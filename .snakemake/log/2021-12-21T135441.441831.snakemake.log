@@ -1,0 +1,25 @@
+Building DAG of jobs...
+Using shell: /bin/bash
+Provided cores: 1 (use --cores to define parallelism)
+Rules claiming more threads will be scaled down.
+Job stats:
+job               count    min threads    max threads
+--------------  -------  -------------  -------------
+create_network        1              1              1
+total                 1              1              1
+
+Select jobs to execute...
+
+[Tue Dec 21 13:54:41 2021]
+rule create_network:
+    input: data/base_grid/bus.csv, data/base_grid/branch.csv, data/base_grid/dcline.csv, data/base_grid/plant.csv
+    output: networks/elec.nc
+    log: logs/create_network.log
+    jobid: 0
+    benchmark: benchmarks/base_network
+    resources: tmpdir=/tmp, mem=500
+
+[Tue Dec 21 13:54:49 2021]
+Finished job 0.
+1 of 1 steps (100%) done
+Complete log: /home/ws/eb5194/Students/jinnan-su/git/US-model/.snakemake/log/2021-12-21T135441.441831.snakemake.log

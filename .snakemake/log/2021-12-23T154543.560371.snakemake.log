@@ -1,0 +1,30 @@
+Building DAG of jobs...
+Using shell: /bin/bash
+Provided cores: 1 (use --cores to define parallelism)
+Rules claiming more threads will be scaled down.
+Job stats:
+job               count    min threads    max threads
+--------------  -------  -------------  -------------
+create_network        1              1              1
+total                 1              1              1
+
+Select jobs to execute...
+
+[Thu Dec 23 15:45:43 2021]
+rule create_network:
+    input: data/base_grid/bus.csv, data/base_grid/branch.csv, data/base_grid/dcline.csv, data/base_grid/plant.csv, data/base_grid/bus2sub.csv, data/base_grid/wind.csv, data/base_grid/solar.csv
+    output: networks/elec.nc
+    log: logs/create_network.log
+    jobid: 0
+    benchmark: benchmarks/create_network
+    resources: tmpdir=/tmp, mem=500
+
+[Thu Dec 23 15:45:50 2021]
+Error in rule create_network:
+    jobid: 0
+    output: networks/elec.nc
+    log: logs/create_network.log (check log file(s) for error message)
+
+Shutting down, this might take some time.
+Exiting because a job execution failed. Look above for error message
+Complete log: /home/ws/eb5194/Students/jinnan-su/git/US-model/.snakemake/log/2021-12-23T154543.560371.snakemake.log

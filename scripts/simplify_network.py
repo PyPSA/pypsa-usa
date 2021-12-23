@@ -2,6 +2,7 @@
 
 import pypsa
 import pandas as pd
+import numpy as np
 from pypsa.networkclustering import get_clustering_from_busmap
 
 def aggregate_to_substations(network, substations, busmap):
@@ -10,7 +11,7 @@ def aggregate_to_substations(network, substations, busmap):
     
     clustering = get_clustering_from_busmap(
         network, busmap,
-        bus_strategies={'type':np.max},custom
+        bus_strategies={'type':np.max},
     )
 
     network = clustering.network
@@ -41,7 +42,7 @@ if __name__ == "__main__":
     busmap_to_sub = pd.read_csv(snakemake.input.bus2sub, index_col=0)
     sub = pd.read_csv(snakemake.input.sub, index_col=0)
 
-    busmap_to_sub = bus2sub.sub_id.astype(str)
+    busmap_to_sub = busmap_to_sub.sub_id.astype(str)
     busmap_to_sub.index = busmap_to_sub.index.astype(str)
 
     n = aggregate_to_substations(n, sub, busmap_to_sub)

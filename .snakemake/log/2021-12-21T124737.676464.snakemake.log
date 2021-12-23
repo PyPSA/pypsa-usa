@@ -1,0 +1,36 @@
+Building DAG of jobs...
+Using shell: /bin/bash
+Provided cores: 1 (use --cores to define parallelism)
+Rules claiming more threads will be scaled down.
+Job stats:
+job                    count    min threads    max threads
+-------------------  -------  -------------  -------------
+retrieve_databundle        1              1              1
+total                      1              1              1
+
+Select jobs to execute...
+
+[Tue Dec 21 12:47:37 2021]
+rule retrieve_databundle:
+    output: data/bundle/bus.csv, data/bundle/bus2sub.csv, data/bundle/dcline.csv, data/bundle/demand.csv, data/bundle/gencost.csv, data/bundle/plant.csv, data/bundle/solar.csv, data/bundle/wind.csv, data/bundle/zone.csv
+    log: logs/retrieve_databundle.log
+    jobid: 0
+    resources: tmpdir=/tmp
+
+Waiting at most 5 seconds for missing files.
+MissingOutputException in line 28 of /home/ws/eb5194/Students/jinnan-su/git/US-model/Snakefile:
+Job Missing files after 5 seconds:
+data/bundle/bus.csv
+data/bundle/bus2sub.csv
+data/bundle/dcline.csv
+data/bundle/demand.csv
+data/bundle/gencost.csv
+data/bundle/plant.csv
+data/bundle/solar.csv
+data/bundle/wind.csv
+data/bundle/zone.csv
+This might be due to filesystem latency. If that is the case, consider to increase the wait time with --latency-wait.
+Job id: 0 completed successfully, but some output files are missing. 0
+Shutting down, this might take some time.
+Exiting because a job execution failed. Look above for error message
+Complete log: /home/ws/eb5194/Students/jinnan-su/git/US-model/.snakemake/log/2021-12-21T124737.676464.snakemake.log
