@@ -1,0 +1,11 @@
+
+ToDos:
+
+* what are the different types (1,2,3) in the bus.csv?
+* where can we retrieve the line lengths? (could use haversine, but is there no data?)
+* what's the line num_paralel?
+* what's the line type?
+* what are TransformerWindings?
+* add capital costs to generators
+* add wind/solar/load
+* remove _helpers or import necessary functions somehow from pypsa-eur

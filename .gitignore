@@ -1,0 +1,9 @@
+
+logs/
+networks/
+benchmarks/
+data/
+
+gurobi.log
+
+USATestSystem.zip
