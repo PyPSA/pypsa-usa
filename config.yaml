@@ -6,11 +6,7 @@ logging:
   level: INFO
   format: '%(levelname)s:%(name)s:%(message)s'
 
-scenario:
-  simpl: ['']
-  ll: ['copt']
-  clusters: [37, 128, 256, 512, 1024]
-  opts: [Co2L-3H]
-
 enable:
   retrieve_data: true
+
+renewable_techs: ["wind", "solar"]

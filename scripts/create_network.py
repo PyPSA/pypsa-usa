@@ -138,7 +138,7 @@ if __name__ == "__main__":
     n = add_dclines_from_file(n, snakemake.input['links'])
 
     #add generators
-    renewable_techs = ["wind", "solar"]
+    renewable_techs = snakemake.config['renewable_techs']
     n = add_conventional_plants_from_file(n, snakemake.input['plants'], renewable_techs)
     n = add_renewable_plants_from_file(n, snakemake.input['plants'], renewable_techs)
 
