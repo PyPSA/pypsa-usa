@@ -1,4 +1,6 @@
 
+.snakemake/
+
 logs/
 networks/
 benchmarks/

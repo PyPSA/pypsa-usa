@@ -1,3 +1,0 @@
-WorkflowError:
-Duplicate output file pattern in rule retrieve_databundle. First two duplicate for entries 0 and 1
-  File "/home/ws/eb5194/Students/jinnan-su/git/US-model/Snakefile", line 39, in <module>
