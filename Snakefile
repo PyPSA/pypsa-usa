@@ -18,7 +18,7 @@ wildcard_constraints:
     opts="[-+a-zA-Z0-9\.]*"
 
 
-datafiles = ['bus.csv', 'sub.csv', 'bus2sub.csv', 'dcline.csv', 'demand.csv',
+datafiles = ['bus.csv', 'sub.csv', 'bus2sub.csv', 'branch.csv', 'dcline.csv', 'demand.csv',
              'plant.csv', 'solar.csv', 'wind.csv']
 
 
