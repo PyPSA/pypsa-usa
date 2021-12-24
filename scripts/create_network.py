@@ -25,6 +25,7 @@ def add_branches_from_file(n, fn_branches):
 
     for tech in ["Line", "Transformer"]:
         tech_branches = branches.query("branch_device_type == @tech")
+        tech_branches.from_bus_id = tech_branches.from_bus_id.astype(str)
         logger.info(f"Adding {len(tech_branches)} branches as {tech}s to the network.")
 
         n.madd(tech,
@@ -34,6 +35,7 @@ def add_branches_from_file(n, fn_branches):
                r = tech_branches.r,
                x = tech_branches.r,
                s_nom = tech_branches.rateA,
+               v_nom = tech_branches.from_bus_id.map(n.buses.v_nom),
                interconnect = tech_branches.interconnect)
 
     n.lines.length = 1000 #FIX THIS->haversine??
@@ -95,6 +97,31 @@ def add_renewable_plants_from_file(n, fn_plants, renewable_techs):
 
     return n
 
+def add_demand_from_file(n, fn_demand):
+
+    """
+    Zone power demand is disaggregated to buses proportional to Pd,
+    where Pd is the real power demand (MW).
+
+    """
+
+    demand = pd.read_csv(fn_demand, index_col=0)
+    demand.index = n.snapshots
+    demand.columns = demand.columns.astype(int)
+
+    demand_per_bus_pu = (n.buses.set_index('zone_id').Pd
+                         /n.buses.groupby('zone_id').sum().Pd)
+
+    demand_per_bus = demand_per_bus_pu.multiply(demand)
+    demand_per_bus.columns = n.buses.index
+
+    n.madd("Load", demand_per_bus.columns,
+           bus = demand_per_bus.columns,
+           p_set = demand_per_bus
+    )
+
+    return n
+
 
 if __name__ == "__main__":
     logger = logging.getLogger(__name__)
@@ -114,6 +141,9 @@ if __name__ == "__main__":
     renewable_techs = ["wind", "solar"]
     n = add_conventional_plants_from_file(n, snakemake.input['plants'], renewable_techs)
     n = add_renewable_plants_from_file(n, snakemake.input['plants'], renewable_techs)
+
+    #add load
+    n = add_demand_from_file(n, snakemake.input['demand'])
 
     #export network
     n.export_to_netcdf(snakemake.output[0])

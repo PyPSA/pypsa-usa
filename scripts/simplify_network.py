@@ -24,14 +24,6 @@ def aggregate_to_substations(network, substations, busmap):
 
     return network
 
-def assign_voltage_level_to_lines(network):
-
-    v_nom = pd.DataFrame(
-        data=[network.lines.bus0.map(network.buses.v_nom),
-              network.lines.bus1.map(network.buses.v_nom)]).mean()
-
-    return v_nom
-
 import logging
 
 if __name__ == "__main__":
@@ -40,13 +32,11 @@ if __name__ == "__main__":
     n = pypsa.Network(snakemake.input.network)
     
     busmap_to_sub = pd.read_csv(snakemake.input.bus2sub, index_col=0)
-    sub = pd.read_csv(snakemake.input.sub, index_col=0)
+    substations = pd.read_csv(snakemake.input.sub, index_col=0)
 
     busmap_to_sub = busmap_to_sub.sub_id.astype(str)
     busmap_to_sub.index = busmap_to_sub.index.astype(str)
 
-    n = aggregate_to_substations(n, sub, busmap_to_sub)
-
-    n.lines["v_nom"] = assign_voltage_level_to_lines(n)
+    n = aggregate_to_substations(n, substations, busmap_to_sub)
 
     n.export_to_netcdf(snakemake.output[0])

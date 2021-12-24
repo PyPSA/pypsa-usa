@@ -31,13 +31,14 @@ if config['enable'].get('retrieve_data', True):
 
 rule create_network:
     input:
-        buses   ="data/base_grid/bus.csv",
-        lines   ="data/base_grid/branch.csv",
-        links   ="data/base_grid/dcline.csv",
-        plants  ="data/base_grid/plant.csv",
-        bus2sub ="data/base_grid/bus2sub.csv",
-        wind    ="data/base_grid/wind.csv",
-        solar   ="data/base_grid/solar.csv"
+        buses   = "data/base_grid/bus.csv",
+        lines   = "data/base_grid/branch.csv",
+        links   = "data/base_grid/dcline.csv",
+        plants  = "data/base_grid/plant.csv",
+        bus2sub = "data/base_grid/bus2sub.csv",
+        wind    = "data/base_grid/wind.csv",
+        solar   = "data/base_grid/solar.csv",
+        demand  = "data/base_grid/demand.csv"
     output: "networks/elec.nc"
     log: "logs/create_network.log"
     benchmark: "benchmarks/create_network"
