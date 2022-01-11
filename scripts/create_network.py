@@ -1,4 +1,4 @@
-# Copyright 2019-2020 Martha Frysztacki (KIT)
+# Copyright 2021-2022 Martha Frysztacki (KIT)
 
 import pypsa
 import pandas as pd

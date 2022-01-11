@@ -42,7 +42,7 @@ rule create_network:
     output: "networks/elec.nc"
     log: "logs/create_network.log"
     benchmark: "benchmarks/create_network"
-    threads: 1
+    threads: 4
     resources: mem=500
     script: "scripts/create_network.py"
 
@@ -55,7 +55,14 @@ rule simplify_network:
     output: "networks/elec_s.nc"
     log: "logs/simplify_network"
     benchmark: "benchmarks/simplify_network"
-    threads: 1
+    threads: 4
     resources: mem=500
     script: "scripts/simplify_network.py"
 
+
+rule network_snippet:
+    input: "networks/{network}.nc",
+    output: "networks/{network}_snippet.nc"
+    threads: 4
+    resources: mem=500
+    script: "scripts/network_snippet.py"
