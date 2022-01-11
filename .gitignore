@@ -1,10 +1,13 @@
 
-.snakemake/
+*~
 
+.snakemake/
 logs/
 networks/
 benchmarks/
 data/
+
+scripts/__pycache__
 
 gurobi.log
 
