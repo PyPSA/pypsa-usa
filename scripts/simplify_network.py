@@ -1,9 +1,10 @@
 # Copyright 2021-2022 Martha Frysztacki (KIT)
 
 import pypsa
+import logging
 import pandas as pd
 import numpy as np
-from pypsa.networkclustering import get_clustering_from_busmap
+from pypsa.networkclustering import busmap_by_kmeans, get_clustering_from_busmap
 
 def aggregate_to_substations(network, substations, busmap):
 
@@ -24,7 +25,20 @@ def aggregate_to_substations(network, substations, busmap):
 
     return network
 
-import logging
+def assign_line_lengths(n, line_length_factor):
+
+    logger.info("Assigning line lengths using haversine function...")
+
+    n.lines.length = pypsa.geo.haversine_pts(n.buses.loc[n.lines.bus0][['x','y']],
+                                             n.buses.loc[n.lines.bus1][['x','y']])
+    n.lines.length *= line_length_factor
+
+    n.links.length = pypsa.geo.haversine_pts(n.buses.loc[n.links.bus0][['x','y']],
+                                             n.buses.loc[n.links.bus1][['x','y']])
+    n.links.length *= line_length_factor
+
+    return n
+
 
 if __name__ == "__main__":
     logger = logging.getLogger(__name__)
@@ -38,5 +52,6 @@ if __name__ == "__main__":
     busmap_to_sub.index = busmap_to_sub.index.astype(str)
 
     n = aggregate_to_substations(n, substations, busmap_to_sub)
+    n = assign_line_lengths(n, 1.25)
 
     n.export_to_netcdf(snakemake.output[0])
