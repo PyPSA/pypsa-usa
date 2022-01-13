@@ -12,7 +12,7 @@ def add_buses_from_file(n, fn_buses):
 
     n.madd("Bus", buses.index,
            Pd = buses.Pd,
-           type = buses.type,
+           #type = buses.type, # do we need this?
            v_nom = buses.baseKV,
            zone_id = buses.zone_id)
 
@@ -38,8 +38,6 @@ def add_branches_from_file(n, fn_branches):
                v_nom = tech_branches.from_bus_id.map(n.buses.v_nom),
                interconnect = tech_branches.interconnect)
 
-    n.lines.length = 1000 #FIX THIS->haversine??
-
     return n
 
 def add_dclines_from_file(n, fn_dclines):
@@ -53,8 +51,6 @@ def add_dclines_from_file(n, fn_dclines):
            bus0 = dclines.from_bus_id,
            bus1 = dclines.to_bus_id,
            p_nom = dclines.Pt)
-
-    n.links.length = 1000 #FIX THIS->haversine??
 
     return n
 

@@ -6,6 +6,7 @@ logs/
 networks/
 benchmarks/
 data/
+resources/
 
 scripts/__pycache__
 

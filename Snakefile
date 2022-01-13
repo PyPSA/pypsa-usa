@@ -41,7 +41,6 @@ rule create_network:
         demand  = "data/base_grid/demand.csv"
     output: "networks/elec.nc"
     log: "logs/create_network.log"
-    benchmark: "benchmarks/create_network"
     threads: 4
     resources: mem=500
     script: "scripts/create_network.py"
@@ -53,16 +52,26 @@ rule simplify_network:
         bus2sub = "data/base_grid/bus2sub.csv",
         sub     = "data/base_grid/sub.csv",
     output: "networks/elec_s.nc"
-    log: "logs/simplify_network"
-    benchmark: "benchmarks/simplify_network"
+    log: "logs/simplify_network/elec_s.log"
     threads: 4
     resources: mem=500
     script: "scripts/simplify_network.py"
 
 
+rule cluster_network:
+    input: "networks/elec_s.nc"
+    output:
+        network = "networks/elec_s_{nclusters}.nc",
+        busmap  = "resources/busmap_elec_s_{nclusters}.nc"
+    log: "logs/cluster_network/elec_s_{nclusters}.log"
+    threads: 4
+    resources: mem=500
+    script: "scripts/cluster_network.py"
+
+
 rule network_snippet:
     input: "networks/{network}.nc",
-    output: "networks/{network}_snippet.nc"
+    output: "networks/snippet_{network}.nc"
     threads: 4
     resources: mem=500
     script: "scripts/network_snippet.py"
