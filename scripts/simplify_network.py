@@ -16,8 +16,6 @@ def aggregate_to_substations(network, substations, busmap):
     )
 
     network = clustering.network
-
-    substations.index = substations.index.astype(str)
     
     network.buses['interconnect'] = substations.interconnect
     network.buses['x'] = substations.lon
@@ -25,7 +23,12 @@ def aggregate_to_substations(network, substations, busmap):
 
     return network
 
-def assign_line_lengths(n, line_length_factor):
+def assign_line_lengths(n, line_length_factor, busmap_to_sub=None, substations=None):
+
+    if (busmap_to_sub is not None) and (substations is not None):
+        busmap_to_sub['x'] = busmap_to_sub.sub_id.map(substations['lon'])
+        busmap_to_sub['y'] = busmap_to_sub.sub_id.map(substations['lat'])
+        n.buses[['x','y']] = busmap_to_sub[['x','y']]
 
     logger.info("Assigning line lengths using haversine function...")
 
@@ -45,13 +48,15 @@ if __name__ == "__main__":
     
     n = pypsa.Network(snakemake.input.network)
     
-    busmap_to_sub = pd.read_csv(snakemake.input.bus2sub, index_col=0)
-    substations = pd.read_csv(snakemake.input.sub, index_col=0)
-
-    busmap_to_sub = busmap_to_sub.sub_id.astype(str)
+    busmap_to_sub = pd.read_csv(snakemake.input.bus2sub, index_col=0, dtype={'sub_id':str})
     busmap_to_sub.index = busmap_to_sub.index.astype(str)
+    substations = pd.read_csv(snakemake.input.sub, index_col=0)
+    substations.index = substations.index.astype(str)
 
-    n = aggregate_to_substations(n, substations, busmap_to_sub)
-    n = assign_line_lengths(n, 1.25)
+    # assign line lengths based on sub_id,
+    # otherwise divide by zero error in networkclustering
+    n = assign_line_lengths(n, 1.25, busmap_to_sub, substations)
+
+    n = aggregate_to_substations(n, substations, busmap_to_sub.sub_id)
 
     n.export_to_netcdf(snakemake.output[0])
