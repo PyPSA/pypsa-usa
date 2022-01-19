@@ -32,9 +32,9 @@ def add_branches_from_file(n, fn_branches):
                tech_branches.index,
                bus0 = tech_branches.from_bus_id,
                bus1 = tech_branches.to_bus_id,
-               r = tech_branches.r*((n.buses.loc[tech_branches.from_bus_id]['v_nom'])**2),
-               x = tech_branches.x*((n.buses.loc[tech_branches.from_bus_id]['v_nom'])**2),
-               b = tech_branches.b/((n.buses.loc[tech_branches.from_bus_id]['v_nom'])**2),
+               r = tech_branches.r*(n.buses.loc[tech_branches.from_bus_id]['v_nom'].values**2),
+               x = tech_branches.x*(n.buses.loc[tech_branches.from_bus_id]['v_nom'].values**2),
+               b = tech_branches.b/(n.buses.loc[tech_branches.from_bus_id]['v_nom'].values**2),
                s_nom = tech_branches.rateA,
                v_nom = tech_branches.from_bus_id.map(n.buses.v_nom),
                interconnect = tech_branches.interconnect)
