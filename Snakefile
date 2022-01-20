@@ -36,7 +36,7 @@ rule create_network:
         wind    = "data/base_grid/wind.csv",
         solar   = "data/base_grid/solar.csv",
         demand  = "data/base_grid/demand.csv",
-        tech_costs = "data/cost.csv"
+        tech_costs = "data/costs.csv"
     output: "networks/elec.nc"
     log: "logs/create_network.log"
     threads: 4
