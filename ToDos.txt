@@ -2,6 +2,11 @@
 ToDos:
 
 * what are the different types (1,2,3) in the bus.csv?
+*bus type
+               *PQ bus          = 1
+               *PV bus          = 2
+               *reference bus   = 3
+               *isolated bus    = 4
 * where can we retrieve the line lengths? (could use haversine, but is there no data?)
 * what's the line num_paralel?
 * what's the line type?
