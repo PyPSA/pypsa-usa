@@ -8,9 +8,6 @@ HTTP = HTTPRemoteProvider()
 configfile: "config.yaml"
 
 
-COSTS="data/costs.csv"
-
-
 wildcard_constraints:
     simpl="[a-zA-Z0-9]*|all",
     clusters="[0-9]+m?|all",
@@ -19,7 +16,7 @@ wildcard_constraints:
 
 
 datafiles = ['bus.csv', 'sub.csv', 'bus2sub.csv', 'branch.csv', 'dcline.csv', 'demand.csv',
-             'plant.csv', 'solar.csv', 'wind.csv']
+             'plant.csv', 'solar.csv', 'wind.csv', 'costs.csv']
 
 
 if config['enable'].get('retrieve_data', True):
@@ -38,8 +35,8 @@ rule create_network:
         bus2sub = "data/base_grid/bus2sub.csv",
         wind    = "data/base_grid/wind.csv",
         solar   = "data/base_grid/solar.csv",
-        demand  = "data/base_grid/demand.csv"
-        tech_costs = COSTS
+        demand  = "data/base_grid/demand.csv",
+        tech_costs = "data/cost.csv"
     output: "networks/elec.nc"
     log: "logs/create_network.log"
     threads: 4
