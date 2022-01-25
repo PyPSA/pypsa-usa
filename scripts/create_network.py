@@ -226,7 +226,7 @@ if __name__ == "__main__":
     n = add_renewable_plants_from_file(n, snakemake.input['plants'], renewable_techs, costs)
 
     #add load
-    # n = add_demand_from_file(n, snakemake.input['demand'])
+    n = add_demand_from_file(n, snakemake.input['demand'])
 
     #export network
     n.export_to_netcdf(snakemake.output[0])

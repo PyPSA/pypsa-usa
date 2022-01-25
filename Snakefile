@@ -16,14 +16,14 @@ wildcard_constraints:
 
 
 datafiles = ['bus.csv', 'sub.csv', 'bus2sub.csv', 'branch.csv', 'dcline.csv', 'demand.csv',
-             'plant.csv', 'solar.csv', 'wind.csv', 'costs.csv']
+             'plant.csv', 'solar.csv', 'wind.csv']
 
 
-# if config['enable'].get('retrieve_data', True):
-#     rule retrieve_databundle:
-#         output: expand('data/base_grid/{file}', file=datafiles)
-#         log: "logs/retrieve_databundle.log"
-#         script: 'scripts/retrieve_databundle.py'
+if config['enable'].get('retrieve_data', True):
+    rule retrieve_databundle:
+        output: expand('data/base_grid/{file}', file=datafiles)
+        log: "logs/retrieve_databundle.log"
+        script: 'scripts/retrieve_databundle.py'
 
 
 rule create_network:
