@@ -75,7 +75,8 @@ def add_conventional_plants_from_file(n, fn_plants, renewable_techs):
            bus=plants.bus_id,
            p_nom=plants.Pmax,
            marginal_cost=plants.GenFuelCost,
-           p_nom_extendable=False
+           p_nom_extendable=False,
+           carrier = plants.type
     )
 
     return n
@@ -166,10 +167,11 @@ def add_renewable_plants_from_file(n, fn_plants, renewable_techs, costs):
         n.madd("Generator", tech_plants.index,
                bus = tech_plants.bus_id,
                p_nom_min = tech_plants.Pmax, #I forget what Tom said last time, but if we want to make it extendable for renewable units, this p should be min. Otherwise, the capacity will be cut to minimise the objective function.
-               marginal_cost = tech_plants.GenFuelCost,
+               marginal_cost = costs.at[tech, 'marginal_cost']*1.14,
                capital_cost = costs.at[tech, 'capital_cost']*1.14, #divide or multiply the currency to make it the same as marginal cost
                p_max_pu = p_max_pu,
-               p_nom_extendable = True
+               p_nom_extendable = True,
+               carrier = tech
         )
 
     return n
@@ -224,7 +226,7 @@ if __name__ == "__main__":
     n = add_renewable_plants_from_file(n, snakemake.input['plants'], renewable_techs, costs)
 
     #add load
-    n = add_demand_from_file(n, snakemake.input['demand'])
+    # n = add_demand_from_file(n, snakemake.input['demand'])
 
     #export network
     n.export_to_netcdf(snakemake.output[0])
