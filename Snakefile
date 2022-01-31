@@ -57,12 +57,12 @@ rule simplify_network:
 
 
 rule cluster_network:
-    input: "networks/elec_s.nc"
+    input: 'networks/elec_s.nc'
     output:
-        network = "networks/elec_s_{nclusters}.nc",
-        busmap  = "resources/busmap_elec_s_{nclusters}.nc"
-    log: "logs/cluster_network/elec_s_{nclusters}.log"
-    threads: 4
+        network = "networks/elec_s_{clusters}.nc",
+        busmap  = "resources/busmap_elec_s_{clusters}.csv",
+    log: "logs/cluster_network/elec_s_{clusters}.log"
+    threads: 1
     resources: mem=500
     script: "scripts/cluster_network.py"
 
@@ -73,3 +73,14 @@ rule network_snippet:
     threads: 4
     resources: mem=500
     script: "scripts/network_snippet.py"
+
+
+rule add_storage:
+    input:
+        network= 'networks/elec_s_{nclusters}.nc',
+        tech_costs= "data/costs.csv"
+    output: 'networks/elec_s_{nclusters}_ec.nc'
+    log: "logs/cluster_network/elec_s_{nclusters}_ec.log"
+    threads: 4
+    resources: mem=500
+    script: "scripts/storage.py"
