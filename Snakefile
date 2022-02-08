@@ -16,14 +16,14 @@ wildcard_constraints:
 
 
 datafiles = ['bus.csv', 'sub.csv', 'bus2sub.csv', 'branch.csv', 'dcline.csv', 'demand.csv',
-             'plant.csv', 'solar.csv', 'wind.csv']
+             'plant.csv', 'solar.csv', 'wind.csv', 'costs.csv']
 
 
-if config['enable'].get('retrieve_data', True):
-    rule retrieve_databundle:
-        output: expand('data/base_grid/{file}', file=datafiles)
-        log: "logs/retrieve_databundle.log"
-        script: 'scripts/retrieve_databundle.py'
+# if config['enable'].get('retrieve_data', True):
+#     rule retrieve_databundle:
+#         output: expand('data/base_grid/{file}', file=datafiles)
+#         log: "logs/retrieve_databundle.log"
+#         script: 'scripts/retrieve_databundle.py'
 
 
 rule create_network:
@@ -34,7 +34,9 @@ rule create_network:
         plants  = "data/base_grid/plant.csv",
         bus2sub = "data/base_grid/bus2sub.csv",
         wind    = "data/base_grid/wind.csv",
+        wind_offshore = "data/base_grid/wind.csv",
         solar   = "data/base_grid/solar.csv",
+        hydro   = "data/base_grid/hydro.csv",
         demand  = "data/base_grid/demand.csv",
         tech_costs = "data/costs.csv"
     output: "networks/elec.nc"
@@ -56,20 +58,39 @@ rule simplify_network:
     script: "scripts/simplify_network.py"
 
 
-rule cluster_network:
-    input: "networks/elec_s.nc"
-    output:
-        network = "networks/elec_s_{nclusters}.nc",
-        busmap  = "resources/busmap_elec_s_{nclusters}.nc"
-    log: "logs/cluster_network/elec_s_{nclusters}.log"
-    threads: 4
-    resources: mem=500
-    script: "scripts/cluster_network.py"
+# rule cluster_network:
+#     input: "networks/elec_s.nc"
+#     output:
+#         network = "networks/elec_s_{nclusters}.nc",
+#         busmap  = "resources/busmap_elec_s_{nclusters}.nc"
+#     log: "logs/cluster_network/elec_s_{nclusters}.log"
+#     threads: 4
+#     resources: mem=500
+#     script: "scripts/cluster_network.py"
 
 
-rule network_snippet:
-    input: "networks/{network}.nc",
-    output: "networks/snippet_{network}.nc"
+# rule network_snippet:
+#     input: "networks/{network}.nc",
+#     output: "networks/snippet_{network}.nc"
+#     threads: 4
+#     resources: mem=500
+#     script: "scripts/network_snippet.py"
+
+rule add_storage:
+    input:
+        network= "networks/elec_s_{nclusters}.nc",
+        tech_costs= "data/costs.csv"
+    output: "networks/elec_s_{nclusters}_ec.nc"
+    log: "logs/cluster_network/elec_s_{nclusters}_ec.log"
     threads: 4
     resources: mem=500
-    script: "scripts/network_snippet.py"
+    script: "scripts/storage.py"
+
+rule add_co2:
+    input:
+        network= "networks/elec_s_{nclusters}_ec.nc",
+    output: "networks/elec_s_{nclusters}_ec_co2.nc"
+    log: "logs/cluster_network/elec_s_{nclusters}_ec_co2.log"
+    threads: 4
+    resources: mem=5000
+    script: "scripts/add_co2.py"

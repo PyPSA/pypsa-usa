@@ -181,7 +181,6 @@ def add_demand_from_file(n, fn_demand):
     """
     Zone power demand is disaggregated to buses proportional to Pd,
     where Pd is the real power demand (MW).
-
     """
 
     demand = pd.read_csv(fn_demand, index_col=0)
