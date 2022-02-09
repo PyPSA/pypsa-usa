@@ -34,7 +34,6 @@ rule create_network:
         plants  = "data/base_grid/plant.csv",
         bus2sub = "data/base_grid/bus2sub.csv",
         wind    = "data/base_grid/wind.csv",
-        wind_offshore = "data/base_grid/wind.csv",
         solar   = "data/base_grid/solar.csv",
         hydro   = "data/base_grid/hydro.csv",
         demand  = "data/base_grid/demand.csv",
