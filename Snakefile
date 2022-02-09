@@ -58,23 +58,16 @@ rule simplify_network:
     script: "scripts/simplify_network.py"
 
 
-# rule cluster_network:
-#     input: "networks/elec_s.nc"
-#     output:
-#         network = "networks/elec_s_{nclusters}.nc",
-#         busmap  = "resources/busmap_elec_s_{nclusters}.nc"
-#     log: "logs/cluster_network/elec_s_{nclusters}.log"
-#     threads: 4
-#     resources: mem=500
-#     script: "scripts/cluster_network.py"
+rule cluster_network:
+    input: 'networks/elec_s.nc'
+    output:
+        network = "networks/elec_s_{clusters}.nc",
+        busmap  = "resources/busmap_elec_s_{clusters}.csv",
+    log: "logs/cluster_network/elec_s_{clusters}.log"
+    threads: 1
+    resources: mem=500
+    script: "scripts/cluster_network.py"
 
-
-# rule network_snippet:
-#     input: "networks/{network}.nc",
-#     output: "networks/snippet_{network}.nc"
-#     threads: 4
-#     resources: mem=500
-#     script: "scripts/network_snippet.py"
 
 rule add_storage:
     input:
@@ -85,6 +78,7 @@ rule add_storage:
     threads: 4
     resources: mem=500
     script: "scripts/storage.py"
+
 
 rule add_co2:
     input:
