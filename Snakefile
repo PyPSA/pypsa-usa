@@ -73,7 +73,7 @@ rule add_storage:
         network= "networks/elec_s_{nclusters}.nc",
         tech_costs= "data/costs.csv"
     output: "networks/elec_s_{nclusters}_ec.nc"
-    log: "logs/cluster_network/elec_s_{nclusters}_ec.log"
+    log: "logs/add_storage/elec_s_{nclusters}_ec.log"
     threads: 4
     resources: mem=500
     script: "scripts/storage.py"
@@ -83,7 +83,9 @@ rule add_co2:
     input:
         network= "networks/elec_s_{nclusters}_ec.nc",
     output: "networks/elec_s_{nclusters}_ec_co2.nc"
-    log: "logs/cluster_network/elec_s_{nclusters}_ec_co2.log"
+    log:
+        solver = "logs/add_co2/elec_s_{nclusters}_ec_co2_solver.log"
     threads: 4
     resources: mem=5000
+    log: "logs/add_co2"
     script: "scripts/add_co2.py"

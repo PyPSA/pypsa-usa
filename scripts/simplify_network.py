@@ -11,8 +11,11 @@ def aggregate_to_substations(network, substations, busmap):
     logger.info("Aggregating buses to substation level...")
     
     clustering = get_clustering_from_busmap(
-        network, busmap,
+        network, busmap, aggregate_generators_weighted=True,
+        aggregate_one_ports=["Load", "StorageUnit"],
+        line_length_factor=1.,
         bus_strategies={'type':np.max},
+        generator_strategies={'marginal_cost': np.mean, 'p_nom_min': np.sum}
     )
 
     network = clustering.network
@@ -48,6 +51,13 @@ if __name__ == "__main__":
     
     n = pypsa.Network(snakemake.input.network)
     
+    #mild hack to remove corrupted generators (should be removed in the long run)
+    nans  = n.generators_t.p_max_pu.isna().any()
+    nans = n.generators_t.p_max_pu.sum()[nans].index
+    n.mremove("Generator", nans)
+    nans  = n.generators_t.p_max_pu.isna().any()
+    nans = n.generators_t.p_max_pu.sum()[nans].index
+
     busmap_to_sub = pd.read_csv(snakemake.input.bus2sub, index_col=0, dtype={'sub_id':str})
     busmap_to_sub.index = busmap_to_sub.index.astype(str)
     substations = pd.read_csv(snakemake.input.sub, index_col=0)
