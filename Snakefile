@@ -16,7 +16,7 @@ wildcard_constraints:
 
 
 datafiles = ['bus.csv', 'sub.csv', 'bus2sub.csv', 'branch.csv', 'dcline.csv', 'demand.csv',
-             'plant.csv', 'solar.csv', 'wind.csv']
+             'plant.csv', 'solar.csv', 'wind.csv', 'costs.csv']
 
 
 if config['enable'].get('retrieve_data', True):
@@ -35,6 +35,7 @@ rule create_network:
         bus2sub = "data/base_grid/bus2sub.csv",
         wind    = "data/base_grid/wind.csv",
         solar   = "data/base_grid/solar.csv",
+        hydro   = "data/base_grid/hydro.csv",
         demand  = "data/base_grid/demand.csv",
         tech_costs = "data/costs.csv"
     output: "networks/elec.nc"
@@ -67,20 +68,24 @@ rule cluster_network:
     script: "scripts/cluster_network.py"
 
 
-rule network_snippet:
-    input: "networks/{network}.nc",
-    output: "networks/snippet_{network}.nc"
-    threads: 4
-    resources: mem=500
-    script: "scripts/network_snippet.py"
-
-
 rule add_storage:
     input:
-        network= 'networks/elec_s_{nclusters}.nc',
+        network= "networks/elec_s_{nclusters}.nc",
         tech_costs= "data/costs.csv"
-    output: 'networks/elec_s_{nclusters}_ec.nc'
-    log: "logs/cluster_network/elec_s_{nclusters}_ec.log"
+    output: "networks/elec_s_{nclusters}_ec.nc"
+    log: "logs/add_storage/elec_s_{nclusters}_ec.log"
     threads: 4
     resources: mem=500
     script: "scripts/storage.py"
+
+
+rule add_co2:
+    input:
+        network= "networks/elec_s_{nclusters}_ec.nc",
+    output: "networks/elec_s_{nclusters}_ec_co2.nc"
+    log:
+        solver = "logs/add_co2/elec_s_{nclusters}_ec_co2_solver.log"
+    threads: 4
+    resources: mem=5000
+    log: "logs/add_co2"
+    script: "scripts/add_co2.py"

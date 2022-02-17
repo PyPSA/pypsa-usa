@@ -44,3 +44,24 @@ electricity:
   custom_powerplants: false # use pandas query strings here, e.g. Country in ['Germany']
   conventional_carriers: [coal, gas, nuclear,oil] # [nuclear, oil, OCGT, CCGT, coal, lignite, geothermal, biomass]
   renewable_capacities_from_OPSD: [hydro, wind, solar, geothermal, wind_offshore]
+
+solving:
+  options:
+    formulation: kirchhoff
+    load_shedding: true
+    noisy_costs: true
+    min_iterations: 4
+    max_iterations: 6
+    clip_p_max_pu: 0.01
+    skip_iterations: True
+    track_iterations: false
+  solver:
+    name: gurobi
+    threads: 4
+    method: 2 # barrier
+    crossover: 0
+    BarConvTol: 1.e-5
+    FeasibilityTol: 1.e-6
+    AggFill: 0
+    PreDual: 0
+    GURO_PAR_BARDENSETHRESH: 200

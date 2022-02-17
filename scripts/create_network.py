@@ -30,11 +30,10 @@ def annuity(m, r):
 
 def add_branches_from_file(n, fn_branches):
 
-    branches = pd.read_csv(fn_branches, index_col=0)
+    branches = pd.read_csv(fn_branches, dtype={'from_bus_id': str}, index_col=0)
 
     for tech in ["Line", "Transformer"]:
         tech_branches = branches.query("branch_device_type == @tech")
-        tech_branches.from_bus_id = tech_branches.from_bus_id.astype(str)
         logger.info(f"Adding {len(tech_branches)} branches as {tech}s to the network.")
 
         n.madd(tech,
@@ -72,11 +71,12 @@ def add_conventional_plants_from_file(n, fn_plants, renewable_techs):
     logger.info(f"Adding {len(plants)} conventional generators to the network.")
 
     n.madd("Generator", plants.index,
-           bus=plants.bus_id,
+           bus=plants.bus_id.astype(str),
            p_nom=plants.Pmax,
-           marginal_cost=plants.GenFuelCost,
+           marginal_cost=1,
            p_nom_extendable=False,
-           carrier = plants.type
+           carrier = plants.type,
+           weight = 1.
     )
 
     return n
@@ -160,7 +160,11 @@ def add_renewable_plants_from_file(n, fn_plants, renewable_techs, costs):
 
         logger.info(f"Adding {len(tech_plants)} {tech} generators to the network.")
 
-        p = pd.read_csv(snakemake.input[tech], index_col=0)
+        if tech=="wind_offshore":
+            p = pd.read_csv(snakemake.input["wind"], index_col=0)
+        else:
+            p = pd.read_csv(snakemake.input[tech], index_col=0)
+
         p.index = n.snapshots
         p_max_pu = p.multiply(1./tech_plants.Pmax)
 
@@ -171,7 +175,8 @@ def add_renewable_plants_from_file(n, fn_plants, renewable_techs, costs):
                capital_cost = costs.at[tech, 'capital_cost']*1.14, #divide or multiply the currency to make it the same as marginal cost
                p_max_pu = p_max_pu,
                p_nom_extendable = True,
-               carrier = tech
+               carrier = tech,
+               weight = 1.
         )
 
     return n
@@ -181,17 +186,18 @@ def add_demand_from_file(n, fn_demand):
     """
     Zone power demand is disaggregated to buses proportional to Pd,
     where Pd is the real power demand (MW).
-
     """
 
     demand = pd.read_csv(fn_demand, index_col=0)
     demand.index = n.snapshots
+    #zone_id is int, therefore demand.columns should be int first
     demand.columns = demand.columns.astype(int)
 
     demand_per_bus_pu = (n.buses.set_index('zone_id').Pd
                          /n.buses.groupby('zone_id').sum().Pd)
 
     demand_per_bus = demand_per_bus_pu.multiply(demand)
+
     demand_per_bus.columns = n.buses.index
 
     n.madd("Load", demand_per_bus.columns,
@@ -217,6 +223,7 @@ if __name__ == "__main__":
 
     #add buses, transformers, lines and links
     n = add_buses_from_file(n, snakemake.input['buses'])
+
     n = add_branches_from_file(n, snakemake.input['lines'])
     n = add_dclines_from_file(n, snakemake.input['links'])
 
@@ -229,4 +236,4 @@ if __name__ == "__main__":
     n = add_demand_from_file(n, snakemake.input['demand'])
 
     #export network
-    n.export_to_netcdf(snakemake.output[0])
+    testn.export_to_netcdf(snakemake.output[0])
