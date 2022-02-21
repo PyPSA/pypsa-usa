@@ -9,7 +9,8 @@ logging:
 enable:
   retrieve_data: true
 
-renewable_techs: ["wind", "solar"]
+renewable_techs: ["wind", "solar","hydro","wind_offshore"]
+conventional_techs: ["coal", "gas", "nuclear", "oil", "geothermal"]
 
 costs:
   year: 2030
