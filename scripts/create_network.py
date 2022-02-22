@@ -63,21 +63,26 @@ def add_dclines_from_file(n, fn_dclines):
     return n
 
 
-def add_conventional_plants_from_file(n, fn_plants, renewable_techs):
+def add_conventional_plants_from_file(n, fn_plants, conventional_techs, costs):
 
     plants = pd.read_csv(fn_plants, index_col=0)
-    plants = plants.query("type not in @renewable_techs")
+    plants.replace(['dfo','ng'],['oil','gas'],inplace=True)
 
-    logger.info(f"Adding {len(plants)} conventional generators to the network.")
+    for tech in conventional_techs:
+        tech_plants = plants.query("type == @tech")
+        tech_plants.index = tech_plants.index.astype(str)
 
-    n.madd("Generator", plants.index,
-           bus=plants.bus_id.astype(str),
-           p_nom=plants.Pmax,
-           marginal_cost=1,
+        logger.info(f"Adding {len(tech_plants)} {tech} generators to the network.")
+
+
+        n.madd("Generator", tech_plants.index,
+           bus=tech_plants.bus_id.astype(str),
+           p_nom=tech_plants.Pmax,
+           marginal_cost=costs.at[tech, 'marginal_cost']*1.14,
            p_nom_extendable=False,
-           carrier = plants.type,
+           carrier = tech_plants.type,
            weight = 1.
-    )
+               )
 
     return n
 
@@ -165,8 +170,21 @@ def add_renewable_plants_from_file(n, fn_plants, renewable_techs, costs):
         else:
             p = pd.read_csv(snakemake.input[tech], index_col=0)
 
+
         p.index = n.snapshots
-        p_max_pu = p.multiply(1./tech_plants.Pmax)
+
+        if ((tech_plants.Pmax==0).any()):
+            pm = p.max(axis=0)
+            pc=pd.merge(tech_plants,pm.to_frame(),left_index=True, right_index=True)
+            pma=pc[['Pmax',0]]
+            pnom=pma.max(axis=1)
+            p = p[pnom.index]
+            p_max_pu = p.multiply(1. / pnom)
+        else:
+            p = p[tech_plants.index]
+            p_max_pu = p.multiply(1. / tech_plants.Pmax)
+
+        print(p_max_pu)
 
         n.madd("Generator", tech_plants.index,
                bus = tech_plants.bus_id,
@@ -229,11 +247,12 @@ if __name__ == "__main__":
 
     #add generators
     renewable_techs = snakemake.config['renewable_techs']
-    n = add_conventional_plants_from_file(n, snakemake.input['plants'], renewable_techs)
+    conventional_techs = snakemake.config['conventional_techs']
+    n = add_conventional_plants_from_file(n, snakemake.input['plants'], conventional_techs, costs)
     n = add_renewable_plants_from_file(n, snakemake.input['plants'], renewable_techs, costs)
 
     #add load
     n = add_demand_from_file(n, snakemake.input['demand'])
 
     #export network
-    testn.export_to_netcdf(snakemake.output[0])
+    n.export_to_netcdf(snakemake.output[0])
