@@ -74,7 +74,6 @@ def add_conventional_plants_from_file(n, fn_plants, conventional_techs, costs):
 
         logger.info(f"Adding {len(tech_plants)} {tech} generators to the network.")
 
-
         n.madd("Generator", tech_plants.index,
            bus=tech_plants.bus_id.astype(str),
            p_nom=tech_plants.Pmax,
@@ -171,11 +170,19 @@ def add_renewable_plants_from_file(n, fn_plants, renewable_techs, costs):
             p = pd.read_csv(snakemake.input[tech], index_col=0)
 
         p.index = n.snapshots
-        p_max_pu = p.multiply(1./tech_plants.Pmax)
+
+        if (tech_plants.Pmax==0).any():
+            #p_nom is the maximum of {Pmax, dispatch}
+            p_nom = (pd.concat([p.max(axis=0), tech_plants['Pmax']], axis=1)
+                     .max(axis=1))
+            p_max_pu = (p[p_nom.index] / p_nom).fillna(0) #some values remain 0
+        else:
+            p_nom = tech_plants.Pmax
+            p_max_pu = p[tech_plants.index] / p_nom
 
         n.madd("Generator", tech_plants.index,
                bus = tech_plants.bus_id,
-               p_nom_min = tech_plants.Pmax, #I forget what Tom said last time, but if we want to make it extendable for renewable units, this p should be min. Otherwise, the capacity will be cut to minimise the objective function.
+               p_nom_min = p_nom, #I forget what Tom said last time, but if we want to make it extendable for renewable units, this p should be min. Otherwise, the capacity will be cut to minimise the objective function.
                marginal_cost = costs.at[tech, 'marginal_cost']*1.14,
                capital_cost = costs.at[tech, 'capital_cost']*1.14, #divide or multiply the currency to make it the same as marginal cost
                p_max_pu = p_max_pu,
