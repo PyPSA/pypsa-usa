@@ -13,6 +13,21 @@ idx = pd.IndexSlice
 
 logger = logging.getLogger(__name__)
 
+def average_every_nhours(n, offset):
+    logger.info(f"Resampling the network to {offset}")
+    m = n.copy(with_time=False)
+
+    snapshot_weightings = n.snapshot_weightings.resample(offset).sum()
+    m.set_snapshots(snapshot_weightings.index)
+    m.snapshot_weightings = snapshot_weightings
+
+    for c in n.iterate_components():
+        pnl = getattr(m, c.list_name+"_t")
+        for k, df in c.pnl.items():
+            if not df.empty:
+                pnl[k] = df.resample(offset).mean()
+
+    return m
 
 def add_co2limit(n, Nyears=1.):
     annual_emissions = snakemake.config['electricity']['co2limit']
@@ -131,14 +146,15 @@ if __name__ == "__main__":
 
     Nyears = n.snapshot_weightings.sum() / 8784.
 
+    nH = snakemake.wildcards.nH
+    average_every_nhours(n, nH)
     add_co2limit(n, Nyears)
     add_emission_prices(n)
-    npd = pd.date_range(freq='h', start="2016-01-01", end="2017-01-01", closed='left')
 
     config = snakemake.config
     solve_opts = snakemake.config['solving']['options']
 
-    opts = 'Co2L0.0-2H'.split('-')
+    opts = f'Co2L-{nH}'.split('-')
 
     tmpdir = solve_opts.get('tmpdir')
     if tmpdir is not None:
