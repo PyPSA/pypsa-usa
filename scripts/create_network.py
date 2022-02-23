@@ -180,8 +180,6 @@ def add_renewable_plants_from_file(n, fn_plants, renewable_techs, costs):
             p_nom = tech_plants.Pmax
             p_max_pu = p[tech_plants.index] / p_nom
 
-        print(p_max_pu)
-
         n.madd("Generator", tech_plants.index,
                bus = tech_plants.bus_id,
                p_nom_min = p_nom, #I forget what Tom said last time, but if we want to make it extendable for renewable units, this p should be min. Otherwise, the capacity will be cut to minimise the objective function.
