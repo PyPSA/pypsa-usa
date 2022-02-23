@@ -74,7 +74,6 @@ def add_conventional_plants_from_file(n, fn_plants, conventional_techs, costs):
 
         logger.info(f"Adding {len(tech_plants)} {tech} generators to the network.")
 
-
         n.madd("Generator", tech_plants.index,
            bus=tech_plants.bus_id.astype(str),
            p_nom=tech_plants.Pmax,
@@ -82,7 +81,7 @@ def add_conventional_plants_from_file(n, fn_plants, conventional_techs, costs):
            p_nom_extendable=False,
            carrier = tech_plants.type,
            weight = 1.
-               )
+        )
 
     return n
 
