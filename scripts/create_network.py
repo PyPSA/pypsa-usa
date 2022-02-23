@@ -82,7 +82,7 @@ def add_conventional_plants_from_file(n, fn_plants, conventional_techs, costs):
            p_nom_extendable=False,
            carrier = tech_plants.type,
            weight = 1.
-               )
+        )
 
     return n
 
