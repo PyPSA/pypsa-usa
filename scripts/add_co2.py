@@ -146,15 +146,15 @@ if __name__ == "__main__":
 
     Nyears = n.snapshot_weightings.sum() / 8784.
 
-    average_every_nhours(n, '3H')
+    nH = snakemake.wildcards.nH
+    average_every_nhours(n, nH)
     add_co2limit(n, Nyears)
     add_emission_prices(n)
-    npd = pd.date_range(freq='h', start="2016-01-01", end="2017-01-01", closed='left')
 
     config = snakemake.config
     solve_opts = snakemake.config['solving']['options']
 
-    opts = 'Co2L0.0-2H'.split('-')
+    opts = f'Co2L-{nH}'.split('-')
 
     tmpdir = solve_opts.get('tmpdir')
     if tmpdir is not None:
