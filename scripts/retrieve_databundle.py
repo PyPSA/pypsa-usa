@@ -8,10 +8,13 @@
 """
 
 import logging
-from _helpers import progress_retrieve, configure_logging
-
 import zipfile
+
 from pathlib import Path
+
+import sys
+sys.path.append(snakemake.config['subworkflow'] + "scripts/")
+from _helpers import progress_retrieve, configure_logging
 
 logger = logging.getLogger(__name__)
 

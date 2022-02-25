@@ -3,6 +3,10 @@
 import pypsa
 import pandas as pd
 
+import sys
+sys.path.append(snakemake.config['subworkflow'] + "scripts/")
+from add_electricity import load_costs
+
 import logging
 
 idx = pd.IndexSlice
@@ -85,78 +89,11 @@ def add_conventional_plants_from_file(n, fn_plants, conventional_techs, costs):
 
     return n
 
-def load_costs(Nyears=1., tech_costs=None, config=None, elec_config=None):
-    if tech_costs is None:
-        tech_costs = snakemake.input.tech_costs
-
-    if config is None:
-        config = snakemake.config['costs']
-
-    # set all asset costs and other parameters
-    costs = pd.read_csv(tech_costs, index_col=list(range(3))).sort_index()
-
-    # correct units to MW and EUR
-    costs.loc[costs.unit.str.contains("/kW"),"value"] *= 1e3
-    costs.loc[costs.unit.str.contains("USD"),"value"] *= config['USD2013_to_EUR2013']
-
-    costs = (costs.loc[idx[:,config['year'],:], "value"]
-             .unstack(level=2).groupby("technology").sum(min_count=1))
-
-    costs = costs.fillna({"CO2 intensity" : 0,
-                          "FOM" : 0,
-                          "VOM" : 0,
-                          "discount rate" : config['discountrate'],
-                          "efficiency" : 1,
-                          "fuel" : 0,
-                          "investment" : 0,
-                          "lifetime" : 25})
-
-    costs["capital_cost"] = ((annuity(costs["lifetime"], costs["discount rate"]) +
-                             costs["FOM"]/100.) *
-                             costs["investment"] * Nyears['stores'])
-
-    costs.at['OCGT', 'fuel'] = costs.at['gas', 'fuel']
-    costs.at['CCGT', 'fuel'] = costs.at['gas', 'fuel']
-
-    costs['marginal_cost'] = costs['VOM'] + costs['fuel'] / costs['efficiency']
-
-    costs = costs.rename(columns={"CO2 intensity": "co2_emissions"})
-
-    costs.at['OCGT', 'co2_emissions'] = costs.at['gas', 'co2_emissions']
-    costs.at['CCGT', 'co2_emissions'] = costs.at['gas', 'co2_emissions']
-
-    costs.at['solar', 'capital_cost'] = 0.5*(costs.at['solar-rooftop', 'capital_cost'] +
-                                             costs.at['solar-utility', 'capital_cost'])
-
-    def costs_for_storage(store, link1, link2=None, max_hours=1.):
-        capital_cost = link1['capital_cost'] + max_hours * store['capital_cost']
-        if link2 is not None:
-            capital_cost += link2['capital_cost']
-        return pd.Series(dict(capital_cost=capital_cost,
-                              marginal_cost=0.,
-                              co2_emissions=0.))
-
-    if elec_config is None:
-        elec_config = snakemake.config['electricity']
-    max_hours = elec_config['max_hours']
-    costs.loc["battery"] = \
-        costs_for_storage(costs.loc["battery storage"], costs.loc["battery inverter"],
-                          max_hours=max_hours['battery'])
-    costs.loc["H2"] = \
-        costs_for_storage(costs.loc["hydrogen storage"], costs.loc["fuel cell"],
-                          costs.loc["electrolysis"], max_hours=max_hours['H2'])
-
-    for attr in ('marginal_cost', 'capital_cost'):
-        overwrites = config.get(attr)
-        if overwrites is not None:
-            overwrites = pd.Series(overwrites)
-            costs.loc[overwrites.index, attr] = overwrites
-    costs.rename(index={'onwind':'wind','offwind':'wind_offshore'},inplace=True)
-    return costs
 
 def add_renewable_plants_from_file(n, fn_plants, renewable_techs, costs):
 
     plants = pd.read_csv(fn_plants, index_col=0)
+    plants.replace(['wind','wind_offshore'], ['onwind','offwind'], inplace=True)
 
     for tech in renewable_techs:
         tech_plants = plants.query("type == @tech")
@@ -164,7 +101,7 @@ def add_renewable_plants_from_file(n, fn_plants, renewable_techs, costs):
 
         logger.info(f"Adding {len(tech_plants)} {tech} generators to the network.")
 
-        if tech=="wind_offshore":
+        if tech in ["onwind", "offwind"]:
             p = pd.read_csv(snakemake.input["wind"], index_col=0)
         else:
             p = pd.read_csv(snakemake.input[tech], index_col=0)
@@ -230,12 +167,14 @@ if __name__ == "__main__":
     )
 
     #attach load costs
-    Nyears = n.snapshot_weightings.sum() / 8784.
-    costs = load_costs(Nyears)
+    Nyears = n.snapshot_weightings.generators.sum() / 8784.
+    costs = load_costs(
+        snakemake.input.tech_costs, snakemake.config['costs'],
+        snakemake.config['electricity'], Nyears
+    )
 
     #add buses, transformers, lines and links
     n = add_buses_from_file(n, snakemake.input['buses'])
-
     n = add_branches_from_file(n, snakemake.input['lines'])
     n = add_dclines_from_file(n, snakemake.input['links'])
 

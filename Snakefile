@@ -1,3 +1,4 @@
+# Copyright 2021-2022 Martha Frysztacki (KIT)
 
 from os.path import normpath, exists
 from shutil import copyfile
@@ -7,6 +8,11 @@ HTTP = HTTPRemoteProvider()
 
 configfile: "config.yaml"
 
+#define subworkflow here
+#currently only function imports, no snakemake rules can be re-used due to leap year
+subworkflow_dir = config["subworkflow"]
+configfile: subworkflow_dir + "config.default.yaml" #append to existing config
+configfile: "config.yaml" #read config twice in case some keys were be overwritten
 
 wildcard_constraints:
     simpl="[a-zA-Z0-9]*|all",
@@ -16,7 +22,7 @@ wildcard_constraints:
 
 
 datafiles = ['bus.csv', 'sub.csv', 'bus2sub.csv', 'branch.csv', 'dcline.csv', 'demand.csv',
-             'plant.csv', 'solar.csv', 'wind.csv', 'costs.csv']
+             'plant.csv', 'solar.csv', 'wind.csv', 'hydro.csv']
 
 
 if config['enable'].get('retrieve_data', True):
@@ -37,7 +43,7 @@ rule create_network:
         solar   = "data/base_grid/solar.csv",
         hydro   = "data/base_grid/hydro.csv",
         demand  = "data/base_grid/demand.csv",
-        tech_costs = "data/costs.csv"
+        tech_costs = subworkflow_dir + "data/costs.csv"
     output: "networks/elec.nc"
     log: "logs/create_network.log"
     threads: 4
@@ -71,7 +77,7 @@ rule cluster_network:
 rule add_storage:
     input:
         network= "networks/elec_s_{nclusters}.nc",
-        tech_costs= "data/costs.csv"
+        tech_costs= subworkflow_dir + "data/costs.csv"
     output: "networks/elec_s_{nclusters}_ec.nc"
     log: "logs/add_storage/elec_s_{nclusters}_ec.log"
     threads: 4
