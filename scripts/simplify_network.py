@@ -50,13 +50,6 @@ if __name__ == "__main__":
     logger = logging.getLogger(__name__)
     
     n = pypsa.Network(snakemake.input.network)
-    
-    #mild hack to remove corrupted generators (should be removed in the long run)
-    nans  = n.generators_t.p_max_pu.isna().any()
-    nans = n.generators_t.p_max_pu.sum()[nans].index
-    n.mremove("Generator", nans)
-    nans  = n.generators_t.p_max_pu.isna().any()
-    nans = n.generators_t.p_max_pu.sum()[nans].index
 
     busmap_to_sub = pd.read_csv(snakemake.input.bus2sub, index_col=0, dtype={'sub_id':str})
     busmap_to_sub.index = busmap_to_sub.index.astype(str)
