@@ -5,7 +5,7 @@ import pandas as pd
 
 import sys
 sys.path.append(snakemake.config['subworkflow'] + "scripts/")
-from add_electricity import load_costs
+from add_electricity import load_costs, _add_missing_carriers_from_costs
 
 import logging
 
@@ -24,13 +24,6 @@ def add_buses_from_file(n, fn_buses):
 
     return n
 
-def annuity(m, r):
-    if isinstance(r, pd.Series):
-        return pd.Series(1 / m, index=r.index).where(r == 0, r / (1. - 1. / (1. + r) ** m))
-    elif r > 0:
-        return r / (1. - 1. / (1. + r) ** m)
-    else:
-        return 1 / m
 
 def add_branches_from_file(n, fn_branches):
 
@@ -69,6 +62,8 @@ def add_dclines_from_file(n, fn_dclines):
 
 def add_conventional_plants_from_file(n, fn_plants, conventional_techs, costs):
 
+    _add_missing_carriers_from_costs(n, costs, conventional_techs)
+
     plants = pd.read_csv(fn_plants, index_col=0)
     plants.replace(['dfo','ng'],['oil','gas'],inplace=True)
 
@@ -91,6 +86,8 @@ def add_conventional_plants_from_file(n, fn_plants, conventional_techs, costs):
 
 
 def add_renewable_plants_from_file(n, fn_plants, renewable_techs, costs):
+
+    _add_missing_carriers_from_costs(n, costs, renewable_techs)
 
     plants = pd.read_csv(fn_plants, index_col=0)
     plants.replace(['wind','wind_offshore'], ['onwind','offwind'], inplace=True)
