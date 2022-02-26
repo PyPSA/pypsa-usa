@@ -22,7 +22,8 @@ if __name__ == "__main__":
 
     nH = snakemake.wildcards.nH
     average_every_nhours(n, nH)
-    add_co2limit(n, snakemake.config['electricity']['co2limit'], Nyears)
+    cf = float(snakemake.wildcards.emission)
+    add_co2limit(n, snakemake.config['electricity']['co2limit']*cf, Nyears)
 
     config = snakemake.config
     solve_opts = snakemake.config['solving']['options']
