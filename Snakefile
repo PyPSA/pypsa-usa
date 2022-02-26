@@ -88,9 +88,9 @@ rule add_storage:
 rule add_co2:
     input:
         network= "networks/elec_s_{nclusters}_ec.nc",
-    output: "networks/elec_s_{nclusters}_ec_Co2L-{nH}.nc"
+    output: "networks/elec_s_{nclusters}_ec_Co2L{emission}-{nH}.nc"
     log:
-        solver = "logs/add_co2/elec_s_{nclusters}_ec_Co2L-{nH}_solver.log"
+        solver = "logs/add_co2/elec_s_{nclusters}_ec_Co2L{emission}-{nH}_solver.log"
     threads: 4
     resources: mem=5000
     log: "logs/add_co2"
