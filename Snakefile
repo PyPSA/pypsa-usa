@@ -11,6 +11,10 @@ configfile: "config.yaml"
 #define subworkflow here
 #currently only function imports, no snakemake rules can be re-used due to leap year
 subworkflow_dir = config["subworkflow"]
+subworkflow pypsaeur:
+    workdir: subworkflow_dir
+    snakefile: subworkflow_dir + "Snakefile"
+    configfile: subworkflow_dir + "/config.yaml"
 configfile: subworkflow_dir + "config.default.yaml" #append to existing config
 configfile: "config.yaml" #read config twice in case some keys were be overwritten
 
@@ -88,9 +92,9 @@ rule add_storage:
 rule add_co2:
     input:
         network= "networks/elec_s_{nclusters}_ec.nc",
-    output: "networks/elec_s_{nclusters}_ec_Co2L{emission}-{nH}.nc"
+    output: "networks/elec_s_{nclusters}_ec_{opts}.nc"
     log:
-        solver = "logs/add_co2/elec_s_{nclusters}_ec_Co2L{emission}-{nH}_solver.log"
+        solver = "logs/add_co2/elec_s_{nclusters}_ec_{opts}_solver.log"
     threads: 4
     resources: mem=5000
     log: "logs/add_co2"
