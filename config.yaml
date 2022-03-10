@@ -5,8 +5,9 @@ subworkflow: '../pypsa-eur/'
 enable:
   retrieve_data: true
 
-renewable_techs: ["onwind", "solar", "hydro", "offwind"]
+renewable_techs: ["onwind", "solar", "offwind", "hydro"]
 conventional_techs: ["coal", "gas", "nuclear", "oil", "geothermal"]
+extendable_techs : ["solar", "onwind", "offwind"]
 
 electricity:
   voltages: [230., 345., 500., 765.]

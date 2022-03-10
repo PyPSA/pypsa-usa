@@ -76,16 +76,17 @@ def add_conventional_plants_from_file(n, fn_plants, conventional_techs, costs):
         n.madd("Generator", tech_plants.index,
            bus=tech_plants.bus_id.astype(str),
            p_nom=tech_plants.Pmax,
-           marginal_cost=costs.at[tech, 'marginal_cost']*1.14,
+           marginal_cost=tech_plants.GenIOB*tech_plants.GenFuelCost/1.14, #divide or multiply the currency to make it the same as marginal cost
            p_nom_extendable=False,
            carrier = tech_plants.type,
-           weight = 1.
+           weight = 1.,
+           efficiency = costs.at[tech, 'efficiency']
         )
 
     return n
 
 
-def add_renewable_plants_from_file(n, fn_plants, renewable_techs, costs):
+def add_renewable_plants_from_file(n, fn_plants, renewable_techs, extendable_techs, costs):
 
     _add_missing_carriers_from_costs(n, costs, renewable_techs)
 
@@ -114,15 +115,22 @@ def add_renewable_plants_from_file(n, fn_plants, renewable_techs, costs):
             p_nom = tech_plants.Pmax
             p_max_pu = p[tech_plants.index] / p_nom
 
+        if tech in extendable_techs:
+            p_nom_extendable = True
+        else:
+            p_nom_extendable = False
+
         n.madd("Generator", tech_plants.index,
-               bus = tech_plants.bus_id,
-               p_nom_min = p_nom, #I forget what Tom said last time, but if we want to make it extendable for renewable units, this p should be min. Otherwise, the capacity will be cut to minimise the objective function.
-               marginal_cost = costs.at[tech, 'marginal_cost']*1.14,
-               capital_cost = costs.at[tech, 'capital_cost']*1.14, #divide or multiply the currency to make it the same as marginal cost
-               p_max_pu = p_max_pu,
-               p_nom_extendable = True,
-               carrier = tech,
-               weight = 1.
+               bus=tech_plants.bus_id,
+               p_nom_min=p_nom,
+               p_nom=p_nom,
+               marginal_cost=tech_plants.GenIOB*tech_plants.GenFuelCost/1.14,
+               capital_cost=costs.at[tech, 'capital_cost'],
+               p_max_pu=p_max_pu,
+               p_nom_extendable=p_nom_extendable,
+               carrier=tech,
+               weight=1.,
+               efficiency = costs.at[tech, 'efficiency']
         )
 
     return n
@@ -179,7 +187,9 @@ if __name__ == "__main__":
     renewable_techs = snakemake.config['renewable_techs']
     conventional_techs = snakemake.config['conventional_techs']
     n = add_conventional_plants_from_file(n, snakemake.input['plants'], conventional_techs, costs)
-    n = add_renewable_plants_from_file(n, snakemake.input['plants'], renewable_techs, costs)
+    n = add_renewable_plants_from_file(
+        n, snakemake.input['plants'], snakemake.config["extendable_techs"], renewable_techs, costs
+    )
 
     #add load
     n = add_demand_from_file(n, snakemake.input['demand'])
