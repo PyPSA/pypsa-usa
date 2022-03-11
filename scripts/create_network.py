@@ -65,7 +65,7 @@ def add_conventional_plants_from_file(n, fn_plants, conventional_techs, costs):
     _add_missing_carriers_from_costs(n, costs, conventional_techs)
 
     plants = pd.read_csv(fn_plants, index_col=0)
-    plants.replace(['dfo','ng'],['oil','gas'],inplace=True)
+    plants.replace(['dfo','ng'],['oil','OCGT'],inplace=True)
 
     for tech in conventional_techs:
         tech_plants = plants.query("type == @tech")
