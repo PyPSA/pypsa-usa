@@ -6,7 +6,7 @@ enable:
   retrieve_data: true
 
 renewable_techs: ["onwind", "solar", "offwind", "hydro"]
-conventional_techs: ["coal", "gas", "nuclear", "oil", "geothermal"]
+conventional_techs: ["coal", "OCGT", "nuclear", "oil", "geothermal"]
 extendable_techs : ["solar", "onwind", "offwind"]
 
 electricity:
@@ -14,7 +14,7 @@ electricity:
   co2limit: 1.4728e+9 # 0.8 * 1.841e+9
   co2base: 1.841e+9 #base_from_2020 Locations of the 1,841 MMmt of CO2 emissions from the current state of the grid in 2020.
 
-  conventional_carriers: [coal, gas, nuclear,oil] # [nuclear, oil, OCGT, CCGT, coal, lignite, geothermal, biomass]
+  conventional_carriers: [coal, OCGT, nuclear,oil] # [nuclear, oil, OCGT, CCGT, coal, lignite, geothermal, biomass]
 
 solving:
   options:
