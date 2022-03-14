@@ -21,6 +21,14 @@ if __name__ == "__main__":
     opts = snakemake.wildcards.opts.split('-')
 
     n = pypsa.Network(snakemake.input[0])
+
+    # hack to remove generators without capacity (required for SEG to work)
+    # shouldn't exist, in fact...
+    p_max_pu_norm = n.generators_t.p_max_pu.max()
+    remove_g = p_max_pu_norm[p_max_pu_norm == 0.].index
+    n.mremove("Generator", remove_g)
+
+    # continue as usual
     Nyears = n.snapshot_weightings.objective.sum() / 8784.
 
     set_line_s_max_pu(n, snakemake.config['lines']['s_max_pu'])
