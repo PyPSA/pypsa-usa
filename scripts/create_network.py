@@ -188,7 +188,7 @@ if __name__ == "__main__":
     conventional_techs = snakemake.config['conventional_techs']
     n = add_conventional_plants_from_file(n, snakemake.input['plants'], conventional_techs, costs)
     n = add_renewable_plants_from_file(
-        n, snakemake.input['plants'], snakemake.config["extendable_techs"], renewable_techs, costs
+        n, snakemake.input['plants'],  renewable_techs, snakemake.config["extendable_techs"], costs
     )
 
     #add load
