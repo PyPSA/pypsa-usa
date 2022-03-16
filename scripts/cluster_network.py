@@ -23,8 +23,7 @@ def cluster_network(n, n_clusters, algorithm='kmeans'):
     )
 
     return clustering.network, clustering.busmap
-    
-    
+
 
 if __name__ == "__main__":
     logger = logging.getLogger(__name__)
@@ -34,4 +33,8 @@ if __name__ == "__main__":
     n, busmap = cluster_network(n, int(snakemake.wildcards.clusters), 'kmeans')
 
     busmap.to_csv(snakemake.output['busmap'])
+
+    #hotfix for later scripts
+    n.buses["country"] = "USA"
+
     n.export_to_netcdf(snakemake.output['network'])
