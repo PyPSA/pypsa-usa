@@ -42,8 +42,19 @@ def add_branches_from_file(n, fn_branches):
                b = tech_branches.b/(n.buses.loc[tech_branches.from_bus_id]['v_nom'].values**2),
                s_nom = tech_branches.rateA,
                v_nom = tech_branches.from_bus_id.map(n.buses.v_nom),
-               interconnect = tech_branches.interconnect)
+               interconnect = tech_branches.interconnect,
+               type='Rail'
+        )
     return n
+
+
+def add_custom_line_type(n):
+
+    n.line_types.loc['Rail'] = pd.Series(
+        [60, 0.0683, 0.335, 15, 1.01],
+        index=['f_nom','r_per_length','x_per_length','c_per_length','i_nom']
+    )
+
 
 def add_dclines_from_file(n, fn_dclines):
 
@@ -55,7 +66,9 @@ def add_dclines_from_file(n, fn_dclines):
            dclines.index,
            bus0 = dclines.from_bus_id,
            bus1 = dclines.to_bus_id,
-           p_nom = dclines.Pt)
+           p_nom = dclines.Pt,
+           carrier = "DC"
+    )
 
     return n
 
@@ -189,6 +202,7 @@ if __name__ == "__main__":
     n = add_buses_from_file(n, snakemake.input['buses'])
     n = add_branches_from_file(n, snakemake.input['lines'])
     n = add_dclines_from_file(n, snakemake.input['links'])
+    add_custom_line_type(n)
 
     #add generators
     renewable_techs = snakemake.config['renewable_techs']
