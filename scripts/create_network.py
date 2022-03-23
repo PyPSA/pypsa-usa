@@ -67,7 +67,8 @@ def add_dclines_from_file(n, fn_dclines):
            bus0 = dclines.from_bus_id,
            bus1 = dclines.to_bus_id,
            p_nom = dclines.Pt,
-           carrier = "DC"
+           carrier = "DC",
+           underwater_fraction = 0.,
     )
 
     return n

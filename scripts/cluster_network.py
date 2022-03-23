@@ -7,6 +7,12 @@ import pandas as pd
 
 from pypsa.networkclustering import busmap_by_kmeans, get_clustering_from_busmap
 
+def add_custom_line_type(n):
+    n.line_types.loc['Rail'] = pd.Series(
+        [60, 0.0683, 0.335, 15, 1.01],
+        index=['f_nom','r_per_length','x_per_length','c_per_length','i_nom']
+    )
+
 
 def cluster_network(n, n_clusters, algorithm='kmeans'):
 
@@ -34,7 +40,8 @@ if __name__ == "__main__":
 
     busmap.to_csv(snakemake.output['busmap'])
 
-    #hotfix for later scripts
+    #hotfixes for later scripts
     n.buses["country"] = "USA"
+    add_custom_line_type(n)
 
     n.export_to_netcdf(snakemake.output['network'])
