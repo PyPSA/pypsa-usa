@@ -134,3 +134,10 @@ rule solve_network:
     resources: mem_mb=memory
     shadow: "minimal"
     script: pypsaeur("scripts/solve_network.py")
+
+rule solve_all:
+    input:
+        expand("results/networks/elec_s_200_ec_lv1.0_{opts}.nc",
+               opts=['Co2L0.0-2920SEG', 'Co2L0.1-2920SEG', 'Co2L0.2-2920SEG', 'Co2L0.3-2920SEG',
+                     'Co2L0.4-2920SEG', 'Co2L0.5-2920SEG', 'Co2L0.6-2920SEG', 'Co2L0.7-2920SEG',
+                     'Co2L0.8-2920SEG', 'Co2L0.9-2920SEG', 'Co2L1.0-2920SEG'])
