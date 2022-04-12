@@ -135,6 +135,7 @@ rule solve_network:
     shadow: "minimal"
     script: pypsaeur("scripts/solve_network.py")
 
+
 rule solve_all:
     input:
         expand("results/networks/elec_s_200_ec_l{ll}_{opts}.nc",
