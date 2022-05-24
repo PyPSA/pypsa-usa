@@ -7,16 +7,16 @@ import numpy as np
 from functools import reduce
 from pypsa.networkclustering import busmap_by_kmeans, get_clustering_from_busmap
 
-def simplify_network_to_345(n):
-    logger.info("Mapping all network lines onto a single 345kV layer")
+def simplify_network_to_voltage_level(n, voltage_level):
+    logger.info("Mapping all network lines onto a single layer")
 
-    n.buses['v_nom'] = 345.
+    n.buses['v_nom'] = voltage_level
 
-    linetype_345, = n.lines.loc[n.lines.v_nom == 345., 'type'].unique()
-    lines_v_nom_b = n.lines.v_nom != 345.
-    n.lines.loc[lines_v_nom_b, 'num_parallel'] *= (n.lines.loc[lines_v_nom_b, 'v_nom'] / 345.)**2
-    n.lines.loc[lines_v_nom_b, 'v_nom'] = 345.
-    n.lines.loc[lines_v_nom_b, 'type'] = linetype_345
+    linetype, = n.lines.loc[n.lines.v_nom == voltage_level, 'type'].unique()
+    lines_v_nom_b = n.lines.v_nom != voltage_level
+    n.lines.loc[lines_v_nom_b, 'num_parallel'] *= (n.lines.loc[lines_v_nom_b, 'v_nom'] / voltage_level)**2
+    n.lines.loc[lines_v_nom_b, 'v_nom'] = voltage_level
+    n.lines.loc[lines_v_nom_b, 'type'] = linetype
     n.lines.loc[lines_v_nom_b, 's_nom'] = (
         np.sqrt(3) * n.lines['type'].map(n.line_types.i_nom) *
         n.lines.bus0.map(n.buses.v_nom) * n.lines.num_parallel
@@ -51,7 +51,13 @@ def aggregate_to_substations(network, substations, busmap):
         aggregate_one_ports=["Load", "StorageUnit"],
         line_length_factor=1.,
         bus_strategies={'type':np.max},
-        generator_strategies={'marginal_cost': np.mean, 'p_nom_min': np.sum}
+        generator_strategies={'marginal_cost': np.mean, 
+                              'p_nom_min': np.sum, 
+                              'p_min_pu': np.mean, 
+                              'p_max_pu': np.mean, 
+                              "ramp_limit_up": np.max, 
+                              "ramp_limit_down": np.max
+        }
     )
 
     network = clustering.network
@@ -85,8 +91,10 @@ def assign_line_lengths(n, line_length_factor, busmap_to_sub=None, substations=N
 if __name__ == "__main__":
     logger = logging.getLogger(__name__)
 
+    voltage_level = snakemake.config['electricity']['voltage_simplified']
+
     n = pypsa.Network(snakemake.input.network)
-    n, trafo_map = simplify_network_to_345(n)
+    n, trafo_map = simplify_network_to_voltage_level(n, voltage_level)
 
     busmap_to_sub = pd.read_csv(snakemake.input.bus2sub, index_col=0, dtype={'sub_id':str})
     busmap_to_sub.index = busmap_to_sub.index.astype(str)

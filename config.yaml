@@ -1,22 +1,36 @@
 # Copyright 2021-2022 Martha Frysztacki (KIT)
 
-subworkflow: '../pypsa-eur/'
+subworkflow: "pypsa-eur/"
 
-enable:
-  retrieve_data: true
+zenodo_repository:
+  url: "https://zenodo.org/record/4538590/files/USATestSystem.zip"
+  use: false # if false, network is created from powersimdata
 
-renewable_techs: ["onwind", "solar", "offwind", "hydro"]
-conventional_techs: ["coal", "OCGT", "nuclear", "oil", "geothermal"]
-extendable_techs : ["solar", "onwind", "offwind"]
+allowed_carriers: [wind, solar, offwind, hydro, coal, nuclear, ng, oil, geothermal]
+committable_carriers: []
+extendable_carriers: [solar, wind, offwind]
 
 electricity:
   voltages: [230., 345., 500., 765.]
+  voltage_simplified: 230
   co2limit: 1.4728e+9 # 0.8 * 1.841e+9
   co2base: 1.841e+9 #base_from_2020 Locations of the 1,841 MMmt of CO2 emissions from the current state of the grid in 2020.
 
-  conventional_carriers: [coal, OCGT, nuclear,oil] # [nuclear, oil, OCGT, CCGT, coal, lignite, geothermal, biomass]
+  extendable_carriers:
+    Generator: []
+    StorageUnit: [] # battery, H2
+    Store: [battery, H2]
+    Link: []
+
 
 solving:
   options:
     load_shedding: True
     skip_iterations: True
+
+costs:
+  year: 2030
+  discountrate: 0.07 # From a Lion Hirth paper, also reflects average of Noothout et al 2016
+  USD2013_to_EUR2013: 0.7532 # https://www.ecb.europa.eu/stats/exchange/eurofxref/html/eurofxref-graph-usd.en.html
+  emission_prices: # in currency per tonne emission, only used with the option Ep
+    co2: 0.

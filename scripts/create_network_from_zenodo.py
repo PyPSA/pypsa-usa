@@ -4,10 +4,12 @@ import pypsa
 import pandas as pd
 
 import sys
-sys.path.append(snakemake.config['subworkflow'] + "scripts/")
+import logging
+import os
+
+sys.path.append(os.path.join('pypsa-eur', 'scripts'))
 from add_electricity import load_costs, _add_missing_carriers_from_costs
 
-import logging
 
 idx = pd.IndexSlice
 

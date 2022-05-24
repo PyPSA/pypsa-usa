@@ -13,7 +13,7 @@ import zipfile
 from pathlib import Path
 
 import sys
-sys.path.append(snakemake.config['subworkflow'] + "scripts/")
+sys.path.append(Path(snakemake.config['subworkflow']) / "scripts" )
 from _helpers import progress_retrieve, configure_logging
 
 logger = logging.getLogger(__name__)
@@ -25,8 +25,8 @@ if __name__ == "__main__":
     rootpath = '.'
     configure_logging(snakemake)
 
-    url = "https://zenodo.org/record/4538590/files/USATestSystem.zip"
-
+    url = snakemake.config["zenodo_repository"]["url"]
+                           
     # Save locations
     tarball_fn = Path(f"{rootpath}/USATestSystem.zip")
     to_fn = Path(f"{rootpath}/data")

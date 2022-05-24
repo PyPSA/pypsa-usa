@@ -25,7 +25,14 @@ def cluster_network(n, n_clusters, algorithm='kmeans'):
         n, busmap, aggregate_generators_weighted=True,
         aggregate_one_ports=["Load", "StorageUnit"],
         line_length_factor=1.25,
-        generator_strategies={'marginal_cost': np.mean, 'p_nom_min': np.sum}
+        generator_strategies={'marginal_cost': np.mean, 
+                              'committable': np.any, 
+                              'p_nom_min': np.sum, 
+                              'p_min_pu': np.mean, 
+                              'p_max_pu': np.mean, 
+                              "ramp_limit_up": np.max, 
+                              "ramp_limit_down": np.max
+        }
     )
 
     return clustering.network, clustering.busmap
