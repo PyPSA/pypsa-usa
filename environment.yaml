@@ -1,0 +1,61 @@
+# SPDX-FileCopyrightText: : 2017-2020 The PyPSA-Eur Authors
+#
+# SPDX-License-Identifier: MIT
+
+name: compat-pypsa-powersimdata
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - python>=3.8
+  - pip
+  - mamba # esp for windows build
+
+  - pypsa>=0.18
+  - atlite>=0.2.5
+
+  # Dependencies of the workflow itself
+  - xlrd
+  - openpyxl
+  - pycountry
+  - seaborn
+  - snakemake-minimal
+  - memory_profiler
+  - yaml
+  - pytables
+  - lxml
+  - numpy
+  - geopandas
+  - xarray
+  - netcdf4
+  - networkx
+  - scipy
+  - shapely
+  - progressbar2
+  - pyomo
+  - matplotlib
+
+  # Keep in conda environment when calling ipython
+  - ipython
+
+  # GIS dependencies:
+  - cartopy
+  - descartes
+  - rasterio
+
+  # PyPSA-Eur-Sec Dependencies
+  - geopy
+  - tqdm
+  - pytz
+  - country_converter
+  - tabula-py
+
+  # For editing
+  - spyder
+
+  - pip:
+    - vresutils==0.3.1
+    - tsam>=1.1.0
+    - git+https://github.com/pypsa/powersimdata.git@exporter-to-pypsa
+    - git+https://github.com/pypsa/pypsa.git
+    - gurobipy
