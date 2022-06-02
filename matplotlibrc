@@ -1,0 +1,8 @@
+font.family: sans-serif
+font.sans-serif: Ubuntu
+image.cmap: viridis
+axes.prop_cycle : tab20
+axes.grid : false
+legend.frameon : false
+savefig.bbox : tight
+mathtext.default : regular

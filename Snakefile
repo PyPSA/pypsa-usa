@@ -1,13 +1,9 @@
 # Copyright 2021-2022 Martha Frysztacki (KIT)
 
-from os.path import normpath, exists
-from shutil import copyfile
-
-from snakemake.remote.HTTP import RemoteProvider as HTTPRemoteProvider
-
-HTTP = HTTPRemoteProvider()
+from os.path import normpath
 
 
+localrules: all, report, clean
 configfile: "config.yaml"
 
 
@@ -236,3 +232,41 @@ rule solve_network:
         "minimal"
     script:
         pypsaeur("scripts/solve_network.py")
+
+
+rule report:
+    message: "Compile report."
+    input:
+        tex="../report/report.tex",
+        bib="../report/references.bib"
+    output: "../report/report.pdf"
+    shell:
+        """
+        pdflatex {input.tex}
+        bibtex {input.bib})
+        pdflatex {input.tex}
+        pdflatex {input.tex}
+        """
+
+
+
+rule dag:
+     message: "Plot dependency graph of the workflow."
+     output:
+         dot="../resources/dag.dot",
+         pdf="../resources/dag.pdf"
+     shell:
+         """
+         snakemake --rulegraph > {output.dot}
+         dot -Tpdf -o {output.pdf} {output.dot}
+         """
+
+
+rule clean:
+    message: "Remove all build results but keep downloaded data."
+    run:
+         import shutil
+
+         shutil.rmtree("../resources")
+         shutil.rmtree("../results")
+         print("Data downloaded to data/ has not been cleaned.")
