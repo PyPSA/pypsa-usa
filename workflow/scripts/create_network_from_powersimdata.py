@@ -8,7 +8,7 @@ from yaml import load
 
 from create_network_from_zenodo import add_custom_line_type
 
-sys.path.append(os.path.join("pypsa-eur", "scripts"))
+sys.path.append(os.path.join("subworkflows", "pypsa-eur", "scripts"))
 from add_electricity import load_costs, _add_missing_carriers_from_costs
 
 
@@ -54,7 +54,7 @@ if __name__ == "__main__":
         capital_cost=n.generators.carrier.map(costs.capital_cost),
         weight=1,
         p_nom_extendable=n.generators.carrier.isin(extendable_carriers),
-        commmittable=n.generators.carrier.isin(committable_carriers),
+        committable=n.generators.carrier.isin(committable_carriers),
     )
     n.mremove("Generator", n.generators.query("carrier not in @allowed_carriers").index)
 

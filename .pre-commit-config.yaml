@@ -1,0 +1,44 @@
+repos:
+- repo: https://github.com/pre-commit/pre-commit-hooks
+  rev: v4.2.0
+  hooks:
+  - id: trailing-whitespace
+  - id: end-of-file-fixer
+  - id: mixed-line-ending
+  - id: check-yaml
+  - id: check-merge-conflict
+  - id: check-added-large-files
+    args: ['--maxkb=2000']
+- repo: https://github.com/psf/black
+  rev: 22.3.0
+  hooks:
+  - id: black
+  - id: black-jupyter
+- repo: https://github.com/aflc/pre-commit-jupyter
+  rev: v1.2.1
+  hooks:
+  - id: jupyter-notebook-cleanup
+- repo: https://github.com/snakemake/snakefmt
+  rev: v0.6.0
+  hooks:
+  - id: snakefmt
+- repo: https://github.com/jonasbb/pre-commit-latex-hooks
+  rev: v1.3.0
+  hooks:
+  - id: american-eg-ie
+  - id: cleveref-capitalization
+  - id: consistent-spelling
+    args:
+        [
+          "--emph=et al.",
+          '--regex=naive=\bna(i|\\"i)ve',
+          '--regex=optimisation=\boptimi(s|z)ation',
+        ]
+  - id: ensure-labels-for-sections
+  - id: no-space-in-cite
+  - id: tilde-cite
+  - id: unique-labels
+# - repo: https://github.com/fsfe/reuse-tool
+#   rev: latest
+#   hooks:
+#   - id: reuse

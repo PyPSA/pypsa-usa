@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: MIT
 
-name: compat-pypsa-powersimdata
+name: pypsa-usa
 channels:
   - conda-forge
   - bioconda
@@ -26,6 +26,7 @@ dependencies:
   - lxml
   - numpy
   - geopandas
+  - powerplantmatching
   - xarray
   - netcdf4
   - networkx
@@ -50,12 +51,11 @@ dependencies:
   - country_converter
   - tabula-py
 
-  # For editing
-  - spyder
+  - fs<=2.4.14
 
   - pip:
     - vresutils==0.3.1
     - tsam>=1.1.0
-    - git+https://github.com/pypsa/powersimdata.git@exporter-to-pypsa
+    - git+https://github.com/Breakthrough-Energy/powersimdata.git@pypsa
     - git+https://github.com/pypsa/pypsa.git
     - gurobipy

@@ -1,0 +1,12 @@
+.snakemake
+.git
+.pytest_cache
+__pycache__
+*.pyc
+*.pyo
+.vscode
+.DS_Store
+.ipynb_checkpoints
+.vscode
+resources
+results
