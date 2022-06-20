@@ -13,6 +13,7 @@ import zipfile
 from pathlib import Path
 
 import sys
+import os
 
 sys.path.append(os.path.join("subworkflows", "pypsa-eur", "scripts"))
 from _helpers import progress_retrieve, configure_logging

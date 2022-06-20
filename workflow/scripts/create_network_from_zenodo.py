@@ -87,28 +87,36 @@ def add_dclines_from_file(n, fn_dclines):
     return n
 
 
-def add_conventional_plants_from_file(n, fn_plants, conventional_techs, costs):
+def add_conventional_plants_from_file(
+        n, fn_plants, conventional_carriers, extendable_carriers, costs
+):
+    print(conventional_carriers)
 
-    _add_missing_carriers_from_costs(n, costs, conventional_techs)
+    _add_missing_carriers_from_costs(n, costs, conventional_carriers)
 
     plants = pd.read_csv(fn_plants, index_col=0)
-    plants.replace(["dfo", "ng"], ["oil", "OCGT"], inplace=True)
+    plants.replace(["dfo"], ["oil"], inplace=True)
 
-    for tech in conventional_techs:
+    for tech in conventional_carriers:
         tech_plants = plants.query("type == @tech")
         tech_plants.index = tech_plants.index.astype(str)
 
         logger.info(f"Adding {len(tech_plants)} {tech} generators to the network.")
+
+        if tech in extendable_carriers:
+            p_nom_extendable = True
+        else:
+            p_nom_extendable = False
 
         n.madd(
             "Generator",
             tech_plants.index,
             bus=tech_plants.bus_id.astype(str),
             p_nom=tech_plants.Pmax,
+            p_nom_extendable=p_nom_extendable,
             marginal_cost=tech_plants.GenIOB
             * tech_plants.GenFuelCost
             / 1.14,  # divide or multiply the currency to make it the same as marginal cost
-            p_nom_extendable=False,
             carrier=tech_plants.type,
             weight=1.0,
             efficiency=costs.at[tech, "efficiency"],
@@ -118,21 +126,21 @@ def add_conventional_plants_from_file(n, fn_plants, conventional_techs, costs):
 
 
 def add_renewable_plants_from_file(
-    n, fn_plants, renewable_techs, extendable_techs, costs
+    n, fn_plants, renewable_carriers, extendable_carriers, costs
 ):
 
-    _add_missing_carriers_from_costs(n, costs, renewable_techs)
+    _add_missing_carriers_from_costs(n, costs, renewable_carriers)
 
     plants = pd.read_csv(fn_plants, index_col=0)
-    plants.replace(["wind", "wind_offshore"], ["onwind", "offwind"], inplace=True)
+    plants.replace(["wind_offshore"], ["offwind"], inplace=True)
 
-    for tech in renewable_techs:
+    for tech in renewable_carriers:
         tech_plants = plants.query("type == @tech")
         tech_plants.index = tech_plants.index.astype(str)
 
         logger.info(f"Adding {len(tech_plants)} {tech} generators to the network.")
 
-        if tech in ["onwind", "offwind"]:
+        if tech in ["wind", "offwind"]:
             p = pd.read_csv(snakemake.input["wind"], index_col=0)
         else:
             p = pd.read_csv(snakemake.input[tech], index_col=0)
@@ -147,7 +155,7 @@ def add_renewable_plants_from_file(
             p_nom = tech_plants.Pmax
             p_max_pu = p[tech_plants.index] / p_nom
 
-        if tech in extendable_techs:
+        if tech in extendable_carriers:
             p_nom_extendable = True
         else:
             p_nom_extendable = False
@@ -223,6 +231,9 @@ if __name__ == "__main__":
         snakemake.config["electricity"],
         Nyears,
     )
+    
+    # should renaming technologies move to config.yaml?
+    costs = costs.rename(index={'onwind': 'wind', 'OCGT': 'ng'})
 
     # add buses, transformers, lines and links
     n = add_buses_from_file(n, snakemake.input["buses"])
@@ -230,18 +241,27 @@ if __name__ == "__main__":
     n = add_dclines_from_file(n, snakemake.input["links"])
     add_custom_line_type(n)
 
-    # add generators
-    renewable_techs = snakemake.config["renewable_techs"]
-    conventional_techs = snakemake.config["conventional_techs"]
-    n = add_conventional_plants_from_file(
-        n, snakemake.input["plants"], conventional_techs, costs
+    # add renewable generators
+    renewable_carriers = list(
+        set(snakemake.config["allowed_carriers"]).intersection(
+            set(["wind", "solar", "offwind", "hydro"]))
     )
     n = add_renewable_plants_from_file(
         n,
         snakemake.input["plants"],
-        renewable_techs,
-        snakemake.config["extendable_techs"],
+        renewable_carriers,
+        snakemake.config["extendable_carriers"],
         costs,
+    )
+
+    # add conventional generators
+    conventional_carriers = list(
+        set(snakemake.config["allowed_carriers"]).intersection(
+            set(["coal", "ng", "nuclear", "oil", "geothermal"]))
+    )
+    n = add_conventional_plants_from_file(
+        n, snakemake.input["plants"], conventional_carriers,
+        snakemake.config["extendable_carriers"], costs
     )
 
     # add load
