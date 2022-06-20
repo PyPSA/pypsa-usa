@@ -14,9 +14,14 @@ from add_electricity import load_costs, _add_missing_carriers_from_costs
 idx = pd.IndexSlice
 
 
-def add_buses_from_file(n, fn_buses):
+def add_buses_from_file(n, fn_buses, interconnect="Western"):
 
     buses = pd.read_csv(fn_buses, index_col=0)
+    if interconnect != "usa":
+        # interconnects in raw data given with uppercase
+        interconnect = interconnect[0].upper() + interconnect[1:]
+        buses = pd.read_csv(fn_buses, index_col=0).query("interconnect == @interconnect")
+
     logger.info(f"Adding {len(buses)} buses to the network.")
 
     n.madd(
@@ -33,7 +38,8 @@ def add_buses_from_file(n, fn_buses):
 
 def add_branches_from_file(n, fn_branches):
 
-    branches = pd.read_csv(fn_branches, dtype={"from_bus_id": str}, index_col=0)
+    branches = (pd.read_csv(fn_branches, dtype={"from_bus_id": str, "to_bus_id": str}, index_col=0)
+                .query("from_bus_id in @n.buses.index and to_bus_id in @n.buses.index"))
 
     for tech in ["Line", "Transformer"]:
         tech_branches = branches.query("branch_device_type == @tech")
@@ -70,7 +76,8 @@ def add_custom_line_type(n):
 
 def add_dclines_from_file(n, fn_dclines):
 
-    dclines = pd.read_csv(fn_dclines, index_col=0)
+    dclines = (pd.read_csv(fn_dclines, dtype={"from_bus_id": str, "to_bus_id": str}, index_col=0)
+               .query("from_bus_id in @n.buses.index and to_bus_id in @n.buses.index"))
 
     logger.info(f"Adding {len(dclines)} dc-lines as Links to the network.")
 
@@ -90,11 +97,11 @@ def add_dclines_from_file(n, fn_dclines):
 def add_conventional_plants_from_file(
         n, fn_plants, conventional_carriers, extendable_carriers, costs
 ):
-    print(conventional_carriers)
 
     _add_missing_carriers_from_costs(n, costs, conventional_carriers)
 
-    plants = pd.read_csv(fn_plants, index_col=0)
+    plants = (pd.read_csv(fn_plants, dtype={"bus_id": str}, index_col=0)
+              .query("bus_id in @n.buses.index"))
     plants.replace(["dfo"], ["oil"], inplace=True)
 
     for tech in conventional_carriers:
@@ -131,7 +138,8 @@ def add_renewable_plants_from_file(
 
     _add_missing_carriers_from_costs(n, costs, renewable_carriers)
 
-    plants = pd.read_csv(fn_plants, index_col=0)
+    plants = (pd.read_csv(fn_plants, dtype={'bus_id': str}, index_col=0)
+              .query("bus_id in @n.buses.index"))
     plants.replace(["wind_offshore"], ["offwind"], inplace=True)
 
     for tech in renewable_carriers:
@@ -144,8 +152,11 @@ def add_renewable_plants_from_file(
             p = pd.read_csv(snakemake.input["wind"], index_col=0)
         else:
             p = pd.read_csv(snakemake.input[tech], index_col=0)
+        intersection = set(p.columns).intersection(tech_plants.index)
+        p = p[list(intersection)]
 
         p.index = n.snapshots
+        p.columns = p.columns.astype(str)
 
         if (tech_plants.Pmax == 0).any():
             # p_nom is the maximum of {Pmax, dispatch}
@@ -154,6 +165,7 @@ def add_renewable_plants_from_file(
         else:
             p_nom = tech_plants.Pmax
             p_max_pu = p[tech_plants.index] / p_nom
+
 
         if tech in extendable_carriers:
             p_nom_extendable = True
@@ -195,9 +207,12 @@ def add_demand_from_file(n, fn_demand):
     """
 
     demand = pd.read_csv(fn_demand, index_col=0)
-    demand.index = n.snapshots
     # zone_id is int, therefore demand.columns should be int first
     demand.columns = demand.columns.astype(int)
+    demand.index = n.snapshots
+
+    intersection = set(demand.columns).intersection(n.buses.zone_id.unique())
+    demand = demand[list(intersection)]
 
     demand_per_bus_pu = (
         n.buses.set_index("zone_id").Pd / n.buses.groupby("zone_id").sum().Pd
@@ -236,7 +251,8 @@ if __name__ == "__main__":
     costs = costs.rename(index={'onwind': 'wind', 'OCGT': 'ng'})
 
     # add buses, transformers, lines and links
-    n = add_buses_from_file(n, snakemake.input["buses"])
+    n = add_buses_from_file(n, snakemake.input["buses"],
+                            interconnect=snakemake.wildcards.interconnect)
     n = add_branches_from_file(n, snakemake.input["lines"])
     n = add_dclines_from_file(n, snakemake.input["links"])
     add_custom_line_type(n)
@@ -268,4 +284,4 @@ if __name__ == "__main__":
     n = add_demand_from_file(n, snakemake.input["demand"])
 
     # export network
-    n.export_to_netcdf(snakemake.output[0])
+    n.export_to_netcdf(snakemake.output.network)
