@@ -78,8 +78,8 @@ if not config["zenodo_repository"]["use"]:
         input:
             tech_costs="subworkflows/pypsa-eur/data/costs.csv",
         output:
-            bus2sub="data/base_grid/bus2sub.csv",
-            sub="data/base_grid/sub.csv",
+            bus2sub="data/base_grid/{interconnect}/bus2sub.csv",
+            sub="data/base_grid/{interconnect}/sub.csv",
             network="networks/{interconnect}.nc",
         log:
             "logs/create_network/{interconnect}.log",
@@ -127,6 +127,8 @@ else:
             sub="data/base_grid/sub.csv",
             tech_costs="subworkflows/pypsa-eur/data/costs.csv",
         output:
+            bus2sub="data/base_grid/{interconnect}/bus2sub.csv",
+            sub="data/base_grid/{interconnect}/sub.csv",
             network="networks/{interconnect}.nc",
         log:
             "logs/create_network/{interconnect}.log",
@@ -139,8 +141,8 @@ else:
 
 rule simplify_network:
     input:
-        bus2sub="data/base_grid/bus2sub.csv",
-        sub="data/base_grid/sub.csv",
+        bus2sub="data/base_grid/{interconnect}/bus2sub.csv",
+        sub="data/base_grid/{interconnect}/sub.csv",
         network="networks/{interconnect}.nc",
     output:
         network="networks/{interconnect}_s.nc",
