@@ -2,7 +2,7 @@ import logging
 import sys
 import os
 
-from powersimdata.input.export_data import export_to_pypsa
+from powersimdata.input.exporter import export_to_pypsa
 from powersimdata import Scenario
 from yaml import load
 
