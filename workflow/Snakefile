@@ -78,8 +78,8 @@ if not config["zenodo_repository"]["use"]:
         input:
             tech_costs="subworkflows/pypsa-eur/data/costs.csv",
         output:
-            bus2sub="data/base_grid/{interconnect}/bus2sub.csv",
-            sub="data/base_grid/{interconnect}/sub.csv",
+            bus2sub="data/base_grid/bus2sub.csv",
+            sub="data/base_grid/sub.csv",
             network="networks/{interconnect}.nc",
         log:
             "logs/create_network/{interconnect}.log",
@@ -107,7 +107,7 @@ else:
 
     rule retrieve_data_from_zenodo:
         output:
-            expand("data/base_grid/usa/{file}", file=DATAFILES),
+            expand("data/base_grid/{file}", file=DATAFILES),
         log:
             "logs/retrieve_data_from_zenodo.log",
         script:
@@ -115,21 +115,21 @@ else:
 
     rule create_network:
         input:
-            buses="data/base_grid/usa/bus.csv",
-            lines="data/base_grid/usa/branch.csv",
-            links="data/base_grid/usa/dcline.csv",
-            plants="data/base_grid/usa/plant.csv",
-            wind="data/base_grid/usa/wind.csv",
-            solar="data/base_grid/usa/solar.csv",
-            hydro="data/base_grid/usa/hydro.csv",
-            demand="data/base_grid/usa/demand.csv",
-            bus2sub="data/base_grid/usa/bus2sub.csv",
-            sub="data/base_grid/usa/sub.csv",
+            buses="data/base_grid/bus.csv",
+            lines="data/base_grid/branch.csv",
+            links="data/base_grid/dcline.csv",
+            plants="data/base_grid/plant.csv",
+            wind="data/base_grid/wind.csv",
+            solar="data/base_grid/solar.csv",
+            hydro="data/base_grid/hydro.csv",
+            demand="data/base_grid/demand.csv",
+            bus2sub="data/base_grid/bus2sub.csv",
+            sub="data/base_grid/sub.csv",
             tech_costs="subworkflows/pypsa-eur/data/costs.csv",
         output:
-            network="networks/usa.nc",
+            network="networks/{interconnect}.nc",
         log:
-            "logs/create_network.log",
+            "logs/create_network/{interconnect}.log",
         threads: 4
         resources:
             mem=500,
@@ -139,8 +139,8 @@ else:
 
 rule simplify_network:
     input:
-        bus2sub="data/base_grid/{interconnect}/bus2sub.csv",
-        sub="data/base_grid/{interconnect}/sub.csv",
+        bus2sub="data/base_grid/bus2sub.csv",
+        sub="data/base_grid/sub.csv",
         network="networks/{interconnect}.nc",
     output:
         network="networks/{interconnect}_s.nc",
