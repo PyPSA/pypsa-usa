@@ -18,8 +18,6 @@ def add_buses_from_file(n, fn_buses, interconnect="Western"):
 
     buses = pd.read_csv(fn_buses, index_col=0)
     if interconnect != "usa":
-        # interconnects in raw data given with uppercase
-        interconnect = interconnect[0].upper() + interconnect[1:]
         buses = pd.read_csv(fn_buses, index_col=0).query("interconnect == @interconnect")
 
     logger.info(f"Adding {len(buses)} buses to the network.")
@@ -250,9 +248,13 @@ if __name__ == "__main__":
     # should renaming technologies move to config.yaml?
     costs = costs.rename(index={'onwind': 'wind', 'OCGT': 'ng'})
 
+    interconnect = snakemake.wildcards.interconnect
+    # interconnect in raw data given with an uppercase first letter
+    if interconnect != "usa":
+        interconnect = interconnect[0].upper() + interconnect[1:]
+
     # add buses, transformers, lines and links
-    n = add_buses_from_file(n, snakemake.input["buses"],
-                            interconnect=snakemake.wildcards.interconnect)
+    n = add_buses_from_file(n, snakemake.input["buses"], interconnect=interconnect)
     n = add_branches_from_file(n, snakemake.input["lines"])
     n = add_dclines_from_file(n, snakemake.input["links"])
     add_custom_line_type(n)
@@ -282,6 +284,18 @@ if __name__ == "__main__":
 
     # add load
     n = add_demand_from_file(n, snakemake.input["demand"])
+
+    # export bus2sub interconnect data
+    bus2sub = (pd.read_csv(snakemake.input.bus2sub)
+               .query("interconnect == @interconnect")
+               .set_index("bus_id"))
+    bus2sub.to_csv(snakemake.output.bus2sub)
+
+    # export sub interconnect data
+    sub = (pd.read_csv(snakemake.input.sub)
+           .query("interconnect == @interconnect")
+           .set_index("sub_id"))
+    sub.to_csv(snakemake.output.sub)
 
     # export network
     n.export_to_netcdf(snakemake.output.network)
