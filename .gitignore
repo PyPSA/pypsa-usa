@@ -12,6 +12,7 @@ dconf
 results/
 resources/
 data/
+workflow/benchmarks/
 
 ## Core latex/pdflatex auxiliary files:
 *.aux
