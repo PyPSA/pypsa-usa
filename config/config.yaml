@@ -6,6 +6,8 @@ zenodo_repository:
   url: "https://zenodo.org/record/4538590/files/USATestSystem.zip"
   use: false # if false, network is created from powersimdata
 
+countries: [US]
+
 allowed_carriers: [wind, solar, offwind, hydro, coal, nuclear, ng, oil, geothermal]
 committable_carriers: []
 extendable_carriers: [solar, wind, offwind]
@@ -23,6 +25,15 @@ electricity:
     Link: []
 
 
+renewable:
+  wind:
+    potential: simple # or conservative
+  solar:
+    potential: simple # or conservative
+  hydro:
+    potential: simple
+
+
 solving:
   options:
     formulation: kirchhoff
@@ -31,7 +42,7 @@ solving:
     min_iterations: 4
     max_iterations: 6
     clip_p_max_pu: 0.01
-    skip_iterations: false
+    skip_iterations: true
     track_iterations: false
     #nhours: 10
   solver:

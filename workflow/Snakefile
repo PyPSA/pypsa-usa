@@ -4,6 +4,7 @@
 
 from os.path import normpath
 
+COSTS = "subworkflows/pypsa-eur/data/costs.csv"
 
 # --------------------------- Workflow constraints --------------------------- #
 
@@ -42,7 +43,7 @@ subworkflow pypsaeur:
 rule test_all:
     input:
         expand(
-            "../results/networks/texas_s_10_ec_l{ll}_{opts}.nc",
+            "../results/texas/elec_s_10_ec_l{ll}_{opts}.nc",
             ll=["vopt"],
             opts=[
                 "Co2L0.5-2920SEG",
@@ -80,7 +81,7 @@ if not config["zenodo_repository"]["use"]:
         output:
             bus2sub="data/base_grid/{interconnect}/bus2sub.csv",
             sub="data/base_grid/{interconnect}/sub.csv",
-            network="networks/{interconnect}.nc",
+            network="../resources/{interconnect}/elec.nc",
         log:
             "logs/create_network/{interconnect}.log",
         threads: 4
@@ -127,7 +128,7 @@ else:
             sub="data/base_grid/usa/sub.csv",
             tech_costs="subworkflows/pypsa-eur/data/costs.csv",
         output:
-            network="networks/usa.nc",
+            network="../resources/{interconnect}/elec.nc",
         log:
             "logs/create_network.log",
         threads: 4
@@ -137,15 +138,50 @@ else:
             "scripts/create_network_from_zenodo.py"
 
 
+rule build_shapes:
+    params:
+        source_states_shapes="admin_1_states_provinces",
+        source_offshore_shapes="https://www.weather.gov/source/gis/Shapefiles/WSOM/oz22mr22.zip",
+        buffer_distance=2000,
+    output:
+        country_shapes="../resources/{interconnect}/country_shapes.geojson",
+        state_shapes="../resources/{interconnect}/state_shapes.geojson",
+        offshore_shapes="../resources/{interconnect}/offshore_shapes.geojson",
+    log:
+        "logs/build_shapes_{interconnect}.log",
+    threads: 1
+    resources:
+        mem_mb=1000,
+    script:
+        "scripts/build_shapes.py"
+
+
+rule build_bus_regions:
+    input:
+        country_shapes="../resources/{interconnect}/country_shapes.geojson",
+        offshore_shapes="../resources/{interconnect}/offshore_shapes.geojson",
+        base_network="../resources/{interconnect}/elec_s.nc",
+    output:
+        regions_onshore="../resources/{interconnect}/regions_onshore_s.geojson",
+        regions_offshore="../resources/{interconnect}/regions_offshore_s.geojson",
+    log:
+        "logs/{interconnect}/build_bus_regions_s.log",
+    threads: 1
+    resources:
+        mem_mb=1000,
+    script:
+        pypsaeur("scripts/build_bus_regions.py")
+
+
 rule simplify_network:
     input:
         bus2sub="data/base_grid/{interconnect}/bus2sub.csv",
         sub="data/base_grid/{interconnect}/sub.csv",
-        network="networks/{interconnect}.nc",
+        network="../resources/{interconnect}/elec.nc",
     output:
-        network="networks/{interconnect}_s.nc",
+        network="../resources/{interconnect}/elec_s.nc",
     log:
-        "logs/simplify_network/{interconnect}_s.log",
+        "logs/simplify_network/{interconnect}/elec_s.log",
     threads: 4
     resources:
         mem=500,
@@ -155,27 +191,57 @@ rule simplify_network:
 
 rule cluster_network:
     input:
-        "networks/{interconnect}_s.nc",
+        network="../resources/{interconnect}/elec_s.nc",
+        regions_onshore="../resources/{interconnect}/regions_onshore_s.geojson",
+        regions_offshore="../resources/{interconnect}/regions_offshore_s.geojson",
+        busmap="data/base_grid/{interconnect}/bus2sub.csv",
+        custom_busmap=(
+            "../data/{interconnect}/custom_busmap_{clusters}.csv"
+            if config["enable"].get("custom_busmap", False)
+            else []
+        ),
+        tech_costs=COSTS,
     output:
-        network="networks/{interconnect}_s_{clusters}.nc",
-        busmap="../resources/busmap_{interconnect}_s_{clusters}.csv",
+        network="../resources/{interconnect}/elec_s_{clusters}.nc",
+        regions_onshore="../resources/{interconnect}/regions_onshore_s_{clusters}.geojson",
+        regions_offshore="../resources/{interconnect}/regions_offshore_s_{clusters}.geojson",
+        busmap="../resources/{interconnect}/busmap_s_{clusters}.csv",
+        linemap="../resources/{interconnect}/linemap_s_{clusters}.csv",
     log:
-        "logs/cluster_network/{interconnect}_s_{clusters}.log",
+        "logs/cluster_network/{interconnect}/elec_s_{clusters}.log",
+    benchmark:
+        "benchmarks/cluster_network/{interconnect}/elec_s_{clusters}"
     threads: 1
     resources:
-        mem=500,
+        mem_mb=6000,
     script:
-        "scripts/cluster_network.py"
+        pypsaeur("scripts/cluster_network.py")
+# rule cluster_network:
+
+
+
+#     input:
+#         "../resources/{interconnect}/elec_s.nc",
+#     output:
+#         network="../resources/{interconnect}/elec_s_{clusters}.nc",
+#         busmap="../resources/busmap_{interconnect}/elec_s_{clusters}.csv",
+#     log:
+#         "logs/cluster_network/{interconnect}/elec_s_{clusters}.log",
+#     threads: 1
+#     resources:
+#         mem=500,
+#     script:
+#         "scripts/cluster_network.py"
 
 
 rule add_extra_components:
     input:
-        network="networks/{interconnect}_s_{nclusters}.nc",
+        network="../resources/{interconnect}/elec_s_{clusters}.nc",
         tech_costs="subworkflows/pypsa-eur/data/costs.csv",
     output:
-        "networks/{interconnect}_s_{nclusters}_ec.nc",
+        "../resources/{interconnect}/elec_s_{clusters}_ec.nc",
     log:
-        "logs/add_extra_components/{interconnect}_s_{nclusters}_ec.log",
+        "logs/add_extra_components/{interconnect}/elec_s_{clusters}_ec.log",
     threads: 4
     resources:
         mem=500,
@@ -185,12 +251,12 @@ rule add_extra_components:
 
 rule prepare_network:
     input:
-        network="networks/{interconnect}_s_{nclusters}_ec.nc",
+        network="../resources/{interconnect}/elec_s_{clusters}_ec.nc",
         tech_costs="subworkflows/pypsa-eur/data/costs.csv",
     output:
-        "networks/{interconnect}_s_{nclusters}_ec_l{ll}_{opts}.nc",
+        "../resources/{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}.nc",
     log:
-        solver="logs/prepare_network/{interconnect}_s_{nclusters}_ec_l{ll}_{opts}.log",
+        solver="logs/prepare_network/{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}.log",
     threads: 4
     resources:
         mem=5000,
@@ -222,17 +288,17 @@ def memory(w):
 
 rule solve_network:
     input:
-        "networks/{interconnect}_s_{clusters}_ec_l{ll}_{opts}.nc",
+        "../resources/{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}.nc",
     output:
-        "../results/networks/{interconnect}_s{simpl}_{clusters}_ec_l{ll}_{opts}.nc",
+        "../results/{interconnect}/elec_s{simpl}_{clusters}_ec_l{ll}_{opts}.nc",
     log:
         solver=normpath(
-            "logs/solve_network/{interconnect}_s{simpl}_{clusters}_ec_l{ll}_{opts}_solver.log"
+            "logs/solve_network/{interconnect}/elec_s{simpl}_{clusters}_ec_l{ll}_{opts}_solver.log"
         ),
-        python="logs/solve_network/{interconnect}_s{simpl}_{clusters}_ec_l{ll}_{opts}_python.log",
-        memory="logs/solve_network/{interconnect}_s{simpl}_{clusters}_ec_l{ll}_{opts}_memory.log",
+        python="logs/solve_network/{interconnect}/elec_s{simpl}_{clusters}_ec_l{ll}_{opts}_python.log",
+        memory="logs/solve_network/{interconnect}/elec_s{simpl}_{clusters}_ec_l{ll}_{opts}_memory.log",
     benchmark:
-        "benchmarks/solve_network/{interconnect}_s{simpl}_{clusters}_ec_l{ll}_{opts}"
+        "benchmarks/solve_network/{interconnect}/elec_s{simpl}_{clusters}_ec_l{ll}_{opts}"
     threads: 4
     resources:
         mem_mb=memory,
@@ -278,5 +344,4 @@ rule clean:
 
         shutil.rmtree("../resources", ignore_errors=True)
         shutil.rmtree("../results", ignore_errors=True)
-        shutil.rmtree("networks", ignore_errors=True)
         print("Data downloaded to data/ has not been cleaned.")
