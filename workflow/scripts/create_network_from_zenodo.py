@@ -14,9 +14,12 @@ from add_electricity import load_costs, _add_missing_carriers_from_costs
 idx = pd.IndexSlice
 
 
-def add_buses_from_file(n, fn_buses):
+def add_buses_from_file(n, fn_buses, interconnect="Western"):
 
     buses = pd.read_csv(fn_buses, index_col=0)
+    if interconnect != "usa":
+        buses = pd.read_csv(fn_buses, index_col=0).query("interconnect == @interconnect")
+
     logger.info(f"Adding {len(buses)} buses to the network.")
 
     n.madd(
@@ -33,7 +36,8 @@ def add_buses_from_file(n, fn_buses):
 
 def add_branches_from_file(n, fn_branches):
 
-    branches = pd.read_csv(fn_branches, dtype={"from_bus_id": str}, index_col=0)
+    branches = (pd.read_csv(fn_branches, dtype={"from_bus_id": str, "to_bus_id": str}, index_col=0)
+                .query("from_bus_id in @n.buses.index and to_bus_id in @n.buses.index"))
 
     for tech in ["Line", "Transformer"]:
         tech_branches = branches.query("branch_device_type == @tech")
@@ -70,7 +74,8 @@ def add_custom_line_type(n):
 
 def add_dclines_from_file(n, fn_dclines):
 
-    dclines = pd.read_csv(fn_dclines, index_col=0)
+    dclines = (pd.read_csv(fn_dclines, dtype={"from_bus_id": str, "to_bus_id": str}, index_col=0)
+               .query("from_bus_id in @n.buses.index and to_bus_id in @n.buses.index"))
 
     logger.info(f"Adding {len(dclines)} dc-lines as Links to the network.")
 
@@ -87,28 +92,36 @@ def add_dclines_from_file(n, fn_dclines):
     return n
 
 
-def add_conventional_plants_from_file(n, fn_plants, conventional_techs, costs):
+def add_conventional_plants_from_file(
+        n, fn_plants, conventional_carriers, extendable_carriers, costs
+):
 
-    _add_missing_carriers_from_costs(n, costs, conventional_techs)
+    _add_missing_carriers_from_costs(n, costs, conventional_carriers)
 
-    plants = pd.read_csv(fn_plants, index_col=0)
-    plants.replace(["dfo", "ng"], ["oil", "OCGT"], inplace=True)
+    plants = (pd.read_csv(fn_plants, dtype={"bus_id": str}, index_col=0)
+              .query("bus_id in @n.buses.index"))
+    plants.replace(["dfo"], ["oil"], inplace=True)
 
-    for tech in conventional_techs:
+    for tech in conventional_carriers:
         tech_plants = plants.query("type == @tech")
         tech_plants.index = tech_plants.index.astype(str)
 
         logger.info(f"Adding {len(tech_plants)} {tech} generators to the network.")
+
+        if tech in extendable_carriers:
+            p_nom_extendable = True
+        else:
+            p_nom_extendable = False
 
         n.madd(
             "Generator",
             tech_plants.index,
             bus=tech_plants.bus_id.astype(str),
             p_nom=tech_plants.Pmax,
+            p_nom_extendable=p_nom_extendable,
             marginal_cost=tech_plants.GenIOB
             * tech_plants.GenFuelCost
             / 1.14,  # divide or multiply the currency to make it the same as marginal cost
-            p_nom_extendable=False,
             carrier=tech_plants.type,
             weight=1.0,
             efficiency=costs.at[tech, "efficiency"],
@@ -118,26 +131,30 @@ def add_conventional_plants_from_file(n, fn_plants, conventional_techs, costs):
 
 
 def add_renewable_plants_from_file(
-    n, fn_plants, renewable_techs, extendable_techs, costs
+    n, fn_plants, renewable_carriers, extendable_carriers, costs
 ):
 
-    _add_missing_carriers_from_costs(n, costs, renewable_techs)
+    _add_missing_carriers_from_costs(n, costs, renewable_carriers)
 
-    plants = pd.read_csv(fn_plants, index_col=0)
-    plants.replace(["wind", "wind_offshore"], ["onwind", "offwind"], inplace=True)
+    plants = (pd.read_csv(fn_plants, dtype={'bus_id': str}, index_col=0)
+              .query("bus_id in @n.buses.index"))
+    plants.replace(["wind_offshore"], ["offwind"], inplace=True)
 
-    for tech in renewable_techs:
+    for tech in renewable_carriers:
         tech_plants = plants.query("type == @tech")
         tech_plants.index = tech_plants.index.astype(str)
 
         logger.info(f"Adding {len(tech_plants)} {tech} generators to the network.")
 
-        if tech in ["onwind", "offwind"]:
+        if tech in ["wind", "offwind"]:
             p = pd.read_csv(snakemake.input["wind"], index_col=0)
         else:
             p = pd.read_csv(snakemake.input[tech], index_col=0)
+        intersection = set(p.columns).intersection(tech_plants.index)
+        p = p[list(intersection)]
 
         p.index = n.snapshots
+        p.columns = p.columns.astype(str)
 
         if (tech_plants.Pmax == 0).any():
             # p_nom is the maximum of {Pmax, dispatch}
@@ -147,7 +164,8 @@ def add_renewable_plants_from_file(
             p_nom = tech_plants.Pmax
             p_max_pu = p[tech_plants.index] / p_nom
 
-        if tech in extendable_techs:
+
+        if tech in extendable_carriers:
             p_nom_extendable = True
         else:
             p_nom_extendable = False
@@ -187,9 +205,12 @@ def add_demand_from_file(n, fn_demand):
     """
 
     demand = pd.read_csv(fn_demand, index_col=0)
-    demand.index = n.snapshots
     # zone_id is int, therefore demand.columns should be int first
     demand.columns = demand.columns.astype(int)
+    demand.index = n.snapshots
+
+    intersection = set(demand.columns).intersection(n.buses.zone_id.unique())
+    demand = demand[list(intersection)]
 
     demand_per_bus_pu = (
         n.buses.set_index("zone_id").Pd / n.buses.groupby("zone_id").sum().Pd
@@ -223,29 +244,58 @@ if __name__ == "__main__":
         snakemake.config["electricity"],
         Nyears,
     )
+    
+    # should renaming technologies move to config.yaml?
+    costs = costs.rename(index={'onwind': 'wind', 'OCGT': 'ng'})
+
+    interconnect = snakemake.wildcards.interconnect
+    # interconnect in raw data given with an uppercase first letter
+    if interconnect != "usa":
+        interconnect = interconnect[0].upper() + interconnect[1:]
 
     # add buses, transformers, lines and links
-    n = add_buses_from_file(n, snakemake.input["buses"])
+    n = add_buses_from_file(n, snakemake.input["buses"], interconnect=interconnect)
     n = add_branches_from_file(n, snakemake.input["lines"])
     n = add_dclines_from_file(n, snakemake.input["links"])
     add_custom_line_type(n)
 
-    # add generators
-    renewable_techs = snakemake.config["renewable_techs"]
-    conventional_techs = snakemake.config["conventional_techs"]
-    n = add_conventional_plants_from_file(
-        n, snakemake.input["plants"], conventional_techs, costs
+    # add renewable generators
+    renewable_carriers = list(
+        set(snakemake.config["allowed_carriers"]).intersection(
+            set(["wind", "solar", "offwind", "hydro"]))
     )
     n = add_renewable_plants_from_file(
         n,
         snakemake.input["plants"],
-        renewable_techs,
-        snakemake.config["extendable_techs"],
+        renewable_carriers,
+        snakemake.config["extendable_carriers"],
         costs,
+    )
+
+    # add conventional generators
+    conventional_carriers = list(
+        set(snakemake.config["allowed_carriers"]).intersection(
+            set(["coal", "ng", "nuclear", "oil", "geothermal"]))
+    )
+    n = add_conventional_plants_from_file(
+        n, snakemake.input["plants"], conventional_carriers,
+        snakemake.config["extendable_carriers"], costs
     )
 
     # add load
     n = add_demand_from_file(n, snakemake.input["demand"])
 
+    # export bus2sub interconnect data
+    bus2sub = (pd.read_csv(snakemake.input.bus2sub)
+               .query("interconnect == @interconnect")
+               .set_index("bus_id"))
+    bus2sub.to_csv(snakemake.output.bus2sub)
+
+    # export sub interconnect data
+    sub = (pd.read_csv(snakemake.input.sub)
+           .query("interconnect == @interconnect")
+           .set_index("sub_id"))
+    sub.to_csv(snakemake.output.sub)
+
     # export network
-    n.export_to_netcdf(snakemake.output[0])
+    n.export_to_netcdf(snakemake.output.network)
