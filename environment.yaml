@@ -11,6 +11,7 @@ dependencies:
   - pip
   - mamba # esp for windows build
 
+
   - pypsa>=0.18
   - atlite>=0.2.5
 
@@ -38,6 +39,9 @@ dependencies:
 
   # Keep in conda environment when calling ipython
   - ipython
+  - jupyter
+  - notebook
+  - ipykernel
 
   # GIS dependencies:
   - cartopy

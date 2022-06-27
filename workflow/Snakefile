@@ -218,22 +218,6 @@ rule cluster_network:
         mem_mb=6000,
     script:
         pypsaeur("scripts/cluster_network.py")
-# rule cluster_network:
-
-
-
-#     input:
-#         "../resources/{interconnect}/elec_s.nc",
-#     output:
-#         network="../resources/{interconnect}/elec_s_{clusters}.nc",
-#         busmap="../resources/busmap_{interconnect}/elec_s_{clusters}.csv",
-#     log:
-#         "logs/cluster_network/{interconnect}/elec_s_{clusters}.log",
-#     threads: 1
-#     resources:
-#         mem=500,
-#     script:
-#         "scripts/cluster_network.py"
 
 
 rule add_extra_components:
@@ -292,20 +276,30 @@ rule solve_network:
     input:
         "../resources/{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}.nc",
     output:
-        "../results/{interconnect}/elec_s{simpl}_{clusters}_ec_l{ll}_{opts}.nc",
+        "../results/{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}.nc",
     log:
         solver=normpath(
-            "logs/solve_network/{interconnect}/elec_s{simpl}_{clusters}_ec_l{ll}_{opts}_solver.log"
+            "logs/solve_network/{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}_solver.log"
         ),
-        python="logs/solve_network/{interconnect}/elec_s{simpl}_{clusters}_ec_l{ll}_{opts}_python.log",
-        memory="logs/solve_network/{interconnect}/elec_s{simpl}_{clusters}_ec_l{ll}_{opts}_memory.log",
+        python="logs/solve_network/{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}_python.log",
+        memory="logs/solve_network/{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}_memory.log",
     benchmark:
-        "benchmarks/solve_network/{interconnect}/elec_s{simpl}_{clusters}_ec_l{ll}_{opts}"
+        "benchmarks/solve_network/{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}"
     threads: 4
     resources:
         mem_mb=memory,
     script:
         pypsaeur("scripts/solve_network.py")
+
+
+rule plot_results:
+    input:
+        network="../results/{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}.nc",
+    output:
+        capacities="../results/{interconnect}/figures/elec_s_{clusters}_ec_l{ll}_{opts}_capacities.pdf",
+        operation="../results/{interconnect}/figures/elec_s_{clusters}_ec_l{ll}_{opts}_operation.pdf",
+    notebook:
+        "notebooks/plot_results.py.ipynb"
 
 
 rule report:
