@@ -4,7 +4,7 @@
 
 from os.path import normpath
 
-COSTS = "subworkflows/pypsa-eur/data/costs.csv"
+COSTS = "workflow/subworkflows/pypsa-eur/data/costs.csv"
 
 # --------------------------- Workflow constraints --------------------------- #
 
@@ -26,15 +26,15 @@ wildcard_constraints:
 
 
 # Merge subworkflow configs and main config
-configfile: "../config/config.pypsa-eur.yaml"
-configfile: "../config/config.yaml"
+configfile: "config/config.pypsa-eur.yaml"
+configfile: "config/config.yaml"
 
 
 subworkflow pypsaeur:
     workdir:
-        "subworkflows/pypsa-eur"
+        "workflow/subworkflows/pypsa-eur"
     snakefile:
-        "subworkflows/pypsa-eur/Snakefile"
+        "workflow/subworkflows/pypsa-eur/Snakefile"
 
 
 # ----------------------------------- Rules ---------------------------------- #
@@ -43,7 +43,7 @@ subworkflow pypsaeur:
 rule test_all:
     input:
         expand(
-            "../results/texas/elec_s_10_ec_l{ll}_{opts}.nc",
+            "results/texas/elec_s_10_ec_l{ll}_{opts}.nc",
             ll=["vopt"],
             opts=[
                 "Co2L0.5-2920SEG",
@@ -55,7 +55,7 @@ rule test_all:
 rule solve_all:
     input:
         expand(
-            "../results/networks/usa_s_200_ec_l{ll}_{opts}.nc",
+            "results/networks/usa_s_200_ec_l{ll}_{opts}.nc",
             ll=["vopt"],
             opts=[
                 "Co2L0.0-2920SEG",
@@ -77,11 +77,11 @@ if not config["zenodo_repository"]["use"]:
 
     rule create_network:
         input:
-            tech_costs="subworkflows/pypsa-eur/data/costs.csv",
+            tech_costs="workflow/subworkflows/pypsa-eur/data/costs.csv",
         output:
-            bus2sub="data/base_grid/{interconnect}/bus2sub.csv",
-            sub="data/base_grid/{interconnect}/sub.csv",
-            network="../resources/{interconnect}/elec.nc",
+            bus2sub="workflow/data/base_grid/{interconnect}/bus2sub.csv",
+            sub="workflow/data/base_grid/{interconnect}/sub.csv",
+            network="resources/{interconnect}/elec.nc",
         log:
             "logs/create_network/{interconnect}.log",
         threads: 4
@@ -108,7 +108,7 @@ else:
 
     rule retrieve_data_from_zenodo:
         output:
-            expand("data/base_grid/{file}", file=DATAFILES),
+            expand("workflow/data/base_grid/{file}", file=DATAFILES),
         log:
             "logs/retrieve_data_from_zenodo.log",
         script:
@@ -116,21 +116,21 @@ else:
 
     rule create_network:
         input:
-            buses="data/base_grid/bus.csv",
-            lines="data/base_grid/branch.csv",
-            links="data/base_grid/dcline.csv",
-            plants="data/base_grid/plant.csv",
-            wind="data/base_grid/wind.csv",
-            solar="data/base_grid/solar.csv",
-            hydro="data/base_grid/hydro.csv",
-            demand="data/base_grid/demand.csv",
-            bus2sub="data/base_grid/bus2sub.csv",
-            sub="data/base_grid/sub.csv",
-            tech_costs="subworkflows/pypsa-eur/data/costs.csv",
+            buses="workflow/data/base_grid/bus.csv",
+            lines="workflow/data/base_grid/branch.csv",
+            links="workflow/data/base_grid/dcline.csv",
+            plants="workflow/data/base_grid/plant.csv",
+            wind="workflow/data/base_grid/wind.csv",
+            solar="workflow/data/base_grid/solar.csv",
+            hydro="workflow/data/base_grid/hydro.csv",
+            demand="workflow/data/base_grid/demand.csv",
+            bus2sub="workflow/data/base_grid/bus2sub.csv",
+            sub="workflow/data/base_grid/sub.csv",
+            tech_costs="workflow/subworkflows/pypsa-eur/data/costs.csv",
         output:
-            bus2sub="data/base_grid/{interconnect}/bus2sub.csv",
-            sub="data/base_grid/{interconnect}/sub.csv",
-            network="../resources/{interconnect}/elec.nc",
+            bus2sub="workflow/data/base_grid/{interconnect}/bus2sub.csv",
+            sub="workflow/data/base_grid/{interconnect}/sub.csv",
+            network="resources/{interconnect}/elec.nc",
         log:
             "logs/create_network/{interconnect}.log",
         threads: 4
@@ -146,9 +146,9 @@ rule build_shapes:
         source_offshore_shapes="https://www.weather.gov/source/gis/Shapefiles/WSOM/oz22mr22.zip",
         buffer_distance=2000,
     output:
-        country_shapes="../resources/{interconnect}/country_shapes.geojson",
-        state_shapes="../resources/{interconnect}/state_shapes.geojson",
-        offshore_shapes="../resources/{interconnect}/offshore_shapes.geojson",
+        country_shapes="resources/{interconnect}/country_shapes.geojson",
+        state_shapes="resources/{interconnect}/state_shapes.geojson",
+        offshore_shapes="resources/{interconnect}/offshore_shapes.geojson",
     log:
         "logs/build_shapes_{interconnect}.log",
     threads: 1
@@ -160,12 +160,12 @@ rule build_shapes:
 
 rule build_bus_regions:
     input:
-        country_shapes="../resources/{interconnect}/country_shapes.geojson",
-        offshore_shapes="../resources/{interconnect}/offshore_shapes.geojson",
-        base_network="../resources/{interconnect}/elec_s.nc",
+        country_shapes="resources/{interconnect}/country_shapes.geojson",
+        offshore_shapes="resources/{interconnect}/offshore_shapes.geojson",
+        base_network="resources/{interconnect}/elec_s.nc",
     output:
-        regions_onshore="../resources/{interconnect}/regions_onshore_s.geojson",
-        regions_offshore="../resources/{interconnect}/regions_offshore_s.geojson",
+        regions_onshore="resources/{interconnect}/regions_onshore_s.geojson",
+        regions_offshore="resources/{interconnect}/regions_offshore_s.geojson",
     log:
         "logs/{interconnect}/build_bus_regions_s.log",
     threads: 1
@@ -177,11 +177,11 @@ rule build_bus_regions:
 
 rule simplify_network:
     input:
-        bus2sub="data/base_grid/{interconnect}/bus2sub.csv",
-        sub="data/base_grid/{interconnect}/sub.csv",
-        network="../resources/{interconnect}/elec.nc",
+        bus2sub="workflow/data/base_grid/{interconnect}/bus2sub.csv",
+        sub="workflow/data/base_grid/{interconnect}/sub.csv",
+        network="resources/{interconnect}/elec.nc",
     output:
-        network="../resources/{interconnect}/elec_s.nc",
+        network="resources/{interconnect}/elec_s.nc",
     log:
         "logs/simplify_network/{interconnect}/elec_s.log",
     threads: 4
@@ -193,22 +193,22 @@ rule simplify_network:
 
 rule cluster_network:
     input:
-        network="../resources/{interconnect}/elec_s.nc",
-        regions_onshore="../resources/{interconnect}/regions_onshore_s.geojson",
-        regions_offshore="../resources/{interconnect}/regions_offshore_s.geojson",
-        busmap="data/base_grid/{interconnect}/bus2sub.csv",
+        network="resources/{interconnect}/elec_s.nc",
+        regions_onshore="resources/{interconnect}/regions_onshore_s.geojson",
+        regions_offshore="resources/{interconnect}/regions_offshore_s.geojson",
+        busmap="workflow/data/base_grid/{interconnect}/bus2sub.csv",
         custom_busmap=(
-            "../data/{interconnect}/custom_busmap_{clusters}.csv"
+            "workflow/data/{interconnect}/custom_busmap_{clusters}.csv"
             if config["enable"].get("custom_busmap", False)
             else []
         ),
         tech_costs=COSTS,
     output:
-        network="../resources/{interconnect}/elec_s_{clusters}.nc",
-        regions_onshore="../resources/{interconnect}/regions_onshore_s_{clusters}.geojson",
-        regions_offshore="../resources/{interconnect}/regions_offshore_s_{clusters}.geojson",
-        busmap="../resources/{interconnect}/busmap_s_{clusters}.csv",
-        linemap="../resources/{interconnect}/linemap_s_{clusters}.csv",
+        network="resources/{interconnect}/elec_s_{clusters}.nc",
+        regions_onshore="resources/{interconnect}/regions_onshore_s_{clusters}.geojson",
+        regions_offshore="resources/{interconnect}/regions_offshore_s_{clusters}.geojson",
+        busmap="resources/{interconnect}/busmap_s_{clusters}.csv",
+        linemap="resources/{interconnect}/linemap_s_{clusters}.csv",
     log:
         "logs/cluster_network/{interconnect}/elec_s_{clusters}.log",
     benchmark:
@@ -222,10 +222,10 @@ rule cluster_network:
 
 rule add_extra_components:
     input:
-        network="../resources/{interconnect}/elec_s_{clusters}.nc",
-        tech_costs="subworkflows/pypsa-eur/data/costs.csv",
+        network="resources/{interconnect}/elec_s_{clusters}.nc",
+        tech_costs="workflow/subworkflows/pypsa-eur/data/costs.csv",
     output:
-        "../resources/{interconnect}/elec_s_{clusters}_ec.nc",
+        "resources/{interconnect}/elec_s_{clusters}_ec.nc",
     log:
         "logs/add_extra_components/{interconnect}/elec_s_{clusters}_ec.log",
     threads: 4
@@ -237,10 +237,10 @@ rule add_extra_components:
 
 rule prepare_network:
     input:
-        network="../resources/{interconnect}/elec_s_{clusters}_ec.nc",
-        tech_costs="subworkflows/pypsa-eur/data/costs.csv",
+        network="resources/{interconnect}/elec_s_{clusters}_ec.nc",
+        tech_costs="workflow/subworkflows/pypsa-eur/data/costs.csv",
     output:
-        "../resources/{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}.nc",
+        "resources/{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}.nc",
     log:
         solver="logs/prepare_network/{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}.log",
     threads: 4
@@ -274,9 +274,9 @@ def memory(w):
 
 rule solve_network:
     input:
-        "../resources/{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}.nc",
+        "resources/{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}.nc",
     output:
-        "../results/{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}.nc",
+        "results/{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}.nc",
     log:
         solver=normpath(
             "logs/solve_network/{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}_solver.log"
@@ -294,10 +294,10 @@ rule solve_network:
 
 rule plot_results:
     input:
-        network="../results/{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}.nc",
+        network="results/{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}.nc",
     output:
-        capacities="../results/{interconnect}/figures/elec_s_{clusters}_ec_l{ll}_{opts}_capacities.pdf",
-        operation="../results/{interconnect}/figures/elec_s_{clusters}_ec_l{ll}_{opts}_operation.pdf",
+        capacities="results/{interconnect}/figures/elec_s_{clusters}_ec_l{ll}_{opts}_capacities.pdf",
+        operation="results/{interconnect}/figures/elec_s_{clusters}_ec_l{ll}_{opts}_operation.pdf",
     notebook:
         "notebooks/plot_results.py.ipynb"
 
@@ -306,10 +306,10 @@ rule report:
     message:
         "Compile report."
     input:
-        tex="../report/report.tex",
-        bib="../report/references.bib",
+        tex="report/report.tex",
+        bib="report/references.bib",
     output:
-        "../report/report.pdf",
+        "report/report.pdf",
     shell:
         """
         pdflatex {input.tex}
@@ -323,8 +323,8 @@ rule dag:
     message:
         "Plot dependency graph of the workflow."
     output:
-        dot="../resources/dag.dot",
-        pdf="../resources/dag.pdf",
+        dot="resources/dag.dot",
+        pdf="resources/dag.pdf",
     shell:
         """
         snakemake --rulegraph > {output.dot}
@@ -338,6 +338,6 @@ rule clean:
     run:
         import shutil
 
-        shutil.rmtree("../resources", ignore_errors=True)
-        shutil.rmtree("../results", ignore_errors=True)
+        shutil.rmtree("resources", ignore_errors=True)
+        shutil.rmtree("results", ignore_errors=True)
         print("Data downloaded to data/ has not been cleaned.")
