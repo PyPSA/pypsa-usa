@@ -15,7 +15,7 @@ from pathlib import Path
 import sys
 import os
 
-sys.path.append(os.path.join("subworkflows", "pypsa-eur", "scripts"))
+sys.path.append(os.path.join("workflow", "subworkflows", "pypsa-eur", "scripts"))
 from _helpers import progress_retrieve, configure_logging
 
 logger = logging.getLogger(__name__)

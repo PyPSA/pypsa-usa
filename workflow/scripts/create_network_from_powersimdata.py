@@ -8,7 +8,7 @@ from yaml import load
 
 from create_network_from_zenodo import add_custom_line_type
 
-sys.path.append(os.path.join("subworkflows", "pypsa-eur", "scripts"))
+sys.path.append(os.path.join("workflow", "subworkflows", "pypsa-eur", "scripts"))
 from add_electricity import load_costs, _add_missing_carriers_from_costs
 
 
