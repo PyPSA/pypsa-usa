@@ -5,6 +5,14 @@
 from os.path import normpath
 
 PYPSAEUR = "workflow/subworkflows/pypsa-eur/"
+FIGURES_SINGLE = [
+    "capacity_map",
+    "capacity_bar",
+    "operation_map",
+    "operation_bar",
+    "operation_area",
+    "cost_bar",
+]
 
 # --------------------------- Workflow constraints --------------------------- #
 
@@ -40,36 +48,21 @@ subworkflow pypsaeur:
 # ----------------------------------- Rules ---------------------------------- #
 
 
-rule test_all:
+rule all:
     input:
         expand(
-            "results/texas/elec_s_10_ec_l{ll}_{opts}.nc",
-            ll=["vopt"],
-            opts=[
-                "Co2L0.5-2920SEG",
-                "Co2L1.0-2920SEG",
-            ],
+            "results/{interconnect}/figures/elec_s_{clusters}_ec_l{ll}_{opts}_{figure}.pdf",
+            **config["scenarios"]["all"],
+            figure=FIGURES_SINGLE
         ),
 
 
-rule solve_all:
+rule test:
     input:
         expand(
-            "results/networks/usa_s_200_ec_l{ll}_{opts}.nc",
-            ll=["vopt"],
-            opts=[
-                "Co2L0.0-2920SEG",
-                "Co2L0.1-2920SEG",
-                "Co2L0.2-2920SEG",
-                "Co2L0.3-2920SEG",
-                "Co2L0.4-2920SEG",
-                "Co2L0.5-2920SEG",
-                "Co2L0.6-2920SEG",
-                "Co2L0.7-2920SEG",
-                "Co2L0.8-2920SEG",
-                "Co2L0.9-2920SEG",
-                "Co2L1.0-2920SEG",
-            ],
+            "results/{interconnect}/figures/elec_s_{clusters}_ec_l{ll}_{opts}_{figure}.pdf",
+            **config["scenarios"]["test"],
+            figure=FIGURES_SINGLE
         ),
 
 
@@ -292,18 +285,17 @@ rule solve_network:
         pypsaeur("scripts/solve_network.py")
 
 
-rule plot_results:
+rule plot_figures_single:
     input:
         network="results/{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}.nc",
         regions_onshore="resources/{interconnect}/regions_onshore_s_{clusters}.geojson",
         regions_offshore="resources/{interconnect}/regions_offshore_s_{clusters}.geojson",
     output:
-        capacity_map="results/{interconnect}/figures/elec_s_{clusters}_ec_l{ll}_{opts}_capacity_map.pdf",
-        capacity_bar="results/{interconnect}/figures/elec_s_{clusters}_ec_l{ll}_{opts}_capacity_bar.pdf",
-        operation_map="results/{interconnect}/figures/elec_s_{clusters}_ec_l{ll}_{opts}_operation_map.pdf",
-        operation_bar="results/{interconnect}/figures/elec_s_{clusters}_ec_l{ll}_{opts}_operation_bar.pdf",
-        operation_area="results/{interconnect}/figures/elec_s_{clusters}_ec_l{ll}_{opts}_operation_area.pdf",
-        cost_bar="results/{interconnect}/figures/elec_s_{clusters}_ec_l{ll}_{opts}_cost_bar.pdf",
+        **{
+            fig: "results/{interconnect}/figures/elec_s_{clusters}_ec_l{ll}_{opts}_%s.pdf"
+            % fig
+            for fig in FIGURES_SINGLE
+        },
     notebook:
         "notebooks/plot_results.py.ipynb"
 

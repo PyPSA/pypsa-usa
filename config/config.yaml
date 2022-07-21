@@ -1,5 +1,36 @@
 # Copyright 2021-2022 Martha Frysztacki (KIT)
 
+scenarios:
+  all:
+    interconnect: usa
+    clusters: 200
+    opts:
+      [
+        Co2L0.0,
+        Co2L0.1,
+        Co2L0.2,
+        Co2L0.3,
+        Co2L0.4,
+        Co2L0.5,
+        Co2L0.6,
+        Co2L0.7,
+        Co2L0.8,
+        Co2L0.9,
+        Co2L1.0,
+      ]
+    ll: [vopt, v1.0, v1.1, v1.2]
+
+  test:
+    interconnect: texas
+    clusters: 5
+    opts:
+      [
+        Co2L0.0,
+        Co2L0.5,
+        Co2L1.0,
+      ]
+    ll: 1.0
+
 subworkflow: "pypsa-eur/"
 
 zenodo_repository:
@@ -8,7 +39,8 @@ zenodo_repository:
 
 countries: [US]
 
-allowed_carriers: [wind, solar, offwind, hydro, coal, nuclear, ng, oil, geothermal]
+allowed_carriers:
+  [wind, solar, offwind, hydro, coal, nuclear, ng, oil, geothermal]
 committable_carriers: []
 extendable_carriers: [solar, wind, offwind]
 
@@ -24,7 +56,6 @@ electricity:
     Store: [battery, H2]
     Link: []
 
-
 renewable:
   wind:
     potential: simple # or conservative
@@ -32,7 +63,6 @@ renewable:
     potential: simple # or conservative
   hydro:
     potential: simple
-
 
 solving:
   options:
@@ -55,7 +85,6 @@ solving:
     AggFill: 0
     PreDual: 0
     GURO_PAR_BARDENSETHRESH: 200
-
 
 costs:
   year: 2030
