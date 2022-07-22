@@ -29,7 +29,7 @@ scenarios:
         Co2L0.5,
         Co2L1.0,
       ]
-    ll: 1.0
+    ll: v1.0
 
 subworkflow: "pypsa-eur/"
 

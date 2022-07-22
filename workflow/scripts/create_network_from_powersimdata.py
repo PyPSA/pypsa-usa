@@ -55,6 +55,9 @@ if __name__ == "__main__":
         weight=1,
         p_nom_extendable=n.generators.carrier.isin(extendable_carriers),
         committable=n.generators.carrier.isin(committable_carriers),
+        p_min_pu=n.generators.p_min_pu.where(
+            n.generators.carrier.isin(committable_carriers), 0
+        ),
     )
     n.mremove("Generator", n.generators.query("carrier not in @allowed_carriers").index)
 
