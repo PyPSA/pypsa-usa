@@ -54,7 +54,7 @@ electricity:
     Generator: []
     StorageUnit: [] # battery, H2
     Store: [battery, H2]
-    Link: []
+    Link: [H2 pipeline]
 
 renewable:
   wind:

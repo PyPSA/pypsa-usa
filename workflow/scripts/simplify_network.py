@@ -79,6 +79,7 @@ def aggregate_to_substations(network, substations, busmap):
     network.buses["country"] = "US"
 
     network.lines["type"] = np.nan
+    network.lines["underwaterfraction"] = 0
 
     return network
 
