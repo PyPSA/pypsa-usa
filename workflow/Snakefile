@@ -278,7 +278,7 @@ rule solve_network:
         memory="logs/solve_network/{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}_memory.log",
     benchmark:
         "benchmarks/solve_network/{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}"
-    threads: 4
+    threads: 8
     resources:
         mem_mb=memory,
     script:
