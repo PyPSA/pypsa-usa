@@ -264,3 +264,4 @@ TSWLatexianTemp*
 
 # other
 connect.sh
+config/config.cluster.yaml

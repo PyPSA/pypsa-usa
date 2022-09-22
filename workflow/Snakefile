@@ -36,6 +36,7 @@ wildcard_constraints:
 # Merge subworkflow configs and main config
 configfile: "config/config.pypsa-eur.yaml"
 configfile: "config/config.yaml"
+configfile: "config/config.cluster.yaml"
 
 
 subworkflow pypsaeur:
@@ -269,7 +270,7 @@ rule solve_network:
     input:
         "resources/{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}.nc",
     output:
-        "results/{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}.nc",
+        "results/{interconnect}/networks/elec_s_{clusters}_ec_l{ll}_{opts}.nc",
     log:
         solver=normpath(
             "logs/solve_network/{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}_solver.log"
@@ -287,7 +288,7 @@ rule solve_network:
 
 rule plot_figures_single:
     input:
-        network="results/{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}.nc",
+        network="results/{interconnect}/networks/elec_s_{clusters}_ec_l{ll}_{opts}.nc",
         regions_onshore="resources/{interconnect}/regions_onshore_s_{clusters}.geojson",
         regions_offshore="resources/{interconnect}/regions_offshore_s_{clusters}.geojson",
     output:
@@ -298,6 +299,16 @@ rule plot_figures_single:
         },
     notebook:
         "notebooks/plot_results.py.ipynb"
+
+
+rule sync:
+    params:
+        cluster=config["cluster"],
+    shell:
+        """
+        rsync -uvarh --no-g --ignore-missing-args --files-from=.sync-send . {params.cluster}
+        rsync -uvarh --no-g --ignore-missing-args --files-from=.sync-receive {params.cluster} .
+        """
 
 
 rule report:

@@ -1,0 +1,10 @@
+config
+environment.yaml
+matplotlibrc
+workflow/scripts
+workflow/notebooks
+workflow/envs
+workflow/rules
+workflow/Snakefile
+workflow/subworkflows/*/Snakefile
+workflow/subworkflows/*/scripts
