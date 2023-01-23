@@ -8,6 +8,8 @@ import logging
 import os
 
 sys.path.append(os.path.join("workflow", "subworkflows", "pypsa-eur", "scripts"))
+sys.path.append(os.path.join(os.getcwd(), "subworkflows", "pypsa-eur", "scripts"))
+
 from add_electricity import load_costs, _add_missing_carriers_from_costs
 
 
