@@ -298,7 +298,7 @@ rule plot_figures_single:
             for fig in FIGURES_SINGLE
         },
     notebook:
-        "notebooks/plot_results.py.ipynb"
+        "notebooks/plot-results.py.ipynb"
 
 
 rule sync:
