@@ -27,15 +27,13 @@ scenarios:
         Co2L0.0,
         Co2L1.0,
       ]
-    ll: [vopt, v1.0]
+    ll: [vopt, v1.2]
 
   test:
     interconnect: texas
     clusters: 5
     opts:
       [
-        Co2L0.0,
-        Co2L0.5,
         Co2L1.0,
       ]
     ll: v1.0
@@ -46,7 +44,7 @@ zenodo_repository:
   url: "https://zenodo.org/record/4538590/files/USATestSystem.zip"
   use: true # if false, network is created from powersimdata, if true, network is created from zenodo_repo. Currently 'false' does not function
 
-countries: [US]
+countries: [US]  
 
 allowed_carriers:
   [wind, solar, offwind, hydro, coal, nuclear, ng, oil, geothermal]
