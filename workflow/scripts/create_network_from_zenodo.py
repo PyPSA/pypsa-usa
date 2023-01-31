@@ -298,20 +298,35 @@ if __name__ == "__main__":
     n = add_demand_from_file(n, snakemake.input["demand"])
 
     # export bus2sub interconnect data
-    bus2sub = (
-        pd.read_csv(snakemake.input.bus2sub)
-        .query("interconnect == @interconnect")
-        .set_index("bus_id")
-    )
-    bus2sub.to_csv(snakemake.output.bus2sub)
+    logger.info(f"exporting bus2sub and sub data for {interconnect}")
+    if interconnect == "usa": #if usa interconnect do not filter bc all sub are in usa
+        bus2sub = (
+            pd.read_csv(snakemake.input.bus2sub)
+            .set_index("bus_id")
+        )
+        bus2sub.to_csv(snakemake.output.bus2sub)
+    else:
+        bus2sub = (
+            pd.read_csv(snakemake.input.bus2sub)
+            .query("interconnect == @interconnect")
+            .set_index("bus_id")
+        )
+        bus2sub.to_csv(snakemake.output.bus2sub)
 
     # export sub interconnect data
-    sub = (
-        pd.read_csv(snakemake.input.sub)
-        .query("interconnect == @interconnect")
-        .set_index("sub_id")
-    )
-    sub.to_csv(snakemake.output.sub)
+    if interconnect == "usa": #if usa interconnect do not filter bc all sub are in usa
+        sub = (
+            pd.read_csv(snakemake.input.sub)
+            .set_index("sub_id")
+        )
+        sub.to_csv(snakemake.output.sub)
+    else:
+        sub = (
+            pd.read_csv(snakemake.input.sub)
+            .query("interconnect == @interconnect")
+            .set_index("sub_id")
+        )
+        sub.to_csv(snakemake.output.sub)
 
     # export network
     n.export_to_netcdf(snakemake.output.network)
