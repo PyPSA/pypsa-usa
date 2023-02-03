@@ -67,8 +67,7 @@ rule test:
         ),
 
 
-if not config["zenodo_repository"]["use"]:
-
+if not config["zenodo_repository"]["use"]: #Creating network from powersimdata
     rule create_network:
         input:
             tech_costs=pypsaeur("resources/costs.csv"),
@@ -85,7 +84,7 @@ if not config["zenodo_repository"]["use"]:
             "scripts/create_network_from_powersimdata.py"
 
 
-else:
+else:                            #Creating network from zenodo
 
     DATAFILES = [
         "bus.csv",
@@ -134,27 +133,69 @@ else:
             "scripts/create_network_from_zenodo.py"
 
 
-rule build_shapes:
-    params:
-        source_states_shapes="admin_1_states_provinces",
-        source_offshore_shapes="https://www.weather.gov/source/gis/Shapefiles/WSOM/oz22mr22.zip",
-        buffer_distance=2000,
-    output:
-        country_shapes="resources/{interconnect}/country_shapes.geojson",
-        state_shapes="resources/{interconnect}/state_shapes.geojson",
-        offshore_shapes="resources/{interconnect}/offshore_shapes.geojson",
-    log:
-        "logs/build_shapes_{interconnect}.log",
-    threads: 1
-    resources:
-        mem_mb=1000,
-    script:
-        "scripts/build_shapes.py"
+if config["offshore"] == "weathergov":
+    rule build_shapes:
+        params:
+            source_states_shapes="admin_1_states_provinces",
+            source_offshore_shapes=config["offshore_weathergov"]["path"],
+            buffer_distance=200000,
+        input:
+            zone="data/base_grid/zone.csv",
+        output:
+            country_shapes="resources/{interconnect}/country_shapes.geojson",
+            state_shapes="resources/{interconnect}/state_shapes.geojson",
+            offshore_shapes="resources/{interconnect}/offshore_shapes.geojson",
+        log:
+            "logs/build_shapes_{interconnect}.log",
+        threads: 1
+        resources:
+            mem_mb=1000,
+        script:
+            "scripts/build_shapes.py"
+elif config["offshore"] == "nrel":
+    rule build_shapes:
+        params:
+            source_states_shapes="admin_1_states_provinces",
+            source_offshore_shapes=config["offshore_nrel"]["path"],
+            buffer_distance=20000,
+        input:
+            zone="data/base_grid/zone.csv",
+        output:
+            country_shapes="resources/{interconnect}/country_shapes.geojson",
+            state_shapes="resources/{interconnect}/state_shapes.geojson",
+            offshore_shapes="resources/{interconnect}/offshore_shapes.geojson",
+        log:
+            "logs/build_shapes_{interconnect}.log",
+        threads: 1
+        resources:
+            mem_mb=1000,
+        script:
+            "scripts/build_shapes.py"
+else:
+    rule build_shapes:
+        params:
+            source_states_shapes="admin_1_states_provinces",
+            source_offshore_shapes=config["offshore_ca"]["path"],
+            buffer_distance=200000,
+        input:
+            zone="data/base_grid/zone.csv",
+        output:
+            country_shapes="resources/{interconnect}/country_shapes.geojson",
+            state_shapes="resources/{interconnect}/state_shapes.geojson",
+            offshore_shapes="resources/{interconnect}/offshore_shapes.geojson",
+        log:
+            "logs/build_shapes_{interconnect}.log",
+        threads: 1
+        resources:
+            mem_mb=1000,
+        script:
+            "scripts/build_shapes.py"
 
 
 rule build_bus_regions:
     input:
         country_shapes="resources/{interconnect}/country_shapes.geojson",
+        # country_shapes="resources/{interconnect}/state_shapes.geojson",
         offshore_shapes="resources/{interconnect}/offshore_shapes.geojson",
         base_network="resources/{interconnect}/elec_s.nc",
     output:

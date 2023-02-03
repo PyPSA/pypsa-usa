@@ -20,14 +20,14 @@ scenarios:
   #     ]
   #   ll: [vopt, v1.0, v1.1, v1.2]
   all:
-    interconnect: usa
-    clusters: 10
+    interconnect: western
+    clusters: 7
+    # statePartitions: True
     opts:
       [
-        Co2L0.0,
         Co2L1.0,
       ]
-    ll: [vopt, v1.2]
+    ll: [vopt]
 
   test:
     interconnect: texas
@@ -44,7 +44,17 @@ zenodo_repository:
   url: "https://zenodo.org/record/4538590/files/USATestSystem.zip"
   use: true # if false, network is created from powersimdata, if true, network is created from zenodo_repo. Currently 'false' does not function
 
+offshore: ca #options are nrel, ca, weathergov
+offshore_nrel:
+  path: "data/Offshore_Wind_Speed_90m/Offshore_Wind_Speed_90m.shp"
+offshore_ca:
+  path: "data/BOEM_CA_OSW_GIS/CA_OSW_BOEM_CallAreas.shp"
+offshore_weathergov:
+  path: "https://www.weather.gov/source/gis/Shapefiles/WSOM/oz22mr22.zip"
+
+
 countries: [US]  
+states: ['AL', 'AZ',  'AR', 'CA', 'CO', 'CT', 'DE', 'DC', 'FL', 'GA', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA', 'ME', 'MD', 'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ', 'NM',  'NY','NC',  'ND', 'OH', 'OK', 'OR', 'PA', 'RI','SC', 'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'VI', 'WA', 'WV', 'WI', 'WY']
 
 allowed_carriers:
   [wind, solar, offwind, hydro, coal, nuclear, ng, oil, geothermal]
