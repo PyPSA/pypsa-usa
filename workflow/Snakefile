@@ -193,9 +193,11 @@ else:
 
 
 rule build_bus_regions:
+    params:
+        use_state_shapes= config["use_state_shapes"],
     input:
         country_shapes="resources/{interconnect}/country_shapes.geojson",
-        # country_shapes="resources/{interconnect}/state_shapes.geojson",
+        state_shapes="resources/{interconnect}/state_shapes.geojson",
         offshore_shapes="resources/{interconnect}/offshore_shapes.geojson",
         base_network="resources/{interconnect}/elec_s.nc",
     output:
@@ -207,7 +209,7 @@ rule build_bus_regions:
     resources:
         mem_mb=1000,
     script:
-        pypsaeur("scripts/build_bus_regions.py")
+        "scripts/build_bus_regions.py"
 
 
 rule simplify_network:
