@@ -28,9 +28,9 @@ zenodo_repository:
 
 offshore: weathergov #options are nrel, ca, weathergov
 offshore_nrel:
-  path: "data/Offshore_Wind_Speed_90m/Offshore_Wind_Speed_90m.shp"
+  path: "geodata_repo/Offshore_Wind_Speed_90m/Offshore_Wind_Speed_90m.shp"
 offshore_ca:
-  path: "data/BOEM_CA_OSW_GIS/CA_OSW_BOEM_CallAreas.shp"
+  path: "geodata_repo/BOEM_CA_OSW_GIS/CA_OSW_BOEM_CallAreas.shp"
 offshore_weathergov:
   path: "https://www.weather.gov/source/gis/Shapefiles/WSOM/oz22mr22.zip"
 
@@ -40,7 +40,7 @@ countries: [US]
 # states: ['AL', 'AZ',  'AR', 'CA', 'CO', 'CT', 'DE', 'DC', 'FL', 'GA', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA', 'ME', 'MD', 'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ', 'NM',  'NY','NC',  'ND', 'OH', 'OK', 'OR', 'PA', 'RI','SC', 'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'VI', 'WA', 'WV', 'WI', 'WY']
 states: [AL, AZ,  AR, CA, CO, CT, DE, DC, FL, GA, ID, IL, IN, IA, KS, KY, LA, ME, MD, MA, MI, MN, MS, MO, MT, NE, NV, NH, NJ, NM,  NY,NC,  ND, OH, OK, OR, PA, RI,SC, SD, TN, TX, UT, VT, VA, VI, WA, WV, WI, WY]
 focus_weights: 
-  CA: 0.2
+  CA: 0.2 #if use_state_shapes is set to false, comment this out
 
 allowed_carriers: [wind, solar, offwind, hydro, coal, nuclear, ng, oil, geothermal]
 committable_carriers: []
