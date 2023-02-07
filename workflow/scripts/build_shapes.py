@@ -4,10 +4,14 @@ import cartopy.io.shapereader as shpreader
 import pandas as pd, os, sys
 
 '''
-Builds shapefiles for the interconnect identified in the config file.
+Description: 
+This script builds the shapes for the interconnect identified in the config file. The shapes are built using the states in the interconnect and the offshore shapes specified in the config file. geojson files are saved to the resources folder.
+
+Kamran Modifications:
+- Added a new input parameter to the config file: source_offshore_shapes to accomodate for NREL Offshore shapes and BOEM offshore shapes.
+- Fixed issue to allow filter by interconnection.
 
 Build shapes ->  build_bus_regions -> simplify_network  -> cluster_network
-
 '''
 sys.path.append(os.path.join(os.getcwd(),'workflow'))
 

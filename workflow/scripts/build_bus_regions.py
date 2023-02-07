@@ -57,6 +57,7 @@ import numpy as np
 import geopandas as gpd
 from shapely.geometry import Polygon
 from scipy.spatial import Voronoi
+import pdb
 
 sys.path.append(os.path.join(os.getcwd(), "subworkflows", "pypsa-eur", "scripts"))
 from _helpers import configure_logging, REGION_COLS
@@ -175,9 +176,12 @@ if __name__ == "__main__":
                     'x': state_locs['x'],
                     'y': state_locs['y'],
                     'geometry': voronoi_partition_pts(state_locs.values, onshore_shape),
-                    'country': 'US',
-                    'state': state,
+                    # 'country': 'US',
+                    'country': state,
                 }))
+            n.buses.loc[state_locs.index, 'country'] = state #adds state abbreviation to the bus dataframe under the country column
+            # pdb.set_trace()
+
 
         #Adds Busses in the offshore Regions (there shouldnt be any onshore busses in the offshore regions)
         offshore_shape = offshore_shapes['US']
@@ -198,6 +202,7 @@ if __name__ == "__main__":
 
 
 
+    n.export_to_netcdf(snakemake.output.network)
 
     pd.concat(onshore_regions, ignore_index=True).to_file(snakemake.output.regions_onshore)
     if offshore_regions:

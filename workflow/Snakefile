@@ -203,6 +203,7 @@ rule build_bus_regions:
     output:
         regions_onshore="resources/{interconnect}/regions_onshore_s.geojson",
         regions_offshore="resources/{interconnect}/regions_offshore_s.geojson",
+        network="resources/{interconnect}/elec_ss.nc",
     log:
         "logs/{interconnect}/build_bus_regions_s.log",
     threads: 1
@@ -230,7 +231,7 @@ rule simplify_network:
 
 rule cluster_network:
     input:
-        network="resources/{interconnect}/elec_s.nc",
+        network="resources/{interconnect}/elec_ss.nc",
         regions_onshore="resources/{interconnect}/regions_onshore_s.geojson",
         regions_offshore="resources/{interconnect}/regions_offshore_s.geojson",
         busmap="data/base_grid/{interconnect}/bus2sub.csv",

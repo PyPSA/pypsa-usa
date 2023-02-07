@@ -39,10 +39,10 @@ use_state_shapes: true
 countries: [US]  
 # states: ['AL', 'AZ',  'AR', 'CA', 'CO', 'CT', 'DE', 'DC', 'FL', 'GA', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA', 'ME', 'MD', 'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ', 'NM',  'NY','NC',  'ND', 'OH', 'OK', 'OR', 'PA', 'RI','SC', 'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'VI', 'WA', 'WV', 'WI', 'WY']
 states: [AL, AZ,  AR, CA, CO, CT, DE, DC, FL, GA, ID, IL, IN, IA, KS, KY, LA, ME, MD, MA, MI, MN, MS, MO, MT, NE, NV, NH, NJ, NM,  NY,NC,  ND, OH, OK, OR, PA, RI,SC, SD, TN, TX, UT, VT, VA, VI, WA, WV, WI, WY]
+focus_weights: 
+  CA: 0.2
 
-
-allowed_carriers:
-  [wind, solar, offwind, hydro, coal, nuclear, ng, oil, geothermal]
+allowed_carriers: [wind, solar, offwind, hydro, coal, nuclear, ng, oil, geothermal]
 committable_carriers: []
 extendable_carriers: [solar, wind, offwind]
 
