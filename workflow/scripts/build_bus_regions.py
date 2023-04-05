@@ -161,141 +161,77 @@ if __name__ == "__main__":
                 })
             offshore_regions_c = offshore_regions_c.loc[offshore_regions_c.area > 1e-2]
             offshore_regions.append(offshore_regions_c)
-    else:
+    else: # when using Custom State/Balancing Authority shapes
         logger.info("Building bus regions for states in %s", snakemake.wildcards.interconnect)
         for state in states:
-            c_b = n.buses.country == 'US' #dont really need this line?
-            if abbrev_to_us_state[state] not in state_shapes.index: continue
-            onshore_shape = state_shapes[abbrev_to_us_state[state]]
-            onshore_locs = n.buses.loc[c_b & n.buses.substation_lv, ["x", "y"]] 
+            # c_b = n.buses.country == 'US' #dont really need this line?
+            if snakemake.params.balancing_authorities["use"]:
+                if state not in state_shapes.index: continue #need for interconnection wildcard
+                onshore_shape = state_shapes[state]
+            else:
+                if abbrev_to_us_state[state] not in state_shapes.index: continue
+                onshore_shape = state_shapes[abbrev_to_us_state[state]]
+            onshore_locs = n.buses.loc[n.buses.substation_lv, ["x", "y"]] 
             bus_points = gpd.points_from_xy(x=onshore_locs.x, y=onshore_locs.y)
-            state_locs = onshore_locs[[onshore_shape.contains(bus_points[i]) for i in range(len(bus_points))]] #checks if onshore bus is within the onshore shape of the state
+            state_locs = pd.DataFrame(columns=['x','y'])
+            state_locs = pd.concat([state_locs,onshore_locs[[onshore_shape.contains(bus_points[i]) for i in range(len(bus_points)) ]]])
+
+            if state_locs.empty: continue #skip empty BA's which are not in the bus dataframe. ex. eastern texas BA when using the WECC interconnect
+            if state== 'SPP-WAUE': continue #revisit this later
 
             onshore_regions.append(gpd.GeoDataFrame({
                     'name': state_locs.index,
                     'x': state_locs['x'],
                     'y': state_locs['y'],
                     'geometry': voronoi_partition_pts(state_locs.values, onshore_shape),
-                    # 'country': 'US',
                     'country': state,
                 }))
             n.buses.loc[state_locs.index, 'country'] = state #adds state abbreviation to the bus dataframe under the country column
-            # pdb.set_trace()
 
+        ### Defining Offshore Regions ###
 
-        #Adds Busses in the offshore Regions (there shouldnt be any onshore busses in the offshore regions)
-        offshore_shape = offshore_shapes['US']
-        offshore_locs = n.buses.loc[c_b & n.buses.substation_off, ["x", "y"]]
+        for i in range(len(offshore_shapes)):
+            offshore_shape = offshore_shapes[i]
+            shape_name = offshore_shapes.index[i]
+            bus_locs = n.buses.loc[n.buses.substation_off, ["x", "y"]] #substation off isn't doing anything here, all substations are "offshore"
+            bus_points = gpd.points_from_xy(x=bus_locs.x, y=bus_locs.y)
+            offshore_busses = bus_locs[[offshore_shape.buffer(0.2).contains(bus_points[i]) for i in range(len(bus_points))]]  #filter for OSW busses within shape
+            offshore_regions_c = gpd.GeoDataFrame({
+                'name': offshore_busses.index,
+                'x': offshore_busses['x'],
+                'y': offshore_busses['y'],
+                'geometry': voronoi_partition_pts(offshore_busses.values, offshore_shape),
+                'country': shape_name,})
+            offshore_regions_c = offshore_regions_c.loc[offshore_regions_c.area > 1e-2]
+            offshore_regions.append(offshore_regions_c)
+            n.buses.loc[offshore_busses.index, 'country'] = shape_name #adds offshore shape name to the bus dataframe under the country column
+        # n.mremove("Bus",  n.buses.loc[n.buses.country=='US'].index) #remove extra OSW busses from the network, OSW buses need to be tied to a BOEM Call area region. This causes error, need to address later.
 
-        bus_points = gpd.points_from_xy(x=offshore_locs.x, y=offshore_locs.y)
-        offshore_busses = offshore_locs[[offshore_shape.buffer(0).contains(bus_points[i]) for i in range(len(bus_points))]]     #checks if offshore bus is within the offshore shape
+        # offshore_shape = offshore_shapes['US']
+        # offshore_locs = n.buses.loc[n.buses.country == 'US'].loc[n.buses.substation_off, ["x", "y"]]
+        # pdb.set_trace()
 
-        offshore_regions_c = gpd.GeoDataFrame({
-                'name': offshore_locs.index,
-                'x': offshore_locs['x'],
-                'y': offshore_locs['y'],
-                'geometry': voronoi_partition_pts(offshore_locs.values, offshore_shape),
-                'country': 'US'
-            })
-        offshore_regions_c = offshore_regions_c.loc[offshore_regions_c.area > 1e-2]
-        offshore_regions.append(offshore_regions_c)
+        # bus_points = gpd.points_from_xy(x=offshore_locs.x, y=offshore_locs.y)
+        # offshore_busses = offshore_locs[[offshore_shape.buffer(200000).contains(bus_points[i]) for i in range(len(bus_points))]]     #checks if offshore bus is within the offshore shape
 
+        # offshore_regions_c = gpd.GeoDataFrame({
+        #         'name': offshore_locs.index,
+        #         'x': offshore_locs['x'],
+        #         'y': offshore_locs['y'],
+        #         'geometry': voronoi_partition_pts(offshore_locs.values, offshore_shape),
+        #         'country': 'US'
+        #     })
+        # offshore_regions_c = offshore_regions_c.loc[offshore_regions_c.area > 1e-2]
+        # offshore_regions.append(offshore_regions_c)
 
 
     n.export_to_netcdf(snakemake.output.network)
+
+    # pdb.set_trace()
+    # n.buses.to_csv('/Users/kamrantehranchi/Library/CloudStorage/OneDrive-Stanford/Kamran_OSW/PyPSA_Models/pypsa-breakthroughenergy-usa/workflow/resources/western/busmap_s.csv')
 
     pd.concat(onshore_regions, ignore_index=True).to_file(snakemake.output.regions_onshore)
     if offshore_regions:
         pd.concat(offshore_regions, ignore_index=True).to_file(snakemake.output.regions_offshore)
     else:
         offshore_shapes.to_frame().to_file(snakemake.output.regions_offshore)
-
-
-
-############################################################################################################
-'''
-import logging
-import pypsa
-import os
-import pandas as pd
-import numpy as np
-import geopandas as gpd
-from shapely.geometry import Polygon
-from scipy.spatial import Voronoi
-
-sys.path.append(os.path.join("/Users/kamrantehranchi/Library/CloudStorage/OneDrive-Stanford/Kamran_OSW/PyPSA_Models/pypsa-breakthroughenergy-usa/workflow/subworkflows/pypsa-eur/scripts"))
-
-sys.path.append(os.path.join(os.getcwd(), "subworkflows", "pypsa-eur", "scripts"))
-
-
-country_path = "/Users/kamrantehranchi/Library/CloudStorage/OneDrive-Stanford/Kamran_OSW/PyPSA_Models/pypsa-breakthroughenergy-usa/workflow/resources/western/country_shapes.geojson"
-offshore_path = "/Users/kamrantehranchi/Library/CloudStorage/OneDrive-Stanford/Kamran_OSW/PyPSA_Models/pypsa-breakthroughenergy-usa/workflow/resources/western/offshore_shapes.geojson"
-state_path = "/Users/kamrantehranchi/Library/CloudStorage/OneDrive-Stanford/Kamran_OSW/PyPSA_Models/pypsa-breakthroughenergy-usa/workflow/resources/western/state_shapes.geojson"
-
-from _helpers import configure_logging, REGION_COLS
-from helper_functs import abbrev_to_us_state
-
-countries = ['US']  
-country= 'US'
-states= ['AL', 'AZ',  'AR', 'CA', 'CO', 'CT', 'DE', 'DC', 'FL', 'GA', 'ID', 'IL', 'IN', 'IA', 'KS','KY', 'LA', 'ME', 'MD', 'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ', 'NM',  'NY','NC',  'ND', 'OH', 'OK', 'OR', 'PA', 'RI','SC', 'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'VI', 'WA', 'WV', 'WI', 'WY']
-
-# logger.info("Building bus regions for %s", countries)
-n = pypsa.Network("/Users/kamrantehranchi/Library/CloudStorage/OneDrive-Stanford/Kamran_OSW/PyPSA_Models/pypsa-breakthroughenergy-usa/workflow/resources/western/elec_s.nc")
-
-country_shapes = gpd.read_file(country_path).set_index('name')['geometry']
-offshore_shapes = gpd.read_file(offshore_path)
-offshore_shapes = offshore_shapes.reindex(columns=REGION_COLS).set_index('name')['geometry']
-
-state_shapes = gpd.read_file(state_path).set_index('name')['geometry']
-
-onshore_regions = []
-offshore_regions = []
-
-for state in states:
-    c_b = n.buses.country == country
-    #check if string is in the state_shapes index
-    if abbrev_to_us_state[state] not in state_shapes.index: continue
-    onshore_shape = state_shapes[abbrev_to_us_state[state]]
-    onshore_locs = n.buses.loc[c_b & n.buses.substation_lv, ["x", "y"]] 
-    bus_points = gpd.points_from_xy(x=onshore_locs.x, y=onshore_locs.y)
-    state_locs = onshore_locs[[onshore_shape.contains(bus_points[i]) for i in range(len(bus_points))]] #checks if onshore bus is within the onshore shape of the state
-
-    onshore_regions.append(gpd.GeoDataFrame({
-            'name': state_locs.index,
-            'x': state_locs['x'],
-            'y': state_locs['y'],
-            'geometry': voronoi_partition_pts(state_locs.values, onshore_shape),
-            'country': country,
-            'state': state,
-        }))
-
-#Adds Busses in the offshore Regions (there shouldnt be any onshore busses in the offshore regions)
-offshore_shape = offshore_shapes[country]
-offshore_locs = n.buses.loc[c_b & n.buses.substation_off, ["x", "y"]]
-
-bus_points = gpd.points_from_xy(x=offshore_locs.x, y=offshore_locs.y)
-offshore_busses = offshore_locs[[offshore_shape.buffer(0).contains(bus_points[i]) for i in range(len(bus_points))]]     #checks if offshore bus is within the offshore shape
-
-offshore_regions_c = gpd.GeoDataFrame({
-        'name': offshore_locs.index,
-        'x': offshore_locs['x'],
-        'y': offshore_locs['y'],
-        'geometry': voronoi_partition_pts(offshore_locs.values, offshore_shape),
-        'country': country
-    })
-offshore_regions_c = offshore_regions_c.loc[offshore_regions_c.area > 1e-2]
-offshore_regions.append(offshore_regions_c)
-
-
-pd.concat(onshore_regions, ignore_index=True).to_file(snakemake.output.regions_onshore)
-if offshore_regions:
-    pd.concat(offshore_regions, ignore_index=True).to_file(snakemake.output.regions_offshore)
-else:
-    offshore_shapes.to_frame().to_file(snakemake.output.regions_offshore)
-
-
-#left off fixing offshore regions. I noticed the elec_s simplified network has tons of busses offshore.... so I need to figure out why that is and what to do about it.... state level partitions work well though.
-
-#to make offshore network for CA detaild network i should partition the shape files into the climate zones files for california....this can be done in the build_shapes file. those get fed in as "states" individually to preserve their boundaries. 
-
-'''
