@@ -13,8 +13,9 @@ conda activate pypsa-usa
 
 # Workflow
 
-##Configuration
+## Configuration
 
+## Execution 
 For executing the workflow go into the `workflow` directory and execute `snakemake` from your terminal, i.e.
 
 ```bash
