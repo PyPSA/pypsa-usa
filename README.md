@@ -24,6 +24,9 @@ snakemake -j6
 
 where 6 indicates the number of used cores, you may change it to your preferred number. This will run the first rule defined in the `Snakefile`.
 
+## Examine Results
+
+
 <!-- # Scope -->
 
 # License
