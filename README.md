@@ -11,20 +11,9 @@ conda env create -f environment.yaml
 conda activate pypsa-usa
 ```
 
-download submodules after cloning:
-
-```
-git submodule update --init
-```
-
-update submodule with:
-
-```
-git submodule update --remote
-
-```
-
 # Workflow
+
+##Configuration
 
 For executing the workflow go into the `workflow` directory and execute `snakemake` from your terminal, i.e.
 
