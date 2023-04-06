@@ -1,6 +1,6 @@
-# PyPSA-USA powered by BreakthroughEnergy
+# PyPSA-USA
 
-This workflow optimizes the power system model provided by [BreakthroughEnergy](https://www.breakthroughenergy.org/) via the [PowersimData package](https://github.com/Breakthrough-Energy/PowerSimData). Note that the functionalities of the workflow are still limited as the it is in initial stage. The project is funded by the BreakthroughEnergy Initiative.
+This workflow optimizes the power system model provided by [BreakthroughEnergy](https://www.breakthroughenergy.org/). Note that the functionalities of the workflow are still limited as the it is in initial stage.
 
 # Installation
 
