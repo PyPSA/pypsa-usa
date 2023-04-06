@@ -298,6 +298,7 @@ rule report:
         pdflatex {input.tex}
         """
 
+# Create DAG with- snakemake --dag results/western/networks/elec_s_40_ec_lvopt_Co2L1.0.nc -F | sed -n "/digraph/,/}/p" | dot -Tpng -o results/workflow.png
 rule dag:
     message:
         "Plotting dependency graph of the workflow."
