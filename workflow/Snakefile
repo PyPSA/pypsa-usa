@@ -82,10 +82,10 @@ rule create_network:
         lines="data/base_grid/branch.csv",
         links="data/base_grid/dcline.csv",
         plants="data/base_grid/plant.csv",
-        wind="data/base_grid/wind.csv",
-        solar="data/base_grid/solar.csv",
-        hydro="data/base_grid/hydro.csv",
-        demand="data/base_grid/demand.csv",
+        wind="data/2020/wind.csv",
+        solar="data/2020/solar.csv",
+        hydro="data/2020/hydro.csv",
+        demand="data/2020/demand.csv",
         bus2sub="data/base_grid/bus2sub.csv",
         sub="data/base_grid/sub.csv",
         tech_costs="repo_data/pypsa_eur_costs.csv",
@@ -111,7 +111,7 @@ rule build_shapes:
         zone="data/base_grid/zone.csv",
     output:
         country_shapes="resources/{interconnect}/country_shapes.geojson",
-        state_shapes="resources/{interconnect}/state_shapes.geojson",
+        ba_region_shapes="resources/{interconnect}/ba_region_shapes.geojson",
         offshore_shapes="resources/{interconnect}/offshore_shapes.geojson",
     log:
         "logs/build_shapes_{interconnect}.log",
@@ -138,11 +138,10 @@ rule simplify_network:
 
 rule build_bus_regions:
     params:
-        use_state_shapes= config["use_state_shapes"], #I can combine these 
         balancing_authorities=config["balancing_authorities"],
     input:
         country_shapes="resources/{interconnect}/country_shapes.geojson",
-        state_shapes="resources/{interconnect}/state_shapes.geojson",
+        ba_region_shapes="resources/{interconnect}/ba_region_shapes.geojson",
         offshore_shapes="resources/{interconnect}/offshore_shapes.geojson",
         base_network="resources/{interconnect}/elec_s.nc",
     output:
@@ -200,7 +199,6 @@ rule add_extra_components:
         mem=500,
     script:
         "scripts/add_extra_components.py"
-
 
 rule prepare_network:
     input:

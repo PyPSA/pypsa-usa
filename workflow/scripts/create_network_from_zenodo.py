@@ -29,8 +29,8 @@ def add_buses_from_file(n, fn_buses, interconnect="Western"):
     n.madd(
         "Bus",
         buses.index,
-        Pd=buses.Pd,
-        # type = buses.type, # do we need this?
+        Pd=buses.Pd, # used to decompose zone demand to bus demand
+        # type = buses.type # do we need this? 
         v_nom=buses.baseKV,
         zone_id=buses.zone_id,
     )
@@ -48,24 +48,44 @@ def add_branches_from_file(n, fn_branches):
         tech_branches = branches.query("branch_device_type == @tech")
         logger.info(f"Adding {len(tech_branches)} branches as {tech}s to the network.")
 
-        n.madd(
+        # Why are the resistance, reactance, and susceptance scaled by Vnom^2?
+
+        # From Pypsa documentation on Line "type" : "Name of line standard type. If this is not an empty string “”, then the line standard type impedance parameters are multiplied with the line length and divided/multiplied by num_parallel to compute x, r, etc. This will override any values set in r, x, and b. If the string is empty, PyPSA will simply read r, x, etc."
+
+        # Based on above it seems we would want to leave line type blank and accept the impedance parameters as specified in the branches file?? Ask Fabian and Martha why the did it this way.
+        n.madd( 
             tech,
             tech_branches.index,
             bus0=tech_branches.from_bus_id,
             bus1=tech_branches.to_bus_id,
             r=tech_branches.r
-            * (n.buses.loc[tech_branches.from_bus_id]["v_nom"].values ** 2)
-            / 100,
+            * (n.buses.loc[tech_branches.from_bus_id]["v_nom"].values ** 2) / 100,
             x=tech_branches.x
-            * (n.buses.loc[tech_branches.from_bus_id]["v_nom"].values ** 2)
-            / 100,
+            * (n.buses.loc[tech_branches.from_bus_id]["v_nom"].values ** 2)/ 100,
             b=tech_branches.b
             / (n.buses.loc[tech_branches.from_bus_id]["v_nom"].values ** 2),
             s_nom=tech_branches.rateA,
             v_nom=tech_branches.from_bus_id.map(n.buses.v_nom),
             interconnect=tech_branches.interconnect,
-            type="Rail",
         )
+        # n.madd( 
+        #     tech,
+        #     tech_branches.index,
+        #     bus0=tech_branches.from_bus_id,
+        #     bus1=tech_branches.to_bus_id,
+        #     r=tech_branches.r
+        #     * (n.buses.loc[tech_branches.from_bus_id]["v_nom"].values ** 2)
+        #     / 100,
+        #     x=tech_branches.x
+        #     * (n.buses.loc[tech_branches.from_bus_id]["v_nom"].values ** 2)
+        #     / 100,
+        #     b=tech_branches.b
+        #     / (n.buses.loc[tech_branches.from_bus_id]["v_nom"].values ** 2),
+        #     s_nom=tech_branches.rateA,
+        #     v_nom=tech_branches.from_bus_id.map(n.buses.v_nom),
+        #     interconnect=tech_branches.interconnect,
+        #     type="Rail",
+        # )
     return n
 
 
@@ -92,15 +112,14 @@ def add_dclines_from_file(n, fn_dclines):
         bus1=dclines.to_bus_id,
         p_nom=dclines.Pt,
         carrier="DC",
-        underwater_fraction=0.0,
+        underwater_fraction=0.0, #DC line in bay is underwater, but does network have this line?
     )
 
     return n
 
 
 def add_conventional_plants_from_file(
-    n, fn_plants, conventional_carriers, extendable_carriers, costs
-):
+    n, fn_plants, conventional_carriers, extendable_carriers, costs):
 
     _add_missing_carriers_from_costs(n, costs, conventional_carriers)
 
@@ -138,8 +157,7 @@ def add_conventional_plants_from_file(
 
 
 def add_renewable_plants_from_file(
-    n, fn_plants, renewable_carriers, extendable_carriers, costs
-):
+    n, fn_plants, renewable_carriers, extendable_carriers, costs):
 
     _add_missing_carriers_from_costs(n, costs, renewable_carriers)
 
@@ -154,7 +172,7 @@ def add_renewable_plants_from_file(
 
         logger.info(f"Adding {len(tech_plants)} {tech} generators to the network.")
 
-        if tech in ["wind", "offwind"]:
+        if tech in ["wind", "offwind"]: #is this going to double add wind?
             p = pd.read_csv(snakemake.input["wind"], index_col=0)
         else:
             p = pd.read_csv(snakemake.input[tech], index_col=0)
