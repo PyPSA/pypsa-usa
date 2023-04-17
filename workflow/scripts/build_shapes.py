@@ -7,14 +7,8 @@ import pdb
 '''
 Description: 
 This script builds the shapes for the interconnect identified in the config file. 
-The shapes are built using the states or Balancing Authority Shapes and the offshore shapes specified in the config file. 
+The shapes are built using the Balancing Authority Shapes and the offshore shapes specified in the config file. 
 Geojson files are saved to the resources folder.
-
-Build shapes ->  build_bus_regions -> simplify_network  -> cluster_network
-
-*** Future work:
-- Remove the use of "States" as shapes, and directly filter balancing authorities based on their interconnection
-
 
 '''
 sys.path.append(os.path.join(os.getcwd(),'workflow'))
@@ -50,11 +44,9 @@ if snakemake.params.balancing_authorities["use"]:
     ba_states_intersect =  ba['geometry'].apply(lambda shp: shp.intersects(countries.dissolve().iloc[0]['geometry']))
     ba_states = ba[ba_states_intersect]
     ba_states.rename(columns={"name_1": "name"}, inplace=True)
-    # ba_states.drop(columns=['name_2'],inplace=True)
     states= ba_states
-    # states = gpd.GeoDataFrame(pd.concat([states,ba],ignore_index=True),crs=4326)
 
-states.to_file(snakemake.output.state_shapes)
+states.to_file(snakemake.output.ba_region_shapes)
 
 offshore_config = snakemake.params.source_offshore_shapes
 offshore_path = offshore_config['offshore_path'][offshore_config['use']]
