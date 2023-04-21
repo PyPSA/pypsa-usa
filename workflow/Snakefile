@@ -16,8 +16,8 @@ FIGURES_SINGLE = [
 # --------------------------- Workflow constraints --------------------------- #
 
 localrules:
-    dag,
-    report,
+    # dag,
+    # report,
     clean,
 
 wildcard_constraints:
@@ -54,6 +54,7 @@ rule test:
             figure=FIGURES_SINGLE
         ),
 
+
 #Creating network from zenodo
 DATAFILES = [
     "bus.csv",
@@ -66,6 +67,7 @@ DATAFILES = [
     "solar.csv",
     "wind.csv",
     "hydro.csv",
+    "zone.csv",
 ]
 
 rule retrieve_data_from_zenodo:
@@ -82,10 +84,10 @@ rule create_network:
         lines="data/base_grid/branch.csv",
         links="data/base_grid/dcline.csv",
         plants="data/base_grid/plant.csv",
-        wind="data/2020/wind.csv",
-        solar="data/2020/solar.csv",
-        hydro="data/2020/hydro.csv",
-        demand="data/2020/demand.csv",
+        wind="data/base_grid/wind.csv",
+        solar="data/base_grid/solar.csv",
+        hydro="data/base_grid/hydro.csv",
+        demand="data/base_grid/demand.csv",
         bus2sub="data/base_grid/bus2sub.csv",
         sub="data/base_grid/sub.csv",
         tech_costs="repo_data/pypsa_eur_costs.csv",
@@ -269,7 +271,6 @@ rule plot_figures_single:
         },
     notebook:
         "notebooks/plot-results.py.ipynb"
-
 
 rule sync:
     params:
