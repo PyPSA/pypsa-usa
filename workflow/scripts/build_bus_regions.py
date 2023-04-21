@@ -168,7 +168,7 @@ if __name__ == "__main__":
             bus_points = gpd.points_from_xy(x=onshore_locs.x, y=onshore_locs.y)
             ba_locs = pd.DataFrame(columns=['x','y'])
             ba_locs = pd.concat([ba_locs,onshore_locs[[onshore_shape.contains(bus_points[i]) for i in range(len(bus_points)) ]]])
-            pdb.set_trace()
+            # pdb.set_trace()
 
             if ba_locs.empty: continue #skip empty BA's which are not in the bus dataframe. ex. eastern texas BA when using the WECC interconnect
             # if ba == 'SPP-WAUE': continue #revisit this later
