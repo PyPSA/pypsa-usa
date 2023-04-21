@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: MIT
 #
-# Edits for PyPSA-USA by Kamran Tehranchi (Stanford)
+# Edits for PyPSA-USA by Kamran Tehranchi ()
 
 """
 
@@ -58,9 +58,7 @@ import pdb
 sys.path.append(os.path.join(os.getcwd(), "subworkflows", "pypsa-eur", "scripts"))
 from _helpers import configure_logging, REGION_COLS
 
-
 logger = logging.getLogger(__name__)
-
 
 def voronoi_partition_pts(points, outline):
     """
@@ -131,7 +129,7 @@ if __name__ == "__main__":
     offshore_regions = []
 
     if snakemake.params.balancing_authorities["use"]==False: #Ignore BA shapes
-        logger.info("Building bus regions for %s", countries)
+        logger.info("Building bus regions for %s", len(countries))
         for country in countries:
             c_b = n.buses.country == country
 
@@ -165,17 +163,15 @@ if __name__ == "__main__":
             if snakemake.params.balancing_authorities["use"]:
                 if ba not in ba_region_shapes.index: continue #filter only ba's in interconnection 
                 onshore_shape = ba_region_shapes[ba]
-            # else:
-            #     if abbrev_to_us_state[ba] not in ba_region_shapes.index: continue
-            #     onshore_shape = ba_region_shapes[abbrev_to_us_state[ba]]
 
             onshore_locs = n.buses.loc[n.buses.substation_lv, ["x", "y"]] 
             bus_points = gpd.points_from_xy(x=onshore_locs.x, y=onshore_locs.y)
             ba_locs = pd.DataFrame(columns=['x','y'])
             ba_locs = pd.concat([ba_locs,onshore_locs[[onshore_shape.contains(bus_points[i]) for i in range(len(bus_points)) ]]])
+            pdb.set_trace()
 
             if ba_locs.empty: continue #skip empty BA's which are not in the bus dataframe. ex. eastern texas BA when using the WECC interconnect
-            if ba == 'SPP-WAUE': continue #revisit this later
+            # if ba == 'SPP-WAUE': continue #revisit this later
 
             onshore_regions.append(gpd.GeoDataFrame({
                     'name': ba_locs.index,
@@ -184,13 +180,17 @@ if __name__ == "__main__":
                     'geometry': voronoi_partition_pts(ba_locs.values, onshore_shape),
                     'country': ba,
                 }))
-            n.buses.loc[ba_locs.index, 'country'] = ba #adds state abbreviation to the bus dataframe under the country column
+            n.buses.loc[ba_locs.index, 'country'] = ba #adds abbreviation to the bus dataframe under the country column
+
+            #hot fix for imperial beach substation being offshore
+            n.buses.loc['37584', 'country'] = 'CISO-SDGE'
+
 
         ### Defining Offshore Regions ###
         for i in range(len(offshore_shapes)):
             offshore_shape = offshore_shapes[i]
             shape_name = offshore_shapes.index[i]
-            bus_locs = n.buses.loc[n.buses.substation_off, ["x", "y"]] #substation off isn't doing anything here, all substations are "offshore"
+            bus_locs = n.buses.loc[n.buses.substation_off, ["x", "y"]] #substation off all true?
             bus_points = gpd.points_from_xy(x=bus_locs.x, y=bus_locs.y)
             offshore_busses = bus_locs[[offshore_shape.buffer(0.2).contains(bus_points[i]) for i in range(len(bus_points))]]  #filter for OSW busses within shape
             offshore_regions_c = gpd.GeoDataFrame({
@@ -204,25 +204,12 @@ if __name__ == "__main__":
             n.buses.loc[offshore_busses.index, 'country'] = shape_name #adds offshore shape name to the bus dataframe under the country column
             
         ### Remove Extra OSW Busses and Branches ###
+        #Removes remaining nodes in network left with country = US (these are offshore busses that are not in the offshore shape or onshore shapes)
 
-        # n.mremove("Bus",  n.buses.loc[n.buses.country=='US'].index) #remove extra OSW busses from the network, OSW buses need to be tied to a BOEM Call area region. This causes error, need to address later.
-
-        # offshore_shape = offshore_shapes['US']
-        # offshore_locs = n.buses.loc[n.buses.country == 'US'].loc[n.buses.substation_off, ["x", "y"]]
-        # pdb.set_trace()
-
-        # bus_points = gpd.points_from_xy(x=offshore_locs.x, y=offshore_locs.y)
-        # offshore_busses = offshore_locs[[offshore_shape.buffer(200000).contains(bus_points[i]) for i in range(len(bus_points))]]     #checks if offshore bus is within the offshore shape
-
-        # offshore_regions_c = gpd.GeoDataFrame({
-        #         'name': offshore_locs.index,
-        #         'x': offshore_locs['x'],
-        #         'y': offshore_locs['y'],
-        #         'geometry': voronoi_partition_pts(offshore_locs.values, offshore_shape),
-        #         'country': 'US'
-        #     })
-        # offshore_regions_c = offshore_regions_c.loc[offshore_regions_c.area > 1e-2]
-        # offshore_regions.append(offshore_regions_c)
+        #To-do- add filter that checks if the buses being removed are over water. Currently this works for WECC since I have cleaned up the GEOJSON files
+        n.mremove("Line", n.lines.loc[n.lines.bus1.isin(n.buses.loc[n.buses.country=='US'].index)].index) 
+        n.mremove("Load", n.loads.loc[n.loads.bus.isin(n.buses.loc[n.buses.country=='US'].index)].index)
+        n.mremove("Bus",  n.buses.loc[n.buses.country=='US'].index)
 
 
     n.export_to_netcdf(snakemake.output.network)

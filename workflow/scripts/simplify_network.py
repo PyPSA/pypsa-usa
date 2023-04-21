@@ -120,6 +120,10 @@ if __name__ == "__main__":
     substations = pd.read_csv(snakemake.input.sub, index_col=0)
     substations.index = substations.index.astype(str)
 
+    #remove offshore substations here?
+    # substations[substations.index == '37584'].lat = 40.7128
+    # substations[substations.index == '37584'].lon = -74.0060
+
     busmaps = [trafo_map, busmap_to_sub.sub_id]
     busmaps = reduce(lambda x, y: x.map(y), busmaps[1:], busmaps[0])
 
