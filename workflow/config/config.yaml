@@ -41,6 +41,27 @@ BA_names: ['AEC', 'AECI', 'AVA', 'Arizona', 'BANC', 'BPAT', 'CHPD', 'CISO-PGAE',
 # focus_weights: 
 #   CISO-PGAE: 0.5
 
+snapshots:
+  start: "2013-01-01"
+  end: "2014-01-01"
+  inclusive: 'left' # include start, not end
+
+planning_horizons: # investment years
+  - 2030
+  - 2035
+  - 2040
+  - 2045
+
+investment_period_discount_rate: 0.05
+
+forecast_data:
+  use_ads: true #if set true uses ads data, if false uses BE data
+  use_cec: true #if set true uses cec data, if false uses ads/BE data
+  ads_path: '/Users/kamrantehranchi/Local_Documents/pypsa-breakthroughenergy-usa/workflow/resources/ads_private_data/Load_2032.csv'
+  # demand_data: #must match the planning horizons above
+  #   2030: 
+  
+
 allowed_carriers: [wind, solar, offwind, hydro, coal, nuclear, ng, oil, geothermal]
 committable_carriers: []
 extendable_carriers: [solar, wind, offwind]

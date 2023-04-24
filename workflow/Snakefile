@@ -78,7 +78,37 @@ rule retrieve_data_from_zenodo:
     script:
         "scripts/retrieve_data_from_zenodo.py"
 
-rule create_network:
+
+rule base_network:
+    input:
+        eg_buses="data/base_grid/bus.csv",
+        eg_lines="data/base_grid/branch.csv",
+        eg_links="data/base_grid/dcline.csv",
+        # eg_converters="data/entsoegridkit/converters.csv",
+        # eg_transformers="data/entsoegridkit/transformers.csv",
+        # parameter_corrections="data/parameter_corrections.yaml",
+        # links_p_nom="data/links_p_nom.csv",
+        # links_tyndp="data/links_tyndp.csv",
+        europe_shape="resources/{interconnect}/country_shapes.geojson",
+        country_shapes="resources/{interconnect}/ba_region_shapes.geojson",
+        offshore_shapes="resources/{interconnect}/offshore_shapes.geojson",
+        # country_shapes=RESOURCES + "country_shapes.geojson",
+        # offshore_shapes=RESOURCES + "offshore_shapes.geojson",
+        # europe_shape=RESOURCES + "europe_shape.geojson",
+    output:
+        network = "resources/{interconnect}/base.nc",
+    log:
+        "logs/base_network/{interconnect}.log",
+    threads: 1
+    resources:
+        mem_mb=1500,
+    # conda:
+    #     "../envs/environment.yaml"
+    script:
+        "scripts/base_network.py"
+
+
+rule create_multi_period_network:
     input:
         buses="data/base_grid/bus.csv",
         lines="data/base_grid/branch.csv",
@@ -88,6 +118,33 @@ rule create_network:
         solar="data/base_grid/solar.csv",
         hydro="data/base_grid/hydro.csv",
         demand="data/base_grid/demand.csv",
+        bus2sub="data/base_grid/bus2sub.csv",
+        sub="data/base_grid/sub.csv",
+        tech_costs="repo_data/pypsa_eur_costs.csv",
+    output:
+        bus2sub="data/base_grid/{interconnect}/bus2sub.csv",
+        sub="data/base_grid/{interconnect}/sub.csv",
+        network="resources/{interconnect}/elec.nc",
+    log:
+        "logs/create_multi_period_network/{interconnect}.log",
+    threads: 4
+    resources:
+        mem=500,
+    script:
+        "scripts/create_multi_period_network.py"
+
+
+
+rule create_network:
+    input:
+        buses="data/base_grid/bus.csv",
+        lines="data/base_grid/branch.csv",
+        links="data/base_grid/dcline.csv",
+        plants="data/base_grid/plant.csv",
+        wind="data/base_grid/wind.csv",
+        solar="data/base_grid/solar.csv",
+        hydro="data/base_grid/hydro.csv",
+        demand=config['demand_data']
         bus2sub="data/base_grid/bus2sub.csv",
         sub="data/base_grid/sub.csv",
         tech_costs="repo_data/pypsa_eur_costs.csv",
