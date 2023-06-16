@@ -1,4 +1,4 @@
-# Description: Snakefile for the new workflow
+# Copyright 2021-2022 Martha Frysztacki (KIT), Fabian Hofmann (TUB)
 
 # -------------------------- Imports and Parameters -------------------------- #
 
@@ -55,8 +55,7 @@ rule test:
         ),
 
 
-################# ----------- Rules to Retrieve Data ---------- #################
-
+#Creating network from zenodo
 DATAFILES = [
     "bus.csv",
     "sub.csv",
@@ -79,24 +78,87 @@ rule retrieve_data_from_zenodo:
     script:
         "scripts/retrieve_data_from_zenodo.py"
 
-rule retrieve_forecast_data:
+
+rule base_network:
+    input:
+        eg_buses="data/base_grid/bus.csv",
+        eg_lines="data/base_grid/branch.csv",
+        eg_links="data/base_grid/dcline.csv",
+        # eg_converters="data/entsoegridkit/converters.csv",
+        # eg_transformers="data/entsoegridkit/transformers.csv",
+        # parameter_corrections="data/parameter_corrections.yaml",
+        # links_p_nom="data/links_p_nom.csv",
+        # links_tyndp="data/links_tyndp.csv",
+        europe_shape="resources/{interconnect}/country_shapes.geojson",
+        country_shapes="resources/{interconnect}/ba_region_shapes.geojson",
+        offshore_shapes="resources/{interconnect}/offshore_shapes.geojson",
+        # country_shapes=RESOURCES + "country_shapes.geojson",
+        # offshore_shapes=RESOURCES + "offshore_shapes.geojson",
+        # europe_shape=RESOURCES + "europe_shape.geojson",
     output:
-        # expand("data/base_grid/{file}", file=DATAFILES), # need to rename the files that are output from this script
+        network = "resources/{interconnect}/base.nc",
     log:
-        "logs/retrieve_forecast_data.log",
+        "logs/base_network/{interconnect}.log",
+    threads: 1
+    resources:
+        mem_mb=1500,
+    # conda:
+    #     "../envs/environment.yaml"
     script:
-        "scripts/retrieve_forecast_data.py"        
+        "scripts/base_network.py"
 
-rule retrieve_historical_load_data:
+
+rule create_multi_period_network:
+    input:
+        buses="data/base_grid/bus.csv",
+        lines="data/base_grid/branch.csv",
+        links="data/base_grid/dcline.csv",
+        plants="data/base_grid/plant.csv",
+        wind="data/base_grid/wind.csv",
+        solar="data/base_grid/solar.csv",
+        hydro="data/base_grid/hydro.csv",
+        demand="data/base_grid/demand.csv",
+        bus2sub="data/base_grid/bus2sub.csv",
+        sub="data/base_grid/sub.csv",
+        tech_costs="repo_data/pypsa_eur_costs.csv",
     output:
-        # expand("data/base_grid/{file}", file=DATAFILES), # need to rename the files that are output from this script
+        bus2sub="data/base_grid/{interconnect}/bus2sub.csv",
+        sub="data/base_grid/{interconnect}/sub.csv",
+        network="resources/{interconnect}/elec.nc",
     log:
-        "logs/retrieve_historical_load_data.log",
+        "logs/create_multi_period_network/{interconnect}.log",
+    threads: 4
+    resources:
+        mem=500,
     script:
-        "scripts/retrieve_historical_load_data.py"
+        "scripts/create_multi_period_network.py"
 
 
-################# ----------- Rules to Build Network ---------- #################
+
+rule create_network:
+    input:
+        buses="data/base_grid/bus.csv",
+        lines="data/base_grid/branch.csv",
+        links="data/base_grid/dcline.csv",
+        plants="data/base_grid/plant.csv",
+        wind="data/base_grid/wind.csv",
+        solar="data/base_grid/solar.csv",
+        hydro="data/base_grid/hydro.csv",
+        demand=config['demand_data']
+        bus2sub="data/base_grid/bus2sub.csv",
+        sub="data/base_grid/sub.csv",
+        tech_costs="repo_data/pypsa_eur_costs.csv",
+    output:
+        bus2sub="data/base_grid/{interconnect}/bus2sub.csv",
+        sub="data/base_grid/{interconnect}/sub.csv",
+        network="resources/{interconnect}/elec.nc",
+    log:
+        "logs/create_network/{interconnect}.log",
+    threads: 4
+    resources:
+        mem=500,
+    script:
+        "scripts/create_network_from_zenodo.py"
 
 rule build_shapes:
     params:
@@ -118,62 +180,6 @@ rule build_shapes:
     script:
         "scripts/build_shapes.py"
 
-rule build_base_network:
-    input:
-        buses="data/base_grid/bus.csv",
-        lines="data/base_grid/branch.csv",
-        links="data/base_grid/dcline.csv",
-        bus2sub="data/base_grid/bus2sub.csv",
-        sub="data/base_grid/sub.csv",
-        tech_costs="repo_data/pypsa_eur_costs.csv",
-        ba_region_shapes="resources/{interconnect}/ba_region_shapes.geojson",
-        offshore_shapes="resources/{interconnect}/offshore_shapes.geojson",
-    output:
-        bus2sub="data/base_grid/{interconnect}/bus2sub.csv",
-        sub="data/base_grid/{interconnect}/sub.csv",
-        network="resources/{interconnect}/base_network.nc",
-    log:
-        "logs/create_network/{interconnect}.log",
-    threads: 4
-    resources:
-        mem=500,
-    script:
-        "scripts/build_base_network.py"
-
-
-# rule build_load_data:
-#     input:
-
-#     output:
-
-#     log:
-#         "logs/create_network/{interconnect}.log",
-#     threads: 4
-#     resources:
-#         mem=500,
-#     script:
-#         "scripts/build_load_data.py"
-
-# rule build_powerplants:
-#  input:
-#         base_network="resources/{interconnect}/elec.nc",
-#         plants="data/base_grid/plant.csv",
-#         wind="data/base_grid/wind.csv",
-#         solar="data/base_grid/solar.csv",
-#         hydro="data/base_grid/hydro.csv",
-#         tech_costs="repo_data/pypsa_eur_costs.csv",
-#     output:
-#         network="resources/{interconnect}/elec.nc",
-#     log:
-#         "logs/create_network/{interconnect}.log",
-#     threads: 4
-#     resources:
-#         mem=500,
-#     script:
-#         "scripts/build_powerplants.py"
-
-
-################# ----------- Rules to Simplify Network ---------- #################
 rule simplify_network:
     input:
         bus2sub="data/base_grid/{interconnect}/bus2sub.csv",
@@ -237,9 +243,6 @@ rule cluster_network:
         mem_mb=6000,
     script:
         "scripts/cluster_network_eur.py"
-
-
-################# ----------- Rules to Optimize ---------- #################
 
 
 rule add_extra_components:
