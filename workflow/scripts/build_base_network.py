@@ -1,4 +1,5 @@
 # Copyright 2021-2022 Martha Frysztacki (KIT)
+# Modified by Kamran Tehranchi (Stanford University)
 
 import pypsa, pandas as pd, logging, geopandas as gpd
 from geopandas.tools import sjoin
@@ -84,7 +85,6 @@ def add_dclines_from_file(n, fn_dclines):
 
     return n
 
-
 def assign_bus_ba(PATH_BUS, PATH_BA_SHP, PATH_OFFSHORE_SHP, bus_locs):
     bus_df = pd.read_csv(PATH_BUS, index_col=0)
     bus_locs["geometry"] = gpd.points_from_xy(bus_locs["lon"], bus_locs["lat"])
@@ -98,7 +98,6 @@ def assign_bus_ba(PATH_BUS, PATH_BA_SHP, PATH_OFFSHORE_SHP, bus_locs):
     ba_points = ba_points.rename(columns={'name':'balancing_area'})
     bus_df = pd.merge(bus_df, ba_points['balancing_area'], left_index=True, right_index=True,how='left')
     return bus_df
-
 
 if __name__ == "__main__":
     logger = logging.getLogger(__name__)
@@ -155,7 +154,7 @@ if __name__ == "__main__":
             .set_index("sub_id")
         )
         sub.to_csv(snakemake.output.sub)
-    import pdb; pdb.set_trace()
+    # import pdb; pdb.set_trace()
 
     # export network
     n.export_to_netcdf(snakemake.output.network)
