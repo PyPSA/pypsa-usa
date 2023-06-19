@@ -110,7 +110,6 @@ if __name__ == "__main__":
     if interconnect != "usa":
         interconnect = interconnect[0].upper() + interconnect[1:]
 
-
     #assign locations and balancing authorities to buses
     bus2sub = pd.read_csv(snakemake.input.bus2sub).set_index("bus_id")
     sub = pd.read_csv(snakemake.input.sub).set_index("sub_id")
