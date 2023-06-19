@@ -140,19 +140,28 @@ rule build_base_network:
     script:
         "scripts/build_base_network.py"
 
+# ads_files = [
+#     "Load_2030.csv",
+#     "Solar_2030.csv",
+#     "Wind_2030.csv",
+#     "Load_2032.csv",
+#     "Solar_2032.csv",
+#     "Wind_2032.csv",
+# ]
 
-# rule build_load_data:
-#     input:
-
-#     output:
-
-#     log:
-#         "logs/create_network/{interconnect}.log",
-#     threads: 4
-#     resources:
-#         mem=500,
-#     script:
-#         "scripts/build_load_data.py"
+rule build_load_data:
+    input:
+        network="resources/{interconnect}/elec_base_network.nc",
+        demand_breakthrough_2016="data/base_grid/demand.csv",
+        ads_2032 = 'resources/WECC_ADS/downloads/2032/Public Data/Hourly Profiles in CSV format',
+        ads_2030 = 'resources/WECC_ADS/downloads/2030/WECC 2030 ADS PCM 2020-12-16 (V1.5) Public Data/CSV Shape Files',
+    output:
+        # demand_ads= expand("resources/demand_ads/{file}", file=ads_files),
+        network="resources/{interconnect}/elec_base_network_load.nc",
+    log:
+        "logs/build_load_data/{interconnect}.log",
+    script:
+        "scripts/build_load_data.py"
 
 # rule build_powerplants:
 #  input:
@@ -178,7 +187,7 @@ rule simplify_network:
     input:
         bus2sub="data/base_grid/{interconnect}/bus2sub.csv",
         sub="data/base_grid/{interconnect}/sub.csv",
-        network="resources/{interconnect}/elec.nc",
+        network="resources/{interconnect}/elec_base_network_load.nc",
     output:
         network="resources/{interconnect}/elec_s.nc",
     log:

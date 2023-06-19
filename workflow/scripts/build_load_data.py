@@ -3,24 +3,16 @@ Preprocesses Historical and Forecasted Load, Solar, and Wind Data
 
 Written by Kamran Tehranchi, Stanford University.
 '''
-import pandas as pd
-import glob, os
-from pathlib import Path
-# import urllib.request
-import logging
-import zipfile
-import requests, zipfile, io
-from pathlib import Path
-import os
-
+import pandas as pd, glob, os, logging, pypsa
 from _helpers import progress_retrieve, configure_logging
 
-logger = logging.getLogger(__name__)
+def process_ads_data(file_patterns):
+    for year, file_patterns_year in file_patterns.items():
+        ads_filelist = glob.glob(os.path.join(snakemake.input[f'ads_{year}'], '*.csv'))
+        for profile_type, pattern in file_patterns_year.items():
+            modify_ads_files(profile_type, [s for s in ads_filelist if pattern in s], year)
 
-#configs and snakemake inputs
-PATH_DATABUNDLE = '/Users/kamrantehranchi/Local_Documents/pypsa-breakthroughenergy-usa/workflow/resources'
-
-def preprocess_ads_data(profiletype, paths, PATH_OUTPUT, year):
+def modify_ads_files(profiletype, paths, year):
     """
     Preprocesses the load, solar, and wind data from the ADS PCM
     :param profiletype: string, either 'load', 'solar', or 'wind'
@@ -33,41 +25,95 @@ def preprocess_ads_data(profiletype, paths, PATH_OUTPUT, year):
         df = pd.read_csv(paths[i], header=0, index_col=0)
         # df.columns = df.columns.str.split('_').str[1]
         df.columns = df.columns.str.removeprefix(f'{profiletype}_')
-        df.columns = df.columns.str.removeprefix('PV_')
-        df.columns = df.columns.str.removeprefix('WT_')
-        
-        df.columns = df.columns.str.removesuffix('.dat')
-        df.columns = df.columns.str.removesuffix(f'_{year}')
-        df.columns = df.columns.str.removesuffix(f'_[18].dat: {year}')
+        # df.columns = df.columns.str.removeprefix('PV_')
+        # df.columns = df.columns.str.removeprefix('WT_')
+        # df.columns = df.columns.str.removesuffix('.dat')
+        # df.columns = df.columns.str.removesuffix(f'_{year}')
+        # df.columns = df.columns.str.removesuffix(f'_[18].dat: {year}')
         df = df.iloc[1:8785, :]
         df_combined = pd.concat([df_combined, df], axis=1)
-    df_combined.to_csv(os.path.join(PATH_OUTPUT, 'WECC_ADS', f'{profiletype}_{data_year}.csv'))
-    
+    df_combined.to_csv(os.path.join("resources/WECC_ADS/processed", f'{profiletype}_{year}.csv'))
+
+    return None
+
+def add_breakthrough_demand_from_file(n, fn_demand):
+
+    """
+    Zone power demand is disaggregated to buses proportional to Pd,
+    where Pd is the real power demand (MW).
+    """
+
+    demand = pd.read_csv(fn_demand, index_col=0)
+    # zone_id is int, therefore demand.columns should be int first
+    demand.columns = demand.columns.astype(int)
+    demand.index = n.snapshots
+
+    intersection = set(demand.columns).intersection(n.buses.zone_id.unique())
+    demand = demand[list(intersection)]
+
+    demand_per_bus_pu = (n.buses.set_index("zone_id").Pd / n.buses.groupby("zone_id").sum().Pd)
+    demand_per_bus = demand_per_bus_pu.multiply(demand)
+    demand_per_bus.columns = n.buses.index
+
+    n.madd( "Load", demand_per_bus.columns, bus=demand_per_bus.columns, p_set=demand_per_bus)
+    return n
+
+def add_ads_demand_from_file(n, fn_demand):
+
+    """
+    Zone power demand is disaggregated to buses proportional to Pd,
+    where Pd is the real power demand (MW).
+    """
+
+    demand = pd.read_csv(fn_demand, index_col=0)
+    # zone_id is int, therefore demand.columns should be int first
+    demand.columns = demand.columns.astype(int)
+    demand.index = n.snapshots
+
+    intersection = set(demand.columns).intersection(n.buses.zone_id.unique())
+    demand = demand[list(intersection)]
+
+    demand_per_bus_pu = (n.buses.set_index("zone_id").Pd / n.buses.groupby("zone_id").sum().Pd)
+    demand_per_bus = demand_per_bus_pu.multiply(demand)
+    demand_per_bus.columns = n.buses.index
+
+    n.madd( "Load", demand_per_bus.columns, bus=demand_per_bus.columns, p_set=demand_per_bus)
+    return n
+
 
 if __name__ == "__main__":
     
     logger = logging.getLogger(__name__)
-    rootpath = "../" #remove . for snakemake
-    # configure_logging(snakemake)
+    configure_logging(snakemake)
 
-    #Process ASD PCM data
-    logger.info("Preprocessing ADS data")
-    PATH_ADS_2032 = 'resources/WECC_ADS/downloads/2032/Public Data/Hourly Profiles in CSV format'
-    PATH_ADS_2030 = 'resources/WECC_ADS/downloads/2030/WECC 2030 ADS PCM 2020-12-16 (V1.5) Public Data/CSV Shape Files'
-    ads_filelist = []
-    for file in glob.glob(os.path.join(rootpath,PATH_ADS_2032,"*.csv")):
-        ads_filelist.append(os.path.join(file))
-    data_year = 2032
-    preprocess_ads_data('Load', [s for s in ads_filelist if "Profile_Load" in s], PATH_DATABUNDLE,data_year)
-    preprocess_ads_data('Solar', [s for s in ads_filelist if "Profile_Solar" in s], PATH_DATABUNDLE,data_year)
-    preprocess_ads_data('wind', [s for s in ads_filelist if "Profile_Wind" in s], PATH_DATABUNDLE,data_year)
+    network = pypsa.Network(snakemake.input['network'])
 
-    for file in glob.glob(os.path.join(rootpath,PATH_ADS_2030,"*.csv")):
-        ads_filelist.append(os.path.join(rootpath,PATH_ADS_2030,file))
-    data_year = 2030
-    preprocess_ads_data('Load', [s for s in ads_filelist if "Profile_Load" in s], PATH_DATABUNDLE,data_year)
-    preprocess_ads_data('Solar', [s for s in ads_filelist if "Profile_Solar" in s], PATH_DATABUNDLE,data_year)
-    preprocess_ads_data('wind', [s for s in ads_filelist if "Profile_Wind" in s], PATH_DATABUNDLE,data_year)
+    if snakemake.config['load_data']['use_ads']:
+
+        logger.info("Preproccessing ADS data")
+        os.makedirs("resources/WECC_ADS/processed/", exist_ok=True)
+
+        file_patterns = {
+                2032: {
+                    'Load': 'Profile_Load',
+                    'Solar': 'Profile_Solar',
+                    'Wind': 'Profile_Wind'
+                },
+                2030: {
+                    'Load': 'Profile_Load',
+                    'Solar': 'Profile_Solar',
+                    'Wind': 'Profile_Wind'
+                }
+            }
+
+        process_ads_data(file_patterns)
+
+    else: #else standard breakthrough configuration
+        # load data
+        logger.info("Adding Breakthrough Energy Network Demand data")
+        n = add_breakthrough_demand_from_file(n, snakemake.input["demand_breakthrough_2016"])
+
+
 
 
     # n.set_snapshots(
