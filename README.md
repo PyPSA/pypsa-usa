@@ -16,13 +16,21 @@ conda activate pypsa-usa
 ## Configuration
 
 ## Execution 
-For executing the workflow go into the `workflow` directory and execute `snakemake` from your terminal, i.e.
+To execute the workflow, go into the `workflow` directory and execute `snakemake` from your terminal, i.e.
 
 ```bash
 snakemake -j6
 ```
 
 where 6 indicates the number of used cores, you may change it to your preferred number. This will run the first rule defined in the `Snakefile`.
+
+
+To execute a portion of the workflow up to a given rule, cd to the `workflow` directory and execute:
+
+```bash
+snakemake -j4 -R build_base_network  --until build_base_network
+```
+where build_base_network is the last rule you would like to run.
 
 ## Examine Results
 

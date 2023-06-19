@@ -85,22 +85,18 @@ def add_dclines_from_file(n, fn_dclines):
     return n
 
 
-def assign_bus_ba(PATH_BUS, PATH_BA_SHP, PATH_OFFSHORE_SHP, buslocs):
+def assign_bus_ba(PATH_BUS, PATH_BA_SHP, PATH_OFFSHORE_SHP, bus_locs):
     bus_df = pd.read_csv(PATH_BUS, index_col=0)
-    bus_df_locs = pd.merge(bus_df, buslocs, left_index=True, right_index=True, how='left')
-    #make gdp point from lat and long
-    bus_df_locs["geometry"] = gpd.points_from_xy(bus_df_locs["lon"], bus_df_locs["lat"])
-    #read in shapefiles
+    bus_locs["geometry"] = gpd.points_from_xy(bus_locs["lon"], bus_locs["lat"])
+    bus_df_locs = pd.merge(bus_df, bus_locs['geometry'], left_index=True, right_index=True, how='left') #merging bus data w/ geometry data
+
     ba_region_shapes = gpd.read_file(PATH_BA_SHP)
     offshore_shapes = gpd.read_file(PATH_OFFSHORE_SHP)
     combined_shapes = gpd.GeoDataFrame(pd.concat([ba_region_shapes, offshore_shapes],ignore_index=True))
     
-    import pdb; pdb.set_trace()
-    ba_points = sjoin(gpd.GeoDataFrame(bus_df_locs["geometry"],crs= 4326), combined_shapes, how='left')
+    ba_points = sjoin(gpd.GeoDataFrame(bus_df_locs["geometry"],crs= 4326), combined_shapes, how='left',predicate='contains')
     ba_points = ba_points.rename(columns={'name':'balancing_area'})
     bus_df = pd.merge(bus_df, ba_points['balancing_area'], left_index=True, right_index=True,how='left')
-    #### issue with extra points through merging... and later on i get error in network creation
-
     return bus_df
 
 
