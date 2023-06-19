@@ -131,7 +131,7 @@ rule build_base_network:
     output:
         bus2sub="data/base_grid/{interconnect}/bus2sub.csv",
         sub="data/base_grid/{interconnect}/sub.csv",
-        network="resources/{interconnect}/base_network.nc",
+        network="resources/{interconnect}/elec_base_network.nc",
     log:
         "logs/create_network/{interconnect}.log",
     threads: 4
