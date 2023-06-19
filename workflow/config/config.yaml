@@ -41,6 +41,10 @@ BA_names: ['AEC', 'AECI', 'AVA', 'Arizona', 'BANC', 'BPAT', 'CHPD', 'CISO-PGAE',
 # focus_weights: 
 #   CISO-PGAE: 0.5
 
+load_data:
+  use_ads: true #if set true uses ads data, if false uses BE data
+  # use_cec: true #if set true uses cec data, if false uses ads/BE data
+
 # snapshots:
 #   start: "2013-01-01"
 #   end: "2014-01-01"
@@ -54,9 +58,6 @@ planning_horizons: # investment years
 
 investment_period_discount_rate: 0.05
 
-load_data:
-  use_ads: false #if set true uses ads data, if false uses BE data
-  # use_cec: true #if set true uses cec data, if false uses ads/BE data
 
   
 allowed_carriers: [wind, solar, offwind, hydro, coal, nuclear, ng, oil, geothermal]
