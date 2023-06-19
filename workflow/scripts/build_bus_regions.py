@@ -55,7 +55,6 @@ from shapely.geometry import Polygon
 from scipy.spatial import Voronoi
 import pdb
 
-sys.path.append(os.path.join(os.getcwd(), "subworkflows", "pypsa-eur", "scripts"))
 from _helpers import configure_logging, REGION_COLS
 
 logger = logging.getLogger(__name__)
@@ -116,7 +115,6 @@ if __name__ == "__main__":
     countries = snakemake.config['countries']
     balancing_authorities = snakemake.config['BA_names']
 
-    
     n = pypsa.Network(snakemake.input.base_network)
 
     country_shapes = gpd.read_file(snakemake.input.country_shapes).set_index('name')['geometry']
@@ -157,7 +155,7 @@ if __name__ == "__main__":
             offshore_regions.append(offshore_regions_c)
 
     else: # Use Balancing Authority shapes
-        logger.info("Building bus regions for Balancing Authorities in %s", snakemake.wildcards.interconnect)
+        logger.info("Building bus regions for Balancing Authorities in %s interconnect/region", snakemake.wildcards.interconnect)
         for ba in balancing_authorities:
 
             if snakemake.params.balancing_authorities["use"]:

@@ -113,7 +113,7 @@ def add_renewable_plants_from_file(
 if __name__ == "__main__":
     logger = logging.getLogger(__name__)
 
-    n = pypsa.Network(snakmake.input.network)
+    n = pypsa.Network(snakemake.input.network)
     n.set_snapshots(
         pd.date_range(freq="h", start="2016-01-01", end="2017-01-01", closed="left")
     )
