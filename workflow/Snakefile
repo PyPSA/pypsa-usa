@@ -87,9 +87,21 @@ rule retrieve_forecast_data:
     script:
         "scripts/retrieve_forecast_data.py"        
 
+DATAFILES_DMD = [
+    "EIA_DMD_2015.csv",
+    "EIA_DMD_2016.csv",
+    "EIA_DMD_2017.csv",
+    "EIA_DMD_2018.csv",
+    "EIA_DMD_2019.csv",
+    "EIA_DMD_2020.csv",
+    "EIA_DMD_2021.csv",
+    "EIA_DMD_2022.csv",
+    "EIA_DMD_2023.csv",
+    ]
+
 rule retrieve_historical_load_data:
     output:
-        # expand("data/base_grid/{file}", file=DATAFILES), # need to rename the files that are output from this script
+        expand("resources/eia/{file}", file=DATAFILES_DMD),
     log:
         "logs/retrieve_historical_load_data.log",
     script:
@@ -146,6 +158,7 @@ rule build_load_data:
         demand_breakthrough_2016="data/base_grid/demand.csv",
         ads_2032 = 'resources/WECC_ADS/downloads/2032/Public Data/Hourly Profiles in CSV format',
         ads_2030 = 'resources/WECC_ADS/downloads/2030/WECC 2030 ADS PCM 2020-12-16 (V1.5) Public Data/CSV Shape Files',
+        eia = expand("resources/eia/{file}", file=DATAFILES_DMD),
         tech_costs="repo_data/pypsa_eur_costs.csv",
     output:
         network="resources/{interconnect}/elec_base_network_l.nc",

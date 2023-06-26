@@ -43,6 +43,7 @@ BA_names: ['AEC', 'AECI', 'AVA', 'Arizona', 'BANC', 'BPAT', 'CHPD', 'CISO-PGAE',
 
 load_data:
   use_ads: true #if set true uses ads data, if false uses BE data
+  historical_year: 2016
   # use_cec: true #if set true uses cec data, if false uses ads/BE data
 
 # snapshots:

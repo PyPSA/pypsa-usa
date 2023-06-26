@@ -29,13 +29,13 @@ def add_breakthrough_demand_from_file(n, fn_demand):
     n.madd( "Load", demand_per_bus.columns, bus=demand_per_bus.columns, p_set=demand_per_bus)
     return n
 
-def process_ads_data(file_patterns):
+def prepare_ads_files(file_patterns):
     for year, file_patterns_year in file_patterns.items():
         ads_filelist = glob.glob(os.path.join(snakemake.input[f'ads_{year}'], '*.csv'))
         for profile_type, pattern in file_patterns_year.items():
-            modify_ads_files(profile_type, [s for s in ads_filelist if pattern in s], year)
+            read_ads_files(profile_type, [s for s in ads_filelist if pattern in s], year)
 
-def modify_ads_files(profiletype, paths, year):
+def read_ads_files(profiletype, paths, year):
     df_combined = pd.DataFrame()
     for i in range(len(paths)):
         df = pd.read_csv(paths[i], header=0, index_col=0,low_memory=False)
@@ -43,7 +43,21 @@ def modify_ads_files(profiletype, paths, year):
         df_combined = pd.concat([df_combined, df], axis=1)
     df_combined.to_csv(os.path.join("resources/WECC_ADS/processed", f'{profiletype}_{year}.csv'))
 
-def preprocess_ads_load(df_ads,data_year):
+def prepare_ads_load_data(ads_load_path, data_year):
+    '''
+    Modify ads load data to match the balancing authority names in the network
+    '''
+    import pdb; pdb.set_trace()
+    # df.columns = df.columns.str.split('_').str[1]
+    #read in ads data
+    df_ads = pd.read_csv(ads_load_path,skiprows=1)
+
+
+    df_ads.columns = df_ads.columns.str.removeprefix('load_')
+    df_ads.columns = df_ads.columns.str.removesuffix('.dat')
+    df_ads.columns = df_ads.columns.str.removesuffix(f'_{data_year}')
+    df_ads.columns = df_ads.columns.str.removesuffix(f'_[18].dat: {data_year}')
+
     df_ads['CISO-PGAE'] = df_ads.pop('CIPV') + df_ads.pop('CIPB') + df_ads.pop('SPPC')#hotfix see github issue #15
     df_ads['BPAT'] = df_ads.pop('BPAT') + df_ads.pop('TPWR') + df_ads.pop('SCL')
     df_ads['IPCO'] = df_ads.pop('IPFE') + df_ads.pop('IPMV') + df_ads.pop('IPTV')
@@ -54,20 +68,18 @@ def preprocess_ads_load(df_ads,data_year):
     df_ads.rename(columns=ba_list_map,inplace=True)
     df_ads['datetime'] = pd.Timestamp(f'{data_year}-01-01')+pd.to_timedelta(df_ads.index, unit='H')
     df_ads.set_index('datetime',inplace=True)
+
     if len(df_ads.index) > 8761: #remove leap year day
         df_ads= df_ads[~(df_ads.index.date == pd.to_datetime(f'{data_year}-04-29'))]
 
     # not_in_list = df_ads.loc[:,~df_ads.columns.isin(ba_list)]
     return df_ads
 
-
-
-
 def add_ads_demand_from_file(n, fn_demand):
-
     """
     Zone power demand is disaggregated to buses proportional to Pd,
     where Pd is the real power demand (MW).
+    **** below is from original add_demand_from_file ****
     """
 
     demand = pd.read_csv(fn_demand, index_col=0)
@@ -97,6 +109,7 @@ if __name__ == "__main__":
     if interconnect != "usa":
         interconnect = interconnect[0].upper() + interconnect[1:]
 
+    pd.read_csv(snakemake.input['eia'] + 'EIA_DMD_2015.csv')
 
     if snakemake.config['load_data']['use_ads']:
 
@@ -123,7 +136,9 @@ if __name__ == "__main__":
                     'pump_load': 'Data_Pump',
                 }
             }
-        process_ads_data(file_patterns)
+        prepare_ads_files(file_patterns)
+        data_year = 2032 #choose data year
+        prepare_ads_load_data(f'resources/WECC_ADS/processed/load_{data_year}',data_year)
         n = add_ads_demand_from_file(n, snakemake.input["demand_breakthrough_2016"])
         n.export_to_netcdf(snakemake.output.network)
 
