@@ -94,10 +94,15 @@ def assign_bus_ba(PATH_BUS, PATH_BA_SHP, PATH_OFFSHORE_SHP, bus_locs):
     offshore_shapes = gpd.read_file(PATH_OFFSHORE_SHP)
     combined_shapes = gpd.GeoDataFrame(pd.concat([ba_region_shapes, offshore_shapes],ignore_index=True))
     
-    ba_points = sjoin(gpd.GeoDataFrame(bus_df_locs["geometry"],crs= 4326), combined_shapes, how='left',predicate='contains')
+    ba_points = sjoin(gpd.GeoDataFrame(bus_df_locs["geometry"],crs= 4326), combined_shapes, how='left',predicate='within')
     ba_points = ba_points.rename(columns={'name':'balancing_area'})
-    bus_df = pd.merge(bus_df, ba_points['balancing_area'], left_index=True, right_index=True,how='left')
-    return bus_df
+    bus_df_final = pd.merge(bus_df, ba_points['balancing_area'], left_index=True, right_index=True,how='left')
+    # import pdb; pdb.set_trace()
+    #for identifying duplicants-- below
+    df = bus_df_final.reset_index().groupby(['bus_id']).size().reset_index(name='count').sort_values('count')
+    df_issues = df[df['count']>1]
+    bus_df_final.loc[df_issues.bus_id]
+    return bus_df_final
 
 if __name__ == "__main__":
     logger = logging.getLogger(__name__)
