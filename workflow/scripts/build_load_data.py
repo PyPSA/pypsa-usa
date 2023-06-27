@@ -5,7 +5,6 @@ Written by Kamran Tehranchi, Stanford University.
 '''
 import pandas as pd, glob, os, logging, pypsa
 from _helpers import progress_retrieve, configure_logging
-from add_electricity import load_costs, _add_missing_carriers_from_costs
 
 def add_breakthrough_demand_from_file(n, fn_demand):
 
@@ -15,7 +14,6 @@ def add_breakthrough_demand_from_file(n, fn_demand):
     """
 
     demand = pd.read_csv(fn_demand, index_col=0)
-    # zone_id is int, therefore demand.columns should be int first
     demand.columns = demand.columns.astype(int)
     demand.index = n.snapshots
 
@@ -25,7 +23,7 @@ def add_breakthrough_demand_from_file(n, fn_demand):
     demand_per_bus_pu = (n.buses.set_index("zone_id").Pd / n.buses.groupby("zone_id").sum().Pd)
     demand_per_bus = demand_per_bus_pu.multiply(demand)
     demand_per_bus.columns = n.buses.index
-
+    import pdb; pdb.set_trace()
     n.madd( "Load", demand_per_bus.columns, bus=demand_per_bus.columns, p_set=demand_per_bus)
     return n
 
@@ -98,24 +96,70 @@ def add_ads_demand_from_file(n, fn_demand):
     return n
 
 
+def add_eia_demand_from_file(n, demand):
+    """
+    Zone power demand is disaggregated to buses proportional to Pd,
+    where Pd is the real power demand (MW).
+
+    Need to match these BAs
+        array(['CISO-PGAE', 'CISO-SCE', 'CISO-VEA', 'CISO-SDGE', '', 'Arizona',
+
+    """
+    demand.set_index('timestamp', inplace=True)
+    demand.index = n.snapshots #maybe add check to make sure they match?
+
+    demand['Arizona'] = demand.pop('SRP') + demand.pop('AZPS')
+    n.buses['ba_load_data'] = n.buses.balancing_area.replace({'CISO-PGAE': 'CISO', 'CISO-SCE': 'CISO', 'CISO-VEA': 'CISO', 'CISO-SDGE': 'CISO'})
+    n.buses['ba_load_data'] = n.buses.ba_load_data.replace({'': 'missing_ba'})
+
+    intersection = set(demand.columns).intersection(n.buses.ba_load_data.unique())
+    demand = demand[list(intersection)]
+
+
+    demand_per_bus_pu = (n.buses.set_index("ba_load_data").Pd / n.buses.groupby("ba_load_data").sum().Pd)
+    demand_per_bus = demand_per_bus_pu.multiply(demand)
+
+    demand_per_bus.fillna(0,inplace=True)
+
+    demand_per_bus.columns = n.buses.index
+    import pdb; pdb.set_trace()
+
+    n.madd( "Load", demand_per_bus.columns, bus=demand_per_bus.columns, p_set=demand_per_bus) #np.random.rand(len(network.snapshots), 2)
+    return n
+    
+
+
 if __name__ == "__main__":
     logger = logging.getLogger(__name__)
     configure_logging(snakemake)
 
     n = pypsa.Network(snakemake.input['network'])
 
-    interconnect = snakemake.wildcards.interconnect
-    # interconnect in raw data given with an uppercase first letter
-    if interconnect != "usa":
-        interconnect = interconnect[0].upper() + interconnect[1:]
+    ###### using EIA historical Load Data ######
+    if snakemake.config['load_data']['use_eia']:
+        logger.info("Preproccessing ADS data")
+        os.makedirs("resources/eia/processed/", exist_ok=True)
 
-    pd.read_csv(snakemake.input['eia'] + 'EIA_DMD_2015.csv')
 
-    if snakemake.config['load_data']['use_ads']:
+        load_year = snakemake.config['load_data']['historical_year']
+        df = pd.read_csv(snakemake.input['eia'][load_year%2015])
+
+        pypsa_bas = n.buses.balancing_area.unique()
+
+        n.set_snapshots(pd.date_range(freq="h", start=f"{load_year}-01-01",
+                                        end=f"{load_year+1}-01-01",
+                                        closed="left")
+                        )
+
+        n = add_eia_demand_from_file(n, df)
+        import pdb; pdb.set_trace()
+
+
+    ###### using ADS Data ######
+    elif snakemake.config['load_data']['use_ads']:
 
         logger.info("Preproccessing ADS data")
         os.makedirs("resources/WECC_ADS/processed/", exist_ok=True)
-
         file_patterns = {   # Processed file name : Unprocessed file name
                 2032: {
                     'load': 'Profile_Load',
@@ -139,27 +183,17 @@ if __name__ == "__main__":
         prepare_ads_files(file_patterns)
         data_year = 2032 #choose data year
         prepare_ads_load_data(f'resources/WECC_ADS/processed/load_{data_year}',data_year)
-        n = add_ads_demand_from_file(n, snakemake.input["demand_breakthrough_2016"])
+
+        n = add_ads_demand_from_file(n)
         n.export_to_netcdf(snakemake.output.network)
 
-    else:   # else standard breakthrough configuration
-        # load data
+    elif snakemake.config['load_data']['use_breakthrough']:  # else standard breakthrough configuration
         logger.info("Adding Breakthrough Energy Network Demand data")
 
         n.set_snapshots(
             pd.date_range(freq="h", start="2016-01-01", end="2017-01-01", closed="left")
         )
-
-        # attach load costs
-        Nyears = n.snapshot_weightings.generators.sum() / 8784.0
-        costs = load_costs(
-            snakemake.input.tech_costs,
-            snakemake.config["costs"],
-            snakemake.config["electricity"],
-            Nyears,
-        )
-
-        # should renaming technologies move to config.yaml?
-        costs = costs.rename(index={"onwind": "wind", "OCGT": "ng"})
         n = add_breakthrough_demand_from_file(n, snakemake.input["demand_breakthrough_2016"])
-        n.export_to_netcdf(snakemake.output.network)
+
+
+    n.export_to_netcdf(snakemake.output.network)

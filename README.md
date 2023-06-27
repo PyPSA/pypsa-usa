@@ -25,12 +25,12 @@ snakemake -j6
 where 6 indicates the number of used cores, you may change it to your preferred number. This will run the first rule defined in the `Snakefile`.
 
 
-To execute a portion of the workflow up to a given rule, cd to the `workflow` directory and execute:
+To force the execution of a portion of the workflow up to a given rule, cd to the `workflow` directory and run:
 
 ```bash
-snakemake -j4 -R build_base_network  --until build_base_network
+snakemake -j4 -R build_shapes  --until build_base_network
 ```
-where build_base_network is the last rule you would like to run.
+where `build_shapes` is forced to run, and `build_base_network`  is the last rule you would like to run.
 
 ## Examine Results
 
