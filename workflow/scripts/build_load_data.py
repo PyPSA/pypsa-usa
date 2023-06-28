@@ -43,31 +43,25 @@ def read_ads_files(profiletype, paths, year):
 
 def prepare_ads_load_data(ads_load_path, data_year):
     '''
-    Modify ads load data to match the balancing authority names in the network
+    Modify ads load data to match the balancing authority names in the network. Need to test with all potential ADS years
     '''
-    # df.columns = df.columns.str.split('_').str[1]
-    #read in ads data
-    df_ads = pd.read_csv(ads_load_path,skiprows=1)
-
-
-    df_ads.columns = df_ads.columns.str.removeprefix('load_')
+    df_ads = pd.read_csv(ads_load_path)
+    df_ads.columns = df_ads.columns.str.removeprefix('Load_')
     df_ads.columns = df_ads.columns.str.removesuffix('.dat')
     df_ads.columns = df_ads.columns.str.removesuffix(f'_{data_year}')
     df_ads.columns = df_ads.columns.str.removesuffix(f'_[18].dat: {data_year}')
-
     df_ads['CISO-PGAE'] = df_ads.pop('CIPV') + df_ads.pop('CIPB') + df_ads.pop('SPPC')#hotfix see github issue #15
     df_ads['BPAT'] = df_ads.pop('BPAT') + df_ads.pop('TPWR') + df_ads.pop('SCL')
     df_ads['IPCO'] = df_ads.pop('IPFE') + df_ads.pop('IPMV') + df_ads.pop('IPTV')
     df_ads['PACW'] = df_ads.pop('PAID') + df_ads.pop('PAUT') + df_ads.pop('PAWY')
     df_ads['Arizona'] = df_ads.pop('SRP') + df_ads.pop('AZPS') 
     df_ads.drop(columns=['Unnamed: 44', 'TH_Malin', 'TH_Mead', 'TH_PV'],inplace=True)
-    ba_list_map = {'CISC': 'CISO-SCE', 'CISD': 'CISO-SDGE','LDWP': 'LADWP','NWMT': 'MT_west','TIDC': 'TID','VEA': 'CISO-VEA','WAUW': 'WAUW_SPP'}
+    ba_list_map = {'CISC': 'CISO-SCE', 'CISD': 'CISO-SDGE','VEA': 'CISO-VEA','WAUW': 'WAUW_SPP'}
     df_ads.rename(columns=ba_list_map,inplace=True)
-    df_ads['datetime'] = pd.Timestamp(f'{data_year}-01-01')+pd.to_timedelta(df_ads.index, unit='H')
-    df_ads.set_index('datetime',inplace=True)
-
-    if len(df_ads.index) > 8761: #remove leap year day
-        df_ads= df_ads[~(df_ads.index.date == pd.to_datetime(f'{data_year}-04-29'))]
+    # df_ads['datetime'] = pd.Timestamp(f'{data_year}-01-01')+pd.to_timedelta(df_ads.index, unit='H')
+    df_ads.set_index('Index',inplace=True)
+    # if len(df_ads.index) > 8761: #remove leap year day
+    #     df_ads= df_ads[~(df_ads.index.date == pd.to_datetime(f'{data_year}-04-29'))]
 
     # not_in_list = df_ads.loc[:,~df_ads.columns.isin(ba_list)]
     return df_ads
@@ -77,10 +71,8 @@ def add_ads_demand(n, demand):
     Zone power demand is disaggregated to buses proportional to Pd,
     where Pd is the real power demand (MW).
     """
-    demand.set_index('timestamp', inplace=True)
-    demand.index = n.snapshots #maybe add check to make sure they match?
+    demand.index = n.snapshots 
 
-    demand['Arizona'] = demand.pop('SRP') + demand.pop('AZPS')
     n.buses['ba_load_data'] = n.buses.balancing_area.replace({'CISO-PGAE': 'CISO', 'CISO-SCE': 'CISO', 'CISO-VEA': 'CISO', 'CISO-SDGE': 'CISO'})
     n.buses['ba_load_data'] = n.buses.ba_load_data.replace({'': 'missing_ba'})
 
@@ -100,10 +92,6 @@ def add_eia_demand(n, demand):
     """
     Zone power demand is disaggregated to buses proportional to Pd,
     where Pd is the real power demand (MW).
-
-    Need to match these BAs
-        array(['CISO-PGAE', 'CISO-SCE', 'CISO-VEA', 'CISO-SDGE', '', 'Arizona',
-
     """
     demand.set_index('timestamp', inplace=True)
     demand.index = n.snapshots #maybe add check to make sure they match?
@@ -131,26 +119,20 @@ if __name__ == "__main__":
 
     n = pypsa.Network(snakemake.input['network'])
 
-    ###### using EIA historical Load Data ######
-    if snakemake.config['load_data']['use_eia']:
+    if sum([snakemake.config['load_data']['use_eia'], snakemake.config['load_data']['use_ads']], snakemake.config['load_data']['use_breakthrough']) > 1:
+        logger.error("Only one of the load_data configs can be set to true")
+        raise ValueError("Only one of the load_data configs can be set to true")
+    elif snakemake.config['load_data']['use_eia']:     ###### using EIA historical Load Data ######
         logger.info("Preproccessing ADS data")
-        os.makedirs("resources/eia/processed/", exist_ok=True)
-
         load_year = snakemake.config['load_data']['historical_year']
-        df = pd.read_csv(snakemake.input['eia'][load_year%2015])
-
-        pypsa_bas = n.buses.balancing_area.unique()
+        eia_demand = pd.read_csv(snakemake.input['eia'][load_year%2015])
 
         n.set_snapshots(pd.date_range(freq="h", start=f"{load_year}-01-01",
                                         end=f"{load_year+1}-01-01",
                                         closed="left")
                         )
-
-        n = add_eia_demand(n, df)
-
-    ###### using ADS Data ######
-    elif snakemake.config['load_data']['use_ads']:
-
+        n = add_eia_demand(n, eia_demand)
+    elif snakemake.config['load_data']['use_ads']:     ###### using ADS Data ######
         logger.info("Preproccessing ADS data")
         os.makedirs("resources/WECC_ADS/processed/", exist_ok=True)
         file_patterns = {   # Processed file name : Unprocessed file name
@@ -174,12 +156,14 @@ if __name__ == "__main__":
                 }
             }
         prepare_ads_files(file_patterns)
-        data_year = 2032 #choose data year
-        prepare_ads_load_data(f'resources/WECC_ADS/processed/load_{data_year}',data_year)
-
-        n = add_ads_demand(n)
+        load_year = snakemake.config['load_data']['future_year']
+        demand = prepare_ads_load_data(f'resources/WECC_ADS/processed/load_{load_year}.csv',load_year)
+        n.set_snapshots(pd.date_range(freq="h", start=f"{load_year}-01-01",
+                                        end=f"{load_year+1}-01-01",
+                                        closed="left")
+                        )
+        n = add_ads_demand(n,demand)
         n.export_to_netcdf(snakemake.output.network)
-
     elif snakemake.config['load_data']['use_breakthrough']:  # else standard breakthrough configuration
         logger.info("Adding Breakthrough Energy Network Demand data")
 
@@ -187,7 +171,8 @@ if __name__ == "__main__":
             pd.date_range(freq="h", start="2016-01-01", end="2017-01-01", closed="left")
         )
         n = add_breakthrough_demand_from_file(n, snakemake.input["demand_breakthrough_2016"])
-
+    else:
+        logger.error("No load data specified in config.yaml")
 
     # import pdb; pdb.set_trace()
     n.export_to_netcdf(snakemake.output.network)

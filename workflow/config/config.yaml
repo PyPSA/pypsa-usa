@@ -42,10 +42,11 @@ BA_names: ['AEC', 'AECI', 'AVA', 'Arizona', 'BANC', 'BPAT', 'CHPD', 'CISO-PGAE',
 #   CISO-PGAE: 0.5
 
 load_data:
-  use_eia: true #if set true uses historical data, if false uses BE data
+  use_eia: false #if set true uses historical data, if false uses BE data
   historical_year: 2019
-  use_ads: false #if set true uses ads data, if false uses BE data
-  use_breakthrough: true 
+  use_ads: true #if set true uses ads data, if false uses BE data
+  future_year: 2032
+  use_breakthrough: false 
   # use_cec: true #if set true uses cec data, if false uses ads/BE data
 
 # snapshots:
