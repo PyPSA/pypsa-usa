@@ -99,9 +99,9 @@ def assign_bus_ba(PATH_BUS, PATH_BA_SHP, PATH_OFFSHORE_SHP, bus_locs):
     bus_df_final = pd.merge(bus_df, ba_points['balancing_area'], left_index=True, right_index=True,how='left')
     # import pdb; pdb.set_trace()
     #for identifying duplicants-- below
-    df = bus_df_final.reset_index().groupby(['bus_id']).size().reset_index(name='count').sort_values('count')
-    df_issues = df[df['count']>1]
-    bus_df_final.loc[df_issues.bus_id]
+    # df = bus_df_final.reset_index().groupby(['bus_id']).size().reset_index(name='count').sort_values('count')
+    # df_issues = df[df['count']>1]
+    # bus_df_final.loc[df_issues.bus_id]
     return bus_df_final
 
 if __name__ == "__main__":

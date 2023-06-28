@@ -81,7 +81,8 @@ rule retrieve_data_from_zenodo:
 
 rule retrieve_forecast_data:
     output:
-        # expand("data/base_grid/{file}", file=DATAFILES), # need to rename the files that are output from this script
+        ads_2032 = directory('resources/WECC_ADS/downloads/2032/Public Data/Hourly Profiles in CSV format'),
+        ads_2030 = directory('resources/WECC_ADS/downloads/2030/WECC 2030 ADS PCM 2020-12-16 (V1.5) Public Data/CSV Shape Files'),
     log:
         "logs/retrieve_forecast_data.log",
     script:
@@ -186,7 +187,7 @@ rule build_powerplants:
         "scripts/build_powerplants.py"
 
 
-################# ----------- Rules to Simplify Network ---------- #################
+################# ----------- Rules to Aggregate & Simplify Network ---------- #################
 rule simplify_network:
     input:
         bus2sub="data/base_grid/{interconnect}/bus2sub.csv",

@@ -20,7 +20,6 @@ from _helpers import progress_retrieve, configure_logging
 logger = logging.getLogger(__name__)
 
 #configs and snakemake inputs
-PATH_DATABUNDLE = '/Users/kamrantehranchi/Local_Documents/pypsa-breakthroughenergy-usa/workflow/resources'
 def download_wecc_forecasts(url, rootpath,year):
     save_to_path = Path(f"{rootpath}/{year}")
     if os.path.isfile(save_to_path):
@@ -41,8 +40,7 @@ def download_cec_forecasts(urls, path):
 
 if __name__ == "__main__":
     logger = logging.getLogger(__name__)
-    rootpath = "../" #remove . for snakemake
-    # configure_logging(snakemake)
+    rootpath = "./" 
 
     #Download CEC forecasts
     logger.info("Downloading CEC Forecasts")

@@ -23,7 +23,7 @@ def add_breakthrough_demand_from_file(n, fn_demand):
     demand_per_bus_pu = (n.buses.set_index("zone_id").Pd / n.buses.groupby("zone_id").sum().Pd)
     demand_per_bus = demand_per_bus_pu.multiply(demand)
     demand_per_bus.columns = n.buses.index
-    import pdb; pdb.set_trace()
+
     n.madd( "Load", demand_per_bus.columns, bus=demand_per_bus.columns, p_set=demand_per_bus)
     return n
 
@@ -45,7 +45,6 @@ def prepare_ads_load_data(ads_load_path, data_year):
     '''
     Modify ads load data to match the balancing authority names in the network
     '''
-    import pdb; pdb.set_trace()
     # df.columns = df.columns.str.split('_').str[1]
     #read in ads data
     df_ads = pd.read_csv(ads_load_path,skiprows=1)
@@ -73,30 +72,31 @@ def prepare_ads_load_data(ads_load_path, data_year):
     # not_in_list = df_ads.loc[:,~df_ads.columns.isin(ba_list)]
     return df_ads
 
-def add_ads_demand_from_file(n, fn_demand):
+def add_ads_demand(n, demand):
     """
     Zone power demand is disaggregated to buses proportional to Pd,
     where Pd is the real power demand (MW).
-    **** below is from original add_demand_from_file ****
     """
+    demand.set_index('timestamp', inplace=True)
+    demand.index = n.snapshots #maybe add check to make sure they match?
 
-    demand = pd.read_csv(fn_demand, index_col=0)
-    # zone_id is int, therefore demand.columns should be int first
-    demand.columns = demand.columns.astype(int)
-    demand.index = n.snapshots
+    demand['Arizona'] = demand.pop('SRP') + demand.pop('AZPS')
+    n.buses['ba_load_data'] = n.buses.balancing_area.replace({'CISO-PGAE': 'CISO', 'CISO-SCE': 'CISO', 'CISO-VEA': 'CISO', 'CISO-SDGE': 'CISO'})
+    n.buses['ba_load_data'] = n.buses.ba_load_data.replace({'': 'missing_ba'})
 
-    intersection = set(demand.columns).intersection(n.buses.zone_id.unique())
+    intersection = set(demand.columns).intersection(n.buses.ba_load_data.unique())
     demand = demand[list(intersection)]
 
-    demand_per_bus_pu = (n.buses.set_index("zone_id").Pd / n.buses.groupby("zone_id").sum().Pd)
+    demand_per_bus_pu = (n.buses.set_index("ba_load_data").Pd / n.buses.groupby("ba_load_data").sum().Pd)
     demand_per_bus = demand_per_bus_pu.multiply(demand)
+    demand_per_bus.fillna(0,inplace=True)
     demand_per_bus.columns = n.buses.index
 
-    n.madd( "Load", demand_per_bus.columns, bus=demand_per_bus.columns, p_set=demand_per_bus)
+    n.madd( "Load", demand_per_bus.columns, bus=demand_per_bus.columns, p_set=demand_per_bus) 
     return n
 
 
-def add_eia_demand_from_file(n, demand):
+def add_eia_demand(n, demand):
     """
     Zone power demand is disaggregated to buses proportional to Pd,
     where Pd is the real power demand (MW).
@@ -115,19 +115,15 @@ def add_eia_demand_from_file(n, demand):
     intersection = set(demand.columns).intersection(n.buses.ba_load_data.unique())
     demand = demand[list(intersection)]
 
-
     demand_per_bus_pu = (n.buses.set_index("ba_load_data").Pd / n.buses.groupby("ba_load_data").sum().Pd)
     demand_per_bus = demand_per_bus_pu.multiply(demand)
-
     demand_per_bus.fillna(0,inplace=True)
-
     demand_per_bus.columns = n.buses.index
-    import pdb; pdb.set_trace()
 
-    n.madd( "Load", demand_per_bus.columns, bus=demand_per_bus.columns, p_set=demand_per_bus) #np.random.rand(len(network.snapshots), 2)
+    n.madd( "Load", demand_per_bus.columns, bus=demand_per_bus.columns, p_set=demand_per_bus) 
+
     return n
     
-
 
 if __name__ == "__main__":
     logger = logging.getLogger(__name__)
@@ -140,7 +136,6 @@ if __name__ == "__main__":
         logger.info("Preproccessing ADS data")
         os.makedirs("resources/eia/processed/", exist_ok=True)
 
-
         load_year = snakemake.config['load_data']['historical_year']
         df = pd.read_csv(snakemake.input['eia'][load_year%2015])
 
@@ -151,9 +146,7 @@ if __name__ == "__main__":
                                         closed="left")
                         )
 
-        n = add_eia_demand_from_file(n, df)
-        import pdb; pdb.set_trace()
-
+        n = add_eia_demand(n, df)
 
     ###### using ADS Data ######
     elif snakemake.config['load_data']['use_ads']:
@@ -184,7 +177,7 @@ if __name__ == "__main__":
         data_year = 2032 #choose data year
         prepare_ads_load_data(f'resources/WECC_ADS/processed/load_{data_year}',data_year)
 
-        n = add_ads_demand_from_file(n)
+        n = add_ads_demand(n)
         n.export_to_netcdf(snakemake.output.network)
 
     elif snakemake.config['load_data']['use_breakthrough']:  # else standard breakthrough configuration
@@ -196,4 +189,5 @@ if __name__ == "__main__":
         n = add_breakthrough_demand_from_file(n, snakemake.input["demand_breakthrough_2016"])
 
 
+    # import pdb; pdb.set_trace()
     n.export_to_netcdf(snakemake.output.network)

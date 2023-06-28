@@ -38,7 +38,6 @@ def download_historical_load_data(url, year):
 
 if __name__ == "__main__":
     logger = logging.getLogger(__name__)
-    logger.info("Downloading EIA Data")
     pd.options.mode.chained_assignment = None
     warnings.simplefilter(action='ignore', category=FutureWarning)
 
@@ -55,6 +54,8 @@ if __name__ == "__main__":
         logger.info("EIA Data bundle already downloaded.")
     else:
         for year in range(2015, 2024):
+            logger.info(f'Downloading {year} EIA Data')
+
             if year >= 2019:
                 df = download_historical_load_data(url_2018_present, year)
             elif year == 2018:
