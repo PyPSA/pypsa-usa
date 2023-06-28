@@ -107,7 +107,6 @@ def voronoi_partition_pts(points, outline):
 
 
 def assign_bus_ba(n, ba_region_shapes, offshore_shapes):
-    import pdb; pdb.set_trace()
     bus_df = n.buses
     bus_df["geometry"] = gpd.points_from_xy(bus_df["x"], bus_df["y"])
 
@@ -137,7 +136,6 @@ if __name__ == "__main__":
     gpd_offshore_shapes = gpd.read_file(snakemake.input.offshore_shapes)
     offshore_shapes = gpd_offshore_shapes.reindex(columns=REGION_COLS).set_index('name')['geometry']
 
-    n = assign_bus_ba(n,gpd_ba_shapes, gpd_offshore_shapes)
 
     onshore_regions = []
     offshore_regions = []
@@ -147,13 +145,13 @@ if __name__ == "__main__":
         for country in countries:
             c_b = n.buses.country == country
             country_geometry = gpd_countries['geometry']
-            onshore_shape = country_geometry[country]
-            onshore_locs = n.buses.loc[c_b & n.buses.substation_lv, ["x", "y"]]
+            ba_shape = country_geometry[country]
+            ba_locs = n.buses.loc[c_b & n.buses.substation_lv, ["x", "y"]]
             onshore_regions.append(gpd.GeoDataFrame({
-                    'name': onshore_locs.index,
-                    'x': onshore_locs['x'],
-                    'y': onshore_locs['y'],
-                    'geometry': voronoi_partition_pts(onshore_locs.values, onshore_shape),
+                    'name': ba_locs.index,
+                    'x': ba_locs['x'],
+                    'y': ba_locs['y'],
+                    'geometry': voronoi_partition_pts(ba_locs.values, ba_shape),
                     'country': country
                 }))
 
@@ -172,35 +170,28 @@ if __name__ == "__main__":
 
     else: # Use Balancing Authority shapes
         logger.info("Building bus regions for Balancing Authorities in %s interconnect/region", snakemake.wildcards.interconnect)
-
-        import pdb; pdb.set_trace()
+        n = assign_bus_ba(n,gpd_ba_shapes, gpd_offshore_shapes)
 
         for ba in balancing_areas:
-            if snakemake.params.balancing_authorities["use"]:
-                if ba not in ba_region_shapes.index: continue #filter only ba's in interconnection 
-                onshore_shape = ba_region_shapes[ba]
+            if ba not in ba_region_shapes.index: continue #filter only ba's in interconnection 
+            # print('defining bus regions for ', ba)
+            ba_shape = ba_region_shapes[ba]
+            all_locs = n.buses.loc[n.buses.substation_lv, ["x", "y"]] 
 
-            onshore_locs = n.buses.loc[n.buses.substation_lv, ["x", "y"]] 
-            bus_points = gpd.points_from_xy(x=onshore_locs.x, y=onshore_locs.y)
-            ba_locs = pd.DataFrame(columns=['x','y'])
-            ba_locs = pd.concat([ba_locs,onshore_locs[[onshore_shape.contains(bus_points[i]) for i in range(len(bus_points)) ]]])
-            # pdb.set_trace()
-
+            # ba_locs contains the bus name and locations for all buses in the BA for ba_shape.
+            ba_buses = n.buses.balancing_area[n.buses.balancing_area == ba]
+            ba_locs = all_locs.loc[ba_buses.index]
             if ba_locs.empty: continue #skip empty BA's which are not in the bus dataframe. ex. eastern texas BA when using the WECC interconnect
-            # if ba == 'SPP-WAUE': continue #revisit this later
 
             onshore_regions.append(gpd.GeoDataFrame({
                     'name': ba_locs.index,
                     'x': ba_locs['x'],
                     'y': ba_locs['y'],
-                    'geometry': voronoi_partition_pts(ba_locs.values, onshore_shape),
+                    'geometry': voronoi_partition_pts(ba_locs.values, ba_shape),
                     'country': ba,
                 }))
             n.buses.loc[ba_locs.index, 'country'] = ba #adds abbreviation to the bus dataframe under the country column
-
-            #hot fix for imperial beach substation being offshore
-            n.buses.loc['37584', 'country'] = 'CISO-SDGE'
-
+            n.buses.loc['37584', 'country'] = 'CISO-SDGE'   #hot fix for imperial beach substation being offshore
 
         ### Defining Offshore Regions ###
         for i in range(len(offshore_shapes)):
