@@ -108,15 +108,10 @@ def add_renewable_plants_from_file(
 
     return n
 
-
-
 if __name__ == "__main__":
     logger = logging.getLogger(__name__)
 
     n = pypsa.Network(snakemake.input.network)
-    n.set_snapshots(
-        pd.date_range(freq="h", start="2016-01-01", end="2017-01-01", closed="left")
-    )
 
     # attach load costs
     Nyears = n.snapshot_weightings.generators.sum() / 8784.0
@@ -164,4 +159,6 @@ if __name__ == "__main__":
     )
 
     # export network
+
+    # import pdb; pdb.set_trace()
     n.export_to_netcdf(snakemake.output.network)

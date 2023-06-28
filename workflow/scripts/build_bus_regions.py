@@ -106,6 +106,19 @@ def voronoi_partition_pts(points, outline):
     return np.array(polygons, dtype=object)
 
 
+def assign_bus_ba(n, ba_region_shapes, offshore_shapes):
+    import pdb; pdb.set_trace()
+    bus_df = n.buses
+    bus_df["geometry"] = gpd.points_from_xy(bus_df["x"], bus_df["y"])
+
+    combined_shapes = gpd.GeoDataFrame(pd.concat([ba_region_shapes, offshore_shapes],ignore_index=True))
+    
+    ba_points = gpd.tools.sjoin(gpd.GeoDataFrame(bus_df["geometry"],crs= 4326), combined_shapes, how='left',predicate='within')
+    ba_points = ba_points.rename(columns={'name':'balancing_area'})
+    bus_df_final = pd.merge(bus_df, ba_points['balancing_area'], left_index=True, right_index=True,how='left').drop(columns=['geometry'])
+    n.buses = bus_df_final
+    return n
+
 if __name__ == "__main__":
     if 'snakemake' not in globals():
         from _helpers import mock_snakemake
@@ -113,25 +126,28 @@ if __name__ == "__main__":
     configure_logging(snakemake)
 
     countries = snakemake.config['countries']
-    balancing_authorities = snakemake.config['BA_names']
+    balancing_areas = snakemake.config['BA_names']
 
     n = pypsa.Network(snakemake.input.base_network)
 
-    country_shapes = gpd.read_file(snakemake.input.country_shapes).set_index('name')['geometry']
-    ba_region_shapes = gpd.read_file(snakemake.input.ba_region_shapes).set_index('name')['geometry']
+    gpd_countries = gpd.read_file(snakemake.input.country_shapes).set_index('name')
+    gpd_ba_shapes = gpd.read_file(snakemake.input.ba_region_shapes)
+    ba_region_shapes = gpd_ba_shapes.set_index('name')['geometry']
 
-    offshore_shapes = gpd.read_file(snakemake.input.offshore_shapes)
-    offshore_shapes = offshore_shapes.reindex(columns=REGION_COLS).set_index('name')['geometry']
+    gpd_offshore_shapes = gpd.read_file(snakemake.input.offshore_shapes)
+    offshore_shapes = gpd_offshore_shapes.reindex(columns=REGION_COLS).set_index('name')['geometry']
+
+    n = assign_bus_ba(n,gpd_ba_shapes, gpd_offshore_shapes)
 
     onshore_regions = []
     offshore_regions = []
 
-    if snakemake.params.balancing_authorities["use"]==False: #Ignore BA shapes
+    if snakemake.params.balancing_authorities["use"]==False: #Ignore BA shapes, use only USA Outline
         logger.info("Building bus regions for %s", len(countries))
         for country in countries:
             c_b = n.buses.country == country
-
-            onshore_shape = country_shapes[country]
+            country_geometry = gpd_countries['geometry']
+            onshore_shape = country_geometry[country]
             onshore_locs = n.buses.loc[c_b & n.buses.substation_lv, ["x", "y"]]
             onshore_regions.append(gpd.GeoDataFrame({
                     'name': onshore_locs.index,
@@ -156,8 +172,10 @@ if __name__ == "__main__":
 
     else: # Use Balancing Authority shapes
         logger.info("Building bus regions for Balancing Authorities in %s interconnect/region", snakemake.wildcards.interconnect)
-        for ba in balancing_authorities:
 
+        import pdb; pdb.set_trace()
+
+        for ba in balancing_areas:
             if snakemake.params.balancing_authorities["use"]:
                 if ba not in ba_region_shapes.index: continue #filter only ba's in interconnection 
                 onshore_shape = ba_region_shapes[ba]
@@ -212,9 +230,6 @@ if __name__ == "__main__":
 
 
     n.export_to_netcdf(snakemake.output.network)
-
-    # pdb.set_trace()
-    # n.buses.to_csv('/Users/kamrantehranchi/Library/CloudStorage/OneDrive-Stanford/Kamran_OSW/PyPSA_Models/pypsa-breakthroughenergy-usa/workflow/resources/western/busmap_s.csv')
 
     pd.concat(onshore_regions, ignore_index=True).to_file(snakemake.output.regions_onshore)
     if offshore_regions:
