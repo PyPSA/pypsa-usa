@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: MIT
 #
-# Edits for PyPSA-USA by Kamran Tehranchi ()
+# Edits for PyPSA-USA by Kamran Tehranchi
 
 """
 

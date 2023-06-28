@@ -65,6 +65,10 @@ def add_renewable_plants_from_file(
             p = pd.read_csv(snakemake.input[tech], index_col=0)
         intersection = set(p.columns).intersection(tech_plants.index)
         p = p[list(intersection)]
+        # import pdb; pdb.set_trace()
+        Nhours = len(n.snapshots)
+        
+        p = p.iloc[:Nhours,:]        #hotfix to fit 2016 renewable data to load data
 
         p.index = n.snapshots
         p.columns = p.columns.astype(str)
@@ -114,7 +118,8 @@ if __name__ == "__main__":
     n = pypsa.Network(snakemake.input.network)
 
     # attach load costs
-    Nyears = n.snapshot_weightings.generators.sum() / 8784.0
+    Nhours = len(n.snapshots)
+    Nyears = n.snapshot_weightings.generators.sum() / Nhours
     costs = load_costs(
         snakemake.input.tech_costs,
         snakemake.config["costs"],
