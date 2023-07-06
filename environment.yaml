@@ -11,7 +11,7 @@ dependencies:
   - pip
   - mamba # esp for windows build
 
-  - pypsa>=0.22.0
+  - pypsa==0.23.0
   - atlite>=0.2.5
 
   # Dependencies of the workflow itself
