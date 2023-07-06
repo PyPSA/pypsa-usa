@@ -50,12 +50,12 @@ if __name__ == "__main__":
     PATH_DOWNLOAD.mkdir(parents=True, exist_ok=True)
     i = 0
 
-    if os.path.isfile(os.path.join(PATH_DOWNLOAD, snakemake.output[6])):
+    if os.path.isfile(os.path.join(PATH_DOWNLOAD, snakemake.output[8])):
         logger.info("EIA Data bundle already downloaded.")
     else:
         for year in range(2015, 2024):
-            logger.info(f'Downloading {year} EIA Data')
-
+            logger.info(f"Downloading {year} EIA Data")
+            print(f'Downloading {year} EIA Data')
             if year >= 2019:
                 df = download_historical_load_data(url_2018_present, year)
             elif year == 2018:

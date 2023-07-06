@@ -100,7 +100,7 @@ DATAFILES_DMD = [
     "EIA_DMD_2023.csv",
     ]
 
-rule retrieve_historical_load_data:
+rule retrieve_eia_data:
     output:
         expand("resources/eia/{file}", file=DATAFILES_DMD),
     log:
