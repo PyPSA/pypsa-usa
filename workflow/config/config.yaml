@@ -62,7 +62,7 @@ investment_period_discount_rate: 0.05
 
 allowed_carriers: [wind, solar, offwind, hydro, coal, nuclear, ng, geothermal]
 committable_carriers: []
-# extendable_carriers: [solar, wind, offwind, ng, geothermal, coal, nuclear, battery]
+extendable_carriers: [solar, wind, offwind, ng, geothermal, coal, nuclear, battery]
 
 enable:
   prepare_links_p_nom: false
@@ -88,8 +88,8 @@ electricity:
   extendable_carriers:
     Generator: [solar, wind, offwind, ng, geothermal, coal, nuclear]
     StorageUnit: [battery] # battery, H2
-    # Store: [battery, H2]
-    # Link: [H2 pipeline]
+    Store: [battery] #[battery, H2]
+    Link: [] #[H2 pipeline]
 
 lines:
   types:
