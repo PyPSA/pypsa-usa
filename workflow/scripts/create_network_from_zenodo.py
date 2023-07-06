@@ -235,7 +235,7 @@ if __name__ == "__main__":
     # create network
     n = pypsa.Network()
     n.set_snapshots(
-        pd.date_range(freq="h", start="2016-01-01", end="2017-01-01", closed="left")
+        pd.date_range(freq="h", start="2016-01-01", end="2017-01-01", inclusive="left")
     )
 
     # attach load costs

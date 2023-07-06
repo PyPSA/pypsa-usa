@@ -134,7 +134,7 @@ if __name__ == "__main__":
     ###### using EIA historical Load Data ######
     if snakemake.config['load_data']['use_eia']:
         logger.info("Preproccessing ADS data")
-        os.makedirs("resources/eia/processed/", exist_ok=True)
+        # os.makedirs("resources/eia/processed/", exist_ok=True)
 
         load_year = snakemake.config['load_data']['historical_year']
         df = pd.read_csv(snakemake.input['eia'][load_year%2015])
@@ -143,7 +143,7 @@ if __name__ == "__main__":
 
         n.set_snapshots(pd.date_range(freq="h", start=f"{load_year}-01-01",
                                         end=f"{load_year+1}-01-01",
-                                        closed="left")
+                                        inclusive="left")
                         )
 
         n = add_eia_demand(n, df)
@@ -184,7 +184,7 @@ if __name__ == "__main__":
         logger.info("Adding Breakthrough Energy Network Demand data")
 
         n.set_snapshots(
-            pd.date_range(freq="h", start="2016-01-01", end="2017-01-01", closed="left")
+            pd.date_range(freq="h", start="2016-01-01", end="2017-01-01", inclusive="left")
         )
         n = add_breakthrough_demand_from_file(n, snakemake.input["demand_breakthrough_2016"])
 
