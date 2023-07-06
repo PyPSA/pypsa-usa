@@ -32,9 +32,8 @@ def add_conventional_plants_from_file(
             bus=tech_plants.bus_id.astype(str),
             p_nom=tech_plants.Pmax,
             p_nom_extendable=p_nom_extendable,
-            marginal_cost=tech_plants.GenIOB
-            * tech_plants.GenFuelCost
-            / 1.14,  # divide or multiply the currency to make it the same as marginal cost
+            marginal_cost=tech_plants.GenIOB * tech_plants.GenFuelCost,  #(MMBTu/MW) * (USD/MMBTu) = USD/MW
+            marginal_cost_quadratic= tech_plants.GenIOC * tech_plants.GenFuelCost,
             carrier=tech_plants.type,
             weight=1.0,
             efficiency=costs.at[tech, "efficiency"],
@@ -59,15 +58,15 @@ def add_renewable_plants_from_file(
 
         logger.info(f"Adding {len(tech_plants)} {tech} generators to the network.")
 
-        if tech in ["wind", "offwind"]: #is this going to double add wind?
+        if tech in ["wind", "offwind"]: 
             p = pd.read_csv(snakemake.input["wind"], index_col=0)
         else:
             p = pd.read_csv(snakemake.input[tech], index_col=0)
-        intersection = set(p.columns).intersection(tech_plants.index)
+        intersection = set(p.columns).intersection(tech_plants.index) #filters by plants ID for the plants of type tech
         p = p[list(intersection)]
+
         # import pdb; pdb.set_trace()
         Nhours = len(n.snapshots)
-        
         p = p.iloc[:Nhours,:]        #hotfix to fit 2016 renewable data to load data
 
         p.index = n.snapshots
@@ -92,7 +91,8 @@ def add_renewable_plants_from_file(
             bus=tech_plants.bus_id,
             p_nom_min=p_nom,
             p_nom=p_nom,
-            marginal_cost=tech_plants.GenIOB * tech_plants.GenFuelCost / 1.14,
+            marginal_cost=tech_plants.GenIOB * tech_plants.GenFuelCost, #(MMBTu/MW) * (USD/MMBTu) = USD/MW
+            marginal_cost_quadratic = tech_plants.GenIOC * tech_plants.GenFuelCost, 
             capital_cost=costs.at[tech, "capital_cost"],
             p_max_pu=p_max_pu,
             p_nom_extendable=p_nom_extendable,
@@ -103,6 +103,7 @@ def add_renewable_plants_from_file(
 
     # hack to remove generators without capacity (required for SEG to work)
     # shouldn't exist, in fact...
+    import pdb;pdb.set_trace()
     p_max_pu_norm = n.generators_t.p_max_pu.max()
     remove_g = p_max_pu_norm[p_max_pu_norm == 0.0].index
     logger.info(
@@ -126,7 +127,7 @@ if __name__ == "__main__":
         snakemake.config["electricity"],
         Nyears,
     )
-
+    import pdb;pdb.set_trace()
     # should renaming technologies move to config.yaml?
     costs = costs.rename(index={"onwind": "wind", "OCGT": "ng"})
 
@@ -164,6 +165,4 @@ if __name__ == "__main__":
     )
 
     # export network
-
-    # import pdb; pdb.set_trace()
     n.export_to_netcdf(snakemake.output.network)
