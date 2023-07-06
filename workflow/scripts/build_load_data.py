@@ -72,7 +72,6 @@ def add_ads_demand(n, demand):
     where Pd is the real power demand (MW).
     """
     demand.index = n.snapshots 
-    import pdb; pdb.set_trace()
     # n.buses['ba_load_data'] = n.buses.balancing_area.replace({'CISO-PGAE': 'CISO', 'CISO-SCE': 'CISO', 'CISO-VEA': 'CISO', 'CISO-SDGE': 'CISO'})
     n.buses['ba_load_data'] = n.buses.balancing_area.replace({'': 'missing_ba'})
 
@@ -127,7 +126,7 @@ if __name__ == "__main__":
         eia_demand = pd.read_csv(snakemake.input['eia'][load_year%2015])
         n.set_snapshots(pd.date_range(freq="h", start=f"{load_year}-01-01",
                                         end=f"{load_year+1}-01-01",
-                                        closed="left")
+                                        inclusive="left")
                         )
         n = add_eia_demand(n, eia_demand)
     elif snakemake.config['load_data']['use_ads']:     ###### using ADS Data ######
@@ -159,14 +158,14 @@ if __name__ == "__main__":
         demand = prepare_ads_load_data(f'resources/WECC_ADS/processed/load_{load_year}.csv',load_year)
         n.set_snapshots(pd.date_range(freq="h", start=f"{load_year}-01-01",
                                         end=f"{load_year+1}-01-01",
-                                        closed="left")
+                                        inclusive="left")
                         )
         n = add_ads_demand(n,demand)
         n.export_to_netcdf(snakemake.output.network)
     elif snakemake.config['load_data']['use_breakthrough']:  # else standard breakthrough configuration
         logger.info("Adding Breakthrough Energy Network Demand data from 2016")
         n.set_snapshots(
-            pd.date_range(freq="h", start="2016-01-01", end="2017-01-01", closed="left")
+            pd.date_range(freq="h", start="2016-01-01", end="2017-01-01", inclusive="left")
         )
         n = add_breakthrough_demand_from_file(n, snakemake.input["demand_breakthrough_2016"])
     else:
