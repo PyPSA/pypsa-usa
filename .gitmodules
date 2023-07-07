@@ -1,3 +1,3 @@
 [submodule "workflow/subworkflows/pypsa-earth"]
-path = workflow/subworkflows/pypsa-earth
-url = git@github.com:pypsa-meets-earth/pypsa-earth.git
+	path = workflow/subworkflows/pypsa-earth
+	url = https://github.com/pypsa-meets-earth/pypsa-earth.git
