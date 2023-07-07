@@ -42,10 +42,11 @@ BA_names: ['AEC', 'AECI', 'AVA', 'Arizona', 'BANC', 'BPAT', 'CHPD', 'CISO-PGAE',
 #   CISO-PGAE: 0.5
 
 load_data:
-  use_eia: true #if set true uses historical data, if false uses BE data
+  use_eia: false #if set true uses historical data, if false uses BE data
   historical_year: 2019
-  use_ads: false #if set true uses ads data, if false uses BE data
-  use_breakthrough: true 
+  use_ads: true #if set true uses ads data, if false uses BE data
+  future_year: 2032
+  use_breakthrough: false 
   # use_cec: true #if set true uses cec data, if false uses ads/BE data
 
 # snapshots:
@@ -59,10 +60,9 @@ planning_horizons: # investment years .... use these only for future years?
 investment_period_discount_rate: 0.05
 
 
-  
-allowed_carriers: [wind, solar, offwind, hydro, coal, nuclear, ng, oil, geothermal]
+allowed_carriers: [wind, solar, offwind, hydro, coal, nuclear, ng, geothermal]
 committable_carriers: []
-extendable_carriers: [solar, wind, offwind]
+extendable_carriers: [solar, wind, offwind, ng, geothermal, coal, nuclear, battery]
 
 enable:
   prepare_links_p_nom: false
@@ -86,10 +86,10 @@ electricity:
     H2: 168
 
   extendable_carriers:
-    Generator: []
-    StorageUnit: [] # battery, H2
-    Store: [battery, H2]
-    Link: [H2 pipeline]
+    Generator: [solar, wind, offwind, ng, geothermal, coal, nuclear]
+    StorageUnit: [battery] # battery, H2
+    Store: [battery] #[battery, H2]
+    Link: [] #[H2 pipeline]
 
 lines:
   types:

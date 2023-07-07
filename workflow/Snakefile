@@ -121,7 +121,7 @@ rule build_shapes:
         zone="data/base_grid/zone.csv",
     output:
         country_shapes="resources/{interconnect}/country_shapes.geojson",
-        ba_region_shapes="resources/{interconnect}/ba_region_shapes.geojson",
+        onshore_shapes="resources/{interconnect}/onshore_shapes.geojson",
         offshore_shapes="resources/{interconnect}/offshore_shapes.geojson",
     log:
         "logs/build_shapes_{interconnect}.log",
@@ -138,8 +138,7 @@ rule build_base_network:
         links="data/base_grid/dcline.csv",
         bus2sub="data/base_grid/bus2sub.csv",
         sub="data/base_grid/sub.csv",
-        tech_costs="repo_data/pypsa_eur_costs.csv",
-        ba_region_shapes="resources/{interconnect}/ba_region_shapes.geojson",
+        onshore_shapes="resources/{interconnect}/onshore_shapes.geojson",
         offshore_shapes="resources/{interconnect}/offshore_shapes.geojson",
     output:
         bus2sub="data/base_grid/{interconnect}/bus2sub.csv",
@@ -208,7 +207,7 @@ rule build_bus_regions:
         balancing_authorities=config["balancing_authorities"],
     input:
         country_shapes="resources/{interconnect}/country_shapes.geojson",
-        ba_region_shapes="resources/{interconnect}/ba_region_shapes.geojson",
+        ba_region_shapes="resources/{interconnect}/onshore_shapes.geojson",
         offshore_shapes="resources/{interconnect}/offshore_shapes.geojson",
         base_network="resources/{interconnect}/elec_s.nc",
     output:
