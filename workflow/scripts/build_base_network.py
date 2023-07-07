@@ -120,7 +120,7 @@ if __name__ == "__main__":
     sub = pd.read_csv(snakemake.input.sub).set_index("sub_id")
     buslocs = pd.merge(bus2sub, sub, left_on="sub_id", right_index=True)
 
-    bus_df = assign_bus_ba(snakemake.input["buses"], snakemake.input["ba_region_shapes"],snakemake.input["offshore_shapes"],buslocs)
+    bus_df = assign_bus_ba(snakemake.input["buses"], snakemake.input["onshore_shapes"],snakemake.input["offshore_shapes"],buslocs)
 
     # add buses, transformers, lines and links
     n = add_buses_from_file(n, bus_df, interconnect=interconnect)
