@@ -1,4 +1,8 @@
-# Description: Snakefile for the new workflow
+
+from snakemake.utils import min_version
+min_version("6.0")
+
+
 
 # -------------------------- Imports and Parameters -------------------------- #
 
@@ -167,6 +171,21 @@ rule build_load_data:
     script:
         "scripts/build_load_data.py"
 
+        
+if config["enable"].get("build_cutout", False):
+    rule build_cutout:
+        input:
+            onshore_shapes="resources/{interconnect}/country_shapes.geojson",
+            offshore_shapes="resources/{interconnect}/offshore_shapes.geojson",
+        output:
+            cutout = "resources/{interconnect}/cutout.nc",
+        log:
+            "logs/build_cutout/{interconnect}.log",
+        script:
+            "subworkflows/pypsa-earth/scripts/build_cutout.py"
+
+
+
 rule build_powerplants:
     input:
         network="resources/{interconnect}/elec_base_network_l.nc",
@@ -175,6 +194,7 @@ rule build_powerplants:
         solar="data/base_grid/solar.csv",
         hydro="data/base_grid/hydro.csv",
         tech_costs="repo_data/pypsa_eur_costs.csv",
+        cutout = "resources/{interconnect}/cutout.nc",
     output:
         network="resources/{interconnect}/elec_base_network_l_pp.nc",
     log:
@@ -184,6 +204,33 @@ rule build_powerplants:
         mem=500,
     script:
         "scripts/build_powerplants.py"
+
+
+# module pypsa_eur:
+#     snakefile:
+#         "subworkflows/pypsa-eur/Snakefile"
+#         # github("pypsa-meets-earth/pypsa-earth", path="Snakefile", tag="v0.2.1")
+#     config: config
+#     # skip_validation: True
+
+# use rule * from pypsa_eur as other_*
+
+# use rule build_cutout from pypsa_eur with:
+#     input:
+#         onshore_shapes="resources/country_shapes.geojson",
+#         offshore_shapes="resources/offshore_shapes.geojson",
+#     output:
+#         "cutouts/" + "cutout.nc",
+#     # log:
+#     #     "logs/" + "build_cutout/cutout.log",
+#     # benchmark:
+#     #     "benchmarks/" + "build_cutout_cutout",
+#     # threads: ATLITE_NPROCESSES
+#     # resources:
+#     #     mem_mb=ATLITE_NPROCESSES * 1000,
+#     # script:
+#     #     "scripts/build_cutout.py"
+
 
 
 ################# ----------- Rules to Aggregate & Simplify Network ---------- #################

@@ -11,6 +11,15 @@ conda env create -f environment.yaml
 conda activate pypsa-usa
 ```
 
+download submodules after cloning:
+
+`git submodule update --init`
+
+update submodule with:
+
+`git submodule update --remote`
+
+
 # Workflow
 
 ## Configuration
