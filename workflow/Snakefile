@@ -2,7 +2,14 @@
 from snakemake.utils import min_version
 min_version("6.0")
 
+import importlib
+retrieve_databundle_light = importlib.import_module("subworkflows.pypsa-earth.scripts.retrieve_databundle_light")
+# helpers = importlib.import_module("subworkflows.pypsa-earth.scripts._helpers")
 
+from snakemake.remote.HTTP import RemoteProvider as HTTPRemoteProvider
+from retrieve_databundle_light import datafiles_retrivedatabundle
+
+HTTP = HTTPRemoteProvider()
 
 # -------------------------- Imports and Parameters -------------------------- #
 
@@ -38,6 +45,16 @@ wildcard_constraints:
 configfile: "config/config.yaml"
 configfile: "config/config.cluster.yaml"
 
+ATLITE_NPROCESSES = config["atlite"].get("nprocesses", 4)
+
+run = config.get("run", {})
+RDIR = run["name"] + "/" if run.get("name") else ""
+CDIR = RDIR if not run.get("shared_cutouts") else ""
+
+LOGS = "logs/" + RDIR
+BENCHMARKS = "benchmarks/" + RDIR
+RESOURCES = "resources/" + RDIR if not run.get("shared_resources") else "resources/"
+RESULTS = "results/" + RDIR
 
 # ----------------------------------- Rules ---------------------------------- #
 
@@ -113,6 +130,98 @@ rule retrieve_eia_data:
         "scripts/retrieve_historical_load_data.py"
 
 
+rule retrieve_ship_raster:
+    input:
+        HTTP.remote(
+            "https://zenodo.org/record/6953563/files/shipdensity_global.zip",
+            keep_local=True,
+            static=True,
+        ),
+    output:
+        "data/shipdensity_global.zip",
+    log:
+        LOGS + "retrieve_ship_raster.log",
+    resources:
+        mem_mb=5000,
+    retries: 2
+    run:
+        move(input[0], output[0])
+
+if config["enable"].get("retrieve_databundle", True):
+    datafiles = [
+        "ch_cantons.csv",
+        "je-e-21.03.02.xls",
+        "eez/World_EEZ_v8_2014.shp",
+        "hydro_capacities.csv",
+        "naturalearth/ne_10m_admin_0_countries.shp",
+        "nama_10r_3popgdp.tsv.gz",
+        "nama_10r_3gdp.tsv.gz",
+        "corine/g250_clc06_V18_5.tif",
+    ]
+
+    if not config.get("tutorial", False):
+        datafiles.extend(["natura/Natura2000_end2015.shp", "GEBCO_2014_2D.nc"])
+
+    rule retrieve_databundle:
+        output:
+            expand("data/pypsa-eur/{file}", file=datafiles),
+        log:
+            LOGS + "retrieve_databundle.log",
+        resources:
+            mem_mb=1000,
+        retries: 2
+        conda:
+            "../envs/environment.yaml"
+        script:
+            "../scripts/retrieve_databundle.py"
+
+    rule retrieve_databundle_light:
+        output:  #expand(directory('{file}') if isdir('{file}') else '{file}', file=datafiles)
+            expand("pypsa_earth_{file}", file=datafiles_retrivedatabundle(config)),
+            directory("data/landcover"),
+        log:
+            "logs/" + RDIR + "retrieve_databundle.log",
+        benchmark:
+            "benchmarks/" + RDIR + "retrieve_databundle_light"
+        script:
+            "subworkflows/pypsa-earth/scripts/retrieve_databundle_light.py"
+
+
+if config["enable"].get("retrieve_cutout", True):
+
+    rule retrieve_cutout:
+        input:
+            HTTP.remote(
+                "zenodo.org/record/8136996/files/cutout_western_{cutout}.nc"
+                ,static=True),
+        output:
+            protected("cutouts/" + CDIR + "cutout_{interconnect}_{cutout}.nc"),
+        log:
+            "logs/" + CDIR + "retrieve_cutout_{interconnect}_{cutout}.log",
+        resources:
+            mem_mb=5000,
+        retries: 2
+        run:
+            move(input[0], output[0])
+####"https://zenodo.org/record/8136996/files/cutout_western_ERA5_2019.nc",
+
+if config["enable"].get("build_natura_raster", False):
+
+    rule build_natura_raster:
+        input:
+            # natura=ancient("data/bundle/natura/Natura2000_end2015.shp"),
+            cutouts=expand("cutouts/" + CDIR + "cutout_western_{cutouts}.nc", **config["atlite"]),
+        output:
+            RESOURCES + "natura.tiff",
+        resources:
+            mem_mb=5000,
+        log:
+            LOGS + "build_natura_raster.log",
+        conda:
+            "../envs/environment.yaml"
+        script:
+            "../scripts/build_natura_raster.py"
+
 ################# ----------- Rules to Build Network ---------- #################
 
 rule build_shapes:
@@ -172,73 +281,156 @@ rule build_load_data:
         "scripts/build_load_data.py"
 
         
-if config["enable"].get("build_cutout", False):
-    rule build_cutout:
-        input:
-            onshore_shapes="resources/{interconnect}/country_shapes.geojson",
-            offshore_shapes="resources/{interconnect}/offshore_shapes.geojson",
-        output:
-            cutout = "resources/{interconnect}/cutout.nc",
-        log:
-            "logs/build_cutout/{interconnect}.log",
-        script:
-            "subworkflows/pypsa-earth/scripts/build_cutout.py"
+# if config["enable"].get("build_cutout", False):
+#     rule build_cutout:
+#         input:
+#             onshore_shapes="resources/{interconnect}/country_shapes.geojson",
+#             offshore_shapes="resources/{interconnect}/offshore_shapes.geojson",
+#         output:
+#             cutout = "resources/{interconnect}/cutout_{interconnect}.nc",
+#         script:
+#             "scripts/build_cutout_earth.py"
 
 
-
-rule build_powerplants:
+rule build_ship_raster:
     input:
-        network="resources/{interconnect}/elec_base_network_l.nc",
-        plants="data/base_grid/plant.csv",
-        wind="data/base_grid/wind.csv",
-        solar="data/base_grid/solar.csv",
-        hydro="data/base_grid/hydro.csv",
-        tech_costs="repo_data/pypsa_eur_costs.csv",
-        cutout = "resources/{interconnect}/cutout.nc",
+        ship_density="data/shipdensity_global.zip",
+        cutouts=expand(
+            "cutouts/" + CDIR + "cutout_western_{cutout}.nc",
+            cutout=[
+                config["renewable"][carrier]["cutout"]
+                for carrier in config["electricity"]["renewable_carriers"]
+            ],
+        ),
     output:
-        network="resources/{interconnect}/elec_base_network_l_pp.nc",
+        RESOURCES + "{interconnect}/shipdensity_raster.tif",
     log:
-        "logs/create_network/{interconnect}.log",
-    threads: 4
+        LOGS + "{interconnect}/build_ship_raster.log",
     resources:
-        mem=500,
+        mem_mb=5000,
+    benchmark:
+        BENCHMARKS + "{interconnect}/build_ship_raster"
     script:
-        "scripts/build_powerplants.py"
+        "subworkflows/pypsa-eur/scripts/build_ship_raster.py"
 
 
-# module pypsa_eur:
-#     snakefile:
-#         "subworkflows/pypsa-eur/Snakefile"
-#         # github("pypsa-meets-earth/pypsa-earth", path="Snakefile", tag="v0.2.1")
-#     config: config
-#     # skip_validation: True
+rule build_renewable_profiles:
+    params:
+        renewable=config["renewable"],
+    input:
+        base_network=RESOURCES + "{interconnect}/elec_base_network_l.nc",
+        # corine=ancient("data/bundle/corine/g250_clc06_V18_5.tif"),
+        natura=lambda w: (
+            RESOURCES + "natura.tiff"
+            if config["renewable"][w.technology]["natura"]
+            else []
+        ),
+        # gebco=ancient(
+        #     lambda w: (
+        #         "data/bundle/GEBCO_2014_2D.nc"
+        #         if config["renewable"][w.technology].get("max_depth")
+        #         else []
+        #     )
+        # ),
+        ship_density=lambda w: (
+            RESOURCES + "{interconnect}/shipdensity_raster.tif"
+            if "ship_threshold" in config["renewable"][w.technology].keys()
+            else []
+        ),
+        country_shapes=RESOURCES + "{interconnect}/country_shapes.geojson",
+        offshore_shapes=RESOURCES + "{interconnect}/offshore_shapes.geojson",
+        regions=lambda w: (
+            RESOURCES + "{interconnect}/regions_onshore_s.geojson"
+            if w.technology in ("onwind", "solar")
+            else RESOURCES + "{interconnect}/regions_offshore_S.geojson"
+        ),
+        cutout=lambda w: "cutouts/"
+        + CDIR + "cutout_{interconnect}_"
+        + config["renewable"][w.technology]["cutout"]
+        + ".nc",
+    output:
+        profile=RESOURCES + "{interconnect}/profile_{technology}.nc",
+    log:
+        LOGS + "{interconnect}/build_renewable_profile_{technology}.log",
+    benchmark:
+        BENCHMARKS + "{interconnect}/build_renewable_profiles_{technology}"
+    threads: ATLITE_NPROCESSES
+    resources:
+        mem_mb=ATLITE_NPROCESSES * 5000,
+    wildcard_constraints:
+        technology="(?!hydro).*",  # Any technology other than hydro
+    conda:
+        "../envs/environment.yaml"
+    script:
+        "subworkflows/pypsa-eur/scripts/build_renewable_profiles.py"
 
-# use rule * from pypsa_eur as other_*
 
-# use rule build_cutout from pypsa_eur with:
+rule add_electricity:
+    params:
+        length_factor=config["lines"]["length_factor"],
+        scaling_factor=config["load"]["scaling_factor"],
+        countries=config["countries"],
+        renewable=config["renewable"],
+        electricity=config["electricity"],
+        conventional=config.get("conventional", {}),
+        costs=config["costs"],
+    input:
+        **{
+            f"profile_{tech}": RESOURCES + "{interconnect}" + f"/profile_{tech}.nc"
+            for tech in config["electricity"]["renewable_carriers"]
+        },
+        # **{
+        #     f"conventional_{carrier}_{attr}": fn
+        #     for carrier, d in config.get("conventional", {None: {}}).items()
+        #     for attr, fn in d.items()
+        #     if str(fn).startswith("data/")
+        # },
+        base_network=RESOURCES + "{interconnect}/elec_base_network_l.nc",
+        tech_costs="repo_data/pypsa_eur_costs.csv",
+        regions=RESOURCES + "{interconnect}/regions_onshore_s.geojson",
+        powerplants="data/base_grid/plant.csv",
+        # hydro_capacities=ancient("data/bundle/hydro_capacities.csv"),
+        # geth_hydro_capacities="data/geth2015_hydro_capacities.csv",
+        # load=RESOURCES + "load.csv",
+    output:
+        RESOURCES + "{interconnect}/elec_base_network_l_pp.nc",
+    log:
+        LOGS + "{interconnect}_add_electricity.log",
+    benchmark:
+        BENCHMARKS + "{interconnect}_add_electricity"
+    threads: 1
+    resources:
+        mem_mb=5000,
+    conda:
+        "../envs/environment.yaml"
+    script:
+        "../scripts/add_electricity.py"
+
+# rule build_powerplants:
 #     input:
-#         onshore_shapes="resources/country_shapes.geojson",
-#         offshore_shapes="resources/offshore_shapes.geojson",
+#         network="resources/{interconnect}/elec_base_network_l.nc",
+#         plants="data/base_grid/plant.csv",
+#         wind="data/base_grid/wind.csv",
+#         solar="data/base_grid/solar.csv",
+#         hydro="data/base_grid/hydro.csv",
+#         tech_costs="repo_data/pypsa_eur_costs.csv",
+#         cutout="resources/{interconnect}/cutout_{interconnect}_ERA5.nc"
 #     output:
-#         "cutouts/" + "cutout.nc",
-#     # log:
-#     #     "logs/" + "build_cutout/cutout.log",
-#     # benchmark:
-#     #     "benchmarks/" + "build_cutout_cutout",
-#     # threads: ATLITE_NPROCESSES
-#     # resources:
-#     #     mem_mb=ATLITE_NPROCESSES * 1000,
-#     # script:
-#     #     "scripts/build_cutout.py"
-
-
+#         network="resources/{interconnect}/elec_base_network_l_pp.nc",
+#     log:
+#         "logs/create_network/{interconnect}.log",
+#     threads: 4
+#     resources:
+#         mem=500,
+#     script:
+#         "scripts/build_powerplants.py"
 
 ################# ----------- Rules to Aggregate & Simplify Network ---------- #################
 rule simplify_network:
     input:
         bus2sub="data/base_grid/{interconnect}/bus2sub.csv",
         sub="data/base_grid/{interconnect}/sub.csv",
-        network="resources/{interconnect}/elec_base_network_l_pp.nc",
+        network= RESOURCES + "{interconnect}/elec_base_network_l_pp.nc",
     output:
         network="resources/{interconnect}/elec_s.nc",
     log:
