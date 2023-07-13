@@ -329,7 +329,7 @@ rule build_renewable_profiles:
     script:
         "subworkflows/pypsa-eur/scripts/build_renewable_profiles.py"
 
-
+# TODO: Combine add_electricity with build_powerplants 
 rule add_electricity:
     params:
         length_factor=config["lines"]["length_factor"],
@@ -354,6 +354,10 @@ rule add_electricity:
         tech_costs="repo_data/pypsa_eur_costs.csv",
         regions=RESOURCES + "{interconnect}/regions_onshore_s.geojson",
         powerplants="data/base_grid/plant.csv",
+        hydro="data/base_grid/hydro.csv",
+        wind="data/base_grid/wind.csv",
+        solar="data/base_grid/solar.csv",
+
         # hydro_capacities=ancient("data/bundle/hydro_capacities.csv"),
         # geth_hydro_capacities="data/geth2015_hydro_capacities.csv",
         # load=RESOURCES + "load.csv",
@@ -367,7 +371,7 @@ rule add_electricity:
     resources:
         mem_mb=5000,
     script:
-        "../scripts/add_electricity.py"
+        "scripts/add_electricity.py"
 
 # rule build_powerplants:
 #     input:
@@ -569,14 +573,16 @@ rule report:
 # Create DAG with- snakemake --dag results/western/networks/elec_s_40_ec_lvopt_Co2L1.0.nc -F | sed -n "/digraph/,/}/p" | dot -Tpng -o results/workflow.png
 rule dag:
     message:
-        "Plotting dependency graph of the workflow."
+        "Creating DAG of workflow."
     output:
         dot=RESOURCES + "dag.dot",
         pdf=RESOURCES + "dag.pdf",
+        png=RESOURCES + "dag.png",
     shell:
         """
-        snakemake --rulegraph > {output.dot}
+        snakemake --rulegraph all | sed -n "/digraph/,\$p" > {output.dot}
         dot -Tpdf -o {output.pdf} {output.dot}
+        dot -Tpng -o {output.png} {output.dot}
         """
 
 rule clean:
