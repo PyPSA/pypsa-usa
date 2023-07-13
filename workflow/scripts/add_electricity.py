@@ -103,117 +103,6 @@ idx = pd.IndexSlice
 logger = logging.getLogger(__name__)
 
 
-def add_conventional_plants_from_file(
-    n, fn_plants, conventional_carriers, extendable_carriers, costs):
-
-    _add_missing_carriers_from_costs(n, costs, conventional_carriers)
-
-    plants = pd.read_csv(fn_plants, dtype={"bus_id": str}, index_col=0).query(
-        "bus_id in @n.buses.index"
-    )
-    plants.replace(["dfo"], ["oil"], inplace=True)
-
-    for tech in conventional_carriers:
-        tech_plants = plants.query("type == @tech")
-        tech_plants.index = tech_plants.index.astype(str)
-
-        logger.info(f"Adding {len(tech_plants)} {tech} generators to the network.")
-
-        if tech in extendable_carriers:
-            p_nom_extendable = True
-        else:
-            p_nom_extendable = False
-
-        n.madd(
-            "Generator",
-            tech_plants.index,
-            bus=tech_plants.bus_id.astype(str),
-            p_nom=tech_plants.Pmax,
-            p_nom_extendable=p_nom_extendable,
-            marginal_cost=tech_plants.GenIOB * tech_plants.GenFuelCost,  #(MMBTu/MW) * (USD/MMBTu) = USD/MW
-            marginal_cost_quadratic= tech_plants.GenIOC * tech_plants.GenFuelCost,
-            carrier=tech_plants.type,
-            weight=1.0,
-            efficiency=costs.at[tech, "efficiency"],
-        )
-
-    return n
-
-
-def add_renewable_plants_from_file(
-    n, fn_plants, renewable_carriers, extendable_carriers, costs):
-
-    _add_missing_carriers_from_costs(n, costs, renewable_carriers)
-
-    plants = pd.read_csv(fn_plants, dtype={"bus_id": str}, index_col=0).query(
-        "bus_id in @n.buses.index"
-    )
-    plants.replace(["wind_offshore"], ["offwind"], inplace=True)
-
-    for tech in renewable_carriers:
-        tech_plants = plants.query("type == @tech")
-        tech_plants.index = tech_plants.index.astype(str)
-
-        logger.info(f"Adding {len(tech_plants)} {tech} generators to the network.")
-
-        if tech in ["wind", "offwind"]: 
-            p = pd.read_csv(snakemake.input["wind"], index_col=0)
-        else:
-            p = pd.read_csv(snakemake.input[tech], index_col=0)
-        intersection = set(p.columns).intersection(tech_plants.index) #filters by plants ID for the plants of type tech
-        p = p[list(intersection)]
-
-        # import pdb; pdb.set_trace()
-        Nhours = len(n.snapshots)
-        p = p.iloc[:Nhours,:]        #hotfix to fit 2016 renewable data to load data
-
-        p.index = n.snapshots
-        p.columns = p.columns.astype(str)
-
-        if (tech_plants.Pmax == 0).any():
-            # p_nom is the maximum of {Pmax, dispatch}
-            p_nom = pd.concat([p.max(axis=0), tech_plants["Pmax"]], axis=1).max(axis=1)
-            p_max_pu = (p[p_nom.index] / p_nom).fillna(0)  # some values remain 0
-        else:
-            p_nom = tech_plants.Pmax
-            p_max_pu = p[tech_plants.index] / p_nom
-
-        if tech in extendable_carriers:
-            p_nom_extendable = True
-        else:
-            p_nom_extendable = False
-
-        n.madd(
-            "Generator",
-            tech_plants.index,
-            bus=tech_plants.bus_id,
-            p_nom_min=p_nom,
-            p_nom=p_nom,
-            marginal_cost=tech_plants.GenIOB * tech_plants.GenFuelCost, #(MMBTu/MW) * (USD/MMBTu) = USD/MW
-            marginal_cost_quadratic = tech_plants.GenIOC * tech_plants.GenFuelCost, 
-            capital_cost=costs.at[tech, "capital_cost"],
-            p_max_pu=p_max_pu,
-            p_nom_extendable=p_nom_extendable,
-            carrier=tech,
-            weight=1.0,
-            efficiency=costs.at[tech, "efficiency"],
-        )
-
-    # hack to remove generators without capacity (required for SEG to work)
-    # shouldn't exist, in fact...
-    import pdb;pdb.set_trace()
-    p_max_pu_norm = n.generators_t.p_max_pu.max()
-    remove_g = p_max_pu_norm[p_max_pu_norm == 0.0].index
-    logger.info(
-        f"removing {len(remove_g)} {tech} generators {remove_g} with no renewable potential."
-    )
-    n.mremove("Generator", remove_g)
-
-    return n
-
-
-
-
 def normed(s):
     return s / s.sum()
 
@@ -391,50 +280,6 @@ def shapes_to_shapes(orig, dest):
             transfer[i, j] = area / dest[i].area
 
     return transfer
-
-
-def attach_load(n, regions, load, nuts3_shapes, countries, scaling=1.0):
-    substation_lv_i = n.buses.index[n.buses["substation_lv"]]
-    regions = gpd.read_file(regions).set_index("name").reindex(substation_lv_i)
-    opsd_load = pd.read_csv(load, index_col=0, parse_dates=True).filter(items=countries)
-
-    logger.info(f"Load data scaled with scalling factor {scaling}.")
-    opsd_load *= scaling
-
-    nuts3 = gpd.read_file(nuts3_shapes).set_index("index")
-
-    def upsample(cntry, group):
-        l = opsd_load[cntry]
-        if len(group) == 1:
-            return pd.DataFrame({group.index[0]: l})
-        else:
-            nuts3_cntry = nuts3.loc[nuts3.country == cntry]
-            transfer = shapes_to_shapes(group, nuts3_cntry.geometry).T.tocsr()
-            gdp_n = pd.Series(
-                transfer.dot(nuts3_cntry["gdp"].fillna(1.0).values), index=group.index
-            )
-            pop_n = pd.Series(
-                transfer.dot(nuts3_cntry["pop"].fillna(1.0).values), index=group.index
-            )
-
-            # relative factors 0.6 and 0.4 have been determined from a linear
-            # regression on the country to continent load data
-            factors = normed(0.6 * normed(gdp_n) + 0.4 * normed(pop_n))
-            return pd.DataFrame(
-                factors.values * l.values[:, np.newaxis],
-                index=l.index,
-                columns=factors.index,
-            )
-
-    load = pd.concat(
-        [
-            upsample(cntry, group)
-            for cntry, group in regions.geometry.groupby(regions.country)
-        ],
-        axis=1,
-    )
-
-    n.madd("Load", substation_lv_i, bus=substation_lv_i, p_set=load)
 
 
 def update_transmission_costs(n, costs, length_factor=1.0):
@@ -856,6 +701,119 @@ def estimate_renewable_capacities(n, year, tech_map, expansion_limit, countries)
             )
 
 
+
+def add_conventional_plants_from_file(
+    n, fn_plants, conventional_carriers, extendable_carriers, costs):
+
+    _add_missing_carriers_from_costs(n, costs, conventional_carriers)
+
+    plants = pd.read_csv(fn_plants, dtype={"bus_id": str}, index_col=0).query(
+        "bus_id in @n.buses.index"
+    )
+    plants.replace(["dfo"], ["oil"], inplace=True)
+
+    for tech in conventional_carriers:
+        tech_plants = plants.query("type == @tech")
+        tech_plants.index = tech_plants.index.astype(str)
+
+        logger.info(f"Adding {len(tech_plants)} {tech} generators to the network.")
+
+        if tech in extendable_carriers:
+            p_nom_extendable = True
+        else:
+            p_nom_extendable = False
+
+        n.madd(
+            "Generator",
+            tech_plants.index,
+            bus=tech_plants.bus_id.astype(str),
+            p_nom=tech_plants.Pmax,
+            p_nom_extendable=p_nom_extendable,
+            marginal_cost=tech_plants.GenIOB * tech_plants.GenFuelCost,  #(MMBTu/MW) * (USD/MMBTu) = USD/MW
+            marginal_cost_quadratic= tech_plants.GenIOC * tech_plants.GenFuelCost,
+            carrier=tech_plants.type,
+            weight=1.0,
+            efficiency=costs.at[tech, "efficiency"],
+        )
+
+    return n
+
+def add_renewable_plants_from_file(
+    n, fn_plants, renewable_carriers, extendable_carriers, costs):
+
+    _add_missing_carriers_from_costs(n, costs, renewable_carriers)
+
+    plants = pd.read_csv(fn_plants, dtype={"bus_id": str}, index_col=0).query(
+        "bus_id in @n.buses.index"
+    )
+    plants.replace(["wind_offshore"], ["offwind"], inplace=True)
+
+    for tech in renewable_carriers:
+        tech_plants = plants.query("type == @tech")
+        tech_plants.index = tech_plants.index.astype(str)
+
+        logger.info(f"Adding {len(tech_plants)} {tech} generators to the network.")
+
+        if tech in ["wind", "offwind"]: 
+            p = pd.read_csv(snakemake.input["wind"], index_col=0)
+        else:
+            p = pd.read_csv(snakemake.input[tech], index_col=0)
+        intersection = set(p.columns).intersection(tech_plants.index) #filters by plants ID for the plants of type tech
+        p = p[list(intersection)]
+
+        # import pdb; pdb.set_trace()
+        Nhours = len(n.snapshots)
+        p = p.iloc[:Nhours,:]        #hotfix to fit 2016 renewable data to load data
+
+        p.index = n.snapshots
+        p.columns = p.columns.astype(str)
+
+        if (tech_plants.Pmax == 0).any():
+            # p_nom is the maximum of {Pmax, dispatch}
+            p_nom = pd.concat([p.max(axis=0), tech_plants["Pmax"]], axis=1).max(axis=1)
+            p_max_pu = (p[p_nom.index] / p_nom).fillna(0)  # some values remain 0
+        else:
+            p_nom = tech_plants.Pmax
+            p_max_pu = p[tech_plants.index] / p_nom
+
+        if tech in extendable_carriers:
+            p_nom_extendable = True
+        else:
+            p_nom_extendable = False
+
+        n.madd(
+            "Generator",
+            tech_plants.index,
+            bus=tech_plants.bus_id,
+            p_nom_min=p_nom,
+            p_nom=p_nom,
+            marginal_cost=tech_plants.GenIOB * tech_plants.GenFuelCost, #(MMBTu/MW) * (USD/MMBTu) = USD/MW
+            marginal_cost_quadratic = tech_plants.GenIOC * tech_plants.GenFuelCost, 
+            capital_cost=costs.at[tech, "capital_cost"],
+            p_max_pu=p_max_pu,
+            p_nom_extendable=p_nom_extendable,
+            carrier=tech,
+            weight=1.0,
+            efficiency=costs.at[tech, "efficiency"],
+        )
+
+    # hack to remove generators without capacity (required for SEG to work)
+    # shouldn't exist, in fact...
+    import pdb;pdb.set_trace()
+    p_max_pu_norm = n.generators_t.p_max_pu.max()
+    remove_g = p_max_pu_norm[p_max_pu_norm == 0.0].index
+    logger.info(
+        f"removing {len(remove_g)} {tech} generators {remove_g} with no renewable potential."
+    )
+    n.mremove("Generator", remove_g)
+
+    return n
+
+def merge_powerplants(ppl_conventional, ppl_hydro, ppl_wind):
+    ppl = pd.concat([ppl_conventional, ppl_hydro, ppl_wind], axis=0)
+    ppl.index = ppl.index.astype(str)
+    return ppl
+
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
@@ -875,19 +833,13 @@ if __name__ == "__main__":
         Nyears,
     )
     import pdb; pdb.set_trace()
+
+    #for breakthrough plant configuration
     ppl_conventional = load_powerplants(snakemake.input.powerplants)
     ppl_hydro = load_powerplants(snakemake.input.hydro)
     ppl_wind = load_powerplants(snakemake.input.wind)
     ppl_solar = load_powerplants(snakemake.input.solar)
-
-    attach_load(
-        n,
-        snakemake.input.regions,
-        snakemake.input.load,
-        snakemake.input.nuts3_shapes,
-        params.countries,
-        params.scaling_factor,
-    )
+    ppl = merge_powerplants(ppl_conventional, ppl_hydro, ppl_wind, ppl_solar)
 
     update_transmission_costs(n, costs, params.length_factor)
 

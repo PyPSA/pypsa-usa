@@ -27,12 +27,12 @@ run:
 
 enable:
   # prepare_links_p_nom: false
-  retrieve_databundle: true
   # retrieve_cost_data: true
-  build_cutout: true
-  retrieve_cutout: true
-  retrieve_natura_raster: true
   # custom_busmap: false
+  retrieve_databundle: false # set these to false after first run
+  build_cutout: false 
+  retrieve_cutout: false 
+  retrieve_natura_raster: true 
 
 zenodo_repository:
   url: "https://zenodo.org/record/4538590/files/USATestSystem.zip"
@@ -209,11 +209,9 @@ renewable:
       year: 2013  # (optional) year of statistics used to rescale the runoff time series. When not provided, the weather year of the snapshots is used
     multiplier: 1.1  # multiplier applied after the normalization of the hydro production; default 1.0
 
-allowed_carriers: [wind, solar, offwind, hydro]
-committable_carriers: []
-extendable_carriers: [solar, wind, offwind, ng, coal, nuclear, battery]
 
 electricity:
+  conventional_carriers: [nuclear, oil, OCGT, CCGT, coal, geothermal, biomass]
   renewable_carriers: [wind, solar, offwind]
   voltages: [230., 345., 500., 765.]
   voltage_simplified: 230
@@ -225,6 +223,7 @@ electricity:
     battery: 6
     H2: 168
 
+  # extendable_carriers: [solar, wind, offwind, ng, coal, nuclear, battery] #used in original build_powerplants rule not needed in add_electricity
   extendable_carriers:
     Generator: [solar, wind, offwind, ng, geothermal, coal, nuclear]
     StorageUnit: [battery] # battery, H2
