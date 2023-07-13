@@ -1,6 +1,6 @@
 # PyPSA-USA
 
-This workflow optimizes the power system model provided by [BreakthroughEnergy](https://www.breakthroughenergy.org/). Note that the functionalities of the workflow are still limited as the it is in initial stage.
+This workflow optimizes the power system model provided by [BreakthroughEnergy](https://www.breakthroughenergy.org/). Note that the functionalities of the workflow are still limited as the it is in initial stage. 
 
 # Installation
 
@@ -23,6 +23,8 @@ update submodule with:
 # Workflow
 
 ## Configuration
+
+**This workflow has only been thoroughly tested for the `western` interconnection wildcard.**
 
 ## Execution 
 To execute the workflow, go into the `workflow` directory and execute `snakemake` from your terminal, i.e.
