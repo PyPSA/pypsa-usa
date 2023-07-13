@@ -266,6 +266,22 @@ def load_powerplants(ppl_fn):
         .replace({"carrier": carrier_dict})
     )
 
+def load_powerplants_breakthrough(ppl_fn):
+    carrier_dict = {
+        "ocgt": "OCGT",
+        "ccgt": "CCGT",
+        "bioenergy": "biomass",
+        "ccgt, thermal": "CCGT",
+        "hard coal": "coal",
+    }
+    df = pd.read_csv(ppl_fn, index_col=0, dtype={"bus": "str"})
+    import pdb; pdb.set_trace()
+        df.powerplant.to_pypsa_names()
+        .rename(columns=str.lower)
+        .replace({"carrier": carrier_dict})
+    return (
+        df
+    )
 
 def shapes_to_shapes(orig, dest):
     """
@@ -635,7 +651,6 @@ def attach_extendable_generators(n, costs, ppl, carriers):
                 "Only OCGT, CCGT and nuclear are allowed at the moment."
             )
 
-
 def attach_OPSD_renewables(n, tech_map):
     tech_string = ", ".join(sum(tech_map.values(), []))
     logger.info(f"Using OPSD renewable capacities for carriers {tech_string}.")
@@ -835,10 +850,10 @@ if __name__ == "__main__":
     import pdb; pdb.set_trace()
 
     #for breakthrough plant configuration
-    ppl_conventional = load_powerplants(snakemake.input.powerplants)
-    ppl_hydro = load_powerplants(snakemake.input.hydro)
-    ppl_wind = load_powerplants(snakemake.input.wind)
-    ppl_solar = load_powerplants(snakemake.input.solar)
+    ppl_conventional = load_powerplants_breakthrough(snakemake.input.powerplants)
+    ppl_hydro = load_powerplants_breakthrough(snakemake.input.hydro)
+    ppl_wind = load_powerplants_breakthrough(snakemake.input.wind)
+    ppl_solar = load_powerplants_breakthrough(snakemake.input.solar)
     ppl = merge_powerplants(ppl_conventional, ppl_hydro, ppl_wind, ppl_solar)
 
     update_transmission_costs(n, costs, params.length_factor)
