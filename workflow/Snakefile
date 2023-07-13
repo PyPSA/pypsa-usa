@@ -1,11 +1,7 @@
-
 from snakemake.utils import min_version
 min_version("6.0")
 
-# import importlib
-# retrieve_databundle_light = importlib.import_module("subworkflows.pypsa-earth.scripts.retrieve_databundle_light")
 from shutil import copyfile, move, rmtree
-
 from snakemake.remote.HTTP import RemoteProvider as HTTPRemoteProvider
 
 HTTP = HTTPRemoteProvider()
@@ -52,6 +48,7 @@ CDIR = RDIR if not run.get("shared_cutouts") else ""
 
 LOGS = "logs/" + RDIR
 BENCHMARKS = "benchmarks/" + RDIR
+DATA = "data/" + RDIR
 RESOURCES = "resources/" + RDIR if not run.get("shared_resources") else "resources/"
 RESULTS = "results/" + RDIR
 
@@ -93,7 +90,7 @@ DATAFILES = [
 
 rule retrieve_data_from_zenodo:
     output:
-        expand("data/base_grid/{file}", file=DATAFILES),
+        expand( DATA + "breakthrough_network/{file}", file=DATAFILES),
     log:
         "logs/retrieve_data_from_zenodo.log",
     script:
@@ -137,7 +134,7 @@ rule retrieve_ship_raster:
             static=True,
         ),
     output:
-        "data/shipdensity_global.zip",
+        DATA +"shipdensity_global.zip",
     log:
         LOGS + "retrieve_ship_raster.log",
     resources:
@@ -152,15 +149,15 @@ if config["enable"].get("retrieve_databundle", True):
         "je-e-21.03.02.xls",
         "eez/World_EEZ_v8_2014.shp",
         "hydro_capacities.csv",
-        "naturalearth/ne_10m_admin_0_countries.shp",
-        "nama_10r_3popgdp.tsv.gz",
-        "nama_10r_3gdp.tsv.gz",
+        # "naturalearth/ne_10m_admin_0_countries.shp",
+        # "nama_10r_3popgdp.tsv.gz",
+        # "nama_10r_3gdp.tsv.gz",
         "corine/g250_clc06_V18_5.tif",
     ]
 
     rule retrieve_pypsa_eur_databundle:
         output:
-            expand("data/pypsa-eur/{file}", file=datafiles),
+            expand(DATA + "pypsa-eur/{file}", file=datafiles),
         log:
             LOGS + "retrieve_databundle.log",
         resources:
@@ -202,21 +199,6 @@ if config["enable"].get("retrieve_cutout", True):
 
 ################# ----------- Rules to Build Network ---------- #################
 
-
-# if config["enable"].get("build_natura_raster", False):
-    # rule build_natura_raster:
-    #     input:
-    #         natura=RESOURCES + "natura.zip",
-    #         cutouts=expand("cutouts/" + CDIR + "cutout_western_{cutouts}.nc", **config["atlite"]),
-    #     output:
-    #         RESOURCES + "natura.tiff",
-    #     resources:
-    #         mem_mb=5000,
-    #     log:
-    #         LOGS + "build_natura_raster.log",
-    #     script:
-    #         "/scripts/build_natura_raster.py"
-
 rule build_shapes:
     params:
         source_states_shapes="admin_1_states_provinces",
@@ -224,7 +206,7 @@ rule build_shapes:
         buffer_distance=200000,
         balancing_authorities=config["balancing_authorities"],
     input:
-        zone="data/base_grid/zone.csv",
+        zone= DATA + "breakthough_network/zone.csv",
     output:
         country_shapes=RESOURCES + "{interconnect}/country_shapes.geojson",
         onshore_shapes=RESOURCES + "{interconnect}/onshore_shapes.geojson",
@@ -239,16 +221,16 @@ rule build_shapes:
 
 rule build_base_network:
     input:
-        buses="data/base_grid/bus.csv",
-        lines="data/base_grid/branch.csv",
-        links="data/base_grid/dcline.csv",
-        bus2sub="data/base_grid/bus2sub.csv",
-        sub="data/base_grid/sub.csv",
+        buses=DATA + "breakthough_network/bus.csv",
+        lines=DATA + "breakthough_network/branch.csv",
+        links=DATA + "breakthough_network/dcline.csv",
+        bus2sub=DATA + "breakthough_network/bus2sub.csv",
+        sub=DATA + "breakthough_network/sub.csv",
         onshore_shapes=RESOURCES + "{interconnect}/onshore_shapes.geojson",
         offshore_shapes=RESOURCES + "{interconnect}/offshore_shapes.geojson",
     output:
-        bus2sub="data/base_grid/{interconnect}/bus2sub.csv",
-        sub="data/base_grid/{interconnect}/sub.csv",
+        bus2sub=DATA + "breakthough_network/{interconnect}/bus2sub.csv",
+        sub=DATA + "breakthough_network/{interconnect}/sub.csv",
         network=RESOURCES + "{interconnect}/elec_base_network.nc",
     log:
         "logs/create_network/{interconnect}.log",
@@ -261,7 +243,7 @@ rule build_base_network:
 rule build_load_data:
     input:
         network=RESOURCES + "{interconnect}/elec_base_network.nc",
-        demand_breakthrough_2016="data/base_grid/demand.csv",
+        demand_breakthrough_2016=DATA + "breakthough_network/demand.csv",
         ads_2032 = RESOURCES + "WECC_ADS/downloads/2032/Public Data/Hourly Profiles in CSV format",
         ads_2030 = RESOURCES + "WECC_ADS/downloads/2030/WECC 2030 ADS PCM 2020-12-16 (V1.5) Public Data/CSV Shape Files",
         eia = expand(RESOURCES + "eia/{file}", file=DATAFILES_DMD),
@@ -287,7 +269,7 @@ if config["enable"].get("build_cutout", False):
 
 rule build_ship_raster:
     input:
-        ship_density="data/shipdensity_global.zip",
+        ship_density=DATA + "shipdensity_global.zip",
         cutouts=expand(
             "cutouts/" + CDIR + "cutout_western_{cutout}.nc",
             cutout=[
@@ -312,19 +294,19 @@ rule build_renewable_profiles:
         renewable=config["renewable"],
     input:
         base_network=RESOURCES + "{interconnect}/elec_base_network_l.nc",
-        # corine=ancient("data/bundle/corine/g250_clc06_V18_5.tif"),
+        corine=ancient("data/bundle/corine/g250_clc06_V18_5.tif"),
         natura=lambda w: (
-            RESOURCES + "natura.tiff"
+            DATA + "natura.tiff"
             if config["renewable"][w.technology]["natura"]
             else []
         ),
-        # gebco=ancient(
-        #     lambda w: (
-        #         "data/bundle/GEBCO_2014_2D.nc"
-        #         if config["renewable"][w.technology].get("max_depth")
-        #         else []
-        #     )
-        # ),
+        gebco=ancient(
+            lambda w: (
+                "data/bundle/GEBCO_2014_2D.nc"
+                if config["renewable"][w.technology].get("max_depth")
+                else []
+            )
+        ),
         ship_density=lambda w: (
             RESOURCES + "{interconnect}/shipdensity_raster.tif"
             if "ship_threshold" in config["renewable"][w.technology].keys()
