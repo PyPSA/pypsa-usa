@@ -250,7 +250,6 @@ def load_costs(tech_costs, config, max_hours, Nyears=1.0):
 
     return costs
 
-
 def load_powerplants(ppl_fn):
     carrier_dict = {
         "ocgt": "OCGT",
@@ -274,11 +273,10 @@ def load_powerplants_breakthrough(ppl_fn):
         "ccgt, thermal": "CCGT",
         "hard coal": "coal",
     }
-    df = pd.read_csv(ppl_fn, index_col=0, dtype={"bus": "str"})
-    import pdb; pdb.set_trace()
-        df.powerplant.to_pypsa_names().rename(columns=str.lower).replace({"carrier": carrier_dict})
+
     return (
-        df
+        pd.read_csv(ppl_fn, index_col=0, dtype={"bus_id": "str"})
+        .rename(columns=str.lower)
     )
 
 def shapes_to_shapes(orig, dest):
@@ -714,7 +712,6 @@ def estimate_renewable_capacities(n, year, tech_map, expansion_limit, countries)
             )
 
 
-
 def add_conventional_plants_from_file(
     n, fn_plants, conventional_carriers, extendable_carriers, costs):
 
@@ -822,15 +819,9 @@ def add_renewable_plants_from_file(
 
     return n
 
-def merge_powerplants(ppl_conventional, ppl_hydro, ppl_wind):
-    ppl = pd.concat([ppl_conventional, ppl_hydro, ppl_wind], axis=0)
-    ppl.index = ppl.index.astype(str)
-    return ppl
-
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
-
         snakemake = mock_snakemake("add_electricity")
     configure_logging(snakemake)
 
@@ -845,14 +836,6 @@ if __name__ == "__main__":
         params.electricity["max_hours"],
         Nyears,
     )
-    import pdb; pdb.set_trace()
-
-    #for breakthrough plant configuration
-    ppl_conventional = load_powerplants_breakthrough(snakemake.input.powerplants)
-    ppl_hydro = load_powerplants_breakthrough(snakemake.input.hydro)
-    ppl_wind = load_powerplants_breakthrough(snakemake.input.wind)
-    ppl_solar = load_powerplants_breakthrough(snakemake.input.solar)
-    ppl = merge_powerplants(ppl_conventional, ppl_hydro, ppl_wind, ppl_solar)
 
     update_transmission_costs(n, costs, params.length_factor)
 
@@ -862,50 +845,81 @@ if __name__ == "__main__":
     conventional_inputs = {
         k: v for k, v in snakemake.input.items() if k.startswith("conventional_")
     }
-    attach_conventional_generators(
-        n,
-        costs,
-        ppl,
-        conventional_carriers,
-        extendable_carriers,
-        params.conventional,
-        conventional_inputs,
-    )
+    # attach_conventional_generators(
+    #     n,
+    #     costs,
+    #     ppl,
+    #     conventional_carriers,
+    #     extendable_carriers,
+    #     params.conventional,
+    #     conventional_inputs,
+    # )
+    # attach_wind_and_solar(
+    #     n,
+    #     costs,
+    #     snakemake.input,
+    #     renewable_carriers,
+    #     extendable_carriers,
+    #     params.length_factor,
+    # )
 
-    attach_wind_and_solar(
-        n,
-        costs,
-        snakemake.input,
-        renewable_carriers,
-        extendable_carriers,
-        params.length_factor,
-    )
+    ############# for breakthrough plant configuration #############
+    if config["generator_data"]["use_breakthrough"]:
+        costs = costs.rename(index={"onwind": "wind", "OCGT": "ng"}) #changing cost data to match the breakthrought plant data #TODO: #10 change this so that breakthrough fuel types and plant types match the pypsa naming scheme.
 
-    if "hydro" in renewable_carriers:
-        para = params.renewable["hydro"]
-        attach_hydro(
+        ppl = load_powerplants_breakthrough(snakemake.input.powerplants)
+        
+        conventional_carriers = list(
+            set(snakemake.config["allowed_carriers"]).intersection(
+                set(["coal", "ng", "nuclear", "oil", "geothermal"])
+            )
+        )
+        n = add_conventional_plants_from_file(
             n,
+            snakemake.input["plants"],
+            conventional_carriers,
+            snakemake.config["extendable_carriers"],
             costs,
-            ppl,
-            snakemake.input.profile_hydro,
-            snakemake.input.hydro_capacities,
-            para.pop("carriers", []),
-            **para,
         )
 
-    estimate_renewable_caps = params.electricity["estimate_renewable_capacities"]
-    if estimate_renewable_caps["enable"]:
-        tech_map = estimate_renewable_caps["technology_mapping"]
-        expansion_limit = estimate_renewable_caps["expansion_limit"]
-        year = estimate_renewable_caps["year"]
-
-        if estimate_renewable_caps["from_opsd"]:
-            attach_OPSD_renewables(n, tech_map)
-        estimate_renewable_capacities(
-            n, year, tech_map, expansion_limit, params.countries
+        renewable_carriers = list(
+            set(snakemake.config["allowed_carriers"]).intersection(
+                set(["wind", "solar", "offwind", "hydro"])
+            )
+        )
+        n = add_renewable_plants_from_file(
+            n,
+            snakemake.input["plants"],
+            renewable_carriers,
+            snakemake.config["extendable_carriers"],
+            costs,
         )
 
-    update_p_nom_max(n)
+    ###############################################################
+    # if "hydro" in renewable_carriers:
+    #     para = params.renewable["hydro"]
+    #     attach_hydro(
+    #         n,
+    #         costs,
+    #         ppl,
+    #         snakemake.input.profile_hydro,
+    #         snakemake.input.hydro_capacities,
+    #         para.pop("carriers", []),
+    #         **para,
+    #     )
+    # estimate_renewable_caps = params.electricity["estimate_renewable_capacities"]
+    # if estimate_renewable_caps["enable"]:
+    #     tech_map = estimate_renewable_caps["technology_mapping"]
+    #     expansion_limit = estimate_renewable_caps["expansion_limit"]
+    #     year = estimate_renewable_caps["year"]
+
+    #     if estimate_renewable_caps["from_opsd"]:
+    #         attach_OPSD_renewables(n, tech_map)
+    #     estimate_renewable_capacities(
+    #         n, year, tech_map, expansion_limit, params.countries
+    #     )
+
+    # update_p_nom_max(n)
 
     sanitize_carriers(n, snakemake.config)
 
