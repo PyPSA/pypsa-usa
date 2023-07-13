@@ -358,10 +358,6 @@ rule add_electricity:
         hydro="data/breakthrough_network/base_grid/hydro.csv",
         wind="data/breakthrough_network/base_grid/wind.csv",
         solar="data/breakthrough_network/base_grid/solar.csv",
-
-        # hydro_capacities=ancient("data/bundle/hydro_capacities.csv"),
-        # geth_hydro_capacities="data/geth2015_hydro_capacities.csv",
-        # load=RESOURCES + "load.csv",
     output:
         RESOURCES + "{interconnect}/elec_base_network_l_pp.nc",
     log:

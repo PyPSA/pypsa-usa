@@ -131,11 +131,6 @@ if __name__ == "__main__":
     # should renaming technologies move to config.yaml?
     costs = costs.rename(index={"onwind": "wind", "OCGT": "ng"})
 
-    interconnect = snakemake.wildcards.interconnect
-    # interconnect in raw data given with an uppercase first letter
-    if interconnect != "usa":
-        interconnect = interconnect[0].upper() + interconnect[1:]
-
     # add renewable generators
     renewable_carriers = list(
         set(snakemake.config["allowed_carriers"]).intersection(
