@@ -276,9 +276,7 @@ def load_powerplants_breakthrough(ppl_fn):
     }
     df = pd.read_csv(ppl_fn, index_col=0, dtype={"bus": "str"})
     import pdb; pdb.set_trace()
-        df.powerplant.to_pypsa_names()
-        .rename(columns=str.lower)
-        .replace({"carrier": carrier_dict})
+        df.powerplant.to_pypsa_names().rename(columns=str.lower).replace({"carrier": carrier_dict})
     return (
         df
     )

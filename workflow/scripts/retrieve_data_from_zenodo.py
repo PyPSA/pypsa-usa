@@ -27,7 +27,7 @@ if __name__ == "__main__":
 
     # Save locations
     tarball_fn = Path(f"{rootpath}/USATestSystem.zip")
-    to_fn = Path(f"{rootpath}/data")
+    to_fn = Path(f"{rootpath}/data/breakthrough_network/")
 
     if os.path.isfile(tarball_fn):
         logger.info(f"Data bundle already downloaded.")
