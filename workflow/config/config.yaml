@@ -19,6 +19,11 @@ scenarios:
       ]
     ll: v1.0
 
+run:
+  name: "" # use this to keep track of runs with different settings
+  disable_progressbar: false # set to true to disable the progressbar
+  shared_resources: false # set to true to share the default resources across runs
+  shared_cutouts: true # set to true to share the default cutout(s) across runs
 
 enable:
   # prepare_links_p_nom: false
@@ -32,7 +37,9 @@ enable:
 
 zenodo_repository:
   url: "https://zenodo.org/record/4538590/files/USATestSystem.zip"
-
+natura_repository:
+  url: "https://sandbox.zenodo.org/record/1183583/files/natura_global.zip"
+  
 offshore_shape:
   use: ca #options are ca, weathergov
   offshore_path:
