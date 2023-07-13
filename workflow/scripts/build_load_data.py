@@ -118,6 +118,10 @@ if __name__ == "__main__":
 
     n = pypsa.Network(snakemake.input['network'])
 
+    ###### using EIA historical Load Data ######
+    if snakemake.config['load_data']['use_eia']:
+        logger.info("Preproccessing ADS data")
+        # os.makedirs("resources/eia/processed/", exist_ok=True)
 
     if sum([snakemake.config['load_data']['use_eia'], snakemake.config['load_data']['use_ads']], snakemake.config['load_data']['use_breakthrough']) > 1:
         raise ValueError("Only one of the load_data configs can be set to true")
@@ -174,5 +178,5 @@ if __name__ == "__main__":
 
         
 
-
+    # import pdb; pdb.set_trace()
     n.export_to_netcdf(snakemake.output.network)

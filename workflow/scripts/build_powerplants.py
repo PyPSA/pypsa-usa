@@ -65,7 +65,11 @@ def add_renewable_plants_from_file(
         intersection = set(p.columns).intersection(tech_plants.index) #filters by plants ID for the plants of type tech
         p = p[list(intersection)]
 
+<<<<<<< HEAD
 
+=======
+        # import pdb; pdb.set_trace()
+>>>>>>> bd1ceb9 (Development to Master- Minor updates/ bug fixes (#18))
         Nhours = len(n.snapshots)
         p = p.iloc[:Nhours,:]        #hotfix to fit 2016 renewable data to load data
 
@@ -103,7 +107,11 @@ def add_renewable_plants_from_file(
 
     # hack to remove generators without capacity (required for SEG to work)
     # shouldn't exist, in fact...
+<<<<<<< HEAD
 
+=======
+    # import pdb;pdb.set_trace()
+>>>>>>> bd1ceb9 (Development to Master- Minor updates/ bug fixes (#18))
     p_max_pu_norm = n.generators_t.p_max_pu.max()
     remove_g = p_max_pu_norm[p_max_pu_norm == 0.0].index
     logger.info(
@@ -127,7 +135,7 @@ if __name__ == "__main__":
         snakemake.config["electricity"],
         Nyears,
     )
-
+    # import pdb;pdb.set_trace()
     # should renaming technologies move to config.yaml?
     costs = costs.rename(index={"onwind": "wind", "OCGT": "ng"})
 

@@ -61,7 +61,7 @@ balancing_area_names: ['AEC', 'AECI', 'AVA', 'Arizona', 'BANC', 'BPAT', 'CHPD', 
 
 # TODO: #11 change load data and generator data to be a snakemake wildcard value
 load_data:
-  use_eia: true #if set true uses historical data, if false uses BE data
+  use_eia: false #if set true uses historical data, if false uses BE data
   historical_year: 2019
   use_ads: false #if set true uses ads data, if false uses BE data
   future_year: 2032
