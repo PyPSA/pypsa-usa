@@ -46,7 +46,7 @@ if snakemake.params.balancing_authorities["use"]:
     ba_states.rename(columns={"name_1": "name"}, inplace=True)
     gdf_states= ba_states
 
-gdf_states.to_file(snakemake.output.ba_region_shapes)
+gdf_states.to_file(snakemake.output.onshore_shapes)
 
 
 ####### Load offshore shapes #######
