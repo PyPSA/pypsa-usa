@@ -22,7 +22,7 @@ FIGURES_SINGLE = [
 # --------------------------- Workflow constraints --------------------------- #
 
 localrules:
-    # dag,
+    dag,
     # report,
     clean,
 
@@ -62,6 +62,7 @@ rule all:
             **config["scenarios"]["all"],
             figure=FIGURES_SINGLE
         ),
+        "repo_data/dag.png",
 
 rule test:
     input:
@@ -90,7 +91,7 @@ DATAFILES = [
 
 rule retrieve_data_from_zenodo:
     output:
-        expand( DATA + "breakthrough_network/{file}", file=DATAFILES),
+        expand( DATA + "breakthrough_network/base_grid/{file}", file=DATAFILES),
     log:
         "logs/retrieve_data_from_zenodo.log",
     script:
@@ -213,16 +214,16 @@ rule build_shapes:
 
 rule build_base_network:
     input:
-        buses=DATA + "breakthrough_network/bus.csv",
-        lines=DATA + "breakthrough_network/branch.csv",
-        links=DATA + "breakthrough_network/dcline.csv",
-        bus2sub=DATA + "breakthrough_network/bus2sub.csv",
-        sub=DATA + "breakthrough_network/sub.csv",
+        buses=DATA + "breakthrough_network/base_grid/bus.csv",
+        lines=DATA + "breakthrough_network/base_grid/branch.csv",
+        links=DATA + "breakthrough_network/base_grid/dcline.csv",
+        bus2sub=DATA + "breakthrough_network/base_grid/bus2sub.csv",
+        sub=DATA + "breakthrough_network/base_grid/sub.csv",
         onshore_shapes=RESOURCES + "{interconnect}/onshore_shapes.geojson",
         offshore_shapes=RESOURCES + "{interconnect}/offshore_shapes.geojson",
     output:
-        bus2sub=DATA + "breakthrough_network/{interconnect}/bus2sub.csv",
-        sub=DATA + "breakthrough_network/{interconnect}/sub.csv",
+        bus2sub=DATA + "breakthrough_network/base_grid/{interconnect}/bus2sub.csv",
+        sub=DATA + "breakthrough_network/base_grid/{interconnect}/sub.csv",
         network=RESOURCES + "{interconnect}/elec_base_network.nc",
     log:
         "logs/create_network/{interconnect}.log",
@@ -235,7 +236,7 @@ rule build_base_network:
 rule build_load_data:
     input:
         network=RESOURCES + "{interconnect}/elec_base_network.nc",
-        demand_breakthrough_2016=DATA + "breakthrough_network/demand.csv",
+        demand_breakthrough_2016=DATA + "breakthrough_network/base_grid/demand.csv",
         ads_2032 = RESOURCES + "WECC_ADS/downloads/2032/Public Data/Hourly Profiles in CSV format",
         ads_2030 = RESOURCES + "WECC_ADS/downloads/2030/WECC 2030 ADS PCM 2020-12-16 (V1.5) Public Data/CSV Shape Files",
         eia = expand(RESOURCES + "eia/{file}", file=DATAFILES_DMD),
@@ -353,10 +354,10 @@ rule add_electricity:
         base_network=RESOURCES + "{interconnect}/elec_base_network_l.nc",
         tech_costs="repo_data/pypsa_eur_costs.csv",
         regions=RESOURCES + "{interconnect}/regions_onshore_s.geojson",
-        powerplants="data/breakthrough_network/plant.csv",
-        hydro="data/breakthrough_network/hydro.csv",
-        wind="data/breakthrough_network/wind.csv",
-        solar="data/breakthrough_network/solar.csv",
+        powerplants="data/breakthrough_network/base_grid/plant.csv",
+        hydro="data/breakthrough_network/base_grid/hydro.csv",
+        wind="data/breakthrough_network/base_grid/wind.csv",
+        solar="data/breakthrough_network/base_grid/solar.csv",
 
         # hydro_capacities=ancient("data/bundle/hydro_capacities.csv"),
         # geth_hydro_capacities="data/geth2015_hydro_capacities.csv",
@@ -376,10 +377,10 @@ rule add_electricity:
 # rule build_powerplants:
 #     input:
 #         network=RESOURCES + "{interconnect}/elec_base_network_l.nc",
-#         plants="data/breakthrough_network/plant.csv",
-#         wind="data/breakthrough_network/wind.csv",
-#         solar="data/breakthrough_network/solar.csv",
-#         hydro="data/breakthrough_network/hydro.csv",
+#         plants="data/breakthrough_network/base_grid/plant.csv",
+#         wind="data/breakthrough_network/base_grid/wind.csv",
+#         solar="data/breakthrough_network/base_grid/solar.csv",
+#         hydro="data/breakthrough_network/base_grid/hydro.csv",
 #         tech_costs="repo_data/pypsa_eur_costs.csv",
 #         cutout=RESOURCES + "{interconnect}/cutout_{interconnect}_ERA5.nc"
 #     output:
@@ -395,8 +396,8 @@ rule add_electricity:
 ################# ----------- Rules to Aggregate & Simplify Network ---------- #################
 rule simplify_network:
     input:
-        bus2sub="data/breakthrough_network/{interconnect}/bus2sub.csv",
-        sub="data/breakthrough_network/{interconnect}/sub.csv",
+        bus2sub="data/breakthrough_network/base_grid/{interconnect}/bus2sub.csv",
+        sub="data/breakthrough_network/base_grid/{interconnect}/sub.csv",
         network= RESOURCES + "{interconnect}/elec_base_network_l_pp.nc",
     output:
         network=RESOURCES + "{interconnect}/elec_s.nc",
@@ -434,7 +435,7 @@ rule cluster_network:
         network=RESOURCES + "{interconnect}/elec_ss.nc",
         regions_onshore=RESOURCES + "{interconnect}/regions_onshore_s.geojson",
         regions_offshore=RESOURCES + "{interconnect}/regions_offshore_s.geojson",
-        busmap="data/breakthrough_network/{interconnect}/bus2sub.csv",
+        busmap="data/breakthrough_network/base_grid/{interconnect}/bus2sub.csv",
         custom_busmap=(
             "data/{interconnect}/custom_busmap_{clusters}.csv"
             if config["enable"].get("custom_busmap", False)
@@ -570,14 +571,14 @@ rule report:
         pdflatex {input.tex}
         """
 
-# Create DAG with- snakemake --dag results/western/networks/elec_s_40_ec_lvopt_Co2L1.0.nc -F | sed -n "/digraph/,/}/p" | dot -Tpng -o results/workflow.png
+# Create DAG with- snakemake --dag -F | sed -n "/digraph/,/}/p" | dot -Tpng -o repo_data/workflow.png
 rule dag:
     message:
         "Creating DAG of workflow."
     output:
-        dot=RESOURCES + "dag.dot",
-        pdf=RESOURCES + "dag.pdf",
-        png=RESOURCES + "dag.png",
+        dot="repo_data/dag.dot",
+        pdf="repo_data/dag.pdf",
+        png="repo_data/dag.png",
     shell:
         """
         snakemake --rulegraph all | sed -n "/digraph/,\$p" > {output.dot}
