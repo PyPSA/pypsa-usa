@@ -145,19 +145,14 @@ rule retrieve_ship_raster:
 
 if config["enable"].get("retrieve_databundle", True):
     datafiles = [
-        "ch_cantons.csv",
-        "je-e-21.03.02.xls",
-        "eez/World_EEZ_v8_2014.shp",
-        "hydro_capacities.csv",
-        # "naturalearth/ne_10m_admin_0_countries.shp",
-        # "nama_10r_3popgdp.tsv.gz",
-        # "nama_10r_3gdp.tsv.gz",
-        "corine/g250_clc06_V18_5.tif",
+    "eez/eez_v11.gpkg",
+    "gebco/GEBCO_2021_TID.nc",
+    "copernicus/PROBAV_LC100_global_v3.0.1_2019-nrt_Discrete-Classification-map_EPSG-4326.tif",
     ]
 
-    rule retrieve_pypsa_eur_databundle:
+    rule retrieve_pypsa_earth_databundle:
         output:
-            expand(DATA + "pypsa-eur/{file}", file=datafiles),
+            expand(DATA + "pypsa_earth/{file}", file=datafiles),
         log:
             LOGS + "retrieve_databundle.log",
         resources:
@@ -166,8 +161,7 @@ if config["enable"].get("retrieve_databundle", True):
         conda:
             "../envs/environment.yaml"
         script:
-            "subworkflows/pypsa-eur/scripts/retrieve_databundle.py"
-
+            "scripts/retrieve_pypsa_earth_databundle.py"
 
 rule retrieve_natura_data:
     output:
@@ -186,7 +180,7 @@ if config["enable"].get("retrieve_cutout", True):
                 "zenodo.org/record/8136996/files/cutout_western_{cutout}.nc"
                 ,static=True),
         output:
-            protected("cutouts/" + CDIR + "cutout_{interconnect}_{cutout}.nc"),
+            "cutouts/" + CDIR + "cutout_{interconnect}_{cutout}.nc",
         log:
             "logs/" + CDIR + "retrieve_cutout_{interconnect}_{cutout}.log",
         resources:
@@ -294,7 +288,7 @@ rule build_renewable_profiles:
         renewable=config["renewable"],
     input:
         base_network=RESOURCES + "{interconnect}/elec_base_network_l.nc",
-        corine=ancient("data/bundle/corine/g250_clc06_V18_5.tif"),
+        corine=ancient("data/pypsa_earth/copernicus/PROBAV_LC100_global_v3.0.1_2019-nrt_Discrete-Classification-map_EPSG-4326.tif"),
         natura=lambda w: (
             DATA + "natura.tiff"
             if config["renewable"][w.technology]["natura"]
@@ -302,7 +296,7 @@ rule build_renewable_profiles:
         ),
         gebco=ancient(
             lambda w: (
-                "data/bundle/GEBCO_2014_2D.nc"
+                DATA + "pypsa_earth/gebco/GEBCO_2021_TID.nc"
                 if config["renewable"][w.technology].get("max_depth")
                 else []
             )
