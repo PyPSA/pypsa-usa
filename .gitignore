@@ -16,6 +16,7 @@ resources/
 data/
 benchmarks/
 resources/ads_private_data
+subworkflows/
 
 ## Core latex/pdflatex auxiliary files:
 *.aux
