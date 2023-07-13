@@ -38,7 +38,10 @@ zenodo_repository:
   url: "https://zenodo.org/record/4538590/files/USATestSystem.zip"
 natura_repository:
   url: "https://sandbox.zenodo.org/record/1183583/files/natura_global.zip"
-  
+pypsa_earth_repository:
+  url:  "https://sandbox.zenodo.org/record/1183583/files/data_v0.1.zip?download=1"
+
+
 offshore_shape:
   use: ca #options are ca, weathergov
   offshore_path:
