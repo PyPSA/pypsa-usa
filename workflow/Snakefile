@@ -158,8 +158,6 @@ if config["enable"].get("retrieve_databundle", True):
         resources:
             mem_mb=1000,
         retries: 2
-        conda:
-            "../envs/environment.yaml"
         script:
             "scripts/retrieve_pypsa_earth_databundle.py"
 
@@ -368,8 +366,6 @@ rule add_electricity:
     threads: 1
     resources:
         mem_mb=5000,
-    conda:
-        "../envs/environment.yaml"
     script:
         "../scripts/add_electricity.py"
 
