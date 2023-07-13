@@ -22,7 +22,7 @@ conda activate pypsa-usa
 
 # Workflow
 
-![workflow](https://github.com/ktehranchi/pypsa-breakthroughenergy-usa/assets/83722342/256ee4d7-b138-412d-8f03-c07287c98726)
+![workflow](https://github.com/ktehranchi/pypsa-breakthroughenergy-usa/blob/master/workflow/repo_data/workflow.jpg)
 
 ## Configuration
 
