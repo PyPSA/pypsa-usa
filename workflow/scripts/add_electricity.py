@@ -889,6 +889,20 @@ if __name__ == "__main__":
             extendable_carriers,
             params.length_factor,
         )
+        #temporarily adding hydro with breakthrough only data until I can correctly import hydro_data
+        renewable_carriers = list(
+            set(snakemake.config["allowed_carriers"]).intersection(
+                set(["hydro"])
+            )
+        )
+        n = attach_breakthrough_renewable_plants(
+            n,
+            snakemake.input["plants"],
+            renewable_carriers,
+            snakemake.config["extendable_carriers"],
+            costs,
+        )
+
     else: #use zenodo downloaded breakthrough renewable profile data
         renewable_carriers = list(
             set(snakemake.config["allowed_carriers"]).intersection(
