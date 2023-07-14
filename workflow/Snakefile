@@ -64,13 +64,13 @@ rule all:
         ),
         "repo_data/dag.png",
 
-rule test:
-    input:
-        expand(
-            "results/{interconnect}/figures/elec_s_{clusters}_ec_l{ll}_{opts}_{figure}.pdf",
-            **config["scenarios"]["test"],
-            figure=FIGURES_SINGLE
-        ),
+# rule test:
+#     input:
+#         expand(
+#             "results/{interconnect}/figures/elec_s_{clusters}_ec_l{ll}_{opts}_{figure}.pdf",
+#             **config["scenarios"]["test"],
+#             figure=FIGURES_SINGLE
+#         ),
 
 
 ################# ----------- Rules to Retrieve Data ---------- #################

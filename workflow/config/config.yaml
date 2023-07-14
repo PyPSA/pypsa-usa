@@ -10,14 +10,14 @@ scenarios:
       ]
     ll: [vopt]
 
-  test:
-    interconnect: texas
-    clusters: 5
-    opts:
-      [
-        Co2L1.0,
-      ]
-    ll: v1.0
+  # test:
+  #   interconnect: texas
+  #   clusters: 5
+  #   opts:
+  #     [
+  #       Co2L1.0,
+  #     ]
+  #   ll: v1.0
 
 run:
   name: "" # use this to keep track of runs with different settings
@@ -69,9 +69,9 @@ load_data:
   # use_cec: true #if set true uses cec data, if false uses ads/BE data
 
 generator_data:
-  use_breakthough: true #need to test each of these
-  use_breakthrough_atlite: false
-  use_eia: False
+  use_breakthrough: true #need to test each of these
+  use_breakthrough_atlite: false # will currently still use breaktrough hydro data with atlite solar and wind. might have some issues with timestamps
+  use_eia: False #not implemented yet
 
 snapshots:
   start: "2019-01-01"
