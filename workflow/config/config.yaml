@@ -41,7 +41,6 @@ natura_repository:
 pypsa_earth_repository:
   url:  "https://sandbox.zenodo.org/record/1183583/files/data_v0.1.zip?download=1"
 
-
 offshore_shape:
   use: ca #options are ca, weathergov
   offshore_path:
@@ -70,7 +69,7 @@ load_data:
   # use_cec: true #if set true uses cec data, if false uses ads/BE data
 
 generator_data:
-  use_breakthough: True #need to test each of these
+  use_breakthough: true #need to test each of these
   use_breakthrough_atlite: false
   use_eia: False
 
@@ -79,8 +78,8 @@ snapshots:
   end: "2020-01-01"
   inclusive: 'left' # include start, not end
 
-planning_horizons: # investment years .... use these only for future years?
-  - 2015
+# planning_horizons: # investment years .... use these only for future years?
+#   - 2015
 
 investment_period_discount_rate: 0.05
 
@@ -109,6 +108,26 @@ atlite:
     #   sarah_interpolate: false
     #   sarah_dir:
     #   features: [influx, temperature]
+
+electricity:
+  conventional_carriers: [nuclear, oil, OCGT, CCGT, coal, geothermal, biomass]
+  renewable_carriers: [wind, solar, offwind, hydro]
+  voltages: [230., 345., 500., 765.]
+  voltage_simplified: 230
+  co2limit: 1.4728e+9 # 0.8 * 1.841e+9
+  co2base: 1.841e+9 #base_from_2020 Locations of the 1,841 MMmt of CO2 emissions from the current state of the grid in 2020.
+  gaslimit: false # global gas usage limit of X MWh_th
+
+  max_hours:
+    battery: 6
+    H2: 168
+
+  # extendable_carriers: [solar, wind, offwind, ng, coal, nuclear, battery] #used in original build_powerplants rule not needed in add_electricity
+  extendable_carriers:
+    Generator: [solar, wind, offwind, ng, geothermal, coal, nuclear]
+    StorageUnit: [battery] # battery, H2
+    Store: [battery] #[battery, H2]
+    Link: [] #[H2 pipeline]
 
 renewable:
   wind:
@@ -214,26 +233,6 @@ renewable:
       year: 2013  # (optional) year of statistics used to rescale the runoff time series. When not provided, the weather year of the snapshots is used
     multiplier: 1.1  # multiplier applied after the normalization of the hydro production; default 1.0
 
-
-electricity:
-  conventional_carriers: [nuclear, oil, OCGT, CCGT, coal, geothermal, biomass]
-  renewable_carriers: [wind, solar, offwind]
-  voltages: [230., 345., 500., 765.]
-  voltage_simplified: 230
-  co2limit: 1.4728e+9 # 0.8 * 1.841e+9
-  co2base: 1.841e+9 #base_from_2020 Locations of the 1,841 MMmt of CO2 emissions from the current state of the grid in 2020.
-  gaslimit: false # global gas usage limit of X MWh_th
-
-  max_hours:
-    battery: 6
-    H2: 168
-
-  # extendable_carriers: [solar, wind, offwind, ng, coal, nuclear, battery] #used in original build_powerplants rule not needed in add_electricity
-  extendable_carriers:
-    Generator: [solar, wind, offwind, ng, geothermal, coal, nuclear]
-    StorageUnit: [battery] # battery, H2
-    Store: [battery] #[battery, H2]
-    Link: [] #[H2 pipeline]
 
 lines:
   types:

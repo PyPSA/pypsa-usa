@@ -358,7 +358,7 @@ def attach_wind_and_solar(
                     + connection_cost
                 )
                 logger.info(
-                    "Added connection cost of {:0.0f}-{:0.0f} Eur/MW/a to {}".format(
+                    "Added connection cost of {:0.0f}-{:0.0f} USD/MW/a to {}".format(
                         connection_cost.min(), connection_cost.max(), car
                     )
                 )
@@ -712,7 +712,7 @@ def estimate_renewable_capacities(n, year, tech_map, expansion_limit, countries)
             )
 
 
-def add_conventional_plants_from_file(
+def attach_conventional_breakthrough_plants(
     n, fn_plants, conventional_carriers, extendable_carriers, costs):
 
     _add_missing_carriers_from_costs(n, costs, conventional_carriers)
@@ -748,7 +748,7 @@ def add_conventional_plants_from_file(
 
     return n
 
-def add_renewable_plants_from_file(
+def attach_breakthrough_renewable_plants(
     n, fn_plants, renewable_carriers, extendable_carriers, costs):
 
     _add_missing_carriers_from_costs(n, costs, renewable_carriers)
@@ -864,7 +864,7 @@ if __name__ == "__main__":
     # )
 
     ############# for breakthrough plant configuration #############
-    if config["generator_data"]["use_breakthrough"]:
+    if snakemake.config["generator_data"]["use_breakthrough"]:
         costs = costs.rename(index={"onwind": "wind", "OCGT": "ng"}) #changing cost data to match the breakthrought plant data #TODO: #10 change this so that breakthrough fuel types and plant types match the pypsa naming scheme.
 
         ppl = load_powerplants_breakthrough(snakemake.input.powerplants)
@@ -874,26 +874,36 @@ if __name__ == "__main__":
                 set(["coal", "ng", "nuclear", "oil", "geothermal"])
             )
         )
-        n = add_conventional_plants_from_file(
+        n = attach_conventional_breakthrough_plants(
             n,
             snakemake.input["plants"],
             conventional_carriers,
             snakemake.config["extendable_carriers"],
             costs,
         )
-
+    if snakemake.config["generator_data"]["use_breakthrough_atlite"]:
+        attach_wind_and_solar(
+            n,
+            costs,
+            snakemake.input,
+            renewable_carriers,
+            extendable_carriers,
+            params.length_factor,
+        )
+    else: #use zenodo downloaded breakthrough renewable profile data
         renewable_carriers = list(
             set(snakemake.config["allowed_carriers"]).intersection(
                 set(["wind", "solar", "offwind", "hydro"])
             )
         )
-        n = add_renewable_plants_from_file(
+        n = attach_breakthrough_renewable_plants(
             n,
             snakemake.input["plants"],
             renewable_carriers,
             snakemake.config["extendable_carriers"],
             costs,
         )
+        
 
     ###############################################################
     # if "hydro" in renewable_carriers:
