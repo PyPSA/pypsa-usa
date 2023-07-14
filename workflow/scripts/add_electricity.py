@@ -670,7 +670,6 @@ def attach_OPSD_renewables(n, tech_map):
         n.generators.p_nom.update(gens.bus.map(caps).dropna())
         n.generators.p_nom_min.update(gens.bus.map(caps).dropna())
 
-
 def estimate_renewable_capacities(n, year, tech_map, expansion_limit, countries):
     if not len(countries) or not len(tech_map):
         return
@@ -710,7 +709,6 @@ def estimate_renewable_capacities(n, year, tech_map, expansion_limit, countries)
             n.generators.loc[tech_i, "p_nom_max"] = (
                 expansion_limit * n.generators.loc[tech_i, "p_nom_min"]
             )
-
 
 def attach_conventional_breakthrough_plants(
     n, fn_plants, conventional_carriers, extendable_carriers, costs):
@@ -864,8 +862,9 @@ if __name__ == "__main__":
     # )
 
     ############# for breakthrough plant configuration #############
+    #stick with the old method for now, I am going to ditch the breakthrough plant data soon anyway
     if snakemake.config["generator_data"]["use_breakthrough"]:
-        costs = costs.rename(index={"onwind": "wind", "OCGT": "ng"}) #changing cost data to match the breakthrought plant data #TODO: #10 change this so that breakthrough fuel types and plant types match the pypsa naming scheme.
+        costs = costs.rename(index={"onwind": "wind", "OCGT": "ng"}) #changing cost data to match the breakthrough plant data #TODO: #10 change this so that breakthrough fuel types and plant types match the pypsa naming scheme.
 
         ppl = load_powerplants_breakthrough(snakemake.input.powerplants)
         
