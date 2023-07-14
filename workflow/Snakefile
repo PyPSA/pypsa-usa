@@ -89,20 +89,20 @@ DATAFILES = [
     "zone.csv",
 ]
 
-rule retrieve_data_from_zenodo:
+rule retrieve_breakthrough_network_data:
     output:
         expand( DATA + "breakthrough_network/base_grid/{file}", file=DATAFILES),
     log:
-        "logs/retrieve_data_from_zenodo.log",
+        "logs/retrieve_breakthrough_network_data.log",
     script:
         "scripts/retrieve_data_from_zenodo.py"
 
-rule retrieve_forecast_data:
+rule retrieve_WECC_forecast_data:
     output:
         ads_2032 = directory(RESOURCES + "WECC_ADS/downloads/2032/Public Data/Hourly Profiles in CSV format"),
         ads_2030 = directory(RESOURCES + "WECC_ADS/downloads/2030/WECC 2030 ADS PCM 2020-12-16 (V1.5) Public Data/CSV Shape Files"),
     log:
-        "logs/retrieve_forecast_data.log",
+        "logs/retrieve_WECC_forecast_data.log",
     script:
         "scripts/retrieve_forecast_data.py"        
 
@@ -199,7 +199,7 @@ rule build_shapes:
         buffer_distance=200000,
         balancing_authorities=config["balancing_authorities"],
     input:
-        zone= DATA + "breakthrough_network/zone.csv",
+        zone= DATA + "breakthrough_network/base_grid/zone.csv",
     output:
         country_shapes=RESOURCES + "{interconnect}/country_shapes.geojson",
         onshore_shapes=RESOURCES + "{interconnect}/onshore_shapes.geojson",
