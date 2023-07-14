@@ -7,12 +7,16 @@ dconf
 *.log
 *.pdf
 *.png
+*.zip
+*.DS_Store
 
 # generated files
 results/
 resources/
 data/
 benchmarks/
+resources/ads_private_data
+subworkflows/
 
 ## Core latex/pdflatex auxiliary files:
 *.aux

@@ -1,0 +1,264 @@
+# Copyright 2021-2022 Martha Frysztacki (KIT)
+
+scenarios:
+  all:
+    interconnect: western #"usa|texas|western|eastern"
+    clusters: 50
+
+    opts:
+      [
+        Co2L1.0,
+      ]
+    ll: [vopt]
+
+  test:
+    interconnect: texas
+    clusters: 5
+    opts:
+      [
+        Co2L1.0,
+      ]
+    ll: v1.0
+
+zenodo_repository:
+  url: "https://zenodo.org/record/4538590/files/USATestSystem.zip"
+
+offshore_shape:
+  use: ca #options are ca, weathergov
+  offshore_path:
+    ca: "repo_data/BOEM_CA_OSW_GIS/CA_OSW_BOEM_CallAreas.shp"
+    weathergov: "https://www.weather.gov/source/gis/Shapefiles/WSOM/oz22mr22.zip"
+    # nrel: "geodata_repo/Offshore_Wind_Speed_90m/Offshore_Wind_Speed_90m.shp"
+
+# use_state_shapes: true
+
+balancing_authorities: #comment out the list of states above and focus weights if using  balancing authority shapes ### note need to replace the use of "States" for everything. it should be labeled as BA
+  use: true 
+  path: "repo_data/BA_shapes_new/Modified_BE_BA_Shapes.shp"
+
+countries: [US]  
+BA_names: ['AEC', 'AECI', 'AVA', 'Arizona', 'BANC', 'BPAT', 'CHPD', 'CISO-PGAE', 'CISO-SCE', 'CISO-SDGE', 'CISO-VEA', 'SPP-CSWS', 'Carolina', 'DOPD', 'SPP-EDE', 'EPE', 'ERCO-C', 'ERCO-E', 'ERCO-FW', 'ERCO-N', 'ERCO-NC', 'ERCO-S', 'ERCO-SC', 'ERCO-W', 'Florida', 'GCPD', 'SPP-GRDA', 'GRID', 'IID', 'IPCO', 'ISONE-Connecticut', 'ISONE-Maine', 'ISONE-Massachusetts', 'ISONE-New Hampshire', 'ISONE-Rhode Island', 'ISONE-Vermont', 'SPP-KACY', 'SPP-KCPL', 'LDWP', 'SPP-LES', 'MISO-0001', 'MISO-0027', 'MISO-0035', 'MISO-0004', 'MISO-0006', 'MISO-8910', 'SPP-MPS', 'NWMT', 'NEVP', 'SPP-NPPD', 'NYISO-A', 'NYISO-B', 'NYISO-C', 'NYISO-D', 'NYISO-E', 'NYISO-F', 'NYISO-G', 'NYISO-H', 'NYISO-I', 'NYISO-J', 'NYISO-K', 'SPP-OKGE', 'SPP-OPPD', 'PACE', 'PACW', 'PGE', 'PJM_AE', 'PJM_AEP', 'PJM_AP', 'PJM_ATSI', 'PJM_BGE', 'PJM_ComEd', 'PJM_DAY', 'PJM_DEO&K', 'PJM_DLCO', 'PJM_DP&L', 'PJM_Dominion', 'PJM_EKPC', 'PJM_JCP&L', 'PJM_METED', 'PJM_PECO', 'PJM_PENELEC', 'PJM_PEPCO', 'PJM_PPL', 'PJM_PSEG', 'PJM_RECO', 'PNM', 'PSCO', 'PSEI', 'SPP-SECI', 'SOCO', 'SPP-SPRM', 'SPP-SPS', 'TEPC', 'TIDC', 'TVA', 'WACM', 'WALC', 'WAUW','SPP-WAUE_2','SPP-WAUE_3','SPP-WAUE_4','SPP-WAUE_5','SPP-WAUE_6','SPP-WAUE_7','SPP-WAUE_8','SPP-WAUE_9', 'SPP-WFEC', 'SPP-WR']
+# focus_weights: 
+#   CISO-PGAE: 0.5
+
+load_data:
+  use_eia: false #if set true uses historical data, if false uses BE data
+  historical_year: 2019
+  use_ads: true #if set true uses ads data, if false uses BE data
+  future_year: 2032
+  use_breakthrough: false 
+  # use_cec: true #if set true uses cec data, if false uses ads/BE data
+
+# snapshots:
+#   start: "2013-01-01"
+#   end: "2014-01-01"
+#   inclusive: 'left' # include start, not end
+
+planning_horizons: # investment years .... use these only for future years?
+  - 2015
+
+investment_period_discount_rate: 0.05
+
+
+allowed_carriers: [wind, solar, offwind, hydro, coal, nuclear, ng, geothermal]
+committable_carriers: []
+extendable_carriers: [solar, wind, offwind, ng, geothermal, coal, nuclear, battery]
+
+enable:
+  prepare_links_p_nom: false
+  retrieve_databundle: true
+  retrieve_cost_data: true
+  build_cutout: false
+  retrieve_cutout: true
+  build_natura_raster: false
+  retrieve_natura_raster: true
+  custom_busmap: false
+
+electricity:
+  voltages: [230., 345., 500., 765.]
+  voltage_simplified: 230
+  co2limit: 1.4728e+9 # 0.8 * 1.841e+9
+  co2base: 1.841e+9 #base_from_2020 Locations of the 1,841 MMmt of CO2 emissions from the current state of the grid in 2020.
+  gaslimit: false # global gas usage limit of X MWh_th
+
+  max_hours:
+    battery: 6
+    H2: 168
+
+  extendable_carriers:
+    Generator: [solar, wind, offwind, ng, geothermal, coal, nuclear]
+    StorageUnit: [battery] # battery, H2
+    Store: [battery] #[battery, H2]
+    Link: [] #[H2 pipeline]
+
+lines:
+  types:
+    220.: "Al/St 240/40 2-bundle 220.0"
+    300.: "Al/St 240/40 3-bundle 300.0"
+    380.: "Al/St 240/40 4-bundle 380.0"
+  s_max_pu: 0.7
+  s_nom_max: .inf
+  length_factor: 1.25
+  under_construction: 'zero' # 'zero': set capacity to zero, 'remove': remove, 'keep': with full capacity
+
+links:
+  p_max_pu: 1.0
+  p_nom_max: .inf
+  include_tyndp: true
+  under_construction: 'zero' # 'zero': set capacity to zero, 'remove': remove, 'keep': with full capacity
+
+renewable:
+  wind:
+    potential: simple # or conservative
+  solar:
+    potential: simple # or conservative
+  hydro:
+    potential: simple
+
+costs:
+  year: 2030
+  version: v0.4.0
+  rooftop_share: 0.14  # based on the potentials, assuming  (0.1 kW/m2 and 10 m2/person)
+  fill_values:
+    FOM: 0
+    VOM: 0
+    efficiency: 1
+    fuel: 0
+    investment: 0
+    lifetime: 25
+    "CO2 intensity": 0
+    "discount rate": 0.07
+  marginal_cost:
+    solar: 0.01
+    onwind: 0.015
+    offwind: 0.015
+    hydro: 0.
+    H2: 0.
+    electrolysis: 0.
+    fuel cell: 0.
+    battery: 0.
+    battery inverter: 0.
+  emission_prices: # in currency per tonne emission, only used with the option Ep
+    co2: 0.
+
+clustering:
+  simplify_network:
+    to_substations: false # network is simplified to nodes with positive or negative power injection (i.e. substations or offwind connections)
+    algorithm: kmeans # choose from: [hac, kmeans]
+    feature: solar+onwind-time # only for hac. choose from: [solar+onwind-time, solar+onwind-cap, solar-time, solar-cap, solar+offwind-cap] etc.
+  cluster_network:
+    algorithm: kmeans
+    feature: solar+onwind-time
+  aggregation_strategies:
+    generators:
+      p_nom_max: sum # use "min" for more conservative assumptions
+      p_nom_min: sum
+      p_min_pu: mean
+      marginal_cost: mean
+      committable: any
+      ramp_limit_up: max
+      ramp_limit_down: max
+      efficiency: mean
+
+solving:
+  options:
+    formulation: kirchhoff
+    load_shedding: false
+    noisy_costs: true
+    min_iterations: 4
+    max_iterations: 6
+    clip_p_max_pu: 0.01
+    skip_iterations: true
+    track_iterations: false
+    nhours: 1
+  solver:
+    name: gurobi
+    threads: 4
+    method: 2 # barrier
+    crossover: 0
+    BarConvTol: 1.e-5
+    FeasibilityTol: 1.e-6
+    AggFill: 0
+    PreDual: 0
+    GURO_PAR_BARDENSETHRESH: 200
+
+plotting:
+  map:
+    figsize: [7, 7]
+    boundaries: [-10.2, 29, 35,  72]
+    p_nom:
+      bus_size_factor: 5.e+4
+      linewidth_factor: 3.e+3
+
+  costs_max: 800
+  costs_threshold: 1
+
+  energy_max: 15000.
+  energy_min: -10000.
+  energy_threshold: 50.
+
+  vre_techs: ["onwind", "offwind-ac", "offwind-dc", "solar", "ror"]
+  conv_techs: ["OCGT", "CCGT", "Nuclear", "Coal"]
+  storage_techs: ["hydro+PHS", "battery", "H2"]
+  load_carriers: ["AC load"]
+  AC_carriers: ["AC line", "AC transformer"]
+  link_carriers: ["DC line", "Converter AC-DC"]
+  tech_colors:
+    "onwind" : "#235ebc"
+    "onshore wind" : "#235ebc"
+    'offwind' : "#6895dd"
+    'offwind-ac' : "#6895dd"
+    'offshore wind' : "#6895dd"
+    'offshore wind ac' : "#6895dd"
+    'offwind-dc' : "#74c6f2"
+    'offshore wind dc' : "#74c6f2"
+    "hydro" : "#08ad97"
+    "hydro+PHS" : "#08ad97"
+    "PHS" : "#08ad97"
+    "hydro reservoir" : "#08ad97"
+    'hydroelectricity' : '#08ad97'
+    "ror" : "#4adbc8"
+    "run of river" : "#4adbc8"
+    'solar' : "#f9d002"
+    'solar PV' : "#f9d002"
+    'solar thermal' : '#ffef60'
+    'biomass' : '#0c6013'
+    'solid biomass' : '#06540d'
+    'biogas' : '#23932d'
+    'waste' : '#68896b'
+    'geothermal' : '#ba91b1'
+    "OCGT" : "#d35050"
+    "gas" : "#d35050"
+    "natural gas" : "#d35050"
+    "CCGT" : "#b20101"
+    "nuclear" : "#ff9000"
+    "coal" : "#707070"
+    "lignite" : "#9e5a01"
+    "oil" : "#262626"
+    "H2" : "#ea048a"
+    "hydrogen storage" : "#ea048a"
+    "battery" : "#b8ea04"
+    "Electric load" : "#f9d002"
+    "electricity" : "#f9d002"
+    "lines" : "#70af1d"
+    "transmission lines" : "#70af1d"
+    "AC-AC" : "#70af1d"
+    "AC line" : "#70af1d"
+    "links" : "#8a1caf"
+    "HVDC links" : "#8a1caf"
+    "DC-DC" : "#8a1caf"
+    "DC link" : "#8a1caf"
+  nice_names:
+    OCGT: "Open-Cycle Gas"
+    CCGT: "Combined-Cycle Gas"
+    offwind-ac: "Offshore Wind (AC)"
+    offwind-dc: "Offshore Wind (DC)"
+    onwind: "Onshore Wind"
+    solar: "Solar"
+    PHS: "Pumped Hydro Storage"
+    hydro: "Reservoir & Dam"
+    battery: "Battery Storage"
+    H2: "Hydrogen Storage"
+    lines: "Transmission Lines"
+    ror: "Run of River"
+
