@@ -12,7 +12,7 @@ dependencies:
   - mamba # esp for windows build
 
 
-  - pypsa>=0.18
+  - pypsa==0.23.0
   - atlite>=0.2.5
 
   # Dependencies of the workflow itself
@@ -32,7 +32,7 @@ dependencies:
   - netcdf4
   - networkx
   - scipy
-  - shapely
+  - shapely>=2
   - progressbar2
   - pyomo
   - matplotlib
@@ -60,6 +60,5 @@ dependencies:
   - pip:
     - vresutils==0.3.1
     - tsam>=1.1.0
-    - git+https://github.com/Breakthrough-Energy/powersimdata.git
-    - git+https://github.com/pypsa/pypsa.git
+    # - git+https://github.com/pypsa/pypsa.git
     - gurobipy

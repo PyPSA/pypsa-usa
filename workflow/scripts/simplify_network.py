@@ -125,7 +125,7 @@ if __name__ == "__main__":
 
     # assign line lengths based on sub_id,
     # otherwise divide by zero error in networkclustering
-    n = assign_line_lengths(n, 1.25, busmap_to_sub, substations)
+    n = assign_line_lengths(n, 1.25, busmap_to_sub, substations) #should we be multiplying by 1.25 here?
     n.links["underwater_fraction"] = 0
 
     n = aggregate_to_substations(n, substations, busmap_to_sub.sub_id)

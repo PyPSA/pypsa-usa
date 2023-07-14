@@ -6,10 +6,7 @@ import pandas as pd
 import sys
 import logging
 import os
-
-sys.path.append(os.path.join("workflow", "subworkflows", "pypsa-eur", "scripts"))
 from add_electricity import load_costs, _add_missing_carriers_from_costs
-
 
 idx = pd.IndexSlice
 
@@ -27,8 +24,8 @@ def add_buses_from_file(n, fn_buses, interconnect="Western"):
     n.madd(
         "Bus",
         buses.index,
-        Pd=buses.Pd,
-        # type = buses.type, # do we need this?
+        Pd=buses.Pd, # used to decompose zone demand to bus demand
+        # type = buses.type # do we need this? 
         v_nom=buses.baseKV,
         zone_id=buses.zone_id,
     )
@@ -46,7 +43,8 @@ def add_branches_from_file(n, fn_branches):
         tech_branches = branches.query("branch_device_type == @tech")
         logger.info(f"Adding {len(tech_branches)} branches as {tech}s to the network.")
 
-        n.madd(
+        # S_base = 100 MVA
+        n.madd( 
             tech,
             tech_branches.index,
             bus0=tech_branches.from_bus_id,
@@ -64,6 +62,7 @@ def add_branches_from_file(n, fn_branches):
             interconnect=tech_branches.interconnect,
             type="Rail",
         )
+
     return n
 
 
@@ -90,15 +89,14 @@ def add_dclines_from_file(n, fn_dclines):
         bus1=dclines.to_bus_id,
         p_nom=dclines.Pt,
         carrier="DC",
-        underwater_fraction=0.0,
+        underwater_fraction=0.0, #DC line in bay is underwater, but does network have this line?
     )
 
     return n
 
 
 def add_conventional_plants_from_file(
-    n, fn_plants, conventional_carriers, extendable_carriers, costs
-):
+    n, fn_plants, conventional_carriers, extendable_carriers, costs):
 
     _add_missing_carriers_from_costs(n, costs, conventional_carriers)
 
@@ -136,8 +134,7 @@ def add_conventional_plants_from_file(
 
 
 def add_renewable_plants_from_file(
-    n, fn_plants, renewable_carriers, extendable_carriers, costs
-):
+    n, fn_plants, renewable_carriers, extendable_carriers, costs):
 
     _add_missing_carriers_from_costs(n, costs, renewable_carriers)
 
@@ -152,7 +149,7 @@ def add_renewable_plants_from_file(
 
         logger.info(f"Adding {len(tech_plants)} {tech} generators to the network.")
 
-        if tech in ["wind", "offwind"]:
+        if tech in ["wind", "offwind"]: #is this going to double add wind?
             p = pd.read_csv(snakemake.input["wind"], index_col=0)
         else:
             p = pd.read_csv(snakemake.input[tech], index_col=0)
@@ -238,7 +235,7 @@ if __name__ == "__main__":
     # create network
     n = pypsa.Network()
     n.set_snapshots(
-        pd.date_range(freq="h", start="2016-01-01", end="2017-01-01", closed="left")
+        pd.date_range(freq="h", start="2016-01-01", end="2017-01-01", inclusive="left")
     )
 
     # attach load costs
@@ -296,20 +293,35 @@ if __name__ == "__main__":
     n = add_demand_from_file(n, snakemake.input["demand"])
 
     # export bus2sub interconnect data
-    bus2sub = (
-        pd.read_csv(snakemake.input.bus2sub)
-        .query("interconnect == @interconnect")
-        .set_index("bus_id")
-    )
-    bus2sub.to_csv(snakemake.output.bus2sub)
+    logger.info(f"exporting bus2sub and sub data for {interconnect}")
+    if interconnect == "usa": #if usa interconnect do not filter bc all sub are in usa
+        bus2sub = (
+            pd.read_csv(snakemake.input.bus2sub)
+            .set_index("bus_id")
+        )
+        bus2sub.to_csv(snakemake.output.bus2sub)
+    else:
+        bus2sub = (
+            pd.read_csv(snakemake.input.bus2sub)
+            .query("interconnect == @interconnect")
+            .set_index("bus_id")
+        )
+        bus2sub.to_csv(snakemake.output.bus2sub)
 
     # export sub interconnect data
-    sub = (
-        pd.read_csv(snakemake.input.sub)
-        .query("interconnect == @interconnect")
-        .set_index("sub_id")
-    )
-    sub.to_csv(snakemake.output.sub)
+    if interconnect == "usa": #if usa interconnect do not filter bc all sub are in usa
+        sub = (
+            pd.read_csv(snakemake.input.sub)
+            .set_index("sub_id")
+        )
+        sub.to_csv(snakemake.output.sub)
+    else:
+        sub = (
+            pd.read_csv(snakemake.input.sub)
+            .query("interconnect == @interconnect")
+            .set_index("sub_id")
+        )
+        sub.to_csv(snakemake.output.sub)
 
     # export network
     n.export_to_netcdf(snakemake.output.network)
