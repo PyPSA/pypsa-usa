@@ -344,6 +344,7 @@ rule add_electricity:
         **{
             f"profile_{tech}": RESOURCES + "{interconnect}" + f"/profile_{tech}.nc"
             for tech in config["electricity"]["renewable_carriers"]
+            if tech != "hydro" #ignore hydro becuase we will use other method for attaching hydro
         },
         **{
             f"conventional_{carrier}_{attr}": fn
@@ -369,25 +370,6 @@ rule add_electricity:
         mem_mb=5000,
     script:
         "scripts/add_electricity.py"
-
-# rule build_powerplants:
-#     input:
-#         network=RESOURCES + "{interconnect}/elec_base_network_l.nc",
-#         plants="data/breakthrough_network/base_grid/plant.csv",
-#         wind="data/breakthrough_network/base_grid/wind.csv",
-#         solar="data/breakthrough_network/base_grid/solar.csv",
-#         hydro="data/breakthrough_network/base_grid/hydro.csv",
-#         tech_costs="repo_data/pypsa_eur_costs.csv",
-#         cutout=RESOURCES + "{interconnect}/cutout_{interconnect}_ERA5.nc"
-#     output:
-#         network=RESOURCES + "{interconnect}/elec_base_network_l_pp.nc",
-#     log:
-#         "logs/create_network/{interconnect}.log",
-#     threads: 4
-#     resources:
-#         mem=500,
-#     script:
-#         "scripts/build_powerplants.py"
 
 ################# ----------- Rules to Aggregate & Simplify Network ---------- #################
 rule simplify_network:
@@ -455,7 +437,7 @@ rule cluster_network:
         "scripts/cluster_network_eur.py"
 
 
-################# ----------- Rules to Optimize ---------- #################
+################# ----------- Rules to Optimize/Solve Network ---------- #################
 
 
 rule add_extra_components:
