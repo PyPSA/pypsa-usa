@@ -163,3 +163,29 @@ if __name__ == "__main__":
 
     # export network
     n.export_to_netcdf(snakemake.output.network)
+
+
+
+'''
+# Items from build_bus_regions to be added to this script
+        for ba in balancing_areas:
+
+            n.buses.loc[ba_locs.index, 'country'] = ba #adds abbreviation to the bus dataframe under the country column
+            n.buses.loc['37584', 'country'] = 'CISO-SDGE'   #hot fix for imperial beach substation being offshore
+
+        for i in range(len(offshore_shapes)):
+
+            n.buses.loc[offshore_busses.index, 'country'] = shape_name #adds offshore shape name to the bus dataframe under the country column
+
+
+   
+        ### Remove Extra OSW Busses and Branches ###
+        #Removes remaining nodes in network left with country = US (these are offshore busses that are not in the offshore shape or onshore shapes)
+        pdb.set_trace()
+        #To-do- add filter that checks if the buses being removed are over water. Currently this works for WECC since I have cleaned up the GEOJSON files
+        n.mremove("Line", n.lines.loc[n.lines.bus1.isin(n.buses.loc[n.buses.country=='US'].index)].index) 
+        n.mremove("Load", n.loads.loc[n.loads.bus.isin(n.buses.loc[n.buses.country=='US'].index)].index)
+        n.mremove("Generator", n.generators.loc[n.generators.bus.isin(n.buses.loc[n.buses.country=='US'].index)].index)
+        n.mremove("Bus",  n.buses.loc[n.buses.country=='US'].index)
+
+'''
