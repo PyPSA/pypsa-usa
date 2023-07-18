@@ -55,9 +55,13 @@ from shapely.geometry import Polygon
 from scipy.spatial import Voronoi
 import pdb
 
-from _helpers import configure_logging, REGION_COLS
+import log
+logger = log.setup_custom_logger('root')
+logger.debug('main message')
 
-logger = logging.getLogger(__name__)
+
+from _helpers import configure_logging, REGION_COLS
+from simplify_network import aggregate_to_substations
 
 def voronoi_partition_pts(points, outline):
     """
@@ -119,6 +123,7 @@ def assign_bus_ba(n, ba_region_shapes, offshore_shapes):
     return n
 
 if __name__ == "__main__":
+    logger = logging.getLogger(__name__)
     if 'snakemake' not in globals():
         from _helpers import mock_snakemake
         snakemake = mock_snakemake('build_bus_regions')
@@ -128,6 +133,17 @@ if __name__ == "__main__":
     balancing_areas = snakemake.config['BA_names']
 
     n = pypsa.Network(snakemake.input.base_network)
+    import pdb; pdb.set_trace()
+
+    #need to aggregate to substation to ensure building bus regions for only substation level nodes
+    n.generators['weight'] = 0 #temporary to enable clustering
+    busmap_to_sub = pd.read_csv(
+        snakemake.input.bus2sub, index_col=0, dtype={"sub_id": str}
+    )
+    busmap_to_sub.index = busmap_to_sub.index.astype(str)
+    substations = pd.read_csv(snakemake.input.sub, index_col=0)
+    substations.index = substations.index.astype(str)
+    n = aggregate_to_substations(n, substations, busmap_to_sub.sub_id)
 
     gpd_countries = gpd.read_file(snakemake.input.country_shapes).set_index('name')
     gpd_ba_shapes = gpd.read_file(snakemake.input.ba_region_shapes)
@@ -190,6 +206,7 @@ if __name__ == "__main__":
                     'geometry': voronoi_partition_pts(ba_locs.values, ba_shape),
                     'country': ba,
                 }))
+            
             n.buses.loc[ba_locs.index, 'country'] = ba #adds abbreviation to the bus dataframe under the country column
             n.buses.loc['37584', 'country'] = 'CISO-SDGE'   #hot fix for imperial beach substation being offshore
 
@@ -208,11 +225,12 @@ if __name__ == "__main__":
                 'country': shape_name,})
             offshore_regions_c = offshore_regions_c.loc[offshore_regions_c.area > 1e-2]
             offshore_regions.append(offshore_regions_c)
+
             n.buses.loc[offshore_busses.index, 'country'] = shape_name #adds offshore shape name to the bus dataframe under the country column
             
         ### Remove Extra OSW Busses and Branches ###
         #Removes remaining nodes in network left with country = US (these are offshore busses that are not in the offshore shape or onshore shapes)
-
+        pdb.set_trace()
         #To-do- add filter that checks if the buses being removed are over water. Currently this works for WECC since I have cleaned up the GEOJSON files
         n.mremove("Line", n.lines.loc[n.lines.bus1.isin(n.buses.loc[n.buses.country=='US'].index)].index) 
         n.mremove("Load", n.loads.loc[n.loads.bus.isin(n.buses.loc[n.buses.country=='US'].index)].index)
@@ -227,3 +245,5 @@ if __name__ == "__main__":
         pd.concat(offshore_regions, ignore_index=True).to_file(snakemake.output.regions_offshore)
     else:
         offshore_shapes.to_frame().to_file(snakemake.output.regions_offshore)
+
+#TODO: #14 Move all network modifications to build_base_network.

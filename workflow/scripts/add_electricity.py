@@ -131,6 +131,17 @@ def add_missing_carriers(n, carriers):
     if len(missing_carriers) > 0:
         n.madd("Carrier", missing_carriers)
 
+def _add_missing_carriers_from_costs(n, costs, carriers):
+    missing_carriers = pd.Index(carriers).difference(n.carriers.index)
+    if missing_carriers.empty: return
+
+    emissions_cols = costs.columns.to_series()\
+                           .loc[lambda s: s.str.endswith('_emissions')].values
+    suptechs = missing_carriers.str.split('-').str[0]
+    emissions = costs.loc[suptechs, emissions_cols].fillna(0.)
+    emissions.index = missing_carriers
+    n.import_components_from_dataframe(emissions, 'Carrier')
+
 
 def sanitize_carriers(n, config):
     """
@@ -807,7 +818,7 @@ def attach_breakthrough_renewable_plants(
 
     # hack to remove generators without capacity (required for SEG to work)
     # shouldn't exist, in fact...
-    import pdb;pdb.set_trace()
+    # import pdb;pdb.set_trace()
     p_max_pu_norm = n.generators_t.p_max_pu.max()
     remove_g = p_max_pu_norm[p_max_pu_norm == 0.0].index
     logger.info(
@@ -866,10 +877,10 @@ if __name__ == "__main__":
     if snakemake.config["generator_data"]["use_breakthrough"]:
         costs = costs.rename(index={"onwind": "wind", "OCGT": "ng"}) #changing cost data to match the breakthrough plant data #TODO: #10 change this so that breakthrough fuel types and plant types match the pypsa naming scheme.
 
-        ppl = load_powerplants_breakthrough(snakemake.input.powerplants)
+        ppl = load_powerplants_breakthrough(snakemake.input.plants)
         
         conventional_carriers = list(
-            set(snakemake.config["allowed_carriers"]).intersection(
+            set(snakemake.config['electricity']["conventional_carriers"]).intersection(
                 set(["coal", "ng", "nuclear", "oil", "geothermal"])
             )
         )
@@ -877,9 +888,10 @@ if __name__ == "__main__":
             n,
             snakemake.input["plants"],
             conventional_carriers,
-            snakemake.config["extendable_carriers"],
+            snakemake.config['electricity']["extendable_carriers"],
             costs,
         )
+
     if snakemake.config["generator_data"]["use_breakthrough_atlite"]:
         attach_wind_and_solar(
             n,
@@ -891,7 +903,7 @@ if __name__ == "__main__":
         )
         #temporarily adding hydro with breakthrough only data until I can correctly import hydro_data
         renewable_carriers = list(
-            set(snakemake.config["allowed_carriers"]).intersection(
+            set(snakemake.config['electricity']["renewable_carriers"]).intersection(
                 set(["hydro"])
             )
         )
@@ -899,13 +911,13 @@ if __name__ == "__main__":
             n,
             snakemake.input["plants"],
             renewable_carriers,
-            snakemake.config["extendable_carriers"],
+            snakemake.config['electricity']["extendable_carriers"],
             costs,
         )
 
     else: #use zenodo downloaded breakthrough renewable profile data
         renewable_carriers = list(
-            set(snakemake.config["allowed_carriers"]).intersection(
+            set(snakemake.config['electricity']["renewable_carriers"]).intersection(
                 set(["wind", "solar", "offwind", "hydro"])
             )
         )
@@ -913,7 +925,7 @@ if __name__ == "__main__":
             n,
             snakemake.input["plants"],
             renewable_carriers,
-            snakemake.config["extendable_carriers"],
+            snakemake.config['electricity']["extendable_carriers"],
             costs,
         )
         

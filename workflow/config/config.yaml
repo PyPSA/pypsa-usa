@@ -110,7 +110,7 @@ atlite:
     #   features: [influx, temperature]
 
 electricity:
-  conventional_carriers: [nuclear, oil, OCGT, CCGT, coal, geothermal, biomass]
+  conventional_carriers: [nuclear, oil, ng, coal, geothermal]
   renewable_carriers: [wind, solar, offwind, hydro]
   voltages: [230., 345., 500., 765.]
   voltage_simplified: 230
@@ -122,12 +122,14 @@ electricity:
     battery: 6
     H2: 168
 
-  # extendable_carriers: [solar, wind, offwind, ng, coal, nuclear, battery] #used in original build_powerplants rule not needed in add_electricity
   extendable_carriers:
     Generator: [solar, wind, offwind, ng, geothermal, coal, nuclear]
     StorageUnit: [battery] # battery, H2
     Store: [battery] #[battery, H2]
     Link: [] #[H2 pipeline]
+
+
+# extendable_carriers: [solar, wind, offwind, ng, coal, nuclear, battery] #used in original build_powerplants rule not needed in add_electricity
 
 renewable:
   wind:
@@ -347,6 +349,8 @@ plotting:
   link_carriers: ["DC line", "Converter AC-DC"]
   tech_colors:
     "onwind" : "#235ebc"
+    "wind" : "#235ebc"
+
     "onshore wind" : "#235ebc"
     'offwind' : "#6895dd"
     'offwind-ac' : "#6895dd"
@@ -371,6 +375,7 @@ plotting:
     'geothermal' : '#ba91b1'
     "OCGT" : "#d35050"
     "gas" : "#d35050"
+    "ng" : "#d35050"
     "natural gas" : "#d35050"
     "CCGT" : "#b20101"
     "nuclear" : "#ff9000"
@@ -386,10 +391,13 @@ plotting:
     "transmission lines" : "#70af1d"
     "AC-AC" : "#70af1d"
     "AC line" : "#70af1d"
+    "AC" : "#70af1d"
     "links" : "#8a1caf"
     "HVDC links" : "#8a1caf"
     "DC-DC" : "#8a1caf"
     "DC link" : "#8a1caf"
+    "DC" : "#8a1caf"
+    
   nice_names:
     OCGT: "Open-Cycle Gas"
     CCGT: "Combined-Cycle Gas"
