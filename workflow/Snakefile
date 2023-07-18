@@ -328,7 +328,7 @@ rule build_renewable_profiles:
             if "ship_threshold" in config["renewable"][w.technology].keys()
             else []
         ),
-        country_shapes=RESOURCES + "{interconnect}/country_shapes.geojson", #review if i should use country or BA shapes (onshore shapes) here 
+        country_shapes=RESOURCES + "{interconnect}/country_shapes.geojson", 
         offshore_shapes=RESOURCES + "{interconnect}/offshore_shapes.geojson",
         regions=lambda w: (
             RESOURCES + "{interconnect}/regions_onshore.geojson"
