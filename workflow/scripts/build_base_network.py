@@ -87,6 +87,7 @@ def add_dclines_from_file(n, fn_dclines):
 
 def assign_bus_ba(PATH_BUS, PATH_BA_SHP, PATH_OFFSHORE_SHP, bus_locs):
     bus_df = pd.read_csv(PATH_BUS, index_col=0)
+    bus_df = pd.merge(bus_df, bus_locs[['lat','lon']], left_index=True, right_index=True, how='left')
     bus_locs["geometry"] = gpd.points_from_xy(bus_locs["lon"], bus_locs["lat"])
     bus_df_locs = pd.merge(bus_df, bus_locs['geometry'], left_index=True, right_index=True, how='left') #merging bus data w/ geometry data
 

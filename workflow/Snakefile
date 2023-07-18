@@ -233,9 +233,32 @@ rule build_base_network:
     script:
         "scripts/build_base_network.py"
 
+# TODO: #13 move build_bus_regions higher in the workflow to use base_network
+rule build_bus_regions:
+    params:
+        balancing_authorities=config["balancing_authorities"],
+    input:
+        country_shapes= RESOURCES + "{interconnect}/country_shapes.geojson",
+        ba_region_shapes=RESOURCES + "{interconnect}/onshore_shapes.geojson",
+        offshore_shapes=RESOURCES + "{interconnect}/offshore_shapes.geojson",
+        base_network=RESOURCES + "{interconnect}/elec_base_network.nc",
+        bus2sub="data/breakthrough_network/base_grid/{interconnect}/bus2sub.csv",
+        sub="data/breakthrough_network/base_grid/{interconnect}/sub.csv",
+    output:
+        regions_onshore=RESOURCES + "{interconnect}/regions_onshore.geojson",
+        regions_offshore=RESOURCES + "{interconnect}/regions_offshore.geojson",
+        network=RESOURCES + "{interconnect}/elec_base_network_m.nc",
+    log:
+        "logs/{interconnect}/build_bus_regions_s.log",
+    threads: 1
+    resources:
+        mem_mb=1000,
+    script:
+        "scripts/build_bus_regions.py"
+
 rule build_load_data:
     input:
-        network=RESOURCES + "{interconnect}/elec_base_network.nc",
+        network=RESOURCES + "{interconnect}/elec_base_network_m.nc",
         demand_breakthrough_2016=DATA + "breakthrough_network/base_grid/demand.csv",
         ads_2032 = RESOURCES + "WECC_ADS/downloads/2032/Public Data/Hourly Profiles in CSV format",
         ads_2030 = RESOURCES + "WECC_ADS/downloads/2030/WECC 2030 ADS PCM 2020-12-16 (V1.5) Public Data/CSV Shape Files",
@@ -308,9 +331,9 @@ rule build_renewable_profiles:
         country_shapes=RESOURCES + "{interconnect}/country_shapes.geojson",
         offshore_shapes=RESOURCES + "{interconnect}/offshore_shapes.geojson",
         regions=lambda w: (
-            RESOURCES + "{interconnect}/regions_onshore_s.geojson"
+            RESOURCES + "{interconnect}/regions_onshore.geojson"
             if w.technology in ("onwind", "solar")
-            else RESOURCES + "{interconnect}/regions_offshore_S.geojson"
+            else RESOURCES + "{interconnect}/regions_offshore.geojson"
         ),
         cutout=lambda w: "cutouts/"
         + CDIR + "cutout_{interconnect}_"
@@ -354,8 +377,8 @@ rule add_electricity:
         },
         base_network=RESOURCES + "{interconnect}/elec_base_network_l.nc",
         tech_costs="repo_data/pypsa_eur_costs.csv",
-        regions=RESOURCES + "{interconnect}/regions_onshore_s.geojson",
-        powerplants="data/breakthrough_network/base_grid/plant.csv",
+        regions=RESOURCES + "{interconnect}/regions_onshore.geojson",
+        plants="data/breakthrough_network/base_grid/plant.csv",
         hydro="data/breakthrough_network/base_grid/hydro.csv",
         wind="data/breakthrough_network/base_grid/wind.csv",
         solar="data/breakthrough_network/base_grid/solar.csv",
@@ -387,32 +410,12 @@ rule simplify_network:
     script:
         "scripts/simplify_network.py"
 
-rule build_bus_regions:
-    params:
-        balancing_authorities=config["balancing_authorities"],
-    input:
-        country_shapes= RESOURCES + "{interconnect}/country_shapes.geojson",
-        ba_region_shapes=RESOURCES + "{interconnect}/onshore_shapes.geojson",
-        offshore_shapes=RESOURCES + "{interconnect}/offshore_shapes.geojson",
-        base_network=RESOURCES + "{interconnect}/elec_s.nc",
-    output:
-        regions_onshore=RESOURCES + "{interconnect}/regions_onshore_s.geojson",
-        regions_offshore=RESOURCES + "{interconnect}/regions_offshore_s.geojson",
-        network=RESOURCES + "{interconnect}/elec_ss.nc",
-    log:
-        "logs/{interconnect}/build_bus_regions_s.log",
-    threads: 1
-    resources:
-        mem_mb=1000,
-    script:
-        "scripts/build_bus_regions.py"
-
 
 rule cluster_network:
     input:
-        network=RESOURCES + "{interconnect}/elec_ss.nc",
-        regions_onshore=RESOURCES + "{interconnect}/regions_onshore_s.geojson",
-        regions_offshore=RESOURCES + "{interconnect}/regions_offshore_s.geojson",
+        network=RESOURCES + "{interconnect}/elec_s.nc",
+        regions_onshore=RESOURCES + "{interconnect}/regions_onshore.geojson",
+        regions_offshore=RESOURCES + "{interconnect}/regions_offshore.geojson",
         busmap="data/breakthrough_network/base_grid/{interconnect}/bus2sub.csv",
         custom_busmap=(
             "data/{interconnect}/custom_busmap_{clusters}.csv"
@@ -434,7 +437,7 @@ rule cluster_network:
     resources:
         mem_mb=6000,
     script:
-        "scripts/cluster_network_eur.py"
+        "/scripts/cluster_network_eur.py"
 
 
 ################# ----------- Rules to Optimize/Solve Network ---------- #################
@@ -549,7 +552,7 @@ rule report:
         pdflatex {input.tex}
         """
 
-# Create DAG with- snakemake --dag -F | sed -n "/digraph/,/}/p" | dot -Tpng -o repo_data/workflow.png
+# Create DAG with- snakemake --dag -F | sed -n "/digraph/,\$p" | dot -Tpng -o repo_data/workflow.png
 rule dag:
     message:
         "Creating DAG of workflow."

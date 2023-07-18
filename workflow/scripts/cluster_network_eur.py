@@ -392,7 +392,7 @@ if __name__ == "__main__":
         line_length_factor = snakemake.config['lines']['length_factor']
         Nyears = n.snapshot_weightings.objective.sum()/8760
 
-        hvac_overhead_cost = (load_costs(snakemake.input.tech_costs, snakemake.config['costs'], snakemake.config['electricity'], Nyears)
+        hvac_overhead_cost = (load_costs(snakemake.input.tech_costs, snakemake.config['costs'], snakemake.config['electricity']['max_hours'], Nyears)
                               .at['HVAC overhead', 'capital_cost'])
 
         def consense(x):
