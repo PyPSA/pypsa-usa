@@ -3,7 +3,7 @@
 scenarios:
   all:
     interconnect: western #"usa|texas|western|eastern"
-    clusters: 10
+    clusters: 30
     opts:
       [
         Co2L1.0,
@@ -93,7 +93,7 @@ atlite:
       # module: era5
     ERA5_2019:
       module: era5 # in priority order
-      x: [-12., 35.]
+      x: [-12., 35.] #replace these. Would be used for build cutout
       y: [33., 72]
       dx: 0.3
       dy: 0.3
@@ -131,7 +131,7 @@ electricity:
 
 # extendable_carriers: [solar, wind, offwind, ng, coal, nuclear, battery] #used in original build_powerplants rule not needed in add_electricity
 
-renewable:
+renewable: #all keys labeled corrine are actually copernicus codes. Using the name corrine bc using the pypsa-eur convention
   wind:
     cutout: era5_2019
     resource:
@@ -169,7 +169,7 @@ renewable:
     # proxy for wake losses
     # from 10.1016/j.energy.2018.08.153
     # until done more rigorously in #153
-    copernicus:
+    corine:
       grid_codes: [80, 200]
     natura: true
     max_depth: 50
@@ -188,7 +188,7 @@ renewable:
     # proxy for wake losses
     # from 10.1016/j.energy.2018.08.153
     # until done more rigorously in #153
-    copernicus:
+    corine:
       grid_codes: [80, 200]
     natura: true
     max_depth: 50
@@ -211,7 +211,7 @@ renewable:
     # sector: The economic potential of photovoltaics and concentrating solar
     # power." Applied Energy 135 (2014): 704-720.
     correction_factor: 0.854337
-    copernicus:
+    corine:
       grid_codes: [20, 30, 40, 50, 60, 90, 100]
     natura: true
     potential: simple # or conservative

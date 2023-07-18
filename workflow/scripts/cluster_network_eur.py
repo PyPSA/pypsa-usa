@@ -366,7 +366,7 @@ if __name__ == "__main__":
     configure_logging(snakemake)
 
     n = pypsa.Network(snakemake.input.network)
-
+    import pdb; pdb.set_trace()
     focus_weights = snakemake.config.get('focus_weights', None)
 
     renewable_carriers = pd.Index([tech
