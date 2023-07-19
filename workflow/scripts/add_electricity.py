@@ -596,7 +596,6 @@ def attach_hydro(n, costs, ppl, profile_hydro, hydro_capacities, carriers, **par
             inflow=inflow_t.loc[:, hydro.index],
         )
 
-
 def attach_extendable_generators(n, costs, ppl, carriers):
     logger.warning(
         "The function `attach_extendable_generators` is deprecated in v0.5.0."
@@ -690,6 +689,37 @@ def attach_OPSD_renewables(n, tech_map):
         n.generators.p_nom.update(gens.bus.map(caps).dropna())
         n.generators.p_nom_min.update(gens.bus.map(caps).dropna())
 
+def attach_breakthrough_renewable_bus_capacities(n, all_be_plants, renewable_carriers):
+    # logger.info(f"Using breakthrough carriers to attach {tech_string} capacity to plants.")
+
+    plants = pd.read_csv(all_be_plants, dtype={"bus_id": str}, index_col=0).query(
+        "bus_id in @n.buses.index"
+    )
+    plants.replace(["wind_offshore"], ["offwind"], inplace=True)
+    import pdb; pdb.set_trace()
+    for tech in renewable_carriers:
+        tech_plants = plants.query("type == @tech")
+        tech_plants.index = tech_plants.index.astype(str)
+        logger.info(f"Adding {len(plants)} {tech} generators to the network.")
+
+        tech_plants = plants.query("type == @tech")
+        tech_plants.index = tech_plants.index.astype(str)
+        logger.info(f"Adding {len(tech_plants)} {tech} generator capacities to the network.")
+
+        gens = n.generators[lambda plants: plants.type == tech]
+        buses = n.buses.loc[gens.bus.unique()]
+        gens_per_bus = gens.groupby("bus").p_nom.count()
+
+        # caps = map_country_bus(df.query("Fueltype == @fueltype and lat == lat"), buses)
+        # caps = caps.groupby(["bus"]).Capacity.sum()
+        # caps = caps / gens_per_bus.reindex(caps.index, fill_value=1)
+
+        # n.generators.p_nom.update(gens.bus.map(caps).dropna())
+        # n.generators.p_nom_min.update(gens.bus.map(caps).dropna())
+
+
+
+
 def estimate_renewable_capacities(n, year, tech_map, expansion_limit, countries):
     if not len(countries) or not len(tech_map):
         return
@@ -730,7 +760,7 @@ def estimate_renewable_capacities(n, year, tech_map, expansion_limit, countries)
                 expansion_limit * n.generators.loc[tech_i, "p_nom_min"]
             )
 
-def attach_conventional_breakthrough_plants(
+def attach_breakthrough_conventional_plants(
     n, fn_plants, conventional_carriers, extendable_carriers, costs):
 
     _add_missing_carriers_from_costs(n, costs, conventional_carriers)
@@ -818,7 +848,7 @@ def attach_breakthrough_renewable_plants(
             marginal_cost=tech_plants.GenIOB * tech_plants.GenFuelCost, #(MMBTu/MW) * (USD/MMBTu) = USD/MW
             marginal_cost_quadratic = tech_plants.GenIOC * tech_plants.GenFuelCost, 
             capital_cost=costs.at[tech, "capital_cost"],
-            p_max_pu=p_max_pu,
+            p_max_pu=p_max_pu, #timeseries of max power output pu
             p_nom_extendable=p_nom_extendable,
             carrier=tech,
             weight=1.0,
@@ -877,24 +907,26 @@ if __name__ == "__main__":
 
     if snakemake.config["generator_data"]["use_breakthrough"]:
         costs = costs.rename(index={"onwind": "wind", "OCGT": "ng"}) #changing cost data to match the breakthrough plant data #TODO: #10 change this so that breakthrough fuel types and plant types match the pypsa naming scheme.
-        ppl = load_powerplants_breakthrough(snakemake.input.plants)
+        # ppl = load_powerplants_breakthrough(snakemake.input.plants)
         conventional_carriers = list(
             set(snakemake.config['electricity']["conventional_carriers"]).intersection(
                 set(["coal", "ng", "nuclear", "oil", "geothermal"])
             )
         )
-        n = attach_conventional_breakthrough_plants(
+        n = attach_breakthrough_conventional_plants(
             n,
             snakemake.input["plants"],
             conventional_carriers,
             snakemake.config['electricity']["extendable_carriers"],
             costs,
         )
+
     if snakemake.config["generator_data"]["use_breakthrough_atlite"]:
         costs = costs.rename(index={"offwind-ac-connection-submarine": "offwind-connection-submarine",
                                     "offwind-ac-connection-underground": "offwind-connection-underground",
                                     'offwind-ac-station': 'offwind-station',
-                                     "onwind":"wind"}) #temporary fix. should rename carriers instead of changing cost names
+                                     "onwind":"wind"}) #temporary fix. should rename carriers instead of changing cost names. w TODO#10
+    
         attach_wind_and_solar(
             n,
             costs,
@@ -904,6 +936,13 @@ if __name__ == "__main__":
             params.length_factor,
         )
 
+        renewable_carriers = list(
+            set(snakemake.config['electricity']["renewable_carriers"]).intersection(
+                set(["wind", "solar", "offwind"])
+            )
+        )
+
+        attach_breakthrough_renewable_bus_capacities(n, snakemake.input["plants"], renewable_carriers)
         # estimate_renewable_caps = params.electricity["estimate_renewable_capacities"]
         # if estimate_renewable_caps["enable"]:
         #     tech_map = estimate_renewable_caps["technology_mapping"]

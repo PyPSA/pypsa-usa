@@ -69,8 +69,8 @@ load_data:
   # use_cec: true #if set true uses cec data, if false uses ads/BE data
 
 generator_data:
-  use_breakthrough: false #need to test each of these
-  use_breakthrough_atlite: true # will currently still use breaktrough hydro data with atlite solar and wind. might have some issues with timestamps
+  use_breakthrough: true #enables BE thermal generators
+  use_breakthrough_atlite: true # true= BE renewable gens with atlite calculated timeseries. false= BE renewable gens with BE timeseries
   use_eia: False #not implemented yet
 
 snapshots:
