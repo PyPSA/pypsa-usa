@@ -69,8 +69,8 @@ load_data:
   # use_cec: true #if set true uses cec data, if false uses ads/BE data
 
 generator_data:
-  use_breakthrough: true #need to test each of these
-  use_breakthrough_atlite: false # will currently still use breaktrough hydro data with atlite solar and wind. might have some issues with timestamps
+  use_breakthrough: false #need to test each of these
+  use_breakthrough_atlite: true # will currently still use breaktrough hydro data with atlite solar and wind. might have some issues with timestamps
   use_eia: False #not implemented yet
 
 snapshots:
@@ -127,9 +127,6 @@ electricity:
     StorageUnit: [battery] # battery, H2
     Store: [battery] #[battery, H2]
     Link: [] #[H2 pipeline]
-
-
-# extendable_carriers: [solar, wind, offwind, ng, coal, nuclear, battery] #used in original build_powerplants rule not needed in add_electricity
 
 renewable: #all keys labeled corrine are actually copernicus codes. Using the name corrine bc using the pypsa-eur convention
   wind:
