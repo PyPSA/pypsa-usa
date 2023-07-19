@@ -110,7 +110,7 @@ if __name__ == "__main__":
         os.chdir(os.path.dirname(os.path.abspath(__file__)))
         snakemake = mock_snakemake("build_cutout", cutout="africa-2013-era5")
     configure_logging(snakemake)
-    import pdb; pdb.set_trace()
+
     cutout_params = snakemake.config["atlite"]["cutouts"]['era5']
     snapshots = pd.date_range(freq="h", **snakemake.config["snapshots"])
     time = [snapshots[0], snapshots[-1]]

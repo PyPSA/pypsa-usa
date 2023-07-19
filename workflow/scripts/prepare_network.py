@@ -221,7 +221,7 @@ if __name__ == "__main__":
     # pdb.set_trace()
     n = pypsa.Network(snakemake.input[0])
     Nyears = n.snapshot_weightings.objective.sum() / 8760.
-    costs = load_costs(snakemake.input.tech_costs, snakemake.config['costs'], snakemake.config['electricity'], Nyears)
+    costs = load_costs(snakemake.input.tech_costs, snakemake.config['costs'], snakemake.config['electricity']['max_hours'], Nyears)
 
     set_line_s_max_pu(n, snakemake.config['lines']['s_max_pu'])
 

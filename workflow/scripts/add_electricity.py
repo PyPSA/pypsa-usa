@@ -132,6 +132,7 @@ def add_missing_carriers(n, carriers):
         n.madd("Carrier", missing_carriers)
 
 def _add_missing_carriers_from_costs(n, costs, carriers):
+
     missing_carriers = pd.Index(carriers).difference(n.carriers.index)
     if missing_carriers.empty: return
 
@@ -173,6 +174,7 @@ def sanitize_carriers(n, config):
     for c in n.iterate_components():
         if "carrier" in c.df:
             add_missing_carriers(n, c.df.carrier)
+
 
     carrier_i = n.carriers.index
     nice_names = (
@@ -780,7 +782,7 @@ def attach_breakthrough_renewable_plants(
         intersection = set(p.columns).intersection(tech_plants.index) #filters by plants ID for the plants of type tech
         p = p[list(intersection)]
 
-        # import pdb; pdb.set_trace()
+
         Nhours = len(n.snapshots)
         p = p.iloc[:Nhours,:]        #hotfix to fit 2016 renewable data to load data
 
@@ -818,7 +820,7 @@ def attach_breakthrough_renewable_plants(
 
     # hack to remove generators without capacity (required for SEG to work)
     # shouldn't exist, in fact...
-    # import pdb;pdb.set_trace()
+
     p_max_pu_norm = n.generators_t.p_max_pu.max()
     remove_g = p_max_pu_norm[p_max_pu_norm == 0.0].index
     logger.info(
@@ -827,6 +829,18 @@ def attach_breakthrough_renewable_plants(
     n.mremove("Generator", remove_g)
 
     return n
+
+def add_nice_carrier_names(n, config):
+    carrier_i = n.carriers.index
+    nice_names = (pd.Series(config['plotting']['nice_names'])
+                  .reindex(carrier_i).fillna(carrier_i.to_series().str.title()))
+    n.carriers['nice_name'] = nice_names
+    colors = pd.Series(config['plotting']['tech_colors']).reindex(carrier_i)
+    if colors.isna().any():
+        missing_i = list(colors.index[colors.isna()])
+        logger.warning(f'tech_colors for carriers {missing_i} not defined in config.')
+    n.carriers['color'] = colors
+
 
 if __name__ == "__main__":
     if "snakemake" not in globals():
@@ -916,6 +930,7 @@ if __name__ == "__main__":
         )
 
     else: #use zenodo downloaded breakthrough renewable profile data
+
         renewable_carriers = list(
             set(snakemake.config['electricity']["renewable_carriers"]).intersection(
                 set(["wind", "solar", "offwind", "hydro"])

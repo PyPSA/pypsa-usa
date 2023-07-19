@@ -230,7 +230,7 @@ if __name__ == "__main__":
         ### Remove Extra OSW Busses and Branches ###
         #Removes remaining nodes in network left with country = US (these are offshore busses that are not in the offshore shape or onshore shapes)
 
-        pdb.set_trace()
+
         #To-do- add filter that checks if the buses being removed are over water. Currently this works for WECC since I have cleaned up the GEOJSON files
         # n.mremove("Line", n.lines.loc[n.lines.bus1.isin(n.buses.loc[n.buses.country=='US'].index)].index) 
         # n.mremove("Load", n.loads.loc[n.loads.bus.isin(n.buses.loc[n.buses.country=='US'].index)].index)
