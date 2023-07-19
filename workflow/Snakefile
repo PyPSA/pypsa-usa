@@ -304,54 +304,54 @@ rule build_ship_raster:
     script:
         "subworkflows/pypsa-eur/scripts/build_ship_raster.py"
 
-
-rule build_renewable_profiles:
-    params:
-        renewable=config["renewable"],
-    input:
-        base_network=RESOURCES + "{interconnect}/elec_base_network_l.nc",
-        corine=ancient("data/pypsa_earth/copernicus/PROBAV_LC100_global_v3.0.1_2019-nrt_Discrete-Classification-map_EPSG-4326.tif"),
-        natura=lambda w: (
-            DATA + "natura.tiff"
-            if config["renewable"][w.technology]["natura"]
-            else []
-        ),
-        gebco=ancient(
-            lambda w: (
-                DATA + "pypsa_earth/gebco/GEBCO_2021_TID.nc"
-                if config["renewable"][w.technology].get("max_depth")
+if config['generator_data']['use_breakthrough_atlite']:
+    rule build_renewable_profiles:
+        params:
+            renewable=config["renewable"],
+        input:
+            base_network=RESOURCES + "{interconnect}/elec_base_network_l.nc",
+            corine=ancient("data/pypsa_earth/copernicus/PROBAV_LC100_global_v3.0.1_2019-nrt_Discrete-Classification-map_EPSG-4326.tif"),
+            natura=lambda w: (
+                DATA + "natura.tiff"
+                if config["renewable"][w.technology]["natura"]
                 else []
-            )
-        ),
-        ship_density=lambda w: (
-            RESOURCES + "{interconnect}/shipdensity_raster.tif"
-            if "ship_threshold" in config["renewable"][w.technology].keys()
-            else []
-        ),
-        country_shapes=RESOURCES + "{interconnect}/country_shapes.geojson", 
-        offshore_shapes=RESOURCES + "{interconnect}/offshore_shapes.geojson",
-        regions=lambda w: (
-            RESOURCES + "{interconnect}/regions_onshore.geojson"
-            if w.technology in ("onwind", "solar")
-            else RESOURCES + "{interconnect}/regions_offshore.geojson"
-        ),
-        cutout=lambda w: "cutouts/"
-        + CDIR + "cutout_{interconnect}_"
-        + config["renewable"][w.technology]["cutout"]
-        + ".nc",
-    output:
-        profile=RESOURCES + "{interconnect}/profile_{technology}.nc",
-    log:
-        LOGS + "{interconnect}/build_renewable_profile_{technology}.log",
-    benchmark:
-        BENCHMARKS + "{interconnect}/build_renewable_profiles_{technology}"
-    threads: ATLITE_NPROCESSES
-    resources:
-        mem_mb=ATLITE_NPROCESSES * 5000,
-    wildcard_constraints:
-        technology="(?!hydro).*",  # Any technology other than hydro
-    script:
-        "subworkflows/pypsa-eur/scripts/build_renewable_profiles.py"
+            ),
+            gebco=ancient(
+                lambda w: (
+                    DATA + "pypsa_earth/gebco/GEBCO_2021_TID.nc"
+                    if config["renewable"][w.technology].get("max_depth")
+                    else []
+                )
+            ),
+            ship_density=lambda w: (
+                RESOURCES + "{interconnect}/shipdensity_raster.tif"
+                if "ship_threshold" in config["renewable"][w.technology].keys()
+                else []
+            ),
+            country_shapes=RESOURCES + "{interconnect}/country_shapes.geojson", 
+            offshore_shapes=RESOURCES + "{interconnect}/offshore_shapes.geojson",
+            regions=lambda w: (
+                RESOURCES + "{interconnect}/regions_onshore.geojson"
+                if w.technology in ("onwind", "solar")
+                else RESOURCES + "{interconnect}/regions_offshore.geojson"
+            ),
+            cutout=lambda w: "cutouts/"
+            + CDIR + "cutout_{interconnect}_"
+            + config["renewable"][w.technology]["cutout"]
+            + ".nc",
+        output:
+            profile=RESOURCES + "{interconnect}/profile_{technology}.nc",
+        log:
+            LOGS + "{interconnect}/build_renewable_profile_{technology}.log",
+        benchmark:
+            BENCHMARKS + "{interconnect}/build_renewable_profiles_{technology}"
+        threads: ATLITE_NPROCESSES
+        resources:
+            mem_mb=ATLITE_NPROCESSES * 5000,
+        wildcard_constraints:
+            technology="(?!hydro).*",  # Any technology other than hydro
+        script:
+            "subworkflows/pypsa-eur/scripts/build_renewable_profiles.py"
 
 # TODO: Combine add_electricity with build_powerplants 
 rule add_electricity:
@@ -437,7 +437,7 @@ rule cluster_network:
     resources:
         mem_mb=6000,
     script:
-        "/scripts/cluster_network_eur.py"
+        "scripts/cluster_network_eur.py"
 
 
 ################# ----------- Rules to Optimize/Solve Network ---------- #################

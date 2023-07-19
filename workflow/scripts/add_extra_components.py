@@ -200,9 +200,9 @@ if __name__ == "__main__":
 
     n = pypsa.Network(snakemake.input.network)
     elec_config = snakemake.config['electricity']
-    # pdb.set_trace()
+
     Nyears = n.snapshot_weightings.objective.sum() / 8760.
-    costs = load_costs(snakemake.input.tech_costs, snakemake.config['costs'], elec_config, Nyears)
+    costs = load_costs(snakemake.input.tech_costs, snakemake.config['costs'], elec_config['max_hours'], Nyears)
 
     attach_storageunits(n, costs, elec_config)
     attach_stores(n, costs, elec_config)
