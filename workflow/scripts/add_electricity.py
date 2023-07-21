@@ -377,14 +377,62 @@ def attach_wind_and_solar(
                 )
             else:
                 capital_cost = costs.at[car, "capital_cost"]
-            # import pdb; pdb.set_trace()
             #TODO: #15 When to simplify network to substation level?
-            bus2sub = pd.read_csv(input_profiles.bus2sub, dtype=str)
-            bus2sub = bus2sub[bus2sub["sub_id"].isin(ds.indexes["bus"])]
-            bus2sub = bus2sub.set_index("sub_id")
-            bus2sub = bus2sub.to_dict()["bus_id"]
-            ds["bus"] = ds.indexes["bus"].map(bus2sub)
+            #This is a temporary fix. Here I reassign the renewable profiles to "bus_ids" according to the BE network as opposed to currently used "sub_ids"... This is caused by the fact that the build_renewable_profiles uses a simplified network where the substation IDs are labeled as bus IDs.
 
+            # n_bus2sub = bus2sub.set_index("bus_id").to_dict()["sub_id"]
+            # n.buses["sub_id"] = n.buses.index.to_series().map(n_bus2sub)
+            '''
+            sub2bus = bus2sub[bus2sub["sub_id"].isin(ds.indexes["bus"])]
+            # sub2bus = sub2bus.set_index("sub_id")
+            # sub2bus = sub2bus.to_dict()["bus_id"]
+            # ds["bus"] = ds.indexes["bus"].map(bus2sub)
+
+            ds2 = xr.Dataset({"bus":sub2bus.sub_id,"bus_id":sub2bus.bus_id})
+            ds2 = ds2.set_coords("bus").swap_dims({"dim_0":"bus"}).drop_vars("dim_0")
+            ds2 = ds2.swap_dims({"bus":"bus_id"})
+            ds2 = ds2.swap_dims({"bus_id":"bus"}) 
+            ds2.drop_duplicates("bus")
+            DS2  =xr.combine_by_coords([ds,DS])
+            
+
+            (Pdb) DS.bus.to_dataframe().bus.value_counts()
+            bus
+            35494    16
+            37284    14
+            39760    14
+            35465    13
+            39330    13
+
+            * bus      (bus) object '35494' '35494' '35494' ... '35494' '35494' '35494'
+                bus_id   (bus) object '2011011' '2011012' '2011013' ... '2011025' '2011026'
+            '''
+            bus2sub = pd.read_csv(input_profiles.bus2sub, dtype=str).drop("interconnect", axis=1)
+            bus_list = ds.bus.to_dataframe("sub_id").merge(bus2sub).bus_id.astype(str).values
+            p_nom_max_bus = ds["p_nom_max"].to_dataframe().merge(bus2sub,left_on="bus", right_on="sub_id").p_nom_max
+            weight_bus = ds["weight"].to_dataframe().merge(bus2sub,left_on="bus", right_on="sub_id").weight
+            bus_profiles = ds["profile"].transpose("time", "bus").to_pandas().T.merge(bus2sub,left_on="bus", right_on="sub_id").set_index('bus_id').drop(columns='sub_id').T
+            
+            logger.info(f"Adding {car} capacity-factor profiles to the network.")
+            import pdb; pdb.set_trace()
+
+            n.madd(
+                "Generator",
+                bus_list,
+                " " + car,
+                bus=bus_list,
+                carrier=car,
+                p_nom_extendable=car in extendable_carriers["Generator"],
+                p_nom_max=p_nom_max_bus,
+                weight=weight_bus,
+                marginal_cost=costs.at[supcar, "marginal_cost"],
+                capital_cost=capital_cost,
+                efficiency=costs.at[supcar, "efficiency"],
+                p_max_pu=bus_profiles,
+            )
+
+
+            '''
             n.madd(
                 "Generator",
                 ds.indexes["bus"],
@@ -399,6 +447,7 @@ def attach_wind_and_solar(
                 efficiency=costs.at[supcar, "efficiency"],
                 p_max_pu=ds["profile"].transpose("time", "bus").to_pandas(),
             )
+            '''
 
 
 def attach_conventional_generators(
@@ -689,35 +738,31 @@ def attach_OPSD_renewables(n, tech_map):
         n.generators.p_nom.update(gens.bus.map(caps).dropna())
         n.generators.p_nom_min.update(gens.bus.map(caps).dropna())
 
-def attach_breakthrough_renewable_bus_capacities(n, all_be_plants, renewable_carriers):
-    # logger.info(f"Using breakthrough carriers to attach {tech_string} capacity to plants.")
-
+def attach_breakthrough_renewable_capacities_to_atlite(n, all_be_plants, renewable_carriers):
     plants = pd.read_csv(all_be_plants, dtype={"bus_id": str}, index_col=0).query(
         "bus_id in @n.buses.index"
     )
     plants.replace(["wind_offshore"], ["offwind"], inplace=True)
     import pdb; pdb.set_trace()
+
     for tech in renewable_carriers:
         tech_plants = plants.query("type == @tech")
         tech_plants.index = tech_plants.index.astype(str)
-        logger.info(f"Adding {len(plants)} {tech} generators to the network.")
 
-        tech_plants = plants.query("type == @tech")
-        tech_plants.index = tech_plants.index.astype(str)
-        logger.info(f"Adding {len(tech_plants)} {tech} generator capacities to the network.")
+        network_gens = n.generators[n.generators.carrier == tech] #BUG: there are only 2 wind gens in the network and 1 offwind gen.
+        network_buses = n.buses.loc[network_gens.bus.unique()]
+        gens_per_bus = network_gens.groupby("bus").p_nom.count()
 
-        gens = n.generators[lambda plants: plants.type == tech]
-        buses = n.buses.loc[gens.bus.unique()]
-        gens_per_bus = gens.groupby("bus").p_nom.count()
-
-        # caps = map_country_bus(df.query("Fueltype == @fueltype and lat == lat"), buses)
+        #assign capacities from tech_plants to buses that match the tech. But the buses are not necessarily the same as the extendable generators that exist in the network.
+        caps = tech_plants.groupby("bus_id").sum().Pmax
         # caps = caps.groupby(["bus"]).Capacity.sum()
         # caps = caps / gens_per_bus.reindex(caps.index, fill_value=1)
 
+        n.generators.p_nom.update(network_gens.network_buses.map(caps).dropna())
+
         # n.generators.p_nom.update(gens.bus.map(caps).dropna())
         # n.generators.p_nom_min.update(gens.bus.map(caps).dropna())
-
-
+        logger.info(f"Adding {len(tech_plants)} {tech} generator capacities to the network.")
 
 
 def estimate_renewable_capacities(n, year, tech_map, expansion_limit, countries):
@@ -942,7 +987,8 @@ if __name__ == "__main__":
             )
         )
 
-        attach_breakthrough_renewable_bus_capacities(n, snakemake.input["plants"], renewable_carriers)
+        attach_breakthrough_renewable_capacities_to_atlite(n, snakemake.input["plants"], renewable_carriers)
+
         # estimate_renewable_caps = params.electricity["estimate_renewable_capacities"]
         # if estimate_renewable_caps["enable"]:
         #     tech_map = estimate_renewable_caps["technology_mapping"]
