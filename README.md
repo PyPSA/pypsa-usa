@@ -20,6 +20,15 @@ conda env create -f environment.yaml
 conda activate pypsa-usa
 ```
 
+download submodules after cloning:
+
+`git submodule update --init`
+
+update submodule with:
+
+`git submodule update --remote`
+
+
 # Workflow
 
 ![pypsa-usa workflow](https://github.com/ktehranchi/pypsa-breakthroughenergy-usa/blob/master/workflow/repo_data/workflow.jpg?raw=true)

@@ -1,17 +1,5 @@
-# Copyright 2021-2022 Martha Frysztacki (KIT)
-
-"""
-.. imagedata:: https://zenodo.org/record/4538590/files/USATestSystem.zip
-   :target: https://doi.org/10.5281/zenodo.3530898
-
-
-"""
-
-import logging
-import zipfile
-
+import logging, zipfile, os
 from pathlib import Path
-import os
 
 from _helpers import progress_retrieve, configure_logging
 
@@ -23,11 +11,11 @@ if __name__ == "__main__":
     rootpath = "."
     configure_logging(snakemake)
 
-    url = snakemake.config["zenodo_repository"]["url"]
+    url = snakemake.config["pypsa_earth_repository"]["url"]
 
     # Save locations
-    tarball_fn = Path(f"{rootpath}/USATestSystem.zip")
-    to_fn = Path(f"{rootpath}/data/breakthrough_network/")
+    tarball_fn = Path(f"{rootpath}/data_v0.1.zip.zip")
+    to_fn = Path(f"{rootpath}/data/pypsa_earth/")
 
     if os.path.isfile(tarball_fn):
         logger.info(f"Data bundle already downloaded.")

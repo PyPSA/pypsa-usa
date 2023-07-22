@@ -24,7 +24,7 @@ def add_breakthrough_demand_from_file(n, fn_demand):
     demand_per_bus = demand_per_bus_pu.multiply(demand)
     demand_per_bus.columns = n.buses.index
 
-    n.madd( "Load", demand_per_bus.columns, bus=demand_per_bus.columns, p_set=demand_per_bus)
+    n.madd( "Load", demand_per_bus.columns, bus=demand_per_bus.columns, p_set=demand_per_bus, carrier='AC')
     return n
 
 def prepare_ads_files(file_patterns):
@@ -83,7 +83,7 @@ def add_ads_demand(n, demand):
     demand_per_bus.fillna(0,inplace=True)
     demand_per_bus.columns = n.buses.index
 
-    n.madd( "Load", demand_per_bus.columns, bus=demand_per_bus.columns, p_set=demand_per_bus) 
+    n.madd( "Load", demand_per_bus.columns, bus=demand_per_bus.columns, p_set=demand_per_bus, carrier='AC') 
     return n
 
 
@@ -107,7 +107,7 @@ def add_eia_demand(n, demand):
     demand_per_bus.fillna(0,inplace=True)
     demand_per_bus.columns = n.buses.index
 
-    n.madd( "Load", demand_per_bus.columns, bus=demand_per_bus.columns, p_set=demand_per_bus) 
+    n.madd( "Load", demand_per_bus.columns, bus=demand_per_bus.columns, p_set=demand_per_bus, carrier='AC') 
 
     return n
     
