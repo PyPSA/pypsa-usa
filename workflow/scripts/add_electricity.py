@@ -378,7 +378,6 @@ def attach_wind_and_solar(
             else:
                 capital_cost = costs.at[car, "capital_cost"]
             #TODO: #15 When to simplify network to substation level?
-            #This is a temporary fix. Here I reassign the renewable profiles to "bus_ids" according to the BE network as opposed to currently used "sub_ids"... This is caused by the fact that the build_renewable_profiles uses a simplified network where the substation IDs are labeled as bus IDs.
 
             # n_bus2sub = bus2sub.set_index("bus_id").to_dict()["sub_id"]
             # n.buses["sub_id"] = n.buses.index.to_series().map(n_bus2sub)
@@ -414,7 +413,7 @@ def attach_wind_and_solar(
             bus_profiles = ds["profile"].transpose("time", "bus").to_pandas().T.merge(bus2sub,left_on="bus", right_on="sub_id").set_index('bus_id').drop(columns='sub_id').T
             
             logger.info(f"Adding {car} capacity-factor profiles to the network.")
-            import pdb; pdb.set_trace()
+            # import pdb; pdb.set_trace()
 
             n.madd(
                 "Generator",
@@ -743,7 +742,6 @@ def attach_breakthrough_renewable_capacities_to_atlite(n, all_be_plants, renewab
         "bus_id in @n.buses.index"
     )
     plants.replace(["wind_offshore"], ["offwind"], inplace=True)
-    import pdb; pdb.set_trace()
 
     for tech in renewable_carriers:
         tech_plants = plants.query("type == @tech")
@@ -753,15 +751,17 @@ def attach_breakthrough_renewable_capacities_to_atlite(n, all_be_plants, renewab
         network_buses = n.buses.loc[network_gens.bus.unique()]
         gens_per_bus = network_gens.groupby("bus").p_nom.count()
 
-        #assign capacities from tech_plants to buses that match the tech. But the buses are not necessarily the same as the extendable generators that exist in the network.
-        caps = tech_plants.groupby("bus_id").sum().Pmax
-        # caps = caps.groupby(["bus"]).Capacity.sum()
-        # caps = caps / gens_per_bus.reindex(caps.index, fill_value=1)
+        caps = tech_plants.groupby("bus_id").sum().Pmax #namplate capacity per bus
+        # caps = caps / gens_per_bus.reindex(caps.index, fill_value=1) ##REVIEW do i need this
+        #TODO: #16 Gens excluded from atlite profiles bc of landuse/etc will not be able to be attached if in the breakthrough network
+        # import pdb; pdb.set_trace()
 
-        n.generators.p_nom.update(network_gens.network_buses.map(caps).dropna())
+        if caps[~caps.index.isin(network_gens.bus)].sum() > 0:
+            missing_capacity = caps[~caps.index.isin(network_gens.bus)].sum()
+            logger.info(f"There are {np.round(missing_capacity,1)} MW of {tech} plants that are not in the network. See git issue #16.")
 
-        # n.generators.p_nom.update(gens.bus.map(caps).dropna())
-        # n.generators.p_nom_min.update(gens.bus.map(caps).dropna())
+        n.generators.p_nom.update(network_gens.bus.map(caps).dropna())
+        n.generators.p_nom_min.update(network_gens.bus.map(caps).dropna())
         logger.info(f"Adding {len(tech_plants)} {tech} generator capacities to the network.")
 
 
