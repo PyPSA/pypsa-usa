@@ -297,7 +297,7 @@ def busmap_for_n_clusters(n, n_clusters, solver_name, focus_weights=None, algori
             return prefix + busmap_by_greedy_modularity(n, n_clusters[x.name], buses_i=x.index)
         else:
             raise ValueError(f"`algorithm` must be one of 'kmeans' or 'hac'. Is {algorithm}.")
-    # pdb.set_trace()
+
     return (n.buses.groupby(['country', 'sub_network'], group_keys=False)
             .apply(busmap_for_country).squeeze().rename('busmap'))
 
@@ -360,13 +360,13 @@ def plot_busmap_for_n_clusters(n, n_clusters, fn=None):
 
 
 if __name__ == "__main__":
+    print("Running clustering.py directly")
     if 'snakemake' not in globals():
         from _helpers import mock_snakemake
         snakemake = mock_snakemake('cluster_network', simpl='', clusters='15')
     configure_logging(snakemake)
 
     n = pypsa.Network(snakemake.input.network)
-
     focus_weights = snakemake.config.get('focus_weights', None)
 
     renewable_carriers = pd.Index([tech
@@ -392,7 +392,7 @@ if __name__ == "__main__":
         line_length_factor = snakemake.config['lines']['length_factor']
         Nyears = n.snapshot_weightings.objective.sum()/8760
 
-        hvac_overhead_cost = (load_costs(snakemake.input.tech_costs, snakemake.config['costs'], snakemake.config['electricity'], Nyears)
+        hvac_overhead_cost = (load_costs(snakemake.input.tech_costs, snakemake.config['costs'], snakemake.config['electricity']['max_hours'], Nyears)
                               .at['HVAC overhead', 'capital_cost'])
 
         def consense(x):

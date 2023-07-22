@@ -3,25 +3,43 @@
 scenarios:
   all:
     interconnect: western #"usa|texas|western|eastern"
-    clusters: 50
-
+    clusters: 30
     opts:
       [
         Co2L1.0,
       ]
     ll: [vopt]
 
-  test:
-    interconnect: texas
-    clusters: 5
-    opts:
-      [
-        Co2L1.0,
-      ]
-    ll: v1.0
+  # test:
+  #   interconnect: texas
+  #   clusters: 5
+  #   opts:
+  #     [
+  #       Co2L1.0,
+  #     ]
+  #   ll: v1.0
+
+run:
+  name: "" # use this to keep track of runs with different settings
+  disable_progressbar: false # set to true to disable the progressbar
+  shared_resources: false # set to true to share the default resources across runs
+  shared_cutouts: true # set to true to share the default cutout(s) across runs
+
+enable:
+  # prepare_links_p_nom: false
+  # retrieve_cost_data: true
+  # custom_busmap: false
+  retrieve_databundle: false # set these to false after first run
+  build_cutout: false 
+  retrieve_cutout: false 
+  retrieve_natura_raster: true 
 
 zenodo_repository:
   url: "https://zenodo.org/record/4538590/files/USATestSystem.zip"
+natura_repository:
+  url: "https://sandbox.zenodo.org/record/1183583/files/natura_global.zip"
+pypsa_earth_repository:
+  url:  "https://sandbox.zenodo.org/record/1183583/files/data_v0.1.zip?download=1"
 
 offshore_shape:
   use: ca #options are ca, weathergov
@@ -32,49 +50,68 @@ offshore_shape:
 
 # use_state_shapes: true
 
-balancing_authorities: #comment out the list of states above and focus weights if using  balancing authority shapes ### note need to replace the use of "States" for everything. it should be labeled as BA
+balancing_areas: #comment out the list of states above and focus weights if using  balancing authority shapes ### note need to replace the use of "States" for everything. it should be labeled as BA
   use: true 
   path: "repo_data/BA_shapes_new/Modified_BE_BA_Shapes.shp"
 
 countries: [US]  
-BA_names: ['AEC', 'AECI', 'AVA', 'Arizona', 'BANC', 'BPAT', 'CHPD', 'CISO-PGAE', 'CISO-SCE', 'CISO-SDGE', 'CISO-VEA', 'SPP-CSWS', 'Carolina', 'DOPD', 'SPP-EDE', 'EPE', 'ERCO-C', 'ERCO-E', 'ERCO-FW', 'ERCO-N', 'ERCO-NC', 'ERCO-S', 'ERCO-SC', 'ERCO-W', 'Florida', 'GCPD', 'SPP-GRDA', 'GRID', 'IID', 'IPCO', 'ISONE-Connecticut', 'ISONE-Maine', 'ISONE-Massachusetts', 'ISONE-New Hampshire', 'ISONE-Rhode Island', 'ISONE-Vermont', 'SPP-KACY', 'SPP-KCPL', 'LDWP', 'SPP-LES', 'MISO-0001', 'MISO-0027', 'MISO-0035', 'MISO-0004', 'MISO-0006', 'MISO-8910', 'SPP-MPS', 'NWMT', 'NEVP', 'SPP-NPPD', 'NYISO-A', 'NYISO-B', 'NYISO-C', 'NYISO-D', 'NYISO-E', 'NYISO-F', 'NYISO-G', 'NYISO-H', 'NYISO-I', 'NYISO-J', 'NYISO-K', 'SPP-OKGE', 'SPP-OPPD', 'PACE', 'PACW', 'PGE', 'PJM_AE', 'PJM_AEP', 'PJM_AP', 'PJM_ATSI', 'PJM_BGE', 'PJM_ComEd', 'PJM_DAY', 'PJM_DEO&K', 'PJM_DLCO', 'PJM_DP&L', 'PJM_Dominion', 'PJM_EKPC', 'PJM_JCP&L', 'PJM_METED', 'PJM_PECO', 'PJM_PENELEC', 'PJM_PEPCO', 'PJM_PPL', 'PJM_PSEG', 'PJM_RECO', 'PNM', 'PSCO', 'PSEI', 'SPP-SECI', 'SOCO', 'SPP-SPRM', 'SPP-SPS', 'TEPC', 'TIDC', 'TVA', 'WACM', 'WALC', 'WAUW','SPP-WAUE_2','SPP-WAUE_3','SPP-WAUE_4','SPP-WAUE_5','SPP-WAUE_6','SPP-WAUE_7','SPP-WAUE_8','SPP-WAUE_9', 'SPP-WFEC', 'SPP-WR']
+balancing_area_names: ['AEC', 'AECI', 'AVA', 'Arizona', 'BANC', 'BPAT', 'CHPD', 'CISO-PGAE', 'CISO-SCE', 'CISO-SDGE', 'CISO-VEA', 'SPP-CSWS', 'Carolina', 'DOPD', 'SPP-EDE', 'EPE', 'ERCO-C', 'ERCO-E', 'ERCO-FW', 'ERCO-N', 'ERCO-NC', 'ERCO-S', 'ERCO-SC', 'ERCO-W', 'Florida', 'GCPD', 'SPP-GRDA', 'GRID', 'IID', 'IPCO', 'ISONE-Connecticut', 'ISONE-Maine', 'ISONE-Massachusetts', 'ISONE-New Hampshire', 'ISONE-Rhode Island', 'ISONE-Vermont', 'SPP-KACY', 'SPP-KCPL', 'LDWP', 'SPP-LES', 'MISO-0001', 'MISO-0027', 'MISO-0035', 'MISO-0004', 'MISO-0006', 'MISO-8910', 'SPP-MPS', 'NWMT', 'NEVP', 'SPP-NPPD', 'NYISO-A', 'NYISO-B', 'NYISO-C', 'NYISO-D', 'NYISO-E', 'NYISO-F', 'NYISO-G', 'NYISO-H', 'NYISO-I', 'NYISO-J', 'NYISO-K', 'SPP-OKGE', 'SPP-OPPD', 'PACE', 'PACW', 'PGE', 'PJM_AE', 'PJM_AEP', 'PJM_AP', 'PJM_ATSI', 'PJM_BGE', 'PJM_ComEd', 'PJM_DAY', 'PJM_DEO&K', 'PJM_DLCO', 'PJM_DP&L', 'PJM_Dominion', 'PJM_EKPC', 'PJM_JCP&L', 'PJM_METED', 'PJM_PECO', 'PJM_PENELEC', 'PJM_PEPCO', 'PJM_PPL', 'PJM_PSEG', 'PJM_RECO', 'PNM', 'PSCO', 'PSEI', 'SPP-SECI', 'SOCO', 'SPP-SPRM', 'SPP-SPS', 'TEPC', 'TIDC', 'TVA', 'WACM', 'WALC', 'WAUW','SPP-WAUE_2','SPP-WAUE_3','SPP-WAUE_4','SPP-WAUE_5','SPP-WAUE_6','SPP-WAUE_7','SPP-WAUE_8','SPP-WAUE_9', 'SPP-WFEC', 'SPP-WR'] #TODO remove config list of BA's and reference geojson values directly instead
 # focus_weights: 
 #   CISO-PGAE: 0.5
 
+# TODO: #11 change load data and generator data to be a snakemake wildcard value
 load_data:
   use_eia: false #if set true uses historical data, if false uses BE data
   historical_year: 2019
-  use_ads: true #if set true uses ads data, if false uses BE data
+  use_ads: false #if set true uses ads data, if false uses BE data
   future_year: 2032
   use_breakthrough: false 
   # use_cec: true #if set true uses cec data, if false uses ads/BE data
 
-# snapshots:
-#   start: "2013-01-01"
-#   end: "2014-01-01"
-#   inclusive: 'left' # include start, not end
+generator_data:
+  use_breakthrough: true #enables BE thermal generators
+  use_breakthrough_atlite: true # true= BE renewable gens with atlite calculated timeseries. false= BE renewable gens with BE timeseries
+  use_eia: False #not implemented yet
 
-planning_horizons: # investment years .... use these only for future years?
-  - 2015
+snapshots:
+  start: "2019-01-01"
+  end: "2020-01-01"
+  inclusive: 'left' # include start, not end
+
+# planning_horizons: # investment years .... use these only for future years?
+#   - 2015
 
 investment_period_discount_rate: 0.05
 
-
-allowed_carriers: [wind, solar, offwind, hydro, coal, nuclear, ng, geothermal]
-committable_carriers: []
-extendable_carriers: [solar, wind, offwind, ng, geothermal, coal, nuclear, battery]
-
-enable:
-  prepare_links_p_nom: false
-  retrieve_databundle: true
-  retrieve_cost_data: true
-  build_cutout: false
-  retrieve_cutout: true
-  build_natura_raster: false
-  retrieve_natura_raster: true
-  custom_busmap: false
+atlite:
+  default_cutout: ERA5_2019
+  nprocesses: 4
+  show_progress: false # false saves time
+  cutouts:
+    # use 'base' to determine geographical bounds and time span from config
+    # base:
+      # module: era5
+    ERA5_2019:
+      module: era5 # in priority order
+      x: [-12., 35.] #replace these. Would be used for build cutout
+      y: [33., 72]
+      dx: 0.3
+      dy: 0.3
+      time: ['2013', '2013']
+    # europe-2013-sarah:
+    #   module: [sarah, era5] # in priority order
+    #   x: [-12., 45.]
+    #   y: [33., 65]
+    #   dx: 0.2
+    #   dy: 0.2
+    #   time: ['2013', '2013']
+    #   sarah_interpolate: false
+    #   sarah_dir:
+    #   features: [influx, temperature]
 
 electricity:
+  conventional_carriers: [nuclear, oil, ng, coal, geothermal]
+  renewable_carriers: [wind, solar, offwind, hydro]
   voltages: [230., 345., 500., 765.]
   voltage_simplified: 230
   co2limit: 1.4728e+9 # 0.8 * 1.841e+9
@@ -90,6 +127,111 @@ electricity:
     StorageUnit: [battery] # battery, H2
     Store: [battery] #[battery, H2]
     Link: [] #[H2 pipeline]
+
+renewable: #all keys labeled corrine are actually copernicus codes. Using the name corrine bc using the pypsa-eur convention
+  wind:
+    cutout: era5_2019
+    resource:
+      method: wind
+      turbine: Vestas_V112_3MW
+    capacity_per_sqkm: 3 # conservative, ScholzPhd Tab 4.3.1: 10MW/km^2
+    # correction_factor: 0.93
+    corine:
+      # Scholz, Y. (2012). Renewable energy based electricity supply at low costs:
+      #  development of the REMix model and application for Europe. ( p.42 / p.28)
+      # CLC grid codes:
+      # 11X/12X - Various forest types
+      # 20  - Shrubs
+      # 30  - Herbaceus vegetation
+      # 40  - Cropland
+      # 50  - Urban
+      # 60  - Bare / Sparse vegetation
+      # 80  - Permanent water bodies
+      # 100 - Moss and lichen
+      # 200 - Open sea
+      grid_codes: [20, 30, 40, 60, 100, 111, 112, 113, 114, 115, 116, 121, 122, 123, 124, 125, 126]
+      distance: 1000
+      distance_grid_codes: [50]
+    natura: true
+    potential: simple # or conservative
+    clip_p_max_pu: 1.e-2
+    extendable: true
+  offwind:
+    cutout: era5_2019
+    resource:
+      method: wind
+      turbine: NREL_ReferenceTurbine_5MW_offshore
+    capacity_per_sqkm: 2
+    correction_factor: 0.8855
+    # proxy for wake losses
+    # from 10.1016/j.energy.2018.08.153
+    # until done more rigorously in #153
+    corine:
+      grid_codes: [80, 200] #page 28 of https://land.copernicus.eu/global/sites/cgls.vito.be/files/products/CGLOPS1_PUM_LC100m-V3_I3.4.pdf
+    natura: true
+    max_depth: 50
+    max_shore_distance: 30000
+    potential: simple # or conservative
+    clip_p_max_pu: 1.e-2
+    extendable: true
+  offwind-dc:
+    cutout: era5_2019
+    resource:
+      method: wind
+      turbine: NREL_ReferenceTurbine_5MW_offshore
+    # ScholzPhd Tab 4.3.1: 10MW/km^2
+    capacity_per_sqkm: 3
+    correction_factor: 0.8855
+    # proxy for wake losses
+    # from 10.1016/j.energy.2018.08.153
+    # until done more rigorously in #153
+    corine:
+      grid_codes: [80, 200]
+    natura: true
+    max_depth: 50
+    min_shore_distance: 30000
+    potential: simple # or conservative
+    clip_p_max_pu: 1.e-2
+    extendable: true
+  solar:
+    cutout: era5_2019
+    resource:
+      method: pv
+      panel: CSi
+      orientation: latitude_optimal # will lead into optimal design
+        # slope: 0.  # slope: 0 represent a flat panel
+        # azimuth: 180.  # azimuth: 180 south orientation
+    capacity_per_sqkm: 4.6 # From 1.7 to 4.6 addresses issue #361
+    # Determined by comparing uncorrected area-weighted full-load hours to those
+    # published in Supplementary Data to
+    # Pietzcker, Robert Carl, et al. "Using the sun to decarbonize the power
+    # sector: The economic potential of photovoltaics and concentrating solar
+    # power." Applied Energy 135 (2014): 704-720.
+    correction_factor: 0.854337
+    corine:
+      grid_codes: [20, 30, 40, 50, 60, 90, 100] #see above for codes
+    natura: true
+    potential: simple # or conservative
+    clip_p_max_pu: 1.e-2
+    extendable: true
+  hydro:
+    cutout: era5_2019
+    resource:
+      method: hydro
+      hydrobasins: data/hydrobasins/hybas_world_lev06_v1c.shp
+      flowspeed: 1.0  # m/s
+      # weight_with_height: false
+      # show_progress: true
+    carriers: [ror, PHS, hydro]
+    PHS_max_hours: 6
+    hydro_max_hours: "energy_capacity_totals_by_country"  # not active
+    clip_min_inflow: 1.0
+    extendable: true
+    normalization:
+      method: hydro_capacities  # 'hydro_capacities' to rescale country hydro production by using hydro_capacities, 'eia' to rescale by eia data, false for no rescaling
+      year: 2013  # (optional) year of statistics used to rescale the runoff time series. When not provided, the weather year of the snapshots is used
+    multiplier: 1.1  # multiplier applied after the normalization of the hydro production; default 1.0
+
 
 lines:
   types:
@@ -107,13 +249,12 @@ links:
   include_tyndp: true
   under_construction: 'zero' # 'zero': set capacity to zero, 'remove': remove, 'keep': with full capacity
 
-renewable:
-  wind:
-    potential: simple # or conservative
-  solar:
-    potential: simple # or conservative
-  hydro:
-    potential: simple
+load:
+  # power_statistics: true # only for files from <2019; set false in order to get ENTSOE transparency data
+  # interpolate_limit: 3 # data gaps up until this size are interpolated linearly
+  # time_shift_for_large_gaps: 1w # data gaps up until this size are copied by copying from
+  # manual_adjustments: true # false
+  scaling_factor: 1.0
 
 costs:
   year: 2030
@@ -170,7 +311,7 @@ solving:
     clip_p_max_pu: 0.01
     skip_iterations: true
     track_iterations: false
-    nhours: 1
+    nhours: 48
   solver:
     name: gurobi
     threads: 4
@@ -205,6 +346,7 @@ plotting:
   link_carriers: ["DC line", "Converter AC-DC"]
   tech_colors:
     "onwind" : "#235ebc"
+    "wind" : "#235ebc"
     "onshore wind" : "#235ebc"
     'offwind' : "#6895dd"
     'offwind-ac' : "#6895dd"
@@ -229,6 +371,7 @@ plotting:
     'geothermal' : '#ba91b1'
     "OCGT" : "#d35050"
     "gas" : "#d35050"
+    "ng" : "#d35050"
     "natural gas" : "#d35050"
     "CCGT" : "#b20101"
     "nuclear" : "#ff9000"
@@ -244,10 +387,13 @@ plotting:
     "transmission lines" : "#70af1d"
     "AC-AC" : "#70af1d"
     "AC line" : "#70af1d"
+    "AC" : "#70af1d"
     "links" : "#8a1caf"
     "HVDC links" : "#8a1caf"
     "DC-DC" : "#8a1caf"
     "DC link" : "#8a1caf"
+    "DC" : "#8a1caf"
+
   nice_names:
     OCGT: "Open-Cycle Gas"
     CCGT: "Combined-Cycle Gas"
