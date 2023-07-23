@@ -35,7 +35,7 @@ git submodule update --remote
 
 # Workflow
 
-![pypsa-usa workflow](https://github.com/PyPSA/pypsa-breakthroughenergy-usa/blob/dev_atlite_integration/workflow/repo_data/dag.png?raw=true)
+![pypsa-usa workflow](https://github.com/PyPSA/pypsa-breakthroughenergy-usa/blob/dev_atlite_integration/workflow/repo_data/dag.jpg?raw=true)
 
 ## Configuration
 

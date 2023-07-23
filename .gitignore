@@ -270,4 +270,4 @@ TSWLatexianTemp*
 # Exceptions to gitignore
 connect.sh
 config/config.cluster.yaml
-workflow/repo_data/dag.png
+/workflow/repo_data/dag.png
