@@ -188,8 +188,6 @@ if config["enable"].get("retrieve_cutout", True):
         retries: 2
         run:
             move(input[0], output[0])
-####"https://zenodo.org/record/8136996/files/cutout_western_ERA5_2019.nc",
-
 
 ################# ----------- Rules to Build Network ---------- #################
 
@@ -562,12 +560,12 @@ rule dag:
         "Creating DAG of workflow."
     output:
         dot="repo_data/dag.dot",
-        pdf="repo_data/dag.pdf",
+        jpg="repo_data/dag.jpg",
         png="repo_data/dag.png",
     shell:
         """
         snakemake --rulegraph all | sed -n "/digraph/,\$p" > {output.dot}
-        dot -Tpdf -o {output.pdf} {output.dot}
+        dot -Tjpg -o {output.jpg} {output.dot}
         dot -Tpng -o {output.png} {output.dot}
         """
 
