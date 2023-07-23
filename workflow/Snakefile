@@ -176,7 +176,8 @@ if config["enable"].get("retrieve_cutout", True):
     rule retrieve_cutout:
         input:
             HTTP.remote(
-                "zenodo.org/record/8136996/files/cutout_western_{cutout}.nc"
+                'zenodo.org/record/8136996/files/cutout_western_{cutout}.nc?download=1'
+                # "zenodo.org/record/8136996/files/cutout_western_{cutout}.nc"
                 ,static=True),
         output:
             "cutouts/" + CDIR + "cutout_{interconnect}_{cutout}.nc",
