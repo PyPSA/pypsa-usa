@@ -146,21 +146,20 @@ rule retrieve_ship_raster:
 
 if config["enable"].get("retrieve_databundle", True):
     datafiles = [
-    "eez/eez_v11.gpkg",
-    "gebco/GEBCO_2021_TID.nc",
-    "copernicus/PROBAV_LC100_global_v3.0.1_2019-nrt_Discrete-Classification-map_EPSG-4326.tif",
+    "gebco/gebco_2023_tid_USA.nc",
+    "copernicus/PROBAV_LC100_global_v3.0.1_2019-nrt_Discrete-Classification-map_USA_EPSG-4326.tif",
     ]
 
-    rule retrieve_pypsa_earth_databundle:
+    rule retrieve_databundle:
         output:
-            expand(DATA + "pypsa_earth/{file}", file=datafiles),
+            expand(DATA + "{file}", file=datafiles),
         log:
             LOGS + "retrieve_databundle.log",
         resources:
             mem_mb=1000,
         retries: 2
         script:
-            "scripts/retrieve_pypsa_earth_databundle.py"
+            "scripts/retrieve_databundle.py"
 
 rule retrieve_natura_data:
     output:
@@ -309,7 +308,7 @@ rule build_renewable_profiles:
         renewable=config["renewable"],
     input:
         base_network=RESOURCES + "{interconnect}/elec_base_network_l.nc",
-        corine=ancient("data/pypsa_earth/copernicus/PROBAV_LC100_global_v3.0.1_2019-nrt_Discrete-Classification-map_EPSG-4326.tif"),
+        corine=ancient("data/copernicus/PROBAV_LC100_global_v3.0.1_2019-nrt_Discrete-Classification-map_USA_EPSG-4326.tif"),
         natura=lambda w: (
             DATA + "natura.tiff"
             if config["renewable"][w.technology]["natura"]
@@ -317,7 +316,7 @@ rule build_renewable_profiles:
         ),
         gebco=ancient(
             lambda w: (
-                DATA + "pypsa_earth/gebco/GEBCO_2021_TID.nc"
+                DATA + "gebco/gebco_2023_tid_USA.nc"
                 if config["renewable"][w.technology].get("max_depth")
                 else []
             )

@@ -11,11 +11,11 @@ if __name__ == "__main__":
     rootpath = "."
     configure_logging(snakemake)
 
-    url = snakemake.config["pypsa_earth_repository"]["url"]
+    url = snakemake.config["pypsa_usa_repository"]["url"]
 
     # Save locations
-    tarball_fn = Path(f"{rootpath}/data_v0.1.zip.zip")
-    to_fn = Path(f"{rootpath}/data/pypsa_earth/")
+    tarball_fn = Path(f"{rootpath}/pypsa_usa_data.zip")
+    to_fn = Path(f"{rootpath}/data/")
 
     if os.path.isfile(tarball_fn):
         logger.info(f"Data bundle already downloaded.")

@@ -22,15 +22,15 @@ enable:
   # custom_busmap: false
   retrieve_databundle: true # set these to false after first run
   build_cutout: false 
-  retrieve_cutout: true 
-  retrieve_natura_raster: true 
+  retrieve_cutout: false 
+  retrieve_natura_raster: false 
 
-zenodo_repository:
+zenodo_repository: #breakthrough network
   url: "https://zenodo.org/record/4538590/files/USATestSystem.zip"
 natura_repository:
   url: "https://sandbox.zenodo.org/record/1183583/files/natura_global.zip"
-pypsa_earth_repository:
-  url:  "https://sandbox.zenodo.org/record/1183583/files/data_v0.1.zip?download=1"
+pypsa_usa_repository:
+  url:  "https://zenodo.org/record/8175051/files/pypsa_usa_data.zip?download=1"
 
 offshore_shape:
   use: ca #options are ca, weathergov
@@ -41,7 +41,7 @@ offshore_shape:
 
 # use_state_shapes: true
 
-balancing_areas: #comment out the list of states above and focus weights if using  balancing authority shapes ### note need to replace the use of "States" for everything. it should be labeled as BA
+balancing_areas: 
   use: true 
   path: "repo_data/BA_shapes_new/Modified_BE_BA_Shapes.shp"
 
@@ -52,7 +52,7 @@ balancing_area_names: ['AEC', 'AECI', 'AVA', 'Arizona', 'BANC', 'BPAT', 'CHPD', 
 
 # TODO: #11 change load data and generator data to be a snakemake wildcard value
 load_data:
-  use_eia: false #if set true uses historical data, if false uses BE data
+  use_eia: true #if set true uses historical data, if false uses BE data
   historical_year: 2019
   use_ads: false #if set true uses ads data, if false uses BE data
   future_year: 2032
