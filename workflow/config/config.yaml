@@ -47,28 +47,22 @@ balancing_area_names: ['AEC', 'AECI', 'AVA', 'Arizona', 'BANC', 'BPAT', 'CHPD', 
 #   CISO-PGAE: 0.5
 
 # TODO: #11 change load data and generator data to be a snakemake wildcard value
-load_data:
-  use_eia: true #if set true uses historical data, if false uses BE data
-  historical_year: 2019
-  use_ads: false #if set true uses ads data, if false uses BE data
+load_data: # set only one of the `use_...` to true
+  use_eia: true 
+  historical_year: 2019 #keep at 2019 for now! I will be adding other years shortly.
+  use_ads: false 
   future_year: 2032
   use_breakthrough: false 
-  # use_cec: true #if set true uses cec data, if false uses ads/BE data
 
 generator_data:
-  use_breakthrough: true #enables BE thermal generators
+  use_breakthrough: false #enables BE thermal generators
   use_breakthrough_atlite: true # true= BE renewable gens with atlite calculated timeseries. false= BE renewable gens with BE timeseries
-  use_eia: False #not implemented yet
+  #use_eia: False #not implemented yet
 
-snapshots:
+snapshots: #do not edit (temp)
   start: "2019-01-01"
   end: "2020-01-01"
   inclusive: 'left' # include start, not end
-
-# planning_horizons: # investment years .... use these only for future years?
-#   - 2015
-
-investment_period_discount_rate: 0.05
 
 atlite:
   default_cutout: ERA5_2019
@@ -80,21 +74,11 @@ atlite:
       # module: era5
     ERA5_2019:
       module: era5 # in priority order
-      x: [-12., 35.] #replace these. Would be used for build cutout
+      x: [-12., 35.] #TODO: include build_cutout rule to use these configurations. 
       y: [33., 72]
       dx: 0.3
       dy: 0.3
       time: ['2013', '2013']
-    # europe-2013-sarah:
-    #   module: [sarah, era5] # in priority order
-    #   x: [-12., 45.]
-    #   y: [33., 65]
-    #   dx: 0.2
-    #   dy: 0.2
-    #   time: ['2013', '2013']
-    #   sarah_interpolate: false
-    #   sarah_dir:
-    #   features: [influx, temperature]
 
 electricity:
   conventional_carriers: [nuclear, oil, ng, coal, geothermal]
@@ -115,7 +99,7 @@ electricity:
     Store: [battery] #[battery, H2]
     Link: [] #[H2 pipeline]
 
-renewable: #all keys labeled corrine are actually copernicus codes. Using the name corrine bc using the pypsa-eur convention
+renewable: 
   wind:
     cutout: era5_2019
     resource:
@@ -124,6 +108,7 @@ renewable: #all keys labeled corrine are actually copernicus codes. Using the na
     capacity_per_sqkm: 3 # conservative, ScholzPhd Tab 4.3.1: 10MW/km^2
     # correction_factor: 0.93
     corine:
+      #all keys labeled corrine are actually copernicus codes. Using the name corrine bc using the pypsa-eur convention
       # Scholz, Y. (2012). Renewable energy based electricity supply at low costs:
       #  development of the REMix model and application for Europe. ( p.42 / p.28)
       # CLC grid codes:
@@ -243,10 +228,10 @@ load:
   # manual_adjustments: true # false
   scaling_factor: 1.0
 
-costs:
-  year: 2030
+costs:  # based on the potentials, assuming  (0.1 kW/m2 and 10 m2/person) (TODO:pypsa-eur assumptions... need to re-visit)
+  year: 2030 #not currently used
   version: v0.4.0
-  rooftop_share: 0.14  # based on the potentials, assuming  (0.1 kW/m2 and 10 m2/person)
+  rooftop_share: 0.14  
   fill_values:
     FOM: 0
     VOM: 0
@@ -256,7 +241,7 @@ costs:
     lifetime: 25
     "CO2 intensity": 0
     "discount rate": 0.07
-  marginal_cost:
+  marginal_cost: #(TODO:pypsa-eur assumptions... need to re-visit)
     solar: 0.01
     onwind: 0.015
     offwind: 0.015
