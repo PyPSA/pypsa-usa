@@ -9,6 +9,7 @@ dconf
 *.png
 *.zip
 *.DS_Store
+*.dot
 
 # generated files
 results/
@@ -266,6 +267,7 @@ TSWLatexianTemp*
 # standalone packages
 *.sta
 
-# other
+# Exceptions to gitignore
 connect.sh
 config/config.cluster.yaml
+/workflow/repo_data/dag.png
