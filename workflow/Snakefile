@@ -23,7 +23,6 @@ FIGURES_SINGLE = [
 
 localrules:
     dag,
-    # report,
     clean,
 
 wildcard_constraints:
@@ -515,30 +514,6 @@ rule plot_figures_single:
     notebook:
         "notebooks/plot-results.py.ipynb"
 
-rule sync:
-    params:
-        cluster=config["cluster"],
-    shell:
-        """
-        rsync -uvarh --no-g --ignore-missing-args --files-from=.sync-send . {params.cluster}
-        rsync -uvarh --no-g --ignore-missing-args --files-from=.sync-receive {params.cluster} .
-        """
-
-rule report:
-    message:
-        "Compile report."
-    input:
-        tex="report/report.tex",
-        bib="report/references.bib",
-    output:
-        "report/report.pdf",
-    shell:
-        """
-        pdflatex {input.tex}
-        bibtex {input.bib})
-        pdflatex {input.tex}
-        pdflatex {input.tex}
-        """
 
 # Create DAG with- 
 # snakemake --dag -F | sed -n "/digraph/,\$p" | dot -Tpng -o repo_data/dag.jpg
