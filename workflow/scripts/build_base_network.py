@@ -56,6 +56,7 @@ def add_branches_from_file(n, fn_branches):
             v_nom=tech_branches.from_bus_id.map(n.buses.v_nom),
             interconnect=tech_branches.interconnect,
             type="Rail",
+            carrier="AC"
         )
     return n
 
@@ -87,6 +88,7 @@ def add_dclines_from_file(n, fn_dclines):
 
 def assign_bus_ba(PATH_BUS, PATH_BA_SHP, PATH_OFFSHORE_SHP, bus_locs):
     bus_df = pd.read_csv(PATH_BUS, index_col=0)
+    bus_df = pd.merge(bus_df, bus_locs[['lat','lon']], left_index=True, right_index=True, how='left')
     bus_locs["geometry"] = gpd.points_from_xy(bus_locs["lon"], bus_locs["lat"])
     bus_df_locs = pd.merge(bus_df, bus_locs['geometry'], left_index=True, right_index=True, how='left') #merging bus data w/ geometry data
 
@@ -97,7 +99,7 @@ def assign_bus_ba(PATH_BUS, PATH_BA_SHP, PATH_OFFSHORE_SHP, bus_locs):
     ba_points = sjoin(gpd.GeoDataFrame(bus_df_locs["geometry"],crs= 4326), combined_shapes, how='left',predicate='within')
     ba_points = ba_points.rename(columns={'name':'balancing_area'})
     bus_df_final = pd.merge(bus_df, ba_points['balancing_area'], left_index=True, right_index=True,how='left')
-    # import pdb; pdb.set_trace()
+
     #for identifying duplicants-- below
     # df = bus_df_final.reset_index().groupby(['bus_id']).size().reset_index(name='count').sort_values('count')
     # df_issues = df[df['count']>1]
@@ -158,7 +160,33 @@ if __name__ == "__main__":
             .set_index("sub_id")
         )
         sub.to_csv(snakemake.output.sub)
-    # import pdb; pdb.set_trace()
+
 
     # export network
     n.export_to_netcdf(snakemake.output.network)
+
+
+
+'''
+# Items from build_bus_regions to be added to this script
+        for ba in balancing_areas:
+
+            n.buses.loc[ba_locs.index, 'country'] = ba #adds abbreviation to the bus dataframe under the country column
+            n.buses.loc['37584', 'country'] = 'CISO-SDGE'   #hot fix for imperial beach substation being offshore
+
+        for i in range(len(offshore_shapes)):
+
+            n.buses.loc[offshore_busses.index, 'country'] = shape_name #adds offshore shape name to the bus dataframe under the country column
+
+
+   
+        ### Remove Extra OSW Busses and Branches ###
+        #Removes remaining nodes in network left with country = US (these are offshore busses that are not in the offshore shape or onshore shapes)
+
+        #To-do- add filter that checks if the buses being removed are over water. Currently this works for WECC since I have cleaned up the GEOJSON files
+        n.mremove("Line", n.lines.loc[n.lines.bus1.isin(n.buses.loc[n.buses.country=='US'].index)].index) 
+        n.mremove("Load", n.loads.loc[n.loads.bus.isin(n.buses.loc[n.buses.country=='US'].index)].index)
+        n.mremove("Generator", n.generators.loc[n.generators.bus.isin(n.buses.loc[n.buses.country=='US'].index)].index)
+        n.mremove("Bus",  n.buses.loc[n.buses.country=='US'].index)
+
+'''

@@ -1,6 +1,6 @@
 # PyPSA-USA
 
-pypsa-usa is an open-source power systems model of the bulk transmission systems in the United States. This workflow draws from the work of [pypsa-eur](https://pypsa-eur.readthedocs.io/en/latest/index.html) and [pypsa-meets-earth](https://pypsa-earth.readthedocs.io/en/latest/how_to_contribute.html) to build a highly configurable power systems model that can be used for capacity expansion modeling, production cost simulation, and power flow analysis. This model is currently under development, and is only stable under certain configurations detailed below.
+PyPSA-USA is an open-source power systems model of the bulk transmission systems in the United States. This workflow draws from the work of [pypsa-eur](https://pypsa-eur.readthedocs.io/en/latest/index.html) and [pypsa-meets-earth](https://pypsa-earth.readthedocs.io/en/latest/how_to_contribute.html) to build a highly configurable power systems model that can be used for capacity expansion modeling, production cost simulation, and power flow analysis. This model is currently under development, and is only stable under certain configurations detailed below.
 
 The model draws data from:
 
@@ -20,23 +20,46 @@ conda env create -f environment.yaml
 conda activate pypsa-usa
 ```
 
+download submodules after cloning:
+
+```
+git submodule update --init
+```
+
+update submodule with:
+
+```
+git submodule update --remote
+```
+
+
 # Workflow
 
-![pypsa-usa workflow](https://github.com/ktehranchi/pypsa-breakthroughenergy-usa/blob/master/workflow/repo_data/workflow.jpg?raw=true)
-
+![pypsa-usa workflow](https://github.com/PyPSA/pypsa-breakthroughenergy-usa/blob/dev_atlite_integration/workflow/repo_data/dag.jpg?raw=true)
 
 ## Configuration
 
 **This workflow has only been thoroughly tested for the `western` interconnection wildcard.**
 
 ## Execution 
-To execute the workflow, go into the `workflow` directory and execute `snakemake` from your terminal, i.e.
+To execute the workflow, go into the `workflow` directory and execute `snakemake` from your terminal. 
 
 ```bash
 snakemake -j6
 ```
 
-where 6 indicates the number of used cores, you may change it to your preferred number. This will run the first rule defined in the `Snakefile`.
+where 6 indicates the number of used cores, you may change it to your preferred number. This will run the workflow defined in the `Snakefile`.
+
+For your initial execution you must set the configuration for retrieving data to true as specified in `config.defualt.yaml`. After the first run, you should set these to false to avoid redownloading the files.
+
+```
+enable:
+  retrieve_databundle: true
+  retrieve_cutout: true 
+  retrieve_natura_raster: true 
+```
+
+### Troubleshooting:
 
 To force the execution of a portion of the workflow up to a given rule, cd to the `workflow` directory and run:
 
