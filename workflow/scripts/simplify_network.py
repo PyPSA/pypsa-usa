@@ -1,11 +1,15 @@
 # Copyright 2021-2022 Martha Frysztacki (KIT)
 
 import pypsa
-import logging
 import pandas as pd
 import numpy as np
 from functools import reduce
 from pypsa.networkclustering import busmap_by_kmeans, get_clustering_from_busmap
+
+import logging
+
+logger = logging.getLogger('root')
+# logger.debug('submodule message')
 
 
 def simplify_network_to_voltage_level(n, voltage_level):
@@ -104,7 +108,7 @@ def assign_line_lengths(n, line_length_factor, busmap_to_sub=None, substations=N
 
     return n
 
-
+   
 if __name__ == "__main__":
     logger = logging.getLogger(__name__)
 
@@ -125,7 +129,8 @@ if __name__ == "__main__":
 
     # assign line lengths based on sub_id,
     # otherwise divide by zero error in networkclustering
-    n = assign_line_lengths(n, 1.25, busmap_to_sub, substations) #should we be multiplying by 1.25 here?
+    # should we be multiplying by 1.25 here?
+    n = assign_line_lengths(n, 1.25, busmap_to_sub, substations) 
     n.links["underwater_fraction"] = 0
 
     n = aggregate_to_substations(n, substations, busmap_to_sub.sub_id)
