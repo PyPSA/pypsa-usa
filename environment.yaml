@@ -57,12 +57,6 @@ dependencies:
 
   - fs<=2.4.14
 
-  # PyPSA-earth Dependencies
-- pip:
-  - git+https://github.com/davide-f/google-drive-downloader@master  # google drive with fix for virus scan
-  - git+https://github.com/FRESNA/vresutils@master  # until new pip release > 0.3.1 (strictly)
-
-
   - pip:
     - vresutils==0.3.1
     - tsam>=1.1.0
