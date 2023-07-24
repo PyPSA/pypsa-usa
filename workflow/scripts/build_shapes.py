@@ -35,8 +35,8 @@ gdf_interconnection_states.to_file(snakemake.output.country_shapes)
 
 
 ####### Load balancing authority shapes #######
-if snakemake.params.balancing_authorities["use"]:
-    gdf_ba = gpd.read_file(snakemake.params.balancing_authorities["path"])
+if snakemake.params.balancing_areas["use"]:
+    gdf_ba = gpd.read_file(snakemake.params.balancing_areas["path"])
     gdf_ba.rename(columns={"BA": "name"}, inplace=True)
     gdf_ba.to_crs(4326,inplace=True)
 
