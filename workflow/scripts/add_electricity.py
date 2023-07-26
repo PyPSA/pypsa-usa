@@ -413,9 +413,8 @@ def attach_wind_and_solar(
             bus_profiles = ds["profile"].transpose("time", "bus").to_pandas().T.merge(bus2sub,left_on="bus", right_on="sub_id").set_index('bus_id').drop(columns='sub_id').T
             
             logger.info(f"Adding {car} capacity-factor profiles to the network.")
-            import pdb; pdb.set_trace()
 
-            #why is p_nom_max set to zero??
+            #TODO: #24 VALIDATE TECHNICAL POTENTIALS
 
             n.madd(
                 "Generator",
@@ -759,7 +758,7 @@ def attach_breakthrough_renewable_capacities_to_atlite(n, all_be_plants, renewab
         if caps[~caps.index.isin(network_gens.bus)].sum() > 0:
             missing_capacity = caps[~caps.index.isin(network_gens.bus)].sum()
             logger.info(f"There are {np.round(missing_capacity,1)} MW of {tech} plants that are not in the network. See git issue #16.")
-            import pdb; pdb.set_trace()
+            # import pdb; pdb.set_trace()
 
         n.generators.p_nom.update(network_gens.bus.map(caps).dropna())
         n.generators.p_nom_min.update(network_gens.bus.map(caps).dropna())
