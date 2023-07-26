@@ -346,7 +346,7 @@ if __name__ == "__main__":
             average_distance.rename("average_distance"),
         ]
     )
-    import pdb; pdb.set_trace()
+    # import pdb; pdb.set_trace()
 
     if snakemake.wildcards.technology.startswith("offwind"):
         logger.info("Calculate underwater fraction of connections.")
