@@ -122,8 +122,8 @@ renewable:
       # 100 - Moss and lichen
       # 200 - Open sea
       grid_codes: [20, 30, 40, 60, 100, 111, 112, 113, 114, 115, 116, 121, 122, 123, 124, 125, 126]
-      distance: 1000
-      distance_grid_codes: [50]
+      distance: 10 #buffer from distance_grid_codes that are to be excluded
+      distance_grid_codes: [50] 
     natura: true
     potential: simple # or conservative
     clip_p_max_pu: 1.e-2
@@ -141,27 +141,8 @@ renewable:
     corine:
       grid_codes: [80, 200] #page 28 of https://land.copernicus.eu/global/sites/cgls.vito.be/files/products/CGLOPS1_PUM_LC100m-V3_I3.4.pdf
     natura: true
-    max_depth: 50
+    max_depth: 1000
     max_shore_distance: 30000
-    potential: simple # or conservative
-    clip_p_max_pu: 1.e-2
-    extendable: true
-  offwind-dc:
-    cutout: era5_2019
-    resource:
-      method: wind
-      turbine: NREL_ReferenceTurbine_5MW_offshore
-    # ScholzPhd Tab 4.3.1: 10MW/km^2
-    capacity_per_sqkm: 3
-    correction_factor: 0.8855
-    # proxy for wake losses
-    # from 10.1016/j.energy.2018.08.153
-    # until done more rigorously in #153
-    corine:
-      grid_codes: [80, 200]
-    natura: true
-    max_depth: 50
-    min_shore_distance: 30000
     potential: simple # or conservative
     clip_p_max_pu: 1.e-2
     extendable: true
@@ -183,6 +164,25 @@ renewable:
     corine:
       grid_codes: [20, 30, 40, 50, 60, 90, 100] #see above for codes
     natura: true
+    potential: simple # or conservative
+    clip_p_max_pu: 1.e-2
+    extendable: true
+  offwind-dc:
+    cutout: era5_2019
+    resource:
+      method: wind
+      turbine: NREL_ReferenceTurbine_5MW_offshore
+    # ScholzPhd Tab 4.3.1: 10MW/km^2
+    capacity_per_sqkm: 3
+    correction_factor: 0.8855
+    # proxy for wake losses
+    # from 10.1016/j.energy.2018.08.153
+    # until done more rigorously in #153
+    corine:
+      grid_codes: [80, 200]
+    natura: true
+    max_depth: 50
+    min_shore_distance: 30000
     potential: simple # or conservative
     clip_p_max_pu: 1.e-2
     extendable: true
@@ -242,9 +242,9 @@ costs:  # based on the potentials, assuming  (0.1 kW/m2 and 10 m2/person) (TODO:
     "CO2 intensity": 0
     "discount rate": 0.07
   marginal_cost: #(TODO:pypsa-eur assumptions... need to re-visit)
-    solar: 0.01
-    onwind: 0.015
-    offwind: 0.015
+    solar: 0.00
+    onwind: 0.00
+    offwind: 0.00
     hydro: 0.
     H2: 0.
     electrolysis: 0.
