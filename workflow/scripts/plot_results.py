@@ -24,17 +24,20 @@ if __name__ == "__main__":
 
     n = pypsa.Network(snakemake.input.network)
     regions_onshore = gpd.read_file(snakemake.input.regions_onshore)
-    import pdb; pdb.set_trace()
+    # import pdb; pdb.set_trace()
     # TODO
     n.carriers.loc["wind", "color"] = "lightblue"
     n.carriers.loc["offwind", "color"] = "lightblue"
     n.carriers.loc["offwind", "nice_name"] = "Offshore Wind"
     n.carriers.loc["ng", "color"] = "indianred"
-    n.carriers.loc["dfo", "color"] = "k"
-    n.carriers.loc["other", "color"] = "grey"
+    # n.carriers.loc["dfo", "color"] = "k"
+    # n.carriers.loc["other", "color"] = "grey"
 
     # TODO
     generating_link_carrier_map = {"fuel cell": "H2", "battery discharger": "battery"}
+
+
+    TITLE_SIZE = 16
 
     ######
     ### Capacity Plots
@@ -53,7 +56,71 @@ if __name__ == "__main__":
 
     ###### 
     ## Capacity Map
-    # Map of all the added optimized capacities in the Network. Including buses, lines, and links
+    # Map of all the CURRENT capacities in the Network. Including buses, lines, and links
+    ######
+
+    fig, ax = plt.subplots(
+        figsize=(8, 8), subplot_kw={"projection": ccrs.EqualEarth(n.buses.x.mean())}
+    )
+    g = n.generators.groupby(["bus", "carrier"]).p_nom.sum()
+    s = (
+        n.links.query("carrier in @generating_link_carrier_map")
+        .groupby(["bus1", "carrier"])
+        .p_nom.sum()
+    )
+    s = s.rename(index=generating_link_carrier_map, level=1)
+    buses = pd.concat([g, s])
+    with plt.rc_context({"patch.linewidth": 0.1}):
+        n.plot(
+            bus_sizes=buses / bus_scale,
+            bus_alpha=0.7,
+            line_widths=n.lines.s_nom / line_scale,
+            link_widths=n.links.p_nom / line_scale,
+            line_colors="teal",
+            ax=ax,
+            margin=0.2,
+            color_geomap=None,
+        )
+    regions_onshore.plot(
+        ax=ax,
+        facecolor="whitesmoke",
+        edgecolor="white",
+        aspect="equal",
+        transform=ccrs.PlateCarree(),
+        linewidth=1.2,
+    )
+    ax.set_extent(regions_onshore.total_bounds[[0, 2, 1, 3]])
+
+    legend_kwargs = {"loc": "upper left", "frameon": False}
+    bus_sizes = [5000, 10e3, 50e3]  # in MW
+    line_sizes = [2000, 5000]  # in MW
+    add_legend_circles(
+        ax,
+        [s / bus_scale for s in bus_sizes],
+        [f"{s / 1000} GW" for s in bus_sizes],
+        legend_kw={"bbox_to_anchor": (1, 1), **legend_kwargs},
+    )
+    add_legend_lines(
+        ax,
+        [s / line_scale for s in line_sizes],
+        [f"{s / 1000} GW" for s in line_sizes],
+        legend_kw={"bbox_to_anchor": (1, 0.8), **legend_kwargs},
+    )
+    add_legend_patches(
+        ax,
+        n.carriers.color,
+        n.carriers.nice_name,
+        legend_kw={"bbox_to_anchor": (1, 0), **legend_kwargs, "loc": "lower left"},
+    )
+    ax.set_title("Base Network Capacities", fontsize=TITLE_SIZE)
+    fig.tight_layout()
+    fig.savefig(snakemake.output.capacity_map_base)
+
+    # import pdb; pdb.set_trace()
+
+    ###### 
+    ## Capacity Map
+    # Map of all the added OPTIMIZED capacities in the Network. Including buses, lines, and links
     ######
 
     fig, ax = plt.subplots(
@@ -109,8 +176,9 @@ if __name__ == "__main__":
         n.carriers.nice_name,
         legend_kw={"bbox_to_anchor": (1, 0), **legend_kwargs, "loc": "lower left"},
     )
+    ax.set_title("Optimized Network Capacities", fontsize=TITLE_SIZE)
     fig.tight_layout()
-    fig.savefig(snakemake.output.capacity_map)
+    fig.savefig(snakemake.output.capacity_map_optimized)
 
     ####
     ## Capacity Bar Plot
@@ -124,6 +192,7 @@ if __name__ == "__main__":
     capacities.div(1e3).plot.bar(color=colors, ax=ax)
     ax.set_ylabel("Total capacity [GW]")
     ax.set_xlabel("")
+    ax.set_title("Optimized Network Capacities", fontsize=TITLE_SIZE)
     fig.savefig(snakemake.output.capacity_bar)
 
 
@@ -141,7 +210,7 @@ if __name__ == "__main__":
     else:
         line_scale = 1e7
 
-    import pdb; pdb.set_trace()
+    # import pdb; pdb.set_trace()
     ######
     ## Operation Map
     # Map of all the optimized operation in the Network. Including buses, lines, and links
@@ -196,13 +265,14 @@ if __name__ == "__main__":
         legend_kw={"bbox_to_anchor": (1, 0.0), **legend_kwargs, "loc": "lower left"},
     )
     fig.tight_layout()
+    ax.set_title("Optimized Network Operations [MWh]", fontsize= TITLE_SIZE)
     fig.savefig(snakemake.output.operation_map)
     
 
     ####
     ## Cost Plots
     ####
-    import pdb; pdb.set_trace()
+    # import pdb; pdb.set_trace()
 
     carriers = n.generators.carrier
     production = (

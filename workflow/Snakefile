@@ -11,7 +11,8 @@ HTTP = HTTPRemoteProvider()
 from os.path import normpath
 
 FIGURES_SINGLE = [
-    "capacity_map",
+    "capacity_map_base",
+    "capacity_map_optimized",
     "capacity_bar",
     "operation_map",
     "operation_bar",
