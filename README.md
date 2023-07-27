@@ -9,7 +9,7 @@ The model draws data from:
 - Historical load data from the EIA via the [GridEmissions](https://github.com/jdechalendar/gridemissions/) tool.
 - Forecasted load data from the [WECC ADS PCM](https://www.wecc.org/ReliabilityModeling/Pages/AnchorDataSet.aspx).
 - Renewable time series based on ERA5, assembled using the atlite tool.
-- Geographical potentials for wind and solar generators based on land use (CORINE) and excluding nature reserves (Natura2000) are computed with the atlite library.(under development)
+- Geographical potentials for wind and solar generators based on [land use](https://land.copernicus.eu/global/products/lc) and excluding [protected lands](https://www.protectedplanet.net/country/USA) are computed with the atlite library.
 
 Example 500 Node Western Interconnection Network:
 ![pypsa-usa Base Network](https://github.com/PyPSA/pypsa-breakthroughenergy-usa/blob/master/workflow/repo_data/network_500.jpg)
