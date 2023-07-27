@@ -92,7 +92,7 @@ rule retrieve_WECC_forecast_data:
         ads_2032 = directory(RESOURCES + "WECC_ADS/downloads/2032/Public Data/Hourly Profiles in CSV format"),
         ads_2030 = directory(RESOURCES + "WECC_ADS/downloads/2030/WECC 2030 ADS PCM 2020-12-16 (V1.5) Public Data/CSV Shape Files"),
     log:
-        "logs/retrieve_WECC_forecast_data.log",
+        "logs/retrieve/retrieve_WECC_forecast_data.log",
     script:
         "scripts/retrieve_forecast_data.py"        
 
@@ -112,7 +112,7 @@ rule retrieve_eia_data:
     output:
         expand(RESOURCES + "eia/{file}", file=DATAFILES_DMD),
     log:
-        "logs/retrieve_historical_load_data.log",
+        "logs/retrieve/retrieve_historical_load_data.log",
     script:
         "scripts/retrieve_historical_load_data.py"
 
@@ -155,7 +155,7 @@ rule retrieve_natura_data:
     output:
         "data/natura.tiff",
     log:
-        "logs/retrieve_natura_data.log",
+        "logs/retrieve/retrieve_natura_data.log",
     script:
         "scripts/retrieve_natura_data.py"
 
@@ -501,7 +501,7 @@ rule solve_network:
         "scripts/solve_network.py"
 
 
-rule plot_figures_single:
+rule plot_figures:
     input:
         network="results/{interconnect}/networks/elec_s_{clusters}_ec_l{ll}_{opts}.nc",
         regions_onshore=RESOURCES + "{interconnect}/regions_onshore_s_{clusters}.geojson",
@@ -512,8 +512,8 @@ rule plot_figures_single:
             % fig
             for fig in FIGURES_SINGLE
         },
-    notebook:
-        "notebooks/plot-results.py.ipynb"
+    script:
+        "scripts/plot_results.py"
 
 
 # Create DAG with- 
