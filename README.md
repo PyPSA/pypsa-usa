@@ -4,12 +4,15 @@ PyPSA-USA is an open-source power systems model of the bulk transmission systems
 
 The model draws data from:
 
-- The [BreakthroughEnergy](https://www.breakthroughenergy.org/) transmission network model. This model is a X bus network, with X lines above 69 kV, X substations, and x lines.
+- The [BreakthroughEnergy](https://www.breakthroughenergy.org/) transmission network model. This model has 82,071 bus network, 41,083 substations, and 104,192 lines across the three interconnections.
 - Powerplant Data can be drawn from three options: the Breakthrough Network, the WECC Anchor Data Set Production Cost Model, or the [PUDL](https://catalystcoop-pudl.readthedocs.io/en/latest/index.html#) dataset. (only breakthrough functioning currently in master branch)
 - Historical load data from the EIA via the [GridEmissions](https://github.com/jdechalendar/gridemissions/) tool.
 - Forecasted load data from the [WECC ADS PCM](https://www.wecc.org/ReliabilityModeling/Pages/AnchorDataSet.aspx).
-- Renewable time series based on ERA5 and SARAH, assembled using the atlite tool. (under development)
+- Renewable time series based on ERA5, assembled using the atlite tool.
 - Geographical potentials for wind and solar generators based on land use (CORINE) and excluding nature reserves (Natura2000) are computed with the atlite library.(under development)
+
+
+![pypsa-usa Base Network](https://github.com/PyPSA/pypsa-breakthroughenergy-usa/blob/master/workflow/repo_data/Network_500.jpg?raw=true)
 
 # Installation
 
@@ -35,11 +38,18 @@ git submodule update --remote
 
 # Workflow
 
-![pypsa-usa workflow](https://github.com/PyPSA/pypsa-breakthroughenergy-usa/blob/dev_atlite_integration/workflow/repo_data/dag.jpg?raw=true)
+![pypsa-usa workflow](https://github.com/PyPSA/pypsa-breakthroughenergy-usa/blob/master/workflow/repo_data/dag.jpg?raw=true)
 
 ## Configuration
 
-**This workflow has only been thoroughly tested for the `western` interconnection wildcard.**
+**This workflow is currently only being tested for the `western` interconnection wildcard.**
+
+Maximum Number of clusters:
+```
+Eastern: 35047
+Western: 4786
+Texas: 1250
+```
 
 ## Execution 
 To execute the workflow, go into the `workflow` directory and execute `snakemake` from your terminal. 
