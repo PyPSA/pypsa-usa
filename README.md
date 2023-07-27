@@ -11,8 +11,9 @@ The model draws data from:
 - Renewable time series based on ERA5, assembled using the atlite tool.
 - Geographical potentials for wind and solar generators based on land use (CORINE) and excluding nature reserves (Natura2000) are computed with the atlite library.(under development)
 
-
+Example 500 Node Western Interconnection Network:
 ![pypsa-usa Base Network](https://github.com/PyPSA/pypsa-breakthroughenergy-usa/blob/master/workflow/repo_data/network_500.jpg)
+
 
 # Installation
 
@@ -44,12 +45,24 @@ git submodule update --remote
 
 **This workflow is currently only being tested for the `western` interconnection wildcard.**
 
+### Clustering
+
+Minimum Number of clusters:
+```
+Eastern: TBD
+Western: 30
+Texas: TBD
+```
+
 Maximum Number of clusters:
 ```
 Eastern: 35047
 Western: 4786
 Texas: 1250
 ```
+
+### Wildcards:
+For more detailed definitions of wildcards, please reference [pypsa-eur](https://pypsa-eur.readthedocs.io/en/latest/wildcards.html). Not all wildcards implemented are available for pypsa-usa.
 
 ## Execution 
 To execute the workflow, go into the `workflow` directory and execute `snakemake` from your terminal. 
@@ -69,6 +82,8 @@ enable:
   retrieve_natura_raster: true 
 ```
 
+Note: The `build_renewable_profiles` rule will take ~10-15 minutes to run the first time you run the workflow. After that, changing the number of clusters, load, or generator configurations will not require rebuilding the renewable profiles. Changes to `renewables` configuration will cause re-run of `build_renewable_profiles`.
+
 ### Troubleshooting:
 
 To force the execution of a portion of the workflow up to a given rule, cd to the `workflow` directory and run:
@@ -80,8 +95,8 @@ where `build_shapes` is forced to run, and `build_base_network`  is the last rul
 
 ## Examine Results
 
-# Contact
-You can contact ctehran@stanford.edu for immediate questions on the usage of the tool.
+# Contributing
+We welcome your contributions to this project. If you have ideas, requests, or encounter issues with the model you can contact ktehranchi@stanford.edu. Please do not hesitate to reach out.
 
 
 <!-- # Scope -->

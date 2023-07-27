@@ -24,6 +24,7 @@ if __name__ == "__main__":
 
     n = pypsa.Network(snakemake.input.network)
     regions_onshore = gpd.read_file(snakemake.input.regions_onshore)
+    n_clusters = snakemake.wildcards.n_clusters
     # import pdb; pdb.set_trace()
     # TODO
     n.carriers.loc["wind", "color"] = "lightblue"
@@ -112,7 +113,7 @@ if __name__ == "__main__":
         n.carriers.nice_name,
         legend_kw={"bbox_to_anchor": (1, 0), **legend_kwargs, "loc": "lower left"},
     )
-    ax.set_title("Base Network Capacities", fontsize=TITLE_SIZE)
+    ax.set_title(f'Base Network Capacities  (#clusters = {n_clusters})', fontsize=TITLE_SIZE)
     fig.tight_layout()
     fig.savefig(snakemake.output.capacity_map_base)
 
@@ -176,7 +177,7 @@ if __name__ == "__main__":
         n.carriers.nice_name,
         legend_kw={"bbox_to_anchor": (1, 0), **legend_kwargs, "loc": "lower left"},
     )
-    ax.set_title("Optimized Network Capacities", fontsize=TITLE_SIZE)
+    ax.set_title(f'Optimized Network Capacities  (#clusters = {n_clusters})', fontsize=TITLE_SIZE)
     fig.tight_layout()
     fig.savefig(snakemake.output.capacity_map_optimized)
 
@@ -192,7 +193,7 @@ if __name__ == "__main__":
     capacities.div(1e3).plot.bar(color=colors, ax=ax)
     ax.set_ylabel("Total capacity [GW]")
     ax.set_xlabel("")
-    ax.set_title("Optimized Network Capacities", fontsize=TITLE_SIZE)
+    ax.set_title(f'Optimized Network Capacities (#clusters = {n_clusters})', fontsize=TITLE_SIZE)
     fig.savefig(snakemake.output.capacity_bar)
 
 
