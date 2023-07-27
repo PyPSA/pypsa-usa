@@ -12,7 +12,7 @@ The model draws data from:
 - Geographical potentials for wind and solar generators based on land use (CORINE) and excluding nature reserves (Natura2000) are computed with the atlite library.(under development)
 
 
-![pypsa-usa Base Network](https://github.com/PyPSA/pypsa-breakthroughenergy-usa/blob/master/workflow/repo_data/Network_500.jpg?raw=true)
+![pypsa-usa Base Network](https://github.com/PyPSA/pypsa-breakthroughenergy-usa/blob/master/workflow/repo_data/network_500.jpg)
 
 # Installation
 
