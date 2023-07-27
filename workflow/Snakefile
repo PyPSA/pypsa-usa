@@ -66,7 +66,7 @@ rule all:
 
 ################# ----------- Rules to Retrieve Data ---------- #################
 
-DATAFILES = [
+breakthrough_datafiles = [
     "bus.csv",
     "sub.csv",
     "bus2sub.csv",
@@ -80,13 +80,20 @@ DATAFILES = [
     "zone.csv",
 ]
 
-rule retrieve_breakthrough_network_data:
+pypsa_usa_datafiles = [
+"gebco/gebco_2023_tid_USA.nc",
+"copernicus/PROBAV_LC100_global_v3.0.1_2019-nrt_Discrete-Classification-map_USA_EPSG-4326.tif",
+]
+
+rule retrieve_zenodo_databundles:
     output:
-        expand( DATA + "breakthrough_network/base_grid/{file}", file=DATAFILES),
+        expand(DATA + "breakthrough_network/base_grid/{file}", file=breakthrough_datafiles),
+        expand(DATA + "{file}", file=pypsa_usa_datafiles),
+        "data/natura.tiff",
     log:
-        "logs/retrieve_breakthrough_network_data.log",
+        "logs/retrieve/retrieve_databundles.log",
     script:
-        "scripts/retrieve_data_from_zenodo.py"
+        "scripts/retrieve_databundles.py"
 
 rule retrieve_WECC_forecast_data:
     output:
@@ -134,31 +141,6 @@ rule retrieve_ship_raster:
     retries: 2
     run:
         move(input[0], output[0])
-
-if config["enable"].get("retrieve_databundle", True):
-    datafiles = [
-    "gebco/gebco_2023_tid_USA.nc",
-    "copernicus/PROBAV_LC100_global_v3.0.1_2019-nrt_Discrete-Classification-map_USA_EPSG-4326.tif",
-    ]
-
-    rule retrieve_databundle:
-        output:
-            expand(DATA + "{file}", file=datafiles),
-        log:
-            LOGS + "retrieve_databundle.log",
-        resources:
-            mem_mb=1000,
-        retries: 2
-        script:
-            "scripts/retrieve_databundle.py"
-
-rule retrieve_natura_data:
-    output:
-        "data/natura.tiff",
-    log:
-        "logs/retrieve/retrieve_natura_data.log",
-    script:
-        "scripts/retrieve_natura_data.py"
 
 
 if config["enable"].get("retrieve_cutout", True):

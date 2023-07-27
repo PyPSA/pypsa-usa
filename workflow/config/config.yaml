@@ -22,6 +22,11 @@ enable:
   retrieve_cutout: true 
   retrieve_natura_raster: true 
 
+zenodo_repositories:
+  protected_planet: "https://sandbox.zenodo.org/record/1183583/files/natura_global.zip"
+  USATestSystem: "https://zenodo.org/record/4538590/files/USATestSystem.zip"
+  pypsa_usa_data: "https://zenodo.org/record/8175051/files/pypsa_usa_data.zip?download=1"
+
 zenodo_repository: #breakthrough network
   url: "https://zenodo.org/record/4538590/files/USATestSystem.zip"
 natura_repository:
