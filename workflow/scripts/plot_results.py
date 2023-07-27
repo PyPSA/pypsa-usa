@@ -24,7 +24,7 @@ if __name__ == "__main__":
 
     n = pypsa.Network(snakemake.input.network)
     regions_onshore = gpd.read_file(snakemake.input.regions_onshore)
-    n_clusters = snakemake.wildcards.n_clusters
+    n_clusters = snakemake.wildcards.clusters
     # import pdb; pdb.set_trace()
     # TODO
     n.carriers.loc["wind", "color"] = "lightblue"
