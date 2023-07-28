@@ -8,7 +8,7 @@ if __name__ == "__main__":
     rootpath = "."
     configure_logging(snakemake)
 
-    repositories = snakemake.config["zenodo_repositories"]
+    repositories = snakemake.params.repositories
     for repository in repositories:
         url = repositories[repository]
 
