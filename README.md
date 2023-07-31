@@ -1,5 +1,7 @@
 # PyPSA-USA
 
+**NOTE: This model is under active development. The western interconnection is stable, however you are likely to find bugs in the workflow as we continue to develop the model. Please file github issues or email ctehran@stanford.edu for support**
+
 PyPSA-USA is an open-source power systems model of the bulk transmission systems in the United States. This workflow draws from the work of [pypsa-eur](https://pypsa-eur.readthedocs.io/en/latest/index.html) and [pypsa-meets-earth](https://pypsa-earth.readthedocs.io/en/latest/how_to_contribute.html) to build a highly configurable power systems model that can be used for capacity expansion modeling, production cost simulation, and power flow analysis. This model is currently under development, and is only stable under certain configurations detailed below.
 
 The model draws data from:
@@ -72,15 +74,6 @@ snakemake -j6
 ```
 
 where 6 indicates the number of used cores, you may change it to your preferred number. This will run the workflow defined in the `Snakefile`.
-
-For your initial execution you must set the configuration for retrieving data to true as specified in `config.defualt.yaml`. After the first run, you should set these to false to avoid redownloading the files.
-
-```
-enable:
-  retrieve_databundle: true
-  retrieve_cutout: true 
-  retrieve_natura_raster: true 
-```
 
 Note: The `build_renewable_profiles` rule will take ~10-15 minutes to run the first time you run the workflow. After that, changing the number of clusters, load, or generator configurations will not require rebuilding the renewable profiles. Changes to `renewables` configuration will cause re-run of `build_renewable_profiles`.
 
