@@ -17,10 +17,7 @@ run:
   shared_cutouts: true # set to true to share the default cutout(s) across runs
 
 enable:
-  retrieve_databundle: true # set these to false after first run
-  build_cutout: false 
-  retrieve_cutout: true 
-  retrieve_natura_raster: true 
+  build_cutout: false
 
 zenodo_repositories:
   protected_planet: "https://sandbox.zenodo.org/record/1183583/files/natura_global.zip"

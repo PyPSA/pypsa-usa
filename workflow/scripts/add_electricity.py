@@ -408,12 +408,11 @@ def attach_wind_and_solar(
             '''
             bus2sub = pd.read_csv(input_profiles.bus2sub, dtype=str).drop("interconnect", axis=1)
             bus_list = ds.bus.to_dataframe("sub_id").merge(bus2sub).bus_id.astype(str).values
-            p_nom_max_bus = ds["p_nom_max"].to_dataframe().merge(bus2sub,left_on="bus", right_on="sub_id").p_nom_max
-            weight_bus = ds["weight"].to_dataframe().merge(bus2sub,left_on="bus", right_on="sub_id").weight
+            p_nom_max_bus = ds["p_nom_max"].to_dataframe().merge(bus2sub,left_on="bus", right_on="sub_id").set_index('bus_id').p_nom_max
+            weight_bus = ds["weight"].to_dataframe().merge(bus2sub,left_on="bus", right_on="sub_id").set_index('bus_id').weight
             bus_profiles = ds["profile"].transpose("time", "bus").to_pandas().T.merge(bus2sub,left_on="bus", right_on="sub_id").set_index('bus_id').drop(columns='sub_id').T
             
             logger.info(f"Adding {car} capacity-factor profiles to the network.")
-
             #TODO: #24 VALIDATE TECHNICAL POTENTIALS
 
             n.madd(
@@ -431,6 +430,7 @@ def attach_wind_and_solar(
                 p_max_pu=bus_profiles,
             )
 
+            # import pdb; pdb.set_trace()
 
             '''
             n.madd(
@@ -1000,8 +1000,8 @@ if __name__ == "__main__":
         #     estimate_renewable_capacities(
         #         n, year, tech_map, expansion_limit, params.countries
         #     )
-
-        # update_p_nom_max(n)
+        # import pdb; pdb.set_trace()
+        update_p_nom_max(n)
 
         #temporarily adding hydro with breakthrough only data until I can correctly import hydro_data
         renewable_carriers = list(
