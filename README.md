@@ -12,7 +12,7 @@ The model draws data from:
 - Geographical potentials for wind and solar generators based on [land use](https://land.copernicus.eu/global/products/lc) and excluding [protected lands](https://www.protectedplanet.net/country/USA) are computed with the atlite library.
 
 Example 500 Node Western Interconnection Network:
-![pypsa-usa Base Network](https://github.com/PyPSA/pypsa-breakthroughenergy-usa/blob/master/workflow/repo_data/network_500.jpg)
+![pypsa-usa Base Network](https://github.com/PyPSA/pypsa-usa/blob/master/workflow/repo_data/network_500.jpg)
 
 
 # Installation
@@ -39,7 +39,7 @@ git submodule update --remote
 
 # Workflow
 
-![pypsa-usa workflow](https://github.com/PyPSA/pypsa-breakthroughenergy-usa/blob/master/workflow/repo_data/dag.jpg?raw=true)
+![pypsa-usa workflow](https://github.com/PyPSA/pypsa-usa/blob/master/workflow/repo_data/dag.jpg?raw=true)
 
 ## Configuration
 
