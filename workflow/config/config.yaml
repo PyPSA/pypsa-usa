@@ -50,7 +50,8 @@ load_data: # set only one of the `use_...` to true
   use_breakthrough: false 
 
 generator_data:
-  use_breakthrough: true #enables BE thermal generators
+  use_eia: true # if enabled uses eia plant data with atlite for renewable profiles. Temporarily still uses BE Hydro
+  use_breakthrough: true #True uses BE thermal generators
   use_breakthrough_atlite: true # true= BE renewable gens with atlite calculated timeseries. false= BE renewable gens with BE timeseries
   #use_eia: False #not implemented yet
 
