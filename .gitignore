@@ -18,9 +18,7 @@ data/
 benchmarks/
 resources/
 subworkflows/
-
-#folders to ignore
-*notebooks/
+notebooks/
 
 ## Core latex/pdflatex auxiliary files:
 *.aux
