@@ -24,6 +24,9 @@ def add_buses_from_file(n, buses, interconnect):
         v_nom=buses.baseKV,
         zone_id=buses.zone_id,
         balancing_area= buses.balancing_area,
+        interconnect = buses.interconnect,
+        x = buses.lon,
+        y = buses.lat,
     )
 
     return n
