@@ -16,9 +16,11 @@ results/
 resources/
 data/
 benchmarks/
-resources/ads_private_data
+resources/
 subworkflows/
-notebooks/
+
+#folders to ignore
+*notebooks/
 
 ## Core latex/pdflatex auxiliary files:
 *.aux
