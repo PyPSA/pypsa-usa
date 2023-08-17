@@ -349,6 +349,7 @@ rule add_electricity:
         tech_costs="repo_data/pypsa_eur_costs.csv",
         regions=RESOURCES + "{interconnect}/regions_onshore.geojson",
         plants_eia="repo_data/eia_plants_wecc.csv",
+        plants_ads="repo_data/ads_plants_locs.csv",
         fuel_costs="repo_data/eia_mappings/fuelCost22.csv",
         plants="data/breakthrough_network/base_grid/plant.csv",
         hydro="data/breakthrough_network/base_grid/hydro.csv",

@@ -42,20 +42,9 @@ balancing_area_names: ['AEC', 'AECI', 'AVA', 'Arizona', 'BANC', 'BPAT', 'CHPD', 
 #   CISO-PGAE: 0.5
 
 # TODO: #11 change load data and generator data to be a snakemake wildcard value
-load_data: # set only one of the `use_...` to true
-  use_eia: true 
-  historical_year: 2019 #keep at 2019 for now! I will be adding other years shortly.
-  use_ads: false 
-  future_year: 2032
-  use_breakthrough: false 
+network_configuration: "ads2032" # "pypsa-usa" or "ads2032" or "breakthrough" 
 
-generator_data:
-  use_eia: true # if enabled uses eia plant data with atlite for renewable profiles. Temporarily still uses BE Hydro
-  use_breakthrough: false #True uses BE thermal generators
-  use_breakthrough_atlite: true # true= BE renewable gens with atlite calculated timeseries. false= BE renewable gens with BE timeseries
-  #use_eia: False #not implemented yet
-
-snapshots: #do not edit (temp)
+snapshots:
   start: "2019-01-01"
   end: "2020-01-01"
   inclusive: 'left' # include start, not end

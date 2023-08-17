@@ -917,7 +917,6 @@ def load_powerplants_eia(ppl_fn):
     plants = add_missing_heat_rates(plants, snakemake.input.fuel_costs)
     plants['carrier'] = plants.tech_type.map(carrier_dict)
     return plants
-
 def add_missing_fuel_cost(plants, costs_fn):
     fuel_cost = pd.read_csv(costs_fn, index_col=0,skiprows=3)
     plants['fuel_cost'] = plants.fuel_type.map(fuel_cost.fuel_price_per_mmbtu)
@@ -1041,6 +1040,77 @@ def attach_eia_renewable_capacities_to_atlite(n, plants_df, renewable_carriers):
         logger.info(f"Adding {len(plants_filt)} {tech} generator capacities to the network.")
 
 
+def load_powerplants_ads(ppl_fn):
+    tech_dict= {
+        'Solar_Tracking',
+        'NG_Industrial', 
+        'NG_Areo',
+        'Wind_Onshore',
+        'Geo_Binary', 
+        'Solar_CSP6', 
+        'NG_Single shaft', 
+        'Solar_CSP0',
+        'Geo_Double flash', 
+        'Solar_Photovoltaic',
+        'Natural Gas_Steam Turbine', 
+        'Subbituminous Coal_Steam Turbine',
+        'Water_Hydraulic Turbine', 
+        'Natural Gas_Gas Turbine',
+        'Wind_Wind Turbine', 
+        'MWH_Battery Storage', 
+        'Nuclear_Nuclear',
+        'Solar_NonTracking', 
+        'Landfill Gas_Internal Combustion',
+        'Electricity_Battery Storage', 
+        'Solar_Non-Tracking', 
+        'DFO_ICE',
+        'OBG_GT-NG', 
+        'DFO_ST', 
+        'WDS_ST', 
+        'Solar_Fixed', 
+        'NG_Aero',
+        'Biomass Waste_Internal Combustion', 
+        'OBG_ICE', 
+        'LFG_ICE',
+        'NG_GT-NG', 'Wind_WT', 
+        'Natural Gas_Combined Cycle',
+        'Uranium_Nuclear',
+        'Electricity_Non-Tracking'
+    }
+    carrier_dict = {
+        'Solar':'solar',
+        'NG':'ng', 
+        'Water':'hydro', 
+        'Bio':'biomass', 
+        'Wind':'wind', 
+        'WH':'waste',
+        'Geo':'geothermal',
+        'Uranium':'nuclear',
+        'Petroleum Coke':'oil',
+        'Coal':'coal',
+        'NatGas':'ng',
+        'Oil':'oil',
+        'Electricity':'battery',
+        'Natural Gas':'ng',
+        'Subbituminous Coal':'coal',
+        'Combined Cycle':'ng',
+        'MWH':'battery',
+        'Nuclear':'nuclear',
+        'Landfill Gas':'waste',
+        'DFO':'oil',
+        'OBG':'other',
+        'WDS':'biomass',
+        'Biomass Waste':'waste',
+        'LFG':'waste'
+    }
+    import pdb; pdb.set_trace()
+    plants = pd.read_csv(ppl_fn, index_col=0, dtype={"bus_assignment": "str"}).rename(columns=str.lower)
+    plants.rename(columns={'fueltype':'fuel_type'}, inplace=True)
+    plants = add_missing_fuel_cost(plants, snakemake.input.fuel_costs)
+    plants = add_missing_heat_rates(plants, snakemake.input.fuel_costs)
+    plants['carrier'] = plants.fuel_type.map(carrier_dict)
+    return plants
+
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
@@ -1069,7 +1139,7 @@ if __name__ == "__main__":
         k: v for k, v in snakemake.input.items() if k.startswith("conventional_")
     }
 
-    if snakemake.config["generator_data"]["use_eia"]: 
+    if snakemake.config["network_configuration"] == "pypsa-usa": 
         costs = costs.rename(index={"onwind": "wind", "OCGT": "ng"}) #changing cost data to match the plant data #TODO: #10 change this so that fuel types and plant types match the pypsa naming scheme.
 
         plant_data = load_powerplants_eia(snakemake.input['plants_eia'])
@@ -1138,60 +1208,130 @@ if __name__ == "__main__":
             extendable_carriers,
             costs,
         )
+    elif snakemake.config["network_configuration"] == "ads2032": 
+        import pdb; pdb.set_trace()
+        costs = costs.rename(index={"onwind": "wind", "OCGT": "ng"}) #changing cost data to match the plant data #TODO: #10 change this so that fuel types and plant types match the pypsa naming scheme.
 
+        plant_data = load_powerplants_ads(snakemake.input['plants_ads'])
+        
+        #match each plant to nearest node in network
+        plant_data_locs = match_plant_to_bus(n, plant_data)
+
+        #attach conventional plants to network
+        n = attach_eia_conventional_plants(
+            n,
+            plant_data_locs,
+            conventional_carriers,
+            extendable_carriers,
+            costs,
+        )
+
+        #attach batteries to network
+        n = attach_eia_batteries(
+            n, 
+            plant_data_locs,
+            extendable_carriers, 
+            costs
+        )
+
+        #attach renewable plants to network
+        costs = costs.rename(index={"offwind-ac-connection-submarine": "offwind-connection-submarine",
+                                    "offwind-ac-connection-underground": "offwind-connection-underground",
+                                    'offwind-ac-station': 'offwind-station',
+                                    "onwind":"wind"}) #temporary fix. should rename carriers instead of changing cost names. w TODO#10
+    
+        attach_wind_and_solar(
+            n,
+            costs,
+            snakemake.input,
+            renewable_carriers,
+            extendable_carriers,
+            params.length_factor,
+        )
+
+        renewable_carriers = list(
+            set(snakemake.config['electricity']["renewable_carriers"]).intersection(
+                set(["wind", "solar", "offwind"])
+            )
+        )
+
+        attach_eia_renewable_capacities_to_atlite(
+            n,
+            plant_data_locs,
+            renewable_carriers
+        )
+
+        update_p_nom_max(n)
+
+
+        #attach hydro to network (using breakthrough plants and profiles)
+        #temporarily adding hydro with breakthrough only data until I can correctly import hydro_data
+        renewable_carriers = list(
+            set(snakemake.config['electricity']["renewable_carriers"]).intersection(
+                set(["hydro"])
+            )
+        )
+        n = attach_breakthrough_renewable_plants(
+            n,
+            snakemake.input["plants"],
+            renewable_carriers,
+            extendable_carriers,
+            costs,
+        )
+    elif snakemake.config["network_configuration"] == "breakthrough":
+        costs = costs.rename(index={"onwind": "wind", "OCGT": "ng"}) #changing cost data to match the breakthrough plant data #TODO: #10 change this so that breakthrough fuel types and plant types match the pypsa naming scheme.
+        conventional_carriers = list(
+            set(snakemake.config['electricity']["conventional_carriers"]).intersection(
+                set(["coal", "ng", "nuclear", "oil", "geothermal"])
+            )
+        )
+
+        n = attach_breakthrough_conventional_plants(
+            n,
+            snakemake.input["plants"],
+            conventional_carriers,
+            extendable_carriers,
+            costs,
+        )
+
+        #adding breakthrough renewable plants to network
+        costs = costs.rename(index={"offwind-ac-connection-submarine": "offwind-connection-submarine",
+                                    "offwind-ac-connection-underground": "offwind-connection-underground",
+                                    'offwind-ac-station': 'offwind-station',
+                                    "onwind":"wind"}) #temporary fix. should rename carriers instead of changing cost names. w TODO#10
+        attach_wind_and_solar(
+            n,
+            costs,
+            snakemake.input,
+            renewable_carriers,
+            extendable_carriers,
+            params.length_factor,
+        )
+
+        renewable_carriers = list(
+            set(snakemake.config['electricity']["renewable_carriers"]).intersection(
+                set(["wind", "solar", "offwind"])
+            )
+        )
+
+        attach_breakthrough_renewable_capacities_to_atlite(n, snakemake.input["plants"], renewable_carriers)
+        update_p_nom_max(n)
+
+        #temporarily adding hydro with breakthrough only data until I can correctly import hydro_data
+        renewable_carriers = list(
+            set(snakemake.config['electricity']["renewable_carriers"]).intersection(
+                set(["hydro"])
+            )
+        )
+        n = attach_breakthrough_renewable_plants(
+            n,
+            snakemake.input["plants"],
+            renewable_carriers,
+            extendable_carriers,
+            costs,
+        )
     else:
-        if snakemake.config["generator_data"]["use_breakthrough"]:
-            costs = costs.rename(index={"onwind": "wind", "OCGT": "ng"}) #changing cost data to match the breakthrough plant data #TODO: #10 change this so that breakthrough fuel types and plant types match the pypsa naming scheme.
-            conventional_carriers = list(
-                set(snakemake.config['electricity']["conventional_carriers"]).intersection(
-                    set(["coal", "ng", "nuclear", "oil", "geothermal"])
-                )
-            )
-
-            n = attach_breakthrough_conventional_plants(
-                n,
-                snakemake.input["plants"],
-                conventional_carriers,
-                extendable_carriers,
-                costs,
-            )
-
-            #adding breakthrough renewable plants to network
-            costs = costs.rename(index={"offwind-ac-connection-submarine": "offwind-connection-submarine",
-                                        "offwind-ac-connection-underground": "offwind-connection-underground",
-                                        'offwind-ac-station': 'offwind-station',
-                                        "onwind":"wind"}) #temporary fix. should rename carriers instead of changing cost names. w TODO#10
-            attach_wind_and_solar(
-                n,
-                costs,
-                snakemake.input,
-                renewable_carriers,
-                extendable_carriers,
-                params.length_factor,
-            )
-
-            renewable_carriers = list(
-                set(snakemake.config['electricity']["renewable_carriers"]).intersection(
-                    set(["wind", "solar", "offwind"])
-                )
-            )
-
-            attach_breakthrough_renewable_capacities_to_atlite(n, snakemake.input["plants"], renewable_carriers)
-            update_p_nom_max(n)
-
-            #temporarily adding hydro with breakthrough only data until I can correctly import hydro_data
-            renewable_carriers = list(
-                set(snakemake.config['electricity']["renewable_carriers"]).intersection(
-                    set(["hydro"])
-                )
-            )
-            n = attach_breakthrough_renewable_plants(
-                n,
-                snakemake.input["plants"],
-                renewable_carriers,
-                extendable_carriers,
-                costs,
-            )
+        raise ValueError(f"Unknown network_configuration {snakemake.config['network_configuration']}")
 
     sanitize_carriers(n, snakemake.config)
     n.meta = snakemake.config
