@@ -97,6 +97,7 @@ import xarray as xr
 from _helpers import configure_logging, update_p_nom_max
 
 from shapely.prepared import prep
+import pdb
 
 idx = pd.IndexSlice
 
@@ -900,8 +901,8 @@ def load_powerplants_eia(ppl_fn):
     carrier_dict = {
         'Nuclear':'nuclear',
         'Coal':'coal', 
-        'Gas_SC':'ng', 
-        'Gas_CC':'ng', 
+        'Gas_SC':'gas', 
+        'Gas_CC':'gas', 
         'Oil':'oil', 
         'Geothermal':'geothermal',
         'Biomass':'biomass', 
@@ -917,6 +918,7 @@ def load_powerplants_eia(ppl_fn):
     plants = add_missing_heat_rates(plants, snakemake.input.fuel_costs)
     plants['carrier'] = plants.tech_type.map(carrier_dict)
     return plants
+
 def add_missing_fuel_cost(plants, costs_fn):
     fuel_cost = pd.read_csv(costs_fn, index_col=0,skiprows=3)
     plants['fuel_cost'] = plants.fuel_type.map(fuel_cost.fuel_price_per_mmbtu)
@@ -994,7 +996,7 @@ def attach_eia_batteries(n, plants_df,extendable_carriers, costs):
     plants_filt = plants.query("carrier == 'battery' ")
     plants_filt.index = plants_filt.index.astype(str) + "_" + plants_filt.generator_id.astype(str)
 
-    logger.info(f"Adding {len(plants_filt)} Batteries as 'Stores' to the network.")
+    logger.info(f"Adding {len(plants_filt)} Batteries as Stores to the network.")
     plants_filt = plants_filt.dropna(subset=['energy_capacity_mwh'])
     # logger.info(f"Dropping {len(plants_filt) - len(plants_filt.dropna(subset=['energy_capacity_mwh']))} Batteries without energy capacity.")
 
@@ -1039,47 +1041,91 @@ def attach_eia_renewable_capacities_to_atlite(n, plants_df, renewable_carriers):
         n.generators.p_nom_min.update(network_gens.bus.map(caps).dropna())
         logger.info(f"Adding {len(plants_filt)} {tech} generator capacities to the network.")
 
-
 def load_powerplants_ads(ppl_fn):
+    #TODO: #32 Revisit Technology Type Assignments
     tech_dict= {
-        'Solar_Tracking',
-        'NG_Industrial', 
-        'NG_Areo',
-        'Wind_Onshore',
-        'Geo_Binary', 
-        'Solar_CSP6', 
-        'NG_Single shaft', 
-        'Solar_CSP0',
-        'Geo_Double flash', 
-        'Solar_Photovoltaic',
-        'Natural Gas_Steam Turbine', 
-        'Subbituminous Coal_Steam Turbine',
-        'Water_Hydraulic Turbine', 
-        'Natural Gas_Gas Turbine',
-        'Wind_Wind Turbine', 
-        'MWH_Battery Storage', 
-        'Nuclear_Nuclear',
-        'Solar_NonTracking', 
-        'Landfill Gas_Internal Combustion',
-        'Electricity_Battery Storage', 
-        'Solar_Non-Tracking', 
-        'DFO_ICE',
-        'OBG_GT-NG', 
-        'DFO_ST', 
-        'WDS_ST', 
-        'Solar_Fixed', 
-        'NG_Aero',
-        'Biomass Waste_Internal Combustion', 
-        'OBG_ICE', 
-        'LFG_ICE',
-        'NG_GT-NG', 'Wind_WT', 
-        'Natural Gas_Combined Cycle',
-        'Uranium_Nuclear',
-        'Electricity_Non-Tracking'
+        'Solar_Tracking':'solar-utility',
+        'NG_Industrial':'OCGT', 
+        'NG_Areo':'OCGT',
+        'Wind_Onshore':'onwind',
+        'Geo_Binary':'geothermal', 
+        'Solar_CSP6':'central solar thermal', 
+        'NG_Single shaft':'OCGT', 
+        'Solar_CSP0':'central solar thermal',
+        'Geo_Double flash':'geothermal',
+        'Solar_Photovoltaic':'solar-utility',
+        'Natural Gas_Steam Turbine':'CCGT',
+        'Subbituminous Coal_Steam Turbine':'coal',
+        'Water_Hydraulic Turbine':'hydro', 
+        'Natural Gas_Gas Turbine':'OCGT',
+        'Wind_Wind Turbine':'onwind', 
+        'MWH_Battery Storage':'battery storage', 
+        'Nuclear_Nuclear':'nuclear',
+        'Solar_NonTracking':'solar-utility', 
+        'Landfill Gas_Internal Combustion':'other',
+        'Electricity_Battery Storage':'battery storage', 
+        'Solar_Non-Tracking':'solar-utility', 
+        'DFO_ICE':'oil',
+        'OBG_GT-NG':'other', 
+        'DFO_ST':'oil', 
+        'WDS_ST':'biomass',
+        'Solar_Fixed':'solar-utility',
+        'NG_Aero':'OCGT',
+        'Biomass Waste_Internal Combustion':'biomass', 
+        'OBG_ICE':'other',
+        'LFG_ICE':'waste',
+        'NG_GT-NG':'OCGT',
+        'Wind_WT':'onwind',
+        'Natural Gas_Combined Cycle':'CCGT',
+        'Uranium_Nuclear':'nuclear',
+        'Electricity_Non-Tracking':'battery storage',
+    }
+    sub_type_dict = {
+        'SolarPV-Tracking':'solar-utility',
+        'CT-NatGas-Industrial':'OCGT',
+        'CT-NatGas-Aero':'OCGT',
+        'Hydro':'hydro',
+        'Bio-ICE':'biomass',
+        'PS-Hydro':'hydro',
+        'SolarPV-NonTracking':'solar-utility',
+        'WT-Onshore':'onwind',
+        'Bio-ST':'CCGT',
+        'ST-WasteHeat':'CCGT',
+        'Geo-BinaryCycle':'geothermal',
+        'ST-NatGas':'CCGT',
+        'SolarThermal-CSP6':'central solar thermal',
+        'CCWhole-NatGas-SingleShaft':'CCGT',
+        'ICE-NatGas':'OCGT',
+        'HydroRPS':'hydro',
+        'ST-Nuclear':'nuclear',
+        'Bio-CT':'biomass',
+        'ST-Other':'CCGT',
+        'CT-OilDistillate':'oil',
+        'ST-Coal':'coal',
+        'CCWhole-NatGas-Aero':'CCGT',
+        'Bio-CC':'biomass',
+        'CCWhole-NatGas-Industrial':'CCGT',
+        'SolarThermal-CSP0':'central solar thermal',
+        'PS-HydroRPS':'hydro',
+        'Battery Storage':'battery storage',
+        'Geo-DoubleFlash':'geothermal',
+        'ICE-OilDistillate':'oil',
+        'HYDRO':'hydro',
+        'CT-Aero':'OCGT',
+        'DR':'demand response',
+        'MotorLoad':'other',
+        'DG-BTM':'solar-rooftop',
+        'CT-AB-Cogen':'OCGT',
+        'CCPart-Steam':'CCGT',
+        'CC-AB-Cogen':'CCGT',
+        'UnknownPwrFloMdl':'other',
+        'hydro':'hydro',
+        'DC-Intertie':'other',
+        'VAR-Device':'other'
     }
     carrier_dict = {
         'Solar':'solar',
-        'NG':'ng', 
+        'NG':'gas', 
         'Water':'hydro', 
         'Bio':'biomass', 
         'Wind':'wind', 
@@ -1088,12 +1134,12 @@ def load_powerplants_ads(ppl_fn):
         'Uranium':'nuclear',
         'Petroleum Coke':'oil',
         'Coal':'coal',
-        'NatGas':'ng',
+        'NatGas':'gas',
         'Oil':'oil',
         'Electricity':'battery',
-        'Natural Gas':'ng',
+        'Natural Gas':'gas',
         'Subbituminous Coal':'coal',
-        'Combined Cycle':'ng',
+        'Combined Cycle':'gas',
         'MWH':'battery',
         'Nuclear':'nuclear',
         'Landfill Gas':'waste',
@@ -1103,13 +1149,105 @@ def load_powerplants_ads(ppl_fn):
         'Biomass Waste':'waste',
         'LFG':'waste'
     }
-    import pdb; pdb.set_trace()
+    fuel_type_dict = {
+        'Solar':'Solar',
+        'NG':'Gas',
+        'Water':'Hydro',
+        'Bio':'Biomass',
+        'Wind':'Wind',
+        'WH':'Waste', ##TODO: #33 add waste into cost data
+        'Geo': 'Geothermal',
+        'Uranium':'Nuclear',
+        'Petroleum Coke':'Oil',
+        'Coal':'Coal',
+        'NatGas':'Gas',
+        'Oil':'Oil',
+        'Electricity':'Battery',
+        'Natural Gas':'Gas',
+        'Subbituminous Coal':'Coal',
+        'Combined Cycle':'Gas_CC',
+        'MWH':'Battery',
+        'Nuclear':'Nuclear',
+        'Landfill Gas':'Waste',
+        'DFO':'Oil',
+        'OBG':'Other',
+        'WDS':'Biomass',
+        'Biomass Waste':'Biomass',
+        'LFG':'Waste',
+    }
+    # import pdb; pdb.set_trace()
     plants = pd.read_csv(ppl_fn, index_col=0, dtype={"bus_assignment": "str"}).rename(columns=str.lower)
-    plants.rename(columns={'fueltype':'fuel_type'}, inplace=True)
+    plants.rename(columns={'fueltype':'fuel_type_ads'}, inplace=True)
+
+    plants['carrier'] = plants.fuel_type_ads.map(carrier_dict)
+    plants['fuel_type'] = plants.fuel_type_ads.map(fuel_type_dict)
+    plants['tech_type'] = plants.tech_type.map(sub_type_dict)
     plants = add_missing_fuel_cost(plants, snakemake.input.fuel_costs)
     plants = add_missing_heat_rates(plants, snakemake.input.fuel_costs)
-    plants['carrier'] = plants.fuel_type.map(carrier_dict)
+
+    plants.rename(columns={'lat':'latitude', 'lon':'longitude'}, inplace=True)
+    plants = plants.dropna(subset=['latitude', 'longitude'])
     return plants
+
+def attach_ads_conventional_plants(
+    n, plants_df, conventional_carriers, extendable_carriers, costs):
+
+    _add_missing_carriers_from_costs(n, costs, conventional_carriers)
+
+    plants = plants_df.query(
+        "bus_assignment in @n.buses.index"
+    )
+
+    for tech_type in conventional_carriers:
+        if tech_type == 'gas' : pdb.set_trace()
+
+        plants_filt = plants.query("carrier == @tech_type")
+        plants_filt.index = plants_filt.ads_name.astype(str)
+
+        logger.info(f"Adding {len(plants_filt)} {tech_type} generators to the network.")
+
+        n.madd(
+            "Generator",
+            plants_filt.index,
+            bus=plants_filt.bus_assignment,
+            p_nom=plants_filt['maxcap(mw)'],
+            p_nom_extendable= tech_type in extendable_carriers['Generator'],
+            marginal_cost=plants_filt['inchr2(mmbtu/mwh)'] * plants_filt.fuel_cost,  #(MMBTu/MW) * (USD/MMBTu) = USD/MW
+            # marginal_cost_quadratic= plants_filt.GenIOC * plants_filt.GenFuelCost,
+            ramp_limit_up= plants_filt['rampup rate(mw/minute)']/ plants_filt['maxcap(mw)'] * 60, #MW/min to p.u./hour
+            ramp_limit_down= plants_filt['rampdn rate(mw/minute)']/ plants_filt['maxcap(mw)'] * 60, #MW/min to p.u./hour
+            carrier=plants_filt.carrier,
+            weight=1.0,
+            efficiency=costs.at[tech_type, "efficiency"],
+        )
+
+    return n
+
+def attach_ads_batteries(n, plants_df,extendable_carriers, costs):
+    plants = plants_df.query(
+        "bus_assignment in @n.buses.index"
+    )
+
+    plants_filt = plants.query("carrier == 'battery' ")
+    plants_filt.index = plants_filt.ads_name.astype(str)
+
+    logger.info(f"Adding {len(plants_filt)} Batteries as Stores to the network.")
+    # plants_filt = plants_filt.dropna(subset=['energy_capacity_mwh'])
+    # logger.info(f"Dropping {len(plants_filt) - len(plants_filt.dropna(subset=['energy_capacity_mwh']))} Batteries without energy capacity.")
+
+    n.madd(
+        "Store",
+        plants_filt.index,
+        bus=plants_filt.bus_assignment,
+        p_nom=plants_filt['maxcap(mw)'],
+        p_nom_extendable='battery' in extendable_carriers['Store'],
+        max_hours = snakemake.config['electricity']['max_hours'],
+        carrier=plants_filt.carrier,
+        weight=1.0,
+        efficiency=costs.at['battery', "efficiency"],
+    )
+
+    return n
 
 if __name__ == "__main__":
     if "snakemake" not in globals():
@@ -1140,7 +1278,9 @@ if __name__ == "__main__":
     }
 
     if snakemake.config["network_configuration"] == "pypsa-usa": 
-        costs = costs.rename(index={"onwind": "wind", "OCGT": "ng"}) #changing cost data to match the plant data #TODO: #10 change this so that fuel types and plant types match the pypsa naming scheme.
+        costs = costs.rename(index={"onwind": "wind",
+                                     #"OCGT": "ng"
+                                     }) #changing cost data to match the plant data #TODO: #10 change this so that fuel types and plant types match the pypsa naming scheme.
 
         plant_data = load_powerplants_eia(snakemake.input['plants_eia'])
         
@@ -1168,7 +1308,8 @@ if __name__ == "__main__":
         costs = costs.rename(index={"offwind-ac-connection-submarine": "offwind-connection-submarine",
                                     "offwind-ac-connection-underground": "offwind-connection-underground",
                                     'offwind-ac-station': 'offwind-station',
-                                    "onwind":"wind"}) #temporary fix. should rename carriers instead of changing cost names. w TODO#10
+                                    "onwind":"wind"
+                                    }) #temporary fix. should rename carriers instead of changing cost names. w TODO#10
     
         attach_wind_and_solar(
             n,
@@ -1209,8 +1350,6 @@ if __name__ == "__main__":
             costs,
         )
     elif snakemake.config["network_configuration"] == "ads2032": 
-        import pdb; pdb.set_trace()
-        costs = costs.rename(index={"onwind": "wind", "OCGT": "ng"}) #changing cost data to match the plant data #TODO: #10 change this so that fuel types and plant types match the pypsa naming scheme.
 
         plant_data = load_powerplants_ads(snakemake.input['plants_ads'])
         
@@ -1218,7 +1357,7 @@ if __name__ == "__main__":
         plant_data_locs = match_plant_to_bus(n, plant_data)
 
         #attach conventional plants to network
-        n = attach_eia_conventional_plants(
+        n = attach_ads_conventional_plants(
             n,
             plant_data_locs,
             conventional_carriers,
@@ -1227,7 +1366,7 @@ if __name__ == "__main__":
         )
 
         #attach batteries to network
-        n = attach_eia_batteries(
+        n = attach_ads_batteries(
             n, 
             plant_data_locs,
             extendable_carriers, 
@@ -1238,7 +1377,8 @@ if __name__ == "__main__":
         costs = costs.rename(index={"offwind-ac-connection-submarine": "offwind-connection-submarine",
                                     "offwind-ac-connection-underground": "offwind-connection-underground",
                                     'offwind-ac-station': 'offwind-station',
-                                    "onwind":"wind"}) #temporary fix. should rename carriers instead of changing cost names. w TODO#10
+                                    "onwind":"wind"
+                                    }) #temporary fix. should rename carriers instead of changing cost names. w TODO#10
     
         attach_wind_and_solar(
             n,
@@ -1262,7 +1402,6 @@ if __name__ == "__main__":
         )
 
         update_p_nom_max(n)
-
 
         #attach hydro to network (using breakthrough plants and profiles)
         #temporarily adding hydro with breakthrough only data until I can correctly import hydro_data
