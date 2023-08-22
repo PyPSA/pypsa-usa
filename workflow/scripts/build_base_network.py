@@ -24,6 +24,7 @@ def add_buses_from_file(n, buses, interconnect):
         v_nom=buses.baseKV,
         zone_id=buses.zone_id,
         balancing_area= buses.balancing_area,
+        country = buses.country,
         interconnect = buses.interconnect,
         x = buses.lon,
         y = buses.lat,
@@ -102,6 +103,7 @@ def assign_bus_ba(PATH_BUS, PATH_BA_SHP, PATH_OFFSHORE_SHP, bus_locs):
     ba_points = sjoin(gpd.GeoDataFrame(bus_df_locs["geometry"],crs= 4326), combined_shapes, how='left',predicate='within')
     ba_points = ba_points.rename(columns={'name':'balancing_area'})
     bus_df_final = pd.merge(bus_df, ba_points['balancing_area'], left_index=True, right_index=True,how='left')
+    bus_df_final['country'] = bus_df_final['balancing_area']
 
     #for identifying duplicants-- below
     # df = bus_df_final.reset_index().groupby(['bus_id']).size().reset_index(name='count').sort_values('count')

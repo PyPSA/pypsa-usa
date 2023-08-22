@@ -3,7 +3,7 @@
 scenarios:
   all:
     interconnect: western #"usa|texas|western|eastern"
-    clusters: 500
+    clusters: 60
     opts:
       [
         Co2L1.0,
@@ -32,7 +32,6 @@ offshore_shape:
     # nrel: "geodata_repo/Offshore_Wind_Speed_90m/Offshore_Wind_Speed_90m.shp"
 
 balancing_areas: 
-  use: true 
   path: "repo_data/BA_shapes_new/Modified_BE_BA_Shapes.shp"
 
 #TODO: #19 remove config list of BA's and reference geojson values directly instead
@@ -247,6 +246,7 @@ clustering:
   cluster_network:
     algorithm: kmeans
     feature: solar+onwind-time
+    by_balancing_areas: false
   aggregation_strategies:
     generators:
       p_nom_max: sum # use "min" for more conservative assumptions
