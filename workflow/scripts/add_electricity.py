@@ -1175,7 +1175,7 @@ def load_powerplants_ads(ppl_fn):
         'Biomass Waste':'Biomass',
         'LFG':'Waste',
     }
-    # import pdb; pdb.set_trace()
+
     plants = pd.read_csv(ppl_fn, index_col=0, dtype={"bus_assignment": "str"}).rename(columns=str.lower)
     plants.rename(columns={'fueltype':'fuel_type_ads'}, inplace=True)
 
@@ -1199,8 +1199,6 @@ def attach_ads_conventional_plants(
     )
 
     for tech_type in conventional_carriers:
-        # if tech_type == 'gas' : pdb.set_trace()
-
         plants_filt = plants.query("carrier == @tech_type")
         plants_filt.index = plants_filt.ads_name.astype(str)
 
@@ -1247,6 +1245,88 @@ def attach_ads_batteries(n, plants_df,extendable_carriers, costs):
         efficiency=costs.at['battery', "efficiency"],
     )
 
+    return n
+
+def attach_ads_renewables(n, plants_df, renewable_carriers, extendable_carriers, costs):
+    ads_renewables_path = snakemake.input.ads_renewables
+
+    for tech_type in renewable_carriers:
+        plants_filt = plants_df.query("carrier == @tech_type")
+        plants_filt.index = plants_filt.ads_name.astype(str)
+
+        logger.info(f"Adding {len(plants_filt)} {tech_type} generators to the network.")
+
+        if tech_type in ["wind", "offwind"]: 
+            profiles = pd.read_csv(ads_renewables_path + "/wind_2032.csv", index_col=0)
+        elif tech_type == "solar":
+            profiles = pd.read_csv(ads_renewables_path + "/solar_2032.csv", index_col=0)
+            dpv = pd.read_csv(ads_renewables_path + "/btm_solar_2032.csv", index_col=0)
+            profiles = pd.concat([profiles, dpv], axis = 1)
+            # plants_filt = plants_filt.dropna(subset=['dispatchshapename']) # dropping the two Solar + Storage plants without dispatch shapes (only the storage plants get dropped)... 
+        else:
+            profiles = pd.read_csv(ads_renewables_path + f'/{tech_type}_2032.csv', index_col=0)
+        
+
+        profiles.columns = profiles.columns.str.replace('.dat: 2032','')
+        profiles.columns = profiles.columns.str.replace('.DAT: 2032','')
+
+        profiles.index = n.snapshots
+        profiles.columns = profiles.columns.astype(str)
+
+        if tech_type == 'hydro': #matching hydro according to balancing authority specified
+            profiles.columns = profiles.columns.str.replace('HY_','')
+            profiles.columns = profiles.columns.str.replace('_2018','')
+
+            southwest = {'SRP', 'WALC', 'TH_Mead'}
+            northwest = {'DOPD', 'CHPD', 'WAUW'}
+            #TODO: #34 Add BCHA and AESO hydro profiles in ADS Configuration
+            # {'AESO', 'CISC_CISD', 'CIPV_CIPB', 'IPCO', 'PSCO_IPMV_IPTV_IPFE', 'Unnamed: 27', 'NEVP', 'BCHA', 'SouthConsolidated'}
+            profiles_ba = set(profiles.columns)
+            bas = set(plants_filt.balancing_area.unique())
+
+            profiles_new = pd.DataFrame(index=n.snapshots, columns=plants_filt.index)
+            for plant in profiles_new.columns:
+                ba = plants_filt.loc[plant].balancing_area
+                if ba in southwest:
+                    ba = 'SouthConsolidated'
+                elif ba in northwest:
+                    ba = 'BPAT' # this is a temp fix. Probably not right to assign all northwest hydro to BPA
+                ba_prof = profiles.columns.str.contains(ba)
+                # if ba_prof.sum() == 0: 
+                #     pdb.set_trace()
+                    #BA profile has no renewable potential
+                profiles_new[plant] = profiles.loc[:,ba_prof].values
+            p_max_pu = profiles_new
+            p_max_pu.columns = plants_filt.index
+
+            
+        else: # expanding profiles to match order of shapes in network for solar + wind + pump loads
+            intersection = set(profiles.columns).intersection(plants_filt.dispatchshapename)
+            # missing = set(plants_filt.dispatchshapename) - intersection
+            # profiles = profiles[list(intersection)]
+            profiles_new = pd.DataFrame(index=n.snapshots, columns=plants_filt.dispatchshapename)
+            for plant in profiles_new.columns:
+                profiles_new[plant] = profiles[plant]
+            p_max_pu = profiles_new
+            p_max_pu.columns = plants_filt.index
+
+        p_nom = plants_filt['maxcap(mw)']
+
+        n.madd(
+            "Generator",
+            plants_filt.index,
+            bus=plants_filt.bus_assignment,
+            p_nom_min=p_nom,
+            p_nom=p_nom,
+            marginal_cost=0, #(MMBTu/MW) * (USD/MMBTu) = USD/MW
+            # marginal_cost_quadratic = tech_plants.GenIOC * tech_plants.GenFuelCost, 
+            capital_cost=costs.at[tech_type, "capital_cost"],
+            p_max_pu=p_max_pu, #timeseries of max power output pu
+            p_nom_extendable= tech_type in extendable_carriers["Generator"],
+            carrier=tech_type,
+            weight=1.0,
+            efficiency=costs.at[tech_type, "efficiency"],
+        )
     return n
 
 if __name__ == "__main__":
@@ -1379,44 +1459,16 @@ if __name__ == "__main__":
                                     'offwind-ac-station': 'offwind-station',
                                     "onwind":"wind"
                                     }) #temporary fix. should rename carriers instead of changing cost names. w TODO#10
-    
-        attach_wind_and_solar(
-            n,
-            costs,
-            snakemake.input,
-            renewable_carriers,
-            extendable_carriers,
-            params.length_factor,
-        )
 
-        renewable_carriers = list(
-            set(snakemake.config['electricity']["renewable_carriers"]).intersection(
-                set(["wind", "solar", "offwind"])
-            )
-        )
-
-        attach_eia_renewable_capacities_to_atlite(
+        attach_ads_renewables(
             n,
             plant_data_locs,
-            renewable_carriers
-        )
-
-        update_p_nom_max(n)
-
-        #attach hydro to network (using breakthrough plants and profiles)
-        #temporarily adding hydro with breakthrough only data until I can correctly import hydro_data
-        renewable_carriers = list(
-            set(snakemake.config['electricity']["renewable_carriers"]).intersection(
-                set(["hydro"])
-            )
-        )
-        n = attach_breakthrough_renewable_plants(
-            n,
-            snakemake.input["plants"],
             renewable_carriers,
             extendable_carriers,
             costs,
         )
+        update_p_nom_max(n)
+
     elif snakemake.config["network_configuration"] == "breakthrough":
         costs = costs.rename(index={"onwind": "wind", "OCGT": "ng"}) #changing cost data to match the breakthrough plant data #TODO: #10 change this so that breakthrough fuel types and plant types match the pypsa naming scheme.
         conventional_carriers = list(
