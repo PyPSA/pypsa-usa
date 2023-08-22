@@ -1199,7 +1199,7 @@ def attach_ads_conventional_plants(
     )
 
     for tech_type in conventional_carriers:
-        if tech_type == 'gas' : pdb.set_trace()
+        # if tech_type == 'gas' : pdb.set_trace()
 
         plants_filt = plants.query("carrier == @tech_type")
         plants_filt.index = plants_filt.ads_name.astype(str)

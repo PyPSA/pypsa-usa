@@ -99,8 +99,8 @@ rule retrieve_zenodo_databundles:
 
 rule retrieve_WECC_forecast_data:
     output:
-        ads_2032 = directory(RESOURCES + "WECC_ADS/downloads/2032/Public Data/Hourly Profiles in CSV format"),
-        ads_2030 = directory(RESOURCES + "WECC_ADS/downloads/2030/WECC 2030 ADS PCM 2020-12-16 (V1.5) Public Data/CSV Shape Files"),
+        ads_2032 = directory(DATA + "WECC_ADS/downloads/2032/Public Data/Hourly Profiles in CSV format"),
+        ads_2030 = directory(DATA + "WECC_ADS/downloads/2030/WECC 2030 ADS PCM 2020-12-16 (V1.5) Public Data/CSV Shape Files"),
     log:
         "logs/retrieve/retrieve_WECC_forecast_data.log",
     script:
@@ -230,8 +230,8 @@ rule build_load_data:
     input:
         network=RESOURCES + "{interconnect}/elec_base_network.nc",
         demand_breakthrough_2016=DATA + "breakthrough_network/base_grid/demand.csv",
-        ads_2032 = RESOURCES + "WECC_ADS/downloads/2032/Public Data/Hourly Profiles in CSV format",
-        ads_2030 = RESOURCES + "WECC_ADS/downloads/2030/WECC 2030 ADS PCM 2020-12-16 (V1.5) Public Data/CSV Shape Files",
+        ads_2032 = DATA + "WECC_ADS/downloads/2032/Public Data/Hourly Profiles in CSV format",
+        ads_2030 = DATA + "WECC_ADS/downloads/2030/WECC 2030 ADS PCM 2020-12-16 (V1.5) Public Data/CSV Shape Files",
         eia = expand(RESOURCES + "eia/{file}", file=DATAFILES_DMD),
         tech_costs="repo_data/pypsa_eur_costs.csv",
     output:
