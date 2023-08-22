@@ -79,7 +79,7 @@ electricity:
     H2: 168
 
   extendable_carriers:
-    Generator: [solar, wind, offwind, gas, coal, nuclear]
+    Generator: [solar, wind, offwind, gas, coal]
     StorageUnit: [battery] # battery, H2
     Store: [battery] #[battery, H2]
     Link: [] #[H2 pipeline]
