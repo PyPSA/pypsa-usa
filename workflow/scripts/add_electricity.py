@@ -1189,6 +1189,9 @@ def load_powerplants_ads(ppl_fn):
     plants = plants.dropna(subset=['latitude', 'longitude'])
     return plants
 
+def assign_ads_missing_lat_lon(plants,n):
+
+
 def attach_ads_conventional_plants(
     n, plants_df, conventional_carriers, extendable_carriers, costs):
 
@@ -1230,8 +1233,7 @@ def attach_ads_batteries(n, plants_df,extendable_carriers, costs):
     plants_filt.index = plants_filt.ads_name.astype(str)
 
     logger.info(f"Adding {len(plants_filt)} Batteries as Stores to the network.")
-    # plants_filt = plants_filt.dropna(subset=['energy_capacity_mwh'])
-    # logger.info(f"Dropping {len(plants_filt) - len(plants_filt.dropna(subset=['energy_capacity_mwh']))} Batteries without energy capacity.")
+    logger.info(f"Note: ADS Public data does not include energy capacity(mwhr) for each BESS plant. Capacity is set in config file by key: 'max_hours'.")
 
     n.madd(
         "Store",
@@ -1266,7 +1268,6 @@ def attach_ads_renewables(n, plants_df, renewable_carriers, extendable_carriers,
         else:
             profiles = pd.read_csv(ads_renewables_path + f'/{tech_type}_2032.csv', index_col=0)
         
-
         profiles.columns = profiles.columns.str.replace('.dat: 2032','')
         profiles.columns = profiles.columns.str.replace('.DAT: 2032','')
 
@@ -1276,14 +1277,11 @@ def attach_ads_renewables(n, plants_df, renewable_carriers, extendable_carriers,
         if tech_type == 'hydro': #matching hydro according to balancing authority specified
             profiles.columns = profiles.columns.str.replace('HY_','')
             profiles.columns = profiles.columns.str.replace('_2018','')
-
             southwest = {'SRP', 'WALC', 'TH_Mead'}
             northwest = {'DOPD', 'CHPD', 'WAUW'}
-            #TODO: #34 Add BCHA and AESO hydro profiles in ADS Configuration
-            # {'AESO', 'CISC_CISD', 'CIPV_CIPB', 'IPCO', 'PSCO_IPMV_IPTV_IPFE', 'Unnamed: 27', 'NEVP', 'BCHA', 'SouthConsolidated'}
-            profiles_ba = set(profiles.columns)
-            bas = set(plants_filt.balancing_area.unique())
-
+            #TODO: #34 Add BCHA and AESO hydro profiles in ADS Configuration. Profiles that don't get used: 'AESO', 'IPCO', 'NEVP', 'BCHA'
+            # profiles_ba = set(profiles.columns)
+            # bas = set(plants_filt.balancing_area.unique())
             profiles_new = pd.DataFrame(index=n.snapshots, columns=plants_filt.index)
             for plant in profiles_new.columns:
                 ba = plants_filt.loc[plant].balancing_area
@@ -1292,16 +1290,11 @@ def attach_ads_renewables(n, plants_df, renewable_carriers, extendable_carriers,
                 elif ba in northwest:
                     ba = 'BPAT' # this is a temp fix. Probably not right to assign all northwest hydro to BPA
                 ba_prof = profiles.columns.str.contains(ba)
-                # if ba_prof.sum() == 0: 
-                #     pdb.set_trace()
-                    #BA profile has no renewable potential
                 profiles_new[plant] = profiles.loc[:,ba_prof].values
             p_max_pu = profiles_new
             p_max_pu.columns = plants_filt.index
-
-            
-        else: # expanding profiles to match order of shapes in network for solar + wind + pump loads
-            intersection = set(profiles.columns).intersection(plants_filt.dispatchshapename)
+        else: #  solar + wind + other
+            # intersection = set(profiles.columns).intersection(plants_filt.dispatchshapename)
             # missing = set(plants_filt.dispatchshapename) - intersection
             # profiles = profiles[list(intersection)]
             profiles_new = pd.DataFrame(index=n.snapshots, columns=plants_filt.dispatchshapename)
@@ -1311,7 +1304,6 @@ def attach_ads_renewables(n, plants_df, renewable_carriers, extendable_carriers,
             p_max_pu.columns = plants_filt.index
 
         p_nom = plants_filt['maxcap(mw)']
-
         n.madd(
             "Generator",
             plants_filt.index,
