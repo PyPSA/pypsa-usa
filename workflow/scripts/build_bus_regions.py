@@ -155,75 +155,47 @@ if __name__ == "__main__":
     onshore_regions = []
     offshore_regions = []
 
-    if snakemake.params.balancing_areas["use"]==False: #Ignore BA shapes, use only USA Outline
-        logger.info("Building bus regions for %s", len(countries))
-        for country in countries:
-            c_b = n.buses.country == country
-            country_geometry = gpd_countries['geometry']
-            ba_shape = country_geometry[country]
-            ba_locs = n.buses.loc[c_b & n.buses.substation_lv, ["x", "y"]]
-            onshore_regions.append(gpd.GeoDataFrame({
-                    'name': ba_locs.index,
-                    'x': ba_locs['x'],
-                    'y': ba_locs['y'],
-                    'geometry': voronoi_partition_pts(ba_locs.values, ba_shape),
-                    'country': country
-                }))
 
-            if country not in offshore_shapes.index: continue
-            offshore_shape = offshore_shapes[country]
-            offshore_locs = n.buses.loc[c_b & n.buses.substation_off, ["x", "y"]]
-            offshore_regions_c = gpd.GeoDataFrame({
-                    'name': offshore_locs.index,
-                    'x': offshore_locs['x'],
-                    'y': offshore_locs['y'],
-                    'geometry': voronoi_partition_pts(offshore_locs.values, offshore_shape),
-                    'country': country
-                })
-            offshore_regions_c = offshore_regions_c.loc[offshore_regions_c.area > 1e-2]
-            offshore_regions.append(offshore_regions_c)
+    logger.info("Building bus regions for Balancing Authorities in %s interconnect/region", snakemake.wildcards.interconnect)
+    n = assign_bus_ba(n,gpd_ba_shapes, gpd_offshore_shapes)
 
-    else: # Use Balancing Authority shapes
-        logger.info("Building bus regions for Balancing Authorities in %s interconnect/region", snakemake.wildcards.interconnect)
-        n = assign_bus_ba(n,gpd_ba_shapes, gpd_offshore_shapes)
+    for ba in balancing_areas:
+        if ba not in ba_region_shapes.index: continue #filter only ba's in interconnection 
+        # print('defining bus regions for ', ba)
+        ba_shape = ba_region_shapes[ba]
+        all_locs = n.buses.loc[n.buses.substation_lv, ["x", "y"]] 
 
-        for ba in balancing_areas:
-            if ba not in ba_region_shapes.index: continue #filter only ba's in interconnection 
-            # print('defining bus regions for ', ba)
-            ba_shape = ba_region_shapes[ba]
-            all_locs = n.buses.loc[n.buses.substation_lv, ["x", "y"]] 
+        # ba_locs contains the bus name and locations for all buses in the BA for ba_shape.
+        ba_buses = n.buses.balancing_area[n.buses.balancing_area == ba]
+        ba_locs = all_locs.loc[ba_buses.index]
+        if ba_locs.empty: continue #skip empty BA's which are not in the bus dataframe. ex. eastern texas BA when using the WECC interconnect
 
-            # ba_locs contains the bus name and locations for all buses in the BA for ba_shape.
-            ba_buses = n.buses.balancing_area[n.buses.balancing_area == ba]
-            ba_locs = all_locs.loc[ba_buses.index]
-            if ba_locs.empty: continue #skip empty BA's which are not in the bus dataframe. ex. eastern texas BA when using the WECC interconnect
+        onshore_regions.append(gpd.GeoDataFrame({
+                'name': ba_locs.index,
+                'x': ba_locs['x'],
+                'y': ba_locs['y'],
+                'geometry': voronoi_partition_pts(ba_locs.values, ba_shape),
+                'country': ba,
+            }))
+        
+        # n.buses.loc[ba_locs.index, 'country'] = ba #adds abbreviation to the bus dataframe under the country column
+        # n.buses.loc['37584', 'country'] = 'CISO-SDGE'   #hot fix for imperial beach substation being offshore
 
-            onshore_regions.append(gpd.GeoDataFrame({
-                    'name': ba_locs.index,
-                    'x': ba_locs['x'],
-                    'y': ba_locs['y'],
-                    'geometry': voronoi_partition_pts(ba_locs.values, ba_shape),
-                    'country': ba,
-                }))
-            
-            # n.buses.loc[ba_locs.index, 'country'] = ba #adds abbreviation to the bus dataframe under the country column
-            # n.buses.loc['37584', 'country'] = 'CISO-SDGE'   #hot fix for imperial beach substation being offshore
-
-        ### Defining Offshore Regions ###
-        for i in range(len(offshore_shapes)):
-            offshore_shape = offshore_shapes[i]
-            shape_name = offshore_shapes.index[i]
-            bus_locs = n.buses.loc[n.buses.substation_off, ["x", "y"]] #substation off all true?
-            bus_points = gpd.points_from_xy(x=bus_locs.x, y=bus_locs.y)
-            offshore_busses = bus_locs[[offshore_shape.buffer(0.2).contains(bus_points[i]) for i in range(len(bus_points))]]  #filter for OSW busses within shape
-            offshore_regions_c = gpd.GeoDataFrame({
-                'name': offshore_busses.index,
-                'x': offshore_busses['x'],
-                'y': offshore_busses['y'],
-                'geometry': voronoi_partition_pts(offshore_busses.values, offshore_shape),
-                'country': shape_name,})
-            offshore_regions_c = offshore_regions_c.loc[offshore_regions_c.area > 1e-2]
-            offshore_regions.append(offshore_regions_c)
+    ### Defining Offshore Regions ###
+    for i in range(len(offshore_shapes)):
+        offshore_shape = offshore_shapes[i]
+        shape_name = offshore_shapes.index[i]
+        bus_locs = n.buses.loc[n.buses.substation_off, ["x", "y"]] #substation off all true?
+        bus_points = gpd.points_from_xy(x=bus_locs.x, y=bus_locs.y)
+        offshore_busses = bus_locs[[offshore_shape.buffer(0.2).contains(bus_points[i]) for i in range(len(bus_points))]]  #filter for OSW busses within shape
+        offshore_regions_c = gpd.GeoDataFrame({
+            'name': offshore_busses.index,
+            'x': offshore_busses['x'],
+            'y': offshore_busses['y'],
+            'geometry': voronoi_partition_pts(offshore_busses.values, offshore_shape),
+            'country': shape_name,})
+        offshore_regions_c = offshore_regions_c.loc[offshore_regions_c.area > 1e-2]
+        offshore_regions.append(offshore_regions_c)
 
             # n.buses.loc[offshore_busses.index, 'country'] = shape_name #adds offshore shape name to the bus dataframe under the country column
             

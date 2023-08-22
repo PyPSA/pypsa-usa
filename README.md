@@ -7,7 +7,7 @@ PyPSA-USA is an open-source power systems model of the bulk transmission systems
 The model draws data from:
 
 - The [BreakthroughEnergy](https://www.breakthroughenergy.org/) transmission network model. This model has 82,071 bus network, 41,083 substations, and 104,192 lines across the three interconnections.
-- Powerplant Data can be drawn from three options: the Breakthrough Network, the WECC Anchor Data Set Production Cost Model, or the [PUDL](https://catalystcoop-pudl.readthedocs.io/en/latest/index.html#) dataset. (only breakthrough functioning currently in master branch)
+- Powerplant Data can be drawn from three options: the Breakthrough Network, the WECC Anchor Data Set Production Cost Model, or the EIA++
 - Historical load data from the EIA via the [GridEmissions](https://github.com/jdechalendar/gridemissions/) tool.
 - Forecasted load data from the [WECC ADS PCM](https://www.wecc.org/ReliabilityModeling/Pages/AnchorDataSet.aspx).
 - Renewable time series based on ERA5, assembled using the atlite tool.
@@ -26,7 +26,7 @@ conda env create -f environment.yaml
 conda activate pypsa-usa
 ```
 
-download submodules after cloning:
+<!-- download submodules after cloning:
 
 ```
 git submodule update --init
@@ -36,7 +36,7 @@ update submodule with:
 
 ```
 git submodule update --remote
-```
+``` -->
 
 
 # Workflow
@@ -48,6 +48,8 @@ git submodule update --remote
 **This workflow is currently only being tested for the `western` interconnection wildcard.**
 
 ### Clustering
+
+There have been issues in running operations-only simulations with clusters >50 for the WECC. Issue is currently being addressed.
 
 Minimum Number of clusters:
 ```

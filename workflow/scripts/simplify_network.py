@@ -52,7 +52,7 @@ def simplify_network_to_voltage_level(n, voltage_level):
     return n, trafo_map
 
 
-def aggregate_to_substations(network, substations, busmap):
+def aggregate_to_substations(network, substations, busmap,use_ba_zones=False):
 
     logger.info("Aggregating buses to substation level...")
 
@@ -72,7 +72,15 @@ def aggregate_to_substations(network, substations, busmap):
             "ramp_limit_down": np.max,
         },
     )
-
+    sub_index = network.buses.country.index.map(busmap.to_dict())
+    countries = network.buses.country.values
+    countries_dict = dict(zip(sub_index, countries))
+    substations['ba'] = substations.index.map(countries_dict)
+    if use_ba_zones: 
+        zone = substations.ba 
+    else:
+        zone = "US"
+    
     network = clustering.network
 
     network.buses["interconnect"] = substations.interconnect
@@ -80,8 +88,7 @@ def aggregate_to_substations(network, substations, busmap):
     network.buses["y"] = substations.lat
     network.buses["substation_lv"] = True
     network.buses["substation_off"] = True
-    network.buses["country"] = "US"
-
+    network.buses["country"] = zone
     network.lines["type"] = np.nan
 
     return network
@@ -113,6 +120,7 @@ if __name__ == "__main__":
     logger = logging.getLogger(__name__)
 
     voltage_level = snakemake.config["electricity"]["voltage_simplified"]
+    use_ba_zones = snakemake.config['clustering']['cluster_network']['by_balancing_areas']
 
     n = pypsa.Network(snakemake.input.network)
     n, trafo_map = simplify_network_to_voltage_level(n, voltage_level)
@@ -133,6 +141,6 @@ if __name__ == "__main__":
     n = assign_line_lengths(n, 1.25, busmap_to_sub, substations) 
     n.links["underwater_fraction"] = 0
 
-    n = aggregate_to_substations(n, substations, busmap_to_sub.sub_id)
+    n = aggregate_to_substations(n, substations, busmap_to_sub.sub_id, use_ba_zones)
 
     n.export_to_netcdf(snakemake.output[0])
