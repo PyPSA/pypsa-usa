@@ -67,7 +67,6 @@ gdf_regions_union = gpd.GeoDataFrame([[gdf_states.unary_union, "NERC_Interconnec
 gdf_regions_union = gdf_regions_union.set_crs(4326)
 gdf_regions_union.to_file(snakemake.output.country_shapes)
 
-pdb.set_trace()
 
 ####### Load balancing authority shapes #######
 gdf_ba = gpd.read_file(snakemake.params.balancing_areas["path"])
