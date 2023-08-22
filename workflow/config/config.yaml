@@ -41,20 +41,9 @@ balancing_area_names: ['AEC', 'AECI', 'AVA', 'Arizona', 'BANC', 'BPAT', 'CHPD', 
 #   CISO-PGAE: 0.5
 
 # TODO: #11 change load data and generator data to be a snakemake wildcard value
-load_data: # set only one of the `use_...` to true
-  use_eia: true 
-  historical_year: 2019 #keep at 2019 for now! I will be adding other years shortly.
-  use_ads: false 
-  future_year: 2032
-  use_breakthrough: false 
+network_configuration: "ads2032" # "pypsa-usa" or "ads2032" or "breakthrough" 
 
-generator_data:
-  use_eia: true # if enabled uses eia plant data with atlite for renewable profiles. Temporarily still uses BE Hydro
-  use_breakthrough: false #True uses BE thermal generators
-  use_breakthrough_atlite: true # true= BE renewable gens with atlite calculated timeseries. false= BE renewable gens with BE timeseries
-  #use_eia: False #not implemented yet
-
-snapshots: #do not edit (temp)
+snapshots:
   start: "2019-01-01"
   end: "2020-01-01"
   inclusive: 'left' # include start, not end
@@ -76,7 +65,7 @@ atlite:
       time: ['2013', '2013']
 
 electricity: 
-  conventional_carriers: [nuclear, oil, ng, coal, geothermal] # Choose Carriers to load into network
+  conventional_carriers: [nuclear, oil, gas, coal, geothermal] # Choose Carriers to load into network
   renewable_carriers: [wind, solar, offwind, hydro] # Choose Carriers to load into network
   voltages: [230., 345., 500., 765.]
   voltage_simplified: 230 #Voltage level to simplify network to in rule "simplify network"
@@ -85,11 +74,11 @@ electricity:
   gaslimit: false # global gas usage limit of X MWh_th
 
   max_hours:
-    battery: 6
+    battery: 6 # ADS USES THIS AS ASSUMPTION FOR CURRENT BATTERIES
     H2: 168
 
   extendable_carriers:
-    Generator: [solar, wind, offwind, ng, coal, nuclear]
+    Generator: [solar, wind, offwind, gas, coal]
     StorageUnit: [battery] # battery, H2
     Store: [battery] #[battery, H2]
     Link: [] #[H2 pipeline]
