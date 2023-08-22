@@ -70,16 +70,17 @@ gdf_regions_union.to_file(snakemake.output.country_shapes)
 pdb.set_trace()
 
 ####### Load balancing authority shapes #######
-if snakemake.params.balancing_areas["use"]:
-    gdf_ba = gpd.read_file(snakemake.params.balancing_areas["path"])
-    gdf_ba.rename(columns={"BA": "name"}, inplace=True)
-    gdf_ba.to_crs(4326,inplace=True)
+gdf_ba = gpd.read_file(snakemake.params.balancing_areas["path"])
+gdf_ba.rename(columns={"BA": "name"}, inplace=True)
+gdf_ba.to_crs(4326,inplace=True)
 
-    #Only include balancing authorities which have intersection with interconnection filtered states
-    ba_states_intersect =  gdf_ba['geometry'].apply(lambda shp: shp.intersects(gdf_regions_union.dissolve().iloc[0]['geometry']))
-    ba_states = gdf_ba[ba_states_intersect]
-    ba_states.rename(columns={"name_1": "name"}, inplace=True)
-    gdf_states= ba_states
+
+#Only include balancing authorities which have intersection with interconnection filtered states
+ba_states_intersect =  gdf_ba['geometry'].apply(lambda shp: shp.intersects(gdf_interconnection_states.dissolve().iloc[0]['geometry']))
+ba_states = gdf_ba[ba_states_intersect]
+ba_states.rename(columns={"name_1": "name"}, inplace=True)
+gdf_states= ba_states
+
 
 gdf_states.to_file(snakemake.output.onshore_shapes)
 
