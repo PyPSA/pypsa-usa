@@ -27,19 +27,6 @@ def add_breakthrough_demand_from_file(n, fn_demand):
     n.madd( "Load", demand_per_bus.columns, bus=demand_per_bus.columns, p_set=demand_per_bus, carrier='AC')
     return n
 
-def prepare_ads_files(file_patterns):
-    for year, file_patterns_year in file_patterns.items():
-        ads_filelist = glob.glob(os.path.join(snakemake.input[f'ads_{year}'], '*.csv'))
-        for profile_type, pattern in file_patterns_year.items():
-            read_ads_files(profile_type, [s for s in ads_filelist if pattern in s], year)
-
-def read_ads_files(profiletype, paths, year):
-    df_combined = pd.DataFrame()
-    for i in range(len(paths)):
-        df = pd.read_csv(paths[i], header=0, index_col=0,low_memory=False)
-        df = df.iloc[1:8785, :]
-        df_combined = pd.concat([df_combined, df], axis=1)
-    df_combined.to_csv(os.path.join("resources/WECC_ADS/processed", f'{profiletype}_{year}.csv'))
 
 def prepare_ads_load_data(ads_load_path, data_year):
     '''
@@ -118,61 +105,34 @@ if __name__ == "__main__":
 
     n = pypsa.Network(snakemake.input['network'])
 
-
-    if sum([snakemake.config['load_data']['use_eia'], snakemake.config['load_data']['use_ads']], snakemake.config['load_data']['use_breakthrough']) > 1:
-        raise ValueError("Only one of the load_data configs can be set to true")
-    elif snakemake.config['load_data']['use_eia']:
-        load_year = snakemake.config['load_data']['historical_year']
+    if snakemake.config['network_configuration']  == "pypsa-usa":
+        snapshot_config = snakemake.config['snapshots']
+        load_year = pd.to_datetime(snapshot_config['start']).year
         logger.info(f'Building Load Data using EIA demand data year {load_year}')
         eia_demand = pd.read_csv(snakemake.input['eia'][load_year%2015])
-        n.set_snapshots(pd.date_range(freq="h", start=f"{load_year}-01-01",
-                                        end=f"{load_year+1}-01-01",
-                                        inclusive="left")
+        n.set_snapshots(pd.date_range(freq="h", 
+                                      start=snapshot_config['start'],
+                                      end=snapshot_config['end'],
+                                      inclusive=snapshot_config['inclusive'])
                         )
         n = add_eia_demand(n, eia_demand)
-    elif snakemake.config['load_data']['use_ads']:     ###### using ADS Data ######
-        load_year = snakemake.config['load_data']['future_year']
-        logger.info(f'Building Load Data using EIA Historical Data from year {load_year}')
-        logger.info("Preproccessing ADS data")
-        os.makedirs("resources/WECC_ADS/processed/", exist_ok=True)
-        file_patterns = {   # Processed file name : Unprocessed file name
-                2032: {
-                    'load': 'Profile_Load',
-                    'solar': 'Profile_Solar',
-                    'wind': 'Profile_Wind',
-                    'hydro': 'Profile_Hydro',
-                    'btm_solar': 'Profile_BTM Solar',
-                    'pumped_storage': 'Profile_Pumped Storage',
-                    'pump_load': 'Profile_Pumps',
-                },
-                2030: {
-                    'load': 'Data_Load',
-                    'solar': 'Data_Solar PV',
-                    'wind': 'Data_WT',
-                    'hydro': 'Data_Hydro',
-                    'btm_solar': 'Data_SolarPV_Rooftop',
-                    'pumped_storage': 'Data_PumpStorage',
-                    'pump_load': 'Data_Pump',
-                }
-            }
-        prepare_ads_files(file_patterns)
-        demand = prepare_ads_load_data(f'resources/WECC_ADS/processed/load_{load_year}.csv',load_year)
-        n.set_snapshots(pd.date_range(freq="h", start=f"{load_year}-01-01",
-                                        end=f"{load_year+1}-01-01",
-                                        inclusive="left")
+    elif snakemake.config['network_configuration']  == "ads2032":
+        load_year = 2032
+        demand = prepare_ads_load_data(f'data/WECC_ADS/processed/load_{load_year}.csv',load_year)
+        n.set_snapshots(pd.date_range(freq="h", 
+                                      start=f"{load_year}-01-01",
+                                      end=f"{load_year+1}-01-01",
+                                      inclusive="left")
                         )
         n = add_ads_demand(n,demand)
         n.export_to_netcdf(snakemake.output.network)
-    elif snakemake.config['load_data']['use_breakthrough']:  # else standard breakthrough configuration
+    elif snakemake.config['network_configuration']  == "breakthrough":
         logger.info("Adding Breakthrough Energy Network Demand data from 2016")
         n.set_snapshots(
             pd.date_range(freq="h", start="2016-01-01", end="2017-01-01", inclusive="left")
         )
         n = add_breakthrough_demand_from_file(n, snakemake.input["demand_breakthrough_2016"])
     else:
-        raise ValueError("No load data specified in config.yaml")
+        raise ValueError(f"Unknown network_configuration: {snakemake.config['network_configuration']}")
 
-        
-
-    # import pdb; pdb.set_trace()
     n.export_to_netcdf(snakemake.output.network)
