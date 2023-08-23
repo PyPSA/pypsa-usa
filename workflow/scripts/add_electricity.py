@@ -1189,7 +1189,7 @@ def load_powerplants_ads(ppl_fn):
     plants = plants.dropna(subset=['latitude', 'longitude'])
     return plants
 
-def assign_ads_missing_lat_lon(plants,n):
+# def assign_ads_missing_lat_lon(plants,n):
 
 
 def attach_ads_conventional_plants(

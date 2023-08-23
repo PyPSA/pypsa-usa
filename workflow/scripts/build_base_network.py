@@ -1,14 +1,13 @@
-# Copyright 2021-2022 Martha Frysztacki (KIT)
-# Modified by Kamran Tehranchi (Stanford University)
+# Copyright 2023-2024 PyPSA-USA & PyPSA-EUR Authors 
 
 import pypsa, pandas as pd, logging, geopandas as gpd
 from geopandas.tools import sjoin
+import pdb
 
 
 idx = pd.IndexSlice
 
 def add_buses_from_file(n, buses, interconnect):
-
     if interconnect != "usa":
         buses = buses.query(
             "interconnect == @interconnect"
@@ -20,7 +19,6 @@ def add_buses_from_file(n, buses, interconnect):
         "Bus",
         buses.index,
         Pd=buses.Pd, # used to decompose zone demand to bus demand
-        # type = buses.type # do we need this? 
         v_nom=buses.baseKV,
         zone_id=buses.zone_id,
         balancing_area= buses.balancing_area,
@@ -28,6 +26,7 @@ def add_buses_from_file(n, buses, interconnect):
         interconnect = buses.interconnect,
         x = buses.lon,
         y = buses.lat,
+        sub_id = buses.sub_id
     )
 
     return n
@@ -105,6 +104,9 @@ def assign_bus_ba(PATH_BUS, PATH_BA_SHP, PATH_OFFSHORE_SHP, bus_locs):
     bus_df_final = pd.merge(bus_df, ba_points['balancing_area'], left_index=True, right_index=True,how='left')
     bus_df_final['country'] = bus_df_final['balancing_area']
 
+    #attaching sub_id
+    bus_df_final['sub_id'] = bus_locs.sub_id
+
     #for identifying duplicants-- below
     # df = bus_df_final.reset_index().groupby(['bus_id']).size().reset_index(name='count').sort_values('count')
     # df_issues = df[df['count']>1]
@@ -127,8 +129,14 @@ if __name__ == "__main__":
     sub = pd.read_csv(snakemake.input.sub).set_index("sub_id")
     buslocs = pd.merge(bus2sub, sub, left_on="sub_id", right_index=True)
 
-    bus_df = assign_bus_ba(snakemake.input["buses"], snakemake.input["onshore_shapes"],snakemake.input["offshore_shapes"],buslocs)
-
+    bus_df = assign_bus_ba(
+        snakemake.input["buses"], 
+        snakemake.input["onshore_shapes"],
+        snakemake.input["offshore_shapes"],
+        buslocs
+        )
+    
+    # pdb.set_trace()
     # add buses, transformers, lines and links
     n = add_buses_from_file(n, bus_df, interconnect=interconnect)
     n = add_branches_from_file(n, snakemake.input["lines"])
