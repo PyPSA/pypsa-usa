@@ -37,7 +37,7 @@ def prepare_ads_load_data(ads_load_path, data_year):
     df_ads.columns = df_ads.columns.str.removesuffix('.dat')
     df_ads.columns = df_ads.columns.str.removesuffix(f'_{data_year}')
     df_ads.columns = df_ads.columns.str.removesuffix(f'_[18].dat: {data_year}')
-    df_ads['CISO-PGAE'] = df_ads.pop('CIPV') + df_ads.pop('CIPB') + df_ads.pop('SPPC')#hotfix see github issue #15
+    df_ads['CISO-PGAE'] = df_ads.pop('CIPV') + df_ads.pop('CIPB') + df_ads.pop('SPPC') #TODO: #37 Create new Zone for SPPC
     df_ads['BPAT'] = df_ads.pop('BPAT') + df_ads.pop('TPWR') + df_ads.pop('SCL')
     df_ads['IPCO'] = df_ads.pop('IPFE') + df_ads.pop('IPMV') + df_ads.pop('IPTV')
     df_ads['PACW'] = df_ads.pop('PAID') + df_ads.pop('PAUT') + df_ads.pop('PAWY')
