@@ -80,7 +80,13 @@ def add_eia_demand(n, demand):
     where Pd is the real power demand (MW).
     """
     demand.set_index('timestamp', inplace=True)
-    demand.index = n.snapshots #maybe add check to make sure they match?
+    demand.index = pd.to_datetime(demand.index, utc=True)
+    #check to see if snapshots and demand index match
+
+    if len(demand.index) != len(n.snapshots):
+        demand = demand.iloc[3:, :]
+
+    demand.index = n.snapshots 
 
     demand['Arizona'] = demand.pop('SRP') + demand.pop('AZPS')
     n.buses['ba_load_data'] = n.buses.balancing_area.replace({'CISO-PGAE': 'CISO', 'CISO-SCE': 'CISO', 'CISO-VEA': 'CISO', 'CISO-SDGE': 'CISO'})
@@ -109,7 +115,7 @@ if __name__ == "__main__":
         snapshot_config = snakemake.config['snapshots']
         load_year = pd.to_datetime(snapshot_config['start']).year
         logger.info(f'Building Load Data using EIA demand data year {load_year}')
-        eia_demand = pd.read_csv(snakemake.input['eia'][load_year%2015])
+        eia_demand = pd.read_csv(snakemake.input['eia'][load_year%2017])
         n.set_snapshots(pd.date_range(freq="h", 
                                       start=snapshot_config['start'],
                                       end=snapshot_config['end'],
