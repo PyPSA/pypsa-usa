@@ -52,7 +52,7 @@ git submodule update --remote
 The `network_configuration` option in the `config.yaml` file accepts 3 values: `pypsa-usa` , `ads2032`, and `breakthrough`. Each cooresponds to a different combiation of input datasources for the generators, demand data, and generation timeseries for renewable generators. 
 
 | Configuration Options: | PyPSA-USA | ADS2032 |
-|----------|----------|----------|
+|:----------:|:----------:|:----------:|
 | Transmission | TAMU/BE | TAMU/BE |
 | Thermal Generators | EIA860 | WECC-ADS |
 | Renewable Time-Series | Atlite | WECC-ADS |
