@@ -6,8 +6,8 @@ PyPSA-USA is an open-source power systems model of the bulk transmission systems
 
 The model draws data from:
 
-- The [BreakthroughEnergy](https://www.breakthroughenergy.org/) transmission network model. This model has 82,071 bus network, 41,083 substations, and 104,192 lines across the three interconnections.
-- Powerplant Data can be drawn from three options: the Breakthrough Network, the WECC Anchor Data Set Production Cost Model, or the EIA++
+- The [TAMU/BreakthroughEnergy](https://www.breakthroughenergy.org/) transmission network model. This model has 82,071 bus network, 41,083 substations, and 104,192 lines across the three interconnections.
+- Powerplant Data can be drawn from three options: the Breakthrough Network, the WECC Anchor Data Set Production Cost Model, or the EIA860
 - Historical load data from the EIA via the EIA930.
 - Forecasted load data from the [WECC ADS PCM](https://www.wecc.org/ReliabilityModeling/Pages/AnchorDataSet.aspx).
 - Renewable time series based on ERA5, assembled using the atlite tool.
