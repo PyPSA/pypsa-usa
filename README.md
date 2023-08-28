@@ -39,15 +39,11 @@ git submodule update --remote
 ``` -->
 
 
-# Workflow
-
-![pypsa-usa workflow](https://github.com/PyPSA/pypsa-usa/blob/master/workflow/repo_data/dag.jpg?raw=true)
-
-## Configuration
+# Configuration
 
 **This workflow is currently only being tested for the `western` interconnection wildcard.**
 
-### Pre-set Configuration Options
+## Pre-set Configuration Options
 
 The `network_configuration` option in the `config.yaml` file accepts 3 values: `pypsa-usa` , `ads2032`, and `breakthrough`. Each cooresponds to a different combiation of input datasources for the generators, demand data, and generation timeseries for renewable generators. 
 
@@ -60,7 +56,7 @@ The `network_configuration` option in the `config.yaml` file accepts 3 values: `
 | Years Supported | 2019 (soon 2017-2023) | 2032 |
 | Interconnections Supported | WECC (soon entire US) | WECC |
 
-### Clustering
+## Clustering
 
 There have been issues in running operations-only simulations with clusters >50 for the WECC. Issue is currently being addressed.
 
@@ -78,10 +74,10 @@ Western: 4786
 Texas: 1250
 ```
 
-### Wildcards:
+## Wildcards:
 For more detailed definitions of wildcards, please reference [pypsa-eur](https://pypsa-eur.readthedocs.io/en/latest/wildcards.html). Not all wildcards implemented are available for pypsa-usa.
 
-## Execution 
+# Execution 
 To execute the workflow, go into the `workflow` directory and execute `snakemake` from your terminal. 
 
 ```bash
@@ -101,7 +97,10 @@ snakemake -j4 -R build_shapes  --until build_base_network
 ```
 where `build_shapes` is forced to run, and `build_base_network`  is the last rule you would like to run.
 
-## Examine Results
+
+# Workflow
+
+![pypsa-usa workflow](https://github.com/PyPSA/pypsa-usa/blob/master/workflow/repo_data/dag.jpg?raw=true)
 
 # Contributing
 We welcome your contributions to this project. If you have ideas, requests, or encounter issues with the model you can contact ktehranchi@stanford.edu. Please do not hesitate to reach out.
