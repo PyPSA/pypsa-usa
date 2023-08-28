@@ -107,8 +107,7 @@ rule retrieve_WECC_forecast_data:
         "scripts/retrieve_forecast_data.py"        
 
 DATAFILES_DMD = [
-    "EIA_DMD_2015.csv",
-    "EIA_DMD_2016.csv",
+    # "EIA_DMD_2016.csv",
     "EIA_DMD_2017.csv",
     "EIA_DMD_2018.csv",
     "EIA_DMD_2019.csv",
@@ -124,7 +123,7 @@ rule retrieve_eia_data:
     log:
         "logs/retrieve/retrieve_historical_load_data.log",
     script:
-        "scripts/retrieve_historical_load_data.py"
+        "scripts/retrieve_eia_data.py"
 
 
 rule retrieve_ship_raster:
