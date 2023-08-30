@@ -68,4 +68,5 @@ rules-summary
 
 license
 changelog
+contributing
 ```
