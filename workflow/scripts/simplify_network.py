@@ -5,8 +5,9 @@ import pandas as pd
 import numpy as np
 from functools import reduce
 from pypsa.networkclustering import busmap_by_kmeans, get_clustering_from_busmap
-
+from _helpers import export_network_for_gis_mapping
 import logging
+import os
 
 logger = logging.getLogger('root')
 # logger.debug('submodule message')
@@ -144,3 +145,6 @@ if __name__ == "__main__":
     n = aggregate_to_substations(n, substations, busmap_to_sub.sub_id, use_ba_zones)
 
     n.export_to_netcdf(snakemake.output[0])
+
+    output_path = os.path.dirname(snakemake.output[0]) + 'simplified_'
+    export_network_for_gis_mapping(n, output_path)

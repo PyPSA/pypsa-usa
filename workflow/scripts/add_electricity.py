@@ -86,15 +86,14 @@ It further adds extendable ``generators`` with **zero** capacity for
 
 import logging
 from itertools import product
-
 import geopandas as gpd
 import numpy as np
 import pandas as pd
-
+import os
 import pypsa
 import scipy.sparse as sparse
 import xarray as xr
-from _helpers import configure_logging, update_p_nom_max
+from _helpers import configure_logging, update_p_nom_max, export_network_for_gis_mapping
 
 from shapely.prepared import prep
 import pdb
@@ -1561,3 +1560,6 @@ if __name__ == "__main__":
     sanitize_carriers(n, snakemake.config)
     n.meta = snakemake.config
     n.export_to_netcdf(snakemake.output[0])
+
+    output_folder = os.path.dirname(snakemake.output[0]) + '/base_network'
+    export_network_for_gis_mapping(n, output_folder)

@@ -240,6 +240,24 @@ def get_aggregation_strategies(aggregation_strategies):
 
     return bus_strategies, generator_strategies
 
+def export_network_for_gis_mapping(n, output_path):
+    import pandas as pd
+    import os
+
+    #Creating GIS Table for Mapping Lines in QGIS
+    lines_gis = n.lines.copy()
+    lines_gis['latitude1'] = n.buses.loc[lines_gis.bus0].y.values
+    lines_gis['longitude1'] = n.buses.loc[lines_gis.bus0].x.values
+    lines_gis['latitude2'] = n.buses.loc[lines_gis.bus1].y.values
+    lines_gis['longitude2'] = n.buses.loc[lines_gis.bus1].x.values
+    lines_gis['v_nom'] = n.buses.loc[lines_gis.bus0].v_nom.values
+    lines_gis['wkt_geom'] = 'LINESTRING (' + lines_gis.longitude1.astype(str) + ' ' + lines_gis.latitude1.astype(str) + ', ' + lines_gis.longitude2.astype(str) + ' ' + lines_gis.latitude2.astype(str) + ')'
+
+    lines_gis.to_csv(output_path + '_lines_GIS.csv')
+    
+    #Creating GIS Table for Mapping Buses in QGIS
+    buses_gis = n.buses.copy()
+    buses_gis.to_csv(output_path + '_buses_GIS.csv')
 
 def mock_snakemake(rulename, **wildcards):
     """
