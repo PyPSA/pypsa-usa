@@ -67,7 +67,7 @@ And use Python's built-in web server for a preview in your web browser
 (`http://localhost:8000`)
 
 ```bash
-python3 -m http.server --directory 'docs/build/html'
+~/pypsa-usa $ python3 -m http.server --directory 'docs/build/html'
 ```
 
 ## Code Contributions
