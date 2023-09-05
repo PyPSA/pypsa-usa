@@ -16,6 +16,9 @@ The model draws data from:
 Example 500 Node Western Interconnection Network:
 ![pypsa-usa Base Network](https://github.com/PyPSA/pypsa-usa/blob/master/workflow/repo_data/network_500.jpg)
 
+# Documentation 
+
+All documentation for PyPSA-USA can be found [here](https://pypsa-usa.readthedocs.io/en/latest/)
 
 # Installation
 
