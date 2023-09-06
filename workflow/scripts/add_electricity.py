@@ -1360,7 +1360,7 @@ def attach_ads_renewables(n, plants_df, renewable_carriers, extendable_carriers,
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
-        snakemake = mock_snakemake("add_electricity")
+        snakemake = mock_snakemake("add_electricity", interconnect='western')
     configure_logging(snakemake)
 
     params = snakemake.params
