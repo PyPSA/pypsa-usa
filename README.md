@@ -1,6 +1,6 @@
 # PyPSA-USA
 
-**NOTE: This model is under active development. The western interconnection is stable, however you are likely to find bugs in the workflow as we continue to develop the model. Please file github issues or email ctehran@stanford.edu for support**
+**NOTE: This model is under active development. The western interconnection is stable, however you are likely to find bugs in the workflow as we continue to develop the model. Please file github issues or email ktehranchi@stanford.edu for support**
 
 Model [Documentation](https://pypsa-usa.readthedocs.io/en/latest/)
 
