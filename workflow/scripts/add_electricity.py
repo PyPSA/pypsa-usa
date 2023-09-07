@@ -1557,6 +1557,13 @@ if __name__ == "__main__":
     else:
         raise ValueError(f"Unknown network_configuration {snakemake.config['network_configuration']}")
 
+
+
+    # import pdb; pdb.set_trace()
+    import modify_network_osw as osw
+    osw.build_OSW_base_configuration(n)
+    osw.build_OSW_500kV(n)
+
     sanitize_carriers(n, snakemake.config)
     n.meta = snakemake.config
     n.export_to_netcdf(snakemake.output[0])

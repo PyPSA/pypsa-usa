@@ -44,19 +44,20 @@ tesla_substation_bus_id = '2021593'
 
 
 def define_line_types(network):    
-    network.line_types.loc["500kvac"] = pd.Series(
-        [60, 0.0683, 0.335],
-        index=["f_nom", "r_per_length", "x_per_length"],
-        )
+    # # import pdb;pdb.set_trace()
+    # network.line_types.loc["500kvac"] = pd.Series(
+    #     [60, 0.0683, 0.335, 15, 1.01, 'ol'],
+    #     index=["f_nom", "r_per_length", "x_per_length", "c_per_length", "i_nom", "mounting"],
+    #     )
+
+    # network.line_types.loc["export_cable"] = pd.Series(
+    #     [60, 0.0683, 0.335, 15, 1.01, 'subsea'],
+    #     index=["f_nom", "r_per_length", "x_per_length",  "c_per_length", "i_nom", "mounting"],
+    #     )
     
-    network.line_types.loc["export_cable"] = pd.Series(
-        [60, 0.0683, 0.335],
-        index=["f_nom", "r_per_length", "x_per_length"],
-        )
-    
-    network.transformer_types.loc["Rail"] = pd.Series(
-        [60, 0.0683, 0.335],
-        index=["f_nom", "r_per_length", "x_per_length"],
+    network.line_types.loc["Rail"] = pd.Series(
+        [60, 0.0683, 0.335, 15, 1.01],
+        index=["f_nom", "r_per_length", "x_per_length", "c_per_length", "i_nom"],
         )
     return network
 
@@ -66,7 +67,8 @@ def add_hvdc_subsea(network, line_name, bus0, bus1):
                 name= line_name, 
                 bus0=bus0, 
                 bus1=bus1,
-                type="HVDC_VSC", 
+                type='Rail',
+                # type="HVDC_VSC", 
                 carrier = "DC",
                 efficiency=1,
                 p_nom=2000,
@@ -78,7 +80,8 @@ def add_hvdc_overhead(network, line_name, bus0, bus1):
             name = line_name,
             bus0=bus0, 
             bus1=bus1,
-            type="HVDC_LCC", 
+            type="Rail",
+            # type="HVDC_LCC", 
             carrier = "DC",
             efficiency=1,
             p_nom=3000,
@@ -93,7 +96,8 @@ def add_hvac_500kv(network, line_name, bus0, bus1):
                 r=2.8910114,
                 x=84.8225115,
                 s_nom=3200,
-                type="500kvac",
+                type="Rail",
+                # type="500kvac",
                 carrier = 'AC',
         )
     network.lines.loc[line_name, "interconnect"] = "Western"
@@ -117,11 +121,11 @@ def add_osw_turbines(network, plant_name, capacity,  pu_time_series):
                 p_nom= capacity,
                 marginal_cost=0,
                 p_max_pu= pu_time_series.values,
-                weight = 1,
                 efficiency = 1,
                 p_nom_extendable = False,
-
             )
+    network.generators.loc[ plant_name+"_osw", "weight"] = 1
+
 
 def add_export_array_module(network, name, export_cable_id, 
                             capacity, offshore_sub_location):
@@ -130,70 +134,71 @@ def add_export_array_module(network, name, export_cable_id,
     export_cable_data = network.lines.loc[str(export_cable_id)]
     old_onshore_bus = network.buses.loc[export_cable_data.bus1]
 
-    # #Add off-shore Bus_id:
-    # network.add("Bus",
-    #             name = f'{name}_floating_sub',
-    #             x = offshore_sub_location[0],
-    #             y = offshore_sub_location[1],
-    #             v_nom = 230,
-    #             carrier = 'AC',
-    #             )
-    # network.buses.loc[f'{name}_floating_sub', 'substation'] = False
-    # network.buses.loc[f'{name}_floating_sub', 'balancing_area'] = 'CISO-PGAE'
-    # network.buses.loc[f'{name}_floating_sub', 'country'] = 'US'
+    #Add off-shore Bus_id:
+    network.add("Bus",
+                name = f'{name}_floating_sub',
+                x = offshore_sub_location[0],
+                y = offshore_sub_location[1],
+                v_nom = 230,
+                carrier = 'AC',
+                )
+    network.buses.loc[f'{name}_floating_sub', 'substation'] = False
+    network.buses.loc[f'{name}_floating_sub', 'balancing_area'] = 'CISO-PGAE'
+    network.buses.loc[f'{name}_floating_sub', 'country'] = 'US'
 
-    # #Add new onshore bus:
-    # network.add("Bus",
-    #             name = f'{name}_onshore_bus_230kv',
-    #             x = old_onshore_bus.x + 0.001,
-    #             y = old_onshore_bus.y + 0.001,
-    #             v_nom = 230,
-    #             carrier = 'AC',
-    #             )
-    # network.buses.loc[f'{name}_onshore_bus_230kv', 'substation'] = False
-    # network.buses.loc[f'{name}_onshore_bus_230kv', 'balancing_area'] = 'CISO-PGAE'
-    # network.buses.loc[f'{name}_onshore_bus_230kv', 'country'] = 'US'
+    #Add new onshore bus:
+    network.add("Bus",
+                name = f'{name}_onshore_bus_230kv',
+                x = old_onshore_bus.x + 0.001,
+                y = old_onshore_bus.y + 0.001,
+                v_nom = 230,
+                carrier = 'AC',
+                )
+    network.buses.loc[f'{name}_onshore_bus_230kv', 'substation'] = False
+    network.buses.loc[f'{name}_onshore_bus_230kv', 'balancing_area'] = 'CISO-PGAE'
+    network.buses.loc[f'{name}_onshore_bus_230kv', 'country'] = 'US'
 
-    # #Add new export cable
-    # network.add("Line",
-    #             name = f'{name}_export_cable',
-    #             bus0 = f'{name}_floating_sub',
-    #             bus1 = f'{name}_onshore_bus_230kv',
-    #             s_nom = capacity,
-    #             type = 'export_cable',
-    #             carrier = 'AC',
-    #             x = 10, #revisit resistance and reactance values later
-    #             r = 0.1,
-    #             s_nom_extendable = False,
-    #             )
-    # network.lines.loc[f'{name}_export_cable', 'v_nom'] = 230
+    #Add new export cable
+    network.add("Line",
+                name = f'{name}_export_cable',
+                bus0 = f'{name}_floating_sub',
+                bus1 = f'{name}_onshore_bus_230kv',
+                s_nom = capacity,
+                type = 'Rail',
+                # type = 'export_cable',
+                carrier = 'AC',
+                x = 10, #revisit resistance and reactance values later
+                r = 0.1,
+                s_nom_extendable = False,
+                )
+    network.lines.loc[f'{name}_export_cable', 'v_nom'] = 230
 
     
-    # #Add new 500kV bus
-    # network.add("Bus",
-    #             name = f'{name}_onshore_bus_500kv',
-    #             x = old_onshore_bus.x + 0.001,
-    #             y = old_onshore_bus.y + 0.001,
-    #             v_nom = 500,
-    #             carrier = 'AC',
-    #             )
+    #Add new 500kV bus
+    network.add("Bus",
+                name = f'{name}_onshore_bus_500kv',
+                x = old_onshore_bus.x + 0.001,
+                y = old_onshore_bus.y + 0.001,
+                v_nom = 500,
+                carrier = 'AC',
+                )
     
-    # network.buses.loc[f'{name}_onshore_bus_500kv', 'substation'] = False
-    # network.buses.loc[f'{name}_onshore_bus_500kv', 'balancing_area'] = 'CISO-PGAE'
-    # network.buses.loc[f'{name}_onshore_bus_500kv', 'country'] = 'US'
+    network.buses.loc[f'{name}_onshore_bus_500kv', 'substation'] = False
+    network.buses.loc[f'{name}_onshore_bus_500kv', 'balancing_area'] = 'CISO-PGAE'
+    network.buses.loc[f'{name}_onshore_bus_500kv', 'country'] = 'US'
 
-    # #Add new transformer
-    # network.add("Transformer",
-    #             name = f'{name}_transformer',
-    #             bus0 = f'{name}_onshore_bus_230kv',
-    #             bus1 = f'{name}_onshore_bus_500kv',
-    #             s_nom = capacity,
-    #             type = 'Rail',
-    #             x = 10, #revisit resistance and reactance values later
-    #             r = 0.1,
-    #             )
+    #Add new transformer
+    network.add("Transformer",
+                name = f'{name}_transformer',
+                bus0 = f'{name}_onshore_bus_230kv',
+                bus1 = f'{name}_onshore_bus_500kv',
+                s_nom = capacity,
+                type = 'Rail',
+                x = 10, #revisit resistance and reactance values later
+                r = 0.1,
+                )
     
-    # network.transformers.loc[f'{name}_transformer', 'country'] = 'US'
+    network.transformers.loc[f'{name}_transformer', 'carrier'] = 'AC'
 
 
 
@@ -211,23 +216,23 @@ osw_ts = pd.read_csv('/Users/kamrantehranchi/Local_Documents/pypsa-usa/workflow/
 
 def build_OSW_base_configuration(network):
     #define network lines
+    # import pdb;pdb.set_trace()
     define_line_types(network)
 
-    # # Add Offshore Substations + Export Cables
-    # add_export_array_module(network,
-    #                         "humboldt",
-    #                         humboldt_export_cable_id,
-    #                         capacity = 2000,
-    #                         offshore_sub_location = humboldt_bus_loc
-    #                         )
+    # Add Offshore Substations + Export Cables
+    add_export_array_module(network,
+                            "humboldt",
+                            humboldt_export_cable_id,
+                            capacity = 2000,
+                            offshore_sub_location = humboldt_bus_loc
+                            )
 
-    # # Add New Offshore Generators
-    # add_osw_turbines(network,
-    #                 "humboldt", 
-    #                 capacity = 1607,  
-    #                 pu_time_series = osw_ts.Wind_Offshore_Humboldt
-    #             )
-    print('test')
+    # Add New Offshore Generators
+    add_osw_turbines(network,
+                    "humboldt", 
+                    capacity = 1607,  
+                    pu_time_series = osw_ts.Wind_Offshore_Humboldt
+                )
 
 
 def build_OSW_500kV(network):
@@ -257,6 +262,7 @@ def build_OSW_500kV(network):
                 x = 10, #revisit resistance and reactance values later
                 r = 0.1,
                 )
+    network.transformers.loc['fern_round_mountain_transformer', 'carrier'] = 'AC'
 
     # Alternative 1.1- 500 kV Overland Option strengthening COI
     # Add 500 kV line from Fern Road Substation to Tesla Substation
@@ -283,7 +289,8 @@ def build_OSW_500kV(network):
                 x = 10, #revisit resistance and reactance values later
                 r = 0.1,
                 )
-    
+    network.transformers.loc['tesla_step_up_transformer', 'carrier'] = 'AC'
+
 
 # Alternative 2- HVDC LCC Overhead Option
 def build_hvdc_overhead(network):
