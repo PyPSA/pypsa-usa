@@ -117,7 +117,7 @@ def add_osw_turbines(network, plant_name, capacity,  pu_time_series):
     network.add("Generator", 
                 name= plant_name+"_osw", 
                 bus= plant_name+"_floating_sub", 
-                carrier= "wind",
+                carrier= "offwind",
                 p_nom= capacity,
                 marginal_cost=0,
                 p_max_pu= pu_time_series.values,
@@ -199,9 +199,6 @@ def add_export_array_module(network, name, export_cable_id,
                 )
     
     network.transformers.loc[f'{name}_transformer', 'carrier'] = 'AC'
-
-
-
 
 # Load the network
 # resources_folder= os.path.join(os.path.dirname(os.getcwd()), 'resources')

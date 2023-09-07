@@ -122,8 +122,7 @@ if __name__ == "__main__":
 
     voltage_level = snakemake.config["electricity"]["voltage_simplified"]
     use_ba_zones = snakemake.config['clustering']['cluster_network']['by_balancing_areas']
-    
-    import pdb; pdb.set_trace()
+
     n = pypsa.Network(snakemake.input.network)
     n, trafo_map = simplify_network_to_voltage_level(n, voltage_level)
 

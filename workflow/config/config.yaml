@@ -246,7 +246,7 @@ clustering:
   cluster_network:
     algorithm: kmeans
     feature: solar+onwind-time
-    by_balancing_areas: false
+    by_balancing_areas: false # if true, balancing_areas are enforced in cluser boundaries
   aggregation_strategies:
     generators:
       p_nom_max: sum # use "min" for more conservative assumptions
