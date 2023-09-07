@@ -1,7 +1,19 @@
 # Tutorial 
 
+We are working on this!
 
-TBD
+
+# Execution 
+To execute the workflow, go into the `workflow` directory and execute `snakemake` from your terminal. 
+
+```bash
+snakemake -j6
+```
+
+where 6 indicates the number of used cores, you may change it to your preferred number. This will run the workflow defined in the `Snakefile`.
+
+Note: The `build_renewable_profiles` rule will take ~10-15 minutes to run the first time you run the workflow. After that, changing the number of clusters, load, or generator configurations will not require rebuilding the renewable profiles. Changes to `renewables` configuration will cause re-run of `build_renewable_profiles`.
+
 
 ### Troubleshooting:
 
