@@ -38,7 +38,7 @@ Only the western region for 2019 has been prepared and saved to Zenodo for downl
 
 ## Rule `retrieve_cost_data`
 
-This rule downloads generatro economic assumptions from the [NREL](https://www.nrel.gov/) [Annual Technology Baseline](https://atb.nrel.gov/). 
+This rule downloads generator economic assumptions from the [NREL](https://www.nrel.gov/) [Annual Technology Baseline](https://atb.nrel.gov/). 
 
 [![URL](https://img.shields.io/badge/URL-NREL_ATB-blue)](<https://atb.nrel.gov/x>)
 
