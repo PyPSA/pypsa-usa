@@ -2,8 +2,7 @@
 
 import pypsa, pandas as pd, logging, geopandas as gpd
 from geopandas.tools import sjoin
-import pdb
-
+from _helpers import configure_logging
 
 idx = pd.IndexSlice
 
@@ -89,17 +88,12 @@ def add_dclines_from_file(n, fn_dclines):
 
     return n
 
-def assign_bus_ba(PATH_BUS, PATH_BA_SHP, PATH_OFFSHORE_SHP, bus_locs):
-    bus_df = pd.read_csv(PATH_BUS, index_col=0)
-    bus_df = pd.merge(bus_df, bus_locs[['lat','lon']], left_index=True, right_index=True, how='left')
-    bus_locs["geometry"] = gpd.points_from_xy(bus_locs["lon"], bus_locs["lat"])
-    bus_df_locs = pd.merge(bus_df, bus_locs['geometry'], left_index=True, right_index=True, how='left') #merging bus data w/ geometry data
-
+def assign_bus_ba(buses: pd.DataFrame, PATH_BA_SHP, PATH_OFFSHORE_SHP, bus_locs):
     ba_region_shapes = gpd.read_file(PATH_BA_SHP)
     offshore_shapes = gpd.read_file(PATH_OFFSHORE_SHP)
     combined_shapes = gpd.GeoDataFrame(pd.concat([ba_region_shapes, offshore_shapes],ignore_index=True))
     
-    ba_points = sjoin(gpd.GeoDataFrame(bus_df_locs["geometry"],crs= 4326), combined_shapes, how='left',predicate='within')
+    ba_points = sjoin(gpd.GeoDataFrame(buses["geometry"],crs= 4326), combined_shapes, how='left',predicate='within')
     ba_points = ba_points.rename(columns={'name':'balancing_area'})
     bus_df_final = pd.merge(bus_df, ba_points['balancing_area'], left_index=True, right_index=True,how='left')
     bus_df_final['country'] = bus_df_final['balancing_area']
@@ -113,8 +107,25 @@ def assign_bus_ba(PATH_BUS, PATH_BA_SHP, PATH_OFFSHORE_SHP, bus_locs):
     # bus_df_final.loc[df_issues.bus_id]
     return bus_df_final
 
+def assign_bus_location(buses: pd.DataFrame, buslocs: pd.DataFrame) -> gpd.GeoDataFrame:
+    """Attaches coordinates to each bus"""
+    bus_df = pd.merge(buses, buslocs[['lat','lon']], left_index=True, right_index=True, how='left')
+    buslocs["geometry"] = gpd.points_from_xy(buslocs["lon"], buslocs["lat"])
+    return pd.merge(bus_df, buslocs['geometry'], left_index=True, right_index=True, how='left')
+
+def map_bus_to_region():
+    """Maps a bus to a geographic region
+    
+    Args:
+    """
+    pass
+
 if __name__ == "__main__":
     logger = logging.getLogger(__name__)
+    if 'snakemake' not in globals():
+        from _helpers import mock_snakemake
+        snakemake = mock_snakemake('build_base_network', interconnect='western')
+    configure_logging(snakemake)
 
     # create network
     n = pypsa.Network()
@@ -128,15 +139,26 @@ if __name__ == "__main__":
     bus2sub = pd.read_csv(snakemake.input.bus2sub).set_index("bus_id")
     sub = pd.read_csv(snakemake.input.sub).set_index("sub_id")
     buslocs = pd.merge(bus2sub, sub, left_on="sub_id", right_index=True)
+ 
+    # merge bus data with geometry data
+    bus_df = pd.read_csv(snakemake.input["buses"], index_col=0)
+    buses = assign_bus_location(bus_df, buslocs)
+
+    # balancing authority shape
+    ba_region_shapes = gpd.read_file(snakemake.input["onshore_shapes"]) # TODO add all BAs
+    offshore_shapes = gpd.read_file(snakemake.input["offshore_shapes"])
+    ba_shapes = gpd.GeoDataFrame(pd.concat([ba_region_shapes, offshore_shapes],ignore_index=True))
+
+    # states shape
+    
 
     bus_df = assign_bus_ba(
-        snakemake.input["buses"], 
+        buses,
         snakemake.input["onshore_shapes"],
         snakemake.input["offshore_shapes"],
         buslocs
-        )
+    )
     
-    # pdb.set_trace()
     # add buses, transformers, lines and links
     n = add_buses_from_file(n, bus_df, interconnect=interconnect)
     n = add_branches_from_file(n, snakemake.input["lines"])
