@@ -145,6 +145,8 @@ def add_export_array_module(network, name, export_cable_id,
     network.buses.loc[f'{name}_floating_sub', 'substation'] = False
     network.buses.loc[f'{name}_floating_sub', 'balancing_area'] = 'CISO-PGAE'
     network.buses.loc[f'{name}_floating_sub', 'country'] = 'US'
+    network.buses.loc[f'{name}_floating_sub', 'sub_id'] = 231
+
 
     #Add new onshore bus:
     network.add("Bus",
@@ -157,6 +159,8 @@ def add_export_array_module(network, name, export_cable_id,
     network.buses.loc[f'{name}_onshore_bus_230kv', 'substation'] = False
     network.buses.loc[f'{name}_onshore_bus_230kv', 'balancing_area'] = 'CISO-PGAE'
     network.buses.loc[f'{name}_onshore_bus_230kv', 'country'] = 'US'
+    network.buses.loc[f'{name}_onshore_bus_230kv', 'sub_id'] = 232
+
 
     #Add new export cable
     network.add("Line",
@@ -182,10 +186,11 @@ def add_export_array_module(network, name, export_cable_id,
                 v_nom = 500,
                 carrier = 'AC',
                 )
-    
     network.buses.loc[f'{name}_onshore_bus_500kv', 'substation'] = False
     network.buses.loc[f'{name}_onshore_bus_500kv', 'balancing_area'] = 'CISO-PGAE'
     network.buses.loc[f'{name}_onshore_bus_500kv', 'country'] = 'US'
+    network.buses.loc[f'{name}_onshore_bus_500kv', 'sub_id'] = 501
+
 
     #Add new transformer
     network.add("Transformer",
@@ -242,6 +247,7 @@ def build_OSW_500kV(network):
                 v_nom = 500,
                 carrier = 'AC',
                 )
+    network.buses.loc['fern_road_sub', 'sub_id'] = 503
 
     # Add 500 kV line from Humboldt Onshore Bus to Fern Road Substation
     add_hvac_500kv(network,
@@ -270,7 +276,9 @@ def build_OSW_500kV(network):
                 v_nom = 500,
                 carrier= 'AC',
                 )
+    network.buses.loc['tesla_sub_500kv', 'sub_id'] = 502
 
+    
     add_hvac_500kv(network,
                     line_name="fern_tesla_500kv",
                     bus0 = "fern_road_sub",

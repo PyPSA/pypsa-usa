@@ -95,13 +95,7 @@ def aggregate_to_substations(network, substations, busmap,use_ba_zones=False):
     return network
 
 
-def assign_line_lengths(n, line_length_factor, busmap_to_sub=None, substations=None):
-
-    if (busmap_to_sub is not None) and (substations is not None):
-        busmap_to_sub["x"] = busmap_to_sub.sub_id.map(substations["lon"])
-        busmap_to_sub["y"] = busmap_to_sub.sub_id.map(substations["lat"])
-        n.buses[["x", "y"]] = busmap_to_sub[["x", "y"]]
-
+def assign_line_lengths(n, line_length_factor):
     logger.info("Assigning line lengths using haversine function...")
 
     n.lines.length = pypsa.geo.haversine_pts(
@@ -122,7 +116,7 @@ if __name__ == "__main__":
 
     voltage_level = snakemake.config["electricity"]["voltage_simplified"]
     use_ba_zones = snakemake.config['clustering']['cluster_network']['by_balancing_areas']
-
+    import pdb; pdb.set_trace()
     n = pypsa.Network(snakemake.input.network)
     n, trafo_map = simplify_network_to_voltage_level(n, voltage_level)
 
@@ -133,14 +127,18 @@ if __name__ == "__main__":
     substations = pd.read_csv(snakemake.input.sub, index_col=0)
     substations.index = substations.index.astype(str)
 
+    #new busmap definition
+    busmap_to_sub = n.buses.sub_id.astype(int).astype(str).to_frame()
+
+
     busmaps = [trafo_map, busmap_to_sub.sub_id]
     busmaps = reduce(lambda x, y: x.map(y), busmaps[1:], busmaps[0])
 
     # assign line lengths based on sub_id,
     # otherwise divide by zero error in networkclustering
-    # should we be multiplying by 1.25 here?
-    n = assign_line_lengths(n, 1.25, busmap_to_sub, substations) 
-    n.links["underwater_fraction"] = 0
+    # should we be multiplying by 1.25 here?... haversine is a poor approximation. TODO: WHEN WE REPLACE NETWORK WITH NEW NETWORK WE SHOULD CALACULATE LINE LENGTHS BASED ON THE actual GIS line files.
+    n = assign_line_lengths(n, 1.25) 
+    n.links["underwater_fraction"] = 0 #TODO: CALULATE UNDERWATER FRACTIONS.
 
     n = aggregate_to_substations(n, substations, busmap_to_sub.sub_id, use_ba_zones)
 
