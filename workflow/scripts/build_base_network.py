@@ -155,15 +155,16 @@ if __name__ == "__main__":
     ba_shape = ba_shape.rename(columns={"name":"balancing_area"})
 
     # country and state shapes
-    
+    state_shape = gpd.read_file(snakemake.input["state_shapes"])
+    state_shape = state_shape.rename(columns={"name":"state"})
 
     #assign ba, state, and country to each bus
     gdf_bus = map_bus_to_region(gdf_bus, ba_shape, "balancing_area")
     gdf_bus = map_bus_to_region(gdf_bus, state_shape, "state")
-    gdf_bus = map_bus_to_region(gdf_bus, country_shape, "country")
+    gdf_bus = map_bus_to_region(gdf_bus, state_shape, "country")
     
     # add buses, transformers, lines and links
-    n = add_buses_from_file(n, bus_df, interconnect=interconnect)
+    n = add_buses_from_file(n, gdf_bus, interconnect=interconnect)
     n = add_branches_from_file(n, snakemake.input["lines"])
     n = add_dclines_from_file(n, snakemake.input["links"])
     add_custom_line_type(n)
