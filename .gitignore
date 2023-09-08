@@ -6,7 +6,7 @@ dconf
 *.nc
 *.log
 *.pdf
-*.png
+# *.png
 *.zip
 *.DS_Store
 *.dot
