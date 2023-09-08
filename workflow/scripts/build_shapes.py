@@ -145,6 +145,10 @@ if __name__ == "__main__":
     interconnect_regions = interconnect_regions.set_crs(4326)
     interconnect_regions.to_file(snakemake.output.country_shapes)
 
+    # save state shapes 
+    state_boundaries = gdf_states[["name", "country", "geometry"]].set_crs(4326)
+    state_boundaries.to_file(snakemake.output.state_shapes)
+
     # Load balancing authority shapes
     gdf_ba = load_ba_shape(snakemake.input.onshore_shapes)
 
