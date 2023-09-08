@@ -6,7 +6,7 @@ from _helpers import configure_logging
 
 idx = pd.IndexSlice
 
-def add_buses_from_file(n, buses, interconnect):
+def add_buses_from_file(n: pypsa.Network, buses: gpd.GeoDataFrame, interconnect: str) -> pypsa.Network:
     if interconnect != "usa":
         buses = buses.query(
             "interconnect == @interconnect"
@@ -17,10 +17,11 @@ def add_buses_from_file(n, buses, interconnect):
     n.madd(
         "Bus",
         buses.index,
-        Pd=buses.Pd, # used to decompose zone demand to bus demand
-        v_nom=buses.baseKV,
-        zone_id=buses.zone_id,
-        balancing_area= buses.balancing_area,
+        Pd = buses.Pd, # used to decompose zone demand to bus demand
+        v_nom = buses.baseKV,
+        zone_id = buses.zone_id,
+        balancing_area = buses.balancing_area,
+        state = buses.state,
         country = buses.country,
         interconnect = buses.interconnect,
         x = buses.lon,
@@ -92,18 +93,6 @@ def assign_sub_id(buses: pd.DataFrame, bus_locs: pd.DataFrame) -> pd.DataFrame:
     """Adds sub id to dataframe as a new column"""
     buses['sub_id'] = bus_locs.sub_id
     return buses
-
-def assign_bus_ba(buses: pd.DataFrame, PATH_BA_SHP, PATH_OFFSHORE_SHP, bus_locs):
-    ba_region_shapes = gpd.read_file(PATH_BA_SHP)
-    offshore_shapes = gpd.read_file(PATH_OFFSHORE_SHP)
-    combined_shapes = gpd.GeoDataFrame(pd.concat([ba_region_shapes, offshore_shapes],ignore_index=True))
-    
-    ba_points = sjoin(gpd.GeoDataFrame(buses["geometry"],crs= 4326), combined_shapes, how='left',predicate='within')
-    ba_points = ba_points.rename(columns={'name':'balancing_area'})
-    bus_df_final = pd.merge(bus_df, ba_points['balancing_area'], left_index=True, right_index=True,how='left')
-    bus_df_final['country'] = bus_df_final['balancing_area']
-
-    return bus_df_final
 
 def assign_bus_location(buses: pd.DataFrame, buslocs: pd.DataFrame) -> gpd.GeoDataFrame:
     """Attaches coordinates and sub ids to each bus"""
