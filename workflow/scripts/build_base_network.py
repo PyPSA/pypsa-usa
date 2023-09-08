@@ -88,6 +88,11 @@ def add_dclines_from_file(n, fn_dclines):
 
     return n
 
+def assign_sub_id(buses: pd.DataFrame, bus_locs: pd.DataFrame) -> pd.DataFrame:
+    """Adds sub id to dataframe as a new column"""
+    buses['sub_id'] = bus_locs.sub_id
+    return buses
+
 def assign_bus_ba(buses: pd.DataFrame, PATH_BA_SHP, PATH_OFFSHORE_SHP, bus_locs):
     ba_region_shapes = gpd.read_file(PATH_BA_SHP)
     offshore_shapes = gpd.read_file(PATH_OFFSHORE_SHP)
@@ -98,27 +103,25 @@ def assign_bus_ba(buses: pd.DataFrame, PATH_BA_SHP, PATH_OFFSHORE_SHP, bus_locs)
     bus_df_final = pd.merge(bus_df, ba_points['balancing_area'], left_index=True, right_index=True,how='left')
     bus_df_final['country'] = bus_df_final['balancing_area']
 
-    #attaching sub_id
-    bus_df_final['sub_id'] = bus_locs.sub_id
-
-    #for identifying duplicants-- below
-    # df = bus_df_final.reset_index().groupby(['bus_id']).size().reset_index(name='count').sort_values('count')
-    # df_issues = df[df['count']>1]
-    # bus_df_final.loc[df_issues.bus_id]
     return bus_df_final
 
 def assign_bus_location(buses: pd.DataFrame, buslocs: pd.DataFrame) -> gpd.GeoDataFrame:
-    """Attaches coordinates to each bus"""
-    bus_df = pd.merge(buses, buslocs[['lat','lon']], left_index=True, right_index=True, how='left')
-    buslocs["geometry"] = gpd.points_from_xy(buslocs["lon"], buslocs["lat"])
-    return pd.merge(bus_df, buslocs['geometry'], left_index=True, right_index=True, how='left')
-
-def map_bus_to_region():
+    """Attaches coordinates and sub ids to each bus"""
+    gdf_bus = pd.merge(buses, buslocs[['lat','lon']], left_index=True, right_index=True, how='left')
+    gdf_bus["geometry"] = gpd.points_from_xy(gdf_bus["lon"], gdf_bus["lat"])
+    return gpd.GeoDataFrame(gdf_bus, crs=4326)
+    
+def map_bus_to_region(buses: gpd.GeoDataFrame, shape: gpd.GeoDataFrame, name: str) -> gpd.GeoDataFrame:
     """Maps a bus to a geographic region
     
     Args:
+        buses: gpd.GeoDataFrame, 
+        shape: gpd.GeoDataFrame, 
+        name: str
+            column name in shape to merge
     """
-    pass
+    shape_filtered = shape[[name, "geometry"]]
+    return gpd.sjoin(buses, shape_filtered, how="left").drop(columns=["index_right"])
 
 if __name__ == "__main__":
     logger = logging.getLogger(__name__)
@@ -141,23 +144,23 @@ if __name__ == "__main__":
     buslocs = pd.merge(bus2sub, sub, left_on="sub_id", right_index=True)
  
     # merge bus data with geometry data
-    bus_df = pd.read_csv(snakemake.input["buses"], index_col=0)
-    buses = assign_bus_location(bus_df, buslocs)
+    df_bus = pd.read_csv(snakemake.input["buses"], index_col=0)
+    df_bus = assign_sub_id(df_bus, buslocs)
+    gdf_bus = assign_bus_location(df_bus, buslocs)
 
     # balancing authority shape
-    ba_region_shapes = gpd.read_file(snakemake.input["onshore_shapes"]) # TODO add all BAs
+    ba_region_shapes = gpd.read_file(snakemake.input["onshore_shapes"])
     offshore_shapes = gpd.read_file(snakemake.input["offshore_shapes"])
-    ba_shapes = gpd.GeoDataFrame(pd.concat([ba_region_shapes, offshore_shapes],ignore_index=True))
+    ba_shape = gpd.GeoDataFrame(pd.concat([ba_region_shapes, offshore_shapes],ignore_index=True))
+    ba_shape = ba_shape.rename(columns={"name":"balancing_area"})
 
-    # states shape
+    # country and state shapes
     
 
-    bus_df = assign_bus_ba(
-        buses,
-        snakemake.input["onshore_shapes"],
-        snakemake.input["offshore_shapes"],
-        buslocs
-    )
+    #assign ba, state, and country to each bus
+    gdf_bus = map_bus_to_region(gdf_bus, ba_shape, "balancing_area")
+    gdf_bus = map_bus_to_region(gdf_bus, state_shape, "state")
+    gdf_bus = map_bus_to_region(gdf_bus, country_shape, "country")
     
     # add buses, transformers, lines and links
     n = add_buses_from_file(n, bus_df, interconnect=interconnect)
