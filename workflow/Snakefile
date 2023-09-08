@@ -160,16 +160,16 @@ rule retrieve_cutout:
     run:
         move(input[0], output[0])
 
-# rule retrieve_cost_data:
-#     output:
-#         parquet = RESOURCES + "costs_{year}_raw.parquet",
-#         # csv = "data/costs_{year}.csv",
-#     log:
-#         LOGS + "retrieve_cost_data_{year}.log",
-#     resources:
-#         mem_mb=1000,
-#     script:
-#         "scripts/retrieve_cost_data.py"
+rule retrieve_cost_data:
+    output:
+        nrel_atb = RESOURCES + "costs/nrel_atb.parquet",
+        nrel_atb_transport = RESOURCES + "costs/nrel_atb_transport.xlsx",
+    log:
+        LOGS + "retrieve_cost_data.log",
+    resources:
+        mem_mb=1000,
+    script:
+        "scripts/retrieve_cost_data.py"
 
 ################# ----------- Rules to Build Network ---------- #################
 

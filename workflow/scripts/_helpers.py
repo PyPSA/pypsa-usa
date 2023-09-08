@@ -220,7 +220,7 @@ def progress_retrieve(url, file):
     pbar = ProgressBar(0, 100)
 
     def dlProgress(count, blockSize, totalSize):
-        pbar.update( int(count * blockSize * 100 / totalSize) )
+        pbar.update(int(count * blockSize * 100 / totalSize))
 
     urllib.request.urlretrieve(url, file, reporthook=dlProgress)
 
