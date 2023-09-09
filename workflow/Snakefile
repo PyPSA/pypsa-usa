@@ -170,7 +170,8 @@ rule retrieve_cost_data:
         ng_residential_price = RESOURCES + "costs/ng_commercial_price.csv",
         ng_commercial_price = RESOURCES + "costs/ng_residential_price.csv",
     params:
-        eia_api_key = config["costs"].get("eia_aip_key")
+        eia_api_key = config["costs"].get("eia_aip_key"),
+        pypsa_costs_version = config["costs"].get("version", "v0.6.0")
     log:
         LOGS + "retrieve_cost_data.log",
     resources:

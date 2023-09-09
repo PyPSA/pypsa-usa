@@ -123,7 +123,7 @@ if __name__ == "__main__":
             ng_2022_electric_power_price.to_csv(ng_residential_price)
     
     # get european template data 
-    version = "v0.6.0"
+    version = snakemake.params.pypsa_costs_version
     tech_year = snakemake.wildcards.year
     csv = f"https://raw.githubusercontent.com/PyPSA/technology-data/{version}/outputs/costs_{tech_year}.csv"
     save_tech_data = snakemake.output.pypsa_technology_data
