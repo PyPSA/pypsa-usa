@@ -164,12 +164,27 @@ rule retrieve_cost_data:
     output:
         nrel_atb = RESOURCES + "costs/nrel_atb.parquet",
         nrel_atb_transport = RESOURCES + "costs/nrel_atb_transport.xlsx",
+        pypsa_technology_data = RESOURCES + "costs/pypsa_eur.csv",
+        ng_electric_power_price = RESOURCES + "costs/ng_electric_power_price.csv",
+        ng_industrial_price = RESOURCES + "costs/ng_industrial_price.csv",
+        ng_residential_price = RESOURCES + "costs/ng_commercial_price.csv",
+        ng_commercial_price = RESOURCES + "costs/ng_residential_price.csv",
+    params:
+        eia_api_key = config["costs"].get("eia_aip_key")
     log:
         LOGS + "retrieve_cost_data.log",
     resources:
         mem_mb=1000,
     script:
         "scripts/retrieve_cost_data.py"
+
+# rule create_cost_data:
+#     input:
+#         nrel_atb = RESOURCES + "costs/nrel_atb.parquet",
+#         nrel_atb_transport = RESOURCES + "costs/nrel_atb_transport.xlsx",
+#     output:
+#         tech_costs = RESOURCES + "costs_{year}.csv",
+#         fuel_costs = RESOURCES + "fuel_costs.csv",
 
 ################# ----------- Rules to Build Network ---------- #################
 
