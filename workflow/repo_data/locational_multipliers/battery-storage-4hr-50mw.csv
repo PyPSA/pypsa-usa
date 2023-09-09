@@ -1,0 +1,65 @@
+State,City ,Base Project Cost ($/kW ), Location Variation, Delta Cost Difference ($/kW), Total Location Project Cost ($/kW)
+Alabama,Huntsville,"1,389",1.02,24,1413
+Arizona,Phoenix,"1,389",0.99,-15,1374
+Arkansas,Little Rock,"1,389",1.04,56,1445
+California,Bakersfield,"1,389",1.04,57,1446
+California,Los Angeles,"1,389",1.04,60,1449
+California,Modesto,"1,389",1,55,1444
+California,Sacramento,"1,389",1,57,1446
+California,San Francisco,"1,389",1,60,1449
+Colorado,Denver,"1,389",0.99,-12,1377
+Connecticut,Hartford,"1,389",1.02,23,1412
+Delaware,Dover,"1,389",0.99,-17,1373
+District of Columbia,Washington,"1,389",1.01,9,1398
+Florida,Tallahassee,"1,389",1,0,1389
+Florida,Tampa,"1,389",1.01,7,1396
+Georgia,Atlanta,"1,389",1.02,25,1414
+Idaho,Boise,"1,389",1.01,19,1408
+Illinois,Chicago,"1,389",1,15,1404
+Illinois,Joliet,"1,389",1.01,12,1401
+Indiana,Indianapolis,"1,389",1.02,29,1418
+Iowa,Davenport,"1,389",1,1,1390
+Iowa,Waterloo,"1,389",1,-1,1388
+Kansas,Wichita,"1,389",1,-2,1387
+Kentucky,Louisville,"1,389",1.02,28,1417
+Louisiana,New Orleans,"1,389",1.03,44,1434
+Maine,Portland,"1,389",1.01,11,1400
+Maryland,Baltimore,"1,389",1.01,8,1397
+Massachusetts,Boston,"1,389",1,32,1421
+Michigan,Detroit,"1,389",1,5,1394
+Michigan,Grand Rapids,"1,389",1,0,1390
+Minnesota,Saint Paul,"1,389",0.99,-21,1368
+Mississippi,Jackson,"1,389",1,-4,1385
+Missouri,St. Louis,"1,389",1.05,71,1460
+Missouri,Kansas City,"1,389",1,5,1394
+Montana,Great Falls,"1,389",0.99,-8,1381
+Nebraska,Omaha,"1,389",1,1,1390
+New Hampshire,Concord,"1,389",1.03,47,1436
+New Jersey,Newark,"1,389",1.02,23,1412
+New,Albuquerque,"1,389",1.04,49,1438
+New Mexico,New York,"1,389",1,37,1426
+New York,Syracuse,"1,389",1,5,1394
+Nevada,Las Vegas,"1,389",1.04,56,1445
+North Carolina,Charlotte,"1,389",1,-2,1387
+North Dakota,Bismarck,"1,389",0.98,-29,1360
+Oklahoma,Oklahoma City,"1,389",1,-6,1383
+Oklahoma,Tulsa,"1,389",0.99,-8,1381
+Ohio,Cincinnati,"1,389",0.99,-8,1381
+Oregon,Portland,"1,389",1.04,53,1442
+Pennsylvania,Philadelphia,"1,389",1,22,1411
+Pennsylvania,Wilkes-Barre,"1,389",1.01,8,1397
+Rhode Island,Providence,"1,389",1.02,33,1422
+South Carolina,Charleston,"1,389",1.08,114,1503
+South Carolina,Spartanburg,"1,389",1.02,22,1411
+South Dakota,Rapid City,"1,389",0.98,-31,1358
+Tennessee,Knoxville (Nashville),"1,389",1.04,57,1446
+Texas,Houston,"1,389",1,0,1389
+Utah,Salt Lake City,"1,389",1.04,54,1443
+Vermont,Burlington,"1,389",1.08,109,1498
+Virginia,Alexandria,"1,389",1.01,9,1398
+Virginia,Lynchburg,"1,389",1,-4,1385
+Washington,Seattle,"1,389",1.04,61,1450
+Washington,Spokane,"1,389",1.02,26,1415
+West Virginia,Charleston,"1,389",1,-1,1389
+Wisconsin,Green Bay,"1,389",0.98,-33,1356
+Wyoming,Cheyenne,"1,389",0.99,-13,1376

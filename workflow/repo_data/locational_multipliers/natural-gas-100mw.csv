@@ -1,0 +1,65 @@
+State,City ,Base Project Cost ($/kW ), Location Variation, Delta Cost Difference ($/kW), Total Location Project Cost ($/kW)
+Alabama,Huntsville,1175,0.96,-53,1122
+Arizona,Phoenix,1175,0.98,-26,1149
+Arkansas,Little Rock,1175,0.96,-49,1126
+California,Bakersfield,1175,1.16,192,1367
+California,Los Angeles,1175,1.18,206,1381
+California,Modesto,1175,1.17,199,1374
+California,Sacramento,1175,1.19,218,1393
+California,San Francisco,1175,1.31,359,1534
+Colorado,Denver,1175,0.97,-39,1136
+Connecticut,Hartford,1175,1.15,172,1347
+Delaware,Dover,1175,1.13,157,1331
+District of Columbia,Washington,1175,1.02,28,1203
+Florida,Tallahassee,1175,0.94,-67,1107
+Florida,Tampa,1175,0.96,-52,1123
+Georgia,Atlanta,1175,0.98,-29,1145
+Idaho,Boise,1175,1.01,14,1189
+Illinois,Chicago,1175,1.23,270,1445
+Illinois,Joliet,1175,1.2,234,1409
+Indiana,Indianapolis,1175,1.01,9,1184
+Iowa,Davenport,1175,1.03,39,1214
+Iowa,Waterloo,1175,0.96,-41,1133
+Kansas,Wichita,1175,0.97,-38,1137
+Kentucky,Louisville,1175,0.99,-6,1168
+Louisiana,New Orleans,1175,0.96,-45,1130
+Maine,Portland,1175,1,6,1181
+Maryland,Baltimore,1175,1.02,19,1194
+Massachusetts,Boston,1175,1.2,229,1404
+Michigan,Detroit,1175,1.11,128,1303
+Michigan,Grand Rapids,1175,1.03,35,1210
+Minnesota,Saint Paul,1175,1.09,106,1281
+Mississippi,Jackson,1175,0.94,-65,1109
+Missouri,St. Louis,1175,1.11,129,1304
+Missouri,Kansas City,1175,1.07,82,1256
+Montana,Great Falls,1175,0.96,-42,1133
+Nebraska,Omaha,1175,0.97,-32,1142
+New Hampshire,Concord,1175,1.05,59,1233
+New Jersey,Newark,1175,1.22,253,1428
+New,Albuquerque,1175,0.98,-27,1148
+New Mexico,New York,1175,1.43,500,1675
+New York,Syracuse,1175,1.06,69,1244
+Nevada,Las Vegas,1175,1.12,146,1321
+North Carolina,Charlotte,1175,0.96,-49,1126
+North Dakota,Bismarck,1175,1.02,22,1196
+Oklahoma,Oklahoma City,1175,1,-1,1173
+Oklahoma,Tulsa,1175,0.93,-82,1092
+Ohio,Cincinnati,1175,0.93,-83,1092
+Oregon,Portland,1175,1.08,96,1271
+Pennsylvania,Philadelphia,1175,1.21,251,1426
+Pennsylvania,Wilkes-Barre,1175,1.06,73,1248
+Rhode Island,Providence,1175,1.12,138,1313
+South Carolina,Charleston,1175,0.95,-55,1120
+South Carolina,Spartanburg,1175,0.96,-47,1128
+South Dakota,Rapid City,1175,0.97,-33,1142
+Tennessee,Knoxville (Nashville),1175,0.97,-31,1144
+Texas,Houston,1175,0.93,-84,1091
+Utah,Salt Lake City,1175,0.97,-34,1141
+Vermont,Burlington,1175,1.02,27,1202
+Virginia,Alexandria,1175,1.02,21,1195
+Virginia,Lynchburg,1175,0.96,-52,1123
+Washington,Seattle,1175,1.14,160,1334
+Washington,Spokane,1175,1.04,45,1220
+West Virginia,Charleston,1175,1.04,43,1218
+Wisconsin,Green Bay,1175,1.04,44,1219
+Wyoming,Cheyenne,1175,0.99,-14,1161

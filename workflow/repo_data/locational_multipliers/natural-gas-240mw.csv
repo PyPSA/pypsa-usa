@@ -1,0 +1,65 @@
+State,City ,Base Project Cost ($/kW ), Location Variation, Delta Cost Difference ($/kW), Total Location Project Cost ($/kW)
+Alabama,Huntsville,713,0.95,-33,680
+Arizona,Phoenix,713,0.98,-16,696
+Arkansas,Little Rock,713,0.96,-30,683
+California,Bakersfield,713,1.17,122,834
+California,Los Angeles,713,1.18,130,843
+California,Modesto,713,1.18,126,839
+California,Sacramento,713,1.19,138,851
+California,San Francisco,713,1.32,227,940
+Colorado,Denver,713,0.97,-25,688
+Connecticut,Hartford,713,1.15,109,821
+Delaware,Dover,713,1.14,99,811
+District of Columbia,Washington,713,1.03,18,731
+Florida,Tallahassee,713,0.94,-42,670
+Florida,Tampa,713,0.95,-33,680
+Georgia,Atlanta,713,0.97,-18,695
+Idaho,Boise,713,1.01,9,722
+Illinois,Chicago,713,1.24,170,883
+Illinois,Joliet,713,1.21,147,860
+Indiana,Indianapolis,713,1.01,6,719
+Iowa,Davenport,713,1.03,25,738
+Iowa,Waterloo,713,0.96,-26,687
+Kansas,Wichita,713,0.97,-24,689
+Kentucky,Louisville,713,0.99,-4,709
+Louisiana,New Orleans,713,0.96,-28,685
+Maine,Portland,713,1.01,4,717
+Maryland,Baltimore,713,1.02,12,725
+Massachusetts,Boston,713,1.2,145,857
+Michigan,Detroit,713,1.11,81,794
+Michigan,Grand Rapids,713,1.03,22,735
+Minnesota,Saint Paul,713,1.09,66,779
+Mississippi,Jackson,713,0.94,-41,672
+Missouri,St. Louis,713,1.12,82,795
+Missouri,Kansas City,713,1.07,51,764
+Montana,Great Falls,713,0.96,-27,686
+Nebraska,Omaha,713,0.97,-20,692
+New Hampshire,Concord,713,1.05,37,750
+New Jersey,Newark,713,1.22,160,873
+New,Albuquerque,713,0.98,-16,696
+New Mexico,New York,713,1.44,315,1028
+New York,Syracuse,713,1.06,43,756
+Nevada,Las Vegas,713,1.13,92,805
+North Carolina,Charlotte,713,0.96,-31,682
+North Dakota,Bismarck,713,1.02,13,726
+Oklahoma,Oklahoma City,713,1,-1,712
+Oklahoma,Tulsa,713,0.93,-52,661
+Ohio,Cincinnati,713,0.93,-52,661
+Oregon,Portland,713,1.09,61,774
+Pennsylvania,Philadelphia,713,1.22,159,871
+Pennsylvania,Wilkes-Barre,713,1.06,46,759
+Rhode Island,Providence,713,1.12,88,800
+South Carolina,Charleston,713,0.95,-33,679
+South Carolina,Spartanburg,713,0.96,-29,683
+South Dakota,Rapid City,713,0.97,-21,692
+Tennessee,Knoxville (Nashville),713,0.97,-19,694
+Texas,Houston,713,0.93,-53,660
+Utah,Salt Lake City,713,0.97,-21,692
+Vermont,Burlington,713,1.03,18,731
+Virginia,Alexandria,713,1.02,13,726
+Virginia,Lynchburg,713,0.95,-33,680
+Washington,Seattle,713,1.14,101,814
+Washington,Spokane,713,1.04,29,742
+West Virginia,Charleston,713,1.04,27,740
+Wisconsin,Green Bay,713,1.04,27,740
+Wyoming,Cheyenne,713,0.99,-9,704

@@ -1,0 +1,65 @@
+State,City ,Base Project Cost ($/kW ), Location Variation, Delta Cost Difference ($/kW), Total Location Project Cost ($/kW)
+Alabama,Huntsville,4558,0.97,-155,4403
+Arizona,Phoenix,4558,1.05,250,4808
+Arkansas,Little Rock,4558,0.97,-129,4429
+California,Bakersfield,4558,1.24,1114,5672
+California,Los Angeles,4558,1.25,1132,5690
+California,Modesto,4558,1.26,1162,5721
+California,Sacramento,4558,1.27,1227,5785
+California,San Francisco,4558,1.34,1547,6105
+Colorado,Denver,4558,1.03,139,4697
+Connecticut,Hartford,4558,1.22,1000,5558
+Delaware,Dover,4558,1.2,905,5463
+District of Columbia,Washington,4558,1.08,371,4929
+Florida,Tallahassee,4558,0.95,-209,4349
+Florida,Tampa,4558,0.97,-135,4423
+Georgia,Atlanta,4558,0.99,-42,4516
+Idaho,Boise,4558,1.03,120,4678
+Illinois,Chicago,4558,1.25,1118,5676
+Illinois,Joliet,4558,1.21,954,5513
+Indiana,Indianapolis,4558,1.02,88,4646
+Iowa,Davenport,4558,1.04,190,4748
+Iowa,Waterloo,4558,0.98,-107,4451
+Kansas,Wichita,4558,0.98,-93,4465
+Kentucky,Louisville,4558,1.01,35,4593
+Louisiana,New Orleans,4558,0.98,-101,4458
+Maine,Portland,4558,1.03,128,4686
+Maryland,Baltimore,4558,1.02,96,4654
+Massachusetts,Boston,4558,1.26,1191,5749
+Michigan,Detroit,4558,1.11,504,5062
+Michigan,Grand Rapids,4558,1.04,184,4742
+Minnesota,Saint Paul,4558,1.1,444,5002
+Mississippi,Jackson,4558,0.96,-202,4356
+Missouri,St. Louis,4558,1.11,523,5081
+Missouri,Kansas City,4558,1.07,327,4885
+Montana,Great Falls,4558,0.97,-116,4442
+Nebraska,Omaha,4558,0.98,-85,4473
+New Hampshire,Concord,4558,1.13,603,5162
+New Jersey,Newark,4558,1.21,970,5528
+New,Albuquerque,4558,0.99,-37,4521
+New Mexico,New York,4558,1.52,2351,6910
+New York,Syracuse,4558,1.12,567,5125
+Nevada,Las Vegas,4558,1.14,623,5182
+North Carolina,Charlotte,4558,0.97,-158,4400
+North Dakota,Bismarck,4558,1.03,139,4697
+Oklahoma,Oklahoma City,4558,1.01,32,4590
+Oklahoma,Tulsa,4558,0.94,-288,4270
+Ohio,Cincinnati,4558,0.94,-289,4269
+Oregon,Portland,4558,1.15,687,5245
+Pennsylvania,Philadelphia,4558,1.27,1234,5793
+Pennsylvania,Wilkes-Barre,4558,1.14,649,5208
+Rhode Island,Providence,4558,1.2,896,5455
+South Carolina,Charleston,4558,0.97,-144,4414
+South Carolina,Spartanburg,4558,0.97,-119,4439
+South Dakota,Rapid City,4558,0.98,-88,4470
+Tennessee,Knoxville (Nashville),4558,0.98,-100,4458
+Texas,Houston,4558,0.94,-285,4273
+Utah,Salt Lake City,4558,0.99,-52,4506
+Vermont,Burlington,4558,1.05,210,4768
+Virginia,Alexandria,4558,1.07,341,4899
+Virginia,Lynchburg,4558,1.02,108,4666
+Washington,Seattle,4558,1.12,569,5127
+Washington,Spokane,4558,1.05,236,4795
+West Virginia,Charleston,4558,1.04,178,4736
+Wisconsin,Green Bay,4558,1.05,221,4779
+Wyoming,Cheyenne,4558,0.99,-25,4533

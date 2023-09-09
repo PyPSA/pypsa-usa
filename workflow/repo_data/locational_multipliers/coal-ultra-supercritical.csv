@@ -1,0 +1,65 @@
+State,City ,Base Project Cost ($/kW ), Location Variation, Delta Cost Difference ($/kW), Total Location Project Cost ($/kW)
+Alabama,Huntsville,"3,676",0.97,-128,3549
+Arizona,Phoenix,"3,676",1.05,199,3875
+Arkansas,Little Rock,"3,676",0.96,-133,3543
+California,Bakersfield,"3,676",1.26,973,4649
+California,Los Angeles,"3,676",1.27,989,4665
+California,Modesto,"3,676",1.28,"1,017",4694
+California,Sacramento,"3,676",1.29,"1,076",4752
+California,San Francisco,"3,676",1.37,"1,367",5043
+Colorado,Denver,"3,676",1.03,100,3776
+Connecticut,Hartford,"3,676",1.24,877,4554
+Delaware,Dover,"3,676",1.22,801,4477
+District of Columbia,Washington,"3,676",1.08,307,3983
+Florida,Tallahassee,"3,676",0.95,-194,3483
+Florida,Tampa,"3,676",0.97,-127,3549
+Georgia,Atlanta,"3,676",0.99,-46,3630
+Idaho,Boise,"3,676",1.03,105,3781
+Illinois,Chicago,"3,676",1.28,"1,018",4694
+Illinois,Joliet,"3,676",1.24,869,4545
+Indiana,Indianapolis,"3,676",1.02,74,3750
+Iowa,Davenport,"3,676",1.05,173,3850
+Iowa,Waterloo,"3,676",0.97,-97,3579
+Kansas,Wichita,"3,676",0.98,-85,3592
+Kentucky,Louisville,"3,676",1.01,26,3702
+Louisiana,New Orleans,"3,676",0.97,-104,3572
+Maine,Portland,"3,676",1.03,114,3790
+Maryland,Baltimore,"3,676",1.02,86,3762
+Massachusetts,Boston,"3,676",1.29,"1,050",4726
+Michigan,Detroit,"3,676",1.12,459,4135
+Michigan,Grand Rapids,"3,676",1.05,168,3844
+Minnesota,Saint Paul,"3,676",1.11,411,4087
+Mississippi,Jackson,"3,676",0.95,-186,3490
+Missouri,St. Louis,"3,676",1.13,461,4137
+Missouri,Kansas City,"3,676",1.08,297,3974
+Montana,Great Falls,"3,676",0.97,-104,3572
+Nebraska,Omaha,"3,676",0.98,-78,3599
+New Hampshire,Concord,"3,676",1.14,510,4186
+New Jersey,Newark,"3,676",1.24,881,4557
+New,Albuquerque,"3,676",0.99,-47,3629
+New Mexico,New York,"3,676",1.57,"2,109",5785
+New York,Syracuse,"3,676",1.13,487,4163
+Nevada,Las Vegas,"3,676",1.15,556,4233
+North Carolina,Charlotte,"3,676",0.96,-144,3532
+North Dakota,Bismarck,"3,676",1.04,133,3810
+Oklahoma,Oklahoma City,"3,676",1.01,30,3707
+Oklahoma,Tulsa,"3,676",0.93,-261,3415
+Ohio,Cincinnati,"3,676",0.93,-262,3414
+Oregon,Portland,"3,676",1.16,584,4261
+Pennsylvania,Philadelphia,"3,676",1.3,"1,092",4769
+Pennsylvania,Wilkes-Barre,"3,676",1.15,561,4238
+Rhode Island,Providence,"3,676",1.21,781,4457
+South Carolina,Charleston,"3,676",0.96,-159,3518
+South Carolina,Spartanburg,"3,676",0.97,-116,3561
+South Dakota,Rapid City,"3,676",0.98,-73,3603
+Tennessee,Knoxville (Nashville),"3,676",0.97,-104,3573
+Texas,Houston,"3,676",0.93,-260,3416
+Utah,Salt Lake City,"3,676",0.98,-60,3617
+Vermont,Burlington,"3,676",1.05,167,3843
+Virginia,Alexandria,"3,676",1.08,280,3956
+Virginia,Lynchburg,"3,676",1.02,70,3746
+Washington,Seattle,"3,676",1.14,505,4182
+Washington,Spokane,"3,676",1.06,210,3886
+West Virginia,Charleston,"3,676",1.04,162,3839
+Wisconsin,Green Bay,"3,676",1.06,209,3886
+Wyoming,Cheyenne,"3,676",0.99,-20,3656

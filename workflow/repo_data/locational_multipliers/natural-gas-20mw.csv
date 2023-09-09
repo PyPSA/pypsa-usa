@@ -1,0 +1,65 @@
+State,City ,Base Project Cost ($/kW ), Location Variation, Delta Cost Difference ($/kW), Total Location Project Cost ($/kW)
+Alabama,Huntsville,1810,0.97,-48,1762
+Arizona,Phoenix,1810,0.98,-32,1778
+Arkansas,Little Rock,1810,0.98,-32,1777
+California,Bakersfield,1810,1.16,292,2102
+California,Los Angeles,1810,1.17,303,2112
+California,Modesto,1810,1.16,292,2102
+California,Sacramento,1810,1.17,314,2124
+California,San Francisco,1810,1.26,465,2275
+Colorado,Denver,1810,0.97,-57,1752
+Connecticut,Hartford,1810,1.14,252,2062
+Delaware,Dover,1810,1.1,176,1985
+District of Columbia,Washington,1810,1.02,42,1852
+Florida,Tallahassee,1810,0.96,-80,1730
+Florida,Tampa,1810,0.97,-61,1749
+Georgia,Atlanta,1810,0.99,-17,1793
+Idaho,Boise,1810,1.02,36,1846
+Illinois,Chicago,1810,1.21,382,2191
+Illinois,Joliet,1810,1.18,320,2129
+Indiana,Indianapolis,1810,1.02,37,1846
+Iowa,Davenport,1810,1.04,66,1876
+Iowa,Waterloo,1810,0.98,-33,1777
+Kansas,Wichita,1810,0.98,-27,1782
+Kentucky,Louisville,1810,1.01,13,1823
+Louisiana,New Orleans,1810,0.98,-27,1782
+Maine,Portland,1810,1.01,27,1836
+Maryland,Baltimore,1810,1.02,36,1845
+Massachusetts,Boston,1810,1.18,320,2129
+Michigan,Detroit,1810,1.09,161,1971
+Michigan,Grand Rapids,1810,1.02,42,1852
+Minnesota,Saint Paul,1810,1.08,148,1958
+Mississippi,Jackson,1810,0.96,-78,1731
+Missouri,St. Louis,1810,1.12,210,2019
+Missouri,Kansas City,1810,1.07,118,1928
+Montana,Great Falls,1810,0.98,-39,1770
+Nebraska,Omaha,1810,0.99,-24,1785
+New Hampshire,Concord,1810,1.06,117,1927
+New Jersey,Newark,1810,1.19,342,2152
+New,Albuquerque,1810,1,1,1811
+New Mexico,New York,1810,1.37,673,2483
+New York,Syracuse,1810,1.05,96,1906
+Nevada,Las Vegas,1810,1.12,224,2034
+North Carolina,Charlotte,1810,0.97,-56,1754
+North Dakota,Bismarck,1810,1,8,1818
+Oklahoma,Oklahoma City,1810,1,2,1811
+Oklahoma,Tulsa,1810,0.94,-101,1709
+Ohio,Cincinnati,1810,0.94,-101,1709
+Oregon,Portland,1810,1.09,157,1966
+Pennsylvania,Philadelphia,1810,1.18,326,2136
+Pennsylvania,Wilkes-Barre,1810,1.06,108,1918
+Rhode Island,Providence,1810,1.12,217,2027
+South Carolina,Charleston,1810,0.99,-15,1795
+South Carolina,Spartanburg,1810,0.98,-39,1770
+South Dakota,Rapid City,1810,0.98,-40,1770
+Tennessee,Knoxville (Nashville),1810,0.99,-15,1794
+Texas,Houston,1810,0.94,-108,1702
+Utah,Salt Lake City,1810,1,0,1809
+Vermont,Burlington,1810,1.05,94,1904
+Virginia,Alexandria,1810,1.02,35,1844
+Virginia,Lynchburg,1810,0.97,-57,1753
+Washington,Seattle,1810,1.13,231,2041
+Washington,Spokane,1810,1.04,65,1874
+West Virginia,Charleston,1810,1.03,55,1864
+Wisconsin,Green Bay,1810,1.03,55,1865
+Wyoming,Cheyenne,1810,0.99,-18,1791

@@ -1,0 +1,65 @@
+State,City ,Base Project Cost ($/kW ), Location Variation, Delta Cost Difference ($/kW), Total Location Project Cost ($/kW)
+Alabama,Huntsville,6041,0.99,-53,5988
+Arizona,Phoenix,6041,0.98,-147,5894
+Arkansas,Little Rock,6041,1.02,122,6163
+California,Bakersfield,6041,1.22,1305,7346
+California,Los Angeles,6041,1.22,1339,7380
+California,Modesto,6041,1.22,1358,7399
+California,Sacramento,6041,1.24,1443,7484
+California,San Francisco,6041,1.3,1830,7871
+Colorado,Denver,6041,0.96,-227,5815
+Connecticut,Hartford,6041,1.16,946,6987
+Delaware,Dover,6041,1.1,602,6643
+District of Columbia,Washington,6041,1.02,146,6188
+Florida,Tallahassee,6041,0.95,-280,5761
+Florida,Tampa,6041,0.97,-151,5890
+Georgia,Atlanta,6041,1.01,61,6103
+Idaho,Boise,6041,1.04,258,6300
+Illinois,Chicago,6041,1.23,1415,7456
+Illinois,Joliet,6041,1.2,1207,7249
+Indiana,Indianapolis,6041,1.05,274,6315
+Iowa,Davenport,6041,1.04,231,6272
+Iowa,Waterloo,6041,0.98,-134,5907
+Kansas,Wichita,6041,0.98,-130,5912
+Kentucky,Louisville,6041,1.03,204,6245
+Louisiana,New Orleans,6041,1.02,95,6137
+Maine,Portland,6041,1.04,217,6258
+Maryland,Baltimore,6041,1.03,160,6202
+Massachusetts,Boston,6041,1.2,1216,7257
+Michigan,Detroit,6041,1.1,634,6675
+Michigan,Grand Rapids,6041,1.04,225,6267
+Minnesota,Saint Paul,6041,1.06,389,6430
+Mississippi,Jackson,6041,0.95,-294,5747
+Missouri,St. Louis,6041,1.18,1061,7103
+Missouri,Kansas City,6041,1.07,418,6459
+Montana,Great Falls,6041,0.97,-186,5855
+Nebraska,Omaha,6041,0.98,-100,5941
+New Hampshire,Concord,6041,1.11,649,6690
+New Jersey,Newark,6041,1.21,1297,7338
+New,Albuquerque,6041,1.03,196,6237
+New Mexico,New York,6041,1.42,2560,8601
+New York,Syracuse,6041,1.06,344,6385
+Nevada,Las Vegas,6041,1.18,1095,7136
+North Carolina,Charlotte,6041,0.97,-203,5838
+North Dakota,Bismarck,6041,1,-4,6037
+Oklahoma,Oklahoma City,6041,1,4,6045
+Oklahoma,Tulsa,6041,0.94,-387,5654
+Ohio,Cincinnati,6041,0.94,-389,5652
+Oregon,Portland,6041,1.13,777,6818
+Pennsylvania,Philadelphia,6041,1.2,1204,7245
+Pennsylvania,Wilkes-Barre,6041,1.08,463,6504
+Rhode Island,Providence,6041,1.15,893,6935
+South Carolina,Charleston,6041,1.07,407,6448
+South Carolina,Spartanburg,6041,0.99,-50,5992
+South Dakota,Rapid City,6041,0.95,-287,5754
+Tennessee,Knoxville (Nashville),6041,1.03,197,6238
+Texas,Houston,6041,0.94,-339,5703
+Utah,Salt Lake City,6041,1.04,239,6280
+Vermont,Burlington,6041,1.15,892,6933
+Virginia,Alexandria,6041,1.02,110,6151
+Virginia,Lynchburg,6041,0.96,-214,5827
+Washington,Seattle,6041,1.18,1059,7100
+Washington,Spokane,6041,1.07,447,6488
+West Virginia,Charleston,6041,1.03,210,6252
+Wisconsin,Green Bay,6041,1.01,63,6105
+Wyoming,Cheyenne,6041,0.98,-107,5935

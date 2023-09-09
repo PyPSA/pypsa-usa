@@ -1,0 +1,65 @@
+State,City ,Base Project Cost ($/kW ), Location Variation, Delta Cost Difference ($/kW), Total Location Project Cost ($/kW)
+Alabama,Huntsville,958,0.95,-51,907
+Arizona,Phoenix,958,1.05,50,1008
+Arkansas,Little Rock,958,0.95,-49,910
+California,Bakersfield,958,1.28,270,1229
+California,Los Angeles,958,1.3,285,1243
+California,Modesto,958,1.29,278,1236
+California,Sacramento,958,1.31,298,1256
+California,San Francisco,958,1.46,442,1401
+Colorado,Denver,958,1.04,36,994
+Connecticut,Hartford,958,1.26,252,1210
+Delaware,Dover,958,1.25,238,1196
+District of Columbia,Washington,958,1.11,104,1063
+Florida,Tallahassee,958,0.93,-64,894
+Florida,Tampa,958,0.95,-50,908
+Georgia,Atlanta,958,0.97,-29,929
+Idaho,Boise,958,1.01,13,971
+Illinois,Chicago,958,1.27,257,1216
+Illinois,Joliet,958,1.23,223,1181
+Indiana,Indianapolis,958,1.01,8,966
+Iowa,Davenport,958,1.04,38,996
+Iowa,Waterloo,958,0.96,-40,919
+Kansas,Wichita,958,0.96,-36,922
+Kentucky,Louisville,958,0.99,-7,951
+Louisiana,New Orleans,958,0.95,-45,913
+Maine,Portland,958,1.01,5,963
+Maryland,Baltimore,958,1.02,18,977
+Massachusetts,Boston,958,1.32,310,1269
+Michigan,Detroit,958,1.13,122,1081
+Michigan,Grand Rapids,958,1.03,33,992
+Minnesota,Saint Paul,958,1.11,102,1061
+Mississippi,Jackson,958,0.93,-62,896
+Missouri,St. Louis,958,1.13,120,1079
+Missouri,Kansas City,958,1.08,78,1036
+Montana,Great Falls,958,0.96,-40,919
+Nebraska,Omaha,958,0.97,-31,927
+New Hampshire,Concord,958,1.14,134,1092
+New Jersey,Newark,958,1.25,241,1200
+New,Albuquerque,958,0.97,-28,931
+New Mexico,New York,958,1.61,589,1548
+New York,Syracuse,958,1.15,146,1105
+Nevada,Las Vegas,958,1.14,137,1095
+North Carolina,Charlotte,958,0.95,-47,912
+North Dakota,Bismarck,958,1.02,22,980
+Oklahoma,Oklahoma City,958,1,-1,957
+Oklahoma,Tulsa,958,0.92,-78,880
+Ohio,Cincinnati,958,0.92,-79,880
+Oregon,Portland,958,1.09,90,1048
+Pennsylvania,Philadelphia,958,1.35,333,1292
+Pennsylvania,Wilkes-Barre,958,1.16,150,1109
+Rhode Island,Providence,958,1.23,217,1175
+South Carolina,Charleston,958,0.94,-57,901
+South Carolina,Spartanburg,958,0.95,-46,912
+South Dakota,Rapid City,958,0.97,-30,929
+Tennessee,Knoxville (Nashville),958,0.97,-32,927
+Texas,Houston,958,0.92,-80,878
+Utah,Salt Lake City,958,0.96,-35,924
+Vermont,Burlington,958,1.02,21,979
+Virginia,Alexandria,958,1.1,96,1055
+Virginia,Lynchburg,958,1.02,22,981
+Washington,Seattle,958,1.16,150,1108
+Washington,Spokane,958,1.04,42,1001
+West Virginia,Charleston,958,1.04,41,999
+Wisconsin,Green Bay,958,1.05,43,1002
+Wyoming,Cheyenne,958,0.99,-13,945

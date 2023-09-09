@@ -1,0 +1,65 @@
+State,City ,Base Project Cost ($/kW ), Location Variation, Delta Cost Difference ($/kW), Total Location Project Cost ($/kW)
+Alabama,Huntsville,845,1.02,15,860
+Arizona,Phoenix,845,0.99,-9,836
+Arkansas,Little Rock,845,1.04,34,879
+California,Bakersfield,845,1.04,35,880
+California,Los Angeles,845,1.04,36,881
+California,Modesto,845,1.04,33,878
+California,Sacramento,845,1.04,34,880
+California,San Francisco,845,1.04,37,882
+Colorado,Denver,845,0.99,-7,838
+Connecticut,Hartford,845,1.02,14,859
+Delaware,Dover,845,0.99,-10,835
+District of Columbia,Washington,845,1.01,5,851
+Florida,Tallahassee,845,1,0,845
+Florida,Tampa,845,1,4,849
+Georgia,Atlanta,845,1.02,15,860
+Idaho,Boise,845,1.01,12,857
+Illinois,Chicago,845,1.01,9,854
+Illinois,Joliet,845,1.01,7,853
+Indiana,Indianapolis,845,1.02,18,863
+Iowa,Davenport,845,1,1,846
+Iowa,Waterloo,845,1,-1,844
+Kansas,Wichita,845,1,-1,844
+Kentucky,Louisville,845,1.02,17,862
+Louisiana,New Orleans,845,1.03,27,872
+Maine,Portland,845,1.01,6,852
+Maryland,Baltimore,845,1.01,5,850
+Massachusetts,Boston,845,1.02,19,865
+Michigan,Detroit,845,1,3,848
+Michigan,Grand Rapids,845,1,0,845
+Minnesota,Saint Paul,845,0.99,-13,833
+Mississippi,Jackson,845,1,-3,843
+Missouri,St. Louis,845,1.05,43,888
+Missouri,Kansas City,845,1,3,848
+Montana,Great Falls,845,0.99,-5,840
+Nebraska,Omaha,845,1,0,846
+New Hampshire,Concord,845,1.03,28,874
+New Jersey,Newark,845,1.02,14,859
+New,Albuquerque,845,1.04,30,875
+New Mexico,New York,845,1.03,23,868
+New York,Syracuse,845,1,3,848
+Nevada,Las Vegas,845,1.04,34,879
+North Carolina,Charlotte,845,1,-1,844
+North Dakota,Bismarck,845,0.98,-18,827
+Oklahoma,Oklahoma City,845,1,-4,841
+Oklahoma,Tulsa,845,0.99,-5,840
+Ohio,Cincinnati,845,0.99,-5,840
+Oregon,Portland,845,1.04,32,877
+Pennsylvania,Philadelphia,845,1.02,14,859
+Pennsylvania,Wilkes-Barre,845,1.01,5,850
+Rhode Island,Providence,845,1.02,20,865
+South Carolina,Charleston,845,1.08,69,914
+South Carolina,Spartanburg,845,1.02,13,859
+South Dakota,Rapid City,845,0.98,-19,826
+Tennessee,Knoxville (Nashville),845,1.04,34,879
+Texas,Houston,845,1,0,845
+Utah,Salt Lake City,845,1.04,33,878
+Vermont,Burlington,845,1.08,66,911
+Virginia,Alexandria,845,1.01,5,850
+Virginia,Lynchburg,845,1,-2,843
+Washington,Seattle,845,1.04,37,882
+Washington,Spokane,845,1.02,16,861
+West Virginia,Charleston,845,1,0,845
+Wisconsin,Green Bay,845,0.98,-20,825
+Wyoming,Cheyenne,845,0.99,-7,839
