@@ -1553,6 +1553,7 @@ if __name__ == "__main__":
         raise ValueError(f"Unknown network_configuration {snakemake.config['network_configuration']}")
 
     if snakemake.config['osw_config']['enable_osw']:
+        logger.info('Adding OSW in network')
         import modify_network_osw as osw
         osw.build_OSW_base_configuration(n)
         osw.build_OSW_500kV(n)

@@ -11,9 +11,6 @@ import os
 
 logger = logging.getLogger(__name__)
 
-# logger.debug('submodule message')
-
-
 def simplify_network_to_voltage_level(n, voltage_level):
     '''
     Simplify network to a single voltage level. Network Line Characteristics (s_nom, num_parallel, type) are mapped to the new voltage level.
@@ -99,6 +96,7 @@ def aggregate_to_substations(network: pypsa.Network, substations, busmap, aggreg
         ValueError('zonal_aggregation must be either balancing_area, country or state')
 
     network_s = clustering.network
+    import pdb; pdb.set_trace()
 
     network_s.buses["interconnect"] = substations.interconnect
     network_s.buses["x"] = substations.x
@@ -148,7 +146,6 @@ if __name__ == "__main__":
     #new busmap definition
     busmap_to_sub = n.buses.sub_id.astype(int).astype(str).to_frame()
 
-
     busmaps = [trafo_map, busmap_to_sub.sub_id]
     busmaps = reduce(lambda x, y: x.map(y), busmaps[1:], busmaps[0])
 
@@ -156,7 +153,6 @@ if __name__ == "__main__":
     # TODO: WHEN WE REPLACE NETWORK WITH NEW NETWORK WE SHOULD CALACULATE LINE LENGTHS BASED ON THE actual GIS line files.
     n = assign_line_lengths(n, 1.25) 
     n.links["underwater_fraction"] = 0 #TODO: CALULATE UNDERWATER FRACTIONS.
-
 
     n = aggregate_to_substations(n, substations, busmap_to_sub.sub_id, aggregation_zones)
 

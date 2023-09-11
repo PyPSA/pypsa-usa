@@ -1,2 +1,2 @@
 osw_config:
-  enable_osw: false
+  enable_osw: true
