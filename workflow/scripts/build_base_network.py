@@ -1,4 +1,4 @@
-# Copyright 2023-2024 PyPSA-USA & PyPSA-EUR Authors 
+# BY PyPSA-USA Authors 
 
 import pypsa, pandas as pd, logging, geopandas as gpd
 from geopandas.tools import sjoin

@@ -1,3 +1,4 @@
+# BY PyPSA-USA Authors
 """
 Description: 
 This script builds the shapes for the interconnect identified in the config file. 

@@ -39,6 +39,7 @@ wildcard_constraints:
 # Merge subworkflow configs and main config
 configfile: "config/config.yaml"
 configfile: "config/config.cluster.yaml"
+configfile: "config/config.osw.yaml"
 
 ATLITE_NPROCESSES = config["atlite"].get("nprocesses", 4)
 
@@ -217,10 +218,7 @@ rule build_base_network:
     script:
         "scripts/build_base_network.py"
 
-# TODO: #13 move build_bus_regions higher in the workflow to use base_network
 rule build_bus_regions:
-    params:
-        balancing_areas=config["balancing_areas"],
     input:
         country_shapes= RESOURCES + "{interconnect}/country_shapes.geojson",
         ba_region_shapes=RESOURCES + "{interconnect}/onshore_shapes.geojson",
@@ -369,7 +367,7 @@ rule add_electricity:
         hydro="data/breakthrough_network/base_grid/hydro.csv",
         wind="data/breakthrough_network/base_grid/wind.csv",
         solar="data/breakthrough_network/base_grid/solar.csv",
-        # ads_renewables = "data/WECC_ADS/processed/",
+        ads_renewables = "data/WECC_ADS/processed/",
         bus2sub="data/breakthrough_network/base_grid/{interconnect}/bus2sub.csv",
     output:
         RESOURCES + "{interconnect}/elec_base_network_l_pp.nc",
