@@ -303,7 +303,7 @@ plotting:
     "onwind" : "#235ebc"
     "wind" : "#235ebc"
     "onshore wind" : "#235ebc"
-    'offwind' : "#6895dd"
+    'offwind' : "#dd6895"
     'offwind-ac' : "#6895dd"
     'offshore wind' : "#6895dd"
     'offshore wind ac' : "#6895dd"

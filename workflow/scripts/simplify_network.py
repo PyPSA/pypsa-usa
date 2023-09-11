@@ -96,7 +96,6 @@ def aggregate_to_substations(network: pypsa.Network, substations, busmap, aggreg
         ValueError('zonal_aggregation must be either balancing_area, country or state')
 
     network_s = clustering.network
-    import pdb; pdb.set_trace()
 
     network_s.buses["interconnect"] = substations.interconnect
     network_s.buses["x"] = substations.x
