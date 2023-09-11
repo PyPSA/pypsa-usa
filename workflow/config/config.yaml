@@ -31,7 +31,7 @@ offshore_shape:
     weathergov: "https://www.weather.gov/source/gis/Shapefiles/WSOM/oz22mr22.zip"
     # nrel: "geodata_repo/Offshore_Wind_Speed_90m/Offshore_Wind_Speed_90m.shp"
 
-balancing_areas: 
+balancing_area_gis: 
   path: "repo_data/BA_shapes_new/Modified_BE_BA_Shapes.shp"
 
 #TODO: #19 remove config list of BA's and reference geojson values directly instead

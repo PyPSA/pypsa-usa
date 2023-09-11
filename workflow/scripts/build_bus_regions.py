@@ -150,9 +150,6 @@ if __name__ == "__main__":
 
     logger.info("Building bus regions for %s zones", aggregation_zones)
 
-    import pdb; pdb.set_trace()
-    # n = assign_bus_ba(n,gpd_ba_shapes, gpd_offshore_shapes)
-
     for ba in ba_region_shapes.index:
         ba_shape = ba_region_shapes[ba]
         all_locs = n.buses.loc[n.buses.substation_lv, ["x", "y"]] 

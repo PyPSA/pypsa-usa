@@ -218,10 +218,7 @@ rule build_base_network:
     script:
         "scripts/build_base_network.py"
 
-# TODO: #13 move build_bus_regions higher in the workflow to use base_network
 rule build_bus_regions:
-    params:
-        balancing_areas=config["balancing_areas"],
     input:
         country_shapes= RESOURCES + "{interconnect}/country_shapes.geojson",
         ba_region_shapes=RESOURCES + "{interconnect}/onshore_shapes.geojson",
