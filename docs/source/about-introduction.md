@@ -1,6 +1,6 @@
 # Introduction
 
-TBD
+PyPSA-USA is a model for the US bulk power system built on the pypsa platform. For some introduction to the pypsa modeling workflow- please see the [pypsa-eur](https://youtu.be/ty47YU1_eeQ?si=Cz90jWcN1xk1Eq4i) introductory video.
 
 ## Workflow 
 
