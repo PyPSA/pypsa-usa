@@ -97,7 +97,7 @@ def aggregate_to_substations(network: pypsa.Network, substations, busmap, aggreg
         zone = substations.state
     else:
         ValueError('zonal_aggregation must be either balancing_area, country or state')
-    import pdb; pdb.set_trace()
+
     network_s = clustering.network
 
     network_s.buses["interconnect"] = substations.interconnect
@@ -157,7 +157,6 @@ if __name__ == "__main__":
     n = assign_line_lengths(n, 1.25) 
     n.links["underwater_fraction"] = 0 #TODO: CALULATE UNDERWATER FRACTIONS.
 
-    import pdb; pdb.set_trace()
 
     n = aggregate_to_substations(n, substations, busmap_to_sub.sub_id, aggregation_zones)
 
