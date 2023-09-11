@@ -1,9 +1,4 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
-# SPDX-FileCopyrightText: : 2017-2023 The PyPSA-Eur Authors
-#
-# SPDX-License-Identifier: MIT
+# BY PyPSA-USA Authors
 """
 Calculates for each network node the (i) installable capacity (based on land-
 use), (ii) the available generation time series (based on weather data), and

@@ -1,4 +1,4 @@
-# Copyright 2021-2022 Martha Frysztacki (KIT)
+# BY PyPSA-USA Authors
 
 import pypsa
 import pandas as pd
@@ -57,7 +57,7 @@ def simplify_network_to_voltage_level(n, voltage_level):
     return n, trafo_map
 
 
-def aggregate_to_substations(network, substations, busmap, aggregation_zones=False):
+def aggregate_to_substations(network: pypsa.Network, substations, busmap, aggregation_zones: str):
     '''
     Aggregate network to substations. First step in clusterings, if use_ba_zones is True, then the network retains balancing Authority zones in clustering.'''
 
@@ -97,7 +97,7 @@ def aggregate_to_substations(network, substations, busmap, aggregation_zones=Fal
         zone = substations.state
     else:
         ValueError('zonal_aggregation must be either balancing_area, country or state')
-
+    import pdb; pdb.set_trace()
     network_s = clustering.network
 
     network_s.buses["interconnect"] = substations.interconnect
@@ -157,6 +157,7 @@ if __name__ == "__main__":
     n = assign_line_lengths(n, 1.25) 
     n.links["underwater_fraction"] = 0 #TODO: CALULATE UNDERWATER FRACTIONS.
 
+    import pdb; pdb.set_trace()
 
     n = aggregate_to_substations(n, substations, busmap_to_sub.sub_id, aggregation_zones)
 

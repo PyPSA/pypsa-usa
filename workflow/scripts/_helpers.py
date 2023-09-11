@@ -1,6 +1,4 @@
-# SPDX-FileCopyrightText: : 2017-2022 The PyPSA-Eur Authors
-#
-# SPDX-License-Identifier: MIT
+# By PyPSA-USA Authors
 
 import pandas as pd
 from pathlib import Path
