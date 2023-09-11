@@ -21,7 +21,7 @@ def simplify_network_to_voltage_level(n, voltage_level):
     logger.info("Mapping all network lines onto a single layer")
 
     n.buses["v_nom"] = voltage_level
-    # import pdb; pdb.set_trace()
+
     (linetype,) = n.lines.loc[n.lines.v_nom == voltage_level, "type"].unique()
     lines_v_nom_b = n.lines.v_nom != voltage_level
     n.lines.loc[lines_v_nom_b, "num_parallel"] *= (
@@ -159,8 +159,6 @@ if __name__ == "__main__":
 
 
     n = aggregate_to_substations(n, substations, busmap_to_sub.sub_id, aggregation_zones)
-
-    import pdb; pdb.set_trace()
 
     n.export_to_netcdf(snakemake.output[0])
 

@@ -370,7 +370,7 @@ rule add_electricity:
         hydro="data/breakthrough_network/base_grid/hydro.csv",
         wind="data/breakthrough_network/base_grid/wind.csv",
         solar="data/breakthrough_network/base_grid/solar.csv",
-        # ads_renewables = "data/WECC_ADS/processed/",
+        ads_renewables = "data/WECC_ADS/processed/",
         bus2sub="data/breakthrough_network/base_grid/{interconnect}/bus2sub.csv",
     output:
         RESOURCES + "{interconnect}/elec_base_network_l_pp.nc",
