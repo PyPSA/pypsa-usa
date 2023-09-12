@@ -7,6 +7,8 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
+EUR_2_USD = 1.07 # taken on 12-12-2023
+
 # https://atb.nrel.gov/electricity/2023/equations_&_variables
 ATB_CMP_MAPPER = {
     "CAPEX":"CAPEX",
@@ -363,6 +365,56 @@ def get_atb_data(atb: pd.DataFrame, techs: Union[str,List[str]]) -> pd.DataFrame
     
     return df
 
+def correct_units(df: pd.DataFrame) -> pd.DataFrame:
+    """Alligns units to be the same as PyPSA
+    
+    Note
+    ----
+    Input data should follow pypsa costs datastructure 
+    """
+    
+    # kW -> MW
+    df.loc[df.unit.str.contains("/kW"), "value"] *= 1e3
+    df.unit = df.unit.str.replace("/kW", "/MW")
+    
+    # MMBtu/MWh -> per unit efficiency 
+    df.loc[df.unit == "MMBtu/MWh", "value"] = 3.412 / df.loc[df.unit == "MMBtu/MWh", "value"]
+    df.unit = df.unit.str.replace("MMBtu/MWh", "per unit")
+    
+    # Eur -> USD 
+    df.loc[df.unit.str.contains("EUR/"), "value"] *= EUR_2_USD
+    df.unit = df.unit.str.replace("EUR/", "USD/")
+    
+    # $ -> USD (for consistancy)
+    df.unit = df.unit.str.replace("$/", "USD/")
+    
+    return df
+    
+def correct_fixed_cost(df: pd.DataFrame) -> pd.DataFrame:
+    """Changes fixed cost from $/MW to %/year
+    
+    Note
+    ----
+    Input data should follow pypsa costs datastructure 
+    """
+    
+    # get technologies to fix 
+    # "Gasnetz", "gas storage" are expressed as only a percentage 
+    df_fom = df[(df.parameter == "FOM") & (~df.unit.str.startswith("%/"))]
+    techs = [x for x in df_fom.technology.unique() if x not in ["Gasnetz", "gas storage"]]
+    
+    # this method of slicing a df is quite inefficienct :( 
+    for tech in techs:
+        fom = df.loc[(df.technology == tech) & (df.parameter == "FOM"), "value"].reset_index(drop=True)
+        capex = df.loc[(df.technology == tech) & (df.parameter == "investment"), "value"].reset_index(drop=True)
+        
+        assert fom.shape == capex.shape # should each only have one row 
+        
+        df.loc[(df.technology == tech) & (df.parameter == "FOM"), "value"] = fom / capex * 100
+        df.loc[(df.technology == tech) & (df.parameter == "FOM"), "unit"] = "%/year"
+        
+    return df
+
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
@@ -377,3 +429,9 @@ if __name__ == "__main__":
     # get technologies to replace by the ATB
     techs = [x for x in eur.technology.unique() if x in ATB_TECH_MAPPER]
     atb_extracted = get_atb_data(atb, techs)
+    
+    # merge dataframes 
+    costs = pd.concat([eur, atb_extracted])
+    
+    atb_extracted = correct_units(atb_extracted)
+    atb_extracted = correct_fixed_cost(atb_extracted)
