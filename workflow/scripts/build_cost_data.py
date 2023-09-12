@@ -3,6 +3,7 @@
 from _helpers import mock_snakemake
 from typing import List, Dict, Union
 import logging
+import pandas as pd
 
 logger = logging.getLogger(__name__)
 
@@ -193,15 +194,12 @@ def build_core_metric_key(
     Will not work with Debt Fraction 
     """
     
-    if technology not in ATB_TECH_MAPPER.keys():
-        raise KeyError(f"Invalid technology of {technology}")
-    
     # Core Metric Parameter (metric to extract)
     try: 
         cmp = ATB_CMP_MAPPER[core_metric_parameter]
     except KeyError as ex:
-        # logger.error(f"Financial parameter of {core_metric_parameter} not available")
-        raise KeyError(ex)
+        logger.warning(f"Financial parameter of {core_metric_parameter} not available")
+        return ""
 
     # Market or R&D
     if core_metric_case != "Market": 
@@ -260,8 +258,122 @@ def build_core_metric_key(
         else:
             detail = tech_detail
     
-    
     return f"{cmc}{crp}{cmp}{name}{alias}{detail}{scenario}{year_short}"
 
+def get_atb_data(atb: pd.DataFrame, techs: Union[str,List[str]]) -> pd.DataFrame:
+    """Gets ATB data that overlaps with PyPSA-Eur data
+    
+    Args:
+        atb: pd.DataFrame, 
+            raw ATB dataframe 
+        techs: Union[str,List[str]]
+            technologies to extract data for. If more than one technology is 
+            provided, all data is appended together
+            
+    Returns:
+        dataframe of atb data for provided techs
+    """
+    data = []
+    
+    if not isinstance(techs, list):
+        techs = [techs]
+    
+    for technology in techs:
+        
+        # get fixed operating cost 
+        core_metric_parameter = "Fixed O&M"
+        core_metric_key = build_core_metric_key(core_metric_parameter, technology)
+        data.append([
+            technology,
+            ATB_CMP_MAPPER[core_metric_parameter],
+            atb.loc[core_metric_key]["value"],
+            atb.loc[core_metric_key]["unit"],
+            "NREL ATB",
+            core_metric_key
+        ])
+        
+        # get variable operating cost 
+        core_metric_parameter = "Variable O&M"
+        core_metric_key = build_core_metric_key(core_metric_parameter, technology)
+        data.append([
+            technology,
+            ATB_CMP_MAPPER[core_metric_parameter],
+            atb.loc[core_metric_key]["value"],
+            atb.loc[core_metric_key]["unit"],
+            "NREL ATB",
+            core_metric_key
+        ])
+        
+        # get lifetime 
+        core_metric_parameter = "CAPEX" # lifetime is the default crp
+        core_metric_key = build_core_metric_key(core_metric_parameter, technology)
+        data.append([
+            technology,
+            ATB_CMP_MAPPER[core_metric_parameter],
+            ATB_TECH_MAPPER["crp"],
+            "years",
+            "NREL ATB",
+            core_metric_key
+        ])
+        
+        # get capital cost 
+        core_metric_parameter = "CAPEX" 
+        core_metric_key = build_core_metric_key(core_metric_parameter, technology)
+        data.append([
+            technology,
+            ATB_CMP_MAPPER[core_metric_parameter],
+            atb.loc[core_metric_key]["value"],
+            atb.loc[core_metric_key]["unit"],
+            "NREL ATB",
+            core_metric_key
+        ])
+        
+        # get efficiency 
+        core_metric_parameter = "Heat Rate" 
+        core_metric_key = build_core_metric_key(core_metric_parameter, technology)
+        data.append([
+            technology,
+            ATB_CMP_MAPPER[core_metric_parameter],
+            atb.loc[core_metric_key]["value"],
+            atb.loc[core_metric_key]["unit"],
+            "NREL ATB",
+            core_metric_key
+        ])
+        
+        # get discount rate 
+        core_metric_parameter = "WACC Real" 
+        core_metric_key = build_core_metric_key(core_metric_parameter, technology)
+        data.append([
+            technology,
+            ATB_CMP_MAPPER[core_metric_parameter],
+            atb.loc[core_metric_key]["value"],
+            atb.loc[core_metric_key]["unit"],
+            "NREL ATB",
+            core_metric_key
+        ])
+        
+    df = pd.DataFrame(data, columns=[
+        "technology",
+        "parameter",
+        "value",
+        "unit",
+        "source",
+        "further description"
+    ])
+    
+    return df
+
 if __name__ == "__main__":
-    pass
+    if "snakemake" not in globals():
+        from _helpers import mock_snakemake
+        snakemake = mock_snakemake("retrieve_cost_data", year=2030)
+        rootpath = ".."
+    else:
+        rootpath = "."
+        
+    eur = pd.read_csv(snakemake.input.pypsa_technology_data)
+    atb = pd.read_parquet(snakemake.input.nrel_atb).set_index("core_metric_key")
+    
+    # get technologies to replace by the ATB
+    techs = [x for x in eur.technology.unique() if x in ATB_TECH_MAPPER]
+    atb_extracted = get_atb_data(atb, techs)

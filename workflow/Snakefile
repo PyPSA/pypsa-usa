@@ -179,14 +179,6 @@ rule retrieve_cost_data:
     script:
         "scripts/retrieve_cost_data.py"
 
-# rule create_cost_data:
-#     input:
-#         nrel_atb = RESOURCES + "costs/nrel_atb.parquet",
-#         nrel_atb_transport = RESOURCES + "costs/nrel_atb_transport.xlsx",
-#     output:
-#         tech_costs = RESOURCES + "costs_{year}.csv",
-#         fuel_costs = RESOURCES + "fuel_costs.csv",
-
 ################# ----------- Rules to Build Network ---------- #################
 
 rule build_shapes:
@@ -352,6 +344,17 @@ rule build_renewable_profiles:
         technology="(?!hydro).*",  # Any technology other than hydro
     script:
         "scripts/build_renewable_profiles.py"
+
+rule build_cost_data:
+    input:
+        nrel_atb = RESOURCES + "costs/nrel_atb.parquet",
+        pypsa_technology_data = RESOURCES + "costs/pypsa_eur.csv",
+    output:
+        tech_costs = RESOURCES + "costs_{year}.csv",
+    log:
+        LOGS + "costs_{year}.log",
+    script:
+        "scripts/build_cost_data.py"
 
 rule add_electricity:
     params:
