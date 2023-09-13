@@ -308,7 +308,7 @@ def get_atb_data(atb: pd.DataFrame, techs: Union[str,List[str]], **kwargs) -> pd
             data.append([
                 technology,
                 "FOM",
-                atb.loc[core_metric_key]["value"],
+                round(atb.loc[core_metric_key]["value"],2),
                 atb.loc[core_metric_key]["units"],
                 "NREL ATB",
                 core_metric_key
@@ -323,7 +323,7 @@ def get_atb_data(atb: pd.DataFrame, techs: Union[str,List[str]], **kwargs) -> pd
             data.append([
                 technology,
                 "VOM",
-                atb.loc[core_metric_key]["value"],
+                round(atb.loc[core_metric_key]["value"],2),
                 f"{atb.loc[core_metric_key]['units']}_e",
                 "NREL ATB",
                 core_metric_key
@@ -347,8 +347,8 @@ def get_atb_data(atb: pd.DataFrame, techs: Union[str,List[str]], **kwargs) -> pd
         try:
             data.append([
                 technology,
-                "investment", # M20CAPEXUSBSUSBS8HM30
-                atb.loc[core_metric_key]["value"],
+                "investment",
+                round(atb.loc[core_metric_key]["value"],2),
                 f"{atb.loc[core_metric_key]['units']}_e",
                 "NREL ATB",
                 core_metric_key
@@ -363,7 +363,7 @@ def get_atb_data(atb: pd.DataFrame, techs: Union[str,List[str]], **kwargs) -> pd
             data.append([
                 technology,
                 "efficiency",
-                atb.loc[core_metric_key]["value"],
+                round(atb.loc[core_metric_key]["value"],2),
                 atb.loc[core_metric_key]["units"],
                 "NREL ATB",
                 core_metric_key
@@ -378,7 +378,7 @@ def get_atb_data(atb: pd.DataFrame, techs: Union[str,List[str]], **kwargs) -> pd
             data.append([
                 technology,
                 "discount rate",
-                atb.loc[core_metric_key]["value"],
+                round(atb.loc[core_metric_key]["value"],2),
                 "per unit",
                 "NREL ATB",
                 core_metric_key
