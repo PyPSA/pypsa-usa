@@ -16,14 +16,14 @@ ATB_CMP_MAPPER = {
     "Fixed O&M":"FOM",
     "Fuel":"F", # Fuel costs, converted to $/MWh, using heat rates
     "Heat Rate":"HR",
-    "CRF":"CRF", # capital recovery factor
+    # "CRF":"CRF", # capital recovery factor
     "WACC Real":"WACCR",
     "WACC Nominal":"WACCN",
-    "GCC": "GCC", # Grid Connection Costs
+    # "GCC": "GCC", # Grid Connection Costs
     "OCC": "OCC", # Overnight Capital Costs
     "Variable O&M": "VOM",
     "Heat Rate":"HR",
-    "Heat Rate Penalty":"HRP"
+    # "Heat Rate Penalty":"HRP"
 }
 
 """
@@ -260,10 +260,13 @@ def build_core_metric_key(
         else:
             detail = tech_detail
     
-    return f"{cmc}{crp}{cmp}{name}{alias}{detail}{scenario}{year_short}"
+    if cmp in ("WACCR", "WACCR"): # different formatting for WACC
+        return f"{cmc}{crp}{cmp}{name}{scenario}{year_short}"
+    else:
+        return f"{cmc}{crp}{cmp}{name}{alias}{detail}{scenario}{year_short}"
 
 def get_atb_data(atb: pd.DataFrame, techs: Union[str,List[str]]) -> pd.DataFrame:
-    """Gets ATB data that overlaps with PyPSA-Eur data
+    """Gets ATB data for specific financial parameters 
     
     Args:
         atb: pd.DataFrame, 
@@ -287,9 +290,9 @@ def get_atb_data(atb: pd.DataFrame, techs: Union[str,List[str]]) -> pd.DataFrame
         core_metric_key = build_core_metric_key(core_metric_parameter, technology)
         data.append([
             technology,
-            ATB_CMP_MAPPER[core_metric_parameter],
+            "FOM",
             atb.loc[core_metric_key]["value"],
-            atb.loc[core_metric_key]["unit"],
+            atb.loc[core_metric_key]["units"],
             "NREL ATB",
             core_metric_key
         ])
@@ -297,22 +300,23 @@ def get_atb_data(atb: pd.DataFrame, techs: Union[str,List[str]]) -> pd.DataFrame
         # get variable operating cost 
         core_metric_parameter = "Variable O&M"
         core_metric_key = build_core_metric_key(core_metric_parameter, technology)
-        data.append([
-            technology,
-            ATB_CMP_MAPPER[core_metric_parameter],
-            atb.loc[core_metric_key]["value"],
-            atb.loc[core_metric_key]["unit"],
-            "NREL ATB",
-            core_metric_key
-        ])
+        try:
+            data.append([
+                technology,
+                "VOM",
+                atb.loc[core_metric_key]["value"],
+                f"{atb.loc[core_metric_key]['units']}_e",
+                "NREL ATB",
+                core_metric_key
+            ])
+        except KeyError:
+            logger.info(f"No ATB variable costs for {technology}")
         
-        # get lifetime 
-        core_metric_parameter = "CAPEX" # lifetime is the default crp
-        core_metric_key = build_core_metric_key(core_metric_parameter, technology)
+        # get lifetime - lifetime is the default crp
         data.append([
             technology,
-            ATB_CMP_MAPPER[core_metric_parameter],
-            ATB_TECH_MAPPER["crp"],
+            "lifetime",
+            ATB_TECH_MAPPER[technology]["crp"]["default"],
             "years",
             "NREL ATB",
             core_metric_key
@@ -323,9 +327,9 @@ def get_atb_data(atb: pd.DataFrame, techs: Union[str,List[str]]) -> pd.DataFrame
         core_metric_key = build_core_metric_key(core_metric_parameter, technology)
         data.append([
             technology,
-            ATB_CMP_MAPPER[core_metric_parameter],
+            "investment",
             atb.loc[core_metric_key]["value"],
-            atb.loc[core_metric_key]["unit"],
+            f"{atb.loc[core_metric_key]['units']}_e",
             "NREL ATB",
             core_metric_key
         ])
@@ -333,23 +337,26 @@ def get_atb_data(atb: pd.DataFrame, techs: Union[str,List[str]]) -> pd.DataFrame
         # get efficiency 
         core_metric_parameter = "Heat Rate" 
         core_metric_key = build_core_metric_key(core_metric_parameter, technology)
-        data.append([
-            technology,
-            ATB_CMP_MAPPER[core_metric_parameter],
-            atb.loc[core_metric_key]["value"],
-            atb.loc[core_metric_key]["unit"],
-            "NREL ATB",
-            core_metric_key
-        ])
+        try:
+            data.append([
+                technology,
+                "efficiency",
+                atb.loc[core_metric_key]["value"],
+                atb.loc[core_metric_key]["units"],
+                "NREL ATB",
+                core_metric_key
+            ])
+        except KeyError:
+            logger.info(f"No ATB heat rate for {technology}")
         
         # get discount rate 
         core_metric_parameter = "WACC Real" 
         core_metric_key = build_core_metric_key(core_metric_parameter, technology)
         data.append([
             technology,
-            ATB_CMP_MAPPER[core_metric_parameter],
+            "discount rate",
             atb.loc[core_metric_key]["value"],
-            atb.loc[core_metric_key]["unit"],
+            "per unit",
             "NREL ATB",
             core_metric_key
         ])
@@ -418,7 +425,7 @@ def correct_fixed_cost(df: pd.DataFrame) -> pd.DataFrame:
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
-        snakemake = mock_snakemake("retrieve_cost_data", year=2030)
+        snakemake = mock_snakemake("build_cost_data", year=2030)
         rootpath = ".."
     else:
         rootpath = "."
@@ -432,6 +439,11 @@ if __name__ == "__main__":
     
     # merge dataframes 
     costs = pd.concat([eur, atb_extracted])
+    costs = costs.drop_duplicates(subset = ["technology", "parameter"], keep="last")
     
-    atb_extracted = correct_units(atb_extracted)
-    atb_extracted = correct_fixed_cost(atb_extracted)
+    # align merged data 
+    costs = correct_units(costs)
+    costs = correct_fixed_cost(costs)
+    costs = costs.reset_index(drop=True)
+    
+    costs.to_csv(snakemake.output.tech_costs)
