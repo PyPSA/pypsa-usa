@@ -185,8 +185,8 @@ ATB_TECH_MAPPER = {
     },
     "Pumped-Storage-Hydro-bicharger":{
         "technology":"Pumped Storage Hydropower",
-        "name":{"default":"H","options":["H"]},
-        "alias":{"default":"H","options":["H"]},
+        "name":{"default":"PSH","options":["PSH"]},
+        "alias":{"default":"PSH","options":["PSH"]},
         "detail":{"default":"NC1","options":["NC1","NC2","NC3","NC4","NC5","NC6","NC7","NC8","NC1","NC2","NC3","NC4"]},
         "crp":{"default":100,"options":[20,30,100]},
     },
@@ -279,7 +279,7 @@ def build_core_metric_key(
     else:
         return f"{cmc}{crp}{cmp}{name}{alias}{detail}{scenario}{year_short}"
 
-def get_atb_data(atb: pd.DataFrame, techs: Union[str,List[str]]) -> pd.DataFrame:
+def get_atb_data(atb: pd.DataFrame, techs: Union[str,List[str]], **kwargs) -> pd.DataFrame:
     """Gets ATB data for specific financial parameters 
     
     Args:
@@ -288,6 +288,8 @@ def get_atb_data(atb: pd.DataFrame, techs: Union[str,List[str]]) -> pd.DataFrame
         techs: Union[str,List[str]]
             technologies to extract data for. If more than one technology is 
             provided, all data is appended together
+        kwargs: 
+            values to override defaullts in ATB
             
     Returns:
         dataframe of atb data for provided techs
@@ -301,19 +303,22 @@ def get_atb_data(atb: pd.DataFrame, techs: Union[str,List[str]]) -> pd.DataFrame
         
         # get fixed operating cost 
         core_metric_parameter = "Fixed O&M"
-        core_metric_key = build_core_metric_key(core_metric_parameter, technology)
-        data.append([
-            technology,
-            "FOM",
-            atb.loc[core_metric_key]["value"],
-            atb.loc[core_metric_key]["units"],
-            "NREL ATB",
-            core_metric_key
-        ])
+        core_metric_key = build_core_metric_key(core_metric_parameter, technology, **kwargs)
+        try:
+            data.append([
+                technology,
+                "FOM",
+                atb.loc[core_metric_key]["value"],
+                atb.loc[core_metric_key]["units"],
+                "NREL ATB",
+                core_metric_key
+            ])
+        except KeyError:
+            logger.info(f"No ATB fixed costs for {technology}")
         
         # get variable operating cost 
         core_metric_parameter = "Variable O&M"
-        core_metric_key = build_core_metric_key(core_metric_parameter, technology)
+        core_metric_key = build_core_metric_key(core_metric_parameter, technology, **kwargs)
         try:
             data.append([
                 technology,
@@ -338,19 +343,22 @@ def get_atb_data(atb: pd.DataFrame, techs: Union[str,List[str]]) -> pd.DataFrame
         
         # get capital cost 
         core_metric_parameter = "CAPEX" 
-        core_metric_key = build_core_metric_key(core_metric_parameter, technology)
-        data.append([
-            technology,
-            "investment",
-            atb.loc[core_metric_key]["value"],
-            f"{atb.loc[core_metric_key]['units']}_e",
-            "NREL ATB",
-            core_metric_key
-        ])
+        core_metric_key = build_core_metric_key(core_metric_parameter, technology, **kwargs)
+        try:
+            data.append([
+                technology,
+                "investment", # M20CAPEXUSBSUSBS8HM30
+                atb.loc[core_metric_key]["value"],
+                f"{atb.loc[core_metric_key]['units']}_e",
+                "NREL ATB",
+                core_metric_key
+            ])
+        except KeyError:
+            logger.info(f"No ATB capital costs for {technology}")
         
         # get efficiency 
         core_metric_parameter = "Heat Rate" 
-        core_metric_key = build_core_metric_key(core_metric_parameter, technology)
+        core_metric_key = build_core_metric_key(core_metric_parameter, technology, **kwargs)
         try:
             data.append([
                 technology,
@@ -365,15 +373,18 @@ def get_atb_data(atb: pd.DataFrame, techs: Union[str,List[str]]) -> pd.DataFrame
         
         # get discount rate 
         core_metric_parameter = "WACC Real" 
-        core_metric_key = build_core_metric_key(core_metric_parameter, technology)
-        data.append([
-            technology,
-            "discount rate",
-            atb.loc[core_metric_key]["value"],
-            "per unit",
-            "NREL ATB",
-            core_metric_key
-        ])
+        core_metric_key = build_core_metric_key(core_metric_parameter, technology, **kwargs)
+        try:
+            data.append([
+                technology,
+                "discount rate",
+                atb.loc[core_metric_key]["value"],
+                "per unit",
+                "NREL ATB",
+                core_metric_key
+            ])
+        except KeyError:
+            logger.info(f"No ATB WACC for {technology}")
         
     df = pd.DataFrame(data, columns=[
         "technology",
@@ -447,9 +458,11 @@ if __name__ == "__main__":
     eur = pd.read_csv(snakemake.input.pypsa_technology_data)
     atb = pd.read_parquet(snakemake.input.nrel_atb).set_index("core_metric_key")
     
+    year = snakemake.wildcards.year
+    
     # get technologies to replace by the ATB
     techs = [x for x in eur.technology.unique() if x in ATB_TECH_MAPPER]
-    atb_extracted = get_atb_data(atb, techs)
+    atb_extracted = get_atb_data(atb, techs, year=year)
     
     # merge dataframes 
     costs = pd.concat([eur, atb_extracted])
@@ -460,4 +473,4 @@ if __name__ == "__main__":
     costs = correct_fixed_cost(costs)
     costs = costs.reset_index(drop=True)
     
-    costs.to_csv(snakemake.output.tech_costs)
+    costs.to_csv(snakemake.output.tech_costs, index=False)
