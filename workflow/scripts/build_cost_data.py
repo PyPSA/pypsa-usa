@@ -36,7 +36,7 @@ pypsa-name:{
     }
 """
 ATB_TECH_MAPPER = {
-    "biopower":{
+    "biomass":{
         "technology":"Biopower",
         "name":{"default":"B","options":["B"]},
         "alias":{"default":"B","options":["B"]},
@@ -71,11 +71,18 @@ ATB_TECH_MAPPER = {
         "detail":{"default":"NPD1","options":["NPD1","NPD2","NPD3","NPD4","NPD5","NPD6","NPD7","NPD8","NSD1","NSD2","NSD3","NSD4"]},
         "crp":{"default":100,"options":[20,30,100]},
     },
-    "natural_gas":{
+    "CCGT":{ # natural gas
         "technology":"NaturalGas_FE",
         "name":{"default":"NGFE","options":["NGFE"]},
         "alias":{"default":"NG","options":["NG"]},
         "detail":{"default":"CCFF","options":["CCFF","CCFF95CCS","CCFF97CCS","CTFF","CCHF","CCHF95CCS","CCHF97CCS","FC","FC98CCS"]},
+        "crp":{"default":30,"options":[20,30,55]},
+    },
+    "OCGT":{ # natural gas
+        "technology":"NaturalGas_FE",
+        "name":{"default":"NGFE","options":["NGFE"]},
+        "alias":{"default":"NG","options":["NG"]},
+        "detail":{"default":"CTFF","options":["CCFF","CCFF95CCS","CCFF97CCS","CTFF","CCHF","CCHF95CCS","CCHF97CCS","FC","FC98CCS"]},
         "crp":{"default":30,"options":[20,30,55]},
     },
     "natural_gas_retrofit":{
@@ -86,94 +93,101 @@ ATB_TECH_MAPPER = {
         "crp":{"default":30,"options":[20,30,55]},
     },
     "nuclear":{
-        "technology":"NaturalGas_Retrofits",
+        "technology":"Nuclear", 
         "name":{"default":"N","options":["N"]},
         "alias":{"default":"N","options":["N"]},
-        "detail":{"default":"AP1000","options":["AP1000","SMR"]},
+        "detail":{"default":"AP1000","options":["AP1000"]}, # large scale nuclear 
         "crp":{"default":60,"options":[20,30,60]},
     },
-    "solar_commercial":{
+    "smr":{
+        "technology":"Nuclear", 
+        "name":{"default":"N","options":["N"]},
+        "alias":{"default":"N","options":["N"]},
+        "detail":{"default":"SMR","options":["SMR"]}, # small modular reactor
+        "crp":{"default":60,"options":[20,30,60]},
+    },
+    "solar-rooftop commercial":{
         "technology":"CommPV",
         "name":{"default":"CPV","options":["CPV"]},
         "alias":{"default":"CPV","options":["CPV"]},
         "detail":{"default":"C5","options":["C1","C2","C3","C4","C5","C6","C7","C8","C9","C10"]},
         "crp":{"default":20,"options":[20,30]},
     },
-    "solar_concentrated":{
+    "solar-concentrated":{
         "technology":"CSP",
         "name":{"default":"CSP","options":["CSP"]},
         "alias":{"default":"CSP","options":["CSP"]},
         "detail":{"default":"C2","options":["C2","C3","C8"]},
         "crp":{"default":20,"options":[20,30]},
     },
-    "solar_residential":{
+    "solar-rooftop":{
         "technology":"ResPV",
         "name":{"default":"RPV","options":["RPV"]},
         "alias":{"default":"RPV","options":["RPV"]},
         "detail":{"default":"C5","options":["C1","C2","C3","C4","C5","C6","C7","C8","C9","C10"]},
         "crp":{"default":20,"options":[20,30]},
     },
-    "solar_utility":{
+    "solar-utility":{
         "technology":"UtilityPV",
         "name":{"default":"UPV","options":["UPV"]},
         "alias":{"default":"UPV","options":["UPV"]},
         "detail":{"default":"C5","options":["C1","C2","C3","C4","C5","C6","C7","C8","C9","C10"]},
         "crp":{"default":20,"options":[20,30]},
     },
-    "solar_utility_plus_battery":{
+    "solar-utility-plus-battery":{
         "technology":"Utility-Scale PV-Plus-Battery",
         "name":{"default":"USPVPB","options":["USPVPB"]},
         "alias":{"default":"PVS","options":["PVS"]},
         "detail":{"default":"C5","options":["C1","C2","C3","C4","C5","C6","C7","C8","C9","C10"]},
         "crp":{"default":20,"options":[20,30]},
     },
-    "storage_battery_commercial":{
+    "commercial battery storage":{
         "technology":"Commercial Battery Storage",
         "name":{"default":"CBS","options":["CBS"]},
         "alias":{"default":"CBS","options":["CBS"]},
         "detail":{"default":"4H","options":["1H","2H","4H","6H","8H"]},
         "crp":{"default":20,"options":[20,30]},
     },
-    "storage_battery_residential":{
+    "home battery storage":{
         "technology":"Residential Battery Storage",
         "name":{"default":"RBS","options":["RBS"]},
         "alias":{"default":"RBS","options":["RBS"]},
         "detail":{"default":"5W125W","options":["5W125W","5W20W"]},
         "crp":{"default":20,"options":[20,30]},
     },
-    "storage_battery_utility":{
+    "battery storage":{
         "technology":"Utility-Scale Battery Storage",
         "name":{"default":"USBS","options":["USBS"]},
         "alias":{"default":"USBS","options":["USBS"]},
         "detail":{"default":"8H","options":["2H","4H","6H","8H","10H"]},
         "crp":{"default":20,"options":[20,30]},
     },
-    "wind_distributed":{
+    "wind-distributed":{
         "technology":"DistributedWind",
         "name":{"default":"DW","options":["DW"]},
         "alias":{"default":"MDW","options":["CDW","LDW","MDW","RDW"]},
         "detail":{"default":"C7","options":["C1","C2","C3","C4","C5","C6","C7","C8","C9","C10"]},
         "crp":{"default":30,"options":[20,30]},
     },
-    "wind_onshore":{
+    "onwind":{
         "technology":"LandbasedWind",
         "name":{"default":"LW","options":["LW"]},
         "alias":{"default":"LBW","options":["LBW"]},
         "detail":{"default":"C4","options":["C1","C2","C3","C4","C5","C6","C7","C8","C9","C10"]},
         "crp":{"default":30,"options":[20,30]},
     },
-    "wind_offshore":{
+    "offwind":{
         "technology":"OffShoreWind",
         "name":{"default":"OSW","options":["OSW"]},
         "alias":{"default":"OW","options":["OW"]},
         "detail":{"default":"C3","options":["C1","C2","C3","C4","C5","C6","C7","C8","C9","C10","C11","C12","C13","C14"]},
         "crp":{"default":30,"options":[20,30]},
     },
-    "storage_pumped_hydro":{
+    "Pumped-Storage-Hydro-bicharger":{
         "technology":"Pumped Storage Hydropower",
         "name":{"default":"H","options":["H"]},
         "alias":{"default":"H","options":["H"]},
-        "detail":{"default":"NPD1","options":["NPD1","NPD2","NPD3","NPD4","NPD5","NPD6","NPD7","NPD8","NSD1","NSD2","NSD3","NSD4"]},
+        "detail":{"default":"NC1","options":["NC1","NC2","NC3","NC4","NC5","NC6","NC7","NC8","NC1","NC2","NC3","NC4"]},
         "crp":{"default":100,"options":[20,30,100]},
     },
 }
