@@ -280,6 +280,7 @@ solving:
   operations:
     run: true
     stochastic: false
+    iterations: 10
 
 plotting:
   map:

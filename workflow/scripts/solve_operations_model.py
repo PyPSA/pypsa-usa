@@ -10,9 +10,9 @@ def solve_operations_model(n, commit=False, load_shedding = False, snapshots=Non
     # Optimize the network for the specified time period
     if load_shedding: n.optimize.add_load_shedding(sign=1, marginal_cost=10000,suffix=' load')
     n.optimize(snapshots, solver_name=solver_name)
-    revenues = n.statistics.revenue()
-    production_cost = n.statistics.revenue().Load.Ac
-    return n, production_cost, revenues
+    revenue = n.statistics.revenue()
+    revenue.index = revenue.index.map(lambda x: '_'.join(x[:2]))
+    return n, revenue
 
 
 def update_network_data(n, sample):
@@ -54,8 +54,8 @@ def process_iteration(n, samples, i):
     
     # solve operations model
     n_hours = snakemake.config['solving']['options']['nhours']
-    n, production_cost, revenue = solve_operations_model(n, commit=False, load_shedding=False, snapshots=n.snapshots[:n_hours], solver_name=solver)
-    return i, production_cost, revenue
+    n, revenue = solve_operations_model(n, commit=False, load_shedding=False, snapshots=n.snapshots[:n_hours], solver_name=solver)
+    return i, revenue
 
 if __name__ == "__main__":
     logger = logging.getLogger(__name__)
@@ -73,7 +73,7 @@ if __name__ == "__main__":
         #Run Operations Model
         operations_results = pd.DataFrame(np.zeros(shape=(len(samples),2)), columns=['sample_num', 'production_cost'])
 
-        num_iterations = len(samples)
+        num_iterations = snakemake.config['solving']['operations']['iterations']
         results = Parallel(n_jobs=-1)(delayed(process_iteration)(n, samples, i) for i in tqdm(range(num_iterations)))
 
         # Assuming operations_results is a DataFrame
@@ -85,6 +85,10 @@ if __name__ == "__main__":
     else:
         #Run Operations Model
         n_hours = snakemake.config['solving']['options']['nhours']
-        n, production_cost, revenue = solve_operations_model(n, commit=False, load_shedding=False, snapshots=n.snapshots[:n_hours], solver_name=solver)
+        n, revenue = solve_operations_model(n, commit=False, 
+                                                             load_shedding=False, 
+                                                             snapshots=n.snapshots[:n_hours], 
+                                                             solver_name=solver
+                                                             )
         revenue.to_csv(snakemake.output.production_cost)
         n.export_to_netcdf(snakemake.output.network_solved)
