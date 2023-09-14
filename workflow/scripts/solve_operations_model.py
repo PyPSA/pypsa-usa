@@ -10,8 +10,10 @@ def solve_operations_model(n, commit=False, load_shedding = False, snapshots=Non
     # Optimize the network for the specified time period
     if load_shedding: n.optimize.add_load_shedding(sign=1, marginal_cost=10000,suffix=' load')
     n.optimize(snapshots, solver_name=solver_name)
-    production_cost = n.buses_t.marginal_price * n.loads_t.p_set.values
-    return n, production_cost
+    revenues = n.statistics.revenue()
+    production_cost = n.statistics.revenue().Load.Ac
+    return n, production_cost, revenues
+
 
 def update_network_data(n, sample):
     """Update the network data with the given sample
@@ -52,8 +54,8 @@ def process_iteration(n, samples, i):
     
     # solve operations model
     n_hours = snakemake.config['solving']['options']['nhours']
-    n, production_cost = solve_operations_model(n, commit=False, load_shedding=False, snapshots=n.snapshots[:n_hours], solver_name=solver)
-    return i, production_cost.sum().sum()
+    n, production_cost, revenue = solve_operations_model(n, commit=False, load_shedding=False, snapshots=n.snapshots[:n_hours], solver_name=solver)
+    return i, production_cost, revenue
 
 if __name__ == "__main__":
     logger = logging.getLogger(__name__)
@@ -82,6 +84,7 @@ if __name__ == "__main__":
         operations_results.to_csv(snakemake.output.operations_results, index=False)
     else:
         #Run Operations Model
-        n, production_cost = solve_operations_model(n, commit=False, load_shedding=False, solver_name=solver)
-        production_cost.to_csv(snakemake.output.production_cost)
+        n_hours = snakemake.config['solving']['options']['nhours']
+        n, production_cost, revenue = solve_operations_model(n, commit=False, load_shedding=False, snapshots=n.snapshots[:n_hours], solver_name=solver)
+        revenue.to_csv(snakemake.output.production_cost)
         n.export_to_netcdf(snakemake.output.network_solved)

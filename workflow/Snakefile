@@ -445,6 +445,7 @@ if config['solving']['operations']['run']:
         script:
             "scripts/solve_operations_model.py"
 
+#Capacity Expansion Branch
 rule add_extra_components:
     input:
         network=RESOURCES + "{interconnect}/elec_s_{clusters}.nc",
