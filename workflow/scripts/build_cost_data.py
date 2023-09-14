@@ -64,11 +64,18 @@ ATB_TECH_MAPPER = {
         "detail":{"default":"HF","options":["DEGSB","DEGSF","HB","HF","NFEGSB","NFEGSF"]},
         "crp":{"default":30,"options":[20,30]},
     },
-    "hydro":{
+    "hydro":{ # dammed hydro 
         "technology":"Hydropower",
         "name":{"default":"H","options":["H"]},
         "alias":{"default":"H","options":["H"]},
-        "detail":{"default":"NPD1","options":["NPD1","NPD2","NPD3","NPD4","NPD5","NPD6","NPD7","NPD8","NSD1","NSD2","NSD3","NSD4"]},
+        "detail":{"default":"NPD1","options":["NPD1","NPD2","NPD3","NPD4","NPD5","NPD6","NPD7","NPD8"]},
+        "crp":{"default":100,"options":[20,30,100]},
+    },
+    "ror":{ # run of river  
+        "technology":"Hydropower",
+        "name":{"default":"H","options":["H"]},
+        "alias":{"default":"H","options":["H"]},
+        "detail":{"default":"NSD1","options":["NSD1","NSD2","NSD3","NSD4"]},
         "crp":{"default":100,"options":[20,30,100]},
     },
     "CCGT":{ # natural gas
@@ -92,18 +99,18 @@ ATB_TECH_MAPPER = {
         "detail":{"default":"CCFC90CCS","options":["CCFC90CCS","CCFC95CCS","CCFF97CCS","CCHC90CCS","CCHC95CCS"]},
         "crp":{"default":30,"options":[20,30,55]},
     },
-    "nuclear":{
+    "nuclear":{ # large scale nuclear 
         "technology":"Nuclear", 
         "name":{"default":"N","options":["N"]},
         "alias":{"default":"N","options":["N"]},
-        "detail":{"default":"AP1000","options":["AP1000"]}, # large scale nuclear 
+        "detail":{"default":"AP1000","options":["AP1000"]}, 
         "crp":{"default":60,"options":[20,30,60]},
     },
-    "smr":{
+    "SMR":{ # small modular reactor
         "technology":"Nuclear", 
         "name":{"default":"N","options":["N"]},
         "alias":{"default":"N","options":["N"]},
-        "detail":{"default":"SMR","options":["SMR"]}, # small modular reactor
+        "detail":{"default":"SMR","options":["SMR"]}, 
         "crp":{"default":60,"options":[20,30,60]},
     },
     "solar-rooftop commercial":{
@@ -141,6 +148,13 @@ ATB_TECH_MAPPER = {
         "detail":{"default":"C5","options":["C1","C2","C3","C4","C5","C6","C7","C8","C9","C10"]},
         "crp":{"default":20,"options":[20,30]},
     },
+    "central solar thermal":{
+        "technology":"CSP",
+        "name":{"default":"CSP","options":["CSP"]},
+        "alias":{"default":"CSP","options":["CSP"]},
+        "detail":{"default":"C2","options":["C1","C2","C3","C4","C5","C6","C7","C8","C9","C10"]},
+        "crp":{"default":30,"options":[20,30]},
+    },
     "commercial battery storage":{
         "technology":"Commercial Battery Storage",
         "name":{"default":"CBS","options":["CBS"]},
@@ -173,7 +187,7 @@ ATB_TECH_MAPPER = {
         "technology":"LandbasedWind",
         "name":{"default":"LW","options":["LW"]},
         "alias":{"default":"LBW","options":["LBW"]},
-        "detail":{"default":"C4","options":["C1","C2","C3","C4","C5","C6","C7","C8","C9","C10"]},
+        "detail":{"default":"C4T1","options":["C1T1","C2T1","C3T1","C4T1","C5T1","C6T1","C7T1","C8T2","C9T3","C10T4"]},
         "crp":{"default":30,"options":[20,30]},
     },
     "offwind":{
@@ -308,7 +322,7 @@ def get_atb_data(atb: pd.DataFrame, techs: Union[str,List[str]], **kwargs) -> pd
             data.append([
                 technology,
                 "FOM",
-                round(atb.loc[core_metric_key]["value"],2),
+                atb.loc[core_metric_key]["value"],
                 atb.loc[core_metric_key]["units"],
                 "NREL ATB",
                 core_metric_key
@@ -323,7 +337,7 @@ def get_atb_data(atb: pd.DataFrame, techs: Union[str,List[str]], **kwargs) -> pd
             data.append([
                 technology,
                 "VOM",
-                round(atb.loc[core_metric_key]["value"],2),
+                atb.loc[core_metric_key]["value"],
                 f"{atb.loc[core_metric_key]['units']}_e",
                 "NREL ATB",
                 core_metric_key
@@ -348,7 +362,7 @@ def get_atb_data(atb: pd.DataFrame, techs: Union[str,List[str]], **kwargs) -> pd
             data.append([
                 technology,
                 "investment",
-                round(atb.loc[core_metric_key]["value"],2),
+                atb.loc[core_metric_key]["value"],
                 f"{atb.loc[core_metric_key]['units']}_e",
                 "NREL ATB",
                 core_metric_key
@@ -363,7 +377,7 @@ def get_atb_data(atb: pd.DataFrame, techs: Union[str,List[str]], **kwargs) -> pd
             data.append([
                 technology,
                 "efficiency",
-                round(atb.loc[core_metric_key]["value"],2),
+                atb.loc[core_metric_key]["value"],
                 atb.loc[core_metric_key]["units"],
                 "NREL ATB",
                 core_metric_key
@@ -378,7 +392,7 @@ def get_atb_data(atb: pd.DataFrame, techs: Union[str,List[str]], **kwargs) -> pd
             data.append([
                 technology,
                 "discount rate",
-                round(atb.loc[core_metric_key]["value"],2),
+                atb.loc[core_metric_key]["value"],
                 "per unit",
                 "NREL ATB",
                 core_metric_key
@@ -394,6 +408,7 @@ def get_atb_data(atb: pd.DataFrame, techs: Union[str,List[str]], **kwargs) -> pd
         "source",
         "further description"
     ])
+    df["value"] = df["value"].round(3)
     
     return df
 
@@ -437,12 +452,12 @@ def correct_fixed_cost(df: pd.DataFrame) -> pd.DataFrame:
     
     # this method of slicing a df is quite inefficienct :( 
     for tech in techs:
-        fom = df.loc[(df.technology == tech) & (df.parameter == "FOM"), "value"].reset_index(drop=True)
-        capex = df.loc[(df.technology == tech) & (df.parameter == "investment"), "value"].reset_index(drop=True)
+        fom = df.loc[(df.technology == tech) & (df.parameter == "FOM"), "value"]
+        capex = df.loc[(df.technology == tech) & (df.parameter == "investment"), "value"]
         
         assert fom.shape == capex.shape # should each only have one row 
         
-        df.loc[(df.technology == tech) & (df.parameter == "FOM"), "value"] = fom / capex * 100
+        df.loc[(df.technology == tech) & (df.parameter == "FOM"), "value"] = fom.iloc[-1] / capex.iloc[-1] * 100
         df.loc[(df.technology == tech) & (df.parameter == "FOM"), "unit"] = "%/year"
         
     return df
@@ -472,5 +487,6 @@ if __name__ == "__main__":
     costs = correct_units(costs)
     costs = correct_fixed_cost(costs)
     costs = costs.reset_index(drop=True)
+    costs["value"] = costs["value"].round(3)
     
     costs.to_csv(snakemake.output.tech_costs, index=False)
