@@ -1,9 +1,4 @@
-# -*- coding: utf-8 -*-
-# SPDX-FileCopyrightText: : 2017-2023 The PyPSA-Eur Authors
-#
-# SPDX-License-Identifier: MIT
-
-# coding: utf-8
+# PyPSA USA Authors
 """
 Adds electrical generators and existing hydro storage units to a base network.
 
@@ -86,15 +81,14 @@ It further adds extendable ``generators`` with **zero** capacity for
 
 import logging
 from itertools import product
-
 import geopandas as gpd
 import numpy as np
 import pandas as pd
-
+import os
 import pypsa
 import scipy.sparse as sparse
 import xarray as xr
-from _helpers import configure_logging, update_p_nom_max
+from _helpers import configure_logging, update_p_nom_max, export_network_for_gis_mapping
 
 from shapely.prepared import prep
 import pdb
@@ -1324,7 +1318,7 @@ def attach_ads_renewables(n, plants_df, renewable_carriers, extendable_carriers,
                 if ba_prof.sum() == 0:
                     logger.warning(f'No hydro profile for {ba}.')
                     profiles_new[plant] = 0
-                    pdb.set_trace()
+
 
                 profiles_new[plant] = profiles.loc[:,ba_prof].values
             p_max_pu = profiles_new
@@ -1558,6 +1552,14 @@ if __name__ == "__main__":
     else:
         raise ValueError(f"Unknown network_configuration {snakemake.config['network_configuration']}")
 
+    if snakemake.config['osw_config']['enable_osw']:
+        import modify_network_osw as osw
+        osw.build_OSW_base_configuration(n)
+        osw.build_OSW_500kV(n)
+
     sanitize_carriers(n, snakemake.config)
     n.meta = snakemake.config
     n.export_to_netcdf(snakemake.output[0])
+
+    output_folder = os.path.dirname(snakemake.output[0]) + '/base_network'
+    export_network_for_gis_mapping(n, output_folder)

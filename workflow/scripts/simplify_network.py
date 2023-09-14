@@ -1,18 +1,23 @@
-# Copyright 2021-2022 Martha Frysztacki (KIT)
+# BY PyPSA-USA Authors
 
 import pypsa
 import pandas as pd
 import numpy as np
 from functools import reduce
 from pypsa.networkclustering import busmap_by_kmeans, get_clustering_from_busmap
-
+from _helpers import export_network_for_gis_mapping, configure_logging
 import logging
+import os
 
-logger = logging.getLogger('root')
+logger = logging.getLogger(__name__)
+
 # logger.debug('submodule message')
 
 
 def simplify_network_to_voltage_level(n, voltage_level):
+    '''
+    Simplify network to a single voltage level. Network Line Characteristics (s_nom, num_parallel, type) are mapped to the new voltage level.
+    '''
     logger.info("Mapping all network lines onto a single layer")
 
     n.buses["v_nom"] = voltage_level
@@ -52,7 +57,9 @@ def simplify_network_to_voltage_level(n, voltage_level):
     return n, trafo_map
 
 
-def aggregate_to_substations(network, substations, busmap,use_ba_zones=False):
+def aggregate_to_substations(network: pypsa.Network, substations, busmap, aggregation_zones: str):
+    '''
+    Aggregate network to substations. First step in clusterings, if use_ba_zones is True, then the network retains balancing Authority zones in clustering.'''
 
     logger.info("Aggregating buses to substation level...")
 
@@ -72,35 +79,42 @@ def aggregate_to_substations(network, substations, busmap,use_ba_zones=False):
             "ramp_limit_down": np.max,
         },
     )
-    sub_index = network.buses.country.index.map(busmap.to_dict())
-    countries = network.buses.country.values
-    countries_dict = dict(zip(sub_index, countries))
-    substations['ba'] = substations.index.map(countries_dict)
-    if use_ba_zones: 
-        zone = substations.ba 
+    # sub_index = network.buses.country.index.map(busmap.to_dict())
+    # countries = network.buses.country.values
+    # countries_dict = dict(zip(sub_index, countries))
+    # substations['ba'] = substations.index.map(countries_dict)
+    substations = network.buses[['sub_id', 'interconnect', 'state',
+                                 'country','balancing_area','x','y']]
+    substations = substations.drop_duplicates(subset=['sub_id'])
+    substations.sub_id  = substations.sub_id.astype(int).astype(str)
+    substations.index = substations.sub_id
+
+    if aggregation_zones == 'balancing_area': 
+        zone = substations.balancing_area 
+    elif aggregation_zones == 'country':
+        zone = substations.country
+    elif aggregation_zones == 'state':
+        zone = substations.state
     else:
-        zone = "US"
-    
-    network = clustering.network
+        ValueError('zonal_aggregation must be either balancing_area, country or state')
 
-    network.buses["interconnect"] = substations.interconnect
-    network.buses["x"] = substations.lon
-    network.buses["y"] = substations.lat
-    network.buses["substation_lv"] = True
-    network.buses["substation_off"] = True
-    network.buses["country"] = zone
-    network.lines["type"] = np.nan
+    network_s = clustering.network
 
-    return network
+    network_s.buses["interconnect"] = substations.interconnect
+    network_s.buses["x"] = substations.x
+    network_s.buses["y"] = substations.y
+    network_s.buses["substation_lv"] = True
+    network_s.buses["substation_off"] = True
+    network_s.buses["country"] = zone
+    network_s.buses["state"] = substations.state
+    network_s.buses["balancing_area"] = substations.balancing_area
+    network_s.lines["type"] = np.nan
+    return network_s
 
 
-def assign_line_lengths(n, line_length_factor, busmap_to_sub=None, substations=None):
-
-    if (busmap_to_sub is not None) and (substations is not None):
-        busmap_to_sub["x"] = busmap_to_sub.sub_id.map(substations["lon"])
-        busmap_to_sub["y"] = busmap_to_sub.sub_id.map(substations["lat"])
-        n.buses[["x", "y"]] = busmap_to_sub[["x", "y"]]
-
+def assign_line_lengths(n, line_length_factor):
+    '''
+    Assign line lengths to network. Uses haversine function to calculate line lengths.'''
     logger.info("Assigning line lengths using haversine function...")
 
     n.lines.length = pypsa.geo.haversine_pts(
@@ -117,30 +131,36 @@ def assign_line_lengths(n, line_length_factor, busmap_to_sub=None, substations=N
 
    
 if __name__ == "__main__":
-    logger = logging.getLogger(__name__)
+    if "snakemake" not in globals():
+        from _helpers import mock_snakemake
+        snakemake = mock_snakemake("simplify_network", interconnect='western')
+    configure_logging(snakemake)
 
     voltage_level = snakemake.config["electricity"]["voltage_simplified"]
-    use_ba_zones = snakemake.config['clustering']['cluster_network']['by_balancing_areas']
+    aggregation_zones = snakemake.config['clustering']['cluster_network']['aggregation_zones']
 
     n = pypsa.Network(snakemake.input.network)
     n, trafo_map = simplify_network_to_voltage_level(n, voltage_level)
 
-    busmap_to_sub = pd.read_csv(
-        snakemake.input.bus2sub, index_col=0, dtype={"sub_id": str}
-    )
-    busmap_to_sub.index = busmap_to_sub.index.astype(str)
     substations = pd.read_csv(snakemake.input.sub, index_col=0)
     substations.index = substations.index.astype(str)
+
+    #new busmap definition
+    busmap_to_sub = n.buses.sub_id.astype(int).astype(str).to_frame()
+
 
     busmaps = [trafo_map, busmap_to_sub.sub_id]
     busmaps = reduce(lambda x, y: x.map(y), busmaps[1:], busmaps[0])
 
-    # assign line lengths based on sub_id,
-    # otherwise divide by zero error in networkclustering
-    # should we be multiplying by 1.25 here?
-    n = assign_line_lengths(n, 1.25, busmap_to_sub, substations) 
-    n.links["underwater_fraction"] = 0
+    # Haversine is a poor approximation... use 1.25 as an approximiation, but should be replaced with actual line lengths.
+    # TODO: WHEN WE REPLACE NETWORK WITH NEW NETWORK WE SHOULD CALACULATE LINE LENGTHS BASED ON THE actual GIS line files.
+    n = assign_line_lengths(n, 1.25) 
+    n.links["underwater_fraction"] = 0 #TODO: CALULATE UNDERWATER FRACTIONS.
 
-    n = aggregate_to_substations(n, substations, busmap_to_sub.sub_id, use_ba_zones)
+
+    n = aggregate_to_substations(n, substations, busmap_to_sub.sub_id, aggregation_zones)
 
     n.export_to_netcdf(snakemake.output[0])
+
+    output_path = os.path.dirname(snakemake.output[0]) + 'simplified_'
+    export_network_for_gis_mapping(n, output_path)
