@@ -64,7 +64,7 @@ if __name__ == "__main__":
     else:
         rootpath = "."
 
-    # get nrel atb power generation data 
+    # get nrel atb power generation data
     atb_year = 2023
     parquet = f"https://oedi-data-lake.s3.amazonaws.com/ATB/electricity/parquet/{atb_year}/ATBe.parquet"
     save_atb = snakemake.output.nrel_atb

@@ -212,10 +212,10 @@ load:
   # manual_adjustments: true # false
   scaling_factor: 1.0
 
-costs:  # based on the potentials, assuming  (0.1 kW/m2 and 10 m2/person) (TODO:pypsa-eur assumptions... need to re-visit)
-  year: 2030 #not currently used
-  version: v0.4.0
-  rooftop_share: 0.14  
+costs:  # based on the potentials, assuming  (0.1 kW/m2 and 10 m2/person)
+  year: 2030 
+  version: v0.6.0
+  rooftop_share: 0.14
   fill_values:
     FOM: 0
     VOM: 0
@@ -225,7 +225,7 @@ costs:  # based on the potentials, assuming  (0.1 kW/m2 and 10 m2/person) (TODO:
     lifetime: 25
     "CO2 intensity": 0
     "discount rate": 0.07
-  marginal_cost: #(TODO:pypsa-eur assumptions... need to re-visit)
+  marginal_cost:
     solar: 0.00
     onwind: 0.00
     offwind: 0.00
