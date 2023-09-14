@@ -277,6 +277,9 @@ solving:
     AggFill: 0
     PreDual: 0
     GURO_PAR_BARDENSETHRESH: 200
+  operations:
+    run: true
+    stochastic: false
 
 plotting:
   map:

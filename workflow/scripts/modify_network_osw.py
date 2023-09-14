@@ -1,8 +1,5 @@
 import pandas as pd
 import pypsa
-import pdb
-import os
-
 
 #Global Variables
 
@@ -42,6 +39,11 @@ round_mountain_bus_id = '2020316'
 #Tesla Substation (Antioch is Closest Matching Substation)
 tesla_substation_bus_id = '2021593'
 
+#SF 345kB Substation:
+sf_345kv_substation_bus_id = '2021181'
+
+#Pittsburg 765kV Substation:
+pittsburg_substation_bus_id = '2021641'
 
 def define_line_types(network):    
     # # import pdb;pdb.set_trace()
@@ -60,7 +62,6 @@ def define_line_types(network):
         index=["f_nom", "r_per_length", "x_per_length", "c_per_length", "i_nom"],
         )
     return network
-
 
 def add_hvdc_subsea(network, line_name, bus0, bus1):
     network.add("Link", 
@@ -216,23 +217,23 @@ osw_ts = pd.read_csv('/Users/kamrantehranchi/Local_Documents/pypsa-usa/workflow/
                         parse_dates=True
                     )
 
-def build_OSW_base_configuration(network):
+def build_OSW_base_configuration(network, osw_capacity):
+    """Adding the initial buses, export cables, and transformers to the network."""
     #define network lines
-    # import pdb;pdb.set_trace()
     define_line_types(network)
 
     # Add Offshore Substations + Export Cables
     add_export_array_module(network,
                             "humboldt",
                             humboldt_export_cable_id,
-                            capacity = 2000,
+                            capacity = osw_capacity,
                             offshore_sub_location = humboldt_bus_loc
                             )
 
     # Add New Offshore Generators
     add_osw_turbines(network,
                     "humboldt", 
-                    capacity = 1607,  
+                    capacity = osw_capacity,  
                     pu_time_series = osw_ts.Wind_Offshore_Humboldt
                 )
 
@@ -278,7 +279,6 @@ def build_OSW_500kV(network):
                 )
     network.buses.loc['tesla_sub_500kv', 'sub_id'] = 502
 
-    
     add_hvac_500kv(network,
                     line_name="fern_tesla_500kv",
                     bus0 = "fern_road_sub",
@@ -299,8 +299,52 @@ def build_OSW_500kV(network):
 
 # Alternative 2- HVDC LCC Overhead Option
 def build_hvdc_overhead(network):
-    None
+    network.add("Bus",
+                name= "Pittsburg_500kV",
+                x = network.buses.loc[pittsburg_substation_bus_id].x + 0.001,
+                y = network.buses.loc[pittsburg_substation_bus_id].y + 0.001,
+                v_nom = 500,
+                carrier= 'AC',
+                )
+    network.buses.loc['BayHub_500kV', 'sub_id'] = 504
+
+    network.add("Transformer",
+                name = "Pittsburg_transformer",
+                bus0 = "Pittsburg_500kV",
+                bus1 = pittsburg_substation_bus_id,
+                s_nom = 2000,
+                type = 'Rail',
+                x = 10, #revisit resistance and reactance values later
+                r = 0.1,
+                )
+    network.transformers.loc['Pittsburg_500kV', 'carrier'] = 'AC'
+
+    add_hvdc_overhead(network, "HVDC_Humboldt_OverheadLink",
+                     "humboldt_onshore_bus_500kv",
+                    "Pittsburg_500kV")
 
 # Alternative 3- HVDC VSC Subsea Option
 def build_hvdc_subsea(network):
-    None
+    network.add("Bus",
+                name= "BayHub_500kV",
+                x = network.buses.loc[sf_345kv_substation_bus_id].x + 0.001,
+                y = network.buses.loc[sf_345kv_substation_bus_id].y + 0.001,
+                v_nom = 500,
+                carrier= 'AC',
+                )
+    network.buses.loc['BayHub_500kV', 'sub_id'] = 504
+
+    network.add("Transformer",
+                name = "BayHub_transformer",
+                bus0 = "BayHub_500kV",
+                bus1 = sf_345kv_substation_bus_id,
+                s_nom = 2000,
+                type = 'Rail',
+                x = 10, #revisit resistance and reactance values later
+                r = 0.1,
+                )
+    network.transformers.loc['BayHub_transformer', 'carrier'] = 'AC'
+
+    add_hvdc_subsea(network, "HVDC_Humboldt_SubseaLink",
+                     "humboldt_onshore_bus_500kv",
+                    "BayHub_500kV")

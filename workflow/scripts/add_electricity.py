@@ -1554,9 +1554,12 @@ if __name__ == "__main__":
 
     if snakemake.config['osw_config']['enable_osw']:
         logger.info('Adding OSW in network')
+        humboldt_capacity = snakemake.config['osw_config']['humboldt_capacity']
         import modify_network_osw as osw
-        osw.build_OSW_base_configuration(n)
-        osw.build_OSW_500kV(n)
+        osw.build_OSW_base_configuration(n, osw_capacity=humboldt_capacity)
+        if snakemake.config['osw_config']['build_hvac']: osw.build_OSW_500kV(n)
+        if snakemake.config['osw_config']['build_hvdc_subsea']: osw.build_hvdc_subsea(n)
+        if snakemake.config['osw_config']['build_hvdc_overhead']: osw.build_hvdc_overhead(n)
 
     sanitize_carriers(n, snakemake.config)
     n.meta = snakemake.config
