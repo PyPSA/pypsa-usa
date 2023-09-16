@@ -893,26 +893,21 @@ def add_nice_carrier_names(n, config):
         logger.warning(f'tech_colors for carriers {missing_i} not defined in config.')
     n.carriers['color'] = colors
 
-def load_powerplants_eia(ppl_fn):
-    carrier_dict = {
-        'Nuclear':'nuclear',
-        'Coal':'coal', 
-        'Gas_SC':'gas', 
-        'Gas_CC':'gas', 
-        'Oil':'oil', 
-        'Geothermal':'geothermal',
-        'Biomass':'biomass', 
-        'Other':'other', 
-        'Waste':'waste',
-        'Hydro':'hydro',
-        'Battery':'battery',
-        'Solar':'solar',
-        'Wind':'wind',
-    }
-    plants = pd.read_csv(ppl_fn, index_col=0, dtype={"bus_assignment": "str"}).rename(columns=str.lower)
-    plants = add_missing_fuel_cost(plants, snakemake.input.fuel_costs)
-    plants = add_missing_heat_rates(plants, snakemake.input.fuel_costs)
-    plants['carrier'] = plants.tech_type.map(carrier_dict)
+def load_powerplants_eia(
+    eia_dataset: str, 
+    carrier_mapper: Dict[str,str] = None,
+) -> pd.DataFrame:
+    
+    # load data
+    plants = pd.read_csv(
+        eia_dataset, 
+        index_col=0, 
+        dtype={"bus_assignment": "str"}).rename(columns=str.lower)
+
+    # apply mappings if required 
+    if carrier_mapper:
+        plants['carrier'] = plants.tech_type.map(carrier_mapper)    
+    
     return plants
 
 def add_missing_fuel_cost(plants, costs_fn):
@@ -1043,7 +1038,7 @@ def load_powerplants_ads(
     carrier_mapper: Dict[str,str] = None,
     fuel_mapper: Dict[str,str] = None
 ) -> pd.DataFrame:
-    """Loads base ADS plants
+    """Loads base ADS plants and applies name mappings 
     
     Arguments
     ---------
@@ -1270,15 +1265,18 @@ if __name__ == "__main__":
                                      #"OCGT": "ng"
                                      }) #changing cost data to match the plant data #TODO: #10 change this so that fuel types and plant types match the pypsa naming scheme.
 
-        plant_data = load_powerplants_eia(snakemake.input['plants_eia'])
+        eia_carrier_mapper = constants.EIA_FUEL_MAPPER
+        plants = load_powerplants_eia(snakemake.input['plants_eia'], eia_carrier_mapper)
+        plants = add_missing_fuel_cost(plants, snakemake.input.fuel_costs)
+        plants = add_missing_heat_rates(plants, snakemake.input.fuel_costs)
         
         #match each plant to nearest node in network
-        plant_data_locs = match_plant_to_bus(n, plant_data)
+        plant_locs = match_plant_to_bus(n, plants)
 
         #attach conventional plants to network
         n = attach_eia_conventional_plants(
             n,
-            plant_data_locs,
+            plant_locs,
             conventional_carriers,
             extendable_carriers,
             costs,
@@ -1287,7 +1285,7 @@ if __name__ == "__main__":
         #attach batteries to network
         n = attach_eia_batteries(
             n, 
-            plant_data_locs,
+            plant_locs,
             extendable_carriers, 
             costs
         )
@@ -1316,7 +1314,7 @@ if __name__ == "__main__":
 
         attach_eia_renewable_capacities_to_atlite(
             n,
-            plant_data_locs,
+            plant_locs,
             renewable_carriers
         )
 

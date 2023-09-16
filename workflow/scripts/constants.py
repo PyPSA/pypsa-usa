@@ -143,3 +143,24 @@ ADS_FUEL_MAPPER = {
     'Biomass Waste':'Biomass',
     'LFG':'Waste',
 }
+
+###########################
+# Constants for EIA mapping 
+###########################
+
+# maps EIA carrier name to PyPSA name
+EIA_CARRIER_MAPPER = {
+        'Nuclear':'nuclear',
+        'Coal':'coal', 
+        'Gas_SC':'gas', 
+        'Gas_CC':'gas', 
+        'Oil':'oil', 
+        'Geothermal':'geothermal',
+        'Biomass':'biomass', 
+        'Other':'other', 
+        'Waste':'waste',
+        'Hydro':'hydro',
+        'Battery':'battery',
+        'Solar':'solar',
+        'Wind':'wind',
+}
