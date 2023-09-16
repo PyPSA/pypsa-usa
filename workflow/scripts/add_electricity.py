@@ -1042,7 +1042,7 @@ def load_powerplants_ads(
     tech_mapper: Dict[str,str] = None,
     carrier_mapper: Dict[str,str] = None,
     fuel_mapper: Dict[str,str] = None
-):
+) -> pd.DataFrame:
     """Loads base ADS plants
     
     Arguments
@@ -1053,16 +1053,19 @@ def load_powerplants_ads(
     fuel_mapper: Dict[str,str],
     """
 
+    # read in data 
     plants = pd.read_csv(ads_dataset, index_col=0, dtype={"bus_assignment": "str"}).rename(columns=str.lower)
     plants.rename(columns={'fueltype':'fuel_type_ads'}, inplace=True)
 
-    plants['carrier'] = plants.fuel_type_ads.map(carrier_mapper)
-    plants['fuel_type'] = plants.fuel_type_ads.map(fuel_mapper)
-    plants['tech_type'] = plants.tech_type.map(tech_mapper)
-    plants = add_missing_fuel_cost(plants, snakemake.input.fuel_costs)
-    plants = add_missing_heat_rates(plants, snakemake.input.fuel_costs)
-
+    # apply mappings if required 
+    if carrier_mapper:
+        plants['carrier'] = plants.fuel_type_ads.map(carrier_mapper)
+    if fuel_mapper:
+        plants['fuel_type'] = plants.fuel_type_ads.map(fuel_mapper)
+    if tech_mapper:
+        plants['tech_type'] = plants.tech_type.map(tech_mapper)
     plants.rename(columns={'lat':'latitude', 'lon':'longitude'}, inplace=True)    
+    
     return plants
 
 
@@ -1343,23 +1346,27 @@ if __name__ == "__main__":
         ads_fuel_mapper = constants.ADS_FUEL_MAPPER
 
         # load base powerplants 
-        plant_data = load_powerplants_ads(
+        plants = load_powerplants_ads(
             ads_dataset = snakemake.input['plants_ads'],
             tech_mapper = ads_sub_type_tech_mapper, 
             carrier_mapper = ads_carrier_mapper,
             fuel_mapper = ads_fuel_mapper
         )
         
+        # apply missing data to powerplants 
+        plants = add_missing_fuel_cost(plants, snakemake.input.fuel_costs)
+        plants = add_missing_heat_rates(plants, snakemake.input.fuel_costs)
+        
         #assign coords to plants missing lat/lon
-        plant_data = assign_ads_missing_lat_lon(plant_data,n)
+        plants = assign_ads_missing_lat_lon(plants,n)
 
         #match each plant to nearest node in network
-        plant_data_locs = match_plant_to_bus(n, plant_data)
+        plant_locs = match_plant_to_bus(n, plants)
 
         #attach conventional plants to network
         n = attach_ads_conventional_plants(
             n,
-            plant_data_locs,
+            plant_locs,
             conventional_carriers,
             extendable_carriers,
             costs,
@@ -1368,7 +1375,7 @@ if __name__ == "__main__":
         #attach batteries to network
         n = attach_ads_batteries(
             n, 
-            plant_data_locs,
+            plant_locs,
             extendable_carriers, 
             costs
         )
@@ -1382,14 +1389,12 @@ if __name__ == "__main__":
 
         attach_ads_renewables(
             n,
-            plant_data_locs,
+            plant_locs,
             renewable_carriers,
             extendable_carriers,
             costs,
         )
-
-
-
+        
         update_p_nom_max(n)
 
     elif snakemake.config["network_configuration"] == "breakthrough":
