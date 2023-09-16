@@ -6,11 +6,11 @@ dependencies:
   - python>=3.8
   - pip
 
-  - pypsa==0.23.0
+  - pypsa
   - atlite>=0.2.5
 
   # Dependencies of the workflow itself
-  - pandas==2.0.3
+  - pandas
   - xlrd
   - openpyxl
   - pycountry

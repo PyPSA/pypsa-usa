@@ -47,13 +47,13 @@ import numpy as np
 import geopandas as gpd
 from shapely.geometry import Polygon
 from scipy.spatial import Voronoi
-
+from functools import reduce
 from _helpers import setup_custom_logger
 logger = setup_custom_logger('root')
 logger.debug('main message')
 
 from _helpers import configure_logging, REGION_COLS
-from simplify_network import aggregate_to_substations
+from simplify_network import aggregate_to_substations, simplify_network_to_voltage_level
 
 def voronoi_partition_pts(points, outline):
     """
@@ -122,12 +122,14 @@ if __name__ == "__main__":
         snakemake = mock_snakemake('build_bus_regions', interconnect='western')
     configure_logging(snakemake)
 
-    logger.info("Building bus regions for %s", snakemake.wildcards.interconnect)
-    logger.info("Built for aggregation with %s zones", aggregation_zones)
 
     #Configurations
     countries = snakemake.config['countries']
+    voltage_level = snakemake.config["electricity"]["voltage_simplified"]
     aggregation_zones = snakemake.config['clustering']['cluster_network']['aggregation_zones']
+
+    logger.info("Building bus regions for %s", snakemake.wildcards.interconnect)
+    logger.info("Built for aggregation with %s zones", aggregation_zones)
 
     n_base = pypsa.Network(snakemake.input.base_network)
 
@@ -139,6 +141,15 @@ if __name__ == "__main__":
     busmap_to_sub.index = busmap_to_sub.index.astype(str)
     substations = pd.read_csv(snakemake.input.sub, index_col=0)
     substations.index = substations.index.astype(str)
+
+    n_base, trafo_map = simplify_network_to_voltage_level(n_base, voltage_level)
+
+    #new busmap definition
+    busmap_to_sub = n_base.buses.sub_id.astype(int).astype(str).to_frame()
+
+    busmaps = [trafo_map, busmap_to_sub.sub_id]
+    busmaps = reduce(lambda x, y: x.map(y), busmaps[1:], busmaps[0])
+
     n = aggregate_to_substations(n_base, substations, busmap_to_sub.sub_id, aggregation_zones)
 
     gpd_countries = gpd.read_file(snakemake.input.country_shapes).set_index('name')

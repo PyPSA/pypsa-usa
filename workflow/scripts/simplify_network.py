@@ -4,11 +4,10 @@ import pypsa
 import pandas as pd
 import numpy as np
 from functools import reduce
-from pypsa.networkclustering import busmap_by_kmeans, get_clustering_from_busmap
+from pypsa.clustering.spatial import get_clustering_from_busmap
 from _helpers import export_network_for_gis_mapping, configure_logging
 import logging
 import os
-
 logger = logging.getLogger(__name__)
 
 def simplify_network_to_voltage_level(n, voltage_level):
@@ -59,14 +58,16 @@ def aggregate_to_substations(network: pypsa.Network, substations, busmap, aggreg
     Aggregate network to substations. First step in clusterings, if use_ba_zones is True, then the network retains balancing Authority zones in clustering.'''
 
     logger.info("Aggregating buses to substation level...")
-
+    import pdb; pdb.set_trace()
     clustering = get_clustering_from_busmap(
         network,
         busmap,
         aggregate_generators_weighted=True,
         aggregate_one_ports=["Load", "StorageUnit"],
         line_length_factor=1.0,
-        bus_strategies={"type": np.max},
+        bus_strategies={"type": np.max,
+                        "Pd": np.sum,
+                        },
         generator_strategies={
             "marginal_cost": np.mean,
             "p_nom_min": np.sum,

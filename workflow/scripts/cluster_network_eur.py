@@ -112,7 +112,7 @@ import seaborn as sns
 
 from functools import reduce
 
-from pypsa.networkclustering import (busmap_by_kmeans, busmap_by_hac,
+from pypsa.clustering.spatial import (busmap_by_kmeans, busmap_by_hac,
                                      busmap_by_greedy_modularity, get_clustering_from_busmap)
 
 import warnings
@@ -363,11 +363,14 @@ if __name__ == "__main__":
     print("Running clustering.py directly")
     if 'snakemake' not in globals():
         from _helpers import mock_snakemake
-        snakemake = mock_snakemake('cluster_network', simpl='', clusters='15')
+        snakemake = mock_snakemake('cluster_network', interconnect='western', clusters='30')
     configure_logging(snakemake)
 
     n = pypsa.Network(snakemake.input.network)
     focus_weights = snakemake.config.get('focus_weights', None)
+
+    n.buses.drop(columns=['state', 'balancing_area','sub_id'], inplace=True)
+
 
     renewable_carriers = pd.Index([tech
                                    for tech in n.generators.carrier.unique()
@@ -387,7 +390,7 @@ if __name__ == "__main__":
         # Fast-path if no clustering is necessary
         busmap = n.buses.index.to_series()
         linemap = n.lines.index.to_series()
-        clustering = pypsa.networkclustering.Clustering(n, busmap, linemap, linemap, pd.Series(dtype='O'))
+        clustering = pypsa.clustering.spatial.Clustering(n, busmap, linemap, linemap, pd.Series(dtype='O'))
     else:
         line_length_factor = snakemake.config['lines']['length_factor']
         Nyears = n.snapshot_weightings.objective.sum()/8760
