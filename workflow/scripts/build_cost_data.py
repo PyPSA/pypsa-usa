@@ -246,7 +246,7 @@ def build_core_metric_key(
         scenario = "M" # Moderate
 
     # Year
-    year_short = int(year % 100)
+    year_short = int(int(year) % 100)
 
     # Cost Recovery Period 
     if not crpyears:
