@@ -3,8 +3,11 @@ Preprocesses Historical and Forecasted Load, Solar, and Wind Data
 
 Written by Kamran Tehranchi, Stanford University.
 '''
-import pandas as pd, glob, os, logging, pypsa
-from _helpers import progress_retrieve, configure_logging
+import pandas as pd, logging, pypsa
+from _helpers import configure_logging
+
+logger = logging.getLogger(__name__)
+
 
 def add_breakthrough_demand_from_file(n, fn_demand):
 
@@ -106,7 +109,9 @@ def add_eia_demand(n, demand):
     
 
 if __name__ == "__main__":
-    logger = logging.getLogger(__name__)
+    if "snakemake" not in globals():
+        from _helpers import mock_snakemake
+        snakemake = mock_snakemake("simplify_network", interconnect='western')
     configure_logging(snakemake)
 
     n = pypsa.Network(snakemake.input['network'])

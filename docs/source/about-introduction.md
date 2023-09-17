@@ -10,35 +10,43 @@ Add general description about [snakemake](https://snakemake.readthedocs.io/en/st
 
 ## Folder Structure 
 
-The project follows the [recommended folder structure](https://snakemake.readthedocs.io/en/stable/snakefiles/deployment.html) from Snakemake 
+The project is organized based on the folder structure below. The workflow folder contains all data and scripts neccesary to run the pypsa-usa model. After the first time you run the snakemake file, your directory will be built and populated with the associated data. Because most of the files are too large to store on github, we pull data from various sources into the `data` folder. The `repo_data` folder contains smaller files suitable for github. The resources folder contains intermediate files built by snakemake rules through the workflow. You'll see sub-folders created for each interconnection you run the model with. 
+
+The envs folder contains the conda env yaml files neccesary to build your mamba/conda environment. The scripts folder contains the individual python scripts that are referenced in the Snakefile rules.
 
 ```bash
 ├── .gitignore
 ├── README.md
 ├── LICENSE.md
+├── docs
+├── report
 ├── workflow
-│   ├── rules
-|   │   ├── module1.smk
-|   │   └── module2.smk
 │   ├── envs
-|   │   ├── tool1.yaml
-|   │   └── tool2.yaml
+|   │   └── environment.yaml
+│   ├── logs
+|   │   └── example.log
 │   ├── scripts
 |   │   ├── script1.py
 |   │   └── script2.R
-│   ├── notebooks
-|   │   ├── notebook1.py.ipynb
-|   │   └── notebook2.r.ipynb
-│   ├── report
-|   │   ├── plot1.rst
-|   │   └── plot2.rst
+│   ├── config
+|   │   ├── config.yaml
+|   │   └── config.example.yaml
+│   ├── resources
+|   │   ├── folder1
+|   │   └── intermediate_data_example.csv
+│   ├── repo_data
+|   │   ├── example.tiff
+|   │   └── example2.csv
+│   ├── data
+|   │   └── breakthrough_network
+|   │   └── WECC_ADS
+|   │   └── otherfolders
+│   ├── results
+|   │   ├── example_network.nc
+|   │   └── example_data.csv
 |   └── Snakefile
-├── config
-│   ├── config.yaml
-│   └── some-sheet.tsv
-├── results
-└── resources
 ```
+
 
 ## System Requirements 
 

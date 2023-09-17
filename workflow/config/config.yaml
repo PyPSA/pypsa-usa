@@ -1,5 +1,3 @@
-# Copyright 2021-2022 Martha Frysztacki (KIT)
-
 scenarios:
   all:
     interconnect: western #"usa|texas|western|eastern"
@@ -286,6 +284,10 @@ solving:
     AggFill: 0
     PreDual: 0
     GURO_PAR_BARDENSETHRESH: 200
+  operations:
+    run: true
+    stochastic: false
+    iterations: 10
 
 plotting:
   map:
@@ -312,7 +314,7 @@ plotting:
     "onwind" : "#235ebc"
     "wind" : "#235ebc"
     "onshore wind" : "#235ebc"
-    'offwind' : "#6895dd"
+    'offwind' : "#dd6895"
     'offwind-ac' : "#6895dd"
     'offshore wind' : "#6895dd"
     'offshore wind ac' : "#6895dd"

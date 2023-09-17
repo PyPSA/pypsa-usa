@@ -119,8 +119,11 @@ if __name__ == "__main__":
     logger = logging.getLogger(__name__)
     if 'snakemake' not in globals():
         from _helpers import mock_snakemake
-        snakemake = mock_snakemake('build_bus_regions')
+        snakemake = mock_snakemake('build_bus_regions', interconnect='western')
     configure_logging(snakemake)
+
+    logger.info("Building bus regions for %s", snakemake.wildcards.interconnect)
+    logger.info("Built for aggregation with %s zones", aggregation_zones)
 
     #Configurations
     countries = snakemake.config['countries']
@@ -148,7 +151,6 @@ if __name__ == "__main__":
     onshore_regions = []
     offshore_regions = []
 
-    logger.info("Building bus regions for %s zones", aggregation_zones)
 
     for ba in ba_region_shapes.index:
         ba_shape = ba_region_shapes[ba]
