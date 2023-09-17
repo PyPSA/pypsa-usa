@@ -122,12 +122,12 @@ if __name__ == "__main__":
         snakemake = mock_snakemake('build_bus_regions', interconnect='western')
     configure_logging(snakemake)
 
-    logger.info("Building bus regions for %s", snakemake.wildcards.interconnect)
-    logger.info("Built for aggregation with %s zones", aggregation_zones)
-
     #Configurations
     countries = snakemake.config['countries']
     aggregation_zones = snakemake.config['clustering']['cluster_network']['aggregation_zones']
+    
+    logger.info("Building bus regions for %s", snakemake.wildcards.interconnect)
+    logger.info("Built for aggregation with %s zones", aggregation_zones)
 
     n_base = pypsa.Network(snakemake.input.base_network)
 
