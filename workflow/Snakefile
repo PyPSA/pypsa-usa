@@ -171,10 +171,10 @@ rule retrieve_cost_data:
         nrel_atb = RESOURCES + "costs/{year}/../nrel_atb.parquet",
         nrel_atb_transport = RESOURCES + "costs/{year}/../nrel_atb_transport.xlsx",
         pypsa_technology_data = RESOURCES + "costs/{year}/pypsa_eur.csv",
-        # ng_electric_power_price = RESOURCES + "costs/ng_electric_power_price.csv",
-        # ng_industrial_price = RESOURCES + "costs/ng_industrial_price.csv",
-        # ng_residential_price = RESOURCES + "costs/ng_commercial_price.csv",
-        # ng_commercial_price = RESOURCES + "costs/ng_residential_price.csv",
+        ng_electric_power_price = RESOURCES + "costs/{year}/../ng_electric_power_price.csv",
+        ng_industrial_price = RESOURCES + "costs/{year}/../ng_industrial_price.csv",
+        ng_residential_price = RESOURCES + "costs/{year}/../ng_commercial_price.csv",
+        ng_commercial_price = RESOURCES + "costs/{year}/../ng_residential_price.csv",
     params:
         eia_api_key = config["costs"].get("eia_aip_key", None),
         pypsa_costs_version = config["costs"].get("version", "v0.6.0")

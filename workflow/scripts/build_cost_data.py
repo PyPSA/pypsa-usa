@@ -4,10 +4,9 @@ from _helpers import mock_snakemake
 from typing import List, Dict, Union
 import logging
 import pandas as pd
+import constants as const
 
 logger = logging.getLogger(__name__)
-
-EUR_2_USD = 1.07 # taken on 12-12-2023
 
 # https://atb.nrel.gov/electricity/2023/equations_&_variables
 ATB_CMP_MAPPER = {
@@ -24,186 +23,6 @@ ATB_CMP_MAPPER = {
     "Variable O&M": "VOM",
     "Heat Rate":"HR",
     # "Heat Rate Penalty":"HRP"
-}
-
-"""
-pypsa-name:{
-    "technology":"ATB-Name",
-    "name":"ATB-tech-abreviation",
-    "alias":"ATB-tech-alias.",
-    "detail":"ATB-tech-detail",
-    "crp":"ATB-crp",
-    }
-"""
-ATB_TECH_MAPPER = {
-    "biomass":{
-        "technology":"Biopower",
-        "name":{"default":"B","options":["B"]},
-        "alias":{"default":"B","options":["B"]},
-        "detail":{"default":"D","options":["D"]},
-        "crp":{"default":45,"options":[20,30,45]},
-    },
-    "coal":{
-        "technology":"Coal_FE",
-        "name":{"default":"CFE","options":["CFE"]},
-        "alias":{"default":"C","options":["C"]},
-        "detail":{"default":"95CCS","options":["95CCS","99CCS","IGCC"]},
-        "crp":{"default":30,"options":[20,30,75]},
-    },
-    "coal_retro":{
-        "technology":"Coal_Retrofits",
-        "name":{"default":"CR","options":["CR"]},
-        "alias":{"default":"C","options":["C"]},
-        "detail":{"default":"90CCS","options":["90CCS","95CCS"]},
-        "crp":{"default":30,"options":[20,30,75]},
-    },
-    "geothermal":{
-        "technology":"Geothermal",
-        "name":{"default":"G","options":["G"]},
-        "alias":{"default":"G","options":["G"]},
-        "detail":{"default":"HF","options":["DEGSB","DEGSF","HB","HF","NFEGSB","NFEGSF"]},
-        "crp":{"default":30,"options":[20,30]},
-    },
-    "hydro":{ # dammed hydro 
-        "technology":"Hydropower",
-        "name":{"default":"H","options":["H"]},
-        "alias":{"default":"H","options":["H"]},
-        "detail":{"default":"NPD1","options":["NPD1","NPD2","NPD3","NPD4","NPD5","NPD6","NPD7","NPD8"]},
-        "crp":{"default":100,"options":[20,30,100]},
-    },
-    "ror":{ # run of river  
-        "technology":"Hydropower",
-        "name":{"default":"H","options":["H"]},
-        "alias":{"default":"H","options":["H"]},
-        "detail":{"default":"NSD1","options":["NSD1","NSD2","NSD3","NSD4"]},
-        "crp":{"default":100,"options":[20,30,100]},
-    },
-    "CCGT":{ # natural gas
-        "technology":"NaturalGas_FE",
-        "name":{"default":"NGFE","options":["NGFE"]},
-        "alias":{"default":"NG","options":["NG"]},
-        "detail":{"default":"CCFF","options":["CCFF","CCFF95CCS","CCFF97CCS","CTFF","CCHF","CCHF95CCS","CCHF97CCS","FC","FC98CCS"]},
-        "crp":{"default":30,"options":[20,30,55]},
-    },
-    "OCGT":{ # natural gas
-        "technology":"NaturalGas_FE",
-        "name":{"default":"NGFE","options":["NGFE"]},
-        "alias":{"default":"NG","options":["NG"]},
-        "detail":{"default":"CTFF","options":["CCFF","CCFF95CCS","CCFF97CCS","CTFF","CCHF","CCHF95CCS","CCHF97CCS","FC","FC98CCS"]},
-        "crp":{"default":30,"options":[20,30,55]},
-    },
-    "natural_gas_retrofit":{
-        "technology":"NaturalGas_Retrofits",
-        "name":{"default":"NGR","options":["NGR"]},
-        "alias":{"default":"NG","options":["NG"]},
-        "detail":{"default":"CCFC90CCS","options":["CCFC90CCS","CCFC95CCS","CCFF97CCS","CCHC90CCS","CCHC95CCS"]},
-        "crp":{"default":30,"options":[20,30,55]},
-    },
-    "nuclear":{ # large scale nuclear 
-        "technology":"Nuclear", 
-        "name":{"default":"N","options":["N"]},
-        "alias":{"default":"N","options":["N"]},
-        "detail":{"default":"AP1000","options":["AP1000"]}, 
-        "crp":{"default":60,"options":[20,30,60]},
-    },
-    "SMR":{ # small modular reactor
-        "technology":"Nuclear", 
-        "name":{"default":"N","options":["N"]},
-        "alias":{"default":"N","options":["N"]},
-        "detail":{"default":"SMR","options":["SMR"]}, 
-        "crp":{"default":60,"options":[20,30,60]},
-    },
-    "solar-rooftop commercial":{
-        "technology":"CommPV",
-        "name":{"default":"CPV","options":["CPV"]},
-        "alias":{"default":"CPV","options":["CPV"]},
-        "detail":{"default":"C5","options":["C1","C2","C3","C4","C5","C6","C7","C8","C9","C10"]},
-        "crp":{"default":20,"options":[20,30]},
-    },
-    "solar-concentrated":{
-        "technology":"CSP",
-        "name":{"default":"CSP","options":["CSP"]},
-        "alias":{"default":"CSP","options":["CSP"]},
-        "detail":{"default":"C2","options":["C2","C3","C8"]},
-        "crp":{"default":20,"options":[20,30]},
-    },
-    "solar-rooftop":{
-        "technology":"ResPV",
-        "name":{"default":"RPV","options":["RPV"]},
-        "alias":{"default":"RPV","options":["RPV"]},
-        "detail":{"default":"C5","options":["C1","C2","C3","C4","C5","C6","C7","C8","C9","C10"]},
-        "crp":{"default":20,"options":[20,30]},
-    },
-    "solar-utility":{
-        "technology":"UtilityPV",
-        "name":{"default":"UPV","options":["UPV"]},
-        "alias":{"default":"UPV","options":["UPV"]},
-        "detail":{"default":"C5","options":["C1","C2","C3","C4","C5","C6","C7","C8","C9","C10"]},
-        "crp":{"default":20,"options":[20,30]},
-    },
-    "solar-utility-plus-battery":{
-        "technology":"Utility-Scale PV-Plus-Battery",
-        "name":{"default":"USPVPB","options":["USPVPB"]},
-        "alias":{"default":"PVS","options":["PVS"]},
-        "detail":{"default":"C5","options":["C1","C2","C3","C4","C5","C6","C7","C8","C9","C10"]},
-        "crp":{"default":20,"options":[20,30]},
-    },
-    "central solar thermal":{
-        "technology":"CSP",
-        "name":{"default":"CSP","options":["CSP"]},
-        "alias":{"default":"CSP","options":["CSP"]},
-        "detail":{"default":"C2","options":["C1","C2","C3","C4","C5","C6","C7","C8","C9","C10"]},
-        "crp":{"default":30,"options":[20,30]},
-    },
-    "commercial battery storage":{
-        "technology":"Commercial Battery Storage",
-        "name":{"default":"CBS","options":["CBS"]},
-        "alias":{"default":"CBS","options":["CBS"]},
-        "detail":{"default":"4H","options":["1H","2H","4H","6H","8H"]},
-        "crp":{"default":20,"options":[20,30]},
-    },
-    "home battery storage":{
-        "technology":"Residential Battery Storage",
-        "name":{"default":"RBS","options":["RBS"]},
-        "alias":{"default":"RBS","options":["RBS"]},
-        "detail":{"default":"5W125W","options":["5W125W","5W20W"]},
-        "crp":{"default":20,"options":[20,30]},
-    },
-    "battery storage":{
-        "technology":"Utility-Scale Battery Storage",
-        "name":{"default":"USBS","options":["USBS"]},
-        "alias":{"default":"USBS","options":["USBS"]},
-        "detail":{"default":"8H","options":["2H","4H","6H","8H","10H"]},
-        "crp":{"default":20,"options":[20,30]},
-    },
-    "wind-distributed":{
-        "technology":"DistributedWind",
-        "name":{"default":"DW","options":["DW"]},
-        "alias":{"default":"MDW","options":["CDW","LDW","MDW","RDW"]},
-        "detail":{"default":"C7","options":["C1","C2","C3","C4","C5","C6","C7","C8","C9","C10"]},
-        "crp":{"default":30,"options":[20,30]},
-    },
-    "onwind":{
-        "technology":"LandbasedWind",
-        "name":{"default":"LW","options":["LW"]},
-        "alias":{"default":"LBW","options":["LBW"]},
-        "detail":{"default":"C4T1","options":["C1T1","C2T1","C3T1","C4T1","C5T1","C6T1","C7T1","C8T2","C9T3","C10T4"]},
-        "crp":{"default":30,"options":[20,30]},
-    },
-    "offwind":{
-        "technology":"OffShoreWind",
-        "name":{"default":"OSW","options":["OSW"]},
-        "alias":{"default":"OW","options":["OW"]},
-        "detail":{"default":"C3","options":["C1","C2","C3","C4","C5","C6","C7","C8","C9","C10","C11","C12","C13","C14"]},
-        "crp":{"default":30,"options":[20,30]},
-    },
-    "Pumped-Storage-Hydro-bicharger":{
-        "technology":"Pumped Storage Hydropower",
-        "name":{"default":"PSH","options":["PSH"]},
-        "alias":{"default":"PSH","options":["PSH"]},
-        "detail":{"default":"NC1","options":["NC1","NC2","NC3","NC4","NC5","NC6","NC7","NC8","NC1","NC2","NC3","NC4"]},
-        "crp":{"default":100,"options":[20,30,100]},
-    },
 }
 
 def build_core_metric_key(
@@ -250,41 +69,41 @@ def build_core_metric_key(
 
     # Cost Recovery Period 
     if not crpyears:
-        crp = ATB_TECH_MAPPER[technology]["crp"]["default"]
+        crp = const.ATB_TECH_MAPPER[technology]["crp"]["default"]
     else:
-        if not crpyears in ATB_TECH_MAPPER[technology]["crp"]["options"]:
+        if not crpyears in const.ATB_TECH_MAPPER[technology]["crp"]["options"]:
             logger.warning(f"Invalid crp selection of {tech_name}")
-            crp = ATB_TECH_MAPPER[technology]["crp"]["default"]
+            crp = const.ATB_TECH_MAPPER[technology]["crp"]["default"]
         else:
             crp = crpyears
         
     # technology name
     if not tech_name:
-        name = ATB_TECH_MAPPER[technology]["name"]["default"]
+        name = const.ATB_TECH_MAPPER[technology]["name"]["default"]
     else:
-        if not tech_name in ATB_TECH_MAPPER[technology]["name"]["options"]:
+        if not tech_name in const.ATB_TECH_MAPPER[technology]["name"]["options"]:
             logger.warning(f"Invalid technology name of {tech_name}")
-            name = ATB_TECH_MAPPER[technology]["name"]["default"]
+            name = const.ATB_TECH_MAPPER[technology]["name"]["default"]
         else:
             name = tech_name
 
     # technology alias
     if not tech_alias:
-        alias = ATB_TECH_MAPPER[technology]["alias"]["default"]
+        alias = const.ATB_TECH_MAPPER[technology]["alias"]["default"]
     else:
-        if not tech_alias in ATB_TECH_MAPPER[technology]["alias"]["options"]:
+        if not tech_alias in const.ATB_TECH_MAPPER[technology]["alias"]["options"]:
             logger.warning(f"Invalid technology alias of {tech_alias}")
-            alias = ATB_TECH_MAPPER[technology]["alias"]["default"]
+            alias = const.ATB_TECH_MAPPER[technology]["alias"]["default"]
         else:
             alias = tech_alias
 
     # technology detail
     if not tech_detail:
-        detail = ATB_TECH_MAPPER[technology]["detail"]["default"]
+        detail = const.ATB_TECH_MAPPER[technology]["detail"]["default"]
     else:
-        if not tech_detail in ATB_TECH_MAPPER[technology]["alias"]["options"]:
+        if not tech_detail in const.ATB_TECH_MAPPER[technology]["alias"]["options"]:
             logger.warning(f"Invalid technology alias of {tech_alias}")
-            detail = ATB_TECH_MAPPER[technology]["detail"]["default"]
+            detail = const.ATB_TECH_MAPPER[technology]["detail"]["default"]
         else:
             detail = tech_detail
     
@@ -349,7 +168,7 @@ def get_atb_data(atb: pd.DataFrame, techs: Union[str,List[str]], **kwargs) -> pd
         data.append([
             technology,
             "lifetime",
-            ATB_TECH_MAPPER[technology]["crp"]["default"],
+            const.ATB_TECH_MAPPER[technology]["crp"]["default"],
             "years",
             "NREL ATB",
             core_metric_key
@@ -412,12 +231,15 @@ def get_atb_data(atb: pd.DataFrame, techs: Union[str,List[str]], **kwargs) -> pd
     
     return df
 
-def correct_units(df: pd.DataFrame) -> pd.DataFrame:
+def correct_units(df: pd.DataFrame, eur_conversion: Dict[str, float]) -> pd.DataFrame:
     """Alligns units to be the same as PyPSA
     
-    Note
-    ----
-    Input data should follow pypsa costs datastructure 
+    Arguments
+    ---------
+    df: pd.DataFrame, 
+    eur_conversion: Dict[str, float]
+        If wanting to convert from eur to another unit, provide the new unit 
+        and conversion rate as a dictionary (ie. {"USD": 1.05})
     """
     
     # kW -> MW
@@ -429,8 +251,10 @@ def correct_units(df: pd.DataFrame) -> pd.DataFrame:
     df.unit = df.unit.str.replace("MMBtu/MWh", "per unit")
     
     # Eur -> USD 
-    df.loc[df.unit.str.contains("EUR/"), "value"] *= EUR_2_USD
-    df.unit = df.unit.str.replace("EUR/", "USD/")
+    if eur_conversion:
+        convert_to = eur_conversion.keys()[0]
+        df.loc[df.unit.str.contains("EUR/"), "value"] *= eur_conversion[convert_to]
+        df.unit = df.unit.str.replace("EUR/", f"{convert_to}/")
     
     # $ -> USD (for consistancy)
     df.unit = df.unit.str.replace("$/", "USD/")
@@ -438,7 +262,7 @@ def correct_units(df: pd.DataFrame) -> pd.DataFrame:
     return df
     
 def correct_fixed_cost(df: pd.DataFrame) -> pd.DataFrame:
-    """Changes fixed cost from $/MW to %/year
+    """Changes fixed cost from $/W to %/year
     
     Note
     ----
@@ -480,7 +304,7 @@ if __name__ == "__main__":
     year = snakemake.wildcards.year
     
     # get technologies to replace by the ATB
-    techs = [x for x in eur.technology.unique() if x in ATB_TECH_MAPPER]
+    techs = [x for x in eur.technology.unique() if x in const.ATB_TECH_MAPPER]
     atb_extracted = get_atb_data(atb, techs, year=year)
     
     # merge dataframes 
@@ -488,7 +312,7 @@ if __name__ == "__main__":
     costs = costs.drop_duplicates(subset = ["technology", "parameter"], keep="last")
     
     # align merged data 
-    costs = correct_units(costs)
+    costs = correct_units(costs, {"USD", const.EUR_2_USD})
     costs = correct_fixed_cost(costs)
     costs = costs.reset_index(drop=True)
     costs["value"] = costs["value"].round(3)
