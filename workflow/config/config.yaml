@@ -255,6 +255,10 @@ clustering:
       ramp_limit_up: max
       ramp_limit_down: max
       efficiency: mean
+    buses:
+      Pd: sum
+      zone_id: mean # should delete zone id's and PDs from network earlier.
+      state: max
 
 solving:
   options:
@@ -278,7 +282,7 @@ solving:
     PreDual: 0
     GURO_PAR_BARDENSETHRESH: 200
   operations:
-    run: true
+    run: false
     stochastic: false
     iterations: 10
 
