@@ -127,6 +127,9 @@ if __name__ == "__main__":
     countries = snakemake.config['countries']
     voltage_level = snakemake.config["electricity"]["voltage_simplified"]
     aggregation_zones = snakemake.config['clustering']['cluster_network']['aggregation_zones']
+    
+    logger.info("Building bus regions for %s", snakemake.wildcards.interconnect)
+    logger.info("Built for aggregation with %s zones", aggregation_zones)
 
     logger.info("Building bus regions for %s", snakemake.wildcards.interconnect)
     logger.info("Built for aggregation with %s zones", aggregation_zones)
