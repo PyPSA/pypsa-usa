@@ -2,15 +2,16 @@ name: pypsa-usa
 channels:
   - conda-forge
   - bioconda
+
 dependencies:
   - python>=3.8
   - pip
 
   - pypsa
-  - atlite>=0.2.5
+  - atlite
 
   # Dependencies of the workflow itself
-  - pandas
+  - pandas>=0.24.0,<2.1
   - xlrd
   - openpyxl
   - pycountry
@@ -22,7 +23,6 @@ dependencies:
   - lxml
   - numpy
   - geopandas
-  - powerplantmatching
   - xarray
   - netcdf4
   - networkx
