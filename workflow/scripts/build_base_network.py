@@ -119,7 +119,6 @@ if __name__ == "__main__":
         snakemake = mock_snakemake('build_base_network', interconnect='western')
     configure_logging(snakemake)
 
-    import pdb; pdb.set_trace()
     # create network
     n = pypsa.Network()
 
