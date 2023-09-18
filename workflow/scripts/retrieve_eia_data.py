@@ -80,7 +80,6 @@ def read_and_concat_csvs(folder_path, columns_to_keep, output_folder_path):
 
 
 def prepare_eia_load_data(df):
-    import pdb; pdb.set_trace()
     df = df[['period', 'value', 'region']]
     df.columns = ['timestamp', 'value', 'region']
     df = df.drop_duplicates().dropna().set_index(['timestamp','region']).unstack(level=1)
@@ -114,7 +113,6 @@ def prepare_historical_load_data(df, year):
         filtered_df.iloc[:,0] = pd.to_datetime(df['Unnamed: 0'])
     df = filtered_df.set_index('timestamp')
     df = df.loc[f'{year}-01-01':f'{year}-12-31']
-    import pdb; pdb.set_trace()
     return df
 
 if __name__ == "__main__":

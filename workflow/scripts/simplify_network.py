@@ -58,7 +58,7 @@ def aggregate_to_substations(network: pypsa.Network, substations, busmap, aggreg
     Aggregate network to substations. First step in clusterings, if use_ba_zones is True, then the network retains balancing Authority zones in clustering.'''
 
     logger.info("Aggregating buses to substation level...")
-    import pdb; pdb.set_trace()
+
     clustering = get_clustering_from_busmap(
         network,
         busmap,
