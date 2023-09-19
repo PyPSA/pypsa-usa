@@ -9,6 +9,7 @@ HTTP = HTTPRemoteProvider()
 # -------------------------- Imports and Parameters -------------------------- #
 
 from os.path import normpath
+from pathlib import Path
 
 FIGURES_SINGLE = [
     "capacity_map_base",
@@ -393,6 +394,9 @@ rule add_electricity:
         solar="data/breakthrough_network/base_grid/solar.csv",
         ads_renewables = "data/WECC_ADS/processed/",
         bus2sub="data/breakthrough_network/base_grid/{interconnect}/bus2sub.csv",
+        **{
+            f"gen_cost_mult_{Path(x).stem}":f"repo_data/locational_multipliers/{Path(x).name}" for x in Path("repo_data/locational_multipliers/").glob("*")
+        }
     output:
         RESOURCES + "{interconnect}/elec_base_network_l_pp.nc",
     log:

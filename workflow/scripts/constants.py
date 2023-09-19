@@ -354,3 +354,19 @@ ATB_TECH_MAPPER = {
         "crp":{"default":100,"options":[20,30,100]},
     },
 }
+
+###########################################
+# Constants for NREL Locational Multipliers
+###########################################
+
+# {pypsa-name: csv-name} 
+CAPEX_LOCATIONAL_MULTIPLIER = {
+    "nuclear":"nuclear-1117mw", 
+    # "oil", 
+    "gas":"natural-gas-430mw-90ccs", 
+    "coal":"coal-ultra-supercritical-90ccs", 
+    "geothermal":"geothermal-50mw", 
+    "solar":"spv-150mw", 
+    "wind":"onshore-wind-200mw",
+    "hydro":"hydro-100mw"
+}

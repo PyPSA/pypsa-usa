@@ -89,8 +89,9 @@ import pypsa
 import scipy.sparse as sparse
 import xarray as xr
 from _helpers import configure_logging, update_p_nom_max, export_network_for_gis_mapping
-import constants
-from typing import Dict
+import constants as const
+from typing import Dict, Any, List, Union
+from pathlib import Path 
 
 from shapely.prepared import prep
 import pdb
@@ -197,7 +198,13 @@ def add_co2_emissions(n, costs, carriers):
     n.carriers.loc[carriers, "co2_emissions"] = costs.co2_emissions[suptechs].values
 
 
-def load_costs(tech_costs, config, max_hours, Nyears=1.0):
+def load_costs(
+    tech_costs: str, 
+    config: Dict[str,Any], 
+    max_hours: Dict[str, Union[int,float]], 
+    Nyears: float = 1.0
+) -> pd.DataFrame:
+    
     # set all asset costs and other parameters
     costs = pd.read_csv(tech_costs, index_col=[0, 1]).sort_index()
 
@@ -205,6 +212,7 @@ def load_costs(tech_costs, config, max_hours, Nyears=1.0):
     costs.loc[costs.unit.str.contains("/kW"), "value"] *= 1e3
     costs.unit = costs.unit.str.replace("/kW", "/MW")
 
+    # polulate missing values with user provided defaults 
     fill_values = config["fill_values"]
     costs = costs.value.unstack().fillna(fill_values)
 
@@ -290,6 +298,14 @@ def shapes_to_shapes(orig, dest):
 
     return transfer
 
+def update_capital_costs(n: pypsa.Network, carrier: str, multiplier: pd.DataFrame):
+    """Applies regional multipliers to capital cost data"""
+    
+    # n.generators["capital_cost"] = (
+    #     n.generators["capital_cost"] * multiplier.at[]
+    # )
+    pass
+    
 
 def update_transmission_costs(n, costs, length_factor=1.0):
     # TODO: line length factor of lines is applied to lines and links.
@@ -1235,7 +1251,7 @@ def attach_ads_renewables(n, plants_df, renewable_carriers, extendable_carriers,
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
-        snakemake = mock_snakemake("add_electricity", interconnect='western')
+        snakemake = mock_snakemake("add_electricity", interconnect="western")
     configure_logging(snakemake)
 
     params = snakemake.params
@@ -1265,7 +1281,7 @@ if __name__ == "__main__":
                                      #"OCGT": "ng"
                                      }) #changing cost data to match the plant data #TODO: #10 change this so that fuel types and plant types match the pypsa naming scheme.
 
-        eia_carrier_mapper = constants.EIA_FUEL_MAPPER
+        eia_carrier_mapper = const.EIA_FUEL_MAPPER
         plants = load_powerplants_eia(snakemake.input['plants_eia'], eia_carrier_mapper)
         plants = add_missing_fuel_cost(plants, snakemake.input.fuel_costs)
         plants = add_missing_heat_rates(plants, snakemake.input.fuel_costs)
@@ -1338,10 +1354,10 @@ if __name__ == "__main__":
     elif snakemake.config["network_configuration"] == "ads2032": 
         
         # get mappers 
-        ads_tech_mapper = constants.ADS_TECH_MAPPER
-        ads_sub_type_tech_mapper = constants.ADS_SUB_TYPE_TECH_MAPPER
-        ads_carrier_mapper = constants.ADS_CARRIER_NAME
-        ads_fuel_mapper = constants.ADS_FUEL_MAPPER
+        ads_tech_mapper = const.ADS_TECH_MAPPER
+        ads_sub_type_tech_mapper = const.ADS_SUB_TYPE_TECH_MAPPER
+        ads_carrier_mapper = const.ADS_CARRIER_NAME
+        ads_fuel_mapper = const.ADS_FUEL_MAPPER
 
         # load base powerplants 
         plants = load_powerplants_ads(
@@ -1449,6 +1465,13 @@ if __name__ == "__main__":
         )
     else:
         raise ValueError(f"Unknown network_configuration {snakemake.config['network_configuration']}")
+
+    # apply regional multipliers to capital cost data
+    for generator_type, multiplier_data in const.CAPEX_LOCATIONAL_MULTIPLIER.items():
+        multiplier_file = snakemake.input[f"gen_cost_mult_{multiplier_data}"]
+        df = pd.read_csv(multiplier_file)
+        df = df.fillna(1)
+        update_capital_costs(n, generator_type, multiplier_data)
 
     if snakemake.config['osw_config']['enable_osw']:
         logger.info('Adding OSW in network')

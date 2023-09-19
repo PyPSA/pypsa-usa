@@ -1,4 +1,4 @@
-State,City ,Base Project Cost ($/kW ), Location Variation, Delta Cost Difference ($/kW), Total Location Project Cost ($/kW)
+State,City,Base Project Cost ($/kW ),Location Variation,Delta Cost Difference ($/kW),Total Location Project Cost ($/kW)
 Alabama,Huntsville,5876,0.98,-126,5750
 Arizona,Phoenix,5876,1.04,232,6108
 Arkansas,Little Rock,5876,0.98,-99,5777
