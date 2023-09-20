@@ -323,6 +323,61 @@ def update_capital_costs(n: pypsa.Network, carrier: str, multiplier: pd.DataFram
         lambda x: x["capital_cost"] * multiplier.at[x["state"], "Location Variation"], axis=1)
     n.generators.loc[gen.index] = gen
     
+def update_marginal_costs(n: pypsa.Network, carrier: str, fuel_costs: pd.DataFrame, vom_cost: float = 0, apply_average: bool = False):
+    """Applies regional and monthly marginal cost data
+    
+    Arguments
+    ---------
+    n: pypsa.Network, 
+    carrier: str, 
+        carrier to apply fuel cost data to (ie. Gas)
+    fuel_costs: pd.DataFrame, 
+        EIA fuel cost data
+    vom_cost: float = 0
+        Additional flat $/MWh cost to add onto the fuel costs 
+    apply_average: bool = False
+        Apply USA average fuel cost to all regions 
+    """
+    
+    # map generators to states
+    bus_state_mapper = n.buses.to_dict()["state"]
+    gen = n.generators[n.generators.carrier == carrier].copy() # copy with warning
+    gen["state"] = gen.bus.map(bus_state_mapper)
+    gen = gen[gen["state"].isin(fuel_costs.state.unique())]
+    
+    # log any states that do not have multipliers attached 
+    missed = gen[~gen["state"].isin(fuel_costs.state.unique())]
+    if not missed.empty:
+        logger.warning(f"Time dependent marginal costs not applied to {missed.state.unique()}")
+        
+    # update fuel cost values from $/MCF to $/MWh 
+    fuel_costs["value"] = fuel_costs["value"] * const.NG_MCF_2_MWH
+    fuel_costs["units"] = "$/MWh"
+    
+    # extract out monthly variations for fuel costs 
+    fuel_costs.set_index("period")
+    fuel_costs.index = pd.to_datetime(fuel_costs.index)
+    fuel_costs["month"] = fuel_costs.index.month
+    
+    # create a state level fuel cost dataframe for the modeled snapshots 
+    state_fuel_costs = pd.DataFrame()
+    state_fuel_costs.index = pd.DatetimeIndex(n.snapshots)
+    if not apply_average:
+        for state in gen.state.unique():
+            state_fuel_cost = fuel_costs[fuel_costs["state"] == state]
+            month_to_price_mapper = state_fuel_cost.set_index("month").to_dict()["value"]
+            state_fuel_costs[state] = state_fuel_costs.index.month.map(month_to_price_mapper)
+    else:
+        usa_fuel_cost = fuel_costs[fuel_costs["state"] == "U.S."]
+        month_to_price_mapper = usa_fuel_cost.set_index("month").to_dict()["value"]
+        for state in gen.state.unique():
+            state_fuel_costs[state] = state_fuel_costs.index.month.map(month_to_price_mapper)
+        
+    # apply all marginal cost values 
+    for generator, state in zip(gen.index, gen.state):
+        n.generator_t["marginal_cost"][generator] = state_fuel_costs[state] + vom_cost
+        
+    
 
 def update_transmission_costs(n, costs, length_factor=1.0):
     # TODO: line length factor of lines is applied to lines and links.
@@ -1484,13 +1539,24 @@ if __name__ == "__main__":
         raise ValueError(f"Unknown network_configuration {snakemake.config['network_configuration']}")
 
     # apply regional multipliers to capital cost data
-    for generator_type, multiplier_data in const.CAPEX_LOCATIONAL_MULTIPLIER.items():
+    for carrier, multiplier_data in const.CAPEX_LOCATIONAL_MULTIPLIER.items():
         multiplier_file = snakemake.input[f"gen_cost_mult_{multiplier_data}"]
         df_multiplier = pd.read_csv(multiplier_file)
         df_multiplier = clean_locational_multiplier(df_multiplier)
-        update_capital_costs(n, generator_type, df_multiplier)
+        update_capital_costs(n, carrier, df_multiplier)
         
     # apply regional/temporal variations to fuel cost data 
+    fuel_costs = {"gas":"ng_electric_power_price"}
+    for carrier, cost_data in fuel_costs.items():
+        fuel_cost_file = snakemake.input[f"{cost_data}"]
+        df_fuel_costs = pd.read_csv(fuel_cost_file)
+        update_marginal_costs(
+            n=n, 
+            carrier=carrier, 
+            fuel_costs=df_fuel_costs, 
+            vom_cost=0,
+            apply_average=False
+        )
 
     if snakemake.config['osw_config']['enable_osw']:
         logger.info('Adding OSW in network')

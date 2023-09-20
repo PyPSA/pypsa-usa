@@ -396,7 +396,8 @@ rule add_electricity:
         bus2sub="data/breakthrough_network/base_grid/{interconnect}/bus2sub.csv",
         **{
             f"gen_cost_mult_{Path(x).stem}":f"repo_data/locational_multipliers/{Path(x).name}" for x in Path("repo_data/locational_multipliers/").glob("*")
-        }
+        },
+        ng_electric_power_price = RESOURCES + "costs/ng_electric_power_price.csv",
     output:
         RESOURCES + "{interconnect}/elec_base_network_l_pp.nc",
     log:

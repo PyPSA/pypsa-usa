@@ -4,7 +4,13 @@
 # General Constants
 ###################
 
+# convert euros to USD
 EUR_2_USD = 1.07 # taken on 12-12-2023
+
+# energy content of natural gas 
+# (1 MCF) * (1.036 MMBTU / 1 MCF) * (0.293 MWh / 1 MMBTU)
+# https://www.eia.gov/tools/faqs/faq.php?id=45&t=8
+NG_MCF_2_MWH = 0.3035
 
 ################################
 # Constants for ADS WECC mapping 
