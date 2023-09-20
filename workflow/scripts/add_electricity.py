@@ -309,9 +309,14 @@ def update_capital_costs(n: pypsa.Network, carrier: str, multiplier: pd.DataFram
     
     # map generators to states
     bus_state_mapper = n.buses.to_dict()["state"]
-    gen = n.generators[n.generators.carrier == carrier].copy() # copy with warning error
+    gen = n.generators[n.generators.carrier == carrier].copy() # copy with warning
     gen["state"] = gen.bus.map(bus_state_mapper)
-    gen = gen[gen["state"] != ""]
+    gen = gen[gen["state"].isin(multiplier.index)] # drops any regions that do not have cost multipliers 
+    
+    # log any states that do not have multipliers attached 
+    missed = gen[~gen["state"].isin(multiplier.index)]
+    if not missed.empty:
+        logger.warning(f"CAPEX cost multiplier not applied to {missed.state.unique()}")
     
     # apply multiplier 
     gen["capital_cost"] = gen.apply(
@@ -1484,6 +1489,8 @@ if __name__ == "__main__":
         df_multiplier = pd.read_csv(multiplier_file)
         df_multiplier = clean_locational_multiplier(df_multiplier)
         update_capital_costs(n, generator_type, df_multiplier)
+        
+    # apply regional/temporal variations to fuel cost data 
 
     if snakemake.config['osw_config']['enable_osw']:
         logger.info('Adding OSW in network')
