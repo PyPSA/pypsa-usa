@@ -231,7 +231,7 @@ def get_atb_data(atb: pd.DataFrame, techs: Union[str,List[str]], **kwargs) -> pd
     
     return df
 
-def correct_units(df: pd.DataFrame, eur_conversion: Dict[str, float]) -> pd.DataFrame:
+def correct_units(df: pd.DataFrame, eur_conversion: Dict[str, float] = None) -> pd.DataFrame:
     """Alligns units to be the same as PyPSA
     
     Arguments
@@ -252,7 +252,7 @@ def correct_units(df: pd.DataFrame, eur_conversion: Dict[str, float]) -> pd.Data
     
     # Eur -> USD 
     if eur_conversion:
-        convert_to = eur_conversion.keys()[0]
+        convert_to = list(eur_conversion.keys())[0] # ie. USD 
         df.loc[df.unit.str.contains("EUR/"), "value"] *= eur_conversion[convert_to]
         df.unit = df.unit.str.replace("EUR/", f"{convert_to}/")
     
@@ -312,7 +312,7 @@ if __name__ == "__main__":
     costs = costs.drop_duplicates(subset = ["technology", "parameter"], keep="last")
     
     # align merged data 
-    costs = correct_units(costs, {"USD", const.EUR_2_USD})
+    costs = correct_units(costs, {"USD": const.EUR_2_USD})
     costs = correct_fixed_cost(costs)
     costs = costs.reset_index(drop=True)
     costs["value"] = costs["value"].round(3)
