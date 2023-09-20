@@ -79,9 +79,13 @@ def format_eia_data_xlsx(df: pd.DataFrame) -> pd.DataFrame:
     """Formats costs data from direct download"""
     
     # not all states have data, so backfill using USA average in these cases
-    fill_values = {x:df["U.S. Natural Gas Electric Power Price (Dollars per Thousand Cubic Feet)"] for x in df.columns}
-    df = df.fillna(fill_values).reset_index()
-    
+    fill_column = [x for x in df.columns if x.startswith(("U.S. Natural Gas", "United States Natural Gas"))]
+    if len(fill_column) != 1:
+        logger.warning(f"No fill column selected")
+    else:
+        fill_values = {x:df[fill_column[0]] for x in df.columns}
+        df = df.fillna(fill_values).reset_index()
+        
     # unpivot data 
     df = df.melt(id_vars="Date", var_name="series-description")
     
