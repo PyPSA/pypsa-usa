@@ -298,13 +298,25 @@ def shapes_to_shapes(orig, dest):
 
     return transfer
 
+def clean_locational_multiplier(df: pd.DataFrame):
+    """Updates format of locational multiplier data"""
+    df = df.fillna(1)
+    df = df[["State", "Location Variation"]]
+    return df.groupby("State").mean()
+
 def update_capital_costs(n: pypsa.Network, carrier: str, multiplier: pd.DataFrame):
     """Applies regional multipliers to capital cost data"""
     
-    # n.generators["capital_cost"] = (
-    #     n.generators["capital_cost"] * multiplier.at[]
-    # )
-    pass
+    # map generators to states
+    bus_state_mapper = n.buses.to_dict()["state"]
+    gen = n.generators[n.generators.carrier == carrier].copy() # copy with warning error
+    gen["state"] = gen.bus.map(bus_state_mapper)
+    gen = gen[gen["state"] != ""]
+    
+    # apply multiplier 
+    gen["capital_cost"] = gen.apply(
+        lambda x: x["capital_cost"] * multiplier.at[x["state"], "Location Variation"], axis=1)
+    n.generators.loc[gen.index] = gen
     
 
 def update_transmission_costs(n, costs, length_factor=1.0):
@@ -1469,9 +1481,9 @@ if __name__ == "__main__":
     # apply regional multipliers to capital cost data
     for generator_type, multiplier_data in const.CAPEX_LOCATIONAL_MULTIPLIER.items():
         multiplier_file = snakemake.input[f"gen_cost_mult_{multiplier_data}"]
-        df = pd.read_csv(multiplier_file)
-        df = df.fillna(1)
-        update_capital_costs(n, generator_type, multiplier_data)
+        df_multiplier = pd.read_csv(multiplier_file)
+        df_multiplier = clean_locational_multiplier(df_multiplier)
+        update_capital_costs(n, generator_type, df_multiplier)
 
     if snakemake.config['osw_config']['enable_osw']:
         logger.info('Adding OSW in network')
