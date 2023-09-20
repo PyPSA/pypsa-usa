@@ -355,8 +355,8 @@ def update_marginal_costs(n: pypsa.Network, carrier: str, fuel_costs: pd.DataFra
     fuel_costs["units"] = "$/MWh"
     
     # extract out monthly variations for fuel costs 
-    fuel_costs.set_index("period")
-    fuel_costs.index = pd.to_datetime(fuel_costs.index)
+    fuel_costs = fuel_costs.set_index("period")
+    fuel_costs.index = pd.to_datetime(fuel_costs.index, format="%Y-%m-%d")
     fuel_costs["month"] = fuel_costs.index.month
     
     # create a state level fuel cost dataframe for the modeled snapshots 
@@ -375,7 +375,7 @@ def update_marginal_costs(n: pypsa.Network, carrier: str, fuel_costs: pd.DataFra
         
     # apply all marginal cost values 
     for generator, state in zip(gen.index, gen.state):
-        n.generator_t["marginal_cost"][generator] = state_fuel_costs[state] + vom_cost
+        n.generators_t["marginal_cost"][generator] = state_fuel_costs[state] + vom_cost
         
     
 
@@ -1554,7 +1554,7 @@ if __name__ == "__main__":
             n=n, 
             carrier=carrier, 
             fuel_costs=df_fuel_costs, 
-            vom_cost=0,
+            vom_cost=costs.at[carrier, "VOM"],
             apply_average=False
         )
 
