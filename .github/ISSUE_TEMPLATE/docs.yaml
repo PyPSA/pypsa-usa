@@ -1,6 +1,6 @@
 name: Documentation
 description: Issues relating to documentation of PyPSA-USA
-title: ""
+# title: ""
 labels: ["documentation"]
 body:
 
