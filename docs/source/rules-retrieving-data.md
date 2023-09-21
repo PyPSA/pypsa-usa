@@ -38,11 +38,31 @@ Only the western region for 2019 has been prepared and saved to Zenodo for downl
 
 ## Rule `retrieve_cost_data`
 
-This rule downloads generator economic assumptions from the [NREL](https://www.nrel.gov/) [Annual Technology Baseline](https://atb.nrel.gov/). 
+This rule downloads economic assumptions from various sources. 
+
+The [NREL](https://www.nrel.gov/) [Annual Technology Baseline](https://atb.nrel.gov/) provides economic parameters on capital costs, fixed operation costs, variable operating costs, fuel costs, technology specific discount rates, average capacity factors, and efficiencies.  
 
 [![URL](https://img.shields.io/badge/URL-NREL_ATB-blue)](<https://atb.nrel.gov/x>)
 
 [![AWS](https://img.shields.io/badge/AWS-%23FF9900.svg?style=for-the-badge&logo=amazon-aws&logoColor=white)](https://data.openei.org/s3_viewer?bucket=oedi-data-lake&prefix=ATB%2F)
+
+State level capital cost supply side generator cost multipliers are pulled from the "Capital Cost and Performance
+Characteristic Estimates for Utility Scale Electric Power Generating Technologies" by the [EIA](https://www.eia.gov/). Note, these have been saved as CSV's and come with the repository download 
+
+[![URL](https://img.shields.io/badge/URL-CAPEX_Multipliers-blue)](<https://www.eia.gov/analysis/studies/powerplants/capitalcost/pdf/capital_cost_AEO2020.pdf>)
+
+State level historial monthly fuel prices are taken from the [EIA](https://www.eia.gov/). This includes seperate prices for electrical power producers, industrial customers, commercial customers, and residential customers. 
+
+[![URL](https://img.shields.io/badge/URL-EIA_Natural_Gas_Prices-blue)](<https://www.eia.gov/dnav/ng/ng_pri_sum_dcu_nus_m.htm>)
+
+The [Annual Technology Baseline](https://atb.nrel.gov/) also provides data on the [transportation sector](https://atb.nrel.gov/transportation/2020/index), including fuel usage and capital costs.   
+
+[![URL](https://img.shields.io/badge/URL-NREL_ATB_Transportation-blue)](<https://atb.nrel.gov/transportation/2020/index>)
+
+To populate any missing data, the [PyPSA/technology-data](https://github.com/PyPSA/technology-data) project is used. Data from here 
+is only used when no other sources can be found, as it is mostly European focused. 
+
+[![GitHub](https://img.shields.io/badge/github-%23121011.svg?style=for-the-badge&logo=github&logoColor=white)](https://github.com/PyPSA/technology-data)
 
 ### Relevant Settings 
 
@@ -55,9 +75,10 @@ costs:
     version:
 ```
 
-.. seealso::
-    Documentation of the configuration file ``config/config.yaml`` at
-    :ref:`costs_cf`
+```{seealso}
+Documentation of the configuration file ``config/config.yaml`` at
+:ref:`costs_cf`
+``````
 
 ### Outputs 
 
