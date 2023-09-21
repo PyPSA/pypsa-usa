@@ -512,7 +512,7 @@ The list of available biomass is given by the category in `ENSPRESO_BIOMASS <htt
    ``rooftop_share:`` are based on the potentials, assuming
    (0.1 kW/m2 and 10 m2/person) -->
 
-(solving_cf_)
+(solving_cf)=
 ## ``solving``
 
 <!-- .. literalinclude:: ../config/config.default.yaml
