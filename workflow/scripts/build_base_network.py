@@ -31,7 +31,7 @@ def add_buses_from_file(n: pypsa.Network, buses: gpd.GeoDataFrame, interconnect:
 
     return n
 
-def add_branches_from_file(n, fn_branches):
+def add_branches_from_file(n: pypsa.Network, fn_branches: str) -> pypsa.Network:
 
     branches = pd.read_csv(
         fn_branches, dtype={"from_bus_id": str, "to_bus_id": str}, index_col=0
@@ -69,7 +69,7 @@ def add_custom_line_type(n):
         index=["f_nom", "r_per_length", "x_per_length", "c_per_length", "i_nom"],
     )
 
-def add_dclines_from_file(n, fn_dclines):
+def add_dclines_from_file(n: pypsa.Network, fn_dclines: str) -> pypsa.Network:
 
     dclines = pd.read_csv(
         fn_dclines, dtype={"from_bus_id": str, "to_bus_id": str}, index_col=0
