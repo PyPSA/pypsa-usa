@@ -1,0 +1,39 @@
+name: Feature request
+description: Ideas to improve PyPSA-USA
+title: ""
+labels: ["enhancement"]
+body:
+
+- type: textarea
+  id: request
+  attributes:
+    label: Feature Request
+    description: Detailed description the suggested improvement. Please provide context why the feature would be useful. 
+  validations:
+    required: true
+
+# - type: input
+#   id: bug
+#   attributes:
+#     label: Is your feature related to a bug?
+#     description: If applicable, refer to a an existing bug using the `#bugid` keyword
+#     placeholder: "#bugid 10"
+#   validations:
+#     required: false
+
+- type: textarea
+  id: solution
+  attributes:
+    label: Suggested Solution
+    description: Do you have an idea on how to implement the idea? Please include any references you already have. 
+  validations:
+    required: false
+
+- type: textarea
+  id: other
+  attributes:
+    label: Additional Info
+    description: |
+      Please provide any additional information or resources that will help us implement the idea.
+  validations:
+    required: false
