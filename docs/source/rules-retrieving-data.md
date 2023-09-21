@@ -44,7 +44,7 @@ This rule downloads generator economic assumptions from the [NREL](https://www.n
 
 [![AWS](https://img.shields.io/badge/AWS-%23FF9900.svg?style=for-the-badge&logo=amazon-aws&logoColor=white)](https://data.openei.org/s3_viewer?bucket=oedi-data-lake&prefix=ATB%2F)
 
-### Relevant Settings 
+**Relevant Settings** 
 
 ```yaml
 enable:
@@ -55,10 +55,11 @@ costs:
     version:
 ```
 
-.. seealso::
-    Documentation of the configuration file ``config/config.yaml`` at
-    :ref:`costs_cf`
+```{seealso}
+Documentation of the configuration file ``config/config.yaml`` at
+:ref:`costs_cf`
+```
 
-### Outputs 
+**Outputs** 
 
 - ``resources/costs.csv``
