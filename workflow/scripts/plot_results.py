@@ -1,3 +1,4 @@
+"""Plots reults from optimzation"""
 
 import sys
 import os

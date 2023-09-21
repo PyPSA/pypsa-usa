@@ -2,6 +2,7 @@
 
 Numerous datasets used in PyPSA USA are large and are not stored on GitHub. Insted, data is stored on Zenodo or supplier websites, and the workflow will automatically download these datasets via the `retrieve` rules
 
+(databundle)=
 ## Rule `retrieve_zenodo_databundles`
 
 Data used to create the base electrical network is pulled from [Breakthrough Energy](https://breakthroughenergy.org/) (~4.3GB). This includes geolocated data on substations, power lines, generators, electrical demand, and resource potentials. 
@@ -26,6 +27,7 @@ Forecasted electricity demand data and generator operational charasteristics for
 
 [![URL](https://img.shields.io/badge/URL-WECC_Data-blue)](<https://www.wecc.org/Reliability/Forms/Default%20View.aspx>)
 
+(cutout)=
 ## Rule `retrieve_cutout`
 
 Cutouts are spatio-temporal subsets of the USA weather data from the [ERA5 dataset](https://cds.climate.copernicus.eu/cdsapp#!/dataset/reanalysis-era5-single-levels?tab=overview). They have been prepared by and are for use with the [atlite](https://github.com/PyPSA/atlite) tool. You can either generate them yourself using the build_cutouts rule or retrieve them directly from zenodo through the rule `retrieve_cutout`.
@@ -36,6 +38,7 @@ Cutouts are spatio-temporal subsets of the USA weather data from the [ERA5 datas
 Only the western region for 2019 has been prepared and saved to Zenodo for download. Any other region needs to be created by the user.
 ```
 
+(costs)=
 ## Rule `retrieve_cost_data`
 
 This rule downloads generator economic assumptions from the [NREL](https://www.nrel.gov/) [Annual Technology Baseline](https://atb.nrel.gov/). 
@@ -44,7 +47,7 @@ This rule downloads generator economic assumptions from the [NREL](https://www.n
 
 [![AWS](https://img.shields.io/badge/AWS-%23FF9900.svg?style=for-the-badge&logo=amazon-aws&logoColor=white)](https://data.openei.org/s3_viewer?bucket=oedi-data-lake&prefix=ATB%2F)
 
-### Relevant Settings 
+**Relevant Settings** 
 
 ```yaml
 enable:
@@ -55,10 +58,11 @@ costs:
     version:
 ```
 
-.. seealso::
-    Documentation of the configuration file ``config/config.yaml`` at
-    :ref:`costs_cf`
+```{seealso}
+Documentation of the configuration file ``config/config.yaml`` at
+:ref:`costs_cf`
+```
 
-### Outputs 
+**Outputs** 
 
 - ``resources/costs.csv``

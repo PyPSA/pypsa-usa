@@ -1,4 +1,5 @@
 # BY PyPSA-USA Authors
+"""Aggregates network to substations and simplifies to a single voltage level"""
 
 import pypsa
 import pandas as pd
