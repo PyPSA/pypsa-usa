@@ -21,7 +21,7 @@ Reads in [Breakthrough Energy](https://breakthroughenergy.org/) infrastructure d
 ## Rule `build_renewable_profiles`
 
 (electricity)=
-## Rule `add_electricity`
+## Rule `add_electricity` 
 ```{eval-rst}  
 .. automodule:: add_electricity
 ```
