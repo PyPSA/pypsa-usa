@@ -1550,6 +1550,10 @@ if __name__ == "__main__":
     for carrier, cost_data in fuel_costs.items():
         fuel_cost_file = snakemake.input[f"{cost_data}"]
         df_fuel_costs = pd.read_csv(fuel_cost_file)
+        if carrier == "gas":
+            vom = (costs.at["OCGT", "VOM"] + costs.at["CCGT", "VOM"]) / 2
+        else:
+            vom = costs.at[carrier, "VOM"]
         update_marginal_costs(
             n=n, 
             carrier=carrier, 

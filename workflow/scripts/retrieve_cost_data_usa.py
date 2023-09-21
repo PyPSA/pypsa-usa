@@ -8,7 +8,7 @@ from _helpers import (
     progress_retrieve, 
     mock_snakemake
 )
-from typing import List, Dict, Union
+from typing import Dict, Union
 import requests
 
 logger = logging.getLogger(__name__)
@@ -106,7 +106,7 @@ def format_eia_data_xlsx(df: pd.DataFrame) -> pd.DataFrame:
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
-        snakemake = mock_snakemake("retrieve_cost_data", year=2030)
+        snakemake = mock_snakemake("retrieve_cost_data_usa")
         rootpath = ".."
     else:
         rootpath = "."
@@ -210,11 +210,3 @@ if __name__ == "__main__":
             df = df[df.index.year == 2022]
             df.to_csv(ng_residential_price)
             
-    # get european template data 
-    version = snakemake.params.pypsa_costs_version
-    tech_year = snakemake.wildcards.year
-    csv = f"https://raw.githubusercontent.com/PyPSA/technology-data/{version}/outputs/costs_{tech_year}.csv"
-    save_tech_data = snakemake.output.pypsa_technology_data
-    if not Path(save_tech_data).exists():
-        logger.info(f"Downloading PyPSA-Eur costs from '{csv}'")
-        progress_retrieve(csv, save_tech_data)

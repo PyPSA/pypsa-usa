@@ -167,24 +167,34 @@ rule retrieve_cutout:
     run:
         move(input[0], output[0])
 
-rule retrieve_cost_data:
+rule retrieve_cost_data_eur:
     output:
-        nrel_atb = RESOURCES + "costs/{year}/../nrel_atb.parquet",
-        nrel_atb_transport = RESOURCES + "costs/{year}/../nrel_atb_transport.xlsx",
         pypsa_technology_data = RESOURCES + "costs/{year}/pypsa_eur.csv",
-        ng_electric_power_price = RESOURCES + "costs/{year}/../ng_electric_power_price.csv",
-        ng_industrial_price = RESOURCES + "costs/{year}/../ng_industrial_price.csv",
-        ng_residential_price = RESOURCES + "costs/{year}/../ng_commercial_price.csv",
-        ng_commercial_price = RESOURCES + "costs/{year}/../ng_residential_price.csv",
     params:
-        eia_api_key = config["costs"].get("eia_aip_key", None),
         pypsa_costs_version = config["costs"].get("version", "v0.6.0")
     log:
-        LOGS + "retrieve_cost_data_{year}.log",
+        LOGS + "retrieve_cost_data_eur_{year}.log",
     resources:
         mem_mb=1000,
     script:
-        "scripts/retrieve_cost_data.py"
+        "scripts/retrieve_cost_data_eur.py"
+
+rule retrieve_cost_data_usa:
+    output:
+        nrel_atb = RESOURCES + "costs/nrel_atb.parquet",
+        nrel_atb_transport = RESOURCES + "costs/nrel_atb_transport.xlsx",
+        ng_electric_power_price = RESOURCES + "costs/ng_electric_power_price.csv",
+        ng_industrial_price = RESOURCES + "costs/ng_industrial_price.csv",
+        ng_residential_price = RESOURCES + "costs/ng_commercial_price.csv",
+        ng_commercial_price = RESOURCES + "costs/ng_residential_price.csv",
+    params:
+        eia_api_key = config["costs"].get("eia_aip_key", None),
+    log:
+        LOGS + "retrieve_cost_data_usa.log",
+    resources:
+        mem_mb=1000,
+    script:
+        "scripts/retrieve_cost_data_usa.py"
 
 ################# ----------- Rules to Build Network ---------- #################
 
