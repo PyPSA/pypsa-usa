@@ -373,11 +373,19 @@ def update_marginal_costs(n: pypsa.Network, carrier: str, fuel_costs: pd.DataFra
         for state in gen.state.unique():
             state_fuel_costs[state] = state_fuel_costs.index.month.map(month_to_price_mapper)
         
-    # apply all marginal cost values 
-    for generator, state in zip(gen.index, gen.state):
-        n.generators_t["marginal_cost"][generator] = state_fuel_costs[state] + vom_cost
-        
+    # apply all fuel cost values 
+    dfs = []
+    for state in gen.state.unique():
+        gens_in_state = gen[gen.state == state].index.to_list()
+        dfs.append(pd.DataFrame({gen: state_fuel_costs[state] for gen in gens_in_state}))
+    n.generators_t["marginal_cost"] = pd.concat(dfs, axis=1)
     
+    # apply efficiency of each generator to know fuel burn rate 
+    gen_eff_mapper = n.generators.to_dict()["efficiency"]
+    n.generators_t["marginal_cost"] = n.generators_t["marginal_cost"].apply(lambda x: x / gen_eff_mapper[x.name], axis=0)
+    
+    # apply fixed rate VOM cost     
+    n.generators_t["marginal_cost"] += vom_cost
 
 def update_transmission_costs(n, costs, length_factor=1.0):
     # TODO: line length factor of lines is applied to lines and links.
@@ -1558,7 +1566,7 @@ if __name__ == "__main__":
             n=n, 
             carrier=carrier, 
             fuel_costs=df_fuel_costs, 
-            vom_cost=costs.at[carrier, "VOM"],
+            vom_cost=vom,
             apply_average=False
         )
 
