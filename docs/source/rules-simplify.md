@@ -17,9 +17,3 @@
 ```{eval-rst}  
 .. automodule:: add_extra_components
 ```
-
-(prepare)=
-## Rule `prepare_network`
-```{eval-rst}  
-.. automodule:: prepare_network
-```
