@@ -323,7 +323,14 @@ def update_capital_costs(n: pypsa.Network, carrier: str, multiplier: pd.DataFram
         lambda x: x["capital_cost"] * multiplier.at[x["state"], "Location Variation"], axis=1)
     n.generators.loc[gen.index] = gen
     
-def update_marginal_costs(n: pypsa.Network, carrier: str, fuel_costs: pd.DataFrame, vom_cost: float = 0, apply_average: bool = False):
+def update_marginal_costs(
+    n: pypsa.Network,
+    carrier: str, 
+    fuel_costs: pd.DataFrame, 
+    vom_cost: float = 0, 
+    efficiency: float = None,
+    apply_average: bool = False
+):
     """Applies regional and monthly marginal cost data
     
     Arguments
@@ -335,6 +342,9 @@ def update_marginal_costs(n: pypsa.Network, carrier: str, fuel_costs: pd.DataFra
         EIA fuel cost data
     vom_cost: float = 0
         Additional flat $/MWh cost to add onto the fuel costs 
+    efficiency: float = None
+        Flat efficiency multiplier to apply to all generators. If not supplied,
+        the efficiency is looked up at a generator level from the network 
     apply_average: bool = False
         Apply USA average fuel cost to all regions 
     """
@@ -381,8 +391,11 @@ def update_marginal_costs(n: pypsa.Network, carrier: str, fuel_costs: pd.DataFra
     n.generators_t["marginal_cost"] = pd.concat(dfs, axis=1)
     
     # apply efficiency of each generator to know fuel burn rate 
-    gen_eff_mapper = n.generators.to_dict()["efficiency"]
-    n.generators_t["marginal_cost"] = n.generators_t["marginal_cost"].apply(lambda x: x / gen_eff_mapper[x.name], axis=0)
+    if not efficiency:
+        gen_eff_mapper = n.generators.to_dict()["efficiency"]
+        n.generators_t["marginal_cost"] = n.generators_t["marginal_cost"].apply(lambda x: x / gen_eff_mapper[x.name], axis=0)
+    else:
+        n.generators_t["marginal_cost"] = n.generators_t["marginal_cost"].div(efficiency)
     
     # apply fixed rate VOM cost     
     n.generators_t["marginal_cost"] += vom_cost
@@ -1560,13 +1573,16 @@ if __name__ == "__main__":
         df_fuel_costs = pd.read_csv(fuel_cost_file)
         if carrier == "gas":
             vom = (costs.at["OCGT", "VOM"] + costs.at["CCGT", "VOM"]) / 2
+            eff = (costs.at["OCGT", "efficiency"] + costs.at["CCGT", "efficiency"]) / 2
         else:
             vom = costs.at[carrier, "VOM"]
+            eff = None
         update_marginal_costs(
             n=n, 
             carrier=carrier, 
             fuel_costs=df_fuel_costs, 
             vom_cost=vom,
+            efficiency=eff,
             apply_average=False
         )
 
