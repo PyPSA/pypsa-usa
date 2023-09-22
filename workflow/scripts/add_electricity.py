@@ -1390,7 +1390,7 @@ if __name__ == "__main__":
     
     # fix for ccgt and ocgt techs 
     costs.at["gas","investment_annualized"] = (
-        costs.at["ccgt","investment_annualized"] + costs.at["ocgt","investment_annualized"]
+        costs.at["CCGT","investment_annualized"] + costs.at["OCGT","investment_annualized"]
     ) / 2
 
     update_transmission_costs(n, costs, params.length_factor)
@@ -1597,7 +1597,7 @@ if __name__ == "__main__":
         multiplier_file = snakemake.input[f"gen_cost_mult_{multiplier_data}"]
         df_multiplier = pd.read_csv(multiplier_file)
         df_multiplier = clean_locational_multiplier(df_multiplier)
-        update_capital_costs(n, carrier, costs, df_multiplier)
+        update_capital_costs(n, carrier, costs, df_multiplier, Nyears)
         
     # apply regional/temporal variations to fuel cost data 
     fuel_costs = {"gas":"ng_electric_power_price"}
