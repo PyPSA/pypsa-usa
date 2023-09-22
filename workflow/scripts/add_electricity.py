@@ -1134,11 +1134,18 @@ def attach_ads_renewables(n, plants_df, renewable_carriers, extendable_carriers,
 #     return
 
 
-def prepare_ads_load_data(ads_load_path: str, data_year: int) -> pd.DataFrame:
-    '''
-    Modify ads load data to match the balancing authority names in the network file.
-    '''
-    df_ads = pd.read_csv(ads_load_path)
+def prepare_breakthrough_demand_data(demand_path: str) -> pd.DataFrame:
+    logger.info("Adding Breakthrough Energy Network Demand data from 2016")
+    demand = pd.read_csv(demand_path, index_col=0)
+    demand.columns = demand.columns.astype(int)
+    demand.index = n.snapshots
+    intersection = set(demand.columns).intersection(n.buses.zone_id.unique())
+    demand = demand[list(intersection)]
+    n.buses.rename(columns={'zone_id':'load_dissag'}, inplace=True)
+    return disaggregate_demand_to_buses(n, demand)
+
+def prepare_ads_demand():
+    data_year = 2032
     df_ads.columns = df_ads.columns.str.removeprefix('Load_')
     df_ads.columns = df_ads.columns.str.removesuffix('.dat')
     df_ads.columns = df_ads.columns.str.removesuffix(f'_{data_year}')
@@ -1152,20 +1159,7 @@ def prepare_ads_load_data(ads_load_path: str, data_year: int) -> pd.DataFrame:
     ba_list_map = {'CISC': 'CISO-SCE', 'CISD': 'CISO-SDGE','VEA': 'CISO-VEA','WAUW': 'WAUW_SPP'}
     df_ads.rename(columns=ba_list_map,inplace=True)
     df_ads.set_index('Index',inplace=True)
-    return df_ads
 
-def prepare_breakthrough_demand_data(demand_path: str) -> pd.DataFrame:
-    demand = pd.read_csv(demand_path, index_col=0)
-    demand.columns = demand.columns.astype(int)
-    demand.index = n.snapshots
-
-    intersection = set(demand.columns).intersection(n.buses.zone_id.unique())
-    demand = demand[list(intersection)]
-    n.buses.rename(columns={'zone_id':'load_dissag'}, inplace=True)
-    return disaggregate_demand_to_buses(n, demand)
-
-
-def prepare_ads_demand():
     demand.index = n.snapshots
     n.buses['load_dissag'] = n.buses.balancing_area.replace({'': 'missing_ba'})
     intersection = set(demand.columns).intersection(n.buses.ba_load_data.unique())
@@ -1173,6 +1167,7 @@ def prepare_ads_demand():
     return disaggregate_demand_to_buses(n, demand)
 
 def prepare_eia_demand()
+    logger.info(f'Building Load Data using EIA demand data year {load_year}')
     demand.set_index('timestamp', inplace=True)
     demand.index = pd.to_datetime(demand.index, utc=True)
 
@@ -1219,9 +1214,6 @@ def add_demand_from_file(n:pypsa.Network,
     n.madd("Load", demand_per_bus.columns, bus=demand_per_bus.columns, p_set=demand_per_bus, carrier='AC')
     return n
 
-
-
-
 #########################################
 if __name__ == "__main__":
     if "snakemake" not in globals():
@@ -1230,8 +1222,37 @@ if __name__ == "__main__":
     configure_logging(snakemake)
 
     params = snakemake.params
-
+    configuration = snakemake.config["network_configuration"]
     n = pypsa.Network(snakemake.input.base_network)
+
+    #Todo combine this with the renewable data if statements.
+    #This is the first point in the workflow where snapshots are added to the network.
+
+    if configuration  == "pypsa-usa":
+        snapshot_config = snakemake.config['snapshots']
+        load_year = pd.to_datetime(snapshot_config['start']).year
+        fn_demand = snakemake.input['eia'][load_year%2017]
+        n.set_snapshots(pd.date_range(freq="h", 
+                                        start=snapshot_config['start'],
+                                        end=snapshot_config['end'],
+                                        inclusive=snapshot_config['inclusive'])
+                        )
+    elif configuration  == "ads2032":
+        load_year = 2032
+        fn_demand = f'data/WECC_ADS/processed/load_{load_year}.csv'
+        n.set_snapshots(pd.date_range(freq="h", 
+                                      start=f"{load_year}-01-01",
+                                      end=f"{load_year+1}-01-01",
+                                      inclusive="left")
+                        )
+    elif configuration  == "breakthrough":
+        n.set_snapshots(
+            pd.date_range(freq="h", start="2016-01-01", end="2017-01-01", inclusive="left")
+        )
+        fn_demand = snakemake.input["demand_breakthrough_2016"]
+
+    add_demand_from_file(n, fn_demand, configuration)
+    ##########
 
     Nyears = n.snapshot_weightings.objective.sum() / 8760.0
 
@@ -1251,7 +1272,7 @@ if __name__ == "__main__":
         k: v for k, v in snakemake.input.items() if k.startswith("conventional_")
     }
 
-    if snakemake.config["network_configuration"] == "pypsa-usa": 
+    if configuration == "pypsa-usa": 
         costs = costs.rename(index={"onwind": "wind",
                                      #"OCGT": "ng"
                                      }) #changing cost data to match the plant data #TODO: #10 change this so that fuel types and plant types match the pypsa naming scheme.
@@ -1326,7 +1347,7 @@ if __name__ == "__main__":
             extendable_carriers,
             costs,
         )
-    elif snakemake.config["network_configuration"] == "ads2032": 
+    elif configuration == "ads2032": 
         
         # get mappers 
         ads_tech_mapper = constants.ADS_TECH_MAPPER
@@ -1386,7 +1407,7 @@ if __name__ == "__main__":
         
         update_p_nom_max(n)
 
-    elif snakemake.config["network_configuration"] == "breakthrough":
+    elif configuration == "breakthrough":
         costs = costs.rename(index={"onwind": "wind", "OCGT": "ng"}) #changing cost data to match the breakthrough plant data #TODO: #10 change this so that breakthrough fuel types and plant types match the pypsa naming scheme.
         conventional_carriers = list(
             set(snakemake.config['electricity']["conventional_carriers"]).intersection(
@@ -1457,118 +1478,3 @@ if __name__ == "__main__":
     output_folder = os.path.dirname(snakemake.output[0]) + '/base_network'
     export_network_for_gis_mapping(n, output_folder)
 
-#### Old ADD LOAD DATA MAIN CALLS
-
-    if snakemake.config['network_configuration']  == "pypsa-usa":
-        import pdb; pdb.set_trace()
-        snapshot_config = snakemake.config['snapshots']
-        load_year = pd.to_datetime(snapshot_config['start']).year
-        logger.info(f'Building Load Data using EIA demand data year {load_year}')
-        eia_demand = pd.read_csv(snakemake.input['eia'][load_year%2017])
-        n.set_snapshots(pd.date_range(freq="h", 
-                                      start=snapshot_config['start'],
-                                      end=snapshot_config['end'],
-                                      inclusive=snapshot_config['inclusive'])
-                        )
-        n = add_eia_demand(n, eia_demand)
-    elif snakemake.config['network_configuration']  == "ads2032":
-        load_year = 2032
-        demand = prepare_ads_load_data(f'data/WECC_ADS/processed/load_{load_year}.csv',load_year)
-        n.set_snapshots(pd.date_range(freq="h", 
-                                      start=f"{load_year}-01-01",
-                                      end=f"{load_year+1}-01-01",
-                                      inclusive="left")
-                        )
-        n = add_ads_demand(n,demand)
-        n.export_to_netcdf(snakemake.output.network)
-    elif snakemake.config['network_configuration']  == "breakthrough":
-        logger.info("Adding Breakthrough Energy Network Demand data from 2016")
-        n.set_snapshots(
-            pd.date_range(freq="h", start="2016-01-01", end="2017-01-01", inclusive="left")
-        )
-        n = add_breakthrough_demand_from_file(n, snakemake.input["demand_breakthrough_2016"])
-    else:
-        raise ValueError(f"Unknown network_configuration: {snakemake.config['network_configuration']}")
-
-
-
-
-
-
-
-
-
-
-# old code to delete
-
-# def add_breakthrough_demand_from_file(n, fn_demand):
-
-#     """
-#     Zone power demand is disaggregated to buses proportional to Pd,
-#     where Pd is the real power demand (MW).
-#     """
-
-#     demand = pd.read_csv(fn_demand, index_col=0)
-#     demand.columns = demand.columns.astype(int)
-#     demand.index = n.snapshots
-
-#     intersection = set(demand.columns).intersection(n.buses.zone_id.unique())
-#     demand = demand[list(intersection)]
-
-#     demand_per_bus_pu = (n.buses.set_index("zone_id").Pd / n.buses.groupby("zone_id").sum().Pd)
-#     demand_per_bus = demand_per_bus_pu.multiply(demand)
-#     demand_per_bus.columns = n.buses.index
-
-#     n.madd( "Load", demand_per_bus.columns, bus=demand_per_bus.columns, p_set=demand_per_bus, carrier='AC')
-#     return n
-
-# def add_ads_demand(n, demand):
-#     """
-#     Zone power demand is disaggregated to buses proportional to Pd,
-#     where Pd is the real power demand (MW).
-#     """
-#     demand.index = n.snapshots 
-#     # n.buses['ba_load_data'] = n.buses.balancing_area.replace({'CISO-PGAE': 'CISO', 'CISO-SCE': 'CISO', 'CISO-VEA': 'CISO', 'CISO-SDGE': 'CISO'})
-#     n.buses['ba_load_data'] = n.buses.balancing_area.replace({'': 'missing_ba'})
-
-#     intersection = set(demand.columns).intersection(n.buses.ba_load_data.unique())
-#     demand = demand[list(intersection)]
-
-#     demand_per_bus_pu = (n.buses.set_index("ba_load_data").Pd / n.buses.groupby("ba_load_data").sum().Pd)
-#     demand_per_bus = demand_per_bus_pu.multiply(demand)
-#     demand_per_bus.fillna(0,inplace=True)
-#     demand_per_bus.columns = n.buses.index
-
-#     n.madd( "Load", demand_per_bus.columns, bus=demand_per_bus.columns, p_set=demand_per_bus, carrier='AC') 
-#     return n
-
-# def add_eia_demand(n, demand):
-#     """
-#     Zone power demand is disaggregated to buses proportional to Pd,
-#     where Pd is the real power demand (MW).
-#     """
-#     demand.set_index('timestamp', inplace=True)
-#     demand.index = pd.to_datetime(demand.index,utc=True)
-#     #check to see if snapshots and demand index match
-
-#     if len(demand.index) != 8760:
-#         demand = demand.iloc[3:, :]  #First 3 rows are not in snapshots
-
-#     demand = demand.loc[n.snapshots]
-
-#     demand.index = n.snapshots 
-
-#     demand['Arizona'] = demand.pop('SRP') + demand.pop('AZPS')
-#     n.buses['ba_load_data'] = n.buses.balancing_area.replace({'CISO-PGAE': 'CISO', 'CISO-SCE': 'CISO', 'CISO-VEA': 'CISO', 'CISO-SDGE': 'CISO'})
-#     n.buses['ba_load_data'] = n.buses.ba_load_data.replace({'': 'missing_ba'})
-
-#     intersection = set(demand.columns).intersection(n.buses.ba_load_data.unique())
-#     demand = demand[list(intersection)]
-
-#     demand_per_bus_pu = (n.buses.set_index("ba_load_data").Pd / n.buses.groupby("ba_load_data").sum().Pd)
-#     demand_per_bus = demand_per_bus_pu.multiply(demand)
-#     demand_per_bus.fillna(0,inplace=True)
-#     demand_per_bus.columns = n.buses.index
-
-#     n.madd( "Load", demand_per_bus.columns, bus=demand_per_bus.columns, p_set=demand_per_bus, carrier='AC') 
-#     return n
