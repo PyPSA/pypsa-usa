@@ -1,0 +1,4 @@
+
+[submodule "workflow/scripts/subworkflows/pypsa-eur"]
+	path = workflow/scripts/subworkflows/pypsa-eur
+	url = git@github.com:PyPSA/pypsa-eur.git
