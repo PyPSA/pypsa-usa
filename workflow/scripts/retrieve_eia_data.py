@@ -113,7 +113,6 @@ def prepare_historical_load_data(df, year):
         filtered_df.iloc[:,0] = pd.to_datetime(df['Unnamed: 0'])
     df = filtered_df.set_index('timestamp')
     df = df.loc[f'{year}-01-01':f'{year}-12-31']
-
     return df
 
 if __name__ == "__main__":
