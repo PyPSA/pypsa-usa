@@ -268,6 +268,16 @@ def load_costs(
 
     return costs
 
+def add_annualized_capital_costs(costs: pd.DataFrame, Nyears: float = 1.0) -> pd.DataFrame:
+    """Adds column to calculate annualized capital costs only"""
+
+    costs["investment_annualized"] = (
+        calculate_annuity(costs["lifetime"], costs["discount rate"])
+        * costs["investment"]
+        * Nyears
+    )
+    return costs
+
 def load_powerplants(ppl_fn):
     carrier_dict = {
         "ocgt": "OCGT",
@@ -304,7 +314,7 @@ def clean_locational_multiplier(df: pd.DataFrame):
     df = df[["State", "Location Variation"]]
     return df.groupby("State").mean()
 
-def update_capital_costs(n: pypsa.Network, carrier: str, multiplier: pd.DataFrame):
+def update_capital_costs(n: pypsa.Network, carrier: str, costs: pd.DataFrame, multiplier: pd.DataFrame, Nyears: float = 1.0):
     """Applies regional multipliers to capital cost data"""
     
     # map generators to states
@@ -319,8 +329,22 @@ def update_capital_costs(n: pypsa.Network, carrier: str, multiplier: pd.DataFram
         logger.warning(f"CAPEX cost multiplier not applied to {missed.state.unique()}")
     
     # apply multiplier 
-    gen["capital_cost"] = gen.apply(
-        lambda x: x["capital_cost"] * multiplier.at[x["state"], "Location Variation"], axis=1)
+    
+    # commented code is if applying multiplier to (capex + fom)
+    # gen["capital_cost"] = gen.apply(
+    #     lambda x: x["capital_cost"] * multiplier.at[x["state"], "Location Variation"], axis=1)
+    
+    # apply multiplier to annualized capital investment cost 
+    gen["investment"] = gen.apply(
+        lambda x: costs.at[carrier,"investment_annualized"] * multiplier.at[x["state"], "Location Variation"], axis=1)
+    
+    # get fixed costs based on overnight capital costs with multiplier applied 
+    gen["fom"] = gen["investment"] * (costs.at[carrier, "FOM"] / 100.0) * Nyears
+    
+    # find final annualized capital cost
+    gen["capital_cost"] = gen["investment"] + gen["fom"]
+    
+    # overwrite network generator dataframe with updated values 
     n.generators.loc[gen.index] = gen
     
 def update_marginal_costs(
@@ -1359,6 +1383,15 @@ if __name__ == "__main__":
         params.electricity["max_hours"],
         Nyears,
     )
+    
+    # calculates annulaized capital costs seperate from the fixed costs to be
+    # able to apply regional mulitpliers to only capex 
+    costs = add_annualized_capital_costs(costs, Nyears)
+    
+    # fix for ccgt and ocgt techs 
+    costs.at["gas","investment_annualized"] = (
+        costs.at["ccgt","investment_annualized"] + costs.at["ocgt","investment_annualized"]
+    ) / 2
 
     update_transmission_costs(n, costs, params.length_factor)
 
@@ -1564,7 +1597,7 @@ if __name__ == "__main__":
         multiplier_file = snakemake.input[f"gen_cost_mult_{multiplier_data}"]
         df_multiplier = pd.read_csv(multiplier_file)
         df_multiplier = clean_locational_multiplier(df_multiplier)
-        update_capital_costs(n, carrier, df_multiplier)
+        update_capital_costs(n, carrier, costs, df_multiplier)
         
     # apply regional/temporal variations to fuel cost data 
     fuel_costs = {"gas":"ng_electric_power_price"}
