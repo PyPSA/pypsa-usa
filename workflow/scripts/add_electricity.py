@@ -266,38 +266,6 @@ def shapes_to_shapes(orig, dest):
     return transfer
 
 
-def update_transmission_costs(n, costs, length_factor=1.0):
-    # TODO: line length factor of lines is applied to lines and links.
-    # Separate the function to distinguish 
-
-    n.lines["capital_cost"] = (
-        n.lines["length"] * length_factor * costs.at["HVAC overhead", "capital_cost"]
-    )
-
-    if n.links.empty:
-        return
-
-    dc_b = n.links.carrier == "DC"
-
-    # If there are no dc links, then the 'underwater_fraction' column
-    # may be missing. Therefore we have to return here.
-    if n.links.loc[dc_b].empty:
-        return
-
-    costs = (
-        n.links.loc[dc_b, "length"]
-        * length_factor
-        * (
-            (1.0 - n.links.loc[dc_b, "underwater_fraction"])
-            * costs.at["HVDC overhead", "capital_cost"]
-            + n.links.loc[dc_b, "underwater_fraction"]
-            * costs.at["HVDC submarine", "capital_cost"]
-        )
-        + costs.at["HVDC inverter pair", "capital_cost"]
-    )
-    n.links.loc[dc_b, "capital_cost"] = costs
-
-
 def attach_wind_and_solar(
     n, costs, input_profiles, carriers, extendable_carriers, line_length_factor=1
 ):
@@ -1134,31 +1102,68 @@ def attach_ads_renewables(n, plants_df, renewable_carriers, extendable_carriers,
 #     return
 
 
-def prepare_breakthrough_demand_data(demand_path: str) -> pd.DataFrame:
+
+def update_transmission_costs(n: pypsa.Network, costs, length_factor=1.0):
+    # TODO: line length factor of lines is applied to lines and links.
+    # Separate the function to distinguish 
+
+    n.lines["capital_cost"] = (
+        n.lines["length"] * length_factor * costs.at["HVAC overhead", "capital_cost"]
+    )
+
+    if n.links.empty:
+        return
+
+    dc_b = n.links.carrier == "DC"
+
+    # If there are no dc links, then the 'underwater_fraction' column
+    # may be missing. Therefore we have to return here.
+    if n.links.loc[dc_b].empty:
+        return
+
+    costs = (
+        n.links.loc[dc_b, "length"]
+        * length_factor
+        * (
+            (1.0 - n.links.loc[dc_b, "underwater_fraction"])
+            * costs.at["HVDC overhead", "capital_cost"]
+            + n.links.loc[dc_b, "underwater_fraction"]
+            * costs.at["HVDC submarine", "capital_cost"]
+        )
+        + costs.at["HVDC inverter pair", "capital_cost"]
+    )
+    n.links.loc[dc_b, "capital_cost"] = costs
+
+
+def prepare_breakthrough_demand_data(n: pypsa.Network, 
+                                     demand_path: str) -> pd.DataFrame:
     logger.info("Adding Breakthrough Energy Network Demand data from 2016")
     demand = pd.read_csv(demand_path, index_col=0)
     demand.columns = demand.columns.astype(int)
     demand.index = n.snapshots
     intersection = set(demand.columns).intersection(n.buses.zone_id.unique())
     demand = demand[list(intersection)]
-    n.buses.rename(columns={'zone_id':'load_dissag'}, inplace=True)
+    n.buses.rename(columns={'zone_id': 'load_dissag'}, inplace=True)
     return disaggregate_demand_to_buses(n, demand)
 
-def prepare_ads_demand():
+
+def prepare_ads_demand(n: pypsa.Network, 
+                       demand_path: str) -> pd.DataFrame:
+    demand = pd.read_csv(demand_path, index_col=0)
     data_year = 2032
-    df_ads.columns = df_ads.columns.str.removeprefix('Load_')
-    df_ads.columns = df_ads.columns.str.removesuffix('.dat')
-    df_ads.columns = df_ads.columns.str.removesuffix(f'_{data_year}')
-    df_ads.columns = df_ads.columns.str.removesuffix(f'_[18].dat: {data_year}')
-    df_ads['CISO-PGAE'] = df_ads.pop('CIPV') + df_ads.pop('CIPB') + df_ads.pop('SPPC') #TODO: #37 Create new Zone for SPPC
-    df_ads['BPAT'] = df_ads.pop('BPAT') + df_ads.pop('TPWR') + df_ads.pop('SCL')
-    df_ads['IPCO'] = df_ads.pop('IPFE') + df_ads.pop('IPMV') + df_ads.pop('IPTV')
-    df_ads['PACW'] = df_ads.pop('PAID') + df_ads.pop('PAUT') + df_ads.pop('PAWY')
-    df_ads['Arizona'] = df_ads.pop('SRP') + df_ads.pop('AZPS') 
-    df_ads.drop(columns=['Unnamed: 44', 'TH_Malin', 'TH_Mead', 'TH_PV'],inplace=True)
+    demand.columns = demand.columns.str.removeprefix('Load_')
+    demand.columns = demand.columns.str.removesuffix('.dat')
+    demand.columns = demand.columns.str.removesuffix(f'_{data_year}')
+    demand.columns = demand.columns.str.removesuffix(f'_[18].dat: {data_year}')
+    demand['CISO-PGAE'] = demand.pop('CIPV') + demand.pop('CIPB') + demand.pop('SPPC') #TODO: #37 Create new Zone for SPPC
+    demand['BPAT'] = demand.pop('BPAT') + demand.pop('TPWR') + demand.pop('SCL')
+    demand['IPCO'] = demand.pop('IPFE') + demand.pop('IPMV') + demand.pop('IPTV')
+    demand['PACW'] = demand.pop('PAID') + demand.pop('PAUT') + demand.pop('PAWY')
+    demand['Arizona'] = demand.pop('SRP') + demand.pop('AZPS') 
+    demand.drop(columns=['Unnamed: 44', 'TH_Malin', 'TH_Mead', 'TH_PV'], inplace=True)
     ba_list_map = {'CISC': 'CISO-SCE', 'CISD': 'CISO-SDGE','VEA': 'CISO-VEA','WAUW': 'WAUW_SPP'}
-    df_ads.rename(columns=ba_list_map,inplace=True)
-    df_ads.set_index('Index',inplace=True)
+    demand.rename(columns=ba_list_map,inplace=True)
+    demand.set_index('Index',inplace=True)
 
     demand.index = n.snapshots
     n.buses['load_dissag'] = n.buses.balancing_area.replace({'': 'missing_ba'})
@@ -1166,26 +1171,30 @@ def prepare_ads_demand():
     demand = demand[list(intersection)]
     return disaggregate_demand_to_buses(n, demand)
 
-def prepare_eia_demand()
-    logger.info(f'Building Load Data using EIA demand data year {load_year}')
-    demand.set_index('timestamp', inplace=True)
-    demand.index = pd.to_datetime(demand.index, utc=True)
 
-    if len(demand.index) != 8760:
-        demand = demand.iloc[3:, :]  # First 3 rows are not in snapshots
-
-    demand = demand.loc[n.snapshots]
+def prepare_eia_demand(n: pypsa.Network, demand_path: str) -> pd.DataFrame:
+    logger.info('Building Load Data using EIA demand')
+    demand = pd.read_csv(demand_path, index_col=0)
+    demand.index = pd.to_datetime(demand.index)
+    demand = demand.fillna(method='backfill') #tempory solution until we switch back to gridEmission for the cleaned Data
+    demand = demand.loc[n.snapshots.intersection(demand.index)] # Only keep demand data for which we want the snapshots of.
     demand.index = n.snapshots
+
     demand['Arizona'] = demand.pop('SRP') + demand.pop('AZPS')
-    n.buses['load_dissag'] = n.buses.balancing_area.replace({'CISO-PGAE': 'CISO', 'CISO-SCE': 'CISO', 'CISO-VEA': 'CISO', 'CISO-SDGE': 'CISO'})
+    n.buses['load_dissag'] = n.buses.balancing_area.replace({'CISO-PGAE': 'CISO', 
+                                                             'CISO-SCE': 'CISO', 
+                                                             'CISO-VEA': 'CISO', 
+                                                             'CISO-SDGE': 'CISO'})
     n.buses['load_dissag'] = n.buses.load_dissag.replace({'': 'missing_ba'})
 
-    intersection = set(demand.columns).intersection(n.buses.ba_load_data.unique())
+    intersection = set(demand.columns).intersection(n.buses.load_dissag.unique())
     demand = demand[list(intersection)]
     return disaggregate_demand_to_buses(n, demand)
 
 
-def disaggregate_demand_to_buses(n, demand):
+
+def disaggregate_demand_to_buses(n: pypsa.Network, 
+                                 demand: pd.DataFrame) -> pd.DataFrame:
     """
     Zone power demand is disaggregated to buses proportional to Pd,
     where Pd is the real power demand (MW).
@@ -1194,25 +1203,36 @@ def disaggregate_demand_to_buses(n, demand):
     demand_per_bus = demand_per_bus_pu.multiply(demand)
     demand_per_bus.fillna(0, inplace=True)
     demand_per_bus.columns = n.buses.index
-    return n
+    return demand_per_bus
 
-def add_demand_from_file(n:pypsa.Network, 
-                         fn_demand:str, 
-                         demand_type:str)->pypsa.Network:
+
+def add_demand_from_file(n: pypsa.Network, 
+                         fn_demand: str, 
+                         demand_type: str):
     """
     Add demand to network from specified configuration setting. Returns network with demand added.
     """
-
     if demand_type == "breakthrough":
-        demand_per_bus = prepare_breakthrough_demand_data(fn_demand)
+        demand_per_bus = prepare_breakthrough_demand_data(n, fn_demand)
     elif demand_type == "ads":
-        demand_per_bus = prepare_ads_demand(fn_demand)
-    elif demand_type == "eia":
-        demand_per_bus = prepare_eia_demand(fn_demand)
+        demand_per_bus = prepare_ads_demand(n, fn_demand)
+    elif demand_type == "pypsa-usa":
+        demand_per_bus = prepare_eia_demand(n, fn_demand)
     else:
-        raise ValueError("Invalid demand_type. Supported values are 'breakthrough', 'ads', and 'eia'.")
-    n.madd("Load", demand_per_bus.columns, bus=demand_per_bus.columns, p_set=demand_per_bus, carrier='AC')
-    return n
+        raise ValueError("Invalid demand_type. Supported values are 'breakthrough', 'ads', and 'pypsa-usa'.")
+    n.madd("Load", demand_per_bus.columns, bus=demand_per_bus.columns,
+           p_set=demand_per_bus, carrier='AC')
+
+
+def test_snapshot_year(sns_year: int, load_year: int, configuration: str):
+    if sns_year != load_year:
+        raise ValueError(f"""Snapshot start year {sns_year} does not match load year {load_year}
+                          required for {configuration} configuration.
+                          Please update the snapshot start year in the config file. \n
+                            ads requires 2032 \n
+                            breakthrough requires 2016 \n
+                            \n
+                          """)
 
 #########################################
 if __name__ == "__main__":
@@ -1224,34 +1244,35 @@ if __name__ == "__main__":
     params = snakemake.params
     configuration = snakemake.config["network_configuration"]
     n = pypsa.Network(snakemake.input.base_network)
-
-    #Todo combine this with the renewable data if statements.
-    #This is the first point in the workflow where snapshots are added to the network.
+    n.name = configuration
+    
+    snapshot_config = snakemake.config['snapshots']
+    sns_start = pd.to_datetime(snapshot_config['start'] + ' 07:00:00') 
+    # Shifting to 7am UTC since this is the Midnight PST time. 
+    # Work around to deal with the fact that the load data is in UTC and n.snapshots is in UTC... but annual EIA file doesnt include first 7 UTC hours of the year.... 
+    # TODO: Need to combine all EIA data into one file then filter based on n.snapshots
+    sns_end = pd.to_datetime(snapshot_config['end'] + ' 00:00:00')
+    sns_inclusive = snapshot_config['inclusive']
 
     if configuration  == "pypsa-usa":
-        snapshot_config = snakemake.config['snapshots']
-        load_year = pd.to_datetime(snapshot_config['start']).year
-        fn_demand = snakemake.input['eia'][load_year%2017]
-        n.set_snapshots(pd.date_range(freq="h", 
-                                        start=snapshot_config['start'],
-                                        end=snapshot_config['end'],
-                                        inclusive=snapshot_config['inclusive'])
-                        )
+        fn_demand = snakemake.input['eia'][sns_start.year%2017]
     elif configuration  == "ads2032":
-        load_year = 2032
-        fn_demand = f'data/WECC_ADS/processed/load_{load_year}.csv'
-        n.set_snapshots(pd.date_range(freq="h", 
-                                      start=f"{load_year}-01-01",
-                                      end=f"{load_year+1}-01-01",
-                                      inclusive="left")
-                        )
+        ads_year = 2032
+        fn_demand = f'data/WECC_ADS/processed/load_{ads_year}.csv'
+        test_snapshot_year(sns_start.year, ads_year, configuration)
     elif configuration  == "breakthrough":
-        n.set_snapshots(
-            pd.date_range(freq="h", start="2016-01-01", end="2017-01-01", inclusive="left")
-        )
+        test_snapshot_year(sns_start.year, 2016, configuration)
         fn_demand = snakemake.input["demand_breakthrough_2016"]
-
-    add_demand_from_file(n, fn_demand, configuration)
+    else:
+        raise ValueError("Invalid demand_type. Supported values are 'breakthrough', 'ads', and 'eia'.")
+    
+    n.set_snapshots(pd.date_range(freq="h", 
+                            start= sns_start,
+                            end= sns_end,
+                            inclusive= sns_inclusive)
+                    )
+    
+    add_demand_from_file(n, fn_demand, configuration) #can now move this down lower in workflow
     ##########
 
     Nyears = n.snapshot_weightings.objective.sum() / 8760.0
