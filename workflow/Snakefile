@@ -264,7 +264,7 @@ rule build_bus_regions:
 
 rule build_cost_data:
     input:
-        nrel_atb = RESOURCES + "costs/{year}/../nrel_atb.parquet",
+        nrel_atb = RESOURCES + "costs/nrel_atb.parquet",
         pypsa_technology_data = RESOURCES + "costs/{year}/pypsa_eur.csv",
     output:
         tech_costs = DATA + "costs_{year}.csv",
