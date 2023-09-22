@@ -243,22 +243,6 @@ rule build_bus_regions:
     script:
         "scripts/build_bus_regions.py"
 
-rule build_load_data:
-    input:
-        network=RESOURCES + "{interconnect}/elec_base_network.nc",
-        demand_breakthrough_2016=DATA + "breakthrough_network/base_grid/demand.csv",
-        ads_2032 = DATA + "WECC_ADS/downloads/2032/Public Data/Hourly Profiles in CSV format",
-        ads_2030 = DATA + "WECC_ADS/downloads/2030/WECC 2030 ADS PCM 2020-12-16 (V1.5) Public Data/CSV Shape Files",
-        eia = expand(RESOURCES + "eia/{file}", file=DATAFILES_DMD),
-        tech_costs="repo_data/pypsa_eur_costs.csv",
-    output:
-        network=RESOURCES + "{interconnect}/elec_base_network_l.nc",
-    log:
-        "logs/build_load_data/{interconnect}.log",
-    script:
-        "scripts/build_load_data.py"
-
-        
 if config["enable"].get("build_cutout", False):
     rule build_cutout:
         input:
@@ -362,7 +346,7 @@ rule add_electricity:
             for attr, fn in d.items()
             if str(fn).startswith("data/")
         },
-        base_network=RESOURCES + "{interconnect}/elec_base_network_l.nc",
+        base_network=RESOURCES + "{interconnect}/elec_base_network.nc",
         tech_costs="repo_data/pypsa_eur_costs.csv",
         regions=RESOURCES + "{interconnect}/regions_onshore.geojson",
         plants_eia="repo_data/eia_plants_wecc.csv",
@@ -374,6 +358,10 @@ rule add_electricity:
         solar="data/breakthrough_network/base_grid/solar.csv",
         ads_renewables = "data/WECC_ADS/processed/",
         bus2sub="data/breakthrough_network/base_grid/{interconnect}/bus2sub.csv",
+        demand_breakthrough_2016=DATA + "breakthrough_network/base_grid/demand.csv",
+        ads_2032 = DATA + "WECC_ADS/downloads/2032/Public Data/Hourly Profiles in CSV format",
+        ads_2030 = DATA + "WECC_ADS/downloads/2030/WECC 2030 ADS PCM 2020-12-16 (V1.5) Public Data/CSV Shape Files",
+        eia = expand(RESOURCES + "eia/{file}", file=DATAFILES_DMD),
     output:
         RESOURCES + "{interconnect}/elec_base_network_l_pp.nc",
     log:

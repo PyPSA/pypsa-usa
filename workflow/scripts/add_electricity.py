@@ -42,58 +42,30 @@ Relevant Settings
 Inputs
 ------
 
-- ``resources/costs.csv``: The database of cost assumptions for all included technologies for specific years from various sources; e.g. discount rate, lifetime, investment (CAPEX), fixed operation and maintenance (FOM), variable operation and maintenance (VOM), fuel costs, efficiency, carbon-dioxide intensity.
-- ``data/bundle/hydro_capacities.csv``: Hydropower plant store/discharge power capacities, energy storage capacity, and average hourly inflow by country.
-
-    .. image:: img/hydrocapacities.png
-        :scale: 34 %
-
-- ``data/geth2015_hydro_capacities.csv``: alternative to capacities above; not currently used!
-- ``resources/load.csv`` Hourly per-country load profiles.
-- ``resources/regions_onshore.geojson``: confer :ref:`busregions`
-- ``resources/nuts3_shapes.geojson``: confer :ref:`shapes`
-- ``resources/powerplants.csv``: confer :ref:`powerplants`
-- ``resources/profile_{}.nc``: all technologies in ``config["renewables"].keys()``, confer :ref:`renewableprofiles`.
-- ``networks/base.nc``: confer :ref:`base`
 
 Outputs
 -------
 
-- ``networks/elec.nc``:
-
-    .. image:: img/elec.png
-            :scale: 33 %
 
 Description
 -----------
 
-The rule :mod:`add_electricity` ties all the different data inputs from the preceding rules together into a detailed PyPSA network that is stored in ``networks/elec.nc``. It includes:
 
-- today's transmission topology and transfer capacities (optionally including lines which are under construction according to the config settings ``lines: under_construction`` and ``links: under_construction``),
-- today's thermal and hydro power generation capacities (for the technologies listed in the config setting ``electricity: conventional_carriers``), and
-- today's load time-series (upsampled in a top-down approach according to population and gross domestic product)
 
-It further adds extendable ``generators`` with **zero** capacity for
-
-- photovoltaic, onshore and AC- as well as DC-connected offshore wind installations with today's locational, hourly wind and solar capacity factors (but **no** current capacities),
-- additional open- and combined-cycle gas turbines (if ``OCGT`` and/or ``CCGT`` is listed in the config setting ``electricity: extendable_carriers``)
 """
 
 import logging
 from itertools import product
-import geopandas as gpd
 import numpy as np
 import pandas as pd
 import os
 import pypsa
-import scipy.sparse as sparse
+from scipy import sparse
 import xarray as xr
 from _helpers import configure_logging, update_p_nom_max, export_network_for_gis_mapping
 import constants
 from typing import Dict
-
 from shapely.prepared import prep
-import pdb
 
 idx = pd.IndexSlice
 
@@ -101,6 +73,9 @@ logger = logging.getLogger(__name__)
 
 
 def normed(s):
+    """
+    Normalize a pandas.Series to sum to 1.
+    """
     return s / s.sum()
 
 
@@ -626,99 +601,6 @@ def attach_hydro(n, costs, ppl, profile_hydro, hydro_capacities, carriers, **par
             inflow=inflow_t.loc[:, hydro.index],
         )
 
-def attach_extendable_generators(n, costs, ppl, carriers):
-    logger.warning(
-        "The function `attach_extendable_generators` is deprecated in v0.5.0."
-    )
-    add_missing_carriers(n, carriers)
-    add_co2_emissions(n, costs, carriers)
-
-    for tech in carriers:
-        if tech.startswith("OCGT"):
-            ocgt = (
-                ppl.query("carrier in ['OCGT', 'CCGT']")
-                .groupby("bus", as_index=False)
-                .first()
-            )
-            n.madd(
-                "Generator",
-                ocgt.index,
-                suffix=" OCGT",
-                bus=ocgt["bus"],
-                carrier=tech,
-                p_nom_extendable=True,
-                p_nom=0.0,
-                capital_cost=costs.at["OCGT", "capital_cost"],
-                marginal_cost=costs.at["OCGT", "marginal_cost"],
-                efficiency=costs.at["OCGT", "efficiency"],
-            )
-
-        elif tech.startswith("CCGT"):
-            ccgt = (
-                ppl.query("carrier in ['OCGT', 'CCGT']")
-                .groupby("bus", as_index=False)
-                .first()
-            )
-            n.madd(
-                "Generator",
-                ccgt.index,
-                suffix=" CCGT",
-                bus=ccgt["bus"],
-                carrier=tech,
-                p_nom_extendable=True,
-                p_nom=0.0,
-                capital_cost=costs.at["CCGT", "capital_cost"],
-                marginal_cost=costs.at["CCGT", "marginal_cost"],
-                efficiency=costs.at["CCGT", "efficiency"],
-            )
-
-        elif tech.startswith("nuclear"):
-            nuclear = (
-                ppl.query("carrier == 'nuclear'").groupby("bus", as_index=False).first()
-            )
-            n.madd(
-                "Generator",
-                nuclear.index,
-                suffix=" nuclear",
-                bus=nuclear["bus"],
-                carrier=tech,
-                p_nom_extendable=True,
-                p_nom=0.0,
-                capital_cost=costs.at["nuclear", "capital_cost"],
-                marginal_cost=costs.at["nuclear", "marginal_cost"],
-                efficiency=costs.at["nuclear", "efficiency"],
-            )
-
-        else:
-            raise NotImplementedError(
-                "Adding extendable generators for carrier "
-                "'{tech}' is not implemented, yet. "
-                "Only OCGT, CCGT and nuclear are allowed at the moment."
-            )
-
-def attach_OPSD_renewables(n, tech_map):
-    tech_string = ", ".join(sum(tech_map.values(), []))
-    logger.info(f"Using OPSD renewable capacities for carriers {tech_string}.")
-
-    df = pm.data.OPSD_VRE().powerplant.convert_country_to_alpha2()
-    technology_b = ~df.Technology.isin(["Onshore", "Offshore"])
-    df["Fueltype"] = df.Fueltype.where(technology_b, df.Technology).replace(
-        {"Solar": "PV"}
-    )
-    df = df.query("Fueltype in @tech_map").powerplant.convert_country_to_alpha2()
-
-    for fueltype, carriers in tech_map.items():
-        gens = n.generators[lambda df: df.carrier.isin(carriers)]
-        buses = n.buses.loc[gens.bus.unique()]
-        gens_per_bus = gens.groupby("bus").p_nom.count()
-
-        caps = map_country_bus(df.query("Fueltype == @fueltype and lat == lat"), buses)
-        caps = caps.groupby(["bus"]).Capacity.sum()
-        caps = caps / gens_per_bus.reindex(caps.index, fill_value=1)
-
-        n.generators.p_nom.update(gens.bus.map(caps).dropna())
-        n.generators.p_nom_min.update(gens.bus.map(caps).dropna())
-
 def attach_breakthrough_renewable_capacities_to_atlite(n, all_be_plants, renewable_carriers):
     plants = pd.read_csv(all_be_plants, dtype={"bus_id": str}, index_col=0).query(
         "bus_id in @n.buses.index"
@@ -992,7 +874,7 @@ def attach_eia_batteries(n, plants_df,extendable_carriers, costs):
     # logger.info(f"Dropping {len(plants_filt) - len(plants_filt.dropna(subset=['energy_capacity_mwh']))} Batteries without energy capacity.")
 
     n.madd(
-        "Store",
+        "StorageUnit",
         plants_filt.index,
         bus=plants_filt.bus_assignment,
         p_nom=plants_filt.capacity_mw,
@@ -1000,8 +882,10 @@ def attach_eia_batteries(n, plants_df,extendable_carriers, costs):
         max_hours = plants_filt.energy_capacity_mwh / plants_filt.capacity_mw,
         build_year=plants_filt.operating_year,
         carrier=plants_filt.carrier,
-        weight=1.0,
-        efficiency=costs.at['battery', "efficiency"],
+        efficiency_store= 1.0,
+        efficiency_dispatch=1.0, #TODO: Add efficiency_dispatch to config file
+        cyclic_state_of_charge=True,
+        capital_cost=costs.at["battery", "capital_cost"],
     )
 
     return n
@@ -1063,7 +947,6 @@ def load_powerplants_ads(
     
     return plants
 
-
 def assign_ads_missing_lat_lon(plants,n):
     import random
     plants_unmatched = plants[plants.latitude.isna() | plants.longitude.isna()]
@@ -1090,7 +973,6 @@ def assign_ads_missing_lat_lon(plants,n):
     plants = plants.dropna(subset=['latitude','longitude']) #drop any plants that still don't have lat/lon
 
     return plants
-
 
 def attach_ads_conventional_plants(
     n, plants_df, conventional_carriers, extendable_carriers, costs):
@@ -1136,15 +1018,18 @@ def attach_ads_batteries(n, plants_df,extendable_carriers, costs):
     logger.info(f"Note: ADS Public data does not include energy capacity(mwhr) for each BESS plant. Capacity is set in config file by key: 'max_hours'.")
 
     n.madd(
-        "Store",
+        "StorageUnit",
         plants_filt.index,
+        carrier=plants_filt.carrier,
         bus=plants_filt.bus_assignment,
         p_nom=plants_filt['maxcap(mw)'],
         p_nom_extendable='battery' in extendable_carriers['Store'],
         max_hours = snakemake.config['electricity']['max_hours'],
-        carrier=plants_filt.carrier,
+        efficiency_store= 1.0,
+        efficiency_dispatch=1.0, #TODO: Add efficiency_dispatch to config file
+        cyclic_state_of_charge=True,
+        capital_cost=costs.at["battery", "capital_cost"],
         weight=1.0,
-        efficiency=costs.at['battery', "efficiency"],
     )
 
     return n
@@ -1183,8 +1068,8 @@ def attach_ads_renewables(n, plants_df, renewable_carriers, extendable_carriers,
             plants_filt.balancing_area = plants_filt.balancing_area.map(pge_dict).fillna(plants_filt.balancing_area)
             # {'Arizona', 'CISC', 'IPFE', 'DOPD', 'CISD', 'IPMV', 'CHPD', 'PSCO', 'CISO-SDGE', 'IPTV', 'CIPV', 'TH_Mead', 'CIPB', 'WALC', 'CISO-SCE', 'WAUW', 'SRP', 'CISO-PGAE'}
             #TODO: #34 Add BCHA and AESO hydro profiles in ADS Configuration. Profiles that don't get used: 'AESO', 'IPCO', 'NEVP', 'BCHA'
-            profiles_ba = set(profiles.columns) # available ba hydro profiles
-            bas = set(plants_filt.balancing_area.unique()) # plants that need BA hydro profiles
+            # profiles_ba = set(profiles.columns) # available ba hydro profiles
+            # bas = set(plants_filt.balancing_area.unique()) # plants that need BA hydro profiles
 
             # import pdb; pdb.set_trace() 
             # print( need to assign bas for pge bay and valley)
@@ -1231,7 +1116,113 @@ def attach_ads_renewables(n, plants_df, renewable_carriers, extendable_carriers,
             efficiency=costs.at[tech_type, "efficiency"],
         )
     return n
+########################### Load Data #########################################
 
+
+########### New Refactored Functions #############
+
+# def attach_wind_and_solar():
+#     return
+
+# def attach_battery_storage():
+#     return
+
+# def attach_hydro():
+#     return
+
+# def attach_conventional():
+#     return
+
+
+def prepare_ads_load_data(ads_load_path: str, data_year: int) -> pd.DataFrame:
+    '''
+    Modify ads load data to match the balancing authority names in the network file.
+    '''
+    df_ads = pd.read_csv(ads_load_path)
+    df_ads.columns = df_ads.columns.str.removeprefix('Load_')
+    df_ads.columns = df_ads.columns.str.removesuffix('.dat')
+    df_ads.columns = df_ads.columns.str.removesuffix(f'_{data_year}')
+    df_ads.columns = df_ads.columns.str.removesuffix(f'_[18].dat: {data_year}')
+    df_ads['CISO-PGAE'] = df_ads.pop('CIPV') + df_ads.pop('CIPB') + df_ads.pop('SPPC') #TODO: #37 Create new Zone for SPPC
+    df_ads['BPAT'] = df_ads.pop('BPAT') + df_ads.pop('TPWR') + df_ads.pop('SCL')
+    df_ads['IPCO'] = df_ads.pop('IPFE') + df_ads.pop('IPMV') + df_ads.pop('IPTV')
+    df_ads['PACW'] = df_ads.pop('PAID') + df_ads.pop('PAUT') + df_ads.pop('PAWY')
+    df_ads['Arizona'] = df_ads.pop('SRP') + df_ads.pop('AZPS') 
+    df_ads.drop(columns=['Unnamed: 44', 'TH_Malin', 'TH_Mead', 'TH_PV'],inplace=True)
+    ba_list_map = {'CISC': 'CISO-SCE', 'CISD': 'CISO-SDGE','VEA': 'CISO-VEA','WAUW': 'WAUW_SPP'}
+    df_ads.rename(columns=ba_list_map,inplace=True)
+    df_ads.set_index('Index',inplace=True)
+    return df_ads
+
+def prepare_breakthrough_demand_data(demand_path: str) -> pd.DataFrame:
+    demand = pd.read_csv(demand_path, index_col=0)
+    demand.columns = demand.columns.astype(int)
+    demand.index = n.snapshots
+
+    intersection = set(demand.columns).intersection(n.buses.zone_id.unique())
+    demand = demand[list(intersection)]
+    n.buses.rename(columns={'zone_id':'load_dissag'}, inplace=True)
+    return disaggregate_demand_to_buses(n, demand)
+
+
+def prepare_ads_demand():
+    demand.index = n.snapshots
+    n.buses['load_dissag'] = n.buses.balancing_area.replace({'': 'missing_ba'})
+    intersection = set(demand.columns).intersection(n.buses.ba_load_data.unique())
+    demand = demand[list(intersection)]
+    return disaggregate_demand_to_buses(n, demand)
+
+def prepare_eia_demand()
+    demand.set_index('timestamp', inplace=True)
+    demand.index = pd.to_datetime(demand.index, utc=True)
+
+    if len(demand.index) != 8760:
+        demand = demand.iloc[3:, :]  # First 3 rows are not in snapshots
+
+    demand = demand.loc[n.snapshots]
+    demand.index = n.snapshots
+    demand['Arizona'] = demand.pop('SRP') + demand.pop('AZPS')
+    n.buses['load_dissag'] = n.buses.balancing_area.replace({'CISO-PGAE': 'CISO', 'CISO-SCE': 'CISO', 'CISO-VEA': 'CISO', 'CISO-SDGE': 'CISO'})
+    n.buses['load_dissag'] = n.buses.load_dissag.replace({'': 'missing_ba'})
+
+    intersection = set(demand.columns).intersection(n.buses.ba_load_data.unique())
+    demand = demand[list(intersection)]
+    return disaggregate_demand_to_buses(n, demand)
+
+
+def disaggregate_demand_to_buses(n, demand):
+    """
+    Zone power demand is disaggregated to buses proportional to Pd,
+    where Pd is the real power demand (MW).
+    """
+    demand_per_bus_pu = (n.buses.set_index("load_dissag").Pd / n.buses.groupby("load_dissag").sum().Pd)
+    demand_per_bus = demand_per_bus_pu.multiply(demand)
+    demand_per_bus.fillna(0, inplace=True)
+    demand_per_bus.columns = n.buses.index
+    return n
+
+def add_demand_from_file(n:pypsa.Network, 
+                         fn_demand:str, 
+                         demand_type:str)->pypsa.Network:
+    """
+    Add demand to network from specified configuration setting. Returns network with demand added.
+    """
+
+    if demand_type == "breakthrough":
+        demand_per_bus = prepare_breakthrough_demand_data(fn_demand)
+    elif demand_type == "ads":
+        demand_per_bus = prepare_ads_demand(fn_demand)
+    elif demand_type == "eia":
+        demand_per_bus = prepare_eia_demand(fn_demand)
+    else:
+        raise ValueError("Invalid demand_type. Supported values are 'breakthrough', 'ads', and 'eia'.")
+    n.madd("Load", demand_per_bus.columns, bus=demand_per_bus.columns, p_set=demand_per_bus, carrier='AC')
+    return n
+
+
+
+
+#########################################
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
@@ -1265,7 +1256,7 @@ if __name__ == "__main__":
                                      #"OCGT": "ng"
                                      }) #changing cost data to match the plant data #TODO: #10 change this so that fuel types and plant types match the pypsa naming scheme.
 
-        eia_carrier_mapper = constants.EIA_FUEL_MAPPER
+        eia_carrier_mapper = constants.EIA_CARRIER_MAPPER
         plants = load_powerplants_eia(snakemake.input['plants_eia'], eia_carrier_mapper)
         plants = add_missing_fuel_cost(plants, snakemake.input.fuel_costs)
         plants = add_missing_heat_rates(plants, snakemake.input.fuel_costs)
@@ -1465,3 +1456,119 @@ if __name__ == "__main__":
 
     output_folder = os.path.dirname(snakemake.output[0]) + '/base_network'
     export_network_for_gis_mapping(n, output_folder)
+
+#### Old ADD LOAD DATA MAIN CALLS
+
+    if snakemake.config['network_configuration']  == "pypsa-usa":
+        import pdb; pdb.set_trace()
+        snapshot_config = snakemake.config['snapshots']
+        load_year = pd.to_datetime(snapshot_config['start']).year
+        logger.info(f'Building Load Data using EIA demand data year {load_year}')
+        eia_demand = pd.read_csv(snakemake.input['eia'][load_year%2017])
+        n.set_snapshots(pd.date_range(freq="h", 
+                                      start=snapshot_config['start'],
+                                      end=snapshot_config['end'],
+                                      inclusive=snapshot_config['inclusive'])
+                        )
+        n = add_eia_demand(n, eia_demand)
+    elif snakemake.config['network_configuration']  == "ads2032":
+        load_year = 2032
+        demand = prepare_ads_load_data(f'data/WECC_ADS/processed/load_{load_year}.csv',load_year)
+        n.set_snapshots(pd.date_range(freq="h", 
+                                      start=f"{load_year}-01-01",
+                                      end=f"{load_year+1}-01-01",
+                                      inclusive="left")
+                        )
+        n = add_ads_demand(n,demand)
+        n.export_to_netcdf(snakemake.output.network)
+    elif snakemake.config['network_configuration']  == "breakthrough":
+        logger.info("Adding Breakthrough Energy Network Demand data from 2016")
+        n.set_snapshots(
+            pd.date_range(freq="h", start="2016-01-01", end="2017-01-01", inclusive="left")
+        )
+        n = add_breakthrough_demand_from_file(n, snakemake.input["demand_breakthrough_2016"])
+    else:
+        raise ValueError(f"Unknown network_configuration: {snakemake.config['network_configuration']}")
+
+
+
+
+
+
+
+
+
+
+# old code to delete
+
+# def add_breakthrough_demand_from_file(n, fn_demand):
+
+#     """
+#     Zone power demand is disaggregated to buses proportional to Pd,
+#     where Pd is the real power demand (MW).
+#     """
+
+#     demand = pd.read_csv(fn_demand, index_col=0)
+#     demand.columns = demand.columns.astype(int)
+#     demand.index = n.snapshots
+
+#     intersection = set(demand.columns).intersection(n.buses.zone_id.unique())
+#     demand = demand[list(intersection)]
+
+#     demand_per_bus_pu = (n.buses.set_index("zone_id").Pd / n.buses.groupby("zone_id").sum().Pd)
+#     demand_per_bus = demand_per_bus_pu.multiply(demand)
+#     demand_per_bus.columns = n.buses.index
+
+#     n.madd( "Load", demand_per_bus.columns, bus=demand_per_bus.columns, p_set=demand_per_bus, carrier='AC')
+#     return n
+
+# def add_ads_demand(n, demand):
+#     """
+#     Zone power demand is disaggregated to buses proportional to Pd,
+#     where Pd is the real power demand (MW).
+#     """
+#     demand.index = n.snapshots 
+#     # n.buses['ba_load_data'] = n.buses.balancing_area.replace({'CISO-PGAE': 'CISO', 'CISO-SCE': 'CISO', 'CISO-VEA': 'CISO', 'CISO-SDGE': 'CISO'})
+#     n.buses['ba_load_data'] = n.buses.balancing_area.replace({'': 'missing_ba'})
+
+#     intersection = set(demand.columns).intersection(n.buses.ba_load_data.unique())
+#     demand = demand[list(intersection)]
+
+#     demand_per_bus_pu = (n.buses.set_index("ba_load_data").Pd / n.buses.groupby("ba_load_data").sum().Pd)
+#     demand_per_bus = demand_per_bus_pu.multiply(demand)
+#     demand_per_bus.fillna(0,inplace=True)
+#     demand_per_bus.columns = n.buses.index
+
+#     n.madd( "Load", demand_per_bus.columns, bus=demand_per_bus.columns, p_set=demand_per_bus, carrier='AC') 
+#     return n
+
+# def add_eia_demand(n, demand):
+#     """
+#     Zone power demand is disaggregated to buses proportional to Pd,
+#     where Pd is the real power demand (MW).
+#     """
+#     demand.set_index('timestamp', inplace=True)
+#     demand.index = pd.to_datetime(demand.index,utc=True)
+#     #check to see if snapshots and demand index match
+
+#     if len(demand.index) != 8760:
+#         demand = demand.iloc[3:, :]  #First 3 rows are not in snapshots
+
+#     demand = demand.loc[n.snapshots]
+
+#     demand.index = n.snapshots 
+
+#     demand['Arizona'] = demand.pop('SRP') + demand.pop('AZPS')
+#     n.buses['ba_load_data'] = n.buses.balancing_area.replace({'CISO-PGAE': 'CISO', 'CISO-SCE': 'CISO', 'CISO-VEA': 'CISO', 'CISO-SDGE': 'CISO'})
+#     n.buses['ba_load_data'] = n.buses.ba_load_data.replace({'': 'missing_ba'})
+
+#     intersection = set(demand.columns).intersection(n.buses.ba_load_data.unique())
+#     demand = demand[list(intersection)]
+
+#     demand_per_bus_pu = (n.buses.set_index("ba_load_data").Pd / n.buses.groupby("ba_load_data").sum().Pd)
+#     demand_per_bus = demand_per_bus_pu.multiply(demand)
+#     demand_per_bus.fillna(0,inplace=True)
+#     demand_per_bus.columns = n.buses.index
+
+#     n.madd( "Load", demand_per_bus.columns, bus=demand_per_bus.columns, p_set=demand_per_bus, carrier='AC') 
+#     return n

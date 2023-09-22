@@ -39,11 +39,11 @@ countries: [US]
 #   CISO-PGAE: 0.5
 
 # TODO: #11 change load data and generator data to be a snakemake wildcard value
-network_configuration: "pypsa-usa" # "pypsa-usa" or "ads2032"
+network_configuration: "pypsa-usa" # "pypsa-usa" or "ads2032" or "breakthrough"
 
 snapshots:
   start: "2019-01-01"
-  end: "2020-01-01"
+  end: "2019-01-14"
   inclusive: 'left' # include start, not end
 
 atlite:
@@ -286,7 +286,7 @@ solving:
     PreDual: 0
     GURO_PAR_BARDENSETHRESH: 200
   operations:
-    run: false
+    run: true
     stochastic: false
     iterations: 10
 
