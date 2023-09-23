@@ -1619,6 +1619,11 @@ if __name__ == "__main__":
             apply_average=False
         )
 
+    # fix p_nom_min for extendable generators 
+    extendable = n.generators[n.generators.p_nom_extendable == True].copy()
+    extendable.p_nom_min = extendable.p_nom
+    n.generators.loc[extendable.index] = extendable
+
     if snakemake.config['osw_config']['enable_osw']:
         logger.info('Adding OSW in network')
         humboldt_capacity = snakemake.config['osw_config']['humboldt_capacity']
