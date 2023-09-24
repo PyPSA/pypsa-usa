@@ -2,39 +2,32 @@
 
 """
 
-Relevant Settings
------------------
+**Relevant Settings**
 
 .. code:: yaml
 
     countries:
 
-.. seealso::
-    Documentation of the configuration file ``config.yaml`` at
-    :ref:`toplevel_cf`
 
-Inputs
-------
+**Inputs**
 
 - ``resources/country_shapes.geojson``: confer :ref:`shapes`
 - ``resources/offshore_shapes.geojson``: confer :ref:`shapes`
 - ``networks/base.nc``: confer :ref:`base`
 
-Outputs
--------
+**Outputs**
 
 - ``resources/regions_onshore.geojson``:
 
-    .. image:: ../img/regions_onshore.png
-        :scale: 33 %
+    # .. image:: ../img/regions_onshore.png
+    #     :scale: 33 %
 
 - ``resources/regions_offshore.geojson``:
 
-    .. image:: ../img/regions_offshore.png
-        :scale: 33 %
+    # .. image:: ../img/regions_offshore.png
+    #     :scale: 33 %
 
-Description
------------
+**Description**
 
 Creates Voronoi shapes for each bus representing both onshore and offshore regions.
 

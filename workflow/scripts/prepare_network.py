@@ -14,8 +14,7 @@ Prepare PyPSA network for solving according to :ref:`opts` and :ref:`ll`, such a
 - reducing the **temporal** resolution by averaging over multiple hours
   or segmenting time series into chunks of varying lengths using ``tsam``.
 
-Relevant Settings
------------------
+**Relevant Settings**
 
 .. code:: yaml
 
@@ -35,19 +34,16 @@ Relevant Settings
     Documentation of the configuration file ``config.yaml`` at
     :ref:`costs_cf`, :ref:`electricity_cf`
 
-Inputs
-------
+**Inputs**
 
 - ``resources/costs.csv``: The database of cost assumptions for all included technologies for specific years from various sources; e.g. discount rate, lifetime, investment (CAPEX), fixed operation and maintenance (FOM), variable operation and maintenance (VOM), fuel costs, efficiency, carbon-dioxide intensity.
 - ``networks/elec_s{simpl}_{clusters}.nc``: confer :ref:`cluster`
 
-Outputs
--------
+**Outputs**
 
 - ``networks/elec_s{simpl}_{clusters}_ec_l{ll}_{opts}.nc``: Complete PyPSA network that will be handed to the ``solve_network`` rule.
 
-Description
------------
+**Description**
 
 .. tip::
     The rule :mod:`prepare_all_networks` runs
