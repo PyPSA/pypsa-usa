@@ -1620,9 +1620,9 @@ if __name__ == "__main__":
         )
 
     # fix p_nom_min for extendable generators 
-    extendable = n.generators[n.generators.p_nom_extendable == True].copy()
-    extendable.p_nom_min = extendable.p_nom
-    n.generators.loc[extendable.index] = extendable
+    # The "- 0.001" is just to avoid numerical issues 
+    n.generators["p_nom_min"] = n.generators.apply(
+        lambda x: (x["p_nom"] - 0.001) if (x["p_nom_extendable"] and x["p_nom_min"] == 0) else x["p_nom_min"], axis=1)
 
     if snakemake.config['osw_config']['enable_osw']:
         logger.info('Adding OSW in network')
