@@ -67,7 +67,7 @@ is only used when no other sources can be found, as it is mostly European focuse
 
 [![GitHub](https://img.shields.io/badge/github-%23121011.svg?style=for-the-badge&logo=github&logoColor=white)](https://github.com/PyPSA/technology-data)
 
-### Relevant Settings 
+**Relevant Settings** 
 
 ```yaml
 enable:
