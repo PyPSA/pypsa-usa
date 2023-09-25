@@ -1402,7 +1402,7 @@ if __name__ == "__main__":
                                      #"OCGT": "ng"
                                      }) #changing cost data to match the plant data #TODO: #10 change this so that fuel types and plant types match the pypsa naming scheme.
 
-        eia_carrier_mapper = const.EIA_FUEL_MAPPER
+        eia_carrier_mapper = const.EIA_CARRIER_MAPPER
         plants = load_powerplants_eia(snakemake.input['plants_eia'], eia_carrier_mapper)
         plants = add_missing_fuel_cost(plants, snakemake.input.fuel_costs)
         plants = add_missing_heat_rates(plants, snakemake.input.fuel_costs)

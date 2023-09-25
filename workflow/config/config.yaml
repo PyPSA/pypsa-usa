@@ -39,7 +39,7 @@ countries: [US]
 #   CISO-PGAE: 0.5
 
 # TODO: #11 change load data and generator data to be a snakemake wildcard value
-network_configuration: "ads2032" # "pypsa-usa" or "ads2032" or "breakthrough" 
+network_configuration: "pypsa-usa" # "pypsa-usa" or "ads2032" or "breakthrough" 
 
 snapshots:
   start: "2019-01-01"
