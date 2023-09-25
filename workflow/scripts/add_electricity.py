@@ -84,8 +84,9 @@ import pypsa
 import scipy.sparse as sparse
 import xarray as xr
 from _helpers import configure_logging, update_p_nom_max, export_network_for_gis_mapping
-import constants
-from typing import Dict
+import constants as const
+from typing import Dict, Any, List, Union
+from pathlib import Path 
 
 from shapely.prepared import prep
 import pdb
@@ -192,7 +193,13 @@ def add_co2_emissions(n, costs, carriers):
     n.carriers.loc[carriers, "co2_emissions"] = costs.co2_emissions[suptechs].values
 
 
-def load_costs(tech_costs, config, max_hours, Nyears=1.0):
+def load_costs(
+    tech_costs: str, 
+    config: Dict[str,Any], 
+    max_hours: Dict[str, Union[int,float]], 
+    Nyears: float = 1.0
+) -> pd.DataFrame:
+    
     # set all asset costs and other parameters
     costs = pd.read_csv(tech_costs, index_col=[0, 1]).sort_index()
 
@@ -200,6 +207,7 @@ def load_costs(tech_costs, config, max_hours, Nyears=1.0):
     costs.loc[costs.unit.str.contains("/kW"), "value"] *= 1e3
     costs.unit = costs.unit.str.replace("/kW", "/MW")
 
+    # polulate missing values with user provided defaults 
     fill_values = config["fill_values"]
     costs = costs.value.unstack().fillna(fill_values)
 
@@ -255,6 +263,16 @@ def load_costs(tech_costs, config, max_hours, Nyears=1.0):
 
     return costs
 
+def add_annualized_capital_costs(costs: pd.DataFrame, Nyears: float = 1.0) -> pd.DataFrame:
+    """Adds column to calculate annualized capital costs only"""
+
+    costs["investment_annualized"] = (
+        calculate_annuity(costs["lifetime"], costs["discount rate"])
+        * costs["investment"]
+        * Nyears
+    )
+    return costs
+
 def load_powerplants(ppl_fn):
     carrier_dict = {
         "ocgt": "OCGT",
@@ -285,6 +303,121 @@ def shapes_to_shapes(orig, dest):
 
     return transfer
 
+def clean_locational_multiplier(df: pd.DataFrame):
+    """Updates format of locational multiplier data"""
+    df = df.fillna(1)
+    df = df[["State", "Location Variation"]]
+    return df.groupby("State").mean()
+
+def update_capital_costs(n: pypsa.Network, carrier: str, costs: pd.DataFrame, multiplier: pd.DataFrame, Nyears: float = 1.0):
+    """Applies regional multipliers to capital cost data"""
+    
+    # map generators to states
+    bus_state_mapper = n.buses.to_dict()["state"]
+    gen = n.generators[n.generators.carrier == carrier].copy() # copy with warning
+    gen["state"] = gen.bus.map(bus_state_mapper)
+    gen = gen[gen["state"].isin(multiplier.index)] # drops any regions that do not have cost multipliers 
+    
+    # log any states that do not have multipliers attached 
+    missed = gen[~gen["state"].isin(multiplier.index)]
+    if not missed.empty:
+        logger.warning(f"CAPEX cost multiplier not applied to {missed.state.unique()}")
+    
+    # apply multiplier 
+    
+    # commented code is if applying multiplier to (capex + fom)
+    # gen["capital_cost"] = gen.apply(
+    #     lambda x: x["capital_cost"] * multiplier.at[x["state"], "Location Variation"], axis=1)
+    
+    # apply multiplier to annualized capital investment cost 
+    gen["investment"] = gen.apply(
+        lambda x: costs.at[carrier,"investment_annualized"] * multiplier.at[x["state"], "Location Variation"], axis=1)
+    
+    # get fixed costs based on overnight capital costs with multiplier applied 
+    gen["fom"] = gen["investment"] * (costs.at[carrier, "FOM"] / 100.0) * Nyears
+    
+    # find final annualized capital cost
+    gen["capital_cost"] = gen["investment"] + gen["fom"]
+    
+    # overwrite network generator dataframe with updated values 
+    n.generators.loc[gen.index] = gen
+    
+def update_marginal_costs(
+    n: pypsa.Network,
+    carrier: str, 
+    fuel_costs: pd.DataFrame, 
+    vom_cost: float = 0, 
+    efficiency: float = None,
+    apply_average: bool = False
+):
+    """Applies regional and monthly marginal cost data
+    
+    Arguments
+    ---------
+    n: pypsa.Network, 
+    carrier: str, 
+        carrier to apply fuel cost data to (ie. Gas)
+    fuel_costs: pd.DataFrame, 
+        EIA fuel cost data
+    vom_cost: float = 0
+        Additional flat $/MWh cost to add onto the fuel costs 
+    efficiency: float = None
+        Flat efficiency multiplier to apply to all generators. If not supplied,
+        the efficiency is looked up at a generator level from the network 
+    apply_average: bool = False
+        Apply USA average fuel cost to all regions 
+    """
+    
+    # map generators to states
+    bus_state_mapper = n.buses.to_dict()["state"]
+    gen = n.generators[n.generators.carrier == carrier].copy() # copy with warning
+    gen["state"] = gen.bus.map(bus_state_mapper)
+    gen = gen[gen["state"].isin(fuel_costs.state.unique())]
+    
+    # log any states that do not have multipliers attached 
+    missed = gen[~gen["state"].isin(fuel_costs.state.unique())]
+    if not missed.empty:
+        logger.warning(f"Time dependent marginal costs not applied to {missed.state.unique()}")
+        
+    # update fuel cost values from $/MCF to $/MWh 
+    fuel_costs["value"] = fuel_costs["value"] * const.NG_MCF_2_MWH
+    fuel_costs["units"] = "$/MWh"
+    
+    # extract out monthly variations for fuel costs 
+    fuel_costs = fuel_costs.set_index("period")
+    fuel_costs.index = pd.to_datetime(fuel_costs.index, format="%Y-%m-%d")
+    fuel_costs["month"] = fuel_costs.index.month
+    
+    # create a state level fuel cost dataframe for the modeled snapshots 
+    state_fuel_costs = pd.DataFrame()
+    state_fuel_costs.index = pd.DatetimeIndex(n.snapshots)
+    if not apply_average:
+        for state in gen.state.unique():
+            state_fuel_cost = fuel_costs[fuel_costs["state"] == state]
+            month_to_price_mapper = state_fuel_cost.set_index("month").to_dict()["value"]
+            state_fuel_costs[state] = state_fuel_costs.index.month.map(month_to_price_mapper)
+    else:
+        usa_fuel_cost = fuel_costs[fuel_costs["state"] == "U.S."]
+        month_to_price_mapper = usa_fuel_cost.set_index("month").to_dict()["value"]
+        for state in gen.state.unique():
+            state_fuel_costs[state] = state_fuel_costs.index.month.map(month_to_price_mapper)
+        
+    # apply all fuel cost values 
+    dfs = []
+    for state in gen.state.unique():
+        gens_in_state = gen[gen.state == state].index.to_list()
+        dfs.append(pd.DataFrame({gen: state_fuel_costs[state] for gen in gens_in_state}))
+    n.generators_t["marginal_cost"] = pd.concat(dfs, axis=1)
+    
+    # apply efficiency of each generator to know fuel burn rate 
+    if not efficiency:
+        gen_eff_mapper = n.generators.to_dict()["efficiency"]
+        n.generators_t["marginal_cost"] = n.generators_t["marginal_cost"].apply(lambda x: x / gen_eff_mapper[x.name], axis=0)
+    else:
+        n.generators_t["marginal_cost"] = n.generators_t["marginal_cost"].div(efficiency)
+    
+    # apply fixed rate VOM cost     
+    n.generators_t["marginal_cost"] += vom_cost
 
 def update_transmission_costs(n, costs, length_factor=1.0):
     # TODO: line length factor of lines is applied to lines and links.
@@ -1230,7 +1363,7 @@ def attach_ads_renewables(n, plants_df, renewable_carriers, extendable_carriers,
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
-        snakemake = mock_snakemake("add_electricity", interconnect='western')
+        snakemake = mock_snakemake("add_electricity", interconnect="western")
     configure_logging(snakemake)
 
     params = snakemake.params
@@ -1245,6 +1378,15 @@ if __name__ == "__main__":
         params.electricity["max_hours"],
         Nyears,
     )
+    
+    # calculates annulaized capital costs seperate from the fixed costs to be
+    # able to apply regional mulitpliers to only capex 
+    costs = add_annualized_capital_costs(costs, Nyears)
+    
+    # fix for ccgt and ocgt techs 
+    costs.at["gas","investment_annualized"] = (
+        costs.at["CCGT","investment_annualized"] + costs.at["OCGT","investment_annualized"]
+    ) / 2
 
     update_transmission_costs(n, costs, params.length_factor)
 
@@ -1260,7 +1402,7 @@ if __name__ == "__main__":
                                      #"OCGT": "ng"
                                      }) #changing cost data to match the plant data #TODO: #10 change this so that fuel types and plant types match the pypsa naming scheme.
 
-        eia_carrier_mapper = constants.EIA_FUEL_MAPPER
+        eia_carrier_mapper = const.EIA_CARRIER_MAPPER
         plants = load_powerplants_eia(snakemake.input['plants_eia'], eia_carrier_mapper)
         plants = add_missing_fuel_cost(plants, snakemake.input.fuel_costs)
         plants = add_missing_heat_rates(plants, snakemake.input.fuel_costs)
@@ -1333,10 +1475,10 @@ if __name__ == "__main__":
     elif snakemake.config["network_configuration"] == "ads2032": 
         
         # get mappers 
-        ads_tech_mapper = constants.ADS_TECH_MAPPER
-        ads_sub_type_tech_mapper = constants.ADS_SUB_TYPE_TECH_MAPPER
-        ads_carrier_mapper = constants.ADS_CARRIER_NAME
-        ads_fuel_mapper = constants.ADS_FUEL_MAPPER
+        ads_tech_mapper = const.ADS_TECH_MAPPER
+        ads_sub_type_tech_mapper = const.ADS_SUB_TYPE_TECH_MAPPER
+        ads_carrier_mapper = const.ADS_CARRIER_NAME
+        ads_fuel_mapper = const.ADS_FUEL_MAPPER
 
         # load base powerplants 
         plants = load_powerplants_ads(
@@ -1444,6 +1586,38 @@ if __name__ == "__main__":
         )
     else:
         raise ValueError(f"Unknown network_configuration {snakemake.config['network_configuration']}")
+
+    # apply regional multipliers to capital cost data
+    for carrier, multiplier_data in const.CAPEX_LOCATIONAL_MULTIPLIER.items():
+        multiplier_file = snakemake.input[f"gen_cost_mult_{multiplier_data}"]
+        df_multiplier = pd.read_csv(multiplier_file)
+        df_multiplier = clean_locational_multiplier(df_multiplier)
+        update_capital_costs(n, carrier, costs, df_multiplier, Nyears)
+        
+    # apply regional/temporal variations to fuel cost data 
+    fuel_costs = {"gas":"ng_electric_power_price"}
+    for carrier, cost_data in fuel_costs.items():
+        fuel_cost_file = snakemake.input[f"{cost_data}"]
+        df_fuel_costs = pd.read_csv(fuel_cost_file)
+        if carrier == "gas":
+            vom = (costs.at["OCGT", "VOM"] + costs.at["CCGT", "VOM"]) / 2
+            eff = (costs.at["OCGT", "efficiency"] + costs.at["CCGT", "efficiency"]) / 2
+        else:
+            vom = costs.at[carrier, "VOM"]
+            eff = None
+        update_marginal_costs(
+            n=n, 
+            carrier=carrier, 
+            fuel_costs=df_fuel_costs, 
+            vom_cost=vom,
+            efficiency=eff,
+            apply_average=False
+        )
+
+    # fix p_nom_min for extendable generators 
+    # The "- 0.001" is just to avoid numerical issues 
+    n.generators["p_nom_min"] = n.generators.apply(
+        lambda x: (x["p_nom"] - 0.001) if (x["p_nom_extendable"] and x["p_nom_min"] == 0) else x["p_nom_min"], axis=1)
 
     if snakemake.config['osw_config']['enable_osw']:
         logger.info('Adding OSW in network')

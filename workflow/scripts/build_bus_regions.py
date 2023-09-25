@@ -112,7 +112,7 @@ if __name__ == "__main__":
     logger = logging.getLogger(__name__)
     if 'snakemake' not in globals():
         from _helpers import mock_snakemake
-        snakemake = mock_snakemake('build_bus_regions', interconnect='western')
+        snakemake = mock_snakemake('build_bus_regions', interconnect="western")
     configure_logging(snakemake)
 
 
