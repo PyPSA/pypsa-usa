@@ -6,12 +6,22 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-
+from _helpers import mock_snakemake, configure_logging
 import atlite
 import geopandas as gpd
 import numpy as np
 import pandas as pd
 import xarray as xr
+
+STATES_TO_REMOVE = [
+    "Hawaii", 
+    "Alaska", 
+    "Commonwealth of the Northern Mariana Islands", 
+    "United States Virgin Islands", 
+    "Guam", 
+    "Puerto Rico", 
+    "American Samoa"
+]
 
 def load_urban_ratio(df: pd.DataFrame) -> pd.DataFrame:
     """Loads data to get urban and rural values at a GEOID level
@@ -49,6 +59,7 @@ def load_population(df: pd.DataFrame) -> pd.DataFrame:
     > pd.read_csv("./population.csv", skiprows=1)
         
     """
+    df = df.set_index("Geography")
     df.index = df.index.str[-5:]
     df.index.name = "GEOID"
     df = df.rename(columns={x:x.strip() for x in df.columns})
@@ -60,17 +71,16 @@ def load_population(df: pd.DataFrame) -> pd.DataFrame:
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
-
-        snakemake = mock_snakemake("build_population_layouts")
-
-    logging.basicConfig(level=snakemake.config["logging"]["level"])
+        snakemake = mock_snakemake("build_population_layouts", interconnect="western", cutout="era5_2019")
+    configure_logging(snakemake)
 
     cutout = atlite.Cutout(snakemake.input.cutout)
 
     grid_cells = cutout.grid.geometry
 
     # retrive county level population data 
-    counties = gpd.read_file(snakemake.input.counties).set_index("index")
+    counties = gpd.read_file(snakemake.input.county_shapes).set_index("GEOID")
+    counties = counties[~(counties.STATE_NAME.isin(STATES_TO_REMOVE))]
 
     # Indicator matrix counties -> grid cells
     I = atlite.cutout.compute_indicatormatrix(counties.geometry, grid_cells)
@@ -86,25 +96,31 @@ if __name__ == "__main__":
     # extract population in each county 
     pop = pd.read_csv(snakemake.input.population, skiprows=1)
     pop = load_population(pop)
+    pop["STATE"] = pop["Geographic Area Name"].map(lambda x: x.split(",")[1].strip())
+    pop = pop[~(pop.STATE.isin(STATES_TO_REMOVE))]
 
     # population in each grid cell
-    pop_cells = pd.Series(I.dot(pop["Population"]))
+    cell_pop = pd.Series(I.dot(pop["Population"]))
 
     # in km^2
     cell_areas = grid_cells.to_crs(3035).area / 1e6
 
     # pop per km^2
-    density_cells = pop_cells / cell_areas
+    density_cells = cell_pop / cell_areas
 
     # rural or urban population in grid cell
     pop_rural = pd.Series(0.0, density_cells.index)
     pop_urban = pd.Series(0.0, density_cells.index)
     
-    pop_cells = {"total": pop_cells}
-    pop_cells["rural"] = pop_rural
-    pop_cells["urban"] = pop_urban
+    # calcualte rural and urban population per cell 
+    
+    
+    # save total, rural, urban population 
+    pops = {"total": cell_pop}
+    pops["rural"] = pop_rural
+    pops["urban"] = pop_urban
 
-    for key, pop in pop_cells.items():
+    for key, pop in pops.items():
         ycoords = ("y", cutout.coords["y"].data)
         xcoords = ("x", cutout.coords["x"].data)
         values = pop.values.reshape(cutout.shape)
