@@ -12,6 +12,7 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 import xarray as xr
+import matplotlib.pyplot as plt
 
 STATES_TO_REMOVE = [
     "Hawaii", 
@@ -65,7 +66,32 @@ def load_population(df: pd.DataFrame) -> pd.DataFrame:
     df = df.rename(columns={"!!Total":"population"})
     df = df[["Geographic Area Name", "population"]]
     return df
+
+def plot_county_data(gdf: gpd.GeoDataFrame, col: str, title: str = None, description: str = None):
+    """Plots heat map of geodataframe 
     
+    Adapted from 
+    https://www.relataly.com/visualize-covid-19-data-on-a-geographic-heat-maps/291/
+    """
+
+    # for legend range 
+    vmin = gdf[col].min()
+    vmax = gdf[col].max()
+    cmap = 'viridis'
+    
+    # Create figure and axes for Matplotlib
+    fig, ax = plt.subplots(1, figsize=(20, 8))
+    ax.axis('off')
+    gdf.plot(column=col, ax=ax, edgecolor='0.8', linewidth=1, cmap=cmap)
+
+    ax.set_title(title, fontdict={'fontsize': '25', 'fontweight': '3'})
+    ax.annotate(description, xy=(0.1, .08), xycoords='figure fraction', horizontalalignment='left', 
+                verticalalignment='bottom', fontsize=10)
+                
+    sm = plt.cm.ScalarMappable(norm=plt.Normalize(vmin=vmin, vmax=vmax), cmap=cmap)
+    sm._A = [] # Empty array for the data range
+    cbaxes = fig.add_axes([0.15, 0.25, 0.01, 0.4])
+    cbar = fig.colorbar(sm, cax=cbaxes)
 
 if __name__ == "__main__":
     if "snakemake" not in globals():
@@ -124,6 +150,22 @@ if __name__ == "__main__":
         layout = xr.DataArray(values, [ycoords, xcoords])
 
         layout.to_netcdf(snakemake.output[f"pop_layout_{key}"])
+
+    # plot data
+    title = "Population"
+    column = "population"
+    description = "Source: https://data.census.gov/ \nDecennial Census - Universe: Total population - 2020: DEC Demographic and Housing Characteristics"
+    plot_county_data(counties, column, title, description)
+
+    title = "Population Density (person/km2)"
+    column = "density_person_per_km2"
+    description = "Source: https://data.census.gov/ \nDecennial Census - Universe: Total population - 2020: DEC Demographic and Housing Characteristics"
+    plot_county_data(counties, column, title, description)
+
+    title = "Urban Density"
+    column = "urban_area"
+    description = "Source: https://data.census.gov/ \nDecennial Census - Universe: Housing units - 2020: DEC Demographic and Housing Characteristics"
+    plot_county_data(counties, column, title, description)
 
     # Below is akin to the PyPSA-Eur implementation of rural/urbal areas. They 
     # build up cells based on population density to hit a generic urbanization rate 
