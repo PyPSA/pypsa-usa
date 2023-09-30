@@ -1,0 +1,65 @@
+State,City,Base Project Cost ($/kW ),Location Variation,Delta Cost Difference ($/kW),Total Location Project Cost ($/kW)
+Alabama,Huntsville,2481,0.98,-49,2432
+Arizona,Phoenix,2481,0.99,-26,2454
+Arkansas,Little Rock,2481,0.98,-42,2439
+California,Bakersfield,2481,1.08,191,2672
+California,Los Angeles,2481,1.08,205,2685
+California,Modesto,2481,1.08,198,2679
+California,Sacramento,2481,1.09,217,2697
+California,San Francisco,2481,1.14,353,2834
+Colorado,Denver,2481,0.98,-39,2442
+Connecticut,Hartford,2481,1.07,169,2650
+Delaware,Dover,2481,1.06,152,2632
+District of Columbia,Washington,2481,1.01,28,2509
+Florida,Tallahassee,2481,0.97,-66,2415
+Florida,Tampa,2481,0.98,-50,2431
+Georgia,Atlanta,2481,0.99,-26,2454
+Idaho,Boise,2481,1.01,15,2496
+Illinois,Chicago,2481,1.11,264,2745
+Illinois,Joliet,2481,1.09,228,2709
+Indiana,Indianapolis,2481,1,12,2492
+Iowa,Davenport,2481,1.02,38,2519
+Iowa,Waterloo,2481,0.98,-41,2440
+Kansas,Wichita,2481,0.98,-38,2443
+Kentucky,Louisville,2481,1,-4,2477
+Louisiana,New Orleans,2481,0.98,-40,2441
+Maine,Portland,2481,1,6,2487
+Maryland,Baltimore,2481,1.01,19,2500
+Massachusetts,Boston,2481,1.09,225,2706
+Michigan,Detroit,2481,1.05,125,2606
+Michigan,Grand Rapids,2481,1.01,34,2515
+Minnesota,Saint Paul,2481,1.04,101,2582
+Mississippi,Jackson,2481,0.97,-64,2417
+Missouri,St. Louis,2481,1.05,131,2612
+Missouri,Kansas City,2481,1.03,80,2561
+Montana,Great Falls,2481,0.98,-42,2439
+Nebraska,Omaha,2481,0.99,-31,2449
+New Hampshire,Concord,2481,1.02,61,2542
+New Jersey,Newark,2481,1.1,248,2729
+New,Albuquerque,2481,0.99,-22,2459
+New Mexico,New York,2481,1.2,489,2970
+New York,Syracuse,2481,1.03,67,2548
+Nevada,Las Vegas,2481,1.06,146,2627
+North Carolina,Charlotte,2481,0.98,-48,2433
+North Dakota,Bismarck,2481,1.01,19,2499
+Oklahoma,Oklahoma City,2481,1,-2,2479
+Oklahoma,Tulsa,2481,0.97,-81,2400
+Ohio,Cincinnati,2481,0.97,-81,2400
+Oregon,Portland,2481,1.04,98,2579
+Pennsylvania,Philadelphia,2481,1.1,246,2727
+Pennsylvania,Wilkes-Barre,2481,1.03,72,2552
+Rhode Island,Providence,2481,1.06,137,2618
+South Carolina,Charleston,2481,0.98,-42,2438
+South Carolina,Spartanburg,2481,0.98,-44,2437
+South Dakota,Rapid City,2481,0.99,-35,2446
+Tennessee,Knoxville (Nashville),2481,0.99,-25,2456
+Texas,Houston,2481,0.97,-82,2399
+Utah,Salt Lake City,2481,0.99,-28,2453
+Vermont,Burlington,2481,1.01,35,2516
+Virginia,Alexandria,2481,1.01,21,2502
+Virginia,Lynchburg,2481,0.98,-51,2430
+Washington,Seattle,2481,1.06,160,2641
+Washington,Spokane,2481,1.02,46,2527
+West Virginia,Charleston,2481,1.02,42,2523
+Wisconsin,Green Bay,2481,1.02,40,2521
+Wyoming,Cheyenne,2481,0.99,-15,2466

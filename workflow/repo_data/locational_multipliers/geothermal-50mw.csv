@@ -1,0 +1,65 @@
+State,City,Base Project Cost ($/kW ),Location Variation,Delta Cost Difference ($/kW),Total Location Project Cost ($/kW)
+Alabama,Huntsville,N/A,N/A,N/A,N/A
+Arizona,Phoenix,N/A,N/A,N/A,N/A
+Arkansas,Little Rock,N/A,N/A,N/A,N/A
+California,Bakersfield,2521,1.14,356,2877
+California,Los Angeles,2521,1.15,377,2898
+California,Modesto,2521,1.15,373,2894
+California,Sacramento,2521,1.16,401,2922
+California,San Francisco,2521,1.22,560,3081
+Colorado,Denver,N/A,N/A,N/A,N/A
+Connecticut,Hartford,N/A,N/A,N/A,N/A
+Delaware,Dover,N/A,N/A,N/A,N/A
+District of Columbia,Washington,N/A,N/A,N/A,N/A
+Florida,Tallahassee,N/A,N/A,N/A,N/A
+Florida,Tampa,N/A,N/A,N/A,N/A
+Georgia,Atlanta,N/A,N/A,N/A,N/A
+Idaho,Boise,2521,1.02,50,2571
+Illinois,Chicago,N/A,N/A,N/A,N/A
+Illinois,Joliet,N/A,N/A,N/A,N/A
+Indiana,Indianapolis,N/A,N/A,N/A,N/A
+Iowa,Davenport,N/A,N/A,N/A,N/A
+Iowa,Waterloo,N/A,N/A,N/A,N/A
+Kansas,Wichita,N/A,N/A,N/A,N/A
+Kentucky,Louisville,N/A,N/A,N/A,N/A
+Louisiana,New Orleans,N/A,N/A,N/A,N/A
+Maine,Portland,N/A,N/A,N/A,N/A
+Maryland,Baltimore,N/A,N/A,N/A,N/A
+Massachusetts,Boston,N/A,N/A,N/A,N/A
+Michigan,Detroit,N/A,N/A,N/A,N/A
+Michigan,Grand Rapids,N/A,N/A,N/A,N/A
+Minnesota,Saint Paul,N/A,N/A,N/A,N/A
+Mississippi,Jackson,N/A,N/A,N/A,N/A
+Missouri,St. Louis,N/A,N/A,N/A,N/A
+Missouri,Kansas City,N/A,N/A,N/A,N/A
+Montana,Great Falls,N/A,N/A,N/A,N/A
+Nebraska,Omaha,N/A,N/A,N/A,N/A
+New Hampshire,Concord,N/A,N/A,N/A,N/A
+New Jersey,Newark,N/A,N/A,N/A,N/A
+New,Albuquerque,N/A,N/A,N/A,N/A
+New Mexico,New York,N/A,N/A,N/A,N/A
+New York,Syracuse,N/A,N/A,N/A,N/A
+Nevada,Las Vegas,2521,1.11,277,2798
+North Carolina,Charlotte,N/A,N/A,N/A,N/A
+North Dakota,Bismarck,N/A,N/A,N/A,N/A
+Oklahoma,Oklahoma City,N/A,N/A,N/A,N/A
+Oklahoma,Tulsa,N/A,N/A,N/A,N/A
+Ohio,Cincinnati,N/A,N/A,N/A,N/A
+Oregon,Portland,2521,1.07,183,2704
+Pennsylvania,Philadelphia,N/A,N/A,N/A,N/A
+Pennsylvania,Wilkes-Barre,N/A,N/A,N/A,N/A
+Rhode Island,Providence,N/A,N/A,N/A,N/A
+South Carolina,Charleston,N/A,N/A,N/A,N/A
+South Carolina,Spartanburg,N/A,N/A,N/A,N/A
+South Dakota,Rapid City,N/A,N/A,N/A,N/A
+Tennessee,Knoxville (Nashville),N/A,N/A,N/A,N/A
+Texas,Houston,N/A,N/A,N/A,N/A
+Utah,Salt Lake City,N/A,N/A,N/A,N/A
+Vermont,Burlington,N/A,N/A,N/A,N/A
+Virginia,Alexandria,N/A,N/A,N/A,N/A
+Virginia,Lynchburg,N/A,N/A,N/A,N/A
+Washington,Seattle,2521,1.11,276,2797
+Washington,Spokane,2521,1.04,89,2610
+West Virginia,Charleston,N/A,N/A,N/A,N/A
+Wisconsin,Green Bay,N/A,N/A,N/A,N/A
+Wyoming,Cheyenne,N/A,N/A,N/A,N/A
