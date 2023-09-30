@@ -17,10 +17,42 @@ Baythymetry data via [GEBCO](https://www.gebco.net/) and a cutout of USA [Copern
 
 [![DOI](https://zenodo.org/badge/doi/10.5281/zenodo.8175051.svg)](https://zenodo.org/record/8175051)
 
+(databundle-sector)=
+## Rule `retrieve_sector_databundle`
+Retrives data for sector coupling
+
+[![DOI](https://sandbox.zenodo.org/badge/DOI/10.5072/zenodo.1244084.svg)](https://doi.org/10.5072/zenodo.1244084)
+
+Geographic boundaries of the United States counties are taken from the 
+United States Census Bureau. Note, these follow 2020 boundaries to match 
+census numbers 
+
+[![URL](https://img.shields.io/badge/URL-Cartographic_Boundaries-blue)](<https://www.census.gov/geographies/mapping-files/time-series/geo/cartographic-boundary.2020.html#list-tab-1883739534>)
+
+County level populations are taken from the United States Census Bureau. Filters applied:
+ - Geography: All Counties within United States and Puerto Rico
+ - Year: 2020
+ - Surveys: Decennial Census, Demographic and Housing Characteristics
+ 
+Sheet Name: Decennial Census - P1 | Total Population - 2020: DEC Demographic and Housing Characteristics
+
+[![URL](https://img.shields.io/badge/URL-United_States_Census_Bureau-blue)](<https://data.census.gov/>)
+
+County level urbanization rates are taken from the United States Census Bureau. Filters applied:
+ - Geography: All Counties within United States and Puerto Rico
+ - Year: 2020
+ - Surveys: Decennial Census, Demographic and Housing Characteristics
+ 
+Sheet Name: Decennial Census - H1 | Housing Units - 2020: DEC Demographic and Housing Characteristics
+
+[![URL](https://img.shields.io/badge/URL-United_States_Census_Bureau-blue)](<https://data.census.gov/>)
+
+(retrieve-eia)=
 ## Rule `retrieve_eia_data`
 
 Historical electrical load data from 2015 till the last present month are retrieved from the [US Energy Information Agency](https://www.eia.gov/) (EIA). Data is downloaded at hourly temporal resolution and at a spatial resolution of balancing authority region. 
 
+(retrieve-wecc)=
 ## Rule `retrieve_WECC_forcast_data`
 
 Forecasted electricity demand data and generator operational charasteristics for the [Western Electricity Coordinating Council](https://www.wecc.org/Pages/home.aspx) (WECC) region are retrieved directly from WECC. Projected data for both 2030 and 2032 are retrieved (~300MB each). 
