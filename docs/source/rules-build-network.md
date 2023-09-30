@@ -31,6 +31,11 @@
 .. automodule:: build_renewable_profiles
 ```
 
+## Rule `build_population_layout`
+```{eval-rst}  
+.. automodule:: build_population_layout
+```
+
 (electricity)=
 ## Rule `add_electricity` 
 ```{eval-rst}  

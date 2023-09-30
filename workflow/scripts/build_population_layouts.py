@@ -1,5 +1,5 @@
 """
-Build mapping between cutout grid cells and population (total, urban, rural).
+Builds mapping between cutout grid cells and population (total, urban, rural).
 """
 
 import logging
