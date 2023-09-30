@@ -30,10 +30,10 @@
 ```{eval-rst}  
 .. automodule:: build_renewable_profiles
 ```
-
+(population-layouts)=
 ## Rule `build_population_layout`
 ```{eval-rst}  
-.. automodule:: build_population_layout
+.. automodule:: build_population_layouts
 ```
 
 (electricity)=

@@ -4,8 +4,14 @@ from _helpers import progress_retrieve, configure_logging
 logger = logging.getLogger(__name__)
 
 if __name__ == "__main__":
-    logger = logging.getLogger(__name__)
-    rootpath = "."
+    if "snakemake" not in globals():
+        from _helpers import mock_snakemake
+
+        # snakemake = mock_snakemake("retrieve_databundles")
+        snakemake = mock_snakemake("retrieve_sector_databundle")
+        rootpath = ".."
+    else:
+        rootpath = "."
     configure_logging(snakemake)
 
     repositories = snakemake.params.repositories
@@ -23,7 +29,7 @@ if __name__ == "__main__":
         if os.path.isfile(tarball_fn):
             logger.info(f"{repository} zenodo repository already downloaded.")
         else:
-            logger.info(f"Downloading {repository} zenodo repositoy from '{url}'.")
+            logger.info(f"Downloading {repository} zenodo repository from '{url}'.")
             progress_retrieve(url, tarball_fn)
         
         logger.info(f"Extracting {repository} databundle.")
