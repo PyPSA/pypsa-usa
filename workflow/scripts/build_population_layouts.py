@@ -57,14 +57,13 @@ def load_population(df: pd.DataFrame) -> pd.DataFrame:
     ----
     When reading in the data, be sure to skip the first row:
     > pd.read_csv("./population.csv", skiprows=1)
-        
     """
     df = df.set_index("Geography")
     df.index = df.index.str[-5:]
     df.index.name = "GEOID"
     df = df.rename(columns={x:x.strip() for x in df.columns})
-    df = df.rename(columns={"!!Total":"Population"})
-    df = df[["Geographic Area Name", "Population"]]
+    df = df.rename(columns={"!!Total":"population"})
+    df = df[["Geographic Area Name", "population"]]
     return df
     
 
@@ -82,13 +81,6 @@ if __name__ == "__main__":
     counties = gpd.read_file(snakemake.input.county_shapes).set_index("GEOID")
     counties = counties[~(counties.STATE_NAME.isin(STATES_TO_REMOVE))]
 
-    # Indicator matrix counties -> grid cells
-    I = atlite.cutout.compute_indicatormatrix(counties.geometry, grid_cells)
-
-    # Indicator matrix grid_cells -> counties; inprinciple Iinv*I is identity
-    # but imprecisions mean not perfect
-    Iinv = cutout.indicatormatrix(counties.geometry)
-
     # extract urban fraction in each county 
     urban_fraction = pd.read_csv(snakemake.input.urban_percent, skiprows=1)
     urban_fraction = load_urban_ratio(urban_fraction)
@@ -96,29 +88,34 @@ if __name__ == "__main__":
     # extract population in each county 
     pop = pd.read_csv(snakemake.input.population, skiprows=1)
     pop = load_population(pop)
+    
+    # merge population and urban fraction data 
+    pop = pop.join(urban_fraction, rsuffix="_pop")
+    pop = pop.drop(columns=["Geographic Area Name_pop"])
     pop["STATE"] = pop["Geographic Area Name"].map(lambda x: x.split(",")[1].strip())
     pop = pop[~(pop.STATE.isin(STATES_TO_REMOVE))]
+    
+    # calcualte urban and rural populations 
+    pop["urban_population"] = pop["population"] * pop["URBAN"]
+    pop["rural_population"] = pop["population"] * pop["RURAL"]
+    
+    # merge population data with county information 
+    counties = counties.join(pop)
+
+    # Indicator matrix counties -> grid cells
+    I = atlite.cutout.compute_indicatormatrix(counties.geometry, grid_cells)
 
     # population in each grid cell
-    cell_pop = pd.Series(I.dot(pop["Population"]))
+    cell_pop = pd.Series(I.dot(counties["population"]))
+    cell_rural_pop = pd.Series(I.dot(counties["rural_population"]))
+    cell_urban_pop = pd.Series(I.dot(counties["urban_population"]))
 
-    # in km^2
-    cell_areas = grid_cells.to_crs(3035).area / 1e6
-
-    # pop per km^2
-    density_cells = cell_pop / cell_areas
-
-    # rural or urban population in grid cell
-    pop_rural = pd.Series(0.0, density_cells.index)
-    pop_urban = pd.Series(0.0, density_cells.index)
-    
-    # calcualte rural and urban population per cell 
-    
-    
     # save total, rural, urban population 
-    pops = {"total": cell_pop}
-    pops["rural"] = pop_rural
-    pops["urban"] = pop_urban
+    pops = {
+        "total": cell_pop,
+        "rural": cell_rural_pop,
+        "urban": cell_urban_pop,
+    }
 
     for key, pop in pops.items():
         ycoords = ("y", cutout.coords["y"].data)
@@ -133,6 +130,20 @@ if __name__ == "__main__":
     # for a country. As we have urban rates at a county level, for the time 
     # being we will just use that
     """
+    # in km^2
+    cell_areas = grid_cells.to_crs(3035).area / 1e6
+
+    # pop per km^2
+    density_cells = cell_pop / cell_areas
+    
+    # Indicator matrix grid_cells -> counties; inprinciple Iinv*I is identity
+    # but imprecisions mean not perfect
+    Iinv = cutout.indicatormatrix(counties.geometry)
+    
+    # calcualte rural and urban population per cell 
+    cell_rural_pop = pd.Series(0.0, density_cells.index)
+    cell_urban_pop = pd.Series(0.0, density_cells.index)
+    
     for geoid in counties.index:
         logger.debug(
             f"The urbanization rate for county {geoid} is {round(urban_fraction.loc[geoid]*100)}%"
