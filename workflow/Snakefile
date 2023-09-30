@@ -435,13 +435,14 @@ rule cluster_network:
 
 rule build_population_layouts:
     input:
-        nuts3_shapes=RESOURCES + "nuts3_shapes.geojson",
-        urban_percent="data/urban_percent.csv",
-        cutout="cutouts/" + CDIR + config["atlite"]["default_cutout"] + ".nc",
+        county_shapes = DATA + "counties/cb_2020_us_county_500k.shp",
+        urban_percent = DATA + "UrbanArea.csv",
+        population = DATA + "population.csv",
+        cutout = "cutouts/" + CDIR + "{interconnect}_{cutout}.nc",
     output:
-        pop_layout_total=RESOURCES + "pop_layout_total.nc",
-        pop_layout_urban=RESOURCES + "pop_layout_urban.nc",
-        pop_layout_rural=RESOURCES + "pop_layout_rural.nc",
+        pop_layout_total = RESOURCES + "pop_layout_total.nc",
+        pop_layout_urban = RESOURCES + "pop_layout_urban.nc",
+        pop_layout_rural = RESOURCES + "pop_layout_rural.nc",
     log:
         LOGS + "build_population_layouts.log",
     resources:
