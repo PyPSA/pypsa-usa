@@ -13,16 +13,7 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 import matplotlib.pyplot as plt
-
-STATES_TO_REMOVE = [
-    "Hawaii", 
-    "Alaska", 
-    "Commonwealth of the Northern Mariana Islands", 
-    "United States Virgin Islands", 
-    "Guam", 
-    "Puerto Rico", 
-    "American Samoa"
-]
+import constants
 
 def load_urban_ratio(df: pd.DataFrame) -> pd.DataFrame:
     """Loads data to get urban and rural values at a GEOID level
@@ -105,7 +96,7 @@ if __name__ == "__main__":
 
     # retrive county level population data 
     counties = gpd.read_file(snakemake.input.county_shapes).set_index("GEOID")
-    counties = counties[~(counties.STATE_NAME.isin(STATES_TO_REMOVE))]
+    counties = counties[~(counties.STATE_NAME.isin(constants.STATES_TO_REMOVE))]
 
     # extract urban fraction in each county 
     urban_fraction = pd.read_csv(snakemake.input.urban_percent, skiprows=1)
@@ -119,7 +110,7 @@ if __name__ == "__main__":
     pop = pop.join(urban_fraction, rsuffix="_pop")
     pop = pop.drop(columns=["Geographic Area Name_pop"])
     pop["STATE"] = pop["Geographic Area Name"].map(lambda x: x.split(",")[1].strip())
-    pop = pop[~(pop.STATE.isin(STATES_TO_REMOVE))]
+    pop = pop[~(pop.STATE.isin(constants.STATES_TO_REMOVE))]
     
     # calcualte urban and rural populations 
     pop["urban_population"] = pop["population"] * pop["URBAN"]
@@ -186,6 +177,7 @@ if __name__ == "__main__":
     # build up cells based on population density to hit a generic urbanization rate 
     # for a country. As we have urban rates at a county level, for the time 
     # being we will just use that
+    
     """
     # in km^2
     cell_areas = grid_cells.to_crs(3035).area / 1e6

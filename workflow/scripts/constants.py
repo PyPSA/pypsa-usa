@@ -12,6 +12,17 @@ EUR_2_USD = 1.07 # taken on 12-12-2023
 # https://www.eia.gov/tools/faqs/faq.php?id=45&t=8
 NG_MCF_2_MWH = 0.3035
 
+# Extract only the continental united states 
+STATES_TO_REMOVE = [
+    "Hawaii", 
+    "Alaska", 
+    "Commonwealth of the Northern Mariana Islands", 
+    "United States Virgin Islands", 
+    "Guam", 
+    "Puerto Rico", 
+    "American Samoa"
+]
+
 ################################
 # Constants for ADS WECC mapping 
 ################################
