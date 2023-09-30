@@ -1,4 +1,7 @@
-"""Retrieves cost data"""
+"""Retrieves cost data for Europe
+
+This is a seperate rule due to the need for a wildcard argument 
+"""
 
 import logging
 from pathlib import Path
