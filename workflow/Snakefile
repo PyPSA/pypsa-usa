@@ -489,7 +489,7 @@ rule cluster_network:
 rule build_population_layouts:
     input:
         county_shapes = DATA + "counties/cb_2020_us_county_500k.shp",
-        urban_percent = DATA + "urbanization/DECENNIALDHC2020.H1-Data.csv"
+        urban_percent = DATA + "urbanization/DECENNIALDHC2020.H1-Data.csv",
         population = DATA + "population/DECENNIALDHC2020.P1-Data.csv",
         cutout = "cutouts/" + CDIR + "{interconnect}_{cutout}.nc",
     output:
