@@ -55,16 +55,31 @@ atlite:
   nprocesses: 4
   show_progress: false # false saves time
   cutouts:
-    # use 'base' to determine geographical bounds and time span from config
-    # base:
-      # module: era5
     era5_2019:
       module: era5 # in priority order
-      x: [-12., 35.] #TODO: include build_cutout rule to use these configurations. 
-      y: [33., 72]
+      time: ['2019', '2019']
+  interconnect:
+    western:
+      x: [-126, -99]
+      y: [27, 50]
       dx: 0.3
       dy: 0.3
-      time: ['2013', '2013']
+    eastern:
+      x: [-109, -65]
+      y: [23, 50]
+      dx: 0.3
+      dy: 0.3
+    texas:
+      x: [-110,-90]
+      y: [24, 37]
+      dx: 0.3
+      dy: 0.3
+    usa:
+      x: [-126, -65]
+      y: [23, 50]
+      dx: 0.3
+      dy: 0.3
+
 
 electricity: 
   conventional_carriers: [nuclear, oil, gas, coal, geothermal] # Choose Carriers to load into network
