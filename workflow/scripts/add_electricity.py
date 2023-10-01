@@ -1119,12 +1119,11 @@ def attach_conventional_generators(
     #             n.generators.loc[idx, attr] = values
 
 
-
 def load_powerplants_eia(
     eia_dataset: str, 
     carrier_mapper: Dict[str,str] = None,
 ) -> pd.DataFrame:
-    
+    import pdb; pdb.set_trace()
     # load data
     plants = pd.read_csv(
         eia_dataset, 
@@ -1136,7 +1135,6 @@ def load_powerplants_eia(
         plants['carrier'] = plants.tech_type.map(carrier_mapper)    
     
     return plants
-
 
 
 def load_powerplants_ads(
@@ -1221,8 +1219,6 @@ def attach_breakthrough_conventional_plants(fn_plants):
     marginal_cost_quadratic= tech_plants.GenIOC * tech_plants.GenFuelCost,
     carrier=tech_plants.type,
     weight=1.0,
-
-
 
 
 #########################################
