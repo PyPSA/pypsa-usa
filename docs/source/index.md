@@ -56,6 +56,7 @@ config-assumptions
 
 rules-retrieving-data
 rules-build-network
+rules-build-sector-network
 rules-simplify
 rules-solve
 rules-summary

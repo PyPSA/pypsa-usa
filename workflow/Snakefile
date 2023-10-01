@@ -54,6 +54,8 @@ DATA = "data/" + RDIR
 RESOURCES = "resources/" + RDIR if not run.get("shared_resources") else "resources/"
 RESULTS = "results/" + RDIR
 
+include: "rules/build_sector.smk"
+
 # ----------------------------------- Rules ---------------------------------- #
 
 
@@ -483,30 +485,6 @@ rule cluster_network:
         mem_mb=6000,
     script:
         "scripts/cluster_network_eur.py"
-
-################# ----------- Rules for sector coupling ---------- #################
-
-rule build_population_layouts:
-    input:
-        county_shapes = DATA + "counties/cb_2020_us_county_500k.shp",
-        urban_percent = DATA + "urbanization/DECENNIALDHC2020.H1-Data.csv",
-        population = DATA + "population/DECENNIALDHC2020.P1-Data.csv",
-        cutout = "cutouts/" + CDIR + "{interconnect}_{cutout}.nc",
-    output:
-        pop_layout_total = RESOURCES + "pop_layout_total.nc",
-        pop_layout_urban = RESOURCES + "pop_layout_urban.nc",
-        pop_layout_rural = RESOURCES + "pop_layout_rural.nc",
-    log:
-        LOGS + "build_population_layouts.log",
-    resources:
-        mem_mb=20000,
-    benchmark:
-        BENCHMARKS + "build_population_layouts"
-    threads: 8
-    conda:
-        "../envs/environment.yaml"
-    script:
-        "../scripts/build_population_layouts.py"
 
 ################# ----------- Rules to Optimize/Solve Network ---------- #################
 
