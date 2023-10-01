@@ -7,6 +7,7 @@ scenarios:
         Co2L1.0,
       ]
     ll: [vopt]
+    scope: "total" # "urban", "rural", or "total" 
 
 run:
   name: "" # use this to keep track of runs with different settings
