@@ -331,7 +331,7 @@ rule add_electricity:
         countries=config["countries"],
         renewable=config["renewable"],
         electricity=config["electricity"],
-        conventional=config.get("conventional", {}),
+        conventional=config["conventional"],
         costs=config["costs"],
     input:
         **{
@@ -343,6 +343,7 @@ rule add_electricity:
         **{
             f"conventional_{carrier}_{attr}": fn
             for carrier, d in config.get("conventional", {None: {}}).items()
+            if carrier in config["electricity"]["conventional_carriers"]
             for attr, fn in d.items()
             if str(fn).startswith("data/")
         },

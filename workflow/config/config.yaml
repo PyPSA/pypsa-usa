@@ -81,6 +81,12 @@ electricity:
     Store: [battery] #[battery, H2]
     Link: [] #[H2 pipeline]
 
+
+conventional:
+  unit_commitment: false
+  dynamic_fuel_price: false
+
+
 renewable: #build_renewable_profiles configurations
   wind:
     cutout: era5_2019

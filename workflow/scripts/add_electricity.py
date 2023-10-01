@@ -677,36 +677,6 @@ def match_plant_to_bus(n, plants):
     return plants_matched
 
 
-def attach_eia_batteries(n, plants_df,extendable_carriers, costs):
-    plants = plants_df.query(
-        "bus_assignment in @n.buses.index"
-    )
-
-    plants_filt = plants.query("carrier == 'battery' ")
-    plants_filt.index = plants_filt.index.astype(str) + "_" + plants_filt.generator_id.astype(str)
-
-    logger.info(f"Adding {len(plants_filt)} Batteries as Stores to the network.")
-    plants_filt = plants_filt.dropna(subset=['energy_capacity_mwh'])
-    # logger.info(f"Dropping {len(plants_filt) - len(plants_filt.dropna(subset=['energy_capacity_mwh']))} Batteries without energy capacity.")
-
-    n.madd(
-        "StorageUnit",
-        plants_filt.index,
-        bus=plants_filt.bus_assignment,
-        p_nom=plants_filt.capacity_mw,
-        p_nom_extendable='battery' in extendable_carriers['Store'],
-        max_hours = plants_filt.energy_capacity_mwh / plants_filt.capacity_mw,
-        build_year=plants_filt.operating_year,
-        carrier=plants_filt.carrier,
-        efficiency_store= 1.0,
-        efficiency_dispatch=1.0, #TODO: Add efficiency_dispatch to config file
-        cyclic_state_of_charge=True,
-        capital_cost=costs.at["battery", "capital_cost"],
-    )
-
-    return n
-
-
 def attach_eia_renewable_capacities_to_atlite(n, plants_df, renewable_carriers):
     plants = plants_df.query(
         "bus_assignment in @n.buses.index"
@@ -880,9 +850,6 @@ def attach_ads_renewables(n, plants_df, renewable_carriers, extendable_carriers,
 # def attach_wind_and_solar():
 #     return
 
-# def attach_battery_storage():
-#     return
-
 # def attach_hydro():
 #     return
 
@@ -1019,11 +986,7 @@ def test_snapshot_year_alignment(sns_year: int, load_year: int, configuration: s
                             \n
                           """)
 
-
-################### def attach_conventional(): ###########
-
-
-
+#double check if we need to filter the plants by buses that are in the network filtered by interconnect.
 def attach_conventional_generators(
     n,
     costs,
@@ -1046,12 +1009,12 @@ def attach_conventional_generators(
     #     ppl["carrier"] == "natural gas", "technology"
     # ]
 
-    # ppl = (
-    #     ppl.query("carrier in @carriers")
-    #     .join(costs, on="carrier", rsuffix="_r")
-    #     .rename(index=lambda s: "C" + str(s))
-    # )
-    # ppl["efficiency"] = ppl.efficiency.fillna(ppl.efficiency_r)
+    ppl = (
+        ppl.query("carrier in @carriers")
+        .join(costs, on="carrier", rsuffix="_r")
+        .rename(index=lambda s: "C" + str(s))
+    )
+    ppl["efficiency"] = ppl.efficiency.fillna(ppl.efficiency_r)
 
     if unit_commitment is not None:
         committable_attrs = ppl.carrier.isin(unit_commitment).to_frame("committable")
@@ -1080,20 +1043,19 @@ def attach_conventional_generators(
     # Define generators using modified ppl DataFrame
     caps = ppl.groupby("carrier").p_nom.sum().div(1e3).round(2)
     logger.info(f"Adding {len(ppl)} generators with capacities [GW] \n{caps}")
-
     n.madd(
         "Generator",
         ppl.index,
         carrier=ppl.carrier,
-        bus=ppl.bus,
+        bus=ppl.bus_assignment,
         p_nom_min=ppl.p_nom.where(ppl.carrier.isin(conventional_carriers), 0),
         p_nom=ppl.p_nom.where(ppl.carrier.isin(conventional_carriers), 0),
         p_nom_extendable=ppl.carrier.isin(extendable_carriers["Generator"]),
         efficiency=ppl.efficiency,
         marginal_cost=marginal_cost,
         capital_cost=ppl.capital_cost,
-        build_year=ppl.datein.fillna(0).astype(int),
-        lifetime=(ppl.dateout - ppl.datein).fillna(np.inf),
+        build_year=ppl.build_year.fillna(0).astype(int),
+        lifetime=(ppl.dateout - ppl.build_year).fillna(np.inf),
         **committable_attrs,
     )
 
@@ -1119,11 +1081,39 @@ def attach_conventional_generators(
     #             n.generators.loc[idx, attr] = values
 
 
+def attach_battery_storage(n: pypsa.Network, 
+                           plants: pd.DataFrame, 
+                           extendable_carriers, 
+                           costs):
+    """Attaches Battery Energy Storage Systems To the Network.
+    """
+    plants_filt = plants.query("carrier == 'battery' ")
+    plants_filt.index = plants_filt.index.astype(str) + "_" + plants_filt.generator_id.astype(str)
+
+    logger.info(f"Adding {len(plants_filt)} Batteries as Stores to the network.")
+    plants_filt = plants_filt.dropna(subset=['energy_capacity_mwh'])
+    # logger.info(f"Dropping {len(plants_filt) - len(plants_filt.dropna(subset=['energy_capacity_mwh']))} Batteries without energy capacity.")
+
+    n.madd(
+        "StorageUnit",
+        plants_filt.index,
+        carrier = "battery",
+        bus=plants_filt.bus_assignment,
+        p_nom=plants_filt.p_nom,
+        p_nom_extendable='battery' in extendable_carriers['Store'],
+        max_hours = plants_filt.energy_capacity_mwh / plants_filt.p_nom,
+        build_year=plants_filt.operating_year,
+        efficiency_store= 1.0,
+        efficiency_dispatch=1.0, #TODO: Add efficiency_dispatch to config file
+        cyclic_state_of_charge=True,
+        capital_cost=costs.at["battery", "capital_cost"],
+    )
+
+
 def load_powerplants_eia(
     eia_dataset: str, 
     carrier_mapper: Dict[str,str] = None,
 ) -> pd.DataFrame:
-    import pdb; pdb.set_trace()
     # load data
     plants = pd.read_csv(
         eia_dataset, 
@@ -1133,7 +1123,19 @@ def load_powerplants_eia(
     # apply mappings if required 
     if carrier_mapper:
         plants['carrier'] = plants.tech_type.map(carrier_mapper)    
-    
+
+    plants = add_missing_fuel_cost(plants, snakemake.input.fuel_costs)
+    plants = add_missing_heat_rates(plants, snakemake.input.fuel_costs)
+    plants['generator_name'] = plants.index.astype(str) + "_" + plants.generator_id.astype(str)
+    plants.set_index('generator_name', inplace=True)
+    plants['p_nom'] = plants.pop('capacity_mw')
+    plants['heat_rate'] = plants.pop('inchr2(mmbtu/mwh)')
+    plants['marginal_cost'] = plants.heat_rate * plants.fuel_cost  #(MMBTu/MW) * (USD/MMBTu) = USD/MW
+    plants['efficiency'] = 1 / (plants['heat_rate'] / 3.412) #MMBTu/MWh to MWh_electric/MWh_thermal
+    plants['ramp_limit_up'] = plants.pop('rampup rate(mw/minute)') / plants.p_nom * 60 #MW/min to p.u./hour
+    plants['ramp_limit_down'] = plants.pop('rampdn rate(mw/minute)') / plants.p_nom * 60 #MW/min to p.u./hour
+    plants['build_year'] = plants.operating_year
+    plants['dateout'] = np.inf #placeholder TODO FIX LIFETIME
     return plants
 
 
@@ -1165,60 +1167,101 @@ def load_powerplants_ads(
     if tech_mapper:
         plants['tech_type'] = plants.tech_type.map(tech_mapper)
     plants.rename(columns={'lat':'latitude', 'lon':'longitude'}, inplace=True)    
-    
+
+    plants['generator_name'] = plants.ads_name.astype(str)
+    plants['p_nom'] = plants['maxcap(mw)']
+    plants['heat_rate'] = plants['inchr2(mmbtu/mwh)']
+    plants['marginal_cost'] = plants['heat_rate'] * plants.fuel_cost  #(MMBTu/MW) * (USD/MMBTu) = USD/MW
+    plants['efficiency'] = 1 / (plants['heat_rate'] / 3.412) #MMBTu/MWh to MWh_electric/MWh_thermal
+    plants['ramp_limit_up'] = plants['rampup rate(mw/minute)']/ plants['maxcap(mw)'] * 60 #MW/min to p.u./hour
+    plants['ramp_limit_down'] = plants['rampdn rate(mw/minute)']/ plants['maxcap(mw)'] * 60 #MW/min to p.u./hour
     return plants
 
 
-def prepare_ads_conventional_plants(
-    plants_df: pd.DataFrame
-) -> pd.DataFrame:
-    """
-    Arranges ADS conventional plant data into a format that can be used by
-      the add_conventional_plants and maybe also the add_wind_and_solar functions.
-    """
-    plants_filt.index = plants_filt.ads_name.astype(str)
-    bus=plants_filt.bus_assignment
-    p_nom=plants_filt['maxcap(mw)']
-    p_nom_extendable= tech_type in extendable_carriers['Generator']
-    marginal_cost=plants_filt['inchr2(mmbtu/mwh)'] * plants_filt.fuel_cost,  #(MMBTu/MW) * (USD/MMBTu) = USD/MW
-    ramp_limit_up= plants_filt['rampup rate(mw/minute)']/ plants_filt['maxcap(mw)'] * 60, #MW/min to p.u./hour
-    ramp_limit_down= plants_filt['rampdn rate(mw/minute)']/ plants_filt['maxcap(mw)'] * 60, #MW/min to p.u./hour
-    carrier=plants_filt.carrier,
+def load_powerplants_breakthrough(breakthrough_dataset: str) -> pd.DataFrame:
+    """Loads base Breakthrough Energy plants and applies name mappings"""
+
+    plants = pd.read_csv(breakthrough_dataset, dtype={"bus_id": str}, index_col=0).query("bus_id in @n.buses.index")
+    plants.replace(["dfo"], ["oil"], inplace=True)
+    plants['generator_name'] = plants.index.astype(str)
+    plants['bus_assignment']= plants.bus_id.astype(str)
+    plants['p_nom']= plants['Pmax']
+    plants['heat_rate']= plants['GenIOB']
+    plants['marginal_cost']= plants['GenIOB'] * plants['GenFuelCost']  #(MMBTu/MW) * (USD/MMBTu) = USD/MW
+    plants['efficiency']= 1 / (plants['GenIOB'] / 3.412) #MMBTu/MWh to MWh_electric/MWh_thermal
+    plants['carrier']= plants.type
+    return plants
 
 
-def attach_eia_conventional_plants(
-    plants_df: pd.DataFrame
-) -> pd.DataFrame:
-    """
-    Arranges EIA conventional plant data into a format that can be used by
-      the add_conventional_plants and maybe also the add_wind_and_solar functions.
-    """
+# def attach_eia_batteries(n, plants_df,extendable_carriers, costs):
+#     plants = plants_df.query(
+#         "bus_assignment in @n.buses.index"
+#     )
+#     plants_filt = plants.query("carrier == 'battery' ")
+#     plants_filt.index = plants_filt.index.astype(str) + "_" + plants_filt.generator_id.astype(str)
+#     n.madd(
+#         "StorageUnit",
+#         plants_filt.index,
+#         bus=plants_filt.bus_assignment,
+#         p_nom=plants_filt.capacity_mw,
+#         p_nom_extendable='battery' in extendable_carriers['Store'],
+#         max_hours = plants_filt.energy_capacity_mwh / plants_filt.capacity_mw,
+#         build_year=plants_filt.operating_year,
+#         carrier=plants_filt.carrier,
+#         efficiency_store= 1.0,
+#         efficiency_dispatch=1.0, #TODO: Add efficiency_dispatch to config file
+#         cyclic_state_of_charge=True,
+#         capital_cost=costs.at["battery", "capital_cost"],
+#     )
+#     return n
 
-    plants_filt.index = plants_filt.index.astype(str) + "_" + plants_filt.generator_id.astype(str)
-    bus=plants_filt.bus_assignment
-    p_nom=plants_filt.capacity_mw
-    p_nom_extendable= tech_type in extendable_carriers['Generator']
-    marginal_cost=plants_filt['inchr2(mmbtu/mwh)'] * plants_filt.fuel_cost  #(MMBTu/MW) * (USD/MMBTu) = USD/MW
-    ramp_limit_up= plants_filt['rampup rate(mw/minute)']/ plants_filt.capacity_mw * 60 #MW/min to p.u./hour
-    ramp_limit_down= plants_filt['rampdn rate(mw/minute)']/ plants_filt.capacity_mw * 60 #MW/min to p.u./hour
-    carrier=plants_filt.carrier
-    build_year=plants_filt.operating_year
-    weight=1.0
+# def prepare_ads_conventional_plants(
+#     plants_df: pd.DataFrame
+# ) -> pd.DataFrame:
+#     """
+#     Arranges ADS conventional plant data into a format that can be used by
+#       the add_conventional_plants and maybe also the add_wind_and_solar functions.
+#     """
+#     plants_filt.index = plants_filt.ads_name.astype(str)
+#     bus=plants_filt.bus_assignment
+#     p_nom=plants_filt['maxcap(mw)']
+#     p_nom_extendable= tech_type in extendable_carriers['Generator']
+#     marginal_cost=plants_filt['inchr2(mmbtu/mwh)'] * plants_filt.fuel_cost,  #(MMBTu/MW) * (USD/MMBTu) = USD/MW
+#     ramp_limit_up= plants_filt['rampup rate(mw/minute)']/ plants_filt['maxcap(mw)'] * 60, #MW/min to p.u./hour
+#     ramp_limit_down= plants_filt['rampdn rate(mw/minute)']/ plants_filt['maxcap(mw)'] * 60, #MW/min to p.u./hour
+#     carrier=plants_filt.carrier,
 
 
-def attach_breakthrough_conventional_plants(fn_plants):
-    # _add_missing_carriers_from_costs(n, costs, conventional_carriers)
-    # plants = pd.read_csv(fn_plants, dtype={"bus_id": str}, index_col=0).query("bus_id in @n.buses.index")
-    # plants.replace(["dfo"], ["oil"], inplace=True)
+# def attach_eia_conventional_plants(
+#     plants_df: pd.DataFrame
+# ) -> pd.DataFrame:
+#     """
+#     Arranges EIA conventional plant data into a format that can be used by
+#       the add_conventional_plants and maybe also the add_wind_and_solar functions.
+#     """
+#     plants_filt.index = plants_filt.index.astype(str) + "_" + plants_filt.generator_id.astype(str)
+#     bus=plants_filt.bus_assignment
+#     p_nom=plants_filt.capacity_mw
+#     p_nom_extendable= tech_type in extendable_carriers['Generator']
+#     marginal_cost=plants_filt['inchr2(mmbtu/mwh)'] * plants_filt.fuel_cost  #(MMBTu/MW) * (USD/MMBTu) = USD/MW
+#     ramp_limit_up= plants_filt['rampup rate(mw/minute)']/ plants_filt.capacity_mw * 60 #MW/min to p.u./hour
+#     ramp_limit_down= plants_filt['rampdn rate(mw/minute)']/ plants_filt.capacity_mw * 60 #MW/min to p.u./hour
+#     carrier=plants_filt.carrier
+#     build_year=plants_filt.operating_year
+#     weight=1.0
+# def attach_breakthrough_conventional_plants(fn_plants):
+#     # _add_missing_carriers_from_costs(n, costs, conventional_carriers)
+#     # plants = pd.read_csv(fn_plants, dtype={"bus_id": str}, index_col=0).query("bus_id in @n.buses.index")
+#     # plants.replace(["dfo"], ["oil"], inplace=True)
 
-    tech_plants.index = tech_plants.index.astype(str)
-    bus=tech_plants.bus_id.astype(str),
-    p_nom=tech_plants.Pmax,
-    p_nom_extendable= tech in extendable_carriers["Generator"],
-    marginal_cost=tech_plants.GenIOB * tech_plants.GenFuelCost,  #(MMBTu/MW) * (USD/MMBTu) = USD/MW
-    marginal_cost_quadratic= tech_plants.GenIOC * tech_plants.GenFuelCost,
-    carrier=tech_plants.type,
-    weight=1.0,
+#     tech_plants.index = tech_plants.index.astype(str)
+#     bus=tech_plants.bus_id.astype(str),
+#     p_nom=tech_plants.Pmax,
+#     p_nom_extendable= tech in extendable_carriers["Generator"],
+#     marginal_cost=tech_plants.GenIOB * tech_plants.GenFuelCost,  #(MMBTu/MW) * (USD/MMBTu) = USD/MW
+#     marginal_cost_quadratic= tech_plants.GenIOC * tech_plants.GenFuelCost,
+#     carrier=tech_plants.type,
+#     weight=1.0,
 
 
 #########################################
@@ -1280,32 +1323,44 @@ if __name__ == "__main__":
         k: v for k, v in snakemake.input.items() if k.startswith("conventional_")
     }
     
+    if params.conventional["unit_commitment"]:
+        unit_commitment = pd.read_csv(snakemake.input.unit_commitment, index_col=0)
+    else:
+        unit_commitment = None
+
+    if params.conventional["dynamic_fuel_price"]:
+        fuel_price = pd.read_csv(
+            snakemake.input.fuel_price, index_col=0, header=0, parse_dates=True
+        )
+        fuel_price = fuel_price.reindex(n.snapshots).fillna(method="ffill")
+    else:
+        fuel_price = None
+
     if configuration == "pypsa-usa": 
         costs = costs.rename(index={"onwind": "wind",
                                      #"OCGT": "ng"
                                      }) #changing cost data to match the plant data #TODO: #10 change this so that fuel types and plant types match the pypsa naming scheme.
 
         eia_carrier_mapper = constants.EIA_CARRIER_MAPPER
-        plants = load_powerplants_eia(snakemake.input['plants_eia'], eia_carrier_mapper)
-        plant_with_bus_assignments = match_plant_to_bus(n, plants)
+        plants = load_powerplants_eia(snakemake.input['plants_eia'], 
+                                      eia_carrier_mapper)
+        plants = match_plant_to_bus(n, plants)
 
-
-        plants = add_missing_fuel_cost(plants, snakemake.input.fuel_costs)
-        plants = add_missing_heat_rates(plants, snakemake.input.fuel_costs)
-        
-        #attach conventional plants to network
-        n = attach_eia_conventional_plants(
+        attach_conventional_generators(
             n,
-            plant_with_bus_assignments,
+            costs,
+            plants,
             conventional_carriers,
             extendable_carriers,
-            costs,
-        )
+            params.conventional,
+            conventional_inputs,
+            unit_commitment=unit_commitment,
+            fuel_price=fuel_price)
 
         #attach batteries to network
-        n = attach_eia_batteries(
+        n = attach_battery_storage(
             n, 
-            plant_with_bus_assignments,
+            plants,
             extendable_carriers, 
             costs
         )
@@ -1334,7 +1389,7 @@ if __name__ == "__main__":
 
         attach_eia_renewable_capacities_to_atlite(
             n,
-            plant_with_bus_assignments,
+            plants,
             renewable_carriers
         )
 
