@@ -1,9 +1,5 @@
 """Rules for building sector coupling network"""
 
-rule force_sector:
-    input:
-        population = DATA + "population/DECENNIALDHC2020.P1-Data.csv",
-
 rule build_population_layouts:
     input:
         county_shapes = DATA + "counties/cb_2020_us_county_500k.shp",
@@ -36,7 +32,7 @@ rule build_heat_demands:
         cutout = "cutouts/" + CDIR + "{interconnect}_" + config["atlite"]["default_cutout"] + ".nc",
     output:
         # heat_demand=RESOURCES + "heat_demand_{scope}_elec_s{simpl}_{clusters}.nc",
-        heat_demand=RESOURCES + "heat_demand_{scope}_elec_s_{clusters}.nc",
+        heat_demand = RESOURCES + "heat_demand_{scope}_elec_s_{clusters}.nc",
     resources:
         mem_mb=20000,
     threads: 8
@@ -51,28 +47,32 @@ rule build_heat_demands:
     script:
         "../scripts/build_heat_demand.py"
 
-
-# rule build_temperature_profiles:
-#     params:
-#         snapshots=config["snapshots"],
-#     input:
-#         pop_layout=RESOURCES + "pop_layout_{scope}.nc",
-#         regions_onshore=RESOURCES + "regions_onshore_elec_s{simpl}_{clusters}.geojson",
-#         cutout="cutouts/" + CDIR + config["atlite"]["default_cutout"] + ".nc",
-#     output:
-#         temp_soil=RESOURCES + "temp_soil_{scope}_elec_s{simpl}_{clusters}.nc",
-#         temp_air=RESOURCES + "temp_air_{scope}_elec_s{simpl}_{clusters}.nc",
-#     resources:
-#         mem_mb=20000,
-#     threads: 8
-#     log:
-#         LOGS + "build_temperature_profiles_{scope}_{simpl}_{clusters}.log",
-#     benchmark:
-#         BENCHMARKS + "build_temperature_profiles/{scope}_s{simpl}_{clusters}"
-#     conda:
-#         "../envs/environment.yaml"
-#     script:
-#         "../scripts/build_temperature_profiles.py"
+rule build_temperature_profiles:
+    params:
+        snapshots = config["snapshots"],
+    input:
+        pop_layout = RESOURCES + "pop_layout_{scope}.nc",
+        # regions_onshore = RESOURCES + "regions_onshore_elec_s{simpl}_{clusters}.geojson",
+        regions_onshore = RESOURCES + "{interconnect}/regions_onshore_s_{clusters}.geojson",
+        cutout = "cutouts/" + CDIR + "{interconnect}_" + config["atlite"]["default_cutout"] + ".nc",
+    output:
+        # temp_soil = RESOURCES + "temp_soil_{scope}_elec_s{simpl}_{clusters}.nc",
+        # temp_air = RESOURCES + "temp_air_{scope}_elec_s{simpl}_{clusters}.nc",
+        temp_soil = RESOURCES + "temp_soil_{scope}_elec_s_{clusters}.nc",
+        temp_air = RESOURCES + "temp_air_{scope}_elec_s_{clusters}.nc",
+    resources:
+        mem_mb=20000,
+    threads: 8
+    log:
+        LOGS + "build_temperature_profiles_{scope}_{clusters}.log",
+        # LOGS + "build_temperature_profiles_{scope}_{simpl}_{clusters}.log",
+    benchmark:
+        # BENCHMARKS + "build_temperature_profiles/{scope}_s{simpl}_{clusters}"
+        BENCHMARKS + "build_temperature_profiles/{scope}_s_{clusters}"
+    conda:
+        "../envs/environment.yaml"
+    script:
+        "../scripts/build_temperature_profiles.py"
 
 # rule build_solar_thermal_profiles:
 #     params:
