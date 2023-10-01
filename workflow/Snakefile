@@ -550,7 +550,7 @@ rule prepare_network:
     log:
         "logs/prepare_network",
     script:
-        "scripts/prepare_network.py"
+        "scripts/subworkflows/pypsa-eur/scripts/prepare_network.py" 
 
 def memory(w):
     factor = 3.0

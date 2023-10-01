@@ -70,11 +70,14 @@ def add_branches_from_file(n: pypsa.Network, fn_branches: str) -> pypsa.Network:
         )
     return n
 
-def add_custom_line_type(n):
+def add_custom_line_type(n: pypsa.Network):
     n.line_types.loc["Rail"] = pd.Series(
         [60, 0.0683, 0.335, 15, 1.01],
         index=["f_nom", "r_per_length", "x_per_length", "c_per_length", "i_nom"],
     )
+
+def assign_line_types(n: pypsa.Network):
+    n.lines.type = n.lines.v_nom.map(snakemake.config['lines']['types'])
 
 def add_dclines_from_file(n: pypsa.Network, fn_dclines: str) -> pypsa.Network:
 
@@ -164,6 +167,7 @@ if __name__ == "__main__":
     n = add_branches_from_file(n, snakemake.input["lines"])
     n = add_dclines_from_file(n, snakemake.input["links"])
     add_custom_line_type(n)
+    assign_line_types(n)
 
     # export bus2sub interconnect data
     logger.info(f"exporting bus2sub and sub data for {interconnect}")
