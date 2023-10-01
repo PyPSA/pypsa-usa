@@ -1,9 +1,13 @@
 """Rules for building sector coupling network"""
 
+rule force_sector:
+    input:
+        population = DATA + "population/DECENNIALDHC2020.P1-Data.csv",
+
 rule build_population_layouts:
     input:
         county_shapes = DATA + "counties/cb_2020_us_county_500k.shp",
-        urban_percent = DATA + "urbanization/DECENNIALDHC2020.H1-Data.csv",
+        urban_percent = DATA + "urbanization/DECENNIALDHC2020.H2-Data.csv",
         population = DATA + "population/DECENNIALDHC2020.P1-Data.csv",
         cutout = "cutouts/" + CDIR + "{interconnect}_{cutout}.nc",
     output:
@@ -22,26 +26,27 @@ rule build_population_layouts:
     script:
         "../scripts/build_population_layouts.py"
 
-# rule build_heat_demands:
-#     params:
-#         snapshots=config["snapshots"],
-#     input:
-#         pop_layout=RESOURCES + "pop_layout_{scope}.nc",
-#         regions_onshore=RESOURCES + "regions_onshore_elec_s{simpl}_{clusters}.geojson",
-#         cutout="cutouts/" + CDIR + config["atlite"]["default_cutout"] + ".nc",
-#     output:
-#         heat_demand=RESOURCES + "heat_demand_{scope}_elec_s{simpl}_{clusters}.nc",
-#     resources:
-#         mem_mb=20000,
-#     threads: 8
-#     log:
-#         LOGS + "build_heat_demands_{scope}_{simpl}_{clusters}.loc",
-#     benchmark:
-#         BENCHMARKS + "build_heat_demands/{scope}_s{simpl}_{clusters}"
-#     conda:
-#         "../envs/environment.yaml"
-#     script:
-#         "../scripts/build_heat_demand.py"
+rule build_heat_demands:
+    params:
+        snapshots=config["snapshots"],
+    input:
+        pop_layout=RESOURCES + "pop_layout_{scope}.nc",
+        # regions_onshore=RESOURCES + "regions_onshore_elec_s{simpl}_{clusters}.geojson",
+        regions_onshore=RESOURCES + "{interconnect}/regions_onshore_s_{clusters}.geojson",
+        cutout="cutouts/" + CDIR + config["atlite"]["default_cutout"] + ".nc",
+    output:
+        heat_demand=RESOURCES + "heat_demand_{scope}_elec_s{simpl}_{clusters}.nc",
+    resources:
+        mem_mb=20000,
+    threads: 8
+    log:
+        LOGS + "build_heat_demands_{scope}_{simpl}_{clusters}.loc",
+    benchmark:
+        BENCHMARKS + "build_heat_demands/{scope}_s{simpl}_{clusters}"
+    conda:
+        "../envs/environment.yaml"
+    script:
+        "../scripts/build_heat_demand.py"
 
 
 # rule build_temperature_profiles:

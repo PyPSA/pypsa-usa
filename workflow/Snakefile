@@ -42,8 +42,6 @@ configfile: "config/config.yaml"
 configfile: "config/config.cluster.yaml"
 configfile: "config/config.osw.yaml"
 
-include: "rules/build_sector.smk"
-
 ATLITE_NPROCESSES = config["atlite"].get("nprocesses", 4)
 
 run = config.get("run", {})
@@ -55,6 +53,8 @@ BENCHMARKS = "benchmarks/" + RDIR
 DATA = "data/" + RDIR
 RESOURCES = "resources/" + RDIR if not run.get("shared_resources") else "resources/"
 RESULTS = "results/" + RDIR
+
+include: "rules/build_sector.smk"
 
 # ----------------------------------- Rules ---------------------------------- #
 
