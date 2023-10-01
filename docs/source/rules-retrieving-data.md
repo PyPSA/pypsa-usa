@@ -21,7 +21,7 @@ Baythymetry data via [GEBCO](https://www.gebco.net/) and a cutout of USA [Copern
 ## Rule `retrieve_sector_databundle`
 Retrives data for sector coupling
 
-[![DOI](https://sandbox.zenodo.org/badge/DOI/10.5072/zenodo.1244084.svg)](https://doi.org/10.5072/zenodo.1244084)
+[![DOI](https://sandbox.zenodo.org/badge/DOI/10.5072/zenodo.1244195.svg)](https://doi.org/10.5072/zenodo.1244195)
 
 Geographic boundaries of the United States counties are taken from the 
 United States Census Bureau. Note, these follow 2020 boundaries to match 
