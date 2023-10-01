@@ -30,19 +30,22 @@ rule build_heat_demands:
     params:
         snapshots=config["snapshots"],
     input:
-        pop_layout=RESOURCES + "pop_layout_{scope}.nc",
+        pop_layout = RESOURCES + "pop_layout_{scope}.nc",
         # regions_onshore=RESOURCES + "regions_onshore_elec_s{simpl}_{clusters}.geojson",
-        regions_onshore=RESOURCES + "{interconnect}/regions_onshore_s_{clusters}.geojson",
-        cutout="cutouts/" + CDIR + config["atlite"]["default_cutout"] + ".nc",
+        regions_onshore = RESOURCES + "{interconnect}/regions_onshore_s_{clusters}.geojson",
+        cutout = "cutouts/" + CDIR + "{interconnect}_" + config["atlite"]["default_cutout"] + ".nc",
     output:
-        heat_demand=RESOURCES + "heat_demand_{scope}_elec_s{simpl}_{clusters}.nc",
+        # heat_demand=RESOURCES + "heat_demand_{scope}_elec_s{simpl}_{clusters}.nc",
+        heat_demand=RESOURCES + "heat_demand_{scope}_elec_s_{clusters}.nc",
     resources:
         mem_mb=20000,
     threads: 8
     log:
-        LOGS + "build_heat_demands_{scope}_{simpl}_{clusters}.loc",
+        # LOGS + "build_heat_demands_{scope}_{simpl}_{clusters}.loc",
+        LOGS + "build_heat_demands_{scope}_{clusters}.loc",
     benchmark:
-        BENCHMARKS + "build_heat_demands/{scope}_s{simpl}_{clusters}"
+        BENCHMARKS + "build_heat_demands/{scope}_s_{clusters}"
+        # BENCHMARKS + "build_heat_demands/{scope}_s{simpl}_{clusters}"
     conda:
         "../envs/environment.yaml"
     script:
