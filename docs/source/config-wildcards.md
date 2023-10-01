@@ -126,9 +126,14 @@ The ``{sector_opts}`` wildcard is only used for sector-coupling studies.
    :file: configtables/sector-opts.csv -->
 
 (scope)=
-## The ``{scope}`` wildcard
+## The `{scope}` wildcard
+Takes values `residential`, `urban`, `total`. Used in sector coupling 
+studies to define population breakdown. 
 
-<!-- Takes values ``residential``, ``urban``, ``total``. -->
+Used in the following rules:
+- `build_heat_demands`
+- `build_temperature_profiles`
+- `build_solar_thermal_profiles`
 
 (planning_horizons)=
 ## The ``{planning_horizons}`` wildcard
