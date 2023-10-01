@@ -1,0 +1,53 @@
+name: Documentation
+description: Issues relating to documentation of PyPSA-USA
+# title: ""
+labels: ["documentation"]
+body:
+
+- type: dropdown
+  id: issuetype
+  attributes:
+    label: Type of documentation issue
+    multiple: true
+    options:
+      - Missing Information
+      - Incorect Information
+      - Typo
+      - Other
+  validations:
+    required: true
+
+- type: textarea
+  id: description
+  attributes:
+    label: Issue Description
+    description: Detailed description of the documentation issue
+    placeholder: |
+      ie. There is no data source attached to the a `retrieve_data` rule 
+  validations:
+    required: true
+
+- type: textarea
+  id: current
+  attributes:
+    label: Link to existing documentation
+    description: If applicable, provide the link to the current documentation location
+  validations:
+    required: false
+
+- type: textarea
+  id: solution
+  attributes:
+    label: Suggested Update
+    description: Do you have an idea on how to update the documention?
+  validations:
+    required: false
+
+- type: textarea
+  id: other
+  attributes:
+    label: Additional Info
+    description: |
+      Please provide any additional information to help fix this documentation issue
+  validations:
+    required: false

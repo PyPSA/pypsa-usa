@@ -1,0 +1,65 @@
+State,City,Base Project Cost ($/kW ),Location Variation,Delta Cost Difference ($/kW),Total Location Project Cost ($/kW)
+Alabama,Huntsville,6700,0.99,-66,6634
+Arizona,Phoenix,6700,0.99,-74,6626
+Arkansas,Little Rock,6700,1,10,6710
+California,Bakersfield,6700,1.13,858,7558
+California,Los Angeles,6700,1.14,907,7607
+California,Modesto,6700,1.13,892,7592
+California,Sacramento,6700,1.14,953,7652
+California,San Francisco,6700,1.19,1284,7983
+Colorado,Denver,6700,0.98,-157,6543
+Connecticut,Hartford,6700,1.11,729,7429
+Delaware,Dover,6700,1.07,463,7163
+District of Columbia,Washington,6700,1.02,144,6844
+Florida,Tallahassee,6700,0.97,-205,6495
+Florida,Tampa,6700,0.98,-136,6564
+Georgia,Atlanta,6700,1,32,6731
+Idaho,Boise,6700,1.02,147,6847
+Illinois,Chicago,6700,1.16,1051,7750
+Illinois,Joliet,6700,1.13,874,7573
+Indiana,Indianapolis,6700,1.02,161,6861
+Iowa,Davenport,6700,1.03,190,6890
+Iowa,Waterloo,6700,0.99,-63,6637
+Kansas,Wichita,6700,0.99,-57,6643
+Kentucky,Louisville,6700,1.01,97,6797
+Louisiana,New Orleans,6700,1,14,6713
+Maine,Portland,6700,1.01,97,6797
+Maryland,Baltimore,6700,1.02,131,6831
+Massachusetts,Boston,6700,1.14,905,7605
+Michigan,Detroit,6700,1.07,455,7154
+Michigan,Grand Rapids,6700,1.02,119,6819
+Minnesota,Saint Paul,6700,1.06,391,7091
+Mississippi,Jackson,6700,0.97,-205,6495
+Missouri,St. Louis,6700,1.1,684,7384
+Missouri,Kansas City,6700,1.05,338,7038
+Montana,Great Falls,6700,0.98,-106,6594
+Nebraska,Omaha,6700,0.99,-39,6661
+New Hampshire,Concord,6700,1.07,450,7150
+New Jersey,Newark,6700,1.14,961,7661
+New,Albuquerque,6700,1.02,108,6808
+New Mexico,New York,6700,1.27,1834,8533
+New York,Syracuse,6700,1.04,254,6954
+Nevada,Las Vegas,6700,1.1,693,7393
+North Carolina,Charlotte,6700,0.98,-138,6562
+North Dakota,Bismarck,6700,1,9,6708
+Oklahoma,Oklahoma City,6700,1,0,6700
+Oklahoma,Tulsa,6700,0.96,-268,6431
+Ohio,Cincinnati,6700,0.96,-270,6430
+Oregon,Portland,6700,1.07,496,7196
+Pennsylvania,Philadelphia,6700,1.13,892,7592
+Pennsylvania,Wilkes-Barre,6700,1.05,325,7024
+Rhode Island,Providence,6700,1.1,650,7349
+South Carolina,Charleston,6700,1.02,156,6856
+South Carolina,Spartanburg,6700,0.99,-56,6644
+South Dakota,Rapid City,6700,0.98,-111,6589
+Tennessee,Knoxville (Nashville),6700,1.01,51,6751
+Texas,Houston,6700,0.96,-270,6429
+Utah,Salt Lake City,6700,1.02,113,6813
+Vermont,Burlington,6700,1.07,458,7157
+Virginia,Alexandria,6700,1.02,124,6824
+Virginia,Lynchburg,6700,0.98,-118,6582
+Washington,Seattle,6700,1.11,705,7405
+Washington,Spokane,6700,1.04,243,6943
+West Virginia,Charleston,6700,1.02,149,6848
+Wisconsin,Green Bay,6700,1.02,113,6812
+Wyoming,Cheyenne,6700,0.99,-66,6633

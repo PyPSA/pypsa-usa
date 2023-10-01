@@ -1,0 +1,65 @@
+State,City,Base Project Cost ($/kW ),Location Variation,Delta Cost Difference ($/kW),Total Location Project Cost ($/kW)
+Alabama,Huntsville,5876,0.98,-126,5750
+Arizona,Phoenix,5876,1.04,232,6108
+Arkansas,Little Rock,5876,0.98,-99,5777
+California,Bakersfield,5876,1.22,1278,7153
+California,Los Angeles,5876,1.22,1300,7176
+California,Modesto,5876,1.23,1333,7209
+California,Sacramento,5876,1.24,1408,7284
+California,San Francisco,5876,1.3,1778,7654
+Colorado,Denver,5876,1.02,99,5974
+Connecticut,Hartford,5876,1.19,1114,6990
+Delaware,Dover,5876,1.17,972,6848
+District of Columbia,Washington,5876,1.06,381,6257
+Florida,Tallahassee,5876,0.96,-235,5640
+Florida,Tampa,5876,0.98,-143,5733
+Georgia,Atlanta,5876,1,-21,5855
+Idaho,Boise,5876,1.03,155,6031
+Illinois,Chicago,5876,1.22,1310,7186
+Illinois,Joliet,5876,1.19,1118,6994
+Indiana,Indianapolis,5876,1.02,126,6001
+Iowa,Davenport,5876,1.04,221,6097
+Iowa,Waterloo,5876,0.98,-125,5751
+Kansas,Wichita,5876,0.98,-111,5765
+Kentucky,Louisville,5876,1.01,64,5939
+Louisiana,New Orleans,5876,0.99,-74,5802
+Maine,Portland,5876,1.03,157,6033
+Maryland,Baltimore,5876,1.02,118,5993
+Massachusetts,Boston,5876,1.23,1341,7216
+Michigan,Detroit,5876,1.1,590,6466
+Michigan,Grand Rapids,5876,1.04,214,6090
+Minnesota,Saint Paul,5876,1.08,497,6372
+Mississippi,Jackson,5876,0.96,-230,5645
+Missouri,St. Louis,5876,1.11,667,6543
+Missouri,Kansas City,5876,1.07,383,6259
+Montana,Great Falls,5876,0.98,-142,5734
+Nebraska,Omaha,5876,0.98,-99,5777
+New Hampshire,Concord,5876,1.12,682,6558
+New Jersey,Newark,5876,1.2,1146,7022
+New,Albuquerque,5876,1,3,5879
+New Mexico,New York,5876,1.46,2675,8551
+New York,Syracuse,5876,1.1,602,6477
+Nevada,Las Vegas,5876,1.13,772,6648
+North Carolina,Charlotte,5876,0.97,-186,5690
+North Dakota,Bismarck,5876,1.02,137,6013
+Oklahoma,Oklahoma City,5876,1.01,32,5908
+Oklahoma,Tulsa,5876,0.94,-341,5535
+Ohio,Cincinnati,5876,0.94,-342,5534
+Oregon,Portland,5876,1.13,782,6658
+Pennsylvania,Philadelphia,5876,1.24,1382,7258
+Pennsylvania,Wilkes-Barre,5876,1.12,700,6576
+Rhode Island,Providence,5876,1.17,1005,6881
+South Carolina,Charleston,5876,0.99,-72,5804
+South Carolina,Spartanburg,5876,0.98,-113,5763
+South Dakota,Rapid City,5876,0.98,-128,5748
+Tennessee,Knoxville (Nashville),5876,0.99,-71,5804
+Texas,Houston,5876,0.94,-331,5545
+Utah,Salt Lake City,5876,1,-18,5858
+Vermont,Burlington,5876,1.06,334,6209
+Virginia,Alexandria,5876,1.06,346,6222
+Virginia,Lynchburg,5876,1.01,71,5947
+Washington,Seattle,5876,1.12,713,6589
+Washington,Spokane,5876,1.05,298,6173
+West Virginia,Charleston,5876,1.04,206,6082
+Wisconsin,Green Bay,5876,1.04,229,6105
+Wyoming,Cheyenne,5876,0.99,-40,5836

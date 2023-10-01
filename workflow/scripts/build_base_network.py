@@ -1,4 +1,11 @@
 # BY PyPSA-USA Authors 
+"""
+Reads in Breakthrough Energy infrastructure data, and converts it into PyPSA compatiable components. A base netowork file (`*.nc`) is written out. Included in this network are: 
+- Geolocated buses 
+- Geoloactated AC and DC power lines 
+- Transformers 
+"""
+
 
 import pypsa, pandas as pd, logging, geopandas as gpd
 from geopandas.tools import sjoin

@@ -1,0 +1,65 @@
+State,City,Base Project Cost ($/kW ),Location Variation,Delta Cost Difference ($/kW),Total Location Project Cost ($/kW)
+Alabama,Huntsville,N/A,N/A,N/A,N/A
+Arizona,Phoenix,N/A,N/A,N/A,N/A
+Arkansas,Little Rock,N/A,N/A,N/A,N/A
+California,Bakersfield,"4,375",1.03,152,4527
+California,Los Angeles,"4,375",1.58,2548,6923
+California,Modesto,"4,375",1.52,2264,6639
+California,Sacramento,"4,375",1.58,2538,6912
+California,San Francisco,"4,375",1.9,3944,8318
+Colorado,Denver,N/A,N/A,N/A,N/A
+Connecticut,Hartford,"4,375",1.01,41,4416
+Delaware,Dover,"4,375",1.31,1344,5719
+District of Columbia,Washington,N/A,N/A,N/A,N/A
+Florida,Tallahassee,N/A,N/A,N/A,N/A
+Florida,Tampa,N/A,N/A,N/A,N/A
+Georgia,Atlanta,"4,375",1.02,87,4462
+Idaho,Boise,N/A,N/A,N/A,N/A
+Illinois,Chicago,"4,375",1,-7,4368
+Illinois,Joliet,"4,375",1.65,2842,7217
+Indiana,Indianapolis,"4,375",1.06,277,4652
+Iowa,Davenport,N/A,N/A,N/A,N/A
+Iowa,Waterloo,N/A,N/A,N/A,N/A
+Kansas,Wichita,N/A,N/A,N/A,N/A
+Kentucky,Louisville,N/A,N/A,N/A,N/A
+Louisiana,New Orleans,N/A,N/A,N/A,N/A
+Maine,Portland,"4,375",1.01,31,4405
+Maryland,Baltimore,"4,375",1.04,180,4555
+Massachusetts,Boston,"4,375",1.64,2815,7190
+Michigan,Detroit,"4,375",1.32,1409,5784
+Michigan,Grand Rapids,"4,375",1.07,318,4693
+Minnesota,Saint Paul,"4,375",1.29,1286,5661
+Mississippi,Jackson,N/A,N/A,N/A,N/A
+Missouri,St. Louis,N/A,N/A,N/A,N/A
+Missouri,Kansas City,N/A,N/A,N/A,N/A
+Montana,Great Falls,N/A,N/A,N/A,N/A
+Nebraska,Omaha,N/A,N/A,N/A,N/A
+New Hampshire,Concord,N/A,N/A,N/A,N/A
+New Jersey,Newark,"4,375",1.01,27,4402
+New,Albuquerque,N/A,N/A,N/A,N/A
+New Mexico,New York,"4,375",1.01,27,4402
+New York,Syracuse,"4,375",1.22,962,5337
+Nevada,Las Vegas,N/A,N/A,N/A,N/A
+North Carolina,Charlotte,"4,375",1,0,4375
+North Dakota,Bismarck,N/A,N/A,N/A,N/A
+Oklahoma,Oklahoma City,N/A,N/A,N/A,N/A
+Oklahoma,Tulsa,N/A,N/A,N/A,N/A
+Ohio,Cincinnati,N/A,N/A,N/A,N/A
+Oregon,Portland,"4,375",1,-12,4363
+Pennsylvania,Philadelphia,N/A,N/A,N/A,N/A
+Pennsylvania,Wilkes-Barre,N/A,N/A,N/A,N/A
+Rhode Island,Providence,"4,375",1.01,27,4402
+South Carolina,Charleston,"4,375",0.81,-819,3556
+South Carolina,Spartanburg,"4,375",0.89,-494,3881
+South Dakota,Rapid City,N/A,N/A,N/A,N/A
+Tennessee,Knoxville (Nashville),N/A,N/A,N/A,N/A
+Texas,Houston,"4,375",0.98,-102,4273
+Utah,Salt Lake City,N/A,N/A,N/A,N/A
+Vermont,Burlington,N/A,N/A,N/A,N/A
+Virginia,Alexandria,"4,375",1.04,182,4557
+Virginia,Lynchburg,"4,375",0.91,-375,4000
+Washington,Seattle,"4,375",1.35,1531,5905
+Washington,Spokane,"4,375",1.05,209,4584
+West Virginia,Charleston,N/A,N/A,N/A,N/A
+Wisconsin,Green Bay,"4,375",1.02,81,4455
+Wyoming,Cheyenne,N/A,N/A,N/A,N/A

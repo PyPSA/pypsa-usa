@@ -9,6 +9,7 @@ HTTP = HTTPRemoteProvider()
 # -------------------------- Imports and Parameters -------------------------- #
 
 from os.path import normpath
+from pathlib import Path
 
 FIGURES_SINGLE = [
     "capacity_map_base",
@@ -103,6 +104,25 @@ rule retrieve_zenodo_databundles:
     script:
         "scripts/retrieve_databundles.py"
 
+sector_datafiles = [
+    "counties/cb_2020_us_county_500k.shp",
+    "population/DECENNIALDHC2020.P1-Data.csv",
+    "urbanization/DECENNIALDHC2020.H1-Data.csv"
+]
+
+rule retrieve_sector_databundle:
+    params:
+        repositories = config["zenodo_repositories_sector"]
+    output:
+        expand(DATA + "{file}", file=sector_datafiles)
+    log:
+        LOGS + "retrieve_sector_databundle.log",
+    retries: 2
+    conda:
+        "../envs/environment.yaml"
+    script:
+        "../scripts/retrieve_databundles.py"
+
 rule retrieve_WECC_forecast_data:
     output:
         ads_2032 = directory(DATA + "WECC_ADS/downloads/2032/Public Data/Hourly Profiles in CSV format"),
@@ -166,16 +186,34 @@ rule retrieve_cutout:
     run:
         move(input[0], output[0])
 
-# rule retrieve_cost_data:
-#     output:
-#         parquet = RESOURCES + "costs_{year}_raw.parquet",
-#         # csv = "data/costs_{year}.csv",
-#     log:
-#         LOGS + "retrieve_cost_data_{year}.log",
-#     resources:
-#         mem_mb=1000,
-#     script:
-#         "scripts/retrieve_cost_data.py"
+rule retrieve_cost_data_eur:
+    output:
+        pypsa_technology_data = RESOURCES + "costs/{year}/pypsa_eur.csv",
+    params:
+        pypsa_costs_version = config["costs"].get("version", "v0.6.0")
+    log:
+        LOGS + "retrieve_cost_data_eur_{year}.log",
+    resources:
+        mem_mb=1000,
+    script:
+        "scripts/retrieve_cost_data_eur.py"
+
+rule retrieve_cost_data_usa:
+    output:
+        nrel_atb = RESOURCES + "costs/nrel_atb.parquet",
+        nrel_atb_transport = RESOURCES + "costs/nrel_atb_transport.xlsx",
+        ng_electric_power_price = RESOURCES + "costs/ng_electric_power_price.csv",
+        ng_industrial_price = RESOURCES + "costs/ng_industrial_price.csv",
+        ng_residential_price = RESOURCES + "costs/ng_commercial_price.csv",
+        ng_commercial_price = RESOURCES + "costs/ng_residential_price.csv",
+    params:
+        eia_api_key = config["costs"].get("eia_aip_key", None),
+    log:
+        LOGS + "retrieve_cost_data_usa.log",
+    resources:
+        mem_mb=1000,
+    script:
+        "scripts/retrieve_cost_data_usa.py"
 
 ################# ----------- Rules to Build Network ---------- #################
 
@@ -243,6 +281,17 @@ rule build_bus_regions:
     script:
         "scripts/build_bus_regions.py"
 
+rule build_cost_data:
+    input:
+        nrel_atb = RESOURCES + "costs/nrel_atb.parquet",
+        pypsa_technology_data = RESOURCES + "costs/{year}/pypsa_eur.csv",
+    output:
+        tech_costs = DATA + "costs_{year}.csv",
+    log:
+        LOGS + "costs_{year}.log",
+    script:
+        "scripts/build_cost_data.py"
+
 rule build_load_data:
     input:
         network=RESOURCES + "{interconnect}/elec_base_network.nc",
@@ -250,7 +299,7 @@ rule build_load_data:
         ads_2032 = DATA + "WECC_ADS/downloads/2032/Public Data/Hourly Profiles in CSV format",
         ads_2030 = DATA + "WECC_ADS/downloads/2030/WECC 2030 ADS PCM 2020-12-16 (V1.5) Public Data/CSV Shape Files",
         eia = expand(RESOURCES + "eia/{file}", file=DATAFILES_DMD),
-        tech_costs="repo_data/pypsa_eur_costs.csv",
+        tech_costs = DATA + f"costs_{config['costs']['year']}.csv",
     output:
         network=RESOURCES + "{interconnect}/elec_base_network_l.nc",
     log:
@@ -363,7 +412,7 @@ rule add_electricity:
             if str(fn).startswith("data/")
         },
         base_network=RESOURCES + "{interconnect}/elec_base_network_l.nc",
-        tech_costs="repo_data/pypsa_eur_costs.csv",
+        tech_costs=DATA + f"costs_{config['costs']['year']}.csv",
         regions=RESOURCES + "{interconnect}/regions_onshore.geojson",
         plants_eia="repo_data/eia_plants_wecc.csv",
         plants_ads="repo_data/ads_plants_locs.csv",
@@ -374,6 +423,10 @@ rule add_electricity:
         solar="data/breakthrough_network/base_grid/solar.csv",
         ads_renewables = "data/WECC_ADS/processed/",
         bus2sub="data/breakthrough_network/base_grid/{interconnect}/bus2sub.csv",
+        **{
+            f"gen_cost_mult_{Path(x).stem}":f"repo_data/locational_multipliers/{Path(x).name}" for x in Path("repo_data/locational_multipliers/").glob("*")
+        },
+        ng_electric_power_price = RESOURCES + "costs/ng_electric_power_price.csv",
     output:
         RESOURCES + "{interconnect}/elec_base_network_l_pp.nc",
     log:
@@ -414,7 +467,7 @@ rule cluster_network:
             if config["enable"].get("custom_busmap", False)
             else []
         ),
-        tech_costs="repo_data/pypsa_eur_costs.csv",
+        tech_costs=DATA + f"costs_{config['costs']['year']}.csv",
     output:
         network=RESOURCES + "{interconnect}/elec_s_{clusters}.nc",
         regions_onshore=RESOURCES + "{interconnect}/regions_onshore_s_{clusters}.geojson",
@@ -431,6 +484,29 @@ rule cluster_network:
     script:
         "scripts/cluster_network_eur.py"
 
+################# ----------- Rules for sector coupling ---------- #################
+
+rule build_population_layouts:
+    input:
+        county_shapes = DATA + "counties/cb_2020_us_county_500k.shp",
+        urban_percent = DATA + "urbanization/DECENNIALDHC2020.H1-Data.csv",
+        population = DATA + "population/DECENNIALDHC2020.P1-Data.csv",
+        cutout = "cutouts/" + CDIR + "{interconnect}_{cutout}.nc",
+    output:
+        pop_layout_total = RESOURCES + "pop_layout_total.nc",
+        pop_layout_urban = RESOURCES + "pop_layout_urban.nc",
+        pop_layout_rural = RESOURCES + "pop_layout_rural.nc",
+    log:
+        LOGS + "build_population_layouts.log",
+    resources:
+        mem_mb=20000,
+    benchmark:
+        BENCHMARKS + "build_population_layouts"
+    threads: 8
+    conda:
+        "../envs/environment.yaml"
+    script:
+        "../scripts/build_population_layouts.py"
 
 ################# ----------- Rules to Optimize/Solve Network ---------- #################
 
@@ -449,7 +525,7 @@ if config['solving']['operations']['run']:
 rule add_extra_components:
     input:
         network=RESOURCES + "{interconnect}/elec_s_{clusters}.nc",
-        tech_costs="repo_data/pypsa_eur_costs.csv",
+        tech_costs=DATA + f"costs_{config['costs']['year']}.csv",
     output:
         RESOURCES + "{interconnect}/elec_s_{clusters}_ec.nc",
     log:
@@ -463,7 +539,7 @@ rule add_extra_components:
 rule prepare_network:
     input:
         network=RESOURCES + "{interconnect}/elec_s_{clusters}_ec.nc",
-        tech_costs="repo_data/pypsa_eur_costs.csv",
+        tech_costs=DATA + f"costs_{config['costs']['year']}.csv",
     output:
         RESOURCES + "{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}.nc",
     log:

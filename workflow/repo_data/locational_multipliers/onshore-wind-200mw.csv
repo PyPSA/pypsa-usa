@@ -1,0 +1,65 @@
+State,City,Base Project Cost ($/kW ),Location Variation,Delta Cost Difference ($/kW),Total Location Project Cost ($/kW)
+Alabama,Huntsville,1265,1.01,12,1277
+Arizona,Phoenix,1265,0.99,-16,1249
+Arkansas,Little Rock,1265,1.03,35,1301
+California,Bakersfield,1265,1.05,60,1325
+California,Los Angeles,1265,1.05,63,1329
+California,Modesto,1265,1.05,58,1323
+California,Sacramento,1265,1.05,62,1327
+California,San Francisco,1265,1.06,76,1342
+Colorado,Denver,1265,0.99,-13,1252
+Connecticut,Hartford,1265,1.03,32,1298
+Delaware,Dover,1265,1,-1,1265
+District of Columbia,Washington,1265,1.01,9,1274
+Florida,Tallahassee,1265,1,-6,1259
+Florida,Tampa,1265,1,0,1265
+Georgia,Atlanta,1265,1.01,14,1280
+Idaho,Boise,1265,1.01,16,1281
+Illinois,Chicago,1265,1.03,37,1302
+Illinois,Joliet,1265,1.03,32,1297
+Indiana,Indianapolis,1265,1.02,23,1288
+Iowa,Davenport,1265,1,4,1269
+Iowa,Waterloo,1265,0.99,-7,1259
+Kansas,Wichita,1265,1,-6,1259
+Kentucky,Louisville,1265,1.01,19,1284
+Louisiana,New Orleans,1265,1.02,28,1293
+Maine,Portland,1265,1.01,8,1274
+Maryland,Baltimore,1265,1.01,7,1272
+Massachusetts,Boston,1265,1.04,46,1311
+Michigan,Detroit,1265,1.01,15,1281
+Michigan,Grand Rapids,1265,1,3,1268
+Minnesota,Saint Paul,1265,1,-5,1261
+Mississippi,Jackson,1265,0.99,-9,1256
+Missouri,St. Louis,1265,1.05,63,1328
+Missouri,Kansas City,1265,1.01,12,1277
+Montana,Great Falls,1265,0.99,-9,1256
+Nebraska,Omaha,1265,1,-3,1263
+New Hampshire,Concord,1265,1.03,38,1304
+New Jersey,Newark,1265,1.03,42,1307
+New,Albuquerque,1265,1.03,33,1298
+New Mexico,New York,1265,1.06,74,1339
+New York,Syracuse,1265,1.01,11,1277
+Nevada,Las Vegas,1265,1.04,55,1320
+North Carolina,Charlotte,1265,1,-6,1259
+North Dakota,Bismarck,1265,0.98,-21,1245
+Oklahoma,Oklahoma City,1265,1,-5,1260
+Oklahoma,Tulsa,1265,0.99,-13,1252
+Ohio,Cincinnati,1265,0.99,-13,1252
+Oregon,Portland,1265,1.04,47,1312
+Pennsylvania,Philadelphia,1265,1.03,41,1306
+Pennsylvania,Wilkes-Barre,1265,1.01,11,1276
+Rhode Island,Providence,1265,1.03,37,1302
+South Carolina,Charleston,1265,1.06,76,1342
+South Carolina,Spartanburg,1265,1.01,11,1277
+South Dakota,Rapid City,1265,0.98,-25,1240
+Tennessee,Knoxville (Nashville),1265,1.03,36,1301
+Texas,Houston,1265,0.99,-8,1257
+Utah,Salt Lake City,1265,1.03,34,1300
+Vermont,Burlington,1265,1.06,79,1345
+Virginia,Alexandria,1265,1.01,8,1273
+Virginia,Lynchburg,1265,0.99,-9,1257
+Washington,Seattle,1265,1.05,57,1323
+Washington,Spokane,1265,1.02,21,1286
+West Virginia,Charleston,1265,1,4,1269
+Wisconsin,Green Bay,1265,0.99,-19,1247
+Wyoming,Cheyenne,1265,0.99,-10,1255
