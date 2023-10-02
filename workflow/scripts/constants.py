@@ -171,7 +171,8 @@ ADS_FUEL_MAPPER = {
 # Constants for EIA mapping 
 ###########################
 
-# maps EIA carrier name to PyPSA name
+# maps EIA tech_type name to PyPSA name
+# {tech_type: pypsa carrier name}
 EIA_CARRIER_MAPPER = {
         'Nuclear':'nuclear',
         'Coal':'coal', 
@@ -186,6 +187,30 @@ EIA_CARRIER_MAPPER = {
         'Battery':'battery',
         'Solar':'solar',
         'Wind':'onwind',
+}
+
+EIA_PRIME_MOVER_MAPPER = {
+    'BA': 'Energy Storage, Battery',
+    'CE': 'Energy Storage, Compressed Air',
+    'CP': 'Energy Storage, Concentrated Solar Power',
+    'FW': 'Energy Storage, Flywheel',
+    'PS': 'Energy Storage, Reversible Hydraulic Turbine (Pumped Storage)',
+    'ES': 'Energy Storage, Other (specify in SCHEDULE 7)',
+    'ST': 'Steam Turbine, including nuclear, geothermal and solar steam (does not include combined cycle)',
+    'GT': 'Combustion (Gas) Turbine (does not include the combustion turbine part of a combined cycle; see code CT, below)',
+    'IC': 'Internal Combustion Engine (diesel, piston, reciprocating)',
+    'CA': 'Combined Cycle Steam Part',
+    'CT': 'Combined Cycle Combustion Turbine Part',
+    'CS': 'Combined Cycle Single Shaft (combustion turbine and steam turbine share a single generator)',
+    'HY': 'Hydrokinetic, Axial Flow Turbine',
+    'HB': 'Hydrokinetic, Wave Buoy',
+    'HK': 'Hydrokinetic, Other (specify in SCHEDULE 7)',
+    'BT': 'Hydroelectric Turbine (includes turbines associated with delivery of water by pipeline)',
+    'PV': 'Photovoltaic',
+    'WT': 'Wind Turbine, Onshore',
+    'WS': 'Wind Turbine, Offshore',
+    'FC': 'Fuel Cell',
+    'OT': 'Other (specify in SCHEDULE 7)'
 }
 
 

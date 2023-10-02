@@ -407,7 +407,8 @@ rule add_electricity:
     input:
         **{
             f"profile_{tech}": RESOURCES + "{interconnect}" + f"/profile_{tech}.nc"
-            for tech in config["electricity"]["renewable_carriers"]           
+            for tech in config["electricity"]["renewable_carriers"]
+            if tech != "hydro"
         },
         **{
             f"conventional_{carrier}_{attr}": fn

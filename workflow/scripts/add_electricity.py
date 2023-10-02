@@ -1285,6 +1285,16 @@ if __name__ == "__main__":
         extendable_carriers, 
         costs
     )
+    
+    # attach_hydro(n, 
+    #              costs, 
+    #              plants, 
+    #              snakemake.input.profile_hydro, 
+    #              hydro_capacities, 
+    #              "hydro"
+    #         )
+
+    
     if configuration == "ads2032":
         attach_ads_renewables(
             n,
