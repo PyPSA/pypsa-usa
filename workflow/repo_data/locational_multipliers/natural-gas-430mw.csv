@@ -1,0 +1,65 @@
+State,City,Base Project Cost ($/kW ),Location Variation,Delta Cost Difference ($/kW),Total Location Project Cost ($/kW)
+Alabama,Huntsville,1084,0.96,-49,1035
+Arizona,Phoenix,1084,1.1,114,1197
+Arkansas,Little Rock,1084,0.96,-47,1036
+California,Bakersfield,1084,1.3,324,1407
+California,Los Angeles,1084,1.31,337,1421
+California,Modesto,1084,1.31,331,1415
+California,Sacramento,1084,1.32,350,1434
+California,San Francisco,1084,1.45,489,1573
+Colorado,Denver,1084,1.09,100,1184
+Connecticut,Hartford,1084,1.28,308,1391
+Delaware,Dover,1084,1.27,296,1380
+District of Columbia,Washington,1084,1.15,166,1249
+Florida,Tallahassee,1084,0.94,-60,1024
+Florida,Tampa,1084,0.96,-47,1037
+Georgia,Atlanta,1084,0.97,-28,1056
+Idaho,Boise,1084,1.01,11,1095
+Illinois,Chicago,1084,1.22,238,1322
+Illinois,Joliet,1084,1.19,206,1290
+Indiana,Indianapolis,1084,1.01,6,1090
+Iowa,Davenport,1084,1.03,35,1119
+Iowa,Waterloo,1084,0.97,-37,1047
+Kansas,Wichita,1084,0.97,-34,1050
+Kentucky,Louisville,1084,0.99,-8,1076
+Louisiana,New Orleans,1084,0.96,-43,1040
+Maine,Portland,1084,1,4,1088
+Maryland,Baltimore,1084,1.02,17,1100
+Massachusetts,Boston,1084,1.34,364,1447
+Michigan,Detroit,1084,1.1,113,1197
+Michigan,Grand Rapids,1084,1.03,31,1115
+Minnesota,Saint Paul,1084,1.09,96,1180
+Mississippi,Jackson,1084,0.95,-58,1026
+Missouri,St. Louis,1084,1.1,108,1192
+Missouri,Kansas City,1084,1.07,72,1156
+Montana,Great Falls,1084,0.97,-36,1047
+Nebraska,Omaha,1084,0.97,-29,1055
+New Hampshire,Concord,1084,1.18,192,1276
+New Jersey,Newark,1084,1.21,223,1306
+New,Albuquerque,1084,0.97,-27,1056
+New Mexico,New York,1084,1.58,634,1717
+New York,Syracuse,1084,1.19,206,1290
+Nevada,Las Vegas,1084,1.11,124,1208
+North Carolina,Charlotte,1084,0.96,-43,1040
+North Dakota,Bismarck,1084,1.02,22,1105
+Oklahoma,Oklahoma City,1084,1,-1,1083
+Oklahoma,Tulsa,1084,0.93,-72,1011
+Ohio,Cincinnati,1084,0.93,-72,1011
+Oregon,Portland,1084,1.21,229,1313
+Pennsylvania,Philadelphia,1084,1.36,387,1470
+Pennsylvania,Wilkes-Barre,1084,1.19,210,1294
+Rhode Island,Providence,1084,1.25,273,1357
+South Carolina,Charleston,1084,0.95,-57,1027
+South Carolina,Spartanburg,1084,0.96,-43,1040
+South Dakota,Rapid City,1084,0.98,-26,1058
+Tennessee,Knoxville (Nashville),1084,0.97,-32,1052
+Texas,Houston,1084,0.93,-74,1009
+Utah,Salt Lake City,1084,0.97,-34,1050
+Vermont,Burlington,1084,1.01,15,1098
+Virginia,Alexandria,1084,1.15,158,1242
+Virginia,Lynchburg,1084,1.08,87,1171
+Washington,Seattle,1084,1.13,136,1220
+Washington,Spokane,1084,1.03,38,1122
+West Virginia,Charleston,1084,1.04,38,1122
+Wisconsin,Green Bay,1084,1.04,42,1126
+Wyoming,Cheyenne,1084,0.99,-11,1072
