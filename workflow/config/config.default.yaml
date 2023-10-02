@@ -1,7 +1,7 @@
 scenarios:
   all:
     interconnect: western #"usa|texas|western|eastern"
-    clusters: 60
+    clusters: 30
     opts:
       [
         Co2L1.0,
@@ -42,7 +42,6 @@ countries: [US]
 # focus_weights: 
 #   CISO-PGAE: 0.5
 
-# TODO: #11 change load data and generator data to be a snakemake wildcard value
 network_configuration: "pypsa-usa" # "pypsa-usa" or "ads2032" or "breakthrough"
 
 snapshots:

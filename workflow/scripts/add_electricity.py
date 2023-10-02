@@ -1,10 +1,17 @@
 # PyPSA USA Authors
 """
-Adds electrical generators and existing hydro storage units to a base network.
+Adds electrical generators and existing hydro storage units to a base network based on the given network configuration.
 
 **Relevant Settings**
 
 .. code:: yaml
+
+    network_configuration:
+
+    snapshots:
+        start:
+        end:
+        inclusive:
 
     costs:
         year:
@@ -19,10 +26,6 @@ Adds electrical generators and existing hydro storage units to a base network.
         conventional_carriers:
         co2limit:
         extendable_carriers:
-
-
-    load:
-        scaling_factor:
 
     renewable:
         hydro:
@@ -79,6 +82,7 @@ import constants as const
 from typing import Dict, Any, List, Union
 from pathlib import Path 
 from shapely.prepared import prep
+import random
 
 idx = pd.IndexSlice
 
@@ -249,11 +253,13 @@ def shapes_to_shapes(orig, dest):
 
     return transfer
 
+
 def clean_locational_multiplier(df: pd.DataFrame):
     """Updates format of locational multiplier data"""
     df = df.fillna(1)
     df = df[["State", "Location Variation"]]
     return df.groupby("State").mean()
+
 
 def update_capital_costs(n: pypsa.Network, carrier: str, costs: pd.DataFrame, multiplier: pd.DataFrame, Nyears: float = 1.0):
     """Applies regional multipliers to capital cost data"""
@@ -274,7 +280,7 @@ def update_capital_costs(n: pypsa.Network, carrier: str, costs: pd.DataFrame, mu
     # commented code is if applying multiplier to (capex + fom)
     # gen["capital_cost"] = gen.apply(
     #     lambda x: x["capital_cost"] * multiplier.at[x["state"], "Location Variation"], axis=1)
-    
+
     # apply multiplier to annualized capital investment cost 
     gen["investment"] = gen.apply(
         lambda x: costs.at[carrier,"investment_annualized"] * multiplier.at[x["state"], "Location Variation"], axis=1)
@@ -288,6 +294,7 @@ def update_capital_costs(n: pypsa.Network, carrier: str, costs: pd.DataFrame, mu
     # overwrite network generator dataframe with updated values 
     n.generators.loc[gen.index] = gen
     
+
 def update_marginal_costs(
     n: pypsa.Network,
     carrier: str, 
@@ -364,6 +371,7 @@ def update_marginal_costs(
     
     # apply fixed rate VOM cost     
     n.generators_t["marginal_cost"] += vom_cost
+
 
 def update_transmission_costs(n, costs, length_factor=1.0):
     # TODO: line length factor of lines is applied to lines and links.
@@ -527,33 +535,6 @@ def attach_hydro(n, costs, ppl, profile_hydro, hydro_capacities, carriers, **par
         )
 
 
-def attach_breakthrough_renewable_capacities_to_atlite(n, all_be_plants, renewable_carriers):
-    plants = pd.read_csv(all_be_plants, dtype={"bus_id": str}, index_col=0).query(
-        "bus_id in @n.buses.index"
-    )
-    plants.replace(["wind_offshore"], ["offwind"], inplace=True)
-
-    for tech in renewable_carriers:
-        tech_plants = plants.query("type == @tech")
-        tech_plants.index = tech_plants.index.astype(str)
-
-        network_gens = n.generators[n.generators.carrier == tech] #BUG: there are only 2 wind gens in the network and 1 offwind gen.
-        # network_buses = n.buses.loc[network_gens.bus.unique()]
-        # gens_per_bus = network_gens.groupby("bus").p_nom.count()
-
-        caps = tech_plants.groupby("bus_id").sum().Pmax #namplate capacity per bus
-        # caps = caps / gens_per_bus.reindex(caps.index, fill_value=1) ##REVIEW do i need this
-        #TODO: #16 Gens excluded from atlite profiles bc of landuse/etc will not be able to be attached if in the breakthrough network
-
-        if caps[~caps.index.isin(network_gens.bus)].sum() > 0:
-            missing_capacity = caps[~caps.index.isin(network_gens.bus)].sum()
-            logger.info(f"There are {np.round(missing_capacity,1)} MW of {tech} plants that are not in the network. See git issue #16.")
-
-        n.generators.p_nom.update(network_gens.bus.map(caps).dropna())
-        n.generators.p_nom_min.update(network_gens.bus.map(caps).dropna())
-        logger.info(f"Adding {len(tech_plants)} {tech} generator capacities to the network.")
-
-
 def attach_breakthrough_renewable_plants(
     n, fn_plants, renewable_carriers, extendable_carriers, costs):
 
@@ -571,9 +552,9 @@ def attach_breakthrough_renewable_plants(
         logger.info(f"Adding {len(tech_plants)} {tech} generators to the network.")
 
         if tech in ["wind", "offwind"]: 
-            p = pd.read_csv(snakemake.input["wind"], index_col=0)
+            p = pd.read_csv(snakemake.input["wind_breakthrough"], index_col=0)
         else:
-            p = pd.read_csv(snakemake.input[tech], index_col=0)
+            p = pd.read_csv(snakemake.input[f'{tech}_breakthrough'], index_col=0)
         intersection = set(p.columns).intersection(tech_plants.index) #filters by plants ID for the plants of type tech
         p = p[list(intersection)]
 
@@ -631,157 +612,6 @@ def add_nice_carrier_names(n, config):
         missing_i = list(colors.index[colors.isna()])
         logger.warning(f'tech_colors for carriers {missing_i} not defined in config.')
     n.carriers['color'] = colors
-
-
-def assign_ads_missing_lat_lon(plants,n):
-    import random
-    plants_unmatched = plants[plants.latitude.isna() | plants.longitude.isna()]
-    plants_unmatched = plants_unmatched[~plants_unmatched.balancing_area.isna()]
-    logger.info(f'Assigning lat and lon to {len(plants_unmatched)} plants missing locations.')
-
-    ba_list_map = {'CISC': 'CISO-SCE', 'CISD': 'CISO-SDGE','VEA': 'CISO-VEA','AZPS':'Arizona','SRP':'Arizona','PAID':'PACW','PAUT':'PACW','PAWY':'PACW','IPFE':'IPCO','IPMV':'IPCO','IPTV':'IPCO','TPWR':'BPAT','SCL':'BPAT','CIPV':'CISO-PGAE','CIPB':'CISO-PGAE','SPPC':'CISO-PGAE','TH_PV':'Arizona'}
-
-    plants_unmatched['balancing_area'] = plants_unmatched['balancing_area'].replace(ba_list_map)
-    buses = n.buses.copy()
-
-    #assign lat and lon to the plants_unmatched by choosing the bus within the same balancing_area that has the highest v_nom value.
-    #Currently randomly assigned to the top 4 buses in the balancing area by v_nom.
-    for i, row in plants_unmatched.iterrows():
-        # print(row.balancing_area)
-        buses_in_area = buses[buses.balancing_area == row.balancing_area].sort_values(by='v_nom', ascending=False)
-        top_5_buses = buses_in_area.iloc[:4]
-        bus = top_5_buses.iloc[random.randint(0, 3)]
-        plants_unmatched.loc[i,'longitude'] = bus.x
-        plants_unmatched.loc[i,'latitude'] = bus.y
-
-    plants.loc[plants_unmatched.index] = plants_unmatched
-    logger.info(f'{len(plants[plants.latitude.isna() | plants.longitude.isna()])} plants still missing locations.')
-    plants = plants.dropna(subset=['latitude','longitude']) #drop any plants that still don't have lat/lon
-
-    return plants
-
-
-def attach_ads_batteries(n, plants_df,extendable_carriers, costs):
-    plants = plants_df.query(
-        "bus_assignment in @n.buses.index"
-    )
-
-    plants_filt = plants.query("carrier == 'battery' ")
-    plants_filt.index = plants_filt.ads_name.astype(str)
-
-    logger.info(f"Adding {len(plants_filt)} Batteries as Stores to the network.")
-    logger.info(f"Note: ADS Public data does not include energy capacity(mwhr) for each BESS plant. Capacity is set in config file by key: 'max_hours'.")
-
-    n.madd(
-        "StorageUnit",
-        plants_filt.index,
-        carrier=plants_filt.carrier,
-        bus=plants_filt.bus_assignment,
-        p_nom=plants_filt['maxcap(mw)'],
-        p_nom_extendable='battery' in extendable_carriers['Store'],
-        max_hours = snakemake.config['electricity']['max_hours'],
-        efficiency_store= 1.0,
-        efficiency_dispatch=1.0, #TODO: Add efficiency_dispatch to config file
-        cyclic_state_of_charge=True,
-        capital_cost=costs.at["battery", "capital_cost"],
-        weight=1.0,
-    )
-
-    return n
-
-
-def attach_ads_renewables(n, plants_df, renewable_carriers, extendable_carriers, costs):
-    ads_renewables_path = snakemake.input.ads_renewables
-
-    for tech_type in renewable_carriers:
-        plants_filt = plants_df.query("carrier == @tech_type")
-        plants_filt.index = plants_filt.ads_name.astype(str)
-
-        logger.info(f"Adding {len(plants_filt)} {tech_type} generators to the network.")
-
-        if tech_type in ["wind", "offwind"]: 
-            profiles = pd.read_csv(ads_renewables_path + "/wind_2032.csv", index_col=0)
-        elif tech_type == "solar":
-            profiles = pd.read_csv(ads_renewables_path + "/solar_2032.csv", index_col=0)
-            dpv = pd.read_csv(ads_renewables_path + "/btm_solar_2032.csv", index_col=0)
-            profiles = pd.concat([profiles, dpv], axis = 1)
-            # plants_filt = plants_filt.dropna(subset=['dispatchshapename']) # dropping the two Solar + Storage plants without dispatch shapes (only the storage plants get dropped)... 
-        else:
-            profiles = pd.read_csv(ads_renewables_path + f'/{tech_type}_2032.csv', index_col=0)
-        
-        profiles.columns = profiles.columns.str.replace('.dat: 2032','')
-        profiles.columns = profiles.columns.str.replace('.DAT: 2032','')
-
-        profiles.index = n.snapshots
-        profiles.columns = profiles.columns.astype(str)
-
-        if tech_type == 'hydro': #matching hydro according to balancing authority specified
-            profiles.columns = profiles.columns.str.replace('HY_','')
-            profiles.columns = profiles.columns.str.replace('_2018','')
-            southwest = {'Arizona', 'SRP', 'WALC', 'TH_Mead'}
-            northwest = {'DOPD', 'CHPD', 'WAUW'}
-            pge_dict = {'CISO-PGAE':'CIPV', 'CISO-SCE':'CISC', 'CISO-SDGE':'CISD'}  
-            plants_filt.balancing_area = plants_filt.balancing_area.map(pge_dict).fillna(plants_filt.balancing_area)
-            # {'Arizona', 'CISC', 'IPFE', 'DOPD', 'CISD', 'IPMV', 'CHPD', 'PSCO', 'CISO-SDGE', 'IPTV', 'CIPV', 'TH_Mead', 'CIPB', 'WALC', 'CISO-SCE', 'WAUW', 'SRP', 'CISO-PGAE'}
-            #TODO: #34 Add BCHA and AESO hydro profiles in ADS Configuration. Profiles that don't get used: 'AESO', 'IPCO', 'NEVP', 'BCHA'
-            # profiles_ba = set(profiles.columns) # available ba hydro profiles
-            # bas = set(plants_filt.balancing_area.unique()) # plants that need BA hydro profiles
-
-            # print( need to assign bas for pge bay and valley)
-            profiles_new = pd.DataFrame(index=n.snapshots, columns=plants_filt.index)
-            for plant in profiles_new.columns:
-                ba = plants_filt.loc[plant].balancing_area
-                if ba in southwest:
-                    ba = 'SouthConsolidated'
-                elif ba in northwest:
-                    ba = 'BPAT' # this is a temp fix. Probably not right to assign all northwest hydro to BPA
-                ba_prof = profiles.columns.str.contains(ba)
-                if ba_prof.sum() == 0:
-                    logger.warning(f'No hydro profile for {ba}.')
-                    profiles_new[plant] = 0
-
-
-                profiles_new[plant] = profiles.loc[:,ba_prof].values
-            p_max_pu = profiles_new
-            p_max_pu.columns = plants_filt.index
-        else: #  solar + wind + other
-            # intersection = set(profiles.columns).intersection(plants_filt.dispatchshapename)
-            # missing = set(plants_filt.dispatchshapename) - intersection
-            # profiles = profiles[list(intersection)]
-            profiles_new = pd.DataFrame(index=n.snapshots, columns=plants_filt.dispatchshapename)
-            for plant in profiles_new.columns:
-                profiles_new[plant] = profiles[plant]
-            p_max_pu = profiles_new
-            p_max_pu.columns = plants_filt.index
-
-        p_nom = plants_filt['maxcap(mw)']
-        n.madd(
-            "Generator",
-            plants_filt.index,
-            bus=plants_filt.bus_assignment,
-            p_nom_min=p_nom,
-            p_nom=p_nom,
-            marginal_cost=0, #(MMBTu/MW) * (USD/MMBTu) = USD/MW
-            # marginal_cost_quadratic = tech_plants.GenIOC * tech_plants.GenFuelCost, 
-            capital_cost=costs.at[tech_type, "capital_cost"],
-            p_max_pu=p_max_pu, #timeseries of max power output pu
-            p_nom_extendable= tech_type in extendable_carriers["Generator"],
-            carrier=tech_type,
-            weight=1.0,
-            efficiency=costs.at[tech_type, "efficiency"],
-        )
-    return n
-########################### Load Data #########################################
-
-
-########### New Refactored Functions #############
-
-# def attach_wind_and_solar():
-#     return
-
-# def attach_hydro():
-#     return
-
 
 
 def normed(s):
@@ -963,7 +793,13 @@ def add_demand_from_file(n: pypsa.Network,
            p_set=demand_per_bus, carrier='AC')
 
 
-def test_snapshot_year_alignment(sns_year: int, load_year: int, configuration: str):
+def test_snapshot_year_alignment(sns_year: int, configuration: str):
+    if configuration == "ads":
+        load_year = 2032
+    elif configuration == "breakthrough":
+        load_year = 2016
+    else:
+        return
     if sns_year != load_year:
         raise ValueError(f"""Snapshot start year {sns_year} does not match load year {load_year}
                           required for {configuration} configuration.
@@ -975,11 +811,11 @@ def test_snapshot_year_alignment(sns_year: int, load_year: int, configuration: s
 
 #double check if we need to filter the plants by buses that are in the network filtered by interconnect.
 def attach_conventional_generators(
-    n,
-    costs,
-    ppl,
-    conventional_carriers,
-    extendable_carriers,
+    n: pypsa.Network,
+    costs: pd.DataFrame,
+    plants: pd.DataFrame,
+    conventional_carriers: list,
+    extendable_carriers: list,
     conventional_params,
     conventional_inputs,
     unit_commitment=None,
@@ -995,19 +831,18 @@ def attach_conventional_generators(
     # ppl.loc[ppl["carrier"] == "natural gas", "carrier"] = ppl.loc[
     #     ppl["carrier"] == "natural gas", "technology"
     # ]
-
-    ppl = (
-        ppl.query("carrier in @carriers")
+    plants = (
+        plants.query("carrier in @carriers")
         .join(costs, on="carrier", rsuffix="_r")
         .rename(index=lambda s: "C" + str(s))
     )
-    ppl["efficiency"] = ppl.efficiency.fillna(ppl.efficiency_r)
+    plants["efficiency"] = plants.efficiency.fillna(plants.efficiency_r)
 
     if unit_commitment is not None:
-        committable_attrs = ppl.carrier.isin(unit_commitment).to_frame("committable")
+        committable_attrs = plants.carrier.isin(unit_commitment).to_frame("committable")
         for attr in unit_commitment.index:
             default = pypsa.components.component_attrs["Generator"].default[attr]
-            committable_attrs[attr] = ppl.carrier.map(unit_commitment.loc[attr]).fillna(
+            committable_attrs[attr] = plants.carrier.map(unit_commitment.loc[attr]).fillna(
                 default
             )
     else:
@@ -1019,53 +854,32 @@ def attach_conventional_generators(
         ).drop("gas", axis=1)
         missing_carriers = list(set(carriers) - set(fuel_price))
         fuel_price = fuel_price.assign(**costs.fuel[missing_carriers])
-        fuel_price = fuel_price.reindex(ppl.carrier, axis=1)
-        fuel_price.columns = ppl.index
-        marginal_cost = fuel_price.div(ppl.efficiency).add(ppl.carrier.map(costs.VOM))
+        fuel_price = fuel_price.reindex(plants.carrier, axis=1)
+        fuel_price.columns = plants.index
+        marginal_cost = fuel_price.div(plants.efficiency).add(plants.carrier.map(costs.VOM))
     else:
         marginal_cost = (
-            ppl.carrier.map(costs.VOM) + ppl.carrier.map(costs.fuel) / ppl.efficiency
+            plants.carrier.map(costs.VOM) + plants.carrier.map(costs.fuel) / plants.efficiency
         )
 
     # Define generators using modified ppl DataFrame
-    caps = ppl.groupby("carrier").p_nom.sum().div(1e3).round(2)
-    logger.info(f"Adding {len(ppl)} generators with capacities [GW] \n{caps}")
+    caps = plants.groupby("carrier").p_nom.sum().div(1e3).round(2)
+    logger.info(f"Adding {len(plants)} generators with capacities [GW] \n{caps}")
     n.madd(
         "Generator",
-        ppl.index,
-        carrier=ppl.carrier,
-        bus=ppl.bus_assignment,
-        p_nom_min=ppl.p_nom.where(ppl.carrier.isin(conventional_carriers), 0),
-        p_nom=ppl.p_nom.where(ppl.carrier.isin(conventional_carriers), 0),
-        p_nom_extendable=ppl.carrier.isin(extendable_carriers["Generator"]),
-        efficiency=ppl.efficiency,
+        plants.index,
+        carrier=plants.carrier,
+        bus=plants.bus_assignment,
+        p_nom_min=plants.p_nom.where(plants.carrier.isin(conventional_carriers), 0),
+        p_nom=plants.p_nom.where(plants.carrier.isin(conventional_carriers), 0),
+        p_nom_extendable=plants.carrier.isin(extendable_carriers["Generator"]),
+        efficiency=plants.efficiency,
         marginal_cost=marginal_cost,
-        capital_cost=ppl.capital_cost,
-        build_year=ppl.build_year.fillna(0).astype(int),
-        lifetime=(ppl.dateout - ppl.build_year).fillna(np.inf),
+        capital_cost=plants.capital_cost,
+        build_year=plants.build_year.fillna(0).astype(int),
+        lifetime=(plants.dateout - plants.build_year).fillna(np.inf),
         **committable_attrs,
     )
-
-    # for carrier in set(conventional_params) & set(carriers):
-    #     # Generators with technology affected
-    #     idx = n.generators.query("carrier == @carrier").index
-
-    #     for attr in list(set(conventional_params[carrier]) & set(n.generators)):
-    #         values = conventional_params[carrier][attr]
-
-    #         if f"conventional_{carrier}_{attr}" in conventional_inputs:
-    #             # Values affecting generators of technology k country-specific
-    #             # First map generator buses to countries; then map countries to p_max_pu
-    #             values = pd.read_csv(
-    #                 snakemake.input[f"conventional_{carrier}_{attr}"], index_col=0
-    #             ).iloc[:, 0]
-    #             bus_values = n.buses.country.map(values)
-    #             n.generators[attr].update(
-    #                 n.generators.loc[idx].bus.map(bus_values).dropna()
-    #             )
-    #         else:
-    #             # Single value affecting all generators of technology k indiscriminantely of country
-    #             n.generators.loc[idx, attr] = values
 
 
 def attach_battery_storage(n: pypsa.Network, 
@@ -1113,6 +927,7 @@ def load_powerplants_eia(
 
     plants = add_missing_fuel_cost(plants, snakemake.input.fuel_costs)
     plants = add_missing_heat_rates(plants, snakemake.input.fuel_costs)
+
     plants['generator_name'] = plants.index.astype(str) + "_" + plants.generator_id.astype(str)
     plants.set_index('generator_name', inplace=True)
     plants['p_nom'] = plants.pop('capacity_mw')
@@ -1126,13 +941,124 @@ def load_powerplants_eia(
     return plants
 
 
+def assign_ads_missing_lat_lon(plants,n):
+    plants_unmatched = plants[plants.latitude.isna() | plants.longitude.isna()]
+    plants_unmatched = plants_unmatched[~plants_unmatched.balancing_area.isna()]
+    logger.info(f'Assigning lat and lon to {len(plants_unmatched)} plants missing locations.')
+
+    ba_list_map = {'CISC': 'CISO-SCE', 'CISD': 'CISO-SDGE','VEA': 'CISO-VEA','AZPS':'Arizona','SRP':'Arizona','PAID':'PACW','PAUT':'PACW','PAWY':'PACW','IPFE':'IPCO','IPMV':'IPCO','IPTV':'IPCO','TPWR':'BPAT','SCL':'BPAT','CIPV':'CISO-PGAE','CIPB':'CISO-PGAE','SPPC':'CISO-PGAE','TH_PV':'Arizona'}
+
+    plants_unmatched['balancing_area'] = plants_unmatched['balancing_area'].replace(ba_list_map)
+    buses = n.buses.copy()
+
+    #assign lat and lon to the plants_unmatched by choosing the bus within the same balancing_area that has the highest v_nom value.
+    #Currently randomly assigned to the top 4 buses in the balancing area by v_nom.
+    for i, row in plants_unmatched.iterrows():
+        # print(row.balancing_area)
+        buses_in_area = buses[buses.balancing_area == row.balancing_area].sort_values(by='v_nom', ascending=False)
+        top_5_buses = buses_in_area.iloc[:4]
+        bus = top_5_buses.iloc[random.randint(0, 3)]
+        plants_unmatched.loc[i,'longitude'] = bus.x
+        plants_unmatched.loc[i,'latitude'] = bus.y
+
+    plants.loc[plants_unmatched.index] = plants_unmatched
+    logger.info(f'{len(plants[plants.latitude.isna() | plants.longitude.isna()])} plants still missing locations.')
+    plants = plants.dropna(subset=['latitude','longitude']) #drop any plants that still don't have lat/lon
+
+    return plants
+
+
+def attach_ads_renewables(n, plants_df, renewable_carriers, extendable_carriers, costs):
+    '''Attaches renewable plants from ADS files.'''
+    ads_renewables_path = snakemake.input.ads_renewables
+
+    for tech_type in renewable_carriers:
+        plants_filt = plants_df.query("carrier == @tech_type")
+        plants_filt.index = plants_filt.ads_name.astype(str)
+
+        logger.info(f"Adding {len(plants_filt)} {tech_type} generators to the network.")
+
+        if tech_type in ["wind", "offwind"]: 
+            profiles = pd.read_csv(ads_renewables_path + "/wind_2032.csv", index_col=0)
+        elif tech_type == "solar":
+            profiles = pd.read_csv(ads_renewables_path + "/solar_2032.csv", index_col=0)
+            dpv = pd.read_csv(ads_renewables_path + "/btm_solar_2032.csv", index_col=0)
+            profiles = pd.concat([profiles, dpv], axis = 1)
+            # plants_filt = plants_filt.dropna(subset=['dispatchshapename']) # dropping the two Solar + Storage plants without dispatch shapes (only the storage plants get dropped)... 
+        else:
+            profiles = pd.read_csv(ads_renewables_path + f'/{tech_type}_2032.csv', index_col=0)
+        
+        profiles.columns = profiles.columns.str.replace('.dat: 2032','')
+        profiles.columns = profiles.columns.str.replace('.DAT: 2032','')
+
+        profiles.index = n.snapshots
+        profiles.columns = profiles.columns.astype(str)
+
+        if tech_type == 'hydro': #matching hydro according to balancing authority specified
+            profiles.columns = profiles.columns.str.replace('HY_','')
+            profiles.columns = profiles.columns.str.replace('_2018','')
+            southwest = {'Arizona', 'SRP', 'WALC', 'TH_Mead'}
+            northwest = {'DOPD', 'CHPD', 'WAUW'}
+            pge_dict = {'CISO-PGAE':'CIPV', 'CISO-SCE':'CISC', 'CISO-SDGE':'CISD'}  
+            plants_filt.balancing_area = plants_filt.balancing_area.map(pge_dict).fillna(plants_filt.balancing_area)
+            # {'Arizona', 'CISC', 'IPFE', 'DOPD', 'CISD', 'IPMV', 'CHPD', 'PSCO', 'CISO-SDGE', 'IPTV', 'CIPV', 'TH_Mead', 'CIPB', 'WALC', 'CISO-SCE', 'WAUW', 'SRP', 'CISO-PGAE'}
+            #TODO: #34 Add BCHA and AESO hydro profiles in ADS Configuration. Profiles that don't get used: 'AESO', 'IPCO', 'NEVP', 'BCHA'
+            # profiles_ba = set(profiles.columns) # available ba hydro profiles
+            # bas = set(plants_filt.balancing_area.unique()) # plants that need BA hydro profiles
+
+            # print( need to assign bas for pge bay and valley)
+            profiles_new = pd.DataFrame(index=n.snapshots, columns=plants_filt.index)
+            for plant in profiles_new.columns:
+                ba = plants_filt.loc[plant].balancing_area
+                if ba in southwest:
+                    ba = 'SouthConsolidated'
+                elif ba in northwest:
+                    ba = 'BPAT' # this is a temp fix. Probably not right to assign all northwest hydro to BPA
+                ba_prof = profiles.columns.str.contains(ba)
+                if ba_prof.sum() == 0:
+                    logger.warning(f'No hydro profile for {ba}.')
+                    profiles_new[plant] = 0
+
+
+                profiles_new[plant] = profiles.loc[:,ba_prof].values
+            p_max_pu = profiles_new
+            p_max_pu.columns = plants_filt.index
+        else: #  solar + wind + other
+            # intersection = set(profiles.columns).intersection(plants_filt.dispatchshapename)
+            # missing = set(plants_filt.dispatchshapename) - intersection
+            # profiles = profiles[list(intersection)]
+            profiles_new = pd.DataFrame(index=n.snapshots, columns=plants_filt.dispatchshapename)
+            for plant in profiles_new.columns:
+                profiles_new[plant] = profiles[plant]
+            p_max_pu = profiles_new
+            p_max_pu.columns = plants_filt.index
+
+        p_nom = plants_filt['maxcap(mw)']
+        n.madd(
+            "Generator",
+            plants_filt.index,
+            bus=plants_filt.bus_assignment,
+            p_nom_min=p_nom,
+            p_nom=p_nom,
+            marginal_cost=0, #(MMBTu/MW) * (USD/MMBTu) = USD/MW
+            # marginal_cost_quadratic = tech_plants.GenIOC * tech_plants.GenFuelCost, 
+            capital_cost=costs.at[tech_type, "capital_cost"],
+            p_max_pu=p_max_pu, #timeseries of max power output pu
+            p_nom_extendable= tech_type in extendable_carriers["Generator"],
+            carrier=tech_type,
+            weight=1.0,
+            efficiency=costs.at[tech_type, "efficiency"],
+        )
+    return n
+
+
 def load_powerplants_ads(
     ads_dataset: str, 
     tech_mapper: Dict[str,str] = None,
     carrier_mapper: Dict[str,str] = None,
     fuel_mapper: Dict[str,str] = None
 ) -> pd.DataFrame:
-    """Loads base ADS plants and applies name mappings 
+    """Loads base ADS plants, fills missing data, and applies name mappings.
     
     Arguments
     ---------
@@ -1154,6 +1080,10 @@ def load_powerplants_ads(
     if tech_mapper:
         plants['tech_type'] = plants.tech_type.map(tech_mapper)
     plants.rename(columns={'lat':'latitude', 'lon':'longitude'}, inplace=True)    
+
+    # apply missing data to powerplants 
+    plants = add_missing_fuel_cost(plants, snakemake.input.fuel_costs)
+    plants = add_missing_heat_rates(plants, snakemake.input.fuel_costs)
 
     plants['generator_name'] = plants.ads_name.astype(str)
     plants['p_nom'] = plants['maxcap(mw)']
@@ -1188,6 +1118,7 @@ def attach_wind_and_solar(
     extendable_carriers: Dict[str, list[str]],
     line_length_factor=1
     ):
+    """Attached Atlite Calculated wind and solar capacity factor profiles to the network."""
     add_missing_carriers(n, carriers)
     for car in carriers:
         if car == "hydro":
@@ -1247,9 +1178,6 @@ def attach_wind_and_solar(
                 p_max_pu=bus_profiles,
             )
 
-
-
-#########################################
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
@@ -1268,25 +1196,13 @@ if __name__ == "__main__":
     # TODO: Need to combine all EIA data into one file then filter based on n.snapshots
     sns_end = pd.to_datetime(snapshot_config['end'] + ' 00:00:00')
     sns_inclusive = snapshot_config['inclusive']
+    test_snapshot_year_alignment(sns_start.year, configuration)
 
-    if configuration  == "pypsa-usa":
-        fn_demand = snakemake.input['eia'][sns_start.year%2017]
-    elif configuration  == "ads2032":
-        ads_year = 2032
-        fn_demand = f'data/WECC_ADS/processed/load_{ads_year}.csv'
-        test_snapshot_year_alignment(sns_start.year, ads_year, configuration)
-    elif configuration  == "breakthrough":
-        test_snapshot_year_alignment(sns_start.year, 2016, configuration)
-        fn_demand = snakemake.input["demand_breakthrough_2016"]
-    else:
-        raise ValueError("Invalid demand_type. Supported values are 'breakthrough', 'ads', and 'eia'.")
-    
     n.set_snapshots(pd.date_range(freq="h", 
                             start= sns_start,
                             end= sns_end,
                             inclusive= sns_inclusive)
                     )
-
     Nyears = n.snapshot_weightings.objective.sum() / 8760.0
 
     costs = load_costs(
@@ -1327,42 +1243,54 @@ if __name__ == "__main__":
     else:
         fuel_price = None
 
+    if configuration  == "pypsa-usa":
+        fn_demand = snakemake.input['eia'][sns_start.year%2017]
+        plants = load_powerplants_eia(snakemake.input['plants_eia'], const.EIA_CARRIER_MAPPER)
+    elif configuration  == "breakthrough":
+        fn_demand = snakemake.input["demand_breakthrough_2016"]
+        plants = load_powerplants_breakthrough(snakemake.input['plants_breakthrough'])
+    elif configuration  == "ads2032":
+        fn_demand = f'data/WECC_ADS/processed/load_2032.csv'
+        plants = load_powerplants_ads(
+            snakemake.input['plants_ads'],
+            const.ADS_SUB_TYPE_TECH_MAPPER, 
+            const.ADS_CARRIER_NAME,
+            const.ADS_FUEL_MAPPER
+        )
+        plants = assign_ads_missing_lat_lon(plants, n)
+    else:
+        raise ValueError(f"Unknown network_configuration {snakemake.config['network_configuration']}")
+    
+    #Applying to all configurations
+    plants = match_plant_to_bus(n, plants)
     add_demand_from_file(n, fn_demand, configuration)
 
-    if configuration == "pypsa-usa": 
-        import pdb; pdb.set_trace()
-        costs = costs.rename(index={"onwind": "wind",
-                                     #"OCGT": "ng"
-                                     }) #changing cost data to match the plant data #TODO: #10 change this so that fuel types and plant types match the pypsa naming scheme.
-
-        eia_carrier_mapper = const.EIA_CARRIER_MAPPER
-        plants = load_powerplants_eia(snakemake.input['plants_eia'], 
-                                      eia_carrier_mapper)
-        plants = match_plant_to_bus(n, plants)
-        attach_conventional_generators(
+    attach_conventional_generators(
+        n,
+        costs,
+        plants,
+        conventional_carriers,
+        extendable_carriers,
+        params.conventional,
+        conventional_inputs,
+        unit_commitment=unit_commitment,
+        fuel_price=fuel_price
+    )
+    attach_battery_storage(
+        n, 
+        plants,
+        extendable_carriers, 
+        costs
+    )
+    if configuration == "ads2032":
+        attach_ads_renewables(
             n,
-            costs,
             plants,
-            conventional_carriers,
+            renewable_carriers,
             extendable_carriers,
-            params.conventional,
-            conventional_inputs,
-            unit_commitment=unit_commitment,
-            fuel_price=fuel_price
+            costs,
         )
-        attach_battery_storage(
-            n, 
-            plants,
-            extendable_carriers, 
-            costs
-        )
-        #attach renewable plants to network
-        costs = costs.rename(index={"offwind-ac-connection-submarine": "offwind-connection-submarine",
-                                    "offwind-ac-connection-underground": "offwind-connection-underground",
-                                    'offwind-ac-station': 'offwind-station',
-                                    "onwind":"wind"
-                                    }) #temporary fix. should rename carriers instead of changing cost names. w TODO#10
-    
+    else:
         attach_wind_and_solar(
             n,
             costs,
@@ -1371,145 +1299,24 @@ if __name__ == "__main__":
             extendable_carriers,
             params.length_factor,
         )
-
         renewable_carriers = list(
             set(snakemake.config['electricity']["renewable_carriers"]).intersection(
-                set(["wind", "solar", "offwind"])
-            )
-        )
+                set(["onwind", "solar", "offwind"])
+            ))
         attach_renewable_capacities_to_atlite(
             n,
             plants,
             renewable_carriers
         )
-
-        update_p_nom_max(n)
-
         #temporarily adding hydro with breakthrough only data until I can correctly import hydro_data
-        renewable_carriers = list(
-            set(snakemake.config['electricity']["renewable_carriers"]).intersection(
-                set(["hydro"])
-            )
-        )
         n = attach_breakthrough_renewable_plants(
             n,
-            snakemake.input["plants"],
-            renewable_carriers,
+            snakemake.input["plants_breakthrough"],
+            ["hydro"],
             extendable_carriers,
             costs,
         )
-    elif configuration == "breakthrough":
-        costs = costs.rename(index={"onwind": "wind", "OCGT": "ng"}) #changing cost data to match the breakthrough plant data #TODO: #10 change this so that breakthrough fuel types and plant types match the pypsa naming scheme.
-        conventional_carriers = list(
-            set(snakemake.config['electricity']["conventional_carriers"]).intersection(
-                set(["coal", "ng", "nuclear", "oil", "geothermal"])
-            )
-        )
-
-        n = attach_breakthrough_conventional_plants(
-            n,
-            snakemake.input["plants"],
-            conventional_carriers,
-            extendable_carriers,
-            costs,
-        )
-
-        #adding breakthrough renewable plants to network
-        costs = costs.rename(index={"offwind-ac-connection-submarine": "offwind-connection-submarine",
-                                    "offwind-ac-connection-underground": "offwind-connection-underground",
-                                    'offwind-ac-station': 'offwind-station',
-                                    "onwind":"wind"}) #temporary fix. should rename carriers instead of changing cost names. w TODO#10
-        attach_wind_and_solar(
-            n,
-            costs,
-            snakemake.input,
-            renewable_carriers,
-            extendable_carriers,
-            params.length_factor,
-        )
-
-        renewable_carriers = list(
-            set(snakemake.config['electricity']["renewable_carriers"]).intersection(
-                set(["wind", "solar", "offwind"])
-            )
-        )
-
-        attach_breakthrough_renewable_capacities_to_atlite(n, snakemake.input["plants"], renewable_carriers)
-        update_p_nom_max(n)
-
-        #temporarily adding hydro with breakthrough only data until I can correctly import hydro_data
-        renewable_carriers = list(
-            set(snakemake.config['electricity']["renewable_carriers"]).intersection(
-                set(["hydro"])
-            )
-        )
-        n = attach_breakthrough_renewable_plants(
-            n,
-            snakemake.input["plants"],
-            renewable_carriers,
-            extendable_carriers,
-            costs,
-        )
-    elif configuration == "ads2032": 
-        
-        # get mappers 
-        ads_tech_mapper = const.ADS_TECH_MAPPER
-        ads_sub_type_tech_mapper = const.ADS_SUB_TYPE_TECH_MAPPER
-        ads_carrier_mapper = const.ADS_CARRIER_NAME
-        ads_fuel_mapper = const.ADS_FUEL_MAPPER
-
-        # load base powerplants 
-        plants = load_powerplants_ads(
-            ads_dataset = snakemake.input['plants_ads'],
-            tech_mapper = ads_sub_type_tech_mapper, 
-            carrier_mapper = ads_carrier_mapper,
-            fuel_mapper = ads_fuel_mapper
-        )
-        
-        # apply missing data to powerplants 
-        plants = add_missing_fuel_cost(plants, snakemake.input.fuel_costs)
-        plants = add_missing_heat_rates(plants, snakemake.input.fuel_costs)
-        
-        #assign coords to plants missing lat/lon
-        plants = assign_ads_missing_lat_lon(plants,n)
-
-        #match each plant to nearest node in network
-        plant_with_bus_assignments = match_plant_to_bus(n, plants)
-
-        #attach conventional plants to network
-        n = attach_ads_conventional_plants(
-            n,
-            plant_with_bus_assignments,
-            conventional_carriers,
-            extendable_carriers,
-            costs,
-        )
-
-        #attach batteries to network
-        n = attach_ads_batteries(
-            n, 
-            plant_with_bus_assignments,
-            extendable_carriers, 
-            costs
-        )
-
-        #attach renewable plants to network
-        costs = costs.rename(index={"offwind-ac-connection-submarine": "offwind-connection-submarine",
-                                    "offwind-ac-connection-underground": "offwind-connection-underground",
-                                    'offwind-ac-station': 'offwind-station',
-                                    "onwind":"wind"
-                                    }) #temporary fix. should rename carriers instead of changing cost names. w TODO#10
-
-        attach_ads_renewables(
-            n,
-            plant_with_bus_assignments,
-            renewable_carriers,
-            extendable_carriers,
-            costs,
-        )
-        update_p_nom_max(n)
-    else:
-        raise ValueError(f"Unknown network_configuration {snakemake.config['network_configuration']}")
+    update_p_nom_max(n)
 
     # apply regional multipliers to capital cost data
     for carrier, multiplier_data in const.CAPEX_LOCATIONAL_MULTIPLIER.items():
@@ -1558,78 +1365,3 @@ if __name__ == "__main__":
 
     output_folder = os.path.dirname(snakemake.output[0]) + '/base_network'
     export_network_for_gis_mapping(n, output_folder)
-
-
-
-
-
-
-# def attach_eia_batteries(n, plants_df,extendable_carriers, costs):
-#     plants = plants_df.query(
-#         "bus_assignment in @n.buses.index"
-#     )
-#     plants_filt = plants.query("carrier == 'battery' ")
-#     plants_filt.index = plants_filt.index.astype(str) + "_" + plants_filt.generator_id.astype(str)
-#     n.madd(
-#         "StorageUnit",
-#         plants_filt.index,
-#         bus=plants_filt.bus_assignment,
-#         p_nom=plants_filt.capacity_mw,
-#         p_nom_extendable='battery' in extendable_carriers['Store'],
-#         max_hours = plants_filt.energy_capacity_mwh / plants_filt.capacity_mw,
-#         build_year=plants_filt.operating_year,
-#         carrier=plants_filt.carrier,
-#         efficiency_store= 1.0,
-#         efficiency_dispatch=1.0, #TODO: Add efficiency_dispatch to config file
-#         cyclic_state_of_charge=True,
-#         capital_cost=costs.at["battery", "capital_cost"],
-#     )
-#     return n
-
-# def prepare_ads_conventional_plants(
-#     plants_df: pd.DataFrame
-# ) -> pd.DataFrame:
-#     """
-#     Arranges ADS conventional plant data into a format that can be used by
-#       the add_conventional_plants and maybe also the add_wind_and_solar functions.
-#     """
-#     plants_filt.index = plants_filt.ads_name.astype(str)
-#     bus=plants_filt.bus_assignment
-#     p_nom=plants_filt['maxcap(mw)']
-#     p_nom_extendable= tech_type in extendable_carriers['Generator']
-#     marginal_cost=plants_filt['inchr2(mmbtu/mwh)'] * plants_filt.fuel_cost,  #(MMBTu/MW) * (USD/MMBTu) = USD/MW
-#     ramp_limit_up= plants_filt['rampup rate(mw/minute)']/ plants_filt['maxcap(mw)'] * 60, #MW/min to p.u./hour
-#     ramp_limit_down= plants_filt['rampdn rate(mw/minute)']/ plants_filt['maxcap(mw)'] * 60, #MW/min to p.u./hour
-#     carrier=plants_filt.carrier,
-
-
-# def attach_eia_conventional_plants(
-#     plants_df: pd.DataFrame
-# ) -> pd.DataFrame:
-#     """
-#     Arranges EIA conventional plant data into a format that can be used by
-#       the add_conventional_plants and maybe also the add_wind_and_solar functions.
-#     """
-#     plants_filt.index = plants_filt.index.astype(str) + "_" + plants_filt.generator_id.astype(str)
-#     bus=plants_filt.bus_assignment
-#     p_nom=plants_filt.capacity_mw
-#     p_nom_extendable= tech_type in extendable_carriers['Generator']
-#     marginal_cost=plants_filt['inchr2(mmbtu/mwh)'] * plants_filt.fuel_cost  #(MMBTu/MW) * (USD/MMBTu) = USD/MW
-#     ramp_limit_up= plants_filt['rampup rate(mw/minute)']/ plants_filt.capacity_mw * 60 #MW/min to p.u./hour
-#     ramp_limit_down= plants_filt['rampdn rate(mw/minute)']/ plants_filt.capacity_mw * 60 #MW/min to p.u./hour
-#     carrier=plants_filt.carrier
-#     build_year=plants_filt.operating_year
-#     weight=1.0
-# def attach_breakthrough_conventional_plants(fn_plants):
-#     # _add_missing_carriers_from_costs(n, costs, conventional_carriers)
-#     # plants = pd.read_csv(fn_plants, dtype={"bus_id": str}, index_col=0).query("bus_id in @n.buses.index")
-#     # plants.replace(["dfo"], ["oil"], inplace=True)
-
-#     tech_plants.index = tech_plants.index.astype(str)
-#     bus=tech_plants.bus_id.astype(str),
-#     p_nom=tech_plants.Pmax,
-#     p_nom_extendable= tech in extendable_carriers["Generator"],
-#     marginal_cost=tech_plants.GenIOB * tech_plants.GenFuelCost,  #(MMBTu/MW) * (USD/MMBTu) = USD/MW
-#     marginal_cost_quadratic= tech_plants.GenIOC * tech_plants.GenFuelCost,
-#     carrier=tech_plants.type,
-#     weight=1.0,

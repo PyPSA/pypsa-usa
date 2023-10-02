@@ -185,9 +185,18 @@ EIA_CARRIER_MAPPER = {
         'Hydro':'hydro',
         'Battery':'battery',
         'Solar':'solar',
-        'Wind':'wind',
+        'Wind':'onwind',
 }
 
+
+################################
+# Constants for Breakthrough mapping 
+################################
+
+BREAKTHROUGH_TECH_MAPPER = {
+    'wind_offshore': 'offwind',
+    'wind': 'onwind',
+}
 ################################
 # Constants for NREL ATB mapping 
 ################################
@@ -384,6 +393,6 @@ CAPEX_LOCATIONAL_MULTIPLIER = {
     "coal":"coal-ultra-supercritical-90ccs", 
     "geothermal":"geothermal-50mw", 
     "solar":"spv-150mw", 
-    "wind":"onshore-wind-200mw",
+    "onwind":"onshore-wind-200mw",
     "hydro":"hydro-100mw"
 }
