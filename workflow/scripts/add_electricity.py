@@ -825,12 +825,14 @@ def attach_conventional_generators(
     add_missing_carriers(n, carriers)
     add_co2_emissions(n, costs, carriers)
 
-    # # Replace carrier "natural gas" with the respective technology (OCGT or
-    # # CCGT) to align with PyPSA names of "carriers" and avoid filtering "natural
-    # # gas" powerplants in ppl.query("carrier in @carriers")
-    # ppl.loc[ppl["carrier"] == "natural gas", "carrier"] = ppl.loc[
-    #     ppl["carrier"] == "natural gas", "technology"
+    # Replace carrier "natural gas" with the respective technology (OCGT or
+    # CCGT) to align with PyPSA names of "carriers" and avoid filtering "natural
+    # gas" powerplants in ppl.query("carrier in @carriers")
+
+    # plants.loc[plants["carrier"] == "natural gas", "carrier"] = plants.loc[
+    #     plants["carrier"] == "natural gas", "technology"
     # ]
+
     plants = (
         plants.query("carrier in @carriers")
         .join(costs, on="carrier", rsuffix="_r")
@@ -1326,16 +1328,17 @@ if __name__ == "__main__":
         update_capital_costs(n, carrier, costs, df_multiplier, Nyears)
         
     # apply regional/temporal variations to fuel cost data 
-    fuel_costs = {"gas":"ng_electric_power_price"}
+    fuel_costs = {"CCGT":"ng_electric_power_price",
+                  "OCGT":"ng_electric_power_price",}
     for carrier, cost_data in fuel_costs.items():
         fuel_cost_file = snakemake.input[f"{cost_data}"]
         df_fuel_costs = pd.read_csv(fuel_cost_file)
-        if carrier == "gas":
-            vom = (costs.at["OCGT", "VOM"] + costs.at["CCGT", "VOM"]) / 2
-            eff = (costs.at["OCGT", "efficiency"] + costs.at["CCGT", "efficiency"]) / 2
-        else:
-            vom = costs.at[carrier, "VOM"]
-            eff = None
+        # if carrier == "gas":
+        #     vom = (costs.at["OCGT", "VOM"] + costs.at["CCGT", "VOM"]) / 2
+        #     eff = (costs.at["OCGT", "efficiency"] + costs.at["CCGT", "efficiency"]) / 2
+        # else:
+        vom = costs.at[carrier, "VOM"]
+        eff = costs.at[carrier, "efficiency"]
         update_marginal_costs(
             n=n, 
             carrier=carrier, 

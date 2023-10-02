@@ -6,7 +6,9 @@
 To start, you'll want to set the proper network configuration for your studies purpose. You can copy the default `config/config.default.yaml` to `config/config.yaml`
 
 
-To execute the workflow, go into the `workflow` directory and execute `snakemake` from your terminal. 
+## Run workflow
+
+To run the workflow, go into the `workflow` directory and run `snakemake` from your terminal. 
 
 ```bash
 snakemake -j6

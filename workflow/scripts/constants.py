@@ -175,8 +175,8 @@ ADS_FUEL_MAPPER = {
 EIA_CARRIER_MAPPER = {
         'Nuclear':'nuclear',
         'Coal':'coal', 
-        'Gas_SC':'gas', 
-        'Gas_CC':'gas', 
+        'Gas_SC':'OCGT', 
+        'Gas_CC':'CCGT', 
         'Oil':'oil', 
         'Geothermal':'geothermal',
         'Biomass':'biomass', 
@@ -389,7 +389,9 @@ ATB_TECH_MAPPER = {
 CAPEX_LOCATIONAL_MULTIPLIER = {
     "nuclear":"nuclear-1117mw", 
     # "oil", 
-    "gas":"natural-gas-430mw-90ccs", 
+    # "gas":"natural-gas-430mw-90ccs", 
+    "CCGT":"natural-gas-430mw-90ccs", 
+    "OCGT":"natural-gas-430mw-90ccs", 
     "coal":"coal-ultra-supercritical-90ccs", 
     "geothermal":"geothermal-50mw", 
     "solar":"spv-150mw", 
