@@ -58,7 +58,7 @@ atlite:
     era5_2019:
       module: era5 # in priority order
       time: ['2019', '2019']
-  interconnect:
+  interconnects:
     western:
       x: [-126, -99]
       y: [27, 50]
