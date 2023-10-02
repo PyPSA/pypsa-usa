@@ -20,7 +20,6 @@ Relevant Settings
         conventional_carriers:
         co2limit:
         extendable_carriers:
-        estimate_renewable_capacities:
 
 
     load:
@@ -70,39 +69,6 @@ from shapely.prepared import prep
 idx = pd.IndexSlice
 
 logger = logging.getLogger(__name__)
-
-
-def normed(s):
-    """
-    Normalize a pandas.Series to sum to 1.
-    """
-    return s / s.sum()
-
-
-def calculate_annuity(n, r):
-    """
-    Calculate the annuity factor for an asset with lifetime n years and.
-
-    discount rate of r, e.g. annuity(20, 0.05) * 20 = 1.6
-    """
-    if isinstance(r, pd.Series):
-        return pd.Series(1 / n, index=r.index).where(
-            r == 0, r / (1.0 - 1.0 / (1.0 + r) ** n)
-        )
-    elif r > 0:
-        return r / (1.0 - 1.0 / (1.0 + r) ** n)
-    else:
-        return 1 / n
-
-
-def add_missing_carriers(n, carriers):
-    """
-    Function to add missing carriers to the network without raising errors.
-    """
-    missing_carriers = set(carriers) - set(n.carriers.index)
-    if len(missing_carriers) > 0:
-        n.madd("Carrier", missing_carriers)
-
 
 # can we get rid of this function and use add_mising_carriers instead?
 def _add_missing_carriers_from_costs(n, costs, carriers):
@@ -235,130 +201,6 @@ def load_costs(tech_costs, config, max_hours, Nyears=1.0):
             costs.loc[overwrites.index, attr] = overwrites
 
     return costs
-
-def load_powerplants(ppl_fn):
-    carrier_dict = {
-        "ocgt": "OCGT",
-        "ccgt": "CCGT",
-        "bioenergy": "biomass",
-        "ccgt, thermal": "CCGT",
-        "hard coal": "coal",
-    }
-    return (
-        pd.read_csv(ppl_fn, index_col=0, dtype={"bus": "str"})
-        .powerplant.to_pypsa_names()
-        .rename(columns=str.lower)
-        .replace({"carrier": carrier_dict})
-    )
-
-
-def attach_wind_and_solar(
-    n, costs, input_profiles, carriers, extendable_carriers, line_length_factor=1
-):
-    add_missing_carriers(n, carriers)
-
-    for car in carriers:
-        if car == "hydro":
-            continue
-
-        with xr.open_dataset(getattr(input_profiles, "profile_" + car)) as ds:
-            if ds.indexes["bus"].empty:
-                continue
-
-            supcar = car.split("-", 2)[0]
-            if supcar == "offwind":
-                underwater_fraction = ds["underwater_fraction"].to_pandas()
-                connection_cost = (
-                    line_length_factor
-                    * ds["average_distance"].to_pandas()
-                    * (
-                        underwater_fraction
-                        * costs.at[car + "-connection-submarine", "capital_cost"]
-                        + (1.0 - underwater_fraction)
-                        * costs.at[car + "-connection-underground", "capital_cost"]
-                    )
-                )
-                capital_cost = (
-                    costs.at["offwind", "capital_cost"]
-                    + costs.at[car + "-station", "capital_cost"]
-                    + connection_cost
-                )
-                logger.info(
-                    "Added connection cost of {:0.0f}-{:0.0f} USD/MW/a to {}".format(
-                        connection_cost.min(), connection_cost.max(), car
-                    )
-                )
-            else:
-                capital_cost = costs.at[car, "capital_cost"]
-            #TODO: #15 When to simplify network to substation level?
-
-            # n_bus2sub = bus2sub.set_index("bus_id").to_dict()["sub_id"]
-            # n.buses["sub_id"] = n.buses.index.to_series().map(n_bus2sub)
-            '''
-            sub2bus = bus2sub[bus2sub["sub_id"].isin(ds.indexes["bus"])]
-            # sub2bus = sub2bus.set_index("sub_id")
-            # sub2bus = sub2bus.to_dict()["bus_id"]
-            # ds["bus"] = ds.indexes["bus"].map(bus2sub)
-
-            ds2 = xr.Dataset({"bus":sub2bus.sub_id,"bus_id":sub2bus.bus_id})
-            ds2 = ds2.set_coords("bus").swap_dims({"dim_0":"bus"}).drop_vars("dim_0")
-            ds2 = ds2.swap_dims({"bus":"bus_id"})
-            ds2 = ds2.swap_dims({"bus_id":"bus"}) 
-            ds2.drop_duplicates("bus")
-            DS2  =xr.combine_by_coords([ds,DS])
-            
-
-            (Pdb) DS.bus.to_dataframe().bus.value_counts()
-            bus
-            35494    16
-            37284    14
-            39760    14
-            35465    13
-            39330    13
-
-            * bus      (bus) object '35494' '35494' '35494' ... '35494' '35494' '35494'
-                bus_id   (bus) object '2011011' '2011012' '2011013' ... '2011025' '2011026'
-            '''
-            bus2sub = pd.read_csv(input_profiles.bus2sub, dtype=str).drop("interconnect", axis=1)
-            bus_list = ds.bus.to_dataframe("sub_id").merge(bus2sub).bus_id.astype(str).values
-            p_nom_max_bus = ds["p_nom_max"].to_dataframe().merge(bus2sub,left_on="bus", right_on="sub_id").set_index('bus_id').p_nom_max
-            weight_bus = ds["weight"].to_dataframe().merge(bus2sub,left_on="bus", right_on="sub_id").set_index('bus_id').weight
-            bus_profiles = ds["profile"].transpose("time", "bus").to_pandas().T.merge(bus2sub,left_on="bus", right_on="sub_id").set_index('bus_id').drop(columns='sub_id').T
-            
-            logger.info(f"Adding {car} capacity-factor profiles to the network.")
-            #TODO: #24 VALIDATE TECHNICAL POTENTIALS
-
-            n.madd(
-                "Generator",
-                bus_list,
-                " " + car,
-                bus=bus_list,
-                carrier=car,
-                p_nom_extendable=car in extendable_carriers["Generator"],
-                p_nom_max=p_nom_max_bus,
-                weight=weight_bus,
-                marginal_cost=costs.at[supcar, "marginal_cost"],
-                capital_cost=capital_cost,
-                efficiency=costs.at[supcar, "efficiency"],
-                p_max_pu=bus_profiles,
-            )
-
-            '''
-            n.madd(
-                "Generator",
-                ds.indexes["bus"],
-                " " + car,
-                bus=ds.indexes["bus"],
-                carrier=car,
-                p_nom_extendable=car in extendable_carriers["Generator"],
-                p_nom_max=ds["p_nom_max"].to_pandas(),
-                weight=ds["weight"].to_pandas(),
-                marginal_cost=costs.at[supcar, "marginal_cost"],
-                capital_cost=capital_cost,
-                efficiency=costs.at[supcar, "efficiency"],
-                p_max_pu=ds["profile"].transpose("time", "bus").to_pandas(),
-            )
-            '''
 
 
 def attach_hydro(n, costs, ppl, profile_hydro, hydro_capacities, carriers, **params):
@@ -518,47 +360,6 @@ def attach_breakthrough_renewable_capacities_to_atlite(n, all_be_plants, renewab
         logger.info(f"Adding {len(tech_plants)} {tech} generator capacities to the network.")
 
 
-def estimate_renewable_capacities(n, year, tech_map, expansion_limit, countries):
-    if not len(countries) or not len(tech_map):
-        return
-
-    capacities = pm.data.IRENASTAT().powerplant.convert_country_to_alpha2()
-    capacities = capacities.query(
-        "Year == @year and Technology in @tech_map and Country in @countries"
-    )
-    capacities = capacities.groupby(["Technology", "Country"]).Capacity.sum()
-
-    logger.info(
-        f"Heuristics applied to distribute renewable capacities [GW]: "
-        f"\n{capacities.groupby('Technology').sum().div(1e3).round(2)}"
-    )
-
-    for ppm_technology, techs in tech_map.items():
-        tech_i = n.generators.query("carrier in @techs").index
-        stats = capacities.loc[ppm_technology].reindex(countries, fill_value=0.0)
-        country = n.generators.bus[tech_i].map(n.buses.country)
-        existent = n.generators.p_nom[tech_i].groupby(country).sum()
-        missing = stats - existent
-        dist = n.generators_t.p_max_pu.mean() * n.generators.p_nom_max
-
-        n.generators.loc[tech_i, "p_nom"] += (
-            dist[tech_i]
-            .groupby(country)
-            .transform(lambda s: normed(s) * missing[s.name])
-            .where(lambda s: s > 0.1, 0.0)  # only capacities above 100kW
-        )
-        n.generators.loc[tech_i, "p_nom_min"] = n.generators.loc[tech_i, "p_nom"]
-
-        if expansion_limit:
-            assert np.isscalar(expansion_limit)
-            logger.info(
-                f"Reducing capacity expansion limit to {expansion_limit*100:.2f}% of installed capacity."
-            )
-            n.generators.loc[tech_i, "p_nom_max"] = (
-                expansion_limit * n.generators.loc[tech_i, "p_nom_min"]
-            )
-
-
 def attach_breakthrough_renewable_plants(
     n, fn_plants, renewable_carriers, extendable_carriers, costs):
 
@@ -636,72 +437,6 @@ def add_nice_carrier_names(n, config):
         missing_i = list(colors.index[colors.isna()])
         logger.warning(f'tech_colors for carriers {missing_i} not defined in config.')
     n.carriers['color'] = colors
-
-
-def add_missing_fuel_cost(plants, costs_fn):
-    fuel_cost = pd.read_csv(costs_fn, index_col=0,skiprows=3)
-    plants['fuel_cost'] = plants.fuel_type.map(fuel_cost.fuel_price_per_mmbtu)
-    return plants
-
-
-def add_missing_heat_rates(plants, heat_rates_fn):
-    heat_rates = pd.read_csv(heat_rates_fn, index_col=0, skiprows=3)
-    hr_mapped = plants.fuel_type.map(heat_rates.heat_rate_btu_per_kwh) / 1000  #convert to mmbtu/mwh
-    plants['inchr2(mmbtu/mwh)'].fillna(hr_mapped, inplace=True)
-    return plants
-
-
-def match_plant_to_bus(n, plants):
-    import geopandas as gpd
-    from shapely.geometry import Point
-
-    plants_matched = plants.copy()
-    plants_matched['bus_assignment'] = None
-
-    buses = n.buses.copy()
-    buses['geometry'] = gpd.points_from_xy(buses["x"], buses["y"])
-
-    # from: https://stackoverflow.com/questions/58893719/find-nearest-point-in-other-dataframe-with-a-lot-of-data
-    from sklearn.neighbors import BallTree
-    # Create a BallTree 
-    tree = BallTree(buses[['x', 'y']].values, leaf_size=2)
-    # Query the BallTree on each feature from 'appart' to find the distance
-    # to the nearest 'pharma' and its id
-    plants_matched['distance_nearest'], plants_matched['id_nearest'] = tree.query(
-        plants_matched[['longitude', 'latitude']].values, # The input array for the query
-        k=1, # The number of nearest neighbors
-    )
-    plants_matched.bus_assignment = buses.reset_index().iloc[plants_matched.id_nearest].Bus.values
-    plants_matched.drop(columns=['id_nearest'], inplace=True)
-
-    return plants_matched
-
-
-def attach_eia_renewable_capacities_to_atlite(n, plants_df, renewable_carriers):
-    plants = plants_df.query(
-        "bus_assignment in @n.buses.index"
-    )
-
-    for tech in renewable_carriers:
-        plants_filt = plants.query("carrier == @tech")
-        if plants_filt.empty: continue
-        plants_filt.index = plants_filt.index.astype(str) + "_" + plants_filt.generator_id.astype(str)
-
-        network_gens = n.generators[n.generators.carrier == tech] 
-        # network_buses = n.buses.loc[network_gens.bus.unique()]
-        # gens_per_bus = network_gens.groupby("bus").p_nom.count()
-
-        caps = plants_filt.groupby("bus_assignment").sum().capacity_mw #namplate capacity per bus
-        # caps = caps / gens_per_bus.reindex(caps.index, fill_value=1) ##REVIEW do i need this
-        #TODO: #16 Gens excluded from atlite profiles bc of landuse/etc will not be able to be attached if in the breakthrough network
-
-        if caps[~caps.index.isin(network_gens.bus)].sum() > 0:
-            missing_capacity = caps[~caps.index.isin(network_gens.bus)].sum()
-            logger.info(f"There are {np.round(missing_capacity,1)} MW of {tech} plants that are not in the network. See git issue #16.")
-
-        n.generators.p_nom.update(network_gens.bus.map(caps).dropna())
-        n.generators.p_nom_min.update(network_gens.bus.map(caps).dropna())
-        logger.info(f"Adding {len(plants_filt)} {tech} generator capacities to the network.")
 
 
 def assign_ads_missing_lat_lon(plants,n):
@@ -853,6 +588,96 @@ def attach_ads_renewables(n, plants_df, renewable_carriers, extendable_carriers,
 # def attach_hydro():
 #     return
 
+
+
+def normed(s):
+    """
+    Normalize a pandas.Series to sum to 1.
+    """
+    return s / s.sum()
+
+
+def calculate_annuity(n, r):
+    """
+    Calculate the annuity factor for an asset with lifetime n years and.
+
+    discount rate of r, e.g. annuity(20, 0.05) * 20 = 1.6
+    """
+    if isinstance(r, pd.Series):
+        return pd.Series(1 / n, index=r.index).where(
+            r == 0, r / (1.0 - 1.0 / (1.0 + r) ** n)
+        )
+    elif r > 0:
+        return r / (1.0 - 1.0 / (1.0 + r) ** n)
+    else:
+        return 1 / n
+
+
+def add_missing_carriers(n, carriers):
+    """
+    Function to add missing carriers to the network without raising errors.
+    """
+    missing_carriers = set(carriers) - set(n.carriers.index)
+    if len(missing_carriers) > 0:
+        n.madd("Carrier", missing_carriers)
+
+
+def add_missing_fuel_cost(plants, costs_fn):
+    fuel_cost = pd.read_csv(costs_fn, index_col=0,skiprows=3)
+    plants['fuel_cost'] = plants.fuel_type.map(fuel_cost.fuel_price_per_mmbtu)
+    return plants
+
+
+def add_missing_heat_rates(plants, heat_rates_fn):
+    heat_rates = pd.read_csv(heat_rates_fn, index_col=0, skiprows=3)
+    hr_mapped = plants.fuel_type.map(heat_rates.heat_rate_btu_per_kwh) / 1000  #convert to mmbtu/mwh
+    plants['inchr2(mmbtu/mwh)'].fillna(hr_mapped, inplace=True)
+    return plants
+
+
+def match_plant_to_bus(n, plants):
+    import geopandas as gpd
+    from shapely.geometry import Point
+
+    plants_matched = plants.copy()
+    plants_matched['bus_assignment'] = None
+
+    buses = n.buses.copy()
+    buses['geometry'] = gpd.points_from_xy(buses["x"], buses["y"])
+
+    # from: https://stackoverflow.com/questions/58893719/find-nearest-point-in-other-dataframe-with-a-lot-of-data
+    from sklearn.neighbors import BallTree
+    # Create a BallTree 
+    tree = BallTree(buses[['x', 'y']].values, leaf_size=2)
+    # Query the BallTree on each feature from 'appart' to find the distance
+    # to the nearest 'pharma' and its id
+    plants_matched['distance_nearest'], plants_matched['id_nearest'] = tree.query(
+        plants_matched[['longitude', 'latitude']].values, # The input array for the query
+        k=1, # The number of nearest neighbors
+    )
+    plants_matched.bus_assignment = buses.reset_index().iloc[plants_matched.id_nearest].Bus.values
+    plants_matched.drop(columns=['id_nearest'], inplace=True)
+
+    return plants_matched
+
+
+def attach_renewable_capacities_to_atlite(n, plants_df, renewable_carriers):
+    plants = plants_df.query(
+        "bus_assignment in @n.buses.index"
+    )
+    for tech in renewable_carriers:
+        plants_filt = plants.query("carrier == @tech")
+        if plants_filt.empty: continue
+        network_gens = n.generators[n.generators.carrier == tech] 
+        caps = plants_filt.groupby("bus_assignment").sum().p_nom #namplate capacity per bus
+        # caps = caps / gens_per_bus.reindex(caps.index, fill_value=1) ##REVIEW do i need this
+        #TODO: #16 Gens excluded from atlite profiles bc of landuse/etc will not be able to be attached if in the breakthrough network
+        if caps[~caps.index.isin(network_gens.bus)].sum() > 0:
+            missing_capacity = caps[~caps.index.isin(network_gens.bus)].sum()
+            logger.info(f"There are {np.round(missing_capacity,1)} MW of {tech} plants that are not in the network. See git issue #16.")
+        n.generators.p_nom.update(network_gens.bus.map(caps).dropna())
+        n.generators.p_nom_min.update(network_gens.bus.map(caps).dropna())
+        logger.info(f"Adding {len(plants_filt)} {tech} generator capacities to the network.")
 
 
 def update_transmission_costs(n: pypsa.Network, costs, length_factor=1.0):
@@ -1193,75 +1018,73 @@ def load_powerplants_breakthrough(breakthrough_dataset: str) -> pd.DataFrame:
     return plants
 
 
-# def attach_eia_batteries(n, plants_df,extendable_carriers, costs):
-#     plants = plants_df.query(
-#         "bus_assignment in @n.buses.index"
-#     )
-#     plants_filt = plants.query("carrier == 'battery' ")
-#     plants_filt.index = plants_filt.index.astype(str) + "_" + plants_filt.generator_id.astype(str)
-#     n.madd(
-#         "StorageUnit",
-#         plants_filt.index,
-#         bus=plants_filt.bus_assignment,
-#         p_nom=plants_filt.capacity_mw,
-#         p_nom_extendable='battery' in extendable_carriers['Store'],
-#         max_hours = plants_filt.energy_capacity_mwh / plants_filt.capacity_mw,
-#         build_year=plants_filt.operating_year,
-#         carrier=plants_filt.carrier,
-#         efficiency_store= 1.0,
-#         efficiency_dispatch=1.0, #TODO: Add efficiency_dispatch to config file
-#         cyclic_state_of_charge=True,
-#         capital_cost=costs.at["battery", "capital_cost"],
-#     )
-#     return n
+def attach_wind_and_solar(
+    n: pypsa.Network, 
+    costs: pd.DataFrame, 
+    input_profiles: str, 
+    carriers: list[str],
+    extendable_carriers: Dict[str, list[str]],
+    line_length_factor=1
+    ):
+    add_missing_carriers(n, carriers)
+    for car in carriers:
+        if car == "hydro":
+            continue
 
-# def prepare_ads_conventional_plants(
-#     plants_df: pd.DataFrame
-# ) -> pd.DataFrame:
-#     """
-#     Arranges ADS conventional plant data into a format that can be used by
-#       the add_conventional_plants and maybe also the add_wind_and_solar functions.
-#     """
-#     plants_filt.index = plants_filt.ads_name.astype(str)
-#     bus=plants_filt.bus_assignment
-#     p_nom=plants_filt['maxcap(mw)']
-#     p_nom_extendable= tech_type in extendable_carriers['Generator']
-#     marginal_cost=plants_filt['inchr2(mmbtu/mwh)'] * plants_filt.fuel_cost,  #(MMBTu/MW) * (USD/MMBTu) = USD/MW
-#     ramp_limit_up= plants_filt['rampup rate(mw/minute)']/ plants_filt['maxcap(mw)'] * 60, #MW/min to p.u./hour
-#     ramp_limit_down= plants_filt['rampdn rate(mw/minute)']/ plants_filt['maxcap(mw)'] * 60, #MW/min to p.u./hour
-#     carrier=plants_filt.carrier,
+        with xr.open_dataset(getattr(input_profiles, "profile_" + car)) as ds:
+            if ds.indexes["bus"].empty:
+                continue
 
+            supcar = car.split("-", 2)[0]
+            if supcar == "offwind":
+                underwater_fraction = ds["underwater_fraction"].to_pandas()
+                connection_cost = (
+                    line_length_factor
+                    * ds["average_distance"].to_pandas()
+                    * (
+                        underwater_fraction
+                        * costs.at[car + "-connection-submarine", "capital_cost"]
+                        + (1.0 - underwater_fraction)
+                        * costs.at[car + "-connection-underground", "capital_cost"]
+                    )
+                )
+                capital_cost = (
+                    costs.at["offwind", "capital_cost"]
+                    + costs.at[car + "-station", "capital_cost"]
+                    + connection_cost
+                )
+                logger.info(
+                    "Added connection cost of {:0.0f}-{:0.0f} USD/MW/a to {}".format(
+                        connection_cost.min(), connection_cost.max(), car
+                    )
+                )
+            else:
+                capital_cost = costs.at[car, "capital_cost"]
 
-# def attach_eia_conventional_plants(
-#     plants_df: pd.DataFrame
-# ) -> pd.DataFrame:
-#     """
-#     Arranges EIA conventional plant data into a format that can be used by
-#       the add_conventional_plants and maybe also the add_wind_and_solar functions.
-#     """
-#     plants_filt.index = plants_filt.index.astype(str) + "_" + plants_filt.generator_id.astype(str)
-#     bus=plants_filt.bus_assignment
-#     p_nom=plants_filt.capacity_mw
-#     p_nom_extendable= tech_type in extendable_carriers['Generator']
-#     marginal_cost=plants_filt['inchr2(mmbtu/mwh)'] * plants_filt.fuel_cost  #(MMBTu/MW) * (USD/MMBTu) = USD/MW
-#     ramp_limit_up= plants_filt['rampup rate(mw/minute)']/ plants_filt.capacity_mw * 60 #MW/min to p.u./hour
-#     ramp_limit_down= plants_filt['rampdn rate(mw/minute)']/ plants_filt.capacity_mw * 60 #MW/min to p.u./hour
-#     carrier=plants_filt.carrier
-#     build_year=plants_filt.operating_year
-#     weight=1.0
-# def attach_breakthrough_conventional_plants(fn_plants):
-#     # _add_missing_carriers_from_costs(n, costs, conventional_carriers)
-#     # plants = pd.read_csv(fn_plants, dtype={"bus_id": str}, index_col=0).query("bus_id in @n.buses.index")
-#     # plants.replace(["dfo"], ["oil"], inplace=True)
+            bus2sub = pd.read_csv(input_profiles.bus2sub, dtype=str).drop("interconnect", axis=1)
+            bus_list = ds.bus.to_dataframe("sub_id").merge(bus2sub).bus_id.astype(str).values
+            p_nom_max_bus = ds["p_nom_max"].to_dataframe().merge(bus2sub,left_on="bus", right_on="sub_id").set_index('bus_id').p_nom_max
+            weight_bus = ds["weight"].to_dataframe().merge(bus2sub,left_on="bus", right_on="sub_id").set_index('bus_id').weight
+            bus_profiles = ds["profile"].transpose("time", "bus").to_pandas().T.merge(bus2sub,left_on="bus", right_on="sub_id").set_index('bus_id').drop(columns='sub_id').T
+            
+            logger.info(f"Adding {car} capacity-factor profiles to the network.")
+            #TODO: #24 VALIDATE TECHNICAL POTENTIALS
 
-#     tech_plants.index = tech_plants.index.astype(str)
-#     bus=tech_plants.bus_id.astype(str),
-#     p_nom=tech_plants.Pmax,
-#     p_nom_extendable= tech in extendable_carriers["Generator"],
-#     marginal_cost=tech_plants.GenIOB * tech_plants.GenFuelCost,  #(MMBTu/MW) * (USD/MMBTu) = USD/MW
-#     marginal_cost_quadratic= tech_plants.GenIOC * tech_plants.GenFuelCost,
-#     carrier=tech_plants.type,
-#     weight=1.0,
+            n.madd(
+                "Generator",
+                bus_list,
+                " " + car,
+                bus=bus_list,
+                carrier=car,
+                p_nom_extendable=car in extendable_carriers["Generator"],
+                p_nom_max=p_nom_max_bus,
+                weight=weight_bus,
+                marginal_cost=costs.at[supcar, "marginal_cost"],
+                capital_cost=capital_cost,
+                efficiency=costs.at[supcar, "efficiency"],
+                p_max_pu=bus_profiles,
+            )
+
 
 
 #########################################
@@ -1301,9 +1124,6 @@ if __name__ == "__main__":
                             end= sns_end,
                             inclusive= sns_inclusive)
                     )
-    
-    add_demand_from_file(n, fn_demand, configuration) #can now move this down lower in workflow
-    ##########
 
     Nyears = n.snapshot_weightings.objective.sum() / 8760.0
 
@@ -1336,7 +1156,10 @@ if __name__ == "__main__":
     else:
         fuel_price = None
 
+    add_demand_from_file(n, fn_demand, configuration)
+
     if configuration == "pypsa-usa": 
+        import pdb; pdb.set_trace()
         costs = costs.rename(index={"onwind": "wind",
                                      #"OCGT": "ng"
                                      }) #changing cost data to match the plant data #TODO: #10 change this so that fuel types and plant types match the pypsa naming scheme.
@@ -1345,7 +1168,6 @@ if __name__ == "__main__":
         plants = load_powerplants_eia(snakemake.input['plants_eia'], 
                                       eia_carrier_mapper)
         plants = match_plant_to_bus(n, plants)
-
         attach_conventional_generators(
             n,
             costs,
@@ -1355,16 +1177,14 @@ if __name__ == "__main__":
             params.conventional,
             conventional_inputs,
             unit_commitment=unit_commitment,
-            fuel_price=fuel_price)
-
-        #attach batteries to network
-        n = attach_battery_storage(
+            fuel_price=fuel_price
+        )
+        attach_battery_storage(
             n, 
             plants,
             extendable_carriers, 
             costs
         )
-
         #attach renewable plants to network
         costs = costs.rename(index={"offwind-ac-connection-submarine": "offwind-connection-submarine",
                                     "offwind-ac-connection-underground": "offwind-connection-underground",
@@ -1386,8 +1206,7 @@ if __name__ == "__main__":
                 set(["wind", "solar", "offwind"])
             )
         )
-
-        attach_eia_renewable_capacities_to_atlite(
+        attach_renewable_capacities_to_atlite(
             n,
             plants,
             renewable_carriers
@@ -1395,8 +1214,58 @@ if __name__ == "__main__":
 
         update_p_nom_max(n)
 
+        #temporarily adding hydro with breakthrough only data until I can correctly import hydro_data
+        renewable_carriers = list(
+            set(snakemake.config['electricity']["renewable_carriers"]).intersection(
+                set(["hydro"])
+            )
+        )
+        n = attach_breakthrough_renewable_plants(
+            n,
+            snakemake.input["plants"],
+            renewable_carriers,
+            extendable_carriers,
+            costs,
+        )
+    elif configuration == "breakthrough":
+        costs = costs.rename(index={"onwind": "wind", "OCGT": "ng"}) #changing cost data to match the breakthrough plant data #TODO: #10 change this so that breakthrough fuel types and plant types match the pypsa naming scheme.
+        conventional_carriers = list(
+            set(snakemake.config['electricity']["conventional_carriers"]).intersection(
+                set(["coal", "ng", "nuclear", "oil", "geothermal"])
+            )
+        )
 
-        #attach hydro to network (using breakthrough plants and profiles)
+        n = attach_breakthrough_conventional_plants(
+            n,
+            snakemake.input["plants"],
+            conventional_carriers,
+            extendable_carriers,
+            costs,
+        )
+
+        #adding breakthrough renewable plants to network
+        costs = costs.rename(index={"offwind-ac-connection-submarine": "offwind-connection-submarine",
+                                    "offwind-ac-connection-underground": "offwind-connection-underground",
+                                    'offwind-ac-station': 'offwind-station',
+                                    "onwind":"wind"}) #temporary fix. should rename carriers instead of changing cost names. w TODO#10
+        attach_wind_and_solar(
+            n,
+            costs,
+            snakemake.input,
+            renewable_carriers,
+            extendable_carriers,
+            params.length_factor,
+        )
+
+        renewable_carriers = list(
+            set(snakemake.config['electricity']["renewable_carriers"]).intersection(
+                set(["wind", "solar", "offwind"])
+            )
+        )
+
+        attach_breakthrough_renewable_capacities_to_atlite(n, snakemake.input["plants"], renewable_carriers)
+        update_p_nom_max(n)
+
         #temporarily adding hydro with breakthrough only data until I can correctly import hydro_data
         renewable_carriers = list(
             set(snakemake.config['electricity']["renewable_carriers"]).intersection(
@@ -1467,61 +1336,7 @@ if __name__ == "__main__":
             extendable_carriers,
             costs,
         )
-        
         update_p_nom_max(n)
-
-    elif configuration == "breakthrough":
-        costs = costs.rename(index={"onwind": "wind", "OCGT": "ng"}) #changing cost data to match the breakthrough plant data #TODO: #10 change this so that breakthrough fuel types and plant types match the pypsa naming scheme.
-        conventional_carriers = list(
-            set(snakemake.config['electricity']["conventional_carriers"]).intersection(
-                set(["coal", "ng", "nuclear", "oil", "geothermal"])
-            )
-        )
-
-        n = attach_breakthrough_conventional_plants(
-            n,
-            snakemake.input["plants"],
-            conventional_carriers,
-            extendable_carriers,
-            costs,
-        )
-
-        #adding breakthrough renewable plants to network
-        costs = costs.rename(index={"offwind-ac-connection-submarine": "offwind-connection-submarine",
-                                    "offwind-ac-connection-underground": "offwind-connection-underground",
-                                    'offwind-ac-station': 'offwind-station',
-                                    "onwind":"wind"}) #temporary fix. should rename carriers instead of changing cost names. w TODO#10
-        attach_wind_and_solar(
-            n,
-            costs,
-            snakemake.input,
-            renewable_carriers,
-            extendable_carriers,
-            params.length_factor,
-        )
-
-        renewable_carriers = list(
-            set(snakemake.config['electricity']["renewable_carriers"]).intersection(
-                set(["wind", "solar", "offwind"])
-            )
-        )
-
-        attach_breakthrough_renewable_capacities_to_atlite(n, snakemake.input["plants"], renewable_carriers)
-        update_p_nom_max(n)
-
-        #temporarily adding hydro with breakthrough only data until I can correctly import hydro_data
-        renewable_carriers = list(
-            set(snakemake.config['electricity']["renewable_carriers"]).intersection(
-                set(["hydro"])
-            )
-        )
-        n = attach_breakthrough_renewable_plants(
-            n,
-            snakemake.input["plants"],
-            renewable_carriers,
-            extendable_carriers,
-            costs,
-        )
     else:
         raise ValueError(f"Unknown network_configuration {snakemake.config['network_configuration']}")
 
@@ -1541,3 +1356,77 @@ if __name__ == "__main__":
     output_folder = os.path.dirname(snakemake.output[0]) + '/base_network'
     export_network_for_gis_mapping(n, output_folder)
 
+
+
+
+
+
+# def attach_eia_batteries(n, plants_df,extendable_carriers, costs):
+#     plants = plants_df.query(
+#         "bus_assignment in @n.buses.index"
+#     )
+#     plants_filt = plants.query("carrier == 'battery' ")
+#     plants_filt.index = plants_filt.index.astype(str) + "_" + plants_filt.generator_id.astype(str)
+#     n.madd(
+#         "StorageUnit",
+#         plants_filt.index,
+#         bus=plants_filt.bus_assignment,
+#         p_nom=plants_filt.capacity_mw,
+#         p_nom_extendable='battery' in extendable_carriers['Store'],
+#         max_hours = plants_filt.energy_capacity_mwh / plants_filt.capacity_mw,
+#         build_year=plants_filt.operating_year,
+#         carrier=plants_filt.carrier,
+#         efficiency_store= 1.0,
+#         efficiency_dispatch=1.0, #TODO: Add efficiency_dispatch to config file
+#         cyclic_state_of_charge=True,
+#         capital_cost=costs.at["battery", "capital_cost"],
+#     )
+#     return n
+
+# def prepare_ads_conventional_plants(
+#     plants_df: pd.DataFrame
+# ) -> pd.DataFrame:
+#     """
+#     Arranges ADS conventional plant data into a format that can be used by
+#       the add_conventional_plants and maybe also the add_wind_and_solar functions.
+#     """
+#     plants_filt.index = plants_filt.ads_name.astype(str)
+#     bus=plants_filt.bus_assignment
+#     p_nom=plants_filt['maxcap(mw)']
+#     p_nom_extendable= tech_type in extendable_carriers['Generator']
+#     marginal_cost=plants_filt['inchr2(mmbtu/mwh)'] * plants_filt.fuel_cost,  #(MMBTu/MW) * (USD/MMBTu) = USD/MW
+#     ramp_limit_up= plants_filt['rampup rate(mw/minute)']/ plants_filt['maxcap(mw)'] * 60, #MW/min to p.u./hour
+#     ramp_limit_down= plants_filt['rampdn rate(mw/minute)']/ plants_filt['maxcap(mw)'] * 60, #MW/min to p.u./hour
+#     carrier=plants_filt.carrier,
+
+
+# def attach_eia_conventional_plants(
+#     plants_df: pd.DataFrame
+# ) -> pd.DataFrame:
+#     """
+#     Arranges EIA conventional plant data into a format that can be used by
+#       the add_conventional_plants and maybe also the add_wind_and_solar functions.
+#     """
+#     plants_filt.index = plants_filt.index.astype(str) + "_" + plants_filt.generator_id.astype(str)
+#     bus=plants_filt.bus_assignment
+#     p_nom=plants_filt.capacity_mw
+#     p_nom_extendable= tech_type in extendable_carriers['Generator']
+#     marginal_cost=plants_filt['inchr2(mmbtu/mwh)'] * plants_filt.fuel_cost  #(MMBTu/MW) * (USD/MMBTu) = USD/MW
+#     ramp_limit_up= plants_filt['rampup rate(mw/minute)']/ plants_filt.capacity_mw * 60 #MW/min to p.u./hour
+#     ramp_limit_down= plants_filt['rampdn rate(mw/minute)']/ plants_filt.capacity_mw * 60 #MW/min to p.u./hour
+#     carrier=plants_filt.carrier
+#     build_year=plants_filt.operating_year
+#     weight=1.0
+# def attach_breakthrough_conventional_plants(fn_plants):
+#     # _add_missing_carriers_from_costs(n, costs, conventional_carriers)
+#     # plants = pd.read_csv(fn_plants, dtype={"bus_id": str}, index_col=0).query("bus_id in @n.buses.index")
+#     # plants.replace(["dfo"], ["oil"], inplace=True)
+
+#     tech_plants.index = tech_plants.index.astype(str)
+#     bus=tech_plants.bus_id.astype(str),
+#     p_nom=tech_plants.Pmax,
+#     p_nom_extendable= tech in extendable_carriers["Generator"],
+#     marginal_cost=tech_plants.GenIOB * tech_plants.GenFuelCost,  #(MMBTu/MW) * (USD/MMBTu) = USD/MW
+#     marginal_cost_quadratic= tech_plants.GenIOC * tech_plants.GenFuelCost,
+#     carrier=tech_plants.type,
+#     weight=1.0,
