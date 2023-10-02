@@ -328,6 +328,24 @@ rule build_ship_raster:
     script:
         "subworkflows/pypsa-eur/scripts/build_ship_raster.py"
 
+rule build_hydro_profiles:
+    params:
+        hydro=config["renewable"]["hydro"],
+        countries=config["countries"],
+    input:
+        ba_region_shapes=RESOURCES + "{interconnect}/onshore_shapes.geojson",
+        # eia_hydro_generation="data/eia_hydro_annual_generation.csv",
+        cutout=f"cutouts/" + CDIR + "{interconnect}_" + config["renewable"]["hydro"]["cutout"] + ".nc",
+    output:
+        RESOURCES + "{interconnect}/profile_hydro.nc",
+    log:
+        LOGS + "{interconnect}/build_hydro_profile.log",
+    resources:
+        mem_mb=5000,
+    conda:
+        "envs/environment.yaml"
+    script:
+        "scripts/build_hydro_profile.py"
 
 rule build_renewable_profiles:
     params:
@@ -389,9 +407,7 @@ rule add_electricity:
     input:
         **{
             f"profile_{tech}": RESOURCES + "{interconnect}" + f"/profile_{tech}.nc"
-            for tech in config["electricity"]["renewable_carriers"]
-            if tech != "hydro" #ignore hydro becuase we will use other method for attaching hydro
-            
+            for tech in config["electricity"]["renewable_carriers"]           
         },
         **{
             f"conventional_{carrier}_{attr}": fn

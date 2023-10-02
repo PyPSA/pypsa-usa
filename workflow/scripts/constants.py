@@ -389,7 +389,6 @@ ATB_TECH_MAPPER = {
 CAPEX_LOCATIONAL_MULTIPLIER = {
     "nuclear":"nuclear-1117mw", 
     # "oil", 
-    # "gas":"natural-gas-430mw-90ccs", 
     "CCGT":"natural-gas-430mw-90ccs", 
     "OCGT":"natural-gas-430mw-90ccs", 
     "coal":"coal-ultra-supercritical-90ccs", 

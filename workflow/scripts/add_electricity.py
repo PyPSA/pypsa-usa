@@ -809,7 +809,6 @@ def test_snapshot_year_alignment(sns_year: int, configuration: str):
                             \n
                           """)
 
-#double check if we need to filter the plants by buses that are in the network filtered by interconnect.
 def attach_conventional_generators(
     n: pypsa.Network,
     costs: pd.DataFrame,
@@ -875,6 +874,8 @@ def attach_conventional_generators(
         p_nom_min=plants.p_nom.where(plants.carrier.isin(conventional_carriers), 0),
         p_nom=plants.p_nom.where(plants.carrier.isin(conventional_carriers), 0),
         p_nom_extendable=plants.carrier.isin(extendable_carriers["Generator"]),
+        ramp_limit_up=plants.ramp_limit_up,
+        ramp_limit_down=plants.ramp_limit_down,
         efficiency=plants.efficiency,
         marginal_cost=marginal_cost,
         capital_cost=plants.capital_cost,
@@ -882,6 +883,75 @@ def attach_conventional_generators(
         lifetime=(plants.dateout - plants.build_year).fillna(np.inf),
         **committable_attrs,
     )
+
+
+def attach_wind_and_solar(
+    n: pypsa.Network, 
+    costs: pd.DataFrame, 
+    input_profiles: str, 
+    carriers: list[str],
+    extendable_carriers: Dict[str, list[str]],
+    line_length_factor=1
+    ):
+    """Attached Atlite Calculated wind and solar capacity factor profiles to the network."""
+    add_missing_carriers(n, carriers)
+    for car in carriers:
+        if car == "hydro":
+            continue
+
+        with xr.open_dataset(getattr(input_profiles, "profile_" + car)) as ds:
+            if ds.indexes["bus"].empty:
+                continue
+
+            supcar = car.split("-", 2)[0]
+            if supcar == "offwind":
+                underwater_fraction = ds["underwater_fraction"].to_pandas()
+                connection_cost = (
+                    line_length_factor
+                    * ds["average_distance"].to_pandas()
+                    * (
+                        underwater_fraction
+                        * costs.at[car + "-connection-submarine", "capital_cost"]
+                        + (1.0 - underwater_fraction)
+                        * costs.at[car + "-connection-underground", "capital_cost"]
+                    )
+                )
+                capital_cost = (
+                    costs.at["offwind", "capital_cost"]
+                    + costs.at[car + "-station", "capital_cost"]
+                    + connection_cost
+                )
+                logger.info(
+                    "Added connection cost of {:0.0f}-{:0.0f} USD/MW/a to {}".format(
+                        connection_cost.min(), connection_cost.max(), car
+                    )
+                )
+            else:
+                capital_cost = costs.at[car, "capital_cost"]
+
+            bus2sub = pd.read_csv(input_profiles.bus2sub, dtype=str).drop("interconnect", axis=1)
+            bus_list = ds.bus.to_dataframe("sub_id").merge(bus2sub).bus_id.astype(str).values
+            p_nom_max_bus = ds["p_nom_max"].to_dataframe().merge(bus2sub,left_on="bus", right_on="sub_id").set_index('bus_id').p_nom_max
+            weight_bus = ds["weight"].to_dataframe().merge(bus2sub,left_on="bus", right_on="sub_id").set_index('bus_id').weight
+            bus_profiles = ds["profile"].transpose("time", "bus").to_pandas().T.merge(bus2sub,left_on="bus", right_on="sub_id").set_index('bus_id').drop(columns='sub_id').T
+            
+            logger.info(f"Adding {car} capacity-factor profiles to the network.")
+            #TODO: #24 VALIDATE TECHNICAL POTENTIALS
+
+            n.madd(
+                "Generator",
+                bus_list,
+                " " + car,
+                bus=bus_list,
+                carrier=car,
+                p_nom_extendable=car in extendable_carriers["Generator"],
+                p_nom_max=p_nom_max_bus,
+                weight=weight_bus,
+                marginal_cost=costs.at[supcar, "marginal_cost"],
+                capital_cost=capital_cost,
+                efficiency=costs.at[supcar, "efficiency"],
+                p_max_pu=bus_profiles,
+            )
 
 
 def attach_battery_storage(n: pypsa.Network, 
@@ -1111,75 +1181,6 @@ def load_powerplants_breakthrough(breakthrough_dataset: str) -> pd.DataFrame:
     plants['carrier']= plants.type
     return plants
 
-
-def attach_wind_and_solar(
-    n: pypsa.Network, 
-    costs: pd.DataFrame, 
-    input_profiles: str, 
-    carriers: list[str],
-    extendable_carriers: Dict[str, list[str]],
-    line_length_factor=1
-    ):
-    """Attached Atlite Calculated wind and solar capacity factor profiles to the network."""
-    add_missing_carriers(n, carriers)
-    for car in carriers:
-        if car == "hydro":
-            continue
-
-        with xr.open_dataset(getattr(input_profiles, "profile_" + car)) as ds:
-            if ds.indexes["bus"].empty:
-                continue
-
-            supcar = car.split("-", 2)[0]
-            if supcar == "offwind":
-                underwater_fraction = ds["underwater_fraction"].to_pandas()
-                connection_cost = (
-                    line_length_factor
-                    * ds["average_distance"].to_pandas()
-                    * (
-                        underwater_fraction
-                        * costs.at[car + "-connection-submarine", "capital_cost"]
-                        + (1.0 - underwater_fraction)
-                        * costs.at[car + "-connection-underground", "capital_cost"]
-                    )
-                )
-                capital_cost = (
-                    costs.at["offwind", "capital_cost"]
-                    + costs.at[car + "-station", "capital_cost"]
-                    + connection_cost
-                )
-                logger.info(
-                    "Added connection cost of {:0.0f}-{:0.0f} USD/MW/a to {}".format(
-                        connection_cost.min(), connection_cost.max(), car
-                    )
-                )
-            else:
-                capital_cost = costs.at[car, "capital_cost"]
-
-            bus2sub = pd.read_csv(input_profiles.bus2sub, dtype=str).drop("interconnect", axis=1)
-            bus_list = ds.bus.to_dataframe("sub_id").merge(bus2sub).bus_id.astype(str).values
-            p_nom_max_bus = ds["p_nom_max"].to_dataframe().merge(bus2sub,left_on="bus", right_on="sub_id").set_index('bus_id').p_nom_max
-            weight_bus = ds["weight"].to_dataframe().merge(bus2sub,left_on="bus", right_on="sub_id").set_index('bus_id').weight
-            bus_profiles = ds["profile"].transpose("time", "bus").to_pandas().T.merge(bus2sub,left_on="bus", right_on="sub_id").set_index('bus_id').drop(columns='sub_id').T
-            
-            logger.info(f"Adding {car} capacity-factor profiles to the network.")
-            #TODO: #24 VALIDATE TECHNICAL POTENTIALS
-
-            n.madd(
-                "Generator",
-                bus_list,
-                " " + car,
-                bus=bus_list,
-                carrier=car,
-                p_nom_extendable=car in extendable_carriers["Generator"],
-                p_nom_max=p_nom_max_bus,
-                weight=weight_bus,
-                marginal_cost=costs.at[supcar, "marginal_cost"],
-                capital_cost=capital_cost,
-                efficiency=costs.at[supcar, "efficiency"],
-                p_max_pu=bus_profiles,
-            )
-
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
@@ -1333,10 +1334,6 @@ if __name__ == "__main__":
     for carrier, cost_data in fuel_costs.items():
         fuel_cost_file = snakemake.input[f"{cost_data}"]
         df_fuel_costs = pd.read_csv(fuel_cost_file)
-        # if carrier == "gas":
-        #     vom = (costs.at["OCGT", "VOM"] + costs.at["CCGT", "VOM"]) / 2
-        #     eff = (costs.at["OCGT", "efficiency"] + costs.at["CCGT", "efficiency"]) / 2
-        # else:
         vom = costs.at[carrier, "VOM"]
         eff = costs.at[carrier, "efficiency"]
         update_marginal_costs(

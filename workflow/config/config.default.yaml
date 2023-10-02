@@ -1,10 +1,10 @@
 scenarios:
   all:
     interconnect: western #"usa|texas|western|eastern"
-    clusters: 30
+    clusters: 60
     opts:
       [
-        Co2L1.0,
+        Co2L0.75,
       ]
     ll: [vopt]
     scope: "total" # "urban", "rural", or "total" 
@@ -42,6 +42,7 @@ countries: [US]
 # focus_weights: 
 #   CISO-PGAE: 0.5
 
+# TODO: #11 change load data and generator data to be a snakemake wildcard value
 network_configuration: "pypsa-usa" # "pypsa-usa" or "ads2032" or "breakthrough"
 
 snapshots:
@@ -66,7 +67,7 @@ atlite:
       time: ['2013', '2013']
 
 electricity: 
-  conventional_carriers: [nuclear, oil, gas, coal, geothermal] # Choose Carriers to load into network
+  conventional_carriers: [nuclear, oil, OCGT, CCGT, coal, geothermal] # Choose Carriers to load into network
   renewable_carriers: [onwind, solar, offwind, hydro] # Choose Carriers to load into network
   voltages: [230., 345., 500., 765.]
   voltage_simplified: 230 #Voltage level to simplify network to in rule "simplify network"
@@ -79,7 +80,7 @@ electricity:
     H2: 168
 
   extendable_carriers:
-    Generator: [solar, onwind, offwind, gas, coal]
+    Generator: [solar, onwind, offwind, OCGT, CCGT, coal]
     StorageUnit: [battery] # battery, H2
     Store: [battery] #[battery, H2]
     Link: [] #[H2 pipeline]
@@ -296,7 +297,7 @@ solving:
     PreDual: 0
     GURO_PAR_BARDENSETHRESH: 200
   operations:
-    run: true
+    run: false
     stochastic: false
     iterations: 10
 
