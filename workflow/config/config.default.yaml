@@ -4,7 +4,7 @@ scenarios:
     clusters: 60
     opts:
       [
-        Co2L1.0,
+        Co2L0.75,
       ]
     ll: [vopt]
     scope: "total" # "urban", "rural", or "total" 
@@ -43,11 +43,11 @@ countries: [US]
 #   CISO-PGAE: 0.5
 
 # TODO: #11 change load data and generator data to be a snakemake wildcard value
-network_configuration: "pypsa-usa" # "pypsa-usa" or "ads2032" or "breakthrough" 
+network_configuration: "pypsa-usa" # "pypsa-usa" or "ads2032" or "breakthrough"
 
 snapshots:
   start: "2019-01-01"
-  end: "2020-01-01"
+  end: "2019-01-14"
   inclusive: 'left' # include start, not end
 
 atlite:
@@ -67,8 +67,8 @@ atlite:
       time: ['2013', '2013']
 
 electricity: 
-  conventional_carriers: [nuclear, oil, gas, coal, geothermal] # Choose Carriers to load into network
-  renewable_carriers: [wind, solar, offwind, hydro] # Choose Carriers to load into network
+  conventional_carriers: [nuclear, oil, OCGT, CCGT, coal, geothermal] # Choose Carriers to load into network
+  renewable_carriers: [onwind, solar, offwind, hydro] # Choose Carriers to load into network
   voltages: [230., 345., 500., 765.]
   voltage_simplified: 230 #Voltage level to simplify network to in rule "simplify network"
   co2limit: 1.4728e+9 # 0.8 * 1.841e+9
@@ -80,13 +80,19 @@ electricity:
     H2: 168
 
   extendable_carriers:
-    Generator: [solar, wind, offwind, gas, coal]
+    Generator: [solar, onwind, offwind, OCGT, CCGT, coal]
     StorageUnit: [battery] # battery, H2
     Store: [battery] #[battery, H2]
     Link: [] #[H2 pipeline]
 
+
+conventional:
+  unit_commitment: false
+  dynamic_fuel_price: false
+
+
 renewable: #build_renewable_profiles configurations
-  wind:
+  onwind:
     cutout: era5_2019
     resource:
       method: wind
@@ -176,7 +182,7 @@ renewable: #build_renewable_profiles configurations
     cutout: era5_2019
     resource:
       method: hydro
-      hydrobasins: data/hydrobasins/hybas_world_lev06_v1c.shp
+      hydrobasins: resources/hybas_na_lev06_v1c.shp
       flowspeed: 1.0  # m/s
       # weight_with_height: false
       # show_progress: true

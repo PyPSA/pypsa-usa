@@ -283,6 +283,7 @@ rule build_bus_regions:
     script:
         "scripts/build_bus_regions.py"
 
+
 rule build_cost_data:
     input:
         nrel_atb = RESOURCES + "costs/nrel_atb.parquet",
@@ -294,22 +295,7 @@ rule build_cost_data:
     script:
         "scripts/build_cost_data.py"
 
-rule build_load_data:
-    input:
-        network=RESOURCES + "{interconnect}/elec_base_network.nc",
-        demand_breakthrough_2016=DATA + "breakthrough_network/base_grid/demand.csv",
-        ads_2032 = DATA + "WECC_ADS/downloads/2032/Public Data/Hourly Profiles in CSV format",
-        ads_2030 = DATA + "WECC_ADS/downloads/2030/WECC 2030 ADS PCM 2020-12-16 (V1.5) Public Data/CSV Shape Files",
-        eia = expand(RESOURCES + "eia/{file}", file=DATAFILES_DMD),
-        tech_costs = DATA + f"costs_{config['costs']['year']}.csv",
-    output:
-        network=RESOURCES + "{interconnect}/elec_base_network_l.nc",
-    log:
-        "logs/build_load_data/{interconnect}.log",
-    script:
-        "scripts/build_load_data.py"
 
-        
 if config["enable"].get("build_cutout", False):
     rule build_cutout:
         input:
@@ -342,6 +328,24 @@ rule build_ship_raster:
     script:
         "subworkflows/pypsa-eur/scripts/build_ship_raster.py"
 
+rule build_hydro_profiles:
+    params:
+        hydro=config["renewable"]["hydro"],
+        countries=config["countries"],
+    input:
+        ba_region_shapes=RESOURCES + "{interconnect}/onshore_shapes.geojson",
+        # eia_hydro_generation="data/eia_hydro_annual_generation.csv",
+        cutout=f"cutouts/" + CDIR + "{interconnect}_" + config["renewable"]["hydro"]["cutout"] + ".nc",
+    output:
+        RESOURCES + "{interconnect}/profile_hydro.nc",
+    log:
+        LOGS + "{interconnect}/build_hydro_profile.log",
+    resources:
+        mem_mb=5000,
+    conda:
+        "envs/environment.yaml"
+    script:
+        "scripts/build_hydro_profile.py"
 
 rule build_renewable_profiles:
     params:
@@ -398,33 +402,37 @@ rule add_electricity:
         countries=config["countries"],
         renewable=config["renewable"],
         electricity=config["electricity"],
-        conventional=config.get("conventional", {}),
+        conventional=config["conventional"],
         costs=config["costs"],
     input:
         **{
             f"profile_{tech}": RESOURCES + "{interconnect}" + f"/profile_{tech}.nc"
             for tech in config["electricity"]["renewable_carriers"]
-            if tech != "hydro" #ignore hydro becuase we will use other method for attaching hydro
-            
+            if tech != "hydro"
         },
         **{
             f"conventional_{carrier}_{attr}": fn
             for carrier, d in config.get("conventional", {None: {}}).items()
+            if carrier in config["electricity"]["conventional_carriers"]
             for attr, fn in d.items()
             if str(fn).startswith("data/")
         },
-        base_network=RESOURCES + "{interconnect}/elec_base_network_l.nc",
+        base_network=RESOURCES + "{interconnect}/elec_base_network.nc",
         tech_costs=DATA + f"costs_{config['costs']['year']}.csv",
         regions=RESOURCES + "{interconnect}/regions_onshore.geojson",
         plants_eia="repo_data/eia_plants_wecc.csv",
         plants_ads="repo_data/ads_plants_locs.csv",
         fuel_costs="repo_data/eia_mappings/fuelCost22.csv",
-        plants="data/breakthrough_network/base_grid/plant.csv",
-        hydro="data/breakthrough_network/base_grid/hydro.csv",
-        wind="data/breakthrough_network/base_grid/wind.csv",
-        solar="data/breakthrough_network/base_grid/solar.csv",
+        plants_breakthrough="data/breakthrough_network/base_grid/plant.csv",
+        hydro_breakthrough="data/breakthrough_network/base_grid/hydro.csv",
+        wind_breakthrough="data/breakthrough_network/base_grid/wind.csv",
+        solar_breakthrough="data/breakthrough_network/base_grid/solar.csv",
         ads_renewables = "data/WECC_ADS/processed/",
         bus2sub="data/breakthrough_network/base_grid/{interconnect}/bus2sub.csv",
+        demand_breakthrough_2016=DATA + "breakthrough_network/base_grid/demand.csv",
+        ads_2032 = DATA + "WECC_ADS/downloads/2032/Public Data/Hourly Profiles in CSV format",
+        ads_2030 = DATA + "WECC_ADS/downloads/2030/WECC 2030 ADS PCM 2020-12-16 (V1.5) Public Data/CSV Shape Files",
+        eia = expand(RESOURCES + "eia/{file}", file=DATAFILES_DMD),
         **{
             f"gen_cost_mult_{Path(x).stem}":f"repo_data/locational_multipliers/{Path(x).name}" for x in Path("repo_data/locational_multipliers/").glob("*")
         },

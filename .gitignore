@@ -6,10 +6,11 @@ dconf
 *.nc
 *.log
 *.pdf
-# *.png
 *.zip
 *.DS_Store
 *.dot
+*config.yaml
+
 
 # generated files
 results/
