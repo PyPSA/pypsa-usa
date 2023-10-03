@@ -1,8 +1,3 @@
-
-# -*- coding: utf-8 -*-
-# SPDX-FileCopyrightText: : 2017-2023 The PyPSA-Eur Authors
-#
-# SPDX-License-Identifier: MIT
 """
 Create cutouts with `atlite <https://atlite.readthedocs.io/en/latest/>`_.
 
@@ -37,16 +32,34 @@ Inputs
 Outputs
 -------
 
-- ``cutouts/{cutout}``: weather data from either the `ERA5 <https://www.ecmwf.int/en/forecasts/datasets/reanalysis-datasets/era5>`_
-  reanalysis weather dataset or `SARAH-2 <https://wui.cmsaf.eu/safira/action/viewProduktSearch>`_
-  satellite-based historic weather data with the following structure:
+- ``cutouts/{cutout}``: weather data from the `ERA5 <https://www.ecmwf.int/en/forecasts/datasets/reanalysis-datasets/era5>`_
+  reanalysis weather dataset satellite-based historic weather data with the following structure:
 
 **ERA5 cutout:**
 
     ===================  ==========  ==========  =========================================================
     Field                Dimensions  Unit        Description
     ===================  ==========  ==========  =========================================================
-    pressure             time, y, x  Pa          Surface pressure
+    height               y, x        m           Surface elevation above sea level
+    -------------------  ----------  ----------  ---------------------------------------------------------
+    wnd100m              time, y, x  ms**-1      Wind speeds at 100 meters (regardless of direction)
+    -------------------  ----------  ----------  ---------------------------------------------------------
+    wnd_azimuth          time, y, x  ms**-1      100 metre U wind component
+    -------------------  ----------  ----------  ---------------------------------------------------------
+    roughness            y, x        m           Forecast surface roughness
+                                                 (`roughness length <https://en.wikipedia.org/wiki/Roughness_length>`_)
+    -------------------  ----------  ----------  ---------------------------------------------------------
+    influx_toa           time, y, x  Wm**-2      Top of Earth's atmosphere TOA incident solar radiation
+    -------------------  ----------  ----------  ---------------------------------------------------------
+    influx_direct        time, y, x  Wm**-2      Total sky direct solar radiation at surface
+    -------------------  ----------  ----------  ---------------------------------------------------------
+    influx_diffuse       time, y, x  Wm**-2      Diffuse solar radiation at surface.
+                                                 Surface solar radiation downwards minus
+                                                 direct solar radiation.
+    -------------------  ----------  ----------  ---------------------------------------------------------
+    solar_altitude       time, y, x  rad          
+    -------------------  ----------  ----------  ---------------------------------------------------------
+    solar_azimuth        time, y, x  rad          
     -------------------  ----------  ----------  ---------------------------------------------------------
     temperature          time, y, x  K           Air temperature 2 meters above the surface.
     -------------------  ----------  ----------  ---------------------------------------------------------
@@ -60,25 +73,19 @@ Outputs
     runoff               time, y, x  m           `Runoff <https://en.wikipedia.org/wiki/Surface_runoff>`_
                                                  (volume per area)
     -------------------  ----------  ----------  ---------------------------------------------------------
-    roughness            y, x        m           Forecast surface roughness
-                                                 (`roughness length <https://en.wikipedia.org/wiki/Roughness_length>`_)
-    -------------------  ----------  ----------  ---------------------------------------------------------
-    height               y, x        m           Surface elevation above sea level
-    -------------------  ----------  ----------  ---------------------------------------------------------
     albedo               time, y, x  --          `Albedo <https://en.wikipedia.org/wiki/Albedo>`_
                                                  measure of diffuse reflection of solar radiation.
                                                  Calculated from relation between surface solar radiation
                                                  downwards (Jm**-2) and surface net solar radiation
                                                  (Jm**-2). Takes values between 0 and 1.
-    -------------------  ----------  ----------  ---------------------------------------------------------
-    influx_diffuse       time, y, x  Wm**-2      Diffuse solar radiation at surface.
-                                                 Surface solar radiation downwards minus
-                                                 direct solar radiation.
-    -------------------  ----------  ----------  ---------------------------------------------------------
-    wnd100m              time, y, x  ms**-1      Wind speeds at 100 meters (regardless of direction)
     ===================  ==========  ==========  =========================================================
 
-    .. image:: img/era5.png
+    The **Western Interconnect** is shown below as an example: 
+
+    .. image:: _static/cutouts/western_cutout.png
+        :scale: 40 %
+        
+    .. image:: _static/cutouts/western_weather.png
         :scale: 40 %
 
 
@@ -98,7 +105,7 @@ logger = logging.getLogger(__name__)
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
-        snakemake = mock_snakemake("build_cutout", cutout="era5_2019", interconnect="usa")
+        snakemake = mock_snakemake("build_cutout", cutout="era5_2019", interconnect="western")
     configure_logging(snakemake)
 
     # data set and temporal patameters 
