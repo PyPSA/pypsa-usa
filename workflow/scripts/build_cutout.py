@@ -10,8 +10,7 @@ For this rule to work you must have
     For details on the weather data read the `atlite documentation <https://atlite.readthedocs.io/en/latest/>`_.
     If you need help specifically for creating cutouts `the corresponding section in the atlite documentation <https://atlite.readthedocs.io/en/latest/examples/create_cutout.html>`_ should be helpful.
 
-Relevant Settings
------------------
+**Relevant Settings**
 
 .. code:: yaml
 
@@ -24,13 +23,11 @@ Relevant Settings
     Documentation of the configuration file ``config/config.yaml`` at
     :ref:`atlite_cf`
 
-Inputs
-------
+**Inputs**
 
-*None*
+None
 
-Outputs
--------
+**Outputs**
 
 - ``cutouts/{cutout}``: weather data from the `ERA5 <https://www.ecmwf.int/en/forecasts/datasets/reanalysis-datasets/era5>`_
   reanalysis weather dataset satellite-based historic weather data with the following structure:
@@ -80,17 +77,15 @@ Outputs
                                                  (Jm**-2). Takes values between 0 and 1.
     ===================  ==========  ==========  =========================================================
 
-    The **Western Interconnect** is shown below as an example: 
+**Description**
+
+    The *Western Interconnect* is shown below as an example: 
 
     .. image:: _static/cutouts/western_cutout.png
         :scale: 40 %
         
     .. image:: _static/cutouts/western_weather.png
         :scale: 40 %
-
-
-Description
------------
 """
 
 import logging

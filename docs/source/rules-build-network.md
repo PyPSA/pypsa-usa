@@ -25,6 +25,12 @@
 .. automodule:: build_bus_regions
 ```
 
+(cutout)=
+## Rule `build_cutout`
+```{eval-rst}  
+.. automodule:: build_cutout
+```
+
 (renewableprofiles)=
 ## Rule `build_renewable_profiles`
 ```{eval-rst}  
