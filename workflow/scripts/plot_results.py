@@ -64,14 +64,14 @@ if __name__ == "__main__":
     fig, ax = plt.subplots(
         figsize=(8, 8), subplot_kw={"projection": ccrs.EqualEarth(n.buses.x.mean())}
     )
-    g = n.generators.groupby(["bus", "carrier"]).p_nom.sum()
-    s = (
+    generation_capacity = n.generators.groupby(["bus", "carrier"]).p_nom.sum()
+    storage_capacity = (
         n.links.query("carrier in @generating_link_carrier_map")
         .groupby(["bus1", "carrier"])
         .p_nom.sum()
     )
-    s = s.rename(index=generating_link_carrier_map, level=1)
-    buses = pd.concat([g, s])
+    storage_capacity = storage_capacity.rename(index=generating_link_carrier_map, level=1)
+    buses = pd.concat([generation_capacity, storage_capacity])
     with plt.rc_context({"patch.linewidth": 0.1}):
         n.plot(
             bus_sizes=buses / bus_scale,
@@ -128,14 +128,14 @@ if __name__ == "__main__":
     fig, ax = plt.subplots(
         figsize=(8, 8), subplot_kw={"projection": ccrs.EqualEarth(n.buses.x.mean())}
     )
-    g = n.generators.groupby(["bus", "carrier"]).p_nom_opt.sum()
-    s = (
+    generation_capacity = n.generators.groupby(["bus", "carrier"]).p_nom_opt.sum()
+    storage_capacity = (
         n.links.query("carrier in @generating_link_carrier_map")
         .groupby(["bus1", "carrier"])
         .p_nom_opt.sum()
     )
-    s = s.rename(index=generating_link_carrier_map, level=1)
-    buses = pd.concat([g, s])
+    storage_capacity = storage_capacity.rename(index=generating_link_carrier_map, level=1)
+    buses = pd.concat([generation_capacity, storage_capacity])
     with plt.rc_context({"patch.linewidth": 0.1}):
         n.plot(
             bus_sizes=buses / bus_scale,
@@ -272,10 +272,8 @@ if __name__ == "__main__":
     
 
     ####
-    ## Cost Plots
+    ## Operations Time-Series Plots
     ####
-    # import pdb; pdb.set_trace()
-
     carriers = n.generators.carrier
     production = (
         n.generators_t.p.groupby(carriers, axis=1)

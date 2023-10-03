@@ -13,12 +13,6 @@
 .. automodule:: build_base_network
 ```
 
-(load)=
-## Rule `build_load_data`
-```{eval-rst}  
-.. automodule:: build_load_data
-```
-
 (busregions)=
 ## Rule `build_bus_regions`
 ```{eval-rst}  
