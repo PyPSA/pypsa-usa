@@ -32,7 +32,9 @@ None
 - ``cutouts/{cutout}``: weather data from the `ERA5 <https://www.ecmwf.int/en/forecasts/datasets/reanalysis-datasets/era5>`_
   reanalysis weather dataset satellite-based historic weather data with the following structure:
 
-**ERA5 cutout:**
+**Description**
+
+Using the ERA5 cutout, the following parameters are accessible:
 
     ===================  ==========  ==========  =========================================================
     Field                Dimensions  Unit        Description
@@ -77,15 +79,14 @@ None
                                                  (Jm**-2). Takes values between 0 and 1.
     ===================  ==========  ==========  =========================================================
 
-**Description**
 
-    The *Western Interconnect* is shown below as an example: 
+The *Western Interconnect* is shown below as an example: 
 
     .. image:: _static/cutouts/western_cutout.png
-        :scale: 40 %
+        :scale: 100 %
         
     .. image:: _static/cutouts/western_weather.png
-        :scale: 40 %
+        :scale: 80 %
 """
 
 import logging
