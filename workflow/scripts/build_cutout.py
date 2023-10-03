@@ -81,11 +81,6 @@ Outputs
     .. image:: img/era5.png
         :scale: 40 %
 
-A **SARAH-2 cutout** can be used to amend the fields ``temperature``, ``influx_toa``, ``influx_direct``, ``albedo``,
-``influx_diffuse`` of ERA5 using satellite-based radiation observations.
-
-    .. image:: img/sarah.png
-        :scale: 40 %
 
 Description
 -----------
@@ -103,7 +98,7 @@ logger = logging.getLogger(__name__)
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
-        snakemake = mock_snakemake("build_cutout", cutout="era5_2019", interconnect="western")
+        snakemake = mock_snakemake("build_cutout", cutout="era5_2019", interconnect="usa")
     configure_logging(snakemake)
 
     # data set and temporal patameters 
