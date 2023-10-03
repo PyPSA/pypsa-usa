@@ -182,7 +182,7 @@ renewable: #build_renewable_profiles configurations
     cutout: era5_2019
     resource:
       method: hydro
-      hydrobasins: data/hydrobasins/hybas_world_lev06_v1c.shp
+      hydrobasins: resources/hybas_na_lev06_v1c.shp
       flowspeed: 1.0  # m/s
       # weight_with_height: false
       # show_progress: true
