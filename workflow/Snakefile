@@ -298,13 +298,26 @@ rule build_cost_data:
 
 if config["enable"].get("build_cutout", False):
     rule build_cutout:
+        params:
+            snapshots=config["snapshots"],
+            cutouts=config["atlite"]["cutouts"],
+            interconnects=config["atlite"]["interconnects"],
         input:
-            onshore_shapes=RESOURCES + "{interconnect}/country_shapes.geojson",
-            offshore_shapes=RESOURCES + "{interconnect}/offshore_shapes.geojson",
+            regions_onshore = RESOURCES + "{interconnect}/country_shapes.geojson",
+            regions_offshore = RESOURCES + "{interconnect}/offshore_shapes.geojson",
         output:
-            cutout= expand("cutouts/" + CDIR + "{interconnect}_{cutouts}.nc", **config["atlite"]),
+            protected("cutouts/" + CDIR + "{interconnect}_{cutout}.nc"),
+        log:
+            "logs/" + CDIR + "build_cutout/{interconnect}_{cutout}.log",
+        benchmark:
+            "benchmarks/" + CDIR + "build_cutout_{interconnect}_{cutout}"
+        threads: ATLITE_NPROCESSES
+        resources:
+            mem_mb=ATLITE_NPROCESSES * 1000,
+        conda:
+            "../envs/environment.yaml"
         script:
-            "scripts/build_cutout.py"
+            "../scripts/build_cutout.py"
 
 
 rule build_ship_raster:
