@@ -6,6 +6,9 @@
 
 .. code:: yaml
 
+    interconnect:
+    offshore_shape:
+    aggregation_zones:
     countries:
 
 

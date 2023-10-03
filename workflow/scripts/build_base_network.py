@@ -1,9 +1,43 @@
 # BY PyPSA-USA Authors 
 """
-Reads in Breakthrough Energy infrastructure data, and converts it into PyPSA compatiable components. A base netowork file (`*.nc`) is written out. Included in this network are: 
-- Geolocated buses 
-- Geoloactated AC and DC power lines 
-- Transformers 
+
+**Relevant Settings**
+
+.. code:: yaml
+
+    interconnect:
+    offshore_shape:
+    aggregation_zones:
+    countries:
+
+
+**Inputs**
+
+- ``data/breakthrough_network/base_grid/{interconnect}/bus.csv``
+- ``data/breakthrough_network/base_grid/{interconnect}/branch.csv``
+- ``data/breakthrough_network/base_grid/{interconnect}/dcline.csv``
+- ``data/breakthrough_network/base_grid/{interconnect}/bus2sub.csv``
+- ``data/breakthrough_network/base_grid/{interconnect}/sub.csv``
+- ``resources/country_shapes.geojson``: confer :ref:`shapes`
+- ``resources/offshore_shapes.geojson``: confer :ref:`shapes`
+- ``resources/{interconnect}/state_boundaries.geojson``: confer :ref:`shapes`
+
+
+**Outputs**
+
+- ``networks/base.nc``: 
+- ``data/breakthrough_network/base_grid/{interconnect}/bus2sub.csv``
+- ``data/breakthrough_network/base_grid/{interconnect}/sub.csv``
+- ``resources/{interconnect}/elec_base_network.nc``
+
+
+**Description**
+
+Reads in Breakthrough Energy/TAMU transmission dataset, and converts it into PyPSA compatible components. A base netowork file (`*.nc`) is written out. Included in this network are: 
+    - Geolocated buses 
+    - Geoloactated AC and DC transmission lines + links
+    - Transformers 
+
 """
 
 
