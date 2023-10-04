@@ -3,9 +3,9 @@
 
 (prepare)=
 ## Rule `prepare_network`
-```{eval-rst}  
-.. automodule:: prepare_network
-```
+% ```{eval-rst}  
+% .. automodule:: prepare_network
+% ```
 
 (solve)=
 ## Rule `solve_network`
