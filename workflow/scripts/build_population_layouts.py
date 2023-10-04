@@ -1,5 +1,44 @@
 """
 Builds mapping between cutout grid cells and population (total, urban, rural).
+
+**Relevant Settings**
+
+.. code:: yaml
+
+    scope: 
+    
+**Inputs**
+
+- ``data/counties/cb_2020_us_county_500k.shp``: County shapes in the USA
+- ``data/population/DECENNIALDHC2020.P1-Data.csv``: Population per county in the USA, 
+
+    .. image:: _static/pop_layout/population.png
+        :scale: 33 %
+
+- ``data/urbanization/DECENNIALDHC2020.H2-Data.csv``: Urbanization rate per county in the USA
+
+    .. image:: _static/pop_layout/urban.png
+        :scale: 33 %
+
+- ``cutouts/" + CDIR + "{interconnect}_{cutout}.nc``: : confer :ref:`cutout`
+
+**Outputs**
+
+- ``resources/pop_layout_total.nc``: total population by grid cell
+
+    .. image:: _static/pop_layout/pop_layout_total.png
+        :scale: 33 %
+
+- ``resources/pop_layout_urban.nc``: urban population by grid cell
+
+    .. image:: _static/pop_layout/pop_layout_urban.png
+        :scale: 33 %
+
+- ``resources/pop_layout_rural.nc``: rural population by grid cell
+
+    .. image:: _static/pop_layout/pop_layout_rural.png
+        :scale: 33 %
+
 """
 
 import logging
