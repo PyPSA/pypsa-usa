@@ -94,9 +94,21 @@ pypsa_usa_datafiles = [
 "copernicus/PROBAV_LC100_global_v3.0.1_2019-nrt_Discrete-Classification-map_USA_EPSG-4326.tif",
 ]
 
+def define_zenodo_databundles():
+    return {
+        'protected_planet':"https://sandbox.zenodo.org/record/1183583/files/natura_global.zip",
+        'USATestSystem':"https://zenodo.org/record/4538590/files/USATestSystem.zip",
+        'pypsa_usa_data':"https://zenodo.org/record/8175051/files/pypsa_usa_data.zip?download=1"
+        }
+
+def define_sector_databundles():
+    return {
+        'pypsa_usa_sec':"https://sandbox.zenodo.org/record/1244195/files/pypsa-usa-sec.zip?download=1"
+        }
+
 rule retrieve_zenodo_databundles:
     params:
-        repositories=config["zenodo_repositories"],
+        define_zenodo_databundles()
     output:
         expand(DATA + "breakthrough_network/base_grid/{file}", file=breakthrough_datafiles),
         expand(DATA + "{file}", file=pypsa_usa_datafiles),
@@ -114,7 +126,7 @@ sector_datafiles = [
 
 rule retrieve_sector_databundle:
     params:
-        repositories = config["zenodo_repositories_sector"]
+        define_sector_databundles()
     output:
         expand(DATA + "{file}", file=sector_datafiles)
     log:

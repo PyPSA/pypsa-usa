@@ -6,15 +6,14 @@ logger = logging.getLogger(__name__)
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
-
-        # snakemake = mock_snakemake("retrieve_databundles")
-        snakemake = mock_snakemake("retrieve_sector_databundle")
+        snakemake = mock_snakemake("retrieve_zenodo_databundles")
+        # snakemake = mock_snakemake('retrieve_sector_databundle')
         rootpath = ".."
     else:
         rootpath = "."
     configure_logging(snakemake)
 
-    repositories = snakemake.params.repositories
+    repositories = snakemake.params[0]
     for repository in repositories:
         url = repositories[repository]
 
