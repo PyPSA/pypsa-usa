@@ -20,24 +20,24 @@ Builds mapping between cutout grid cells and population (total, urban, rural).
     .. image:: _static/pop_layout/urban.png
         :scale: 33 %
 
-- ``cutouts/" + CDIR + "{interconnect}_{cutout}.nc``: : confer :ref:`cutout`
+- ``cutouts/" + CDIR + "{interconnect}_{cutout}.nc``: : confer :ref:cutout
 
 **Outputs**
 
 - ``resources/pop_layout_total.nc``: total population by grid cell
 
     .. image:: _static/pop_layout/pop_layout_total.png
-        :scale: 33 %
+        :scale: 80 %
 
 - ``resources/pop_layout_urban.nc``: urban population by grid cell
 
     .. image:: _static/pop_layout/pop_layout_urban.png
-        :scale: 33 %
+        :scale: 80 %
 
 - ``resources/pop_layout_rural.nc``: rural population by grid cell
 
     .. image:: _static/pop_layout/pop_layout_rural.png
-        :scale: 33 %
+        :scale: 80 %
 
 """
 
