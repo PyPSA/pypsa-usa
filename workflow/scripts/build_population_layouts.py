@@ -14,6 +14,7 @@ import pandas as pd
 import xarray as xr
 import matplotlib.pyplot as plt
 import constants
+from pathlib import Path
 
 def load_urban_ratio(df: pd.DataFrame) -> pd.DataFrame:
     """Loads data to get urban and rural values at a GEOID level
@@ -58,7 +59,7 @@ def load_population(df: pd.DataFrame) -> pd.DataFrame:
     df = df[["Geographic Area Name", "population"]]
     return df
 
-def plot_county_data(gdf: gpd.GeoDataFrame, col: str, title: str = None, description: str = None):
+def plot_county_data(gdf: gpd.GeoDataFrame, col: str, title: str = None, description: str = None, save: str = None):
     """Plots heat map of geodataframe 
     
     Adapted from 
@@ -83,6 +84,9 @@ def plot_county_data(gdf: gpd.GeoDataFrame, col: str, title: str = None, descrip
     sm._A = [] # Empty array for the data range
     cbaxes = fig.add_axes([0.15, 0.25, 0.01, 0.4])
     cbar = fig.colorbar(sm, cax=cbaxes)
+    
+    if save:
+        fig.savefig(save)
 
 if __name__ == "__main__":
     if "snakemake" not in globals():
@@ -144,34 +148,39 @@ if __name__ == "__main__":
 
     # plot data
     
-    # plotting_data = counties.copy()
-    # plotting_data["density_person_per_km2"] = plotting_data.population / counties.ALAND * 1000000
-    # columns = {
-    #     "Geographic Area Name":"name", 
-    #     "NAMELSAD":"county",
-    #     "STATE_NAME":"state",
-    #     "Population":"population",
-    #     "ALAND":"land_area_m2",
-    #     "density_person_per_km2":"density_person_per_km2",
-    #     "URBAN":"urban_area",
-    #     "geometry":"geometry"}
-    # plotting_data = plotting_data[columns.keys()]
-    # plotting_data = plotting_data.rename(columns=columns)
+    plotting_data = counties.copy()
+    plotting_data["density_person_per_km2"] = plotting_data.population / counties.ALAND * 1000000
+    columns = {
+        "Geographic Area Name":"name", 
+        "NAMELSAD":"county",
+        "STATE_NAME":"state",
+        "population":"population",
+        "ALAND":"land_area_m2",
+        "density_person_per_km2":"density_person_per_km2",
+        "URBAN":"urban_area",
+        "geometry":"geometry"}
+    plotting_data = plotting_data[columns.keys()]
+    plotting_data = plotting_data.rename(columns=columns)
     
-    # title = "Population"
-    # column = "population"
-    # description = "Source: https://data.census.gov/ \nDecennial Census - Universe: Total population - 2020: DEC Demographic and Housing Characteristics"
-    # plot_county_data(plotting_data, column, title, description)
+    save_path = Path("..", "..", "docs", "source", "_static")
+    
+    title = "Population by County"
+    column = "population"
+    description = "Source: https://data.census.gov/ \nDecennial Census - Universe: Total population - 2020: DEC Demographic and Housing Characteristics"
+    save = Path(save_path, "population.png")
+    plot_county_data(plotting_data, column, title, description, str(save))
 
-    # title = "Population Density (person/km2)"
-    # column = "density_person_per_km2"
-    # description = "Source: https://data.census.gov/ \nDecennial Census - Universe: Total population - 2020: DEC Demographic and Housing Characteristics"
-    # plot_county_data(plotting_data, column, title, description)
+    title = "Population Density by County (person/km2)"
+    column = "density_person_per_km2"
+    description = "Source: https://data.census.gov/ \nDecennial Census - Universe: Total population - 2020: DEC Demographic and Housing Characteristics"
+    save = Path(save_path, "population_density.png")
+    plot_county_data(plotting_data, column, title, description)
 
-    # title = "Urban Density"
-    # column = "urban_area"
-    # description = "Source: https://data.census.gov/ \nDecennial Census - Universe: Housing units - 2020: DEC Demographic and Housing Characteristics"
-    # plot_county_data(plotting_data, column, title, description)
+    title = "Urban Density by County"
+    column = "urban_area"
+    save = Path(save_path, "urban.png")
+    description = "Source: https://data.census.gov/ \nDecennial Census - Universe: Housing units - 2020: DEC Demographic and Housing Characteristics"
+    plot_county_data(plotting_data, column, title, description, str(save))
 
     # Below is akin to the PyPSA-Eur implementation of rural/urbal areas. They 
     # build up cells based on population density to hit a generic urbanization rate 
