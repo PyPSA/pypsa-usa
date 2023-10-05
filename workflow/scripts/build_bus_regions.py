@@ -118,7 +118,6 @@ if __name__ == "__main__":
         snakemake = mock_snakemake('build_bus_regions', interconnect="western")
     configure_logging(snakemake)
 
-
     #Configurations
     countries = snakemake.config['countries']
     voltage_level = snakemake.config["electricity"]["voltage_simplified"]
@@ -131,6 +130,7 @@ if __name__ == "__main__":
     logger.info("Built for aggregation with %s zones", aggregation_zones)
 
     n_base = pypsa.Network(snakemake.input.base_network)
+    import pdb; pdb.set_trace()
 
     #Aggregating to substation to ensure building bus regions for only substation level nodes
     n_base.generators['weight'] = 0 #temporary to enable clustering

@@ -185,21 +185,6 @@ rule retrieve_ship_raster:
         move(input[0], output[0])
 
 
-rule retrieve_cutout:
-    input:
-        HTTP.remote(
-            'https://sandbox.zenodo.org/record/1225941/files/{interconnect}_{cutout}.nc?download=1'
-            ,static=True),
-    output:
-        "cutouts/" + CDIR + "{interconnect}_{cutout}.nc",
-    log:
-        "logs/" + CDIR + "retrieve_cutout_{interconnect}_{cutout}.log",
-    resources:
-        mem_mb=5000,
-    retries: 2
-    run:
-        move(input[0], output[0])
-
 rule retrieve_cost_data_eur:
     output:
         pypsa_technology_data = RESOURCES + "costs/{year}/pypsa_eur.csv",
@@ -235,11 +220,11 @@ rule build_shapes:
     params:
         source_states_shapes="admin_1_states_provinces",
         source_offshore_shapes=config["offshore_shape"],
-        buffer_distance=200000,
     input:
         zone= DATA + "breakthrough_network/base_grid/zone.csv",
         onshore_shapes = "repo_data/BA_shapes_new/Modified_BE_BA_Shapes.shp",
-        offshore_shapes = "repo_data/BOEM_CA_OSW_GIS/CA_OSW_BOEM_CallAreas.shp"
+        offshore_shapes_ca_osw = "repo_data/BOEM_CA_OSW_GIS/CA_OSW_BOEM_CallAreas.shp",
+        offshore_shapes_eez= "data/gis/conus_eez.shp"
     output:
         country_shapes = RESOURCES + "{interconnect}/country_shapes.geojson",
         onshore_shapes = RESOURCES + "{interconnect}/onshore_shapes.geojson",
@@ -327,10 +312,24 @@ if config["enable"].get("build_cutout", False):
         resources:
             mem_mb=ATLITE_NPROCESSES * 1000,
         conda:
-            "../envs/environment.yaml"
+            "envs/environment.yaml"
         script:
-            "../scripts/build_cutout.py"
-
+            "scripts/build_cutout.py"
+else:
+    rule retrieve_cutout:
+        input:
+            HTTP.remote(
+                'https://sandbox.zenodo.org/record/1225941/files/{interconnect}_{cutout}.nc?download=1'
+                ,static=True),
+        output:
+            "cutouts/" + CDIR + "{interconnect}_{cutout}.nc",
+        log:
+            "logs/" + CDIR + "retrieve_cutout_{interconnect}_{cutout}.log",
+        resources:
+            mem_mb=5000,
+        retries: 2
+        run:
+            move(input[0], output[0])
 
 rule build_ship_raster:
     input:

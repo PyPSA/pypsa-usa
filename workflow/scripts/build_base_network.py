@@ -160,7 +160,7 @@ if __name__ == "__main__":
     logger = logging.getLogger(__name__)
     if 'snakemake' not in globals():
         from _helpers import mock_snakemake
-        snakemake = mock_snakemake('build_base_network', interconnect='western')
+        snakemake = mock_snakemake('build_base_network', interconnect='texas')
     configure_logging(snakemake)
 
     # create network
@@ -196,6 +196,7 @@ if __name__ == "__main__":
     gdf_bus = map_bus_to_region(gdf_bus, state_shape, "state")
     gdf_bus = map_bus_to_region(gdf_bus, state_shape, "country")
     
+    import pdb; pdb.set_trace()
     # add buses, transformers, lines and links
     n = add_buses_from_file(n, gdf_bus, interconnect=interconnect)
     n = add_branches_from_file(n, snakemake.input["lines"])

@@ -51,6 +51,7 @@ import pandas as pd
 import logging
 from _helpers import mock_snakemake, configure_logging
 from typing import List
+import matplotlib.pyplot as plt
 
 def load_na_shapes(state_shape: str = "admin_1_states_provinces") -> gpd.GeoDataFrame:
     """Creates geodataframe of north america"""
@@ -90,16 +91,17 @@ def combine_offshore_shapes(source: str, shape: gpd.GeoDataFrame, interconnect: 
     """Conbines offshore shapes"""
     if source == "weather.gov":
         offshore = _combine_weather_gov_shape(shape, interconnect, buffer)
-    elif source == "BOEM":
-        offshore = _combine_boem(shape)
+    elif source == "ca_osw":
+        offshore = _dissolve_boem(shape)
+    elif source == "eez":
+        offshore = _dissolve_eez(shape, interconnect, buffer)
     else:
         logger.error(f"source {source} is invalid offshore data source")
         offshore = None
     return offshore
         
-def _combine_weather_gov_shape(shape: gpd.GeoDataFrame, interconnect: gpd.GeoDataFrame, buffer: int = 200000):
+def _combine_weather_gov_shape(shape: gpd.GeoDataFrame, interconnect: gpd.GeoDataFrame, buffer: int = 1000):
     """Combines offshore shapes from weather.gov"""
-    
     crs = ccrs.Mollweide()
     shape = shape.rename(columns={"NAME": "name", "LAT": "y", "LON": "x"})
     gdf_regions_union = interconnect.to_crs(crs).buffer(buffer)
@@ -108,21 +110,33 @@ def _combine_weather_gov_shape(shape: gpd.GeoDataFrame, interconnect: gpd.GeoDat
     offshore = shape[overlap].unary_union
     return gpd.GeoDataFrame([[offshore, "US"]], columns=["geometry", "name"])
     
-def _combine_boem(shape: gpd.GeoDataFrame):
-    """Combines offshore shapes from boem"""
+def _dissolve_boem(shape: gpd.GeoDataFrame):
+    """Dissolves offshore shapes from boem"""
+    # crs = ccrs.Mollweide()
+    shape_split = shape.dissolve().explode(index_parts=False) 
+    # overlap = shape.to_crs(crs).buffer(0).intersects(shape_combine.to_crs(crs)) #maybe typo since overlap not used? 
+    shape_split.rename(columns={"Lease_Name": "name"}, inplace=True)
+    shape_split.name = ['Morro_Bay','Humboldt']
+    return shape_split
+
+def _dissolve_eez(shape: gpd.GeoDataFrame, interconnect: gpd.GeoDataFrame, buffer: int = 1000):
+    """Dissolves offshore shapes of eez. Creates a buffer around the interconnect and subtracts the interconnect from the eez- since no wind will be built very close to shore.... TBD getting better shape files using research already done on this topic."""
     crs = ccrs.Mollweide()
-    shape_combine = shape.dissolve().explode(index_parts=False) 
-    overlap = shape.to_crs(crs).buffer(0).intersects(shape_combine.to_crs(crs)) #maybe typo since overlap not used? 
-    shape_combine.rename(columns={"Lease_Name": "name"}, inplace=True)
-    shape_combine.name = ['Morro_Bay','Humboldt']
-    return shape_combine
-    
+    # shape_split = shape.dissolve().explode(index_parts=False)         
+    shape_split = shape.explode(index_parts=False) 
+    shape_split = gpd.GeoSeries.to_crs(shape_split, crs= 4326)
+
+    # shape_split.rename(columns={"GEONAME": "name"}, inplace=True)
+    # buffered_interconnect = interconnect.to_crs(crs).buffer(buffer)
+    # shape_split = shape_split.to_crs(crs).difference(buffered_interconnect.unary_union)
+    # shape_split = gpd.GeoSeries.to_crs(shape_split, crs= 4326)
+    return shape_split
 
 if __name__ == "__main__":
     logger = logging.getLogger(__name__)
     if 'snakemake' not in globals():
         from _helpers import mock_snakemake
-        snakemake = mock_snakemake('build_shapes', interconnect='western')
+        snakemake = mock_snakemake('build_shapes', interconnect='texas')
     configure_logging(snakemake)
 
     interconnect = snakemake.wildcards.interconnect
@@ -201,23 +215,24 @@ if __name__ == "__main__":
     gdf_ba_states.to_file(snakemake.output.onshore_shapes)
 
     # load offshore shapes
-    offshore_path =snakemake.input.offshore_shapes
-    offshore = gpd.read_file(offshore_path)
+    offshore_config = snakemake.params.source_offshore_shapes
+    if offshore_config == "ca_osw":
+        offshore = gpd.read_file(snakemake.input.offshore_shapes_ca_osw)
+    elif offshore_config == "eez":
+        offshore = gpd.read_file(snakemake.input.offshore_shapes_eez)
 
-    if "weather.gov" in offshore_path:
-        offshore = combine_offshore_shapes(
-            source="weather.gov",
-            shape=offshore, 
-            interconnect=interconnect_regions, 
-            buffer=snakemake.params.buffer_distance
-        )
-    elif "BOEM" in offshore_path:
-        offshore = combine_offshore_shapes(
-            source="BOEM",
-            shape=offshore, 
-            interconnect=interconnect_regions, 
-            buffer=snakemake.params.buffer_distance
-        )
+    #filter buffer from shore
+    buffer_distance = 40000 # buffer distance for offshore shapes from shore.
+    crs = ccrs.Mollweide()
+    buffered_na = gdf_na.to_crs(crs).buffer(buffer_distance)
+    offshore = offshore.to_crs(crs).difference(buffered_na.unary_union)
+
+    offshore = combine_offshore_shapes(
+        source=offshore_config,
+        shape=offshore, 
+        interconnect=interconnect_regions, 
+        buffer=buffer_distance
+    )
 
     offshore_c = offshore.set_crs(4326)
     offshore_c.to_file(snakemake.output.offshore_shapes)
