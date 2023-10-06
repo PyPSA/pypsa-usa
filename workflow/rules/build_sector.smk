@@ -95,3 +95,27 @@ rule build_temperature_profiles:
 #         "../envs/environment.yaml"
 #     script:
 #         "../scripts/build_solar_thermal_profiles.py"
+
+rule build_clustered_population_layouts:
+    input:
+        pop_layout_total=RESOURCES + "pop_layout_total.nc",
+        pop_layout_urban=RESOURCES + "pop_layout_urban.nc",
+        pop_layout_rural=RESOURCES + "pop_layout_rural.nc",
+        # regions_onshore=RESOURCES + "regions_onshore_elec_s{simpl}_{clusters}.geojson",
+        regions_onshore = RESOURCES + "{interconnect}/regions_onshore_s_{clusters}.geojson",
+        cutout = "cutouts/" + CDIR + "{interconnect}_" + config["atlite"]["default_cutout"] + ".nc",
+    output:
+        # clustered_pop_layout=RESOURCES + "pop_layout_elec_s{simpl}_{clusters}.csv",
+        clustered_pop_layout=RESOURCES + "pop_layout_elec_s_{clusters}.csv",
+    log:
+        # LOGS + "build_clustered_population_layouts_{simpl}_{clusters}.log",
+        LOGS + "build_clustered_population_layouts_{clusters}.log",
+    resources:
+        mem_mb=10000,
+    benchmark:
+        # BENCHMARKS + "build_clustered_population_layouts/s{simpl}_{clusters}"
+        BENCHMARKS + "build_clustered_population_layouts/s_{clusters}"
+    conda:
+        "../envs/environment.yaml"
+    script:
+        "../scripts/build_clustered_population_layouts.py"
