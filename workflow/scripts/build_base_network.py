@@ -156,6 +156,22 @@ def map_bus_to_region(buses: gpd.GeoDataFrame, shape: gpd.GeoDataFrame, name: st
     shape_filtered = shape[[name, "geometry"]]
     return gpd.sjoin(buses, shape_filtered, how="left").drop(columns=["index_right"])
 
+def remove_breakthrough_offshore(n: pypsa.Network, offshore_shapes: gpd.GeoDataFrame, state_shapes: gpd.GeoDataFrame) -> pypsa.Network:
+    """ Remove Offshore Busses and Connecting Branches"""
+    import pdb; pdb.set_trace()
+    bus_points = pd.DataFrame([n.buses["x"], n.buses["y"]]).T
+    bus_points['geometry'] = gpd.points_from_xy(n.buses["x"], n.buses["y"])
+    gpd.sjoin(bus_points, state_shapes, how="left").drop(columns=["index_right"])
+    n.buses['substation_off'] = ~bus_points.isin(state_shapes.index)
+
+
+
+# n.mremove("Line", n.lines.loc[n.lines.bus1.isin(n.buses.loc[n.buses.country=='US'].index)].index) 
+# n.mremove("Load", n.loads.loc[n.loads.bus.isin(n.buses.loc[n.buses.country=='US'].index)].index)
+# n.mremove("Generator", n.generators.loc[n.generators.bus.isin(n.buses.loc[n.buses.country=='US'].index)].index)
+# n.mremove("Bus",  n.buses.loc[n.buses.country=='US'].index)
+
+
 if __name__ == "__main__":
     logger = logging.getLogger(__name__)
     if 'snakemake' not in globals():
@@ -196,13 +212,15 @@ if __name__ == "__main__":
     gdf_bus = map_bus_to_region(gdf_bus, state_shape, "state")
     gdf_bus = map_bus_to_region(gdf_bus, state_shape, "country")
     
-    import pdb; pdb.set_trace()
     # add buses, transformers, lines and links
     n = add_buses_from_file(n, gdf_bus, interconnect=interconnect)
     n = add_branches_from_file(n, snakemake.input["lines"])
     n = add_dclines_from_file(n, snakemake.input["links"])
     add_custom_line_type(n)
     assign_line_types(n)
+
+    # remove offshore buses and connecting branches
+    n = remove_breakthrough_offshore(n, offshore_shapes, state_shape)
 
     # export bus2sub interconnect data
     logger.info(f"exporting bus2sub and sub data for {interconnect}")
@@ -254,13 +272,6 @@ if __name__ == "__main__":
 
 
    
-        ### Remove Extra OSW Busses and Branches ###
-        #Removes remaining nodes in network left with country = US (these are offshore busses that are not in the offshore shape or onshore shapes)
 
-        #To-do- add filter that checks if the buses being removed are over water. Currently this works for WECC since I have cleaned up the GEOJSON files
-        n.mremove("Line", n.lines.loc[n.lines.bus1.isin(n.buses.loc[n.buses.country=='US'].index)].index) 
-        n.mremove("Load", n.loads.loc[n.loads.bus.isin(n.buses.loc[n.buses.country=='US'].index)].index)
-        n.mremove("Generator", n.generators.loc[n.generators.bus.isin(n.buses.loc[n.buses.country=='US'].index)].index)
-        n.mremove("Bus",  n.buses.loc[n.buses.country=='US'].index)
 
 '''

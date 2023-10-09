@@ -130,7 +130,6 @@ if __name__ == "__main__":
     logger.info("Built for aggregation with %s zones", aggregation_zones)
 
     n_base = pypsa.Network(snakemake.input.base_network)
-    import pdb; pdb.set_trace()
 
     #Aggregating to substation to ensure building bus regions for only substation level nodes
     n_base.generators['weight'] = 0 #temporary to enable clustering
@@ -181,11 +180,13 @@ if __name__ == "__main__":
 
     ### Defining Offshore Regions ###
     for i in range(len(offshore_shapes)):
-        offshore_shape = offshore_shapes[i]
+        import pdb; pdb.set_trace()
+        offshore_shape = offshore_shapes.iloc[i]
         shape_name = offshore_shapes.index[i]
         bus_locs = n.buses.loc[n.buses.substation_off, ["x", "y"]] #substation off all true?
         bus_points = gpd.points_from_xy(x=bus_locs.x, y=bus_locs.y)
         offshore_busses = bus_locs[[offshore_shape.buffer(0.2).contains(bus_points[i]) for i in range(len(bus_points))]]  #filter for OSW busses within shape
+        if offshore_busses.empty: continue
         offshore_regions_c = gpd.GeoDataFrame({
             'name': offshore_busses.index,
             'x': offshore_busses['x'],

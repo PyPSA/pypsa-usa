@@ -222,7 +222,7 @@ if __name__ == "__main__":
         offshore = gpd.read_file(snakemake.input.offshore_shapes_eez)
 
     #filter buffer from shore
-    buffer_distance = 40000 # buffer distance for offshore shapes from shore.
+    buffer_distance = 20000 # buffer distance for offshore shapes from shore.
     crs = ccrs.Mollweide()
     buffered_na = gdf_na.to_crs(crs).buffer(buffer_distance)
     offshore = offshore.to_crs(crs).difference(buffered_na.unary_union)
