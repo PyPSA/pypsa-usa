@@ -1,13 +1,16 @@
+(introduction)=
 # Introduction
 
 PyPSA-USA is a model for the US bulk power system built on the pypsa platform. For some introduction to the pypsa modeling workflow- please see the [pypsa-eur](https://youtu.be/ty47YU1_eeQ?si=Cz90jWcN1xk1Eq4i) introductory video.
 
+(workflow)=
 ## Workflow 
 
 Add general description about [snakemake](https://snakemake.readthedocs.io/en/stable/index.html) 
 
 ![pypsa-usa workflow](https://github.com/PyPSA/pypsa-usa/blob/master/workflow/repo_data/dag.jpg?raw=true)
 
+(folder-structure)=
 ## Folder Structure 
 
 The project is organized based on the folder structure below. The workflow folder contains all data and scripts neccesary to run the pypsa-usa model. After the first time you run the snakemake file, your directory will be built and populated with the associated data. Because most of the files are too large to store on github, we pull data from various sources into the `data` folder. The `repo_data` folder contains smaller files suitable for github. The resources folder contains intermediate files built by snakemake rules through the workflow. You'll see sub-folders created for each interconnection you run the model with. 

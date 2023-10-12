@@ -2,39 +2,35 @@
 
 """
 
-Relevant Settings
------------------
+**Relevant Settings**
 
 .. code:: yaml
 
+    interconnect:
+    offshore_shape:
+    aggregation_zones:
     countries:
 
-.. seealso::
-    Documentation of the configuration file ``config.yaml`` at
-    :ref:`toplevel_cf`
 
-Inputs
-------
+**Inputs**
 
 - ``resources/country_shapes.geojson``: confer :ref:`shapes`
 - ``resources/offshore_shapes.geojson``: confer :ref:`shapes`
 - ``networks/base.nc``: confer :ref:`base`
 
-Outputs
--------
+**Outputs**
 
 - ``resources/regions_onshore.geojson``:
 
-    .. image:: ../img/regions_onshore.png
-        :scale: 33 %
+    # .. image:: ../img/regions_onshore.png
+    #     :scale: 33 %
 
 - ``resources/regions_offshore.geojson``:
 
-    .. image:: ../img/regions_offshore.png
-        :scale: 33 %
+    # .. image:: ../img/regions_offshore.png
+    #     :scale: 33 %
 
-Description
------------
+**Description**
 
 Creates Voronoi shapes for each bus representing both onshore and offshore regions.
 
@@ -119,7 +115,7 @@ if __name__ == "__main__":
     logger = logging.getLogger(__name__)
     if 'snakemake' not in globals():
         from _helpers import mock_snakemake
-        snakemake = mock_snakemake('build_bus_regions', interconnect='western')
+        snakemake = mock_snakemake('build_bus_regions', interconnect="western")
     configure_logging(snakemake)
 
 

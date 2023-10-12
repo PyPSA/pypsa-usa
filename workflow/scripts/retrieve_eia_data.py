@@ -1,5 +1,5 @@
 '''
-Downloads historical BA Data from gridemissions tool, and saves it to a csv file.
+Downloads historical BA Data from EIA, proccesses and saves to a csv file.
 
 github: https://github.com/jdechalendar/gridemissions
 site: https://gridemissions.jdechalendar.su.domains/#/code
@@ -13,13 +13,11 @@ import logging
 import re
 from pathlib import Path
 import warnings
-import pdb
-
-
 
 def download_csvs(urls, folder_path):
     """
-    Downloads a set of csv's from a list of urls and saves them in a folder.
+    Downloads a set of csv's from a list of urls and saves them in a folder. 
+    To be used for downloading EIA data.
 
     Parameters:
     urls (list): A list of urls to download csv's from.
@@ -41,9 +39,11 @@ def download_csvs(urls, folder_path):
             print(f"{file_name} downloaded successfully!")
 
 
-def read_and_concat_csvs(folder_path, columns_to_keep, output_folder_path):
+def read_and_concat_EIA_930(folder_path: str, 
+                            columns_to_keep: list, 
+                            output_folder_path: str):
     """
-    Reads a set of csv's from a folder, removes all but a few specified columns, and concatenates them together.
+    Reads and cleans a set of EIA930 6 month file csvs.
 
     Parameters:
     folder_path (str): The path of the folder to read the csv's from.
@@ -79,14 +79,19 @@ def read_and_concat_csvs(folder_path, columns_to_keep, output_folder_path):
         print(f"{output_file} saved successfully!")
 
 
-def prepare_eia_load_data(df):
+def prepare_eia_load_data(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Modifies EIA Load Data Files from GridEmissions
+    """
     df = df[['period', 'value', 'region']]
     df.columns = ['timestamp', 'value', 'region']
     df = df.drop_duplicates().dropna().set_index(['timestamp','region']).unstack(level=1)
-    
     return df
 
-def download_historical_load_data(url, output_path):
+def download_historical_load_data(url: str, output_path: str) -> pd.DataFrame:
+    """
+    Downloads historical load data from GridEmissions
+    """
     response = requests.get(url)
     if response.status_code == 200:  # Check if the request was successful
         buffer = BytesIO(response.content)
@@ -98,6 +103,9 @@ def download_historical_load_data(url, output_path):
     return df
 
 def prepare_historical_load_data(df, year):
+    """
+    Old Function Need to check use.... Pretty sure used in GridEmission workflow. which we will switch back to.
+    """
     # pattern = r'EBA\..*-ALL\.D\.H'  # Define the header filter pattern
     pattern = r'EBA\.(.*?)-ALL\.D\.H'
     pattern2 = r'E_\.(.*?)_\.D\.H'
@@ -113,7 +121,6 @@ def prepare_historical_load_data(df, year):
         filtered_df.iloc[:,0] = pd.to_datetime(df['Unnamed: 0'])
     df = filtered_df.set_index('timestamp')
     df = df.loc[f'{year}-01-01':f'{year}-12-31']
-
     return df
 
 if __name__ == "__main__":
@@ -121,7 +128,7 @@ if __name__ == "__main__":
     pd.options.mode.chained_assignment = None
     warnings.simplefilter(action='ignore', category=FutureWarning)
 
-    # URL of the gzipped CSV file
+    # URL of the gzipped CSV file.... Don't use these since Historical GridEmissions is Down
     url_2018_present = 'https://gridemissions.s3.us-east-2.amazonaws.com/EBA_elec.csv.gz'
     url_2015_2018 = 'https://gridemissions.s3.us-east-2.amazonaws.com/EBA_opt_no_src.csv.gz'
     url_2015_present = 'https://gridemissions.s3.us-east-2.amazonaws.com/EBA_raw.csv.gz'
@@ -160,6 +167,6 @@ if __name__ == "__main__":
 
         download_csvs(urls, PATH_DOWNLOAD_CSV)
         columns_to_keep = ['UTC Time at End of Hour', 'Balancing Authority', 'Demand (MW)']
-        read_and_concat_csvs(PATH_DOWNLOAD_CSV, columns_to_keep, PATH_DOWNLOAD)
+        read_and_concat_EIA_930(PATH_DOWNLOAD_CSV, columns_to_keep, PATH_DOWNLOAD)
 
         logger.info("EIA Data bundle downloaded.")

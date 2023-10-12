@@ -5,8 +5,7 @@
 """
 Solves linear optimal power flow for a network iteratively while updating reactances.
 
-Relevant Settings
------------------
+**Relevant Settings**
 
 .. code:: yaml
 
@@ -29,21 +28,18 @@ Relevant Settings
     Documentation of the configuration file ``config.yaml`` at
     :ref:`electricity_cf`, :ref:`solving_cf`, :ref:`plotting_cf`
 
-Inputs
-------
+**Inputs**
 
 - ``networks/elec_s{simpl}_{clusters}_ec_l{ll}_{opts}.nc``: confer :ref:`prepare`
 
-Outputs
--------
+**Outputs**
 
 - ``results/networks/elec_s{simpl}_{clusters}_ec_l{ll}_{opts}.nc``: Solved PyPSA network including optimisation results
 
-    .. image:: ../img/results.png
-        :scale: 40 %
+    # .. image:: ../img/results.png
+    #     :scale: 40 %
 
-Description
------------
+**Description**
 
 Total annual system costs are minimised with PyPSA. The full formulation of the
 linear optimal power flow (plus investment planning

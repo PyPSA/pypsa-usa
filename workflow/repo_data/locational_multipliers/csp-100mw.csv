@@ -1,0 +1,65 @@
+State,City,Base Project Cost ($/kW ),Location Variation,Delta Cost Difference ($/kW),Total Location Project Cost ($/kW)
+Alabama,Huntsville,7221,1.01,67,7288
+Arizona,Phoenix,7221,0.97,-201,7021
+Arkansas,Little Rock,7221,1.05,370,7591
+California,Bakersfield,7221,1.17,1220,8441
+California,Los Angeles,7221,1.18,1269,8490
+California,Modesto,7221,1.17,1242,8463
+California,Sacramento,7221,1.18,1307,8529
+California,San Francisco,7221,1.24,1738,8959
+Colorado,Denver,7221,0.97,-241,6980
+Connecticut,Hartford,7221,1.11,782,8003
+Delaware,Dover,7221,1.05,346,7568
+District of Columbia,Washington,7221,1.02,144,7365
+Florida,Tallahassee,7221,0.97,-212,7009
+Florida,Tampa,7221,0.99,-88,7134
+Georgia,Atlanta,7221,1.02,151,7372
+Idaho,Boise,7221,1.03,247,7468
+Illinois,Chicago,7221,1.14,1030,8252
+Illinois,Joliet,7221,1.12,881,8102
+Indiana,Indianapolis,7221,1.04,305,7527
+Iowa,Davenport,7221,1.02,144,7365
+Iowa,Waterloo,7221,0.98,-129,7092
+Kansas,Wichita,7221,0.98,-138,7083
+Kentucky,Louisville,7221,1.04,256,7477
+Louisiana,New Orleans,7221,1.04,275,7496
+Maine,Portland,7221,1.02,138,7359
+Maryland,Baltimore,7221,1.02,128,7350
+Massachusetts,Boston,7221,1.14,1040,8261
+Michigan,Detroit,7221,1.07,470,7692
+Michigan,Grand Rapids,7221,1.02,132,7353
+Minnesota,Saint Paul,7221,1.02,128,7350
+Mississippi,Jackson,7221,0.97,-244,6978
+Missouri,St. Louis,7221,1.16,1126,8347
+Missouri,Kansas City,7221,1.04,313,7535
+Montana,Great Falls,7221,0.97,-206,7015
+Nebraska,Omaha,7221,0.99,-105,7117
+New Hampshire,Concord,7221,1.09,666,7888
+New Jersey,Newark,7221,1.14,1027,8248
+New,Albuquerque,7221,1.05,355,7577
+New Mexico,New York,7221,1.27,1982,9203
+New York,Syracuse,7221,1.04,255,7477
+Nevada,Las Vegas,7221,1.14,1033,8254
+North Carolina,Charlotte,7221,0.98,-175,7046
+North Dakota,Bismarck,7221,0.98,-180,7041
+Oklahoma,Oklahoma City,7221,0.99,-38,7184
+Oklahoma,Tulsa,7221,0.95,-332,6889
+Ohio,Cincinnati,7221,0.95,-333,6888
+Oregon,Portland,7221,1.11,829,8050
+Pennsylvania,Philadelphia,7221,1.14,986,8207
+Pennsylvania,Wilkes-Barre,7221,1.05,326,7548
+Rhode Island,Providence,7221,1.11,791,8012
+South Carolina,Charleston,7221,1.12,865,8086
+South Carolina,Spartanburg,7221,1.01,58,7280
+South Dakota,Rapid City,7221,0.94,-409,6812
+Tennessee,Knoxville (Nashville),7221,1.06,452,7673
+Texas,Houston,7221,0.96,-255,6966
+Utah,Salt Lake City,7221,1.06,408,7630
+Vermont,Burlington,7221,1.16,1174,8396
+Virginia,Alexandria,7221,1.02,114,7335
+Virginia,Lynchburg,7221,0.97,-196,7025
+Washington,Seattle,7221,1.16,1124,8345
+Washington,Spokane,7221,1.06,442,7664
+West Virginia,Charleston,7221,1.02,140,7361
+Wisconsin,Green Bay,7221,0.98,-167,7054
+Wyoming,Cheyenne,7221,0.98,-174,7048

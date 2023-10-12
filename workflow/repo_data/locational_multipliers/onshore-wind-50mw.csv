@@ -1,0 +1,65 @@
+State,City,Base Project Cost ($/kW ),Location Variation,Delta Cost Difference ($/kW),Total Location Project Cost ($/kW)
+Alabama,Huntsville,"1,677",1.01,14,1691
+Arizona,Phoenix,"1,677",0.99,-23,1653
+Arkansas,Little Rock,"1,677",1.03,46,1722
+California,Bakersfield,"1,677",1.05,89,1765
+California,Los Angeles,"1,677",1.06,94,1770
+California,Modesto,"1,677",1,86,1762
+California,Sacramento,"1,677",1,91,1768
+California,San Francisco,"1,677",1,116,1793
+Colorado,Denver,"1,677",0.99,-19,1658
+Connecticut,Hartford,"1,677",1.03,50,1727
+Delaware,Dover,"1,677",1,4,1680
+District of Columbia,Washington,"1,677",1.01,13,1689
+Florida,Tallahassee,"1,677",0.99,-11,1666
+Florida,Tampa,"1,677",1,-3,1674
+Georgia,Atlanta,"1,677",1.01,18,1695
+Idaho,Boise,"1,677",1.01,22,1699
+Illinois,Chicago,"1,677",1,61,1737
+Illinois,Joliet,"1,677",1.03,53,1729
+Indiana,Indianapolis,"1,677",1.02,32,1709
+Iowa,Davenport,"1,677",1,7,1683
+Iowa,Waterloo,"1,677",0.99,-11,1666
+Kansas,Wichita,"1,677",0.99,-10,1667
+Kentucky,Louisville,"1,677",1.02,25,1702
+Louisiana,New Orleans,"1,677",1.02,36,1712
+Maine,Portland,"1,677",1.01,11,1688
+Maryland,Baltimore,"1,677",1.01,10,1686
+Massachusetts,Boston,"1,677",1,71,1747
+Michigan,Detroit,"1,677",1.02,25,1702
+Michigan,Grand Rapids,"1,677",1,5,1681
+Minnesota,Saint Paul,"1,677",1,-2,1674
+Mississippi,Jackson,"1,677",0.99,-15,1662
+Missouri,St. Louis,"1,677",1.05,90,1767
+Missouri,Kansas City,"1,677",1.01,19,1695
+Montana,Great Falls,"1,677",0.99,-14,1663
+Nebraska,Omaha,"1,677",1,-5,1672
+New Hampshire,Concord,"1,677",1.03,54,1731
+New Jersey,Newark,"1,677",1.04,67,1743
+New,Albuquerque,"1,677",1.03,44,1720
+New Mexico,New York,"1,677",1,118,1795
+New York,Syracuse,"1,677",1.01,18,1695
+Nevada,Las Vegas,"1,677",1.05,80,1756
+North Carolina,Charlotte,"1,677",0.99,-10,1666
+North Dakota,Bismarck,"1,677",0.98,-27,1649
+Oklahoma,Oklahoma City,"1,677",1,-7,1670
+Oklahoma,Tulsa,"1,677",0.99,-21,1656
+Ohio,Cincinnati,"1,677",0.99,-21,1655
+Oregon,Portland,"1,677",1.04,67,1744
+Pennsylvania,Philadelphia,"1,677",1,65,1742
+Pennsylvania,Wilkes-Barre,"1,677",1.01,17,1694
+Rhode Island,Providence,"1,677",1.03,55,1732
+South Carolina,Charleston,"1,677",1.06,101,1778
+South Carolina,Spartanburg,"1,677",1.01,14,1690
+South Dakota,Rapid City,"1,677",0.98,-35,1642
+Tennessee,Knoxville (Nashville),"1,677",1.03,46,1723
+Texas,Houston,"1,677",0.99,-14,1662
+Utah,Salt Lake City,"1,677",1.03,45,1722
+Vermont,Burlington,"1,677",1.06,108,1785
+Virginia,Alexandria,"1,677",1.01,11,1688
+Virginia,Lynchburg,"1,677",0.99,-14,1663
+Washington,Seattle,"1,677",1.05,83,1760
+Washington,Spokane,"1,677",1.02,29,1705
+West Virginia,Charleston,"1,677",1,6,1683
+Wisconsin,Green Bay,"1,677",0.99,-24,1653
+Wyoming,Cheyenne,"1,677",0.99,-15,1662

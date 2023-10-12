@@ -4,9 +4,10 @@ scenarios:
     clusters: 60
     opts:
       [
-        Co2L1.0,
+        Co2L0.75,
       ]
     ll: [vopt]
+    scope: "total" # "urban", "rural", or "total" 
 
 run:
   name: "" # use this to keep track of runs with different settings
@@ -21,6 +22,9 @@ zenodo_repositories:
   protected_planet: "https://sandbox.zenodo.org/record/1183583/files/natura_global.zip"
   USATestSystem: "https://zenodo.org/record/4538590/files/USATestSystem.zip"
   pypsa_usa_data: "https://zenodo.org/record/8175051/files/pypsa_usa_data.zip?download=1"
+
+zenodo_repositories_sector:
+  pypsa_usa_sec: "https://sandbox.zenodo.org/record/1244195/files/pypsa-usa-sec.zip?download=1"
 
 offshore_shape:
   use: ca #options are ca, weathergov
@@ -39,11 +43,11 @@ countries: [US]
 #   CISO-PGAE: 0.5
 
 # TODO: #11 change load data and generator data to be a snakemake wildcard value
-network_configuration: "pypsa-usa" # "pypsa-usa" or "ads2032"
+network_configuration: "pypsa-usa" # "pypsa-usa" or "ads2032" or "breakthrough"
 
 snapshots:
   start: "2019-01-01"
-  end: "2020-01-01"
+  end: "2019-01-14"
   inclusive: 'left' # include start, not end
 
 atlite:
@@ -51,20 +55,35 @@ atlite:
   nprocesses: 4
   show_progress: false # false saves time
   cutouts:
-    # use 'base' to determine geographical bounds and time span from config
-    # base:
-      # module: era5
     era5_2019:
       module: era5 # in priority order
-      x: [-12., 35.] #TODO: include build_cutout rule to use these configurations. 
-      y: [33., 72]
+      time: ['2019', '2019']
+  interconnects:
+    western:
+      x: [-126, -99]
+      y: [27, 50]
       dx: 0.3
       dy: 0.3
-      time: ['2013', '2013']
+    eastern:
+      x: [-109, -65]
+      y: [23, 50]
+      dx: 0.3
+      dy: 0.3
+    texas:
+      x: [-110,-90]
+      y: [24, 37]
+      dx: 0.3
+      dy: 0.3
+    usa:
+      x: [-126, -65]
+      y: [23, 50]
+      dx: 0.3
+      dy: 0.3
+
 
 electricity: 
-  conventional_carriers: [nuclear, oil, gas, coal, geothermal] # Choose Carriers to load into network
-  renewable_carriers: [wind, solar, offwind, hydro] # Choose Carriers to load into network
+  conventional_carriers: [nuclear, oil, OCGT, CCGT, coal, geothermal] # Choose Carriers to load into network
+  renewable_carriers: [onwind, solar, offwind, hydro] # Choose Carriers to load into network
   voltages: [230., 345., 500., 765.]
   voltage_simplified: 230 #Voltage level to simplify network to in rule "simplify network"
   co2limit: 1.4728e+9 # 0.8 * 1.841e+9
@@ -76,13 +95,19 @@ electricity:
     H2: 168
 
   extendable_carriers:
-    Generator: [solar, wind, offwind, gas, coal]
+    Generator: [solar, onwind, offwind, OCGT, CCGT, coal]
     StorageUnit: [battery] # battery, H2
     Store: [battery] #[battery, H2]
     Link: [] #[H2 pipeline]
 
+
+conventional:
+  unit_commitment: false
+  dynamic_fuel_price: false
+
+
 renewable: #build_renewable_profiles configurations
-  wind:
+  onwind:
     cutout: era5_2019
     resource:
       method: wind
@@ -172,7 +197,7 @@ renewable: #build_renewable_profiles configurations
     cutout: era5_2019
     resource:
       method: hydro
-      hydrobasins: data/hydrobasins/hybas_world_lev06_v1c.shp
+      hydrobasins: resources/hybas_na_lev06_v1c.shp
       flowspeed: 1.0  # m/s
       # weight_with_height: false
       # show_progress: true
@@ -214,10 +239,11 @@ load:
   # manual_adjustments: true # false
   scaling_factor: 1.0
 
-costs:  # based on the potentials, assuming  (0.1 kW/m2 and 10 m2/person) (TODO:pypsa-eur assumptions... need to re-visit)
-  year: 2030 #not currently used
-  version: v0.4.0
-  rooftop_share: 0.14  
+
+costs:  # based on the potentials, assuming  (0.1 kW/m2 and 10 m2/person)
+  year: 2030 
+  version: v0.6.0
+  rooftop_share: 0.14
   fill_values:
     FOM: 0
     VOM: 0
@@ -227,7 +253,7 @@ costs:  # based on the potentials, assuming  (0.1 kW/m2 and 10 m2/person) (TODO:
     lifetime: 25
     "CO2 intensity": 0
     "discount rate": 0.07
-  marginal_cost: #(TODO:pypsa-eur assumptions... need to re-visit)
+  marginal_cost:
     solar: 0.00
     onwind: 0.00
     offwind: 0.00
