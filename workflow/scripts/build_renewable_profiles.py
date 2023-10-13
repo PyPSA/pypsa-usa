@@ -195,7 +195,7 @@ if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
 
-        snakemake = mock_snakemake("build_renewable_profiles", technology="solar")
+        snakemake = mock_snakemake("build_renewable_profiles", technology="solar", interconnect="eastern")
     configure_logging(snakemake)
 
     nprocesses = int(snakemake.threads)
