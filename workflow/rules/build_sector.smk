@@ -143,3 +143,45 @@ rule build_clustered_population_layouts:
         "../envs/environment.yaml"
     script:
         "../scripts/build_clustered_population_layouts.py"
+
+rule build_cop_profiles:
+    params:
+        heat_pump_sink_T=config["sector"]["heat_pump_sink_T"],
+    input:
+        temp_soil_total = RESOURCES + "temp_soil_total_elec_s_{clusters}.nc",
+        temp_soil_rural = RESOURCES + "temp_soil_rural_elec_s_{clusters}.nc",
+        temp_soil_urban = RESOURCES + "temp_soil_urban_elec_s_{clusters}.nc",
+        temp_air_total = RESOURCES + "temp_air_total_elec_s_{clusters}.nc",
+        temp_air_rural = RESOURCES + "temp_air_rural_elec_s_{clusters}.nc",
+        temp_air_urban = RESOURCES + "temp_air_urban_elec_s_{clusters}.nc",
+        # temp_soil_total=RESOURCES + "temp_soil_total_elec_s{simpl}_{clusters}.nc",
+        # temp_soil_rural=RESOURCES + "temp_soil_rural_elec_s{simpl}_{clusters}.nc",
+        # temp_soil_urban=RESOURCES + "temp_soil_urban_elec_s{simpl}_{clusters}.nc",
+        # temp_air_total=RESOURCES + "temp_air_total_elec_s{simpl}_{clusters}.nc",
+        # temp_air_rural=RESOURCES + "temp_air_rural_elec_s{simpl}_{clusters}.nc",
+        # temp_air_urban=RESOURCES + "temp_air_urban_elec_s{simpl}_{clusters}.nc",
+    output:
+        cop_soil_total = RESOURCES + "cop_soil_total_elec_s_{clusters}.nc",
+        cop_soil_rural = RESOURCES + "cop_soil_rural_elec_s_{clusters}.nc",
+        cop_soil_urban = RESOURCES + "cop_soil_urban_elec_s_{clusters}.nc",
+        cop_air_total = RESOURCES + "cop_air_total_elec_s_{clusters}.nc",
+        cop_air_rural = RESOURCES + "cop_air_rural_elec_s_{clusters}.nc",
+        cop_air_urban = RESOURCES + "cop_air_urban_elec_s_{clusters}.nc",
+        # cop_soil_total=RESOURCES + "cop_soil_total_elec_s{simpl}_{clusters}.nc",
+        # cop_soil_rural=RESOURCES + "cop_soil_rural_elec_s{simpl}_{clusters}.nc",
+        # cop_soil_urban=RESOURCES + "cop_soil_urban_elec_s{simpl}_{clusters}.nc",
+        # cop_air_total=RESOURCES + "cop_air_total_elec_s{simpl}_{clusters}.nc",
+        # cop_air_rural=RESOURCES + "cop_air_rural_elec_s{simpl}_{clusters}.nc",
+        # cop_air_urban=RESOURCES + "cop_air_urban_elec_s{simpl}_{clusters}.nc",
+    resources:
+        mem_mb = 20000,
+    log:
+        LOGS + "build_cop_profiles_s{clusters}.log",
+        # LOGS + "build_cop_profiles_s{simpl}_{clusters}.log",
+    benchmark:
+        # BENCHMARKS + "build_cop_profiles/s{simpl}_{clusters}"
+        BENCHMARKS + "build_cop_profiles/s_{clusters}"
+    conda:
+        "../envs/environment.yaml"
+    script:
+        "../scripts/build_cop_profiles.py"
