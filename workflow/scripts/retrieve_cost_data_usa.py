@@ -10,6 +10,7 @@ from _helpers import (
 )
 from typing import Dict, Union
 import requests
+import urllib
 
 logger = logging.getLogger(__name__)
 
@@ -125,8 +126,12 @@ if __name__ == "__main__":
     save_atb_transport = snakemake.output.nrel_atb_transport
     
     if not Path(save_atb_transport).exists():
-        logger.info(f"Downloading ATB transport costs from '{xlsx}'")
-        progress_retrieve(xlsx, save_atb_transport)
+        pass
+        # logger.info(f"Downloading ATB transport costs from '{xlsx}'")
+        # progress_retrieve(xlsx, save_atb_transport)
+        # urllib.request.urlretrieve(xlsx, save_atb_transport)
+        # requests.get(xlsx, save_atb_transport)
+
         
     # get eia monthly fuel cost data 
     eia_api_key = snakemake.params.eia_api_key
