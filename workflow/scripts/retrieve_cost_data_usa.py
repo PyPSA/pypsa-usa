@@ -120,18 +120,18 @@ if __name__ == "__main__":
     if not Path(save_atb).exists():
         logger.info(f"Downloading ATB costs from '{parquet}'")
         progress_retrieve(parquet, save_atb)
-        
+    
+    """
     # get nrel atb transportation data 
     xlsx = "https://atb-archive.nrel.gov/transportation/2020/files/2020_ATB_Data_VehFuels_Download.xlsx"
     save_atb_transport = snakemake.output.nrel_atb_transport
     
     if not Path(save_atb_transport).exists():
-        pass
-        # logger.info(f"Downloading ATB transport costs from '{xlsx}'")
-        # progress_retrieve(xlsx, save_atb_transport)
+        logger.info(f"Downloading ATB transport costs from '{xlsx}'")
+        progress_retrieve(xlsx, save_atb_transport)
         # urllib.request.urlretrieve(xlsx, save_atb_transport)
         # requests.get(xlsx, save_atb_transport)
-
+    """
         
     # get eia monthly fuel cost data 
     eia_api_key = snakemake.params.eia_api_key
