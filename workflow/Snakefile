@@ -203,7 +203,7 @@ rule retrieve_cost_data_eur:
 rule retrieve_cost_data_usa:
     output:
         nrel_atb = RESOURCES + "costs/nrel_atb.parquet",
-        nrel_atb_transport = RESOURCES + "costs/nrel_atb_transport.xlsx",
+        # nrel_atb_transport = RESOURCES + "costs/nrel_atb_transport.xlsx",
         ng_electric_power_price = RESOURCES + "costs/ng_electric_power_price.csv",
         ng_industrial_price = RESOURCES + "costs/ng_industrial_price.csv",
         ng_residential_price = RESOURCES + "costs/ng_commercial_price.csv",
