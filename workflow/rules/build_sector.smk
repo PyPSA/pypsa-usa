@@ -5,7 +5,7 @@ rule build_population_layouts:
         county_shapes = DATA + "counties/cb_2020_us_county_500k.shp",
         urban_percent = DATA + "urbanization/DECENNIALDHC2020.H2-Data.csv",
         population = DATA + "population/DECENNIALDHC2020.P1-Data.csv",
-        cutout = "cutouts/" + CDIR + "{interconnect}_{cutout}.nc",
+        cutout = "cutouts/" + CDIR + "{interconnect}_" + config["atlite"]["default_cutout"] + ".nc",
     output:
         pop_layout_total = RESOURCES + "{interconnect}/pop_layout_total.nc",
         pop_layout_urban = RESOURCES + "{interconnect}/pop_layout_urban.nc",
@@ -26,7 +26,7 @@ rule build_heat_demands:
     params:
         snapshots=config["snapshots"],
     input:
-        pop_layout = RESOURCES + "pop_layout_{scope}.nc",
+        pop_layout = RESOURCES + "{interconnect}/pop_layout_{scope}.nc",
         # regions_onshore=RESOURCES + "regions_onshore_elec_s{simpl}_{clusters}.geojson",
         regions_onshore = RESOURCES + "{interconnect}/regions_onshore_s_{clusters}.geojson",
         cutout = "cutouts/" + CDIR + "{interconnect}_" + config["atlite"]["default_cutout"] + ".nc",
@@ -51,7 +51,7 @@ rule build_temperature_profiles:
     params:
         snapshots = config["snapshots"],
     input:
-        pop_layout = RESOURCES + "pop_layout_{scope}.nc",
+        pop_layout = RESOURCES + "{interconnect}/pop_layout_{scope}.nc",
         # regions_onshore = RESOURCES + "regions_onshore_elec_s{simpl}_{clusters}.geojson",
         regions_onshore = RESOURCES + "{interconnect}/regions_onshore_s_{clusters}.geojson",
         cutout = "cutouts/" + CDIR + "{interconnect}_" + config["atlite"]["default_cutout"] + ".nc",

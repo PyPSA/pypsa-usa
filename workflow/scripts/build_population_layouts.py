@@ -146,9 +146,10 @@ if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
         snakemake = mock_snakemake("build_population_layouts", interconnect="western", cutout="era5_2019")
-        
         # for plotting 
         save_path = Path("..", "..", "docs", "source", "_static", "pop_layout")
+    else:
+        save_path = None
         
     configure_logging(snakemake)
 
