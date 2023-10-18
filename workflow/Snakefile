@@ -96,14 +96,13 @@ pypsa_usa_datafiles = [
 
 def define_zenodo_databundles():
     return {
-        'protected_planet':"https://sandbox.zenodo.org/record/1183583/files/natura_global.zip",
         'USATestSystem':"https://zenodo.org/record/4538590/files/USATestSystem.zip",
-        'pypsa_usa_data':"https://zenodo.org/record/8175051/files/pypsa_usa_data.zip?download=1"
+        'pypsa_usa_data':"https://zenodo.org/records/10019273/files/pypsa_usa_data.zip?download=1"
         }
 
 def define_sector_databundles():
     return {
-        'pypsa_usa_sec':"https://sandbox.zenodo.org/record/1244195/files/pypsa-usa-sec.zip?download=1"
+        'pypsa_usa_sec':"https://zenodo.org/records/10019422/files/pypsa_usa_sec.zip?download=1"
         }
 
 rule retrieve_zenodo_databundles:
@@ -148,7 +147,6 @@ rule retrieve_WECC_forecast_data:
         "scripts/retrieve_forecast_data.py"        
 
 DATAFILES_DMD = [
-    # "EIA_DMD_2016.csv",
     "EIA_DMD_2017.csv",
     "EIA_DMD_2018.csv",
     "EIA_DMD_2019.csv",
@@ -188,7 +186,7 @@ rule retrieve_ship_raster:
 rule retrieve_cutout:
     input:
         HTTP.remote(
-            'https://sandbox.zenodo.org/record/1245777/files/{interconnect}_{cutout}.nc?download=1'
+            'https://zenodo.org/records/10019273/files/{interconnect}_{cutout}.nc?download=1'
             ,static=True),
     output:
         "cutouts/" + CDIR + "{interconnect}_{cutout}.nc",
