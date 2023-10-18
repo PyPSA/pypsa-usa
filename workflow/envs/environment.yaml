@@ -17,7 +17,7 @@ dependencies:
   - seaborn=0.12.2
   - snakemake-minimal=7.32.4
   - memory_profiler=0.61.0
-  - yaml=0.2.5=h0d85af4_2
+  - yaml=0.2.5
   - pytables=3.9.1
   - lxml=4.9.3
   - numpy=1.26.0
