@@ -23,7 +23,7 @@ dependencies:
   - lxml
   - numpy
   - geopandas
-  - xarray
+  - xarray==2023.6.0
   - netcdf4
   - networkx
   - scipy
@@ -31,6 +31,10 @@ dependencies:
   - progressbar2
   - pyomo
   - matplotlib
+  - powerplantmatching>=0.5.5
+  - dask==2023.7.0
+  - dask-core==2023.7.0
+
 
   # Keep in conda environment when calling ipython
   - ipython
