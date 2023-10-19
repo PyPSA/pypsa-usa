@@ -699,11 +699,10 @@ def attach_renewable_capacities_to_atlite(n, plants_df, renewable_carriers):
         if caps_per_bus[~caps_per_bus.index.isin(generators_tech.bus)].sum() > 0:
             missing_capacity = caps_per_bus[~caps_per_bus.index.isin(generators_tech.bus)].sum()
             logger.info(f"There are {np.round(missing_capacity,1)} MW of {tech} plants that are not in the network. See git issue #16.")
-        import pdb; pdb.set_trace()
 
+        logger.info(f"{caps_per_bus.sum()} MW of {tech} capacity added.")
         n.generators.p_nom.update(generators_tech.bus.map(caps_per_bus).dropna())
         n.generators.p_nom_min.update(generators_tech.bus.map(caps_per_bus).dropna())
-        logger.info(f"Adding {len(plants_filt)} {tech} generator capacities to the network.")
 
 
 def prepare_breakthrough_demand_data(n: pypsa.Network, 
@@ -844,7 +843,6 @@ def attach_conventional_generators(
         .rename(index=lambda s: "C" + str(s))
     )
     plants["efficiency"] = plants.efficiency.fillna(plants.efficiency_r)
-    import pdb; pdb.set_trace()
     if unit_commitment is not None:
         committable_attrs = plants.carrier.isin(unit_commitment).to_frame("committable")
         for attr in unit_commitment.index:
@@ -877,8 +875,8 @@ def attach_conventional_generators(
         plants.index,
         carrier=plants.carrier,
         bus=plants.bus_assignment,
-        p_nom_min=plants.p_nom.where(plants.carrier.isin(conventional_carriers), 0),
-        p_nom=plants.p_nom.where(plants.carrier.isin(conventional_carriers), 0),
+        p_nom_min=plants.p_nom.where(plants.carrier.isin(conventional_carriers), 0), #enforces that plants cannot be retired/sold-off at their capital cost
+        p_nom=plants.p_nom.where(plants.carrier.isin(conventional_carriers), 0), 
         p_nom_extendable=plants.carrier.isin(extendable_carriers["Generator"]),
         ramp_limit_up=plants.ramp_limit_up,
         ramp_limit_down=plants.ramp_limit_down,
@@ -942,7 +940,6 @@ def attach_wind_and_solar(
             bus_profiles = ds["profile"].transpose("time", "bus").to_pandas().T.merge(bus2sub,left_on="bus", right_on="sub_id").set_index('bus_id').drop(columns='sub_id').T
             
             logger.info(f"Adding {car} capacity-factor profiles to the network.")
-            import pdb; pdb.set_trace()
             #TODO: #24 VALIDATE TECHNICAL POTENTIALS
 
             n.madd(
@@ -969,11 +966,9 @@ def attach_battery_storage(n: pypsa.Network,
     """
     plants_filt = plants.query("carrier == 'battery' ")
     plants_filt.index = plants_filt.index.astype(str) + "_" + plants_filt.generator_id.astype(str)
-    import pdb; pdb.set_trace()
-    logger.info(f"Adding {len(plants_filt)} Batteries as Stores to the network.")
-    plants_filt = plants_filt.dropna(subset=['energy_capacity_mwh'])
-    # logger.info(f"Dropping {len(plants_filt) - len(plants_filt.dropna(subset=['energy_capacity_mwh']))} Batteries without energy capacity.")
+    logger.info(f'Adding Batteries as Stores to the network.\n{plants_filt.p_nom.sum()} MW Power Capacity\n{plants_filt.energy_capacity_mwh.sum()} MWh Energy Capacity')
 
+    plants_filt = plants_filt.dropna(subset=['energy_capacity_mwh'])
     n.madd(
         "StorageUnit",
         plants_filt.index,
