@@ -374,7 +374,7 @@ rule build_renewable_profiles:
     params:
         renewable=config["renewable"],
     input:
-        base_network= ancient(RESOURCES + "{interconnect}/elec_base_network.nc"),
+        base_network= RESOURCES + "{interconnect}/elec_base_network.nc",
         corine=ancient("data/copernicus/PROBAV_LC100_global_v3.0.1_2019-nrt_Discrete-Classification-map_USA_EPSG-4326.tif"),
         natura=lambda w: (
             DATA + "natura.tiff"
@@ -395,11 +395,11 @@ rule build_renewable_profiles:
         ),
         country_shapes=RESOURCES + "{interconnect}/country_shapes.geojson", 
         offshore_shapes=RESOURCES + "{interconnect}/offshore_shapes.geojson",
-        regions=lambda w: ancient((
+        regions=lambda w: (
             RESOURCES + "{interconnect}/regions_onshore.geojson"
-            if w.technology in ("wind", "solar")
+            if w.technology in ("onwind", "solar")
             else RESOURCES + "{interconnect}/regions_offshore.geojson"
-        )),
+        ),
         cutout=lambda w: "cutouts/"
         + CDIR + "{interconnect}_"
         + config["renewable"][w.technology]["cutout"]

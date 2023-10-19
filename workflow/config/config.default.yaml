@@ -74,9 +74,9 @@ atlite:
 
 
 electricity: 
-  conventional_carriers: [nuclear, oil, OCGT, CCGT, coal, geothermal] # Choose Carriers to load into network
-  renewable_carriers: [onwind, solar, offwind, hydro] # Choose Carriers to load into network
-  voltages: [230., 345., 500., 765.]
+  conventional_carriers: [nuclear, oil, OCGT, CCGT, coal, geothermal] # Choose the conventional plant types to include in network
+  renewable_carriers: [onwind, solar, offwind, hydro] # Choose the renewable plant types to include in network
+  voltages: [230., 345., 500., 765.] #remove
   voltage_simplified: 230 #Voltage level to simplify network to in rule "simplify network"
   co2limit: 1.4728e+9 # 0.8 * 1.841e+9
   co2base: 1.841e+9 #base_from_2020 Locations of the 1,841 MMmt of CO2 emissions from the current state of the grid in 2020.
@@ -163,25 +163,6 @@ renewable: #build_renewable_profiles configurations
     corine:
       grid_codes: [20, 30, 40, 50, 60, 90, 100] #see above for codes
     natura: true
-    potential: simple # or conservative
-    clip_p_max_pu: 1.e-2
-    extendable: true
-  offwind-dc:
-    cutout: era5_2019
-    resource:
-      method: wind
-      turbine: NREL_ReferenceTurbine_5MW_offshore
-    # ScholzPhd Tab 4.3.1: 10MW/km^2
-    capacity_per_sqkm: 3
-    correction_factor: 0.8855
-    # proxy for wake losses
-    # from 10.1016/j.energy.2018.08.153
-    # until done more rigorously in #153
-    corine:
-      grid_codes: [80, 200]
-    natura: true
-    max_depth: 50
-    min_shore_distance: 30000
     potential: simple # or conservative
     clip_p_max_pu: 1.e-2
     extendable: true

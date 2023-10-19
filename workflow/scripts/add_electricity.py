@@ -692,16 +692,17 @@ def attach_renewable_capacities_to_atlite(n, plants_df, renewable_carriers):
     for tech in renewable_carriers:
         plants_filt = plants.query("carrier == @tech")
         if plants_filt.empty: continue
-        network_gens = n.generators[n.generators.carrier == tech] 
-        caps = plants_filt.groupby("bus_assignment").sum().p_nom #namplate capacity per bus
-        # caps = caps / gens_per_bus.reindex(caps.index, fill_value=1) ##REVIEW do i need this
+        generators_tech = n.generators[n.generators.carrier == tech] 
+        caps_per_bus = plants_filt.groupby("bus_assignment").sum().p_nom #namplate capacity per bus
+        # caps = caps / gens_per_bus.reindex(caps.index, fill_value=1) ##REVIEW
         #TODO: #16 Gens excluded from atlite profiles bc of landuse/etc will not be able to be attached if in the breakthrough network
-        if caps[~caps.index.isin(network_gens.bus)].sum() > 0:
-            missing_capacity = caps[~caps.index.isin(network_gens.bus)].sum()
-            logger.info(f"There are {np.round(missing_capacity,1)} MW of {tech} plants that are not in the network. See git issue #16.")
-        n.generators.p_nom.update(network_gens.bus.map(caps).dropna())
-        n.generators.p_nom_min.update(network_gens.bus.map(caps).dropna())
-        logger.info(f"Adding {len(plants_filt)} {tech} generator capacities to the network.")
+        if caps_per_bus[~caps_per_bus.index.isin(generators_tech.bus)].sum() > 0:
+            missing_capacity = caps_per_bus[~caps_per_bus.index.isin(generators_tech.bus)].sum()
+            logger.info(f"There are {np.round(missing_capacity,1)/1000} GW of {tech} plants that are not in the network. See git issue #16.")
+
+        logger.info(f"{caps_per_bus.sum()/1000} GW of {tech} capacity added.")
+        n.generators.p_nom.update(generators_tech.bus.map(caps_per_bus).dropna())
+        n.generators.p_nom_min.update(generators_tech.bus.map(caps_per_bus).dropna())
 
 
 def prepare_breakthrough_demand_data(n: pypsa.Network, 
@@ -819,8 +820,12 @@ def attach_conventional_generators(
     conventional_inputs,
     unit_commitment=None,
     fuel_price=None,
-):
-    carriers = list(set(conventional_carriers) | set(extendable_carriers["Generator"]))
+    ):
+    carriers = [
+        carrier
+        for carrier in set(conventional_carriers) | set(extendable_carriers["Generator"])
+        if carrier not in renewable_carriers
+    ]
     add_missing_carriers(n, carriers)
     add_co2_emissions(n, costs, carriers)
 
@@ -838,7 +843,6 @@ def attach_conventional_generators(
         .rename(index=lambda s: "C" + str(s))
     )
     plants["efficiency"] = plants.efficiency.fillna(plants.efficiency_r)
-
     if unit_commitment is not None:
         committable_attrs = plants.carrier.isin(unit_commitment).to_frame("committable")
         for attr in unit_commitment.index:
@@ -871,8 +875,8 @@ def attach_conventional_generators(
         plants.index,
         carrier=plants.carrier,
         bus=plants.bus_assignment,
-        p_nom_min=plants.p_nom.where(plants.carrier.isin(conventional_carriers), 0),
-        p_nom=plants.p_nom.where(plants.carrier.isin(conventional_carriers), 0),
+        p_nom_min=plants.p_nom.where(plants.carrier.isin(conventional_carriers), 0), #enforces that plants cannot be retired/sold-off at their capital cost
+        p_nom=plants.p_nom.where(plants.carrier.isin(conventional_carriers), 0), 
         p_nom_extendable=plants.carrier.isin(extendable_carriers["Generator"]),
         ramp_limit_up=plants.ramp_limit_up,
         ramp_limit_down=plants.ramp_limit_down,
@@ -962,11 +966,9 @@ def attach_battery_storage(n: pypsa.Network,
     """
     plants_filt = plants.query("carrier == 'battery' ")
     plants_filt.index = plants_filt.index.astype(str) + "_" + plants_filt.generator_id.astype(str)
+    logger.info(f'Added Batteries as Stores to the network.\n{plants_filt.p_nom.sum()/1000} GW Power Capacity\n{plants_filt.energy_capacity_mwh.sum()/1000} GWh Energy Capacity')
 
-    logger.info(f"Adding {len(plants_filt)} Batteries as Stores to the network.")
     plants_filt = plants_filt.dropna(subset=['energy_capacity_mwh'])
-    # logger.info(f"Dropping {len(plants_filt) - len(plants_filt.dropna(subset=['energy_capacity_mwh']))} Batteries without energy capacity.")
-
     n.madd(
         "StorageUnit",
         plants_filt.index,
