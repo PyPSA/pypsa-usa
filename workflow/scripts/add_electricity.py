@@ -698,9 +698,9 @@ def attach_renewable_capacities_to_atlite(n, plants_df, renewable_carriers):
         #TODO: #16 Gens excluded from atlite profiles bc of landuse/etc will not be able to be attached if in the breakthrough network
         if caps_per_bus[~caps_per_bus.index.isin(generators_tech.bus)].sum() > 0:
             missing_capacity = caps_per_bus[~caps_per_bus.index.isin(generators_tech.bus)].sum()
-            logger.info(f"There are {np.round(missing_capacity,1)} MW of {tech} plants that are not in the network. See git issue #16.")
+            logger.info(f"There are {np.round(missing_capacity,1)/1000} GW of {tech} plants that are not in the network. See git issue #16.")
 
-        logger.info(f"{caps_per_bus.sum()} MW of {tech} capacity added.")
+        logger.info(f"{caps_per_bus.sum()/1000} GW of {tech} capacity added.")
         n.generators.p_nom.update(generators_tech.bus.map(caps_per_bus).dropna())
         n.generators.p_nom_min.update(generators_tech.bus.map(caps_per_bus).dropna())
 
@@ -966,7 +966,7 @@ def attach_battery_storage(n: pypsa.Network,
     """
     plants_filt = plants.query("carrier == 'battery' ")
     plants_filt.index = plants_filt.index.astype(str) + "_" + plants_filt.generator_id.astype(str)
-    logger.info(f'Adding Batteries as Stores to the network.\n{plants_filt.p_nom.sum()} MW Power Capacity\n{plants_filt.energy_capacity_mwh.sum()} MWh Energy Capacity')
+    logger.info(f'Added Batteries as Stores to the network.\n{plants_filt.p_nom.sum()/1000} GW Power Capacity\n{plants_filt.energy_capacity_mwh.sum()/1000} GWh Energy Capacity')
 
     plants_filt = plants_filt.dropna(subset=['energy_capacity_mwh'])
     n.madd(
