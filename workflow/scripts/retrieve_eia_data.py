@@ -14,6 +14,8 @@ import re
 from pathlib import Path
 import warnings
 
+logger = logging.getLogger(__name__)
+
 def download_csvs(urls, folder_path):
     """
     Downloads a set of csv's from a list of urls and saves them in a folder. 
@@ -36,11 +38,10 @@ def download_csvs(urls, folder_path):
 
         with open(file_path, 'wb') as f:
             f.write(response.content)
-            print(f"{file_name} downloaded successfully!")
+            print(f"{file_name} downloaded successfully")
 
 
 def read_and_concat_EIA_930(folder_path: str, 
-                            columns_to_keep: list, 
                             output_folder_path: str):
     """
     Reads and cleans a set of EIA930 6 month file csvs.
@@ -53,17 +54,19 @@ def read_and_concat_EIA_930(folder_path: str,
     Returns:
     None
     """
+    columns_to_keep = ['UTC Time at End of Hour', 'Balancing Authority', 'Demand (MW) (Adjusted)']
     dfs = {}
+
     for file_name in os.listdir(folder_path):
         if file_name.endswith('.csv'):
             file_path = os.path.join(folder_path, file_name)
             year = file_name.split('_')[2]
             if year not in dfs:
                 dfs[year] = []
-            df = pd.read_csv(file_path, usecols=columns_to_keep, dtype={'Demand (MW)': str})
-            df['Demand (MW)'] = df['Demand (MW)'].str.replace(',', '')
-            df['Demand (MW)'] = df['Demand (MW)'].astype(float)
+            df = pd.read_csv(file_path, usecols=columns_to_keep, dtype={columns_to_keep[2]: str})
             df.columns = ['region','timestamp','demand_mw']
+            df.demand_mw = df.demand_mw.str.replace(',', '')
+            df.demand_mw = df.demand_mw.astype(float)
             dfs[year].append(df)
 
     for year, dfs_list in dfs.items():
@@ -76,7 +79,6 @@ def read_and_concat_EIA_930(folder_path: str,
         
         output_file = os.path.join(output_folder_path, f'EIA_DMD_{year}.csv')
         concatenated_df.to_csv(output_file)
-        print(f"{output_file} saved successfully!")
 
 
 def prepare_eia_load_data(df: pd.DataFrame) -> pd.DataFrame:
@@ -124,9 +126,12 @@ def prepare_historical_load_data(df, year):
     return df
 
 if __name__ == "__main__":
-    logger = logging.getLogger(__name__)
     pd.options.mode.chained_assignment = None
     warnings.simplefilter(action='ignore', category=FutureWarning)
+
+    if "snakemake" not in globals():
+        from _helpers import mock_snakemake
+        snakemake = mock_snakemake("retrieve_eia_data")
 
     # URL of the gzipped CSV file.... Don't use these since Historical GridEmissions is Down
     url_2018_present = 'https://gridemissions.s3.us-east-2.amazonaws.com/EBA_elec.csv.gz'
@@ -159,14 +164,9 @@ if __name__ == "__main__":
         'https://www.eia.gov/electricity/gridmonitor/sixMonthFiles/EIA930_BALANCE_2017_Jan_Jun.csv',
     ]
 
-    if os.path.isfile(os.path.join(PATH_DOWNLOAD, snakemake.output[len(snakemake.output)-1])):
-        logger.info("EIA Data bundle already downloaded.")
-    else:
-        logger.info("Downloading EIA Data")
-        print('Downloading EIA Data')       # Download the gzipped CSV file
+    logger.info("Downloading EIA Data")
 
-        download_csvs(urls, PATH_DOWNLOAD_CSV)
-        columns_to_keep = ['UTC Time at End of Hour', 'Balancing Authority', 'Demand (MW)']
-        read_and_concat_EIA_930(PATH_DOWNLOAD_CSV, columns_to_keep, PATH_DOWNLOAD)
+    download_csvs(urls, PATH_DOWNLOAD_CSV)
+    read_and_concat_EIA_930(PATH_DOWNLOAD_CSV, PATH_DOWNLOAD)
 
-        logger.info("EIA Data bundle downloaded.")
+    logger.info("EIA Data bundle downloaded.")
