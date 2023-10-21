@@ -33,7 +33,7 @@ dependencies:
 - pyomo=6.6.2
 - matplotlib=3.8.0
 - powerplantmatching>=0.5.5
-
+- graphviz=8.1.0
 
 # Keep in conda environment when calling ipython
 - ipython=8.16.1

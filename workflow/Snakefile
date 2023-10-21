@@ -14,11 +14,7 @@ from pathlib import Path
 FIGURES_SINGLE = [
     "capacity_map_base",
     "capacity_map_optimized",
-    "capacity_bar",
-    "operation_map",
-    "operation_bar",
-    "operation_area",
-    "cost_bar",
+    "capacity_map_built",
 ]
 
 # --------------------------- Workflow constraints --------------------------- #
@@ -67,11 +63,11 @@ rule all:
         ) if config['solving']['operations']['run'] 
         else 
             expand(
-                "results/{interconnect}/figures/elec_s_{clusters}_ec_l{ll}_{opts}_{figure}.pdf",
+                "results/{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{figure}.pdf",
                 **config["scenarios"]["all"],
                 figure=FIGURES_SINGLE
             ),
-            #"repo_data/dag.jpg",
+            "repo_data/dag.jpg",
 
 ################# ----------- Rules to Retrieve Data ---------- #################
 
@@ -616,12 +612,12 @@ rule plot_figures:
         regions_offshore=RESOURCES + "{interconnect}/regions_offshore_s_{clusters}.geojson",
     output:
         **{
-            fig: "results/{interconnect}/figures/elec_s_{clusters}_ec_l{ll}_{opts}_%s.pdf"
+            fig: "results/{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_%s.pdf"
             % fig
             for fig in FIGURES_SINGLE
         },
     script:
-        "scripts/plot_results.py"
+        "scripts/plot_figures.py"
 
 
 # Create DAG with- 
