@@ -6,7 +6,7 @@
 # PyPSA USA
 
 ```{warning}
-**This model is under active development. The western interconnection is stable, however you are likely to find bugs in the workflow as we continue to develop the model. Please file github issues or email ktehranchi@stanford.edu for support**
+**This model is under active development. The western interconnection is stable, however you are likely to find bugs in the workflow as we continue to develop the model. Please file [github issues](https://github.com/PyPSA/pypsa-usa/issues) or email ktehranchi@stanford.edu or trevor_barnes@sfu.ca for support**
 ```
 
 PyPSA-USA is an open-source power systems model of the transmission system in the United States. It is a highly configurable power systems model that can be used for capacity expansion modeling, production cost simulation, and power flow analysis. This workflow draws from the work of [pypsa-eur](https://pypsa-eur.readthedocs.io/en/latest/index.html) and [pypsa-meets-earth](https://pypsa-earth.readthedocs.io/en/latest/) projects.
@@ -56,6 +56,7 @@ config-assumptions
 
 rules-retrieving-data
 rules-build-network
+rules-build-sector-network
 rules-simplify
 rules-solve
 rules-summary

@@ -45,17 +45,17 @@ Inputs
 
 - ``data/bundle/corine/g250_clc06_V18_5.tif``: `CORINE Land Cover (CLC) <https://land.copernicus.eu/pan-european/corine-land-cover>`_ inventory on `44 classes <https://wiki.openstreetmap.org/wiki/Corine_Land_Cover#Tagging>`_ of land use (e.g. forests, arable land, industrial, urban areas).
 
-    .. image:: img/corine.png
-        :scale: 33 %
+    # .. image:: img/corine.png
+    #     :scale: 33 %
 
 - ``data/bundle/GEBCO_2014_2D.nc``: A `bathymetric <https://en.wikipedia.org/wiki/Bathymetry>`_ data set with a global terrain model for ocean and land at 15 arc-second intervals by the `General Bathymetric Chart of the Oceans (GEBCO) <https://www.gebco.net/data_and_products/gridded_bathymetry_data/>`_.
 
-    .. image:: img/gebco_2019_grid_image.jpg
-        :scale: 50 %
+    # .. image:: img/gebco_2019_grid_image.jpg
+    #     :scale: 50 %
 
     **Source:** `GEBCO <https://www.gebco.net/data_and_products/images/gebco_2019_grid_image.jpg>`_
 
-- ``resources/natura.tiff``: confer :ref:`natura`
+- ``resources/natura.tiff``: confer :ref:`databundle`
 - ``resources/offshore_shapes.geojson``: confer :ref:`shapes`
 - ``resources/regions_onshore.geojson``: (if not offshore wind), confer :ref:`busregions`
 - ``resources/regions_offshore.geojson``: (if offshore wind), :ref:`busregions`
@@ -89,33 +89,33 @@ Outputs
 
     - **profile**
 
-    .. image:: img/profile_ts.png
-        :scale: 33 %
-        :align: center
+    # .. image:: img/profile_ts.png
+    #     :scale: 33 %
+    #     :align: center
 
     - **p_nom_max**
 
-    .. image:: img/p_nom_max_hist.png
-        :scale: 33 %
-        :align: center
+    # .. image:: img/p_nom_max_hist.png
+    #     :scale: 33 %
+    #     :align: center
 
     - **potential**
 
-    .. image:: img/potential_heatmap.png
-        :scale: 33 %
-        :align: center
+    # .. image:: img/potential_heatmap.png
+    #     :scale: 33 %
+    #     :align: center
 
     - **average_distance**
 
-    .. image:: img/distance_hist.png
-        :scale: 33 %
-        :align: center
+    # .. image:: img/distance_hist.png
+    #     :scale: 33 %
+    #     :align: center
 
     - **underwater_fraction**
 
-    .. image:: img/underwater_hist.png
-        :scale: 33 %
-        :align: center
+    # .. image:: img/underwater_hist.png
+    #     :scale: 33 %
+    #     :align: center
 
 Description
 -----------
@@ -134,30 +134,30 @@ cutout grid cell and each node using the `GLAES
 <https://github.com/FZJ-IEK3-VSA/glaes>`_ library. This uses the CORINE land use data,
 Natura2000 nature reserves and GEBCO bathymetry data.
 
-.. image:: img/eligibility.png
-    :scale: 50 %
-    :align: center
+# .. image:: img/eligibility.png
+#     :scale: 50 %
+#     :align: center
 
 To compute the layout of generators in each node's Voronoi cell, the
 installable potential in each grid cell is multiplied with the capacity factor
 at each grid cell. This is done since we assume more generators are installed
 at cells with a higher capacity factor.
 
-.. image:: img/offwinddc-gridcell.png
-    :scale: 50 %
-    :align: center
+# .. image:: img/offwinddc-gridcell.png
+#     :scale: 50 %
+#     :align: center
 
-.. image:: img/offwindac-gridcell.png
-    :scale: 50 %
-    :align: center
+# .. image:: img/offwindac-gridcell.png
+#     :scale: 50 %
+#     :align: center
 
-.. image:: img/onwind-gridcell.png
-    :scale: 50 %
-    :align: center
+# .. image:: img/onwind-gridcell.png
+#     :scale: 50 %
+#     :align: center
 
-.. image:: img/solar-gridcell.png
-    :scale: 50 %
-    :align: center
+# .. image:: img/solar-gridcell.png
+#     :scale: 50 %
+#     :align: center
 
 This layout is then used to compute the generation availability time series
 from the weather data cutout from ``atlite``.
@@ -180,6 +180,7 @@ import time
 
 import atlite
 import geopandas as gpd
+import pandas as pd
 import numpy as np
 import xarray as xr
 from _helpers import configure_logging
@@ -194,7 +195,7 @@ if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
 
-        snakemake = mock_snakemake("build_renewable_profiles", technology="solar")
+        snakemake = mock_snakemake("build_renewable_profiles", technology="onwind", interconnect="western")
     configure_logging(snakemake)
 
     nprocesses = int(snakemake.threads)
@@ -217,7 +218,8 @@ if __name__ == "__main__":
     else:
         client = None
 
-    cutout = atlite.Cutout(snakemake.input.cutout)
+    sns = pd.date_range(freq="h", **snakemake.config["snapshots"])
+    cutout = atlite.Cutout(snakemake.input.cutout).sel(time=sns)
     regions = gpd.read_file(snakemake.input.regions)
     assert not regions.empty, (
         f"List of regions in {snakemake.input.regions} is empty, please "
@@ -341,8 +343,6 @@ if __name__ == "__main__":
             average_distance.rename("average_distance"),
         ]
     )
-    # import pdb; pdb.set_trace()
-
     if snakemake.wildcards.technology.startswith("offwind"):
         logger.info("Calculate underwater fraction of connections.")
         offshore_shape = gpd.read_file(snakemake.input["offshore_shapes"]).unary_union
@@ -368,4 +368,5 @@ if __name__ == "__main__":
         ds["profile"] = ds["profile"].where(ds["profile"] >= min_p_max_pu, 0)
 
     ds.to_netcdf(snakemake.output.profile)
-    client.shutdown()
+    if client is not None:
+        client.shutdown()

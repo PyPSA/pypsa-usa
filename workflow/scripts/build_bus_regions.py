@@ -2,39 +2,35 @@
 
 """
 
-Relevant Settings
------------------
+**Relevant Settings**
 
 .. code:: yaml
 
+    interconnect:
+    offshore_shape:
+    aggregation_zones:
     countries:
 
-.. seealso::
-    Documentation of the configuration file ``config.yaml`` at
-    :ref:`toplevel_cf`
 
-Inputs
-------
+**Inputs**
 
 - ``resources/country_shapes.geojson``: confer :ref:`shapes`
 - ``resources/offshore_shapes.geojson``: confer :ref:`shapes`
 - ``networks/base.nc``: confer :ref:`base`
 
-Outputs
--------
+**Outputs**
 
 - ``resources/regions_onshore.geojson``:
 
-    .. image:: ../img/regions_onshore.png
-        :scale: 33 %
+    # .. image:: ../img/regions_onshore.png
+    #     :scale: 33 %
 
 - ``resources/regions_offshore.geojson``:
 
-    .. image:: ../img/regions_offshore.png
-        :scale: 33 %
+    # .. image:: ../img/regions_offshore.png
+    #     :scale: 33 %
 
-Description
------------
+**Description**
 
 Creates Voronoi shapes for each bus representing both onshore and offshore regions.
 
@@ -47,13 +43,13 @@ import numpy as np
 import geopandas as gpd
 from shapely.geometry import Polygon
 from scipy.spatial import Voronoi
-
+from functools import reduce
 from _helpers import setup_custom_logger
 logger = setup_custom_logger('root')
 logger.debug('main message')
 
 from _helpers import configure_logging, REGION_COLS
-from simplify_network import aggregate_to_substations
+from simplify_network import aggregate_to_substations, simplify_network_to_voltage_level
 
 def voronoi_partition_pts(points, outline):
     """
@@ -119,15 +115,20 @@ if __name__ == "__main__":
     logger = logging.getLogger(__name__)
     if 'snakemake' not in globals():
         from _helpers import mock_snakemake
-        snakemake = mock_snakemake('build_bus_regions', interconnect='western')
+        snakemake = mock_snakemake('build_bus_regions', interconnect="western")
     configure_logging(snakemake)
 
-    logger.info("Building bus regions for %s", snakemake.wildcards.interconnect)
-    logger.info("Built for aggregation with %s zones", aggregation_zones)
 
     #Configurations
     countries = snakemake.config['countries']
+    voltage_level = snakemake.config["electricity"]["voltage_simplified"]
     aggregation_zones = snakemake.config['clustering']['cluster_network']['aggregation_zones']
+    
+    logger.info("Building bus regions for %s", snakemake.wildcards.interconnect)
+    logger.info("Built for aggregation with %s zones", aggregation_zones)
+
+    logger.info("Building bus regions for %s", snakemake.wildcards.interconnect)
+    logger.info("Built for aggregation with %s zones", aggregation_zones)
 
     n_base = pypsa.Network(snakemake.input.base_network)
 
@@ -139,6 +140,15 @@ if __name__ == "__main__":
     busmap_to_sub.index = busmap_to_sub.index.astype(str)
     substations = pd.read_csv(snakemake.input.sub, index_col=0)
     substations.index = substations.index.astype(str)
+
+    n_base, trafo_map = simplify_network_to_voltage_level(n_base, voltage_level)
+
+    #new busmap definition
+    busmap_to_sub = n_base.buses.sub_id.astype(int).astype(str).to_frame()
+
+    busmaps = [trafo_map, busmap_to_sub.sub_id]
+    busmaps = reduce(lambda x, y: x.map(y), busmaps[1:], busmaps[0])
+
     n = aggregate_to_substations(n_base, substations, busmap_to_sub.sub_id, aggregation_zones)
 
     gpd_countries = gpd.read_file(snakemake.input.country_shapes).set_index('name')

@@ -1,9 +1,47 @@
 # BY PyPSA-USA Authors
+
 """
-Description: 
-This script builds the shapes for the interconnect identified in the config file. 
-The shapes are built using the Balancing Authority Shapes and the offshore shapes specified in the config file. 
-Geojson files are saved to the resources folder.
+
+**Relevant Settings**
+
+.. code:: yaml
+
+    interconnect:
+    countries:
+
+
+**Inputs**
+
+- ``breakthrough_network/base_grid/zone.csv``: confer :ref:`base`
+- ``repo_data/BA_shapes_new/Modified_BE_BA_Shapes.shp``: confer :ref:`base`
+- ``repo_data/BOEM_CA_OSW_GIS/CA_OSW_BOEM_CallAreas.shp``: confer :ref:`base`
+
+**Outputs**
+
+- ``resources/country_shapes.geojson``:
+
+    # .. image:: ../img/regions_onshore.png
+    #     :scale: 33 %
+
+- ``resources/onshore_shapes.geojson``:
+
+    # .. image:: ../img/regions_offshore.png
+    #     :scale: 33 %
+
+- ``resources/offshore_shapes.geojson``:
+
+    # .. image:: ../img/regions_offshore.png
+    #     :scale: 33 %
+
+- ``resources/state_boundaries.geojson``:
+
+    # .. image:: ../img/regions_offshore.png
+    #     :scale: 33 %
+
+**Description**
+
+The `build_shapes` rule builds the GIS shape files for the balancing authorities and offshore regions. The regions are only built for the {interconnect} wildcard. Because balancing authorities often overlap- we modify the GIS dataset developed by  [Breakthrough Energy Sciences](https://breakthrough-energy.github.io/docs/). The offshore regions are built from the BOEM and weather.gov datasets.
+
 """
 
 import geopandas as gpd

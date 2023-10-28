@@ -4,9 +4,10 @@ scenarios:
     clusters: 60
     opts:
       [
-        Co2L1.0,
+        Co2L0.75,
       ]
     ll: [vopt]
+    scope: "total" # "urban", "rural", or "total" 
 
 run:
   name: "" # use this to keep track of runs with different settings
@@ -16,11 +17,6 @@ run:
 
 enable:
   build_cutout: false
-
-zenodo_repositories:
-  protected_planet: "https://sandbox.zenodo.org/record/1183583/files/natura_global.zip"
-  USATestSystem: "https://zenodo.org/record/4538590/files/USATestSystem.zip"
-  pypsa_usa_data: "https://zenodo.org/record/8175051/files/pypsa_usa_data.zip?download=1"
 
 offshore_shape:
   use: ca #options are ca, weathergov
@@ -39,11 +35,11 @@ countries: [US]
 #   CISO-PGAE: 0.5
 
 # TODO: #11 change load data and generator data to be a snakemake wildcard value
-network_configuration: "ads2032" # "pypsa-usa" or "ads2032" or "breakthrough" 
+network_configuration: "pypsa-usa" # "pypsa-usa" or "ads2032" or "breakthrough"
 
 snapshots:
   start: "2019-01-01"
-  end: "2020-01-01"
+  end: "2019-01-14"
   inclusive: 'left' # include start, not end
 
 atlite:
@@ -51,21 +47,36 @@ atlite:
   nprocesses: 4
   show_progress: false # false saves time
   cutouts:
-    # use 'base' to determine geographical bounds and time span from config
-    # base:
-      # module: era5
     era5_2019:
       module: era5 # in priority order
-      x: [-12., 35.] #TODO: include build_cutout rule to use these configurations. 
-      y: [33., 72]
+      time: ['2019', '2019']
+  interconnects:
+    western:
+      x: [-126, -99]
+      y: [27, 50]
       dx: 0.3
       dy: 0.3
-      time: ['2013', '2013']
+    eastern:
+      x: [-109, -65]
+      y: [23, 50]
+      dx: 0.3
+      dy: 0.3
+    texas:
+      x: [-110,-90]
+      y: [24, 37]
+      dx: 0.3
+      dy: 0.3
+    usa:
+      x: [-126, -65]
+      y: [23, 50]
+      dx: 0.3
+      dy: 0.3
+
 
 electricity: 
-  conventional_carriers: [nuclear, oil, gas, coal, geothermal] # Choose Carriers to load into network
-  renewable_carriers: [wind, solar, offwind, hydro] # Choose Carriers to load into network
-  voltages: [230., 345., 500., 765.]
+  conventional_carriers: [nuclear, oil, OCGT, CCGT, coal, geothermal] # Choose the conventional plant types to include in network
+  renewable_carriers: [onwind, solar, offwind, hydro] # Choose the renewable plant types to include in network
+  voltages: [230., 345., 500., 765.] #remove
   voltage_simplified: 230 #Voltage level to simplify network to in rule "simplify network"
   co2limit: 1.4728e+9 # 0.8 * 1.841e+9
   co2base: 1.841e+9 #base_from_2020 Locations of the 1,841 MMmt of CO2 emissions from the current state of the grid in 2020.
@@ -76,13 +87,19 @@ electricity:
     H2: 168
 
   extendable_carriers:
-    Generator: [solar, wind, offwind, gas, coal]
+    Generator: [solar, onwind, offwind, OCGT, CCGT, coal]
     StorageUnit: [battery] # battery, H2
     Store: [battery] #[battery, H2]
     Link: [] #[H2 pipeline]
 
+
+conventional:
+  unit_commitment: false
+  dynamic_fuel_price: false
+
+
 renewable: #build_renewable_profiles configurations
-  wind:
+  onwind:
     cutout: era5_2019
     resource:
       method: wind
@@ -149,30 +166,11 @@ renewable: #build_renewable_profiles configurations
     potential: simple # or conservative
     clip_p_max_pu: 1.e-2
     extendable: true
-  offwind-dc:
-    cutout: era5_2019
-    resource:
-      method: wind
-      turbine: NREL_ReferenceTurbine_5MW_offshore
-    # ScholzPhd Tab 4.3.1: 10MW/km^2
-    capacity_per_sqkm: 3
-    correction_factor: 0.8855
-    # proxy for wake losses
-    # from 10.1016/j.energy.2018.08.153
-    # until done more rigorously in #153
-    corine:
-      grid_codes: [80, 200]
-    natura: true
-    max_depth: 50
-    min_shore_distance: 30000
-    potential: simple # or conservative
-    clip_p_max_pu: 1.e-2
-    extendable: true
   hydro:
     cutout: era5_2019
     resource:
       method: hydro
-      hydrobasins: data/hydrobasins/hybas_world_lev06_v1c.shp
+      hydrobasins: resources/hybas_na_lev06_v1c.shp
       flowspeed: 1.0  # m/s
       # weight_with_height: false
       # show_progress: true
@@ -188,10 +186,14 @@ renewable: #build_renewable_profiles configurations
 
 
 lines:
-  types:
-    220.: "Al/St 240/40 2-bundle 220.0"
-    300.: "Al/St 240/40 3-bundle 300.0"
-    380.: "Al/St 240/40 4-bundle 380.0"
+  types: # All temporary values, need to be updated
+    115.: "Al/St 240/40 2-bundle 220.0" 
+    138.: "Al/St 240/40 2-bundle 220.0"
+    161.: "Al/St 240/40 2-bundle 220.0"
+    230.: "Al/St 240/40 2-bundle 220.0"
+    345.: "Al/St 240/40 4-bundle 380.0"
+    500.: "Al/St 560/50 4-bundle 750.0"
+    765.: "Al/St 560/50 4-bundle 750.0"
   s_max_pu: 0.7
   s_nom_max: .inf
   length_factor: 1.25
@@ -210,10 +212,11 @@ load:
   # manual_adjustments: true # false
   scaling_factor: 1.0
 
-costs:  # based on the potentials, assuming  (0.1 kW/m2 and 10 m2/person) (TODO:pypsa-eur assumptions... need to re-visit)
-  year: 2030 #not currently used
-  version: v0.4.0
-  rooftop_share: 0.14  
+
+costs:  # based on the potentials, assuming  (0.1 kW/m2 and 10 m2/person)
+  year: 2030 
+  version: v0.6.0
+  rooftop_share: 0.14
   fill_values:
     FOM: 0
     VOM: 0
@@ -223,7 +226,7 @@ costs:  # based on the potentials, assuming  (0.1 kW/m2 and 10 m2/person) (TODO:
     lifetime: 25
     "CO2 intensity": 0
     "discount rate": 0.07
-  marginal_cost: #(TODO:pypsa-eur assumptions... need to re-visit)
+  marginal_cost:
     solar: 0.00
     onwind: 0.00
     offwind: 0.00
@@ -235,6 +238,9 @@ costs:  # based on the potentials, assuming  (0.1 kW/m2 and 10 m2/person) (TODO:
     battery inverter: 0.
   emission_prices: # in currency per tonne emission, only used with the option Ep
     co2: 0.
+
+sector:
+  heat_pump_sink_T: 55.
 
 clustering:
   simplify_network:
@@ -255,6 +261,10 @@ clustering:
       ramp_limit_up: max
       ramp_limit_down: max
       efficiency: mean
+    buses:
+      Pd: sum
+      zone_id: mean # should delete zone id's and PDs from network earlier.
+      state: max
 
 solving:
   options:
@@ -278,7 +288,7 @@ solving:
     PreDual: 0
     GURO_PAR_BARDENSETHRESH: 200
   operations:
-    run: true
+    run: false
     stochastic: false
     iterations: 10
 

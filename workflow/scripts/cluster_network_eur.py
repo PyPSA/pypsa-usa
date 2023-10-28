@@ -6,8 +6,7 @@
 """
 Creates networks clustered to ``{cluster}`` number of zones with aggregated buses, generators and transmission corridors.
 
-Relevant Settings
------------------
+**Relevant Settings**
 
 .. code:: yaml
 
@@ -26,10 +25,9 @@ Relevant Settings
 
 .. seealso::
     Documentation of the configuration file ``config.yaml`` at
-    :ref:`toplevel_cf`, :ref:`renewable_cf`, :ref:`solving_cf`, :ref:`lines_cf`
+    :ref:`renewable_cf`, :ref:`solving_cf`, :ref:`lines_cf`
 
-Inputs
-------
+**Inputs**
 
 - ``resources/regions_onshore_elec_s{simpl}.geojson``: confer :ref:`simplify`
 - ``resources/regions_offshore_elec_s{simpl}.geojson``: confer :ref:`simplify`
@@ -37,28 +35,26 @@ Inputs
 - ``networks/elec_s{simpl}.nc``: confer :ref:`simplify`
 - ``data/custom_busmap_elec_s{simpl}_{clusters}.csv``: optional input
 
-Outputs
--------
+**Outputs**
 
 - ``resources/regions_onshore_elec_s{simpl}_{clusters}.geojson``:
 
-    .. image:: ../img/regions_onshore_elec_s_X.png
-        :scale: 33 %
+    # .. image:: ../img/regions_onshore_elec_s_X.png
+    #     :scale: 33 %
 
 - ``resources/regions_offshore_elec_s{simpl}_{clusters}.geojson``:
 
-    .. image:: ../img/regions_offshore_elec_s_X.png
-        :scale: 33 %
+    # .. image:: ../img/regions_offshore_elec_s_X.png
+    #     :scale: 33 %
 
 - ``resources/busmap_elec_s{simpl}_{clusters}.csv``: Mapping of buses from ``networks/elec_s{simpl}.nc`` to ``networks/elec_s{simpl}_{clusters}.nc``;
 - ``resources/linemap_elec_s{simpl}_{clusters}.csv``: Mapping of lines from ``networks/elec_s{simpl}.nc`` to ``networks/elec_s{simpl}_{clusters}.nc``;
 - ``networks/elec_s{simpl}_{clusters}.nc``:
 
-    .. image:: ../img/elec_s_X.png
-        :scale: 40  %
+    # .. image:: ../img/elec_s_X.png
+    #     :scale: 40  %
 
-Description
------------
+**Description**
 
 .. note::
 
@@ -112,7 +108,7 @@ import seaborn as sns
 
 from functools import reduce
 
-from pypsa.networkclustering import (busmap_by_kmeans, busmap_by_hac,
+from pypsa.clustering.spatial import (busmap_by_kmeans, busmap_by_hac,
                                      busmap_by_greedy_modularity, get_clustering_from_busmap)
 
 import warnings
@@ -363,11 +359,14 @@ if __name__ == "__main__":
     print("Running clustering.py directly")
     if 'snakemake' not in globals():
         from _helpers import mock_snakemake
-        snakemake = mock_snakemake('cluster_network', simpl='', clusters='15')
+        snakemake = mock_snakemake('cluster_network', interconnect='western', clusters='30')
     configure_logging(snakemake)
 
     n = pypsa.Network(snakemake.input.network)
     focus_weights = snakemake.config.get('focus_weights', None)
+
+    n.buses.drop(columns=['state', 'balancing_area','sub_id'], inplace=True)
+
 
     renewable_carriers = pd.Index([tech
                                    for tech in n.generators.carrier.unique()
@@ -387,7 +386,7 @@ if __name__ == "__main__":
         # Fast-path if no clustering is necessary
         busmap = n.buses.index.to_series()
         linemap = n.lines.index.to_series()
-        clustering = pypsa.networkclustering.Clustering(n, busmap, linemap, linemap, pd.Series(dtype='O'))
+        clustering = pypsa.clustering.spatial.Clustering(n, busmap, linemap, linemap, pd.Series(dtype='O'))
     else:
         line_length_factor = snakemake.config['lines']['length_factor']
         Nyears = n.snapshot_weightings.objective.sum()/8760

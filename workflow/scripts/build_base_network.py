@@ -1,4 +1,45 @@
 # BY PyPSA-USA Authors 
+"""
+
+**Relevant Settings**
+
+.. code:: yaml
+
+    interconnect:
+    offshore_shape:
+    aggregation_zones:
+    countries:
+
+
+**Inputs**
+
+- ``data/breakthrough_network/base_grid/{interconnect}/bus.csv``
+- ``data/breakthrough_network/base_grid/{interconnect}/branch.csv``
+- ``data/breakthrough_network/base_grid/{interconnect}/dcline.csv``
+- ``data/breakthrough_network/base_grid/{interconnect}/bus2sub.csv``
+- ``data/breakthrough_network/base_grid/{interconnect}/sub.csv``
+- ``resources/country_shapes.geojson``: confer :ref:`shapes`
+- ``resources/offshore_shapes.geojson``: confer :ref:`shapes`
+- ``resources/{interconnect}/state_boundaries.geojson``: confer :ref:`shapes`
+
+
+**Outputs**
+
+- ``networks/base.nc``: 
+- ``data/breakthrough_network/base_grid/{interconnect}/bus2sub.csv``
+- ``data/breakthrough_network/base_grid/{interconnect}/sub.csv``
+- ``resources/{interconnect}/elec_base_network.nc``
+
+
+**Description**
+
+Reads in Breakthrough Energy/TAMU transmission dataset, and converts it into PyPSA compatible components. A base netowork file (`*.nc`) is written out. Included in this network are: 
+    - Geolocated buses 
+    - Geoloactated AC and DC transmission lines + links
+    - Transformers 
+
+"""
+
 
 import pypsa, pandas as pd, logging, geopandas as gpd
 from geopandas.tools import sjoin
@@ -31,7 +72,7 @@ def add_buses_from_file(n: pypsa.Network, buses: gpd.GeoDataFrame, interconnect:
 
     return n
 
-def add_branches_from_file(n, fn_branches):
+def add_branches_from_file(n: pypsa.Network, fn_branches: str) -> pypsa.Network:
 
     branches = pd.read_csv(
         fn_branches, dtype={"from_bus_id": str, "to_bus_id": str}, index_col=0
@@ -63,13 +104,16 @@ def add_branches_from_file(n, fn_branches):
         )
     return n
 
-def add_custom_line_type(n):
+def add_custom_line_type(n: pypsa.Network):
     n.line_types.loc["Rail"] = pd.Series(
         [60, 0.0683, 0.335, 15, 1.01],
         index=["f_nom", "r_per_length", "x_per_length", "c_per_length", "i_nom"],
     )
 
-def add_dclines_from_file(n, fn_dclines):
+def assign_line_types(n: pypsa.Network):
+    n.lines.type = n.lines.v_nom.map(snakemake.config['lines']['types'])
+
+def add_dclines_from_file(n: pypsa.Network, fn_dclines: str) -> pypsa.Network:
 
     dclines = pd.read_csv(
         fn_dclines, dtype={"from_bus_id": str, "to_bus_id": str}, index_col=0
@@ -157,6 +201,7 @@ if __name__ == "__main__":
     n = add_branches_from_file(n, snakemake.input["lines"])
     n = add_dclines_from_file(n, snakemake.input["links"])
     add_custom_line_type(n)
+    assign_line_types(n)
 
     # export bus2sub interconnect data
     logger.info(f"exporting bus2sub and sub data for {interconnect}")
