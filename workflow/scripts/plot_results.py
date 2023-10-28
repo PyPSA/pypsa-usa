@@ -55,6 +55,10 @@ if __name__ == "__main__":
     else:
         line_scale = 4e3
 
+    if snakemake.config['solving']['options']['load_shedding']: 
+        n.carriers.rename(index={'Load':'load'}, inplace=True)
+        n.carriers.loc['load','nice_name'] = 'Load'
+        n.carriers.loc['load','color'] = '#70af1d'
 
     ###### 
     ## Capacity Map
@@ -72,6 +76,7 @@ if __name__ == "__main__":
     )
     storage_capacity = storage_capacity.rename(index=generating_link_carrier_map, level=1)
     buses = pd.concat([generation_capacity, storage_capacity])
+
     with plt.rc_context({"patch.linewidth": 0.1}):
         n.plot(
             bus_sizes=buses / bus_scale,
@@ -217,6 +222,7 @@ if __name__ == "__main__":
     ## Operation Map
     # Map of all the optimized operation in the Network. Including buses, lines, and links
     ######
+
     fig, ax = plt.subplots(
         figsize=(8, 8), subplot_kw={"projection": ccrs.EqualEarth(n.buses.x.mean())}
     )
@@ -269,7 +275,7 @@ if __name__ == "__main__":
     fig.tight_layout()
     ax.set_title("Optimized Network Operations [MWh]", fontsize= TITLE_SIZE)
     fig.savefig(snakemake.output.operation_map)
-    
+        
 
     ####
     ## Operations Time-Series Plots
