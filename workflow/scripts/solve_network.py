@@ -1,7 +1,6 @@
 # SPDX-FileCopyrightText: : 2017-2022 The PyPSA-Eur Authors
 #
 # SPDX-License-Identifier: MIT
-
 """
 Solves linear optimal power flow for a network iteratively while updating reactances.
 
