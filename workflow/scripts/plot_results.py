@@ -68,7 +68,8 @@ if __name__ == "__main__":
     fig, ax = plt.subplots(
         figsize=(8, 8), subplot_kw={"projection": ccrs.EqualEarth(n.buses.x.mean())}
     )
-    generation_capacity = n.generators.groupby(["bus", "carrier"]).p_nom.sum()
+    gens_df = n.generators.drop(n.generators.index[n.generators.carrier == 'load'])
+    generation_capacity = gens_df.groupby(["bus", "carrier"]).p_nom.sum()
     storage_capacity = (
         n.links.query("carrier in @generating_link_carrier_map")
         .groupby(["bus1", "carrier"])
@@ -133,7 +134,7 @@ if __name__ == "__main__":
     fig, ax = plt.subplots(
         figsize=(8, 8), subplot_kw={"projection": ccrs.EqualEarth(n.buses.x.mean())}
     )
-    generation_capacity = n.generators.groupby(["bus", "carrier"]).p_nom_opt.sum()
+    generation_capacity = gens_df.groupby(["bus", "carrier"]).p_nom_opt.sum()
     storage_capacity = (
         n.links.query("carrier in @generating_link_carrier_map")
         .groupby(["bus1", "carrier"])
