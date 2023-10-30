@@ -268,8 +268,9 @@ clustering:
 
 solving:
   options:
+    operations_only: true
     formulation: kirchhoff
-    load_shedding: false
+    load_shedding: true
     noisy_costs: true
     min_iterations: 4
     max_iterations: 6
@@ -287,10 +288,6 @@ solving:
     AggFill: 0
     PreDual: 0
     GURO_PAR_BARDENSETHRESH: 200
-  operations:
-    run: false
-    stochastic: false
-    iterations: 10
 
 plotting:
   map:
