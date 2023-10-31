@@ -63,11 +63,13 @@ include: "rules/build_sector.smk"
 rule all:
     input:
         expand(
-            "results/{interconnect}/figures/elec_s_{clusters}_ec_l{ll}_{opts}_{figure}.pdf",
+            RESULTS + "{interconnect}/figures/elec_s_{clusters}_ec_l{ll}_{opts}_{figure}.pdf",
             **config["scenarios"]["all"],
             figure=FIGURES_SINGLE
         ),
-        #"repo_data/dag.jpg",
+        expand(RESULTS + "{interconnect}/summary_tables/stats_c{clusters}_l{ll}_{opts}.csv",
+                **config["scenarios"]["all"])
+        # "repo_data/dag.jpg",
 
 ################# ----------- Rules to Retrieve Data ---------- #################
 
@@ -275,12 +277,11 @@ rule build_bus_regions:
         ba_region_shapes=RESOURCES + "{interconnect}/onshore_shapes.geojson",
         offshore_shapes=RESOURCES + "{interconnect}/offshore_shapes.geojson",
         base_network=RESOURCES + "{interconnect}/elec_base_network.nc",
-        bus2sub="data/breakthrough_network/base_grid/{interconnect}/bus2sub.csv",
-        sub="data/breakthrough_network/base_grid/{interconnect}/sub.csv",
+        bus2sub= DATA + "breakthrough_network/base_grid/{interconnect}/bus2sub.csv",
+        sub= DATA + "breakthrough_network/base_grid/{interconnect}/sub.csv",
     output:
         regions_onshore=RESOURCES + "{interconnect}/regions_onshore.geojson",
         regions_offshore=RESOURCES + "{interconnect}/regions_offshore.geojson",
-        # network=RESOURCES + "{interconnect}/elec_base_network_m.nc",
     log:
         "logs/{interconnect}/build_bus_regions_s.log",
     threads: 1
@@ -371,7 +372,7 @@ rule build_renewable_profiles:
         renewable=config["renewable"],
     input:
         base_network= RESOURCES + "{interconnect}/elec_base_network.nc",
-        corine=ancient("data/copernicus/PROBAV_LC100_global_v3.0.1_2019-nrt_Discrete-Classification-map_USA_EPSG-4326.tif"),
+        corine=ancient(DATA + "copernicus/PROBAV_LC100_global_v3.0.1_2019-nrt_Discrete-Classification-map_USA_EPSG-4326.tif"),
         natura=lambda w: (
             DATA + "natura.tiff"
             if config["renewable"][w.technology]["natura"]
@@ -444,12 +445,12 @@ rule add_electricity:
         plants_eia="repo_data/eia_plants_wecc.csv",
         plants_ads="repo_data/ads_plants_locs.csv",
         fuel_costs="repo_data/eia_mappings/fuelCost22.csv",
-        plants_breakthrough="data/breakthrough_network/base_grid/plant.csv",
-        hydro_breakthrough="data/breakthrough_network/base_grid/hydro.csv",
-        wind_breakthrough="data/breakthrough_network/base_grid/wind.csv",
-        solar_breakthrough="data/breakthrough_network/base_grid/solar.csv",
-        ads_renewables = "data/WECC_ADS/processed/",
-        bus2sub="data/breakthrough_network/base_grid/{interconnect}/bus2sub.csv",
+        plants_breakthrough= DATA + "breakthrough_network/base_grid/plant.csv",
+        hydro_breakthrough= DATA + "breakthrough_network/base_grid/hydro.csv",
+        wind_breakthrough= DATA + "breakthrough_network/base_grid/wind.csv",
+        solar_breakthrough= DATA + "breakthrough_network/base_grid/solar.csv",
+        ads_renewables = DATA + "WECC_ADS/processed/",
+        bus2sub= DATA + "breakthrough_network/base_grid/{interconnect}/bus2sub.csv",
         demand_breakthrough_2016=DATA + "breakthrough_network/base_grid/demand.csv",
         ads_2032 = DATA + "WECC_ADS/downloads/2032/Public Data/Hourly Profiles in CSV format",
         ads_2030 = DATA + "WECC_ADS/downloads/2030/WECC 2030 ADS PCM 2020-12-16 (V1.5) Public Data/CSV Shape Files",
@@ -579,7 +580,7 @@ rule solve_network:
     input:
         RESOURCES + "{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}.nc",
     output:
-        "results/{interconnect}/networks/elec_s_{clusters}_ec_l{ll}_{opts}.nc",
+        RESULTS + "{interconnect}/networks/elec_s_{clusters}_ec_l{ll}_{opts}.nc",
     log:
         solver=normpath(
             "logs/solve_network/{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}_solver.log"
@@ -597,17 +598,25 @@ rule solve_network:
 
 rule plot_figures:
     input:
-        network="results/{interconnect}/networks/elec_s_{clusters}_ec_l{ll}_{opts}.nc",
+        network= RESULTS + "{interconnect}/networks/elec_s_{clusters}_ec_l{ll}_{opts}.nc",
         regions_onshore=RESOURCES + "{interconnect}/regions_onshore_s_{clusters}.geojson",
         regions_offshore=RESOURCES + "{interconnect}/regions_offshore_s_{clusters}.geojson",
     output:
         **{
-            fig: "results/{interconnect}/figures/elec_s_{clusters}_ec_l{ll}_{opts}_%s.pdf"
+            fig: RESULTS + "{interconnect}/figures/elec_s_{clusters}_ec_l{ll}_{opts}_%s.pdf"
             % fig
             for fig in FIGURES_SINGLE
         },
     script:
         "scripts/plot_results.py"
+
+rule make_summary:
+    input:
+        network= RESULTS + "{interconnect}/networks/elec_s_{clusters}_ec_l{ll}_{opts}.nc",
+    output:
+        stats = RESULTS + "{interconnect}/summary_tables/stats_c{clusters}_l{ll}_{opts}.csv",
+    script:
+        "scripts/make_summary.py"
 
 
 # Create DAG with- 
