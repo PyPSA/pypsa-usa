@@ -40,7 +40,7 @@ wildcard_constraints:
 # Merge subworkflow configs and main config
 # configfile: "config/config.default.yaml"
 configfile: "config/config.yaml"
-configfile: "config/config.cluster.yaml"
+# configfile: "config/config.cluster.yaml"
 configfile: "config/config.osw.yaml"
 
 ATLITE_NPROCESSES = config["atlite"].get("nprocesses", 4)
