@@ -165,6 +165,9 @@ rule retrieve_eia_data:
         expand(DATA + "eia/{file}", file=DATAFILES_DMD),
     log:
         "logs/retrieve/retrieve_historical_load_data.log",
+    resources:
+        mem_mb=1000,
+        time_min=10,
     script:
         "scripts/retrieve_eia_data.py"
 
@@ -182,6 +185,7 @@ rule retrieve_ship_raster:
         LOGS + "retrieve_ship_raster.log",
     resources:
         mem_mb=5000,
+        time_min=10
     retries: 2
     run:
         move(input[0], output[0])
@@ -198,6 +202,7 @@ rule retrieve_cutout:
         "logs/" + CDIR + "retrieve_cutout_{interconnect}_{cutout}.log",
     resources:
         mem_mb=5000,
+        time_min=60,
     retries: 2
     run:
         move(input[0], output[0])
@@ -211,6 +216,7 @@ rule retrieve_cost_data_eur:
         LOGS + "retrieve_cost_data_eur_{year}.log",
     resources:
         mem_mb=1000,
+        time_min=10,
     script:
         "scripts/retrieve_cost_data_eur.py"
 
@@ -224,10 +230,11 @@ rule retrieve_cost_data_usa:
         ng_commercial_price = DATA + "costs/ng_residential_price.csv",
     params:
         eia_api_key = config["costs"].get("eia_aip_key", None),
-    log:
-        LOGS + "retrieve_cost_data_usa.log",
     resources:
         mem_mb=1000,
+        time_min=10,
+    log:
+        LOGS + "retrieve_cost_data_usa.log",
     script:
         "scripts/retrieve_cost_data_usa.py"
 
