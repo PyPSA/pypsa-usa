@@ -249,7 +249,7 @@ rule build_shapes:
     log:
         "logs/build_shapes_{interconnect}.log",
     threads: 1
-    resources: mem_mb=1000, time_min: 10,
+    resources: mem_mb=1000, time_min= 10
     script:
         "scripts/build_shapes.py"
 
@@ -270,7 +270,7 @@ rule build_base_network:
     log:
         "logs/create_network/{interconnect}.log",
     threads: 4
-    resources: mem_mb=1000, time_min: 10,
+    resources: mem_mb=1000, time_min= 10,
     script:
         "scripts/build_base_network.py"
 
@@ -288,7 +288,7 @@ rule build_bus_regions:
     log:
         "logs/{interconnect}/build_bus_regions_s.log",
     threads: 1
-    resources: mem_mb=1000, time_min: 10,
+    resources: mem_mb=1000, time_min= 10,
     script:
         "scripts/build_bus_regions.py"
 
@@ -301,7 +301,7 @@ rule build_cost_data:
         tech_costs = DATA + "costs_{year}.csv",
     log:
         LOGS + "costs_{year}.log",
-    resources: mem_mb=1000, time_min: 10,
+    resources: mem_mb=1000, time_min= 10,
     script:
         "scripts/build_cost_data.py"
 
