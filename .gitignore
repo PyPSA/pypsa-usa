@@ -9,7 +9,7 @@ dconf
 *.zip
 *.DS_Store
 *.dot
-*config.yaml
+# *config/config.yaml
 
 
 # generated files
