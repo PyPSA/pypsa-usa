@@ -110,6 +110,8 @@ rule retrieve_zenodo_databundles:
         expand(DATA + "breakthrough_network/base_grid/{file}", file=breakthrough_datafiles),
         expand(DATA + "{file}", file=pypsa_usa_datafiles),
         DATA + "natura.tiff",
+    resources:
+        time_min=10,
     log:
         "logs/retrieve/retrieve_databundles.log",
     script:
@@ -129,6 +131,8 @@ rule retrieve_sector_databundle:
     log:
         LOGS + "retrieve_sector_databundle.log",
     retries: 2
+    resources:
+        time_min=10,
     conda:
         "../envs/environment.yaml"
     script:
@@ -139,6 +143,8 @@ rule retrieve_WECC_forecast_data:
         ads_2032 = directory(DATA + "WECC_ADS/downloads/2032/Public Data/Hourly Profiles in CSV format"),
         ads_2030 = directory(DATA + "WECC_ADS/downloads/2030/WECC 2030 ADS PCM 2020-12-16 (V1.5) Public Data/CSV Shape Files"),
         ads_dir = directory(DATA + "WECC_ADS/processed"),
+    resources:
+        time_min=10,
     log:
         "logs/retrieve/retrieve_WECC_forecast_data.log",
     script:
