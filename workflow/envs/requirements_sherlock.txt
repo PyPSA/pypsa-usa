@@ -3,7 +3,7 @@ atlite==0.2.11
 dask==2023.7.0
 
 # Dependencies of the workflow itself
-pandas>=0.24.0,<2.1
+pandas==2.0.3
 xlrd==2.0.1
 openpyxl==3.1.2
 pycountry==22.3.5
@@ -23,6 +23,9 @@ progressbar2==4.2.0
 pyomo==6.6.2
 matplotlib==3.8.0
 powerplantmatching>=0.5.5
+
+# fastparquet
+# pyarrow
 
 #Keep in conda environment when calling ipython
 ipython==8.16.1
