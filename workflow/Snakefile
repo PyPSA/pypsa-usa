@@ -40,7 +40,7 @@ wildcard_constraints:
 # Merge subworkflow configs and main config
 # configfile: "config/config.default.yaml"
 configfile: "config/config.yaml"
-# configfile: "config/config.cluster.yaml"
+configfile: "config/config.cluster.yaml"
 configfile: "config/config.osw.yaml"
 
 ATLITE_NPROCESSES = config["atlite"].get("nprocesses", 4)
@@ -183,9 +183,7 @@ rule retrieve_ship_raster:
         DATA +"shipdensity_global.zip",
     log:
         LOGS + "retrieve_ship_raster.log",
-    resources:
-        mem_mb=5000,
-        time_min=10
+    resources: mem_mb=5000, time_min=10
     retries: 2
     run:
         move(input[0], output[0])
@@ -200,9 +198,7 @@ rule retrieve_cutout:
         "cutouts/" + CDIR + "{interconnect}_{cutout}.nc",
     log:
         "logs/" + CDIR + "retrieve_cutout_{interconnect}_{cutout}.log",
-    resources:
-        mem_mb=5000,
-        time_min=60,
+    resources: mem_mb=5000, time_min=60,
     retries: 2
     run:
         move(input[0], output[0])
@@ -214,9 +210,7 @@ rule retrieve_cost_data_eur:
         pypsa_costs_version = config["costs"].get("version", "v0.6.0")
     log:
         LOGS + "retrieve_cost_data_eur_{year}.log",
-    resources:
-        mem_mb=1000,
-        time_min=10,
+    resources: mem_mb=1000, time_min=10,
     script:
         "scripts/retrieve_cost_data_eur.py"
 
@@ -230,9 +224,7 @@ rule retrieve_cost_data_usa:
         ng_commercial_price = DATA + "costs/ng_residential_price.csv",
     params:
         eia_api_key = config["costs"].get("eia_aip_key", None),
-    resources:
-        mem_mb=1000,
-        time_min=10,
+    resources: mem_mb=1000, time_min=10,
     log:
         LOGS + "retrieve_cost_data_usa.log",
     script:
@@ -257,8 +249,7 @@ rule build_shapes:
     log:
         "logs/build_shapes_{interconnect}.log",
     threads: 1
-    resources:
-        mem_mb=1000,
+    resources: mem_mb=1000, time_min: 10,
     script:
         "scripts/build_shapes.py"
 
@@ -279,8 +270,7 @@ rule build_base_network:
     log:
         "logs/create_network/{interconnect}.log",
     threads: 4
-    resources:
-        mem=500,
+    resources: mem_mb=1000, time_min: 10,
     script:
         "scripts/build_base_network.py"
 
@@ -298,8 +288,7 @@ rule build_bus_regions:
     log:
         "logs/{interconnect}/build_bus_regions_s.log",
     threads: 1
-    resources:
-        mem_mb=1000,
+    resources: mem_mb=1000, time_min: 10,
     script:
         "scripts/build_bus_regions.py"
 
@@ -312,6 +301,7 @@ rule build_cost_data:
         tech_costs = DATA + "costs_{year}.csv",
     log:
         LOGS + "costs_{year}.log",
+    resources: mem_mb=1000, time_min: 10,
     script:
         "scripts/build_cost_data.py"
 
@@ -333,7 +323,8 @@ if config["enable"].get("build_cutout", False):
             "benchmarks/" + CDIR + "build_cutout_{interconnect}_{cutout}"
         threads: ATLITE_NPROCESSES
         resources:
-            mem_mb=ATLITE_NPROCESSES * 1000,
+            mem_mb=ATLITE_NPROCESSES * 1000, 
+            time_min=60,
         conda:
             "../envs/environment.yaml"
         script:
@@ -356,6 +347,7 @@ rule build_ship_raster:
         LOGS + "{interconnect}/build_ship_raster.log",
     resources:
         mem_mb=5000,
+        time_min=10,
     benchmark:
         BENCHMARKS + "{interconnect}/build_ship_raster"
     script:
@@ -375,6 +367,7 @@ rule build_hydro_profiles:
         LOGS + "{interconnect}/build_hydro_profile.log",
     resources:
         mem_mb=5000,
+        time_min=10,
     conda:
         "envs/environment.yaml"
     script:
@@ -423,6 +416,7 @@ rule build_renewable_profiles:
     threads: ATLITE_NPROCESSES
     resources:
         mem_mb=ATLITE_NPROCESSES * 5000,
+        time_min=60,
     wildcard_constraints:
         technology="(?!hydro).*",  # Any technology other than hydro
     script:
@@ -481,6 +475,7 @@ rule add_electricity:
     threads: 1
     resources:
         mem_mb=5000,
+        time_min=20,
     script:
         "scripts/add_electricity.py"
 
@@ -497,6 +492,7 @@ rule simplify_network:
     threads: 4
     resources:
         mem=500,
+        time_min=10,
     script:
         "scripts/simplify_network.py"
 
@@ -526,6 +522,7 @@ rule cluster_network:
     threads: 1
     resources:
         mem_mb=6000,
+        time_min=10,
     script:
         "scripts/cluster_network_eur.py"
 
@@ -542,6 +539,7 @@ rule add_extra_components:
     threads: 4
     resources:
         mem=500,
+        time_min=10,
     script:
         "scripts/add_extra_components.py"
 
@@ -564,6 +562,7 @@ rule prepare_network:
     threads: 4
     resources:
         mem=5000,
+        time_min=10,
     log:
         "logs/prepare_network",
     script:
@@ -605,6 +604,7 @@ rule solve_network:
     threads: 8
     resources:
         mem_mb=memory,
+        time_min=60,
     script:
         "scripts/solve_network.py"
 
@@ -620,6 +620,7 @@ rule plot_figures:
             % fig
             for fig in FIGURES_SINGLE
         },
+    resources: mem_mb=1000, time_min=10,
     script:
         "scripts/plot_results.py"
 
@@ -628,6 +629,7 @@ rule make_summary:
         network= RESULTS + "{interconnect}/networks/elec_s_{clusters}_ec_l{ll}_{opts}.nc",
     output:
         stats = RESULTS + "{interconnect}/summary_tables/stats_c{clusters}_l{ll}_{opts}.csv",
+    resources: mem_mb=1000, time_min=10,
     script:
         "scripts/make_summary.py"
 
