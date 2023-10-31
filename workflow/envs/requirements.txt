@@ -62,7 +62,6 @@ fonttools==4.43.1
 fqdn==1.5.1
 fs==2.4.11
 fsspec==2023.9.2
-GDAL==3.7.2
 geographiclib==1.52
 geojson-rewind==1.0.3
 geopandas==0.14.0
