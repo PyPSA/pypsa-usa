@@ -31,8 +31,8 @@ balancing_area_gis:
 #TODO: #19 remove config list of BA's and reference geojson values directly instead
 countries: [US]  
 
-focus_weights: 
-  CISO-PGAE: 0.5
+# focus_weights: 
+#   CISO-PGAE: 0.5
 
 # TODO: #11 change load data and generator data to be a snakemake wildcard value
 network_configuration: "pypsa-usa" # "pypsa-usa" or "ads2032" or "breakthrough"

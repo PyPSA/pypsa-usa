@@ -139,13 +139,10 @@ if __name__ == "__main__":
     url_2015_present = 'https://gridemissions.s3.us-east-2.amazonaws.com/EBA_raw.csv.gz'
 
 
-    rootpath = "./"
-    PATH_DOWNLOAD = Path(f"{rootpath}/resources/eia")
-    PATH_DOWNLOAD_RAW = Path(f"{rootpath}/resources/eia/raw")
-    PATH_DOWNLOAD_CSV = Path(f"{rootpath}/resources/eia/6moFiles")
+    PATH_DOWNLOAD = Path(snakemake.output[0]).parent
+    PATH_DOWNLOAD_CSV = PATH_DOWNLOAD / "6moFiles"
 
     PATH_DOWNLOAD_CSV.mkdir(parents=True, exist_ok=True)
-    PATH_DOWNLOAD_RAW.mkdir(parents=True, exist_ok=True)
     PATH_DOWNLOAD.mkdir(parents=True, exist_ok=True)
 
     urls = [

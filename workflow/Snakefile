@@ -38,8 +38,8 @@ wildcard_constraints:
 # -------------------------- Config and Subworkflows ------------------------- #
 
 # Merge subworkflow configs and main config
-configfile: "config/config.default.yaml"
-# configfile: "config/config.yaml"
+# configfile: "config/config.default.yaml"
+configfile: "config/config.yaml"
 configfile: "config/config.cluster.yaml"
 configfile: "config/config.osw.yaml"
 
@@ -51,7 +51,7 @@ CDIR = RDIR if not run.get("shared_cutouts") else ""
 
 LOGS = "logs/" + RDIR
 BENCHMARKS = "benchmarks/" + RDIR
-DATA = "data/" + RDIR
+DATA = "data/"
 RESOURCES = "resources/" + RDIR if not run.get("shared_resources") else "resources/"
 RESULTS = "results/" + RDIR
 
@@ -107,7 +107,7 @@ rule retrieve_zenodo_databundles:
     output:
         expand(DATA + "breakthrough_network/base_grid/{file}", file=breakthrough_datafiles),
         expand(DATA + "{file}", file=pypsa_usa_datafiles),
-        "data/natura.tiff",
+        DATA + "natura.tiff",
     log:
         "logs/retrieve/retrieve_databundles.log",
     script:
@@ -154,7 +154,7 @@ DATAFILES_DMD = [
 
 rule retrieve_eia_data:
     output:
-        expand(RESOURCES + "eia/{file}", file=DATAFILES_DMD),
+        expand(DATA + "eia/{file}", file=DATAFILES_DMD),
     log:
         "logs/retrieve/retrieve_historical_load_data.log",
     script:
@@ -196,7 +196,7 @@ rule retrieve_cutout:
 
 rule retrieve_cost_data_eur:
     output:
-        pypsa_technology_data = RESOURCES + "costs/{year}/pypsa_eur.csv",
+        pypsa_technology_data = DATA + "costs/{year}/pypsa_eur.csv",
     params:
         pypsa_costs_version = config["costs"].get("version", "v0.6.0")
     log:
@@ -208,12 +208,12 @@ rule retrieve_cost_data_eur:
 
 rule retrieve_cost_data_usa:
     output:
-        nrel_atb = RESOURCES + "costs/nrel_atb.parquet",
-        # nrel_atb_transport = RESOURCES + "costs/nrel_atb_transport.xlsx",
-        ng_electric_power_price = RESOURCES + "costs/ng_electric_power_price.csv",
-        ng_industrial_price = RESOURCES + "costs/ng_industrial_price.csv",
-        ng_residential_price = RESOURCES + "costs/ng_commercial_price.csv",
-        ng_commercial_price = RESOURCES + "costs/ng_residential_price.csv",
+        nrel_atb = DATA + "costs/nrel_atb.parquet",
+        # nrel_atb_transport = DATA + "costs/nrel_atb_transport.xlsx",
+        ng_electric_power_price = DATA + "costs/ng_electric_power_price.csv",
+        ng_industrial_price = DATA + "costs/ng_industrial_price.csv",
+        ng_residential_price = DATA + "costs/ng_commercial_price.csv",
+        ng_commercial_price = DATA + "costs/ng_residential_price.csv",
     params:
         eia_api_key = config["costs"].get("eia_aip_key", None),
     log:
@@ -292,8 +292,8 @@ rule build_bus_regions:
 
 rule build_cost_data:
     input:
-        nrel_atb = RESOURCES + "costs/nrel_atb.parquet",
-        pypsa_technology_data = RESOURCES + "costs/{year}/pypsa_eur.csv",
+        nrel_atb = DATA + "costs/nrel_atb.parquet",
+        pypsa_technology_data = DATA + "costs/{year}/pypsa_eur.csv",
     output:
         tech_costs = DATA + "costs_{year}.csv",
     log:
@@ -453,11 +453,11 @@ rule add_electricity:
         demand_breakthrough_2016=DATA + "breakthrough_network/base_grid/demand.csv",
         ads_2032 = DATA + "WECC_ADS/downloads/2032/Public Data/Hourly Profiles in CSV format",
         ads_2030 = DATA + "WECC_ADS/downloads/2030/WECC 2030 ADS PCM 2020-12-16 (V1.5) Public Data/CSV Shape Files",
-        eia = expand(RESOURCES + "eia/{file}", file=DATAFILES_DMD),
+        eia = expand(DATA + "eia/{file}", file=DATAFILES_DMD),
         **{
             f"gen_cost_mult_{Path(x).stem}":f"repo_data/locational_multipliers/{Path(x).name}" for x in Path("repo_data/locational_multipliers/").glob("*")
         },
-        ng_electric_power_price = RESOURCES + "costs/ng_electric_power_price.csv",
+        ng_electric_power_price = DATA + "costs/ng_electric_power_price.csv",
     output:
         RESOURCES + "{interconnect}/elec_base_network_l_pp.nc",
     log:
