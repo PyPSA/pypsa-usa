@@ -91,7 +91,7 @@ if __name__ == "__main__":
             2032: {
                 'load': 'Profile_Load',
                 'solar': 'Profile_Solar',
-                'wind': 'Profile_Wind',
+                'onwind': 'Profile_Wind',
                 'hydro': 'Profile_Hydro',
                 'btm_solar': 'Profile_BTM Solar',
                 'pumped_storage': 'Profile_Pump Storage',
@@ -100,7 +100,7 @@ if __name__ == "__main__":
             2030: {
                 'load': 'Data_Load',
                 'solar': 'Data_Solar PV',
-                'wind': 'Data_WT',
+                'onwind': 'Data_WT',
                 'hydro': 'Data_Hydro',
                 'btm_solar': 'Data_SolarPV_Rooftop',
                 'pumped_storage': 'Data_PumpStorage',

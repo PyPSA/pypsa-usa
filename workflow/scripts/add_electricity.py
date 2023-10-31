@@ -79,6 +79,7 @@ from scipy import sparse
 import xarray as xr
 from _helpers import configure_logging, update_p_nom_max, export_network_for_gis_mapping
 import constants as const
+import modify_network_osw as osw
 from typing import Dict, Any, List, Union
 from pathlib import Path 
 from shapely.prepared import prep
@@ -148,6 +149,9 @@ def sanitize_carriers(n, config):
         logger.warning(f"tech_colors for carriers {missing_i} not defined in config.")
     n.carriers["color"] = n.carriers.color.where(n.carriers.color != "", colors)
 
+def sanitize_bus_data(n):
+    drop_list = ['load_dissag']
+    n.buses.drop(columns=drop_list, inplace=True)
 
 def add_co2_emissions(n, costs, carriers):
     """
@@ -733,11 +737,14 @@ def prepare_ads_demand(n: pypsa.Network,
     demand.drop(columns=['Unnamed: 44', 'TH_Malin', 'TH_Mead', 'TH_PV'], inplace=True)
     ba_list_map = {'CISC': 'CISO-SCE', 'CISD': 'CISO-SDGE','VEA': 'CISO-VEA','WAUW': 'WAUW_SPP'}
     demand.rename(columns=ba_list_map,inplace=True)
-    demand.set_index('Index',inplace=True)
+
+    demand.index = pd.to_datetime(demand.index)
+    nhours = len(n.snapshots)
+    demand = demand.iloc[:nhours,:] #hotfix to fit data
 
     demand.index = n.snapshots
     n.buses['load_dissag'] = n.buses.balancing_area.replace({'': 'missing_ba'})
-    intersection = set(demand.columns).intersection(n.buses.ba_load_data.unique())
+    intersection = set(demand.columns).intersection(n.buses.load_dissag.unique())
     demand = demand[list(intersection)]
     return disaggregate_demand_to_buses(n, demand)
 
@@ -784,7 +791,7 @@ def add_demand_from_file(n: pypsa.Network,
     """
     if demand_type == "breakthrough":
         demand_per_bus = prepare_breakthrough_demand_data(n, fn_demand)
-    elif demand_type == "ads":
+    elif demand_type == "ads2032":
         demand_per_bus = prepare_ads_demand(n, fn_demand)
     elif demand_type == "pypsa-usa":
         demand_per_bus = prepare_eia_demand(n, fn_demand)
@@ -883,8 +890,8 @@ def attach_conventional_generators(
         efficiency=plants.efficiency,
         marginal_cost=marginal_cost,
         capital_cost=plants.capital_cost,
-        build_year=plants.build_year.fillna(0).astype(int),
-        lifetime=(plants.dateout - plants.build_year).fillna(np.inf),
+        # build_year=plants.build_year.fillna(0).astype(int),
+        # lifetime=(plants.dateout - plants.build_year).fillna(np.inf),
         **committable_attrs,
     )
 
@@ -977,7 +984,7 @@ def attach_battery_storage(n: pypsa.Network,
         p_nom=plants_filt.p_nom,
         p_nom_extendable='battery' in extendable_carriers['Store'],
         max_hours = plants_filt.energy_capacity_mwh / plants_filt.p_nom,
-        build_year=plants_filt.operating_year,
+        # build_year=plants_filt.operating_year,
         efficiency_store= 1.0,
         efficiency_dispatch=1.0, #TODO: Add efficiency_dispatch to config file
         cyclic_state_of_charge=True,
@@ -1030,8 +1037,8 @@ def assign_ads_missing_lat_lon(plants,n):
     for i, row in plants_unmatched.iterrows():
         # print(row.balancing_area)
         buses_in_area = buses[buses.balancing_area == row.balancing_area].sort_values(by='v_nom', ascending=False)
-        top_5_buses = buses_in_area.iloc[:4]
-        bus = top_5_buses.iloc[random.randint(0, 3)]
+        top_n_buses = buses_in_area.iloc[:20]
+        bus = top_n_buses.iloc[random.randint(0, top_n_buses.shape[0]-1)]
         plants_unmatched.loc[i,'longitude'] = bus.x
         plants_unmatched.loc[i,'latitude'] = bus.y
 
@@ -1053,7 +1060,7 @@ def attach_ads_renewables(n, plants_df, renewable_carriers, extendable_carriers,
         logger.info(f"Adding {len(plants_filt)} {tech_type} generators to the network.")
 
         if tech_type in ["wind", "offwind"]: 
-            profiles = pd.read_csv(ads_renewables_path + "/wind_2032.csv", index_col=0)
+            profiles = pd.read_csv(ads_renewables_path + "/onwind_2032.csv", index_col=0)
         elif tech_type == "solar":
             profiles = pd.read_csv(ads_renewables_path + "/solar_2032.csv", index_col=0)
             dpv = pd.read_csv(ads_renewables_path + "/btm_solar_2032.csv", index_col=0)
@@ -1064,6 +1071,10 @@ def attach_ads_renewables(n, plants_df, renewable_carriers, extendable_carriers,
         
         profiles.columns = profiles.columns.str.replace('.dat: 2032','')
         profiles.columns = profiles.columns.str.replace('.DAT: 2032','')
+
+        nhours = len(n.snapshots)
+        profiles = profiles.iloc[:nhours,:] #hotfix to fit data
+
 
         profiles.index = n.snapshots
         profiles.columns = profiles.columns.astype(str)
@@ -1145,7 +1156,6 @@ def load_powerplants_ads(
     # read in data 
     plants = pd.read_csv(ads_dataset, index_col=0, dtype={"bus_assignment": "str"}).rename(columns=str.lower)
     plants.rename(columns={'fueltype':'fuel_type_ads'}, inplace=True)
-
     # apply mappings if required 
     if carrier_mapper:
         plants['carrier'] = plants.fuel_type_ads.map(carrier_mapper)
@@ -1158,6 +1168,7 @@ def load_powerplants_ads(
     # apply missing data to powerplants 
     plants = add_missing_fuel_cost(plants, snakemake.input.fuel_costs)
     plants = add_missing_heat_rates(plants, snakemake.input.fuel_costs)
+    plants = plants.drop(columns= 'generatorkey').reset_index().rename(columns={'generatorkey':'generator_id'})
 
     plants['generator_name'] = plants.ads_name.astype(str)
     plants['p_nom'] = plants['maxcap(mw)']
@@ -1166,6 +1177,10 @@ def load_powerplants_ads(
     plants['efficiency'] = 1 / (plants['heat_rate'] / 3.412) #MMBTu/MWh to MWh_electric/MWh_thermal
     plants['ramp_limit_up'] = plants['rampup rate(mw/minute)']/ plants['maxcap(mw)'] * 60 #MW/min to p.u./hour
     plants['ramp_limit_down'] = plants['rampdn rate(mw/minute)']/ plants['maxcap(mw)'] * 60 #MW/min to p.u./hour
+
+    #assign energy_capacity_mwh to batteries
+    battery_locs = plants.carrier =='battery'
+    plants.loc[battery_locs,'energy_capacity_mwh'] = plants.loc[battery_locs,'p_nom'] * snakemake.config['electricity']['max_hours']['battery']
     return plants
 
 
@@ -1190,7 +1205,7 @@ if __name__ == "__main__":
     configure_logging(snakemake)
 
     params = snakemake.params
-    configuration = snakemake.config["network_configuration"]
+    configuration = params.network_configuration
     n = pypsa.Network(snakemake.input.base_network)
     n.name = configuration
     
@@ -1362,16 +1377,16 @@ if __name__ == "__main__":
     n.generators["p_nom_min"] = n.generators.apply(
         lambda x: (x["p_nom"] - 0.001) if (x["p_nom_extendable"] and x["p_nom_min"] == 0) else x["p_nom_min"], axis=1)
 
-    if snakemake.config['osw_config']['enable_osw']:
+    osw_config = snakemake.params.osw
+    if osw_config['enable_osw']:
         logger.info('Adding OSW in network')
-        humboldt_capacity = snakemake.config['osw_config']['humboldt_capacity']
-        import modify_network_osw as osw
+        humboldt_capacity = osw_config['humboldt_capacity']
         osw.build_OSW_base_configuration(n, osw_capacity=humboldt_capacity)
-        if snakemake.config['osw_config']['build_hvac']: osw.build_OSW_500kV(n)
-        if snakemake.config['osw_config']['build_hvdc_subsea']: osw.build_hvdc_subsea(n)
-        if snakemake.config['osw_config']['build_hvdc_overhead']: osw.build_hvdc_overhead(n)
-
+        if osw_config['build_hvac']: osw.build_OSW_500kV(n)
+        if osw_config['build_hvdc_subsea']: osw.build_hvdc_subsea(n)
+        if osw_config['build_hvdc_overhead']: osw.build_hvdc_overhead(n)
     sanitize_carriers(n, snakemake.config)
+    sanitize_bus_data(n)
     n.meta = snakemake.config
     n.export_to_netcdf(snakemake.output[0])
 

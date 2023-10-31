@@ -422,6 +422,8 @@ rule add_electricity:
         electricity=config["electricity"],
         conventional=config["conventional"],
         costs=config["costs"],
+        osw=config["osw_config"],
+        network_configuration=config["network_configuration"],
     input:
         **{
             f"profile_{tech}": RESOURCES + "{interconnect}" + f"/profile_{tech}.nc"

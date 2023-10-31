@@ -18,7 +18,6 @@ def simplify_network_to_voltage_level(n, voltage_level):
     logger.info("Mapping all network lines onto a single layer")
 
     n.buses["v_nom"] = voltage_level
-
     (linetype,) = n.lines.loc[n.lines.v_nom == voltage_level, "type"].unique()
     lines_v_nom_b = n.lines.v_nom != voltage_level
     n.lines.loc[lines_v_nom_b, "num_parallel"] *= (

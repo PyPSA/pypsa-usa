@@ -1,5 +1,6 @@
 import pandas as pd
 import pypsa
+import scipy.interpolate
 
 #Global Variables
 
@@ -46,7 +47,6 @@ sf_345kv_substation_bus_id = '2021181'
 pittsburg_substation_bus_id = '2021641'
 
 def define_line_types(network):    
-    # # import pdb;pdb.set_trace()
     # network.line_types.loc["500kvac"] = pd.Series(
     #     [60, 0.0683, 0.335, 15, 1.01, 'ol'],
     #     index=["f_nom", "r_per_length", "x_per_length", "c_per_length", "i_nom", "mounting"],
@@ -57,10 +57,15 @@ def define_line_types(network):
     #     index=["f_nom", "r_per_length", "x_per_length",  "c_per_length", "i_nom", "mounting"],
     #     )
     
-    network.line_types.loc["Rail"] = pd.Series(
-        [60, 0.0683, 0.335, 15, 1.01],
-        index=["f_nom", "r_per_length", "x_per_length", "c_per_length", "i_nom"],
-        )
+    # network.line_types.loc["Rail"] = pd.Series(
+    #     [60, 0.0683, 0.335, 15, 1.01],
+    #     index=["f_nom", "r_per_length", "x_per_length", "c_per_length", "i_nom"],
+    #     )
+
+    # 230.: "Al/St 240/40 2-bundle 220.0"
+    # 345.: "Al/St 240/40 4-bundle 380.0"
+    # 500.: "Al/St 560/50 4-bundle 750.0"
+    # 765.: "Al/St 560/50 4-bundle 750.0"
     return network
 
 def add_hvdc_subsea(network, line_name, bus0, bus1):
@@ -68,8 +73,7 @@ def add_hvdc_subsea(network, line_name, bus0, bus1):
                 name= line_name, 
                 bus0=bus0, 
                 bus1=bus1,
-                type='Rail',
-                # type="HVDC_VSC", 
+                type='HVDC Oil filled 1400',
                 carrier = "DC",
                 efficiency=1,
                 p_nom=2000,
@@ -81,8 +85,7 @@ def add_hvdc_overhead(network, line_name, bus0, bus1):
             name = line_name,
             bus0=bus0, 
             bus1=bus1,
-            type="Rail",
-            # type="HVDC_LCC", 
+            type="HVDC XLPE 1000",
             carrier = "DC",
             efficiency=1,
             p_nom=3000,
@@ -97,8 +100,7 @@ def add_hvac_500kv(network, line_name, bus0, bus1):
                 r=2.8910114,
                 x=84.8225115,
                 s_nom=3200,
-                type="Rail",
-                # type="500kvac",
+                type="Al/St 560/50 4-bundle 750.0",
                 carrier = 'AC',
         )
     network.lines.loc[line_name, "interconnect"] = "Western"
@@ -109,8 +111,8 @@ def add_osw_turbines(network, plant_name, capacity,  pu_time_series):
     if pu_time_series.index.shape[0] != network.snapshots.shape[0]:
         #extend a pandas series to the length of the network.snapshots
         ts = pd.Series(index=network.snapshots)
-        ts.values[:8760] = pu_time_series.values
-        ts.values[8760:] = pu_time_series.values[:24]
+        ts.values[:network.snapshots.shape[0]] = pu_time_series.values[:network.snapshots.shape[0]]
+        ts.fillna(0)
         pu_time_series = ts
     else:
         pu_time_series.index = network.snapshots
@@ -143,10 +145,12 @@ def add_export_array_module(network, name, export_cable_id,
                 v_nom = 230,
                 carrier = 'AC',
                 )
-    network.buses.loc[f'{name}_floating_sub', 'substation'] = False
+    # network.buses.loc[f'{name}_floating_sub', 'substation'] = False
     network.buses.loc[f'{name}_floating_sub', 'balancing_area'] = 'CISO-PGAE'
     network.buses.loc[f'{name}_floating_sub', 'country'] = 'US'
     network.buses.loc[f'{name}_floating_sub', 'sub_id'] = 231
+    network.buses.loc[f'{name}_floating_sub', 'interconnect'] = 'Western'
+    network.buses.loc[f'{name}_floating_sub', 'load_dissag'] = 'no_load'
 
 
     #Add new onshore bus:
@@ -157,10 +161,12 @@ def add_export_array_module(network, name, export_cable_id,
                 v_nom = 230,
                 carrier = 'AC',
                 )
-    network.buses.loc[f'{name}_onshore_bus_230kv', 'substation'] = False
+    # network.buses.loc[f'{name}_onshore_bus_230kv', 'substation'] = False
     network.buses.loc[f'{name}_onshore_bus_230kv', 'balancing_area'] = 'CISO-PGAE'
     network.buses.loc[f'{name}_onshore_bus_230kv', 'country'] = 'US'
     network.buses.loc[f'{name}_onshore_bus_230kv', 'sub_id'] = 232
+    network.buses.loc[f'{name}_onshore_bus_230kv', 'interconnect'] = 'Western'
+    network.buses.loc[f'{name}_onshore_bus_230kv', 'load_dissag'] = 'no_load'
 
 
     #Add new export cable
@@ -169,7 +175,7 @@ def add_export_array_module(network, name, export_cable_id,
                 bus0 = f'{name}_floating_sub',
                 bus1 = f'{name}_onshore_bus_230kv',
                 s_nom = capacity,
-                type = 'Rail',
+                type = 'Al/St 240/40 2-bundle 220.0',
                 # type = 'export_cable',
                 carrier = 'AC',
                 x = 10, #revisit resistance and reactance values later
@@ -187,10 +193,12 @@ def add_export_array_module(network, name, export_cable_id,
                 v_nom = 500,
                 carrier = 'AC',
                 )
-    network.buses.loc[f'{name}_onshore_bus_500kv', 'substation'] = False
+    # network.buses.loc[f'{name}_onshore_bus_500kv', 'substation'] = False
     network.buses.loc[f'{name}_onshore_bus_500kv', 'balancing_area'] = 'CISO-PGAE'
     network.buses.loc[f'{name}_onshore_bus_500kv', 'country'] = 'US'
     network.buses.loc[f'{name}_onshore_bus_500kv', 'sub_id'] = 501
+    network.buses.loc[f'{name}_onshore_bus_500kv', 'interconnect'] = 'Western'
+    network.buses.loc[f'{name}_onshore_bus_500kv', 'load_dissag'] = 'no_load'
 
 
     #Add new transformer
@@ -208,7 +216,7 @@ def add_export_array_module(network, name, export_cable_id,
 
 # Load the network
 # resources_folder= os.path.join(os.path.dirname(os.getcwd()), 'resources')
-# network = pypsa.Network(os.path.join(resources_folder, 'western/elec_base_network_l_pp.nc'))
+# network = pypsa.Network(os.path.join(resources_folder, 'Western/elec_base_network_l_pp.nc'))
 
 # Load Offshore Wind Time Series Data
 # osw_ts = pd.read_csv(snakemake.input.osw_ts, index_col=0, parse_dates=True)
@@ -249,6 +257,7 @@ def build_OSW_500kV(network):
                 carrier = 'AC',
                 )
     network.buses.loc['fern_road_sub', 'sub_id'] = 503
+    network.buses.loc['fern_road_sub', 'interconnect'] = 'Western'
 
     # Add 500 kV line from Humboldt Onshore Bus to Fern Road Substation
     add_hvac_500kv(network,
@@ -278,13 +287,14 @@ def build_OSW_500kV(network):
                 carrier= 'AC',
                 )
     network.buses.loc['tesla_sub_500kv', 'sub_id'] = 502
+    network.buses.loc['tesla_sub_500kv', 'interconnect'] = 'interconnect'
 
     add_hvac_500kv(network,
                     line_name="fern_tesla_500kv",
                     bus0 = "fern_road_sub",
                     bus1 = "tesla_sub_500kv",
                     )
-
+    
     network.add("Transformer",
                 name = "tesla_step_up_transformer",
                 bus0 = "tesla_sub_500kv",
@@ -306,7 +316,8 @@ def build_hvdc_overhead(network):
                 v_nom = 500,
                 carrier= 'AC',
                 )
-    network.buses.loc['BayHub_500kV', 'sub_id'] = 504
+    network.buses.loc['Pittsburg_500kV', 'sub_id'] = 504
+    network.buses.loc['Pittsburg_500kV', 'interconnect'] = 'Western'
 
     network.add("Transformer",
                 name = "Pittsburg_transformer",
