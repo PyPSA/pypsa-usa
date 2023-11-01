@@ -294,11 +294,12 @@ if __name__ == "__main__":
 
     if snakemake.config['solving']['options']['nhours'] < 8760:
         nhours= snakemake.config['solving']['options']['nhours']
-        enddate = pd.to_datetime('2016-01-01') + pd.Timedelta(nhours%24,'h')
+        enddate = pd.to_datetime('2019-01-01') + pd.Timedelta(nhours%24,'h')
         enddate
+
         for timeslice in list(range(1, enddate.month)) + ["all"]:
             snapshots = (
-                n.snapshots.get_loc(f"2016-{timeslice}")
+                n.snapshots.get_loc(f"2019-{timeslice}")
                 if timeslice != "all"
                 else slice(None, None)
             )
@@ -320,10 +321,7 @@ if __name__ == "__main__":
     else:
         for timeslice in list(range(1, 12)) + ["all"]:
             snapshots = (
-                n.snapshots.get_loc(f"2016-{timeslice}")
-                if timeslice != "all"
-                else slice(None, None)
-            )
+                n.snapshots)
             fig, ax = plt.subplots(figsize=(14, 4))
             production[snapshots].plot.area(ax=ax, color=colors, alpha=0.7, legend="reverse")
             # demand.plot.line(ax=ax, ls='-', color='darkblue')
