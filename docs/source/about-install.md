@@ -25,8 +25,8 @@ PyPSA-USA uses mamba to manage project dependencies. You can download and instal
 Once mamba is installed, use the environment file within your git repository to activate the `pypsa-usa` conda environment. This step can take ~10-20 minutes. After creating the mamba environment, you will only need to activate it before running the snakemake workflow.
 
 ```bash 
-$ mamba env create -f environment.yaml
-$ mamba activate pypsa-usa
+$ conda env create -f workflow/envs/environment.yaml
+$ conda activate pypsa-usa
 ```
 
 You also have the option to use miniconda. Download [Miniconda](https://docs.conda.io/en/latest/miniconda.html) following their [instructions](https://docs.conda.io/en/latest/miniconda.html). You can create the environment using the same commannds as above with `mamba` replaced with `conda`.
