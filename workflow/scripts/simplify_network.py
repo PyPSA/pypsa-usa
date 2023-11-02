@@ -146,6 +146,8 @@ if __name__ == "__main__":
     #new busmap definition
     busmap_to_sub = n.buses.sub_id.astype(int).astype(str).to_frame()
 
+    # if osw_config['enable_osw']:
+
     busmaps = [trafo_map, busmap_to_sub.sub_id]
     busmaps = reduce(lambda x, y: x.map(y), busmaps[1:], busmaps[0])
 

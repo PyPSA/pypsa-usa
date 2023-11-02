@@ -150,7 +150,7 @@ def sanitize_carriers(n, config):
     n.carriers["color"] = n.carriers.color.where(n.carriers.color != "", colors)
 
 def sanitize_bus_data(n):
-    drop_list = ['load_dissag']
+    drop_list = ['load_dissag','zone_id']
     n.buses.drop(columns=drop_list, inplace=True)
 
 def add_co2_emissions(n, costs, carriers):
@@ -1379,8 +1379,8 @@ if __name__ == "__main__":
 
     osw_config = snakemake.params.osw
     if osw_config['enable_osw']:
-        logger.info('Adding OSW in network')
         humboldt_capacity = osw_config['humboldt_capacity']
+        logger.info(f'Adding {humboldt_capacity} OSW in network')
         osw.build_OSW_base_configuration(n, osw_capacity=humboldt_capacity)
         if osw_config['build_hvac']: osw.build_OSW_500kV(n)
         if osw_config['build_hvdc_subsea']: osw.build_hvdc_subsea(n)

@@ -281,98 +281,34 @@ if __name__ == "__main__":
     ####
     ## Operations Time-Series Plots
     ####
-    carriers = n.generators.carrier
-    production = (
-        n.generators_t.p.groupby(carriers, axis=1)
-        .sum()
-        .rename(columns=n.carriers.nice_name)
-        / 1e3
-    )
-    production = production.loc[:, production.sum() > 0.1]
+
+    start_snapshot = snakemake.config['snapshots']['start']
+    end_snapshot = snakemake.config['snapshots']['end']
+    carriers_gen = n.generators.carrier
+    carriers_storageUnits = n.storage_units.carrier
+    production = n.generators_t.p.groupby(carriers_gen, axis=1).sum().rename(columns=n.carriers.nice_name)/ 1e3
+    storage = n.storage_units_t.p.groupby(carriers_storageUnits, axis=1).sum()/1e3
+    storage_charge = storage[storage > 0].fillna(0).rename(columns={'battery':'Battery Discharging'})
+    storage_discharge = storage[storage < 0].fillna(0).rename(columns={'battery':'Battery Charging'})
+    energymix = pd.concat([production, storage_charge, storage_discharge], axis=1)
+
     demand = n.loads_t.p.sum(1).rename("Demand") / 1e3
     colors = n.carriers.set_index("nice_name").color[production.columns]
+    colors = pd.concat([colors, pd.Series({'Battery Discharging':'#88a75b', 'Battery Charging':'#5d4e29'})])
 
-    if snakemake.config['solving']['options']['nhours'] < 8760:
-        nhours= snakemake.config['solving']['options']['nhours']
-        enddate = pd.to_datetime('2019-01-01') + pd.Timedelta(nhours%24,'h')
-        enddate
-
-        for timeslice in list(range(1, enddate.month)) + ["all"]:
-            snapshots = (
-                n.snapshots.get_loc(f"2019-{timeslice}")
-                if timeslice != "all"
-                else slice(None, None)
-            )
-            fig, ax = plt.subplots(figsize=(14, 4))
-            production[snapshots].plot.area(ax=ax, color=colors, alpha=0.7, legend="reverse")
-            # demand.plot.line(ax=ax, ls='-', color='darkblue')
-            ax.legend(bbox_to_anchor=(1, 1), loc="upper left")
-            ax.set_ylabel("Power [GW]")
-            ax.set_xlabel("")
-            fig.tight_layout()
-            suffix = (
-                "-" + datetime.strptime(str(timeslice), "%m").strftime("%b")
-                if timeslice != "all"
-                else ""
-            )
-            path = Path(snakemake.output.operation_area)
-            fig.savefig(path.parent / (path.stem + suffix + path.suffix))
-
-    else:
-        for timeslice in list(range(1, 12)) + ["all"]:
-            snapshots = (
-                n.snapshots)
-            fig, ax = plt.subplots(figsize=(14, 4))
-            production[snapshots].plot.area(ax=ax, color=colors, alpha=0.7, legend="reverse")
-            # demand.plot.line(ax=ax, ls='-', color='darkblue')
-            ax.legend(bbox_to_anchor=(1, 1), loc="upper left")
-            ax.set_ylabel("Power [GW]")
-            ax.set_xlabel("")
-            fig.tight_layout()
-            suffix = (
-                "-" + datetime.strptime(str(timeslice), "%m").strftime("%b")
-                if timeslice != "all"
-                else ""
-            )
-            path = Path(snakemake.output.operation_area)
-            fig.savefig(path.parent / (path.stem + suffix + path.suffix))
-
-
-
+    fig, ax = plt.subplots(figsize=(14, 4))
+    energymix[start_snapshot:end_snapshot].plot.area(ax=ax, color=colors, alpha=0.7, legend="reverse")
+    demand[start_snapshot:end_snapshot].plot.line(ax=ax, ls='-', color='darkblue')
+    ax.legend(bbox_to_anchor=(1, 1), loc="upper left")
+    ax.set_ylabel("Power [GW]")
+    ax.set_xlabel("")
+    ax.title.set_text(f'PyPSA-USA Simulation with {n_clusters} Node n')
+    fig.tight_layout()
+    fig.savefig(snakemake.output.operation_area)
+    
     fig, ax = plt.subplots()
     total_production = n.snapshot_weightings.generators @ production
     total_production.div(1e3).plot.bar(color=colors, ax=ax)
     ax.set_ylabel("Total production [TWh]")
     ax.set_xlabel("")
     fig.savefig(snakemake.output.operation_bar)
-
-
-    fig, ax = plt.subplots()
-
-    production = n.generators_t.p
-    operational_costs = (
-        (production * n.generators.marginal_cost)
-        .groupby(carriers, axis=1)
-        .sum()
-        .rename(columns=n.carriers.nice_name)
-    ).sum()
-
-    capital_costs = (
-        n.generators.eval("p_nom_opt * capital_cost")
-        .groupby(carriers)
-        .sum()
-        .rename(n.carriers.nice_name)
-    )
-
-    costs = pd.concat([operational_costs, capital_costs], axis=1, keys=["OPEX", "CAPEX"])
-    costs = costs.reset_index("carrier")
-
-
-    s1 = sns.barplot(y="carrier", x="CAPEX", data=costs, alpha=0.6, ax=ax, palette=colors)
-    s2 = sns.barplot(
-        y="carrier", x="OPEX", data=costs, ax=ax, left=costs["CAPEX"], palette=colors
-    )
-
-    ax.set_ylabel("")
-    ax.set_xlabel("CAPEX & OPEX [$]")
-    fig.savefig(snakemake.output.cost_bar)

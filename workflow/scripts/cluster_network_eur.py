@@ -128,7 +128,7 @@ def normed(x): return (x/x.sum()).fillna(0.)
 
 
 def weighting_for_country(n, x):
-    conv_carriers = {'OCGT','CCGT','PHS', 'hydro'}
+    conv_carriers = {'OCGT','CCGT','PHS', 'hydro'}#,'coal','oil','nuclear','solar','onwind'}
     gen = (n
            .generators.loc[n.generators.carrier.isin(conv_carriers)]
            .groupby('bus').p_nom.sum()
@@ -144,6 +144,7 @@ def weighting_for_country(n, x):
     l = normed(load.reindex(b_i, fill_value=0))
 
     w = g + l
+    if w.max() == 0: import pdb; pdb.set_trace()
     return (w * (100. / w.max())).clip(lower=1.).astype(int)
 
 
