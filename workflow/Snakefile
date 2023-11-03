@@ -242,10 +242,10 @@ rule build_shapes:
         onshore_shapes = "repo_data/BA_shapes_new/Modified_BE_BA_Shapes.shp",
         offshore_shapes = "repo_data/BOEM_CA_OSW_GIS/CA_OSW_BOEM_CallAreas.shp"
     output:
-        country_shapes = RESOURCES + "{interconnect}/country_shapes.geojson",
-        onshore_shapes = RESOURCES + "{interconnect}/onshore_shapes.geojson",
-        offshore_shapes = RESOURCES + "{interconnect}/offshore_shapes.geojson",
-        state_shapes = RESOURCES + "{interconnect}/state_boundaries.geojson"
+        country_shapes = RESOURCES_BASE + "{interconnect}/country_shapes.geojson",
+        onshore_shapes = RESOURCES_BASE + "{interconnect}/onshore_shapes.geojson",
+        offshore_shapes = RESOURCES_BASE + "{interconnect}/offshore_shapes.geojson",
+        state_shapes = RESOURCES_BASE + "{interconnect}/state_boundaries.geojson"
     log:
         "logs/build_shapes_{interconnect}.log",
     threads: 1
