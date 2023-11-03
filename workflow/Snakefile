@@ -494,6 +494,7 @@ rule simplify_network:
     resources:
         mem=3000,
         time_min=10,
+        cpus_per_task=1,
     script:
         "scripts/simplify_network.py"
 
@@ -524,6 +525,7 @@ rule cluster_network:
     resources:
         mem_mb=6000,
         time_min=10,
+        cpus_per_task=1,
     script:
         "scripts/cluster_network_eur.py"
 
@@ -541,6 +543,7 @@ rule add_extra_components:
     resources:
         mem=3000,
         time_min=10,
+        cpus_per_task=1,
     script:
         "scripts/add_extra_components.py"
 
@@ -564,6 +567,7 @@ rule prepare_network:
     resources:
         mem=5000,
         time_min=10,
+        cpus_per_task=1,
     log:
         "logs/prepare_network",
     script:
@@ -604,7 +608,7 @@ rule solve_network:
         "benchmarks/solve_network/{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}"
     resources:
         mem_mb=40000,
-        cpus_per_task=1,
+        cpus_per_task=2,
         time_min=40,
     script:
         "scripts/solve_network.py"
@@ -621,7 +625,7 @@ rule plot_figures:
             % fig
             for fig in FIGURES_SINGLE
         },
-    resources: mem_mb=1000, time_min=10,
+    resources: mem_mb=1000, time_min=10, cpus_per_task=1,
     script:
         "scripts/plot_results.py"
 
@@ -630,7 +634,7 @@ rule make_summary:
         network= RESULTS + "{interconnect}/networks/elec_s_{clusters}_ec_l{ll}_{opts}.nc",
     output:
         stats = RESULTS + "{interconnect}/summary_tables/stats_c{clusters}_l{ll}_{opts}.csv",
-    resources: mem_mb=1000, time_min=10,
+    resources: mem_mb=1000, time_min=10, cpus_per_task=1,
     script:
         "scripts/make_summary.py"
 
