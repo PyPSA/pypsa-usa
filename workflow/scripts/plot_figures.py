@@ -32,78 +32,6 @@ import cartopy.crs as ccrs
 # Global Plotting Settings
 TITLE_SIZE = 16
 
-
-# def create_area_plot(production, demand, colors, snapshots, output_path, timeslice):
-#     fig, ax = plt.subplots(figsize=(14, 4))
-#     production[snapshots].plot.area(ax=ax, color=colors, alpha=0.7, legend="reverse")
-#     ax.legend(bbox_to_anchor=(1, 1), loc="upper left")
-#     ax.set_ylabel("Power [GW]")
-#     ax.set_xlabel("")
-#     fig.tight_layout()
-#     suffix = (
-#         "-" + datetime.strptime(str(timeslice), "%m").strftime("%b")
-#         if timeslice != "all"
-#         else ""
-#     )
-#     fig.savefig(output_path.parent / (output_path.stem + suffix + output_path.suffix))
-
-
-# def create_total_production_bar(total_production, colors, output_path):
-#     fig, ax = plt.subplots()
-#     total_production.div(1e3).plot.bar(color=colors, ax=ax)
-#     ax.set_ylabel("Total production [TWh]")
-#     ax.set_xlabel("")
-#     fig.savefig(output_path)
-
-
-# def main(snakemake):
-
-#     carriers_gen = n.generators.carrier
-#     carriers_storageUnits = n.storage_units.carrier
-#     production = n.generators_t.p.groupby(carriers_gen, axis=1).sum().rename(columns=n.carriers.nice_name)/ 1e3
-#     # storage = network.storage_units_t.p.groupby(carriers_storageUnits, axis=1).sum()/1e3
-#     # storage_charge = storage[storage > 0].fillna(0).rename(columns={'battery':'Battery Discharging'})
-#     # storage_discharge = storage[storage < 0].fillna(0).rename(columns={'battery':'Battery Charging'})
-#     # energymix = pd.concat([production, storage_charge, storage_discharge], axis=1)
-#     demand = n.loads_t.p.sum(1).rename("Demand") / 1e3
-
-#     if n_hours < 8760:
-#         enddate = pd.to_datetime(snakemake.config["snapshots"]["end"])
-#         year = enddate.year
-#         for timeslice in list(range(1, enddate.month)) + ["all"]:
-#             snapshots = (
-#                 n.snapshots.get_loc(f"{year}-{timeslice}")
-#                 if timeslice != "all"
-#                 else slice(None, None)
-#             )
-#             create_area_plot(production, demand, colors, snapshots, snakemake.output.operation_area, timeslice)
-#     else:
-#         for timeslice in list(range(1, 12)) + ["all"]:
-#             snapshots = (
-#                 n.snapshots.get_loc(f"{year}-{timeslice}")
-#                 if timeslice != "all"
-#                 else slice(None, None)
-#             )
-#             create_area_plot(production, demand, colors, snapshots, snakemake.output.operation_area, timeslice)
-
-#     create_total_production_bar(total_production, colors, snakemake.output.operation_bar)
-
-#     operational_costs = (
-#         (production * n.generators.marginal_cost)
-#         .groupby(carriers, axis=1)
-#         .sum()
-#         .rename(columns=n.carriers.nice_name)
-#     ).sum()
-
-#     capital_costs = (
-#         n.generators.eval("p_nom_opt * capital_cost")
-#         .groupby(carriers)
-#         .sum()
-#         .rename(n.carriers.nice_name)
-#     )
-
-#     create_cost_bar(operational_costs, capital_costs, colors, snakemake.output.cost_bar)
-
 def get_bus_scale(interconnect: str) -> float:
     """Scales lines based on interconnect size"""
     if interconnect != "usa":
@@ -140,6 +68,55 @@ def create_title(title: str, **wildcards) -> str:
     wildcards_joined = " | ".join(w)
     return f"{title} \n ({wildcards_joined})"
 
+def plot_production_area(n: pypsa.Network, save:str, **wildcards) -> None:
+    """Plot timeseries production
+    
+    Will plot an image for the entire time horizon, in addition to seperate 
+    monthly generation curves
+    """
+    
+    # get data 
+    
+    carriers = n.generators.carrier
+    carrier_nice_names = n.carriers.nice_name
+    production = n.generators_t.p.mul(1e-3) # MW -> GW
+    production = production.groupby(carriers, axis=1).sum().rename(columns=carrier_nice_names)
+    demand = pd.DataFrame(n.loads_t.p.sum(1).mul(1e-3)).rename(columns={0:"Deamand"})
+    
+    # plot 
+    
+    year = n.snapshots[0].year
+    for timeslice in ["all"] + list(range(1, 12)):
+        try:
+            if not timeslice == "all":
+                snapshots = (n.snapshots.get_loc(f"{year}-{timeslice}"))
+            else:
+                snapshots = slice(None, None)
+                
+            fig, ax = plt.subplots(figsize=(14, 4))
+            color_palette = n.carriers.set_index("nice_name").to_dict()["color"]
+            
+            production[snapshots].plot.area(ax=ax, alpha=0.7, legend="reverse", color=color_palette)
+            demand[snapshots].plot.line(ax=ax, ls="-", color="darkblue")
+            
+            suffix = (
+                "-" + datetime.strptime(str(timeslice), "%m").strftime("%b")
+                if timeslice != "all"
+                else ""
+            )
+            
+            ax.legend(bbox_to_anchor=(1, 1), loc="upper left")
+            ax.set_title(create_title("Costs", **wildcards))
+            ax.set_ylabel("Power [GW]")
+            fig.tight_layout()
+            
+            save = Path(save)
+            fig.savefig(save.parent / (save.stem + suffix + save.suffix))
+            
+        except KeyError:
+            # outside slicing range 
+            continue
+        
 def plot_production_bar(n: pypsa.Network, save:str, **wildcards) -> None:
     """Plot production per carrier"""
     
@@ -156,7 +133,7 @@ def plot_production_bar(n: pypsa.Network, save:str, **wildcards) -> None:
     
     fig, ax = plt.subplots(figsize=(10, 10))
     color_palette = n.carriers.set_index("nice_name").to_dict()["color"]
-    sns.barplot(data=production, y="carrier", x="Production (TWh)")
+    sns.barplot(data=production, y="carrier", x="Production (TWh)", palette=color_palette)
     
     ax.set_title(create_title("Costs", **wildcards))
     ax.set_ylabel("")
@@ -353,7 +330,7 @@ if __name__ == "__main__":
     # extract shared plotting files 
     n = pypsa.Network(snakemake.input.network)
     onshore_regions = gpd.read_file(snakemake.input.regions_onshore)
-    n_hours = snakemake.config['solving']['options']['nhours']
+    # n_hours = snakemake.config['solving']['options']['nhours']
     
     # mappers 
     generating_link_carrier_map = {"fuel cell": "H2", "battery discharger": "battery"}
@@ -367,4 +344,5 @@ if __name__ == "__main__":
     plot_new_capacity(n, onshore_regions, snakemake.output["capacity_map_new"], **snakemake.wildcards)
     plot_costs_bar(n, snakemake.output["costs_bar"], **snakemake.wildcards)
     plot_production_bar(n, snakemake.output["production_bar"], **snakemake.wildcards)
+    plot_production_area(n, snakemake.output["production_area"], **snakemake.wildcards)
     

@@ -17,6 +17,7 @@ FIGURES_SINGLE = [
     "capacity_map_new",
     "costs_bar",
     "production_bar",
+    "production_area",
 ]
 
 # --------------------------- Workflow constraints --------------------------- #
