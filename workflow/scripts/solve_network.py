@@ -389,16 +389,16 @@ if __name__ == "__main__":
     solver_options = snakemake.config['solving']['solver']
 
     fn = getattr(snakemake.log, 'memory', None)
-    with memory_logger(filename=fn, interval=400) as mem:
-        n = pypsa.Network(snakemake.input[0])
-        if solve_opts['operations_only']:
-            logger.info('Solving operations old model')
-            n = solve_operations_model(n, solve_opts, solver_options)
-        else:
-            n = prepare_network(n, solve_opts)
-            n = solve_network(n, snakemake.config, opts, solver_dir=tmpdir,
-                            solver_logfile=snakemake.log.solver)
-            n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))
-        n.export_to_netcdf(snakemake.output[0])
+    # with memory_logger(filename=fn, interval=400) as mem:
+    n = pypsa.Network(snakemake.input[0])
+    if solve_opts['operations_only']:
+        logger.info('Solving operations only model')
+        n = solve_operations_model(n, solve_opts, solver_options)
+    else:
+        n = prepare_network(n, solve_opts)
+        n = solve_network(n, snakemake.config, opts, solver_dir=tmpdir,
+                        solver_logfile=snakemake.log.solver)
+        n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))
+    n.export_to_netcdf(snakemake.output[0])
 
-    logger.info("Maximum memory usage: {}".format(mem.mem_usage))
+    # logger.info("Maximum memory usage: {}".format(mem.mem_usage))
