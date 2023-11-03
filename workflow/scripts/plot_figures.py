@@ -71,8 +71,6 @@ TITLE_SIZE = 16
 
 # def main(snakemake):
 
-#     generating_link_carrier_map = {"fuel cell": "H2", "battery discharger": "battery"}
-
 #     carriers_gen = n.generators.carrier
 #     carriers_storageUnits = n.storage_units.carrier
 #     production = n.generators_t.p.groupby(carriers_gen, axis=1).sum().rename(columns=n.carriers.nice_name)/ 1e3
@@ -154,9 +152,46 @@ def create_title(title: str, **wildcards) -> str:
             w.append(f"opts = {value}")
     wildcards_joined = " | ".join(w)
     return f"{title} \n ({wildcards_joined})"
-        
 
-def plot_capacity_map(n: pypsa.Network, bus_values: pd.DataFrame, regions: gpd.GeoDataFrame, colors=None, bus_scale=1, line_scale=1, title = None) -> (plt.figure, plt.axes):
+def plot_costs_bar(n: pypsa.Network, save:str, **wildcards) -> None:
+    """Plot OPEX and CAPEX"""
+    
+    # get data 
+    
+    carriers = n.generators.carrier
+    carrier_nice_names = n.carriers.nice_name
+    production = n.generators_t.p
+    marginal_cost = n.generators.marginal_cost
+    
+    operational_costs = (
+        (production * marginal_cost)
+        .groupby(carriers, axis=1)
+        .sum()
+        .rename(columns=carrier_nice_names)
+    ).sum()
+
+    capital_costs = (
+        n.generators.eval("p_nom_opt * capital_cost")
+        .groupby(carriers)
+        .sum()
+        .rename(n.carriers.nice_name)
+    )
+    costs = pd.concat([operational_costs, capital_costs], axis=1, keys=["OPEX", "CAPEX"]).reset_index()
+    
+    # plot 
+    
+    fig, ax = plt.subplots(figsize=(10, 10))
+    color_palette = n.carriers.set_index("nice_name").to_dict()["color"]
+    sns.barplot(y="carrier", x="CAPEX", data=costs, alpha=0.6, ax=ax, palette=color_palette)
+    sns.barplot(y="carrier", x="OPEX", data=costs, ax=ax, left=costs["CAPEX"], palette=color_palette)
+    
+    ax.set_title(create_title("Costs", **wildcards))
+    ax.set_ylabel("")
+    ax.set_xlabel("CAPEX & OPEX [$]")
+    fig.tight_layout()
+    fig.savefig(save)
+
+def plot_capacity_map(n: pypsa.Network, bus_values: pd.DataFrame, regions: gpd.GeoDataFrame, bus_scale=1, line_scale=1, title = None) -> (plt.figure, plt.axes):
     """
     Generic network plotting function for capacity pie charts at each node
     """
@@ -174,8 +209,7 @@ def plot_capacity_map(n: pypsa.Network, bus_values: pd.DataFrame, regions: gpd.G
             line_colors="teal",
             ax=ax,
             margin=0.2,
-            color_geomap=None,
-            bus_colors=colors,
+            color_geomap=None
         )
         
     # onshore regions
@@ -303,7 +337,6 @@ if __name__ == "__main__":
             opts='Co2L0.75',
         )
     configure_logging(snakemake)
-    # logging.basicConfig(level=snakemake.config["logging"]["level"])
     
     # extract shared plotting files 
     n = pypsa.Network(snakemake.input.network)
@@ -323,4 +356,5 @@ if __name__ == "__main__":
     plot_base_capacity(n, onshore_regions, snakemake.output["capacity_map_base"], **snakemake.wildcards)
     plot_opt_capacity(n, onshore_regions, snakemake.output["capacity_map_optimized"], **snakemake.wildcards)
     plot_new_capacity(n, onshore_regions, snakemake.output["capacity_map_new"], **snakemake.wildcards)
+    plot_costs_bar(n, snakemake.output["costs_bar"], **snakemake.wildcards)
     
