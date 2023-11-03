@@ -14,11 +14,18 @@ def get_stats(n):
     revenue.index = revenue.index.map(lambda x: '_'.join(x[:2]))
     revenue = revenue.reset_index()
     revenue['statistic'] = ['revenue' for i in range(len(revenue))]
+
     opex = n.statistics.opex()
     opex.index = opex.index.map(lambda x: '_'.join(x[:2]))
     opex = opex.reset_index()
     opex['statistic'] = ['opex' for i in range(len(opex))]
-    df = pd.concat([revenue, opex])
+
+    capacity = n.statistics.expanded_capacity()
+    capacity.index = capacity.index.map(lambda x: '_'.join(x[:2]))
+    capacity = capacity.reset_index()
+    capacity['statistic'] = ['ExpCapacity' for i in range(len(capacity))]
+
+    df = pd.concat([revenue, opex, capacity])
     df.rename(columns={'index':'type',0:'value'},inplace=True)
     df['value'] = df['value'].astype(float)
     df[['statistic','type','value']].to_csv(snakemake.output[0], index=False)

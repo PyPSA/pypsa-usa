@@ -1,6 +1,8 @@
 osw_config:
-  enable_osw: True
+  enable_osw: False
   humboldt_capacity: 1607
-  build_hvac: false
-  build_hvdc_subsea: false  
-  build_hvdc_overhead: false
+  build_hvac: True
+  build_hvdc_subsea: true  
+  build_hvdc_overhead: True
+  optimize_only_osw: false
+  optimize_osw_capacity: False

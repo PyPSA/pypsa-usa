@@ -35,6 +35,30 @@ diablo_canyon_onshore_bus_id = 2026131
 diablo_canyon_export_cable_id = 104171
 diablo_canyon_bus_loc = [-121.2597, 35.2138]
 
+#Cost Info
+npv_500kV = 3.341e9
+MVA_500kV = 3200
+capital_cost_500kV = npv_500kV/MVA_500kV
+
+npv_500kV_seg1 = 1.838e9
+capital_cost_500kV_seg1 = npv_500kV_seg1/MVA_500kV
+
+npv_500kV_seg2 = npv_500kV - npv_500kV_seg1
+capital_cost_500kV_seg2 = npv_500kV_seg2/MVA_500kV
+
+npv_HVDC_subsea = 4.461e9
+MVA_HVDC_subsea = 2000
+capital_cost_subsea = npv_HVDC_subsea/MVA_HVDC_subsea
+
+npv_HVDC_overhead = 3.114e9
+MVA_HVDC_overhead = 3000
+capital_cost_overhead = npv_HVDC_overhead/MVA_HVDC_overhead
+
+#S nom Capacities
+s_nom_500kV = 3200
+s_nom_HVDC_subsea = 2000
+s_nom_HVDC_overhead = 3000
+
 #Round Mountain Bus ID:
 round_mountain_bus_id = '2020316'
 
@@ -48,7 +72,7 @@ sf_345kv_substation_bus_id = '2021181'
 pittsburg_substation_bus_id = '2021641'
 
 
-def add_hvdc_subsea(network, line_name, bus0, bus1):
+def add_hvdc_subsea(network, line_name, bus0, bus1, capex):
     network.add("Link", 
                 name= line_name, 
                 bus0=bus0, 
@@ -56,11 +80,13 @@ def add_hvdc_subsea(network, line_name, bus0, bus1):
                 type='HVDC Oil filled 1400',
                 carrier = "DC",
                 efficiency=1,
-                p_nom=2000,
+                p_nom=s_nom_HVDC_subsea,
                 p_min_pu=-1,
+                capital_cost = capex,
+                p_nom_extendable = True,
             )
 
-def add_hvdc_overhead(network, line_name, bus0, bus1):
+def add_hvdc_overhead(network, line_name, bus0, bus1, capex):
     network.add("Link",
             name = line_name,
             bus0=bus0, 
@@ -68,20 +94,24 @@ def add_hvdc_overhead(network, line_name, bus0, bus1):
             type="HVDC XLPE 1000",
             carrier = "DC",
             efficiency=1,
-            p_nom=3000,
+            p_nom=s_nom_HVDC_overhead,
             p_min_pu=-1,
+            capital_cost = capex,
+            p_nom_extendable = True,
         )
 
-def add_hvac_500kv(network, line_name, bus0, bus1):
+def add_hvac_500kv(network, line_name, bus0, bus1, capex):
     network.add("Line", 
                 name = line_name, 
                 bus0=bus0, 
                 bus1=bus1,
                 r=2.8910114,
                 x=84.8225115,
-                s_nom=3200,
+                s_nom=s_nom_500kV,
                 type="Al/St 560/50 4-bundle 750.0",
                 carrier = 'AC',
+                capital_cost = capex,
+                s_nom_extendable = True,
         )
     network.lines.loc[line_name, "interconnect"] = "Western"
     network.lines.loc[line_name, 'v_nom'] = 500
@@ -106,6 +136,7 @@ def add_osw_turbines(network, plant_name, capacity,  pu_time_series):
                 p_max_pu= pu_time_series.values,
                 efficiency = 1,
                 p_nom_extendable = False,
+                capital_cost= 5.91e6
             )
     network.generators.loc[ plant_name+"_osw", "weight"] = 1
 
@@ -143,7 +174,7 @@ def add_export_array_module(network, name, export_cable_id,
                 )
     # network.buses.loc[f'{name}_onshore_bus_230kv', 'substation'] = False
     network.buses.loc[f'{name}_onshore_bus_230kv', 'balancing_area'] = 'CISO-PGAE'
-    network.buses.loc[f'{name}_onshore_bus_230kv', 'country'] = 'CISO-PGAE'
+    network.buses.loc[f'{name}_onshore_bus_230kv', 'country'] = 'US'
     network.buses.loc[f'{name}_onshore_bus_230kv', 'state'] = 'California'
     network.buses.loc[f'{name}_onshore_bus_230kv', 'sub_id'] = humboldt_onshore_sub_id
     network.buses.loc[f'{name}_onshore_bus_230kv', 'interconnect'] = 'Western'
@@ -160,7 +191,7 @@ def add_export_array_module(network, name, export_cable_id,
                 carrier = 'AC',
                 x = 10, #revisit resistance and reactance values later
                 r = 0.1,
-                s_nom_extendable = False,
+                s_nom_extendable = True,
                 )
     network.lines.loc[f'{name}_export_cable', 'v_nom'] = 230
     
@@ -240,12 +271,16 @@ def build_OSW_500kV(network):
                 )
     network.buses.loc['fern_road_sub', 'sub_id'] = 503
     network.buses.loc['fern_road_sub', 'interconnect'] = 'Western'
+    network.buses.loc['fern_road_sub', 'country'] = 'US'
+    network.buses.loc['fern_road_sub', 'balancing_area'] = 'CISO-PGAE'
+
 
     # Add 500 kV line from Humboldt Onshore Bus to Fern Road Substation
     add_hvac_500kv(network,
                     line_name="humboldt_fern_road_500kv",
                     bus0 = "humboldt_onshore_bus_500kv",
                     bus1 = "fern_road_sub",
+                    capex = capital_cost_500kV_seg1,
                     )
     # Add transformer connecting Fern Road Substation to Round Mountain Bus
     network.add("Transformer",
@@ -270,11 +305,14 @@ def build_OSW_500kV(network):
                 )
     network.buses.loc['tesla_sub_500kv', 'sub_id'] = 502
     network.buses.loc['tesla_sub_500kv', 'interconnect'] = 'interconnect'
+    network.buses.loc['tesla_sub_500kv', 'country'] = 'US'
+    network.buses.loc['tesla_sub_500kv', 'balancing_area'] = 'CISO-PGAE'
 
     add_hvac_500kv(network,
                     line_name="fern_tesla_500kv",
                     bus0 = "fern_road_sub",
                     bus1 = "tesla_sub_500kv",
+                    capex = capital_cost_500kV_seg2,
                     )
     
     network.add("Transformer",
@@ -299,6 +337,8 @@ def build_hvdc_overhead(network):
                 )
     network.buses.loc['Pittsburg_500kV', 'sub_id'] = 504
     network.buses.loc['Pittsburg_500kV', 'interconnect'] = 'Western'
+    network.buses.loc['Pittsburg_500kV', 'country'] = 'US'
+    network.buses.loc['Pittsburg_500kV', 'balancing_area'] = 'CISO-PGAE'
 
     network.add("Transformer",
                 name = "Pittsburg_transformer",
@@ -309,11 +349,12 @@ def build_hvdc_overhead(network):
                 x = 10, #revisit resistance and reactance values later
                 r = 0.1,
                 )
-    network.transformers.loc['Pittsburg_500kV', 'carrier'] = 'AC'
+    network.transformers.loc['Pittsburg_transformer', 'carrier'] = 'AC'
 
     add_hvdc_overhead(network, "HVDC_Humboldt_OverheadLink",
                      "humboldt_onshore_bus_500kv",
-                    "Pittsburg_500kV")
+                    "Pittsburg_500kV",
+                    capex = capital_cost_overhead,)
 
 # Alternative 3- HVDC VSC Subsea Option
 def build_hvdc_subsea(network):
@@ -325,6 +366,8 @@ def build_hvdc_subsea(network):
                 carrier= 'AC',
                 )
     network.buses.loc['BayHub_500kV', 'sub_id'] = 504
+    network.buses.loc['BayHub_500kV', 'country'] = 'US'
+    network.buses.loc['BayHub_500kV', 'balancing_area'] = 'CISO-PGAE'
 
     network.add("Transformer",
                 name = "BayHub_transformer",
@@ -339,4 +382,5 @@ def build_hvdc_subsea(network):
 
     add_hvdc_subsea(network, "HVDC_Humboldt_SubseaLink",
                      "humboldt_onshore_bus_500kv",
-                    "BayHub_500kV")
+                    "BayHub_500kV",
+                    capex = capital_cost_subsea,)

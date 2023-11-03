@@ -340,6 +340,20 @@ def solve_network(n, config, opts='', **kwargs):
               extra_functionality=extra_functionality, **kwargs)
     return n
 
+def set_osw_extendable_to(n, val):
+    osw_config = snakemake.config['osw_config']
+    import pdb; pdb.set_trace()
+    if osw_config['build_hvac']:
+        n.lines.loc['humboldt_fern_road_500kv'].s_nom_extendable = val
+        n.lines.loc['fern_tesla_500kv'].s_nom_extendable = val
+    if osw_config['build_hvdc_overhead']:
+        n.links.loc['HVDC_Humboldt_OverheadLink'].s_nom_extendable = val
+    if osw_config['build_hvdc_subsea']:
+        n.links.loc['HVDC_Humboldt_SubseaLink'].s_nom_extendable = val
+    if osw_config['optimize_osw_capacity']:
+        n.generators.loc['humboldt_osw'].p_nom_extendable = val
+    
+
 def solve_operations_model(n, solve_opts, solver_options):
     load_shedding = solve_opts.get('load_shedding')
     solver_name = solver_options.pop('name')
@@ -347,6 +361,8 @@ def solve_operations_model(n, solve_opts, solver_options):
         nhours = solve_opts['nhours']
         n.set_snapshots(n.snapshots[:nhours])
     set_all_extendable_to(n, False)
+    if snakemake.config['osw_config']['optimize_only_osw']:
+        set_osw_extendable_to(n, True)
     if load_shedding: n.optimize.add_load_shedding(sign=1, marginal_cost=10000,suffix=' load')
     n.optimize(n.snapshots, solver_name=solver_name, solver_options=solver_options)
     return n

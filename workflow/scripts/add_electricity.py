@@ -1043,7 +1043,8 @@ def assign_ads_missing_lat_lon(plants,n):
         plants_unmatched.loc[i,'latitude'] = bus.y
 
     plants.loc[plants_unmatched.index] = plants_unmatched
-    logger.info(f'{len(plants[plants.latitude.isna() | plants.longitude.isna()])} plants still missing locations.')
+    missing_plants = len(plants[plants.latitude.isna() | plants.longitude.isna()])
+    if missing_plants>0: logger.info(f'{missing_plants} plants missing locations.')
     plants = plants.dropna(subset=['latitude','longitude']) #drop any plants that still don't have lat/lon
 
     return plants
@@ -1377,6 +1378,9 @@ if __name__ == "__main__":
     n.generators["p_nom_min"] = n.generators.apply(
         lambda x: (x["p_nom"] - 0.001) if (x["p_nom_extendable"] and x["p_nom_min"] == 0) else x["p_nom_min"], axis=1)
 
+    n.lines["capital_cost"] = 1e11
+    n.links["capital_cost"] = 1e11
+
     osw_config = snakemake.params.osw
     if osw_config['enable_osw']:
         humboldt_capacity = osw_config['humboldt_capacity']
@@ -1387,6 +1391,7 @@ if __name__ == "__main__":
         if osw_config['build_hvdc_overhead']: osw.build_hvdc_overhead(n)
     sanitize_carriers(n, snakemake.config)
     sanitize_bus_data(n)
+
     n.meta = snakemake.config
     n.export_to_netcdf(snakemake.output[0])
 
