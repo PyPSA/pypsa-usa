@@ -389,9 +389,10 @@ if __name__ == "__main__":
     solver_options = snakemake.config['solving']['solver']
 
     fn = getattr(snakemake.log, 'memory', None)
-    with memory_logger(filename=fn, interval=30.) as mem:
+    with memory_logger(filename=fn, interval=400) as mem:
         n = pypsa.Network(snakemake.input[0])
         if solve_opts['operations_only']:
+            logger.info('Solving operations old model')
             n = solve_operations_model(n, solve_opts, solver_options)
         else:
             n = prepare_network(n, solve_opts)
