@@ -56,19 +56,6 @@ TITLE_SIZE = 16
 #     fig.savefig(output_path)
 
 
-# def create_cost_bar(operational_costs, capital_costs, colors, output_path):
-#     fig, ax = plt.subplots()
-
-#     costs = pd.concat([operational_costs, capital_costs], axis=1, keys=["OPEX", "CAPEX"])
-#     costs = costs.reset_index("carrier")
-
-#     s1 = sns.barplot(y="carrier", x="CAPEX", data=costs, alpha=0.6, ax=ax, palette=colors)
-#     s2 = sns.barplot(y="carrier", x="OPEX", data=costs, ax=ax, left=costs["CAPEX"], palette=colors)
-
-#     ax.set_ylabel("")
-#     ax.set_xlabel("CAPEX & OPEX [$]")
-#     fig.savefig(output_path)
-
 # def main(snakemake):
 
 #     carriers_gen = n.generators.carrier
@@ -152,6 +139,31 @@ def create_title(title: str, **wildcards) -> str:
             w.append(f"opts = {value}")
     wildcards_joined = " | ".join(w)
     return f"{title} \n ({wildcards_joined})"
+
+def plot_production_bar(n: pypsa.Network, save:str, **wildcards) -> None:
+    """Plot production per carrier"""
+    
+    # get data 
+    
+    carriers = n.generators.carrier
+    carrier_nice_names = n.carriers.nice_name
+    production = n.generators_t.p
+    production = pd.DataFrame(production.groupby(carriers, axis=1)
+                              .sum().rename(columns=carrier_nice_names)
+                              .sum()).mul(1e-6).rename(columns={0:"Production (TWh)"}).reset_index()
+    
+    # plot 
+    
+    fig, ax = plt.subplots(figsize=(10, 10))
+    color_palette = n.carriers.set_index("nice_name").to_dict()["color"]
+    sns.barplot(data=production, y="carrier", x="Production (TWh)")
+    
+    ax.set_title(create_title("Costs", **wildcards))
+    ax.set_ylabel("")
+    # ax.set_xlabel("")
+    fig.tight_layout()
+    fig.savefig(save)
+
 
 def plot_costs_bar(n: pypsa.Network, save:str, **wildcards) -> None:
     """Plot OPEX and CAPEX"""
@@ -341,9 +353,6 @@ if __name__ == "__main__":
     # extract shared plotting files 
     n = pypsa.Network(snakemake.input.network)
     onshore_regions = gpd.read_file(snakemake.input.regions_onshore)
-    n_clusters = snakemake.wildcards.clusters
-    ll = snakemake.wildcards.ll
-    opts = snakemake.wildcards.opts
     n_hours = snakemake.config['solving']['options']['nhours']
     
     # mappers 
@@ -357,4 +366,5 @@ if __name__ == "__main__":
     plot_opt_capacity(n, onshore_regions, snakemake.output["capacity_map_optimized"], **snakemake.wildcards)
     plot_new_capacity(n, onshore_regions, snakemake.output["capacity_map_new"], **snakemake.wildcards)
     plot_costs_bar(n, snakemake.output["costs_bar"], **snakemake.wildcards)
+    plot_production_bar(n, snakemake.output["production_bar"], **snakemake.wildcards)
     
