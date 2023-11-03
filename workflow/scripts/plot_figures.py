@@ -189,7 +189,7 @@ def create_title(title: str, **wildcards) -> str:
         elif wildcard == "opts":
             w.append(f"opts = {value}")
     wildcards_joined = " | ".join(w)
-    return f"{title} ({wildcards_joined})"
+    return f"{title} \n ({wildcards_joined})"
         
 
 def plot_capacity_map(n: pypsa.Network, bus_values: pd.DataFrame, regions: gpd.GeoDataFrame, colors=None, bus_scale=1, line_scale=1, title = None) -> (plt.figure, plt.axes):
@@ -198,7 +198,7 @@ def plot_capacity_map(n: pypsa.Network, bus_values: pd.DataFrame, regions: gpd.G
     """
 
     fig, ax = plt.subplots(
-        figsize=(8, 8), subplot_kw={"projection": ccrs.EqualEarth(n.buses.x.mean())}
+        figsize=(10, 10), subplot_kw={"projection": ccrs.EqualEarth(n.buses.x.mean())}
     )
 
     with plt.rc_context({"patch.linewidth": 0.1}):
@@ -211,6 +211,7 @@ def plot_capacity_map(n: pypsa.Network, bus_values: pd.DataFrame, regions: gpd.G
             ax=ax,
             margin=0.2,
             color_geomap=None,
+            bus_colors=colors,
         )
         
     # onshore regions
@@ -247,9 +248,9 @@ def plot_capacity_map(n: pypsa.Network, bus_values: pd.DataFrame, regions: gpd.G
         legend_kw={"bbox_to_anchor": (1, 0), **legend_kwargs, "loc": "lower left"},
     )
     if not title:   
-        ax.set_title(f"Capacity (MW)", fontsize=TITLE_SIZE)
+        ax.set_title(f"Capacity (MW)", fontsize=TITLE_SIZE, pad=20)
     else:
-        ax.set_title(title, fontsize=TITLE_SIZE)
+        ax.set_title(title, fontsize=TITLE_SIZE, pad=20)
     fig.tight_layout()
     
     return fig, ax
@@ -270,6 +271,7 @@ def plot_base_capacity(n: pypsa.Network, regions: gpd.GeoDataFrame, colors = Non
         regions=regions,
         line_scale=line_scale,
         bus_scale=bus_scale,
+        colors=colors,
         title=title
     )
 
@@ -289,7 +291,7 @@ if __name__ == "__main__":
     # extract shared plotting files 
     n = pypsa.Network(snakemake.input.network)
     onshore_regions = gpd.read_file(snakemake.input.regions_onshore)
-    colors = snakemake.params.plotting
+    colors = snakemake.params.plotting["tech_colors"]
     n_clusters = snakemake.wildcards.clusters
     ll = snakemake.wildcards.ll
     opts = snakemake.wildcards.opts
@@ -302,5 +304,5 @@ if __name__ == "__main__":
     sns.set_theme("paper", style="darkgrid")
     
     # create plots
-    fig, _ = plot_base_capacity(n, onshore_regions, **snakemake.wildcards)
+    fig, _ = plot_base_capacity(n, onshore_regions, colors, **snakemake.wildcards)
     fig.savefig(snakemake.output["capacity_map_base"])
