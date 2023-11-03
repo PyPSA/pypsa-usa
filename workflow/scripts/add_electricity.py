@@ -1385,7 +1385,8 @@ if __name__ == "__main__":
     if osw_config['enable_osw']:
         humboldt_capacity = osw_config['humboldt_capacity']
         logger.info(f'Adding {humboldt_capacity} OSW in network')
-        osw.build_OSW_base_configuration(n, osw_capacity=humboldt_capacity)
+        osw_ts = pd.read_csv(snakemake.input.osw_ts, index_col=0, parse_dates=True)
+        osw.build_OSW_base_configuration(n, humboldt_capacity, osw_ts)
         if osw_config['build_hvac']: osw.build_OSW_500kV(n)
         if osw_config['build_hvdc_subsea']: osw.build_hvdc_subsea(n)
         if osw_config['build_hvdc_overhead']: osw.build_hvdc_overhead(n)

@@ -236,12 +236,7 @@ def add_export_array_module(network, name, export_cable_id,
     network.transformers.loc[f'{name}_transformer_2', 'carrier'] = 'AC'
 
 
-osw_ts = pd.read_csv(snakemake.input.osw_ts, 
-                        index_col=0, 
-                        parse_dates=True
-                    )
-
-def build_OSW_base_configuration(network, osw_capacity):
+def build_OSW_base_configuration(network, osw_capacity, osw_ts):
     """Adding the initial buses, export cables, and transformers to the network."""
 
     # Add Offshore Substations + Export Cables
