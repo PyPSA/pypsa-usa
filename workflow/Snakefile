@@ -490,9 +490,8 @@ rule simplify_network:
         network=RESOURCES + "{interconnect}/elec_s.nc",
     log:
         "logs/simplify_network/{interconnect}/elec_s.log",
-    threads: 4
     resources:
-        mem=3000,
+        mem=5000,
         time_min=10,
         cpus_per_task=1,
     script:
