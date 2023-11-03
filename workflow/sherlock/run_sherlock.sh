@@ -10,4 +10,4 @@ ml gurobi/10.0.1_py39
 
 # snakemake -j6 --cluster "sbatch --partition=serc --account=iazevedo -c 1 -o logs/slurm/{rule}_{wildcards} -e logs/slurm/{rule}_{wildcards}"
 
-snakemake -j6 --cluster "sbatch --time={resources.time_min} --partition=serc --account=iazevedo -o logs/slurm/{rule}_{wildcards} -e logs/slurm/{rule}_{wildcards}" --latency-wait 60
+snakemake -j6 --cluster "sbatch --time={resources.time_min} --cpus-per-task={resources.cpus_per_task} --mem={resources.mem_mb} --partition=serc --account=iazevedo -o logs/slurm/{rule}_{wildcards} -e logs/slurm/{rule}_{wildcards}" --latency-wait 60
