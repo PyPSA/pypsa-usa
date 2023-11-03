@@ -68,7 +68,7 @@ geopandas==0.14.0
 geopy==2.4.0
 gitdb==4.0.10
 GitPython==3.1.37
-gurobipy==10.0.3
+# gurobipy==10.0.3
 highspy==1.5.3
 humanfriendly==10.0
 idna==3.4

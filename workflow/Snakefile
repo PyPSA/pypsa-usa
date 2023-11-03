@@ -491,7 +491,7 @@ rule simplify_network:
     log:
         "logs/simplify_network/{interconnect}/elec_s.log",
     resources:
-        mem=5000,
+        mem_mb=5000,
         time_min=10,
         cpus_per_task=1,
     script:
@@ -522,7 +522,7 @@ rule cluster_network:
         "benchmarks/cluster_network/{interconnect}/elec_s_{clusters}"
     threads: 1
     resources:
-        mem_mb=6000,
+        mem_mb=5000,
         time_min=10,
         cpus_per_task=1,
     script:
@@ -540,7 +540,7 @@ rule add_extra_components:
         "logs/add_extra_components/{interconnect}/elec_s_{clusters}_ec.log",
     threads: 4
     resources:
-        mem=3000,
+        mem_mb=5000,
         time_min=10,
         cpus_per_task=1,
     script:
@@ -564,7 +564,7 @@ rule prepare_network:
         solver="logs/prepare_network/{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}.log",
     threads: 4
     resources:
-        mem=5000,
+        mem_mb=5000,
         time_min=10,
         cpus_per_task=1,
     log:
@@ -606,8 +606,8 @@ rule solve_network:
     benchmark:
         "benchmarks/solve_network/{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}"
     resources:
-        mem_mb=40000,
-        cpus_per_task=2,
+        mem_mb=60000,
+        cpus_per_task=1,
         time_min=40,
     script:
         "scripts/solve_network.py"
