@@ -364,6 +364,7 @@ def solve_operations_model(n, solve_opts, solver_options):
     if snakemake.config['osw_config']['optimize_only_osw']:
         set_osw_extendable_to(n, True)
     if load_shedding: n.optimize.add_load_shedding(sign=1, marginal_cost=10000,suffix=' load')
+    logger.info("Solving operations only model")
     n.optimize(n.snapshots, solver_name=solver_name, solver_options=solver_options)
     return n
 
@@ -389,16 +390,16 @@ if __name__ == "__main__":
     solver_options = snakemake.config['solving']['solver']
 
     fn = getattr(snakemake.log, 'memory', None)
-    # with memory_logger(filename=fn, interval=400) as mem:
-    n = pypsa.Network(snakemake.input[0])
-    if solve_opts['operations_only']:
-        logger.info('Solving operations only model')
-        n = solve_operations_model(n, solve_opts, solver_options)
-    else:
-        n = prepare_network(n, solve_opts)
-        n = solve_network(n, snakemake.config, opts, solver_dir=tmpdir,
-                        solver_logfile=snakemake.log.solver)
-        n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))
-    n.export_to_netcdf(snakemake.output[0])
+    with memory_logger(filename=fn, interval=10) as mem:
+        n = pypsa.Network(snakemake.input[0])
+        if solve_opts['operations_only']:
+            logger.info('Preparing operations only model')
+            n = solve_operations_model(n, solve_opts, solver_options)
+        else:
+            n = prepare_network(n, solve_opts)
+            n = solve_network(n, snakemake.config, opts, solver_dir=tmpdir,
+                            solver_logfile=snakemake.log.solver)
+            n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))
+        n.export_to_netcdf(snakemake.output[0])
 
-    # logger.info("Maximum memory usage: {}".format(mem.mem_usage))
+    logger.info("Maximum memory usage: {}".format(mem.mem_usage))
