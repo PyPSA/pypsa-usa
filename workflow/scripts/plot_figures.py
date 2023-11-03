@@ -255,7 +255,7 @@ def plot_capacity_map(n: pypsa.Network, bus_values: pd.DataFrame, regions: gpd.G
     
     return fig, ax
 
-def plot_base_capacity(n: pypsa.Network, regions: gpd.GeoDataFrame, colors = None, **wildcards) -> (plt.figure, plt.axes):
+def plot_base_capacity(n: pypsa.Network, regions: gpd.GeoDataFrame, **wildcards) -> (plt.figure, plt.axes):
     gen_pnom = n.generators.groupby(["bus", "carrier"]).p_nom.sum()
     storage_pnom = n.storage_units.groupby(["bus", "carrier"]).p_nom.sum()
     bus_pnom = pd.concat([gen_pnom, storage_pnom])
@@ -271,7 +271,6 @@ def plot_base_capacity(n: pypsa.Network, regions: gpd.GeoDataFrame, colors = Non
         regions=regions,
         line_scale=line_scale,
         bus_scale=bus_scale,
-        colors=colors,
         title=title
     )
 
@@ -291,7 +290,6 @@ if __name__ == "__main__":
     # extract shared plotting files 
     n = pypsa.Network(snakemake.input.network)
     onshore_regions = gpd.read_file(snakemake.input.regions_onshore)
-    colors = snakemake.params.plotting["tech_colors"]
     n_clusters = snakemake.wildcards.clusters
     ll = snakemake.wildcards.ll
     opts = snakemake.wildcards.opts
@@ -304,5 +302,5 @@ if __name__ == "__main__":
     sns.set_theme("paper", style="darkgrid")
     
     # create plots
-    fig, _ = plot_base_capacity(n, onshore_regions, colors, **snakemake.wildcards)
+    fig, _ = plot_base_capacity(n, onshore_regions, **snakemake.wildcards)
     fig.savefig(snakemake.output["capacity_map_base"])
