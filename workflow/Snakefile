@@ -492,7 +492,7 @@ rule simplify_network:
         "logs/simplify_network/{interconnect}/elec_s.log",
     threads: 4
     resources:
-        mem=500,
+        mem=3000,
         time_min=10,
     script:
         "scripts/simplify_network.py"
@@ -539,7 +539,7 @@ rule add_extra_components:
         "logs/add_extra_components/{interconnect}/elec_s_{clusters}_ec.log",
     threads: 4
     resources:
-        mem=500,
+        mem=3000,
         time_min=10,
     script:
         "scripts/add_extra_components.py"
