@@ -236,7 +236,7 @@ def add_export_array_module(network, name, export_cable_id,
     network.transformers.loc[f'{name}_transformer_2', 'carrier'] = 'AC'
 
 
-osw_ts = pd.read_csv('/Users/kamrantehranchi/Local_Documents/pypsa-usa/workflow/repo_data/Offshore_Wind_CEC_PLEXOS_2030.csv', 
+osw_ts = pd.read_csv(snakemake.input.osw_ts, 
                         index_col=0, 
                         parse_dates=True
                     )

@@ -416,7 +416,7 @@ rule build_renewable_profiles:
     threads: ATLITE_NPROCESSES
     resources:
         mem_mb=ATLITE_NPROCESSES * 5000,
-        time_min=60,
+        time_min=6025,
     wildcard_constraints:
         technology="(?!hydro).*",  # Any technology other than hydro
     script:
@@ -466,6 +466,7 @@ rule add_electricity:
             f"gen_cost_mult_{Path(x).stem}":f"repo_data/locational_multipliers/{Path(x).name}" for x in Path("repo_data/locational_multipliers/").glob("*")
         },
         ng_electric_power_price = DATA + "costs/ng_electric_power_price.csv",
+        osw_ts = "repo_data/Offshore_Wind_CEC_PLEXOS_2030.csv",
     output:
         RESOURCES + "{interconnect}/elec_base_network_l_pp.nc",
     log:
