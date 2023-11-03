@@ -71,37 +71,7 @@ TITLE_SIZE = 16
 
 # def main(snakemake):
 
-#     os.chdir(os.getcwd())
-#     rootpath = "."
-
-#     #Import Files
-#     n = pypsa.Network(snakemake.input.network)
-#     regions_onshore = gpd.read_file(snakemake.input.regions_onshore)
-    
-#     #Parameters & Wildcards
-#     n_clusters = snakemake.wildcards.clusters
-#     ll = snakemake.wildcards.ll
-#     opts = snakemake.wildcards.opts
-#     n_hours = snakemake.config['solving']['options']['nhours']
-
-#     #Plotting Settings
-#     sns.set_theme("paper", style="darkgrid")
-
 #     generating_link_carrier_map = {"fuel cell": "H2", "battery discharger": "battery"}
-
-#     #Base Capacity Map 
-#     gen_pnom = n.generators.groupby(["bus", "carrier"]).p_nom.sum()
-#     storage_capacity = (n.storage_units.groupby(["bus", "carrier"]).p_nom.sum())
-#     bus_base_capacities = pd.concat([gen_pnom, storage_capacity])
-#     fig, ax = plot_capacity_map(n, bus_base_capacities, generating_link_carrier_map, regions_onshore, n_clusters)
-#     fig.savefig(snakemake.output[0])
-
-#     #Optimized Capacity Map
-#     gen_pnom_opt = n.generators.groupby(["bus", "carrier"]).p_nom_opt.sum()
-#     storage_capacity_opt = (n.storage_units.groupby(["bus", "carrier"]).p_nom_opt.sum())
-#     bus_opt_capacities = pd.concat([gen_pnom_opt, storage_capacity_opt])
-#     fig, ax = plot_capacity_map(n, bus_opt_capacities, generating_link_carrier_map, regions_onshore, n_clusters)
-#     fig.savefig(snakemake.output[1])
 
 #     #Built Capacity Map
 #     gen_built = gen_pnom_opt - gen_pnom
@@ -255,17 +225,20 @@ def plot_capacity_map(n: pypsa.Network, bus_values: pd.DataFrame, regions: gpd.G
     
     return fig, ax
 
-def plot_base_capacity(n: pypsa.Network, regions: gpd.GeoDataFrame, **wildcards) -> (plt.figure, plt.axes):
+def plot_base_capacity(n: pypsa.Network, regions: gpd.GeoDataFrame, save: str, **wildcards) -> None:
+    """
+    Plots base network capacities
+    """
     gen_pnom = n.generators.groupby(["bus", "carrier"]).p_nom.sum()
     storage_pnom = n.storage_units.groupby(["bus", "carrier"]).p_nom.sum()
     bus_pnom = pd.concat([gen_pnom, storage_pnom])
-    title = create_title("Base Network Capacities", **wildcards)
     
+    title = create_title("Base Network Capacities", **wildcards)
     interconnect = wildcards.get("interconnect", None)
     bus_scale = get_bus_scale(interconnect=wildcards["interconnect"]) if interconnect else 1
     line_scale = get_line_scale(interconnect=wildcards["interconnect"]) if interconnect else 1
     
-    return plot_capacity_map(
+    fig, _ = plot_capacity_map(
         n=n, 
         bus_values=bus_pnom,
         regions=regions,
@@ -273,6 +246,30 @@ def plot_base_capacity(n: pypsa.Network, regions: gpd.GeoDataFrame, **wildcards)
         bus_scale=bus_scale,
         title=title
     )
+    fig.savefig(save)
+
+def plot_opt_capacity(n: pypsa.Network, regions: gpd.GeoDataFrame, save: str, **wildcards) -> None:
+    """
+    Plots optimal network capacities
+    """
+    gen_pnom_opt = n.generators.groupby(["bus", "carrier"]).p_nom_opt.sum()
+    storage_pnom_opt = (n.storage_units.groupby(["bus", "carrier"]).p_nom_opt.sum())
+    bus_pnom_opt = pd.concat([gen_pnom_opt, storage_pnom_opt])
+    
+    title = create_title("Base Network Capacities", **wildcards)
+    interconnect = wildcards.get("interconnect", None)
+    bus_scale = get_bus_scale(interconnect=wildcards["interconnect"]) if interconnect else 1
+    line_scale = get_line_scale(interconnect=wildcards["interconnect"]) if interconnect else 1
+    
+    fig, _ = plot_capacity_map(
+        n=n, 
+        bus_values=bus_pnom_opt,
+        regions=regions,
+        line_scale=line_scale,
+        bus_scale=bus_scale,
+        title=title
+    )
+    fig.savefig(save)
 
 if __name__ == "__main__":
     if 'snakemake' not in globals():
@@ -302,5 +299,6 @@ if __name__ == "__main__":
     sns.set_theme("paper", style="darkgrid")
     
     # create plots
-    fig, _ = plot_base_capacity(n, onshore_regions, **snakemake.wildcards)
-    fig.savefig(snakemake.output["capacity_map_base"])
+    plot_base_capacity(n, onshore_regions, snakemake.output["capacity_map_base"], **snakemake.wildcards)
+    plot_opt_capacity(n, onshore_regions, snakemake.output["capacity_map_optimized"], **snakemake.wildcards)
+    
