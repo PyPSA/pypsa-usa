@@ -73,14 +73,6 @@ TITLE_SIZE = 16
 
 #     generating_link_carrier_map = {"fuel cell": "H2", "battery discharger": "battery"}
 
-#     #Built Capacity Map
-#     gen_built = gen_pnom_opt - gen_pnom
-#     storage_built = storage_capacity_opt - storage_capacity
-#     buses_built_capacities = pd.concat([gen_built, storage_built])
-#     fig, ax = plot_capacity_map(n, buses_built_capacities, generating_link_carrier_map, regions_onshore, n_clusters)
-#     fig.savefig(snakemake.output[2])
-
-
 #     carriers_gen = n.generators.carrier
 #     carriers_storageUnits = n.storage_units.carrier
 #     production = n.generators_t.p.groupby(carriers_gen, axis=1).sum().rename(columns=n.carriers.nice_name)/ 1e3
@@ -128,12 +120,14 @@ TITLE_SIZE = 16
 #     create_cost_bar(operational_costs, capital_costs, colors, snakemake.output.cost_bar)
 
 def get_bus_scale(interconnect: str) -> float:
+    """Scales lines based on interconnect size"""
     if interconnect != "usa":
         return 1e5
     else:
         return 4e4
     
 def get_line_scale(interconnect: str) -> float:
+    """Scales lines based on interconnect size"""
     if interconnect != "usa":
         return 2e3
     else:
@@ -256,7 +250,7 @@ def plot_opt_capacity(n: pypsa.Network, regions: gpd.GeoDataFrame, save: str, **
     storage_pnom_opt = (n.storage_units.groupby(["bus", "carrier"]).p_nom_opt.sum())
     bus_pnom_opt = pd.concat([gen_pnom_opt, storage_pnom_opt])
     
-    title = create_title("Base Network Capacities", **wildcards)
+    title = create_title("Optimal Network Capacities", **wildcards)
     interconnect = wildcards.get("interconnect", None)
     bus_scale = get_bus_scale(interconnect=wildcards["interconnect"]) if interconnect else 1
     line_scale = get_line_scale(interconnect=wildcards["interconnect"]) if interconnect else 1
@@ -264,6 +258,33 @@ def plot_opt_capacity(n: pypsa.Network, regions: gpd.GeoDataFrame, save: str, **
     fig, _ = plot_capacity_map(
         n=n, 
         bus_values=bus_pnom_opt,
+        regions=regions,
+        line_scale=line_scale,
+        bus_scale=bus_scale,
+        title=title
+    )
+    fig.savefig(save)
+
+def plot_new_capacity(n: pypsa.Network, regions: gpd.GeoDataFrame, save: str, **wildcards) -> None:
+    """Plots new capacity"""
+    gen_pnom = n.generators.groupby(["bus", "carrier"]).p_nom.sum()
+    gen_pnom_opt = n.generators.groupby(["bus", "carrier"]).p_nom_opt.sum()
+    gen_pnom_new = gen_pnom_opt - gen_pnom
+    
+    storage_pnom = n.storage_units.groupby(["bus", "carrier"]).p_nom.sum()
+    storage_pnom_opt = (n.storage_units.groupby(["bus", "carrier"]).p_nom_opt.sum())
+    storage_pnom_new = storage_pnom_opt - storage_pnom
+    
+    bus_pnom_new = pd.concat([gen_pnom_new, storage_pnom_new])
+    
+    title = create_title("New Network Capacities", **wildcards)
+    interconnect = wildcards.get("interconnect", None)
+    bus_scale = get_bus_scale(interconnect=wildcards["interconnect"]) if interconnect else 1
+    line_scale = get_line_scale(interconnect=wildcards["interconnect"]) if interconnect else 1
+    
+    fig, _ = plot_capacity_map(
+        n=n, 
+        bus_values=bus_pnom_new,
         regions=regions,
         line_scale=line_scale,
         bus_scale=bus_scale,
@@ -301,4 +322,5 @@ if __name__ == "__main__":
     # create plots
     plot_base_capacity(n, onshore_regions, snakemake.output["capacity_map_base"], **snakemake.wildcards)
     plot_opt_capacity(n, onshore_regions, snakemake.output["capacity_map_optimized"], **snakemake.wildcards)
+    plot_new_capacity(n, onshore_regions, snakemake.output["capacity_map_new"], **snakemake.wildcards)
     
