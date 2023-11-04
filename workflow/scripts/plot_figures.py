@@ -123,6 +123,30 @@ def get_node_emissions(n: pypsa.Network) -> pd.DataFrame:
     
     return emissions
 
+def plot_region_emissions_html(n: pypsa.Network, save:str, **wildcards) -> None:
+    """Plots interactive region level emissions"""
+    
+    # get data 
+    
+    emissions = get_node_emissions(n)
+    emissions = emissions.groupby(n.buses.country, axis=1).sum()
+    
+    # plot data
+    
+    fig = px.area(
+        emissions, 
+        x=emissions.index,
+        y=emissions.columns,
+    )
+    
+    title = create_title("Regional CO2 Emissions", **wildcards)
+    fig.update_layout(
+        title=dict(text=title, font=dict(size=TITLE_SIZE)),
+        xaxis_title="",
+        yaxis_title="Emissions [Tonnes]",
+    )
+    fig.write_html(save)
+    
 def plot_node_emissions_html(n: pypsa.Network, save:str, **wildcards) -> None:
     """Plots interactive node level emissions. 
     
@@ -132,6 +156,8 @@ def plot_node_emissions_html(n: pypsa.Network, save:str, **wildcards) -> None:
     # get data 
     
     emissions = get_node_emissions(n)
+    
+    # plot
     
     fig = px.area(
         emissions, 
@@ -550,4 +576,5 @@ if __name__ == "__main__":
     plot_hourly_emissions(n, snakemake.output["emissions_area"], **snakemake.wildcards)
     plot_hourly_emissions_html(n, snakemake.output["emissions_area_html"], **snakemake.wildcards)
     plot_accumulated_emissions(n, snakemake.output["emissions_accumulated"], **snakemake.wildcards)
-    plot_node_emissions_html(n, snakemake.output["emissions_node_html"], **snakemake.wildcards)
+    # plot_node_emissions_html(n, snakemake.output["emissions_node_html"], **snakemake.wildcards)
+    plot_region_emissions_html(n, snakemake.output["emissions_region_html"], **snakemake.wildcards)
