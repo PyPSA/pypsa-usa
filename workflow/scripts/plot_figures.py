@@ -101,7 +101,54 @@ def get_snapshot_emissions(n: pypsa.Network) -> pd.DataFrame:
     
     return emissions
 
+def get_node_emissions(n: pypsa.Network) -> pd.DataFrame:
+    """Gets timeseries emissions per node"""
+    
+    emission_rates = n.carriers[n.carriers["co2_emissions"] != 0]["co2_emissions"]
+
+    if emission_rates.empty:
+        return pd.DataFrame(index=n.snapshots)
+    
+    emission_rates = n.carriers[n.carriers["co2_emissions"] != 0]["co2_emissions"]
+
+    emitters = emission_rates.index
+    generators = n.generators[n.generators.carrier.isin(emitters)]
+    
+    if generators.empty:
+        return pd.DataFrame(index=n.snapshots, columns=n.buses.index).fillna(0)
+
+    em_pu = generators.carrier.map(emission_rates) / generators.efficiency # TODO timeseries efficiency 
+    emissions = n.generators_t.p[generators.index].mul(em_pu)
+    emissions = emissions.groupby(n.generators.bus, axis=1).sum()
+    
+    return emissions
+
+def plot_node_emissions_html(n: pypsa.Network, save:str, **wildcards) -> None:
+    """Plots interactive node level emissions. 
+    
+    Performance issues of this with many nodes!!
+    """
+    
+    # get data 
+    
+    emissions = get_node_emissions(n)
+    
+    fig = px.area(
+        emissions, 
+        x=emissions.index,
+        y=emissions.columns,
+    )
+    
+    title = create_title("Node Emissions", **wildcards)
+    fig.update_layout(
+        title=dict(text=title, font=dict(size=TITLE_SIZE)),
+        xaxis_title="",
+        yaxis_title="Emissions [Tonnes]",
+    )
+    fig.write_html(save)
+
 def plot_accumulated_emissions(n: pypsa.Network, save:str, **wildcards) -> None:
+    """Plots accumulated emissions by technology"""
     
     # get data
     
@@ -124,6 +171,7 @@ def plot_accumulated_emissions(n: pypsa.Network, save:str, **wildcards) -> None:
     fig.savefig(save)
 
 def plot_hourly_emissions_html(n: pypsa.Network, save:str, **wildcards) -> None:
+    """Plots interactive snapshot emissions by technology"""
 
     # get data
     
@@ -149,6 +197,7 @@ def plot_hourly_emissions_html(n: pypsa.Network, save:str, **wildcards) -> None:
     fig.write_html(save)
 
 def plot_hourly_emissions(n: pypsa.Network, save:str, **wildcards) -> None:
+    """Plots snapshot emissions by technology"""
     
     # get data
     
@@ -501,3 +550,4 @@ if __name__ == "__main__":
     plot_hourly_emissions(n, snakemake.output["emissions_area"], **snakemake.wildcards)
     plot_hourly_emissions_html(n, snakemake.output["emissions_area_html"], **snakemake.wildcards)
     plot_accumulated_emissions(n, snakemake.output["emissions_accumulated"], **snakemake.wildcards)
+    plot_node_emissions_html(n, snakemake.output["emissions_node_html"], **snakemake.wildcards)

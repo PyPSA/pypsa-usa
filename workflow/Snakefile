@@ -25,6 +25,7 @@ FIGURES_SINGLE = [
 FIGURES_SINGLE_HTML = [
     "production_area_html",
     "emissions_area_html",
+    "emissions_node_html"
 ]
 
 # --------------------------- Workflow constraints --------------------------- #
