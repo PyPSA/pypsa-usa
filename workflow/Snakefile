@@ -18,6 +18,7 @@ FIGURES_SINGLE = [
     "costs_bar",
     "production_bar",
     "production_area",
+    "emissions_area"
 ]
 
 FIGURES_SINGLE_HTML = [

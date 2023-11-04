@@ -2,7 +2,7 @@
 
 import sys
 import os
-from typing import Dict
+from typing import Dict, Union
 
 import pypsa
 import matplotlib.pyplot as plt
@@ -40,7 +40,7 @@ def get_color_palette(n: pypsa.Network) -> Dict[str,str]:
     color_palette = n.carriers.set_index("nice_name").to_dict()["color"]
     color_palette["Battery Charging"] = color_palette["Battery Storage"]
     color_palette["Battery Discharging"] = color_palette["Battery Storage"]
-    color_palette["Battery"] = color_palette["Battery Storage"]
+    color_palette["battery"] = color_palette["Battery Storage"]
     return color_palette
 
 def get_bus_scale(interconnect: str) -> float:
@@ -78,6 +78,49 @@ def create_title(title: str, **wildcards) -> str:
             w.append(f"opts = {value}")
     wildcards_joined = " | ".join(w)
     return f"{title} \n ({wildcards_joined})"
+
+def get_snapshot_emissions(n: pypsa.Network) -> pd.DataFrame:
+    """Gets timeseries emissions per technology"""
+    
+    emission_rates = n.carriers[n.carriers["co2_emissions"] != 0]["co2_emissions"]
+
+    if emission_rates.empty:
+        return pd.DataFrame(index=n.snapshots)
+
+    nice_names = n.carriers["nice_name"]
+    emitters = emission_rates.index
+    generators = n.generators[n.generators.carrier.isin(emitters)]
+
+    if generators.empty:
+        return pd.DataFrame(index=n.snapshots, columns=emitters).fillna(0).rename(columns=nice_names)
+    
+    em_pu = generators.carrier.map(emission_rates) / generators.efficiency # TODO timeseries efficiency 
+    emissions = n.generators_t.p[generators.index].mul(em_pu)
+    emissions = emissions.groupby(n.generators.carrier, axis=1).sum().rename(columns=nice_names)
+    
+    return emissions
+
+def plot_hourly_emissions(n: pypsa.Network, save:str, **wildcards) -> None:
+    
+    # get data
+    
+    emissions = get_snapshot_emissions(n)
+    
+    # plot
+    
+    color_palette = get_color_palette(n)
+    
+    fig, ax = plt.subplots(figsize=(14, 4))
+    
+    emissions.plot.area(ax=ax, alpha=0.7, legend="reverse", color=color_palette)
+    
+    ax.legend(bbox_to_anchor=(1, 1), loc="upper left")
+    ax.set_title(create_title("Technology Emissions", **wildcards))
+    ax.set_ylabel("Emissions [Tonnes]")
+    fig.tight_layout()
+    
+    fig.savefig(save)
+    
 
 def plot_production_html(n: pypsa.Network, save:str, **wildcards) -> None:
     """Plots interactive timeseries production chart"""
@@ -407,3 +450,4 @@ if __name__ == "__main__":
     plot_production_bar(n, snakemake.output["production_bar"], **snakemake.wildcards)
     plot_production_area(n, snakemake.output["production_area"], **snakemake.wildcards)
     plot_production_html(n, snakemake.output["production_area_html"], **snakemake.wildcards)
+    plot_hourly_emissions(n, snakemake.output["emissions_area"], **snakemake.wildcards)
