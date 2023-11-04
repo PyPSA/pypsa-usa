@@ -20,6 +20,10 @@ FIGURES_SINGLE = [
     "production_area",
 ]
 
+FIGURES_SINGLE_HTML = [
+    "production_area_html",
+]
+
 # --------------------------- Workflow constraints --------------------------- #
 
 localrules:
@@ -625,6 +629,11 @@ rule plot_figures:
             fig: "results/{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_%s.pdf"
             % fig
             for fig in FIGURES_SINGLE
+        },
+        **{
+            fig: "results/{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_%s.html"
+            % fig
+            for fig in FIGURES_SINGLE_HTML
         },
     script:
         "scripts/plot_figures.py"

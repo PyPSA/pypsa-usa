@@ -28,6 +28,9 @@ import pandas as pd
 import geopandas as gpd
 import cartopy.crs as ccrs
 
+import plotly.express as px
+import plotly.graph_objects as go
+
 
 # Global Plotting Settings
 TITLE_SIZE = 16
@@ -68,6 +71,37 @@ def create_title(title: str, **wildcards) -> str:
     wildcards_joined = " | ".join(w)
     return f"{title} \n ({wildcards_joined})"
 
+def plot_production_html(n: pypsa.Network, save:str, **wildcards) -> None:
+    """Plots interactive timeseries production chart"""
+    
+    # get data 
+    
+    carriers = n.generators.carrier
+    carrier_nice_names = n.carriers.nice_name
+    production = n.generators_t.p.mul(1e-3) # MW -> GW
+    production = production.groupby(carriers, axis=1).sum().rename(columns=carrier_nice_names)
+    production["Demand"] = n.loads_t.p.sum(1).mul(1e-3) # MW -> GW
+    
+    # plot 
+    
+    color_palette = n.carriers.set_index("nice_name").to_dict()["color"]
+    
+    fig = px.area(
+        production, 
+        x=production.index, 
+        y=[c for c in production.columns if c != "Demand"],
+        color_discrete_map=color_palette
+    )
+    fig.add_trace(go.Scatter(x=production.index, y=production.Demand, mode="lines", name="Demand", line_color="darkblue"))
+    title = create_title("Production [GW]", **wildcards)
+    fig.update_layout(
+        title=dict(text=title, font=dict(size=TITLE_SIZE)),
+        xaxis_title="",
+        yaxis_title="Power [GW]",
+    )
+    fig.write_html(save)
+    
+
 def plot_production_area(n: pypsa.Network, save:str, **wildcards) -> None:
     """Plot timeseries production
     
@@ -85,6 +119,8 @@ def plot_production_area(n: pypsa.Network, save:str, **wildcards) -> None:
     
     # plot 
     
+    color_palette = n.carriers.set_index("nice_name").to_dict()["color"]
+    
     year = n.snapshots[0].year
     for timeslice in ["all"] + list(range(1, 12)):
         try:
@@ -94,7 +130,6 @@ def plot_production_area(n: pypsa.Network, save:str, **wildcards) -> None:
                 snapshots = slice(None, None)
                 
             fig, ax = plt.subplots(figsize=(14, 4))
-            color_palette = n.carriers.set_index("nice_name").to_dict()["color"]
             
             production[snapshots].plot.area(ax=ax, alpha=0.7, legend="reverse", color=color_palette)
             demand[snapshots].plot.line(ax=ax, ls="-", color="darkblue")
@@ -106,7 +141,7 @@ def plot_production_area(n: pypsa.Network, save:str, **wildcards) -> None:
             )
             
             ax.legend(bbox_to_anchor=(1, 1), loc="upper left")
-            ax.set_title(create_title("Costs", **wildcards))
+            ax.set_title(create_title("Production [GW]", **wildcards))
             ax.set_ylabel("Power [GW]")
             fig.tight_layout()
             
@@ -345,4 +380,4 @@ if __name__ == "__main__":
     plot_costs_bar(n, snakemake.output["costs_bar"], **snakemake.wildcards)
     plot_production_bar(n, snakemake.output["production_bar"], **snakemake.wildcards)
     plot_production_area(n, snakemake.output["production_area"], **snakemake.wildcards)
-    
+    plot_production_html(n, snakemake.output["production_area_html"], **snakemake.wildcards)
