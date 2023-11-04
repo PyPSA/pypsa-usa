@@ -2,6 +2,8 @@
 
 import sys
 import os
+from typing import Dict
+
 import pypsa
 import matplotlib.pyplot as plt
 import geopandas as gpd
@@ -9,7 +11,6 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 import seaborn as sns
-import logging
 from datetime import datetime
 from cartopy import crs as ccrs
 from pypsa.plot import add_legend_circles, add_legend_lines, add_legend_patches
@@ -34,6 +35,12 @@ import plotly.graph_objects as go
 
 # Global Plotting Settings
 TITLE_SIZE = 16
+
+def get_color_palette(n: pypsa.Network) -> Dict[str,str]:
+    color_palette = n.carriers.set_index("nice_name").to_dict()["color"]
+    color_palette["Battery Charging"] = color_palette["Battery Storage"]
+    color_palette["Battery Discharging"] = color_palette["Battery Storage"]
+    return color_palette
 
 def get_bus_scale(interconnect: str) -> float:
     """Scales lines based on interconnect size"""
@@ -92,7 +99,7 @@ def plot_production_html(n: pypsa.Network, save:str, **wildcards) -> None:
     
     # plot 
     
-    color_palette = n.carriers.set_index("nice_name").to_dict()["color"]
+    color_palette = get_color_palette(n)
     
     fig = px.area(
         energy_mix, 
@@ -135,9 +142,7 @@ def plot_production_area(n: pypsa.Network, save:str, **wildcards) -> None:
     
     # plot 
     
-    color_palette = n.carriers.set_index("nice_name").to_dict()["color"]
-    color_palette["Battery Charging"] = color_palette["Battery Storage"]
-    color_palette["Battery Discharging"] = color_palette["Battery Storage"]
+    color_palette = get_color_palette(n)
     
     year = n.snapshots[0].year
     for timeslice in ["all"] + list(range(1, 12)):
@@ -191,9 +196,7 @@ def plot_production_bar(n: pypsa.Network, save:str, **wildcards) -> None:
     # plot 
     
     fig, ax = plt.subplots(figsize=(10, 10))
-    color_palette = n.carriers.set_index("nice_name").to_dict()["color"]
-    color_palette["Battery Charging"] = color_palette["Battery Storage"]
-    color_palette["Battery Discharging"] = color_palette["Battery Storage"]
+    color_palette = get_color_palette(n)
     sns.barplot(data=energy_mix, y="carrier", x="Production (TWh)", palette=color_palette)
     
     ax.set_title(create_title("Production [TWh]", **wildcards))
@@ -231,7 +234,7 @@ def plot_costs_bar(n: pypsa.Network, save:str, **wildcards) -> None:
     # plot 
     
     fig, ax = plt.subplots(figsize=(10, 10))
-    color_palette = n.carriers.set_index("nice_name").to_dict()["color"]
+    color_palette = get_color_palette(n)
     sns.barplot(y="carrier", x="CAPEX", data=costs, alpha=0.6, ax=ax, palette=color_palette)
     sns.barplot(y="carrier", x="OPEX", data=costs, ax=ax, left=costs["CAPEX"], palette=color_palette)
     
@@ -400,10 +403,10 @@ if __name__ == "__main__":
     sns.set_theme("paper", style="darkgrid")
     
     # create plots
-    # plot_base_capacity(n, onshore_regions, snakemake.output["capacity_map_base"], **snakemake.wildcards)
-    # plot_opt_capacity(n, onshore_regions, snakemake.output["capacity_map_optimized"], **snakemake.wildcards)
-    # plot_new_capacity(n, onshore_regions, snakemake.output["capacity_map_new"], **snakemake.wildcards)
-    # plot_costs_bar(n, snakemake.output["costs_bar"], **snakemake.wildcards)
-    # plot_production_bar(n, snakemake.output["production_bar"], **snakemake.wildcards)
+    plot_base_capacity(n, onshore_regions, snakemake.output["capacity_map_base"], **snakemake.wildcards)
+    plot_opt_capacity(n, onshore_regions, snakemake.output["capacity_map_optimized"], **snakemake.wildcards)
+    plot_new_capacity(n, onshore_regions, snakemake.output["capacity_map_new"], **snakemake.wildcards)
+    plot_costs_bar(n, snakemake.output["costs_bar"], **snakemake.wildcards)
+    plot_production_bar(n, snakemake.output["production_bar"], **snakemake.wildcards)
     plot_production_area(n, snakemake.output["production_area"], **snakemake.wildcards)
     plot_production_html(n, snakemake.output["production_area_html"], **snakemake.wildcards)
