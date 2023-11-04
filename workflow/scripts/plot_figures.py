@@ -40,6 +40,7 @@ def get_color_palette(n: pypsa.Network) -> Dict[str,str]:
     color_palette = n.carriers.set_index("nice_name").to_dict()["color"]
     color_palette["Battery Charging"] = color_palette["Battery Storage"]
     color_palette["Battery Discharging"] = color_palette["Battery Storage"]
+    color_palette["Battery"] = color_palette["Battery Storage"]
     return color_palette
 
 def get_bus_scale(interconnect: str) -> float:
@@ -91,10 +92,8 @@ def plot_production_html(n: pypsa.Network, save:str, **wildcards) -> None:
     production = production.groupby(carriers, axis=1).sum().rename(columns=carrier_nice_names)
     
     storage = n.storage_units_t.p.groupby(carriers_storage_units, axis=1).sum().mul(1e-3)
-    storage_charge = storage[storage > 0].fillna(0).rename(columns={'battery':'Battery Discharging'})
-    storage_discharge = storage[storage < 0].fillna(0).rename(columns={'battery':'Battery Charging'})
     
-    energy_mix = pd.concat([production, storage_charge, storage_discharge], axis=1)
+    energy_mix = pd.concat([production,storage], axis=1)
     energy_mix["Demand"] = n.loads_t.p.sum(1).mul(1e-3) # MW -> GW
     
     # plot 
@@ -134,10 +133,8 @@ def plot_production_area(n: pypsa.Network, save:str, **wildcards) -> None:
     production = production.groupby(carriers, axis=1).sum().rename(columns=carrier_nice_names)
     
     storage = n.storage_units_t.p.groupby(carriers_storage_units, axis=1).sum().mul(1e-3)
-    storage_charge = storage[storage > 0].fillna(0).rename(columns={'battery':'Battery Discharging'})
-    storage_discharge = storage[storage < 0].fillna(0).rename(columns={'battery':'Battery Charging'})
     
-    energy_mix = pd.concat([production, storage_charge, storage_discharge], axis=1)
+    energy_mix = pd.concat([production, storage], axis=1)
     demand = pd.DataFrame(n.loads_t.p.sum(1).mul(1e-3)).rename(columns={0:"Deamand"})
     
     # plot 
