@@ -41,6 +41,7 @@ def get_color_palette(n: pypsa.Network) -> Dict[str,str]:
     color_palette["Battery Charging"] = color_palette["Battery Storage"]
     color_palette["Battery Discharging"] = color_palette["Battery Storage"]
     color_palette["battery"] = color_palette["Battery Storage"]
+    color_palette["co2"] = "k"
     return color_palette
 
 def get_bus_scale(interconnect: str) -> float:
@@ -99,6 +100,28 @@ def get_snapshot_emissions(n: pypsa.Network) -> pd.DataFrame:
     emissions = emissions.groupby(n.generators.carrier, axis=1).sum().rename(columns=nice_names)
     
     return emissions
+
+def plot_accumulated_emissions(n: pypsa.Network, save:str, **wildcards) -> None:
+    
+    # get data
+    
+    emissions = get_snapshot_emissions(n).sum(axis=1)
+    emissions = emissions.cumsum().to_frame("co2")
+    
+    # plot
+    
+    color_palette = get_color_palette(n)
+    
+    fig, ax = plt.subplots(figsize=(14, 4))
+    
+    emissions.plot.area(ax=ax, alpha=0.7, legend="reverse", color=color_palette)
+    
+    ax.legend(bbox_to_anchor=(1, 1), loc="upper left")
+    ax.set_title(create_title("Accumulated Emissions", **wildcards))
+    ax.set_ylabel("Emissions [Tonnes]")
+    fig.tight_layout()
+    
+    fig.savefig(save)
 
 def plot_hourly_emissions_html(n: pypsa.Network, save:str, **wildcards) -> None:
 
@@ -477,3 +500,4 @@ if __name__ == "__main__":
     plot_production_html(n, snakemake.output["production_area_html"], **snakemake.wildcards)
     plot_hourly_emissions(n, snakemake.output["emissions_area"], **snakemake.wildcards)
     plot_hourly_emissions_html(n, snakemake.output["emissions_area_html"], **snakemake.wildcards)
+    plot_accumulated_emissions(n, snakemake.output["emissions_accumulated"], **snakemake.wildcards)
