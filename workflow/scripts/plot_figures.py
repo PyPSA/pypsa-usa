@@ -100,6 +100,31 @@ def get_snapshot_emissions(n: pypsa.Network) -> pd.DataFrame:
     
     return emissions
 
+def plot_hourly_emissions_html(n: pypsa.Network, save:str, **wildcards) -> None:
+
+    # get data
+    
+    emissions = get_snapshot_emissions(n)
+    
+    # plot
+    
+    color_palette = get_color_palette(n)
+    
+    fig = px.area(
+        emissions, 
+        x=emissions.index,
+        y=emissions.columns,
+        color_discrete_map=color_palette
+    )
+    
+    title = create_title("Technology Emissions", **wildcards)
+    fig.update_layout(
+        title=dict(text=title, font=dict(size=TITLE_SIZE)),
+        xaxis_title="",
+        yaxis_title="Emissions [Tonnes]",
+    )
+    fig.write_html(save)
+
 def plot_hourly_emissions(n: pypsa.Network, save:str, **wildcards) -> None:
     
     # get data
@@ -451,3 +476,4 @@ if __name__ == "__main__":
     plot_production_area(n, snakemake.output["production_area"], **snakemake.wildcards)
     plot_production_html(n, snakemake.output["production_area_html"], **snakemake.wildcards)
     plot_hourly_emissions(n, snakemake.output["emissions_area"], **snakemake.wildcards)
+    plot_hourly_emissions_html(n, snakemake.output["emissions_area_html"], **snakemake.wildcards)
