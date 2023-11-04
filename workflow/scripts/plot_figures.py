@@ -158,19 +158,27 @@ def plot_production_bar(n: pypsa.Network, save:str, **wildcards) -> None:
     # get data 
     
     carriers = n.generators.carrier
+    carriers_storage_units = n.storage_units.carrier
     carrier_nice_names = n.carriers.nice_name
     production = n.generators_t.p
     production = pd.DataFrame(production.groupby(carriers, axis=1)
                               .sum().rename(columns=carrier_nice_names)
                               .sum()).mul(1e-6).rename(columns={0:"Production (TWh)"}).reset_index()
     
+    storage = n.storage_units_t.p.groupby(carriers_storage_units, axis=1).sum().mul(1e-6)
+    storage_charge = storage[storage > 0].rename(columns={'battery':'Battery Discharging'}).sum().reset_index().rename(columns={0:"Production (TWh)"})
+    storage_discharge = storage[storage < 0].rename(columns={'battery':'Battery Charging'}).sum().reset_index().rename(columns={0:"Production (TWh)"})
+    energy_mix = pd.concat([production, storage_charge, storage_discharge])
+    
     # plot 
     
     fig, ax = plt.subplots(figsize=(10, 10))
     color_palette = n.carriers.set_index("nice_name").to_dict()["color"]
-    sns.barplot(data=production, y="carrier", x="Production (TWh)", palette=color_palette)
+    color_palette["Battery Charging"] = color_palette["Battery Storage"]
+    color_palette["Battery Discharging"] = color_palette["Battery Storage"]
+    sns.barplot(data=energy_mix, y="carrier", x="Production (TWh)", palette=color_palette)
     
-    ax.set_title(create_title("Costs", **wildcards))
+    ax.set_title(create_title("Production [TWh]", **wildcards))
     ax.set_ylabel("")
     # ax.set_xlabel("")
     fig.tight_layout()
