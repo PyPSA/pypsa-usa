@@ -77,22 +77,30 @@ def plot_production_html(n: pypsa.Network, save:str, **wildcards) -> None:
     # get data 
     
     carriers = n.generators.carrier
+    carriers_storage_units = n.storage_units.carrier
     carrier_nice_names = n.carriers.nice_name
+    
     production = n.generators_t.p.mul(1e-3) # MW -> GW
     production = production.groupby(carriers, axis=1).sum().rename(columns=carrier_nice_names)
-    production["Demand"] = n.loads_t.p.sum(1).mul(1e-3) # MW -> GW
+    
+    storage = n.storage_units_t.p.groupby(carriers_storage_units, axis=1).sum().mul(1e-3)
+    storage_charge = storage[storage > 0].fillna(0).rename(columns={'battery':'Battery Discharging'})
+    storage_discharge = storage[storage < 0].fillna(0).rename(columns={'battery':'Battery Charging'})
+    
+    energy_mix = pd.concat([production, storage_charge, storage_discharge], axis=1)
+    energy_mix["Demand"] = n.loads_t.p.sum(1).mul(1e-3) # MW -> GW
     
     # plot 
     
     color_palette = n.carriers.set_index("nice_name").to_dict()["color"]
     
     fig = px.area(
-        production, 
-        x=production.index, 
-        y=[c for c in production.columns if c != "Demand"],
+        energy_mix, 
+        x=energy_mix.index, 
+        y=[c for c in energy_mix.columns if c != "Demand"],
         color_discrete_map=color_palette
     )
-    fig.add_trace(go.Scatter(x=production.index, y=production.Demand, mode="lines", name="Demand", line_color="darkblue"))
+    fig.add_trace(go.Scatter(x=energy_mix.index, y=energy_mix.Demand, mode="lines", name="Demand", line_color="darkblue"))
     title = create_title("Production [GW]", **wildcards)
     fig.update_layout(
         title=dict(text=title, font=dict(size=TITLE_SIZE)),
@@ -112,14 +120,24 @@ def plot_production_area(n: pypsa.Network, save:str, **wildcards) -> None:
     # get data 
     
     carriers = n.generators.carrier
+    carriers_storage_units = n.storage_units.carrier
     carrier_nice_names = n.carriers.nice_name
+    
     production = n.generators_t.p.mul(1e-3) # MW -> GW
     production = production.groupby(carriers, axis=1).sum().rename(columns=carrier_nice_names)
+    
+    storage = n.storage_units_t.p.groupby(carriers_storage_units, axis=1).sum().mul(1e-3)
+    storage_charge = storage[storage > 0].fillna(0).rename(columns={'battery':'Battery Discharging'})
+    storage_discharge = storage[storage < 0].fillna(0).rename(columns={'battery':'Battery Charging'})
+    
+    energy_mix = pd.concat([production, storage_charge, storage_discharge], axis=1)
     demand = pd.DataFrame(n.loads_t.p.sum(1).mul(1e-3)).rename(columns={0:"Deamand"})
     
     # plot 
     
     color_palette = n.carriers.set_index("nice_name").to_dict()["color"]
+    color_palette["Battery Charging"] = color_palette["Battery Storage"]
+    color_palette["Battery Discharging"] = color_palette["Battery Storage"]
     
     year = n.snapshots[0].year
     for timeslice in ["all"] + list(range(1, 12)):
@@ -131,7 +149,7 @@ def plot_production_area(n: pypsa.Network, save:str, **wildcards) -> None:
                 
             fig, ax = plt.subplots(figsize=(14, 4))
             
-            production[snapshots].plot.area(ax=ax, alpha=0.7, legend="reverse", color=color_palette)
+            energy_mix[snapshots].plot.area(ax=ax, alpha=0.7, legend="reverse", color=color_palette)
             demand[snapshots].plot.line(ax=ax, ls="-", color="darkblue")
             
             suffix = (
@@ -382,10 +400,10 @@ if __name__ == "__main__":
     sns.set_theme("paper", style="darkgrid")
     
     # create plots
-    plot_base_capacity(n, onshore_regions, snakemake.output["capacity_map_base"], **snakemake.wildcards)
-    plot_opt_capacity(n, onshore_regions, snakemake.output["capacity_map_optimized"], **snakemake.wildcards)
-    plot_new_capacity(n, onshore_regions, snakemake.output["capacity_map_new"], **snakemake.wildcards)
-    plot_costs_bar(n, snakemake.output["costs_bar"], **snakemake.wildcards)
-    plot_production_bar(n, snakemake.output["production_bar"], **snakemake.wildcards)
+    # plot_base_capacity(n, onshore_regions, snakemake.output["capacity_map_base"], **snakemake.wildcards)
+    # plot_opt_capacity(n, onshore_regions, snakemake.output["capacity_map_optimized"], **snakemake.wildcards)
+    # plot_new_capacity(n, onshore_regions, snakemake.output["capacity_map_new"], **snakemake.wildcards)
+    # plot_costs_bar(n, snakemake.output["costs_bar"], **snakemake.wildcards)
+    # plot_production_bar(n, snakemake.output["production_bar"], **snakemake.wildcards)
     plot_production_area(n, snakemake.output["production_area"], **snakemake.wildcards)
     plot_production_html(n, snakemake.output["production_area_html"], **snakemake.wildcards)
