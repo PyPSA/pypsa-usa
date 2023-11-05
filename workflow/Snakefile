@@ -20,7 +20,8 @@ FIGURES_SINGLE = [
     "production_area",
     "emissions_area",
     "emissions_accumulated",
-    "emissions_map"
+    "emissions_map",
+    "renewable_potential_map",
 ]
 
 FIGURES_SINGLE_HTML = [

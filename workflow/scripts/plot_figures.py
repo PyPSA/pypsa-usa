@@ -460,7 +460,7 @@ def plot_costs_bar(n: pypsa.Network, save:str, **wildcards) -> None:
     fig.tight_layout()
     fig.savefig(save)
 
-def plot_capacity_map(n: pypsa.Network, bus_values: pd.DataFrame, regions: gpd.GeoDataFrame, bus_scale=1, line_scale=1, title = None) -> (plt.figure, plt.axes):
+def plot_capacity_map(n: pypsa.Network, bus_values: pd.DataFrame, regions: gpd.GeoDataFrame, bus_scale=1, line_scale=1, lines=True, title = None) -> (plt.figure, plt.axes):
     """
     Generic network plotting function for capacity pie charts at each node
     """
@@ -468,13 +468,20 @@ def plot_capacity_map(n: pypsa.Network, bus_values: pd.DataFrame, regions: gpd.G
     fig, ax = plt.subplots(
         figsize=(10, 10), subplot_kw={"projection": ccrs.EqualEarth(n.buses.x.mean())}
     )
+    
+    if lines:
+        line_width = n.lines.s_nom / line_scale
+        link_width = n.links.p_nom / line_scale
+    else:
+        line_width = 0
+        link_width = 0
 
     with plt.rc_context({"patch.linewidth": 0.1}):
         n.plot(
             bus_sizes=bus_values / bus_scale,
             bus_alpha=0.7,
-            line_widths=n.lines.s_nom / line_scale,
-            link_widths=n.links.p_nom / line_scale,
+            line_widths=line_width,
+            link_widths=link_width,
             line_colors="teal",
             ax=ax,
             margin=0.2,
@@ -502,12 +509,13 @@ def plot_capacity_map(n: pypsa.Network, bus_values: pd.DataFrame, regions: gpd.G
         [f"{s / 1000} GW" for s in bus_sizes],
         legend_kw={"bbox_to_anchor": (1, 1), **legend_kwargs},
     )
-    add_legend_lines(
-        ax,
-        [s / line_scale for s in line_sizes],
-        [f"{s / 1000} GW" for s in line_sizes],
-        legend_kw={"bbox_to_anchor": (1, 0.8), **legend_kwargs},
-    )
+    if lines:
+        add_legend_lines(
+            ax,
+            [s / line_scale for s in line_sizes],
+            [f"{s / 1000} GW" for s in line_sizes],
+            legend_kw={"bbox_to_anchor": (1, 0.8), **legend_kwargs},
+        )
     add_legend_patches(
         ax,
         n.carriers.color,
@@ -595,6 +603,40 @@ def plot_new_capacity(n: pypsa.Network, regions: gpd.GeoDataFrame, save: str, **
     )
     fig.savefig(save)
 
+def plot_renewable_potential(n: pypsa.Network, regions: gpd.GeoDataFrame, save: str, **wildcards) -> None:
+    """Plots wind and solar resource potential by node"""
+    renew = n.generators[
+        (n.generators.p_nom_max != np.inf) & 
+        (n.generators.carrier.isin(["onwind", "offwind", "solar"]))]
+    renew = renew.groupby(["bus", "carrier"]).p_nom_max.sum()
+    
+    title = create_title("Renewable Capacity Potential", **wildcards)
+    interconnect = wildcards.get("interconnect", None)
+    bus_scale = get_bus_scale(interconnect=wildcards["interconnect"]) if interconnect else 1
+    
+    bus_scale *= 12 # since potential capacity is so big
+    
+    fig, ax = plot_capacity_map(
+        n=n, 
+        bus_values=renew,
+        regions=regions,
+        bus_scale=bus_scale,
+        lines=False,
+        title=title
+    )
+    
+    # only show renewables in legend 
+    fig.artists[-1].remove() # remove existing legend
+    renew_carriers = n.carriers[n.carriers.index.isin(["onwind", "offwind", "solar"])]
+    add_legend_patches(
+        ax,
+        renew_carriers.color,
+        renew_carriers.nice_name,
+        legend_kw={"bbox_to_anchor": (1, 0),  "frameon": False, "loc": "lower left"},
+    )
+    
+    fig.savefig(save)
+
 if __name__ == "__main__":
     if 'snakemake' not in globals():
         from _helpers import mock_snakemake
@@ -632,3 +674,4 @@ if __name__ == "__main__":
     # plot_node_emissions_html(n, snakemake.output["emissions_node_html"], **snakemake.wildcards)
     plot_region_emissions_html(n, snakemake.output["emissions_region_html"], **snakemake.wildcards)
     plot_emissions_map(n, onshore_regions, snakemake.output["emissions_map"], **snakemake.wildcards)
+    plot_renewable_potential(n, onshore_regions, snakemake.output["renewable_potential_map"], **snakemake.wildcards)
