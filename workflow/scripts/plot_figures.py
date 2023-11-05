@@ -123,6 +123,59 @@ def get_node_emissions(n: pypsa.Network) -> pd.DataFrame:
     
     return emissions
 
+def plot_emissions_map(n: pypsa.Network, regions: gpd.GeoDataFrame, save:str, **wildcards) -> None:
+    
+    # get data 
+    
+    emissions = get_node_emissions(n).mul(1e-6).sum() # T -> MT
+    
+    # plot data
+    
+    fig, ax = plt.subplots(
+            figsize=(10, 10), subplot_kw={"projection": ccrs.EqualEarth(n.buses.x.mean())}
+        )
+
+    bus_scale = 1
+
+    with plt.rc_context({"patch.linewidth": 0.1}):
+        n.plot(
+            bus_sizes=emissions / bus_scale,
+            bus_colors="k",
+            bus_alpha=0.7,
+            line_widths=0,
+            link_widths=0,
+            ax=ax,
+            margin=0.2,
+            color_geomap=None
+        )
+        
+    # onshore regions
+    regions.plot(
+        ax=ax,
+        facecolor="whitesmoke",
+        edgecolor="white",
+        aspect="equal",
+        transform=ccrs.PlateCarree(),
+        linewidth=1.2,
+    )
+    ax.set_extent(regions.total_bounds[[0, 2, 1, 3]])
+
+    legend_kwargs = {"loc": "upper left", "frameon": False}
+    bus_sizes = [0.01, 0.1, 1]  # in Tonnes
+
+    # add_legend_circles(
+    #     ax,
+    #     [s / bus_scale for s in bus_sizes],
+    #     [f"{s / 1000} Tonnes" for s in bus_sizes],
+    #     legend_kw={"bbox_to_anchor": (1, 1), **legend_kwargs},
+    # )
+    
+    title = create_title("Emissions (MTonne)", **wildcards)
+    ax.set_title(title, fontsize=TITLE_SIZE, pad=20)
+    fig.tight_layout()
+    
+    fig.savefig(save)
+
 def plot_region_emissions_html(n: pypsa.Network, save:str, **wildcards) -> None:
     """Plots interactive region level emissions"""
     
@@ -578,3 +631,4 @@ if __name__ == "__main__":
     plot_accumulated_emissions(n, snakemake.output["emissions_accumulated"], **snakemake.wildcards)
     # plot_node_emissions_html(n, snakemake.output["emissions_node_html"], **snakemake.wildcards)
     plot_region_emissions_html(n, snakemake.output["emissions_region_html"], **snakemake.wildcards)
+    plot_emissions_map(n, onshore_regions, snakemake.output["emissions_map"], **snakemake.wildcards)
