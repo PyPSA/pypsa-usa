@@ -20,6 +20,7 @@ FIGURES_SINGLE = [
     "production_area",
     "emissions_area",
     "emissions_accumulated",
+    "emissions_accumulated_tech",
     "emissions_map",
     "renewable_potential_map",
 ]
@@ -29,6 +30,7 @@ FIGURES_SINGLE_HTML = [
     "emissions_area_html",
     "emissions_node_html",
     "emissions_region_html",
+    "emissions_accumulated_tech_html"
 ]
 
 # --------------------------- Workflow constraints --------------------------- #

@@ -227,7 +227,7 @@ def plot_node_emissions_html(n: pypsa.Network, save:str, **wildcards) -> None:
     fig.write_html(save)
 
 def plot_accumulated_emissions(n: pypsa.Network, save:str, **wildcards) -> None:
-    """Plots accumulated emissions by technology"""
+    """Plots accumulated emissions"""
     
     # get data
     
@@ -248,6 +248,56 @@ def plot_accumulated_emissions(n: pypsa.Network, save:str, **wildcards) -> None:
     fig.tight_layout()
     
     fig.savefig(save)
+    
+def plot_accumulated_emissions_tech(n: pypsa.Network, save:str, **wildcards) -> None:
+    """Plots accumulated emissions by technology"""
+    
+    # get data
+    
+    nice_names = n.carriers.nice_name
+    emissions = get_snapshot_emissions(n).cumsum().rename(columns=nice_names)
+    
+    # plot
+    
+    color_palette = get_color_palette(n)
+    
+    fig, ax = plt.subplots(figsize=(14, 4))
+    
+    emissions.plot.area(ax=ax, alpha=0.7, legend="reverse", color=color_palette)
+    
+    ax.legend(bbox_to_anchor=(1, 1), loc="upper left")
+    ax.set_title(create_title("Technology Accumulated Emissions", **wildcards))
+    ax.set_ylabel("Emissions [Tonnes]")
+    fig.tight_layout()
+    
+    fig.savefig(save)
+    
+def plot_accumulated_emissions_tech_html(n: pypsa.Network, save:str, **wildcards) -> None:
+    """Plots accumulated emissions by technology"""
+    
+    # get data
+    
+    nice_names = n.carriers.nice_name
+    emissions = get_snapshot_emissions(n).cumsum().rename(columns=nice_names)
+    
+    # plot
+    
+    color_palette = get_color_palette(n)
+    
+    fig = px.area(
+        emissions, 
+        x=emissions.index,
+        y=emissions.columns,
+        color_discrete_map=color_palette
+    )
+    
+    title = create_title("Technology Accumulated Emissions", **wildcards)
+    fig.update_layout(
+        title=dict(text=title, font=dict(size=TITLE_SIZE)),
+        xaxis_title="",
+        yaxis_title="Emissions [Tonnes]",
+    )
+    fig.write_html(save)
 
 def plot_hourly_emissions_html(n: pypsa.Network, save:str, **wildcards) -> None:
     """Plots interactive snapshot emissions by technology"""
@@ -671,6 +721,8 @@ if __name__ == "__main__":
     plot_hourly_emissions(n, snakemake.output["emissions_area"], **snakemake.wildcards)
     plot_hourly_emissions_html(n, snakemake.output["emissions_area_html"], **snakemake.wildcards)
     plot_accumulated_emissions(n, snakemake.output["emissions_accumulated"], **snakemake.wildcards)
+    plot_accumulated_emissions_tech(n, snakemake.output["emissions_accumulated_tech"], **snakemake.wildcards)
+    plot_accumulated_emissions_tech_html(n, snakemake.output["emissions_accumulated_tech_html"], **snakemake.wildcards)
     # plot_node_emissions_html(n, snakemake.output["emissions_node_html"], **snakemake.wildcards)
     plot_region_emissions_html(n, snakemake.output["emissions_region_html"], **snakemake.wildcards)
     plot_emissions_map(n, onshore_regions, snakemake.output["emissions_map"], **snakemake.wildcards)
