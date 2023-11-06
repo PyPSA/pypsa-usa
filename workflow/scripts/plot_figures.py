@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 from _helpers import configure_logging
 
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
 import pandas as pd
 import geopandas as gpd
 import cartopy.crs as ccrs
@@ -79,6 +80,31 @@ def create_title(title: str, **wildcards) -> str:
             w.append(f"opts = {value}")
     wildcards_joined = " | ".join(w)
     return f"{title} \n ({wildcards_joined})"
+
+def get_pnom(n: pypsa.Network, components:str = "all") -> pd.DataFrame:
+    """Gets pnom capacity"""
+    storage_pnom = n.storage_units.groupby(["bus", "carrier"]).p_nom.sum()
+    generator_pnom = n.generators.groupby(["bus", "carrier"]).p_nom.sum()
+    
+    if components == "generator":
+        return generator_pnom
+    elif components == "storage":
+        return storage_pnom
+    else:
+        return pd.concat([generator_pnom, storage_pnom])
+    
+    
+def get_pnom_opt(n: pypsa.Network, components:str = "all") -> pd.DataFrame:
+    """Gets optimal pnom capacity"""
+    storage_pnom_opt = n.storage_units.groupby(["bus", "carrier"]).p_nom_opt.sum()
+    generator_pnom_opt = n.generators.groupby(["bus", "carrier"]).p_nom_opt.sum()
+    
+    if components == "generator":
+        return generator_pnom_opt
+    elif components == "storage":
+        return storage_pnom_opt
+    else:
+        return pd.concat([generator_pnom_opt, storage_pnom_opt])
 
 def get_snapshot_emissions(n: pypsa.Network) -> pd.DataFrame:
     """Gets timeseries emissions per technology"""
@@ -584,9 +610,12 @@ def plot_base_capacity(n: pypsa.Network, regions: gpd.GeoDataFrame, save: str, *
     """
     Plots base network capacities
     """
-    gen_pnom = n.generators.groupby(["bus", "carrier"]).p_nom.sum()
-    storage_pnom = n.storage_units.groupby(["bus", "carrier"]).p_nom.sum()
-    bus_pnom = pd.concat([gen_pnom, storage_pnom])
+    
+    # get data
+
+    pnom = get_pnom(n)
+    
+    # plot data
     
     title = create_title("Base Network Capacities", **wildcards)
     interconnect = wildcards.get("interconnect", None)
@@ -595,7 +624,7 @@ def plot_base_capacity(n: pypsa.Network, regions: gpd.GeoDataFrame, save: str, *
     
     fig, _ = plot_capacity_map(
         n=n, 
-        bus_values=bus_pnom,
+        bus_values=pnom,
         regions=regions,
         line_scale=line_scale,
         bus_scale=bus_scale,
@@ -607,9 +636,12 @@ def plot_opt_capacity(n: pypsa.Network, regions: gpd.GeoDataFrame, save: str, **
     """
     Plots optimal network capacities
     """
-    gen_pnom_opt = n.generators.groupby(["bus", "carrier"]).p_nom_opt.sum()
-    storage_pnom_opt = (n.storage_units.groupby(["bus", "carrier"]).p_nom_opt.sum())
-    bus_pnom_opt = pd.concat([gen_pnom_opt, storage_pnom_opt])
+    
+    # get data
+    
+    pnom_opt = get_pnom_opt(n)
+    
+    # plot data 
     
     title = create_title("Optimal Network Capacities", **wildcards)
     interconnect = wildcards.get("interconnect", None)
@@ -618,7 +650,7 @@ def plot_opt_capacity(n: pypsa.Network, regions: gpd.GeoDataFrame, save: str, **
     
     fig, _ = plot_capacity_map(
         n=n, 
-        bus_values=bus_pnom_opt,
+        bus_values=pnom_opt,
         regions=regions,
         line_scale=line_scale,
         bus_scale=bus_scale,
@@ -628,15 +660,14 @@ def plot_opt_capacity(n: pypsa.Network, regions: gpd.GeoDataFrame, save: str, **
 
 def plot_new_capacity(n: pypsa.Network, regions: gpd.GeoDataFrame, save: str, **wildcards) -> None:
     """Plots new capacity"""
-    gen_pnom = n.generators.groupby(["bus", "carrier"]).p_nom.sum()
-    gen_pnom_opt = n.generators.groupby(["bus", "carrier"]).p_nom_opt.sum()
-    gen_pnom_new = gen_pnom_opt - gen_pnom
     
-    storage_pnom = n.storage_units.groupby(["bus", "carrier"]).p_nom.sum()
-    storage_pnom_opt = (n.storage_units.groupby(["bus", "carrier"]).p_nom_opt.sum())
-    storage_pnom_new = storage_pnom_opt - storage_pnom
+    # get data
     
-    bus_pnom_new = pd.concat([gen_pnom_new, storage_pnom_new])
+    pnom = get_pnom(n)
+    pnom_opt = get_pnom_opt(n)
+    pnom_new = pnom_opt - pnom
+
+    # plot data
     
     title = create_title("New Network Capacities", **wildcards)
     interconnect = wildcards.get("interconnect", None)
@@ -645,7 +676,7 @@ def plot_new_capacity(n: pypsa.Network, regions: gpd.GeoDataFrame, save: str, **
     
     fig, _ = plot_capacity_map(
         n=n, 
-        bus_values=bus_pnom_new,
+        bus_values=pnom_new,
         regions=regions,
         line_scale=line_scale,
         bus_scale=bus_scale,
@@ -685,6 +716,66 @@ def plot_renewable_potential(n: pypsa.Network, regions: gpd.GeoDataFrame, save: 
         legend_kw={"bbox_to_anchor": (1, 0),  "frameon": False, "loc": "lower left"},
     )
     
+    fig.savefig(save)
+
+def plot_capacity_additions(n: pypsa.Network, save: str, **wildcards) -> None:
+    """Plots base capacity vs optimal capacity """
+    
+    # get data
+    
+    nice_names = n.carriers.nice_name
+    
+    pnom = get_pnom(n)
+    pnom = pnom.groupby("carrier").sum().to_frame("Base Capacity")
+    pnom_opt = get_pnom_opt(n)
+    pnom_opt = pnom_opt.groupby("carrier").sum().to_frame("Optimal Capacity")
+    
+    capacity = pnom.join(pnom_opt).reset_index()
+    capacity["carrier"] = capacity.carrier.map(nice_names)
+    capacity_melt = capacity.melt(id_vars="carrier", var_name="Capacity Type", value_name="Capacity")
+    
+    # plot data (option 1)
+    # using seaborn with hues, but does not do tech color groups 
+    
+    """
+    fig, ax = plt.subplots(figsize=(10, 10))
+    sns.barplot(data=capacity_melt, y="carrier", x="Capacity", hue="Capacity Type", ax=ax)
+    
+    ax.set_title(create_title("System Capacity Additions", **wildcards))
+    ax.set_ylabel("")
+    ax.set_xlabel("Capacity [MW]")
+    fig.tight_layout()
+    fig.savefig(save)
+    """
+    
+    # plot data (option 2)
+    # using matplotlib for tech group colours
+    
+    capacity = capacity.set_index("carrier")
+    color_palette = get_color_palette(n)
+    color_mapper = [color_palette[carrier] for carrier in capacity.index]
+    bar_height = 0.35
+    
+    fig, ax = plt.subplots(figsize=(10, 10))
+
+    ax.barh(capacity.index, capacity['Base Capacity'], height=bar_height, align='center', color=color_mapper)
+    ax.barh([i + bar_height for i in range(len(capacity))], capacity['Optimal Capacity'], height=bar_height, align='center', alpha=0.50, color=color_mapper)
+    ax.invert_yaxis()
+    ax.set_yticks([i + bar_height / 2 for i in range(len(capacity))])
+
+    legend_lines = [
+        Line2D([0], [0], color='k', alpha=1, lw=7),
+        Line2D([0], [0], color='k', alpha=0.5, lw=7)
+    ]
+    ax.legend(legend_lines, ["Base Capacity", "Optimal Capacity"], loc="lower right", borderpad=0.75)
+    
+    ax.set_title(create_title("System Capacity Additions", **wildcards))
+    ax.set_ylabel("")
+    ax.set_xlabel("Capacity [MW]")
+    fig.tight_layout()
+    
+    # save = Path(save)
+    # fig.savefig(f"{save.parent}/{save.stem}_color{save.suffix}")
     fig.savefig(save)
 
 if __name__ == "__main__":
@@ -727,3 +818,4 @@ if __name__ == "__main__":
     plot_region_emissions_html(n, snakemake.output["emissions_region_html"], **snakemake.wildcards)
     plot_emissions_map(n, onshore_regions, snakemake.output["emissions_map"], **snakemake.wildcards)
     plot_renewable_potential(n, onshore_regions, snakemake.output["renewable_potential_map"], **snakemake.wildcards)
+    plot_capacity_additions(n, snakemake.output["capacity_additions_bar"], **snakemake.wildcards)

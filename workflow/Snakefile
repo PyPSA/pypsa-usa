@@ -23,6 +23,7 @@ FIGURES_SINGLE = [
     "emissions_accumulated_tech",
     "emissions_map",
     "renewable_potential_map",
+    "capacity_additions_bar"
 ]
 
 FIGURES_SINGLE_HTML = [
