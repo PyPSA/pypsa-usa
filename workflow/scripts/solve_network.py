@@ -1,7 +1,6 @@
 # SPDX-FileCopyrightText: : 2017-2022 The PyPSA-Eur Authors
 #
 # SPDX-License-Identifier: MIT
-
 """
 Solves linear optimal power flow for a network iteratively while updating reactances.
 
@@ -341,6 +340,23 @@ def solve_network(n, config, opts='', **kwargs):
               extra_functionality=extra_functionality, **kwargs)
     return n
 
+def solve_operations_model(n, solve_opts, solver_options):
+    load_shedding = solve_opts.get('load_shedding')
+    solver_name = solver_options.pop('name')
+    if solve_opts.get('nhours'):
+        nhours = solve_opts['nhours']
+        n.set_snapshots(n.snapshots[:nhours])
+    set_all_extendable_to(n, False)
+    if load_shedding: n.optimize.add_load_shedding(sign=1, marginal_cost=10000,suffix=' load')
+    n.optimize(n.snapshots, solver_name=solver_name, solver_options=solver_options)
+    return n
+
+def set_all_extendable_to(n, val):
+    for component in n.iterate_components():
+        if hasattr(component.df, "p_nom_extendable"):
+            component.df.p_nom_extendable = val
+        if hasattr(component.df, "s_nom_extendable"):
+            component.df.s_nom_extendable = val
 
 if __name__ == "__main__":
     if 'snakemake' not in globals():
@@ -354,15 +370,18 @@ if __name__ == "__main__":
         Path(tmpdir).mkdir(parents=True, exist_ok=True)
     opts = snakemake.wildcards.opts.split('-')
     solve_opts = snakemake.config['solving']['options']
+    solver_options = snakemake.config['solving']['solver']
 
     fn = getattr(snakemake.log, 'memory', None)
     with memory_logger(filename=fn, interval=30.) as mem:
         n = pypsa.Network(snakemake.input[0])
-        n = prepare_network(n, solve_opts)
-        n = solve_network(n, snakemake.config, opts, solver_dir=tmpdir,
-                          solver_logfile=snakemake.log.solver)
-        n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))
+        if solve_opts['operations_only']:
+            n = solve_operations_model(n, solve_opts, solver_options)
+        else:
+            n = prepare_network(n, solve_opts)
+            n = solve_network(n, snakemake.config, opts, solver_dir=tmpdir,
+                            solver_logfile=snakemake.log.solver)
+            n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))
         n.export_to_netcdf(snakemake.output[0])
-
 
     logger.info("Maximum memory usage: {}".format(mem.mem_usage))
