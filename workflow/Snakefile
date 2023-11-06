@@ -29,7 +29,7 @@ FIGURES_SINGLE = [
 FIGURES_SINGLE_HTML = [
     "production_area_html",
     "emissions_area_html",
-    "emissions_node_html",
+    # "emissions_node_html",
     "emissions_region_html",
     "emissions_accumulated_tech_html"
 ]
@@ -68,9 +68,9 @@ RESOURCES = "resources/" + RDIR if not run.get("shared_resources") else "resourc
 RESULTS = "results/" + RDIR
 
 include: "rules/build_sector.smk"
+include: "rules/postprocess.smk"
 
 # ----------------------------------- Rules ---------------------------------- #
-
 
 rule all:
     input:
@@ -84,7 +84,7 @@ rule all:
                 **config["scenarios"]["all"],
                 figure=FIGURES_SINGLE
             ),
-            "repo_data/dag.jpg",
+            # "repo_data/dag.jpg",
 
 ################# ----------- Rules to Retrieve Data ---------- #################
 
@@ -608,33 +608,6 @@ rule solve_network:
         mem_mb=memory,
     script:
         "scripts/solve_network.py"
-
-
-rule plot_figures:
-    input:
-        network="results/{interconnect}/networks/elec_s_{clusters}_ec_l{ll}_{opts}.nc",
-        regions_onshore=RESOURCES + "{interconnect}/regions_onshore_s_{clusters}.geojson",
-        regions_offshore=RESOURCES + "{interconnect}/regions_offshore_s_{clusters}.geojson",
-    params:
-        # countries=config["countries"],
-        # planning_horizons=config["scenario"]["planning_horizons"],
-        # sector_opts=config["scenario"]["sector_opts"],
-        # emissions_scope=config["energy"]["emissions"],
-        plotting=config["plotting"],
-        # RDIR=RDIR,
-    output:
-        **{
-            fig: "results/{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_%s.pdf"
-            % fig
-            for fig in FIGURES_SINGLE
-        },
-        **{
-            fig: "results/{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_%s.html"
-            % fig
-            for fig in FIGURES_SINGLE_HTML
-        },
-    script:
-        "scripts/plot_figures.py"
 
 
 # Create DAG with- 
