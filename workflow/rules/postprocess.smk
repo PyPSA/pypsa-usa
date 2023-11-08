@@ -19,4 +19,4 @@ rule plot_figures:
             for fig in FIGURES_SINGLE_HTML
         },
     script:
-        "scripts/plot_figures.py"
+        "../scripts/plot_figures.py"
