@@ -81,7 +81,7 @@ def create_title(title: str, **wildcards) -> str:
     wildcards_joined = " | ".join(w)
     return f"{title} \n ({wildcards_joined})"
 
-def get_pnom(n: pypsa.Network, components:str = "all") -> pd.DataFrame:
+def get_generator_pnom(n: pypsa.Network, components:str = "all") -> pd.DataFrame:
     """Gets pnom capacity"""
     storage_pnom = n.storage_units.groupby(["bus", "carrier"]).p_nom.sum()
     generator_pnom = n.generators.groupby(["bus", "carrier"]).p_nom.sum()
@@ -93,8 +93,7 @@ def get_pnom(n: pypsa.Network, components:str = "all") -> pd.DataFrame:
     else:
         return pd.concat([generator_pnom, storage_pnom])
     
-    
-def get_pnom_opt(n: pypsa.Network, components:str = "all") -> pd.DataFrame:
+def get_generator_pnom_opt(n: pypsa.Network, components:str = "all") -> pd.DataFrame:
     """Gets optimal pnom capacity"""
     storage_pnom_opt = n.storage_units.groupby(["bus", "carrier"]).p_nom_opt.sum()
     generator_pnom_opt = n.generators.groupby(["bus", "carrier"]).p_nom_opt.sum()
@@ -537,7 +536,16 @@ def plot_costs_bar(n: pypsa.Network, save:str, **wildcards) -> None:
     fig.tight_layout()
     fig.savefig(save)
 
-def plot_capacity_map(n: pypsa.Network, bus_values: pd.DataFrame, regions: gpd.GeoDataFrame, bus_scale=1, line_scale=1, lines=True, title = None) -> (plt.figure, plt.axes):
+def plot_capacity_map(
+    n: pypsa.Network, 
+    bus_values: pd.DataFrame, 
+    line_values: pd.DataFrame,
+    link_values: pd.DataFrame,
+    regions: gpd.GeoDataFrame, 
+    bus_scale=1, 
+    line_scale=1, 
+    title = None
+) -> (plt.figure, plt.axes):
     """
     Generic network plotting function for capacity pie charts at each node
     """
@@ -546,12 +554,8 @@ def plot_capacity_map(n: pypsa.Network, bus_values: pd.DataFrame, regions: gpd.G
         figsize=(10, 10), subplot_kw={"projection": ccrs.EqualEarth(n.buses.x.mean())}
     )
     
-    if lines:
-        line_width = n.lines.s_nom / line_scale
-        link_width = n.links.p_nom / line_scale
-    else:
-        line_width = 0
-        link_width = 0
+    line_width = line_values / line_scale
+    link_width = link_values / line_scale
 
     with plt.rc_context({"patch.linewidth": 0.1}):
         n.plot(
@@ -586,13 +590,12 @@ def plot_capacity_map(n: pypsa.Network, bus_values: pd.DataFrame, regions: gpd.G
         [f"{s / 1000} GW" for s in bus_sizes],
         legend_kw={"bbox_to_anchor": (1, 1), **legend_kwargs},
     )
-    if lines:
-        add_legend_lines(
-            ax,
-            [s / line_scale for s in line_sizes],
-            [f"{s / 1000} GW" for s in line_sizes],
-            legend_kw={"bbox_to_anchor": (1, 0.8), **legend_kwargs},
-        )
+    add_legend_lines(
+        ax,
+        [s / line_scale for s in line_sizes],
+        [f"{s / 1000} GW" for s in line_sizes],
+        legend_kw={"bbox_to_anchor": (1, 0.8), **legend_kwargs},
+    )
     add_legend_patches(
         ax,
         n.carriers.color,
@@ -614,18 +617,22 @@ def plot_base_capacity(n: pypsa.Network, regions: gpd.GeoDataFrame, save: str, *
     
     # get data
 
-    pnom = get_pnom(n)
+    bus_values = get_generator_pnom(n)
+    line_values = n.lines.s_nom
+    link_values = n.links.p_nom
     
     # plot data
     
     title = create_title("Base Network Capacities", **wildcards)
     interconnect = wildcards.get("interconnect", None)
-    bus_scale = get_bus_scale(interconnect=wildcards["interconnect"]) if interconnect else 1
-    line_scale = get_line_scale(interconnect=wildcards["interconnect"]) if interconnect else 1
+    bus_scale = get_bus_scale(interconnect) if interconnect else 1
+    line_scale = get_line_scale(interconnect) if interconnect else 1
     
     fig, _ = plot_capacity_map(
         n=n, 
-        bus_values=pnom,
+        bus_values=bus_values,
+        line_values=line_values,
+        link_values=link_values,
         regions=regions,
         line_scale=line_scale,
         bus_scale=bus_scale,
@@ -640,18 +647,22 @@ def plot_opt_capacity(n: pypsa.Network, regions: gpd.GeoDataFrame, save: str, **
     
     # get data
     
-    pnom_opt = get_pnom_opt(n)
+    bus_values = get_generator_pnom_opt(n)
+    line_values = n.lines.s_nom_opt
+    link_values = n.links.p_nom_opt
     
     # plot data 
     
     title = create_title("Optimal Network Capacities", **wildcards)
     interconnect = wildcards.get("interconnect", None)
-    bus_scale = get_bus_scale(interconnect=wildcards["interconnect"]) if interconnect else 1
-    line_scale = get_line_scale(interconnect=wildcards["interconnect"]) if interconnect else 1
+    bus_scale = get_bus_scale(interconnect) if interconnect else 1
+    line_scale = get_line_scale(interconnect) if interconnect else 1
     
     fig, _ = plot_capacity_map(
         n=n, 
-        bus_values=pnom_opt,
+        bus_values=bus_values,
+        line_values=line_values,
+        link_values=link_values,
         regions=regions,
         line_scale=line_scale,
         bus_scale=bus_scale,
@@ -664,20 +675,30 @@ def plot_new_capacity(n: pypsa.Network, regions: gpd.GeoDataFrame, save: str, **
     
     # get data
     
-    pnom = get_pnom(n)
-    pnom_opt = get_pnom_opt(n)
-    pnom_new = pnom_opt - pnom
+    bus_pnom = get_generator_pnom(n)
+    bus_pnom_opt = get_generator_pnom_opt(n)
+    bus_values = bus_pnom_opt - bus_pnom
+    
+    line_snom = n.lines.s_nom
+    line_snom_opt = n.lines.s_nom_opt
+    line_values = line_snom_opt - line_snom
+    
+    link_pnom = n.links.p_nom
+    link_pnom_opt = n.links.p_nom_opt
+    link_values = link_pnom_opt - link_pnom
 
     # plot data
     
     title = create_title("New Network Capacities", **wildcards)
     interconnect = wildcards.get("interconnect", None)
-    bus_scale = get_bus_scale(interconnect=wildcards["interconnect"]) if interconnect else 1
-    line_scale = get_line_scale(interconnect=wildcards["interconnect"]) if interconnect else 1
+    bus_scale = get_bus_scale(interconnect) if interconnect else 1
+    line_scale = get_line_scale(interconnect) if interconnect else 1
     
     fig, _ = plot_capacity_map(
         n=n, 
-        bus_values=pnom_new,
+        bus_values=bus_values,
+        line_values=line_values,
+        link_values=link_values,
         regions=regions,
         line_scale=line_scale,
         bus_scale=bus_scale,
@@ -687,28 +708,39 @@ def plot_new_capacity(n: pypsa.Network, regions: gpd.GeoDataFrame, save: str, **
 
 def plot_renewable_potential(n: pypsa.Network, regions: gpd.GeoDataFrame, save: str, **wildcards) -> None:
     """Plots wind and solar resource potential by node"""
+    
+    # get data
+    
     renew = n.generators[
         (n.generators.p_nom_max != np.inf) & 
         (n.generators.carrier.isin(["onwind", "offwind", "solar"]))]
-    renew = renew.groupby(["bus", "carrier"]).p_nom_max.sum()
+    bus_values = renew.groupby(["bus", "carrier"]).p_nom_max.sum()
+    
+    # do not show lines or links
+    line_values = n.lines.s_nom.replace(0)
+    link_values = n.links.p_nom.replace(0)
+    
+    # plot data
     
     title = create_title("Renewable Capacity Potential", **wildcards)
     interconnect = wildcards.get("interconnect", None)
-    bus_scale = get_bus_scale(interconnect=wildcards["interconnect"]) if interconnect else 1
+    bus_scale = get_bus_scale(interconnect) if interconnect else 1
     
     bus_scale *= 12 # since potential capacity is so big
     
     fig, ax = plot_capacity_map(
         n=n, 
-        bus_values=renew,
+        bus_values=bus_values,
+        line_values=line_values,
+        link_values=link_values,
         regions=regions,
         bus_scale=bus_scale,
-        lines=False,
         title=title
     )
     
     # only show renewables in legend 
-    fig.artists[-1].remove() # remove existing legend
+    fig.artists[-2].remove() # remove line width legend 
+    fig.artists[-1].remove() # remove existing colour legend
     renew_carriers = n.carriers[n.carriers.index.isin(["onwind", "offwind", "solar"])]
     add_legend_patches(
         ax,
@@ -726,9 +758,9 @@ def plot_capacity_additions(n: pypsa.Network, save: str, **wildcards) -> None:
     
     nice_names = n.carriers.nice_name
     
-    pnom = get_pnom(n)
+    pnom = get_generator_pnom(n)
     pnom = pnom.groupby("carrier").sum().to_frame("Base Capacity")
-    pnom_opt = get_pnom_opt(n)
+    pnom_opt = get_generator_pnom_opt(n)
     pnom_opt = pnom_opt.groupby("carrier").sum().to_frame("Optimal Capacity")
     
     capacity = pnom.join(pnom_opt).reset_index()
