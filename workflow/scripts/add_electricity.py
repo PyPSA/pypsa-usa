@@ -360,17 +360,20 @@ def update_marginal_costs(
     for state in gen.state.unique():
         gens_in_state = gen[gen.state == state].index.to_list()
         dfs.append(pd.DataFrame({gen: state_fuel_costs[state] for gen in gens_in_state}))
-    n.generators_t["marginal_cost"] = pd.concat(dfs, axis=1)
+    df = pd.concat(dfs, axis=1)
     
     # apply efficiency of each generator to know fuel burn rate 
     if not efficiency:
         gen_eff_mapper = n.generators.to_dict()["efficiency"]
-        n.generators_t["marginal_cost"] = n.generators_t["marginal_cost"].apply(lambda x: x / gen_eff_mapper[x.name], axis=0)
+        df = df.apply(lambda x: x / gen_eff_mapper[x.name], axis=0)
     else:
-        n.generators_t["marginal_cost"] = n.generators_t["marginal_cost"].div(efficiency)
+        df = df.div(efficiency)
     
-    # apply fixed rate VOM cost     
-    n.generators_t["marginal_cost"] += vom_cost
+    # apply fixed rate VOM cost
+    df += vom_cost
+    
+    # join into exisitng time series marginal costs 
+    n.generators_t["marginal_cost"] = n.generators_t["marginal_cost"].join(df, how="inner")
 
 
 def update_transmission_costs(n, costs, length_factor=1.0):
@@ -1347,13 +1350,13 @@ if __name__ == "__main__":
         fuel_cost_file = snakemake.input[f"{cost_data}"]
         df_fuel_costs = pd.read_csv(fuel_cost_file)
         vom = costs.at[carrier, "VOM"]
-        eff = costs.at[carrier, "efficiency"]
+        # eff = costs.at[carrier, "efficiency"]
         update_marginal_costs(
             n=n, 
             carrier=carrier, 
             fuel_costs=df_fuel_costs, 
             vom_cost=vom,
-            efficiency=eff,
+            # efficiency=eff,
             apply_average=False
         )
 

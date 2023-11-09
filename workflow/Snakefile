@@ -14,11 +14,24 @@ from pathlib import Path
 FIGURES_SINGLE = [
     "capacity_map_base",
     "capacity_map_optimized",
-    "capacity_bar",
-    "operation_map",
-    "operation_bar",
-    "operation_area",
-    "cost_bar",
+    "capacity_map_new",
+    "costs_bar",
+    "production_bar",
+    "production_area",
+    "emissions_area",
+    "emissions_accumulated",
+    "emissions_accumulated_tech",
+    "emissions_map",
+    "renewable_potential_map",
+    "capacity_additions_bar"
+]
+
+FIGURES_SINGLE_HTML = [
+    "production_area_html",
+    "emissions_area_html",
+    # "emissions_node_html",
+    "emissions_region_html",
+    "emissions_accumulated_tech_html"
 ]
 
 # --------------------------- Workflow constraints --------------------------- #
@@ -41,6 +54,7 @@ wildcard_constraints:
 configfile: "config/config.default.yaml"
 configfile: "config/config.cluster.yaml"
 configfile: "config/config.osw.yaml"
+configfile: "config/config.plotting.yaml"
 
 ATLITE_NPROCESSES = config["atlite"].get("nprocesses", 4)
 
@@ -55,18 +69,23 @@ RESOURCES = "resources/" + RDIR if not run.get("shared_resources") else "resourc
 RESULTS = "results/" + RDIR
 
 include: "rules/build_sector.smk"
+include: "rules/postprocess.smk"
 
 # ----------------------------------- Rules ---------------------------------- #
-
 
 rule all:
     input:
         expand(
             "results/{interconnect}/figures/elec_s_{clusters}_ec_l{ll}_{opts}_{figure}.pdf",
             **config["scenarios"]["all"],
-            figure=FIGURES_SINGLE
-        ),
-        #"repo_data/dag.jpg",
+        ) if config['solving']['operations']['run'] 
+        else 
+            expand(
+                "results/{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{figure}.pdf",
+                **config["scenarios"]["all"],
+                figure=FIGURES_SINGLE
+            ),
+            # "repo_data/dag.jpg",
 
 ################# ----------- Rules to Retrieve Data ---------- #################
 
@@ -590,21 +609,6 @@ rule solve_network:
         mem_mb=memory,
     script:
         "scripts/solve_network.py"
-
-
-rule plot_figures:
-    input:
-        network="results/{interconnect}/networks/elec_s_{clusters}_ec_l{ll}_{opts}.nc",
-        regions_onshore=RESOURCES + "{interconnect}/regions_onshore_s_{clusters}.geojson",
-        regions_offshore=RESOURCES + "{interconnect}/regions_offshore_s_{clusters}.geojson",
-    output:
-        **{
-            fig: "results/{interconnect}/figures/elec_s_{clusters}_ec_l{ll}_{opts}_%s.pdf"
-            % fig
-            for fig in FIGURES_SINGLE
-        },
-    script:
-        "scripts/plot_results.py"
 
 
 # Create DAG with- 
