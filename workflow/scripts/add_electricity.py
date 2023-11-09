@@ -1350,13 +1350,13 @@ if __name__ == "__main__":
         fuel_cost_file = snakemake.input[f"{cost_data}"]
         df_fuel_costs = pd.read_csv(fuel_cost_file)
         vom = costs.at[carrier, "VOM"]
-        eff = costs.at[carrier, "efficiency"]
+        # eff = costs.at[carrier, "efficiency"]
         update_marginal_costs(
             n=n, 
             carrier=carrier, 
             fuel_costs=df_fuel_costs, 
             vom_cost=vom,
-            efficiency=eff,
+            # efficiency=eff,
             apply_average=False
         )
 
