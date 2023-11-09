@@ -30,3 +30,19 @@ $ mamba activate pypsa-usa
 ```
 
 You also have the option to use miniconda. Download [Miniconda](https://docs.conda.io/en/latest/miniconda.html) following their [instructions](https://docs.conda.io/en/latest/miniconda.html).
+
+
+## Step 3: Install a Solver
+
+PyPSA-USA uses an external solver to solve the optimization problem formulated in the workflow. After you install your solver and confirm it is accessible within your conda environment, update your solving configuration to match your solver of choice.
+You can download and install several free options here:
+
+- [HiGHS](https://highs.dev/)
+- [Cbc](https://projects.coin-or.org/Cbc#DownloadandInstall)
+- [GLPK](https://www.gnu.org/software/glpk/)
+- [Ipopt](https://coin-or.github.io/Ipopt/INSTALL.html)
+
+and the non-free, commercial software (for some of which free academic licenses are available)
+
+- [Gurobi](https://www.gurobi.com/documentation/quickstart.html)
+- [CPLEX](https://www.ibm.com/products/ilog-cplex-optimization-studio)
