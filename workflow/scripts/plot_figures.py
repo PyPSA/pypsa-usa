@@ -817,7 +817,7 @@ if __name__ == "__main__":
         snakemake = mock_snakemake(
             'plot_figures', 
             interconnect='western',
-            clusters=60,
+            clusters=30,
             ll='vopt',
             opts='Co2L0.75',
         )

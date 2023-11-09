@@ -54,6 +54,7 @@ wildcard_constraints:
 configfile: "config/config.default.yaml"
 configfile: "config/config.cluster.yaml"
 configfile: "config/config.osw.yaml"
+configfile: "config/config.plotting.yaml"
 
 ATLITE_NPROCESSES = config["atlite"].get("nprocesses", 4)
 
