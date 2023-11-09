@@ -1,0 +1,16 @@
+,Unit,Values,Description
+conventional_carriers,--,"Any subset of {nuclear, oil, OCGT, CCGT, coal, lignite, geothermal, biomass}","List of conventional power plants to include in the model from ``resources/powerplants.csv``. If an included carrier is also listed in ``extendable_carriers``, the capacity is taken as a lower bound."
+renewable_carriers,--,"Any subset of {solar, onwind, offwind-ac, offwind-dc, hydro}",List of renewable generators to include in the model.
+voltage_simplified,kV,int,"Voltage level to simplify network to in rule ""simplify network"""
+gaslimit,MWhth,float or false,Global gas usage limit (Set False for development)
+co2limit,:math:`t_{CO_2-eq}/a`,float,Cap on total annual system carbon dioxide emissions
+co2base,:math:`t_{CO_2-eq}/a`,float,Reference value of total annual system carbon dioxide emissions if relative emission reduction target is specified in ``{opts}`` wildcard.
+,,,
+max_hours:,,,
+battery,h,float,Maximum state of charge capacity of the battery in terms of hours at full output capacity ``p_nom``. Cf. `PyPSA documentation <https://pypsa.readthedocs.io/en/latest/components.html#storage-unit>`_.
+,,,
+extendable_carriers:,,,
+Generator,--,Any extendable carrier,"Defines existing or non-existing conventional and renewable power plants to be extendable during the optimization. Conventional generators can only be built/expanded where already existent today. If a listed conventional carrier is not included in the ``conventional_carriers`` list, the lower limit of the capacity expansion is set to 0."
+Storage Unit,--,"Any subset of {'battery','H2'}",Adds extendable storage units (battery and/or hydrogen) at every node/bus after clustering without capacity limits and with zero initial capacity.
+Store,--,"Any subset of {'battery','H2'}",Adds extendable storage units (battery and/or hydrogen) at every node/bus after clustering without capacity limits and with zero initial capacity.
+Links,--,Any subset of {'H2 pipeline'},Adds extendable links (H2 pipelines only) at every connection where there are lines or HVDC links without capacity limits and with zero initial capacity. Hydrogen pipelines require hydrogen storage to be modelled as ``Store``.
