@@ -34,10 +34,11 @@ investment changes as more ambitious greenhouse-gas emission reduction targets a
 The ``run`` section is used for running and storing scenarios with different configurations which are not covered by :ref:`wildcards`. It determines the path at which resources, networks and results are stored. Therefore the user can run different configurations within the same directory.
 
 ```{eval-rst}  
-.. literalinclude:: ../config/config.default.yaml
+.. literalinclude:: ../../workflow/config/config.default.yaml
    :language: yaml
    :start-at: run:
-   :end-before: # docs
+   :end-before: enable:
+
 
 .. csv-table::
    :header-rows: 1
@@ -48,10 +49,10 @@ The ``run`` section is used for running and storing scenarios with different con
 (snapshots_cf)=
 ## ``snapshots``
 
-Specifies the temporal range to build an energy system model for as arguments to `pandas.date_range <https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.date_range.html>`
+Specifies the temporal range to build an energy system model for as arguments to `(pandas.date_range)[https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.date_range.html]`
 
 ```{eval-rst}  
-.. literalinclude:: ../config/config.default.yaml
+.. literalinclude:: ../../workflow/config/config.default.yaml
    :language: yaml
    :start-at: snapshots:
    :end-before: # docs
@@ -60,6 +61,52 @@ Specifies the temporal range to build an energy system model for as arguments to
    :header-rows: 1
    :widths: 22,7,22,33
    :file: configtables/snapshots.csv
+```
+
+
+(electricity_cf)=
+## ``electricity``
+
+Specifies the types of generators that are included in the network, which are extendable, and the CO2 base for which the optimized reduction is relative to.
+
+```{eval-rst}  
+.. literalinclude:: ../../workflow/config/config.default.yaml
+   :language: yaml
+   :start-at: electricity:
+   :end-before: # docs
+
+.. csv-table::
+   :header-rows: 1
+   :widths: 22,7,22,33
+   :file: configtables/electricity.csv
+```
+
+(renewable_cf)=
+## ``renewable``
+### ``solar``
+```{eval-rst}  
+.. literalinclude:: ../../workflow/config/config.default.yaml
+   :language: yaml
+   :start-at: solar:
+   :end-before: # docs
+
+.. csv-table::
+   :header-rows: 1
+   :widths: 22,7,22,33
+   :file: configtables/solar.csv
+```
+
+### ``onwind``
+```{eval-rst}  
+.. literalinclude:: ../../workflow/config/config.default.yaml
+   :language: yaml
+   :start-at: onwind:
+   :end-before: # docs
+
+.. csv-table::
+   :header-rows: 1
+   :widths: 22,7,22,33
+   :file: configtables/onwind.csv
 ```
 
 (clustering_cf)=
@@ -80,7 +127,7 @@ Texas: 1250
 ```
 
 ```{eval-rst}  
-.. literalinclude:: ../config/config.default.yaml
+.. literalinclude:: ../../workflow/config/config.default.yaml
    :language: yaml
    :start-at: clustering:
    :end-before: # docs
@@ -91,39 +138,21 @@ Texas: 1250
    :file: configtables/clustering.csv
 
 .. note::
-   ``feature:`` in ``simplify_network:``
-   are only relevant if ``hac`` were chosen in ``algorithm``.
+   ``feature:`` in ``simplify_network:`` are only relevant if ``hac`` were chosen in ``algorithm``.
+   
+   - Use `focus_weights` to specify the proportion of cluster nodes to be attributed to a given zone given by the `aggregation_zone` configuration.
 
 .. tip::
    use ``min`` in ``p_nom_max:`` for more `
-   conservative assumptions. -->
+   conservative assumptions.
 ```
 
-Use `focus_weights` to specify the proportion of cluster nodes to be attributed to a given zone given by the `aggregation_zone` configuration.
-
-
-(electricity_cf)=
-## ``electricity``
-
-Specifies the types of generators that are included in the network, which are extendable, and the CO2 base for which the optimized reduction is relative to.
-
-```{eval-rst}  
-.. literalinclude:: ../config/config.default.yaml
-   :language: yaml
-   :start-at: electricity:
-   :end-before: # docs
-
-.. csv-table::
-   :header-rows: 1
-   :widths: 22,7,22,33
-   :file: configtables/electricity.csv
-```
 
 (solving_cf)=
 ## ``solving``
 
 ```{eval-rst}  
-.. literalinclude:: ../config/config.default.yaml
+.. literalinclude:: ../../workflow/config/config.default.yaml
    :language: yaml
    :start-at: solving:
    :end-before: # docs
