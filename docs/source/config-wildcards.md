@@ -84,13 +84,12 @@ the :mod:`solve_network` step. It may hold multiple triggers separated by ``-``,
 i.e. ``Co2L-3H`` contains the ``Co2L`` trigger and the ``3H`` switch. There are
 currently:
 
-For more detailed definitions of opt wildcard, please reference [pypsa-eur](https://pypsa-eur.readthedocs.io/en/latest/wildcards.html).
-
-<!-- 
+```{eval-rst}  
 .. csv-table::
    :header-rows: 1
    :widths: 10,20,10,10
-   :file: configtables/opts.csv -->
+   :file: configtables/opts.csv
+```
 
 <!-- (sector_opts)=
 ## The ``{sector_opts}`` wildcard -->
