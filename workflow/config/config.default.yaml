@@ -1,11 +1,7 @@
 scenarios:
   all:
     interconnect: western #"usa|texas|western|eastern"
-<<<<<<< HEAD
     clusters: 30
-=======
-    clusters: 35
->>>>>>> 7b7b49f7d5b670bfbe19b55d8453fc36499026dd
     opts:
       [
         Co2L0.25,
@@ -289,4 +285,3 @@ solving:
     run: false
     stochastic: false
     iterations: 10
-
