@@ -11,17 +11,17 @@ Data used to create the base electrical network is pulled from [Breakthrough Ene
 
 Protected land area data for the USA is retrieved from [Protected Planet](https://www.protectedplanet.net/en) via the [PyPSA Meets-Earth](https://pypsa-meets-earth.github.io/) data deposit (`natura_global`) (~100MB). 
 
-[![DOI](https://zenodo.org/badge/doi/10.5281/zenodo.1223907.svg)](https://zenodo.org/record/1223907)
+[![DOI](https://zenodo.org/badge/doi/10.5281/zenodo.10067222.svg)](https://zenodo.org/records/10067222)
 
 Baythymetry data via [GEBCO](https://www.gebco.net/) and a cutout of USA [Copernicus Global Land Service](https://land.copernicus.eu/global/products/lc) data are downloaded from a PyPSA USA Zenodo depost (~2GB). 
 
-[![DOI](https://zenodo.org/badge/doi/10.5281/zenodo.8175051.svg)](https://zenodo.org/record/8175051)
+[![DOI](https://zenodo.org/badge/doi/10.5281/zenodo.10067222.svg)](https://zenodo.org/records/10067222)
 
 (databundle-sector)=
 ## Rule `retrieve_sector_databundle`
 Retrives data for sector coupling
 
-[![DOI](https://sandbox.zenodo.org/badge/DOI/10.5072/zenodo.1244195.svg)](https://doi.org/10.5072/zenodo.1244195)
+[![DOI](https://sandbox.zenodo.org/badge/DOI/10.5072/zenodo.10019422.svg)](https://zenodo.org/records/10019422)
 
 Geographic boundaries of the United States counties are taken from the 
 United States Census Bureau. Note, these follow 2020 boundaries to match 
@@ -64,10 +64,10 @@ Forecasted electricity demand data and generator operational charasteristics for
 
 Cutouts are spatio-temporal subsets of the USA weather data from the [ERA5 dataset](https://cds.climate.copernicus.eu/cdsapp#!/dataset/reanalysis-era5-single-levels?tab=overview). They have been prepared by and are for use with the [atlite](https://github.com/PyPSA/atlite) tool. You can either generate them yourself using the build_cutouts rule or retrieve them directly from zenodo through the rule `retrieve_cutout`.
 
-[![DOI](https://zenodo.org/badge/doi/10.5281/zenodo.1225941.svg)](https://zenodo.org/record/1225941)
+[![DOI](https://zenodo.org/badge/doi/10.5281/zenodo.10067222.svg)](https://zenodo.org/records/10067222)
 
 ```{note}
-Only the western region for 2019 has been prepared and saved to Zenodo for download. Any other region needs to be created by the user.
+Only the 2019 interconnects based on ERA5 have been prepared and saved to Zenodo for download
 ```
 
 (costs)=
