@@ -2,7 +2,7 @@
 
 ## Rule `plot_results`
 ```{eval-rst}  
-.. automodule:: plot_results
+.. automodule:: plot_figures
 ```
 
 ## Rule `dag`

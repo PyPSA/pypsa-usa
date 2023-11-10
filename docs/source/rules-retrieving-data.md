@@ -59,7 +59,7 @@ Forecasted electricity demand data and generator operational charasteristics for
 
 [![URL](https://img.shields.io/badge/URL-WECC_Data-blue)](<https://www.wecc.org/Reliability/Forms/Default%20View.aspx>)
 
-(cutout)=
+(retrieve-cutout)=
 ## Rule `retrieve_cutout`
 
 Cutouts are spatio-temporal subsets of the USA weather data from the [ERA5 dataset](https://cds.climate.copernicus.eu/cdsapp#!/dataset/reanalysis-era5-single-levels?tab=overview). They have been prepared by and are for use with the [atlite](https://github.com/PyPSA/atlite) tool. You can either generate them yourself using the build_cutouts rule or retrieve them directly from zenodo through the rule `retrieve_cutout`.

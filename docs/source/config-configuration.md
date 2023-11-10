@@ -73,7 +73,7 @@ Specifies the types of generators that are included in the network, which are ex
 .. literalinclude:: ../../workflow/config/config.default.yaml
    :language: yaml
    :start-at: electricity:
-   :end-before: # docs
+   :end-before: conventional:
 
 .. csv-table::
    :header-rows: 1
@@ -82,13 +82,14 @@ Specifies the types of generators that are included in the network, which are ex
 ```
 
 (renewable_cf)=
-## ``renewable``
-### ``solar``
+## `renewable`
+
+### `solar`
 ```{eval-rst}  
 .. literalinclude:: ../../workflow/config/config.default.yaml
    :language: yaml
    :start-at: solar:
-   :end-before: # docs
+   :end-before: hydro:
 
 .. csv-table::
    :header-rows: 1
@@ -96,12 +97,12 @@ Specifies the types of generators that are included in the network, which are ex
    :file: configtables/solar.csv
 ```
 
-### ``onwind``
+### `onwind`
 ```{eval-rst}  
 .. literalinclude:: ../../workflow/config/config.default.yaml
    :language: yaml
    :start-at: onwind:
-   :end-before: # docs
+   :end-before: offwind:
 
 .. csv-table::
    :header-rows: 1
@@ -110,7 +111,7 @@ Specifies the types of generators that are included in the network, which are ex
 ```
 
 (clustering_cf)=
-## ``clustering``
+## `clustering`
 
 Minimum Number of clusters:
 ```
@@ -155,7 +156,6 @@ Texas: 1250
 .. literalinclude:: ../../workflow/config/config.default.yaml
    :language: yaml
    :start-at: solving:
-   :end-before: # docs
 
 .. csv-table::
    :header-rows: 1

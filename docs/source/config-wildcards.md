@@ -16,7 +16,7 @@ Detailed explanations of how wildcards work in ``snakemake`` can be found in the
 `relevant section of the [documentation](https://snakemake.readthedocs.io/en/stable/snakefiles/rules.html#wildcards).
 ```
 
-(interconnects)=
+(interconnect)=
 ## The `{interconnect}` wildcard
 
 The `{interconnect}` wildcard sets the geographc scope of the model run. Models 
