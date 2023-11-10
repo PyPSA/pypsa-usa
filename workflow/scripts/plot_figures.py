@@ -105,6 +105,19 @@ def get_generator_pnom_opt(n: pypsa.Network, components:str = "all") -> pd.DataF
     else:
         return pd.concat([generator_pnom_opt, storage_pnom_opt])
 
+def get_generator_pnom_opt_brownfield(n: pypsa.Network, components:str = "all") -> pd.DataFrame:
+    """Gets optimal pnom capacity"""
+    storage_pnom_opt = n.storage_units.groupby(["bus", "carrier"]).p_nom_opt.sum()
+    generator_pnom_opt = n.generators.groupby(["bus", "carrier"]).p_nom_opt.sum()
+    generator_pnom.iloc[:] = n.generators_t.p.max().values
+
+    if components == "generator":
+        return generator_pnom_opt
+    elif components == "storage":
+        return storage_pnom_opt
+    else:
+        return pd.concat([generator_pnom_opt, storage_pnom_opt])
+
 def get_snapshot_emissions(n: pypsa.Network) -> pd.DataFrame:
     """Gets timeseries emissions per technology"""
     
@@ -643,6 +656,36 @@ def plot_base_capacity(n: pypsa.Network, regions: gpd.GeoDataFrame, save: str, *
 def plot_opt_capacity(n: pypsa.Network, regions: gpd.GeoDataFrame, save: str, **wildcards) -> None:
     """
     Plots optimal network capacities
+    """
+    
+    # get data
+    
+    bus_values = get_generator_pnom_opt(n)
+    line_values = n.lines.s_nom_opt
+    link_values = n.links.p_nom_opt
+    
+    # plot data 
+    
+    title = create_title("Optimal Network Capacities", **wildcards)
+    interconnect = wildcards.get("interconnect", None)
+    bus_scale = get_bus_scale(interconnect) if interconnect else 1
+    line_scale = get_line_scale(interconnect) if interconnect else 1
+    
+    fig, _ = plot_capacity_map(
+        n=n, 
+        bus_values=bus_values,
+        line_values=line_values,
+        link_values=link_values,
+        regions=regions,
+        line_scale=line_scale,
+        bus_scale=bus_scale,
+        title=title
+    )
+    fig.savefig(save)
+
+def plot_brownfield_opt_capacity(n: pypsa.Network, regions: gpd.GeoDataFrame, save: str, **wildcards) -> None:
+    """
+    Plots brownfield optimal network capacities
     """
     
     # get data

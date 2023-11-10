@@ -44,6 +44,7 @@ Reads in Breakthrough Energy/TAMU transmission dataset, and converts it into PyP
 import pypsa, pandas as pd, logging, geopandas as gpd
 from geopandas.tools import sjoin
 from _helpers import configure_logging
+from pypsa.geo import haversine
 
 idx = pd.IndexSlice
 
@@ -99,7 +100,7 @@ def add_branches_from_file(n: pypsa.Network, fn_branches: str) -> pypsa.Network:
             s_nom=tech_branches.rateA,
             v_nom=tech_branches.from_bus_id.map(n.buses.v_nom),
             interconnect=tech_branches.interconnect,
-            type="Rail",
+            type="Rail", #rail is used temporarily then over ridden by assign_line_types
             carrier="AC"
         )
     return n
@@ -156,6 +157,14 @@ def map_bus_to_region(buses: gpd.GeoDataFrame, shape: gpd.GeoDataFrame, name: st
     shape_filtered = shape[[name, "geometry"]]
     return gpd.sjoin(buses, shape_filtered, how="left").drop(columns=["index_right"])
 
+def assign_line_length(n: pypsa.Network):
+    '''Assigns line length to each line in the network using Haversine distance'''
+    bus_df = n.buses[['x','y']]
+    distances = haversine(bus_df.loc[n.lines.bus0].values, bus_df.loc[n.lines.bus1].values)
+    n.lines['length'] = distances[:,0]
+    n.lines.length.plot(kind='hist', bins=100)
+
+
 if __name__ == "__main__":
     logger = logging.getLogger(__name__)
     if 'snakemake' not in globals():
@@ -202,7 +211,8 @@ if __name__ == "__main__":
     n = add_dclines_from_file(n, snakemake.input["links"])
     add_custom_line_type(n)
     assign_line_types(n)
-
+    assign_line_length(n)
+    
     # export bus2sub interconnect data
     logger.info(f"exporting bus2sub and sub data for {interconnect}")
     if interconnect == "usa": #if usa interconnect do not filter bc all sub are in usa
