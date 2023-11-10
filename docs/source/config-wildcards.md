@@ -1,27 +1,51 @@
 (wildcards)=
 # Wildcards
 
-We are working on this!
+For more detailed definitions of wildcards, please reference [pypsa-eur](https://pypsa-eur.readthedocs.io/en/latest/wildcards.html). 
+Not all wildcards implemented in [pypsa-eur](https://pypsa-eur.readthedocs.io/en/latest/wildcards.html) are available 
+yet in pypsa-usa.
 
-For more detailed definitions of wildcards, please reference [pypsa-eur](https://pypsa-eur.readthedocs.io/en/latest/wildcards.html). Not all wildcards implemented are available for pypsa-usa.
-
-<!-- It is easy to run PyPSA-Eur for multiple scenarios using the wildcards feature of ``snakemake``.
-Wildcards allow to generalise a rule to produce all files that follow a regular expression pattern
+It is easy to run PyPSA-USA for multiple scenarios using the wildcards feature of `snakemake`.
+Wildcards generalise a rule to produce all files that follow a regular expression pattern
 which e.g. defines one particular scenario. One can think of a wildcard as a parameter that shows
-up in the input/output file names of the ``Snakefile`` and thereby determines which rules to run,
-what data to retrieve and what files to produce. -->
+up in the input/output file names of the `Snakefile` and thereby determines which rules to run,
+what data to retrieve and what files to produce.
 
 ```{note}
 Detailed explanations of how wildcards work in ``snakemake`` can be found in the
 `relevant section of the [documentation](https://snakemake.readthedocs.io/en/stable/snakefiles/rules.html#wildcards).
 ```
 
-<!-- (cutout_wc)=
-## The ``{cutout}`` wildcard -->
+(interconnects)=
+## The `{interconnect}` wildcard
 
-<!-- The ``{cutout}`` wildcard facilitates running the rule :mod:`build_cutout`
-for all cutout configurations specified under ``atlite: cutouts:``.
-These cutouts will be stored in a folder specified by ``{cutout}``. -->
+The `{interconnect}` wildcard sets the geographc scope of the model run. Models 
+can be run for the `western`, `eastern`, `texas`, or `usa` grid. The interconnects 
+follow the representation described by [Breakthrough Energy](https://breakthroughenergy.org/).
+
+A visual representation of each `{interconnect}` is shown below: 
+
+```{eval-rst}  
+.. image:: _static/cutouts/cutouts.png
+    :scale: 100 %
+```
+
+(cutout_wc)=
+## The `{cutout}` wildcard
+
+The `{cutout}` wildcard facilitates running the rule :mod:`build_cutout`
+for all cutout configurations specified under `atlite: cutouts:`. Each cutout 
+is descibed in the form `{dataset}_{year}`. These cutouts will be stored in a 
+folder specified by `{cutout}`.
+
+Valid dataset names include: `era5`
+Valid years can be from `1940` to `2022`
+
+```{note}
+Data for `era5_2019` has been pre-pared for the user and will be automatically downloaded 
+during the workflow. If other years are needed, the user will need to prepaer the 
+cutout themself. 
+```
 
 <!-- (technology)=
 ## The ``{technology}`` wildcard -->
@@ -39,17 +63,17 @@ network model should be pre-clustered to in the rule
 :mod:`simplify_network` (before :mod:`cluster_network`). -->
 
 (clusters)=
-## The ``{clusters}`` wildcard
+## The `{clusters}` wildcard
 
-The ``{clusters}`` wildcard specifies the number of buses a detailed network model should be reduced to in the rule :mod:`cluster_network`.
+The `{clusters}` wildcard specifies the number of buses a detailed network model should be reduced to in the rule :mod:`cluster_network`.
 The number of clusters must be lower than the total number of nodes and higher than the number of balancing authoritites. 
 
-If an `m` is placed behind the number of clusters (e.g. ``100m``), generators are only moved to the clustered buses but not aggregated by carrier; i.e. the clustered bus may have more than one e.g. wind generator.
+If an `m` is placed behind the number of clusters (e.g. `100m`), generators are only moved to the clustered buses but not aggregated by carrier; i.e. the clustered bus may have more than one e.g. wind generator.
 
 (ll)=
-## The ``{ll}`` wildcard
+## The `{ll}` wildcard
 
-The ``{ll}`` wildcard specifies what limits on
+The `{ll}` wildcard specifies what limits on
 line expansion are set for the optimisation model.
 It is handled in the rule :mod:`prepare_network`.
 
@@ -76,7 +100,7 @@ The wildcard, in general, consists of two parts:
            costs no more than 25 % more than the current system.
 
 (opts)=
-## The ``{opts}`` wildcard
+## The `{opts}` wildcard
 
 The ``{opts}`` wildcard is used for electricity-only studies. It triggers
 optional constraints, which are activated in either :mod:`prepare_network` or
