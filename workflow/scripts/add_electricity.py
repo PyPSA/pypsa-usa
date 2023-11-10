@@ -332,8 +332,9 @@ def update_marginal_costs(
     if not missed.empty:
         logger.warning(f"Time dependent marginal costs not applied to {missed.state.unique()}")
         
-    # update fuel cost values from $/MCF to $/MWh 
-    fuel_costs["value"] = fuel_costs["value"] * const.NG_MCF_2_MWH
+    # update fuel cost values from $/MCF to $/MWh  
+    # $/MCF * (1 MCF / 1.036 MMBTU) * (1 MMBTU / 0.293 MWh) = $/MWh
+    fuel_costs["value"] = fuel_costs["value"] / const.NG_MCF_2_MWH
     fuel_costs["units"] = "$/MWh"
     
     # extract out monthly variations for fuel costs 
