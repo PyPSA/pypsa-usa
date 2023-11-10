@@ -14,6 +14,7 @@ from pathlib import Path
 FIGURES_SINGLE = [
     "capacity_map_base",
     "capacity_map_optimized",
+    "capacity_map_optimized_brownfield",
     "capacity_map_new",
     "costs_bar",
     "production_bar",

@@ -880,6 +880,7 @@ if __name__ == "__main__":
     # create plots
     plot_base_capacity(n, onshore_regions, snakemake.output["capacity_map_base"], **snakemake.wildcards)
     plot_opt_capacity(n, onshore_regions, snakemake.output["capacity_map_optimized"], **snakemake.wildcards)
+    plot_brownfield_opt_capacity(n, onshore_regions, snakemake.output["capacity_map_optimized_brownfield"], **snakemake.wildcards)
     plot_new_capacity(n, onshore_regions, snakemake.output["capacity_map_new"], **snakemake.wildcards)
     plot_costs_bar(n, snakemake.output["costs_bar"], **snakemake.wildcards)
     plot_production_bar(n, snakemake.output["production_bar"], **snakemake.wildcards)
