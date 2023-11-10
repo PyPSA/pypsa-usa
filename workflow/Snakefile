@@ -80,7 +80,7 @@ rule all:
             **config["scenarios"]["all"],
             figure=FIGURES_SINGLE
         ),
-        "repo_data/dag.jpg",
+        # "repo_data/dag.jpg",
 
 ################# ----------- Rules to Retrieve Data ---------- #################
 
