@@ -76,16 +76,11 @@ include: "rules/postprocess.smk"
 rule all:
     input:
         expand(
-            "results/{interconnect}/figures/elec_s_{clusters}_ec_l{ll}_{opts}_{figure}.pdf",
+            "results/{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{figure}.pdf",
             **config["scenarios"]["all"],
-        ) if config['solving']['operations']['run'] 
-        else 
-            expand(
-                "results/{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{figure}.pdf",
-                **config["scenarios"]["all"],
-                figure=FIGURES_SINGLE
-            ),
-            "repo_data/dag.jpg",
+            figure=FIGURES_SINGLE
+        ),
+        "repo_data/dag.jpg",
 
 ################# ----------- Rules to Retrieve Data ---------- #################
 
