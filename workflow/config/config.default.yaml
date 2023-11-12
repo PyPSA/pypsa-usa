@@ -1,6 +1,6 @@
 scenarios:
   all:
-    interconnect: eastern #"usa|texas|western|eastern"
+    interconnect: usa #"usa|texas|western|eastern"
     clusters: 30
     opts:
       [
@@ -19,14 +19,8 @@ enable:
   build_cutout: false
 
 offshore_shape:
-  use: ca #options are ca, weathergov
-  offshore_path:
-    ca: "repo_data/BOEM_CA_OSW_GIS/CA_OSW_BOEM_CallAreas.shp"
-    weathergov: "https://www.weather.gov/source/gis/Shapefiles/WSOM/oz22mr22.zip"
-    # nrel: "geodata_repo/Offshore_Wind_Speed_90m/Offshore_Wind_Speed_90m.shp"
+  use: eez #options are ca_osw, eez
 
-
-#TODO: #19 remove config list of BA's and reference geojson values directly instead
 countries: [US]  
 
 # focus_weights: 

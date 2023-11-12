@@ -44,7 +44,7 @@ Reads in Breakthrough Energy/TAMU transmission dataset, and converts it into PyP
 import pypsa, pandas as pd, logging, geopandas as gpd
 from geopandas.tools import sjoin
 from _helpers import configure_logging
-from pypsa.geo import haversine
+import numpy as np
 
 idx = pd.IndexSlice
 
@@ -174,9 +174,30 @@ def remove_breakthrough_offshore(n: pypsa.Network, offshore_shapes: gpd.GeoDataF
 def assign_line_length(n: pypsa.Network):
     '''Assigns line length to each line in the network using Haversine distance'''
     bus_df = n.buses[['x','y']]
-    distances = haversine(bus_df.loc[n.lines.bus0].values, bus_df.loc[n.lines.bus1].values)
-    n.lines['length'] = distances[:,0]
-    n.lines.length.plot(kind='hist', bins=100)
+    bus0 = bus_df.loc[n.lines.bus0].values
+    bus1 = bus_df.loc[n.lines.bus1].values
+    distances = haversine_np(bus0[:,0], bus0[:,1], bus1[:,0], bus1[:,1])
+    n.lines['length'] = distances
+
+
+def haversine_np(lon1, lat1, lon2, lat2):
+    """
+    Calculate the great circle distance between two points
+    on the earth (specified in decimal degrees)
+    
+    All args must be of equal length.    
+    source: https://stackoverflow.com/questions/29545704/fast-haversine-approximation-python-pandas
+    """
+    lon1, lat1, lon2, lat2 = map(np.radians, [lon1, lat1, lon2, lat2])
+    
+    dlon = lon2 - lon1
+    dlat = lat2 - lat1
+    
+    a = np.sin(dlat/2.0)**2 + np.cos(lat1) * np.cos(lat2) * np.sin(dlon/2.0)**2
+    
+    c = 2 * np.arcsin(np.sqrt(a))
+    km = 6378.137 * c
+    return km
 
 
 if __name__ == "__main__":
@@ -223,17 +244,17 @@ if __name__ == "__main__":
     n = add_buses_from_file(n, gdf_bus, interconnect=interconnect)
     n = add_branches_from_file(n, snakemake.input["lines"])
     n = add_dclines_from_file(n, snakemake.input["links"])
+    logger.info(f"Assigning line types.")
     add_custom_line_type(n)
     assign_line_types(n)
+    logger.info(f"Assigning line lengths.")
     assign_line_length(n)
-    
+
     # remove offshore buses and connecting branches
     # n = remove_breakthrough_offshore(n, offshore_shapes, state_shape)
 
-
-    
     # export bus2sub interconnect data
-    logger.info(f"exporting bus2sub and sub data for {interconnect}")
+    logger.info(f"Exporting bus2sub and sub data for {interconnect}")
     if interconnect == "usa": #if usa interconnect do not filter bc all sub are in usa
         bus2sub = (
             pd.read_csv(snakemake.input.bus2sub)

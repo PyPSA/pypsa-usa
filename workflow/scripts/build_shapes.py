@@ -40,7 +40,7 @@
 
 **Description**
 
-The `build_shapes` rule builds the GIS shape files for the balancing authorities and offshore regions. The regions are only built for the {interconnect} wildcard. Because balancing authorities often overlap- we modify the GIS dataset developed by  [Breakthrough Energy Sciences](https://breakthrough-energy.github.io/docs/). The offshore regions are built from the BOEM and weather.gov datasets.
+The `build_shapes` rule builds the GIS shape files for the balancing authorities and offshore regions. The regions are only built for the {interconnect} wildcard. Because balancing authorities often overlap- we modify the GIS dataset developed by  [Breakthrough Energy Sciences](https://breakthrough-energy.github.io/docs/).
 
 """
 
@@ -89,9 +89,7 @@ def load_ba_shape(ba_file: str) -> gpd.GeoDataFrame:
 
 def combine_offshore_shapes(source: str, shape: gpd.GeoDataFrame, interconnect: gpd.GeoDataFrame, buffer: int = 200000) -> gpd.GeoDataFrame:
     """Conbines offshore shapes"""
-    if source == "weather.gov":
-        offshore = _combine_weather_gov_shape(shape, interconnect, buffer)
-    elif source == "ca_osw":
+    if source == "ca_osw":
         offshore = _dissolve_boem(shape)
     elif source == "eez":
         offshore = _dissolve_eez(shape, interconnect, buffer)
@@ -99,16 +97,6 @@ def combine_offshore_shapes(source: str, shape: gpd.GeoDataFrame, interconnect: 
         logger.error(f"source {source} is invalid offshore data source")
         offshore = None
     return offshore
-        
-def _combine_weather_gov_shape(shape: gpd.GeoDataFrame, interconnect: gpd.GeoDataFrame, buffer: int = 1000):
-    """Combines offshore shapes from weather.gov"""
-    crs = ccrs.Mollweide()
-    shape = shape.rename(columns={"NAME": "name", "LAT": "y", "LON": "x"})
-    gdf_regions_union = interconnect.to_crs(crs).buffer(buffer)
-    gdf_regions_union = gpd.GeoSeries(gdf_regions_union[0], shape.index)
-    overlap = shape.to_crs(crs).buffer(0).intersects(gdf_regions_union[0])
-    offshore = shape[overlap].unary_union
-    return gpd.GeoDataFrame([[offshore, "US"]], columns=["geometry", "name"])
     
 def _dissolve_boem(shape: gpd.GeoDataFrame):
     """Dissolves offshore shapes from boem"""
@@ -215,11 +203,14 @@ if __name__ == "__main__":
     gdf_ba_states.to_file(snakemake.output.onshore_shapes)
 
     # load offshore shapes
-    offshore_config = snakemake.params.source_offshore_shapes
+    offshore_config = snakemake.params.source_offshore_shapes['use']
     if offshore_config == "ca_osw":
         offshore = gpd.read_file(snakemake.input.offshore_shapes_ca_osw)
     elif offshore_config == "eez":
         offshore = gpd.read_file(snakemake.input.offshore_shapes_eez)
+    else:
+        logger.error(f"source {source} is invalid offshore data source")
+        offshore = None
 
     #filter buffer from shore
     buffer_distance = 20000 # buffer distance for offshore shapes from shore.
