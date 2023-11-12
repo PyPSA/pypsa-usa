@@ -225,11 +225,12 @@ if __name__ == "__main__":
     n = add_dclines_from_file(n, snakemake.input["links"])
     add_custom_line_type(n)
     assign_line_types(n)
-
-    # remove offshore buses and connecting branches
-    n = remove_breakthrough_offshore(n, offshore_shapes, state_shape)
-
     assign_line_length(n)
+    
+    # remove offshore buses and connecting branches
+    # n = remove_breakthrough_offshore(n, offshore_shapes, state_shape)
+
+
     
     # export bus2sub interconnect data
     logger.info(f"exporting bus2sub and sub data for {interconnect}")

@@ -180,7 +180,7 @@ if __name__ == "__main__":
 
     ### Defining Offshore Regions ###
     for i in range(len(offshore_shapes)):
-        import pdb; pdb.set_trace()
+        # import pdb; pdb.set_trace()
         offshore_shape = offshore_shapes.iloc[i]
         shape_name = offshore_shapes.index[i]
         bus_locs = n.buses.loc[n.buses.substation_off, ["x", "y"]] #substation off all true?

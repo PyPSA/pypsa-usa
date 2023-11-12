@@ -755,11 +755,17 @@ def prepare_eia_demand(n: pypsa.Network,
     demand = demand.loc[n.snapshots.intersection(demand.index)] # Only keep demand data for which we want the snapshots of.
     demand.index = n.snapshots
 
+    #Combine EIA Demand Data to Match GIS Shapes
     demand['Arizona'] = demand.pop('SRP') + demand.pop('AZPS')
+
+    #Combine GIS Shape fields to Match EIA Demand Data
+    #TODO: Include EIA sub-ba level data so this setp for CISO is not neccesary
     n.buses['load_dissag'] = n.buses.balancing_area.replace({'CISO-PGAE': 'CISO', 
                                                              'CISO-SCE': 'CISO', 
                                                              'CISO-VEA': 'CISO', 
                                                              'CISO-SDGE': 'CISO'})
+
+    #TODO: There should be no buses with missing_bas
     n.buses['load_dissag'] = n.buses.load_dissag.replace({'': 'missing_ba'})
 
     intersection = set(demand.columns).intersection(n.buses.load_dissag.unique())
