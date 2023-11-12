@@ -195,7 +195,7 @@ if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
 
-        snakemake = mock_snakemake("build_renewable_profiles", technology="solar")
+        snakemake = mock_snakemake("build_renewable_profiles", technology="onwind", interconnect="western")
     configure_logging(snakemake)
 
     nprocesses = int(snakemake.threads)
@@ -368,4 +368,5 @@ if __name__ == "__main__":
         ds["profile"] = ds["profile"].where(ds["profile"] >= min_p_max_pu, 0)
 
     ds.to_netcdf(snakemake.output.profile)
-    client.shutdown()
+    if client is not None:
+        client.shutdown()

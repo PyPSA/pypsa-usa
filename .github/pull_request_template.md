@@ -10,4 +10,3 @@ Closes # (if applicable).
 - [ ] Changed dependencies are added to `envs/environment.yaml`.
 - [ ] Changes in configuration options are added in all of `config.default.yaml`.
 - [ ] Changes in configuration options are also documented in `doc/configtables/*.csv`.
-- [ ] A release note `doc/release_notes.rst` is added.

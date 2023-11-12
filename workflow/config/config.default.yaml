@@ -1,12 +1,12 @@
 scenarios:
   all:
     interconnect: western #"usa|texas|western|eastern"
-    clusters: 60
+    clusters: 30
     opts:
       [
         Co2L0.75,
       ]
-    ll: [vopt]
+    ll: [v1.25]
     scope: "total" # "urban", "rural", or "total" 
 
 run:
@@ -18,14 +18,6 @@ run:
 enable:
   build_cutout: false
 
-zenodo_repositories:
-  protected_planet: "https://sandbox.zenodo.org/record/1183583/files/natura_global.zip"
-  USATestSystem: "https://zenodo.org/record/4538590/files/USATestSystem.zip"
-  pypsa_usa_data: "https://zenodo.org/record/8175051/files/pypsa_usa_data.zip?download=1"
-
-zenodo_repositories_sector:
-  pypsa_usa_sec: "https://sandbox.zenodo.org/record/1244195/files/pypsa-usa-sec.zip?download=1"
-
 offshore_shape:
   use: ca #options are ca, weathergov
   offshore_path:
@@ -33,8 +25,6 @@ offshore_shape:
     weathergov: "https://www.weather.gov/source/gis/Shapefiles/WSOM/oz22mr22.zip"
     # nrel: "geodata_repo/Offshore_Wind_Speed_90m/Offshore_Wind_Speed_90m.shp"
 
-balancing_area_gis: 
-  path: "repo_data/BA_shapes_new/Modified_BE_BA_Shapes.shp"
 
 #TODO: #19 remove config list of BA's and reference geojson values directly instead
 countries: [US]  
@@ -47,9 +37,10 @@ network_configuration: "pypsa-usa" # "pypsa-usa" or "ads2032" or "breakthrough"
 
 snapshots:
   start: "2019-01-01"
-  end: "2019-01-14"
-  inclusive: 'left' # include start, not end
+  end: "2019-02-28"
+  inclusive: 'left'
 
+# docs :
 atlite:
   default_cutout: era5_2019
   nprocesses: 4
@@ -80,18 +71,17 @@ atlite:
       dx: 0.3
       dy: 0.3
 
-
+# docs :
 electricity: 
-  conventional_carriers: [nuclear, oil, OCGT, CCGT, coal, geothermal] # Choose Carriers to load into network
-  renewable_carriers: [onwind, solar, offwind, hydro] # Choose Carriers to load into network
-  voltages: [230., 345., 500., 765.]
+  conventional_carriers: [nuclear, oil, OCGT, CCGT, coal, geothermal] # Choose the conventional plant types to include in network
+  renewable_carriers: [onwind, solar, offwind, hydro] # Choose the renewable plant types to include in network
   voltage_simplified: 230 #Voltage level to simplify network to in rule "simplify network"
   co2limit: 1.4728e+9 # 0.8 * 1.841e+9
-  co2base: 1.841e+9 #base_from_2020 Locations of the 1,841 MMmt of CO2 emissions from the current state of the grid in 2020.
+  co2base: 226.86e+6 #base_from_2020 Locations of the 250 MMmt of CO2 emissions from the WECC 2021.
   gaslimit: false # global gas usage limit of X MWh_th
 
   max_hours:
-    battery: 6 # ADS USES THIS AS ASSUMPTION FOR CURRENT BATTERIES
+    battery: 6
     H2: 168
 
   extendable_carriers:
@@ -100,13 +90,13 @@ electricity:
     Store: [battery] #[battery, H2]
     Link: [] #[H2 pipeline]
 
-
+# docs :
 conventional:
   unit_commitment: false
   dynamic_fuel_price: false
 
-
-renewable: #build_renewable_profiles configurations
+# docs :
+renewable:
   onwind:
     cutout: era5_2019
     resource:
@@ -115,19 +105,7 @@ renewable: #build_renewable_profiles configurations
     capacity_per_sqkm: 3 # conservative, ScholzPhd Tab 4.3.1: 10MW/km^2
     # correction_factor: 0.93
     corine:
-      #all keys labeled corrine are actually copernicus codes. Using the name corrine bc using the pypsa-eur convention
-      # Scholz, Y. (2012). Renewable energy based electricity supply at low costs:
-      #  development of the REMix model and application for Europe. ( p.42 / p.28)
-      # CLC grid codes:
-      # 11X/12X - Various forest types
-      # 20  - Shrubs
-      # 30  - Herbaceus vegetation
-      # 40  - Cropland
-      # 50  - Urban
-      # 60  - Bare / Sparse vegetation
-      # 80  - Permanent water bodies
-      # 100 - Moss and lichen
-      # 200 - Open sea
+      #all keys labeled corrine are actually copernicus codes. Using the name corrine bc using the pypsa-eur convention: https://land.copernicus.eu/global/sites/cgls.vito.be/files/products/CGLOPS1_PUM_LC100m-V3_I3.4.pdf
       grid_codes: [20, 30, 40, 60, 100, 111, 112, 113, 114, 115, 116, 121, 122, 123, 124, 125, 126]
       distance: 10 #buffer from distance_grid_codes that are to be excluded
       distance_grid_codes: [50] 
@@ -144,7 +122,6 @@ renewable: #build_renewable_profiles configurations
     correction_factor: 0.8855
     # proxy for wake losses
     # from 10.1016/j.energy.2018.08.153
-    # until done more rigorously in #153
     corine:
       grid_codes: [80, 200] #page 28 of https://land.copernicus.eu/global/sites/cgls.vito.be/files/products/CGLOPS1_PUM_LC100m-V3_I3.4.pdf
     natura: true
@@ -161,35 +138,11 @@ renewable: #build_renewable_profiles configurations
       orientation: latitude_optimal # will lead into optimal design
         # slope: 0.  # slope: 0 represent a flat panel
         # azimuth: 180.  # azimuth: 180 south orientation
-    capacity_per_sqkm: 4.6 # From 1.7 to 4.6 addresses issue #361
-    # Determined by comparing uncorrected area-weighted full-load hours to those
-    # published in Supplementary Data to
-    # Pietzcker, Robert Carl, et al. "Using the sun to decarbonize the power
-    # sector: The economic potential of photovoltaics and concentrating solar
-    # power." Applied Energy 135 (2014): 704-720.
+    capacity_per_sqkm: 4.6 # From 1.7 to 4.6 addresses issue #361 - TODO revisit this assumption
     correction_factor: 0.854337
     corine:
       grid_codes: [20, 30, 40, 50, 60, 90, 100] #see above for codes
     natura: true
-    potential: simple # or conservative
-    clip_p_max_pu: 1.e-2
-    extendable: true
-  offwind-dc:
-    cutout: era5_2019
-    resource:
-      method: wind
-      turbine: NREL_ReferenceTurbine_5MW_offshore
-    # ScholzPhd Tab 4.3.1: 10MW/km^2
-    capacity_per_sqkm: 3
-    correction_factor: 0.8855
-    # proxy for wake losses
-    # from 10.1016/j.energy.2018.08.153
-    # until done more rigorously in #153
-    corine:
-      grid_codes: [80, 200]
-    natura: true
-    max_depth: 50
-    min_shore_distance: 30000
     potential: simple # or conservative
     clip_p_max_pu: 1.e-2
     extendable: true
@@ -211,7 +164,7 @@ renewable: #build_renewable_profiles configurations
       year: 2013  # (optional) year of statistics used to rescale the runoff time series. When not provided, the weather year of the snapshots is used
     multiplier: 1.1  # multiplier applied after the normalization of the hydro production; default 1.0
 
-
+# docs :
 lines:
   types: # All temporary values, need to be updated
     115.: "Al/St 240/40 2-bundle 220.0" 
@@ -226,20 +179,18 @@ lines:
   length_factor: 1.25
   under_construction: 'zero' # 'zero': set capacity to zero, 'remove': remove, 'keep': with full capacity
 
+# docs :
 links:
   p_max_pu: 1.0
   p_nom_max: .inf
   include_tyndp: true
   under_construction: 'zero' # 'zero': set capacity to zero, 'remove': remove, 'keep': with full capacity
 
+# docs :
 load:
-  # power_statistics: true # only for files from <2019; set false in order to get ENTSOE transparency data
-  # interpolate_limit: 3 # data gaps up until this size are interpolated linearly
-  # time_shift_for_large_gaps: 1w # data gaps up until this size are copied by copying from
-  # manual_adjustments: true # false
   scaling_factor: 1.0
 
-
+# docs :
 costs:  # based on the potentials, assuming  (0.1 kW/m2 and 10 m2/person)
   year: 2030 
   version: v0.6.0
@@ -266,6 +217,11 @@ costs:  # based on the potentials, assuming  (0.1 kW/m2 and 10 m2/person)
   emission_prices: # in currency per tonne emission, only used with the option Ep
     co2: 0.
 
+# docs :
+sector:
+  heat_pump_sink_T: 55.
+
+# docs :
 clustering:
   simplify_network:
     to_substations: false # network is simplified to nodes with positive or negative power injection (i.e. substations or offwind connections)
@@ -282,16 +238,18 @@ clustering:
       p_min_pu: mean
       marginal_cost: mean
       committable: any
-      ramp_limit_up: max
-      ramp_limit_down: max
+      ramp_limit_up: mean
+      ramp_limit_down: mean
       efficiency: mean
     buses:
       Pd: sum
       zone_id: mean # should delete zone id's and PDs from network earlier.
       state: max
 
+# docs :
 solving:
   options:
+    operations_only: false
     formulation: kirchhoff
     load_shedding: false
     noisy_costs: true
@@ -300,7 +258,7 @@ solving:
     clip_p_max_pu: 0.01
     skip_iterations: true
     track_iterations: false
-    nhours: 48
+    nhours: 8760
   solver:
     name: gurobi
     threads: 4
@@ -311,93 +269,3 @@ solving:
     AggFill: 0
     PreDual: 0
     GURO_PAR_BARDENSETHRESH: 200
-  operations:
-    run: false
-    stochastic: false
-    iterations: 10
-
-plotting:
-  map:
-    figsize: [7, 7]
-    boundaries: [-10.2, 29, 35,  72]
-    p_nom:
-      bus_size_factor: 5.e+4
-      linewidth_factor: 3.e+3
-
-  costs_max: 800
-  costs_threshold: 1
-
-  energy_max: 15000.
-  energy_min: -10000.
-  energy_threshold: 50.
-
-  vre_techs: ["onwind", "offwind-ac", "offwind-dc", "solar", "ror"]
-  conv_techs: ["OCGT", "CCGT", "Nuclear", "Coal"]
-  storage_techs: ["hydro+PHS", "battery", "H2"]
-  load_carriers: ["AC load"]
-  AC_carriers: ["AC line", "AC transformer"]
-  link_carriers: ["DC line", "Converter AC-DC"]
-  tech_colors:
-    "onwind" : "#235ebc"
-    "wind" : "#235ebc"
-    "onshore wind" : "#235ebc"
-    'offwind' : "#dd6895"
-    'offwind-ac' : "#6895dd"
-    'offshore wind' : "#6895dd"
-    'offshore wind ac' : "#6895dd"
-    'offwind-dc' : "#74c6f2"
-    'offshore wind dc' : "#74c6f2"
-    "hydro" : "#08ad97"
-    "hydro+PHS" : "#08ad97"
-    "PHS" : "#08ad97"
-    "hydro reservoir" : "#08ad97"
-    'hydroelectricity' : '#08ad97'
-    "ror" : "#4adbc8"
-    "run of river" : "#4adbc8"
-    'solar' : "#f9d002"
-    'solar PV' : "#f9d002"
-    'solar thermal' : '#ffef60'
-    'biomass' : '#0c6013'
-    'solid biomass' : '#06540d'
-    'biogas' : '#23932d'
-    'waste' : '#68896b'
-    'geothermal' : '#ba91b1'
-    "OCGT" : "#d35050"
-    "gas" : "#d35050"
-    "ng" : "#d35050"
-    "natural gas" : "#d35050"
-    "CCGT" : "#b20101"
-    "nuclear" : "#ff9000"
-    "coal" : "#707070"
-    "lignite" : "#9e5a01"
-    "oil" : "#262626"
-    "H2" : "#ea048a"
-    "hydrogen storage" : "#ea048a"
-    "battery" : "#b8ea04"
-    "Electric load" : "#f9d002"
-    "electricity" : "#f9d002"
-    "lines" : "#70af1d"
-    "transmission lines" : "#70af1d"
-    "AC-AC" : "#70af1d"
-    "AC line" : "#70af1d"
-    "AC" : "#70af1d"
-    "links" : "#8a1caf"
-    "HVDC links" : "#8a1caf"
-    "DC-DC" : "#8a1caf"
-    "DC link" : "#8a1caf"
-    "DC" : "#8a1caf"
-
-  nice_names:
-    OCGT: "Open-Cycle Gas"
-    CCGT: "Combined-Cycle Gas"
-    offwind-ac: "Offshore Wind (AC)"
-    offwind-dc: "Offshore Wind (DC)"
-    onwind: "Onshore Wind"
-    solar: "Solar"
-    PHS: "Pumped Hydro Storage"
-    hydro: "Reservoir & Dam"
-    battery: "Battery Storage"
-    H2: "Hydrogen Storage"
-    lines: "Transmission Lines"
-    ror: "Run of River"
-

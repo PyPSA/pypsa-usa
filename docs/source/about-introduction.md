@@ -1,7 +1,7 @@
 (introduction)=
 # Introduction
 
-PyPSA-USA is a model for the US bulk power system built on the pypsa platform. For some introduction to the pypsa modeling workflow- please see the [pypsa-eur](https://youtu.be/ty47YU1_eeQ?si=Cz90jWcN1xk1Eq4i) introductory video.
+PyPSA-USA is an open-source bulk power system planning model for the United-States. PyPSA-USA is built on the Python for Power System Analysis (pypsa) platform, and leverages much of the work of [PyPSA-EUR](https://pypsa-eur.readthedocs.io/en/latest/index.html) throughout the workflow. For some introduction to the pypsa modeling workflow- please see the [pypsa-eur](https://youtu.be/ty47YU1_eeQ?si=Cz90jWcN1xk1Eq4i) introductory video.
 
 (workflow)=
 ## Workflow 
@@ -49,8 +49,3 @@ The envs folder contains the conda env yaml files neccesary to build your mamba/
 |   │   └── example_data.csv
 |   └── Snakefile
 ```
-
-
-## System Requirements 
-
-TBD

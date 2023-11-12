@@ -1,5 +1,44 @@
 """
 Builds mapping between cutout grid cells and population (total, urban, rural).
+
+**Relevant Settings**
+
+.. code:: yaml
+
+    scope: 
+    
+**Inputs**
+
+- ``data/counties/cb_2020_us_county_500k.shp``: County shapes in the USA
+- ``data/population/DECENNIALDHC2020.P1-Data.csv``: Population per county in the USA, 
+
+    .. image:: _static/pop_layout/population.png
+        :scale: 33 %
+
+- ``data/urbanization/DECENNIALDHC2020.H2-Data.csv``: Urbanization rate per county in the USA
+
+    .. image:: _static/pop_layout/urban.png
+        :scale: 33 %
+
+- ``cutouts/" + CDIR + "{interconnect}_{cutout}.nc``: : confer :ref:cutout
+
+**Outputs**
+
+- ``resources/pop_layout_total.nc``: total population by grid cell
+
+    .. image:: _static/pop_layout/pop_layout_total.png
+        :scale: 80 %
+
+- ``resources/pop_layout_urban.nc``: urban population by grid cell
+
+    .. image:: _static/pop_layout/pop_layout_urban.png
+        :scale: 80 %
+
+- ``resources/pop_layout_rural.nc``: rural population by grid cell
+
+    .. image:: _static/pop_layout/pop_layout_rural.png
+        :scale: 80 %
+
 """
 
 import logging
@@ -14,6 +53,7 @@ import pandas as pd
 import xarray as xr
 import matplotlib.pyplot as plt
 import constants
+from pathlib import Path
 
 def load_urban_ratio(df: pd.DataFrame) -> pd.DataFrame:
     """Loads data to get urban and rural values at a GEOID level
@@ -58,7 +98,7 @@ def load_population(df: pd.DataFrame) -> pd.DataFrame:
     df = df[["Geographic Area Name", "population"]]
     return df
 
-def plot_county_data(gdf: gpd.GeoDataFrame, col: str, title: str = None, description: str = None):
+def plot_county_data(gdf: gpd.GeoDataFrame, col: str, title: str = None, description: str = None, save: str = None):
     """Plots heat map of geodataframe 
     
     Adapted from 
@@ -83,11 +123,33 @@ def plot_county_data(gdf: gpd.GeoDataFrame, col: str, title: str = None, descrip
     sm._A = [] # Empty array for the data range
     cbaxes = fig.add_axes([0.15, 0.25, 0.01, 0.4])
     cbar = fig.colorbar(sm, cax=cbaxes)
+    
+    if save:
+        fig.savefig(save)
+        
+def plot_grid_data(da: xr.DataArray, title: str = None, save: str = None):
+    """Plots gridded population layout"""
+    
+    fig, ax = plt.subplots(figsize=(5, 4))
+    da.plot(ax=ax, cbar_kwargs={"label": "population"})
+    ax.set_xlabel("longitude")
+    ax.set_ylabel("latitude")
+    
+    if title:
+        ax.set_title(title)
+    
+    if save:
+        fig.savefig(save)
+    
 
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
         snakemake = mock_snakemake("build_population_layouts", interconnect="western", cutout="era5_2019")
+        
+        # for plotting 
+        save_path = Path("..", "..", "docs", "source", "_static", "pop_layout")
+        
     configure_logging(snakemake)
 
     cutout = atlite.Cutout(snakemake.input.cutout)
@@ -139,39 +201,49 @@ if __name__ == "__main__":
         xcoords = ("x", cutout.coords["x"].data)
         values = pop.values.reshape(cutout.shape)
         layout = xr.DataArray(values, [ycoords, xcoords])
-
         layout.to_netcdf(snakemake.output[f"pop_layout_{key}"])
+        
+        # plot data
+        if save_path:
+            save = Path(save_path, f"pop_layout_{key}.png")
+            title = f"{key} population by grid cell"
+            plot_grid_data(layout, title, save)
 
     # plot data
-    
-    # plotting_data = counties.copy()
-    # plotting_data["density_person_per_km2"] = plotting_data.population / counties.ALAND * 1000000
-    # columns = {
-    #     "Geographic Area Name":"name", 
-    #     "NAMELSAD":"county",
-    #     "STATE_NAME":"state",
-    #     "Population":"population",
-    #     "ALAND":"land_area_m2",
-    #     "density_person_per_km2":"density_person_per_km2",
-    #     "URBAN":"urban_area",
-    #     "geometry":"geometry"}
-    # plotting_data = plotting_data[columns.keys()]
-    # plotting_data = plotting_data.rename(columns=columns)
-    
-    # title = "Population"
-    # column = "population"
-    # description = "Source: https://data.census.gov/ \nDecennial Census - Universe: Total population - 2020: DEC Demographic and Housing Characteristics"
-    # plot_county_data(plotting_data, column, title, description)
+    if save_path: 
+        
+        plotting_data = counties.copy()
+        plotting_data["density_person_per_km2"] = plotting_data.population / counties.ALAND * 1000000
+        columns = {
+            "Geographic Area Name":"name", 
+            "NAMELSAD":"county",
+            "STATE_NAME":"state",
+            "population":"population",
+            "ALAND":"land_area_m2",
+            "density_person_per_km2":"density_person_per_km2",
+            "URBAN":"urban_area",
+            "geometry":"geometry"}
+        plotting_data = plotting_data[columns.keys()]
+        plotting_data = plotting_data.rename(columns=columns)
+        
+        title = "Population by County"
+        column = "population"
+        description = "Source: https://data.census.gov/ \nDecennial Census - Universe: Total population - 2020: DEC Demographic and Housing Characteristics"
+        save = Path(save_path, "population.png")
+        plot_county_data(plotting_data, column, title, description, str(save))
 
-    # title = "Population Density (person/km2)"
-    # column = "density_person_per_km2"
-    # description = "Source: https://data.census.gov/ \nDecennial Census - Universe: Total population - 2020: DEC Demographic and Housing Characteristics"
-    # plot_county_data(plotting_data, column, title, description)
+        title = "Population Density by County (person/km2)"
+        column = "density_person_per_km2"
+        description = "Source: https://data.census.gov/ \nDecennial Census - Universe: Total population - 2020: DEC Demographic and Housing Characteristics"
+        save = Path(save_path, "population_density.png")
+        save = Path(save_path, "density.png")
+        plot_county_data(plotting_data, column, title, description, str(save))
 
-    # title = "Urban Density"
-    # column = "urban_area"
-    # description = "Source: https://data.census.gov/ \nDecennial Census - Universe: Housing units - 2020: DEC Demographic and Housing Characteristics"
-    # plot_county_data(plotting_data, column, title, description)
+        title = "Urban Density by County"
+        column = "urban_area"
+        save = Path(save_path, "urban.png")
+        description = "Source: https://data.census.gov/ \nDecennial Census - Universe: Housing units - 2020: DEC Demographic and Housing Characteristics"
+        plot_county_data(plotting_data, column, title, description, str(save))
 
     # Below is akin to the PyPSA-Eur implementation of rural/urbal areas. They 
     # build up cells based on population density to hit a generic urbanization rate 

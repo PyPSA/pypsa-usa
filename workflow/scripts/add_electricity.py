@@ -332,8 +332,9 @@ def update_marginal_costs(
     if not missed.empty:
         logger.warning(f"Time dependent marginal costs not applied to {missed.state.unique()}")
         
-    # update fuel cost values from $/MCF to $/MWh 
-    fuel_costs["value"] = fuel_costs["value"] * const.NG_MCF_2_MWH
+    # update fuel cost values from $/MCF to $/MWh  
+    # $/MCF * (1 MCF / 1.036 MMBTU) * (1 MMBTU / 0.293 MWh) = $/MWh
+    fuel_costs["value"] = fuel_costs["value"] / const.NG_MCF_2_MWH
     fuel_costs["units"] = "$/MWh"
     
     # extract out monthly variations for fuel costs 
@@ -360,17 +361,20 @@ def update_marginal_costs(
     for state in gen.state.unique():
         gens_in_state = gen[gen.state == state].index.to_list()
         dfs.append(pd.DataFrame({gen: state_fuel_costs[state] for gen in gens_in_state}))
-    n.generators_t["marginal_cost"] = pd.concat(dfs, axis=1)
+    df = pd.concat(dfs, axis=1)
     
     # apply efficiency of each generator to know fuel burn rate 
     if not efficiency:
         gen_eff_mapper = n.generators.to_dict()["efficiency"]
-        n.generators_t["marginal_cost"] = n.generators_t["marginal_cost"].apply(lambda x: x / gen_eff_mapper[x.name], axis=0)
+        df = df.apply(lambda x: x / gen_eff_mapper[x.name], axis=0)
     else:
-        n.generators_t["marginal_cost"] = n.generators_t["marginal_cost"].div(efficiency)
+        df = df.div(efficiency)
     
-    # apply fixed rate VOM cost     
-    n.generators_t["marginal_cost"] += vom_cost
+    # apply fixed rate VOM cost
+    df += vom_cost
+    
+    # join into exisitng time series marginal costs 
+    n.generators_t["marginal_cost"] = n.generators_t["marginal_cost"].join(df, how="inner")
 
 
 def update_transmission_costs(n, costs, length_factor=1.0):
@@ -692,16 +696,17 @@ def attach_renewable_capacities_to_atlite(n, plants_df, renewable_carriers):
     for tech in renewable_carriers:
         plants_filt = plants.query("carrier == @tech")
         if plants_filt.empty: continue
-        network_gens = n.generators[n.generators.carrier == tech] 
-        caps = plants_filt.groupby("bus_assignment").sum().p_nom #namplate capacity per bus
-        # caps = caps / gens_per_bus.reindex(caps.index, fill_value=1) ##REVIEW do i need this
+        generators_tech = n.generators[n.generators.carrier == tech] 
+        caps_per_bus = plants_filt.groupby("bus_assignment").sum().p_nom #namplate capacity per bus
+        # caps = caps / gens_per_bus.reindex(caps.index, fill_value=1) ##REVIEW
         #TODO: #16 Gens excluded from atlite profiles bc of landuse/etc will not be able to be attached if in the breakthrough network
-        if caps[~caps.index.isin(network_gens.bus)].sum() > 0:
-            missing_capacity = caps[~caps.index.isin(network_gens.bus)].sum()
-            logger.info(f"There are {np.round(missing_capacity,1)} MW of {tech} plants that are not in the network. See git issue #16.")
-        n.generators.p_nom.update(network_gens.bus.map(caps).dropna())
-        n.generators.p_nom_min.update(network_gens.bus.map(caps).dropna())
-        logger.info(f"Adding {len(plants_filt)} {tech} generator capacities to the network.")
+        if caps_per_bus[~caps_per_bus.index.isin(generators_tech.bus)].sum() > 0:
+            missing_capacity = caps_per_bus[~caps_per_bus.index.isin(generators_tech.bus)].sum()
+            logger.info(f"There are {np.round(missing_capacity,1)/1000} GW of {tech} plants that are not in the network. See git issue #16.")
+
+        logger.info(f"{caps_per_bus.sum()/1000} GW of {tech} capacity added.")
+        n.generators.p_nom.update(generators_tech.bus.map(caps_per_bus).dropna())
+        n.generators.p_nom_min.update(generators_tech.bus.map(caps_per_bus).dropna())
 
 
 def prepare_breakthrough_demand_data(n: pypsa.Network, 
@@ -819,8 +824,12 @@ def attach_conventional_generators(
     conventional_inputs,
     unit_commitment=None,
     fuel_price=None,
-):
-    carriers = list(set(conventional_carriers) | set(extendable_carriers["Generator"]))
+    ):
+    carriers = [
+        carrier
+        for carrier in set(conventional_carriers) | set(extendable_carriers["Generator"])
+        if carrier not in renewable_carriers
+    ]
     add_missing_carriers(n, carriers)
     add_co2_emissions(n, costs, carriers)
 
@@ -838,7 +847,6 @@ def attach_conventional_generators(
         .rename(index=lambda s: "C" + str(s))
     )
     plants["efficiency"] = plants.efficiency.fillna(plants.efficiency_r)
-
     if unit_commitment is not None:
         committable_attrs = plants.carrier.isin(unit_commitment).to_frame("committable")
         for attr in unit_commitment.index:
@@ -871,8 +879,8 @@ def attach_conventional_generators(
         plants.index,
         carrier=plants.carrier,
         bus=plants.bus_assignment,
-        p_nom_min=plants.p_nom.where(plants.carrier.isin(conventional_carriers), 0),
-        p_nom=plants.p_nom.where(plants.carrier.isin(conventional_carriers), 0),
+        p_nom_min=plants.p_nom.where(plants.carrier.isin(conventional_carriers), 0), #enforces that plants cannot be retired/sold-off at their capital cost
+        p_nom=plants.p_nom.where(plants.carrier.isin(conventional_carriers), 0), 
         p_nom_extendable=plants.carrier.isin(extendable_carriers["Generator"]),
         ramp_limit_up=plants.ramp_limit_up,
         ramp_limit_down=plants.ramp_limit_down,
@@ -962,17 +970,16 @@ def attach_battery_storage(n: pypsa.Network,
     """
     plants_filt = plants.query("carrier == 'battery' ")
     plants_filt.index = plants_filt.index.astype(str) + "_" + plants_filt.generator_id.astype(str)
+    logger.info(f'Added Batteries as Stores to the network.\n{plants_filt.p_nom.sum()/1000} GW Power Capacity\n{plants_filt.energy_capacity_mwh.sum()/1000} GWh Energy Capacity')
 
-    logger.info(f"Adding {len(plants_filt)} Batteries as Stores to the network.")
     plants_filt = plants_filt.dropna(subset=['energy_capacity_mwh'])
-    # logger.info(f"Dropping {len(plants_filt) - len(plants_filt.dropna(subset=['energy_capacity_mwh']))} Batteries without energy capacity.")
-
     n.madd(
         "StorageUnit",
         plants_filt.index,
         carrier = "battery",
         bus=plants_filt.bus_assignment,
         p_nom=plants_filt.p_nom,
+        p_nom_min=plants_filt.p_nom,
         p_nom_extendable='battery' in extendable_carriers['Store'],
         max_hours = plants_filt.energy_capacity_mwh / plants_filt.p_nom,
         build_year=plants_filt.operating_year,
@@ -1345,13 +1352,13 @@ if __name__ == "__main__":
         fuel_cost_file = snakemake.input[f"{cost_data}"]
         df_fuel_costs = pd.read_csv(fuel_cost_file)
         vom = costs.at[carrier, "VOM"]
-        eff = costs.at[carrier, "efficiency"]
+        # eff = costs.at[carrier, "efficiency"]
         update_marginal_costs(
             n=n, 
             carrier=carrier, 
             fuel_costs=df_fuel_costs, 
             vom_cost=vom,
-            efficiency=eff,
+            # efficiency=eff,
             apply_average=False
         )
 

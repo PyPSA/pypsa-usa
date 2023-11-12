@@ -44,6 +44,7 @@ Reads in Breakthrough Energy/TAMU transmission dataset, and converts it into PyP
 import pypsa, pandas as pd, logging, geopandas as gpd
 from geopandas.tools import sjoin
 from _helpers import configure_logging
+from pypsa.geo import haversine
 
 idx = pd.IndexSlice
 
@@ -99,7 +100,7 @@ def add_branches_from_file(n: pypsa.Network, fn_branches: str) -> pypsa.Network:
             s_nom=tech_branches.rateA,
             v_nom=tech_branches.from_bus_id.map(n.buses.v_nom),
             interconnect=tech_branches.interconnect,
-            type="Rail",
+            type="Rail", #rail is used temporarily then over ridden by assign_line_types
             carrier="AC"
         )
     return n
@@ -170,6 +171,12 @@ def remove_breakthrough_offshore(n: pypsa.Network, offshore_shapes: gpd.GeoDataF
 # n.mremove("Load", n.loads.loc[n.loads.bus.isin(n.buses.loc[n.buses.country=='US'].index)].index)
 # n.mremove("Generator", n.generators.loc[n.generators.bus.isin(n.buses.loc[n.buses.country=='US'].index)].index)
 # n.mremove("Bus",  n.buses.loc[n.buses.country=='US'].index)
+def assign_line_length(n: pypsa.Network):
+    '''Assigns line length to each line in the network using Haversine distance'''
+    bus_df = n.buses[['x','y']]
+    distances = haversine(bus_df.loc[n.lines.bus0].values, bus_df.loc[n.lines.bus1].values)
+    n.lines['length'] = distances[:,0]
+    n.lines.length.plot(kind='hist', bins=100)
 
 
 if __name__ == "__main__":
@@ -222,6 +229,8 @@ if __name__ == "__main__":
     # remove offshore buses and connecting branches
     n = remove_breakthrough_offshore(n, offshore_shapes, state_shape)
 
+    assign_line_length(n)
+    
     # export bus2sub interconnect data
     logger.info(f"exporting bus2sub and sub data for {interconnect}")
     if interconnect == "usa": #if usa interconnect do not filter bc all sub are in usa

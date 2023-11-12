@@ -1,7 +1,6 @@
 # SPDX-FileCopyrightText: : 2017-2022 The PyPSA-Eur Authors
 #
 # SPDX-License-Identifier: MIT
-
 """
 Solves linear optimal power flow for a network iteratively while updating reactances.
 
@@ -98,19 +97,8 @@ def prepare_network(n, solve_opts):
 
     load_shedding = solve_opts.get('load_shedding')
     if load_shedding:
-        n.add("Carrier", "load", color="#dd2e23", nice_name="Load shedding")
-        buses_i = n.buses.query("carrier == 'AC'").index
-        if not np.isscalar(load_shedding): load_shedding = 1e2 # Eur/kWh
-        # intersect between macroeconomic and surveybased
-        # willingness to pay
-        # http://journal.frontiersin.org/article/10.3389/fenrg.2015.00055/full)
-        n.madd("Generator", buses_i, " load",
-               bus=buses_i,
-               carrier='load',
-               sign=1e-3, # Adjust sign to measure p and p_nom in kW instead of MW
-               marginal_cost=load_shedding, 
-               p_nom=1e9 # kW
-               )
+        buses_i = n.buses.query("carrier == 'AC'").index.to_list()
+        add_load_shedding(n, buses=buses_i, marginal_cost=load_shedding)
 
     if solve_opts.get('noisy_costs'):
         for t in n.iterate_components(n.one_port_components):
@@ -341,12 +329,57 @@ def solve_network(n, config, opts='', **kwargs):
               extra_functionality=extra_functionality, **kwargs)
     return n
 
+def solve_operations_model(n, solve_opts, solver_options):
+    load_shedding = solve_opts.get('load_shedding')
+    solver_name = solver_options.pop('name')
+    if solve_opts.get('nhours'):
+        nhours = solve_opts['nhours']
+        n.set_snapshots(n.snapshots[:nhours])
+    set_all_extendable_to(n, False)
+    if load_shedding:
+        buses_i = n.buses.query("carrier == 'AC'").index.to_list()
+        add_load_shedding(n, buses=buses_i, marginal_cost=load_shedding)
+    n.optimize(n.snapshots, solver_name=solver_name, solver_options=solver_options)
+    return n
+
+def set_all_extendable_to(n, val):
+    for component in n.iterate_components():
+        if hasattr(component.df, "p_nom_extendable"):
+            component.df.p_nom_extendable = val
+        if hasattr(component.df, "s_nom_extendable"):
+            component.df.s_nom_extendable = val
+
+def add_load_shedding(n, buses=None, marginal_cost=10000, p_nom=1e6):
+    # intersect between macroeconomic and surveybased
+    # willingness to pay
+    # http://journal.frontiersin.org/article/10.3389/fenrg.2015.00055/full)
+    if marginal_cost == True:
+        marginal_cost = 10000 # $/MWh
+    elif not isinstance(marginal_cost, (int, float)): 
+        marginal_cost = 10000 # $/MWh
+    buses = buses if buses else n.buses.index
+    n.optimize.add_load_shedding(
+        buses=buses,
+        sign=1, # keep everything in MW
+        marginal_cost=marginal_cost, # Cost of load shedding
+        p_nom=p_nom, # Max load shedding
+        suffix=' load'
+    )
+    n.carriers.at["Load", "color"] = "#dd2e23"
+    n.carriers.at["Load", "nice_name"] = "Load Shedding"
+    n.add("Carrier", "load", color="#dd2e23", nice_name="Load shedding")
 
 if __name__ == "__main__":
     if 'snakemake' not in globals():
         from _helpers import mock_snakemake
-        snakemake = mock_snakemake('solve_network', simpl='',
-                                  clusters='5', ll='copt', opts='Co2L-BAU-CCL-24H')
+        snakemake = mock_snakemake(
+            'solve_network', 
+            interconnect="western",
+            # simpl='',
+            clusters='30', 
+            ll='vopt', 
+            opts='Co2L0.75'
+        )
     configure_logging(snakemake)
 
     tmpdir = snakemake.config['solving'].get('tmpdir')
@@ -354,15 +387,18 @@ if __name__ == "__main__":
         Path(tmpdir).mkdir(parents=True, exist_ok=True)
     opts = snakemake.wildcards.opts.split('-')
     solve_opts = snakemake.config['solving']['options']
+    solver_options = snakemake.config['solving']['solver']
 
     fn = getattr(snakemake.log, 'memory', None)
     with memory_logger(filename=fn, interval=30.) as mem:
         n = pypsa.Network(snakemake.input[0])
-        n = prepare_network(n, solve_opts)
-        n = solve_network(n, snakemake.config, opts, solver_dir=tmpdir,
-                          solver_logfile=snakemake.log.solver)
-        n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))
+        if solve_opts['operations_only']:
+            n = solve_operations_model(n, solve_opts, solver_options)
+        else:
+            n = prepare_network(n, solve_opts)
+            n = solve_network(n, snakemake.config, opts, solver_dir=tmpdir,
+                            solver_logfile=snakemake.log.solver)
+            n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))
         n.export_to_netcdf(snakemake.output[0])
-
 
     logger.info("Maximum memory usage: {}".format(mem.mem_usage))
