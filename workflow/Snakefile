@@ -338,21 +338,7 @@ if config["enable"].get("build_cutout", False):
             "envs/environment.yaml"
         script:
             "scripts/build_cutout.py"
-else:
-    rule retrieve_cutout:
-        input:
-            HTTP.remote(
-                'https://sandbox.zenodo.org/record/1225941/files/{interconnect}_{cutout}.nc?download=1'
-                ,static=True),
-        output:
-            "cutouts/" + CDIR + "{interconnect}_{cutout}.nc",
-        log:
-            "logs/" + CDIR + "retrieve_cutout_{interconnect}_{cutout}.log",
-        resources:
-            mem_mb=5000,
-        retries: 2
-        run:
-            move(input[0], output[0])
+
 
 rule build_ship_raster:
     input:
