@@ -1,8 +1,6 @@
 # PyPSA-USA
 
-**NOTE: This model is under active development. We welcome you to file issues on github as we continue to develop the model. You can email ktehranchi@stanford.edu for questions/support**
-
-# See [our readthedocs website](https://pypsa-usa.readthedocs.io/en/latest/) for detailed documentation.
+## See our [readthedocs](https://pypsa-usa.readthedocs.io/en/latest/) for installation and usage instructions.
 
 PyPSA-USA is an open-source power systems model of the bulk transmission systems in the United States. This workflow draws from the work of [pypsa-eur](https://pypsa-eur.readthedocs.io/en/latest/index.html) to build a highly configurable power systems model that can be used for capacity expansion modeling, production cost simulation, and power flow analysis. 
 
