@@ -240,6 +240,9 @@ if __name__ == "__main__":
     gdf_bus = map_bus_to_region(gdf_bus, state_shape, "state")
     gdf_bus = map_bus_to_region(gdf_bus, state_shape, "country")
     
+    # Removing few duplicated buses where GIS shapes were overlapping. TODO Fix GIS shapes
+    gdf_bus = gdf_bus.reset_index().drop_duplicates(subset='bus_id', keep='first').set_index('bus_id')
+
     # add buses, transformers, lines and links
     n = add_buses_from_file(n, gdf_bus, interconnect=interconnect)
     n = add_branches_from_file(n, snakemake.input["lines"])
@@ -249,7 +252,7 @@ if __name__ == "__main__":
     assign_line_types(n)
     logger.info(f"Assigning line lengths.")
     assign_line_length(n)
-
+    
     # remove offshore buses and connecting branches
     # n = remove_breakthrough_offshore(n, offshore_shapes, state_shape)
 

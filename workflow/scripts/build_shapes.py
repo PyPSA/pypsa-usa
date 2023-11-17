@@ -129,12 +129,13 @@ if __name__ == "__main__":
 
     interconnect = snakemake.wildcards.interconnect
     breakthrough_zones = pd.read_csv(snakemake.input.zone)
-    breakthrough_zones= breakthrough_zones[breakthrough_zones['interconnect'].str.contains(interconnect, na=False, case=False)]
+    if interconnect != "usa":
+        breakthrough_zones= breakthrough_zones[breakthrough_zones['interconnect'].str.contains(interconnect, na=False, case=False)]
 
     # get usa states and territories
     gdf_na = load_na_shapes()
     gdf_na = gdf_na.query("name not in ['Alaska', 'Hawaii']")
-    
+
     # apply interconnect wildcard 
     if interconnect == "western": #filter states in interconnect
         gdf_states = filter_shapes(

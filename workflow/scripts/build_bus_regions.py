@@ -98,18 +98,18 @@ def voronoi_partition_pts(points, outline):
     return np.array(polygons, dtype=object)
 
 
-def assign_bus_ba(n: pypsa.Network, ba_region_shapes: gpd.GeoDataFrame, offshore_shapes: gpd.GeoDataFrame) -> pypsa.Network:
-    """Assigns Balancing Area to each bus in the network"""
-    bus_df = n.buses
-    bus_df["geometry"] = gpd.points_from_xy(bus_df["x"], bus_df["y"])
+# def assign_bus_ba(n: pypsa.Network, ba_region_shapes: gpd.GeoDataFrame, offshore_shapes: gpd.GeoDataFrame) -> pypsa.Network:
+#     """Assigns Balancing Area to each bus in the network"""
+#     bus_df = n.buses
+#     bus_df["geometry"] = gpd.points_from_xy(bus_df["x"], bus_df["y"])
 
-    combined_shapes = gpd.GeoDataFrame(pd.concat([ba_region_shapes, offshore_shapes],ignore_index=True))
+#     combined_shapes = gpd.GeoDataFrame(pd.concat([ba_region_shapes, offshore_shapes],ignore_index=True))
     
-    ba_points = gpd.tools.sjoin(gpd.GeoDataFrame(bus_df["geometry"],crs= 4326), combined_shapes, how='left',predicate='within')
-    ba_points = ba_points.rename(columns={'name':'balancing_area'})
-    bus_df_final = pd.merge(bus_df, ba_points['balancing_area'], left_index=True, right_index=True,how='left').drop(columns=['geometry'])
-    n.buses = bus_df_final
-    return n
+#     ba_points = gpd.tools.sjoin(gpd.GeoDataFrame(bus_df["geometry"],crs= 4326), combined_shapes, how='left',predicate='within')
+#     ba_points = ba_points.rename(columns={'name':'balancing_area'})
+#     bus_df_final = pd.merge(bus_df, ba_points['balancing_area'], left_index=True, right_index=True,how='left').drop(columns=['geometry'])
+#     n.buses = bus_df_final
+#     return n
 
 if __name__ == "__main__":
     logger = logging.getLogger(__name__)
@@ -132,23 +132,15 @@ if __name__ == "__main__":
     n_base = pypsa.Network(snakemake.input.base_network)
 
     #Aggregating to substation to ensure building bus regions for only substation level nodes
-    n_base.generators['weight'] = 0 #temporary to enable clustering
-    busmap_to_sub = pd.read_csv(
-        snakemake.input.bus2sub, index_col=0, dtype={"sub_id": str}
-    )
-    busmap_to_sub.index = busmap_to_sub.index.astype(str)
+    bus2sub = pd.read_csv(snakemake.input.bus2sub, index_col=0, dtype={"sub_id": str})
+    bus2sub.index = bus2sub.index.astype(str)
+    bus2sub = bus2sub.loc[n_base.buses.index]
     substations = pd.read_csv(snakemake.input.sub, index_col=0)
     substations.index = substations.index.astype(str)
 
-    n_base, trafo_map = simplify_network_to_voltage_level(n_base, voltage_level)
-
-    #new busmap definition
-    busmap_to_sub = n_base.buses.sub_id.astype(int).astype(str).to_frame()
-
-    busmaps = [trafo_map, busmap_to_sub.sub_id]
-    busmaps = reduce(lambda x, y: x.map(y), busmaps[1:], busmaps[0])
-
-    n = aggregate_to_substations(n_base, substations, busmap_to_sub.sub_id, aggregation_zones)
+    bus2sub['balancing_area'] = bus2sub.index.map(n_base.buses.balancing_area)
+    bus2sub['x'] = bus2sub.sub_id.map(substations.lon)
+    bus2sub['y'] = bus2sub.sub_id.map(substations.lat)
 
     gpd_countries = gpd.read_file(snakemake.input.country_shapes).set_index('name')
     gpd_ba_shapes = gpd.read_file(snakemake.input.ba_region_shapes)
@@ -160,15 +152,18 @@ if __name__ == "__main__":
     onshore_regions = []
     offshore_regions = []
 
-
     for ba in ba_region_shapes.index:
         ba_shape = ba_region_shapes[ba]
-        all_locs = n.buses.loc[n.buses.substation_lv, ["x", "y"]] 
+        all_locs = bus2sub[["x", "y"]] 
 
         # ba_locs contains the bus name and locations for all buses in the BA for ba_shape.
-        ba_buses = n.buses.balancing_area[n.buses.balancing_area == ba]
+        ba_buses = bus2sub.balancing_area[bus2sub.balancing_area == ba]
         ba_locs = all_locs.loc[ba_buses.index]
         if ba_locs.empty: continue # skip empty BA's which are not in the bus dataframe. ex. eastern texas BA when using the WECC interconnect
+
+        print(ba)
+        if ba =="MISO-0001":
+            ba_shape = gpd.GeoDataFrame(geometry = ba_shape).dissolve().iloc[0].geometry
 
         onshore_regions.append(gpd.GeoDataFrame({
                 'name': ba_locs.index,
@@ -183,7 +178,7 @@ if __name__ == "__main__":
         # import pdb; pdb.set_trace()
         offshore_shape = offshore_shapes.iloc[i]
         shape_name = offshore_shapes.index[i]
-        bus_locs = n.buses.loc[n.buses.substation_off, ["x", "y"]] #substation off all true?
+        bus_locs = bus2sub[["x", "y"]]
         bus_points = gpd.points_from_xy(x=bus_locs.x, y=bus_locs.y)
         offshore_busses = bus_locs[[offshore_shape.buffer(0.2).contains(bus_points[i]) for i in range(len(bus_points))]]  #filter for OSW busses within shape
         if offshore_busses.empty: continue
