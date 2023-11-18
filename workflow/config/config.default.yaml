@@ -37,7 +37,7 @@ network_configuration: "pypsa-usa" # "pypsa-usa" or "ads2032" or "breakthrough"
 
 snapshots:
   start: "2019-01-01"
-  end: "2019-02-28"
+  end: "2019-12-31"
   inclusive: 'left'
 
 # docs :

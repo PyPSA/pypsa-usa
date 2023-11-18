@@ -2,6 +2,10 @@
 
 ## Step 1: Clone Github Repository 
 
+```{note}
+If it your first time cloning a repository with a submodule, you will need to set up your git with an ssh-key by following these [directions](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/generating-a-new-ssh-key-and-adding-it-to-the-ssh-agent).
+```
+
 Clone this repository and all submodules 
 
 ```bash 
@@ -17,6 +21,8 @@ commands `git submodule init` and `git submodule update `
 $ git submodule init
 $ git submodule update 
 ```
+
+
 
 ## Step 2: Create Conda Environment 
 
