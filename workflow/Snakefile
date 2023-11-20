@@ -196,7 +196,7 @@ rule retrieve_ship_raster:
 rule retrieve_cutout:
     input:
         HTTP.remote(
-            'https://zenodo.org/records/10067222/files/{interconnect}_{cutout}.nc?download=1'
+            'zenodo.org/records/10067222/files/{interconnect}_{cutout}.nc'
             ,static=True),
     output:
         "cutouts/" + CDIR + "{interconnect}_{cutout}.nc",
