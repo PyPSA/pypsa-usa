@@ -81,8 +81,11 @@ from _helpers import configure_logging, update_p_nom_max, export_network_for_gis
 import constants as const
 from typing import Dict, Any, List, Union
 from pathlib import Path 
-from shapely.prepared import prep
 import random
+import geopandas as gpd
+from shapely.prepared import prep
+from shapely.geometry import Point
+from sklearn.neighbors import BallTree
 
 idx = pd.IndexSlice
 
@@ -664,9 +667,6 @@ def add_missing_heat_rates(plants, heat_rates_fn):
 
 
 def match_plant_to_bus(n, plants):
-    import geopandas as gpd
-    from shapely.geometry import Point
-
     plants_matched = plants.copy()
     plants_matched['bus_assignment'] = None
 
@@ -674,7 +674,6 @@ def match_plant_to_bus(n, plants):
     buses['geometry'] = gpd.points_from_xy(buses["x"], buses["y"])
 
     # from: https://stackoverflow.com/questions/58893719/find-nearest-point-in-other-dataframe-with-a-lot-of-data
-    from sklearn.neighbors import BallTree
     # Create a BallTree 
     tree = BallTree(buses[['x', 'y']].values, leaf_size=2)
     # Query the BallTree on each feature from 'appart' to find the distance
