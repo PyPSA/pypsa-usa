@@ -312,14 +312,15 @@ def build_offshore_transmission_configuration(n: pypsa.Network) -> pypsa.Network
                                 offshore_buses.x.values, 
                                 offshore_buses.y.values
                             )
-
     # add onshore poi buses @230kV
     logger.info(f"Adding {len(offshore_buses)} offshore buses to the network.")
     n.madd(
         "Bus",
         "OSW_POI_" + osw_offsub_bus_ids, #name poi bus after offshore substation
         v_nom = 230,
+        sub_id = offshore_buses.sub_id.values,
         balancing_area = n.buses.loc[offshore_buses.bus_assignment].balancing_area.values,
+        interconnect = n.buses.loc[offshore_buses.bus_assignment].interconnect.values,
         x = n.buses.loc[offshore_buses.bus_assignment].x.values,
         y = n.buses.loc[offshore_buses.bus_assignment].y.values,
         poi_bus = True,
@@ -332,8 +333,8 @@ def build_offshore_transmission_configuration(n: pypsa.Network) -> pypsa.Network
         "Line",
         "OSW_export_" + osw_offsub_bus_ids, #name line after offshore substation
         v_nom = 230,
-        bus0 = osw_offsub_bus_ids,
-        bus1 = "OSW_POI_" + osw_offsub_bus_ids,
+        bus0 = osw_offsub_bus_ids.values,
+        bus1 = "OSW_POI_" + osw_offsub_bus_ids.values,
         length = line_lengths,
         type = 'temp',
         carrier = 'AC',
@@ -344,7 +345,6 @@ def build_offshore_transmission_configuration(n: pypsa.Network) -> pypsa.Network
     )
 
     # add offshore transmission transformers
-    import pdb; pdb.set_trace()
     n.madd(
         "Transformer",
         "OSW_poi_stepup_" + osw_offsub_bus_ids, #name transformer after offshore substation
@@ -356,7 +356,6 @@ def build_offshore_transmission_configuration(n: pypsa.Network) -> pypsa.Network
         x = 0.1,
         r = 0.1,
     )
-
     return n
 
 
@@ -365,6 +364,7 @@ def remove_breakthrough_offshore(n: pypsa.Network) -> pypsa.Network:
     #rm any lines/transformers/ buses associated with offshore substation buses
     n.mremove("Bus",  n.buses.loc[n.buses.substation_off].index)
     n.mremove("Line", n.lines.loc[n.lines.bus0.isin(n.buses.loc[n.buses.substation_off].index)].index) 
+    n.mremove("Line", n.lines.loc[n.lines.bus1.isin(n.buses.loc[n.buses.substation_off].index)].index) 
     n.mremove("Transformer", n.transformers.loc[n.transformers.bus0.isin(n.buses.loc[n.buses.poi_bus].index)].index)
     n.mremove("Transformer", n.transformers.loc[n.transformers.bus1.isin(n.buses.loc[n.buses.poi_bus].index)].index)
     n.mremove("Bus",  n.buses.loc[n.buses.poi_bus].index)
@@ -427,35 +427,11 @@ def main(snakemake):
 
     # export bus2sub interconnect data
     logger.info(f"Exporting bus2sub and sub data for {interconnect}")
-    if interconnect == "usa": #if usa interconnect do not filter bc all sub are in usa
-        bus2sub = (
-            pd.read_csv(snakemake.input.bus2sub)
-            .set_index("bus_id")
-        )
-        bus2sub.to_csv(snakemake.output.bus2sub)
-    else:
-        bus2sub = (
-            pd.read_csv(snakemake.input.bus2sub)
-            .query("interconnect == @interconnect")
-            .set_index("bus_id")
-        )
-        bus2sub.to_csv(snakemake.output.bus2sub)
 
-    # export sub interconnect data
-    if interconnect == "usa": #if usa interconnect do not filter bc all sub are in usa
-        sub = (
-            pd.read_csv(snakemake.input.sub)
-            .set_index("sub_id")
-        )
-        sub.to_csv(snakemake.output.sub)
-    else:
-        sub = (
-            pd.read_csv(snakemake.input.sub)
-            .query("interconnect == @interconnect")
-            .set_index("sub_id")
-        )
-        sub.to_csv(snakemake.output.sub)
-
+    bus2sub = n.buses[['sub_id', 'interconnect']]
+    bus2sub.to_csv(snakemake.output.bus2sub)
+    subs = n.buses[['sub_id', 'x', 'y', 'interconnect']].set_index('sub_id').drop_duplicates().rename(columns={'x':'lon', 'y':'lat'})
+    subs.to_csv(snakemake.output.sub)
 
     # export network
     n.export_to_netcdf(snakemake.output.network)
