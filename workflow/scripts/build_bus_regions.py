@@ -115,9 +115,9 @@ def main(snakemake):
     substations = pd.read_csv(snakemake.input.sub, index_col=0)
     substations.index = substations.index.astype(str)
 
-    bus2sub['balancing_area'] = bus2sub.index.map(n.buses.balancing_area)
-    bus2sub['x'] = bus2sub.sub_id.map(substations.lon)
-    bus2sub['y'] = bus2sub.sub_id.map(substations.lat)
+    # bus2sub['balancing_area'] = bus2sub.index.map(n.buses.balancing_area)
+    # bus2sub['x'] = bus2sub.sub_id.map(substations.lon)
+    # bus2sub['y'] = bus2sub.sub_id.map(substations.lat)
     bus2sub = bus2sub.reset_index().set_index('sub_id').drop_duplicates()
 
     gpd_countries = gpd.read_file(snakemake.input.country_shapes).set_index('name')
@@ -130,6 +130,7 @@ def main(snakemake):
     onshore_regions = []
     offshore_regions = []
 
+    all_locs = bus2sub[["x", "y"]] # all locations of substations in the bus2sub dataframe
     onshore_buses = n.buses[~n.buses.substation_off]
     bus2sub_onshore = bus2sub[bus2sub.Bus.isin(onshore_buses.index)]
 
@@ -137,12 +138,12 @@ def main(snakemake):
     for ba in ba_region_shapes.index:
         print(ba)
         ba_shape = ba_region_shapes[ba] # current shape
-        all_locs = bus2sub[["x", "y"]] # all locations of substations in the bus2sub dataframe
-
-        ba_buses = bus2sub_onshore.balancing_area[bus2sub_onshore.balancing_area == ba] # series of substations in the current BA
-        ba_buses
-        ba_locs = all_locs.loc[ba_buses.index] # locations of substations in the current BA
+        ba_subs = bus2sub_onshore.balancing_area[bus2sub_onshore.balancing_area == ba] # series of substations in the current BA
+        ba_locs = all_locs.loc[ba_subs.index] # locations of substations in the current BA
         if ba_locs.empty: continue # skip empty BA's which are not in the bus dataframe. ex. portions of eastern texas BA when using the WECC interconnect
+        if ba =="GRID":
+            import pdb; pdb.set_trace()
+            #issue im running into is that the ba_locs has some buses without gps coordinates.
 
         if ba =="MISO-0001":
             ba_shape = gpd.GeoDataFrame(geometry = ba_shape).dissolve().iloc[0].geometry

@@ -429,7 +429,7 @@ def main(snakemake):
     # export bus2sub interconnect data
     logger.info(f"Exporting bus2sub and sub data for {interconnect}")
 
-    bus2sub = n.buses[['sub_id', 'interconnect']]
+    bus2sub = n.buses[['sub_id', 'interconnect','balancing_area','x','y']]
     bus2sub.to_csv(snakemake.output.bus2sub)
     subs = n.buses[['sub_id', 'x', 'y', 'interconnect']].set_index('sub_id').drop_duplicates().rename(columns={'x':'lon', 'y':'lat'})
     subs.to_csv(snakemake.output.sub)
