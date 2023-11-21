@@ -39,7 +39,6 @@ The `run` section is used for running and storing scenarios with different confi
    :start-at: run:
    :end-before: # docs :
 
-
 .. csv-table::
    :header-rows: 1
    :widths: 22,7,22,33
@@ -47,7 +46,7 @@ The `run` section is used for running and storing scenarios with different confi
 ```
 
 (snapshots_cf)=
-## ``snapshots``
+## `snapshots`
 
 Specifies the temporal range to build an energy system model for as arguments to `(pandas.date_range)[https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.date_range.html]`
 
@@ -63,9 +62,25 @@ Specifies the temporal range to build an energy system model for as arguments to
    :file: configtables/snapshots.csv
 ```
 
+(atlite_cf)=
+## `atlite`
+
+Define and specify the `atlite.Cutout` used for calculating renewable potentials and time-series. All options except for `features` are directly used as [`cutout parameters`](https://atlite.readthedocs.io/en/latest/ref_api.html#cutout)
+
+```{eval-rst}  
+.. literalinclude:: ../../workflow/config/config.default.yaml
+   :language: yaml
+   :start-at: atlite:
+   :end-before: # docs
+
+.. csv-table::
+   :header-rows: 1
+   :widths: 22,7,22,33
+   :file: configtables/atlite.csv
+```
 
 (electricity_cf)=
-## ``electricity``
+## `electricity`
 
 Specifies the types of generators that are included in the network, which are extendable, and the CO2 base for which the optimized reduction is relative to.
 
@@ -110,6 +125,65 @@ Specifies the types of generators that are included in the network, which are ex
    :file: configtables/onwind.csv
 ```
 
+(lines_cf)=
+## `lines`
+```{eval-rst}  
+.. literalinclude:: ../../workflow/config/config.default.yaml
+   :language: yaml
+   :start-at: lines:
+   :end-before: # docs
+
+.. csv-table::
+   :header-rows: 1
+   :widths: 22,7,22,33
+   :file: configtables/lines.csv
+```
+
+(links_cf)=
+## `links`
+
+```{eval-rst}  
+.. literalinclude:: ../../workflow/config/config.default.yaml
+   :language: yaml
+   :start-at: links:
+   :end-before: # docs
+
+.. csv-table::
+   :header-rows: 1
+   :widths: 22,7,22,33
+   :file: configtables/links.csv
+```
+
+(load_cf)=
+## `load`
+
+```{eval-rst}
+.. literalinclude:: ../../workflow/config/config.default.yaml
+   :language: yaml
+   :start-after: load:
+   :end-before: # docs
+
+.. csv-table::
+   :header-rows: 1
+   :widths: 22,7,22,33
+   :file: configtables/load.csv
+```
+
+(costs_cf)=
+## `costs`
+
+```{eval-rst}
+.. literalinclude:: ../../workflow/config/config.default.yaml
+   :language: yaml
+   :start-at: costs:
+   :end-before: # docs
+
+.. csv-table::
+   :header-rows: 1
+   :widths: 22,7,22,33
+   :file: configtables/costs.csv
+```
+
 (clustering_cf)=
 ## `clustering`
 
@@ -151,7 +225,7 @@ use `min` in `p_nom_max:` for more conservative assumptions.
 ```
 
 (solving_cf)=
-## ``solving``
+## `solving`
 
 ```{eval-rst}  
 .. literalinclude:: ../../workflow/config/config.default.yaml
@@ -164,4 +238,15 @@ use `min` in `p_nom_max:` for more conservative assumptions.
    :file: configtables/solving.csv
 ```
 
+(plotting_cf)=
+## `plotting`
 
+```{eval-rst}  
+.. literalinclude:: ../../workflow/config/config.plotting.yaml
+   :language: yaml
+
+.. csv-table::
+   :header-rows: 1
+   :widths: 22,7,22,33
+   :file: configtables/plotting.csv
+```
