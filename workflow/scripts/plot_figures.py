@@ -1,6 +1,4 @@
-"""Plots results from optimzation. 
-
-Both static and (some) interactive charts are available for analysis 
+"""Plots static and interactive charts to analyze system results 
 
 **Inputs**
 
@@ -8,7 +6,7 @@ A solved network
 
 **Outputs**
 
-Capacity Maps for: 
+Capacity maps for: 
     - Base capacity 
     - New capacity 
     - Optimal capacity (does not show existing unused capacity)
@@ -16,26 +14,31 @@ Capacity Maps for:
     - Renewable potential capacity 
 
     .. image:: _static/plots/capacity-map.png
-        :scale: 80 % 
-        
-System level hourly production, costs, and capacity:
+        :scale: 33 % 
+
+System level charts for: 
+    - Hourly production
+    - Generator costs 
+    - Generator capacity 
 
     .. image:: _static/plots/production-area.png
-        :scale: 80 % 
+        :scale: 33 % 
         
     .. image:: _static/plots/costs-bar.png
-        :scale: 80 % 
+        :scale: 33 % 
         
     .. image:: _static/plots/capacity-bar.png
-        :scale: 80 % 
+        :scale: 33 % 
 
-System level and nodal level emissions: 
+Emission charts for:
+    - Emissions map by node 
+    - Accumulated emissions 
 
     .. image:: _static/plots/emissions-area.png
-        :scale: 80 % 
+        :scale: 33 % 
         
     .. image:: _static/plots/emissions-map.png
-        :scale: 80 % 
+        :scale: 33 % 
 """
 
 import sys
