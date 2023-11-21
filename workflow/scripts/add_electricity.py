@@ -37,7 +37,7 @@ Adds electrical generators and existing hydro storage units to a base network ba
         length_factor:
 
 .. seealso::
-    Documentation of the configuration file ``config/config.yaml`` at :ref:`costs_cf`,
+    Documentation of the configuration file `config/config.yaml` at :ref:`costs_cf`,
     :ref:`electricity_cf`, :ref:`load_cf`, :ref:`renewable_cf`, :ref:`lines_cf`
 
 **Inputs**

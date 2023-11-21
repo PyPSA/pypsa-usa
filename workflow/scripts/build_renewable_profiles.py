@@ -65,7 +65,7 @@ Inputs
 Outputs
 -------
 
-- ``resources/profile_{technology}.nc`` with the following structure
+- `resources/profile_{technology}.nc` with the following structure
 
     ===================  ==========  =========================================================
     Field                Dimensions  Description
@@ -160,17 +160,17 @@ at cells with a higher capacity factor.
 #     :align: center
 
 This layout is then used to compute the generation availability time series
-from the weather data cutout from ``atlite``.
+from the weather data cutout from `atlite`.
 
 Two methods are available to compute the maximal installable potential for the
-node (`p_nom_max`): ``simple`` and ``conservative``:
+node (`p_nom_max`): `simple` and `conservative`:
 
-- ``simple`` adds up the installable potentials of the individual grid cells.
+- `simple` adds up the installable potentials of the individual grid cells.
   If the model comes close to this limit, then the time series may slightly
   overestimate production since it is assumed the geographical distribution is
   proportional to capacity factor.
 
-- ``conservative`` assertains the nodal limit by increasing capacities
+- `conservative` assertains the nodal limit by increasing capacities
   proportional to the layout until the limit of an individual grid cell is
   reached.
 """
