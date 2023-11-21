@@ -13,12 +13,13 @@ The `network_configuration` option accepts 3 values: `pypsa-usa` , `ads2032`, an
 | Configuration Options: | PyPSA-USA | ADS2032(lite) | Breakthrough |
 |:----------:|:----------:|:----------:|:----------:|
 | Transmission | TAMU/BE | TAMU/BE | TAMU/BE |
-| Thermal Generators | EIA860 | WECC-ADS | BE |
+| Thermal Generators | EIA860, WECC-ADS, CEC Plexos | WECC-ADS | BE |
 | Renewable Time-Series | Atlite | WECC-ADS | Atlite |
 | Hydro Time-Series | Breakthrough (temp) | WECC-ADS | Breakthrough |
 | Demand | EIA930 | WECC-ADS | Breakthrough |
 | Years Supported | 2019 (soon 2017-2023) | 2032 | 2016 |
 | Interconnections Supported | WECC (soon US) | WECC | WECC (soon US)|
+| Cost Projections | NREL-ATB | NREL-ATB | NREL-ATB|
 | Purpose[^+] | CEM, PCS | PCS | PCS |
 
 [^+]: CEM = Capacity Expansion Model, PCS = Production Cost Simulation
