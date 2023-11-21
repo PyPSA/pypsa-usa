@@ -1,6 +1,6 @@
 scenarios:
   all:
-    interconnect: usa #"usa|texas|western|eastern"
+    interconnect: texas #"usa|texas|western|eastern"
     clusters: 30
     opts:
       [

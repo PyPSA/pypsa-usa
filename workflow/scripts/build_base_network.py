@@ -244,7 +244,7 @@ def build_offshore_buses(offshore_shapes: gpd.GeoDataFrame) -> pd.DataFrame:
     offshore_buses = offshore_buses.to_crs('EPSG:4326')
     offshore_buses.lat = offshore_buses.geometry.y
     offshore_buses.lon = offshore_buses.geometry.x
-    offshore_buses['sub_id'] = np.arange(5000, 5000+len(offshore_buses))
+    offshore_buses['sub_id'] = np.arange(50000, 50000+len(offshore_buses))
     offshore_buses.index = np.arange(3008161, 3008161+len(offshore_buses))
     return offshore_buses
 
@@ -257,7 +257,7 @@ def add_offshore_buses(n: pypsa.Network, offshore_buses: pd.DataFrame) -> pypsa.
         v_nom = 230,
         balancing_area = 'Offshore',
         state = 'Offshore',
-        country = 'Offshore',
+        country = 'US',
         interconnect = 'Offshore',
         x = offshore_buses.lon,
         y = offshore_buses.lat,
@@ -320,11 +320,14 @@ def build_offshore_transmission_configuration(n: pypsa.Network) -> pypsa.Network
         v_nom = 230,
         sub_id = offshore_buses.sub_id.values,
         balancing_area = n.buses.loc[offshore_buses.bus_assignment].balancing_area.values,
+        state = n.buses.loc[offshore_buses.bus_assignment].balancing_area.values,
+        country = 'US',
         interconnect = n.buses.loc[offshore_buses.bus_assignment].interconnect.values,
         x = n.buses.loc[offshore_buses.bus_assignment].x.values,
         y = n.buses.loc[offshore_buses.bus_assignment].y.values,
         poi_bus = True,
         poi_sub = True,
+        substation_off = False,
     )
 
     # add offshore transmission lines
@@ -361,14 +364,12 @@ def build_offshore_transmission_configuration(n: pypsa.Network) -> pypsa.Network
 
 def remove_breakthrough_offshore(n: pypsa.Network) -> pypsa.Network:
     """ Remove Offshore buses, Branches, Transformers, and Generators from the original BE network."""
-    #rm any lines/transformers/ buses associated with offshore substation buses
+    #rm any lines/buses associated with offshore substation buses
+    n.mremove("Line", n.lines.loc[n.lines.bus0.isin(n.buses.loc[n.buses.substation_off].index)].index)
     n.mremove("Bus",  n.buses.loc[n.buses.substation_off].index)
-    n.mremove("Line", n.lines.loc[n.lines.bus0.isin(n.buses.loc[n.buses.substation_off].index)].index) 
-    n.mremove("Line", n.lines.loc[n.lines.bus1.isin(n.buses.loc[n.buses.substation_off].index)].index) 
-    n.mremove("Transformer", n.transformers.loc[n.transformers.bus0.isin(n.buses.loc[n.buses.poi_bus].index)].index)
-    n.mremove("Transformer", n.transformers.loc[n.transformers.bus1.isin(n.buses.loc[n.buses.poi_bus].index)].index)
-    n.mremove("Bus",  n.buses.loc[n.buses.poi_bus].index)
-
+    # n.mremove("Transformer", n.transformers.loc[n.transformers.bus0.isin(n.buses.loc[n.buses.poi_bus].index)].index)
+    # n.mremove("Transformer", n.transformers.loc[n.transformers.bus1.isin(n.buses.loc[n.buses.poi_bus].index)].index)
+    # n.mremove("Bus",  n.buses.loc[n.buses.poi_bus].index)
     return n
 
 def main(snakemake):

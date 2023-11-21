@@ -95,7 +95,6 @@ def voronoi_partition_pts(points, outline):
 
 
 def main(snakemake):
-        
     #Configurations
     countries = snakemake.config['countries']
     voltage_level = snakemake.config["electricity"]["voltage_simplified"]
@@ -107,19 +106,19 @@ def main(snakemake):
     logger.info("Building bus regions for %s", snakemake.wildcards.interconnect)
     logger.info("Built for aggregation with %s zones", aggregation_zones)
 
-    n_base = pypsa.Network(snakemake.input.base_network)
+    n = pypsa.Network(snakemake.input.base_network)
 
     #Pulling data for bus2sub map, to ensure bus regions are only built for substations
     bus2sub = pd.read_csv(snakemake.input.bus2sub, index_col=0, dtype={"sub_id": str})
     bus2sub.index = bus2sub.index.astype(str)
-    bus2sub = bus2sub.loc[n_base.buses.index]
+    bus2sub = bus2sub.loc[n.buses.index]
     substations = pd.read_csv(snakemake.input.sub, index_col=0)
     substations.index = substations.index.astype(str)
 
-    bus2sub['balancing_area'] = bus2sub.index.map(n_base.buses.balancing_area)
+    bus2sub['balancing_area'] = bus2sub.index.map(n.buses.balancing_area)
     bus2sub['x'] = bus2sub.sub_id.map(substations.lon)
     bus2sub['y'] = bus2sub.sub_id.map(substations.lat)
-    bus2sub = bus2sub.set_index('sub_id').drop_duplicates()
+    bus2sub = bus2sub.reset_index().set_index('sub_id').drop_duplicates()
 
     gpd_countries = gpd.read_file(snakemake.input.country_shapes).set_index('name')
     gpd_ba_shapes = gpd.read_file(snakemake.input.ba_region_shapes)
@@ -131,14 +130,18 @@ def main(snakemake):
     onshore_regions = []
     offshore_regions = []
 
+    onshore_buses = n.buses[~n.buses.substation_off]
+    bus2sub_onshore = bus2sub[bus2sub.Bus.isin(onshore_buses.index)]
+
     logger.info("Building Onshore Regions")
     for ba in ba_region_shapes.index:
+        print(ba)
         ba_shape = ba_region_shapes[ba] # current shape
         all_locs = bus2sub[["x", "y"]] # all locations of substations in the bus2sub dataframe
 
-        ba_buses = bus2sub.balancing_area[bus2sub.balancing_area == ba] # series of substations in the current BA
+        ba_buses = bus2sub_onshore.balancing_area[bus2sub_onshore.balancing_area == ba] # series of substations in the current BA
+        ba_buses
         ba_locs = all_locs.loc[ba_buses.index] # locations of substations in the current BA
-
         if ba_locs.empty: continue # skip empty BA's which are not in the bus dataframe. ex. portions of eastern texas BA when using the WECC interconnect
 
         if ba =="MISO-0001":
