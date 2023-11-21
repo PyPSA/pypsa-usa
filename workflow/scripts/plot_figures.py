@@ -737,7 +737,7 @@ def plot_brownfield_opt_capacity(n: pypsa.Network, regions: gpd.GeoDataFrame, sa
     
     # plot data 
     
-    title = create_title("Optimal Network Capacities", **wildcards)
+    title = create_title("Optimal Brownfield Network Capacities", **wildcards)
     interconnect = wildcards.get("interconnect", None)
     bus_scale = get_bus_scale(interconnect) if interconnect else 1
     line_scale = get_line_scale(interconnect) if interconnect else 1
