@@ -99,9 +99,6 @@ def main(snakemake):
     countries = snakemake.config['countries']
     voltage_level = snakemake.config["electricity"]["voltage_simplified"]
     aggregation_zones = snakemake.config['clustering']['cluster_network']['aggregation_zones']
-    
-    logger.info("Building bus regions for %s", snakemake.wildcards.interconnect)
-    logger.info("Built for aggregation with %s zones", aggregation_zones)
 
     logger.info("Building bus regions for %s", snakemake.wildcards.interconnect)
     logger.info("Built for aggregation with %s zones", aggregation_zones)
@@ -133,16 +130,17 @@ def main(snakemake):
     all_locs = bus2sub[["x", "y"]] # all locations of substations in the bus2sub dataframe
     onshore_buses = n.buses[~n.buses.substation_off]
     bus2sub_onshore = bus2sub[bus2sub.Bus.isin(onshore_buses.index)]
+    bus2sub_offshore = bus2sub[~bus2sub.Bus.isin(onshore_buses.index)]
 
     logger.info("Building Onshore Regions")
     for ba in ba_region_shapes.index:
-        print(ba)
         ba_shape = ba_region_shapes[ba] # current shape
         ba_subs = bus2sub_onshore.balancing_area[bus2sub_onshore.balancing_area == ba] # series of substations in the current BA
         ba_locs = all_locs.loc[ba_subs.index] # locations of substations in the current BA
         if ba_locs.empty: continue # skip empty BA's which are not in the bus dataframe. ex. portions of eastern texas BA when using the WECC interconnect
         if ba =="GRID":
-            import pdb; pdb.set_trace()
+            # import pdb; pdb.set_trace()
+            pass
             #issue im running into is that the ba_locs has some buses without gps coordinates.
 
         if ba =="MISO-0001":
@@ -159,22 +157,18 @@ def main(snakemake):
     ### Defining Offshore Regions ###
     logger.info("Building Offshore Regions")
     for i in range(len(offshore_shapes)):
-        import pdb; pdb.set_trace()
         offshore_shape = offshore_shapes.iloc[i]
         shape_name = offshore_shapes.index[i]
-        bus_locs = bus2sub[["x", "y"]]
-        bus_points = gpd.points_from_xy(x=bus_locs.x, y=bus_locs.y)
-        offshore_busses = bus_locs[[offshore_shape.buffer(0.2).contains(bus_points[i]) for i in range(len(bus_points))]]  #filter for OSW busses within shape
-        if offshore_busses.empty: continue
+        offshore_buses = bus2sub_offshore[["x", "y"]]
+        if offshore_buses.empty: continue
         offshore_regions_c = gpd.GeoDataFrame({
-            'name': offshore_busses.index,
-            'x': offshore_busses['x'],
-            'y': offshore_busses['y'],
-            'geometry': voronoi_partition_pts(offshore_busses.values, offshore_shape),
+            'name': offshore_buses.index,
+            'x': offshore_buses['x'],
+            'y': offshore_buses['y'],
+            'geometry': voronoi_partition_pts(offshore_buses.values, offshore_shape),
             'country': shape_name,})
         offshore_regions_c = offshore_regions_c.loc[offshore_regions_c.area > 1e-2]
         offshore_regions.append(offshore_regions_c)
-
 
     pd.concat(onshore_regions, ignore_index=True).to_file(snakemake.output.regions_onshore)
 
@@ -191,6 +185,3 @@ if __name__ == "__main__":
         snakemake = mock_snakemake('build_bus_regions', interconnect="usa")
     configure_logging(snakemake)
     main(snakemake)
-
-
-# balancing_areas = ['AEC', 'AECI', 'AVA', 'Arizona', 'BANC', 'BPAT', 'CHPD', 'CISO-PGAE', 'CISO-SCE', 'CISO-SDGE', 'CISO-VEA', 'SPP-CSWS', 'Carolina', 'DOPD', 'SPP-EDE', 'EPE', 'ERCO-C', 'ERCO-E', 'ERCO-FW', 'ERCO-N', 'ERCO-NC', 'ERCO-S', 'ERCO-SC', 'ERCO-W', 'Florida', 'GCPD', 'SPP-GRDA', 'GRID', 'IID', 'IPCO', 'ISONE-Connecticut', 'ISONE-Maine', 'ISONE-Massachusetts', 'ISONE-New Hampshire', 'ISONE-Rhode Island', 'ISONE-Vermont', 'SPP-KACY', 'SPP-KCPL', 'LDWP', 'SPP-LES', 'MISO-0001', 'MISO-0027', 'MISO-0035', 'MISO-0004', 'MISO-0006', 'MISO-8910', 'SPP-MPS', 'NWMT', 'NEVP', 'SPP-NPPD', 'NYISO-A', 'NYISO-B', 'NYISO-C', 'NYISO-D', 'NYISO-E', 'NYISO-F', 'NYISO-G', 'NYISO-H', 'NYISO-I', 'NYISO-J', 'NYISO-K', 'SPP-OKGE', 'SPP-OPPD', 'PACE', 'PACW', 'PGE', 'PJM_AE', 'PJM_AEP', 'PJM_AP', 'PJM_ATSI', 'PJM_BGE', 'PJM_ComEd', 'PJM_DAY', 'PJM_DEO&K', 'PJM_DLCO', 'PJM_DP&L', 'PJM_Dominion', 'PJM_EKPC', 'PJM_JCP&L', 'PJM_METED', 'PJM_PECO', 'PJM_PENELEC', 'PJM_PEPCO', 'PJM_PPL', 'PJM_PSEG', 'PJM_RECO', 'PNM', 'PSCO', 'PSEI', 'SPP-SECI', 'SOCO', 'SPP-SPRM', 'SPP-SPS', 'TEPC', 'TIDC', 'TVA', 'WACM', 'WALC', 'WAUW','SPP-WAUE_2','SPP-WAUE_3','SPP-WAUE_4','SPP-WAUE_5','SPP-WAUE_6','SPP-WAUE_7','SPP-WAUE_8','SPP-WAUE_9', 'SPP-WFEC', 'SPP-WR']

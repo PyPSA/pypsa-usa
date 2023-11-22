@@ -753,6 +753,7 @@ def prepare_eia_demand(n: pypsa.Network,
     demand = demand.fillna(method='backfill') #tempory solution until we switch back to gridEmission for the cleaned Data
     demand = demand.loc[n.snapshots.intersection(demand.index)] # Only keep demand data for which we want the snapshots of.
     demand.index = n.snapshots
+    
 
     #Combine EIA Demand Data to Match GIS Shapes
     demand['Arizona'] = demand.pop('SRP') + demand.pop('AZPS')

@@ -1,10 +1,10 @@
 scenarios:
   all:
-    interconnect: usa #"usa|texas|western|eastern"
-    clusters: 30
+    interconnect: western #"usa|texas|western|eastern"
+    clusters: [60]
     opts:
       [
-        Co2L0.75,
+        Co2L1.5,
       ]
     ll: [v1.25]
     scope: "total" # "urban", "rural", or "total" 
@@ -168,7 +168,7 @@ lines:
     345.: "Al/St 240/40 4-bundle 380.0"
     500.: "Al/St 560/50 4-bundle 750.0"
     765.: "Al/St 560/50 4-bundle 750.0"
-  s_max_pu: 0.7
+  s_max_pu: 1.0
   s_nom_max: .inf
   length_factor: 1.25
   under_construction: 'zero' # 'zero': set capacity to zero, 'remove': remove, 'keep': with full capacity
@@ -243,9 +243,9 @@ clustering:
 # docs :
 solving:
   options:
-    operations_only: false
+    operations_only: true
     formulation: kirchhoff
-    load_shedding: false
+    load_shedding: true
     noisy_costs: true
     min_iterations: 4
     max_iterations: 6
