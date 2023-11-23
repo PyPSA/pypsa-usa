@@ -14,11 +14,25 @@ from pathlib import Path
 FIGURES_SINGLE = [
     "capacity_map_base",
     "capacity_map_optimized",
-    "capacity_bar",
-    "operation_map",
-    "operation_bar",
-    "operation_area",
-    "cost_bar",
+    "capacity_map_optimized_brownfield",
+    "capacity_map_new",
+    "costs_bar",
+    "production_bar",
+    "production_area",
+    "emissions_area",
+    "emissions_accumulated",
+    "emissions_accumulated_tech",
+    "emissions_map",
+    "renewable_potential_map",
+    "capacity_additions_bar"
+]
+
+FIGURES_SINGLE_HTML = [
+    "production_area_html",
+    "emissions_area_html",
+    # "emissions_node_html",
+    "emissions_region_html",
+    "emissions_accumulated_tech_html"
 ]
 
 # --------------------------- Workflow constraints --------------------------- #
@@ -41,6 +55,7 @@ wildcard_constraints:
 configfile: "config/config.default.yaml"
 configfile: "config/config.cluster.yaml"
 configfile: "config/config.osw.yaml"
+configfile: "config/config.plotting.yaml"
 
 ATLITE_NPROCESSES = config["atlite"].get("nprocesses", 4)
 
@@ -55,23 +70,18 @@ RESOURCES = "resources/" + RDIR if not run.get("shared_resources") else "resourc
 RESULTS = "results/" + RDIR
 
 include: "rules/build_sector.smk"
+include: "rules/postprocess.smk"
 
 # ----------------------------------- Rules ---------------------------------- #
-
 
 rule all:
     input:
         expand(
-            RESULTS + '{interconnect}/production_cost/elec_s_{clusters}_solvedOps.csv',
+            "results/{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{figure}.pdf",
             **config["scenarios"]["all"],
-        ) if config['solving']['operations']['run'] 
-        else 
-            expand(
-                "results/{interconnect}/figures/elec_s_{clusters}_ec_l{ll}_{opts}_{figure}.pdf",
-                **config["scenarios"]["all"],
-                figure=FIGURES_SINGLE
-            ),
-            #"repo_data/dag.jpg",
+            figure=FIGURES_SINGLE
+        ),
+        # "repo_data/dag.jpg",
 
 ################# ----------- Rules to Retrieve Data ---------- #################
 
@@ -94,9 +104,20 @@ pypsa_usa_datafiles = [
 "copernicus/PROBAV_LC100_global_v3.0.1_2019-nrt_Discrete-Classification-map_USA_EPSG-4326.tif",
 ]
 
+def define_zenodo_databundles():
+    return {
+        'USATestSystem':"https://zenodo.org/record/4538590/files/USATestSystem.zip",
+        'pypsa_usa_data':"https://zenodo.org/records/10067222/files/pypsa_usa_data.zip?download=1"
+        }
+
+def define_sector_databundles():
+    return {
+        'pypsa_usa_sec':"https://zenodo.org/records/10067222/files/pypsa_usa_sec.zip?download=1"
+        }
+
 rule retrieve_zenodo_databundles:
     params:
-        repositories=config["zenodo_repositories"],
+        define_zenodo_databundles()
     output:
         expand(DATA + "breakthrough_network/base_grid/{file}", file=breakthrough_datafiles),
         expand(DATA + "{file}", file=pypsa_usa_datafiles),
@@ -114,7 +135,7 @@ sector_datafiles = [
 
 rule retrieve_sector_databundle:
     params:
-        repositories = config["zenodo_repositories_sector"]
+        define_sector_databundles()
     output:
         expand(DATA + "{file}", file=sector_datafiles)
     log:
@@ -136,7 +157,6 @@ rule retrieve_WECC_forecast_data:
         "scripts/retrieve_forecast_data.py"        
 
 DATAFILES_DMD = [
-    # "EIA_DMD_2016.csv",
     "EIA_DMD_2017.csv",
     "EIA_DMD_2018.csv",
     "EIA_DMD_2019.csv",
@@ -176,7 +196,7 @@ rule retrieve_ship_raster:
 rule retrieve_cutout:
     input:
         HTTP.remote(
-            'https://sandbox.zenodo.org/record/1245777/files/{interconnect}_{cutout}.nc?download=1'
+            'zenodo.org/records/10067222/files/{interconnect}_{cutout}.nc'
             ,static=True),
     output:
         "cutouts/" + CDIR + "{interconnect}_{cutout}.nc",
@@ -363,8 +383,9 @@ rule build_hydro_profiles:
 rule build_renewable_profiles:
     params:
         renewable=config["renewable"],
+        snapshots=config["snapshots"],
     input:
-        base_network= ancient(RESOURCES + "{interconnect}/elec_base_network.nc"),
+        base_network= RESOURCES + "{interconnect}/elec_base_network.nc",
         corine=ancient("data/copernicus/PROBAV_LC100_global_v3.0.1_2019-nrt_Discrete-Classification-map_USA_EPSG-4326.tif"),
         natura=lambda w: (
             DATA + "natura.tiff"
@@ -385,11 +406,11 @@ rule build_renewable_profiles:
         ),
         country_shapes=RESOURCES + "{interconnect}/country_shapes.geojson", 
         offshore_shapes=RESOURCES + "{interconnect}/offshore_shapes.geojson",
-        regions=lambda w: ancient((
+        regions=lambda w: (
             RESOURCES + "{interconnect}/regions_onshore.geojson"
-            if w.technology in ("wind", "solar")
+            if w.technology in ("onwind", "solar")
             else RESOURCES + "{interconnect}/regions_offshore.geojson"
-        )),
+        ),
         cutout=lambda w: "cutouts/"
         + CDIR + "{interconnect}_"
         + config["renewable"][w.technology]["cutout"]
@@ -509,18 +530,6 @@ rule cluster_network:
 
 ################# ----------- Rules to Optimize/Solve Network ---------- #################
 
-#Operations Model Snakemake Branch
-if config['solving']['operations']['run']:
-    rule solve_operations_model:
-        input:
-            network=RESOURCES + "{interconnect}/elec_s_{clusters}.nc",
-        output:
-            network_solved = RESULTS + "{interconnect}/networks/elec_s_{clusters}_solvedOps.nc",
-            production_cost = RESULTS + "{interconnect}/production_cost/elec_s_{clusters}_solvedOps.csv",
-        script:
-            "scripts/solve_operations_model.py"
-
-#Capacity Expansion Branch
 rule add_extra_components:
     input:
         network=RESOURCES + "{interconnect}/elec_s_{clusters}.nc",
@@ -597,21 +606,6 @@ rule solve_network:
         mem_mb=memory,
     script:
         "scripts/solve_network.py"
-
-
-rule plot_figures:
-    input:
-        network="results/{interconnect}/networks/elec_s_{clusters}_ec_l{ll}_{opts}.nc",
-        regions_onshore=RESOURCES + "{interconnect}/regions_onshore_s_{clusters}.geojson",
-        regions_offshore=RESOURCES + "{interconnect}/regions_offshore_s_{clusters}.geojson",
-    output:
-        **{
-            fig: "results/{interconnect}/figures/elec_s_{clusters}_ec_l{ll}_{opts}_%s.pdf"
-            % fig
-            for fig in FIGURES_SINGLE
-        },
-    script:
-        "scripts/plot_results.py"
 
 
 # Create DAG with- 
