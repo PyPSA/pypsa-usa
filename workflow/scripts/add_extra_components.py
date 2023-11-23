@@ -186,12 +186,58 @@ def attach_hydrogen_pipelines(n, costs, elec_opts):
            efficiency=costs.at['H2 pipeline','efficiency'],
            carrier="H2 pipeline")
 
+def correct_extendable_generators(n: pypsa.Network, costs: pd.DataFrame): 
+    """Adds dummy generators to account for economic retirement 
+    
+    Specifically this function does the following: 
+    1. Creates duplicate generators for any that are tagged as extendable. For
+    example, an extendable "CCGT" generator will be split into "CCGT" and "CCGT new" 
+    2. Capital costs of exisitng extendable generators are replaced with fixed costs 
+    3. p_nom_max of existing extendable generators are set to p_nom
+    4. p_nom_min of existing and new generators is set to zero 
+    """
+    extend = n.generators[n.generators["p_nom_extendable"] == True]
+    
+    # divide by 100 b/c FOM expressed as percentage of CAPEX
+    n.generators["capital_cost"] = n.generators.apply(
+        lambda row: row["capital_cost"] if not row.name in (extend.index) else row["capital_cost"] * costs.at[row["carrier"], "FOM"] / 100, axis=1
+    )
+
+    n.generators["p_nom_max"] = np.where(
+        n.generators["p_nom_extendable"],
+        n.generators["p_nom"],
+        n.generators["p_nom_max"]
+    )
+
+    n.generators["p_nom_min"] = np.where(
+        n.generators["p_nom_extendable"],
+        0,
+        n.generators["p_nom_min"]
+    )
+    
+    n.madd(
+        "Generator",
+        extend.index,
+        suffix=" new",
+        carrier=extend.carrier,
+        bus=extend.bus,
+        p_nom_min=0,
+        p_nom=0,
+        p_nom_max=extend.p_nom_max,
+        p_nom_extendable=True,
+        ramp_limit_up=extend.ramp_limit_up,
+        ramp_limit_down=extend.ramp_limit_down,
+        efficiency=extend.efficiency,
+        marginal_cost=extend.marginal_cost,
+        capital_cost=extend.capital_cost,
+        lifetime=extend.lifetime
+    )
+    
 
 if __name__ == "__main__":
     if 'snakemake' not in globals():
         from _helpers import mock_snakemake
-        snakemake = mock_snakemake('add_extra_components',
-                                  simpl='', clusters=5)
+        snakemake = mock_snakemake("add_extra_components", interconnect="western", clusters=30)
     configure_logging(snakemake)
 
     n = pypsa.Network(snakemake.input.network)
@@ -205,6 +251,9 @@ if __name__ == "__main__":
     attach_hydrogen_pipelines(n, costs, elec_config)
 
     add_nice_carrier_names(n, snakemake.config)
+
+    if elec_config["retirement"] == "economic":
+        correct_extendable_generators(n, costs)
 
     n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))
     n.export_to_netcdf(snakemake.output[0])

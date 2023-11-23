@@ -531,6 +531,8 @@ rule cluster_network:
 ################# ----------- Rules to Optimize/Solve Network ---------- #################
 
 rule add_extra_components:
+    params:
+        retirement = config["electricity"].get("retirement", "economic")
     input:
         network=RESOURCES + "{interconnect}/elec_s_{clusters}.nc",
         tech_costs=DATA + f"costs_{config['costs']['year']}.csv",
