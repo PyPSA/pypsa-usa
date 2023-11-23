@@ -192,10 +192,12 @@ def correct_extendable_generators(n: pypsa.Network, costs: pd.DataFrame):
     Specifically this function does the following: 
     1. Creates duplicate generators for any that are tagged as extendable. For
     example, an extendable "CCGT" generator will be split into "CCGT" and "CCGT new" 
-    2. Capital costs of exisitng extendable generators are replaced with fixed costs 
+    2. Capital costs of existing extendable generators are replaced with fixed costs 
     3. p_nom_max of existing extendable generators are set to p_nom
     4. p_nom_min of existing and new generators is set to zero 
     """
+    
+    # only assign dummy generators to extendable generators
     extend = n.generators[n.generators["p_nom_extendable"] == True]
     
     # divide by 100 b/c FOM expressed as percentage of CAPEX
@@ -215,6 +217,8 @@ def correct_extendable_generators(n: pypsa.Network, costs: pd.DataFrame):
         n.generators["p_nom_min"]
     )
     
+    availability = n.generators_t["p_max_pu"][[x for x in extend.index if x in n.generators_t["p_max_pu"].columns]]
+    
     n.madd(
         "Generator",
         extend.index,
@@ -230,7 +234,8 @@ def correct_extendable_generators(n: pypsa.Network, costs: pd.DataFrame):
         efficiency=extend.efficiency,
         marginal_cost=extend.marginal_cost,
         capital_cost=extend.capital_cost,
-        lifetime=extend.lifetime
+        lifetime=extend.lifetime,
+        p_max_pu = availability
     )
     
 
