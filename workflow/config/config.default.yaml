@@ -90,6 +90,8 @@ electricity:
     Store: [battery] #[battery, H2]
     Link: [] #[H2 pipeline]
 
+  retirement: economic # "economic" or "technical"
+
 # docs :
 conventional:
   unit_commitment: false
