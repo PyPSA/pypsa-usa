@@ -1,18 +1,22 @@
 """Rules for building sector coupling network"""
 
 rule add_sectors:
+    params:
+        electricity=config["electricity"],
+        costs=config["costs"]
     input:
-        RESOURCES + "{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}.nc"
+        network=RESOURCES + "{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}.nc",
+        tech_costs=DATA + f"costs_{config['costs']['year']}.csv",
     output:
-        RESOURCES + "{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}_sec_{sector}.nc"
+        network=RESOURCES + "{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}_sec_{sectors}.nc"
     script:
         "../scripts/add_sectors.py"
 
 rule add_sector_data:
     input:
-        RESOURCES + "{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}_sec_{sector}.nc"
+        RESOURCES + "{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}_sec_{sectors}.nc"
     output:
-        RESOURCES + "{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}_sec_{sector}_net.nc"
+        RESOURCES + "{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}_sec_{sectors}_fill.nc"
     script:
         "../scripts/add_sector_data.py"
     
