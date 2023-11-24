@@ -4,15 +4,15 @@ rule add_sectors:
     input:
         RESOURCES + "{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}.nc"
     output:
-        RESOURCES + "{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}_net.nc"
+        RESOURCES + "{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}_sec_{sector}.nc"
     script:
         "../scripts/add_sectors.py"
 
 rule add_sector_data:
     input:
-        RESOURCES + "{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}_net.nc"
+        RESOURCES + "{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}_sec_{sector}.nc"
     output:
-        RESOURCES + "{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}_net_{sector}.nc"
+        RESOURCES + "{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}_sec_{sector}_net.nc"
     script:
         "../scripts/add_sector_data.py"
     
