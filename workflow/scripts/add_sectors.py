@@ -110,16 +110,17 @@ def add_generators(n: pypsa.Network, new_carrier: str, old_carriers: Union[str, 
         )
         
         # copy over time dependent marginal costs 
-        name_mapper = {f"{bus} {old_carrier}":f"{bus} {new_carrier}" for bus in generators.buses.bus}
-        generators = n.generators_t.marginal_cost[[name_mapper.keys()]]
+        buses = n.generators[n.generators.carrier == old_carrier].bus
+        name_mapper = {f"{bus} {old_carrier}":f"{bus} {new_carrier}" for bus in buses}
+        generators = n.generators_t.marginal_cost[[x for x in name_mapper]]
         if generators.empty:
             logger.info(f"No generators with time varrying marginal cost for {old_carrier}")
         else:
             generators = generators - marginal_costs # extract fuel costs 
             generators = generators.rename(columns=name_mapper)
-            old_generators = [g for g in n.generators_t.marginal_cost if g.isin(name_mapper.keys()) or g.isin([f"{x} new" for x in name_mapper.keys()])]
+            old_generators = [g for g in n.generators_t.marginal_cost if (g in name_mapper.keys()) or (g in [f"{x} new" for x in name_mapper])]
             n.generators_t.marginal_cost = n.generators_t.marginal_cost.drop(columns=old_generators)
-            n.generators_t.marginal_cost = n.generators_t.marginal_cost.join(generators, axis=1)
+            n.generators_t.marginal_cost = n.generators_t.marginal_cost.join(generators)
 
 def add_sector(n: pypsa.Network, new_carrier: str, old_carriers: Union[str, List[str]] = None, costs: pd.DataFrame = pd.DataFrame(), **kwargs):
     """Creates new sector ontop of existing one
