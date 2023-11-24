@@ -49,47 +49,91 @@ def add_buses(n: pypsa.Network, carrier: str, carrier_follow: str = "AC"):
             carrier=carrier
         )
 
-def add_links(n: pypsa.Network, new_carrier: str, old_carrier: List[str], add_generators: bool = True):
+def add_links(n: pypsa.Network, new_carrier: str, old_carriers: List[str], costs: pd.DataFrame = pd.DataFrame(), add_generators: bool = True):
     """Replace Generators with cross sector links
     
-    carrier: List[str]
+    n: pypsa.Network, 
+    new_carrier: str,
+        New carrier of the network (ie. Gas)
+    old_carriers: List[str],
+        Old carriers to replace (ie. ["CCGT", "OCGT"])
+    costs: pd.DataFrame = pd.DataFrame(),
     add_generators: bool = True
         Replace exisiting generators with new mining generators at each node 
     """
     
-    plants = n.generators[n.generators.carrier.isin(old_carrier)]
-    n.madd(
-        "Link",
-        names=plants.index,
-        bus0=plants.bus + f" {new_carrier}", # incorrect with anything except electrical network
-        bus1=plants.bus,
-        carrier=plants.carrier,
-        p_nom_min=plants.p_nom_min,
-        p_nom=plants.p_nom,
-        p_nom_max=plants.p_nom_max,
-        p_nom_extendable=plants.p_nom_extendable,
-        ramp_limit_up=plants.ramp_limit_up,
-        ramp_limit_down=plants.ramp_limit_down,
-        efficiency=plants.efficiency,
-        marginal_cost=plants.marginal_cost,
-        capital_cost=plants.capital_cost,
-        lifetime=plants.lifetime,
-    )
-    n.mremove("Generator", plants.index)
-    
-    if add_generators:
-        n.madd("Generator", names=plants.index + f" {new_carrier}", bus= plants.bus + f" {new_carrier}")
-    n.madd("Generator", names=plants.index + f" {new_carrier}", bus= plants.bus + f" {new_carrier}")
+    for old_carrier in old_carriers:
+        plants = n.generators[n.generators.carrier==old_carrier]
+        try:
+            marginal_costs=costs.at[old_carrier, "VOM"]
+        except KeyError:
+            logger.warning(f"Can not locate marginal costs for {old_carrier}")
+            marginal_costs=plants.marginal_cost
+        n.madd(
+            "Link",
+            names=plants.index,
+            bus0=plants.bus + f" {new_carrier}", # incorrect with anything except electrical network
+            bus1=plants.bus,
+            carrier=plants.carrier,
+            p_nom_min=plants.p_nom_min,
+            p_nom=plants.p_nom,
+            p_nom_max=plants.p_nom_max,
+            p_nom_extendable=plants.p_nom_extendable,
+            ramp_limit_up=plants.ramp_limit_up,
+            ramp_limit_down=plants.ramp_limit_down,
+            efficiency=plants.efficiency,
+            marginal_cost=marginal_costs,
+            capital_cost=plants.capital_cost,
+            lifetime=plants.lifetime,
+        )
+        n.mremove("Generator", plants.index)
+        n.generators_t["marginal_cost"] = n.generators_t["marginal_cost"].drop(columns=[plants.index])
+
+def add_generators(n: pypsa.Network, new_carrier: str, old_carriers: Union[str, List[str]], costs: pd.DataFrame = pd.DataFrame()):
+    """Attaches generators to new buses"""
+    for old_carrier in old_carriers:
+        plants = n.generators[n.generators.carrier==old_carrier]
+        try:
+            marginal_costs=costs.at[old_carrier, "VOM"]
+            fuel_costs=plants.marginal_cost - marginal_costs
+        except KeyError:
+            logger.warning(f"Can not locate marginal costs for {old_carrier}")
+            marginal_costs=plants.marginal_cost
+            fuel_costs=0
+            
+        n.madd(
+            "Generator", 
+            names=plants.bus + f" {new_carrier}", 
+            bus= plants.bus + f" {new_carrier}",
+            p_nom_extendable=True,
+            marginal_costs=fuel_costs
+        )
+        
+        # copy over time dependent marginal costs 
+        name_mapper = {f"{bus} {old_carrier}":f"{bus} {new_carrier}" for bus in generators.buses.bus}
+        generators = n.generators_t.marginal_cost[[name_mapper.keys()]]
+        if generators.empty:
+            logger.info(f"No generators with time varrying marginal cost for {old_carrier}")
+        else:
+            generators = generators - marginal_costs # extract fuel costs 
+            generators = generators.rename(columns=name_mapper)
+            old_generators = [g for g in n.generators_t.marginal_cost if g.isin(name_mapper.keys()) or g.isin([f"{x} new" for x in name_mapper.keys()])]
+            n.generators_t.marginal_cost = n.generators_t.marginal_cost.drop(columns=old_generators)
+            n.generators_t.marginal_cost = n.generators_t.marginal_cost.join(generators, axis=1)
 
 def add_sector(n: pypsa.Network, new_carrier: str, old_carriers: Union[str, List[str]] = None, costs: pd.DataFrame = pd.DataFrame(), **kwargs):
     """Creates new sector ontop of existing one
     
     Note: Currently, can only be built ontop of electricity sector
     
+    Marginal costs are handeled as follows:
+    - Links are the VOM of just the technology
+    - Replacement generators contain time varrying fuel costs
+    
     n: pypsa.Network, 
     new_carrier: str
         Carrier to represent in the network
-    old_carrier: List[str] = None
+    old_carrier: Union[str, List[str]] = None
         Exisitng technologies to map to new carrier network . If none are provided, then 
         only buses are created, without links or generators
     costs: pd.DataFrame
@@ -98,9 +142,15 @@ def add_sector(n: pypsa.Network, new_carrier: str, old_carriers: Union[str, List
     
     add_carrier(n, new_carrier, costs)
     add_buses(n, new_carrier)
-    if not isinstance(old_carriers, list):
-        old_carriers = [old_carriers]
-    add_links(n, new_carrier, old_carriers, **kwargs)
+    if old_carriers:
+        if not isinstance(old_carriers, list):
+            old_carriers = [old_carriers]
+        add_generators(n, new_carrier, old_carriers, costs)
+        add_links(n, new_carrier, old_carriers, costs)
+    else:
+        pass
+        # can add in logic to template out link connections 
+        # add_template_links(n ,new_carrier, costs, **kwargs)
 
 if __name__ == "__main__":
     if "snakemake" not in globals():
@@ -134,6 +184,6 @@ if __name__ == "__main__":
     if "G" in sectors:
         new_carrier = "gas"
         old_carriers = ["CCGT", "OCGT"]
-        add_sector(n, new_carrier, old_carriers, costs, add_generators=False)
+        add_sector(n, new_carrier, old_carriers, costs, add_generators=True)
         
     n.export_to_netcdf(snakemake.output.network)
