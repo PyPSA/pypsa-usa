@@ -246,6 +246,7 @@ rule build_shapes:
         source_offshore_shapes=config["offshore_shape"],
     input:
         zone= DATA + "breakthrough_network/base_grid/zone.csv",
+        nerc_shapes = "repo_data/NERC_Regions/NERC_Regions_Subregions.shp",
         onshore_shapes = "repo_data/BA_shapes_new/Modified_BE_BA_Shapes.shp",
         offshore_shapes_ca_osw = "repo_data/BOEM_CA_OSW_GIS/CA_OSW_BOEM_CallAreas.shp",
         offshore_shapes_eez= "data/gis/conus_eez.shp"
