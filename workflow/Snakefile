@@ -146,15 +146,16 @@ rule retrieve_sector_databundle:
     script:
         "../scripts/retrieve_databundles.py"
 
-rule retrieve_WECC_forecast_data:
-    output:
-        ads_2032 = directory(DATA + "WECC_ADS/downloads/2032/Public Data/Hourly Profiles in CSV format"),
-        ads_2030 = directory(DATA + "WECC_ADS/downloads/2030/WECC 2030 ADS PCM 2020-12-16 (V1.5) Public Data/CSV Shape Files"),
-        ads_dir = directory(DATA + "WECC_ADS/processed"),
-    log:
-        "logs/retrieve/retrieve_WECC_forecast_data.log",
-    script:
-        "scripts/retrieve_forecast_data.py"        
+if config["network_configuration"] == 'ads2032':
+    rule retrieve_WECC_forecast_data:
+        output:
+            ads_2032 = directory(DATA + "WECC_ADS/downloads/2032/Public Data/Hourly Profiles in CSV format"),
+            ads_2030 = directory(DATA + "WECC_ADS/downloads/2030/WECC 2030 ADS PCM 2020-12-16 (V1.5) Public Data/CSV Shape Files"),
+            ads_dir = directory(DATA + "WECC_ADS/processed"),
+        log:
+            "logs/retrieve/retrieve_WECC_forecast_data.log",
+        script:
+            "scripts/retrieve_forecast_data.py"
 
 DATAFILES_DMD = [
     "EIA_DMD_2017.csv",
@@ -461,11 +462,26 @@ rule add_electricity:
         hydro_breakthrough="data/breakthrough_network/base_grid/hydro.csv",
         wind_breakthrough="data/breakthrough_network/base_grid/wind.csv",
         solar_breakthrough="data/breakthrough_network/base_grid/solar.csv",
-        ads_renewables = "data/WECC_ADS/processed/",
         bus2sub="data/breakthrough_network/base_grid/{interconnect}/bus2sub.csv",
         demand_breakthrough_2016=DATA + "breakthrough_network/base_grid/demand.csv",
-        ads_2032 = DATA + "WECC_ADS/downloads/2032/Public Data/Hourly Profiles in CSV format",
-        ads_2030 = DATA + "WECC_ADS/downloads/2030/WECC 2030 ADS PCM 2020-12-16 (V1.5) Public Data/CSV Shape Files",
+        # ads_2032 = DATA + "WECC_ADS/downloads/2032/Public Data/Hourly Profiles in CSV format",
+        # ads_2030 = DATA + "WECC_ADS/downloads/2030/WECC 2030 ADS PCM 2020-12-16 (V1.5) Public Data/CSV Shape Files",
+        # ads_renewables = "data/WECC_ADS/processed/",
+        ads_renewables = 
+            DATA + "data/WECC_ADS/processed/"
+            if config["network_configuration"] == 'ads2032'
+            else []
+        ,
+        ads_2032=
+            DATA + "WECC_ADS/downloads/2032/Public Data/Hourly Profiles in CSV format"
+            if config["network_configuration"] == 'ads2032'
+            else []
+        ,
+        ads_2030=
+            DATA + "WECC_ADS/downloads/2030/WECC 2030 ADS PCM 2020-12-16 (V1.5) Public Data/CSV Shape Files"
+            if config["network_configuration"] == 'ads2032'
+            else []
+        ,
         eia = expand(RESOURCES + "eia/{file}", file=DATAFILES_DMD),
         **{
             f"gen_cost_mult_{Path(x).stem}":f"repo_data/locational_multipliers/{Path(x).name}" for x in Path("repo_data/locational_multipliers/").glob("*")
