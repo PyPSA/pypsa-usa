@@ -79,13 +79,9 @@ Using the ERA5 cutout, the following parameters are accessible:
                                                  (Jm**-2). Takes values between 0 and 1.
     ===================  ==========  ==========  =========================================================
 
-
-The *Western Interconnect* is shown below as an example: 
-
-    .. image:: _static/cutouts/western_cutout.png
-        :scale: 100 %
+The **USA Interconnect** weather data is shown below: 
         
-    .. image:: _static/cutouts/western_weather.png
+    .. image:: _static/cutouts/weather.png
         :scale: 80 %
 """
 
