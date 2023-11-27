@@ -100,7 +100,7 @@ def main(snakemake):
     voltage_level = snakemake.config["electricity"]["voltage_simplified"]
     aggregation_zones = snakemake.config['clustering']['cluster_network']['aggregation_zones']
 
-    logger.info("Building bus regions for %s", snakemake.wildcards.interconnect)
+    logger.info("Building bus regions for %s Interconnect", snakemake.wildcards.interconnect)
     logger.info("Built for aggregation with %s zones", aggregation_zones)
 
     n = pypsa.Network(snakemake.input.base_network)
@@ -108,14 +108,7 @@ def main(snakemake):
     #Pulling data for bus2sub map, to ensure bus regions are only built for substations
     bus2sub = pd.read_csv(snakemake.input.bus2sub, index_col=0, dtype={"sub_id": str})
     bus2sub.index = bus2sub.index.astype(str)
-    bus2sub = bus2sub.loc[n.buses.index]
-    substations = pd.read_csv(snakemake.input.sub, index_col=0)
-    substations.index = substations.index.astype(str)
-
-    # bus2sub['balancing_area'] = bus2sub.index.map(n.buses.balancing_area)
-    # bus2sub['x'] = bus2sub.sub_id.map(substations.lon)
-    # bus2sub['y'] = bus2sub.sub_id.map(substations.lat)
-    bus2sub = bus2sub.reset_index().set_index('sub_id').drop_duplicates()
+    bus2sub = bus2sub.reset_index().drop_duplicates(subset='sub_id').set_index('sub_id')
 
     gpd_countries = gpd.read_file(snakemake.input.country_shapes).set_index('name')
     gpd_ba_shapes = gpd.read_file(snakemake.input.ba_region_shapes)
@@ -138,10 +131,9 @@ def main(snakemake):
         ba_subs = bus2sub_onshore.balancing_area[bus2sub_onshore.balancing_area == ba] # series of substations in the current BA
         ba_locs = all_locs.loc[ba_subs.index] # locations of substations in the current BA
         if ba_locs.empty: continue # skip empty BA's which are not in the bus dataframe. ex. portions of eastern texas BA when using the WECC interconnect
-        if ba =="GRID":
-            # import pdb; pdb.set_trace()
+
+        if ba =="WAUW":
             pass
-            #issue im running into is that the ba_locs has some buses without gps coordinates.
 
         if ba =="MISO-0001":
             ba_shape = gpd.GeoDataFrame(geometry = ba_shape).dissolve().iloc[0].geometry
@@ -167,7 +159,7 @@ def main(snakemake):
             'y': offshore_buses['y'],
             'geometry': voronoi_partition_pts(offshore_buses.values, offshore_shape),
             'country': shape_name,})
-        offshore_regions_c = offshore_regions_c.loc[offshore_regions_c.area > 1e-2]
+        offshore_regions_c = offshore_regions_c.loc[offshore_regions_c.area > 1e-2] # remove extremely small regions
         offshore_regions.append(offshore_regions_c)
 
     pd.concat(onshore_regions, ignore_index=True).to_file(snakemake.output.regions_onshore)
@@ -182,6 +174,6 @@ if __name__ == "__main__":
     logger = logging.getLogger(__name__)
     if 'snakemake' not in globals():
         from _helpers import mock_snakemake
-        snakemake = mock_snakemake('build_bus_regions', interconnect="usa")
+        snakemake = mock_snakemake('build_bus_regions', interconnect="western")
     configure_logging(snakemake)
     main(snakemake)

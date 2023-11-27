@@ -120,19 +120,15 @@ def _dissolve_eez(shape: gpd.GeoDataFrame, interconnect: gpd.GeoDataFrame, buffe
     # shape_split = gpd.GeoSeries.to_crs(shape_split, crs= 4326)
     return shape_split
 
-if __name__ == "__main__":
-    logger = logging.getLogger(__name__)
-    if 'snakemake' not in globals():
-        from _helpers import mock_snakemake
-        snakemake = mock_snakemake('build_shapes', interconnect='texas')
-    configure_logging(snakemake)
-
+def main(snakemake):
     interconnect = snakemake.wildcards.interconnect
     breakthrough_zones = pd.read_csv(snakemake.input.zone)
+    logger.info("Building GIS Shapes for %s Interconnect", interconnect)
+
     if interconnect != "usa":
         breakthrough_zones= breakthrough_zones[breakthrough_zones['interconnect'].str.contains(interconnect, na=False, case=False)]
 
-    # get usa states and territories
+    # get North America (na) states and territories
     gdf_na = load_na_shapes()
     gdf_na = gdf_na.query("name not in ['Alaska', 'Hawaii']")
 
@@ -198,8 +194,9 @@ if __name__ == "__main__":
     ba_states_intersect =  gdf_ba['geometry'].apply(
         lambda shp: shp.intersects(interconnect_regions.dissolve().iloc[0]['geometry']))
     ba_states = gdf_ba[ba_states_intersect]
-    
-    gdf_ba_states = ba_states.copy() # setting with copy
+    import pdb; pdb.set_trace()
+
+    gdf_ba_states = ba_states.copy()
     gdf_ba_states.rename(columns={"name_1": "name"})
     gdf_ba_states.to_file(snakemake.output.onshore_shapes)
 
@@ -214,8 +211,8 @@ if __name__ == "__main__":
         offshore = None
 
     #filter buffer from shore
-    buffer_distance = 20000 # buffer distance for offshore shapes from shore.
-    crs = ccrs.Mollweide()
+    buffer_distance = 1000 #17000 # buffer distance for offshore shapes from shore.
+    crs = 'EPSG:5070' #ccrs.Mollweide() # todo use different crs for distance measurements
     buffered_na = gdf_na.to_crs(crs).buffer(buffer_distance)
     offshore = offshore.to_crs(crs).difference(buffered_na.unary_union)
 
@@ -228,3 +225,24 @@ if __name__ == "__main__":
 
     offshore_c = offshore.set_crs(4326)
     offshore_c.to_file(snakemake.output.offshore_shapes)
+    import pdb; pdb.set_trace()
+
+if __name__ == "__main__":
+    logger = logging.getLogger(__name__)
+    if 'snakemake' not in globals():
+        from _helpers import mock_snakemake
+        snakemake = mock_snakemake('build_shapes', interconnect='western')
+    configure_logging(snakemake)
+    main(snakemake)
+
+# CURRENT IMPLEMENTATION
+#COUNTRY SHAPE = UNION OF STATES THAT ARE CONTAINED IN NERC INTERCONNECT
+#STATE SHAPE = STATES IN NERC INTERCONNECT
+#ONSHORE SHAPE = BA IN STATE SHAPES
+#OFFSHORE SHAPE = OFFSHORE SHAPES NEAR STATE SHAPES
+
+# TODO
+#COUNTRY SHAPE = NERC INTERCONNECT SHAPES
+#STATE SHAPE = PORTIONS OF STATES IN NERC INTERCONNECT
+#ONSHORE SHAPE = BA IN STATE SHAPES
+#OFFSHORE SHAPE = OFFSHORE SHAPES NEAR BA's
