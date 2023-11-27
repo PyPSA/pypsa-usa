@@ -1,4 +1,45 @@
-"""Plots reults from optimzation"""
+"""Plots static and interactive charts to analyze system results 
+
+**Inputs**
+
+A solved network 
+
+**Outputs**
+
+Capacity maps for: 
+    - Base capacity 
+    - New capacity 
+    - Optimal capacity (does not show existing unused capacity)
+    - Optimal browfield capacity 
+    - Renewable potential capacity 
+
+    .. image:: _static/plots/capacity-map.png
+        :scale: 33 % 
+
+System level charts for: 
+    - Hourly production
+    - Generator costs 
+    - Generator capacity 
+
+    .. image:: _static/plots/production-area.png
+        :scale: 33 % 
+        
+    .. image:: _static/plots/costs-bar.png
+        :scale: 33 % 
+        
+    .. image:: _static/plots/capacity-bar.png
+        :scale: 33 % 
+
+Emission charts for:
+    - Emissions map by node 
+    - Accumulated emissions 
+
+    .. image:: _static/plots/emissions-area.png
+        :scale: 33 % 
+        
+    .. image:: _static/plots/emissions-map.png
+        :scale: 33 % 
+"""
 
 import sys
 import os
@@ -696,7 +737,7 @@ def plot_brownfield_opt_capacity(n: pypsa.Network, regions: gpd.GeoDataFrame, sa
     
     # plot data 
     
-    title = create_title("Optimal Network Capacities", **wildcards)
+    title = create_title("Optimal Brownfield Network Capacities", **wildcards)
     interconnect = wildcards.get("interconnect", None)
     bus_scale = get_bus_scale(interconnect) if interconnect else 1
     line_scale = get_line_scale(interconnect) if interconnect else 1
