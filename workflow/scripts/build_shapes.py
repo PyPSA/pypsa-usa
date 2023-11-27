@@ -240,25 +240,29 @@ def main(snakemake):
     # load offshore shapes
     offshore_config = snakemake.params.source_offshore_shapes['use']
     if offshore_config == "ca_osw":
-        logger.info("Using CA OSW shapes")
+        logger.info("Building Offshore GIS shapes with CA OSW shapes")
         offshore = gpd.read_file(snakemake.input.offshore_shapes_ca_osw)
     elif offshore_config == "eez":
-        logger.info("Using EEZ shapes")
+        logger.info("Building Offshore GIS shapes with Exclusive Economic Zones shapes")
         offshore = gpd.read_file(snakemake.input.offshore_shapes_eez)
     else:
         logger.error(f"source {source} is invalid offshore data source")
         offshore = None
 
     #filter buffer from shore
-    buffer_distance = 1000 # buffer distance for offshore shapes from shore.
-    buffered_states = state_boundaries.to_crs(MEASUREMENT_CRS).buffer(buffer_distance)
+    buffer_distance_min = 10e3 # buffer distance for offshore shapes from shore.. 1e3 = 1km
+    buffer_distance_max = 300e3
+    buffered_states = state_boundaries.to_crs(MEASUREMENT_CRS).buffer(buffer_distance_min)
     offshore = offshore.to_crs(MEASUREMENT_CRS).difference(buffered_states.unary_union)
+    buffer_states_max = state_boundaries.to_crs(MEASUREMENT_CRS).buffer(buffer_distance_max)
+    offshore = offshore.to_crs(MEASUREMENT_CRS).intersection(buffer_states_max.unary_union)
+    
 
     offshore = combine_offshore_shapes(
         source=offshore_config,
         shape=offshore, 
         interconnect=gdf_states, 
-        buffer=buffer_distance
+        buffer=buffer_distance_min
     )
 
     offshore_c = offshore.set_crs(GPS_CRS)
@@ -268,7 +272,7 @@ if __name__ == "__main__":
     logger = logging.getLogger(__name__)
     if 'snakemake' not in globals():
         from _helpers import mock_snakemake
-        snakemake = mock_snakemake('build_shapes', interconnect='eastern')
+        snakemake = mock_snakemake('build_shapes', interconnect='western')
     configure_logging(snakemake)
     main(snakemake)
 
