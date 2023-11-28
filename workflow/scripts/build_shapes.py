@@ -252,6 +252,8 @@ def main(snakemake):
     #filter buffer from shore
     buffer_distance_min = 10e3 # buffer distance for offshore shapes from shore.. 1e3 = 1km
     buffer_distance_max = 300e3
+    buffered_na = gdf_na.to_crs(MEASUREMENT_CRS).buffer(buffer_distance_min)
+    offshore = offshore.to_crs(MEASUREMENT_CRS).difference(buffered_na.unary_union)
     buffered_states = state_boundaries.to_crs(MEASUREMENT_CRS).buffer(buffer_distance_min)
     offshore = offshore.to_crs(MEASUREMENT_CRS).difference(buffered_states.unary_union)
     buffer_states_max = state_boundaries.to_crs(MEASUREMENT_CRS).buffer(buffer_distance_max)
@@ -272,7 +274,7 @@ if __name__ == "__main__":
     logger = logging.getLogger(__name__)
     if 'snakemake' not in globals():
         from _helpers import mock_snakemake
-        snakemake = mock_snakemake('build_shapes', interconnect='western')
+        snakemake = mock_snakemake('build_shapes', interconnect='texas')
     configure_logging(snakemake)
     main(snakemake)
 
@@ -280,7 +282,7 @@ if __name__ == "__main__":
 #COUNTRY SHAPE = UNION OF STATES THAT ARE CONTAINED IN NERC INTERCONNECT √
 #STATE SHAPE = STATES IN NERC INTERCONNECT √
 #ONSHORE SHAPE = BA IN STATE SHAPES
-#OFFSHORE SHAPE = OFFSHORE SHAPES NEAR STATE SHAPES
+#OFFSHORE SHAPE = OFFSHORE SHAPES NEAR STATE SHAPES √
 
 # TODO
 #COUNTRY SHAPE = NERC INTERCONNECT SHAPES

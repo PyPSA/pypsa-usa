@@ -268,6 +268,15 @@ def add_offshore_buses(n: pypsa.Network, offshore_buses: pd.DataFrame) -> pypsa.
     )
     return n
 
+
+def assign_texas_poi(n: pypsa.Network) -> pypsa.Network:
+    tx_pois_sub = [40893, 40894, 40729, 40908, 40854, 40760, 40776]
+    tx_pois_bus = [3007405, 3007407, 3007096, 3007429, 3007321, 3007171, 3007205]
+    n.buses.loc[n.buses.sub_id.isin(tx_pois_sub), 'poi_sub'] = True
+    n.buses.loc[n.buses.sub_id.isin(tx_pois_bus), 'poi_bus'] = True
+    return n
+
+
 def identify_osw_poi(n: pypsa.Network) -> pypsa.Network:
     "Identify offshore wind points of interconnections in the base network."
     offshore_lines = n.lines.loc[n.lines.bus0.isin(n.buses.loc[n.buses.substation_off].index)]
@@ -419,6 +428,8 @@ def main(snakemake):
     
     # identify offshore points of interconnection, and remove unncess components from BE network
     n = identify_osw_poi(n)
+    if interconnect=='Texas': 
+        n = assign_texas_poi(n)
     n = remove_breakthrough_offshore(n)
 
     # build new offshore network configuration
@@ -434,6 +445,18 @@ def main(snakemake):
     subs = n.buses[['sub_id', 'x', 'y', 'interconnect']].set_index('sub_id').drop_duplicates().rename(columns={'x':'lon', 'y':'lat'})
     subs.to_csv(snakemake.output.sub)
 
+    # Export GIS Mapping Files
+    n.buses.to_csv(snakemake.output.bus_gis)
+    lines_gis = n.lines.copy()
+    lines_gis['bus0'] = lines_gis.bus0.astype(str)
+    lines_gis['bus1'] = lines_gis.bus1.astype(str)
+    lines_gis['lat1'] = n.buses.loc[lines_gis.bus0].y.values
+    lines_gis['lon1'] = n.buses.loc[lines_gis.bus0].x.values
+    lines_gis['lat2'] = n.buses.loc[lines_gis.bus1].y.values
+    lines_gis['lon2'] = n.buses.loc[lines_gis.bus1].x.values
+    lines_gis['WKT_geometry'] = 'LINESTRING ('+lines_gis.lon1.astype(str).values+' '+lines_gis.lat1.astype(str).values+', '+lines_gis.lon2.astype(str).values+' '+lines_gis.lat2.astype(str).values+')'
+    lines_gis.to_csv(snakemake.output.lines_gis)
+
     # export network
     n.export_to_netcdf(snakemake.output.network)
 
@@ -441,7 +464,7 @@ if __name__ == "__main__":
     logger = logging.getLogger(__name__)
     if 'snakemake' not in globals():
         from _helpers import mock_snakemake
-        snakemake = mock_snakemake('build_base_network', interconnect='usa')
+        snakemake = mock_snakemake('build_base_network', interconnect='texas')
     configure_logging(snakemake)
     main(snakemake)
 
