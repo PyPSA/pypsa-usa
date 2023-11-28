@@ -1,5 +1,5 @@
 ,Unit,Values,Description
-conventional_carriers,--,"Any subset of {nuclear, oil, OCGT, CCGT, coal, lignite, geothermal, biomass}","List of conventional power plants to include in the model from `resources/powerplants.csv`. If an included carrier is also listed in `extendable_carriers`, the capacity is taken as a lower bound."
+conventional_carriers,--,"Any subset of {nuclear, oil, OCGT, CCGT, coal, geothermal, biomass}","List of conventional power plants to include in the model from `resources/powerplants.csv`. If an included carrier is also listed in `extendable_carriers`, the capacity is taken as a lower bound."
 renewable_carriers,--,"Any subset of {solar, onwind, offwind-ac, offwind-dc, hydro}",List of renewable generators to include in the model.
 voltage_simplified,kV,int,"Voltage level to simplify network to in rule ""simplify network"""
 gaslimit,MWhth,float or false,Global gas usage limit (Set False for development)
