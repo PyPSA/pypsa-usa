@@ -8,6 +8,7 @@ scenarios:
       ]
     ll: [v1.25]
     scope: "total" # "urban", "rural", or "total" 
+    sector: "G"
 
 run:
   name: "" # use this to keep track of runs with different settings
