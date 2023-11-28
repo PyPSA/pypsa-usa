@@ -186,7 +186,7 @@ def attach_hydrogen_pipelines(n, costs, elec_opts):
            efficiency=costs.at['H2 pipeline','efficiency'],
            carrier="H2 pipeline")
 
-def correct_extendable_generators(n: pypsa.Network, costs: pd.DataFrame): 
+def add_economic_retirement(n: pypsa.Network, costs: pd.DataFrame): 
     """Adds dummy generators to account for economic retirement 
     
     Specifically this function does the following: 
@@ -258,7 +258,7 @@ if __name__ == "__main__":
     add_nice_carrier_names(n, snakemake.config)
 
     if elec_config["retirement"] == "economic":
-        correct_extendable_generators(n, costs)
+        add_economic_retirement(n, costs)
 
     n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))
     n.export_to_netcdf(snakemake.output[0])
