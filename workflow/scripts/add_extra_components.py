@@ -217,8 +217,6 @@ def add_economic_retirement(n: pypsa.Network, costs: pd.DataFrame):
         n.generators["p_nom_min"]
     )
     
-    availability = n.generators_t["p_max_pu"][[x for x in extend.index if x in n.generators_t["p_max_pu"].columns]]
-    
     n.madd(
         "Generator",
         extend.index,
@@ -235,8 +233,18 @@ def add_economic_retirement(n: pypsa.Network, costs: pd.DataFrame):
         marginal_cost=extend.marginal_cost,
         capital_cost=extend.capital_cost,
         lifetime=extend.lifetime,
-        p_max_pu = availability
+        p_min_pu = extend.p_min_pu,
+        p_max_pu = extend.p_max_pu,
     )
+    
+    # time dependent factors added after as not all generators are time dependent 
+    marginal_cost_t = n.generators_t["marginal_cost"][[x for x in extend.index if x in n.generators_t.marginal_cost.columns]]
+    marginal_cost_t = marginal_cost_t.rename(columns={x:f"{x} new" for x in marginal_cost_t.columns})
+    n.generators_t["marginal_cost"] = n.generators_t["marginal_cost"].join(marginal_cost_t)
+    
+    p_max_pu_t = n.generators_t["p_max_pu"][[x for x in extend.index if x in n.generators_t["p_max_pu"].columns]]
+    p_max_pu_t = p_max_pu_t.rename(columns={x:f"{x} new" for x in p_max_pu_t.columns})
+    n.generators_t["p_max_pu"] = n.generators_t["p_max_pu"].join(p_max_pu_t)
     
 
 if __name__ == "__main__":
