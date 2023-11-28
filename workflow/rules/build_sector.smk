@@ -12,15 +12,6 @@ rule add_sectors:
     script:
         "../scripts/add_sectors.py"
 
-rule add_sector_data:
-    input:
-        RESOURCES + "{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}_sec_{sectors}.nc"
-    output:
-        RESOURCES + "{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}_sec_{sectors}_fill.nc"
-    script:
-        "../scripts/add_sector_data.py"
-    
-
 rule build_population_layouts:
     input:
         county_shapes = DATA + "counties/cb_2020_us_county_500k.shp",
