@@ -125,9 +125,7 @@ def combine_offshore_shapes(source: str, shape: gpd.GeoDataFrame, interconnect: 
     
 def _dissolve_boem(shape: gpd.GeoDataFrame):
     """Dissolves offshore shapes from boem"""
-    # crs = ccrs.Mollweide()
     shape_split = shape.dissolve().explode(index_parts=False) 
-    # overlap = shape.to_crs(crs).buffer(0).intersects(shape_combine.to_crs(crs)) #maybe typo since overlap not used? 
     shape_split.rename(columns={"Lease_Name": "name"}, inplace=True)
     shape_split.name = ['Morro_Bay','Humboldt']
     return shape_split
@@ -150,6 +148,9 @@ def trim_states_to_interconnect(gdf_states: gpd.GeoDataFrame, gdf_nerc: gpd.GeoD
         texas_geometry  = gdf_states.loc[gdf_states.name == 'Texas', 'geometry']
         texas_geometry = filter_small_polygons_gpd(texas_geometry, 1e9)
         gdf_states.loc[gdf_states.name == 'Texas', 'geometry'] = texas_geometry.geometry
+    elif interconnect == "eastern":
+        gdf_nerc_f = gdf_nerc[gdf_nerc.OBJECTID.isin([1,3,6,7])]
+        gdf_states = gpd.overlay(gdf_states, gdf_nerc_f.to_crs(GPS_CRS), how='difference')
     return gdf_states
 
 def main(snakemake):
@@ -280,12 +281,10 @@ if __name__ == "__main__":
 
 # CURRENT IMPLEMENTATION
 #COUNTRY SHAPE = UNION OF STATES THAT ARE CONTAINED IN NERC INTERCONNECT √
-#STATE SHAPE = STATES IN NERC INTERCONNECT √
 #ONSHORE SHAPE = BA IN STATE SHAPES
-#OFFSHORE SHAPE = OFFSHORE SHAPES NEAR STATE SHAPES √
 
 # TODO
 #COUNTRY SHAPE = NERC INTERCONNECT SHAPES
 #STATE SHAPE = PORTIONS OF STATES IN NERC INTERCONNECT
-#ONSHORE SHAPE = BA IN STATE SHAPES
-#OFFSHORE SHAPE = OFFSHORE SHAPES NEAR BA's
+#ONSHORE SHAPE = BA IN STATE SHAPES √
+#OFFSHORE SHAPE = OFFSHORE SHAPES NEAR BA's √

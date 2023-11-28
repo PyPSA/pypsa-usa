@@ -703,7 +703,7 @@ def attach_renewable_capacities_to_atlite(n, plants_df, renewable_carriers):
             missing_capacity = caps_per_bus[~caps_per_bus.index.isin(generators_tech.bus)].sum()
             logger.info(f"There are {np.round(missing_capacity,1)/1000} GW of {tech} plants that are not in the network. See git issue #16.")
 
-        logger.info(f"{caps_per_bus.sum()/1000} GW of {tech} capacity added.")
+        logger.info(f"{np.round(caps_per_bus.sum()/1000,2)} GW of {tech} capacity added.")
         n.generators.p_nom.update(generators_tech.bus.map(caps_per_bus).dropna())
         n.generators.p_nom_min.update(generators_tech.bus.map(caps_per_bus).dropna())
 
@@ -750,24 +750,18 @@ def prepare_eia_demand(n: pypsa.Network,
     logger.info('Building Load Data using EIA demand')
     demand = pd.read_csv(demand_path, index_col=0)
     demand.index = pd.to_datetime(demand.index)
-    demand = demand.fillna(method='backfill') #tempory solution until we switch back to gridEmission for the cleaned Data
-    demand = demand.loc[n.snapshots.intersection(demand.index)] # Only keep demand data for which we want the snapshots of.
+    demand = demand.fillna(method='backfill') #tempory solution until gridEmission for the cleaned Data
+    demand = demand.loc[n.snapshots.intersection(demand.index)] # filter by snapshots
     demand.index = n.snapshots
-    
 
     #Combine EIA Demand Data to Match GIS Shapes
-    demand['Arizona'] = demand.pop('SRP') + demand.pop('AZPS')
-
-    #Combine GIS Shape fields to Match EIA Demand Data
     #TODO: Include EIA sub-ba level data so this setp for CISO is not neccesary
-    n.buses['load_dissag'] = n.buses.balancing_area.replace({'CISO-PGAE': 'CISO', 
-                                                             'CISO-SCE': 'CISO', 
-                                                             'CISO-VEA': 'CISO', 
-                                                             'CISO-SDGE': 'CISO'})
+    demand['Arizona'] = demand.pop('SRP') + demand.pop('AZPS')
+    n.buses['load_dissag'] = n.buses.balancing_area.replace({'^CISO.*': 'CISO'}, regex=True)
+    n.buses.load_dissag = n.buses.load_dissag.replace({'^ERCO.*': 'ERCO'}, regex=True)
 
     #TODO: There should be no buses with missing_bas
     n.buses['load_dissag'] = n.buses.load_dissag.replace({'': 'missing_ba'})
-
     intersection = set(demand.columns).intersection(n.buses.load_dissag.unique())
     demand = demand[list(intersection)]
     return disaggregate_demand_to_buses(n, demand)
@@ -827,6 +821,7 @@ def attach_conventional_generators(
     conventional_carriers: list,
     extendable_carriers: list,
     conventional_params,
+    renewable_carriers: list,
     conventional_inputs,
     unit_commitment=None,
     fuel_price=None,
@@ -925,14 +920,14 @@ def attach_wind_and_solar(
                     * ds["average_distance"].to_pandas()
                     * (
                         underwater_fraction
-                        * costs.at[car + "-connection-submarine", "capital_cost"]
+                        * costs.at[car + "-ac-connection-submarine", "capital_cost"]
                         + (1.0 - underwater_fraction)
-                        * costs.at[car + "-connection-underground", "capital_cost"]
+                        * costs.at[car + "-ac-connection-underground", "capital_cost"]
                     )
                 )
                 capital_cost = (
                     costs.at["offwind", "capital_cost"]
-                    + costs.at[car + "-station", "capital_cost"]
+                    + costs.at[car + "-ac-station", "capital_cost"]
                     + connection_cost
                 )
                 logger.info(
@@ -943,7 +938,7 @@ def attach_wind_and_solar(
             else:
                 capital_cost = costs.at[car, "capital_cost"]
 
-            bus2sub = pd.read_csv(input_profiles.bus2sub, dtype=str).drop("interconnect", axis=1)
+            bus2sub = pd.read_csv(input_profiles.bus2sub, dtype=str).drop("interconnect", axis=1).rename(columns={"Bus": "bus_id"})
             bus_list = ds.bus.to_dataframe("sub_id").merge(bus2sub).bus_id.astype(str).values
             p_nom_max_bus = ds["p_nom_max"].to_dataframe().merge(bus2sub,left_on="bus", right_on="sub_id").set_index('bus_id').p_nom_max
             weight_bus = ds["weight"].to_dataframe().merge(bus2sub,left_on="bus", right_on="sub_id").set_index('bus_id').weight
@@ -976,7 +971,7 @@ def attach_battery_storage(n: pypsa.Network,
     """
     plants_filt = plants.query("carrier == 'battery' ")
     plants_filt.index = plants_filt.index.astype(str) + "_" + plants_filt.generator_id.astype(str)
-    logger.info(f'Added Batteries as Stores to the network.\n{plants_filt.p_nom.sum()/1000} GW Power Capacity\n{plants_filt.energy_capacity_mwh.sum()/1000} GWh Energy Capacity')
+    logger.info(f'Added Batteries as Stores to the network.\n{np.round(plants_filt.p_nom.sum()/1000,2)} GW Power Capacity \n{np.round(plants_filt.energy_capacity_mwh.sum()/1000, 2)} GWh Energy Capacity')
 
     plants_filt = plants_filt.dropna(subset=['energy_capacity_mwh'])
     n.madd(
@@ -1194,12 +1189,8 @@ def load_powerplants_breakthrough(breakthrough_dataset: str) -> pd.DataFrame:
     plants['carrier']= plants.type
     return plants
 
-if __name__ == "__main__":
-    if "snakemake" not in globals():
-        from _helpers import mock_snakemake
-        snakemake = mock_snakemake("add_electricity", interconnect="western")
-    configure_logging(snakemake)
 
+def main(snakemake):
     params = snakemake.params
     configuration = snakemake.config["network_configuration"]
     n = pypsa.Network(snakemake.input.base_network)
@@ -1288,6 +1279,7 @@ if __name__ == "__main__":
         conventional_carriers,
         extendable_carriers,
         params.conventional,
+        renewable_carriers,
         conventional_inputs,
         unit_commitment=unit_commitment,
         fuel_price=fuel_price
@@ -1306,7 +1298,6 @@ if __name__ == "__main__":
     #              hydro_capacities, 
     #              "hydro"
     #         )
-
     
     if configuration == "ads2032":
         attach_ads_renewables(
@@ -1388,3 +1379,10 @@ if __name__ == "__main__":
 
     output_folder = os.path.dirname(snakemake.output[0]) + '/base_network'
     export_network_for_gis_mapping(n, output_folder)
+
+if __name__ == "__main__":
+    if "snakemake" not in globals():
+        from _helpers import mock_snakemake
+        snakemake = mock_snakemake("add_electricity", interconnect="texas")
+    configure_logging(snakemake)
+    main(snakemake)
