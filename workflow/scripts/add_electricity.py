@@ -86,6 +86,7 @@ import geopandas as gpd
 from shapely.prepared import prep
 from shapely.geometry import Point
 from sklearn.neighbors import BallTree
+import pdb
 
 idx = pd.IndexSlice
 
@@ -1194,8 +1195,8 @@ def main(snakemake):
     params = snakemake.params
     configuration = snakemake.config["network_configuration"]
     n = pypsa.Network(snakemake.input.base_network)
+
     n.name = configuration
-    
     snapshot_config = snakemake.config['snapshots']
     sns_start = pd.to_datetime(snapshot_config['start'] + ' 07:00:00') 
     # Shifting to 7am UTC since this is the Midnight PST time. 
@@ -1290,7 +1291,8 @@ def main(snakemake):
         extendable_carriers, 
         costs
     )
-    
+
+
     # attach_hydro(n, 
     #              costs, 
     #              plants, 

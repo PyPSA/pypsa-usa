@@ -1,7 +1,7 @@
 scenarios:
   all:
-    interconnect: western #"usa|texas|western|eastern"
-    clusters: [60]
+    interconnect: texas #"usa|texas|western|eastern"
+    clusters: [30]
     opts:
       [
         Co2L1.5,

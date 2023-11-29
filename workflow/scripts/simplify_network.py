@@ -9,6 +9,7 @@ from pypsa.clustering.spatial import get_clustering_from_busmap
 from _helpers import export_network_for_gis_mapping, configure_logging
 import logging
 import os
+import pdb
 logger = logging.getLogger(__name__)
 
 def simplify_network_to_voltage_level(n, voltage_level):
@@ -78,10 +79,7 @@ def aggregate_to_substations(network: pypsa.Network, substations, busmap, aggreg
             "ramp_limit_down": np.max,
         },
     )
-    # sub_index = network.buses.country.index.map(busmap.to_dict())
-    # countries = network.buses.country.values
-    # countries_dict = dict(zip(sub_index, countries))
-    # substations['ba'] = substations.index.map(countries_dict)
+
     substations = network.buses[['sub_id', 'interconnect', 'state',
                                  'country','balancing_area','x','y']]
     substations = substations.drop_duplicates(subset=['sub_id'])
@@ -104,10 +102,10 @@ def aggregate_to_substations(network: pypsa.Network, substations, busmap, aggreg
     network_s.buses["y"] = substations.y
     network_s.buses["substation_lv"] = True
     network_s.buses["substation_off"] = True
-    network_s.buses["country"] = zone
+    network_s.buses["country"] = zone #country field used bc pypsa-eur aggregates based on country boundary
     network_s.buses["state"] = substations.state
     network_s.buses["balancing_area"] = substations.balancing_area
-    network_s.lines["type"] = np.nan
+    # network_s.lines["type"] = np.nan
     return network_s
 
 
@@ -132,13 +130,17 @@ def assign_line_lengths(n, line_length_factor):
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
-        snakemake = mock_snakemake("simplify_network", interconnect='western')
+        snakemake = mock_snakemake("simplify_network", interconnect='texas')
     configure_logging(snakemake)
 
     voltage_level = snakemake.config["electricity"]["voltage_simplified"]
     aggregation_zones = snakemake.config['clustering']['cluster_network']['aggregation_zones']
 
     n = pypsa.Network(snakemake.input.network)
+
+    import pdb; pdb.set_trace()
+
+    pdb.set_trace()
     n, trafo_map = simplify_network_to_voltage_level(n, voltage_level)
 
     substations = pd.read_csv(snakemake.input.sub, index_col=0)
@@ -154,10 +156,11 @@ if __name__ == "__main__":
     # TODO: WHEN WE REPLACE NETWORK WITH NEW NETWORK WE SHOULD CALACULATE LINE LENGTHS BASED ON THE actual GIS line files.
     n = assign_line_lengths(n, 1.25) 
     n.links["underwater_fraction"] = 0 #TODO: CALULATE UNDERWATER FRACTIONS.
-
+    pdb.set_trace()
     n = aggregate_to_substations(n, substations, busmap_to_sub.sub_id, aggregation_zones)
 
     n.export_to_netcdf(snakemake.output[0])
+    import pdb; pdb.set_trace()
 
     output_path = os.path.dirname(snakemake.output[0]) + 'simplified_'
     export_network_for_gis_mapping(n, output_path)

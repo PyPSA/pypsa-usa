@@ -163,7 +163,6 @@ def main(snakemake):
         offshore_regions.append(offshore_regions_c)
 
     pd.concat(onshore_regions, ignore_index=True).to_file(snakemake.output.regions_onshore)
-
     if offshore_regions:
         pd.concat(offshore_regions, ignore_index=True).to_file(snakemake.output.regions_offshore)
     else:

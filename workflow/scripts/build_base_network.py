@@ -49,6 +49,7 @@ from shapely.geometry import Polygon, Point
 import geopandas as gpd
 from shapely.geometry import Point
 from sklearn.neighbors import BallTree
+import constants as const
 
 
 def haversine_np(lon1, lat1, lon2, lat2):
@@ -288,24 +289,25 @@ def identify_osw_poi(n: pypsa.Network) -> pypsa.Network:
     n.buses.poi_sub = n.buses.poi_sub.fillna(False)
     return n
 
-def match_osw_to_poi(pois, offshore_buses):
-    offshore_buses = offshore_buses.copy()
-    offshore_buses['bus_assignment'] = None
 
-    pois['geometry'] = gpd.points_from_xy(pois["x"], pois["y"])
+def match_osw_to_poi(buses_to_match_to, missing_buses):
+    missing_buses = missing_buses.copy()
+    missing_buses['bus_assignment'] = None
+
+    buses_to_match_to['geometry'] = gpd.points_from_xy(buses_to_match_to["x"], buses_to_match_to["y"])
 
     # from: https://stackoverflow.com/questions/58893719/find-nearest-point-in-other-dataframe-with-a-lot-of-data
     # Create a BallTree 
-    tree = BallTree(pois[['x', 'y']].values, leaf_size=2)
+    tree = BallTree(buses_to_match_to[['x', 'y']].values, leaf_size=2)
     # Query the BallTree on each feature from 'appart' to find the distance
     # to the nearest 'pharma' and its id
-    offshore_buses['distance_nearest'], offshore_buses['id_nearest'] = tree.query(
-        offshore_buses[['x', 'y']].values, # The input array for the query
+    missing_buses['distance_nearest'], missing_buses['id_nearest'] = tree.query(
+        missing_buses[['x', 'y']].values, # The input array for the query
         k=1, # The number of nearest neighbors
     )
-    offshore_buses['bus_assignment'] = pois.reset_index().iloc[offshore_buses.id_nearest].Bus.values
-    offshore_buses.drop(columns=['id_nearest'], inplace=True)
-    return offshore_buses
+    missing_buses['bus_assignment'] = buses_to_match_to.reset_index().iloc[missing_buses.id_nearest].Bus.values
+    missing_buses.drop(columns=['id_nearest'], inplace=True)
+    return missing_buses
 
 
 def build_offshore_transmission_configuration(n: pypsa.Network) -> pypsa.Network:
@@ -329,7 +331,7 @@ def build_offshore_transmission_configuration(n: pypsa.Network) -> pypsa.Network
         v_nom = 230,
         sub_id = offshore_buses.sub_id.values,
         balancing_area = n.buses.loc[offshore_buses.bus_assignment].balancing_area.values,
-        state = n.buses.loc[offshore_buses.bus_assignment].balancing_area.values,
+        state = n.buses.loc[offshore_buses.bus_assignment].state.values,
         country = 'US',
         interconnect = n.buses.loc[offshore_buses.bus_assignment].interconnect.values,
         x = n.buses.loc[offshore_buses.bus_assignment].x.values,
@@ -348,8 +350,8 @@ def build_offshore_transmission_configuration(n: pypsa.Network) -> pypsa.Network
         bus0 = osw_offsub_bus_ids.values,
         bus1 = "OSW_POI_" + osw_offsub_bus_ids.values,
         length = line_lengths,
-        type = 'temp',
-        carrier = 'AC',
+        type = "temp",
+        carrier = "AC",
         x = 0.1,
         r = 0.1,
         s_nom = 5000,
@@ -363,7 +365,7 @@ def build_offshore_transmission_configuration(n: pypsa.Network) -> pypsa.Network
         bus0 = "OSW_POI_" + osw_offsub_bus_ids,
         bus1 = offshore_buses.bus_assignment.index.astype(str),
         s_nom = 5000,
-        type = 'temp',
+        type = "temp",
         v_nom = 230,
         x = 0.1,
         r = 0.1,
@@ -380,6 +382,21 @@ def remove_breakthrough_offshore(n: pypsa.Network) -> pypsa.Network:
     # n.mremove("Transformer", n.transformers.loc[n.transformers.bus1.isin(n.buses.loc[n.buses.poi_bus].index)].index)
     # n.mremove("Bus",  n.buses.loc[n.buses.poi_bus].index)
     return n
+
+
+def assign_missing_states_countries(n: pypsa.Network):
+    """Assign buses missing state and countries to their nearest neighbor bus value"""
+    buses = n.buses.copy()
+    missing = buses.loc[buses.state.isna() | buses.country.isna() | buses.balancing_area.isna()]
+    buses = buses.loc[~buses.state.isna() & ~buses.country.isna() & ~buses.balancing_area.isna()]
+    buses = buses.loc[~buses.state.isin(['Offshore'])]
+    missing = match_osw_to_poi(buses, missing)
+    missing.balancing_area = buses.loc[missing.bus_assignment].balancing_area.values
+    missing.state = buses.loc[missing.bus_assignment].state.values
+    missing.country = buses.loc[missing.bus_assignment].country.values
+    n.buses.loc[missing.index, 'balancing_area'] = missing.balancing_area
+    n.buses.loc[missing.index, 'state'] = missing.state
+    n.buses.loc[missing.index, 'country'] = missing.country
 
 def main(snakemake):
     # create network
@@ -422,10 +439,7 @@ def main(snakemake):
     n = add_buses_from_file(n, gdf_bus, interconnect=interconnect)
     n = add_branches_from_file(n, snakemake.input["lines"])
     n = add_dclines_from_file(n, snakemake.input["links"])
-    add_custom_line_type(n)
-    assign_line_types(n)
-    assign_line_length(n)
-    
+
     # identify offshore points of interconnection, and remove unncess components from BE network
     n = identify_osw_poi(n)
     if interconnect=='Texas': 
@@ -436,6 +450,17 @@ def main(snakemake):
     offshore_buses = build_offshore_buses(offshore_shapes)
     n = add_offshore_buses(n, offshore_buses)
     n = build_offshore_transmission_configuration(n)
+
+    if interconnect=='Eastern': 
+        logger.warning(f"Eastern Interconnect is missing {len(n.buses.loc[n.buses.balancing_area.isna() | n.buses.state.isna() | n.buses.country.isna()])} bus locations. Must clean-up GIS files before using!")
+
+    #asssign line types and lengths
+    add_custom_line_type(n)
+    assign_line_types(n)
+    assign_line_length(n)
+    assign_missing_states_countries(n)
+
+    logger.info(f"Network is missing BA/State/Country information for {len(n.buses.loc[n.buses.balancing_area.isna() | n.buses.state.isna() | n.buses.country.isna()])} buses.")
 
     # export bus2sub interconnect data
     logger.info(f"Exporting bus2sub and sub data for {interconnect}")
@@ -467,13 +492,3 @@ if __name__ == "__main__":
         snakemake = mock_snakemake('build_base_network', interconnect='texas')
     configure_logging(snakemake)
     main(snakemake)
-
-
-#n.buses.loc['37584', 'country'] = 'CISO-SDGE'  
-#  #hot fix for imperial beach substation being offshore
-
-    # def id_out_of_shape():
-    #     #identify points not in shape
-    #     bus_points = gpd.GeoDataFrame(n.buses.copy(), geometry=gpd.points_from_xy(n.buses["x"], n.buses["y"]))
-    #     bus_points['within_multipolygon'] = bus_points.apply(lambda row: row['geometry'].within(onshore_shapes), axis=1)
-    #     offshore_buses = bus_points[~bus_points['within_multipolygon']]
