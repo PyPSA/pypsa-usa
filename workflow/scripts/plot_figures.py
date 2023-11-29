@@ -184,17 +184,17 @@ def get_generator_pnom_opt_brownfield(n: pypsa.Network, retirement_method = "eco
     
     def economic_retirement(n: pypsa.Network, component:str = "all") -> pd.DataFrame:
         if component not in ("storage_units", "generators"):
-             logger.warning(f"{component} not in the set ('storage_units', 'generator')")
+             logger.warning(f"{component} not in the set ('storage_units', 'generators')")
              return pd.DataFrame()
         else:
             p_nom_opt = getattr(n, component)
             return p_nom_opt.groupby(["bus", "carrier"]).p_nom_opt.sum()
     
     if retirement_method == "technical":
-        generator_pnom_opt = technical_retirement(n, "generator")
+        generator_pnom_opt = technical_retirement(n, "generators")
         storage_pnom_opt = technical_retirement(n, "storage_units")
     elif retirement_method == "economic":
-        generator_pnom_opt = economic_retirement(n, "generator")
+        generator_pnom_opt = economic_retirement(n, "generators")
         storage_pnom_opt = economic_retirement(n, "storage_units")
     else:
         logger.error(f"Retirement method must be one of 'technical' or 'economic'. Recieved {retirement_method}.")
@@ -979,21 +979,21 @@ if __name__ == "__main__":
     sns.set_theme("paper", style="darkgrid")
     
     # create plots
-    # plot_base_capacity(n, onshore_regions, snakemake.output["capacity_map_base"], **snakemake.wildcards)
-    # plot_opt_capacity(n, onshore_regions, snakemake.output["capacity_map_optimized"], "greenfield", retirement_method, **snakemake.wildcards)
-    # plot_opt_capacity(n, onshore_regions, snakemake.output["capacity_map_optimized_brownfield"], "brownfield", retirement_method, **snakemake.wildcards)
-    # plot_new_capacity(n, onshore_regions, snakemake.output["capacity_map_new"], **snakemake.wildcards)
-    # plot_costs_bar(n, snakemake.output["costs_bar"], **snakemake.wildcards)
-    # plot_production_bar(n, snakemake.output["production_bar"], **snakemake.wildcards)
-    # plot_production_area(n, snakemake.output["production_area"], **snakemake.wildcards)
-    # plot_production_html(n, snakemake.output["production_area_html"], **snakemake.wildcards)
-    # plot_hourly_emissions(n, snakemake.output["emissions_area"], **snakemake.wildcards)
-    # plot_hourly_emissions_html(n, snakemake.output["emissions_area_html"], **snakemake.wildcards)
-    # plot_accumulated_emissions(n, snakemake.output["emissions_accumulated"], **snakemake.wildcards)
-    # plot_accumulated_emissions_tech(n, snakemake.output["emissions_accumulated_tech"], **snakemake.wildcards)
-    # plot_accumulated_emissions_tech_html(n, snakemake.output["emissions_accumulated_tech_html"], **snakemake.wildcards)
-    # # plot_node_emissions_html(n, snakemake.output["emissions_node_html"], **snakemake.wildcards)
-    # plot_region_emissions_html(n, snakemake.output["emissions_region_html"], **snakemake.wildcards)
-    # plot_emissions_map(n, onshore_regions, snakemake.output["emissions_map"], **snakemake.wildcards)
-    # plot_renewable_potential(n, onshore_regions, snakemake.output["renewable_potential_map"], **snakemake.wildcards)
-    plot_capacity_additions(n, snakemake.output["capacity_additions_bar"], **snakemake.wildcards)
+    plot_base_capacity(n, onshore_regions, snakemake.output["capacity_map_base"], **snakemake.wildcards)
+    plot_opt_capacity(n, onshore_regions, snakemake.output["capacity_map_optimized"], "greenfield", retirement_method, **snakemake.wildcards)
+    plot_opt_capacity(n, onshore_regions, snakemake.output["capacity_map_optimized_brownfield"], "brownfield", retirement_method, **snakemake.wildcards)
+    plot_new_capacity(n, onshore_regions, snakemake.output["capacity_map_new"], "greenfield", retirement_method, **snakemake.wildcards)
+    plot_capacity_additions(n, snakemake.output["capacity_additions_bar"], "greenfield", retirement_method,  **snakemake.wildcards)
+    plot_costs_bar(n, snakemake.output["costs_bar"], **snakemake.wildcards)
+    plot_production_bar(n, snakemake.output["production_bar"], **snakemake.wildcards)
+    plot_production_area(n, snakemake.output["production_area"], **snakemake.wildcards)
+    plot_production_html(n, snakemake.output["production_area_html"], **snakemake.wildcards)
+    plot_hourly_emissions(n, snakemake.output["emissions_area"], **snakemake.wildcards)
+    plot_hourly_emissions_html(n, snakemake.output["emissions_area_html"], **snakemake.wildcards)
+    plot_accumulated_emissions(n, snakemake.output["emissions_accumulated"], **snakemake.wildcards)
+    plot_accumulated_emissions_tech(n, snakemake.output["emissions_accumulated_tech"], **snakemake.wildcards)
+    plot_accumulated_emissions_tech_html(n, snakemake.output["emissions_accumulated_tech_html"], **snakemake.wildcards)
+    # plot_node_emissions_html(n, snakemake.output["emissions_node_html"], **snakemake.wildcards)
+    plot_region_emissions_html(n, snakemake.output["emissions_region_html"], **snakemake.wildcards)
+    plot_emissions_map(n, onshore_regions, snakemake.output["emissions_map"], **snakemake.wildcards)
+    plot_renewable_potential(n, onshore_regions, snakemake.output["renewable_potential_map"], **snakemake.wildcards)
