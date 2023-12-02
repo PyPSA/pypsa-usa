@@ -142,9 +142,9 @@ def get_generator_pnom_opt_greenfield(n: pypsa.Network, retirement_method = "eco
              return pd.DataFrame()
         else:
             gens = getattr(n, component)[["carrier", "bus"]].copy()
-            gens_t_p = getattr(n, component)["p"]
+            gens_t_p = getattr(n, f"{component}_t")["p"]
             gens["p_max"] = gens.index.map(gens_t_p.max()).fillna(0)
-            return gens.groupby(["bus", "carrier"]).gens.sum()
+            return gens.groupby(["bus", "carrier"]).sum().squeeze()
     
     def economic_retirement(n: pypsa.Network, component:str) -> pd.DataFrame:
         if component not in ("storage_units", "generators"):
@@ -904,7 +904,8 @@ def plot_capacity_additions(
         logger.error(f"Capacity method must be one of 'greenfield' or 'brownfield'. Recieved {opt_capacity}.")
         raise NotImplementedError
     
-    pnom_opt = pnom_opt.reset_index().drop(columns=["bus"]).groupby("carrier").sum().rename(columns={"p_nom_opt":"Optimal Capacity"})
+    # depending on retirment method, column name may be p_nom_opt or p_max
+    pnom_opt = pnom_opt.reset_index().drop(columns=["bus"]).groupby("carrier").sum().rename(columns={"p_nom_opt":"Optimal Capacity", "p_max":"Optimal Capacity"})
     
     capacity = pnom.join(pnom_opt).reset_index()
     capacity["carrier"] = capacity.carrier.map(nice_names)
