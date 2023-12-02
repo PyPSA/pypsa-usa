@@ -398,6 +398,17 @@ def assign_missing_states_countries(n: pypsa.Network):
     n.buses.loc[missing.index, 'state'] = missing.state
     n.buses.loc[missing.index, 'country'] = missing.country
 
+
+def modify_breakthrough_substations(n:pypsa.Network, interconnect:str):
+    if interconnect == 'Western':
+        sub_fixes = {35017 : {'x':-123.00844,'y':48.63147},
+        35033 : {'x':-122.961586,'y':48.574995},
+        37584 : {'x':-117.10501, 'y':32.54935}}
+        for i in sub_fixes.keys():
+            n.buses.loc[n.buses.sub_id == i, 'x'] = sub_fixes[i]['x']
+            n.buses.loc[n.buses.sub_id == i, 'y'] = sub_fixes[i]['y']
+    return n
+
 def main(snakemake):
     # create network
     n = pypsa.Network()
@@ -439,6 +450,7 @@ def main(snakemake):
     n = add_buses_from_file(n, gdf_bus, interconnect=interconnect)
     n = add_branches_from_file(n, snakemake.input["lines"])
     n = add_dclines_from_file(n, snakemake.input["links"])
+    n = modify_breakthrough_substations(n, interconnect)
 
     # identify offshore points of interconnection, and remove unncess components from BE network
     n = identify_osw_poi(n)
@@ -459,7 +471,7 @@ def main(snakemake):
     assign_line_types(n)
     assign_line_length(n)
     assign_missing_states_countries(n)
-
+    
     logger.info(f"Network is missing BA/State/Country information for {len(n.buses.loc[n.buses.balancing_area.isna() | n.buses.state.isna() | n.buses.country.isna()])} buses.")
 
     # export bus2sub interconnect data
@@ -489,6 +501,6 @@ if __name__ == "__main__":
     logger = logging.getLogger(__name__)
     if 'snakemake' not in globals():
         from _helpers import mock_snakemake
-        snakemake = mock_snakemake('build_base_network', interconnect='texas')
+        snakemake = mock_snakemake('build_base_network', interconnect='western')
     configure_logging(snakemake)
     main(snakemake)

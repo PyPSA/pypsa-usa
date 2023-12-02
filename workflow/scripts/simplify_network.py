@@ -138,9 +138,6 @@ if __name__ == "__main__":
 
     n = pypsa.Network(snakemake.input.network)
 
-    import pdb; pdb.set_trace()
-
-    pdb.set_trace()
     n, trafo_map = simplify_network_to_voltage_level(n, voltage_level)
 
     substations = pd.read_csv(snakemake.input.sub, index_col=0)
@@ -156,7 +153,7 @@ if __name__ == "__main__":
     # TODO: WHEN WE REPLACE NETWORK WITH NEW NETWORK WE SHOULD CALACULATE LINE LENGTHS BASED ON THE actual GIS line files.
     n = assign_line_lengths(n, 1.25) 
     n.links["underwater_fraction"] = 0 #TODO: CALULATE UNDERWATER FRACTIONS.
-    pdb.set_trace()
+
     n = aggregate_to_substations(n, substations, busmap_to_sub.sub_id, aggregation_zones)
 
     n.export_to_netcdf(snakemake.output[0])

@@ -153,6 +153,19 @@ def trim_states_to_interconnect(gdf_states: gpd.GeoDataFrame, gdf_nerc: gpd.GeoD
         gdf_states = gpd.overlay(gdf_states, gdf_nerc_f.to_crs(GPS_CRS), how='difference')
     return gdf_states
 
+def trim_ba_to_interconnect(gdf_ba: gpd.GeoDataFrame, interconnect_regions: gpd.GeoDataFrame, interconnect: str):
+    """Trims balancing authorities to only include portions of balancing authorities in interconnect regions"""
+    ba_states_intersect =  gdf_ba['geometry'].apply(
+        lambda shp: shp.intersects(interconnect_regions.dissolve().iloc[0]['geometry']))
+    ba_states = gdf_ba[ba_states_intersect]
+    if interconnect == "western":
+        ba_states = ba_states[~(ba_states.name.str.contains('MISO|SPP'))]
+    if interconnect == "texas":
+        ba_states = ba_states[~(ba_states.name.str.contains('MISO|SPP|EPE'))]
+    if interconnect == "eastern":
+        ba_states = ba_states[~(ba_states.name.str.contains('PNM|EPE|PSCO|WACM|ERCO'))]
+    return ba_states
+
 def main(snakemake):
     interconnect = snakemake.wildcards.interconnect
     breakthrough_zones = pd.read_csv(snakemake.input.zone)
@@ -169,7 +182,7 @@ def main(snakemake):
     gdf_nerc = gpd.read_file(snakemake.input.nerc_shapes)
 
     # apply interconnect wildcard 
-    if interconnect == "western": #filter states in interconnect
+    if interconnect == "western": #filter states that have any portion in interconnect
         gdf_states = filter_shapes(
             data=gdf_na,
             zones=breakthrough_zones,
@@ -230,9 +243,7 @@ def main(snakemake):
     gdf_ba = load_ba_shape(snakemake.input.onshore_shapes)
 
     # Only include balancing authorities which have intersection with interconnection filtered states
-    ba_states_intersect =  gdf_ba['geometry'].apply(
-        lambda shp: shp.intersects(interconnect_regions.dissolve().iloc[0]['geometry']))
-    ba_states = gdf_ba[ba_states_intersect]
+    ba_states = trim_ba_to_interconnect(gdf_ba, interconnect_regions, interconnect)
 
     gdf_ba_states = ba_states.copy()
     gdf_ba_states.rename(columns={"name_1": "name"})
@@ -252,7 +263,7 @@ def main(snakemake):
 
     #filter buffer from shore
     buffer_distance_min = 10e3 # buffer distance for offshore shapes from shore.. 1e3 = 1km
-    buffer_distance_max = 300e3
+    buffer_distance_max = 100e3
     buffered_na = gdf_na.to_crs(MEASUREMENT_CRS).buffer(buffer_distance_min)
     offshore = offshore.to_crs(MEASUREMENT_CRS).difference(buffered_na.unary_union)
     buffered_states = state_boundaries.to_crs(MEASUREMENT_CRS).buffer(buffer_distance_min)
@@ -275,7 +286,7 @@ if __name__ == "__main__":
     logger = logging.getLogger(__name__)
     if 'snakemake' not in globals():
         from _helpers import mock_snakemake
-        snakemake = mock_snakemake('build_shapes', interconnect='texas')
+        snakemake = mock_snakemake('build_shapes', interconnect='eastern')
     configure_logging(snakemake)
     main(snakemake)
 

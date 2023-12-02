@@ -146,6 +146,7 @@ def main(snakemake):
                 'country': ba,
             }))
 
+
     ### Defining Offshore Regions ###
     logger.info("Building Offshore Regions")
     for i in range(len(offshore_shapes)):
@@ -162,12 +163,15 @@ def main(snakemake):
         offshore_regions_c = offshore_regions_c.loc[offshore_regions_c.area > 1e-2] # remove extremely small regions
         offshore_regions.append(offshore_regions_c)
 
-    pd.concat(onshore_regions, ignore_index=True).to_file(snakemake.output.regions_onshore)
+    onshore_regions_concat = pd.concat(onshore_regions, ignore_index=True)
+    onshore_regions_concat.to_file(snakemake.output.regions_onshore)
     if offshore_regions:
         pd.concat(offshore_regions, ignore_index=True).to_file(snakemake.output.regions_offshore)
     else:
         offshore_shapes.to_frame().to_file(snakemake.output.regions_offshore)
 
+    if onshore_regions_concat[onshore_regions_concat.geometry.is_empty].shape[0] > 0:
+        ValueError(f"{onshore_regions_concat[onshore_regions_concat.geometry == None].shape[0]} onshore regions are missing geometry.")
 
 if __name__ == "__main__":
     logger = logging.getLogger(__name__)
