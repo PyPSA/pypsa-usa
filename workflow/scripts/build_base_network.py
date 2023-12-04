@@ -341,8 +341,8 @@ def build_offshore_transmission_configuration(n: pypsa.Network) -> pypsa.Network
         substation_off = False,
     )
 
-    # add offshore transmission lines
-    logger.info(f"Adding offshore transmission lines to the network.")
+    # add offshore wind export cables
+    logger.info(f"Adding offshore wind export lines to the network.")
     n.madd(
         "Line",
         "OSW_export_" + osw_offsub_bus_ids, #name line after offshore substation
@@ -363,7 +363,7 @@ def build_offshore_transmission_configuration(n: pypsa.Network) -> pypsa.Network
         "Transformer",
         "OSW_poi_stepup_" + osw_offsub_bus_ids, #name transformer after offshore substation
         bus0 = "OSW_POI_" + osw_offsub_bus_ids,
-        bus1 = offshore_buses.bus_assignment.index.astype(str),
+        bus1 = offshore_buses.bus_assignment.astype(str).values,
         s_nom = 5000,
         type = "temp",
         v_nom = 230,
@@ -378,9 +378,6 @@ def remove_breakthrough_offshore(n: pypsa.Network) -> pypsa.Network:
     #rm any lines/buses associated with offshore substation buses
     n.mremove("Line", n.lines.loc[n.lines.bus0.isin(n.buses.loc[n.buses.substation_off].index)].index)
     n.mremove("Bus",  n.buses.loc[n.buses.substation_off].index)
-    # n.mremove("Transformer", n.transformers.loc[n.transformers.bus0.isin(n.buses.loc[n.buses.poi_bus].index)].index)
-    # n.mremove("Transformer", n.transformers.loc[n.transformers.bus1.isin(n.buses.loc[n.buses.poi_bus].index)].index)
-    # n.mremove("Bus",  n.buses.loc[n.buses.poi_bus].index)
     return n
 
 
@@ -401,8 +398,8 @@ def assign_missing_states_countries(n: pypsa.Network):
 
 def modify_breakthrough_substations(n:pypsa.Network, interconnect:str):
     if interconnect == 'Western':
-        sub_fixes = {35017 : {'x':-123.00844,'y':48.63147},
-        35033 : {'x':-122.961586,'y':48.574995},
+        sub_fixes = {35017 : {'x':-123.0922,'y':48.5372},
+        35033 : {'x':-122.78053,'y':48.65694}, 
         37584 : {'x':-117.10501, 'y':32.54935}}
         for i in sub_fixes.keys():
             n.buses.loc[n.buses.sub_id == i, 'x'] = sub_fixes[i]['x']
@@ -443,7 +440,7 @@ def main(snakemake):
     gdf_bus = map_bus_to_region(gdf_bus, state_shape, "state")
     gdf_bus = map_bus_to_region(gdf_bus, state_shape, "country")
     
-    # Removing few duplicated buses where GIS shapes were overlapping. TODO Fix GIS shapes
+    # Removing few duplicated shapes where GIS shapes were overlapping. TODO Fix GIS shapes
     gdf_bus = gdf_bus.reset_index().drop_duplicates(subset='bus_id', keep='first').set_index('bus_id')
 
     # add buses, transformers, lines and links
@@ -493,7 +490,6 @@ def main(snakemake):
     lines_gis['lon2'] = n.buses.loc[lines_gis.bus1].x.values
     lines_gis['WKT_geometry'] = 'LINESTRING ('+lines_gis.lon1.astype(str).values+' '+lines_gis.lat1.astype(str).values+', '+lines_gis.lon2.astype(str).values+' '+lines_gis.lat2.astype(str).values+')'
     lines_gis.to_csv(snakemake.output.lines_gis)
-
     # export network
     n.export_to_netcdf(snakemake.output.network)
 

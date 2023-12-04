@@ -105,7 +105,7 @@ def aggregate_to_substations(network: pypsa.Network, substations, busmap, aggreg
     network_s.buses["country"] = zone #country field used bc pypsa-eur aggregates based on country boundary
     network_s.buses["state"] = substations.state
     network_s.buses["balancing_area"] = substations.balancing_area
-    # network_s.lines["type"] = np.nan
+    network_s.lines["type"] = np.nan
     return network_s
 
 
@@ -130,7 +130,7 @@ def assign_line_lengths(n, line_length_factor):
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
-        snakemake = mock_snakemake("simplify_network", interconnect='texas')
+        snakemake = mock_snakemake("simplify_network", interconnect='western')
     configure_logging(snakemake)
 
     voltage_level = snakemake.config["electricity"]["voltage_simplified"]
@@ -157,7 +157,6 @@ if __name__ == "__main__":
     n = aggregate_to_substations(n, substations, busmap_to_sub.sub_id, aggregation_zones)
 
     n.export_to_netcdf(snakemake.output[0])
-    import pdb; pdb.set_trace()
 
     output_path = os.path.dirname(snakemake.output[0]) + 'simplified_'
     export_network_for_gis_mapping(n, output_path)

@@ -132,12 +132,6 @@ def main(snakemake):
         ba_locs = all_locs.loc[ba_subs.index] # locations of substations in the current BA
         if ba_locs.empty: continue # skip empty BA's which are not in the bus dataframe. ex. portions of eastern texas BA when using the WECC interconnect
 
-        if ba =="WAUW":
-            pass
-
-        if ba =="MISO-0001":
-            ba_shape = gpd.GeoDataFrame(geometry = ba_shape).dissolve().iloc[0].geometry
-
         onshore_regions.append(gpd.GeoDataFrame({
                 'name': ba_locs.index,
                 'x': ba_locs['x'],
@@ -145,7 +139,6 @@ def main(snakemake):
                 'geometry': voronoi_partition_pts(ba_locs.values, ba_shape),
                 'country': ba,
             }))
-
 
     ### Defining Offshore Regions ###
     logger.info("Building Offshore Regions")
@@ -171,7 +164,7 @@ def main(snakemake):
         offshore_shapes.to_frame().to_file(snakemake.output.regions_offshore)
 
     if onshore_regions_concat[onshore_regions_concat.geometry.is_empty].shape[0] > 0:
-        ValueError(f"{onshore_regions_concat[onshore_regions_concat.geometry == None].shape[0]} onshore regions are missing geometry.")
+        ValueError(f"Onshore regions are missing geometry.")
 
 if __name__ == "__main__":
     logger = logging.getLogger(__name__)

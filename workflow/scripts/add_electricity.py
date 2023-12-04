@@ -1175,6 +1175,9 @@ def load_powerplants_ads(
     plants['ramp_limit_down'] = plants['rampdn rate(mw/minute)']/ plants['maxcap(mw)'] * 60 #MW/min to p.u./hour
     return plants
 
+def clean_bus_data(n: pypsa.Network):
+    col_list = ['poi_bus', 'poi_sub']
+    n.buses.drop(columns=col_list, inplace=True)
 
 def load_powerplants_breakthrough(breakthrough_dataset: str) -> pd.DataFrame:
     """Loads base Breakthrough Energy plants and applies name mappings"""
@@ -1375,6 +1378,7 @@ def main(snakemake):
         if snakemake.config['osw_config']['build_hvdc_subsea']: osw.build_hvdc_subsea(n)
         if snakemake.config['osw_config']['build_hvdc_overhead']: osw.build_hvdc_overhead(n)
 
+    clean_bus_data(n)
     sanitize_carriers(n, snakemake.config)
     n.meta = snakemake.config
     n.export_to_netcdf(snakemake.output[0])
@@ -1385,6 +1389,6 @@ def main(snakemake):
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
-        snakemake = mock_snakemake("add_electricity", interconnect="texas")
+        snakemake = mock_snakemake("add_electricity", interconnect="western")
     configure_logging(snakemake)
     main(snakemake)

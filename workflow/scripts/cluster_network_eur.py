@@ -191,7 +191,7 @@ def distribute_clusters(n, n_clusters, focus_weights=None, solver_name="cbc"):
          .pipe(normed))
 
     N = n.buses.groupby(['country', 'sub_network']).size()
-    print(N)
+
     assert n_clusters >= len(N) and n_clusters <= N.sum(), \
         f"Number of clusters must be {len(N)} <= n_clusters <= {N.sum()} for this selection of countries."
 
@@ -364,8 +364,6 @@ if __name__ == "__main__":
 
     n = pypsa.Network(snakemake.input.network)
     focus_weights = snakemake.config.get('focus_weights', None)
-
-    import pdb; pdb.set_trace()
 
     n.buses.drop(columns=['state', 'balancing_area','sub_id'], inplace=True)
 
