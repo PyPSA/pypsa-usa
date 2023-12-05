@@ -22,7 +22,7 @@ def add_carrier(n: pypsa.Network, carrier: str, costs: pd.DataFrame = pd.DataFra
         if kwargs.get("tech_colors"):
             attrs["color"] = kwargs["tech_colors"].get(carrier)
         if kwargs.get("nice_names"):
-            attrs["color"] = kwargs["nice_names"].get(carrier)
+            attrs["nice_names"] = kwargs["nice_names"].get(carrier)
         if not costs.empty:
             try:
                 attrs["co2_emissions"] = costs.at[carrier, "co2_emissions"]
