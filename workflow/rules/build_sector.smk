@@ -3,7 +3,8 @@
 rule add_sectors:
     params:
         electricity=config["electricity"],
-        costs=config["costs"]
+        costs=config["costs"],
+        plotting=config["plotting"]
     input:
         network=RESOURCES + "{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}.nc",
         tech_costs=DATA + f"costs_{config['costs']['year']}.csv",

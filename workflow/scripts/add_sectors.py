@@ -15,14 +15,21 @@ logger = logging.getLogger(__name__)
 from _helpers import configure_logging
 from add_electricity import load_costs
 
-def add_carrier(n: pypsa.Network, carrier: str, costs: pd.DataFrame = pd.DataFrame()):
+def add_carrier(n: pypsa.Network, carrier: str, costs: pd.DataFrame = pd.DataFrame(), **kwargs):
     """Adds new carrier into the network with emission factor"""
     if not carrier in n.carriers.index:
-        try:
-            n.add("Carrier", carrier, co2_emissions=costs.at[carrier, "co2_emissions"])
-        except KeyError:
-            logger.debug(f"{carrier} does not have an emission factor ")
-            n.add("Carrier", carrier, co2_emissions=0)
+        attrs = {}
+        if kwargs.get("tech_colors"):
+            attrs["color"] = kwargs["tech_colors"].get(carrier)
+        if kwargs.get("nice_names"):
+            attrs["color"] = kwargs["nice_names"].get(carrier)
+        if not costs.empty:
+            try:
+                attrs["co2_emissions"] = costs.at[carrier, "co2_emissions"]
+            except KeyError:
+                logger.debug(f"{carrier} does not have an emission factor ")
+        n.add("Carrier", carrier, **attrs)
+            
 
 def add_buses(n: pypsa.Network, new_carrier: str, old_carrier: str):
     """Creates buses with new carriers at same geographic location"""
@@ -203,12 +210,15 @@ if __name__ == "__main__":
         params.electricity["max_hours"],
         Nyears,
     )
+    
+    nice_names = params.plotting.get("nice_names", None)
+    tech_colors = params.plotting.get("tech_colors", None)
 
     sectors = snakemake.wildcards.sectors.split("-")
     
     if "G" in sectors:
         new_carrier = "gas"
-        add_carrier(n, new_carrier, costs)
+        add_carrier(n, new_carrier, costs, nice_names=nice_names, tech_colors=tech_colors)
         for old_carrier in ("CCGT", "OCGT"):
             add_buses(n, new_carrier, old_carrier)
             add_generators(n, new_carrier, old_carrier, costs)
