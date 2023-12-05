@@ -77,7 +77,7 @@ include: "rules/postprocess.smk"
 rule all:
     input:
         expand(
-            "results/{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{figure}.pdf",
+            "results/{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_sec_{sector}_{figure}.pdf",
             **config["scenarios"]["all"],
             figure=FIGURES_SINGLE
         ),
@@ -606,17 +606,17 @@ def memory(w):
 
 rule solve_network:
     input:
-        RESOURCES + "{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}.nc",
+        RESOURCES + "{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}_sec_{sectors}.nc",
     output:
-        "results/{interconnect}/networks/elec_s_{clusters}_ec_l{ll}_{opts}.nc",
+        "results/{interconnect}/networks/elec_s_{clusters}_ec_l{ll}_{opts}_sec_{sectors}.nc",
     log:
         solver=normpath(
-            "logs/solve_network/{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}_solver.log"
+            "logs/solve_network/{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}_sec_{sectors}_solver.log"
         ),
-        python="logs/solve_network/{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}_python.log",
-        memory="logs/solve_network/{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}_memory.log",
+        python="logs/solve_network/{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}_sec_{sectors}_python.log",
+        memory="logs/solve_network/{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}_sec_{sectors}_memory.log",
     benchmark:
-        "benchmarks/solve_network/{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}"
+        "benchmarks/solve_network/{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}_sec_{sectors}"
     threads: 8
     resources:
         mem_mb=memory,
