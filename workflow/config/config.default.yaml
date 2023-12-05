@@ -1,6 +1,6 @@
 scenarios:
   all:
-    interconnect: western #"usa|texas|western|eastern"
+    interconnect: texas #"usa|texas|western|eastern"
     clusters: [30]
     opts:
       [
@@ -31,7 +31,7 @@ network_configuration: "pypsa-usa" # "pypsa-usa" or "ads2032" or "breakthrough"
 
 snapshots:
   start: "2019-01-01"
-  end: "2019-12-31"
+  end: "2019-01-05"
   inclusive: 'left'
 
 # docs :
@@ -238,6 +238,7 @@ clustering:
       Pd: sum
       zone_id: mean # should delete zone id's and PDs from network earlier.
       state: max
+    
 
 # docs :
 solving:

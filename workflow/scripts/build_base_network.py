@@ -325,6 +325,13 @@ def build_offshore_transmission_configuration(n: pypsa.Network) -> pypsa.Network
                             )
     # add onshore poi buses @230kV
     logger.info(f"Adding {len(offshore_buses)} offshore buses to the network.")
+
+    n.buses.loc[offshore_buses.index, 'balancing_area'] = n.buses.loc[offshore_buses.bus_assignment].balancing_area.values
+    n.buses.loc[offshore_buses.index, 'state'] = n.buses.loc[offshore_buses.bus_assignment].state.values
+    n.buses.loc[offshore_buses.index, 'country'] = n.buses.loc[offshore_buses.bus_assignment].country.values
+    n.buses.loc[offshore_buses.index, 'interconnect'] = n.buses.loc[offshore_buses.bus_assignment].interconnect.values
+
+
     n.madd(
         "Bus",
         "OSW_POI_" + osw_offsub_bus_ids, #name poi bus after offshore substation
@@ -355,7 +362,8 @@ def build_offshore_transmission_configuration(n: pypsa.Network) -> pypsa.Network
         x = 0.1,
         r = 0.1,
         s_nom = 5000,
-        underwater_fraction = 1.0,
+        underwater_fraction = 0.0, #temporarily setting to investigate clustering underwater issues later
+        interconnect = n.buses.loc[offshore_buses.bus_assignment].interconnect.values,
     )
 
     # add offshore transmission transformers
@@ -394,6 +402,8 @@ def assign_missing_states_countries(n: pypsa.Network):
     n.buses.loc[missing.index, 'balancing_area'] = missing.balancing_area
     n.buses.loc[missing.index, 'state'] = missing.state
     n.buses.loc[missing.index, 'country'] = missing.country
+    n.buses.loc[missing.index, 'interconnect'] = missing.interconnect
+
 
 
 def modify_breakthrough_substations(n:pypsa.Network, interconnect:str):
@@ -497,6 +507,6 @@ if __name__ == "__main__":
     logger = logging.getLogger(__name__)
     if 'snakemake' not in globals():
         from _helpers import mock_snakemake
-        snakemake = mock_snakemake('build_base_network', interconnect='western')
+        snakemake = mock_snakemake('build_base_network', interconnect='texas')
     configure_logging(snakemake)
     main(snakemake)

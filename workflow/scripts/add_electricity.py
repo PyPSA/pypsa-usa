@@ -995,6 +995,7 @@ def attach_battery_storage(n: pypsa.Network,
 def load_powerplants_eia(
     eia_dataset: str, 
     carrier_mapper: Dict[str,str] = None,
+    interconnect: str = None,
 ) -> pd.DataFrame:
     # load data
     plants = pd.read_csv(
@@ -1002,6 +1003,9 @@ def load_powerplants_eia(
         index_col=0, 
         dtype={"bus_assignment": "str"}).rename(columns=str.lower)
 
+    if interconnect:
+        plants['interconnection'] = plants['nerc region'].map(const.NERC_REGION_MAPPER)
+        plants = plants[plants.interconnection == interconnect]
     # apply mappings if required 
     if carrier_mapper:
         plants['carrier'] = plants.tech_type.map(carrier_mapper)    
@@ -1176,7 +1180,7 @@ def load_powerplants_ads(
     return plants
 
 def clean_bus_data(n: pypsa.Network):
-    col_list = ['poi_bus', 'poi_sub']
+    col_list = ['poi_bus', 'poi_sub', 'poi']
     n.buses.drop(columns=col_list, inplace=True)
 
 def load_powerplants_breakthrough(breakthrough_dataset: str) -> pd.DataFrame:
@@ -1197,6 +1201,8 @@ def load_powerplants_breakthrough(breakthrough_dataset: str) -> pd.DataFrame:
 def main(snakemake):
     params = snakemake.params
     configuration = snakemake.config["network_configuration"]
+    interconnection = snakemake.wildcards["interconnect"]
+
     n = pypsa.Network(snakemake.input.base_network)
 
     n.name = configuration
@@ -1256,7 +1262,7 @@ def main(snakemake):
 
     if configuration  == "pypsa-usa":
         fn_demand = snakemake.input['eia'][sns_start.year%2017]
-        plants = load_powerplants_eia(snakemake.input['plants_eia'], const.EIA_CARRIER_MAPPER)
+        plants = load_powerplants_eia(snakemake.input['plants_eia'], const.EIA_CARRIER_MAPPER, interconnect=interconnection)
     elif configuration  == "breakthrough":
         fn_demand = snakemake.input["demand_breakthrough_2016"]
         plants = load_powerplants_breakthrough(snakemake.input['plants_breakthrough'])
@@ -1342,6 +1348,8 @@ def main(snakemake):
 
     # apply regional multipliers to capital cost data
     for carrier, multiplier_data in const.CAPEX_LOCATIONAL_MULTIPLIER.items():
+        if n.generators.query(f"carrier == '{carrier}'").empty:
+            continue
         multiplier_file = snakemake.input[f"gen_cost_mult_{multiplier_data}"]
         df_multiplier = pd.read_csv(multiplier_file)
         df_multiplier = clean_locational_multiplier(df_multiplier)
@@ -1389,6 +1397,6 @@ def main(snakemake):
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
-        snakemake = mock_snakemake("add_electricity", interconnect="western")
+        snakemake = mock_snakemake("add_electricity", interconnect="texas")
     configure_logging(snakemake)
     main(snakemake)

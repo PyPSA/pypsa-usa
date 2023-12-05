@@ -219,7 +219,14 @@ EIA_PRIME_MOVER_MAPPER = {
     'OT': 'Other (specify in SCHEDULE 7)'
 }
 
-
+NERC_REGION_MAPPER = {
+    'WECC':'western',
+    'TRE':'texas',
+    'SERC':'eastern',
+    'RFC':'eastern',
+    'NPCC':'eastern',
+    'MRO':'eastern',
+}
 ################################
 # Constants for Breakthrough mapping 
 ################################

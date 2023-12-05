@@ -130,7 +130,7 @@ def assign_line_lengths(n, line_length_factor):
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
-        snakemake = mock_snakemake("simplify_network", interconnect='western')
+        snakemake = mock_snakemake("simplify_network", interconnect='texas')
     configure_logging(snakemake)
 
     voltage_level = snakemake.config["electricity"]["voltage_simplified"]
