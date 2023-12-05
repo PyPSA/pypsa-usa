@@ -374,6 +374,7 @@ def build_offshore_transmission_configuration(n: pypsa.Network) -> pypsa.Network
         bus1 = offshore_buses.bus_assignment.astype(str).values,
         s_nom = 5000,
         type = "temp",
+        carrier = "AC",
         v_nom = 230,
         x = 0.1,
         r = 0.1,

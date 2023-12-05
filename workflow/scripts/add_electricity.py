@@ -600,12 +600,12 @@ def attach_breakthrough_renewable_plants(
     # hack to remove generators without capacity (required for SEG to work)
     # shouldn't exist, in fact...
 
-    p_max_pu_norm = n.generators_t.p_max_pu.max()
-    remove_g = p_max_pu_norm[p_max_pu_norm == 0.0].index
-    logger.info(
-        f"removing {len(remove_g)} {tech} generators {remove_g} with no renewable potential."
-    )
-    n.mremove("Generator", remove_g)
+    # p_max_pu_norm = n.generators_t.p_max_pu.max()
+    # remove_g = p_max_pu_norm[p_max_pu_norm == 0.0].index
+    # logger.info(
+    #     f"removing {len(remove_g)} {tech} generators {remove_g} with no renewable potential."
+    # )
+    # n.mremove("Generator", remove_g)
 
     return n
 
