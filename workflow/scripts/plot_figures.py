@@ -43,7 +43,7 @@ Emission charts for:
 
 import sys
 import os
-from typing import Dict, Union
+from typing import Dict, Union, List
 
 import pypsa
 import matplotlib.pyplot as plt
@@ -122,29 +122,35 @@ def create_title(title: str, **wildcards) -> str:
     wildcards_joined = " | ".join(w)
     return f"{title} \n ({wildcards_joined})"
 
-def get_generator_pnom(n: pypsa.Network, components:str = "all") -> pd.DataFrame:
+def get_generator_pnom(n: pypsa.Network, carriers_2_plot: List[str], components:str = "all") -> pd.DataFrame:
     """Gets pnom capacity"""
-    storage_pnom = n.storage_units.groupby(["bus", "carrier"]).p_nom.sum()
-    generator_pnom = n.generators.groupby(["bus", "carrier"]).p_nom.sum()
+    storage_pnom = n.storage_units[n.storage_units["carrier"].isin(carriers_2_plot)].groupby(["bus", "carrier"]).p_nom.sum()
+    generator_pnom = n.generators[n.generators["carrier"].isin(carriers_2_plot)].groupby(["bus", "carrier"]).p_nom.sum()
+    links_pnom = n.links[n.links["carrier"].isin(carriers_2_plot)].groupby(["bus", "carrier"]).p_nom.sum()
     
     if components == "generator":
         return generator_pnom
     elif components == "storage":
         return storage_pnom
+    elif components == "links":
+        return links_pnom
     else:
-        return pd.concat([generator_pnom, storage_pnom])
+        return pd.concat([generator_pnom, links_pnom, storage_pnom])
     
-def get_generator_pnom_opt(n: pypsa.Network, components:str = "all") -> pd.DataFrame:
+def get_generator_pnom_opt(n: pypsa.Network, carriers_2_plot: List[str], components:str = "all") -> pd.DataFrame:
     """Gets optimal pnom capacity"""
-    storage_pnom_opt = n.storage_units.groupby(["bus", "carrier"]).p_nom_opt.sum()
-    generator_pnom_opt = n.generators.groupby(["bus", "carrier"]).p_nom_opt.sum()
+    storage_pnom_opt = n.storage_units[n.storage_units["carrier"].isin(carriers_2_plot)].groupby(["bus", "carrier"]).p_nom_opt.sum()
+    generator_pnom_opt = n.generators[n.generators["carrier"].isin(carriers_2_plot)].groupby(["bus", "carrier"]).p_nom_opt.sum()
+    links_pnom_opt = n.links[n.links["carrier"].isin(carriers_2_plot)].groupby(["bus", "carrier"]).p_nom_opt.sum()
     
     if components == "generator":
         return generator_pnom_opt
     elif components == "storage":
         return storage_pnom_opt
+    elif components == "links":
+        return links_pnom_opt
     else:
-        return pd.concat([generator_pnom_opt, storage_pnom_opt])
+        return pd.concat([generator_pnom_opt, links_pnom_opt, storage_pnom_opt])
 
 def get_generator_pnom_opt_brownfield(n: pypsa.Network, components:str = "all") -> pd.DataFrame:
     """Gets optimal pnom capacity"""
@@ -158,6 +164,26 @@ def get_generator_pnom_opt_brownfield(n: pypsa.Network, components:str = "all") 
         return storage_pnom_opt
     else:
         return pd.concat([generator_pnom_opt, storage_pnom_opt])
+
+def get_time_series_production(n: pypsa.Network, carriers_2_plot: List[str]):
+    """Gets time series production"""
+    
+    generator_carriers = n.generators[n.generators["carrier"].isin(carriers_2_plot)].index.to_list()
+    generators = n.generators_t.p[[generator_carriers]].mul(1e-3).groupby(carriers, axis=1).sum() # MW -> GW
+    
+    storage_carriers = n.storage_units[n.storage_units["carrier"].isin(carriers_2_plot)].index.to_list()
+    storage_units = n.storage_units_t.p[[storage_carriers]].mul(1e-3).groupby(carriers, axis=1).sum() # MW -> GW
+    
+    link_carriers = n.links[n.links["carrier"].isin(carriers_2_plot)].index.to_list()
+    links = n.links_t.p[[link_carriers]].mul(1e-3).groupby(carriers, axis=1).sum() # MW -> GW
+    
+    storage_charge = storage_units[storage_units > 0].rename(columns={'battery':'Battery Discharging'}).fillna(0)
+    storage_discharge = storage_units[storage_units < 0].rename(columns={'battery':'Battery Charging'}).fillna(0)
+    
+    return pd.concat([generators, links, storage_charge, storage_discharge], axis=1)
+
+def get_time_series_demand(n: pypsa.Network):
+    return pd.DataFrame(n.loads_t.p.sum(1).mul(1e-3)).rename(columns={0:"Deamand"})
 
 def get_snapshot_emissions(n: pypsa.Network) -> pd.DataFrame:
     """Gets timeseries emissions per technology"""
@@ -427,13 +453,13 @@ def plot_hourly_emissions(n: pypsa.Network, save:str, **wildcards) -> None:
     fig.savefig(save)
     
 
-def plot_production_html(n: pypsa.Network, save:str, **wildcards) -> None:
+def plot_production_html(n: pypsa.Network, carriers_2_plot: List[str], save:str, **wildcards) -> None:
     """Plots interactive timeseries production chart"""
     
     # get data 
     
-    carriers = n.generators.carrier
-    carriers_storage_units = n.storage_units.carrier
+    carriers = n.generators[n.generators.carrier.isin(carriers_2_plot)].carrier
+    carriers_storage_units = n.storage_units[n.storage_units.carrier.isin(carriers_2_plot)].carrier
     carrier_nice_names = n.carriers.nice_name
     
     production = n.generators_t.p.mul(1e-3) # MW -> GW
@@ -464,7 +490,7 @@ def plot_production_html(n: pypsa.Network, save:str, **wildcards) -> None:
     fig.write_html(save)
     
 
-def plot_production_area(n: pypsa.Network, save:str, **wildcards) -> None:
+def plot_production_area(n: pypsa.Network, carriers_2_plot: List[str], save:str, **wildcards) -> None:
     """Plot timeseries production
     
     Will plot an image for the entire time horizon, in addition to seperate 
@@ -484,6 +510,9 @@ def plot_production_area(n: pypsa.Network, save:str, **wildcards) -> None:
     storage_charge = storage[storage > 0].rename(columns={'battery':'Battery Discharging'}).fillna(0)
     storage_discharge = storage[storage < 0].rename(columns={'battery':'Battery Charging'}).fillna(0)
     energy_mix = pd.concat([production, storage_charge, storage_discharge], axis=1)
+
+    energy_mix = get_time_series_production(n, carriers_2_plot)
+    demand = get_time_series_demand(n)
 
     demand = pd.DataFrame(n.loads_t.p.sum(1).mul(1e-3)).rename(columns={0:"Deamand"})
     
@@ -521,7 +550,7 @@ def plot_production_area(n: pypsa.Network, save:str, **wildcards) -> None:
             # outside slicing range 
             continue
         
-def plot_production_bar(n: pypsa.Network, save:str, **wildcards) -> None:
+def plot_production_bar(n: pypsa.Network, carriers_2_plot: List[str], save:str, **wildcards) -> None:
     """Plot production per carrier"""
     
     # get data 
@@ -552,12 +581,12 @@ def plot_production_bar(n: pypsa.Network, save:str, **wildcards) -> None:
     fig.savefig(save)
 
 
-def plot_costs_bar(n: pypsa.Network, save:str, **wildcards) -> None:
+def plot_costs_bar(n: pypsa.Network, carriers_2_plot: List[str], save:str, **wildcards) -> None:
     """Plot OPEX and CAPEX"""
     
     # get data 
     
-    carriers = n.generators.carrier
+    carriers = n.generators[n.generators.carrier.isin(carriers_2_plot)].carrier
     carrier_nice_names = n.carriers.nice_name
     production = n.generators_t.p
     marginal_cost = n.generators.marginal_cost
@@ -664,14 +693,20 @@ def plot_capacity_map(
     
     return fig, ax
 
-def plot_base_capacity(n: pypsa.Network, regions: gpd.GeoDataFrame, save: str, **wildcards) -> None:
+def plot_base_capacity(
+    n: pypsa.Network, 
+    regions: gpd.GeoDataFrame, 
+    carriers: List[str],
+    save: str, 
+    **wildcards
+) -> None:
     """
     Plots base network capacities
     """
     
     # get data
 
-    bus_values = get_generator_pnom(n)
+    bus_values = get_generator_pnom(n, carriers)
     line_values = n.lines.s_nom
     link_values = n.links.p_nom
     
@@ -686,7 +721,7 @@ def plot_base_capacity(n: pypsa.Network, regions: gpd.GeoDataFrame, save: str, *
         n=n, 
         bus_values=bus_values,
         line_values=line_values,
-        link_values=link_values,
+        # link_values=link_values,
         regions=regions,
         line_scale=line_scale,
         bus_scale=bus_scale,
@@ -716,7 +751,7 @@ def plot_opt_capacity(n: pypsa.Network, regions: gpd.GeoDataFrame, save: str, **
         n=n, 
         bus_values=bus_values,
         line_values=line_values,
-        link_values=link_values,
+        # link_values=link_values,
         regions=regions,
         line_scale=line_scale,
         bus_scale=bus_scale,
@@ -746,7 +781,7 @@ def plot_brownfield_opt_capacity(n: pypsa.Network, regions: gpd.GeoDataFrame, sa
         n=n, 
         bus_values=bus_values,
         line_values=line_values,
-        link_values=link_values,
+        # link_values=link_values,
         regions=regions,
         line_scale=line_scale,
         bus_scale=bus_scale,
@@ -754,22 +789,28 @@ def plot_brownfield_opt_capacity(n: pypsa.Network, regions: gpd.GeoDataFrame, sa
     )
     fig.savefig(save)
 
-def plot_new_capacity(n: pypsa.Network, regions: gpd.GeoDataFrame, save: str, **wildcards) -> None:
+def plot_new_capacity(
+    n: pypsa.Network, 
+    regions: gpd.GeoDataFrame, 
+    carriers: List[str],
+    save: str, 
+    **wildcards
+) -> None:
     """Plots new capacity"""
     
     # get data
     
-    bus_pnom = get_generator_pnom(n)
-    bus_pnom_opt = get_generator_pnom_opt(n)
+    bus_pnom = get_generator_pnom(n, carriers)
+    bus_pnom_opt = get_generator_pnom_opt(n, carriers)
     bus_values = bus_pnom_opt - bus_pnom
     
     line_snom = n.lines.s_nom
     line_snom_opt = n.lines.s_nom_opt
     line_values = line_snom_opt - line_snom
     
-    link_pnom = n.links.p_nom
-    link_pnom_opt = n.links.p_nom_opt
-    link_values = link_pnom_opt - link_pnom
+    # link_pnom = n.links.p_nom
+    # link_pnom_opt = n.links.p_nom_opt
+    # link_values = link_pnom_opt - link_pnom
 
     # plot data
     
@@ -782,7 +823,7 @@ def plot_new_capacity(n: pypsa.Network, regions: gpd.GeoDataFrame, save: str, **
         n=n, 
         bus_values=bus_values,
         line_values=line_values,
-        link_values=link_values,
+        # link_values=link_values,
         regions=regions,
         line_scale=line_scale,
         bus_scale=bus_scale,
@@ -835,16 +876,16 @@ def plot_renewable_potential(n: pypsa.Network, regions: gpd.GeoDataFrame, save: 
     
     fig.savefig(save)
 
-def plot_capacity_additions(n: pypsa.Network, save: str, **wildcards) -> None:
+def plot_capacity_additions(n: pypsa.Network, carriers: List[str], save: str, **wildcards) -> None:
     """Plots base capacity vs optimal capacity """
     
     # get data
     
     nice_names = n.carriers.nice_name
     
-    pnom = get_generator_pnom(n)
+    pnom = get_generator_pnom(n, carriers)
     pnom = pnom.groupby("carrier").sum().to_frame("Base Capacity")
-    pnom_opt = get_generator_pnom_opt(n)
+    pnom_opt = get_generator_pnom_opt(n, carriers)
     pnom_opt = pnom_opt.groupby("carrier").sum().to_frame("Optimal Capacity")
     
     capacity = pnom.join(pnom_opt).reset_index()
@@ -902,8 +943,9 @@ if __name__ == "__main__":
             'plot_figures', 
             interconnect='western',
             clusters=30,
-            ll='v1.0',
-            opts='Co2L0.25',
+            ll='v1.25',
+            opts='Co2L0.75',
+            sectors="G"
         )
     configure_logging(snakemake)
     
@@ -915,15 +957,24 @@ if __name__ == "__main__":
     # mappers 
     generating_link_carrier_map = {"fuel cell": "H2", "battery discharger": "battery"}
     
+    # carriers to plot
+    carriers = (snakemake.params.electricity["conventional_carriers"] + 
+        snakemake.params.electricity["renewable_carriers"] +
+        snakemake.params.electricity["extendable_carriers"]["StorageUnit"] + 
+        snakemake.params.electricity["extendable_carriers"]["Store"] + 
+        snakemake.params.electricity["extendable_carriers"]["Link"]
+    )
+    carriers = list(set(carriers)) # remove any duplicates 
+    
     # plotting theme
     sns.set_theme("paper", style="darkgrid")
     
     # create plots
-    plot_base_capacity(n, onshore_regions, snakemake.output["capacity_map_base"], **snakemake.wildcards)
-    plot_opt_capacity(n, onshore_regions, snakemake.output["capacity_map_optimized"], **snakemake.wildcards)
-    plot_brownfield_opt_capacity(n, onshore_regions, snakemake.output["capacity_map_optimized_brownfield"], **snakemake.wildcards)
-    plot_new_capacity(n, onshore_regions, snakemake.output["capacity_map_new"], **snakemake.wildcards)
-    plot_costs_bar(n, snakemake.output["costs_bar"], **snakemake.wildcards)
+    plot_base_capacity(n, onshore_regions, carriers, snakemake.output["capacity_map_base"], **snakemake.wildcards)
+    plot_opt_capacity(n, onshore_regions, carriers, snakemake.output["capacity_map_optimized"], **snakemake.wildcards)
+    # plot_brownfield_opt_capacity(n, onshore_regions, snakemake.output["capacity_map_optimized_brownfield"], **snakemake.wildcards)
+    plot_new_capacity(n, onshore_regions, carriers, snakemake.output["capacity_map_new"], **snakemake.wildcards)
+    plot_costs_bar(n, snakemake.output["costs_bar"], carriers, **snakemake.wildcards)
     plot_production_bar(n, snakemake.output["production_bar"], **snakemake.wildcards)
     plot_production_area(n, snakemake.output["production_area"], **snakemake.wildcards)
     plot_production_html(n, snakemake.output["production_area_html"], **snakemake.wildcards)
@@ -936,4 +987,4 @@ if __name__ == "__main__":
     plot_region_emissions_html(n, snakemake.output["emissions_region_html"], **snakemake.wildcards)
     plot_emissions_map(n, onshore_regions, snakemake.output["emissions_map"], **snakemake.wildcards)
     plot_renewable_potential(n, onshore_regions, snakemake.output["renewable_potential_map"], **snakemake.wildcards)
-    plot_capacity_additions(n, snakemake.output["capacity_additions_bar"], **snakemake.wildcards)
+    plot_capacity_additions(n, snakemake.output["capacity_additions_bar"], carriers, **snakemake.wildcards)
