@@ -271,16 +271,18 @@ def main(snakemake):
     buffer_states_max = state_boundaries.to_crs(MEASUREMENT_CRS).buffer(buffer_distance_max)
     offshore = offshore.to_crs(MEASUREMENT_CRS).intersection(buffer_states_max.unary_union)
     
-
-    offshore = combine_offshore_shapes(
-        source=offshore_config,
-        shape=offshore, 
-        interconnect=gdf_states, 
-        buffer=buffer_distance_min
-    )
-
-    offshore_c = offshore.set_crs(GPS_CRS)
-    offshore_c.to_file(snakemake.output.offshore_shapes)
+    offshore = offshore[~offshore.is_empty] # remove empty polygons
+    if offshore.empty:
+        logger.warning("Empty offshore shape dataframe")
+    else:
+        offshore = combine_offshore_shapes(
+            source=offshore_config,
+            shape=offshore, 
+            interconnect=gdf_states, 
+            buffer=buffer_distance_min
+        )
+        offshore = offshore.set_crs(GPS_CRS)
+    offshore.to_file(snakemake.output.offshore_shapes)
 
 if __name__ == "__main__":
     logger = logging.getLogger(__name__)
