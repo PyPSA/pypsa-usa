@@ -102,12 +102,14 @@ breakthrough_datafiles = [
 pypsa_usa_datafiles = [
 "gebco/gebco_2023_tid_USA.nc",
 "copernicus/PROBAV_LC100_global_v3.0.1_2019-nrt_Discrete-Classification-map_USA_EPSG-4326.tif",
+"eez/conus_eez.shp",
+"natura.tiff",
 ]
 
 def define_zenodo_databundles():
     return {
         'USATestSystem':"https://zenodo.org/record/4538590/files/USATestSystem.zip",
-        'pypsa_usa_data':"https://zenodo.org/records/10067222/files/pypsa_usa_data.zip?download=1"
+        'pypsa_usa_data':"https://zenodo.org/records/10278157/files/pypsa_usa_data.zip" 
         }
 
 def define_sector_databundles():
@@ -121,7 +123,6 @@ rule retrieve_zenodo_databundles:
     output:
         expand(DATA + "breakthrough_network/base_grid/{file}", file=breakthrough_datafiles),
         expand(DATA + "{file}", file=pypsa_usa_datafiles),
-        "data/natura.tiff",
     log:
         "logs/retrieve/retrieve_databundles.log",
     script:
@@ -249,7 +250,7 @@ rule build_shapes:
         nerc_shapes = "repo_data/NERC_Regions/NERC_Regions_Subregions.shp",
         onshore_shapes = "repo_data/BA_shapes_new/Modified_BE_BA_Shapes.shp",
         offshore_shapes_ca_osw = "repo_data/BOEM_CA_OSW_GIS/CA_OSW_BOEM_CallAreas.shp",
-        offshore_shapes_eez= "data/gis/conus_eez.shp"
+        offshore_shapes_eez= "data/eez/conus_eez.shp"
     output:
         country_shapes = RESOURCES + "{interconnect}/country_shapes.geojson",
         onshore_shapes = RESOURCES + "{interconnect}/onshore_shapes.geojson",
