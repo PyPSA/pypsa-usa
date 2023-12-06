@@ -1,5 +1,11 @@
 """Module for holding global constant values"""
 
+###########################################
+# Constants for GIS Coordinate Reference Systems
+###########################################
+MEASUREMENT_CRS = "EPSG:5070"
+GPS_CRS = "EPSG:4326"
+
 ###################
 # General Constants
 ###################
@@ -213,7 +219,14 @@ EIA_PRIME_MOVER_MAPPER = {
     'OT': 'Other (specify in SCHEDULE 7)'
 }
 
-
+NERC_REGION_MAPPER = {
+    'WECC':'western',
+    'TRE':'texas',
+    'SERC':'eastern',
+    'RFC':'eastern',
+    'NPCC':'eastern',
+    'MRO':'eastern',
+}
 ################################
 # Constants for Breakthrough mapping 
 ################################

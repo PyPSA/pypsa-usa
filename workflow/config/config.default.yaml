@@ -1,10 +1,10 @@
 scenarios:
   all:
-    interconnect: western #"usa|texas|western|eastern"
-    clusters: 30
+    interconnect: texas #"usa|texas|western|eastern"
+    clusters: [40]
     opts:
       [
-        Co2L0.75,
+        Co2L1.5,
       ]
     ll: [v1.25]
     scope: "total" # "urban", "rural", or "total" 
@@ -19,14 +19,8 @@ enable:
   build_cutout: false
 
 offshore_shape:
-  use: ca #options are ca, weathergov
-  offshore_path:
-    ca: "repo_data/BOEM_CA_OSW_GIS/CA_OSW_BOEM_CallAreas.shp"
-    weathergov: "https://www.weather.gov/source/gis/Shapefiles/WSOM/oz22mr22.zip"
-    # nrel: "geodata_repo/Offshore_Wind_Speed_90m/Offshore_Wind_Speed_90m.shp"
+  use: eez #options are ca_osw, eez
 
-
-#TODO: #19 remove config list of BA's and reference geojson values directly instead
 countries: [US]  
 
 # focus_weights: 
@@ -37,7 +31,7 @@ network_configuration: "pypsa-usa" # "pypsa-usa" or "ads2032" or "breakthrough"
 
 snapshots:
   start: "2019-01-01"
-  end: "2019-12-31"
+  end: "2019-12-30"
   inclusive: 'left'
 
 # docs :
@@ -174,7 +168,7 @@ lines:
     345.: "Al/St 240/40 4-bundle 380.0"
     500.: "Al/St 560/50 4-bundle 750.0"
     765.: "Al/St 560/50 4-bundle 750.0"
-  s_max_pu: 0.7
+  s_max_pu: 1.0
   s_nom_max: .inf
   length_factor: 1.25
   under_construction: 'zero' # 'zero': set capacity to zero, 'remove': remove, 'keep': with full capacity
@@ -244,13 +238,14 @@ clustering:
       Pd: sum
       zone_id: mean # should delete zone id's and PDs from network earlier.
       state: max
+    
 
 # docs :
 solving:
   options:
-    operations_only: false
+    operations_only: true
     formulation: kirchhoff
-    load_shedding: false
+    load_shedding: true
     noisy_costs: true
     min_iterations: 4
     max_iterations: 6
