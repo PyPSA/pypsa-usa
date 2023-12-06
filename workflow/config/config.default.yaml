@@ -1,6 +1,6 @@
 scenarios:
   all:
-    interconnect: western #"usa|texas|western|eastern"
+    interconnect: texas #"usa|texas|western|eastern"
     clusters: [40]
     opts:
       [
@@ -232,9 +232,7 @@ clustering:
       ramp_limit_down: mean
       efficiency: mean
     buses:
-      Pd: sum
-      zone_id: mean # should delete zone id's and PDs from network earlier.
-      state: max
+      state: max # temp fix. When fixing state aggregation- change add electricity such that region info not is use is removed.
     
 
 # docs :

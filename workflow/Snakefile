@@ -85,7 +85,7 @@ rule all:
             **config["scenarios"]["all"],
             figure=FIGURES_SINGLE
         ),
-        # "repo_data/dag.jpg",
+        "repo_data/dag.jpg",
 
 # Create DAG with- 
 # snakemake --dag -F | sed -n "/digraph/,\$p" | dot -Tpng -o repo_data/dag.jpg
@@ -107,7 +107,6 @@ rule clean:
         "Remove all build results but keep downloaded data."
     run:
         import shutil
-
         shutil.rmtree("resources", ignore_errors=True)
         shutil.rmtree("results", ignore_errors=True)
         print("Data downloaded to data/ has not been cleaned.")
