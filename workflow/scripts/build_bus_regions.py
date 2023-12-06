@@ -44,10 +44,6 @@ import geopandas as gpd
 from shapely.geometry import Polygon
 from scipy.spatial import Voronoi
 from functools import reduce
-from _helpers import setup_custom_logger
-logger = setup_custom_logger('root')
-logger.debug('main message')
-
 from _helpers import configure_logging, REGION_COLS
 from simplify_network import aggregate_to_substations, simplify_network_to_voltage_level
 
@@ -98,58 +94,21 @@ def voronoi_partition_pts(points, outline):
     return np.array(polygons, dtype=object)
 
 
-def assign_bus_ba(n: pypsa.Network, ba_region_shapes: gpd.GeoDataFrame, offshore_shapes: gpd.GeoDataFrame) -> pypsa.Network:
-    """Assigns Balancing Area to each bus in the network"""
-    bus_df = n.buses
-    bus_df["geometry"] = gpd.points_from_xy(bus_df["x"], bus_df["y"])
-
-    combined_shapes = gpd.GeoDataFrame(pd.concat([ba_region_shapes, offshore_shapes],ignore_index=True))
-    
-    ba_points = gpd.tools.sjoin(gpd.GeoDataFrame(bus_df["geometry"],crs= 4326), combined_shapes, how='left',predicate='within')
-    ba_points = ba_points.rename(columns={'name':'balancing_area'})
-    bus_df_final = pd.merge(bus_df, ba_points['balancing_area'], left_index=True, right_index=True,how='left').drop(columns=['geometry'])
-    n.buses = bus_df_final
-    return n
-
-if __name__ == "__main__":
-    logger = logging.getLogger(__name__)
-    if 'snakemake' not in globals():
-        from _helpers import mock_snakemake
-        snakemake = mock_snakemake('build_bus_regions', interconnect="western")
-    configure_logging(snakemake)
-
-
+def main(snakemake):
     #Configurations
     countries = snakemake.config['countries']
     voltage_level = snakemake.config["electricity"]["voltage_simplified"]
     aggregation_zones = snakemake.config['clustering']['cluster_network']['aggregation_zones']
-    
-    logger.info("Building bus regions for %s", snakemake.wildcards.interconnect)
+
+    logger.info("Building bus regions for %s Interconnect", snakemake.wildcards.interconnect)
     logger.info("Built for aggregation with %s zones", aggregation_zones)
 
-    logger.info("Building bus regions for %s", snakemake.wildcards.interconnect)
-    logger.info("Built for aggregation with %s zones", aggregation_zones)
+    n = pypsa.Network(snakemake.input.base_network)
 
-    n_base = pypsa.Network(snakemake.input.base_network)
-
-    #Aggregating to substation to ensure building bus regions for only substation level nodes
-    n_base.generators['weight'] = 0 #temporary to enable clustering
-    busmap_to_sub = pd.read_csv(
-        snakemake.input.bus2sub, index_col=0, dtype={"sub_id": str}
-    )
-    busmap_to_sub.index = busmap_to_sub.index.astype(str)
-    substations = pd.read_csv(snakemake.input.sub, index_col=0)
-    substations.index = substations.index.astype(str)
-
-    n_base, trafo_map = simplify_network_to_voltage_level(n_base, voltage_level)
-
-    #new busmap definition
-    busmap_to_sub = n_base.buses.sub_id.astype(int).astype(str).to_frame()
-
-    busmaps = [trafo_map, busmap_to_sub.sub_id]
-    busmaps = reduce(lambda x, y: x.map(y), busmaps[1:], busmaps[0])
-
-    n = aggregate_to_substations(n_base, substations, busmap_to_sub.sub_id, aggregation_zones)
+    #Pulling data for bus2sub map, to ensure bus regions are only built for substations
+    bus2sub = pd.read_csv(snakemake.input.bus2sub, index_col=0, dtype={"sub_id": str})
+    bus2sub.index = bus2sub.index.astype(str)
+    bus2sub = bus2sub.reset_index().drop_duplicates(subset='sub_id').set_index('sub_id')
 
     gpd_countries = gpd.read_file(snakemake.input.country_shapes).set_index('name')
     gpd_ba_shapes = gpd.read_file(snakemake.input.ba_region_shapes)
@@ -161,15 +120,21 @@ if __name__ == "__main__":
     onshore_regions = []
     offshore_regions = []
 
+    all_locs = bus2sub[["x", "y"]] # all locations of substations in the bus2sub dataframe
+    onshore_buses = n.buses[~n.buses.substation_off]
+    bus2sub_onshore = bus2sub[bus2sub.Bus.isin(onshore_buses.index)]
+    bus2sub_offshore = bus2sub[~bus2sub.Bus.isin(onshore_buses.index)]
 
+    logger.info("Building Onshore Regions")
     for ba in ba_region_shapes.index:
-        ba_shape = ba_region_shapes[ba]
-        all_locs = n.buses.loc[n.buses.substation_lv, ["x", "y"]] 
+        # print(ba)
+        ba_shape = ba_region_shapes[ba] # current shape
+        ba_subs = bus2sub_onshore.balancing_area[bus2sub_onshore.balancing_area == ba] # series of substations in the current BA
+        ba_locs = all_locs.loc[ba_subs.index] # locations of substations in the current BA
+        if ba_locs.empty: continue # skip empty BA's which are not in the bus dataframe. ex. portions of eastern texas BA when using the WECC interconnect
 
-        # ba_locs contains the bus name and locations for all buses in the BA for ba_shape.
-        ba_buses = n.buses.balancing_area[n.buses.balancing_area == ba]
-        ba_locs = all_locs.loc[ba_buses.index]
-        if ba_locs.empty: continue # skip empty BA's which are not in the bus dataframe. ex. eastern texas BA when using the WECC interconnect
+        if ba =="MISO-0001":
+            ba_shape = gpd.GeoDataFrame(geometry = ba_shape).dissolve().iloc[0].geometry
 
         onshore_regions.append(gpd.GeoDataFrame({
                 'name': ba_locs.index,
@@ -180,28 +145,36 @@ if __name__ == "__main__":
             }))
 
     ### Defining Offshore Regions ###
+    logger.info("Building Offshore Regions")
     for i in range(len(offshore_shapes)):
-        offshore_shape = offshore_shapes[i]
+        offshore_shape = offshore_shapes.iloc[i]
         shape_name = offshore_shapes.index[i]
-        bus_locs = n.buses.loc[n.buses.substation_off, ["x", "y"]] #substation off all true?
-        bus_points = gpd.points_from_xy(x=bus_locs.x, y=bus_locs.y)
-        offshore_busses = bus_locs[[offshore_shape.buffer(0.2).contains(bus_points[i]) for i in range(len(bus_points))]]  #filter for OSW busses within shape
+        offshore_buses = bus2sub_offshore[["x", "y"]]
+        if offshore_buses.empty: continue
         offshore_regions_c = gpd.GeoDataFrame({
-            'name': offshore_busses.index,
-            'x': offshore_busses['x'],
-            'y': offshore_busses['y'],
-            'geometry': voronoi_partition_pts(offshore_busses.values, offshore_shape),
+            'name': offshore_buses.index,
+            'x': offshore_buses['x'],
+            'y': offshore_buses['y'],
+            'geometry': voronoi_partition_pts(offshore_buses.values, offshore_shape),
             'country': shape_name,})
-        offshore_regions_c = offshore_regions_c.loc[offshore_regions_c.area > 1e-2]
+        offshore_regions_c = offshore_regions_c.loc[offshore_regions_c.area > 1e-2] # remove extremely small regions
         offshore_regions.append(offshore_regions_c)
 
-
-    pd.concat(onshore_regions, ignore_index=True).to_file(snakemake.output.regions_onshore)
-
+    onshore_regions_concat = pd.concat(onshore_regions, ignore_index=True)
+    onshore_regions_concat.to_file(snakemake.output.regions_onshore)
     if offshore_regions:
         pd.concat(offshore_regions, ignore_index=True).to_file(snakemake.output.regions_offshore)
     else:
         offshore_shapes.to_frame().to_file(snakemake.output.regions_offshore)
 
+    if onshore_regions_concat[onshore_regions_concat.geometry.is_empty].shape[0] > 0:
+        logger.error(f"Onshore regions are missing geometry.")
+        ValueError(f"Onshore regions are missing geometry.")
 
-    # balancing_areas = ['AEC', 'AECI', 'AVA', 'Arizona', 'BANC', 'BPAT', 'CHPD', 'CISO-PGAE', 'CISO-SCE', 'CISO-SDGE', 'CISO-VEA', 'SPP-CSWS', 'Carolina', 'DOPD', 'SPP-EDE', 'EPE', 'ERCO-C', 'ERCO-E', 'ERCO-FW', 'ERCO-N', 'ERCO-NC', 'ERCO-S', 'ERCO-SC', 'ERCO-W', 'Florida', 'GCPD', 'SPP-GRDA', 'GRID', 'IID', 'IPCO', 'ISONE-Connecticut', 'ISONE-Maine', 'ISONE-Massachusetts', 'ISONE-New Hampshire', 'ISONE-Rhode Island', 'ISONE-Vermont', 'SPP-KACY', 'SPP-KCPL', 'LDWP', 'SPP-LES', 'MISO-0001', 'MISO-0027', 'MISO-0035', 'MISO-0004', 'MISO-0006', 'MISO-8910', 'SPP-MPS', 'NWMT', 'NEVP', 'SPP-NPPD', 'NYISO-A', 'NYISO-B', 'NYISO-C', 'NYISO-D', 'NYISO-E', 'NYISO-F', 'NYISO-G', 'NYISO-H', 'NYISO-I', 'NYISO-J', 'NYISO-K', 'SPP-OKGE', 'SPP-OPPD', 'PACE', 'PACW', 'PGE', 'PJM_AE', 'PJM_AEP', 'PJM_AP', 'PJM_ATSI', 'PJM_BGE', 'PJM_ComEd', 'PJM_DAY', 'PJM_DEO&K', 'PJM_DLCO', 'PJM_DP&L', 'PJM_Dominion', 'PJM_EKPC', 'PJM_JCP&L', 'PJM_METED', 'PJM_PECO', 'PJM_PENELEC', 'PJM_PEPCO', 'PJM_PPL', 'PJM_PSEG', 'PJM_RECO', 'PNM', 'PSCO', 'PSEI', 'SPP-SECI', 'SOCO', 'SPP-SPRM', 'SPP-SPS', 'TEPC', 'TIDC', 'TVA', 'WACM', 'WALC', 'WAUW','SPP-WAUE_2','SPP-WAUE_3','SPP-WAUE_4','SPP-WAUE_5','SPP-WAUE_6','SPP-WAUE_7','SPP-WAUE_8','SPP-WAUE_9', 'SPP-WFEC', 'SPP-WR']
+if __name__ == "__main__":
+    logger = logging.getLogger(__name__)
+    if 'snakemake' not in globals():
+        from _helpers import mock_snakemake
+        snakemake = mock_snakemake('build_bus_regions', interconnect="western")
+    configure_logging(snakemake)
+    main(snakemake)

@@ -4,3 +4,6 @@ osw_config:
   build_hvac: true
   build_hvdc_subsea: false  
   build_hvdc_overhead: false
+
+offshore_shape:
+  use: eez #options are ca_osw, eez

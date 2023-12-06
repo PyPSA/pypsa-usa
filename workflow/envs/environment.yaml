@@ -33,6 +33,7 @@ dependencies:
 - progressbar2==4.2.0
 - pyomo==6.6.2
 - matplotlib==3.8.0
+- plotly==5.17.0
 - powerplantmatching==0.5.7
 
 

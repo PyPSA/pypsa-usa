@@ -109,7 +109,7 @@ if __name__ == "__main__":
     # fn = snakemake.input.eia_hydro_generation
     # eia_stats = get_eia_annual_hydro_generation(fn, countries)
 
-    # import pdb; pdb.set_trace()
+
 
     inflow = cutout.runoff(
         shapes=country_shapes,
