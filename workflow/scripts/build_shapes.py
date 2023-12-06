@@ -258,7 +258,7 @@ def main(snakemake):
         logger.info("Building Offshore GIS shapes with Exclusive Economic Zones shapes")
         offshore = gpd.read_file(snakemake.input.offshore_shapes_eez)
     else:
-        logger.error(f"source {source} is invalid offshore data source")
+        logger.error(f"source {offshore_config} is invalid offshore data source")
         offshore = None
 
     #filter buffer from shore
