@@ -4,6 +4,8 @@ rule add_extra_components:
     input:
         network=RESOURCES + "{interconnect}/elec_s_{clusters}.nc",
         tech_costs=DATA + f"costs_{config['costs']['year']}.csv",
+    params:
+        retirement=config["electricity"].get("retirement", "economic")
     output:
         RESOURCES + "{interconnect}/elec_s_{clusters}_ec.nc",
     log:
