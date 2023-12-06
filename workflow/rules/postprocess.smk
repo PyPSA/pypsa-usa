@@ -7,6 +7,7 @@ rule plot_figures:
         regions_offshore=RESOURCES + "{interconnect}/regions_offshore_s_{clusters}.geojson",
     params:
         plotting=config["plotting"],
+        electricity=config["electricity"]
     output:
         **{
             fig: "results/{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_sec_{sectors}_%s.pdf"
