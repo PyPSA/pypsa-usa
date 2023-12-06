@@ -273,16 +273,14 @@ def main(snakemake):
     
     offshore = offshore[~offshore.is_empty] # remove empty polygons
     if offshore.empty:
-        logger.warning("Empty offshore shape dataframe")
-    else:
-        offshore = combine_offshore_shapes(
-            source=offshore_config,
-            shape=offshore, 
-            interconnect=gdf_states, 
-            buffer=buffer_distance_min
-        )
-        offshore = offshore.set_crs(GPS_CRS)
-    offshore.to_file(snakemake.output.offshore_shapes)
+        raise AssertionError("Offshore wind shape is empty")
+    offshore = combine_offshore_shapes(
+        source=offshore_config,
+        shape=offshore, 
+        interconnect=gdf_states, 
+        buffer=buffer_distance_min
+    )
+    offshore = offshore.set_crs(GPS_CRS).to_file(snakemake.output.offshore_shapes)
 
 if __name__ == "__main__":
     logger = logging.getLogger(__name__)
