@@ -931,6 +931,7 @@ def attach_wind_and_solar(
                     + costs.at[car + "-ac-station", "capital_cost"]
                     + connection_cost
                 )
+
                 logger.info(
                     "Added connection cost of {:0.0f}-{:0.0f} USD/MW/a to {}".format(
                         connection_cost.min(), connection_cost.max(), car
@@ -945,6 +946,11 @@ def attach_wind_and_solar(
             weight_bus = ds["weight"].to_dataframe().merge(bus2sub,left_on="bus", right_on="sub_id").set_index('bus_id').weight
             bus_profiles = ds["profile"].transpose("time", "bus").to_pandas().T.merge(bus2sub,left_on="bus", right_on="sub_id").set_index('bus_id').drop(columns='sub_id').T
             
+            if car == 'offwind':
+                capital_cost = capital_cost.to_frame().reset_index()
+                capital_cost.bus = capital_cost.bus.astype(int)
+                capital_cost = pd.merge(capital_cost, n.buses.sub_id.reset_index(),left_on='bus', right_on='sub_id',how='left').rename(columns={0:'capital_cost'}).set_index('Bus').capital_cost
+
             logger.info(f"Adding {car} capacity-factor profiles to the network.")
             #TODO: #24 VALIDATE TECHNICAL POTENTIALS
 
@@ -1238,6 +1244,7 @@ def main(snakemake):
         costs.at["CCGT","investment_annualized"] + costs.at["OCGT","investment_annualized"]
     ) / 2
 
+
     update_transmission_costs(n, costs, params.length_factor)
 
     renewable_carriers = set(params.electricity["renewable_carriers"])
@@ -1345,6 +1352,7 @@ def main(snakemake):
             costs,
         )
     update_p_nom_max(n)
+
 
     # apply regional multipliers to capital cost data
     for carrier, multiplier_data in const.CAPEX_LOCATIONAL_MULTIPLIER.items():
