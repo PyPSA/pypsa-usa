@@ -7,7 +7,7 @@ run:
   shared_cutouts: true # set to true to share the default cutout(s) across runs
 
 scenario:
-  interconnect: western #"usa|texas|western|eastern"
+  interconnect: texas #"usa|texas|western|eastern"
   clusters: [40]
   opts:
     [
