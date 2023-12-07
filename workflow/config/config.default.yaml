@@ -7,11 +7,12 @@ run:
   shared_cutouts: true # set to true to share the default cutout(s) across runs
 
 scenario:
-  interconnect: texas #"usa|texas|western|eastern"
+  interconnect: western #"usa|texas|western|eastern"
   clusters: [40]
   opts:
     [
-      Co2L1.5-480SEG,
+      Co2L1.25,
+      # Co2L1.25-480SEG,
     ]
   ll: [v1.25]
   scope: "total" # "urban", "rural", or "total" 
