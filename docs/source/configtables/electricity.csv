@@ -1,5 +1,5 @@
 ,Unit,Values,Description
-conventional_carriers,--,"Any subset of {nuclear, oil, OCGT, CCGT, coal, lignite, geothermal, biomass}","List of conventional power plants to include in the model from ``resources/powerplants.csv``. If an included carrier is also listed in ``extendable_carriers``, the capacity is taken as a lower bound."
+conventional_carriers,--,"Any subset of {nuclear, oil, OCGT, CCGT, coal, geothermal, biomass}","List of conventional power plants to include in the model from ``resources/powerplants.csv``. If an included carrier is also listed in ``extendable_carriers``, the capacity is taken as a lower bound."
 renewable_carriers,--,"Any subset of {solar, onwind, offwind-ac, offwind-dc, hydro}",List of renewable generators to include in the model.
 voltage_simplified,kV,int,"Voltage level to simplify network to in rule ""simplify network"""
 gaslimit,MWhth,float or false,Global gas usage limit (Set False for development)
@@ -14,3 +14,5 @@ Generator,--,Any extendable carrier,"Defines existing or non-existing convention
 Storage Unit,--,"Any subset of {'battery','H2'}",Adds extendable storage units (battery and/or hydrogen) at every node/bus after clustering without capacity limits and with zero initial capacity.
 Store,--,"Any subset of {'battery','H2'}",Adds extendable storage units (battery and/or hydrogen) at every node/bus after clustering without capacity limits and with zero initial capacity.
 Links,--,Any subset of {'H2 pipeline'},Adds extendable links (H2 pipelines only) at every connection where there are lines or HVDC links without capacity limits and with zero initial capacity. Hydrogen pipelines require hydrogen storage to be modelled as ``Store``.
+,,,
+retirement, --," One of ""economic"" or ""technical"""," ""Sets the retirement method for converntional generators. If ``technical`` all generators ``p_nom_min`` are set to ``p_nom`` to prevent selling off of the asset. Retirements are then tracked in post-proccessing. If ``economic`` existing plants have their ``p_nom_min`` set as ``0``,  ``p_nom_max`` set to ``p_nom``,  and capital costs set to fixed costs. Generators with ``p_nom`` are then added to handle capacity expansion."""
