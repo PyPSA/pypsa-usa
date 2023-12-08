@@ -6,7 +6,7 @@ run:
 
 scenario:
   interconnect: texas #"usa|texas|western|eastern"
-  clusters: [40]
+  clusters: [30]
   opts:
     [
       Co2L1.25,
@@ -32,8 +32,8 @@ countries: [US]
 network_configuration: "pypsa-usa" # "pypsa-usa" or "ads2032" or "breakthrough"
 
 snapshots:
-  start: "2021-02-01"
-  end: "2021-02-28"
+  start: "2021-01-01"
+  end: "2021-05-30"
   inclusive: 'left'
 
 foresight:  # not implemented yet
