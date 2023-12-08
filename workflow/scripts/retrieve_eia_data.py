@@ -140,12 +140,10 @@ if __name__ == "__main__":
 
 
     rootpath = "./"
-    PATH_DOWNLOAD = Path(f"{rootpath}/resources/eia")
-    PATH_DOWNLOAD_RAW = Path(f"{rootpath}/resources/eia/raw")
-    PATH_DOWNLOAD_CSV = Path(f"{rootpath}/resources/eia/6moFiles")
+    PATH_DOWNLOAD = Path(f"{rootpath}/data/eia")
+    PATH_DOWNLOAD_CSV = Path(f"{rootpath}/data/eia/6moFiles")
 
     PATH_DOWNLOAD_CSV.mkdir(parents=True, exist_ok=True)
-    PATH_DOWNLOAD_RAW.mkdir(parents=True, exist_ok=True)
     PATH_DOWNLOAD.mkdir(parents=True, exist_ok=True)
 
     urls = [

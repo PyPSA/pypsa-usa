@@ -1,4 +1,4 @@
-################# ----------- Rules to Optimize/Solve Network ---------- #################
+# Rules to Optimize/Solve Network 
 
 rule add_extra_components:
     input:
@@ -42,20 +42,33 @@ rule prepare_network:
 
 
 rule solve_network:
+    params:
+        solving=config["solving"],
+        foresight=config["foresight"],
+        planning_horizons=config["scenario"]["planning_horizons"],
+        co2_sequestration_potential=config["sector"].get(
+            "co2_sequestration_potential", 200
+        ),
     input:
-        RESOURCES + "{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}.nc",
+        network=RESOURCES + "{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}.nc",
+        config=RESULTS + "config.yaml",
     output:
-        "results/{interconnect}/networks/elec_s_{clusters}_ec_l{ll}_{opts}.nc",
+        network=RESULTS + "{interconnect}/networks/elec_s_{clusters}_ec_l{ll}_{opts}.nc",
     log:
         solver=normpath(
-            "logs/solve_network/{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}_solver.log"
+            LOGS + "solve_network/{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}_solver.log"
         ),
-        python="logs/solve_network/{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}_python.log",
-        memory="logs/solve_network/{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}_memory.log",
+        python=LOGS
+        + "solve_network/{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}_python.log",
     benchmark:
-        "benchmarks/solve_network/{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}"
-    threads: 8
+        BENCHMARKS + "solve_network/{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}"
+    threads: 4
     resources:
         mem_mb=memory,
+        walltime=config["solving"].get("walltime", "12:00:00"),
+    shadow:
+        "minimal"
+    conda:
+        "../envs/environment.yaml"
     script:
-        "../scripts/solve_network.py"
+        "../scripts/subworkflows/pypsa-eur/scripts/solve_network.py"
