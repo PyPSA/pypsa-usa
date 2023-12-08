@@ -200,6 +200,8 @@ if __name__ == "__main__":
     Nyears = n.snapshot_weightings.objective.sum() / 8760.
     costs = load_costs(snakemake.input.tech_costs, snakemake.config['costs'], elec_config['max_hours'], Nyears)
 
+    n.buses['location'] = n.buses.index 
+
     attach_storageunits(n, costs, elec_config)
     attach_stores(n, costs, elec_config)
     attach_hydrogen_pipelines(n, costs, elec_config)
