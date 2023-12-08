@@ -9,7 +9,7 @@ rule add_sectors:
         network=RESOURCES + "{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}.nc",
         tech_costs=DATA + f"costs_{config['costs']['year']}.csv",
     output:
-        network=RESOURCES + "{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}_sec_{sectors}.nc"
+        network=RESOURCES + "{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}_{sector}.nc"
     script:
         "../scripts/add_sectors.py"
 

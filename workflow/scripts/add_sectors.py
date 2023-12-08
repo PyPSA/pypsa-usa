@@ -52,7 +52,6 @@ def add_buses(n: pypsa.Network, new_carrier: str, old_carrier: str):
             y=b.y,
             interconnect=b.interconnect,
             country=b.country,
-            zone_id=b.zone_id,
             carrier=new_carrier
         )
 
@@ -67,7 +66,6 @@ def add_buses_from_ac(n: pypsa.Network, new_carrier: str):
         y=buses.y,
         interconnect=buses.interconnect,
         country=buses.country,
-        zone_id=buses.zone_id,
         carrier=new_carrier
     )
 
@@ -190,12 +188,12 @@ if __name__ == "__main__":
 
         snakemake = mock_snakemake(
             "add_sectors",
-            interconnect="western",
+            interconnect="texas",
             # simpl="",
-            clusters="30",
+            clusters="40",
             ll="v1.25",
-            opts="Co2L0.75",
-            sectors="G",
+            opts="Co2L1.25",
+            sector="E-G",
         )
     configure_logging(snakemake)
     
@@ -214,7 +212,7 @@ if __name__ == "__main__":
     nice_names = params.plotting.get("nice_names", None)
     tech_colors = params.plotting.get("tech_colors", None)
 
-    sectors = snakemake.wildcards.sectors.split("-")
+    sectors = snakemake.wildcards.sector.split("-")
     
     if "G" in sectors:
         new_carrier = "gas"
