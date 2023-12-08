@@ -109,21 +109,21 @@ rule retrieve_ship_raster:
     run:
         move(input[0], output[0])
 
-
-rule retrieve_cutout:
-    input:
-        HTTP.remote(
-            'zenodo.org/records/10067222/files/{interconnect}_{cutout}.nc'
-            ,static=True),
-    output:
-        "cutouts/" + CDIR + "{interconnect}_{cutout}.nc",
-    log:
-        "logs/" + CDIR + "retrieve_cutout_{interconnect}_{cutout}.log",
-    resources:
-        mem_mb=5000,
-    retries: 2
-    run:
-        move(input[0], output[0])
+if config["enable"].get("download_cutout", False):
+    rule retrieve_cutout:
+        input:
+            HTTP.remote(
+                'zenodo.org/records/10067222/files/{interconnect}_{cutout}.nc'
+                ,static=True),
+        output:
+            "cutouts/" + CDIR + "{interconnect}_{cutout}.nc",
+        log:
+            "logs/" + CDIR + "retrieve_cutout_{interconnect}_{cutout}.log",
+        resources:
+            mem_mb=5000,
+        retries: 2
+        run:
+            move(input[0], output[0])
 
 rule retrieve_cost_data_eur:
     output:

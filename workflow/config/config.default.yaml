@@ -1,7 +1,7 @@
 scenarios:
   all:
-    interconnect: western #"usa|texas|western|eastern"
-    clusters: [40]
+    interconnect: texas #"usa|texas|western|eastern"
+    clusters: [50]
     opts:
       [
         Co2L1.5,
@@ -17,6 +17,7 @@ run:
 
 enable:
   build_cutout: false
+  download_cutout: false
 
 countries: [US]  
 
@@ -27,19 +28,19 @@ countries: [US]
 network_configuration: "pypsa-usa" # "pypsa-usa" or "ads2032" or "breakthrough"
 
 snapshots:
-  start: "2019-01-01"
-  end: "2019-01-30"
+  start: "2021-02-01"
+  end: "2021-02-28"
   inclusive: 'left'
 
 # docs :
 atlite:
-  default_cutout: era5_2019
+  default_cutout: era5_2021
   nprocesses: 4
   show_progress: false # false saves time
   cutouts:
     era5_2019:
       module: era5 # in priority order
-      time: ['2019', '2019']
+      time: ['2021', '2021']
   interconnects:
     western:
       x: [-126, -99]
@@ -89,7 +90,7 @@ conventional:
 # docs :
 renewable:
   onwind:
-    cutout: era5_2019
+    cutout: era5_2021
     resource:
       method: wind
       turbine: Vestas_V112_3MW
@@ -105,7 +106,7 @@ renewable:
     clip_p_max_pu: 1.e-2
     extendable: true
   offwind:
-    cutout: era5_2019
+    cutout: era5_2021
     resource:
       method: wind
       turbine: NREL_ReferenceTurbine_5MW_offshore
@@ -122,7 +123,7 @@ renewable:
     clip_p_max_pu: 1.e-2
     extendable: true
   solar:
-    cutout: era5_2019
+    cutout: era5_2021
     resource:
       method: pv
       panel: CSi
@@ -138,7 +139,7 @@ renewable:
     clip_p_max_pu: 1.e-2
     extendable: true
   hydro:
-    cutout: era5_2019
+    cutout: era5_2021
     resource:
       method: hydro
       hydrobasins: resources/hybas_na_lev06_v1c.shp
@@ -178,7 +179,7 @@ links:
 
 # docs :
 load:
-  scaling_factor: 1.0
+  scaling_factor: 3
 
 # docs :
 costs:  # based on the potentials, assuming  (0.1 kW/m2 and 10 m2/person)

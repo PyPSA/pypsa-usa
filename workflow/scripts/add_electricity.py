@@ -747,11 +747,13 @@ def prepare_ads_demand(n: pypsa.Network,
 
 
 def prepare_eia_demand(n: pypsa.Network, 
-                       demand_path: str) -> pd.DataFrame:
+                       demand_path: str,
+                       scaling = 1.0) -> pd.DataFrame:
     logger.info('Building Load Data using EIA demand')
     demand = pd.read_csv(demand_path, index_col=0)
     demand.index = pd.to_datetime(demand.index)
     demand = demand.fillna(method='backfill') #tempory solution until gridEmission for the cleaned Data
+    demand *= scaling
     demand = demand.loc[n.snapshots.intersection(demand.index)] # filter by snapshots
     demand.index = n.snapshots
 
@@ -783,7 +785,8 @@ def disaggregate_demand_to_buses(n: pypsa.Network,
 
 def add_demand_from_file(n: pypsa.Network, 
                          fn_demand: str, 
-                         demand_type: str):
+                         demand_type: str, 
+                         scaling):
     """
     Add demand to network from specified configuration setting. Returns network with demand added.
     """
@@ -792,7 +795,7 @@ def add_demand_from_file(n: pypsa.Network,
     elif demand_type == "ads":
         demand_per_bus = prepare_ads_demand(n, fn_demand)
     elif demand_type == "pypsa-usa":
-        demand_per_bus = prepare_eia_demand(n, fn_demand)
+        demand_per_bus = prepare_eia_demand(n, fn_demand, scaling)
     else:
         raise ValueError("Invalid demand_type. Supported values are 'breakthrough', 'ads', and 'pypsa-usa'.")
     n.madd("Load", demand_per_bus.columns, bus=demand_per_bus.columns,
@@ -1208,6 +1211,7 @@ def main(snakemake):
     params = snakemake.params
     configuration = snakemake.config["network_configuration"]
     interconnection = snakemake.wildcards["interconnect"]
+    scaling = snakemake.config['load']['scaling_factor']
 
     n = pypsa.Network(snakemake.input.base_network)
 
@@ -1287,7 +1291,7 @@ def main(snakemake):
     
     #Applying to all configurations
     plants = match_plant_to_bus(n, plants)
-    add_demand_from_file(n, fn_demand, configuration)
+    add_demand_from_file(n, fn_demand, configuration, scaling)
 
     attach_conventional_generators(
         n,
