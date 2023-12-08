@@ -311,13 +311,14 @@ def clustering_for_n_clusters(n, n_clusters, custom_busmap=False, aggregate_carr
         busmap = custom_busmap
 
     clustering = get_clustering_from_busmap(
-        n, busmap,
-        bus_strategies=bus_strategies,
+        n, 
+        busmap,
         aggregate_generators_weighted=True,
         aggregate_generators_carriers=aggregate_carriers,
         aggregate_one_ports=["Load", "StorageUnit"],
         line_length_factor=line_length_factor,
         generator_strategies=generator_strategies,
+        bus_strategies=bus_strategies,
         scale_link_capital_costs=False)
 
     if not n.links.empty:
@@ -359,14 +360,13 @@ if __name__ == "__main__":
     print("Running clustering.py directly")
     if 'snakemake' not in globals():
         from _helpers import mock_snakemake
-        snakemake = mock_snakemake('cluster_network', interconnect='western', clusters='30')
+        snakemake = mock_snakemake('cluster_network', interconnect='texas', clusters='30')
     configure_logging(snakemake)
 
     n = pypsa.Network(snakemake.input.network)
     focus_weights = snakemake.config.get('focus_weights', None)
 
     n.buses.drop(columns=['state', 'balancing_area','sub_id'], inplace=True)
-
 
     renewable_carriers = pd.Index([tech
                                    for tech in n.generators.carrier.unique()
@@ -413,6 +413,7 @@ if __name__ == "__main__":
             logger.info(f"Imported custom busmap from {snakemake.input.custom_busmap}")
 
         cluster_config = snakemake.config.get('clustering', {}).get('cluster_network', {})
+
         clustering = clustering_for_n_clusters(n, n_clusters, custom_busmap, aggregate_carriers,
                                                line_length_factor, aggregation_strategies,
                                                snakemake.config['solving']['solver']['name'],

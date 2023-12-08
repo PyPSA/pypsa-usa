@@ -40,7 +40,7 @@
 
 **Description**
 
-The `build_shapes` rule builds the GIS shape files for the balancing authorities and offshore regions. The regions are only built for the {interconnect} wildcard. Because balancing authorities often overlap- we modify the GIS dataset developed by  [Breakthrough Energy Sciences](https://breakthrough-energy.github.io/docs/). The offshore regions are built from the BOEM and weather.gov datasets.
+The `build_shapes` rule builds the GIS shape files for the balancing authorities and offshore regions. The regions are only built for the {interconnect} wildcard. Because balancing authorities often overlap- we modify the GIS dataset developed by  [Breakthrough Energy Sciences](https://breakthrough-energy.github.io/docs/).
 
 """
 
@@ -51,6 +51,32 @@ import pandas as pd
 import logging
 from _helpers import mock_snakemake, configure_logging
 from typing import List
+from constants import *
+import matplotlib.pyplot as plt
+from shapely.geometry import MultiPolygon
+
+def filter_small_polygons_gpd(geo_series: gpd.GeoSeries, min_area: float) -> gpd.GeoSeries:
+    """
+    Filters out polygons within each MultiPolygon in a GeoSeries that are smaller than a specified area.
+
+    Parameters:
+    geo_series (gpd.GeoSeries): A GeoSeries containing MultiPolygon geometries.
+    min_area (float): The minimum area threshold.
+
+    Returns:
+    gpd.GeoSeries: A GeoSeries with MultiPolygons filtered based on the area criterion.
+    """
+    # Explode the MultiPolygons into individual Polygons
+    original_crs = geo_series.crs
+    exploded = geo_series.to_crs(MEASUREMENT_CRS).explode(index_parts=True).reset_index(drop=True)
+
+    # Filter based on area
+    filtered = exploded[exploded.area >= min_area]
+
+    # Aggregate back into MultiPolygons
+    # Group by the original index and create a MultiPolygon from the remaining geometries
+    aggregated = filtered.groupby(filtered.index).agg(lambda x: MultiPolygon(x.tolist()) if len(x) > 1 else x.iloc[0])
+    return aggregated
 
 def load_na_shapes(state_shape: str = "admin_1_states_provinces") -> gpd.GeoDataFrame:
     """Creates geodataframe of north america"""
@@ -88,53 +114,75 @@ def load_ba_shape(ba_file: str) -> gpd.GeoDataFrame:
 
 def combine_offshore_shapes(source: str, shape: gpd.GeoDataFrame, interconnect: gpd.GeoDataFrame, buffer: int = 200000) -> gpd.GeoDataFrame:
     """Conbines offshore shapes"""
-    if source == "weather.gov":
-        offshore = _combine_weather_gov_shape(shape, interconnect, buffer)
-    elif source == "BOEM":
-        offshore = _combine_boem(shape)
+    if source == "ca_osw":
+        offshore = _dissolve_boem(shape)
+    elif source == "eez":
+        offshore = _dissolve_eez(shape, interconnect, buffer)
     else:
         logger.error(f"source {source} is invalid offshore data source")
         offshore = None
     return offshore
-        
-def _combine_weather_gov_shape(shape: gpd.GeoDataFrame, interconnect: gpd.GeoDataFrame, buffer: int = 200000):
-    """Combines offshore shapes from weather.gov"""
     
-    crs = ccrs.Mollweide()
-    shape = shape.rename(columns={"NAME": "name", "LAT": "y", "LON": "x"})
-    gdf_regions_union = interconnect.to_crs(crs).buffer(buffer)
-    gdf_regions_union = gpd.GeoSeries(gdf_regions_union[0], shape.index)
-    overlap = shape.to_crs(crs).buffer(0).intersects(gdf_regions_union[0])
-    offshore = shape[overlap].unary_union
-    return gpd.GeoDataFrame([[offshore, "US"]], columns=["geometry", "name"])
-    
-def _combine_boem(shape: gpd.GeoDataFrame):
-    """Combines offshore shapes from boem"""
-    crs = ccrs.Mollweide()
-    shape_combine = shape.dissolve().explode(index_parts=False) 
-    overlap = shape.to_crs(crs).buffer(0).intersects(shape_combine.to_crs(crs)) #maybe typo since overlap not used? 
-    shape_combine.rename(columns={"Lease_Name": "name"}, inplace=True)
-    shape_combine.name = ['Morro_Bay','Humboldt']
-    return shape_combine
-    
+def _dissolve_boem(shape: gpd.GeoDataFrame):
+    """Dissolves offshore shapes from boem"""
+    shape_split = shape.dissolve().explode(index_parts=False) 
+    shape_split.rename(columns={"Lease_Name": "name"}, inplace=True)
+    shape_split.name = ['Morro_Bay','Humboldt']
+    return shape_split
 
-if __name__ == "__main__":
-    logger = logging.getLogger(__name__)
-    if 'snakemake' not in globals():
-        from _helpers import mock_snakemake
-        snakemake = mock_snakemake('build_shapes', interconnect='western')
-    configure_logging(snakemake)
+def _dissolve_eez(shape: gpd.GeoDataFrame, interconnect: gpd.GeoDataFrame, buffer: int = 1000):
+    """Dissolves offshore shapes from eez then filters plolygons that are not near the interconnect shape"""
+    shape = filter_small_polygons_gpd(shape, 1e9) 
+    shape_split = gpd.GeoDataFrame(geometry = shape.explode(index_parts=False).geometry).set_crs(MEASUREMENT_CRS)
+    buffered_interconnect = interconnect.to_crs(MEASUREMENT_CRS).buffer(1e4)
+    union_buffered_interconnect = buffered_interconnect.unary_union    
+    filtered_shapes = shape_split[shape_split.intersects(union_buffered_interconnect)]
+    shape_split = filtered_shapes.to_crs(GPS_CRS)
+    return shape_split
 
+def trim_states_to_interconnect(gdf_states: gpd.GeoDataFrame, gdf_nerc: gpd.GeoDataFrame, interconnect: str):
+    """Trims states to only include portions of states in NERC Interconnect"""
+    if interconnect == "western":
+        gdf_nerc_f = gdf_nerc[gdf_nerc.OBJECTID.isin([3,8,9])]
+        gdf_states = gpd.overlay(gdf_states, gdf_nerc_f.to_crs(GPS_CRS), how='difference')
+        texas_geometry  = gdf_states.loc[gdf_states.name == 'Texas', 'geometry']
+        texas_geometry = filter_small_polygons_gpd(texas_geometry, 1e9)
+        gdf_states.loc[gdf_states.name == 'Texas', 'geometry'] = texas_geometry.geometry
+    elif interconnect == "eastern":
+        gdf_nerc_f = gdf_nerc[gdf_nerc.OBJECTID.isin([1,3,6,7])]
+        gdf_states = gpd.overlay(gdf_states, gdf_nerc_f.to_crs(GPS_CRS), how='difference')
+    return gdf_states
+
+def trim_ba_to_interconnect(gdf_ba: gpd.GeoDataFrame, interconnect_regions: gpd.GeoDataFrame, interconnect: str):
+    """Trims balancing authorities to only include portions of balancing authorities in interconnect regions"""
+    ba_states_intersect =  gdf_ba['geometry'].apply(
+        lambda shp: shp.intersects(interconnect_regions.dissolve().iloc[0]['geometry']))
+    ba_states = gdf_ba[ba_states_intersect]
+    if interconnect == "western":
+        ba_states = ba_states[~(ba_states.name.str.contains('MISO|SPP'))]
+    if interconnect == "texas":
+        ba_states = ba_states[~(ba_states.name.str.contains('MISO|SPP|EPE'))]
+    if interconnect == "eastern":
+        ba_states = ba_states[~(ba_states.name.str.contains('PNM|EPE|PSCO|WACM|ERCO'))]
+    return ba_states
+
+def main(snakemake):
     interconnect = snakemake.wildcards.interconnect
     breakthrough_zones = pd.read_csv(snakemake.input.zone)
-    breakthrough_zones= breakthrough_zones[breakthrough_zones['interconnect'].str.contains(interconnect, na=False, case=False)]
+    logger.info("Building GIS Shapes for %s Interconnect", interconnect)
 
-    # get usa states and territories
+    if interconnect != "usa":
+        breakthrough_zones= breakthrough_zones[breakthrough_zones['interconnect'].str.contains(interconnect, na=False, case=False)]
+
+    # get North America (na) states and territories
     gdf_na = load_na_shapes()
     gdf_na = gdf_na.query("name not in ['Alaska', 'Hawaii']")
-    
+
+    # Load NERC Shapes
+    gdf_nerc = gpd.read_file(snakemake.input.nerc_shapes)
+
     # apply interconnect wildcard 
-    if interconnect == "western": #filter states in interconnect
+    if interconnect == "western": #filter states that have any portion in interconnect
         gdf_states = filter_shapes(
             data=gdf_na,
             zones=breakthrough_zones,
@@ -179,45 +227,75 @@ if __name__ == "__main__":
             ]
         )
 
+    #Trim gdf_states to only include portions of texas in NERC Interconnect
+    gdf_states = trim_states_to_interconnect(gdf_states, gdf_nerc, interconnect)
+
     # save interconnection regions 
     interconnect_regions = gpd.GeoDataFrame([[gdf_states.unary_union, "NERC_Interconnect"]], columns=["geometry", "name"])
-    interconnect_regions = interconnect_regions.set_crs(4326)
+    interconnect_regions = interconnect_regions.set_crs(GPS_CRS)
     interconnect_regions.to_file(snakemake.output.country_shapes)
 
     # save state shapes 
-    state_boundaries = gdf_states[["name", "country", "geometry"]].set_crs(4326)
+    state_boundaries = gdf_states[["name", "country", "geometry"]].set_crs(GPS_CRS)
     state_boundaries.to_file(snakemake.output.state_shapes)
 
     # Load balancing authority shapes
     gdf_ba = load_ba_shape(snakemake.input.onshore_shapes)
 
     # Only include balancing authorities which have intersection with interconnection filtered states
-    ba_states_intersect =  gdf_ba['geometry'].apply(
-        lambda shp: shp.intersects(interconnect_regions.dissolve().iloc[0]['geometry']))
-    ba_states = gdf_ba[ba_states_intersect]
-    
-    gdf_ba_states = ba_states.copy() # setting with copy
+    ba_states = trim_ba_to_interconnect(gdf_ba, interconnect_regions, interconnect)
+
+    gdf_ba_states = ba_states.copy()
     gdf_ba_states.rename(columns={"name_1": "name"})
     gdf_ba_states.to_file(snakemake.output.onshore_shapes)
 
     # load offshore shapes
-    offshore_path =snakemake.input.offshore_shapes
-    offshore = gpd.read_file(offshore_path)
+    offshore_config = snakemake.params.source_offshore_shapes['use']
+    if offshore_config == "ca_osw":
+        logger.info("Building Offshore GIS shapes with CA OSW shapes")
+        offshore = gpd.read_file(snakemake.input.offshore_shapes_ca_osw)
+    elif offshore_config == "eez":
+        logger.info("Building Offshore GIS shapes with Exclusive Economic Zones shapes")
+        offshore = gpd.read_file(snakemake.input.offshore_shapes_eez)
+    else:
+        logger.error(f"source {offshore_config} is invalid offshore data source")
+        offshore = None
 
-    if "weather.gov" in offshore_path:
-        offshore = combine_offshore_shapes(
-            source="weather.gov",
-            shape=offshore, 
-            interconnect=interconnect_regions, 
-            buffer=snakemake.params.buffer_distance
-        )
-    elif "BOEM" in offshore_path:
-        offshore = combine_offshore_shapes(
-            source="BOEM",
-            shape=offshore, 
-            interconnect=interconnect_regions, 
-            buffer=snakemake.params.buffer_distance
-        )
+    #filter buffer from shore
+    buffer_distance_min = 10e3 # buffer distance for offshore shapes from shore.. 1e3 = 1km
+    buffer_distance_max = 100e3
+    buffered_na = gdf_na.to_crs(MEASUREMENT_CRS).buffer(buffer_distance_min)
+    offshore = offshore.to_crs(MEASUREMENT_CRS).difference(buffered_na.unary_union)
+    buffered_states = state_boundaries.to_crs(MEASUREMENT_CRS).buffer(buffer_distance_min)
+    offshore = offshore.to_crs(MEASUREMENT_CRS).difference(buffered_states.unary_union)
+    buffer_states_max = state_boundaries.to_crs(MEASUREMENT_CRS).buffer(buffer_distance_max)
+    offshore = offshore.to_crs(MEASUREMENT_CRS).intersection(buffer_states_max.unary_union)
+    
+    offshore = offshore[~offshore.is_empty] # remove empty polygons
+    if offshore.empty:
+        raise AssertionError("Offshore wind shape is empty")
+    offshore = combine_offshore_shapes(
+        source=offshore_config,
+        shape=offshore, 
+        interconnect=gdf_states, 
+        buffer=buffer_distance_min
+    )
+    offshore = offshore.set_crs(GPS_CRS).to_file(snakemake.output.offshore_shapes)
 
-    offshore_c = offshore.set_crs(4326)
-    offshore_c.to_file(snakemake.output.offshore_shapes)
+if __name__ == "__main__":
+    logger = logging.getLogger(__name__)
+    if 'snakemake' not in globals():
+        from _helpers import mock_snakemake
+        snakemake = mock_snakemake('build_shapes', interconnect='eastern')
+    configure_logging(snakemake)
+    main(snakemake)
+
+# CURRENT IMPLEMENTATION
+#COUNTRY SHAPE = UNION OF STATES THAT ARE CONTAINED IN NERC INTERCONNECT √
+#ONSHORE SHAPE = BA IN STATE SHAPES
+
+# TODO
+#COUNTRY SHAPE = NERC INTERCONNECT SHAPES
+#STATE SHAPE = PORTIONS OF STATES IN NERC INTERCONNECT
+#ONSHORE SHAPE = BA IN STATE SHAPES √
+#OFFSHORE SHAPE = OFFSHORE SHAPES NEAR BA's √
