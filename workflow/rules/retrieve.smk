@@ -85,7 +85,7 @@ DATAFILES_DMD = [
 
 rule retrieve_eia_data:
     output:
-        expand(RESOURCES + "eia/{file}", file=DATAFILES_DMD),
+        expand(DATA + "eia/{file}", file=DATAFILES_DMD),
     log:
         "logs/retrieve/retrieve_historical_load_data.log",
     script:

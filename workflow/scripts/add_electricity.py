@@ -1189,7 +1189,7 @@ def load_powerplants_ads(
     return plants
 
 def clean_bus_data(n: pypsa.Network):
-    col_list = ['poi_bus', 'poi_sub', 'poi']
+    col_list = ['poi_bus', 'poi_sub', 'poi', 'Pd', 'zone_id']
     n.buses.drop(columns=col_list, inplace=True)
 
 def load_powerplants_breakthrough(breakthrough_dataset: str) -> pd.DataFrame:
