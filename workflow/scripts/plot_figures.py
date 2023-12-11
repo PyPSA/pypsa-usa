@@ -130,40 +130,105 @@ def get_generator_pnom(n: pypsa.Network, carriers_2_plot: List[str], components:
     
     if components == "generator":
         return generator_pnom
-    elif components == "storage":
+    elif components == "storage_units":
         return storage_pnom
     elif components == "links":
         return links_pnom
     else:
         return pd.concat([generator_pnom, links_pnom, storage_pnom])
-    
+
+"""OLD FUNCTION"""
 def get_generator_pnom_opt(n: pypsa.Network, carriers_2_plot: List[str], components:str = "all") -> pd.DataFrame:
     """Gets optimal pnom capacity"""
     storage_pnom_opt = n.storage_units[n.storage_units["carrier"].isin(carriers_2_plot)].groupby(["bus", "carrier"]).p_nom_opt.sum()
     generator_pnom_opt = n.generators[n.generators["carrier"].isin(carriers_2_plot)].groupby(["bus", "carrier"]).p_nom_opt.sum()
     links_pnom_opt = n.links[n.links["carrier"].isin(carriers_2_plot)].groupby(["bus1", "carrier"]).p_nom_opt.sum()
     
+def get_generator_pnom_opt_greenfield(
+    n: pypsa.Network, 
+    carriers_2_plot: List[str],
+    retirement_method = "economic", 
+    components:str = "all"
+) -> pd.DataFrame:
+    """Gets optimal greenfield pnom capacity"""
+    def technical_retirement(n: pypsa.Network, component:str) -> pd.DataFrame:
+        if component not in ("storage_units", "generators", "links"):
+             logger.warning(f"{component} not in the set ('storage_units', 'generator', 'links')")
+             return pd.DataFrame()
+        else:
+            gens = getattr(n, component)[["carrier", "bus"]].copy()
+            gens_t_p = getattr(n, f"{component}_t")["p"]
+            gens["p_max"] = gens.index.map(gens_t_p.max()).fillna(0)
+            return gens.groupby(["bus", "carrier"]).sum().squeeze()
+    
+    def economic_retirement(n: pypsa.Network, component:str) -> pd.DataFrame:
+        if component not in ("storage_units", "generators", "links"):
+             logger.warning(f"{component} not in the set ('storage_units', 'generator', 'links')")
+             return pd.DataFrame()
+        else:
+            p_nom_opt = getattr(n, component)
+            return p_nom_opt.groupby(["bus", "carrier"]).p_nom_opt.sum()
+    
+    if retirement_method == "technical":
+        generator_pnom_opt = technical_retirement(n, "generators")
+        storage_pnom_opt = technical_retirement(n, "storage_units")
+        links_pnom_opt = technical_retirement(n, "links")
+    elif retirement_method == "economic":
+        generator_pnom_opt = economic_retirement(n, "generators")
+        storage_pnom_opt = economic_retirement(n, "storage_units")
+        links_pnom_opt = economic_retirement(n, "links")
+    else:
+        logger.error(f"Retirement method must be one of 'technical' or 'economic'. Recieved {retirement_method}.")
+        raise NotImplementedError
+    
     if components == "generator":
         return generator_pnom_opt
-    elif components == "storage":
+    elif components == "storage_units":
         return storage_pnom_opt
     elif components == "links":
         return links_pnom_opt
     else:
         return pd.concat([generator_pnom_opt, links_pnom_opt, storage_pnom_opt])
 
-def get_generator_pnom_opt_brownfield(n: pypsa.Network, components:str = "all") -> pd.DataFrame:
-    """Gets optimal pnom capacity"""
-    storage_pnom_opt = n.storage_units.groupby(["bus", "carrier"]).p_nom_opt.sum()
-    generator_pnom_opt = n.generators.groupby(["bus", "carrier"]).p_nom_opt.sum()
-    generator_pnom.iloc[:] = n.generators_t.p.max().values
+def get_generator_pnom_opt_brownfield(n: pypsa.Network, retirement_method = "economic", components:str = "all") -> pd.DataFrame:
+    """Gets optimal brownfield pnom capacity"""
+    
+    def technical_retirement(n: pypsa.Network, component:str) -> pd.DataFrame:
+        if component not in ("storage_units", "generators", "links"):
+             logger.warning(f"{component} not in the set ('storage_units', 'generator', 'links')")
+             return pd.DataFrame()
+        else:
+            p_nom_opt = getattr(n, component)
+            return p_nom_opt.groupby(["bus", "carrier"]).p_nom_opt.sum()
+    
+    def economic_retirement(n: pypsa.Network, component:str = "all") -> pd.DataFrame:
+        if component not in ("storage_units", "generators"):
+             logger.warning(f"{component} not in the set ('storage_units', 'generators', 'links')")
+             return pd.DataFrame()
+        else:
+            p_nom_opt = getattr(n, component)
+            return p_nom_opt.groupby(["bus", "carrier"]).p_nom_opt.sum()
+    
+    if retirement_method == "technical":
+        generator_pnom_opt = technical_retirement(n, "generators")
+        storage_pnom_opt = technical_retirement(n, "storage_units")
+        links_pnom_opt = technical_retirement(n, "links")
+    elif retirement_method == "economic":
+        generator_pnom_opt = economic_retirement(n, "generators")
+        storage_pnom_opt = economic_retirement(n, "storage_units")
+        links_pnom_opt = economic_retirement(n, "links")
+    else:
+        logger.error(f"Retirement method must be one of 'technical' or 'economic'. Recieved {retirement_method}.")
+        raise NotImplementedError
 
     if components == "generator":
         return generator_pnom_opt
-    elif components == "storage":
+    elif components == "storage_units":
         return storage_pnom_opt
+    elif components == "links":
+        return links_pnom_opt
     else:
-        return pd.concat([generator_pnom_opt, storage_pnom_opt])
+        return pd.concat([generator_pnom_opt, storage_pnom_opt, links_pnom_opt])
 
 def get_time_series_production(n: pypsa.Network, carriers_2_plot: List[str]):
     """Gets time series production in MW"""
@@ -720,24 +785,31 @@ def plot_base_capacity(
 
 def plot_opt_capacity(
     n: pypsa.Network, 
-    regions: gpd.GeoDataFrame, 
-    carriers: List[str],
+    regions: gpd.GeoDataFrame,
+    carriers: List[str], 
     save: str, 
+    opt_capacity: str = "greenfield", 
+    retirement_method: str = "economic", 
     **wildcards
 ) -> None:
-    """
-    Plots optimal network capacities
-    """
+    """Plots optimal network capacities"""
     
     # get data
     
-    bus_values = get_generator_pnom_opt(n, carriers)
+    if opt_capacity == "greenfield":
+        bus_values = get_generator_pnom_opt_greenfield(n, retirement_method)
+    elif opt_capacity == "brownfield":
+        bus_values = get_generator_pnom_opt_brownfield(n, retirement_method)
+    else:
+        logger.error(f"Capacity method must be one of 'greenfield' or 'brownfield'. Recieved {opt_capacity}.")
+        raise NotImplementedError
+    
     line_values = n.lines.s_nom_opt
     link_values = n.links.p_nom_opt
     
     # plot data 
     
-    title = create_title("Optimal Network Capacities", **wildcards)
+    title = create_title(f"Optimal {opt_capacity} Network Capacities", **wildcards)
     interconnect = wildcards.get("interconnect", None)
     bus_scale = get_bus_scale(interconnect) if interconnect else 1
     line_scale = get_line_scale(interconnect) if interconnect else 1
@@ -754,41 +826,13 @@ def plot_opt_capacity(
     )
     fig.savefig(save)
 
-def plot_brownfield_opt_capacity(n: pypsa.Network, regions: gpd.GeoDataFrame, save: str, **wildcards) -> None:
-    """
-    Plots brownfield optimal network capacities
-    """
-    
-    # get data
-    
-    bus_values = get_generator_pnom_opt(n)
-    line_values = n.lines.s_nom_opt
-    link_values = n.links.p_nom_opt
-    
-    # plot data 
-    
-    title = create_title("Optimal Brownfield Network Capacities", **wildcards)
-    interconnect = wildcards.get("interconnect", None)
-    bus_scale = get_bus_scale(interconnect) if interconnect else 1
-    line_scale = get_line_scale(interconnect) if interconnect else 1
-    
-    fig, _ = plot_capacity_map(
-        n=n, 
-        bus_values=bus_values,
-        line_values=line_values,
-        # link_values=link_values,
-        regions=regions,
-        line_scale=line_scale,
-        bus_scale=bus_scale,
-        title=title
-    )
-    fig.savefig(save)
-
 def plot_new_capacity(
     n: pypsa.Network, 
-    regions: gpd.GeoDataFrame, 
+    regions: gpd.GeoDataFrame,
     carriers: List[str],
     save: str, 
+    opt_capacity: str = "greenfield", 
+    retirement_method: str = "economic", 
     **wildcards
 ) -> None:
     """Plots new capacity"""
@@ -796,8 +840,16 @@ def plot_new_capacity(
     # get data
     
     bus_pnom = get_generator_pnom(n, carriers)
-    bus_pnom_opt = get_generator_pnom_opt(n, carriers)
+    if opt_capacity == "greenfield":
+        bus_pnom_opt = get_generator_pnom_opt_greenfield(n, retirement_method)
+    elif opt_capacity == "brownfield":
+        bus_pnom_opt = get_generator_pnom_opt_brownfield(n, retirement_method)
+    else:
+        logger.error(f"Capacity method must be one of 'greenfield' or 'brownfield'. Recieved {opt_capacity}.")
+        raise NotImplementedError
+    
     bus_values = bus_pnom_opt - bus_pnom
+    bus_values = bus_values.map(lambda x: x if x > 0 else 0)
     
     line_snom = n.lines.s_nom
     line_snom_opt = n.lines.s_nom_opt
@@ -871,8 +923,15 @@ def plot_renewable_potential(n: pypsa.Network, regions: gpd.GeoDataFrame, save: 
     
     fig.savefig(save)
 
-def plot_capacity_additions(n: pypsa.Network, carriers: List[str], save: str, **wildcards) -> None:
-    """Plots base capacity vs optimal capacity """
+def plot_capacity_additions(
+    n: pypsa.Network, 
+    carriers: List[str],
+    save: str, 
+    opt_capacity: str = "greenfield", 
+    retirement_method: str = "economic", 
+    **wildcards
+) -> None:
+    """Plots base capacity vs optimal capacity"""
     
     # get data
     
@@ -880,8 +939,18 @@ def plot_capacity_additions(n: pypsa.Network, carriers: List[str], save: str, **
     
     pnom = get_generator_pnom(n, carriers)
     pnom = pnom.groupby("carrier").sum().to_frame("Base Capacity")
-    pnom_opt = get_generator_pnom_opt(n, carriers)
-    pnom_opt = pnom_opt.groupby("carrier").sum().to_frame("Optimal Capacity")
+    
+    if opt_capacity == "greenfield":
+        pnom_opt = get_generator_pnom_opt_greenfield(n, retirement_method)
+    elif opt_capacity == "brownfield":
+        pnom_opt = get_generator_pnom_opt_brownfield(n, retirement_method)
+    else:
+        logger.error(f"Capacity method must be one of 'greenfield' or 'brownfield'. Recieved {opt_capacity}.")
+        raise NotImplementedError
+    
+    # depending on retirment method, column name may be p_nom_opt or p_max
+    pnom_opt = pnom_opt.reset_index().drop(columns=["bus"]).groupby("carrier").sum().rename(columns={"p_nom_opt":"Optimal Capacity", "p_max":"Optimal Capacity"})
+    # pnom_opt = pnom_opt.groupby("carrier").sum().to_frame("Optimal Capacity")
     
     capacity = pnom.join(pnom_opt).reset_index()
     capacity["carrier"] = capacity.carrier.map(nice_names)
@@ -947,6 +1016,7 @@ if __name__ == "__main__":
     # extract shared plotting files 
     n = pypsa.Network(snakemake.input.network)
     onshore_regions = gpd.read_file(snakemake.input.regions_onshore)
+    retirement_method = snakemake.params.retirement
     # n_hours = snakemake.config['solving']['options']['nhours']
     
     # mappers 
@@ -966,10 +1036,11 @@ if __name__ == "__main__":
     
     # create plots
     plot_base_capacity(n, onshore_regions, carriers, snakemake.output["capacity_map_base"], **snakemake.wildcards)
-    plot_opt_capacity(n, onshore_regions, carriers, snakemake.output["capacity_map_optimized"], **snakemake.wildcards)
-    # plot_brownfield_opt_capacity(n, onshore_regions, snakemake.output["capacity_map_optimized_brownfield"], **snakemake.wildcards)
-    plot_new_capacity(n, onshore_regions, carriers, snakemake.output["capacity_map_new"], **snakemake.wildcards)
+    plot_opt_capacity(n, onshore_regions, carriers, snakemake.output["capacity_map_optimized"], "greenfield", retirement_method, **snakemake.wildcards)
+    plot_opt_capacity(n, onshore_regions, carriers, snakemake.output["capacity_map_optimized_brownfield"], "brownfield", retirement_method, **snakemake.wildcards)
+    plot_new_capacity(n, onshore_regions, carriers, snakemake.output["capacity_map_new"], "greenfield", retirement_method, **snakemake.wildcards)
     plot_costs_bar(n, carriers, snakemake.output["costs_bar"], **snakemake.wildcards)
+    plot_capacity_additions(n, carriers, snakemake.output["capacity_additions_bar"], "greenfield", retirement_method,  **snakemake.wildcards)
     plot_production_bar(n, carriers, snakemake.output["production_bar"], **snakemake.wildcards)
     plot_production_area(n, carriers, snakemake.output["production_area"], **snakemake.wildcards)
     plot_production_html(n, carriers, snakemake.output["production_area_html"], **snakemake.wildcards)
@@ -982,4 +1053,3 @@ if __name__ == "__main__":
     plot_region_emissions_html(n, snakemake.output["emissions_region_html"], **snakemake.wildcards)
     plot_emissions_map(n, onshore_regions, snakemake.output["emissions_map"], **snakemake.wildcards)
     plot_renewable_potential(n, onshore_regions, snakemake.output["renewable_potential_map"], **snakemake.wildcards)
-    plot_capacity_additions(n, carriers, snakemake.output["capacity_additions_bar"], **snakemake.wildcards)
