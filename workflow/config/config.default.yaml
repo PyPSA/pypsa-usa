@@ -7,8 +7,8 @@ run:
   shared_cutouts: true # set to true to share the default cutout(s) across runs
 
 scenario:
-  interconnect: texas #"usa|texas|western|eastern"
-  clusters: [40]
+  interconnect: western #"usa|texas|western|eastern"
+  clusters: [200]
   opts:
     [
       Co2L1.25,
@@ -123,18 +123,33 @@ renewable:
     resource:
       method: wind
       turbine: NREL_ReferenceTurbine_5MW_offshore
-    capacity_per_sqkm: 2
-    correction_factor: 0.8855
-    # proxy for wake losses
-    # from 10.1016/j.energy.2018.08.153
+    capacity_per_sqkm: 3 # 2021–2022 Transmission Plan, CAISO
+    correction_factor: 0.8855 # proxy for wake losses, from 10.1016/j.energy.2018.08.153
     corine:
       grid_codes: [80, 200] #page 28 of https://land.copernicus.eu/global/sites/cgls.vito.be/files/products/CGLOPS1_PUM_LC100m-V3_I3.4.pdf
     natura: true
-    max_depth: 1000
+    max_depth: 60 # meters, ref https://www.nrel.gov/docs/fy16osti/66599.pdf 
     max_shore_distance: 30000
     potential: simple # or conservative
     clip_p_max_pu: 1.e-2
     extendable: true
+  # offwind-floating:
+  #   cutout: era5_2019
+  #   resource:
+  #     method: wind
+  #     turbine: NREL_ReferenceTurbine_2020ATB_15MW_offshore
+  #   capacity_per_sqkm: 3 # 2021–2022 Transmission Plan, CAISO
+  #   correction_factor: 0.8855
+  #   # proxy for wake losses, from 10.1016/j.energy.2018.08.153
+  #   corine:
+  #     grid_codes: [80, 200] #page 28 of https://land.copernicus.eu/global/sites/cgls.vito.be/files/products/CGLOPS1_PUM_LC100m-V3_I3.4.pdf
+  #   natura: true
+  #   min_depth: 60 # meters, ref https://www.nrel.gov/docs/fy16osti/66599.pdf
+  #   max_depth: 1300 # meters, ref https://www.nrel.gov/docs/fy22osti/83650.pdf
+  #   max_shore_distance: 30000
+  #   potential: simple # or conservative
+  #   clip_p_max_pu: 1.e-2
+  #   extendable: true
   solar:
     cutout: era5_2019
     resource:
