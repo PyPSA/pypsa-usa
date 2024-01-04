@@ -433,13 +433,14 @@ def plot_production_area(n: pypsa.Network, carriers_2_plot: List[str], save:str,
 
     # get data 
 
-    # energy_mix = get_time_series_production(n, carriers_2_plot)
     energy_mix = get_energy_timeseries(n).mul(1e-3) # MW -> GW
     demand = get_demand_timeseries(n).mul(1e-3) # MW -> GW
     
     # fix battery charge/discharge to only be positive 
     if "battery" in energy_mix:
         energy_mix["battery"] = energy_mix.battery.abs()
+        # accounts for battery stores and storage units
+        energy_mix = energy_mix.groupby(level=0, axis=1).sum()
         
     energy_mix = energy_mix[[x for x in carriers_2_plot if x in energy_mix]]
     

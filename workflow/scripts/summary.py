@@ -71,6 +71,8 @@ def get_energy_timeseries(n: pypsa.Network) -> pd.DataFrame:
     def _get_energy_multi_port(n: pypsa.Network, c: str) -> pd.DataFrame:
         c_energies = pd.DataFrame(index=n.snapshots, columns=c.df.carrier.unique()).fillna(0)
         for port in [col[3:] for col in c.df.columns if col[:3] == "bus"]:
+            if port == "0": # only track flow in one direction 
+                continue
             totals = (
                 c.pnl["p" + port]
                 .multiply(n.snapshot_weightings.generators, axis=0)
@@ -80,13 +82,13 @@ def get_energy_timeseries(n: pypsa.Network) -> pd.DataFrame:
             totals.loc[no_bus] = float(
                 n.component_attrs[c.name].loc["p" + port, "default"]
             )
-            c_energies += totals.T.groupby(c.df.carrier).sum().T
+            c_energies -= totals.T.groupby(c.df.carrier).sum().T
         return c_energies
     
     energy = []
     for c in n.iterate_components(n.one_port_components | n.branch_components):
         # if c.name in ("Generator", "StorageUnit", "Store"):
-        if c.name in ("Generator", "StorageUnit"):
+        if c.name in ("Generator", "StorageUnit", "Store"):
             e = _get_energy_one_port(n, c)
         elif c.name in ("Link"):
             e = _get_energy_multi_port(n, c)
