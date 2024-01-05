@@ -228,6 +228,9 @@ def create_grid(polygon, cell_size):
     # Find the center of each cell
     centers = intersecting_cells.geometry.centroid
 
+    # Remove centroids that are outside of the polygon
+    centers = [center for center in centers if center.within(polygon)]
+
     # Return the coordinates of the centers
     return [(center.y, center.x) for center in centers]
 
@@ -291,6 +294,7 @@ def identify_osw_poi(n: pypsa.Network) -> pypsa.Network:
 
 
 def match_osw_to_poi(buses_to_match_to, missing_buses):
+    "Match offshore buses to their nearest POI bus"
     missing_buses = missing_buses.copy()
     missing_buses['bus_assignment'] = None
 
@@ -419,20 +423,23 @@ def modify_breakthrough_substations(n:pypsa.Network, interconnect:str):
     return n
 
 
-#lines to remove: 89634, 89668
 #Lines to set snom: 90528 -> zero or remove
 #Lines set snom: 90529 -> zero or small ##... hard to approxmimate since lines arent 1:1
 def modify_breakthrough_lines(n:pypsa.Network, interconnect:str):
     if interconnect == 'Western' or interconnect == 'usa':
         line_fixes = {
-            '91027' : {'s_nom':100},
-            '90529' : {'s_nom':50},
+            '91027' : {'v_nom':115},
+            '90511' : {'v_nom':115},
+            '90530' : {'v_nom':115},
+            '90528' : {'v_nom':115},
+            '90529' : {'v_nom':115},
             }
+            
         for i in line_fixes.keys():
-            n.lines.loc[n.lines.index == i, 's_nom'] = line_fixes[i]['s_nom']
-    # import pdb; pdb.set_trace()
-    n.remove("Line", '89634')
-    n.remove("Line", '89668')
+            n.lines.loc[n.lines.index == i, 'v_nom'] = line_fixes[i]['v_nom']
+            n.buses.loc[n.lines.loc[n.lines.index == i].bus0, 'v_nom'] = line_fixes[i]['v_nom']
+            n.buses.loc[n.lines.loc[n.lines.index == i].bus1, 'v_nom'] = line_fixes[i]['v_nom']
+
     return n
 
 def main(snakemake):
@@ -522,6 +529,7 @@ def main(snakemake):
     lines_gis['lon2'] = n.buses.loc[lines_gis.bus1].x.values
     lines_gis['WKT_geometry'] = 'LINESTRING ('+lines_gis.lon1.astype(str).values+' '+lines_gis.lat1.astype(str).values+', '+lines_gis.lon2.astype(str).values+' '+lines_gis.lat2.astype(str).values+')'
     lines_gis.to_csv(snakemake.output.lines_gis)
+    
     # export network
     n.export_to_netcdf(snakemake.output.network)
 
