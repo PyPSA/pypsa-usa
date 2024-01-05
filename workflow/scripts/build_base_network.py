@@ -362,7 +362,7 @@ def build_offshore_transmission_configuration(n: pypsa.Network) -> pypsa.Network
         carrier = "AC",
         x = 0.1,
         r = 0.1,
-        s_nom = 5000,
+        s_nom = 0,
         underwater_fraction = 0.0, #temporarily setting to investigate clustering underwater issues later
         interconnect = n.buses.loc[offshore_buses.bus_assignment].interconnect.values,
     )
@@ -373,7 +373,7 @@ def build_offshore_transmission_configuration(n: pypsa.Network) -> pypsa.Network
         "OSW_poi_stepup_" + osw_offsub_bus_ids, #name transformer after offshore substation
         bus0 = "OSW_POI_" + osw_offsub_bus_ids,
         bus1 = offshore_buses.bus_assignment.astype(str).values,
-        s_nom = 5000,
+        s_nom = 0,
         type = "temp",
         carrier = "AC",
         v_nom = 230,
@@ -409,13 +409,30 @@ def assign_missing_states_countries(n: pypsa.Network):
 
 
 def modify_breakthrough_substations(n:pypsa.Network, interconnect:str):
-    if interconnect == 'Western':
+    if interconnect == 'Western' or interconnect == 'usa':
         sub_fixes = {35017 : {'x':-123.0922,'y':48.5372},
         35033 : {'x':-122.78053,'y':48.65694}, 
         37584 : {'x':-117.10501, 'y':32.54935}}
         for i in sub_fixes.keys():
             n.buses.loc[n.buses.sub_id == i, 'x'] = sub_fixes[i]['x']
             n.buses.loc[n.buses.sub_id == i, 'y'] = sub_fixes[i]['y']
+    return n
+
+
+#lines to remove: 89634, 89668
+#Lines to set snom: 90528 -> zero or remove
+#Lines set snom: 90529 -> zero or small ##... hard to approxmimate since lines arent 1:1
+def modify_breakthrough_lines(n:pypsa.Network, interconnect:str):
+    if interconnect == 'Western' or interconnect == 'usa':
+        line_fixes = {
+            '91027' : {'s_nom':100},
+            '90529' : {'s_nom':50},
+            }
+        for i in line_fixes.keys():
+            n.lines.loc[n.lines.index == i, 's_nom'] = line_fixes[i]['s_nom']
+    # import pdb; pdb.set_trace()
+    n.remove("Line", '89634')
+    n.remove("Line", '89668')
     return n
 
 def main(snakemake):
@@ -472,6 +489,9 @@ def main(snakemake):
     n = add_offshore_buses(n, offshore_buses)
     n = build_offshore_transmission_configuration(n)
 
+    # Modify network lines to fix errors in breakthrough data
+    n = modify_breakthrough_lines(n, interconnect)
+
     if interconnect=='Eastern': 
         logger.warning(f"Eastern Interconnect is missing {len(n.buses.loc[n.buses.balancing_area.isna() | n.buses.state.isna() | n.buses.country.isna()])} bus locations. Must clean-up GIS files before using!")
 
@@ -509,6 +529,6 @@ if __name__ == "__main__":
     logger = logging.getLogger(__name__)
     if 'snakemake' not in globals():
         from _helpers import mock_snakemake
-        snakemake = mock_snakemake('build_base_network', interconnect='texas')
+        snakemake = mock_snakemake('build_base_network', interconnect='western')
     configure_logging(snakemake)
     main(snakemake)

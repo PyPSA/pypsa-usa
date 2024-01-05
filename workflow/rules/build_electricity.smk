@@ -73,7 +73,7 @@ rule build_cost_data:
         nrel_atb = RESOURCES + "costs/nrel_atb.parquet",
         pypsa_technology_data = RESOURCES + "costs/{year}/pypsa_eur.csv",
     output:
-        tech_costs = DATA + "costs_{year}.csv",
+        tech_costs = RESOURCES + "costs_{year}.csv",
     log:
         LOGS + "costs_{year}.log",
     script:
@@ -216,7 +216,7 @@ rule add_electricity:
             if str(fn).startswith("data/")
         },
         base_network=RESOURCES + "{interconnect}/elec_base_network.nc",
-        tech_costs=DATA + f"costs_{config['costs']['year']}.csv",
+        tech_costs=RESOURCES + f"costs_{config['costs']['year']}.csv",
         regions=RESOURCES + "{interconnect}/regions_onshore.geojson",
         plants_eia="repo_data/eia_plants_wecc.csv",
         plants_ads="repo_data/ads_plants_locs.csv",
@@ -291,7 +291,7 @@ rule cluster_network:
             if config["enable"].get("custom_busmap", False)
             else []
         ),
-        tech_costs=DATA + f"costs_{config['costs']['year']}.csv",
+        tech_costs=RESOURCES + f"costs_{config['costs']['year']}.csv",
     output:
         network=RESOURCES + "{interconnect}/elec_s_{clusters}.nc",
         regions_onshore=RESOURCES + "{interconnect}/regions_onshore_s_{clusters}.geojson",
