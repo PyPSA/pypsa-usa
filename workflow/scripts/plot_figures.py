@@ -66,7 +66,8 @@ from summary import (
     get_tech_emissions_timeseries,
     get_capacity_greenfield,
     get_capacity_brownfield,
-    get_capacity_base
+    get_capacity_base,
+    get_operational_costs
 )
 
 import matplotlib.pyplot as plt
@@ -116,7 +117,7 @@ def get_line_scale(interconnect: str) -> float:
     if interconnect != "usa":
         return 2e3
     else:
-        return 4e3
+        return 3e3
 
 def create_title(title: str, **wildcards) -> str:
     """Standardizes wildcard writing in titles
@@ -391,17 +392,16 @@ def plot_production_html(n: pypsa.Network, carriers_2_plot: List[str], save:str,
     """Plots interactive timeseries production chart"""
     
     # get data 
+
+    energy_mix = get_energy_timeseries(n).mul(1e-3) # MW -> GW
     
-    carriers = n.generators[n.generators.carrier.isin(carriers_2_plot)].carrier
-    carriers_storage_units = n.storage_units[n.storage_units.carrier.isin(carriers_2_plot)].carrier
-    carrier_nice_names = n.carriers.nice_name
-    
-    production = n.generators_t.p.mul(1e-3) # MW -> GW
-    production = production.groupby(carriers, axis=1).sum().rename(columns=carrier_nice_names)
-    
-    storage = n.storage_units_t.p.groupby(carriers_storage_units, axis=1).sum().mul(1e-3)
-    
-    energy_mix = pd.concat([production,storage], axis=1)
+    # fix battery charge/discharge to only be positive 
+    if "battery" in energy_mix:
+        energy_mix["battery"] = energy_mix.battery.abs()
+        # accounts for battery stores and storage units
+        energy_mix = energy_mix.groupby(level=0, axis=1).sum()
+        
+    energy_mix = energy_mix[[x for x in carriers_2_plot if x in energy_mix]]
     energy_mix["Demand"] = get_demand_timeseries(n).mul(1e-3) # MW -> GW
     
     # plot 
@@ -514,25 +514,27 @@ def plot_costs_bar(n: pypsa.Network, carriers_2_plot: List[str], save:str, **wil
     
     # get data 
     
-    carriers = n.generators[n.generators.carrier.isin(carriers_2_plot)].carrier
-    carrier_nice_names = n.carriers.nice_name
-    production = n.generators_t.p
-    marginal_cost = n.generators.marginal_cost
+    operational_costs = get_operational_costs(n)
     
-    operational_costs = (
-        (production * marginal_cost)
-        .groupby(carriers, axis=1)
-        .sum()
-        .rename(columns=carrier_nice_names)
-    ).sum()
+    # carriers = n.generators[n.generators.carrier.isin(carriers_2_plot)].carrier
+    # carrier_nice_names = n.carriers.nice_name
+    # production = n.generators_t.p
+    # marginal_cost = n.generators.marginal_cost
+    
+    # operational_costs = (
+    #     (production * marginal_cost)
+    #     .groupby(carriers, axis=1)
+    #     .sum()
+    #     .rename(columns=carrier_nice_names)
+    # ).sum()
 
-    capital_costs = (
-        n.generators.eval("p_nom_opt * capital_cost")
-        .groupby(carriers)
-        .sum()
-        .rename(n.carriers.nice_name)
-    )
-    costs = pd.concat([operational_costs, capital_costs], axis=1, keys=["OPEX", "CAPEX"]).reset_index()
+    # capital_costs = (
+    #     n.generators.eval("p_nom_opt * capital_cost")
+    #     .groupby(carriers)
+    #     .sum()
+    #     .rename(n.carriers.nice_name)
+    # )
+    # costs = pd.concat([operational_costs, capital_costs], axis=1, keys=["OPEX", "CAPEX"]).reset_index()
     
     # plot 
     
@@ -647,7 +649,7 @@ def plot_base_capacity(
     # get data
 
     bus_values = get_capacity_base(n)
-    bus_values = bus_values[bus_values.index.get_level_values(1).isin([carriers])]
+    bus_values = bus_values[bus_values.index.get_level_values(1).isin(carriers)]
     line_values = n.lines.s_nom
     link_values = n.links.p_nom
     
@@ -691,6 +693,8 @@ def plot_opt_capacity(
         logger.error(f"Capacity method must be one of 'greenfield' or 'brownfield'. Recieved {opt_capacity}.")
         raise NotImplementedError
     
+    bus_values = bus_values[bus_values.index.get_level_values(1).isin(carriers)]
+    
     line_values = n.lines.s_nom_opt
     link_values = n.links.p_nom_opt
     
@@ -727,7 +731,6 @@ def plot_new_capacity(
     # get data
     
     bus_pnom = get_capacity_base(n)
-    bus_pnom = bus_pnom[bus_pnom.index.get_level_values(1).isin([carriers])]
     if opt_capacity == "greenfield":
         bus_pnom_opt = get_capacity_greenfield(n, retirement_method)
     elif opt_capacity == "brownfield":
@@ -737,7 +740,10 @@ def plot_new_capacity(
         raise NotImplementedError
     
     bus_values = bus_pnom_opt - bus_pnom
-    bus_values = bus_values.map(lambda x: x if x > 0 else 0)
+    bus_values = bus_values[
+        (bus_values > 0) & 
+        (bus_values.index.get_level_values(1).isin(carriers))
+    ]
     
     line_snom = n.lines.s_nom
     line_snom_opt = n.lines.s_nom_opt
@@ -931,10 +937,10 @@ if __name__ == "__main__":
     sns.set_theme("paper", style="darkgrid")
     
     # create plots
-    # plot_base_capacity(n, onshore_regions, carriers, snakemake.output["capacity_map_base"], **snakemake.wildcards)
-    # plot_opt_capacity(n, onshore_regions, carriers, snakemake.output["capacity_map_optimized"], "greenfield", retirement_method, **snakemake.wildcards)
-    # plot_opt_capacity(n, onshore_regions, carriers, snakemake.output["capacity_map_optimized_brownfield"], "brownfield", retirement_method, **snakemake.wildcards)
-    # plot_new_capacity(n, onshore_regions, carriers, snakemake.output["capacity_map_new"], "greenfield", retirement_method, **snakemake.wildcards)
+    plot_base_capacity(n, onshore_regions, carriers, snakemake.output["capacity_map_base"], **snakemake.wildcards)
+    plot_opt_capacity(n, onshore_regions, carriers, snakemake.output["capacity_map_optimized"], "greenfield", retirement_method, **snakemake.wildcards)
+    plot_opt_capacity(n, onshore_regions, carriers, snakemake.output["capacity_map_optimized_brownfield"], "brownfield", retirement_method, **snakemake.wildcards)
+    plot_new_capacity(n, onshore_regions, carriers, snakemake.output["capacity_map_new"], "greenfield", retirement_method, **snakemake.wildcards)
     # plot_costs_bar(n, carriers, snakemake.output["costs_bar"], **snakemake.wildcards)
     # plot_capacity_additions(n, carriers, snakemake.output["capacity_additions_bar"], "greenfield", retirement_method,  **snakemake.wildcards)
     # plot_production_bar(n, carriers, snakemake.output["production_bar"], **snakemake.wildcards)

@@ -189,6 +189,44 @@ def get_capacity_brownfield(n: pypsa.Network, retirement_method = "economic", co
         raise NotImplementedError
 
 ### 
+# COSTS
+###
+
+def get_operational_costs(n: pypsa.Network) -> pd.DataFrame:
+    
+    def _get_energy_one_port(c: pypsa.components.Component) -> pd.DataFrame:
+        return c.pnl.p.abs()
+        
+    def _get_energy_multi_port(c: pypsa.components.Component) -> pd.DataFrame:
+        return c.pnl.p0.abs()
+    
+    totals = pd.DataFrame(index=n.snapshots.index)
+    for c in n.iterate_components(n.one_port_components | n.branch_components):
+        if c.name in ("Generator", "StorageUnit", "Store"):
+            production = _get_energy_one_port(c)
+        elif c.name in ("Link"):
+            production = _get_energy_multi_port(c)
+        else:
+            continue
+        
+        # pypsa.descriptors.allocate_series_dataframes(n, {c.name:["marginal_cost"]})
+        marginal_cost = c.pnl.marginal_cost
+        for item in c.df.index:
+            if item not in marginal_cost:
+                marginal_cost[item] = c.df.at[item, "marginal_cost"]
+        
+        opex = (
+            (production * marginal_cost)
+            .fillna(0)
+            .groupby(c.df.carrier, axis=1)
+            .sum()
+        )
+
+        totals = totals.merge(opex)
+
+    return pd.concat(totals)
+
+### 
 # EMISSIONS
 ###
 

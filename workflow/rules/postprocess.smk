@@ -21,6 +21,7 @@ rule plot_figures:
         regions_onshore=RESOURCES + "{interconnect}/regions_onshore_s_{clusters}.geojson",
         regions_offshore=RESOURCES + "{interconnect}/regions_offshore_s_{clusters}.geojson",
     params:
+        electricity=config["electricity"],
         plotting=config["plotting"],
         retirement = config["electricity"].get("retirement", "technical")
     output:
