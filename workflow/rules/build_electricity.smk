@@ -5,6 +5,7 @@ rule build_shapes:
     params:
         source_states_shapes="admin_1_states_provinces",
         source_offshore_shapes=config["offshore_shape"],
+        offwind_params=config["renewable"]["offwind"]
     input:
         zone= DATA + "breakthrough_network/base_grid/zone.csv",
         nerc_shapes = "repo_data/NERC_Regions/NERC_Regions_Subregions.shp",
@@ -51,6 +52,7 @@ rule build_base_network:
 rule build_bus_regions:
     input:
         country_shapes= RESOURCES + "{interconnect}/country_shapes.geojson",
+        state_shapes= RESOURCES + "{interconnect}/state_boundaries.geojson",
         ba_region_shapes=RESOURCES + "{interconnect}/onshore_shapes.geojson",
         offshore_shapes=RESOURCES + "{interconnect}/offshore_shapes.geojson",
         base_network=RESOURCES + "{interconnect}/elec_base_network.nc",
@@ -73,7 +75,7 @@ rule build_cost_data:
         nrel_atb = RESOURCES + "costs/nrel_atb.parquet",
         pypsa_technology_data = RESOURCES + "costs/{year}/pypsa_eur.csv",
     output:
-        tech_costs = RESOURCES + "costs_{year}.csv",
+        tech_costs= RESOURCES + "costs_{year}.csv",
     log:
         LOGS + "costs_{year}.log",
     script:
@@ -227,9 +229,6 @@ rule add_electricity:
         solar_breakthrough="data/breakthrough_network/base_grid/solar.csv",
         bus2sub="data/breakthrough_network/base_grid/{interconnect}/bus2sub.csv",
         demand_breakthrough_2016=DATA + "breakthrough_network/base_grid/demand.csv",
-        # ads_2032 = DATA + "WECC_ADS/downloads/2032/Public Data/Hourly Profiles in CSV format",
-        # ads_2030 = DATA + "WECC_ADS/downloads/2030/WECC 2030 ADS PCM 2020-12-16 (V1.5) Public Data/CSV Shape Files",
-        # ads_renewables = "data/WECC_ADS/processed/",
         ads_renewables = 
             DATA + "data/WECC_ADS/processed/"
             if config["network_configuration"] == 'ads2032'

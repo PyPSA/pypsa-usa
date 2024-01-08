@@ -416,12 +416,16 @@ def modify_breakthrough_substations(n:pypsa.Network, interconnect:str):
     if interconnect == 'Western' or interconnect == 'usa':
         sub_fixes = {35017 : {'x':-123.0922,'y':48.5372},
         35033 : {'x':-122.78053,'y':48.65694}, 
-        37584 : {'x':-117.10501, 'y':32.54935}}
+        37584 : {'x':-117.10501, 'y':32.54935},
+        36116 : {'x':-122.4555, 'y':37.8780},
+        36145 : {'x':-122.3121,'y':37.8211},
+        39718 : {'x':-106.49655,'y':31.76924},
+        39731 : {'x':-106.3232,'y':31.7093},
+        }
         for i in sub_fixes.keys():
             n.buses.loc[n.buses.sub_id == i, 'x'] = sub_fixes[i]['x']
             n.buses.loc[n.buses.sub_id == i, 'y'] = sub_fixes[i]['y']
     return n
-
 
 #Lines to set snom: 90528 -> zero or remove
 #Lines set snom: 90529 -> zero or small ##... hard to approxmimate since lines arent 1:1
@@ -513,7 +517,7 @@ def main(snakemake):
     # export bus2sub interconnect data
     logger.info(f"Exporting bus2sub and sub data for {interconnect}")
 
-    bus2sub = n.buses[['sub_id', 'interconnect','balancing_area','x','y']]
+    bus2sub = n.buses[['sub_id', 'interconnect','balancing_area','x','y','state','country']]
     bus2sub.to_csv(snakemake.output.bus2sub)
     subs = n.buses[['sub_id', 'x', 'y', 'interconnect']].set_index('sub_id').drop_duplicates().rename(columns={'x':'lon', 'y':'lat'})
     subs.to_csv(snakemake.output.sub)

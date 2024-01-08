@@ -1186,7 +1186,7 @@ def load_powerplants_ads(
     return plants
 
 def clean_bus_data(n: pypsa.Network):
-    col_list = ['poi_bus', 'poi_sub', 'poi', 'Pd', 'zone_id']
+    col_list = ['poi_bus', 'poi_sub', 'poi', 'Pd', 'zone_id', 'load_dissag']
     n.buses.drop(columns=col_list, inplace=True)
 
 def load_powerplants_breakthrough(breakthrough_dataset: str) -> pd.DataFrame:
@@ -1336,7 +1336,7 @@ def main(snakemake):
         )
         renewable_carriers = list(
             set(snakemake.config['electricity']["renewable_carriers"]).intersection(
-                set(["onwind", "solar", "offwind"])
+                set(["onwind", "solar", "offwind", "offwind-floating"])
             ))
         attach_renewable_capacities_to_atlite(
             n,
@@ -1390,9 +1390,6 @@ def main(snakemake):
         humboldt_capacity = snakemake.config['osw_config']['humboldt_capacity']
         import modify_network_osw as osw
         osw.build_OSW_base_configuration(n, osw_capacity=humboldt_capacity)
-        if snakemake.config['osw_config']['build_hvac']: osw.build_OSW_500kV(n)
-        if snakemake.config['osw_config']['build_hvdc_subsea']: osw.build_hvdc_subsea(n)
-        if snakemake.config['osw_config']['build_hvdc_overhead']: osw.build_hvdc_overhead(n)
 
     clean_bus_data(n)
     sanitize_carriers(n, snakemake.config)

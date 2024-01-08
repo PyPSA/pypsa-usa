@@ -76,7 +76,8 @@ def filter_small_polygons_gpd(geo_series: gpd.GeoSeries, min_area: float) -> gpd
     # Aggregate back into MultiPolygons
     # Group by the original index and create a MultiPolygon from the remaining geometries
     aggregated = filtered.groupby(filtered.index).agg(lambda x: MultiPolygon(x.tolist()) if len(x) > 1 else x.iloc[0])
-    return aggregated
+    aggregated.set_crs(MEASUREMENT_CRS, inplace=True)
+    return aggregated.to_crs(original_crs)
 
 def load_na_shapes(state_shape: str = "admin_1_states_provinces") -> gpd.GeoDataFrame:
     """Creates geodataframe of north america"""
@@ -147,7 +148,7 @@ def trim_states_to_interconnect(gdf_states: gpd.GeoDataFrame, gdf_nerc: gpd.GeoD
         gdf_states = gpd.overlay(gdf_states, gdf_nerc_f.to_crs(GPS_CRS), how='difference')
         texas_geometry  = gdf_states.loc[gdf_states.name == 'Texas', 'geometry']
         texas_geometry = filter_small_polygons_gpd(texas_geometry, 1e9)
-        gdf_states.loc[gdf_states.name == 'Texas', 'geometry'] = texas_geometry.geometry
+        gdf_states.loc[gdf_states.name == 'Texas', 'geometry'] = texas_geometry.geometry.values
     elif interconnect == "eastern":
         gdf_nerc_f = gdf_nerc[gdf_nerc.OBJECTID.isin([1,3,6,7])]
         gdf_states = gpd.overlay(gdf_states, gdf_nerc_f.to_crs(GPS_CRS), how='difference')
