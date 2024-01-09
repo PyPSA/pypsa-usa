@@ -3,8 +3,10 @@
 import pypsa 
 import pandas as pd
 import geopandas as gpd
-from _helpers import configure_logging, mock_snakemake
 import constants
+import logging
+logger = logging.getLogger(__name__)
+from typing import List
 
 ###
 # HELPERS
@@ -39,7 +41,7 @@ def read_gas_import_export_data(xlsx: str) -> pd.DataFrame:
     Returns a dataframe with units in mmcf where first header is states 
     and second header is country import/export to/from
     """
-    df = pd.read_excel("./NG_MOVE_POE1_A_EPG0_IRP_MMCF_A.xls", sheet_name="Data 1", skiprows=2, index_col=0)
+    df = pd.read_excel(xlsx, sheet_name="Data 1", skiprows=2, index_col=0)
     
     regex_pattern = r"U.S. Natural Gas Pipeline *"
     df_filtered = df.filter(regex=regex_pattern, axis=1)
@@ -127,12 +129,18 @@ def read_gas_pipline(xlsx: str, year: int = 2022) -> pd.DataFrame:
     return df.groupby(["STATE_TO", "STATE_FROM"]).sum()
 
 ###
-# BUS CREATION 
+# BUSES 
 ###
 
-def build_state_gas_buses(n: pypsa.Network, states: gpd.GeoDataFrame) -> None:
+def build_state_gas_buses(n: pypsa.Network, states: gpd.GeoDataFrame, interconnect:List[str] = ["usa"]) -> None:
     
     states["interconnect"] = states.STATE.map(constants.STATES_INTERCONNECT_MAPPER)
+    
+    if interconnect != ["usa"]:
+        states = states[states.interconnect.isin(interconnect)]
+        if states.empty:
+            logger.warning(f"Empty natural gas buses dataframe for interconnect {interconnect}")
+            return
     
     n.madd(
         "Bus", 
@@ -151,11 +159,18 @@ def build_state_gas_buses(n: pypsa.Network, states: gpd.GeoDataFrame) -> None:
 # PRODUCERS
 ###
 
-def build_gas_producers(n: pypsa.Network, producers: pd.DataFrame) -> None:
+def build_gas_producers(n: pypsa.Network, producers: pd.DataFrame, interconnect:List[str] = ["usa"]) -> None:
     """Applies EIA form 757 (gas production facilities)"""
     
     df = producers.reset_index().drop(columns=["COUNTY"]).groupby("STATE").sum()
     df["bus"] = df.index + " gas"
+    df["interconnect"] = df.index.map(constants.STATES_INTERCONNECT_MAPPER)
+    
+    if interconnect != ["usa"]:
+        df = df[df.interconnect.isin(interconnect)]
+        if df.empty:
+            logger.warning(f"Empty natural gas producers dataframe for interconnect {interconnect}")
+            return
     
     n.madd(
         "Generator", 
@@ -172,10 +187,17 @@ def build_gas_producers(n: pypsa.Network, producers: pd.DataFrame) -> None:
 # STORAGE
 ###
 
-def build_storage_facilities(n: pypsa.Network, storage: pd.DataFrame, **kwargs) -> None:
+def build_storage_facilities(n: pypsa.Network, storage: pd.DataFrame, interconnect: List[str] = ["usa"], **kwargs) -> None:
     
     df = storage.reset_index().drop(columns=["COUNTY"]).groupby("STATE").sum()
     df["bus"] = df.index + " gas"
+    df["interconnect"] = df.index.map(constants.STATES_INTERCONNECT_MAPPER)
+    
+    if interconnect != ["usa"]:
+        df = df[df.interconnect.isin(interconnect)]
+        if df.empty:
+            logger.warning(f"Empty natural gas producers dataframe for interconnect {interconnect}")
+            return
     
     n.madd(
         "Bus",
@@ -228,6 +250,60 @@ def build_storage_facilities(n: pypsa.Network, storage: pd.DataFrame, **kwargs) 
     )
 
 ###
+# IMPORTS/EXPORTS
+###
+
+def build_import_export_facilities(n: pypsa.Network, df: pd.DataFrame, direction: str, interconnect: List[str] = "usa") -> None:
+    
+    assert direction in ("import", "export")
+    
+    if interconnect != ["usa"]:
+        df = df[[x for x in df.columns if constants.STATES_INTERCONNECT_MAPPER[x] in interconnect]]
+        if df.empty:
+            logger.warning(f"Empty natural gas {direction} dataframe for interconnect {interconnect}")
+            return
+    
+    for country in ("Canada", "Mexico"):
+        data = df.xs(country,level=1,axis=1).T.groupby(level=0).sum().T
+        
+        n.madd(
+            "Bus",
+            names=data.columns,
+            suffix=f" gas {direction}",
+            carrier=f"gas {direction}",
+            unit="MMCF",
+        )
+        
+        n.madd(
+            "Store",
+            names=data.columns,
+            suffix=f" gas {direction}",
+            bus=data.columns + f" gas {direction}",
+            carrier=f"gas {direction}",
+            e_nom_extendable=True,
+            capital_cost=0,
+            e_nom=0,
+            e_cyclic=False,
+            marginal_cost=0,
+        )
+        
+        bus0_suffix = " gas" if direction == "export" else " gas import"
+        bus1_suffix = " gas export" if direction == "export" else " gas"
+
+        n.madd(
+            "Link",
+            names=df.index,
+            suffix=f" gas {direction}",
+            carrier=f"gas {direction}",
+            bus0=df.index + bus0_suffix,
+            bus1=df.index + bus1_suffix,
+            p_min_pu=0,
+            p_max_pu=0, ########################## to update #################
+            p_nom_extendable=False,
+            marginal_cost=0
+        )
+
+###
 # PIPELINES
 ###
 
@@ -239,9 +315,12 @@ def build_storage_facilities(n: pypsa.Network, storage: pd.DataFrame, **kwargs) 
 
 def build_natural_gas(
     n: pypsa.Network,
+    interconnect: str = "Texas",
     counties: str = "../data/counties/cb_2020_us_county_500k.shp",
     eia_757: str = "../data/natural-gas/EIA-757.csv",
     eia_191: str = "../data/natural-gas/EIA-191.csv",
+    imports: str = "../data/natural-gas/NG_MOVE_POE1_A_EPG0_IRP_MMCF_M.xls",
+    exports: str = "../data/natural-gas/NG_MOVE_POE1_A_EPG0_ENP_MMCF_M.xls",
 ) -> pypsa.Network:
 
     # create natural gas buses 
@@ -250,12 +329,18 @@ def build_natural_gas(
     
     # create production facilities (generators)
     # production_facilities = read_eia_757(eia_757)
-    # build_gas_producers(n, production_facilities)
+    # build_gas_producers(n, production_facilities, interconnect)
     
-    # create storage facilities (storage units)
-    storage_facilities = read_eia_191(eia_191)
-    build_storage_facilities(n, storage_facilities)
+    # create storage facilities (links+stores)
+    # storage_facilities = read_eia_191(eia_191)
+    # build_storage_facilities(n, storage_facilities, interconnect)
 
+    # create import/export generators 
+    imports = read_gas_import_export_data(imports)
+    exports = read_gas_import_export_data(exports)
+    
+    build_import_export_facilities(n, imports, "import", interconnect)
+    build_import_export_facilities(n, exports, "export", interconnect)
 
 if __name__ == "__main__":
 
