@@ -6,7 +6,7 @@ import geopandas as gpd
 import constants
 import logging
 logger = logging.getLogger(__name__)
-from typing import List
+from typing import List, Dict
 
 ###
 # HELPERS
@@ -24,6 +24,23 @@ def get_state_center_points(shapefile: str) -> gpd.GeoDataFrame:
     gdf = gdf[["STATE", "geometry"]]
     return gdf[~gdf.index.isin(constants.STATES_TO_REMOVE)]
     
+def filter_on_interconnect(
+    df: pd.DataFrame, 
+    interconnect: str, 
+    states_2_interconnect: Dict[str,str]
+) -> pd.DataFrame:
+    """Name of states must be in column called 'STATE' """
+    
+    if interconnect == "usa":
+        return df
+    else:
+        df["interconnect"] = df.STATE.map(states_2_interconnect)
+        assert not df.interconnect.isna().any() 
+        df = df[df.interconnect.isin(interconnect)]
+        if df.empty:
+            logger.warning(f"Empty natural gas data for interconnect {interconnect}")
+        return df.drop(columns="interconnect")
+    
 ###
 # READING FUNCTIONS
 ###
@@ -31,7 +48,7 @@ def get_state_center_points(shapefile: str) -> gpd.GeoDataFrame:
 def read_gas_import_export_locations(geojson: str) -> gpd.GeoDataFrame:
     """Reads in import/export data"""
 
-    gdf = gpd.read_file("./Natural_Gas_Import_Export.geojson")
+    gdf = gpd.read_file(geojson)
     gdf = gdf[gdf.STATUS == "IN SERVICE"]
     return gdf[["STATE","COUNTY","IMPVOL", "EXPVOL", "geometry"]].copy()
 
@@ -132,11 +149,11 @@ def read_gas_pipline(xlsx: str, year: int = 2022) -> pd.DataFrame:
 # BUSES 
 ###
 
-def build_state_gas_buses(n: pypsa.Network, states: gpd.GeoDataFrame, interconnect:List[str] = ["usa"]) -> None:
+def build_state_gas_buses(n: pypsa.Network, states: gpd.GeoDataFrame, interconnect: str = "usa") -> None:
     
     states["interconnect"] = states.STATE.map(constants.STATES_INTERCONNECT_MAPPER)
     
-    if interconnect != ["usa"]:
+    if interconnect != "usa":
         states = states[states.interconnect.isin(interconnect)]
         if states.empty:
             logger.warning(f"Empty natural gas buses dataframe for interconnect {interconnect}")
@@ -159,18 +176,11 @@ def build_state_gas_buses(n: pypsa.Network, states: gpd.GeoDataFrame, interconne
 # PRODUCERS
 ###
 
-def build_gas_producers(n: pypsa.Network, producers: pd.DataFrame, interconnect:List[str] = ["usa"]) -> None:
+def build_gas_producers(n: pypsa.Network, producers: pd.DataFrame, interconnect: str = "usa") -> None:
     """Applies EIA form 757 (gas production facilities)"""
     
     df = producers.reset_index().drop(columns=["COUNTY"]).groupby("STATE").sum()
     df["bus"] = df.index + " gas"
-    df["interconnect"] = df.index.map(constants.STATES_INTERCONNECT_MAPPER)
-    
-    if interconnect != ["usa"]:
-        df = df[df.interconnect.isin(interconnect)]
-        if df.empty:
-            logger.warning(f"Empty natural gas producers dataframe for interconnect {interconnect}")
-            return
     
     n.madd(
         "Generator", 
@@ -187,17 +197,10 @@ def build_gas_producers(n: pypsa.Network, producers: pd.DataFrame, interconnect:
 # STORAGE
 ###
 
-def build_storage_facilities(n: pypsa.Network, storage: pd.DataFrame, interconnect: List[str] = ["usa"], **kwargs) -> None:
+def build_storage_facilities(n: pypsa.Network, storage: pd.DataFrame, **kwargs) -> None:
     
     df = storage.reset_index().drop(columns=["COUNTY"]).groupby("STATE").sum()
     df["bus"] = df.index + " gas"
-    df["interconnect"] = df.index.map(constants.STATES_INTERCONNECT_MAPPER)
-    
-    if interconnect != ["usa"]:
-        df = df[df.interconnect.isin(interconnect)]
-        if df.empty:
-            logger.warning(f"Empty natural gas producers dataframe for interconnect {interconnect}")
-            return
     
     n.madd(
         "Bus",
@@ -253,26 +256,29 @@ def build_storage_facilities(n: pypsa.Network, storage: pd.DataFrame, interconne
 # IMPORTS/EXPORTS
 ###
 
-def build_import_export_facilities(n: pypsa.Network, df: pd.DataFrame, direction: str, interconnect: List[str] = "usa") -> None:
+def filter_imports_exports_on_interconnect(
+    df: pd.DataFrame, 
+    interconnect: str, 
+    states_2_interconnect: Dict[str,str]
+) -> pd.DataFrame:
+    
+    if interconnect != "usa":
+        df = df[[x for x in df.columns if states_2_interconnect[x] in interconnect]]
+        if df.empty:
+            logger.warning(f"Empty natural gas import/export dataframe for interconnect {interconnect}")
+    return df
+            
+
+def build_import_export_facilities(n: pypsa.Network, df: pd.DataFrame, direction: str) -> None:
     
     assert direction in ("import", "export")
     
-    if interconnect != ["usa"]:
-        df = df[[x for x in df.columns if constants.STATES_INTERCONNECT_MAPPER[x] in interconnect]]
-        if df.empty:
-            logger.warning(f"Empty natural gas {direction} dataframe for interconnect {interconnect}")
-            return
-    
     for country in ("Canada", "Mexico"):
+        
         data = df.xs(country,level=1,axis=1).T.groupby(level=0).sum().T
         
-        n.madd(
-            "Bus",
-            names=data.columns,
-            suffix=f" gas {direction}",
-            carrier=f"gas {direction}",
-            unit="MMCF",
-        )
+        if data.empty: # ie. Texas does not connect to Canada
+            continue
         
         n.madd(
             "Store",
@@ -307,7 +313,95 @@ def build_import_export_facilities(n: pypsa.Network, df: pd.DataFrame, direction
 # PIPELINES
 ###
 
+def assign_pipeline_interconnects(df: pd.DataFrame, states_2_interconnect: Dict[str,str]):
+    
+    df["INTERCONNECT_TO"] = df.STATE_TO.map(states_2_interconnect)
+    df["INTERCONNECT_FROM"] = df.STATE_FROM.map(states_2_interconnect)
+    
+    assert not df.isna().any().any()    
+    
+    return df
 
+def get_domestic_pipelines(df: pd.DataFrame, interconnect: str) -> pd.DataFrame:
+    """Gets all pipelines fully within the interconnect"""
+    
+    if interconnect != "usa":
+        df = df[
+            (df.INTERCONNECT_TO == interconnect) & (df.INTERCONNECT_FROM == interconnect)
+        ]
+        if df.empty:
+            logger.error(f"Empty natural gas domestic pipelines for interconnect {interconnect}")
+    else:
+        df = df[
+            ~(df[["INTERCONNECT_TO", "INTERCONNECT_FROM"]].isin(["canada", "mexico"])).all(axis=1)
+        ]
+    return df
+    
+def get_domestic_pipeline_connections(df: pd.DataFrame, interconnect: str) -> pd.DataFrame:
+    """Gets all pipelines within the usa that connect to the interconnect"""
+    
+    if interconnect == "usa":
+        # no domestic connections 
+        return pd.DataFrame(columns=df.columns)
+    else:
+        # get rid of international connections
+        df = df[
+            ~((df.INTERCONNECT_TO.isin(["canada", "mexico"])) | (df.INTERCONNECT_FROM.isin(["canada", "mexico"])))
+        ]
+        # get rid of pipelines within the interconnect 
+        return df[
+            (df["INTERCONNECT_TO"].eq(interconnect) | df["INTERCONNECT_FROM"].eq(interconnect)) & 
+            ~(df["INTERCONNECT_TO"].eq(interconnect) & df["INTERCONNECT_FROM"].eq(interconnect)) 
+        ]
+
+def get_international_pipeline_connections(df: pd.DataFrame, interconnect: str) -> pd.DataFrame:
+    """Gets all international pipeline connections"""
+    df = df[
+            (df.INTERCONNECT_TO.isin(["canada", "mexico"])) | 
+            (df.INTERCONNECT_FROM.isin(["canada", "mexico"]))
+        ]
+    if interconnect == "usa":
+        return df
+    else:
+        return df[
+            (df.INTERCONNECT_TO == interconnect) | 
+            (df.INTERCONNECT_FROM == interconnect)
+        ]
+
+def build_pipelines(n: pypsa.Network, df: pd.DataFrame) -> None:
+    
+    df["NAME"] = df.STATE_FROM + " " + df.STATE_TO
+    
+    n.madd(
+        "Link",
+        names=df.NAME,
+        suffix=" pipeline",
+        carrier="gas pipeline",
+        unit="MMCF",
+        bus0=df.STATE_FROM + " gas",
+        bus1=df.STATE_TO + " gas",
+        p_nom=round(df.CAPACITY_MMCFD / 24), # get a hourly flow rate 
+        p_min_pu=0,
+        p_max_pu=1,
+        p_nom_extendable=False,
+        marginal_cost=0,
+    )
+
+def build_import_export_gas_buses(n: pypsa.Network, df: pd.DataFrame) -> None:
+    """Builds import and export buses for pipelines to connect to.
+    
+    Dataframe must have a 'STATE_TO' and 'STATE_FROM' column
+    """
+    
+    df["NAME"] = df.STATE_FROM + " " + df.STATE_TO
+    
+    n.madd(
+        "Bus",
+        names=df.NAME,
+        suffix=f" gas trade",
+        carrier=f"gas trade",
+        unit="MMCF",
+    )
 
 ### 
 # MAIN FUNCTION TO EXECUTE
@@ -315,32 +409,76 @@ def build_import_export_facilities(n: pypsa.Network, df: pd.DataFrame, direction
 
 def build_natural_gas(
     n: pypsa.Network,
-    interconnect: str = "Texas",
+    interconnect: str = "texas",
     counties: str = "../data/counties/cb_2020_us_county_500k.shp",
     eia_757: str = "../data/natural-gas/EIA-757.csv",
     eia_191: str = "../data/natural-gas/EIA-191.csv",
     imports: str = "../data/natural-gas/NG_MOVE_POE1_A_EPG0_IRP_MMCF_M.xls",
     exports: str = "../data/natural-gas/NG_MOVE_POE1_A_EPG0_ENP_MMCF_M.xls",
+    pipelines: str = "../data/natural-gas/EIA-StatetoStateCapacity_Jan2023.xlsx"
 ) -> pypsa.Network:
 
     # create natural gas buses 
     # states = get_state_center_points(snakemake.input.counties)
     # build_state_gas_buses(states)
     
-    # create production facilities (generators)
+    ###
+    # CREATE PRODUCTION FACILITIES
+    ###
+    
     # production_facilities = read_eia_757(eia_757)
-    # build_gas_producers(n, production_facilities, interconnect)
+    # production_facilities = filter_on_interconnect(production_facilities, interconnect, constants.STATES_INTERCONNECT_MAPPER)
+    # build_gas_producers(n, production_facilities)
     
-    # create storage facilities (links+stores)
+    ###
+    # CREATE STORAGE FACILITIES
+    ###
+    
     # storage_facilities = read_eia_191(eia_191)
-    # build_storage_facilities(n, storage_facilities, interconnect)
-
-    # create import/export generators 
-    imports = read_gas_import_export_data(imports)
-    exports = read_gas_import_export_data(exports)
+    # storage_facilities = filter_on_interconnect(storage_facilities, interconnect, constants.STATES_INTERCONNECT_MAPPER)
+    # build_storage_facilities(n, storage_facilities)
     
-    build_import_export_facilities(n, imports, "import", interconnect)
-    build_import_export_facilities(n, exports, "export", interconnect)
+    ###
+    # CREATE PIPELINES
+    ###
+    
+    pipelines = read_gas_pipline(pipelines).reset_index()
+    
+    pipelines = pipelines[~(
+        (pipelines.STATE_TO == "Gulf of Mexico") | (pipelines.STATE_FROM == "Gulf of Mexico"))]
+    pipelines.STATE_TO = pipelines.STATE_TO.map(constants.STATE_2_CODE)
+    pipelines.STATE_FROM = pipelines.STATE_FROM.map(constants.STATE_2_CODE)
+    
+    pipelines = assign_pipeline_interconnects(pipelines, constants.STATES_INTERCONNECT_MAPPER)
+    
+    domestic_piplines = get_domestic_pipelines(pipelines, interconnect)
+    domestic_pipeline_connections = get_domestic_pipeline_connections(pipelines, interconnect)
+    international_pipeline_connections = get_international_pipeline_connections(pipelines, interconnect)
+    
+    build_pipelines(n, domestic_piplines)
+    
+    build_import_export_gas_buses(n, domestic_pipeline_connections)
+    build_pipelines(n, domestic_pipeline_connections)
+    
+    build_import_export_gas_buses(n, international_pipeline_connections)
+    build_pipelines(n, international_pipeline_connections)
+
+    ###
+    # CREATE INTERNATIONAL IMPORTS EXPORTS
+    ###
+    
+    # imports = read_gas_import_export_data(imports)
+    # imports = filter_imports_exports_on_interconnect(imports, interconnect, constants.STATES_INTERCONNECT_MAPPER)
+    
+    # exports = read_gas_import_export_data(exports)
+    # exports = filter_imports_exports_on_interconnect(exports, interconnect, constants.STATES_INTERCONNECT_MAPPER)
+    
+    # build_import_export_facilities(n, imports, "import")
+    # build_import_export_facilities(n, exports, "export")
+
+    ###
+    # CREATE DOMESTIC IMPORTS EXPORTS
+    ###
 
 if __name__ == "__main__":
 
