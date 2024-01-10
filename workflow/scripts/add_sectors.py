@@ -9,11 +9,16 @@ Marginal costs are handeled as follows:
 
 import pypsa
 import pandas as pd
+import geopandas as gpd
 from typing import List, Union
 import logging
 logger = logging.getLogger(__name__)
 from _helpers import configure_logging
 from add_electricity import load_costs
+from build_natural_gas import build_natural_gas
+
+def get_state_geometry(shp: str) -> gpd.GeoSeries:
+    return gpd.read_file(shp).dissolve("STATE_NAME")["geometry"]
 
 def add_carrier(n: pypsa.Network, carrier: str, costs: pd.DataFrame = pd.DataFrame(), **kwargs):
     """Adds new carrier into the network with emission factor"""
@@ -214,9 +219,19 @@ if __name__ == "__main__":
 
     sectors = snakemake.wildcards.sector.split("-")
     
+    states = get_state_geometry(snakemake.input.counties)
+    
     if "G" in sectors:
         new_carrier = "gas"
         add_carrier(n, new_carrier, costs, nice_names=nice_names, tech_colors=tech_colors)
+        build_natural_gas(
+            n=n,
+            interconnect=snakemake.wildcards.interconnect,
+            counties=snakemake.input.counties,
+            eia_757=snakemake.input.eia_757,
+            eia_191=snakemake.input.eia_191,
+            pipelines=snakemake.input.pipelines,
+        )
         for old_carrier in ("CCGT", "OCGT"):
             add_buses(n, new_carrier, old_carrier)
             add_generators(n, new_carrier, old_carrier, costs)

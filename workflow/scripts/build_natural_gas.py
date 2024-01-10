@@ -12,7 +12,7 @@ from typing import List, Dict
 # HELPERS
 ###
 
-def get_state_center_points(shapefile: str) -> gpd.GeoDataFrame:
+def get_state_center_points(shapefile: str) -> pd.DataFrame:
     """Gets centerpoints of states using county shapefile"""
     gdf = gpd.read_file(shapefile)
     gdf = (
@@ -21,8 +21,9 @@ def get_state_center_points(shapefile: str) -> gpd.GeoDataFrame:
         .rename(columns={"STUSPS":"STATE", "geometry":"shape"})
         )
     gdf["geometry"] = gdf["shape"].map(lambda x: x.centroid)
-    gdf = gdf[["STATE", "geometry"]]
-    return gdf[~gdf.index.isin(constants.STATES_TO_REMOVE)]
+    gdf[["x","y"]] = gdf["geometry"].apply(lambda x: pd.Series({"x": x.x, "y": x.y}))
+    gdf = gdf[["STATE", "x", "y"]]
+    return pd.DataFrame(gdf[~gdf.index.isin(constants.STATES_TO_REMOVE)])
     
 def filter_on_interconnect(
     df: pd.DataFrame, 
@@ -36,7 +37,7 @@ def filter_on_interconnect(
     else:
         df["interconnect"] = df.STATE.map(states_2_interconnect)
         assert not df.interconnect.isna().any() 
-        df = df[df.interconnect.isin(interconnect)]
+        df = df[df.interconnect == interconnect]
         if df.empty:
             logger.warning(f"Empty natural gas data for interconnect {interconnect}")
         return df.drop(columns="interconnect")
@@ -81,11 +82,17 @@ def read_gas_import_export_data(xlsx: str) -> pd.DataFrame:
     
     return df
 
-def read_eia_191(csv: str) -> pd.DataFrame:
+def read_eia_191(csv: str, **kwargs) -> pd.DataFrame:
     """Reads in EIA form 191 for natural gas storage"""
+    
     df = pd.read_csv(csv, index_col=0)
     df = df.rename(columns={x:x.replace("<BR>", " ") for x in df.columns})
     df.columns = df.columns.str.strip()
+    
+    regions_to_remove = kwargs.get("regions_to_remove", None)
+    if regions_to_remove:
+        df = df[~df.Region.isin(regions_to_remove)]
+    
     df = df[df.Status == "Active"]
     df = df[[
         "Report State", 
@@ -104,6 +111,7 @@ def read_eia_191(csv: str) -> pd.DataFrame:
     df[["MIN_CAPACITY_MMCF", "MAX_CAPACITY_MMCF", "MAX_DAILY_DELIEVERY_MMCF"]] = (
         df[["MIN_CAPACITY_MMCF", "MAX_CAPACITY_MMCF", "MAX_DAILY_DELIEVERY_MMCF"]] * 0.001
     )
+    df["STATE"] = df["STATE"].str.upper()
 
     return df.groupby(["STATE", "COUNTY"]).sum()
 
@@ -127,6 +135,7 @@ def read_eia_757(csv: str) -> pd.DataFrame:
         "Plant Flow":"FLOW_MMCF", 
         "BTU Content":"BTU_CONTENT", 
     })
+    df["STATE"] = df["STATE"].str.upper()
 
     return df.groupby(["STATE", "COUNTY"]).sum()
 
@@ -149,22 +158,14 @@ def read_gas_pipline(xlsx: str, year: int = 2022) -> pd.DataFrame:
 # BUSES 
 ###
 
-def build_state_gas_buses(n: pypsa.Network, states: gpd.GeoDataFrame, interconnect: str = "usa") -> None:
-    
-    states["interconnect"] = states.STATE.map(constants.STATES_INTERCONNECT_MAPPER)
-    
-    if interconnect != "usa":
-        states = states[states.interconnect.isin(interconnect)]
-        if states.empty:
-            logger.warning(f"Empty natural gas buses dataframe for interconnect {interconnect}")
-            return
+def build_state_gas_buses(n: pypsa.Network, states: pd.DataFrame) -> None:
     
     n.madd(
         "Bus", 
         names=states.STATE,
         suffix=" gas",
-        x=states.geometry.x,
-        y=states.geometry.y,
+        x=states.x,
+        y=states.y,
         carrier="gas",
         unit="MMCF",
         interconnect=states.interconnect,
@@ -176,7 +177,7 @@ def build_state_gas_buses(n: pypsa.Network, states: gpd.GeoDataFrame, interconne
 # PRODUCERS
 ###
 
-def build_gas_producers(n: pypsa.Network, producers: pd.DataFrame, interconnect: str = "usa") -> None:
+def build_gas_producers(n: pypsa.Network, producers: pd.DataFrame) -> None:
     """Applies EIA form 757 (gas production facilities)"""
     
     df = producers.reset_index().drop(columns=["COUNTY"]).groupby("STATE").sum()
@@ -392,11 +393,11 @@ def build_import_export_pipelines(n: pypsa.Network, df: pd.DataFrame, interconne
     """
     
     if interconnect != "usa":
-        to_from = df[df.INTERCONENCT_TO==interconnect]
-        from_to = df[df.INTERCONENCT_FROM==interconnect]
+        to_from = df[df.INTERCONNECT_TO==interconnect]
+        from_to = df[df.INTERCONNECT_FROM==interconnect]
     else:
-        to_from = df[~df.INTERCONENCT_TO.isin(["canada", "mexico"])]
-        from_to = df[~df.INTERCONENCT_FROM.isin(["canada", "mexico"])]
+        to_from = df[~df.INTERCONNECT_TO.isin(["canada", "mexico"])]
+        from_to = df[~df.INTERCONNECT_FROM.isin(["canada", "mexico"])]
         
     to_from["NAME"] = to_from.STATE_FROM + " " + to_from.STATE_TO
     from_to["NAME"] = from_to.STATE_TO + " " + from_to.STATE_FROM
@@ -490,25 +491,30 @@ def build_natural_gas(
     pipelines: str = "../data/natural-gas/EIA-StatetoStateCapacity_Jan2023.xlsx"
 ) -> pypsa.Network:
 
-    # create natural gas buses 
-    # states = get_state_center_points(snakemake.input.counties)
-    # build_state_gas_buses(states)
+    ###
+    # CREATE STATE LEVEL BUSES
+    ###
+
+    states = get_state_center_points(counties)
+    states = filter_on_interconnect(states, interconnect, constants.STATES_INTERCONNECT_MAPPER)
+    states["interconnect"] = states.STATE.map(constants.STATES_INTERCONNECT_MAPPER)
+    build_state_gas_buses(n, states)
     
     ###
     # CREATE PRODUCTION FACILITIES
     ###
     
-    # production_facilities = read_eia_757(eia_757)
-    # production_facilities = filter_on_interconnect(production_facilities, interconnect, constants.STATES_INTERCONNECT_MAPPER)
-    # build_gas_producers(n, production_facilities)
+    production_facilities = read_eia_757(eia_757).reset_index()
+    production_facilities = filter_on_interconnect(production_facilities, interconnect, constants.STATES_INTERCONNECT_MAPPER)
+    build_gas_producers(n, production_facilities)
     
     ###
     # CREATE STORAGE FACILITIES
     ###
     
-    # storage_facilities = read_eia_191(eia_191)
-    # storage_facilities = filter_on_interconnect(storage_facilities, interconnect, constants.STATES_INTERCONNECT_MAPPER)
-    # build_storage_facilities(n, storage_facilities)
+    storage_facilities = read_eia_191(eia_191, regions_to_remove=constants.STATES_TO_REMOVE).reset_index()
+    storage_facilities = filter_on_interconnect(storage_facilities, interconnect, constants.STATES_INTERCONNECT_MAPPER)
+    build_storage_facilities(n, storage_facilities)
     
     ###
     # CREATE PIPELINES
@@ -552,10 +558,3 @@ if __name__ == "__main__":
 
     n = pypsa.Network("../resources/texas/elec_s_40_ec_lv1.25_Co2L1.25.nc")
     build_natural_gas(n=n)
-
-    # read_gas_import_export_locations("./Natural_Gas_Import_Export.geojson")
-    # read_gas_import_export_data("./NG_MOVE_POE1_A_EPG0_IRP_MMCF_A.xls")
-    # read_gas_import_export_data("./NG_MOVE_POE1_A_EPG0_ENP_MMCF_A.xls")
-    # read_eia_191("./EIA-191.csv")
-    # read_eia_757("./EIA-757.csv")
-    # read_gas_pipline("./EIA-StatetoStateCapacity_Jan2023.xlsx")

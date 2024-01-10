@@ -4,10 +4,18 @@ rule add_sectors:
     params:
         electricity=config["electricity"],
         costs=config["costs"],
-        plotting=config["plotting"]
+        plotting=config["plotting"],
+        natural_gas=config["sector"].get("natural_gas", None)
     input:
         network=RESOURCES + "{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}.nc",
         tech_costs=DATA + f"costs_{config['costs']['year']}.csv",
+        counties=DATA + "counties/cb_2020_us_county_500k.shp",
+        # for natural gas
+        eia_191=DATA + "natural-gas/EIA-191.csv",
+        eia_757=DATA + "natural-gas/EIA-757.csv",
+        piplines=DATA + "natural-gas/EIA-StatetoStateCapacity_Jan2023.xlsx",
+        imports=DATA + "natural-gas/NG_MOVE_POE2_A_EPG0_IRP_MMCF_A.xls",
+        exports=DATA + "natural-gas/NG_MOVE_POE2_A_EPG0_ENP_MMCF_A.xls",
     output:
         network=RESOURCES + "{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}_{sector}.nc"
     script:
