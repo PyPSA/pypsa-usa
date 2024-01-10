@@ -8,11 +8,11 @@ run:
 
 scenario:
   interconnect: western #"usa|texas|western|eastern"
-  clusters: [40]
+  clusters: [200]
   opts:
     [
-      Co2L1.25,
-      # Co2L1.25-480SEG,
+      # Co2L1.25,
+      Co2L1.25-1000SEG, #480 hours in the year
     ]
   ll: [v1.25]
   scope: "total" # "urban", "rural", or "total" 
@@ -73,7 +73,7 @@ atlite:
 # docs :
 electricity: 
   conventional_carriers: [nuclear, oil, OCGT, CCGT, coal, geothermal] # Choose the conventional plant types to include in network
-  renewable_carriers: [onwind, solar, offwind, offwind-floating, hydro] # Choose the renewable plant types to include in network
+  renewable_carriers: [onwind, solar, offwind, offwind_floating, hydro] # Choose the renewable plant types to include in network
   voltage_simplified: 230 #Voltage level to simplify network to in rule "simplify network"
   co2limit: 1.4728e+9 # 0.8 * 1.841e+9
   co2base: 226.86e+6 #base_from_2020 Locations of the 250 MMmt of CO2 emissions from the WECC 2021.
@@ -90,7 +90,7 @@ electricity:
     H2: 168
 
   extendable_carriers:
-    Generator: [solar, onwind, offwind, offwind-floating, OCGT, CCGT, coal]
+    Generator: [solar, onwind, offwind, offwind_floating, OCGT, CCGT, coal]
     StorageUnit: [battery] # battery, H2
     Store: [battery] #[battery, H2]
     Link: [] #[H2 pipeline]
@@ -115,7 +115,7 @@ renewable:
       distance: 10 #buffer from distance_grid_codes that are to be excluded
       distance_grid_codes: [50] 
     natura: true
-    potential: simple # or conservative
+    potential: conservative # simple or conservative
     clip_p_max_pu: 1.e-2
     extendable: true
   offwind:
@@ -130,11 +130,11 @@ renewable:
     natura: true
     max_depth: 60 # meters, ref https://www.nrel.gov/docs/fy16osti/66599.pdf 
     min_shore_distance: 20000 # meters
-    max_shore_distance: 100000
-    potential: simple # or conservative
+    max_shore_distance: 90000 # meters
+    potential: conservative # simple or conservative
     clip_p_max_pu: 1.e-2
     extendable: true
-  offwind-floating:
+  offwind_floating:
     cutout: era5_2019
     resource:
       method: wind
@@ -147,8 +147,9 @@ renewable:
     natura: true
     min_depth: 60 # meters, ref https://www.nrel.gov/docs/fy16osti/66599.pdf
     max_depth: 1300 # meters, ref https://www.nrel.gov/docs/fy22osti/83650.pdf
-    max_shore_distance: 150000
-    potential: simple # or conservative
+    min_shore_distance: 20000 # meters
+    max_shore_distance: 90000 # meters
+    potential: conservative # simple or conservative
     clip_p_max_pu: 1.e-2
     extendable: true
   solar:
@@ -164,7 +165,7 @@ renewable:
     corine:
       grid_codes: [20, 30, 40, 50, 60, 90, 100] #see above for codes
     natura: true
-    potential: simple # or conservative
+    potential: conservative # simple or conservative
     clip_p_max_pu: 1.e-2
     extendable: true
   hydro:

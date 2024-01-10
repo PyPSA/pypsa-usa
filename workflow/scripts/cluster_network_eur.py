@@ -95,7 +95,7 @@ Creates networks clustered to ``{cluster}`` number of zones with aggregated buse
 
 import logging
 import pdb
-from _helpers import configure_logging, update_p_nom_max, get_aggregation_strategies
+from _helpers import configure_logging, update_p_nom_max, get_aggregation_strategies, export_network_for_gis_mapping
 
 import pypsa
 
@@ -429,3 +429,6 @@ if __name__ == "__main__":
         getattr(clustering, attr).to_csv(snakemake.output[attr])
 
     cluster_regions((clustering.busmap,), snakemake.input, snakemake.output)
+
+    output_path = os.path.dirname(snakemake.output[0]) + '_clustered_'
+    export_network_for_gis_mapping(clustering.network, output_path)

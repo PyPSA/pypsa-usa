@@ -160,7 +160,7 @@ rule build_renewable_profiles:
         ),
         gebco=ancient(
             lambda w: (
-                DATA + "gebco/gebco_2023_tid_USA.nc"
+                DATA + "gebco/gebco_2023_n55.0_s10.0_w-126.0_e-65.0.tif"
                 if config["renewable"][w.technology].get("max_depth")
                 else []
             )

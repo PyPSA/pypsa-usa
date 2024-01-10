@@ -130,7 +130,7 @@ def assign_line_lengths(n, line_length_factor):
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
-        snakemake = mock_snakemake("simplify_network", interconnect='texas')
+        snakemake = mock_snakemake("simplify_network", interconnect='western')
     configure_logging(snakemake)
 
     voltage_level = snakemake.config["electricity"]["voltage_simplified"]
@@ -158,5 +158,5 @@ if __name__ == "__main__":
 
     n.export_to_netcdf(snakemake.output[0])
 
-    output_path = os.path.dirname(snakemake.output[0]) + 'simplified_'
+    output_path = os.path.dirname(snakemake.output[0]) + '_simplified_'
     export_network_for_gis_mapping(n, output_path)

@@ -330,11 +330,11 @@ def build_offshore_transmission_configuration(n: pypsa.Network) -> pypsa.Network
     # add onshore poi buses @230kV
     logger.info(f"Adding {len(offshore_buses)} offshore buses to the network.")
 
-    # Reassigns Offshore buses region identifies to the POI bus regions
-    n.buses.loc[offshore_buses.index, 'balancing_area'] = n.buses.loc[offshore_buses.bus_assignment].balancing_area.values
-    n.buses.loc[offshore_buses.index, 'state'] = n.buses.loc[offshore_buses.bus_assignment].state.values
-    n.buses.loc[offshore_buses.index, 'country'] = n.buses.loc[offshore_buses.bus_assignment].country.values
-    n.buses.loc[offshore_buses.index, 'interconnect'] = n.buses.loc[offshore_buses.bus_assignment].interconnect.values
+    # # Reassigns Offshore buses region identifies to the POI bus regions
+    # n.buses.loc[offshore_buses.index, 'balancing_area'] = n.buses.loc[offshore_buses.bus_assignment].balancing_area.values
+    # n.buses.loc[offshore_buses.index, 'state'] = n.buses.loc[offshore_buses.bus_assignment].state.values
+    # n.buses.loc[offshore_buses.index, 'country'] = n.buses.loc[offshore_buses.bus_assignment].country.values
+    # n.buses.loc[offshore_buses.index, 'interconnect'] = n.buses.loc[offshore_buses.bus_assignment].interconnect.values
 
 
     n.madd(

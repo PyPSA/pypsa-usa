@@ -378,7 +378,7 @@ ATB_TECH_MAPPER = {
         "crp":{"default":100,"options":[20,30,100]},
     },
     # End Perfect Matches
-    "offwind-floating":{
+    "offwind_floating":{
         "technology":"OffShoreWind",
         "name":{"default":"OSW","options":["OSW"]},
         "alias":{"default":"OW","options":["OW"]},

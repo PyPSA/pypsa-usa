@@ -797,7 +797,7 @@ def plot_renewable_potential(n: pypsa.Network, regions: gpd.GeoDataFrame, save: 
     
     renew = n.generators[
         (n.generators.p_nom_max != np.inf) & 
-        (n.generators.carrier.isin(["onwind", "offwind", "solar"]))]
+        (n.generators.carrier.isin(["onwind", "offwind", "offwind_floating", "solar"]))]
     bus_values = renew.groupby(["bus", "carrier"]).p_nom_max.sum()
     
     # do not show lines or links
@@ -825,7 +825,7 @@ def plot_renewable_potential(n: pypsa.Network, regions: gpd.GeoDataFrame, save: 
     # only show renewables in legend 
     fig.artists[-2].remove() # remove line width legend 
     fig.artists[-1].remove() # remove existing colour legend
-    renew_carriers = n.carriers[n.carriers.index.isin(["onwind", "offwind", "solar"])]
+    renew_carriers = n.carriers[n.carriers.index.isin(["onwind", "offwind", "offwind_floating", "solar"])]
     add_legend_patches(
         ax,
         renew_carriers.color,

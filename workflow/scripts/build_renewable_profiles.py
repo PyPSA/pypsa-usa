@@ -26,6 +26,7 @@ Relevant settings
             grid_codes:
             distance:
             natura:
+            min_depth:
             max_depth:
             max_shore_distance:
             min_shore_distance:
@@ -195,7 +196,7 @@ if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
 
-        snakemake = mock_snakemake("build_renewable_profiles", technology="onwind", interconnect="western")
+        snakemake = mock_snakemake("build_renewable_profiles", technology="offwind_floating", interconnect="western")
     configure_logging(snakemake)
 
     nprocesses = int(snakemake.threads)
@@ -260,6 +261,13 @@ if __name__ == "__main__":
         # use named function np.greater with partially frozen argument instead
         # and exclude areas where: -max_depth > grid cell depth
         func = functools.partial(np.greater, -params["max_depth"])
+        excluder.add_raster(snakemake.input.gebco, codes=func, crs=4326, nodata=-1000)
+
+    if params.get("min_depth"):
+        # lambda not supported for atlite + multiprocessing
+        # use named function np.greater with partially frozen argument instead
+        # and exclude areas where: -min_depth < grid cell depth
+        func = functools.partial(np.less, -params["min_depth"])
         excluder.add_raster(snakemake.input.gebco, codes=func, crs=4326, nodata=-1000)
 
     if "min_shore_distance" in params:

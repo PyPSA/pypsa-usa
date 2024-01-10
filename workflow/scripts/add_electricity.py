@@ -914,7 +914,7 @@ def attach_wind_and_solar(
                 continue
 
             supcar = car.split("-", 2)[0]
-            if supcar == "offwind":
+            if supcar == "offwind" or supcar == "offwind_floating":
                 underwater_fraction = ds["underwater_fraction"].to_pandas()
                 connection_cost = (
                     line_length_factor
@@ -1336,7 +1336,7 @@ def main(snakemake):
         )
         renewable_carriers = list(
             set(snakemake.config['electricity']["renewable_carriers"]).intersection(
-                set(["onwind", "solar", "offwind", "offwind-floating"])
+                set(["onwind", "solar", "offwind", "offwind_floating"])
             ))
         attach_renewable_capacities_to_atlite(
             n,
@@ -1402,6 +1402,6 @@ def main(snakemake):
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
-        snakemake = mock_snakemake("add_electricity", interconnect="texas")
+        snakemake = mock_snakemake("add_electricity", interconnect="western")
     configure_logging(snakemake)
     main(snakemake)
