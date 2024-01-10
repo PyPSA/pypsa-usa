@@ -293,22 +293,7 @@ def build_import_export_facilities(n: pypsa.Network, df: pd.DataFrame, direction
             marginal_cost=0,
         )
         
-        bus0_suffix = " gas" if direction == "export" else " gas import"
-        bus1_suffix = " gas export" if direction == "export" else " gas"
-
-        n.madd(
-            "Link",
-            names=df.index,
-            suffix=f" gas {direction}",
-            carrier=f"gas {direction}",
-            bus0=df.index + bus0_suffix,
-            bus1=df.index + bus1_suffix,
-            p_min_pu=0,
-            p_max_pu=0, ########################## to update #################
-            p_nom_extendable=False,
-            marginal_cost=0
-        )
-
+        
 ###
 # PIPELINES
 ###
@@ -387,20 +372,107 @@ def build_pipelines(n: pypsa.Network, df: pd.DataFrame) -> None:
         marginal_cost=0,
     )
 
-def build_import_export_gas_buses(n: pypsa.Network, df: pd.DataFrame) -> None:
+def build_import_export_pipelines(n: pypsa.Network, df: pd.DataFrame, interconnect: str) -> None:
     """Builds import and export buses for pipelines to connect to.
     
-    Dataframe must have a 'STATE_TO' and 'STATE_FROM' column
+    Dataframe must have a 'STATE_TO', 'STATE_FROM', 'INTERCONNECT_TO', and
+    'INTERCONNECT_FROM' columns
+    
+    The function does the following
+    - exisitng domestic buses are retained 
+    - new import export buses are created based on region
+        - "WA BC gas export"
+        - "WA BC gas import"
+    - new one way links are added with capacity limits 
+        - "WA BC gas export" 
+        - "WA BC gas import" 
+    - stores are added WITHOUT energy limits 
+        - "WA BC gas export" 
+        - "WA BC gas import" 
     """
     
-    df["NAME"] = df.STATE_FROM + " " + df.STATE_TO
+    if interconnect != "usa":
+        to_from = df[df.INTERCONENCT_TO==interconnect]
+        from_to = df[df.INTERCONENCT_FROM==interconnect]
+    else:
+        to_from = df[~df.INTERCONENCT_TO.isin(["canada", "mexico"])]
+        from_to = df[~df.INTERCONENCT_FROM.isin(["canada", "mexico"])]
+        
+    to_from["NAME"] = to_from.STATE_FROM + " " + to_from.STATE_TO
+    from_to["NAME"] = from_to.STATE_TO + " " + from_to.STATE_FROM
     
     n.madd(
         "Bus",
-        names=df.NAME,
-        suffix=f" gas trade",
-        carrier=f"gas trade",
+        names=to_from.NAME,
+        suffix=" gas export",
+        carrier="gas export",
         unit="MMCF",
+    )
+    
+    n.madd(
+        "Bus",
+        names=from_to.NAME,
+        suffix=" gas import",
+        carrier="gas import",
+        unit="MMCF",
+    )
+    
+    n.madd(
+        "Link",
+        names=to_from.NAME,
+        suffix=" gas export",
+        carrier="gas export",
+        unit="MMCF",
+        bus0=to_from.STATE_FROM + " gas",
+        bus1=to_from.NAME + " gas export",
+        p_nom=round(to_from.CAPACITY_MMCFD / 24), # get a hourly flow rate 
+        p_min_pu=0,
+        p_max_pu=1,
+        p_nom_extendable=False,
+        marginal_cost=0,
+    )
+    
+    n.madd(
+        "Link",
+        names=from_to.NAME,
+        suffix=" gas import",
+        carrier="gas import",
+        unit="MMCF",
+        bus0=from_to.NAME + " gas import",
+        bus1=from_to.STATE_FROM + " gas",
+        p_nom=round(from_to.CAPACITY_MMCFD / 24), # get a hourly flow rate 
+        p_min_pu=0,
+        p_max_pu=1,
+        p_nom_extendable=False,
+        marginal_cost=0,
+    )
+    
+    n.madd(
+        "Store",
+        names=to_from.NAME,
+        suffix=" gas export",
+        unit="MMCF",
+        bus=to_from.NAME + " gas export",
+        carrier="gas export",
+        e_nom_extendable=True,
+        capital_cost=0,
+        e_nom=0,
+        e_cyclic=False,
+        marginal_cost=0,
+    )
+    
+    n.madd(
+        "Store",
+        names=from_to.NAME,
+        unit="MMCF",
+        suffix=" gas import",
+        bus=from_to.NAME + " gas import",
+        carrier="gas import",
+        e_nom_extendable=True,
+        capital_cost=0,
+        e_nom=0,
+        e_cyclic=False,
+        marginal_cost=0,
     )
 
 ### 
@@ -456,15 +528,11 @@ def build_natural_gas(
     international_pipeline_connections = get_international_pipeline_connections(pipelines, interconnect)
     
     build_pipelines(n, domestic_piplines)
-    
-    build_import_export_gas_buses(n, domestic_pipeline_connections)
-    build_pipelines(n, domestic_pipeline_connections)
-    
-    build_import_export_gas_buses(n, international_pipeline_connections)
-    build_pipelines(n, international_pipeline_connections)
+    build_import_export_pipelines(n, domestic_pipeline_connections, interconnect)
+    build_import_export_pipelines(n, international_pipeline_connections, interconnect)
 
     ###
-    # CREATE INTERNATIONAL IMPORTS EXPORTS
+    # CREATE INTERNATIONAL IMPORT EXPORT ENERGY LIMITS 
     ###
     
     # imports = read_gas_import_export_data(imports)
