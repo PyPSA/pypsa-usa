@@ -108,7 +108,7 @@ renewable:
     resource:
       method: wind
       turbine: Vestas_V112_3MW
-      add_cutout_windspeed: true
+      # add_cutout_windspeed: true
     capacity_per_sqkm: 3 # conservative, ScholzPhd Tab 4.3.1: 10MW/km^2
     # correction_factor: 0.93
     corine:
@@ -125,7 +125,7 @@ renewable:
     resource:
       method: wind
       turbine: NREL_ReferenceTurbine_2020ATB_5.5MW
-      add_cutout_windspeed: true
+      # add_cutout_windspeed: true
     capacity_per_sqkm: 3 # 2021–2022 Transmission Plan, CAISO
     correction_factor: 0.8855 # proxy for wake losses, from 10.1016/j.energy.2018.08.153
     corine:
@@ -142,7 +142,7 @@ renewable:
     resource:
       method: wind
       turbine: NREL_ReferenceTurbine_2020ATB_15MW_offshore
-      add_cutout_windspeed: true
+      # add_cutout_windspeed: true
     capacity_per_sqkm: 3 # 2021–2022 Transmission Plan, CAISO
     correction_factor: 0.8855
     # proxy for wake losses, from 10.1016/j.energy.2018.08.153
