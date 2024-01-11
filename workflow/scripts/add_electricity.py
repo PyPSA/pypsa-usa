@@ -915,20 +915,22 @@ def attach_wind_and_solar(
 
             supcar = car.split("-", 2)[0]
             if supcar == "offwind" or supcar == "offwind_floating":
+                if supcar == "offwind_floating":
+                    supcar = "offwind"
                 underwater_fraction = ds["underwater_fraction"].to_pandas()
                 connection_cost = (
                     line_length_factor
                     * ds["average_distance"].to_pandas()
                     * (
                         underwater_fraction
-                        * costs.at[car + "-ac-connection-submarine", "capital_cost"]
+                        * costs.at[supcar + "-ac-connection-submarine", "capital_cost"]
                         + (1.0 - underwater_fraction)
-                        * costs.at[car + "-ac-connection-underground", "capital_cost"]
+                        * costs.at[supcar + "-ac-connection-underground", "capital_cost"]
                     )
                 )
                 capital_cost = (
-                    costs.at["offwind", "capital_cost"]
-                    + costs.at[car + "-ac-station", "capital_cost"]
+                    costs.at[car, "capital_cost"]
+                    + costs.at[supcar + "-ac-station", "capital_cost"] #update to find floating substation costs
                     + connection_cost
                 )
 
@@ -963,9 +965,9 @@ def attach_wind_and_solar(
                 p_nom_extendable=car in extendable_carriers["Generator"],
                 p_nom_max=p_nom_max_bus,
                 weight=weight_bus,
-                marginal_cost=costs.at[supcar, "marginal_cost"],
+                marginal_cost=costs.at[car, "marginal_cost"],
                 capital_cost=capital_cost,
-                efficiency=costs.at[supcar, "efficiency"],
+                efficiency=costs.at[car, "efficiency"],
                 p_max_pu=bus_profiles,
             )
 
@@ -1307,8 +1309,7 @@ def main(snakemake):
         extendable_carriers, 
         costs
     )
-
-
+    
     # attach_hydro(n, 
     #              costs, 
     #              plants, 

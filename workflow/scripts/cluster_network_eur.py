@@ -128,13 +128,13 @@ def normed(x): return (x/x.sum()).fillna(0.)
 
 
 def weighting_for_country(n, x):
-    conv_carriers = {'OCGT','CCGT','PHS', 'hydro'}
+    # conv_carriers = {'OCGT','CCGT','PHS', 'hydro'}
     gen = (n
-           .generators.loc[n.generators.carrier.isin(conv_carriers)]
+           .generators#.loc[n.generators.carrier.isin(conv_carriers)]
            .groupby('bus').p_nom.sum()
            .reindex(n.buses.index, fill_value=0.) +
            n
-           .storage_units.loc[n.storage_units.carrier.isin(conv_carriers)]
+           .storage_units#.loc[n.storage_units.carrier.isin(conv_carriers)]
            .groupby('bus').p_nom.sum()
            .reindex(n.buses.index, fill_value=0.))
     load = n.loads_t.p_set.mean().groupby(n.loads.bus).sum()
@@ -360,7 +360,7 @@ if __name__ == "__main__":
     print("Running clustering.py directly")
     if 'snakemake' not in globals():
         from _helpers import mock_snakemake
-        snakemake = mock_snakemake('cluster_network', interconnect='texas', clusters='30')
+        snakemake = mock_snakemake('cluster_network', interconnect='western', clusters='100')
     configure_logging(snakemake)
 
     n = pypsa.Network(snakemake.input.network)
