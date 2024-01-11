@@ -1,7 +1,9 @@
-cluster: "sbatch --time={resources.time_min} --mem={resources.mem_mb}
-          --partition=serc --account=iazevedo
-          -c {resources.cpus} -o logs/slurm/{rule}_{wildcards}
-          -e logs/slurm/{rule}_{wildcards}"
-jobs: 15
-default-resources: [cpus=1, mem_mb=5000, time_min=15] #defines default resource requested
-resources: [cpus=2, mem_mb=100000] #defines resource limits
+__default__:
+    account: iazevedo
+    partition: serc
+    time: 00:30:00 # time limit for each job
+    nodes: 1
+    ntasks-per-node: 8 #Request n cores be allocated per node.
+    chdir: $GROUP_HOME/kamran/pypsa-usa/workflow
+    output: logs/slurm/{rule}-%j.out
+    error: logs/slurm/err_{rule}-%j.err
