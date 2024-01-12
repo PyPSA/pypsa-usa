@@ -5,5 +5,5 @@ __default__:
     nodes: 1
     ntasks-per-node: 8 #Request n cores be allocated per node.
     chdir: $GROUP_HOME/kamran/pypsa-usa/workflow
-    output: logs/slurm/{rule}-%j.out
-    error: logs/slurm/err_{rule}-%j.err
+    output: log/slurm/{rule}-%j.out
+    error: log/slurm/err_{rule}-%j.err
