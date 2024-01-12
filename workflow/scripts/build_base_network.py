@@ -444,6 +444,18 @@ def modify_breakthrough_lines(n:pypsa.Network, interconnect:str):
             n.buses.loc[n.lines.loc[n.lines.index == i].bus0, 'v_nom'] = line_fixes[i]['v_nom']
             n.buses.loc[n.lines.loc[n.lines.index == i].bus1, 'v_nom'] = line_fixes[i]['v_nom']
 
+        #Removing Unccesary Lines in Humboldt, adding new missing one.
+        line_removals = ['89634', '89668']
+        n.mremove('Line', line_removals)
+        line_params = n.lines.loc['90501'].copy()
+        line_params.name = line_removals[0]
+        line_params.bus0 = '2020004'
+        line_params.bus1 = '2020532'
+        n.add('Line', line_params.name, **line_params)
+        n.lines.loc[line_params.name, 'v_nom'] = line_params.v_nom
+        n.lines.loc[line_params.name, 'interconnect'] = line_params.interconnect
+        n.lines.loc[line_params.name, 'underwater_fraction'] = line_params.underwater_fraction
+
     return n
 
 def main(snakemake):

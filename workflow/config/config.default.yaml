@@ -8,7 +8,7 @@ run:
 
 scenario:
   interconnect: western #"usa|texas|western|eastern"
-  clusters: [200]
+  clusters: [300]
   opts:
     [
       # Co2L1.25,
