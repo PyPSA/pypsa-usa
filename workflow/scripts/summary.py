@@ -111,44 +111,48 @@ def get_demand_timeseries(n: pypsa.Network) -> pd.DataFrame:
 ###
 
 def get_capacity_base(n: pypsa.Network) -> pd.DataFrame:
-    """Gets starting capacities"""
-    storage_pnom = n.storage_units.groupby(["bus", "carrier"]).p_nom.sum()
-    generator_pnom = n.generators.groupby(["bus", "carrier"]).p_nom.sum()
-    links_pnom = n.links.groupby(["bus1", "carrier"]).p_nom.sum()
-    return pd.concat([generator_pnom, links_pnom, storage_pnom])
+    """Gets starting capacities
+    
+    Note, link capacities are grouped by bus0
+    """
+    totals=[]
+    for c in n.iterate_components(n.one_port_components | n.branch_components):
+        if c.name in ("Generator", "StorageUnit"):
+            totals.append((c.df.p_nom).groupby(by=[c.df.bus, c.df.carrier]).sum())
+        elif c.name == "Link":
+            totals.append((c.df.p_nom).groupby(by=[c.df.bus0,c.df.carrier]).sum().rename_axis(index={"bus0":"bus"}))
+    return pd.concat(totals)
 
 def get_capacity_greenfield(n: pypsa.Network, retirement_method = "economic") -> pd.DataFrame:
-    """Gets optimal greenfield pnom capacity"""
-    def _technical_retirement(n: pypsa.Network, component:str) -> pd.DataFrame:
-        if component not in ("storage_units", "generators", "links"):
-             logger.warning(f"{component} not in the set ('storage_units', 'generator', 'links')")
-             return pd.DataFrame()
-        else:
-            gens = getattr(n, component)[["carrier", "bus"]].copy()
-            gens_t_p = getattr(n, f"{component}_t")["p"]
-            gens["p_max"] = gens.index.map(gens_t_p.max()).fillna(0)
-            if component == "links":
-                gens = gens[gens.carrier.isin(["battery charger", "battery discharger"])]
-                return gens.groupby(["bus1", "carrier"]).p_nom_opt.sum()
-            else:
-                return gens.groupby(["bus", "carrier"]).p_nom_opt.sum()
+    """Gets optimal greenfield pnom capacity
     
-    def _economic_retirement(n: pypsa.Network, component:str) -> pd.DataFrame:
-        if component not in ("storage_units", "generators", "links"):
-             logger.warning(f"{component} not in the set ('storage_units', 'generator', 'links')")
-             return pd.DataFrame()
-        else:
-            p_nom_opt = getattr(n, component)
-            if component == "links":
-                p_nom_opt = p_nom_opt[p_nom_opt.carrier.isin(["battery charger", "battery discharger"])]
-                return p_nom_opt.groupby(["bus1", "carrier"]).p_nom_opt.sum()
-            else:
-                return p_nom_opt.groupby(["bus", "carrier"]).p_nom_opt.sum()
+    Note, link capacities are grouped by bus0
+    """
     
+    def _technical_retirement(c:pypsa.components.Component) -> pd.DataFrame:
+        if c.name == "Link":
+            return (c.pnl.p0.max()).groupby(by=[c.df.bus0,c.df.carrier]).sum().rename_axis(index={"bus0":"bus"})
+        else:
+            return (c.pnl.p.max()).groupby(by=[c.df.bus, c.df.carrier]).sum()
+    
+    def _economic_retirement(c:pypsa.components.Component) -> pd.DataFrame:
+        new_cap = (c.df.p_nom_opt - c.df.p_nom).map(lambda x: max(0, x))
+        if c.name == "Link":
+            return (new_cap).groupby(by=[c.df.bus0,c.df.carrier]).sum().rename_axis(index={"bus0":"bus"})
+        else:
+            return (new_cap).groupby(by=[c.df.bus, c.df.carrier]).sum()
+    
+    totals=[]
     if retirement_method == "technical":
-        return pd.concat([_technical_retirement(n, x) for x in ["generators", "storage_units", "links"]])
+        for c in n.iterate_components(n.one_port_components | n.branch_components):
+            if c.name in ("Generator", "StorageUnit", "Link"):
+                totals.append(_technical_retirement(c))
+        return pd.concat(totals)
     elif retirement_method == "economic":
-        return pd.concat([_economic_retirement(n, x) for x in ["generators", "storage_units", "links"]])
+        for c in n.iterate_components(n.one_port_components | n.branch_components):
+            if c.name in ("Generator", "StorageUnit", "Link"):
+                totals.append(_economic_retirement(c))
+        return pd.concat(totals)
     else:
         logger.error(f"Retirement method must be one of 'technical' or 'economic'. Recieved {retirement_method}.")
         raise NotImplementedError
@@ -156,34 +160,29 @@ def get_capacity_greenfield(n: pypsa.Network, retirement_method = "economic") ->
 def get_capacity_brownfield(n: pypsa.Network, retirement_method = "economic", components:str = "all") -> pd.DataFrame:
     """Gets optimal brownfield pnom capacity"""
     
-    def _technical_retirement(n: pypsa.Network, component:str) -> pd.DataFrame:
-        if component not in ("storage_units", "generators", "links"):
-             logger.warning(f"{component} not in the set ('storage_units', 'generator', 'links')")
-             return pd.DataFrame()
+    def _technical_retirement(c:pypsa.components.Component) -> pd.DataFrame:
+        if c.name == "Link":
+            return (c.df.p_nom_opt).groupby(by=[c.df.bus0,c.df.carrier]).sum().rename_axis(index={"bus0":"bus"})
         else:
-            p_nom_opt = getattr(n, component)
-            if component == "links":
-                p_nom_opt = p_nom_opt[p_nom_opt.carrier.isin(["battery charger", "battery discharger"])]
-                return p_nom_opt.groupby(["bus1", "carrier"]).p_nom_opt.sum()
-            else:
-                return p_nom_opt.groupby(["bus", "carrier"]).p_nom_opt.sum()
+            return (c.df.p_nom_opt).groupby(by=[c.df.bus, c.df.carrier]).sum()
     
-    def _economic_retirement(n: pypsa.Network, component:str) -> pd.DataFrame:
-        if component not in ("storage_units", "generators", "links"):
-             logger.warning(f"{component} not in the set ('storage_units', 'generators', 'links')")
-             return pd.DataFrame()
+    def _economic_retirement(c:str) -> pd.DataFrame:
+        new_cap = (c.df.p_nom_opt - c.df.p_nom).map(lambda x: max(0, x))
+        if c.name == "Link":
+            return (new_cap).groupby(by=[c.df.bus0,c.df.carrier]).sum().rename_axis(index={"bus0":"bus"})
         else:
-            p_nom_opt = getattr(n, component)
-            if component == "links":
-                p_nom_opt = p_nom_opt[p_nom_opt.carrier.isin(["battery charger", "battery discharger"])]
-                return p_nom_opt.groupby(["bus1", "carrier"]).p_nom_opt.sum()
-            else:
-                return p_nom_opt.groupby(["bus", "carrier"]).p_nom_opt.sum()
+            return (new_cap).groupby(by=[c.df.bus, c.df.carrier]).sum()
     
+    totals = []
     if retirement_method == "technical":
-        return pd.concat([_technical_retirement(n, x) for x in ["generators", "storage_units", "links"]])
+        if c.name in ("Generator", "StorageUnit", "Link"):
+                totals.append(_technical_retirement(c))
+        return pd.concat(totals)
     elif retirement_method == "economic":
-        return pd.concat([_economic_retirement(n, x) for x in ["generators", "storage_units", "links"]])
+        for c in n.iterate_components(n.one_port_components | n.branch_components):
+            if c.name in ("Generator", "StorageUnit", "Link"):
+                totals.append(_economic_retirement(c))
+        return pd.concat(totals)
     else:
         logger.error(f"Retirement method must be one of 'technical' or 'economic'. Recieved {retirement_method}.")
         raise NotImplementedError
@@ -200,7 +199,7 @@ def get_operational_costs(n: pypsa.Network) -> pd.DataFrame:
     def _get_energy_multi_port(c: pypsa.components.Component) -> pd.DataFrame:
         return c.pnl.p0.abs()
     
-    totals = pd.DataFrame(index=n.snapshots.index)
+    totals = []
     for c in n.iterate_components(n.one_port_components | n.branch_components):
         if c.name in ("Generator", "StorageUnit", "Store"):
             production = _get_energy_one_port(c)
@@ -222,7 +221,37 @@ def get_operational_costs(n: pypsa.Network) -> pd.DataFrame:
             .sum()
         )
 
-        totals = totals.merge(opex)
+        totals.append(opex)
+
+    return pd.concat(totals, axis=1)
+
+def get_capital_costs(n: pypsa.Network) -> pd.DataFrame:
+    
+    def _get_new_capacity_MW(c: pypsa.components.Component) -> pd.DataFrame:
+        return (c.df.p_nom_opt - c.df.p_nom).map(lambda x: x if x > 0 else 0)
+        
+    def _get_new_capacity_MWh(c: pypsa.components.Component) -> pd.DataFrame:
+        return (c.df.e_nom_opt - c.df.e_nom).map(lambda x: x if x > 0 else 0)
+    
+    totals = []
+    for c in n.iterate_components(n.one_port_components | n.branch_components):
+        if c.name in ("Generator", "StorageUnit", "Link"):
+            new_capacity = _get_new_capacity_MW(c)
+        elif c.name in ("Store"):
+            new_capacity = _get_new_capacity_MWh(c)
+        else:
+            continue
+        
+        capital_costs = c.df.capital_cost
+        
+        capex = (
+            (new_capacity * capital_costs)
+            .fillna(0)
+            .groupby(c.df.carrier)
+            .sum()
+        )
+
+        totals.append(capex)
 
     return pd.concat(totals)
 
