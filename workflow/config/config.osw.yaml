@@ -2,7 +2,7 @@
 # modify_base_network: true #modify BE network to calibrate humbodlt TX capacity
 
 osw_config:
-  enable_osw: true
+  enable_osw: false
   humboldt_capacity: 1607
 
 offshore_shape:
