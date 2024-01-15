@@ -516,26 +516,24 @@ def plot_production_bar(n: pypsa.Network, carriers_2_plot: List[str], save:str, 
     
     # get data 
     
-    carriers = n.generators.carrier
-    carriers_storage_units = n.storage_units.carrier
-    carrier_nice_names = n.carriers.nice_name
-    production = n.generators_t.p
-    production = pd.DataFrame(production.groupby(carriers, axis=1)
-                              .sum().rename(columns=carrier_nice_names)
-                              .sum()).mul(1e-6).rename(columns={0:"Production (TWh)"}).reset_index()
-    
-    storage = n.storage_units_t.p.groupby(carriers_storage_units, axis=1).sum().mul(1e-6)
-    storage_charge = storage[storage > 0].rename(columns={'battery':'Battery Discharging'}).sum().reset_index().rename(columns={0:"Production (TWh)"})
-    storage_discharge = storage[storage < 0].rename(columns={'battery':'Battery Charging'}).sum().reset_index().rename(columns={0:"Production (TWh)"})
-    energy_mix = pd.concat([production, storage_charge, storage_discharge])
+    energy_mix = (
+        get_energy_timeseries(n)
+        .rename(columns={"battery charger": "battery", "battery discharger": "battery"})
+        .groupby(level=0, axis=1)
+        .sum()
+        .sum()
+        .mul(1e-3) # MW -> GW
+    )
+    energy_mix = pd.DataFrame(energy_mix, columns=["Production"]).reset_index(names="carrier")
+    energy_mix = energy_mix[energy_mix.carrier.isin(carriers_2_plot)]
     
     # plot 
     
     fig, ax = plt.subplots(figsize=(10, 10))
     color_palette = get_color_palette(n)
-    sns.barplot(data=energy_mix, y="carrier", x="Production (TWh)", palette=color_palette)
+    sns.barplot(data=energy_mix, y="carrier", x="Production", palette=color_palette)
     
-    ax.set_title(create_title("Production [TWh]", **wildcards))
+    ax.set_title(create_title("Production [GWh]", **wildcards))
     ax.set_ylabel("")
     # ax.set_xlabel("")
     fig.tight_layout()
@@ -971,7 +969,7 @@ if __name__ == "__main__":
     plot_new_capacity(n, onshore_regions, carriers, snakemake.output["capacity_map_new"], "greenfield", retirement_method, **snakemake.wildcards)
     plot_capacity_additions_bar(n, carriers, snakemake.output["capacity_additions_bar"], "greenfield", retirement_method,  **snakemake.wildcards)
     plot_costs_bar(n, carriers, snakemake.output["costs_bar"], **snakemake.wildcards)
-    # plot_production_bar(n, carriers, snakemake.output["production_bar"], **snakemake.wildcards)
+    plot_production_bar(n, carriers, snakemake.output["production_bar"], **snakemake.wildcards)
     plot_production_area(n, carriers, snakemake.output["production_area"], **snakemake.wildcards)
     plot_production_html(n, carriers, snakemake.output["production_area_html"], **snakemake.wildcards)
     plot_hourly_emissions(n, snakemake.output["emissions_area"], **snakemake.wildcards)

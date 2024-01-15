@@ -208,11 +208,11 @@ def get_operational_costs(n: pypsa.Network) -> pd.DataFrame:
         else:
             continue
         
-        # pypsa.descriptors.allocate_series_dataframes(n, {c.name:["marginal_cost"]})
         marginal_cost = c.pnl.marginal_cost
-        for item in c.df.index:
-            if item not in marginal_cost:
-                marginal_cost[item] = c.df.at[item, "marginal_cost"]
+        marginal_cost_static = {}
+        for item in [x for x in c.df.index if x not in marginal_cost.columns]:
+            marginal_cost_static[item] = [c.df.at[item, "marginal_cost"]] * len(marginal_cost)
+        marginal_cost = pd.concat([marginal_cost, pd.DataFrame(marginal_cost_static, index=marginal_cost.index)], axis=1)
         
         opex = (
             (production * marginal_cost)
