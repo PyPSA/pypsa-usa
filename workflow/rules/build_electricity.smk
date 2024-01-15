@@ -252,12 +252,12 @@ rule add_electricity:
     output:
         RESOURCES + "{interconnect}/elec_base_network_l_pp.nc",
     log:
-        LOGS + "{interconnect}_add_electricity.log",
+        LOGS + "{interconnect}/add_electricity.log",
     benchmark:
-        BENCHMARKS + "{interconnect}_add_electricity"
+        BENCHMARKS + "{interconnect}/add_electricity"
     threads: 1
     resources:
-        mem_mb=5000,
+        mem_mb=7000,
     script:
         "../scripts/add_electricity.py"
 
@@ -274,7 +274,7 @@ rule simplify_network:
         "logs/simplify_network/{interconnect}/elec_s.log",
     threads: 4
     resources:
-        mem=500,
+        mem=7000,
     script:
         "../scripts/simplify_network.py"
 
@@ -303,6 +303,6 @@ rule cluster_network:
         "benchmarks/cluster_network/{interconnect}/elec_s_{clusters}"
     threads: 1
     resources:
-        mem_mb=6000,
+        mem_mb=7000,
     script:
         "../scripts/cluster_network_eur.py"
