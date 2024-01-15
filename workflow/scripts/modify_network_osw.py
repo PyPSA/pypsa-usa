@@ -1,5 +1,6 @@
 import pandas as pd
 import pypsa
+import os
 
 #Global Variables
 
@@ -63,7 +64,7 @@ def add_osw_turbines(network, plant_name, capacity,  pu_time_series):
     network.add("Generator", 
                 name= plant_name+"_osw", 
                 bus= eureka_bus_id,
-                carrier= "offwind",
+                carrier= "offwind_floating",
                 p_nom= capacity,
                 marginal_cost=0,
                 p_max_pu= pu_time_series.values,
@@ -73,26 +74,14 @@ def add_osw_turbines(network, plant_name, capacity,  pu_time_series):
     network.generators.loc[ plant_name+"_osw", "weight"] = 1
 
 
-
 # Load Offshore Wind Time Series Data
-osw_ts = pd.read_csv('/Users/kamrantehranchi/Local_Documents/pypsa-usa/workflow/repo_data/Offshore_Wind_CEC_PLEXOS_2030.csv', 
+osw_ts = pd.read_csv(os.getcwd() + f'/../repo_data/Offshore_Wind_CEC_PLEXOS_2030.csv', 
                         index_col=0, 
                         parse_dates=True
                     )
 
 def build_OSW_base_configuration(network, osw_capacity):
     """Adding the initial buses, export cables, and transformers to the network."""
-    # #define network lines
-    # define_line_types(network)
-
-    # # Add Offshore Substations + Export Cables
-    # add_export_array_module(network,
-    #                         "humboldt",
-    #                         humboldt_export_cable_id,
-    #                         capacity = osw_capacity,
-    #                         offshore_sub_location = humboldt_bus_loc
-    #                         )
-
     # Add New Offshore Generators
     add_osw_turbines(network,
                     "humboldt", 
@@ -211,24 +200,6 @@ def build_hvdc_subsea(network):
                     "BayHub_500kV")
 
 
-def define_line_types(network):    
-    # # import pdb;pdb.set_trace()
-    # network.line_types.loc["500kvac"] = pd.Series(
-    #     [60, 0.0683, 0.335, 15, 1.01, 'ol'],
-    #     index=["f_nom", "r_per_length", "x_per_length", "c_per_length", "i_nom", "mounting"],
-    #     )
-
-    # network.line_types.loc["export_cable"] = pd.Series(
-    #     [60, 0.0683, 0.335, 15, 1.01, 'subsea'],
-    #     index=["f_nom", "r_per_length", "x_per_length",  "c_per_length", "i_nom", "mounting"],
-    #     )
-    
-    network.line_types.loc["Rail"] = pd.Series(
-        [60, 0.0683, 0.335, 15, 1.01],
-        index=["f_nom", "r_per_length", "x_per_length", "c_per_length", "i_nom"],
-        )
-    return network
-
 def add_hvdc_subsea(network, line_name, bus0, bus1):
     network.add("Link", 
                 name= line_name, 
@@ -248,7 +219,6 @@ def add_hvdc_overhead(network, line_name, bus0, bus1):
             bus0=bus0, 
             bus1=bus1,
             type="Rail",
-            # type="HVDC_LCC", 
             carrier = "DC",
             efficiency=1,
             p_nom=3000,
@@ -264,7 +234,6 @@ def add_hvac_500kv(network, line_name, bus0, bus1):
                 x=84.8225115,
                 s_nom=3200,
                 type="Rail",
-                # type="500kvac",
                 carrier = 'AC',
         )
     network.lines.loc[line_name, "interconnect"] = "Western"
