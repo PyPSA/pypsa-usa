@@ -948,7 +948,7 @@ def attach_wind_and_solar(
             weight_bus = ds["weight"].to_dataframe().merge(bus2sub,left_on="bus", right_on="sub_id").set_index('bus_id').weight
             bus_profiles = ds["profile"].transpose("time", "bus").to_pandas().T.merge(bus2sub,left_on="bus", right_on="sub_id").set_index('bus_id').drop(columns='sub_id').T
             
-            if car == 'offwind':
+            if supcar == 'offwind':
                 capital_cost = capital_cost.to_frame().reset_index()
                 capital_cost.bus = capital_cost.bus.astype(int)
                 capital_cost = pd.merge(capital_cost, n.buses.sub_id.reset_index(),left_on='bus', right_on='sub_id',how='left').rename(columns={0:'capital_cost'}).set_index('Bus').capital_cost

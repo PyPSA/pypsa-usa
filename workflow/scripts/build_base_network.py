@@ -437,6 +437,7 @@ def modify_breakthrough_lines(n:pypsa.Network, interconnect:str):
             '90530' : {'v_nom':115},
             '90528' : {'v_nom':115},
             '90529' : {'v_nom':115},
+            '89704' : {'v_nom':115},
             }
             
         for i in line_fixes.keys():
