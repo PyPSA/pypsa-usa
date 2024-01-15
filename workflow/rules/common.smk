@@ -1,6 +1,6 @@
 
 def memory(w):
-    factor = 3.0
+    factor = 3.5
     for o in w.opts.split("-"):
         m = re.match(r"^(\d+)h$", o, re.IGNORECASE)
         if m is not None:
