@@ -262,51 +262,103 @@ def get_capital_costs(n: pypsa.Network) -> pd.DataFrame:
 def get_node_emissions_timeseries(n: pypsa.Network) -> pd.DataFrame:
     """Gets timeseries emissions per node"""
     
-    emission_rates = n.carriers[n.carriers["co2_emissions"] != 0]["co2_emissions"]
-
-    if emission_rates.empty:
-        return pd.DataFrame(index=n.snapshots)
+    totals=[]
+    for c in n.iterate_components(n.one_port_components | n.branch_components):
+        if c.name in ("Generator"):
+            
+            # get time series efficiency
+            eff = c.pnl.efficiency
+            eff_static = {}
+            for gen in [x for x in c.df.index if x not in eff.columns]:
+                eff_static[gen] = [c.df.at[gen, "efficiency"]] * len(eff)
+            eff = pd.concat([eff, pd.DataFrame(eff_static, index=eff.index)], axis=1)
+            
+            co2_factor = c.df.carrier.map(n.carriers.co2_emissions).fillna(0)
+            
+            totals.append(
+                (
+                    c.pnl.p
+                    .mul(1/eff)
+                    .mul(co2_factor)
+                    .groupby(n.generators.bus, axis=1)
+                    .sum()
+                )
+            )
+        elif c.name == "Link": # efficiency taken into account by using p0
+            
+            co2_factor = c.df.carrier.map(n.carriers.co2_emissions).fillna(0)
+            
+            totals.append(
+                (
+                    c.pnl.p0
+                    .mul(co2_factor)
+                    .groupby(n.links.bus0, axis=1)
+                    .sum()
+                    .rename_axis(index={"bus0":"bus"})
+                )
+            )
+    return pd.concat(totals, axis=1)
     
-    emission_rates = n.carriers[n.carriers["co2_emissions"] != 0]["co2_emissions"]
-
-    emitters = emission_rates.index
-    generators = n.generators[n.generators.carrier.isin(emitters)]
     
-    if generators.empty:
-        return pd.DataFrame(index=n.snapshots, columns=n.buses.index).fillna(0)
+    # emission_rates = n.carriers[n.carriers["co2_emissions"] != 0]["co2_emissions"]
 
-    em_pu = generators.carrier.map(emission_rates) / generators.efficiency # TODO timeseries efficiency 
-    return (
-        n.generators_t.p[generators.index]
-        .mul(em_pu)
-        .groupby(n.generators.bus, axis=1)
-        .sum()
-    )
+    # if emission_rates.empty:
+    #     return pd.DataFrame(index=n.snapshots)
+    
+    # emission_rates = n.carriers[n.carriers["co2_emissions"] != 0]["co2_emissions"]
+
+    # emitters = emission_rates.index
+    # generators = n.generators[n.generators.carrier.isin(emitters)]
+    
+    # if generators.empty:
+    #     return pd.DataFrame(index=n.snapshots, columns=n.buses.index).fillna(0)
+
+    # em_pu = generators.carrier.map(emission_rates) / generators.efficiency # TODO timeseries efficiency 
+    # return (
+    #     n.generators_t.p[generators.index]
+    #     .mul(em_pu)
+    #     .groupby(n.generators.bus, axis=1)
+    #     .sum()
+    # )
 
 def get_tech_emissions_timeseries(n: pypsa.Network) -> pd.DataFrame:
     """Gets timeseries emissions per technology"""
-    
-    emission_rates = n.carriers[n.carriers["co2_emissions"] != 0]["co2_emissions"]
 
-    if emission_rates.empty:
-        return pd.DataFrame(index=n.snapshots)
-
-    nice_names = n.carriers["nice_name"]
-    emitters = emission_rates.index
-    generators = n.generators[n.generators.carrier.isin(emitters)]
-
-    if generators.empty:
-        return pd.DataFrame(index=n.snapshots, columns=emitters).fillna(0).rename(columns=nice_names)
-    
-    em_pu = generators.carrier.map(emission_rates) / generators.efficiency # TODO timeseries efficiency 
-    return (
-        n.generators_t.p[generators.index]
-        .mul(em_pu)
-        .groupby(n.generators.carrier, axis=1)
-        .sum()
-        .rename(columns=nice_names)
-    )
-
+    totals=[]
+    for c in n.iterate_components(n.one_port_components | n.branch_components):
+        if c.name in ("Generator"):
+            
+            # get time series efficiency
+            eff = c.pnl.efficiency
+            eff_static = {}
+            for gen in [x for x in c.df.index if x not in eff.columns]:
+                eff_static[gen] = [c.df.at[gen, "efficiency"]] * len(eff)
+            eff = pd.concat([eff, pd.DataFrame(eff_static, index=eff.index)], axis=1)
+            
+            co2_factor = c.df.carrier.map(n.carriers.co2_emissions).fillna(0)
+            
+            totals.append(
+                (
+                    c.pnl.p
+                    .mul(1/eff)
+                    .mul(co2_factor)
+                    .groupby(n.generators.carrier, axis=1)
+                    .sum()
+                )
+            )
+        elif c.name == "Link": # efficiency taken into account by using p0
+            
+            co2_factor = c.df.carrier.map(n.carriers.co2_emissions).fillna(0)
+            
+            totals.append(
+                (
+                    c.pnl.p0
+                    .mul(co2_factor)
+                    .groupby(n.links.carrier, axis=1)
+                    .sum()
+                )
+            )
+    return pd.concat(totals, axis=1)
 
 if __name__ == "__main__":
     if 'snakemake' not in globals():
@@ -322,7 +374,7 @@ if __name__ == "__main__":
     configure_logging(snakemake)
     
     n = pypsa.Network(snakemake.input.network)
-    get_energy_total(n)
-    get_energy_timeseries(n)
+    # get_energy_total(n)
+    # get_energy_timeseries(n)
     
     
