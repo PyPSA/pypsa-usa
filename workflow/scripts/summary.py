@@ -136,11 +136,10 @@ def get_capacity_greenfield(n: pypsa.Network, retirement_method = "economic") ->
             return (c.pnl.p.max()).groupby(by=[c.df.bus, c.df.carrier]).sum()
     
     def _economic_retirement(c:pypsa.components.Component) -> pd.DataFrame:
-        new_cap = (c.df.p_nom_opt - c.df.p_nom).map(lambda x: max(0, x))
         if c.name == "Link":
-            return (new_cap).groupby(by=[c.df.bus0,c.df.carrier]).sum().rename_axis(index={"bus0":"bus"})
+            return (c.df.p_nom_opt).groupby(by=[c.df.bus0,c.df.carrier]).sum().rename_axis(index={"bus0":"bus"})
         else:
-            return (new_cap).groupby(by=[c.df.bus, c.df.carrier]).sum()
+            return (c.df.p_nom_opt).groupby(by=[c.df.bus, c.df.carrier]).sum()
     
     totals=[]
     if retirement_method == "technical":
@@ -167,11 +166,10 @@ def get_capacity_brownfield(n: pypsa.Network, retirement_method = "economic", co
             return (c.df.p_nom_opt).groupby(by=[c.df.bus, c.df.carrier]).sum()
     
     def _economic_retirement(c:str) -> pd.DataFrame:
-        new_cap = (c.df.p_nom_opt - c.df.p_nom).map(lambda x: max(0, x))
         if c.name == "Link":
-            return (new_cap).groupby(by=[c.df.bus0,c.df.carrier]).sum().rename_axis(index={"bus0":"bus"})
+            return (c.df.p_nom_opt).groupby(by=[c.df.bus0,c.df.carrier]).sum().rename_axis(index={"bus0":"bus"})
         else:
-            return (new_cap).groupby(by=[c.df.bus, c.df.carrier]).sum()
+            return (c.df.p_nom_opt).groupby(by=[c.df.bus, c.df.carrier]).sum()
     
     totals = []
     if retirement_method == "technical":
@@ -369,7 +367,7 @@ if __name__ == "__main__":
             clusters=40,
             ll='v1.25',
             opts='Co2L1.25',
-            sector="E-G"
+            sector="E"
         )
     configure_logging(snakemake)
     

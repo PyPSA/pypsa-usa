@@ -852,7 +852,14 @@ def plot_capacity_additions_bar(
     
     nice_names = n.carriers.nice_name
     
-    p_nom = get_capacity_base(n).to_frame("Base Capacity")
+    p_nom = (
+        get_capacity_base(n)
+        .to_frame("Base Capacity")
+        .reset_index()
+        .drop(columns=["bus"]) 
+        .groupby("carrier")
+        .sum()
+    )
     
     if opt_capacity == "greenfield":
         p_nom_opt = get_capacity_greenfield(n, retirement_method)
@@ -869,16 +876,10 @@ def plot_capacity_additions_bar(
         .drop(columns=["bus"]) 
         .groupby("carrier")
         .sum()
-        .rename(columns={0:"Optimal Capacity"})
+        .rename(columns={"p_nom_opt":"Optimal Capacity"})
     )
     
-    capacity =(
-        p_nom.join(p_nom_opt)
-        .reset_index()
-        .drop(columns=["bus"])
-        .groupby("carrier")
-        .sum()
-    )
+    capacity = p_nom.join(p_nom_opt)
     capacity = capacity[capacity.index.isin(carriers_2_plot)]
     capacity.index = capacity.index.map(nice_names)
     
@@ -937,7 +938,7 @@ if __name__ == "__main__":
             clusters=40,
             ll='v1.25',
             opts='Co2L1.25',
-            sector="E-G"
+            sector="E"
         )
     configure_logging(snakemake)
     
