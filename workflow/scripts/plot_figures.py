@@ -89,14 +89,22 @@ import plotly.graph_objects as go
 # Global Plotting Settings
 TITLE_SIZE = 16
 
-def get_color_palette(n: pypsa.Network) -> Dict[str,str]:
-    color_palette = n.carriers.color.to_dict()
-    return {
-        **color_palette,
-        "charge":color_palette["battery"],
-        "discharge":color_palette["battery"],
-        "co2":"k"
+def get_color_palette(n: pypsa.Network) -> pd.Series:
+    """Returns colors based on nice name"""
+    
+    colors = (
+        n.carriers
+        .reset_index()
+        .set_index("nice_name")
+    ).color
+    
+    additional = {
+        "Battery Charge": n.carriers.loc["battery"].color,
+        "Battery Discharge": n.carriers.loc["battery"].color,
+        "co2": "k",
     }
+    
+    return pd.concat([colors, pd.Series(additional)])
 
 # def get_color_palette(n: pypsa.Network) -> Dict[str,str]:
 #     color_palette = n.carriers.set_index("nice_name").to_dict()["color"]
@@ -255,7 +263,7 @@ def plot_region_emissions_html(n: pypsa.Network, save:str, **wildcards) -> None:
     fig.update_layout(
         title=dict(text=title, font=dict(size=TITLE_SIZE)),
         xaxis_title="",
-        yaxis_title="Emissions [Tonnes]",
+        yaxis_title="Emissions [MT]",
     )
     fig.write_html(save)
     
@@ -281,7 +289,7 @@ def plot_node_emissions_html(n: pypsa.Network, save:str, **wildcards) -> None:
     fig.update_layout(
         title=dict(text=title, font=dict(size=TITLE_SIZE)),
         xaxis_title="",
-        yaxis_title="Emissions [Tonnes]",
+        yaxis_title="Emissions [MT]",
     )
     fig.write_html(save)
 
@@ -303,7 +311,7 @@ def plot_accumulated_emissions(n: pypsa.Network, save:str, **wildcards) -> None:
     
     ax.legend(bbox_to_anchor=(1, 1), loc="upper left")
     ax.set_title(create_title("Accumulated Emissions", **wildcards))
-    ax.set_ylabel("Emissions [Tonnes]")
+    ax.set_ylabel("Emissions [MT]")
     fig.tight_layout()
     
     fig.savefig(save)
@@ -313,14 +321,13 @@ def plot_accumulated_emissions_tech(n: pypsa.Network, save:str, **wildcards) -> 
     
     # get data
     
-    nice_names = n.carriers.nice_name
     emissions = (
         get_tech_emissions_timeseries(n)
         .cumsum()
-        # .rename(columns=nice_names)
         .mul(1e-6) # T -> MT
     )
-    emissions = emissions.drop(columns=["battery charger", "battery discharger"])
+    emissions = emissions[[x for x in n.carriers[n.carriers.co2_emissions > 0].index if x in emissions.columns]]
+    emissions = emissions.rename(columns=n.carriers.nice_name)
     
     # plot
     
@@ -332,7 +339,7 @@ def plot_accumulated_emissions_tech(n: pypsa.Network, save:str, **wildcards) -> 
     
     ax.legend(bbox_to_anchor=(1, 1), loc="upper left")
     ax.set_title(create_title("Technology Accumulated Emissions", **wildcards))
-    ax.set_ylabel("Emissions [Tonnes]")
+    ax.set_ylabel("Emissions [MT]")
     fig.tight_layout()
     
     fig.savefig(save)
@@ -342,14 +349,13 @@ def plot_accumulated_emissions_tech_html(n: pypsa.Network, save:str, **wildcards
     
     # get data
     
-    nice_names = n.carriers.nice_name
     emissions = (
         get_tech_emissions_timeseries(n)
         .cumsum()
-        # .rename(columns=nice_names)
         .mul(1e-6) # T -> MT
     )
-    emissions = emissions.drop(columns=["battery charger", "battery discharger"])
+    emissions = emissions[[x for x in n.carriers[n.carriers.co2_emissions > 0].index if x in emissions.columns]]
+    emissions = emissions.rename(columns=n.carriers.nice_name)
     
     # plot
     
@@ -359,14 +365,14 @@ def plot_accumulated_emissions_tech_html(n: pypsa.Network, save:str, **wildcards
         emissions, 
         x=emissions.index,
         y=emissions.columns,
-        color_discrete_map=color_palette
+        color_discrete_map=color_palette.to_dict()
     )
     
     title = create_title("Technology Accumulated Emissions", **wildcards)
     fig.update_layout(
         title=dict(text=title, font=dict(size=TITLE_SIZE)),
         xaxis_title="",
-        yaxis_title="Emissions [Tonnes]",
+        yaxis_title="Emissions [MT]",
     )
     fig.write_html(save)
 
@@ -376,7 +382,8 @@ def plot_hourly_emissions_html(n: pypsa.Network, save:str, **wildcards) -> None:
     # get data
     
     emissions = get_tech_emissions_timeseries(n).mul(1e-6) # T -> MT
-    emissions = emissions.drop(columns=["battery charger", "battery discharger"])
+    emissions = emissions[[x for x in n.carriers[n.carriers.co2_emissions > 0].index if x in emissions.columns]]
+    emissions = emissions.rename(columns=n.carriers.nice_name)
     
     # plot
     
@@ -386,14 +393,14 @@ def plot_hourly_emissions_html(n: pypsa.Network, save:str, **wildcards) -> None:
         emissions, 
         x=emissions.index,
         y=emissions.columns,
-        color_discrete_map=color_palette
+        color_discrete_map=color_palette.to_dict()
     )
     
     title = create_title("Technology Emissions", **wildcards)
     fig.update_layout(
         title=dict(text=title, font=dict(size=TITLE_SIZE)),
         xaxis_title="",
-        yaxis_title="Emissions [Tonnes]",
+        yaxis_title="Emissions [MT]",
     )
     fig.write_html(save)
 
@@ -403,7 +410,8 @@ def plot_hourly_emissions(n: pypsa.Network, save:str, **wildcards) -> None:
     # get data
     
     emissions = get_tech_emissions_timeseries(n).mul(1e-6) # T -> MT
-    emissions = emissions.drop(columns=["battery charger", "battery discharger"])
+    emissions = emissions[[x for x in n.carriers[n.carriers.co2_emissions > 0].index if x in emissions.columns]]
+    emissions = emissions.rename(columns=n.carriers.nice_name)
     
     # plot
     
@@ -411,11 +419,11 @@ def plot_hourly_emissions(n: pypsa.Network, save:str, **wildcards) -> None:
     
     fig, ax = plt.subplots(figsize=(14, 4))
     
-    emissions.plot.area(ax=ax, alpha=0.7, legend="reverse", color=color_palette)
+    emissions.plot.area(ax=ax, alpha=0.7, legend="reverse", color=color_palette.to_dict())
     
     ax.legend(bbox_to_anchor=(1, 1), loc="upper left")
     ax.set_title(create_title("Technology Emissions", **wildcards))
-    ax.set_ylabel("Emissions [Tonnes]")
+    ax.set_ylabel("Emissions [MT]")
     fig.tight_layout()
     
     fig.savefig(save)
@@ -435,6 +443,8 @@ def plot_production_html(n: pypsa.Network, carriers_2_plot: List[str], save:str,
         energy_mix = energy_mix.groupby(level=0, axis=1).sum()
         
     energy_mix = energy_mix[[x for x in carriers_2_plot if x in energy_mix]]
+    energy_mix = energy_mix.rename(columns=n.carriers.nice_name)
+    
     energy_mix["Demand"] = get_demand_timeseries(n).mul(1e-3) # MW -> GW
     
     # plot 
@@ -445,7 +455,7 @@ def plot_production_html(n: pypsa.Network, carriers_2_plot: List[str], save:str,
         energy_mix, 
         x=energy_mix.index, 
         y=[c for c in energy_mix.columns if c != "Demand"],
-        color_discrete_map=color_palette
+        color_discrete_map=color_palette.to_dict()
     )
     fig.add_trace(go.Scatter(x=energy_mix.index, y=energy_mix.Demand, mode="lines", name="Demand", line_color="darkblue"))
     title = create_title("Production [GW]", **wildcards)
@@ -476,6 +486,7 @@ def plot_production_area(n: pypsa.Network, carriers_2_plot: List[str], save:str,
         energy_mix = energy_mix.groupby(level=0, axis=1).sum()
         
     energy_mix = energy_mix[[x for x in carriers_2_plot if x in energy_mix]]
+    energy_mix = energy_mix.rename(columns=n.carriers.nice_name)
     
     # plot 
     
@@ -491,7 +502,7 @@ def plot_production_area(n: pypsa.Network, carriers_2_plot: List[str], save:str,
                 
             fig, ax = plt.subplots(figsize=(14, 4))
             
-            energy_mix[snapshots].plot.area(ax=ax, alpha=0.7, legend="reverse", color=color_palette)
+            energy_mix[snapshots].plot.area(ax=ax, alpha=0.7, color=color_palette.to_dict())
             demand[snapshots].plot.line(ax=ax, ls="-", color="darkblue")
             
             suffix = (
@@ -525,13 +536,14 @@ def plot_production_bar(n: pypsa.Network, carriers_2_plot: List[str], save:str, 
         .mul(1e-3) # MW -> GW
     )
     energy_mix = pd.DataFrame(energy_mix, columns=["Production"]).reset_index(names="carrier")
-    energy_mix = energy_mix[energy_mix.carrier.isin(carriers_2_plot)]
+    energy_mix = energy_mix[energy_mix.carrier.isin([x for x in carriers_2_plot if x != "battery"])].copy()
+    energy_mix["color"] = energy_mix.carrier.map(n.carriers.color)
+    energy_mix["carrier"] = energy_mix.carrier.map(n.carriers.nice_name)
     
     # plot 
     
     fig, ax = plt.subplots(figsize=(10, 10))
-    color_palette = get_color_palette(n)
-    sns.barplot(data=energy_mix, y="carrier", x="Production", palette=color_palette)
+    sns.barplot(data=energy_mix, y="carrier", x="Production", palette=energy_mix.color)
     
     ax.set_title(create_title("Production [GWh]", **wildcards))
     ax.set_ylabel("")
