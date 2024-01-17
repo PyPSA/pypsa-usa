@@ -39,10 +39,10 @@ def assign_bus_2_state(n: pypsa.Network, shp: str,  states_2_include: List[str] 
     states_projected = states.to_crs("EPSG:3857")
     gdf = gpd.sjoin_nearest(buses_projected, states_projected, how="left")
     
-    n.buses["state"] = n.buses.index.map(gdf.index_right)
+    n.buses["STATE"] = n.buses.index.map(gdf.index_right)
     
     if state_2_state_name:
-        n.buses["state_name"] = n.buses.state.map(state_2_state_name)
+        n.buses["STATE_NAME"] = n.buses.STATE.map(state_2_state_name)
 
 def convert_generators_2_links(n: pypsa.Network, carrier: str, bus0_suffix: str):
     """Replace Generators with cross sector links. 
@@ -57,7 +57,9 @@ def convert_generators_2_links(n: pypsa.Network, carrier: str, bus0_suffix: str)
         suffix to attach link to 
     """
     
-    plants = n.generators[n.generators.carrier==carrier]
+    plants = n.generators[n.generators.carrier==carrier].copy()
+    plants["state"] = plants.bus.map(n.buses.state)
+    
     n.madd(
         "Link",
         names=plants.index,

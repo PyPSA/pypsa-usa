@@ -160,17 +160,20 @@ def read_gas_pipline(xlsx: str, year: int = 2022) -> pd.DataFrame:
 
 def build_state_gas_buses(n: pypsa.Network, states: pd.DataFrame) -> None:
     
+    # TODO: reformate states so names is on the index to remove the "to_list()"
+    
     n.madd(
         "Bus", 
         names=states.STATE,
         suffix=" gas",
-        x=states.x,
-        y=states.y,
+        x=states.x.to_list(),
+        y=states.y.to_list(),
         carrier="gas",
         unit="MMCF",
-        interconnect=states.interconnect,
-        country=states.STATE ,
-        location=states.index # full state name
+        interconnect=states.interconnect.to_list(),
+        country=states.STATE.to_list(), # for consistency 
+        STATE=states.STATE.to_list(),
+        STATE_NAME=states.index
     )
     
 ###
@@ -201,7 +204,7 @@ def build_gas_producers(n: pypsa.Network, producers: pd.DataFrame) -> None:
 def build_storage_facilities(n: pypsa.Network, storage: pd.DataFrame, **kwargs) -> None:
     
     df = storage.reset_index().drop(columns=["COUNTY"]).groupby("STATE").sum()
-    df["bus"] = df.index + " gas"
+    df["bus"] = df.index
     
     n.madd(
         "Bus",
@@ -216,7 +219,7 @@ def build_storage_facilities(n: pypsa.Network, storage: pd.DataFrame, **kwargs) 
         "Store",
         names=df.index,
         suffix=" gas storage",
-        bus=df.bus + " gas storage",
+        bus=df.index + " gas storage",
         carrier="gas storage",
         e_nom_extendable=False,
         e_nom=df.MAX_CAPACITY_MMCF,
@@ -490,6 +493,12 @@ def build_natural_gas(
     exports: str = "../data/natural-gas/NG_MOVE_POE1_A_EPG0_ENP_MMCF_M.xls",
     pipelines: str = "../data/natural-gas/EIA-StatetoStateCapacity_Jan2023.xlsx"
 ) -> pypsa.Network:
+
+    ###
+    # CREATE GAS CARRIER
+    ###
+    
+    n.add("Carrier","gas")
 
     ###
     # CREATE STATE LEVEL BUSES
