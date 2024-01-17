@@ -396,18 +396,21 @@ def build_import_export_pipelines(n: pypsa.Network, df: pd.DataFrame, interconne
     """
     
     if interconnect != "usa":
-        to_from = df[df.INTERCONNECT_TO==interconnect]
-        from_to = df[df.INTERCONNECT_FROM==interconnect]
+        to_from = df[df.INTERCONNECT_TO==interconnect].copy()
+        from_to = df[df.INTERCONNECT_FROM==interconnect].copy()
     else:
-        to_from = df[~df.INTERCONNECT_TO.isin(["canada", "mexico"])]
-        from_to = df[~df.INTERCONNECT_FROM.isin(["canada", "mexico"])]
+        to_from = df[~df.INTERCONNECT_TO.isin(["canada", "mexico"])].copy()
+        from_to = df[~df.INTERCONNECT_FROM.isin(["canada", "mexico"])].copy()
         
     to_from["NAME"] = to_from.STATE_FROM + " " + to_from.STATE_TO
     from_to["NAME"] = from_to.STATE_TO + " " + from_to.STATE_FROM
     
+    to_from = to_from.set_index("NAME")
+    from_to = from_to.set_index("NAME")
+    
     n.madd(
         "Bus",
-        names=to_from.NAME,
+        names=to_from.index,
         suffix=" gas export",
         carrier="gas export",
         unit="MMCF",
@@ -415,7 +418,7 @@ def build_import_export_pipelines(n: pypsa.Network, df: pd.DataFrame, interconne
     
     n.madd(
         "Bus",
-        names=from_to.NAME,
+        names=from_to.index,
         suffix=" gas import",
         carrier="gas import",
         unit="MMCF",
@@ -423,12 +426,12 @@ def build_import_export_pipelines(n: pypsa.Network, df: pd.DataFrame, interconne
     
     n.madd(
         "Link",
-        names=to_from.NAME,
+        names=to_from.index,
         suffix=" gas export",
         carrier="gas export",
         unit="MMCF",
         bus0=to_from.STATE_FROM + " gas",
-        bus1=to_from.NAME + " gas export",
+        bus1=to_from.index + " gas export",
         p_nom=round(to_from.CAPACITY_MMCFD / 24), # get a hourly flow rate 
         p_min_pu=0,
         p_max_pu=1,
@@ -438,11 +441,11 @@ def build_import_export_pipelines(n: pypsa.Network, df: pd.DataFrame, interconne
     
     n.madd(
         "Link",
-        names=from_to.NAME,
+        names=from_to.index,
         suffix=" gas import",
         carrier="gas import",
         unit="MMCF",
-        bus0=from_to.NAME + " gas import",
+        bus0=from_to.index + " gas import",
         bus1=from_to.STATE_FROM + " gas",
         p_nom=round(from_to.CAPACITY_MMCFD / 24), # get a hourly flow rate 
         p_min_pu=0,
@@ -453,10 +456,10 @@ def build_import_export_pipelines(n: pypsa.Network, df: pd.DataFrame, interconne
     
     n.madd(
         "Store",
-        names=to_from.NAME,
+        names=to_from.index,
         suffix=" gas export",
         unit="MMCF",
-        bus=to_from.NAME + " gas export",
+        bus=to_from.index + " gas export",
         carrier="gas export",
         e_nom_extendable=True,
         capital_cost=0,
@@ -467,10 +470,10 @@ def build_import_export_pipelines(n: pypsa.Network, df: pd.DataFrame, interconne
     
     n.madd(
         "Store",
-        names=from_to.NAME,
+        names=from_to.index,
         unit="MMCF",
         suffix=" gas import",
-        bus=from_to.NAME + " gas import",
+        bus=from_to.index + " gas import",
         carrier="gas import",
         e_nom_extendable=True,
         capital_cost=0,
@@ -542,7 +545,11 @@ def build_natural_gas(
     domestic_pipeline_connections = get_domestic_pipeline_connections(pipelines, interconnect)
     international_pipeline_connections = get_international_pipeline_connections(pipelines, interconnect)
     
-    build_pipelines(n, domestic_piplines)
+    if domestic_piplines.empty:
+        logger.warning(f"No domestic gas pipelines to add for {interconnect}")
+    else:
+        build_pipelines(n, domestic_piplines)
+        
     build_import_export_pipelines(n, domestic_pipeline_connections, interconnect)
     build_import_export_pipelines(n, international_pipeline_connections, interconnect)
 

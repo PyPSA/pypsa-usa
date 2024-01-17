@@ -58,12 +58,12 @@ def convert_generators_2_links(n: pypsa.Network, carrier: str, bus0_suffix: str)
     """
     
     plants = n.generators[n.generators.carrier==carrier].copy()
-    plants["state"] = plants.bus.map(n.buses.state)
+    plants["STATE"] = plants.bus.map(n.buses.STATE)
     
     n.madd(
         "Link",
         names=plants.index,
-        bus0=plants.state + bus0_suffix,
+        bus0=plants.STATE + bus0_suffix,
         bus1=plants.bus,
         carrier=plants.carrier,
         p_nom_min=plants.p_nom_min,

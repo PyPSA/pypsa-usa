@@ -13,7 +13,7 @@ rule add_sectors:
         # for natural gas
         eia_191=DATA + "natural-gas/EIA-191.csv",
         eia_757=DATA + "natural-gas/EIA-757.csv",
-        piplines=DATA + "natural-gas/EIA-StatetoStateCapacity_Jan2023.xlsx",
+        pipelines=DATA + "natural-gas/EIA-StatetoStateCapacity_Jan2023.xlsx",
         imports=DATA + "natural-gas/NG_MOVE_POE2_A_EPG0_IRP_MMCF_A.xls",
         exports=DATA + "natural-gas/NG_MOVE_POE2_A_EPG0_ENP_MMCF_A.xls",
     output:
