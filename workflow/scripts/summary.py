@@ -156,7 +156,7 @@ def get_capacity_greenfield(n: pypsa.Network, retirement_method = "economic") ->
         logger.error(f"Retirement method must be one of 'technical' or 'economic'. Recieved {retirement_method}.")
         raise NotImplementedError
 
-def get_capacity_brownfield(n: pypsa.Network, retirement_method = "economic", components:str = "all") -> pd.DataFrame:
+def get_capacity_brownfield(n: pypsa.Network, retirement_method = "economic") -> pd.DataFrame:
     """Gets optimal brownfield pnom capacity"""
     
     def _technical_retirement(c:pypsa.components.Component) -> pd.DataFrame:
@@ -296,28 +296,6 @@ def get_node_emissions_timeseries(n: pypsa.Network) -> pd.DataFrame:
                 )
             )
     return pd.concat(totals, axis=1)
-    
-    
-    # emission_rates = n.carriers[n.carriers["co2_emissions"] != 0]["co2_emissions"]
-
-    # if emission_rates.empty:
-    #     return pd.DataFrame(index=n.snapshots)
-    
-    # emission_rates = n.carriers[n.carriers["co2_emissions"] != 0]["co2_emissions"]
-
-    # emitters = emission_rates.index
-    # generators = n.generators[n.generators.carrier.isin(emitters)]
-    
-    # if generators.empty:
-    #     return pd.DataFrame(index=n.snapshots, columns=n.buses.index).fillna(0)
-
-    # em_pu = generators.carrier.map(emission_rates) / generators.efficiency # TODO timeseries efficiency 
-    # return (
-    #     n.generators_t.p[generators.index]
-    #     .mul(em_pu)
-    #     .groupby(n.generators.bus, axis=1)
-    #     .sum()
-    # )
 
 def get_tech_emissions_timeseries(n: pypsa.Network) -> pd.DataFrame:
     """Gets timeseries emissions per technology"""

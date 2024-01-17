@@ -106,14 +106,6 @@ def get_color_palette(n: pypsa.Network) -> pd.Series:
     
     return pd.concat([colors, pd.Series(additional)])
 
-# def get_color_palette(n: pypsa.Network) -> Dict[str,str]:
-#     color_palette = n.carriers.set_index("nice_name").to_dict()["color"]
-#     color_palette["Battery Charging"] = color_palette["Battery Storage"]
-#     color_palette["Battery Discharging"] = color_palette["Battery Storage"]
-#     color_palette["battery"] = color_palette["Battery Storage"]
-#     color_palette["co2"] = "k"
-#     return color_palette
-
 def get_bus_scale(interconnect: str) -> float:
     """Scales lines based on interconnect size"""
     if interconnect != "usa":
@@ -227,9 +219,9 @@ def plot_emissions_map(n: pypsa.Network, regions: gpd.GeoDataFrame, save:str, **
     )
     ax.set_extent(regions.total_bounds[[0, 2, 1, 3]])
 
-    legend_kwargs = {"loc": "upper left", "frameon": False}
-    bus_sizes = [0.01, 0.1, 1]  # in Tonnes
-
+    # legend_kwargs = {"loc": "upper left", "frameon": False}
+    # bus_sizes = [0.01, 0.1, 1]  # in Tonnes
+    # 
     # add_legend_circles(
     #     ax,
     #     [s / bus_scale for s in bus_sizes],
@@ -557,8 +549,8 @@ def plot_costs_bar(n: pypsa.Network, carriers_2_plot: List[str], save:str, **wil
     
     # get data 
     
-    operational_costs = get_operational_costs(n).sum()
-    capital_costs = get_capital_costs(n)
+    operational_costs = get_operational_costs(n).sum().mul(1e-9) # $ -> M$
+    capital_costs = get_capital_costs(n).mul(1e-9) # $ -> M$
     
     costs = pd.concat([operational_costs, capital_costs], axis=1, keys=["OPEX", "CAPEX"]).reset_index()
     costs = costs[costs.carrier.isin(carriers_2_plot)]
@@ -568,14 +560,19 @@ def plot_costs_bar(n: pypsa.Network, carriers_2_plot: List[str], save:str, **wil
     # plot data
     
     fig, ax = plt.subplots(figsize=(10, 10))
-    # color_palette = get_color_palette(n)
     color_palette = n.carriers.reset_index().set_index("nice_name").to_dict()["color"]
     sns.barplot(y="carrier", x="CAPEX", data=costs, alpha=0.6, ax=ax, palette=color_palette)
     sns.barplot(y="carrier", x="OPEX", data=costs, ax=ax, left=costs["CAPEX"], palette=color_palette)
     
+    legend_lines = [
+        Line2D([0], [0], color='k', alpha=1, lw=7),
+        Line2D([0], [0], color='k', alpha=0.6, lw=7)
+    ]
+    ax.legend(legend_lines, ["OPEX", "CAPEX"], loc="lower right", borderpad=0.75)
+    
     ax.set_title(create_title("Costs", **wildcards))
     ax.set_ylabel("")
-    ax.set_xlabel("CAPEX & OPEX [$]")
+    ax.set_xlabel("CAPEX & OPEX [M$]")
     fig.tight_layout()
     fig.savefig(save)
 
@@ -976,21 +973,21 @@ if __name__ == "__main__":
     sns.set_theme("paper", style="darkgrid")
     
     # create plots
-    plot_base_capacity(n, onshore_regions, carriers, snakemake.output["capacity_map_base"], **snakemake.wildcards)
-    plot_opt_capacity(n, onshore_regions, carriers, snakemake.output["capacity_map_optimized"], "greenfield", retirement_method, **snakemake.wildcards)
-    plot_opt_capacity(n, onshore_regions, carriers, snakemake.output["capacity_map_optimized_brownfield"], "brownfield", retirement_method, **snakemake.wildcards)
-    plot_new_capacity(n, onshore_regions, carriers, snakemake.output["capacity_map_new"], "greenfield", retirement_method, **snakemake.wildcards)
-    plot_capacity_additions_bar(n, carriers, snakemake.output["capacity_additions_bar"], "greenfield", retirement_method,  **snakemake.wildcards)
+    # plot_base_capacity(n, onshore_regions, carriers, snakemake.output["capacity_map_base"], **snakemake.wildcards)
+    # plot_opt_capacity(n, onshore_regions, carriers, snakemake.output["capacity_map_optimized"], "greenfield", retirement_method, **snakemake.wildcards)
+    # plot_opt_capacity(n, onshore_regions, carriers, snakemake.output["capacity_map_optimized_brownfield"], "brownfield", retirement_method, **snakemake.wildcards)
+    # plot_new_capacity(n, onshore_regions, carriers, snakemake.output["capacity_map_new"], "greenfield", retirement_method, **snakemake.wildcards)
+    # plot_capacity_additions_bar(n, carriers, snakemake.output["capacity_additions_bar"], "greenfield", retirement_method,  **snakemake.wildcards)
     plot_costs_bar(n, carriers, snakemake.output["costs_bar"], **snakemake.wildcards)
-    plot_production_bar(n, carriers, snakemake.output["production_bar"], **snakemake.wildcards)
-    plot_production_area(n, carriers, snakemake.output["production_area"], **snakemake.wildcards)
-    plot_production_html(n, carriers, snakemake.output["production_area_html"], **snakemake.wildcards)
-    plot_hourly_emissions(n, snakemake.output["emissions_area"], **snakemake.wildcards)
-    plot_hourly_emissions_html(n, snakemake.output["emissions_area_html"], **snakemake.wildcards)
-    plot_accumulated_emissions(n, snakemake.output["emissions_accumulated"], **snakemake.wildcards)
-    plot_accumulated_emissions_tech(n, snakemake.output["emissions_accumulated_tech"], **snakemake.wildcards)
-    plot_accumulated_emissions_tech_html(n, snakemake.output["emissions_accumulated_tech_html"], **snakemake.wildcards)
-    # plot_node_emissions_html(n, snakemake.output["emissions_node_html"], **snakemake.wildcards)
-    plot_region_emissions_html(n, snakemake.output["emissions_region_html"], **snakemake.wildcards)
-    plot_emissions_map(n, onshore_regions, snakemake.output["emissions_map"], **snakemake.wildcards)
-    plot_renewable_potential(n, onshore_regions, snakemake.output["renewable_potential_map"], **snakemake.wildcards)
+    # plot_production_bar(n, carriers, snakemake.output["production_bar"], **snakemake.wildcards)
+    # plot_production_area(n, carriers, snakemake.output["production_area"], **snakemake.wildcards)
+    # plot_production_html(n, carriers, snakemake.output["production_area_html"], **snakemake.wildcards)
+    # plot_hourly_emissions(n, snakemake.output["emissions_area"], **snakemake.wildcards)
+    # plot_hourly_emissions_html(n, snakemake.output["emissions_area_html"], **snakemake.wildcards)
+    # plot_accumulated_emissions(n, snakemake.output["emissions_accumulated"], **snakemake.wildcards)
+    # plot_accumulated_emissions_tech(n, snakemake.output["emissions_accumulated_tech"], **snakemake.wildcards)
+    # plot_accumulated_emissions_tech_html(n, snakemake.output["emissions_accumulated_tech_html"], **snakemake.wildcards)
+    # # plot_node_emissions_html(n, snakemake.output["emissions_node_html"], **snakemake.wildcards)
+    # plot_region_emissions_html(n, snakemake.output["emissions_region_html"], **snakemake.wildcards)
+    # plot_emissions_map(n, onshore_regions, snakemake.output["emissions_map"], **snakemake.wildcards)
+    # plot_renewable_potential(n, onshore_regions, snakemake.output["renewable_potential_map"], **snakemake.wildcards)
