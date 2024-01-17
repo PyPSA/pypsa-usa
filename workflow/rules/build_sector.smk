@@ -177,7 +177,7 @@ rule build_clustered_population_layouts:
 
 rule build_cop_profiles:
     params:
-        heat_pump_sink_T=config["sector"]["heat_pump_sink_T"],
+        heat_pump_sink_T=config["sector"]["heating"]["heat_pump_sink_T"],
     input:
         temp_soil_total = RESOURCES + "{interconnect}/temp_soil_total_elec_s_{clusters}.nc",
         temp_soil_rural = RESOURCES + "{interconnect}/temp_soil_rural_elec_s_{clusters}.nc",
