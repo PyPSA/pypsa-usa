@@ -111,44 +111,47 @@ def get_demand_timeseries(n: pypsa.Network) -> pd.DataFrame:
 ###
 
 def get_capacity_base(n: pypsa.Network) -> pd.DataFrame:
-    """Gets starting capacities"""
-    storage_pnom = n.storage_units.groupby(["bus", "carrier"]).p_nom.sum()
-    generator_pnom = n.generators.groupby(["bus", "carrier"]).p_nom.sum()
-    links_pnom = n.links.groupby(["bus1", "carrier"]).p_nom.sum()
-    return pd.concat([generator_pnom, links_pnom, storage_pnom])
+    """Gets starting capacities
+    
+    Note, link capacities are grouped by bus0
+    """
+    totals=[]
+    for c in n.iterate_components(n.one_port_components | n.branch_components):
+        if c.name in ("Generator", "StorageUnit"):
+            totals.append((c.df.p_nom).groupby(by=[c.df.bus, c.df.carrier]).sum())
+        elif c.name == "Link":
+            totals.append((c.df.p_nom).groupby(by=[c.df.bus0,c.df.carrier]).sum().rename_axis(index={"bus0":"bus"}))
+    return pd.concat(totals)
 
 def get_capacity_greenfield(n: pypsa.Network, retirement_method = "economic") -> pd.DataFrame:
-    """Gets optimal greenfield pnom capacity"""
-    def _technical_retirement(n: pypsa.Network, component:str) -> pd.DataFrame:
-        if component not in ("storage_units", "generators", "links"):
-             logger.warning(f"{component} not in the set ('storage_units', 'generator', 'links')")
-             return pd.DataFrame()
-        else:
-            gens = getattr(n, component)[["carrier", "bus"]].copy()
-            gens_t_p = getattr(n, f"{component}_t")["p"]
-            gens["p_max"] = gens.index.map(gens_t_p.max()).fillna(0)
-            if component == "links":
-                gens = gens[gens.carrier.isin(["battery charger", "battery discharger"])]
-                return gens.groupby(["bus1", "carrier"]).p_nom_opt.sum()
-            else:
-                return gens.groupby(["bus", "carrier"]).p_nom_opt.sum()
+    """Gets optimal greenfield pnom capacity
     
-    def _economic_retirement(n: pypsa.Network, component:str) -> pd.DataFrame:
-        if component not in ("storage_units", "generators", "links"):
-             logger.warning(f"{component} not in the set ('storage_units', 'generator', 'links')")
-             return pd.DataFrame()
-        else:
-            p_nom_opt = getattr(n, component)
-            if component == "links":
-                p_nom_opt = p_nom_opt[p_nom_opt.carrier.isin(["battery charger", "battery discharger"])]
-                return p_nom_opt.groupby(["bus1", "carrier"]).p_nom_opt.sum()
-            else:
-                return p_nom_opt.groupby(["bus", "carrier"]).p_nom_opt.sum()
+    Note, link capacities are grouped by bus0
+    """
     
+    def _technical_retirement(c:pypsa.components.Component) -> pd.DataFrame:
+        if c.name == "Link":
+            return (c.pnl.p0.max()).groupby(by=[c.df.bus0,c.df.carrier]).sum().rename_axis(index={"bus0":"bus"})
+        else:
+            return (c.pnl.p.max()).groupby(by=[c.df.bus, c.df.carrier]).sum()
+    
+    def _economic_retirement(c:pypsa.components.Component) -> pd.DataFrame:
+        if c.name == "Link":
+            return (c.df.p_nom_opt).groupby(by=[c.df.bus0,c.df.carrier]).sum().rename_axis(index={"bus0":"bus"})
+        else:
+            return (c.df.p_nom_opt).groupby(by=[c.df.bus, c.df.carrier]).sum()
+    
+    totals=[]
     if retirement_method == "technical":
-        return pd.concat([_technical_retirement(n, x) for x in ["generators", "storage_units", "links"]])
+        for c in n.iterate_components(n.one_port_components | n.branch_components):
+            if c.name in ("Generator", "StorageUnit", "Link"):
+                totals.append(_technical_retirement(c))
+        return pd.concat(totals)
     elif retirement_method == "economic":
-        return pd.concat([_economic_retirement(n, x) for x in ["generators", "storage_units", "links"]])
+        for c in n.iterate_components(n.one_port_components | n.branch_components):
+            if c.name in ("Generator", "StorageUnit", "Link"):
+                totals.append(_economic_retirement(c))
+        return pd.concat(totals)
     else:
         logger.error(f"Retirement method must be one of 'technical' or 'economic'. Recieved {retirement_method}.")
         raise NotImplementedError
@@ -156,34 +159,28 @@ def get_capacity_greenfield(n: pypsa.Network, retirement_method = "economic") ->
 def get_capacity_brownfield(n: pypsa.Network, retirement_method = "economic", components:str = "all") -> pd.DataFrame:
     """Gets optimal brownfield pnom capacity"""
     
-    def _technical_retirement(n: pypsa.Network, component:str) -> pd.DataFrame:
-        if component not in ("storage_units", "generators", "links"):
-             logger.warning(f"{component} not in the set ('storage_units', 'generator', 'links')")
-             return pd.DataFrame()
+    def _technical_retirement(c:pypsa.components.Component) -> pd.DataFrame:
+        if c.name == "Link":
+            return (c.df.p_nom_opt).groupby(by=[c.df.bus0,c.df.carrier]).sum().rename_axis(index={"bus0":"bus"})
         else:
-            p_nom_opt = getattr(n, component)
-            if component == "links":
-                p_nom_opt = p_nom_opt[p_nom_opt.carrier.isin(["battery charger", "battery discharger"])]
-                return p_nom_opt.groupby(["bus1", "carrier"]).p_nom_opt.sum()
-            else:
-                return p_nom_opt.groupby(["bus", "carrier"]).p_nom_opt.sum()
+            return (c.df.p_nom_opt).groupby(by=[c.df.bus, c.df.carrier]).sum()
     
-    def _economic_retirement(n: pypsa.Network, component:str) -> pd.DataFrame:
-        if component not in ("storage_units", "generators", "links"):
-             logger.warning(f"{component} not in the set ('storage_units', 'generators', 'links')")
-             return pd.DataFrame()
+    def _economic_retirement(c:str) -> pd.DataFrame:
+        if c.name == "Link":
+            return (c.df.p_nom_opt).groupby(by=[c.df.bus0,c.df.carrier]).sum().rename_axis(index={"bus0":"bus"})
         else:
-            p_nom_opt = getattr(n, component)
-            if component == "links":
-                p_nom_opt = p_nom_opt[p_nom_opt.carrier.isin(["battery charger", "battery discharger"])]
-                return p_nom_opt.groupby(["bus1", "carrier"]).p_nom_opt.sum()
-            else:
-                return p_nom_opt.groupby(["bus", "carrier"]).p_nom_opt.sum()
+            return (c.df.p_nom_opt).groupby(by=[c.df.bus, c.df.carrier]).sum()
     
+    totals = []
     if retirement_method == "technical":
-        return pd.concat([_technical_retirement(n, x) for x in ["generators", "storage_units", "links"]])
+        if c.name in ("Generator", "StorageUnit", "Link"):
+                totals.append(_technical_retirement(c))
+        return pd.concat(totals)
     elif retirement_method == "economic":
-        return pd.concat([_economic_retirement(n, x) for x in ["generators", "storage_units", "links"]])
+        for c in n.iterate_components(n.one_port_components | n.branch_components):
+            if c.name in ("Generator", "StorageUnit", "Link"):
+                totals.append(_economic_retirement(c))
+        return pd.concat(totals)
     else:
         logger.error(f"Retirement method must be one of 'technical' or 'economic'. Recieved {retirement_method}.")
         raise NotImplementedError
@@ -200,7 +197,7 @@ def get_operational_costs(n: pypsa.Network) -> pd.DataFrame:
     def _get_energy_multi_port(c: pypsa.components.Component) -> pd.DataFrame:
         return c.pnl.p0.abs()
     
-    totals = pd.DataFrame(index=n.snapshots.index)
+    totals = []
     for c in n.iterate_components(n.one_port_components | n.branch_components):
         if c.name in ("Generator", "StorageUnit", "Store"):
             production = _get_energy_one_port(c)
@@ -209,11 +206,11 @@ def get_operational_costs(n: pypsa.Network) -> pd.DataFrame:
         else:
             continue
         
-        # pypsa.descriptors.allocate_series_dataframes(n, {c.name:["marginal_cost"]})
         marginal_cost = c.pnl.marginal_cost
-        for item in c.df.index:
-            if item not in marginal_cost:
-                marginal_cost[item] = c.df.at[item, "marginal_cost"]
+        marginal_cost_static = {}
+        for item in [x for x in c.df.index if x not in marginal_cost.columns]:
+            marginal_cost_static[item] = [c.df.at[item, "marginal_cost"]] * len(marginal_cost)
+        marginal_cost = pd.concat([marginal_cost, pd.DataFrame(marginal_cost_static, index=marginal_cost.index)], axis=1)
         
         opex = (
             (production * marginal_cost)
@@ -222,7 +219,37 @@ def get_operational_costs(n: pypsa.Network) -> pd.DataFrame:
             .sum()
         )
 
-        totals = totals.merge(opex)
+        totals.append(opex)
+
+    return pd.concat(totals, axis=1)
+
+def get_capital_costs(n: pypsa.Network) -> pd.DataFrame:
+    
+    def _get_new_capacity_MW(c: pypsa.components.Component) -> pd.DataFrame:
+        return (c.df.p_nom_opt - c.df.p_nom).map(lambda x: x if x > 0 else 0)
+        
+    def _get_new_capacity_MWh(c: pypsa.components.Component) -> pd.DataFrame:
+        return (c.df.e_nom_opt - c.df.e_nom).map(lambda x: x if x > 0 else 0)
+    
+    totals = []
+    for c in n.iterate_components(n.one_port_components | n.branch_components):
+        if c.name in ("Generator", "StorageUnit", "Link"):
+            new_capacity = _get_new_capacity_MW(c)
+        elif c.name in ("Store"):
+            new_capacity = _get_new_capacity_MWh(c)
+        else:
+            continue
+        
+        capital_costs = c.df.capital_cost
+        
+        capex = (
+            (new_capacity * capital_costs)
+            .fillna(0)
+            .groupby(c.df.carrier)
+            .sum()
+        )
+
+        totals.append(capex)
 
     return pd.concat(totals)
 
@@ -233,51 +260,103 @@ def get_operational_costs(n: pypsa.Network) -> pd.DataFrame:
 def get_node_emissions_timeseries(n: pypsa.Network) -> pd.DataFrame:
     """Gets timeseries emissions per node"""
     
-    emission_rates = n.carriers[n.carriers["co2_emissions"] != 0]["co2_emissions"]
-
-    if emission_rates.empty:
-        return pd.DataFrame(index=n.snapshots)
+    totals=[]
+    for c in n.iterate_components(n.one_port_components | n.branch_components):
+        if c.name in ("Generator"):
+            
+            # get time series efficiency
+            eff = c.pnl.efficiency
+            eff_static = {}
+            for gen in [x for x in c.df.index if x not in eff.columns]:
+                eff_static[gen] = [c.df.at[gen, "efficiency"]] * len(eff)
+            eff = pd.concat([eff, pd.DataFrame(eff_static, index=eff.index)], axis=1)
+            
+            co2_factor = c.df.carrier.map(n.carriers.co2_emissions).fillna(0)
+            
+            totals.append(
+                (
+                    c.pnl.p
+                    .mul(1/eff)
+                    .mul(co2_factor)
+                    .groupby(n.generators.bus, axis=1)
+                    .sum()
+                )
+            )
+        elif c.name == "Link": # efficiency taken into account by using p0
+            
+            co2_factor = c.df.carrier.map(n.carriers.co2_emissions).fillna(0)
+            
+            totals.append(
+                (
+                    c.pnl.p0
+                    .mul(co2_factor)
+                    .groupby(n.links.bus0, axis=1)
+                    .sum()
+                    .rename_axis(index={"bus0":"bus"})
+                )
+            )
+    return pd.concat(totals, axis=1)
     
-    emission_rates = n.carriers[n.carriers["co2_emissions"] != 0]["co2_emissions"]
-
-    emitters = emission_rates.index
-    generators = n.generators[n.generators.carrier.isin(emitters)]
     
-    if generators.empty:
-        return pd.DataFrame(index=n.snapshots, columns=n.buses.index).fillna(0)
+    # emission_rates = n.carriers[n.carriers["co2_emissions"] != 0]["co2_emissions"]
 
-    em_pu = generators.carrier.map(emission_rates) / generators.efficiency # TODO timeseries efficiency 
-    return (
-        n.generators_t.p[generators.index]
-        .mul(em_pu)
-        .groupby(n.generators.bus, axis=1)
-        .sum()
-    )
+    # if emission_rates.empty:
+    #     return pd.DataFrame(index=n.snapshots)
+    
+    # emission_rates = n.carriers[n.carriers["co2_emissions"] != 0]["co2_emissions"]
+
+    # emitters = emission_rates.index
+    # generators = n.generators[n.generators.carrier.isin(emitters)]
+    
+    # if generators.empty:
+    #     return pd.DataFrame(index=n.snapshots, columns=n.buses.index).fillna(0)
+
+    # em_pu = generators.carrier.map(emission_rates) / generators.efficiency # TODO timeseries efficiency 
+    # return (
+    #     n.generators_t.p[generators.index]
+    #     .mul(em_pu)
+    #     .groupby(n.generators.bus, axis=1)
+    #     .sum()
+    # )
 
 def get_tech_emissions_timeseries(n: pypsa.Network) -> pd.DataFrame:
     """Gets timeseries emissions per technology"""
-    
-    emission_rates = n.carriers[n.carriers["co2_emissions"] != 0]["co2_emissions"]
 
-    if emission_rates.empty:
-        return pd.DataFrame(index=n.snapshots)
-
-    nice_names = n.carriers["nice_name"]
-    emitters = emission_rates.index
-    generators = n.generators[n.generators.carrier.isin(emitters)]
-
-    if generators.empty:
-        return pd.DataFrame(index=n.snapshots, columns=emitters).fillna(0).rename(columns=nice_names)
-    
-    em_pu = generators.carrier.map(emission_rates) / generators.efficiency # TODO timeseries efficiency 
-    return (
-        n.generators_t.p[generators.index]
-        .mul(em_pu)
-        .groupby(n.generators.carrier, axis=1)
-        .sum()
-        .rename(columns=nice_names)
-    )
-
+    totals=[]
+    for c in n.iterate_components(n.one_port_components | n.branch_components):
+        if c.name in ("Generator"):
+            
+            # get time series efficiency
+            eff = c.pnl.efficiency
+            eff_static = {}
+            for gen in [x for x in c.df.index if x not in eff.columns]:
+                eff_static[gen] = [c.df.at[gen, "efficiency"]] * len(eff)
+            eff = pd.concat([eff, pd.DataFrame(eff_static, index=eff.index)], axis=1)
+            
+            co2_factor = c.df.carrier.map(n.carriers.co2_emissions).fillna(0)
+            
+            totals.append(
+                (
+                    c.pnl.p
+                    .mul(1/eff)
+                    .mul(co2_factor)
+                    .groupby(n.generators.carrier, axis=1)
+                    .sum()
+                )
+            )
+        elif c.name == "Link": # efficiency taken into account by using p0
+            
+            co2_factor = c.df.carrier.map(n.carriers.co2_emissions).fillna(0)
+            
+            totals.append(
+                (
+                    c.pnl.p0
+                    .mul(co2_factor)
+                    .groupby(n.links.carrier, axis=1)
+                    .sum()
+                )
+            )
+    return pd.concat(totals, axis=1)
 
 if __name__ == "__main__":
     if 'snakemake' not in globals():
@@ -288,12 +367,12 @@ if __name__ == "__main__":
             clusters=40,
             ll='v1.25',
             opts='Co2L1.25',
-            sector="E-G"
+            sector="E"
         )
     configure_logging(snakemake)
     
     n = pypsa.Network(snakemake.input.network)
-    get_energy_total(n)
-    get_energy_timeseries(n)
+    # get_energy_total(n)
+    # get_energy_timeseries(n)
     
     

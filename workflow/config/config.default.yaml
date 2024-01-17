@@ -16,7 +16,7 @@ scenario:
     ]
   ll: [v1.25]
   scope: "total" # "urban", "rural", or "total" 
-  sector: "G"
+  sector: ""
   planning_horizons:
     - 2030 #not implemented yet (temp placeholder)
     # - 2040
