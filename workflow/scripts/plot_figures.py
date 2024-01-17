@@ -299,7 +299,7 @@ def plot_accumulated_emissions(n: pypsa.Network, save:str, **wildcards) -> None:
     
     fig, ax = plt.subplots(figsize=(14, 4))
     
-    emissions.plot.area(ax=ax, alpha=0.7, legend="reverse", color=color_palette)
+    emissions.plot.area(ax=ax, alpha=0.7, legend="reverse", color=color_palette.to_dict())
     
     ax.legend(bbox_to_anchor=(1, 1), loc="upper left")
     ax.set_title(create_title("Accumulated Emissions", **wildcards))
@@ -327,7 +327,7 @@ def plot_accumulated_emissions_tech(n: pypsa.Network, save:str, **wildcards) -> 
     
     fig, ax = plt.subplots(figsize=(14, 4))
     
-    emissions.plot.area(ax=ax, alpha=0.7, legend="reverse", color=color_palette)
+    emissions.plot.area(ax=ax, alpha=0.7, legend="reverse", color=color_palette.to_dict())
     
     ax.legend(bbox_to_anchor=(1, 1), loc="upper left")
     ax.set_title(create_title("Technology Accumulated Emissions", **wildcards))
@@ -430,9 +430,13 @@ def plot_production_html(n: pypsa.Network, carriers_2_plot: List[str], save:str,
     
     # fix battery charge/discharge to only be positive 
     if "battery" in energy_mix:
-        energy_mix["battery"] = energy_mix.battery.abs()
-        # accounts for battery stores and storage units
+        col_rename = {
+            "battery charger": "battery",
+            "battery discharger": "battery",
+        }
+        energy_mix = energy_mix.rename(columns=col_rename)
         energy_mix = energy_mix.groupby(level=0, axis=1).sum()
+        energy_mix["battery"] = energy_mix.battery.map(lambda x: max(0, x))
         
     energy_mix = energy_mix[[x for x in carriers_2_plot if x in energy_mix]]
     energy_mix = energy_mix.rename(columns=n.carriers.nice_name)
@@ -472,10 +476,15 @@ def plot_production_area(n: pypsa.Network, carriers_2_plot: List[str], save:str,
     demand = get_demand_timeseries(n).mul(1e-3) # MW -> GW
     
     # fix battery charge/discharge to only be positive 
+    # groups battery, batter charger and battery discharger together
     if "battery" in energy_mix:
-        energy_mix["battery"] = energy_mix.battery.abs()
-        # accounts for battery stores and storage units
+        col_rename = {
+            "battery charger": "battery",
+            "battery discharger": "battery",
+        }
+        energy_mix = energy_mix.rename(columns=col_rename)
         energy_mix = energy_mix.groupby(level=0, axis=1).sum()
+        energy_mix["battery"] = energy_mix.battery.map(lambda x: max(0, x))
         
     energy_mix = energy_mix[[x for x in carriers_2_plot if x in energy_mix]]
     energy_mix = energy_mix.rename(columns=n.carriers.nice_name)
