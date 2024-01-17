@@ -18,6 +18,7 @@ from add_electricity import load_costs
 from build_natural_gas import build_natural_gas
 from shapely.geometry import Point
 import constants
+import sys
 
 def assign_bus_2_state(n: pypsa.Network, shp: str,  states_2_include: List[str] = None, state_2_state_name: Dict[str, str] = None) -> None:
     """Adds a state column to the network buses dataframe
@@ -102,6 +103,13 @@ if __name__ == "__main__":
     
     n = pypsa.Network(snakemake.input.network)
     
+    sectors = snakemake.wildcards.sector.split("-")
+    
+    # exit if only electricity network
+    if all(s == "E" for s in sectors):
+        n.export_to_netcdf(snakemake.output.network)
+        sys.exit() 
+    
     # map states to each clustered bus
     
     if snakemake.wildcards.interconnect == "usa":
@@ -121,8 +129,6 @@ if __name__ == "__main__":
     #     params.electricity["max_hours"],
     #     Nyears,
     # )
-
-    sectors = snakemake.wildcards.sector.split("-")
     
     if "G" in sectors:
         build_natural_gas(
