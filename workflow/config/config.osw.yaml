@@ -7,3 +7,7 @@ osw_config:
 
 offshore_shape:
   use: eez #options are ca_osw, eez
+
+offshore_network: 
+  enable: true # set to true to enable offshore network
+  bus_spacing: 25000 # km

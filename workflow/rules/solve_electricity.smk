@@ -32,7 +32,7 @@ rule prepare_network:
         solver="logs/prepare_network/{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}.log",
     threads: 4
     resources:
-        mem=5000,
+        mem_mb=5000,
     log:
         "logs/prepare_network",
     script:
