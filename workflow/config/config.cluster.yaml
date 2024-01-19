@@ -1,7 +1,13 @@
 __default__:
     account: iazevedo
     partition: serc
-    time: 00:30:00 # time limit for each job
+    walltime: 00:30:00 # time limit for each job
     chdir: $GROUP_HOME/kamran/pypsa-usa/workflow
     output: logs/slurm/{rule}-%j.out
     error: logs/slurm/err_{rule}-%j.err
+
+build_renewable_profiles:
+    walltime: 01:00:00
+
+solve_network:
+    walltime: 06:00:00
