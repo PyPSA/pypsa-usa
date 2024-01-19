@@ -758,10 +758,8 @@ def prepare_eia_demand(n: pypsa.Network,
     #Combine EIA Demand Data to Match GIS Shapes
     #TODO: Include EIA sub-ba level data so this setp for CISO is not neccesary
     demand['Arizona'] = demand.pop('SRP') + demand.pop('AZPS')
-    n.buses['load_dissag'] = n.buses.balancing_area.replace({'^CISO.*': 'CISO'}, regex=True)
-    n.buses.load_dissag = n.buses.load_dissag.replace({'^ERCO.*': 'ERCO'}, regex=True)
+    n.buses['load_dissag'] = n.buses.balancing_area.replace({'^CISO.*': 'CISO', '^ERCO.*': 'ERCO'}, regex=True)
 
-    #TODO: There should be no buses with missing_bas
     n.buses['load_dissag'] = n.buses.load_dissag.replace({'': 'missing_ba'})
     intersection = set(demand.columns).intersection(n.buses.load_dissag.unique())
     demand = demand[list(intersection)]
@@ -774,10 +772,17 @@ def disaggregate_demand_to_buses(n: pypsa.Network,
     Zone power demand is disaggregated to buses proportional to Pd,
     where Pd is the real power demand (MW).
     """
-    demand_per_bus_pu = (n.buses.set_index("load_dissag").Pd / n.buses.groupby("load_dissag").sum().Pd)
-    demand_per_bus = demand_per_bus_pu.multiply(demand)
+    grouped_sum = n.buses.groupby("load_dissag").sum().Pd
+    merged = n.buses.merge(grouped_sum, how='left', left_on='load_dissag', right_index=True)
+    merged['demand_per_bus_fr'] = merged.Pd_x / merged.Pd_y
+    demand_per_bus = pd.DataFrame(1, columns=n.buses.index, index=n.snapshots)
+    demand_per_bus = demand_per_bus * merged.demand_per_bus_fr
     demand_per_bus.fillna(0, inplace=True)
-    demand_per_bus.columns = n.buses.index
+    demand_per_bus.columns = merged.load_dissag
+    demand_expanded = demand.reindex(columns=demand_per_bus.columns, fill_value=demand)
+    demand_expanded = demand_expanded.apply(pd.to_numeric, errors='coerce')
+    demand_final = demand_per_bus.values * demand_expanded.values
+    demand_per_bus = pd.DataFrame(demand_final, columns=n.buses.index, index=n.snapshots)
     return demand_per_bus
 
 

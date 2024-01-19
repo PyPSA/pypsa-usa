@@ -8,13 +8,13 @@ run:
 
 scenario:
   interconnect: western #"usa|texas|western|eastern"
-  clusters: [300]
+  clusters: [100]
   opts:
     [
       # Co2L1.25,
       Co2L1.25-1000SEG, #480 hours in the year
     ]
-  ll: [v1.25]
+  ll: [v1.0]
   scope: "total" # "urban", "rural", or "total" 
   planning_horizons:
     - 2030 #not implemented yet (temp placeholder)
@@ -29,6 +29,7 @@ countries: [US]
 
 focus_weights:
   Offshore: 0.2
+  California: 0.5
   # CISO-PGAE: 0.5
 
 network_configuration: "pypsa-usa" # "pypsa-usa" or "ads2032" or "breakthrough"
@@ -74,7 +75,7 @@ atlite:
 # docs :
 electricity: 
   conventional_carriers: [nuclear, oil, OCGT, CCGT, coal, geothermal] # Choose the conventional plant types to include in network
-  renewable_carriers: [onwind, solar, offwind, offwind_floating, hydro] # Choose the renewable plant types to include in network
+  renewable_carriers: [onwind, offwind, offwind_floating, solar, hydro] # Choose the renewable plant types to include in network 
   voltage_simplified: 230 #Voltage level to simplify network to in rule "simplify network"
   co2limit: 1.4728e+9 # 0.8 * 1.841e+9
   co2base: 226.86e+6 #base_from_2020 Locations of the 250 MMmt of CO2 emissions from the WECC 2021.
@@ -91,7 +92,7 @@ electricity:
     H2: 168
 
   extendable_carriers:
-    Generator: [solar, onwind, offwind, offwind_floating, OCGT, CCGT, coal]
+    Generator: [solar, onwind, offwind, offwind_floating, OCGT, CCGT, coal] #offwind, offwind_floating,
     StorageUnit: [battery] # battery, H2
     Store: [battery] #[battery, H2]
     Link: [] #[H2 pipeline]
@@ -275,8 +276,8 @@ clustering:
 solving:
   #tmpdir: "path/to/tmp"
   options:
-    operations_only: false
-    load_shedding: false
+    operations_only: true
+    load_shedding: true
     clip_p_max_pu: 1.e-2
     noisy_costs: true
     skip_iterations: true

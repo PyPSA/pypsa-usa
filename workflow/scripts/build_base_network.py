@@ -235,12 +235,12 @@ def create_grid(polygon, cell_size):
     return [(center.y, center.x) for center in centers]
 
 
-def build_offshore_buses(offshore_shapes: gpd.GeoDataFrame) -> pd.DataFrame:
+def build_offshore_buses(offshore_shapes: gpd.GeoDataFrame, offshore_spacing: int) -> pd.DataFrame:
     "Build dataframe of offshore buses by creating evenly spaced grid cells inside of the offshore shapes."
     offshore_buses = pd.DataFrame()
     offshore_shapes = offshore_shapes.to_crs('EPSG:5070')
     for shape in offshore_shapes.geometry:
-        cell_centers = create_grid(shape, 25e3) # 25km cell size
+        cell_centers = create_grid(shape, offshore_spacing) 
         cell_centers = pd.DataFrame(cell_centers, columns=['lat', 'lon'])
         offshore_buses = pd.concat([offshore_buses, cell_centers], ignore_index=True)
     #reproject back to EPSG:4326
@@ -509,9 +509,10 @@ def main(snakemake):
     n = remove_breakthrough_offshore(n)
 
     # build new offshore network configuration
-    offshore_buses = build_offshore_buses(offshore_shapes)
-    n = add_offshore_buses(n, offshore_buses)
-    n = build_offshore_transmission_configuration(n)
+    if snakemake.params.build_offshore_network['enable']:
+        offshore_buses = build_offshore_buses(offshore_shapes, snakemake.params.build_offshore_network['bus_spacing'])
+        n = add_offshore_buses(n, offshore_buses)
+        n = build_offshore_transmission_configuration(n)
 
     # Modify network lines to fix errors in breakthrough data
     n = modify_breakthrough_lines(n, interconnect)

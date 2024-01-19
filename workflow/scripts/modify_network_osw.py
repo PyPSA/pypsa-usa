@@ -67,15 +67,24 @@ def add_osw_turbines(network, plant_name, capacity,  pu_time_series):
                 carrier= "offwind_floating",
                 p_nom= capacity,
                 marginal_cost=0,
+                capital_cost=1e9,
                 p_max_pu= pu_time_series.values,
                 efficiency = 1,
-                p_nom_extendable = True,
+                p_nom_extendable = False,
             )
     network.generators.loc[ plant_name+"_osw", "weight"] = 1
 
 
 # Load Offshore Wind Time Series Data
-osw_ts = pd.read_csv(os.getcwd() + f'/../repo_data/Offshore_Wind_CEC_PLEXOS_2030.csv', 
+primary_path = os.path.join(os.getcwd(), '../repo_data/Offshore_Wind_CEC_PLEXOS_2030.csv')
+secondary_path = os.path.join(os.getcwd(), 'repo_data/Offshore_Wind_CEC_PLEXOS_2030.csv')
+# Check if the primary path exists
+if os.path.exists(primary_path):
+    osw_ts_path = primary_path
+else:
+    osw_ts_path = secondary_path
+
+osw_ts = pd.read_csv(osw_ts_path, 
                         index_col=0, 
                         parse_dates=True
                     )

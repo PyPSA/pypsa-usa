@@ -26,6 +26,8 @@ rule build_shapes:
         "../scripts/build_shapes.py"
 
 rule build_base_network:
+    params:
+        build_offshore_network= config["offshore_network"],
     input:
         buses=DATA + "breakthrough_network/base_grid/bus.csv",
         lines=DATA + "breakthrough_network/base_grid/branch.csv",
@@ -45,7 +47,7 @@ rule build_base_network:
         "logs/create_network/{interconnect}.log",
     threads: 4
     resources:
-        mem=500,
+        mem_mb=500,
     script:
         "../scripts/build_base_network.py"
 
@@ -274,7 +276,7 @@ rule simplify_network:
         "logs/simplify_network/{interconnect}/elec_s.log",
     threads: 4
     resources:
-        mem=7000,
+        mem_mb=7000,
     script:
         "../scripts/simplify_network.py"
 
