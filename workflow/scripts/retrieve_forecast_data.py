@@ -3,17 +3,11 @@ Download forecast data from external sources (CEC, WECC) and save to resources f
 
 Written by Kamran Tehranchi, Stanford University.
 '''
-
 import pandas as pd
 import glob, os
 from pathlib import Path
-# import urllib.request
 import logging
-import zipfile
 import requests, zipfile, io
-from pathlib import Path
-import os
-
 from _helpers import progress_retrieve, configure_logging
 
 
@@ -63,7 +57,6 @@ if __name__ == "__main__":
     logger = logging.getLogger(__name__)
     rootpath = "./" 
 
-    #Download CEC forecasts
     logger.info("Downloading CEC Forecasts")
     PATH_CEC = Path(f"{rootpath}/data/cec_forecasts")
     PATH_CEC.mkdir(parents=True, exist_ok=True)
@@ -71,7 +64,6 @@ if __name__ == "__main__":
     # download_cec_forecasts(cec_urls, cecpath)
 
     logger.info("Downloading WECC ADS Forecasts")
-    #Download ADS Data
     PATH_ADS = Path(f"{rootpath}/data/WECC_ADS")
     adspath_zips = Path(f"{rootpath}/data/WECC_ADS/downloads")
     PATH_ADS.mkdir(parents=True, exist_ok=True)
@@ -80,12 +72,9 @@ if __name__ == "__main__":
     download_wecc_forecasts(URL_WECC_2032, adspath_zips, 2032)
     download_wecc_forecasts(URL_WECC_2030, adspath_zips, 2030)
 
-
     logger.info("Preproccessing ADS 2032 data")
-
     PATH_2032 = "data/WECC_ADS/downloads/2032/Public Data/Hourly Profiles in CSV format"
     PATH_2030 =  "data/WECC_ADS/downloads/2030/WECC 2030 ADS PCM 2020-12-16 (V1.5) Public Data/CSV Shape Files"
-
     os.makedirs("data/WECC_ADS/processed/", exist_ok=True)
     file_patterns = {   # Processed file name : Unprocessed file name
             2032: {

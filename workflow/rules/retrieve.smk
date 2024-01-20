@@ -25,7 +25,7 @@ pypsa_usa_datafiles = [
 def define_zenodo_databundles():
     return {
         'USATestSystem':"https://zenodo.org/record/4538590/files/USATestSystem.zip",
-        'pypsa_usa_data':"https://zenodo.org/records/10480944/files/pypsa_usa_data.zip" 
+        'pypsa_usa_data':"https://zenodo.org/records/10480944/files/pypsa_usa_data.zip"
         }
 
 def define_sector_databundles():
@@ -44,7 +44,19 @@ rule retrieve_zenodo_databundles:
     conda:
         "../envs/environment.yaml"
     script:
-        "../scripts/retrieve_databundles.py"
+        "../scripts/retrieve_databundles.py"    
+
+rule retrieve_nrel_efs_data:
+    params:
+        define_nrel_databundles()
+    output:
+        DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv",
+    log:
+        "logs/retrieve/retrieve_databundles.log",
+    conda:
+        "../envs/environment.yaml"
+    script:
+        "../scripts/retrieve_databundles.py"   
 
 sector_datafiles = [
     "counties/cb_2020_us_county_500k.shp",

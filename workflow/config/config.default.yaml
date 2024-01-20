@@ -8,7 +8,7 @@ run:
 
 scenario:
   interconnect: western #"usa|texas|western|eastern"
-  clusters: [100]
+  clusters: [30]
   opts:
     [
       # Co2L1.25,
@@ -96,6 +96,10 @@ electricity:
     StorageUnit: [battery] # battery, H2
     Store: [battery] #[battery, H2]
     Link: [] #[H2 pipeline]
+  
+  demand:
+    EFS_case: reference # reference, medium, high
+    EFS_speed: moderate # slow, moderate, rapid
 
 # docs :
 conventional:
