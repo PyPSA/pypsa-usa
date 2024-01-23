@@ -28,8 +28,7 @@ enable:
 countries: [US]  
 
 focus_weights:
-  Offshore: 0.2     # Offshore buses require weighting
-  California: 0.5
+  Offshore: 0.2     # Offshore buses require weighting- # Offshore nodes = weight * n_clusters
 
 network_configuration: "pypsa-usa" # "pypsa-usa" or "ads2032" or "breakthrough"
 
