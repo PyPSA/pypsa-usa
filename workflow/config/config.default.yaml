@@ -8,13 +8,14 @@ run:
 
 scenario:
   interconnect: western #"usa|texas|western|eastern"
-  clusters: [100]
+  clusters: [300]
   opts:
     [
-      # Co2L1.25,
-      Co2L1.25-1000SEG, #480 hours in the year
+      # Co2L1.00,
+      Co2L0.10,
+      # Co2L1.25-1000SEG, #x hours in the year
     ]
-  ll: [v1.0]
+  ll: [v1.05]
   scope: "total" # "urban", "rural", or "total" 
   planning_horizons:
     - 2030 #not implemented yet (temp placeholder)
@@ -82,7 +83,7 @@ electricity:
   gaslimit: false # global gas usage limit of X MWh_th
 
   operational_reserve:
-    activate: false
+    activate: False
     epsilon_load: 0.02
     epsilon_vres: 0.02
     contingency: 4000
@@ -201,7 +202,7 @@ lines:
     345.: "Al/St 240/40 4-bundle 380.0"
     500.: "Al/St 560/50 4-bundle 750.0"
     765.: "Al/St 560/50 4-bundle 750.0"
-  s_max_pu: 1.0
+  s_max_pu: 0.7
   s_nom_max: .inf
   length_factor: 1.25
   under_construction: 'zero' # 'zero': set capacity to zero, 'remove': remove, 'keep': with full capacity
@@ -276,8 +277,8 @@ clustering:
 solving:
   #tmpdir: "path/to/tmp"
   options:
-    operations_only: true
-    load_shedding: true
+    # operations_only: false
+    load_shedding: false
     clip_p_max_pu: 1.e-2
     noisy_costs: true
     skip_iterations: true
@@ -309,10 +310,12 @@ solving:
       parallel: "on"
       random_seed: 123
     gurobi-default:
-      threads: 4
+      threads: 8
       method: 2 # barrier
       crossover: 0
-      BarConvTol: 1.e-6
+      BarConvTol: 1.e-4
+      OptimalityTol: 1.e-4
+      FeasibilityTol: 1.e-3
       Seed: 123
       AggFill: 0
       PreDual: 0

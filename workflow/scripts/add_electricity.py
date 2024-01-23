@@ -596,17 +596,6 @@ def attach_breakthrough_renewable_plants(
             weight=1.0,
             efficiency=costs.at[tech, "efficiency"],
         )
-
-    # hack to remove generators without capacity (required for SEG to work)
-    # shouldn't exist, in fact...
-
-    # p_max_pu_norm = n.generators_t.p_max_pu.max()
-    # remove_g = p_max_pu_norm[p_max_pu_norm == 0.0].index
-    # logger.info(
-    #     f"removing {len(remove_g)} {tech} generators {remove_g} with no renewable potential."
-    # )
-    # n.mremove("Generator", remove_g)
-
     return n
 
 
@@ -783,6 +772,7 @@ def disaggregate_demand_to_buses(n: pypsa.Network,
     demand_expanded = demand_expanded.apply(pd.to_numeric, errors='coerce')
     demand_final = demand_per_bus.values * demand_expanded.values
     demand_per_bus = pd.DataFrame(demand_final, columns=n.buses.index, index=n.snapshots)
+    demand_per_bus = demand_per_bus.loc[:, (demand_per_bus != 0).any(axis=0)]
     return demand_per_bus
 
 

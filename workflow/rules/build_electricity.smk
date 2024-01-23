@@ -21,7 +21,7 @@ rule build_shapes:
         "logs/build_shapes_{interconnect}.log",
     threads: 1
     resources:
-        mem_mb=1000,
+        mem_mb=300,
     script:
         "../scripts/build_shapes.py"
 
@@ -47,7 +47,7 @@ rule build_base_network:
         "logs/create_network/{interconnect}.log",
     threads: 4
     resources:
-        mem_mb=500,
+        mem_mb=300,
     script:
         "../scripts/build_base_network.py"
 
@@ -67,7 +67,7 @@ rule build_bus_regions:
         "logs/{interconnect}/build_bus_regions_s.log",
     threads: 1
     resources:
-        mem_mb=1000,
+        mem_mb=300,
     script:
         "../scripts/build_bus_regions.py"
 
@@ -80,6 +80,9 @@ rule build_cost_data:
         tech_costs= RESOURCES + "costs_{year}.csv",
     log:
         LOGS + "costs_{year}.log",
+    threads: 1
+    resources:
+        mem_mb=300,
     script:
         "../scripts/build_cost_data.py"
 
@@ -191,7 +194,7 @@ rule build_renewable_profiles:
         BENCHMARKS + "{interconnect}/build_renewable_profiles_{technology}"
     threads: ATLITE_NPROCESSES
     resources:
-        mem_mb=ATLITE_NPROCESSES * 5000,
+        mem_mb=ATLITE_NPROCESSES * 2000,
     wildcard_constraints:
         technology="(?!hydro).*",  # Any technology other than hydro
     script:
@@ -259,7 +262,7 @@ rule add_electricity:
         BENCHMARKS + "{interconnect}/add_electricity"
     threads: 1
     resources:
-        mem_mb=7000,
+        mem_mb=14000,
     script:
         "../scripts/add_electricity.py"
 
@@ -276,7 +279,7 @@ rule simplify_network:
         "logs/simplify_network/{interconnect}/elec_s.log",
     threads: 4
     resources:
-        mem_mb=7000,
+        mem_mb=10000,
     script:
         "../scripts/simplify_network.py"
 
@@ -305,6 +308,6 @@ rule cluster_network:
         "benchmarks/cluster_network/{interconnect}/elec_s_{clusters}"
     threads: 1
     resources:
-        mem_mb=7000,
+        mem_mb=10000,
     script:
         "../scripts/cluster_network_eur.py"
