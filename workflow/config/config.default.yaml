@@ -95,6 +95,8 @@ electricity:
     Store: [battery] #[battery, H2]
     Link: [] #[H2 pipeline]
 
+  retirement: economic # "economic" or "technical"
+
 # docs :
 conventional:
   unit_commitment: false
@@ -287,7 +289,7 @@ solving:
     max_iterations: 6
     transmission_losses: 0
     linearized_unit_commitment: true
-    horizon: 365
+    horizon: 8760
 
   solver:
     name: gurobi
