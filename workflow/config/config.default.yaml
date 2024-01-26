@@ -11,9 +11,8 @@ scenario:
   clusters: [300]
   opts:
     [
-      # Co2L1.00,
-      Co2L0.5-1000SEG,
-      # Co2L1.25-1000SEG, #x hours in the year
+      Co2L0.1,           # Limit CO2 emissions to 10% of CO2 base
+      # Co2L0.1-1000SEG, # Cluster to 1000 hours in the year
     ]
   ll: [v1.05]
   scope: "total" # "urban", "rural", or "total" 
@@ -29,9 +28,7 @@ enable:
 countries: [US]  
 
 focus_weights:
-  Offshore: 0.2
-  California: 0.5
-  # CISO-PGAE: 0.5
+  Offshore: 0.2     # Offshore buses require weighting- # Offshore nodes = weight * n_clusters
 
 network_configuration: "pypsa-usa" # "pypsa-usa" or "ads2032" or "breakthrough"
 
@@ -97,6 +94,8 @@ electricity:
     StorageUnit: [battery] # battery, H2
     Store: [battery] #[battery, H2]
     Link: [] #[H2 pipeline]
+
+  retirement: economic # "economic" or "technical"
 
 # docs :
 conventional:
@@ -258,7 +257,7 @@ clustering:
   cluster_network:
     algorithm: kmeans
     feature: solar+onwind-time
-    aggregation_zones: 'state' # balancing_area, country, or state. # Currently issue in State aggregation- error thrown on Utah
+    aggregation_zones: 'state' # balancing_area, country, or state. # Currently issue in State aggregation
   aggregation_strategies:
     generators:
       p_nom_max: sum # use "min" for more conservative assumptions
@@ -290,7 +289,7 @@ solving:
     max_iterations: 6
     transmission_losses: 0
     linearized_unit_commitment: true
-    horizon: 365
+    horizon: 8760
 
   solver:
     name: gurobi
