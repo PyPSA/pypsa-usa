@@ -12,7 +12,7 @@ scenario:
   opts:
     [
       # Co2L1.00,
-      Co2L0.10,
+      Co2L0.5-1000SEG,
       # Co2L1.25-1000SEG, #x hours in the year
     ]
   ll: [v1.05]
@@ -278,7 +278,7 @@ solving:
   #tmpdir: "path/to/tmp"
   options:
     # operations_only: false
-    load_shedding: false
+    load_shedding: true
     clip_p_max_pu: 1.e-2
     noisy_costs: true
     skip_iterations: true
