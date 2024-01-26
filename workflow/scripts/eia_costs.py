@@ -2,12 +2,15 @@
 
 Available Fuels include: 
     - "gas"
+    - "coal" (only API)
     
 Available Industries include: 
     - "power"
-    - "residential" 
-    - "commercial" 
-    - "industry" 
+    - "residential" (only gas)
+    - "commercial" (only gas)
+    - "industry" (only gas)
+    - "imports" (only gas)
+    - "exports" (only gas)
 
 Examples: 
 >>> costs = EiaCosts(2020)
@@ -22,8 +25,7 @@ period
 2020-12-15  Wyoming Natural Gas Price Sold to Electric Pow...   3.30  $/MCF Wyoming
 
 
->>> # note, U.S.A price is still reported! 
->>> costs = EiaCostsApi(2020, "xxxxxxxxxxxxxxxxxxxxxxxxxxxx")
+>>> costs = EiaCostsApi(2020, "xxxxxxxxxxxxxxxxx")
 >>> costs.get_fuel_cost("gas", "residential")
 
                                            series-description  value  units   state  
@@ -38,6 +40,7 @@ period
 
 from abc import ABC, abstractmethod
 from typing import Union, Dict
+import math 
 
 import pandas as pd
 import numpy as np
@@ -45,7 +48,6 @@ import requests
 
 import logging
 
-from pandas.core.api import DataFrame as DataFrame
 logger = logging.getLogger(__name__)
 
 class Strategy(ABC):
@@ -59,12 +61,12 @@ class Strategy(ABC):
     
     @staticmethod
     def _set_year(year: int) -> int:
-        if year < 2005:
-            logger.info(f"year must be > 2004. Recieved {year}. Setting to 2005")
-            return 2005
-        elif year > 2023:
-            logger.info(f"year must be < 2024. Recieved {year}. Setting to 2023")
-            return 2023
+        if year < 2009:
+            logger.info(f"year must be > 2008. Recieved {year}. Setting to 2009")
+            return 2009
+        elif year > 2022:
+            logger.info(f"year must be < 2023. Recieved {year}. Setting to 2022")
+            return 2022
         else:
             return year
     
@@ -131,9 +133,8 @@ class EiaCosts(Strategy):
             return f"https://www.eia.gov/dnav/ng/xls/NG_PRI_SUM_A_EPG0_{code}_DMCF_M.xls"
         else:
             raise NotImplementedError
-            
-            
-    def _retrieve_data(self, url: str) -> DataFrame:
+              
+    def _retrieve_data(self, url: str) -> pd.DataFrame:
         return pd.read_excel(
             url, 
             sheet_name="Data 1", 
@@ -141,13 +142,12 @@ class EiaCosts(Strategy):
             index_col=0
         )
         
-    def _format_data(self, fuel: str, df: pd.DataFrame) -> DataFrame:
+    def _format_data(self, fuel: str, df: pd.DataFrame) -> pd.DataFrame:
         if fuel == "gas":
             df = self._format_natural_gas(df)
             return df[df.index.year == self.year].copy() 
     
-    @staticmethod
-    def _format_natural_gas(df: pd.DataFrame) -> pd.DataFrame:
+    def _format_natural_gas(self, df: pd.DataFrame) -> pd.DataFrame:
         
         # not all states have data, so backfill using USA average in these cases
         fill_column = [x for x in df.columns if x.startswith(
@@ -196,33 +196,40 @@ class EiaCostsApi(Strategy):
                 code = "PIN"
             else:
                 raise NotImplementedError
-            
             base = "https://api.eia.gov/v2/natural-gas/pri/sum/data/"
             facets = f"frequency=monthly&data[0]=value&facets[process][]={code}&start={self.year}-01&end={self.year+1}-01&sort[0][column]=period&sort[0][direction]=desc&offset=0&length=5000"
-            
             return f"{base}?api_key={self.api_key}&{facets}"
         
+        elif fuel == "coal":
+            if industry == "power":
+                base = "https://api.eia.gov/v2/coal/shipments/by-mine-by-plant/data/"
+                facets = f"frequency=quarterly&data[0]=price&start={self.year}-Q1&end={self.year+1}-Q1&sort[0][column]=period&sort[0][direction]=desc&offset=0&length=5000"
+                return f"{base}?api_key={self.api_key}&{facets}"
+            else:
+                raise NotImplementedError
         else:
             raise NotImplementedError
             
-    def _retrieve_data(self, url: str) -> DataFrame:
+    def _retrieve_data(self, url: str) -> pd.DataFrame:
         
         data = self._request_eia_data(url)
         if not data:
             raise ValueError
-        
-        df = pd.DataFrame.from_dict(data["response"]["data"])
-        df["period"] = pd.to_datetime(df["period"])
-        return df.set_index("period").copy()
+
+        return pd.DataFrame.from_dict(data["response"]["data"])
         
     def _format_data(self, fuel: str, df: pd.DataFrame) -> pd.DataFrame:
         if fuel == "gas":
             return self._format_natural_gas(df)
+        elif fuel == "coal":
+            return self._format_coal(df)
 
     def _format_natural_gas(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Adds default values and 'state' column to data"""
 
-        # add state 
+        # format dates
+        df["period"] = pd.to_datetime(df["period"], format="%Y-%m-%d")
+        df = df.set_index("period").copy()
+
         # split happens twice to account for inconsistent naming 
         df["state"] = df["series-description"].map(lambda x: x.split("Natural Gas")[0].strip())
         df["state"] = df["state"].map(lambda x: x.split("Price of")[0].strip())
@@ -242,6 +249,54 @@ class EiaCostsApi(Strategy):
             .sort_values(["state", "period"])
             .set_index("period")
         )
+        
+    def _format_coal(self, df: pd.DataFrame) -> pd.DataFrame:
+
+        df = df[
+            (df.coalType.isin(("All", "all"))) & 
+            ~(df.price == "w") & # withheld value. Will be assigned usa average 
+            ~(df.price.isna()) 
+        ].copy()
+        
+        # sometimes prices come in the format of xx.xx.xx, so drop everything after the second "."
+        df["price"] = df.price.map(lambda x: float(x) if len(x.split(".")) < 2 else float(".".join(x.split(".")[:2])))
+        
+        # get data at a per quarter level 
+        df[["year", "quarter"]] = df.period.str.split("-", expand=True)
+        df = (
+            df
+            [["plantStateDescription", "price", "price-units", "year", "quarter"]]
+            .rename(columns={"plantStateDescription":"state", "price-units":"unit"})
+            .groupby(by=["state", "unit", "year", "quarter"]).mean()
+            .reset_index()
+        )
+        df = df[df.year.astype(int) == self.year].copy() # api is bringing in an extra quarter 
+        
+        # Expand data to be at a per month level 
+        dfs = []
+        dates = pd.date_range(start="2020-01-01", end="2020-12-01", freq="MS")
+        for date in dates:
+            quarter = math.floor((date.month - 1) / 3) + 1 # months 1-3 are Q1, months 4-6 are Q2 ... 
+            df_month = df[df.quarter == f"Q{quarter}"].copy()
+            df_month["period"] = date
+            dfs.append(df_month)
+        states = pd.concat(dfs).drop(columns=["year", "quarter"])
+
+        # add a usa average datapoint for missing values 
+        usa_average = []
+        for date in dates:
+            usa_average.append([
+                "U.S.",
+                "average dollars per ton",
+                states[states.period == date].price.mean(),
+                date
+            ])
+            usa = pd.DataFrame(usa_average, columns=states.columns)
+
+        final = pd.concat([states, usa]).reset_index(drop=True)
+        final["series-description"] = final.state.map(lambda x: f"{x} Coal Electric Power Price")
+
+        return final.set_index("period")
         
     @staticmethod
     def _request_eia_data(url:str) -> Dict[str,Union[Dict,str]]:
