@@ -9,8 +9,8 @@ Available Industries include:
     - "residential" (only gas)
     - "commercial" (only gas)
     - "industry" (only gas)
-    - "imports" (only gas)
-    - "exports" (only gas)
+    - "exports" (only gas | only api)
+    - "imports" (only gas | only api)
 
 Examples: 
 >>> costs = EiaCosts(2020)
@@ -50,7 +50,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-class Strategy(ABC):
+class EiaData(ABC):
     """
     Arguments:
     """
@@ -80,20 +80,47 @@ class Strategy(ABC):
 
     @abstractmethod
     def _get_url(self, fuel: str, industry: str) -> str:
-        raise NotImplementedError
+        pass
 
     @abstractmethod
     def _retrieve_data(self, url: str) -> pd.DataFrame:
-        raise NotImplementedError
+        pass
 
     @abstractmethod
     def _format_data(self, fuel: str, df: pd.DataFrame) -> pd.DataFrame:
-        raise NotImplementedError
+        pass
+
+    def _request_eia_data(self, url:str) -> Dict[str,Union[Dict,str]]:
+        """Retrieves data from EIA API
+        Args:
+            url:str, 
+                in the form of "https://api.eia.gov/v2/" with api and facets
+        """
+        response = requests.get(url)
+
+        if response.status_code == 200:
+            data = response.json()  # Assumes the response is in JSON format
+        else:
+            logger.error(f"EIA Request failed with status code: {response.status_code}")
+            data = {}
+            
+        return data
+
+    def format_period(self, dates: pd.Series) -> pd.Series:
+        try:
+            # Try to convert to YYYY-MM-DD format
+            return pd.to_datetime(dates, format="%Y-%m-%d")
+        except ValueError:
+            try:
+                # Try to convert to YYYY-MM format
+                return pd.to_datetime(dates + "-01", format="%Y-%m-%d")
+            except ValueError:
+                return pd.NaT
 
     def get_fuel_cost(self, fuel: str, industry: str = "power") -> pd.DataFrame:
         
         # check for industries 
-        industries = ("residential", "commercial", "industry", "power")
+        industries = ("residential", "commercial", "industry", "power", "imports", "exports")
         if industry not in industries:
             logger.error(f"Industry must be in {industries}; recieved {industry}")
             return pd.DataFrame()
@@ -110,7 +137,7 @@ class Strategy(ABC):
         return self._format_data(fuel, df)
         
 
-class EiaCosts(Strategy):
+class EiaCosts(EiaData):
     """
     Retrieves data via direct downloads 
     """
@@ -176,7 +203,7 @@ class EiaCosts(Strategy):
             
         return df
         
-class EiaCostsApi(Strategy):
+class EiaCostsApi(EiaData):
     """
     Retrieves data via API access
     """
@@ -194,6 +221,10 @@ class EiaCostsApi(Strategy):
                 code = "PCS"
             elif industry == "industry":
                 code = "PIN"
+            elif industry == "imports":
+                code = "PRP"
+            elif industry == "exports":
+                code = "PNP"
             else:
                 raise NotImplementedError
             base = "https://api.eia.gov/v2/natural-gas/pri/sum/data/"
@@ -217,7 +248,7 @@ class EiaCostsApi(Strategy):
             raise ValueError
 
         return pd.DataFrame.from_dict(data["response"]["data"])
-        
+    
     def _format_data(self, fuel: str, df: pd.DataFrame) -> pd.DataFrame:
         if fuel == "gas":
             return self._format_natural_gas(df)
@@ -227,10 +258,12 @@ class EiaCostsApi(Strategy):
     def _format_natural_gas(self, df: pd.DataFrame) -> pd.DataFrame:
 
         # format dates
-        df["period"] = pd.to_datetime(df["period"], format="%Y-%m-%d")
+        df["period"] = self.format_period(df.period)
         df = df.set_index("period").copy()
 
         # split happens twice to account for inconsistent naming 
+        # Sometimes "U.S. Natural Gas price"
+        # Sometimes "Price of U.S. Natural Gas"
         df["state"] = df["series-description"].map(lambda x: x.split("Natural Gas")[0].strip())
         df["state"] = df["state"].map(lambda x: x.split("Price of")[0].strip())
         df["value"] = df["value"].fillna(np.nan)
@@ -298,22 +331,7 @@ class EiaCostsApi(Strategy):
 
         return final.set_index("period")
         
-    @staticmethod
-    def _request_eia_data(url:str) -> Dict[str,Union[Dict,str]]:
-        """Retrieves data from EIA API
-        Args:
-            url:str, 
-                in the form of "https://api.eia.gov/v2/" with api and facets
-        """
-        response = requests.get(url)
 
-        if response.status_code == 200:
-            data = response.json()  # Assumes the response is in JSON format
-        else:
-            logger.error(f"EIA Request failed with status code: {response.status_code}")
-            data = {}
-            
-        return data
     
     
     
