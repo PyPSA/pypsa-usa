@@ -7,19 +7,27 @@ import constants
 import logging
 logger = logging.getLogger(__name__)
 from typing import List, Dict
+from math import pi
+import numpy as np
 
 ###
 # HELPERS
 ###
 
-def get_state_center_points(shapefile: str) -> pd.DataFrame:
-    """Gets centerpoints of states using county shapefile"""
+def get_state_boundaries(shapefile: str) -> pd.DataFrame:
+    """Gets admin boundaries of state"""
     gdf = gpd.read_file(shapefile)
-    gdf = (
+    return (
         gdf
         .dissolve("STATE_NAME")
-        .rename(columns={"STUSPS":"STATE", "geometry":"shape"})
-        )
+        .rename(columns={"STUSPS":"STATE"})
+        .reset_index()
+        [["STATE_NAME", "STATE","geometry"]]
+    )
+
+def get_state_center_points(shapefile: str) -> pd.DataFrame:
+    """Gets centerpoints of states using county shapefile"""
+    gdf = get_state_boundaries(shapefile).rename(columns={"geometry":"shape"})
     gdf["geometry"] = gdf["shape"].map(lambda x: x.centroid)
     gdf[["x","y"]] = gdf["geometry"].apply(lambda x: pd.Series({"x": x.x, "y": x.y}))
     gdf = gdf[["STATE", "x", "y"]]
@@ -154,13 +162,59 @@ def read_gas_pipline(xlsx: str, year: int = 2022) -> pd.DataFrame:
     df = df[["STATE_FROM","STATE_TO","CAPACITY_MMCFD"]]
     return df.groupby(["STATE_TO", "STATE_FROM"]).sum()
 
+def read_pipeline_linepack(geojson: str, states: gpd.GeoDataFrame) -> pd.DataFrame:
+    """Reads in linepack energy limits
+    
+    https://atlas.eia.gov/apps/3652f0f1860d45beb0fed27dc8a6fc8d/explore
+    """
+    
+    gdf = gpd.read_file(geojson)
+    
+    length_in_state = gpd.sjoin(gdf.to_crs("4269"), states, how="right", predicate="within").reset_index()
+    length_in_state = (
+        length_in_state[["STATE_NAME", "STATE", "TYPEPIPE", "Shape_Leng", "Shape__Length"]]
+        .rename(columns={"Shape_Leng":"LENGTH_DEG", "Shape__Length":"LENGTH_M"})
+        .groupby(by=["STATE_NAME", "STATE", "TYPEPIPE"]).sum().reset_index()
+    )
+    
+    # https://publications.anl.gov/anlpubs/2008/02/61034.pdf
+    intrastate_radius = 12 * 0.0254 # inches in meters (24in dia)
+    interstate_radius = 18 * 0.0254 # inches meters (36in dia)
+
+    volumne_in_state = length_in_state.copy()
+    volumne_in_state["RADIUS"] = volumne_in_state.TYPEPIPE.map(lambda x: interstate_radius if x == "Interstate" else intrastate_radius)
+    volumne_in_state["VOLUME_M3"] = volumne_in_state.LENGTH_M * pi * volumne_in_state.RADIUS ** 2 
+    volumne_in_state = volumne_in_state[["STATE_NAME", "STATE", "VOLUME_M3"]]
+    volumne_in_state = volumne_in_state.groupby(by=["STATE_NAME", "STATE"]).sum()
+    
+    # https://publications.anl.gov/anlpubs/2008/02/61034.pdf
+    max_pressure = 8000 # kPa
+    min_pressure = 4000 # kPa
+
+    energy_in_state = volumne_in_state.copy()
+    energy_in_state["MAX_ENERGY_kJ"] = energy_in_state.VOLUME_M3 * max_pressure
+    energy_in_state["MIN_ENERGY_kJ"] = energy_in_state.VOLUME_M3 * min_pressure
+    energy_in_state["NOMINAL_ENERGY_kJ"] = (energy_in_state.MAX_ENERGY_kJ + energy_in_state.MIN_ENERGY_kJ) / 2
+    
+    # https://apps.cer-rec.gc.ca/Conversion/conversion-tables.aspx#s1ss1
+    # 1 GJ to 947.8171 CF
+    # TODO: replace with heating value 
+    kj_2_mmcf = 1e-6 * 947.8171 * 1e-6 # kj -> GJ -> cf -> mmcf
+    
+    final = energy_in_state.copy()
+    final["MAX_ENERGY_MMCF"] = final.MAX_ENERGY_kJ * kj_2_mmcf
+    final["MIN_ENERGY_MMCF"] = final.MIN_ENERGY_kJ * kj_2_mmcf
+    final["NOMINAL_ENERGY_MMCF"] = final.NOMINAL_ENERGY_kJ * kj_2_mmcf
+
+    return final[["STATE_NAME", "STATE", "MAX_ENERGY_MMCF", "MIN_ENERGY_MMCF", "NOMINAL_ENERGY_MMCF"]]
+
 ###
 # BUSES 
 ###
 
 def build_state_gas_buses(n: pypsa.Network, states: pd.DataFrame) -> None:
     
-    # TODO: reformate states so names is on the index to remove the "to_list()"
+    # TODO: reformat states so names is on the index to remove the "to_list()"
     
     n.madd(
         "Bus", 
@@ -358,6 +412,7 @@ def get_international_pipeline_connections(df: pd.DataFrame, interconnect: str) 
         ]
 
 def build_pipelines(n: pypsa.Network, df: pd.DataFrame) -> None:
+    """Builds links between states"""
     
     df["NAME"] = df.STATE_FROM + " " + df.STATE_TO
     
@@ -482,6 +537,34 @@ def build_import_export_pipelines(n: pypsa.Network, df: pd.DataFrame, interconne
         marginal_cost=0,
     )
 
+def build_linepack(n: pypsa.Network, df: pd.DataFrame) -> None:
+    """Builds storage units to represent linepack"""
+    
+    df = df.set_index("STATE")
+    
+    n.madd(
+        "StorageUnit",
+        names=df.index,
+        unit="MMCF",
+        suffix=" linepack",
+        bus=df.index + " gas",
+        carrier="gas pipeline",
+        p_nom=0,
+        p_nom_extendable=False,
+        p_nom_min=0,
+        p_nom_max=np.inf,
+        marginal_cost=0,
+        capital_cost=0,
+        state_of_charge_initial=df.NOMINAL_ENERGY_MMCF,
+        state_of_charge_initial_per_period=False,
+        cyclic_state_of_charge=True,
+        cyclic_state_of_charge_per_period=False,
+        max_hours=1,
+        efficiency_store=1,
+        efficiency_dispatch=1,
+        standing_loss=0
+    )
+    
 ### 
 # MAIN FUNCTION TO EXECUTE
 ###
@@ -494,7 +577,8 @@ def build_natural_gas(
     eia_191: str = "../data/natural-gas/EIA-191.csv",
     imports: str = "../data/natural-gas/NG_MOVE_POE1_A_EPG0_IRP_MMCF_M.xls",
     exports: str = "../data/natural-gas/NG_MOVE_POE1_A_EPG0_ENP_MMCF_M.xls",
-    pipelines: str = "../data/natural-gas/EIA-StatetoStateCapacity_Jan2023.xlsx"
+    pipelines: str = "../data/natural-gas/EIA-StatetoStateCapacity_Jan2023.xlsx",
+    linepack: str = "../data/natural-gas/Natural_Gas_Pipelines.geojson",
 ) -> pypsa.Network:
 
     ###
@@ -507,10 +591,10 @@ def build_natural_gas(
     # CREATE STATE LEVEL BUSES
     ###
 
-    states = get_state_center_points(counties)
-    states = filter_on_interconnect(states, interconnect, constants.STATES_INTERCONNECT_MAPPER)
-    states["interconnect"] = states.STATE.map(constants.STATES_INTERCONNECT_MAPPER)
-    build_state_gas_buses(n, states)
+    centroids = get_state_center_points(counties)
+    centroids = filter_on_interconnect(centroids, interconnect, constants.STATES_INTERCONNECT_MAPPER)
+    centroids["interconnect"] = centroids.STATE.map(constants.STATES_INTERCONNECT_MAPPER)
+    build_state_gas_buses(n, centroids)
     
     ###
     # CREATE PRODUCTION FACILITIES
@@ -569,6 +653,18 @@ def build_natural_gas(
     ###
     # CREATE DOMESTIC IMPORTS EXPORTS
     ###
+    
+    
+
+    ###
+    # CREATE LIENPACK
+    ###
+    
+    states = get_state_boundaries(counties)
+    pipeline_linepack = read_pipeline_linepack(linepack, states)
+    pipeline_linepack = filter_on_interconnect(pipeline_linepack, interconnect, constants.STATES_INTERCONNECT_MAPPER)
+    build_linepack(n, pipeline_linepack)
+    
 
 if __name__ == "__main__":
 
