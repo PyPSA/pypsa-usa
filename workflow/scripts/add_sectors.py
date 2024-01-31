@@ -119,16 +119,6 @@ if __name__ == "__main__":
         
     code_2_state = {v: k for k, v in constants.STATE_2_CODE.items()}
     assign_bus_2_state(n, snakemake.input.counties, states_2_map, code_2_state)
-
-    # params = snakemake.params
-    
-    # Nyears = n.snapshot_weightings.objective.sum() / 8760.0
-    # costs = load_costs(
-    #     snakemake.input.tech_costs,
-    #     params.costs,
-    #     params.electricity["max_hours"],
-    #     Nyears,
-    # )
     
     if "G" in sectors:
         build_natural_gas(

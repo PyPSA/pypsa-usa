@@ -29,7 +29,7 @@ def define_zenodo_databundles():
 
 def define_sector_databundles():
     return {
-        'pypsa_usa_sec':"https://zenodo.org/records/10067222/files/pypsa_usa_sec.zip?download=1"
+        "pypsa_usa_sec":"https://zenodo.org/records/10547484/files/pypsa_usa_data_sector.zip?download=1"
         }
 
 rule retrieve_zenodo_databundles:
@@ -44,9 +44,21 @@ rule retrieve_zenodo_databundles:
         "../scripts/retrieve_databundles.py"
 
 sector_datafiles = [
-    "counties/cb_2020_us_county_500k.shp",
-    "population/DECENNIALDHC2020.P1-Data.csv",
-    "urbanization/DECENNIALDHC2020.H1-Data.csv"
+    # general 
+    "counties/cb_2022_us_county_500k.shp",
+
+    # heating sector
+    # "population/DECENNIALDHC2020.P1-Data.csv",
+    # "urbanization/DECENNIALDHC2020.H1-Data.csv",
+
+    # natural gas 
+    "natural_gas/EIA-191.csv",
+    "natural_gas/EIA-757.csv",
+    "natural_gas/EIA-StatetoStateCapacity_Jan2023.xlsx",
+    "natural_gas/Natural_Gas_Import_Export.geojson",
+    "natural_gas/Natural_Gas_Processing_Plants.geojson",
+    "natural_gas/NG_MOVE_POE1_A_EPG0_IRP_MMCF_M.xls",
+    "natural_gas/NG_MOVE_POE2_A_EPG0_ENP_MMCF_M.xls",
 ]
 
 rule retrieve_sector_databundle:

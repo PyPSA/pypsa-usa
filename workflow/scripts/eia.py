@@ -406,4 +406,5 @@ class GasTrade(DataExtractor):
             return description.split(" Natural Gas Pipeline")[0]
     
 if __name__ == "__main__":
-    print(Trade("gas", "imports", 2022, "O0kLkuarUMBg0dkmZGWDABbqU2etu4jA8Z8f2Rp4").get_data())
+    api_key = ""
+    print(Trade("gas", "imports", 2022, api_key).get_data())

@@ -432,7 +432,7 @@ def build_pipelines(n: pypsa.Network, df: pd.DataFrame) -> None:
     )
 
 def build_import_export_pipelines(n: pypsa.Network, df: pd.DataFrame, interconnect: str) -> None:
-    """Builds import and export buses for pipelines to connect to.
+    """Builds import and export bus+link+store to connect to
     
     Dataframe must have a 'STATE_TO', 'STATE_FROM', 'INTERCONNECT_TO', and
     'INTERCONNECT_FROM' columns
@@ -638,6 +638,15 @@ def build_natural_gas(
     build_import_export_pipelines(n, international_pipeline_connections, interconnect)
 
     ###
+    # CREATE LIENPACK
+    ###
+    
+    states = get_state_boundaries(counties)
+    pipeline_linepack = read_pipeline_linepack(linepack, states)
+    pipeline_linepack = filter_on_interconnect(pipeline_linepack, interconnect, constants.STATES_INTERCONNECT_MAPPER)
+    build_linepack(n, pipeline_linepack)
+
+    ###
     # CREATE INTERNATIONAL IMPORT EXPORT ENERGY LIMITS 
     ###
     
@@ -651,19 +660,15 @@ def build_natural_gas(
     # build_import_export_facilities(n, exports, "export")
 
     ###
-    # CREATE DOMESTIC IMPORTS EXPORTS
+    # CREATE DOMESTIC IMPORT EXPORT ENERGY LIMITS 
     ###
     
-    
+    if domestic_piplines.empty:
+        logger.warning(f"No domestic gas pipelines production constraints to add for {interconnect}")
+    else:
+        build_pipelines(n, domestic_piplines)
 
-    ###
-    # CREATE LIENPACK
-    ###
-    
-    states = get_state_boundaries(counties)
-    pipeline_linepack = read_pipeline_linepack(linepack, states)
-    pipeline_linepack = filter_on_interconnect(pipeline_linepack, interconnect, constants.STATES_INTERCONNECT_MAPPER)
-    build_linepack(n, pipeline_linepack)
+
     
 
 if __name__ == "__main__":
