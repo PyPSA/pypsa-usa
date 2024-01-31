@@ -50,15 +50,6 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-INDUSTRY_CODES = {
-    "power":"PEU",
-    "residential":"PRS",
-    "commercial":"PCS",
-    "industrial":"PIN",
-    "imports":"PRP",
-    "exports":"PNP",
-}
-
 API_BASE = "https://api.eia.gov/v2/"
 
 # exceptions
@@ -107,6 +98,25 @@ class FuelCosts(EiaData):
             )
 
 # concrete creator 
+class Trade(EiaData):
+    
+    def __init__(self, fuel: str, direction: str, year: int, api: str) -> None:
+        self.fuel = fuel
+        self.direction = direction
+        self.year = year
+        self.api = api
+
+    def data_creator(self) -> pd.DataFrame:
+        if self.fuel == "gas":
+            return GasTrade(self.direction, self.year, self.api)
+        else:
+            raise InputException(
+                propery="Energy Trade", 
+                valid_options=["gas"], 
+                recived_option=self.fuel
+            )
+
+# concrete creator 
 class Production(EiaData):
     
     def __init__(self, fuel: str, industry: str, year: int, api: str) -> None:
@@ -118,6 +128,25 @@ class Production(EiaData):
     def data_creator(self) -> pd.DataFrame:
         pass
 
+# concrete creator 
+class Demand(EiaData):
+    """Not yet implemented"""
+    
+    def __init__(self, fuel: str, year: int, api: str) -> None:
+        self.fuel = fuel
+        self.year = year
+        self.api = api
+    
+    def data_creator(self) -> pd.DataFrame:
+        if self.fuel == "electricity":
+            return ElectricityDemand(self.year, self.api)
+        else:
+            raise InputException(
+                propery="Demand", 
+                valid_options=["electricity"], 
+                recived_option=self.fuel
+            )
+
 # product
 class DataExtractor(ABC):
     """extracts and formats data"""
@@ -128,6 +157,13 @@ class DataExtractor(ABC):
     
     @abstractmethod
     def format_data(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Formats retrieved data from EIA
+        
+                    series-description    value  units   state  
+        period                                                   
+        2020-01-15  description of data   2.74  $/MCF    U.S.  
+        ...
+        """
         pass
     
     @abstractmethod
@@ -178,19 +214,28 @@ class DataExtractor(ABC):
 # concrete product 
 class GasCosts(DataExtractor):
     
+    industry_codes = {
+        "power":"PEU",
+        "residential":"PRS",
+        "commercial":"PCS",
+        "industrial":"PIN",
+        "imports":"PRP",
+        "exports":"PNP",
+    }
+    
     def __init__(self, industry: str, year: int, api_key: str) -> None:
         self.industry = industry
         super().__init__(year, api_key)
-        if industry not in INDUSTRY_CODES.keys():
+        if industry not in self.industry_codes.keys():
             raise InputException(
                 propery="Gas Costs", 
-                valid_options=list(INDUSTRY_CODES), 
+                valid_options=list(self.industry_codes), 
                 recived_option=industry
             )
     
     def build_url(self) -> str:
         base_url = "natural-gas/pri/sum/data/"
-        facets = f"frequency=monthly&data[0]=value&facets[process][]={INDUSTRY_CODES[self.industry]}&start={self.year}-01&end={self.year+1}-01&sort[0][column]=period&sort[0][direction]=desc&offset=0&length=5000"
+        facets = f"frequency=monthly&data[0]=value&facets[process][]={self.industry_codes[self.industry]}&start={self.year}-01&end={self.year+1}-01&sort[0][column]=period&sort[0][direction]=desc&offset=0&length=5000"
         return f"{API_BASE}{base_url}?api_key={self.api_key}&{facets}"
     
     def format_data(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -224,13 +269,18 @@ class GasCosts(DataExtractor):
         
 # concrete product 
 class CoalCosts(DataExtractor):
+    
+    industry_codes = {
+        "power":"PEU",
+    }
+    
     def __init__(self, industry: str, year: int, api_key: str) -> None:
         self.industry = industry
         super().__init__(year, api_key)
         if industry != "power":
             raise InputException(
                 propery="Coal Costs", 
-                valid_options=INDUSTRY_CODES.keys(), 
+                valid_options=list(self.industry_codes), 
                 recived_option=industry
             )
             
@@ -286,7 +336,74 @@ class CoalCosts(DataExtractor):
         final["series-description"] = final.state.map(lambda x: f"{x} Coal Electric Power Price")
 
         return final.set_index("period")
+
+class ElectricityDemand(DataExtractor):
+    """Extracts demand by balancing authority 
     
+    TODO: Develop method to extract data 5000 entries at a time. 
+    We can probably use the offset option in the EIA API to just call it 
+    however many times we need
+    https://www.eia.gov/opendata/documentation.php
+    """
+    
+    def __init__(self, year: int, api_key: str) -> None:
+        super().__init__(year, api_key)
+        
+    def build_url(self) -> str:
+        base_url = "electricity/rto/region-data/data/"
+        facets = f"frequency=hourly&data[0]=value&facets[type][]=D&start={self.year}-01-01T00&end={self.year}-12-31T00&sort[0][column]=period&sort[0][direction]=desc&offset=0&length=5000"
+        return f"{API_BASE}{base_url}?api_key={self.api_key}&{facets}"
+    
+    def format_data(self, df: pd.DataFrame) -> pd.DataFrame:
+        return df
+
+class GasTrade(DataExtractor):
+    """Gets imports/exports by point of entry"""
+    
+    direction_codes = {
+        "imports":"IRP",
+        "exports":"ENP"
+    }
+
+    def __init__(self, direction: str, year: int, api_key: str) -> None:
+        self.direction = direction
+        super().__init__(year, api_key)
+        if self.direction not in list(self.direction_codes):
+            raise InputException(
+                propery="Natural Gas Imports and Exports", 
+                valid_options=list(self.direction_codes), 
+                recived_option=direction
+            )
+            
+    def build_url(self) -> str:
+        poe = "poe1" if self.direction == "imports" else "poe2"
+        base_url = f"natural-gas/move/{poe}/data/"
+        facets = f"frequency=monthly&data[0]=value&facets[process][]={self.direction_codes[self.direction]}&start={self.year}-01&end={self.year+1}-01&sort[0][column]=period&sort[0][direction]=desc&offset=0&length=5000"
+        return f"{API_BASE}{base_url}?api_key={self.api_key}&{facets}"
+    
+    def format_data(self, df: pd.DataFrame) -> pd.DataFrame:
+        df["period"] = self._format_period(df.period).copy()
+        df["state"] = df["series-description"].map(self.extract_state)
+        
+        return (
+            df
+            [["series-description", "value", "units", "state", "period"]]
+            .sort_values(["state", "period"])
+            .set_index("period")
+        )
+    
+    @staticmethod
+    def extract_state(description: str) -> str:
+        """Extracts state from series descripion
+        
+        Input will be in one of the following forms
+        - "Massena, NY Natural Gas Pipeline Imports From Canada"
+        - "U.S. Natural Gas Pipeline Imports From Mexico"
+        """
+        try: # state level 
+            return description.split(",")[1].split(" ")[1] 
+        except IndexError: # country level 
+            return description.split(" Natural Gas Pipeline")[0]
     
 if __name__ == "__main__":
-    pass
+    print(Trade("gas", "imports", 2022, "O0kLkuarUMBg0dkmZGWDABbqU2etu4jA8Z8f2Rp4").get_data())
