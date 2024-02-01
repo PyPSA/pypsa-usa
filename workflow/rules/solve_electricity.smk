@@ -12,7 +12,7 @@ rule add_extra_components:
         "logs/add_extra_components/{interconnect}/elec_s_{clusters}_ec.log",
     threads: 4
     resources:
-        mem_mb=800,
+        mem_mb=1000,
     script:
         "../scripts/add_extra_components.py"
 
@@ -34,7 +34,7 @@ rule prepare_network:
         solver="logs/prepare_network/{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}.log",
     threads: 4
     resources:
-        mem_mb=800,
+        mem_mb=1000,
     log:
         "logs/prepare_network",
     script:

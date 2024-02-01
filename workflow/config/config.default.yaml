@@ -278,7 +278,7 @@ solving:
   #tmpdir: "path/to/tmp"
   options:
     # operations_only: false
-    load_shedding: false
+    load_shedding: true
     clip_p_max_pu: 1.e-2
     noisy_costs: true
     skip_iterations: true
