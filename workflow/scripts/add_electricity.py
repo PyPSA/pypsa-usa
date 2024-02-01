@@ -758,22 +758,20 @@ def prepare_eia_demand(n: pypsa.Network,
 def disaggregate_demand_to_buses(n: pypsa.Network, 
                                  demand: pd.DataFrame) -> pd.DataFrame:
     """
-    Zone power demand is disaggregated to buses proportional to Pd,
-    where Pd is the real power demand (MW).
+    Zone power demand is disaggregated to buses proportional to Pd
     """
-    grouped_sum = n.buses.groupby("load_dissag").sum().Pd
-    merged = n.buses.merge(grouped_sum, how='left', left_on='load_dissag', right_index=True)
-    merged['demand_per_bus_fr'] = merged.Pd_x / merged.Pd_y
-    demand_per_bus = pd.DataFrame(1, columns=n.buses.index, index=n.snapshots)
-    demand_per_bus = demand_per_bus * merged.demand_per_bus_fr
-    demand_per_bus.fillna(0, inplace=True)
-    demand_per_bus.columns = merged.load_dissag
-    demand_expanded = demand.reindex(columns=demand_per_bus.columns, fill_value=demand)
-    demand_expanded = demand_expanded.apply(pd.to_numeric, errors='coerce')
-    demand_final = demand_per_bus.values * demand_expanded.values
-    demand_per_bus = pd.DataFrame(demand_final, columns=n.buses.index, index=n.snapshots)
-    demand_per_bus = demand_per_bus.loc[:, (demand_per_bus != 0).any(axis=0)]
-    return demand_per_bus
+
+    n.buses.Pd = n.buses.Pd.fillna(0)
+    group_sums = n.buses.groupby('load_dissag')['Pd'].transform('sum')
+    n.buses['proportion'] = n.buses['Pd'] / group_sums
+    demand_aligned = demand.reindex(columns=n.buses['load_dissag'].unique(), fill_value=0)
+    bus_demand = pd.DataFrame()
+    for load_dissag in n.buses['load_dissag'].unique():
+        proportion = n.buses.loc[n.buses['load_dissag'] == load_dissag, 'proportion']
+        zone_bus_demand = demand_aligned[load_dissag].values.reshape(-1,1) * proportion.values.T
+        bus_demand = pd.concat([bus_demand, pd.DataFrame(zone_bus_demand, columns=proportion.index)], axis=1)
+    bus_demand.index = n.snapshots
+    return bus_demand.fillna(0)
 
 
 def add_demand_from_file(n: pypsa.Network, 

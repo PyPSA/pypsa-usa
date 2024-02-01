@@ -8,13 +8,13 @@ run:
 
 scenario:
   interconnect: western #"usa|texas|western|eastern"
-  clusters: [300]
+  clusters: [30]
   opts:
     [
-      Co2L0.1,           # Limit CO2 emissions to 10% of CO2 base
-      # Co2L0.1-1000SEG, # Cluster to 1000 hours in the year
+      # Co2L1.5,           # Limit CO2 emissions to 10% of CO2 base
+      Co2L0.1-500SEG, # Cluster to 1000 hours in the year
     ]
-  ll: [v1.05]
+  ll: [v1.00] 
   scope: "total" # "urban", "rural", or "total" 
   planning_horizons:
     - 2030 #not implemented yet (temp placeholder)
@@ -29,6 +29,7 @@ countries: [US]
 
 focus_weights:
   Offshore: 0.2     # Offshore buses require weighting- # Offshore nodes = weight * n_clusters
+  California: 0.5
 
 network_configuration: "pypsa-usa" # "pypsa-usa" or "ads2032" or "breakthrough"
 
@@ -92,7 +93,7 @@ electricity:
   extendable_carriers:
     Generator: [solar, onwind, offwind, offwind_floating, OCGT, CCGT, coal] #offwind, offwind_floating,
     StorageUnit: [battery] # battery, H2
-    Store: [battery] #[battery, H2]
+    Store: [] #[battery, H2]
     Link: [] #[H2 pipeline]
 
   retirement: economic # "economic" or "technical"

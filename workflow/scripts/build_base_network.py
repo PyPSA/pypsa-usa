@@ -446,7 +446,7 @@ def modify_breakthrough_lines(n:pypsa.Network, interconnect:str):
             n.buses.loc[n.lines.loc[n.lines.index == i].bus1, 'v_nom'] = line_fixes[i]['v_nom']
 
         #Removing Unccesary Lines in Humboldt, adding new missing one.
-        line_removals = ['89634', '89668']
+        line_removals = ['89634', '89668', '90528']
         n.mremove('Line', line_removals)
         line_params = n.lines.loc['90501'].copy()
         line_params.name = line_removals[0]
