@@ -1,18 +1,6 @@
 """
 Extracts EIA data 
 
-Available Fuels include: 
-    - "gas"
-    - "coal" 
-    
-Available Industries include: 
-    - "power"
-    - "residential" (only gas)
-    - "commercial" (only gas)
-    - "industrial" (only gas)
-    - "exports" (only gas)
-    - "imports" (only gas)
-
 Examples: 
 >>> costs = FuelCosts("gas", "power", 2020, "xxxxxxxxxxxxxxxx")
 >>> costs.get_data()
