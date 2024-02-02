@@ -29,6 +29,7 @@ period
 from abc import ABC, abstractmethod
 from typing import Union, Dict
 import math 
+import constants
 
 import pandas as pd
 import numpy as np
@@ -39,6 +40,8 @@ import logging
 logger = logging.getLogger(__name__)
 
 API_BASE = "https://api.eia.gov/v2/"
+
+STATE_CODES = constants.STATE_2_CODE
 
 # exceptions
 class InputException(Exception):
@@ -114,7 +117,8 @@ class Production(EiaData):
         self.api = api
     
     def data_creator(self) -> pd.DataFrame:
-        pass
+        if self.fuel == "gas":
+            return 
 
 # concrete creator 
 class Demand(EiaData):
@@ -127,11 +131,29 @@ class Demand(EiaData):
     
     def data_creator(self) -> pd.DataFrame:
         if self.fuel == "electricity":
-            return ElectricityDemand(self.year, self.api)
+            raise NotImplementedError()
         else:
             raise InputException(
                 propery="Demand", 
                 valid_options=["electricity"], 
+                recived_option=self.fuel
+            )
+
+class Storage(EiaData):
+    
+    def __init__(self, fuel: str, storage: str, year: int, api: str) -> None:
+        self.fuel = fuel
+        self.storage = storage
+        self.year = year
+        self.api = api
+
+    def data_creator(self) -> pd.DataFrame:
+        if self.fuel == "gas":
+            return GasStorage(self.storage, self.year, self.api)
+        else:
+            raise InputException(
+                propery="Storage", 
+                valid_options=["gas"], 
                 recived_option=self.fuel
             )
 
@@ -392,7 +414,59 @@ class GasTrade(DataExtractor):
             return description.split(",")[1].split(" ")[1] 
         except IndexError: # country level 
             return description.split(" Natural Gas Pipeline")[0]
+
+class GasStorage(DataExtractor):
+    """Underground storage facilites for natural gas"""
     
+    storage_codes = {
+        "base":"SAB", 
+        "working":"SAO",
+        "total":"SAT",
+        "withdraw":"SAW"
+    }
+    
+    def __init__(self, storage: str, year: int, api_key: str) -> None:
+        self.storage = storage
+        super().__init__(year, api_key)
+        if self.storage not in list(self.storage_codes):
+            raise InputException(
+                propery="Natural Gas Underground Storage", 
+                valid_options=list(self.storage_codes), 
+                recived_option=storage
+            )
+
+    def build_url(self) -> str:
+        base_url = "natural-gas/stor/sum/data/"
+        facets = f"frequency=monthly&data[0]=value&facets[process][]=SAW&start={self.year}-01&end={self.year+1}-01&sort[0][column]=period&sort[0][direction]=desc&offset=0&length=5000"
+        return f"{API_BASE}{base_url}?api_key={self.api_key}&{facets}"
+
+    def format_data(self, df: pd.DataFrame) -> pd.DataFrame:
+        
+        df = df[~(df["area-name"] == "NA")].copy()
+        df["period"] = self._format_period(df.period)
+        df["state"] = (
+            df["series-description"]
+            .map(self.extract_state)
+            .map(self.map_state_names)
+        )
+        
+        return (
+            df
+            [["series-description", "value", "units", "state", "period"]]
+            .sort_values(["state", "period"])
+            .set_index("period")
+        )
+
+    @staticmethod
+    def extract_state(description: str) -> str:
+        """Extracts state from series descripion"""
+        return description.split(" Natural ")[0]
+    
+    @staticmethod
+    def map_state_names(state: str) -> str:
+        """Maps state name to code"""
+        return state if state == "U.S." else STATE_CODES[state]
+
 if __name__ == "__main__":
     api_key = ""
-    print(Trade("gas", "imports", 2022, api_key).get_data())
+    print(Storage("gas", "withdraw", 2022, api_key).get_data())
