@@ -771,6 +771,7 @@ def disaggregate_demand_to_buses(n: pypsa.Network,
         zone_bus_demand = demand_aligned[load_dissag].values.reshape(-1,1) * proportion.values.T
         bus_demand = pd.concat([bus_demand, pd.DataFrame(zone_bus_demand, columns=proportion.index)], axis=1)
     bus_demand.index = n.snapshots
+    n.buses.drop(columns=['proportion'], inplace=True)
     return bus_demand.fillna(0)
 
 
@@ -807,6 +808,7 @@ def test_snapshot_year_alignment(sns_year: int, configuration: str):
                             breakthrough requires 2016 \n
                             \n
                           """)
+                          
 
 def attach_conventional_generators(
     n: pypsa.Network,

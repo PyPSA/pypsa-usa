@@ -21,7 +21,7 @@ rule build_shapes:
         "logs/build_shapes_{interconnect}.log",
     threads: 1
     resources:
-        mem_mb=300,
+        mem_mb=500,
     script:
         "../scripts/build_shapes.py"
 
@@ -45,9 +45,9 @@ rule build_base_network:
         network=RESOURCES + "{interconnect}/elec_base_network.nc",
     log:
         "logs/create_network/{interconnect}.log",
-    threads: 4
+    threads: 1
     resources:
-        mem_mb=300,
+        mem_mb=1000,
     script:
         "../scripts/build_base_network.py"
 
@@ -67,7 +67,7 @@ rule build_bus_regions:
         "logs/{interconnect}/build_bus_regions_s.log",
     threads: 1
     resources:
-        mem_mb=300,
+        mem_mb=1000,
     script:
         "../scripts/build_bus_regions.py"
 
@@ -194,7 +194,7 @@ rule build_renewable_profiles:
         BENCHMARKS + "{interconnect}/build_renewable_profiles_{technology}"
     threads: ATLITE_NPROCESSES
     resources:
-        mem_mb=ATLITE_NPROCESSES * 2000,
+        mem_mb=ATLITE_NPROCESSES * 5000,
     wildcard_constraints:
         technology="(?!hydro).*",  # Any technology other than hydro
     script:
@@ -262,7 +262,7 @@ rule add_electricity:
         BENCHMARKS + "{interconnect}/add_electricity"
     threads: 1
     resources:
-        mem_mb=14000,
+        mem_mb=18000,
     script:
         "../scripts/add_electricity.py"
 
@@ -277,9 +277,10 @@ rule simplify_network:
         network=RESOURCES + "{interconnect}/elec_s.nc",
     log:
         "logs/simplify_network/{interconnect}/elec_s.log",
-    threads: 4
+    threads: 2
     resources:
         mem_mb=10000,
+    group: "agg_network"
     script:
         "../scripts/simplify_network.py"
 
@@ -309,5 +310,50 @@ rule cluster_network:
     threads: 1
     resources:
         mem_mb=10000,
+    group: "agg_network"
     script:
         "../scripts/cluster_network_eur.py"
+
+
+rule add_extra_components:
+    input:
+        network=RESOURCES + "{interconnect}/elec_s_{clusters}.nc",
+        tech_costs=RESOURCES + f"costs_{config['costs']['year']}.csv",
+    params:
+        retirement=config["electricity"].get("retirement", "technical")
+    output:
+        RESOURCES + "{interconnect}/elec_s_{clusters}_ec.nc",
+    log:
+        "logs/add_extra_components/{interconnect}/elec_s_{clusters}_ec.log",
+    threads: 1
+    resources:
+        mem_mb=4000,
+    group: "agg_network"
+    script:
+        "../scripts/add_extra_components.py"
+
+rule prepare_network:
+    params:
+        links=config["links"],
+        lines=config["lines"],
+        co2base=config["electricity"]["co2base"],
+        co2limit=config["electricity"]["co2limit"],
+        gaslimit=config["electricity"].get("gaslimit"),
+        max_hours=config["electricity"]["max_hours"],
+        costs=config["costs"],
+    input:
+        network=RESOURCES + "{interconnect}/elec_s_{clusters}_ec.nc",
+        tech_costs=RESOURCES + f"costs_{config['costs']['year']}.csv",
+    output:
+        RESOURCES + "{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}.nc",
+    log:
+        solver="logs/prepare_network/{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}.log",
+    threads: 1
+    resources:
+        mem_mb=4000,
+    group: "agg_network"
+    log:
+        "logs/prepare_network",
+    script:
+        "../scripts/subworkflows/pypsa-eur/scripts/prepare_network.py" 
+

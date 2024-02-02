@@ -9,8 +9,7 @@ __default__:
     error: logs/slurm/err_{rule}-%j.err
 
 build_renewable_profiles:
-    walltime: 01:00:00
+    walltime: 01:30:00
 
 solve_network:
     walltime: 06:00:00
-    cpus_per_task: 8

@@ -8,13 +8,14 @@ run:
 
 scenario:
   interconnect: western #"usa|texas|western|eastern"
-  clusters: [30]
+  clusters: [50]
   opts:
     [
       # Co2L1.5,           # Limit CO2 emissions to 10% of CO2 base
-      Co2L0.1-500SEG, # Cluster to 1000 hours in the year
+      Co2L0.1-1000SEG, # Cluster to 1000 hours in the year 
+
     ]
-  ll: [v1.00] 
+  ll: [v1.05] 
   scope: "total" # "urban", "rural", or "total" 
   planning_horizons:
     - 2030 #not implemented yet (temp placeholder)
@@ -29,7 +30,7 @@ countries: [US]
 
 focus_weights:
   Offshore: 0.2     # Offshore buses require weighting- # Offshore nodes = weight * n_clusters
-  California: 0.5
+  # California: 0.5
 
 network_configuration: "pypsa-usa" # "pypsa-usa" or "ads2032" or "breakthrough"
 
@@ -43,7 +44,7 @@ foresight:  # not implemented yet
 # docs :
 atlite:
   default_cutout: era5_2019
-  nprocesses: 4
+  nprocesses: 6
   show_progress: false # false saves time
   cutouts:
     era5_2019:
@@ -278,7 +279,7 @@ solving:
   #tmpdir: "path/to/tmp"
   options:
     # operations_only: false
-    load_shedding: true
+    load_shedding: false
     clip_p_max_pu: 1.e-2
     noisy_costs: true
     skip_iterations: true
