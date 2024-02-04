@@ -41,7 +41,7 @@ class StateGeometry:
         if self._states:
             return self._states
         else:
-            self._states = self._get_state_boundaries(self)
+            self._states = self._get_state_boundaries()
             return self._states
     
     @property
@@ -83,6 +83,7 @@ class GasData(ABC):
     
     state_2_interconnect = constants.STATES_INTERCONNECT_MAPPER
     state_2_name = {v: k for k, v in constants.STATE_2_CODE.items()}
+    name_2_state = constants.STATE_2_CODE
     states_2_remove = [x for x, y in constants.STATES_INTERCONNECT_MAPPER.items() if not y]
     
     def __init__(self, year: int, interconnect: str) -> None:
@@ -114,14 +115,18 @@ class GasData(ABC):
     def build_infrastructure(self, n: pypsa.Network) -> None:
         pass
     
-    def filter_on_interconnect(self, df: pd.DataFrame) -> pd.DataFrame:
+    def filter_on_interconnect(self, df: pd.DataFrame, additional_removals: List[str] = None) -> pd.DataFrame:
         """Name of states must be in column called 'STATE'"""
+        
+        states_2_remove = self.states_2_remove
+        if additional_removals:
+            states_2_remove += additional_removals
         
         if "STATE" not in df.columns:
             logger.debug("Natual gas data not filtered due to incorrect data formatting")
             return df
         
-        df = df[~df.STATE.isin(self.states_2_remove)].copy()
+        df = df[~df.STATE.isin(states_2_remove)].copy()
         
         if self.interconnect == "usa":
             return df
@@ -178,24 +183,44 @@ class GasStorage(GasData):
         
     
     def read_data(self):
-        base = eia.Storage("gas", "base", self.year, self.api)
-        total = eia.Storage("gas", "total", self.year, self.api)
-        return pd.concat([base, total])
+        base = eia.Storage("gas", "base", self.year, self.api).get_data()
+        base["storage_type"] = "base_capacity"
+        total = eia.Storage("gas", "total", self.year, self.api).get_data()
+        total["storage_type"] = "total_capacity"
+        working = eia.Storage("gas", "working", self.year, self.api).get_data()
+        working["storage_type"] = "working_capacity"
+        
+        final = pd.concat([base, total, working])
+        final["value"] = pd.to_numeric(final.value)
+        return final
     
     def format_data(self, data: pd.DataFrame):
-        return self.filter_on_interconnect(data)
+        df = data.copy()
+        df = (
+            df
+            .reset_index()
+            .drop(columns=["period","series-description", "units"]) # units in MMCF
+            .groupby(["state", "storage_type"])
+            .mean() # get average yearly capacity
+            .reset_index()
+            .rename(columns={"value":"capacity"})
+            .pivot(columns="storage_type", index="state")
+        )
+        df.columns = df.columns.droplevel(0)
+        df.columns.name = ""
+        df = df.reset_index()
+        df = df.rename(columns={
+            "base_capacity": "MIN_CAPACITY_MMCF", 
+            "total_capacity": "MAX_CAPACITY_MMCF",
+            "state":"STATE"
+            })
+        return self.filter_on_interconnect(df, ["U.S."])
     
     def build_infrastructure(self, n: pypsa.Network, **kwargs):
         
-        df = (
-            self.data
-            .copy()
-            .reset_index()
-            .drop(columns=["COUNTY"])
-            .groupby("STATE")
-            .sum()
-        )
-        df["bus"] = df.index
+        df = self.data.copy()
+        df.index = df.STATE
+        df["state_name"] = df.index.map(self.state_2_name)
         
         n.madd(
             "Bus",
@@ -215,7 +240,7 @@ class GasStorage(GasData):
             e_nom_extendable=False,
             e_nom=df.MAX_CAPACITY_MMCF,
             e_cyclic=cyclic_storage,
-            e_min_pu=df.MAX_CAPACITY_MMCF / df.MAX_CAPACITY_MMCF,
+            e_min_pu=df.MIN_CAPACITY_MMCF,
             marginal_cost=0 # to update
         )
         
@@ -288,7 +313,7 @@ class GasProcessing(GasData):
         
         return self.filter_on_interconnect(df)
     
-    def build_infrastructure(self, n: pypsa.Network, **kwargs):
+    def build_infrastructure(self, n: pypsa.Network):
 
         df = self.data.copy()
         df = df.set_index("STATE")
@@ -325,9 +350,9 @@ class _GasPipelineCapacity(GasData):
         df.columns = df.columns.str.strip()
         df = df[df.index == int(self.year)]
         df = df.rename(columns={
-            "State From":"STATE_FROM",
+            "State From":"STATE_NAME_FROM",
             "County From":"COUNTRY_FROM",
-            "State To":"STATE_TO",
+            "State To":"STATE_NAME_TO",
             "County To":"COUNTRY_TO",
             "Capacity (mmcfd)":"CAPACITY_MMCFD"
         })
@@ -335,19 +360,25 @@ class _GasPipelineCapacity(GasData):
             df
             .astype(
                 {
-                    "STATE_FROM":"str",
+                    "STATE_NAME_FROM":"str",
                     "COUNTRY_FROM":"str",
-                    "STATE_TO":"str",
+                    "STATE_NAME_TO":"str",
                     "COUNTRY_TO":"str",
                     "CAPACITY_MMCFD":"float"
                 }
             )
-            [["STATE_FROM","STATE_TO","CAPACITY_MMCFD"]]
-            .groupby(["STATE_TO", "STATE_FROM"])
+            [["STATE_NAME_FROM","STATE_NAME_TO","CAPACITY_MMCFD"]]
+            .groupby(["STATE_NAME_TO", "STATE_NAME_FROM"])
             .sum()
             .reset_index()
-            .map(self.assign_pipeline_interconnects)
         )
+        
+        df = df[~(
+            (df.STATE_NAME_TO.isin(["Gulf of Mexico", "Gulf of Mexico - Deepwater"])) | 
+            (df.STATE_NAME_FROM.isin(["Gulf of Mexico", "Gulf of Mexico - Deepwater"]))
+        )]
+        
+        df = self.assign_pipeline_interconnects(df)
         return self.extract_pipelines(df)
 
     @abstractmethod
@@ -361,6 +392,9 @@ class _GasPipelineCapacity(GasData):
 
     def assign_pipeline_interconnects(self, df: pd.DataFrame):
         """Adds interconnect labels to the pipelines"""
+        
+        df["STATE_TO"] = df.STATE_NAME_TO.map(self.name_2_state)
+        df["STATE_FROM"] = df.STATE_NAME_FROM.map(self.name_2_state)
         
         df["INTERCONNECT_TO"] = df.STATE_TO.map(self.state_2_interconnect)
         df["INTERCONNECT_FROM"] = df.STATE_FROM.map(self.state_2_interconnect)
@@ -725,12 +759,11 @@ def build_natural_gas(
     pipelines.build_infrastructure(n)
     
     # add pipelines for imports/exports 
-    
     # TODO: have trade pipelines share data to only instantiate once
-    pipelines_domestic = TradeGasPipelineCapacity(year, interconnect, pipelines_path, domestic=True)
-    pipelines_international = TradeGasPipelineCapacity(year, interconnect, pipelines_path, domestic=False)
     
+    pipelines_domestic = TradeGasPipelineCapacity(year, interconnect, pipelines_path, domestic=True)
     pipelines_domestic.build_infrastructure(n)
+    pipelines_international = TradeGasPipelineCapacity(year, interconnect, pipelines_path, domestic=False)
     pipelines_international.build_infrastructure(n)
     
     # add pipeline linepack 
