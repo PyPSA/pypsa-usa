@@ -1,7 +1,5 @@
 """Module for adding the gas sector"""
 
-from geopandas.geodataframe import GeoDataFrame
-from pandas.core.api import DataFrame as DataFrame
 import pypsa 
 import pandas as pd
 import geopandas as gpd
@@ -12,6 +10,7 @@ logger = logging.getLogger(__name__)
 from typing import List, Dict, Union
 from math import pi
 import numpy as np
+import yaml
 
 import eia 
 
@@ -52,8 +51,8 @@ class StateGeometry:
             return self._state_center_points
         else:
             if not self._states:
-                self._states = self._get_state_boundaries(self)
-            self._state_center_points = self._get_state_center_points(self)
+                self._states = self._get_state_boundaries()
+            self._state_center_points = self._get_state_center_points()
             return self._state_center_points
                 
         
@@ -82,11 +81,18 @@ class StateGeometry:
 class GasData(ABC):
     """Main class to interface with data"""
     
-    def __init__(self, year: int) -> None:
+    state_2_interconnect = constants.STATES_INTERCONNECT_MAPPER
+    state_2_name = {v: k for k, v in constants.STATE_2_CODE.items()}
+    states_2_remove = [x for x, y in constants.STATES_INTERCONNECT_MAPPER.items() if not y]
+    
+    def __init__(self, year: int, interconnect: str) -> None:
         self.year = year
+        if interconnect.lower() not in ("western", "eastern", "texas", "usa"):
+            logger.debug(f"Invalid interconnect of {interconnect}. Setting to 'usa'")
+            self.interconnect = "usa" # no filtering of data
+        else:
+            self.interconnect = interconnect.lower()
         self._data = self._get_data()
-        self.state_2_interconnect = constants.STATES_INTERCONNECT_MAPPER
-        self.states_2_remove = [x for x, y in constants.STATES_INTERCONNECT_MAPPER.items() if not y]
         
     @property
     def data(self) -> pd.DataFrame:
@@ -108,23 +114,23 @@ class GasData(ABC):
     def build_infrastructure(self, n: pypsa.Network) -> None:
         pass
     
-    def filter_on_interconnect(
-        self,
-        df: pd.DataFrame, 
-        interconnect: str, 
-    ) -> pd.DataFrame:
+    def filter_on_interconnect(self, df: pd.DataFrame) -> pd.DataFrame:
         """Name of states must be in column called 'STATE'"""
+        
+        if "STATE" not in df.columns:
+            logger.debug("Natual gas data not filtered due to incorrect data formatting")
+            return df
         
         df = df[~df.STATE.isin(self.states_2_remove)].copy()
         
-        if interconnect == "usa":
+        if self.interconnect == "usa":
             return df
         else:
-            df["interconnect"] = df.STATE.map(self.states_2_interconnect)
+            df["interconnect"] = df.STATE.map(self.state_2_interconnect)
             assert not df.interconnect.isna().any()
-            df = df[df.interconnect == interconnect]
+            df = df[df.interconnect == self.interconnect]
             if df.empty:
-                logger.warning(f"Empty natural gas data for interconnect {interconnect}")
+                logger.warning(f"Empty natural gas data for interconnect {self.interconnect}")
             return df.drop(columns="interconnect")
 
 class GasBuses(GasData):
@@ -134,39 +140,42 @@ class GasBuses(GasData):
         County shapefile of United States
     """
     
-    def __init__(self, counties: str) -> None:
-        super().__init__(year=2020) # year locked for location mapping
+    def __init__(self, interconnect: str, counties: str) -> None:
         self.states = StateGeometry(counties)
+        super().__init__(year=2020, interconnect=interconnect) # year locked for location mapping
         
-    def read_data(self) -> Union[pd.DataFrame, gpd.GeoDataFrame]:
+    def read_data(self) -> gpd.GeoDataFrame:
         return pd.DataFrame(self.states.state_center_points)
     
-    def format_data(self, data: Union[pd.DataFrame, gpd.GeoDataFrame]) -> pd.DataFrame:
-        return data
+    def format_data(self, data: gpd.GeoDataFrame) -> pd.DataFrame:
+        data = pd.DataFrame(data)
+        data["name"] = data.STATE.map(self.state_2_name)
+        return self.filter_on_interconnect(data)
 
     def build_infrastructure(self, n: Network) -> None:
         
-        states = self.data.copy()
+        states = self.data.copy().set_index("STATE")
         
         n.madd(
             "Bus", 
-            names=states.STATE,
+            names=states.index,
             suffix=" gas",
-            x=states.x.to_list(),
-            y=states.y.to_list(),
+            x=states.x,
+            y=states.y,
             carrier="gas",
             unit="MMCF",
-            interconnect=states.interconnect.to_list(),
-            country=states.STATE.to_list(), # for consistency 
-            STATE=states.STATE.to_list(),
-            STATE_NAME=states.index
+            interconnect=self.interconnect,
+            country=states.index, # for consistency 
+            STATE=states.index,
+            STATE_NAME=states.name
         )
 
 class GasStorage(GasData):
     
-    def __init__(self, year: int, api: str) -> None:
-        super().__init__(year)
+    def __init__(self, year: int, interconnect: str, api: str) -> None:
         self.api = api
+        super().__init__(year, interconnect)
+        
     
     def read_data(self):
         base = eia.Storage("gas", "base", self.year, self.api)
@@ -174,7 +183,7 @@ class GasStorage(GasData):
         return pd.concat([base, total])
     
     def format_data(self, data: pd.DataFrame):
-        return data
+        return self.filter_on_interconnect(data)
     
     def build_infrastructure(self, n: pypsa.Network, **kwargs):
         
@@ -240,9 +249,10 @@ class GasStorage(GasData):
 
 class GasProcessing(GasData):
     
-    def __init__(self, year: int, eia_757: str = None) -> None:
-        super().__init__(year=2017) # only 2017 is available
+    def __init__(self, interconnect: str, eia_757: str) -> None:
         self.eia_757 = eia_757
+        super().__init__(year=2017, interconnect=interconnect) # only 2017 is available
+        
     
     def read_data(self) -> pd.DataFrame:
         return pd.read_csv(self.eia_757).fillna(0)
@@ -268,12 +278,20 @@ class GasProcessing(GasData):
         })
         df["STATE"] = df["STATE"].str.upper()
 
-        return df.groupby(["STATE", "COUNTY"]).sum()
+        df = (
+            df
+            .drop(columns=["COUNTY"])
+            .groupby("STATE")
+            .sum()
+            .reset_index()
+        )
+        
+        return self.filter_on_interconnect(df)
     
     def build_infrastructure(self, n: pypsa.Network, **kwargs):
 
         df = self.data.copy()
-        df = df.reset_index().drop(columns=["COUNTY"]).groupby("STATE").sum()
+        df = df.set_index("STATE")
         df["bus"] = df.index + " gas"
         
         n.madd(
@@ -287,11 +305,12 @@ class GasProcessing(GasData):
             p_nom=df.CAPACITY_MMCF
         )
 
-class GasPipelineCapacity(GasData):
+class _GasPipelineCapacity(GasData):
     
-    def __init__(self, year: int, xlsx: str) -> None:
-        super().__init__(year)
+    def __init__(self, year: int, interconnect: str, xlsx: str) -> None:
         self.xlsx = xlsx
+        super().__init__(year, interconnect)
+        
         
     def read_data(self) -> pd.DataFrame:
         return pd.read_excel(
@@ -337,21 +356,24 @@ class GasPipelineCapacity(GasData):
 
     @abstractmethod
     def extract_pipelines(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Extracts pipelines for that region"""
+        """Extracts pipelines for that region. Used in Format data"""
         pass
 
     def assign_pipeline_interconnects(self, df: pd.DataFrame):
-        """Adds interconnct labels to the pipelines"""
+        """Adds interconnect labels to the pipelines"""
         
         df["INTERCONNECT_TO"] = df.STATE_TO.map(self.state_2_interconnect)
-        df["INTERCONNECT_FROM"] = df.STATE_FROM.map(self.states_2_interconnect)
+        df["INTERCONNECT_FROM"] = df.STATE_FROM.map(self.state_2_interconnect)
         
         assert not df.isna().any().any()    
         
         return df
 
-class InterconnectGasPipelineCapacity(GasPipelineCapacity):
+class InterconnectGasPipelineCapacity(_GasPipelineCapacity):
     """Pipeline capacity within the interconnect"""
+
+    def __init__(self, year: int, interconnect: str, xlsx: str) -> None:
+        super().__init__(year, interconnect, xlsx)
 
     def extract_pipelines(self, data: pd.DataFrame) -> pd.DataFrame:
         
@@ -393,12 +415,13 @@ class InterconnectGasPipelineCapacity(GasPipelineCapacity):
             p_nom_extendable=False,
         )
 
-class TradeGasPipelineCapacity(GasPipelineCapacity):
+class TradeGasPipelineCapacity(_GasPipelineCapacity):
     """Pipeline capcity connecting to the interconnect"""
     
-    def __init__(self, year: int, xlsx: str, domestic: bool = True) -> None:
-        super().__init__(year, xlsx)
+    def __init__(self, year: int, interconnect: str, xlsx: str, domestic: bool = True) -> None:
         self.domestic = domestic
+        super().__init__(year, interconnect, xlsx)
+        
         
     def extract_pipelines(self, data: pd.DataFrame) -> pd.DataFrame:
         
@@ -408,7 +431,7 @@ class TradeGasPipelineCapacity(GasPipelineCapacity):
         else: 
             return self._get_international_pipeline_connections(df)
 
-    def _get_domestic_pipeline_connections(self, df: pd.DataFramer) -> pd.DataFrame:
+    def _get_domestic_pipeline_connections(self, df: pd.DataFrame) -> pd.DataFrame:
         """Gets all pipelines within the usa that connect to the interconnect"""
         
         if self.interconnect == "usa":
@@ -553,11 +576,11 @@ class TradeGasPipelineCapacity(GasPipelineCapacity):
 
 class PipelineLinepack(GasData):
     
-    def __init__(self, year: int, counties: str, pipelines: str) -> None:
-        super().__init__(year)
+    def __init__(self, year: int, interconnect: str, counties: str, pipelines: str) -> None:
         self.counties = StateGeometry(counties)
         self.states = self.counties.states
         self.pipeline_geojson = pipelines
+        super().__init__(year, interconnect)
         
     def read_data(self) -> gpd.GeoDataFrame:
         """https://atlas.eia.gov/apps/3652f0f1860d45beb0fed27dc8a6fc8d/explore"""
@@ -603,8 +626,8 @@ class PipelineLinepack(GasData):
         final["MIN_ENERGY_MMCF"] = final.MIN_ENERGY_kJ * kj_2_mmcf
         final["NOMINAL_ENERGY_MMCF"] = final.NOMINAL_ENERGY_kJ * kj_2_mmcf
 
-        return final[["MAX_ENERGY_MMCF", "MIN_ENERGY_MMCF", "NOMINAL_ENERGY_MMCF"]].reset_index()
-        
+        final = final[["MAX_ENERGY_MMCF", "MIN_ENERGY_MMCF", "NOMINAL_ENERGY_MMCF"]].reset_index()
+        return self.filter_on_interconnect(final)
         
     def build_infrastructure(self, n: pypsa.Network) -> None:
         
@@ -633,7 +656,35 @@ class PipelineLinepack(GasData):
             efficiency_dispatch=1,
             standing_loss=0
         )
+
+class ImportExportLimits(GasData):
+    """Adds constraints for import export limits"""
     
+    def __init__(self, year: int, interconnect: str, api: str) -> None:
+        self.api = api
+        super().__init__(year, interconnect)
+        
+    def read_data(self) -> pd.DataFrame:
+        imports = eia.Trade("gas", "imports", self.year, self.api).get_data()
+        exports = eia.Trade("gas", "exports", self.year, self.api).get_data()
+        return pd.concat([imports, exports])
+    
+    def format_data(self, data: pd.DataFrame) -> pd.DataFrame:
+        df = (
+            data
+            .reset_index()
+            .drop(columns=["series-description"])
+            .groupby(["period", "units", "state"])
+            .sum()
+            .reset_index()
+            .rename(columns={"state":"STATE"})
+            .copy()
+        )
+        # may need to add ["U.S."] to states to remove here 
+        return self.filter_on_interconnect(df)
+    
+    def build_infrastructure(self, n: pypsa.Network) -> None:
+        pass
 ### 
 # MAIN FUNCTION TO EXECUTE
 ###
@@ -643,114 +694,55 @@ def build_natural_gas(
     year: int,
     api: str,
     interconnect: str = "western",
-    counties: str = "../data/counties/cb_2020_us_county_500k.shp",
-    pipelines: str = "../data/natural_gas/EIA-StatetoStateCapacity_Jan2023.xlsx",
-    pipeline_shape: str = "../data/natural_gas/pipelines.geojson",
-    eia_757: str = "../data/natural_gas/eia_757.csv",
-) -> pypsa.Network:
+    county_path: str = "../data/counties/cb_2020_us_county_500k.shp",
+    pipelines_path: str = "../data/natural_gas/EIA-StatetoStateCapacity_Jan2023.xlsx",
+    pipeline_shape_path: str = "../data/natural_gas/pipelines.geojson",
+    eia_757_path: str = "../data/natural_gas/eia_757.csv",
+) -> None:
 
-    state_name_map = constants.STATES_INTERCONNECT_MAPPER
-    states_2_remove = [x for x, y in constants.STATES_INTERCONNECT_MAPPER.items() if not y]
-
-    ###
-    # CREATE GAS CARRIER
-    ###
+    # add gas carrier
     
     n.add("Carrier","gas")
 
-    ###
-    # CREATE STATE LEVEL BUSES
-    ###
+    # add state level gas buses
 
-    centroids = get_state_center_points(counties)
-    centroids = filter_on_interconnect(centroids, interconnect, state_name_map, states_2_remove)
-    centroids["interconnect"] = centroids.STATE.map(state_name_map)
-    build_state_gas_buses(n, centroids)
+    buses = GasBuses(interconnect, county_path)
+    buses.build_infrastructure(n)
     
-    ###
-    # CREATE PRODUCTION FACILITIES
-    ###
+    # add state level natural gas processing facilities 
     
-    production_facilities = read_eia_757(eia_757).reset_index()
-    production_facilities = filter_on_interconnect(production_facilities, interconnect, state_name_map)
-    build_gas_producers(n, production_facilities)
+    production = GasProcessing(interconnect, eia_757_path)
+    production.build_infrastructure(n)
     
-    ###
-    # CREATE STORAGE FACILITIES
-    ###
+    # add state level gas storage facilities 
     
-    storage_facilities = Storage("gas", "working", year, "")
-    storage_facilities = read_eia_191(eia_191, regions_to_remove=constants.STATES_TO_REMOVE).reset_index()
-    storage_facilities = filter_on_interconnect(storage_facilities, interconnect, state_name_map)
-    build_storage_facilities(n, storage_facilities)
+    storage = GasStorage(year, interconnect, api)
+    storage.build_infrastructure(n)
     
-    ###
-    # CREATE PIPELINES
-    ###
+    # add interconnect pipelines 
     
-    pipelines = read_gas_pipline(pipelines).reset_index()
+    pipelines = InterconnectGasPipelineCapacity(year, interconnect, pipelines_path)
+    pipelines.build_infrastructure(n)
     
-    pipelines = pipelines[~(
-        (pipelines.STATE_TO == "Gulf of Mexico") | (pipelines.STATE_FROM == "Gulf of Mexico"))]
-    pipelines.STATE_TO = pipelines.STATE_TO.map(constants.STATE_2_CODE)
-    pipelines.STATE_FROM = pipelines.STATE_FROM.map(constants.STATE_2_CODE)
+    # add pipelines for imports/exports 
     
-    pipelines = assign_pipeline_interconnects(pipelines, state_name_map)
+    # TODO: have trade pipelines share data to only instantiate once
+    pipelines_domestic = TradeGasPipelineCapacity(year, interconnect, pipelines_path, domestic=True)
+    pipelines_international = TradeGasPipelineCapacity(year, interconnect, pipelines_path, domestic=False)
     
-    domestic_piplines = get_domestic_pipelines(pipelines, interconnect)
-    domestic_pipeline_connections = get_domestic_pipeline_connections(pipelines, interconnect)
-    international_pipeline_connections = get_international_pipeline_connections(pipelines, interconnect)
+    pipelines_domestic.build_infrastructure(n)
+    pipelines_international.build_infrastructure(n)
     
-    if domestic_piplines.empty:
-        logger.warning(f"No domestic gas pipelines to add for {interconnect}")
-    else:
-        build_pipelines(n, domestic_piplines)
-        
-    build_import_export_pipelines(n, domestic_pipeline_connections, interconnect)
-    build_import_export_pipelines(n, international_pipeline_connections, interconnect)
-
-    ###
-    # CREATE LINEPACK
-    ###
+    # add pipeline linepack 
     
-    states = get_state_boundaries(counties)
-    pipeline_linepack = read_pipeline_linepack(pipeline_shape, states)
-    pipeline_linepack = filter_on_interconnect(pipeline_linepack, interconnect, state_name_map, states_2_remove)
-    build_linepack(n, pipeline_linepack)
-
-    ###
-    # CREATE INTERNATIONAL IMPORT EXPORT ENERGY LIMITS 
-    ###
-    
-    imports = Trade("gas", "imports", 2020, "").get_data()
-    imports = (
-        imports
-        .reset_index()
-        .drop(columns=["series-description"])
-        .groupby(["period", "units", "state"])
-        .sum()
-        .reset_index()
-        .rename(columns={"state":"STATE"})
-    )
-    imports = filter_on_interconnect(imports, interconnect, state_name_map, ["U.S."])
-    
-    exports = Trade("gas", "exports", 2020, "").get_data()
-    exports = (
-        exports
-        .reset_index()
-        .drop(columns=["series-description"])
-        .groupby(["period", "units", "state"])
-        .sum()
-        .reset_index()
-        .rename(columns={"state":"STATE"})
-    )
-    exports = filter_on_interconnect(exports, interconnect, state_name_map, ["U.S."])
-    
-    build_import_export_facilities(n, imports, "import")
-    build_import_export_facilities(n, exports, "export")
-    
+    linepack = PipelineLinepack(year, interconnect, county_path, pipeline_shape_path)
+    linepack.build_infrastructure(n)
 
 if __name__ == "__main__":
 
     n = pypsa.Network("../resources/western/elec_s_30_ec_lv1.25_Co2L1.25.nc")
-    build_natural_gas(n=n)
+    year = 2020
+    with open("./../config/config.api.yaml", "r") as file:
+        yaml_data = yaml.safe_load(file)
+    api = yaml_data["api"]["eia"]
+    build_natural_gas(n=n, year=year, api=api)
