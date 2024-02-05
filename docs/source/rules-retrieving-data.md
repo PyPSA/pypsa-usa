@@ -52,18 +52,16 @@ Sheet Name: Decennial Census - H1 | Housing Units - 2020: DEC Demographic and Ho
 **Natural Gas Data**
 
 Natural Gas infrastructure includes: 
-- State to State pipeline pipeline capacity at a county and pipeline level 
-- Natural gas storage locations and capacity at a county level 
-- Natural gas processing plant locations at a county level 
-- Natural Gas imports/exports by point of entry at a annual level 
+- State to State pipeline capacity 
+- State level tranmsission pipeline volume 
+- Natural gas processing facility locations
+- Natural gas processing facility locations (via EIA API)
+- Natural gas underground storage (via EIA API)
+- Natural Gas imports/exports by point of entry (via EIA API)
 
 [![URL](https://img.shields.io/badge/URL-Pipeline_Capacity-blue)](<https://www.eia.gov/naturalgas/data.php>)
-[![URL](https://img.shields.io/badge/URL-Storage-blue)](<https://www.eia.gov/naturalgas/ngqs/#?report=RP7&year1=2022&year2=2022&company=Name>)
+[![URL](https://img.shields.io/badge/URL-Pipeline_Shape-blue)](<https://hifld-geoplatform.opendata.arcgis.com/datasets/f44e00fce8b943f69a40a2324cf49dfd_0/explore>)
 [![URL](https://img.shields.io/badge/URL-Processing_Capacity-blue)](<https://www.eia.gov/naturalgas/ngqs/#?report=RP9&year1=2017&year2=2017&company=Name>)
-[![URL](https://img.shields.io/badge/URL-Processing_Facilities-blue)](<https://hifld-geoplatform.opendata.arcgis.com/datasets/geoplatform::natural-gas-processing-plants/about>)
-[![URL](https://img.shields.io/badge/URL-Import_Export_Locations-blue)](<https://hifld-geoplatform.opendata.arcgis.com/datasets/geoplatform::natural-gas-import-export/about>)
-[![URL](https://img.shields.io/badge/URL-Import_Data-blue)](<https://www.eia.gov/dnav/ng/ng_move_poe1_a_EPG0_IRP_Mmcf_a.htm>)
-[![URL](https://img.shields.io/badge/URL-Export_Data-blue)](<https://www.eia.gov/dnav/ng/ng_move_poe2_a_EPG0_ENP_Mmcf_a.htm>)
 
 (retrieve-eia)=
 ## Rule `retrieve_eia_data`
@@ -104,16 +102,19 @@ Characteristic Estimates for Utility Scale Electric Power Generating Technologie
 
 [![URL](https://img.shields.io/badge/URL-CAPEX_Multipliers-blue)](<https://www.eia.gov/analysis/studies/powerplants/capitalcost/pdf/capital_cost_AEO2020.pdf>)
 
-State level historial monthly fuel prices are taken from the [EIA](https://www.eia.gov/). This includes seperate prices for electrical power producers, industrial customers, commercial customers, and residential customers. 
+State level historial monthly **natural gas** fuel prices are taken from the [EIA](https://www.eia.gov/). This includes seperate prices for electrical power producers, industrial customers, commercial customers, and residential customers. 
 
 [![URL](https://img.shields.io/badge/URL-EIA_Natural_Gas_Prices-blue)](<https://www.eia.gov/dnav/ng/ng_pri_sum_dcu_nus_m.htm>)
+
+State level historical **coal** fuel prices are taken from the [EIA](https://www.eia.gov/).
+
+[![URL](https://img.shields.io/badge/URL-EIA_Coal_Prices-blue)](<https://www.eia.gov/coal/data/browser/#/topic/45?agg=1,0&geo=vvvvvvvvvvvvo&rank=g&freq=Q&start=200801&end=202303&ctype=columnchart&ltype=pin&rtype=s&maptype=0&rse=0&pin=>)
 
 The [Annual Technology Baseline](https://atb.nrel.gov/) also provides data on the [transportation sector](https://atb.nrel.gov/transportation/2020/index), including fuel usage and capital costs.   
 
 [![URL](https://img.shields.io/badge/URL-NREL_ATB_Transportation-blue)](<https://atb.nrel.gov/transportation/2020/index>)
 
-To populate any missing data, the [PyPSA/technology-data](https://github.com/PyPSA/technology-data) project is used. Data from here 
-is only used when no other sources can be found, as it is mostly European focused. 
+To populate any missing data, the [PyPSA/technology-data](https://github.com/PyPSA/technology-data) project is used. Data from here is only used when no other sources can be found, as it is mostly European focused. 
 
 [![GitHub](https://img.shields.io/badge/github-%23121011.svg?style=for-the-badge&logo=github&logoColor=white)](https://github.com/PyPSA/technology-data)
 

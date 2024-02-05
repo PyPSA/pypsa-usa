@@ -1,4 +1,3 @@
 # holds user api keys
-
-apis:
+api:
   eia: ""

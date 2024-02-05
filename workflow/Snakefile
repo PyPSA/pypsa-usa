@@ -58,6 +58,7 @@ configfile: "config/config.default.yaml"
 configfile: "config/config.cluster.yaml"
 configfile: "config/config.osw.yaml"
 configfile: "config/config.plotting.yaml"
+configfile: "config/config.api.yaml"
 
 ATLITE_NPROCESSES = config["atlite"].get("nprocesses", 4)
 

@@ -719,6 +719,44 @@ class ImportExportLimits(GasData):
     
     def build_infrastructure(self, n: pypsa.Network) -> None:
         pass
+
+def convert_generators_2_links(n: pypsa.Network, carrier: str):
+    """Replace Generators with cross sector links. 
+    
+    Links bus1 are the bus the generator is attached to. Links bus0 are state 
+    level followed by the suffix (ie. "WA gas" if " gas" is the bus0_suffix)
+    
+    n: pypsa.Network, 
+    carrier: str,
+        carrier of the generator to convert to a link
+    bus0_suffix: str,
+        suffix to attach link to 
+    """
+    
+    plants = n.generators[n.generators.carrier==carrier].copy()
+    plants["STATE"] = plants.bus.map(n.buses.STATE)
+    
+    n.madd(
+        "Link",
+        names=plants.index,
+        bus0=plants.STATE + " gas",
+        bus1=plants.bus,
+        carrier=plants.carrier,
+        p_nom_min=plants.p_nom_min,
+        p_nom=plants.p_nom,
+        p_nom_max=plants.p_nom_max,
+        p_nom_extendable=plants.p_nom_extendable,
+        ramp_limit_up=plants.ramp_limit_up,
+        ramp_limit_down=plants.ramp_limit_down,
+        efficiency=plants.efficiency,
+        marginal_cost=plants.marginal_cost,
+        capital_cost=plants.capital_cost,
+        lifetime=plants.lifetime,
+    )
+    
+    # remove generators 
+    n.mremove("Generator", plants.index)
+
 ### 
 # MAIN FUNCTION TO EXECUTE
 ###
@@ -770,6 +808,10 @@ def build_natural_gas(
     
     linepack = PipelineLinepack(year, interconnect, county_path, pipeline_shape_path)
     linepack.build_infrastructure(n)
+
+    # convert existing generators to cross-sector links 
+    for carrier in ("CCGT", "OCGT"):
+        convert_generators_2_links(n, carrier)
 
 if __name__ == "__main__":
 

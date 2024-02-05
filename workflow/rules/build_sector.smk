@@ -7,12 +7,10 @@ def sector_input_files(wildcards):
     sectors = wildcards.sector.split("-")
     if "G" in sectors:
         ng_files = {
-            "counties": DATA + "counties/cb_2022_us_county_500k.shp",
-            "eia_191": DATA + "natural_gas/EIA-191.csv",
-            "eia_757": DATA + "natural_gas/EIA-757.csv",
-            "pipelines": DATA + "natural_gas/EIA-StatetoStateCapacity_Jan2023.xlsx",
-            "imports": DATA + "natural_gas/NG_MOVE_POE1_A_EPG0_IRP_MMCF_M.xls",
-            "exports": DATA + "natural_gas/NG_MOVE_POE2_A_EPG0_ENP_MMCF_M.xls",
+            "county": DATA + "counties/cb_2020_us_county_500k.shp",
+            "pipeline_capacity": DATA + "natural_gas/EIA-StatetoStateCapacity_Jan2023.xlsx",
+            "pipeline_shape": DATA + "natural_gas/pipelines.geojson",
+            "eia_757": DATA + "natural_gas/eia_757.csv",
         }
         input_files.update(ng_files)
 
@@ -23,7 +21,9 @@ rule add_sectors:
         electricity=config["electricity"],
         costs=config["costs"],
         plotting=config["plotting"],
-        natural_gas=config["sector"].get("natural_gas", None)
+        natural_gas=config["sector"].get("natural_gas", None),
+        snapshots=config["snapshots"],
+        api=config["api"],
     input:
         unpack(sector_input_files)
     output:

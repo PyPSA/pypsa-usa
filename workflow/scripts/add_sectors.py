@@ -45,54 +45,13 @@ def assign_bus_2_state(n: pypsa.Network, shp: str,  states_2_include: List[str] 
     if state_2_state_name:
         n.buses["STATE_NAME"] = n.buses.STATE.map(state_2_state_name)
 
-def convert_generators_2_links(n: pypsa.Network, carrier: str, bus0_suffix: str):
-    """Replace Generators with cross sector links. 
-    
-    Links bus1 are the bus the generator is attached to. Links bus0 are state 
-    level followed by the suffix (ie. "WA gas" if " gas" is the bus0_suffix)
-    
-    n: pypsa.Network, 
-    carrier: str,
-        carrier of the generator to convert to a link
-    bus0_suffix: str,
-        suffix to attach link to 
-    """
-    
-    plants = n.generators[n.generators.carrier==carrier].copy()
-    plants["STATE"] = plants.bus.map(n.buses.STATE)
-    
-    n.madd(
-        "Link",
-        names=plants.index,
-        bus0=plants.STATE + bus0_suffix,
-        bus1=plants.bus,
-        carrier=plants.carrier,
-        p_nom_min=plants.p_nom_min,
-        p_nom=plants.p_nom,
-        p_nom_max=plants.p_nom_max,
-        p_nom_extendable=plants.p_nom_extendable,
-        ramp_limit_up=plants.ramp_limit_up,
-        ramp_limit_down=plants.ramp_limit_down,
-        efficiency=plants.efficiency,
-        marginal_cost=plants.marginal_cost,
-        capital_cost=plants.capital_cost,
-        lifetime=plants.lifetime,
-    )
-    
-    # copy time varrying parameters 
-    # for gen in plants.index: 
-    #     n.
-    
-    # remove generators 
-    n.mremove("Generator", plants.index)
-
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
 
         snakemake = mock_snakemake(
             "add_sectors",
-            interconnect="texas",
+            interconnect="western",
             # simpl="",
             clusters="40",
             ll="v1.25",
@@ -123,15 +82,13 @@ if __name__ == "__main__":
     if "G" in sectors:
         build_natural_gas(
             n=n,
-            interconnect=snakemake.wildcards.interconnect,
-            counties=snakemake.input.counties,
-            eia_757=snakemake.input.eia_757,
-            eia_191=snakemake.input.eia_191,
-            pipelines=snakemake.input.pipelines,
+            year=pd.to_datetime(snakemake.parmas.snapshots["start"]).year,
+            api=snakemake.params.api["eia"],
+            interconnect=snakemake.params.interconnect,
+            county=snakemake.input.county_path,
+            pipelines_path=snakemake.input.pipeline_capacity,
+            pipeline_shape_path=snakemake.input.pipeline_shape,
+            eia_757_path=snakemake.input.eia_757
         )
-        
-        # convert existing generators to links 
-        for carrier in ("CCGT", "OCGT"):
-            convert_generators_2_links(n, carrier, " gas")
         
     n.export_to_netcdf(snakemake.output.network)

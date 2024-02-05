@@ -45,20 +45,16 @@ rule retrieve_zenodo_databundles:
 
 sector_datafiles = [
     # general 
-    "counties/cb_2022_us_county_500k.shp",
+    "counties/cb_2020_us_county_500k.shp",
 
     # heating sector
     # "population/DECENNIALDHC2020.P1-Data.csv",
     # "urbanization/DECENNIALDHC2020.H1-Data.csv",
 
     # natural gas 
-    "natural_gas/EIA-191.csv",
     "natural_gas/EIA-757.csv",
     "natural_gas/EIA-StatetoStateCapacity_Jan2023.xlsx",
-    "natural_gas/Natural_Gas_Import_Export.geojson",
-    "natural_gas/Natural_Gas_Processing_Plants.geojson",
-    "natural_gas/NG_MOVE_POE1_A_EPG0_IRP_MMCF_M.xls",
-    "natural_gas/NG_MOVE_POE2_A_EPG0_ENP_MMCF_M.xls",
+    "pipelines.geojson"
 ]
 
 rule retrieve_sector_databundle:
@@ -158,7 +154,8 @@ rule retrieve_cost_data_usa:
         ng_residential_price = RESOURCES + "costs/ng_commercial_price.csv",
         ng_commercial_price = RESOURCES + "costs/ng_residential_price.csv",
     params:
-        eia_api_key = config["costs"].get("eia_aip_key", None),
+        # eia_api_key = config["api"].get("eia", None),
+        eia_api_key = None,
     log:
         LOGS + "retrieve_cost_data_usa.log",
     resources:
