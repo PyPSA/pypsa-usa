@@ -341,4 +341,7 @@ def test_network_datatype_consistency(n):
         col = test_column_datatypes_consistency(n.df(component))
         if len(col) > 0:
             inconsistent_columns[component] =  col
-    return inconsistent_columns
+    if len(inconsistent_columns) > 0:
+        return f"Network has inconsistent datatypes in the following components: {inconsistent_columns}"
+    else:
+        return None

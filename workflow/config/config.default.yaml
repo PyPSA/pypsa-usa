@@ -8,11 +8,14 @@ run:
 
 scenario:
   interconnect: western #"usa|texas|western|eastern"
-  clusters: [50]
+  clusters: [70]
   opts:
     [
-      # Co2L1.5,           # Limit CO2 emissions to 10% of CO2 base
-      Co2L0.1-1000SEG, # Cluster to 1000 hours in the year 
+      Co2L1.0-1000SEG, # Cluster to 1000 hours in the year 
+      Co2L0.75-1000SEG, # Cluster to 1000 hours in the year 
+      Co2L0.5-1000SEG, # Cluster to 1000 hours in the year 
+      Co2L0.25-1000SEG, # Cluster to 1000 hours in the year 
+
 
     ]
   ll: [v1.05] 
@@ -29,7 +32,7 @@ enable:
 countries: [US]  
 
 focus_weights:
-  Offshore: 0.2     # Offshore buses require weighting- # Offshore nodes = weight * n_clusters
+  # Offshore: 0.1     # Offshore buses require weighting- # Offshore nodes = weight * n_clusters
   # California: 0.5
 
 network_configuration: "pypsa-usa" # "pypsa-usa" or "ads2032" or "breakthrough"
@@ -278,7 +281,6 @@ clustering:
 solving:
   #tmpdir: "path/to/tmp"
   options:
-    # operations_only: false
     load_shedding: false
     clip_p_max_pu: 1.e-2
     noisy_costs: true

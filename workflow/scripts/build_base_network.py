@@ -327,16 +327,14 @@ def build_offshore_transmission_configuration(n: pypsa.Network) -> pypsa.Network
                                 offshore_buses.x.values, 
                                 offshore_buses.y.values
                             )
+    # Reassigns Offshore buses region identifies to the POI bus regions
+    n.buses.loc[offshore_buses.index, 'balancing_area'] = n.buses.loc[offshore_buses.bus_assignment].balancing_area.values
+    n.buses.loc[offshore_buses.index, 'state'] = n.buses.loc[offshore_buses.bus_assignment].state.values
+    n.buses.loc[offshore_buses.index, 'country'] = n.buses.loc[offshore_buses.bus_assignment].country.values
+    n.buses.loc[offshore_buses.index, 'interconnect'] = n.buses.loc[offshore_buses.bus_assignment].interconnect.values
+
+
     # add onshore poi buses @230kV
-    logger.info(f"Adding {len(offshore_buses)} offshore buses to the network.")
-
-    # # Reassigns Offshore buses region identifies to the POI bus regions
-    # n.buses.loc[offshore_buses.index, 'balancing_area'] = n.buses.loc[offshore_buses.bus_assignment].balancing_area.values
-    # n.buses.loc[offshore_buses.index, 'state'] = n.buses.loc[offshore_buses.bus_assignment].state.values
-    # n.buses.loc[offshore_buses.index, 'country'] = n.buses.loc[offshore_buses.bus_assignment].country.values
-    # n.buses.loc[offshore_buses.index, 'interconnect'] = n.buses.loc[offshore_buses.bus_assignment].interconnect.values
-
-
     n.madd(
         "Bus",
         "OSW_POI_" + osw_offsub_bus_ids, #name poi bus after offshore substation
@@ -411,7 +409,6 @@ def assign_missing_states_countries(n: pypsa.Network):
     n.buses.loc[missing.index, 'interconnect'] = missing.interconnect
 
 
-
 def modify_breakthrough_substations(n:pypsa.Network, interconnect:str):
     if interconnect == 'Western' or interconnect == 'usa':
         sub_fixes = {35017 : {'x':-123.0922,'y':48.5372},
@@ -427,8 +424,7 @@ def modify_breakthrough_substations(n:pypsa.Network, interconnect:str):
             n.buses.loc[n.buses.sub_id == i, 'y'] = sub_fixes[i]['y']
     return n
 
-#Lines to set snom: 90528 -> zero or remove
-#Lines set snom: 90529 -> zero or small ##... hard to approxmimate since lines arent 1:1
+
 def modify_breakthrough_lines(n:pypsa.Network, interconnect:str):
     if interconnect == 'Western' or interconnect == 'usa':
         line_fixes = {
@@ -529,9 +525,8 @@ def main(snakemake):
     assign_missing_states_countries(n)
     
     # Tests
-    inconsistent_columns = test_network_datatype_consistency(n)
-    if len(inconsistent_columns) > 0:
-        logger.warning(f"Network has inconsistent datatypes in the following components: {inconsistent_columns}")
+    logger.info(test_network_datatype_consistency(n))
+
 
     if len(n.buses.loc[n.buses.balancing_area.isna() | n.buses.state.isna() | n.buses.country.isna()]) > 0:
         logger.info(f"Network is missing BA/State/Country information for {len(n.buses.loc[n.buses.balancing_area.isna() | n.buses.state.isna() | n.buses.country.isna()])} buses.")
