@@ -76,7 +76,8 @@ def filter_small_polygons_gpd(geo_series: gpd.GeoSeries, min_area: float) -> gpd
     # Aggregate back into MultiPolygons
     # Group by the original index and create a MultiPolygon from the remaining geometries
     aggregated = filtered.groupby(filtered.index).agg(lambda x: MultiPolygon(x.tolist()) if len(x) > 1 else x.iloc[0])
-    return aggregated
+    aggregated.set_crs(MEASUREMENT_CRS, inplace=True)
+    return aggregated.to_crs(original_crs)
 
 def load_na_shapes(state_shape: str = "admin_1_states_provinces") -> gpd.GeoDataFrame:
     """Creates geodataframe of north america"""
@@ -112,7 +113,7 @@ def load_ba_shape(ba_file: str) -> gpd.GeoDataFrame:
     gdf = gdf.rename(columns={"BA": "name"})
     return gdf.to_crs(4326)
 
-def combine_offshore_shapes(source: str, shape: gpd.GeoDataFrame, interconnect: gpd.GeoDataFrame, buffer: int = 200000) -> gpd.GeoDataFrame:
+def combine_offshore_shapes(source: str, shape: gpd.GeoDataFrame, interconnect: gpd.GeoDataFrame, buffer) -> gpd.GeoDataFrame:
     """Conbines offshore shapes"""
     if source == "ca_osw":
         offshore = _dissolve_boem(shape)
@@ -130,11 +131,11 @@ def _dissolve_boem(shape: gpd.GeoDataFrame):
     shape_split.name = ['Morro_Bay','Humboldt']
     return shape_split
 
-def _dissolve_eez(shape: gpd.GeoDataFrame, interconnect: gpd.GeoDataFrame, buffer: int = 1000):
+def _dissolve_eez(shape: gpd.GeoDataFrame, interconnect: gpd.GeoDataFrame, max_buffer: int):
     """Dissolves offshore shapes from eez then filters plolygons that are not near the interconnect shape"""
     shape = filter_small_polygons_gpd(shape, 1e9) 
     shape_split = gpd.GeoDataFrame(geometry = shape.explode(index_parts=False).geometry).set_crs(MEASUREMENT_CRS)
-    buffered_interconnect = interconnect.to_crs(MEASUREMENT_CRS).buffer(1e4)
+    buffered_interconnect = interconnect.to_crs(MEASUREMENT_CRS).buffer(max_buffer)
     union_buffered_interconnect = buffered_interconnect.unary_union    
     filtered_shapes = shape_split[shape_split.intersects(union_buffered_interconnect)]
     shape_split = filtered_shapes.to_crs(GPS_CRS)
@@ -147,7 +148,7 @@ def trim_states_to_interconnect(gdf_states: gpd.GeoDataFrame, gdf_nerc: gpd.GeoD
         gdf_states = gpd.overlay(gdf_states, gdf_nerc_f.to_crs(GPS_CRS), how='difference')
         texas_geometry  = gdf_states.loc[gdf_states.name == 'Texas', 'geometry']
         texas_geometry = filter_small_polygons_gpd(texas_geometry, 1e9)
-        gdf_states.loc[gdf_states.name == 'Texas', 'geometry'] = texas_geometry.geometry
+        gdf_states.loc[gdf_states.name == 'Texas', 'geometry'] = texas_geometry.geometry.values
     elif interconnect == "eastern":
         gdf_nerc_f = gdf_nerc[gdf_nerc.OBJECTID.isin([1,3,6,7])]
         gdf_states = gpd.overlay(gdf_states, gdf_nerc_f.to_crs(GPS_CRS), how='difference')
@@ -262,8 +263,9 @@ def main(snakemake):
         offshore = None
 
     #filter buffer from shore
-    buffer_distance_min = 10e3 # buffer distance for offshore shapes from shore.. 1e3 = 1km
-    buffer_distance_max = 100e3
+    buffer_distance_min = snakemake.params.offwind_params['min_shore_distance']
+    buffer_distance_max = snakemake.params.offwind_params['max_shore_distance']
+
     buffered_na = gdf_na.to_crs(MEASUREMENT_CRS).buffer(buffer_distance_min)
     offshore = offshore.to_crs(MEASUREMENT_CRS).difference(buffered_na.unary_union)
     buffered_states = state_boundaries.to_crs(MEASUREMENT_CRS).buffer(buffer_distance_min)
@@ -278,7 +280,7 @@ def main(snakemake):
         source=offshore_config,
         shape=offshore, 
         interconnect=gdf_states, 
-        buffer=buffer_distance_min
+        buffer=buffer_distance_max
     )
     offshore = offshore.set_crs(GPS_CRS).to_file(snakemake.output.offshore_shapes)
 
@@ -286,7 +288,7 @@ if __name__ == "__main__":
     logger = logging.getLogger(__name__)
     if 'snakemake' not in globals():
         from _helpers import mock_snakemake
-        snakemake = mock_snakemake('build_shapes', interconnect='eastern')
+        snakemake = mock_snakemake('build_shapes', interconnect='western')
     configure_logging(snakemake)
     main(snakemake)
 

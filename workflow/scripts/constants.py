@@ -401,6 +401,8 @@ BREAKTHROUGH_TECH_MAPPER = {
 ################################
 
 """
+If you want to use the default ATB technology, the minimum must be defined: pypsa-name, technology, crp.
+If a default classificiation is not defined by ATB, then the remaining fields will be used to extract data from the ATB.
 pypsa-name:{
     "technology":"ATB-Name",
     "name":"ATB-tech-abreviation",
@@ -422,13 +424,6 @@ ATB_TECH_MAPPER = {
         "name":{"default":"CFE","options":["CFE"]},
         "alias":{"default":"C","options":["C"]},
         "detail":{"default":"95CCS","options":["95CCS","99CCS","IGCC"]},
-        "crp":{"default":30,"options":[20,30,75]},
-    },
-    "coal_retro":{
-        "technology":"Coal_Retrofits",
-        "name":{"default":"CR","options":["CR"]},
-        "alias":{"default":"C","options":["C"]},
-        "detail":{"default":"90CCS","options":["90CCS","95CCS"]},
         "crp":{"default":30,"options":[20,30,75]},
     },
     "geothermal":{
@@ -466,13 +461,6 @@ ATB_TECH_MAPPER = {
         "detail":{"default":"CTFF","options":["CCFF","CCFF95CCS","CCFF97CCS","CTFF","CCHF","CCHF95CCS","CCHF97CCS","FC","FC98CCS"]},
         "crp":{"default":30,"options":[20,30,55]},
     },
-    "natural_gas_retrofit":{
-        "technology":"NaturalGas_Retrofits",
-        "name":{"default":"NGR","options":["NGR"]},
-        "alias":{"default":"NG","options":["NG"]},
-        "detail":{"default":"CCFC90CCS","options":["CCFC90CCS","CCFC95CCS","CCFF97CCS","CCHC90CCS","CCHC95CCS"]},
-        "crp":{"default":30,"options":[20,30,55]},
-    },
     "nuclear":{ # large scale nuclear 
         "technology":"Nuclear", 
         "name":{"default":"N","options":["N"]},
@@ -494,13 +482,6 @@ ATB_TECH_MAPPER = {
         "detail":{"default":"C5","options":["C1","C2","C3","C4","C5","C6","C7","C8","C9","C10"]},
         "crp":{"default":20,"options":[20,30]},
     },
-    "solar-concentrated":{
-        "technology":"CSP",
-        "name":{"default":"CSP","options":["CSP"]},
-        "alias":{"default":"CSP","options":["CSP"]},
-        "detail":{"default":"C2","options":["C2","C3","C8"]},
-        "crp":{"default":20,"options":[20,30]},
-    },
     "solar-rooftop":{
         "technology":"ResPV",
         "name":{"default":"RPV","options":["RPV"]},
@@ -515,26 +496,12 @@ ATB_TECH_MAPPER = {
         "detail":{"default":"C5","options":["C1","C2","C3","C4","C5","C6","C7","C8","C9","C10"]},
         "crp":{"default":20,"options":[20,30]},
     },
-    "solar-utility-plus-battery":{
-        "technology":"Utility-Scale PV-Plus-Battery",
-        "name":{"default":"USPVPB","options":["USPVPB"]},
-        "alias":{"default":"PVS","options":["PVS"]},
-        "detail":{"default":"C5","options":["C1","C2","C3","C4","C5","C6","C7","C8","C9","C10"]},
-        "crp":{"default":20,"options":[20,30]},
-    },
     "central solar thermal":{
         "technology":"CSP",
         "name":{"default":"CSP","options":["CSP"]},
         "alias":{"default":"CSP","options":["CSP"]},
         "detail":{"default":"C2","options":["C1","C2","C3","C4","C5","C6","C7","C8","C9","C10"]},
         "crp":{"default":30,"options":[20,30]},
-    },
-    "commercial battery storage":{
-        "technology":"Commercial Battery Storage",
-        "name":{"default":"CBS","options":["CBS"]},
-        "alias":{"default":"CBS","options":["CBS"]},
-        "detail":{"default":"4H","options":["1H","2H","4H","6H","8H"]},
-        "crp":{"default":20,"options":[20,30]},
     },
     "home battery storage":{
         "technology":"Residential Battery Storage",
@@ -550,13 +517,6 @@ ATB_TECH_MAPPER = {
         "detail":{"default":"8H","options":["2H","4H","6H","8H","10H"]},
         "crp":{"default":20,"options":[20,30]},
     },
-    "wind-distributed":{
-        "technology":"DistributedWind",
-        "name":{"default":"DW","options":["DW"]},
-        "alias":{"default":"MDW","options":["CDW","LDW","MDW","RDW"]},
-        "detail":{"default":"C7","options":["C1","C2","C3","C4","C5","C6","C7","C8","C9","C10"]},
-        "crp":{"default":30,"options":[20,30]},
-    },
     "onwind":{
         "technology":"LandbasedWind",
         "name":{"default":"LW","options":["LW"]},
@@ -568,7 +528,7 @@ ATB_TECH_MAPPER = {
         "technology":"OffShoreWind",
         "name":{"default":"OSW","options":["OSW"]},
         "alias":{"default":"OW","options":["OW"]},
-        "detail":{"default":"C3","options":["C1","C2","C3","C4","C5","C6","C7","C8","C9","C10","C11","C12","C13","C14"]},
+        "detail":{"default":"C3","options":["C1","C2","C3","C4","C5","C6","C7"]},
         "crp":{"default":30,"options":[20,30]},
     },
     "Pumped-Storage-Hydro-bicharger":{
@@ -578,6 +538,63 @@ ATB_TECH_MAPPER = {
         "detail":{"default":"NC1","options":["NC1","NC2","NC3","NC4","NC5","NC6","NC7","NC8","NC1","NC2","NC3","NC4"]},
         "crp":{"default":100,"options":[20,30,100]},
     },
+    # End Perfect Matches
+    "offwind_floating":{
+        "technology":"OffShoreWind",
+        "name":{"default":"OSW","options":["OSW"]},
+        "alias":{"default":"OW","options":["OW"]},
+        "detail":{"default":"C13","options":["C8","C9","C10","C11","C12","C13","C14"]},
+        "crp":{"default":30,"options":[20,30]},
+    },
+    "solar":{
+        "technology":"UtilityPV",
+        "name":{"default":"UPV","options":["UPV"]},
+        "alias":{"default":"UPV","options":["UPV"]},
+        "detail":{"default":"C5","options":["C1","C2","C3","C4","C5","C6","C7","C8","C9","C10"]},
+        "crp":{"default":20,"options":[20,30]},
+    },
+    # "natural_gas_retrofit":{
+    #     "technology":"NaturalGas_Retrofits",
+    #     "name":{"default":"NGR","options":["NGR"]},
+    #     "alias":{"default":"NG","options":["NG"]},
+    #     "detail":{"default":"CCFC90CCS","options":["CCFC90CCS","CCFC95CCS","CCFF97CCS","CCHC90CCS","CCHC95CCS"]},
+    #     "crp":{"default":30,"options":[20,30,55]},
+    # },
+    # "solar-concentrated":{
+    #     "technology":"CSP",
+    #     "name":{"default":"CSP","options":["CSP"]},
+    #     "alias":{"default":"CSP","options":["CSP"]},
+    #     "detail":{"default":"C2","options":["C2","C3","C8"]},
+    #     "crp":{"default":20,"options":[20,30]},
+    # },
+    # "solar-utility-plus-battery":{
+    #     "technology":"Utility-Scale PV-Plus-Battery",
+    #     "name":{"default":"USPVPB","options":["USPVPB"]},
+    #     "alias":{"default":"PVS","options":["PVS"]},
+    #     "detail":{"default":"C5","options":["C1","C2","C3","C4","C5","C6","C7","C8","C9","C10"]},
+    #     "crp":{"default":20,"options":[20,30]},
+    # },
+    # "commercial battery storage":{
+    #     "technology":"Commercial Battery Storage",
+    #     "name":{"default":"CBS","options":["CBS"]},
+    #     "alias":{"default":"CBS","options":["CBS"]},
+    #     "detail":{"default":"4H","options":["1H","2H","4H","6H","8H"]},
+    #     "crp":{"default":20,"options":[20,30]},
+    # },
+    # "wind-distributed":{
+    #     "technology":"DistributedWind",
+    #     "name":{"default":"DW","options":["DW"]},
+    #     "alias":{"default":"MDW","options":["CDW","LDW","MDW","RDW"]},
+    #     "detail":{"default":"C7","options":["C1","C2","C3","C4","C5","C6","C7","C8","C9","C10"]},
+    #     "crp":{"default":30,"options":[20,30]},
+    # },
+    # "coal_retro":{
+    #     "technology":"Coal_Retrofits",
+    #     "name":{"default":"CR","options":["CR"]},
+    #     "alias":{"default":"C","options":["C"]},
+    #     "detail":{"default":"90CCS","options":["90CCS","95CCS"]},
+    #     "crp":{"default":30,"options":[20,30,75]},
+    # },
 }
 
 ###########################################

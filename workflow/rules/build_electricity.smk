@@ -5,6 +5,7 @@ rule build_shapes:
     params:
         source_states_shapes="admin_1_states_provinces",
         source_offshore_shapes=config["offshore_shape"],
+        offwind_params=config["renewable"]["offwind"]
     input:
         zone= DATA + "breakthrough_network/base_grid/zone.csv",
         nerc_shapes = "repo_data/NERC_Regions/NERC_Regions_Subregions.shp",
@@ -20,11 +21,13 @@ rule build_shapes:
         "logs/build_shapes_{interconnect}.log",
     threads: 1
     resources:
-        mem_mb=1000,
+        mem_mb=500,
     script:
         "../scripts/build_shapes.py"
 
 rule build_base_network:
+    params:
+        build_offshore_network= config["offshore_network"],
     input:
         buses=DATA + "breakthrough_network/base_grid/bus.csv",
         lines=DATA + "breakthrough_network/base_grid/branch.csv",
@@ -42,15 +45,16 @@ rule build_base_network:
         network=RESOURCES + "{interconnect}/elec_base_network.nc",
     log:
         "logs/create_network/{interconnect}.log",
-    threads: 4
+    threads: 1
     resources:
-        mem=500,
+        mem_mb=1000,
     script:
         "../scripts/build_base_network.py"
 
 rule build_bus_regions:
     input:
         country_shapes= RESOURCES + "{interconnect}/country_shapes.geojson",
+        state_shapes= RESOURCES + "{interconnect}/state_boundaries.geojson",
         ba_region_shapes=RESOURCES + "{interconnect}/onshore_shapes.geojson",
         offshore_shapes=RESOURCES + "{interconnect}/offshore_shapes.geojson",
         base_network=RESOURCES + "{interconnect}/elec_base_network.nc",
@@ -73,9 +77,12 @@ rule build_cost_data:
         nrel_atb = RESOURCES + "costs/nrel_atb.parquet",
         pypsa_technology_data = RESOURCES + "costs/{year}/pypsa_eur.csv",
     output:
-        tech_costs = DATA + "costs_{year}.csv",
+        tech_costs= RESOURCES + "costs_{year}.csv",
     log:
         LOGS + "costs_{year}.log",
+    threads: 1
+    resources:
+        mem_mb=300,
     script:
         "../scripts/build_cost_data.py"
 
@@ -158,7 +165,7 @@ rule build_renewable_profiles:
         ),
         gebco=ancient(
             lambda w: (
-                DATA + "gebco/gebco_2023_tid_USA.nc"
+                DATA + "gebco/gebco_2023_n55.0_s10.0_w-126.0_e-65.0.tif"
                 if config["renewable"][w.technology].get("max_depth")
                 else []
             )
@@ -216,7 +223,7 @@ rule add_electricity:
             if str(fn).startswith("data/")
         },
         base_network=RESOURCES + "{interconnect}/elec_base_network.nc",
-        tech_costs=DATA + f"costs_{config['costs']['year']}.csv",
+        tech_costs=RESOURCES + f"costs_{config['costs']['year']}.csv",
         regions=RESOURCES + "{interconnect}/regions_onshore.geojson",
         plants_eia="repo_data/eia_plants_wecc.csv",
         plants_ads="repo_data/ads_plants_locs.csv",
@@ -227,9 +234,6 @@ rule add_electricity:
         solar_breakthrough="data/breakthrough_network/base_grid/solar.csv",
         bus2sub="data/breakthrough_network/base_grid/{interconnect}/bus2sub.csv",
         demand_breakthrough_2016=DATA + "breakthrough_network/base_grid/demand.csv",
-        # ads_2032 = DATA + "WECC_ADS/downloads/2032/Public Data/Hourly Profiles in CSV format",
-        # ads_2030 = DATA + "WECC_ADS/downloads/2030/WECC 2030 ADS PCM 2020-12-16 (V1.5) Public Data/CSV Shape Files",
-        # ads_renewables = "data/WECC_ADS/processed/",
         ads_renewables = 
             DATA + "data/WECC_ADS/processed/"
             if config["network_configuration"] == 'ads2032'
@@ -253,12 +257,12 @@ rule add_electricity:
     output:
         RESOURCES + "{interconnect}/elec_base_network_l_pp.nc",
     log:
-        LOGS + "{interconnect}_add_electricity.log",
+        LOGS + "{interconnect}/add_electricity.log",
     benchmark:
-        BENCHMARKS + "{interconnect}_add_electricity"
+        BENCHMARKS + "{interconnect}/add_electricity"
     threads: 1
     resources:
-        mem_mb=5000,
+        mem_mb=18000,
     script:
         "../scripts/add_electricity.py"
 
@@ -273,9 +277,10 @@ rule simplify_network:
         network=RESOURCES + "{interconnect}/elec_s.nc",
     log:
         "logs/simplify_network/{interconnect}/elec_s.log",
-    threads: 4
+    threads: 2
     resources:
-        mem=500,
+        mem_mb=10000,
+    group: "agg_network"
     script:
         "../scripts/simplify_network.py"
 
@@ -291,7 +296,7 @@ rule cluster_network:
             if config["enable"].get("custom_busmap", False)
             else []
         ),
-        tech_costs=DATA + f"costs_{config['costs']['year']}.csv",
+        tech_costs=RESOURCES + f"costs_{config['costs']['year']}.csv",
     output:
         network=RESOURCES + "{interconnect}/elec_s_{clusters}.nc",
         regions_onshore=RESOURCES + "{interconnect}/regions_onshore_s_{clusters}.geojson",
@@ -304,6 +309,51 @@ rule cluster_network:
         "benchmarks/cluster_network/{interconnect}/elec_s_{clusters}"
     threads: 1
     resources:
-        mem_mb=6000,
+        mem_mb=10000,
+    group: "agg_network"
     script:
         "../scripts/cluster_network_eur.py"
+
+
+rule add_extra_components:
+    input:
+        network=RESOURCES + "{interconnect}/elec_s_{clusters}.nc",
+        tech_costs=RESOURCES + f"costs_{config['costs']['year']}.csv",
+    params:
+        retirement=config["electricity"].get("retirement", "technical")
+    output:
+        RESOURCES + "{interconnect}/elec_s_{clusters}_ec.nc",
+    log:
+        "logs/add_extra_components/{interconnect}/elec_s_{clusters}_ec.log",
+    threads: 1
+    resources:
+        mem_mb=4000,
+    group: "agg_network"
+    script:
+        "../scripts/add_extra_components.py"
+
+rule prepare_network:
+    params:
+        links=config["links"],
+        lines=config["lines"],
+        co2base=config["electricity"]["co2base"],
+        co2limit=config["electricity"]["co2limit"],
+        gaslimit=config["electricity"].get("gaslimit"),
+        max_hours=config["electricity"]["max_hours"],
+        costs=config["costs"],
+    input:
+        network=RESOURCES + "{interconnect}/elec_s_{clusters}_ec.nc",
+        tech_costs=RESOURCES + f"costs_{config['costs']['year']}.csv",
+    output:
+        RESOURCES + "{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}.nc",
+    log:
+        solver="logs/prepare_network/{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}.log",
+    threads: 1
+    resources:
+        mem_mb=4000,
+    group: "agg_network"
+    log:
+        "logs/prepare_network",
+    script:
+        "../scripts/subworkflows/pypsa-eur/scripts/prepare_network.py" 
+

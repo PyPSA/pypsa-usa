@@ -16,6 +16,7 @@ breakthrough_datafiles = [
 
 pypsa_usa_datafiles = [
 "gebco/gebco_2023_tid_USA.nc",
+"gebco/gebco_2023_n55.0_s10.0_w-126.0_e-65.0.tif",
 "copernicus/PROBAV_LC100_global_v3.0.1_2019-nrt_Discrete-Classification-map_USA_EPSG-4326.tif",
 "eez/conus_eez.shp",
 "natura.tiff",
@@ -24,7 +25,7 @@ pypsa_usa_datafiles = [
 def define_zenodo_databundles():
     return {
         'USATestSystem':"https://zenodo.org/record/4538590/files/USATestSystem.zip",
-        'pypsa_usa_data':"https://zenodo.org/records/10278157/files/pypsa_usa_data.zip" 
+        'pypsa_usa_data':"https://zenodo.org/records/10480944/files/pypsa_usa_data.zip" 
         }
 
 def define_sector_databundles():
@@ -40,6 +41,8 @@ rule retrieve_zenodo_databundles:
         expand(DATA + "{file}", file=pypsa_usa_datafiles),
     log:
         "logs/retrieve/retrieve_databundles.log",
+    conda:
+        "../envs/environment.yaml"
     script:
         "../scripts/retrieve_databundles.py"
 

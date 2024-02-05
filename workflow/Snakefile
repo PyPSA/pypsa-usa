@@ -93,7 +93,7 @@ rule all:
             **config["scenario"],
             figure=FIGURES_SINGLE
         ),
-        "repo_data/dag.jpg",
+        #"repo_data/dag.jpg",
 
 # Create DAG with- 
 # snakemake --dag -F | sed -n "/digraph/,\$p" | dot -Tpng -o repo_data/dag.jpg
@@ -104,6 +104,8 @@ rule dag:
     output:
         dot="repo_data/dag.dot",
         jpg="repo_data/dag.jpg",
+    conda: 
+        "envs/environment.yaml"
     shell:
         """
         snakemake --rulegraph all | sed -n "/digraph/,\$p" > {output.dot}

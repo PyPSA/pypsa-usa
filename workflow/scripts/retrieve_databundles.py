@@ -1,9 +1,11 @@
 import logging, zipfile, os, io, requests
 from pathlib import Path
 from _helpers import progress_retrieve, configure_logging
+
 logger = logging.getLogger(__name__)
 
-#Note: when adding files to pypsa_usa_data.zip, be sure to zip the folder w/o the root folder included.... ie (cd pypsa_usa_data && zip -r ../pypsa_usa_data.zip .)
+#Note: when adding files to pypsa_usa_data.zip, be sure to zip the folder w/o the root folder included:
+# ` cd pypsa_usa_data && zip -r ../pypsa_usa_data.zip . `
 
 if __name__ == "__main__":
     if "snakemake" not in globals():
