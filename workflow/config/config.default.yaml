@@ -20,6 +20,7 @@ scenario:
     ]
   ll: [v1.05] 
   scope: "total" # "urban", "rural", or "total" 
+  sector: "" # G 
   planning_horizons:
     - 2030 #not implemented yet (temp placeholder)
     # - 2040
@@ -250,8 +251,13 @@ costs:  # based on the potentials, assuming  (0.1 kW/m2 and 10 m2/person)
 
 # docs :
 sector:
-  heat_pump_sink_T: 55.
   co2_sequestration_potential: 0
+  natural_gas:
+    allow_imports_exports: true # false to be implemented 
+    copperplate: true # copperplates at a state level (only true works)
+    cyclic_storage: false
+  heating:
+    heat_pump_sink_T: 55.
 
 # docs :
 clustering:
