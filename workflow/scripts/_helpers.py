@@ -311,3 +311,34 @@ def mock_snakemake(rulename, **wildcards):
 
     os.chdir(script_dir)
     return snakemake
+
+
+def test_column_datatypes_consistency(df):
+    """
+    Test if each column in a DataFrame has consistent datatypes using pandas built-in methods.
+    
+    Parameters:
+    df (pd.DataFrame): The DataFrame to test.
+    
+    Returns:
+    list: A list of column names that do not have internally consistent datatypes.
+    """
+    inconsistent_columns = []
+    for column in df.columns:
+        # Use pandas infer_dtype to check for mixed types in the column
+        dtype = pd.api.types.infer_dtype(df[column], skipna=True)
+        if dtype.startswith('mixed'):
+            inconsistent_columns.append(column)
+    return inconsistent_columns
+
+def test_network_datatype_consistency(n):
+    """
+    Test if each component in a Network has consistent datatypes.
+    """
+    inconsistent_columns = {}
+    for component in n.components:
+        if component == "Network": continue
+        col = test_column_datatypes_consistency(n.df(component))
+        if len(col) > 0:
+            inconsistent_columns[component] =  col
+    return inconsistent_columns
