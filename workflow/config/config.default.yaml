@@ -4,6 +4,7 @@ run:
   name: "" # use this to keep track of runs with different settings
   disable_progressbar: false # set to true to disable the progressbar
   shared_resources: false # set to true to share the default resources across runs
+  shared_resources_base: true #set to true to share resources upstream of add_electricity in the workflow- ie. this will save you time if you do not change the "electricity" configuration
   shared_cutouts: true # set to true to share the default cutout(s) across runs
 
 scenario:

@@ -37,7 +37,7 @@ rule add_brownfield:
         network=RESULTS
         + "prenetworks/elec_s{simpl}_{clusters}_l{ll}_{opts}_{sector_opts}_{planning_horizons}.nc",
         network_p=solved_previous_horizon,  #solved network at previous time step
-        costs="data/costs_{planning_horizons}.csv",
+        costs=DATA + "costs_{planning_horizons}.csv",
     output:
         RESULTS
         + "prenetworks-brownfield/elec_s{simpl}_{clusters}_l{ll}_{opts}_{sector_opts}_{planning_horizons}.nc",
@@ -67,7 +67,7 @@ rule solve_sector_network_myopic:
     input:
         network=RESULTS
         + "prenetworks-brownfield/elec_s{simpl}_{clusters}_l{ll}_{opts}_{sector_opts}_{planning_horizons}.nc",
-        costs="data/costs_{planning_horizons}.csv",
+        costs=DATA + "costs_{planning_horizons}.csv",
         config=RESULTS + "config.yaml",
     output:
         RESULTS
