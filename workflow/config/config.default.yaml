@@ -9,17 +9,16 @@ run:
 
 scenario:
   interconnect: western #"usa|texas|western|eastern"
-  clusters: [70]
+  clusters: [30]
   opts:
     [
       Co2L1.0-1000SEG, # Cluster to 1000 hours in the year 
       Co2L0.75-1000SEG, # Cluster to 1000 hours in the year 
       Co2L0.5-1000SEG, # Cluster to 1000 hours in the year 
       Co2L0.25-1000SEG, # Cluster to 1000 hours in the year 
-
-
+      Co2L0.0-1000SEG, # Cluster to 1000 hours in the year 
     ]
-  ll: [v1.05] 
+  ll: [v1.25] 
   scope: "total" # "urban", "rural", or "total" 
   sector: "" # G 
   planning_horizons:
