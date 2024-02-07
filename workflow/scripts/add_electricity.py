@@ -698,18 +698,6 @@ def attach_renewable_capacities_to_atlite(n, plants_df, renewable_carriers):
         n.generators.p_nom_min.update(generators_tech.bus.map(caps_per_bus).dropna())
 
 
-def prepare_breakthrough_demand_data(n: pypsa.Network, 
-                                     demand_path: str) -> pd.DataFrame:
-    logger.info("Adding Breakthrough Energy Network Demand data from 2016")
-    demand = pd.read_csv(demand_path, index_col=0)
-    demand.columns = demand.columns.astype(int)
-    demand.index = n.snapshots
-    intersection = set(demand.columns).intersection(n.buses.zone_id.unique())
-    demand = demand[list(intersection)]
-    n.buses.rename(columns={'zone_id': 'load_dissag'}, inplace=True)
-    return disaggregate_demand_to_buses(n, demand)
-
-
 def prepare_ads_demand(n: pypsa.Network, 
                        demand_path: str) -> pd.DataFrame:
     demand = pd.read_csv(demand_path, index_col=0)
@@ -793,14 +781,12 @@ def add_demand_from_file(n: pypsa.Network,
     """
     Add demand to network from specified configuration setting. Returns network with demand added.
     """
-    if demand_type == "breakthrough":
-        demand_per_bus = prepare_breakthrough_demand_data(n, fn_demand)
-    elif demand_type == "ads":
+    if demand_type == "ads":
         demand_per_bus = prepare_ads_demand(n, fn_demand)
     elif demand_type == "pypsa-usa":
         demand_per_bus = prepare_eia_demand(n, fn_demand)
     else:
-        raise ValueError("Invalid demand_type. Supported values are 'breakthrough', 'ads', and 'pypsa-usa'.")
+        raise ValueError("Invalid demand_type. Supported values are 'ads', and 'pypsa-usa'.")
     n.madd("Load", demand_per_bus.columns, bus=demand_per_bus.columns,
            p_set=demand_per_bus, carrier='AC')
 
@@ -808,8 +794,6 @@ def add_demand_from_file(n: pypsa.Network,
 def test_snapshot_year_alignment(sns_year: int, configuration: str):
     if configuration == "ads":
         load_year = 2032
-    elif configuration == "breakthrough":
-        load_year = 2016
     else:
         return
     if sns_year != load_year:
@@ -817,7 +801,6 @@ def test_snapshot_year_alignment(sns_year: int, configuration: str):
                           required for {configuration} configuration.
                           Please update the snapshot start year in the config file. \n
                             ads requires 2032 \n
-                            breakthrough requires 2016 \n
                             \n
                           """)
                           
@@ -1198,20 +1181,6 @@ def clean_bus_data(n: pypsa.Network):
     col_list = ['poi_bus', 'poi_sub', 'poi', 'Pd', 'zone_id', 'load_dissag']
     n.buses.drop(columns=col_list, inplace=True)
 
-def load_powerplants_breakthrough(breakthrough_dataset: str) -> pd.DataFrame:
-    """Loads base Breakthrough Energy plants and applies name mappings"""
-
-    plants = pd.read_csv(breakthrough_dataset, dtype={"bus_id": str}, index_col=0).query("bus_id in @n.buses.index")
-    plants.replace(["dfo"], ["oil"], inplace=True)
-    plants['generator_name'] = plants.index.astype(str)
-    plants['bus_assignment']= plants.bus_id.astype(str)
-    plants['p_nom']= plants['Pmax']
-    plants['heat_rate']= plants['GenIOB']
-    plants['marginal_cost']= plants['GenIOB'] * plants['GenFuelCost']  #(MMBTu/MW) * (USD/MMBTu) = USD/MW
-    plants['efficiency']= 1 / (plants['GenIOB'] / 3.412) #MMBTu/MWh to MWh_electric/MWh_thermal
-    plants['carrier']= plants.type
-    return plants
-
 
 def main(snakemake):
     params = snakemake.params
@@ -1278,9 +1247,6 @@ def main(snakemake):
     if configuration  == "pypsa-usa":
         fn_demand = snakemake.input['eia'][sns_start.year%2017]
         plants = load_powerplants_eia(snakemake.input['plants_eia'], const.EIA_CARRIER_MAPPER, interconnect=interconnection)
-    elif configuration  == "breakthrough":
-        fn_demand = snakemake.input["demand_breakthrough_2016"]
-        plants = load_powerplants_breakthrough(snakemake.input['plants_breakthrough'])
     elif configuration  == "ads2032":
         fn_demand = f'data/WECC_ADS/processed/load_2032.csv'
         plants = load_powerplants_ads(
