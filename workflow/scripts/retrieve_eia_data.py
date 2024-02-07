@@ -82,16 +82,6 @@ def read_and_concat_EIA_930(folder_path: str,
         output_file = os.path.join(output_folder_path, f'EIA_DMD_{year}.csv')
         concatenated_df.to_csv(output_file)
 
-def prepare_eia_load_data(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Modifies EIA Load Data Files from GridEmissions
-    """
-    df = df[['period', 'value', 'region']]
-    df.columns = ['timestamp', 'value', 'region']
-    df = df.drop_duplicates().dropna().set_index(['timestamp','region']).unstack(level=1)
-    return df
-
-
 
 def download_and_extract(url, extract_path):
     # Get the file name from the URL
@@ -138,15 +128,11 @@ def prepare_historical_load_data(PATH_DOWNLOAD: str) -> None:
     filtered_columns = [col for col in df.columns if re.match(pattern, col)]
     filtered_columns.insert(0, "period")
     filtered_df = df[filtered_columns]
-    updated_columns = [re.sub(r'_D$', '', col) for col in filtered_columns]  # Remove the "_D" suffix from the column names
+    updated_columns = [re.sub(r'^E_|_D$', '', col) for col in filtered_columns]  # Remove 'E_' and '_D' from the column names
     filtered_df.columns = updated_columns
-    # filtered_df.insert(0, "timestamp", "")
-    if 'period' in df.columns:
-        filtered_df.iloc[:,0] = pd.to_datetime(df['period'])
-    else:
-        filtered_df.iloc[:,0] = pd.to_datetime(df['Unnamed: 0'])
-    df = filtered_df.rename(columns={'period':'timestamp'}).set_index('timestamp')
-    return df
+
+    filtered_df = filtered_df.rename(columns={'period':'timestamp'}).set_index('timestamp')
+    return filtered_df
 
 if __name__ == "__main__":
     pd.options.mode.chained_assignment = None
@@ -165,34 +151,34 @@ if __name__ == "__main__":
 
     PATH_DOWNLOAD = Path(f"../data/GridEmissions")
     PATH_DOWNLOAD.mkdir(parents=True, exist_ok=True)
-    download_and_extract(url_new, PATH_DOWNLOAD)
-    prepare_historical_load_data(PATH_DOWNLOAD)
+    # download_and_extract(url_new, PATH_DOWNLOAD)
+    df = prepare_historical_load_data(PATH_DOWNLOAD)
+    df.to_csv(f"{snakemake.output[0]}")
+    logger.info("GridEmissions Demand Data bundle downloaded.")
 
+    # EIA 6 mo file method
+    rootpath = "./"
+    PATH_DOWNLOAD = Path(f"{rootpath}/data/eia")
+    PATH_DOWNLOAD_CSV = Path(f"{rootpath}/data/eia/6moFiles")
 
-    # # EIA 6 mo file method
-    # rootpath = "./"
-    # PATH_DOWNLOAD = Path(f"{rootpath}/data/eia")
-    # PATH_DOWNLOAD_CSV = Path(f"{rootpath}/data/eia/6moFiles")
+    PATH_DOWNLOAD_CSV.mkdir(parents=True, exist_ok=True)
+    PATH_DOWNLOAD.mkdir(parents=True, exist_ok=True)
 
-    # PATH_DOWNLOAD_CSV.mkdir(parents=True, exist_ok=True)
-    # PATH_DOWNLOAD.mkdir(parents=True, exist_ok=True)
-
-    # urls = [
-    #     'https://www.eia.gov/electricity/gridmonitor/sixMonthFiles/EIA930_BALANCE_2023_Jan_Jun.csv',
-    #     'https://www.eia.gov/electricity/gridmonitor/sixMonthFiles/EIA930_BALANCE_2022_Jul_Dec.csv',
-    #     'https://www.eia.gov/electricity/gridmonitor/sixMonthFiles/EIA930_BALANCE_2022_Jan_Jun.csv',
-    #     'https://www.eia.gov/electricity/gridmonitor/sixMonthFiles/EIA930_BALANCE_2021_Jul_Dec.csv',
-    #     'https://www.eia.gov/electricity/gridmonitor/sixMonthFiles/EIA930_BALANCE_2021_Jan_Jun.csv',
-    #     'https://www.eia.gov/electricity/gridmonitor/sixMonthFiles/EIA930_BALANCE_2020_Jul_Dec.csv',
-    #     'https://www.eia.gov/electricity/gridmonitor/sixMonthFiles/EIA930_BALANCE_2020_Jan_Jun.csv',
-    #     'https://www.eia.gov/electricity/gridmonitor/sixMonthFiles/EIA930_BALANCE_2019_Jul_Dec.csv',
-    #     'https://www.eia.gov/electricity/gridmonitor/sixMonthFiles/EIA930_BALANCE_2019_Jan_Jun.csv',
-    #     'https://www.eia.gov/electricity/gridmonitor/sixMonthFiles/EIA930_BALANCE_2018_Jul_Dec.csv',
-    #     'https://www.eia.gov/electricity/gridmonitor/sixMonthFiles/EIA930_BALANCE_2018_Jan_Jun.csv',
-    #     'https://www.eia.gov/electricity/gridmonitor/sixMonthFiles/EIA930_BALANCE_2017_Jul_Dec.csv',
-    #     'https://www.eia.gov/electricity/gridmonitor/sixMonthFiles/EIA930_BALANCE_2017_Jan_Jun.csv',
-    # ]
-    # logger.info("Downloading EIA Data")
-    # download_csvs(urls, PATH_DOWNLOAD_CSV)
-    # read_and_concat_EIA_930(PATH_DOWNLOAD_CSV, PATH_DOWNLOAD)
-    logger.info("EIA Data bundle downloaded.")
+    urls = [
+        # 'https://www.eia.gov/electricity/gridmonitor/sixMonthFiles/EIA930_BALANCE_2023_Jan_Jun.csv',
+        # 'https://www.eia.gov/electricity/gridmonitor/sixMonthFiles/EIA930_BALANCE_2022_Jul_Dec.csv',
+        # 'https://www.eia.gov/electricity/gridmonitor/sixMonthFiles/EIA930_BALANCE_2022_Jan_Jun.csv',
+        'https://www.eia.gov/electricity/gridmonitor/sixMonthFiles/EIA930_BALANCE_2021_Jul_Dec.csv',
+        'https://www.eia.gov/electricity/gridmonitor/sixMonthFiles/EIA930_BALANCE_2021_Jan_Jun.csv',
+        'https://www.eia.gov/electricity/gridmonitor/sixMonthFiles/EIA930_BALANCE_2020_Jul_Dec.csv',
+        'https://www.eia.gov/electricity/gridmonitor/sixMonthFiles/EIA930_BALANCE_2020_Jan_Jun.csv',
+        'https://www.eia.gov/electricity/gridmonitor/sixMonthFiles/EIA930_BALANCE_2019_Jul_Dec.csv',
+        'https://www.eia.gov/electricity/gridmonitor/sixMonthFiles/EIA930_BALANCE_2019_Jan_Jun.csv',
+        # 'https://www.eia.gov/electricity/gridmonitor/sixMonthFiles/EIA930_BALANCE_2018_Jul_Dec.csv',
+        # 'https://www.eia.gov/electricity/gridmonitor/sixMonthFiles/EIA930_BALANCE_2018_Jan_Jun.csv',
+        # 'https://www.eia.gov/electricity/gridmonitor/sixMonthFiles/EIA930_BALANCE_2017_Jul_Dec.csv',
+        # 'https://www.eia.gov/electricity/gridmonitor/sixMonthFiles/EIA930_BALANCE_2017_Jan_Jun.csv',
+    ]
+    logger.info("Downloading EIA Data")
+    download_csvs(urls, PATH_DOWNLOAD_CSV)
+    read_and_concat_EIA_930(PATH_DOWNLOAD_CSV, PATH_DOWNLOAD)

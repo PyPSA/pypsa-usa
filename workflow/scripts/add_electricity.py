@@ -728,12 +728,11 @@ def prepare_eia_demand(n: pypsa.Network,
     logger.info('Building Load Data using EIA demand')
     demand = pd.read_csv(demand_path, index_col=0)
     demand.index = pd.to_datetime(demand.index)
-    demand = demand.fillna(method='backfill') #tempory solution until gridEmission for the cleaned Data
     demand = demand.loc[n.snapshots.intersection(demand.index)] # filter by snapshots
+    demand = demand[~demand.index.duplicated(keep='last')]
     demand.index = n.snapshots
 
     #Combine EIA Demand Data to Match GIS Shapes
-    #TODO: Include EIA sub-ba level data so this setp for CISO is not neccesary
     demand['Arizona'] = demand.pop('SRP') + demand.pop('AZPS')
     n.buses['load_dissag'] = n.buses.balancing_area.replace({'^CISO.*': 'CISO', '^ERCO.*': 'ERCO'}, regex=True)
 
@@ -741,19 +740,6 @@ def prepare_eia_demand(n: pypsa.Network,
     intersection = set(demand.columns).intersection(n.buses.load_dissag.unique())
     demand = demand[list(intersection)]
     return disaggregate_demand_to_buses(n, demand)
-
-# def disaggregate_demand_to_buses(n: pypsa.Network, 
-#                                  demand: pd.DataFrame) -> pd.DataFrame:
-#     """
-#     Zone power demand is disaggregated to buses proportional to Pd,
-#     where Pd is the real power demand (MW).
-#     """
-#     demand_per_bus_pu = (n.buses.set_index("load_dissag").Pd / n.buses.groupby("load_dissag").sum().Pd)
-#     demand_per_bus = demand_per_bus_pu.multiply(demand)
-#     demand_per_bus.fillna(0, inplace=True)
-#     demand_per_bus.columns = n.buses.index
-#     return demand_per_bus
-
 
 def disaggregate_demand_to_buses(n: pypsa.Network, 
                                  demand: pd.DataFrame) -> pd.DataFrame:
@@ -824,14 +810,6 @@ def attach_conventional_generators(
     ]
     add_missing_carriers(n, carriers)
     add_co2_emissions(n, costs, carriers)
-
-    # Replace carrier "natural gas" with the respective technology (OCGT or
-    # CCGT) to align with PyPSA names of "carriers" and avoid filtering "natural
-    # gas" powerplants in ppl.query("carrier in @carriers")
-
-    # plants.loc[plants["carrier"] == "natural gas", "carrier"] = plants.loc[
-    #     plants["carrier"] == "natural gas", "technology"
-    # ]
 
     plants = (
         plants.query("carrier in @carriers")
@@ -1245,7 +1223,7 @@ def main(snakemake):
         fuel_price = None
 
     if configuration  == "pypsa-usa":
-        fn_demand = snakemake.input['eia'][sns_start.year%2017]
+        fn_demand = snakemake.input['eia'][0]
         plants = load_powerplants_eia(snakemake.input['plants_eia'], const.EIA_CARRIER_MAPPER, interconnect=interconnection)
     elif configuration  == "ads2032":
         fn_demand = f'data/WECC_ADS/processed/load_2032.csv'

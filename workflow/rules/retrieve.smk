@@ -77,18 +77,12 @@ if config["network_configuration"] == 'ads2032':
             "../scripts/retrieve_forecast_data.py"
 
 DATAFILES_DMD = [
-    "EIA_DMD_2017.csv",
-    "EIA_DMD_2018.csv",
-    "EIA_DMD_2019.csv",
-    "EIA_DMD_2020.csv",
-    "EIA_DMD_2021.csv",
-    "EIA_DMD_2022.csv",
-    "EIA_DMD_2023.csv",
+    "EIA_DMD_2018_2024.csv",
     ]
 
 rule retrieve_eia_data:
     output:
-        expand(DATA + "eia/{file}", file=DATAFILES_DMD),
+        expand(DATA + "GridEmissions/{file}", file=DATAFILES_DMD),
     log:
         "logs/retrieve/retrieve_historical_load_data.log",
     script:

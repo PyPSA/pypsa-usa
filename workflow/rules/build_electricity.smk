@@ -249,7 +249,7 @@ rule add_electricity:
             if config["network_configuration"] == 'ads2032'
             else []
         ,
-        eia = expand(DATA + "eia/{file}", file=DATAFILES_DMD),
+        eia = expand(DATA + "GridEmissions/{file}", file=DATAFILES_DMD),
         **{
             f"gen_cost_mult_{Path(x).stem}":f"repo_data/locational_multipliers/{Path(x).name}" for x in Path("repo_data/locational_multipliers/").glob("*")
         },
