@@ -17,19 +17,21 @@ rule copy_config:
 
 rule plot_figures:
     input:
-        network="results/{interconnect}/networks/elec_s_{clusters}_ec_l{ll}_{opts}.nc",
+        network=RESULTS + "{interconnect}/networks/elec_s_{clusters}_ec_l{ll}_{opts}_{sector}.nc",
         regions_onshore=RESOURCES + "{interconnect}/regions_onshore_s_{clusters}.geojson",
         regions_offshore=RESOURCES + "{interconnect}/regions_offshore_s_{clusters}.geojson",
     params:
+        electricity=config["electricity"],
         plotting=config["plotting"],
+        retirement = config["electricity"].get("retirement", "technical")
     output:
         **{
-            fig: "results/{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_%s.pdf"
+            fig: RESULTS + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}_%s.pdf"
             % fig
             for fig in FIGURES_SINGLE
         },
         **{
-            fig: "results/{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_%s.html"
+            fig: RESULTS + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}_%s.html"
             % fig
             for fig in FIGURES_SINGLE_HTML
         },

@@ -18,17 +18,6 @@ EUR_2_USD = 1.07 # taken on 12-12-2023
 # https://www.eia.gov/tools/faqs/faq.php?id=45&t=8
 NG_MCF_2_MWH = 0.3035
 
-# Extract only the continental united states 
-STATES_TO_REMOVE = [
-    "Hawaii", 
-    "Alaska", 
-    "Commonwealth of the Northern Mariana Islands", 
-    "United States Virgin Islands", 
-    "Guam", 
-    "Puerto Rico", 
-    "American Samoa"
-]
-
 ################################
 # Constants for ADS WECC mapping 
 ################################
@@ -219,6 +208,21 @@ EIA_PRIME_MOVER_MAPPER = {
     'OT': 'Other (specify in SCHEDULE 7)'
 }
 
+###############################
+# Constants for Region Mappings
+###############################
+
+# Extract only the continental united states 
+STATES_TO_REMOVE = [
+    "Hawaii", 
+    "Alaska", 
+    "Commonwealth of the Northern Mariana Islands", 
+    "United States Virgin Islands", 
+    "Guam", 
+    "Puerto Rico", 
+    "American Samoa"
+]
+
 NERC_REGION_MAPPER = {
     'WECC':'western',
     'TRE':'texas',
@@ -227,6 +231,163 @@ NERC_REGION_MAPPER = {
     'NPCC':'eastern',
     'MRO':'eastern',
 }
+
+STATES_INTERCONNECT_MAPPER = {
+    "AL":"eastern",
+    "AK":None,
+    "AZ":"western",
+    "AR":"eastern",
+    "AS":None,
+    "CA":"western",
+    "CO":"western",
+    "CT":"eastern",
+    "DE":"eastern",
+    "DC":"eastern",
+    "FL":"eastern",
+    "GA":"eastern",
+    "GU":None,
+    "HI":None,
+    "ID":"western",
+    "IL":"eastern",
+    "IN":"eastern",
+    "IA":"eastern",
+    "KS":"eastern",
+    "KY":"eastern",
+    "LA":"eastern",
+    "ME":"eastern",
+    "MD":"eastern",
+    "MA":"eastern",
+    "MI":"eastern",
+    "MN":"eastern",
+    "MS":"eastern",
+    "MO":"eastern",
+    "MT":"western",
+    "NE":"eastern",
+    "NV":"western",
+    "NH":"eastern",
+    "NJ":"eastern",
+    "NM":"western",
+    "NY":"eastern",
+    "NC":"eastern",
+    "ND":"eastern",
+    "MP":None,
+    "OH":"eastern",
+    "OK":"eastern",
+    "OR":"western",
+    "PA":"eastern",
+    "PR":None,
+    "RI":"eastern",
+    "SC":"eastern",
+    "SD":"eastern",
+    "TN":"eastern",
+    "TX":"texas",
+    "TT":None,
+    "UT":"western",
+    "VT":"eastern",
+    "VA":"eastern",
+    "VI":"eastern",
+    "WA":"western",
+    "WV":"eastern",
+    "WI":"eastern",
+    "WY":"western",
+    
+    "AB":"canada",
+    "BC":"canada",
+    "MB":"canada",
+    "NB":"canada",
+    "NL":"canada",
+    "NT":"canada",
+    "NS":"canada",
+    "NU":"canada",
+    "ON":"canada",
+    "PE":"canada",
+    "QC":"canada",
+    "SK":"canada",
+    "YT":"canada",
+    
+    "MX":"mexico",
+}
+
+STATE_2_CODE = {
+    
+    # United States
+    "Alabama":"AL",
+    "Alaska":"AK",
+    "Arizona":"AZ",
+    "Arkansas":"AR",
+    "American Samoa":"AS",
+    "California":"CA",
+    "Colorado":"CO",
+    "Connecticut":"CT",
+    "Delaware":"DE",
+    "District of Columbia":"DC",
+    "Florida":"FL",
+    "Georgia":"GA",
+    "Guam":"GU",
+    "Hawaii":"HI",
+    "Idaho":"ID",
+    "Illinois":"IL",
+    "Indiana":"IN",
+    "Iowa":"IA",
+    "Kansas":"KS",
+    "Kentucky":"KY",
+    "Louisiana":"LA",
+    "Maine":"ME",
+    "Maryland":"MD",
+    "Massachusetts":"MA",
+    "Michigan":"MI",
+    "Minnesota":"MN",
+    "Mississippi":"MS",
+    "Missouri":"MO",
+    "Montana":"MT",
+    "Nebraska":"NE",
+    "Nevada":"NV",
+    "New Hampshire":"NH",
+    "New Jersey":"NJ",
+    "New Mexico":"NM",
+    "New York":"NY",
+    "North Carolina":"NC",
+    "North Dakota":"ND",
+    "Northern Mariana Islands":"MP",
+    "Ohio":"OH",
+    "Oklahoma":"OK",
+    "Oregon":"OR",
+    "Pennsylvania":"PA",
+    "Puerto Rico":"PR",
+    "Rhode Island":"RI",
+    "South Carolina":"SC",
+    "South Dakota":"SD",
+    "Tennessee":"TN",
+    "Texas":"TX",
+    "Trust Territories":"TT",
+    "Utah":"UT",
+    "Vermont":"VT",
+    "Virginia":"VA",
+    "Virgin Islands":"VI",
+    "Washington":"WA",
+    "West Virginia":"WV",
+    "Wisconsin":"WI",
+    "Wyoming":"WY",
+    
+    # Canada
+    "Alberta":"AB",
+    "British Columbia":"BC",
+    "Manitoba":"MB",
+    "New Brunswick":"NB",
+    "Newfoundland and Labrador":"NL",
+    "Northwest Territories":"NT",
+    "Nova Scotia":"NS",
+    "Nunavut":"NU",
+    "Ontario":"ON",
+    "Prince Edward Island":"PE",
+    "Quebec":"QC",
+    "Saskatchewan":"SK",
+    "Yukon":"YT",
+    
+    # Mexico
+    "Mexico":"MX",
+}
+
 ################################
 # Constants for Breakthrough mapping 
 ################################

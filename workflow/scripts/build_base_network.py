@@ -43,7 +43,7 @@ Reads in Breakthrough Energy/TAMU transmission dataset, and converts it into PyP
 
 import pypsa, pandas as pd, logging, geopandas as gpd
 from geopandas.tools import sjoin
-from _helpers import configure_logging
+from _helpers import configure_logging, test_network_datatype_consistency
 import numpy as np
 from shapely.geometry import Polygon, Point
 import geopandas as gpd
@@ -327,16 +327,14 @@ def build_offshore_transmission_configuration(n: pypsa.Network) -> pypsa.Network
                                 offshore_buses.x.values, 
                                 offshore_buses.y.values
                             )
+    # Reassigns Offshore buses region identifies to the POI bus regions
+    n.buses.loc[offshore_buses.index, 'balancing_area'] = n.buses.loc[offshore_buses.bus_assignment].balancing_area.values
+    n.buses.loc[offshore_buses.index, 'state'] = n.buses.loc[offshore_buses.bus_assignment].state.values
+    n.buses.loc[offshore_buses.index, 'country'] = n.buses.loc[offshore_buses.bus_assignment].country.values
+    n.buses.loc[offshore_buses.index, 'interconnect'] = n.buses.loc[offshore_buses.bus_assignment].interconnect.values
+
+
     # add onshore poi buses @230kV
-    logger.info(f"Adding {len(offshore_buses)} offshore buses to the network.")
-
-    # # Reassigns Offshore buses region identifies to the POI bus regions
-    # n.buses.loc[offshore_buses.index, 'balancing_area'] = n.buses.loc[offshore_buses.bus_assignment].balancing_area.values
-    # n.buses.loc[offshore_buses.index, 'state'] = n.buses.loc[offshore_buses.bus_assignment].state.values
-    # n.buses.loc[offshore_buses.index, 'country'] = n.buses.loc[offshore_buses.bus_assignment].country.values
-    # n.buses.loc[offshore_buses.index, 'interconnect'] = n.buses.loc[offshore_buses.bus_assignment].interconnect.values
-
-
     n.madd(
         "Bus",
         "OSW_POI_" + osw_offsub_bus_ids, #name poi bus after offshore substation
@@ -411,7 +409,6 @@ def assign_missing_states_countries(n: pypsa.Network):
     n.buses.loc[missing.index, 'interconnect'] = missing.interconnect
 
 
-
 def modify_breakthrough_substations(n:pypsa.Network, interconnect:str):
     if interconnect == 'Western' or interconnect == 'usa':
         sub_fixes = {35017 : {'x':-123.0922,'y':48.5372},
@@ -427,8 +424,7 @@ def modify_breakthrough_substations(n:pypsa.Network, interconnect:str):
             n.buses.loc[n.buses.sub_id == i, 'y'] = sub_fixes[i]['y']
     return n
 
-#Lines to set snom: 90528 -> zero or remove
-#Lines set snom: 90529 -> zero or small ##... hard to approxmimate since lines arent 1:1
+
 def modify_breakthrough_lines(n:pypsa.Network, interconnect:str):
     if interconnect == 'Western' or interconnect == 'usa':
         line_fixes = {
@@ -446,22 +442,24 @@ def modify_breakthrough_lines(n:pypsa.Network, interconnect:str):
             n.buses.loc[n.lines.loc[n.lines.index == i].bus1, 'v_nom'] = line_fixes[i]['v_nom']
 
         #Removing Unccesary Lines in Humboldt, adding new missing one.
-        line_removals = ['89634', '89668']
+        line_removals = ['89634', '89668', '90528']
         n.mremove('Line', line_removals)
         line_params = n.lines.loc['90501'].copy()
         line_params.name = line_removals[0]
         line_params.bus0 = '2020004'
         line_params.bus1 = '2020532'
-        n.add('Line', line_params.name, **line_params)
+        n.add('Line', line_params.name, **line_params.drop(['v_nom','interconnect','underwater_fraction']))
         n.lines.loc[line_params.name, 'v_nom'] = line_params.v_nom
         n.lines.loc[line_params.name, 'interconnect'] = line_params.interconnect
         n.lines.loc[line_params.name, 'underwater_fraction'] = line_params.underwater_fraction
 
     return n
 
+
 def main(snakemake):
     # create network
     n = pypsa.Network()
+    n.name = "PyPSA-USA"
 
     interconnect = snakemake.wildcards.interconnect
     # interconnect in raw data given with an uppercase first letter
@@ -526,7 +524,12 @@ def main(snakemake):
     assign_line_length(n)
     assign_missing_states_countries(n)
     
-    logger.info(f"Network is missing BA/State/Country information for {len(n.buses.loc[n.buses.balancing_area.isna() | n.buses.state.isna() | n.buses.country.isna()])} buses.")
+    # Tests
+    logger.info(test_network_datatype_consistency(n))
+
+
+    if len(n.buses.loc[n.buses.balancing_area.isna() | n.buses.state.isna() | n.buses.country.isna()]) > 0:
+        logger.info(f"Network is missing BA/State/Country information for {len(n.buses.loc[n.buses.balancing_area.isna() | n.buses.state.isna() | n.buses.country.isna()])} buses.")
 
     # export bus2sub interconnect data
     logger.info(f"Exporting bus2sub and sub data for {interconnect}")

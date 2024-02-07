@@ -23,6 +23,8 @@ Retrives data for sector coupling
 
 [![DOI](https://sandbox.zenodo.org/badge/DOI/10.5072/zenodo.10019422.svg)](https://zenodo.org/records/10019422)
 
+**Geographic Data**
+
 Geographic boundaries of the United States counties are taken from the 
 United States Census Bureau. Note, these follow 2020 boundaries to match 
 census numbers 
@@ -46,6 +48,22 @@ County level urbanization rates are taken from the United States Census Bureau. 
 Sheet Name: Decennial Census - H1 | Housing Units - 2020: DEC Demographic and Housing Characteristics
 
 [![URL](https://img.shields.io/badge/URL-United_States_Census_Bureau-blue)](<https://data.census.gov/>)
+
+**Natural Gas Data**
+
+Natural Gas infrastructure includes: 
+- State to State pipeline pipeline capacity at a county and pipeline level 
+- Natural gas storage locations and capacity at a county level 
+- Natural gas processing plant locations at a county level 
+- Natural Gas imports/exports by point of entry at a annual level 
+
+[![URL](https://img.shields.io/badge/URL-Pipeline_Capacity-blue)](<https://www.eia.gov/naturalgas/data.php>)
+[![URL](https://img.shields.io/badge/URL-Storage-blue)](<https://www.eia.gov/naturalgas/ngqs/#?report=RP7&year1=2022&year2=2022&company=Name>)
+[![URL](https://img.shields.io/badge/URL-Processing_Capacity-blue)](<https://www.eia.gov/naturalgas/ngqs/#?report=RP9&year1=2017&year2=2017&company=Name>)
+[![URL](https://img.shields.io/badge/URL-Processing_Facilities-blue)](<https://hifld-geoplatform.opendata.arcgis.com/datasets/geoplatform::natural-gas-processing-plants/about>)
+[![URL](https://img.shields.io/badge/URL-Import_Export_Locations-blue)](<https://hifld-geoplatform.opendata.arcgis.com/datasets/geoplatform::natural-gas-import-export/about>)
+[![URL](https://img.shields.io/badge/URL-Import_Data-blue)](<https://www.eia.gov/dnav/ng/ng_move_poe1_a_EPG0_IRP_Mmcf_a.htm>)
+[![URL](https://img.shields.io/badge/URL-Export_Data-blue)](<https://www.eia.gov/dnav/ng/ng_move_poe2_a_EPG0_ENP_Mmcf_a.htm>)
 
 (retrieve-eia)=
 ## Rule `retrieve_eia_data`

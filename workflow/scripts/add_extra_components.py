@@ -51,7 +51,7 @@ from _helpers import configure_logging
 import pypsa
 import pandas as pd
 import numpy as np
-import pdb
+from typing import List
 
 from add_electricity import (load_costs, add_nice_carrier_names,
                              _add_missing_carriers_from_costs)
@@ -186,12 +186,82 @@ def attach_hydrogen_pipelines(n, costs, elec_opts):
            efficiency=costs.at['H2 pipeline','efficiency'],
            carrier="H2 pipeline")
 
+def add_economic_retirement(n: pypsa.Network, costs: pd.DataFrame, gens: List[str] = None): 
+    """Adds dummy generators to account for economic retirement 
+    
+    Specifically this function does the following: 
+    1. Creates duplicate generators for any that are tagged as extendable. For
+    example, an extendable "CCGT" generator will be split into "CCGT" and "CCGT new" 
+    2. Capital costs of existing extendable generators are replaced with fixed costs 
+    3. p_nom_max of existing extendable generators are set to p_nom
+    4. p_nom_min of existing and new generators is set to zero 
+    
+    Arguments:
+    n: pypsa.Network, 
+    costs: pd.DataFrame, 
+    gens: List[str]
+        List of generators to apply economic retirment to. If none provided, it is 
+        applied to all extendable generators
+    """
+    
+    # only assign dummy generators to extendable generators
+    extend = n.generators[n.generators["p_nom_extendable"] == True]
+    if gens: 
+        extend = extend[extend["carrier"].isin(gens)]
+    if extend.empty:
+        return 
+    
+    # divide by 100 b/c FOM expressed as percentage of CAPEX
+    n.generators["capital_cost"] = n.generators.apply(
+        lambda row: row["capital_cost"] if not row.name in (extend.index) else row["capital_cost"] * costs.at[row["carrier"], "FOM"] / 100, axis=1
+    )
+
+    n.generators["p_nom_max"] = np.where(
+        n.generators["p_nom_extendable"] & n.generators.carrier.isin(gens),
+        n.generators["p_nom"],
+        n.generators["p_nom_max"]
+    )
+
+    n.generators["p_nom_min"] = np.where(
+        n.generators["p_nom_extendable"] & n.generators.carrier.isin(gens),
+        0,
+        n.generators["p_nom_min"]
+    )
+    
+    n.madd(
+        "Generator",
+        extend.index,
+        suffix=" new",
+        carrier=extend.carrier,
+        bus=extend.bus,
+        p_nom_min=0,
+        p_nom=0,
+        p_nom_max=extend.p_nom_max,
+        p_nom_extendable=True,
+        ramp_limit_up=extend.ramp_limit_up,
+        ramp_limit_down=extend.ramp_limit_down,
+        efficiency=extend.efficiency,
+        marginal_cost=extend.marginal_cost,
+        capital_cost=extend.capital_cost,
+        lifetime=extend.lifetime,
+        p_min_pu = extend.p_min_pu,
+        p_max_pu = extend.p_max_pu,
+    )
+    
+    # time dependent factors added after as not all generators are time dependent 
+    marginal_cost_t = n.generators_t["marginal_cost"][[x for x in extend.index if x in n.generators_t.marginal_cost.columns]]
+    marginal_cost_t = marginal_cost_t.rename(columns={x:f"{x} new" for x in marginal_cost_t.columns})
+    n.generators_t["marginal_cost"] = n.generators_t["marginal_cost"].join(marginal_cost_t)
+    
+    p_max_pu_t = n.generators_t["p_max_pu"][[x for x in extend.index if x in n.generators_t["p_max_pu"].columns]]
+    p_max_pu_t = p_max_pu_t.rename(columns={x:f"{x} new" for x in p_max_pu_t.columns})
+    n.generators_t["p_max_pu"] = n.generators_t["p_max_pu"].join(p_max_pu_t)
+    
 
 if __name__ == "__main__":
     if 'snakemake' not in globals():
         from _helpers import mock_snakemake
-        snakemake = mock_snakemake('add_extra_components',
-                                  simpl='', clusters=5)
+        snakemake = mock_snakemake("add_extra_components", interconnect="western", clusters=30)
     configure_logging(snakemake)
 
     n = pypsa.Network(snakemake.input.network)
@@ -207,6 +277,10 @@ if __name__ == "__main__":
     attach_hydrogen_pipelines(n, costs, elec_config)
 
     add_nice_carrier_names(n, snakemake.config)
+
+    if snakemake.params.retirement == "economic":
+        economic_retirement_gens = elec_config.get("conventional_carriers", None)
+        add_economic_retirement(n, costs, economic_retirement_gens)
 
     n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))
     n.export_to_netcdf(snakemake.output[0])
