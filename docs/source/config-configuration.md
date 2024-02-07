@@ -185,6 +185,21 @@ Specifies the types of generators that are included in the network, which are ex
    :file: configtables/costs.csv
 ```
 
+(sector_cf)=
+## `sector`
+```{eval-rst}
+.. literalinclude:: ../../workflow/config/config.default.yaml
+   :language: yaml
+   :start-at: sector:
+   :end-before: # docs
+
+.. csv-table::
+   :header-rows: 1
+   :widths: 22,7,22,33
+   :file: configtables/sector.csv
+```
+
+
 (clustering_cf)=
 ## `clustering`
 

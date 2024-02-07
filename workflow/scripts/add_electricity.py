@@ -77,7 +77,7 @@ import os
 import pypsa
 from scipy import sparse
 import xarray as xr
-from _helpers import configure_logging, update_p_nom_max, export_network_for_gis_mapping
+from _helpers import configure_logging, update_p_nom_max, export_network_for_gis_mapping, test_network_datatype_consistency
 import constants as const
 from typing import Dict, Any, List, Union
 from pathlib import Path 
@@ -754,6 +754,18 @@ def prepare_eia_demand(n: pypsa.Network,
     demand = demand[list(intersection)]
     return disaggregate_demand_to_buses(n, demand)
 
+# def disaggregate_demand_to_buses(n: pypsa.Network, 
+#                                  demand: pd.DataFrame) -> pd.DataFrame:
+#     """
+#     Zone power demand is disaggregated to buses proportional to Pd,
+#     where Pd is the real power demand (MW).
+#     """
+#     demand_per_bus_pu = (n.buses.set_index("load_dissag").Pd / n.buses.groupby("load_dissag").sum().Pd)
+#     demand_per_bus = demand_per_bus_pu.multiply(demand)
+#     demand_per_bus.fillna(0, inplace=True)
+#     demand_per_bus.columns = n.buses.index
+#     return demand_per_bus
+
 
 def disaggregate_demand_to_buses(n: pypsa.Network, 
                                  demand: pd.DataFrame) -> pd.DataFrame:
@@ -1208,7 +1220,6 @@ def main(snakemake):
 
     n = pypsa.Network(snakemake.input.base_network)
 
-    n.name = configuration
     snapshot_config = snakemake.config['snapshots']
     sns_start = pd.to_datetime(snapshot_config['start'] + ' 07:00:00') 
     # Shifting to 7am UTC since this is the Midnight PST time. 
@@ -1394,6 +1405,8 @@ def main(snakemake):
 
     output_folder = os.path.dirname(snakemake.output[0]) + '/base_network'
     export_network_for_gis_mapping(n, output_folder)
+    logger.info(test_network_datatype_consistency(n))
+
 
 if __name__ == "__main__":
     if "snakemake" not in globals():
