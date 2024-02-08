@@ -8,7 +8,7 @@ run:
 
 scenario:
   interconnect: western #"usa|texas|western|eastern"
-  clusters: [30]
+  clusters: [30]    #100, 300, 1000
   opts:
     [
       Co2L1.25,
@@ -75,7 +75,7 @@ electricity:
   conventional_carriers: [nuclear, oil, OCGT, CCGT, coal, geothermal] # Choose the conventional plant types to include in network
   renewable_carriers: [onwind, solar, offwind, hydro] # Choose the renewable plant types to include in network
   voltage_simplified: 230 #Voltage level to simplify network to in rule "simplify network"
-  co2limit: 1.4728e+9 # 0.8 * 1.841e+9
+  co2limit: 1.4728e+12 # 0.8 * 1.841e+9
   co2base: 226.86e+6 #base_from_2020 Locations of the 250 MMmt of CO2 emissions from the WECC 2021.
   gaslimit: false # global gas usage limit of X MWh_th
 
@@ -256,8 +256,9 @@ clustering:
 solving:
   #tmpdir: "path/to/tmp"
   options:
-    operations_only: false
-    load_shedding: false
+    use_transport_model: true
+    operations_only: true
+    load_shedding: true
     clip_p_max_pu: 1.e-2
     noisy_costs: true
     skip_iterations: true

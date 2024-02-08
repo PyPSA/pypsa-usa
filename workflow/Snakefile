@@ -27,6 +27,12 @@ FIGURES_SINGLE = [
     "capacity_additions_bar"
 ]
 
+FIGURES_VALIDATE = [
+    "seasonal_stacked_plot",
+    "carrier_production_bar",
+    "production_deviation_bar"
+]
+
 FIGURES_SINGLE_HTML = [
     "production_area_html",
     "emissions_area_html",
@@ -83,7 +89,7 @@ rule all:
         expand(
             "results/{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{figure}.pdf",
             **config["scenario"],
-            figure=FIGURES_SINGLE
+            figure=FIGURES_SINGLE + FIGURES_VALIDATE,
         ),
         "repo_data/dag.jpg",
 
