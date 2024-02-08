@@ -12,13 +12,13 @@ scenario:
   clusters: [30]
   opts:
     [
-      Co2L0.25-1000SEG, # Cluster to 1000 hours in the year 
+      Co2L0.75-1000SEG, # Cluster to 1000 hours in the year 
     ]
   ll: [v1.0] 
   scope: "total" # "urban", "rural", or "total" 
   sector: "" # G 
-  planning_horizons:
-    - 2030 #not implemented yet (temp placeholder)
+  planning_horizons: # Uncomment to use NREL EFS Demand Forecasts
+    - 2030 
     - 2040
     # - 2050
 
@@ -44,7 +44,7 @@ foresight:  # not implemented yet
 # docs :
 atlite:
   default_cutout: era5_2019
-  nprocesses: 6
+  nprocesses: 8
   show_progress: false # false saves time
   cutouts:
     era5_2019:

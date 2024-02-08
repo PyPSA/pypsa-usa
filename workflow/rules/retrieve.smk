@@ -102,6 +102,8 @@ rule retrieve_eia_data:
         expand(DATA + "GridEmissions/{file}", file=DATAFILES_DMD),
     log:
         "logs/retrieve/retrieve_historical_load_data.log",
+    resources:
+        mem_mb=5000,
     script:
         "../scripts/retrieve_eia_data.py"
 

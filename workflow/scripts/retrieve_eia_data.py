@@ -151,7 +151,7 @@ if __name__ == "__main__":
 
     PATH_DOWNLOAD = Path(f"../data/GridEmissions")
     PATH_DOWNLOAD.mkdir(parents=True, exist_ok=True)
-    # download_and_extract(url_new, PATH_DOWNLOAD)
+    download_and_extract(url_new, PATH_DOWNLOAD)
     df = prepare_historical_load_data(PATH_DOWNLOAD)
     df.to_csv(f"{snakemake.output[0]}")
     logger.info("GridEmissions Demand Data bundle downloaded.")
