@@ -1,4 +1,53 @@
-"""Module for adding the gas sector"""
+"""Module for adding the gas sector
+
+**Description**
+
+This module will add a state level copperplate natural gas network to the model. 
+Specifically, it will do the following: 
+    - Adds state level natural gas buses
+    - Converts exisitng OCGT and CCGT generators to links  
+    - Creates capacity constrained pipelines between state gas buses (links)
+    - Creates capacity constraind natural gas processing facilites (generators)
+    - Creates capacity and energy constrainted underground gas storage facilities 
+    - Creates energy constrained linepack storage (storage units)
+    - Creates capacity constrained pipelines to states neighbouring the interconnect 
+    - Creates capacity and energy constrained import/exports to international connections
+    - Adds import/export historical natural gas prices 
+
+**Relevant Settings**
+
+.. code:: yaml
+
+    sector:
+      natural_gas:
+        allow_imports_exports: true # only true implemented 
+        cyclic_storage: false
+    
+**Inputs**
+
+- n: pypsa.Network,
+    - Network to add the natural gas network to. Note, the electrical network 
+    represntation should be done by this point. 
+- year: int,
+    - Year to extract natural gas data for. Must be between ``2009`` and ``2022``
+- api: str,
+    - EIA API key. Get from https://www.eia.gov/opendata/register.php
+- interconnect: str = "western",
+    - Name of interconnect. Must be in ("eastern", "western", "texas", "usa")
+- county_path: str
+    - ``data/counties/cb_2020_us_county_500k.shp``: County shapes in the USA
+- pipelines_path: str
+    - ``EIA-StatetoStateCapacity_Jan2023.xlsx`` : State to state pipeline capacity from EIA  
+- pipeline_shape_path: str = "../data/natural_gas/pipelines.geojson",
+    - ``pipelines.geojson`` : National level 
+- eia_757_path: str = "../data/natural_gas/eia_757.csv",
+
+**Outputs**
+
+- ``pypsa.Network``
+
+
+"""
 
 import pypsa 
 import pandas as pd
@@ -16,6 +65,14 @@ import eia
 
 from abc import ABC, abstractmethod
 
+### 
+# Constants 
+###
+
+# for converting everthing into MWh_th 
+MWH_2_MMCF = constants.NG_MWH_2_MMCF
+MMCF_2_MWH = 1 / MWH_2_MMCF
+KJ_2_MWH = (1 / 1000) * (1 / 3600)
 
 ###
 # Geolocation of Assets class 
@@ -168,7 +225,7 @@ class GasBuses(GasData):
             x=states.x,
             y=states.y,
             carrier="gas",
-            unit="MMCF",
+            unit="MWh_th",
             interconnect=self.interconnect,
             country=states.index, # for consistency 
             STATE=states.index,
@@ -196,10 +253,11 @@ class GasStorage(GasData):
     
     def format_data(self, data: pd.DataFrame):
         df = data.copy()
+        df["value"] = df.value * MMCF_2_MWH
         df = (
             df
             .reset_index()
-            .drop(columns=["period","series-description", "units"]) # units in MMCF
+            .drop(columns=["period","series-description", "units"]) # units in MWh_th
             .groupby(["state", "storage_type"])
             .mean() # get average yearly capacity
             .reset_index()
@@ -210,8 +268,8 @@ class GasStorage(GasData):
         df.columns.name = ""
         df = df.reset_index()
         df = df.rename(columns={
-            "base_capacity": "MIN_CAPACITY_MMCF", 
-            "total_capacity": "MAX_CAPACITY_MMCF",
+            "base_capacity": "MIN_CAPACITY_MWH", 
+            "total_capacity": "MAX_CAPACITY_MWH",
             "state":"STATE"
             })
         return self.filter_on_interconnect(df, ["U.S."])
@@ -227,7 +285,7 @@ class GasStorage(GasData):
             names=df.index,
             suffix=" gas storage",
             carrier="gas storage",
-            unit="MMCF",
+            unit="MWh_th",
         )
         
         cyclic_storage = kwargs.get("cyclic_storage", False)
@@ -238,9 +296,9 @@ class GasStorage(GasData):
             bus=df.index + " gas storage",
             carrier="gas storage",
             e_nom_extendable=False,
-            e_nom=df.MAX_CAPACITY_MMCF,
+            e_nom=df.MAX_CAPACITY_MWH,
             e_cyclic=cyclic_storage,
-            e_min_pu=df.MIN_CAPACITY_MMCF,
+            e_min_pu=df.MIN_CAPACITY_MWH,
             marginal_cost=0 # to update
         )
         
@@ -291,13 +349,14 @@ class GasProcessing(GasData):
             "County Name", 
             "Plant Capacity", 
             "Plant Flow", 
-            "BTU Content"
+            # "BTU Content"
         ]]
+        df["Plant Capacity"] = df["Plant Capacity"] * MMCF_2_MWH
         df["Report State"] = df["Report State"].str.capitalize()
         df = df.rename(columns={
             "Report State":"STATE", 
             "County Name":"COUNTY", 
-            "Plant Capacity":"CAPACITY_MMCF", 
+            "Plant Capacity":"CAPACITY_MWH", 
             "Plant Flow":"FLOW_MMCF", 
             "BTU Content":"BTU_CONTENT", 
         })
@@ -327,7 +386,7 @@ class GasProcessing(GasData):
             carrier="gas",
             p_nom_extendable=False,
             marginal_costs=0.35, # https://www.eia.gov/analysis/studies/drilling/pdf/upstream.pdf
-            p_nom=df.CAPACITY_MMCF
+            p_nom=df.CAPACITY_MWH
         )
 
 class _GasPipelineCapacity(GasData):
@@ -349,12 +408,13 @@ class _GasPipelineCapacity(GasData):
         df = data.copy()
         df.columns = df.columns.str.strip()
         df = df[df.index == int(self.year)]
+        df["Capacity (mmcfd)"] = df["Capacity (mmcfd)"] * MMCF_2_MWH / 24 # divide by 24 to get hourly 
         df = df.rename(columns={
             "State From":"STATE_NAME_FROM",
             "County From":"COUNTRY_FROM",
             "State To":"STATE_NAME_TO",
             "County To":"COUNTRY_TO",
-            "Capacity (mmcfd)":"CAPACITY_MMCFD"
+            "Capacity (mmcfd)":"CAPACITY_MW"
         })
         df = (
             df
@@ -364,10 +424,10 @@ class _GasPipelineCapacity(GasData):
                     "COUNTRY_FROM":"str",
                     "STATE_NAME_TO":"str",
                     "COUNTRY_TO":"str",
-                    "CAPACITY_MMCFD":"float"
+                    "CAPACITY_MW":"float"
                 }
             )
-            [["STATE_NAME_FROM","STATE_NAME_TO","CAPACITY_MMCFD"]]
+            [["STATE_NAME_FROM","STATE_NAME_TO","CAPACITY_MW"]]
             .groupby(["STATE_NAME_TO", "STATE_NAME_FROM"])
             .sum()
             .reset_index()
@@ -440,10 +500,10 @@ class InterconnectGasPipelineCapacity(_GasPipelineCapacity):
             names=df.index,
             suffix=" pipeline",
             carrier="gas pipeline",
-            unit="MMCF",
+            unit="MW",
             bus0=df.STATE_FROM + " gas",
             bus1=df.STATE_TO + " gas",
-            p_nom=round(df.CAPACITY_MMCFD / 24), # get a hourly flow rate 
+            p_nom=df.CAPACITY_MW,
             p_min_pu=0,
             p_max_pu=1,
             p_nom_extendable=False,
@@ -535,7 +595,7 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
             names=to_from.index,
             suffix=" gas export",
             carrier="gas export",
-            unit="MMCF",
+            unit="",
             country=to_from.STATE_TO,
             interconnect=self.interconnect,
         )
@@ -545,7 +605,7 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
             names=from_to.index,
             suffix=" gas import",
             carrier="gas import",
-            unit="MMCF",
+            unit="",
             country=from_to.STATE_FROM,
             interconnect=self.interconnect,
         )
@@ -555,10 +615,10 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
             names=to_from.index,
             suffix=" gas export",
             carrier="gas export",
-            unit="MMCF",
+            unit="MW",
             bus0=to_from.STATE_TO + " gas",
             bus1=to_from.index + " gas export",
-            p_nom=round(to_from.CAPACITY_MMCFD / 24), # get a hourly flow rate 
+            p_nom=to_from.CAPACITY_MW, 
             p_min_pu=0,
             p_max_pu=1,
             p_nom_extendable=False,
@@ -570,10 +630,10 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
             names=from_to.index,
             suffix=" gas import",
             carrier="gas import",
-            unit="MMCF",
+            unit="MW",
             bus0=from_to.index + " gas import",
             bus1=from_to.STATE_FROM + " gas",
-            p_nom=round(from_to.CAPACITY_MMCFD / 24), # get a hourly flow rate 
+            p_nom=from_to.CAPACITY_MW, 
             p_min_pu=0,
             p_max_pu=1,
             p_nom_extendable=False,
@@ -584,7 +644,7 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
             "Store",
             names=to_from.index,
             suffix=" gas export",
-            unit="MMCF",
+            unit="MWh_th",
             bus=to_from.index + " gas export",
             carrier="gas export",
             e_nom_extendable=True,
@@ -597,7 +657,7 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
         n.madd(
             "Store",
             names=from_to.index,
-            unit="MMCF",
+            unit="MWh_th",
             suffix=" gas import",
             bus=from_to.index + " gas import",
             carrier="gas import",
@@ -650,17 +710,12 @@ class PipelineLinepack(GasData):
         energy_in_state["MIN_ENERGY_kJ"] = energy_in_state.VOLUME_M3 * min_pressure
         energy_in_state["NOMINAL_ENERGY_kJ"] = (energy_in_state.MAX_ENERGY_kJ + energy_in_state.MIN_ENERGY_kJ) / 2
         
-        # https://apps.cer-rec.gc.ca/Conversion/conversion-tables.aspx#s1ss1
-        # 1 GJ to 947.8171 CF
-        # TODO: replace with heating value 
-        kj_2_mmcf = 1e-6 * 947.8171 * 1e-6 # kj -> GJ -> cf -> mmcf
-        
         final = energy_in_state.copy()
-        final["MAX_ENERGY_MMCF"] = final.MAX_ENERGY_kJ * kj_2_mmcf
-        final["MIN_ENERGY_MMCF"] = final.MIN_ENERGY_kJ * kj_2_mmcf
-        final["NOMINAL_ENERGY_MMCF"] = final.NOMINAL_ENERGY_kJ * kj_2_mmcf
+        final["MAX_ENERGY_MWh"] = final.MAX_ENERGY_kJ * KJ_2_MWH
+        final["MIN_ENERGY_MWh"] = final.MIN_ENERGY_kJ * KJ_2_MWH
+        final["NOMINAL_ENERGY_MWh"] = final.NOMINAL_ENERGY_kJ * KJ_2_MWH
 
-        final = final[["MAX_ENERGY_MMCF", "MIN_ENERGY_MMCF", "NOMINAL_ENERGY_MMCF"]].reset_index()
+        final = final[["MAX_ENERGY_MWh", "MIN_ENERGY_MWh", "NOMINAL_ENERGY_MWh"]].reset_index()
         return self.filter_on_interconnect(final)
         
     def build_infrastructure(self, n: pypsa.Network) -> None:
@@ -669,26 +724,27 @@ class PipelineLinepack(GasData):
         df = df.set_index("STATE")
         
         n.madd(
-            "StorageUnit",
+            "Store",
             names=df.index,
-            unit="MMCF",
+            unit="MWh_th",
             suffix=" linepack",
             bus=df.index + " gas",
             carrier="gas pipeline",
-            p_nom=0,
-            p_nom_extendable=False,
-            p_nom_min=0,
-            p_nom_max=np.inf,
+            e_nom=df.MAX_ENERGY_MWh,
+            e_nom_extendable=False,
+            e_nom_min=0,
+            e_nom_max=np.inf,
+            e_min_pu=df.MIN_ENERGY_MWh / df.MAX_ENERGY_MWh,
+            e_max_pu=1,
+            e_initial=df.NOMINAL_ENERGY_MWh,
+            e_initial_per_period=False,
+            e_cyclic=False,
+            e_cyclic_per_period=True,
+            p_set=0,
             marginal_cost=0,
-            capital_cost=0,
-            state_of_charge_initial=df.NOMINAL_ENERGY_MMCF,
-            state_of_charge_initial_per_period=False,
-            cyclic_state_of_charge=True,
-            cyclic_state_of_charge_per_period=False,
-            max_hours=1,
-            efficiency_store=1,
-            efficiency_dispatch=1,
-            standing_loss=0
+            capital_cost=1,
+            standing_loss=0,
+            lifetime=np.inf
         )
 
 class ImportExportLimits(GasData):
@@ -736,6 +792,21 @@ def convert_generators_2_links(n: pypsa.Network, carrier: str):
     plants = n.generators[n.generators.carrier==carrier].copy()
     plants["STATE"] = plants.bus.map(n.buses.STATE)
     
+    pnl = {}
+    
+    # copy over pnl parameters 
+    for c in n.iterate_components(["Generators"]):
+        for param, df in c.pnl.items():
+            # skip result vars 
+            if param not in (
+                "p_min_pu", "p_max_pu", "p_set", "q_set", "marginal_cost", 
+                "marginal_cost_quadratic", "efficiency", "stand_by_cost"
+            ):
+                continue
+            cols = [p for p in plants.index if p in df.columns]
+            if cols:
+                pnl[param] = df[cols]
+            
     n.madd(
         "Link",
         names=plants.index,
@@ -753,6 +824,9 @@ def convert_generators_2_links(n: pypsa.Network, carrier: str):
         capital_cost=plants.capital_cost,
         lifetime=plants.lifetime,
     )
+    
+    for param, df in pnl.items():
+        n.links_t[param] = n.links_t[param].join(df, how="inner")
     
     # remove generators 
     n.mremove("Generator", plants.index)
