@@ -77,7 +77,7 @@ import os
 import pypsa
 from scipy import sparse
 import xarray as xr
-from _helpers import configure_logging, update_p_nom_max, export_network_for_gis_mapping, test_network_datatype_consistency
+from _helpers import configure_logging, update_p_nom_max, export_network_for_gis_mapping, test_network_datatype_consistency, local_to_utc
 import constants as const
 from typing import Dict, Any, List, Union
 from pathlib import Path 
@@ -698,18 +698,6 @@ def attach_renewable_capacities_to_atlite(n, plants_df, renewable_carriers):
         n.generators.p_nom_min.update(generators_tech.bus.map(caps_per_bus).dropna())
 
 
-def prepare_breakthrough_demand_data(n: pypsa.Network, 
-                                     demand_path: str) -> pd.DataFrame:
-    logger.info("Adding Breakthrough Energy Network Demand data from 2016")
-    demand = pd.read_csv(demand_path, index_col=0)
-    demand.columns = demand.columns.astype(int)
-    demand.index = n.snapshots
-    intersection = set(demand.columns).intersection(n.buses.zone_id.unique())
-    demand = demand[list(intersection)]
-    n.buses.rename(columns={'zone_id': 'load_dissag'}, inplace=True)
-    return disaggregate_demand_to_buses(n, demand)
-
-
 def prepare_ads_demand(n: pypsa.Network, 
                        demand_path: str) -> pd.DataFrame:
     demand = pd.read_csv(demand_path, index_col=0)
@@ -740,12 +728,11 @@ def prepare_eia_demand(n: pypsa.Network,
     logger.info('Building Load Data using EIA demand')
     demand = pd.read_csv(demand_path, index_col=0)
     demand.index = pd.to_datetime(demand.index)
-    demand = demand.fillna(method='backfill') #tempory solution until gridEmission for the cleaned Data
     demand = demand.loc[n.snapshots.intersection(demand.index)] # filter by snapshots
+    demand = demand[~demand.index.duplicated(keep='last')]
     demand.index = n.snapshots
 
     #Combine EIA Demand Data to Match GIS Shapes
-    #TODO: Include EIA sub-ba level data so this setp for CISO is not neccesary
     demand['Arizona'] = demand.pop('SRP') + demand.pop('AZPS')
     n.buses['load_dissag'] = n.buses.balancing_area.replace({'^CISO.*': 'CISO', '^ERCO.*': 'ERCO'}, regex=True)
 
@@ -754,18 +741,34 @@ def prepare_eia_demand(n: pypsa.Network,
     demand = demand[list(intersection)]
     return disaggregate_demand_to_buses(n, demand)
 
-# def disaggregate_demand_to_buses(n: pypsa.Network, 
-#                                  demand: pd.DataFrame) -> pd.DataFrame:
-#     """
-#     Zone power demand is disaggregated to buses proportional to Pd,
-#     where Pd is the real power demand (MW).
-#     """
-#     demand_per_bus_pu = (n.buses.set_index("load_dissag").Pd / n.buses.groupby("load_dissag").sum().Pd)
-#     demand_per_bus = demand_per_bus_pu.multiply(demand)
-#     demand_per_bus.fillna(0, inplace=True)
-#     demand_per_bus.columns = n.buses.index
-#     return demand_per_bus
+def prepare_efs_demand(n: pypsa.Network,
+                          planning_horizons: List[str],
+                          ) -> pd.DataFrame:
+    logger.info('Building Load Data using EFS demand')
+    demand = pd.read_csv(snakemake.input.efs)
 
+    demand = demand.loc[demand.Year == planning_horizons[0]]
+    demand.drop(columns=['Electrification','TechnologyAdvancement','Sector','Subsector','Year'], inplace=True)
+    #TODO: We are throwing out great data here on the sector and subsector loads. Revisit this.
+
+    demand= demand.groupby(['State','LocalHourID']).sum().reset_index()
+
+    demand['DateTime'] = pd.Timestamp(year=planning_horizons[0], month=1, day=1) + pd.to_timedelta(demand['LocalHourID'] - 1, unit='H')
+    demand['UTC_Time'] = demand.groupby(['State'])['DateTime'].transform(local_to_utc)
+    demand.drop(columns=['LocalHourID','DateTime'], inplace=True)
+    demand.set_index('UTC_Time', inplace=True)
+
+    demand = demand.pivot(columns='State', values='LoadMW')
+    n.buses['load_dissag'] = n.buses.state
+    intersection = set(demand.columns).intersection( 
+            [const.STATE_2_CODE.get(item, item) for item in n.buses.load_dissag.unique()]
+            )
+    demand = demand[list(intersection)]
+    demand.columns = [{v: k for k, v in const.STATE_2_CODE.items()}.get(item, item) for item in demand.columns]
+    demand = demand.dropna()
+    demand.index = n.snapshots
+    
+    return disaggregate_demand_to_buses(n, demand)
 
 def disaggregate_demand_to_buses(n: pypsa.Network, 
                                  demand: pd.DataFrame) -> pd.DataFrame:
@@ -786,41 +789,22 @@ def disaggregate_demand_to_buses(n: pypsa.Network,
     n.buses.drop(columns=['proportion'], inplace=True)
     return bus_demand.fillna(0)
 
-
-def add_demand_from_file(n: pypsa.Network, 
-                         fn_demand: str, 
-                         demand_type: str):
+def attach_demand(n: pypsa.Network, configuration: str):
     """
     Add demand to network from specified configuration setting. Returns network with demand added.
     """
-    if demand_type == "breakthrough":
-        demand_per_bus = prepare_breakthrough_demand_data(n, fn_demand)
-    elif demand_type == "ads":
-        demand_per_bus = prepare_ads_demand(n, fn_demand)
-    elif demand_type == "pypsa-usa":
-        demand_per_bus = prepare_eia_demand(n, fn_demand)
+    if configuration == "ads":
+        demand_per_bus = prepare_ads_demand(n, f'data/WECC_ADS/processed/load_2032.csv')
+    elif configuration == "pypsa-usa":
+        if snakemake.params.get('planning_horizons'):
+            demand_per_bus = prepare_efs_demand(n, snakemake.params.get('planning_horizons'))
+        else:
+            demand_per_bus = prepare_eia_demand(n, snakemake.input['eia'][0])
     else:
-        raise ValueError("Invalid demand_type. Supported values are 'breakthrough', 'ads', and 'pypsa-usa'.")
+        raise ValueError("Invalid demand_type. Supported values are 'ads', and 'pypsa-usa'.")
     n.madd("Load", demand_per_bus.columns, bus=demand_per_bus.columns,
            p_set=demand_per_bus, carrier='AC')
 
-
-def test_snapshot_year_alignment(sns_year: int, configuration: str):
-    if configuration == "ads":
-        load_year = 2032
-    elif configuration == "breakthrough":
-        load_year = 2016
-    else:
-        return
-    if sns_year != load_year:
-        raise ValueError(f"""Snapshot start year {sns_year} does not match load year {load_year}
-                          required for {configuration} configuration.
-                          Please update the snapshot start year in the config file. \n
-                            ads requires 2032 \n
-                            breakthrough requires 2016 \n
-                            \n
-                          """)
-                          
 
 def attach_conventional_generators(
     n: pypsa.Network,
@@ -841,14 +825,6 @@ def attach_conventional_generators(
     ]
     add_missing_carriers(n, carriers)
     add_co2_emissions(n, costs, carriers)
-
-    # Replace carrier "natural gas" with the respective technology (OCGT or
-    # CCGT) to align with PyPSA names of "carriers" and avoid filtering "natural
-    # gas" powerplants in ppl.query("carrier in @carriers")
-
-    # plants.loc[plants["carrier"] == "natural gas", "carrier"] = plants.loc[
-    #     plants["carrier"] == "natural gas", "technology"
-    # ]
 
     plants = (
         plants.query("carrier in @carriers")
@@ -979,10 +955,12 @@ def attach_wind_and_solar(
             )
 
 
-def attach_battery_storage(n: pypsa.Network, 
-                           plants: pd.DataFrame, 
-                           extendable_carriers, 
-                           costs):
+def attach_battery_storage(
+    n: pypsa.Network, 
+    plants: pd.DataFrame, 
+    extendable_carriers, 
+    costs
+    ):
     """Attaches Battery Energy Storage Systems To the Network.
     """
     plants_filt = plants.query("carrier == 'battery' ")
@@ -1011,7 +989,7 @@ def load_powerplants_eia(
     eia_dataset: str, 
     carrier_mapper: Dict[str,str] = None,
     interconnect: str = None,
-) -> pd.DataFrame:
+    ) -> pd.DataFrame:
     # load data
     plants = pd.read_csv(
         eia_dataset, 
@@ -1084,7 +1062,6 @@ def attach_ads_renewables(n, plants_df, renewable_carriers, extendable_carriers,
             profiles = pd.read_csv(ads_renewables_path + "/solar_2032.csv", index_col=0)
             dpv = pd.read_csv(ads_renewables_path + "/btm_solar_2032.csv", index_col=0)
             profiles = pd.concat([profiles, dpv], axis = 1)
-            # plants_filt = plants_filt.dropna(subset=['dispatchshapename']) # dropping the two Solar + Storage plants without dispatch shapes (only the storage plants get dropped)... 
         else:
             profiles = pd.read_csv(ads_renewables_path + f'/{tech_type}_2032.csv', index_col=0)
         
@@ -1141,7 +1118,6 @@ def attach_ads_renewables(n, plants_df, renewable_carriers, extendable_carriers,
             p_nom_min=p_nom,
             p_nom=p_nom,
             marginal_cost=0, #(MMBTu/MW) * (USD/MMBTu) = USD/MW
-            # marginal_cost_quadratic = tech_plants.GenIOC * tech_plants.GenFuelCost, 
             capital_cost=costs.at[tech_type, "capital_cost"],
             p_max_pu=p_max_pu, #timeseries of max power output pu
             p_nom_extendable= tech_type in extendable_carriers["Generator"],
@@ -1157,7 +1133,7 @@ def load_powerplants_ads(
     tech_mapper: Dict[str,str] = None,
     carrier_mapper: Dict[str,str] = None,
     fuel_mapper: Dict[str,str] = None
-) -> pd.DataFrame:
+    ) -> pd.DataFrame:
     """Loads base ADS plants, fills missing data, and applies name mappings.
     
     Arguments
@@ -1198,36 +1174,19 @@ def clean_bus_data(n: pypsa.Network):
     col_list = ['poi_bus', 'poi_sub', 'poi', 'Pd', 'zone_id', 'load_dissag']
     n.buses.drop(columns=col_list, inplace=True)
 
-def load_powerplants_breakthrough(breakthrough_dataset: str) -> pd.DataFrame:
-    """Loads base Breakthrough Energy plants and applies name mappings"""
-
-    plants = pd.read_csv(breakthrough_dataset, dtype={"bus_id": str}, index_col=0).query("bus_id in @n.buses.index")
-    plants.replace(["dfo"], ["oil"], inplace=True)
-    plants['generator_name'] = plants.index.astype(str)
-    plants['bus_assignment']= plants.bus_id.astype(str)
-    plants['p_nom']= plants['Pmax']
-    plants['heat_rate']= plants['GenIOB']
-    plants['marginal_cost']= plants['GenIOB'] * plants['GenFuelCost']  #(MMBTu/MW) * (USD/MMBTu) = USD/MW
-    plants['efficiency']= 1 / (plants['GenIOB'] / 3.412) #MMBTu/MWh to MWh_electric/MWh_thermal
-    plants['carrier']= plants.type
-    return plants
-
 
 def main(snakemake):
     params = snakemake.params
     configuration = snakemake.config["network_configuration"]
     interconnection = snakemake.wildcards["interconnect"]
+    planning_horizons = snakemake.params['planning_horizons']
 
     n = pypsa.Network(snakemake.input.base_network)
 
     snapshot_config = snakemake.config['snapshots']
-    sns_start = pd.to_datetime(snapshot_config['start'] + ' 07:00:00') 
-    # Shifting to 7am UTC since this is the Midnight PST time. 
-    # Work around to deal with the fact that the load data is in UTC and n.snapshots is in UTC... but annual EIA file doesnt include first 7 UTC hours of the year.... 
-    # TODO: Need to combine all EIA data into one file then filter based on n.snapshots
-    sns_end = pd.to_datetime(snapshot_config['end'] + ' 00:00:00')
+    sns_start = pd.to_datetime(snapshot_config['start'] + ' 08:00:00') 
+    sns_end = pd.to_datetime(snapshot_config['end'] + ' 06:00:00')
     sns_inclusive = snapshot_config['inclusive']
-    test_snapshot_year_alignment(sns_start.year, configuration)
 
     n.set_snapshots(pd.date_range(freq="h", 
                             start= sns_start,
@@ -1276,13 +1235,8 @@ def main(snakemake):
         fuel_price = None
 
     if configuration  == "pypsa-usa":
-        fn_demand = snakemake.input['eia'][sns_start.year%2017]
         plants = load_powerplants_eia(snakemake.input['plants_eia'], const.EIA_CARRIER_MAPPER, interconnect=interconnection)
-    elif configuration  == "breakthrough":
-        fn_demand = snakemake.input["demand_breakthrough_2016"]
-        plants = load_powerplants_breakthrough(snakemake.input['plants_breakthrough'])
     elif configuration  == "ads2032":
-        fn_demand = f'data/WECC_ADS/processed/load_2032.csv'
         plants = load_powerplants_ads(
             snakemake.input['plants_ads'],
             const.ADS_SUB_TYPE_TECH_MAPPER, 
@@ -1295,7 +1249,7 @@ def main(snakemake):
     
     #Applying to all configurations
     plants = match_plant_to_bus(n, plants)
-    add_demand_from_file(n, fn_demand, configuration)
+    attach_demand(n, configuration)
 
     attach_conventional_generators(
         n,
@@ -1315,14 +1269,6 @@ def main(snakemake):
         extendable_carriers, 
         costs
     )
-    
-    # attach_hydro(n, 
-    #              costs, 
-    #              plants, 
-    #              snakemake.input.profile_hydro, 
-    #              hydro_capacities, 
-    #              "hydro"
-    #         )
     
     if configuration == "ads2032":
         attach_ads_renewables(

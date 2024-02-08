@@ -388,6 +388,30 @@ STATE_2_CODE = {
     "Mexico":"MX",
 }
 
+
+import pandas as pd
+import pytz
+from datetime import datetime, timedelta
+
+
+# Simplified dictionary to map states to their primary time zones.
+# Note: This does not account for states with multiple time zones or specific exceptions.
+STATE_2_TIMEZONE = {
+    'AL': 'US/Central', 'AK': 'US/Alaska', 'AZ': 'US/Mountain', 'AR': 'US/Central',
+    'CA': 'US/Pacific', 'CO': 'US/Mountain', 'CT': 'US/Eastern', 'DE': 'US/Eastern',
+    'FL': 'US/Eastern', 'GA': 'US/Eastern', 'HI': 'Pacific/Honolulu', 'ID': 'US/Mountain',
+    'IL': 'US/Central', 'IN': 'US/Eastern', 'IA': 'US/Central', 'KS': 'US/Central',
+    'KY': 'US/Eastern', 'LA': 'US/Central', 'ME': 'US/Eastern', 'MD': 'US/Eastern',
+    'MA': 'US/Eastern', 'MI': 'US/Eastern', 'MN': 'US/Central', 'MS': 'US/Central',
+    'MO': 'US/Central', 'MT': 'US/Mountain', 'NE': 'US/Central', 'NV': 'US/Pacific',
+    'NH': 'US/Eastern', 'NJ': 'US/Eastern', 'NM': 'US/Mountain', 'NY': 'US/Eastern',
+    'NC': 'US/Eastern', 'ND': 'US/Central', 'OH': 'US/Eastern', 'OK': 'US/Central',
+    'OR': 'US/Pacific', 'PA': 'US/Eastern', 'RI': 'US/Eastern', 'SC': 'US/Eastern',
+    'SD': 'US/Central', 'TN': 'US/Central', 'TX': 'US/Central', 'UT': 'US/Mountain',
+    'VT': 'US/Eastern', 'VA': 'US/Eastern', 'WA': 'US/Pacific', 'WV': 'US/Eastern',
+    'WI': 'US/Central', 'WY': 'US/Mountain'
+}
+
 ################################
 # Constants for Breakthrough mapping 
 ################################
