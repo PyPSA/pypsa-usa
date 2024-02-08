@@ -1,11 +1,4 @@
-"""Generic module to add a new energy network
-
-Creates new sector ontop of existing one. Note: Currently, can only be built ontop of electricity sector
-
-Marginal costs are handeled as follows:
-- Links are the VOM of just the technology
-- Replacement generators contain time varrying fuel costs
-"""
+"""Generic module to add a new energy network"""
 
 import pypsa
 import pandas as pd
@@ -14,7 +7,6 @@ from typing import List, Union, Dict
 import logging
 logger = logging.getLogger(__name__)
 from _helpers import configure_logging
-from add_electricity import load_costs
 from build_natural_gas import build_natural_gas
 from shapely.geometry import Point
 import constants
@@ -51,7 +43,7 @@ if __name__ == "__main__":
 
         snakemake = mock_snakemake(
             "add_sectors",
-            interconnect="western",
+            interconnect="texas",
             # simpl="",
             clusters="40",
             ll="v1.25",
@@ -77,15 +69,15 @@ if __name__ == "__main__":
         states_2_map = [x for x,y in constants.STATES_INTERCONNECT_MAPPER.items() if y == snakemake.wildcards.interconnect]
         
     code_2_state = {v: k for k, v in constants.STATE_2_CODE.items()}
-    assign_bus_2_state(n, snakemake.input.counties, states_2_map, code_2_state)
+    assign_bus_2_state(n, snakemake.input.county, states_2_map, code_2_state)
     
     if "G" in sectors:
         build_natural_gas(
             n=n,
-            year=pd.to_datetime(snakemake.parmas.snapshots["start"]).year,
+            year=pd.to_datetime(snakemake.params.snapshots["start"]).year,
             api=snakemake.params.api["eia"],
-            interconnect=snakemake.params.interconnect,
-            county=snakemake.input.county_path,
+            interconnect=snakemake.wildcards.interconnect,
+            county_path=snakemake.input.county,
             pipelines_path=snakemake.input.pipeline_capacity,
             pipeline_shape_path=snakemake.input.pipeline_shape,
             eia_757_path=snakemake.input.eia_757

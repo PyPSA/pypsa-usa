@@ -584,8 +584,8 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
             to_from = df[~df.INTERCONNECT_TO.isin(["canada", "mexico"])].copy()
             from_to = df[~df.INTERCONNECT_FROM.isin(["canada", "mexico"])].copy()
             
-        to_from["NAME"] = to_from.STATE_FROM + " " + to_from.STATE_TO
-        from_to["NAME"] = from_to.STATE_TO + " " + from_to.STATE_FROM
+        to_from["NAME"] = to_from.STATE_TO + " " + to_from.STATE_FROM
+        from_to["NAME"] = from_to.STATE_FROM + " " + from_to.STATE_TO
         
         to_from = to_from.set_index("NAME")
         from_to = from_to.set_index("NAME")
@@ -795,7 +795,7 @@ def convert_generators_2_links(n: pypsa.Network, carrier: str):
     pnl = {}
     
     # copy over pnl parameters 
-    for c in n.iterate_components(["Generators"]):
+    for c in n.iterate_components(["Generator"]):
         for param, df in c.pnl.items():
             # skip result vars 
             if param not in (
