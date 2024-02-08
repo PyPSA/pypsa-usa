@@ -19,7 +19,7 @@ scenario:
   sector: "" # G 
   planning_horizons:
     - 2030 #not implemented yet (temp placeholder)
-    # - 2040
+    - 2040
     # - 2050
 
 
@@ -32,11 +32,11 @@ focus_weights:
   # Offshore: 0.1     # Offshore buses require weighting- # Offshore nodes = weight * n_clusters
   # California: 0.5
 
-network_configuration: "pypsa-usa" # "pypsa-usa" or "ads2032" or "breakthrough"
+network_configuration: "pypsa-usa" # "pypsa-usa" or "ads2032"
 
 snapshots:
   start: "2019-01-01"
-  end: "2019-12-30"
+  end: "2020-01-01"
   inclusive: 'left'
 
 foresight:  # not implemented yet

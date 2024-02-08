@@ -209,6 +209,7 @@ rule add_electricity:
         electricity=config["electricity"],
         conventional=config["conventional"],
         costs=config["costs"],
+        planning_horizons=config["scenario"]["planning_horizons"],
     input:
         **{
             f"profile_{tech}": RESOURCES_BASE + "{interconnect}" + f"/profile_{tech}.nc"
@@ -233,7 +234,6 @@ rule add_electricity:
         wind_breakthrough=DATA + "breakthrough_network/base_grid/wind.csv",
         solar_breakthrough=DATA + "breakthrough_network/base_grid/solar.csv",
         bus2sub=DATA + "breakthrough_network/base_grid/{interconnect}/bus2sub.csv",
-        demand_breakthrough_2016=DATA + "breakthrough_network/base_grid/demand.csv",
         ads_renewables = 
             DATA + "WECC_ADS/processed/"
             if config["network_configuration"] == 'ads2032'
@@ -250,6 +250,7 @@ rule add_electricity:
             else []
         ,
         eia = expand(DATA + "GridEmissions/{file}", file=DATAFILES_DMD),
+        efs = DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv",
         **{
             f"gen_cost_mult_{Path(x).stem}":f"repo_data/locational_multipliers/{Path(x).name}" for x in Path("repo_data/locational_multipliers/").glob("*")
         },

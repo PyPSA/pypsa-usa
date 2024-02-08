@@ -46,6 +46,11 @@ rule retrieve_zenodo_databundles:
     script:
         "../scripts/retrieve_databundles.py"    
 
+def define_nrel_databundles():
+    return {
+        'EFS':"https://data.nrel.gov/system/files/126/EFSLoadProfile_Reference_Moderate.zip"
+        }
+
 rule retrieve_nrel_efs_data:
     params:
         define_nrel_databundles()
