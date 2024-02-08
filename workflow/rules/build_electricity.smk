@@ -82,7 +82,7 @@ rule build_cost_data:
         LOGS + "costs_{year}.log",
     threads: 1
     resources:
-        mem_mb=300,
+        mem_mb=1000,
     script:
         "../scripts/build_cost_data.py"
 
