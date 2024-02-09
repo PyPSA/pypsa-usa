@@ -50,6 +50,7 @@ import geopandas as gpd
 from shapely.geometry import Point
 from sklearn.neighbors import BallTree
 import constants as const
+from build_shapes import load_na_shapes
 
 
 def haversine_np(lon1, lat1, lon2, lat2):
@@ -85,7 +86,6 @@ def add_buses_from_file(n: pypsa.Network, buses: gpd.GeoDataFrame, interconnect:
         buses.index,
         Pd = buses.Pd, # used to decompose zone demand to bus demand
         v_nom = buses.baseKV,
-        zone_id = buses.zone_id,
         balancing_area = buses.balancing_area,
         state = buses.state,
         country = buses.country,
@@ -94,7 +94,8 @@ def add_buses_from_file(n: pypsa.Network, buses: gpd.GeoDataFrame, interconnect:
         y = buses.lat,
         sub_id = buses.sub_id,
         substation_off = False,
-        poi = False
+        poi = False,
+        LAF_states = buses.LAF_states,
     )
 
     n.buses.loc[n.buses.sub_id.astype(int) >= 41012, 'substation_off'] = True #mark offshore buses
@@ -485,12 +486,19 @@ def main(snakemake):
     # country and state shapes
     state_shape = gpd.read_file(snakemake.input["state_shapes"])
     state_shape = state_shape.rename(columns={"name":"state"})
+    na_shape = load_na_shapes().rename(columns={'name':'full_states'})
 
     #assign ba, state, and country to each bus
+    gdf_bus = map_bus_to_region(gdf_bus, na_shape, "full_states")
     gdf_bus = map_bus_to_region(gdf_bus, ba_shape, "balancing_area")
     gdf_bus = map_bus_to_region(gdf_bus, state_shape, "state")
     gdf_bus = map_bus_to_region(gdf_bus, state_shape, "country")
     
+    # assign load allocation factors to buses for state level dissagregation
+    group_sums = gdf_bus.groupby('full_states')['Pd'].transform('sum')
+    gdf_bus['LAF_states'] = gdf_bus['Pd'] / group_sums
+    gdf_bus.drop(columns=['full_states'], inplace=True)
+
     # Removing few duplicated shapes where GIS shapes were overlapping. TODO Fix GIS shapes
     gdf_bus = gdf_bus.reset_index().drop_duplicates(subset='bus_id', keep='first').set_index('bus_id')
 

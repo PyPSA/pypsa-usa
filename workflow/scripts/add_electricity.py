@@ -720,6 +720,7 @@ def prepare_ads_demand(n: pypsa.Network,
     n.buses['load_dissag'] = n.buses.balancing_area.replace({'': 'missing_ba'})
     intersection = set(demand.columns).intersection(n.buses.ba_load_data.unique())
     demand = demand[list(intersection)]
+    set_load_allocation_factor(n)
     return disaggregate_demand_to_buses(n, demand)
 
 
@@ -739,6 +740,8 @@ def prepare_eia_demand(n: pypsa.Network,
     n.buses['load_dissag'] = n.buses.load_dissag.replace({'': 'missing_ba'})
     intersection = set(demand.columns).intersection(n.buses.load_dissag.unique())
     demand = demand[list(intersection)]
+
+    set_load_allocation_factor(n)
     return disaggregate_demand_to_buses(n, demand)
 
 def prepare_efs_demand(n: pypsa.Network,
@@ -746,7 +749,7 @@ def prepare_efs_demand(n: pypsa.Network,
                           ) -> pd.DataFrame:
     logger.info('Building Load Data using EFS demand')
     demand = pd.read_csv(snakemake.input.efs)
-
+    # TODO- Need to distribute load taking into account proportion of Pd not included in each state. ie need a new column from build base network that is the proportion of Pd for each state
     demand = demand.loc[demand.Year == planning_horizons[0]]
     demand.drop(columns=['Electrification','TechnologyAdvancement','Sector','Subsector','Year'], inplace=True)
     #TODO: We are throwing out great data here on the sector and subsector loads. Revisit this.
@@ -767,26 +770,31 @@ def prepare_efs_demand(n: pypsa.Network,
     demand.columns = [{v: k for k, v in const.STATE_2_CODE.items()}.get(item, item) for item in demand.columns]
     demand = demand.dropna()
     demand.index = n.snapshots
-    
+    n.buses.rename(columns={'LAF_states':'LAF'}, inplace=True)
+    # demand.loc[:,'Texas'] = demand.loc[:,'Texas'] / 400 #temp
     return disaggregate_demand_to_buses(n, demand)
+
+def set_load_allocation_factor(n: pypsa.Network) -> pd.DataFrame:
+    """
+    Defines Load allocation factor for each bus according to load_dissag for balancing areas
+    """
+    n.buses.Pd = n.buses.Pd.fillna(0)
+    group_sums = n.buses.groupby('load_dissag')['Pd'].transform('sum')
+    n.buses['LAF'] = n.buses['Pd'] / group_sums
 
 def disaggregate_demand_to_buses(n: pypsa.Network, 
                                  demand: pd.DataFrame) -> pd.DataFrame:
     """
     Zone power demand is disaggregated to buses proportional to Pd
     """
-
-    n.buses.Pd = n.buses.Pd.fillna(0)
-    group_sums = n.buses.groupby('load_dissag')['Pd'].transform('sum')
-    n.buses['proportion'] = n.buses['Pd'] / group_sums
     demand_aligned = demand.reindex(columns=n.buses['load_dissag'].unique(), fill_value=0)
     bus_demand = pd.DataFrame()
     for load_dissag in n.buses['load_dissag'].unique():
-        proportion = n.buses.loc[n.buses['load_dissag'] == load_dissag, 'proportion']
-        zone_bus_demand = demand_aligned[load_dissag].values.reshape(-1,1) * proportion.values.T
-        bus_demand = pd.concat([bus_demand, pd.DataFrame(zone_bus_demand, columns=proportion.index)], axis=1)
+        LAF = n.buses.loc[n.buses['load_dissag'] == load_dissag, 'LAF']
+        zone_bus_demand = demand_aligned[load_dissag].values.reshape(-1,1) * LAF.values.T
+        bus_demand = pd.concat([bus_demand, pd.DataFrame(zone_bus_demand, columns=LAF.index)], axis=1)
     bus_demand.index = n.snapshots
-    n.buses.drop(columns=['proportion'], inplace=True)
+    n.buses.drop(columns=['LAF'], inplace=True)
     return bus_demand.fillna(0)
 
 def attach_demand(n: pypsa.Network, configuration: str):
@@ -1171,7 +1179,7 @@ def load_powerplants_ads(
     return plants
 
 def clean_bus_data(n: pypsa.Network):
-    col_list = ['poi_bus', 'poi_sub', 'poi', 'Pd', 'zone_id', 'load_dissag']
+    col_list = ['poi_bus', 'poi_sub', 'poi', 'Pd', 'load_dissag']
     n.buses.drop(columns=col_list, inplace=True)
 
 

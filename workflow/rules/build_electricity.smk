@@ -3,7 +3,6 @@
 
 rule build_shapes:
     params:
-        source_states_shapes="admin_1_states_provinces",
         source_offshore_shapes=config["offshore_shape"],
         offwind_params=config["renewable"]["offwind"]
     input:
