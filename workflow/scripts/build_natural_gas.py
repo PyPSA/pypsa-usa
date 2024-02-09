@@ -270,6 +270,7 @@ class GasStorage(GasData):
         df = df.rename(columns={
             "base_capacity": "MIN_CAPACITY_MWH", 
             "total_capacity": "MAX_CAPACITY_MWH",
+            "working_capacity": "WORKING_CAPACITY_MWH",
             "state":"STATE"
             })
         return self.filter_on_interconnect(df, ["U.S."])
@@ -299,6 +300,7 @@ class GasStorage(GasData):
             e_nom=df.MAX_CAPACITY_MWH,
             e_cyclic=cyclic_storage,
             e_min_pu=df.MIN_CAPACITY_MWH / df.MAX_CAPACITY_MWH,
+            e_initial=df.MAX_CAPACITY_MWH - df.MIN_CAPACITY_MWH, # same as working
             marginal_cost=0 # to update
         )
         
