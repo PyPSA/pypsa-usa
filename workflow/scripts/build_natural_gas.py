@@ -298,12 +298,13 @@ class GasStorage(GasData):
             e_nom_extendable=False,
             e_nom=df.MAX_CAPACITY_MWH,
             e_cyclic=cyclic_storage,
-            e_min_pu=df.MIN_CAPACITY_MWH,
+            e_min_pu=df.MIN_CAPACITY_MWH / df.MAX_CAPACITY_MWH,
             marginal_cost=0 # to update
         )
         
-        # must do two links, rather than a bidirectional one, to constrain 
-        # daily discharge limits 
+        # must do two links, rather than a bidirectional one, to constrain charge limits 
+        # Right now, chanrge limits are set at being able to drain the reservoir 
+        # over one full month 
         n.madd(
             "Link",
             names=df.index,
@@ -311,6 +312,7 @@ class GasStorage(GasData):
             carrier="gas storage",
             bus0=df.index + " gas",
             bus1=df.index + " gas storage",
+            p_nom = (df.MAX_CAPACITY_MWH - df.MIN_CAPACITY_MWH) / (30 * 24),
             p_min_pu=0,
             p_max_pu=1,
             p_nom_extendable=False,
@@ -324,6 +326,7 @@ class GasStorage(GasData):
             carrier="gas storage",
             bus0=df.index + " gas storage",
             bus1=df.index + " gas",
+            p_nom = (df.MAX_CAPACITY_MWH - df.MIN_CAPACITY_MWH) / (30 * 24),
             p_min_pu=0,
             p_max_pu=1,
             p_nom_extendable=False,
@@ -651,6 +654,7 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
             capital_cost=0,
             e_nom=0,
             e_cyclic=False,
+            e_cyclic_per_period=False,
             marginal_cost=0,
         )
         
@@ -665,6 +669,7 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
             capital_cost=0,
             e_nom=0,
             e_cyclic=False,
+            e_cyclic_per_period=False,
             marginal_cost=0,
         )
 
