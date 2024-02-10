@@ -1,12 +1,13 @@
 # PyPSA-USA Default Configuration File
+network_configuration: "pypsa-usa" # "pypsa-usa" or "ads2032"
 
 run:
   name: "" # use this to keep track of runs with different settings
   disable_progressbar: false # set to true to disable the progressbar
   shared_resources: false # set to true to share the default resources across runs
-  shared_resources_base: true #set to true to share resources upstream of add_electricity in the workflow- ie. this will save you time if you do not change the "electricity" configuration
   shared_cutouts: true # set to true to share the default cutout(s) across runs
 
+# docs :
 scenario:
   interconnect: western #"usa|texas|western|eastern"
   clusters: [30]
@@ -21,23 +22,21 @@ scenario:
   planning_horizons:
     - 2030 #  # Uncomment to use NREL EFS Demand Forecasts (2030, 2040, 2050)
 
+foresight:  # Only Single Stage Currently
 
+
+# docs :
 enable:
   build_cutout: false
 
 countries: [US]  
-
-focus_weights:
-  # California: 0.5
-
-network_configuration: "pypsa-usa" # "pypsa-usa" or "ads2032"
 
 snapshots:
   start: "2019-01-01"
   end: "2020-01-01"
   inclusive: 'left'
 
-foresight:  # not implemented yet
+# docs :
 
 # docs :
 atlite:
@@ -279,7 +278,9 @@ clustering:
       efficiency: mean
     buses:
       state: max # temp fix. When fixing state aggregation- change add electricity such that region info not is use is removed.
-    
+
+focus_weights:
+  # California: 0.5
 
 # docs :
 solving:

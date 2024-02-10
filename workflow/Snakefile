@@ -69,7 +69,6 @@ LOGS = "logs/" + RDIR
 BENCHMARKS = "benchmarks/" + RDIR
 DATA = "data/" + RDIR
 RESOURCES = "resources/" + RDIR if not run.get("shared_resources") else "resources/"
-RESOURCES_BASE = "resources/" + RDIR if not run.get("shared_resources_base") else "resources/"
 RESULTS = "results/" + RDIR
 
 include: "rules/common.smk"
