@@ -1,10 +1,10 @@
 # PyPSA-USA Default Configuration File
 
 run:
-  name: "BalancingAreas" # use this to keep track of runs with different settings
+  name: "" # use this to keep track of runs with different settings
   disable_progressbar: false # set to true to disable the progressbar
   shared_resources: false # set to true to share the default resources across runs
-  shared_resources_base: false #set to true to share resources upstream of add_electricity in the workflow- ie. this will save you time if you do not change the "electricity" configuration
+  shared_resources_base: true #set to true to share resources upstream of add_electricity in the workflow- ie. this will save you time if you do not change the "electricity" configuration
   shared_cutouts: true # set to true to share the default cutout(s) across runs
 
 scenario:
@@ -12,16 +12,14 @@ scenario:
   clusters: [30]
   opts:
     [
-      Co2L0.75-4H, # Cluster to 1000 hours in the year 
-      # Co2L0.5-4H, # Cluster to 1000 hours in the year 
-      # Co2L0.25-4H, # Cluster to 1000 hours in the year 
-      # Co2L0.25-4H, # Cluster to 1000 hours in the year 
+      Co2L0.75-4H,
+
     ]
   ll: [v1.15] 
   scope: "total" # "urban", "rural", or "total" 
   sector: "" # G 
-  planning_horizons: # Uncomment to use NREL EFS Demand Forecasts
-    - 2030 # 2030, 2040, 2050
+  planning_horizons:
+    - 2030 #  # Uncomment to use NREL EFS Demand Forecasts (2030, 2040, 2050)
 
 
 enable:
