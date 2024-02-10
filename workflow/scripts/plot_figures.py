@@ -43,7 +43,7 @@ Emission charts for:
 
 import sys
 import os
-from typing import Dict, Union, List
+from typing import Dict, Union, List, Tuple
 
 import pypsa
 import matplotlib.pyplot as plt
@@ -144,38 +144,28 @@ def create_title(title: str, **wildcards) -> str:
     wildcards_joined = " | ".join(w)
     return f"{title} \n ({wildcards_joined})"
 
-def correct_ccgt_ocgt_buses(df: pd.DataFrame):
-    """Changes ocgt and ccgt LINK buses from xx_gas to just xx to plot
+def remove_sector_buses(df: pd.DataFrame) -> pd.DataFrame:
+    """Removes buses for sector coupling"""
     
-    Only needed when plotting gas sector results, as OCGT and CCGT generators 
-    are changed to links and grouped to bus0, which has the suffix " gas"
+    num_levels = df.index.nlevels
     
-    Input dataframe should have mulitlvel index, where the first level is 
-    the bus name
-    """
+    if num_levels > 1:
+        condition = (
+            (df.index.get_level_values("bus").str.endswith(" gas")) | 
+            (df.index.get_level_values("bus").str.endswith(" gas storage"))
+        )
+    else:
+        condition = (
+            (df.index.str.endswith(" gas")) | 
+            (df.index.str.endswith(" gas storage")) | 
+            (df.index.str.endswith(" gas import")) | 
+            (df.index.str.endswith(" gas export"))
+        )
+    return df.loc[~condition].copy()
 
-    condition = (
-        (df.index.get_level_values("bus").str.endswith(" gas")) & 
-        (df.index.get_level_values("carrier").isin(["OCGT", "ocgt", "CCGT", "ccgt"])) 
-    )
-    return df.rename(
-        index={x:x.replace(" gas","") for x in df.loc[condition].index.get_level_values("bus")}, 
-        level="bus"
-    )
-
-def correct_ccgt_ocgt_buses_single_index(df: pd.DataFrame):
-    """Changes ocgt and ccgt LINK buses from xx_gas to just xx to plot
-    
-    Only needed when plotting gas sector results, as OCGT and CCGT generators 
-    are changed to links and grouped to bus0, which has the suffix " gas"
-    """
-
-    condition = (df.index.str.endswith(" gas"))
-    return (
-        df
-        .rename(index={x:x.replace(" gas","") for x in df.loc[condition].index})
-        .groupby(level=0).sum()
-    )
+def remove_sector_links(df: pd.DataFrame) -> pd.DataFrame:
+    """Removes links for plotting capacity"""
+    pass
 
 def plot_emissions_map(n: pypsa.Network, regions: gpd.GeoDataFrame, save:str, **wildcards) -> None:
      
@@ -183,10 +173,13 @@ def plot_emissions_map(n: pypsa.Network, regions: gpd.GeoDataFrame, save:str, **
     
     emissions = (
         get_node_emissions_timeseries(n)
+        .groupby(level=0, axis=1) # group columns 
         .sum()
+        .sum() # collaps rows
         .mul(1e-6) # T -> MT
     )
-    emissions = correct_ccgt_ocgt_buses_single_index(emissions)
+    emissions = remove_sector_buses(emissions.T).T
+    emissions.index.name = "bus"
     
     # plot data
     
@@ -594,7 +587,7 @@ def plot_capacity_map(
     bus_scale=1, 
     line_scale=1, 
     title = None
-) -> (plt.figure, plt.axes):
+) -> Tuple[plt.figure, plt.axes]:
     """
     Generic network plotting function for capacity pie charts at each node
     """
@@ -685,10 +678,11 @@ def plot_base_capacity(
     # get data
 
     bus_values = get_capacity_base(n)
-    bus_values = correct_ccgt_ocgt_buses(bus_values).groupby(by=["bus", "carrier"]).sum()
     bus_values = bus_values[bus_values.index.get_level_values(1).isin(carriers)]
+    bus_values = remove_sector_buses(bus_values).groupby(by=["bus", "carrier"]).sum()
+    
     line_values = n.lines.s_nom
-    # link_values = n.links.p_nom
+    link_values = n.links.p_nom.replace(0)
     
     # plot data
     
@@ -701,7 +695,8 @@ def plot_base_capacity(
         n=n, 
         bus_values=bus_values,
         line_values=line_values,
-        link_values=n.links.p_nom.replace(0),
+        # link_values=link_values,
+        link_values=pd.DataFrame(),
         regions=regions,
         line_scale=line_scale,
         bus_scale=bus_scale,
@@ -730,8 +725,15 @@ def plot_opt_capacity(
         logger.error(f"Capacity method must be one of 'greenfield' or 'brownfield'. Recieved {opt_capacity}.")
         raise NotImplementedError
     
-    bus_values = correct_ccgt_ocgt_buses(bus_values).groupby(by=["bus", "carrier"]).sum()
-    bus_values = bus_values[bus_values.index.get_level_values(1).isin(carriers)]
+    # a little awkward to fix color plotting referece issue
+    bus_values = bus_values[bus_values.index.get_level_values("carrier").isin(carriers)]
+    bus_values = (
+        remove_sector_buses(bus_values)
+        .reset_index()
+        .groupby(by=["bus", "carrier"])
+        .sum()
+        .squeeze()
+    )
     
     line_values = n.lines.s_nom_opt
     # link_values = n.links.p_nom_opt
@@ -745,7 +747,7 @@ def plot_opt_capacity(
     
     fig, _ = plot_capacity_map(
         n=n, 
-        bus_values=bus_values,
+        bus_values=bus_values.copy(),
         line_values=line_values,
         link_values=n.links.p_nom.replace(0),
         regions=regions,
@@ -777,12 +779,20 @@ def plot_new_capacity(
         logger.error(f"Capacity method must be one of 'greenfield' or 'brownfield'. Recieved {opt_capacity}.")
         raise NotImplementedError
     
+    # awkward processing to fix color plotting issue 
+    
     bus_values = bus_pnom_opt - bus_pnom
-    bus_values = correct_ccgt_ocgt_buses(bus_values).groupby(by=["bus", "carrier"]).sum()
     bus_values = bus_values[
         (bus_values > 0) & 
         (bus_values.index.get_level_values(1).isin(carriers))
     ]
+    bus_values = (
+        remove_sector_buses(bus_values)
+        .reset_index()
+        .groupby(by=["bus", "carrier"])
+        .sum()
+        .squeeze()
+    )
     
     line_snom = n.lines.s_nom
     line_snom_opt = n.lines.s_nom_opt
@@ -803,7 +813,8 @@ def plot_new_capacity(
         n=n, 
         bus_values=bus_values,
         line_values=line_values,
-        link_values=n.links.p_nom.replace(0),
+        # link_values=n.links.p_nom.replace(0),
+        link_values=pd.DataFrame(),
         regions=regions,
         line_scale=line_scale,
         bus_scale=bus_scale,
@@ -952,11 +963,11 @@ if __name__ == "__main__":
         from _helpers import mock_snakemake
         snakemake = mock_snakemake(
             'plot_figures', 
-            interconnect='western',
+            interconnect='texas',
             clusters=40,
             ll='v1.25',
             opts='Co2L1.25',
-            sector="E"
+            sector="E-G"
         )
     configure_logging(snakemake)
     

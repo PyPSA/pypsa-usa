@@ -855,7 +855,7 @@ def build_natural_gas(
 
     # add gas carrier
     
-    n.add("Carrier","gas")
+    n.add("Carrier", "gas", color="#d35050", nice_name="Natural Gas")
 
     # add state level gas buses
 
