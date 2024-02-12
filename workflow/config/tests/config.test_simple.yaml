@@ -13,7 +13,8 @@ scenario:
   clusters: [10]
   opts:
     [
-      Co2L0.75-6H,
+      Co2L0.9-4H,
+      Co2L0.5-4H,
 
     ]
   ll: [v1.15] 

@@ -749,7 +749,7 @@ def prepare_efs_demand(n: pypsa.Network,
                           ) -> pd.DataFrame:
     logger.info('Building Load Data using EFS demand')
     demand = pd.read_csv(snakemake.input.efs)
-    # TODO- Need to distribute load taking into account proportion of Pd not included in each state. ie need a new column from build base network that is the proportion of Pd for each state
+
     demand = demand.loc[demand.Year == planning_horizons[0]]
     demand.drop(columns=['Electrification','TechnologyAdvancement','Sector','Subsector','Year'], inplace=True)
     #TODO: We are throwing out great data here on the sector and subsector loads. Revisit this.
@@ -769,6 +769,8 @@ def prepare_efs_demand(n: pypsa.Network,
     demand = demand[list(intersection)]
     demand.columns = [{v: k for k, v in const.STATE_2_CODE.items()}.get(item, item) for item in demand.columns]
     demand = demand.dropna()
+    if snakemake.wildcards.interconnect == 'texas':
+        demand = demand.iloc[2:,:] #temp fix for lining up timezones
     demand.index = n.snapshots
     n.buses.rename(columns={'LAF_states':'LAF'}, inplace=True)
     # demand.loc[:,'Texas'] = demand.loc[:,'Texas'] / 400 #temp
@@ -1365,6 +1367,6 @@ def main(snakemake):
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
-        snakemake = mock_snakemake("add_electricity", interconnect="western")
+        snakemake = mock_snakemake("add_electricity", interconnect="texas")
     configure_logging(snakemake)
     main(snakemake)

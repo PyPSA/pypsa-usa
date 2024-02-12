@@ -106,6 +106,10 @@ def get_demand_timeseries(n: pypsa.Network) -> pd.DataFrame:
     """Gets timeseries energy demand"""
     return pd.DataFrame(n.loads_t.p.sum(1)).rename(columns={0:"Demand"})
 
+def get_demand_base(n: pypsa.Network) -> pd.DataFrame:
+    """Gets Nodal Sum of Demand"""
+    return  pd.DataFrame(n.loads_t.p).rename(columns=n.loads.bus).sum(0)
+
 ### 
 # ENERGY CAPACITY
 ###
