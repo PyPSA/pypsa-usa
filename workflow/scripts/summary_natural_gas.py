@@ -47,21 +47,17 @@ def get_imports_exports(n: pypsa.Network, international: bool = True) -> pd.Data
     exports = get_import_export(df, "export")
     
     if international:
-        imports = get_international(df)
-        exports = get_international(df)
+        imports = get_international(imports)
+        exports = get_international(exports)
     else:
-        imports = get_domestic(df)
-        exports = get_domestic(df)
-    
-    exports_t = n.stores_t.e[exports.index].sum(axis=1)
+        imports = get_domestic(imports)
+        exports = get_domestic(exports)
+
     imports_t = n.stores_t.e[imports.index].sum(axis=1)
+    exports_t = n.stores_t.e[exports.index].sum(axis=1)
     
-    if international:
-        imports_t.name = "International Gas Imports"
-        exports_t.name = "International Gas Exports"
-    else:
-        imports_t.name = "Domestic Gas Imports"
-        exports_t.name = "Domestic Gas Exports"
+    imports_t.name = "Imports"
+    exports_t.name = "Exports"
 
     return pd.concat([imports_t, exports_t], axis=1)
 

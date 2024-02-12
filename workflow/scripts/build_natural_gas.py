@@ -298,7 +298,8 @@ class GasStorage(GasData):
             carrier="gas storage",
             e_nom_extendable=False,
             e_nom=df.MAX_CAPACITY_MWH,
-            e_cyclic=cyclic_storage,
+            # e_cyclic=cyclic_storage,
+            e_cyclic=True,
             e_min_pu=df.MIN_CAPACITY_MWH / df.MAX_CAPACITY_MWH,
             e_initial=df.MAX_CAPACITY_MWH - df.MIN_CAPACITY_MWH, # same as working
             marginal_cost=0 # to update
@@ -389,7 +390,8 @@ class GasProcessing(GasData):
             suffix=" gas production",
             bus=df.bus,
             carrier="gas",
-            p_nom_extendable=False,
+            p_nom_extendable=True,
+            capital_cost = 0.01,
             marginal_costs=0.35, # https://www.eia.gov/analysis/studies/drilling/pdf/upstream.pdf
             p_nom=df.CAPACITY_MWH
         )
@@ -517,8 +519,9 @@ class InterconnectGasPipelineCapacity(_GasPipelineCapacity):
 class TradeGasPipelineCapacity(_GasPipelineCapacity):
     """Pipeline capcity connecting to the interconnect"""
     
-    def __init__(self, year: int, interconnect: str, xlsx: str, domestic: bool = True) -> None:
+    def __init__(self, year: int, interconnect: str, xlsx: str, api: str, domestic: bool = True) -> None:
         self.domestic = domestic
+        self.api = api
         super().__init__(year, interconnect, xlsx)
         
         
@@ -560,6 +563,24 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
                 (df.INTERCONNECT_TO == self.interconnect) | 
                 (df.INTERCONNECT_FROM == self.interconnect)
             ]
+            
+    def _get_international_costs(self, direction: str, interpoloation_method: str = "zero") -> pd.DataFrame:
+        """Gets timeseries of international costs in $/MWh
+        
+        interpolation_method can be one of: 
+        - linear, zero
+        """
+        
+        assert direction in ("imports", "exports")
+        
+        # fuel costs/profits at a national level 
+        costs = eia.FuelCosts("gas", direction, self.year, self.api).get_data()
+        
+        # fuel costs come in MCF, so first convert to MMCF
+        costs = costs[["value"]].astype("float")
+        costs = costs / 1000 * MMCF_2_MWH
+        
+        return costs.resample("H").asfreq().interpolate(method=interpoloation_method)
             
     def build_infrastructure(self, n: pypsa.Network) -> None:
         """Builds import and export bus+link+store to connect to
@@ -615,6 +636,18 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
             interconnect=self.interconnect,
         )
         
+        if not self.domestic:            
+            export_costs = self._get_international_costs("exports")
+            export_costs = export_costs[
+                (export_costs.index >= n.snapshots[0]) & 
+                (export_costs.index <= n.snapshots[-1])
+            ].copy()
+            for link in to_from.index:
+                export_costs[link] = export_costs["value"]
+            export_costs = export_costs.drop(columns=["value"])
+        else:
+            export_costs=0
+        
         n.madd(
             "Link",
             names=to_from.index,
@@ -627,9 +660,22 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
             p_min_pu=0,
             p_max_pu=1,
             p_nom_extendable=False,
-            marginal_cost=0,
+            efficiency=1, # must be 1 for proper cost accounting 
+            marginal_cost=export_costs * (-1), # note the negative value! 
         )
-        
+
+        if not self.domestic:
+            import_costs = self._get_international_costs("imports")
+            import_costs = import_costs[
+                (import_costs.index >= n.snapshots[0]) & 
+                (import_costs.index <= n.snapshots[-1])
+            ].copy()
+            for link in from_to.index:
+                import_costs[link] = import_costs["value"]
+            import_costs = import_costs.drop(columns=["value"])
+        else:
+            import_costs=0
+
         n.madd(
             "Link",
             names=from_to.index,
@@ -642,7 +688,8 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
             p_min_pu=0,
             p_max_pu=1,
             p_nom_extendable=False,
-            marginal_cost=0,
+            efficiency=1, # must be 1 for proper cost accounting 
+            marginal_cost=import_costs,
         )
         
         n.madd(
@@ -850,7 +897,7 @@ def build_natural_gas(
     county_path: str = "../data/counties/cb_2020_us_county_500k.shp",
     pipelines_path: str = "../data/natural_gas/EIA-StatetoStateCapacity_Jan2023.xlsx",
     pipeline_shape_path: str = "../data/natural_gas/pipelines.geojson",
-    eia_757_path: str = "../data/natural_gas/eia_757.csv",
+    eia_757_path: str = "../data/natural_gas/EIA-757.csv",
 ) -> None:
 
     # add gas carrier
@@ -880,9 +927,9 @@ def build_natural_gas(
     # add pipelines for imports/exports 
     # TODO: have trade pipelines share data to only instantiate once
     
-    pipelines_domestic = TradeGasPipelineCapacity(year, interconnect, pipelines_path, domestic=True)
+    pipelines_domestic = TradeGasPipelineCapacity(year, interconnect, pipelines_path, api, domestic=True)
     pipelines_domestic.build_infrastructure(n)
-    pipelines_international = TradeGasPipelineCapacity(year, interconnect, pipelines_path, domestic=False)
+    pipelines_international = TradeGasPipelineCapacity(year, interconnect, pipelines_path, api, domestic=False)
     pipelines_international.build_infrastructure(n)
     
     # add pipeline linepack 
@@ -896,8 +943,8 @@ def build_natural_gas(
 
 if __name__ == "__main__":
 
-    n = pypsa.Network("../resources/western/elec_s_30_ec_lv1.25_Co2L1.25.nc")
-    year = 2020
+    n = pypsa.Network("../resources/texas/elec_s_40_ec_lv1.25_Co2L1.25.nc")
+    year = 2019
     with open("./../config/config.api.yaml", "r") as file:
         yaml_data = yaml.safe_load(file)
     api = yaml_data["api"]["eia"]
