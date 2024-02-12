@@ -9,13 +9,11 @@ run:
 
 # docs :
 scenario:
-  interconnect: texas #"usa|texas|western|eastern"
-  clusters: [10]
+  interconnect: [western, texas] #"usa|texas|western|eastern"
+  clusters: [40]
   opts:
     [
       Co2L0.9-4H,
-      Co2L0.5-4H,
-
     ]
   ll: [v1.15] 
   scope: "total" # "urban", "rural", or "total" 
