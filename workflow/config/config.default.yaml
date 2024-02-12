@@ -80,7 +80,7 @@ electricity:
   retirement: economic # "economic" or "technical"
 
   operational_reserve:
-    activate: True
+    activate: False
     epsilon_load: 0.02
     epsilon_vres: 0.02
     contingency: 4000
