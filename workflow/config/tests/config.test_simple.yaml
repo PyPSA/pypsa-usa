@@ -2,31 +2,27 @@
 network_configuration: "pypsa-usa" # "pypsa-usa" or "ads2032"
 
 run:
-  name: "" # use this to keep track of runs with different settings
+  name: "Test_Simple" # use this to keep track of runs with different settings
   disable_progressbar: false # set to true to disable the progressbar
   shared_resources: false # set to true to share the default resources across runs
   shared_cutouts: true # set to true to share the default cutout(s) across runs
 
 # docs :
 scenario:
-  interconnect: western #"usa|texas|western|eastern"
-  clusters: [30, 100]
+  interconnect: texas #"usa|texas|western|eastern"
+  clusters: [10]
   opts:
     [
-      Co2L1.0-4H,
-      Co2L0.75-4H,
-      Co2L0.5-4H,
-      Co2L0.25-4H,
-      Co2L0.0-4H,
+      Co2L0.75-6H,
+
     ]
-  ll: [vopt, v1.15] 
+  ll: [v1.15] 
   scope: "total" # "urban", "rural", or "total" 
   sector: "" # G 
   planning_horizons:
     - 2030 #  # Uncomment to use NREL EFS Demand Forecasts (2030, 2040, 2050)
 
 foresight:  # Only Single Stage Currently
-
 
 # docs :
 enable:
@@ -83,7 +79,7 @@ electricity:
   retirement: economic # "economic" or "technical"
 
   operational_reserve:
-    activate: True
+    activate: False
     epsilon_load: 0.02
     epsilon_vres: 0.02
     contingency: 4000

@@ -73,7 +73,7 @@ rule build_bus_regions:
 
 rule build_cost_data:
     input:
-        nrel_atb = RESOURCES + "costs/nrel_atb.parquet",
+        nrel_atb = DATA + "costs/nrel_atb.parquet",
         pypsa_technology_data = RESOURCES + "costs/{year}/pypsa_eur.csv",
     output:
         tech_costs= RESOURCES + "costs_{year}.csv",
@@ -253,7 +253,7 @@ rule add_electricity:
         **{
             f"gen_cost_mult_{Path(x).stem}":f"repo_data/locational_multipliers/{Path(x).name}" for x in Path("repo_data/locational_multipliers/").glob("*")
         },
-        ng_electric_power_price = RESOURCES + "costs/ng_electric_power_price.csv",
+        ng_electric_power_price = DATA + "costs/ng_electric_power_price.csv",
     output:
         RESOURCES + "{interconnect}/elec_base_network_l_pp.nc",
     log:
