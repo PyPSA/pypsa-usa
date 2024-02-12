@@ -30,7 +30,7 @@ dependencies:
 - networkx==3.1
 - scipy==1.11.3
 - shapely==2.0.2
-- progressbar2==4.2.0
+- progressbar2==4.3.2
 - pyomo==6.6.2
 - matplotlib==3.8.0
 - plotly==5.17.0

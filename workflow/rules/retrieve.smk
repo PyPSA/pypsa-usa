@@ -16,6 +16,7 @@ breakthrough_datafiles = [
 
 pypsa_usa_datafiles = [
 "gebco/gebco_2023_tid_USA.nc",
+"gebco/gebco_2023_n55.0_s10.0_w-126.0_e-65.0.tif",
 "copernicus/PROBAV_LC100_global_v3.0.1_2019-nrt_Discrete-Classification-map_USA_EPSG-4326.tif",
 "eez/conus_eez.shp",
 "natura.tiff",
@@ -24,7 +25,7 @@ pypsa_usa_datafiles = [
 def define_zenodo_databundles():
     return {
         'USATestSystem':"https://zenodo.org/record/4538590/files/USATestSystem.zip",
-        'pypsa_usa_data':"https://zenodo.org/records/10278157/files/pypsa_usa_data.zip" 
+        'pypsa_usa_data':"https://zenodo.org/records/10480944/files/pypsa_usa_data.zip" 
         }
 
 def define_sector_databundles():
@@ -40,6 +41,8 @@ rule retrieve_zenodo_databundles:
         expand(DATA + "{file}", file=pypsa_usa_datafiles),
     log:
         "logs/retrieve/retrieve_databundles.log",
+    conda:
+        "../envs/environment.yaml"
     script:
         "../scripts/retrieve_databundles.py"
 
@@ -135,7 +138,7 @@ rule retrieve_cutout:
 
 rule retrieve_cost_data_eur:
     output:
-        pypsa_technology_data = RESOURCES + "costs/{year}/pypsa_eur.csv",
+        pypsa_technology_data = RESOURCES_BASE + "costs/{year}/pypsa_eur.csv",
     params:
         pypsa_costs_version = config["costs"].get("version", "v0.6.0")
     log:
@@ -147,12 +150,12 @@ rule retrieve_cost_data_eur:
 
 rule retrieve_cost_data_usa:
     output:
-        nrel_atb = RESOURCES + "costs/nrel_atb.parquet",
-        # nrel_atb_transport = RESOURCES + "costs/nrel_atb_transport.xlsx",
-        ng_electric_power_price = RESOURCES + "costs/ng_electric_power_price.csv",
-        ng_industrial_price = RESOURCES + "costs/ng_industrial_price.csv",
-        ng_residential_price = RESOURCES + "costs/ng_commercial_price.csv",
-        ng_commercial_price = RESOURCES + "costs/ng_residential_price.csv",
+        nrel_atb = RESOURCES_BASE + "costs/nrel_atb.parquet",
+        # nrel_atb_transport = RESOURCES_BASE + "costs/nrel_atb_transport.xlsx",
+        ng_electric_power_price = RESOURCES_BASE + "costs/ng_electric_power_price.csv",
+        ng_industrial_price = RESOURCES_BASE + "costs/ng_industrial_price.csv",
+        ng_residential_price = RESOURCES_BASE + "costs/ng_commercial_price.csv",
+        ng_commercial_price = RESOURCES_BASE + "costs/ng_residential_price.csv",
     params:
         # eia_api_key = config["api"].get("eia", None),
         eia_api_key = None,

@@ -1,1 +1,15 @@
-cluster: ""
+__default__:
+    account: iazevedo
+    partition: serc
+    email: ktehranchi@stanford.edu
+    walltime: 00:30:00 # time limit for each job
+    cpus_per_task: 1 # number of cores per job
+    chdir: $GROUP_HOME/kamran/pypsa-usa/workflow
+    output: logs/slurm/{rule}-%j.out
+    error: logs/slurm/err_{rule}-%j.err
+
+build_renewable_profiles:
+    walltime: 01:30:00
+
+solve_network:
+    walltime: 06:00:00

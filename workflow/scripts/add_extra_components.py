@@ -217,13 +217,13 @@ def add_economic_retirement(n: pypsa.Network, costs: pd.DataFrame, gens: List[st
     )
 
     n.generators["p_nom_max"] = np.where(
-        n.generators["p_nom_extendable"],
+        n.generators["p_nom_extendable"] & n.generators.carrier.isin(gens),
         n.generators["p_nom"],
         n.generators["p_nom_max"]
     )
 
     n.generators["p_nom_min"] = np.where(
-        n.generators["p_nom_extendable"],
+        n.generators["p_nom_extendable"] & n.generators.carrier.isin(gens),
         0,
         n.generators["p_nom_min"]
     )

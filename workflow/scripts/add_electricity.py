@@ -77,7 +77,7 @@ import os
 import pypsa
 from scipy import sparse
 import xarray as xr
-from _helpers import configure_logging, update_p_nom_max, export_network_for_gis_mapping
+from _helpers import configure_logging, update_p_nom_max, export_network_for_gis_mapping, test_network_datatype_consistency
 import constants as const
 from typing import Dict, Any, List, Union
 from pathlib import Path 
@@ -596,17 +596,6 @@ def attach_breakthrough_renewable_plants(
             weight=1.0,
             efficiency=costs.at[tech, "efficiency"],
         )
-
-    # hack to remove generators without capacity (required for SEG to work)
-    # shouldn't exist, in fact...
-
-    # p_max_pu_norm = n.generators_t.p_max_pu.max()
-    # remove_g = p_max_pu_norm[p_max_pu_norm == 0.0].index
-    # logger.info(
-    #     f"removing {len(remove_g)} {tech} generators {remove_g} with no renewable potential."
-    # )
-    # n.mremove("Generator", remove_g)
-
     return n
 
 
@@ -758,27 +747,44 @@ def prepare_eia_demand(n: pypsa.Network,
     #Combine EIA Demand Data to Match GIS Shapes
     #TODO: Include EIA sub-ba level data so this setp for CISO is not neccesary
     demand['Arizona'] = demand.pop('SRP') + demand.pop('AZPS')
-    n.buses['load_dissag'] = n.buses.balancing_area.replace({'^CISO.*': 'CISO'}, regex=True)
-    n.buses.load_dissag = n.buses.load_dissag.replace({'^ERCO.*': 'ERCO'}, regex=True)
+    n.buses['load_dissag'] = n.buses.balancing_area.replace({'^CISO.*': 'CISO', '^ERCO.*': 'ERCO'}, regex=True)
 
-    #TODO: There should be no buses with missing_bas
     n.buses['load_dissag'] = n.buses.load_dissag.replace({'': 'missing_ba'})
     intersection = set(demand.columns).intersection(n.buses.load_dissag.unique())
     demand = demand[list(intersection)]
     return disaggregate_demand_to_buses(n, demand)
 
+# def disaggregate_demand_to_buses(n: pypsa.Network, 
+#                                  demand: pd.DataFrame) -> pd.DataFrame:
+#     """
+#     Zone power demand is disaggregated to buses proportional to Pd,
+#     where Pd is the real power demand (MW).
+#     """
+#     demand_per_bus_pu = (n.buses.set_index("load_dissag").Pd / n.buses.groupby("load_dissag").sum().Pd)
+#     demand_per_bus = demand_per_bus_pu.multiply(demand)
+#     demand_per_bus.fillna(0, inplace=True)
+#     demand_per_bus.columns = n.buses.index
+#     return demand_per_bus
+
 
 def disaggregate_demand_to_buses(n: pypsa.Network, 
                                  demand: pd.DataFrame) -> pd.DataFrame:
     """
-    Zone power demand is disaggregated to buses proportional to Pd,
-    where Pd is the real power demand (MW).
+    Zone power demand is disaggregated to buses proportional to Pd
     """
-    demand_per_bus_pu = (n.buses.set_index("load_dissag").Pd / n.buses.groupby("load_dissag").sum().Pd)
-    demand_per_bus = demand_per_bus_pu.multiply(demand)
-    demand_per_bus.fillna(0, inplace=True)
-    demand_per_bus.columns = n.buses.index
-    return demand_per_bus
+
+    n.buses.Pd = n.buses.Pd.fillna(0)
+    group_sums = n.buses.groupby('load_dissag')['Pd'].transform('sum')
+    n.buses['proportion'] = n.buses['Pd'] / group_sums
+    demand_aligned = demand.reindex(columns=n.buses['load_dissag'].unique(), fill_value=0)
+    bus_demand = pd.DataFrame()
+    for load_dissag in n.buses['load_dissag'].unique():
+        proportion = n.buses.loc[n.buses['load_dissag'] == load_dissag, 'proportion']
+        zone_bus_demand = demand_aligned[load_dissag].values.reshape(-1,1) * proportion.values.T
+        bus_demand = pd.concat([bus_demand, pd.DataFrame(zone_bus_demand, columns=proportion.index)], axis=1)
+    bus_demand.index = n.snapshots
+    n.buses.drop(columns=['proportion'], inplace=True)
+    return bus_demand.fillna(0)
 
 
 def add_demand_from_file(n: pypsa.Network, 
@@ -814,6 +820,7 @@ def test_snapshot_year_alignment(sns_year: int, configuration: str):
                             breakthrough requires 2016 \n
                             \n
                           """)
+                          
 
 def attach_conventional_generators(
     n: pypsa.Network,
@@ -914,21 +921,23 @@ def attach_wind_and_solar(
                 continue
 
             supcar = car.split("-", 2)[0]
-            if supcar == "offwind":
+            if supcar == "offwind" or supcar == "offwind_floating":
+                if supcar == "offwind_floating":
+                    supcar = "offwind"
                 underwater_fraction = ds["underwater_fraction"].to_pandas()
                 connection_cost = (
                     line_length_factor
                     * ds["average_distance"].to_pandas()
                     * (
                         underwater_fraction
-                        * costs.at[car + "-ac-connection-submarine", "capital_cost"]
+                        * costs.at[supcar + "-ac-connection-submarine", "capital_cost"]
                         + (1.0 - underwater_fraction)
-                        * costs.at[car + "-ac-connection-underground", "capital_cost"]
+                        * costs.at[supcar + "-ac-connection-underground", "capital_cost"]
                     )
                 )
                 capital_cost = (
-                    costs.at["offwind", "capital_cost"]
-                    + costs.at[car + "-ac-station", "capital_cost"]
+                    costs.at[car, "capital_cost"]
+                    + costs.at[supcar + "-ac-station", "capital_cost"] #update to find floating substation costs
                     + connection_cost
                 )
 
@@ -946,7 +955,7 @@ def attach_wind_and_solar(
             weight_bus = ds["weight"].to_dataframe().merge(bus2sub,left_on="bus", right_on="sub_id").set_index('bus_id').weight
             bus_profiles = ds["profile"].transpose("time", "bus").to_pandas().T.merge(bus2sub,left_on="bus", right_on="sub_id").set_index('bus_id').drop(columns='sub_id').T
             
-            if car == 'offwind':
+            if supcar == 'offwind':
                 capital_cost = capital_cost.to_frame().reset_index()
                 capital_cost.bus = capital_cost.bus.astype(int)
                 capital_cost = pd.merge(capital_cost, n.buses.sub_id.reset_index(),left_on='bus', right_on='sub_id',how='left').rename(columns={0:'capital_cost'}).set_index('Bus').capital_cost
@@ -963,9 +972,9 @@ def attach_wind_and_solar(
                 p_nom_extendable=car in extendable_carriers["Generator"],
                 p_nom_max=p_nom_max_bus,
                 weight=weight_bus,
-                marginal_cost=costs.at[supcar, "marginal_cost"],
+                marginal_cost=costs.at[car, "marginal_cost"],
                 capital_cost=capital_cost,
-                efficiency=costs.at[supcar, "efficiency"],
+                efficiency=costs.at[car, "efficiency"],
                 p_max_pu=bus_profiles,
             )
 
@@ -1186,7 +1195,7 @@ def load_powerplants_ads(
     return plants
 
 def clean_bus_data(n: pypsa.Network):
-    col_list = ['poi_bus', 'poi_sub', 'poi', 'Pd', 'zone_id']
+    col_list = ['poi_bus', 'poi_sub', 'poi', 'Pd', 'zone_id', 'load_dissag']
     n.buses.drop(columns=col_list, inplace=True)
 
 def load_powerplants_breakthrough(breakthrough_dataset: str) -> pd.DataFrame:
@@ -1211,7 +1220,6 @@ def main(snakemake):
 
     n = pypsa.Network(snakemake.input.base_network)
 
-    n.name = configuration
     snapshot_config = snakemake.config['snapshots']
     sns_start = pd.to_datetime(snapshot_config['start'] + ' 07:00:00') 
     # Shifting to 7am UTC since this is the Midnight PST time. 
@@ -1307,8 +1315,7 @@ def main(snakemake):
         extendable_carriers, 
         costs
     )
-
-
+    
     # attach_hydro(n, 
     #              costs, 
     #              plants, 
@@ -1336,7 +1343,7 @@ def main(snakemake):
         )
         renewable_carriers = list(
             set(snakemake.config['electricity']["renewable_carriers"]).intersection(
-                set(["onwind", "solar", "offwind"])
+                set(["onwind", "solar", "offwind", "offwind_floating"])
             ))
         attach_renewable_capacities_to_atlite(
             n,
@@ -1390,9 +1397,6 @@ def main(snakemake):
         humboldt_capacity = snakemake.config['osw_config']['humboldt_capacity']
         import modify_network_osw as osw
         osw.build_OSW_base_configuration(n, osw_capacity=humboldt_capacity)
-        if snakemake.config['osw_config']['build_hvac']: osw.build_OSW_500kV(n)
-        if snakemake.config['osw_config']['build_hvdc_subsea']: osw.build_hvdc_subsea(n)
-        if snakemake.config['osw_config']['build_hvdc_overhead']: osw.build_hvdc_overhead(n)
 
     clean_bus_data(n)
     sanitize_carriers(n, snakemake.config)
@@ -1401,10 +1405,12 @@ def main(snakemake):
 
     output_folder = os.path.dirname(snakemake.output[0]) + '/base_network'
     export_network_for_gis_mapping(n, output_folder)
+    logger.info(test_network_datatype_consistency(n))
+
 
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
-        snakemake = mock_snakemake("add_electricity", interconnect="texas")
+        snakemake = mock_snakemake("add_electricity", interconnect="western")
     configure_logging(snakemake)
     main(snakemake)
