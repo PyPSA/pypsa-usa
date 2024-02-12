@@ -38,4 +38,12 @@ rule plot_figures:
     script:
         "../scripts/plot_figures.py"
 
-
+rule plot_natural_gas:
+    input:
+        network="results/{interconnect}/networks/elec_s_{clusters}_ec_l{ll}_{opts}_{sector}.nc",
+    params:
+        plotting=config["plotting"],
+    output:
+        html="results/{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/sectors/natural_gas.html"
+    script:
+        "../scripts/plot_natural_gas.py"
