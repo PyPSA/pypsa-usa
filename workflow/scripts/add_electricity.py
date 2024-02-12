@@ -1354,13 +1354,14 @@ def main(snakemake):
         import modify_network_osw as osw
         osw.build_OSW_base_configuration(n, osw_capacity=humboldt_capacity)
 
+    output_folder = os.path.dirname(snakemake.output[0]) + '/base_network'
+    export_network_for_gis_mapping(n, output_folder)
+    
     clean_bus_data(n)
     sanitize_carriers(n, snakemake.config)
     n.meta = snakemake.config
     n.export_to_netcdf(snakemake.output[0])
 
-    output_folder = os.path.dirname(snakemake.output[0]) + '/base_network'
-    export_network_for_gis_mapping(n, output_folder)
     logger.info(test_network_datatype_consistency(n))
 
 

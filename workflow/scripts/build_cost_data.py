@@ -308,7 +308,7 @@ def correct_fixed_cost(df: pd.DataFrame) -> pd.DataFrame:
     # Values are very different between PyPSA and ATB causing merge issues for:
     #   - 'battery storage'
     #   - 'home battery storage'
-    techs_to_skip = ["Gasnetz", "gas storage", "battery storage", "home battery storage"]
+    techs_to_skip = ["Gasnetz", "gas storage"]
     df_fom = df[(df.parameter == "FOM") & (~df.unit.str.startswith("%/"))]
     techs = [x for x in df_fom.technology.unique() if x not in techs_to_skip]
     

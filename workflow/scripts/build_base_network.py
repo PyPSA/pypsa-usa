@@ -393,6 +393,23 @@ def remove_breakthrough_offshore(n: pypsa.Network) -> pypsa.Network:
     n.mremove("Bus",  n.buses.loc[n.buses.substation_off].index)
     return n
 
+def assign_missing_state_regions(gdf_bus: gpd.GeoDataFrame): 
+    """Assign buses missing state and countries to their nearest neighbor bus value"""
+    buses = gdf_bus.copy()
+    buses = buses.reset_index().rename(columns={'bus_id':'Bus','lon':'x', 'lat':'y'}).set_index('Bus')
+
+    missing = buses.loc[buses.full_states.isna()]
+    buses = buses.loc[~buses.full_states.isna()]
+    buses = buses.loc[~buses.full_states.isin(['Offshore'])]
+    missing = match_osw_to_poi(buses, missing)
+    missing.full_states = buses.loc[missing.bus_assignment].full_states.values
+
+    buses = buses.reset_index().rename(columns={'Bus':'bus_id','x':'lon', 'y':'lat'}).set_index('bus_id')
+    missing = missing.reset_index().rename(columns={'Bus':'bus_id','x':'lon', 'y':'lat'}).set_index('bus_id')
+
+    #reassigning values to original dataframe
+    gdf_bus.loc[missing.index, 'full_states'] = missing.full_states
+    return gdf_bus
 
 def assign_missing_states_countries(n: pypsa.Network):
     """Assign buses missing state and countries to their nearest neighbor bus value"""
@@ -486,15 +503,16 @@ def main(snakemake):
     # country and state shapes
     state_shape = gpd.read_file(snakemake.input["state_shapes"])
     state_shape = state_shape.rename(columns={"name":"state"})
-    na_shape = load_na_shapes().rename(columns={'name':'full_states'})
+    na_shape = load_na_shapes(countries=['US']).rename(columns={'name':'full_states'})
 
     #assign ba, state, and country to each bus
     gdf_bus = map_bus_to_region(gdf_bus, na_shape, "full_states")
     gdf_bus = map_bus_to_region(gdf_bus, ba_shape, "balancing_area")
     gdf_bus = map_bus_to_region(gdf_bus, state_shape, "state")
     gdf_bus = map_bus_to_region(gdf_bus, state_shape, "country")
-    
+
     # assign load allocation factors to buses for state level dissagregation
+    gdf_bus = assign_missing_state_regions(gdf_bus)
     group_sums = gdf_bus.groupby('full_states')['Pd'].transform('sum')
     gdf_bus['LAF_states'] = gdf_bus['Pd'] / group_sums
     gdf_bus.drop(columns=['full_states'], inplace=True)
@@ -566,6 +584,6 @@ if __name__ == "__main__":
     logger = logging.getLogger(__name__)
     if 'snakemake' not in globals():
         from _helpers import mock_snakemake
-        snakemake = mock_snakemake('build_base_network', interconnect='western')
+        snakemake = mock_snakemake('build_base_network', interconnect='texas')
     configure_logging(snakemake)
     main(snakemake)
