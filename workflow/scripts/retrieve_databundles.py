@@ -2,6 +2,7 @@ import logging, zipfile, os, io, requests
 from pathlib import Path
 from _helpers import progress_retrieve, configure_logging
 import subprocess
+import platform
 
 
 logger = logging.getLogger(__name__)
@@ -25,7 +26,10 @@ def download_repository(url, rootpath, repository):
 
     logger.info(f"Extracting {repository} databundle.")
     if repository == 'EFS': #deflate64 compression not supported by zipFile, current subprocess command will only work on linux and mac
-        cmd = ['unzip', tarball_fn, '-d', to_fn]
+        if platform.system() == 'Windows':
+            cmd = ['tar', '-xf', tarball_fn, '-C', to_fn]
+        else:
+            cmd = ['unzip', tarball_fn, '-d', to_fn]
         subprocess.run(cmd, check=True)
     else:
         with zipfile.ZipFile(tarball_fn, "r") as zip_ref:
