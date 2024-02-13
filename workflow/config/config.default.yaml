@@ -9,18 +9,15 @@ run:
 
 scenario:
   interconnect: western #"usa|texas|western|eastern"
-  clusters: [30]
+  clusters: [40]
   opts:
     [
-      Co2L1.0-1000SEG, # Cluster to 1000 hours in the year 
-      Co2L0.75-1000SEG, # Cluster to 1000 hours in the year 
-      Co2L0.5-1000SEG, # Cluster to 1000 hours in the year 
-      Co2L0.25-1000SEG, # Cluster to 1000 hours in the year 
-      Co2L0.0-1000SEG, # Cluster to 1000 hours in the year 
+      Co2L1.25,
+      # Co2L1.25-480SEG,
     ]
   ll: [v1.25] 
   scope: "total" # "urban", "rural", or "total" 
-  sector: "" # G 
+  sector: "G" # G 
   planning_horizons:
     - 2030 #not implemented yet (temp placeholder)
     # - 2040
@@ -40,7 +37,7 @@ network_configuration: "pypsa-usa" # "pypsa-usa" or "ads2032" or "breakthrough"
 
 snapshots:
   start: "2019-01-01"
-  end: "2019-12-30"
+  end: "2019-01-07"
   inclusive: 'left'
 
 foresight:  # not implemented yet
@@ -254,7 +251,6 @@ sector:
   co2_sequestration_potential: 0
   natural_gas:
     allow_imports_exports: true # false to be implemented 
-    copperplate: true # copperplates at a state level (only true works)
     cyclic_storage: false
   heating:
     heat_pump_sink_T: 55.

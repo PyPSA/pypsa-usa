@@ -111,6 +111,12 @@ rule all:
             **config["scenario"],
             figure=FIGURES_SINGLE
         ),
+        expand(
+            "results/{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}_{figure}.html",
+            **config["scenario"],
+            figure=FIGURES_SINGLE_HTML
+        ),
+        sector_figures,
         #"repo_data/dag.jpg",
 
 # Create DAG with- 
