@@ -34,9 +34,7 @@ countries: [US]
 snapshots:
   start: "2019-01-01"
   end: "2020-01-01"
-  inclusive: 'left'
-
-# docs :
+  inclusive: "left"
 
 # docs :
 atlite:
@@ -251,7 +249,6 @@ sector:
   co2_sequestration_potential: 0
   natural_gas:
     allow_imports_exports: true # false to be implemented 
-    copperplate: true # copperplates at a state level (only true works)
     cyclic_storage: false
   heating:
     heat_pump_sink_T: 55.

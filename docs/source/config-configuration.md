@@ -61,6 +61,7 @@ Planning horizons determines which year of future demand forecast to use for you
    :language: yaml
    :start-at: scenario:
    :end-before: # docs :
+```
 
 (snapshots_cf)=
 ## `snapshots`
