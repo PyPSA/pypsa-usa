@@ -16,6 +16,7 @@ FIGURES_SINGLE = [
     "capacity_map_optimized",
     "capacity_map_optimized_brownfield",
     "capacity_map_new",
+    "demand_map",
     "costs_bar",
     "production_bar",
     "production_area",
@@ -54,7 +55,8 @@ wildcard_constraints:
 # -------------------------- Config and Subworkflows ------------------------- #
 
 # Merge subworkflow configs and main config
-configfile: "config/config.default.yaml"
+configfile: "config/tests/config.test_simple.yaml"
+# configfile: "config/config.default.yaml"
 configfile: "config/config.cluster.yaml"
 configfile: "config/config.osw.yaml"
 configfile: "config/config.plotting.yaml"
@@ -67,9 +69,8 @@ CDIR = RDIR if not run.get("shared_cutouts") else ""
 
 LOGS = "logs/" + RDIR
 BENCHMARKS = "benchmarks/" + RDIR
-DATA = "data/" + RDIR
+DATA = "data/"
 RESOURCES = "resources/" + RDIR if not run.get("shared_resources") else "resources/"
-RESOURCES_BASE = "resources/" + RDIR if not run.get("shared_resources_base") else "resources/"
 RESULTS = "results/" + RDIR
 
 include: "rules/common.smk"

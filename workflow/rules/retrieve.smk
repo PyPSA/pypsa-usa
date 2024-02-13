@@ -25,7 +25,7 @@ pypsa_usa_datafiles = [
 def define_zenodo_databundles():
     return {
         'USATestSystem':"https://zenodo.org/record/4538590/files/USATestSystem.zip",
-        'pypsa_usa_data':"https://zenodo.org/records/10480944/files/pypsa_usa_data.zip" 
+        'pypsa_usa_data':"https://zenodo.org/records/10480944/files/pypsa_usa_data.zip"
         }
 
 def define_sector_databundles():
@@ -44,7 +44,24 @@ rule retrieve_zenodo_databundles:
     conda:
         "../envs/environment.yaml"
     script:
-        "../scripts/retrieve_databundles.py"
+        "../scripts/retrieve_databundles.py"    
+
+def define_nrel_databundles():
+    return {
+        'EFS':"https://data.nrel.gov/system/files/126/EFSLoadProfile_Reference_Moderate.zip"
+        }
+
+rule retrieve_nrel_efs_data:
+    params:
+        define_nrel_databundles()
+    output:
+        DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv",
+    log:
+        "logs/retrieve/retrieve_databundles.log",
+    conda:
+        "../envs/environment.yaml"
+    script:
+        "../scripts/retrieve_databundles.py"   
 
 sector_datafiles = [
     "counties/cb_2020_us_county_500k.shp",
@@ -77,20 +94,16 @@ if config["network_configuration"] == 'ads2032':
             "../scripts/retrieve_forecast_data.py"
 
 DATAFILES_DMD = [
-    "EIA_DMD_2017.csv",
-    "EIA_DMD_2018.csv",
-    "EIA_DMD_2019.csv",
-    "EIA_DMD_2020.csv",
-    "EIA_DMD_2021.csv",
-    "EIA_DMD_2022.csv",
-    "EIA_DMD_2023.csv",
+    "EIA_DMD_2018_2024.csv",
     ]
 
 rule retrieve_eia_data:
     output:
-        expand(DATA + "eia/{file}", file=DATAFILES_DMD),
+        expand(DATA + "GridEmissions/{file}", file=DATAFILES_DMD),
     log:
         "logs/retrieve/retrieve_historical_load_data.log",
+    resources:
+        mem_mb=5000,
     script:
         "../scripts/retrieve_eia_data.py"
 
@@ -130,7 +143,7 @@ rule retrieve_cutout:
 
 rule retrieve_cost_data_eur:
     output:
-        pypsa_technology_data = RESOURCES_BASE + "costs/{year}/pypsa_eur.csv",
+        pypsa_technology_data = RESOURCES + "costs/{year}/pypsa_eur.csv",
     params:
         pypsa_costs_version = config["costs"].get("version", "v0.6.0")
     log:
@@ -142,12 +155,12 @@ rule retrieve_cost_data_eur:
 
 rule retrieve_cost_data_usa:
     output:
-        nrel_atb = RESOURCES_BASE + "costs/nrel_atb.parquet",
-        # nrel_atb_transport = RESOURCES_BASE + "costs/nrel_atb_transport.xlsx",
-        ng_electric_power_price = RESOURCES_BASE + "costs/ng_electric_power_price.csv",
-        ng_industrial_price = RESOURCES_BASE + "costs/ng_industrial_price.csv",
-        ng_residential_price = RESOURCES_BASE + "costs/ng_commercial_price.csv",
-        ng_commercial_price = RESOURCES_BASE + "costs/ng_residential_price.csv",
+        nrel_atb = DATA + "costs/nrel_atb.parquet",
+        # nrel_atb_transport = DATA + "costs/nrel_atb_transport.xlsx",
+        ng_electric_power_price = DATA + "costs/ng_electric_power_price.csv",
+        ng_industrial_price = DATA + "costs/ng_industrial_price.csv",
+        ng_residential_price = DATA + "costs/ng_commercial_price.csv",
+        ng_commercial_price = DATA + "costs/ng_residential_price.csv",
     params:
         eia_api_key = config["costs"].get("eia_aip_key", None),
     log:

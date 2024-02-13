@@ -3,7 +3,6 @@
 
 rule build_shapes:
     params:
-        source_states_shapes="admin_1_states_provinces",
         source_offshore_shapes=config["offshore_shape"],
         offwind_params=config["renewable"]["offwind"]
     input:
@@ -13,10 +12,10 @@ rule build_shapes:
         offshore_shapes_ca_osw = "repo_data/BOEM_CA_OSW_GIS/CA_OSW_BOEM_CallAreas.shp",
         offshore_shapes_eez= DATA + "eez/conus_eez.shp"
     output:
-        country_shapes = RESOURCES_BASE + "{interconnect}/country_shapes.geojson",
-        onshore_shapes = RESOURCES_BASE + "{interconnect}/onshore_shapes.geojson",
-        offshore_shapes = RESOURCES_BASE + "{interconnect}/offshore_shapes.geojson",
-        state_shapes = RESOURCES_BASE + "{interconnect}/state_boundaries.geojson"
+        country_shapes = RESOURCES + "{interconnect}/country_shapes.geojson",
+        onshore_shapes = RESOURCES + "{interconnect}/onshore_shapes.geojson",
+        offshore_shapes = RESOURCES + "{interconnect}/offshore_shapes.geojson",
+        state_shapes = RESOURCES + "{interconnect}/state_boundaries.geojson"
     log:
         "logs/build_shapes_{interconnect}.log",
     threads: 1
@@ -34,15 +33,15 @@ rule build_base_network:
         links=DATA + "breakthrough_network/base_grid/dcline.csv",
         bus2sub=DATA + "breakthrough_network/base_grid/bus2sub.csv",
         sub=DATA + "breakthrough_network/base_grid/sub.csv",
-        onshore_shapes=RESOURCES_BASE + "{interconnect}/onshore_shapes.geojson",
-        offshore_shapes=RESOURCES_BASE + "{interconnect}/offshore_shapes.geojson",
-        state_shapes = RESOURCES_BASE + "{interconnect}/state_boundaries.geojson"
+        onshore_shapes=RESOURCES + "{interconnect}/onshore_shapes.geojson",
+        offshore_shapes=RESOURCES + "{interconnect}/offshore_shapes.geojson",
+        state_shapes = RESOURCES + "{interconnect}/state_boundaries.geojson"
     output:
         bus2sub=DATA + "breakthrough_network/base_grid/{interconnect}/bus2sub.csv",
         sub=DATA + "breakthrough_network/base_grid/{interconnect}/sub.csv",
         bus_gis=RESOURCES + "{interconnect}/bus_gis.csv",
         lines_gis=RESOURCES + "{interconnect}/lines_gis.csv",
-        network=RESOURCES_BASE + "{interconnect}/elec_base_network.nc",
+        network=RESOURCES + "{interconnect}/elec_base_network.nc",
     log:
         "logs/create_network/{interconnect}.log",
     threads: 1
@@ -53,16 +52,16 @@ rule build_base_network:
 
 rule build_bus_regions:
     input:
-        country_shapes= RESOURCES_BASE + "{interconnect}/country_shapes.geojson",
-        state_shapes= RESOURCES_BASE + "{interconnect}/state_boundaries.geojson",
-        ba_region_shapes=RESOURCES_BASE + "{interconnect}/onshore_shapes.geojson",
-        offshore_shapes=RESOURCES_BASE + "{interconnect}/offshore_shapes.geojson",
-        base_network=RESOURCES_BASE + "{interconnect}/elec_base_network.nc",
+        country_shapes= RESOURCES + "{interconnect}/country_shapes.geojson",
+        state_shapes= RESOURCES + "{interconnect}/state_boundaries.geojson",
+        ba_region_shapes=RESOURCES + "{interconnect}/onshore_shapes.geojson",
+        offshore_shapes=RESOURCES + "{interconnect}/offshore_shapes.geojson",
+        base_network=RESOURCES + "{interconnect}/elec_base_network.nc",
         bus2sub=DATA + "breakthrough_network/base_grid/{interconnect}/bus2sub.csv",
         sub=DATA + "breakthrough_network/base_grid/{interconnect}/sub.csv",
     output:
-        regions_onshore=RESOURCES_BASE + "{interconnect}/regions_onshore.geojson",
-        regions_offshore=RESOURCES_BASE + "{interconnect}/regions_offshore.geojson",
+        regions_onshore=RESOURCES + "{interconnect}/regions_onshore.geojson",
+        regions_offshore=RESOURCES + "{interconnect}/regions_offshore.geojson",
     log:
         "logs/{interconnect}/build_bus_regions_s.log",
     threads: 1
@@ -74,15 +73,15 @@ rule build_bus_regions:
 
 rule build_cost_data:
     input:
-        nrel_atb = RESOURCES_BASE + "costs/nrel_atb.parquet",
-        pypsa_technology_data = RESOURCES_BASE + "costs/{year}/pypsa_eur.csv",
+        nrel_atb = DATA + "costs/nrel_atb.parquet",
+        pypsa_technology_data = RESOURCES + "costs/{year}/pypsa_eur.csv",
     output:
-        tech_costs= RESOURCES_BASE + "costs_{year}.csv",
+        tech_costs= RESOURCES + "costs_{year}.csv",
     log:
         LOGS + "costs_{year}.log",
     threads: 1
     resources:
-        mem_mb=300,
+        mem_mb=1000,
     script:
         "../scripts/build_cost_data.py"
 
@@ -94,8 +93,8 @@ if config["enable"].get("build_cutout", False):
             cutouts=config["atlite"]["cutouts"],
             interconnects=config["atlite"]["interconnects"],
         input:
-            regions_onshore = RESOURCES_BASE + "{interconnect}/country_shapes.geojson",
-            regions_offshore = RESOURCES_BASE + "{interconnect}/offshore_shapes.geojson",
+            regions_onshore = RESOURCES + "{interconnect}/country_shapes.geojson",
+            regions_offshore = RESOURCES + "{interconnect}/offshore_shapes.geojson",
         output:
             protected("cutouts/" + CDIR + "{interconnect}_{cutout}.nc"),
         log:
@@ -122,7 +121,7 @@ rule build_ship_raster:
             ],
         ),
     output:
-        RESOURCES_BASE + "{interconnect}/shipdensity_raster.tif",
+        RESOURCES + "{interconnect}/shipdensity_raster.tif",
     log:
         LOGS + "{interconnect}/build_ship_raster.log",
     resources:
@@ -137,11 +136,11 @@ rule build_hydro_profiles:
         hydro=config["renewable"]["hydro"],
         countries=config["countries"],
     input:
-        ba_region_shapes=RESOURCES_BASE + "{interconnect}/onshore_shapes.geojson",
+        ba_region_shapes=RESOURCES + "{interconnect}/onshore_shapes.geojson",
         # eia_hydro_generation=DATA + "eia_hydro_annual_generation.csv",
         cutout=f"cutouts/" + CDIR + "{interconnect}_" + config["renewable"]["hydro"]["cutout"] + ".nc",
     output:
-        RESOURCES_BASE + "{interconnect}/profile_hydro.nc",
+        RESOURCES + "{interconnect}/profile_hydro.nc",
     log:
         LOGS + "{interconnect}/build_hydro_profile.log",
     resources:
@@ -156,7 +155,7 @@ rule build_renewable_profiles:
         renewable=config["renewable"],
         snapshots=config["snapshots"],
     input:
-        base_network= RESOURCES_BASE + "{interconnect}/elec_base_network.nc",
+        base_network= RESOURCES + "{interconnect}/elec_base_network.nc",
         corine=ancient(DATA + "copernicus/PROBAV_LC100_global_v3.0.1_2019-nrt_Discrete-Classification-map_USA_EPSG-4326.tif"),
         natura=lambda w: (
             DATA + "natura.tiff"
@@ -175,19 +174,19 @@ rule build_renewable_profiles:
             if "ship_threshold" in config["renewable"][w.technology].keys()
             else []
         ),
-        country_shapes=RESOURCES_BASE + "{interconnect}/country_shapes.geojson", 
-        offshore_shapes=RESOURCES_BASE + "{interconnect}/offshore_shapes.geojson",
+        country_shapes=RESOURCES + "{interconnect}/country_shapes.geojson", 
+        offshore_shapes=RESOURCES + "{interconnect}/offshore_shapes.geojson",
         regions=lambda w: (
-            RESOURCES_BASE + "{interconnect}/regions_onshore.geojson"
+            RESOURCES + "{interconnect}/regions_onshore.geojson"
             if w.technology in ("onwind", "solar")
-            else RESOURCES_BASE + "{interconnect}/regions_offshore.geojson"
+            else RESOURCES + "{interconnect}/regions_offshore.geojson"
         ),
         cutout=lambda w: "cutouts/"
         + CDIR + "{interconnect}_"
         + config["renewable"][w.technology]["cutout"]
         + ".nc",
     output:
-        profile=RESOURCES_BASE + "{interconnect}/profile_{technology}.nc",
+        profile=RESOURCES + "{interconnect}/profile_{technology}.nc",
     log:
         LOGS + "{interconnect}/build_renewable_profile_{technology}.log",
     benchmark:
@@ -209,9 +208,10 @@ rule add_electricity:
         electricity=config["electricity"],
         conventional=config["conventional"],
         costs=config["costs"],
+        planning_horizons=config["scenario"]["planning_horizons"],
     input:
         **{
-            f"profile_{tech}": RESOURCES_BASE + "{interconnect}" + f"/profile_{tech}.nc"
+            f"profile_{tech}": RESOURCES + "{interconnect}" + f"/profile_{tech}.nc"
             for tech in config["electricity"]["renewable_carriers"]
             if tech != "hydro"
         },
@@ -222,9 +222,9 @@ rule add_electricity:
             for attr, fn in d.items()
             if str(fn).startswith("data/")
         },
-        base_network=RESOURCES_BASE + "{interconnect}/elec_base_network.nc",
-        tech_costs=RESOURCES_BASE + f"costs_{config['costs']['year']}.csv",
-        regions=RESOURCES_BASE + "{interconnect}/regions_onshore.geojson",
+        base_network=RESOURCES + "{interconnect}/elec_base_network.nc",
+        tech_costs=RESOURCES + f"costs_{config['costs']['year']}.csv",
+        regions=RESOURCES + "{interconnect}/regions_onshore.geojson",
         plants_eia="repo_data/eia_plants_wecc.csv",
         plants_ads="repo_data/ads_plants_locs.csv",
         fuel_costs="repo_data/eia_mappings/fuelCost22.csv",
@@ -233,7 +233,6 @@ rule add_electricity:
         wind_breakthrough=DATA + "breakthrough_network/base_grid/wind.csv",
         solar_breakthrough=DATA + "breakthrough_network/base_grid/solar.csv",
         bus2sub=DATA + "breakthrough_network/base_grid/{interconnect}/bus2sub.csv",
-        demand_breakthrough_2016=DATA + "breakthrough_network/base_grid/demand.csv",
         ads_renewables = 
             DATA + "WECC_ADS/processed/"
             if config["network_configuration"] == 'ads2032'
@@ -249,11 +248,12 @@ rule add_electricity:
             if config["network_configuration"] == 'ads2032'
             else []
         ,
-        eia = expand(DATA + "eia/{file}", file=DATAFILES_DMD),
+        eia = expand(DATA + "GridEmissions/{file}", file=DATAFILES_DMD),
+        efs = DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv",
         **{
             f"gen_cost_mult_{Path(x).stem}":f"repo_data/locational_multipliers/{Path(x).name}" for x in Path("repo_data/locational_multipliers/").glob("*")
         },
-        ng_electric_power_price = RESOURCES_BASE + "costs/ng_electric_power_price.csv",
+        ng_electric_power_price = DATA + "costs/ng_electric_power_price.csv",
     output:
         RESOURCES + "{interconnect}/elec_base_network_l_pp.nc",
     log:
@@ -288,15 +288,15 @@ rule simplify_network:
 rule cluster_network:
     input:
         network=RESOURCES + "{interconnect}/elec_s.nc",
-        regions_onshore=RESOURCES_BASE + "{interconnect}/regions_onshore.geojson",
-        regions_offshore=RESOURCES_BASE + "{interconnect}/regions_offshore.geojson",
+        regions_onshore=RESOURCES + "{interconnect}/regions_onshore.geojson",
+        regions_offshore=RESOURCES + "{interconnect}/regions_offshore.geojson",
         busmap=DATA + "breakthrough_network/base_grid/{interconnect}/bus2sub.csv",
         custom_busmap=(
             DATA + "{interconnect}/custom_busmap_{clusters}.csv"
             if config["enable"].get("custom_busmap", False)
             else []
         ),
-        tech_costs=RESOURCES_BASE + f"costs_{config['costs']['year']}.csv",
+        tech_costs=RESOURCES + f"costs_{config['costs']['year']}.csv",
     output:
         network=RESOURCES + "{interconnect}/elec_s_{clusters}.nc",
         regions_onshore=RESOURCES + "{interconnect}/regions_onshore_s_{clusters}.geojson",
@@ -318,7 +318,7 @@ rule cluster_network:
 rule add_extra_components:
     input:
         network=RESOURCES + "{interconnect}/elec_s_{clusters}.nc",
-        tech_costs=RESOURCES_BASE + f"costs_{config['costs']['year']}.csv",
+        tech_costs=RESOURCES + f"costs_{config['costs']['year']}.csv",
     params:
         retirement=config["electricity"].get("retirement", "technical")
     output:
@@ -343,7 +343,7 @@ rule prepare_network:
         costs=config["costs"],
     input:
         network=RESOURCES + "{interconnect}/elec_s_{clusters}_ec.nc",
-        tech_costs=RESOURCES_BASE + f"costs_{config['costs']['year']}.csv",
+        tech_costs=RESOURCES + f"costs_{config['costs']['year']}.csv",
     output:
         RESOURCES + "{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}.nc",
     log:

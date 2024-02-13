@@ -10,13 +10,16 @@ run:
 # docs :
 scenario:
   interconnect: western #"usa|texas|western|eastern"
-  clusters: [30]
+  clusters: [30, 100]
   opts:
     [
+      Co2L1.0-4H,
       Co2L0.75-4H,
-
+      Co2L0.5-4H,
+      Co2L0.25-4H,
+      Co2L0.0-4H,
     ]
-  ll: [v1.15] 
+  ll: [vopt, v1.15] 
   scope: "total" # "urban", "rural", or "total" 
   sector: "" # G 
   planning_horizons:
@@ -80,7 +83,7 @@ electricity:
   retirement: economic # "economic" or "technical"
 
   operational_reserve:
-    activate: False
+    activate: True
     epsilon_load: 0.02
     epsilon_vres: 0.02
     contingency: 4000

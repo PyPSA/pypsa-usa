@@ -79,7 +79,7 @@ def filter_small_polygons_gpd(geo_series: gpd.GeoSeries, min_area: float) -> gpd
     aggregated.set_crs(MEASUREMENT_CRS, inplace=True)
     return aggregated.to_crs(original_crs)
 
-def load_na_shapes(state_shape: str = "admin_1_states_provinces") -> gpd.GeoDataFrame:
+def load_na_shapes(state_shape: str = "admin_1_states_provinces", countries: list = ['US', 'CA', 'MX']) -> gpd.GeoDataFrame:
     """Creates geodataframe of north america"""
     shpfilename = shpreader.natural_earth(
         resolution="10m", category="cultural", name=state_shape
@@ -89,7 +89,7 @@ def load_na_shapes(state_shape: str = "admin_1_states_provinces") -> gpd.GeoData
     data = []
     for r in gdf_states:
         attr = r.attributes
-        if attr["iso_a2"] in ["US", "CA", "MX"]: # include US and Canada & Mexico
+        if attr["iso_a2"] in countries: # include US and Canada & Mexico
             data.append([attr["name"], attr['iso_a2'], attr["latitude"], attr["longitude"], r.geometry])
     gdf_states = gpd.GeoDataFrame(data, columns=["name", "country", "x", "y", "geometry"]).set_crs(4326)
     return gdf_states

@@ -67,6 +67,7 @@ from summary import (
     get_capacity_greenfield,
     get_capacity_brownfield,
     get_capacity_base,
+    get_demand_base,
     get_operational_costs,
     get_capital_costs
 )
@@ -671,7 +672,8 @@ def plot_capacity_map(
     
     return fig, ax
 
-def plot_base_capacity(
+
+def plot_demand_map(
     n: pypsa.Network, 
     regions: gpd.GeoDataFrame, 
     carriers: List[str],
@@ -679,7 +681,91 @@ def plot_base_capacity(
     **wildcards
 ) -> None:
     """
-    Plots base network capacities
+    Plots map of network nodal demand
+    """
+    
+    # get data
+
+    bus_values = get_demand_base(n).mul(1e-3)
+    line_values = n.lines.s_nom
+    link_values = n.links.p_nom.replace(0)
+
+    # plot data
+    title = create_title("Network Demand", **wildcards)
+    interconnect = wildcards.get("interconnect", None)
+    bus_scale = get_bus_scale(interconnect) if interconnect else 1
+    line_scale = get_line_scale(interconnect) if interconnect else 1
+    
+    fig, ax = plt.subplots(
+        figsize=(10, 10), subplot_kw={"projection": ccrs.EqualEarth(n.buses.x.mean())}
+    )
+    
+    line_width = line_values / line_scale
+    link_width = link_values / line_scale
+    
+    with plt.rc_context({"patch.linewidth": 0.1}):
+        n.plot(
+            bus_sizes=bus_values / bus_scale,
+            # bus_colors=None,
+            bus_alpha=0.7,
+            line_widths=line_width,
+            link_widths=0 if link_width.empty else link_width,
+            line_colors="teal",
+            ax=ax,
+            margin=0.2,
+            color_geomap=None
+        )
+        
+    # onshore regions
+    regions.plot(
+        ax=ax,
+        facecolor="whitesmoke",
+        edgecolor="white",
+        aspect="equal",
+        transform=ccrs.PlateCarree(),
+        linewidth=1.2,
+    )
+    ax.set_extent(regions.total_bounds[[0, 2, 1, 3]])
+
+    legend_kwargs = {"loc": "upper left", "frameon": False}
+    bus_sizes = [5000, 10e3, 50e3]  # in MW
+    line_sizes = [2000, 5000]  # in MW
+
+    add_legend_circles(
+        ax,
+        [s / bus_scale for s in bus_sizes],
+        [f"{s / 1000} GW" for s in bus_sizes],
+        legend_kw={"bbox_to_anchor": (1, 1), **legend_kwargs},
+    )
+    add_legend_lines(
+        ax,
+        [s / line_scale for s in line_sizes],
+        [f"{s / 1000} GW" for s in line_sizes],
+        legend_kw={"bbox_to_anchor": (1, 0.8), **legend_kwargs},
+    )
+    add_legend_patches(
+        ax,
+        n.carriers.color,
+        n.carriers.nice_name,
+        legend_kw={"bbox_to_anchor": (1, 0), **legend_kwargs, "loc": "lower left"},
+    )
+    if not title:   
+        ax.set_title(f"Total Annual Demand (MW)", fontsize=TITLE_SIZE, pad=20)
+    else:
+        ax.set_title(title, fontsize=TITLE_SIZE, pad=20)
+    fig.tight_layout()
+    fig.savefig(save)
+
+
+def plot_base_capacity_map(
+    n: pypsa.Network, 
+    regions: gpd.GeoDataFrame, 
+    carriers: List[str],
+    save: str, 
+    **wildcards
+) -> None:
+    """
+    Plots map of base network capacities
     """
     
     # get data
@@ -689,7 +775,6 @@ def plot_base_capacity(
     bus_values = bus_values[bus_values.index.get_level_values(1).isin(carriers)]
     line_values = n.lines.s_nom
     # link_values = n.links.p_nom
-    
     # plot data
     
     title = create_title("Base Network Capacities", **wildcards)
@@ -709,7 +794,7 @@ def plot_base_capacity(
     )
     fig.savefig(save)
 
-def plot_opt_capacity(
+def plot_opt_capacity_map(
     n: pypsa.Network, 
     regions: gpd.GeoDataFrame,
     carriers: List[str], 
@@ -718,7 +803,7 @@ def plot_opt_capacity(
     retirement_method: str = "economic", 
     **wildcards
 ) -> None:
-    """Plots optimal network capacities"""
+    """Plots map of optimal network capacities"""
     
     # get data
     
@@ -755,7 +840,7 @@ def plot_opt_capacity(
     )
     fig.savefig(save)
 
-def plot_new_capacity(
+def plot_new_capacity_map(
     n: pypsa.Network, 
     regions: gpd.GeoDataFrame,
     carriers: List[str],
@@ -764,7 +849,7 @@ def plot_new_capacity(
     retirement_method: str = "economic", 
     **wildcards
 ) -> None:
-    """Plots new capacity"""
+    """Plots map of new capacity"""
     
     # get data
     
@@ -982,10 +1067,11 @@ if __name__ == "__main__":
     sns.set_theme("paper", style="darkgrid")
     
     # create plots
-    plot_base_capacity(n, onshore_regions, carriers, snakemake.output["capacity_map_base"], **snakemake.wildcards)
-    plot_opt_capacity(n, onshore_regions, carriers, snakemake.output["capacity_map_optimized"], "greenfield", retirement_method, **snakemake.wildcards)
-    plot_opt_capacity(n, onshore_regions, carriers, snakemake.output["capacity_map_optimized_brownfield"], "brownfield", retirement_method, **snakemake.wildcards)
-    plot_new_capacity(n, onshore_regions, carriers, snakemake.output["capacity_map_new"], "greenfield", retirement_method, **snakemake.wildcards)
+    plot_base_capacity_map(n, onshore_regions, carriers, snakemake.output["capacity_map_base"], **snakemake.wildcards)
+    plot_opt_capacity_map(n, onshore_regions, carriers, snakemake.output["capacity_map_optimized"], "greenfield", retirement_method, **snakemake.wildcards)
+    plot_opt_capacity_map(n, onshore_regions, carriers, snakemake.output["capacity_map_optimized_brownfield"], "brownfield", retirement_method, **snakemake.wildcards)
+    plot_new_capacity_map(n, onshore_regions, carriers, snakemake.output["capacity_map_new"], "greenfield", retirement_method, **snakemake.wildcards)
+    plot_demand_map(n, onshore_regions, carriers, snakemake.output["demand_map"], **snakemake.wildcards)
     plot_capacity_additions_bar(n, carriers, snakemake.output["capacity_additions_bar"], "greenfield", retirement_method,  **snakemake.wildcards)
     plot_costs_bar(n, carriers, snakemake.output["costs_bar"], **snakemake.wildcards)
     plot_production_bar(n, carriers, snakemake.output["production_bar"], **snakemake.wildcards)
