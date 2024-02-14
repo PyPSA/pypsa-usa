@@ -223,7 +223,7 @@ class DataExtractor(ABC):
             return response.json()  # Assumes the response is in JSON format
         else:
             logger.error(f"EIA Request failed with status code: {response.status_code}")
-            raise requests.ConnectionError
+            raise requests.ConnectionError(f"Status code {response.status_code}")
 
     @staticmethod
     def _format_period(dates: pd.Series) -> pd.Series:

@@ -80,7 +80,6 @@ if __name__ == "__main__":
             county_path=snakemake.input.county,
             pipelines_path=snakemake.input.pipeline_capacity,
             pipeline_shape_path=snakemake.input.pipeline_shape,
-            eia_757_path=snakemake.input.eia_757
         )
         
     n.export_to_netcdf(snakemake.output.network)

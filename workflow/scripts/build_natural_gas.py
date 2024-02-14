@@ -178,7 +178,7 @@ class GasData(ABC):
             states_2_remove += additional_removals
         
         if "STATE" not in df.columns:
-            logger.debug("Natual gas data not filtered due to incorrect data formatting")
+            logger.debug("Natual gas data notfiltered due to incorrect data formatting") 
             return df
         
         df = df[~df.STATE.isin(states_2_remove)].copy()
@@ -287,7 +287,7 @@ class GasStorage(GasData):
             unit="MWh_th",
         )
         
-        cyclic_storage = kwargs.get("cyclic_storage", False)
+        cyclic_storage = kwargs.get("cyclic_storage", True)
         n.madd(
             "Store",
             names=df.index,
@@ -345,21 +345,22 @@ class GasProcessing(GasData):
     def format_data(self, data: pd.DataFrame):
         df = data.copy()
     
-        df["value"] = df.value * MMCF_2_MWH / 30 / 24 # get monthly average hourly capacity (based on 30 days / month)
+        df["value"] = df.value.astype(float) * MMCF_2_MWH / 30 / 24 # get monthly average hourly capacity (based on 30 days / month)
         df = (
             df
             .reset_index()
             .drop(columns=["period","series-description", "units"]) # units in MW_th
             .groupby(["state"])
             .max() # get average yearly capacity
-            .rename(columns={"value":"p_nom"})
+            .reset_index()
+            .rename(columns={"state":"STATE","value":"p_nom"})
         )
         return self.filter_on_interconnect(df, ["U.S."])
     
     def build_infrastructure(self, n: pypsa.Network, **kwargs):
 
         df = self.data.copy()
-        df = df.set_index("state")
+        df = df.set_index("STATE")
         df["bus"] = df.index + " gas"
         
         capacity_mult = kwargs.get("capacity_multiplier", 1)
@@ -763,7 +764,7 @@ class PipelineLinepack(GasData):
         df = self.data.copy()
         df = df.set_index("STATE")
         
-        cyclic_storage = kwargs.get("cyclic_storage", False)
+        cyclic_storage = kwargs.get("cyclic_storage", True)
         
         n.madd(
             "Store",
@@ -855,15 +856,15 @@ def convert_generators_2_links(n: pypsa.Network, carrier: str):
         bus0=plants.STATE + " gas",
         bus1=plants.bus,
         carrier=plants.carrier,
-        p_nom_min=plants.p_nom_min,
-        p_nom=plants.p_nom,
-        p_nom_max=plants.p_nom_max,
+        p_nom_min=plants.p_nom_min / plants.efficiency,
+        p_nom=plants.p_nom / plants.efficiency, # links rated on input capacity
+        p_nom_max=plants.p_nom_max / plants.efficiency,
         p_nom_extendable=plants.p_nom_extendable,
         ramp_limit_up=plants.ramp_limit_up,
         ramp_limit_down=plants.ramp_limit_down,
         efficiency=plants.efficiency,
-        marginal_cost=plants.marginal_cost,
-        capital_cost=plants.capital_cost,
+        marginal_cost=plants.marginal_cost * plants.efficiency, # fuel costs rated at delievered
+        capital_cost=plants.capital_cost * plants.efficiency, # links rated on input capacity
         lifetime=plants.lifetime,
     )
     
@@ -885,7 +886,10 @@ def build_natural_gas(
     county_path: str = "../data/counties/cb_2020_us_county_500k.shp",
     pipelines_path: str = "../data/natural_gas/EIA-StatetoStateCapacity_Jan2023.xlsx",
     pipeline_shape_path: str = "../data/natural_gas/pipelines.geojson",
+    **kwargs
 ) -> None:
+
+    cyclic_storage = kwargs.get("cyclic_storage", True)
 
     # add gas carrier
     
@@ -904,7 +908,7 @@ def build_natural_gas(
     # add state level gas storage facilities 
     
     storage = GasStorage(year, interconnect, api)
-    storage.build_infrastructure(n)
+    storage.build_infrastructure(n, cyclic_storage=cyclic_storage)
     
     # add interconnect pipelines 
     
@@ -922,7 +926,7 @@ def build_natural_gas(
     # add pipeline linepack 
     
     linepack = PipelineLinepack(year, interconnect, county_path, pipeline_shape_path)
-    linepack.build_infrastructure(n)
+    linepack.build_infrastructure(n, cyclic_storage=cyclic_storage)
 
     # convert existing generators to cross-sector links 
     for carrier in ("CCGT", "OCGT"):
@@ -930,7 +934,7 @@ def build_natural_gas(
 
 if __name__ == "__main__":
 
-    n = pypsa.Network("../resources/texas/elec_s_40_ec_lv1.25_Co2L1.25.nc")
+    n = pypsa.Network("../resources/western/elec_s_40_ec_lv1.25_Co2L1.25.nc")
     year = 2019
     with open("./../config/config.api.yaml", "r") as file:
         yaml_data = yaml.safe_load(file)
