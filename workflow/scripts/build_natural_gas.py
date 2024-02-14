@@ -44,9 +44,7 @@ Specifically, it will do the following:
 
 **Outputs**
 
-- ``pypsa.Network``
-
-
+- `pypsa.Network`
 """
 
 import pypsa 
@@ -233,11 +231,11 @@ class GasBuses(GasData):
         )
 
 class GasStorage(GasData):
+    """Creator for underground storage"""
     
     def __init__(self, year: int, interconnect: str, api: str) -> None:
         self.api = api
         super().__init__(year, interconnect)
-        
     
     def read_data(self):
         base = eia.Storage("gas", "base", self.year, self.api).get_data()
@@ -298,8 +296,7 @@ class GasStorage(GasData):
             carrier="gas storage",
             e_nom_extendable=False,
             e_nom=df.MAX_CAPACITY_MWH,
-            # e_cyclic=cyclic_storage,
-            e_cyclic=True,
+            e_cyclic=cyclic_storage,
             e_min_pu=df.MIN_CAPACITY_MWH / df.MAX_CAPACITY_MWH,
             e_initial=df.MAX_CAPACITY_MWH - df.MIN_CAPACITY_MWH, # same as working
             marginal_cost=0 # to update
@@ -338,51 +335,37 @@ class GasStorage(GasData):
 
 class GasProcessing(GasData):
     
-    def __init__(self, interconnect: str, eia_757: str) -> None:
-        self.eia_757 = eia_757
-        super().__init__(year=2017, interconnect=interconnect) # only 2017 is available
+    def __init__(self, year: int, interconnect: str, api: str) -> None:
+        self.api = api
+        super().__init__(year=year, interconnect=interconnect)
         
-    
     def read_data(self) -> pd.DataFrame:
-        return pd.read_csv(self.eia_757).fillna(0)
+        return eia.Production("gas", "market", self.year, self.api).get_data()
     
     def format_data(self, data: pd.DataFrame):
         df = data.copy()
-        df = df.rename(columns={x:x.replace("<BR>", " ") for x in df.columns})
-        df.columns = df.columns.str.strip()
-        df = df[[
-            "Report State", 
-            "County Name", 
-            "Plant Capacity", 
-            "Plant Flow", 
-            # "BTU Content"
-        ]]
-        df["Plant Capacity"] = df["Plant Capacity"] * MMCF_2_MWH
-        df["Report State"] = df["Report State"].str.capitalize()
-        df = df.rename(columns={
-            "Report State":"STATE", 
-            "County Name":"COUNTY", 
-            "Plant Capacity":"CAPACITY_MWH", 
-            "Plant Flow":"FLOW_MMCF", 
-            "BTU Content":"BTU_CONTENT", 
-        })
-        df["STATE"] = df["STATE"].str.upper()
-
+    
+        df["value"] = df.value * MMCF_2_MWH / 30 / 24 # get monthly average hourly capacity (based on 30 days / month)
         df = (
             df
-            .drop(columns=["COUNTY"])
-            .groupby("STATE")
-            .sum()
             .reset_index()
+            .drop(columns=["period","series-description", "units"]) # units in MW_th
+            .groupby(["state"])
+            .max() # get average yearly capacity
+            .rename(columns={"value":"p_nom"})
         )
-        
-        return self.filter_on_interconnect(df)
+        return self.filter_on_interconnect(df, ["U.S."])
     
-    def build_infrastructure(self, n: pypsa.Network):
+    def build_infrastructure(self, n: pypsa.Network, **kwargs):
 
         df = self.data.copy()
-        df = df.set_index("STATE")
+        df = df.set_index("state")
         df["bus"] = df.index + " gas"
+        
+        capacity_mult = kwargs.get("capacity_multiplier", 1)
+        p_nom_extendable = False if capacity_mult == 1 else True
+        p_nom_mult = 1 if capacity_mult >= 1 else capacity_mult
+        p_nom_max_mult = capacity_mult
         
         n.madd(
             "Generator", 
@@ -390,10 +373,12 @@ class GasProcessing(GasData):
             suffix=" gas production",
             bus=df.bus,
             carrier="gas",
-            p_nom_extendable=True,
-            capital_cost = 0.01,
+            p_nom_extendable=p_nom_extendable,
+            capital_cost=0.01, # to update 
             marginal_costs=0.35, # https://www.eia.gov/analysis/studies/drilling/pdf/upstream.pdf
-            p_nom=df.CAPACITY_MWH
+            p_nom=df.p_nom * p_nom_mult,
+            p_nom_min=0,
+            p_nom_max=df.p_nom * p_nom_max_mult
         )
 
 class _GasPipelineCapacity(GasData):
@@ -723,6 +708,7 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
         )
 
 class PipelineLinepack(GasData):
+    """Creator for linepack infrastructure"""
     
     def __init__(self, year: int, interconnect: str, counties: str, pipelines: str) -> None:
         self.counties = StateGeometry(counties)
@@ -772,10 +758,12 @@ class PipelineLinepack(GasData):
         final = final[["MAX_ENERGY_MWh", "MIN_ENERGY_MWh", "NOMINAL_ENERGY_MWh"]].reset_index()
         return self.filter_on_interconnect(final)
         
-    def build_infrastructure(self, n: pypsa.Network) -> None:
+    def build_infrastructure(self, n: pypsa.Network, **kwargs) -> None:
         
         df = self.data.copy()
         df = df.set_index("STATE")
+        
+        cyclic_storage = kwargs.get("cyclic_storage", False)
         
         n.madd(
             "Store",
@@ -792,7 +780,7 @@ class PipelineLinepack(GasData):
             e_max_pu=1,
             e_initial=df.NOMINAL_ENERGY_MWh,
             e_initial_per_period=False,
-            e_cyclic=False,
+            e_cyclic=cyclic_storage,
             e_cyclic_per_period=True,
             p_set=0,
             marginal_cost=0,
@@ -897,7 +885,6 @@ def build_natural_gas(
     county_path: str = "../data/counties/cb_2020_us_county_500k.shp",
     pipelines_path: str = "../data/natural_gas/EIA-StatetoStateCapacity_Jan2023.xlsx",
     pipeline_shape_path: str = "../data/natural_gas/pipelines.geojson",
-    eia_757_path: str = "../data/natural_gas/EIA-757.csv",
 ) -> None:
 
     # add gas carrier
@@ -911,8 +898,8 @@ def build_natural_gas(
     
     # add state level natural gas processing facilities 
     
-    production = GasProcessing(interconnect, eia_757_path)
-    production.build_infrastructure(n)
+    production = GasProcessing(year, interconnect, api)
+    production.build_infrastructure(n, capacity_multiplier=1)
     
     # add state level gas storage facilities 
     

@@ -486,7 +486,6 @@ class GasStorage(DataExtractor):
 class GasProduction(DataExtractor):
     """Dry natural gas production"""
 
-    # https://www.eia.gov/naturalgas/storage/basics/
     production_codes = {
         "market":"VGM", 
         "gross":"FGW", # gross withdrawls

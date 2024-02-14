@@ -43,7 +43,7 @@ if __name__ == "__main__":
 
         snakemake = mock_snakemake(
             "add_sectors",
-            interconnect="texas",
+            interconnect="western",
             # simpl="",
             clusters="40",
             ll="v1.25",
