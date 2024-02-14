@@ -75,7 +75,7 @@ class FuelCosts(EiaData):
     
     def __init__(self, fuel: str, industry: str, year: int, api: str) -> None:
         self.fuel = fuel
-        self.industry = industry
+        self.industry = industry # (power|residential|commercial|industrial|imports|exports)
         self.year = year
         self.api = api
     
@@ -96,7 +96,7 @@ class Trade(EiaData):
     
     def __init__(self, fuel: str, direction: str, year: int, api: str) -> None:
         self.fuel = fuel
-        self.direction = direction
+        self.direction = direction # (imports|exports)
         self.year = year
         self.api = api
 
@@ -113,15 +113,21 @@ class Trade(EiaData):
 # concrete creator 
 class Production(EiaData):
     
-    def __init__(self, fuel: str, industry: str, year: int, api: str) -> None:
+    def __init__(self, fuel: str, production: str, year: int, api: str) -> None:
         self.fuel = fuel
-        self.industry = industry
+        self.production = production # (marketed|gross)
         self.year = year
         self.api = api
     
     def data_creator(self) -> pd.DataFrame:
         if self.fuel == "gas":
-            return 
+            return GasProduction(self.production, self.year, self.api)
+        else:
+            raise InputException(
+                property="Production",
+                valid_options=["gas"],
+                recieved_option=self.fuel
+            )
 
 # concrete creator 
 class Demand(EiaData):
@@ -146,7 +152,7 @@ class Storage(EiaData):
     
     def __init__(self, fuel: str, storage: str, year: int, api: str) -> None:
         self.fuel = fuel
-        self.storage = storage
+        self.storage = storage # (base|working|total|withdraw)
         self.year = year
         self.api = api
 
@@ -477,8 +483,64 @@ class GasStorage(DataExtractor):
         """Maps state name to code"""
         return "U.S." if state == "U.S. Total" else STATE_CODES[state]
 
+class GasProduction(DataExtractor):
+    """Dry natural gas production"""
+
+    # https://www.eia.gov/naturalgas/storage/basics/
+    production_codes = {
+        "market":"VGM", 
+        "gross":"FGW", # gross withdrawls
+    }
+    
+    def __init__(self, production: str, year: int, api_key: str) -> None:
+        self.production = production
+        if self.production not in list(self.production_codes):
+            raise InputException(
+                propery="Natural Gas Production", 
+                valid_options=list(self.production_codes), 
+                recived_option=production
+            )
+        super().__init__(year, api_key)
+
+    def build_url(self) -> str:
+        base_url = "natural-gas/prod/sum/data/"
+        facets = f"frequency=monthly&data[0]=value&facets[process][]={self.production_codes[self.production]}&start={self.year}-01&end={self.year+1}-01&sort[0][column]=period&sort[0][direction]=desc&offset=0&length=5000"
+        return f"{API_BASE}{base_url}?api_key={self.api_key}&{facets}"
+
+    def format_data(self, df: pd.DataFrame) -> pd.DataFrame:
+        
+        df = df[~(df["area-name"] == "NA")].copy()
+        df["period"] = self._format_period(df.period)
+        df["state"] = (
+            df["series-description"]
+            .map(self.extract_state)
+            .map(self.map_state_names)
+        )
+        
+        return (
+            df
+            [["series-description", "value", "units", "state", "period"]]
+            .sort_values(["state", "period"])
+            .set_index("period")
+        )
+        
+    @staticmethod
+    def extract_state(description: str) -> str:
+        """Extracts state from series descripion
+        
+        Input will be in one of the following forms
+        - "Maryland Natural Gas Marketed Production (MMcf)"
+        - "Idaho Marketed Production of Natural Gas (MMcf)"
+        """
+        return description.split(" Natural Gas")[0].split(" Marketed")[0]
+    
+    @staticmethod
+    def map_state_names(state: str) -> str:
+        """Maps state name to code"""
+        return "U.S." if state == "U.S." else STATE_CODES[state]
+
 if __name__ == "__main__":
     with open("./../config/config.api.yaml", "r") as file:
         yaml_data = yaml.safe_load(file)
     api = yaml_data["api"]["eia"]
-    print(Storage("gas", "base", 2020, api).get_data())
+    print(Production("gas", "market", 2020, api).get_data())
