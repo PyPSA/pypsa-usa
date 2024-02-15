@@ -219,6 +219,7 @@ rule add_electricity:
         tech_costs=DATA + f"costs_{config['costs']['year']}.csv",
         regions=RESOURCES + "{interconnect}/regions_onshore.geojson",
         plants_eia="repo_data/eia_plants_wecc.csv",
+        plants_tx=f"repo_data/ercot_specific/{config['capacity_from_reeds']}.csv",
         plants_ads="repo_data/ads_plants_locs.csv",
         fuel_costs="repo_data/eia_mappings/fuelCost22.csv",
         plants_breakthrough="data/breakthrough_network/base_grid/plant.csv",
@@ -246,17 +247,18 @@ rule add_electricity:
             else []
         ,
         eia = expand(DATA + "eia/{file}", file=DATAFILES_DMD),
+        uri_demand="repo_data/ercot_specific/uri_real_demand.csv",
         **{
             f"gen_cost_mult_{Path(x).stem}":f"repo_data/locational_multipliers/{Path(x).name}" for x in Path("repo_data/locational_multipliers/").glob("*")
         },
         ng_electric_power_price = RESOURCES + "costs/ng_electric_power_price.csv",
     output:
-        RESOURCES + "{interconnect}/elec_base_network_l_pp.nc",
+        RESOURCES + "{interconnect}/elec_base_network_1_pp.nc",
     log:
         LOGS + "{interconnect}_add_electricity.log",
     benchmark:
         BENCHMARKS + "{interconnect}_add_electricity"
-    threads: 1
+    threads: 2
     resources:
         mem_mb=5000,
     script:
@@ -268,7 +270,7 @@ rule simplify_network:
     input:
         bus2sub="data/breakthrough_network/base_grid/{interconnect}/bus2sub.csv",
         sub="data/breakthrough_network/base_grid/{interconnect}/sub.csv",
-        network= RESOURCES + "{interconnect}/elec_base_network_l_pp.nc",
+        network= RESOURCES + "{interconnect}/elec_base_network_1_pp.nc",
     output:
         network=RESOURCES + "{interconnect}/elec_s.nc",
     log:

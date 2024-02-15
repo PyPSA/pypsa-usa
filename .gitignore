@@ -20,6 +20,8 @@ benchmarks/
 resources/
 notebooks/
 venv/
+outputs/
+repo_data/
 
 ## Core latex/pdflatex auxiliary files:
 *.aux

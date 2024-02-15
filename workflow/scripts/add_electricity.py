@@ -160,6 +160,9 @@ def add_co2_emissions(n, costs, carriers):
     suptechs = n.carriers.loc[carriers].index.str.split("-").str[0]
     n.carriers.loc[carriers, "co2_emissions"] = costs.co2_emissions[suptechs].values
 
+    # Remove CO2 from geothermal
+    n.carriers.loc['geothermal', "co2_emissions"] = 0
+
 
 def load_costs(
     tech_costs: str, 
@@ -174,6 +177,14 @@ def load_costs(
     # correct units to MW
     costs.loc[costs.unit.str.contains("/kW"), "value"] *= 1e3
     costs.unit = costs.unit.str.replace("/kW", "/MW")
+
+    # Fix some FOMs where the units are not % but are USD/MW
+    tech_need_fix_fom = costs[(costs.index.get_level_values('parameter') == 'FOM') & (costs.unit.str.contains("USD"))].index.get_level_values('technology')
+    tech_need_fix_fom_wide = costs[(costs.index.get_level_values('technology').isin(tech_need_fix_fom))].value.unstack()
+    tech_need_fix_fom_wide['FOM'] = tech_need_fix_fom_wide['FOM']/tech_need_fix_fom_wide['investment']*100
+
+    costs.loc[(costs.index.get_level_values('parameter') == 'FOM') & (costs.unit.str.contains("USD")), 'value'] = tech_need_fix_fom_wide.FOM.values
+    costs.loc[(costs.index.get_level_values('parameter') == 'FOM') & (costs.unit.str.contains("USD")), 'unit'] = "%/year"
 
     # polulate missing values with user provided defaults 
     fill_values = config["fill_values"]
@@ -748,11 +759,27 @@ def prepare_ads_demand(n: pypsa.Network,
 
 def prepare_eia_demand(n: pypsa.Network, 
                        demand_path: str,
-                       scaling = 1.0) -> pd.DataFrame:
+                       replace_uri: False,
+                       scaling = 1.0, 
+                       ) -> pd.DataFrame:
     logger.info('Building Load Data using EIA demand')
     demand = pd.read_csv(demand_path, index_col=0)
     demand.index = pd.to_datetime(demand.index)
     demand = demand.fillna(method='backfill') #tempory solution until gridEmission for the cleaned Data
+    
+    if replace_uri:
+        # Read Uri projected demand from ERCOT
+        demand_uri = pd.read_csv(snakemake.input['uri_demand'])
+        demand_uri.columns = ['timestamp', 'ERCO_uri']
+        demand_uri['ERCO_uri'] = demand_uri['ERCO_uri'].str.replace(',', '').astype(float)
+        demand_uri['timestamp'] = pd.to_datetime(demand_uri['timestamp'])
+        demand_uri['timestamp'] -=  pd.to_timedelta(6, unit='h')
+
+        # Replace eia demand with Uri-specific demand
+        demand = demand.merge(demand_uri, on='timestamp', how='left')
+        demand['ERCO'] = demand.ERCO_uri.combine_first(demand.ERCO)
+        demand = demand.drop('ERCO_uri', axis=1).set_index('timestamp', inplace=False)
+
     demand *= scaling
     demand = demand.loc[n.snapshots.intersection(demand.index)] # filter by snapshots
     demand.index = n.snapshots
@@ -786,6 +813,7 @@ def disaggregate_demand_to_buses(n: pypsa.Network,
 def add_demand_from_file(n: pypsa.Network, 
                          fn_demand: str, 
                          demand_type: str, 
+                         replace_uri: False, 
                          scaling):
     """
     Add demand to network from specified configuration setting. Returns network with demand added.
@@ -795,7 +823,7 @@ def add_demand_from_file(n: pypsa.Network,
     elif demand_type == "ads":
         demand_per_bus = prepare_ads_demand(n, fn_demand)
     elif demand_type == "pypsa-usa":
-        demand_per_bus = prepare_eia_demand(n, fn_demand, scaling)
+        demand_per_bus = prepare_eia_demand(n, fn_demand,replace_uri, scaling)
     else:
         raise ValueError("Invalid demand_type. Supported values are 'breakthrough', 'ads', and 'pypsa-usa'.")
     n.madd("Load", demand_per_bus.columns, bus=demand_per_bus.columns,
@@ -976,7 +1004,8 @@ def attach_wind_and_solar(
 def attach_battery_storage(n: pypsa.Network, 
                            plants: pd.DataFrame, 
                            extendable_carriers, 
-                           costs):
+                           costs,
+                           max_hours=1):
     """Attaches Battery Energy Storage Systems To the Network.
     """
     plants_filt = plants.query("carrier == 'battery' ")
@@ -992,7 +1021,8 @@ def attach_battery_storage(n: pypsa.Network,
         p_nom=plants_filt.p_nom,
         p_nom_min=plants_filt.p_nom,
         p_nom_extendable='battery' in extendable_carriers['Store'],
-        max_hours = plants_filt.energy_capacity_mwh / plants_filt.p_nom,
+        # max_hours = plants_filt.energy_capacity_mwh / plants_filt.p_nom,
+        max_hours = max_hours['battery'],
         build_year=plants_filt.operating_year,
         efficiency_store= 1.0,
         efficiency_dispatch=1.0, #TODO: Add efficiency_dispatch to config file
@@ -1032,6 +1062,27 @@ def load_powerplants_eia(
     plants['ramp_limit_down'] = plants.pop('rampdn rate(mw/minute)') / plants.p_nom * 60 #MW/min to p.u./hour
     plants['build_year'] = plants.operating_year
     plants['dateout'] = np.inf #placeholder TODO FIX LIFETIME
+    return plants
+
+def load_powerplants_texas(
+    dataset: str
+) -> pd.DataFrame:
+    # load data
+    plants = pd.read_csv(
+        dataset, 
+        dtype={"bus_assignment": "str"}).rename(columns=str.lower)
+
+    plants['interconnection'] = 'texas'
+    plants['carrier'] = plants['tech_pypsa']
+    plants['inchr2(mmbtu/mwh)'] = plants['heat_rate']
+
+    plants = add_missing_fuel_cost(plants, snakemake.input.fuel_costs)
+    plants = add_missing_heat_rates(plants, snakemake.input.fuel_costs)
+
+    plants.set_index('generator_name', inplace=True)
+    plants['heat_rate'] = plants.pop('inchr2(mmbtu/mwh)')
+    plants['marginal_cost'] = plants.heat_rate * plants.fuel_cost  #(MMBTu/MW) * (USD/MMBTu) = USD/MW
+    plants['efficiency'] = 1 / (plants['heat_rate'] / 3.412) * 1000 #MMBTu/MWh to MWh_electric/MWh_thermal
     return plants
 
 
@@ -1210,6 +1261,9 @@ def load_powerplants_breakthrough(breakthrough_dataset: str) -> pd.DataFrame:
 def main(snakemake):
     params = snakemake.params
     configuration = snakemake.config["network_configuration"]
+    texas_reliability = snakemake.config["texas_reliability"]
+    replace_uri = snakemake.config["replace_uri"]
+    uri_demand = snakemake.input['uri_demand']
     interconnection = snakemake.wildcards["interconnect"]
     scaling = snakemake.config['load']['scaling_factor']
 
@@ -1273,7 +1327,10 @@ def main(snakemake):
 
     if configuration  == "pypsa-usa":
         fn_demand = snakemake.input['eia'][sns_start.year%2017]
-        plants = load_powerplants_eia(snakemake.input['plants_eia'], const.EIA_CARRIER_MAPPER, interconnect=interconnection)
+        if texas_reliability: 
+            plants = load_powerplants_texas(snakemake.input['plants_tx'])
+        else:
+            plants = load_powerplants_eia(snakemake.input['plants_eia'], const.EIA_CARRIER_MAPPER, interconnect=interconnection)
     elif configuration  == "breakthrough":
         fn_demand = snakemake.input["demand_breakthrough_2016"]
         plants = load_powerplants_breakthrough(snakemake.input['plants_breakthrough'])
@@ -1291,7 +1348,7 @@ def main(snakemake):
     
     #Applying to all configurations
     plants = match_plant_to_bus(n, plants)
-    add_demand_from_file(n, fn_demand, configuration, scaling)
+    add_demand_from_file(n, fn_demand, configuration, replace_uri, scaling)
 
     attach_conventional_generators(
         n,
@@ -1309,7 +1366,8 @@ def main(snakemake):
         n, 
         plants,
         extendable_carriers, 
-        costs
+        costs,
+        params.electricity["max_hours"],
     )
 
 

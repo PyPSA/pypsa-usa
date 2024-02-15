@@ -47,12 +47,13 @@ wildcard_constraints:
     clusters="[0-9]+m?|all",
     ll="(v|c)([0-9\.]+|opt|all)|all",
     opts="[-+a-zA-Z0-9\.]*",
+    scope="[-+a-zA-Z0-9\.]*",
 
 
 # -------------------------- Config and Subworkflows ------------------------- #
 
 # Merge subworkflow configs and main config
-configfile: "config/config.default.yaml"
+configfile: "config/config.default_r.yaml"
 configfile: "config/config.cluster.yaml"
 configfile: "config/config.osw.yaml"
 configfile: "config/config.plotting.yaml"
@@ -63,11 +64,28 @@ run = config.get("run", {})
 RDIR = run["name"] + "/" if run.get("name") else ""
 CDIR = RDIR if not run.get("shared_cutouts") else ""
 
-LOGS = "logs/" + RDIR
-BENCHMARKS = "benchmarks/" + RDIR
-DATA = "data/" + RDIR
-RESOURCES = "resources/" + RDIR if not run.get("shared_resources") else "resources/"
+# LOGS = "logs/" + RDIR
+# BENCHMARKS = "benchmarks/" + RDIR
+# DATA = "data/" + RDIR
+# RESOURCES = "resources/" + RDIR if not run.get("shared_resources") else "resources/"
+# RESULTS = "results/" + RDIR
+
+LOGS = "logs/"
+BENCHMARKS = "benchmarks/" 
+DATA = "data/"
+RESOURCES = "resources/" + RDIR if not run.get("shared_resources") else "resources/" + RDIR
 RESULTS = "results/" + RDIR
+
+DATAFILES_DMD = [
+    "EIA_DMD_2017.csv",
+    "EIA_DMD_2018.csv",
+    "EIA_DMD_2019.csv",
+    "EIA_DMD_2020.csv",
+    "EIA_DMD_2021.csv",
+    "EIA_DMD_2022.csv",
+    "EIA_DMD_2023.csv",
+    ]
+
 
 include: "rules/common.smk"
 include: "rules/retrieve.smk"
@@ -81,11 +99,11 @@ include: "rules/postprocess.smk"
 rule all:
     input:
         expand(
-            "results/{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{figure}.pdf",
+            RESULTS + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{figure}.pdf",
             **config["scenario"],
             figure=FIGURES_SINGLE
         ),
-        "repo_data/dag.jpg",
+        #"repo_data/dag.jpg",
 
 # Create DAG with- 
 # snakemake --dag -F | sed -n "/digraph/,\$p" | dot -Tpng -o repo_data/dag.jpg

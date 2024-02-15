@@ -29,7 +29,7 @@ def define_zenodo_databundles():
 
 def define_sector_databundles():
     return {
-        'pypsa_usa_sec':"https://zenodo.org/records/10067222/files/pypsa_usa_sec.zip?download=1"
+        'pypsa_usa_sec':"https://zenodo.org/records/10547484/files/pypsa_usa_data_sector.zip?download=1"
         }
 
 rule retrieve_zenodo_databundles:
@@ -73,23 +73,15 @@ if config["network_configuration"] == 'ads2032':
         script:
             "../scripts/retrieve_forecast_data.py"
 
-DATAFILES_DMD = [
-    "EIA_DMD_2017.csv",
-    "EIA_DMD_2018.csv",
-    "EIA_DMD_2019.csv",
-    "EIA_DMD_2020.csv",
-    "EIA_DMD_2021.csv",
-    "EIA_DMD_2022.csv",
-    "EIA_DMD_2023.csv",
-    ]
 
-rule retrieve_eia_data:
-    output:
-        expand(DATA + "eia/{file}", file=DATAFILES_DMD),
-    log:
-        "logs/retrieve/retrieve_historical_load_data.log",
-    script:
-        "../scripts/retrieve_eia_data.py"
+if config["enable"].get("download_eia", False):
+    rule retrieve_eia_data:
+        output:
+            expand(DATA + "eia/{file}", file=DATAFILES_DMD),
+        log:
+            "logs/retrieve/retrieve_historical_load_data.log",
+        script:
+            "../scripts/retrieve_eia_data.py"
 
 
 rule retrieve_ship_raster:

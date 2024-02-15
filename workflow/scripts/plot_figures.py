@@ -82,6 +82,8 @@ def get_color_palette(n: pypsa.Network) -> Dict[str,str]:
     color_palette = n.carriers.set_index("nice_name").to_dict()["color"]
     color_palette["Battery Charging"] = color_palette["Battery Storage"]
     color_palette["Battery Discharging"] = color_palette["Battery Storage"]
+    # color_palette["H2"] = color_palette["Hydrogen Storage"]
+    # color_palette["H2 electrolysis"] = color_palette["Hydrogen Storage"]
     color_palette["battery"] = color_palette["Battery Storage"]
     color_palette["co2"] = "k"
     return color_palette
@@ -96,9 +98,9 @@ def get_bus_scale(interconnect: str) -> float:
 def get_line_scale(interconnect: str) -> float:
     """Scales lines based on interconnect size"""
     if interconnect != "usa":
-        return 2e3
+        return 2e4
     else:
-        return 4e3
+        return 2e2
 
 def create_title(title: str, **wildcards) -> str:
     """Standardizes wildcard writing in titles
@@ -527,13 +529,13 @@ def plot_production_area(n: pypsa.Network, save:str, **wildcards) -> None:
     
     production = n.generators_t.p.mul(1e-3) # MW -> GW
     production = production.groupby(carriers, axis=1).sum().rename(columns=carrier_nice_names)
-    
+
     storage = n.storage_units_t.p.groupby(carriers_storage_units, axis=1).sum().mul(1e-3)
     storage_charge = storage[storage > 0].rename(columns={'battery':'Battery Discharging'}).fillna(0)
     storage_discharge = storage[storage < 0].rename(columns={'battery':'Battery Charging'}).fillna(0)
     energy_mix = pd.concat([production, storage_charge, storage_discharge], axis=1)
 
-    demand = pd.DataFrame(n.loads_t.p.sum(1).mul(1e-3)).rename(columns={0:"Deamand"})
+    demand = pd.DataFrame(n.loads_t.p.sum(1).mul(1e-3)).rename(columns={0:"Demand"})
     
     # plot 
     
@@ -581,7 +583,7 @@ def plot_production_bar(n: pypsa.Network, save:str, **wildcards) -> None:
     production = pd.DataFrame(production.groupby(carriers, axis=1)
                               .sum().rename(columns=carrier_nice_names)
                               .sum()).mul(1e-6).rename(columns={0:"Production (TWh)"}).reset_index()
-    
+
     storage = n.storage_units_t.p.groupby(carriers_storage_units, axis=1).sum().mul(1e-6)
     storage_charge = storage[storage > 0].rename(columns={'battery':'Battery Discharging'}).sum().reset_index().rename(columns={0:"Production (TWh)"})
     storage_discharge = storage[storage < 0].rename(columns={'battery':'Battery Charging'}).sum().reset_index().rename(columns={0:"Production (TWh)"})
@@ -969,6 +971,10 @@ if __name__ == "__main__":
     
     # extract shared plotting files 
     n = pypsa.Network(snakemake.input.network)
+
+    # Remove load sheding because they are too large to plot
+    n.mremove('Generator', list(n.generators[n.generators.carrier == 'load'].index))
+    
     onshore_regions = gpd.read_file(snakemake.input.regions_onshore)
     retirement_method = snakemake.params.retirement
     # n_hours = snakemake.config['solving']['options']['nhours']

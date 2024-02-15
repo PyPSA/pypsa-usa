@@ -1,11 +1,13 @@
 """Rules for building sector coupling network"""
 
 rule build_population_layouts:
+    params:
+        cutouts=config["atlite"]["cutouts"],
     input:
         county_shapes = DATA + "counties/cb_2020_us_county_500k.shp",
         urban_percent = DATA + "urbanization/DECENNIALDHC2020.H2-Data.csv",
         population = DATA + "population/DECENNIALDHC2020.P1-Data.csv",
-        cutout = "cutouts/" + CDIR + "{interconnect}_{cutout}.nc",
+        cutout = "cutouts/" + CDIR + "texas_era5_2021.nc",
     output:
         pop_layout_total = RESOURCES + "{interconnect}/pop_layout_total.nc",
         pop_layout_urban = RESOURCES + "{interconnect}/pop_layout_urban.nc",
@@ -188,4 +190,19 @@ rule build_cop_profiles:
 
 rule testing:
     input:
-        RESOURCES + "western/cop_soil_total_elec_s_60.nc"
+        RESOURCES + "{interconnect}/cop_soil_total_elec_s_{clusters}.nc"
+
+
+rule build_gas_network:
+    input:
+        gas_network="data/gas_network/scigrid-gas/data/IGGIELGN_PipeSegments.geojson",
+    output:
+        cleaned_gas_network=RESOURCES + "gas_network.csv",
+    resources:
+        mem_mb=4000,
+    log:
+        LOGS + "build_gas_network.log",
+    conda:
+        "../envs/environment.yaml"
+    script:
+        "../scripts/build_gas_network.py"
