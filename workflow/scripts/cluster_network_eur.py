@@ -95,7 +95,7 @@ Creates networks clustered to ``{cluster}`` number of zones with aggregated buse
 
 import logging
 import pdb
-from _helpers import configure_logging, update_p_nom_max, get_aggregation_strategies
+from _helpers import configure_logging, update_p_nom_max, get_aggregation_strategies, export_network_for_gis_mapping
 
 import pypsa
 
@@ -128,13 +128,13 @@ def normed(x): return (x/x.sum()).fillna(0.)
 
 
 def weighting_for_country(n, x):
-    conv_carriers = {'OCGT','CCGT','PHS', 'hydro'}
+    # conv_carriers = {'OCGT','CCGT','PHS', 'hydro'}
     gen = (n
-           .generators.loc[n.generators.carrier.isin(conv_carriers)]
+           .generators#.loc[n.generators.carrier.isin(conv_carriers)]
            .groupby('bus').p_nom.sum()
            .reindex(n.buses.index, fill_value=0.) +
            n
-           .storage_units.loc[n.storage_units.carrier.isin(conv_carriers)]
+           .storage_units#.loc[n.storage_units.carrier.isin(conv_carriers)]
            .groupby('bus').p_nom.sum()
            .reindex(n.buses.index, fill_value=0.))
     load = n.loads_t.p_set.mean().groupby(n.loads.bus).sum()
@@ -191,7 +191,7 @@ def distribute_clusters(n, n_clusters, focus_weights=None, solver_name="cbc"):
          .pipe(normed))
 
     N = n.buses.groupby(['country', 'sub_network']).size()
-
+    
     assert n_clusters >= len(N) and n_clusters <= N.sum(), \
         f"Number of clusters must be {len(N)} <= n_clusters <= {N.sum()} for this selection of countries."
 
@@ -202,6 +202,9 @@ def distribute_clusters(n, n_clusters, focus_weights=None, solver_name="cbc"):
         assert total_focus <= 1.0, "The sum of focus weights must be less than or equal to 1."
 
         for country, weight in focus_weights.items():
+            if country == "Offshore":
+                L[(country, '0')] = weight + weight**2
+                L.pipe(normed)
             L[country] = weight / len(L[country])
 
         remainder = [c not in focus_weights.keys() for c in L.index.get_level_values('country')]
@@ -360,7 +363,7 @@ if __name__ == "__main__":
     print("Running clustering.py directly")
     if 'snakemake' not in globals():
         from _helpers import mock_snakemake
-        snakemake = mock_snakemake('cluster_network', interconnect='texas', clusters='30')
+        snakemake = mock_snakemake('cluster_network', interconnect='western', clusters='100')
     configure_logging(snakemake)
 
     n = pypsa.Network(snakemake.input.network)
@@ -429,3 +432,6 @@ if __name__ == "__main__":
         getattr(clustering, attr).to_csv(snakemake.output[attr])
 
     cluster_regions((clustering.busmap,), snakemake.input, snakemake.output)
+
+    output_path = os.path.dirname(snakemake.output[0]) + '_clustered_'
+    export_network_for_gis_mapping(clustering.network, output_path)

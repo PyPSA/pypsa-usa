@@ -1,0 +1,7 @@
+,Unit,Values,Description
+co2_sequestration_potential,MtCO2/a,"float","The potential of sequestering CO2 in the spatial scope per year"
+natural_gas,,,"Options when implementing natural gas network with sector wildcard 'G'"
+-- allow_imports_exports,bool,"{true, false}","Allow international imports/exports"
+-- cyclic_storage,bool,"{true, false}","Apply cyclic storage constraints on linepack and underground storage"
+heating,,,"Options when implementing heating network with sector wildcard 'H'"
+-- heat_pump_sink_T,C,"float","The temperature heat sink used in heat pumps based on DTU / large area radiators. The value is conservatively high to cover hot water and space heating in poorly-insulated buildings"

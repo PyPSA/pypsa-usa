@@ -43,13 +43,14 @@ Reads in Breakthrough Energy/TAMU transmission dataset, and converts it into PyP
 
 import pypsa, pandas as pd, logging, geopandas as gpd
 from geopandas.tools import sjoin
-from _helpers import configure_logging
+from _helpers import configure_logging, test_network_datatype_consistency
 import numpy as np
 from shapely.geometry import Polygon, Point
 import geopandas as gpd
 from shapely.geometry import Point
 from sklearn.neighbors import BallTree
 import constants as const
+from build_shapes import load_na_shapes
 
 
 def haversine_np(lon1, lat1, lon2, lat2):
@@ -85,7 +86,6 @@ def add_buses_from_file(n: pypsa.Network, buses: gpd.GeoDataFrame, interconnect:
         buses.index,
         Pd = buses.Pd, # used to decompose zone demand to bus demand
         v_nom = buses.baseKV,
-        zone_id = buses.zone_id,
         balancing_area = buses.balancing_area,
         state = buses.state,
         country = buses.country,
@@ -94,7 +94,8 @@ def add_buses_from_file(n: pypsa.Network, buses: gpd.GeoDataFrame, interconnect:
         y = buses.lat,
         sub_id = buses.sub_id,
         substation_off = False,
-        poi = False
+        poi = False,
+        LAF_states = buses.LAF_states,
     )
 
     n.buses.loc[n.buses.sub_id.astype(int) >= 41012, 'substation_off'] = True #mark offshore buses
@@ -228,16 +229,19 @@ def create_grid(polygon, cell_size):
     # Find the center of each cell
     centers = intersecting_cells.geometry.centroid
 
+    # Remove centroids that are outside of the polygon
+    centers = [center for center in centers if center.within(polygon)]
+
     # Return the coordinates of the centers
     return [(center.y, center.x) for center in centers]
 
 
-def build_offshore_buses(offshore_shapes: gpd.GeoDataFrame) -> pd.DataFrame:
+def build_offshore_buses(offshore_shapes: gpd.GeoDataFrame, offshore_spacing: int) -> pd.DataFrame:
     "Build dataframe of offshore buses by creating evenly spaced grid cells inside of the offshore shapes."
     offshore_buses = pd.DataFrame()
     offshore_shapes = offshore_shapes.to_crs('EPSG:5070')
     for shape in offshore_shapes.geometry:
-        cell_centers = create_grid(shape, 25e3) # 25km cell size
+        cell_centers = create_grid(shape, offshore_spacing) 
         cell_centers = pd.DataFrame(cell_centers, columns=['lat', 'lon'])
         offshore_buses = pd.concat([offshore_buses, cell_centers], ignore_index=True)
     #reproject back to EPSG:4326
@@ -291,6 +295,7 @@ def identify_osw_poi(n: pypsa.Network) -> pypsa.Network:
 
 
 def match_osw_to_poi(buses_to_match_to, missing_buses):
+    "Match offshore buses to their nearest POI bus"
     missing_buses = missing_buses.copy()
     missing_buses['bus_assignment'] = None
 
@@ -323,9 +328,6 @@ def build_offshore_transmission_configuration(n: pypsa.Network) -> pypsa.Network
                                 offshore_buses.x.values, 
                                 offshore_buses.y.values
                             )
-    # add onshore poi buses @230kV
-    logger.info(f"Adding {len(offshore_buses)} offshore buses to the network.")
-
     # Reassigns Offshore buses region identifies to the POI bus regions
     n.buses.loc[offshore_buses.index, 'balancing_area'] = n.buses.loc[offshore_buses.bus_assignment].balancing_area.values
     n.buses.loc[offshore_buses.index, 'state'] = n.buses.loc[offshore_buses.bus_assignment].state.values
@@ -333,6 +335,7 @@ def build_offshore_transmission_configuration(n: pypsa.Network) -> pypsa.Network
     n.buses.loc[offshore_buses.index, 'interconnect'] = n.buses.loc[offshore_buses.bus_assignment].interconnect.values
 
 
+    # add onshore poi buses @230kV
     n.madd(
         "Bus",
         "OSW_POI_" + osw_offsub_bus_ids, #name poi bus after offshore substation
@@ -362,7 +365,7 @@ def build_offshore_transmission_configuration(n: pypsa.Network) -> pypsa.Network
         carrier = "AC",
         x = 0.1,
         r = 0.1,
-        s_nom = 5000,
+        s_nom = 0,
         underwater_fraction = 0.0, #temporarily setting to investigate clustering underwater issues later
         interconnect = n.buses.loc[offshore_buses.bus_assignment].interconnect.values,
     )
@@ -373,7 +376,7 @@ def build_offshore_transmission_configuration(n: pypsa.Network) -> pypsa.Network
         "OSW_poi_stepup_" + osw_offsub_bus_ids, #name transformer after offshore substation
         bus0 = "OSW_POI_" + osw_offsub_bus_ids,
         bus1 = offshore_buses.bus_assignment.astype(str).values,
-        s_nom = 5000,
+        s_nom = 0,
         type = "temp",
         carrier = "AC",
         v_nom = 230,
@@ -390,6 +393,23 @@ def remove_breakthrough_offshore(n: pypsa.Network) -> pypsa.Network:
     n.mremove("Bus",  n.buses.loc[n.buses.substation_off].index)
     return n
 
+def assign_missing_state_regions(gdf_bus: gpd.GeoDataFrame): 
+    """Assign buses missing state and countries to their nearest neighbor bus value"""
+    buses = gdf_bus.copy()
+    buses = buses.reset_index().rename(columns={'bus_id':'Bus','lon':'x', 'lat':'y'}).set_index('Bus')
+
+    missing = buses.loc[buses.full_states.isna()]
+    buses = buses.loc[~buses.full_states.isna()]
+    buses = buses.loc[~buses.full_states.isin(['Offshore'])]
+    missing = match_osw_to_poi(buses, missing)
+    missing.full_states = buses.loc[missing.bus_assignment].full_states.values
+
+    buses = buses.reset_index().rename(columns={'Bus':'bus_id','x':'lon', 'y':'lat'}).set_index('bus_id')
+    missing = missing.reset_index().rename(columns={'Bus':'bus_id','x':'lon', 'y':'lat'}).set_index('bus_id')
+
+    #reassigning values to original dataframe
+    gdf_bus.loc[missing.index, 'full_states'] = missing.full_states
+    return gdf_bus
 
 def assign_missing_states_countries(n: pypsa.Network):
     """Assign buses missing state and countries to their nearest neighbor bus value"""
@@ -407,20 +427,57 @@ def assign_missing_states_countries(n: pypsa.Network):
     n.buses.loc[missing.index, 'interconnect'] = missing.interconnect
 
 
-
 def modify_breakthrough_substations(n:pypsa.Network, interconnect:str):
-    if interconnect == 'Western':
+    if interconnect == 'Western' or interconnect == 'usa':
         sub_fixes = {35017 : {'x':-123.0922,'y':48.5372},
         35033 : {'x':-122.78053,'y':48.65694}, 
-        37584 : {'x':-117.10501, 'y':32.54935}}
+        37584 : {'x':-117.10501, 'y':32.54935},
+        36116 : {'x':-122.4555, 'y':37.8780},
+        36145 : {'x':-122.3121,'y':37.8211},
+        39718 : {'x':-106.49655,'y':31.76924},
+        39731 : {'x':-106.3232,'y':31.7093},
+        }
         for i in sub_fixes.keys():
             n.buses.loc[n.buses.sub_id == i, 'x'] = sub_fixes[i]['x']
             n.buses.loc[n.buses.sub_id == i, 'y'] = sub_fixes[i]['y']
     return n
 
+
+def modify_breakthrough_lines(n:pypsa.Network, interconnect:str):
+    if interconnect == 'Western' or interconnect == 'usa':
+        line_fixes = {
+            '91027' : {'v_nom':115},
+            '90511' : {'v_nom':115},
+            '90530' : {'v_nom':115},
+            '90528' : {'v_nom':115},
+            '90529' : {'v_nom':115},
+            '89704' : {'v_nom':115},
+            }
+            
+        for i in line_fixes.keys():
+            n.lines.loc[n.lines.index == i, 'v_nom'] = line_fixes[i]['v_nom']
+            n.buses.loc[n.lines.loc[n.lines.index == i].bus0, 'v_nom'] = line_fixes[i]['v_nom']
+            n.buses.loc[n.lines.loc[n.lines.index == i].bus1, 'v_nom'] = line_fixes[i]['v_nom']
+
+        #Removing Unccesary Lines in Humboldt, adding new missing one.
+        line_removals = ['89634', '89668', '90528']
+        n.mremove('Line', line_removals)
+        line_params = n.lines.loc['90501'].copy()
+        line_params.name = line_removals[0]
+        line_params.bus0 = '2020004'
+        line_params.bus1 = '2020532'
+        n.add('Line', line_params.name, **line_params.drop(['v_nom','interconnect','underwater_fraction']))
+        n.lines.loc[line_params.name, 'v_nom'] = line_params.v_nom
+        n.lines.loc[line_params.name, 'interconnect'] = line_params.interconnect
+        n.lines.loc[line_params.name, 'underwater_fraction'] = line_params.underwater_fraction
+
+    return n
+
+
 def main(snakemake):
     # create network
     n = pypsa.Network()
+    n.name = "PyPSA-USA"
 
     interconnect = snakemake.wildcards.interconnect
     # interconnect in raw data given with an uppercase first letter
@@ -446,12 +503,20 @@ def main(snakemake):
     # country and state shapes
     state_shape = gpd.read_file(snakemake.input["state_shapes"])
     state_shape = state_shape.rename(columns={"name":"state"})
+    na_shape = load_na_shapes(countries=['US']).rename(columns={'name':'full_states'})
 
     #assign ba, state, and country to each bus
+    gdf_bus = map_bus_to_region(gdf_bus, na_shape, "full_states")
     gdf_bus = map_bus_to_region(gdf_bus, ba_shape, "balancing_area")
     gdf_bus = map_bus_to_region(gdf_bus, state_shape, "state")
     gdf_bus = map_bus_to_region(gdf_bus, state_shape, "country")
-    
+
+    # assign load allocation factors to buses for state level dissagregation
+    gdf_bus = assign_missing_state_regions(gdf_bus)
+    group_sums = gdf_bus.groupby('full_states')['Pd'].transform('sum')
+    gdf_bus['LAF_states'] = gdf_bus['Pd'] / group_sums
+    gdf_bus.drop(columns=['full_states'], inplace=True)
+
     # Removing few duplicated shapes where GIS shapes were overlapping. TODO Fix GIS shapes
     gdf_bus = gdf_bus.reset_index().drop_duplicates(subset='bus_id', keep='first').set_index('bus_id')
 
@@ -468,9 +533,13 @@ def main(snakemake):
     n = remove_breakthrough_offshore(n)
 
     # build new offshore network configuration
-    offshore_buses = build_offshore_buses(offshore_shapes)
-    n = add_offshore_buses(n, offshore_buses)
-    n = build_offshore_transmission_configuration(n)
+    if snakemake.params.build_offshore_network['enable']:
+        offshore_buses = build_offshore_buses(offshore_shapes, snakemake.params.build_offshore_network['bus_spacing'])
+        n = add_offshore_buses(n, offshore_buses)
+        n = build_offshore_transmission_configuration(n)
+
+    # Modify network lines to fix errors in breakthrough data
+    n = modify_breakthrough_lines(n, interconnect)
 
     if interconnect=='Eastern': 
         logger.warning(f"Eastern Interconnect is missing {len(n.buses.loc[n.buses.balancing_area.isna() | n.buses.state.isna() | n.buses.country.isna()])} bus locations. Must clean-up GIS files before using!")
@@ -481,12 +550,17 @@ def main(snakemake):
     assign_line_length(n)
     assign_missing_states_countries(n)
     
-    logger.info(f"Network is missing BA/State/Country information for {len(n.buses.loc[n.buses.balancing_area.isna() | n.buses.state.isna() | n.buses.country.isna()])} buses.")
+    # Tests
+    logger.info(test_network_datatype_consistency(n))
+
+
+    if len(n.buses.loc[n.buses.balancing_area.isna() | n.buses.state.isna() | n.buses.country.isna()]) > 0:
+        logger.info(f"Network is missing BA/State/Country information for {len(n.buses.loc[n.buses.balancing_area.isna() | n.buses.state.isna() | n.buses.country.isna()])} buses.")
 
     # export bus2sub interconnect data
     logger.info(f"Exporting bus2sub and sub data for {interconnect}")
 
-    bus2sub = n.buses[['sub_id', 'interconnect','balancing_area','x','y']]
+    bus2sub = n.buses[['sub_id', 'interconnect','balancing_area','x','y','state','country']]
     bus2sub.to_csv(snakemake.output.bus2sub)
     subs = n.buses[['sub_id', 'x', 'y', 'interconnect']].set_index('sub_id').drop_duplicates().rename(columns={'x':'lon', 'y':'lat'})
     subs.to_csv(snakemake.output.sub)
@@ -502,6 +576,7 @@ def main(snakemake):
     lines_gis['lon2'] = n.buses.loc[lines_gis.bus1].x.values
     lines_gis['WKT_geometry'] = 'LINESTRING ('+lines_gis.lon1.astype(str).values+' '+lines_gis.lat1.astype(str).values+', '+lines_gis.lon2.astype(str).values+' '+lines_gis.lat2.astype(str).values+')'
     lines_gis.to_csv(snakemake.output.lines_gis)
+    
     # export network
     n.export_to_netcdf(snakemake.output.network)
 

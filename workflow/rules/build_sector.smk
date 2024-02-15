@@ -1,5 +1,36 @@
 """Rules for building sector coupling network"""
 
+def sector_input_files(wildcards):
+    input_files = {
+        "network": RESOURCES + "{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}.nc"
+    }
+    sectors = wildcards.sector.split("-")
+    if "G" in sectors:
+        ng_files = {
+            "counties": DATA + "counties/cb_2020_us_county_500k.shp",
+            "eia_191": DATA + "natural-gas/EIA-191.csv",
+            "eia_757": DATA + "natural-gas/EIA-757.csv",
+            "pipelines": DATA + "natural-gas/EIA-StatetoStateCapacity_Jan2023.xlsx",
+            "imports": DATA + "natural-gas/NG_MOVE_POE2_A_EPG0_IRP_MMCF_A.xls",
+            "exports": DATA + "natural-gas/NG_MOVE_POE2_A_EPG0_ENP_MMCF_A.xls",
+        }
+        input_files.update(ng_files)
+
+    return input_files
+
+rule add_sectors:
+    params:
+        electricity=config["electricity"],
+        costs=config["costs"],
+        plotting=config["plotting"],
+        natural_gas=config["sector"].get("natural_gas", None)
+    input:
+        unpack(sector_input_files)
+    output:
+        network=RESOURCES + "{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}_{sector}.nc"
+    script:
+        "../scripts/add_sectors.py"
+
 rule build_population_layouts:
     params:
         cutouts=config["atlite"]["cutouts"],
@@ -7,7 +38,7 @@ rule build_population_layouts:
         county_shapes = DATA + "counties/cb_2020_us_county_500k.shp",
         urban_percent = DATA + "urbanization/DECENNIALDHC2020.H2-Data.csv",
         population = DATA + "population/DECENNIALDHC2020.P1-Data.csv",
-        cutout = "cutouts/" + CDIR + "texas_era5_2021.nc",
+        cutout = "cutouts/" + CDIR + "{interconnect}_" + config["atlite"]["default_cutout"] + ".nc",
     output:
         pop_layout_total = RESOURCES + "{interconnect}/pop_layout_total.nc",
         pop_layout_urban = RESOURCES + "{interconnect}/pop_layout_urban.nc",
@@ -28,7 +59,7 @@ rule build_heat_demands:
     params:
         snapshots=config["snapshots"],
     input:
-        pop_layout = RESOURCES + "pop_layout_{scope}.nc",
+        pop_layout = RESOURCES + "{interconnect}/pop_layout_{scope}.nc",
         # regions_onshore=RESOURCES + "regions_onshore_elec_s{simpl}_{clusters}.geojson",
         regions_onshore = RESOURCES + "{interconnect}/regions_onshore_s_{clusters}.geojson",
         cutout = "cutouts/" + CDIR + "{interconnect}_" + config["atlite"]["default_cutout"] + ".nc",
@@ -53,7 +84,7 @@ rule build_temperature_profiles:
     params:
         snapshots = config["snapshots"],
     input:
-        pop_layout = RESOURCES + "pop_layout_{scope}.nc",
+        pop_layout = RESOURCES + "{interconnect}/pop_layout_{scope}.nc",
         # regions_onshore = RESOURCES + "regions_onshore_elec_s{simpl}_{clusters}.geojson",
         regions_onshore = RESOURCES + "{interconnect}/regions_onshore_s_{clusters}.geojson",
         cutout = "cutouts/" + CDIR + "{interconnect}_" + config["atlite"]["default_cutout"] + ".nc",
@@ -148,7 +179,7 @@ rule build_clustered_population_layouts:
 
 rule build_cop_profiles:
     params:
-        heat_pump_sink_T=config["sector"]["heat_pump_sink_T"],
+        heat_pump_sink_T=config["sector"]["heating"]["heat_pump_sink_T"],
     input:
         temp_soil_total = RESOURCES + "{interconnect}/temp_soil_total_elec_s_{clusters}.nc",
         temp_soil_rural = RESOURCES + "{interconnect}/temp_soil_rural_elec_s_{clusters}.nc",
@@ -187,22 +218,3 @@ rule build_cop_profiles:
         "../envs/environment.yaml"
     script:
         "../scripts/build_cop_profiles.py"
-
-rule testing:
-    input:
-        RESOURCES + "{interconnect}/cop_soil_total_elec_s_{clusters}.nc"
-
-
-rule build_gas_network:
-    input:
-        gas_network="data/gas_network/scigrid-gas/data/IGGIELGN_PipeSegments.geojson",
-    output:
-        cleaned_gas_network=RESOURCES + "gas_network.csv",
-    resources:
-        mem_mb=4000,
-    log:
-        LOGS + "build_gas_network.log",
-    conda:
-        "../envs/environment.yaml"
-    script:
-        "../scripts/build_gas_network.py"

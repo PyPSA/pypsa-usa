@@ -111,8 +111,18 @@ def main(snakemake):
     bus2sub = bus2sub.reset_index().drop_duplicates(subset='sub_id').set_index('sub_id')
 
     gpd_countries = gpd.read_file(snakemake.input.country_shapes).set_index('name')
-    gpd_ba_shapes = gpd.read_file(snakemake.input.ba_region_shapes)
-    ba_region_shapes = gpd_ba_shapes.set_index('name')['geometry']
+    gpd_states = gpd.read_file(snakemake.input.state_shapes).set_index('name')
+    gpd_ba_shapes = gpd.read_file(snakemake.input.ba_region_shapes).set_index('name')['geometry']
+    
+    if aggregation_zones == 'country':
+        agg_region_shapes = gpd_countries
+    elif aggregation_zones == 'balancing_area':
+        agg_region_shapes = gpd_ba_shapes
+    elif aggregation_zones == 'state':
+        agg_region_shapes = gpd_states.geometry
+    else:
+        ValueError('zonal_aggregation must be either balancing_area, country or state')
+
 
     gpd_offshore_shapes = gpd.read_file(snakemake.input.offshore_shapes)
     offshore_shapes = gpd_offshore_shapes.reindex(columns=REGION_COLS).set_index('name')['geometry']
@@ -124,24 +134,25 @@ def main(snakemake):
     onshore_buses = n.buses[~n.buses.substation_off]
     bus2sub_onshore = bus2sub[bus2sub.Bus.isin(onshore_buses.index)]
     bus2sub_offshore = bus2sub[~bus2sub.Bus.isin(onshore_buses.index)]
+    #need to get all agg types into the bus2sub
+
 
     logger.info("Building Onshore Regions")
-    for ba in ba_region_shapes.index:
-        # print(ba)
-        ba_shape = ba_region_shapes[ba] # current shape
-        ba_subs = bus2sub_onshore.balancing_area[bus2sub_onshore.balancing_area == ba] # series of substations in the current BA
-        ba_locs = all_locs.loc[ba_subs.index] # locations of substations in the current BA
-        if ba_locs.empty: continue # skip empty BA's which are not in the bus dataframe. ex. portions of eastern texas BA when using the WECC interconnect
+    for region in agg_region_shapes.index:
+        region_shape = agg_region_shapes[region] # current shape
+        region_subs = bus2sub_onshore[f'{aggregation_zones}'][bus2sub_onshore[f'{aggregation_zones}'] == region] # series of substations in the current BA
+        region_locs = all_locs.loc[region_subs.index] # locations of substations in the current BA
+        if region_locs.empty: continue # skip empty BA's which are not in the bus dataframe. ex. portions of eastern texas BA when using the WECC interconnect
 
-        if ba =="MISO-0001":
-            ba_shape = gpd.GeoDataFrame(geometry = ba_shape).dissolve().iloc[0].geometry
+        if region =="MISO-0001":
+            region_shape = gpd.GeoDataFrame(geometry = region_shape).dissolve().iloc[0].geometry
 
         onshore_regions.append(gpd.GeoDataFrame({
-                'name': ba_locs.index,
-                'x': ba_locs['x'],
-                'y': ba_locs['y'],
-                'geometry': voronoi_partition_pts(ba_locs.values, ba_shape),
-                'country': ba,
+                'name': region_locs.index,
+                'x': region_locs['x'],
+                'y': region_locs['y'],
+                'geometry': voronoi_partition_pts(region_locs.values, region_shape),
+                'country': region,
             }))
 
     ### Defining Offshore Regions ###
@@ -168,8 +179,7 @@ def main(snakemake):
         offshore_shapes.to_frame().to_file(snakemake.output.regions_offshore)
 
     if onshore_regions_concat[onshore_regions_concat.geometry.is_empty].shape[0] > 0:
-        logger.error(f"Onshore regions are missing geometry.")
-        ValueError(f"Onshore regions are missing geometry.")
+        logger.error(f"Onshore Buses are missing geometry.")
 
 if __name__ == "__main__":
     logger = logging.getLogger(__name__)

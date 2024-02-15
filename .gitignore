@@ -20,8 +20,6 @@ benchmarks/
 resources/
 notebooks/
 venv/
-outputs/
-repo_data/
 
 ## Core latex/pdflatex auxiliary files:
 *.aux
@@ -65,14 +63,6 @@ __pycache__
 *.dvi
 *.xdv
 *-converted-to.*
-# these rules might exclude image files for figures etc.
-# *.ps
-# *.eps
-# *.pdf
-
-## Build tool directories for auxiliary files
-# latexrun
-latex.out/
 
 ## Auxiliary and intermediate files from other packages:
 # algorithms
@@ -275,3 +265,6 @@ TSWLatexianTemp*
 connect.sh
 config/config.cluster.yaml
 /workflow/repo_data/dag.png
+!.pre-commit-config.yaml
+
+
