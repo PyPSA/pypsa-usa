@@ -2,23 +2,24 @@
 network_configuration: "pypsa-usa" # "pypsa-usa" or "ads2032"
 
 run:
-  name: "add_bat8_2023_test" # use this to keep track of runs with different settings
+  name: "" # use this to keep track of runs with different settings
   disable_progressbar: false # set to true to disable the progressbar
   shared_resources: false # set to true to share the default resources across runs
   shared_cutouts: true # set to true to share the default cutout(s) across runs
 
 # docs :
 scenario:
-  interconnect: texas #"usa|texas|western|eastern"
-  clusters: [30]
+  interconnect: western #"usa|texas|western|eastern"
+  clusters: [30, 100]
   opts:
     [
-      # Co2L1.25,
-      Co2L1-1H,
+      Co2L1.0-4H,
+      Co2L0.75-4H,
+      Co2L0.5-4H,
+      Co2L0.25-4H,
+      Co2L0.0-4H,
     ]
-  ll: [v1]
-  scope: [total] # "urban", "rural", or "total" 
-  ll: [v1] 
+  ll: [vopt, v1.15] 
   scope: "total" # "urban", "rural", or "total" 
   sector: "" # G 
   planning_horizons:
@@ -30,33 +31,25 @@ foresight:  # Only Single Stage Currently
 # docs :
 enable:
   build_cutout: false
-  download_cutout: false
-  download_eia: false
-  allow_new_plant: false
 
 countries: [US]  
 
-# Texas reliability study
-texas_reliability: true
-replace_uri: true
-capacity_from_reeds: 'ercot_cap_2030_add_bat2'
-
 snapshots:
-  start: "2023-01-01"
-  end: "2024-01-01"
+  start: "2019-01-01"
+  end: "2020-01-01"
   inclusive: 'left'
 
-foresight:  # not implemented yet
+# docs :
 
 # docs :
 atlite:
-  default_cutout: era5_2023
+  default_cutout: era5_2019
   nprocesses: 8
   show_progress: false # false saves time
   cutouts:
-    era5_2023:
+    era5_2019:
       module: era5 # in priority order
-      time: ['2023']
+      time: ['2019', '2019']
   interconnects:
     western:
       x: [-126, -99]
@@ -84,28 +77,24 @@ electricity:
   conventional_carriers: [nuclear, oil, OCGT, CCGT, coal, geothermal] # Choose the conventional plant types to include in network
   renewable_carriers: [onwind, offwind, offwind_floating, solar, hydro] # Choose the renewable plant types to include in network 
   voltage_simplified: 230 #Voltage level to simplify network to in rule "simplify network"
-  co2limit: 1.0e+9 # 0.8 * 1.841e+9
+  co2limit: 1.4728e+9 # 0.8 * 1.841e+9
   co2base: 226.86e+6 #base_from_2020 Locations of the 250 MMmt of CO2 emissions from the WECC 2021.
   gaslimit: false # global gas usage limit of X MWh_th
-  egs: true
-  egs_reduction: 0.2
   retirement: economic # "economic" or "technical"
 
   operational_reserve:
-    activate: False
+    activate: True
     epsilon_load: 0.02
     epsilon_vres: 0.02
     contingency: 4000
 
   max_hours:
-    battery: 8
+    battery: 6
     H2: 168
 
   extendable_carriers:
-    # Generator: [solar, onwind, offwind, OCGT, CCGT, coal, geothermal]
-    Generator: []
-    # StorageUnit: [battery] # battery, H2
-    StorageUnit: [] # battery, H2
+    Generator: [solar, onwind, offwind, offwind_floating, OCGT, CCGT, coal] #offwind, offwind_floating,
+    StorageUnit: [battery] # battery, H2
     Store: [] #[battery, H2]
     Link: [] #[H2 pipeline]
   
@@ -122,7 +111,7 @@ conventional:
 # docs :
 renewable:
   onwind:
-    cutout: era5_2023
+    cutout: era5_2019
     resource:
       method: wind
       turbine: Vestas_V112_3MW
@@ -139,7 +128,7 @@ renewable:
     clip_p_max_pu: 1.e-2
     extendable: true
   offwind:
-    cutout: era5_2023
+    cutout: era5_2019
     resource:
       method: wind
       turbine: NREL_ReferenceTurbine_2020ATB_5.5MW
@@ -175,7 +164,7 @@ renewable:
     clip_p_max_pu: 1.e-2
     extendable: true
   solar:
-    cutout: era5_2023
+    cutout: era5_2019
     resource:
       method: pv
       panel: CSi
@@ -191,7 +180,7 @@ renewable:
     clip_p_max_pu: 1.e-2
     extendable: true
   hydro:
-    cutout: era5_2023
+    cutout: era5_2019
     resource:
       method: hydro
       hydrobasins: resources/hybas_na_lev06_v1c.shp
@@ -231,11 +220,11 @@ links:
 
 # docs :
 load:
-  scaling_factor: 1.09
+  scaling_factor: 1.0
 
 # docs :
 costs:  # based on the potentials, assuming  (0.1 kW/m2 and 10 m2/person)
-  year: 2030
+  year: 2030 
   version: v0.6.0
   rooftop_share: 0.14
   fill_values:
@@ -265,6 +254,7 @@ sector:
   co2_sequestration_potential: 0
   natural_gas:
     allow_imports_exports: true # false to be implemented 
+    copperplate: true # copperplates at a state level (only true works)
     cyclic_storage: false
   heating:
     heat_pump_sink_T: 55.
@@ -299,13 +289,12 @@ focus_weights:
 solving:
   #tmpdir: "path/to/tmp"
   options:
-    operations_only: false
-    load_shedding: true
+    load_shedding: false
     clip_p_max_pu: 1.e-2
     noisy_costs: true
     skip_iterations: true
     rolling_horizon: false
-    seed: 122
+    seed: 123
     # options that go into the optimize function
     track_iterations: false
     min_iterations: 4
@@ -332,7 +321,7 @@ solving:
       parallel: "on"
       random_seed: 123
     gurobi-default:
-      threads: 10
+      threads: 8
       method: 2 # barrier
       crossover: 0
       BarConvTol: 1.e-4
@@ -353,7 +342,7 @@ solving:
       OptimalityTol: 1.e-4
       ObjScale: -0.5
       threads: 8
-      Seed: 124
+      Seed: 123
     gurobi-fallback:        # Use gurobi defaults
       name: gurobi
       crossover: 0
