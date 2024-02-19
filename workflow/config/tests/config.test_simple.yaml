@@ -33,8 +33,6 @@ snapshots:
   inclusive: 'left'
 
 # docs :
-
-# docs :
 atlite:
   default_cutout: era5_2019
   nprocesses: 8

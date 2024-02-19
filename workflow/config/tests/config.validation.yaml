@@ -32,7 +32,6 @@ snapshots:
   end: "2020-01-01"
   inclusive: 'left'
 
-# docs :
 
 # docs :
 atlite:
