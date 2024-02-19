@@ -2,22 +2,22 @@
 network_configuration: "pypsa-usa" # "pypsa-usa" or "ads2032"
 
 run:
-  name: "Test_Simple" # use this to keep track of runs with different settings
+  name: "Validation" # use this to keep track of runs with different settings
   disable_progressbar: false # set to true to disable the progressbar
   shared_resources: false # set to true to share the default resources across runs
   shared_cutouts: true # set to true to share the default cutout(s) across runs
-  validation: false # set to true to run back-casting plots
+  validation: true # set to true to run back-casting plots
 
 # docs :
 scenario:
   interconnect: [texas] #"usa|texas|western|eastern"
   clusters: [40]
-  opts: [Co2L0.9-4H]
-  ll: [v1.15]
+  opts: [Co2L2.0]
+  ll: [v1.0]
   scope: "total" # "urban", "rural", or "total"
   sector: "" # G
   planning_horizons:
-  - 2030   #  # Uncomment to use NREL EFS Demand Forecasts (2030, 2040, 2050)
+  # - 2030   #  # Uncomment to use NREL EFS Demand Forecasts (2030, 2040, 2050)
 
 foresight:  # Only Single Stage Currently
 
@@ -86,8 +86,8 @@ electricity:
     H2: 168
 
   extendable_carriers:
-    Generator: [solar, onwind, offwind, offwind_floating, OCGT, CCGT, coal] #offwind, offwind_floating,
-    StorageUnit: [battery] # battery, H2
+    Generator: [] #offwind, offwind_floating,
+    StorageUnit: [] # battery, H2
     Store: [] #[battery, H2]
     Link: [] #[H2 pipeline]
 
