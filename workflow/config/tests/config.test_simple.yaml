@@ -6,7 +6,7 @@ run:
   disable_progressbar: false # set to true to disable the progressbar
   shared_resources: false # set to true to share the default resources across runs
   shared_cutouts: true # set to true to share the default cutout(s) across runs
-  validation: true # set to true to run back-casting plots
+  validation: false # set to true to run back-casting plots
 
 # docs :
 scenario:
@@ -31,8 +31,6 @@ snapshots:
   start: "2019-01-01"
   end: "2020-01-01"
   inclusive: 'left'
-
-# docs :
 
 # docs :
 atlite:

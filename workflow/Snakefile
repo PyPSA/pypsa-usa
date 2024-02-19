@@ -65,8 +65,9 @@ wildcard_constraints:
 
 
 # Merge subworkflow configs and main config
-configfile: "config/tests/config.test_simple.yaml"
-# configfile: "config/config.default.yaml"
+# configfile: "config/tests/config.validation.yaml"
+# configfile: "config/tests/config.test_simple.yaml"
+configfile: "config/config.default.yaml"
 configfile: "config/config.cluster.yaml"
 configfile: "config/config.osw.yaml"
 configfile: "config/config.plotting.yaml"
@@ -100,7 +101,7 @@ if "E" not in config["scenario"]["sector"]:
         config["scenario"]["sector"] = f"E-{config['scenario']['sector']}"
 
 if config["run"]["validation"]:
-    COLLECT_FIGURES = FIGURES_VALIDATE + FIGURES_SINGLE
+    COLLECT_FIGURES = FIGURES_VALIDATE
 else:
     COLLECT_FIGURES = FIGURES_SINGLE
 
