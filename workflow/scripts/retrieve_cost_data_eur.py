@@ -4,8 +4,6 @@ Retrieves cost data for Europe.
 This is a seperate rule due to the need for a wildcard argument
 """
 
-from __future__ import annotations
-
 import logging
 from pathlib import Path
 

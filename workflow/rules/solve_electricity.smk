@@ -49,20 +49,24 @@ rule solve_network_operations:
             "co2_sequestration_potential", 200
         ),
     input:
-        network=RESOURCES + "{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}.nc",
+        network=RESOURCES
+        + "{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}_{sector}.nc",
         config=RESULTS + "config.yaml",
     output:
         network=RESULTS
-        + "{interconnect}/networks/elec_s_{clusters}_ec_l{ll}_{opts}_operations.nc",
+        + "{interconnect}/networks/elec_s_{clusters}_ec_l{ll}_{opts}_{sector}_operations.nc",
     log:
         solver=normpath(
             LOGS
-            + "solve_network/{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}_solver.log"
+            + "solve_network/{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}_{sector}_solver.log"
         ),
         python=LOGS
-        + "solve_network/{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}_python.log",
+        + "solve_network/{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}_{sector}_python.log",
     benchmark:
-        BENCHMARKS + "solve_network/{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}"
+        (
+            BENCHMARKS
+            + "solve_network/{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}_{sector}"
+        )
     threads: 4
     resources:
         mem_mb=memory,
@@ -72,4 +76,4 @@ rule solve_network_operations:
     conda:
         "../envs/environment.yaml"
     script:
-        "../scripts/solve_network.py"
+        "../scripts/solve_operations_network.py"

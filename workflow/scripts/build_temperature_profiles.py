@@ -2,8 +2,6 @@
 Build time series for air and soil temperatures per clustered model region.
 """
 
-from __future__ import annotations
-
 import atlite
 import geopandas as gpd
 import numpy as np

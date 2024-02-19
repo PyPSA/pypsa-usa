@@ -2,8 +2,6 @@
 Module for adding the gas sector.
 """
 
-from __future__ import annotations
-
 import logging
 
 import constants

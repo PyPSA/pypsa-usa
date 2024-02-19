@@ -5,8 +5,6 @@ folder.
 Written by Kamran Tehranchi, Stanford University.
 """
 
-from __future__ import annotations
-
 import glob
 import io
 import logging

@@ -14,8 +14,6 @@ COP GSHP = 8.77 - 0.150(Tsink - Tsource) + 0.000734(Tsink - Tsource)^2 for 20 <=
 A Tsink of 50-60C is recommended for how water temperatures
 """
 
-from __future__ import annotations
-
 import xarray as xr
 
 

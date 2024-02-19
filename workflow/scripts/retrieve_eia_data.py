@@ -5,8 +5,6 @@ github: https://github.com/jdechalendar/gridemissions
 site: https://gridemissions.jdechalendar.su.domains/#/code
 """
 
-from __future__ import annotations
-
 import glob
 import gzip
 import logging

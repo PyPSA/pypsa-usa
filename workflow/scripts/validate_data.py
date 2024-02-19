@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import logging
 from collections import OrderedDict
 
@@ -190,7 +188,10 @@ def get_buses(n):
     buses_clean = [ba.split("0")[0] for ba in buses]
     buses_clean = [ba.split("-")[0] for ba in buses_clean]
     buses = list(OrderedDict.fromkeys(buses_clean))
-    buses.pop(1)
+    if "ERCO" in buses:
+        pass
+    else:
+        buses.pop(1)
     return buses
 
 
@@ -200,10 +201,11 @@ if __name__ == "__main__":
 
         snakemake = mock_snakemake(
             "plot_validation_figures",
-            interconnect="western",
-            clusters=30,
-            ll="v1.25",
-            opts="Co2L0.75",
+            interconnect="texas",
+            clusters=40,
+            ll="v1.15",
+            opts="Co2L0.9-4H",
+            sector="E",
         )
     configure_logging(snakemake)
     n = pypsa.Network(snakemake.input.network)

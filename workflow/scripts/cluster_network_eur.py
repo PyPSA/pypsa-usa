@@ -91,10 +91,9 @@ buses, generators and transmission corridors.
     for all ``scenario`` s in the configuration file
     the rule :mod:`cluster_network`.
 """
-from __future__ import annotations
+
 
 import logging
-import pdb
 import warnings
 from functools import reduce
 

@@ -42,8 +42,6 @@ Emission charts for:
         :scale: 33 %
 """
 
-from __future__ import annotations
-
 import logging
 import os
 import sys
