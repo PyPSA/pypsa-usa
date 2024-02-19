@@ -41,7 +41,7 @@ def download_cec_forecasts(urls, path):
         progress_retrieve(url, save_path)
         csv_path = Path(f"{path}/{key}.csv")
         pd.read_excel(save_path, sheet_name="Data", header=0, index_col=0).to_csv(
-            csv_path
+            csv_path,
         )
         os.remove(save_path)
 
@@ -57,7 +57,9 @@ def prepare_ads_files(file_patterns, path_2032, path_2030):
         ads_filelist = glob.glob(os.path.join(path_year, "*.csv"))
         for profile_type, pattern in file_patterns_year.items():
             read_ads_files(
-                profile_type, [s for s in ads_filelist if pattern in s], year
+                profile_type,
+                [s for s in ads_filelist if pattern in s],
+                year,
             )
 
 
@@ -68,7 +70,7 @@ def read_ads_files(profiletype, paths, year):
         df = df.iloc[1:8785, :]
         df_combined = pd.concat([df_combined, df], axis=1)
     df_combined.to_csv(
-        os.path.join("data/WECC_ADS/processed", f"{profiletype}_{year}.csv")
+        os.path.join("data/WECC_ADS/processed", f"{profiletype}_{year}.csv"),
     )
 
 

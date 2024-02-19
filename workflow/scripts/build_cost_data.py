@@ -144,7 +144,7 @@ def find_default_core_metric_key(
     filtered_atb = atb.loc[criteria]
     if filtered_atb.shape[0] != 1:
         raise KeyError(
-            f"No default core_metric_key found for {technology} {core_metric_parameter}"
+            f"No default core_metric_key found for {technology} {core_metric_parameter}",
         )
     return filtered_atb.iloc[0].name
 
@@ -177,11 +177,16 @@ def get_atb_data(atb: pd.DataFrame, techs: str | list[str], **kwargs) -> pd.Data
         # if atb.loc[atb.technology == const.ATB_TECH_MAPPER[technology]["technology"], 'default'].any():
         try:
             core_metric_key = find_default_core_metric_key(
-                atb, technology, core_metric_parameter, **kwargs
+                atb,
+                technology,
+                core_metric_parameter,
+                **kwargs,
             )
         except:
             core_metric_key = build_core_metric_key(
-                core_metric_parameter, technology, **kwargs
+                core_metric_parameter,
+                technology,
+                **kwargs,
             )
         try:
             data.append(
@@ -192,7 +197,7 @@ def get_atb_data(atb: pd.DataFrame, techs: str | list[str], **kwargs) -> pd.Data
                     atb.loc[core_metric_key]["units"],
                     "NREL ATB",
                     core_metric_key,
-                ]
+                ],
             )
         except KeyError:
             logger.info(f"No ATB fixed costs for {technology}")
@@ -201,11 +206,16 @@ def get_atb_data(atb: pd.DataFrame, techs: str | list[str], **kwargs) -> pd.Data
         core_metric_parameter = "Variable O&M"
         try:
             core_metric_key = find_default_core_metric_key(
-                atb, technology, core_metric_parameter, **kwargs
+                atb,
+                technology,
+                core_metric_parameter,
+                **kwargs,
             )
         except:
             core_metric_key = build_core_metric_key(
-                core_metric_parameter, technology, **kwargs
+                core_metric_parameter,
+                technology,
+                **kwargs,
             )
         try:
             data.append(
@@ -216,7 +226,7 @@ def get_atb_data(atb: pd.DataFrame, techs: str | list[str], **kwargs) -> pd.Data
                     f"{atb.loc[core_metric_key]['units']}_e",
                     "NREL ATB",
                     core_metric_key,
-                ]
+                ],
             )
         except KeyError:
             logger.info(f"No ATB variable costs for {technology}")
@@ -230,18 +240,23 @@ def get_atb_data(atb: pd.DataFrame, techs: str | list[str], **kwargs) -> pd.Data
                 "years",
                 "NREL ATB",
                 core_metric_key,
-            ]
+            ],
         )
 
         # get capital cost
         core_metric_parameter = "CAPEX"
         try:
             core_metric_key = find_default_core_metric_key(
-                atb, technology, core_metric_parameter, **kwargs
+                atb,
+                technology,
+                core_metric_parameter,
+                **kwargs,
             )
         except:
             core_metric_key = build_core_metric_key(
-                core_metric_parameter, technology, **kwargs
+                core_metric_parameter,
+                technology,
+                **kwargs,
             )
         try:
             data.append(
@@ -252,7 +267,7 @@ def get_atb_data(atb: pd.DataFrame, techs: str | list[str], **kwargs) -> pd.Data
                     f"{atb.loc[core_metric_key]['units']}_e",
                     "NREL ATB",
                     core_metric_key,
-                ]
+                ],
             )
         except KeyError:
             logger.info(f"No ATB capital costs for {technology}")
@@ -261,11 +276,16 @@ def get_atb_data(atb: pd.DataFrame, techs: str | list[str], **kwargs) -> pd.Data
         core_metric_parameter = "Heat Rate"
         try:
             core_metric_key = find_default_core_metric_key(
-                atb, technology, core_metric_parameter, **kwargs
+                atb,
+                technology,
+                core_metric_parameter,
+                **kwargs,
             )
         except:
             core_metric_key = build_core_metric_key(
-                core_metric_parameter, technology, **kwargs
+                core_metric_parameter,
+                technology,
+                **kwargs,
             )
         try:
             data.append(
@@ -276,7 +296,7 @@ def get_atb_data(atb: pd.DataFrame, techs: str | list[str], **kwargs) -> pd.Data
                     atb.loc[core_metric_key]["units"],
                     "NREL ATB",
                     core_metric_key,
-                ]
+                ],
             )
         except KeyError:
             logger.info(f"No ATB heat rate for {technology}")
@@ -285,11 +305,16 @@ def get_atb_data(atb: pd.DataFrame, techs: str | list[str], **kwargs) -> pd.Data
         core_metric_parameter = "WACC Real"
         try:
             core_metric_key = find_default_core_metric_key(
-                atb, technology, core_metric_parameter, **kwargs
+                atb,
+                technology,
+                core_metric_parameter,
+                **kwargs,
             )
         except:
             core_metric_key = build_core_metric_key(
-                core_metric_parameter, technology, **kwargs
+                core_metric_parameter,
+                technology,
+                **kwargs,
             )
         try:
             data.append(
@@ -300,7 +325,7 @@ def get_atb_data(atb: pd.DataFrame, techs: str | list[str], **kwargs) -> pd.Data
                     "per unit",
                     "NREL ATB",
                     core_metric_key,
-                ]
+                ],
             )
         except KeyError:
             logger.info(f"No ATB WACC for {technology}")
@@ -322,7 +347,8 @@ def get_atb_data(atb: pd.DataFrame, techs: str | list[str], **kwargs) -> pd.Data
 
 
 def correct_units(
-    df: pd.DataFrame, eur_conversion: dict[str, float] = None
+    df: pd.DataFrame,
+    eur_conversion: dict[str, float] = None,
 ) -> pd.DataFrame:
     """
     Alligns units to be the same as PyPSA.
@@ -379,7 +405,8 @@ def correct_fixed_cost(df: pd.DataFrame) -> pd.DataFrame:
     for tech in techs:
         fom = df.loc[(df.technology == tech) & (df.parameter == "FOM"), "value"]
         capex = df.loc[
-            (df.technology == tech) & (df.parameter == "investment"), "value"
+            (df.technology == tech) & (df.parameter == "investment"),
+            "value",
         ]
 
         assert fom.shape == capex.shape  # should each only have one row

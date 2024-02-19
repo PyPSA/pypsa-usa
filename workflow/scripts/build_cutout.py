@@ -101,7 +101,9 @@ if __name__ == "__main__":
         from _helpers import mock_snakemake
 
         snakemake = mock_snakemake(
-            "build_cutout", cutout="era5_2019", interconnect="eastern"
+            "build_cutout",
+            cutout="era5_2019",
+            interconnect="eastern",
         )
     configure_logging(snakemake)
 
@@ -123,7 +125,8 @@ if __name__ == "__main__":
         regions = pd.concat([onshore, offshore])
         d = (
             max(
-                interconnect_params.get("dx", 0.25), interconnect_params.get("dy", 0.25)
+                interconnect_params.get("dx", 0.25),
+                interconnect_params.get("dy", 0.25),
             )
             * 2
         )

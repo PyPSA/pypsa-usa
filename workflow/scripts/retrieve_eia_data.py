@@ -78,7 +78,9 @@ def read_and_concat_EIA_930(
             if year not in dfs:
                 dfs[year] = []
             df = pd.read_csv(
-                file_path, usecols=columns_to_keep, dtype={columns_to_keep[2]: str}
+                file_path,
+                usecols=columns_to_keep,
+                dtype={columns_to_keep[2]: str},
             )
             df.columns = ["region", "timestamp", "demand_mw"]
             df.demand_mw = df.demand_mw.str.replace(",", "")
@@ -88,7 +90,7 @@ def read_and_concat_EIA_930(
     for year, dfs_list in dfs.items():
         concatenated_df = pd.concat(dfs_list, ignore_index=True)
         concatenated_df = concatenated_df.set_index(["timestamp", "region"]).unstack(
-            level=1
+            level=1,
         )["demand_mw"]
         concatenated_df.dropna(axis=1, how="all", inplace=True)
         concatenated_df.index = pd.to_datetime(concatenated_df.index)
@@ -109,7 +111,7 @@ def download_and_extract(url, extract_path):
 
     # Setup progress bar
     with open(filename, "wb") as file, progressbar.ProgressBar(
-        max_value=total_size_in_bytes
+        max_value=total_size_in_bytes,
     ) as bar:
         for data in response.iter_content(1024):
             file.write(data)
@@ -156,7 +158,7 @@ def prepare_historical_load_data(PATH_DOWNLOAD: str) -> None:
     filtered_df.columns = updated_columns
 
     filtered_df = filtered_df.rename(columns={"period": "timestamp"}).set_index(
-        "timestamp"
+        "timestamp",
     )
     return filtered_df
 

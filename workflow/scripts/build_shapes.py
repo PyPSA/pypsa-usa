@@ -57,7 +57,8 @@ from shapely.geometry import MultiPolygon
 
 
 def filter_small_polygons_gpd(
-    geo_series: gpd.GeoSeries, min_area: float
+    geo_series: gpd.GeoSeries,
+    min_area: float,
 ) -> gpd.GeoSeries:
     """
     Filters out polygons within each MultiPolygon in a GeoSeries that are
@@ -84,14 +85,15 @@ def filter_small_polygons_gpd(
     # Aggregate back into MultiPolygons
     # Group by the original index and create a MultiPolygon from the remaining geometries
     aggregated = filtered.groupby(filtered.index).agg(
-        lambda x: MultiPolygon(x.tolist()) if len(x) > 1 else x.iloc[0]
+        lambda x: MultiPolygon(x.tolist()) if len(x) > 1 else x.iloc[0],
     )
     aggregated.set_crs(MEASUREMENT_CRS, inplace=True)
     return aggregated.to_crs(original_crs)
 
 
 def load_na_shapes(
-    state_shape: str = "admin_1_states_provinces", countries: list = ["US", "CA", "MX"]
+    state_shape: str = "admin_1_states_provinces",
+    countries: list = ["US", "CA", "MX"],
 ) -> gpd.GeoDataFrame:
     """
     Creates geodataframe of north america.
@@ -114,10 +116,11 @@ def load_na_shapes(
                     attr["latitude"],
                     attr["longitude"],
                     r.geometry,
-                ]
+                ],
             )
     gdf_states = gpd.GeoDataFrame(
-        data, columns=["name", "country", "x", "y", "geometry"]
+        data,
+        columns=["name", "country", "x", "y", "geometry"],
     ).set_crs(4326)
     return gdf_states
 
@@ -153,7 +156,10 @@ def load_ba_shape(ba_file: str) -> gpd.GeoDataFrame:
 
 
 def combine_offshore_shapes(
-    source: str, shape: gpd.GeoDataFrame, interconnect: gpd.GeoDataFrame, buffer
+    source: str,
+    shape: gpd.GeoDataFrame,
+    interconnect: gpd.GeoDataFrame,
+    buffer,
 ) -> gpd.GeoDataFrame:
     """
     Conbines offshore shapes.
@@ -179,7 +185,9 @@ def _dissolve_boem(shape: gpd.GeoDataFrame):
 
 
 def _dissolve_eez(
-    shape: gpd.GeoDataFrame, interconnect: gpd.GeoDataFrame, max_buffer: int
+    shape: gpd.GeoDataFrame,
+    interconnect: gpd.GeoDataFrame,
+    max_buffer: int,
 ):
     """
     Dissolves offshore shapes from eez then filters plolygons that are not near
@@ -187,7 +195,7 @@ def _dissolve_eez(
     """
     shape = filter_small_polygons_gpd(shape, 1e9)
     shape_split = gpd.GeoDataFrame(
-        geometry=shape.explode(index_parts=False).geometry
+        geometry=shape.explode(index_parts=False).geometry,
     ).set_crs(MEASUREMENT_CRS)
     buffered_interconnect = interconnect.to_crs(MEASUREMENT_CRS).buffer(max_buffer)
     union_buffered_interconnect = buffered_interconnect.unary_union
@@ -197,7 +205,9 @@ def _dissolve_eez(
 
 
 def trim_states_to_interconnect(
-    gdf_states: gpd.GeoDataFrame, gdf_nerc: gpd.GeoDataFrame, interconnect: str
+    gdf_states: gpd.GeoDataFrame,
+    gdf_nerc: gpd.GeoDataFrame,
+    interconnect: str,
 ):
     """
     Trims states to only include portions of states in NERC Interconnect.
@@ -205,7 +215,9 @@ def trim_states_to_interconnect(
     if interconnect == "western":
         gdf_nerc_f = gdf_nerc[gdf_nerc.OBJECTID.isin([3, 8, 9])]
         gdf_states = gpd.overlay(
-            gdf_states, gdf_nerc_f.to_crs(GPS_CRS), how="difference"
+            gdf_states,
+            gdf_nerc_f.to_crs(GPS_CRS),
+            how="difference",
         )
         texas_geometry = gdf_states.loc[gdf_states.name == "Texas", "geometry"]
         texas_geometry = filter_small_polygons_gpd(texas_geometry, 1e9)
@@ -215,13 +227,17 @@ def trim_states_to_interconnect(
     elif interconnect == "eastern":
         gdf_nerc_f = gdf_nerc[gdf_nerc.OBJECTID.isin([1, 3, 6, 7])]
         gdf_states = gpd.overlay(
-            gdf_states, gdf_nerc_f.to_crs(GPS_CRS), how="difference"
+            gdf_states,
+            gdf_nerc_f.to_crs(GPS_CRS),
+            how="difference",
         )
     return gdf_states
 
 
 def trim_ba_to_interconnect(
-    gdf_ba: gpd.GeoDataFrame, interconnect_regions: gpd.GeoDataFrame, interconnect: str
+    gdf_ba: gpd.GeoDataFrame,
+    interconnect_regions: gpd.GeoDataFrame,
+    interconnect: str,
 ):
     """
     Trims balancing authorities to only include portions of balancing
@@ -248,7 +264,9 @@ def main(snakemake):
     if interconnect != "usa":
         breakthrough_zones = breakthrough_zones[
             breakthrough_zones["interconnect"].str.contains(
-                interconnect, na=False, case=False
+                interconnect,
+                na=False,
+                case=False,
             )
         ]
 
@@ -310,7 +328,8 @@ def main(snakemake):
 
     # save interconnection regions
     interconnect_regions = gpd.GeoDataFrame(
-        [[gdf_states.unary_union, "NERC_Interconnect"]], columns=["geometry", "name"]
+        [[gdf_states.unary_union, "NERC_Interconnect"]],
+        columns=["geometry", "name"],
     )
     interconnect_regions = interconnect_regions.set_crs(GPS_CRS)
     interconnect_regions.to_file(snakemake.output.country_shapes)
@@ -348,14 +367,14 @@ def main(snakemake):
     buffered_na = gdf_na.to_crs(MEASUREMENT_CRS).buffer(buffer_distance_min)
     offshore = offshore.to_crs(MEASUREMENT_CRS).difference(buffered_na.unary_union)
     buffered_states = state_boundaries.to_crs(MEASUREMENT_CRS).buffer(
-        buffer_distance_min
+        buffer_distance_min,
     )
     offshore = offshore.to_crs(MEASUREMENT_CRS).difference(buffered_states.unary_union)
     buffer_states_max = state_boundaries.to_crs(MEASUREMENT_CRS).buffer(
-        buffer_distance_max
+        buffer_distance_max,
     )
     offshore = offshore.to_crs(MEASUREMENT_CRS).intersection(
-        buffer_states_max.unary_union
+        buffer_states_max.unary_union,
     )
 
     offshore = offshore[~offshore.is_empty]  # remove empty polygons

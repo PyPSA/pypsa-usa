@@ -66,7 +66,10 @@ def simplify_network_to_voltage_level(n, voltage_level):
 
 
 def aggregate_to_substations(
-    network: pypsa.Network, substations, busmap, aggregation_zones: str
+    network: pypsa.Network,
+    substations,
+    busmap,
+    aggregation_zones: str,
 ):
     """
     Aggregate network to substations.
@@ -191,7 +194,10 @@ if __name__ == "__main__":
     n.links["underwater_fraction"] = 0  # TODO: CALULATE UNDERWATER FRACTIONS.
 
     n = aggregate_to_substations(
-        n, substations, busmap_to_sub.sub_id, aggregation_zones
+        n,
+        substations,
+        busmap_to_sub.sub_id,
+        aggregation_zones,
     )
 
     n.export_to_netcdf(snakemake.output[0])

@@ -79,7 +79,7 @@ def load_urban_ratio(df: pd.DataFrame) -> pd.DataFrame:
             "!!Total:": "total",
             "!!Total:!!Urban": "urban",
             "!!Total:!!Rural": "rural",
-        }
+        },
     )
     df["URBAN"] = (df["urban"] / df["total"]).round(2)  # ratios
     df["RURAL"] = (df["rural"] / df["total"]).round(2)
@@ -174,7 +174,9 @@ if __name__ == "__main__":
         from _helpers import mock_snakemake
 
         snakemake = mock_snakemake(
-            "build_population_layouts", interconnect="western", cutout="era5_2019"
+            "build_population_layouts",
+            interconnect="western",
+            cutout="era5_2019",
         )
         # for plotting
         save_path = Path("..", "..", "docs", "source", "_static", "pop_layout")

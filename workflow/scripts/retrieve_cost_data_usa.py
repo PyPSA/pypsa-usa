@@ -33,7 +33,9 @@ def get_eia_data_api(url: str, api: str = None, facets: str = None) -> pd.DataFr
 
 
 def request_eia_api_data(
-    url: str, api: str, facets: str = None
+    url: str,
+    api: str,
+    facets: str = None,
 ) -> dict[str, dict | str]:
     """
     Retrieves data from EIA API.
@@ -80,14 +82,14 @@ def format_eia_api_data(df: pd.DataFrame) -> pd.DataFrame:
 
     # add state
     df["state"] = df["series-description"].map(
-        lambda x: x.split("Natural Gas")[0].strip()
+        lambda x: x.split("Natural Gas")[0].strip(),
     )
     df["value"] = df["value"].fillna(np.nan)
     usa_average = df[df.state == "U.S."].to_dict()["value"]
 
     df = df.reset_index()
     df["use_average"] = ~pd.notna(
-        df["value"]
+        df["value"],
     )  # not sure why this cant be built into the lambda function
     df["value"] = df.apply(
         lambda x: x["value"] if not x["use_average"] else usa_average[x["period"]],
@@ -126,13 +128,13 @@ def format_eia_data_xlsx(df: pd.DataFrame) -> pd.DataFrame:
 
     # adjust units and format to match structre returned from API
     df["units"] = df["series-description"].map(
-        lambda x: x.split("(")[1].split(")")[0].strip()
+        lambda x: x.split("(")[1].split(")")[0].strip(),
     )
     df["units"] = df["units"].map(
-        lambda x: "$/MCF" if x == "Dollars per Thousand Cubic Feet" else x
+        lambda x: "$/MCF" if x == "Dollars per Thousand Cubic Feet" else x,
     )
     df["state"] = df["series-description"].map(
-        lambda x: x.split("Natural Gas")[0].strip()
+        lambda x: x.split("Natural Gas")[0].strip(),
     )
     df["period"] = pd.to_datetime(df["Date"])
     df = df.set_index("period").drop(columns=["Date"])
@@ -189,7 +191,7 @@ if __name__ == "__main__":
             url = "https://api.eia.gov/v2/natural-gas/pri/sum/data/"
             facets = "frequency=monthly&data[0]=value&facets[process][]=PEU&start=2022-01&end=2023-01&sort[0][column]=period&sort[0][direction]=desc&offset=0&length=5000"
             logger.info(
-                f"Downloading EIA electric power producer natural gas costs from '{url}'"
+                f"Downloading EIA electric power producer natural gas costs from '{url}'",
             )
             df = get_eia_data_api(url, eia_api_key, facets)
             df = format_eia_api_data(df)
@@ -227,7 +229,7 @@ if __name__ == "__main__":
         if not Path(ng_electric_power_price).exists():
             url = "https://www.eia.gov/dnav/ng/xls/NG_PRI_SUM_A_EPG0_PEU_DMCF_M.xls"
             logger.info(
-                f"Downloading EIA electric power producer natural gas costs from '{url}'"
+                f"Downloading EIA electric power producer natural gas costs from '{url}'",
             )
             df = get_eia_data_xlsx(url)
             df = format_eia_data_xlsx(df)

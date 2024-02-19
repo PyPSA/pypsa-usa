@@ -202,7 +202,10 @@ def correct_ccgt_ocgt_buses_single_index(df: pd.DataFrame):
 
 
 def plot_emissions_map(
-    n: pypsa.Network, regions: gpd.GeoDataFrame, save: str, **wildcards
+    n: pypsa.Network,
+    regions: gpd.GeoDataFrame,
+    save: str,
+    **wildcards,
 ) -> None:
 
     # get data
@@ -331,7 +334,10 @@ def plot_accumulated_emissions(n: pypsa.Network, save: str, **wildcards) -> None
     fig, ax = plt.subplots(figsize=(14, 4))
 
     emissions.plot.area(
-        ax=ax, alpha=0.7, legend="reverse", color=color_palette.to_dict()
+        ax=ax,
+        alpha=0.7,
+        legend="reverse",
+        color=color_palette.to_dict(),
     )
 
     ax.legend(bbox_to_anchor=(1, 1), loc="upper left")
@@ -366,7 +372,10 @@ def plot_accumulated_emissions_tech(n: pypsa.Network, save: str, **wildcards) ->
     fig, ax = plt.subplots(figsize=(14, 4))
 
     emissions.plot.area(
-        ax=ax, alpha=0.7, legend="reverse", color=color_palette.to_dict()
+        ax=ax,
+        alpha=0.7,
+        legend="reverse",
+        color=color_palette.to_dict(),
     )
 
     ax.legend(bbox_to_anchor=(1, 1), loc="upper left")
@@ -378,7 +387,9 @@ def plot_accumulated_emissions_tech(n: pypsa.Network, save: str, **wildcards) ->
 
 
 def plot_accumulated_emissions_tech_html(
-    n: pypsa.Network, save: str, **wildcards
+    n: pypsa.Network,
+    save: str,
+    **wildcards,
 ) -> None:
     """
     Plots accumulated emissions by technology.
@@ -477,7 +488,10 @@ def plot_hourly_emissions(n: pypsa.Network, save: str, **wildcards) -> None:
     fig, ax = plt.subplots(figsize=(14, 4))
 
     emissions.plot.area(
-        ax=ax, alpha=0.7, legend="reverse", color=color_palette.to_dict()
+        ax=ax,
+        alpha=0.7,
+        legend="reverse",
+        color=color_palette.to_dict(),
     )
 
     ax.legend(bbox_to_anchor=(1, 1), loc="upper left")
@@ -489,7 +503,10 @@ def plot_hourly_emissions(n: pypsa.Network, save: str, **wildcards) -> None:
 
 
 def plot_production_html(
-    n: pypsa.Network, carriers_2_plot: list[str], save: str, **wildcards
+    n: pypsa.Network,
+    carriers_2_plot: list[str],
+    save: str,
+    **wildcards,
 ) -> None:
     """
     Plots interactive timeseries production chart.
@@ -531,7 +548,7 @@ def plot_production_html(
             mode="lines",
             name="Demand",
             line_color="darkblue",
-        )
+        ),
     )
     title = create_title("Production [GW]", **wildcards)
     fig.update_layout(
@@ -543,7 +560,10 @@ def plot_production_html(
 
 
 def plot_production_area(
-    n: pypsa.Network, carriers_2_plot: list[str], save: str, **wildcards
+    n: pypsa.Network,
+    carriers_2_plot: list[str],
+    save: str,
+    **wildcards,
 ) -> None:
     """
     Plot timeseries production.
@@ -586,7 +606,9 @@ def plot_production_area(
             fig, ax = plt.subplots(figsize=(14, 4))
 
             energy_mix[snapshots].plot.area(
-                ax=ax, alpha=0.7, color=color_palette.to_dict()
+                ax=ax,
+                alpha=0.7,
+                color=color_palette.to_dict(),
             )
             demand[snapshots].plot.line(ax=ax, ls="-", color="darkblue")
 
@@ -609,7 +631,10 @@ def plot_production_area(
 
 
 def plot_production_bar(
-    n: pypsa.Network, carriers_2_plot: list[str], save: str, **wildcards
+    n: pypsa.Network,
+    carriers_2_plot: list[str],
+    save: str,
+    **wildcards,
 ) -> None:
     """
     Plot production per carrier.
@@ -626,7 +651,7 @@ def plot_production_bar(
         .mul(1e-3)  # MW -> GW
     )
     energy_mix = pd.DataFrame(energy_mix, columns=["Production"]).reset_index(
-        names="carrier"
+        names="carrier",
     )
     energy_mix = energy_mix[
         energy_mix.carrier.isin([x for x in carriers_2_plot if x != "battery"])
@@ -647,7 +672,10 @@ def plot_production_bar(
 
 
 def plot_costs_bar(
-    n: pypsa.Network, carriers_2_plot: list[str], save: str, **wildcards
+    n: pypsa.Network,
+    carriers_2_plot: list[str],
+    save: str,
+    **wildcards,
 ) -> None:
     """
     Plot OPEX and CAPEX.
@@ -659,7 +687,9 @@ def plot_costs_bar(
     capital_costs = get_capital_costs(n).mul(1e-9)  # $ -> M$
 
     costs = pd.concat(
-        [operational_costs, capital_costs], axis=1, keys=["OPEX", "CAPEX"]
+        [operational_costs, capital_costs],
+        axis=1,
+        keys=["OPEX", "CAPEX"],
     ).reset_index()
     costs = costs[costs.carrier.isin(carriers_2_plot)]
     costs["carrier"] = costs.carrier.map(n.carriers.nice_name)
@@ -670,7 +700,12 @@ def plot_costs_bar(
     fig, ax = plt.subplots(figsize=(10, 10))
     color_palette = n.carriers.reset_index().set_index("nice_name").to_dict()["color"]
     sns.barplot(
-        y="carrier", x="CAPEX", data=costs, alpha=0.6, ax=ax, palette=color_palette
+        y="carrier",
+        x="CAPEX",
+        data=costs,
+        alpha=0.6,
+        ax=ax,
+        palette=color_palette,
     )
     sns.barplot(
         y="carrier",
@@ -928,7 +963,7 @@ def plot_opt_capacity_map(
         bus_values = get_capacity_brownfield(n, retirement_method)
     else:
         logger.error(
-            f"Capacity method must be one of 'greenfield' or 'brownfield'. Recieved {opt_capacity}."
+            f"Capacity method must be one of 'greenfield' or 'brownfield'. Recieved {opt_capacity}.",
         )
         raise NotImplementedError
 
@@ -982,7 +1017,7 @@ def plot_new_capacity_map(
         bus_pnom_opt = get_capacity_brownfield(n, retirement_method)
     else:
         logger.error(
-            f"Capacity method must be one of 'greenfield' or 'brownfield'. Recieved {opt_capacity}."
+            f"Capacity method must be one of 'greenfield' or 'brownfield'. Recieved {opt_capacity}.",
         )
         raise NotImplementedError
 
@@ -1023,7 +1058,10 @@ def plot_new_capacity_map(
 
 
 def plot_renewable_potential(
-    n: pypsa.Network, regions: gpd.GeoDataFrame, save: str, **wildcards
+    n: pypsa.Network,
+    regions: gpd.GeoDataFrame,
+    save: str,
+    **wildcards,
 ) -> None:
     """
     Plots wind and solar resource potential by node.
@@ -1035,7 +1073,7 @@ def plot_renewable_potential(
         (n.generators.p_nom_max != np.inf)
         & (
             n.generators.carrier.isin(
-                ["onwind", "offwind", "offwind_floating", "solar"]
+                ["onwind", "offwind", "offwind_floating", "solar"],
             )
         )
     ]
@@ -1110,7 +1148,7 @@ def plot_capacity_additions_bar(
         p_nom_opt = get_capacity_brownfield(n, retirement_method)
     else:
         logger.error(
-            f"Capacity method must be one of 'greenfield' or 'brownfield'. Recieved {opt_capacity}."
+            f"Capacity method must be one of 'greenfield' or 'brownfield'. Recieved {opt_capacity}.",
         )
         raise NotImplementedError
 
@@ -1279,33 +1317,55 @@ if __name__ == "__main__":
     )
     plot_costs_bar(n, carriers, snakemake.output["costs_bar"], **snakemake.wildcards)
     plot_production_bar(
-        n, carriers, snakemake.output["production_bar"], **snakemake.wildcards
+        n,
+        carriers,
+        snakemake.output["production_bar"],
+        **snakemake.wildcards,
     )
     plot_production_area(
-        n, carriers, snakemake.output["production_area"], **snakemake.wildcards
+        n,
+        carriers,
+        snakemake.output["production_area"],
+        **snakemake.wildcards,
     )
     plot_production_html(
-        n, carriers, snakemake.output["production_area_html"], **snakemake.wildcards
+        n,
+        carriers,
+        snakemake.output["production_area_html"],
+        **snakemake.wildcards,
     )
     plot_hourly_emissions(n, snakemake.output["emissions_area"], **snakemake.wildcards)
     plot_hourly_emissions_html(
-        n, snakemake.output["emissions_area_html"], **snakemake.wildcards
+        n,
+        snakemake.output["emissions_area_html"],
+        **snakemake.wildcards,
     )
     plot_accumulated_emissions(
-        n, snakemake.output["emissions_accumulated"], **snakemake.wildcards
+        n,
+        snakemake.output["emissions_accumulated"],
+        **snakemake.wildcards,
     )
     plot_accumulated_emissions_tech(
-        n, snakemake.output["emissions_accumulated_tech"], **snakemake.wildcards
+        n,
+        snakemake.output["emissions_accumulated_tech"],
+        **snakemake.wildcards,
     )
     plot_accumulated_emissions_tech_html(
-        n, snakemake.output["emissions_accumulated_tech_html"], **snakemake.wildcards
+        n,
+        snakemake.output["emissions_accumulated_tech_html"],
+        **snakemake.wildcards,
     )
     # plot_node_emissions_html(n, snakemake.output["emissions_node_html"], **snakemake.wildcards)
     plot_region_emissions_html(
-        n, snakemake.output["emissions_region_html"], **snakemake.wildcards
+        n,
+        snakemake.output["emissions_region_html"],
+        **snakemake.wildcards,
     )
     plot_emissions_map(
-        n, onshore_regions, snakemake.output["emissions_map"], **snakemake.wildcards
+        n,
+        onshore_regions,
+        snakemake.output["emissions_map"],
+        **snakemake.wildcards,
     )
     plot_renewable_potential(
         n,

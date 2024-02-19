@@ -85,7 +85,7 @@ def voronoi_partition_pts(points, outline):
                         [xmax + 3.0 * xspan, ymin - 3.0 * yspan],
                         [xmax + 3.0 * xspan, ymax + 3.0 * yspan],
                     ],
-                )
+                ),
             ),
         )
 
@@ -112,7 +112,8 @@ def main(snakemake):
     ]
 
     logger.info(
-        "Building bus regions for %s Interconnect", snakemake.wildcards.interconnect
+        "Building bus regions for %s Interconnect",
+        snakemake.wildcards.interconnect,
     )
     logger.info("Built for aggregation with %s zones", aggregation_zones)
 
@@ -140,7 +141,7 @@ def main(snakemake):
 
     gpd_offshore_shapes = gpd.read_file(snakemake.input.offshore_shapes)
     offshore_shapes = gpd_offshore_shapes.reindex(columns=REGION_COLS).set_index(
-        "name"
+        "name",
     )["geometry"]
 
     onshore_regions = []
@@ -179,7 +180,7 @@ def main(snakemake):
                     "y": region_locs["y"],
                     "geometry": voronoi_partition_pts(region_locs.values, region_shape),
                     "country": region,
-                }
+                },
             ),
         )
 
@@ -197,10 +198,11 @@ def main(snakemake):
                 "x": offshore_buses["x"],
                 "y": offshore_buses["y"],
                 "geometry": voronoi_partition_pts(
-                    offshore_buses.values, offshore_shape
+                    offshore_buses.values,
+                    offshore_shape,
                 ),
                 "country": shape_name,
-            }
+            },
         )
         offshore_regions_c = offshore_regions_c.loc[
             offshore_regions_c.area > 1e-2
@@ -211,7 +213,7 @@ def main(snakemake):
     onshore_regions_concat.to_file(snakemake.output.regions_onshore)
     if offshore_regions:
         pd.concat(offshore_regions, ignore_index=True).to_file(
-            snakemake.output.regions_offshore
+            snakemake.output.regions_offshore,
         )
     else:
         offshore_shapes.to_frame().to_file(snakemake.output.regions_offshore)

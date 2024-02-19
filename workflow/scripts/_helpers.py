@@ -34,7 +34,9 @@ def configure_logging(snakemake, skip_handlers=False):
 
     if skip_handlers is False:
         fallback_path = Path(__file__).parent.joinpath(
-            "..", "logs", f"{snakemake.rule}.log"
+            "..",
+            "logs",
+            f"{snakemake.rule}.log",
         )
         logfile = snakemake.log.get(
             "python",
@@ -57,7 +59,7 @@ def setup_custom_logger(name):
     import logging
 
     formatter = logging.Formatter(
-        fmt="%(asctime)s - %(levelname)s - %(module)s - %(message)s"
+        fmt="%(asctime)s - %(levelname)s - %(module)s - %(message)s",
     )
 
     handler = logging.StreamHandler()
@@ -104,12 +106,12 @@ def load_network(import_name=None, custom_components=None):
     if custom_components is not None:
         override_components = pypsa.components.components.copy()
         override_component_attrs = Dict(
-            {k: v.copy() for k, v in pypsa.components.component_attrs.items()}
+            {k: v.copy() for k, v in pypsa.components.component_attrs.items()},
         )
         for k, v in custom_components.items():
             override_components.loc[k] = v["component"]
             override_component_attrs[k] = pd.DataFrame(
-                columns=["type", "unit", "default", "description", "status"]
+                columns=["type", "unit", "default", "description", "status"],
             )
             for attr, val in v["attributes"].items():
                 override_component_attrs[k].loc[attr] = val
@@ -149,7 +151,8 @@ def load_network_for_plots(fn, tech_costs, config, combine_hydro_ps=True):
 
     if combine_hydro_ps:
         n.storage_units.loc[
-            n.storage_units.carrier.isin({"PHS", "hydro"}), "carrier"
+            n.storage_units.carrier.isin({"PHS", "hydro"}),
+            "carrier",
         ] = "hydro+PHS"
 
     # if the carrier was not set on the heat storage units
@@ -179,7 +182,7 @@ def aggregate_p_nom(n):
             n.storage_units.groupby("carrier").p_nom_opt.sum(),
             n.links.groupby("carrier").p_nom_opt.sum(),
             n.loads_t.p.groupby(n.loads.carrier, axis=1).sum().mean(),
-        ]
+        ],
     )
 
 
@@ -190,7 +193,7 @@ def aggregate_p(n):
             n.storage_units_t.p.sum().groupby(n.storage_units.carrier).sum(),
             n.stores_t.p.sum().groupby(n.stores.carrier).sum(),
             -n.loads_t.p.sum().groupby(n.loads.carrier).sum(),
-        ]
+        ],
     )
 
 
@@ -201,7 +204,7 @@ def aggregate_e_nom(n):
             .groupby(n.storage_units["carrier"])
             .sum(),
             n.stores["e_nom_opt"].groupby(n.stores.carrier).sum(),
-        ]
+        ],
     )
 
 
@@ -221,7 +224,7 @@ def aggregate_p_curtailed(n):
                 .groupby(n.storage_units.carrier)
                 .sum()
             ),
-        ]
+        ],
     )
 
 

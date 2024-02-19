@@ -268,7 +268,7 @@ class GasCosts(DataExtractor):
         # Sometimes "U.S. Natural Gas price"
         # Sometimes "Price of U.S. Natural Gas"
         df["state"] = df["series-description"].map(
-            lambda x: x.split("Natural Gas")[0].strip()
+            lambda x: x.split("Natural Gas")[0].strip(),
         )
         df["state"] = df["state"].map(lambda x: x.split("Price of")[0].strip())
         df["value"] = df["value"].fillna(np.nan)
@@ -278,7 +278,7 @@ class GasCosts(DataExtractor):
 
         df = df.reset_index()
         df["use_average"] = ~pd.notna(
-            df["value"]
+            df["value"],
         )  # not sure why this cant be built into the lambda function
         df["value"] = df.apply(
             lambda x: x["value"] if not x["use_average"] else usa_average[x["period"]],
@@ -327,7 +327,7 @@ class CoalCosts(DataExtractor):
         df["price"] = df.price.map(
             lambda x: (
                 float(x) if len(x.split(".")) < 2 else float(".".join(x.split(".")[:2]))
-            )
+            ),
         )
 
         # get data at a per quarter level
@@ -346,7 +346,9 @@ class CoalCosts(DataExtractor):
         # Expand data to be at a per month level
         dfs = []
         dates = pd.date_range(
-            start=f"{self.year}-01-01", end="{self.year}-12-01", freq="MS"
+            start=f"{self.year}-01-01",
+            end="{self.year}-12-01",
+            freq="MS",
         )
         for date in dates:
             quarter = (
@@ -366,13 +368,13 @@ class CoalCosts(DataExtractor):
                     "average dollars per ton",
                     states[states.period == date].price.mean(),
                     date,
-                ]
+                ],
             )
             usa = pd.DataFrame(usa_average, columns=states.columns)
 
         final = pd.concat([states, usa]).reset_index(drop=True)
         final["series-description"] = final.state.map(
-            lambda x: f"{x} Coal Electric Power Price"
+            lambda x: f"{x} Coal Electric Power Price",
         )
 
         return final.set_index("period")

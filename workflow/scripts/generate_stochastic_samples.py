@@ -44,20 +44,22 @@ def import_profiles_from_network(PATH_NETWORK, num_clusters):
     network = pypsa.Network(PATH_NETWORK)
     # Export network to csv to be run in NodalStochastic Profile Generator
     network.loads_t.p_set.to_csv(
-        os.path.join("resources/pypsa", f"loads_t_p_set_{num_clusters}.csv")
+        os.path.join("resources/pypsa", f"loads_t_p_set_{num_clusters}.csv"),
     )
 
     # filter columns with solar in name
     solar_df = network.generators_t.p_max_pu.loc[
-        :, network.generators_t.p_max_pu.columns.str.contains("solar")
+        :,
+        network.generators_t.p_max_pu.columns.str.contains("solar"),
     ]
     solar_df.to_csv(
-        os.path.join("resources/pypsa", f"solar_profiles_{num_clusters}.csv")
+        os.path.join("resources/pypsa", f"solar_profiles_{num_clusters}.csv"),
     )
 
     # filter columns with wind in name and export as csv
     wind_df = network.generators_t.p_max_pu.loc[
-        :, network.generators_t.p_max_pu.columns.str.contains("wind")
+        :,
+        network.generators_t.p_max_pu.columns.str.contains("wind"),
     ]
     wind_df.to_csv(os.path.join("resources/pypsa", f"wind_profiles_{num_clusters}.csv"))
 
@@ -78,7 +80,8 @@ def resample_and_group(base_data, area_mapping):
         pandas.DataFrame: Resampled data, grouped by day of year and area id.
     """
     base_area = base_data.groupby(
-        base_data.columns.map(area_mapping.area_id), axis=1
+        base_data.columns.map(area_mapping.area_id),
+        axis=1,
     ).mean()
     base_area["doy"] = timestamp_reference.day_of_year
     base_area_daily = base_area.groupby("doy").mean()
@@ -99,7 +102,8 @@ def create_allocation(base, mapping):
     """
     base_ = base.copy().reset_index(drop=True)
     total_area_hourly = base_.groupby(
-        base_.columns.map(mapping.to_dict()["area_id"]), axis=1
+        base_.columns.map(mapping.to_dict()["area_id"]),
+        axis=1,
     ).sum()
     base_.columns = base.columns.map(mapping.to_dict()["area_id"])
     base_[base_ < 0.0001] = 0
@@ -188,26 +192,38 @@ def sampling_warmup(df, thresholds, rng, min_steps=50):
         eps = rng_eps(winter_params, rng)
         ratio += winter_params.kai * (winter_params.mu - ratio) + eps
         ratio, eps, na = resample_ratio(
-            ratio, winter_params, thresholds, eps, rng, True
+            ratio,
+            winter_params,
+            thresholds,
+            eps,
+            rng,
+            True,
         )
     return ratio, eps
 
 
 # idea: to better replicate inverter curtailment, i should retain out of threshold samples but maintain a seperate 'ratio' df that is the max(sample, 0) or min(sample, threshold))... this simplifies the need for re-sampling but retains proper distributional properties
 def resample_ratio(
-    original_ratio, params, thresholds, original_epsilon, rng, initialization
+    original_ratio,
+    params,
+    thresholds,
+    original_epsilon,
+    rng,
+    initialization,
 ):
     resample_count = 0
     param_dict = params.sampling_id.to_dict()
     while np.any(
-        np.logical_or(original_ratio > thresholds, original_ratio < 0)
+        np.logical_or(original_ratio > thresholds, original_ratio < 0),
     ):  # if any values are out of bounds
         resampled_ratio = original_ratio.copy(deep=True)
         mask_to_resample = np.logical_or(
-            original_ratio > thresholds, original_ratio < 0
+            original_ratio > thresholds,
+            original_ratio < 0,
         )  # mask of values to resample
         resampled_epsilon = rng_eps(
-            params[mask_to_resample.values], rng
+            params[mask_to_resample.values],
+            rng,
         )  # resample epsilon for values to resample
         resampled_ratio[mask_to_resample] = (
             original_ratio[mask_to_resample]
@@ -217,7 +233,7 @@ def resample_ratio(
         resample_count += 1
 
         if np.any(
-            np.logical_or(resampled_ratio > thresholds, resampled_ratio < 0)
+            np.logical_or(resampled_ratio > thresholds, resampled_ratio < 0),
         ):  # if any values are still out of bounds
 
             in_bounds_mask = np.logical_and(
@@ -226,7 +242,7 @@ def resample_ratio(
             )
 
             if np.any(
-                in_bounds_mask
+                in_bounds_mask,
             ):  # if any values are in bounds (i.e. resampling was successful), then update original ratio and epsilon so that we reduce the number of resampled values in the next iteration
                 if not initialization:
                     resampled_epsilon.index = resampled_epsilon.index.map(param_dict)
@@ -269,7 +285,8 @@ num_clusters = 96
 ################### Sampling ###################
 # %%
 load_base, solar_base, wind_base = import_profiles_from_network(
-    NETWORK_PATH, num_clusters
+    NETWORK_PATH,
+    num_clusters,
 )
 num_zones = {
     "load": load_base.shape[1],
@@ -311,12 +328,12 @@ wind_parameters["sampling_id"] = (
     + wind_parameters.area_id.astype(str)
 )
 parameters_concat = pd.concat(
-    [load_parameters, solar_parameters, wind_parameters]
+    [load_parameters, solar_parameters, wind_parameters],
 ).reset_index()
 
 # Create a timeseries index dataframe to reference when sampling
 timestamp_reference = pd.DataFrame(
-    {"timestamp": pd.period_range(year, periods=num_hours, freq="h")}
+    {"timestamp": pd.period_range(year, periods=num_hours, freq="h")},
 )
 timestamp_reference = timestamp_reference.assign(
     month=timestamp_reference["timestamp"].dt.month,
@@ -338,10 +355,10 @@ timestamp_reference["season"] = timestamp_reference["month"].map(
         9: "fall",
         10: "fall",
         11: "fall",
-    }
+    },
 )
 timestamp_reference["season_num"] = timestamp_reference["season"].map(
-    {"winter": 1, "spring": 2, "summer": 3, "fall": 4}
+    {"winter": 1, "spring": 2, "summer": 3, "fall": 4},
 )
 
 load_base.reset_index(inplace=True, drop=True)
@@ -350,7 +367,8 @@ wind_base.reset_index(inplace=True, drop=True)
 
 # resample load, solar, and wind to daily and area level values.
 solar_base_area_daily, solar_base_area = resample_and_group(
-    solar_base, area_mapping_solar
+    solar_base,
+    area_mapping_solar,
 )
 wind_base_area_daily, wind_base_area = resample_and_group(wind_base, area_mapping_wind)
 
@@ -367,20 +385,22 @@ df_daytime_solar_tracking = pd.DataFrame(
     columns=solar_base_area.columns,
 )
 df_daytime_solar_tracking = df_daytime_solar_tracking.apply(
-    lambda x: define_solar_hours(daytime_mask[x.name], timestamp_reference)[2]
+    lambda x: define_solar_hours(daytime_mask[x.name], timestamp_reference)[2],
 )
 
 # %%#Define Stochastic Mu Dataframes
 cols_to_use = timestamp_reference.columns.difference(load_parameters.columns)
 df_mu_load_hourly_unstack = assign_stochastic_mu(
-    load_parameters.reset_index(), timestamp_reference[cols_to_use]
+    load_parameters.reset_index(),
+    timestamp_reference[cols_to_use],
 )
 df_mu_solar_hourly_unstack = assign_stochastic_mu(
     solar_parameters.query("timescale == 'hourly'").reset_index(),
     timestamp_reference[cols_to_use],
 )
 df_mu_solar_daily_unstack = assign_stochastic_mu(
-    solar_parameters.query(" timescale == 'daily' ").reset_index(), timestamp_reference
+    solar_parameters.query(" timescale == 'daily' ").reset_index(),
+    timestamp_reference,
 )
 df_mu_wind_hourly_unstack = assign_stochastic_mu(
     wind_parameters.query(" timescale == 'daily' ").reset_index(),
@@ -398,7 +418,7 @@ wind_zones_samples = np.zeros([num_hours, num_zones["wind"], num_samples])
 solar_gen_samples = np.zeros([num_hours, solar_base.columns.shape[0], num_samples])
 wind_gen_samples = np.zeros([num_hours, wind_base.columns.shape[0], num_samples])
 ratio_samples_combined = np.zeros(
-    [num_hours, parameters_concat.sampling_id.unique().shape[0], num_samples]
+    [num_hours, parameters_concat.sampling_id.unique().shape[0], num_samples],
 )
 
 # %% Sampling Process
@@ -412,13 +432,17 @@ for sample_num in range(0, num_samples):
     solar_sampling_id_dict = dict(
         parameters_concat[parameters_concat.sampling_id.str.contains("solar")]
         .reset_index()[["sampling_id", "index"]]
-        .values
+        .values,
     )
     ratio_samples = pd.DataFrame(
-        0, index=np.arange(n_hours), columns=sampling_profile_names
+        0,
+        index=np.arange(n_hours),
+        columns=sampling_profile_names,
     )
     epsilon_samples = pd.DataFrame(
-        0, index=np.arange(n_hours), columns=sampling_profile_names
+        0,
+        index=np.arange(n_hours),
+        columns=sampling_profile_names,
     )
 
     thresholds = np.concatenate(
@@ -426,11 +450,13 @@ for sample_num in range(0, num_samples):
             [load_ratio_threshold] * ratio_samples.columns.str.contains("load").sum(),
             [solar_ratio_threshold] * ratio_samples.columns.str.contains("solar").sum(),
             [wind_ratio_threshold] * ratio_samples.columns.str.contains("wind").sum(),
-        ]
+        ],
     )
 
     ratio_samples.iloc[0, :], epsilon_samples.iloc[0, :] = sampling_warmup(
-        parameters_concat, thresholds, rng
+        parameters_concat,
+        thresholds,
+        rng,
     )
 
     for i in range(1, n_hours):
@@ -453,7 +479,8 @@ for sample_num in range(0, num_samples):
             )
             epsilon_samples.loc[i, epsilon_samples.columns.str.contains("daily")] = (
                 epsilon_samples.loc[
-                    i - 1, epsilon_samples.columns.str.contains("daily")
+                    i - 1,
+                    epsilon_samples.columns.str.contains("daily"),
                 ]
             )
 
@@ -467,10 +494,11 @@ for sample_num in range(0, num_samples):
                         if "solar" in param_code
                     ],
                     previous_sunset_idx[previous_sunset_idx > 0].index,
-                )
+                ),
             )
             previous_mu_vals = ratio_samples.loc[
-                :, ratio_samples.columns.str.contains("solar")
+                :,
+                ratio_samples.columns.str.contains("solar"),
             ].iloc[i - 1]
             # previous_mu_vals = ratio_samples.loc[:,ratio_samples.columns.str.contains('solar')].iloc[i - 1].rename(index=solar_sampling_id_dict).loc[area_sunset_dict.keys()]
             solar_season = season_df[season_df.sampling_id.str.contains("solar")]
@@ -494,7 +522,12 @@ for sample_num in range(0, num_samples):
         ).any():
             r0, eps = ratio_samples.iloc[i], epsilon_samples.iloc[i, :]
             ratios_new, eps_new, resample_count = resample_ratio(
-                r0, season_df, thresholds, eps, rng, False
+                r0,
+                season_df,
+                thresholds,
+                eps,
+                rng,
+                False,
             )
             ratio_samples.iloc[i], epsilon_samples.iloc[i, :], resample_count = (
                 ratios_new,
@@ -542,7 +575,8 @@ for sample_num in range(0, num_samples):
         columns=solar_allocation.columns,
     )
     sampled_solar_generatorlvl = sampled_solar_generatorlvl.apply(
-        lambda x: x * sampled_solar.loc[:, str(x.name)], axis=0
+        lambda x: x * sampled_solar.loc[:, str(x.name)],
+        axis=0,
     )
 
     solar_zones_samples[:, :, sample_num] = sampled_solar.values
@@ -571,7 +605,8 @@ for sample_num in range(0, num_samples):
         columns=wind_allocation.columns,
     )
     sampled_wind_generatorlvl = sampled_wind_generatorlvl.apply(
-        lambda x: x * sampled_wind.loc[:, str(x.name)], axis=0
+        lambda x: x * sampled_wind.loc[:, str(x.name)],
+        axis=0,
     )
 
     wind_zones_samples[:, :, sample_num] = sampled_wind.values
@@ -591,13 +626,17 @@ wind_cols["np_ind_wind"] = np.arange(0, len(wind_cols))
 df_ind_match = pd.DataFrame(load_base.columns, columns=["load"])
 df_ind_match["np_ind_load"] = np.arange(0, len(load_base.columns))
 df_ind_match = df_ind_match.merge(
-    solar_cols, left_on="load", right_index=True, how="outer"
+    solar_cols,
+    left_on="load",
+    right_index=True,
+    how="outer",
 ).merge(wind_cols, left_on="load", right_index=True, how="outer")
 df_ind_match.index = np.arange(0, len(df_ind_match))
 df_bus_coordinates = df_ind_match["load"]
 df_ind_match = df_ind_match.drop(columns=["load"])
 df_ind_match_combinedarr = df_ind_match.where(
-    df_ind_match.isnull(), np.column_stack([df_ind_match.index.values] * 3)
+    df_ind_match.isnull(),
+    np.column_stack([df_ind_match.index.values] * 3),
 )
 
 # Create index references for each dataset
@@ -617,16 +656,22 @@ load_inds_orig = df_ind_match.np_ind_load.dropna().astype(int).values
 
 # Combine load solar wind data into one array for each sample
 combined_gen_samples = np.zeros(
-    [8784, 97, 3, num_samples]
+    [8784, 97, 3, num_samples],
 )  # Dimensions are (t, node, profile type, samples)
 combined_gen_samples[:, load_inds_combined, 0, :] = load_zones_samples[
-    :, load_inds_orig, :
+    :,
+    load_inds_orig,
+    :,
 ]
 combined_gen_samples[:, solar_inds_combined, 1, :] = solar_gen_samples[
-    :, solar_inds_orig, :
+    :,
+    solar_inds_orig,
+    :,
 ]
 combined_gen_samples[:, wind_inds_combined, 2, :] = wind_gen_samples[
-    :, wind_inds_orig, :
+    :,
+    wind_inds_orig,
+    :,
 ]
 
 # Create xarray dataset
@@ -644,16 +689,18 @@ da_bus_data = xr.DataArray(
 ################Combining zonal data into one array for each profile type #############################
 # remove numeric from wind and solar columns
 base_zones_solar = pd.DataFrame(
-    solar_cols.index.str.replace("[0-9]", "").drop_duplicates(), columns=["solar"]
+    solar_cols.index.str.replace("[0-9]", "").drop_duplicates(),
+    columns=["solar"],
 )
 base_zones_wind = pd.DataFrame(
-    wind_cols.index.str.replace("[0-9]", "").drop_duplicates(), columns=["wind"]
+    wind_cols.index.str.replace("[0-9]", "").drop_duplicates(),
+    columns=["wind"],
 )
 
 base_zones_wind = base_zones_wind[
     ~base_zones_wind.wind.str.contains("SDGE")
 ].reset_index(
-    drop=True
+    drop=True,
 )  # temporary fix
 df_zone_ind_match = base_zones_solar.reset_index(names="solar_ind").merge(
     base_zones_wind.reset_index(names="wind_ind"),
@@ -673,13 +720,17 @@ wind_zone_inds_orig = df_zone_ind_match.wind_ind.dropna().astype(int).values
 solar_zone_inds_orig = df_zone_ind_match.solar_ind.dropna().astype(int).values
 
 combined_zone_data = np.zeros(
-    [8784, 22, 2, num_samples]
+    [8784, 22, 2, num_samples],
 )  # Dimensions are (t, node, profile type, samples)
 combined_zone_data[:, solar_zone_inds_combined, 0, :] = solar_zones_samples[
-    :, solar_zone_inds_orig, :
+    :,
+    solar_zone_inds_orig,
+    :,
 ]
 combined_zone_data[:, wind_zone_inds_combined, 1, :] = wind_zones_samples[
-    :, wind_zone_inds_orig, :
+    :,
+    wind_zone_inds_orig,
+    :,
 ]
 
 da_zone_data = xr.DataArray(

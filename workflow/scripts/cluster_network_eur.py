@@ -134,13 +134,15 @@ def normed(x):
 def weighting_for_country(n, x):
     # conv_carriers = {'OCGT','CCGT','PHS', 'hydro'}
     gen = n.generators.groupby(  # .loc[n.generators.carrier.isin(conv_carriers)]
-        "bus"
+        "bus",
     ).p_nom.sum().reindex(
-        n.buses.index, fill_value=0.0
+        n.buses.index,
+        fill_value=0.0,
     ) + n.storage_units.groupby(  # .loc[n.storage_units.carrier.isin(conv_carriers)]
-        "bus"
+        "bus",
     ).p_nom.sum().reindex(
-        n.buses.index, fill_value=0.0
+        n.buses.index,
+        fill_value=0.0,
     )
     load = n.loads_t.p_set.mean().groupby(n.loads.bus).sum()
 
@@ -164,7 +166,8 @@ def get_feature_for_hac(n, buses_i=None, feature=None):
     if "offwind" in carriers:
         carriers.remove("offwind")
         carriers = np.append(
-            carriers, network.generators.carrier.filter(like="offwind").unique()
+            carriers,
+            network.generators.carrier.filter(like="offwind").unique(),
         )
 
     if feature.split("-")[1] == "cap":
@@ -183,7 +186,7 @@ def get_feature_for_hac(n, buses_i=None, feature=None):
         for carrier in carriers:
             gen_i = n.generators.query("carrier == @carrier").index
             attach = n.generators_t.p_max_pu[gen_i].rename(
-                columns=n.generators.loc[gen_i].bus
+                columns=n.generators.loc[gen_i].bus,
             )
             feature_data = pd.concat([feature_data, attach], axis=0)[buses_i]
 
@@ -237,7 +240,9 @@ def distribute_clusters(n, n_clusters, focus_weights=None, solver_name="cbc"):
         logger.warning("Using custom focus weights for determining number of clusters.")
 
     assert np.isclose(
-        L.sum(), 1.0, rtol=1e-3
+        L.sum(),
+        1.0,
+        rtol=1e-3,
     ), f"Country weights L must sum up to 1.0 when distributing clusters. Is {L.sum()}."
 
     m = po.ConcreteModel()
@@ -255,7 +260,7 @@ def distribute_clusters(n, n_clusters, focus_weights=None, solver_name="cbc"):
     opt = po.SolverFactory(solver_name)
     if not opt.has_capability("quadratic_objective"):
         logger.warning(
-            f"The configured solver `{solver_name}` does not support quadratic objectives. Falling back to `ipopt`."
+            f"The configured solver `{solver_name}` does not support quadratic objectives. Falling back to `ipopt`.",
         )
         opt = po.SolverFactory("ipopt")
 
@@ -290,7 +295,8 @@ def busmap_for_n_clusters(
             m = n[n.buses.country == country].copy()
 
             _, labels = csgraph.connected_components(
-                m.adjacency_matrix(), directed=False
+                m.adjacency_matrix(),
+                directed=False,
             )
 
             component = pd.Series(labels, index=m.buses.index)
@@ -302,7 +308,7 @@ def busmap_for_n_clusters(
                 ].index[0]
 
                 neighbor_bus = n.lines.query(
-                    "bus0 == @disconnected_bus or bus1 == @disconnected_bus"
+                    "bus0 == @disconnected_bus or bus1 == @disconnected_bus",
                 ).iloc[0][["bus0", "bus1"]]
                 new_country = list(set(n.buses.loc[neighbor_bus].country) - {country})[
                     0
@@ -329,7 +335,10 @@ def busmap_for_n_clusters(
     n.determine_network_topology()
 
     n_clusters = distribute_clusters(
-        n, n_clusters, focus_weights=focus_weights, solver_name=solver_name
+        n,
+        n_clusters,
+        focus_weights=focus_weights,
+        solver_name=solver_name,
     )
 
     def busmap_for_country(x):
@@ -341,19 +350,28 @@ def busmap_for_n_clusters(
 
         if algorithm == "kmeans":
             return prefix + busmap_by_kmeans(
-                n, weight, n_clusters[x.name], buses_i=x.index, **algorithm_kwds
+                n,
+                weight,
+                n_clusters[x.name],
+                buses_i=x.index,
+                **algorithm_kwds,
             )
         elif algorithm == "hac":
             return prefix + busmap_by_hac(
-                n, n_clusters[x.name], buses_i=x.index, feature=feature.loc[x.index]
+                n,
+                n_clusters[x.name],
+                buses_i=x.index,
+                feature=feature.loc[x.index],
             )
         elif algorithm == "modularity":
             return prefix + busmap_by_greedy_modularity(
-                n, n_clusters[x.name], buses_i=x.index
+                n,
+                n_clusters[x.name],
+                buses_i=x.index,
             )
         else:
             raise ValueError(
-                f"`algorithm` must be one of 'kmeans' or 'hac'. Is {algorithm}."
+                f"`algorithm` must be one of 'kmeans' or 'hac'. Is {algorithm}.",
             )
 
     return (
@@ -379,12 +397,17 @@ def clustering_for_n_clusters(
 ):
 
     bus_strategies, generator_strategies = get_aggregation_strategies(
-        aggregation_strategies
+        aggregation_strategies,
     )
 
     if not isinstance(custom_busmap, pd.Series):
         busmap = busmap_for_n_clusters(
-            n, n_clusters, solver_name, focus_weights, algorithm, feature
+            n,
+            n_clusters,
+            solver_name,
+            focus_weights,
+            algorithm,
+            feature,
         )
     else:
         busmap = custom_busmap
@@ -443,7 +466,9 @@ if __name__ == "__main__":
         from _helpers import mock_snakemake
 
         snakemake = mock_snakemake(
-            "cluster_network", interconnect="western", clusters="100"
+            "cluster_network",
+            interconnect="western",
+            clusters="100",
         )
     configure_logging(snakemake)
 
@@ -457,13 +482,13 @@ if __name__ == "__main__":
             tech
             for tech in n.generators.carrier.unique()
             if tech in snakemake.config["renewable"]
-        ]
+        ],
     )
 
     if snakemake.wildcards.clusters.endswith("m"):
         n_clusters = int(snakemake.wildcards.clusters[:-1])
         aggregate_carriers = snakemake.config["electricity"].get(
-            "conventional_carriers"
+            "conventional_carriers",
         )
     elif snakemake.wildcards.clusters == "all":
         n_clusters = len(n.buses)
@@ -477,7 +502,11 @@ if __name__ == "__main__":
         busmap = n.buses.index.to_series()
         linemap = n.lines.index.to_series()
         clustering = pypsa.clustering.spatial.Clustering(
-            n, busmap, linemap, linemap, pd.Series(dtype="O")
+            n,
+            busmap,
+            linemap,
+            linemap,
+            pd.Series(dtype="O"),
         )
     else:
         line_length_factor = snakemake.config["lines"]["length_factor"]
@@ -498,7 +527,8 @@ if __name__ == "__main__":
             return v
 
         aggregation_strategies = snakemake.config["clustering"].get(
-            "aggregation_strategies", {}
+            "aggregation_strategies",
+            {},
         )
         # translate str entries of aggregation_strategies to pd.Series functions:
         aggregation_strategies = {
@@ -508,13 +538,16 @@ if __name__ == "__main__":
         custom_busmap = snakemake.config["enable"].get("custom_busmap", False)
         if custom_busmap:
             custom_busmap = pd.read_csv(
-                snakemake.input.custom_busmap, index_col=0, squeeze=True
+                snakemake.input.custom_busmap,
+                index_col=0,
+                squeeze=True,
             )
             custom_busmap.index = custom_busmap.index.astype(str)
             logger.info(f"Imported custom busmap from {snakemake.input.custom_busmap}")
 
         cluster_config = snakemake.config.get("clustering", {}).get(
-            "cluster_network", {}
+            "cluster_network",
+            {},
         )
 
         clustering = clustering_for_n_clusters(
@@ -534,7 +567,8 @@ if __name__ == "__main__":
     update_p_nom_max(clustering.network)
 
     clustering.network.meta = dict(
-        snakemake.config, **dict(wildcards=dict(snakemake.wildcards))
+        snakemake.config,
+        **dict(wildcards=dict(snakemake.wildcards)),
     )
     clustering.network.export_to_netcdf(snakemake.output.network)
     for attr in (

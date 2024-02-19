@@ -80,13 +80,15 @@ def get_energy_timeseries(n: pypsa.Network) -> pd.DataFrame:
 
     def _get_energy_multi_port(n: pypsa.Network, c: str) -> pd.DataFrame:
         c_energies = pd.DataFrame(
-            index=n.snapshots, columns=c.df.carrier.unique()
+            index=n.snapshots,
+            columns=c.df.carrier.unique(),
         ).fillna(0)
         for port in [col[3:] for col in c.df.columns if col[:3] == "bus"]:
             if port == "0":  # only track flow in one direction
                 continue
             totals = c.pnl["p" + port].multiply(
-                n.snapshot_weightings.generators, axis=0
+                n.snapshot_weightings.generators,
+                axis=0,
             )
             # remove values where bus is missing (bug in nomopyomo)
             no_bus = c.df.index[c.df["bus" + port] == ""]
@@ -149,13 +151,14 @@ def get_capacity_base(n: pypsa.Network) -> pd.DataFrame:
                 (c.df.p_nom)
                 .groupby(by=[c.df.bus0, c.df.carrier])
                 .sum()
-                .rename_axis(index={"bus0": "bus"})
+                .rename_axis(index={"bus0": "bus"}),
             )
     return pd.concat(totals)
 
 
 def get_capacity_greenfield(
-    n: pypsa.Network, retirement_method="economic"
+    n: pypsa.Network,
+    retirement_method="economic",
 ) -> pd.DataFrame:
     """
     Gets optimal greenfield pnom capacity.
@@ -198,13 +201,14 @@ def get_capacity_greenfield(
         return pd.concat(totals)
     else:
         logger.error(
-            f"Retirement method must be one of 'technical' or 'economic'. Recieved {retirement_method}."
+            f"Retirement method must be one of 'technical' or 'economic'. Recieved {retirement_method}.",
         )
         raise NotImplementedError
 
 
 def get_capacity_brownfield(
-    n: pypsa.Network, retirement_method="economic"
+    n: pypsa.Network,
+    retirement_method="economic",
 ) -> pd.DataFrame:
     """
     Gets optimal brownfield pnom capacity.
@@ -244,7 +248,7 @@ def get_capacity_brownfield(
         return pd.concat(totals)
     else:
         logger.error(
-            f"Retirement method must be one of 'technical' or 'economic'. Recieved {retirement_method}."
+            f"Retirement method must be one of 'technical' or 'economic'. Recieved {retirement_method}.",
         )
         raise NotImplementedError
 
@@ -275,7 +279,7 @@ def get_operational_costs(n: pypsa.Network) -> pd.DataFrame:
         marginal_cost_static = {}
         for item in [x for x in c.df.index if x not in marginal_cost.columns]:
             marginal_cost_static[item] = [c.df.at[item, "marginal_cost"]] * len(
-                marginal_cost
+                marginal_cost,
             )
         marginal_cost = pd.concat(
             [

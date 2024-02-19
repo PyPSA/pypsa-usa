@@ -20,7 +20,8 @@ import xarray as xr
 
 
 def coefficient_of_performance(
-    delta_T: xr.DataArray, source: str = "air"
+    delta_T: xr.DataArray,
+    source: str = "air",
 ) -> xr.DataArray:
     if source == "air":
         return 6.81 - 0.121 * delta_T + 0.000630 * delta_T**2

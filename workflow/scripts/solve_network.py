@@ -243,7 +243,7 @@ def add_SAFE_constraints(n, config):
     ) * n.loads_t.p_set.sum(axis=1).max()
     conv_techs = config["plotting"]["conv_techs"]
     exist_conv_caps = n.generators.query(
-        "~p_nom_extendable & carrier in @conv_techs"
+        "~p_nom_extendable & carrier in @conv_techs",
     ).p_nom.sum()
     ext_gens_i = n.generators.query("carrier in @conv_techs & p_nom_extendable").index
     lhs = linexpr((1, get_var(n, "Generator", "p_nom")[ext_gens_i])).sum()
@@ -271,7 +271,7 @@ def add_operational_reserve_margin_constraint(n, config):
             vres_i.intersection(ext_i)
         ]
         lhs += linexpr(
-            (-EPSILON_VRES * capacity_factor, renewable_capacity_variables)
+            (-EPSILON_VRES * capacity_factor, renewable_capacity_variables),
         ).sum(1)
 
     # Total demand at t
@@ -305,7 +305,8 @@ def update_capacity_constraint(n):
     if not ext_i.empty:
         capacity_variable = get_var(n, "Generator", "p_nom")
         lhs += linexpr((-p_max_pu[ext_i], capacity_variable)).reindex(
-            columns=gen_i, fill_value=""
+            columns=gen_i,
+            fill_value="",
         )
 
     rhs = (p_max_pu[fix_i] * capacity_fixed).reindex(columns=gen_i, fill_value=0)

@@ -143,7 +143,10 @@ def attach_stores(n, costs, elec_opts):
 
     if "battery" in carriers:
         b_buses_i = n.madd(
-            "Bus", buses_i + " battery", carrier="battery", **bus_sub_dict
+            "Bus",
+            buses_i + " battery",
+            carrier="battery",
+            **bus_sub_dict,
         )
 
         n.madd(
@@ -198,7 +201,7 @@ def attach_hydrogen_pipelines(n, costs, elec_opts):
     # determine bus pairs
     attrs = ["bus0", "bus1", "length"]
     candidates = pd.concat(
-        [n.lines[attrs], n.links.query('carrier=="DC"')[attrs]]
+        [n.lines[attrs], n.links.query('carrier=="DC"')[attrs]],
     ).reset_index(drop=True)
 
     # remove bus pair duplicates regardless of order of bus0 and bus1
@@ -223,7 +226,9 @@ def attach_hydrogen_pipelines(n, costs, elec_opts):
 
 
 def add_economic_retirement(
-    n: pypsa.Network, costs: pd.DataFrame, gens: list[str] = None
+    n: pypsa.Network,
+    costs: pd.DataFrame,
+    gens: list[str] = None,
 ):
     """
     Adds dummy generators to account for economic retirement.
@@ -297,10 +302,10 @@ def add_economic_retirement(
         [x for x in extend.index if x in n.generators_t.marginal_cost.columns]
     ]
     marginal_cost_t = marginal_cost_t.rename(
-        columns={x: f"{x} new" for x in marginal_cost_t.columns}
+        columns={x: f"{x} new" for x in marginal_cost_t.columns},
     )
     n.generators_t["marginal_cost"] = n.generators_t["marginal_cost"].join(
-        marginal_cost_t
+        marginal_cost_t,
     )
 
     p_max_pu_t = n.generators_t["p_max_pu"][
@@ -315,7 +320,9 @@ if __name__ == "__main__":
         from _helpers import mock_snakemake
 
         snakemake = mock_snakemake(
-            "add_extra_components", interconnect="western", clusters=30
+            "add_extra_components",
+            interconnect="western",
+            clusters=30,
         )
     configure_logging(snakemake)
 

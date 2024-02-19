@@ -76,7 +76,9 @@ def haversine_np(lon1, lat1, lon2, lat2):
 
 
 def add_buses_from_file(
-    n: pypsa.Network, buses: gpd.GeoDataFrame, interconnect: str
+    n: pypsa.Network,
+    buses: gpd.GeoDataFrame,
+    interconnect: str,
 ) -> pypsa.Network:
     if interconnect != "usa":
         buses = buses.query(
@@ -191,14 +193,20 @@ def assign_bus_location(buses: pd.DataFrame, buslocs: pd.DataFrame) -> gpd.GeoDa
     Attaches coordinates and sub ids to each bus.
     """
     gdf_bus = pd.merge(
-        buses, buslocs[["lat", "lon"]], left_index=True, right_index=True, how="left"
+        buses,
+        buslocs[["lat", "lon"]],
+        left_index=True,
+        right_index=True,
+        how="left",
     )
     gdf_bus["geometry"] = gpd.points_from_xy(gdf_bus["lon"], gdf_bus["lat"])
     return gpd.GeoDataFrame(gdf_bus, crs=4326)
 
 
 def map_bus_to_region(
-    buses: gpd.GeoDataFrame, shape: gpd.GeoDataFrame, name: str
+    buses: gpd.GeoDataFrame,
+    shape: gpd.GeoDataFrame,
+    name: str,
 ) -> gpd.GeoDataFrame:
     """
     Maps a bus to a geographic region.
@@ -249,8 +257,8 @@ def create_grid(polygon, cell_size):
                         (x + cell_size, y),
                         (x + cell_size, y + cell_size),
                         (x, y + cell_size),
-                    ]
-                )
+                    ],
+                ),
             )
             y += cell_size
         x += cell_size
@@ -272,7 +280,8 @@ def create_grid(polygon, cell_size):
 
 
 def build_offshore_buses(
-    offshore_shapes: gpd.GeoDataFrame, offshore_spacing: int
+    offshore_shapes: gpd.GeoDataFrame,
+    offshore_spacing: int,
 ) -> pd.DataFrame:
     "Build dataframe of offshore buses by creating evenly spaced grid cells inside of the offshore shapes."
     offshore_buses = pd.DataFrame()
@@ -344,7 +353,8 @@ def match_osw_to_poi(buses_to_match_to, missing_buses):
     missing_buses["bus_assignment"] = None
 
     buses_to_match_to["geometry"] = gpd.points_from_xy(
-        buses_to_match_to["x"], buses_to_match_to["y"]
+        buses_to_match_to["x"],
+        buses_to_match_to["y"],
     )
 
     # from: https://stackoverflow.com/questions/58893719/find-nearest-point-in-other-dataframe-with-a-lot-of-data
@@ -368,7 +378,8 @@ def build_offshore_transmission_configuration(n: pypsa.Network) -> pypsa.Network
     poi_buses = n.buses.loc[n.buses.poi_sub]  # identify the buses at the POI
     highest_voltage_buses = poi_buses.loc[poi_buses.groupby("sub_id")["v_nom"].idxmax()]
     offshore_buses = match_osw_to_poi(
-        highest_voltage_buses, n.buses.loc[n.buses.substation_off]
+        highest_voltage_buses,
+        n.buses.loc[n.buses.substation_off],
     )  # match offshore buses to POI
 
     osw_offsub_bus_ids = n.buses.loc[n.buses.substation_off].index
@@ -598,7 +609,7 @@ def main(snakemake):
     ba_region_shapes = gpd.read_file(snakemake.input["onshore_shapes"])
     offshore_shapes = gpd.read_file(snakemake.input["offshore_shapes"])
     ba_shape = gpd.GeoDataFrame(
-        pd.concat([ba_region_shapes, offshore_shapes], ignore_index=True)
+        pd.concat([ba_region_shapes, offshore_shapes], ignore_index=True),
     )
     ba_shape = ba_shape.rename(columns={"name": "balancing_area"})
 
@@ -641,7 +652,8 @@ def main(snakemake):
     # build new offshore network configuration
     if snakemake.params.build_offshore_network["enable"]:
         offshore_buses = build_offshore_buses(
-            offshore_shapes, snakemake.params.build_offshore_network["bus_spacing"]
+            offshore_shapes,
+            snakemake.params.build_offshore_network["bus_spacing"],
         )
         n = add_offshore_buses(n, offshore_buses)
         n = build_offshore_transmission_configuration(n)
@@ -651,7 +663,7 @@ def main(snakemake):
 
     if interconnect == "Eastern":
         logger.warning(
-            f"Eastern Interconnect is missing {len(n.buses.loc[n.buses.balancing_area.isna() | n.buses.state.isna() | n.buses.country.isna()])} bus locations. Must clean-up GIS files before using!"
+            f"Eastern Interconnect is missing {len(n.buses.loc[n.buses.balancing_area.isna() | n.buses.state.isna() | n.buses.country.isna()])} bus locations. Must clean-up GIS files before using!",
         )
 
     # asssign line types and lengths
@@ -669,12 +681,12 @@ def main(snakemake):
                 n.buses.balancing_area.isna()
                 | n.buses.state.isna()
                 | n.buses.country.isna()
-            ]
+            ],
         )
         > 0
     ):
         logger.info(
-            f"Network is missing BA/State/Country information for {len(n.buses.loc[n.buses.balancing_area.isna() | n.buses.state.isna() | n.buses.country.isna()])} buses."
+            f"Network is missing BA/State/Country information for {len(n.buses.loc[n.buses.balancing_area.isna() | n.buses.state.isna() | n.buses.country.isna()])} buses.",
         )
 
     # export bus2sub interconnect data
