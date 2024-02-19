@@ -66,6 +66,7 @@ def plot_graphs(n, csv_path_1, csv_path_2, save1, save2, save3):
     optimized = optimized_df(n, order)
     historic = historic_df(csv_path_1, csv_path_2, buses)[0]
     fig, axes = plt.subplots(3, 1, figsize=(9, 9))
+    import pdb; pdb.set_trace()
     optimized.resample("1D").sum().plot.area(ax=axes[0], **kwargs, title="Optimized")
     historic.resample("1D").sum().plot.area(ax=axes[1], **kwargs, title="Historic")
 
@@ -191,7 +192,7 @@ def get_buses(n):
     buses_clean = [ba.split("-")[0] for ba in buses_clean]
     buses = list(OrderedDict.fromkeys(buses_clean))
     if "ERCO" in buses:
-        buses.pop(0)
+        pass
     else:
         buses.pop(1)
     return buses
