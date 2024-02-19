@@ -1,4 +1,3 @@
-
 import logging
 import re
 from pathlib import Path
@@ -102,6 +101,7 @@ def add_operational_reserve_margin_constraint(n, config):
     rhs = EPSILON_LOAD * demand + EPSILON_VRES * potential + CONTINGENCY
 
     define_constraints(n, lhs, ">=", rhs, "Reserve margin")
+
 
 def add_operational_reserve_margin(n, sns, config):
     """
@@ -267,7 +267,6 @@ if __name__ == "__main__":
         n.export_to_netcdf(snakemake.output[0])
 
     logger.info(f"Maximum memory usage: {mem.mem_usage}")
-
 
     # n.optimize.fix_optimal_capacities()
     # n = prepare_network(n, solve_opts, config=snakemake.config)
