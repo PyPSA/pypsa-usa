@@ -1,77 +1,3 @@
-# SPDX-FileCopyrightText: : 2017-2022 The PyPSA-Eur Authors
-#
-# SPDX-License-Identifier: MIT
-"""
-Solves linear optimal power flow for a network iteratively while updating
-reactances.
-
-**Relevant Settings**
-
-.. code:: yaml
-
-    solving:
-        tmpdir:
-        options:
-            formulation:
-            clip_p_max_pu:
-            load_shedding:
-            noisy_costs:
-            nhours:
-            min_iterations:
-            max_iterations:
-            skip_iterations:
-            track_iterations:
-        solver:
-            name:
-
-.. seealso::
-    Documentation of the configuration file ``config.yaml`` at
-    :ref:`electricity_cf`, :ref:`solving_cf`, :ref:`plotting_cf`
-
-**Inputs**
-
-- ``networks/elec_s{simpl}_{clusters}_ec_l{ll}_{opts}.nc``: confer :ref:`prepare`
-
-**Outputs**
-
-- ``results/networks/elec_s{simpl}_{clusters}_ec_l{ll}_{opts}.nc``: Solved PyPSA network including optimisation results
-
-    # .. image:: ../img/results.png
-    #     :scale: 40 %
-
-**Description**
-
-Total annual system costs are minimised with PyPSA. The full formulation of the
-linear optimal power flow (plus investment planning
-is provided in the
-`documentation of PyPSA <https://pypsa.readthedocs.io/en/latest/optimal_power_flow.html#linear-optimal-power-flow>`_.
-The optimization is based on the ``pyomo=False`` setting in the :func:`network.lopf` and  :func:`pypsa.linopf.ilopf` function.
-Additionally, some extra constraints specified in :mod:`prepare_network` are added.
-
-Solving the network in multiple iterations is motivated through the dependence of transmission line capacities and impedances.
-As lines are expanded their electrical parameters change, which renders the optimisation bilinear even if the power flow
-equations are linearized.
-To retain the computational advantage of continuous linear programming, a sequential linear programming technique
-is used, where in between iterations the line impedances are updated.
-Details (and errors made through this heuristic) are discussed in the paper
-
-- Fabian Neumann and Tom Brown. `Heuristics for Transmission Expansion Planning in Low-Carbon Energy System Models <https://arxiv.org/abs/1907.10548>`_), *16th International Conference on the European Energy Market*, 2019. `arXiv:1907.10548 <https://arxiv.org/abs/1907.10548>`_.
-
-.. warning::
-    Capital costs of existing network components are not included in the objective function,
-    since for the optimisation problem they are just a constant term (no influence on optimal result).
-
-    Therefore, these capital costs are not included in ``network.objective``!
-
-    If you want to calculate the full total annual system costs add these to the objective value.
-
-.. tip::
-    The rule :mod:`solve_all_networks` runs
-    for all ``scenario`` s in the configuration file
-    the rule :mod:`solve_network`.
-"""
- 
-
 import logging
 import re
 from pathlib import Path
@@ -126,117 +52,6 @@ def prepare_network(n, solve_opts):
     return n
 
 
-def add_CCL_constraints(n, config):
-    agg_p_nom_limits = config["electricity"].get("agg_p_nom_limits")
-
-    try:
-        agg_p_nom_minmax = pd.read_csv(
-            agg_p_nom_limits,
-            index_col=list(range(2)),
-        )
-    except OSError:
-        logger.exception(
-            "Need to specify the path to a .csv file containing "
-            "aggregate capacity limits per country in "
-            "config['electricity']['agg_p_nom_limit'].",
-        )
-    logger.info(
-        "Adding per carrier generation capacity constraints for "
-        "individual countries",
-    )
-
-    gen_country = n.generators.bus.map(n.buses.country)
-    # cc means country and carrier
-    p_nom_per_cc = (
-        pd.DataFrame(
-            {
-                "p_nom": linexpr((1, get_var(n, "Generator", "p_nom"))),
-                "country": gen_country,
-                "carrier": n.generators.carrier,
-            },
-        )
-        .dropna(subset=["p_nom"])
-        .groupby(["country", "carrier"])
-        .p_nom.apply(join_exprs)
-    )
-    minimum = agg_p_nom_minmax["min"].dropna()
-    if not minimum.empty:
-        minconstraint = define_constraints(
-            n,
-            p_nom_per_cc[minimum.index],
-            ">=",
-            minimum,
-            "agg_p_nom",
-            "min",
-        )
-    maximum = agg_p_nom_minmax["max"].dropna()
-    if not maximum.empty:
-        maxconstraint = define_constraints(
-            n,
-            p_nom_per_cc[maximum.index],
-            "<=",
-            maximum,
-            "agg_p_nom",
-            "max",
-        )
-
-
-def add_EQ_constraints(n, o, scaling=1e-1):
-    float_regex = r"[0-9]*\.?[0-9]+"
-    level = float(re.findall(float_regex, o)[0])
-    if o[-1] == "c":
-        ggrouper = n.generators.bus.map(n.buses.country)
-        lgrouper = n.loads.bus.map(n.buses.country)
-        sgrouper = n.storage_units.bus.map(n.buses.country)
-    else:
-        ggrouper = n.generators.bus
-        lgrouper = n.loads.bus
-        sgrouper = n.storage_units.bus
-    load = (
-        n.snapshot_weightings.generators
-        @ n.loads_t.p_set.groupby(lgrouper, axis=1).sum()
-    )
-    inflow = (
-        n.snapshot_weightings.stores
-        @ n.storage_units_t.inflow.groupby(sgrouper, axis=1).sum()
-    )
-    inflow = inflow.reindex(load.index).fillna(0.0)
-    rhs = scaling * (level * load - inflow)
-    lhs_gen = (
-        linexpr(
-            (
-                n.snapshot_weightings.generators * scaling,
-                get_var(n, "Generator", "p").T,
-            ),
-        )
-        .T.groupby(ggrouper, axis=1)
-        .apply(join_exprs)
-    )
-    lhs_spill = (
-        linexpr(
-            (
-                -n.snapshot_weightings.stores * scaling,
-                get_var(n, "StorageUnit", "spill").T,
-            ),
-        )
-        .T.groupby(sgrouper, axis=1)
-        .apply(join_exprs)
-    )
-    lhs_spill = lhs_spill.reindex(lhs_gen.index).fillna("")
-    lhs = lhs_gen + lhs_spill
-    define_constraints(n, lhs, ">=", rhs, "equity", "min")
-
-
-def add_BAU_constraints(n, config):
-    mincaps = pd.Series(config["electricity"]["BAU_mincapacities"])
-    lhs = (
-        linexpr((1, get_var(n, "Generator", "p_nom")))
-        .groupby(n.generators.carrier)
-        .apply(join_exprs)
-    )
-    define_constraints(n, lhs, ">=", mincaps[lhs.index], "Carrier", "bau_mincaps")
-
-
 def add_SAFE_constraints(n, config):
     peakdemand = (
         1.0 + config["electricity"]["SAFE_reservemargin"]
@@ -286,33 +101,6 @@ def add_operational_reserve_margin_constraint(n, config):
     rhs = EPSILON_LOAD * demand + EPSILON_VRES * potential + CONTINGENCY
 
     define_constraints(n, lhs, ">=", rhs, "Reserve margin")
-
-
-def update_capacity_constraint(n):
-    gen_i = n.generators.index
-    ext_i = n.generators.query("p_nom_extendable").index
-    fix_i = n.generators.query("not p_nom_extendable").index
-
-    dispatch = get_var(n, "Generator", "p")
-    reserve = get_var(n, "Generator", "r")
-
-    capacity_fixed = n.generators.p_nom[fix_i]
-
-    p_max_pu = get_as_dense(n, "Generator", "p_max_pu")
-
-    lhs = linexpr((1, dispatch), (1, reserve))
-
-    if not ext_i.empty:
-        capacity_variable = get_var(n, "Generator", "p_nom")
-        lhs += linexpr((-p_max_pu[ext_i], capacity_variable)).reindex(
-            columns=gen_i,
-            fill_value="",
-        )
-
-    rhs = (p_max_pu[fix_i] * capacity_fixed).reindex(columns=gen_i, fill_value=0)
-
-    define_constraints(n, lhs, "<=", rhs, "Generators", "updated_capacity_constraint")
-
 
 def add_operational_reserve_margin(n, sns, config):
     """
@@ -407,7 +195,7 @@ def solve_network(n, config, opts="", **kwargs):
 
 
 def solve_operations_model(n, solve_opts, solver_options):
-    load_shedding = solve_opts.get("load_shedding")
+    load_shedding = True
     solver_name = solver_options.pop("name")
     if solve_opts.get("nhours"):
         nhours = solve_opts["nhours"]
@@ -473,18 +261,15 @@ if __name__ == "__main__":
     fn = getattr(snakemake.log, "memory", None)
     with memory_logger(filename=fn, interval=30.0) as mem:
         n = pypsa.Network(snakemake.input[0])
-        if solve_opts["operations_only"]:
-            n = solve_operations_model(n, solve_opts, solver_options)
-        else:
-            n = prepare_network(n, solve_opts)
-            n = solve_network(
-                n,
-                snakemake.config,
-                opts,
-                solver_dir=tmpdir,
-                solver_logfile=snakemake.log.solver,
-            )
-            n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))
+        n = solve_operations_model(n, solve_opts, solver_options)
+        # n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))
         n.export_to_netcdf(snakemake.output[0])
 
     logger.info(f"Maximum memory usage: {mem.mem_usage}")
+
+
+    # n.optimize.fix_optimal_capacities()
+    # n = prepare_network(n, solve_opts, config=snakemake.config)
+    # n = solve_network(
+    #     n, config=snakemake.config, opts=opts, log_fn=snakemake.log.solver
+    # )

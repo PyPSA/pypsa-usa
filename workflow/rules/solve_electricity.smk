@@ -72,4 +72,4 @@ rule solve_network_operations:
     conda:
         "../envs/environment.yaml"
     script:
-        "../scripts/solve_network.py"
+        "../scripts/solve_operations_network.py"
