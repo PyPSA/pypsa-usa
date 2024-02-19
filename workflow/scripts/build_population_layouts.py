@@ -40,7 +40,7 @@ Builds mapping between cutout grid cells and population (total, urban, rural).
         :scale: 80 %
 """
 
-from __future__ import annotations
+ 
 
 import logging
 

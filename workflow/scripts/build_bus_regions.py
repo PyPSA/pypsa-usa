@@ -32,7 +32,7 @@
 
 Creates Voronoi shapes for each bus representing both onshore and offshore regions.
 """
-from __future__ import annotations
+ 
 
 import logging
 from functools import reduce

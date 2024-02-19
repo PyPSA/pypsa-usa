@@ -2,7 +2,7 @@
 """
 Aggregates network to substations and simplifies to a single voltage level.
 """
-from __future__ import annotations
+ 
 
 import logging
 import os

@@ -66,7 +66,7 @@ based on the given network configuration.
 
 **Description**
 """
-from __future__ import annotations
+ 
 
 import logging
 import os

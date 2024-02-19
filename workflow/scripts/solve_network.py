@@ -70,7 +70,7 @@ Details (and errors made through this heuristic) are discussed in the paper
     for all ``scenario`` s in the configuration file
     the rule :mod:`solve_network`.
 """
-from __future__ import annotations
+ 
 
 import logging
 import re

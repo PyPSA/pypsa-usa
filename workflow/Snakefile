@@ -99,7 +99,13 @@ if "E" not in config["scenario"]["sector"]:
     else:
         config["scenario"]["sector"] = f"E-{config['scenario']['sector']}"
 
+if config["run"]["validation"]:
+    COLLECT_FIGURES = FIGURES_VALIDATE + FIGURES_SINGLE
+else:
+    COLLECT_FIGURES = FIGURES_SINGLE
+
 # ----------------------------------- Rules ---------------------------------- #
+
 
 
 rule all:
@@ -108,7 +114,7 @@ rule all:
             RESULTS
             + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}_{figure}.pdf",
             **config["scenario"],
-            figure=FIGURES_SINGLE + FIGURES_VALIDATE,
+            figure=COLLECT_FIGURES,
         ),
         #"repo_data/dag.jpg",
 

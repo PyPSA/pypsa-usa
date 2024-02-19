@@ -5,7 +5,7 @@ Adapted from PyPSA-Eur summary statistics reporting script
  - https://github.com/PyPSA/pypsa-eur/blob/master/scripts/make_summary.py
 """
 
-from __future__ import annotations
+ 
 
 import logging
 

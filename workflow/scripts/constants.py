@@ -5,7 +5,7 @@ Module for holding global constant values.
 ###########################################
 # Constants for GIS Coordinate Reference Systems
 ###########################################
-from __future__ import annotations
+ 
 
 MEASUREMENT_CRS = "EPSG:5070"
 GPS_CRS = "EPSG:4326"

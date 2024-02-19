@@ -4,7 +4,7 @@
 # https://www.sphinx-doc.org/en/master/usage/configuration.html
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
-from __future__ import annotations
+ 
 
 project = "pypsa-usa"
 copyright = "2023, Kamran Tehranchi, Trevor Barnes"

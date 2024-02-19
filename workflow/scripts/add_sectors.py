@@ -8,7 +8,7 @@ Marginal costs are handeled as follows:
 - Replacement generators contain time varrying fuel costs
 """
 
-from __future__ import annotations
+ 
 
 import logging
 from typing import Dict

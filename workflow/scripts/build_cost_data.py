@@ -2,7 +2,7 @@
 Combines all time independent cost data sources into a standard format.
 """
 
-from __future__ import annotations
+ 
 
 import logging
 from typing import Dict
