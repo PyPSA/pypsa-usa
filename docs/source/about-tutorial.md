@@ -1,5 +1,5 @@
 (tutorial)=
-# Tutorial 
+# Tutorial
 
 ```{note}
 ** If you have not done so, please follow the [installation instructions](https://pypsa-usa.readthedocs.io/en/latest/about-install.html) [github issues](https://github.com/PyPSA/pypsa-usa/issues) **

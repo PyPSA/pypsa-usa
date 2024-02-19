@@ -1,4 +1,5 @@
-"""Generic module to add a new energy network
+"""
+Generic module to add a new energy network.
 
 Creates new sector ontop of existing one. Note: Currently, can only be built ontop of electricity sector
 
@@ -7,11 +8,17 @@ Marginal costs are handeled as follows:
 - Replacement generators contain time varrying fuel costs
 """
 
-import pypsa
-import pandas as pd
-import geopandas as gpd
-from typing import List, Union, Dict
+from __future__ import annotations
+
 import logging
+from typing import Dict
+from typing import List
+from typing import Union
+
+import geopandas as gpd
+import pandas as pd
+import pypsa
+
 logger = logging.getLogger(__name__)
 from _helpers import configure_logging
 from add_electricity import load_costs
@@ -20,47 +27,56 @@ from shapely.geometry import Point
 import constants
 import sys
 
-def assign_bus_2_state(n: pypsa.Network, shp: str,  states_2_include: List[str] = None, state_2_state_name: Dict[str, str] = None) -> None:
-    """Adds a state column to the network buses dataframe
-    
+
+def assign_bus_2_state(
+    n: pypsa.Network,
+    shp: str,
+    states_2_include: list[str] = None,
+    state_2_state_name: dict[str, str] = None,
+) -> None:
+    """
+    Adds a state column to the network buses dataframe.
+
     The shapefile must be the counties shapefile
     """
-    
+
     buses = n.buses[["x", "y"]].copy()
     buses["geometry"] = buses.apply(lambda x: Point(x.x, x.y), axis=1)
     buses = gpd.GeoDataFrame(buses, crs="EPSG:4269")
-    
+
     states = gpd.read_file(shp).dissolve("STUSPS")["geometry"]
     states = gpd.GeoDataFrame(states)
     if states_2_include:
         states = states[states.index.isin(states_2_include)]
-    
-    # project to avoid CRS warning from geopandas 
+
+    # project to avoid CRS warning from geopandas
     buses_projected = buses.to_crs("EPSG:3857")
     states_projected = states.to_crs("EPSG:3857")
     gdf = gpd.sjoin_nearest(buses_projected, states_projected, how="left")
-    
+
     n.buses["STATE"] = n.buses.index.map(gdf.index_right)
-    
+
     if state_2_state_name:
         n.buses["STATE_NAME"] = n.buses.STATE.map(state_2_state_name)
 
+
 def convert_generators_2_links(n: pypsa.Network, carrier: str, bus0_suffix: str):
-    """Replace Generators with cross sector links. 
-    
-    Links bus1 are the bus the generator is attached to. Links bus0 are state 
+    """
+    Replace Generators with cross sector links.
+
+    Links bus1 are the bus the generator is attached to. Links bus0 are state
     level followed by the suffix (ie. "WA gas" if " gas" is the bus0_suffix)
-    
-    n: pypsa.Network, 
+
+    n: pypsa.Network,
     carrier: str,
         carrier of the generator to convert to a link
     bus0_suffix: str,
-        suffix to attach link to 
+        suffix to attach link to
     """
-    
-    plants = n.generators[n.generators.carrier==carrier].copy()
+
+    plants = n.generators[n.generators.carrier == carrier].copy()
     plants["STATE"] = plants.bus.map(n.buses.STATE)
-    
+
     n.madd(
         "Link",
         names=plants.index,
@@ -78,13 +94,14 @@ def convert_generators_2_links(n: pypsa.Network, carrier: str, bus0_suffix: str)
         capital_cost=plants.capital_cost,
         lifetime=plants.lifetime,
     )
-    
-    # copy time varrying parameters 
-    # for gen in plants.index: 
+
+    # copy time varrying parameters
+    # for gen in plants.index:
     #     n.
-    
-    # remove generators 
+
+    # remove generators
     n.mremove("Generator", plants.index)
+
 
 if __name__ == "__main__":
     if "snakemake" not in globals():
@@ -100,28 +117,36 @@ if __name__ == "__main__":
             sector="E-G",
         )
     configure_logging(snakemake)
-    
+
     n = pypsa.Network(snakemake.input.network)
-    
+
     sectors = snakemake.wildcards.sector.split("-")
-    
+
     # exit if only electricity network
     if all(s == "E" for s in sectors):
         n.export_to_netcdf(snakemake.output.network)
-        sys.exit() 
-    
+        sys.exit()
+
     # map states to each clustered bus
-    
+
     if snakemake.wildcards.interconnect == "usa":
-        states_2_map = [x for x,y in constants.STATES_INTERCONNECT_MAPPER.items() if y in ("western", "eastern", "texas")]
+        states_2_map = [
+            x
+            for x, y in constants.STATES_INTERCONNECT_MAPPER.items()
+            if y in ("western", "eastern", "texas")
+        ]
     else:
-        states_2_map = [x for x,y in constants.STATES_INTERCONNECT_MAPPER.items() if y == snakemake.wildcards.interconnect]
-        
+        states_2_map = [
+            x
+            for x, y in constants.STATES_INTERCONNECT_MAPPER.items()
+            if y == snakemake.wildcards.interconnect
+        ]
+
     code_2_state = {v: k for k, v in constants.STATE_2_CODE.items()}
     assign_bus_2_state(n, snakemake.input.counties, states_2_map, code_2_state)
 
     # params = snakemake.params
-    
+
     # Nyears = n.snapshot_weightings.objective.sum() / 8760.0
     # costs = load_costs(
     #     snakemake.input.tech_costs,
@@ -129,7 +154,7 @@ if __name__ == "__main__":
     #     params.electricity["max_hours"],
     #     Nyears,
     # )
-    
+
     if "G" in sectors:
         build_natural_gas(
             n=n,
@@ -139,9 +164,9 @@ if __name__ == "__main__":
             eia_191=snakemake.input.eia_191,
             pipelines=snakemake.input.pipelines,
         )
-        
-        # convert existing generators to links 
+
+        # convert existing generators to links
         for carrier in ("CCGT", "OCGT"):
             convert_generators_2_links(n, carrier, " gas")
-        
+
     n.export_to_netcdf(snakemake.output.network)

@@ -1,9 +1,12 @@
 # By PyPSA-USA Authors
+from __future__ import annotations
 
-import pandas as pd
 from pathlib import Path
 
-REGION_COLS = ['geometry', 'name', 'x', 'y', 'country']
+import pandas as pd
+
+REGION_COLS = ["geometry", "name", "x", "y", "country"]
+
 
 def configure_logging(snakemake, skip_handlers=False):
     """
@@ -26,28 +29,38 @@ def configure_logging(snakemake, skip_handlers=False):
 
     import logging
 
-    kwargs = snakemake.config.get('logging', dict()).copy()
+    kwargs = snakemake.config.get("logging", dict()).copy()
     kwargs.setdefault("level", "INFO")
 
     if skip_handlers is False:
-        fallback_path = Path(__file__).parent.joinpath('..', 'logs', f"{snakemake.rule}.log")
-        logfile = snakemake.log.get('python', snakemake.log[0] if snakemake.log
-                                    else fallback_path)
+        fallback_path = Path(__file__).parent.joinpath(
+            "..",
+            "logs",
+            f"{snakemake.rule}.log",
+        )
+        logfile = snakemake.log.get(
+            "python",
+            snakemake.log[0] if snakemake.log else fallback_path,
+        )
         kwargs.update(
-            {'handlers': [
-                # Prefer the 'python' log, otherwise take the first log for each
-                # Snakemake rule
-                logging.FileHandler(logfile),
-                logging.StreamHandler()
-                ]
-            })
+            {
+                "handlers": [
+                    # Prefer the 'python' log, otherwise take the first log for each
+                    # Snakemake rule
+                    logging.FileHandler(logfile),
+                    logging.StreamHandler(),
+                ],
+            },
+        )
     logging.basicConfig(**kwargs)
 
 
 def setup_custom_logger(name):
     import logging
 
-    formatter = logging.Formatter(fmt='%(asctime)s - %(levelname)s - %(module)s - %(message)s')
+    formatter = logging.Formatter(
+        fmt="%(asctime)s - %(levelname)s - %(module)s - %(message)s",
+    )
 
     handler = logging.StreamHandler()
     handler.setFormatter(formatter)
@@ -56,6 +69,7 @@ def setup_custom_logger(name):
     # logger.setLevel(logging.DEBUG)
     logger.addHandler(handler)
     return logger
+
 
 def load_network(import_name=None, custom_components=None):
     """
@@ -91,21 +105,30 @@ def load_network(import_name=None, custom_components=None):
 
     if custom_components is not None:
         override_components = pypsa.components.components.copy()
-        override_component_attrs = Dict({k : v.copy() for k,v in pypsa.components.component_attrs.items()})
+        override_component_attrs = Dict(
+            {k: v.copy() for k, v in pypsa.components.component_attrs.items()},
+        )
         for k, v in custom_components.items():
-            override_components.loc[k] = v['component']
-            override_component_attrs[k] = pd.DataFrame(columns = ["type","unit","default","description","status"])
-            for attr, val in v['attributes'].items():
+            override_components.loc[k] = v["component"]
+            override_component_attrs[k] = pd.DataFrame(
+                columns=["type", "unit", "default", "description", "status"],
+            )
+            for attr, val in v["attributes"].items():
                 override_component_attrs[k].loc[attr] = val
 
-    return pypsa.Network(import_name=import_name,
-                         override_components=override_components,
-                         override_component_attrs=override_component_attrs)
+    return pypsa.Network(
+        import_name=import_name,
+        override_components=override_components,
+        override_component_attrs=override_component_attrs,
+    )
 
 
 def pdbcast(v, h):
-    return pd.DataFrame(v.values.reshape((-1, 1)) * h.values,
-                        index=v.index, columns=h.index)
+    return pd.DataFrame(
+        v.values.reshape((-1, 1)) * h.values,
+        index=v.index,
+        columns=h.index,
+    )
 
 
 def load_network_for_plots(fn, tech_costs, config, combine_hydro_ps=True):
@@ -117,99 +140,138 @@ def load_network_for_plots(fn, tech_costs, config, combine_hydro_ps=True):
     n.loads["carrier"] = n.loads.bus.map(n.buses.carrier) + " load"
     n.stores["carrier"] = n.stores.bus.map(n.buses.carrier)
 
-    n.links["carrier"] = (n.links.bus0.map(n.buses.carrier) + "-" + n.links.bus1.map(n.buses.carrier))
+    n.links["carrier"] = (
+        n.links.bus0.map(n.buses.carrier) + "-" + n.links.bus1.map(n.buses.carrier)
+    )
     n.lines["carrier"] = "AC line"
     n.transformers["carrier"] = "AC transformer"
 
-    n.lines['s_nom'] = n.lines['s_nom_min']
-    n.links['p_nom'] = n.links['p_nom_min']
+    n.lines["s_nom"] = n.lines["s_nom_min"]
+    n.links["p_nom"] = n.links["p_nom_min"]
 
     if combine_hydro_ps:
-        n.storage_units.loc[n.storage_units.carrier.isin({'PHS', 'hydro'}), 'carrier'] = 'hydro+PHS'
+        n.storage_units.loc[
+            n.storage_units.carrier.isin({"PHS", "hydro"}),
+            "carrier",
+        ] = "hydro+PHS"
 
     # if the carrier was not set on the heat storage units
     # bus_carrier = n.storage_units.bus.map(n.buses.carrier)
     # n.storage_units.loc[bus_carrier == "heat","carrier"] = "water tanks"
 
-    Nyears = n.snapshot_weightings.objective.sum() / 8760.
-    costs = load_costs(tech_costs, config['costs'], config['electricity'], Nyears)
+    Nyears = n.snapshot_weightings.objective.sum() / 8760.0
+    costs = load_costs(tech_costs, config["costs"], config["electricity"], Nyears)
     update_transmission_costs(n, costs)
 
     return n
+
 
 def update_p_nom_max(n):
     # if extendable carriers (solar/onwind/...) have capacity >= 0,
     # e.g. existing assets from the OPSD project are included to the network,
     # the installed capacity might exceed the expansion limit.
     # Hence, we update the assumptions.
-    
-    n.generators.p_nom_max = n.generators[['p_nom_min', 'p_nom_max']].max(1)
+
+    n.generators.p_nom_max = n.generators[["p_nom_min", "p_nom_max"]].max(1)
+
 
 def aggregate_p_nom(n):
-    return pd.concat([
-        n.generators.groupby("carrier").p_nom_opt.sum(),
-        n.storage_units.groupby("carrier").p_nom_opt.sum(),
-        n.links.groupby("carrier").p_nom_opt.sum(),
-        n.loads_t.p.groupby(n.loads.carrier,axis=1).sum().mean()
-    ])
+    return pd.concat(
+        [
+            n.generators.groupby("carrier").p_nom_opt.sum(),
+            n.storage_units.groupby("carrier").p_nom_opt.sum(),
+            n.links.groupby("carrier").p_nom_opt.sum(),
+            n.loads_t.p.groupby(n.loads.carrier, axis=1).sum().mean(),
+        ],
+    )
+
 
 def aggregate_p(n):
-    return pd.concat([
-        n.generators_t.p.sum().groupby(n.generators.carrier).sum(),
-        n.storage_units_t.p.sum().groupby(n.storage_units.carrier).sum(),
-        n.stores_t.p.sum().groupby(n.stores.carrier).sum(),
-        -n.loads_t.p.sum().groupby(n.loads.carrier).sum()
-    ])
+    return pd.concat(
+        [
+            n.generators_t.p.sum().groupby(n.generators.carrier).sum(),
+            n.storage_units_t.p.sum().groupby(n.storage_units.carrier).sum(),
+            n.stores_t.p.sum().groupby(n.stores.carrier).sum(),
+            -n.loads_t.p.sum().groupby(n.loads.carrier).sum(),
+        ],
+    )
+
 
 def aggregate_e_nom(n):
-    return pd.concat([
-        (n.storage_units["p_nom_opt"]*n.storage_units["max_hours"]).groupby(n.storage_units["carrier"]).sum(),
-        n.stores["e_nom_opt"].groupby(n.stores.carrier).sum()
-    ])
+    return pd.concat(
+        [
+            (n.storage_units["p_nom_opt"] * n.storage_units["max_hours"])
+            .groupby(n.storage_units["carrier"])
+            .sum(),
+            n.stores["e_nom_opt"].groupby(n.stores.carrier).sum(),
+        ],
+    )
+
 
 def aggregate_p_curtailed(n):
-    return pd.concat([
-        ((n.generators_t.p_max_pu.sum().multiply(n.generators.p_nom_opt) - n.generators_t.p.sum())
-         .groupby(n.generators.carrier).sum()),
-        ((n.storage_units_t.inflow.sum() - n.storage_units_t.p.sum())
-         .groupby(n.storage_units.carrier).sum())
-    ])
+    return pd.concat(
+        [
+            (
+                (
+                    n.generators_t.p_max_pu.sum().multiply(n.generators.p_nom_opt)
+                    - n.generators_t.p.sum()
+                )
+                .groupby(n.generators.carrier)
+                .sum()
+            ),
+            (
+                (n.storage_units_t.inflow.sum() - n.storage_units_t.p.sum())
+                .groupby(n.storage_units.carrier)
+                .sum()
+            ),
+        ],
+    )
+
 
 def aggregate_costs(n, flatten=False, opts=None, existing_only=False):
 
-    components = dict(Link=("p_nom", "p0"),
-                      Generator=("p_nom", "p"),
-                      StorageUnit=("p_nom", "p"),
-                      Store=("e_nom", "p"),
-                      Line=("s_nom", None),
-                      Transformer=("s_nom", None))
+    components = dict(
+        Link=("p_nom", "p0"),
+        Generator=("p_nom", "p"),
+        StorageUnit=("p_nom", "p"),
+        Store=("e_nom", "p"),
+        Line=("s_nom", None),
+        Transformer=("s_nom", None),
+    )
 
     costs = {}
     for c, (p_nom, p_attr) in zip(
         n.iterate_components(components.keys(), skip_empty=False),
-        components.values()
+        components.values(),
     ):
-        if c.df.empty: continue
-        if not existing_only: p_nom += "_opt"
-        costs[(c.list_name, 'capital')] = (c.df[p_nom] * c.df.capital_cost).groupby(c.df.carrier).sum()
+        if c.df.empty:
+            continue
+        if not existing_only:
+            p_nom += "_opt"
+        costs[(c.list_name, "capital")] = (
+            (c.df[p_nom] * c.df.capital_cost).groupby(c.df.carrier).sum()
+        )
         if p_attr is not None:
             p = c.pnl[p_attr].sum()
-            if c.name == 'StorageUnit':
+            if c.name == "StorageUnit":
                 p = p.loc[p > 0]
-            costs[(c.list_name, 'marginal')] = (p*c.df.marginal_cost).groupby(c.df.carrier).sum()
+            costs[(c.list_name, "marginal")] = (
+                (p * c.df.marginal_cost).groupby(c.df.carrier).sum()
+            )
     costs = pd.concat(costs)
 
     if flatten:
         assert opts is not None
-        conv_techs = opts['conv_techs']
+        conv_techs = opts["conv_techs"]
 
         costs = costs.reset_index(level=0, drop=True)
-        costs = costs['capital'].add(
-            costs['marginal'].rename({t: t + ' marginal' for t in conv_techs}),
-            fill_value=0.
+        costs = costs["capital"].add(
+            costs["marginal"].rename({t: t + " marginal" for t in conv_techs}),
+            fill_value=0.0,
         )
 
     return costs
+
 
 def progress_retrieve(url, file):
     import urllib
@@ -222,6 +284,7 @@ def progress_retrieve(url, file):
 
     urllib.request.urlretrieve(url, file, reporthook=dlProgress)
 
+
 def get_aggregation_strategies(aggregation_strategies):
     # default aggregation strategies that cannot be defined in .yaml format must be specified within
     # the function, otherwise (when defaults are passed in the function's definition) they get lost
@@ -233,29 +296,41 @@ def get_aggregation_strategies(aggregation_strategies):
     bus_strategies = dict(country=_make_consense("Bus", "country"))
     bus_strategies.update(aggregation_strategies.get("buses", {}))
 
-    generator_strategies = {'build_year': lambda x: 0, 'lifetime': lambda x: np.inf}
+    generator_strategies = {"build_year": lambda x: 0, "lifetime": lambda x: np.inf}
     generator_strategies.update(aggregation_strategies.get("generators", {}))
 
     return bus_strategies, generator_strategies
+
 
 def export_network_for_gis_mapping(n, output_path):
     import pandas as pd
     import os
 
-    #Creating GIS Table for Mapping Lines in QGIS
+    # Creating GIS Table for Mapping Lines in QGIS
     lines_gis = n.lines.copy()
-    lines_gis['latitude1'] = n.buses.loc[lines_gis.bus0].y.values
-    lines_gis['longitude1'] = n.buses.loc[lines_gis.bus0].x.values
-    lines_gis['latitude2'] = n.buses.loc[lines_gis.bus1].y.values
-    lines_gis['longitude2'] = n.buses.loc[lines_gis.bus1].x.values
-    lines_gis['v_nom'] = n.buses.loc[lines_gis.bus0].v_nom.values
-    lines_gis['wkt_geom'] = 'LINESTRING (' + lines_gis.longitude1.astype(str) + ' ' + lines_gis.latitude1.astype(str) + ', ' + lines_gis.longitude2.astype(str) + ' ' + lines_gis.latitude2.astype(str) + ')'
+    lines_gis["latitude1"] = n.buses.loc[lines_gis.bus0].y.values
+    lines_gis["longitude1"] = n.buses.loc[lines_gis.bus0].x.values
+    lines_gis["latitude2"] = n.buses.loc[lines_gis.bus1].y.values
+    lines_gis["longitude2"] = n.buses.loc[lines_gis.bus1].x.values
+    lines_gis["v_nom"] = n.buses.loc[lines_gis.bus0].v_nom.values
+    lines_gis["wkt_geom"] = (
+        "LINESTRING ("
+        + lines_gis.longitude1.astype(str)
+        + " "
+        + lines_gis.latitude1.astype(str)
+        + ", "
+        + lines_gis.longitude2.astype(str)
+        + " "
+        + lines_gis.latitude2.astype(str)
+        + ")"
+    )
 
-    lines_gis.to_csv(output_path + '_lines_GIS.csv')
-    
-    #Creating GIS Table for Mapping Buses in QGIS
+    lines_gis.to_csv(output_path + "_lines_GIS.csv")
+
+    # Creating GIS Table for Mapping Buses in QGIS
     buses_gis = n.buses.copy()
-    buses_gis.to_csv(output_path + '_buses_GIS.csv')
+    buses_gis.to_csv(output_path + "_buses_GIS.csv")
+
 
 def mock_snakemake(rulename, **wildcards):
     """
@@ -280,8 +355,9 @@ def mock_snakemake(rulename, **wildcards):
     from packaging.version import Version, parse
 
     script_dir = Path(__file__).parent.resolve()
-    assert Path.cwd().resolve() == script_dir, \
-      f'mock_snakemake has to be run from the repository scripts directory {script_dir}'
+    assert (
+        Path.cwd().resolve() == script_dir
+    ), f"mock_snakemake has to be run from the repository scripts directory {script_dir}"
     os.chdir(script_dir.parent)
     for p in sm.SNAKEFILE_CHOICES:
         if os.path.exists(p):
@@ -302,9 +378,18 @@ def mock_snakemake(rulename, **wildcards):
                 io[i] = os.path.abspath(io[i])
 
     make_accessable(job.input, job.output, job.log)
-    snakemake = Snakemake(job.input, job.output, job.params, job.wildcards,
-                          job.threads, job.resources, job.log,
-                          job.dag.workflow.config, job.rule.name, None,)
+    snakemake = Snakemake(
+        job.input,
+        job.output,
+        job.params,
+        job.wildcards,
+        job.threads,
+        job.resources,
+        job.log,
+        job.dag.workflow.config,
+        job.rule.name,
+        None,
+    )
     # create log and output dir if not existent
     for path in list(snakemake.log) + list(snakemake.output):
         Path(path).parent.mkdir(parents=True, exist_ok=True)
@@ -315,11 +400,12 @@ def mock_snakemake(rulename, **wildcards):
 
 def test_column_datatypes_consistency(df):
     """
-    Test if each column in a DataFrame has consistent datatypes using pandas built-in methods.
-    
+    Test if each column in a DataFrame has consistent datatypes using pandas
+    built-in methods.
+
     Parameters:
     df (pd.DataFrame): The DataFrame to test.
-    
+
     Returns:
     list: A list of column names that do not have internally consistent datatypes.
     """
@@ -327,9 +413,10 @@ def test_column_datatypes_consistency(df):
     for column in df.columns:
         # Use pandas infer_dtype to check for mixed types in the column
         dtype = pd.api.types.infer_dtype(df[column], skipna=True)
-        if dtype.startswith('mixed'):
+        if dtype.startswith("mixed"):
             inconsistent_columns.append(column)
     return inconsistent_columns
+
 
 def test_network_datatype_consistency(n):
     """
@@ -337,20 +424,25 @@ def test_network_datatype_consistency(n):
     """
     inconsistent_columns = {}
     for component in n.components:
-        if component == "Network": continue
+        if component == "Network":
+            continue
         col = test_column_datatypes_consistency(n.df(component))
         if len(col) > 0:
-            inconsistent_columns[component] =  col
+            inconsistent_columns[component] = col
     if len(inconsistent_columns) > 0:
         return f"Network has inconsistent datatypes in the following components: {inconsistent_columns}"
     else:
         return None
 
+
 def local_to_utc(group):
     from constants import STATE_2_TIMEZONE
     import pytz
+
     timezone_str = STATE_2_TIMEZONE[group.name]
     timezone = pytz.timezone(timezone_str)
-    time_shift = -1 * group.iloc[0].tz_localize(timezone).utcoffset().total_seconds()/3600
+    time_shift = (
+        -1 * group.iloc[0].tz_localize(timezone).utcoffset().total_seconds() / 3600
+    )
     utc = group + pd.Timedelta(hours=time_shift)
     return utc
