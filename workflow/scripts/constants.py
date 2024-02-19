@@ -18,17 +18,6 @@ EUR_2_USD = 1.07 # taken on 12-12-2023
 # https://www.eia.gov/tools/faqs/faq.php?id=45&t=8
 NG_MCF_2_MWH = 0.3035
 
-# Extract only the continental united states 
-STATES_TO_REMOVE = [
-    "Hawaii", 
-    "Alaska", 
-    "Commonwealth of the Northern Mariana Islands", 
-    "United States Virgin Islands", 
-    "Guam", 
-    "Puerto Rico", 
-    "American Samoa"
-]
-
 ################################
 # Constants for ADS WECC mapping 
 ################################
@@ -219,6 +208,21 @@ EIA_PRIME_MOVER_MAPPER = {
     'OT': 'Other (specify in SCHEDULE 7)'
 }
 
+###############################
+# Constants for Region Mappings
+###############################
+
+# Extract only the continental united states 
+STATES_TO_REMOVE = [
+    "Hawaii", 
+    "Alaska", 
+    "Commonwealth of the Northern Mariana Islands", 
+    "United States Virgin Islands", 
+    "Guam", 
+    "Puerto Rico", 
+    "American Samoa"
+]
+
 NERC_REGION_MAPPER = {
     'WECC':'western',
     'TRE':'texas',
@@ -227,6 +231,187 @@ NERC_REGION_MAPPER = {
     'NPCC':'eastern',
     'MRO':'eastern',
 }
+
+STATES_INTERCONNECT_MAPPER = {
+    "AL":"eastern",
+    "AK":None,
+    "AZ":"western",
+    "AR":"eastern",
+    "AS":None,
+    "CA":"western",
+    "CO":"western",
+    "CT":"eastern",
+    "DE":"eastern",
+    "DC":"eastern",
+    "FL":"eastern",
+    "GA":"eastern",
+    "GU":None,
+    "HI":None,
+    "ID":"western",
+    "IL":"eastern",
+    "IN":"eastern",
+    "IA":"eastern",
+    "KS":"eastern",
+    "KY":"eastern",
+    "LA":"eastern",
+    "ME":"eastern",
+    "MD":"eastern",
+    "MA":"eastern",
+    "MI":"eastern",
+    "MN":"eastern",
+    "MS":"eastern",
+    "MO":"eastern",
+    "MT":"western",
+    "NE":"eastern",
+    "NV":"western",
+    "NH":"eastern",
+    "NJ":"eastern",
+    "NM":"western",
+    "NY":"eastern",
+    "NC":"eastern",
+    "ND":"eastern",
+    "MP":None,
+    "OH":"eastern",
+    "OK":"eastern",
+    "OR":"western",
+    "PA":"eastern",
+    "PR":None,
+    "RI":"eastern",
+    "SC":"eastern",
+    "SD":"eastern",
+    "TN":"eastern",
+    "TX":"texas",
+    "TT":None,
+    "UT":"western",
+    "VT":"eastern",
+    "VA":"eastern",
+    "VI":"eastern",
+    "WA":"western",
+    "WV":"eastern",
+    "WI":"eastern",
+    "WY":"western",
+    
+    "AB":"canada",
+    "BC":"canada",
+    "MB":"canada",
+    "NB":"canada",
+    "NL":"canada",
+    "NT":"canada",
+    "NS":"canada",
+    "NU":"canada",
+    "ON":"canada",
+    "PE":"canada",
+    "QC":"canada",
+    "SK":"canada",
+    "YT":"canada",
+    
+    "MX":"mexico",
+}
+
+STATE_2_CODE = {
+    
+    # United States
+    "Alabama":"AL",
+    "Alaska":"AK",
+    "Arizona":"AZ",
+    "Arkansas":"AR",
+    "American Samoa":"AS",
+    "California":"CA",
+    "Colorado":"CO",
+    "Connecticut":"CT",
+    "Delaware":"DE",
+    "District of Columbia":"DC",
+    "Florida":"FL",
+    "Georgia":"GA",
+    "Guam":"GU",
+    "Hawaii":"HI",
+    "Idaho":"ID",
+    "Illinois":"IL",
+    "Indiana":"IN",
+    "Iowa":"IA",
+    "Kansas":"KS",
+    "Kentucky":"KY",
+    "Louisiana":"LA",
+    "Maine":"ME",
+    "Maryland":"MD",
+    "Massachusetts":"MA",
+    "Michigan":"MI",
+    "Minnesota":"MN",
+    "Mississippi":"MS",
+    "Missouri":"MO",
+    "Montana":"MT",
+    "Nebraska":"NE",
+    "Nevada":"NV",
+    "New Hampshire":"NH",
+    "New Jersey":"NJ",
+    "New Mexico":"NM",
+    "New York":"NY",
+    "North Carolina":"NC",
+    "North Dakota":"ND",
+    "Northern Mariana Islands":"MP",
+    "Ohio":"OH",
+    "Oklahoma":"OK",
+    "Oregon":"OR",
+    "Pennsylvania":"PA",
+    "Puerto Rico":"PR",
+    "Rhode Island":"RI",
+    "South Carolina":"SC",
+    "South Dakota":"SD",
+    "Tennessee":"TN",
+    "Texas":"TX",
+    "Trust Territories":"TT",
+    "Utah":"UT",
+    "Vermont":"VT",
+    "Virginia":"VA",
+    "Virgin Islands":"VI",
+    "Washington":"WA",
+    "West Virginia":"WV",
+    "Wisconsin":"WI",
+    "Wyoming":"WY",
+    
+    # Canada
+    "Alberta":"AB",
+    "British Columbia":"BC",
+    "Manitoba":"MB",
+    "New Brunswick":"NB",
+    "Newfoundland and Labrador":"NL",
+    "Northwest Territories":"NT",
+    "Nova Scotia":"NS",
+    "Nunavut":"NU",
+    "Ontario":"ON",
+    "Prince Edward Island":"PE",
+    "Quebec":"QC",
+    "Saskatchewan":"SK",
+    "Yukon":"YT",
+    
+    # Mexico
+    "Mexico":"MX",
+}
+
+
+import pandas as pd
+import pytz
+from datetime import datetime, timedelta
+
+
+# Simplified dictionary to map states to their primary time zones.
+# Note: This does not account for states with multiple time zones or specific exceptions.
+STATE_2_TIMEZONE = {
+    'AL': 'US/Central', 'AK': 'US/Alaska', 'AZ': 'US/Mountain', 'AR': 'US/Central',
+    'CA': 'US/Pacific', 'CO': 'US/Mountain', 'CT': 'US/Eastern', 'DE': 'US/Eastern',
+    'FL': 'US/Eastern', 'GA': 'US/Eastern', 'HI': 'Pacific/Honolulu', 'ID': 'US/Mountain',
+    'IL': 'US/Central', 'IN': 'US/Eastern', 'IA': 'US/Central', 'KS': 'US/Central',
+    'KY': 'US/Eastern', 'LA': 'US/Central', 'ME': 'US/Eastern', 'MD': 'US/Eastern',
+    'MA': 'US/Eastern', 'MI': 'US/Eastern', 'MN': 'US/Central', 'MS': 'US/Central',
+    'MO': 'US/Central', 'MT': 'US/Mountain', 'NE': 'US/Central', 'NV': 'US/Pacific',
+    'NH': 'US/Eastern', 'NJ': 'US/Eastern', 'NM': 'US/Mountain', 'NY': 'US/Eastern',
+    'NC': 'US/Eastern', 'ND': 'US/Central', 'OH': 'US/Eastern', 'OK': 'US/Central',
+    'OR': 'US/Pacific', 'PA': 'US/Eastern', 'RI': 'US/Eastern', 'SC': 'US/Eastern',
+    'SD': 'US/Central', 'TN': 'US/Central', 'TX': 'US/Central', 'UT': 'US/Mountain',
+    'VT': 'US/Eastern', 'VA': 'US/Eastern', 'WA': 'US/Pacific', 'WV': 'US/Eastern',
+    'WI': 'US/Central', 'WY': 'US/Mountain'
+}
+
 ################################
 # Constants for Breakthrough mapping 
 ################################
@@ -240,6 +425,8 @@ BREAKTHROUGH_TECH_MAPPER = {
 ################################
 
 """
+If you want to use the default ATB technology, the minimum must be defined: pypsa-name, technology, crp.
+If a default classificiation is not defined by ATB, then the remaining fields will be used to extract data from the ATB.
 pypsa-name:{
     "technology":"ATB-Name",
     "name":"ATB-tech-abreviation",
@@ -261,13 +448,6 @@ ATB_TECH_MAPPER = {
         "name":{"default":"CFE","options":["CFE"]},
         "alias":{"default":"C","options":["C"]},
         "detail":{"default":"95CCS","options":["95CCS","99CCS","IGCC"]},
-        "crp":{"default":30,"options":[20,30,75]},
-    },
-    "coal_retro":{
-        "technology":"Coal_Retrofits",
-        "name":{"default":"CR","options":["CR"]},
-        "alias":{"default":"C","options":["C"]},
-        "detail":{"default":"90CCS","options":["90CCS","95CCS"]},
         "crp":{"default":30,"options":[20,30,75]},
     },
     "geothermal":{
@@ -305,13 +485,6 @@ ATB_TECH_MAPPER = {
         "detail":{"default":"CTFF","options":["CCFF","CCFF95CCS","CCFF97CCS","CTFF","CCHF","CCHF95CCS","CCHF97CCS","FC","FC98CCS"]},
         "crp":{"default":30,"options":[20,30,55]},
     },
-    "natural_gas_retrofit":{
-        "technology":"NaturalGas_Retrofits",
-        "name":{"default":"NGR","options":["NGR"]},
-        "alias":{"default":"NG","options":["NG"]},
-        "detail":{"default":"CCFC90CCS","options":["CCFC90CCS","CCFC95CCS","CCFF97CCS","CCHC90CCS","CCHC95CCS"]},
-        "crp":{"default":30,"options":[20,30,55]},
-    },
     "nuclear":{ # large scale nuclear 
         "technology":"Nuclear", 
         "name":{"default":"N","options":["N"]},
@@ -333,13 +506,6 @@ ATB_TECH_MAPPER = {
         "detail":{"default":"C5","options":["C1","C2","C3","C4","C5","C6","C7","C8","C9","C10"]},
         "crp":{"default":20,"options":[20,30]},
     },
-    "solar-concentrated":{
-        "technology":"CSP",
-        "name":{"default":"CSP","options":["CSP"]},
-        "alias":{"default":"CSP","options":["CSP"]},
-        "detail":{"default":"C2","options":["C2","C3","C8"]},
-        "crp":{"default":20,"options":[20,30]},
-    },
     "solar-rooftop":{
         "technology":"ResPV",
         "name":{"default":"RPV","options":["RPV"]},
@@ -354,26 +520,12 @@ ATB_TECH_MAPPER = {
         "detail":{"default":"C5","options":["C1","C2","C3","C4","C5","C6","C7","C8","C9","C10"]},
         "crp":{"default":20,"options":[20,30]},
     },
-    "solar-utility-plus-battery":{
-        "technology":"Utility-Scale PV-Plus-Battery",
-        "name":{"default":"USPVPB","options":["USPVPB"]},
-        "alias":{"default":"PVS","options":["PVS"]},
-        "detail":{"default":"C5","options":["C1","C2","C3","C4","C5","C6","C7","C8","C9","C10"]},
-        "crp":{"default":20,"options":[20,30]},
-    },
     "central solar thermal":{
         "technology":"CSP",
         "name":{"default":"CSP","options":["CSP"]},
         "alias":{"default":"CSP","options":["CSP"]},
         "detail":{"default":"C2","options":["C1","C2","C3","C4","C5","C6","C7","C8","C9","C10"]},
         "crp":{"default":30,"options":[20,30]},
-    },
-    "commercial battery storage":{
-        "technology":"Commercial Battery Storage",
-        "name":{"default":"CBS","options":["CBS"]},
-        "alias":{"default":"CBS","options":["CBS"]},
-        "detail":{"default":"4H","options":["1H","2H","4H","6H","8H"]},
-        "crp":{"default":20,"options":[20,30]},
     },
     "home battery storage":{
         "technology":"Residential Battery Storage",
@@ -389,13 +541,6 @@ ATB_TECH_MAPPER = {
         "detail":{"default":"8H","options":["2H","4H","6H","8H","10H"]},
         "crp":{"default":20,"options":[20,30]},
     },
-    "wind-distributed":{
-        "technology":"DistributedWind",
-        "name":{"default":"DW","options":["DW"]},
-        "alias":{"default":"MDW","options":["CDW","LDW","MDW","RDW"]},
-        "detail":{"default":"C7","options":["C1","C2","C3","C4","C5","C6","C7","C8","C9","C10"]},
-        "crp":{"default":30,"options":[20,30]},
-    },
     "onwind":{
         "technology":"LandbasedWind",
         "name":{"default":"LW","options":["LW"]},
@@ -407,7 +552,7 @@ ATB_TECH_MAPPER = {
         "technology":"OffShoreWind",
         "name":{"default":"OSW","options":["OSW"]},
         "alias":{"default":"OW","options":["OW"]},
-        "detail":{"default":"C3","options":["C1","C2","C3","C4","C5","C6","C7","C8","C9","C10","C11","C12","C13","C14"]},
+        "detail":{"default":"C3","options":["C1","C2","C3","C4","C5","C6","C7"]},
         "crp":{"default":30,"options":[20,30]},
     },
     "Pumped-Storage-Hydro-bicharger":{
@@ -417,6 +562,63 @@ ATB_TECH_MAPPER = {
         "detail":{"default":"NC1","options":["NC1","NC2","NC3","NC4","NC5","NC6","NC7","NC8","NC1","NC2","NC3","NC4"]},
         "crp":{"default":100,"options":[20,30,100]},
     },
+    # End Perfect Matches
+    "offwind_floating":{
+        "technology":"OffShoreWind",
+        "name":{"default":"OSW","options":["OSW"]},
+        "alias":{"default":"OW","options":["OW"]},
+        "detail":{"default":"C13","options":["C8","C9","C10","C11","C12","C13","C14"]},
+        "crp":{"default":30,"options":[20,30]},
+    },
+    "solar":{
+        "technology":"UtilityPV",
+        "name":{"default":"UPV","options":["UPV"]},
+        "alias":{"default":"UPV","options":["UPV"]},
+        "detail":{"default":"C5","options":["C1","C2","C3","C4","C5","C6","C7","C8","C9","C10"]},
+        "crp":{"default":20,"options":[20,30]},
+    },
+    # "natural_gas_retrofit":{
+    #     "technology":"NaturalGas_Retrofits",
+    #     "name":{"default":"NGR","options":["NGR"]},
+    #     "alias":{"default":"NG","options":["NG"]},
+    #     "detail":{"default":"CCFC90CCS","options":["CCFC90CCS","CCFC95CCS","CCFF97CCS","CCHC90CCS","CCHC95CCS"]},
+    #     "crp":{"default":30,"options":[20,30,55]},
+    # },
+    # "solar-concentrated":{
+    #     "technology":"CSP",
+    #     "name":{"default":"CSP","options":["CSP"]},
+    #     "alias":{"default":"CSP","options":["CSP"]},
+    #     "detail":{"default":"C2","options":["C2","C3","C8"]},
+    #     "crp":{"default":20,"options":[20,30]},
+    # },
+    # "solar-utility-plus-battery":{
+    #     "technology":"Utility-Scale PV-Plus-Battery",
+    #     "name":{"default":"USPVPB","options":["USPVPB"]},
+    #     "alias":{"default":"PVS","options":["PVS"]},
+    #     "detail":{"default":"C5","options":["C1","C2","C3","C4","C5","C6","C7","C8","C9","C10"]},
+    #     "crp":{"default":20,"options":[20,30]},
+    # },
+    # "commercial battery storage":{
+    #     "technology":"Commercial Battery Storage",
+    #     "name":{"default":"CBS","options":["CBS"]},
+    #     "alias":{"default":"CBS","options":["CBS"]},
+    #     "detail":{"default":"4H","options":["1H","2H","4H","6H","8H"]},
+    #     "crp":{"default":20,"options":[20,30]},
+    # },
+    # "wind-distributed":{
+    #     "technology":"DistributedWind",
+    #     "name":{"default":"DW","options":["DW"]},
+    #     "alias":{"default":"MDW","options":["CDW","LDW","MDW","RDW"]},
+    #     "detail":{"default":"C7","options":["C1","C2","C3","C4","C5","C6","C7","C8","C9","C10"]},
+    #     "crp":{"default":30,"options":[20,30]},
+    # },
+    # "coal_retro":{
+    #     "technology":"Coal_Retrofits",
+    #     "name":{"default":"CR","options":["CR"]},
+    #     "alias":{"default":"C","options":["C"]},
+    #     "detail":{"default":"90CCS","options":["90CCS","95CCS"]},
+    #     "crp":{"default":30,"options":[20,30,75]},
+    # },
 }
 
 ###########################################

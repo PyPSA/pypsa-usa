@@ -10,13 +10,16 @@ run:
 # docs :
 scenario:
   interconnect: western #"usa|texas|western|eastern"
-  clusters: [30]
+  clusters: [30, 100]
   opts:
     [
+      Co2L1.0-4H,
       Co2L0.75-4H,
-
+      Co2L0.5-4H,
+      Co2L0.25-4H,
+      Co2L0.0-4H,
     ]
-  ll: [v1.15] 
+  ll: [vopt, v1.15] 
   scope: "total" # "urban", "rural", or "total" 
   sector: "" # G 
   planning_horizons:
@@ -34,7 +37,9 @@ countries: [US]
 snapshots:
   start: "2019-01-01"
   end: "2020-01-01"
-  inclusive: "left"
+  inclusive: 'left'
+
+# docs :
 
 # docs :
 atlite:
@@ -78,7 +83,7 @@ electricity:
   retirement: economic # "economic" or "technical"
 
   operational_reserve:
-    activate: False
+    activate: True
     epsilon_load: 0.02
     epsilon_vres: 0.02
     contingency: 4000
@@ -249,6 +254,7 @@ sector:
   co2_sequestration_potential: 0
   natural_gas:
     allow_imports_exports: true # false to be implemented 
+    copperplate: true # copperplates at a state level (only true works)
     cyclic_storage: false
   heating:
     heat_pump_sink_T: 55.
