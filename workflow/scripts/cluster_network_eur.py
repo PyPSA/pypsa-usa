@@ -91,7 +91,7 @@ buses, generators and transmission corridors.
     for all ``scenario`` s in the configuration file
     the rule :mod:`cluster_network`.
 """
- 
+
 
 import logging
 import pdb

@@ -2,8 +2,6 @@
 Combines all time independent cost data sources into a standard format.
 """
 
- 
-
 import logging
 from typing import Dict
 from typing import List

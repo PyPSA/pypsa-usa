@@ -5,8 +5,6 @@ folder.
 Written by Kamran Tehranchi, Stanford University.
 """
 
- 
-
 import glob
 import io
 import logging

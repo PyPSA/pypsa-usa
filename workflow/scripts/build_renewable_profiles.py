@@ -175,7 +175,7 @@ node (`p_nom_max`): `simple` and `conservative`:
   proportional to the layout until the limit of an individual grid cell is
   reached.
 """
- 
+
 
 import functools
 import logging

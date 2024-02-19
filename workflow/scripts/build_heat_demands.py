@@ -4,7 +4,7 @@
 """
 Build heat demand time series using heating degree day (HDD) approximation.
 """
- 
+
 
 import atlite
 import geopandas as gpd

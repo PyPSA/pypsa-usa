@@ -66,7 +66,7 @@ based on the given network configuration.
 
 **Description**
 """
- 
+
 
 import logging
 import os

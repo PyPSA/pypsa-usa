@@ -2,8 +2,6 @@
 Retrieves cost data.
 """
 
- 
-
 import logging
 import urllib
 from pathlib import Path

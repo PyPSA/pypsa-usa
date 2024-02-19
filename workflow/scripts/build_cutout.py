@@ -85,8 +85,6 @@ The **USA Interconnect** weather data is shown below:
         :scale: 80 %
 """
 
- 
-
 import logging
 
 import atlite

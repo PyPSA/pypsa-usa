@@ -42,8 +42,6 @@ Emission charts for:
         :scale: 33 %
 """
 
- 
-
 import logging
 import os
 import sys

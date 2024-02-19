@@ -56,7 +56,7 @@ Description
 .. seealso::
     :mod:`build_renewable_profiles`
 """
- 
+
 
 import logging
 
