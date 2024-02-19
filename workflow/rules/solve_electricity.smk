@@ -49,7 +49,8 @@ rule solve_network_operations:
             "co2_sequestration_potential", 200
         ),
     input:
-        network=RESOURCES + "{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}_{sector}.nc",
+        network=RESOURCES
+        + "{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}_{sector}.nc",
         config=RESULTS + "config.yaml",
     output:
         network=RESULTS
@@ -62,7 +63,10 @@ rule solve_network_operations:
         python=LOGS
         + "solve_network/{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}_{sector}_python.log",
     benchmark:
-        BENCHMARKS + "solve_network/{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}_{sector}"
+        (
+            BENCHMARKS
+            + "solve_network/{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}_{sector}"
+        )
     threads: 4
     resources:
         mem_mb=memory,

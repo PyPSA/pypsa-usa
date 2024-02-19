@@ -40,8 +40,6 @@ Builds mapping between cutout grid cells and population (total, urban, rural).
         :scale: 80 %
 """
 
- 
-
 import logging
 
 logger = logging.getLogger(__name__)

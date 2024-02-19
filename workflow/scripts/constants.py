@@ -5,7 +5,7 @@ Module for holding global constant values.
 ###########################################
 # Constants for GIS Coordinate Reference Systems
 ###########################################
- 
+
 
 MEASUREMENT_CRS = "EPSG:5070"
 GPS_CRS = "EPSG:4326"

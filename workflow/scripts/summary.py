@@ -5,8 +5,6 @@ Adapted from PyPSA-Eur summary statistics reporting script
  - https://github.com/PyPSA/pypsa-eur/blob/master/scripts/make_summary.py
 """
 
- 
-
 import logging
 
 import pandas as pd

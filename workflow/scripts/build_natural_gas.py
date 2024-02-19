@@ -2,8 +2,6 @@
 Module for adding the gas sector.
 """
 
- 
-
 import logging
 
 import constants

@@ -3,8 +3,6 @@ Build population layouts for all clustered model regions as total as well as
 split by urban and rural population.
 """
 
- 
-
 import atlite
 import geopandas as gpd
 import pandas as pd
