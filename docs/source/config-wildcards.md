@@ -1,8 +1,8 @@
 (wildcards)=
 # Wildcards
 
-For more detailed definitions of wildcards, please reference [pypsa-eur](https://pypsa-eur.readthedocs.io/en/latest/wildcards.html). 
-Not all wildcards implemented in [pypsa-eur](https://pypsa-eur.readthedocs.io/en/latest/wildcards.html) are available 
+For more detailed definitions of wildcards, please reference [pypsa-eur](https://pypsa-eur.readthedocs.io/en/latest/wildcards.html).
+Not all wildcards implemented in [pypsa-eur](https://pypsa-eur.readthedocs.io/en/latest/wildcards.html) are available
 yet in pypsa-usa.
 
 It is easy to run PyPSA-USA for multiple scenarios using the wildcards feature of `snakemake`.
@@ -19,13 +19,13 @@ Detailed explanations of how wildcards work in ``snakemake`` can be found in the
 (interconnect)=
 ## The `{interconnect}` wildcard
 
-The `{interconnect}` wildcard sets the geographc scope of the model run. Models 
-can be run for the `western`, `eastern`, `texas`, or `usa` grid. The interconnects 
+The `{interconnect}` wildcard sets the geographc scope of the model run. Models
+can be run for the `western`, `eastern`, `texas`, or `usa` grid. The interconnects
 follow the representation described by [Breakthrough Energy](https://breakthroughenergy.org/).
 
-A visual representation of each `{interconnect}` is shown below: 
+A visual representation of each `{interconnect}` is shown below:
 
-```{eval-rst}  
+```{eval-rst}
 .. image:: _static/cutouts/cutouts.png
     :scale: 100 %
 ```
@@ -34,17 +34,17 @@ A visual representation of each `{interconnect}` is shown below:
 ## The `{cutout}` wildcard
 
 The `{cutout}` wildcard facilitates running the rule :mod:`build_cutout`
-for all cutout configurations specified under `atlite: cutouts:`. Each cutout 
-is descibed in the form `{dataset}_{year}`. These cutouts will be stored in a 
+for all cutout configurations specified under `atlite: cutouts:`. Each cutout
+is descibed in the form `{dataset}_{year}`. These cutouts will be stored in a
 folder specified by `{cutout}`.
 
 Valid dataset names include: `era5`
 Valid years can be from `1940` to `2022`
 
 ```{note}
-Data for `era5_2019` has been pre-pared for the user and will be automatically downloaded 
-during the workflow. If other years are needed, the user will need to prepaer the 
-cutout themself. 
+Data for `era5_2019` has been pre-pared for the user and will be automatically downloaded
+during the workflow. If other years are needed, the user will need to prepaer the
+cutout themself.
 ```
 
 <!-- (technology)=
@@ -66,7 +66,7 @@ network model should be pre-clustered to in the rule
 ## The `{clusters}` wildcard
 
 The `{clusters}` wildcard specifies the number of buses a detailed network model should be reduced to in the rule :mod:`cluster_network`.
-The number of clusters must be lower than the total number of nodes and higher than the number of balancing authoritites. 
+The number of clusters must be lower than the total number of nodes and higher than the number of balancing authoritites.
 
 If an `m` is placed behind the number of clusters (e.g. `100m`), generators are only moved to the clustered buses but not aggregated by carrier; i.e. the clustered bus may have more than one e.g. wind generator.
 
@@ -108,7 +108,7 @@ the :mod:`solve_network` step. It may hold multiple triggers separated by `-`,
 i.e. `Co2L-3H` contains the `Co2L` trigger and the `3H` switch. There are
 currently:
 
-```{eval-rst}  
+```{eval-rst}
 .. csv-table::
    :header-rows: 1
    :widths: 10,20,10,10
@@ -119,7 +119,7 @@ currently:
 ## The `{sector}` wildcard
 
 The `{sector}` wildcard is used to specify what sectors to include. If `None`
-is provided, an electrical only study is completed. 
+is provided, an electrical only study is completed.
 
 | Sector      | Code | Description                                                  |
 |-------------|------|--------------------------------------------------------------|
@@ -131,8 +131,8 @@ is provided, an electrical only study is completed.
 
 (scope)=
 ## The `{scope}` wildcard
-Takes values `residential`, `urban`, `total`. Used in sector coupling 
-studies to define population breakdown. 
+Takes values `residential`, `urban`, `total`. Used in sector coupling
+studies to define population breakdown.
 
 Used in the following rules:
 - `build_heat_demands`

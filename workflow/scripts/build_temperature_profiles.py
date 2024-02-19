@@ -2,12 +2,15 @@
 Build time series for air and soil temperatures per clustered model region.
 """
 
+from __future__ import annotations
+
 import atlite
 import geopandas as gpd
 import numpy as np
 import pandas as pd
 import xarray as xr
-from dask.distributed import Client, LocalCluster
+from dask.distributed import Client
+from dask.distributed import LocalCluster
 
 if __name__ == "__main__":
     if "snakemake" not in globals():
@@ -18,7 +21,7 @@ if __name__ == "__main__":
             interconnect="western",
             # simpl="",
             clusters=60,
-            scope="total"
+            scope="total",
         )
 
     nprocesses = int(snakemake.threads)

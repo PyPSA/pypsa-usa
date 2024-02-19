@@ -9,15 +9,11 @@ run:
 scenario:
   interconnect: western #"usa|texas|western|eastern"
   clusters: [30]    #100, 300, 1000
-  opts:
-    [
-      Co2L1.25,
-      # Co2L1.25-480SEG,
-    ]
+  opts: [Co2L1.25]
   ll: [v1.25]
-  scope: "total" # "urban", "rural", or "total" 
+  scope: "total" # "urban", "rural", or "total"
   planning_horizons:
-    - 2030 #not implemented yet (temp placeholder)
+  - 2030   #not implemented yet (temp placeholder)
     # - 2040
     # - 2050
 
@@ -25,9 +21,9 @@ scenario:
 enable:
   build_cutout: false
 
-countries: [US]  
+countries: [US]
 
-# focus_weights: 
+# focus_weights:
 #   CISO-PGAE: 0.5
 
 network_configuration: "pypsa-usa" # "pypsa-usa" or "ads2032" or "breakthrough"
@@ -60,7 +56,7 @@ atlite:
       dx: 0.3
       dy: 0.3
     texas:
-      x: [-110,-90]
+      x: [-110, -90]
       y: [24, 37]
       dx: 0.3
       dy: 0.3
@@ -71,7 +67,7 @@ atlite:
       dy: 0.3
 
 # docs :
-electricity: 
+electricity:
   conventional_carriers: [nuclear, oil, OCGT, CCGT, coal, geothermal] # Choose the conventional plant types to include in network
   renewable_carriers: [onwind, solar, offwind, hydro] # Choose the renewable plant types to include in network
   voltage_simplified: 230 #Voltage level to simplify network to in rule "simplify network"
@@ -115,7 +111,7 @@ renewable:
       #all keys labeled corrine are actually copernicus codes. Using the name corrine bc using the pypsa-eur convention: https://land.copernicus.eu/global/sites/cgls.vito.be/files/products/CGLOPS1_PUM_LC100m-V3_I3.4.pdf
       grid_codes: [20, 30, 40, 60, 100, 111, 112, 113, 114, 115, 116, 121, 122, 123, 124, 125, 126]
       distance: 10 #buffer from distance_grid_codes that are to be excluded
-      distance_grid_codes: [50] 
+      distance_grid_codes: [50]
     natura: true
     potential: simple # or conservative
     clip_p_max_pu: 1.e-2
@@ -174,7 +170,7 @@ renewable:
 # docs :
 lines:
   types: # All temporary values, need to be updated
-    115.: "Al/St 240/40 2-bundle 220.0" 
+    115.: "Al/St 240/40 2-bundle 220.0"
     138.: "Al/St 240/40 2-bundle 220.0"
     161.: "Al/St 240/40 2-bundle 220.0"
     230.: "Al/St 240/40 2-bundle 220.0"
@@ -198,7 +194,7 @@ load:
 
 # docs :
 costs:  # based on the potentials, assuming  (0.1 kW/m2 and 10 m2/person)
-  year: 2030 
+  year: 2030
   version: v0.6.0
   rooftop_share: 0.14
   fill_values:
@@ -250,7 +246,7 @@ clustering:
       efficiency: mean
     buses:
       state: max # temp fix. When fixing state aggregation- change add electricity such that region info not is use is removed.
-    
+
 
 # docs :
 solving:

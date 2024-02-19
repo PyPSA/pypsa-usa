@@ -1,7 +1,6 @@
 # SPDX-FileCopyrightText: : 2017-2022 The PyPSA-Eur Authors
 #
 # SPDX-License-Identifier: MIT
-
 # coding: utf-8
 """
 Adds extra extendable components to the clustered and simplified network.
@@ -45,16 +44,18 @@ The rule :mod:`add_extra_components` attaches additional extendable components t
 
 - ``Stores`` of carrier 'H2' and/or 'battery' in combination with ``Links``. If this option is chosen, the script adds extra buses with corresponding carrier where energy ``Stores`` are attached and which are connected to the corresponding power buses via two links, one each for charging and discharging. This leads to three investment variables for the energy capacity, charging and discharging capacity of the storage unit.
 """
-import logging
-from _helpers import configure_logging
+from __future__ import annotations
 
-import pypsa
-import pandas as pd
-import numpy as np
+import logging
 from typing import List
 
-from add_electricity import (load_costs, add_nice_carrier_names,
-                             _add_missing_carriers_from_costs)
+import numpy as np
+import pandas as pd
+import pypsa
+from _helpers import configure_logging
+from add_electricity import _add_missing_carriers_from_costs
+from add_electricity import add_nice_carrier_names
+from add_electricity import load_costs
 
 idx = pd.IndexSlice
 
@@ -62,8 +63,8 @@ logger = logging.getLogger(__name__)
 
 
 def attach_storageunits(n, costs, elec_opts):
-    carriers = elec_opts['extendable_carriers']['StorageUnit']
-    max_hours = elec_opts['max_hours']
+    carriers = elec_opts["extendable_carriers"]["StorageUnit"]
+    max_hours = elec_opts["max_hours"]
 
     _add_missing_carriers_from_costs(n, costs, carriers)
 
@@ -74,160 +75,203 @@ def attach_storageunits(n, costs, elec_opts):
 
     for carrier in carriers:
         roundtrip_correction = 0.5 if carrier == "battery" else 1
-        
-        n.madd("StorageUnit", buses_i, ' ' + carrier,
-               bus=buses_i,
-               carrier=carrier,
-               p_nom_extendable=True,
-               capital_cost=costs.at[carrier, 'capital_cost'],
-               marginal_cost=costs.at[carrier, 'marginal_cost'],
-               efficiency_store=costs.at[lookup_store[carrier], 'efficiency']**roundtrip_correction,
-               efficiency_dispatch=costs.at[lookup_dispatch[carrier], 'efficiency']**roundtrip_correction,
-               max_hours=max_hours[carrier],
-               cyclic_state_of_charge=True
+
+        n.madd(
+            "StorageUnit",
+            buses_i,
+            " " + carrier,
+            bus=buses_i,
+            carrier=carrier,
+            p_nom_extendable=True,
+            capital_cost=costs.at[carrier, "capital_cost"],
+            marginal_cost=costs.at[carrier, "marginal_cost"],
+            efficiency_store=costs.at[lookup_store[carrier], "efficiency"]
+            ** roundtrip_correction,
+            efficiency_dispatch=costs.at[lookup_dispatch[carrier], "efficiency"]
+            ** roundtrip_correction,
+            max_hours=max_hours[carrier],
+            cyclic_state_of_charge=True,
         )
 
 
 def attach_stores(n, costs, elec_opts):
-    carriers = elec_opts['extendable_carriers']['Store']
+    carriers = elec_opts["extendable_carriers"]["Store"]
 
     _add_missing_carriers_from_costs(n, costs, carriers)
 
     buses_i = n.buses.index
-    bus_sub_dict = {k: n.buses[k].values for k in ['x', 'y', 'country']}
+    bus_sub_dict = {k: n.buses[k].values for k in ["x", "y", "country"]}
 
-    if 'H2' in carriers:
+    if "H2" in carriers:
         h2_buses_i = n.madd("Bus", buses_i + " H2", carrier="H2", **bus_sub_dict)
 
-        n.madd("Store", h2_buses_i,
-               bus=h2_buses_i,
-               carrier='H2',
-               e_nom_extendable=True,
-               e_cyclic=True,
-               capital_cost=costs.at["hydrogen storage underground", "capital_cost"])
+        n.madd(
+            "Store",
+            h2_buses_i,
+            bus=h2_buses_i,
+            carrier="H2",
+            e_nom_extendable=True,
+            e_cyclic=True,
+            capital_cost=costs.at["hydrogen storage underground", "capital_cost"],
+        )
 
-        n.madd("Link", h2_buses_i + " Electrolysis",
-               bus0=buses_i,
-               bus1=h2_buses_i,
-               carrier='H2 electrolysis',
-               p_nom_extendable=True,
-               efficiency=costs.at["electrolysis", "efficiency"],
-               capital_cost=costs.at["electrolysis", "capital_cost"],
-               marginal_cost=costs.at["electrolysis", "marginal_cost"])
+        n.madd(
+            "Link",
+            h2_buses_i + " Electrolysis",
+            bus0=buses_i,
+            bus1=h2_buses_i,
+            carrier="H2 electrolysis",
+            p_nom_extendable=True,
+            efficiency=costs.at["electrolysis", "efficiency"],
+            capital_cost=costs.at["electrolysis", "capital_cost"],
+            marginal_cost=costs.at["electrolysis", "marginal_cost"],
+        )
 
-        n.madd("Link", h2_buses_i + " Fuel Cell",
-               bus0=h2_buses_i,
-               bus1=buses_i,
-               carrier='H2 fuel cell',
-               p_nom_extendable=True,
-               efficiency=costs.at["fuel cell", "efficiency"],
-               #NB: fixed cost is per MWel
-               capital_cost=costs.at["fuel cell", "capital_cost"] * costs.at["fuel cell", "efficiency"],
-               marginal_cost=costs.at["fuel cell", "marginal_cost"])
+        n.madd(
+            "Link",
+            h2_buses_i + " Fuel Cell",
+            bus0=h2_buses_i,
+            bus1=buses_i,
+            carrier="H2 fuel cell",
+            p_nom_extendable=True,
+            efficiency=costs.at["fuel cell", "efficiency"],
+            # NB: fixed cost is per MWel
+            capital_cost=costs.at["fuel cell", "capital_cost"]
+            * costs.at["fuel cell", "efficiency"],
+            marginal_cost=costs.at["fuel cell", "marginal_cost"],
+        )
 
-    if 'battery' in carriers:
-        b_buses_i = n.madd("Bus", buses_i + " battery", carrier="battery", **bus_sub_dict)
+    if "battery" in carriers:
+        b_buses_i = n.madd(
+            "Bus", buses_i + " battery", carrier="battery", **bus_sub_dict
+        )
 
-        n.madd("Store", b_buses_i,
-               bus=b_buses_i,
-               carrier='battery',
-               e_cyclic=True,
-               e_nom_extendable=True,
-               capital_cost=costs.at['battery storage', 'capital_cost'],
-               marginal_cost=costs.at["battery", "marginal_cost"])
+        n.madd(
+            "Store",
+            b_buses_i,
+            bus=b_buses_i,
+            carrier="battery",
+            e_cyclic=True,
+            e_nom_extendable=True,
+            capital_cost=costs.at["battery storage", "capital_cost"],
+            marginal_cost=costs.at["battery", "marginal_cost"],
+        )
 
-        n.madd("Link", b_buses_i + " charger",
-               bus0=buses_i,
-               bus1=b_buses_i,
-               carrier='battery charger',
-               # the efficiencies are "round trip efficiencies"
-               efficiency=costs.at['battery inverter', 'efficiency']**0.5,
-               capital_cost=costs.at['battery inverter', 'capital_cost'],
-               p_nom_extendable=True,
-               marginal_cost=costs.at["battery inverter", "marginal_cost"])
+        n.madd(
+            "Link",
+            b_buses_i + " charger",
+            bus0=buses_i,
+            bus1=b_buses_i,
+            carrier="battery charger",
+            # the efficiencies are "round trip efficiencies"
+            efficiency=costs.at["battery inverter", "efficiency"] ** 0.5,
+            capital_cost=costs.at["battery inverter", "capital_cost"],
+            p_nom_extendable=True,
+            marginal_cost=costs.at["battery inverter", "marginal_cost"],
+        )
 
-        n.madd("Link", b_buses_i + " discharger",
-               bus0=b_buses_i,
-               bus1=buses_i,
-               carrier='battery discharger',
-               efficiency=costs.at['battery inverter','efficiency']**0.5,
-               p_nom_extendable=True,
-               marginal_cost=costs.at["battery inverter", "marginal_cost"])
+        n.madd(
+            "Link",
+            b_buses_i + " discharger",
+            bus0=b_buses_i,
+            bus1=buses_i,
+            carrier="battery discharger",
+            efficiency=costs.at["battery inverter", "efficiency"] ** 0.5,
+            p_nom_extendable=True,
+            marginal_cost=costs.at["battery inverter", "marginal_cost"],
+        )
 
 
 def attach_hydrogen_pipelines(n, costs, elec_opts):
-    ext_carriers = elec_opts['extendable_carriers']
-    as_stores = ext_carriers.get('Store', [])
+    ext_carriers = elec_opts["extendable_carriers"]
+    as_stores = ext_carriers.get("Store", [])
 
-    if 'H2 pipeline' not in ext_carriers.get('Link',[]): return
+    if "H2 pipeline" not in ext_carriers.get("Link", []):
+        return
 
-    assert 'H2' in as_stores, ("Attaching hydrogen pipelines requires hydrogen "
-            "storage to be modelled as Store-Link-Bus combination. See "
-            "`config.yaml` at `electricity: extendable_carriers: Store:`.")
+    assert "H2" in as_stores, (
+        "Attaching hydrogen pipelines requires hydrogen "
+        "storage to be modelled as Store-Link-Bus combination. See "
+        "`config.yaml` at `electricity: extendable_carriers: Store:`."
+    )
 
     # determine bus pairs
-    attrs = ["bus0","bus1","length"]
-    candidates = pd.concat([n.lines[attrs], n.links.query('carrier=="DC"')[attrs]])\
-                    .reset_index(drop=True)
+    attrs = ["bus0", "bus1", "length"]
+    candidates = pd.concat(
+        [n.lines[attrs], n.links.query('carrier=="DC"')[attrs]]
+    ).reset_index(drop=True)
 
     # remove bus pair duplicates regardless of order of bus0 and bus1
-    h2_links = candidates[~pd.DataFrame(np.sort(candidates[['bus0', 'bus1']])).duplicated()]
+    h2_links = candidates[
+        ~pd.DataFrame(np.sort(candidates[["bus0", "bus1"]])).duplicated()
+    ]
     h2_links.index = h2_links.apply(lambda c: f"H2 pipeline {c.bus0}-{c.bus1}", axis=1)
 
     # add pipelines
-    n.madd("Link",
-           h2_links.index,
-           bus0=h2_links.bus0.values + " H2",
-           bus1=h2_links.bus1.values + " H2",
-           p_min_pu=-1,
-           p_nom_extendable=True,
-           length=h2_links.length.values,
-           capital_cost=costs.at['H2 pipeline','capital_cost']*h2_links.length,
-           efficiency=costs.at['H2 pipeline','efficiency'],
-           carrier="H2 pipeline")
+    n.madd(
+        "Link",
+        h2_links.index,
+        bus0=h2_links.bus0.values + " H2",
+        bus1=h2_links.bus1.values + " H2",
+        p_min_pu=-1,
+        p_nom_extendable=True,
+        length=h2_links.length.values,
+        capital_cost=costs.at["H2 pipeline", "capital_cost"] * h2_links.length,
+        efficiency=costs.at["H2 pipeline", "efficiency"],
+        carrier="H2 pipeline",
+    )
 
-def add_economic_retirement(n: pypsa.Network, costs: pd.DataFrame, gens: List[str] = None): 
-    """Adds dummy generators to account for economic retirement 
-    
-    Specifically this function does the following: 
+
+def add_economic_retirement(
+    n: pypsa.Network, costs: pd.DataFrame, gens: list[str] = None
+):
+    """
+    Adds dummy generators to account for economic retirement.
+
+    Specifically this function does the following:
     1. Creates duplicate generators for any that are tagged as extendable. For
-    example, an extendable "CCGT" generator will be split into "CCGT" and "CCGT new" 
-    2. Capital costs of existing extendable generators are replaced with fixed costs 
+    example, an extendable "CCGT" generator will be split into "CCGT" and "CCGT new"
+    2. Capital costs of existing extendable generators are replaced with fixed costs
     3. p_nom_max of existing extendable generators are set to p_nom
-    4. p_nom_min of existing and new generators is set to zero 
-    
+    4. p_nom_min of existing and new generators is set to zero
+
     Arguments:
-    n: pypsa.Network, 
-    costs: pd.DataFrame, 
+    n: pypsa.Network,
+    costs: pd.DataFrame,
     gens: List[str]
-        List of generators to apply economic retirment to. If none provided, it is 
+        List of generators to apply economic retirment to. If none provided, it is
         applied to all extendable generators
     """
-    
+
     # only assign dummy generators to extendable generators
     extend = n.generators[n.generators["p_nom_extendable"] == True]
-    if gens: 
+    if gens:
         extend = extend[extend["carrier"].isin(gens)]
     if extend.empty:
-        return 
-    
+        return
+
     # divide by 100 b/c FOM expressed as percentage of CAPEX
     n.generators["capital_cost"] = n.generators.apply(
-        lambda row: row["capital_cost"] if not row.name in (extend.index) else row["capital_cost"] * costs.at[row["carrier"], "FOM"] / 100, axis=1
+        lambda row: (
+            row["capital_cost"]
+            if not row.name in (extend.index)
+            else row["capital_cost"] * costs.at[row["carrier"], "FOM"] / 100
+        ),
+        axis=1,
     )
 
     n.generators["p_nom_max"] = np.where(
         n.generators["p_nom_extendable"] & n.generators.carrier.isin(gens),
         n.generators["p_nom"],
-        n.generators["p_nom_max"]
+        n.generators["p_nom_max"],
     )
 
     n.generators["p_nom_min"] = np.where(
         n.generators["p_nom_extendable"] & n.generators.carrier.isin(gens),
         0,
-        n.generators["p_nom_min"]
+        n.generators["p_nom_min"],
     )
-    
+
     n.madd(
         "Generator",
         extend.index,
@@ -244,33 +288,49 @@ def add_economic_retirement(n: pypsa.Network, costs: pd.DataFrame, gens: List[st
         marginal_cost=extend.marginal_cost,
         capital_cost=extend.capital_cost,
         lifetime=extend.lifetime,
-        p_min_pu = extend.p_min_pu,
-        p_max_pu = extend.p_max_pu,
+        p_min_pu=extend.p_min_pu,
+        p_max_pu=extend.p_max_pu,
     )
-    
-    # time dependent factors added after as not all generators are time dependent 
-    marginal_cost_t = n.generators_t["marginal_cost"][[x for x in extend.index if x in n.generators_t.marginal_cost.columns]]
-    marginal_cost_t = marginal_cost_t.rename(columns={x:f"{x} new" for x in marginal_cost_t.columns})
-    n.generators_t["marginal_cost"] = n.generators_t["marginal_cost"].join(marginal_cost_t)
-    
-    p_max_pu_t = n.generators_t["p_max_pu"][[x for x in extend.index if x in n.generators_t["p_max_pu"].columns]]
-    p_max_pu_t = p_max_pu_t.rename(columns={x:f"{x} new" for x in p_max_pu_t.columns})
+
+    # time dependent factors added after as not all generators are time dependent
+    marginal_cost_t = n.generators_t["marginal_cost"][
+        [x for x in extend.index if x in n.generators_t.marginal_cost.columns]
+    ]
+    marginal_cost_t = marginal_cost_t.rename(
+        columns={x: f"{x} new" for x in marginal_cost_t.columns}
+    )
+    n.generators_t["marginal_cost"] = n.generators_t["marginal_cost"].join(
+        marginal_cost_t
+    )
+
+    p_max_pu_t = n.generators_t["p_max_pu"][
+        [x for x in extend.index if x in n.generators_t["p_max_pu"].columns]
+    ]
+    p_max_pu_t = p_max_pu_t.rename(columns={x: f"{x} new" for x in p_max_pu_t.columns})
     n.generators_t["p_max_pu"] = n.generators_t["p_max_pu"].join(p_max_pu_t)
-    
+
 
 if __name__ == "__main__":
-    if 'snakemake' not in globals():
+    if "snakemake" not in globals():
         from _helpers import mock_snakemake
-        snakemake = mock_snakemake("add_extra_components", interconnect="western", clusters=30)
+
+        snakemake = mock_snakemake(
+            "add_extra_components", interconnect="western", clusters=30
+        )
     configure_logging(snakemake)
 
     n = pypsa.Network(snakemake.input.network)
-    elec_config = snakemake.config['electricity']
+    elec_config = snakemake.config["electricity"]
 
-    Nyears = n.snapshot_weightings.objective.sum() / 8760.
-    costs = load_costs(snakemake.input.tech_costs, snakemake.config['costs'], elec_config['max_hours'], Nyears)
+    Nyears = n.snapshot_weightings.objective.sum() / 8760.0
+    costs = load_costs(
+        snakemake.input.tech_costs,
+        snakemake.config["costs"],
+        elec_config["max_hours"],
+        Nyears,
+    )
 
-    n.buses['location'] = n.buses.index 
+    n.buses["location"] = n.buses.index
 
     attach_storageunits(n, costs, elec_config)
     attach_stores(n, costs, elec_config)

@@ -1,26 +1,29 @@
-"""Retrieves cost data for Europe
-
-This is a seperate rule due to the need for a wildcard argument 
 """
+Retrieves cost data for Europe.
+
+This is a seperate rule due to the need for a wildcard argument
+"""
+
+from __future__ import annotations
 
 import logging
 from pathlib import Path
-from _helpers import (
-    progress_retrieve, 
-    mock_snakemake
-)
+
+from _helpers import mock_snakemake
+from _helpers import progress_retrieve
 
 logger = logging.getLogger(__name__)
-        
+
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
+
         snakemake = mock_snakemake("retrieve_cost_data_eur", year=2030)
         rootpath = ".."
     else:
         rootpath = "."
 
-    # get european template data 
+    # get european template data
     version = snakemake.params.pypsa_costs_version
     tech_year = snakemake.wildcards.year
     csv = f"https://raw.githubusercontent.com/PyPSA/technology-data/{version}/outputs/costs_{tech_year}.csv"

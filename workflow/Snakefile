@@ -1,4 +1,5 @@
 from snakemake.utils import min_version
+
 min_version("6.0")
 
 from shutil import copyfile, move, rmtree
@@ -25,13 +26,13 @@ FIGURES_SINGLE = [
     "emissions_accumulated_tech",
     "emissions_map",
     "renewable_potential_map",
-    "capacity_additions_bar"
+    "capacity_additions_bar",
 ]
 
 FIGURES_VALIDATE = [
     "seasonal_stacked_plot",
     "carrier_production_bar",
-    "production_deviation_bar"
+    "production_deviation_bar",
 ]
 
 FIGURES_SINGLE_HTML = [
@@ -39,14 +40,16 @@ FIGURES_SINGLE_HTML = [
     "emissions_area_html",
     # "emissions_node_html",
     "emissions_region_html",
-    "emissions_accumulated_tech_html"
+    "emissions_accumulated_tech_html",
 ]
 
 # --------------------------- Workflow constraints --------------------------- #
 
+
 localrules:
     dag,
     clean,
+
 
 wildcard_constraints:
     interconnect="usa|texas|western|eastern",
@@ -55,10 +58,11 @@ wildcard_constraints:
     ll="(v|c)([0-9\.]+|opt|all)|all",
     opts="[-+a-zA-Z0-9\.]*",
     scope="urban|rural|total",
-    sector="([EG]-)*[EG]" 
+    sector="([EG]-)*[EG]",
 
 
 # -------------------------- Config and Subworkflows ------------------------- #
+
 
 # Merge subworkflow configs and main config
 configfile: "config/tests/config.test_simple.yaml"
@@ -66,6 +70,7 @@ configfile: "config/tests/config.test_simple.yaml"
 configfile: "config/config.cluster.yaml"
 configfile: "config/config.osw.yaml"
 configfile: "config/config.plotting.yaml"
+
 
 ATLITE_NPROCESSES = config["atlite"].get("nprocesses", 4)
 
@@ -79,12 +84,14 @@ DATA = "data/"
 RESOURCES = "resources/" + RDIR if not run.get("shared_resources") else "resources/"
 RESULTS = "results/" + RDIR
 
+
 include: "rules/common.smk"
 include: "rules/retrieve.smk"
 include: "rules/build_electricity.smk"
 include: "rules/build_sector.smk"
 include: "rules/solve_electricity.smk"
 include: "rules/postprocess.smk"
+
 
 if "E" not in config["scenario"]["sector"]:
     if not config["scenario"]["sector"]:
@@ -94,17 +101,19 @@ if "E" not in config["scenario"]["sector"]:
 
 # ----------------------------------- Rules ---------------------------------- #
 
+
 rule all:
     input:
         expand(
-            RESULTS +
-            "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}_{figure}.pdf",
+            RESULTS
+            + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}_{figure}.pdf",
             **config["scenario"],
             figure=FIGURES_SINGLE + FIGURES_VALIDATE,
         ),
         #"repo_data/dag.jpg",
 
-# Create DAG with- 
+
+# Create DAG with-
 # snakemake --dag -F | sed -n "/digraph/,\$p" | dot -Tpng -o repo_data/dag.jpg
 # snakemake --rulegraph all | sed -n "/digraph/,\$p" | dot -Tpng -o repo_data/dag.jpg
 rule dag:
@@ -113,7 +122,7 @@ rule dag:
     output:
         dot="repo_data/dag.dot",
         jpg="repo_data/dag.jpg",
-    conda: 
+    conda:
         "envs/environment.yaml"
     shell:
         """
@@ -121,11 +130,13 @@ rule dag:
         dot -Tjpg -o {output.jpg} {output.dot}
         """
 
+
 rule clean:
     message:
         "Remove all build results but keep downloaded data."
     run:
         import shutil
+
         shutil.rmtree("resources", ignore_errors=True)
         shutil.rmtree("results", ignore_errors=True)
         print("Data downloaded to data/ has not been cleaned.")

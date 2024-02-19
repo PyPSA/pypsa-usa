@@ -267,5 +267,3 @@ connect.sh
 config/config.cluster.yaml
 /workflow/repo_data/dag.png
 !.pre-commit-config.yaml
-
-
