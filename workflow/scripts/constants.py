@@ -549,23 +549,23 @@ ATB_TECH_MAPPER = {
         "display_name": "Utility PV - Class 5",
         "crp":  20,
     },
-    "2hr-battery-storage": {
+    "2hr_battery_storage": {
         "display_name": "Utility-Scale Battery Storage - 2Hr",
         "crp":  20,
     },
-    "4hr-battery-storage": {
+    "4hr_battery_storage": {
         "display_name": "Utility-Scale Battery Storage - 4Hr",
         "crp":  20,
     },
-    "6hr-battery-storage": {
+    "6hr_battery_storage": {
         "display_name": "Utility-Scale Battery Storage - 6Hr",
         "crp":  20,
     },
-    "8hr-battery-storage": {
+    "8hr_battery_storage": {
         "display_name": "Utility-Scale Battery Storage - 8Hr",
         "crp":  20,
     },
-    "10hr-battery-storage": {
+    "10hr_battery_storage": {
         "display_name": "Utility-Scale Battery Storage - 10Hr",
         "crp":  20,
     },
