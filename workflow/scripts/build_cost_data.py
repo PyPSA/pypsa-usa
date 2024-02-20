@@ -398,12 +398,13 @@ if __name__ == "__main__":
     else:
         rootpath = "."
 
-    eur = pd.read_csv(snakemake.input.pypsa_technology_data)
-    atb = pd.read_parquet(snakemake.input.nrel_atb).set_index("core_metric_key")
-
     year = snakemake.wildcards.year
 
+    eur = pd.read_csv(snakemake.input.pypsa_technology_data)
+    eur = correct_units(eur, {"USD": const.EUR_2_USD})
+
     # Pull all "default" from ATB
+    atb = pd.read_parquet(snakemake.input.nrel_atb).set_index("core_metric_key")
     techs = list(const.ATB_TECH_MAPPER.keys())
     atb_extracted = get_atb_data(atb, techs, year=year)
     atb_extracted = correct_fixed_cost(atb_extracted)
@@ -413,7 +414,6 @@ if __name__ == "__main__":
     costs = costs.drop_duplicates(subset=["technology", "parameter"], keep="last")
 
     # align merged data
-    costs = correct_units(costs, {"USD": const.EUR_2_USD})
     costs = costs.reset_index(drop=True)
     costs["value"] = costs["value"].round(3)
 
