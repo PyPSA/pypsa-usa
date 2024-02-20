@@ -49,7 +49,7 @@ def build_core_metric_key(
     ----
     Will not work with Debt Fraction
     """
-
+    print(f"building core metric key for {core_metric_parameter}, {technology}")
     # Core Metric Parameter (metric to extract)
     try:
         cmp = ATB_CMP_MAPPER[core_metric_parameter]
@@ -76,43 +76,27 @@ def build_core_metric_key(
 
     # Cost Recovery Period
     if not crpyears:
-        crp = const.ATB_TECH_MAPPER[technology]["crp"]["default"]
+        crp = const.ATB_TECH_MAPPER[technology]["crp"]
     else:
-        if not crpyears in const.ATB_TECH_MAPPER[technology]["crp"]["options"]:
-            logger.warning(f"Invalid crp selection of {tech_name}")
-            crp = const.ATB_TECH_MAPPER[technology]["crp"]["default"]
-        else:
-            crp = crpyears
+        crp = crpyears
 
     # technology name
     if not tech_name:
-        name = const.ATB_TECH_MAPPER[technology]["name"]["default"]
+        name = const.ATB_TECH_MAPPER[technology]["name"]
     else:
-        if not tech_name in const.ATB_TECH_MAPPER[technology]["name"]["options"]:
-            logger.warning(f"Invalid technology name of {tech_name}")
-            name = const.ATB_TECH_MAPPER[technology]["name"]["default"]
-        else:
-            name = tech_name
+        name = tech_name
 
     # technology alias
     if not tech_alias:
-        alias = const.ATB_TECH_MAPPER[technology]["alias"]["default"]
+        alias = const.ATB_TECH_MAPPER[technology]["alias"]
     else:
-        if not tech_alias in const.ATB_TECH_MAPPER[technology]["alias"]["options"]:
-            logger.warning(f"Invalid technology alias of {tech_alias}")
-            alias = const.ATB_TECH_MAPPER[technology]["alias"]["default"]
-        else:
-            alias = tech_alias
+        alias = tech_alias
 
     # technology detail
     if not tech_detail:
-        detail = const.ATB_TECH_MAPPER[technology]["detail"]["default"]
+        detail = const.ATB_TECH_MAPPER[technology]["detail"]
     else:
-        if not tech_detail in const.ATB_TECH_MAPPER[technology]["alias"]["options"]:
-            logger.warning(f"Invalid technology alias of {tech_alias}")
-            detail = const.ATB_TECH_MAPPER[technology]["detail"]["default"]
-        else:
-            detail = tech_detail
+        detail = tech_detail
 
     if cmp in ("WACCR", "WACCR"):  # different formatting for WACC
         return f"{cmc}{crp}{cmp}{name}{scenario}{year_short}"
@@ -120,30 +104,48 @@ def build_core_metric_key(
         return f"{cmc}{crp}{cmp}{name}{alias}{detail}{scenario}{year_short}"
 
 
-def find_default_core_metric_key(
+def find_core_metric_key(
     atb: pd.DataFrame,
     technology: str,
     core_metric_parameter: str,
     year: int = 2030,
 ) -> str:
     """
-    Finds default core_metric_key from NREL ATB.
+    Finds the core_metric_key from NREL ATB given the display_name, crp, and .
     """
     tech = const.ATB_TECH_MAPPER[technology]
-    criteria = (
-        (atb.technology == tech["technology"])
-        & (atb.core_metric_parameter == core_metric_parameter)
-        & (atb.core_metric_variable == year)
-        & (atb.default == True)
-        & (atb.core_metric_case == "Market")
-        & (atb.scenario == "Moderate")
-        & (atb.crpyears.astype(int) == tech["crp"]["default"])
-    )
-    filtered_atb = atb.loc[criteria]
-    if filtered_atb.shape[0] != 1:
-        raise KeyError(
-            f"No default core_metric_key found for {technology} {core_metric_parameter}",
+    scenario = tech.get("scenario", "Moderate")
+    core_metric_case = tech.get("core_metric_case", "Market")
+
+    if core_metric_parameter != "WACC Real":
+        criteria = (
+            (atb.display_name == tech["display_name"])
+            & (atb.core_metric_parameter == core_metric_parameter)
+            & (atb.core_metric_variable == year)
+            & (atb.core_metric_case == core_metric_case)
+            & (atb.scenario == scenario)
+            & (atb.crpyears.astype(int) == tech["crp"])
         )
+        filtered_atb = atb.loc[criteria]
+        if filtered_atb.shape[0] != 1:
+            raise KeyError(
+                f"No default core_metric_key found for {technology} {core_metric_parameter}",
+            )
+    else:
+        tech_name = tech.get("technology",tech['display_name'].split(" - ")[0])
+        criteria = (
+                (atb.technology == tech_name)
+                & (atb.core_metric_parameter == core_metric_parameter)
+                & (atb.core_metric_variable == year)
+                & (atb.core_metric_case == core_metric_case)
+                & (atb.scenario == scenario)
+                & (atb.crpyears.astype(int) == tech["crp"])
+            )
+        filtered_atb = atb.loc[criteria]
+        if filtered_atb.shape[0] != 1:
+            raise KeyError(
+                f"No default core_metric_key found for {technology} {core_metric_parameter}",
+            )
     return filtered_atb.iloc[0].name
 
 
@@ -169,24 +171,17 @@ def get_atb_data(atb: pd.DataFrame, techs: str | list[str], **kwargs) -> pd.Data
         techs = [techs]
 
     for technology in techs:
+        missing = []
 
         # get fixed operating cost
         core_metric_parameter = "Fixed O&M"
-        # if atb.loc[atb.technology == const.ATB_TECH_MAPPER[technology]["technology"], 'default'].any():
         try:
-            core_metric_key = find_default_core_metric_key(
+            core_metric_key = find_core_metric_key(
                 atb,
                 technology,
                 core_metric_parameter,
                 **kwargs,
             )
-        except:
-            core_metric_key = build_core_metric_key(
-                core_metric_parameter,
-                technology,
-                **kwargs,
-            )
-        try:
             data.append(
                 [
                     technology,
@@ -198,24 +193,17 @@ def get_atb_data(atb: pd.DataFrame, techs: str | list[str], **kwargs) -> pd.Data
                 ],
             )
         except KeyError:
-            logger.info(f"No ATB fixed costs for {technology}")
+            missing.append(f'{core_metric_parameter}')
 
         # get variable operating cost
         core_metric_parameter = "Variable O&M"
         try:
-            core_metric_key = find_default_core_metric_key(
+            core_metric_key = find_core_metric_key(
                 atb,
                 technology,
                 core_metric_parameter,
                 **kwargs,
             )
-        except:
-            core_metric_key = build_core_metric_key(
-                core_metric_parameter,
-                technology,
-                **kwargs,
-            )
-        try:
             data.append(
                 [
                     technology,
@@ -227,14 +215,14 @@ def get_atb_data(atb: pd.DataFrame, techs: str | list[str], **kwargs) -> pd.Data
                 ],
             )
         except KeyError:
-            logger.info(f"No ATB variable costs for {technology}")
+            missing.append(f'{core_metric_parameter}')
 
         # get lifetime - lifetime is the default crp
         data.append(
             [
                 technology,
                 "lifetime",
-                const.ATB_TECH_MAPPER[technology]["crp"]["default"],
+                const.ATB_TECH_MAPPER[technology]["crp"],
                 "years",
                 "NREL ATB",
                 core_metric_key,
@@ -244,19 +232,21 @@ def get_atb_data(atb: pd.DataFrame, techs: str | list[str], **kwargs) -> pd.Data
         # get capital cost
         core_metric_parameter = "CAPEX"
         try:
-            core_metric_key = find_default_core_metric_key(
-                atb,
-                technology,
-                core_metric_parameter,
-                **kwargs,
-            )
-        except:
-            core_metric_key = build_core_metric_key(
-                core_metric_parameter,
-                technology,
-                **kwargs,
-            )
-        try:
+            try:
+                core_metric_key = find_core_metric_key(
+                    atb,
+                    technology,
+                    core_metric_parameter,
+                    **kwargs,
+                )
+            except KeyError:
+                core_metric_key = find_core_metric_key(
+                    atb,
+                    technology,
+                    "OCC",
+                    **kwargs,
+                )
+                logger.warning(f"Using OCC for {technology} investment- no ATB CAPEX found.")
             data.append(
                 [
                     technology,
@@ -268,24 +258,17 @@ def get_atb_data(atb: pd.DataFrame, techs: str | list[str], **kwargs) -> pd.Data
                 ],
             )
         except KeyError:
-            logger.info(f"No ATB capital costs for {technology}")
+            missing.append(f'{core_metric_parameter}')
 
         # get efficiency
         core_metric_parameter = "Heat Rate"
         try:
-            core_metric_key = find_default_core_metric_key(
+            core_metric_key = find_core_metric_key(
                 atb,
                 technology,
                 core_metric_parameter,
                 **kwargs,
             )
-        except:
-            core_metric_key = build_core_metric_key(
-                core_metric_parameter,
-                technology,
-                **kwargs,
-            )
-        try:
             data.append(
                 [
                     technology,
@@ -297,24 +280,17 @@ def get_atb_data(atb: pd.DataFrame, techs: str | list[str], **kwargs) -> pd.Data
                 ],
             )
         except KeyError:
-            logger.info(f"No ATB heat rate for {technology}")
+            missing.append(f'{core_metric_parameter}')
 
         # get discount rate
         core_metric_parameter = "WACC Real"
         try:
-            core_metric_key = find_default_core_metric_key(
+            core_metric_key = find_core_metric_key(
                 atb,
                 technology,
                 core_metric_parameter,
                 **kwargs,
             )
-        except:
-            core_metric_key = build_core_metric_key(
-                core_metric_parameter,
-                technology,
-                **kwargs,
-            )
-        try:
             data.append(
                 [
                     technology,
@@ -326,7 +302,10 @@ def get_atb_data(atb: pd.DataFrame, techs: str | list[str], **kwargs) -> pd.Data
                 ],
             )
         except KeyError:
-            logger.info(f"No ATB WACC for {technology}")
+            missing.append(f'{core_metric_parameter}')
+        
+        if len(missing) > 0:
+            logger.warning(f"Missing ATB data for {technology}: {missing}")
 
     df = pd.DataFrame(
         data,
@@ -383,21 +362,14 @@ def correct_units(
 
 def correct_fixed_cost(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Changes fixed cost from $/W to %/year.
+    Changes fixed cost from ATB Data from $/kW-year to %/year.
 
     Note
     ----
     Input data should follow pypsa costs datastructure
     """
 
-    # get technologies to fix
-    # "Gasnetz", "gas storage" are expressed as only a percentage
-    # Values are very different between PyPSA and ATB causing merge issues for:
-    #   - 'battery storage'
-    #   - 'home battery storage'
-    techs_to_skip = ["Gasnetz", "gas storage"]
     df_fom = df[(df.parameter == "FOM") & (~df.unit.str.startswith("%/"))]
-    techs = [x for x in df_fom.technology.unique() if x not in techs_to_skip]
 
     # this method of slicing a df is quite inefficienct :(
     for tech in techs:
@@ -431,12 +403,10 @@ if __name__ == "__main__":
 
     year = snakemake.wildcards.year
 
-    #  Replace pypsa-eur cost data with ATB data when it matches exactly based on const.ATB_CMP_MAPPER
-    # techs = [x for x in eur.technology.unique() if x in const.ATB_TECH_MAPPER] #for exact matches
     # Pull all "default" from ATB
     techs = list(const.ATB_TECH_MAPPER.keys())
-    # for all
     atb_extracted = get_atb_data(atb, techs, year=year)
+    atb_extracted = correct_fixed_cost(atb_extracted)
 
     # merge dataframes
     costs = pd.concat([eur, atb_extracted])
@@ -444,7 +414,6 @@ if __name__ == "__main__":
 
     # align merged data
     costs = correct_units(costs, {"USD": const.EUR_2_USD})
-    costs = correct_fixed_cost(costs)
     costs = costs.reset_index(drop=True)
     costs["value"] = costs["value"].round(3)
 
