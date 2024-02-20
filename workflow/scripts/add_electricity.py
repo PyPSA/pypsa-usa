@@ -1440,7 +1440,7 @@ def load_powerplants_ads(
 
 
 def clean_bus_data(n: pypsa.Network):
-    col_list = ["poi_bus", "poi_sub", "poi", "Pd", "load_dissag"]
+    col_list = ["poi_bus", "poi_sub", "poi", "Pd", "load_dissag", "LAF_states"]
     n.buses.drop(columns=col_list, inplace=True)
 
 

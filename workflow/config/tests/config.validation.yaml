@@ -1,44 +1,42 @@
 # PyPSA-USA Default Configuration File
+network_configuration: "pypsa-usa" # "pypsa-usa" or "ads2032"
 
 run:
-  name: "" # use this to keep track of runs with different settings
+  name: "Validation" # use this to keep track of runs with different settings
   disable_progressbar: false # set to true to disable the progressbar
   shared_resources: false # set to true to share the default resources across runs
   shared_cutouts: true # set to true to share the default cutout(s) across runs
+  validation: true # set to true to run back-casting plots
 
+# docs :
 scenario:
-  interconnect: western #"usa|texas|western|eastern"
-  clusters: [30]    #100, 300, 1000
-  opts: [Co2L1.25]
-  ll: [v1.25]
+  interconnect: [western, texas] #"usa|texas|western|eastern"
+  clusters: [40]
+  opts: [Co2L2.0]
+  ll: [v1.0]
   scope: "total" # "urban", "rural", or "total"
+  sector: "" # G
   planning_horizons:
-  - 2030   #not implemented yet (temp placeholder)
-    # - 2040
-    # - 2050
+  # - 2030   #  # Uncomment to use NREL EFS Demand Forecasts (2030, 2040, 2050)
 
+foresight:  # Only Single Stage Currently
 
+# docs :
 enable:
   build_cutout: false
 
 countries: [US]
 
-# focus_weights:
-#   CISO-PGAE: 0.5
-
-network_configuration: "pypsa-usa" # "pypsa-usa" or "ads2032" or "breakthrough"
-
 snapshots:
   start: "2019-01-01"
-  end: "2019-12-31"
+  end: "2020-01-01"
   inclusive: 'left'
 
-foresight:  # not implemented yet
 
 # docs :
 atlite:
   default_cutout: era5_2019
-  nprocesses: 4
+  nprocesses: 8
   show_progress: false # false saves time
   cutouts:
     era5_2019:
@@ -69,11 +67,12 @@ atlite:
 # docs :
 electricity:
   conventional_carriers: [nuclear, oil, OCGT, CCGT, coal, geothermal] # Choose the conventional plant types to include in network
-  renewable_carriers: [onwind, solar, offwind, hydro] # Choose the renewable plant types to include in network
+  renewable_carriers: [onwind, offwind, offwind_floating, solar, hydro] # Choose the renewable plant types to include in network
   voltage_simplified: 230 #Voltage level to simplify network to in rule "simplify network"
-  co2limit: 1.4728e+12 # 0.8 * 1.841e+9
+  co2limit: 1.4728e+9 # 0.8 * 1.841e+9
   co2base: 226.86e+6 #base_from_2020 Locations of the 250 MMmt of CO2 emissions from the WECC 2021.
   gaslimit: false # global gas usage limit of X MWh_th
+  retirement: economic # "economic" or "technical"
 
   operational_reserve:
     activate: false
@@ -86,12 +85,15 @@ electricity:
     H2: 168
 
   extendable_carriers:
-    Generator: [solar, onwind, offwind, OCGT, CCGT, coal]
-    StorageUnit: [battery] # battery, H2
-    Store: [battery] #[battery, H2]
+    Generator: [] #offwind, offwind_floating,
+    StorageUnit: [] # battery, H2
+    Store: [] #[battery, H2]
     Link: [] #[H2 pipeline]
 
-  retirement: economic # "economic" or "technical"
+  demand: #EFS used for given planning_horizons year
+    EFS_case: reference # reference, medium, high
+    EFS_speed: moderate # slow, moderate, rapid
+
 
 # docs :
 conventional:
@@ -105,6 +107,7 @@ renewable:
     resource:
       method: wind
       turbine: Vestas_V112_3MW
+      # add_cutout_windspeed: true
     capacity_per_sqkm: 3 # conservative, ScholzPhd Tab 4.3.1: 10MW/km^2
     # correction_factor: 0.93
     corine:
@@ -113,24 +116,43 @@ renewable:
       distance: 10 #buffer from distance_grid_codes that are to be excluded
       distance_grid_codes: [50]
     natura: true
-    potential: simple # or conservative
+    potential: conservative # simple or conservative
     clip_p_max_pu: 1.e-2
     extendable: true
   offwind:
     cutout: era5_2019
     resource:
       method: wind
-      turbine: NREL_ReferenceTurbine_5MW_offshore
-    capacity_per_sqkm: 2
-    correction_factor: 0.8855
-    # proxy for wake losses
-    # from 10.1016/j.energy.2018.08.153
+      turbine: NREL_ReferenceTurbine_2020ATB_5.5MW
+      # add_cutout_windspeed: true
+    capacity_per_sqkm: 3 # 2021–2022 Transmission Plan, CAISO
+    correction_factor: 0.8855 # proxy for wake losses, from 10.1016/j.energy.2018.08.153
     corine:
       grid_codes: [80, 200] #page 28 of https://land.copernicus.eu/global/sites/cgls.vito.be/files/products/CGLOPS1_PUM_LC100m-V3_I3.4.pdf
     natura: true
-    max_depth: 1000
-    max_shore_distance: 30000
-    potential: simple # or conservative
+    max_depth: 60 # meters, ref https://www.nrel.gov/docs/fy16osti/66599.pdf
+    min_shore_distance: 22000 # meters
+    max_shore_distance: 90000 # meters
+    potential: conservative # simple or conservative
+    clip_p_max_pu: 1.e-2
+    extendable: true
+  offwind_floating:
+    cutout: era5_2019
+    resource:
+      method: wind
+      turbine: NREL_ReferenceTurbine_2020ATB_15MW_offshore
+      # add_cutout_windspeed: true
+    capacity_per_sqkm: 3 # 2021–2022 Transmission Plan, CAISO
+    correction_factor: 0.8855
+    # proxy for wake losses, from 10.1016/j.energy.2018.08.153
+    corine:
+      grid_codes: [80, 200] #page 28 of https://land.copernicus.eu/global/sites/cgls.vito.be/files/products/CGLOPS1_PUM_LC100m-V3_I3.4.pdf
+    natura: true
+    min_depth: 60 # meters, ref https://www.nrel.gov/docs/fy16osti/66599.pdf
+    max_depth: 1300 # meters, ref https://www.nrel.gov/docs/fy22osti/83650.pdf
+    min_shore_distance: 22000 # meters
+    max_shore_distance: 90000 # meters
+    potential: conservative # simple or conservative
     clip_p_max_pu: 1.e-2
     extendable: true
   solar:
@@ -146,7 +168,7 @@ renewable:
     corine:
       grid_codes: [20, 30, 40, 50, 60, 90, 100] #see above for codes
     natura: true
-    potential: simple # or conservative
+    potential: conservative # simple or conservative
     clip_p_max_pu: 1.e-2
     extendable: true
   hydro:
@@ -177,7 +199,7 @@ lines:
     345.: "Al/St 240/40 4-bundle 380.0"
     500.: "Al/St 560/50 4-bundle 750.0"
     765.: "Al/St 560/50 4-bundle 750.0"
-  s_max_pu: 1.0
+  s_max_pu: 0.7
   s_nom_max: .inf
   length_factor: 1.25
   under_construction: 'zero' # 'zero': set capacity to zero, 'remove': remove, 'keep': with full capacity
@@ -221,8 +243,13 @@ costs:  # based on the potentials, assuming  (0.1 kW/m2 and 10 m2/person)
 
 # docs :
 sector:
-  heat_pump_sink_T: 55.
   co2_sequestration_potential: 0
+  natural_gas:
+    allow_imports_exports: true # false to be implemented
+    copperplate: true # copperplates at a state level (only true works)
+    cyclic_storage: false
+  heating:
+    heat_pump_sink_T: 55.
 
 # docs :
 clustering:
@@ -233,7 +260,7 @@ clustering:
   cluster_network:
     algorithm: kmeans
     feature: solar+onwind-time
-    aggregation_zones: 'balancing_area' # balancing_area, country, or state. # Currently issue in State aggregation- error thrown on Utah
+    aggregation_zones: 'balancing_area' # balancing_area, country, or state. # Currently issue in State aggregation
   aggregation_strategies:
     generators:
       p_nom_max: sum # use "min" for more conservative assumptions
@@ -247,14 +274,14 @@ clustering:
     buses:
       state: max # temp fix. When fixing state aggregation- change add electricity such that region info not is use is removed.
 
+focus_weights:
+  # California: 0.5
 
 # docs :
 solving:
   #tmpdir: "path/to/tmp"
   options:
-    use_transport_model: true
-    operations_only: true
-    load_shedding: true
+    load_shedding: false
     clip_p_max_pu: 1.e-2
     noisy_costs: true
     skip_iterations: true
@@ -286,10 +313,12 @@ solving:
       parallel: "on"
       random_seed: 123
     gurobi-default:
-      threads: 4
+      threads: 8
       method: 2 # barrier
       crossover: 0
-      BarConvTol: 1.e-6
+      BarConvTol: 1.e-4
+      OptimalityTol: 1.e-4
+      FeasibilityTol: 1.e-3
       Seed: 123
       AggFill: 0
       PreDual: 0
