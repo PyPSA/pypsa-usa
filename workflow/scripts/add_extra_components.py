@@ -64,7 +64,6 @@ logger = logging.getLogger(__name__)
 
 def attach_storageunits(n, costs, elec_opts):
     carriers = elec_opts["extendable_carriers"]["StorageUnit"]
-    max_hours = elec_opts["max_hours"]
 
     _add_missing_carriers_from_costs(n, costs, carriers)
 
@@ -73,7 +72,9 @@ def attach_storageunits(n, costs, elec_opts):
     lookup_store = {"H2": "electrolysis", "battery": "battery inverter"}
     lookup_dispatch = {"H2": "fuel cell", "battery": "battery inverter"}
 
+
     for carrier in carriers:
+        max_hours = int(carrier.split("hr_")[0])
         roundtrip_correction = 0.5 if carrier == "battery" else 1
 
         n.madd(
@@ -85,11 +86,11 @@ def attach_storageunits(n, costs, elec_opts):
             p_nom_extendable=True,
             capital_cost=costs.at[carrier, "capital_cost"],
             marginal_cost=costs.at[carrier, "marginal_cost"],
-            efficiency_store=costs.at[lookup_store[carrier], "efficiency"]
+            efficiency_store=costs.at[carrier, "efficiency"]
             ** roundtrip_correction,
-            efficiency_dispatch=costs.at[lookup_dispatch[carrier], "efficiency"]
+            efficiency_dispatch=costs.at[carrier, "efficiency"]
             ** roundtrip_correction,
-            max_hours=max_hours[carrier],
+            max_hours=max_hours,
             cyclic_state_of_charge=True,
         )
 
@@ -139,49 +140,6 @@ def attach_stores(n, costs, elec_opts):
             capital_cost=costs.at["fuel cell", "capital_cost"]
             * costs.at["fuel cell", "efficiency"],
             marginal_cost=costs.at["fuel cell", "marginal_cost"],
-        )
-
-    if "battery" in carriers:
-        b_buses_i = n.madd(
-            "Bus",
-            buses_i + " battery",
-            carrier="battery",
-            **bus_sub_dict,
-        )
-
-        n.madd(
-            "Store",
-            b_buses_i,
-            bus=b_buses_i,
-            carrier="battery",
-            e_cyclic=True,
-            e_nom_extendable=True,
-            capital_cost=costs.at["battery storage", "capital_cost"],
-            marginal_cost=costs.at["battery", "marginal_cost"],
-        )
-
-        n.madd(
-            "Link",
-            b_buses_i + " charger",
-            bus0=buses_i,
-            bus1=b_buses_i,
-            carrier="battery charger",
-            # the efficiencies are "round trip efficiencies"
-            efficiency=costs.at["battery inverter", "efficiency"] ** 0.5,
-            capital_cost=costs.at["battery inverter", "capital_cost"],
-            p_nom_extendable=True,
-            marginal_cost=costs.at["battery inverter", "marginal_cost"],
-        )
-
-        n.madd(
-            "Link",
-            b_buses_i + " discharger",
-            bus0=b_buses_i,
-            bus1=buses_i,
-            carrier="battery discharger",
-            efficiency=costs.at["battery inverter", "efficiency"] ** 0.5,
-            p_nom_extendable=True,
-            marginal_cost=costs.at["battery inverter", "marginal_cost"],
         )
 
 
@@ -321,8 +279,8 @@ if __name__ == "__main__":
 
         snakemake = mock_snakemake(
             "add_extra_components",
-            interconnect="western",
-            clusters=30,
+            interconnect="texas",
+            clusters=40,
         )
     configure_logging(snakemake)
 
