@@ -121,31 +121,27 @@ def find_core_metric_key(
         criteria = (
             (atb.display_name == tech["display_name"])
             & (atb.core_metric_parameter == core_metric_parameter)
-            & (atb.core_metric_variable == year)
+            & (atb.core_metric_variable == int(year))
             & (atb.core_metric_case == core_metric_case)
             & (atb.scenario == scenario)
             & (atb.crpyears.astype(int) == tech["crp"])
         )
         filtered_atb = atb.loc[criteria]
-        if filtered_atb.shape[0] != 1:
-            raise KeyError(
-                f"No default core_metric_key found for {technology} {core_metric_parameter}",
-            )
     else:
         tech_name = tech.get("technology",tech['display_name'].split(" - ")[0])
         criteria = (
                 (atb.technology == tech_name)
                 & (atb.core_metric_parameter == core_metric_parameter)
-                & (atb.core_metric_variable == year)
+                & (atb.core_metric_variable == int(year))
                 & (atb.core_metric_case == core_metric_case)
                 & (atb.scenario == scenario)
                 & (atb.crpyears.astype(int) == tech["crp"])
             )
         filtered_atb = atb.loc[criteria]
-        if filtered_atb.shape[0] != 1:
-            raise KeyError(
-                f"No default core_metric_key found for {technology} {core_metric_parameter}",
-            )
+    if filtered_atb.shape[0] != 1:
+        raise KeyError(
+            f"No default core_metric_key found for {technology} {core_metric_parameter}",
+        )
     return filtered_atb.iloc[0].name
 
 
@@ -217,7 +213,7 @@ def get_atb_data(atb: pd.DataFrame, techs: str | list[str], **kwargs) -> pd.Data
         except KeyError:
             missing.append(f'{core_metric_parameter}')
 
-        # get lifetime - lifetime is the default crp
+        # get lifetime - lifetime is the user defined crp
         data.append(
             [
                 technology,
@@ -225,7 +221,7 @@ def get_atb_data(atb: pd.DataFrame, techs: str | list[str], **kwargs) -> pd.Data
                 const.ATB_TECH_MAPPER[technology]["crp"],
                 "years",
                 "NREL ATB",
-                core_metric_key,
+                "User Defined CRP",
             ],
         )
 
