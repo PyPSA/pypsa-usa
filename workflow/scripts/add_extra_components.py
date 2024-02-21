@@ -75,7 +75,7 @@ def attach_storageunits(n, costs, elec_opts):
 
     for carrier in carriers:
         max_hours = int(carrier.split("hr_")[0])
-        roundtrip_correction = 0.5 if carrier == "battery" else 1
+        roundtrip_correction = 0.5 if "battery" in carrier else 1
 
         n.madd(
             "StorageUnit",
