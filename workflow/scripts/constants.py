@@ -478,15 +478,15 @@ ATB_TECH_MAPPER = {
     "coal": {
         "display_name": "Coal-95%-CCS",
         "technology": "Coal_FE",
-        "crp": 30
+        "crp": 30,
     },
     "geothermal": {
         "display_name": "Geothermal - Hydro / Flash",
-        "crp": 30, 
+        "crp": 30,
     },
     "hydro": {  # dammed hydro
         "display_name": "Hydropower - NPD 1",
-        "crp": 100
+        "crp": 100,
     },
     "ror": {  # run of river
         "display_name": "Hydropower - NSD 1",
@@ -500,74 +500,74 @@ ATB_TECH_MAPPER = {
     "OCGT": {  # natural gas
         "display_name": "NG Combustion Turbine (F-Frame)",
         "technology": "NaturalGas_FE",
-        "crp":  30,
+        "crp": 30,
     },
     "nuclear": {  # large scale nuclear
         "display_name": "Nuclear - AP1000",
-        "crp":  60,
+        "crp": 60,
     },
     "SMR": {  # small modular reactor
         "display_name": "Nuclear - Small Modular Reactor",
-        "crp":  60,
+        "crp": 60,
     },
     "solar-rooftop commercial": {
         "display_name": "Commercial PV - Class 5",
-        "crp":  20
+        "crp": 20,
     },
     "solar-rooftop": {
         "display_name": "Residential PV - Class 5",
-        "crp":  20,
+        "crp": 20,
     },
     "central solar thermal": {
         "display_name": "CSP - Class 2",
-        "crp":  30,
+        "crp": 30,
     },
     "home battery storage": {
         "display_name": "Residential Battery Storage - 5 kW - 12.5 kWh",
-        "crp":  20 ,
+        "crp": 20,
     },
     "onwind": {
         "display_name": "Land-Based Wind - Class 4 - Technology 1",
         "technology": "LandbasedWind",
-        "crp":  30,
+        "crp": 30,
     },
     "offwind": {
         "display_name": "Offshore Wind - Class 5",
         "technology": "OffShoreWind",
-        "crp":  30 ,
+        "crp": 30,
     },
     "offwind_floating": {
         "display_name": "Offshore Wind - Class 13",
         "technology": "OffShoreWind",
-        "crp":  30,
+        "crp": 30,
     },
     "Pumped-Storage-Hydro-bicharger": {
         "display_name": "Pumped Storage Hydropower - National Class 1",
-        "crp":  100,
+        "crp": 100,
     },
     "solar": {
         "display_name": "Utility PV - Class 5",
-        "crp":  20,
+        "crp": 20,
     },
     "2hr_battery_storage": {
         "display_name": "Utility-Scale Battery Storage - 2Hr",
-        "crp":  20,
+        "crp": 20,
     },
     "4hr_battery_storage": {
         "display_name": "Utility-Scale Battery Storage - 4Hr",
-        "crp":  20,
+        "crp": 20,
     },
     "6hr_battery_storage": {
         "display_name": "Utility-Scale Battery Storage - 6Hr",
-        "crp":  20,
+        "crp": 20,
     },
     "8hr_battery_storage": {
         "display_name": "Utility-Scale Battery Storage - 8Hr",
-        "crp":  20,
+        "crp": 20,
     },
     "10hr_battery_storage": {
         "display_name": "Utility-Scale Battery Storage - 10Hr",
-        "crp":  20,
+        "crp": 20,
     },
 }
 

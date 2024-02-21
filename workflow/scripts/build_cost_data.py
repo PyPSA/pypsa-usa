@@ -128,15 +128,15 @@ def find_core_metric_key(
         )
         filtered_atb = atb.loc[criteria]
     else:
-        tech_name = tech.get("technology",tech['display_name'].split(" - ")[0])
+        tech_name = tech.get("technology", tech["display_name"].split(" - ")[0])
         criteria = (
-                (atb.technology == tech_name)
-                & (atb.core_metric_parameter == core_metric_parameter)
-                & (atb.core_metric_variable == int(year))
-                & (atb.core_metric_case == core_metric_case)
-                & (atb.scenario == scenario)
-                & (atb.crpyears.astype(int) == tech["crp"])
-            )
+            (atb.technology == tech_name)
+            & (atb.core_metric_parameter == core_metric_parameter)
+            & (atb.core_metric_variable == int(year))
+            & (atb.core_metric_case == core_metric_case)
+            & (atb.scenario == scenario)
+            & (atb.crpyears.astype(int) == tech["crp"])
+        )
         filtered_atb = atb.loc[criteria]
     if filtered_atb.shape[0] != 1:
         raise KeyError(
@@ -189,7 +189,7 @@ def get_atb_data(atb: pd.DataFrame, techs: str | list[str], **kwargs) -> pd.Data
                 ],
             )
         except KeyError:
-            missing.append(f'{core_metric_parameter}')
+            missing.append(f"{core_metric_parameter}")
 
         # get variable operating cost
         core_metric_parameter = "Variable O&M"
@@ -211,7 +211,7 @@ def get_atb_data(atb: pd.DataFrame, techs: str | list[str], **kwargs) -> pd.Data
                 ],
             )
         except KeyError:
-            missing.append(f'{core_metric_parameter}')
+            missing.append(f"{core_metric_parameter}")
 
         # get lifetime - lifetime is the user defined crp
         data.append(
@@ -242,7 +242,9 @@ def get_atb_data(atb: pd.DataFrame, techs: str | list[str], **kwargs) -> pd.Data
                     "OCC",
                     **kwargs,
                 )
-                logger.warning(f"Using OCC for {technology} investment- no ATB CAPEX found.")
+                logger.warning(
+                    f"Using OCC for {technology} investment- no ATB CAPEX found."
+                )
             data.append(
                 [
                     technology,
@@ -254,7 +256,7 @@ def get_atb_data(atb: pd.DataFrame, techs: str | list[str], **kwargs) -> pd.Data
                 ],
             )
         except KeyError:
-            missing.append(f'{core_metric_parameter}')
+            missing.append(f"{core_metric_parameter}")
 
         # get efficiency
         core_metric_parameter = "Heat Rate"
@@ -276,7 +278,7 @@ def get_atb_data(atb: pd.DataFrame, techs: str | list[str], **kwargs) -> pd.Data
                 ],
             )
         except KeyError:
-            missing.append(f'{core_metric_parameter}')
+            missing.append(f"{core_metric_parameter}")
 
         # get discount rate
         core_metric_parameter = "WACC Real"
@@ -298,8 +300,8 @@ def get_atb_data(atb: pd.DataFrame, techs: str | list[str], **kwargs) -> pd.Data
                 ],
             )
         except KeyError:
-            missing.append(f'{core_metric_parameter}')
-        
+            missing.append(f"{core_metric_parameter}")
+
         if len(missing) > 0:
             logger.warning(f"Missing ATB data for {technology}: {missing}")
 
