@@ -72,7 +72,6 @@ def attach_storageunits(n, costs, elec_opts):
     lookup_store = {"H2": "electrolysis", "battery": "battery inverter"}
     lookup_dispatch = {"H2": "fuel cell", "battery": "battery inverter"}
 
-
     for carrier in carriers:
         max_hours = int(carrier.split("hr_")[0])
         roundtrip_correction = 0.5 if "battery" in carrier else 1
@@ -86,10 +85,8 @@ def attach_storageunits(n, costs, elec_opts):
             p_nom_extendable=True,
             capital_cost=costs.at[carrier, "capital_cost"],
             marginal_cost=costs.at[carrier, "marginal_cost"],
-            efficiency_store=costs.at[carrier, "efficiency"]
-            ** roundtrip_correction,
-            efficiency_dispatch=costs.at[carrier, "efficiency"]
-            ** roundtrip_correction,
+            efficiency_store=costs.at[carrier, "efficiency"] ** roundtrip_correction,
+            efficiency_dispatch=costs.at[carrier, "efficiency"] ** roundtrip_correction,
             max_hours=max_hours,
             cyclic_state_of_charge=True,
         )

@@ -2,6 +2,14 @@
 
 Numerous datasets used in PyPSA USA are large and are not stored on GitHub. Insted, data is stored on Zenodo or supplier websites, and the workflow will automatically download these datasets via the `retrieve` rules
 
+```{note}
+If you recieve the follwing error while running a retrieve rule on Linux
+
+    FileNotFoundError: [Errno 2] No such file or directory: 'unzip'
+
+Run the command `sudo apt install zip`
+```
+
 (databundle)=
 ## Rule `retrieve_zenodo_databundles`
 

@@ -77,8 +77,8 @@ from summary import (
     get_capital_costs,
 )
 from add_electricity import (
-    add_nice_carrier_names, 
-    sanitize_carriers
+    add_nice_carrier_names,
+    sanitize_carriers,
 )
 
 import matplotlib.pyplot as plt
@@ -642,7 +642,7 @@ def plot_production_bar(
 
     energy_mix = (
         get_energy_timeseries(n)
-        #.rename(columns={"battery charger": "battery", "battery discharger": "battery"})
+        # .rename(columns={"battery charger": "battery", "battery discharger": "battery"})
         .groupby(level=0, axis=1)
         .sum()
         .sum()
