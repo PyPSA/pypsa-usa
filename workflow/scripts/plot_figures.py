@@ -108,8 +108,12 @@ def get_color_palette(n: pypsa.Network) -> pd.Series:
     colors = (n.carriers.reset_index().set_index("nice_name")).color
 
     additional = {
-        # "Battery Charge": n.carriers.loc["battery"].color,
-        # "Battery Discharge": n.carriers.loc["battery"].color,
+        "Battery Charge": n.carriers.loc["battery"].color,
+        "Battery Discharge": n.carriers.loc["battery"].color,
+        "battery_discharger": n.carriers.loc["battery"].color,
+        "battery_charger": n.carriers.loc["battery"].color,
+        "4hr_battery_storage_discharger": n.carriers.loc["4hr_battery_storage"].color,
+        "4hr_battery_storage_charger": n.carriers.loc["4hr_battery_storage"].color,
         "co2": "k",
     }
 
@@ -580,13 +584,13 @@ def plot_production_area(
     energy_mix = get_energy_timeseries(n).mul(1e-3)  # MW -> GW
     demand = get_demand_timeseries(n).mul(1e-3)  # MW -> GW
 
-    for carrier in carriers_2_plot:
+    for carrier in energy_mix.columns:
         if 'battery' in carrier:
-            energy_mix[carrier + '_discharger'] = energy_mix[carrier].clip(lower=0)
-            energy_mix[carrier + '_charger'] = energy_mix[carrier].clip(upper=0)
-
+            energy_mix[carrier + '_discharger'] = energy_mix[carrier].clip(lower=0.0001)
+            energy_mix[carrier + '_charger'] = energy_mix[carrier].clip(upper=-0.0001)
+            energy_mix = energy_mix.drop(columns=carrier)
     # energy_mix = energy_mix[[x for x in carriers_2_plot if x in energy_mix]]
-    # energy_mix = energy_mix.rename(columns=n.carriers.nice_name)
+    energy_mix = energy_mix.rename(columns=n.carriers.nice_name)
 
     color_palette = get_color_palette(n)
 
@@ -599,7 +603,7 @@ def plot_production_area(
                 snapshots = slice(None, None)
 
             fig, ax = plt.subplots(figsize=(14, 4))
-
+            
             energy_mix[snapshots].plot.area(
                 ax=ax,
                 alpha=0.7,
@@ -617,7 +621,6 @@ def plot_production_area(
             ax.set_title(create_title("Production [GW]", **wildcards))
             ax.set_ylabel("Power [GW]")
             fig.tight_layout()
-
             save = Path(save)
             fig.savefig(save.parent / (save.stem + suffix + save.suffix))
         except KeyError:

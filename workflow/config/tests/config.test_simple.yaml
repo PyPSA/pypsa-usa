@@ -10,10 +10,10 @@ run:
 
 # docs :
 scenario:
-  interconnect: [texas] #"usa|texas|western|eastern"
+  interconnect: [western] #"usa|texas|western|eastern"
   clusters: [40]
-  opts: [Co2L0.9-4H]
-  ll: [v1.15]
+  opts: [Co2L0.1, Co2L0.2]
+  ll: [v1.0]
   scope: "total" # "urban", "rural", or "total"
   sector: "" # G
   planning_horizons:
@@ -68,8 +68,8 @@ electricity:
   conventional_carriers: [nuclear, oil, OCGT, CCGT, coal, geothermal] # Choose the conventional plant types to include in network
   renewable_carriers: [onwind, offwind, offwind_floating, solar, hydro] # Choose the renewable plant types to include in network
   voltage_simplified: 230 #Voltage level to simplify network to in rule "simplify network"
-  co2limit: 1.4728e+9 # 0.8 * 1.841e+9
-  co2base: 226.86e+6 #base_from_2020 Locations of the 250 MMmt of CO2 emissions from the WECC 2021.
+  co2limit: 147.28e+6 # 0.8 * 184.1e+6
+  co2base: 225.0e+6 #base_from_2020 Locations of the 250 MMmt of CO2 emissions from the WECC 2021.
   gaslimit: false # global gas usage limit of X MWh_th
   retirement: economic # "economic" or "technical"
 
@@ -259,7 +259,7 @@ clustering:
   cluster_network:
     algorithm: kmeans
     feature: solar+onwind-time
-    aggregation_zones: 'balancing_area' # balancing_area, country, or state. # Currently issue in State aggregation
+    aggregation_zones: 'balancing_area' # [balancing_area, state]
   aggregation_strategies:
     generators:
       p_nom_max: sum # use "min" for more conservative assumptions

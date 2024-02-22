@@ -263,7 +263,7 @@ clustering:
   cluster_network:
     algorithm: kmeans
     feature: solar+onwind-time
-    aggregation_zones: 'balancing_area' # balancing_area, country, or state. # Currently issue in State aggregation
+    aggregation_zones: 'balancing_area' # [balancing_area, state]
   aggregation_strategies:
     generators:
       p_nom_max: sum # use "min" for more conservative assumptions
