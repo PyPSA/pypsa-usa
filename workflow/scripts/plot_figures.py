@@ -585,9 +585,9 @@ def plot_production_area(
     demand = get_demand_timeseries(n).mul(1e-3)  # MW -> GW
 
     for carrier in energy_mix.columns:
-        if 'battery' in carrier:
-            energy_mix[carrier + '_discharger'] = energy_mix[carrier].clip(lower=0.0001)
-            energy_mix[carrier + '_charger'] = energy_mix[carrier].clip(upper=-0.0001)
+        if "battery" in carrier:
+            energy_mix[carrier + "_discharger"] = energy_mix[carrier].clip(lower=0.0001)
+            energy_mix[carrier + "_charger"] = energy_mix[carrier].clip(upper=-0.0001)
             energy_mix = energy_mix.drop(columns=carrier)
     # energy_mix = energy_mix[[x for x in carriers_2_plot if x in energy_mix]]
     energy_mix = energy_mix.rename(columns=n.carriers.nice_name)
@@ -603,7 +603,7 @@ def plot_production_area(
                 snapshots = slice(None, None)
 
             fig, ax = plt.subplots(figsize=(14, 4))
-            
+
             energy_mix[snapshots].plot.area(
                 ax=ax,
                 alpha=0.7,
