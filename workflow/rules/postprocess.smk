@@ -42,6 +42,9 @@ rule plot_figures:
             % fig
             for fig in FIGURES_SINGLE_HTML
         },
+    threads: 1
+    resources:
+        mem_mb=5000,
     script:
         "../scripts/plot_figures.py"
 
@@ -59,5 +62,8 @@ rule plot_validation_figures:
             % fig
             for fig in FIGURES_VALIDATE
         },
+    threads: 1
+    resources:
+        mem_mb=5000,
     script:
         "../scripts/validate_data.py"
