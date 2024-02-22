@@ -243,7 +243,7 @@ def get_atb_data(atb: pd.DataFrame, techs: str | list[str], **kwargs) -> pd.Data
                     **kwargs,
                 )
                 logger.warning(
-                    f"Using OCC for {technology} investment- no ATB CAPEX found."
+                    f"Using OCC for {technology} investment- no ATB CAPEX found.",
                 )
             data.append(
                 [
