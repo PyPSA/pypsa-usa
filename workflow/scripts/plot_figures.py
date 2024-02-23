@@ -76,6 +76,10 @@ from summary import (
     get_operational_costs,
     get_capital_costs,
 )
+from add_electricity import (
+    add_nice_carrier_names,
+    sanitize_carriers,
+)
 
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
@@ -106,6 +110,10 @@ def get_color_palette(n: pypsa.Network) -> pd.Series:
     additional = {
         "Battery Charge": n.carriers.loc["battery"].color,
         "Battery Discharge": n.carriers.loc["battery"].color,
+        "battery_discharger": n.carriers.loc["battery"].color,
+        "battery_charger": n.carriers.loc["battery"].color,
+        "4hr_battery_storage_discharger": n.carriers.loc["4hr_battery_storage"].color,
+        "4hr_battery_storage_charger": n.carriers.loc["4hr_battery_storage"].color,
         "co2": "k",
     }
 
@@ -514,18 +522,19 @@ def plot_production_html(
 
     energy_mix = get_energy_timeseries(n).mul(1e-3)  # MW -> GW
 
-    # fix battery charge/discharge to only be positive
-    if "battery" in energy_mix:
-        col_rename = {
-            "battery charger": "battery",
-            "battery discharger": "battery",
-        }
-        energy_mix = energy_mix.rename(columns=col_rename)
-        energy_mix = energy_mix.groupby(level=0, axis=1).sum()
-        energy_mix["battery"] = energy_mix.battery.map(lambda x: max(0, x))
+    # # fix battery charge/discharge to only be positive
+    # if "battery" in energy_mix:
+    #     col_rename = {
+    #         "battery charger": "battery",
+    #         "battery discharger": "battery",
+    #     }
+    #     energy_mix = energy_mix.rename(columns=col_rename)
+    #     energy_mix = energy_mix.groupby(level=0, axis=1).sum()
+    #     energy_mix["battery"] = energy_mix.battery.map(lambda x: max(0, x))
 
-    energy_mix = energy_mix[[x for x in carriers_2_plot if x in energy_mix]]
-    energy_mix = energy_mix.rename(columns=n.carriers.nice_name)
+    # energy_mix = energy_mix[[x for x in carriers_2_plot if x in energy_mix]]
+    # energy_mix = energy_mix.rename(columns=n.carriers.nice_name)
+    # ########
 
     energy_mix["Demand"] = get_demand_timeseries(n).mul(1e-3)  # MW -> GW
 
@@ -575,21 +584,13 @@ def plot_production_area(
     energy_mix = get_energy_timeseries(n).mul(1e-3)  # MW -> GW
     demand = get_demand_timeseries(n).mul(1e-3)  # MW -> GW
 
-    # fix battery charge/discharge to only be positive
-    # groups battery, batter charger and battery discharger together
-    if "battery" in energy_mix:
-        col_rename = {
-            "battery charger": "battery",
-            "battery discharger": "battery",
-        }
-        energy_mix = energy_mix.rename(columns=col_rename)
-        energy_mix = energy_mix.groupby(level=0, axis=1).sum()
-        energy_mix["battery"] = energy_mix.battery.map(lambda x: max(0, x))
-
-    energy_mix = energy_mix[[x for x in carriers_2_plot if x in energy_mix]]
+    for carrier in energy_mix.columns:
+        if "battery" in carrier:
+            energy_mix[carrier + "_discharger"] = energy_mix[carrier].clip(lower=0.0001)
+            energy_mix[carrier + "_charger"] = energy_mix[carrier].clip(upper=-0.0001)
+            energy_mix = energy_mix.drop(columns=carrier)
+    # energy_mix = energy_mix[[x for x in carriers_2_plot if x in energy_mix]]
     energy_mix = energy_mix.rename(columns=n.carriers.nice_name)
-
-    # plot
 
     color_palette = get_color_palette(n)
 
@@ -620,7 +621,6 @@ def plot_production_area(
             ax.set_title(create_title("Production [GW]", **wildcards))
             ax.set_ylabel("Power [GW]")
             fig.tight_layout()
-
             save = Path(save)
             fig.savefig(save.parent / (save.stem + suffix + save.suffix))
         except KeyError:
@@ -642,7 +642,7 @@ def plot_production_bar(
 
     energy_mix = (
         get_energy_timeseries(n)
-        .rename(columns={"battery charger": "battery", "battery discharger": "battery"})
+        # .rename(columns={"battery charger": "battery", "battery discharger": "battery"})
         .groupby(level=0, axis=1)
         .sum()
         .sum()
@@ -753,10 +753,10 @@ def plot_capacity_map(
     bus_colors = pd.concat(
         [
             n.carriers.color,
-            pd.Series(
-                [n.carriers.color["battery"], n.carriers.color["battery"]],
-                index=["battery charger", "battery discharger"],
-            ),
+            # pd.Series(
+            #     [n.carriers.color["battery"], n.carriers.color["battery"]],
+            #     index=["battery charger", "battery discharger"],
+            # ),
         ],
     )
 
@@ -1234,9 +1234,9 @@ if __name__ == "__main__":
         snakemake = mock_snakemake(
             "plot_figures",
             interconnect="western",
-            clusters=40,
-            ll="v1.25",
-            opts="Co2L1.25",
+            clusters=30,
+            ll="v1.15",
+            opts="CO2L0.75-4H",
             sector="E",
         )
     configure_logging(snakemake)
@@ -1246,6 +1246,8 @@ if __name__ == "__main__":
     onshore_regions = gpd.read_file(snakemake.input.regions_onshore)
     retirement_method = snakemake.params.retirement
     # n_hours = snakemake.config['solving']['options']['nhours']
+
+    sanitize_carriers(n, snakemake.config)
 
     # mappers
     generating_link_carrier_map = {"fuel cell": "H2", "battery discharger": "battery"}

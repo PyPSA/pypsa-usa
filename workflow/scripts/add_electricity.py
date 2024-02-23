@@ -1154,6 +1154,7 @@ def attach_wind_and_solar(
             )
 
 
+# double check to make sure batteries are added regardless if they are extendable.
 def attach_battery_storage(
     n: pypsa.Network,
     plants: pd.DataFrame,
@@ -1168,7 +1169,7 @@ def attach_battery_storage(
         plants_filt.index.astype(str) + "_" + plants_filt.generator_id.astype(str)
     )
     logger.info(
-        f"Added Batteries as Stores to the network.\n{np.round(plants_filt.p_nom.sum()/1000,2)} GW Power Capacity \n{np.round(plants_filt.energy_capacity_mwh.sum()/1000, 2)} GWh Energy Capacity",
+        f"Added Batteries as Storage Units to the network.\n{np.round(plants_filt.p_nom.sum()/1000,2)} GW Power Capacity \n{np.round(plants_filt.energy_capacity_mwh.sum()/1000, 2)} GWh Energy Capacity",
     )
 
     plants_filt = plants_filt.dropna(subset=["energy_capacity_mwh"])
@@ -1179,13 +1180,13 @@ def attach_battery_storage(
         bus=plants_filt.bus_assignment,
         p_nom=plants_filt.p_nom,
         p_nom_min=plants_filt.p_nom,
-        p_nom_extendable="battery" in extendable_carriers["Store"],
+        p_nom_extendable=False,
         max_hours=plants_filt.energy_capacity_mwh / plants_filt.p_nom,
         build_year=plants_filt.operating_year,
-        efficiency_store=1.0,
-        efficiency_dispatch=1.0,  # TODO: Add efficiency_dispatch to config file
+        efficiency_store=0.9**0.5,
+        efficiency_dispatch=0.9**0.5,
         cyclic_state_of_charge=True,
-        capital_cost=costs.at["battery", "capital_cost"],
+        # capital_cost=costs.at["battery", "capital_cost"],
     )
 
 
@@ -1440,7 +1441,7 @@ def load_powerplants_ads(
 
 
 def clean_bus_data(n: pypsa.Network):
-    col_list = ["poi_bus", "poi_sub", "poi", "Pd", "load_dissag", "LAF_states"]
+    col_list = ["poi_bus", "poi_sub", "poi", "Pd", "load_dissag"]
     n.buses.drop(columns=col_list, inplace=True)
 
 

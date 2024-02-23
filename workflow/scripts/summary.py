@@ -98,7 +98,6 @@ def get_energy_timeseries(n: pypsa.Network) -> pd.DataFrame:
 
     energy = []
     for c in n.iterate_components(n.one_port_components | n.branch_components):
-        # if c.name in ("Generator", "StorageUnit", "Store"):
         if c.name in ("Generator", "StorageUnit", "Store"):
             e = _get_energy_one_port(n, c)
         elif c.name in ("Link"):

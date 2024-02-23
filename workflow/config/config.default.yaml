@@ -86,8 +86,8 @@ electricity:
 
   extendable_carriers:
     Generator: [solar, onwind, offwind, offwind_floating, OCGT, CCGT, coal] #offwind, offwind_floating,
-    StorageUnit: [battery] # battery, H2
-    Store: [] #[battery, H2]
+    StorageUnit: [4hr_battery_storage] # [Xhr-battery-storage (2-10 hours), H2]
+    Store: [] #[H2]
     Link: [] #[H2 pipeline]
 
   demand: #EFS used for given planning_horizons year
@@ -259,7 +259,7 @@ clustering:
   cluster_network:
     algorithm: kmeans
     feature: solar+onwind-time
-    aggregation_zones: 'balancing_area' # balancing_area, country, or state. # Currently issue in State aggregation
+    aggregation_zones: 'balancing_area' # [balancing_area, state]
   aggregation_strategies:
     generators:
       p_nom_max: sum # use "min" for more conservative assumptions
