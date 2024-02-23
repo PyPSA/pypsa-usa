@@ -49,7 +49,7 @@ def build_core_metric_key(
     ----
     Will not work with Debt Fraction
     """
-    print(f"building core metric key for {core_metric_parameter}, {technology}")
+    logger.info(f"building core metric key for {core_metric_parameter}, {technology}")
     # Core Metric Parameter (metric to extract)
     try:
         cmp = ATB_CMP_MAPPER[core_metric_parameter]
