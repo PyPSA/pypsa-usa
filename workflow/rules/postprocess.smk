@@ -26,14 +26,24 @@ rule plot_figures:
         retirement = config["electricity"].get("retirement", "technical")
     output:
         **{
-            fig: RESULTS + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}_%s.pdf"
+            fig: RESULTS + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/maps/%s"
             % fig
-            for fig in FIGURES_SINGLE
+            for fig in FIGURES_MAPS
         },
         **{
-            fig: RESULTS + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}_%s.html"
+            fig: RESULTS + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/emissions/%s"
             % fig
-            for fig in FIGURES_SINGLE_HTML
+            for fig in FIGURES_EMISSIONS
+        },
+        **{
+            fig: RESULTS + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/production/%s"
+            % fig
+            for fig in FIGURES_PRODUCTION
+        },
+        **{
+            fig: RESULTS + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/system/%s"
+            % fig
+            for fig in FIGURES_SYSTEM
         },
     script:
         "../scripts/plot_figures.py"
@@ -44,6 +54,10 @@ rule plot_natural_gas:
     params:
         plotting=config["plotting"],
     output:
-        html="results/{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/sectors/natural_gas.html"
+        **{
+            fig: RESULTS + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/gas/%s"
+            % fig
+            for fig in FIGURES_NATURAL_GAS
+        },
     script:
         "../scripts/plot_natural_gas.py"

@@ -92,4 +92,4 @@ if __name__ == "__main__":
     configure_logging(snakemake)
     
     n = pypsa.Network(snakemake.input.network)
-    main(n, snakemake.output.html)
+    main(n, snakemake.output["natural_gas.html"])

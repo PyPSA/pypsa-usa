@@ -9,33 +9,42 @@ HTTP = HTTPRemoteProvider()
 # -------------------------- Imports and Parameters -------------------------- #
 
 from os.path import normpath
+from itertools import chain
 from pathlib import Path
 
-FIGURES_SINGLE = [
-    "capacity_map_base",
-    "capacity_map_optimized",
-    "capacity_map_optimized_brownfield",
-    "capacity_map_new",
-    "costs_bar",
-    "production_bar",
-    "production_area",
-    "emissions_area",
-    "emissions_accumulated",
-    "emissions_accumulated_tech",
-    "emissions_map",
-    "renewable_potential_map",
-    "capacity_additions_bar"
+FIGURES_MAPS = [
+    "capacity_map_base.pdf",
+    "capacity_map_optimized.pdf",
+    "capacity_map_optimized_brownfield.pdf",
+    "capacity_map_new.pdf",
+    "emissions_map.pdf",
+    "renewable_potential_map.pdf",
 ]
 
-FIGURES_SINGLE_HTML = [
-    "production_area_html",
-    "emissions_area_html",
-    # "emissions_node_html",
-    "emissions_region_html",
-    "emissions_accumulated_tech_html"
+FIGURES_EMISSIONS = [
+    "emissions_area.pdf",
+    "emissions_accumulated.pdf",
+    "emissions_accumulated_tech.pdf",
+    "emissions_area.html",
+    # "emissions_node.html",
+    "emissions_region.html",
+    "emissions_accumulated_tech.html"
 ]
 
-FIGURES_SECTOR = []
+FIGURES_PRODUCTION = [
+    "production_area.pdf",
+    "production_area.html",
+]
+
+FIGURES_SYSTEM = [
+    "production_bar.pdf",
+    "capacity_additions_bar.pdf",
+    "costs_bar.pdf",
+]
+
+FIGURES_NATURAL_GAS = [
+    "natural_gas.html"
+]
 
 # --------------------------- Workflow constraints --------------------------- #
 
@@ -90,6 +99,42 @@ if "E" not in config["scenario"]["sector"]:
 
 # ----------------------------------- Rules ---------------------------------- #
 
+def figures(wildcards):
+    figs = []
+    # maps
+    figs.append(
+        expand(
+            RESULTS + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/maps/{figure}",
+            **config["scenario"],
+            figure=FIGURES_MAPS
+        )
+    )
+    #emissions
+    figs.append(
+        expand(
+            RESULTS + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/emissions/{figure}",
+            **config["scenario"],
+            figure=FIGURES_EMISSIONS
+        )
+    )
+    # production
+    figs.append(
+        expand(
+            RESULTS + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/production/{figure}",
+            **config["scenario"],
+            figure=FIGURES_PRODUCTION
+        )
+    )
+    # system
+    figs.append(
+        expand(
+            RESULTS + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/system/{figure}",
+            **config["scenario"],
+            figure=FIGURES_SYSTEM
+        )
+    )
+    return list(chain(*figs)) # expand list of lists to single list 
+
 def sector_figures(wildcards):
     figs = []
     if "G" in config["scenario"]["sector"].split("-"):
@@ -98,24 +143,14 @@ def sector_figures(wildcards):
         return ""
     else:
         return expand(
-            "results/{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/sectors/{figure}",
+            RESULTS + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/gas/{figure}",
             **config["scenario"],
-            figure=figs
+            figure=FIGURES_NATURAL_GAS
         )
 
 rule all:
     input:
-        expand(
-            RESULTS +
-            "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}_{figure}.pdf",
-            **config["scenario"],
-            figure=FIGURES_SINGLE
-        ),
-        expand(
-            "results/{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}_{figure}.html",
-            **config["scenario"],
-            figure=FIGURES_SINGLE_HTML
-        ),
+        figures,
         sector_figures,
         #"repo_data/dag.jpg",
 
