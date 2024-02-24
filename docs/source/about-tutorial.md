@@ -1,5 +1,5 @@
 (tutorial)=
-# Tutorial 
+# Tutorial
 
 ```{note}
 ** If you have not done so, please follow the [installation instructions](https://pypsa-usa.readthedocs.io/en/latest/about-install.html) [github issues](https://github.com/PyPSA/pypsa-usa/issues) **
@@ -29,7 +29,7 @@ The `build_renewable_profiles` rule will take ~10-15 minutes to run the first ti
 Result plots and images are automatically built in the `workflow/results` folder. To further analyze the results of a solved network, you can use pypsa to analyze the `elec_s_{clusters}_ec_l{l}_{opts}.nc` file in the `results/{interconnect}/networks/` folder. (Tutorial juyper notebook is on the way!)
 
 (troubleshooting)=
-# Troubleshooting:
+## Troubleshooting:
 
 To force the execution of a portion of the workflow up to a given rule, cd to the `workflow` directory and run:
 

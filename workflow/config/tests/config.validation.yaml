@@ -2,25 +2,24 @@
 network_configuration: "pypsa-usa" # "pypsa-usa" or "ads2032"
 
 run:
-  name: "" # use this to keep track of runs with different settings
+  name: "Validation" # use this to keep track of runs with different settings
   disable_progressbar: false # set to true to disable the progressbar
   shared_resources: false # set to true to share the default resources across runs
   shared_cutouts: true # set to true to share the default cutout(s) across runs
-  validation: false # set to true to run back-casting plots
+  validation: true # set to true to run back-casting plots
 
 # docs :
 scenario:
-  interconnect: western #"usa|texas|western|eastern"
-  clusters: [30]
-  opts: [Co2L0.75-4H]
-  ll: [v1.15]
+  interconnect: [western, texas] #"usa|texas|western|eastern"
+  clusters: [40]
+  opts: [Co2L2.0]
+  ll: [v1.0]
   scope: "total" # "urban", "rural", or "total"
   sector: "" # G
   planning_horizons:
-  - 2030   #  # Uncomment to use NREL EFS Demand Forecasts (2030, 2040, 2050)
+  # - 2030   #  # Uncomment to use NREL EFS Demand Forecasts (2030, 2040, 2050)
 
 foresight:  # Only Single Stage Currently
-
 
 # docs :
 enable:
@@ -31,7 +30,8 @@ countries: [US]
 snapshots:
   start: "2019-01-01"
   end: "2020-01-01"
-  inclusive: "left"
+  inclusive: 'left'
+
 
 # docs :
 atlite:
@@ -85,9 +85,9 @@ electricity:
     H2: 168
 
   extendable_carriers:
-    Generator: [solar, onwind, offwind, offwind_floating, OCGT, CCGT, coal] #offwind, offwind_floating,
-    StorageUnit: [4hr_battery_storage] # [Xhr-battery-storage (2-10 hours), H2]
-    Store: [] #[H2]
+    Generator: [] #offwind, offwind_floating,
+    StorageUnit: [] # battery, H2
+    Store: [] #[battery, H2]
     Link: [] #[H2 pipeline]
 
   demand: #EFS used for given planning_horizons year
@@ -246,6 +246,7 @@ sector:
   co2_sequestration_potential: 0
   natural_gas:
     allow_imports_exports: true # false to be implemented
+    copperplate: true # copperplates at a state level (only true works)
     cyclic_storage: false
   heating:
     heat_pump_sink_T: 55.
@@ -259,7 +260,7 @@ clustering:
   cluster_network:
     algorithm: kmeans
     feature: solar+onwind-time
-    aggregation_zones: 'balancing_area' # [balancing_area, state]
+    aggregation_zones: 'balancing_area' # balancing_area, country, or state. # Currently issue in State aggregation
   aggregation_strategies:
     generators:
       p_nom_max: sum # use "min" for more conservative assumptions

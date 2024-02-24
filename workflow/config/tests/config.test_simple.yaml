@@ -2,7 +2,7 @@
 network_configuration: "pypsa-usa" # "pypsa-usa" or "ads2032"
 
 run:
-  name: "" # use this to keep track of runs with different settings
+  name: "Test_Simple" # use this to keep track of runs with different settings
   disable_progressbar: false # set to true to disable the progressbar
   shared_resources: false # set to true to share the default resources across runs
   shared_cutouts: true # set to true to share the default cutout(s) across runs
@@ -10,17 +10,16 @@ run:
 
 # docs :
 scenario:
-  interconnect: western #"usa|texas|western|eastern"
-  clusters: [30]
-  opts: [Co2L0.75-4H]
-  ll: [v1.15]
+  interconnect: [western] #"usa|texas|western|eastern"
+  clusters: [40]
+  opts: [Co2L0.1, Co2L0.2]
+  ll: [v1.0]
   scope: "total" # "urban", "rural", or "total"
   sector: "" # G
   planning_horizons:
   - 2030   #  # Uncomment to use NREL EFS Demand Forecasts (2030, 2040, 2050)
 
 foresight:  # Only Single Stage Currently
-
 
 # docs :
 enable:
@@ -31,7 +30,7 @@ countries: [US]
 snapshots:
   start: "2019-01-01"
   end: "2020-01-01"
-  inclusive: "left"
+  inclusive: 'left'
 
 # docs :
 atlite:
@@ -69,8 +68,8 @@ electricity:
   conventional_carriers: [nuclear, oil, OCGT, CCGT, coal, geothermal] # Choose the conventional plant types to include in network
   renewable_carriers: [onwind, offwind, offwind_floating, solar, hydro] # Choose the renewable plant types to include in network
   voltage_simplified: 230 #Voltage level to simplify network to in rule "simplify network"
-  co2limit: 1.4728e+9 # 0.8 * 1.841e+9
-  co2base: 226.86e+6 #base_from_2020 Locations of the 250 MMmt of CO2 emissions from the WECC 2021.
+  co2limit: 147.28e+6 # 0.8 * 184.1e+6
+  co2base: 225.0e+6 #base_from_2020 Locations of the 250 MMmt of CO2 emissions from the WECC 2021.
   gaslimit: false # global gas usage limit of X MWh_th
   retirement: economic # "economic" or "technical"
 
@@ -246,6 +245,7 @@ sector:
   co2_sequestration_potential: 0
   natural_gas:
     allow_imports_exports: true # false to be implemented
+    copperplate: true # copperplates at a state level (only true works)
     cyclic_storage: false
   heating:
     heat_pump_sink_T: 55.

@@ -2,13 +2,13 @@
 
 ## Rule `plot_results`
 
-```{eval-rst}  
+```{eval-rst}
 .. automodule:: plot_figures
 ```
 
 ## Rule `dag`
 
-Creates a Directed Acyclic Graph of the workflow 
+Creates a Directed Acyclic Graph of the workflow
 
 **Outputs**
 

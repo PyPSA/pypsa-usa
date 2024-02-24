@@ -56,9 +56,9 @@ Using the ERA5 cutout, the following parameters are accessible:
                                                  Surface solar radiation downwards minus
                                                  direct solar radiation.
     -------------------  ----------  ----------  ---------------------------------------------------------
-    solar_altitude       time, y, x  rad          
+    solar_altitude       time, y, x  rad
     -------------------  ----------  ----------  ---------------------------------------------------------
-    solar_azimuth        time, y, x  rad          
+    solar_azimuth        time, y, x  rad
     -------------------  ----------  ----------  ---------------------------------------------------------
     temperature          time, y, x  K           Air temperature 2 meters above the surface.
     -------------------  ----------  ----------  ---------------------------------------------------------
@@ -79,8 +79,8 @@ Using the ERA5 cutout, the following parameters are accessible:
                                                  (Jm**-2). Takes values between 0 and 1.
     ===================  ==========  ==========  =========================================================
 
-The **USA Interconnect** weather data is shown below: 
-        
+The **USA Interconnect** weather data is shown below:
+
     .. image:: _static/cutouts/weather.png
         :scale: 80 %
 """
@@ -97,33 +97,45 @@ logger = logging.getLogger(__name__)
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
-        snakemake = mock_snakemake("build_cutout", cutout="era5_2019", interconnect="eastern")
+
+        snakemake = mock_snakemake(
+            "build_cutout",
+            cutout="era5_2019",
+            interconnect="eastern",
+        )
     configure_logging(snakemake)
 
-    # data set and temporal patameters 
+    # data set and temporal patameters
     cutout_params = snakemake.params.cutouts[snakemake.wildcards.cutout]
     snapshots = pd.date_range(freq="h", **snakemake.params.snapshots)
     time = [snapshots[0], snapshots[-1]]
     cutout_params["time"] = slice(*cutout_params.get("time", time))
-    
-    # geographical extent parameters 
-    interconnect_params = snakemake.params.interconnects[snakemake.wildcards.interconnect]
+
+    # geographical extent parameters
+    interconnect_params = snakemake.params.interconnects[
+        snakemake.wildcards.interconnect
+    ]
 
     if {"x", "y", "bounds"}.isdisjoint(interconnect_params):
         # Determine the bounds from bus regions with a buffer of two grid cells
         onshore = gpd.read_file(snakemake.input.regions_onshore)
         offshore = gpd.read_file(snakemake.input.regions_offshore)
         regions = pd.concat([onshore, offshore])
-        d = max(interconnect_params.get("dx", 0.25), interconnect_params.get("dy", 0.25)) * 2
+        d = (
+            max(
+                interconnect_params.get("dx", 0.25),
+                interconnect_params.get("dy", 0.25),
+            )
+            * 2
+        )
         interconnect_params["bounds"] = regions.total_bounds + [-d, -d, d, d]
     elif {"x", "y"}.issubset(interconnect_params):
         interconnect_params["x"] = slice(*interconnect_params["x"])
         interconnect_params["y"] = slice(*interconnect_params["y"])
-        
+
     cutout_params.update(interconnect_params)
 
     logging.info(f"Preparing cutout with parameters {cutout_params}.")
     features = cutout_params.pop("features", None)
     cutout = atlite.Cutout(snakemake.output[0], **cutout_params)
     cutout.prepare(features=features)
-    

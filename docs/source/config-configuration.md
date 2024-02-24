@@ -1,26 +1,28 @@
 (config)=
-# Configuration 
+# Configuration
 
-**This workflow is currently only being tested for the `western` interconnection wildcard.**
+**This workflow is currently only being tested for the `western` and  `texas` interconnection wildcards.**
 
 (network_cf)=
 ## Pre-set Configuration Options
 
 ## `network_configuration`
 
-The `network_configuration` option accepts 3 values: `pypsa-usa` , `ads2032`, and `breakthrough`. Each cooresponds to a different combiation of input datasources for the generators, demand data, and generation timeseries for renewable generators. The public version of the WECC ADS PCM does not include data on the transmission network, but does provide detailed information on generators. For this reason the WECC ADS generators are superimposed on the TAMU/BE network.
+The `network_configuration` option accepts 2 values: `pypsa-usa` and `ads2032` Each cooresponds to a different combiation of input datasources for the generators, demand data, and generation timeseries for renewable generators. The public version of the WECC ADS PCM does not include data on the transmission network, but does provide detailed information on generators. For this reason the WECC ADS generators are superimposed on the TAMU/BE network.
 
-| Configuration Options: | PyPSA-USA | ADS2032(lite) | Breakthrough |
-|:----------:|:----------:|:----------:|:----------:|
-| Transmission | TAMU/BE | TAMU/BE | TAMU/BE |
-| Thermal Generators | EIA860, WECC-ADS, CEC Plexos | WECC-ADS | BE |
-| Renewable Time-Series | Atlite | WECC-ADS | Atlite |
-| Hydro Time-Series | Breakthrough (temp) | WECC-ADS | Breakthrough |
-| Demand | EIA930 | WECC-ADS | Breakthrough |
-| Years Supported | 2019 (soon 2017-2023) | 2032 | 2016 |
-| Interconnections Supported | WECC (soon US) | WECC | WECC (soon US)|
-| Cost Projections | NREL-ATB | NREL-ATB | NREL-ATB|
-| Purpose[^+] | CEM, PCS | PCS | PCS |
+Most users will leave this as `pypsa-usa`.
+
+| Configuration Options: | PyPSA-USA | ADS2032(lite) |
+|:----------:|:----------:|:----------:|
+| Transmission | TAMU/BE | TAMU/BE |
+| Thermal Generators | EIA860, WECC-ADS, CEC Plexos | WECC-ADS |
+| Renewable Time-Series | Atlite | WECC-ADS |
+| Hydro Time-Series | Breakthrough (temp) | WECC-ADS |
+| Demand | EIA930 | WECC-ADS |
+| Years Supported | 2019 (soon 2017-2023) | 2032 |
+| Interconnections Supported | WECC (soon US) | WECC |
+| Cost Projections | NREL-ATB | NREL-ATB |
+| Purpose[^+] | CEM, PCS | PCS |
 
 [^+]: CEM = Capacity Expansion Model, PCS = Production Cost Simulation
 
@@ -34,7 +36,7 @@ investment changes as more ambitious greenhouse-gas emission reduction targets a
 
 The `run` section is used for running and storing scenarios with different configurations which are not covered by [wildcards](#wildcards). It determines the path at which resources, networks and results are stored. Therefore the user can run different configurations within the same directory.
 
-```{eval-rst}  
+```{eval-rst}
 .. literalinclude:: ../../workflow/config/config.default.yaml
    :language: yaml
    :start-at: run:
@@ -46,12 +48,27 @@ The `run` section is used for running and storing scenarios with different confi
    :file: configtables/run.csv
 ```
 
+
+(scenario_cf)=
+## `scenario`
+
+The `scenario` section is used for setting the wildcards and defining planning horizon settings. All configurations within this section are described in [wildcards](#wildcards) with the exception of planning_horizons and foresight.
+
+Planning horizons determines which year of future demand forecast to use for your planning model. If you leave `planning_horizons:` empty, historical demand will be set according to `snapshots`.
+
+```{eval-rst}
+.. literalinclude:: ../../workflow/config/config.default.yaml
+   :language: yaml
+   :start-at: scenario:
+   :end-before: # docs :
+```
+
 (snapshots_cf)=
 ## `snapshots`
 
 Specifies the temporal range to build an energy system model for as arguments to `(pandas.date_range)[https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.date_range.html]`
 
-```{eval-rst}  
+```{eval-rst}
 .. literalinclude:: ../../workflow/config/config.default.yaml
    :language: yaml
    :start-at: snapshots:
@@ -68,7 +85,7 @@ Specifies the temporal range to build an energy system model for as arguments to
 
 Define and specify the `atlite.Cutout` used for calculating renewable potentials and time-series. All options except for `features` are directly used as [`cutout parameters`](https://atlite.readthedocs.io/en/latest/ref_api.html#cutout)
 
-```{eval-rst}  
+```{eval-rst}
 .. literalinclude:: ../../workflow/config/config.default.yaml
    :language: yaml
    :start-at: atlite:
@@ -85,7 +102,7 @@ Define and specify the `atlite.Cutout` used for calculating renewable potentials
 
 Specifies the types of generators that are included in the network, which are extendable, and the CO2 base for which the optimized reduction is relative to.
 
-```{eval-rst}  
+```{eval-rst}
 .. literalinclude:: ../../workflow/config/config.default.yaml
    :language: yaml
    :start-at: electricity:
@@ -101,7 +118,7 @@ Specifies the types of generators that are included in the network, which are ex
 ## `renewable`
 
 ### `solar`
-```{eval-rst}  
+```{eval-rst}
 .. literalinclude:: ../../workflow/config/config.default.yaml
    :language: yaml
    :start-at: solar:
@@ -114,7 +131,7 @@ Specifies the types of generators that are included in the network, which are ex
 ```
 
 ### `onwind`
-```{eval-rst}  
+```{eval-rst}
 .. literalinclude:: ../../workflow/config/config.default.yaml
    :language: yaml
    :start-at: onwind:
@@ -128,7 +145,7 @@ Specifies the types of generators that are included in the network, which are ex
 
 (lines_cf)=
 ## `lines`
-```{eval-rst}  
+```{eval-rst}
 .. literalinclude:: ../../workflow/config/config.default.yaml
    :language: yaml
    :start-at: lines:
@@ -143,7 +160,7 @@ Specifies the types of generators that are included in the network, which are ex
 (links_cf)=
 ## `links`
 
-```{eval-rst}  
+```{eval-rst}
 .. literalinclude:: ../../workflow/config/config.default.yaml
    :language: yaml
    :start-at: links:
@@ -210,14 +227,8 @@ Western: 30
 Texas: TBD
 ```
 
-Maximum Number of clusters:
-```bash
-Eastern: 35047
-Western: 4786
-Texas: 1250
-```
 
-```{eval-rst}  
+```{eval-rst}
 .. literalinclude:: ../../workflow/config/config.default.yaml
    :language: yaml
    :start-at: clustering:
@@ -243,7 +254,7 @@ use `min` in `p_nom_max:` for more conservative assumptions.
 (solving_cf)=
 ## `solving`
 
-```{eval-rst}  
+```{eval-rst}
 .. literalinclude:: ../../workflow/config/config.default.yaml
    :language: yaml
    :start-at: solving:
@@ -257,7 +268,7 @@ use `min` in `p_nom_max:` for more conservative assumptions.
 (plotting_cf)=
 ## `plotting`
 
-```{eval-rst}  
+```{eval-rst}
 .. literalinclude:: ../../workflow/config/config.plotting.yaml
    :language: yaml
 

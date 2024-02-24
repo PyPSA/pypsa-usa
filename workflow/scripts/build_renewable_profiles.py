@@ -175,14 +175,16 @@ node (`p_nom_max`): `simple` and `conservative`:
   proportional to the layout until the limit of an individual grid cell is
   reached.
 """
+
+
 import functools
 import logging
 import time
 
 import atlite
 import geopandas as gpd
-import pandas as pd
 import numpy as np
+import pandas as pd
 import xarray as xr
 from _helpers import configure_logging
 from dask.distributed import Client
@@ -196,7 +198,11 @@ if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
 
-        snakemake = mock_snakemake("build_renewable_profiles", technology="offwind_floating", interconnect="western")
+        snakemake = mock_snakemake(
+            "build_renewable_profiles",
+            technology="offwind_floating",
+            interconnect="western",
+        )
     configure_logging(snakemake)
 
     nprocesses = int(snakemake.threads)
@@ -244,16 +250,22 @@ if __name__ == "__main__":
         codes = corine["distance_grid_codes"]
         buffer = corine["distance"]
         excluder.add_raster(
-            snakemake.input.corine, codes=codes, buffer=buffer, crs=4326
+            snakemake.input.corine,
+            codes=codes,
+            buffer=buffer,
+            crs=4326,
         )
-    
+
     if "ship_threshold" in params:
         shipping_threshold = (
             params["ship_threshold"] * 8760 * 6
         )  # approximation because 6 years of data which is hourly collected
         func = functools.partial(np.less, shipping_threshold)
         excluder.add_raster(
-            snakemake.input.ship_density, codes=func, crs=4326, allow_no_overlap=True
+            snakemake.input.ship_density,
+            codes=func,
+            crs=4326,
+            allow_no_overlap=True,
         )
 
     if params.get("max_depth"):
@@ -277,7 +289,9 @@ if __name__ == "__main__":
     if "max_shore_distance" in params:
         buffer = params["max_shore_distance"]
         excluder.add_geometry(
-            snakemake.input.country_shapes, buffer=buffer, invert=True
+            snakemake.input.country_shapes,
+            buffer=buffer,
+            invert=True,
         )
 
     kwargs = dict(nprocesses=nprocesses, disable_progressbar=noprogress)
@@ -292,7 +306,8 @@ if __name__ == "__main__":
 
     area = cutout.grid.to_crs("ESRI:54009").area / 1e6
     area = xr.DataArray(
-        area.values.reshape(cutout.shape), [cutout.coords["y"], cutout.coords["x"]]
+        area.values.reshape(cutout.shape),
+        [cutout.coords["y"], cutout.coords["x"]],
     )
 
     potential = capacity_per_sqkm * availability.sum("bus") * area
@@ -319,7 +334,7 @@ if __name__ == "__main__":
     else:
         raise AssertionError(
             'Config key `potential` should be one of "simple" '
-            f'(default) or "conservative", not "{p_nom_max_meth}"'
+            f'(default) or "conservative", not "{p_nom_max_meth}"',
         )
 
     logger.info("Calculate average distances.")
@@ -349,7 +364,7 @@ if __name__ == "__main__":
             p_nom_max.rename("p_nom_max"),
             potential.rename("potential"),
             average_distance.rename("average_distance"),
-        ]
+        ],
     )
     if snakemake.wildcards.technology.startswith("offwind"):
         logger.info("Calculate underwater fraction of connections.")
@@ -368,7 +383,7 @@ if __name__ == "__main__":
         bus=(
             (ds["profile"].mean("time") > params.get("min_p_max_pu", 0.0))
             & (ds["p_nom_max"] > params.get("min_p_nom_max", 0.0))
-        )
+        ),
     )
 
     if "clip_p_max_pu" in params:

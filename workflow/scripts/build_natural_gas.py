@@ -53,6 +53,12 @@ import geopandas as gpd
 from pypsa.components import Network
 import constants
 import logging
+
+import constants
+import geopandas as gpd
+import pandas as pd
+import pypsa
+
 logger = logging.getLogger(__name__)
 from typing import List, Dict, Union
 from math import pi
@@ -127,6 +133,7 @@ class StateGeometry:
         gdf["geometry"] = gdf["shape"].map(lambda x: x.centroid)
         gdf[["x","y"]] = gdf["geometry"].apply(lambda x: pd.Series({"x": x.x, "y": x.y}))
         return gdf[["STATE", "x", "y"]]
+
 
 
 ###
@@ -903,9 +910,11 @@ def convert_generators_2_links(n: pypsa.Network, carrier: str):
     # remove generators 
     n.mremove("Generator", plants.index)
 
-### 
+
+###
 # MAIN FUNCTION TO EXECUTE
 ###
+
 
 def build_natural_gas(
     n: pypsa.Network,
@@ -965,6 +974,7 @@ def build_natural_gas(
     # convert existing generators to cross-sector links 
     for carrier in ("CCGT", "OCGT"):
         convert_generators_2_links(n, carrier)
+
 
 if __name__ == "__main__":
 

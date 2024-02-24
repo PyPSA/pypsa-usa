@@ -10,10 +10,10 @@ body:
     label: Type of documentation issue
     multiple: true
     options:
-      - Missing Information
-      - Incorect Information
-      - Typo
-      - Other
+    - Missing Information
+    - Incorect Information
+    - Typo
+    - Other
   validations:
     required: true
 
@@ -23,7 +23,7 @@ body:
     label: Issue Description
     description: Detailed description of the documentation issue
     placeholder: |
-      ie. There is no data source attached to the a `retrieve_data` rule 
+      ie. There is no data source attached to the a `retrieve_data` rule
   validations:
     required: true
 
