@@ -251,7 +251,7 @@ class GasStorage(GasData):
     
     def format_data(self, data: pd.DataFrame):
         df = data.copy()
-        df["value"] = df.value * MMCF_2_MWH
+        df["value"] = df.value * MWH_2_MMCF
         df = (
             df
             .reset_index()
@@ -334,6 +334,7 @@ class GasStorage(GasData):
         )
 
 class GasProcessing(GasData):
+    """Creator for processing capacity"""
     
     def __init__(self, year: int, interconnect: str, api: str) -> None:
         self.api = api
@@ -345,7 +346,7 @@ class GasProcessing(GasData):
     def format_data(self, data: pd.DataFrame):
         df = data.copy()
     
-        df["value"] = df.value.astype(float) * MMCF_2_MWH / 30 / 24 # get monthly average hourly capacity (based on 30 days / month)
+        df["value"] = df.value.astype(float) * MWH_2_MMCF / 30 / 24 # get monthly average hourly capacity (based on 30 days / month)
         df = (
             df
             .reset_index()
@@ -401,7 +402,7 @@ class _GasPipelineCapacity(GasData):
         df = data.copy()
         df.columns = df.columns.str.strip()
         df = df[df.index == int(self.year)]
-        df["Capacity (mmcfd)"] = df["Capacity (mmcfd)"] * MMCF_2_MWH / 24 # divide by 24 to get hourly 
+        df["Capacity (mmcfd)"] = df["Capacity (mmcfd)"] * MWH_2_MMCF / 24 # divide by 24 to get hourly 
         df = df.rename(columns={
             "State From":"STATE_NAME_FROM",
             "County From":"COUNTRY_FROM",
@@ -564,7 +565,7 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
         
         # fuel costs come in MCF, so first convert to MMCF
         costs = costs[["value"]].astype("float")
-        costs = costs / 1000 * MMCF_2_MWH
+        costs = costs / 1000 * MWH_2_MMCF
         
         return costs.resample("H").asfreq().interpolate(method=interpoloation_method)
             
@@ -707,7 +708,35 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
             e_cyclic_per_period=False,
             marginal_cost=0,
         )
-
+        
+class TradeGasPipelineEnergy(GasData):
+    """Creator of gas energy limits"""
+    
+    def __init__(self, year: int, interconnect: str, direction: str, api: str) -> None:
+        self.api = api
+        self.dir = direction
+        super().__init__(year, interconnect)
+        
+    def read_data(self) -> pd.DataFrame:
+        assert self.dir in ("imports", "exports")
+        return eia.Trade("gas", self.dir, self.year, self.api).get_data()
+        
+    def format_data(self, n:pypsa.Network) -> None:
+        """Adds international import/export limits"""
+        df = self.data.copy()
+        df["value"] = df.value.astype("float")
+        return (
+            df
+            .drop(columns=["series-description", "units"])
+            .reset_index()
+            .groupby(["period", "state"])
+            .sum()
+            .reset_index()
+        )
+        
+    def build_infrastructure(self, n: Network) -> None:
+        pass
+        
 class PipelineLinepack(GasData):
     """Creator for linepack infrastructure"""
     
@@ -922,6 +951,11 @@ def build_natural_gas(
     pipelines_domestic.build_infrastructure(n)
     pipelines_international = TradeGasPipelineCapacity(year, interconnect, pipelines_path, api, domestic=False)
     pipelines_international.build_infrastructure(n)
+    
+    # import_energy_constraints = TradeGasPipelineEnergy(year, interconnect, "imports", api)
+    # import_energy_constraints.build_infrastructure(n)
+    # export_energyconstraints = TradeGasPipelineEnergy(year, interconnect, "exports", api)
+    # export_energyconstraints.build_infrastructure(n)
     
     # add pipeline linepack 
     

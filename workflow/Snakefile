@@ -140,7 +140,7 @@ def sector_figures(wildcards):
     if "G" in config["scenario"]["sector"].split("-"):
         figs.append("natural_gas.html")
     if not figs:
-        return ""
+        return []
     else:
         return expand(
             RESULTS + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/gas/{figure}",

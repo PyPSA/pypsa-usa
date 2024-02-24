@@ -16,7 +16,10 @@ def _rename_columns(df: pd.DataFrame) -> pd.DataFrame:
     )
 
 def get_gas_demand(n: pypsa.Network, carriers: List[str] = ["CCGT", "OCGT"]) -> pd.DataFrame:
-    """Get energy sources attached to gas buses"""
+    """Get energy sources attached to gas buses
+    
+    This in input energy required (ie. not applying efficiency losses)
+    """
     
     links = n.links[n.links.carrier.isin(carriers)]
     links_t = n.links_t.p0[links.index]

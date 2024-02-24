@@ -37,37 +37,37 @@ def main(n: pypsa.Network, write_file: str):
     
     figures = [
         px.line(
-            get_gas_demand(n) * MWH_2_MMCF, 
+            get_gas_demand(n) / MWH_2_MMCF, 
             title="Gas Demand",
             labels={"snapshot":"", "value":"Demand (MMCF)", "carrier":"Source"},
             height=FIG_HEIGHT
         ),
         px.line(
-            get_gas_processing(n) * MWH_2_MMCF, 
+            get_gas_processing(n) / MWH_2_MMCF, 
             title="Gas Processing Capacity",
             labels={"snapshot":"", "value":"Processing Capacity (MMCF)", "Generator":"State"},
             height=FIG_HEIGHT
         ),
         px.line(
-            get_linepack(n) * MWH_2_MMCF, 
+            get_linepack(n) / MWH_2_MMCF, 
             title="Gas Line Pack",
             labels={"snapshot":"", "value":"Linepack Capacity (MMCF)", "Store":"State"},
             height=FIG_HEIGHT
         ),
         px.line(
-            get_underground_storage(n) * MWH_2_MMCF, 
+            get_underground_storage(n) / MWH_2_MMCF, 
             title="Gas Underground Storage",
             labels={"snapshot":"", "value":"Storage Capacity (MMCF)", "Store":"State"},
             height=FIG_HEIGHT
         ),
         px.line(
-            get_imports_exports(n, international=False) * MWH_2_MMCF, 
+            get_imports_exports(n, international=False) / MWH_2_MMCF, 
             title="Gas Trade Domestic",
             labels={"snapshot":"", "value":"Volume (MMCF)", "Variable":"State"},
             height=FIG_HEIGHT
         ),
         px.line(
-            get_imports_exports(n, international=True) * MWH_2_MMCF,  
+            get_imports_exports(n, international=True) / MWH_2_MMCF,  
             title="Gas Trade International",
             labels={"snapshot":"", "value":"Volume (MMCF)", "variable":"State"},
             height=FIG_HEIGHT
