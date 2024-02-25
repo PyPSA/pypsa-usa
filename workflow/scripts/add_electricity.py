@@ -876,7 +876,7 @@ def prepare_efs_demand(
     demand = demand.dropna()
     if snakemake.wildcards.interconnect == "texas":
         demand = demand.iloc[2:, :]  # temp fix for lining up timezones
-    year = n.snapshots[0].year 
+    year = n.snapshots[0].year
     demand.index = demand.index.map(lambda x: x.replace(year=year))
     demand = demand.loc[n.snapshots.intersection(demand.index)]
     n.buses.rename(columns={"LAF_states": "LAF"}, inplace=True)
