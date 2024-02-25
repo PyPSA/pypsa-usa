@@ -29,7 +29,7 @@ FIGURES_EMISSIONS = [
     "emissions_area.html",
     # "emissions_node.html",
     "emissions_region.html",
-    "emissions_accumulated_tech.html"
+    "emissions_accumulated_tech.html",
 ]
 
 FIGURES_PRODUCTION = [
@@ -43,9 +43,7 @@ FIGURES_SYSTEM = [
     "costs_bar.pdf",
 ]
 
-FIGURES_NATURAL_GAS = [
-    "natural_gas.html"
-]
+FIGURES_NATURAL_GAS = ["natural_gas.html"]
 
 FIGURES_VALIDATE = [
     "seasonal_stacked_plot.pdf",
@@ -113,48 +111,55 @@ if "E" not in config["scenario"]["sector"]:
 
 # ----------------------------------- Rules ---------------------------------- #
 
+
 def electricity_figures(wildcards):
     figs = []
     if config["run"]["validation"]:
         return expand(
-            RESULTS + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/validate/{figure}",
+            RESULTS
+            + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/validate/{figure}",
             **config["scenario"],
-            figure=FIGURES_VALIDATE
+            figure=FIGURES_VALIDATE,
         )
     else:
         # maps
         figs.append(
             expand(
-                RESULTS + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/maps/{figure}",
+                RESULTS
+                + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/maps/{figure}",
                 **config["scenario"],
-                figure=FIGURES_MAPS
+                figure=FIGURES_MAPS,
             )
         )
-        #emissions
+        # emissions
         figs.append(
             expand(
-                RESULTS + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/emissions/{figure}",
+                RESULTS
+                + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/emissions/{figure}",
                 **config["scenario"],
-                figure=FIGURES_EMISSIONS
+                figure=FIGURES_EMISSIONS,
             )
         )
         # production
         figs.append(
             expand(
-                RESULTS + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/production/{figure}",
+                RESULTS
+                + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/production/{figure}",
                 **config["scenario"],
-                figure=FIGURES_PRODUCTION
+                figure=FIGURES_PRODUCTION,
             )
         )
         # system
         figs.append(
             expand(
-                RESULTS + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/system/{figure}",
+                RESULTS
+                + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/system/{figure}",
                 **config["scenario"],
-                figure=FIGURES_SYSTEM
+                figure=FIGURES_SYSTEM,
             )
         )
-        return list(chain(*figs)) # expand list of lists to single list 
+        return list(chain(*figs))  # expand list of lists to single list
+
 
 def sector_figures(wildcards):
     figs = []
@@ -164,10 +169,12 @@ def sector_figures(wildcards):
         return []
     else:
         return expand(
-            RESULTS + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/gas/{figure}",
+            RESULTS
+            + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/gas/{figure}",
             **config["scenario"],
-            figure=FIGURES_NATURAL_GAS
+            figure=FIGURES_NATURAL_GAS,
         )
+
 
 rule all:
     input:

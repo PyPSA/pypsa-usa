@@ -1,4 +1,6 @@
-"""Generic module to add a new energy network"""
+"""
+Generic module to add a new energy network.
+"""
 
 import logging
 from typing import Dict
@@ -48,6 +50,7 @@ def assign_bus_2_state(
     if state_2_state_name:
         n.buses["STATE_NAME"] = n.buses.STATE.map(state_2_state_name)
 
+
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
@@ -89,7 +92,7 @@ if __name__ == "__main__":
 
     code_2_state = {v: k for k, v in constants.STATE_2_CODE.items()}
     assign_bus_2_state(n, snakemake.input.county, states_2_map, code_2_state)
-    
+
     if "G" in sectors:
         build_natural_gas(
             n=n,
@@ -100,5 +103,5 @@ if __name__ == "__main__":
             pipelines_path=snakemake.input.pipeline_capacity,
             pipeline_shape_path=snakemake.input.pipeline_shape,
         )
-        
+
     n.export_to_netcdf(snakemake.output.network)

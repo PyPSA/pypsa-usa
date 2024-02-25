@@ -3,7 +3,7 @@
 
 (build-natural-gas)=
 ## Rule `build_natural_gas`
-```{eval-rst}  
+```{eval-rst}
 .. automodule:: build_natural_gas
 ```
 
