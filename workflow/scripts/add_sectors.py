@@ -1,8 +1,8 @@
 """
 Generic module to add a new energy network.
 
-Reads in the sector wildcard and will call corresponding scripts. In the 
-future, it would be good to integrate this logic into snakemake 
+Reads in the sector wildcard and will call corresponding scripts. In the
+future, it would be good to integrate this logic into snakemake
 """
 
 import logging

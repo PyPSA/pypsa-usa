@@ -149,19 +149,20 @@ def get_capacity_base(n: pypsa.Network) -> pd.DataFrame:
                 (c.df.p_nom)
                 .groupby(by=[c.df.bus0, c.df.carrier])
                 .sum()
-                .rename_axis(index={"bus0": "bus"})
+                .rename_axis(index={"bus0": "bus"}),
             ),
             totals.append(
                 (c.df.p_nom)
                 .groupby(by=[c.df.bus1, c.df.carrier])
                 .sum()
-                .rename_axis(index={"bus1": "bus"})
+                .rename_axis(index={"bus1": "bus"}),
             )
     return pd.concat(totals)
 
 
 def get_capacity_greenfield(
-    n: pypsa.Network, retirement_method="economic"
+    n: pypsa.Network,
+    retirement_method="economic",
 ) -> pd.DataFrame:
     """
     Gets optimal greenfield pnom capacity.
@@ -224,7 +225,8 @@ def get_capacity_greenfield(
 
 
 def get_capacity_brownfield(
-    n: pypsa.Network, retirement_method="economic"
+    n: pypsa.Network,
+    retirement_method="economic",
 ) -> pd.DataFrame:
     """
     Gets optimal brownfield pnom capacity.

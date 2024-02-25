@@ -196,7 +196,10 @@ def remove_sector_links(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def plot_emissions_map(
-    n: pypsa.Network, regions: gpd.GeoDataFrame, save: str, **wildcards
+    n: pypsa.Network,
+    regions: gpd.GeoDataFrame,
+    save: str,
+    **wildcards,
 ) -> None:
 
     # get data

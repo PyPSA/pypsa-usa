@@ -23,7 +23,8 @@ def _rename_columns(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def get_gas_demand(
-    n: pypsa.Network, carriers: list[str] = ["CCGT", "OCGT"]
+    n: pypsa.Network,
+    carriers: list[str] = ["CCGT", "OCGT"],
 ) -> pd.DataFrame:
     """
     Get energy sources attached to gas buses.

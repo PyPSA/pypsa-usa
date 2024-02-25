@@ -14,7 +14,7 @@ Specifically, it will do the following
 - Creates energy constrained linepack storage (storage units)
 - Creates capacity constrained pipelines to states neighbouring the interconnect
 - Creates capacity and energy constrained import/exports to international connections
-- Adds import/export historical natural gas prices  
+- Adds import/export historical natural gas prices
 
 
 **Relevant Settings**
@@ -30,23 +30,23 @@ Specifically, it will do the following
 
 - n: pypsa.Network:
     - Network to add the natural gas network to. Note, the electrical network represntation should be done by this point.
-  
+
 - year: int,
     - Year to extract natural gas data for. Must be between ``2009`` and ``2022``
-  
+
 - api: str,
     - EIA API key. Get from https://www.eia.gov/opendata/register.php
-    
+
 - interconnect: str = "western",
     - Name of interconnect. Must be in ("eastern", "western", "texas", "usa")
-    
+
 - county_path: str
     - ``data/counties/cb_2020_us_county_500k.shp``: County shapes in the USA
-    
+
 - pipelines_path: str
     - ``EIA-StatetoStateCapacity_Jan2023.xlsx`` : State to state pipeline capacity from EIA
-    
-- pipeline_shape_path: str: 
+
+- pipeline_shape_path: str:
     - ``pipelines.geojson`` at a National level
 
 **Outputs**
@@ -151,7 +151,7 @@ class StateGeometry:
         gdf = self._states.copy().rename(columns={"geometry": "shape"})
         gdf["geometry"] = gdf["shape"].map(lambda x: x.centroid)
         gdf[["x", "y"]] = gdf["geometry"].apply(
-            lambda x: pd.Series({"x": x.x, "y": x.y})
+            lambda x: pd.Series({"x": x.x, "y": x.y}),
         )
         return gdf[["STATE", "x", "y"]]
 
@@ -203,7 +203,9 @@ class GasData(ABC):
         pass
 
     def filter_on_interconnect(
-        self, df: pd.DataFrame, additional_removals: list[str] = None
+        self,
+        df: pd.DataFrame,
+        additional_removals: list[str] = None,
     ) -> pd.DataFrame:
         """
         Name of states must be in column called 'STATE'.
@@ -227,7 +229,7 @@ class GasData(ABC):
             df = df[df.interconnect == self.interconnect]
             if df.empty:
                 logger.warning(
-                    f"Empty natural gas data for interconnect {self.interconnect}"
+                    f"Empty natural gas data for interconnect {self.interconnect}",
                 )
             return df.drop(columns="interconnect")
 
@@ -243,7 +245,8 @@ class GasBuses(GasData):
     def __init__(self, interconnect: str, counties: str) -> None:
         self.states = StateGeometry(counties)
         super().__init__(
-            year=2020, interconnect=interconnect
+            year=2020,
+            interconnect=interconnect,
         )  # year locked for location mapping
 
     def read_data(self) -> gpd.GeoDataFrame:
@@ -483,12 +486,12 @@ class _GasPipelineCapacity(GasData):
             ~(
                 (
                     df.STATE_NAME_TO.isin(
-                        ["Gulf of Mexico", "Gulf of Mexico - Deepwater"]
+                        ["Gulf of Mexico", "Gulf of Mexico - Deepwater"],
                     )
                 )
                 | (
                     df.STATE_NAME_FROM.isin(
-                        ["Gulf of Mexico", "Gulf of Mexico - Deepwater"]
+                        ["Gulf of Mexico", "Gulf of Mexico - Deepwater"],
                     )
                 )
             )
@@ -548,13 +551,13 @@ class InterconnectGasPipelineCapacity(_GasPipelineCapacity):
             ]
             if df.empty:
                 logger.error(
-                    f"Empty natural gas domestic pipelines for interconnect {self.interconnect}"
+                    f"Empty natural gas domestic pipelines for interconnect {self.interconnect}",
                 )
         else:
             df = df[
                 ~(
                     df[["INTERCONNECT_TO", "INTERCONNECT_FROM"]].isin(
-                        ["canada", "mexico"]
+                        ["canada", "mexico"],
                     )
                 ).all(axis=1)
             ]
@@ -587,7 +590,12 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
     """
 
     def __init__(
-        self, year: int, interconnect: str, xlsx: str, api: str, domestic: bool = True
+        self,
+        year: int,
+        interconnect: str,
+        xlsx: str,
+        api: str,
+        domestic: bool = True,
     ) -> None:
         self.domestic = domestic
         self.api = api
@@ -646,7 +654,9 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
             ]
 
     def _get_international_costs(
-        self, direction: str, interpoloation_method: str = "zero"
+        self,
+        direction: str,
+        interpoloation_method: str = "zero",
     ) -> pd.DataFrame:
         """
         Gets timeseries of international costs in $/MWh.
@@ -846,7 +856,11 @@ class PipelineLinepack(GasData):
     """
 
     def __init__(
-        self, year: int, interconnect: str, counties: str, pipelines: str
+        self,
+        year: int,
+        interconnect: str,
+        counties: str,
+        pipelines: str,
     ) -> None:
         self.counties = StateGeometry(counties)
         self.states = self.counties.states
@@ -862,7 +876,10 @@ class PipelineLinepack(GasData):
         states = self.states.copy()
 
         length_in_state = gpd.sjoin(
-            gdf.to_crs("4269"), states, how="right", predicate="within"
+            gdf.to_crs("4269"),
+            states,
+            how="right",
+            predicate="within",
         ).reset_index()
         length_in_state = (
             length_in_state[
@@ -880,7 +897,7 @@ class PipelineLinepack(GasData):
 
         volumne_in_state = length_in_state.copy()
         volumne_in_state["RADIUS"] = volumne_in_state.TYPEPIPE.map(
-            lambda x: interstate_radius if x == "Interstate" else intrastate_radius
+            lambda x: interstate_radius if x == "Interstate" else intrastate_radius,
         )
         volumne_in_state["VOLUME_M3"] = (
             volumne_in_state.LENGTH_M * pi * volumne_in_state.RADIUS**2
@@ -1083,11 +1100,19 @@ def build_natural_gas(
     # TODO: have trade pipelines share data to only instantiate once
 
     pipelines_domestic = TradeGasPipelineCapacity(
-        year, interconnect, pipelines_path, api, domestic=True
+        year,
+        interconnect,
+        pipelines_path,
+        api,
+        domestic=True,
     )
     pipelines_domestic.build_infrastructure(n)
     pipelines_international = TradeGasPipelineCapacity(
-        year, interconnect, pipelines_path, api, domestic=False
+        year,
+        interconnect,
+        pipelines_path,
+        api,
+        domestic=False,
     )
     pipelines_international.build_infrastructure(n)
 
