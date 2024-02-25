@@ -47,6 +47,7 @@ about-tutorial
 config-wildcards
 config-configuration
 config-assumptions
+config-sectors
 ```
 
 ```{toctree}

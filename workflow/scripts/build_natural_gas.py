@@ -4,16 +4,18 @@ Module for adding the gas sector.
 **Description**
 
 This module will add a state level copperplate natural gas network to the model.
-Specifically, it will do the following:
-    - Adds state level natural gas buses
-    - Converts exisitng OCGT and CCGT generators to links
-    - Creates capacity constrained pipelines between state gas buses (links)
-    - Creates capacity constraind natural gas processing facilites (generators)
-    - Creates capacity and energy constrainted underground gas storage facilities
-    - Creates energy constrained linepack storage (storage units)
-    - Creates capacity constrained pipelines to states neighbouring the interconnect
-    - Creates capacity and energy constrained import/exports to international connections
-    - Adds import/export historical natural gas prices
+Specifically, it will do the following
+
+- Adds state level natural gas buses
+- Converts exisitng OCGT and CCGT generators to links
+- Creates capacity constrained pipelines between state gas buses (links)
+- Creates capacity constraind natural gas processing facilites (generators)
+- Creates capacity and energy constrainted underground gas storage facilities
+- Creates energy constrained linepack storage (storage units)
+- Creates capacity constrained pipelines to states neighbouring the interconnect
+- Creates capacity and energy constrained import/exports to international connections
+- Adds import/export historical natural gas prices  
+
 
 **Relevant Settings**
 
@@ -26,22 +28,26 @@ Specifically, it will do the following:
 
 **Inputs**
 
-- n: pypsa.Network,
-    - Network to add the natural gas network to. Note, the electrical network
-    represntation should be done by this point.
+- n: pypsa.Network:
+    - Network to add the natural gas network to. Note, the electrical network represntation should be done by this point.
+  
 - year: int,
     - Year to extract natural gas data for. Must be between ``2009`` and ``2022``
+  
 - api: str,
     - EIA API key. Get from https://www.eia.gov/opendata/register.php
+    
 - interconnect: str = "western",
     - Name of interconnect. Must be in ("eastern", "western", "texas", "usa")
+    
 - county_path: str
     - ``data/counties/cb_2020_us_county_500k.shp``: County shapes in the USA
+    
 - pipelines_path: str
     - ``EIA-StatetoStateCapacity_Jan2023.xlsx`` : State to state pipeline capacity from EIA
-- pipeline_shape_path: str = "../data/natural_gas/pipelines.geojson",
-    - ``pipelines.geojson`` : National level
-- eia_757_path: str = "../data/natural_gas/eia_757.csv",
+    
+- pipeline_shape_path: str: 
+    - ``pipelines.geojson`` at a National level
 
 **Outputs**
 

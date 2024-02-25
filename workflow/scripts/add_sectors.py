@@ -1,11 +1,11 @@
 """
 Generic module to add a new energy network.
+
+Reads in the sector wildcard and will call corresponding scripts. In the 
+future, it would be good to integrate this logic into snakemake 
 """
 
 import logging
-from typing import Dict
-from typing import List
-from typing import Union
 
 import geopandas as gpd
 import pandas as pd

@@ -1,6 +1,12 @@
 (build-sector-rules)=
 # Build Sector Coupled Network
 
+(build-sectors)=
+## Rule `build_sectors`
+```{eval-rst}
+.. automodule:: add_sectors
+```
+
 (build-natural-gas)=
 ## Rule `build_natural_gas`
 ```{eval-rst}
