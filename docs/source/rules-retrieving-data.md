@@ -90,7 +90,7 @@ Forecasted electricity demand data and generator operational charasteristics for
 
 The [Electrification Futures Study](https://www.nrel.gov/analysis/electrification-futures.html) (EFS) are a series of publications from the NREL that explore the impacts of electrification in all USA economic sectors. As part of this, study are the EFS hourly load profiles. These load profiles represent projected end-use electricity demand for various scenarios. Load profiles are provided for a subset of years (2018, 2020, 2024, 2030, 2040, 2050) and are aggregated to the state, sector, and select subsector level. See the [EFS Load Profile Data Catalog](https://data.nrel.gov/submissions/126) for full details.
 
-[![URL](https://img.shields.io/badge/URL-EFS_Looad_Profiles-blue)](<https://data.nrel.gov/submissions/126>)
+[![URL](https://img.shields.io/badge/URL-EFS_Load_Profiles-blue)](<https://data.nrel.gov/submissions/126>)
 
 (retrieve-cutout)=
 ## Rule `retrieve_cutout`
