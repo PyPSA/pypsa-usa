@@ -876,9 +876,7 @@ def prepare_efs_demand(
     demand = demand.dropna()
     if snakemake.wildcards.interconnect == "texas":
         demand = demand.iloc[2:, :]  # temp fix for lining up timezones
-    year = n.snapshots[0].year
-    demand.index = demand.index.map(lambda x: x.replace(year=year))
-    demand = demand.loc[n.snapshots.intersection(demand.index)]
+    demand.index = n.snapshots
     n.buses.rename(columns={"LAF_states": "LAF"}, inplace=True)
     # demand.loc[:,'Texas'] = demand.loc[:,'Texas'] / 400 #temp
     return disaggregate_demand_to_buses(n, demand)
@@ -1652,6 +1650,6 @@ if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
 
-        snakemake = mock_snakemake("add_electricity", interconnect="western")
+        snakemake = mock_snakemake("add_electricity", interconnect="texas")
     configure_logging(snakemake)
     main(snakemake)
