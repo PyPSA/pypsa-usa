@@ -225,8 +225,20 @@ if __name__ == "__main__":
     else:
         client = None
 
-    sns = pd.date_range(freq="h", **snakemake.config["snapshots"])
-    cutout = atlite.Cutout(snakemake.input.cutout).sel(time=sns)
+    snapshot_config = snakemake.config["snapshots"]
+    sns_start = pd.to_datetime(snapshot_config["start"] + " 08:00:00")
+    sns_end = pd.to_datetime(snapshot_config["end"] + " 06:00:00")
+    sns_inclusive = snapshot_config["inclusive"]
+    sns = (
+        pd.date_range(
+            freq="h",
+            start=sns_start,
+            end=sns_end,
+            inclusive=sns_inclusive,
+        ),
+    )
+
+    cutout = atlite.Cutout(snakemake.input.cutout).sel(time=sns[0])
     regions = gpd.read_file(snakemake.input.regions)
     assert not regions.empty, (
         f"List of regions in {snakemake.input.regions} is empty, please "
