@@ -210,6 +210,36 @@ rule build_renewable_profiles:
     script:
         "../scripts/build_renewable_profiles.py"
 
+rule build_demand:
+    params:
+        planning_horizons=config["scenario"]["planning_horizons"],
+        snapshots=config["snapshots"]
+    input:
+        base_network=RESOURCES + "{interconnect}/elec_base_network.nc",
+        ads_renewables=(
+            DATA + "WECC_ADS/processed/"
+            if config["network_configuration"] == "ads2032"
+            else []
+        ),
+        ads_2032=(
+            DATA + "WECC_ADS/downloads/2032/Public Data/Hourly Profiles in CSV format"
+            if config["network_configuration"] == "ads2032"
+            else []
+        ),
+        eia=expand(DATA + "GridEmissions/{file}", file=DATAFILES_DMD),
+        efs=DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv",
+    output:
+        demand = RESOURCES + "{interconnect}/demand.csv",
+    log:
+        LOGS + "{interconnect}/build_demand.log",
+    benchmark:
+        BENCHMARKS + "{interconnect}/build_demand"
+    threads: 1
+    resources:
+        mem_mb=10000,
+    script:
+        "../scripts/build_demand.py"
+
 
 rule add_electricity:
     params:
@@ -259,14 +289,7 @@ rule add_electricity:
             if config["network_configuration"] == "ads2032"
             else []
         ),
-        ads_2030=(
-            DATA
-            + "WECC_ADS/downloads/2030/WECC 2030 ADS PCM 2020-12-16 (V1.5) Public Data/CSV Shape Files"
-            if config["network_configuration"] == "ads2032"
-            else []
-        ),
-        eia=expand(DATA + "GridEmissions/{file}", file=DATAFILES_DMD),
-        efs=DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv",
+        demand = RESOURCES + "{interconnect}/demand.csv",
         ng_electric_power_price=DATA + "costs/ng_electric_power_price.csv",
     output:
         RESOURCES + "{interconnect}/elec_base_network_l_pp.nc",
