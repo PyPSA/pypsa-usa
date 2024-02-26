@@ -227,7 +227,7 @@ if __name__ == "__main__":
 
     sns = pd.date_range(freq="h", **snakemake.config["snapshots"])
     cutout = atlite.Cutout(snakemake.input.cutout).sel(time=sns)
-    
+
     regions = gpd.read_file(snakemake.input.regions)
     assert not regions.empty, (
         f"List of regions in {snakemake.input.regions} is empty, please "
