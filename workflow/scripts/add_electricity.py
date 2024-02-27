@@ -1,6 +1,9 @@
 # PyPSA USA Authors
 """
-Add_electricity takes data produced by build_renewable_profiles, build_demand, build_cost_data and build_base_network to create a combined network model of all the generators, demand, costs. Locational multipliers are added for regional fuel costs and capital costs. 
+Add_electricity takes data produced by build_renewable_profiles, build_demand,
+build_cost_data and build_base_network to create a combined network model of
+all the generators, demand, costs. Locational multipliers are added for
+regional fuel costs and capital costs.
 
 **Relevant Settings**
 
@@ -1277,7 +1280,7 @@ def clean_bus_data(n: pypsa.Network):
     """
     Drops data from the network that are no longer needed in workflow.
     """
-    col_list = ["poi_bus", "poi_sub", "poi", "Pd", "load_dissag", "LAF","LAF_states"]
+    col_list = ["poi_bus", "poi_sub", "poi", "Pd", "load_dissag", "LAF", "LAF_states"]
     n.buses.drop(columns=[col for col in col_list if col in n.buses], inplace=True)
 
 
@@ -1367,7 +1370,7 @@ def main(snakemake):
 
     # Applying to all configurations
     plants = match_plant_to_bus(n, plants)
-    
+
     attach_demand(n, snakemake.input.demand)
 
     attach_conventional_generators(
