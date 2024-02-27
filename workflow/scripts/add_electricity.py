@@ -1,7 +1,9 @@
 # PyPSA USA Authors
 """
-Adds electrical generators and existing hydro storage units to a base network
-based on the given network configuration.
+Add_electricity takes data produced by build_renewable_profiles, build_demand,
+build_cost_data and build_base_network to create a combined network model of
+all the generators, demand, costs. Locational multipliers are added for
+regional fuel costs and capital costs.
 
 **Relevant Settings**
 
@@ -44,25 +46,15 @@ based on the given network configuration.
 **Inputs**
 
 - ``resources/costs.csv``: The database of cost assumptions for all included technologies for specific years from various sources; e.g. discount rate, lifetime, investment (CAPEX), fixed operation and maintenance (FOM), variable operation and maintenance (VOM), fuel costs, efficiency, carbon-dioxide intensity.
-- ``data/bundle/hydro_capacities.csv``: Hydropower plant store/discharge power capacities, energy storage capacity, and average hourly inflow by country.
-
-    # .. image:: _static/hydrocapacities.png
-    #     :scale: 34 %
-
-- ``data/geth2015_hydro_capacities.csv``: alternative to capacities above; not currently used!
-- ``resources/load.csv`` Hourly per-country load profiles.
+- ``resources/demand.csv`` Hourly per-country load profiles.
 - ``resources/regions_onshore.geojson``: confer :ref:`busregions`
-- ``resources/nuts3_shapes.geojson``: confer :ref:`shapes`
 - ``resources/profile_{}.nc``: all technologies in ``config["renewables"].keys()``, confer :ref:`renewableprofiles`.
-- ``networks/base.nc``: confer :ref:`base`
+- ``networks/elec_base_network.nc``: confer :ref:`base`
 
 **Outputs**
 
+- ``networks/elec_base_network_l_pp.nc``
 
-- ``networks/elec.nc``:
-
-    # .. image:: _static/elec.png
-    #         :scale: 33 %
 
 **Description**
 """
@@ -771,175 +763,14 @@ def attach_renewable_capacities_to_atlite(n, plants_df, renewable_carriers):
         n.generators.p_nom_min.update(generators_tech.bus.map(caps_per_bus).dropna())
 
 
-def prepare_ads_demand(
-    n: pypsa.Network,
-    demand_path: str,
-) -> pd.DataFrame:
-    demand = pd.read_csv(demand_path, index_col=0)
-    data_year = 2032
-    demand.columns = demand.columns.str.removeprefix("Load_")
-    demand.columns = demand.columns.str.removesuffix(".dat")
-    demand.columns = demand.columns.str.removesuffix(f"_{data_year}")
-    demand.columns = demand.columns.str.removesuffix(f"_[18].dat: {data_year}")
-    demand["CISO-PGAE"] = (
-        demand.pop("CIPV") + demand.pop("CIPB") + demand.pop("SPPC")
-    )  # TODO: #37 Create new Zone for SPPC
-    demand["BPAT"] = demand.pop("BPAT") + demand.pop("TPWR") + demand.pop("SCL")
-    demand["IPCO"] = demand.pop("IPFE") + demand.pop("IPMV") + demand.pop("IPTV")
-    demand["PACW"] = demand.pop("PAID") + demand.pop("PAUT") + demand.pop("PAWY")
-    demand["Arizona"] = demand.pop("SRP") + demand.pop("AZPS")
-    demand.drop(columns=["Unnamed: 44", "TH_Malin", "TH_Mead", "TH_PV"], inplace=True)
-    ba_list_map = {
-        "CISC": "CISO-SCE",
-        "CISD": "CISO-SDGE",
-        "VEA": "CISO-VEA",
-        "WAUW": "WAUW_SPP",
-    }
-    demand.rename(columns=ba_list_map, inplace=True)
-    demand.set_index("Index", inplace=True)
-
-    demand.index = n.snapshots
-    n.buses["load_dissag"] = n.buses.balancing_area.replace({"": "missing_ba"})
-    intersection = set(demand.columns).intersection(n.buses.ba_load_data.unique())
-    demand = demand[list(intersection)]
-    set_load_allocation_factor(n)
-    return disaggregate_demand_to_buses(n, demand)
-
-
-def prepare_eia_demand(
-    n: pypsa.Network,
-    demand_path: str,
-) -> pd.DataFrame:
-    logger.info("Building Load Data using EIA demand")
-    demand = pd.read_csv(demand_path, index_col=0)
-    demand.index = pd.to_datetime(demand.index)
-    demand = demand.loc[n.snapshots.intersection(demand.index)]  # filter by snapshots
-    demand = demand[~demand.index.duplicated(keep="last")]
-    demand.index = n.snapshots
-
-    # Combine EIA Demand Data to Match GIS Shapes
-    demand["Arizona"] = demand.pop("SRP") + demand.pop("AZPS")
-    n.buses["load_dissag"] = n.buses.balancing_area.replace(
-        {"^CISO.*": "CISO", "^ERCO.*": "ERCO"},
-        regex=True,
-    )
-
-    n.buses["load_dissag"] = n.buses.load_dissag.replace({"": "missing_ba"})
-    intersection = set(demand.columns).intersection(n.buses.load_dissag.unique())
-    demand = demand[list(intersection)]
-
-    set_load_allocation_factor(n)
-    return disaggregate_demand_to_buses(n, demand)
-
-
-def prepare_efs_demand(
-    n: pypsa.Network,
-    planning_horizons: list[str],
-) -> pd.DataFrame:
-    logger.info("Building Load Data using EFS demand")
-    demand = pd.read_csv(snakemake.input.efs)
-
-    demand = demand.loc[demand.Year == planning_horizons[0]]
-    demand.drop(
-        columns=[
-            "Electrification",
-            "TechnologyAdvancement",
-            "Sector",
-            "Subsector",
-            "Year",
-        ],
-        inplace=True,
-    )
-    # TODO: We are throwing out great data here on the sector and subsector loads. Revisit this.
-
-    demand = demand.groupby(["State", "LocalHourID"]).sum().reset_index()
-
-    demand["DateTime"] = pd.Timestamp(
-        year=planning_horizons[0],
-        month=1,
-        day=1,
-    ) + pd.to_timedelta(demand["LocalHourID"] - 1, unit="H")
-    demand["UTC_Time"] = demand.groupby(["State"])["DateTime"].transform(local_to_utc)
-    demand.drop(columns=["LocalHourID", "DateTime"], inplace=True)
-    demand.set_index("UTC_Time", inplace=True)
-
-    demand = demand.pivot(columns="State", values="LoadMW")
-    n.buses["load_dissag"] = n.buses.state
-    intersection = set(demand.columns).intersection(
-        [const.STATE_2_CODE.get(item, item) for item in n.buses.load_dissag.unique()],
-    )
-    demand = demand[list(intersection)]
-    demand.columns = [
-        {v: k for k, v in const.STATE_2_CODE.items()}.get(item, item)
-        for item in demand.columns
-    ]
-    demand = demand.dropna()
-    if snakemake.wildcards.interconnect == "texas":
-        demand = demand.iloc[2:, :]  # temp fix for lining up timezones
-    year = n.snapshots[0].year
-    demand.index = demand.index.map(lambda x: x.replace(year=year))
-    demand = demand.loc[n.snapshots.intersection(demand.index)]
-    n.buses.rename(columns={"LAF_states": "LAF"}, inplace=True)
-    # demand.loc[:,'Texas'] = demand.loc[:,'Texas'] / 400 #temp
-    return disaggregate_demand_to_buses(n, demand)
-
-
-def set_load_allocation_factor(n: pypsa.Network) -> pd.DataFrame:
-    """
-    Defines Load allocation factor for each bus according to load_dissag for
-    balancing areas.
-    """
-    n.buses.Pd = n.buses.Pd.fillna(0)
-    group_sums = n.buses.groupby("load_dissag")["Pd"].transform("sum")
-    n.buses["LAF"] = n.buses["Pd"] / group_sums
-
-
-def disaggregate_demand_to_buses(
-    n: pypsa.Network,
-    demand: pd.DataFrame,
-) -> pd.DataFrame:
-    """
-    Zone power demand is disaggregated to buses proportional to Pd.
-    """
-    demand_aligned = demand.reindex(
-        columns=n.buses["load_dissag"].unique(),
-        fill_value=0,
-    )
-    bus_demand = pd.DataFrame()
-    for load_dissag in n.buses["load_dissag"].unique():
-        LAF = n.buses.loc[n.buses["load_dissag"] == load_dissag, "LAF"]
-        zone_bus_demand = (
-            demand_aligned[load_dissag].values.reshape(-1, 1) * LAF.values.T
-        )
-        bus_demand = pd.concat(
-            [bus_demand, pd.DataFrame(zone_bus_demand, columns=LAF.index)],
-            axis=1,
-        )
-    bus_demand.index = n.snapshots
-    n.buses.drop(columns=["LAF"], inplace=True)
-    return bus_demand.fillna(0)
-
-
-def attach_demand(n: pypsa.Network, configuration: str):
+def attach_demand(n: pypsa.Network, demand_per_bus_fn: str):
     """
     Add demand to network from specified configuration setting.
 
     Returns network with demand added.
     """
-    if configuration == "ads":
-        demand_per_bus = prepare_ads_demand(n, f"data/WECC_ADS/processed/load_2032.csv")
-    elif configuration == "pypsa-usa":
-        if snakemake.params.get("planning_horizons"):
-            demand_per_bus = prepare_efs_demand(
-                n,
-                snakemake.params.get("planning_horizons"),
-            )
-        else:
-            demand_per_bus = prepare_eia_demand(n, snakemake.input["eia"][0])
-    else:
-        raise ValueError(
-            "Invalid demand_type. Supported values are 'ads', and 'pypsa-usa'.",
-        )
+    demand_per_bus = pd.read_csv(demand_per_bus_fn, index_col=0)
+    demand_per_bus.index = pd.to_datetime(demand_per_bus.index)
     n.madd(
         "Load",
         demand_per_bus.columns,
@@ -1443,8 +1274,11 @@ def load_powerplants_ads(
 
 
 def clean_bus_data(n: pypsa.Network):
-    col_list = ["poi_bus", "poi_sub", "poi", "Pd", "load_dissag"]
-    n.buses.drop(columns=col_list, inplace=True)
+    """
+    Drops data from the network that are no longer needed in workflow.
+    """
+    col_list = ["poi_bus", "poi_sub", "poi", "Pd", "load_dissag", "LAF", "LAF_states"]
+    n.buses.drop(columns=[col for col in col_list if col in n.buses], inplace=True)
 
 
 def main(snakemake):
@@ -1456,8 +1290,8 @@ def main(snakemake):
     n = pypsa.Network(snakemake.input.base_network)
 
     snapshot_config = snakemake.config["snapshots"]
-    sns_start = pd.to_datetime(snapshot_config["start"] + " 08:00:00")
-    sns_end = pd.to_datetime(snapshot_config["end"] + " 06:00:00")
+    sns_start = pd.to_datetime(snapshot_config["start"])
+    sns_end = pd.to_datetime(snapshot_config["end"])
     sns_inclusive = snapshot_config["inclusive"]
 
     n.set_snapshots(
@@ -1533,7 +1367,8 @@ def main(snakemake):
 
     # Applying to all configurations
     plants = match_plant_to_bus(n, plants)
-    attach_demand(n, configuration)
+
+    attach_demand(n, snakemake.input.demand)
 
     attach_conventional_generators(
         n,
