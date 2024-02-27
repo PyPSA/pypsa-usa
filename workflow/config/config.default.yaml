@@ -17,7 +17,7 @@ scenario:
   scope: "total" # "urban", "rural", or "total"
   sector: "" # G
   planning_horizons:
-  - 2030   #  # Uncomment to use NREL EFS Demand Forecasts (2030, 2040, 2050)
+  # - 2030   #  # Uncomment to use NREL EFS Demand Forecasts (2030, 2040, 2050)
 
 foresight:  # Only Single Stage Currently
 
@@ -73,7 +73,8 @@ electricity:
   co2base: 226.86e+6 #base_from_2020 Locations of the 250 MMmt of CO2 emissions from the WECC 2021.
   gaslimit: false # global gas usage limit of X MWh_th
   retirement: economic # "economic" or "technical"
-
+  SAFE_reservemargin: 0.14
+  
   operational_reserve:
     activate: false
     epsilon_load: 0.02
