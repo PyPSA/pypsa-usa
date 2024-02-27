@@ -324,6 +324,16 @@ rule simplify_network:
 
 
 rule cluster_network:
+    params:
+        cluster_network=config["clustering"]["cluster_network"],
+        conventional_carriers=config["electricity"].get("conventional_carriers", []),
+        renewable_carriers=config["electricity"]["renewable_carriers"],
+        aggregation_strategies=config["clustering"].get("aggregation_strategies", {}),
+        custom_busmap=config["enable"].get("custom_busmap", False),
+        focus_weights=config.get("focus_weights", None),
+        max_hours=config["electricity"]["max_hours"],
+        length_factor=config["lines"]["length_factor"],
+        costs=config["costs"],
     input:
         network=RESOURCES + "{interconnect}/elec_s.nc",
         regions_onshore=RESOURCES + "{interconnect}/regions_onshore.geojson",

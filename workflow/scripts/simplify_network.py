@@ -86,16 +86,16 @@ def aggregate_to_substations(
         aggregate_one_ports=["Load", "StorageUnit"],
         line_length_factor=1.0,
         bus_strategies={
-            "type": np.max,
-            "Pd": np.sum,
+            "type": 'max',
+            "Pd": 'sum',
         },
         generator_strategies={
-            "marginal_cost": np.mean,
-            "p_nom_min": np.sum,
-            "p_min_pu": np.mean,
-            "p_max_pu": np.mean,
-            "ramp_limit_up": np.max,
-            "ramp_limit_down": np.max,
+            "marginal_cost": 'mean',
+            "p_nom_min": 'sum',
+            "p_min_pu": 'mean',
+            "p_max_pu": 'mean',
+            "ramp_limit_up": 'max',
+            "ramp_limit_down": 'max',
         },
     )
 
@@ -129,13 +129,12 @@ def aggregate_to_substations(
     network_s.buses["x"] = substations.x
     network_s.buses["y"] = substations.y
     network_s.buses["substation_lv"] = True
-    network_s.buses["substation_off"] = True
     network_s.buses["country"] = (
         zone  # country field used bc pypsa-eur aggregates based on country boundary
     )
-    network_s.buses["state"] = substations.state
-    network_s.buses["balancing_area"] = substations.balancing_area
     network_s.lines["type"] = np.nan
+
+    network_s.buses.drop(columns = ['balancing_area', 'state', 'substation_off', 'sub_id'], inplace=True)
     return network_s
 
 
