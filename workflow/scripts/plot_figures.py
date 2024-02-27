@@ -506,19 +506,19 @@ def plot_production_html(
 
     energy_mix = get_energy_timeseries(n).mul(1e-3)  # MW -> GW
 
-    # # fix battery charge/discharge to only be positive
-    # if "battery" in energy_mix:
-    #     col_rename = {
-    #         "battery charger": "battery",
-    #         "battery discharger": "battery",
-    #     }
-    #     energy_mix = energy_mix.rename(columns=col_rename)
-    #     energy_mix = energy_mix.groupby(level=0, axis=1).sum()
-    #     energy_mix["battery"] = energy_mix.battery.map(lambda x: max(0, x))
+    # fix battery charge/discharge to only be positive
+    if "battery" in energy_mix:
+        col_rename = {
+            "battery charger": "battery",
+            "battery discharger": "battery",
+        }
+        energy_mix = energy_mix.rename(columns=col_rename)
+        energy_mix = energy_mix.groupby(level=0, axis=1).sum()
+        energy_mix["battery"] = energy_mix.battery.map(lambda x: max(0, x))
 
-    # energy_mix = energy_mix[[x for x in carriers_2_plot if x in energy_mix]]
-    # energy_mix = energy_mix.rename(columns=n.carriers.nice_name)
-    # ########
+    energy_mix = energy_mix[[x for x in carriers_2_plot if x in energy_mix]]
+    energy_mix = energy_mix.rename(columns=n.carriers.nice_name)
+    ########
 
     energy_mix["Demand"] = get_demand_timeseries(n).mul(1e-3)  # MW -> GW
 
@@ -573,7 +573,9 @@ def plot_production_area(
             energy_mix[carrier + "_discharger"] = energy_mix[carrier].clip(lower=0.0001)
             energy_mix[carrier + "_charger"] = energy_mix[carrier].clip(upper=-0.0001)
             energy_mix = energy_mix.drop(columns=carrier)
-    # energy_mix = energy_mix[[x for x in carriers_2_plot if x in energy_mix]]
+            carriers_2_plot.append("battery_charger")
+            carriers_2_plot.append("battery_discharger")
+    energy_mix = energy_mix[[x for x in carriers_2_plot if x in energy_mix]]
     energy_mix = energy_mix.rename(columns=n.carriers.nice_name)
 
     color_palette = get_color_palette(n)
@@ -1267,14 +1269,14 @@ if __name__ == "__main__":
         n,
         onshore_regions,
         carriers,
-        snakemake.output["capacity_map_base"],
+        snakemake.output["capacity_map_base.pdf"],
         **snakemake.wildcards,
     )
     plot_opt_capacity_map(
         n,
         onshore_regions,
         carriers,
-        snakemake.output["capacity_map_optimized"],
+        snakemake.output["capacity_map_optimized.pdf"],
         "greenfield",
         retirement_method,
         **snakemake.wildcards,
@@ -1283,7 +1285,7 @@ if __name__ == "__main__":
         n,
         onshore_regions,
         carriers,
-        snakemake.output["capacity_map_optimized_brownfield"],
+        snakemake.output["capacity_map_optimized_brownfield.pdf"],
         "brownfield",
         retirement_method,
         **snakemake.wildcards,
@@ -1292,7 +1294,7 @@ if __name__ == "__main__":
         n,
         onshore_regions,
         carriers,
-        snakemake.output["capacity_map_new"],
+        snakemake.output["capacity_map_new.pdf"],
         "greenfield",
         retirement_method,
         **snakemake.wildcards,
@@ -1301,72 +1303,72 @@ if __name__ == "__main__":
         n,
         onshore_regions,
         carriers,
-        snakemake.output["demand_map"],
+        snakemake.output["demand_map.pdf"],
         **snakemake.wildcards,
     )
     plot_capacity_additions_bar(
         n,
         carriers,
-        snakemake.output["capacity_additions_bar"],
+        snakemake.output["capacity_additions_bar.pdf"],
         "greenfield",
         retirement_method,
         **snakemake.wildcards,
     )
-    plot_costs_bar(n, carriers, snakemake.output["costs_bar"], **snakemake.wildcards)
+    plot_costs_bar(n, carriers, snakemake.output["costs_bar.pdf"], **snakemake.wildcards)
     plot_production_bar(
         n,
         carriers,
-        snakemake.output["production_bar"],
+        snakemake.output["production_bar.pdf"],
         **snakemake.wildcards,
     )
     plot_production_area(
         n,
         carriers,
-        snakemake.output["production_area"],
+        snakemake.output["production_area.pdf"],
         **snakemake.wildcards,
     )
     plot_production_html(
         n,
         carriers,
-        snakemake.output["production_area_html"],
+        snakemake.output["production_area.html"],
         **snakemake.wildcards,
     )
-    plot_hourly_emissions(n, snakemake.output["emissions_area"], **snakemake.wildcards)
+    plot_hourly_emissions(n, snakemake.output["emissions_area.pdf"], **snakemake.wildcards)
     plot_hourly_emissions_html(
         n,
-        snakemake.output["emissions_area_html"],
+        snakemake.output["emissions_area.html"],
         **snakemake.wildcards,
     )
     plot_accumulated_emissions(
         n,
-        snakemake.output["emissions_accumulated"],
+        snakemake.output["emissions_accumulated.pdf"],
         **snakemake.wildcards,
     )
     plot_accumulated_emissions_tech(
         n,
-        snakemake.output["emissions_accumulated_tech"],
+        snakemake.output["emissions_accumulated_tech.pdf"],
         **snakemake.wildcards,
     )
     plot_accumulated_emissions_tech_html(
         n,
-        snakemake.output["emissions_accumulated_tech_html"],
+        snakemake.output["emissions_accumulated_tech.html"],
         **snakemake.wildcards,
     )
     # plot_node_emissions_html(n, snakemake.output["emissions_node_html"], **snakemake.wildcards)
     plot_region_emissions_html(
         n,
-        snakemake.output["emissions_region_html"],
+        snakemake.output["emissions_region.html"],
         **snakemake.wildcards,
     )
     plot_emissions_map(
         n,
         onshore_regions,
-        snakemake.output["emissions_map"],
+        snakemake.output["emissions_map.pdf"],
         **snakemake.wildcards,
     )
     plot_renewable_potential(
         n,
         onshore_regions,
-        snakemake.output["renewable_potential_map"],
+        snakemake.output["renewable_potential_map.pdf"],
         **snakemake.wildcards,
     )

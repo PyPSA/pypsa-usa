@@ -20,6 +20,7 @@ FIGURES_MAPS = [
     "capacity_map_new.pdf",
     "emissions_map.pdf",
     "renewable_potential_map.pdf",
+    "demand_map.pdf"
 ]
 
 FIGURES_EMISSIONS = [
