@@ -210,10 +210,11 @@ rule build_renewable_profiles:
     script:
         "../scripts/build_renewable_profiles.py"
 
+
 rule build_demand:
     params:
         planning_horizons=config["scenario"]["planning_horizons"],
-        snapshots=config["snapshots"]
+        snapshots=config["snapshots"],
     input:
         base_network=RESOURCES + "{interconnect}/elec_base_network.nc",
         ads_renewables=(
@@ -229,7 +230,7 @@ rule build_demand:
         eia=expand(DATA + "GridEmissions/{file}", file=DATAFILES_DMD),
         efs=DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv",
     output:
-        demand = RESOURCES + "{interconnect}/demand.csv",
+        demand=RESOURCES + "{interconnect}/demand.csv",
     log:
         LOGS + "{interconnect}/build_demand.log",
     benchmark:
@@ -289,7 +290,7 @@ rule add_electricity:
             if config["network_configuration"] == "ads2032"
             else []
         ),
-        demand = RESOURCES + "{interconnect}/demand.csv",
+        demand=RESOURCES + "{interconnect}/demand.csv",
         ng_electric_power_price=DATA + "costs/ng_electric_power_price.csv",
     output:
         RESOURCES + "{interconnect}/elec_base_network_l_pp.nc",

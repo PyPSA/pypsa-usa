@@ -1,6 +1,9 @@
 # PyPSA USA Authors
 """
-Builds the demand data for the PyPSA network. This module is responsible for cleaning and transforming electricity demand data from the NREL Electrification Futures Study, EIA, and GridEmissions to be used in the `add_electricity` module. 
+Builds the demand data for the PyPSA network. This module is responsible for
+cleaning and transforming electricity demand data from the NREL Electrification
+Futures Study, EIA, and GridEmissions to be used in the `add_electricity`
+module.
 
 **Relevant Settings**
 
@@ -20,7 +23,7 @@ Builds the demand data for the PyPSA network. This module is responsible for cle
 
 **Inputs**
 
-    - base_network:  
+    - base_network:
     - ads_renewables:
     - ads_2032:
     - eia: (GridEmissions data file)
@@ -123,6 +126,7 @@ def prepare_eia_demand(
     set_load_allocation_factor(n)
     return disaggregate_demand_to_buses(n, demand)
 
+
 def prepare_efs_demand(
     n: pypsa.Network,
     planning_horizons: list[str],
@@ -165,13 +169,21 @@ def prepare_efs_demand(
         for item in demand.columns
     ]
 
-    #This block is use to align the demand data hours with the snapshot hours
+    # This block is use to align the demand data hours with the snapshot hours
     hoy = (demand.index.dayofyear - 1) * 24 + demand.index.hour
     demand.index = hoy
     demand_new = pd.DataFrame(columns=demand.columns)
     for column in demand.columns:
         col = demand[column].reset_index()
-        demand_new[column] = col.groupby('UTC_Time').apply(lambda group: group.loc[group.drop(columns='UTC_Time').first_valid_index()]).drop(columns='UTC_Time')
+        demand_new[column] = (
+            col.groupby("UTC_Time")
+            .apply(
+                lambda group: group.loc[
+                    group.drop(columns="UTC_Time").first_valid_index()
+                ]
+            )
+            .drop(columns="UTC_Time")
+        )
 
     demand_new.index = n.snapshots
     n.buses.rename(columns={"LAF_states": "LAF"}, inplace=True)
@@ -220,10 +232,9 @@ def main(snakemake):
     interconnection = snakemake.wildcards["interconnect"]
     planning_horizons = snakemake.params["planning_horizons"]
 
-
     snapshot_config = snakemake.params["snapshots"]
-    sns_start = pd.to_datetime(snapshot_config["start"]) #+ " 08:00:00")
-    sns_end = pd.to_datetime(snapshot_config["end"]) #+ " 06:00:00")
+    sns_start = pd.to_datetime(snapshot_config["start"])  # + " 08:00:00")
+    sns_end = pd.to_datetime(snapshot_config["end"])  # + " 06:00:00")
     sns_inclusive = snapshot_config["inclusive"]
 
     n = pypsa.Network(snakemake.input.base_network)
@@ -241,9 +252,15 @@ def main(snakemake):
     if configuration == "ads":
         demand_per_bus = prepare_ads_demand(n, "data/WECC_ADS/processed/load_2032.csv")
     elif configuration == "pypsa-usa":
-        demand_per_bus = prepare_efs_demand(n, snakemake.params.get("planning_horizons")) if snakemake.params.get("planning_horizons") else prepare_eia_demand(n, snakemake.input["eia"][0])
+        demand_per_bus = (
+            prepare_efs_demand(n, snakemake.params.get("planning_horizons"))
+            if snakemake.params.get("planning_horizons")
+            else prepare_eia_demand(n, snakemake.input["eia"][0])
+        )
     else:
-        raise ValueError("Invalid demand_type. Supported values are 'ads', and 'pypsa-usa'.")
+        raise ValueError(
+            "Invalid demand_type. Supported values are 'ads', and 'pypsa-usa'."
+        )
 
     demand_per_bus.to_csv(snakemake.output.demand, index=True)
 
