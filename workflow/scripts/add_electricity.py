@@ -1,7 +1,6 @@
 # PyPSA USA Authors
 """
-Adds electrical generators, storage units, and demand to a base network
-based on the given network configuration.
+Add_electricity takes data produced by build_renewable_profiles, build_demand, build_cost_data and build_base_network to create a combined network model of all the generators, demand, costs. Locational multipliers are added for regional fuel costs and capital costs. 
 
 **Relevant Settings**
 

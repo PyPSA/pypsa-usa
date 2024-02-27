@@ -20,12 +20,15 @@ Builds the demand data for the PyPSA network. This module is responsible for cle
 
 **Inputs**
 
-
+    - base_network:  
+    - ads_renewables:
+    - ads_2032:
+    - eia: (GridEmissions data file)
+    - efs: (NREL EFS Load Forecasts)
 
 **Outputs**
 
-
-
+    - demand: Path to the demand CSV file.
 """
 
 
