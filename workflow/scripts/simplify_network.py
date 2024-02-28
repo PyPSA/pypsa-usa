@@ -86,16 +86,16 @@ def aggregate_to_substations(
         aggregate_one_ports=["Load", "StorageUnit"],
         line_length_factor=1.0,
         bus_strategies={
-            "type": 'max',
-            "Pd": 'sum',
+            "type": "max",
+            "Pd": "sum",
         },
         generator_strategies={
-            "marginal_cost": 'mean',
-            "p_nom_min": 'sum',
-            "p_min_pu": 'mean',
-            "p_max_pu": 'mean',
-            "ramp_limit_up": 'max',
-            "ramp_limit_down": 'max',
+            "marginal_cost": "mean",
+            "p_nom_min": "sum",
+            "p_min_pu": "mean",
+            "p_max_pu": "mean",
+            "ramp_limit_up": "max",
+            "ramp_limit_down": "max",
         },
     )
 
@@ -134,7 +134,9 @@ def aggregate_to_substations(
     )
     network_s.lines["type"] = np.nan
 
-    network_s.buses.drop(columns = ['balancing_area', 'state', 'substation_off', 'sub_id'], inplace=True)
+    network_s.buses.drop(
+        columns=["balancing_area", "state", "substation_off", "sub_id"], inplace=True
+    )
     return network_s
 
 
