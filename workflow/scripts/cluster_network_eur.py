@@ -128,6 +128,7 @@ import logging
 import warnings
 from functools import reduce
 
+import os
 import geopandas as gpd
 import matplotlib.pyplot as plt
 import numpy as np

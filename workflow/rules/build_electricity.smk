@@ -237,7 +237,7 @@ rule build_demand:
         BENCHMARKS + "{interconnect}/build_demand"
     threads: 1
     resources:
-        mem_mb=10000,
+        mem_mb=12000,
     script:
         "../scripts/build_demand.py"
 
@@ -318,8 +318,6 @@ rule simplify_network:
     threads: 2
     resources:
         mem_mb=10000,
-    group:
-        "agg_network"
     script:
         "../scripts/simplify_network.py"
 
@@ -361,10 +359,8 @@ rule cluster_network:
     threads: 1
     resources:
         mem_mb=10000,
-    group:
-        "agg_network"
     script:
-        "../scripts/cluster_network_eur.py"
+        "../scripts/subworkflows/pypsa-eur/scripts/cluster_network.py"
 
 
 rule add_extra_components:
@@ -381,7 +377,7 @@ rule add_extra_components:
     resources:
         mem_mb=4000,
     group:
-        "agg_network"
+        "prepare"
     script:
         "../scripts/add_extra_components.py"
 
@@ -406,7 +402,7 @@ rule prepare_network:
     resources:
         mem_mb=4000,
     group:
-        "agg_network"
+        "prepare"
     log:
         "logs/prepare_network",
     script:

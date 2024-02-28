@@ -31,6 +31,11 @@ rule add_sectors:
     output:
         network=RESOURCES
         + "{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}_{sector}.nc",
+    group: 
+        "prepare"
+    threads: 1
+    resources:
+        mem_mb=4000,        
     script:
         "../scripts/add_sectors.py"
 
