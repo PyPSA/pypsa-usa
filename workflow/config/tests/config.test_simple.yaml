@@ -12,7 +12,7 @@ run:
 scenario:
   interconnect: [western] #"usa|texas|western|eastern"
   clusters: [40]
-  opts: [Co2L0.30-4H-Ep-EQ0.05c-SAFE]
+  opts: [Co2L0.30-3H-Ep-SAFE]
   ll: [v1.0]
   scope: "total" # "urban", "rural", or "total"
   sector: "" # G
@@ -72,6 +72,7 @@ electricity:
   co2base: 225.0e+6 #base_from_2020 Locations of the 250 MMmt of CO2 emissions from the WECC 2021.
   gaslimit: false # global gas usage limit of X MWh_th
   retirement: economic # "economic" or "technical"
+  SAFE_reservemargin: 0.15
 
   operational_reserve:
     activate: false
@@ -254,10 +255,10 @@ sector:
 clustering:
   simplify_network:
     to_substations: false # network is simplified to nodes with positive or negative power injection (i.e. substations or offwind connections)
-    algorithm: kmeans # choose from: [hac, kmeans]
+    algorithm: hac # choose from: [hac, kmeans]
     feature: solar+onwind-time # only for hac. choose from: [solar+onwind-time, solar+onwind-cap, solar-time, solar-cap, solar+offwind-cap] etc.
   cluster_network:
-    algorithm: kmeans
+    algorithm: hac
     feature: solar+onwind-time
     aggregation_zones: 'state' # [balancing_area, state]
     exclude_carriers: []
