@@ -37,7 +37,7 @@ rule solve_network:
     conda:
         "../envs/environment.yaml"
     script:
-        "../scripts/subworkflows/pypsa-eur/scripts/solve_network.py"
+        "../scripts/solve_network_local.py"
 
 
 rule solve_network_operations:

@@ -12,7 +12,7 @@ run:
 scenario:
   interconnect: [western] #"usa|texas|western|eastern"
   clusters: [40]
-  opts: [Co2L0.1, Co2L0.2]
+  opts: [Co2L1.0-3H]
   ll: [v1.0]
   scope: "total" # "urban", "rural", or "total"
   sector: "" # G
@@ -29,7 +29,7 @@ countries: [US]
 
 snapshots:
   start: "2019-01-01"
-  end: "2020-01-01"
+  end: "2019-02-01"
   inclusive: 'left'
 
 # docs :

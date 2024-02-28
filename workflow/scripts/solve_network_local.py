@@ -355,77 +355,82 @@ def add_BAU_constraints(n, config):
 
 def add_regional_co2limit(n, config):
     """
-    Add CCL (country & carrier limit) constraint to the network.
-
-    Add minimum and maximum levels of generator nominal capacity per carrier
-    for individual countries. Opts and path for agg_p_nom_minmax.csv must be defined
-    in config.yaml. Default file is available at data/agg_p_nom_minmax.csv.
-
-    Parameters
-    ----------
-    n : pypsa.Network
-    config : dict
-
-    Example
-    -------
-    scenario:
-        opts: [Co2L-CCL-24H]
-    electricity:
-        agg_p_nom_limits: data/agg_p_nom_minmax.csv
+    Adding regional regional CO2 Limits Specified in the config.yaml.
     """
     weightings = n.snapshot_weightings.loc[n.snapshots]
 
     from pypsa.linopt import get_var
     from pypsa.descriptors import get_switchable_as_dense as get_as_dense
     
-    emissions = n.carriers.co2_emissions
-    gens = n.generators.query("carrier in @emissions.index")
-    if not gens.empty:
-        efficiency = get_as_dense(n, "Generator", "efficiency", inds=gens.index) #mw_electrical/mw_th
-        em_pu = gens.carrier.map(emissions) / efficiency #kg_co2/mw_electrical
-        em_pu = em_pu.multiply(weightings.generators, axis=0)
-        p = get_var(n, "Generator", "p").loc[sns, gens.index]
-        CA_gens = n.generators.get("country", "CA")
-        p = n.model["Generator-p"]
-        vals = linexpr((em_pu, p), as_pandas=False)
-        lhs += join_exprs(vals)
+    region = "California"
+    EF_unspecified = 0.428 #MT CO₂e/MWh_elec
+    region_co2lim = 0
 
-        # storage units
-        sus = n.storage_units.query(
-            "carrier in @emissions.index and " "not cyclic_state_of_charge"
-        )
-        sus_i = sus.index
-        if not sus.empty:
-            em_pu = sus.carrier.map(emissions)
-            soc = (
-                get_var(n, "StorageUnit", "state_of_charge").loc[sns, sus_i].loc[period]
-            )
-            soc = soc.where(soc != -1).ffill().iloc[-1]
-            vals = linexpr((-em_pu, soc), as_pandas=False)
-            lhs = lhs + "\n" + join_exprs(vals)
-            rhs -= em_pu @ sus.state_of_charge_initial
+    # emissions = n.carriers.co2_emissions
+    # # generators
+    # region_gens = n.generators[n.generators.bus.str.contains(region)]
+    # region_gens = region_gens.query("carrier in @emissions.index")
 
-        # stores
-        n.stores["carrier"] = n.stores.bus.map(n.buses.carrier)
-        stores = n.stores.query("carrier in @emissions.index and not e_cyclic")
-        if not stores.empty:
-            em_pu = stores.carrier.map(emissions)
-            e = get_var(n, "Store", "e").loc[sns, stores.index].loc[period]
-            e = e.where(e != -1).ffill().iloc[-1]
-            vals = linexpr((-em_pu, e), as_pandas=False)
-            lhs = lhs + "\n" + join_exprs(vals)
-            rhs -= stores.carrier.map(emissions) @ stores.e_initial
+    # if not region_gens.empty:
+    #     efficiency = get_as_dense(n, "Generator", "efficiency",inds= region_gens.index) #mw_elect/mw_th
+    #     em_pu = region_gens.carrier.map(emissions) / efficiency #kg_co2/mw_electrical
+    #     em_pu = em_pu.multiply(weightings.generators, axis=0)
+    #     p = (n.model["Generator-p"].loc[:, region_gens.index])  
+    #     lhs = (p * em_pu).sum()
 
-        define_constraints(
-            n,
-            lhs,
-            glc.sense,
-            rhs,
-            "GlobalConstraint",
-            "mu",
-            axes=pd.Index([name]),
-            spec=name,
-        )
+    # # storage units - should I change this to measure SOC instead of p_dispatch?
+    # region_sus = n.storage_units[n.storage_units.bus.str.contains(region)]
+    # sus = region_sus.query("carrier in @emissions.index and " "not cyclic_state_of_charge")
+    # sus_i = sus.index
+
+    # if not sus.empty:
+    #     efficiency = get_as_dense(n, "storage_units", "efficiency", inds=sus_i) #mw_electrical/mw_th
+    #     em_pu = region_sus.carrier.map(emissions) / efficiency #kg_co2/mw_electrical
+    #     # em_pu = em_pu.multiply(weightings.generators, axis=0) # Weightings doesn't have storage units, ask pypsa folks about this
+    #     p = (n.model["StorageUnit-p_dispatch"].loc[:, region_sus.index])  
+    #     lhs = lhs + (p * em_pu).sum()
+
+    #     # em_pu = sus.carrier.map(emissions)
+    #     # soc = (
+    #         # get_var(n, "StorageUnit", "state_of_charge").loc[sns, sus_i].loc[period]
+    #     # )
+    #     # soc = soc.where(soc != -1).ffill().iloc[-1]
+    #     # vals = linexpr((-em_pu, soc), as_pandas=False)
+    #     # lhs = lhs + "\n" + join_exprs(vals)
+    #     # rhs -= em_pu @ sus.state_of_charge_initial
+
+    # # stores
+    # n.stores["carrier"] = n.stores.bus.map(n.buses.carrier)
+    # region_stores = n.stores[n.stores.bus.str.contains(region)]
+    # region_stores = region_stores.query("carrier in @emissions.index and not e_cyclic")
+    # if not region_stores.empty:
+    #     efficiency = get_as_dense(n, "stores", "efficiency", inds=region_stores.index) #mw_electrical/mw_th
+    #     em_pu = region_Stores.carrier.map(emissions) / efficiency #kg_co2/mw_electrical
+    #     # em_pu = em_pu.multiply(weightings.generators, axis=0) # Weightings doesn't have storage units, ask pypsa folks about this
+    #     p = (n.model["Stores-p_dispatch"].loc[:, region_stores.index])  
+    #     lhs = lhs + (p * em_pu).sum()
+
+    #     # em_pu = region_stores.carrier.map(emissions)
+    #     # e = get_var(n, "Store", "e").loc[sns, stores.index].loc[period]
+    #     # e = e.where(e != -1).ffill().iloc[-1]
+    #     # vals = linexpr((-em_pu, e), as_pandas=False)
+    #     # lhs = lhs + "\n" + join_exprs(vals)
+    #     # rhs -= stores.carrier.map(emissions) @ stores.e_initial
+
+    # Imports
+    bus0 = n.lines.bus0
+    bus1 = n.lines.bus1
+    bus0_region = bus0[bus0.str.contains(region)]
+    region_lines = n.lines.loc[bus0_region.index]
+    inter_regional_lines = region_lines[~region_lines.bus1.str.contains(region)]
+    
+    if not inter_regional_lines.empty:
+        inter_regional_flows = (n.model["Line-s"].loc[:, inter_regional_lines.index])
+        inter_regional_imports = inter_regional_flows.where(inter_regional_flows <= 0)
+        lhs = (inter_regional_imports).sum()
+
+    rhs = region_co2lim
+    n.model.add_constraints(lhs <= rhs, name=f"{region}_co2_limit")
 
 
 # TODO: think about removing or make per country
@@ -729,9 +734,9 @@ if __name__ == "__main__":
         snakemake = mock_snakemake(
             "solve_network",
             simpl="",
-            opts="Co2L0.75-4H",
-            clusters="30",
-            ll="v1.15",
+            opts="Co2L0.1-12H",
+            clusters="40",
+            ll="v1.0",
             sector_opts="",
             sector="E",
             planning_horizons="2030",
