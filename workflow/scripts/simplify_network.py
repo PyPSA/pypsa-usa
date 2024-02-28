@@ -135,7 +135,8 @@ def aggregate_to_substations(
     network_s.lines["type"] = np.nan
 
     network_s.buses.drop(
-        columns=["balancing_area", "state", "substation_off", "sub_id"], inplace=True
+        columns=["balancing_area", "state", "substation_off", "sub_id"],
+        inplace=True,
     )
     return network_s
 

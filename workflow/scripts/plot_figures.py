@@ -608,7 +608,7 @@ def plot_production_bar(
     energy_mix.name = "dispatch"
     energy_mix = energy_mix[
         energy_mix.index.get_level_values("component").isin(
-            ["Generator", "StorageUnit"]
+            ["Generator", "StorageUnit"],
         )
     ]
     energy_mix = energy_mix.groupby("carrier").sum().reset_index()

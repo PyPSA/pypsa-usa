@@ -9,7 +9,7 @@ def load_yaml_file(filepath):
 def compare_structures(data1, data2, path=""):
     if type(data1) != type(data2):
         print(
-            f"Type mismatch at {path}: {type(data1).__name__} vs {type(data2).__name__}"
+            f"Type mismatch at {path}: {type(data1).__name__} vs {type(data2).__name__}",
         )
         return False
 
@@ -19,7 +19,9 @@ def compare_structures(data1, data2, path=""):
                 print(f"Missing key in second structure at {path}: {key}")
                 continue
             compare_structures(
-                data1[key], data2[key], path=f"{path}.{key}" if path else key
+                data1[key],
+                data2[key],
+                path=f"{path}.{key}" if path else key,
             )
         for key in data2:
             if key not in data1:
@@ -50,5 +52,6 @@ def test_yaml_structure(filepath1, filepath2):
 
 # Example usage
 test_yaml_structure(
-    "../config/tests/config.test_simple.yaml", "../config/config.default.yaml"
+    "../config/tests/config.test_simple.yaml",
+    "../config/config.default.yaml",
 )

@@ -951,7 +951,9 @@ def attach_wind_and_solar(
                 .transpose("time", "bus")
                 .to_pandas()
                 .T.merge(
-                    bus2sub[["bus_id", "sub_id"]], left_on="bus", right_on="sub_id"
+                    bus2sub[["bus_id", "sub_id"]],
+                    left_on="bus",
+                    right_on="sub_id",
                 )
                 .set_index("bus_id")
                 .drop(columns="sub_id")
