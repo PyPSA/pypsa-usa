@@ -73,7 +73,6 @@ from summary import (
     get_capacity_brownfield,
     get_capacity_base,
     get_demand_base,
-    get_operational_costs,
     get_capital_costs,
 )
 from add_electricity import (
@@ -117,7 +116,7 @@ def get_color_palette(n: pypsa.Network) -> pd.Series:
         "co2": "k",
     }
 
-    return pd.concat([colors, pd.Series(additional)])
+    return pd.concat([colors, pd.Series(additional)]).to_dict()
 
 
 def get_bus_scale(interconnect: str) -> float:
@@ -274,12 +273,10 @@ def plot_region_emissions_html(n: pypsa.Network, save: str, **wildcards) -> None
     """
 
     # get data
-
     emissions = get_node_emissions_timeseries(n).mul(1e-6)  # T -> MT
-    emissions = emissions.groupby(n.buses.country, axis=1).sum()
+    emissions = emissions.T.groupby(n.buses.country).sum().T
 
     # plot data
-
     fig = px.area(
         emissions,
         x=emissions.index,
@@ -323,37 +320,6 @@ def plot_node_emissions_html(n: pypsa.Network, save: str, **wildcards) -> None:
     fig.write_html(save)
 
 
-def plot_accumulated_emissions(n: pypsa.Network, save: str, **wildcards) -> None:
-    """
-    Plots accumulated emissions.
-    """
-
-    # get data
-
-    emissions = get_tech_emissions_timeseries(n).mul(1e-6).sum(axis=1)  # T -> MT
-    emissions = emissions.cumsum().to_frame("co2")
-
-    # plot
-
-    color_palette = get_color_palette(n)
-
-    fig, ax = plt.subplots(figsize=(14, 4))
-
-    emissions.plot.area(
-        ax=ax,
-        alpha=0.7,
-        legend="reverse",
-        color=color_palette.to_dict(),
-    )
-
-    ax.legend(bbox_to_anchor=(1, 1), loc="upper left")
-    ax.set_title(create_title("Accumulated Emissions", **wildcards))
-    ax.set_ylabel("Emissions [MT]")
-    fig.tight_layout()
-
-    fig.savefig(save)
-
-
 def plot_accumulated_emissions_tech(n: pypsa.Network, save: str, **wildcards) -> None:
     """
     Plots accumulated emissions by technology.
@@ -381,7 +347,7 @@ def plot_accumulated_emissions_tech(n: pypsa.Network, save: str, **wildcards) ->
         ax=ax,
         alpha=0.7,
         legend="reverse",
-        color=color_palette.to_dict(),
+        color=color_palette,
     )
 
     ax.legend(bbox_to_anchor=(1, 1), loc="upper left")
@@ -421,7 +387,7 @@ def plot_accumulated_emissions_tech_html(
         emissions,
         x=emissions.index,
         y=emissions.columns,
-        color_discrete_map=color_palette.to_dict(),
+        color_discrete_map=color_palette,
     )
 
     title = create_title("Technology Accumulated Emissions", **wildcards)
@@ -458,7 +424,7 @@ def plot_hourly_emissions_html(n: pypsa.Network, save: str, **wildcards) -> None
         emissions,
         x=emissions.index,
         y=emissions.columns,
-        color_discrete_map=color_palette.to_dict(),
+        color_discrete_map=color_palette,
     )
 
     title = create_title("Technology Emissions", **wildcards)
@@ -488,7 +454,6 @@ def plot_hourly_emissions(n: pypsa.Network, save: str, **wildcards) -> None:
     emissions = emissions.rename(columns=n.carriers.nice_name)
 
     # plot
-
     color_palette = get_color_palette(n)
 
     fig, ax = plt.subplots(figsize=(14, 4))
@@ -497,7 +462,7 @@ def plot_hourly_emissions(n: pypsa.Network, save: str, **wildcards) -> None:
         ax=ax,
         alpha=0.7,
         legend="reverse",
-        color=color_palette.to_dict(),
+        color=color_palette,
     )
 
     ax.legend(bbox_to_anchor=(1, 1), loc="upper left")
@@ -546,7 +511,7 @@ def plot_production_html(
         energy_mix,
         x=energy_mix.index,
         y=[c for c in energy_mix.columns if c != "Demand"],
-        color_discrete_map=color_palette.to_dict(),
+        color_discrete_map=color_palette,
     )
     fig.add_trace(
         go.Scatter(
@@ -589,7 +554,7 @@ def plot_production_area(
             energy_mix[carrier + "_discharger"] = energy_mix[carrier].clip(lower=0.0001)
             energy_mix[carrier + "_charger"] = energy_mix[carrier].clip(upper=-0.0001)
             energy_mix = energy_mix.drop(columns=carrier)
-    # energy_mix = energy_mix[[x for x in carriers_2_plot if x in energy_mix]]
+
     energy_mix = energy_mix.rename(columns=n.carriers.nice_name)
 
     color_palette = get_color_palette(n)
@@ -607,7 +572,7 @@ def plot_production_area(
             energy_mix[snapshots].plot.area(
                 ax=ax,
                 alpha=0.7,
-                color=color_palette.to_dict(),
+                color=color_palette,
             )
             demand[snapshots].plot.line(ax=ax, ls="-", color="darkblue")
 
@@ -635,34 +600,25 @@ def plot_production_bar(
     **wildcards,
 ) -> None:
     """
-    Plot production per carrier.
+    Plot diaptch per carrier.
     """
 
     # get data
-
-    energy_mix = (
-        get_energy_timeseries(n)
-        # .rename(columns={"battery charger": "battery", "battery discharger": "battery"})
-        .groupby(level=0, axis=1)
-        .sum()
-        .sum()
-        .mul(1e-3)  # MW -> GW
-    )
-    energy_mix = pd.DataFrame(energy_mix, columns=["Production"]).reset_index(
-        names="carrier",
-    )
-    energy_mix = energy_mix[
-        energy_mix.carrier.isin([x for x in carriers_2_plot if x != "battery"])
-    ].copy()
-    energy_mix["color"] = energy_mix.carrier.map(n.carriers.color)
-    energy_mix["carrier"] = energy_mix.carrier.map(n.carriers.nice_name)
-
-    # plot
+    energy_mix = n.statistics.dispatch().mul(1e-3)  # MW -> GW
+    energy_mix.name = "dispatch" 
+    energy_mix = energy_mix[energy_mix.index.get_level_values('component').isin(['Generator', 'StorageUnit'])]
+    energy_mix = energy_mix.groupby("carrier").sum().reset_index()
+    color_palette = get_color_palette(n)
 
     fig, ax = plt.subplots(figsize=(10, 10))
-    sns.barplot(data=energy_mix, y="carrier", x="Production", palette=energy_mix.color)
+    sns.barplot(
+        data=energy_mix, 
+        y="carrier", 
+        x="dispatch", 
+        palette=color_palette,
+        )
 
-    ax.set_title(create_title("Production [GWh]", **wildcards))
+    ax.set_title(create_title("Dispatch [GWh]", **wildcards))
     ax.set_ylabel("")
     # ax.set_xlabel("")
     fig.tight_layout()
@@ -681,22 +637,20 @@ def plot_costs_bar(
 
     # get data
 
-    operational_costs = get_operational_costs(n).sum().mul(1e-9)  # $ -> M$
-    capital_costs = get_capital_costs(n).mul(1e-9)  # $ -> M$
+    opex = n.statistics.opex().mul(1e-6)  # $ -> M$
+    capex = get_capital_costs(n).mul(1e-6)  # $ -> M$
 
     costs = pd.concat(
-        [operational_costs, capital_costs],
+        [opex, capex],
         axis=1,
-        keys=["OPEX", "CAPEX"],
-    ).reset_index()
-    costs = costs[costs.carrier.isin(carriers_2_plot)]
-    costs["carrier"] = costs.carrier.map(n.carriers.nice_name)
+        keys=["OPEX", "CAPEX"]).reset_index()
     costs = costs.groupby("carrier").sum().reset_index()  # groups batteries
 
     # plot data
-
     fig, ax = plt.subplots(figsize=(10, 10))
-    color_palette = n.carriers.reset_index().set_index("nice_name").to_dict()["color"]
+    color_palette = get_color_palette(n)
+
+
     sns.barplot(
         y="carrier",
         x="CAPEX",
@@ -830,7 +784,7 @@ def plot_demand_map(
 
     bus_values = get_demand_base(n).mul(1e-3)
     line_values = n.lines.s_nom
-    link_values = n.links.p_nom.replace(0)
+    link_values = n.links.p_nom.replace(to_replace={pd.NA: 0})
 
     # plot data
     title = create_title("Network Demand", **wildcards)
@@ -931,7 +885,7 @@ def plot_base_capacity_map(
         n=n,
         bus_values=bus_values,
         line_values=line_values,
-        link_values=n.links.p_nom.replace(0),
+        link_values=n.links.p_nom.replace(to_replace={pd.NA: 0}),
         regions=regions,
         line_scale=line_scale,
         bus_scale=bus_scale,
@@ -984,7 +938,7 @@ def plot_opt_capacity_map(
         n=n,
         bus_values=bus_values,
         line_values=line_values,
-        link_values=n.links.p_nom.replace(0),
+        link_values=n.links.p_nom.replace(to_replace={pd.NA: 0}),
         regions=regions,
         line_scale=line_scale,
         bus_scale=bus_scale,
@@ -1046,7 +1000,7 @@ def plot_new_capacity_map(
         n=n,
         bus_values=bus_values,
         line_values=line_values,
-        link_values=n.links.p_nom.replace(0),
+        link_values=n.links.p_nom.replace(to_replace={pd.NA: 0}),
         regions=regions,
         line_scale=line_scale,
         bus_scale=bus_scale,
@@ -1181,8 +1135,8 @@ def plot_capacity_additions_bar(
     # plot data (option 2)
     # using matplotlib for tech group colours
 
-    # color_palette = get_color_palette(n)
-    color_palette = n.carriers.reset_index().set_index("nice_name").to_dict()["color"]
+
+    color_palette = get_color_palette(n)
     color_mapper = [color_palette[carrier] for carrier in capacity.index]
     bar_height = 0.35
 
@@ -1315,7 +1269,12 @@ if __name__ == "__main__":
         retirement_method,
         **snakemake.wildcards,
     )
-    plot_costs_bar(n, carriers, snakemake.output["costs_bar"], **snakemake.wildcards)
+    plot_costs_bar(
+        n, 
+        carriers, 
+        snakemake.output["costs_bar"], 
+        **snakemake.wildcards
+    )
     plot_production_bar(
         n,
         carriers,
@@ -1334,15 +1293,14 @@ if __name__ == "__main__":
         snakemake.output["production_area_html"],
         **snakemake.wildcards,
     )
-    plot_hourly_emissions(n, snakemake.output["emissions_area"], **snakemake.wildcards)
+    plot_hourly_emissions(
+        n, 
+        snakemake.output["emissions_area"], 
+        **snakemake.wildcards
+    )
     plot_hourly_emissions_html(
         n,
         snakemake.output["emissions_area_html"],
-        **snakemake.wildcards,
-    )
-    plot_accumulated_emissions(
-        n,
-        snakemake.output["emissions_accumulated"],
         **snakemake.wildcards,
     )
     plot_accumulated_emissions_tech(
