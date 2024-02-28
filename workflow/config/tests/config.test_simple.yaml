@@ -12,7 +12,7 @@ run:
 scenario:
   interconnect: [western] #"usa|texas|western|eastern"
   clusters: [40]
-  opts: [Co2L1.0-3H]
+  opts: [Co2L1.0-3H-RCo2L]
   ll: [v1.0]
   scope: "total" # "urban", "rural", or "total"
   sector: "" # G
@@ -73,6 +73,7 @@ electricity:
   gaslimit: false # global gas usage limit of X MWh_th
   retirement: economic # "economic" or "technical"
   SAFE_reservemargin: 0.14
+  regional_Co2_limits: '../repo_data/regional_Co2_limits.csv'
 
   operational_reserve:
     activate: false
@@ -260,7 +261,7 @@ clustering:
   cluster_network:
     algorithm: kmeans
     feature: solar+onwind-time
-    aggregation_zones: 'balancing_area' # [balancing_area, state]
+    aggregation_zones: 'state' # [balancing_area, state]
   aggregation_strategies:
     generators:
       p_nom_max: sum # use "min" for more conservative assumptions
