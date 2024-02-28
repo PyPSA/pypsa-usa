@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # SPDX-FileCopyrightText: : 2017-2023 The PyPSA-Eur Authors
 #
 # SPDX-License-Identifier: MIT
@@ -159,13 +158,14 @@ def normed(x):
 def weighting_for_country(n, x):
     conv_carriers = {"OCGT", "CCGT", "PHS", "hydro"}
     gen = n.generators.loc[n.generators.carrier.isin(conv_carriers)].groupby(
-        "bus"
+        "bus",
     ).p_nom.sum().reindex(n.buses.index, fill_value=0.0) + n.storage_units.loc[
         n.storage_units.carrier.isin(conv_carriers)
     ].groupby(
-        "bus"
+        "bus",
     ).p_nom.sum().reindex(
-        n.buses.index, fill_value=0.0
+        n.buses.index,
+        fill_value=0.0,
     )
     load = n.loads_t.p_set.mean().groupby(n.loads.bus).sum()
 
@@ -188,7 +188,8 @@ def get_feature_for_hac(n, buses_i=None, feature=None):
     if "offwind" in carriers:
         carriers.remove("offwind")
         carriers = np.append(
-            carriers, n.generators.carrier.filter(like="offwind").unique()
+            carriers,
+            n.generators.carrier.filter(like="offwind").unique(),
         )
 
     if feature.split("-")[1] == "cap":
@@ -207,7 +208,7 @@ def get_feature_for_hac(n, buses_i=None, feature=None):
         for carrier in carriers:
             gen_i = n.generators.query("carrier == @carrier").index
             attach = n.generators_t.p_max_pu[gen_i].rename(
-                columns=n.generators.loc[gen_i].bus
+                columns=n.generators.loc[gen_i].bus,
             )
             feature_data = pd.concat([feature_data, attach], axis=0)[buses_i]
 
@@ -257,7 +258,9 @@ def distribute_clusters(n, n_clusters, focus_weights=None, solver_name="cbc"):
         logger.warning("Using custom focus weights for determining number of clusters.")
 
     assert np.isclose(
-        L.sum(), 1.0, rtol=1e-3
+        L.sum(),
+        1.0,
+        rtol=1e-3,
     ), f"Country weights L must sum up to 1.0 when distributing clusters. Is {L.sum()}."
 
     m = po.ConcreteModel()
@@ -275,7 +278,7 @@ def distribute_clusters(n, n_clusters, focus_weights=None, solver_name="cbc"):
     opt = po.SolverFactory(solver_name)
     if not opt.has_capability("quadratic_objective"):
         logger.warning(
-            f"The configured solver `{solver_name}` does not support quadratic objectives. Falling back to `ipopt`."
+            f"The configured solver `{solver_name}` does not support quadratic objectives. Falling back to `ipopt`.",
         )
         opt = po.SolverFactory("ipopt")
 
@@ -310,7 +313,8 @@ def busmap_for_n_clusters(
             m = n[n.buses.country == country].copy()
 
             _, labels = csgraph.connected_components(
-                m.adjacency_matrix(), directed=False
+                m.adjacency_matrix(),
+                directed=False,
             )
 
             component = pd.Series(labels, index=m.buses.index)
@@ -322,16 +326,16 @@ def busmap_for_n_clusters(
                 ].index[0]
 
                 neighbor_bus = n.lines.query(
-                    "bus0 == @disconnected_bus or bus1 == @disconnected_bus"
+                    "bus0 == @disconnected_bus or bus1 == @disconnected_bus",
                 ).iloc[0][["bus0", "bus1"]]
                 new_country = list(
-                    set(n.buses.loc[neighbor_bus].country) - set([country])
+                    set(n.buses.loc[neighbor_bus].country) - {country},
                 )[0]
 
                 logger.info(
                     f"overwriting country `{country}` of bus `{disconnected_bus}` "
                     f"to new country `{new_country}`, because it is disconnected "
-                    "from its initial inter-country transmission grid."
+                    "from its initial inter-country transmission grid.",
                 )
                 n.buses.at[disconnected_bus, "country"] = new_country
         return n
@@ -343,13 +347,16 @@ def busmap_for_n_clusters(
     if (algorithm != "hac") and (feature is not None):
         logger.warning(
             f"Keyword argument feature is only valid for algorithm `hac`. "
-            f"Given feature `{feature}` will be ignored."
+            f"Given feature `{feature}` will be ignored.",
         )
 
     n.determine_network_topology()
 
     n_clusters = distribute_clusters(
-        n, n_clusters, focus_weights=focus_weights, solver_name=solver_name
+        n,
+        n_clusters,
+        focus_weights=focus_weights,
+        solver_name=solver_name,
     )
 
     def busmap_for_country(x):
@@ -361,19 +368,28 @@ def busmap_for_n_clusters(
 
         if algorithm == "kmeans":
             return prefix + busmap_by_kmeans(
-                n, weight, n_clusters[x.name], buses_i=x.index, **algorithm_kwds
+                n,
+                weight,
+                n_clusters[x.name],
+                buses_i=x.index,
+                **algorithm_kwds,
             )
         elif algorithm == "hac":
             return prefix + busmap_by_hac(
-                n, n_clusters[x.name], buses_i=x.index, feature=feature.loc[x.index]
+                n,
+                n_clusters[x.name],
+                buses_i=x.index,
+                feature=feature.loc[x.index],
             )
         elif algorithm == "modularity":
             return prefix + busmap_by_greedy_modularity(
-                n, n_clusters[x.name], buses_i=x.index
+                n,
+                n_clusters[x.name],
+                buses_i=x.index,
             )
         else:
             raise ValueError(
-                f"`algorithm` must be one of 'kmeans' or 'hac'. Is {algorithm}."
+                f"`algorithm` must be one of 'kmeans' or 'hac'. Is {algorithm}.",
             )
 
     return (
@@ -399,7 +415,12 @@ def clustering_for_n_clusters(
 ):
     if not isinstance(custom_busmap, pd.Series):
         busmap = busmap_for_n_clusters(
-            n, n_clusters, solver_name, focus_weights, algorithm, feature
+            n,
+            n_clusters,
+            solver_name,
+            focus_weights,
+            algorithm,
+            feature,
         )
     else:
         busmap = custom_busmap
@@ -496,7 +517,9 @@ if __name__ == "__main__":
             else:
                 labels = ["low", "medium", "high"]
                 suffix = pd.cut(
-                    gens.efficiency, bins=[0, low, high, 1], labels=labels
+                    gens.efficiency,
+                    bins=[0, low, high, 1],
+                    labels=labels,
                 ).astype(str)
                 carriers += [f"{c} {label} efficiency" for label in labels]
                 n.generators.carrier.update(gens.carrier + " " + suffix + " efficiency")
@@ -507,7 +530,11 @@ if __name__ == "__main__":
         busmap = n.buses.index.to_series()
         linemap = n.lines.index.to_series()
         clustering = pypsa.clustering.spatial.Clustering(
-            n, busmap, linemap, linemap, pd.Series(dtype="O")
+            n,
+            busmap,
+            linemap,
+            linemap,
+            pd.Series(dtype="O"),
         )
     else:
         Nyears = n.snapshot_weightings.objective.sum() / 8760
@@ -522,7 +549,9 @@ if __name__ == "__main__":
         custom_busmap = params.custom_busmap
         if custom_busmap:
             custom_busmap = pd.read_csv(
-                snakemake.input.custom_busmap, index_col=0, squeeze=True
+                snakemake.input.custom_busmap,
+                index_col=0,
+                squeeze=True,
             )
             custom_busmap.index = custom_busmap.index.astype(str)
             logger.info(f"Imported custom busmap from {snakemake.input.custom_busmap}")
@@ -549,7 +578,8 @@ if __name__ == "__main__":
         nc.generators["carrier"] = nc.generators.carrier.replace(labels, "", regex=True)
 
     clustering.network.meta = dict(
-        snakemake.config, **dict(wildcards=dict(snakemake.wildcards))
+        snakemake.config,
+        **dict(wildcards=dict(snakemake.wildcards)),
     )
     clustering.network.export_to_netcdf(snakemake.output.network)
     for attr in (

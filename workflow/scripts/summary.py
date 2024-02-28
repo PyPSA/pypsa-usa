@@ -254,6 +254,7 @@ def get_capacity_brownfield(
 # COSTS
 ###
 
+
 def get_capital_costs(n: pypsa.Network) -> pd.DataFrame:
     return n.statistics.capex() - n.statistics.installed_capex()
 
@@ -279,7 +280,11 @@ def get_node_emissions_timeseries(n: pypsa.Network) -> pd.DataFrame:
                 eff_static[gen] = [c.df.at[gen, "efficiency"]] * len(eff)
             eff = pd.concat([eff, pd.DataFrame(eff_static, index=eff.index)], axis=1)
 
-            co2_factor = c.df.carrier.map(n.carriers.co2_emissions).fillna(0).infer_objects(copy=False)
+            co2_factor = (
+                c.df.carrier.map(n.carriers.co2_emissions)
+                .fillna(0)
+                .infer_objects(copy=False)
+            )
 
             totals.append(
                 (
@@ -292,7 +297,11 @@ def get_node_emissions_timeseries(n: pypsa.Network) -> pd.DataFrame:
             )
         elif c.name == "Link":  # efficiency taken into account by using p0
 
-            co2_factor = c.df.carrier.map(n.carriers.co2_emissions).fillna(0).infer_objects(copy=False)
+            co2_factor = (
+                c.df.carrier.map(n.carriers.co2_emissions)
+                .fillna(0)
+                .infer_objects(copy=False)
+            )
 
             totals.append(
                 (
@@ -335,13 +344,14 @@ def get_tech_emissions_timeseries(n: pypsa.Network) -> pd.DataFrame:
             )
         elif c.name == "Link":  # efficiency taken into account by using p0
 
-            co2_factor = c.df.carrier.map(n.carriers.co2_emissions).fillna(0).infer_objects(copy=False)
+            co2_factor = (
+                c.df.carrier.map(n.carriers.co2_emissions)
+                .fillna(0)
+                .infer_objects(copy=False)
+            )
 
             totals.append(
-                (c.pnl.p0.mul(co2_factor)
-                .T.groupby(n.links.carrier)
-                .sum()
-                .T),
+                (c.pnl.p0.mul(co2_factor).T.groupby(n.links.carrier).sum().T),
             )
     return pd.concat(totals, axis=1)
 

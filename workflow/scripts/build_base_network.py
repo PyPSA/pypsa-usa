@@ -726,7 +726,6 @@ def main(snakemake):
     )
     lines_gis.to_csv(snakemake.output.lines_gis)
 
-    
     # export network
     n.export_to_netcdf(snakemake.output.network)
 

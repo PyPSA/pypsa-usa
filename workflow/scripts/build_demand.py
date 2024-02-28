@@ -180,12 +180,12 @@ def prepare_efs_demand(
             .apply(
                 lambda group: group.loc[
                     group.drop(columns="UTC_Time").first_valid_index()
-                ]
+                ],
             )
             .drop(columns="UTC_Time")
         )
 
-    #take the intersection of the demand and the snapshots by hour of year
+    # take the intersection of the demand and the snapshots by hour of year
     hoy = (n.snapshots.dayofyear - 1) * 24 + n.snapshots.hour
     demand_new = demand_new.loc[hoy]
     demand_new.index = n.snapshots
@@ -263,7 +263,7 @@ def main(snakemake):
         )
     else:
         raise ValueError(
-            "Invalid demand_type. Supported values are 'ads', and 'pypsa-usa'."
+            "Invalid demand_type. Supported values are 'ads', and 'pypsa-usa'.",
         )
 
     demand_per_bus.to_csv(snakemake.output.demand, index=True)

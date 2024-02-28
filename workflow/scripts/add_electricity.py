@@ -735,7 +735,7 @@ def match_plant_to_bus(n, plants):
 
 
 def attach_renewable_capacities_to_atlite(
-    n: pypsa.Network, 
+    n: pypsa.Network,
     plants_df: pd.DataFrame,
     renewable_carriers: list,
 ):
@@ -935,14 +935,14 @@ def attach_wind_and_solar(
             p_nom_max_bus = (
                 ds["p_nom_max"]
                 .to_dataframe()
-                .merge(bus2sub[['bus_id','sub_id']], left_on="bus", right_on="sub_id")
+                .merge(bus2sub[["bus_id", "sub_id"]], left_on="bus", right_on="sub_id")
                 .set_index("bus_id")
                 .p_nom_max
             )
             weight_bus = (
                 ds["weight"]
                 .to_dataframe()
-                .merge(bus2sub[['bus_id','sub_id']], left_on="bus", right_on="sub_id")
+                .merge(bus2sub[["bus_id", "sub_id"]], left_on="bus", right_on="sub_id")
                 .set_index("bus_id")
                 .weight
             )
@@ -950,7 +950,9 @@ def attach_wind_and_solar(
                 ds["profile"]
                 .transpose("time", "bus")
                 .to_pandas()
-                .T.merge(bus2sub[['bus_id','sub_id']], left_on="bus", right_on="sub_id")
+                .T.merge(
+                    bus2sub[["bus_id", "sub_id"]], left_on="bus", right_on="sub_id"
+                )
                 .set_index("bus_id")
                 .drop(columns="sub_id")
                 .T

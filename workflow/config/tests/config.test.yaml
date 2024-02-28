@@ -13,7 +13,7 @@ run:
 scenario:
   interconnect: western #"usa|texas|western|eastern"
   clusters: [30, 100]
-  opts: [Co2L0.30-4H-Ep-EQ0.05c-SAFE,]
+  opts: [Co2L0.30-4H-Ep-EQ0.05c-SAFE]
   ll: [vopt, v1.15]
   scope: "total" # "urban", "rural", or "total"
   sector: "" # G

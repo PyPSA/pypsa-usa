@@ -605,18 +605,22 @@ def plot_production_bar(
 
     # get data
     energy_mix = n.statistics.dispatch().mul(1e-3)  # MW -> GW
-    energy_mix.name = "dispatch" 
-    energy_mix = energy_mix[energy_mix.index.get_level_values('component').isin(['Generator', 'StorageUnit'])]
+    energy_mix.name = "dispatch"
+    energy_mix = energy_mix[
+        energy_mix.index.get_level_values("component").isin(
+            ["Generator", "StorageUnit"]
+        )
+    ]
     energy_mix = energy_mix.groupby("carrier").sum().reset_index()
     color_palette = get_color_palette(n)
 
     fig, ax = plt.subplots(figsize=(10, 10))
     sns.barplot(
-        data=energy_mix, 
-        y="carrier", 
-        x="dispatch", 
+        data=energy_mix,
+        y="carrier",
+        x="dispatch",
         palette=color_palette,
-        )
+    )
 
     ax.set_title(create_title("Dispatch [GWh]", **wildcards))
     ax.set_ylabel("")
@@ -643,13 +647,13 @@ def plot_costs_bar(
     costs = pd.concat(
         [opex, capex],
         axis=1,
-        keys=["OPEX", "CAPEX"]).reset_index()
+        keys=["OPEX", "CAPEX"],
+    ).reset_index()
     costs = costs.groupby("carrier").sum().reset_index()  # groups batteries
 
     # plot data
     fig, ax = plt.subplots(figsize=(10, 10))
     color_palette = get_color_palette(n)
-
 
     sns.barplot(
         y="carrier",
@@ -1135,7 +1139,6 @@ def plot_capacity_additions_bar(
     # plot data (option 2)
     # using matplotlib for tech group colours
 
-
     color_palette = get_color_palette(n)
     color_mapper = [color_palette[carrier] for carrier in capacity.index]
     bar_height = 0.35
@@ -1270,10 +1273,10 @@ if __name__ == "__main__":
         **snakemake.wildcards,
     )
     plot_costs_bar(
-        n, 
-        carriers, 
-        snakemake.output["costs_bar"], 
-        **snakemake.wildcards
+        n,
+        carriers,
+        snakemake.output["costs_bar"],
+        **snakemake.wildcards,
     )
     plot_production_bar(
         n,
@@ -1294,9 +1297,9 @@ if __name__ == "__main__":
         **snakemake.wildcards,
     )
     plot_hourly_emissions(
-        n, 
-        snakemake.output["emissions_area"], 
-        **snakemake.wildcards
+        n,
+        snakemake.output["emissions_area"],
+        **snakemake.wildcards,
     )
     plot_hourly_emissions_html(
         n,
