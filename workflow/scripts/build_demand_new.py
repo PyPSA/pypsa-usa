@@ -1,13 +1,13 @@
 # PyPSA USA Authors
 """
-Builds the demand data for the PyPSA network. 
+Builds the demand data for the PyPSA network.
 
-Call a demand source, or multiple via... 
+Call a demand source, or multiple via...
 
     context = Context(AdsDemand(demand_path))
     context.prepare_demand(demand_path)
-    # logic to apply ADS demand 
-    
+    # logic to apply ADS demand
+
     context.strategy = EiaDemand()
     context.prepare_demand(demand_path)
     # logic to apply other demand from eia
@@ -61,19 +61,22 @@ from abc import ABC, abstractmethod
 
 logger = logging.getLogger(__name__)
 
-class Context():
+
+class Context:
     """
     The Context defines the interface of interest to clients.
     """
-    
-    def __init__(self, read_strategy: ReadStrategy, write_strategy: WriteStrategy) -> None:
+
+    def __init__(
+        self, read_strategy: ReadStrategy, write_strategy: WriteStrategy
+    ) -> None:
         self._read_strategy = read_strategy
         self._write_strategy = write_strategy
-    
+
     @property
     def read_strategy(self) -> ReadStrategy:
         """
-        The Context maintains a reference to the Strategy objects
+        The Context maintains a reference to the Strategy objects.
         """
         return self._read_strategy
 
@@ -83,11 +86,11 @@ class Context():
         Usually, the Context allows replacing a Strategy object at runtime.
         """
         self._read_strategy = strategy
-        
+
     @property
     def write_strategy(self) -> WriteStrategy:
         """
-        The Context maintains a reference to the Strategy objects
+        The Context maintains a reference to the Strategy objects.
         """
         return self._write_strategy
 
@@ -97,26 +100,32 @@ class Context():
         Usually, the Context allows replacing a Strategy object at runtime.
         """
         self._write_strategy = strategy
-        
+
     def _read(self, filepath: str, **kwargs) -> pd.DataFrame:
-        """Delegate reading to the strategy"""
+        """
+        Delegate reading to the strategy.
+        """
         return self._read_strategy.prepare_demand(filepath, **kwargs)
-        
+
     def _write(self, demand: pd.DataFrame, n: pypsa.Network) -> pd.DataFrame:
-        """Delegate writing to the strategy"""
+        """
+        Delegate writing to the strategy.
+        """
         return self._write_strategy.retrieve_demand(demand, n)
-        
+
     def prepare_demand(self, filepath: str, **kwargs) -> pd.DataFrame:
         """
         Arguments
-            fuel: str = None, 
-            sector: str = None, 
-            year: int = None 
+            fuel: str = None,
+            sector: str = None,
+            year: int = None
         """
         return self._read(filepath, *kwargs)
-        
+
     def retrieve_demand(self, filepath: str, n: pypsa.Network, **kwargs) -> None:
-        """Reads demand to apply to a network"""
+        """
+        Reads demand to apply to a network.
+        """
         demand = self._read(filepath, *kwargs)
         return self._write(demand, n)
 
@@ -125,44 +134,64 @@ class Context():
 # READ STRATEGIES
 ###
 
+
 class ReadStrategy(ABC):
     """
     The Strategy interface declares operations common to all supported versions
     of some algorithm.
     """
-    
+
     # def __init__(self, filepath: str) -> None:
     #     self.filepath = filepath
     #     self.demand = self._get_demand()
     #     self._check_index()
-    
+
     @abstractmethod
     def _read_data(self, filepath: str) -> pd.DataFrame:
-        """Reads raw data"""
+        """
+        Reads raw data.
+        """
         pass
 
     @abstractmethod
     def _format_data(self, data: pd.DataFrame) -> pd.DataFrame:
-        """Formats raw data"""
+        """
+        Formats raw data.
+        """
         return data
-    
+
     def _get_demand(self, filepath: str) -> pd.DataFrame:
-        """Gets raw data"""
+        """
+        Gets raw data.
+        """
         df = self._read_data(filepath)
         return self._format_data(df)
-    
+
     def _check_index(self) -> None:
-        """Add asserts on index labels"""
-        assert all(x in ["YEAR", "HOUR", "REGION", "SECTOR", "FUEL", "VALUE"] for x in self.demand.columns)
-    
+        """
+        Add asserts on index labels.
+        """
+        assert all(
+            x in ["YEAR", "HOUR", "REGION", "SECTOR", "FUEL", "VALUE"]
+            for x in self.demand.columns
+        )
+
     @staticmethod
-    def _filter_pandas(df: pd.DataFrame, index: str, value: List[str] | List[int]) -> pd.DataFrame:
+    def _filter_pandas(
+        df: pd.DataFrame, index: str, value: list[str] | list[int]
+    ) -> pd.DataFrame:
         return df[df[index].isin(value)].copy()
 
-    def prepare_demand(self, filepath: str, fuel: str | List[str] = None, sector: str | List[str]  = None, year: int = None) -> pd.DataFrame:
-        
+    def prepare_demand(
+        self,
+        filepath: str,
+        fuel: str | list[str] = None,
+        sector: str | list[str] = None,
+        year: int = None,
+    ) -> pd.DataFrame:
+
         demand = self._get_demand(filepath)
-        
+
         if fuel:
             if isinstance(fuel, str):
                 fuel = [fuel]
@@ -173,92 +202,113 @@ class ReadStrategy(ABC):
             self._filter_pandas(demand, "sector", sector)
         if year:
             self._filter_pandas(demand, "year", [year])
-            
-        return demand 
+
+        return demand
+
 
 class ReadEia(ReadStrategy):
-    
+
     def _read_data(self, filepath: str) -> pd.DataFrame:
-        """Reads raw data"""
+        """
+        Reads raw data.
+        """
         logger.info("Building Load Data using EFS demand")
         return pd.read_csv(filepath, engine="pyarrow")
         # df = pd.read_csv(filepath, engine="pyarrow", index_col="timestamp").dropna(axis=1)
         # return xr.Dataset.from_dataframe(df)
 
     def _format_data(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Formats raw data"""
+        """
+        Formats raw data.
+        """
         df = self.correct_data(df)
         df = df.melt(id_vars="timestamp")
         df.timestamp = pd.to_datetime(df.timestamp)
-        df["YEAR"] = df.timestamp.dt.year 
+        df["YEAR"] = df.timestamp.dt.year
         df["FUEL"] = "electricity"
-        df["SECTOR"] = "all" 
+        df["SECTOR"] = "all"
         return df.rename(
             columns={
-                "timestamp":"HOUR", 
-                "value":"VALUE", 
-                "variable":"REGION"
-            }
+                "timestamp": "HOUR",
+                "value": "VALUE",
+                "variable": "REGION",
+            },
         )
-    
+
     @staticmethod
     def correct_data(df: pd.DataFrame) -> pd.DataFrame:
-        """Corrects balancing authority naming"""
+        """
+        Corrects balancing authority naming.
+        """
         df["Arizona"] = df.pop("SRP") + df.pop("AZPS")
         return df
+
 
 ###
 # WRITE STRATEGIES
 ###
 
+
 class WriteStrategy(ABC):
-    """Retrieves demand based on a specified network"""
+    """
+    Retrieves demand based on a specified network.
+    """
 
     def retrieve_demand(self, demand: pd.DataFrame, n: pypsa.Network) -> pd.DataFrame:
-        """Writes demand"""
+        """
+        Writes demand.
+        """
         demand = self.filter_on_snapshots(demand, n)
         demand = self.pivot_data(demand)
         self.update_load_dissagregation_names(n)
         demand = self.get_demand_buses(demand, n)
         self.set_load_allocation_factor(n)
         return self.disaggregate_demand_to_buses(demand, n)
-    
+
     @staticmethod
     def pivot_data(df: pd.DataFrame) -> pd.DataFrame:
-        """Pivots data for easier processing"""
+        """
+        Pivots data for easier processing.
+        """
         df = df[["HOUR", "REGION", "VALUE"]].pivot(index="HOUR", columns="REGION")
-        return df.loc[:,("VALUE")]
-    
+        return df.loc[:, ("VALUE")]
+
     @abstractmethod
     def update_load_dissagregation_names(self, n: pypsa.Network):
-        """Corrects load dissagreagation names"""
+        """
+        Corrects load dissagreagation names.
+        """
         pass
-    
+
     @abstractmethod
     def get_demand_buses(self, demand: pd.DataFrame, n: pypsa.Network):
-        """Applies load aggregation facto to network"""
+        """
+        Applies load aggregation facto to network.
+        """
         pass
-        
+
     def set_load_allocation_factor(self, n: pypsa.Network):
         """
-        Defines Load allocation factor for each bus according to load_dissag for
-        balancing areas.
+        Defines Load allocation factor for each bus according to load_dissag
+        for balancing areas.
         """
         n.buses.Pd = n.buses.Pd.fillna(0)
         group_sums = n.buses.groupby("load_dissag")["Pd"].transform("sum")
         n.buses["LAF"] = n.buses["Pd"] / group_sums
-    
+
     def filter_on_snapshots(self, df: pd.DataFrame, n: pypsa.Network) -> pd.DataFrame:
-        """Filters demand on network snapshots"""
+        """
+        Filters demand on network snapshots.
+        """
         df = df.set_index("HOUR")
         df = df.loc[n.snapshots.intersection(df.index)]
-        return (
-            df
-            .reset_index(names="HOUR")
-            .drop_duplicates(subset=["HOUR", "REGION", "YEAR", "FUEL", "SECTOR"], keep="first")
+        return df.reset_index(names="HOUR").drop_duplicates(
+            subset=["HOUR", "REGION", "YEAR", "FUEL", "SECTOR"], keep="first"
         )
 
-    def disaggregate_demand_to_buses(self, df: pd.DataFrame, n: pypsa.Network) -> pd.DataFrame:
+    def disaggregate_demand_to_buses(
+        self, df: pd.DataFrame, n: pypsa.Network
+    ) -> pd.DataFrame:
         """
         Zone power demand is disaggregated to buses proportional to Pd.
         """
@@ -280,23 +330,28 @@ class WriteStrategy(ABC):
         n.buses.drop(columns=["LAF"], inplace=True)
         return bus_demand.fillna(0)
 
-class WriteEia(WriteStrategy): 
-    """Write EIA demand data"""
-    
+
+class WriteEia(WriteStrategy):
+    """
+    Write EIA demand data.
+    """
+
     def update_load_dissagregation_names(self, n: pypsa.Network):
         n.buses["load_dissag"] = n.buses.balancing_area.replace(
             {"^CISO.*": "CISO", "^ERCO.*": "ERCO"},
             regex=True,
         )
         n.buses["load_dissag"] = n.buses.load_dissag.replace({"": "missing_ba"})
-    
+
     def get_demand_buses(self, demand: pd.DataFrame, n: pypsa.Network):
         intersection = set(demand.columns).intersection(n.buses.load_dissag.unique())
         return demand[list(intersection)]
 
-### 
-# helpers 
+
 ###
+# helpers
+###
+
 
 def attach_demand(n: pypsa.Network, demand_per_bus: pd.DataFrame):
     """
@@ -313,16 +368,18 @@ def attach_demand(n: pypsa.Network, demand_per_bus: pd.DataFrame):
         carrier="AC",
     )
 
-### 
-# main entry point 
+
+###
+# main entry point
 ###
 
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
+
         snakemake = mock_snakemake("build_demand", interconnect="western")
     configure_logging(snakemake)
-    
+
     n = pypsa.Network(snakemake.input.base_network)
 
     snapshot_config = snakemake.params["snapshots"]
@@ -334,10 +391,10 @@ if __name__ == "__main__":
             inclusive=snapshot_config["inclusive"],
         ),
     )
-    
+
     demand_path = snakemake.input.eia
     configuration = snakemake.config["network_configuration"]
-    
+
     if configuration == "eia":
         demand_converter = Context(ReadEia(), WriteEia())
     else:
@@ -345,8 +402,5 @@ if __name__ == "__main__":
 
     # optional arguments of 'fuel', 'sector', 'year'
     demand = demand_converter.retrieve_demand(demand_path, n)
-    
+
     attach_demand(n, demand)
-
-
-    
