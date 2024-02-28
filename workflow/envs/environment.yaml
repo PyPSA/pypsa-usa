@@ -1,4 +1,4 @@
-name: pypsa-usa-new
+name: pypsa-usa
 channels:
 - conda-forge
 - bioconda
