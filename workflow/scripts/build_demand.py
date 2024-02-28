@@ -153,7 +153,7 @@ def prepare_efs_demand(
         year=planning_horizons[0],
         month=1,
         day=1,
-    ) + pd.to_timedelta(demand["LocalHourID"] - 1, unit="H")
+    ) + pd.to_timedelta(demand["LocalHourID"] - 1, unit="h")
     demand["UTC_Time"] = demand.groupby(["State"])["DateTime"].transform(local_to_utc)
     demand.drop(columns=["LocalHourID", "DateTime"], inplace=True)
     demand.set_index("UTC_Time", inplace=True)
@@ -180,12 +180,16 @@ def prepare_efs_demand(
             .apply(
                 lambda group: group.loc[
                     group.drop(columns="UTC_Time").first_valid_index()
-                ]
+                ],
             )
             .drop(columns="UTC_Time")
         )
 
+    # take the intersection of the demand and the snapshots by hour of year
+    hoy = (n.snapshots.dayofyear - 1) * 24 + n.snapshots.hour
+    demand_new = demand_new.loc[hoy]
     demand_new.index = n.snapshots
+
     n.buses.rename(columns={"LAF_states": "LAF"}, inplace=True)
     return disaggregate_demand_to_buses(n, demand_new)
 
@@ -259,7 +263,7 @@ def main(snakemake):
         )
     else:
         raise ValueError(
-            "Invalid demand_type. Supported values are 'ads', and 'pypsa-usa'."
+            "Invalid demand_type. Supported values are 'ads', and 'pypsa-usa'.",
         )
 
     demand_per_bus.to_csv(snakemake.output.demand, index=True)

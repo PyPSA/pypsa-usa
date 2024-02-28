@@ -17,7 +17,7 @@ scenario:
   scope: "total" # "urban", "rural", or "total"
   sector: "" # G
   planning_horizons:
-  - 2030   #  # Uncomment to use NREL EFS Demand Forecasts (2030, 2040, 2050)
+  - 2030   #(2030, 2040, 2050)
 
 foresight:  # Only Single Stage Currently
 
@@ -73,6 +73,7 @@ electricity:
   co2base: 226.86e+6 #base_from_2020 Locations of the 250 MMmt of CO2 emissions from the WECC 2021.
   gaslimit: false # global gas usage limit of X MWh_th
   retirement: economic # "economic" or "technical"
+  SAFE_reservemargin: 0.15
 
   operational_reserve:
     activate: false
@@ -90,7 +91,7 @@ electricity:
     Store: [] #[H2]
     Link: [] #[H2 pipeline]
 
-  demand: #EFS used for given planning_horizons year
+  demand: #EFS used for given planning_horizons year (only ref/mod implemented)
     EFS_case: reference # reference, medium, high
     EFS_speed: moderate # slow, moderate, rapid
 
@@ -259,19 +260,14 @@ clustering:
   cluster_network:
     algorithm: kmeans
     feature: solar+onwind-time
-    aggregation_zones: 'balancing_area' # [balancing_area, state]
+    aggregation_zones: 'state' # [balancing_area, state]
+    exclude_carriers: []
+    consider_efficiency_classes: false
   aggregation_strategies:
     generators:
-      p_nom_max: sum # use "min" for more conservative assumptions
-      p_nom_min: sum
-      p_min_pu: mean
-      marginal_cost: mean
       committable: any
-      ramp_limit_up: mean
-      ramp_limit_down: mean
-      efficiency: mean
-    buses:
-      state: max # temp fix. When fixing state aggregation- change add electricity such that region info not is use is removed.
+      ramp_limit_up: max
+      ramp_limit_down: max
 
 focus_weights:
   # California: 0.5

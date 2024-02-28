@@ -255,70 +255,8 @@ def get_capacity_brownfield(
 ###
 
 
-def get_operational_costs(n: pypsa.Network) -> pd.DataFrame:
-
-    def _get_energy_one_port(c: pypsa.components.Component) -> pd.DataFrame:
-        return c.pnl.p.abs()
-
-    def _get_energy_multi_port(c: pypsa.components.Component) -> pd.DataFrame:
-        return c.pnl.p0.abs()
-
-    totals = []
-    for c in n.iterate_components(n.one_port_components | n.branch_components):
-        if c.name in ("Generator", "StorageUnit", "Store"):
-            production = _get_energy_one_port(c)
-        elif c.name in ("Link"):
-            production = _get_energy_multi_port(c)
-        else:
-            continue
-
-        marginal_cost = c.pnl.marginal_cost
-        marginal_cost_static = {}
-        for item in [x for x in c.df.index if x not in marginal_cost.columns]:
-            marginal_cost_static[item] = [c.df.at[item, "marginal_cost"]] * len(
-                marginal_cost,
-            )
-        marginal_cost = pd.concat(
-            [
-                marginal_cost,
-                pd.DataFrame(marginal_cost_static, index=marginal_cost.index),
-            ],
-            axis=1,
-        )
-
-        opex = (
-            (production * marginal_cost).fillna(0).groupby(c.df.carrier, axis=1).sum()
-        )
-
-        totals.append(opex)
-
-    return pd.concat(totals, axis=1)
-
-
 def get_capital_costs(n: pypsa.Network) -> pd.DataFrame:
-
-    def _get_new_capacity_MW(c: pypsa.components.Component) -> pd.DataFrame:
-        return (c.df.p_nom_opt - c.df.p_nom).map(lambda x: x if x > 0 else 0)
-
-    def _get_new_capacity_MWh(c: pypsa.components.Component) -> pd.DataFrame:
-        return (c.df.e_nom_opt - c.df.e_nom).map(lambda x: x if x > 0 else 0)
-
-    totals = []
-    for c in n.iterate_components(n.one_port_components | n.branch_components):
-        if c.name in ("Generator", "StorageUnit", "Link"):
-            new_capacity = _get_new_capacity_MW(c)
-        elif c.name in ("Store"):
-            new_capacity = _get_new_capacity_MWh(c)
-        else:
-            continue
-
-        capital_costs = c.df.capital_cost
-
-        capex = (new_capacity * capital_costs).fillna(0).groupby(c.df.carrier).sum()
-
-        totals.append(capex)
-
-    return pd.concat(totals)
+    return n.statistics.capex() - n.statistics.installed_capex()
 
 
 ###
@@ -342,26 +280,36 @@ def get_node_emissions_timeseries(n: pypsa.Network) -> pd.DataFrame:
                 eff_static[gen] = [c.df.at[gen, "efficiency"]] * len(eff)
             eff = pd.concat([eff, pd.DataFrame(eff_static, index=eff.index)], axis=1)
 
-            co2_factor = c.df.carrier.map(n.carriers.co2_emissions).fillna(0)
+            co2_factor = (
+                c.df.carrier.map(n.carriers.co2_emissions)
+                .fillna(0)
+                .infer_objects(copy=False)
+            )
 
             totals.append(
                 (
                     c.pnl.p.mul(1 / eff)
                     .mul(co2_factor)
-                    .groupby(n.generators.bus, axis=1)
+                    .T.groupby(n.generators.bus)
                     .sum()
+                    .T
                 ),
             )
         elif c.name == "Link":  # efficiency taken into account by using p0
 
-            co2_factor = c.df.carrier.map(n.carriers.co2_emissions).fillna(0)
+            co2_factor = (
+                c.df.carrier.map(n.carriers.co2_emissions)
+                .fillna(0)
+                .infer_objects(copy=False)
+            )
 
             totals.append(
                 (
                     c.pnl.p0.mul(co2_factor)
-                    .groupby(n.links.bus0, axis=1)
+                    .T.groupby(n.links.bus0)
                     .sum()
                     .rename_axis(index={"bus0": "bus"})
+                    .T
                 ),
             )
     return pd.concat(totals, axis=1)
@@ -389,16 +337,21 @@ def get_tech_emissions_timeseries(n: pypsa.Network) -> pd.DataFrame:
                 (
                     c.pnl.p.mul(1 / eff)
                     .mul(co2_factor)
-                    .groupby(n.generators.carrier, axis=1)
+                    .T.groupby(n.generators.carrier)
                     .sum()
+                    .T
                 ),
             )
         elif c.name == "Link":  # efficiency taken into account by using p0
 
-            co2_factor = c.df.carrier.map(n.carriers.co2_emissions).fillna(0)
+            co2_factor = (
+                c.df.carrier.map(n.carriers.co2_emissions)
+                .fillna(0)
+                .infer_objects(copy=False)
+            )
 
             totals.append(
-                (c.pnl.p0.mul(co2_factor).groupby(n.links.carrier, axis=1).sum()),
+                (c.pnl.p0.mul(co2_factor).T.groupby(n.links.carrier).sum().T),
             )
     return pd.concat(totals, axis=1)
 
