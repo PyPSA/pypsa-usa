@@ -32,8 +32,6 @@ rule solve_network:
     resources:
         mem_mb=memory,
         walltime=config["solving"].get("walltime", "12:00:00"),
-    shadow:
-        "minimal"
     conda:
         "../envs/environment.yaml"
     script:
