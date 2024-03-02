@@ -12,7 +12,7 @@ run:
 scenario:
   interconnect: [western] #"usa|texas|western|eastern"
   clusters: [40]
-  opts: [Co2L1.0-3H-RCo2L]
+  opts: [Co2L1.0-3H-CCL]
   ll: [v1.0]
   scope: "total" # "urban", "rural", or "total"
   sector: "" # G
@@ -74,6 +74,7 @@ electricity:
   retirement: economic # "economic" or "technical"
   SAFE_reservemargin: 0.14
   regional_Co2_limits: '../repo_data/regional_Co2_limits.csv'
+  agg_p_nom_limits: '../repo_data/agg_p_nom_minmax.csv'
 
   operational_reserve:
     activate: false

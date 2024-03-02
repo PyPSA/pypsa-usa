@@ -228,13 +228,16 @@ def add_CCL_constraints(n, config):
         agg_p_nom_limits: data/agg_p_nom_minmax.csv
     """
     agg_p_nom_minmax = pd.read_csv(
-        config["electricity"]["agg_p_nom_limits"], index_col=[0, 1]
+        config["electricity"]["agg_p_nom_limits"], index_col=[1, 2]
     )
+    agg_p_nom_minmax = agg_p_nom_minmax[agg_p_nom_minmax.planning_horizon == int(snakemake.wildcards.planning_horizons)].drop(columns= 'planning_horizon')
+
     logger.info("Adding generation capacity constraints per carrier and country")
     p_nom = n.model["Generator-p_nom"]
 
-    gens = n.generators.query("p_nom_extendable").rename_axis(index="Generator-ext")
-    grouper = pd.concat([gens.bus.map(n.buses.country), gens.carrier])
+    gens = n.generators.query("p_nom_extendable").rename_axis(index="Generator-ext") # why do we query p_nom_extendable
+
+    grouper = pd.concat([gens.bus.map(n.buses.country), gens.carrier], axis=1)
     lhs = p_nom.groupby(grouper).sum().rename(bus="country")
 
     minimum = xr.DataArray(agg_p_nom_minmax["min"].dropna()).rename(dim_0="group")
@@ -250,6 +253,29 @@ def add_CCL_constraints(n, config):
         n.model.add_constraints(
             lhs.sel(group=index) <= maximum.loc[index], name="agg_p_nom_max"
         )
+
+    pct = xr.DataArray(agg_p_nom_minmax["pct"].dropna()).rename(dim_0="group")
+
+    new_tuples=[]
+    for pct_tuple in pct.indexes["group"]: # loop through each RPS policy
+        region, carriers = pct_tuple
+        carriers_list = [carrier.strip() for carrier in carriers.split(',')]
+        if isinstance(carriers_list, list):
+            # Create a new tuple for each energy type and append to new list
+            for carrier in carriers_list:
+                new_tuples.append((region, carrier))
+        else:
+            # If it's not a list, just append the original tuple
+            new_tuples.append(pct_tuple)
+        new_multi_index = pd.MultiIndex.from_tuples(new_tuples, names=['region','carrier'])
+        index = new_multi_index.intersection(lhs.indexes["group"])
+        if not index.empty:
+            n.model.add_constraints(
+                lhs.sel(group=index).sum()
+                    >= pct.loc[region].values[0] * lhs.sel(group=region), name="agg_p_nom_pct"
+            )
+    logger.info("Adding generation capacity constraints per carrier and country")
+
 
 
 def add_EQ_constraints(n, o, scaling=1e-1):
@@ -438,7 +464,6 @@ def add_regional_co2limit(n, config):
 
         rhs = region_co2lim
         n.model.add_constraints(lhs == rhs, name=f"{region}_co2_limit")
-
 
 # TODO: think about removing or make per country
 def add_SAFE_constraints(n, config):
@@ -742,7 +767,7 @@ if __name__ == "__main__":
         snakemake = mock_snakemake(
             "solve_network",
             simpl="",
-            opts="Co2L1.0-3H-RCo2L",
+            opts="Co2L1.0-3H-CCL",
             clusters="40",
             ll="v1.0",
             sector_opts="",

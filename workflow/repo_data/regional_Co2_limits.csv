@@ -1,2 +1,4 @@
 region,planning_horizon,limit,import_emissions_factor
 California,2030,0,0.428
+California,2040,1.80E+07,0.428
+,,,
