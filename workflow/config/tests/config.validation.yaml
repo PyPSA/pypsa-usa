@@ -10,8 +10,8 @@ run:
 
 # docs :
 scenario:
-  interconnect: [western, texas] #"usa|texas|western|eastern"
-  clusters: [40]
+  interconnect: [western] #"usa|texas|western|eastern"
+  clusters: [300]
   opts: [Co2L2.0]
   ll: [v1.0]
   scope: "total" # "urban", "rural", or "total"
@@ -73,6 +73,7 @@ electricity:
   co2base: 226.86e+6 #base_from_2020 Locations of the 250 MMmt of CO2 emissions from the WECC 2021.
   gaslimit: false # global gas usage limit of X MWh_th
   retirement: economic # "economic" or "technical"
+  SAFE_reservemargin: 0.15
 
   operational_reserve:
     activate: false
@@ -270,7 +271,7 @@ clustering:
       ramp_limit_down: max
 
 focus_weights:
-  # California: 0.5
+  California: 0.5
 
 # docs :
 solving:
