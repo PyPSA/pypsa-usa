@@ -237,19 +237,19 @@ def add_CCL_constraints(n, config):
 
     gens_non_extendable = n.generators.query("not p_nom_extendable")
 
-    # minimum = xr.DataArray(agg_p_nom_minmax["min"].dropna()).rename(dim_0="group")
-    # index = minimum.indexes["group"].intersection(lhs.indexes["group"])
-    # if not index.empty:
-    #     n.model.add_constraints(
-    #         lhs.sel(group=index) >= minimum.loc[index], name="agg_p_nom_min"
-    #     )
+    minimum = xr.DataArray(agg_p_nom_minmax["min"].dropna()).rename(dim_0="group")
+    index = minimum.indexes["group"].intersection(lhs.indexes["group"])
+    if not index.empty:
+        n.model.add_constraints(
+            lhs.sel(group=index) >= minimum.loc[index], name="agg_p_nom_min"
+        )
 
-    # maximum = xr.DataArray(agg_p_nom_minmax["max"].dropna()).rename(dim_0="group")
-    # index = maximum.indexes["group"].intersection(lhs.indexes["group"])
-    # if not index.empty:
-    #     n.model.add_constraints(
-    #         lhs.sel(group=index) <= maximum.loc[index], name="agg_p_nom_max"
-    #     )
+    maximum = xr.DataArray(agg_p_nom_minmax["max"].dropna()).rename(dim_0="group")
+    index = maximum.indexes["group"].intersection(lhs.indexes["group"])
+    if not index.empty:
+        n.model.add_constraints(
+            lhs.sel(group=index) <= maximum.loc[index], name="agg_p_nom_max"
+        )
 
     pct = xr.DataArray(agg_p_nom_minmax["pct"].dropna()).rename(dim_0="group")
     new_tuples=[]
@@ -390,7 +390,7 @@ def add_regional_co2limit(n, config):
     
     regional_co2_lims = pd.read_csv(config["electricity"]["regional_Co2_limits"], index_col=[0])
     logger.info("Adding regional Co2 Limits.")
-    regional_co2_lims = regional_co2_lims[regional_co2_lims.planning_horizon == int(snakemake.param.planning_horizons)]
+    regional_co2_lims = regional_co2_lims[regional_co2_lims.planning_horizon == int(snakemake.params.planning_horizons[0])]
 
     for region in regional_co2_lims.index:
         region_co2lim = regional_co2_lims.loc[region].limit
@@ -408,59 +408,23 @@ def add_regional_co2limit(n, config):
             p = (n.model["Generator-p"].loc[:, region_gens.index])  
             lhs = (p * em_pu).sum()
 
-        # # storage units - should I change this to measure SOC instead of p_dispatch?
-        # region_sus = n.storage_units[n.storage_units.bus.str.contains(region)]
-        # sus = region_sus.query("carrier in @emissions.index and " "not cyclic_state_of_charge")
-        # sus_i = sus.index
-
-        # if not sus.empty:
-        #     efficiency = get_as_dense(n, "storage_units", "efficiency", inds=sus_i) #mw_electrical/mw_th
-        #     em_pu = region_sus.carrier.map(emissions) / efficiency #kg_co2/mw_electrical
-        #     # em_pu = em_pu.multiply(weightings.generators, axis=0) # Weightings doesn't have storage units, ask pypsa folks about this
-        #     p = (n.model["StorageUnit-p_dispatch"].loc[:, region_sus.index])  
-        #     lhs = lhs + (p * em_pu).sum()
-
-        #     # em_pu = sus.carrier.map(emissions)
-        #     # soc = (
-        #         # get_var(n, "StorageUnit", "state_of_charge").loc[sns, sus_i].loc[period]
-        #     # )
-        #     # soc = soc.where(soc != -1).ffill().iloc[-1]
-        #     # vals = linexpr((-em_pu, soc), as_pandas=False)
-        #     # lhs = lhs + "\n" + join_exprs(vals)
-        #     # rhs -= em_pu @ sus.state_of_charge_initial
-
-        # # stores
-        # n.stores["carrier"] = n.stores.bus.map(n.buses.carrier)
-        # region_stores = n.stores[n.stores.bus.str.contains(region)]
-        # region_stores = region_stores.query("carrier in @emissions.index and not e_cyclic")
-        # if not region_stores.empty:
-        #     efficiency = get_as_dense(n, "stores", "efficiency", inds=region_stores.index) #mw_electrical/mw_th
-        #     em_pu = region_Stores.carrier.map(emissions) / efficiency #kg_co2/mw_electrical
-        #     # em_pu = em_pu.multiply(weightings.generators, axis=0) # Weightings doesn't have storage units, ask pypsa folks about this
-        #     p = (n.model["Stores-p_dispatch"].loc[:, region_stores.index])  
-        #     lhs = lhs + (p * em_pu).sum()
-
-        #     # em_pu = region_stores.carrier.map(emissions)
-        #     # e = get_var(n, "Store", "e").loc[sns, stores.index].loc[period]
-        #     # e = e.where(e != -1).ffill().iloc[-1]
-        #     # vals = linexpr((-em_pu, e), as_pandas=False)
-        #     # lhs = lhs + "\n" + join_exprs(vals)
-        #     # rhs -= stores.carrier.map(emissions) @ stores.e_initial
-
         # # Imports
         # bus0 = n.lines.bus0
         # bus1 = n.lines.bus1
         # bus0_region = bus0[bus0.str.contains(region)]
         # region_lines = n.lines.loc[bus0_region.index]
         # inter_regional_lines = region_lines[~region_lines.bus1.str.contains(region)]
-        
+        # import pdb; pdb.set_trace()
+
         # if not inter_regional_lines.empty:
         #     inter_regional_flows = (n.model["Line-s"].loc[:, inter_regional_lines.index])
-        #     # inter_regional_flows * EF_unspecified maybe multiply first then take positive portionss
-        #     # inter_regional_imports = inter_regional_flows.where(inter_regional_flows <= 0) #this causes no line flow
+        #     regional_imports = np.max(inter_regional_flows, 0)
+        #     inter_regional_imports = inter_regional_flows.where(inter_regional_flows <= 0)
+            
+        #      #this causes no line flow
         #     # inter_regional_imports = inter_regional_flows.where(inter_regional_flows >= 0) #this causes no line flow
         #     # lhs = (inter_regional_imports).sum()
-        #     lhs = (inter_regional_imports)
+        #     lhs += (inter_regional_imports)
 
         rhs = region_co2lim
         n.model.add_constraints(lhs == rhs, name=f"{region}_co2_limit")
@@ -500,6 +464,45 @@ def add_SAFE_constraints(n, config):
     ).p_nom.sum()
     rhs = reserve_margin - exist_conv_caps
     n.model.add_constraints(lhs >= rhs, name="safe_mintotalcap")
+
+def add_regional_SAFE_constraints(n, config):
+    """
+    Add a capacity reserve margin of a certain fraction above the peak demand.
+    Renewable generators and storage do not contribute. Ignores network.
+
+    Parameters
+    ----------
+        n : pypsa.Network
+        config : dict
+
+    Example
+    -------
+    config.yaml requires to specify opts:
+
+    scenario:
+        opts: [Co2L-SAFE-24H]
+    electricity:
+        SAFE_reservemargin: 0.1
+    Which sets a reserve margin of 10% above the peak demand.
+    """
+    regional_prm = pd.read_csv(config["electricity"]["SAFE_regional_reservemargins"], index_col=[0])
+    for region in regional_prm.index:
+        peakdemand = n.loads_t.p_set.loc[:,n.loads.bus.str.contains(region)].sum(axis=1).max()
+        margin = 1.0 + regional_prm.loc[region].item()
+        reserve_margin = peakdemand * margin
+        conventional_carriers = config["electricity"]["conventional_carriers"]
+
+        region_gens = n.generators[n.generators.bus.str.contains(region)]
+        ext_gens_i = region_gens.query(
+            "carrier in @conventional_carriers & p_nom_extendable"
+        ).index
+        p_nom = n.model["Generator-p_nom"].loc[ext_gens_i]
+        lhs = p_nom.sum()
+        exist_conv_caps = region_gens.query(
+            "~p_nom_extendable & carrier in @conventional_carriers"
+        ).p_nom.sum()
+        rhs = reserve_margin - exist_conv_caps
+        n.model.add_constraints(lhs >= rhs, name=f"safe_mintotalcap_{region}")
 
 
 def add_operational_reserve_margin(n, sns, config):
@@ -698,6 +701,8 @@ def extra_functionality(n, snapshots):
         add_BAU_constraints(n, config)
     if "SAFE" in opts and n.generators.p_nom_extendable.any():
         add_SAFE_constraints(n, config)
+    if "SAFER" in opts and n.generators.p_nom_extendable.any():
+        add_regional_SAFE_constraints(n, config)
     if "CCL" in opts and n.generators.p_nom_extendable.any():
         add_CCL_constraints(n, config)
     reserve = config["electricity"].get("operational_reserve", {})
