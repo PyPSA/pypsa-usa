@@ -8,6 +8,7 @@ import seaborn as sns
 
 logger = logging.getLogger(__name__)
 from _helpers import configure_logging
+from constants import EIA_930_REGION_MAPPER
 
 sns.set_theme("paper", style="whitegrid")
 
@@ -32,6 +33,7 @@ selected_cols = [
     "Net Generation (MW) from Solar (Adjusted)",
     "Net Generation (MW) from Wind (Adjusted)",
     "Net Generation (MW) from Other Fuel Sources (Adjusted)",
+    "Region",
 ]
 rename_his = {
     "Net Generation (MW) from Natural Gas (Adjusted)": "Natural gas",
@@ -59,10 +61,9 @@ kwargs = dict(color=colors, legend=False, ylabel="Production [GW]", xlabel="")
 def plot_graphs(n, csv_path_1, csv_path_2, save1, save2, save3):
     # plot a stacked plot for seasonal production
     # snapshot: January 2 - December 30 (inclusive)
-    buses = get_buses(n)
-    order = historic_df(csv_path_1, csv_path_2, buses)[1]
+    buses = get_regions(n)
+    historic, order = historic_df(csv_path_1, csv_path_2, buses)
     optimized = optimized_df(n, order)
-    historic = historic_df(csv_path_1, csv_path_2, buses)[0]
     fig, axes = plt.subplots(3, 1, figsize=(9, 9))
     optimized.resample("1D").sum().plot.area(ax=axes[0], **kwargs, title="Optimized")
     historic.resample("1D").sum().plot.area(ax=axes[1], **kwargs, title="Historic")
@@ -117,9 +118,7 @@ def optimized_df(n, order):
     """
     Create a DataFrame from the model output/optimized.
     """
-    # Drop Arizona since there is no Arizona balancing authority in the historical data
-    # columns_to_drop = [col for col in n.generators_t["p"].columns if 'Arizona' in col]
-    ba_carrier = n.generators_t["p"]  # .drop(columns_to_drop, axis=1)
+    ba_carrier = n.generators_t["p"]
     optimized = (
         ba_carrier.groupby(axis="columns", by=n.generators["carrier"])
         .sum()
@@ -148,6 +147,8 @@ def historic_df(csv_path_1, csv_path_2, buses):
         date_format="%m/%d/%Y %I:%M:%S %p",
         usecols=selected_cols,
     )
+    historic_first = historic_first[historic_first.Region.map(EIA_930_REGION_MAPPER) == snakemake.wildcards.interconnect]
+
     historic_second = pd.read_csv(
         csv_path_2,
         index_col=[0, 1],
@@ -156,14 +157,21 @@ def historic_df(csv_path_1, csv_path_2, buses):
         date_format="%m/%d/%Y %I:%M:%S %p",
         usecols=selected_cols,
     )
+    historic_second = historic_second[historic_second.Region.map(EIA_930_REGION_MAPPER) == snakemake.wildcards.interconnect]
+
     # Clean the data read from csv
     historic_first_df = (
-        historic_first.loc[buses].fillna(0).replace({",": ""}, regex=True).astype(float)
-    )
-    historic_second_df = (
-        historic_second.loc[buses]
+        historic_first
         .fillna(0)
         .replace({",": ""}, regex=True)
+        .drop(columns= "Region", axis=1)
+        .astype(float)
+    )
+    historic_second_df = (
+        historic_second
+        .fillna(0)
+        .replace({",": ""}, regex=True)
+        .drop(columns= "Region", axis=1)
         .astype(float)
     )
     historic = (
@@ -171,28 +179,21 @@ def historic_df(csv_path_1, csv_path_2, buses):
         .groupby(["UTC Time at End of Hour"])
         .sum()
     )
-    # Consider negative values as 0 for stackplot purposes
-    historic[historic < 0] = 0
+
     historic = historic.rename(columns=rename_his)
+    historic[historic<0] = 0 # remove negative values for plotting (low impact on results)
     order = (historic.diff().abs().sum() / historic.sum()).sort_values().index
     historic = historic.reindex(order, axis=1, level=1)
-    historic = historic.loc["2019-01-02 00:00:00":"2019-12-30 23:00:00"] / 1e3
+    historic = historic/ 1e3
     return historic, order
 
 
-def get_buses(n):
-    buses = []
-    for i in range(n.generators.bus.size):
-        if n.generators.bus[i] not in buses:
-            buses.append(n.generators.bus[i])
-    buses_clean = [ba.split("0")[0] for ba in buses]
-    buses_clean = [ba.split("-")[0] for ba in buses_clean]
-    buses = list(OrderedDict.fromkeys(buses_clean))
-    if "ERCO" in buses:
-        pass
-    else:
-        buses.pop(1)
-    return buses
+def get_regions(n):
+    regions = n.buses.country.unique()
+    regions_clean = [ba.split("0")[0] for ba in regions]
+    regions_clean = [ba.split("-")[0] for ba in regions_clean]
+    regions = list(OrderedDict.fromkeys(regions_clean))
+    return regions
 
 
 if __name__ == "__main__":
@@ -201,10 +202,10 @@ if __name__ == "__main__":
 
         snakemake = mock_snakemake(
             "plot_validation_figures",
-            interconnect="texas",
+            interconnect="western",
             clusters=40,
-            ll="v1.15",
-            opts="Co2L0.9-4H",
+            ll="v1.0",
+            opts="Co2L2.0",
             sector="E",
         )
     configure_logging(snakemake)

@@ -63,8 +63,8 @@ wildcard_constraints:
 
 
 # Merge subworkflow configs and main config
-# configfile: "config/tests/config.validation.yaml"
-configfile: "config/tests/config.test_simple.yaml"
+configfile: "config/tests/config.validation.yaml"
+# configfile: "config/tests/config.test_simple.yaml"
 # configfile: "config/config.default.yaml"
 configfile: "config/config.cluster.yaml"
 configfile: "config/config.osw.yaml"
@@ -90,7 +90,7 @@ include: "rules/build_electricity.smk"
 include: "rules/build_sector.smk"
 include: "rules/solve_electricity.smk"
 include: "rules/postprocess.smk"
-
+include: "rules/validate.smk"
 
 if "E" not in config["scenario"]["sector"]:
     if not config["scenario"]["sector"]:

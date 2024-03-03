@@ -219,7 +219,8 @@ load:
 costs:  # based on the potentials, assuming  (0.1 kW/m2 and 10 m2/person)
   year: 2030
   version: v0.6.0
-  rooftop_share: 0.14
+  rooftop_share: 0.0
+  ng_fuel_year: 2019 # year of the natural gas price from CAISO [2019- 2023]
   fill_values:
     FOM: 0
     VOM: 0

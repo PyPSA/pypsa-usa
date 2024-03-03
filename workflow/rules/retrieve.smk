@@ -190,3 +190,15 @@ rule retrieve_cost_data_usa:
         mem_mb=1000,
     script:
         "../scripts/retrieve_cost_data_usa.py"
+
+rule retrieve_caiso_data:
+    params:
+        fuel_year= config['costs']['ng_fuel_year']
+    output:
+        fuel_prices=DATA + "costs/ng_caiso_prices.csv"
+    log:
+        LOGS + "retrieve_caiso_data.log",
+    resources:
+        mem_mb=2000,
+    script:
+        "../scripts/retrieve_caiso_data.py"

@@ -236,6 +236,22 @@ NERC_REGION_MAPPER = {
     "MRO": "eastern",
 }
 
+EIA_930_REGION_MAPPER = {
+    "CAL": "western",
+    "CAR": "eastern",
+    "CENT": "eastern",
+    "FLA": "eastern",
+    "MIDA": "eastern",
+    "MIDW": "eastern",
+    "NW": "western",
+    "NE": "eastern",
+    "NY": "eastern",
+    "SE": "eastern",
+    "SW": "western",
+    "TEN": "eastern",
+    "TEX": "texas",
+}
+
 STATES_INTERCONNECT_MAPPER = {
     "AL": "eastern",
     "AK": None,

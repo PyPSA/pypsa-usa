@@ -241,6 +241,27 @@ rule build_demand:
     script:
         "../scripts/build_demand.py"
 
+rule build_fuel_prices:
+    params:
+        snapshots=config["snapshots"],
+        fuel_year=config["costs"]["ng_fuel_year"],
+    input:
+        fuel_prices=DATA + "costs/ng_caiso_prices.csv",
+        ng_electric_power_price=DATA + "costs/ng_electric_power_price.csv",
+        fuel_costs="repo_data/eia_mappings/fuelCost22.csv",
+    output:
+        fuel_prices=RESOURCES + "{interconnect}/fuel_prices.csv",
+    log:
+        LOGS + "{interconnect}/build_fuel_prices.log",
+    benchmark:
+        BENCHMARKS + "{interconnect}/build_fuel_prices"
+    threads: 1
+    resources:
+        mem_mb=2000,
+    script:
+        "../scripts/build_fuel_prices.py"
+
+
 
 rule add_electricity:
     params:
@@ -274,7 +295,6 @@ rule add_electricity:
         regions=RESOURCES + "{interconnect}/regions_onshore.geojson",
         plants_eia="repo_data/eia_plants_wecc.csv",
         plants_ads="repo_data/ads_plants_locs.csv",
-        fuel_costs="repo_data/eia_mappings/fuelCost22.csv",
         plants_breakthrough=DATA + "breakthrough_network/base_grid/plant.csv",
         hydro_breakthrough=DATA + "breakthrough_network/base_grid/hydro.csv",
         wind_breakthrough=DATA + "breakthrough_network/base_grid/wind.csv",
@@ -292,6 +312,10 @@ rule add_electricity:
         ),
         demand=RESOURCES + "{interconnect}/demand.csv",
         ng_electric_power_price=DATA + "costs/ng_electric_power_price.csv",
+        caiso_fuel_costs=DATA + "costs/ng_caiso_prices.csv",
+        fuel_costs="repo_data/eia_mappings/fuelCost22.csv",
+        fuel_prices=RESOURCES + "{interconnect}/fuel_prices.csv",
+
     output:
         RESOURCES + "{interconnect}/elec_base_network_l_pp.nc",
     log:
