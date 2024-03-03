@@ -210,10 +210,11 @@ rule build_renewable_profiles:
     script:
         "../scripts/build_renewable_profiles.py"
 
+
 rule build_demand:
     params:
         planning_horizons=config["scenario"]["planning_horizons"],
-        snapshots=config["snapshots"]
+        snapshots=config["snapshots"],
     input:
         base_network=RESOURCES + "{interconnect}/elec_base_network.nc",
         ads_renewables=(
@@ -229,14 +230,14 @@ rule build_demand:
         eia=expand(DATA + "GridEmissions/{file}", file=DATAFILES_DMD),
         efs=DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv",
     output:
-        demand = RESOURCES + "{interconnect}/demand.csv",
+        demand=RESOURCES + "{interconnect}/demand.csv",
     log:
         LOGS + "{interconnect}/build_demand.log",
     benchmark:
         BENCHMARKS + "{interconnect}/build_demand"
     threads: 1
     resources:
-        mem_mb=10000,
+        mem_mb=12000,
     script:
         "../scripts/build_demand.py"
 
@@ -289,7 +290,7 @@ rule add_electricity:
             if config["network_configuration"] == "ads2032"
             else []
         ),
-        demand = RESOURCES + "{interconnect}/demand.csv",
+        demand=RESOURCES + "{interconnect}/demand.csv",
         ng_electric_power_price=DATA + "costs/ng_electric_power_price.csv",
     output:
         RESOURCES + "{interconnect}/elec_base_network_l_pp.nc",
@@ -317,13 +318,21 @@ rule simplify_network:
     threads: 2
     resources:
         mem_mb=10000,
-    group:
-        "agg_network"
     script:
         "../scripts/simplify_network.py"
 
 
 rule cluster_network:
+    params:
+        cluster_network=config["clustering"]["cluster_network"],
+        conventional_carriers=config["electricity"].get("conventional_carriers", []),
+        renewable_carriers=config["electricity"]["renewable_carriers"],
+        aggregation_strategies=config["clustering"].get("aggregation_strategies", {}),
+        custom_busmap=config["enable"].get("custom_busmap", False),
+        focus_weights=config.get("focus_weights", None),
+        max_hours=config["electricity"]["max_hours"],
+        length_factor=config["lines"]["length_factor"],
+        costs=config["costs"],
     input:
         network=RESOURCES + "{interconnect}/elec_s.nc",
         regions_onshore=RESOURCES + "{interconnect}/regions_onshore.geojson",
@@ -350,10 +359,8 @@ rule cluster_network:
     threads: 1
     resources:
         mem_mb=10000,
-    group:
-        "agg_network"
     script:
-        "../scripts/cluster_network_eur.py"
+        "../scripts/subworkflows/pypsa-eur/scripts/cluster_network.py"
 
 
 rule add_extra_components:
@@ -370,7 +377,7 @@ rule add_extra_components:
     resources:
         mem_mb=4000,
     group:
-        "agg_network"
+        "prepare"
     script:
         "../scripts/add_extra_components.py"
 
@@ -395,7 +402,7 @@ rule prepare_network:
     resources:
         mem_mb=4000,
     group:
-        "agg_network"
+        "prepare"
     log:
         "logs/prepare_network",
     script:

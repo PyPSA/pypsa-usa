@@ -1,6 +1,9 @@
 # PyPSA USA Authors
 """
-Add_electricity takes data produced by build_renewable_profiles, build_demand, build_cost_data and build_base_network to create a combined network model of all the generators, demand, costs. Locational multipliers are added for regional fuel costs and capital costs. 
+Add_electricity takes data produced by build_renewable_profiles, build_demand,
+build_cost_data and build_base_network to create a combined network model of
+all the generators, demand, costs. Locational multipliers are added for
+regional fuel costs and capital costs.
 
 **Relevant Settings**
 
@@ -731,7 +734,11 @@ def match_plant_to_bus(n, plants):
     return plants_matched
 
 
-def attach_renewable_capacities_to_atlite(n, plants_df, renewable_carriers):
+def attach_renewable_capacities_to_atlite(
+    n: pypsa.Network,
+    plants_df: pd.DataFrame,
+    renewable_carriers: list,
+):
     plants = plants_df.query(
         "bus_assignment in @n.buses.index",
     )
@@ -928,14 +935,14 @@ def attach_wind_and_solar(
             p_nom_max_bus = (
                 ds["p_nom_max"]
                 .to_dataframe()
-                .merge(bus2sub, left_on="bus", right_on="sub_id")
+                .merge(bus2sub[["bus_id", "sub_id"]], left_on="bus", right_on="sub_id")
                 .set_index("bus_id")
                 .p_nom_max
             )
             weight_bus = (
                 ds["weight"]
                 .to_dataframe()
-                .merge(bus2sub, left_on="bus", right_on="sub_id")
+                .merge(bus2sub[["bus_id", "sub_id"]], left_on="bus", right_on="sub_id")
                 .set_index("bus_id")
                 .weight
             )
@@ -943,12 +950,15 @@ def attach_wind_and_solar(
                 ds["profile"]
                 .transpose("time", "bus")
                 .to_pandas()
-                .T.merge(bus2sub, left_on="bus", right_on="sub_id")
+                .T.merge(
+                    bus2sub[["bus_id", "sub_id"]],
+                    left_on="bus",
+                    right_on="sub_id",
+                )
                 .set_index("bus_id")
                 .drop(columns="sub_id")
                 .T
             )
-
             if supcar == "offwind":
                 capital_cost = capital_cost.to_frame().reset_index()
                 capital_cost.bus = capital_cost.bus.astype(int)
@@ -1274,7 +1284,7 @@ def clean_bus_data(n: pypsa.Network):
     """
     Drops data from the network that are no longer needed in workflow.
     """
-    col_list = ["poi_bus", "poi_sub", "poi", "Pd", "load_dissag", "LAF","LAF_states"]
+    col_list = ["poi_bus", "poi_sub", "poi", "Pd", "load_dissag", "LAF", "LAF_states"]
     n.buses.drop(columns=[col for col in col_list if col in n.buses], inplace=True)
 
 
@@ -1364,7 +1374,7 @@ def main(snakemake):
 
     # Applying to all configurations
     plants = match_plant_to_bus(n, plants)
-    
+
     attach_demand(n, snakemake.input.demand)
 
     attach_conventional_generators(
