@@ -1,2 +1,2 @@
 planning_horizon,region,carrier,min,max,pct
-2030,California,"onwind, solar",,,0.6
+2030,California,"onwind, solar, offwind_floating, geothermal, offwind",,,0.6

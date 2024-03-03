@@ -261,7 +261,7 @@ clustering:
     algorithm: kmeans # choose from: [hac, kmeans]
     feature: solar+onwind-time # only for hac. choose from: [solar+onwind-time, solar+onwind-cap, solar-time, solar-cap, solar+offwind-cap] etc.
   cluster_network:
-    algorithm: kmeans
+    algorithm: hac
     feature: solar+onwind-time
     aggregation_zones: 'state' # [balancing_area, state]
   aggregation_strategies:

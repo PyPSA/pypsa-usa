@@ -11,13 +11,13 @@ run:
 # docs :
 scenario:
   interconnect: western #"usa|texas|western|eastern"
-  clusters: [30]
-  opts: [Co2L0.75-4H]
+  clusters: [100]
+  opts: [RCo2L-SAFER-CCL]
   ll: [v1.15]
   scope: "total" # "urban", "rural", or "total"
   sector: "" # G
   planning_horizons:
-  # - 2030   #  # Uncomment to use NREL EFS Demand Forecasts (2030, 2040, 2050)
+  - 2030   #  # Uncomment to use NREL EFS Demand Forecasts (2030, 2040, 2050)
 
 foresight:  # Only Single Stage Currently
 
@@ -74,7 +74,9 @@ electricity:
   gaslimit: false # global gas usage limit of X MWh_th
   retirement: economic # "economic" or "technical"
   SAFE_reservemargin: 0.14
-  regional_Co2_limits: '../repo_data/regional_Co2_limits.csv'
+  regional_Co2_limits: 'repo_data/regional_Co2_limits.csv'
+  agg_p_nom_limits: 'repo_data/agg_p_nom_minmax.csv'
+  SAFE_regional_reservemargins: 'repo_data/SAFE_regional_prm.csv'
 
   operational_reserve:
     activate: false
