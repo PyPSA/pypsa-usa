@@ -55,7 +55,7 @@ colors = [
     "lightskyblue",
     "crimson",
 ]
-kwargs = dict(color=colors, legend=False, ylabel="Production [GW]", xlabel="")
+kwargs = dict(color=colors, ylabel="Production [GW]", xlabel="")
 
 
 def plot_graphs(n, csv_path_1, csv_path_2, save1, save2, save3):
@@ -65,17 +65,17 @@ def plot_graphs(n, csv_path_1, csv_path_2, save1, save2, save3):
     historic, order = historic_df(csv_path_1, csv_path_2, buses)
     optimized = optimized_df(n, order)
     fig, axes = plt.subplots(3, 1, figsize=(9, 9))
-    optimized.resample("1D").sum().plot.area(ax=axes[0], **kwargs, title="Optimized")
-    historic.resample("1D").sum().plot.area(ax=axes[1], **kwargs, title="Historic")
+    optimized.resample("1D").mean().plot.area(ax=axes[0], **kwargs, legend=False, title="Optimized")
+    historic.resample("1D").mean().plot.area(ax=axes[1], **kwargs,legend=False, title="Historic")
 
-    diff = (optimized - historic).fillna(0).resample("1D").sum()
+    diff = (optimized - historic).fillna(0).resample("1D").mean()
     diff.clip(lower=0).plot.area(
         ax=axes[2],
         **kwargs,
         title=r"$\Delta$ (Optimized - Historic)",
     )
     lim = axes[2].get_ylim()[1]
-    diff.clip(upper=0).plot.area(ax=axes[2], **kwargs)
+    diff.clip(upper=0).plot.area(ax=axes[2], **kwargs, legend=False)
     axes[2].set_ylim(bottom=-lim, top=lim)
 
     h, l = axes[0].get_legend_handles_labels()
@@ -88,6 +88,7 @@ def plot_graphs(n, csv_path_1, csv_path_2, save1, save2, save3):
         frameon=False,
         labelspacing=1,
     )
+    fig.tight_layout()
     fig.savefig(save1)
 
     # plot by carrier
@@ -200,7 +201,7 @@ if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
 
-        snakemake = mock_snakemake(
+        snakemake = mock_snakemake( #use Validation config
             "plot_validation_figures",
             interconnect="western",
             clusters=40,
