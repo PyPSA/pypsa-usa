@@ -12,7 +12,7 @@ run:
 scenario:
   interconnect: [western] #"usa|texas|western|eastern"
   clusters: [40]
-  opts: [Co2L2.0-RPS]
+  opts: [Co2L2.0]
   ll: [v1.0]
   scope: "total" # "urban", "rural", or "total"
   sector: "" # G
@@ -90,10 +90,10 @@ electricity:
     H2: 168
 
   extendable_carriers:
-    Generator: [solar, offwind_floating, CCGT] #offwind, offwind_floating,
-    StorageUnit: [] # battery, H2
-    Store: [] #[battery, H2]
-    Link: [] #[H2 pipeline]
+    Generator: []
+    StorageUnit: [] 
+    Store: [] 
+    Link: []
 
   demand: #EFS used for given planning_horizons year
     EFS_case: reference # reference, medium, high
