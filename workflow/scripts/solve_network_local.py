@@ -211,7 +211,7 @@ def add_CCL_constraints(n, config):
     """
     Add CCL (country & carrier limit) constraint to the network.
 
-    Add minimum, maximum, or percent levels of generator nominal capacity per carrier for individual countries. Percent levels of generator capacity can be set for groups of carriers. Each constraint can be designated for a specified planning horizon in multi-period models. Opts and path for agg_p_nom_minmax.csv must be defined in config.yaml. Default file is available at data/agg_p_nom_minmax.csv.
+    Add minimum or maximum levels of generator nominal capacity per carrier for individual countries. Each constraint can be designated for a specified planning horizon in multi-period models. Opts and path for agg_p_nom_minmax.csv must be defined in config.yaml. Default file is available at config/policy_constraints/agg_p_nom_minmax.csv.
 
     Parameters
     ----------
@@ -223,7 +223,7 @@ def add_CCL_constraints(n, config):
     scenario:
         opts: [Co2L-CCL-24H]
     electricity:
-        agg_p_nom_limits: data/agg_p_nom_minmax.csv
+        agg_p_nom_limits: config/policy_constraints/agg_p_nom_minmax.csv
     """
     agg_p_nom_minmax = pd.read_csv(config["electricity"]["agg_p_nom_limits"], index_col=[1, 2])
     agg_p_nom_minmax = agg_p_nom_minmax[agg_p_nom_minmax.planning_horizon == int(snakemake.params.planning_horizons[0])].drop(columns= 'planning_horizon')
@@ -251,7 +251,37 @@ def add_CCL_constraints(n, config):
             lhs.sel(group=index) <= maximum.loc[index], name="agg_p_nom_max"
         )
 
-    pct = xr.DataArray(agg_p_nom_minmax["pct"].dropna()).rename(dim_0="group")
+
+def add_RPS_constraints(n, config):
+    """
+    Add Renewable Portfolio Standards constraint to the network.
+
+    Add percent levels of generator production (MWh) per carrier or groups of carriers for individual countries. Each constraint can be designated for a specified planning horizon in multi-period models. Opts and path for portfolio_standards.csv must be defined in config.yaml. Default file is available at config/policy_constraints/portfolio_standards.csv.
+
+    Parameters
+    ----------
+    n : pypsa.Network
+    config : dict
+
+    Example
+    -------
+    scenario:
+        opts: [Co2L-RPS-24H]
+    electricity:
+        portfolio_standards: config/policy_constraints/portfolio_standards.csv
+    """
+    portfolio_standards = pd.read_csv(config["electricity"]["portfolio_standards"], index_col=[1, 2])
+    portfolio_standards = portfolio_standards[portfolio_standards.planning_horizon == int(snakemake.params.planning_horizons[0])].drop(columns= 'planning_horizon')
+
+    logger.info("Adding generation capacity constraints per carrier and country")
+    p = n.model["Generator-p"]
+
+    gens = n.generators.rename_axis(index="Generator")
+
+    grouper = pd.concat([gens.bus.map(n.buses.country), gens.carrier], axis=1)
+    lhs = p.groupby(grouper).sum().rename(bus="country")
+
+    pct = xr.DataArray(portfolio_standards["pct"].dropna()).rename(dim_0="group")
     new_tuples=[]
     for pct_tuple in pct.indexes["group"]: # loop through each RPS policy
         region, carriers = pct_tuple
@@ -269,13 +299,13 @@ def add_CCL_constraints(n, config):
         index = new_multi_index.intersection(lhs.indexes["group"])
         if not index.empty:
             logger.info(f"Adding RPS constraint for {region}")
-            p_nom_fixed = gens_non_extendable[gens_non_extendable.bus.str.contains(region)].p_nom.sum()
 
             n.model.add_constraints(
                 lhs.sel(group=index).sum()
                     >= pct.loc[region].values[0] * 
-                    (lhs.sel(group=region).sum() + p_nom_fixed), name=f"agg_p_nom_pct_{region}"
+                    (lhs.sel(group=region).sum()), name=f"portfolio_standard_{region}"
             )
+
 
 
 def add_EQ_constraints(n, o, scaling=1e-1):
@@ -429,7 +459,6 @@ def add_regional_co2limit(n, config):
         rhs = region_co2lim
         n.model.add_constraints(lhs == rhs, name=f"{region}_co2_limit")
 
-# TODO: think about removing or make per country
 def add_SAFE_constraints(n, config):
     """
     Add a capacity reserve margin of a certain fraction above the peak demand.
@@ -464,6 +493,7 @@ def add_SAFE_constraints(n, config):
     ).p_nom.sum()
     rhs = reserve_margin - exist_conv_caps
     n.model.add_constraints(lhs >= rhs, name="safe_mintotalcap")
+
 
 def add_regional_SAFE_constraints(n, config):
     """
@@ -695,6 +725,8 @@ def extra_functionality(n, snapshots):
     """
     opts = n.opts
     config = n.config
+    if "RPS" in opts and n.generators.p_nom_extendable.any():
+        add_RPS_constraints(n, config)
     if "RCo2L" in opts and n.generators.p_nom_extendable.any():
         add_regional_co2limit(n, config)
     if "BAU" in opts and n.generators.p_nom_extendable.any():
@@ -772,7 +804,7 @@ if __name__ == "__main__":
         snakemake = mock_snakemake(
             "solve_network",
             simpl="",
-            opts="Co2L1.0-3H-CCL",
+            opts="Co2L2.0-RPS",
             clusters="40",
             ll="v1.0",
             sector_opts="",
