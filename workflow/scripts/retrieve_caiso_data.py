@@ -53,17 +53,13 @@ def generate_monthly_intervals(year):
 
 def step_download_oasis_reports(queryname, version, node='ALL', resultformat='6', year=2019):
     """Download and combine OASIS reports for each month of a given year into a single DataFrame."""
-    monthly_intervals = generate_monthly_intervals(year)  # Change the year as needed
+    monthly_intervals = generate_monthly_intervals(year)
     file_names = [] 
     for startdatetime, enddatetime in monthly_intervals:
-        # Adjust this function call based on your specific requirements
         download_oasis_report(queryname, startdatetime, enddatetime, version, node, resultformat)
-        # startdatetime = startdatetime.replace(':', '/')
-        # enddatetime = enddatetime.replace(':', '/')
         filename = f"/{queryname}_{startdatetime}_{enddatetime}.{resultformat}.zip"
         file_names.append(filename)
-        #wait for 5 seconds
-        time.sleep(10)
+        time.sleep(5)
 
     return file_names
 
@@ -71,7 +67,6 @@ def combine_reports(file_names, year):
     """Combine all reports into a single DataFrame."""
     all_data_frames = []
     for file in file_names:
-        # Assuming the CSV is directly accessible within the ZIP file; adjust as needed
         df = pd.read_csv(os.getcwd()+ '/' + file, compression='zip')
         all_data_frames.append(df)
 
@@ -102,6 +97,7 @@ def merge_fuel_regions_data(combined_data, year):
     df = pd.read_excel(snakemake.input.fuel_regions, sheet_name='GPI_Fuel_Region')
     df = df[['Fuel Region', 'Balancing Authority']]
     df['Fuel Region'] = df['Fuel Region'].str.strip(' ')
+
     combined_data_merged = pd.merge(combined_data, df, left_on='FUEL_REGION_ID', right_on='Fuel Region', how='left')
     combined_data_merged.drop(columns=['Fuel Region','FUEL_REGION_ID_XML'], inplace=True)
     return combined_data_merged
@@ -111,24 +107,28 @@ def reduce_select_pricing_nodes(combined_data_merged):
     combined_data_merged['day_of_year'] = pd.to_datetime(combined_data_merged['INTERVALSTARTTIME_GMT']).dt.dayofyear
     # avg_doy = combined_data_merged[['day_of_year', 'Balancing Authority','FUEL_REGION_ID','PRC']].groupby(['day_of_year', 'Balancing Authority','FUEL_REGION_ID']).mean() #use this when we want to assign specific pricing nodes
     avg_doy = combined_data_merged[['day_of_year', 'Balancing Authority','PRC']].groupby(['day_of_year', 'Balancing Authority']).mean()
+    return avg_doy
 
 def main(snakemake):
 
     fuel_year = snakemake.params.fuel_year
 
-    combined_data = step_download_oasis_reports(
+    reports = step_download_oasis_reports(
         queryname="PRC_FUEL",
         version="1",
         node="ALL",
         resultformat="6",
         year=fuel_year
     )
-    combined_data_merged = merge_fuel_region_data(combined_data, year=fuel_year)
+
+    combined_data = combine_reports(reports, fuel_year)
+
+    combined_data_merged = merge_fuel_regions_data(combined_data, year=fuel_year)
     reduced_fuel_price_data = reduce_select_pricing_nodes(combined_data_merged)
 
     #check to make sure units are in $/MWh_thermal??? or better unit?
 
-    reduced_fuel_price_data.to_csv( snakemake.output.fuel_prices, index=False)
+    reduced_fuel_price_data.to_csv(snakemake.output.fuel_prices)
 
 if __name__ == "__main__":
     main(snakemake)
