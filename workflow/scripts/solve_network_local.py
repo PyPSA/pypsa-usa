@@ -457,7 +457,7 @@ def add_regional_co2limit(n, config):
         #     lhs += (inter_regional_imports)
 
         rhs = region_co2lim
-        n.model.add_constraints(lhs == rhs, name=f"{region}_co2_limit")
+        n.model.add_constraints(lhs <= rhs, name=f"{region}_co2_limit")
 
 def add_SAFE_constraints(n, config):
     """
