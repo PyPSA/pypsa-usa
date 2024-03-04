@@ -76,7 +76,9 @@ electricity:
   co2base: 226.86e+6 #base_from_2020 Locations of the 250 MMmt of CO2 emissions from the WECC 2021.
   gaslimit: false # global gas usage limit of X MWh_th
   retirement: economic # "economic" or "technical"
-  SAFE_reservemargin: 0.15
+  SAFE_reservemargin: 0.14
+  regional_Co2_limits: '../repo_data/regional_Co2_limits.csv'
+
 
   operational_reserve:
     activate: false
