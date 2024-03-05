@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # SPDX-FileCopyrightText: : 2017-2023 The PyPSA-Eur Authors - Adapted for PyPSA-USA
 #
 # SPDX-License-Identifier: MIT
@@ -81,6 +80,7 @@ def add_co2limit(n, co2limit, Nyears=1.0):
         constant=co2limit * Nyears,
     )
 
+
 def add_regional_co2limit(n, config):
     """
     Add CCL (country & carrier limit) constraint to the network.
@@ -101,6 +101,7 @@ def add_regional_co2limit(n, config):
     electricity:
         agg_p_nom_limits: data/agg_p_nom_minmax.csv
     """
+
     def get_period(n, glc, sns):
         period = slice(None)
         if n._multi_invest and not np.isnan(glc["investment_period"]):
@@ -108,7 +109,7 @@ def add_regional_co2limit(n, config):
             if period not in sns.unique("period"):
                 logger.warning(
                     "Optimized snapshots do not contain the investment "
-                    f"period required for global constraint `{glc.name}`."
+                    f"period required for global constraint `{glc.name}`.",
                 )
         return period
 
@@ -118,12 +119,14 @@ def add_regional_co2limit(n, config):
 
     from pypsa.linopt import get_var
     from pypsa.descriptors import get_switchable_as_dense as get_as_dense
-    
+
     emissions = n.carriers.co2_emissions
     gens = n.generators.query("carrier in @emissions.index")
     if not gens.empty:
-        efficiency = get_as_dense(n, "Generator", "efficiency", inds=gens.index) #mw_electrical/mw_th
-        em_pu = gens.carrier.map(emissions) / efficiency #kg_co2/mw_electrical
+        efficiency = get_as_dense(
+            n, "Generator", "efficiency", inds=gens.index
+        )  # mw_electrical/mw_th
+        em_pu = gens.carrier.map(emissions) / efficiency  # kg_co2/mw_electrical
         em_pu = em_pu.multiply(weightings.generators, axis=0)
         p = get_var(n, "Generator", "p").loc[sns, gens.index]
 
@@ -132,7 +135,7 @@ def add_regional_co2limit(n, config):
 
         # storage units
         sus = n.storage_units.query(
-            "carrier in @emissions.index and " "not cyclic_state_of_charge"
+            "carrier in @emissions.index and " "not cyclic_state_of_charge",
         )
         sus_i = sus.index
         if not sus.empty:
@@ -167,11 +170,9 @@ def add_regional_co2limit(n, config):
             spec=name,
         )
 
-
-
-
     agg_p_nom_minmax = pd.read_csv(
-        config["electricity"]["agg_p_nom_limits"], index_col=[0, 1]
+        config["electricity"]["agg_p_nom_limits"],
+        index_col=[0, 1],
     )
     logger.info("Adding co2 constraints per state")
     p_nom = n.model["Generator-p_nom"]
@@ -184,15 +185,18 @@ def add_regional_co2limit(n, config):
     index = minimum.indexes["group"].intersection(lhs.indexes["group"])
     if not index.empty:
         n.model.add_constraints(
-            lhs.sel(group=index) >= minimum.loc[index], name="agg_p_nom_min"
+            lhs.sel(group=index) >= minimum.loc[index],
+            name="agg_p_nom_min",
         )
 
     maximum = xr.DataArray(agg_p_nom_minmax["max"].dropna()).rename(dim_0="group")
     index = maximum.indexes["group"].intersection(lhs.indexes["group"])
     if not index.empty:
         n.model.add_constraints(
-            lhs.sel(group=index) <= maximum.loc[index], name="agg_p_nom_max"
+            lhs.sel(group=index) <= maximum.loc[index],
+            name="agg_p_nom_max",
         )
+
 
 def add_gaslimit(n, gaslimit, Nyears=1.0):
     sel = n.carriers.index.intersection(["OCGT", "CCGT", "CHP"])
@@ -309,7 +313,7 @@ def apply_time_segmentation(n, segments, solver_name="cbc"):
         import tsam.timeseriesaggregation as tsam
     except:
         raise ModuleNotFoundError(
-            "Optional dependency 'tsam' not found." "Install via 'pip install tsam'"
+            "Optional dependency 'tsam' not found." "Install via 'pip install tsam'",
         )
 
     p_max_pu_norm = n.generators_t.p_max_pu.max()
@@ -340,7 +344,10 @@ def apply_time_segmentation(n, segments, solver_name="cbc"):
 
     n.set_snapshots(pd.DatetimeIndex(snapshots, name="name"))
     n.snapshot_weightings = pd.Series(
-        weightings, index=snapshots, name="weightings", dtype="float64"
+        weightings,
+        index=snapshots,
+        name="weightings",
+        dtype="float64",
     )
 
     segmented.index = snapshots
@@ -394,7 +401,10 @@ if __name__ == "__main__":
         snakemake = mock_snakemake(
             "prepare_network",
             interconnect="western",
-             simpl="", clusters="30", ll="v1.15", opts="CO2L0.75-4H"
+            simpl="",
+            clusters="30",
+            ll="v1.15",
+            opts="CO2L0.75-4H",
         )
     configure_logging(snakemake)
 
@@ -428,7 +438,7 @@ if __name__ == "__main__":
 
     for o in opts:
         if "Co2L" in o:
-            m = re.findall("[0-9]*\.?[0-9]+$", o)
+            m = re.findall(r"[0-9]*\.?[0-9]+$", o)
             if len(m) > 0:
                 co2limit = float(m[0]) * snakemake.params.co2base
                 add_co2limit(n, co2limit, Nyears)
@@ -440,7 +450,7 @@ if __name__ == "__main__":
 
     for o in opts:
         if "CH4L" in o:
-            m = re.findall("[0-9]*\.?[0-9]+$", o)
+            m = re.findall(r"[0-9]*\.?[0-9]+$", o)
             if len(m) > 0:
                 limit = float(m[0]) * 1e6
                 add_gaslimit(n, limit, Nyears)
@@ -472,11 +482,11 @@ if __name__ == "__main__":
     for o in opts:
         if "Ept" in o:
             logger.info(
-                "Setting time dependent emission prices according spot market price"
+                "Setting time dependent emission prices according spot market price",
             )
             add_dynamic_emission_prices(n)
         elif "Ep" in o:
-            m = re.findall("[0-9]*\.?[0-9]+$", o)
+            m = re.findall(r"[0-9]*\.?[0-9]+$", o)
             if len(m) > 0:
                 logger.info("Setting emission prices according to wildcard value.")
                 add_emission_prices(n, dict(co2=float(m[0])))
