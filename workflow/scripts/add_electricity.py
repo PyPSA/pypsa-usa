@@ -1,9 +1,10 @@
 # PyPSA USA Authors
 """
-Add_electricity takes data produced by build_renewable_profiles, build_demand,
-build_cost_data and build_base_network to create a combined network model of
-all the generators, demand, costs. Locational multipliers are added for
-regional fuel costs and capital costs.
+**Description**
+
+This module integrates data produced by `build_renewable_profiles`, `build_demand`, `build_cost_data`, `build_fuel_prices`, and `build_base_network` to create a network model that includes generators, demand, and costs. The module attaches generators, storage units, and loads to the network created by `build_base_network`. Each generator is assigned regional capital costs, and regional and daily or monthly marginal costs. 
+
+Extendable generators are assigned a maximum capacity based on land-use constraints defined in `build_renewable_profiles`. 
 
 **Relevant Settings**
 
@@ -16,28 +17,7 @@ regional fuel costs and capital costs.
         end:
         inclusive:
 
-    costs:
-        year:
-        version:
-        dicountrate:
-        emission_prices:
-
     electricity:
-        max_hours:
-        marginal_cost:
-        capital_cost:
-        conventional_carriers:
-        co2limit:
-        extendable_carriers:
-
-    renewable:
-        hydro:
-            carriers:
-            hydro_max_hours:
-            hydro_capital_cost:
-
-    lines:
-        length_factor:
 
 .. seealso::
     Documentation of the configuration file `config/config.yaml` at :ref:`costs_cf`,
@@ -50,13 +30,12 @@ regional fuel costs and capital costs.
 - ``resources/regions_onshore.geojson``: confer :ref:`busregions`
 - ``resources/profile_{}.nc``: all technologies in ``config["renewables"].keys()``, confer :ref:`renewableprofiles`.
 - ``networks/elec_base_network.nc``: confer :ref:`base`
+- ``resources/ng_fuel_prices.csv``: Natural gas fuel prices by state and BA.
 
 **Outputs**
 
 - ``networks/elec_base_network_l_pp.nc``
 
-
-**Description**
 """
 
 
@@ -347,73 +326,48 @@ def update_marginal_costs(
         Apply USA average fuel cost to all regions
     """
 
-    # map generators to states
-    bus_state_mapper = n.buses.to_dict()["state"]
-    gen = n.generators[n.generators.carrier == carrier].copy()  # copy with warning
-    gen["state"] = gen.bus.map(bus_state_mapper)
-    gen = gen[gen["state"].isin(fuel_costs.state.unique())]
+    missed = []
+    for fuel_region_type in ["balancing_area", "state"]:
+        
+        # map generators to fuel_region_type (state or BA)
+        bus_region_mapper = n.buses.to_dict()[fuel_region_type]
+        gen = n.generators[n.generators.carrier == carrier].copy() if fuel_region_type == "balancing_area" else missed
+        gen[f'{fuel_region_type}'] = gen.bus.map(bus_region_mapper)
+        gen[f'{fuel_region_type}'] = gen[f'{fuel_region_type}'].replace({"CISO-PGAE": "CISO", "CISO-SCE": "CISO", "CISO-SDGE":"CISO","CISO-VEA":"CISO", "Arizona": "AZPS", "NYISO": "NYISO", "CAISO": "CAISO", "BANC":"BANCSMUD"})
 
-    # log any states that do not have multipliers attached
-    missed = gen[~gen["state"].isin(fuel_costs.state.unique())]
-    if not missed.empty:
-        logger.warning(
-            f"Time dependent marginal costs not applied to {missed.state.unique()}",
-        )
+        missed = gen[~gen[fuel_region_type].isin(fuel_costs.columns.unique())]
+        gen = gen[gen[fuel_region_type].isin(fuel_costs.columns.unique())] #Filter for BAs which we have the fuel price data for
 
-    # update fuel cost values from $/MCF to $/MWh
-    # $/MCF * (1 MCF / 1.036 MMBTU) * (1 MMBTU / 0.293 MWh) = $/MWh
-    fuel_costs["value"] = fuel_costs["value"] / const.NG_MCF_2_MWH
-    fuel_costs["units"] = "$/MWh"
+        # Can add block here that pulls in the state level data for Missing CAISO data.
 
-    # extract out monthly variations for fuel costs
-    fuel_costs = fuel_costs.set_index("period")
-    fuel_costs.index = pd.to_datetime(fuel_costs.index, format="%Y-%m-%d")
-    fuel_costs["month"] = fuel_costs.index.month
-
-    # create a state level fuel cost dataframe for the modeled snapshots
-    state_fuel_costs = pd.DataFrame()
-    state_fuel_costs.index = pd.DatetimeIndex(n.snapshots)
-    if not apply_average:
-        for state in gen.state.unique():
-            state_fuel_cost = fuel_costs[fuel_costs["state"] == state]
-            month_to_price_mapper = state_fuel_cost.set_index("month").to_dict()[
-                "value"
-            ]
-            state_fuel_costs[state] = state_fuel_costs.index.month.map(
-                month_to_price_mapper,
-            )
-    else:
-        usa_fuel_cost = fuel_costs[fuel_costs["state"] == "U.S."]
-        month_to_price_mapper = usa_fuel_cost.set_index("month").to_dict()["value"]
-        for state in gen.state.unique():
-            state_fuel_costs[state] = state_fuel_costs.index.month.map(
-                month_to_price_mapper,
+        if not missed.empty:
+            logger.warning(
+                f"BA's missing historical daily fuel costs: {missed[fuel_region_type].unique()}. Using EIA Monthly State Averages.",
             )
 
-    # apply all fuel cost values
-    dfs = []
-    for state in gen.state.unique():
-        gens_in_state = gen[gen.state == state].index.to_list()
-        dfs.append(
-            pd.DataFrame({gen: state_fuel_costs[state] for gen in gens_in_state}),
+        # apply all fuel cost values
+        dfs = []
+        # fuel_costs.set_index(fuel_region_type, inplace=True)
+        for fuel_region in gen[fuel_region_type].unique():
+            gens_in_region = gen[gen[fuel_region_type] == fuel_region].index.to_list()
+            dfs.append(pd.DataFrame({gen_: fuel_costs[fuel_region]  for gen_ in gens_in_region}),)
+        df = pd.concat(dfs, axis=1)
+
+        # apply efficiency of each generator to know fuel burn rate
+        if not efficiency:
+            gen_eff_mapper = n.generators.to_dict()["efficiency"]
+            df = df.apply(lambda x: x / gen_eff_mapper[x.name], axis=0)
+        else:
+            df = df.div(efficiency)
+
+        # apply fixed rate VOM cost
+        df += vom_cost
+
+        # join into exisitng time series marginal costs
+        n.generators_t["marginal_cost"] = n.generators_t["marginal_cost"].join(
+            df,
+            how="inner",
         )
-    df = pd.concat(dfs, axis=1)
-
-    # apply efficiency of each generator to know fuel burn rate
-    if not efficiency:
-        gen_eff_mapper = n.generators.to_dict()["efficiency"]
-        df = df.apply(lambda x: x / gen_eff_mapper[x.name], axis=0)
-    else:
-        df = df.div(efficiency)
-
-    # apply fixed rate VOM cost
-    df += vom_cost
-
-    # join into exisitng time series marginal costs
-    n.generators_t["marginal_cost"] = n.generators_t["marginal_cost"].join(
-        df,
-        how="inner",
-    )
 
 
 def update_transmission_costs(n, costs, length_factor=1.0):
@@ -1451,13 +1405,12 @@ def main(snakemake):
         fuel_cost_file = snakemake.input[f"{cost_data}"]
         df_fuel_costs = pd.read_csv(fuel_cost_file)
         vom = costs.at[carrier, "VOM"]
-        # eff = costs.at[carrier, "efficiency"]
+
         update_marginal_costs(
             n=n,
             carrier=carrier,
             fuel_costs=df_fuel_costs,
             vom_cost=vom,
-            # efficiency=eff,
             apply_average=False,
         )
 

@@ -1,12 +1,14 @@
 # BY PyPSA-USA Authors
 """
+**Description**
+
+The `build_shapes` rule builds the GIS shape files for the balancing authorities and offshore regions. The regions are only built for the {interconnect} wildcard. Because balancing authorities often overlap- we modify the GIS dataset developed by  [Breakthrough Energy Sciences](https://breakthrough-energy.github.io/docs/).
+
 **Relevant Settings**
 
 .. code:: yaml
 
     interconnect:
-    countries:
-
 
 **Inputs**
 
@@ -35,10 +37,6 @@
 
     # .. image:: ../img/regions_offshore.png
     #     :scale: 33 %
-
-**Description**
-
-The `build_shapes` rule builds the GIS shape files for the balancing authorities and offshore regions. The regions are only built for the {interconnect} wildcard. Because balancing authorities often overlap- we modify the GIS dataset developed by  [Breakthrough Energy Sciences](https://breakthrough-energy.github.io/docs/).
 """
 
 

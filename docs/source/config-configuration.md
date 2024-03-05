@@ -19,9 +19,11 @@ Most users will leave this as `pypsa-usa`.
 | Renewable Time-Series | Atlite | WECC-ADS |
 | Hydro Time-Series | Breakthrough (temp) | WECC-ADS |
 | Demand | EIA930 | WECC-ADS |
-| Years Supported | 2019 (soon 2017-2023) | 2032 |
-| Interconnections Supported | WECC (soon US) | WECC |
-| Cost Projections | NREL-ATB | NREL-ATB |
+| Historical Demand | 2019-2023 | - |
+| Future Demand | NREL EFS | WECC ADS 2032 |
+| Interconnections Supported | WECC + ERCOT | WECC |
+| Capital Costs | NREL-ATB | NREL-ATB |
+| Fuel Costs | CAISO/EIA | CAISO/EIA |
 | Purpose[^+] | CEM, PCS | PCS |
 
 [^+]: CEM = Capacity Expansion Model, PCS = Production Cost Simulation

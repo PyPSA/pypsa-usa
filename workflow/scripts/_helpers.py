@@ -446,3 +446,12 @@ def local_to_utc(group):
     )
     utc = group + pd.Timedelta(hours=time_shift)
     return utc
+
+
+def update_config_with_sector_opts(config, sector_opts):
+    from snakemake.utils import update_config
+
+    for o in sector_opts.split("-"):
+        if o.startswith("CF+"):
+            l = o.split("+")[1:]
+            update_config(config, parse(l))

@@ -12,7 +12,7 @@ run:
 scenario:
   interconnect: [western] #"usa|texas|western|eastern"
   clusters: [40]
-  opts: [Co2L0.30-3H-Ep-SAFE]
+  opts: [Co2L1.0-6H-RCo2L-SAFER-RPS]
   ll: [v1.0]
   scope: "total" # "urban", "rural", or "total"
   sector: "" # G
@@ -29,7 +29,7 @@ countries: [US]
 
 snapshots:
   start: "2019-01-01"
-  end: "2019-02-01"
+  end: "2019-01-14"
   inclusive: 'left'
 
 # docs :
@@ -72,7 +72,11 @@ electricity:
   co2base: 225.0e+6 #base_from_2020 Locations of the 250 MMmt of CO2 emissions from the WECC 2021.
   gaslimit: false # global gas usage limit of X MWh_th
   retirement: economic # "economic" or "technical"
-  SAFE_reservemargin: 0.15
+  SAFE_reservemargin: 0.14
+  regional_Co2_limits: 'config/policy_constraints/regional_Co2_limits.csv'
+  agg_p_nom_limits: 'config/policy_constraints/agg_p_nom_minmax.csv'  
+  portfolio_standards: 'config/policy_constraints/portfolio_standards.csv'
+  SAFE_regional_reservemargins: 'config/policy_constraints/SAFE_regional_prm.csv'
 
   operational_reserve:
     activate: false
@@ -218,7 +222,8 @@ load:
 costs:  # based on the potentials, assuming  (0.1 kW/m2 and 10 m2/person)
   year: 2030
   version: v0.6.0
-  rooftop_share: 0.14
+  rooftop_share: 0.0
+  ng_fuel_year: 2019 # year of the natural gas price from CAISO [2019- 2023]
   fill_values:
     FOM: 0
     VOM: 0

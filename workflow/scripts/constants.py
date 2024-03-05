@@ -18,9 +18,12 @@ GPS_CRS = "EPSG:4326"
 EUR_2_USD = 1.07  # taken on 12-12-2023
 
 # energy content of natural gas
-# (1 MCF) * (1.036 MMBTU / 1 MCF) * (0.293 MWh / 1 MMBTU)
+# (1 MCF) * (1.036 MMBTU / 1 MCF) * (0.293 MWh / 1 MMBTU) = #/MWh_thermal
 # https://www.eia.gov/tools/faqs/faq.php?id=45&t=8
 NG_MCF_2_MWH = 0.3035
+
+# $/MMBtu * (1 MMBtu / 0.293 MWh) = $/MWh_thermal
+NG_Dol_MMBTU_2_MWH = 3.4129
 
 ################################
 # Constants for ADS WECC mapping
@@ -234,6 +237,22 @@ NERC_REGION_MAPPER = {
     "RFC": "eastern",
     "NPCC": "eastern",
     "MRO": "eastern",
+}
+
+EIA_930_REGION_MAPPER = {
+    "CAL": "western",
+    "CAR": "eastern",
+    "CENT": "eastern",
+    "FLA": "eastern",
+    "MIDA": "eastern",
+    "MIDW": "eastern",
+    "NW": "western",
+    "NE": "eastern",
+    "NY": "eastern",
+    "SE": "eastern",
+    "SW": "western",
+    "TEN": "eastern",
+    "TEX": "texas",
 }
 
 STATES_INTERCONNECT_MAPPER = {

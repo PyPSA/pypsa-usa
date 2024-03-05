@@ -1,10 +1,6 @@
 (wildcards)=
 # Wildcards
 
-For more detailed definitions of wildcards, please reference [pypsa-eur](https://pypsa-eur.readthedocs.io/en/latest/wildcards.html).
-Not all wildcards implemented in [pypsa-eur](https://pypsa-eur.readthedocs.io/en/latest/wildcards.html) are available
-yet in pypsa-usa.
-
 It is easy to run PyPSA-USA for multiple scenarios using the wildcards feature of `snakemake`.
 Wildcards generalise a rule to produce all files that follow a regular expression pattern
 which e.g. defines one particular scenario. One can think of a wildcard as a parameter that shows
@@ -47,13 +43,6 @@ during the workflow. If other years are needed, the user will need to prepaer th
 cutout themself.
 ```
 
-<!-- (technology)=
-## The ``{technology}`` wildcard -->
-
-<!-- The ``{technology}`` wildcard specifies for which renewable energy technology to produce availability time
-series and potentials using the rule :mod:`build_renewable_profiles`.
-It can take the values ``onwind``, ``offwind-ac``, ``offwind-dc``, and ``solar`` but **not** ``hydro``
-(since hydroelectric plant profiles are created by a different rule). -->
 
 <!-- (simpl)=
 ## The ``{simpl}`` wildcard -->
