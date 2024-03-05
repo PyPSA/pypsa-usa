@@ -3,8 +3,6 @@
 
 (prepare)=
 ## Rule `prepare_network`
-**Directly uses PyPSA-Eur Implementation**
-
 ```{eval-rst}
 Prepare PyPSA network for solving according to :ref:`opts` and :ref:`ll`, such
 as.

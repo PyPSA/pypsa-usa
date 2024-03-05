@@ -75,8 +75,9 @@ Natural Gas infrastructure includes:
 
 (retrieve-eia)=
 ## Rule `retrieve_eia_data`
-
-Historical electrical load data from 2015 till the last present month are retrieved from the [US Energy Information Agency](https://www.eia.gov/) (EIA). Data is downloaded at hourly temporal resolution and at a spatial resolution of balancing authority region.
+```{eval-rst}
+.. automodule:: retrieve_eia_data
+```
 
 (retrieve-wecc)=
 ## Rule `retrieve_WECC_forcast_data`
@@ -151,3 +152,10 @@ Documentation of the configuration file ``config/config.yaml`` at
 **Outputs**
 
 - ``resources/costs.csv``
+
+
+(retrieve-caiso-data)=
+## Rule `retrieve_caiso_data`
+```{eval-rst}
+.. automodule:: retrieve_caiso_data
+```

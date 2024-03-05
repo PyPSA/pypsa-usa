@@ -311,8 +311,6 @@ rule add_electricity:
             else []
         ),
         demand=RESOURCES + "{interconnect}/demand.csv",
-        #ng_electric_power_price=DATA + "costs/ng_electric_power_price.csv",
-        #caiso_fuel_costs=DATA + "costs/ng_caiso_prices.csv",
         fuel_costs="repo_data/eia_mappings/fuelCost22.csv",
         ng_electric_power_price=RESOURCES + "{interconnect}/ng_fuel_prices.csv",
 

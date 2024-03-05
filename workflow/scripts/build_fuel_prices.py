@@ -1,10 +1,30 @@
+# By PyPSA-USA Authors
+"""
+**Description**
+
+Build_fuel_prices.py is a script that prepares data for dynamic fuel prices to be used in the `add_electricity` module. Data is input from `retrieve_caiso_data` and `retrieve_eia_data` to create a combined dataframe with all dynamic fuel prices available. The prices are modified to be on an hourly basis to match the network snapshots, and converted to $/MWh_thermal. The output is a CSV file containing the hourly fuel prices for each Balancing Authority and State.
+
+**Relevant Settings**
+
+.. code:: yaml
+
+    fuel_year:
+    snapshots:
+
+**Inputs**
+
+- ''data/caiso_ng_prices.csv'': A CSV file containing the daily average fuel prices for each Balancing Authority in the WEIM.
+- ''data/eia_ng_prices.csv'': A CSV file containing the monthly average fuel prices for each State.
+
+**Outputs**
+
+- ''data/ng_fuel_prices.csv'': A CSV file containing the hourly fuel prices for each Balancing Authority and State.
+
+"""
+
 import pandas as pd
 import constants as const
 from _helpers import mock_snakemake, configure_logging
-
-"""
-Todo- in build_fuel_prices create a pivoted dataframe where both BAs and States are in the columns. Rows are indexed to n.shapshots. 
-"""
 
 def prepare_eia(eia_fn: str, snapshots: pd.DatetimeIndex = None):
     """Cleans EIA fuel price data.

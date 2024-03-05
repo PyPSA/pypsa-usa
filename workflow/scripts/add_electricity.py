@@ -1,9 +1,10 @@
 # PyPSA USA Authors
 """
-Add_electricity takes data produced by build_renewable_profiles, build_demand,
-build_cost_data and build_base_network to create a combined network model of
-all the generators, demand, costs. Locational multipliers are added for
-regional fuel costs and capital costs.
+**Description**
+
+This module integrates data produced by `build_renewable_profiles`, `build_demand`, `build_cost_data`, `build_fuel_prices`, and `build_base_network` to create a network model that includes generators, demand, and costs. The module attaches generators, storage units, and loads to the network created by `build_base_network`. Each generator is assigned regional capital costs, and regional and daily or monthly marginal costs. 
+
+Extendable generators are assigned a maximum capacity based on land-use constraints defined in `build_renewable_profiles`. 
 
 **Relevant Settings**
 
@@ -16,28 +17,7 @@ regional fuel costs and capital costs.
         end:
         inclusive:
 
-    costs:
-        year:
-        version:
-        dicountrate:
-        emission_prices:
-
     electricity:
-        max_hours:
-        marginal_cost:
-        capital_cost:
-        conventional_carriers:
-        co2limit:
-        extendable_carriers:
-
-    renewable:
-        hydro:
-            carriers:
-            hydro_max_hours:
-            hydro_capital_cost:
-
-    lines:
-        length_factor:
 
 .. seealso::
     Documentation of the configuration file `config/config.yaml` at :ref:`costs_cf`,
@@ -50,13 +30,12 @@ regional fuel costs and capital costs.
 - ``resources/regions_onshore.geojson``: confer :ref:`busregions`
 - ``resources/profile_{}.nc``: all technologies in ``config["renewables"].keys()``, confer :ref:`renewableprofiles`.
 - ``networks/elec_base_network.nc``: confer :ref:`base`
+- ``resources/ng_fuel_prices.csv``: Natural gas fuel prices by state and BA.
 
 **Outputs**
 
 - ``networks/elec_base_network_l_pp.nc``
 
-
-**Description**
 """
 
 

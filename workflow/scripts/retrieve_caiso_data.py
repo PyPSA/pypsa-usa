@@ -1,3 +1,23 @@
+# By PyPSA-USA Authors
+"""
+Historical daily natural gas fuel prices are retrieved from CAISO's Open Access Same-time Information System (OASIS). Data is collected on a daily basis for each Balancing Area and Fuel Region that had joined the Western Energy Imbalance Market (WEIM) during the time period designated in the configuration `fuel_year`.
+[![URL](https://img.shields.io/badge/URL-CAISO_OASIS)](<http://www.caiso.com/participate/Pages/oasis.aspx>)
+
+**Relevant Settings**
+    
+    ```yaml
+    fuel_year:
+    ```
+**Inputs**
+
+- ``repo_data/wecc_fuelregions.xlsx``: A list of fuel regions and their corresponding Balancing Authorities.
+
+
+**Outputs**
+
+- ``data/fuel_prices.csv``: A CSV file containing the daily average fuel prices for each Balancing Authority in the WEIM.
+"""
+
 import pandas as pd
 import requests
 from datetime import datetime, timedelta
