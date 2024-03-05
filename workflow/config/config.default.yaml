@@ -75,7 +75,7 @@ electricity:
   retirement: economic # "economic" or "technical"
   SAFE_reservemargin: 0.14
   regional_Co2_limits: 'config/policy_constraints/regional_Co2_limits.csv'
-  agg_p_nom_limits: 'config/policy_constraints/agg_p_nom_minmax.csv'  
+  agg_p_nom_limits: 'config/policy_constraints/agg_p_nom_minmax.csv'
   portfolio_standards: 'config/policy_constraints/portfolio_standards.csv'
   SAFE_regional_reservemargins: 'config/policy_constraints/SAFE_regional_prm.csv'
 

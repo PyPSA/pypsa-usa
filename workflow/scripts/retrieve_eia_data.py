@@ -7,7 +7,6 @@ Historical electrical load data from 2019-2023 are retrieved from the [US Energy
 
 - ``data/GridEmissions/EIA_DMD_2018_2024.csv``
 - ``data/eia/EIA_DMD_*.csv``
-
 """
 
 import glob

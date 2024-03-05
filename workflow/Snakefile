@@ -92,6 +92,7 @@ include: "rules/solve_electricity.smk"
 include: "rules/postprocess.smk"
 include: "rules/validate.smk"
 
+
 if "E" not in config["scenario"]["sector"]:
     if not config["scenario"]["sector"]:
         config["scenario"]["sector"] = "E"

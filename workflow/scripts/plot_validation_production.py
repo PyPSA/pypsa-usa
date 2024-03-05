@@ -65,8 +65,12 @@ def plot_graphs(n, csv_path_1, csv_path_2, save1, save2, save3):
     historic, order = historic_df(csv_path_1, csv_path_2, buses)
     optimized = optimized_df(n, order)
     fig, axes = plt.subplots(3, 1, figsize=(9, 9))
-    optimized.resample("1D").mean().plot.area(ax=axes[0], **kwargs, legend=False, title="Optimized")
-    historic.resample("1D").mean().plot.area(ax=axes[1], **kwargs,legend=False, title="Historic")
+    optimized.resample("1D").mean().plot.area(
+        ax=axes[0], **kwargs, legend=False, title="Optimized"
+    )
+    historic.resample("1D").mean().plot.area(
+        ax=axes[1], **kwargs, legend=False, title="Historic"
+    )
 
     diff = (optimized - historic).fillna(0).resample("1D").mean()
     diff.clip(lower=0).plot.area(
@@ -148,7 +152,10 @@ def historic_df(csv_path_1, csv_path_2, buses):
         date_format="%m/%d/%Y %I:%M:%S %p",
         usecols=selected_cols,
     )
-    historic_first = historic_first[historic_first.Region.map(EIA_930_REGION_MAPPER) == snakemake.wildcards.interconnect]
+    historic_first = historic_first[
+        historic_first.Region.map(EIA_930_REGION_MAPPER)
+        == snakemake.wildcards.interconnect
+    ]
 
     historic_second = pd.read_csv(
         csv_path_2,
@@ -158,21 +165,22 @@ def historic_df(csv_path_1, csv_path_2, buses):
         date_format="%m/%d/%Y %I:%M:%S %p",
         usecols=selected_cols,
     )
-    historic_second = historic_second[historic_second.Region.map(EIA_930_REGION_MAPPER) == snakemake.wildcards.interconnect]
+    historic_second = historic_second[
+        historic_second.Region.map(EIA_930_REGION_MAPPER)
+        == snakemake.wildcards.interconnect
+    ]
 
     # Clean the data read from csv
     historic_first_df = (
-        historic_first
-        .fillna(0)
+        historic_first.fillna(0)
         .replace({",": ""}, regex=True)
-        .drop(columns= "Region", axis=1)
+        .drop(columns="Region", axis=1)
         .astype(float)
     )
     historic_second_df = (
-        historic_second
-        .fillna(0)
+        historic_second.fillna(0)
         .replace({",": ""}, regex=True)
-        .drop(columns= "Region", axis=1)
+        .drop(columns="Region", axis=1)
         .astype(float)
     )
     historic = (
@@ -182,10 +190,12 @@ def historic_df(csv_path_1, csv_path_2, buses):
     )
 
     historic = historic.rename(columns=rename_his)
-    historic[historic<0] = 0 # remove negative values for plotting (low impact on results)
+    historic[historic < 0] = (
+        0  # remove negative values for plotting (low impact on results)
+    )
     order = (historic.diff().abs().sum() / historic.sum()).sort_values().index
     historic = historic.reindex(order, axis=1, level=1)
-    historic = historic/ 1e3
+    historic = historic / 1e3
     return historic, order
 
 
@@ -201,7 +211,7 @@ if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
 
-        snakemake = mock_snakemake( #use Validation config
+        snakemake = mock_snakemake(  # use Validation config
             "plot_validation_figures",
             interconnect="western",
             clusters=40,
