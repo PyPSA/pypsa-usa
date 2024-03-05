@@ -26,24 +26,6 @@ A visual representation of each `{interconnect}` is shown below:
     :scale: 100 %
 ```
 
-(cutout_wc)=
-## The `{cutout}` wildcard
-
-The `{cutout}` wildcard facilitates running the rule :mod:`build_cutout`
-for all cutout configurations specified under `atlite: cutouts:`. Each cutout
-is descibed in the form `{dataset}_{year}`. These cutouts will be stored in a
-folder specified by `{cutout}`.
-
-Valid dataset names include: `era5`
-Valid years can be from `1940` to `2022`
-
-```{note}
-Data for `era5_2019` has been pre-pared for the user and will be automatically downloaded
-during the workflow. If other years are needed, the user will need to prepaer the
-cutout themself.
-```
-
-
 <!-- (simpl)=
 ## The ``{simpl}`` wildcard -->
 
@@ -104,6 +86,7 @@ currently:
    :file: configtables/opts.csv
 ```
 
+
 (sector)=
 ## The `{sector}` wildcard
 
@@ -127,3 +110,21 @@ Used in the following rules:
 - `build_heat_demands`
 - `build_temperature_profiles`
 - `build_solar_thermal_profiles`
+
+
+(cutout_wc)=
+## The `{cutout}` wildcard
+
+The `{cutout}` wildcard facilitates running the rule :mod:`build_cutout`
+for all cutout configurations specified under `atlite: cutouts:`. Each cutout
+is descibed in the form `{dataset}_{year}`. These cutouts will be stored in a
+folder specified by `{cutout}`.
+
+Valid dataset names include: `era5`
+Valid years can be from `1940` to `2022`
+
+```{note}
+Data for `era5_2019` has been pre-pared for the user and will be automatically downloaded
+during the workflow. If other years are needed, the user will need to prepaer the
+cutout themself.
+```
