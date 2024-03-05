@@ -1,22 +1,34 @@
 (build-rules)=
 # Build Network
 
-(shapes)=
-## Rule `build_shapes`
-```{eval-rst}
-.. automodule:: build_shapes
-```
-
 (base)=
 ## Rule `build_base_network`
 ```{eval-rst}
 .. automodule:: build_base_network
 ```
 
+(shapes)=
+## Rule `build_shapes`
+```{eval-rst}
+.. automodule:: build_shapes
+```
+
 (busregions)=
 ## Rule `build_bus_regions`
 ```{eval-rst}
 .. automodule:: build_bus_regions
+```
+
+(demand)=
+## Rule `build_demand`
+```{eval-rst}
+.. automodule:: build_demand
+```
+
+(fuel_prices)=
+## Rule `build_fuel_prices`
+```{eval-rst}
+.. automodule:: build_fuel_prices
 ```
 
 (cutout)=

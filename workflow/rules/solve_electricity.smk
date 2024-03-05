@@ -32,12 +32,10 @@ rule solve_network:
     resources:
         mem_mb=memory,
         walltime=config["solving"].get("walltime", "12:00:00"),
-    shadow:
-        "minimal"
     conda:
         "../envs/environment.yaml"
     script:
-        "../scripts/subworkflows/pypsa-eur/scripts/solve_network.py"
+        "../scripts/solve_network_local.py"
 
 
 rule solve_network_operations:
