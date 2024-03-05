@@ -12,8 +12,8 @@ run:
 scenario:
   interconnect: western #"usa|texas|western|eastern"
   clusters: [100]
-  opts: [RCo2L-SAFER-CCL]
-  ll: [v1.15]
+  opts: [RCo2L-SAFER-RPS]
+  ll: [v1.0, v1.05]
   scope: "total" # "urban", "rural", or "total"
   sector: "" # G
   planning_horizons:
@@ -263,7 +263,7 @@ clustering:
     algorithm: kmeans # choose from: [hac, kmeans]
     feature: solar+onwind-time # only for hac. choose from: [solar+onwind-time, solar+onwind-cap, solar-time, solar-cap, solar+offwind-cap] etc.
   cluster_network:
-    algorithm: kmeans
+    algorithm: hac # choose from: [hac, kmeans]
     feature: solar+onwind-time
     aggregation_zones: 'state' # [balancing_area, state]
     exclude_carriers: []
