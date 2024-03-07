@@ -33,36 +33,6 @@ snapshots:
   end: "2020-01-01"
   inclusive: "left"
 
-# docs :
-atlite:
-  default_cutout: era5_2019
-  nprocesses: 8
-  show_progress: false # false saves time
-  cutouts:
-    era5_2019:
-      module: era5 # in priority order
-      time: ['2019', '2019']
-  interconnects:
-    western:
-      x: [-126, -99]
-      y: [27, 50]
-      dx: 0.3
-      dy: 0.3
-    eastern:
-      x: [-109, -65]
-      y: [23, 50]
-      dx: 0.3
-      dy: 0.3
-    texas:
-      x: [-110, -90]
-      y: [24, 37]
-      dx: 0.3
-      dy: 0.3
-    usa:
-      x: [-126, -65]
-      y: [23, 50]
-      dx: 0.3
-      dy: 0.3
 
 # docs :
 electricity:
@@ -70,8 +40,10 @@ electricity:
   renewable_carriers: [onwind, offwind, offwind_floating, solar, hydro] # Choose the renewable plant types to include in network
   voltage_simplified: 230 #Voltage level to simplify network to in rule "simplify network"
   co2limit: 1.4728e+9 # 0.8 * 1.841e+9
+  co2limit_enable: False # For sector coupled studies
   co2base: 226.86e+6 #base_from_2020 Locations of the 250 MMmt of CO2 emissions from the WECC 2021.
   gaslimit: false # global gas usage limit of X MWh_th
+  gaslimit_enable: false # For sector coupled studies
   retirement: economic # "economic" or "technical"
   SAFE_reservemargin: 0.14
   regional_Co2_limits: 'config/policy_constraints/regional_Co2_limits.csv'
@@ -99,6 +71,9 @@ electricity:
     EFS_case: reference # reference, medium, high
     EFS_speed: moderate # slow, moderate, rapid
 
+  autarky:
+    enable: false
+    by_country: false
 
 # docs :
 conventional:
@@ -246,7 +221,9 @@ costs:  # based on the potentials, assuming  (0.1 kW/m2 and 10 m2/person)
     battery: 0.
     battery inverter: 0.
   emission_prices: # in currency per tonne emission, only used with the option Ep
+    enable: false
     co2: 0.
+    co2_monthly_prices: false
 
 # docs :
 sector:
@@ -280,6 +257,39 @@ clustering:
 
 focus_weights:
   # California: 0.5
+
+
+# docs :
+atlite:
+  default_cutout: era5_2019
+  nprocesses: 8
+  show_progress: false # false saves time
+  cutouts:
+    era5_2019:
+      module: era5 # in priority order
+      time: ['2019', '2019']
+  interconnects:
+    western:
+      x: [-126, -99]
+      y: [27, 50]
+      dx: 0.3
+      dy: 0.3
+    eastern:
+      x: [-109, -65]
+      y: [23, 50]
+      dx: 0.3
+      dy: 0.3
+    texas:
+      x: [-110, -90]
+      y: [24, 37]
+      dx: 0.3
+      dy: 0.3
+    usa:
+      x: [-126, -65]
+      y: [23, 50]
+      dx: 0.3
+      dy: 0.3
+
 
 # docs :
 solving:

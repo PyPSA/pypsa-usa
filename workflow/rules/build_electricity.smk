@@ -410,13 +410,18 @@ rule add_extra_components:
 
 rule prepare_network:
     params:
+        time_resolution=config["clustering"]["temporal"]["resolution_elec"],
+        adjustments=False,
         links=config["links"],
         lines=config["lines"],
         co2base=config["electricity"]["co2base"],
         co2limit=config["electricity"]["co2limit"],
+        co2limit_enable=config["electricity"][ "co2limit_enable"],
         gaslimit=config["electricity"].get("gaslimit"),
+        gaslimit_enable=config["electricity"].get("gaslimit_enable"),
         max_hours=config["electricity"]["max_hours"],
         costs=config["costs"],
+        autarky=config["electricity"]["autarky"],
     input:
         network=RESOURCES + "{interconnect}/elec_s_{clusters}_ec.nc",
         tech_costs=RESOURCES + f"costs_{config['costs']['year']}.csv",
