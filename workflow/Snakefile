@@ -53,7 +53,7 @@ wildcard_constraints:
 # -------------------------- Config and Subworkflows ------------------------- #
 
 # Merge subworkflow configs and main config
-configfile: "config/config.default.yaml"
+configfile: "config/config.default_r.yaml"
 configfile: "config/config.cluster.yaml"
 configfile: "config/config.osw.yaml"
 configfile: "config/config.plotting.yaml"
@@ -103,7 +103,12 @@ rule all:
             "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}_{figure}.pdf",
             **config["scenario"],
             figure=FIGURES_SINGLE
-        ),
+        ), 
+        # expand(
+        #     RESOURCES + "{interconnect}/hourly_heat_demand_{scope}_elec_s_{clusters}.nc",
+        #     **config["scenario"]
+        # )
+
         #"repo_data/dag.jpg",
         #"repo_data/dag.jpg",
 

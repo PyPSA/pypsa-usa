@@ -1,10 +1,10 @@
 atlite:
   cutouts:
-    era5_2023:
+    era5_2019:
       module: era5
       time:
-      - '2023'
-  default_cutout: era5_2023
+      - '2019'
+  default_cutout: era5_2019
   interconnects:
     eastern:
       dx: 0.3
@@ -42,7 +42,7 @@ atlite:
       y:
       - 27
       - 50
-  nprocesses: 4
+  nprocesses: 8
   show_progress: false
 capacity_from_reeds: ercot_cap_2030_add_bat2
 clustering:
@@ -106,6 +106,9 @@ electricity:
   - CCGT
   - coal
   - geothermal
+  demand:
+    EFS_case: reference
+    EFS_speed: moderate
   egs: true
   egs_reduction: 0.2
   extendable_carriers:
@@ -116,7 +119,7 @@ electricity:
   gaslimit: false
   max_hours:
     H2: 168
-    battery: 8
+    battery: 2
   operational_reserve:
     activate: false
     contingency: 4000
@@ -133,10 +136,11 @@ enable:
   build_cutout: false
   download_cutout: false
   download_eia: false
+focus_weights: null
 foresight: null
 lines:
   length_factor: 1.25
-  s_max_pu: 1.0
+  s_max_pu: 0.7
   s_nom_max: .inf
   types:
     115.0: Al/St 240/40 2-bundle 220.0
@@ -153,6 +157,19 @@ links:
   under_construction: zero
 load:
   scaling_factor: 1.09
+  scaling_factor_monthly:
+  - 1.196442
+  - 1.27942
+  - 1.361699
+  - 1.206554
+  - 1.198357
+  - 1.04308
+  - 1.05757
+  - 1.056679
+  - 1.002989
+  - 1.111066
+  - 1.302436
+  - 1.367929
 network_configuration: pypsa-usa
 renewable:
   hydro:
@@ -174,7 +191,7 @@ renewable:
       hydrobasins: resources/hybas_na_lev06_v1c.shp
       method: hydro
   offwind:
-    capacity_per_sqkm: 2
+    capacity_per_sqkm: 3
     clip_p_max_pu: 0.01
     corine:
       grid_codes:
@@ -183,13 +200,33 @@ renewable:
     correction_factor: 0.8855
     cutout: era5_2023
     extendable: true
-    max_depth: 1000
-    max_shore_distance: 30000
+    max_depth: 60
+    max_shore_distance: 90000
+    min_shore_distance: 22000
     natura: true
-    potential: simple
+    potential: conservative
     resource:
       method: wind
-      turbine: NREL_ReferenceTurbine_5MW_offshore
+      turbine: NREL_ReferenceTurbine_2020ATB_5.5MW
+  offwind_floating:
+    capacity_per_sqkm: 3
+    clip_p_max_pu: 0.01
+    corine:
+      grid_codes:
+      - 80
+      - 200
+    correction_factor: 0.8855
+    cutout: era5_2023
+    extendable: true
+    max_depth: 1300
+    max_shore_distance: 90000
+    min_depth: 60
+    min_shore_distance: 22000
+    natura: true
+    potential: conservative
+    resource:
+      method: wind
+      turbine: NREL_ReferenceTurbine_2020ATB_15MW_offshore
   onwind:
     capacity_per_sqkm: 3
     clip_p_max_pu: 0.01
@@ -218,7 +255,7 @@ renewable:
     cutout: era5_2023
     extendable: true
     natura: true
-    potential: simple
+    potential: conservative
     resource:
       method: wind
       turbine: Vestas_V112_3MW
@@ -238,7 +275,7 @@ renewable:
     cutout: era5_2023
     extendable: true
     natura: true
-    potential: simple
+    potential: conservative
     resource:
       method: pv
       orientation: latitude_optimal
@@ -246,23 +283,27 @@ renewable:
 replace_uri: true
 run:
   disable_progressbar: false
-  name: add_bat8_trans_2023
+  name: add_bat2_2023_new
   shared_cutouts: true
   shared_resources: false
 scenario:
   clusters:
   - 30
   interconnect: texas
-  ll: v2
+  ll: v1.1
   opts:
   - Co2L1-1H
-  planning_horizons:
-  - 2030
+  planning_horizons: null
   scope:
   - total
+  sector: ''
 sector:
   co2_sequestration_potential: 0
-  heat_pump_sink_T: 55.0
+  heating:
+    heat_pump_sink_T: 55.0
+  natural_gas:
+    allow_imports_exports: true
+    cyclic_storage: false
 snapshots:
   end: '2024-01-01'
   inclusive: left
@@ -297,8 +338,10 @@ solving:
     glpk-default: {}
     gurobi-default:
       AggFill: 0
-      BarConvTol: 1.0e-06
+      BarConvTol: 0.0001
+      FeasibilityTol: 0.001
       GURO_PAR_BARDENSETHRESH: 200
+      OptimalityTol: 0.0001
       PreDual: 0
       Seed: 123
       crossover: 0

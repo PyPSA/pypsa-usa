@@ -30,7 +30,7 @@ def define_zenodo_databundles():
 
 def define_sector_databundles():
     return {
-        'pypsa_usa_sec':"https://zenodo.org/records/10547484/files/pypsa_usa_data_sector.zip?download=1"
+        'pypsa_usa_sec':"https://zenodo.org/records/10637836/files/pypsa_usa_sector_data.zip?download=1"
         }
 
 rule retrieve_zenodo_databundles:
@@ -51,22 +51,22 @@ def define_nrel_databundles():
         'EFS':"https://data.nrel.gov/system/files/126/EFSLoadProfile_Reference_Moderate.zip"
         }
 
-rule retrieve_nrel_efs_data:
-    params:
-        define_nrel_databundles()
-    output:
-        DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv",
-    log:
-        "logs/retrieve/retrieve_databundles.log",
-    conda:
-        "../envs/environment.yaml"
-    script:
-        "../scripts/retrieve_databundles.py"   
+# rule retrieve_nrel_efs_data:
+#     params:
+#         define_nrel_databundles()
+#     output:
+#         DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv",
+#     log:
+#         "logs/retrieve/retrieve_databundles.log",
+#     conda:
+#         "../envs/environment.yaml"
+#     script:
+#         "../scripts/retrieve_databundles.py"   
 
 sector_datafiles = [
     "counties/cb_2020_us_county_500k.shp",
     "population/DECENNIALDHC2020.P1-Data.csv",
-    "urbanization/DECENNIALDHC2020.H1-Data.csv"
+    "urbanization/DECENNIALDHC2020.H2-Data.csv"
 ]
 
 rule retrieve_sector_databundle:

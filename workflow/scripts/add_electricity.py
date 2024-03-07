@@ -180,11 +180,13 @@ def load_costs(
 
     # Fix some FOMs where the units are not % but are USD/MW
     tech_need_fix_fom = costs[(costs.index.get_level_values('parameter') == 'FOM') & (costs.unit.str.contains("USD"))].index.get_level_values('technology')
-    tech_need_fix_fom_wide = costs[(costs.index.get_level_values('technology').isin(tech_need_fix_fom))].value.unstack()
-    tech_need_fix_fom_wide['FOM'] = tech_need_fix_fom_wide['FOM']/tech_need_fix_fom_wide['investment']*100
+    
+    if len(tech_need_fix_fom) > 0:
+        tech_need_fix_fom_wide = costs[(costs.index.get_level_values('technology').isin(tech_need_fix_fom))].value.unstack()
+        tech_need_fix_fom_wide['FOM'] = tech_need_fix_fom_wide['FOM']/tech_need_fix_fom_wide['investment']*100
+        costs.loc[(costs.index.get_level_values('parameter') == 'FOM') & (costs.unit.str.contains("USD")), 'value'] = tech_need_fix_fom_wide.FOM.values
+        costs.loc[(costs.index.get_level_values('parameter') == 'FOM') & (costs.unit.str.contains("USD")), 'unit'] = "%/year"
 
-    costs.loc[(costs.index.get_level_values('parameter') == 'FOM') & (costs.unit.str.contains("USD")), 'value'] = tech_need_fix_fom_wide.FOM.values
-    costs.loc[(costs.index.get_level_values('parameter') == 'FOM') & (costs.unit.str.contains("USD")), 'unit'] = "%/year"
 
     # polulate missing values with user provided defaults 
     fill_values = config["fill_values"]
@@ -737,7 +739,7 @@ def prepare_ads_demand(n: pypsa.Network,
 
 def prepare_eia_demand(n: pypsa.Network, 
                        demand_path: str,
-                       replace_uri: False,
+                       replace_uri: True,
                        scaling = 1.0, 
                        ) -> pd.DataFrame:
     logger.info('Building Load Data using EIA demand')
@@ -758,7 +760,28 @@ def prepare_eia_demand(n: pypsa.Network,
         demand['ERCO'] = demand.ERCO_uri.combine_first(demand.ERCO)
         demand = demand.drop('ERCO_uri', axis=1).set_index('timestamp', inplace=False)
 
-    demand *= scaling
+        print(demand.head(30))
+
+    if len(scaling) == 12:
+        demand = demand.reset_index()
+        demand['timestamp'] = pd.to_datetime(demand['timestamp'])
+        demand['month'] = demand['timestamp'].dt.month
+
+        scale_df = pd.DataFrame({'month': list(range(1,13)), 
+                                "scaling":scaling})
+
+        demand = demand.merge(scale_df, on='month', how='left').set_index('timestamp', inplace=False)
+        demand = demand[['AEC', 'AECI', 'AVA', 'AZPS', 'BANC', 'BPAT', 'CHPD',
+            'CISO', 'CPLE', 'CPLW', 'DOPD', 'DUK', 'EPE', 'ERCO', 'FMPP', 'FPC',
+            'FPL', 'GCPD', 'GVL', 'HST', 'IID', 'IPCO', 'ISNE', 'JEA', 'LDWP',
+            'LGEE', 'MISO', 'NEVP', 'NWMT', 'NYIS', 'PACE', 'PACW', 'PGE', 'PJM',
+            'PNM', 'PSCO', 'PSEI', 'SC', 'SCEG', 'SCL', 'SEC', 'SOCO', 'SPA', 'SRP',
+            'SWPP', 'TAL', 'TEC', 'TEPC', 'TIDC', 'TPWR', 'TVA', 'WACM', 'WALC',
+            'WAUW']].multiply(demand["scaling"], axis="index")
+
+    else:
+        demand *= scaling
+
     demand = demand.loc[n.snapshots.intersection(demand.index)] # filter by snapshots
     demand = demand[~demand.index.duplicated(keep='last')]
     demand.index = n.snapshots
@@ -829,20 +852,22 @@ def disaggregate_demand_to_buses(n: pypsa.Network,
     n.buses.drop(columns=['LAF'], inplace=True)
     return bus_demand.fillna(0)
 
-def add_demand_from_file(n: pypsa.Network, 
-                         fn_demand: str, 
-                         demand_type: str):
+def attach_demand(n: pypsa.Network, replace_uri: False, configuration: str, scaling):
     """
     Add demand to network from specified configuration setting. Returns network with demand added.
     """
-    if demand_type == "breakthrough":
-        demand_per_bus = prepare_breakthrough_demand_data(n, fn_demand)
-    elif demand_type == "ads":
-        demand_per_bus = prepare_ads_demand(n, fn_demand)
-    elif demand_type == "pypsa-usa":
-        demand_per_bus = prepare_eia_demand(n, fn_demand)
+    if configuration == "ads":
+        demand_per_bus = prepare_ads_demand(n, f'data/WECC_ADS/processed/load_2032.csv')
+    elif configuration == "pypsa-usa":
+        if snakemake.params.get('planning_horizons'):
+            demand_per_bus = prepare_efs_demand(n, snakemake.params.get('planning_horizons'))
+            print("NOOOOOOOOOOOO!!")   
+        else:
+            demand_per_bus = prepare_eia_demand(n, snakemake.input['eia'][0],  replace_uri, scaling = scaling)
+            print("YEEEEESS!!")
+            print(replace_uri)
     else:
-        raise ValueError("Invalid demand_type. Supported values are 'breakthrough', 'ads', and 'pypsa-usa'.")
+        raise ValueError("Invalid demand_type. Supported values are 'ads', and 'pypsa-usa'.")
     n.madd("Load", demand_per_bus.columns, bus=demand_per_bus.columns,
            p_set=demand_per_bus, carrier='AC')
 
@@ -1233,8 +1258,11 @@ def load_powerplants_ads(
     return plants
 
 def clean_bus_data(n: pypsa.Network):
-    col_list = ['poi_bus', 'poi_sub', 'poi', 'Pd', 'load_dissag']
-    n.buses.drop(columns=col_list, inplace=True)
+    """
+    Drops data from the network that are no longer needed in workflow.
+    """
+    col_list = ["poi_bus", "poi_sub", "poi", "Pd", "load_dissag", "LAF", "LAF_states"]
+    n.buses.drop(columns=[col for col in col_list if col in n.buses], inplace=True)
 
 
 def main(snakemake):
@@ -1244,7 +1272,10 @@ def main(snakemake):
     replace_uri = snakemake.config["replace_uri"]
     uri_demand = snakemake.input['uri_demand']
     interconnection = snakemake.wildcards["interconnect"]
+    scaling_monthly = snakemake.config['load']['scaling_factor_monthly']
     scaling = snakemake.config['load']['scaling_factor']
+    if len(scaling_monthly)==12:
+        scaling = scaling_monthly
     planning_horizons = snakemake.params['planning_horizons']
 
     n = pypsa.Network(snakemake.input.base_network)
@@ -1301,14 +1332,10 @@ def main(snakemake):
         fuel_price = None
 
     if configuration  == "pypsa-usa":
-        fn_demand = snakemake.input['eia'][sns_start.year%2017]
         if texas_reliability: 
             plants = load_powerplants_texas(snakemake.input['plants_tx'])
         else:
             plants = load_powerplants_eia(snakemake.input['plants_eia'], const.EIA_CARRIER_MAPPER, interconnect=interconnection)
-    elif configuration  == "breakthrough":
-        fn_demand = snakemake.input["demand_breakthrough_2016"]
-        plants = load_powerplants_breakthrough(snakemake.input['plants_breakthrough'])
     elif configuration  == "ads2032":
         plants = load_powerplants_ads(
             snakemake.input['plants_ads'],
@@ -1322,7 +1349,31 @@ def main(snakemake):
     
     #Applying to all configurations
     plants = match_plant_to_bus(n, plants)
-    add_demand_from_file(n, fn_demand, configuration)
+    attach_demand(n, replace_uri, configuration, scaling)
+
+    # if configuration  == "pypsa-usa":
+    #     fn_demand = snakemake.input['eia'][sns_start.year%2017]
+    #     if texas_reliability: 
+    #         plants = load_powerplants_texas(snakemake.input['plants_tx'])
+    #     else:
+    #         plants = load_powerplants_eia(snakemake.input['plants_eia'], const.EIA_CARRIER_MAPPER, interconnect=interconnection)
+    # elif configuration  == "breakthrough":
+    #     fn_demand = snakemake.input["demand_breakthrough_2016"]
+    #     plants = load_powerplants_breakthrough(snakemake.input['plants_breakthrough'])
+    # elif configuration  == "ads2032":
+    #     plants = load_powerplants_ads(
+    #         snakemake.input['plants_ads'],
+    #         const.ADS_SUB_TYPE_TECH_MAPPER, 
+    #         const.ADS_CARRIER_NAME,
+    #         const.ADS_FUEL_MAPPER
+    #     )
+    #     plants = assign_ads_missing_lat_lon(plants, n)
+    # else:
+    #     raise ValueError(f"Unknown network_configuration {snakemake.config['network_configuration']}")
+    
+    # #Applying to all configurations
+    # plants = match_plant_to_bus(n, plants)
+    # add_demand_from_file(n, fn_demand, configuration)
 
     attach_conventional_generators(
         n,

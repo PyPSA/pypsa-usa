@@ -2,7 +2,7 @@
 network_configuration: "pypsa-usa" # "pypsa-usa" or "ads2032"
 
 run:
-  name: "add_bat8_2023_test" # use this to keep track of runs with different settings
+  name: "test_g" # use this to keep track of runs with different settings
   disable_progressbar: false # set to true to disable the progressbar
   shared_resources: false # set to true to share the default resources across runs
   shared_cutouts: true # set to true to share the default cutout(s) across runs
@@ -11,18 +11,17 @@ run:
 scenario:
   interconnect: texas #"usa|texas|western|eastern"
   clusters: [30]
+
   opts:
     [
       # Co2L1.25,
       Co2L1-1H,
     ]
-  ll: [v1]
   scope: [total] # "urban", "rural", or "total" 
   ll: [v1] 
-  scope: "total" # "urban", "rural", or "total" 
   sector: "" # G 
   planning_horizons:
-    - 2030 #  # Uncomment to use NREL EFS Demand Forecasts (2030, 2040, 2050)
+    # - 2030 #  # Uncomment to use NREL EFS Demand Forecasts (2030, 2040, 2050)
 
 foresight:  # Only Single Stage Currently
 
@@ -39,24 +38,24 @@ countries: [US]
 # Texas reliability study
 texas_reliability: true
 replace_uri: true
-capacity_from_reeds: 'ercot_cap_2030_add_bat2'
+capacity_from_reeds: 'ercot_cap_2030_add_ct'
 
 snapshots:
-  start: "2023-01-01"
-  end: "2024-01-01"
+  start: "2019-01-01"
+  end: "2019-02-01"
   inclusive: 'left'
 
 foresight:  # not implemented yet
 
 # docs :
 atlite:
-  default_cutout: era5_2023
+  default_cutout: era5_2019
   nprocesses: 8
   show_progress: false # false saves time
   cutouts:
-    era5_2023:
+    era5_2019:
       module: era5 # in priority order
-      time: ['2023']
+      time: ['2019']
   interconnects:
     western:
       x: [-126, -99]
@@ -82,7 +81,7 @@ atlite:
 # docs :
 electricity: 
   conventional_carriers: [nuclear, oil, OCGT, CCGT, coal, geothermal] # Choose the conventional plant types to include in network
-  renewable_carriers: [onwind, offwind, offwind_floating, solar, hydro] # Choose the renewable plant types to include in network 
+  renewable_carriers: [onwind, solar, hydro] # Choose the renewable plant types to include in network 
   voltage_simplified: 230 #Voltage level to simplify network to in rule "simplify network"
   co2limit: 1.0e+9 # 0.8 * 1.841e+9
   co2base: 226.86e+6 #base_from_2020 Locations of the 250 MMmt of CO2 emissions from the WECC 2021.
@@ -98,7 +97,7 @@ electricity:
     contingency: 4000
 
   max_hours:
-    battery: 8
+    battery: 2
     H2: 168
 
   extendable_carriers:
@@ -122,7 +121,7 @@ conventional:
 # docs :
 renewable:
   onwind:
-    cutout: era5_2023
+    cutout: era5_2019
     resource:
       method: wind
       turbine: Vestas_V112_3MW
@@ -139,7 +138,7 @@ renewable:
     clip_p_max_pu: 1.e-2
     extendable: true
   offwind:
-    cutout: era5_2023
+    cutout: era5_2019
     resource:
       method: wind
       turbine: NREL_ReferenceTurbine_2020ATB_5.5MW
@@ -175,7 +174,7 @@ renewable:
     clip_p_max_pu: 1.e-2
     extendable: true
   solar:
-    cutout: era5_2023
+    cutout: era5_2019
     resource:
       method: pv
       panel: CSi
@@ -191,7 +190,7 @@ renewable:
     clip_p_max_pu: 1.e-2
     extendable: true
   hydro:
-    cutout: era5_2023
+    cutout: era5_2019
     resource:
       method: hydro
       hydrobasins: resources/hybas_na_lev06_v1c.shp
@@ -232,6 +231,8 @@ links:
 # docs :
 load:
   scaling_factor: 1.09
+  # 2023 ERCOT
+  scaling_factor_monthly: [1.196442, 1.279420, 1.361699, 1.206554, 1.198357, 1.043080, 1.057570, 1.056679, 1.002989, 1.111066, 1.302436, 1.367929]
 
 # docs :
 costs:  # based on the potentials, assuming  (0.1 kW/m2 and 10 m2/person)

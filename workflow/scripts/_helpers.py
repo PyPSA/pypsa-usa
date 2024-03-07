@@ -312,6 +312,26 @@ def mock_snakemake(rulename, **wildcards):
     os.chdir(script_dir)
     return snakemake
 
+def generate_periodic_profiles(dt_index, nodes, weekly_profile, localize=None):
+    """
+    Give a 24*7 long list of weekly hourly profiles, generate this for each
+    country for the period dt_index, taking account of time zones and summer
+    time.
+    """
+    weekly_profile = pd.Series(weekly_profile, range(24 * 7))
+
+    week_df = pd.DataFrame(index=dt_index, columns=nodes)
+
+    for node in nodes:
+        #TODO: need to convert timezone?
+        tz_dt_index = dt_index
+        week_df[node] = [24 * dt.weekday() + dt.hour for dt in tz_dt_index]
+        week_df[node] = week_df[node].map(weekly_profile)
+
+    week_df = week_df.tz_localize(localize)
+
+    return week_df
+
 
 def test_column_datatypes_consistency(df):
     """

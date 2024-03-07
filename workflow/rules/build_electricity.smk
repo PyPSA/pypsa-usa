@@ -249,7 +249,6 @@ rule add_electricity:
             if config["network_configuration"] == 'ads2032'
             else []
         ,
-        eia = expand(DATA + "eia/{file}", file=DATAFILES_DMD),
         uri_demand="repo_data/ercot_specific/uri_real_demand.csv",
         eia = expand(DATA + "GridEmissions/{file}", file=DATAFILES_DMD),
         efs = DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv",
@@ -258,7 +257,7 @@ rule add_electricity:
         },
         ng_electric_power_price = DATA + "costs/ng_electric_power_price.csv",
     output:
-        RESOURCES + "{interconnect}/elec_base_network_1_pp.nc",
+        RESOURCES + "{interconnect}/elec_base_network_l_pp.nc",
     log:
         LOGS + "{interconnect}/add_electricity.log",
     benchmark:

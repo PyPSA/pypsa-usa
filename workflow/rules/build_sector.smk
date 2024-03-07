@@ -5,6 +5,7 @@ def sector_input_files(wildcards):
         "network": RESOURCES + "{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}.nc"
     }
     sectors = wildcards.sector.split("-")
+    counties = DATA + "counties/cb_2020_us_county_500k.shp"
     if "G" in sectors:
         ng_files = {
             "counties": DATA + "counties/cb_2020_us_county_500k.shp",
@@ -25,7 +26,8 @@ rule add_sectors:
         plotting=config["plotting"],
         natural_gas=config["sector"].get("natural_gas", None)
     input:
-        unpack(sector_input_files)
+        unpack(sector_input_files),
+        counties = DATA + "counties/cb_2020_us_county_500k.shp"
     output:
         network=RESOURCES + "{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}_{sector}.nc"
     script:
@@ -65,7 +67,7 @@ rule build_heat_demands:
         cutout = "cutouts/" + CDIR + "{interconnect}_" + config["atlite"]["default_cutout"] + ".nc",
     output:
         # heat_demand=RESOURCES + "heat_demand_{scope}_elec_s{simpl}_{clusters}.nc",
-        heat_demand = RESOURCES + "{interconnect}/heat_demand_{scope}_elec_s_{clusters}.nc",
+        heat_demand = RESOURCES + "{interconnect}/daily_heat_demand_{scope}_elec_s_{clusters}.nc",
     resources:
         mem_mb=20000,
     threads: 8
@@ -78,7 +80,27 @@ rule build_heat_demands:
     conda:
         "../envs/environment.yaml"
     script:
-        "../scripts/build_heat_demand.py"
+        "../scripts/build_daily_heat_demand.py"
+
+rule build_hourly_heat_demand:
+    params:
+        snapshots={k: config["snapshots"][k] for k in ["start", "end", "inclusive"]},
+    input:
+        heat_profile="data/heat_load_profile_BDEW.csv",
+        heat_demand=RESOURCES + "{interconnect}/daily_heat_demand_{scope}_elec_s_{clusters}.nc",
+    output:
+        heat_demand=RESOURCES + "{interconnect}/hourly_heat_demand_{scope}_elec_s_{clusters}.nc",
+    resources:
+        mem_mb=2000,
+    threads: 8
+    log:
+        LOGS + "{interconnect}/build_hourly_heat_demand_{scope}_{clusters}.loc",
+    benchmark:
+        BENCHMARKS + "{interconnect}/build_hourly_heat_demand/{scope}_s_{clusters}"
+    conda:
+        "../envs/environment.yaml"
+    script:
+        "../scripts/build_hourly_heat_demand.py"
 
 rule build_temperature_profiles:
     params:

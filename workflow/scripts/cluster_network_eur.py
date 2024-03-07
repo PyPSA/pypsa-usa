@@ -384,7 +384,7 @@ if __name__ == "__main__":
     else:
         n_clusters = int(snakemake.wildcards.clusters)
         aggregate_carriers = None # All
-
+    
     if n_clusters == len(n.buses):
         # Fast-path if no clustering is necessary
         busmap = n.buses.index.to_series()
@@ -403,6 +403,7 @@ if __name__ == "__main__":
                 "The `potential` configuration option must agree for all renewable carriers, for now!"
             )
             return v
+        
         aggregation_strategies = snakemake.config["clustering"].get("aggregation_strategies", {})
         # translate str entries of aggregation_strategies to pd.Series functions:
         aggregation_strategies = {
@@ -410,6 +411,8 @@ if __name__ == "__main__":
             for p in aggregation_strategies.keys()
         }
         custom_busmap = snakemake.config["enable"].get("custom_busmap", False)
+
+        logger.info(line_length_factor)
         if custom_busmap:
             custom_busmap = pd.read_csv(snakemake.input.custom_busmap, index_col=0, squeeze=True)
             custom_busmap.index = custom_busmap.index.astype(str)

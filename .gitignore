@@ -268,3 +268,11 @@ config/config.cluster.yaml
 !.pre-commit-config.yaml
 
 
+workflow/repo_data/ercot_specific/ercot_cap_2030_add_bat2.csv
+workflow/repo_data/ercot_specific/ercot_cap_2030_add_cc.csv
+workflow/repo_data/ercot_specific/ercot_cap_2030_add_ct.csv
+workflow/repo_data/ercot_specific/ercot_cap_2030_add_geo.csv
+workflow/repo_data/ercot_specific/ercot_cap_2030_add_mix.csv
+workflow/repo_data/ercot_specific/ercot_cap_2030.csv
+workflow/repo_data/ercot_specific/outage_share_2020_2024.csv
+workflow/repo_data/ercot_specific/uri_real_demand.csv
