@@ -1,6 +1,4 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 # SPDX-FileCopyrightText: : 2017-2023 The PyPSA-Eur Authors
 #
 # SPDX-License-Identifier: MIT
@@ -59,6 +57,7 @@ Description
     :mod:`build_renewable_profiles`
 """
 
+
 import logging
 
 import atlite
@@ -100,16 +99,13 @@ if __name__ == "__main__":
     params_hydro = snakemake.params.hydro
     cutout = atlite.Cutout(snakemake.input.cutout)
 
-    country_shapes = (
-        gpd.read_file(snakemake.input.ba_region_shapes)
-        .set_index("name")["geometry"]
-    )
+    country_shapes = gpd.read_file(snakemake.input.ba_region_shapes).set_index("name")[
+        "geometry"
+    ]
     country_shapes.index.name = "countries"
 
     # fn = snakemake.input.eia_hydro_generation
     # eia_stats = get_eia_annual_hydro_generation(fn, countries)
-
-
 
     inflow = cutout.runoff(
         shapes=country_shapes,

@@ -5,12 +5,12 @@ Builds mapping between cutout grid cells and population (total, urban, rural).
 
 .. code:: yaml
 
-    scope: 
-    
+    scope:
+
 **Inputs**
 
 - ``data/counties/cb_2020_us_county_500k.shp``: County shapes in the USA
-- ``data/population/DECENNIALDHC2020.P1-Data.csv``: Population per county in the USA, 
+- ``data/population/DECENNIALDHC2020.P1-Data.csv``: Population per county in the USA,
 
     .. image:: _static/pop_layout/population.png
         :scale: 33 %
@@ -38,7 +38,6 @@ Builds mapping between cutout grid cells and population (total, urban, rural).
 
     .. image:: _static/pop_layout/pop_layout_rural.png
         :scale: 80 %
-
 """
 
 import logging
@@ -55,36 +54,45 @@ import matplotlib.pyplot as plt
 import constants
 from pathlib import Path
 
+
 def load_urban_ratio(df: pd.DataFrame) -> pd.DataFrame:
-    """Loads data to get urban and rural values at a GEOID level
-    
-    Extracts data from the following source: 
+    """
+    Loads data to get urban and rural values at a GEOID level.
+
+    Extracts data from the following source:
         https://data.census.gov/
         FILTERS: Decennial Census - Universe: Housing units - 2020: DEC Demographic and Housing Characteristics
-        
+
     Note
     ----
     When reading in the data, be sure to skip the first row:
     > pd.read_csv("./UrbanArea.csv", skiprows=1)
-        
     """
     df = df.set_index("Geography")
-    df.index = df.index.str[-5:] # extract GEOID value 
+    df.index = df.index.str[-5:]  # extract GEOID value
     df.index.name = "GEOID"
-    df = df.rename(columns={x:x.strip() for x in df.columns})
-    df = df.rename(columns={"!!Total:":"total", "!!Total:!!Urban":"urban", "!!Total:!!Rural":"rural"})
-    df["URBAN"] = (df["urban"] / df["total"]).round(2) # ratios 
+    df = df.rename(columns={x: x.strip() for x in df.columns})
+    df = df.rename(
+        columns={
+            "!!Total:": "total",
+            "!!Total:!!Urban": "urban",
+            "!!Total:!!Rural": "rural",
+        },
+    )
+    df["URBAN"] = (df["urban"] / df["total"]).round(2)  # ratios
     df["RURAL"] = (df["rural"] / df["total"]).round(2)
     df = df[["Geographic Area Name", "URBAN", "RURAL"]]
     return df
 
+
 def load_population(df: pd.DataFrame) -> pd.DataFrame:
-    """Loads population data at a GEOID level
-    
-    Extracts data from the following source: 
+    """
+    Loads population data at a GEOID level.
+
+    Extracts data from the following source:
         https://data.census.gov/
         FILTERS: Decennial Census - Universe: Total population - 2020: DEC Demographic and Housing Characteristics
-        
+
     Note
     ----
     When reading in the data, be sure to skip the first row:
@@ -93,93 +101,115 @@ def load_population(df: pd.DataFrame) -> pd.DataFrame:
     df = df.set_index("Geography")
     df.index = df.index.str[-5:]
     df.index.name = "GEOID"
-    df = df.rename(columns={x:x.strip() for x in df.columns})
-    df = df.rename(columns={"!!Total":"population"})
+    df = df.rename(columns={x: x.strip() for x in df.columns})
+    df = df.rename(columns={"!!Total": "population"})
     df = df[["Geographic Area Name", "population"]]
     return df
 
-def plot_county_data(gdf: gpd.GeoDataFrame, col: str, title: str = None, description: str = None, save: str = None):
-    """Plots heat map of geodataframe 
-    
-    Adapted from 
+
+def plot_county_data(
+    gdf: gpd.GeoDataFrame,
+    col: str,
+    title: str = None,
+    description: str = None,
+    save: str = None,
+):
+    """
+    Plots heat map of geodataframe.
+
+    Adapted from
     https://www.relataly.com/visualize-covid-19-data-on-a-geographic-heat-maps/291/
     """
 
-    # for legend range 
+    # for legend range
     vmin = gdf[col].min()
     vmax = gdf[col].max()
-    cmap = 'viridis'
-    
+    cmap = "viridis"
+
     # Create figure and axes for Matplotlib
     fig, ax = plt.subplots(1, figsize=(20, 8))
-    ax.axis('off')
-    gdf.plot(column=col, ax=ax, edgecolor='0.8', linewidth=1, cmap=cmap)
+    ax.axis("off")
+    gdf.plot(column=col, ax=ax, edgecolor="0.8", linewidth=1, cmap=cmap)
 
-    ax.set_title(title, fontdict={'fontsize': '25', 'fontweight': '3'})
-    ax.annotate(description, xy=(0.1, .08), xycoords='figure fraction', horizontalalignment='left', 
-                verticalalignment='bottom', fontsize=10)
-                
+    ax.set_title(title, fontdict={"fontsize": "25", "fontweight": "3"})
+    ax.annotate(
+        description,
+        xy=(0.1, 0.08),
+        xycoords="figure fraction",
+        horizontalalignment="left",
+        verticalalignment="bottom",
+        fontsize=10,
+    )
+
     sm = plt.cm.ScalarMappable(norm=plt.Normalize(vmin=vmin, vmax=vmax), cmap=cmap)
-    sm._A = [] # Empty array for the data range
+    sm._A = []  # Empty array for the data range
     cbaxes = fig.add_axes([0.15, 0.25, 0.01, 0.4])
     cbar = fig.colorbar(sm, cax=cbaxes)
-    
+
     if save:
         fig.savefig(save)
-        
+
+
 def plot_grid_data(da: xr.DataArray, title: str = None, save: str = None):
-    """Plots gridded population layout"""
-    
+    """
+    Plots gridded population layout.
+    """
+
     fig, ax = plt.subplots(figsize=(5, 4))
     da.plot(ax=ax, cbar_kwargs={"label": "population"})
     ax.set_xlabel("longitude")
     ax.set_ylabel("latitude")
-    
+
     if title:
         ax.set_title(title)
-    
+
     if save:
         fig.savefig(save)
-    
+
 
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
-        snakemake = mock_snakemake("build_population_layouts", interconnect="western", cutout="era5_2019")
-        # for plotting 
+
+        snakemake = mock_snakemake(
+            "build_population_layouts",
+            interconnect="western",
+            cutout="era5_2019",
+        )
+        # for plotting
         save_path = Path("..", "..", "docs", "source", "_static", "pop_layout")
     else:
         save_path = None
-        
+
     configure_logging(snakemake)
 
     cutout = atlite.Cutout(snakemake.input.cutout)
 
     grid_cells = cutout.grid.geometry
 
-    # retrive county level population data 
+    # retrive county level population data
     counties = gpd.read_file(snakemake.input.county_shapes).set_index("GEOID")
     counties = counties[~(counties.STATE_NAME.isin(constants.STATES_TO_REMOVE))]
 
-    # extract urban fraction in each county 
+    # extract urban fraction in each county
     urban_fraction = pd.read_csv(snakemake.input.urban_percent, skiprows=1)
     urban_fraction = load_urban_ratio(urban_fraction)
 
-    # extract population in each county 
+    # extract population in each county
     pop = pd.read_csv(snakemake.input.population, skiprows=1)
     pop = load_population(pop)
-    
-    # merge population and urban fraction data 
+
+    # merge population and urban fraction data
     pop = pop.join(urban_fraction, rsuffix="_pop")
     pop = pop.drop(columns=["Geographic Area Name_pop"])
     pop["STATE"] = pop["Geographic Area Name"].map(lambda x: x.split(",")[1].strip())
     pop = pop[~(pop.STATE.isin(constants.STATES_TO_REMOVE))]
-    
-    # calcualte urban and rural populations 
+
+    # calcualte urban and rural populations
     pop["urban_population"] = pop["population"] * pop["URBAN"]
     pop["rural_population"] = pop["population"] * pop["RURAL"]
-    
-    # merge population data with county information 
+
+    # merge population data with county information
     counties = counties.join(pop)
 
     # Indicator matrix counties -> grid cells
@@ -190,7 +220,7 @@ if __name__ == "__main__":
     cell_rural_pop = pd.Series(I.dot(counties["rural_population"]))
     cell_urban_pop = pd.Series(I.dot(counties["urban_population"]))
 
-    # save total, rural, urban population 
+    # save total, rural, urban population
     pops = {
         "total": cell_pop,
         "rural": cell_rural_pop,
@@ -203,7 +233,7 @@ if __name__ == "__main__":
         values = pop.values.reshape(cutout.shape)
         layout = xr.DataArray(values, [ycoords, xcoords])
         layout.to_netcdf(snakemake.output[f"pop_layout_{key}"])
-        
+
         # plot data
         if save_path:
             save = Path(save_path, f"pop_layout_{key}.png")
@@ -211,22 +241,25 @@ if __name__ == "__main__":
             plot_grid_data(layout, title, save)
 
     # plot data
-    if save_path: 
-        
+    if save_path:
+
         plotting_data = counties.copy()
-        plotting_data["density_person_per_km2"] = plotting_data.population / counties.ALAND * 1000000
+        plotting_data["density_person_per_km2"] = (
+            plotting_data.population / counties.ALAND * 1000000
+        )
         columns = {
-            "Geographic Area Name":"name", 
-            "NAMELSAD":"county",
-            "STATE_NAME":"state",
-            "population":"population",
-            "ALAND":"land_area_m2",
-            "density_person_per_km2":"density_person_per_km2",
-            "URBAN":"urban_area",
-            "geometry":"geometry"}
+            "Geographic Area Name": "name",
+            "NAMELSAD": "county",
+            "STATE_NAME": "state",
+            "population": "population",
+            "ALAND": "land_area_m2",
+            "density_person_per_km2": "density_person_per_km2",
+            "URBAN": "urban_area",
+            "geometry": "geometry",
+        }
         plotting_data = plotting_data[columns.keys()]
         plotting_data = plotting_data.rename(columns=columns)
-        
+
         title = "Population by County"
         column = "population"
         description = "Source: https://data.census.gov/ \nDecennial Census - Universe: Total population - 2020: DEC Demographic and Housing Characteristics"
@@ -246,26 +279,26 @@ if __name__ == "__main__":
         description = "Source: https://data.census.gov/ \nDecennial Census - Universe: Housing units - 2020: DEC Demographic and Housing Characteristics"
         plot_county_data(plotting_data, column, title, description, str(save))
 
-    # Below is akin to the PyPSA-Eur implementation of rural/urbal areas. They 
-    # build up cells based on population density to hit a generic urbanization rate 
-    # for a country. As we have urban rates at a county level, for the time 
+    # Below is akin to the PyPSA-Eur implementation of rural/urbal areas. They
+    # build up cells based on population density to hit a generic urbanization rate
+    # for a country. As we have urban rates at a county level, for the time
     # being we will just use that
-    
+
     """
     # in km^2
     cell_areas = grid_cells.to_crs(3035).area / 1e6
 
     # pop per km^2
     density_cells = cell_pop / cell_areas
-    
+
     # Indicator matrix grid_cells -> counties; inprinciple Iinv*I is identity
     # but imprecisions mean not perfect
     Iinv = cutout.indicatormatrix(counties.geometry)
-    
-    # calcualte rural and urban population per cell 
+
+    # calcualte rural and urban population per cell
     cell_rural_pop = pd.Series(0.0, density_cells.index)
     cell_urban_pop = pd.Series(0.0, density_cells.index)
-    
+
     for geoid in counties.index:
         logger.debug(
             f"The urbanization rate for county {geoid} is {round(urban_fraction.loc[geoid]*100)}%"
@@ -295,7 +328,7 @@ if __name__ == "__main__":
 
         pop_rural += pop_geoid_rural_b.where(pop_geoid_rural_b, 0.0)
         pop_urban += pop_geoid_rural_b.where(pop_geoid_urban_b, 0.0)
-        
+
     pop_cells = {"total": pop_cells}
     pop_cells["rural"] = pop_rural
     pop_cells["urban"] = pop_urban
@@ -308,5 +341,3 @@ if __name__ == "__main__":
 
         layout.to_netcdf(snakemake.output[f"pop_layout_{key}"])
     """
-
-

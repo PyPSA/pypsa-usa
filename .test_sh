@@ -1,0 +1,7 @@
+# SPDX-FileCopyrightText: : 2021-2024 The PyPSA-Eur Authors
+# ADAPTED FOR PyPSA-USA
+# SPDX-License-Identifier: CC0-1.0
+
+cd workflow/
+
+snakemake -call all --configfile config/test/config.test_simple.yaml --rerun-triggers=mtime

@@ -3,8 +3,6 @@
 
 (prepare)=
 ## Rule `prepare_network`
-**Directly uses PyPSA-Eur Implementation**
-
 ```{eval-rst}
 Prepare PyPSA network for solving according to :ref:`opts` and :ref:`ll`, such
 as.
@@ -79,4 +77,3 @@ Additionally, some extra constraints specified in :mod:`solve_network` are added
     the workflow for all scenarios in the configuration file (``scenario:``)
     based on the rule :mod:`solve_network`.
 ```
-
