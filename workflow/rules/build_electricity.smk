@@ -186,6 +186,9 @@ rule build_renewable_profiles:
         ),
         country_shapes=RESOURCES + "{interconnect}/country_shapes.geojson",
         offshore_shapes=RESOURCES + "{interconnect}/offshore_shapes.geojson",
+        cec_onwind="repo_data/CEC_Wind_BaseScreen_epsg3310.tif",
+        cec_solar="repo_data/CEC_Solar_BaseScreen_epsg3310.tif",
+        boem_osw="repo_data/boem_osw_planning_areas.tif",
         regions=lambda w: (
             RESOURCES + "{interconnect}/regions_onshore.geojson"
             if w.technology in ("onwind", "solar")

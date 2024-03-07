@@ -1,3 +1,5 @@
 region,planning_horizon,limit,import_emissions_factor
 California,2030,30000000,0.428
 California,2040,18000000,0.428
+Oregon,2030,3419959,0
+Washington,2045,0,0

@@ -135,30 +135,11 @@ cutout grid cell and each node using the `GLAES
 <https://github.com/FZJ-IEK3-VSA/glaes>`_ library. This uses the CORINE land use data,
 Natura2000 nature reserves and GEBCO bathymetry data.
 
-# .. image:: img/eligibility.png
-#     :scale: 50 %
-#     :align: center
-
 To compute the layout of generators in each node's Voronoi cell, the
 installable potential in each grid cell is multiplied with the capacity factor
 at each grid cell. This is done since we assume more generators are installed
 at cells with a higher capacity factor.
 
-# .. image:: img/offwinddc-gridcell.png
-#     :scale: 50 %
-#     :align: center
-
-# .. image:: img/offwindac-gridcell.png
-#     :scale: 50 %
-#     :align: center
-
-# .. image:: img/onwind-gridcell.png
-#     :scale: 50 %
-#     :align: center
-
-# .. image:: img/solar-gridcell.png
-#     :scale: 50 %
-#     :align: center
 
 This layout is then used to compute the generation availability time series
 from the weather data cutout from `atlite`.
@@ -200,7 +181,7 @@ if __name__ == "__main__":
 
         snakemake = mock_snakemake(
             "build_renewable_profiles",
-            technology="offwind_floating",
+            technology="onwind",
             interconnect="western",
         )
     configure_logging(snakemake)
@@ -243,6 +224,7 @@ if __name__ == "__main__":
     if params["natura"]:
         excluder.add_raster(snakemake.input.natura, nodata=0, allow_no_overlap=True)
 
+
     corine = params.get("corine", {})
     if "grid_codes" in corine:
         codes = corine["grid_codes"]
@@ -256,6 +238,12 @@ if __name__ == "__main__":
             buffer=buffer,
             crs=4326,
         )
+
+    if params.get("cec", 0):
+        excluder.add_raster(snakemake.input[f"cec_{snakemake.wildcards.technology}"], nodata=0, allow_no_overlap=True)
+        
+    if params.get("boem_screen", 0):
+        excluder.add_raster(snakemake.input[f"boem_osw"], invert=True, nodata=0, allow_no_overlap=True)
 
     if "ship_threshold" in params:
         shipping_threshold = (
@@ -294,6 +282,8 @@ if __name__ == "__main__":
             buffer=buffer,
             invert=True,
         )
+
+    #excluder.plot_shape_availability(regions)
 
     kwargs = dict(nprocesses=nprocesses, disable_progressbar=noprogress)
     if noprogress:
