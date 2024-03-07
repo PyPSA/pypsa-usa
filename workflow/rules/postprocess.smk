@@ -47,3 +47,34 @@ rule plot_figures:
         mem_mb=5000,
     script:
         "../scripts/plot_figures.py"
+
+
+STATISTICS_BARPLOTS = [
+    "capacity_factor",
+    "installed_capacity",
+    "optimal_capacity",
+    "capital_expenditure",
+    "operational_expenditure",
+    "curtailment",
+    "supply",
+    "withdrawal",
+    "market_value",
+]
+
+rule plot_elec_statistics:
+    params:
+        plotting=config_provider("plotting"),
+        barplots=STATISTICS_BARPLOTS,
+    input:
+        network=RESULTS
+            + "{interconnect}/networks/elec_s_{clusters}_ec_l{ll}_{opts}_{sector}.nc",
+    output:
+        **{
+            f"{plot}_bar": RESULTS
+            + f"{{interconnect}}/figures/statistics_{plot}_bar_elec_s_{{clusters}}_ec_l{{ll}}_{{opts}}_{{sector}}.pdf"
+            for plot in STATISTICS_BARPLOTS
+        },
+        barplots_touch=RESULTS
+        + "{interconnect}/figures/.statistics_plots_elec_s_{clusters}_ec_l{ll}_{opts}_{sector}",
+    script:
+        "../scripts/subworkflows/pypsa-eur/scripts/plot_statistics.py"

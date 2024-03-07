@@ -115,6 +115,11 @@ rule all:
             **config["scenario"],
             figure=COLLECT_FIGURES,
         ),
+        expand(
+            RESULTS
+            + "{interconnect}/figures/.statistics_plots_elec_s_{clusters}_ec_l{ll}_{opts}_{sector}",
+            **config["scenario"],
+        ),
         #"repo_data/dag.jpg",
 
 
