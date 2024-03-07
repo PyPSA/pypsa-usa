@@ -47,4 +47,3 @@ rule plot_figures:
         mem_mb=5000,
     script:
         "../scripts/plot_figures.py"
-

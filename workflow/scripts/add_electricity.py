@@ -2,9 +2,9 @@
 """
 **Description**
 
-This module integrates data produced by `build_renewable_profiles`, `build_demand`, `build_cost_data`, `build_fuel_prices`, and `build_base_network` to create a network model that includes generators, demand, and costs. The module attaches generators, storage units, and loads to the network created by `build_base_network`. Each generator is assigned regional capital costs, and regional and daily or monthly marginal costs. 
+This module integrates data produced by `build_renewable_profiles`, `build_demand`, `build_cost_data`, `build_fuel_prices`, and `build_base_network` to create a network model that includes generators, demand, and costs. The module attaches generators, storage units, and loads to the network created by `build_base_network`. Each generator is assigned regional capital costs, and regional and daily or monthly marginal costs.
 
-Extendable generators are assigned a maximum capacity based on land-use constraints defined in `build_renewable_profiles`. 
+Extendable generators are assigned a maximum capacity based on land-use constraints defined in `build_renewable_profiles`.
 
 **Relevant Settings**
 
@@ -35,7 +35,6 @@ Extendable generators are assigned a maximum capacity based on land-use constrai
 **Outputs**
 
 - ``networks/elec_base_network_l_pp.nc``
-
 """
 
 
@@ -328,15 +327,32 @@ def update_marginal_costs(
 
     missed = []
     for fuel_region_type in ["balancing_area", "state"]:
-        
+
         # map generators to fuel_region_type (state or BA)
         bus_region_mapper = n.buses.to_dict()[fuel_region_type]
-        gen = n.generators[n.generators.carrier == carrier].copy() if fuel_region_type == "balancing_area" else missed
-        gen[f'{fuel_region_type}'] = gen.bus.map(bus_region_mapper)
-        gen[f'{fuel_region_type}'] = gen[f'{fuel_region_type}'].replace({"CISO-PGAE": "CISO", "CISO-SCE": "CISO", "CISO-SDGE":"CISO","CISO-VEA":"CISO", "Arizona": "AZPS", "NYISO": "NYISO", "CAISO": "CAISO", "BANC":"BANCSMUD"})
+        gen = (
+            n.generators[n.generators.carrier == carrier].copy()
+            if fuel_region_type == "balancing_area"
+            else missed
+        )
+        gen[f"{fuel_region_type}"] = gen.bus.map(bus_region_mapper)
+        gen[f"{fuel_region_type}"] = gen[f"{fuel_region_type}"].replace(
+            {
+                "CISO-PGAE": "CISO",
+                "CISO-SCE": "CISO",
+                "CISO-SDGE": "CISO",
+                "CISO-VEA": "CISO",
+                "Arizona": "AZPS",
+                "NYISO": "NYISO",
+                "CAISO": "CAISO",
+                "BANC": "BANCSMUD",
+            }
+        )
 
         missed = gen[~gen[fuel_region_type].isin(fuel_costs.columns.unique())]
-        gen = gen[gen[fuel_region_type].isin(fuel_costs.columns.unique())] #Filter for BAs which we have the fuel price data for
+        gen = gen[
+            gen[fuel_region_type].isin(fuel_costs.columns.unique())
+        ]  # Filter for BAs which we have the fuel price data for
 
         # Can add block here that pulls in the state level data for Missing CAISO data.
 
@@ -350,7 +366,9 @@ def update_marginal_costs(
         # fuel_costs.set_index(fuel_region_type, inplace=True)
         for fuel_region in gen[fuel_region_type].unique():
             gens_in_region = gen[gen[fuel_region_type] == fuel_region].index.to_list()
-            dfs.append(pd.DataFrame({gen_: fuel_costs[fuel_region]  for gen_ in gens_in_region}),)
+            dfs.append(
+                pd.DataFrame({gen_: fuel_costs[fuel_region] for gen_ in gens_in_region})
+            )
         df = pd.concat(dfs, axis=1)
 
         # apply efficiency of each generator to know fuel burn rate

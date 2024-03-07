@@ -244,6 +244,7 @@ rule build_demand:
     script:
         "../scripts/build_demand.py"
 
+
 rule build_fuel_prices:
     params:
         snapshots=config["snapshots"],
@@ -263,7 +264,6 @@ rule build_fuel_prices:
         mem_mb=2000,
     script:
         "../scripts/build_fuel_prices.py"
-
 
 
 rule add_electricity:
@@ -316,7 +316,6 @@ rule add_electricity:
         demand=RESOURCES + "{interconnect}/demand.csv",
         fuel_costs="repo_data/eia_mappings/fuelCost22.csv",
         ng_electric_power_price=RESOURCES + "{interconnect}/ng_fuel_prices.csv",
-
     output:
         RESOURCES + "{interconnect}/elec_base_network_l_pp.nc",
     log:
