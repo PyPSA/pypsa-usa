@@ -6,24 +6,19 @@ run:
   disable_progressbar: false # set to true to disable the progressbar
   shared_resources: false # set to true to share the default resources across runs
   shared_cutouts: true # set to true to share the default cutout(s) across runs
+  validation: false # set to true to run back-casting plots
+
 
 # docs :
 scenario:
   interconnect: western #"usa|texas|western|eastern"
-  clusters: [30, 100]
-  opts:
-    [
-      Co2L1.0-4H,
-      Co2L0.75-4H,
-      Co2L0.5-4H,
-      Co2L0.25-4H,
-      Co2L0.0-4H,
-    ]
-  ll: [vopt, v1.15] 
-  scope: "total" # "urban", "rural", or "total" 
-  sector: "" # G 
+  clusters: [40]
+  opts: [Co2L0.30-4H-Ep-SAFE]
+  ll: [v1.05]
+  scope: "total" # "urban", "rural", or "total"
+  sector: "" # G
   planning_horizons:
-    - 2030 #  # Uncomment to use NREL EFS Demand Forecasts (2030, 2040, 2050)
+  - 2030   #(2030, 2040, 2050)
 
 foresight:  # Only Single Stage Currently
 
@@ -32,7 +27,7 @@ foresight:  # Only Single Stage Currently
 enable:
   build_cutout: false
 
-countries: [US]  
+countries: [US]
 
 snapshots:
   start: "2019-01-01"
@@ -62,7 +57,7 @@ atlite:
       dx: 0.3
       dy: 0.3
     texas:
-      x: [-110,-90]
+      x: [-110, -90]
       y: [24, 37]
       dx: 0.3
       dy: 0.3
@@ -73,17 +68,23 @@ atlite:
       dy: 0.3
 
 # docs :
-electricity: 
+electricity:
   conventional_carriers: [nuclear, oil, OCGT, CCGT, coal, geothermal] # Choose the conventional plant types to include in network
-  renewable_carriers: [onwind, offwind, offwind_floating, solar, hydro] # Choose the renewable plant types to include in network 
+  renewable_carriers: [onwind, offwind, offwind_floating, solar, hydro] # Choose the renewable plant types to include in network
   voltage_simplified: 230 #Voltage level to simplify network to in rule "simplify network"
   co2limit: 1.4728e+9 # 0.8 * 1.841e+9
   co2base: 226.86e+6 #base_from_2020 Locations of the 250 MMmt of CO2 emissions from the WECC 2021.
   gaslimit: false # global gas usage limit of X MWh_th
   retirement: economic # "economic" or "technical"
+  SAFE_reservemargin: 0.14
+  regional_Co2_limits: 'config/policy_constraints/regional_Co2_limits.csv'
+  agg_p_nom_limits: 'config/policy_constraints/agg_p_nom_minmax.csv'
+  portfolio_standards: 'config/policy_constraints/portfolio_standards.csv'
+  SAFE_regional_reservemargins: 'config/policy_constraints/SAFE_regional_prm.csv'
+
 
   operational_reserve:
-    activate: True
+    activate: false
     epsilon_load: 0.02
     epsilon_vres: 0.02
     contingency: 4000
@@ -94,10 +95,10 @@ electricity:
 
   extendable_carriers:
     Generator: [solar, onwind, offwind, offwind_floating, OCGT, CCGT, coal] #offwind, offwind_floating,
-    StorageUnit: [battery] # battery, H2
-    Store: [] #[battery, H2]
+    StorageUnit: [4hr_battery_storage] # [Xhr-battery-storage (2-10 hours), H2]
+    Store: [] #[H2]
     Link: [] #[H2 pipeline]
-  
+
   demand: #EFS used for given planning_horizons year
     EFS_case: reference # reference, medium, high
     EFS_speed: moderate # slow, moderate, rapid
@@ -122,7 +123,7 @@ renewable:
       #all keys labeled corrine are actually copernicus codes. Using the name corrine bc using the pypsa-eur convention: https://land.copernicus.eu/global/sites/cgls.vito.be/files/products/CGLOPS1_PUM_LC100m-V3_I3.4.pdf
       grid_codes: [20, 30, 40, 60, 100, 111, 112, 113, 114, 115, 116, 121, 122, 123, 124, 125, 126]
       distance: 10 #buffer from distance_grid_codes that are to be excluded
-      distance_grid_codes: [50] 
+      distance_grid_codes: [50]
     natura: true
     potential: conservative # simple or conservative
     clip_p_max_pu: 1.e-2
@@ -138,7 +139,7 @@ renewable:
     corine:
       grid_codes: [80, 200] #page 28 of https://land.copernicus.eu/global/sites/cgls.vito.be/files/products/CGLOPS1_PUM_LC100m-V3_I3.4.pdf
     natura: true
-    max_depth: 60 # meters, ref https://www.nrel.gov/docs/fy16osti/66599.pdf 
+    max_depth: 60 # meters, ref https://www.nrel.gov/docs/fy16osti/66599.pdf
     min_shore_distance: 22000 # meters
     max_shore_distance: 90000 # meters
     potential: conservative # simple or conservative
@@ -200,7 +201,7 @@ renewable:
 # docs :
 lines:
   types: # All temporary values, need to be updated
-    115.: "Al/St 240/40 2-bundle 220.0" 
+    115.: "Al/St 240/40 2-bundle 220.0"
     138.: "Al/St 240/40 2-bundle 220.0"
     161.: "Al/St 240/40 2-bundle 220.0"
     230.: "Al/St 240/40 2-bundle 220.0"
@@ -224,9 +225,10 @@ load:
 
 # docs :
 costs:  # based on the potentials, assuming  (0.1 kW/m2 and 10 m2/person)
-  year: 2030 
+  year: 2030
   version: v0.6.0
-  rooftop_share: 0.14
+  rooftop_share: 0.0
+  ng_fuel_year: 2019 # year of the natural gas price from CAISO [2019- 2023]
   fill_values:
     FOM: 0
     VOM: 0
@@ -247,13 +249,13 @@ costs:  # based on the potentials, assuming  (0.1 kW/m2 and 10 m2/person)
     battery: 0.
     battery inverter: 0.
   emission_prices: # in currency per tonne emission, only used with the option Ep
-    co2: 0.
+    co2: 20.0
 
 # docs :
 sector:
   co2_sequestration_potential: 0
   natural_gas:
-    allow_imports_exports: true # false to be implemented 
+    allow_imports_exports: true # false to be implemented
     copperplate: true # copperplates at a state level (only true works)
     cyclic_storage: false
   heating:
@@ -268,19 +270,14 @@ clustering:
   cluster_network:
     algorithm: kmeans
     feature: solar+onwind-time
-    aggregation_zones: 'balancing_area' # balancing_area, country, or state. # Currently issue in State aggregation
+    aggregation_zones: 'state' # [balancing_area, state]
+    exclude_carriers: []
+    consider_efficiency_classes: false
   aggregation_strategies:
     generators:
-      p_nom_max: sum # use "min" for more conservative assumptions
-      p_nom_min: sum
-      p_min_pu: mean
-      marginal_cost: mean
       committable: any
-      ramp_limit_up: mean
-      ramp_limit_down: mean
-      efficiency: mean
-    buses:
-      state: max # temp fix. When fixing state aggregation- change add electricity such that region info not is use is removed.
+      ramp_limit_up: max
+      ramp_limit_down: max
 
 focus_weights:
   # California: 0.5
