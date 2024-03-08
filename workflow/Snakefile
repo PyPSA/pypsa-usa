@@ -7,43 +7,10 @@ from snakemake.remote.HTTP import RemoteProvider as HTTPRemoteProvider
 
 HTTP = HTTPRemoteProvider()
 
-# -------------------------- Imports and Parameters -------------------------- #
-
 from os.path import normpath
 from pathlib import Path
 
-FIGURES_SINGLE = [
-    "capacity_map_base",
-    "capacity_map_optimized",
-    "capacity_map_optimized_brownfield",
-    "capacity_map_new",
-    "demand_map",
-    "costs_bar",
-    "production_bar",
-    "production_area",
-    "emissions_area",
-    "emissions_accumulated_tech",
-    "emissions_map",
-    "renewable_potential_map",
-    "capacity_additions_bar",
-]
-
-FIGURES_VALIDATE = [
-    "seasonal_stacked_plot",
-    "carrier_production_bar",
-    "production_deviation_bar",
-]
-
-FIGURES_SINGLE_HTML = [
-    "production_area_html",
-    "emissions_area_html",
-    "emissions_region_html",
-    "emissions_accumulated_tech_html",
-]
-
 # --------------------------- Workflow constraints --------------------------- #
-
-
 localrules:
     dag,
     clean,
@@ -58,20 +25,12 @@ wildcard_constraints:
     scope="urban|rural|total",
     sector="([EG]-)*[EG]",
 
-
 # -------------------------- Config and Subworkflows ------------------------- #
 
-
 # Merge subworkflow configs and main config
-# configfile: "config/tests/config.validation.yaml"
-# configfile: "config/tests/config.test_simple.yaml"
-configfile: "config/config.default.yaml"
 configfile: "config/config.cluster.yaml"
 configfile: "config/config.osw.yaml"
 configfile: "config/config.plotting.yaml"
-
-
-ATLITE_NPROCESSES = config["atlite"].get("nprocesses", 4)
 
 run = config.get("run", {})
 RDIR = run["name"] + "/" if run.get("name") else ""
@@ -102,7 +61,7 @@ if "E" not in config["scenario"]["sector"]:
 if config["run"]["validation"]:
     COLLECT_FIGURES = FIGURES_VALIDATE
 else:
-    COLLECT_FIGURES = FIGURES_SINGLE
+    COLLECT_FIGURES = FIGURES_STATS + FIGURES_MAPS
 
 # ----------------------------------- Rules ---------------------------------- #
 
@@ -120,20 +79,18 @@ rule all:
             + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/.statistics_plots",
             **config["scenario"],
         ),
-        #"repo_data/dag.jpg",
+        "repo_data/dag.jpg",
 
 
 # Create DAG with-
-# snakemake --dag -F | sed -n "/digraph/,\$p" | dot -Tpng -o repo_data/dag.jpg
 # snakemake --rulegraph all | sed -n "/digraph/,\$p" | dot -Tpng -o repo_data/dag.jpg
+# snakemake --dag -F | sed -n "/digraph/,\$p" | dot -Tpng -o repo_data/dag.jpg
 rule dag:
     message:
         "Creating DAG of workflow."
     output:
         dot="repo_data/dag.dot",
         jpg="repo_data/dag.jpg",
-    conda:
-        "envs/environment.yaml"
     shell:
         """
         snakemake --rulegraph all | sed -n "/digraph/,\$p" > {output.dot}

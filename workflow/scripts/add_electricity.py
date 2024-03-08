@@ -143,7 +143,7 @@ def add_co2_emissions(n, costs, carriers):
 def load_costs(
     tech_costs: str,
     config: dict[str, Any],
-    max_hours: dict[str, int | float],
+    max_hours: dict[str, Union[int, float]],
     Nyears: float = 1.0,
 ) -> pd.DataFrame:
 

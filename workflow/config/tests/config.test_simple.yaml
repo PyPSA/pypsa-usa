@@ -11,7 +11,7 @@ run:
 # docs :
 scenario:
   interconnect: [western] #"usa|texas|western|eastern"
-  clusters: [40]
+  clusters: [30]
   opts: [Co2L1.0-6H-RCo2L-SAFER-RPS]
   ll: [v1.0]
   scope: "total" # "urban", "rural", or "total"
@@ -37,9 +37,11 @@ electricity:
   conventional_carriers: [nuclear, oil, OCGT, CCGT, coal, geothermal] # Choose the conventional plant types to include in network
   renewable_carriers: [onwind, offwind, offwind_floating, solar, hydro] # Choose the renewable plant types to include in network
   voltage_simplified: 230 #Voltage level to simplify network to in rule "simplify network"
-  co2limit: 147.28e+6 # 0.8 * 184.1e+6
-  co2base: 225.0e+6 #base_from_2020 Locations of the 250 MMmt of CO2 emissions from the WECC 2021.
+  co2limit: 1.4728e+9 # 0.8 * 1.841e+9
+  co2limit_enable: False # For sector coupled studies
+  co2base: 226.86e+6 #base_from_2020 Locations of the 250 MMmt of CO2 emissions from the WECC 2021.
   gaslimit: false # global gas usage limit of X MWh_th
+  gaslimit_enable: false # For sector coupled studies
   retirement: economic # "economic" or "technical"
   SAFE_reservemargin: 0.14
   regional_Co2_limits: 'config/policy_constraints/regional_Co2_limits.csv'
@@ -301,9 +303,10 @@ solving:
     track_iterations: false
     min_iterations: 4
     max_iterations: 6
-    transmission_losses: 0
+    transmission_losses: 2
     linearized_unit_commitment: true
     horizon: 8760
+    assign_all_duals: true
 
   solver:
     name: gurobi

@@ -311,7 +311,7 @@ def add_RPS_constraints(n, config):
             n.model.add_constraints(
                 lhs.sel(group=index).sum()
                 >= pct.loc[region].values[0] * (lhs.sel(group=region).sum()),
-                name=f"portfolio_standard_{region}",
+                name=f"GlobalConstraint-{region}_portfolio_standard",
             )
 
 
@@ -474,7 +474,7 @@ def add_regional_co2limit(n, config):
         #     lhs += (inter_regional_imports)
 
         rhs = region_co2lim
-        n.model.add_constraints(lhs <= rhs, name=f"{region}_co2_limit")
+        n.model.add_constraints(lhs <= rhs, name=f"GlobalConstraint-{region}_co2_limit")
 
 
 def add_SAFE_constraints(n, config):
@@ -554,7 +554,7 @@ def add_regional_SAFE_constraints(n, config):
             "~p_nom_extendable & carrier in @conventional_carriers",
         ).p_nom.sum()
         rhs = reserve_margin - exist_conv_caps
-        n.model.add_constraints(lhs >= rhs, name=f"safe_mintotalcap_{region}")
+        n.model.add_constraints(lhs >= rhs, name=f"GlobalConstraint-{region}_PRM")
 
 
 def add_operational_reserve_margin(n, sns, config):
@@ -804,6 +804,7 @@ def solve_network(n, config, solving, opts="", **kwargs):
         n.optimize.optimize_with_rolling_horizon(**kwargs)
         status, condition = "", ""
     elif skip_iterations:
+        import pdb; pdb.set_trace()
         status, condition = n.optimize(**kwargs)
     else:
         kwargs["track_iterations"] = (cf_solving.get("track_iterations", False),)

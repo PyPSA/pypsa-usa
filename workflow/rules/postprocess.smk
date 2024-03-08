@@ -17,7 +17,24 @@ rule copy_config:
         "../scripts/subworkflows/pypsa-eur/scripts/copy_config.py"
 
 
-rule plot_figures:
+
+FIGURES_VALIDATE = [
+    "seasonal_stacked_plot",
+    "carrier_production_bar",
+    "production_deviation_bar",
+]
+
+FIGURES_MAPS = [
+    "capacity_map_base",
+    "capacity_map_optimized",
+    "capacity_map_optimized_brownfield",
+    "capacity_map_new",
+    "demand_map",
+    "emissions_map",
+    "renewable_potential_map",
+]
+
+rule plot_network_maps:
     input:
         network=RESULTS
         + "{interconnect}/networks/elec_s_{clusters}_ec_l{ll}_{opts}_{sector}.nc",
@@ -34,7 +51,52 @@ rule plot_figures:
             fig: RESULTS
             + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/%s.pdf"
             % fig
-            for fig in FIGURES_SINGLE
+            for fig in FIGURES_MAPS
+        },
+    log:
+        "logs/plot_figures/{interconnect}_{clusters}_l{ll}_{opts}_{sector}.log",
+    threads: 1
+    resources:
+        mem_mb=5000,
+    script:
+        "../scripts/plot_network_maps.py"
+
+
+FIGURES_SINGLE_HTML = [
+    "production_area_html",
+    "emissions_area_html",
+    "emissions_region_html",
+    "emissions_accumulated_tech_html",
+]
+
+FIGURES_STATS = [
+    "costs_bar",
+    "production_bar",
+    "production_area",
+    "emissions_area",
+    "emissions_accumulated_tech",
+    "capacity_additions_bar",
+    "global_constraint_shadow_prices",
+]
+
+rule plot_statistics:
+    input:
+        network=RESULTS
+        + "{interconnect}/networks/elec_s_{clusters}_ec_l{ll}_{opts}_{sector}.nc",
+        regions_onshore=RESOURCES
+        + "{interconnect}/regions_onshore_s_{clusters}.geojson",
+        regions_offshore=RESOURCES
+        + "{interconnect}/regions_offshore_s_{clusters}.geojson",
+    params:
+        electricity=config["electricity"],
+        plotting=config["plotting"],
+        retirement=config["electricity"].get("retirement", "technical"),
+    output:
+        **{
+            fig: RESULTS
+            + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/%s.pdf"
+            % fig
+            for fig in FIGURES_STATS
         },
         **{
             fig: RESULTS
@@ -48,7 +110,7 @@ rule plot_figures:
     resources:
         mem_mb=5000,
     script:
-        "../scripts/plot_figures.py"
+        "../scripts/plot_statistics.py"
 
 
 STATISTICS_BARPLOTS = [

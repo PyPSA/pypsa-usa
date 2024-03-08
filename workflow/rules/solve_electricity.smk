@@ -35,7 +35,7 @@ rule solve_network:
     conda:
         "../envs/environment.yaml"
     script:
-        "../scripts/solve_network_local.py"
+        "../scripts/solve_network.py"
 
 
 rule solve_network_operations:

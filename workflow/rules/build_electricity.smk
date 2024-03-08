@@ -87,6 +87,7 @@ rule build_cost_data:
     script:
         "../scripts/build_cost_data.py"
 
+ATLITE_NPROCESSES = config["atlite"].get("nprocesses", 4)
 
 if config["enable"].get("build_cutout", False):
 
