@@ -17,7 +17,7 @@ rule build_shapes:
         offshore_shapes=RESOURCES + "{interconnect}/offshore_shapes.geojson",
         state_shapes=RESOURCES + "{interconnect}/state_boundaries.geojson",
     log:
-        "logs/build_shapes_{interconnect}.log",
+        "logs/build_shapes/{interconnect}.log",
     threads: 1
     resources:
         mem_mb=500,
@@ -65,7 +65,7 @@ rule build_bus_regions:
         regions_onshore=RESOURCES + "{interconnect}/regions_onshore.geojson",
         regions_offshore=RESOURCES + "{interconnect}/regions_offshore.geojson",
     log:
-        "logs/{interconnect}/build_bus_regions_s.log",
+        "logs/build_bus_regions/{interconnect}.log",
     threads: 1
     resources:
         mem_mb=1000,

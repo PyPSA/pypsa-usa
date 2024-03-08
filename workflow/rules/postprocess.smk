@@ -32,16 +32,18 @@ rule plot_figures:
     output:
         **{
             fig: RESULTS
-            + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}_%s.pdf"
+            + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/%s.pdf"
             % fig
             for fig in FIGURES_SINGLE
         },
         **{
             fig: RESULTS
-            + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}_%s.html"
+            + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/%s.html"
             % fig
             for fig in FIGURES_SINGLE_HTML
         },
+    log:
+        "logs/plot_figures/{interconnect}_{clusters}_l{ll}_{opts}_{sector}.log",
     threads: 1
     resources:
         mem_mb=5000,
@@ -71,10 +73,12 @@ rule plot_elec_statistics:
     output:
         **{
             f"{plot}_bar": RESULTS
-            + f"{{interconnect}}/figures/statistics_{plot}_bar_elec_s_{{clusters}}_ec_l{{ll}}_{{opts}}_{{sector}}.pdf"
+            + f"{{interconnect}}/figures/cluster_{{clusters}}/l{{ll}}_{{opts}}_{{sector}}/statistics_{plot}_bar.pdf"
             for plot in STATISTICS_BARPLOTS
         },
         barplots_touch=RESULTS
-        + "{interconnect}/figures/.statistics_plots_elec_s_{clusters}_ec_l{ll}_{opts}_{sector}",
+        + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/.statistics_plots",
+    log:
+        "logs/plot_elec_statistics/{interconnect}_{clusters}_l{ll}_{opts}_{sector}.log",
     script:
         "../scripts/subworkflows/pypsa-eur/scripts/plot_statistics.py"

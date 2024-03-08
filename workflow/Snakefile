@@ -111,13 +111,13 @@ rule all:
     input:
         expand(
             RESULTS
-            + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}_{figure}.pdf",
+            + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/{figure}.pdf",
             **config["scenario"],
             figure=COLLECT_FIGURES,
         ),
         expand(
             RESULTS
-            + "{interconnect}/figures/.statistics_plots_elec_s_{clusters}_ec_l{ll}_{opts}_{sector}",
+            + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/.statistics_plots",
             **config["scenario"],
         ),
         #"repo_data/dag.jpg",
