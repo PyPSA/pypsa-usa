@@ -229,6 +229,7 @@ rule build_demand:
         ),
         eia=expand(DATA + "GridEmissions/{file}", file=DATAFILES_DMD),
         efs=DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv",
+        uri_demand="repo_data/ercot_specific/uri_real_demand.csv"
     output:
         demand=RESOURCES + "{interconnect}/demand.csv",
     log:
@@ -310,19 +311,10 @@ rule add_electricity:
             DATA + "WECC_ADS/downloads/2032/Public Data/Hourly Profiles in CSV format"
             if config["network_configuration"] == "ads2032"
             else []
-        ,
-        ads_2030=
-            DATA + "WECC_ADS/downloads/2030/WECC 2030 ADS PCM 2020-12-16 (V1.5) Public Data/CSV Shape Files"
-            if config["network_configuration"] == 'ads2032'
-            else []
-        ,
-        uri_demand="repo_data/ercot_specific/uri_real_demand.csv",
-        eia = expand(DATA + "GridEmissions/{file}", file=DATAFILES_DMD),
-        efs = DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv",
-        **{
-            f"gen_cost_mult_{Path(x).stem}":f"repo_data/locational_multipliers/{Path(x).name}" for x in Path("repo_data/locational_multipliers/").glob("*")
-        },
-        ng_electric_power_price = DATA + "costs/ng_electric_power_price.csv",
+        ),
+        demand=RESOURCES + "{interconnect}/demand.csv",
+        fuel_costs="repo_data/eia_mappings/fuelCost22.csv",
+        ng_electric_power_price=RESOURCES + "{interconnect}/ng_fuel_prices.csv",
     output:
         RESOURCES + "{interconnect}/elec_base_network_l_pp.nc",
     log:
@@ -396,24 +388,20 @@ rule cluster_network:
 if config["enable"].get("allow_new_plant", True):
     rule add_extra_components:
         input:
-            regions=RESOURCES + "{interconnect}/regions_onshore_s_{clusters}.geojson",
             network=RESOURCES + "{interconnect}/elec_s_{clusters}.nc",
-            tech_costs=DATA + f"costs_{config['costs']['year']}.csv",
-            geo_egs_sc=DATA + "geo_egs_supply_curve.geojson",
+            tech_costs=RESOURCES + f"costs_{config['costs']['year']}.csv",
         params:
             retirement=config["electricity"].get("retirement", "technical"),
-            egs=config["electricity"].get("egs"),
-            egs_reduction=config["electricity"].get("egs_reduction"),
         output:
             RESOURCES + "{interconnect}/elec_s_{clusters}_ec.nc",
         log:
             "logs/add_extra_components/{interconnect}/elec_s_{clusters}_ec.log",
-    threads: 1
-    resources:
-        mem_mb=4000,
-    group:
-        "prepare"
-    script:
+        threads: 1
+        resources:
+            mem_mb=4000,
+        group:
+            "prepare"
+        script:
             "../scripts/add_extra_components.py"
 else: 
     rule no_add_extra_components:

@@ -44,23 +44,18 @@ atlite:
       - 50
   nprocesses: 8
   show_progress: false
-capacity_from_reeds: ercot_cap_2030_add_bat2
+capacity_from_reeds: ercot_cap_2030
 clustering:
   aggregation_strategies:
-    buses:
-      state: max
     generators:
       committable: any
-      efficiency: mean
-      marginal_cost: mean
-      p_min_pu: mean
-      p_nom_max: sum
-      p_nom_min: sum
-      ramp_limit_down: mean
-      ramp_limit_up: mean
+      ramp_limit_down: max
+      ramp_limit_up: max
   cluster_network:
-    aggregation_zones: balancing_area
-    algorithm: kmeans
+    aggregation_zones: state
+    algorithm: hac
+    consider_efficiency_classes: false
+    exclude_carriers: []
     feature: solar+onwind-time
   simplify_network:
     algorithm: kmeans
@@ -91,12 +86,16 @@ costs:
     offwind: 0.0
     onwind: 0.0
     solar: 0.0
-  rooftop_share: 0.14
+  ng_fuel_year: 2019
+  rooftop_share: 0.0
   version: v0.6.0
   year: 2030
 countries:
 - US
 electricity:
+  SAFE_regional_reservemargins: config/policy_constraints/SAFE_regional_prm.csv
+  SAFE_reservemargin: 0.14
+  agg_p_nom_limits: config/policy_constraints/agg_p_nom_minmax.csv
   co2base: 226860000.0
   co2limit: 1000000000.0
   conventional_carriers:
@@ -112,7 +111,14 @@ electricity:
   egs: true
   egs_reduction: 0.2
   extendable_carriers:
-    Generator: []
+    Generator:
+    - solar
+    - onwind
+    - offwind
+    - OCGT
+    - CCGT
+    - coal
+    - geothermal
     Link: []
     StorageUnit: []
     Store: []
@@ -121,10 +127,12 @@ electricity:
     H2: 168
     battery: 2
   operational_reserve:
-    activate: false
+    activate: true
     contingency: 4000
     epsilon_load: 0.02
     epsilon_vres: 0.02
+  portfolio_standards: config/policy_constraints/portfolio_standards.csv
+  regional_Co2_limits: config/policy_constraints/regional_Co2_limits.csv
   renewable_carriers:
   - onwind
   - solar
@@ -283,14 +291,15 @@ renewable:
 replace_uri: true
 run:
   disable_progressbar: false
-  name: add_bat2_2023_new
+  name: ref_2023
   shared_cutouts: true
   shared_resources: false
+  validation: false
 scenario:
   clusters:
-  - 30
+  - 8
   interconnect: texas
-  ll: v1.1
+  ll: v1
   opts:
   - Co2L1-1H
   planning_horizons: null

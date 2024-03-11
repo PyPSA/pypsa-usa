@@ -604,8 +604,7 @@ def add_operational_reserve_margin(n, sns, config):
         )
         lhs = summed_reserve + (p_nom_vres * (-EPSILON_VRES * capacity_factor)).sum(
             "Generator",
-        )
-
+        ) 
     # Total demand per t
     demand = get_as_dense(n, "Load", "p_set").sum(axis=1)
 
@@ -871,6 +870,8 @@ if __name__ == "__main__":
         opts=opts,
         log_fn=snakemake.log.solver,
     )
+    print(n.generators["p_nom"])
 
     n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))
+    print(n.generators["p_nom"])
     n.export_to_netcdf(snakemake.output[0])

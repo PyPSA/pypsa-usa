@@ -101,15 +101,51 @@ def prepare_ads_demand(
     return disaggregate_demand_to_buses(n, demand)
 
 
-def prepare_eia_demand(
-    n: pypsa.Network,
-    demand_path: str,
-) -> pd.DataFrame:
-    logger.info("Building Load Data using EIA demand")
+def prepare_eia_demand(n: pypsa.Network, 
+                       demand_path: str,
+                       replace_uri: True,
+                       scaling = 1.0, 
+                       ) -> pd.DataFrame:
+    logger.info('Building Load Data using EIA demand')
     demand = pd.read_csv(demand_path, index_col=0)
     demand.index = pd.to_datetime(demand.index)
-    demand = demand.loc[n.snapshots.intersection(demand.index)]  # filter by snapshots
-    demand = demand[~demand.index.duplicated(keep="last")]
+    demand = demand.fillna(method='backfill') #tempory solution until gridEmission for the cleaned Data
+    
+    if replace_uri:
+        # Read Uri projected demand from ERCOT
+        demand_uri = pd.read_csv(snakemake.input['uri_demand'])
+        demand_uri.columns = ['timestamp', 'ERCO_uri']
+        demand_uri['ERCO_uri'] = demand_uri['ERCO_uri'].str.replace(',', '').astype(float)
+        demand_uri['timestamp'] = pd.to_datetime(demand_uri['timestamp'])
+        demand_uri['timestamp'] -=  pd.to_timedelta(6, unit='h')
+
+        # Replace eia demand with Uri-specific demand
+        demand = demand.merge(demand_uri, on='timestamp', how='left')
+        demand['ERCO'] = demand.ERCO_uri.combine_first(demand.ERCO)
+        demand = demand.drop('ERCO_uri', axis=1).set_index('timestamp', inplace=False)
+
+    if len(scaling) == 12:
+        demand = demand.reset_index()
+        demand['timestamp'] = pd.to_datetime(demand['timestamp'])
+        demand['month'] = demand['timestamp'].dt.month
+
+        scale_df = pd.DataFrame({'month': list(range(1,13)), 
+                                "scaling":scaling})
+
+        demand = demand.merge(scale_df, on='month', how='left').set_index('timestamp', inplace=False)
+        demand = demand[['AEC', 'AECI', 'AVA', 'AZPS', 'BANC', 'BPAT', 'CHPD',
+            'CISO', 'CPLE', 'CPLW', 'DOPD', 'DUK', 'EPE', 'ERCO', 'FMPP', 'FPC',
+            'FPL', 'GCPD', 'GVL', 'HST', 'IID', 'IPCO', 'ISNE', 'JEA', 'LDWP',
+            'LGEE', 'MISO', 'NEVP', 'NWMT', 'NYIS', 'PACE', 'PACW', 'PGE', 'PJM',
+            'PNM', 'PSCO', 'PSEI', 'SC', 'SCEG', 'SCL', 'SEC', 'SOCO', 'SPA', 'SRP',
+            'SWPP', 'TAL', 'TEC', 'TEPC', 'TIDC', 'TPWR', 'TVA', 'WACM', 'WALC',
+            'WAUW']].multiply(demand["scaling"], axis="index")
+
+    else:
+        demand *= scaling
+
+    demand = demand.loc[n.snapshots.intersection(demand.index)] # filter by snapshots
+    demand = demand[~demand.index.duplicated(keep='last')]
     demand.index = n.snapshots
 
     # Combine EIA Demand Data to Match GIS Shapes
@@ -235,6 +271,12 @@ def main(snakemake):
     configuration = snakemake.config["network_configuration"]
     interconnection = snakemake.wildcards["interconnect"]
     planning_horizons = snakemake.params["planning_horizons"]
+    replace_uri = snakemake.config["replace_uri"]
+    uri_demand = snakemake.input['uri_demand']
+    scaling_monthly = snakemake.config['load']['scaling_factor_monthly']
+    scaling = snakemake.config['load']['scaling_factor']
+    if len(scaling_monthly)==12:
+        scaling = scaling_monthly
 
     snapshot_config = snakemake.params["snapshots"]
     sns_start = pd.to_datetime(snapshot_config["start"])  # + " 08:00:00")
@@ -259,7 +301,7 @@ def main(snakemake):
         demand_per_bus = (
             prepare_efs_demand(n, snakemake.params.get("planning_horizons"))
             if snakemake.params.get("planning_horizons")
-            else prepare_eia_demand(n, snakemake.input["eia"][0])
+            else prepare_eia_demand(n, snakemake.input["eia"][0], replace_uri, scaling)
         )
     else:
         raise ValueError(

@@ -2,7 +2,7 @@
 network_configuration: "pypsa-usa" # "pypsa-usa" or "ads2032"
 
 run:
-  name: "test_g" # use this to keep track of runs with different settings
+  name: "testtesttest" # use this to keep track of runs with different settings
   disable_progressbar: false # set to true to disable the progressbar
   shared_resources: false # set to true to share the default resources across runs
   shared_cutouts: true # set to true to share the default cutout(s) across runs
@@ -11,7 +11,7 @@ run:
 # docs :
 scenario:
   interconnect: texas #"usa|texas|western|eastern"
-  clusters: [30]
+  clusters: [8]
 
   opts:
     [
@@ -33,6 +33,7 @@ enable:
   download_cutout: false
   download_eia: false
   allow_new_plant: false
+  casio: false
 
 countries: [US]  
 
@@ -317,7 +318,7 @@ solving:
 
   solver:
     name: gurobi
-    options: gurobi-default
+    options: gurobi-numeric-focus
 
   solver_options:
     highs-default:

@@ -111,8 +111,8 @@ def get_color_palette(n: pypsa.Network) -> pd.Series:
         "Battery Discharge": n.carriers.loc["battery"].color,
         "battery_discharger": n.carriers.loc["battery"].color,
         "battery_charger": n.carriers.loc["battery"].color,
-        "4hr_battery_storage_discharger": n.carriers.loc["4hr_battery_storage"].color,
-        "4hr_battery_storage_charger": n.carriers.loc["4hr_battery_storage"].color,
+        # "4hr_battery_storage_discharger": n.carriers.loc["4hr_battery_storage"].color,
+        # "4hr_battery_storage_charger": n.carriers.loc["4hr_battery_storage"].color,
         "co2": "k",
     }
 
@@ -607,7 +607,7 @@ def plot_production_bar(
     energy_mix = n.statistics.dispatch().mul(1e-3)  # MW -> GW
     energy_mix.name = "dispatch"
     energy_mix = energy_mix[
-        energy_mix.index.get_level_values("component").isin(
+        energy_mix.index.get_level_values(0).isin(
             ["Generator", "StorageUnit"],
         )
     ]

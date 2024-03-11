@@ -57,7 +57,10 @@ def download_oasis_report(
     response = requests.get(base_url, params=params)
 
     if response.status_code == 200:
-        filename = f"{queryname}_{startdatetime}_{enddatetime}.{resultformat}.zip"
+        startdatetimename = startdatetime.replace(":", "")
+        enddatetimename = enddatetime.replace(":", "")
+
+        filename = f"{queryname}_{startdatetimename}_{enddatetimename}.{resultformat}.zip"
         with open(filename, "wb") as file:
             file.write(response.content)
         print(f"Report downloaded successfully: {filename}")
@@ -95,7 +98,9 @@ def step_download_oasis_reports(
         download_oasis_report(
             queryname, startdatetime, enddatetime, version, node, resultformat
         )
-        filename = f"/{queryname}_{startdatetime}_{enddatetime}.{resultformat}.zip"
+        startdatetimename = startdatetime.replace(":", "")
+        enddatetimename = enddatetime.replace(":", "")
+        filename = f"/{queryname}_{startdatetimename}_{enddatetimename}.{resultformat}.zip"
         file_names.append(filename)
         time.sleep(5)
 
