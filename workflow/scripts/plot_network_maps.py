@@ -655,7 +655,26 @@ def plot_renewable_potential(
 
     fig.savefig(save)
 
+def plot_lmp_map(network: pypsa.Network, save: str, **wildcards):
+    fig, ax = plt.subplots(subplot_kw={"projection": ccrs.PlateCarree()}, figsize=(8, 8))
 
+    lmps = n.buses_t.marginal_price.mean()
+
+    plt.hexbin(
+        network.buses.x,
+        network.buses.y,
+        gridsize=40,
+        C=lmps,
+        cmap=plt.cm.bwr,
+        zorder=3,
+    )
+    network.plot(ax=ax, line_widths=pd.Series(0.5, network.lines.index), bus_sizes=0)
+
+    cb = plt.colorbar(location="bottom", pad=0.01)  # Adjust the pad value to move the color bar closer
+    cb.set_label(u'LMP ($/MWh)')
+    plt.title(create_title(u'Locational Marginal Price [$/MWh]', **wildcards))
+    plt.tight_layout(rect=[0, 0, 1, 0.95])  # Adjust the rect values to make the layout tighter
+    plt.savefig(save)
 
 
 if __name__ == "__main__":
@@ -750,3 +769,4 @@ if __name__ == "__main__":
         snakemake.output["renewable_potential_map"],
         **snakemake.wildcards,
     )
+    plot_lmp_map(n, snakemake.output["lmp_map"], **snakemake.wildcards)

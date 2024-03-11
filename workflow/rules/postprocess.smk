@@ -32,6 +32,7 @@ FIGURES_MAPS = [
     "demand_map",
     "emissions_map",
     "renewable_potential_map",
+    "lmp_map",
 ]
 
 rule plot_network_maps:
@@ -77,6 +78,9 @@ FIGURES_STATS = [
     "emissions_accumulated_tech",
     "capacity_additions_bar",
     "global_constraint_shadow_prices",
+    "generator_data_panel",
+    "curtailment_heatmap",
+    "region_lmps",
 ]
 
 rule plot_statistics:
