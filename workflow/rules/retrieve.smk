@@ -191,7 +191,6 @@ rule retrieve_cost_data_usa:
     script:
         "../scripts/retrieve_cost_data_usa.py"
 
-
 rule retrieve_caiso_data:
     params:
         fuel_year=config["costs"]["ng_fuel_year"],

@@ -27,7 +27,6 @@ FIGURES_VALIDATE = [
 FIGURES_MAPS = [
     "capacity_map_base",
     "capacity_map_optimized",
-    "capacity_map_optimized_brownfield",
     "capacity_map_new",
     "demand_map",
     "emissions_map",
@@ -80,6 +79,7 @@ FIGURES_STATS = [
     "global_constraint_shadow_prices",
     "generator_data_panel",
     "curtailment_heatmap",
+    "capfac_heatmap",
     "region_lmps",
 ]
 
@@ -104,7 +104,7 @@ rule plot_statistics:
         },
         **{
             fig: RESULTS
-            + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/%s.html"
+            + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/html/%s.html"
             % fig
             for fig in FIGURES_SINGLE_HTML
         },
@@ -115,36 +115,3 @@ rule plot_statistics:
         mem_mb=5000,
     script:
         "../scripts/plot_statistics.py"
-
-
-STATISTICS_BARPLOTS = [
-    "capacity_factor",
-    "installed_capacity",
-    "optimal_capacity",
-    "capital_expenditure",
-    "operational_expenditure",
-    "curtailment",
-    "supply",
-    "withdrawal",
-    "market_value",
-]
-
-rule plot_elec_statistics:
-    params:
-        plotting=config_provider("plotting"),
-        barplots=STATISTICS_BARPLOTS,
-    input:
-        network=RESULTS
-            + "{interconnect}/networks/elec_s_{clusters}_ec_l{ll}_{opts}_{sector}.nc",
-    output:
-        **{
-            f"{plot}_bar": RESULTS
-            + f"{{interconnect}}/figures/cluster_{{clusters}}/l{{ll}}_{{opts}}_{{sector}}/statistics_{plot}_bar.pdf"
-            for plot in STATISTICS_BARPLOTS
-        },
-        barplots_touch=RESULTS
-        + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/.statistics_plots",
-    log:
-        "logs/plot_elec_statistics/{interconnect}_{clusters}_l{ll}_{opts}_{sector}.log",
-    script:
-        "../scripts/subworkflows/pypsa-eur/scripts/plot_statistics.py"

@@ -69,9 +69,8 @@ from summary import (
     get_energy_timeseries,
     get_node_emissions_timeseries,
     get_tech_emissions_timeseries,
-    get_capacity_greenfield,
-    get_capacity_brownfield,
     get_capacity_base,
+    get_capacity_brownfield,
     get_demand_base,
     get_capital_costs,
 )
@@ -486,8 +485,6 @@ def plot_opt_capacity_map(
     regions: gpd.GeoDataFrame,
     carriers: list[str],
     save: str,
-    opt_capacity: str = "greenfield",
-    retirement_method: str = "economic",
     **wildcards,
 ) -> None:
     """
@@ -495,16 +492,11 @@ def plot_opt_capacity_map(
     """
 
     # get data
+    # capacity = n.statistics()[['Optimal Capacity']]
+    # capacity = capacity[capacity.index.get_level_values(0).isin(['Generator', 'StorageUnit'])]
+    # capacity.index = capacity.index.droplevel(0)
 
-    if opt_capacity == "greenfield":
-        bus_values = get_capacity_greenfield(n, retirement_method)
-    elif opt_capacity == "brownfield":
-        bus_values = get_capacity_brownfield(n, retirement_method)
-    else:
-        logger.error(
-            f"Capacity method must be one of 'greenfield' or 'brownfield'. Recieved {opt_capacity}.",
-        )
-        raise NotImplementedError
+    bus_values = get_capacity_brownfield(n)
 
     bus_values = (
         correct_ccgt_ocgt_buses(bus_values).groupby(by=["bus", "carrier"]).sum()
@@ -512,11 +504,9 @@ def plot_opt_capacity_map(
     bus_values = bus_values[bus_values.index.get_level_values(1).isin(carriers)]
 
     line_values = n.lines.s_nom_opt
-    # link_values = n.links.p_nom_opt
 
     # plot data
-
-    title = create_title(f"Optimal {opt_capacity} Network Capacities", **wildcards)
+    title = create_title(f"Optimal Network Capacities", **wildcards)
     interconnect = wildcards.get("interconnect", None)
     bus_scale = get_bus_scale(interconnect) if interconnect else 1
     line_scale = get_line_scale(interconnect) if interconnect else 1
@@ -539,8 +529,6 @@ def plot_new_capacity_map(
     regions: gpd.GeoDataFrame,
     carriers: list[str],
     save: str,
-    opt_capacity: str = "greenfield",
-    retirement_method: str = "economic",
     **wildcards,
 ) -> None:
     """
@@ -548,17 +536,12 @@ def plot_new_capacity_map(
     """
 
     # get data
+    # expanded_capacity = n.statistics.expanded_capacity()
+    # expanded_capacity = expanded_capacity[expanded_capacity.index.get_level_values(0).isin(['Generator', 'StorageUnit'])]
+    # expanded_capacity.index = expanded_capacity.index.droplevel(0)
 
     bus_pnom = get_capacity_base(n)
-    if opt_capacity == "greenfield":
-        bus_pnom_opt = get_capacity_greenfield(n, retirement_method)
-    elif opt_capacity == "brownfield":
-        bus_pnom_opt = get_capacity_brownfield(n, retirement_method)
-    else:
-        logger.error(
-            f"Capacity method must be one of 'greenfield' or 'brownfield'. Recieved {opt_capacity}.",
-        )
-        raise NotImplementedError
+    bus_pnom_opt = get_capacity_brownfield(n)
 
     bus_values = bus_pnom_opt - bus_pnom
     bus_values = (
@@ -572,12 +555,8 @@ def plot_new_capacity_map(
     line_snom_opt = n.lines.s_nom_opt
     line_values = line_snom_opt - line_snom
 
-    # link_pnom = n.links.p_nom
-    # link_pnom_opt = n.links.p_nom_opt
-    # link_values = link_pnom_opt - link_pnom
 
     # plot data
-
     title = create_title("New Network Capacities", **wildcards)
     interconnect = wildcards.get("interconnect", None)
     bus_scale = get_bus_scale(interconnect) if interconnect else 1
@@ -694,8 +673,6 @@ if __name__ == "__main__":
     # extract shared plotting files
     n = pypsa.Network(snakemake.input.network)
     onshore_regions = gpd.read_file(snakemake.input.regions_onshore)
-    retirement_method = snakemake.params.retirement
-    # n_hours = snakemake.config['solving']['options']['nhours']
 
     sanitize_carriers(n, snakemake.config)
 
@@ -727,28 +704,15 @@ if __name__ == "__main__":
         n,
         onshore_regions,
         carriers,
-        snakemake.output["capacity_map_optimized"],
-        "greenfield",
-        retirement_method,
         **snakemake.wildcards,
-    )
-    plot_opt_capacity_map(
-        n,
-        onshore_regions,
-        carriers,
-        snakemake.output["capacity_map_optimized_brownfield"],
-        "brownfield",
-        retirement_method,
-        **snakemake.wildcards,
+        save=snakemake.output["capacity_map_optimized"],
     )
     plot_new_capacity_map(
         n,
         onshore_regions,
         carriers,
-        snakemake.output["capacity_map_new"],
-        "greenfield",
-        retirement_method,
         **snakemake.wildcards,
+        save=snakemake.output["capacity_map_new"],
     )
     plot_demand_map(
         n,

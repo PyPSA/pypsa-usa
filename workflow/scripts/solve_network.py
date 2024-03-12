@@ -804,7 +804,6 @@ def solve_network(n, config, solving, opts="", **kwargs):
         n.optimize.optimize_with_rolling_horizon(**kwargs)
         status, condition = "", ""
     elif skip_iterations:
-        import pdb; pdb.set_trace()
         status, condition = n.optimize(**kwargs)
     else:
         kwargs["track_iterations"] = (cf_solving.get("track_iterations", False),)

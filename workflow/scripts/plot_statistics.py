@@ -69,8 +69,6 @@ from summary import (
     get_energy_timeseries,
     get_node_emissions_timeseries,
     get_tech_emissions_timeseries,
-    get_capacity_greenfield,
-    get_capacity_brownfield,
     get_capacity_base,
     get_demand_base,
     get_capital_costs,
@@ -231,28 +229,8 @@ def plot_production_html(
     """
     Plots interactive timeseries production chart.
     """
-
-    # get data
-
     energy_mix = get_energy_timeseries(n).mul(1e-3)  # MW -> GW
-
-    # # fix battery charge/discharge to only be positive
-    # if "battery" in energy_mix:
-    #     col_rename = {
-    #         "battery charger": "battery",
-    #         "battery discharger": "battery",
-    #     }
-    #     energy_mix = energy_mix.rename(columns=col_rename)
-    #     energy_mix = energy_mix.groupby(level=0, axis=1).sum()
-    #     energy_mix["battery"] = energy_mix.battery.map(lambda x: max(0, x))
-
-    # energy_mix = energy_mix[[x for x in carriers_2_plot if x in energy_mix]]
-    # energy_mix = energy_mix.rename(columns=n.carriers.nice_name)
-    # ########
-
     energy_mix["Demand"] = get_demand_timeseries(n).mul(1e-3)  # MW -> GW
-
-    # plot
 
     color_palette = get_color_palette(n)
 
@@ -338,77 +316,27 @@ def plot_capacity_additions_bar(
     n: pypsa.Network,
     carriers_2_plot: list[str],
     save: str,
-    opt_capacity: str = "greenfield",
-    retirement_method: str = "economic",
     **wildcards,
 ) -> None:
     """
     Plots base capacity vs optimal capacity as a bar chart.
     """
-
-    # get data
-
-    nice_names = n.carriers.nice_name
-
-    p_nom = (
-        get_capacity_base(n)
-        .to_frame("Base Capacity")
-        .reset_index()
-        .drop(columns=["bus"])
-        .groupby("carrier")
-        .sum()
-    )
-
-    if opt_capacity == "greenfield":
-        p_nom_opt = get_capacity_greenfield(n, retirement_method)
-    elif opt_capacity == "brownfield":
-        p_nom_opt = get_capacity_brownfield(n, retirement_method)
-    else:
-        logger.error(
-            f"Capacity method must be one of 'greenfield' or 'brownfield'. Recieved {opt_capacity}.",
-        )
-        raise NotImplementedError
-
-    # depending on retirment method, column name may be p_nom_opt or p_max
-    p_nom_opt = (
-        p_nom_opt.reset_index()
-        .drop(columns=["bus"])
-        .groupby("carrier")
-        .sum()
-        .rename(columns={"p_nom_opt": "Optimal Capacity"})
-    )
-
-    capacity = p_nom.join(p_nom_opt)
-    capacity = capacity[capacity.index.isin(carriers_2_plot)]
-    capacity.index = capacity.index.map(nice_names)
-
-    # plot data (option 1)
-    # using seaborn with hues, but does not do tech color groups
-    """
+    capacity = n.statistics()[['Optimal Capacity', 'Installed Capacity']]
+    capacity = capacity[capacity.index.get_level_values(0).isin(['Generator', 'StorageUnit'])]
+    capacity.index = capacity.index.droplevel(0)
+    capacity.reset_index(inplace=True)
+    capacity.rename(columns={'index': 'carrier'}, inplace=True)
     capacity_melt = capacity.melt(id_vars="carrier", var_name="Capacity Type", value_name="Capacity")
 
-    fig, ax = plt.subplots(figsize=(10, 10))
-    sns.barplot(data=capacity_melt, y="carrier", x="Capacity", hue="Capacity Type", ax=ax)
-
-    ax.set_title(create_title("System Capacity Additions", **wildcards))
-    ax.set_ylabel("")
-    ax.set_xlabel("Capacity [MW]")
-    fig.tight_layout()
-    fig.savefig(save)
-    """
-
-    # plot data (option 2)
-    # using matplotlib for tech group colours
-
     color_palette = get_color_palette(n)
-    color_mapper = [color_palette[carrier] for carrier in capacity.index]
+    color_mapper = [color_palette[carrier] for carrier in capacity.carrier]
     bar_height = 0.35
 
     fig, ax = plt.subplots(figsize=(10, 10))
 
     ax.barh(
-        capacity.index,
-        capacity["Base Capacity"],
+        capacity.carrier,
+        capacity["Installed Capacity"],
         height=bar_height,
         align="center",
         color=color_mapper,
@@ -430,7 +358,7 @@ def plot_capacity_additions_bar(
     ]
     ax.legend(
         legend_lines,
-        ["Base Capacity", "Optimal Capacity"],
+        ["Installed Capacity", "Optimal Capacity"],
         loc="lower right",
         borderpad=0.75,
     )
@@ -438,10 +366,8 @@ def plot_capacity_additions_bar(
     ax.set_title(create_title("System Capacity Additions", **wildcards))
     ax.set_ylabel("")
     ax.set_xlabel("Capacity [MW]")
-    fig.tight_layout()
 
-    # save = Path(save)
-    # fig.savefig(f"{save.parent}/{save.stem}_color{save.suffix}")
+    fig.tight_layout()
     fig.savefig(save)
 
 
@@ -464,6 +390,7 @@ def plot_production_bar(
         )
     ]
     energy_mix = energy_mix.groupby("carrier").sum().reset_index()
+
     color_palette = get_color_palette(n)
 
     fig, ax = plt.subplots(figsize=(10, 10))
@@ -476,7 +403,6 @@ def plot_production_bar(
 
     ax.set_title(create_title("Dispatch [GWh]", **wildcards))
     ax.set_ylabel("")
-    # ax.set_xlabel("")
     fig.tight_layout()
     fig.savefig(save)
 
@@ -735,6 +661,42 @@ def plot_curtailment_heatmap(n: pypsa.Network, save: str, **wildcards) -> None:
     plt.tight_layout()
     plt.savefig(save)
 
+def plot_capacity_factor_heatmap(n: pypsa.Network, save: str, **wildcards) -> None:
+    """HEATMAP OF RENEWABLE CAPACITY FACTORS BY CARRIER"""
+    df_long = n.generators_t.p_max_pu.melt(var_name='bus', value_name='p_max_pu', ignore_index=False)
+    df_long['region'] = df_long['bus'].map(n.generators.bus.map(n.buses.country))
+    df_long['carrier'] = df_long['bus'].map(n.generators.carrier)
+    df_long['hour'] = df_long.index.hour
+    df_long['month'] = df_long.index.month
+    df_long.drop(columns='bus', inplace=True)
+    df_long = df_long.drop(columns='region').groupby(['carrier', 'month', 'hour']).mean().reset_index()
+
+    unique_groups = df_long['carrier'].unique()
+    num_groups = len(unique_groups)
+
+    rows = num_groups // 4 + (num_groups % 4 > 0)
+    cols = min(num_groups, 4)
+
+    # Plotting with dynamic subplot creation based on the number of groups, with wrapping
+    fig, axes = plt.subplots(rows, cols, figsize=(4*cols, 4*rows))
+    axes = axes.flatten()  # Flatten the axes array for easy iteration
+
+    for i, carrier in enumerate(unique_groups):
+        pivot_table = df_long[df_long.carrier==carrier].pivot(index="month", columns="hour", values="p_max_pu").fillna(0)
+        sns.heatmap(pivot_table, ax=axes[i], cmap="viridis")
+        axes[i].set_title(carrier)
+
+    # Hide any unused axes if the number of groups is not a multiple of 3
+    for j in range(i + 1, rows * cols):
+        axes[j].set_visible(False)
+
+    plt.suptitle("Heatmap of Renewable Capacity Factors by by Carrier")
+
+
+    plt.tight_layout()
+    plt.savefig(save)
+
+
 #### Panel / Mixed Plots ####
 
 def plot_generator_data_panel(
@@ -874,8 +836,6 @@ if __name__ == "__main__":
         n,
         carriers,
         snakemake.output["capacity_additions_bar"],
-        "greenfield",
-        retirement_method,
         **snakemake.wildcards,
     )
     plot_costs_bar(
@@ -917,6 +877,11 @@ if __name__ == "__main__":
     plot_curtailment_heatmap(
         n,
         snakemake.output["curtailment_heatmap"],
+        **snakemake.wildcards,
+    )
+    plot_capacity_factor_heatmap(
+        n,
+        snakemake.output["capfac_heatmap"],
         **snakemake.wildcards,
     )
 

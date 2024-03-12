@@ -103,7 +103,7 @@ electricity:
 # docs :
 conventional:
   unit_commitment: false
-  dynamic_fuel_price: false
+  dynamic_fuel_price: true
 
 # docs :
 renewable:

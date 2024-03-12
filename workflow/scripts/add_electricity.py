@@ -1314,17 +1314,6 @@ def main(snakemake):
     else:
         unit_commitment = None
 
-    if params.conventional["dynamic_fuel_price"]:
-        fuel_price = pd.read_csv(
-            snakemake.input.fuel_price,
-            index_col=0,
-            header=0,
-            parse_dates=True,
-        )
-        fuel_price = fuel_price.reindex(n.snapshots).fillna(method="ffill")
-    else:
-        fuel_price = None
-
     if configuration == "pypsa-usa":
         plants = load_powerplants_eia(
             snakemake.input["plants_eia"],
@@ -1359,7 +1348,7 @@ def main(snakemake):
         renewable_carriers,
         conventional_inputs,
         unit_commitment=unit_commitment,
-        fuel_price=fuel_price,
+        fuel_price=None, # update fuel prices later
     )
     attach_battery_storage(
         n,
@@ -1415,22 +1404,23 @@ def main(snakemake):
         update_capital_costs(n, carrier, costs, df_multiplier, Nyears)
 
     # apply regional/temporal variations to fuel cost data
-    fuel_costs = {
-        "CCGT": "ng_electric_power_price",
-        "OCGT": "ng_electric_power_price",
-    }
-    for carrier, cost_data in fuel_costs.items():
-        fuel_cost_file = snakemake.input[f"{cost_data}"]
-        df_fuel_costs = pd.read_csv(fuel_cost_file)
-        vom = costs.at[carrier, "VOM"]
+    if params.conventional["dynamic_fuel_price"]:
+        fuel_costs = {
+            "CCGT": "ng_electric_power_price",
+            "OCGT": "ng_electric_power_price",
+        }
+        for carrier, cost_data in fuel_costs.items():
+            fuel_cost_file = snakemake.input[f"{cost_data}"]
+            df_fuel_costs = pd.read_csv(fuel_cost_file)
+            vom = costs.at[carrier, "VOM"]
 
-        update_marginal_costs(
-            n=n,
-            carrier=carrier,
-            fuel_costs=df_fuel_costs,
-            vom_cost=vom,
-            apply_average=False,
-        )
+            update_marginal_costs(
+                n=n,
+                carrier=carrier,
+                fuel_costs=df_fuel_costs,
+                vom_cost=vom,
+                apply_average=False,
+            )
 
     # fix p_nom_min for extendable generators
     # The "- 0.001" is just to avoid numerical issues
@@ -1442,13 +1432,6 @@ def main(snakemake):
         ),
         axis=1,
     )
-
-    if snakemake.config["osw_config"]["enable_osw"]:
-        logger.info("Adding OSW in network")
-        humboldt_capacity = snakemake.config["osw_config"]["humboldt_capacity"]
-        import modify_network_osw as osw
-
-        osw.build_OSW_base_configuration(n, osw_capacity=humboldt_capacity)
 
     output_folder = os.path.dirname(snakemake.output[0]) + "/base_network"
     export_network_for_gis_mapping(n, output_folder)

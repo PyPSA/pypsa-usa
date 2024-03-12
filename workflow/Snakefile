@@ -28,6 +28,7 @@ wildcard_constraints:
 # -------------------------- Config and Subworkflows ------------------------- #
 
 # Merge subworkflow configs and main config
+configfile: "config/tests/config.test_simple.yaml"
 configfile: "config/config.cluster.yaml"
 configfile: "config/config.osw.yaml"
 configfile: "config/config.plotting.yaml"
@@ -73,11 +74,6 @@ rule all:
             + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/{figure}.pdf",
             **config["scenario"],
             figure=COLLECT_FIGURES,
-        ),
-        expand(
-            RESULTS
-            + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/.statistics_plots",
-            **config["scenario"],
         ),
         "repo_data/dag.jpg",
 
