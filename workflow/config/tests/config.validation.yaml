@@ -298,6 +298,8 @@ solving:
     transmission_losses: 0
     linearized_unit_commitment: true
     horizon: 8760
+    assign_all_duals: true
+
 
   solver:
     name: gurobi
