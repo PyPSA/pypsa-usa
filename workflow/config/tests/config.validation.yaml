@@ -70,13 +70,15 @@ electricity:
   renewable_carriers: [onwind, offwind, offwind_floating, solar, hydro] # Choose the renewable plant types to include in network
   voltage_simplified: 230 #Voltage level to simplify network to in rule "simplify network"
   co2limit: 1.4728e+9 # 0.8 * 1.841e+9
+  co2limit_enable: False # For sector coupled studies
   co2base: 226.86e+6 #base_from_2020 Locations of the 250 MMmt of CO2 emissions from the WECC 2021.
   gaslimit: false # global gas usage limit of X MWh_th
+  gaslimit_enable: false # For sector coupled studies
   retirement: economic # "economic" or "technical"
   SAFE_reservemargin: 0.14
   regional_Co2_limits: 'config/policy_constraints/regional_Co2_limits.csv'
   agg_p_nom_limits: 'config/policy_constraints/agg_p_nom_minmax.csv'
-  portfolio_standards: '../config/policy_constraints/portfolio_standards.csv'
+  portfolio_standards: 'config/policy_constraints/portfolio_standards.csv'
   SAFE_regional_reservemargins: 'config/policy_constraints/SAFE_regional_prm.csv'
 
   operational_reserve:
@@ -99,6 +101,9 @@ electricity:
     EFS_case: reference # reference, medium, high
     EFS_speed: moderate # slow, moderate, rapid
 
+  autarky:
+    enable: false
+    by_country: false
 
 # docs :
 conventional:

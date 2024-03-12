@@ -8,7 +8,7 @@ rule plot_validation_figures:
     output:
         **{
             fig: RESULTS
-            + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}_%s.pdf"
+            + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/%s.pdf"
             % fig
             for fig in FIGURES_VALIDATE
         },

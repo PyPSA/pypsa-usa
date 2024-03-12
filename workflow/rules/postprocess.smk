@@ -77,6 +77,7 @@ FIGURES_STATS = [
     "emissions_accumulated_tech",
     "capacity_additions_bar",
     "bar_regional_capacity_additions",
+    "bar_regional_emissions",
     "global_constraint_shadow_prices",
     "generator_data_panel",
     "curtailment_heatmap",

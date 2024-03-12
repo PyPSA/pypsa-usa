@@ -58,12 +58,15 @@ colors = [
 kwargs = dict(color=colors, ylabel="Production [GW]", xlabel="")
 
 
-def plot_graphs(n, csv_path_1, csv_path_2, save1, save2, save3):
-    # plot a stacked plot for seasonal production
-    # snapshot: January 2 - December 30 (inclusive)
-    buses = get_regions(n)
-    historic, order = historic_df(csv_path_1, csv_path_2, buses)
-    optimized = optimized_df(n, order)
+def plot_timeseries_comparison(
+    historic: pd.DataFrame,
+    optimized: pd.DataFrame,
+    save_path: str,
+):
+    """
+    plots a stacked plot for seasonal production for snapshots: January 2 - December 30 (inclusive)
+    """
+
     fig, axes = plt.subplots(3, 1, figsize=(9, 9))
     optimized.resample("1D").mean().plot.area(
         ax=axes[0], **kwargs, legend=False, title="Optimized"
@@ -93,8 +96,14 @@ def plot_graphs(n, csv_path_1, csv_path_2, save1, save2, save3):
         labelspacing=1,
     )
     fig.tight_layout()
-    fig.savefig(save1)
+    fig.savefig(save_path)
 
+
+def plot_bar_carrier_production(
+    historic: pd.DataFrame,
+    optimized: pd.DataFrame,
+    save_path: str,
+):
     # plot by carrier
     data = pd.concat([historic, optimized], keys=["Historic", "Optimized"], axis=1)
     data.columns.names = ["Kind", "Carrier"]
@@ -104,8 +113,14 @@ def plot_graphs(n, csv_path_1, csv_path_2, save1, save2, save3):
     df.plot.barh(ax=ax, xlabel="Electricity Production [TWh]", ylabel="")
     ax.set_title("Electricity Production by Carriers")
     ax.grid(axis="y")
-    fig.savefig(save2)
+    fig.savefig(save_path)
 
+
+def plot_bar_production_deviation(
+    historic: pd.DataFrame,
+    optimized: pd.DataFrame,
+    save_path: str,
+):
     # plot strongest deviations for each carrier
     fig, ax = plt.subplots(figsize=(6, 10))
     diff = (optimized - historic).sum() / 1e3  # convert to TW
@@ -116,10 +131,10 @@ def plot_graphs(n, csv_path_1, csv_path_2, save1, save2, save3):
     )
     ax.set_title("Strongest Deviations")
     ax.grid(axis="y")
-    fig.savefig(save3)
+    fig.savefig(save_path)
 
 
-def optimized_df(n, order):
+def create_optimized_df(n, order):
     """
     Create a DataFrame from the model output/optimized.
     """
@@ -132,6 +147,7 @@ def optimized_df(n, order):
     # Combine CCGT and OCGT
     optimized["CCGT"] = optimized["CCGT"] + optimized["OCGT"]
     optimized_comb = optimized.drop(["OCGT"], axis=1)
+
     # Rename and rearrange the columns
     optimized = optimized_comb.rename(columns=rename_op)
     optimized = optimized.reindex(order, axis=1, level=1)
@@ -140,7 +156,7 @@ def optimized_df(n, order):
     return optimized
 
 
-def historic_df(csv_path_1, csv_path_2, buses):
+def create_historical_df(csv_path_1, csv_path_2, buses):
     """
     Create a DataFrame from the csv files containing historical data.
     """
@@ -221,13 +237,29 @@ if __name__ == "__main__":
         )
     configure_logging(snakemake)
     n = pypsa.Network(snakemake.input.network)
-    csv_path_1 = snakemake.input.historic_first
-    csv_path_2 = snakemake.input.historic_second
-    plot_graphs(
-        n,
-        csv_path_1,
-        csv_path_2,
-        snakemake.output["seasonal_stacked_plot"],
-        snakemake.output["carrier_production_bar"],
-        snakemake.output["production_deviation_bar"],
+
+    buses = get_regions(n)
+
+    historic, order = create_historical_df(
+        snakemake.input.historic_first, 
+        snakemake.input.historic_second, 
+        buses)
+    optimized = create_optimized_df(n, order)
+
+    plot_timeseries_comparison(
+        historic,
+        optimized,
+        save_path=snakemake.output["seasonal_stacked_plot"],
+    )
+
+    plot_bar_carrier_production(
+        historic,
+        optimized,
+        save_path=snakemake.output["carrier_production_bar"],
+    )
+
+    plot_bar_production_deviation(
+        historic,
+        optimized,
+        save_path=snakemake.output["production_deviation_bar"],
     )

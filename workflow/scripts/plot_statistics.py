@@ -546,7 +546,24 @@ def plot_regional_capacity_additions_bar(
     fig.tight_layout()
     fig.savefig(save)
 
+def plot_regional_emissions_bar(
+    n: pypsa.Network,
+    save: str,
+    **wildcards,
+) -> None:
+    """PLOT OF CO2 EMISSIONS BY REGION"""
+    generator_emissions = n.generators_t.p * n.generators.carrier.map(n.carriers.co2_emissions)
+    regional_emisssions = generator_emissions.groupby(n.generators.bus.map(n.buses.country), axis=1).sum().sum() / 1e6
 
+    plt.figure(figsize=(10, 10))
+    sns.barplot(x=regional_emisssions.values, y=regional_emisssions.index, palette='viridis')
+
+    plt.xlabel('CO2 Emissions [MMtCO2]')
+    plt.ylabel('')
+    plt.title(create_title('CO2 Emissions by Region', **wildcards))
+
+    plt.tight_layout()
+    plt.savefig(save)
 
 #### Temporal Plots ####
 
@@ -919,6 +936,11 @@ if __name__ == "__main__":
     plot_regional_capacity_additions_bar(
         n,
         snakemake.output["bar_regional_capacity_additions"],
+        **snakemake.wildcards,
+    )
+    plot_regional_emissions_bar(
+        n,
+        snakemake.output["bar_regional_emissions"],
         **snakemake.wildcards,
     )
 
