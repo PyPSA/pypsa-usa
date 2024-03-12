@@ -487,6 +487,67 @@ def plot_global_constraint_shadow_prices(n: pypsa.Network, save: str, **wildcard
     fig.tight_layout()
     fig.savefig(save)
 
+def plot_regional_capacity_additions_bar(
+    n: pypsa.Network,
+    save: str,
+    **wildcards,
+) -> None:
+    """PLOT OF CAPACITY ADDITIONS BY STATE AND CARRIER (STACKED BAR PLOT)"""
+    exp_gens = n.generators.p_nom_opt - n.generators.p_nom
+    exp_storage = n.storage_units.p_nom_opt - n.storage_units.p_nom
+
+    expanded_capacity = pd.concat([exp_gens, exp_storage])
+    expanded_capacity = expanded_capacity.to_frame(name='mw')
+    mapper = pd.concat([n.generators.bus.map(n.buses.country), n.storage_units.bus.map(n.buses.country)])
+    expanded_capacity['region'] = expanded_capacity.index.map(mapper)
+    carrier_mapper = pd.concat([n.generators.carrier, n.storage_units.carrier])
+    expanded_capacity['carrier'] = expanded_capacity.index.map(carrier_mapper)
+
+    palette = n.carriers.color.to_dict()
+
+    expanded_capacity['positive'] = expanded_capacity['mw'] > 0
+    df_sorted = expanded_capacity.sort_values(by=['region', 'carrier'])
+
+    # Correcting the bottoms for positive and negative values
+    bottoms_pos = df_sorted[df_sorted['positive']].groupby('region')['mw'].cumsum() - df_sorted['mw']
+    bottoms_neg = df_sorted[~df_sorted['positive']].groupby('region')['mw'].cumsum() - df_sorted['mw']
+
+    # Re-initialize plot to address the legend and gap issues
+    fig, ax = plt.subplots(figsize=(10, 6))
+
+    # Plot each carrier, adjusting handling for legend and correcting negative stacking
+    for i, carrier in enumerate(df_sorted['carrier'].unique()):
+        # Filter by carrier
+        df_carrier = df_sorted[df_sorted['carrier'] == carrier]
+        
+        # Separate positive and negative
+        df_pos = df_carrier[df_carrier['positive']]
+        df_neg = df_carrier[~df_carrier['positive']]
+
+        # Plot positives
+        ax.barh(df_pos['region'], df_pos['mw'], left=bottoms_pos[df_pos.index], color=palette[carrier], edgecolor='w')
+        
+        # Plot negatives
+        ax.barh(df_neg['region'], df_neg['mw'], left=bottoms_neg[df_neg.index], color=palette[carrier], edgecolor='w')
+
+    # Adjust legend to include all carriers
+    handles, labels = [], []
+    for i, carrier in enumerate(df_sorted['carrier'].unique()):
+        handle = plt.Rectangle((0,0),1,1, color=palette[carrier], edgecolor='w')
+        handles.append(handle)
+        labels.append(f"{carrier}")
+
+    ax.legend(handles, labels, title='Carrier')
+
+    ax.set_title('Adjusted MW by Region and Carrier with Negative Values')
+    ax.set_xlabel('MW')
+    ax.set_ylabel('Region')
+
+    fig.tight_layout()
+    fig.savefig(save)
+
+
+
 #### Temporal Plots ####
 
 def plot_production_area(
@@ -855,7 +916,11 @@ if __name__ == "__main__":
         snakemake.output["global_constraint_shadow_prices"],
         **snakemake.wildcards,
     )
-
+    plot_regional_capacity_additions_bar(
+        n,
+        snakemake.output["bar_regional_capacity_additions"],
+        **snakemake.wildcards,
+    )
 
     # Time Series Plots
     plot_production_area(
