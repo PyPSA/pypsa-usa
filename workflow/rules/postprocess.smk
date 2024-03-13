@@ -17,13 +17,6 @@ rule copy_config:
         "../scripts/subworkflows/pypsa-eur/scripts/copy_config.py"
 
 
-
-FIGURES_VALIDATE = [
-    "seasonal_stacked_plot",
-    "carrier_production_bar",
-    "production_deviation_bar",
-]
-
 FIGURES_MAPS = [
     "capacity_map_base",
     "capacity_map_optimized",

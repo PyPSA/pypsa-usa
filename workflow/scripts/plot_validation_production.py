@@ -11,6 +11,8 @@ logger = logging.getLogger(__name__)
 from _helpers import configure_logging
 from constants import EIA_930_REGION_MAPPER
 
+from plot_statistics import plot_region_lmps, plot_capacity_factor_heatmap, plot_curtailment_heatmap, plot_generator_data_panel, plot_regional_emissions_bar
+
 sns.set_theme("paper", style="whitegrid")
 
 rename_op = {
@@ -262,6 +264,7 @@ def get_regions(n):
     return regions
 
 
+
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
@@ -306,3 +309,33 @@ if __name__ == "__main__":
         save_path=snakemake.output["production_deviation_bar"],
     )
 
+    #Box Plot
+    plot_region_lmps(
+        n,
+        snakemake.output["val_box_region_lmps"],
+        **snakemake.wildcards,
+    )
+
+    plot_curtailment_heatmap(
+        n,
+        snakemake.output["val_heatmap_curtailment"],
+        **snakemake.wildcards,
+    )
+
+    plot_capacity_factor_heatmap(
+        n,
+        snakemake.output["val_heatmap_capacity_factor"],
+        **snakemake.wildcards,
+    )
+
+    plot_generator_data_panel(
+        n,
+        snakemake.output["val_generator_data_panel"],
+        **snakemake.wildcards,
+    )
+
+    plot_regional_emissions_bar(
+        n,
+        snakemake.output["val_bar_regional_emissions"],
+        **snakemake.wildcards,
+    )

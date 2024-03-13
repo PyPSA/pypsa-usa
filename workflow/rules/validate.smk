@@ -1,4 +1,17 @@
 
+
+FIGURES_VALIDATE = [
+    "seasonal_stacked_plot",
+    "carrier_production_bar",
+    "production_deviation_bar",
+    "val_bar_regional_emissions",
+    "val_generator_data_panel",
+    "val_heatmap_curtailment",
+    "val_heatmap_capacity_factor",
+    "val_box_region_lmps",
+]
+
+
 rule plot_validation_figures:
     input:
         network=RESULTS
