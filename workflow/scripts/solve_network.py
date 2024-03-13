@@ -461,17 +461,18 @@ def add_regional_co2limit(n, config):
         # bus0_region = bus0[bus0.str.contains(region)]
         # region_lines = n.lines.loc[bus0_region.index]
         # inter_regional_lines = region_lines[~region_lines.bus1.str.contains(region)]
+
         # import pdb; pdb.set_trace()
 
         # if not inter_regional_lines.empty:
         #     inter_regional_flows = (n.model["Line-s"].loc[:, inter_regional_lines.index])
         #     regional_imports = np.max(inter_regional_flows, 0)
         #     inter_regional_imports = inter_regional_flows.where(inter_regional_flows <= 0)
+        #     lhs += (inter_regional_imports)
 
-        #      #this causes no line flow
+        #     #this causes no line flow
         #     # inter_regional_imports = inter_regional_flows.where(inter_regional_flows >= 0) #this causes no line flow
         #     # lhs = (inter_regional_imports).sum()
-        #     lhs += (inter_regional_imports)
 
         rhs = region_co2lim
         n.model.add_constraints(lhs <= rhs, name=f"GlobalConstraint-{region}_co2_limit")

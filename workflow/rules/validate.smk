@@ -12,6 +12,8 @@ rule plot_validation_figures:
             % fig
             for fig in FIGURES_VALIDATE
         },
+    log:
+        "logs/plot_figures/validation_{interconnect}_{clusters}_l{ll}_{opts}_{sector}.log",
     threads: 1
     resources:
         mem_mb=5000,
