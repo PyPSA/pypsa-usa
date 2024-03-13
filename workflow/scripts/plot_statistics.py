@@ -870,6 +870,41 @@ def plot_region_lmps(
     plt.savefig(save)
 
 
+#Pie Chart
+def plot_california_emissions(
+    n: pypsa.Network,
+    save: str,
+    **wildcards,
+) -> None:
+    """
+    Plots a pie chart of emissions by carrier in California.
+    """
+    generator_emissions = n.generators_t.p * n.generators.carrier.map(n.carriers.co2_emissions)
+    ca_list = ['California', 'CISO', 'CISO_PGE', 'CISO_SCE', 'CISO_SDGE', 'CISO_VEA']
+    ca_generator_emissions = generator_emissions.loc[:, n.generators.bus.map(n.buses.country).isin(ca_list)]
+    ca_generator_emissions = ca_generator_emissions.groupby(n.generators.carrier, axis=1).sum().sum() / 1e6
+    ca_generator_emissions
+
+    lines_bus0 = n.lines.bus0
+    lines_bus1 = n.lines.bus1
+    lines_bus0_region = lines_bus0[lines_bus0.map(n.buses.country).isin(ca_list)]
+
+    region_lines = n.lines.loc[lines_bus0_region.index]
+    inter_regional_lines = region_lines[~region_lines.bus1.map(n.buses.country).isin(ca_list)]
+
+    ca_imports = n.lines_t.p1.loc[:, inter_regional_lines.index].clip(lower=0) * 0.428 / 1e6 # 0.428 is the average emissions factor for imports defined by CPUC
+    ca_imports = pd.Series(ca_imports.sum().sum(), index=['imported_emissions'])
+    ca_emissions = pd.concat([ca_generator_emissions, ca_imports])
+    ca_emissions = ca_emissions.loc[ ca_emissions>0.0001]
+
+    plt.figure(figsize=(8, 8))
+    sns.barplot(x=ca_emissions.values, y=ca_emissions.index, )
+    
+    plt.xlabel('CO2 Emissions [MMtCO2]')
+    plt.title(create_title('California Total Emissions by Source', **wildcards))
+    plt.tight_layout()
+    plt.savefig(save)
+
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
@@ -1010,3 +1045,11 @@ if __name__ == "__main__":
         snakemake.output["region_lmps"],
         **snakemake.wildcards,
     )
+
+    if snakemake.wildcards["interconnect"] == "western":
+        #California Emissions
+        plot_california_emissions(
+            n,
+            Path(snakemake.output["region_lmps"]).parents[0] / "california_emissions.png",
+            **snakemake.wildcards,
+        )

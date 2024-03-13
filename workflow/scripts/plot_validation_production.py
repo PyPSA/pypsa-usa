@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 from _helpers import configure_logging
 from constants import EIA_930_REGION_MAPPER
 
-from plot_statistics import plot_region_lmps, plot_capacity_factor_heatmap, plot_curtailment_heatmap, plot_generator_data_panel, plot_regional_emissions_bar
+from plot_statistics import plot_region_lmps, plot_capacity_factor_heatmap, plot_curtailment_heatmap, plot_generator_data_panel, plot_regional_emissions_bar, plot_california_emissions
 
 sns.set_theme("paper", style="whitegrid")
 
@@ -339,3 +339,10 @@ if __name__ == "__main__":
         snakemake.output["val_bar_regional_emissions"],
         **snakemake.wildcards,
     )
+
+    if snakemake.wildcard.interconnect == "western":
+        plot_california_emissions(
+            n,
+            Path(snakemake.output["val_box_region_lmps"]).parents[0] / "california_emissions.png",
+            **snakemake.wildcards,
+        )
