@@ -19,4 +19,4 @@ The project is licensed under MIT License.
 
 # Citation
 
-See the CITATION.cff and github citation button on the right to generate your citation. 
+See the CITATION.cff and github citation button on the right to generate your citation.

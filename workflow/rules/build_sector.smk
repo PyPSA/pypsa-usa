@@ -31,6 +31,8 @@ rule add_sectors:
     output:
         network=RESOURCES
         + "{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}_{sector}.nc",
+    log:
+        "logs/add_sectors/{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}_{sector}.log",
     group:
         "prepare"
     threads: 1

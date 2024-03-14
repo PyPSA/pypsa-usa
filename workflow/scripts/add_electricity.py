@@ -143,7 +143,7 @@ def add_co2_emissions(n, costs, carriers):
 def load_costs(
     tech_costs: str,
     config: dict[str, Any],
-    max_hours: dict[str, int | float],
+    max_hours: dict[str, Union[int, float]],
     Nyears: float = 1.0,
 ) -> pd.DataFrame:
 
@@ -304,7 +304,6 @@ def update_marginal_costs(
     fuel_costs: pd.DataFrame,
     vom_cost: float = 0,
     efficiency: float = None,
-    apply_average: bool = False,
 ):
     """
     Applies regional and monthly marginal cost data.
@@ -321,8 +320,6 @@ def update_marginal_costs(
     efficiency: float = None
         Flat efficiency multiplier to apply to all generators. If not supplied,
         the efficiency is looked up at a generator level from the network
-    apply_average: bool = False
-        Apply USA average fuel cost to all regions
     """
 
     missed = []
@@ -346,15 +343,13 @@ def update_marginal_costs(
                 "NYISO": "NYISO",
                 "CAISO": "CAISO",
                 "BANC": "BANCSMUD",
-            }
+            },
         )
 
         missed = gen[~gen[fuel_region_type].isin(fuel_costs.columns.unique())]
         gen = gen[
             gen[fuel_region_type].isin(fuel_costs.columns.unique())
         ]  # Filter for BAs which we have the fuel price data for
-
-        # Can add block here that pulls in the state level data for Missing CAISO data.
 
         if not missed.empty:
             logger.warning(
@@ -367,7 +362,9 @@ def update_marginal_costs(
         for fuel_region in gen[fuel_region_type].unique():
             gens_in_region = gen[gen[fuel_region_type] == fuel_region].index.to_list()
             dfs.append(
-                pd.DataFrame({gen_: fuel_costs[fuel_region] for gen_ in gens_in_region})
+                pd.DataFrame(
+                    {gen_: fuel_costs[fuel_region] for gen_ in gens_in_region},
+                ),
             )
         df = pd.concat(dfs, axis=1)
 
@@ -382,6 +379,7 @@ def update_marginal_costs(
         df += vom_cost
 
         # join into exisitng time series marginal costs
+        df.index = n.snapshots
         n.generators_t["marginal_cost"] = n.generators_t["marginal_cost"].join(
             df,
             how="inner",
@@ -796,16 +794,12 @@ def attach_conventional_generators(
         committable_attrs = {}
 
     if fuel_price is not None:
-        fuel_price = fuel_price.assign(
-            OCGT=fuel_price["gas"],
-            CCGT=fuel_price["gas"],
-        ).drop("gas", axis=1)
-        missing_carriers = list(set(carriers) - set(fuel_price))
-        fuel_price = fuel_price.assign(**costs.fuel[missing_carriers])
-        fuel_price = fuel_price.reindex(plants.carrier, axis=1)
-        fuel_price.columns = plants.index
-        marginal_cost = fuel_price.div(plants.efficiency).add(
-            plants.carrier.map(costs.VOM),
+        marginal_cost = update_marginal_costs(
+            n,
+            plants.carrier,
+            fuel_price,
+            vom_cost=plants.VOM,
+            efficiency=plants.efficiency,
         )
     else:
         marginal_cost = (
@@ -1314,17 +1308,6 @@ def main(snakemake):
     else:
         unit_commitment = None
 
-    if params.conventional["dynamic_fuel_price"]:
-        fuel_price = pd.read_csv(
-            snakemake.input.fuel_price,
-            index_col=0,
-            header=0,
-            parse_dates=True,
-        )
-        fuel_price = fuel_price.reindex(n.snapshots).fillna(method="ffill")
-    else:
-        fuel_price = None
-
     if configuration == "pypsa-usa":
         plants = load_powerplants_eia(
             snakemake.input["plants_eia"],
@@ -1359,7 +1342,7 @@ def main(snakemake):
         renewable_carriers,
         conventional_inputs,
         unit_commitment=unit_commitment,
-        fuel_price=fuel_price,
+        fuel_price=None,  # update fuel prices later
     )
     attach_battery_storage(
         n,
@@ -1414,23 +1397,22 @@ def main(snakemake):
         df_multiplier = clean_locational_multiplier(df_multiplier)
         update_capital_costs(n, carrier, costs, df_multiplier, Nyears)
 
-    # apply regional/temporal variations to fuel cost data
-    fuel_costs = {
-        "CCGT": "ng_electric_power_price",
-        "OCGT": "ng_electric_power_price",
-    }
-    for carrier, cost_data in fuel_costs.items():
-        fuel_cost_file = snakemake.input[f"{cost_data}"]
-        df_fuel_costs = pd.read_csv(fuel_cost_file)
-        vom = costs.at[carrier, "VOM"]
+    if params.conventional["dynamic_fuel_price"]:
+        fuel_costs = {
+            "CCGT": "ng_electric_power_price",
+            "OCGT": "ng_electric_power_price",
+        }
+        for carrier, cost_data in fuel_costs.items():
+            fuel_cost_file = snakemake.input[f"{cost_data}"]
+            df_fuel_costs = pd.read_csv(fuel_cost_file)
+            vom = costs.at[carrier, "VOM"]
 
-        update_marginal_costs(
-            n=n,
-            carrier=carrier,
-            fuel_costs=df_fuel_costs,
-            vom_cost=vom,
-            apply_average=False,
-        )
+            update_marginal_costs(
+                n=n,
+                carrier=carrier,
+                fuel_costs=df_fuel_costs,
+                vom_cost=vom,
+            )
 
     # fix p_nom_min for extendable generators
     # The "- 0.001" is just to avoid numerical issues
@@ -1442,13 +1424,6 @@ def main(snakemake):
         ),
         axis=1,
     )
-
-    if snakemake.config["osw_config"]["enable_osw"]:
-        logger.info("Adding OSW in network")
-        humboldt_capacity = snakemake.config["osw_config"]["humboldt_capacity"]
-        import modify_network_osw as osw
-
-        osw.build_OSW_base_configuration(n, osw_capacity=humboldt_capacity)
 
     output_folder = os.path.dirname(snakemake.output[0]) + "/base_network"
     export_network_for_gis_mapping(n, output_folder)

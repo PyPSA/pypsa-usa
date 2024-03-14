@@ -6,8 +6,6 @@ PyPSA-USA is an open-source bulk power system planning model for the United-Stat
 (workflow)=
 ## Workflow
 
-Add general description about [snakemake](https://snakemake.readthedocs.io/en/stable/index.html)
-
 ![pypsa-usa workflow](https://github.com/PyPSA/pypsa-usa/blob/master/workflow/repo_data/dag.jpg?raw=true)
 
 (folder-structure)=

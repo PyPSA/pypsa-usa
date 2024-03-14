@@ -28,7 +28,12 @@ import seaborn as sns
 
 
 def download_oasis_report(
-    queryname, startdatetime, enddatetime, version, node="ALL", resultformat="6"
+    queryname,
+    startdatetime,
+    enddatetime,
+    version,
+    node="ALL",
+    resultformat="6",
 ):
     """
     Download a report from CAISO's OASIS, tailored for fuel prices.
@@ -58,6 +63,7 @@ def download_oasis_report(
 
     if response.status_code == 200:
         filename = f"{queryname}_{startdatetime}_{enddatetime}.{resultformat}.zip"
+        filename = filename.replace(":", "_")  # Replace colons with underscores
         with open(filename, "wb") as file:
             file.write(response.content)
         print(f"Report downloaded successfully: {filename}")
@@ -77,13 +83,17 @@ def generate_monthly_intervals(year):
             (
                 start_date.strftime("%Y%m%dT%H:%M-0000"),
                 end_date.strftime("%Y%m%dT%H:%M-0000"),
-            )
+            ),
         )
     return intervals
 
 
 def step_download_oasis_reports(
-    queryname, version, node="ALL", resultformat="6", year=2019
+    queryname,
+    version,
+    node="ALL",
+    resultformat="6",
+    year=2019,
 ):
     """
     Download and combine OASIS reports for each month of a given year into a
@@ -93,7 +103,12 @@ def step_download_oasis_reports(
     file_names = []
     for startdatetime, enddatetime in monthly_intervals:
         download_oasis_report(
-            queryname, startdatetime, enddatetime, version, node, resultformat
+            queryname,
+            startdatetime,
+            enddatetime,
+            version,
+            node,
+            resultformat,
         )
         filename = f"/{queryname}_{startdatetime}_{enddatetime}.{resultformat}.zip"
         file_names.append(filename)
@@ -108,6 +123,7 @@ def combine_reports(file_names, year):
     """
     all_data_frames = []
     for file in file_names:
+        file = file.replace(":", "_")
         df = pd.read_csv(os.getcwd() + "/" + file, compression="zip")
         all_data_frames.append(df)
 
@@ -143,10 +159,15 @@ def merge_fuel_regions_data(combined_data, year):
     df["Fuel Region"] = df["Fuel Region"].str.strip(" ")
 
     combined_data_merged = pd.merge(
-        combined_data, df, left_on="FUEL_REGION_ID", right_on="Fuel Region", how="left"
+        combined_data,
+        df,
+        left_on="FUEL_REGION_ID",
+        right_on="Fuel Region",
+        how="left",
     )
     combined_data_merged.drop(
-        columns=["Fuel Region", "FUEL_REGION_ID_XML"], inplace=True
+        columns=["Fuel Region", "FUEL_REGION_ID_XML"],
+        inplace=True,
     )
     return combined_data_merged
 
@@ -159,9 +180,9 @@ def reduce_select_pricing_nodes(combined_data_merged):
     Authority
     """
     combined_data_merged["day_of_year"] = pd.to_datetime(
-        combined_data_merged["INTERVALSTARTTIME_GMT"]
+        combined_data_merged["INTERVALSTARTTIME_GMT"],
     ).dt.dayofyear
-    # avg_doy = combined_data_merged[['day_of_year', 'Balancing Authority','FUEL_REGION_ID','PRC']].groupby(['day_of_year', 'Balancing Authority','FUEL_REGION_ID']).mean() #use this when we want to assign specific pricing nodes
+
     avg_doy = (
         combined_data_merged[["day_of_year", "Balancing Authority", "PRC"]]
         .groupby(["day_of_year", "Balancing Authority"])
@@ -174,7 +195,7 @@ def main(snakemake):
 
     fuel_year = snakemake.params.fuel_year
 
-    reports = step_download_oasis_reports(
+    file_names = step_download_oasis_reports(
         queryname="PRC_FUEL",
         version="1",
         node="ALL",
@@ -182,12 +203,10 @@ def main(snakemake):
         year=fuel_year,
     )
 
-    combined_data = combine_reports(reports, fuel_year)
+    combined_data = combine_reports(file_names, fuel_year)
 
     combined_data_merged = merge_fuel_regions_data(combined_data, year=fuel_year)
     reduced_fuel_price_data = reduce_select_pricing_nodes(combined_data_merged)
-
-    # check to make sure units are in $/MWh_thermal??? or better unit?
 
     reduced_fuel_price_data.to_csv(snakemake.output.fuel_prices)
 

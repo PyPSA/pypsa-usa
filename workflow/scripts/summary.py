@@ -153,56 +153,6 @@ def get_capacity_base(n: pypsa.Network) -> pd.DataFrame:
     return pd.concat(totals)
 
 
-def get_capacity_greenfield(
-    n: pypsa.Network,
-    retirement_method="economic",
-) -> pd.DataFrame:
-    """
-    Gets optimal greenfield pnom capacity.
-
-    Note, link capacities are grouped by bus0
-    """
-
-    def _technical_retirement(c: pypsa.components.Component) -> pd.DataFrame:
-        if c.name == "Link":
-            return (
-                (c.pnl.p0.max())
-                .groupby(by=[c.df.bus0, c.df.carrier])
-                .sum()
-                .rename_axis(index={"bus0": "bus"})
-            )
-        else:
-            return (c.pnl.p.max()).groupby(by=[c.df.bus, c.df.carrier]).sum()
-
-    def _economic_retirement(c: pypsa.components.Component) -> pd.DataFrame:
-        if c.name == "Link":
-            return (
-                (c.df.p_nom_opt)
-                .groupby(by=[c.df.bus0, c.df.carrier])
-                .sum()
-                .rename_axis(index={"bus0": "bus"})
-            )
-        else:
-            return (c.df.p_nom_opt).groupby(by=[c.df.bus, c.df.carrier]).sum()
-
-    totals = []
-    if retirement_method == "technical":
-        for c in n.iterate_components(n.one_port_components | n.branch_components):
-            if c.name in ("Generator", "StorageUnit", "Link"):
-                totals.append(_technical_retirement(c))
-        return pd.concat(totals)
-    elif retirement_method == "economic":
-        for c in n.iterate_components(n.one_port_components | n.branch_components):
-            if c.name in ("Generator", "StorageUnit", "Link"):
-                totals.append(_economic_retirement(c))
-        return pd.concat(totals)
-    else:
-        logger.error(
-            f"Retirement method must be one of 'technical' or 'economic'. Recieved {retirement_method}.",
-        )
-        raise NotImplementedError
-
-
 def get_capacity_brownfield(
     n: pypsa.Network,
     retirement_method="economic",
@@ -257,6 +207,29 @@ def get_capacity_brownfield(
 
 def get_capital_costs(n: pypsa.Network) -> pd.DataFrame:
     return n.statistics.capex() - n.statistics.installed_capex()
+
+
+def get_generator_marginal_costs(
+    n: pypsa.Network,
+    resample_period: str = "d",
+) -> pd.DataFrame:
+    """
+    Gets generator marginal costs of Units with static MC and units with time
+    varying MC.
+    """
+    df_mc = (
+        n.get_switchable_as_dense("Generator", "marginal_cost")
+        .resample(resample_period)
+        .mean()
+    )
+    df_long = pd.melt(
+        df_mc.reset_index(),
+        id_vars=["snapshot"],
+        var_name="Generator",
+        value_name="Value",
+    )
+    df_long["Carrier"] = df_long["Generator"].map(n.generators.carrier)
+    return df_long
 
 
 ###
