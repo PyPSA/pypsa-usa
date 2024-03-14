@@ -58,6 +58,7 @@ def download_oasis_report(
 
     if response.status_code == 200:
         filename = f"{queryname}_{startdatetime}_{enddatetime}.{resultformat}.zip"
+        filename = filename.replace(":", "_")  # Replace colons with underscores
         with open(filename, "wb") as file:
             file.write(response.content)
         print(f"Report downloaded successfully: {filename}")
@@ -161,7 +162,7 @@ def reduce_select_pricing_nodes(combined_data_merged):
     combined_data_merged["day_of_year"] = pd.to_datetime(
         combined_data_merged["INTERVALSTARTTIME_GMT"]
     ).dt.dayofyear
-    # avg_doy = combined_data_merged[['day_of_year', 'Balancing Authority','FUEL_REGION_ID','PRC']].groupby(['day_of_year', 'Balancing Authority','FUEL_REGION_ID']).mean() #use this when we want to assign specific pricing nodes
+
     avg_doy = (
         combined_data_merged[["day_of_year", "Balancing Authority", "PRC"]]
         .groupby(["day_of_year", "Balancing Authority"])
@@ -186,8 +187,6 @@ def main(snakemake):
 
     combined_data_merged = merge_fuel_regions_data(combined_data, year=fuel_year)
     reduced_fuel_price_data = reduce_select_pricing_nodes(combined_data_merged)
-
-    # check to make sure units are in $/MWh_thermal??? or better unit?
 
     reduced_fuel_price_data.to_csv(snakemake.output.fuel_prices)
 

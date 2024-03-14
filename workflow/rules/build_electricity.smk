@@ -251,7 +251,11 @@ rule build_fuel_prices:
         snapshots=config["snapshots"],
         fuel_year=config["costs"]["ng_fuel_year"],
     input:
-        caiso_ng_prices=DATA + "costs/ng_caiso_prices.csv",
+        caiso_ng_prices=(
+            DATA + "costs/ng_caiso_prices.csv"
+            if "western" in config["scenario"]["interconnect"]
+            else []
+        ),
         eia_ng_prices=DATA + "costs/ng_electric_power_price.csv",
         avg_fuel_prices="repo_data/eia_mappings/fuelCost22.csv",
     output:
