@@ -199,6 +199,7 @@ def get_capacity_brownfield(
         )
         raise NotImplementedError
 
+
 ###
 # COSTS
 ###
@@ -208,11 +209,26 @@ def get_capital_costs(n: pypsa.Network) -> pd.DataFrame:
     return n.statistics.capex() - n.statistics.installed_capex()
 
 
-def get_generator_marginal_costs(n: pypsa.Network, resample_period: str = 'd') -> pd.DataFrame:
-    """Gets generator marginal costs of Units with static MC and units with time varying MC"""
-    df_mc = n.get_switchable_as_dense('Generator', 'marginal_cost').resample(resample_period).mean()
-    df_long = pd.melt(df_mc.reset_index(), id_vars=['snapshot'], var_name='Generator', value_name='Value')
-    df_long['Carrier'] = df_long['Generator'].map(n.generators.carrier)
+def get_generator_marginal_costs(
+    n: pypsa.Network,
+    resample_period: str = "d",
+) -> pd.DataFrame:
+    """
+    Gets generator marginal costs of Units with static MC and units with time
+    varying MC.
+    """
+    df_mc = (
+        n.get_switchable_as_dense("Generator", "marginal_cost")
+        .resample(resample_period)
+        .mean()
+    )
+    df_long = pd.melt(
+        df_mc.reset_index(),
+        id_vars=["snapshot"],
+        var_name="Generator",
+        value_name="Value",
+    )
+    df_long["Carrier"] = df_long["Generator"].map(n.generators.carrier)
     return df_long
 
 

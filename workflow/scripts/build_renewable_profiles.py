@@ -224,7 +224,6 @@ if __name__ == "__main__":
     if params["natura"]:
         excluder.add_raster(snakemake.input.natura, nodata=0, allow_no_overlap=True)
 
-
     corine = params.get("corine", {})
     if "grid_codes" in corine:
         codes = corine["grid_codes"]
@@ -240,10 +239,19 @@ if __name__ == "__main__":
         )
 
     if params.get("cec", 0):
-        excluder.add_raster(snakemake.input[f"cec_{snakemake.wildcards.technology}"], nodata=0, allow_no_overlap=True)
-        
+        excluder.add_raster(
+            snakemake.input[f"cec_{snakemake.wildcards.technology}"],
+            nodata=0,
+            allow_no_overlap=True,
+        )
+
     if params.get("boem_screen", 0):
-        excluder.add_raster(snakemake.input[f"boem_osw"], invert=True, nodata=0, allow_no_overlap=True)
+        excluder.add_raster(
+            snakemake.input[f"boem_osw"],
+            invert=True,
+            nodata=0,
+            allow_no_overlap=True,
+        )
 
     if "ship_threshold" in params:
         shipping_threshold = (
@@ -283,7 +291,7 @@ if __name__ == "__main__":
             invert=True,
         )
 
-    #excluder.plot_shape_availability(regions)
+    # excluder.plot_shape_availability(regions)
 
     kwargs = dict(nprocesses=nprocesses, disable_progressbar=noprogress)
     if noprogress:

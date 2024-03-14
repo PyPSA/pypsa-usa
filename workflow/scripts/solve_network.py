@@ -221,7 +221,8 @@ def add_CCL_constraints(n, config):
         agg_p_nom_limits: config/policy_constraints/agg_p_nom_minmax.csv
     """
     agg_p_nom_minmax = pd.read_csv(
-        config["electricity"]["agg_p_nom_limits"], index_col=[1, 2]
+        config["electricity"]["agg_p_nom_limits"],
+        index_col=[1, 2],
     )
     agg_p_nom_minmax = agg_p_nom_minmax[
         agg_p_nom_minmax.planning_horizon == int(snakemake.params.planning_horizons[0])
@@ -272,7 +273,8 @@ def add_RPS_constraints(n, config):
         portfolio_standards: config/policy_constraints/portfolio_standards.csv
     """
     portfolio_standards = pd.read_csv(
-        config["electricity"]["portfolio_standards"], index_col=[1, 2]
+        config["electricity"]["portfolio_standards"],
+        index_col=[1, 2],
     )
     portfolio_standards = portfolio_standards[
         portfolio_standards.planning_horizon
@@ -302,7 +304,8 @@ def add_RPS_constraints(n, config):
             new_tuples.append(pct_tuple)
 
         new_multi_index = pd.MultiIndex.from_tuples(
-            new_tuples, names=["region", "carrier"]
+            new_tuples,
+            names=["region", "carrier"],
         )
         index = new_multi_index.intersection(lhs.indexes["group"])
         if not index.empty:
@@ -426,7 +429,8 @@ def add_regional_co2limit(n, sns, config):
     from pypsa.descriptors import get_switchable_as_dense as get_as_dense
 
     regional_co2_lims = pd.read_csv(
-        config["electricity"]["regional_Co2_limits"], index_col=[0]
+        config["electricity"]["regional_Co2_limits"],
+        index_col=[0],
     )
     logger.info("Adding regional Co2 Limits.")
     regional_co2_lims = regional_co2_lims[
@@ -446,7 +450,10 @@ def add_regional_co2limit(n, sns, config):
 
         if not region_gens.empty:
             efficiency = get_as_dense(
-                n, "Generator", "efficiency", inds=region_gens.index
+                n,
+                "Generator",
+                "efficiency",
+                inds=region_gens.index,
             )  # mw_elect/mw_th
             em_pu = (
                 region_gens.carrier.map(emissions) / efficiency
@@ -472,7 +479,6 @@ def add_regional_co2limit(n, sns, config):
         #     # n.model.add_constraints( -1 * n.model["Line-s"].loc[:, inter_regional_lines.index] <= M * bin_x, name=f"BigM-{region}_pos_flow")
         #     # # n.model.add_constraints(n.model["Line-s"].loc[:, inter_regional_lines.index]  >= -M * (1 + bin_x), name=f"BigM-{region}_neg_flow")
         #     # n.model.add_constraints( line_imports >= n.model["Line-s"].loc[:, inter_regional_lines.index] + M * bin_x, name=f"line_imports_{region}_upper")
-
 
         #     #Non Big-M
         #     n.model.add_variables(lower = 0, coords=[sns, inter_regional_lines.index], name=f"line_imports_{region}")
@@ -542,7 +548,8 @@ def add_regional_SAFE_constraints(n, config):
     Which sets a reserve margin of 10% above the peak demand.
     """
     regional_prm = pd.read_csv(
-        config["electricity"]["SAFE_regional_reservemargins"], index_col=[0]
+        config["electricity"]["SAFE_regional_reservemargins"],
+        index_col=[0],
     )
     for region in regional_prm.index:
         peakdemand = (

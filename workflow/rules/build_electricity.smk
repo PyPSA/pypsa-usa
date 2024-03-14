@@ -87,6 +87,7 @@ rule build_cost_data:
     script:
         "../scripts/build_cost_data.py"
 
+
 ATLITE_NPROCESSES = config["atlite"].get("nprocesses", 4)
 
 if config["enable"].get("build_cutout", False):
@@ -391,7 +392,8 @@ rule cluster_network:
     script:
         "../scripts/cluster_network_eur.py"
 
-#"../scripts/subworkflows/pypsa-eur/scripts/cluster_network.py"
+
+# "../scripts/subworkflows/pypsa-eur/scripts/cluster_network.py"
 
 
 rule add_extra_components:
@@ -421,7 +423,7 @@ rule prepare_network:
         lines=config["lines"],
         co2base=config["electricity"]["co2base"],
         co2limit=config["electricity"]["co2limit"],
-        co2limit_enable=config["electricity"][ "co2limit_enable"],
+        co2limit_enable=config["electricity"]["co2limit_enable"],
         gaslimit=config["electricity"].get("gaslimit"),
         gaslimit_enable=config["electricity"].get("gaslimit_enable"),
         max_hours=config["electricity"]["max_hours"],

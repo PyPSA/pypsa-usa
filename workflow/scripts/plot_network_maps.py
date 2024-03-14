@@ -266,7 +266,6 @@ def plot_emissions_map(
     fig.savefig(save)
 
 
-
 def plot_capacity_map(
     n: pypsa.Network,
     bus_values: pd.DataFrame,
@@ -555,7 +554,6 @@ def plot_new_capacity_map(
     line_snom_opt = n.lines.s_nom_opt
     line_values = line_snom_opt - line_snom
 
-
     # plot data
     title = create_title("New Network Capacities", **wildcards)
     interconnect = wildcards.get("interconnect", None)
@@ -634,8 +632,12 @@ def plot_renewable_potential(
 
     fig.savefig(save)
 
+
 def plot_lmp_map(network: pypsa.Network, save: str, **wildcards):
-    fig, ax = plt.subplots(subplot_kw={"projection": ccrs.PlateCarree()}, figsize=(8, 8))
+    fig, ax = plt.subplots(
+        subplot_kw={"projection": ccrs.PlateCarree()},
+        figsize=(8, 8),
+    )
 
     lmps = n.buses_t.marginal_price.mean()
 
@@ -649,10 +651,15 @@ def plot_lmp_map(network: pypsa.Network, save: str, **wildcards):
     )
     network.plot(ax=ax, line_widths=pd.Series(0.5, network.lines.index), bus_sizes=0)
 
-    cb = plt.colorbar(location="bottom", pad=0.01)  # Adjust the pad value to move the color bar closer
-    cb.set_label(u'LMP ($/MWh)')
-    plt.title(create_title(u'Locational Marginal Price [$/MWh]', **wildcards))
-    plt.tight_layout(rect=[0, 0, 1, 0.95])  # Adjust the rect values to make the layout tighter
+    cb = plt.colorbar(
+        location="bottom",
+        pad=0.01,
+    )  # Adjust the pad value to move the color bar closer
+    cb.set_label("LMP ($/MWh)")
+    plt.title(create_title("Locational Marginal Price [$/MWh]", **wildcards))
+    plt.tight_layout(
+        rect=[0, 0, 1, 0.95],
+    )  # Adjust the rect values to make the layout tighter
     plt.savefig(save)
 
 
