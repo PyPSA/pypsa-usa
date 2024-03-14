@@ -40,16 +40,20 @@ def prepare_eia(eia_fn: str, snapshots: pd.DatetimeIndex = None):
     fuel_prices["period"] = pd.to_datetime(fuel_prices.period, format="%Y-%m-%d")
     fuel_prices["month"] = fuel_prices["period"].dt.month
     fuel_prices.drop(
-        columns=["series-description", "period", "units", "value"], inplace=True
+        columns=["series-description", "period", "units", "value"],
+        inplace=True,
     )
 
     year = snapshots[0].year
     fuel_prices["month"] = pd.to_datetime(
-        fuel_prices["month"].astype(str) + "-" + str(year), format="%m-%Y"
+        fuel_prices["month"].astype(str) + "-" + str(year),
+        format="%m-%Y",
     ).map(lambda dt: dt.replace(year=year))
     fuel_prices = fuel_prices.rename(columns={"month": "timestep"})
     fuel_prices = fuel_prices.pivot(
-        index="timestep", columns="state", values="dol_mwh_th"
+        index="timestep",
+        columns="state",
+        values="dol_mwh_th",
     )
     fuel_prices = fuel_prices.reindex(snapshots)
     fuel_prices = fuel_prices.fillna(method="bfill").fillna(method="ffill")
@@ -66,11 +70,13 @@ def prepare_caiso(caiso_fn: str, snapshots: pd.DatetimeIndex = None):
 
     year = snapshots[0].year
     caiso_ng.day_of_year = pd.to_datetime(caiso_ng.day_of_year, format="%j").map(
-        lambda dt: dt.replace(year=year)
+        lambda dt: dt.replace(year=year),
     )
     caiso_ng = caiso_ng.rename(columns={"day_of_year": "timestep"})
     caiso_ng = caiso_ng.pivot(
-        index="timestep", columns="balancing_area", values="dol_mwh_th"
+        index="timestep",
+        columns="balancing_area",
+        values="dol_mwh_th",
     )
     caiso_ng = caiso_ng.reindex(snapshots)
     caiso_ng = caiso_ng.fillna(method="bfill").fillna(method="ffill")

@@ -343,7 +343,7 @@ def update_marginal_costs(
                 "NYISO": "NYISO",
                 "CAISO": "CAISO",
                 "BANC": "BANCSMUD",
-            }
+            },
         )
 
         missed = gen[~gen[fuel_region_type].isin(fuel_costs.columns.unique())]
@@ -362,7 +362,9 @@ def update_marginal_costs(
         for fuel_region in gen[fuel_region_type].unique():
             gens_in_region = gen[gen[fuel_region_type] == fuel_region].index.to_list()
             dfs.append(
-                pd.DataFrame({gen_: fuel_costs[fuel_region] for gen_ in gens_in_region})
+                pd.DataFrame(
+                    {gen_: fuel_costs[fuel_region] for gen_ in gens_in_region}
+                ),
             )
         df = pd.concat(dfs, axis=1)
 
@@ -1340,7 +1342,7 @@ def main(snakemake):
         renewable_carriers,
         conventional_inputs,
         unit_commitment=unit_commitment,
-        fuel_price=None, # update fuel prices later
+        fuel_price=None,  # update fuel prices later
     )
     attach_battery_storage(
         n,
@@ -1411,7 +1413,6 @@ def main(snakemake):
                 fuel_costs=df_fuel_costs,
                 vom_cost=vom,
             )
-
 
     # fix p_nom_min for extendable generators
     # The "- 0.001" is just to avoid numerical issues

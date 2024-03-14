@@ -476,7 +476,6 @@ def update_config_with_sector_opts(config, sector_opts):
             update_config(config, parse(l))
 
 
-
 def validate_checksum(file_path, zenodo_url=None, checksum=None):
     """
     Validate file checksum against provided or Zenodo-retrieved checksum.
@@ -522,7 +521,6 @@ def validate_checksum(file_path, zenodo_url=None, checksum=None):
     ), "Checksum is invalid. This may be due to an incomplete download. Delete the file and re-execute the rule."
 
 
-
 def get_opt(opts, expr, flags=None):
     """
     Return the first option matching the regular expression.
@@ -550,7 +548,6 @@ def find_opt(opts, expr):
             else:
                 return True, None
     return False, None
-
 
 
 def update_config_from_wildcards(config, w, inplace=True):
@@ -611,7 +608,8 @@ def update_config_from_wildcards(config, w, inplace=True):
             if not isinstance(config["adjustments"]["electricity"], dict):
                 config["adjustments"]["electricity"] = dict()
             update_config(
-                config["adjustments"]["electricity"], {attr: {carrier: factor}}
+                config["adjustments"]["electricity"],
+                {attr: {carrier: factor}},
             )
 
     if w.get("sector_opts"):

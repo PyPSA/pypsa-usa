@@ -124,7 +124,10 @@ def add_regional_co2limit(n, config):
     gens = n.generators.query("carrier in @emissions.index")
     if not gens.empty:
         efficiency = get_as_dense(
-            n, "Generator", "efficiency", inds=gens.index
+            n,
+            "Generator",
+            "efficiency",
+            inds=gens.index,
         )  # mw_electrical/mw_th
         em_pu = gens.carrier.map(emissions) / efficiency  # kg_co2/mw_electrical
         em_pu = em_pu.multiply(weightings.generators, axis=0)

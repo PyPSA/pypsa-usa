@@ -28,7 +28,12 @@ import seaborn as sns
 
 
 def download_oasis_report(
-    queryname, startdatetime, enddatetime, version, node="ALL", resultformat="6"
+    queryname,
+    startdatetime,
+    enddatetime,
+    version,
+    node="ALL",
+    resultformat="6",
 ):
     """
     Download a report from CAISO's OASIS, tailored for fuel prices.
@@ -78,13 +83,17 @@ def generate_monthly_intervals(year):
             (
                 start_date.strftime("%Y%m%dT%H:%M-0000"),
                 end_date.strftime("%Y%m%dT%H:%M-0000"),
-            )
+            ),
         )
     return intervals
 
 
 def step_download_oasis_reports(
-    queryname, version, node="ALL", resultformat="6", year=2019
+    queryname,
+    version,
+    node="ALL",
+    resultformat="6",
+    year=2019,
 ):
     """
     Download and combine OASIS reports for each month of a given year into a
@@ -94,7 +103,12 @@ def step_download_oasis_reports(
     file_names = []
     for startdatetime, enddatetime in monthly_intervals:
         download_oasis_report(
-            queryname, startdatetime, enddatetime, version, node, resultformat
+            queryname,
+            startdatetime,
+            enddatetime,
+            version,
+            node,
+            resultformat,
         )
         filename = f"/{queryname}_{startdatetime}_{enddatetime}.{resultformat}.zip"
         file_names.append(filename)
@@ -145,10 +159,15 @@ def merge_fuel_regions_data(combined_data, year):
     df["Fuel Region"] = df["Fuel Region"].str.strip(" ")
 
     combined_data_merged = pd.merge(
-        combined_data, df, left_on="FUEL_REGION_ID", right_on="Fuel Region", how="left"
+        combined_data,
+        df,
+        left_on="FUEL_REGION_ID",
+        right_on="Fuel Region",
+        how="left",
     )
     combined_data_merged.drop(
-        columns=["Fuel Region", "FUEL_REGION_ID_XML"], inplace=True
+        columns=["Fuel Region", "FUEL_REGION_ID_XML"],
+        inplace=True,
     )
     return combined_data_merged
 
@@ -161,7 +180,7 @@ def reduce_select_pricing_nodes(combined_data_merged):
     Authority
     """
     combined_data_merged["day_of_year"] = pd.to_datetime(
-        combined_data_merged["INTERVALSTARTTIME_GMT"]
+        combined_data_merged["INTERVALSTARTTIME_GMT"],
     ).dt.dayofyear
 
     avg_doy = (
