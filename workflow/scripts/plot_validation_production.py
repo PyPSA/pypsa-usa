@@ -11,7 +11,14 @@ logger = logging.getLogger(__name__)
 from _helpers import configure_logging
 from constants import EIA_930_REGION_MAPPER
 
-from plot_statistics import plot_region_lmps, plot_capacity_factor_heatmap, plot_curtailment_heatmap, plot_generator_data_panel, plot_regional_emissions_bar, plot_california_emissions
+from plot_statistics import (
+    plot_region_lmps,
+    plot_capacity_factor_heatmap,
+    plot_curtailment_heatmap,
+    plot_generator_data_panel,
+    plot_regional_emissions_bar,
+    plot_california_emissions,
+)
 
 sns.set_theme("paper", style="whitegrid")
 
@@ -60,26 +67,33 @@ colors = [
 ]
 kwargs = dict(color=colors, ylabel="Production [GW]", xlabel="")
 
+
 def plot_regional_timeseries_comparison(
     n: pypsa.Network,
 ):
-    """
-    """
+    """ """
     regions = n.buses.country.unique()
     regions_clean = [ba.split("-")[0] for ba in regions]
-    regions = list(OrderedDict.fromkeys(regions_clean)) 
-     #filter out a few regions
-    regions = [ba for ba in regions if ba in ['CISO']]
+    regions = list(OrderedDict.fromkeys(regions_clean))
+    # filter out a few regions
+    regions = [ba for ba in regions if ba in ["CISO"]]
     buses = n.buses.copy()
     buses["region"] = [ba.split("-")[0] for ba in buses.country]
     for region in regions:
         region_bus = buses.query(f"region == '{region}'").index
-        optimized_region = create_optimized_by_carrier(n, order, buses.loc[region_bus].country)
-        historic_region = create_historical_df(snakemake.input.historic_first, snakemake.input.historic_second, region=region)[0]
+        optimized_region = create_optimized_by_carrier(
+            n, order, buses.loc[region_bus].country
+        )
+        historic_region = create_historical_df(
+            snakemake.input.historic_first,
+            snakemake.input.historic_second,
+            region=region,
+        )[0]
         plot_timeseries_comparison(
-            historic = historic_region,
-            optimized = optimized_region,
-            save_path= Path(snakemake.output[0]).parents[0] / f"{region}_seasonal_stacked_plot.png",
+            historic=historic_region,
+            optimized=optimized_region,
+            save_path=Path(snakemake.output[0]).parents[0]
+            / f"{region}_seasonal_stacked_plot.png",
         )
 
 
@@ -94,10 +108,16 @@ def plot_timeseries_comparison(
 
     fig, axes = plt.subplots(3, 1, figsize=(9, 9))
     optimized.resample("1D").mean().plot.area(
-        ax=axes[0], **kwargs, legend=False, title="Optimized"
+        ax=axes[0],
+        **kwargs,
+        legend=False,
+        title="Optimized",
     )
     historic.resample("1D").mean().plot.area(
-        ax=axes[1], **kwargs, legend=False, title="Historic"
+        ax=axes[1],
+        **kwargs,
+        legend=False,
+        title="Historic",
     )
 
     diff = (optimized - historic).fillna(0).resample("1D").mean()
@@ -159,12 +179,14 @@ def plot_bar_production_deviation(
     fig.savefig(save_path)
 
 
-def create_optimized_by_carrier(n, order, region= None):
+def create_optimized_by_carrier(n, order, region=None):
     """
     Create a DataFrame from the model output/optimized.
     """
     if region is not None:
-        gen_p = n.generators_t["p"].loc[:, n.generators.bus.map(n.buses.country).isin(region)]
+        gen_p = n.generators_t["p"].loc[
+            :, n.generators.bus.map(n.buses.country).isin(region)
+        ]
     else:
         gen_p = n.generators_t["p"]
 
@@ -188,9 +210,10 @@ def create_optimized_by_carrier(n, order, region= None):
 
 
 def create_historical_df(
-    csv_path_1, 
-    csv_path_2, 
-    region= None,):
+    csv_path_1,
+    csv_path_2,
+    region=None,
+):
     """
     Create a DataFrame from the csv files containing historical data.
     """
@@ -237,14 +260,11 @@ def create_historical_df(
     historic = pd.concat([historic_first_df, historic_second_df], axis=0)
 
     if region is not None:
-        if region == 'Arizona': region = ['AZPS']
+        if region == "Arizona":
+            region = ["AZPS"]
         historic = historic.loc[region]
 
-    historic = (
-        historic
-        .groupby(["UTC Time at End of Hour"])
-        .sum()
-    )
+    historic = historic.groupby(["UTC Time at End of Hour"]).sum()
 
     historic = historic.rename(columns=rename_his)
     historic[historic < 0] = (
@@ -262,7 +282,6 @@ def get_regions(n):
     regions_clean = [ba.split("-")[0] for ba in regions_clean]
     regions = list(OrderedDict.fromkeys(regions_clean))
     return regions
-
 
 
 if __name__ == "__main__":
@@ -283,9 +302,9 @@ if __name__ == "__main__":
     buses = get_regions(n)
 
     historic, order = create_historical_df(
-        snakemake.input.historic_first, 
-        snakemake.input.historic_second, 
-        )
+        snakemake.input.historic_first,
+        snakemake.input.historic_second,
+    )
     optimized = create_optimized_by_carrier(n, order)
 
     plot_regional_timeseries_comparison(
@@ -309,7 +328,7 @@ if __name__ == "__main__":
         save_path=snakemake.output["production_deviation_bar"],
     )
 
-    #Box Plot
+    # Box Plot
     plot_region_lmps(
         n,
         snakemake.output["val_box_region_lmps"],
@@ -343,6 +362,7 @@ if __name__ == "__main__":
     if snakemake.wildcard.interconnect == "western":
         plot_california_emissions(
             n,
-            Path(snakemake.output["val_box_region_lmps"]).parents[0] / "california_emissions.png",
+            Path(snakemake.output["val_box_region_lmps"]).parents[0]
+            / "california_emissions.png",
             **snakemake.wildcards,
         )

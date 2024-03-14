@@ -1,5 +1,3 @@
-
-
 FIGURES_VALIDATE = [
     "seasonal_stacked_plot",
     "carrier_production_bar",

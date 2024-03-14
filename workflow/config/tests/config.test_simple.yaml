@@ -38,7 +38,7 @@ electricity:
   renewable_carriers: [onwind, offwind, offwind_floating, solar, hydro] # Choose the renewable plant types to include in network
   voltage_simplified: 230 #Voltage level to simplify network to in rule "simplify network"
   co2limit: 1.4728e+9 # 0.8 * 1.841e+9
-  co2limit_enable: False # For sector coupled studies
+  co2limit_enable: false # For sector coupled studies
   co2base: 226.86e+6 #base_from_2020 Locations of the 250 MMmt of CO2 emissions from the WECC 2021.
   gaslimit: false # global gas usage limit of X MWh_th
   gaslimit_enable: false # For sector coupled studies
@@ -163,7 +163,7 @@ renewable:
     clip_min_inflow: 1.0
     extendable: true
     normalization:
-      method: hydro_capacities 
+      method: hydro_capacities
       year: 2013
     multiplier: 1.1  # multiplier applied after the normalization of the hydro production; default 1.0
 

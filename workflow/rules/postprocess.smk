@@ -27,6 +27,7 @@ FIGURES_MAPS = [
     "lmp_map",
 ]
 
+
 rule plot_network_maps:
     input:
         network=RESULTS
@@ -77,6 +78,7 @@ FIGURES_STATS = [
     "capfac_heatmap",
     "region_lmps",
 ]
+
 
 rule plot_statistics:
     input:

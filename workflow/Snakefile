@@ -10,6 +10,7 @@ HTTP = HTTPRemoteProvider()
 from os.path import normpath
 from pathlib import Path
 
+
 # --------------------------- Workflow constraints --------------------------- #
 localrules:
     dag,
@@ -25,13 +26,16 @@ wildcard_constraints:
     scope="urban|rural|total",
     sector="([EG]-)*[EG]",
 
+
 # -------------------------- Config and Subworkflows ------------------------- #
+
 
 # Merge subworkflow configs and main config
 # configfile: "config/tests/config.test_simple.yaml"
 configfile: "config/config.cluster.yaml"
 configfile: "config/config.osw.yaml"
 configfile: "config/config.plotting.yaml"
+
 
 run = config.get("run", {})
 RDIR = run["name"] + "/" if run.get("name") else ""

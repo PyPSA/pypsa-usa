@@ -97,6 +97,7 @@ import plotly.graph_objects as go
 # Global Plotting Settings
 TITLE_SIZE = 16
 
+
 def get_color_palette(n: pypsa.Network) -> pd.Series:
     """
     Returns colors based on nice name.
@@ -115,6 +116,7 @@ def get_color_palette(n: pypsa.Network) -> pd.Series:
     }
 
     return pd.concat([colors, pd.Series(additional)]).to_dict()
+
 
 def create_title(title: str, **wildcards) -> str:
     """
@@ -220,6 +222,7 @@ def plot_hourly_emissions_html(n: pypsa.Network, save: str, **wildcards) -> None
     )
     fig.write_html(save)
 
+
 def plot_production_html(
     n: pypsa.Network,
     carriers_2_plot: list[str],
@@ -321,12 +324,16 @@ def plot_capacity_additions_bar(
     """
     Plots base capacity vs optimal capacity as a bar chart.
     """
-    capacity = n.statistics()[['Optimal Capacity', 'Installed Capacity']]
-    capacity = capacity[capacity.index.get_level_values(0).isin(['Generator', 'StorageUnit'])]
+    capacity = n.statistics()[["Optimal Capacity", "Installed Capacity"]]
+    capacity = capacity[
+        capacity.index.get_level_values(0).isin(["Generator", "StorageUnit"])
+    ]
     capacity.index = capacity.index.droplevel(0)
     capacity.reset_index(inplace=True)
-    capacity.rename(columns={'index': 'carrier'}, inplace=True)
-    capacity_melt = capacity.melt(id_vars="carrier", var_name="Capacity Type", value_name="Capacity")
+    capacity.rename(columns={"index": "carrier"}, inplace=True)
+    capacity_melt = capacity.melt(
+        id_vars="carrier", var_name="Capacity Type", value_name="Capacity"
+    )
 
     color_palette = get_color_palette(n)
     color_mapper = [color_palette[carrier] for carrier in capacity.carrier]
@@ -463,7 +470,9 @@ def plot_costs_bar(
     fig.savefig(save)
 
 
-def plot_global_constraint_shadow_prices(n: pypsa.Network, save: str, **wildcards) -> None:
+def plot_global_constraint_shadow_prices(
+    n: pypsa.Network, save: str, **wildcards
+) -> None:
     """
     Plots shadow prices on global constraints.
     """
@@ -487,85 +496,125 @@ def plot_global_constraint_shadow_prices(n: pypsa.Network, save: str, **wildcard
     fig.tight_layout()
     fig.savefig(save)
 
+
 def plot_regional_capacity_additions_bar(
     n: pypsa.Network,
     save: str,
     **wildcards,
 ) -> None:
-    """PLOT OF CAPACITY ADDITIONS BY STATE AND CARRIER (STACKED BAR PLOT)"""
+    """
+    PLOT OF CAPACITY ADDITIONS BY STATE AND CARRIER (STACKED BAR PLOT)
+    """
     exp_gens = n.generators.p_nom_opt - n.generators.p_nom
     exp_storage = n.storage_units.p_nom_opt - n.storage_units.p_nom
 
     expanded_capacity = pd.concat([exp_gens, exp_storage])
-    expanded_capacity = expanded_capacity.to_frame(name='mw')
-    mapper = pd.concat([n.generators.bus.map(n.buses.country), n.storage_units.bus.map(n.buses.country)])
-    expanded_capacity['region'] = expanded_capacity.index.map(mapper)
+    expanded_capacity = expanded_capacity.to_frame(name="mw")
+    mapper = pd.concat(
+        [
+            n.generators.bus.map(n.buses.country),
+            n.storage_units.bus.map(n.buses.country),
+        ]
+    )
+    expanded_capacity["region"] = expanded_capacity.index.map(mapper)
     carrier_mapper = pd.concat([n.generators.carrier, n.storage_units.carrier])
-    expanded_capacity['carrier'] = expanded_capacity.index.map(carrier_mapper)
+    expanded_capacity["carrier"] = expanded_capacity.index.map(carrier_mapper)
 
     palette = n.carriers.color.to_dict()
 
-    expanded_capacity['positive'] = expanded_capacity['mw'] > 0
-    df_sorted = expanded_capacity.sort_values(by=['region', 'carrier'])
+    expanded_capacity["positive"] = expanded_capacity["mw"] > 0
+    df_sorted = expanded_capacity.sort_values(by=["region", "carrier"])
 
     # Correcting the bottoms for positive and negative values
-    bottoms_pos = df_sorted[df_sorted['positive']].groupby('region')['mw'].cumsum() - df_sorted['mw']
-    bottoms_neg = df_sorted[~df_sorted['positive']].groupby('region')['mw'].cumsum() - df_sorted['mw']
+    bottoms_pos = (
+        df_sorted[df_sorted["positive"]].groupby("region")["mw"].cumsum()
+        - df_sorted["mw"]
+    )
+    bottoms_neg = (
+        df_sorted[~df_sorted["positive"]].groupby("region")["mw"].cumsum()
+        - df_sorted["mw"]
+    )
 
     # Re-initialize plot to address the legend and gap issues
     fig, ax = plt.subplots(figsize=(10, 6))
 
     # Plot each carrier, adjusting handling for legend and correcting negative stacking
-    for i, carrier in enumerate(df_sorted['carrier'].unique()):
+    for i, carrier in enumerate(df_sorted["carrier"].unique()):
         # Filter by carrier
-        df_carrier = df_sorted[df_sorted['carrier'] == carrier]
-        
+        df_carrier = df_sorted[df_sorted["carrier"] == carrier]
+
         # Separate positive and negative
-        df_pos = df_carrier[df_carrier['positive']]
-        df_neg = df_carrier[~df_carrier['positive']]
+        df_pos = df_carrier[df_carrier["positive"]]
+        df_neg = df_carrier[~df_carrier["positive"]]
 
         # Plot positives
-        ax.barh(df_pos['region'], df_pos['mw'], left=bottoms_pos[df_pos.index], color=palette[carrier], edgecolor='w')
-        
+        ax.barh(
+            df_pos["region"],
+            df_pos["mw"],
+            left=bottoms_pos[df_pos.index],
+            color=palette[carrier],
+            edgecolor="w",
+        )
+
         # Plot negatives
-        ax.barh(df_neg['region'], df_neg['mw'], left=bottoms_neg[df_neg.index], color=palette[carrier], edgecolor='w')
+        ax.barh(
+            df_neg["region"],
+            df_neg["mw"],
+            left=bottoms_neg[df_neg.index],
+            color=palette[carrier],
+            edgecolor="w",
+        )
 
     # Adjust legend to include all carriers
     handles, labels = [], []
-    for i, carrier in enumerate(df_sorted['carrier'].unique()):
-        handle = plt.Rectangle((0,0),1,1, color=palette[carrier], edgecolor='w')
+    for i, carrier in enumerate(df_sorted["carrier"].unique()):
+        handle = plt.Rectangle((0, 0), 1, 1, color=palette[carrier], edgecolor="w")
         handles.append(handle)
         labels.append(f"{carrier}")
 
-    ax.legend(handles, labels, title='Carrier')
+    ax.legend(handles, labels, title="Carrier")
 
-    ax.set_title('Adjusted MW by Region and Carrier with Negative Values')
-    ax.set_xlabel('MW')
-    ax.set_ylabel('Region')
+    ax.set_title("Adjusted MW by Region and Carrier with Negative Values")
+    ax.set_xlabel("MW")
+    ax.set_ylabel("Region")
 
     fig.tight_layout()
     fig.savefig(save)
+
 
 def plot_regional_emissions_bar(
     n: pypsa.Network,
     save: str,
     **wildcards,
 ) -> None:
-    """PLOT OF CO2 EMISSIONS BY REGION"""
-    generator_emissions = n.generators_t.p * n.generators.carrier.map(n.carriers.co2_emissions)
-    regional_emisssions = generator_emissions.groupby(n.generators.bus.map(n.buses.country), axis=1).sum().sum() / 1e6
+    """
+    PLOT OF CO2 EMISSIONS BY REGION.
+    """
+    generator_emissions = n.generators_t.p * n.generators.carrier.map(
+        n.carriers.co2_emissions
+    )
+    regional_emisssions = (
+        generator_emissions.groupby(n.generators.bus.map(n.buses.country), axis=1)
+        .sum()
+        .sum()
+        / 1e6
+    )
 
     plt.figure(figsize=(10, 10))
-    sns.barplot(x=regional_emisssions.values, y=regional_emisssions.index, palette='viridis')
+    sns.barplot(
+        x=regional_emisssions.values, y=regional_emisssions.index, palette="viridis"
+    )
 
-    plt.xlabel('CO2 Emissions [MMtCO2]')
-    plt.ylabel('')
-    plt.title(create_title('CO2 Emissions by Region', **wildcards))
+    plt.xlabel("CO2 Emissions [MMtCO2]")
+    plt.ylabel("")
+    plt.title(create_title("CO2 Emissions by Region", **wildcards))
 
     plt.tight_layout()
     plt.savefig(save)
 
+
 #### Temporal Plots ####
+
 
 def plot_production_area(
     n: pypsa.Network,
@@ -703,30 +752,46 @@ def plot_accumulated_emissions_tech(n: pypsa.Network, save: str, **wildcards) ->
 
     fig.savefig(save)
 
+
 def plot_curtailment_heatmap(n: pypsa.Network, save: str, **wildcards) -> None:
     curtailment = n.statistics.curtailment(aggregate_time=False)
-    curtailment = curtailment[curtailment.index.get_level_values(0).isin(['StorageUnit', 'Generator'])].droplevel(0)
-    curtailment = curtailment[curtailment.sum(1)> 0.001].T
-    curtailment.index = pd.to_datetime(curtailment.index).tz_localize('utc').tz_convert('America/Los_Angeles')
-    curtailment['month'] = curtailment.index.month
-    curtailment['hour'] = curtailment.index.hour
-    curtailment_group = curtailment.groupby(['month', 'hour']).mean()
+    curtailment = curtailment[
+        curtailment.index.get_level_values(0).isin(["StorageUnit", "Generator"])
+    ].droplevel(0)
+    curtailment = curtailment[curtailment.sum(1) > 0.001].T
+    curtailment.index = (
+        pd.to_datetime(curtailment.index)
+        .tz_localize("utc")
+        .tz_convert("America/Los_Angeles")
+    )
+    curtailment["month"] = curtailment.index.month
+    curtailment["hour"] = curtailment.index.hour
+    curtailment_group = curtailment.groupby(["month", "hour"]).mean()
 
-    df_long = pd.melt(curtailment_group.reset_index(), id_vars=['month','hour'], var_name='carrier', value_name='MW')
+    df_long = pd.melt(
+        curtailment_group.reset_index(),
+        id_vars=["month", "hour"],
+        var_name="carrier",
+        value_name="MW",
+    )
     df_long
 
-    carriers = df_long['carrier'].unique()
+    carriers = df_long["carrier"].unique()
     num_carriers = len(carriers)
 
     rows = num_carriers // 3 + (num_carriers % 3 > 0)
     cols = min(num_carriers, 3)
 
     # Plotting with dynamic subplot creation based on the number of groups, with wrapping
-    fig, axes = plt.subplots(rows, cols, figsize=(3*cols, 3*rows))
+    fig, axes = plt.subplots(rows, cols, figsize=(3 * cols, 3 * rows))
     axes = axes.flatten()  # Flatten the axes array for easy iteration
 
     for i, carrier in enumerate(carriers):
-        pivot_table = df_long[df_long.carrier==carrier].pivot(index="month", columns="hour", values="MW").fillna(0)
+        pivot_table = (
+            df_long[df_long.carrier == carrier]
+            .pivot(index="month", columns="hour", values="MW")
+            .fillna(0)
+        )
         sns.heatmap(pivot_table, ax=axes[i], cmap="viridis")
         axes[i].set_title(carrier)
 
@@ -739,28 +804,42 @@ def plot_curtailment_heatmap(n: pypsa.Network, save: str, **wildcards) -> None:
     plt.tight_layout()
     plt.savefig(save)
 
-def plot_capacity_factor_heatmap(n: pypsa.Network, save: str, **wildcards) -> None:
-    """HEATMAP OF RENEWABLE CAPACITY FACTORS BY CARRIER"""
-    df_long = n.generators_t.p_max_pu.melt(var_name='bus', value_name='p_max_pu', ignore_index=False)
-    df_long['region'] = df_long['bus'].map(n.generators.bus.map(n.buses.country))
-    df_long['carrier'] = df_long['bus'].map(n.generators.carrier)
-    df_long['hour'] = df_long.index.hour
-    df_long['month'] = df_long.index.month
-    df_long.drop(columns='bus', inplace=True)
-    df_long = df_long.drop(columns='region').groupby(['carrier', 'month', 'hour']).mean().reset_index()
 
-    unique_groups = df_long['carrier'].unique()
+def plot_capacity_factor_heatmap(n: pypsa.Network, save: str, **wildcards) -> None:
+    """
+    HEATMAP OF RENEWABLE CAPACITY FACTORS BY CARRIER.
+    """
+    df_long = n.generators_t.p_max_pu.melt(
+        var_name="bus", value_name="p_max_pu", ignore_index=False
+    )
+    df_long["region"] = df_long["bus"].map(n.generators.bus.map(n.buses.country))
+    df_long["carrier"] = df_long["bus"].map(n.generators.carrier)
+    df_long["hour"] = df_long.index.hour
+    df_long["month"] = df_long.index.month
+    df_long.drop(columns="bus", inplace=True)
+    df_long = (
+        df_long.drop(columns="region")
+        .groupby(["carrier", "month", "hour"])
+        .mean()
+        .reset_index()
+    )
+
+    unique_groups = df_long["carrier"].unique()
     num_groups = len(unique_groups)
 
     rows = num_groups // 4 + (num_groups % 4 > 0)
     cols = min(num_groups, 4)
 
     # Plotting with dynamic subplot creation based on the number of groups, with wrapping
-    fig, axes = plt.subplots(rows, cols, figsize=(4*cols, 4*rows))
+    fig, axes = plt.subplots(rows, cols, figsize=(4 * cols, 4 * rows))
     axes = axes.flatten()  # Flatten the axes array for easy iteration
 
     for i, carrier in enumerate(unique_groups):
-        pivot_table = df_long[df_long.carrier==carrier].pivot(index="month", columns="hour", values="p_max_pu").fillna(0)
+        pivot_table = (
+            df_long[df_long.carrier == carrier]
+            .pivot(index="month", columns="hour", values="p_max_pu")
+            .fillna(0)
+        )
         sns.heatmap(pivot_table, ax=axes[i], cmap="viridis")
         axes[i].set_title(carrier)
 
@@ -770,12 +849,12 @@ def plot_capacity_factor_heatmap(n: pypsa.Network, save: str, **wildcards) -> No
 
     plt.suptitle("Heatmap of Renewable Capacity Factors by by Carrier")
 
-
     plt.tight_layout()
     plt.savefig(save)
 
 
 #### Panel / Mixed Plots ####
+
 
 def plot_generator_data_panel(
     n: pypsa.Network,
@@ -783,54 +862,104 @@ def plot_generator_data_panel(
     **wildcards,
 ):
 
-    df_capex_expand = n.generators.loc[n.generators.index.str.contains("new") | n.generators.carrier.isin(['nuclear','solar','onwind','offwind','offwind_floating','geothermal','oil','hydro']),:]
-    df_capex_retire = n.generators.loc[~n.generators.index.str.contains("new") & ~n.generators.carrier.isin(['solar','onwind','offwind','offwind_floating','geothermal','oil','hydro', 'nuclear']),:]
+    df_capex_expand = n.generators.loc[
+        n.generators.index.str.contains("new")
+        | n.generators.carrier.isin(
+            [
+                "nuclear",
+                "solar",
+                "onwind",
+                "offwind",
+                "offwind_floating",
+                "geothermal",
+                "oil",
+                "hydro",
+            ]
+        ),
+        :,
+    ]
+    df_capex_retire = n.generators.loc[
+        ~n.generators.index.str.contains("new")
+        & ~n.generators.carrier.isin(
+            [
+                "solar",
+                "onwind",
+                "offwind",
+                "offwind_floating",
+                "geothermal",
+                "oil",
+                "hydro",
+                "nuclear",
+            ]
+        ),
+        :,
+    ]
 
     df_storage_units = n.storage_units
-    df_storage_units['efficiency'] = df_storage_units.efficiency_dispatch
+    df_storage_units["efficiency"] = df_storage_units.efficiency_dispatch
     df_capex_expand = pd.concat([df_capex_expand, df_storage_units])
 
     # Create a figure and subplots with 2 rows and 2 columns
     fig, axes = plt.subplots(3, 2, figsize=(10, 12))
 
     # Plot on each subplot
-    sns.lineplot(data=get_generator_marginal_costs(n), x='snapshot', y='Value', hue='Carrier', errorbar='sd', ax=axes[0, 0]) 
-    sns.barplot(data=df_capex_expand, x='carrier', y='capital_cost', ax=axes[0, 1])
-    sns.boxplot(data=df_capex_expand, x='carrier', y='efficiency', ax=axes[1, 0])
-    sns.barplot(data=df_capex_retire, x='carrier', y='capital_cost', ax=axes[1, 1])
-    sns.histplot(data=n.generators, x='ramp_limit_up', hue='carrier', ax=axes[2, 0], bins=50, stat='density')
-    sns.barplot(data=n.generators.groupby('carrier').sum().reset_index(), y='p_nom', x='carrier', ax=axes[2, 1])
-
+    sns.lineplot(
+        data=get_generator_marginal_costs(n),
+        x="snapshot",
+        y="Value",
+        hue="Carrier",
+        errorbar="sd",
+        ax=axes[0, 0],
+    )
+    sns.barplot(data=df_capex_expand, x="carrier", y="capital_cost", ax=axes[0, 1])
+    sns.boxplot(data=df_capex_expand, x="carrier", y="efficiency", ax=axes[1, 0])
+    sns.barplot(data=df_capex_retire, x="carrier", y="capital_cost", ax=axes[1, 1])
+    sns.histplot(
+        data=n.generators,
+        x="ramp_limit_up",
+        hue="carrier",
+        ax=axes[2, 0],
+        bins=50,
+        stat="density",
+    )
+    sns.barplot(
+        data=n.generators.groupby("carrier").sum().reset_index(),
+        y="p_nom",
+        x="carrier",
+        ax=axes[2, 1],
+    )
 
     # Set titles for each subplot
-    axes[0, 0].set_title('Generator Marginal Costs')
-    axes[0, 1].set_title('Extendable Capital Costs')
-    axes[1, 0].set_title('Energy Efficiency')
-    axes[1, 1].set_title('Fixed O&M Costs of Retiring Units')
-    axes[2, 0].set_title('Generator Ramp Up Limits')
-    axes[2, 1].set_title('Existing Capacity by Carrier')
+    axes[0, 0].set_title("Generator Marginal Costs")
+    axes[0, 1].set_title("Extendable Capital Costs")
+    axes[1, 0].set_title("Energy Efficiency")
+    axes[1, 1].set_title("Fixed O&M Costs of Retiring Units")
+    axes[2, 0].set_title("Generator Ramp Up Limits")
+    axes[2, 1].set_title("Existing Capacity by Carrier")
 
     # Set labels for each subplot
-    axes[0, 0].set_xlabel('')
-    axes[0, 0].set_ylabel('$ / MWh')
-    axes[0, 1].set_xlabel('')
-    axes[0, 1].set_ylabel('$ / MW-yr')
-    axes[1, 0].set_xlabel('')
-    axes[1, 0].set_ylabel('MWh_primary / MWh_elec')
-    axes[1, 1].set_xlabel('')
-    axes[1, 1].set_ylabel('$ / MW-yr')
-    axes[2, 0].set_xlabel('pu/hr')
-    axes[2, 0].set_ylabel('count')
-    axes[2, 1].set_xlabel('')
-    axes[2, 1].set_ylabel('MW')
+    axes[0, 0].set_xlabel("")
+    axes[0, 0].set_ylabel("$ / MWh")
+    axes[0, 1].set_xlabel("")
+    axes[0, 1].set_ylabel("$ / MW-yr")
+    axes[1, 0].set_xlabel("")
+    axes[1, 0].set_ylabel("MWh_primary / MWh_elec")
+    axes[1, 1].set_xlabel("")
+    axes[1, 1].set_ylabel("$ / MW-yr")
+    axes[2, 0].set_xlabel("pu/hr")
+    axes[2, 0].set_ylabel("count")
+    axes[2, 1].set_xlabel("")
+    axes[2, 1].set_ylabel("MW")
 
-    #Rotate x-axis labels for each subplot
+    # Rotate x-axis labels for each subplot
     for ax in axes.flat:
-        ax.tick_params(axis='x', rotation=35)
+        ax.tick_params(axis="x", rotation=35)
 
     # Lay legend out horizontally
-    axes[0, 0].legend(loc='upper left', bbox_to_anchor=(1, 1), ncol=1, fontsize='xx-small')
-    axes[2, 0].legend( fontsize='xx-small')
+    axes[0, 0].legend(
+        loc="upper left", bbox_to_anchor=(1, 1), ncol=1, fontsize="xx-small"
+    )
+    axes[2, 0].legend(fontsize="xx-small")
 
     fig.tight_layout()
     fig.savefig(save)
@@ -845,22 +974,23 @@ def plot_region_lmps(
     Plots a box plot of LMPs for each region.
     """
     df_lmp = n.buses_t.marginal_price
-    df_long = pd.melt(df_lmp.reset_index(), id_vars=['snapshot'], var_name='bus', value_name='lmp')
-    df_long['season'] = df_long['snapshot'].dt.quarter
-    df_long['hour'] = df_long['snapshot'].dt.hour
-    df_long.drop(columns='snapshot', inplace=True)
+    df_long = pd.melt(
+        df_lmp.reset_index(), id_vars=["snapshot"], var_name="bus", value_name="lmp"
+    )
+    df_long["season"] = df_long["snapshot"].dt.quarter
+    df_long["hour"] = df_long["snapshot"].dt.hour
+    df_long.drop(columns="snapshot", inplace=True)
     df_long["region"] = df_long.bus.map(n.buses.country)
 
     plt.figure(figsize=(10, 10))
 
     sns.boxplot(
-        df_long, 
-        x="lmp", 
+        df_long,
+        x="lmp",
         y="region",
-        width=.5, 
-        fliersize=0.5, 
+        width=0.5,
+        fliersize=0.5,
         linewidth=1,
-        
     )
 
     plt.title(create_title("LMPs by Region", **wildcards))
@@ -870,7 +1000,7 @@ def plot_region_lmps(
     plt.savefig(save)
 
 
-#Pie Chart
+# Pie Chart
 def plot_california_emissions(
     n: pypsa.Network,
     save: str,
@@ -879,10 +1009,16 @@ def plot_california_emissions(
     """
     Plots a pie chart of emissions by carrier in California.
     """
-    generator_emissions = n.generators_t.p * n.generators.carrier.map(n.carriers.co2_emissions)
-    ca_list = ['California', 'CISO', 'CISO_PGE', 'CISO_SCE', 'CISO_SDGE', 'CISO_VEA']
-    ca_generator_emissions = generator_emissions.loc[:, n.generators.bus.map(n.buses.country).isin(ca_list)]
-    ca_generator_emissions = ca_generator_emissions.groupby(n.generators.carrier, axis=1).sum().sum() / 1e6
+    generator_emissions = n.generators_t.p * n.generators.carrier.map(
+        n.carriers.co2_emissions
+    )
+    ca_list = ["California", "CISO", "CISO_PGE", "CISO_SCE", "CISO_SDGE", "CISO_VEA"]
+    ca_generator_emissions = generator_emissions.loc[
+        :, n.generators.bus.map(n.buses.country).isin(ca_list)
+    ]
+    ca_generator_emissions = (
+        ca_generator_emissions.groupby(n.generators.carrier, axis=1).sum().sum() / 1e6
+    )
     ca_generator_emissions
 
     lines_bus0 = n.lines.bus0
@@ -890,20 +1026,25 @@ def plot_california_emissions(
     lines_bus0_region = lines_bus0[lines_bus0.map(n.buses.country).isin(ca_list)]
 
     region_lines = n.lines.loc[lines_bus0_region.index]
-    inter_regional_lines = region_lines[~region_lines.bus1.map(n.buses.country).isin(ca_list)]
+    inter_regional_lines = region_lines[
+        ~region_lines.bus1.map(n.buses.country).isin(ca_list)
+    ]
 
-    ca_imports = n.lines_t.p1.loc[:, inter_regional_lines.index].clip(lower=0) * 0.428 / 1e6 # 0.428 is the average emissions factor for imports defined by CPUC
-    ca_imports = pd.Series(ca_imports.sum().sum(), index=['imported_emissions'])
+    ca_imports = (
+        n.lines_t.p1.loc[:, inter_regional_lines.index].clip(lower=0) * 0.428 / 1e6
+    )  # 0.428 is the average emissions factor for imports defined by CPUC
+    ca_imports = pd.Series(ca_imports.sum().sum(), index=["imported_emissions"])
     ca_emissions = pd.concat([ca_generator_emissions, ca_imports])
-    ca_emissions = ca_emissions.loc[ ca_emissions>0.0001]
+    ca_emissions = ca_emissions.loc[ca_emissions > 0.0001]
 
     plt.figure(figsize=(8, 8))
-    sns.barplot(x=ca_emissions.values, y=ca_emissions.index, )
-    
-    plt.xlabel('CO2 Emissions [MMtCO2]')
-    plt.title(create_title('California Total Emissions by Source', **wildcards))
+    sns.barplot(x=ca_emissions.values, y=ca_emissions.index)
+
+    plt.xlabel("CO2 Emissions [MMtCO2]")
+    plt.title(create_title("California Total Emissions by Source", **wildcards))
     plt.tight_layout()
     plt.savefig(save)
+
 
 if __name__ == "__main__":
     if "snakemake" not in globals():
@@ -942,7 +1083,6 @@ if __name__ == "__main__":
 
     # plotting theme
     sns.set_theme("paper", style="darkgrid")
-
 
     # Bar Plots
     plot_capacity_additions_bar(
@@ -1007,7 +1147,6 @@ if __name__ == "__main__":
         **snakemake.wildcards,
     )
 
-
     # HTML Plots
     plot_production_html(
         n,
@@ -1031,7 +1170,6 @@ if __name__ == "__main__":
         **snakemake.wildcards,
     )
 
-
     # Panel Plots
     plot_generator_data_panel(
         n,
@@ -1039,7 +1177,7 @@ if __name__ == "__main__":
         **snakemake.wildcards,
     )
 
-    #Box Plot
+    # Box Plot
     plot_region_lmps(
         n,
         snakemake.output["region_lmps"],
@@ -1047,9 +1185,10 @@ if __name__ == "__main__":
     )
 
     if snakemake.wildcards["interconnect"] == "western":
-        #California Emissions
+        # California Emissions
         plot_california_emissions(
             n,
-            Path(snakemake.output["region_lmps"]).parents[0] / "california_emissions.png",
+            Path(snakemake.output["region_lmps"]).parents[0]
+            / "california_emissions.png",
             **snakemake.wildcards,
         )
