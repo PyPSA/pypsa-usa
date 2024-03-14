@@ -11,8 +11,8 @@ run:
 # docs :
 scenario:
   interconnect: [western] #"usa|texas|western|eastern"
-  clusters: [40]
-  opts: [Co2L2.0]
+  clusters: [40, 100, 200]
+  opts: [Ep]
   ll: [v1.0]
   scope: "total" # "urban", "rural", or "total"
   sector: "" # G
