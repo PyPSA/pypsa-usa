@@ -210,7 +210,8 @@ def get_capital_costs(n: pypsa.Network) -> pd.DataFrame:
 
 
 def get_generator_marginal_costs(
-    n: pypsa.Network, resample_period: str = "d"
+    n: pypsa.Network,
+    resample_period: str = "d",
 ) -> pd.DataFrame:
     """
     Gets generator marginal costs of Units with static MC and units with time

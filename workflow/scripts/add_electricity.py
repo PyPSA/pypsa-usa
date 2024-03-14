@@ -363,7 +363,7 @@ def update_marginal_costs(
             gens_in_region = gen[gen[fuel_region_type] == fuel_region].index.to_list()
             dfs.append(
                 pd.DataFrame(
-                    {gen_: fuel_costs[fuel_region] for gen_ in gens_in_region}
+                    {gen_: fuel_costs[fuel_region] for gen_ in gens_in_region},
                 ),
             )
         df = pd.concat(dfs, axis=1)

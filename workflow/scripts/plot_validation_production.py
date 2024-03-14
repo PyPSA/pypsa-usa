@@ -21,7 +21,12 @@ from plot_statistics import (
     plot_california_emissions,
 )
 
-from plot_network_maps import plot_capacity_map, create_title, get_bus_scale, get_line_scale
+from plot_network_maps import (
+    plot_capacity_map,
+    create_title,
+    get_bus_scale,
+    get_line_scale,
+)
 
 sns.set_theme("paper", style="whitegrid")
 
@@ -85,7 +90,9 @@ def plot_regional_timeseries_comparison(
     for region in regions:
         region_bus = buses.query(f"region == '{region}'").index
         optimized_region = create_optimized_by_carrier(
-            n, order, buses.loc[region_bus].country
+            n,
+            order,
+            buses.loc[region_bus].country,
         )
         historic_region = create_historical_df(
             snakemake.input.historic_first,
@@ -188,7 +195,8 @@ def create_optimized_by_carrier(n, order, region=None):
     """
     if region is not None:
         gen_p = n.generators_t["p"].loc[
-            :, n.generators.bus.map(n.buses.country).isin(region)
+            :,
+            n.generators.bus.map(n.buses.country).isin(region),
         ]
     else:
         gen_p = n.generators_t["p"]
@@ -286,6 +294,7 @@ def get_regions(n):
     regions = list(OrderedDict.fromkeys(regions_clean))
     return regions
 
+
 def plot_load_shedding_map(
     n: pypsa.Network,
     save: str,
@@ -293,12 +302,12 @@ def plot_load_shedding_map(
     **wildcards,
 ):
 
-    load_curtailment = n.generators_t.p.filter(regex='^(.*load).*$')
+    load_curtailment = n.generators_t.p.filter(regex="^(.*load).*$")
     load_curtailment_sum = load_curtailment.sum()
 
-    #split the generator name into a multi index where the first level is the bus and the second level is the carrier name
-    multi_index = load_curtailment_sum.index.str.rsplit(' ', n=1, expand=True)
-    multi_index.rename({0:'bus', 1:'carrier'}, inplace=True)
+    # split the generator name into a multi index where the first level is the bus and the second level is the carrier name
+    multi_index = load_curtailment_sum.index.str.rsplit(" ", n=1, expand=True)
+    multi_index.rename({0: "bus", 1: "carrier"}, inplace=True)
     load_curtailment_sum.index = multi_index
     bus_values = load_curtailment_sum
 
@@ -322,6 +331,7 @@ def plot_load_shedding_map(
         title=title,
     )
     fig.savefig(save)
+
 
 if __name__ == "__main__":
     if "snakemake" not in globals():

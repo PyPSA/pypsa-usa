@@ -247,7 +247,10 @@ if __name__ == "__main__":
 
     if params.get("boem_screen", 0):
         excluder.add_raster(
-            snakemake.input[f"boem_osw"], invert=True, nodata=0, allow_no_overlap=True
+            snakemake.input[f"boem_osw"],
+            invert=True,
+            nodata=0,
+            allow_no_overlap=True,
         )
 
     if "ship_threshold" in params:

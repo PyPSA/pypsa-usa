@@ -635,7 +635,8 @@ def plot_renewable_potential(
 
 def plot_lmp_map(network: pypsa.Network, save: str, **wildcards):
     fig, ax = plt.subplots(
-        subplot_kw={"projection": ccrs.PlateCarree()}, figsize=(8, 8)
+        subplot_kw={"projection": ccrs.PlateCarree()},
+        figsize=(8, 8),
     )
 
     lmps = n.buses_t.marginal_price.mean()
@@ -651,12 +652,13 @@ def plot_lmp_map(network: pypsa.Network, save: str, **wildcards):
     network.plot(ax=ax, line_widths=pd.Series(0.5, network.lines.index), bus_sizes=0)
 
     cb = plt.colorbar(
-        location="bottom", pad=0.01
+        location="bottom",
+        pad=0.01,
     )  # Adjust the pad value to move the color bar closer
     cb.set_label("LMP ($/MWh)")
     plt.title(create_title("Locational Marginal Price [$/MWh]", **wildcards))
     plt.tight_layout(
-        rect=[0, 0, 1, 0.95]
+        rect=[0, 0, 1, 0.95],
     )  # Adjust the rect values to make the layout tighter
     plt.savefig(save)
 

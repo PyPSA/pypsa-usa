@@ -332,7 +332,9 @@ def plot_capacity_additions_bar(
     capacity.reset_index(inplace=True)
     capacity.rename(columns={"index": "carrier"}, inplace=True)
     capacity_melt = capacity.melt(
-        id_vars="carrier", var_name="Capacity Type", value_name="Capacity"
+        id_vars="carrier",
+        var_name="Capacity Type",
+        value_name="Capacity",
     )
 
     color_palette = get_color_palette(n)
@@ -471,7 +473,9 @@ def plot_costs_bar(
 
 
 def plot_global_constraint_shadow_prices(
-    n: pypsa.Network, save: str, **wildcards
+    n: pypsa.Network,
+    save: str,
+    **wildcards,
 ) -> None:
     """
     Plots shadow prices on global constraints.
@@ -514,7 +518,7 @@ def plot_regional_capacity_additions_bar(
         [
             n.generators.bus.map(n.buses.country),
             n.storage_units.bus.map(n.buses.country),
-        ]
+        ],
     )
     expanded_capacity["region"] = expanded_capacity.index.map(mapper)
     carrier_mapper = pd.concat([n.generators.carrier, n.storage_units.carrier])
@@ -591,7 +595,7 @@ def plot_regional_emissions_bar(
     PLOT OF CO2 EMISSIONS BY REGION.
     """
     generator_emissions = n.generators_t.p * n.generators.carrier.map(
-        n.carriers.co2_emissions
+        n.carriers.co2_emissions,
     )
     regional_emisssions = (
         generator_emissions.groupby(n.generators.bus.map(n.buses.country), axis=1)
@@ -602,7 +606,9 @@ def plot_regional_emissions_bar(
 
     plt.figure(figsize=(10, 10))
     sns.barplot(
-        x=regional_emisssions.values, y=regional_emisssions.index, palette="viridis"
+        x=regional_emisssions.values,
+        y=regional_emisssions.index,
+        palette="viridis",
     )
 
     plt.xlabel("CO2 Emissions [MMtCO2]")
@@ -810,7 +816,9 @@ def plot_capacity_factor_heatmap(n: pypsa.Network, save: str, **wildcards) -> No
     HEATMAP OF RENEWABLE CAPACITY FACTORS BY CARRIER.
     """
     df_long = n.generators_t.p_max_pu.melt(
-        var_name="bus", value_name="p_max_pu", ignore_index=False
+        var_name="bus",
+        value_name="p_max_pu",
+        ignore_index=False,
     )
     df_long["region"] = df_long["bus"].map(n.generators.bus.map(n.buses.country))
     df_long["carrier"] = df_long["bus"].map(n.generators.carrier)
@@ -874,7 +882,7 @@ def plot_generator_data_panel(
                 "geothermal",
                 "oil",
                 "hydro",
-            ]
+            ],
         ),
         :,
     ]
@@ -890,7 +898,7 @@ def plot_generator_data_panel(
                 "oil",
                 "hydro",
                 "nuclear",
-            ]
+            ],
         ),
         :,
     ]
@@ -957,7 +965,10 @@ def plot_generator_data_panel(
 
     # Lay legend out horizontally
     axes[0, 0].legend(
-        loc="upper left", bbox_to_anchor=(1, 1), ncol=1, fontsize="xx-small"
+        loc="upper left",
+        bbox_to_anchor=(1, 1),
+        ncol=1,
+        fontsize="xx-small",
     )
     axes[2, 0].legend(fontsize="xx-small")
 
@@ -975,7 +986,10 @@ def plot_region_lmps(
     """
     df_lmp = n.buses_t.marginal_price
     df_long = pd.melt(
-        df_lmp.reset_index(), id_vars=["snapshot"], var_name="bus", value_name="lmp"
+        df_lmp.reset_index(),
+        id_vars=["snapshot"],
+        var_name="bus",
+        value_name="lmp",
     )
     df_long["season"] = df_long["snapshot"].dt.quarter
     df_long["hour"] = df_long["snapshot"].dt.hour
@@ -1010,11 +1024,12 @@ def plot_california_emissions(
     Plots a pie chart of emissions by carrier in California.
     """
     generator_emissions = n.generators_t.p * n.generators.carrier.map(
-        n.carriers.co2_emissions
+        n.carriers.co2_emissions,
     )
     ca_list = ["California", "CISO", "CISO_PGE", "CISO_SCE", "CISO_SDGE", "CISO_VEA"]
     ca_generator_emissions = generator_emissions.loc[
-        :, n.generators.bus.map(n.buses.country).isin(ca_list)
+        :,
+        n.generators.bus.map(n.buses.country).isin(ca_list),
     ]
     ca_generator_emissions = (
         ca_generator_emissions.groupby(n.generators.carrier, axis=1).sum().sum() / 1e6
