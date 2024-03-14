@@ -109,6 +109,7 @@ def combine_reports(file_names, year):
     """
     all_data_frames = []
     for file in file_names:
+        file = file.replace(":", "_")
         df = pd.read_csv(os.getcwd() + "/" + file, compression="zip")
         all_data_frames.append(df)
 
@@ -175,7 +176,7 @@ def main(snakemake):
 
     fuel_year = snakemake.params.fuel_year
 
-    reports = step_download_oasis_reports(
+    file_names = step_download_oasis_reports(
         queryname="PRC_FUEL",
         version="1",
         node="ALL",
@@ -183,7 +184,7 @@ def main(snakemake):
         year=fuel_year,
     )
 
-    combined_data = combine_reports(reports, fuel_year)
+    combined_data = combine_reports(file_names, fuel_year)
 
     combined_data_merged = merge_fuel_regions_data(combined_data, year=fuel_year)
     reduced_fuel_price_data = reduce_select_pricing_nodes(combined_data_merged)

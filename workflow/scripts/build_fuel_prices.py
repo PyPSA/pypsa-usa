@@ -90,11 +90,11 @@ def main(snakemake):
         end=sns_end,
         inclusive=sns_inclusive,
     )
-    if "western" in snakemake.config["scenario"]["interconnect"]:
+    if "western" in snakemake.wildcards.interconnect:
         fuel_prices_caiso = prepare_caiso(snakemake.input.caiso_ng_prices, snapshots)
     else:
         fuel_prices_caiso = pd.DataFrame()
-        
+
     fuel_prices_eia = prepare_eia(snakemake.input.eia_ng_prices, snapshots)
 
     fuel_prices = pd.concat([fuel_prices_caiso, fuel_prices_eia], axis=1)
