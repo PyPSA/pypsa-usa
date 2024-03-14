@@ -416,7 +416,7 @@ def add_BAU_constraints(n, config):
     n.model.add_constraints(lhs >= rhs, name="bau_mincaps")
 
 
-def add_regional_co2limit(n, config):
+def add_regional_co2limit(n, sns, config):
     """
     Adding regional regional CO2 Limits Specified in the config.yaml.
     """
@@ -461,18 +461,25 @@ def add_regional_co2limit(n, config):
         # bus0_region = bus0[bus0.str.contains(region)]
         # region_lines = n.lines.loc[bus0_region.index]
         # inter_regional_lines = region_lines[~region_lines.bus1.str.contains(region)]
+        # if not inter_regional_lines.empty and EF_unspecified > 0.0001:
+        #     # Big-M Method
+        #     # M = 1e5
+        #     # n.model.add_variables(coords=[sns, inter_regional_lines.index], binary=True, name=f"BigM-{region}_co2_limit")
+        #     # bin_x = n.model[f"BigM-{region}_co2_limit"]
+        #     # n.model.add_variables(lower = 0, coords=[sns, inter_regional_lines.index], name=f"line_imports_{region}")
+        #     # line_imports = n.model[f"line_imports_{region}"]
 
-        # import pdb; pdb.set_trace()
+        #     # n.model.add_constraints( -1 * n.model["Line-s"].loc[:, inter_regional_lines.index] <= M * bin_x, name=f"BigM-{region}_pos_flow")
+        #     # # n.model.add_constraints(n.model["Line-s"].loc[:, inter_regional_lines.index]  >= -M * (1 + bin_x), name=f"BigM-{region}_neg_flow")
+        #     # n.model.add_constraints( line_imports >= n.model["Line-s"].loc[:, inter_regional_lines.index] + M * bin_x, name=f"line_imports_{region}_upper")
 
-        # if not inter_regional_lines.empty:
-        #     inter_regional_flows = (n.model["Line-s"].loc[:, inter_regional_lines.index])
-        #     regional_imports = np.max(inter_regional_flows, 0)
-        #     inter_regional_imports = inter_regional_flows.where(inter_regional_flows <= 0)
-        #     lhs += (inter_regional_imports)
 
-        #     #this causes no line flow
-        #     # inter_regional_imports = inter_regional_flows.where(inter_regional_flows >= 0) #this causes no line flow
-        #     # lhs = (inter_regional_imports).sum()
+        #     #Non Big-M
+        #     n.model.add_variables(lower = 0, coords=[sns, inter_regional_lines.index], name=f"line_imports_{region}")
+        #     line_imports = n.model[f"line_imports_{region}"]
+        #     n.model.add_constraints( line_imports >= n.model["Line-s"].loc[:, inter_regional_lines.index], name=f"line_imports_{region}_upper")
+
+        #     lhs += (line_imports.sum() * EF_unspecified)
 
         rhs = region_co2lim
         n.model.add_constraints(lhs <= rhs, name=f"GlobalConstraint-{region}_co2_limit")
@@ -754,7 +761,7 @@ def extra_functionality(n, snapshots):
     if "RPS" in opts and n.generators.p_nom_extendable.any():
         add_RPS_constraints(n, config)
     if "RCo2L" in opts and n.generators.p_nom_extendable.any():
-        add_regional_co2limit(n, config)
+        add_regional_co2limit(n, snapshots, config)
     if "BAU" in opts and n.generators.p_nom_extendable.any():
         add_BAU_constraints(n, config)
     if "SAFE" in opts and n.generators.p_nom_extendable.any():
