@@ -248,7 +248,7 @@ def main(snakemake):
         ),
     )
     Nyears = n.snapshot_weightings.objective.sum() / 8760.0
-
+    prepare_eia_demand(n, snakemake.input["eia"])
     if configuration == "ads":
         demand_per_bus = prepare_ads_demand(n, "data/WECC_ADS/processed/load_2032.csv")
     elif configuration == "pypsa-usa":

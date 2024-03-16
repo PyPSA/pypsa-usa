@@ -227,7 +227,7 @@ rule build_demand:
             if config["network_configuration"] == "ads2032"
             else []
         ),
-        eia=expand(DATA + "GridEmissions/{file}", file=DATAFILES_DMD),
+        eia=DATA + "GridEmissions/EIA_DMD_2018_2024.csv",
         efs=DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv",
     output:
         demand=RESOURCES + "{interconnect}/demand.csv",
