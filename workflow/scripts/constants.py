@@ -25,6 +25,9 @@ EUR_2_USD = 1.07  # taken on 12-12-2023
 NG_MWH_2_MMCF = 303.5  # MWh / MMCF
 NG_MCF_2_MWH = 0.3035  # TODO get rid of this and just use single constant
 
+# $/MMBtu * (1 MMBtu / 0.293 MWh) = $/MWh_thermal
+NG_Dol_MMBTU_2_MWH = 3.4129
+
 ################################
 # Constants for ADS WECC mapping
 ################################
@@ -237,6 +240,22 @@ NERC_REGION_MAPPER = {
     "RFC": "eastern",
     "NPCC": "eastern",
     "MRO": "eastern",
+}
+
+EIA_930_REGION_MAPPER = {
+    "CAL": "western",
+    "CAR": "eastern",
+    "CENT": "eastern",
+    "FLA": "eastern",
+    "MIDA": "eastern",
+    "MIDW": "eastern",
+    "NW": "western",
+    "NE": "eastern",
+    "NY": "eastern",
+    "SE": "eastern",
+    "SW": "western",
+    "TEN": "eastern",
+    "TEX": "texas",
 }
 
 STATES_INTERCONNECT_MAPPER = {

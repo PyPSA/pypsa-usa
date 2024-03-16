@@ -73,8 +73,9 @@ Natural Gas infrastructure includes:
 
 (retrieve-eia)=
 ## Rule `retrieve_eia_data`
-
-Historical electrical load data from 2015 till the last present month are retrieved from the [US Energy Information Agency](https://www.eia.gov/) (EIA). Data is downloaded at hourly temporal resolution and at a spatial resolution of balancing authority region.
+```{eval-rst}
+.. automodule:: retrieve_eia_data
+```
 
 (retrieve-wecc)=
 ## Rule `retrieve_WECC_forcast_data`
@@ -82,6 +83,13 @@ Historical electrical load data from 2015 till the last present month are retrie
 Forecasted electricity demand data and generator operational charasteristics for the [Western Electricity Coordinating Council](https://www.wecc.org/Pages/home.aspx) (WECC) region are retrieved directly from WECC. Projected data for both 2030 and 2032 are retrieved (~300MB each).
 
 [![URL](https://img.shields.io/badge/URL-WECC_Data-blue)](<https://www.wecc.org/Reliability/Forms/Default%20View.aspx>)
+
+(retrieve-efs)=
+## Rule `retrieve_nrel_efs_data`
+
+The [Electrification Futures Study](https://www.nrel.gov/analysis/electrification-futures.html) (EFS) are a series of publications from the NREL that explore the impacts of electrification in all USA economic sectors. As part of this, study are the EFS hourly load profiles. These load profiles represent projected end-use electricity demand for various scenarios. Load profiles are provided for a subset of years (2018, 2020, 2024, 2030, 2040, 2050) and are aggregated to the state, sector, and select subsector level. See the [EFS Load Profile Data Catalog](https://data.nrel.gov/submissions/126) for full details.
+
+[![URL](https://img.shields.io/badge/URL-EFS_Load_Profiles-blue)](<https://data.nrel.gov/submissions/126>)
 
 (retrieve-cutout)=
 ## Rule `retrieve_cutout`
@@ -145,3 +153,10 @@ Documentation of the configuration file ``config/config.yaml`` at
 **Outputs**
 
 - ``resources/costs.csv``
+
+
+(retrieve-caiso-data)=
+## Rule `retrieve_caiso_data`
+```{eval-rst}
+.. automodule:: retrieve_caiso_data
+```

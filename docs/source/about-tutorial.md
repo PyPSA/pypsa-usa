@@ -14,15 +14,14 @@ You can find more information on each configuration setting on the [configuratio
 
 ## Run workflow
 
-To run the workflow, `cd` into the `workflow` directory and run the `snakemake` from your terminal.
+To run the workflow, `cd` into the `workflow` directory and run the `snakemake` from your terminal with your selection of config file:
 
 ```bash
-snakemake -j1
+snakemake -j1 --configfile config/config.default.yaml
 ```
 
 where 1 indicates the number of cores used.
 
-The `build_renewable_profiles` rule will take ~10-15 minutes to run the first time you run the workflow. After that, changing the number of clusters, load, or generator configurations will not require rebuilding the renewable profiles. Changes to `renewables` configuration will cause re-run of `build_renewable_profiles`.
 
 ## Examine Results
 

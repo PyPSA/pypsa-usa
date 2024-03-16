@@ -1,10 +1,6 @@
 (wildcards)=
 # Wildcards
 
-For more detailed definitions of wildcards, please reference [pypsa-eur](https://pypsa-eur.readthedocs.io/en/latest/wildcards.html).
-Not all wildcards implemented in [pypsa-eur](https://pypsa-eur.readthedocs.io/en/latest/wildcards.html) are available
-yet in pypsa-usa.
-
 It is easy to run PyPSA-USA for multiple scenarios using the wildcards feature of `snakemake`.
 Wildcards generalise a rule to produce all files that follow a regular expression pattern
 which e.g. defines one particular scenario. One can think of a wildcard as a parameter that shows
@@ -29,31 +25,6 @@ A visual representation of each `{interconnect}` is shown below:
 .. image:: _static/cutouts/cutouts.png
     :scale: 100 %
 ```
-
-(cutout_wc)=
-## The `{cutout}` wildcard
-
-The `{cutout}` wildcard facilitates running the rule :mod:`build_cutout`
-for all cutout configurations specified under `atlite: cutouts:`. Each cutout
-is descibed in the form `{dataset}_{year}`. These cutouts will be stored in a
-folder specified by `{cutout}`.
-
-Valid dataset names include: `era5`
-Valid years can be from `1940` to `2022`
-
-```{note}
-Data for `era5_2019` has been pre-pared for the user and will be automatically downloaded
-during the workflow. If other years are needed, the user will need to prepaer the
-cutout themself.
-```
-
-<!-- (technology)=
-## The ``{technology}`` wildcard -->
-
-<!-- The ``{technology}`` wildcard specifies for which renewable energy technology to produce availability time
-series and potentials using the rule :mod:`build_renewable_profiles`.
-It can take the values ``onwind``, ``offwind-ac``, ``offwind-dc``, and ``solar`` but **not** ``hydro``
-(since hydroelectric plant profiles are created by a different rule). -->
 
 <!-- (simpl)=
 ## The ``{simpl}`` wildcard -->
@@ -115,6 +86,7 @@ currently:
    :file: configtables/opts.csv
 ```
 
+
 (sector)=
 ## The `{sector}` wildcard
 
@@ -138,3 +110,21 @@ Used in the following rules:
 - `build_heat_demands`
 - `build_temperature_profiles`
 - `build_solar_thermal_profiles`
+
+
+(cutout_wc)=
+## The `{cutout}` wildcard
+
+The `{cutout}` wildcard facilitates running the rule :mod:`build_cutout`
+for all cutout configurations specified under `atlite: cutouts:`. Each cutout
+is descibed in the form `{dataset}_{year}`. These cutouts will be stored in a
+folder specified by `{cutout}`.
+
+Valid dataset names include: `era5`
+Valid years can be from `1940` to `2022`
+
+```{note}
+Data for `era5_2019` has been pre-pared for the user and will be automatically downloaded
+during the workflow. If other years are needed, the user will need to prepaer the
+cutout themself.
+```

@@ -10,14 +10,14 @@ run:
 
 # docs :
 scenario:
-  interconnect: [western, texas] #"usa|texas|western|eastern"
-  clusters: [40]
-  opts: [Co2L2.0]
+  interconnect: [western] #"usa|texas|western|eastern"
+  clusters: [40, 100, 200]
+  opts: [Ep]
   ll: [v1.0]
   scope: "total" # "urban", "rural", or "total"
   sector: "" # G
   planning_horizons:
-  # - 2030   #  # Uncomment to use NREL EFS Demand Forecasts (2030, 2040, 2050)
+  # - 2030   #(2030, 2040, 2050)
 
 foresight:  # Only Single Stage Currently
 
@@ -70,9 +70,16 @@ electricity:
   renewable_carriers: [onwind, offwind, offwind_floating, solar, hydro] # Choose the renewable plant types to include in network
   voltage_simplified: 230 #Voltage level to simplify network to in rule "simplify network"
   co2limit: 1.4728e+9 # 0.8 * 1.841e+9
+  co2limit_enable: false # For sector coupled studies
   co2base: 226.86e+6 #base_from_2020 Locations of the 250 MMmt of CO2 emissions from the WECC 2021.
   gaslimit: false # global gas usage limit of X MWh_th
+  gaslimit_enable: false # For sector coupled studies
   retirement: economic # "economic" or "technical"
+  SAFE_reservemargin: 0.14
+  regional_Co2_limits: 'config/policy_constraints/regional_Co2_limits.csv'
+  agg_p_nom_limits: 'config/policy_constraints/agg_p_nom_minmax.csv'
+  portfolio_standards: 'config/policy_constraints/portfolio_standards.csv'
+  SAFE_regional_reservemargins: 'config/policy_constraints/SAFE_regional_prm.csv'
 
   operational_reserve:
     activate: false
@@ -85,20 +92,23 @@ electricity:
     H2: 168
 
   extendable_carriers:
-    Generator: [] #offwind, offwind_floating,
-    StorageUnit: [] # battery, H2
-    Store: [] #[battery, H2]
-    Link: [] #[H2 pipeline]
+    Generator: []
+    StorageUnit: []
+    Store: []
+    Link: []
 
   demand: #EFS used for given planning_horizons year
     EFS_case: reference # reference, medium, high
     EFS_speed: moderate # slow, moderate, rapid
 
+  autarky:
+    enable: false
+    by_country: false
 
 # docs :
 conventional:
   unit_commitment: false
-  dynamic_fuel_price: false
+  dynamic_fuel_price: true
 
 # docs :
 renewable:
@@ -218,7 +228,8 @@ load:
 costs:  # based on the potentials, assuming  (0.1 kW/m2 and 10 m2/person)
   year: 2030
   version: v0.6.0
-  rooftop_share: 0.14
+  rooftop_share: 0.0
+  ng_fuel_year: 2019 # year of the natural gas price from CAISO [2019- 2023]
   fill_values:
     FOM: 0
     VOM: 0
@@ -239,7 +250,10 @@ costs:  # based on the potentials, assuming  (0.1 kW/m2 and 10 m2/person)
     battery: 0.
     battery inverter: 0.
   emission_prices: # in currency per tonne emission, only used with the option Ep
+    enable: false
     co2: 0.
+    co2_monthly_prices: false
+
 
 # docs :
 sector:
@@ -260,22 +274,19 @@ clustering:
   cluster_network:
     algorithm: kmeans
     feature: solar+onwind-time
-    aggregation_zones: 'balancing_area' # balancing_area, country, or state. # Currently issue in State aggregation
+    aggregation_zones: 'balancing_area' # [balancing_area, state]
+    exclude_carriers: []
+    consider_efficiency_classes: false
   aggregation_strategies:
     generators:
-      p_nom_max: sum # use "min" for more conservative assumptions
-      p_nom_min: sum
-      p_min_pu: mean
-      marginal_cost: mean
       committable: any
-      ramp_limit_up: mean
-      ramp_limit_down: mean
-      efficiency: mean
-    buses:
-      state: max # temp fix. When fixing state aggregation- change add electricity such that region info not is use is removed.
+      ramp_limit_up: max
+      ramp_limit_down: max
+  temporal:
+    resolution_elec: false
+    resolution_sector: false
 
 focus_weights:
-  # California: 0.5
 
 # docs :
 solving:
@@ -294,6 +305,8 @@ solving:
     transmission_losses: 0
     linearized_unit_commitment: true
     horizon: 8760
+    assign_all_duals: true
+
 
   solver:
     name: gurobi

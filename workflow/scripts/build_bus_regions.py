@@ -1,14 +1,15 @@
 # By PyPSA-USA Authors
 """
+**Description**
+
+Creates Voronoi shapes for each bus representing both onshore and offshore regions.
+
 **Relevant Settings**
 
 .. code:: yaml
 
     interconnect:
-    offshore_shape:
     aggregation_zones:
-    countries:
-
 
 **Inputs**
 
@@ -18,19 +19,8 @@
 
 **Outputs**
 
-- ``resources/regions_onshore.geojson``:
-
-    # .. image:: ../img/regions_onshore.png
-    #     :scale: 33 %
-
-- ``resources/regions_offshore.geojson``:
-
-    # .. image:: ../img/regions_offshore.png
-    #     :scale: 33 %
-
-**Description**
-
-Creates Voronoi shapes for each bus representing both onshore and offshore regions.
+- ``resources/regions_onshore.geojson``
+- ``resources/regions_offshore.geojson``
 """
 
 

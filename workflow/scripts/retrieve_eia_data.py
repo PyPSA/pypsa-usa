@@ -1,8 +1,12 @@
 """
-Downloads historical BA Data from EIA, proccesses and saves to a csv file.
+**Description**
 
-github: https://github.com/jdechalendar/gridemissions
-site: https://gridemissions.jdechalendar.su.domains/#/code
+Historical electrical load data from 2019-2023 are retrieved from the [US Energy Information Agency](https://www.eia.gov/) (EIA) and [GridEmissions](https://gridemissions.jdechalendar.su.domains/#/code). Data is downloaded at hourly temporal resolution and at a spatial resolution of balancing authority region.
+
+**Outputs**
+
+- ``data/GridEmissions/EIA_DMD_2018_2024.csv``
+- ``data/eia/EIA_DMD_*.csv``
 """
 
 import glob

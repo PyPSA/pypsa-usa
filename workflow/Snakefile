@@ -7,8 +7,6 @@ from snakemake.remote.HTTP import RemoteProvider as HTTPRemoteProvider
 
 HTTP = HTTPRemoteProvider()
 
-# -------------------------- Imports and Parameters -------------------------- #
-
 from os.path import normpath
 from itertools import chain
 from pathlib import Path
@@ -53,8 +51,6 @@ FIGURES_VALIDATE = [
 ]
 
 # --------------------------- Workflow constraints --------------------------- #
-
-
 localrules:
     dag,
     clean,
@@ -74,16 +70,12 @@ wildcard_constraints:
 
 
 # Merge subworkflow configs and main config
-# configfile: "config/tests/config.validation.yaml"
-# configfile: "config/tests/config.test_simple.yaml"
-configfile: "config/config.default.yaml"
+configfile: "config/tests/config.validation.yaml"
 configfile: "config/config.cluster.yaml"
 configfile: "config/config.osw.yaml"
 configfile: "config/config.plotting.yaml"
 configfile: "config/config.api.yaml"
 
-
-ATLITE_NPROCESSES = config["atlite"].get("nprocesses", 4)
 
 run = config.get("run", {})
 RDIR = run["name"] + "/" if run.get("name") else ""
@@ -102,6 +94,7 @@ include: "rules/build_electricity.smk"
 include: "rules/build_sector.smk"
 include: "rules/solve_electricity.smk"
 include: "rules/postprocess.smk"
+include: "rules/validate.smk"
 
 
 if "E" not in config["scenario"]["sector"]:
@@ -185,16 +178,14 @@ rule all:
 
 
 # Create DAG with-
-# snakemake --dag -F | sed -n "/digraph/,\$p" | dot -Tpng -o repo_data/dag.jpg
 # snakemake --rulegraph all | sed -n "/digraph/,\$p" | dot -Tpng -o repo_data/dag.jpg
+# snakemake --dag -F | sed -n "/digraph/,\$p" | dot -Tpng -o repo_data/dag.jpg
 rule dag:
     message:
         "Creating DAG of workflow."
     output:
         dot="repo_data/dag.dot",
         jpg="repo_data/dag.jpg",
-    conda:
-        "envs/environment.yaml"
     shell:
         """
         snakemake --rulegraph all | sed -n "/digraph/,\$p" > {output.dot}

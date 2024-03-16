@@ -1,7 +1,10 @@
 # PyPSA USA Authors
 """
-Adds electrical generators and existing hydro storage units to a base network
-based on the given network configuration.
+**Description**
+
+This module integrates data produced by `build_renewable_profiles`, `build_demand`, `build_cost_data`, `build_fuel_prices`, and `build_base_network` to create a network model that includes generators, demand, and costs. The module attaches generators, storage units, and loads to the network created by `build_base_network`. Each generator is assigned regional capital costs, and regional and daily or monthly marginal costs.
+
+Extendable generators are assigned a maximum capacity based on land-use constraints defined in `build_renewable_profiles`.
 
 **Relevant Settings**
 
@@ -14,28 +17,7 @@ based on the given network configuration.
         end:
         inclusive:
 
-    costs:
-        year:
-        version:
-        dicountrate:
-        emission_prices:
-
     electricity:
-        max_hours:
-        marginal_cost:
-        capital_cost:
-        conventional_carriers:
-        co2limit:
-        extendable_carriers:
-
-    renewable:
-        hydro:
-            carriers:
-            hydro_max_hours:
-            hydro_capital_cost:
-
-    lines:
-        length_factor:
 
 .. seealso::
     Documentation of the configuration file `config/config.yaml` at :ref:`costs_cf`,
@@ -44,27 +26,15 @@ based on the given network configuration.
 **Inputs**
 
 - ``resources/costs.csv``: The database of cost assumptions for all included technologies for specific years from various sources; e.g. discount rate, lifetime, investment (CAPEX), fixed operation and maintenance (FOM), variable operation and maintenance (VOM), fuel costs, efficiency, carbon-dioxide intensity.
-- ``data/bundle/hydro_capacities.csv``: Hydropower plant store/discharge power capacities, energy storage capacity, and average hourly inflow by country.
-
-    # .. image:: _static/hydrocapacities.png
-    #     :scale: 34 %
-
-- ``data/geth2015_hydro_capacities.csv``: alternative to capacities above; not currently used!
-- ``resources/load.csv`` Hourly per-country load profiles.
+- ``resources/demand.csv`` Hourly per-country load profiles.
 - ``resources/regions_onshore.geojson``: confer :ref:`busregions`
-- ``resources/nuts3_shapes.geojson``: confer :ref:`shapes`
 - ``resources/profile_{}.nc``: all technologies in ``config["renewables"].keys()``, confer :ref:`renewableprofiles`.
-- ``networks/base.nc``: confer :ref:`base`
+- ``networks/elec_base_network.nc``: confer :ref:`base`
+- ``resources/ng_fuel_prices.csv``: Natural gas fuel prices by state and BA.
 
 **Outputs**
 
-
-- ``networks/elec.nc``:
-
-    # .. image:: _static/elec.png
-    #         :scale: 33 %
-
-**Description**
+- ``networks/elec_base_network_l_pp.nc``
 """
 
 
@@ -173,7 +143,7 @@ def add_co2_emissions(n, costs, carriers):
 def load_costs(
     tech_costs: str,
     config: dict[str, Any],
-    max_hours: dict[str, int | float],
+    max_hours: dict[str, Union[int, float]],
     Nyears: float = 1.0,
 ) -> pd.DataFrame:
 
@@ -334,7 +304,6 @@ def update_marginal_costs(
     fuel_costs: pd.DataFrame,
     vom_cost: float = 0,
     efficiency: float = None,
-    apply_average: bool = False,
 ):
     """
     Applies regional and monthly marginal cost data.
@@ -351,77 +320,70 @@ def update_marginal_costs(
     efficiency: float = None
         Flat efficiency multiplier to apply to all generators. If not supplied,
         the efficiency is looked up at a generator level from the network
-    apply_average: bool = False
-        Apply USA average fuel cost to all regions
     """
 
-    # map generators to states
-    bus_state_mapper = n.buses.to_dict()["state"]
-    gen = n.generators[n.generators.carrier == carrier].copy()  # copy with warning
-    gen["state"] = gen.bus.map(bus_state_mapper)
-    gen = gen[gen["state"].isin(fuel_costs.state.unique())]
+    missed = []
+    for fuel_region_type in ["balancing_area", "state"]:
 
-    # log any states that do not have multipliers attached
-    missed = gen[~gen["state"].isin(fuel_costs.state.unique())]
-    if not missed.empty:
-        logger.warning(
-            f"Time dependent marginal costs not applied to {missed.state.unique()}",
+        # map generators to fuel_region_type (state or BA)
+        bus_region_mapper = n.buses.to_dict()[fuel_region_type]
+        gen = (
+            n.generators[n.generators.carrier == carrier].copy()
+            if fuel_region_type == "balancing_area"
+            else missed
+        )
+        gen[f"{fuel_region_type}"] = gen.bus.map(bus_region_mapper)
+        gen[f"{fuel_region_type}"] = gen[f"{fuel_region_type}"].replace(
+            {
+                "CISO-PGAE": "CISO",
+                "CISO-SCE": "CISO",
+                "CISO-SDGE": "CISO",
+                "CISO-VEA": "CISO",
+                "Arizona": "AZPS",
+                "NYISO": "NYISO",
+                "CAISO": "CAISO",
+                "BANC": "BANCSMUD",
+            },
         )
 
-    # update fuel cost values from $/MCF to $/MWh
-    # $/MCF * (1 MCF / 1.036 MMBTU) * (1 MMBTU / 0.293 MWh) = $/MWh
-    fuel_costs["value"] = fuel_costs["value"] / const.NG_MCF_2_MWH
-    fuel_costs["units"] = "$/MWh"
+        missed = gen[~gen[fuel_region_type].isin(fuel_costs.columns.unique())]
+        gen = gen[
+            gen[fuel_region_type].isin(fuel_costs.columns.unique())
+        ]  # Filter for BAs which we have the fuel price data for
 
-    # extract out monthly variations for fuel costs
-    fuel_costs = fuel_costs.set_index("period")
-    fuel_costs.index = pd.to_datetime(fuel_costs.index, format="%Y-%m-%d")
-    fuel_costs["month"] = fuel_costs.index.month
-
-    # create a state level fuel cost dataframe for the modeled snapshots
-    state_fuel_costs = pd.DataFrame()
-    state_fuel_costs.index = pd.DatetimeIndex(n.snapshots)
-    if not apply_average:
-        for state in gen.state.unique():
-            state_fuel_cost = fuel_costs[fuel_costs["state"] == state]
-            month_to_price_mapper = state_fuel_cost.set_index("month").to_dict()[
-                "value"
-            ]
-            state_fuel_costs[state] = state_fuel_costs.index.month.map(
-                month_to_price_mapper,
-            )
-    else:
-        usa_fuel_cost = fuel_costs[fuel_costs["state"] == "U.S."]
-        month_to_price_mapper = usa_fuel_cost.set_index("month").to_dict()["value"]
-        for state in gen.state.unique():
-            state_fuel_costs[state] = state_fuel_costs.index.month.map(
-                month_to_price_mapper,
+        if not missed.empty:
+            logger.warning(
+                f"BA's missing historical daily fuel costs: {missed[fuel_region_type].unique()}. Using EIA Monthly State Averages.",
             )
 
-    # apply all fuel cost values
-    dfs = []
-    for state in gen.state.unique():
-        gens_in_state = gen[gen.state == state].index.to_list()
-        dfs.append(
-            pd.DataFrame({gen: state_fuel_costs[state] for gen in gens_in_state}),
+        # apply all fuel cost values
+        dfs = []
+        # fuel_costs.set_index(fuel_region_type, inplace=True)
+        for fuel_region in gen[fuel_region_type].unique():
+            gens_in_region = gen[gen[fuel_region_type] == fuel_region].index.to_list()
+            dfs.append(
+                pd.DataFrame(
+                    {gen_: fuel_costs[fuel_region] for gen_ in gens_in_region},
+                ),
+            )
+        df = pd.concat(dfs, axis=1)
+
+        # apply efficiency of each generator to know fuel burn rate
+        if not efficiency:
+            gen_eff_mapper = n.generators.to_dict()["efficiency"]
+            df = df.apply(lambda x: x / gen_eff_mapper[x.name], axis=0)
+        else:
+            df = df.div(efficiency)
+
+        # apply fixed rate VOM cost
+        df += vom_cost
+
+        # join into exisitng time series marginal costs
+        df.index = n.snapshots
+        n.generators_t["marginal_cost"] = n.generators_t["marginal_cost"].join(
+            df,
+            how="inner",
         )
-    df = pd.concat(dfs, axis=1)
-
-    # apply efficiency of each generator to know fuel burn rate
-    if not efficiency:
-        gen_eff_mapper = n.generators.to_dict()["efficiency"]
-        df = df.apply(lambda x: x / gen_eff_mapper[x.name], axis=0)
-    else:
-        df = df.div(efficiency)
-
-    # apply fixed rate VOM cost
-    df += vom_cost
-
-    # join into exisitng time series marginal costs
-    n.generators_t["marginal_cost"] = n.generators_t["marginal_cost"].join(
-        df,
-        how="inner",
-    )
 
 
 def update_transmission_costs(n, costs, length_factor=1.0):
@@ -742,7 +704,11 @@ def match_plant_to_bus(n, plants):
     return plants_matched
 
 
-def attach_renewable_capacities_to_atlite(n, plants_df, renewable_carriers):
+def attach_renewable_capacities_to_atlite(
+    n: pypsa.Network,
+    plants_df: pd.DataFrame,
+    renewable_carriers: list,
+):
     plants = plants_df.query(
         "bus_assignment in @n.buses.index",
     )
@@ -771,175 +737,14 @@ def attach_renewable_capacities_to_atlite(n, plants_df, renewable_carriers):
         n.generators.p_nom_min.update(generators_tech.bus.map(caps_per_bus).dropna())
 
 
-def prepare_ads_demand(
-    n: pypsa.Network,
-    demand_path: str,
-) -> pd.DataFrame:
-    demand = pd.read_csv(demand_path, index_col=0)
-    data_year = 2032
-    demand.columns = demand.columns.str.removeprefix("Load_")
-    demand.columns = demand.columns.str.removesuffix(".dat")
-    demand.columns = demand.columns.str.removesuffix(f"_{data_year}")
-    demand.columns = demand.columns.str.removesuffix(f"_[18].dat: {data_year}")
-    demand["CISO-PGAE"] = (
-        demand.pop("CIPV") + demand.pop("CIPB") + demand.pop("SPPC")
-    )  # TODO: #37 Create new Zone for SPPC
-    demand["BPAT"] = demand.pop("BPAT") + demand.pop("TPWR") + demand.pop("SCL")
-    demand["IPCO"] = demand.pop("IPFE") + demand.pop("IPMV") + demand.pop("IPTV")
-    demand["PACW"] = demand.pop("PAID") + demand.pop("PAUT") + demand.pop("PAWY")
-    demand["Arizona"] = demand.pop("SRP") + demand.pop("AZPS")
-    demand.drop(columns=["Unnamed: 44", "TH_Malin", "TH_Mead", "TH_PV"], inplace=True)
-    ba_list_map = {
-        "CISC": "CISO-SCE",
-        "CISD": "CISO-SDGE",
-        "VEA": "CISO-VEA",
-        "WAUW": "WAUW_SPP",
-    }
-    demand.rename(columns=ba_list_map, inplace=True)
-    demand.set_index("Index", inplace=True)
-
-    demand.index = n.snapshots
-    n.buses["load_dissag"] = n.buses.balancing_area.replace({"": "missing_ba"})
-    intersection = set(demand.columns).intersection(n.buses.ba_load_data.unique())
-    demand = demand[list(intersection)]
-    set_load_allocation_factor(n)
-    return disaggregate_demand_to_buses(n, demand)
-
-
-def prepare_eia_demand(
-    n: pypsa.Network,
-    demand_path: str,
-) -> pd.DataFrame:
-    logger.info("Building Load Data using EIA demand")
-    demand = pd.read_csv(demand_path, index_col=0)
-    demand.index = pd.to_datetime(demand.index)
-    demand = demand.loc[n.snapshots.intersection(demand.index)]  # filter by snapshots
-    demand = demand[~demand.index.duplicated(keep="last")]
-    demand.index = n.snapshots
-
-    # Combine EIA Demand Data to Match GIS Shapes
-    demand["Arizona"] = demand.pop("SRP") + demand.pop("AZPS")
-    n.buses["load_dissag"] = n.buses.balancing_area.replace(
-        {"^CISO.*": "CISO", "^ERCO.*": "ERCO"},
-        regex=True,
-    )
-
-    n.buses["load_dissag"] = n.buses.load_dissag.replace({"": "missing_ba"})
-    intersection = set(demand.columns).intersection(n.buses.load_dissag.unique())
-    demand = demand[list(intersection)]
-
-    set_load_allocation_factor(n)
-    return disaggregate_demand_to_buses(n, demand)
-
-
-def prepare_efs_demand(
-    n: pypsa.Network,
-    planning_horizons: list[str],
-) -> pd.DataFrame:
-    logger.info("Building Load Data using EFS demand")
-    demand = pd.read_csv(snakemake.input.efs)
-
-    demand = demand.loc[demand.Year == planning_horizons[0]]
-    demand.drop(
-        columns=[
-            "Electrification",
-            "TechnologyAdvancement",
-            "Sector",
-            "Subsector",
-            "Year",
-        ],
-        inplace=True,
-    )
-    # TODO: We are throwing out great data here on the sector and subsector loads. Revisit this.
-
-    demand = demand.groupby(["State", "LocalHourID"]).sum().reset_index()
-
-    demand["DateTime"] = pd.Timestamp(
-        year=planning_horizons[0],
-        month=1,
-        day=1,
-    ) + pd.to_timedelta(demand["LocalHourID"] - 1, unit="H")
-    demand["UTC_Time"] = demand.groupby(["State"])["DateTime"].transform(local_to_utc)
-    demand.drop(columns=["LocalHourID", "DateTime"], inplace=True)
-    demand.set_index("UTC_Time", inplace=True)
-
-    demand = demand.pivot(columns="State", values="LoadMW")
-    n.buses["load_dissag"] = n.buses.state
-    intersection = set(demand.columns).intersection(
-        [const.STATE_2_CODE.get(item, item) for item in n.buses.load_dissag.unique()],
-    )
-    demand = demand[list(intersection)]
-    demand.columns = [
-        {v: k for k, v in const.STATE_2_CODE.items()}.get(item, item)
-        for item in demand.columns
-    ]
-    demand = demand.dropna()
-    if snakemake.wildcards.interconnect == "texas":
-        demand = demand.iloc[2:, :]  # temp fix for lining up timezones
-    year = n.snapshots[0].year
-    demand.index = demand.index.map(lambda x: x.replace(year=year))
-    demand = demand.loc[n.snapshots.intersection(demand.index)]
-    n.buses.rename(columns={"LAF_states": "LAF"}, inplace=True)
-    # demand.loc[:,'Texas'] = demand.loc[:,'Texas'] / 400 #temp
-    return disaggregate_demand_to_buses(n, demand)
-
-
-def set_load_allocation_factor(n: pypsa.Network) -> pd.DataFrame:
-    """
-    Defines Load allocation factor for each bus according to load_dissag for
-    balancing areas.
-    """
-    n.buses.Pd = n.buses.Pd.fillna(0)
-    group_sums = n.buses.groupby("load_dissag")["Pd"].transform("sum")
-    n.buses["LAF"] = n.buses["Pd"] / group_sums
-
-
-def disaggregate_demand_to_buses(
-    n: pypsa.Network,
-    demand: pd.DataFrame,
-) -> pd.DataFrame:
-    """
-    Zone power demand is disaggregated to buses proportional to Pd.
-    """
-    demand_aligned = demand.reindex(
-        columns=n.buses["load_dissag"].unique(),
-        fill_value=0,
-    )
-    bus_demand = pd.DataFrame()
-    for load_dissag in n.buses["load_dissag"].unique():
-        LAF = n.buses.loc[n.buses["load_dissag"] == load_dissag, "LAF"]
-        zone_bus_demand = (
-            demand_aligned[load_dissag].values.reshape(-1, 1) * LAF.values.T
-        )
-        bus_demand = pd.concat(
-            [bus_demand, pd.DataFrame(zone_bus_demand, columns=LAF.index)],
-            axis=1,
-        )
-    bus_demand.index = n.snapshots
-    n.buses.drop(columns=["LAF"], inplace=True)
-    return bus_demand.fillna(0)
-
-
-def attach_demand(n: pypsa.Network, configuration: str):
+def attach_demand(n: pypsa.Network, demand_per_bus_fn: str):
     """
     Add demand to network from specified configuration setting.
 
     Returns network with demand added.
     """
-    if configuration == "ads":
-        demand_per_bus = prepare_ads_demand(n, f"data/WECC_ADS/processed/load_2032.csv")
-    elif configuration == "pypsa-usa":
-        if snakemake.params.get("planning_horizons"):
-            demand_per_bus = prepare_efs_demand(
-                n,
-                snakemake.params.get("planning_horizons"),
-            )
-        else:
-            demand_per_bus = prepare_eia_demand(n, snakemake.input["eia"][0])
-    else:
-        raise ValueError(
-            "Invalid demand_type. Supported values are 'ads', and 'pypsa-usa'.",
-        )
+    demand_per_bus = pd.read_csv(demand_per_bus_fn, index_col=0)
+    demand_per_bus.index = pd.to_datetime(demand_per_bus.index)
     n.madd(
         "Load",
         demand_per_bus.columns,
@@ -989,16 +794,12 @@ def attach_conventional_generators(
         committable_attrs = {}
 
     if fuel_price is not None:
-        fuel_price = fuel_price.assign(
-            OCGT=fuel_price["gas"],
-            CCGT=fuel_price["gas"],
-        ).drop("gas", axis=1)
-        missing_carriers = list(set(carriers) - set(fuel_price))
-        fuel_price = fuel_price.assign(**costs.fuel[missing_carriers])
-        fuel_price = fuel_price.reindex(plants.carrier, axis=1)
-        fuel_price.columns = plants.index
-        marginal_cost = fuel_price.div(plants.efficiency).add(
-            plants.carrier.map(costs.VOM),
+        marginal_cost = update_marginal_costs(
+            n,
+            plants.carrier,
+            fuel_price,
+            vom_cost=plants.VOM,
+            efficiency=plants.efficiency,
         )
     else:
         marginal_cost = (
@@ -1100,14 +901,14 @@ def attach_wind_and_solar(
             p_nom_max_bus = (
                 ds["p_nom_max"]
                 .to_dataframe()
-                .merge(bus2sub, left_on="bus", right_on="sub_id")
+                .merge(bus2sub[["bus_id", "sub_id"]], left_on="bus", right_on="sub_id")
                 .set_index("bus_id")
                 .p_nom_max
             )
             weight_bus = (
                 ds["weight"]
                 .to_dataframe()
-                .merge(bus2sub, left_on="bus", right_on="sub_id")
+                .merge(bus2sub[["bus_id", "sub_id"]], left_on="bus", right_on="sub_id")
                 .set_index("bus_id")
                 .weight
             )
@@ -1115,12 +916,15 @@ def attach_wind_and_solar(
                 ds["profile"]
                 .transpose("time", "bus")
                 .to_pandas()
-                .T.merge(bus2sub, left_on="bus", right_on="sub_id")
+                .T.merge(
+                    bus2sub[["bus_id", "sub_id"]],
+                    left_on="bus",
+                    right_on="sub_id",
+                )
                 .set_index("bus_id")
                 .drop(columns="sub_id")
                 .T
             )
-
             if supcar == "offwind":
                 capital_cost = capital_cost.to_frame().reset_index()
                 capital_cost.bus = capital_cost.bus.astype(int)
@@ -1443,8 +1247,11 @@ def load_powerplants_ads(
 
 
 def clean_bus_data(n: pypsa.Network):
-    col_list = ["poi_bus", "poi_sub", "poi", "Pd", "load_dissag"]
-    n.buses.drop(columns=col_list, inplace=True)
+    """
+    Drops data from the network that are no longer needed in workflow.
+    """
+    col_list = ["poi_bus", "poi_sub", "poi", "Pd", "load_dissag", "LAF", "LAF_states"]
+    n.buses.drop(columns=[col for col in col_list if col in n.buses], inplace=True)
 
 
 def main(snakemake):
@@ -1456,8 +1263,8 @@ def main(snakemake):
     n = pypsa.Network(snakemake.input.base_network)
 
     snapshot_config = snakemake.config["snapshots"]
-    sns_start = pd.to_datetime(snapshot_config["start"] + " 08:00:00")
-    sns_end = pd.to_datetime(snapshot_config["end"] + " 06:00:00")
+    sns_start = pd.to_datetime(snapshot_config["start"])
+    sns_end = pd.to_datetime(snapshot_config["end"])
     sns_inclusive = snapshot_config["inclusive"]
 
     n.set_snapshots(
@@ -1501,17 +1308,6 @@ def main(snakemake):
     else:
         unit_commitment = None
 
-    if params.conventional["dynamic_fuel_price"]:
-        fuel_price = pd.read_csv(
-            snakemake.input.fuel_price,
-            index_col=0,
-            header=0,
-            parse_dates=True,
-        )
-        fuel_price = fuel_price.reindex(n.snapshots).fillna(method="ffill")
-    else:
-        fuel_price = None
-
     if configuration == "pypsa-usa":
         plants = load_powerplants_eia(
             snakemake.input["plants_eia"],
@@ -1533,7 +1329,8 @@ def main(snakemake):
 
     # Applying to all configurations
     plants = match_plant_to_bus(n, plants)
-    attach_demand(n, configuration)
+
+    attach_demand(n, snakemake.input.demand)
 
     attach_conventional_generators(
         n,
@@ -1545,7 +1342,7 @@ def main(snakemake):
         renewable_carriers,
         conventional_inputs,
         unit_commitment=unit_commitment,
-        fuel_price=fuel_price,
+        fuel_price=None,  # update fuel prices later
     )
     attach_battery_storage(
         n,
@@ -1600,24 +1397,22 @@ def main(snakemake):
         df_multiplier = clean_locational_multiplier(df_multiplier)
         update_capital_costs(n, carrier, costs, df_multiplier, Nyears)
 
-    # apply regional/temporal variations to fuel cost data
-    fuel_costs = {
-        "CCGT": "ng_electric_power_price",
-        "OCGT": "ng_electric_power_price",
-    }
-    for carrier, cost_data in fuel_costs.items():
-        fuel_cost_file = snakemake.input[f"{cost_data}"]
-        df_fuel_costs = pd.read_csv(fuel_cost_file)
-        vom = costs.at[carrier, "VOM"]
-        # eff = costs.at[carrier, "efficiency"]
-        update_marginal_costs(
-            n=n,
-            carrier=carrier,
-            fuel_costs=df_fuel_costs,
-            vom_cost=vom,
-            # efficiency=eff,
-            apply_average=False,
-        )
+    if params.conventional["dynamic_fuel_price"]:
+        fuel_costs = {
+            "CCGT": "ng_electric_power_price",
+            "OCGT": "ng_electric_power_price",
+        }
+        for carrier, cost_data in fuel_costs.items():
+            fuel_cost_file = snakemake.input[f"{cost_data}"]
+            df_fuel_costs = pd.read_csv(fuel_cost_file)
+            vom = costs.at[carrier, "VOM"]
+
+            update_marginal_costs(
+                n=n,
+                carrier=carrier,
+                fuel_costs=df_fuel_costs,
+                vom_cost=vom,
+            )
 
     # fix p_nom_min for extendable generators
     # The "- 0.001" is just to avoid numerical issues
@@ -1629,13 +1424,6 @@ def main(snakemake):
         ),
         axis=1,
     )
-
-    if snakemake.config["osw_config"]["enable_osw"]:
-        logger.info("Adding OSW in network")
-        humboldt_capacity = snakemake.config["osw_config"]["humboldt_capacity"]
-        import modify_network_osw as osw
-
-        osw.build_OSW_base_configuration(n, osw_capacity=humboldt_capacity)
 
     output_folder = os.path.dirname(snakemake.output[0]) + "/base_network"
     export_network_for_gis_mapping(n, output_folder)
