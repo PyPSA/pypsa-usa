@@ -9,7 +9,8 @@ def sector_input_files(wildcards):
     if "G" in sectors:
         ng_files = {
             "county": DATA + "counties/cb_2020_us_county_500k.shp",
-            "pipeline_capacity": DATA + "natural_gas/EIA-StatetoStateCapacity_Jan2023.xlsx",
+            "pipeline_capacity": DATA
+            + "natural_gas/EIA-StatetoStateCapacity_Jan2023.xlsx",
             "pipeline_shape": DATA + "natural_gas/pipelines.geojson",
             "eia_757": DATA + "natural_gas/EIA-757.csv",
         }

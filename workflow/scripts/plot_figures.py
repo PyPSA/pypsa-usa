@@ -166,43 +166,54 @@ def create_title(title: str, **wildcards) -> str:
     wildcards_joined = " | ".join(w)
     return f"{title} \n ({wildcards_joined})"
 
+
 def remove_sector_buses(df: pd.DataFrame) -> pd.DataFrame:
-    """Removes buses for sector coupling"""
-    
+    """
+    Removes buses for sector coupling.
+    """
+
     num_levels = df.index.nlevels
-    
+
     if num_levels > 1:
-        condition = (
-            (df.index.get_level_values("bus").str.endswith(" gas")) | 
-            (df.index.get_level_values("bus").str.endswith(" gas storage"))
+        condition = (df.index.get_level_values("bus").str.endswith(" gas")) | (
+            df.index.get_level_values("bus").str.endswith(" gas storage")
         )
     else:
         condition = (
-            (df.index.str.endswith(" gas")) | 
-            (df.index.str.endswith(" gas storage")) | 
-            (df.index.str.endswith(" gas import")) | 
-            (df.index.str.endswith(" gas export"))
+            (df.index.str.endswith(" gas"))
+            | (df.index.str.endswith(" gas storage"))
+            | (df.index.str.endswith(" gas import"))
+            | (df.index.str.endswith(" gas export"))
         )
     return df.loc[~condition].copy()
 
+
 def remove_sector_links(df: pd.DataFrame) -> pd.DataFrame:
-    """Removes links for plotting capacity"""
+    """
+    Removes links for plotting capacity.
+    """
     pass
 
-def plot_emissions_map(n: pypsa.Network, regions: gpd.GeoDataFrame, save:str, **wildcards) -> None:
-     
-    # get data 
-    
+
+def plot_emissions_map(
+    n: pypsa.Network,
+    regions: gpd.GeoDataFrame,
+    save: str,
+    **wildcards,
+) -> None:
+
+    # get data
+
     emissions = (
         get_node_emissions_timeseries(n)
-        .groupby(level=0, axis=1) # group columns 
+        .groupby(level=0, axis=1)  # group columns
         .sum()
-        .sum() # collaps rows
-        .mul(1e-6) # T -> MT
+        .sum()  # collaps rows
+        .mul(1e-6)  # T -> MT
     )
     emissions = remove_sector_buses(emissions.T).T
     emissions.index.name = "bus"
-    
+
     # plot data
 
     fig, ax = plt.subplots(
@@ -722,7 +733,7 @@ def plot_capacity_map(
     bus_scale=1,
     line_scale=1,
     title=None,
-) -> Tuple[plt.figure, plt.axes]:
+) -> tuple[plt.figure, plt.axes]:
     """
     Generic network plotting function for capacity pie charts at each node.
     """
@@ -902,10 +913,10 @@ def plot_base_capacity_map(
     bus_values = get_capacity_base(n)
     bus_values = bus_values[bus_values.index.get_level_values(1).isin(carriers)]
     bus_values = remove_sector_buses(bus_values).groupby(by=["bus", "carrier"]).sum()
-    
+
     line_values = n.lines.s_nom
     link_values = n.links.p_nom.replace(0)
-    
+
     # plot data
 
     title = create_title("Base Network Capacities", **wildcards)
@@ -951,7 +962,7 @@ def plot_opt_capacity_map(
             f"Capacity method must be one of 'greenfield' or 'brownfield'. Recieved {opt_capacity}.",
         )
         raise NotImplementedError
-    
+
     # a little awkward to fix color plotting referece issue
     bus_values = bus_values[bus_values.index.get_level_values("carrier").isin(carriers)]
     bus_values = (
@@ -961,7 +972,7 @@ def plot_opt_capacity_map(
         .sum()
         .squeeze()
     )
-    
+
     line_values = n.lines.s_nom_opt
     # link_values = n.links.p_nom_opt
 
@@ -973,7 +984,7 @@ def plot_opt_capacity_map(
     line_scale = get_line_scale(interconnect) if interconnect else 1
 
     fig, _ = plot_capacity_map(
-        n=n, 
+        n=n,
         bus_values=bus_values.copy(),
         line_values=line_values,
         link_values=n.links.p_nom.replace(0),
@@ -1010,9 +1021,9 @@ def plot_new_capacity_map(
             f"Capacity method must be one of 'greenfield' or 'brownfield'. Recieved {opt_capacity}.",
         )
         raise NotImplementedError
-    
-    # awkward processing to fix color plotting issue 
-    
+
+    # awkward processing to fix color plotting issue
+
     bus_values = bus_pnom_opt - bus_pnom
     bus_values = bus_values[
         (bus_values > 0) & (bus_values.index.get_level_values(1).isin(carriers))
@@ -1024,7 +1035,7 @@ def plot_new_capacity_map(
         .sum()
         .squeeze()
     )
-    
+
     line_snom = n.lines.s_nom
     line_snom_opt = n.lines.s_nom_opt
     line_values = line_snom_opt - line_snom

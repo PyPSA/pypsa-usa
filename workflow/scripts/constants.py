@@ -17,13 +17,13 @@ GPS_CRS = "EPSG:4326"
 # convert euros to USD
 EUR_2_USD = 1.07  # taken on 12-12-2023
 
-# energy content of natural gas 
-# Assumes national averages for the conversion 
+# energy content of natural gas
+# Assumes national averages for the conversion
 # https://www.eia.gov/naturalgas/monthly/pdf/table_25.pdf
 # (1036 BTU / CF) * (0.293 Wh / 1 BTU) * (1 MWh / 1,000,000 Wh) * (1,000,000 CF / 1 MMCF) = 303.5 MWh / MMCF
 
-NG_MWH_2_MMCF = 303.5 # MWh / MMCF
-NG_MCF_2_MWH = 0.3035 # TODO get rid of this and just use single constant 
+NG_MWH_2_MMCF = 303.5  # MWh / MMCF
+NG_MCF_2_MWH = 0.3035  # TODO get rid of this and just use single constant
 
 ################################
 # Constants for ADS WECC mapping

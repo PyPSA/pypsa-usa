@@ -134,25 +134,41 @@ def get_demand_base(n: pypsa.Network) -> pd.DataFrame:
 
 
 def get_capacity_base(n: pypsa.Network) -> pd.DataFrame:
-    """Gets starting capacities
-    
+    """
+    Gets starting capacities.
+
     NOTE: Link capacities are grouped by both bus0 and bus1!!
-    It is up to the user to filter this by bus on the returned dataframe 
+    It is up to the user to filter this by bus on the returned dataframe
     """
     totals = []
     for c in n.iterate_components(n.one_port_components | n.branch_components):
         if c.name in ("Generator", "StorageUnit"):
             totals.append((c.df.p_nom).groupby(by=[c.df.bus, c.df.carrier]).sum())
         elif c.name == "Link":
-            totals.append((c.df.p_nom).groupby(by=[c.df.bus0,c.df.carrier]).sum().rename_axis(index={"bus0":"bus"})),
-            totals.append((c.df.p_nom).groupby(by=[c.df.bus1,c.df.carrier]).sum().rename_axis(index={"bus1":"bus"}))
+            totals.append(
+                (c.df.p_nom)
+                .groupby(by=[c.df.bus0, c.df.carrier])
+                .sum()
+                .rename_axis(index={"bus0": "bus"}),
+            ),
+            totals.append(
+                (c.df.p_nom)
+                .groupby(by=[c.df.bus1, c.df.carrier])
+                .sum()
+                .rename_axis(index={"bus1": "bus"}),
+            )
     return pd.concat(totals)
 
-def get_capacity_greenfield(n: pypsa.Network, retirement_method = "economic") -> pd.DataFrame:
-    """Gets optimal greenfield pnom capacity
-    
+
+def get_capacity_greenfield(
+    n: pypsa.Network,
+    retirement_method="economic",
+) -> pd.DataFrame:
+    """
+    Gets optimal greenfield pnom capacity.
+
     NOTE: Link capacities are grouped by both bus0 and bus1!!
-    It is up to the user to filter this by bus on the returned dataframe 
+    It is up to the user to filter this by bus on the returned dataframe
     """
 
     def _technical_retirement(c: pypsa.components.Component) -> pd.DataFrame:
@@ -160,10 +176,16 @@ def get_capacity_greenfield(n: pypsa.Network, retirement_method = "economic") ->
             # unidirectional links, so only take p0
             return pd.concat(
                 [
-                    (c.pnl.p0.max()).groupby(by=[c.df.bus0,c.df.carrier]).sum().rename_axis(index={"bus0":"bus"}),
-                    (c.pnl.p0.max()).groupby(by=[c.df.bus1,c.df.carrier]).sum().rename_axis(index={"bus1":"bus"})
-                ]
-            ) 
+                    (c.pnl.p0.max())
+                    .groupby(by=[c.df.bus0, c.df.carrier])
+                    .sum()
+                    .rename_axis(index={"bus0": "bus"}),
+                    (c.pnl.p0.max())
+                    .groupby(by=[c.df.bus1, c.df.carrier])
+                    .sum()
+                    .rename_axis(index={"bus1": "bus"}),
+                ],
+            )
         else:
             return (c.pnl.p.max()).groupby(by=[c.df.bus, c.df.carrier]).sum()
 
@@ -171,9 +193,15 @@ def get_capacity_greenfield(n: pypsa.Network, retirement_method = "economic") ->
         if c.name == "Link":
             return pd.concat(
                 [
-                    (c.df.p_nom_opt).groupby(by=[c.df.bus0,c.df.carrier]).sum().rename_axis(index={"bus0":"bus"}),
-                    (c.df.p_nom_opt).groupby(by=[c.df.bus1,c.df.carrier]).sum().rename_axis(index={"bus1":"bus"})
-                ]
+                    (c.df.p_nom_opt)
+                    .groupby(by=[c.df.bus0, c.df.carrier])
+                    .sum()
+                    .rename_axis(index={"bus0": "bus"}),
+                    (c.df.p_nom_opt)
+                    .groupby(by=[c.df.bus1, c.df.carrier])
+                    .sum()
+                    .rename_axis(index={"bus1": "bus"}),
+                ],
             )
         else:
             return (c.df.p_nom_opt).groupby(by=[c.df.bus, c.df.carrier]).sum()
@@ -195,20 +223,31 @@ def get_capacity_greenfield(n: pypsa.Network, retirement_method = "economic") ->
         )
         raise NotImplementedError
 
-def get_capacity_brownfield(n: pypsa.Network, retirement_method = "economic") -> pd.DataFrame:
-    """Gets optimal brownfield pnom capacity
-    
-    NOTE: Link capacities are grouped by both bus0 and bus1!!
-    It is up to the user to filter this by bus on the returned dataframe 
+
+def get_capacity_brownfield(
+    n: pypsa.Network,
+    retirement_method="economic",
+) -> pd.DataFrame:
     """
-    
-    def _technical_retirement(c:pypsa.components.Component) -> pd.DataFrame:
+    Gets optimal brownfield pnom capacity.
+
+    NOTE: Link capacities are grouped by both bus0 and bus1!!
+    It is up to the user to filter this by bus on the returned dataframe
+    """
+
+    def _technical_retirement(c: pypsa.components.Component) -> pd.DataFrame:
         if c.name == "Link":
             return pd.concat(
                 [
-                    (c.df.p_nom_opt).groupby(by=[c.df.bus0,c.df.carrier]).sum().rename_axis(index={"bus0":"bus"}),
-                    (c.df.p_nom_opt).groupby(by=[c.df.bus1,c.df.carrier]).sum().rename_axis(index={"bus1":"bus"})
-                ]
+                    (c.df.p_nom_opt)
+                    .groupby(by=[c.df.bus0, c.df.carrier])
+                    .sum()
+                    .rename_axis(index={"bus0": "bus"}),
+                    (c.df.p_nom_opt)
+                    .groupby(by=[c.df.bus1, c.df.carrier])
+                    .sum()
+                    .rename_axis(index={"bus1": "bus"}),
+                ],
             )
         else:
             return (c.df.p_nom_opt).groupby(by=[c.df.bus, c.df.carrier]).sum()
@@ -217,9 +256,15 @@ def get_capacity_brownfield(n: pypsa.Network, retirement_method = "economic") ->
         if c.name == "Link":
             return pd.concat(
                 [
-                    (c.df.p_nom_opt).groupby(by=[c.df.bus0,c.df.carrier]).sum().rename_axis(index={"bus0":"bus"}),
-                    (c.df.p_nom_opt).groupby(by=[c.df.bus1,c.df.carrier]).sum().rename_axis(index={"bus1":"bus"})
-                ]
+                    (c.df.p_nom_opt)
+                    .groupby(by=[c.df.bus0, c.df.carrier])
+                    .sum()
+                    .rename_axis(index={"bus0": "bus"}),
+                    (c.df.p_nom_opt)
+                    .groupby(by=[c.df.bus1, c.df.carrier])
+                    .sum()
+                    .rename_axis(index={"bus1": "bus"}),
+                ],
             )
         else:
             return (c.df.p_nom_opt).groupby(by=[c.df.bus, c.df.carrier]).sum()
