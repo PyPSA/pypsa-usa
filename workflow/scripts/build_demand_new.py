@@ -68,7 +68,9 @@ class Context:
     """
 
     def __init__(
-        self, read_strategy: ReadStrategy, write_strategy: WriteStrategy
+        self,
+        read_strategy: ReadStrategy,
+        write_strategy: WriteStrategy,
     ) -> None:
         self._read_strategy = read_strategy
         self._write_strategy = write_strategy
@@ -178,7 +180,9 @@ class ReadStrategy(ABC):
 
     @staticmethod
     def _filter_pandas(
-        df: pd.DataFrame, index: str, value: list[str] | list[int]
+        df: pd.DataFrame,
+        index: str,
+        value: list[str] | list[int],
     ) -> pd.DataFrame:
         return df[df[index].isin(value)].copy()
 
@@ -303,11 +307,14 @@ class WriteStrategy(ABC):
         df = df.set_index("HOUR")
         df = df.loc[n.snapshots.intersection(df.index)]
         return df.reset_index(names="HOUR").drop_duplicates(
-            subset=["HOUR", "REGION", "YEAR", "FUEL", "SECTOR"], keep="first"
+            subset=["HOUR", "REGION", "YEAR", "FUEL", "SECTOR"],
+            keep="first",
         )
 
     def disaggregate_demand_to_buses(
-        self, df: pd.DataFrame, n: pypsa.Network
+        self,
+        df: pd.DataFrame,
+        n: pypsa.Network,
     ) -> pd.DataFrame:
         """
         Zone power demand is disaggregated to buses proportional to Pd.
