@@ -180,7 +180,7 @@ def prepare_efs_demand(
             .apply(
                 lambda group: group.loc[
                     group.drop(columns="UTC_Time").first_valid_index()
-                ]
+                ],
             )
             .drop(columns="UTC_Time")
         )
@@ -259,7 +259,7 @@ def main(snakemake):
         )
     else:
         raise ValueError(
-            "Invalid demand_type. Supported values are 'ads', and 'pypsa-usa'."
+            "Invalid demand_type. Supported values are 'ads', and 'pypsa-usa'.",
         )
 
     demand_per_bus.to_csv(snakemake.output.demand, index=True)
