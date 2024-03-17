@@ -16,6 +16,7 @@ rule copy_config:
     script:
         "../scripts/subworkflows/pypsa-eur/scripts/copy_config.py"
 
+
 rule plot_network_maps:
     input:
         network=RESULTS
@@ -43,6 +44,7 @@ rule plot_network_maps:
     script:
         "../scripts/plot_network_maps.py"
 
+
 rule plot_natural_gas:
     input:
         network="results/{interconnect}/networks/elec_s_{clusters}_ec_l{ll}_{opts}_{sector}.nc",
@@ -59,6 +61,7 @@ rule plot_natural_gas:
         "logs/plot_figures/gas/{interconnect}_{clusters}_l{ll}_{opts}_{sector}.log",
     script:
         "../scripts/plot_natural_gas.py"
+
 
 rule plot_statistics:
     input:

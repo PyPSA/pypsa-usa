@@ -148,6 +148,7 @@ def create_title(title: str, **wildcards) -> str:
     wildcards_joined = " | ".join(w)
     return f"{title} \n ({wildcards_joined})"
 
+
 def remove_sector_buses(df: pd.DataFrame) -> pd.DataFrame:
     """
     Removes buses for sector coupling.

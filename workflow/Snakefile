@@ -18,7 +18,7 @@ FIGURES_MAPS = [
     "emissions_map.pdf",
     "renewable_potential_map.pdf",
     "demand_map.pdf",
-    "lmp_map.pdf"
+    "lmp_map.pdf",
 ]
 
 FIGURES_EMISSIONS = [
@@ -29,7 +29,7 @@ FIGURES_EMISSIONS = [
     # "emissions_node.html",
     "emissions_region.html",
     "emissions_accumulated_tech.html",
-    "bar_regional_emissions.pdf"
+    "bar_regional_emissions.pdf",
 ]
 
 FIGURES_PRODUCTION = [
@@ -62,6 +62,7 @@ FIGURES_VALIDATE = [
     "val_box_region_lmps.pdf",
     "val_map_load_shedding.pdf",
 ]
+
 
 # --------------------------- Workflow constraints --------------------------- #
 localrules:
@@ -175,6 +176,7 @@ def sector_figures(wildcards):
             figure=FIGURES_NATURAL_GAS,
         )
 
+
 def validation_figures(wildcards):
     print(config["run"])
     print(config["run"]["validation"])
@@ -193,7 +195,7 @@ rule all:
     input:
         electricity_figures,
         sector_figures,
-        validation_figures
+        validation_figures,
         #"repo_data/dag.jpg",
 
 

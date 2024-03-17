@@ -90,7 +90,7 @@ import plotly.graph_objects as go
 TITLE_SIZE = 16
 
 
-def get_color_palette(n: pypsa.Network) -> Dict[str,str]:
+def get_color_palette(n: pypsa.Network) -> dict[str, str]:
     """
     Returns colors based on nice name.
     """
@@ -770,6 +770,7 @@ def plot_accumulated_emissions_tech(n: pypsa.Network, save: str, **wildcards) ->
 
     fig.savefig(save)
 
+
 def plot_accumulated_emissions(n: pypsa.Network, save: str, **wildcards) -> None:
     """
     Plots accumulated emissions.
@@ -799,6 +800,7 @@ def plot_accumulated_emissions(n: pypsa.Network, save: str, **wildcards) -> None
     fig.tight_layout()
 
     fig.savefig(save)
+
 
 def plot_curtailment_heatmap(n: pypsa.Network, save: str, **wildcards) -> None:
     curtailment = n.statistics.curtailment(aggregate_time=False)
