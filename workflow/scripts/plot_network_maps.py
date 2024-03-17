@@ -43,13 +43,6 @@ Emission charts for:
 """
 
 import logging
-import os
-import sys
-from datetime import datetime
-from pathlib import Path
-from typing import Dict
-from typing import List
-from typing import Union
 
 import geopandas as gpd
 import matplotlib.pyplot as plt
@@ -65,17 +58,12 @@ from pypsa.plot import add_legend_patches
 logger = logging.getLogger(__name__)
 from _helpers import configure_logging
 from summary import (
-    get_demand_timeseries,
-    get_energy_timeseries,
     get_node_emissions_timeseries,
-    get_tech_emissions_timeseries,
     get_capacity_base,
     get_capacity_brownfield,
     get_demand_base,
-    get_capital_costs,
 )
 from add_electricity import (
-    add_nice_carrier_names,
     sanitize_carriers,
 )
 
@@ -89,9 +77,6 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import geopandas as gpd
 import cartopy.crs as ccrs
-
-import plotly.express as px
-import plotly.graph_objects as go
 
 
 # Global Plotting Settings
@@ -163,46 +148,25 @@ def create_title(title: str, **wildcards) -> str:
     wildcards_joined = " | ".join(w)
     return f"{title} \n ({wildcards_joined})"
 
-
-def correct_ccgt_ocgt_buses(df: pd.DataFrame):
+def remove_sector_buses(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Changes ocgt and ccgt LINK buses from xx_gas to just xx to plot.
-
-    Only needed when plotting gas sector results, as OCGT and CCGT
-    generators are changed to links and grouped to bus0, which has the
-    suffix " gas"
-
-    Input dataframe should have mulitlvel index, where the first level
-    is the bus name
+    Removes buses for sector coupling.
     """
 
-    condition = (df.index.get_level_values("bus").str.endswith(" gas")) & (
-        df.index.get_level_values("carrier").isin(["OCGT", "ocgt", "CCGT", "ccgt"])
-    )
-    return df.rename(
-        index={
-            x: x.replace(" gas", "")
-            for x in df.loc[condition].index.get_level_values("bus")
-        },
-        level="bus",
-    )
+    num_levels = df.index.nlevels
 
-
-def correct_ccgt_ocgt_buses_single_index(df: pd.DataFrame):
-    """
-    Changes ocgt and ccgt LINK buses from xx_gas to just xx to plot.
-
-    Only needed when plotting gas sector results, as OCGT and CCGT
-    generators are changed to links and grouped to bus0, which has the
-    suffix " gas"
-    """
-
-    condition = df.index.str.endswith(" gas")
-    return (
-        df.rename(index={x: x.replace(" gas", "") for x in df.loc[condition].index})
-        .groupby(level=0)
-        .sum()
-    )
+    if num_levels > 1:
+        condition = (df.index.get_level_values("bus").str.endswith(" gas")) | (
+            df.index.get_level_values("bus").str.endswith(" gas storage")
+        )
+    else:
+        condition = (
+            (df.index.str.endswith(" gas"))
+            | (df.index.str.endswith(" gas storage"))
+            | (df.index.str.endswith(" gas import"))
+            | (df.index.str.endswith(" gas export"))
+        )
+    return df.loc[~condition].copy()
 
 
 def plot_emissions_map(
@@ -214,8 +178,15 @@ def plot_emissions_map(
 
     # get data
 
-    emissions = get_node_emissions_timeseries(n).sum().mul(1e-6)  # T -> MT
-    emissions = correct_ccgt_ocgt_buses_single_index(emissions)
+    emissions = (
+        get_node_emissions_timeseries(n)
+        .groupby(level=0, axis=1)  # group columns
+        .sum()
+        .sum()  # collaps rows
+        .mul(1e-6)  # T -> MT
+    )
+    emissions = remove_sector_buses(emissions.T).T
+    emissions.index.name = "bus"
 
     # plot data
 
@@ -249,16 +220,6 @@ def plot_emissions_map(
     )
     ax.set_extent(regions.total_bounds[[0, 2, 1, 3]])
 
-    # legend_kwargs = {"loc": "upper left", "frameon": False}
-    # bus_sizes = [0.01, 0.1, 1]  # in Tonnes
-    #
-    # add_legend_circles(
-    #     ax,
-    #     [s / bus_scale for s in bus_sizes],
-    #     [f"{s / 1000} Tonnes" for s in bus_sizes],
-    #     legend_kw={"bbox_to_anchor": (1, 1), **legend_kwargs},
-    # )
-
     title = create_title("Emissions (MTonne)", **wildcards)
     ax.set_title(title, fontsize=TITLE_SIZE, pad=20)
     fig.tight_layout()
@@ -275,7 +236,7 @@ def plot_capacity_map(
     bus_scale=1,
     line_scale=1,
     title=None,
-) -> (plt.figure, plt.axes):
+) -> tuple[plt.figure, plt.axes]:
     """
     Generic network plotting function for capacity pie charts at each node.
     """
@@ -453,12 +414,12 @@ def plot_base_capacity_map(
     # get data
 
     bus_values = get_capacity_base(n)
-    bus_values = (
-        correct_ccgt_ocgt_buses(bus_values).groupby(by=["bus", "carrier"]).sum()
-    )
     bus_values = bus_values[bus_values.index.get_level_values(1).isin(carriers)]
+    bus_values = remove_sector_buses(bus_values).groupby(by=["bus", "carrier"]).sum()
+
     line_values = n.lines.s_nom
-    # link_values = n.links.p_nom
+    link_values = n.links.p_nom.replace(0)
+
     # plot data
 
     title = create_title("Base Network Capacities", **wildcards)
@@ -497,11 +458,14 @@ def plot_opt_capacity_map(
 
     bus_values = get_capacity_brownfield(n)
 
+    bus_values = bus_values[bus_values.index.get_level_values("carrier").isin(carriers)]
     bus_values = (
-        correct_ccgt_ocgt_buses(bus_values).groupby(by=["bus", "carrier"]).sum()
+        remove_sector_buses(bus_values)
+        .reset_index()
+        .groupby(by=["bus", "carrier"])
+        .sum()
+        .squeeze()
     )
-    bus_values = bus_values[bus_values.index.get_level_values(1).isin(carriers)]
-
     line_values = n.lines.s_nom_opt
 
     # plot data
@@ -543,12 +507,16 @@ def plot_new_capacity_map(
     bus_pnom_opt = get_capacity_brownfield(n)
 
     bus_values = bus_pnom_opt - bus_pnom
-    bus_values = (
-        correct_ccgt_ocgt_buses(bus_values).groupby(by=["bus", "carrier"]).sum()
-    )
     bus_values = bus_values[
         (bus_values > 0) & (bus_values.index.get_level_values(1).isin(carriers))
     ]
+    bus_values = (
+        remove_sector_buses(bus_values)
+        .reset_index()
+        .groupby(by=["bus", "carrier"])
+        .sum()
+        .squeeze()
+    )
 
     line_snom = n.lines.s_nom
     line_snom_opt = n.lines.s_nom_opt
@@ -704,7 +672,7 @@ if __name__ == "__main__":
         n,
         onshore_regions,
         carriers,
-        snakemake.output["capacity_map_base"],
+        snakemake.output["capacity_map_base.pdf"],
         **snakemake.wildcards,
     )
     plot_opt_capacity_map(
@@ -712,32 +680,32 @@ if __name__ == "__main__":
         onshore_regions,
         carriers,
         **snakemake.wildcards,
-        save=snakemake.output["capacity_map_optimized"],
+        save=snakemake.output["capacity_map_optimized.pdf"],
     )
     plot_new_capacity_map(
         n,
         onshore_regions,
         carriers,
         **snakemake.wildcards,
-        save=snakemake.output["capacity_map_new"],
+        save=snakemake.output["capacity_map_new.pdf"],
     )
     plot_demand_map(
         n,
         onshore_regions,
         carriers,
-        snakemake.output["demand_map"],
+        snakemake.output["demand_map.pdf"],
         **snakemake.wildcards,
     )
     plot_emissions_map(
         n,
         onshore_regions,
-        snakemake.output["emissions_map"],
+        snakemake.output["emissions_map.pdf"],
         **snakemake.wildcards,
     )
     plot_renewable_potential(
         n,
         onshore_regions,
-        snakemake.output["renewable_potential_map"],
+        snakemake.output["renewable_potential_map.pdf"],
         **snakemake.wildcards,
     )
-    plot_lmp_map(n, snakemake.output["lmp_map"], **snakemake.wildcards)
+    plot_lmp_map(n, snakemake.output["lmp_map.pdf"], **snakemake.wildcards)

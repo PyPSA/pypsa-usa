@@ -89,6 +89,8 @@ rule plot_statistics:
             % fig
             for fig in FIGURES_SYSTEM
         },
+    log:
+        "logs/plot_figures/{interconnect}_{clusters}_l{ll}_{opts}_{sector}.log",
     threads: 1
     resources:
         mem_mb=5000,

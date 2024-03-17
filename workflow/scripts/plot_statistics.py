@@ -69,8 +69,6 @@ from summary import (
     get_energy_timeseries,
     get_node_emissions_timeseries,
     get_tech_emissions_timeseries,
-    get_capacity_base,
-    get_demand_base,
     get_capital_costs,
     get_generator_marginal_costs,
 )
@@ -98,7 +96,7 @@ import plotly.graph_objects as go
 TITLE_SIZE = 16
 
 
-def get_color_palette(n: pypsa.Network) -> pd.Series:
+def get_color_palette(n: pypsa.Network) -> Dict[str,str]:
     """
     Returns colors based on nice name.
     """
@@ -758,6 +756,35 @@ def plot_accumulated_emissions_tech(n: pypsa.Network, save: str, **wildcards) ->
 
     fig.savefig(save)
 
+def plot_accumulated_emissions(n: pypsa.Network, save: str, **wildcards) -> None:
+    """
+    Plots accumulated emissions.
+    """
+
+    # get data
+
+    emissions = get_tech_emissions_timeseries(n).mul(1e-6).sum(axis=1)  # T -> MT
+    emissions = emissions.cumsum().to_frame("co2")
+
+    # plot
+
+    color_palette = get_color_palette(n)
+
+    fig, ax = plt.subplots(figsize=(14, 4))
+
+    emissions.plot.area(
+        ax=ax,
+        alpha=0.7,
+        legend="reverse",
+        color=color_palette,
+    )
+
+    ax.legend(bbox_to_anchor=(1, 1), loc="upper left")
+    ax.set_title(create_title("Accumulated Emissions", **wildcards))
+    ax.set_ylabel("Emissions [MT]")
+    fig.tight_layout()
+
+    fig.savefig(save)
 
 def plot_curtailment_heatmap(n: pypsa.Network, save: str, **wildcards) -> None:
     curtailment = n.statistics.curtailment(aggregate_time=False)
@@ -1103,34 +1130,34 @@ if __name__ == "__main__":
     plot_capacity_additions_bar(
         n,
         carriers,
-        snakemake.output["capacity_additions_bar"],
+        snakemake.output["capacity_additions_bar.pdf"],
         **snakemake.wildcards,
     )
     plot_costs_bar(
         n,
         carriers,
-        snakemake.output["costs_bar"],
+        snakemake.output["costs_bar.pdf"],
         **snakemake.wildcards,
     )
     plot_production_bar(
         n,
         carriers,
-        snakemake.output["production_bar"],
+        snakemake.output["production_bar.pdf"],
         **snakemake.wildcards,
     )
     plot_global_constraint_shadow_prices(
         n,
-        snakemake.output["global_constraint_shadow_prices"],
+        snakemake.output["global_constraint_shadow_prices.pdf"],
         **snakemake.wildcards,
     )
     plot_regional_capacity_additions_bar(
         n,
-        snakemake.output["bar_regional_capacity_additions"],
+        snakemake.output["bar_regional_capacity_additions.pdf"],
         **snakemake.wildcards,
     )
     plot_regional_emissions_bar(
         n,
-        snakemake.output["bar_regional_emissions"],
+        snakemake.output["bar_regional_emissions.pdf"],
         **snakemake.wildcards,
     )
 
@@ -1138,27 +1165,32 @@ if __name__ == "__main__":
     plot_production_area(
         n,
         carriers,
-        snakemake.output["production_area"],
+        snakemake.output["production_area.pdf"],
         **snakemake.wildcards,
     )
     plot_hourly_emissions(
         n,
-        snakemake.output["emissions_area"],
+        snakemake.output["emissions_area.pdf"],
         **snakemake.wildcards,
     )
     plot_accumulated_emissions_tech(
         n,
-        snakemake.output["emissions_accumulated_tech"],
+        snakemake.output["emissions_accumulated_tech.pdf"],
+        **snakemake.wildcards,
+    )
+    plot_accumulated_emissions(
+        n,
+        snakemake.output["emissions_accumulated.pdf"],
         **snakemake.wildcards,
     )
     plot_curtailment_heatmap(
         n,
-        snakemake.output["curtailment_heatmap"],
+        snakemake.output["curtailment_heatmap.pdf"],
         **snakemake.wildcards,
     )
     plot_capacity_factor_heatmap(
         n,
-        snakemake.output["capfac_heatmap"],
+        snakemake.output["capfac_heatmap.pdf"],
         **snakemake.wildcards,
     )
 
@@ -1166,36 +1198,36 @@ if __name__ == "__main__":
     plot_production_html(
         n,
         carriers,
-        snakemake.output["production_area_html"],
+        snakemake.output["production_area.html"],
         **snakemake.wildcards,
     )
     plot_hourly_emissions_html(
         n,
-        snakemake.output["emissions_area_html"],
+        snakemake.output["emissions_area.html"],
         **snakemake.wildcards,
     )
     plot_accumulated_emissions_tech_html(
         n,
-        snakemake.output["emissions_accumulated_tech_html"],
+        snakemake.output["emissions_accumulated_tech.html"],
         **snakemake.wildcards,
     )
     plot_region_emissions_html(
         n,
-        snakemake.output["emissions_region_html"],
+        snakemake.output["emissions_region.html"],
         **snakemake.wildcards,
     )
 
     # Panel Plots
     plot_generator_data_panel(
         n,
-        snakemake.output["generator_data_panel"],
+        snakemake.output["generator_data_panel.pdf"],
         **snakemake.wildcards,
     )
 
     # Box Plot
     plot_region_lmps(
         n,
-        snakemake.output["region_lmps"],
+        snakemake.output["region_lmps.pdf"],
         **snakemake.wildcards,
     )
 
@@ -1203,7 +1235,7 @@ if __name__ == "__main__":
         # California Emissions
         plot_california_emissions(
             n,
-            Path(snakemake.output["region_lmps"]).parents[0]
+            Path(snakemake.output["region_lmps.pdf"]).parents[0]
             / "california_emissions.png",
             **snakemake.wildcards,
         )

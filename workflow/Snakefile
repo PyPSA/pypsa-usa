@@ -29,7 +29,7 @@ FIGURES_EMISSIONS = [
     # "emissions_node.html",
     "emissions_region.html",
     "emissions_accumulated_tech.html",
-    "emissions_bar_regional.pdf"
+    "bar_regional_emissions.pdf"
 ]
 
 FIGURES_PRODUCTION = [
