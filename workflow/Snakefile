@@ -8,7 +8,60 @@ from snakemake.remote.HTTP import RemoteProvider as HTTPRemoteProvider
 HTTP = HTTPRemoteProvider()
 
 from os.path import normpath
+from itertools import chain
 from pathlib import Path
+
+FIGURES_MAPS = [
+    "capacity_map_base.pdf",
+    "capacity_map_optimized.pdf",
+    "capacity_map_new.pdf",
+    "emissions_map.pdf",
+    "renewable_potential_map.pdf",
+    "demand_map.pdf",
+    "lmp_map.pdf",
+]
+
+FIGURES_EMISSIONS = [
+    "emissions_area.pdf",
+    "emissions_accumulated.pdf",
+    "emissions_accumulated_tech.pdf",
+    "emissions_area.html",
+    # "emissions_node.html",
+    "emissions_region.html",
+    "emissions_accumulated_tech.html",
+    "bar_regional_emissions.pdf",
+]
+
+FIGURES_PRODUCTION = [
+    "production_area.pdf",
+    "production_area.html",
+]
+
+FIGURES_SYSTEM = [
+    "production_bar.pdf",
+    "capacity_additions_bar.pdf",
+    "costs_bar.pdf",
+    "bar_regional_capacity_additions.pdf",
+    "global_constraint_shadow_prices.pdf",
+    "generator_data_panel.pdf",
+    "curtailment_heatmap.pdf",
+    "capfac_heatmap.pdf",
+    "region_lmps.pdf",
+]
+
+FIGURES_NATURAL_GAS = ["natural_gas.html"]
+
+FIGURES_VALIDATE = [
+    "seasonal_stacked_plot.pdf",
+    "carrier_production_bar.pdf",
+    "production_deviation_bar.pdf",
+    "val_bar_regional_emissions.pdf",
+    "val_generator_data_panel.pdf",
+    "val_heatmap_curtailment.pdf",
+    "val_heatmap_capacity_factor.pdf",
+    "val_box_region_lmps.pdf",
+    "val_map_load_shedding.pdf",
+]
 
 
 # --------------------------- Workflow constraints --------------------------- #
@@ -31,10 +84,12 @@ wildcard_constraints:
 
 
 # Merge subworkflow configs and main config
-configfile: "config/tests/config.validation.yaml"
+# configfile: "config/tests/config.validation.yaml"
+configfile: "config/config.default.yaml"
 configfile: "config/config.cluster.yaml"
 configfile: "config/config.osw.yaml"
 configfile: "config/config.plotting.yaml"
+configfile: "config/config.api.yaml"
 
 
 run = config.get("run", {})
@@ -63,23 +118,85 @@ if "E" not in config["scenario"]["sector"]:
     else:
         config["scenario"]["sector"] = f"E-{config['scenario']['sector']}"
 
-if config["run"]["validation"]:
-    COLLECT_FIGURES = FIGURES_VALIDATE
-else:
-    COLLECT_FIGURES = FIGURES_STATS + FIGURES_MAPS
-
 # ----------------------------------- Rules ---------------------------------- #
+
+
+def electricity_figures(wildcards):
+    figs = []
+    # maps
+    figs.append(
+        expand(
+            RESULTS
+            + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/maps/{figure}",
+            **config["scenario"],
+            figure=FIGURES_MAPS,
+        )
+    )
+    # emissions
+    figs.append(
+        expand(
+            RESULTS
+            + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/emissions/{figure}",
+            **config["scenario"],
+            figure=FIGURES_EMISSIONS,
+        )
+    )
+    # production
+    figs.append(
+        expand(
+            RESULTS
+            + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/production/{figure}",
+            **config["scenario"],
+            figure=FIGURES_PRODUCTION,
+        )
+    )
+    # system
+    figs.append(
+        expand(
+            RESULTS
+            + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/system/{figure}",
+            **config["scenario"],
+            figure=FIGURES_SYSTEM,
+        )
+    )
+    return list(chain(*figs))  # expand list of lists to single list
+
+
+def sector_figures(wildcards):
+    figs = []
+    if "G" in config["scenario"]["sector"].split("-"):
+        figs.append("natural_gas.html")
+    if not figs:
+        return []
+    else:
+        return expand(
+            RESULTS
+            + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/gas/{figure}",
+            **config["scenario"],
+            figure=FIGURES_NATURAL_GAS,
+        )
+
+
+def validation_figures(wildcards):
+    print(config["run"])
+    print(config["run"]["validation"])
+    if config["run"]["validation"]:
+        return expand(
+            RESULTS
+            + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/validation/{figure}",
+            **config["scenario"],
+            figure=FIGURES_VALIDATE,
+        )
+    else:
+        return []
 
 
 rule all:
     input:
-        expand(
-            RESULTS
-            + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/{figure}.pdf",
-            **config["scenario"],
-            figure=COLLECT_FIGURES,
-        ),
-        "repo_data/dag.jpg",
+        electricity_figures,
+        sector_figures,
+        validation_figures,
+        #"repo_data/dag.jpg",
 
 
 # Create DAG with-

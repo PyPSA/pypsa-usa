@@ -17,17 +17,6 @@ rule copy_config:
         "../scripts/subworkflows/pypsa-eur/scripts/copy_config.py"
 
 
-FIGURES_MAPS = [
-    "capacity_map_base",
-    "capacity_map_optimized",
-    "capacity_map_new",
-    "demand_map",
-    "emissions_map",
-    "renewable_potential_map",
-    "lmp_map",
-]
-
-
 rule plot_network_maps:
     input:
         network=RESULTS
@@ -43,7 +32,7 @@ rule plot_network_maps:
     output:
         **{
             fig: RESULTS
-            + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/%s.pdf"
+            + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/maps/%s"
             % fig
             for fig in FIGURES_MAPS
         },
@@ -56,28 +45,22 @@ rule plot_network_maps:
         "../scripts/plot_network_maps.py"
 
 
-FIGURES_SINGLE_HTML = [
-    "production_area_html",
-    "emissions_area_html",
-    "emissions_region_html",
-    "emissions_accumulated_tech_html",
-]
-
-FIGURES_STATS = [
-    "costs_bar",
-    "production_bar",
-    "production_area",
-    "emissions_area",
-    "emissions_accumulated_tech",
-    "capacity_additions_bar",
-    "bar_regional_capacity_additions",
-    "bar_regional_emissions",
-    "global_constraint_shadow_prices",
-    "generator_data_panel",
-    "curtailment_heatmap",
-    "capfac_heatmap",
-    "region_lmps",
-]
+rule plot_natural_gas:
+    input:
+        network="results/{interconnect}/networks/elec_s_{clusters}_ec_l{ll}_{opts}_{sector}.nc",
+    params:
+        plotting=config["plotting"],
+    output:
+        **{
+            fig: RESULTS
+            + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/gas/%s"
+            % fig
+            for fig in FIGURES_NATURAL_GAS
+        },
+    log:
+        "logs/plot_figures/gas/{interconnect}_{clusters}_l{ll}_{opts}_{sector}.log",
+    script:
+        "../scripts/plot_natural_gas.py"
 
 
 rule plot_statistics:
@@ -95,15 +78,21 @@ rule plot_statistics:
     output:
         **{
             fig: RESULTS
-            + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/%s.pdf"
+            + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/emissions/%s"
             % fig
-            for fig in FIGURES_STATS
+            for fig in FIGURES_EMISSIONS
         },
         **{
             fig: RESULTS
-            + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/html/%s.html"
+            + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/production/%s"
             % fig
-            for fig in FIGURES_SINGLE_HTML
+            for fig in FIGURES_PRODUCTION
+        },
+        **{
+            fig: RESULTS
+            + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/system/%s"
+            % fig
+            for fig in FIGURES_SYSTEM
         },
     log:
         "logs/plot_figures/{interconnect}_{clusters}_l{ll}_{opts}_{sector}.log",

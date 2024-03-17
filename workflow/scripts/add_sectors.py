@@ -1,17 +1,11 @@
 """
 Generic module to add a new energy network.
 
-Creates new sector ontop of existing one. Note: Currently, can only be built ontop of electricity sector
-
-Marginal costs are handeled as follows:
-- Links are the VOM of just the technology
-- Replacement generators contain time varrying fuel costs
+Reads in the sector wildcard and will call corresponding scripts. In the
+future, it would be good to integrate this logic into snakemake
 """
 
 import logging
-from typing import Dict
-from typing import List
-from typing import Union
 
 import geopandas as gpd
 import pandas as pd
@@ -19,7 +13,6 @@ import pypsa
 
 logger = logging.getLogger(__name__)
 from _helpers import configure_logging
-from add_electricity import load_costs
 from build_natural_gas import build_natural_gas
 from shapely.geometry import Point
 import constants
@@ -58,56 +51,13 @@ def assign_bus_2_state(
         n.buses["STATE_NAME"] = n.buses.STATE.map(state_2_state_name)
 
 
-def convert_generators_2_links(n: pypsa.Network, carrier: str, bus0_suffix: str):
-    """
-    Replace Generators with cross sector links.
-
-    Links bus1 are the bus the generator is attached to. Links bus0 are state
-    level followed by the suffix (ie. "WA gas" if " gas" is the bus0_suffix)
-
-    n: pypsa.Network,
-    carrier: str,
-        carrier of the generator to convert to a link
-    bus0_suffix: str,
-        suffix to attach link to
-    """
-
-    plants = n.generators[n.generators.carrier == carrier].copy()
-    plants["STATE"] = plants.bus.map(n.buses.STATE)
-
-    n.madd(
-        "Link",
-        names=plants.index,
-        bus0=plants.STATE + bus0_suffix,
-        bus1=plants.bus,
-        carrier=plants.carrier,
-        p_nom_min=plants.p_nom_min,
-        p_nom=plants.p_nom,
-        p_nom_max=plants.p_nom_max,
-        p_nom_extendable=plants.p_nom_extendable,
-        ramp_limit_up=plants.ramp_limit_up,
-        ramp_limit_down=plants.ramp_limit_down,
-        efficiency=plants.efficiency,
-        marginal_cost=plants.marginal_cost,
-        capital_cost=plants.capital_cost,
-        lifetime=plants.lifetime,
-    )
-
-    # copy time varrying parameters
-    # for gen in plants.index:
-    #     n.
-
-    # remove generators
-    n.mremove("Generator", plants.index)
-
-
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
 
         snakemake = mock_snakemake(
             "add_sectors",
-            interconnect="texas",
+            interconnect="western",
             # simpl="",
             clusters="40",
             ll="v1.25",
@@ -141,30 +91,17 @@ if __name__ == "__main__":
         ]
 
     code_2_state = {v: k for k, v in constants.STATE_2_CODE.items()}
-    assign_bus_2_state(n, snakemake.input.counties, states_2_map, code_2_state)
-
-    # params = snakemake.params
-
-    # Nyears = n.snapshot_weightings.objective.sum() / 8760.0
-    # costs = load_costs(
-    #     snakemake.input.tech_costs,
-    #     params.costs,
-    #     params.electricity["max_hours"],
-    #     Nyears,
-    # )
+    assign_bus_2_state(n, snakemake.input.county, states_2_map, code_2_state)
 
     if "G" in sectors:
         build_natural_gas(
             n=n,
+            year=pd.to_datetime(snakemake.params.snapshots["start"]).year,
+            api=snakemake.params.api["eia"],
             interconnect=snakemake.wildcards.interconnect,
-            counties=snakemake.input.counties,
-            eia_757=snakemake.input.eia_757,
-            eia_191=snakemake.input.eia_191,
-            pipelines=snakemake.input.pipelines,
+            county_path=snakemake.input.county,
+            pipelines_path=snakemake.input.pipeline_capacity,
+            pipeline_shape_path=snakemake.input.pipeline_shape,
         )
-
-        # convert existing generators to links
-        for carrier in ("CCGT", "OCGT"):
-            convert_generators_2_links(n, carrier, " gas")
 
     n.export_to_netcdf(snakemake.output.network)

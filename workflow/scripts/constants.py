@@ -18,9 +18,12 @@ GPS_CRS = "EPSG:4326"
 EUR_2_USD = 1.07  # taken on 12-12-2023
 
 # energy content of natural gas
-# (1 MCF) * (1.036 MMBTU / 1 MCF) * (0.293 MWh / 1 MMBTU) = #/MWh_thermal
-# https://www.eia.gov/tools/faqs/faq.php?id=45&t=8
-NG_MCF_2_MWH = 0.3035
+# Assumes national averages for the conversion
+# https://www.eia.gov/naturalgas/monthly/pdf/table_25.pdf
+# (1036 BTU / CF) * (0.293 Wh / 1 BTU) * (1 MWh / 1,000,000 Wh) * (1,000,000 CF / 1 MMCF) = 303.5 MWh / MMCF
+
+NG_MWH_2_MMCF = 303.5  # MWh / MMCF
+NG_MCF_2_MWH = 0.3035  # TODO get rid of this and just use single constant
 
 # $/MMBtu * (1 MMBtu / 0.293 MWh) = $/MWh_thermal
 NG_Dol_MMBTU_2_MWH = 3.4129
