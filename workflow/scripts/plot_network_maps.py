@@ -249,21 +249,10 @@ def plot_capacity_map(
     line_width = line_values / line_scale
     link_width = link_values / line_scale
 
-    # temp hack for battery colors
-    bus_colors = pd.concat(
-        [
-            n.carriers.color,
-            # pd.Series(
-            #     [n.carriers.color["battery"], n.carriers.color["battery"]],
-            #     index=["battery charger", "battery discharger"],
-            # ),
-        ],
-    )
-
     with plt.rc_context({"patch.linewidth": 0.1}):
         n.plot(
             bus_sizes=bus_values / bus_scale,
-            bus_colors=bus_colors,
+            bus_colors=n.carriers.color,
             bus_alpha=0.7,
             line_widths=line_width,
             link_widths=0 if link_width.empty else link_width,

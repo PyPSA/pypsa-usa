@@ -328,6 +328,9 @@ class GasStorage(GasData):
         df.index = df.STATE
         df["state_name"] = df.index.map(self.state_2_name)
 
+        if "gas storage" not in n.carriers.index:
+            n.add("Carrier", "gas storage", color="#d35050", nice_name="Gas Storage")
+
         n.madd(
             "Bus",
             names=df.index,
@@ -567,6 +570,9 @@ class InterconnectGasPipelineCapacity(_GasPipelineCapacity):
 
         df = self.data.copy()
 
+        if "gas pipeline" not in n.carriers.index:
+            n.add("Carrier", "gas pipeline", color="#d35050", nice_name="Gas Pipeline")
+
         df.index = df.STATE_FROM + " " + df.STATE_TO
 
         n.madd(
@@ -711,6 +717,9 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
         to_from = to_from.set_index("NAME")
         from_to = from_to.set_index("NAME")
 
+        if "gas export" not in n.carriers.index:
+            n.add("Carrier", "gas export", color="#d35050", nice_name="Gas Export")
+
         n.madd(
             "Bus",
             names=to_from.index,
@@ -720,6 +729,9 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
             country=to_from.STATE_TO,
             interconnect=self.interconnect,
         )
+
+        if "gas import" not in n.carriers.index:
+            n.add("Carrier", "gas import", color="#d35050", nice_name="Gas Import")
 
         n.madd(
             "Bus",
@@ -930,6 +942,9 @@ class PipelineLinepack(GasData):
 
         df = self.data.copy()
         df = df.set_index("STATE")
+
+        if "gas pipeline" not in n.carriers.index:
+            n.add("Carrier", "gas pipeline", color="#d35050", nice_name="Gas Pipeline")
 
         cyclic_storage = kwargs.get("cyclic_storage", True)
 

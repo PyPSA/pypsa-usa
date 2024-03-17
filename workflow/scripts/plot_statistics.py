@@ -48,8 +48,6 @@ import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Dict
-from typing import List
-from typing import Union
 
 import geopandas as gpd
 import matplotlib.pyplot as plt
@@ -57,10 +55,6 @@ import numpy as np
 import pandas as pd
 import pypsa
 import seaborn as sns
-from cartopy import crs as ccrs
-from pypsa.plot import add_legend_circles
-from pypsa.plot import add_legend_lines
-from pypsa.plot import add_legend_patches
 
 logger = logging.getLogger(__name__)
 from _helpers import configure_logging
@@ -230,7 +224,22 @@ def plot_production_html(
     """
     Plots interactive timeseries production chart.
     """
+    # get data
+
     energy_mix = get_energy_timeseries(n).mul(1e-3)  # MW -> GW
+
+    # fix battery charge/discharge to only be positive
+    if "battery" in energy_mix:
+        col_rename = {
+            "battery charger": "battery",
+            "battery discharger": "battery",
+        }
+        energy_mix = energy_mix.rename(columns=col_rename)
+        energy_mix = energy_mix.groupby(level=0, axis=1).sum()
+        energy_mix["battery"] = energy_mix.battery.map(lambda x: max(0, x))
+
+    energy_mix = energy_mix[[x for x in carriers_2_plot if x in energy_mix]]
+    energy_mix = energy_mix.rename(columns=n.carriers.nice_name)
     energy_mix["Demand"] = get_demand_timeseries(n).mul(1e-3)  # MW -> GW
 
     color_palette = get_color_palette(n)
@@ -643,6 +652,10 @@ def plot_production_area(
             energy_mix[carrier + "_discharger"] = energy_mix[carrier].clip(lower=0.0001)
             energy_mix[carrier + "_charger"] = energy_mix[carrier].clip(upper=-0.0001)
             energy_mix = energy_mix.drop(columns=carrier)
+            carriers_2_plot.append("battery_charger")
+            carriers_2_plot.append("battery_discharger")
+    energy_mix = energy_mix[[x for x in carriers_2_plot if x in energy_mix]]
+    energy_mix = energy_mix.rename(columns=n.carriers.nice_name)
 
     energy_mix = energy_mix.rename(columns=n.carriers.nice_name)
 

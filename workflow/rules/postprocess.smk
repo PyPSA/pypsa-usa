@@ -55,6 +55,8 @@ rule plot_natural_gas:
             % fig
             for fig in FIGURES_NATURAL_GAS
         },
+    log:
+        "logs/plot_figures/gas/{interconnect}_{clusters}_l{ll}_{opts}_{sector}.log",
     script:
         "../scripts/plot_natural_gas.py"
 
