@@ -238,6 +238,7 @@ def plot_production_html(
         energy_mix = energy_mix.groupby(level=0, axis=1).sum()
         energy_mix["battery"] = energy_mix.battery.map(lambda x: max(0, x))
 
+    carriers_2_plot.append("battery")
     energy_mix = energy_mix[[x for x in carriers_2_plot if x in energy_mix]]
     energy_mix = energy_mix.rename(columns=n.carriers.nice_name)
     energy_mix["Demand"] = get_demand_timeseries(n).mul(1e-3)  # MW -> GW
@@ -652,8 +653,8 @@ def plot_production_area(
             energy_mix[carrier + "_discharger"] = energy_mix[carrier].clip(lower=0.0001)
             energy_mix[carrier + "_charger"] = energy_mix[carrier].clip(upper=-0.0001)
             energy_mix = energy_mix.drop(columns=carrier)
-            carriers_2_plot.append("battery_charger")
-            carriers_2_plot.append("battery_discharger")
+            # carriers_2_plot.append("battery_charger")
+            # carriers_2_plot.append("battery_discharger")
     energy_mix = energy_mix[[x for x in carriers_2_plot if x in energy_mix]]
     energy_mix = energy_mix.rename(columns=n.carriers.nice_name)
 
@@ -1133,6 +1134,7 @@ if __name__ == "__main__":
         + snakemake.params.electricity["extendable_carriers"]["StorageUnit"]
         + snakemake.params.electricity["extendable_carriers"]["Store"]
         + snakemake.params.electricity["extendable_carriers"]["Link"]
+        + ["battery_charger", "battery_discharger"]
     )
     carriers = list(set(carriers))  # remove any duplicates
 
