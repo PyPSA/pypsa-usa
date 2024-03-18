@@ -302,7 +302,7 @@ rule add_electricity:
         base_network=RESOURCES + "{interconnect}/elec_base_network.nc",
         tech_costs=RESOURCES + f"costs_{config['costs']['year']}.csv",
         regions=RESOURCES + "{interconnect}/regions_onshore.geojson",
-        plants_eia="repo_data/eia_plants_wecc.csv",
+        plants_eia="repo_data/eia_plants.csv",
         plants_ads="repo_data/ads_plants_locs.csv",
         plants_breakthrough=DATA + "breakthrough_network/base_grid/plant.csv",
         hydro_breakthrough=DATA + "breakthrough_network/base_grid/hydro.csv",

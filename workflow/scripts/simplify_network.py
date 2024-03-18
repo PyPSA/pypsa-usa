@@ -17,6 +17,72 @@ from pypsa.clustering.spatial import get_clustering_from_busmap
 
 logger = logging.getLogger(__name__)
 
+def convert_to_per_unit(df):
+    # Constants
+    sqrt_3 = (3 ** 0.5)
+    
+    # Calculating base values per component
+    df['base_current'] = df['s_nom'] / (df['v_nom'] * sqrt_3)
+    df['base_impedance'] = df['v_nom']**2 / df['s_nom']
+    df['base_susceptance'] = 1 / df['base_impedance']
+    
+    # Converting to per-unit values
+    df['resistance_pu'] = df['r'] / df['base_impedance']
+    df['reactance_pu'] = df['x'] / df['base_impedance']
+    df['susceptance_pu'] = df['b'] / df['base_susceptance']
+    
+    # Dropping intermediate columns (optional)
+    df.drop(['base_current', 'base_impedance', 'base_susceptance'], axis=1, inplace=True)
+    
+    return df
+
+
+def convert_from_per_unit(df, new_voltage):
+    """
+    Convert per-unit values back to actual values at a given voltage.
+
+    Parameters:
+    - df: DataFrame containing the components and their per-unit values.
+    - new_voltage: The voltage level to which the actual values are to be converted.
+    
+    Returns:
+    - DataFrame with updated actual values for resistance, reactance, and susceptance.
+    """
+    # Constants
+    sqrt_3 = (3 ** 0.5)
+
+    # If no new power level is provided, calculate based on existing power values for each component
+    df['new_base_impedance'] = df.apply(lambda x: new_voltage**2 / x['s_nom'], axis=1)
+
+    # Convert per-unit values back to actual values using the new base impedance
+    df['resistance_actual'] = df['resistance_pu'] * df['new_base_impedance']
+    df['reactance_actual'] = df['reactance_pu'] * df['new_base_impedance']
+    df['susceptance_actual'] = df['susceptance_pu'] / df['new_base_impedance']  # Note: Inverse for susceptance
+
+    # Dropping intermediate column
+    df.drop('new_base_impedance', axis=1, inplace=True)
+
+    return df
+
+
+def remove_transformers(n):
+    trafo_map = pd.Series(n.transformers.bus1.values, index=n.transformers.bus0.values)
+    trafo_map = trafo_map[~trafo_map.index.duplicated(keep="first")]
+    several_trafo_b = trafo_map.isin(trafo_map.index)
+    trafo_map.loc[several_trafo_b] = trafo_map.loc[several_trafo_b].map(trafo_map)
+    missing_buses_i = n.buses.index.difference(trafo_map.index)
+    missing = pd.Series(missing_buses_i, missing_buses_i)
+    trafo_map = pd.concat([trafo_map, missing])
+
+    for c in n.one_port_components | n.branch_components:
+        df = n.df(c)
+        for col in df.columns:
+            if col.startswith("bus"):
+                df[col] = df[col].map(trafo_map)
+
+    n.mremove("Transformer", n.transformers.index)
+    n.mremove("Bus", n.buses.index.difference(trafo_map))
+
 
 def simplify_network_to_voltage_level(n, voltage_level):
     """
