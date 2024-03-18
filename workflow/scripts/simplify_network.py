@@ -22,7 +22,7 @@ def convert_to_per_unit(df):
     sqrt_3 = (3 ** 0.5)
     
     # Calculating base values per component
-    df['base_current'] = df['s_nom'] / (df['v_nom'] * sqrt_3)
+    # df['base_current'] = df['s_nom'] / (df['v_nom'] * sqrt_3)
     df['base_impedance'] = df['v_nom']**2 / df['s_nom']
     df['base_susceptance'] = 1 / df['base_impedance']
     
@@ -32,38 +32,47 @@ def convert_to_per_unit(df):
     df['susceptance_pu'] = df['b'] / df['base_susceptance']
     
     # Dropping intermediate columns (optional)
-    df.drop(['base_current', 'base_impedance', 'base_susceptance'], axis=1, inplace=True)
+    df.drop(['base_impedance', 'base_susceptance'], axis=1, inplace=True)
     
     return df
 
 
-def convert_from_per_unit(df, new_voltage):
+def convert_to_voltage_level(n, new_voltage):
     """
-    Convert per-unit values back to actual values at a given voltage.
+    Converts network.lines parameters to a given voltage.
 
     Parameters:
-    - df: DataFrame containing the components and their per-unit values.
-    - new_voltage: The voltage level to which the actual values are to be converted.
-    
-    Returns:
-    - DataFrame with updated actual values for resistance, reactance, and susceptance.
+    n (pypsa.Network): Network
+    new_voltage (float): New voltage level
     """
+    df = convert_to_per_unit(n.lines.copy())
+
     # Constants
     sqrt_3 = (3 ** 0.5)
 
-    # If no new power level is provided, calculate based on existing power values for each component
-    df['new_base_impedance'] = df.apply(lambda x: new_voltage**2 / x['s_nom'], axis=1)
+    df['new_base_impedance'] = new_voltage**2 / df['s_nom']
 
     # Convert per-unit values back to actual values using the new base impedance
-    df['resistance_actual'] = df['resistance_pu'] * df['new_base_impedance']
-    df['reactance_actual'] = df['reactance_pu'] * df['new_base_impedance']
-    df['susceptance_actual'] = df['susceptance_pu'] / df['new_base_impedance']  # Note: Inverse for susceptance
+    df['r'] = df['resistance_pu'] * df['new_base_impedance']
+    df['x'] = df['reactance_pu'] * df['new_base_impedance']
+    df['b'] = df['susceptance_pu'] / df['new_base_impedance']
+
+    df.v_nom = new_voltage
 
     # Dropping intermediate column
-    df.drop('new_base_impedance', axis=1, inplace=True)
+    df.drop(['new_base_impedance', 'resistance_pu', 'reactance_pu', 'susceptance_pu'], axis=1, inplace=True)
 
-    return df
+    # df.r = df.r.fillna(0) #how to deal with existing components that have zero power capacity s_nom
+    # df.x = df.x.fillna(0)
+    # df.b = df.b.fillna(0)
 
+    # Update network lines
+    (linetype,) = n.lines.loc[n.lines.v_nom == voltage_level, "type"].unique()
+    df.type = linetype # Do I even need to set line types? Can drop.
+
+    n.buses["v_nom"] = voltage_level
+    n.lines = df
+    return n
 
 def remove_transformers(n):
     trafo_map = pd.Series(n.transformers.bus1.values, index=n.transformers.bus0.values)
@@ -82,6 +91,9 @@ def remove_transformers(n):
 
     n.mremove("Transformer", n.transformers.index)
     n.mremove("Bus", n.buses.index.difference(trafo_map))
+    return n, trafo_map
+
+
 
 
 def simplify_network_to_voltage_level(n, voltage_level):
@@ -244,7 +256,10 @@ if __name__ == "__main__":
 
     n = pypsa.Network(snakemake.input.network)
 
-    n, trafo_map = simplify_network_to_voltage_level(n, voltage_level)
+    # n, trafo_map = simplify_network_to_voltage_level(n, voltage_level)
+    n = convert_to_voltage_level(n, voltage_level)
+    n, trafo_map = remove_transformers(n)
+
 
     substations = pd.read_csv(snakemake.input.sub, index_col=0)
     substations.index = substations.index.astype(str)
