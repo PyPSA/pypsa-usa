@@ -353,7 +353,7 @@ if __name__ == "__main__":
 
     plot_load_shedding_map(
         n,
-        snakemake.output["val_map_load_shedding"],
+        snakemake.output["val_map_load_shedding.pdf"],
         onshore_regions,
         **snakemake.wildcards,
     )
@@ -372,49 +372,49 @@ if __name__ == "__main__":
     plot_timeseries_comparison(
         historic,
         optimized,
-        save_path=snakemake.output["seasonal_stacked_plot"],
+        save_path=snakemake.output["seasonal_stacked_plot.pdf"],
     )
 
     plot_bar_carrier_production(
         historic,
         optimized,
-        save_path=snakemake.output["carrier_production_bar"],
+        save_path=snakemake.output["carrier_production_bar.pdf"],
     )
 
     plot_bar_production_deviation(
         historic,
         optimized,
-        save_path=snakemake.output["production_deviation_bar"],
+        save_path=snakemake.output["production_deviation_bar.pdf"],
     )
 
     # Box Plot
     plot_region_lmps(
         n,
-        snakemake.output["val_box_region_lmps"],
+        snakemake.output["val_box_region_lmps.pdf"],
         **snakemake.wildcards,
     )
 
     plot_curtailment_heatmap(
         n,
-        snakemake.output["val_heatmap_curtailment"],
+        snakemake.output["val_heatmap_curtailment.pdf"],
         **snakemake.wildcards,
     )
 
     plot_capacity_factor_heatmap(
         n,
-        snakemake.output["val_heatmap_capacity_factor"],
+        snakemake.output["val_heatmap_capacity_factor.pdf"],
         **snakemake.wildcards,
     )
 
     plot_generator_data_panel(
         n,
-        snakemake.output["val_generator_data_panel"],
+        snakemake.output["val_generator_data_panel.pdf"],
         **snakemake.wildcards,
     )
 
     plot_regional_emissions_bar(
         n,
-        snakemake.output["val_bar_regional_emissions"],
+        snakemake.output["val_bar_regional_emissions.pdf"],
         **snakemake.wildcards,
     )
 
