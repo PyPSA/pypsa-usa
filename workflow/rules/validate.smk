@@ -17,6 +17,7 @@ rule plot_validation_figures:
         + "{interconnect}/networks/elec_s_{clusters}_ec_l{ll}_{opts}_{sector}_operations.nc",
         historic_first=DATA + "eia/6moFiles/EIA930_BALANCE_2019_Jan_Jun.csv",
         historic_second=DATA + "eia/6moFiles/EIA930_BALANCE_2019_Jul_Dec.csv",
+        demand_ge=DATA + "GridEmissions/EIA_DMD_2018_2024.csv",
         regions_onshore=RESOURCES
         + "{interconnect}/regions_onshore_s_{clusters}.geojson",
         regions_offshore=RESOURCES
