@@ -83,7 +83,7 @@ def plot_regional_timeseries_comparison(
     regions = n.buses.country.unique()
     regions_clean = [ba.split("-")[0] for ba in regions]
     regions = list(OrderedDict.fromkeys(regions_clean))
-    # filter out a few regions
+
     regions = [ba for ba in regions if ba in ["CISO"]]
     buses = n.buses.copy()
     buses["region"] = [ba.split("-")[0] for ba in buses.country]
@@ -417,6 +417,8 @@ if __name__ == "__main__":
         snakemake.output["val_bar_regional_emissions"],
         **snakemake.wildcards,
     )
+
+    n.statistics().to_csv(snakemake.output["val_statistics"])
 
     # if snakemake.wildcards.interconnect == "western":
     #     plot_california_emissions(

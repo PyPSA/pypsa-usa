@@ -916,7 +916,6 @@ def plot_generator_data_panel(
         x="snapshot",
         y="Value",
         hue="Carrier",
-        errorbar="sd",
         ax=axes[0, 0],
     )
     sns.barplot(data=df_capex_expand, x="carrier", y="capital_cost", ax=axes[0, 1])
@@ -948,6 +947,7 @@ def plot_generator_data_panel(
     # Set labels for each subplot
     axes[0, 0].set_xlabel("")
     axes[0, 0].set_ylabel("$ / MWh")
+    axes[0, 0].set_ylim(0, 150)
     axes[0, 1].set_xlabel("")
     axes[0, 1].set_ylabel("$ / MW-yr")
     axes[1, 0].set_xlabel("")
