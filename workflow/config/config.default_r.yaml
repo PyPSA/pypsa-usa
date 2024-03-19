@@ -1,10 +1,10 @@
 atlite:
   cutouts:
-    era5_2019:
+    era5_2023:
       module: era5
       time:
-      - '2019'
-  default_cutout: era5_2019
+      - '2023'
+  default_cutout: era5_2023
   interconnects:
     eastern:
       dx: 0.3
@@ -62,7 +62,7 @@ clustering:
     feature: solar+onwind-time
     to_substations: false
 conventional:
-  dynamic_fuel_price: false
+  dynamic_fuel_price: true
   unit_commitment: false
 costs:
   emission_prices:
@@ -86,7 +86,7 @@ costs:
     offwind: 0.0
     onwind: 0.0
     solar: 0.0
-  ng_fuel_year: 2019
+  ng_fuel_year: 2023
   rooftop_share: 0.0
   version: v0.6.0
   year: 2030
@@ -111,14 +111,7 @@ electricity:
   egs: true
   egs_reduction: 0.2
   extendable_carriers:
-    Generator:
-    - solar
-    - onwind
-    - offwind
-    - OCGT
-    - CCGT
-    - coal
-    - geothermal
+    Generator: []
     Link: []
     StorageUnit: []
     Store: []
@@ -127,7 +120,7 @@ electricity:
     H2: 168
     battery: 2
   operational_reserve:
-    activate: true
+    activate: false
     contingency: 4000
     epsilon_load: 0.02
     epsilon_vres: 0.02
@@ -142,6 +135,7 @@ electricity:
 enable:
   allow_new_plant: false
   build_cutout: false
+  casio: true
   download_cutout: false
   download_eia: false
 focus_weights: null
@@ -297,9 +291,11 @@ run:
   validation: false
 scenario:
   clusters:
-  - 8
+  - 10
   interconnect: texas
-  ll: v1
+  ll:
+  - v1
+  - v2
   opts:
   - Co2L1-1H
   planning_horizons: null

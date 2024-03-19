@@ -134,7 +134,7 @@ def get_line_scale(interconnect: str) -> float:
     Scales lines based on interconnect size.
     """
     if interconnect != "usa":
-        return 2e4
+        return 2e3
     else:
         return 3e3
 
@@ -607,7 +607,7 @@ def plot_production_bar(
     energy_mix = n.statistics.dispatch().mul(1e-3)  # MW -> GW
     energy_mix.name = "dispatch"
     energy_mix = energy_mix[
-        energy_mix.index.get_level_values(0).isin(
+        energy_mix.index.get_level_values("component").isin(
             ["Generator", "StorageUnit"],
         )
     ]
@@ -982,7 +982,7 @@ def plot_new_capacity_map(
         correct_ccgt_ocgt_buses(bus_values).groupby(by=["bus", "carrier"]).sum()
     )
     bus_values = bus_values[
-        (bus_values > 0) & (bus_values.index.get_level_values(1).isin(carriers))
+        (bus_values >= 0) & (bus_values.index.get_level_values(1).isin(carriers))
     ]
 
     line_snom = n.lines.s_nom

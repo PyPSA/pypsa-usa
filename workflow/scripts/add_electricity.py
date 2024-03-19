@@ -396,6 +396,7 @@ def update_marginal_costs(
 
         # apply fixed rate VOM cost
         df += vom_cost
+        df = df.set_index(n.snapshots)
 
         # join into exisitng time series marginal costs
         n.generators_t["marginal_cost"] = n.generators_t["marginal_cost"].join(
@@ -812,16 +813,12 @@ def attach_conventional_generators(
         committable_attrs = {}
 
     if fuel_price is not None:
-        fuel_price = fuel_price.assign(
-            OCGT=fuel_price["gas"],
-            CCGT=fuel_price["gas"],
-        ).drop("gas", axis=1)
-        missing_carriers = list(set(carriers) - set(fuel_price))
-        fuel_price = fuel_price.assign(**costs.fuel[missing_carriers])
-        fuel_price = fuel_price.reindex(plants.carrier, axis=1)
-        fuel_price.columns = plants.index
-        marginal_cost = fuel_price.div(plants.efficiency).add(
-            plants.carrier.map(costs.VOM),
+        marginal_cost = update_marginal_costs(
+            n,
+            plants.carrier,
+            fuel_price,
+            vom_cost=plants.VOM,
+            efficiency=plants.efficiency,
         )
     else:
         marginal_cost = (
@@ -832,6 +829,9 @@ def attach_conventional_generators(
     # Define generators using modified ppl DataFrame
     caps = plants.groupby("carrier").p_nom.sum().div(1e3).round(2)
     logger.info(f"Adding {len(plants)} generators with capacities [GW] \n{caps}")
+
+    # plants_bus = plants.groupby("carrier", "bus_assignment")
+
     n.madd(
         "Generator",
         plants.index,
@@ -1285,6 +1285,93 @@ def clean_bus_data(n: pypsa.Network):
     col_list = ["poi_bus", "poi_sub", "poi", "Pd", "load_dissag", "LAF", "LAF_states"]
     n.buses.drop(columns=[col for col in col_list if col in n.buses], inplace=True)
 
+def add_ercot_outage(n: pypsa.Network, 
+                     outage, 
+                     conventional_carriers: list,
+                     renewable_carriers: list,
+                     input_profiles: str,
+                     sns_start, 
+                     sns_end):
+    """
+    Add hourly outage rate to p_max_pu
+    """
+    # Get a list of buses
+    bus_list = pd.Series([x for x in n.buses.index if not x.startswith("OSW_POI_")])
+
+    # Read outage rate
+    ercot_outage = pd.read_csv(outage)
+    ercot_outage['snapshot'] = pd.to_datetime(ercot_outage['time'], utc=True).dt.tz_convert (tz='US/Central')
+    ercot_outage['snapshot'] = ercot_outage['snapshot'].dt.tz_localize(None)
+    ercot_outage['outage_rate'] = 1 - ercot_outage['outage_rate']
+    ercot_outage = ercot_outage.loc[(ercot_outage['snapshot'] >= sns_start) & (ercot_outage['snapshot'] <= sns_end)]
+
+    # First add outages to conventional plants
+    for car in conventional_carriers: 
+        print("Add outage rate for " + car)
+        ercot_outage_car = ercot_outage.loc[ercot_outage['tech_pypsa'] == car]
+        ercot_outage_car = ercot_outage_car[['snapshot', 'outage_rate']]
+
+        ercot_outage_car_bus = (ercot_outage_car.assign(dummy=1)
+            .merge(n.generators[n.generators.carrier == car].carrier.index.to_frame().assign(dummy=1), on='dummy')
+            .drop('dummy', axis=1)
+            .pivot_table(index = 'snapshot', columns='Generator',values='outage_rate')
+        )
+        ercot_outage_car_bus.index.name = None
+
+    # Add outage per hour
+        n.generators_t["p_max_pu"] = n.generators_t["p_max_pu"].join(
+            ercot_outage_car_bus,
+            how="outer",
+        )
+    # Second add outages to conventional plants
+    for car in ['solar', 'onwind']: 
+
+        if car not in renewable_carriers: 
+            continue
+
+        ercot_outage_car = ercot_outage.loc[ercot_outage['tech_pypsa'] == car][['snapshot', 'outage_rate']]
+
+
+        with xr.open_dataset(getattr(input_profiles, "profile_" + car)) as ds:
+            if ds.indexes["bus"].empty:
+                continue
+            bus2sub = (
+                pd.read_csv(input_profiles.bus2sub, dtype=str)
+                .drop("interconnect", axis=1)
+                .rename(columns={"Bus": "bus_id"})
+            )
+            bus_profiles = (
+                ds["profile"]
+                .transpose("time", "bus")
+                .to_pandas()
+                .T.merge(
+                    bus2sub[["bus_id", "sub_id"]],
+                    left_on="bus",
+                    right_on="sub_id",
+                )
+                .set_index("bus_id")
+                .drop(columns="sub_id")
+                .T
+            )
+
+            ercot_outage_car_bus = (ercot_outage_car.assign(dummy=1)
+                .merge(bus_list.to_frame(name = 'bus_id').assign(dummy=1), on='dummy')
+                .drop('dummy', axis=1)
+                .pivot_table(index = 'snapshot', columns='bus_id',values='outage_rate')
+                
+            )
+            ercot_outage_car_bus.index.name = None
+
+            n.madd(
+                "Generator",
+                bus_list,
+                " " + car,
+                bus=bus_list,
+                carrier=car,
+                p_max_pu=ercot_outage_car_bus * bus_profiles,
+            )
+    print(n.generators_t.p_max_pu)
+
 
 def main(snakemake):
     params = snakemake.params
@@ -1341,16 +1428,6 @@ def main(snakemake):
     else:
         unit_commitment = None
 
-    if params.conventional["dynamic_fuel_price"]:
-        fuel_price = pd.read_csv(
-            snakemake.input.fuel_price,
-            index_col=0,
-            header=0,
-            parse_dates=True,
-        )
-        fuel_price = fuel_price.reindex(n.snapshots).fillna(method="ffill")
-    else:
-        fuel_price = None
 
     if configuration == "pypsa-usa":
         if texas_reliability: 
@@ -1388,7 +1465,7 @@ def main(snakemake):
         renewable_carriers,
         conventional_inputs,
         unit_commitment=unit_commitment,
-        fuel_price=fuel_price,
+        fuel_price=None,
     )
     attach_battery_storage(
         n,
@@ -1444,23 +1521,22 @@ def main(snakemake):
         df_multiplier = clean_locational_multiplier(df_multiplier)
         update_capital_costs(n, carrier, costs, df_multiplier, Nyears)
 
-    # apply regional/temporal variations to fuel cost data
-    fuel_costs = {
-        "CCGT": "ng_electric_power_price",
-        "OCGT": "ng_electric_power_price",
-    }
-    for carrier, cost_data in fuel_costs.items():
-        fuel_cost_file = snakemake.input[f"{cost_data}"]
-        df_fuel_costs = pd.read_csv(fuel_cost_file)
-        vom = costs.at[carrier, "VOM"]
+    if params.conventional["dynamic_fuel_price"]:
+        fuel_costs = {
+            "CCGT": "ng_electric_power_price",
+            "OCGT": "ng_electric_power_price",
+        }
+        for carrier, cost_data in fuel_costs.items():
+            fuel_cost_file = snakemake.input[f"{cost_data}"]
+            df_fuel_costs = pd.read_csv(fuel_cost_file)
+            vom = costs.at[carrier, "VOM"]
 
-        update_marginal_costs(
-            n=n,
-            carrier=carrier,
-            fuel_costs=df_fuel_costs,
-            vom_cost=vom,
-            apply_average=False,
-        )
+            update_marginal_costs(
+                n=n,
+                carrier=carrier,
+                fuel_costs=df_fuel_costs,
+                vom_cost=vom,
+            )
 
     # fix p_nom_min for extendable generators
     # The "- 0.001" is just to avoid numerical issues
@@ -1472,6 +1548,15 @@ def main(snakemake):
         ),
         axis=1,
     )
+
+    add_ercot_outage(n, 
+                     outage = snakemake.input['ercot_outage'], 
+                     conventional_carriers = conventional_carriers, 
+                     renewable_carriers = renewable_carriers, 
+                     input_profiles = snakemake.input,
+                     sns_start = sns_start,
+                     sns_end = sns_end)
+
 
     if snakemake.config["osw_config"]["enable_osw"]:
         logger.info("Adding OSW in network")

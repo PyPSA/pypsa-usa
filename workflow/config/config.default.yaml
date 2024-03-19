@@ -11,7 +11,7 @@ run:
 # docs :
 scenario:
   interconnect: texas #"usa|texas|western|eastern"
-  clusters: [8]
+  clusters: [10]
 
   opts:
     [
@@ -19,7 +19,7 @@ scenario:
       Co2L1-1H,
     ]
   scope: [total] # "urban", "rural", or "total" 
-  ll: [v1] 
+  ll: [v1, v2] 
   sector: "" # G 
   planning_horizons:
     # - 2030 #  # Uncomment to use NREL EFS Demand Forecasts (2030, 2040, 2050)
@@ -33,29 +33,29 @@ enable:
   download_cutout: false
   download_eia: false
   allow_new_plant: false
-  casio: false
+  casio: true
 
 countries: [US]  
 
 # Texas reliability study
 texas_reliability: true
 replace_uri: true
-capacity_from_reeds: 'ercot_cap_2030_add_ct'
+capacity_from_reeds: 'ercot_cap_2030'
 
 snapshots:
-  start: "2019-01-01"
-  end: "2019-02-01"
+  start: "2023-01-01"
+  end: "2024-01-01"
   inclusive: 'left'
 
 # docs :
 atlite:
-  default_cutout: era5_2019
+  default_cutout: era5_2023
   nprocesses: 8
   show_progress: false # false saves time
   cutouts:
-    era5_2019:
+    era5_2023:
       module: era5 # in priority order
-      time: ['2019']
+      time: ['2023']
   interconnects:
     western:
       x: [-126, -99]
@@ -121,12 +121,12 @@ electricity:
 # docs :
 conventional:
   unit_commitment: false
-  dynamic_fuel_price: false
+  dynamic_fuel_price: true
 
 # docs :
 renewable:
   onwind:
-    cutout: era5_2019
+    cutout: era5_2023
     resource:
       method: wind
       turbine: Vestas_V112_3MW
@@ -143,7 +143,7 @@ renewable:
     clip_p_max_pu: 1.e-2
     extendable: true
   offwind:
-    cutout: era5_2019
+    cutout: era5_2023
     resource:
       method: wind
       turbine: NREL_ReferenceTurbine_2020ATB_5.5MW
@@ -160,7 +160,7 @@ renewable:
     clip_p_max_pu: 1.e-2
     extendable: true
   offwind_floating:
-    cutout: era5_2019
+    cutout: era5_2023
     resource:
       method: wind
       turbine: NREL_ReferenceTurbine_2020ATB_15MW_offshore
@@ -179,7 +179,7 @@ renewable:
     clip_p_max_pu: 1.e-2
     extendable: true
   solar:
-    cutout: era5_2019
+    cutout: era5_2023
     resource:
       method: pv
       panel: CSi
@@ -195,7 +195,7 @@ renewable:
     clip_p_max_pu: 1.e-2
     extendable: true
   hydro:
-    cutout: era5_2019
+    cutout: era5_2023
     resource:
       method: hydro
       hydrobasins: resources/hybas_na_lev06_v1c.shp
@@ -244,7 +244,7 @@ costs:  # based on the potentials, assuming  (0.1 kW/m2 and 10 m2/person)
   year: 2030
   version: v0.6.0
   rooftop_share: 0.0
-  ng_fuel_year: 2019 # year of the natural gas price from CAISO [2019- 2023]
+  ng_fuel_year: 2023 # year of the natural gas price from CAISO [2019- 2023]
   fill_values:
     FOM: 0
     VOM: 0
@@ -318,7 +318,7 @@ solving:
 
   solver:
     name: gurobi
-    options: gurobi-numeric-focus
+    options: gurobi-default
 
   solver_options:
     highs-default:

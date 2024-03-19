@@ -301,6 +301,7 @@ rule add_electricity:
         hydro_breakthrough=DATA + "breakthrough_network/base_grid/hydro.csv",
         wind_breakthrough=DATA + "breakthrough_network/base_grid/wind.csv",
         solar_breakthrough=DATA + "breakthrough_network/base_grid/solar.csv",
+        ercot_outage = "repo_data/ercot_specific/outage_share_2020_2024.csv",
         bus2sub=DATA + "breakthrough_network/base_grid/{interconnect}/bus2sub.csv",
         ads_renewables=(
             DATA + "WECC_ADS/processed/"
