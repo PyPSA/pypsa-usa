@@ -35,9 +35,6 @@ from _helpers import configure_logging
 from _helpers import REGION_COLS
 from scipy.spatial import Voronoi
 from shapely.geometry import Polygon
-from simplify_network import aggregate_to_substations
-from simplify_network import simplify_network_to_voltage_level
-
 
 def voronoi_partition_pts(points, outline):
     """

@@ -94,54 +94,6 @@ def remove_transformers(n):
     return n, trafo_map
 
 
-
-
-def simplify_network_to_voltage_level(n, voltage_level):
-    """
-    Simplify network to a single voltage level.
-
-    Network Line Characteristics (s_nom, num_parallel, type) are mapped
-    to the new voltage level.
-    """
-    logger.info("Mapping all network lines onto a single layer")
-
-    n.buses["v_nom"] = voltage_level
-
-    (linetype,) = n.lines.loc[n.lines.v_nom == voltage_level, "type"].unique()
-    lines_v_nom_b = n.lines.v_nom != voltage_level
-    n.lines.loc[lines_v_nom_b, "num_parallel"] *= (
-        n.lines.loc[lines_v_nom_b, "v_nom"] / voltage_level
-    ) ** 2
-    n.lines.loc[lines_v_nom_b, "v_nom"] = voltage_level
-    n.lines.loc[lines_v_nom_b, "type"] = linetype
-    n.lines.loc[lines_v_nom_b, "s_nom"] = (
-        np.sqrt(3)
-        * n.lines["type"].map(n.line_types.i_nom)
-        * n.lines.bus0.map(n.buses.v_nom)
-        * n.lines.num_parallel
-    )
-
-    # Replace transformers by lines
-    trafo_map = pd.Series(n.transformers.bus1.values, index=n.transformers.bus0.values)
-    trafo_map = trafo_map[~trafo_map.index.duplicated(keep="first")]
-    several_trafo_b = trafo_map.isin(trafo_map.index)
-    trafo_map.loc[several_trafo_b] = trafo_map.loc[several_trafo_b].map(trafo_map)
-    missing_buses_i = n.buses.index.difference(trafo_map.index)
-    missing = pd.Series(missing_buses_i, missing_buses_i)
-    trafo_map = pd.concat([trafo_map, missing])
-
-    for c in n.one_port_components | n.branch_components:
-        df = n.df(c)
-        for col in df.columns:
-            if col.startswith("bus"):
-                df[col] = df[col].map(trafo_map)
-
-    n.mremove("Transformer", n.transformers.index)
-    n.mremove("Bus", n.buses.index.difference(trafo_map))
-
-    return n, trafo_map
-
-
 def aggregate_to_substations(
     network: pypsa.Network,
     substations,

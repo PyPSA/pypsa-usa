@@ -793,12 +793,20 @@ def attach_conventional_generators(
     else:
         committable_attrs = {}
 
+    if fuel_price is not None:
+        marginal_cost = update_marginal_costs(
+            n,
+            plants.carrier,
+            fuel_price,
+            vom_cost=plants.VOM,
+            efficiency=plants.efficiency,
+        )
+    else:
+        marginal_cost = (
+            plants.carrier.map(costs.VOM)
+            + plants.carrier.map(costs.fuel) / plants.efficiency
+        )
 
-    marginal_cost = (
-        plants.carrier.map(costs.VOM)
-        + plants.marginal_cost
-    )
-    
     # Define generators using modified ppl DataFrame
     caps = plants.groupby("carrier").p_nom.sum().div(1e3).round(2)
     logger.info(f"Adding {len(plants)} generators with capacities [GW] \n{caps}")
@@ -821,170 +829,6 @@ def attach_conventional_generators(
         build_year=plants.build_year.fillna(0).astype(int),
         lifetime=(plants.dateout - plants.build_year).fillna(np.inf),
         **committable_attrs,
-    )
-
-
-def attach_wind_and_solar(
-    n: pypsa.Network,
-    costs: pd.DataFrame,
-    input_profiles: str,
-    carriers: list[str],
-    extendable_carriers: dict[str, list[str]],
-    line_length_factor=1,
-):
-    """
-    Attached Atlite Calculated wind and solar capacity factor profiles to the
-    network.
-    """
-    add_missing_carriers(n, carriers)
-    for car in carriers:
-        if car == "hydro":
-            continue
-
-        with xr.open_dataset(getattr(input_profiles, "profile_" + car)) as ds:
-            if ds.indexes["bus"].empty:
-                continue
-
-            supcar = car.split("-", 2)[0]
-            if supcar == "offwind" or supcar == "offwind_floating":
-                if supcar == "offwind_floating":
-                    supcar = "offwind"
-                underwater_fraction = ds["underwater_fraction"].to_pandas()
-                connection_cost = (
-                    line_length_factor
-                    * ds["average_distance"].to_pandas()
-                    * (
-                        underwater_fraction
-                        * costs.at[supcar + "-ac-connection-submarine", "capital_cost"]
-                        + (1.0 - underwater_fraction)
-                        * costs.at[
-                            supcar + "-ac-connection-underground",
-                            "capital_cost",
-                        ]
-                    )
-                )
-                capital_cost = (
-                    costs.at[car, "capital_cost"]
-                    + costs.at[
-                        supcar + "-ac-station",
-                        "capital_cost",
-                    ]  # update to find floating substation costs
-                    + connection_cost
-                )
-
-                logger.info(
-                    "Added connection cost of {:0.0f}-{:0.0f} USD/MW/a to {}".format(
-                        connection_cost.min(),
-                        connection_cost.max(),
-                        car,
-                    ),
-                )
-            else:
-                capital_cost = costs.at[car, "capital_cost"]
-
-            bus2sub = (
-                pd.read_csv(input_profiles.bus2sub, dtype=str)
-                .drop("interconnect", axis=1)
-                .rename(columns={"Bus": "bus_id"})
-            )
-            bus_list = (
-                ds.bus.to_dataframe("sub_id").merge(bus2sub).bus_id.astype(str).values
-            )
-            p_nom_max_bus = (
-                ds["p_nom_max"]
-                .to_dataframe()
-                .merge(bus2sub[["bus_id", "sub_id"]], left_on="bus", right_on="sub_id")
-                .set_index("bus_id")
-                .p_nom_max
-            )
-            weight_bus = (
-                ds["weight"]
-                .to_dataframe()
-                .merge(bus2sub[["bus_id", "sub_id"]], left_on="bus", right_on="sub_id")
-                .set_index("bus_id")
-                .weight
-            )
-            bus_profiles = (
-                ds["profile"]
-                .transpose("time", "bus")
-                .to_pandas()
-                .T.merge(
-                    bus2sub[["bus_id", "sub_id"]],
-                    left_on="bus",
-                    right_on="sub_id",
-                )
-                .set_index("bus_id")
-                .drop(columns="sub_id")
-                .T
-            )
-            if supcar == "offwind":
-                capital_cost = capital_cost.to_frame().reset_index()
-                capital_cost.bus = capital_cost.bus.astype(int)
-                capital_cost = (
-                    pd.merge(
-                        capital_cost,
-                        n.buses.sub_id.reset_index(),
-                        left_on="bus",
-                        right_on="sub_id",
-                        how="left",
-                    )
-                    .rename(columns={0: "capital_cost"})
-                    .set_index("Bus")
-                    .capital_cost
-                )
-
-            logger.info(f"Adding {car} capacity-factor profiles to the network.")
-            # TODO: #24 VALIDATE TECHNICAL POTENTIALS
-
-            n.madd(
-                "Generator",
-                bus_list,
-                " " + car,
-                bus=bus_list,
-                carrier=car,
-                p_nom_extendable=car in extendable_carriers["Generator"],
-                p_nom_max=p_nom_max_bus,
-                weight=weight_bus,
-                marginal_cost=costs.at[car, "marginal_cost"],
-                capital_cost=capital_cost,
-                efficiency=costs.at[car, "efficiency"],
-                p_max_pu=bus_profiles,
-            )
-
-
-# double check to make sure batteries are added regardless if they are extendable.
-def attach_battery_storage(
-    n: pypsa.Network,
-    plants: pd.DataFrame,
-    extendable_carriers,
-    costs,
-):
-    """
-    Attaches Battery Energy Storage Systems To the Network.
-    """
-    plants_filt = plants.query("carrier == 'battery' ")
-    plants_filt.index = (
-        plants_filt.index.astype(str) + "_" + plants_filt.generator_id.astype(str)
-    )
-    logger.info(
-        f"Added Batteries as Storage Units to the network.\n{np.round(plants_filt.p_nom.sum()/1000,2)} GW Power Capacity \n{np.round(plants_filt.energy_capacity_mwh.sum()/1000, 2)} GWh Energy Capacity",
-    )
-
-    plants_filt = plants_filt.dropna(subset=["energy_capacity_mwh"])
-    n.madd(
-        "StorageUnit",
-        plants_filt.index,
-        carrier="battery",
-        bus=plants_filt.bus_assignment,
-        p_nom=plants_filt.p_nom,
-        p_nom_min=plants_filt.p_nom,
-        p_nom_extendable=False,
-        max_hours=plants_filt.energy_capacity_mwh / plants_filt.p_nom,
-        build_year=plants_filt.operating_year,
-        efficiency_store=0.9**0.5,
-        efficiency_dispatch=0.9**0.5,
-        cyclic_state_of_charge=True,
-        # capital_cost=costs.at["battery", "capital_cost"],
     )
 
 
@@ -1238,13 +1082,6 @@ def load_powerplants_ads(
     return plants
 
 
-def clean_bus_data(n: pypsa.Network):
-    """
-    Drops data from the network that are no longer needed in workflow.
-    """
-    col_list = ["poi_bus", "poi_sub", "poi", "Pd", "load_dissag", "LAF", "LAF_states"]
-    n.buses.drop(columns=[col for col in col_list if col in n.buses], inplace=True)
-
 
 def main(snakemake):
     params = snakemake.params
@@ -1286,7 +1123,6 @@ def main(snakemake):
         + costs.at["OCGT", "investment_annualized"]
     ) / 2
 
-    update_transmission_costs(n, costs, params.length_factor)
 
     renewable_carriers = set(params.electricity["renewable_carriers"])
     extendable_carriers = params.electricity["extendable_carriers"]
@@ -1294,11 +1130,6 @@ def main(snakemake):
     conventional_inputs = {
         k: v for k, v in snakemake.input.items() if k.startswith("conventional_")
     }
-
-    if params.conventional["unit_commitment"]:
-        unit_commitment = pd.read_csv(snakemake.input.unit_commitment, index_col=0)
-    else:
-        unit_commitment = None
 
     if configuration == "pypsa-usa":
         plants = load_powerplants_eia(
@@ -1314,15 +1145,9 @@ def main(snakemake):
             const.ADS_FUEL_MAPPER,
         )
         plants = assign_ads_missing_lat_lon(plants, n)
-    else:
-        raise ValueError(
-            f"Unknown network_configuration {snakemake.config['network_configuration']}",
-        )
 
     # Applying to all configurations
     plants = match_plant_to_bus(n, plants)
-
-    attach_demand(n, snakemake.input.demand)
 
     attach_conventional_generators(
         n,
@@ -1380,50 +1205,8 @@ def main(snakemake):
         )
     update_p_nom_max(n)
 
-    # apply regional multipliers to capital cost data
-    for carrier, multiplier_data in const.CAPEX_LOCATIONAL_MULTIPLIER.items():
-        if n.generators.query(f"carrier == '{carrier}'").empty:
-            continue
-        multiplier_file = snakemake.input[f"gen_cost_mult_{multiplier_data}"]
-        df_multiplier = pd.read_csv(multiplier_file)
-        df_multiplier = clean_locational_multiplier(df_multiplier)
-        update_capital_costs(n, carrier, costs, df_multiplier, Nyears)
 
-    if params.conventional["dynamic_fuel_price"]:
-        fuel_costs = {
-            "CCGT": "ng_electric_power_price",
-            "OCGT": "ng_electric_power_price",
-        }
-        for carrier, cost_data in fuel_costs.items():
-            fuel_cost_file = snakemake.input[f"{cost_data}"]
-            df_fuel_costs = pd.read_csv(fuel_cost_file)
-            vom = costs.at[carrier, "VOM"]
 
-            update_marginal_costs(
-                n=n,
-                carrier=carrier,
-                fuel_costs=df_fuel_costs,
-                vom_cost=vom,
-            )
-
-    # fix p_nom_min for extendable generators
-    # The "- 0.001" is just to avoid numerical issues
-    n.generators["p_nom_min"] = n.generators.apply(
-        lambda x: (
-            (x["p_nom"] - 0.001)
-            if (x["p_nom_extendable"] and x["p_nom_min"] == 0)
-            else x["p_nom_min"]
-        ),
-        axis=1,
-    )
-
-    output_folder = os.path.dirname(snakemake.output[0]) + "/base_network"
-    export_network_for_gis_mapping(n, output_folder)
-
-    clean_bus_data(n)
-    sanitize_carriers(n, snakemake.config)
-    n.meta = snakemake.config
-    n.export_to_netcdf(snakemake.output[0])
 
     logger.info(test_network_datatype_consistency(n))
 
