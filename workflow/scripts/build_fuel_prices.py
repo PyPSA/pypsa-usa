@@ -24,94 +24,100 @@ Build_fuel_prices.py is a script that prepares data for dynamic fuel prices to b
 import pandas as pd
 import constants as const
 from _helpers import mock_snakemake, configure_logging
+import eia
+from typing import List
 
 
-def prepare_eia(eia_fn: str, snapshots: pd.DatetimeIndex = None):
-    """
-    Cleans EIA fuel price data.
-
-    returns:
-    fuel_costs: pd.DataFrame
-        Long format dataframe of state level, monthly fuel prices in units of $/MWh_thermal
-    """
-    fuel_prices = pd.read_csv(eia_fn)
-    fuel_prices["dol_mwh_th"] = fuel_prices["value"] / const.NG_MCF_2_MWH
-
-    fuel_prices["period"] = pd.to_datetime(fuel_prices.period, format="%Y-%m-%d")
-    fuel_prices["month"] = fuel_prices["period"].dt.month
-    fuel_prices.drop(
-        columns=["series-description", "period", "units", "value"],
-        inplace=True,
-    )
-
-    year = snapshots[0].year
-    fuel_prices["month"] = pd.to_datetime(
-        fuel_prices["month"].astype(str) + "-" + str(year),
-        format="%m-%Y",
-    ).map(lambda dt: dt.replace(year=year))
-    fuel_prices = fuel_prices.rename(columns={"month": "timestep"})
-    fuel_prices = fuel_prices.pivot(
-        index="timestep",
-        columns="state",
-        values="dol_mwh_th",
-    )
-    fuel_prices = fuel_prices.reindex(snapshots)
-    fuel_prices = fuel_prices.fillna(method="bfill").fillna(method="ffill")
-    return fuel_prices
-
-
-def prepare_caiso(caiso_fn: str, snapshots: pd.DatetimeIndex = None):
+def prepare_caiso(caiso_fn: str, sns: pd.DatetimeIndex = None) -> pd.DataFrame:
     caiso_ng = pd.read_csv(caiso_fn)
     caiso_ng["PRC"] = caiso_ng["PRC"] * const.NG_Dol_MMBTU_2_MWH
-    caiso_ng.rename(
+    caiso_ng = caiso_ng.rename(
         columns={"PRC": "dol_mwh_th", "Balancing Authority": "balancing_area"},
-        inplace=True,
     )
-
-    year = snapshots[0].year
+    year = sns[0].year
     caiso_ng.day_of_year = pd.to_datetime(caiso_ng.day_of_year, format="%j").map(
         lambda dt: dt.replace(year=year),
     )
-    caiso_ng = caiso_ng.rename(columns={"day_of_year": "timestep"})
-    caiso_ng = caiso_ng.pivot(
-        index="timestep",
-        columns="balancing_area",
-        values="dol_mwh_th",
-    )
-    caiso_ng = caiso_ng.reindex(snapshots)
-    caiso_ng = caiso_ng.fillna(method="bfill").fillna(method="ffill")
-    return caiso_ng
+    return caiso_ng.rename(columns={"day_of_year": "period"})
 
+def make_hourly(df: pd.DataFrame) -> pd.DataFrame:
+    """Makes the index hourly"""
+    
+    start = df.index.min()
+    end = pd.to_datetime(start).to_period("Y").to_timestamp("Y").to_period("Y").to_timestamp("Y") + pd.offsets.MonthEnd(0) + pd.Timedelta(hours=23)
+    # new_index = pd.date_range(start=df.index.min(), end=df.index.max()+pd.Timedelta(days=1) + pd.Timedelta(days=1), freq="h")
+    hourly_df = pd.DataFrame(index=pd.date_range(start=start, end=end + pd.Timedelta(days=1), freq="h"))
+    return hourly_df.merge(df, how="left", left_index=True, right_index=True).ffill().bfill()
 
-def main(snakemake):
+def get_ng_prices(sns: pd.date_range, interconnects: List[str], eia_api: str = None) -> pd.DataFrame:
 
+    if eia_api:
+        eia_ng = eia.FuelCosts("gas", "power", sns.year[0], eia_api).get_data().drop(columns=["series-description", "units"]).reset_index()
+        eia_ng = eia_ng.pivot(
+            index="period",
+            columns="state",
+            values="value",
+        )
+        eia_ng = make_hourly(eia_ng)
+    else:
+        eia_ng = pd.DataFrame()
+
+    if "western" in interconnects:
+        caiso_ng = prepare_caiso(snakemake.input.caiso_ng_prices, snapshots)
+        caiso_ng = caiso_ng.pivot(
+            index="period",
+            columns="balancing_area",
+            values="dol_mwh_th",
+        )
+        caiso_ng = make_hourly(caiso_ng)
+    else:
+        caiso_ng = pd.DataFrame()
+    
+    ng = pd.concat([caiso_ng, eia_ng], axis=1)
+    return ng.loc[sns]
+
+def get_coal_prices(sns: pd.date_range, eia_api: str = None) -> pd.DataFrame:
+    
+    if eia_api:
+        eia_coal = eia.FuelCosts("coal", "power", sns.year[0], eia_api).get_data().drop(columns=["series-description", "unit"]).reset_index()
+        eia_coal = eia_coal.pivot(
+            index="period",
+            columns="state",
+            values="price",
+        )
+        eia_coal = make_hourly(eia_coal)
+    else:
+        eia_coal = pd.DataFrame()
+        
+    return eia_coal.loc[sns]
+
+if __name__ == "__main__":
+    if "snakemake" not in globals():
+        from _helpers import mock_snakemake
+
+        snakemake = mock_snakemake("build_fuel_prices", interconnect="western")
+    configure_logging(snakemake)
+    
     snapshot_config = snakemake.config["snapshots"]
     sns_start = pd.to_datetime(snapshot_config["start"])
     sns_end = pd.to_datetime(snapshot_config["end"])
     sns_inclusive = snapshot_config["inclusive"]
-
+    
+    eia_api = snakemake.params.api_eia
+    
+    interconnects = snakemake.config["scenario"]["interconnect"]
+    if isinstance(interconnects, str):
+        interconnects = [interconnects]
+    
     snapshots = pd.date_range(
         freq="h",
         start=sns_start,
         end=sns_end,
         inclusive=sns_inclusive,
     )
-    if "western" in snakemake.wildcards.interconnect:
-        fuel_prices_caiso = prepare_caiso(snakemake.input.caiso_ng_prices, snapshots)
-    else:
-        fuel_prices_caiso = pd.DataFrame()
 
-    fuel_prices_eia = prepare_eia(snakemake.input.eia_ng_prices, snapshots)
-
-    fuel_prices = pd.concat([fuel_prices_caiso, fuel_prices_eia], axis=1)
-
-    fuel_prices.to_csv(snakemake.output.ng_fuel_prices, index=False)
-
-
-if __name__ == "__main__":
-    if "snakemake" not in globals():
-        from _helpers import mock_snakemake
-
-        snakemake = mock_snakemake("build_fuel_prices", interconnect="texas")
-    configure_logging(snakemake)
-    main(snakemake)
+    ng_prices = get_ng_prices(snapshots, interconnects, eia_api)
+    ng_prices.to_csv(snakemake.output.ng_fuel_prices, index=False)
+    
+    coal_prices = get_coal_prices(snapshots, eia_api)
+    ng_prices.to_csv(snakemake.output.coal_fuel_prices, index=False)
