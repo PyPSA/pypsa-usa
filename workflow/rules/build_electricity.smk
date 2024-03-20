@@ -251,16 +251,16 @@ rule build_fuel_prices:
     params:
         snapshots=config["snapshots"],
         fuel_year=config["costs"]["ng_fuel_year"],
+        api_eia=config["api"]["eia"],
     input:
         caiso_ng_prices=(
             DATA + "costs/ng_caiso_prices.csv"
             if "western" in config["scenario"]["interconnect"]
             else []
         ),
-        eia_ng_prices=DATA + "costs/ng_electric_power_price.csv",
-        avg_fuel_prices="repo_data/eia_mappings/fuelCost22.csv",
     output:
         ng_fuel_prices=RESOURCES + "{interconnect}/ng_fuel_prices.csv",
+        coal_fuel_prices=RESOURCES + "{interconnect}/coal_fuel_prices.csv",
     log:
         LOGS + "{interconnect}/build_fuel_prices.log",
     benchmark:
@@ -322,6 +322,7 @@ rule add_electricity:
         demand=RESOURCES + "{interconnect}/demand.csv",
         fuel_costs="repo_data/eia_mappings/fuelCost22.csv",
         ng_electric_power_price=RESOURCES + "{interconnect}/ng_fuel_prices.csv",
+        coal_electric_power_price=RESOURCES + "{interconnect}/coal_fuel_prices.csv",
     output:
         RESOURCES + "{interconnect}/elec_base_network_l_pp.nc",
     log:

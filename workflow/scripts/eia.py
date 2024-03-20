@@ -387,7 +387,7 @@ class CoalCosts(DataExtractor):
         dfs = []
         dates = pd.date_range(
             start=f"{self.year}-01-01",
-            end="{self.year}-12-01",
+            end=f"{self.year}-12-01",
             freq="MS",
         )
         for date in dates:

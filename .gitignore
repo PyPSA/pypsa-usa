@@ -10,7 +10,7 @@ dconf
 *.DS_Store
 *.dot
 *config.yaml
-*/config.api.yaml
+*config.api.yaml
 *.tar.gz
 
 
