@@ -33,6 +33,7 @@ def define_zenodo_databundles():
 def define_sector_databundles():
     return {
         "pypsa_usa_sec": "https://zenodo.org/records/10637836/files/pypsa_usa_sector_data.zip?download=1"
+        "pypsa_usa_sec": "https://zenodo.org/records/10637836/files/pypsa_usa_sector_data.zip?download=1"
     }
 
 
@@ -58,17 +59,17 @@ def define_nrel_databundles():
     }
 
 
-rule retrieve_nrel_efs_data:
-    params:
-        define_nrel_databundles(),
-    output:
-        DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv",
-    log:
-        "logs/retrieve/retrieve_databundles.log",
-    conda:
-        "../envs/environment.yaml"
-    script:
-        "../scripts/retrieve_databundles.py"
+# rule retrieve_nrel_efs_data:
+#     params:
+#         define_nrel_databundles(),
+#     output:
+#         DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv",
+#     log:
+#         "logs/retrieve/retrieve_databundles.log",
+#     conda:
+#         "../envs/environment.yaml"
+#     script:
+#         "../scripts/retrieve_databundles.py"
 
 
 sector_datafiles = [
@@ -84,18 +85,18 @@ sector_datafiles = [
 ]
 
 
-rule retrieve_sector_databundle:
-    params:
-        define_sector_databundles(),
-    output:
-        expand(DATA + "{file}", file=sector_datafiles),
-    log:
-        LOGS + "retrieve_sector_databundle.log",
-    retries: 2
-    conda:
-        "../envs/environment.yaml"
-    script:
-        "../scripts/retrieve_databundles.py"
+# rule retrieve_sector_databundle:
+#     params:
+#         define_sector_databundles(),
+#     output:
+#         expand(DATA + "{file}", file=sector_datafiles),
+#     log:
+#         LOGS + "retrieve_sector_databundle.log",
+#     # retries: 2
+#     conda:
+#         "../envs/environment.yaml"
+#     script:
+#         "../scripts/retrieve_databundles.py"
 
 
 if config["network_configuration"] == "ads2032":
@@ -117,20 +118,16 @@ if config["network_configuration"] == "ads2032":
             "../scripts/retrieve_forecast_data.py"
 
 
-DATAFILES_DMD = [
-    "EIA_DMD_2018_2024.csv",
-]
+if config["enable"].get("download_eia", False):
+    rule retrieve_eia_data:
+        output:
+            expand(DATA + "eia/{file}", file=DATAFILES_DMD),
+        log:
+            "logs/retrieve/retrieve_historical_load_data.log",
+        script:
+            "../scripts/retrieve_eia_data.py"
 
-
-rule retrieve_eia_data:
-    output:
-        expand(DATA + "GridEmissions/{file}", file=DATAFILES_DMD),
-    log:
-        "logs/retrieve/retrieve_historical_load_data.log",
-    resources:
-        mem_mb=5000,
-    script:
-        "../scripts/retrieve_eia_data.py"
+DATAFILES_DMD = ["EIA_DMD_2018_2024.csv"]
 
 
 rule retrieve_ship_raster:
@@ -150,21 +147,21 @@ rule retrieve_ship_raster:
     run:
         move(input[0], output[0])
 
-
-rule retrieve_cutout:
-    input:
-        HTTP.remote(
-            "zenodo.org/records/10067222/files/{interconnect}_{cutout}.nc", static=True
-        ),
-    output:
-        "cutouts/" + CDIR + "{interconnect}_{cutout}.nc",
-    log:
-        "logs/" + CDIR + "retrieve_cutout_{interconnect}_{cutout}.log",
-    resources:
-        mem_mb=5000,
-    retries: 2
-    run:
-        move(input[0], output[0])
+if config["enable"].get("download_cutout", False):
+    rule retrieve_cutout:
+        input:
+            HTTP.remote(
+                'zenodo.org/records/10067222/files/{interconnect}_{cutout}.nc'
+                ,static=True),
+        output:
+            "cutouts/" + CDIR + "{interconnect}_{cutout}.nc",
+        log:
+            "logs/" + CDIR + "retrieve_cutout_{interconnect}_{cutout}.log",
+        resources:
+            mem_mb=5000,
+        retries: 2
+        run:
+            move(input[0], output[0])
 
 
 rule retrieve_cost_data_eur:

@@ -48,6 +48,16 @@ The rule :mod:`add_extra_components` attaches additional extendable components t
 
 import logging
 from typing import List
+import geopandas as gpd
+import numpy as np
+import pandas as pd
+import pypsa
+from _helpers import configure_logging
+
+import pypsa
+import pandas as pd
+import numpy as np
+from typing import List
 
 import numpy as np
 import pandas as pd
@@ -268,6 +278,150 @@ def add_economic_retirement(
     ]
     p_max_pu_t = p_max_pu_t.rename(columns={x: f"{x} new" for x in p_max_pu_t.columns})
     n.generators_t["p_max_pu"] = n.generators_t["p_max_pu"].join(p_max_pu_t)
+    
+# def add_geothermal(n: pypsa.Network, gens: List[str] = None): 
+    
+#     n_prep_gen = n.generators.sort_values(by=['carrier', 'bus'], ascending=True)
+#     lst_bus = n_prep_gen['bus'].unique()
+
+#     n_prep_template = n_prep_gen.head(1)
+#     n_prep_template = n_prep_template.drop(columns=['carrier', 'bus'])
+#     n_prep_template['key'] = '1'
+
+#     n_prep_geo = pd.DataFrame({'bus': lst_bus})
+#     n_prep_geo['carrier'] = 'geothermal'
+#     n_prep_geo['key'] = '1'
+
+
+#     n_prep_geo = n_prep_geo.merge(n_prep_template, left_on='key', right_on='key')
+
+#     n_prep_geo['p_nom_min'] = 0
+#     n_prep_geo['p_nom'] = 0
+#     n_prep_geo['efficiency'] = 0.9
+#     n_prep_geo['marginal_cost'] = 443000
+#     n_prep_geo['capital_cost'] = 14100000
+#     n_prep_geo['p_nom_max'] = 50000
+#     n_prep_geo['weight'] = 1
+#     n_prep_geo['control'] = 'PQ'
+#     n_prep_geo['p_max_pu'] = 1
+#     n_prep_geo['p_nom_opt'] = np.nan
+
+#     # n_prep_geo['index'] = n_prep_geo['bus'] + n_prep_geo['new'] + 
+#     n_prep_geo['Generator'] = n_prep_geo['bus'] + ' ' + n_prep_geo['carrier']
+#     n_prep_geo = n_prep_geo.set_index('Generator')
+
+#     n.madd(
+#         "Generator",
+#         n_prep_geo.index,
+#         suffix=" new",
+#         carrier= n_prep_geo.carrier, 
+#         bus=n_prep_geo.bus,
+#         p_nom_min=0,
+#         p_nom=0,
+#         p_nom_max=n_prep_geo.p_nom_max,
+#         p_nom_extendable=True,
+#         ramp_limit_up=n_prep_geo.ramp_limit_up,
+#         ramp_limit_down=n_prep_geo.ramp_limit_down,
+#         efficiency=n_prep_geo.efficiency,
+#         marginal_cost=n_prep_geo.marginal_cost,
+#         capital_cost=n_prep_geo.capital_cost,
+#         lifetime=n_prep_geo.lifetime,
+#         p_min_pu = n_prep_geo.p_min_pu,
+#         p_max_pu = n_prep_geo.p_max_pu,
+#     )
+
+def add_egs(n: pypsa.Network, regions_gdp, geo_egs_sc, cost_reduction): 
+    
+    region_onshore = gpd.read_file(regions_gdp).rename(columns={'name':'bus'})
+    geo_sc = gpd.read_file(geo_egs_sc).to_crs(4326).rename(columns={'name':'county'})
+
+    geo_sc["fom_pct"] = geo_sc['fom_kw'] / geo_sc['capex_kw']
+
+
+    geo_sc["capital_cost"] = (
+            (
+                calculate_annuity(30, 0.055)
+                + geo_sc["fom_pct"]
+            )
+            * geo_sc["capex_kw"] * 1e3
+            * n.snapshot_weightings.objective.sum() / 8760.0
+        )
+
+    geo_sc["investment_annualized"] = (
+        calculate_annuity(30, 0.055)
+        * geo_sc["capex_kw"] * 1e3
+        * n.snapshot_weightings.objective.sum() / 8760.0
+    )
+
+
+
+
+    region_onshore_geo = gpd.sjoin(region_onshore, geo_sc, how="left").reset_index(drop=True)
+    region_onshore_geo_grp = region_onshore_geo.sort_values(by=['bus', 'capex_kw'], ascending=True).groupby(["bus"])
+
+    region_onshore_geo_grp_c1 = region_onshore_geo_grp.apply(lambda t: t.iloc[0]).reset_index(drop=True)
+    # region_onshore_geo_grp_c2 = region_onshore_geo_grp.apply(lambda t: t.iloc[1]).reset_index(drop=True)
+    # region_onshore_geo_grp_c3 = region_onshore_geo_grp.apply(lambda t: t.iloc[2]).reset_index(drop=True)
+    # region_onshore_geo_grp_c4 = region_onshore_geo_grp.apply(lambda t: t.iloc[3]).reset_index(drop=True)
+    # region_onshore_geo_grp_c5 = region_onshore_geo_grp.apply(lambda t: t.iloc[4]).reset_index(drop=True)
+    # region_onshore_geo_grp_c6 = region_onshore_geo_grp.apply(lambda t: t.iloc[5]).reset_index(drop=True)
+
+    # region_onshore_geo_grp_c1['tech'], region_onshore_geo_grp_c1['class'] = ['geothermal', '1']
+    # region_onshore_geo_grp_c2['tech'], region_onshore_geo_grp_c2['class'] = ['geothermal', '2']
+    # region_onshore_geo_grp_c3['tech'], region_onshore_geo_grp_c3['class'] = ['geothermal', '3']
+    # region_onshore_geo_grp_c4['tech'], region_onshore_geo_grp_c4['class'] = ['geothermal', '4']
+    # region_onshore_geo_grp_c5['tech'], region_onshore_geo_grp_c5['class'] = ['geothermal', '5']
+    # region_onshore_geo_grp_c6['tech'], region_onshore_geo_grp_c6['class'] = ['geothermal', '6']
+
+    region_onshore_geo_grp_c1['carrier'] = 'geothermal'
+    # region_onshore_geo_grp_c2['carrier'] = region_onshore_geo_grp_c2[['tech', 'class']].agg('_'.join, axis=1)
+    # region_onshore_geo_grp_c3['carrier'] = region_onshore_geo_grp_c3[['tech', 'class']].agg('_'.join, axis=1)
+    # region_onshore_geo_grp_c4['carrier'] = region_onshore_geo_grp_c4[['tech', 'class']].agg('_'.join, axis=1)
+    # region_onshore_geo_grp_c5['carrier'] = region_onshore_geo_grp_c5[['tech', 'class']].agg('_'.join, axis=1)
+    # region_onshore_geo_grp_c6['carrier'] = region_onshore_geo_grp_c6[['tech', 'class']].agg('_'.join, axis=1)
+
+    # region_onshore_geo_grp_all_class = pd.concat([region_onshore_geo_grp_c1,
+    #         region_onshore_geo_grp_c2,
+    #         region_onshore_geo_grp_c3,
+    #         region_onshore_geo_grp_c4,
+    #         region_onshore_geo_grp_c5,
+    #         region_onshore_geo_grp_c6])
+    
+    region_onshore_geo_grp_all_class = region_onshore_geo_grp_c1[['bus', 'carrier', 'capital_cost', 'capex_kw', 'fom_kw', 'potential_mw']].rename(columns={'potential_mw':"p_nom_max"}).sort_values(by=['bus', 'carrier'], ascending=True)
+    region_onshore_geo_grp_all_class['capital_cost'] = region_onshore_geo_grp_all_class['capital_cost'] * (1-cost_reduction)
+    region_onshore_geo_grp_all_class['marginal_cost'] = 0
+    region_onshore_geo_grp_all_class['Generator'] = region_onshore_geo_grp_all_class['bus'] + ' ' + region_onshore_geo_grp_all_class['carrier']
+    region_onshore_geo_grp_all_class = region_onshore_geo_grp_all_class.set_index('Generator')
+
+    region_onshore_geo_grp_all_class['p_nom_min'] = 0
+    region_onshore_geo_grp_all_class['p_nom'] = 0
+    region_onshore_geo_grp_all_class['efficiency'] = 1
+    region_onshore_geo_grp_all_class['weight'] = 1
+    region_onshore_geo_grp_all_class['control'] = 'PQ'
+    region_onshore_geo_grp_all_class['p_min_pu'] = 0
+    region_onshore_geo_grp_all_class['p_max_pu'] = 0.9
+    region_onshore_geo_grp_all_class['p_nom_opt'] = np.nan
+
+    n.madd(
+        "Generator",
+        region_onshore_geo_grp_all_class.index,
+        suffix=" new",
+        carrier= region_onshore_geo_grp_all_class.carrier, 
+        bus=region_onshore_geo_grp_all_class.bus,
+        p_nom_min=0,
+        p_nom=0,
+        p_nom_max=region_onshore_geo_grp_all_class.p_nom_max,
+        p_nom_extendable=True,
+        ramp_limit_up=0.15,
+        ramp_limit_down=0.15,
+        efficiency=region_onshore_geo_grp_all_class.efficiency,
+        marginal_cost=region_onshore_geo_grp_all_class.marginal_cost,
+        capital_cost=region_onshore_geo_grp_all_class.capital_cost,
+        lifetime=30,
+        p_min_pu = region_onshore_geo_grp_all_class.p_min_pu,
+        p_max_pu = region_onshore_geo_grp_all_class.p_max_pu,
+    )
+
 
 
 if __name__ == "__main__":
@@ -301,8 +455,14 @@ if __name__ == "__main__":
     add_nice_carrier_names(n, snakemake.config)
 
     if snakemake.params.retirement == "economic":
-        economic_retirement_gens = elec_config.get("conventional_carriers", None)
+        economic_retirement_gens = elec_config['extendable_carriers']['Generator']
+        # economic_retirement_gens = elec_config.get("conventional_carriers", None)
         add_economic_retirement(n, costs, economic_retirement_gens)
+        if snakemake.params.egs:
+            regions_gdp = snakemake.input.regions
+            geo_egs_sc = snakemake.input.geo_egs_sc
+            cost_reduction = snakemake.params.egs_reduction
+            add_egs(n, regions_gdp, geo_egs_sc, cost_reduction)
 
     n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))
     n.export_to_netcdf(snakemake.output[0])
