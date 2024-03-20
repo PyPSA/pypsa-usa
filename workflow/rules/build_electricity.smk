@@ -251,7 +251,7 @@ rule build_fuel_prices:
     params:
         snapshots=config["snapshots"],
         fuel_year=config["costs"]["ng_fuel_year"],
-        api_eia=config["api"]["eia"]
+        api_eia=config["api"]["eia"],
     input:
         caiso_ng_prices=(
             DATA + "costs/ng_caiso_prices.csv"

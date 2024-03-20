@@ -40,20 +40,47 @@ def prepare_caiso(caiso_fn: str, sns: pd.DatetimeIndex = None) -> pd.DataFrame:
     )
     return caiso_ng.rename(columns={"day_of_year": "period"})
 
-def make_hourly(df: pd.DataFrame) -> pd.DataFrame:
-    """Makes the index hourly"""
-    
-    start = df.index.min()
-    end = pd.to_datetime(start).to_period("Y").to_timestamp("Y").to_period("Y").to_timestamp("Y") + pd.offsets.MonthEnd(0) + pd.Timedelta(hours=23)
-    # new_index = pd.date_range(start=df.index.min(), end=df.index.max()+pd.Timedelta(days=1) + pd.Timedelta(days=1), freq="h")
-    hourly_df = pd.DataFrame(index=pd.date_range(start=start, end=end + pd.Timedelta(days=1), freq="h"))
-    return hourly_df.merge(df, how="left", left_index=True, right_index=True).ffill().bfill()
 
-def get_ng_prices(sns: pd.date_range, interconnects: List[str], eia_api: str = None) -> pd.DataFrame:
+def make_hourly(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Makes the index hourly.
+    """
+
+    start = df.index.min()
+    end = (
+        pd.to_datetime(start)
+        .to_period("Y")
+        .to_timestamp("Y")
+        .to_period("Y")
+        .to_timestamp("Y")
+        + pd.offsets.MonthEnd(0)
+        + pd.Timedelta(hours=23)
+    )
+    # new_index = pd.date_range(start=df.index.min(), end=df.index.max()+pd.Timedelta(days=1) + pd.Timedelta(days=1), freq="h")
+    hourly_df = pd.DataFrame(
+        index=pd.date_range(start=start, end=end + pd.Timedelta(days=1), freq="h")
+    )
+    return (
+        hourly_df.merge(df, how="left", left_index=True, right_index=True)
+        .ffill()
+        .bfill()
+    )
+
+
+def get_ng_prices(
+    sns: pd.date_range, interconnects: list[str], eia_api: str = None
+) -> pd.DataFrame:
 
     if eia_api:
-        eia_ng = eia.FuelCosts("gas", "power", sns.year[0], eia_api).get_data().drop(columns=["series-description", "units"]).reset_index()
-        eia_ng["value"] = eia_ng["value"].astype(float) * 1000 / const.NG_MWH_2_MMCF # $/MCF -> $/MWh
+        eia_ng = (
+            eia.FuelCosts("gas", "power", sns.year[0], eia_api)
+            .get_data()
+            .drop(columns=["series-description", "units"])
+            .reset_index()
+        )
+        eia_ng["value"] = (
+            eia_ng["value"].astype(float) * 1000 / const.NG_MWH_2_MMCF
+        )  # $/MCF -> $/MWh
         eia_ng = eia_ng.pivot(
             index="period",
             columns="state",
@@ -73,14 +100,20 @@ def get_ng_prices(sns: pd.date_range, interconnects: List[str], eia_api: str = N
         caiso_ng = make_hourly(caiso_ng)
     else:
         caiso_ng = pd.DataFrame()
-    
+
     ng = pd.concat([caiso_ng, eia_ng], axis=1)
     return ng.loc[sns]
 
+
 def get_coal_prices(sns: pd.date_range, eia_api: str = None) -> pd.DataFrame:
-    
+
     if eia_api:
-        eia_coal = eia.FuelCosts("coal", "power", sns.year[0], eia_api).get_data().drop(columns=["series-description", "unit"]).reset_index()
+        eia_coal = (
+            eia.FuelCosts("coal", "power", sns.year[0], eia_api)
+            .get_data()
+            .drop(columns=["series-description", "unit"])
+            .reset_index()
+        )
         eia_coal = eia_coal.pivot(
             index="period",
             columns="state",
@@ -89,8 +122,9 @@ def get_coal_prices(sns: pd.date_range, eia_api: str = None) -> pd.DataFrame:
         eia_coal = make_hourly(eia_coal)
     else:
         eia_coal = pd.DataFrame()
-        
+
     return eia_coal.loc[sns]
+
 
 if __name__ == "__main__":
     if "snakemake" not in globals():
@@ -98,18 +132,18 @@ if __name__ == "__main__":
 
         snakemake = mock_snakemake("build_fuel_prices", interconnect="western")
     configure_logging(snakemake)
-    
+
     snapshot_config = snakemake.config["snapshots"]
     sns_start = pd.to_datetime(snapshot_config["start"])
     sns_end = pd.to_datetime(snapshot_config["end"])
     sns_inclusive = snapshot_config["inclusive"]
-    
+
     eia_api = snakemake.params.api_eia
-    
+
     interconnects = snakemake.config["scenario"]["interconnect"]
     if isinstance(interconnects, str):
         interconnects = [interconnects]
-    
+
     snapshots = pd.date_range(
         freq="h",
         start=sns_start,
@@ -119,6 +153,6 @@ if __name__ == "__main__":
 
     ng_prices = get_ng_prices(snapshots, interconnects, eia_api)
     ng_prices.to_csv(snakemake.output.ng_fuel_prices, index=False)
-    
+
     coal_prices = get_coal_prices(snapshots, eia_api)
     ng_prices.to_csv(snakemake.output.coal_fuel_prices, index=False)
