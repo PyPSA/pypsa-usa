@@ -53,6 +53,7 @@ def get_ng_prices(sns: pd.date_range, interconnects: List[str], eia_api: str = N
 
     if eia_api:
         eia_ng = eia.FuelCosts("gas", "power", sns.year[0], eia_api).get_data().drop(columns=["series-description", "units"]).reset_index()
+        eia_ng["value"] = eia_ng["value"].astype(float) * 1000 / const.NG_MWH_2_MMCF # $/MCF -> $/MWh
         eia_ng = eia_ng.pivot(
             index="period",
             columns="state",
