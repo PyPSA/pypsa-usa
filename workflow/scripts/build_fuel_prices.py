@@ -157,4 +157,4 @@ if __name__ == "__main__":
     ng_prices.to_csv(snakemake.output.ng_fuel_prices, index=False)
 
     coal_prices = get_coal_prices(snapshots, eia_api)
-    ng_prices.to_csv(snakemake.output.coal_fuel_prices, index=False)
+    coal_prices.to_csv(snakemake.output.coal_fuel_prices, index=False)

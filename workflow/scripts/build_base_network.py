@@ -537,7 +537,9 @@ def modify_breakthrough_substations(n: pypsa.Network, interconnect: str):
             36145: {"x": -122.3121, "y": 37.8211},
             39718: {"x": -106.49655, "y": 31.76924},
             39731: {"x": -106.3232, "y": 31.7093},
-        }
+            35116: {"x": -122.462, "y": 48.982},
+            37707: {"x": -115.4550, "y": 32.6866},
+            }
         for i in sub_fixes.keys():
             n.buses.loc[n.buses.sub_id == i, "x"] = sub_fixes[i]["x"]
             n.buses.loc[n.buses.sub_id == i, "y"] = sub_fixes[i]["y"]
