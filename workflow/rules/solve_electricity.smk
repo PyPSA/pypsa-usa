@@ -35,7 +35,7 @@ rule solve_network:
     conda:
         "../envs/environment.yaml"
     script:
-        "../scripts/solve_network_local.py"
+        "../scripts/solve_network.py"
 
 
 rule solve_network_operations:
@@ -65,7 +65,7 @@ rule solve_network_operations:
             BENCHMARKS
             + "solve_network/{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}_{sector}"
         )
-    threads: 4
+    threads: 8
     resources:
         mem_mb=memory,
         walltime=config["solving"].get("walltime", "12:00:00"),

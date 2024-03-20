@@ -11,7 +11,7 @@ run:
 # docs :
 scenario:
   interconnect: [western] #"usa|texas|western|eastern"
-  clusters: [40]
+  clusters: [30]
   opts: [Co2L1.0-6H-RCo2L-SAFER-RPS]
   ll: [v1.0]
   scope: "total" # "urban", "rural", or "total"
@@ -33,44 +33,15 @@ snapshots:
   inclusive: 'left'
 
 # docs :
-atlite:
-  default_cutout: era5_2019
-  nprocesses: 8
-  show_progress: false # false saves time
-  cutouts:
-    era5_2019:
-      module: era5 # in priority order
-      time: ['2019', '2019']
-  interconnects:
-    western:
-      x: [-126, -99]
-      y: [27, 50]
-      dx: 0.3
-      dy: 0.3
-    eastern:
-      x: [-109, -65]
-      y: [23, 50]
-      dx: 0.3
-      dy: 0.3
-    texas:
-      x: [-110, -90]
-      y: [24, 37]
-      dx: 0.3
-      dy: 0.3
-    usa:
-      x: [-126, -65]
-      y: [23, 50]
-      dx: 0.3
-      dy: 0.3
-
-# docs :
 electricity:
   conventional_carriers: [nuclear, oil, OCGT, CCGT, coal, geothermal] # Choose the conventional plant types to include in network
   renewable_carriers: [onwind, offwind, offwind_floating, solar, hydro] # Choose the renewable plant types to include in network
   voltage_simplified: 230 #Voltage level to simplify network to in rule "simplify network"
-  co2limit: 147.28e+6 # 0.8 * 184.1e+6
-  co2base: 225.0e+6 #base_from_2020 Locations of the 250 MMmt of CO2 emissions from the WECC 2021.
+  co2limit: 1.4728e+9 # 0.8 * 1.841e+9
+  co2limit_enable: false # For sector coupled studies
+  co2base: 226.86e+6 #base_from_2020 Locations of the 250 MMmt of CO2 emissions from the WECC 2021.
   gaslimit: false # global gas usage limit of X MWh_th
+  gaslimit_enable: false # For sector coupled studies
   retirement: economic # "economic" or "technical"
   SAFE_reservemargin: 0.14
   regional_Co2_limits: 'config/policy_constraints/regional_Co2_limits.csv'
@@ -98,11 +69,14 @@ electricity:
     EFS_case: reference # reference, medium, high
     EFS_speed: moderate # slow, moderate, rapid
 
+  autarky:
+    enable: false
+    by_country: false
 
 # docs :
 conventional:
   unit_commitment: false
-  dynamic_fuel_price: false
+  dynamic_fuel_price: true
 
 # docs :
 renewable:
@@ -116,10 +90,11 @@ renewable:
     # correction_factor: 0.93
     corine:
       #all keys labeled corrine are actually copernicus codes. Using the name corrine bc using the pypsa-eur convention: https://land.copernicus.eu/global/sites/cgls.vito.be/files/products/CGLOPS1_PUM_LC100m-V3_I3.4.pdf
-      grid_codes: [20, 30, 40, 60, 100, 111, 112, 113, 114, 115, 116, 121, 122, 123, 124, 125, 126]
+      grid_codes: [20, 30, 40, 60, 100, 112, 113, 114, 115]
       distance: 10 #buffer from distance_grid_codes that are to be excluded
       distance_grid_codes: [50]
     natura: true
+    cec: true
     potential: conservative # simple or conservative
     clip_p_max_pu: 1.e-2
     extendable: true
@@ -135,8 +110,9 @@ renewable:
       grid_codes: [80, 200] #page 28 of https://land.copernicus.eu/global/sites/cgls.vito.be/files/products/CGLOPS1_PUM_LC100m-V3_I3.4.pdf
     natura: true
     max_depth: 60 # meters, ref https://www.nrel.gov/docs/fy16osti/66599.pdf
+    boem_screen: true
     min_shore_distance: 22000 # meters
-    max_shore_distance: 90000 # meters
+    max_shore_distance: 65000 # meters
     potential: conservative # simple or conservative
     clip_p_max_pu: 1.e-2
     extendable: true
@@ -152,10 +128,11 @@ renewable:
     corine:
       grid_codes: [80, 200] #page 28 of https://land.copernicus.eu/global/sites/cgls.vito.be/files/products/CGLOPS1_PUM_LC100m-V3_I3.4.pdf
     natura: true
+    boem_screen: true
     min_depth: 60 # meters, ref https://www.nrel.gov/docs/fy16osti/66599.pdf
     max_depth: 1300 # meters, ref https://www.nrel.gov/docs/fy22osti/83650.pdf
     min_shore_distance: 22000 # meters
-    max_shore_distance: 90000 # meters
+    max_shore_distance: 65000 # meters
     potential: conservative # simple or conservative
     clip_p_max_pu: 1.e-2
     extendable: true
@@ -164,33 +141,30 @@ renewable:
     resource:
       method: pv
       panel: CSi
-      orientation: latitude_optimal # will lead into optimal design
-        # slope: 0.  # slope: 0 represent a flat panel
-        # azimuth: 180.  # azimuth: 180 south orientation
+      orientation: latitude_optimal # will lead into optimal
     capacity_per_sqkm: 4.6 # From 1.7 to 4.6 addresses issue #361 - TODO revisit this assumption
     correction_factor: 0.854337
     corine:
-      grid_codes: [20, 30, 40, 50, 60, 90, 100] #see above for codes
+      grid_codes: [20, 30, 40, 60, 90, 100] #see above for codes
     natura: true
+    cec: true
     potential: conservative # simple or conservative
     clip_p_max_pu: 1.e-2
     extendable: true
   hydro:
     cutout: era5_2019
+    carriers: [ror, PHS, hydro]
+    PHS_max_hours: 6
     resource:
       method: hydro
       hydrobasins: resources/hybas_na_lev06_v1c.shp
       flowspeed: 1.0  # m/s
-      # weight_with_height: false
-      # show_progress: true
-    carriers: [ror, PHS, hydro]
-    PHS_max_hours: 6
     hydro_max_hours: "energy_capacity_totals_by_country"  # not active
     clip_min_inflow: 1.0
     extendable: true
     normalization:
-      method: hydro_capacities  # 'hydro_capacities' to rescale country hydro production by using hydro_capacities, 'eia' to rescale by eia data, false for no rescaling
-      year: 2013  # (optional) year of statistics used to rescale the runoff time series. When not provided, the weather year of the snapshots is used
+      method: hydro_capacities
+      year: 2013
     multiplier: 1.1  # multiplier applied after the normalization of the hydro production; default 1.0
 
 # docs :
@@ -244,7 +218,9 @@ costs:  # based on the potentials, assuming  (0.1 kW/m2 and 10 m2/person)
     battery: 0.
     battery inverter: 0.
   emission_prices: # in currency per tonne emission, only used with the option Ep
+    enable: false
     co2: 0.
+    co2_monthly_prices: false
 
 # docs :
 sector:
@@ -273,9 +249,45 @@ clustering:
       committable: any
       ramp_limit_up: max
       ramp_limit_down: max
+  temporal:
+    resolution_elec: false
+    resolution_sector: false
 
 focus_weights:
   # California: 0.5
+
+
+# docs :
+atlite:
+  default_cutout: era5_2019
+  nprocesses: 8
+  show_progress: false # false saves time
+  cutouts:
+    era5_2019:
+      module: era5 # in priority order
+      time: ['2019', '2019']
+  interconnects:
+    western:
+      x: [-126, -99]
+      y: [27, 50]
+      dx: 0.3
+      dy: 0.3
+    eastern:
+      x: [-109, -65]
+      y: [23, 50]
+      dx: 0.3
+      dy: 0.3
+    texas:
+      x: [-110, -90]
+      y: [24, 37]
+      dx: 0.3
+      dy: 0.3
+    usa:
+      x: [-126, -65]
+      y: [23, 50]
+      dx: 0.3
+      dy: 0.3
+
 
 # docs :
 solving:
@@ -291,9 +303,10 @@ solving:
     track_iterations: false
     min_iterations: 4
     max_iterations: 6
-    transmission_losses: 0
+    transmission_losses: 2
     linearized_unit_commitment: true
     horizon: 8760
+    assign_all_duals: true
 
   solver:
     name: gurobi

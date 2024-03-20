@@ -9,12 +9,11 @@ def sector_input_files(wildcards):
     counties = DATA + "counties/cb_2020_us_county_500k.shp"
     if "G" in sectors:
         ng_files = {
-            "counties": DATA + "counties/cb_2020_us_county_500k.shp",
-            "eia_191": DATA + "natural-gas/EIA-191.csv",
-            "eia_757": DATA + "natural-gas/EIA-757.csv",
-            "pipelines": DATA + "natural-gas/EIA-StatetoStateCapacity_Jan2023.xlsx",
-            "imports": DATA + "natural-gas/NG_MOVE_POE2_A_EPG0_IRP_MMCF_A.xls",
-            "exports": DATA + "natural-gas/NG_MOVE_POE2_A_EPG0_ENP_MMCF_A.xls",
+            "county": DATA + "counties/cb_2020_us_county_500k.shp",
+            "pipeline_capacity": DATA
+            + "natural_gas/EIA-StatetoStateCapacity_Jan2023.xlsx",
+            "pipeline_shape": DATA + "natural_gas/pipelines.geojson",
+            "eia_757": DATA + "natural_gas/EIA-757.csv",
         }
         input_files.update(ng_files)
 
@@ -27,12 +26,16 @@ rule add_sectors:
         costs=config["costs"],
         plotting=config["plotting"],
         natural_gas=config["sector"].get("natural_gas", None),
+        snapshots=config["snapshots"],
+        api=config["api"],
     input:
         unpack(sector_input_files),
         counties = DATA + "counties/cb_2020_us_county_500k.shp"
     output:
         network=RESOURCES
         + "{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}_{sector}.nc",
+    log:
+        "logs/add_sectors/{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}_{sector}.log",
     group:
         "prepare"
     threads: 1

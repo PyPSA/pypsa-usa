@@ -17,7 +17,7 @@ rule build_shapes:
         offshore_shapes=RESOURCES + "{interconnect}/offshore_shapes.geojson",
         state_shapes=RESOURCES + "{interconnect}/state_boundaries.geojson",
     log:
-        "logs/build_shapes_{interconnect}.log",
+        "logs/build_shapes/{interconnect}.log",
     threads: 1
     resources:
         mem_mb=500,
@@ -65,7 +65,7 @@ rule build_bus_regions:
         regions_onshore=RESOURCES + "{interconnect}/regions_onshore.geojson",
         regions_offshore=RESOURCES + "{interconnect}/regions_offshore.geojson",
     log:
-        "logs/{interconnect}/build_bus_regions_s.log",
+        "logs/build_bus_regions/{interconnect}.log",
     threads: 1
     resources:
         mem_mb=1000,
@@ -87,6 +87,8 @@ rule build_cost_data:
     script:
         "../scripts/build_cost_data.py"
 
+
+ATLITE_NPROCESSES = config["atlite"].get("nprocesses", 4)
 
 if config["enable"].get("build_cutout", False):
 
@@ -186,6 +188,9 @@ rule build_renewable_profiles:
         ),
         country_shapes=RESOURCES + "{interconnect}/country_shapes.geojson",
         offshore_shapes=RESOURCES + "{interconnect}/offshore_shapes.geojson",
+        cec_onwind="repo_data/CEC_Wind_BaseScreen_epsg3310.tif",
+        cec_solar="repo_data/CEC_Solar_BaseScreen_epsg3310.tif",
+        boem_osw="repo_data/boem_osw_planning_areas.tif",
         regions=lambda w: (
             RESOURCES + "{interconnect}/regions_onshore.geojson"
             if w.technology in ("onwind", "solar")
@@ -247,12 +252,16 @@ rule build_fuel_prices:
     params:
         snapshots=config["snapshots"],
         fuel_year=config["costs"]["ng_fuel_year"],
+        api_eia=config["api"]["eia"],
     input:
-        caiso_ng_prices=DATA + "costs/ng_caiso_prices.csv",
-        eia_ng_prices=DATA + "costs/ng_electric_power_price.csv",
-        avg_fuel_prices="repo_data/eia_mappings/fuelCost22.csv",
+        caiso_ng_prices=(
+            DATA + "costs/ng_caiso_prices.csv"
+            if "western" in config["scenario"]["interconnect"]
+            else []
+        ),
     output:
         ng_fuel_prices=RESOURCES + "{interconnect}/ng_fuel_prices.csv",
+        coal_fuel_prices=RESOURCES + "{interconnect}/coal_fuel_prices.csv",
     log:
         LOGS + "{interconnect}/build_fuel_prices.log",
     benchmark:
@@ -316,6 +325,7 @@ rule add_electricity:
         demand=RESOURCES + "{interconnect}/demand.csv",
         fuel_costs="repo_data/eia_mappings/fuelCost22.csv",
         ng_electric_power_price=RESOURCES + "{interconnect}/ng_fuel_prices.csv",
+        coal_electric_power_price=RESOURCES + "{interconnect}/coal_fuel_prices.csv",
     output:
         RESOURCES + "{interconnect}/elec_base_network_l_pp.nc",
     log:
@@ -339,7 +349,7 @@ rule simplify_network:
         network=RESOURCES + "{interconnect}/elec_s.nc",
     log:
         "logs/simplify_network/{interconnect}/elec_s.log",
-    threads: 2
+    threads: 1
     resources:
         mem_mb=10000,
     script:
@@ -384,7 +394,10 @@ rule cluster_network:
     resources:
         mem_mb=10000,
     script:
-        "../scripts/subworkflows/pypsa-eur/scripts/cluster_network.py"
+        "../scripts/cluster_network_eur.py"
+
+
+# "../scripts/subworkflows/pypsa-eur/scripts/cluster_network.py"
 
 if config["enable"].get("allow_new_plant", True):
     rule add_extra_components:
@@ -418,13 +431,18 @@ else:
 
 rule prepare_network:
     params:
+        time_resolution=config["clustering"]["temporal"]["resolution_elec"],
+        adjustments=False,
         links=config["links"],
         lines=config["lines"],
         co2base=config["electricity"]["co2base"],
         co2limit=config["electricity"]["co2limit"],
+        co2limit_enable=config["electricity"]["co2limit_enable"],
         gaslimit=config["electricity"].get("gaslimit"),
+        gaslimit_enable=config["electricity"].get("gaslimit_enable"),
         max_hours=config["electricity"]["max_hours"],
         costs=config["costs"],
+        autarky=config["electricity"]["autarky"],
     input:
         network=RESOURCES + "{interconnect}/elec_s_{clusters}_ec.nc",
         tech_costs=RESOURCES + f"costs_{config['costs']['year']}.csv",

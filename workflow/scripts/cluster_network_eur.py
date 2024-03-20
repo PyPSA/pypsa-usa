@@ -590,5 +590,5 @@ if __name__ == "__main__":
 
     cluster_regions((clustering.busmap,), snakemake.input, snakemake.output)
 
-    output_path = os.path.dirname(snakemake.output[0]) + "_clustered_"
-    export_network_for_gis_mapping(clustering.network, output_path)
+    # output_path = os.path.dirname(snakemake.output[0]) + "_clustered_"
+    # export_network_for_gis_mapping(clustering.network, output_path)
