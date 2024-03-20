@@ -1,15 +1,3 @@
-FIGURES_VALIDATE = [
-    "seasonal_stacked_plot",
-    "carrier_production_bar",
-    "production_deviation_bar",
-    "val_bar_regional_emissions",
-    "val_generator_data_panel",
-    "val_heatmap_curtailment",
-    "val_heatmap_capacity_factor",
-    "val_box_region_lmps",
-    "val_map_load_shedding",
-]
-
 
 rule plot_validation_figures:
     input:
@@ -25,7 +13,7 @@ rule plot_validation_figures:
     output:
         **{
             fig: RESULTS
-            + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/%s.pdf"
+            + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/validation/%s"
             % fig
             for fig in FIGURES_VALIDATE
         },
