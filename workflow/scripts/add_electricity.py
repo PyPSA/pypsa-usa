@@ -1401,6 +1401,7 @@ def main(snakemake):
         fuel_costs = {
             "CCGT": "ng_electric_power_price",
             "OCGT": "ng_electric_power_price",
+            "coal": "coal_electric_power_price",
         }
         for carrier, cost_data in fuel_costs.items():
             fuel_cost_file = snakemake.input[f"{cost_data}"]
