@@ -73,8 +73,6 @@ colors = [
     "lightskyblue",
     "crimson",
 ]
-kwargs = dict(color=colors, ylabel="Production [GW]", xlabel="")
-
 
 def plot_regional_timeseries_comparison(
     n: pypsa.Network,
@@ -115,6 +113,7 @@ def plot_timeseries_comparison(
     """
     plots a stacked plot for seasonal production for snapshots: January 2 - December 30 (inclusive)
     """
+    kwargs = dict(color=colors, ylabel="Production [GW]", xlabel="", linewidth=0)
 
     fig, axes = plt.subplots(3, 1, figsize=(9, 9))
     optimized.resample("1D").mean().plot.area(
