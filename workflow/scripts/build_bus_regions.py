@@ -36,6 +36,7 @@ from _helpers import REGION_COLS
 from scipy.spatial import Voronoi
 from shapely.geometry import Polygon
 
+
 def voronoi_partition_pts(points, outline):
     """
     Compute the polygons of a voronoi partition of `points` within the

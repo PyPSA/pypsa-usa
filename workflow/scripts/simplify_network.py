@@ -17,23 +17,24 @@ from pypsa.clustering.spatial import get_clustering_from_busmap
 
 logger = logging.getLogger(__name__)
 
+
 def convert_to_per_unit(df):
     # Constants
-    sqrt_3 = (3 ** 0.5)
-    
+    sqrt_3 = 3**0.5
+
     # Calculating base values per component
     # df['base_current'] = df['s_nom'] / (df['v_nom'] * sqrt_3)
-    df['base_impedance'] = df['v_nom']**2 / df['s_nom']
-    df['base_susceptance'] = 1 / df['base_impedance']
-    
+    df["base_impedance"] = df["v_nom"] ** 2 / df["s_nom"]
+    df["base_susceptance"] = 1 / df["base_impedance"]
+
     # Converting to per-unit values
-    df['resistance_pu'] = df['r'] / df['base_impedance']
-    df['reactance_pu'] = df['x'] / df['base_impedance']
-    df['susceptance_pu'] = df['b'] / df['base_susceptance']
-    
+    df["resistance_pu"] = df["r"] / df["base_impedance"]
+    df["reactance_pu"] = df["x"] / df["base_impedance"]
+    df["susceptance_pu"] = df["b"] / df["base_susceptance"]
+
     # Dropping intermediate columns (optional)
-    df.drop(['base_impedance', 'base_susceptance'], axis=1, inplace=True)
-    
+    df.drop(["base_impedance", "base_susceptance"], axis=1, inplace=True)
+
     return df
 
 
@@ -48,19 +49,23 @@ def convert_to_voltage_level(n, new_voltage):
     df = convert_to_per_unit(n.lines.copy())
 
     # Constants
-    sqrt_3 = (3 ** 0.5)
+    sqrt_3 = 3**0.5
 
-    df['new_base_impedance'] = new_voltage**2 / df['s_nom']
+    df["new_base_impedance"] = new_voltage**2 / df["s_nom"]
 
     # Convert per-unit values back to actual values using the new base impedance
-    df['r'] = df['resistance_pu'] * df['new_base_impedance']
-    df['x'] = df['reactance_pu'] * df['new_base_impedance']
-    df['b'] = df['susceptance_pu'] / df['new_base_impedance']
+    df["r"] = df["resistance_pu"] * df["new_base_impedance"]
+    df["x"] = df["reactance_pu"] * df["new_base_impedance"]
+    df["b"] = df["susceptance_pu"] / df["new_base_impedance"]
 
     df.v_nom = new_voltage
 
     # Dropping intermediate column
-    df.drop(['new_base_impedance', 'resistance_pu', 'reactance_pu', 'susceptance_pu'], axis=1, inplace=True)
+    df.drop(
+        ["new_base_impedance", "resistance_pu", "reactance_pu", "susceptance_pu"],
+        axis=1,
+        inplace=True,
+    )
 
     # df.r = df.r.fillna(0) #how to deal with existing components that have zero power capacity s_nom
     # df.x = df.x.fillna(0)
@@ -68,11 +73,12 @@ def convert_to_voltage_level(n, new_voltage):
 
     # Update network lines
     (linetype,) = n.lines.loc[n.lines.v_nom == voltage_level, "type"].unique()
-    df.type = linetype # Do I even need to set line types? Can drop.
+    df.type = linetype  # Do I even need to set line types? Can drop.
 
     n.buses["v_nom"] = voltage_level
     n.lines = df
     return n
+
 
 def remove_transformers(n):
     trafo_map = pd.Series(n.transformers.bus1.values, index=n.transformers.bus0.values)
@@ -211,7 +217,6 @@ if __name__ == "__main__":
     # n, trafo_map = simplify_network_to_voltage_level(n, voltage_level)
     n = convert_to_voltage_level(n, voltage_level)
     n, trafo_map = remove_transformers(n)
-
 
     substations = pd.read_csv(snakemake.input.sub, index_col=0)
     substations.index = substations.index.astype(str)

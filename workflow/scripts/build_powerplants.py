@@ -1082,7 +1082,6 @@ def load_powerplants_ads(
     return plants
 
 
-
 def main(snakemake):
     params = snakemake.params
     configuration = snakemake.config["network_configuration"]
@@ -1122,7 +1121,6 @@ def main(snakemake):
         costs.at["CCGT", "investment_annualized"]
         + costs.at["OCGT", "investment_annualized"]
     ) / 2
-
 
     renewable_carriers = set(params.electricity["renewable_carriers"])
     extendable_carriers = params.electricity["extendable_carriers"]
@@ -1204,9 +1202,6 @@ def main(snakemake):
             costs,
         )
     update_p_nom_max(n)
-
-
-
 
     logger.info(test_network_datatype_consistency(n))
 

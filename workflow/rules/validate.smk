@@ -17,7 +17,8 @@ rule plot_validation_figures:
             % fig
             for fig in FIGURES_VALIDATE
         },
-        val_statistics= RESULTS + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/statistics.csv"
+        val_statistics=RESULTS
+        + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/statistics.csv",
     log:
         "logs/plot_figures/validation_{interconnect}_{clusters}_l{ll}_{opts}_{sector}.log",
     threads: 1

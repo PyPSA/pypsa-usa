@@ -74,6 +74,7 @@ colors = [
     "crimson",
 ]
 
+
 def plot_regional_timeseries_comparison(
     n: pypsa.Network,
 ):
@@ -286,9 +287,6 @@ def create_historical_df(
     return historic, order
 
 
-
-
-
 def create_historical(
     demand_path,
     region=None,
@@ -305,8 +303,7 @@ def create_historical(
         usecols=selected_cols,
     )
     historic = historic[
-        historic.Region.map(EIA_930_REGION_MAPPER)
-        == snakemake.wildcards.interconnect
+        historic.Region.map(EIA_930_REGION_MAPPER) == snakemake.wildcards.interconnect
     ]
 
     # Clean the data read from csv
@@ -332,7 +329,6 @@ def create_historical(
     historic = historic.reindex(order, axis=1, level=1)
     historic = historic / 1e3
     return historic, order
-
 
 
 def get_regions(n):

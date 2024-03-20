@@ -793,12 +793,8 @@ def attach_conventional_generators(
     else:
         committable_attrs = {}
 
+    marginal_cost = plants.carrier.map(costs.VOM) + plants.marginal_cost
 
-    marginal_cost = (
-        plants.carrier.map(costs.VOM)
-        + plants.marginal_cost
-    )
-    
     # Define generators using modified ppl DataFrame
     caps = plants.groupby("carrier").p_nom.sum().div(1e3).round(2)
     logger.info(f"Adding {len(plants)} generators with capacities [GW] \n{caps}")
