@@ -57,7 +57,7 @@ FIGURES_VALIDATE = [
     "production_deviation_bar.pdf",
     "val_bar_regional_emissions.pdf",
     "val_generator_data_panel.pdf",
-    "val_heatmap_curtailment.pdf",
+    #"val_heatmap_curtailment.pdf",
     "val_heatmap_capacity_factor.pdf",
     "val_box_region_lmps.pdf",
     "val_map_load_shedding.pdf",
@@ -79,11 +79,10 @@ wildcard_constraints:
     scope="urban|rural|total",
     sector="([EG]-)*[EG]",
 
-
 # -------------------------- Config and Subworkflows ------------------------- #
 
-
 # Merge subworkflow configs and main config
+configfile: "config/tests/config.test_simple.yaml"
 configfile: "config/config.cluster.yaml"
 configfile: "config/config.osw.yaml"
 configfile: "config/config.plotting.yaml"

@@ -438,11 +438,11 @@ if __name__ == "__main__":
         **snakemake.wildcards,
     )
 
-    plot_curtailment_heatmap(
-        n,
-        snakemake.output["val_heatmap_curtailment.pdf"],
-        **snakemake.wildcards,
-    )
+    # plot_curtailment_heatmap(
+    #     n,
+    #     snakemake.output["val_heatmap_curtailment.pdf"],
+    #     **snakemake.wildcards,
+    # )
 
     plot_capacity_factor_heatmap(
         n,

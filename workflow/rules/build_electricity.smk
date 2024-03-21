@@ -8,6 +8,7 @@ rule build_shapes:
     input:
         zone=DATA + "breakthrough_network/base_grid/zone.csv",
         nerc_shapes="repo_data/NERC_Regions/NERC_Regions_Subregions.shp",
+        reeds_shapes="repo_data/Reeds_Shapes/rb_and_ba_areas.shp",
         onshore_shapes="repo_data/BA_shapes_new/Modified_BE_BA_Shapes.shp",
         offshore_shapes_ca_osw="repo_data/BOEM_CA_OSW_GIS/CA_OSW_BOEM_CallAreas.shp",
         offshore_shapes_eez=DATA + "eez/conus_eez.shp",
@@ -16,6 +17,7 @@ rule build_shapes:
         onshore_shapes=RESOURCES + "{interconnect}/onshore_shapes.geojson",
         offshore_shapes=RESOURCES + "{interconnect}/offshore_shapes.geojson",
         state_shapes=RESOURCES + "{interconnect}/state_boundaries.geojson",
+        reeds_shapes=RESOURCES + "{interconnect}/reeds_shapes.geojson",
     log:
         "logs/build_shapes/{interconnect}.log",
     threads: 1
@@ -37,6 +39,7 @@ rule build_base_network:
         onshore_shapes=RESOURCES + "{interconnect}/onshore_shapes.geojson",
         offshore_shapes=RESOURCES + "{interconnect}/offshore_shapes.geojson",
         state_shapes=RESOURCES + "{interconnect}/state_boundaries.geojson",
+        reeds_shapes= RESOURCES + "{interconnect}/reeds_shapes.geojson",
     output:
         bus2sub=DATA + "breakthrough_network/base_grid/{interconnect}/bus2sub.csv",
         sub=DATA + "breakthrough_network/base_grid/{interconnect}/sub.csv",
@@ -320,9 +323,17 @@ rule add_electricity:
             else []
         ),
         demand=RESOURCES + "{interconnect}/demand.csv",
-        fuel_costs="repo_data/eia_mappings/fuelCost22.csv",
-        ng_electric_power_price=RESOURCES + "{interconnect}/ng_fuel_prices.csv",
-        coal_electric_power_price=RESOURCES + "{interconnect}/coal_fuel_prices.csv",
+        fuel_costs= "repo_data/eia_mappings/fuelCost22.csv",
+        ng_electric_power_price=(
+            RESOURCES + "{interconnect}/ng_fuel_prices.csv"
+            if config["conventional"]["dynamic_fuel_price"]
+            else []
+        ),
+        coal_electric_power_price=(
+            RESOURCES + "{interconnect}/coal_fuel_prices.csv"
+            if config["conventional"]["dynamic_fuel_price"]
+            else []
+        ),
     output:
         RESOURCES + "{interconnect}/elec_base_network_l_pp.nc",
     log:

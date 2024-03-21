@@ -10,14 +10,14 @@ run:
 
 # docs :
 scenario:
-  interconnect: [western] #"usa|texas|western|eastern"
+  interconnect: [eastern] #"usa|texas|western|eastern"
   clusters: [30]
   opts: [Co2L1.0-6H-RCo2L-SAFER-RPS]
   ll: [v1.0]
   scope: "total" # "urban", "rural", or "total"
   sector: "" # G
   planning_horizons:
-  - 2030   #(2030, 2040, 2050)
+  # - 2030   #(2030, 2040, 2050)
 
 foresight:  # Only Single Stage Currently
 
@@ -29,7 +29,7 @@ countries: [US]
 
 snapshots:
   start: "2019-01-01"
-  end: "2019-01-14"
+  end: "2019-01-07"
   inclusive: 'left'
 
 # docs :
@@ -76,7 +76,7 @@ electricity:
 # docs :
 conventional:
   unit_commitment: false
-  dynamic_fuel_price: true
+  dynamic_fuel_price: false
 
 # docs :
 renewable:
