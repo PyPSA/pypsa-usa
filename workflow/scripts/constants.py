@@ -29,9 +29,11 @@ NG_MCF_2_MWH = 0.3035  # TODO get rid of this and just use single constant
 NG_Dol_MMBTU_2_MWH = 3.4129
 
 LBS_TON = 2000  # lbs/ short ton
-COAL_BTU_LB = 9396 # BTU/lb - EIA US AVERAGE TODO: differentiate between coal types
+COAL_BTU_LB = 9396  # BTU/lb - EIA US AVERAGE TODO: differentiate between coal types
 MMBTU_MWHthemal = 3.4129  # MMBTU to MWh_thermal
-COAL_dol_ton_2_MWHthermal = LBS_TON**-1 * COAL_BTU_LB * 1000**-1 * MMBTU_MWHthemal  # $/ton * ton/BTU * BTU/MWh_thermal 
+COAL_dol_ton_2_MWHthermal = (
+    LBS_TON**-1 * COAL_BTU_LB * 1000**-1 * MMBTU_MWHthemal
+)  # $/ton * ton/BTU * BTU/MWh_thermal
 
 ################################
 # Constants for ADS WECC mapping
