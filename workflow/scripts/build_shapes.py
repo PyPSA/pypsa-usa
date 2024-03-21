@@ -235,28 +235,6 @@ def trim_states_to_interconnect(
         )
     return gdf_states
 
-
-def trim_ba_to_interconnect(
-    gdf_ba: gpd.GeoDataFrame,
-    interconnect_regions: gpd.GeoDataFrame,
-    interconnect: str,
-):
-    """
-    Trims balancing authorities to only include portions of balancing
-    authorities in interconnect regions.
-    """
-    ba_states_intersect = gdf_ba["geometry"].apply(
-        lambda shp: shp.intersects(interconnect_regions.dissolve().iloc[0]["geometry"]),
-    )
-    ba_states = gdf_ba[ba_states_intersect]
-    if interconnect == "western":
-        ba_states = ba_states[~(ba_states.name.str.contains("MISO|SPP"))]
-    if interconnect == "texas":
-        ba_states = ba_states[~(ba_states.name.str.contains("MISO|SPP|EPE"))]
-    if interconnect == "eastern":
-        ba_states = ba_states[~(ba_states.name.str.contains("PNM|EPE|PSCO|WACM|ERCO"))]
-    return ba_states
-
 def trim_shape_to_interconnect(
     gdf: gpd.GeoDataFrame,
     interconnect_regions: gpd.GeoDataFrame,

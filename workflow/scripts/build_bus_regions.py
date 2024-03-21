@@ -117,6 +117,7 @@ def main(snakemake):
     gpd_ba_shapes = gpd.read_file(snakemake.input.ba_region_shapes).set_index("name")[
         "geometry"
     ]
+    gpd_reeds = gpd.read_file(snakemake.input.reeds_shapes).set_index("name")
 
     if aggregation_zones == "country":
         agg_region_shapes = gpd_countries
@@ -124,8 +125,10 @@ def main(snakemake):
         agg_region_shapes = gpd_ba_shapes
     elif aggregation_zones == "state":
         agg_region_shapes = gpd_states.geometry
+    elif aggregation_zones == "reeds":
+        agg_region_shapes = gpd_reeds.geometry
     else:
-        ValueError("zonal_aggregation must be either balancing_area, country or state")
+        ValueError("zonal_aggregation must be either balancing_area, country, reeds, or state")
 
     gpd_offshore_shapes = gpd.read_file(snakemake.input.offshore_shapes)
     offshore_shapes = gpd_offshore_shapes.reindex(columns=REGION_COLS).set_index(
