@@ -545,6 +545,7 @@ def assign_missing_states_countries(n: pypsa.Network):
 #             n.buses.loc[n.buses.sub_id == i, "y"] = sub_fixes[i]["y"]
 #     return n
 
+
 def modify_breakthrough_substations(buslocs: pd.DataFrame):
     sub_fixes = {
         35017: {"lon": -123.0922, "lat": 48.5372},
