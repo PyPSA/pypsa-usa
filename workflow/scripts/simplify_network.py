@@ -18,32 +18,69 @@ from pypsa.clustering.spatial import get_clustering_from_busmap
 logger = logging.getLogger(__name__)
 
 
-def simplify_network_to_voltage_level(n, voltage_level):
+def convert_to_per_unit(df):
+    # Constants
+    sqrt_3 = 3**0.5
+
+    # Calculating base values per component
+    # df['base_current'] = df['s_nom'] / (df['v_nom'] * sqrt_3)
+    df["base_impedance"] = df["v_nom"] ** 2 / df["s_nom"]
+    df["base_susceptance"] = 1 / df["base_impedance"]
+
+    # Converting to per-unit values
+    df["resistance_pu"] = df["r"] / df["base_impedance"]
+    df["reactance_pu"] = df["x"] / df["base_impedance"]
+    df["susceptance_pu"] = df["b"] / df["base_susceptance"]
+
+    # Dropping intermediate columns (optional)
+    df.drop(["base_impedance", "base_susceptance"], axis=1, inplace=True)
+
+    return df
+
+
+def convert_to_voltage_level(n, new_voltage):
     """
-    Simplify network to a single voltage level.
+    Converts network.lines parameters to a given voltage.
 
-    Network Line Characteristics (s_nom, num_parallel, type) are mapped
-    to the new voltage level.
+    Parameters:
+    n (pypsa.Network): Network
+    new_voltage (float): New voltage level
     """
-    logger.info("Mapping all network lines onto a single layer")
+    df = convert_to_per_unit(n.lines.copy())
 
-    n.buses["v_nom"] = voltage_level
+    # Constants
+    sqrt_3 = 3**0.5
 
-    (linetype,) = n.lines.loc[n.lines.v_nom == voltage_level, "type"].unique()
-    lines_v_nom_b = n.lines.v_nom != voltage_level
-    n.lines.loc[lines_v_nom_b, "num_parallel"] *= (
-        n.lines.loc[lines_v_nom_b, "v_nom"] / voltage_level
-    ) ** 2
-    n.lines.loc[lines_v_nom_b, "v_nom"] = voltage_level
-    n.lines.loc[lines_v_nom_b, "type"] = linetype
-    n.lines.loc[lines_v_nom_b, "s_nom"] = (
-        np.sqrt(3)
-        * n.lines["type"].map(n.line_types.i_nom)
-        * n.lines.bus0.map(n.buses.v_nom)
-        * n.lines.num_parallel
+    df["new_base_impedance"] = new_voltage**2 / df["s_nom"]
+
+    # Convert per-unit values back to actual values using the new base impedance
+    df["r"] = df["resistance_pu"] * df["new_base_impedance"]
+    df["x"] = df["reactance_pu"] * df["new_base_impedance"]
+    df["b"] = df["susceptance_pu"] / df["new_base_impedance"]
+
+    df.v_nom = new_voltage
+
+    # Dropping intermediate column
+    df.drop(
+        ["new_base_impedance", "resistance_pu", "reactance_pu", "susceptance_pu"],
+        axis=1,
+        inplace=True,
     )
 
-    # Replace transformers by lines
+    # df.r = df.r.fillna(0) #how to deal with existing components that have zero power capacity s_nom
+    # df.x = df.x.fillna(0)
+    # df.b = df.b.fillna(0)
+
+    # Update network lines
+    (linetype,) = n.lines.loc[n.lines.v_nom == voltage_level, "type"].unique()
+    df.type = linetype  # Do I even need to set line types? Can drop.
+
+    n.buses["v_nom"] = voltage_level
+    n.lines = df
+    return n
+
+
+def remove_transformers(n):
     trafo_map = pd.Series(n.transformers.bus1.values, index=n.transformers.bus0.values)
     trafo_map = trafo_map[~trafo_map.index.duplicated(keep="first")]
     several_trafo_b = trafo_map.isin(trafo_map.index)
@@ -60,7 +97,6 @@ def simplify_network_to_voltage_level(n, voltage_level):
 
     n.mremove("Transformer", n.transformers.index)
     n.mremove("Bus", n.buses.index.difference(trafo_map))
-
     return n, trafo_map
 
 
@@ -178,7 +214,9 @@ if __name__ == "__main__":
 
     n = pypsa.Network(snakemake.input.network)
 
-    n, trafo_map = simplify_network_to_voltage_level(n, voltage_level)
+    # n, trafo_map = simplify_network_to_voltage_level(n, voltage_level)
+    n = convert_to_voltage_level(n, voltage_level)
+    n, trafo_map = remove_transformers(n)
 
     substations = pd.read_csv(snakemake.input.sub, index_col=0)
     substations.index = substations.index.astype(str)

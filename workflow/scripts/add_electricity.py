@@ -366,6 +366,8 @@ def update_marginal_costs(
                     {gen_: fuel_costs[fuel_region] for gen_ in gens_in_region},
                 ),
             )
+        if len(dfs) == 0:
+            continue
         df = pd.concat(dfs, axis=1)
 
         # apply efficiency of each generator to know fuel burn rate
@@ -793,19 +795,7 @@ def attach_conventional_generators(
     else:
         committable_attrs = {}
 
-    if fuel_price is not None:
-        marginal_cost = update_marginal_costs(
-            n,
-            plants.carrier,
-            fuel_price,
-            vom_cost=plants.VOM,
-            efficiency=plants.efficiency,
-        )
-    else:
-        marginal_cost = (
-            plants.carrier.map(costs.VOM)
-            + plants.carrier.map(costs.fuel) / plants.efficiency
-        )
+    marginal_cost = plants.carrier.map(costs.VOM) + plants.marginal_cost
 
     # Define generators using modified ppl DataFrame
     caps = plants.groupby("carrier").p_nom.sum().div(1e3).round(2)

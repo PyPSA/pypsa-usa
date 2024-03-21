@@ -28,6 +28,13 @@ NG_MCF_2_MWH = 0.3035  # TODO get rid of this and just use single constant
 # $/MMBtu * (1 MMBtu / 0.293 MWh) = $/MWh_thermal
 NG_Dol_MMBTU_2_MWH = 3.4129
 
+LBS_TON = 2000  # lbs/ short ton
+COAL_BTU_LB = 9396  # BTU/lb - EIA US AVERAGE TODO: differentiate between coal types
+MMBTU_MWHthemal = 3.4129  # MMBTU to MWh_thermal
+COAL_dol_ton_2_MWHthermal = (
+    LBS_TON**-1 * COAL_BTU_LB * 1000**-1 * MMBTU_MWHthemal
+)  # $/ton * ton/BTU * BTU/MWh_thermal
+
 ################################
 # Constants for ADS WECC mapping
 ################################
@@ -498,7 +505,17 @@ ATB_TECH_MAPPER = {
         "crp": 45,
     },
     "coal": {
+        "display_name": "Coal-new",
+        "technology": "Coal_FE",
+        "crp": 30,
+    },
+    "coal_95CCS": {
         "display_name": "Coal-95%-CCS",
+        "technology": "Coal_FE",
+        "crp": 30,
+    },
+    "coal_99CCS": {
+        "display_name": "Coal-99%-CCS",
         "technology": "Coal_FE",
         "crp": 30,
     },
@@ -521,6 +538,11 @@ ATB_TECH_MAPPER = {
     },
     "OCGT": {  # natural gas
         "display_name": "NG Combustion Turbine (F-Frame)",
+        "technology": "NaturalGas_FE",
+        "crp": 30,
+    },
+    "CCGT_95CCS": {  # natural gas
+        "display_name": "NG Combined Cycle (F-Frame) 95% CCS",
         "technology": "NaturalGas_FE",
         "crp": 30,
     },

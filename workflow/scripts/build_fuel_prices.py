@@ -58,7 +58,7 @@ def make_hourly(df: pd.DataFrame) -> pd.DataFrame:
     )
     # new_index = pd.date_range(start=df.index.min(), end=df.index.max()+pd.Timedelta(days=1) + pd.Timedelta(days=1), freq="h")
     hourly_df = pd.DataFrame(
-        index=pd.date_range(start=start, end=end + pd.Timedelta(days=1), freq="h")
+        index=pd.date_range(start=start, end=end + pd.Timedelta(days=1), freq="h"),
     )
     return (
         hourly_df.merge(df, how="left", left_index=True, right_index=True)
@@ -68,7 +68,9 @@ def make_hourly(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def get_ng_prices(
-    sns: pd.date_range, interconnects: list[str], eia_api: str = None
+    sns: pd.date_range,
+    interconnects: list[str],
+    eia_api: str = None,
 ) -> pd.DataFrame:
 
     if eia_api:
@@ -114,6 +116,9 @@ def get_coal_prices(sns: pd.date_range, eia_api: str = None) -> pd.DataFrame:
             .drop(columns=["series-description", "unit"])
             .reset_index()
         )
+        eia_coal["price"] = (
+            eia_coal["price"].astype(float) * const.COAL_dol_ton_2_MWHthermal
+        )
         eia_coal = eia_coal.pivot(
             index="period",
             columns="state",
@@ -155,4 +160,4 @@ if __name__ == "__main__":
     ng_prices.to_csv(snakemake.output.ng_fuel_prices, index=False)
 
     coal_prices = get_coal_prices(snapshots, eia_api)
-    ng_prices.to_csv(snakemake.output.coal_fuel_prices, index=False)
+    coal_prices.to_csv(snakemake.output.coal_fuel_prices, index=False)

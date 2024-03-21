@@ -73,7 +73,6 @@ colors = [
     "lightskyblue",
     "crimson",
 ]
-kwargs = dict(color=colors, ylabel="Production [GW]", xlabel="")
 
 
 def plot_regional_timeseries_comparison(
@@ -83,22 +82,22 @@ def plot_regional_timeseries_comparison(
     regions = n.buses.country.unique()
     regions_clean = [ba.split("-")[0] for ba in regions]
     regions = list(OrderedDict.fromkeys(regions_clean))
-    # filter out a few regions
+
     regions = [ba for ba in regions if ba in ["CISO"]]
     buses = n.buses.copy()
     buses["region"] = [ba.split("-")[0] for ba in buses.country]
     for region in regions:
         region_bus = buses.query(f"region == '{region}'").index
+        historic_region, order = create_historical_df(
+            snakemake.input.historic_first,
+            snakemake.input.historic_second,
+            region=region,
+        )
         optimized_region = create_optimized_by_carrier(
             n,
             order,
             buses.loc[region_bus].country,
         )
-        historic_region = create_historical_df(
-            snakemake.input.historic_first,
-            snakemake.input.historic_second,
-            region=region,
-        )[0]
         plot_timeseries_comparison(
             historic=historic_region,
             optimized=optimized_region,
@@ -115,6 +114,7 @@ def plot_timeseries_comparison(
     """
     plots a stacked plot for seasonal production for snapshots: January 2 - December 30 (inclusive)
     """
+    kwargs = dict(color=colors, ylabel="Production [GW]", xlabel="", linewidth=0)
 
     fig, axes = plt.subplots(3, 1, figsize=(9, 9))
     optimized.resample("1D").mean().plot.area(
@@ -287,6 +287,50 @@ def create_historical_df(
     return historic, order
 
 
+def create_historical(
+    demand_path,
+    region=None,
+):
+    """
+    Create a DataFrame from the csv files containing historical data.
+    """
+    historic = pd.read_csv(
+        csv_path,
+        index_col=[0, 1],
+        header=0,
+        parse_dates=True,
+        date_format="%m/%d/%Y %I:%M:%S %p",
+        usecols=selected_cols,
+    )
+    historic = historic[
+        historic.Region.map(EIA_930_REGION_MAPPER) == snakemake.wildcards.interconnect
+    ]
+
+    # Clean the data read from csv
+    historic_first_df = (
+        historic_first.fillna(0)
+        .replace({",": ""}, regex=True)
+        .drop(columns="Region", axis=1)
+        .astype(float)
+    )
+
+    if region is not None:
+        if region == "Arizona":
+            region = ["AZPS"]
+        historic = historic.loc[region]
+
+    historic = historic.groupby(["UTC Time at End of Hour"]).sum()
+
+    historic = historic.rename(columns=rename_his)
+    historic[historic < 0] = (
+        0  # remove negative values for plotting (low impact on results)
+    )
+    order = (historic.diff().abs().sum() / historic.sum()).sort_values().index
+    historic = historic.reindex(order, axis=1, level=1)
+    historic = historic / 1e3
+    return historic, order
+
+
 def get_regions(n):
     regions = n.buses.country.unique()
     regions_clean = [ba.split("0")[0] for ba in regions]
@@ -417,6 +461,8 @@ if __name__ == "__main__":
         snakemake.output["val_bar_regional_emissions.pdf"],
         **snakemake.wildcards,
     )
+
+    n.statistics().to_csv(snakemake.output["val_statistics"])
 
     # if snakemake.wildcards.interconnect == "western":
     #     plot_california_emissions(
