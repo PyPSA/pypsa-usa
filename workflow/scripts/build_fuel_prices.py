@@ -116,6 +116,7 @@ def get_coal_prices(sns: pd.date_range, eia_api: str = None) -> pd.DataFrame:
             .drop(columns=["series-description", "unit"])
             .reset_index()
         )
+        eia_coal["price"] = eia_coal["price"].astype(float) * const.COAL_dol_ton_2_MWHthermal
         eia_coal = eia_coal.pivot(
             index="period",
             columns="state",

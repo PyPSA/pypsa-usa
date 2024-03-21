@@ -366,6 +366,8 @@ def update_marginal_costs(
                     {gen_: fuel_costs[fuel_region] for gen_ in gens_in_region},
                 ),
             )
+        if len(dfs) == 0:
+            continue
         df = pd.concat(dfs, axis=1)
 
         # apply efficiency of each generator to know fuel burn rate
