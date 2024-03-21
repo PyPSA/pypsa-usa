@@ -527,23 +527,40 @@ def assign_missing_states_countries(n: pypsa.Network):
     n.buses.loc[missing.index, "interconnect"] = missing.interconnect
 
 
-def modify_breakthrough_substations(n: pypsa.Network, interconnect: str):
-    if interconnect == "Western" or interconnect == "usa":
-        sub_fixes = {
-            35017: {"x": -123.0922, "y": 48.5372},
-            35033: {"x": -122.78053, "y": 48.65694},
-            37584: {"x": -117.10501, "y": 32.54935},
-            36116: {"x": -122.4555, "y": 37.8780},
-            36145: {"x": -122.3121, "y": 37.8211},
-            39718: {"x": -106.49655, "y": 31.76924},
-            39731: {"x": -106.3232, "y": 31.7093},
-            35116: {"x": -122.462, "y": 48.982},
-            37707: {"x": -115.4550, "y": 32.6866},
-        }
-        for i in sub_fixes.keys():
-            n.buses.loc[n.buses.sub_id == i, "x"] = sub_fixes[i]["x"]
-            n.buses.loc[n.buses.sub_id == i, "y"] = sub_fixes[i]["y"]
-    return n
+# def modify_breakthrough_substations(n: pypsa.Network, interconnect: str):
+#     if interconnect == "Western" or interconnect == "usa":
+#         sub_fixes = {
+#             35017: {"x": -123.0922, "y": 48.5372},
+#             35033: {"x": -122.78053, "y": 48.65694},
+#             37584: {"x": -117.10501, "y": 32.54935},
+#             36116: {"x": -122.4555, "y": 37.8780},
+#             36145: {"x": -122.3121, "y": 37.8211},
+#             39718: {"x": -106.49655, "y": 31.76924},
+#             39731: {"x": -106.3232, "y": 31.7093},
+#             35116: {"x": -122.462, "y": 48.982},
+#             37707: {"x": -115.4550, "y": 32.6866},
+#         }
+#         for i in sub_fixes.keys():
+#             n.buses.loc[n.buses.sub_id == i, "x"] = sub_fixes[i]["x"]
+#             n.buses.loc[n.buses.sub_id == i, "y"] = sub_fixes[i]["y"]
+#     return n
+
+def modify_breakthrough_substations(buslocs: pd.DataFrame):
+    sub_fixes = {
+        35017: {"lon": -123.0922, "lat": 48.5372},
+        35033: {"lon": -122.78053, "lat": 48.65694},
+        37584: {"lon": -117.10501, "lat": 32.54935},
+        36116: {"lon": -122.4555, "lat": 37.8780},
+        36145: {"lon": -122.3121, "lat": 37.8211},
+        39718: {"lon": -106.49655, "lat": 31.76924},
+        39731: {"lon": -106.3232, "lat": 31.7093},
+        35116: {"lon": -122.462, "lat": 48.982},
+        37707: {"lon": -115.4550, "lat": 32.6866},
+    }
+    for i in sub_fixes.keys():
+        buslocs.loc[buslocs.sub_id == i, "lon"] = sub_fixes[i]["lon"]
+        buslocs.loc[buslocs.sub_id == i, "lat"] = sub_fixes[i]["lat"]
+    return buslocs
 
 
 def modify_breakthrough_lines(n: pypsa.Network, interconnect: str):
@@ -601,6 +618,7 @@ def main(snakemake):
     bus2sub = pd.read_csv(snakemake.input.bus2sub).set_index("bus_id")
     sub = pd.read_csv(snakemake.input.sub).set_index("sub_id")
     buslocs = pd.merge(bus2sub, sub, left_on="sub_id", right_index=True)
+    buslocs = modify_breakthrough_substations(buslocs)
 
     # merge bus data with geometry data
     df_bus = pd.read_csv(snakemake.input["buses"], index_col=0)
@@ -643,7 +661,7 @@ def main(snakemake):
     n = add_buses_from_file(n, gdf_bus, interconnect=interconnect)
     n = add_branches_from_file(n, snakemake.input["lines"])
     n = add_dclines_from_file(n, snakemake.input["links"])
-    n = modify_breakthrough_substations(n, interconnect)
+    # n = modify_breakthrough_substations(n, interconnect)
 
     # identify offshore points of interconnection, and remove unncess components from BE network
     n = identify_osw_poi(n)
@@ -737,6 +755,6 @@ if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
 
-        snakemake = mock_snakemake("build_base_network", interconnect="texas")
+        snakemake = mock_snakemake("build_base_network", interconnect="western")
     configure_logging(snakemake)
     main(snakemake)
