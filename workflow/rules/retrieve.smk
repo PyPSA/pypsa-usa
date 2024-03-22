@@ -33,7 +33,6 @@ def define_zenodo_databundles():
 def define_sector_databundles():
     return {
         "pypsa_usa_sec": "https://zenodo.org/records/10637836/files/pypsa_usa_sector_data.zip?download=1"
-        "pypsa_usa_sec": "https://zenodo.org/records/10637836/files/pypsa_usa_sector_data.zip?download=1"
     }
 
 
@@ -117,6 +116,9 @@ if config["network_configuration"] == "ads2032":
         script:
             "../scripts/retrieve_forecast_data.py"
 
+DATAFILES_DMD = [
+    "EIA_DMD_2018_2024.csv",
+]
 
 if config["enable"].get("download_eia", False):
     rule retrieve_eia_data:
@@ -126,8 +128,6 @@ if config["enable"].get("download_eia", False):
             "logs/retrieve/retrieve_historical_load_data.log",
         script:
             "../scripts/retrieve_eia_data.py"
-
-DATAFILES_DMD = ["EIA_DMD_2018_2024.csv"]
 
 
 rule retrieve_ship_raster:
@@ -186,8 +186,8 @@ rule retrieve_cost_data_usa:
         ng_residential_price=DATA + "costs/ng_commercial_price.csv",
         ng_commercial_price=DATA + "costs/ng_residential_price.csv",
     params:
-        # eia_api_key = config["api"].get("eia", None),
-        eia_api_key=None,
+        eia_api_key = config["api"].get("eia", None),
+        #eia_api_key="NrkfRpT6pQFCVgYclaRCHuMOI7XmlcGXHGKIa7HP",
     log:
         LOGS + "retrieve_cost_data_usa.log",
     resources:

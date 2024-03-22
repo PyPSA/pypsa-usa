@@ -87,6 +87,9 @@ def get_ng_prices(
             values="value",
         )
         eia_ng = make_hourly(eia_ng)
+
+        if sns.year[0] == 2023: 
+            eia_ng.index = eia_ng.index + pd.offsets.DateOffset(years=1)
     else:
         eia_ng = pd.DataFrame()
 
@@ -100,8 +103,9 @@ def get_ng_prices(
         caiso_ng = make_hourly(caiso_ng)
     else:
         caiso_ng = pd.DataFrame()
-
+    
     ng = pd.concat([caiso_ng, eia_ng], axis=1)
+    ng.to_csv('./test.csv')
     return ng.loc[sns]
 
 
@@ -120,6 +124,10 @@ def get_coal_prices(sns: pd.date_range, eia_api: str = None) -> pd.DataFrame:
             values="price",
         )
         eia_coal = make_hourly(eia_coal)
+
+        if sns.year[0] == 2023: 
+            eia_coal.index = eia_coal.index + pd.offsets.DateOffset(years=1)
+
     else:
         eia_coal = pd.DataFrame()
 

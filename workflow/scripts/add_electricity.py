@@ -1368,8 +1368,6 @@ def add_ercot_outage(n: pypsa.Network,
                 carrier=car,
                 p_max_pu=ercot_outage_car_bus * bus_profiles,
             )
-    print(n.generators_t.p_max_pu)
-
 
 def main(snakemake):
     params = snakemake.params
@@ -1529,12 +1527,6 @@ def main(snakemake):
             df_fuel_costs = pd.read_csv(fuel_cost_file)
             vom = costs.at[carrier, "VOM"]
 
-            update_marginal_costs(
-                n=n,
-                carrier=carrier,
-                fuel_costs=df_fuel_costs,
-                vom_cost=vom,
-            )
             update_marginal_costs(
                 n=n,
                 carrier=carrier,

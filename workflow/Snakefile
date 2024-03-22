@@ -14,7 +14,7 @@ from pathlib import Path
 FIGURES_MAPS = [
     "capacity_map_base.pdf",
     "capacity_map_optimized.pdf",
-    "capacity_map_new.pdf",
+    # "capacity_map_new.pdf",
     "emissions_map.pdf",
     "renewable_potential_map.pdf",
     "demand_map.pdf",
@@ -84,7 +84,7 @@ wildcard_constraints:
 
 
 # Merge subworkflow configs and main config
-configfile: "config/config.default_r.yaml"
+configfile: "config/config.default.yaml"
 configfile: "config/config.cluster.yaml"
 configfile: "config/config.osw.yaml"
 configfile: "config/config.plotting.yaml"

@@ -84,15 +84,17 @@ def format_eia_api_data(df: pd.DataFrame) -> pd.DataFrame:
     )
     df["value"] = df["value"].fillna(np.nan)
     usa_average = df[df.state == "U.S."].to_dict()["value"]
+    # df.index = df.index.astype('str')
 
+    print(usa_average)
     df = df.reset_index()
     df["use_average"] = ~pd.notna(
         df["value"],
     )  # not sure why this cant be built into the lambda function
     df["value"] = df.apply(
-        lambda x: x["value"] if not x["use_average"] else usa_average[x["period"]],
+        lambda x: x["value"] if not x["use_average"] else usa_average[x["period"]], 
         axis=1,
-    )
+    ) if bool(usa_average) else df["value"]
     df = df.drop(columns=["use_average"])
     return df
 
@@ -201,6 +203,7 @@ if __name__ == "__main__":
             facets = "frequency=monthly&data[0]=value&facets[process][]=PIN&start=2022-01&end=2023-01&sort[0][column]=period&sort[0][direction]=desc&offset=0&length=5000"
             logger.info(f"Downloading EIA industrial natural gas costs from '{url}'")
             df = get_eia_data_api(url, eia_api_key, facets)
+            df.to_csv('./test.csv')
             df = format_eia_api_data(df)
             df.to_csv(ng_industrial_price)
 
