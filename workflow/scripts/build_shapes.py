@@ -90,7 +90,7 @@ def filter_small_polygons_gpd(
 
 
 def load_na_shapes(
-    state_shape: str = "admin_1_states_provinces",
+    state_shape: str = "admin_1_states_provinces_lakes",
     countries: list = ["US", "CA", "MX"],
 ) -> gpd.GeoDataFrame:
     """

@@ -201,6 +201,9 @@ def main(snakemake):
         offshore_regions.append(offshore_regions_c)
 
     onshore_regions_concat = pd.concat(onshore_regions, ignore_index=True)
+    
+    onshore_regions_concat = onshore_regions_concat[~onshore_regions_concat.geometry.is_empty] #removing few buses which don't have geometry
+
     onshore_regions_concat.to_file(snakemake.output.regions_onshore)
     if offshore_regions:
         pd.concat(offshore_regions, ignore_index=True).to_file(
@@ -210,7 +213,7 @@ def main(snakemake):
         offshore_shapes.to_frame().to_file(snakemake.output.regions_offshore)
 
     if onshore_regions_concat[onshore_regions_concat.geometry.is_empty].shape[0] > 0:
-        logger.error(f"Onshore Buses are missing geometry.")
+        raise ValueError("Onshore Buses are missing geometry.")
 
 
 if __name__ == "__main__":
@@ -218,6 +221,6 @@ if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
 
-        snakemake = mock_snakemake("build_bus_regions", interconnect="western")
+        snakemake = mock_snakemake("build_bus_regions", interconnect="eastern")
     configure_logging(snakemake)
     main(snakemake)
