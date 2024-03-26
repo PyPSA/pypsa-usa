@@ -20,7 +20,7 @@ rule build_shapes:
         "logs/build_shapes/{interconnect}.log",
     threads: 1
     resources:
-        mem_mb=500,
+        mem_mb=2000,
     script:
         "../scripts/build_shapes.py"
 
