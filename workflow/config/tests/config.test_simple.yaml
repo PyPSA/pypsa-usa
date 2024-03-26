@@ -11,7 +11,7 @@ run:
 # docs :
 scenario:
   interconnect: [eastern] #"usa|texas|western|eastern"
-  clusters: [30]
+  clusters: [42]
   opts: [Co2L1.0-6H-RCo2L-SAFER-RPS]
   ll: [v1.0]
   scope: "total" # "urban", "rural", or "total"
@@ -241,7 +241,7 @@ clustering:
   cluster_network:
     algorithm: hac
     feature: solar+onwind-time
-    aggregation_zones: 'balancing_area' # [balancing_area, state]
+    aggregation_zones: 'state' # [balancing_area, state]
     exclude_carriers: []
     consider_efficiency_classes: false
   aggregation_strategies:
