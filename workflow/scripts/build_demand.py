@@ -114,8 +114,18 @@ def prepare_eia_demand(
 
     # Combine EIA Demand Data to Match GIS Shapes
     demand["Arizona"] = demand.pop("SRP") + demand.pop("AZPS")
+    demand["Carolina"] = demand.pop("CPLE") + demand.pop("CPLW") + demand.pop("DUK") + demand.pop("SC") + demand.pop("SCEG") + demand.pop("YAD")
+    demand["Florida"] = demand.pop("FPC") + demand.pop("FPL") + demand.pop("GVL") + demand.pop("JEA") + demand.pop("NSB") + demand.pop("SEC") + demand.pop("TAL") + demand.pop("TEC") + demand.pop("HST") + demand.pop("FMPP")
+
     n.buses["load_dissag"] = n.buses.balancing_area.replace(
-        {"^CISO.*": "CISO", "^ERCO.*": "ERCO"},
+        {
+            "^CISO.*": "CISO", 
+            "^ERCO.*": "ERCO",
+            "^MISO.*": "MISO",
+            "^SPP.*": "SPP",
+            "^PJM.*": "PJM",
+            "^NYISO.*": "NYIS",
+            "^ISONE.*": "ISNE",},
         regex=True,
     )
 
@@ -227,6 +237,7 @@ def disaggregate_demand_to_buses(
         )
     bus_demand.index = n.snapshots
     n.buses.drop(columns=["LAF"], inplace=True)
+    bus_demand = bus_demand.loc[:, (bus_demand != 0).any(axis=0)]
     return bus_demand.fillna(0)
 
 
@@ -237,8 +248,8 @@ def main(snakemake):
     planning_horizons = snakemake.params["planning_horizons"]
 
     snapshot_config = snakemake.params["snapshots"]
-    sns_start = pd.to_datetime(snapshot_config["start"])  # + " 08:00:00")
-    sns_end = pd.to_datetime(snapshot_config["end"])  # + " 06:00:00")
+    sns_start = pd.to_datetime(snapshot_config["start"])
+    sns_end = pd.to_datetime(snapshot_config["end"])
     sns_inclusive = snapshot_config["inclusive"]
 
     n = pypsa.Network(snakemake.input.base_network)
@@ -266,13 +277,13 @@ def main(snakemake):
             "Invalid demand_type. Supported values are 'ads', and 'pypsa-usa'.",
         )
 
-    demand_per_bus.to_csv(snakemake.output.demand, index=True)
+    demand_per_bus.round(4).to_csv(snakemake.output.demand, index=True)
 
 
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
 
-        snakemake = mock_snakemake("build_demand", interconnect="western")
+        snakemake = mock_snakemake("build_demand", interconnect="eastern")
     configure_logging(snakemake)
     main(snakemake)

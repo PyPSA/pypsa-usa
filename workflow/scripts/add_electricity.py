@@ -745,7 +745,7 @@ def attach_demand(n: pypsa.Network, demand_per_bus_fn: str):
 
     Returns network with demand added.
     """
-    demand_per_bus = pd.read_csv(demand_per_bus_fn, index_col=0)
+    demand_per_bus = pd.read_csv(demand_per_bus_fn, index_col=0)    
     demand_per_bus.index = pd.to_datetime(demand_per_bus.index)
     n.madd(
         "Load",
@@ -1431,6 +1431,6 @@ if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
 
-        snakemake = mock_snakemake("add_electricity", interconnect="western")
+        snakemake = mock_snakemake("add_electricity", interconnect="eastern")
     configure_logging(snakemake)
     main(snakemake)

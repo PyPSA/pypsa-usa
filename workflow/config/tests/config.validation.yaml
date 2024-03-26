@@ -274,7 +274,7 @@ clustering:
   cluster_network:
     algorithm: kmeans
     feature: solar+onwind-time
-    aggregation_zones: 'balancing_area' # [balancing_area, state]
+    aggregation_zones: 'state' # [balancing_area, state]
     exclude_carriers: []
     consider_efficiency_classes: false
   aggregation_strategies:
