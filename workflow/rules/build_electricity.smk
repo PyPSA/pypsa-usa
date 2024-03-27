@@ -222,6 +222,7 @@ rule build_renewable_profiles:
         "../scripts/build_renewable_profiles.py"
 
 
+
 rule build_demand:
     params:
         planning_horizons=config["scenario"]["planning_horizons"],
@@ -246,9 +247,9 @@ rule build_demand:
         LOGS + "{interconnect}/build_demand.log",
     benchmark:
         BENCHMARKS + "{interconnect}/build_demand"
-    threads: 1
+    threads: 2
     resources:
-        mem_mb=12000,
+        mem_mb=interconnect_mem(w.interconnect, 20000),
     script:
         "../scripts/build_demand.py"
 
@@ -273,7 +274,7 @@ rule build_fuel_prices:
         BENCHMARKS + "{interconnect}/build_fuel_prices"
     threads: 1
     resources:
-        mem_mb=2000,
+        mem_mb=800,
     script:
         "../scripts/build_fuel_prices.py"
 
