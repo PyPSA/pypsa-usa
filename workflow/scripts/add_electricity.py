@@ -729,7 +729,7 @@ def attach_renewable_capacities_to_atlite(
                 ~caps_per_bus.index.isin(generators_tech.bus)
             ].sum()
             logger.info(
-                f"There are {np.round(missing_capacity,1)/1000} GW of {tech} plants that are not in the network. See git issue #16.",
+                f"There are {np.round(missing_capacity/1000,4)} GW of {tech} plants that are not in the network. See git issue #16.",
             )
 
         logger.info(

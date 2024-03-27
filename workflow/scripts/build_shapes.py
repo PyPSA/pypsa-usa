@@ -281,7 +281,12 @@ def main(snakemake):
             data=gdf_na,
             zones=breakthrough_zones,
             interconnect=interconnect,
-            add_regions=["Baja California", "British Columbia", "Alberta"],
+            # add_regions=
+            # [
+            #     "Baja California", 
+            #     "British Columbia", 
+            #     "Alberta"
+            # ],
         )
     elif interconnect == "texas":
         gdf_states = filter_shapes(
@@ -294,31 +299,31 @@ def main(snakemake):
             data=gdf_na,
             zones=breakthrough_zones,
             interconnect=interconnect,
-            add_regions=[
-                "Saskatchewan",
-                "Manitoba",
-                "Ontario",
-                "Quebec",
-                "New Brunswick",
-                "Nova Scotia",
-            ],
+            # add_regions=[
+            #     "Saskatchewan",
+            #     "Manitoba",
+            #     "Ontario",
+            #     "Quebec",
+            #     "New Brunswick",
+            #     "Nova Scotia",
+            # ],
         )
     else:  # Entire US + MX + CA
         gdf_states = filter_shapes(
             data=gdf_na,
             zones=breakthrough_zones,
             interconnect=interconnect,
-            add_regions=[
-                "Baja California",
-                "British Columbia",
-                "Alberta",
-                "Saskatchewan",
-                "Manitoba",
-                "Ontario",
-                "Quebec",
-                "New Brunswick",
-                "Nova Scotia",
-            ],
+            # add_regions=[
+            #     "Baja California",
+            #     "British Columbia",
+            #     "Alberta",
+            #     "Saskatchewan",
+            #     "Manitoba",
+            #     "Ontario",
+            #     "Quebec",
+            #     "New Brunswick",
+            #     "Nova Scotia",
+            # ],
         )
 
     # Trim gdf_states to only include portions of texas in NERC Interconnect

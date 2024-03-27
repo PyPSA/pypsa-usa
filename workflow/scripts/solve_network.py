@@ -294,6 +294,9 @@ def add_RPS_constraints(n, config):
     for pct_tuple in pct.indexes["group"]:  # loop through each RPS policy
         region, carriers = pct_tuple
 
+        if region not in n.buses.country.values: 
+            continue
+
         carriers_list = [carrier.strip() for carrier in carriers.split(",")]
         if isinstance(carriers_list, list):
             # Create a new tuple for each energy type and append to new list
@@ -438,6 +441,9 @@ def add_regional_co2limit(n, sns, config):
     ]
 
     for region in regional_co2_lims.index:
+        if region not in n.buses.country.values:
+            continue
+
         region_co2lim = regional_co2_lims.loc[region].limit
         EF_unspecified = regional_co2_lims.loc[
             region
@@ -552,6 +558,8 @@ def add_regional_SAFE_constraints(n, config):
         index_col=[0],
     )
     for region in regional_prm.index:
+        if region not in n.buses.country.values:
+            continue
         peakdemand = (
             n.loads_t.p_set.loc[:, n.loads.bus.str.contains(region)].sum(axis=1).max()
         )

@@ -204,7 +204,7 @@ if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
 
-        snakemake = mock_snakemake("simplify_network", interconnect="western")
+        snakemake = mock_snakemake("simplify_network", interconnect="eastern")
     configure_logging(snakemake)
 
     voltage_level = snakemake.config["electricity"]["voltage_simplified"]
@@ -214,7 +214,6 @@ if __name__ == "__main__":
 
     n = pypsa.Network(snakemake.input.network)
 
-    # n, trafo_map = simplify_network_to_voltage_level(n, voltage_level)
     n = convert_to_voltage_level(n, voltage_level)
     n, trafo_map = remove_transformers(n)
 

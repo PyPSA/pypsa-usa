@@ -125,7 +125,8 @@ def prepare_eia_demand(
             "^SPP.*": "SPP",
             "^PJM.*": "PJM",
             "^NYISO.*": "NYIS",
-            "^ISONE.*": "ISNE",},
+            "^ISONE.*": "ISNE",
+        },
         regex=True,
     )
 
