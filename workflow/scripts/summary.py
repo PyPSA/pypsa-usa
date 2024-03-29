@@ -269,11 +269,7 @@ def get_node_emissions_timeseries(n: pypsa.Network) -> pd.DataFrame:
         if c.name in ("Generator"):
 
             # get time series efficiency
-            eff = c.pnl.efficiency
-            eff_static = {}
-            for gen in [x for x in c.df.index if x not in eff.columns]:
-                eff_static[gen] = [c.df.at[gen, "efficiency"]] * len(eff)
-            eff = pd.concat([eff, pd.DataFrame(eff_static, index=eff.index)], axis=1)
+            eff = n.get_switchable_as_dense("Generator", "efficiency")
 
             co2_factor = (
                 c.df.carrier.map(n.carriers.co2_emissions)

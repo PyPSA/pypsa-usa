@@ -602,16 +602,8 @@ def plot_regional_emissions_bar(
     """
     PLOT OF CO2 EMISSIONS BY REGION.
     """
-    generator_emissions = n.generators_t.p * n.generators.carrier.map(
-        n.carriers.co2_emissions,
-    )
-    regional_emisssions = (
-        generator_emissions.groupby(n.generators.bus.map(n.buses.country), axis=1)
-        .sum()
-        .sum()
-        / 1e6
-    )
-
+    regional_emisssions = get_node_emissions_timeseries(n).T.groupby(n.buses.country).sum().T.sum() / 1e6
+    
     plt.figure(figsize=(10, 10))
     sns.barplot(
         x=regional_emisssions.values,
@@ -1109,11 +1101,11 @@ if __name__ == "__main__":
         from _helpers import mock_snakemake
 
         snakemake = mock_snakemake(
-            "plot_figures",
+            "plot_statistics",
             interconnect="western",
-            clusters=30,
-            ll="v1.15",
-            opts="CO2L0.75-4H",
+            clusters=80,
+            ll="v1.0",
+            opts="RCo2L-SAFER-RPS",
             sector="E",
         )
     configure_logging(snakemake)
