@@ -422,7 +422,12 @@ def plot_regional_emissions_historical_bar(
 
     fig, ax = plt.subplots(figsize=(10, 6))
     sns.barplot(
-        data=final, y="country", x="value", hue="variable", orient="horizontal", ax=ax
+        data=final,
+        y="country",
+        x="value",
+        hue="variable",
+        orient="horizontal",
+        ax=ax,
     )
     ax.set_title(create_title("CO2 Emissions by Region", **wildcards))
     ax.set_xlabel("CO2 Emissions [MMtCO2]")

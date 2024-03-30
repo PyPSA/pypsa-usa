@@ -679,7 +679,8 @@ class StateEmissions(DataExtractor):
             },
         )
         df["series-description"] = df["series-description"].str.cat(
-            df["fuel-name"], sep=" - "
+            df["fuel-name"],
+            sep=" - ",
         )
 
         return (
