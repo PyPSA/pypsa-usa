@@ -588,8 +588,10 @@ def plot_regional_emissions_bar(
     """
     PLOT OF CO2 EMISSIONS BY REGION.
     """
-    regional_emisssions = get_node_emissions_timeseries(n).T.groupby(n.buses.country).sum().T.sum() / 1e6
-    
+    regional_emisssions = (
+        get_node_emissions_timeseries(n).T.groupby(n.buses.country).sum().T.sum() / 1e6
+    )
+
     plt.figure(figsize=(10, 10))
     sns.barplot(
         x=regional_emisssions.values,
