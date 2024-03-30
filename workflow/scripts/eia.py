@@ -165,6 +165,7 @@ class Demand(EiaData):
                 recived_option=self.fuel,
             )
 
+
 # concrete creator
 class Storage(EiaData):
 
@@ -184,12 +185,13 @@ class Storage(EiaData):
                 recived_option=self.fuel,
             )
 
+
 # concrete creator
 class Emissions(EiaData):
-    
+
     def __init__(self, sector: str, year: int, api: str, fuel: str = None) -> None:
-        self.sector = sector # (power|residential|commercial|industry|transport|total)
-        self.year = year # 1970 - 2021
+        self.sector = sector  # (power|residential|commercial|industry|transport|total)
+        self.year = year  # 1970 - 2021
         self.api = api
         self.fuel = "all" if not fuel else fuel  # (coal|oil|gas|all)
 
@@ -622,25 +624,25 @@ class GasProduction(DataExtractor):
 
 class StateEmissions(DataExtractor):
     """
-    State Level CO2 Emissions
+    State Level CO2 Emissions.
     """
-    
+
     sector_codes = {
         "commercial": "CC",
         "power": "EC",
         "industrial": "IC",
         "residential": "RC",
         "transport": "TC",
-        "total": "TT"
+        "total": "TT",
     }
-    
+
     fuel_codes = {
         "coal": "CO",
         "gas": "NG",
         "oil": "PE",
-        "all": "TO" # coal + gas + oil = all emissions
+        "all": "TO",  # coal + gas + oil = all emissions
     }
-    
+
     def __init__(self, sector: str, fuel: str, year: int, api_key: str) -> None:
         self.sector = sector
         self.fuel = fuel
@@ -669,12 +671,16 @@ class StateEmissions(DataExtractor):
     def format_data(self, df: pd.DataFrame) -> pd.DataFrame:
 
         df = df[~(df["state-name"] == "NA")].copy()
-        df = df.rename(columns={
-            "value-units":"units", 
-            "state-name":"state",
-            "sector-name":"series-description"
-        })
-        df["series-description"] = df["series-description"].str.cat(df["fuel-name"], sep= " - ")
+        df = df.rename(
+            columns={
+                "value-units": "units",
+                "state-name": "state",
+                "sector-name": "series-description",
+            },
+        )
+        df["series-description"] = df["series-description"].str.cat(
+            df["fuel-name"], sep=" - "
+        )
 
         return (
             df[["series-description", "value", "units", "state", "period"]]

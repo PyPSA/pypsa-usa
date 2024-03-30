@@ -388,14 +388,14 @@ def plot_regional_emissions_historical_bar(
     **wildcards,
 ) -> None:
     """
-    Compares regional annual emissions to the year 
+    Compares regional annual emissions to the year.
     """
-    
+
     year = snapshots[0].year
-    
+
     sectors = wildcards["sector"].split("-")
     historical_emissions = []
-    if "T" in sectors: 
+    if "T" in sectors:
         historical_emissions.append(Emissions("transport", year, eia_api).get_data())
     if "I" in sectors:
         historical_emissions.append(Emissions("industrial", year, eia_api).get_data())
@@ -405,16 +405,25 @@ def plot_regional_emissions_historical_bar(
     historical_emissions.append(Emissions("power", year, eia_api).get_data())
 
     historical_emissions = pd.concat(historical_emissions)
-    historical = historical_emissions.reset_index()[["value", "state"]].set_index("state").rename(columns={"value":"Actual"})
-    actual = pd.DataFrame(get_node_emissions_timeseries(n).T.groupby(n.buses.country).sum().T.sum() / 1e6, columns=["Optimized"])
+    historical = (
+        historical_emissions.reset_index()[["value", "state"]]
+        .set_index("state")
+        .rename(columns={"value": "Actual"})
+    )
+    actual = pd.DataFrame(
+        get_node_emissions_timeseries(n).T.groupby(n.buses.country).sum().T.sum() / 1e6,
+        columns=["Optimized"],
+    )
 
     final = actual.join(historical).reset_index()
-    
+
     final = pd.melt(final, id_vars=["country"], value_vars=["Optimized", "Actual"])
     final["value"] = final.value.astype("float")
-    
+
     fig, ax = plt.subplots(figsize=(10, 6))
-    sns.barplot(data=final, y="country", x="value", hue='variable', orient='horizontal', ax=ax)
+    sns.barplot(
+        data=final, y="country", x="value", hue="variable", orient="horizontal", ax=ax
+    )
     ax.set_title(create_title("CO2 Emissions by Region", **wildcards))
     ax.set_xlabel("CO2 Emissions [MMtCO2]")
     ax.set_ylabel("")
@@ -504,7 +513,10 @@ if __name__ == "__main__":
         plot_regional_emissions_historical_bar(
             n,
             snakemake.output["val_bar_regional_emissions.pdf"],
-            pd.date_range(start=snakemake.params.snapshots["start"], end=snakemake.params.snapshots["end"]),
+            pd.date_range(
+                start=snakemake.params.snapshots["start"],
+                end=snakemake.params.snapshots["end"],
+            ),
             snakemake.params.eia_api,
             **snakemake.wildcards,
         )
