@@ -385,7 +385,6 @@ def plot_regional_emissions_historical_bar(
     save: str,
     snapshots: pd.date_range,
     eia_api: str,
-    scale_historical: bool = True,
     **wildcards,
 ) -> None:
     """
@@ -437,69 +436,69 @@ if __name__ == "__main__":
     configure_logging(snakemake)
     n = pypsa.Network(snakemake.input.network)
 
-    # onshore_regions = gpd.read_file(snakemake.input.regions_onshore)
-    # offshore_regions = gpd.read_file(snakemake.input.regions_offshore)
+    onshore_regions = gpd.read_file(snakemake.input.regions_onshore)
+    offshore_regions = gpd.read_file(snakemake.input.regions_offshore)
 
-    # plot_load_shedding_map(
-    #     n,
-    #     snakemake.output["val_map_load_shedding.pdf"],
-    #     onshore_regions,
-    #     **snakemake.wildcards,
-    # )
+    plot_load_shedding_map(
+        n,
+        snakemake.output["val_map_load_shedding.pdf"],
+        onshore_regions,
+        **snakemake.wildcards,
+    )
 
-    # buses = get_regions(n)
+    buses = get_regions(n)
 
-    # historic, order = create_historical_df(
-    #     snakemake.input.historic_first,
-    #     snakemake.input.historic_second,
-    # )
-    # optimized = create_optimized_by_carrier(n, order)
+    historic, order = create_historical_df(
+        snakemake.input.historic_first,
+        snakemake.input.historic_second,
+    )
+    optimized = create_optimized_by_carrier(n, order)
 
-    # plot_regional_timeseries_comparison(
-    #     n,
-    # )
-    # plot_timeseries_comparison(
-    #     historic,
-    #     optimized,
-    #     save_path=snakemake.output["seasonal_stacked_plot.pdf"],
-    # )
+    plot_regional_timeseries_comparison(
+        n,
+    )
+    plot_timeseries_comparison(
+        historic,
+        optimized,
+        save_path=snakemake.output["seasonal_stacked_plot.pdf"],
+    )
 
-    # plot_bar_carrier_production(
-    #     historic,
-    #     optimized,
-    #     save_path=snakemake.output["carrier_production_bar.pdf"],
-    # )
+    plot_bar_carrier_production(
+        historic,
+        optimized,
+        save_path=snakemake.output["carrier_production_bar.pdf"],
+    )
 
-    # plot_bar_production_deviation(
-    #     historic,
-    #     optimized,
-    #     save_path=snakemake.output["production_deviation_bar.pdf"],
-    # )
+    plot_bar_production_deviation(
+        historic,
+        optimized,
+        save_path=snakemake.output["production_deviation_bar.pdf"],
+    )
 
-    # # Box Plot
-    # plot_region_lmps(
-    #     n,
-    #     snakemake.output["val_box_region_lmps.pdf"],
-    #     **snakemake.wildcards,
-    # )
+    # Box Plot
+    plot_region_lmps(
+        n,
+        snakemake.output["val_box_region_lmps.pdf"],
+        **snakemake.wildcards,
+    )
 
-    # plot_curtailment_heatmap(
-    #     n,
-    #     snakemake.output["val_heatmap_curtailment.pdf"],
-    #     **snakemake.wildcards,
-    # )
+    plot_curtailment_heatmap(
+        n,
+        snakemake.output["val_heatmap_curtailment.pdf"],
+        **snakemake.wildcards,
+    )
 
-    # plot_capacity_factor_heatmap(
-    #     n,
-    #     snakemake.output["val_heatmap_capacity_factor.pdf"],
-    #     **snakemake.wildcards,
-    # )
+    plot_capacity_factor_heatmap(
+        n,
+        snakemake.output["val_heatmap_capacity_factor.pdf"],
+        **snakemake.wildcards,
+    )
 
-    # plot_generator_data_panel(
-    #     n,
-    #     snakemake.output["val_generator_data_panel.pdf"],
-    #     **snakemake.wildcards,
-    # )
+    plot_generator_data_panel(
+        n,
+        snakemake.output["val_generator_data_panel.pdf"],
+        **snakemake.wildcards,
+    )
 
     if snakemake.params.eia_api:
         plot_regional_emissions_historical_bar(

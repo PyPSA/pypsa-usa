@@ -1,5 +1,8 @@
 
 rule plot_validation_figures:
+    params:
+        eia_api = config["api"]["eia"],
+        snapshots = config["snapshots"],
     input:
         network=RESULTS
         + "{interconnect}/networks/elec_s_{clusters}_ec_l{ll}_{opts}_{sector}_operations.nc",
