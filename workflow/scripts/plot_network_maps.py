@@ -17,26 +17,8 @@ Capacity maps for:
     .. image:: _static/plots/capacity-map.png
         :scale: 33 %
 
-System level charts for:
-    - Hourly production
-    - Generator costs
-    - Generator capacity
-
-    .. image:: _static/plots/production-area.png
-        :scale: 33 %
-
-    .. image:: _static/plots/costs-bar.png
-        :scale: 33 %
-
-    .. image:: _static/plots/capacity-bar.png
-        :scale: 33 %
-
 Emission charts for:
     - Emissions map by node
-    - Accumulated emissions
-
-    .. image:: _static/plots/emissions-area.png
-        :scale: 33 %
 
     .. image:: _static/plots/emissions-map.png
         :scale: 33 %

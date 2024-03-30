@@ -1,7 +1,7 @@
 """
 **Description**
 
-Historical electrical load data from 2019-2023 are retrieved from the [US Energy Information Agency](https://www.eia.gov/) (EIA) and [GridEmissions](https://gridemissions.jdechalendar.su.domains/#/code). Data is downloaded at hourly temporal resolution and at a spatial resolution of balancing authority region.
+Historical electrical load data from 2019-2023 are retrieved from the `US Energy Information Agency <https://www.eia.gov/>`_ (EIA) and `GridEmissions <https://gridemissions.jdechalendar.su.domains/#/code>`_. Data is downloaded at hourly temporal resolution and at a spatial resolution of balancing authority region.
 
 **Outputs**
 

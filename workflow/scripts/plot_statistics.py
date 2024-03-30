@@ -7,16 +7,6 @@ A solved network
 
 **Outputs**
 
-Capacity maps for:
-    - Base capacity
-    - New capacity
-    - Optimal capacity (does not show existing unused capacity)
-    - Optimal browfield capacity
-    - Renewable potential capacity
-
-    .. image:: _static/plots/capacity-map.png
-        :scale: 33 %
-
 System level charts for:
     - Hourly production
     - Generator costs
@@ -32,13 +22,9 @@ System level charts for:
         :scale: 33 %
 
 Emission charts for:
-    - Emissions map by node
     - Accumulated emissions
 
     .. image:: _static/plots/emissions-area.png
-        :scale: 33 %
-
-    .. image:: _static/plots/emissions-map.png
         :scale: 33 %
 """
 
@@ -602,14 +588,8 @@ def plot_regional_emissions_bar(
     """
     PLOT OF CO2 EMISSIONS BY REGION.
     """
-    generator_emissions = n.generators_t.p * n.generators.carrier.map(
-        n.carriers.co2_emissions,
-    )
     regional_emisssions = (
-        generator_emissions.groupby(n.generators.bus.map(n.buses.country), axis=1)
-        .sum()
-        .sum()
-        / 1e6
+        get_node_emissions_timeseries(n).T.groupby(n.buses.country).sum().T.sum() / 1e6
     )
 
     plt.figure(figsize=(10, 10))
@@ -1109,11 +1089,11 @@ if __name__ == "__main__":
         from _helpers import mock_snakemake
 
         snakemake = mock_snakemake(
-            "plot_figures",
+            "plot_statistics",
             interconnect="western",
-            clusters=30,
-            ll="v1.15",
-            opts="CO2L0.75-4H",
+            clusters=80,
+            ll="v1.0",
+            opts="RCo2L-SAFER-RPS",
             sector="E",
         )
     configure_logging(snakemake)
