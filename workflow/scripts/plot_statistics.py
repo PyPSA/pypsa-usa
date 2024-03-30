@@ -7,16 +7,6 @@ A solved network
 
 **Outputs**
 
-Capacity maps for:
-    - Base capacity
-    - New capacity
-    - Optimal capacity (does not show existing unused capacity)
-    - Optimal browfield capacity
-    - Renewable potential capacity
-
-    .. image:: _static/plots/capacity-map.png
-        :scale: 33 %
-
 System level charts for:
     - Hourly production
     - Generator costs
@@ -32,13 +22,9 @@ System level charts for:
         :scale: 33 %
 
 Emission charts for:
-    - Emissions map by node
     - Accumulated emissions
 
     .. image:: _static/plots/emissions-area.png
-        :scale: 33 %
-
-    .. image:: _static/plots/emissions-map.png
         :scale: 33 %
 """
 
