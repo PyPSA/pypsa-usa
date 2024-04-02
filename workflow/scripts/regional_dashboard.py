@@ -8,6 +8,8 @@ import pandas as pd
 import geopandas as gpd
 from shapely.geometry import Point
 
+import plotly.graph_objects as go
+
 import logging 
 logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -16,6 +18,9 @@ logger.propagate = False
 from pathlib import Path
 
 from typing import List, Dict
+
+from summary import get_demand_timeseries, get_energy_timeseries
+from plot_statistics import get_color_palette
 
 ###
 # IDS
@@ -114,15 +119,28 @@ def plot_map(
     
     nodes = n.buses[n.buses.country.isin(states)]
     
-    usa_map = px.scatter_mapbox(
-        nodes,
-        lat=nodes.y,
+    usa_map = go.Figure()
+
+    usa_map.add_trace(go.Scattermapbox(
+        mode='markers',
         lon=nodes.x,
-        hover_name = nodes.index
+        lat=nodes.y,
+        marker=dict(size=10, color='red'),
+        text=nodes.index,
+    ))
+
+    # Update layout to include map
+    usa_map.update_layout(
+        mapbox=dict(
+            style="carto-positron",
+            center=dict(lon=-95, lat=35),
+            zoom=3
+        ),
+        margin=dict(l=0, r=0, t=0, b=0)
     )
     
     return html.Div(children=[dcc.Graph(figure=usa_map)], id=GRAPHIC_MAP)
-    
+
 @app.callback(
     Output(GRAPHIC_MAP, "children"),
     Input(DROPDOWN_SELECT_STATE, "value"),
@@ -132,23 +150,86 @@ def plot_map_callback(
 ) -> html.Div:
     return plot_map(NETWORK, states)
 
+# dispatch 
+
+def plot_dispatch(
+    n: pypsa.Network,
+    states: List[str],
+    resample: str,
+    timeframe: pd.date_range
+) -> html.Div:
+    energy_mix = get_energy_timeseries(n).mul(1e-3)  # MW -> GW
+
+    # fix battery charge/discharge to only be positive
+    if "battery" in energy_mix:
+        col_rename = {
+            "battery charger": "battery",
+            "battery discharger": "battery",
+        }
+        energy_mix = energy_mix.rename(columns=col_rename)
+        energy_mix = energy_mix.T.groupby(level=0).sum().T
+        energy_mix["battery"] = energy_mix.battery.map(lambda x: max(0, x))
+
+    energy_mix = energy_mix.rename(columns=n.carriers.nice_name)
+    energy_mix["Demand"] = get_demand_timeseries(n).mul(1e-3)  # MW -> GW
+    
+    energy_mix = energy_mix.index.resample("4h")
+    
+    color_palette = get_color_palette(n)
+
+    fig = px.area(
+        energy_mix,
+        x=energy_mix.index,
+        y=[c for c in energy_mix.columns if c != "Demand"],
+        color_discrete_map=color_palette,
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=energy_mix.index,
+            y=energy_mix.Demand,
+            mode="lines",
+            name="Demand",
+            line_color="darkblue",
+        ),
+    )
+    title = create_title("Dispatch [GW]", **wildcards)
+    fig.update_layout(
+        title=dict(text=title, font=dict(size=24)),
+        xaxis_title="",
+        yaxis_title="Power [GW]",
+    )
+    return fig
+
 ###
 # APP LAYOUT 
 ### 
 
 app.layout = html.Div(
-    [
+    children=[
+        # map section
         html.Div(
             children = [
-                state_dropdown(states=ALL_STATES)
-            ],
-            style={'width': '25%', 'display': 'inline-block'},
+                html.Div(
+                    children=[
+                        state_dropdown(states=ALL_STATES),
+                    ],
+                    style={"width": "30%", "padding": "20px", "display": "inline-block", "vertical-align":"top"},
+                ),
+                html.Div(
+                    children = [
+                        plot_map_callback()
+                    ],
+                    style={"width": "60%", "display": "inline-block"},
+                )
+            ]
         ),
+        # dispatch and load section
         html.Div(
-            children = [
-                plot_map_callback()
+            children=[
+                
             ]
         )
+        
     ]
 )
 
