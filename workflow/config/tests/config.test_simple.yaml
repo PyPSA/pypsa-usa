@@ -10,8 +10,8 @@ run:
 
 # docs :
 scenario:
-  interconnect: [eastern] #"usa|texas|western|eastern"
-  clusters: [42]
+  interconnect: [texas] #"usa|texas|western|eastern"
+  clusters: [20]
   opts: [Co2L1.0-6H-RCo2L-SAFER-RPS]
   ll: [v1.0]
   scope: "total" # "urban", "rural", or "total"
@@ -239,9 +239,9 @@ clustering:
     algorithm: hac # choose from: [hac, kmeans]
     feature: solar+onwind-time # only for hac. choose from: [solar+onwind-time, solar+onwind-cap, solar-time, solar-cap, solar+offwind-cap] etc.
   cluster_network:
-    algorithm: hac
+    algorithm: kmeans
     feature: solar+onwind-time
-    aggregation_zones: 'state' # [balancing_area, state]
+    aggregation_zones: 'reeds_zone' # [balancing_area, state, reeds_zone]
     exclude_carriers: []
     consider_efficiency_classes: false
   aggregation_strategies:

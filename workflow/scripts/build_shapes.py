@@ -91,7 +91,7 @@ def filter_small_polygons_gpd(
 
 def load_na_shapes(
     state_shape: str = "admin_1_states_provinces_lakes",
-    countries: list = ["US", "CA", "MX"],
+    countries: list = ["US"],
 ) -> gpd.GeoDataFrame:
     """
     Creates geodataframe of north america.
@@ -222,7 +222,7 @@ def trim_states_to_interconnect(
             how="difference",
         )
         texas_geometry = gdf_states.loc[gdf_states.name == "Texas", "geometry"]
-        texas_geometry = filter_small_polygons_gpd(texas_geometry, 1e9)
+        texas_geometry = filter_small_polygons_gpd(texas_geometry, 1e8)
         gdf_states.loc[gdf_states.name == "Texas", "geometry"] = (
             texas_geometry.geometry.values
         )
@@ -411,7 +411,7 @@ if __name__ == "__main__":
     logger = logging.getLogger(__name__)
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
-        snakemake = mock_snakemake("build_shapes", interconnect="eastern")
+        snakemake = mock_snakemake("build_shapes", interconnect="western")
     configure_logging(snakemake)
     main(snakemake)
 

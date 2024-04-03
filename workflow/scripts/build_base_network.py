@@ -95,6 +95,8 @@ def add_buses_from_file(
         balancing_area=buses.balancing_area,
         state=buses.state,
         country=buses.country,
+        reeds_zone=buses.reeds_zone,
+        reeds_ba=buses.reeds_ba,
         interconnect=buses.interconnect,
         x=buses.lon,
         y=buses.lat,
@@ -518,20 +520,33 @@ def assign_missing_states_countries(n: pypsa.Network):
     value.
     """
     buses = n.buses.copy()
-    missing = buses.loc[
-        buses.state.isna() | buses.country.isna() | buses.balancing_area.isna()
-    ]
-    buses = buses.loc[
-        ~buses.state.isna() & ~buses.country.isna() & ~buses.balancing_area.isna()
-    ]
+    missing = buses.loc[(
+        buses.state.isna() | 
+        buses.country.isna() | 
+        buses.balancing_area.isna() | 
+        buses.reeds_zone.isna() |
+        buses.reeds_ba.isna()
+    )]
+    buses = buses.loc[(
+        ~buses.state.isna() & 
+        ~buses.country.isna() & 
+        ~buses.balancing_area.isna() &
+        ~buses.reeds_zone.isna() &
+        ~buses.reeds_ba.isna()
+    )]
     buses = buses.loc[~buses.state.isin(["Offshore"])]
     missing = match_missing_buses(buses, missing)
     missing.balancing_area = buses.loc[missing.bus_assignment].balancing_area.values
     missing.state = buses.loc[missing.bus_assignment].state.values
     missing.country = buses.loc[missing.bus_assignment].country.values
+    missing.reeds_zone = buses.loc[missing.bus_assignment].reeds_zone.values
+    missing.reeds_ba = buses.loc[missing.bus_assignment].reeds_ba.values
+
     n.buses.loc[missing.index, "balancing_area"] = missing.balancing_area
     n.buses.loc[missing.index, "state"] = missing.state
     n.buses.loc[missing.index, "country"] = missing.country
+    n.buses.loc[missing.index, "reeds_zone"] = missing.reeds_zone
+    n.buses.loc[missing.index, "reeds_ba"] = missing.reeds_ba    
     n.buses.loc[missing.index, "interconnect"] = missing.interconnect
 
 

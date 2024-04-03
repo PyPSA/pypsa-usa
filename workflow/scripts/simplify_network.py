@@ -142,6 +142,8 @@ def aggregate_to_substations(
             "state",
             "country",
             "balancing_area",
+            "reeds_zone",
+            "reeds_ba",
             "x",
             "y",
         ]
@@ -156,6 +158,8 @@ def aggregate_to_substations(
         zone = substations.country
     elif aggregation_zones == "state":
         zone = substations.state
+    elif aggregation_zones == "reeds_zone":
+        zone = substations.reeds_zone
     else:
         ValueError("zonal_aggregation must be either balancing_area, country or state")
 

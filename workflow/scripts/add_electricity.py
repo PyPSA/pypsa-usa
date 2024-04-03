@@ -722,7 +722,6 @@ def attach_renewable_capacities_to_atlite(
         caps_per_bus = (
             plants_filt[['bus_assignment', 'p_nom']].groupby("bus_assignment").sum().p_nom
         )  # namplate capacity per bus
-        # caps = caps / gens_per_bus.reindex(caps.index, fill_value=1) ##REVIEW
         # TODO: #16 Gens excluded from atlite profiles bc of landuse/etc will not be able to be attached if in the breakthrough network
         if caps_per_bus[~caps_per_bus.index.isin(generators_tech.bus)].sum() > 0:
             missing_capacity = caps_per_bus[

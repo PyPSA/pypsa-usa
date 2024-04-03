@@ -421,6 +421,19 @@ def add_BAU_constraints(n, config):
     rhs = mincaps[index].rename_axis("carrier")
     n.model.add_constraints(lhs >= rhs, name="bau_mincaps")
 
+def add_flowgate_limits(n, config):
+    """
+    Adds Interregional flowgate limits to constrain inter-regional transfer capacities based on ReEDS inter-regional transfer capacity limits.
+    """
+    mincaps = pd.Series(config["electricity"]["BAU_mincapacities"])
+    p_nom = n.model["Generator-p_nom"]
+    ext_i = n.generators.query("p_nom_extendable")
+    ext_carrier_i = xr.DataArray(ext_i.carrier.rename_axis("Generator-ext"))
+    lhs = p_nom.groupby(ext_carrier_i).sum()
+    index = mincaps.index.intersection(lhs.indexes["carrier"])
+    rhs = mincaps[index].rename_axis("carrier")
+    n.model.add_constraints(lhs >= rhs, name="bau_mincaps")
+
 
 def add_regional_co2limit(n, sns, config):
     """
@@ -788,6 +801,9 @@ def extra_functionality(n, snapshots):
     reserve = config["electricity"].get("operational_reserve", {})
     if reserve.get("activate"):
         add_operational_reserve_margin(n, snapshots, config)
+    flowgates = config["electricity"].get("reeds_transferCapacities", {})
+    if flowgates:
+        add_flowgate_limits(n, config)
     for o in opts:
         if "EQ" in o:
             add_EQ_constraints(n, o)
