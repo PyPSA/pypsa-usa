@@ -421,18 +421,37 @@ def add_BAU_constraints(n, config):
     rhs = mincaps[index].rename_axis("carrier")
     n.model.add_constraints(lhs >= rhs, name="bau_mincaps")
 
-def add_flowgate_limits(n, config):
+def add_flowgate_limits(n, sns, config):
     """
     Adds Interregional flowgate limits to constrain inter-regional transfer capacities based on ReEDS inter-regional transfer capacity limits.
     """
-    mincaps = pd.Series(config["electricity"]["BAU_mincapacities"])
-    p_nom = n.model["Generator-p_nom"]
-    ext_i = n.generators.query("p_nom_extendable")
-    ext_carrier_i = xr.DataArray(ext_i.carrier.rename_axis("Generator-ext"))
-    lhs = p_nom.groupby(ext_carrier_i).sum()
-    index = mincaps.index.intersection(lhs.indexes["carrier"])
-    rhs = mincaps[index].rename_axis("carrier")
-    n.model.add_constraints(lhs >= rhs, name="bau_mincaps")
+    limits = pd.read_csv(snakemake.input.flowgates)
+    user_limits = pd.read_csv(
+        config["electricity"]["transmission_interface_limits"]
+    ).rename(
+        columns={'region_1':'r', 
+        'region_2':'rr',
+        'flow_12':'MW_f0',
+        'flow_21':'MW_r0'}
+    )
+
+    limits = pd.concat([limits, user_limits])
+
+    lines_s = n.model["Line-s"]
+
+    for idx, interface in limits.iterrows():
+        zone0_buses = n.buses[n.buses.country == interface.r]
+        zone1_buses = n.buses[n.buses.country ==interface.rr]
+        if zone0_buses.empty | zone0_buses.empty: continue
+        interface_lines = n.lines[n.lines.bus0.isin(zone0_buses.index) & n.lines.bus1.isin(zone1_buses.index)]
+
+        lhs = lines_s.loc[:, interface_lines.index].sum(dims='Line')
+
+        rhs_pos = interface.MW_f0
+        rhs_neg = interface.MW_r0 * -1
+        n.model.add_constraints(lhs <= rhs_pos, name=f"interface_{interface.interface}_pos")
+        n.model.add_constraints(lhs >= rhs_neg, name=f"interface_{interface.interface}_neg")
+
 
 
 def add_regional_co2limit(n, sns, config):
@@ -801,9 +820,9 @@ def extra_functionality(n, snapshots):
     reserve = config["electricity"].get("operational_reserve", {})
     if reserve.get("activate"):
         add_operational_reserve_margin(n, snapshots, config)
-    flowgates = config["electricity"].get("reeds_transferCapacities", {})
+    flowgates = config["lines"].get("reeds_transmission_limits", {})
     if flowgates:
-        add_flowgate_limits(n, config)
+        add_flowgate_limits(n, snapshots, config)
     for o in opts:
         if "EQ" in o:
             add_EQ_constraints(n, o)
@@ -869,13 +888,13 @@ if __name__ == "__main__":
         snakemake = mock_snakemake(
             "solve_network",
             simpl="",
-            opts="Co2L2.0-RPS",
-            clusters="40",
+            opts="Co2L1.0-6H-RCo2L-SAFER-RPS",
+            clusters="20",
             ll="v1.0",
             sector_opts="",
             sector="E",
             planning_horizons="2030",
-            interconnect="western",
+            interconnect="texas",
         )
     configure_logging(snakemake)
     if "sector_opts" in snakemake.wildcards.keys():

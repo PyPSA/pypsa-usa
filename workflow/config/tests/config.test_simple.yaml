@@ -48,6 +48,8 @@ electricity:
   agg_p_nom_limits: 'config/policy_constraints/agg_p_nom_minmax.csv'
   portfolio_standards: 'config/policy_constraints/portfolio_standards.csv'
   SAFE_regional_reservemargins: 'config/policy_constraints/SAFE_regional_prm.csv'
+  transmission_interface_limits: 'config/policy_constraints/transmission_interface_limits.csv'
+
 
   operational_reserve:
     activate: false
@@ -169,7 +171,7 @@ renewable:
 
 # docs :
 lines:
-  types: # All temporary values, need to be updated
+  types: # remove, not used
     115.: "Al/St 240/40 2-bundle 220.0"
     138.: "Al/St 240/40 2-bundle 220.0"
     161.: "Al/St 240/40 2-bundle 220.0"
@@ -181,6 +183,7 @@ lines:
   s_nom_max: .inf
   length_factor: 1.25
   under_construction: 'zero' # 'zero': set capacity to zero, 'remove': remove, 'keep': with full capacity
+  reeds_transmission_limits: true
 
 # docs :
 links:
