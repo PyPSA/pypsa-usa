@@ -142,6 +142,8 @@ def aggregate_to_substations(
             "state",
             "country",
             "balancing_area",
+            "reeds_zone",
+            "reeds_ba",
             "x",
             "y",
         ]
@@ -156,6 +158,8 @@ def aggregate_to_substations(
         zone = substations.country
     elif aggregation_zones == "state":
         zone = substations.state
+    elif aggregation_zones == "reeds_zone":
+        zone = substations.reeds_zone
     else:
         ValueError("zonal_aggregation must be either balancing_area, country or state")
 
@@ -171,7 +175,7 @@ def aggregate_to_substations(
     network_s.lines["type"] = np.nan
 
     network_s.buses.drop(
-        columns=["balancing_area", "state", "substation_off", "sub_id"],
+        columns=["balancing_area", "state", "substation_off", "sub_id", "reeds_zone", "reeds_ba"],
         inplace=True,
     )
     return network_s
@@ -204,7 +208,7 @@ if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
 
-        snakemake = mock_snakemake("simplify_network", interconnect="western")
+        snakemake = mock_snakemake("simplify_network", interconnect="eastern")
     configure_logging(snakemake)
 
     voltage_level = snakemake.config["electricity"]["voltage_simplified"]
@@ -214,7 +218,6 @@ if __name__ == "__main__":
 
     n = pypsa.Network(snakemake.input.network)
 
-    # n, trafo_map = simplify_network_to_voltage_level(n, voltage_level)
     n = convert_to_voltage_level(n, voltage_level)
     n, trafo_map = remove_transformers(n)
 

@@ -211,7 +211,7 @@ def create_optimized_by_carrier(n, order, region=None):
     if "OCGT" in optimized.columns:
         optimized["CCGT"] = optimized["CCGT"] + optimized["OCGT"]
         optimized_comb = optimized.drop(["OCGT"], axis=1)
-
+    import pdb; pdb.set_trace()
     # Rename and rearrange the columns
     optimized = optimized_comb.rename(columns=rename_op)
     optimized = optimized.reindex(order, axis=1, level=1)

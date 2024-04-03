@@ -50,6 +50,8 @@ electricity:
   agg_p_nom_limits: 'config/policy_constraints/agg_p_nom_minmax.csv'
   portfolio_standards: 'config/policy_constraints/portfolio_standards.csv'
   SAFE_regional_reservemargins: 'config/policy_constraints/SAFE_regional_prm.csv'
+  transmission_interface_limits: 'config/policy_constraints/transmission_interface_limits.csv'
+
 
   operational_reserve:
     activate: false
@@ -184,6 +186,8 @@ lines:
   s_nom_max: .inf
   length_factor: 1.25
   under_construction: 'zero' # 'zero': set capacity to zero, 'remove': remove, 'keep': with full capacity
+  interface_transmission_limits: true
+
 
 # docs :
 links:
@@ -243,7 +247,7 @@ clustering:
   cluster_network:
     algorithm: kmeans # choose from: [hac, kmeans]
     feature: solar+onwind-time
-    aggregation_zones: 'state' # [balancing_area, state]
+    aggregation_zones: 'state' # [balancing_area, state, reeds_zone]
     exclude_carriers: []
     consider_efficiency_classes: false
   aggregation_strategies:

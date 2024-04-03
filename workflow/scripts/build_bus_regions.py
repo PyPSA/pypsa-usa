@@ -125,10 +125,10 @@ def main(snakemake):
         agg_region_shapes = gpd_ba_shapes
     elif aggregation_zones == "state":
         agg_region_shapes = gpd_states.geometry
-    elif aggregation_zones == "reeds":
+    elif aggregation_zones == "reeds_zone":
         agg_region_shapes = gpd_reeds.geometry
     else:
-        ValueError("zonal_aggregation must be either balancing_area, country, reeds, or state")
+        ValueError("zonal_aggregation must be either balancing_area, country, reeds_id, or state")
 
     gpd_offshore_shapes = gpd.read_file(snakemake.input.offshore_shapes)
     offshore_shapes = gpd_offshore_shapes.reindex(columns=REGION_COLS).set_index(
@@ -138,13 +138,11 @@ def main(snakemake):
     onshore_regions = []
     offshore_regions = []
 
-    all_locs = bus2sub[
-        ["x", "y"]
-    ]  # all locations of substations in the bus2sub dataframe
+    all_locs = bus2sub[["x", "y"]]
     onshore_buses = n.buses[~n.buses.substation_off]
+    bus2sub = pd.merge(bus2sub.reset_index(), n.buses[['reeds_zone','reeds_ba']], left_on='Bus', right_on=n.buses.index).set_index('sub_id')
     bus2sub_onshore = bus2sub[bus2sub.Bus.isin(onshore_buses.index)]
     bus2sub_offshore = bus2sub[~bus2sub.Bus.isin(onshore_buses.index)]
-    # need to get all agg types into the bus2sub
 
     logger.info("Building Onshore Regions")
     for region in agg_region_shapes.index:
