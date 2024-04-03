@@ -183,7 +183,7 @@ lines:
   s_nom_max: .inf
   length_factor: 1.25
   under_construction: 'zero' # 'zero': set capacity to zero, 'remove': remove, 'keep': with full capacity
-  reeds_transmission_limits: true
+  interface_transmission_limits: true
 
 # docs :
 links:

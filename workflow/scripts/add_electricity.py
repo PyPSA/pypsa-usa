@@ -1002,7 +1002,9 @@ def load_powerplants_eia(
     if carrier_mapper:
         plants["carrier"] = plants.tech_type.map(carrier_mapper)
 
-    plants.rename(columns={"pypsa_generator_name":"generator_name"}, inplace=True)
+    plants["generator_name"] = (
+        plants.index.astype(str) + "_" + plants.generator_id.astype(str)
+    )    
     plants.set_index("generator_name", inplace=True)
     plants["p_nom"] = plants.pop("nameplate_capacity_mw")
     plants["heat_rate"] = plants.pop("ads_avg_hr")
@@ -1425,7 +1427,6 @@ def main(snakemake):
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
-
-        snakemake = mock_snakemake("add_electricity", interconnect="eastern")
+        snakemake = mock_snakemake("add_electricity", interconnect="western")
     configure_logging(snakemake)
     main(snakemake)

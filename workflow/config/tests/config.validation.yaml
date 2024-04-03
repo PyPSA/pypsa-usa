@@ -215,7 +215,7 @@ lines:
   s_nom_max: .inf
   length_factor: 1.25
   under_construction: 'zero' # 'zero': set capacity to zero, 'remove': remove, 'keep': with full capacity
-  reeds_transmission_limits: true
+  interface_transmission_limits: true
 
 
 # docs :
@@ -296,7 +296,7 @@ focus_weights:
 solving:
   #tmpdir: "path/to/tmp"
   options:
-    load_shedding: false
+    load_shedding: true
     clip_p_max_pu: 1.e-2
     noisy_costs: true
     skip_iterations: true
@@ -306,7 +306,7 @@ solving:
     track_iterations: false
     min_iterations: 4
     max_iterations: 6
-    transmission_losses: 0
+    transmission_losses: 2
     linearized_unit_commitment: true
     horizon: 8760
     assign_all_duals: true

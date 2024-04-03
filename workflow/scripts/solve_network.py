@@ -421,10 +421,11 @@ def add_BAU_constraints(n, config):
     rhs = mincaps[index].rename_axis("carrier")
     n.model.add_constraints(lhs >= rhs, name="bau_mincaps")
 
-def add_flowgate_limits(n, sns, config):
+def add_interface_limits(n, sns, config):
     """
-    Adds Interregional flowgate limits to constrain inter-regional transfer capacities based on ReEDS inter-regional transfer capacity limits.
+    Adds interface transmission limits to constrain inter-regional transfer capacities based on ReEDS inter-regional transfer capacity limits or manually defined limits. 
     """
+    logger.info("Adding Interface Transmission Limits.")
     limits = pd.read_csv(snakemake.input.flowgates)
     user_limits = pd.read_csv(
         config["electricity"]["transmission_interface_limits"]
@@ -449,8 +450,8 @@ def add_flowgate_limits(n, sns, config):
 
         rhs_pos = interface.MW_f0
         rhs_neg = interface.MW_r0 * -1
-        n.model.add_constraints(lhs <= rhs_pos, name=f"interface_{interface.interface}_pos")
-        n.model.add_constraints(lhs >= rhs_neg, name=f"interface_{interface.interface}_neg")
+        n.model.add_constraints(lhs <= rhs_pos, name=f"ITL_{interface.interface}_pos")
+        n.model.add_constraints(lhs >= rhs_neg, name=f"ITL_{interface.interface}_neg")
 
 
 
@@ -820,9 +821,9 @@ def extra_functionality(n, snapshots):
     reserve = config["electricity"].get("operational_reserve", {})
     if reserve.get("activate"):
         add_operational_reserve_margin(n, snapshots, config)
-    flowgates = config["lines"].get("reeds_transmission_limits", {})
-    if flowgates:
-        add_flowgate_limits(n, snapshots, config)
+    interface_limits = config["lines"].get("interface_transmission_limits", {})
+    if interface_limits:
+        add_interface_limits(n, snapshots, config)
     for o in opts:
         if "EQ" in o:
             add_EQ_constraints(n, o)
