@@ -135,14 +135,8 @@ def plot_accumulated_emissions_tech_html(
     # get data
 
     emissions = get_tech_emissions_timeseries(n).cumsum().mul(1e-6)  # T -> MT
-    emissions = emissions[
-        [
-            x
-            for x in n.carriers[n.carriers.co2_emissions > 0].index
-            if x in emissions.columns
-        ]
-    ]
-    emissions = emissions.rename(columns=n.carriers.nice_name)
+    zeros = emissions.columns[(np.abs(emissions) < 1e-7).all()]
+    emissions = emissions.drop(columns=zeros)
 
     # plot
 
@@ -172,14 +166,8 @@ def plot_hourly_emissions_html(n: pypsa.Network, save: str, **wildcards) -> None
     # get data
 
     emissions = get_tech_emissions_timeseries(n).mul(1e-6)  # T -> MT
-    emissions = emissions[
-        [
-            x
-            for x in n.carriers[n.carriers.co2_emissions > 0].index
-            if x in emissions.columns
-        ]
-    ]
-    emissions = emissions.rename(columns=n.carriers.nice_name)
+    zeros = emissions.columns[(np.abs(emissions) < 1e-7).all()]
+    emissions = emissions.drop(columns=zeros)
 
     # plot
 
@@ -684,14 +672,8 @@ def plot_hourly_emissions(n: pypsa.Network, save: str, **wildcards) -> None:
     # get data
 
     emissions = get_tech_emissions_timeseries(n).mul(1e-6)  # T -> MT
-    emissions = emissions[
-        [
-            x
-            for x in n.carriers[n.carriers.co2_emissions > 0].index
-            if x in emissions.columns
-        ]
-    ]
-    emissions = emissions.rename(columns=n.carriers.nice_name)
+    zeros = emissions.columns[(np.abs(emissions) < 1e-7).all()]
+    emissions = emissions.drop(columns=zeros)
 
     # plot
     color_palette = get_color_palette(n)
@@ -721,14 +703,8 @@ def plot_accumulated_emissions_tech(n: pypsa.Network, save: str, **wildcards) ->
     # get data
 
     emissions = get_tech_emissions_timeseries(n).cumsum().mul(1e-6)  # T -> MT
-    emissions = emissions[
-        [
-            x
-            for x in n.carriers[n.carriers.co2_emissions > 0].index
-            if x in emissions.columns
-        ]
-    ]
-    emissions = emissions.rename(columns=n.carriers.nice_name)
+    zeros = emissions.columns[(np.abs(emissions) < 1e-7).all()]
+    emissions = emissions.drop(columns=zeros)
 
     # plot
 
