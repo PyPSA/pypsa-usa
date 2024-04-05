@@ -11,12 +11,51 @@ import pandas as pd
 import pypsa
 from _helpers import configure_logging
 
+from pypsa.statistics import StatisticsAccessor
+from pypsa.statistics import get_bus_and_carrier, get_name_bus_and_carrier
+
 logger = logging.getLogger(__name__)
 
 
 ###
 # ENERGY SUPLPY
 ###
+
+
+def get_primary_energy_use(n: pypsa.Network) -> pd.DataFrame:
+    """Gets timeseries primary energy use by bus and carrier"""
+
+    link_energy_use = (
+        StatisticsAccessor(n)
+        .withdrawal(
+            comps=["Link", "Store", "StorageUnit"],
+            aggregate_time=False,
+            groupby=get_bus_and_carrier,
+        )
+        .droplevel("component")
+    )
+
+    gen_dispatch = (
+        StatisticsAccessor(n)
+        .supply(
+            aggregate_time=False,
+            comps=["Generator"],
+            groupby=pypsa.statistics.get_name_bus_and_carrier,
+        )
+        .droplevel("component")
+    )
+    gen_eff = n.get_switchable_as_dense("Generator", "efficiency")
+
+    gen_energy_use = gen_dispatch.T.mul(1 / gen_eff, axis=0, level="name").T.droplevel(
+        "name"
+    )
+
+    return (
+        pd.concat([gen_energy_use, link_energy_use])
+        .reset_index()
+        .groupby(["bus", "carrier"])
+        .sum()
+    )
 
 
 def get_energy_total(n: pypsa.Network):
@@ -259,51 +298,32 @@ def get_generator_marginal_costs(
 ###
 
 
+def get_node_carrier_emissions_timeseries(n: pypsa.Network) -> pd.DataFrame:
+    """Gets timeseries emissions by bus and carrier"""
+
+    energy = get_primary_energy_use(n)
+    co2 = (
+        n.carriers[["nice_name", "co2_emissions"]]
+        .reset_index()
+        .set_index("nice_name")[["co2_emissions"]]
+        .squeeze()
+    )
+    return energy.mul(co2, level="carrier", axis=0)
+
+
 def get_node_emissions_timeseries(n: pypsa.Network) -> pd.DataFrame:
     """
     Gets timeseries emissions per node.
     """
 
-    totals = []
-    for c in n.iterate_components(n.one_port_components | n.branch_components):
-        if c.name in ("Generator"):
-
-            # get time series efficiency
-            eff = n.get_switchable_as_dense("Generator", "efficiency")
-
-            co2_factor = (
-                c.df.carrier.map(n.carriers.co2_emissions)
-                .fillna(0)
-                .infer_objects(copy=False)
-            )
-
-            totals.append(
-                (
-                    c.pnl.p.mul(1 / eff)
-                    .mul(co2_factor)
-                    .T.groupby(n.generators.bus)
-                    .sum()
-                    .T
-                ),
-            )
-        elif c.name == "Link":  # efficiency taken into account by using p0
-
-            co2_factor = (
-                c.df.carrier.map(n.carriers.co2_emissions)
-                .fillna(0)
-                .infer_objects(copy=False)
-            )
-
-            totals.append(
-                (
-                    c.pnl.p0.mul(co2_factor)
-                    .T.groupby(n.links.bus0)
-                    .sum()
-                    .rename_axis(index={"bus0": "bus"})
-                    .T
-                ),
-            )
-    return pd.concat(totals, axis=1)
+    return (
+        get_node_carrier_emissions_timeseries(n)
+        .droplevel("carrier")
+        .reset_index()
+        .groupby("bus")
+        .sum()
+        .T
+    )
 
 
 def get_tech_emissions_timeseries(n: pypsa.Network) -> pd.DataFrame:
@@ -311,40 +331,14 @@ def get_tech_emissions_timeseries(n: pypsa.Network) -> pd.DataFrame:
     Gets timeseries emissions per technology.
     """
 
-    totals = []
-    for c in n.iterate_components(n.one_port_components | n.branch_components):
-        if c.name in ("Generator"):
-
-            # get time series efficiency
-            eff = c.pnl.efficiency
-            eff_static = {}
-            for gen in [x for x in c.df.index if x not in eff.columns]:
-                eff_static[gen] = [c.df.at[gen, "efficiency"]] * len(eff)
-            eff = pd.concat([eff, pd.DataFrame(eff_static, index=eff.index)], axis=1)
-
-            co2_factor = c.df.carrier.map(n.carriers.co2_emissions).fillna(0)
-
-            totals.append(
-                (
-                    c.pnl.p.mul(1 / eff)
-                    .mul(co2_factor)
-                    .T.groupby(n.generators.carrier)
-                    .sum()
-                    .T
-                ),
-            )
-        elif c.name == "Link":  # efficiency taken into account by using p0
-
-            co2_factor = (
-                c.df.carrier.map(n.carriers.co2_emissions)
-                .fillna(0)
-                .infer_objects(copy=False)
-            )
-
-            totals.append(
-                (c.pnl.p0.mul(co2_factor).T.groupby(n.links.carrier).sum().T),
-            )
-    return pd.concat(totals, axis=1)
+    return (
+        get_node_carrier_emissions_timeseries(n)
+        .droplevel("bus")
+        .reset_index()
+        .groupby("carrier")
+        .sum()
+        .T
+    )
 
 
 if __name__ == "__main__":
