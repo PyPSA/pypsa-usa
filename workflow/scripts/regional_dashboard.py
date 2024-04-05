@@ -21,7 +21,12 @@ from pathlib import Path
 from typing import List, Dict
 import calendar
 
-from summary import get_demand_timeseries, get_energy_timeseries
+from summary import (
+    get_demand_timeseries,
+    get_energy_timeseries,
+    get_node_emissions_timeseries,
+    get_tech_emissions_timeseries,
+)
 from plot_statistics import get_color_palette
 
 ###
@@ -48,7 +53,10 @@ GRAPHIC_MAP = "graphic_map"
 GRAPHIC_DISPATCH = "graphic_dispatch"
 GRAPHIC_LOAD = "graphic_load"
 GRAPHIC_CF = "graphic_cf"
-GRAPHIC_EMISSIONS = "graphic_emissions"
+GRAPHIC_EMISSIONS_STATE = "graphic_emissions_state"
+GRAPHIC_EMISSIONS_FUEL = "graphic_emissions_fuel"
+GRAPHIC_EMISSIONS_ACCUMULATED_STATE = "graphic_emissions_accumulated_state"
+GRAPHIC_EMISSIONS_ACCUMULATED_FUEL = "graphic_emissions_accumulated_fuel"
 GRAPHIC_CAPACITY = "graphic_capacity"
 GRAPHIC_GENERATION = "graphic_generation"
 
@@ -58,21 +66,16 @@ GRAPHIC_GENERATION = "graphic_generation"
 
 external_stylesheets = ["https://codepen.io/chriddyp/pen/bWLwgP.css"]
 logger.info("Reading configuration options")
-# add logic to build network name
-network_name = "elec_s_80_ec_lv1.0_RCo2L-SAFER-RPS_E.nc"
 
-# read in network
-network_path = Path("..", "results", "western", "networks")
-NETWORK = pypsa.Network(str(Path(network_path, network_name)))
+# add logic to build network name
+network_path = Path(
+    "..", "results", "western", "networks", "elec_s_80_ec_lv1.0_RCo2L-SAFER-RPS_E.nc"
+)
+NETWORK = pypsa.Network(str(network_path))
 TIMEFRAME = NETWORK.snapshots
 
 # geolocated node data structures
 ALL_STATES = NETWORK.buses.country.unique()
-NODES_GEOLOCATED = NETWORK.buses
-geometry = [Point(xy) for xy in zip(NODES_GEOLOCATED["x"], NODES_GEOLOCATED["y"])]
-NODES_GEOLOCATED = gpd.GeoDataFrame(
-    NODES_GEOLOCATED, geometry=geometry, crs="EPSG:4326"
-)[["geometry"]]
 
 # dispatch data structure
 DISPATCH = (
@@ -414,6 +417,130 @@ def plot_cf_callback(states: List[str] = ALL_STATES) -> html.Div:
     return plot_cfs(CF, states)
 
 
+# emissions
+
+
+def plot_emissions_state(
+    n: pypsa.Network, states: List[str], resample: str, timeframe: pd.date_range
+) -> html.Div:
+
+    # get data
+    emissions = get_node_emissions_timeseries(n).mul(1e-6)  # T -> MT
+    emissions = emissions.T.groupby(n.buses.country).sum().T
+
+    emissions = emissions[states]
+    emissions = emissions.loc[timeframe]
+    emissions = emissions.resample(resample).sum()
+
+    # plot data
+    fig = px.area(
+        emissions,
+        x=emissions.index,
+        y=emissions.columns,
+    )
+
+    title = "State CO2 Emissions"
+    fig.update_layout(
+        title={"text": title},
+        xaxis_title="",
+        yaxis_title="Emissions [MT]",
+    )
+
+    return html.Div(children=[dcc.Graph(figure=fig)], id=GRAPHIC_EMISSIONS_STATE)
+
+
+@app.callback(
+    Output(GRAPHIC_EMISSIONS_STATE, "children"),
+    Input(DROPDOWN_SELECT_STATE, "value"),
+    Input(RADIO_BUTTON_RESAMPLE, "value"),
+    Input(SLIDER_SELECT_TIME, "value"),
+)
+def plot_emissions_state_callback(
+    states: List[str] = ALL_STATES,
+    resample: str = "1h",
+    weeks: List[int] = [TIMEFRAME.min().week, TIMEFRAME.max().week],
+) -> html.Div:
+
+    # plus one because strftime indexs from 0
+    timeframe = pd.Series(TIMEFRAME.strftime("%U").astype(int) + 1, index=TIMEFRAME)
+    timeframe = timeframe[timeframe.isin(range(weeks[0], weeks[-1], 1))]
+
+    return plot_emissions_state(NETWORK, states, resample, timeframe.index)
+
+
+# def plot_emissions_fuel(n: pypsa.Network, ):
+#     pass
+
+# @app.callback(
+#     Output(GRAPHIC_EMISSIONS_FUEL, "children"),
+#     Input(DROPDOWN_SELECT_STATE, "value"),
+#     Input(RADIO_BUTTON_RESAMPLE, "value"),
+#     Input(SLIDER_SELECT_TIME, "value"),
+# )
+# def plot_emissions_fuel_callback() -> html.Div:
+#     pass
+
+
+def plot_accumulated_emissions_state(
+    n: pypsa.Network, states: List[str], resample: str, timeframe: pd.date_range
+) -> html.Div:
+
+    # get data
+    emissions = get_node_emissions_timeseries(n).mul(1e-6)  # T -> MT
+    emissions = emissions.T.groupby(n.buses.country).sum().T.cumsum()
+
+    emissions = emissions[states]
+    emissions = emissions.loc[timeframe]
+    emissions = emissions.resample(resample).sum()
+
+    # plot data
+    fig = px.area(
+        emissions,
+        x=emissions.index,
+        y=emissions.columns,
+    )
+
+    title = "State CO2 Emissions"
+    fig.update_layout(
+        title={"text": title},
+        xaxis_title="",
+        yaxis_title="Emissions [MT]",
+    )
+
+    return html.Div(
+        children=[dcc.Graph(figure=fig)], id=GRAPHIC_EMISSIONS_ACCUMULATED_STATE
+    )
+
+
+@app.callback(
+    Output(GRAPHIC_EMISSIONS_ACCUMULATED_STATE, "children"),
+    Input(DROPDOWN_SELECT_STATE, "value"),
+    Input(RADIO_BUTTON_RESAMPLE, "value"),
+    Input(SLIDER_SELECT_TIME, "value"),
+)
+def plot_accumulated_emissions_state_callback(
+    states: List[str] = ALL_STATES,
+    resample: str = "1h",
+    weeks: List[int] = [TIMEFRAME.min().week, TIMEFRAME.max().week],
+) -> html.Div:
+
+    # plus one because strftime indexs from 0
+    timeframe = pd.Series(TIMEFRAME.strftime("%U").astype(int) + 1, index=TIMEFRAME)
+    timeframe = timeframe[timeframe.isin(range(weeks[0], weeks[-1], 1))]
+
+    return plot_accumulated_emissions_state(NETWORK, states, resample, timeframe.index)
+
+
+# def plot_accumulated_emissions_fuel() -> html.Div:
+#     pass
+
+# @app.callback(
+#     Output(GRAPHIC_EMISSIONS_ACCUMULATED_FUEL, "children"),
+#     Input(DROPDOWN_SELECT_STATE, "value"),
+# )
+# def plot_accumulated_emissions_fuel_callback() -> html.Div:
+#     pass
+
 ###
 # APP LAYOUT
 ###
@@ -461,6 +588,21 @@ app.layout = html.Div(
         # capacity factor section
         html.Div(
             children=[plot_cf_callback(states=ALL_STATES)],
+            style={"width": "90%", "display": "inline-block"},
+        ),
+        # emissions section
+        html.Div(
+            children=[
+                plot_emissions_state_callback(
+                    states=ALL_STATES,
+                    resample="1h",
+                    weeks=[TIMEFRAME.min().week, TIMEFRAME.max().week],
+                ),
+                plot_accumulated_emissions_state_callback(
+                    states=ALL_STATES,
+                    weeks=[TIMEFRAME.min().week, TIMEFRAME.max().week],
+                ),
+            ],
             style={"width": "90%", "display": "inline-block"},
         ),
     ]
