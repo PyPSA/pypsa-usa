@@ -23,7 +23,9 @@ logger = logging.getLogger(__name__)
 
 
 def get_primary_energy_use(n: pypsa.Network) -> pd.DataFrame:
-    """Gets timeseries primary energy use by bus and carrier"""
+    """
+    Gets timeseries primary energy use by bus and carrier.
+    """
 
     link_energy_use = (
         StatisticsAccessor(n)
@@ -47,7 +49,7 @@ def get_primary_energy_use(n: pypsa.Network) -> pd.DataFrame:
     gen_eff = n.get_switchable_as_dense("Generator", "efficiency")
 
     gen_energy_use = gen_dispatch.T.mul(1 / gen_eff, axis=0, level="name").T.droplevel(
-        "name"
+        "name",
     )
 
     return (
@@ -299,7 +301,9 @@ def get_generator_marginal_costs(
 
 
 def get_node_carrier_emissions_timeseries(n: pypsa.Network) -> pd.DataFrame:
-    """Gets timeseries emissions by bus and carrier"""
+    """
+    Gets timeseries emissions by bus and carrier.
+    """
 
     energy = get_primary_energy_use(n)
     co2 = (
