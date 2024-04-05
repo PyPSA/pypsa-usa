@@ -308,9 +308,8 @@ rule add_electricity:
         base_network=RESOURCES + "{interconnect}/elec_base_network.nc",
         tech_costs=RESOURCES + f"costs_{config['costs']['year']}.csv",
         regions=RESOURCES + "{interconnect}/regions_onshore.geojson",
-        #plants_eia="repo_data/eia_plants.csv",
-        plants_eia="repo_data/eia860_ads_merged.csv",
-        plants_ads="repo_data/ads_plants_locs.csv",
+        plants_eia="repo_data/plants/eia860_ads_merged.csv",
+        plants_ads="repo_data/plants/ads_plants_locs.csv",
         plants_breakthrough=DATA + "breakthrough_network/base_grid/plant.csv",
         hydro_breakthrough=DATA + "breakthrough_network/base_grid/hydro.csv",
         wind_breakthrough=DATA + "breakthrough_network/base_grid/wind.csv",
@@ -327,7 +326,7 @@ rule add_electricity:
             else []
         ),
         demand=RESOURCES + "{interconnect}/demand.csv",
-        fuel_costs= "repo_data/eia_mappings/fuelCost22.csv",
+        fuel_costs= "repo_data/plants/fuelCost22.csv",
         ng_electric_power_price=(
             RESOURCES + "{interconnect}/ng_fuel_prices.csv"
             if config["conventional"]["dynamic_fuel_price"]
@@ -353,6 +352,8 @@ rule add_electricity:
 
 ################# ----------- Rules to Aggregate & Simplify Network ---------- #################
 rule simplify_network:
+    params:
+        aggregation_strategies=config["clustering"].get("aggregation_strategies", {}),
     input:
         bus2sub=DATA + "breakthrough_network/base_grid/{interconnect}/bus2sub.csv",
         sub=DATA + "breakthrough_network/base_grid/{interconnect}/sub.csv",

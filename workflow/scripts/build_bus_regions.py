@@ -219,6 +219,6 @@ if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
 
-        snakemake = mock_snakemake("build_bus_regions", interconnect="eastern")
+        snakemake = mock_snakemake("build_bus_regions", interconnect="western")
     configure_logging(snakemake)
     main(snakemake)
