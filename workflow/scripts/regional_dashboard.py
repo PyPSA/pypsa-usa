@@ -1,4 +1,6 @@
-"""Dash app for exploring regional disaggregated data"""
+"""
+Dash app for exploring regional disaggregated data.
+"""
 
 import pypsa
 from pypsa.statistics import StatisticsAccessor
@@ -83,7 +85,11 @@ logger.info("Reading configuration options")
 
 # add logic to build network name
 network_path = Path(
-    "..", "results", "western", "networks", "elec_s_80_ec_lv1.0_RCo2L-SAFER-RPS_E.nc"
+    "..",
+    "results",
+    "western",
+    "networks",
+    "elec_s_80_ec_lv1.0_RCo2L-SAFER-RPS_E.nc",
 )
 NETWORK = pypsa.Network(str(network_path))
 TIMEFRAME = NETWORK.snapshots
@@ -145,7 +151,7 @@ CF = (
                 x
                 for x in NETWORK.carriers.nice_name
                 if ((x == "Solar") or (x.endswith("Wind"))) or (x == "Reservoir & Dam")
-            ]
+            ],
         )
     ]
     .droplevel("component")
@@ -179,7 +185,7 @@ app.title = "PyPSA-USA Dashboard"
 # select states to include
 
 
-def state_dropdown(states: List[str]) -> html.Div:
+def state_dropdown(states: list[str]) -> html.Div:
     return html.Div(
         children=[
             html.H4("States to Include"),
@@ -191,9 +197,11 @@ def state_dropdown(states: List[str]) -> html.Div:
                 persistence=True,
             ),
             html.Button(
-                children=["Select All"], id=BUTTON_SELECT_ALL_STATES, n_clicks=0
+                children=["Select All"],
+                id=BUTTON_SELECT_ALL_STATES,
+                n_clicks=0,
             ),
-        ]
+        ],
     )
 
 
@@ -208,7 +216,7 @@ def select_all_countries(_: int) -> list[str]:
 # plot map
 
 
-def plot_map(n: pypsa.Network, states: List[str]) -> html.Div:
+def plot_map(n: pypsa.Network, states: list[str]) -> html.Div:
 
     nodes = n.buses[n.buses.country.isin(states)]
 
@@ -221,7 +229,7 @@ def plot_map(n: pypsa.Network, states: List[str]) -> html.Div:
             lat=nodes.y,
             marker=dict(size=10, color="red"),
             text=nodes.index,
-        )
+        ),
     )
 
     # Update layout to include map
@@ -256,7 +264,7 @@ def select_resample() -> html.Div:
                 value="1h",
                 inline=True,
             ),
-        ]
+        ],
     )
 
 
@@ -271,7 +279,7 @@ def time_slider(snapshots: pd.date_range) -> html.Div:
                 step=1,
                 value=[snapshots.min().week, snapshots.max().week],
             ),
-        ]
+        ],
     )
 
 
@@ -281,7 +289,7 @@ def time_slider(snapshots: pd.date_range) -> html.Div:
 def plot_dispatch(
     n: pypsa.Network,
     dispatch: pd.DataFrame,
-    states: List[str],
+    states: list[str],
     resample: str,
     timeframe: pd.date_range,
 ) -> html.Div:
@@ -320,9 +328,9 @@ def plot_dispatch(
     Input(SLIDER_SELECT_TIME, "value"),
 )
 def plot_dispatch_callback(
-    states: List[str] = ALL_STATES,
-    resample: List[str] = "1h",
-    weeks: List[int] = [TIMEFRAME.min().week, TIMEFRAME.max().week],
+    states: list[str] = ALL_STATES,
+    resample: list[str] = "1h",
+    weeks: list[int] = [TIMEFRAME.min().week, TIMEFRAME.max().week],
 ) -> html.Div:
 
     # plus one because strftime indexs from 0
@@ -338,7 +346,7 @@ def plot_dispatch_callback(
 def plot_load(
     load: pd.DataFrame,
     net_load: pd.DataFrame,
-    states: List[str],
+    states: list[str],
     resample: str,
     timeframe: pd.date_range,
 ) -> html.Div:
@@ -347,7 +355,9 @@ def plot_load(
     state_net_load = net_load[net_load.index.isin(states)].sum()
 
     data = pd.concat(
-        [state_load, state_net_load], axis=1, keys=["Absolute Load", "Net Load"]
+        [state_load, state_net_load],
+        axis=1,
+        keys=["Absolute Load", "Net Load"],
     )
     data.index = pd.to_datetime(data.index)
 
@@ -374,9 +384,9 @@ def plot_load(
     Input(SLIDER_SELECT_TIME, "value"),
 )
 def plot_load_callback(
-    states: List[str] = ALL_STATES,
-    resample: List[str] = "1h",
-    weeks: List[int] = [TIMEFRAME.min().week, TIMEFRAME.max().week],
+    states: list[str] = ALL_STATES,
+    resample: list[str] = "1h",
+    weeks: list[int] = [TIMEFRAME.min().week, TIMEFRAME.max().week],
 ) -> html.Div:
 
     # plus one because strftime indexs from 0
@@ -392,7 +402,7 @@ def plot_load_callback(
 def plot_cf(df: pd.DataFrame, carrier: str) -> go.Figure:
 
     fig = go.Figure(
-        go.Heatmap(x=df.hour, y=df.month, z=df[carrier], colorscale="Viridis")
+        go.Heatmap(x=df.hour, y=df.month, z=df[carrier], colorscale="Viridis"),
     )
 
     fig.update_layout(
@@ -406,8 +416,10 @@ def plot_cf(df: pd.DataFrame, carrier: str) -> go.Figure:
     return fig
 
 
-def plot_cfs(cf: pd.DataFrame, states: List[str]) -> html.Div:
-    """Creates list of heatmaps dependent on number of carriers"""
+def plot_cfs(cf: pd.DataFrame, states: list[str]) -> html.Div:
+    """
+    Creates list of heatmaps dependent on number of carriers.
+    """
 
     cfs = []
 
@@ -438,7 +450,7 @@ def plot_cfs(cf: pd.DataFrame, states: List[str]) -> html.Div:
     Output(GRAPHIC_CF, "children"),
     Input(DROPDOWN_SELECT_STATE, "value"),
 )
-def plot_cf_callback(states: List[str] = ALL_STATES) -> html.Div:
+def plot_cf_callback(states: list[str] = ALL_STATES) -> html.Div:
     return plot_cfs(CF, states)
 
 
@@ -446,7 +458,10 @@ def plot_cf_callback(states: List[str] = ALL_STATES) -> html.Div:
 
 
 def plot_emissions_state(
-    n: pypsa.Network, states: List[str], resample: str, timeframe: pd.date_range
+    n: pypsa.Network,
+    states: list[str],
+    resample: str,
+    timeframe: pd.date_range,
 ) -> html.Div:
 
     # get data
@@ -482,9 +497,9 @@ def plot_emissions_state(
     Input(SLIDER_SELECT_TIME, "value"),
 )
 def plot_emissions_state_callback(
-    states: List[str] = ALL_STATES,
+    states: list[str] = ALL_STATES,
     resample: str = "1h",
-    weeks: List[int] = [TIMEFRAME.min().week, TIMEFRAME.max().week],
+    weeks: list[int] = [TIMEFRAME.min().week, TIMEFRAME.max().week],
 ) -> html.Div:
 
     # plus one because strftime indexs from 0
@@ -497,7 +512,7 @@ def plot_emissions_state_callback(
 def plot_emissions_fuel(
     n: pypsa.Network,
     df: pd.DataFrame,  # TECH_EMISSIONS
-    states: List[str],
+    states: list[str],
     resample: str,
     timeframe: pd.date_range,
 ) -> html.Div:
@@ -542,9 +557,9 @@ def plot_emissions_fuel(
     Input(SLIDER_SELECT_TIME, "value"),
 )
 def plot_emissions_fuel_callback(
-    states: List[str] = ALL_STATES,
+    states: list[str] = ALL_STATES,
     resample: str = "1h",
-    weeks: List[int] = [TIMEFRAME.min().week, TIMEFRAME.max().week],
+    weeks: list[int] = [TIMEFRAME.min().week, TIMEFRAME.max().week],
 ) -> html.Div:
 
     # plus one because strftime indexs from 0
@@ -552,12 +567,19 @@ def plot_emissions_fuel_callback(
     timeframe = timeframe[timeframe.isin(range(weeks[0], weeks[-1], 1))]
 
     return plot_emissions_fuel(
-        NETWORK, TECH_EMISSIONS, states, resample, timeframe.index
+        NETWORK,
+        TECH_EMISSIONS,
+        states,
+        resample,
+        timeframe.index,
     )
 
 
 def plot_accumulated_emissions_state(
-    n: pypsa.Network, states: List[str], resample: str, timeframe: pd.date_range
+    n: pypsa.Network,
+    states: list[str],
+    resample: str,
+    timeframe: pd.date_range,
 ) -> html.Div:
 
     # get data
@@ -584,7 +606,8 @@ def plot_accumulated_emissions_state(
     )
 
     return html.Div(
-        children=[dcc.Graph(figure=fig)], id=GRAPHIC_EMISSIONS_ACCUMULATED_STATE
+        children=[dcc.Graph(figure=fig)],
+        id=GRAPHIC_EMISSIONS_ACCUMULATED_STATE,
     )
 
 
@@ -595,9 +618,9 @@ def plot_accumulated_emissions_state(
     Input(SLIDER_SELECT_TIME, "value"),
 )
 def plot_accumulated_emissions_state_callback(
-    states: List[str] = ALL_STATES,
+    states: list[str] = ALL_STATES,
     resample: str = "1h",
-    weeks: List[int] = [TIMEFRAME.min().week, TIMEFRAME.max().week],
+    weeks: list[int] = [TIMEFRAME.min().week, TIMEFRAME.max().week],
 ) -> html.Div:
 
     # plus one because strftime indexs from 0
@@ -610,7 +633,7 @@ def plot_accumulated_emissions_state_callback(
 def plot_accumulated_emissions_fuel(
     n: pypsa.Network,
     df: pd.DataFrame,  # TECH_EMISSIONS
-    states: List[str],
+    states: list[str],
     timeframe: pd.date_range,
 ) -> html.Div:
 
@@ -644,7 +667,8 @@ def plot_accumulated_emissions_fuel(
     )
 
     return html.Div(
-        children=[dcc.Graph(figure=fig)], id=GRAPHIC_EMISSIONS_ACCUMULATED_FUEL
+        children=[dcc.Graph(figure=fig)],
+        id=GRAPHIC_EMISSIONS_ACCUMULATED_FUEL,
     )
 
 
@@ -653,8 +677,8 @@ def plot_accumulated_emissions_fuel(
     Input(DROPDOWN_SELECT_STATE, "value"),
 )
 def plot_accumulated_emissions_fuel_callback(
-    states: List[str] = ALL_STATES,
-    weeks: List[int] = [TIMEFRAME.min().week, TIMEFRAME.max().week],
+    states: list[str] = ALL_STATES,
+    weeks: list[int] = [TIMEFRAME.min().week, TIMEFRAME.max().week],
 ) -> html.Div:
 
     # plus one because strftime indexs from 0
@@ -662,7 +686,10 @@ def plot_accumulated_emissions_fuel_callback(
     timeframe = timeframe[timeframe.isin(range(weeks[0], weeks[-1], 1))]
 
     return plot_accumulated_emissions_fuel(
-        NETWORK, TECH_EMISSIONS, states, timeframe.index
+        NETWORK,
+        TECH_EMISSIONS,
+        states,
+        timeframe.index,
     )
 
 
@@ -670,7 +697,10 @@ def plot_accumulated_emissions_fuel_callback(
 
 
 def plot_lmp_timeseries(
-    n: pypsa.Network, states: List[str], resample: str, timeframe: pd.date_range
+    n: pypsa.Network,
+    states: list[str],
+    resample: str,
+    timeframe: pd.date_range,
 ) -> html.Div:
 
     lmp = n.buses_t.marginal_price.T
@@ -705,9 +735,9 @@ def plot_lmp_timeseries(
     Input(SLIDER_SELECT_TIME, "value"),
 )
 def plot_lmp_timeseries_callback(
-    states: List[str] = ALL_STATES,
+    states: list[str] = ALL_STATES,
     resample: str = "1h",
-    weeks: List[int] = [TIMEFRAME.min().week, TIMEFRAME.max().week],
+    weeks: list[int] = [TIMEFRAME.min().week, TIMEFRAME.max().week],
 ) -> html.Div:
 
     # plus one because strftime indexs from 0
@@ -717,7 +747,7 @@ def plot_lmp_timeseries_callback(
     return plot_lmp_timeseries(NETWORK, states, resample, timeframe.index)
 
 
-def plot_lmp_map(n: pypsa.Network, states: List[str]) -> html.Div:
+def plot_lmp_map(n: pypsa.Network, states: list[str]) -> html.Div:
 
     df = n.buses_t.marginal_price
     df = df.resample("24h").mean()
@@ -750,7 +780,7 @@ def plot_lmp_map(n: pypsa.Network, states: List[str]) -> html.Div:
     Output(GRAPHIC_LMP_MAP, "children"),
     Input(DROPDOWN_SELECT_STATE, "value"),
 )
-def plot_lmp_map_callback(states: List[str]) -> html.Div:
+def plot_lmp_map_callback(states: list[str]) -> html.Div:
     return plot_lmp_map(NETWORK, states)
 
 
@@ -774,7 +804,7 @@ def render_content(tab):
                     children=[plot_map_callback()],
                     style={"width": "90%", "display": "inline-block"},
                 ),
-            ]
+            ],
         )
     elif tab == TAB_DISPATCH:
         return html.Div(
@@ -795,7 +825,7 @@ def render_content(tab):
                     ],
                     style={"width": "90%", "display": "inline-block"},
                 ),
-            ]
+            ],
         )
     elif tab == TAB_EMISSIONS:
         return html.Div(
@@ -824,7 +854,7 @@ def render_content(tab):
                     ],
                     style={"width": "90%", "display": "inline-block"},
                 ),
-            ]
+            ],
         )
     elif tab == TAB_CF:
         return html.Div(
@@ -834,7 +864,7 @@ def render_content(tab):
                     children=[plot_cf_callback(states=ALL_STATES)],
                     style={"width": "90%", "display": "inline-block"},
                 ),
-            ]
+            ],
         )
     elif tab == TAB_LMP:
         return html.Div(
@@ -851,7 +881,7 @@ def render_content(tab):
                     ],
                     style={"width": "90%", "display": "inline-block"},
                 ),
-            ]
+            ],
         )
 
 
