@@ -60,6 +60,14 @@ GRAPHIC_EMISSIONS_ACCUMULATED_FUEL = "graphic_emissions_accumulated_fuel"
 GRAPHIC_CAPACITY = "graphic_capacity"
 GRAPHIC_GENERATION = "graphic_generation"
 
+# tabs
+TABS_UPDATE = "tabs_update"
+TABS_CONTENT = "tabs_content"
+TAB_NODES = "tab_nodes"
+TAB_DISPATCH = "tab_dispatch"
+TAB_CF = "tab_cf"
+TAB_EMISSIONS = "tab_emissions"
+
 ###
 # APP SETUP
 ###
@@ -145,7 +153,7 @@ CF = CF.drop(columns="bus").groupby(["state", "carrier"]).mean()
 ###
 
 logger.info("Starting app")
-app = Dash(external_stylesheets=external_stylesheets)
+app = Dash(external_stylesheets=external_stylesheets, suppress_callback_exceptions=True)
 app.title = "PyPSA-USA Dashboard"
 
 ###
@@ -158,7 +166,7 @@ app.title = "PyPSA-USA Dashboard"
 def state_dropdown(states: List[str]) -> html.Div:
     return html.Div(
         children=[
-            html.H3("States to Include"),
+            html.H4("States to Include"),
             dcc.Dropdown(
                 id=DROPDOWN_SELECT_STATE,
                 options=states,
@@ -225,6 +233,7 @@ def plot_map_callback(
 def select_resample() -> html.Div:
     return html.Div(
         children=[
+            html.H4("Resample Period"),
             dcc.RadioItems(
                 id=RADIO_BUTTON_RESAMPLE,
                 options=["1h", "2h", "4h", "24h", "W"],
@@ -238,14 +247,14 @@ def select_resample() -> html.Div:
 def time_slider(snapshots: pd.date_range) -> html.Div:
     return html.Div(
         children=[
+            html.H4("Weeks To Plot"),
             dcc.RangeSlider(
                 id=SLIDER_SELECT_TIME,
                 min=snapshots.min().week,
                 max=snapshots.max().week,
                 step=1,
                 value=[snapshots.min().week, snapshots.max().week],
-                # marks={i:f"{int(i)}" for i in snapshots.max().week}
-            )
+            ),
         ]
     )
 
@@ -427,6 +436,7 @@ def plot_emissions_state(
     # get data
     emissions = get_node_emissions_timeseries(n).mul(1e-6)  # T -> MT
     emissions = emissions.T.groupby(n.buses.country).sum().T
+    emissions.index = pd.to_datetime(emissions.index)
 
     emissions = emissions[states]
     emissions = emissions.loc[timeframe]
@@ -488,6 +498,7 @@ def plot_accumulated_emissions_state(
     # get data
     emissions = get_node_emissions_timeseries(n).mul(1e-6)  # T -> MT
     emissions = emissions.T.groupby(n.buses.country).sum().T.cumsum()
+    emissions.index = pd.to_datetime(emissions.index)
 
     emissions = emissions[states]
     emissions = emissions.loc[timeframe]
@@ -545,67 +556,102 @@ def plot_accumulated_emissions_state_callback(
 # APP LAYOUT
 ###
 
-app.layout = html.Div(
-    children=[
-        # map section
-        html.Div(
-            children=[
-                html.Div(
-                    children=[
-                        state_dropdown(states=ALL_STATES),
-                    ],
-                    style={
-                        "width": "30%",
-                        "padding": "20px",
-                        "display": "inline-block",
-                        "vertical-align": "top",
-                    },
-                ),
+# tabs
+
+
+@callback(
+    Output(TABS_CONTENT, "children"),
+    Input(TABS_UPDATE, "value"),
+)
+def render_content(tab):
+    if tab == TAB_NODES:
+        return html.Div(
+            [
+                html.H3("Spatial Resoluution"),
                 html.Div(
                     children=[plot_map_callback()],
-                    style={"width": "60%", "display": "inline-block"},
+                    style={"width": "90%", "display": "inline-block"},
                 ),
             ]
-        ),
-        # dispatch and load section
-        html.Div(
+        )
+    elif tab == TAB_DISPATCH:
+        return html.Div(
+            [
+                html.H3("Dispatch and Load Results"),
+                html.Div(
+                    children=[
+                        plot_dispatch_callback(
+                            states=ALL_STATES,
+                            resample="1h",
+                            weeks=[TIMEFRAME.min().week, TIMEFRAME.max().week],
+                        ),
+                        plot_load_callback(
+                            states=ALL_STATES,
+                            resample="1h",
+                            weeks=[TIMEFRAME.min().week, TIMEFRAME.max().week],
+                        ),
+                    ],
+                    style={"width": "90%", "display": "inline-block"},
+                ),
+            ]
+        )
+    elif tab == TAB_EMISSIONS:
+        return html.Div(
+            [
+                html.H3("Emission Results"),
+                html.Div(
+                    children=[
+                        plot_emissions_state_callback(
+                            states=ALL_STATES,
+                            resample="1h",
+                            weeks=[TIMEFRAME.min().week, TIMEFRAME.max().week],
+                        ),
+                        plot_accumulated_emissions_state_callback(
+                            states=ALL_STATES,
+                            weeks=[TIMEFRAME.min().week, TIMEFRAME.max().week],
+                        ),
+                    ],
+                    style={"width": "90%", "display": "inline-block"},
+                ),
+            ]
+        )
+    elif tab == TAB_CF:
+        return html.Div(
+            [
+                html.H3("Capacity Factor Results"),
+                html.Div(
+                    children=[plot_cf_callback(states=ALL_STATES)],
+                    style={"width": "90%", "display": "inline-block"},
+                ),
+            ]
+        )
+
+
+# layout
+
+app.layout = html.Div(
+    children=[
+        state_dropdown(states=ALL_STATES),
+        select_resample(),
+        time_slider(NETWORK.snapshots),
+        dcc.Tabs(
+            id=TABS_UPDATE,
+            value=TAB_DISPATCH,
             children=[
-                select_resample(),
-                time_slider(NETWORK.snapshots),
-                plot_dispatch_callback(
-                    states=ALL_STATES,
-                    resample="1h",
-                    weeks=[TIMEFRAME.min().week, TIMEFRAME.max().week],
-                ),
-                plot_load_callback(
-                    states=ALL_STATES,
-                    resample="1h",
-                    weeks=[TIMEFRAME.min().week, TIMEFRAME.max().week],
-                ),
+                dcc.Tab(label="Nodes", value=TAB_NODES),
+                dcc.Tab(label="Dispatch", value=TAB_DISPATCH),
+                dcc.Tab(label="Emissions", value=TAB_EMISSIONS),
+                dcc.Tab(label="Capacity Factor", value=TAB_CF),
             ],
-            style={"width": "90%", "display": "inline-block"},
         ),
-        # capacity factor section
-        html.Div(
-            children=[plot_cf_callback(states=ALL_STATES)],
-            style={"width": "90%", "display": "inline-block"},
-        ),
-        # emissions section
-        html.Div(
-            children=[
-                plot_emissions_state_callback(
-                    states=ALL_STATES,
-                    resample="1h",
-                    weeks=[TIMEFRAME.min().week, TIMEFRAME.max().week],
-                ),
-                plot_accumulated_emissions_state_callback(
-                    states=ALL_STATES,
-                    weeks=[TIMEFRAME.min().week, TIMEFRAME.max().week],
-                ),
-            ],
-            style={"width": "90%", "display": "inline-block"},
-        ),
-    ]
+        html.Div(id=TABS_CONTENT),
+    ],
+    style={
+        "width": "100%",
+        "padding": "10px",
+        "display": "inline-block",
+        "vertical-align": "top",
+    },
 )
 
 if __name__ == "__main__":
