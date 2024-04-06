@@ -10,6 +10,7 @@ import geopandas as gpd
 import numpy as np
 
 import plotly.graph_objects as go
+import plotly.figure_factory as ff
 
 import logging
 
@@ -45,6 +46,7 @@ BUTTON_SELECT_ALL_NODES = "button_select_all_nodes"
 
 # slider
 SLIDER_SELECT_TIME = "slider_select_time"
+SLIDER_SELECT_LMP_DAY = "slider_select_lmp_day"
 
 # radio buttons
 RADIO_BUTTON_RESAMPLE = "radio_button_resample"
@@ -60,6 +62,8 @@ GRAPHIC_EMISSIONS_ACCUMULATED_STATE = "graphic_emissions_accumulated_state"
 GRAPHIC_EMISSIONS_ACCUMULATED_FUEL = "graphic_emissions_accumulated_fuel"
 GRAPHIC_CAPACITY = "graphic_capacity"
 GRAPHIC_GENERATION = "graphic_generation"
+GRAPHIC_LMP_TIMESERIES = "graphic_lmp_timeseries"
+GRAPHIC_LMP_MAP = "graphic_lmp_map"
 
 # tabs
 TABS_UPDATE = "tabs_update"
@@ -68,6 +72,7 @@ TAB_NODES = "tab_nodes"
 TAB_DISPATCH = "tab_dispatch"
 TAB_CF = "tab_cf"
 TAB_EMISSIONS = "tab_emissions"
+TAB_LMP = "tab_lmp"
 
 ###
 # APP SETUP
@@ -661,6 +666,94 @@ def plot_accumulated_emissions_fuel_callback(
     )
 
 
+# locational marginal price
+
+
+def plot_lmp_timeseries(
+    n: pypsa.Network, states: List[str], resample: str, timeframe: pd.date_range
+) -> html.Div:
+
+    lmp = n.buses_t.marginal_price.T
+    lmp["state"] = lmp.index.map(n.buses.country)
+    lmp = lmp[lmp.state.isin(states)].drop(columns="state").T
+    lmp.index = pd.to_datetime(lmp.index)
+
+    lmp = lmp.loc[timeframe]
+    lmp = lmp.resample(resample).sum()
+
+    # plot data
+    fig = px.line(
+        lmp,
+        x=lmp.index,
+        y=lmp.columns,
+    )
+
+    title = "Locational Marginal Price"
+    fig.update_layout(
+        title={"text": title},
+        xaxis_title="",
+        yaxis_title="$/MWh",
+    )
+
+    return html.Div(children=[dcc.Graph(figure=fig)], id=GRAPHIC_LMP_TIMESERIES)
+
+
+@app.callback(
+    Output(GRAPHIC_LMP_TIMESERIES, "children"),
+    Input(DROPDOWN_SELECT_STATE, "value"),
+    Input(RADIO_BUTTON_RESAMPLE, "value"),
+    Input(SLIDER_SELECT_TIME, "value"),
+)
+def plot_lmp_timeseries_callback(
+    states: List[str] = ALL_STATES,
+    resample: str = "1h",
+    weeks: List[int] = [TIMEFRAME.min().week, TIMEFRAME.max().week],
+) -> html.Div:
+
+    # plus one because strftime indexs from 0
+    timeframe = pd.Series(TIMEFRAME.strftime("%U").astype(int) + 1, index=TIMEFRAME)
+    timeframe = timeframe[timeframe.isin(range(weeks[0], weeks[-1], 1))]
+
+    return plot_lmp_timeseries(NETWORK, states, resample, timeframe.index)
+
+
+def plot_lmp_map(n: pypsa.Network, states: List[str]) -> html.Div:
+
+    df = n.buses_t.marginal_price
+    df = df.resample("24h").mean()
+    df.index = df.index.map(lambda x: f"{x.month}-{x.day}")
+    df = df.T
+    df["state"] = df.index.map(n.buses.country)
+    df = df[df.state.isin(states)].drop(columns="state")
+    df = df.melt(ignore_index=False).reset_index()
+    df["x"], df["y"] = df.Bus.map(n.buses.x), df.Bus.map(n.buses.y)
+
+    fig = ff.create_hexbin_mapbox(
+        data_frame=df,
+        lat="y",
+        lon="x",
+        nx_hexagon=len(df.Bus.unique()),
+        animation_frame="snapshot",
+        color_continuous_scale="Cividis",
+        min_count=1,
+        agg_func=np.mean,
+    )
+    fig.update_layout(margin=dict(b=0, t=0, l=0, r=0))
+    fig.update_layout(mapbox_style="carto-positron")
+    fig.layout.sliders[0].pad.t = 20
+    fig.layout.updatemenus[0].pad.t = 40
+
+    return html.Div(children=[dcc.Graph(figure=fig)], id=GRAPHIC_LMP_MAP)
+
+
+@app.callback(
+    Output(GRAPHIC_LMP_MAP, "children"),
+    Input(DROPDOWN_SELECT_STATE, "value"),
+)
+def plot_lmp_map_callback(states: List[str]) -> html.Div:
+    return plot_lmp_map(NETWORK, states)
+
+
 ###
 # APP LAYOUT
 ###
@@ -743,12 +836,30 @@ def render_content(tab):
                 ),
             ]
         )
+    elif tab == TAB_LMP:
+        return html.Div(
+            [
+                html.H3("Locational Marginal Price"),
+                html.Div(
+                    children=[
+                        plot_lmp_timeseries_callback(
+                            states=ALL_STATES,
+                            resample="1h",
+                            weeks=[TIMEFRAME.min().week, TIMEFRAME.max().week],
+                        ),
+                        plot_lmp_map_callback(states=ALL_STATES),
+                    ],
+                    style={"width": "90%", "display": "inline-block"},
+                ),
+            ]
+        )
 
 
 # layout
 
 app.layout = html.Div(
     children=[
+        html.H2("PyPSA-USA Dashboard"),
         state_dropdown(states=ALL_STATES),
         select_resample(),
         time_slider(NETWORK.snapshots),
@@ -760,6 +871,7 @@ app.layout = html.Div(
                 dcc.Tab(label="Dispatch", value=TAB_DISPATCH),
                 dcc.Tab(label="Emissions", value=TAB_EMISSIONS),
                 dcc.Tab(label="Capacity Factor", value=TAB_CF),
+                dcc.Tab(label="LMP", value=TAB_LMP),
             ],
         ),
         html.Div(id=TABS_CONTENT),
