@@ -159,7 +159,9 @@ class Eulp:
     ]
 
     def __init__(
-        self, filepath: Optional[str] = None, df: Optional[pd.DataFrame] = None
+        self,
+        filepath: Optional[str] = None,
+        df: Optional[pd.DataFrame] = None,
     ) -> None:
         if filepath:
             df = self.read_data(filepath)
@@ -170,7 +172,7 @@ class Eulp:
             assert (self.data.columns == ["electricity", "heating", "cooling"]).all()
         else:
             raise TypeError(
-                f"missing 1 required positional argument: 'filepath' or 'df'"
+                f"missing 1 required positional argument: 'filepath' or 'df'",
             )
 
     def __add__(self, other):
@@ -214,7 +216,7 @@ class Eulp:
 
     def aggregate_data(self, df: pd.DataFrame) -> pd.DataFrame:
 
-        def aggregate_sector(df: pd.DataFrame, columns: List[str]) -> pd.Series:
+        def aggregate_sector(df: pd.DataFrame, columns: list[str]) -> pd.Series:
             sector_columns = [x for x in columns if x in df.columns.to_list()]
             return df[sector_columns].sum(axis=1)
 
@@ -232,7 +234,8 @@ class Eulp:
         return pd.concat(dfs, axis=1).mul(1e-3)  # kwh -> MWh
 
     def plot(
-        self, sectors: Optional[List[str] | str] = ["electricity", "heating", "cooling"]
+        self,
+        sectors: Optional[list[str] | str] = ["electricity", "heating", "cooling"],
     ):
 
         if isinstance(sectors, str):

@@ -1,9 +1,10 @@
-"""Module to download end use load profiles (eulp) for comstock and restock data
+"""
+Module to download end use load profiles (eulp) for comstock and restock data.
 
 Notes:
     - Downloaded at state level
     - Multisector 15-min load profiles for a year (ie. lots of data)
-    - Locked to 2018 Amy Weather data 
+    - Locked to 2018 Amy Weather data
     - https://data.openei.org/submissions/4520
 """
 
@@ -21,7 +22,9 @@ logger = logging.getLogger(__name__)
 
 
 class OediDownload:
-    """Downlaods Oedi restock or comstock data at a state level"""
+    """
+    Downlaods Oedi restock or comstock data at a state level.
+    """
 
     root = "https://oedi-data-lake.s3.amazonaws.com/nrel-pds-building-stock/end-use-load-profiles-for-us-building-stock/2024"
 
@@ -56,7 +59,9 @@ class OediDownload:
         self.release = 2 if self.stock == "res" else 1
 
     def _get_html_folder(self, state: str, upgrade: Optional[int] = 0) -> str:
-        """Gets html of folder"""
+        """
+        Gets html of folder.
+        """
 
         if self.stock == "res":
             data_folder = f"resstock_amy2018_release_{self.release}"
@@ -66,8 +71,11 @@ class OediDownload:
         return f"{self.root}/{data_folder}/timeseries_aggregates/by_state/upgrade={upgrade}/state={state.upper()}"
 
     def _get_htmls(
-        self, state: str, buildings: str | List[str], upgrade: int = 0
-    ) -> List[str]:
+        self,
+        state: str,
+        buildings: str | list[str],
+        upgrade: int = 0,
+    ) -> list[str]:
 
         folder = self._get_html_folder(state)
 
@@ -103,11 +111,13 @@ class OediDownload:
     def download_data(
         self,
         state: str,
-        buildings: Optional[str | List[str]] = None,
+        buildings: Optional[str | list[str]] = None,
         upgrade: int = 0,
         directory: Optional[str] = None,
     ) -> None:
-        """Public method to interface with"""
+        """
+        Public method to interface with.
+        """
 
         if not directory:
             directory = f"{state}"
