@@ -298,7 +298,9 @@ def get_generator_marginal_costs(
 
 
 def get_fuel_costs(n: pypsa.Network) -> pd.DataFrame:
-    """Gets fuel costs per generator, bus, and carrier"""
+    """
+    Gets fuel costs per generator, bus, and carrier.
+    """
 
     # approximates for 2030
     fixed_voms = {
@@ -330,6 +332,7 @@ def get_fuel_costs(n: pypsa.Network) -> pd.DataFrame:
     fuel_costs["bus"] = fuel_costs.Generator.map(n.generators.bus)
     fuel_costs["carrier"] = fuel_costs.Generator.map(n.generators.carrier)
     return fuel_costs.groupby(["carrier", "bus", "Generator"]).sum()
+
 
 ###
 # EMISSIONS
