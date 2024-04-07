@@ -14,6 +14,8 @@ from _helpers import configure_logging
 from pypsa.statistics import StatisticsAccessor
 from pypsa.statistics import get_bus_and_carrier, get_name_bus_and_carrier
 
+import constants
+
 logger = logging.getLogger(__name__)
 
 
@@ -294,6 +296,40 @@ def get_generator_marginal_costs(
     df_long["Carrier"] = df_long["Generator"].map(n.generators.carrier)
     return df_long
 
+
+def get_fuel_costs(n: pypsa.Network) -> pd.DataFrame:
+    """Gets fuel costs per generator, bus, and carrier"""
+
+    # approximates for 2030
+    fixed_voms = {
+        "coal": 3.5 * constants.EUR_2_USD,
+        "oil": 6 * constants.EUR_2_USD,
+        "CCGT": 4.2 * constants.EUR_2_USD,
+        "OCGT": 4.5 * constants.EUR_2_USD,
+        "nuclear": 3.5 * constants.EUR_2_USD,
+    }
+
+    # will return generator level of (fuel_costs / efficiency)
+    marginal_costs = n.get_switchable_as_dense("Generator", "marginal_cost").T
+    marginal_costs = marginal_costs[
+        marginal_costs.index.map(n.generators.carrier).isin(list(fixed_voms))
+    ]
+    voms = pd.Series(
+        index=marginal_costs.index,
+        data=marginal_costs.index.map(n.generators.carrier).map(fixed_voms).fillna(0),
+    ).astype(float)
+    marginal_costs = marginal_costs.subtract(voms, axis=0)
+
+    # remove the efficiency cost
+    eff = n.get_switchable_as_dense("Generator", "efficiency").T
+    eff = eff[eff.index.map(n.generators.carrier).isin(list(fixed_voms))]
+    fuel_costs = marginal_costs.mul(eff, axis=0)
+
+    # add indices for bus and carrier
+    fuel_costs = fuel_costs.reset_index()
+    fuel_costs["bus"] = fuel_costs.Generator.map(n.generators.bus)
+    fuel_costs["carrier"] = fuel_costs.Generator.map(n.generators.carrier)
+    return fuel_costs.groupby(["carrier", "bus", "Generator"]).sum()
 
 ###
 # EMISSIONS
