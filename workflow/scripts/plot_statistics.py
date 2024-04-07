@@ -1202,6 +1202,11 @@ if __name__ == "__main__":
         snakemake.output["capfac_heatmap.pdf"],
         **snakemake.wildcards,
     )
+    plot_fuel_costs(
+        n,
+        snakemake.output["fuel_costs.pdf"],
+        **snakemake.wildcards,
+    )
 
     # HTML Plots
     plot_production_html(
