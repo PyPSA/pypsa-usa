@@ -51,6 +51,7 @@ from summary import (
     get_tech_emissions_timeseries,
     get_capital_costs,
     get_generator_marginal_costs,
+    get_fuel_costs,
 )
 from add_electricity import (
     add_nice_carrier_names,
@@ -1011,6 +1012,41 @@ def plot_region_lmps(
     plt.ylabel("Region")
     plt.tight_layout()
     plt.savefig(save)
+
+
+#### Fuel costs
+
+
+def plot_fuel_costs(
+    n: pypsa.Network,
+    save: str,
+    **wildcards,
+) -> None:
+
+    fuel_costs = get_fuel_costs(n)
+
+    fuels = set(fuel_costs.index.get_level_values("carrier"))
+
+    fig, axs = plt.subplots(len(fuels), 1, figsize=(20, 40))
+
+    for i, fuel in enumerate(fuels):
+        df = (
+            fuel_costs.loc[fuel, :, :]
+            .droplevel("Generator")
+            .reset_index()
+            .groupby("bus")
+            .sum()
+            .T
+        )
+        df.plot(
+            ax=axs[i],
+            title=f"{fuel} costs [$/MWh]",
+            legend=False,
+            xlabel="",
+            ylabel="$/MWh",
+        )
+
+    fig.savefig(save)
 
 
 # Pie Chart
