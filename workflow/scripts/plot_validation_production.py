@@ -77,7 +77,7 @@ def plot_regional_timeseries_comparison(
     regions_clean = [ba.split("-")[0] for ba in regions]
     regions = list(OrderedDict.fromkeys(regions_clean))
 
-    # regions = [ba for ba in regions if ba in ["CISO"]]
+    # regions = [ba for ba in regions if ba in ["PACW"]]
     buses = n.buses.copy()
     buses["region"] = [ba.split("-")[0] for ba in buses.country]
     for region in regions:
@@ -87,6 +87,7 @@ def plot_regional_timeseries_comparison(
             snakemake.input.historic_second,
             region=region,
         )
+
         optimized_region = create_optimized_by_carrier(
             n,
             order,
@@ -134,6 +135,9 @@ def plot_timeseries_comparison(
     for carrier in optimized.columns:
         if carrier not in historic.columns:
             historic[carrier] = 0
+    for carrier in historic.columns:
+        if carrier not in optimized.columns:
+            optimized[carrier] = 0
     diff = (optimized - historic).fillna(0).resample("1D").mean()
     diff.clip(lower=0).plot.area(ax=axes[2], title=r"$\Delta$ (Optimized - Historic)", legend=False, **kwargs)
     diff.clip(upper=0).plot.area(ax=axes[2], **kwargs,  legend=False)
@@ -171,12 +175,63 @@ def plot_bar_carrier_production(
     data = pd.concat([historic, optimized], keys=["Historic", "Optimized"], axis=1)
     data.columns.names = ["Kind", "Carrier"]
     fig, ax = plt.subplots(figsize=(6, 6))
-    df = data.T.groupby(level=["Kind", "Carrier"]).sum().sum().unstack().T
+    df = data.T.groupby(level=["Kind", "Carrier"]).sum().T.sum().unstack().T
     df = df / 1e3  # convert to TWh
     df.plot.barh(ax=ax, xlabel="Electricity Production [TWh]", ylabel="")
     ax.set_title("Electricity Production by Carriers")
     ax.grid(axis="y")
     fig.savefig(save_path)
+
+
+def plot_regional_bar_production_comparison(
+    n: pypsa.Network,
+    historic_full: pd.DataFrame,
+    colors=None,
+):
+    """ """
+    Path.mkdir(Path(snakemake.output[0]).parents[0]/"regional_bar_production", exist_ok=True)
+    regions = n.buses.country.unique()
+    regions_clean = [ba.split("-")[0] for ba in regions]
+    regions = list(OrderedDict.fromkeys(regions_clean))
+
+    # regions = [ba for ba in regions if ba in ["PACW"]]
+    buses = n.buses.copy()
+    buses["region"] = [ba.split("-")[0] for ba in buses.country]
+
+    diff = pd.DataFrame()
+
+    for region in regions:
+        region_bus = buses.query(f"region == '{region}'").index
+        
+        if region == "Arizona":
+            historic_region = historic_full.loc[['AZPS', 'SRP']]
+        else:
+            historic_region = historic_full.loc[region]
+        optimized_region = create_optimized_by_carrier(
+            n,
+            order,
+            region=[region],
+        )
+
+        for carrier in optimized_region.columns:
+            if carrier not in historic_region.columns:
+                historic_region[carrier] = 0
+        for carrier in historic_region.columns:
+            if carrier not in optimized_region.columns:
+                optimized_region[carrier] = 0
+
+        diff[region] = optimized_region.sum() - historic_region.sum()
+
+    # Plot
+    fig, ax = plt.subplots(figsize=(10, 6))
+    diff.T.plot(kind='barh', stacked=True, ax=ax)
+    ax.set_xlabel('Production Deviation [TWh]')
+    ax.set_ylabel('Region')
+    ax.set_title('Production Deviation by Region and Carrier')
+    plt.legend(title='Carrier', bbox_to_anchor=(1.05, 1), loc='upper left')
+
+    plt.tight_layout()
+    fig.savefig(Path(snakemake.output[0]).parents[0]/"production_deviation_by_region.png")
 
 
 def plot_bar_production_deviation(
@@ -208,8 +263,13 @@ def create_optimized_by_carrier(n, order, region=None):
         ]
         # add imports to region
         region_buses = n.buses[n.buses.country.str.contains(region[0])]
-        interface_lines = n.lines[n.lines.bus0.isin(region_buses.index) & ~n.lines.bus1.isin(region_buses.index)]
-        flows = n.lines_t.p1.loc[:,interface_lines.index].sum(axis=1)
+        interface_lines_b0 = n.lines[
+            (n.lines.bus0.isin(region_buses.index) & ~n.lines.bus1.isin(region_buses.index))]
+        interface_lines_b1 = n.lines[
+            (n.lines.bus1.isin(region_buses.index) & ~n.lines.bus0.isin(region_buses.index))
+            ]
+        flows = n.lines_t.p1.loc[:,interface_lines_b0.index].sum(axis=1)
+        flows += n.lines_t.p0.loc[:,interface_lines_b1.index].sum(axis=1)
         imports = flows.apply(lambda x: x if x > 0 else 0)
         exports = flows.apply(lambda x: x if x < 0 else 0)
     else:
@@ -244,6 +304,70 @@ def create_optimized_by_carrier(n, order, region=None):
 
     optimized = optimized.rename(columns=EIA_carrier_names)
     return optimized / 1e3
+
+
+def load_historical_data(
+    csv_path_1,
+    csv_path_2,
+    region=None,
+):
+    """
+    Create a DataFrame from the csv files containing historical data.
+    """
+    historic_first = pd.read_csv(
+        csv_path_1,
+        index_col=[0, 1],
+        header=0,
+        parse_dates=True,
+        date_format="%m/%d/%Y %I:%M:%S %p",
+        usecols=selected_cols,
+        low_memory=False,
+    )
+    historic_first = historic_first[
+        historic_first.Region.map(EIA_930_REGION_MAPPER)
+        == snakemake.wildcards.interconnect
+    ]
+
+    historic_second = pd.read_csv(
+        csv_path_2,
+        index_col=[0, 1],
+        header=0,
+        parse_dates=True,
+        date_format="%m/%d/%Y %I:%M:%S %p",
+        usecols=selected_cols,
+        low_memory=False,
+    )
+    historic_second = historic_second[
+        historic_second.Region.map(EIA_930_REGION_MAPPER)
+        == snakemake.wildcards.interconnect
+    ]
+
+    # Clean the data read from csv
+    historic_first_df = (
+        historic_first.fillna(0)
+        .replace({",": ""}, regex=True)
+        .drop(columns="Region", axis=1)
+        .astype(float)
+    )
+    historic_second_df = (
+        historic_second.fillna(0)
+        .replace({",": ""}, regex=True)
+        .drop(columns="Region", axis=1)
+        .astype(float)
+    )
+
+    historic = pd.concat([historic_first_df, historic_second_df], axis=0)
+
+
+    historic = historic.rename(columns=rename_his)
+    historic[historic < 0] = (
+        0  # remove negative values for plotting (low impact on results)
+    )
+
+    order = (historic.diff().abs().sum() / historic.sum()).sort_values().index
+    historic = historic.reindex(order, axis=1, level=1)
+    historic = historic / 1e3
+    return historic, order
 
 
 def create_historical_df(
@@ -315,50 +439,6 @@ def create_historical_df(
     return historic, order
 
 
-def create_historical(
-    demand_path,
-    region=None,
-):
-    """
-    Create a DataFrame from the csv files containing historical data.
-    """
-    historic = pd.read_csv(
-        csv_path,
-        index_col=[0, 1],
-        header=0,
-        parse_dates=True,
-        date_format="%m/%d/%Y %I:%M:%S %p",
-        usecols=selected_cols,
-    )
-    historic = historic[
-        historic.Region.map(EIA_930_REGION_MAPPER) == snakemake.wildcards.interconnect
-    ]
-
-    # Clean the data read from csv
-    historic_first_df = (
-        historic_first.fillna(0)
-        .replace({",": ""}, regex=True)
-        .drop(columns="Region", axis=1)
-        .astype(float)
-    )
-
-    if region is not None:
-        if region == "Arizona":
-            region = ["AZPS"]
-        historic = historic.loc[region]
-
-    historic = historic.groupby(["UTC Time at End of Hour"]).sum()
-
-    historic = historic.rename(columns=rename_his)
-    historic[historic < 0] = (
-        0  # remove negative values for plotting (low impact on results)
-    )
-    order = (historic.diff().abs().sum() / historic.sum()).sort_values().index
-    historic = historic.reindex(order, axis=1, level=1)
-    historic = historic / 1e3
-    return historic, order
-
-
 def get_regions(n):
     regions = n.buses.country.unique()
     regions_clean = [ba.split("0")[0] for ba in regions]
@@ -404,6 +484,56 @@ def plot_load_shedding_map(
     )
     fig.savefig(save)
 
+def plot_generator_cost_stack(
+    n: pypsa.Network,
+    save: str,
+    **wildcards,
+):
+    marginal_costs = n.get_switchable_as_dense('Generator','marginal_cost')
+    marginal_costs = marginal_costs.mean().rename('marginal_cost')
+    marginal_costs.loc[marginal_costs < 0.1] = 0.5
+    marginal_costs = pd.DataFrame(marginal_costs)
+    marginal_costs['p_nom'] = marginal_costs.index.map(n.generators.p_nom)
+    marginal_costs['carrier'] = marginal_costs.index.map(n.generators.carrier)
+    df = marginal_costs[marginal_costs.index.map(n.generators.carrier) != 'load']
+
+    # Sort by marginal cost
+    df_sorted = df.sort_values(by='marginal_cost')
+
+    # Generate plot
+    fig, ax = plt.subplots()
+
+    # Variables for plotting
+    cumulative_capacity = np.cumsum(df_sorted['p_nom']) - df_sorted['p_nom']
+    marginal_costs = df_sorted['marginal_cost']
+    capacities = df_sorted['p_nom']
+
+    colors = n.carriers.color.to_dict()
+    # Create stack plot
+    for i in range(len(df_sorted)):
+        ax.barh(
+            y=0, 
+            width=capacities.iloc[i], 
+            left=cumulative_capacity.iloc[i], 
+            height=marginal_costs.iloc[i], 
+            align='edge', 
+            linewidth=0,
+            color=colors[df_sorted['carrier'].iloc[i]],
+            )
+
+    fig.legend(
+        handles=[plt.Rectangle((0,0),1,1, color=colors[carrier], label=carrier) for carrier in colors],
+        loc='upper left',
+        bbox_to_anchor=(0.12, 0.875),
+        title='Carrier',
+        )
+
+    ax.set_xlabel('Capacity [MW]')
+    ax.set_ylabel('Marginal Cost [USD/MWh]')
+    ax.set_title('Generator Marginal Costs Stack Plot')
+    fig.savefig(save)
+
+
 
 if __name__ == "__main__":
     if "snakemake" not in globals():
@@ -425,10 +555,17 @@ if __name__ == "__main__":
 
     buses = get_regions(n)
 
-    historic, order = create_historical_df(
+    historical_full, order = load_historical_data(
         snakemake.input.historic_first,
         snakemake.input.historic_second,
     )
+    historic_interconnect = historical_full.groupby(["UTC Time at End of Hour"]).sum()
+
+    # historic, order = create_historical_df(
+    #     snakemake.input.historic_first,
+    #     snakemake.input.historic_second,
+    # )
+
     optimized = create_optimized_by_carrier(n, order)
 
     colors = n.carriers.rename(EIA_carrier_names).color.to_dict()
@@ -436,8 +573,30 @@ if __name__ == "__main__":
     colors['imports'] = "#7d1caf"
     colors['exports'] = "#7d1caf"
 
+
+    # Bar Production
+    plot_regional_bar_production_comparison(
+        n,
+        historical_full,
+        colors=colors,
+    )
+
+    plot_bar_carrier_production(
+        historic_interconnect,
+        optimized,
+        save_path=snakemake.output["carrier_production_bar.pdf"],
+    )
+
+    plot_bar_production_deviation(
+        historic_interconnect,
+        optimized,
+        save_path=snakemake.output["production_deviation_bar.pdf"],
+    )
+
+
+    # Time Series
     plot_timeseries_comparison(
-        historic,
+        historic_interconnect,
         optimized,
         save_path=snakemake.output["seasonal_stacked_plot.pdf"],
         colors=colors,
@@ -448,17 +607,6 @@ if __name__ == "__main__":
         colors= colors
     )
 
-    plot_bar_carrier_production(
-        historic,
-        optimized,
-        save_path=snakemake.output["carrier_production_bar.pdf"],
-    )
-
-    plot_bar_production_deviation(
-        historic,
-        optimized,
-        save_path=snakemake.output["production_deviation_bar.pdf"],
-    )
 
     # Box Plot
     plot_region_lmps(
@@ -467,11 +615,6 @@ if __name__ == "__main__":
         **snakemake.wildcards,
     )
 
-    # plot_curtailment_heatmap(
-    #     n,
-    #     snakemake.output["val_heatmap_curtailment.pdf"],
-    #     **snakemake.wildcards,
-    # )
 
     plot_capacity_factor_heatmap(
         n,
@@ -482,6 +625,12 @@ if __name__ == "__main__":
     plot_generator_data_panel(
         n,
         snakemake.output["val_generator_data_panel.pdf"],
+        **snakemake.wildcards,
+    )
+     
+    plot_generator_cost_stack(
+        n,
+        snakemake.output["val_generator_stack.pdf"],
         **snakemake.wildcards,
     )
 
@@ -506,3 +655,9 @@ if __name__ == "__main__":
     #         / "california_emissions.png",
     #         **snakemake.wildcards,
     #     )
+
+    # plot_curtailment_heatmap(
+    #     n,
+    #     snakemake.output["val_heatmap_curtailment.pdf"],
+    #     **snakemake.wildcards,
+    # )

@@ -105,6 +105,7 @@ def aggregate_to_substations(
     substations,
     busmap,
     aggregation_zones: str,
+    aggregation_strategies=dict(),
 ):
     """
     Aggregate network to substations.
@@ -114,6 +115,11 @@ def aggregate_to_substations(
     """
 
     logger.info("Aggregating buses to substation level...")
+
+    line_strategies = aggregation_strategies.get("lines", dict())
+    generator_strategies = aggregation_strategies.get("generators", dict())
+    one_port_strategies = aggregation_strategies.get("one_ports", dict())
+
 
     clustering = get_clustering_from_busmap(
         network,
@@ -125,15 +131,8 @@ def aggregate_to_substations(
             "type": "max",
             "Pd": "sum",
         },
-        generator_strategies={
-            "marginal_cost": "mean",
-            "p_nom_min": "sum",
-            "p_min_pu": "mean",
-            "p_max_pu": "mean",
-            "ramp_limit_up": "max",
-            "ramp_limit_down": "max",
-        },
-    )
+        generator_strategies=generator_strategies,
+        )
 
     substations = network.buses[
         [
@@ -210,6 +209,7 @@ if __name__ == "__main__":
 
         snakemake = mock_snakemake("simplify_network", interconnect="eastern")
     configure_logging(snakemake)
+    params = snakemake.params
 
     voltage_level = snakemake.config["electricity"]["voltage_simplified"]
     aggregation_zones = snakemake.config["clustering"]["cluster_network"][
@@ -240,6 +240,7 @@ if __name__ == "__main__":
         substations,
         busmap_to_sub.sub_id,
         aggregation_zones,
+        params.aggregation_strategies,
     )
 
     n.export_to_netcdf(snakemake.output[0])

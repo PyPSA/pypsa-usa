@@ -423,7 +423,7 @@ def add_BAU_constraints(n, config):
 
 def add_interface_limits(n, sns, config):
     """
-    Adds interface transmission limits to constrain inter-regional transfer capacities based on ReEDS inter-regional transfer capacity limits or manually defined limits. 
+    Adds interface transmission limits to constrain inter-regional transfer capacities based on user-defined inter-regional transfer capacity limits. 
     """
     logger.info("Adding Interface Transmission Limits.")
     limits = pd.read_csv(snakemake.input.flowgates)
@@ -441,16 +441,26 @@ def add_interface_limits(n, sns, config):
     lines_s = n.model["Line-s"]
 
     for idx, interface in limits.iterrows():
-        zone0_buses = n.buses[n.buses.country == interface.r]
-        zone1_buses = n.buses[n.buses.country ==interface.rr]
-        if zone0_buses.empty | zone0_buses.empty: continue
-        interface_lines = n.lines[n.lines.bus0.isin(zone0_buses.index) & n.lines.bus1.isin(zone1_buses.index)]
+        if interface.interface == 'p10|p11':
+            print(interface)
+        regions_list_r = [region.strip() for region in interface.r.split(",")]
+        regions_list_rr = [region.strip() for region in interface.rr.split(",")]
 
-        lhs = lines_s.loc[:, interface_lines.index].sum(dims='Line')
+        zone0_buses = n.buses[n.buses.country.isin(regions_list_r)]
+        zone1_buses = n.buses[n.buses.country.isin(regions_list_rr)]
+        if zone0_buses.empty | zone0_buses.empty: continue
+        interface_lines_pos = n.lines[n.lines.bus0.isin(zone0_buses.index) & n.lines.bus1.isin(zone1_buses.index)]
+        interface_lines_neg = n.lines[n.lines.bus0.isin(zone1_buses.index) & n.lines.bus1.isin(zone0_buses.index)]
+
+        lhs = (
+            lines_s.loc[:, interface_lines_pos.index].sum(dims='Line') -
+            lines_s.loc[:, interface_lines_neg.index].sum(dims='Line')
+        )
 
         rhs_pos = interface.MW_f0
-        rhs_neg = interface.MW_r0 * -1
         n.model.add_constraints(lhs <= rhs_pos, name=f"ITL_{interface.interface}_pos")
+
+        rhs_neg = interface.MW_r0 * -1
         n.model.add_constraints(lhs >= rhs_neg, name=f"ITL_{interface.interface}_neg")
 
 
@@ -887,15 +897,15 @@ if __name__ == "__main__":
         from _helpers import mock_snakemake
 
         snakemake = mock_snakemake(
-            "solve_network",
+            "solve_network_operations",
             simpl="",
-            opts="Co2L1.0-6H-RCo2L-SAFER-RPS",
-            clusters="20",
+            opts="Ep",
+            clusters="40",
             ll="v1.0",
             sector_opts="",
             sector="E",
-            planning_horizons="2030",
-            interconnect="texas",
+            planning_horizons="",
+            interconnect="western",
         )
     configure_logging(snakemake)
     if "sector_opts" in snakemake.wildcards.keys():

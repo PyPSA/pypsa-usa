@@ -205,7 +205,7 @@ if "western" in config["scenario"]["interconnect"]:
         params:
             fuel_year=config["costs"]["ng_fuel_year"],
         input:
-            fuel_regions="repo_data/wecc_fuelregions.xlsx",
+            fuel_regions="repo_data/plants/wecc_fuelregions.xlsx",
         output:
             fuel_prices=DATA + "costs/ng_caiso_prices.csv",
         log:
