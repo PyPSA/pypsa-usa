@@ -387,6 +387,11 @@ def update_marginal_costs(
             how="inner",
         )
 
+        # Update n.generators table with the average fuel cost and vom cost- for analysis
+        n.generators.loc[gen.index, "marginal_cost"] = df.mean().values
+        n.generators.loc[gen.index, "vom_cost"] = vom_cost
+        n.generators.loc[gen.index, "fuel_cost"] = df.mean().values - vom_cost
+
 
 def update_transmission_costs(n, costs, length_factor=1.0):
     # TODO: line length factor of lines is applied to lines and links.
@@ -676,7 +681,7 @@ def add_missing_heat_rates(plants, heat_rates_fn):
     hr_mapped = (
         plants.fuel_type.map(heat_rates.heat_rate_btu_per_kwh) / 1000
     )  # convert to mmbtu/mwh
-    plants["inchr2(mmbtu/mwh)"].fillna(hr_mapped, inplace=True)
+    plants["heat_rate"].fillna(hr_mapped, inplace=True)
     return plants
 
 
@@ -720,16 +725,18 @@ def attach_renewable_capacities_to_atlite(
             continue
         generators_tech = n.generators[n.generators.carrier == tech]
         caps_per_bus = (
-            plants_filt.groupby("bus_assignment").sum().p_nom
+            plants_filt[["bus_assignment", "p_nom"]]
+            .groupby("bus_assignment")
+            .sum()
+            .p_nom
         )  # namplate capacity per bus
-        # caps = caps / gens_per_bus.reindex(caps.index, fill_value=1) ##REVIEW
         # TODO: #16 Gens excluded from atlite profiles bc of landuse/etc will not be able to be attached if in the breakthrough network
         if caps_per_bus[~caps_per_bus.index.isin(generators_tech.bus)].sum() > 0:
             missing_capacity = caps_per_bus[
                 ~caps_per_bus.index.isin(generators_tech.bus)
             ].sum()
             logger.info(
-                f"There are {np.round(missing_capacity,1)/1000} GW of {tech} plants that are not in the network. See git issue #16.",
+                f"There are {np.round(missing_capacity/1000,4)} GW of {tech} plants that are not in the network. See git issue #16.",
             )
 
         logger.info(
@@ -820,6 +827,13 @@ def attach_conventional_generators(
         lifetime=(plants.dateout - plants.build_year).fillna(np.inf),
         **committable_attrs,
     )
+
+    # Add fuel and VOM costs to the network
+    n.generators.loc[plants.index, "vom_cost"] = plants.carrier.map(costs.VOM)
+    n.generators.loc[plants.index, "fuel_cost"] = plants.marginal_cost
+    n.generators.loc[plants.index, "heat_rate"] = plants.heat_rate
+    n.generators.loc[plants.index, "ba_eia"] = plants.balancing_authority_code
+    n.generators.loc[plants.index, "ba_ads"] = plants.ads_balancing_area
 
 
 def attach_wind_and_solar(
@@ -964,11 +978,14 @@ def attach_battery_storage(
     plants_filt.index = (
         plants_filt.index.astype(str) + "_" + plants_filt.generator_id.astype(str)
     )
+    plants_filt.nameplate_energy_capacity_mwh = (
+        plants_filt.nameplate_energy_capacity_mwh.astype(float)
+    )
     logger.info(
-        f"Added Batteries as Storage Units to the network.\n{np.round(plants_filt.p_nom.sum()/1000,2)} GW Power Capacity \n{np.round(plants_filt.energy_capacity_mwh.sum()/1000, 2)} GWh Energy Capacity",
+        f"Added Batteries as Storage Units to the network.\n{np.round(plants_filt.p_nom.sum()/1000,2)} GW Power Capacity \n{np.round(plants_filt.nameplate_energy_capacity_mwh.sum()/1000, 2)} GWh Energy Capacity",
     )
 
-    plants_filt = plants_filt.dropna(subset=["energy_capacity_mwh"])
+    plants_filt = plants_filt.dropna(subset=["nameplate_energy_capacity_mwh"])
     n.madd(
         "StorageUnit",
         plants_filt.index,
@@ -977,57 +994,93 @@ def attach_battery_storage(
         p_nom=plants_filt.p_nom,
         p_nom_min=plants_filt.p_nom,
         p_nom_extendable=False,
-        max_hours=plants_filt.energy_capacity_mwh / plants_filt.p_nom,
+        max_hours=plants_filt.nameplate_energy_capacity_mwh / plants_filt.p_nom,
         build_year=plants_filt.operating_year,
         efficiency_store=0.9**0.5,
         efficiency_dispatch=0.9**0.5,
         cyclic_state_of_charge=True,
-        # capital_cost=costs.at["battery", "capital_cost"],
     )
 
 
 def load_powerplants_eia(
     eia_dataset: str,
-    carrier_mapper: dict[str, str] = None,
     interconnect: str = None,
 ) -> pd.DataFrame:
-    # load data
+
     plants = pd.read_csv(
         eia_dataset,
-        index_col=0,
-        dtype={"bus_assignment": "str"},
-    ).rename(columns=str.lower)
-
-    if interconnect:
-        plants["interconnection"] = plants["nerc region"].map(const.NERC_REGION_MAPPER)
+    )
+    if (interconnect is not None) & (interconnect != "usa"):
+        plants["interconnection"] = plants["nerc_region"].map(const.NERC_REGION_MAPPER)
         plants = plants[plants.interconnection == interconnect]
     # apply mappings if required
     if carrier_mapper:
         plants["carrier"] = plants.tech_type.map(carrier_mapper)
 
-    plants = add_missing_fuel_cost(plants, snakemake.input.fuel_costs)
-    plants = add_missing_heat_rates(plants, snakemake.input.fuel_costs)
-
     plants["generator_name"] = (
-        plants.index.astype(str) + "_" + plants.generator_id.astype(str)
+        plants.index.astype(str)
+        + "_"
+        + plants.plant_code.astype(str)
+        + "_"
+        + plants.generator_id.astype(str)
     )
     plants.set_index("generator_name", inplace=True)
-    plants["p_nom"] = plants.pop("capacity_mw")
-    plants["heat_rate"] = plants.pop("inchr2(mmbtu/mwh)")
+    plants["p_nom"] = plants.pop("nameplate_capacity_mw")
+
+    # Set Costs
+    plants["heat_rate"] = plants.pop("ads_avg_hr")
+    plants = add_missing_fuel_cost(
+        plants, snakemake.input.fuel_costs
+    )  # Only used for plants that don't have temporal data
+    plants = add_missing_heat_rates(
+        plants, snakemake.input.fuel_costs
+    )  # Only used for plants that not included in ADS data
     plants["marginal_cost"] = (
         plants.heat_rate * plants.fuel_cost
     )  # (MMBTu/MW) * (USD/MMBTu) = USD/MW
+
+    # plants["vom_costs"] = plants.pop("ads_vom_cost")
+    # avg_prime_move_vom = plants[['carrier','vom_costs']].groupby('carrier').mean()
+    # plants.loc[plants.vom_costs.isna(),'vom_costs'] = plants.loc[plants.vom_costs.isna(),'carrier'].map(avg_prime_move_vom.vom_costs)
+
+    plants["start_up_cost"] = plants["ads_startup_cost_fixed$"].fillna(
+        0
+    ) + +plants.ads_startfuelmmbtu.fillna(0) * plants.fuel_cost.fillna(0)
+
     plants["efficiency"] = 1 / (
         plants["heat_rate"] / 3.412
     )  # MMBTu/MWh to MWh_electric/MWh_thermal
+
+    # Set Ramp Rates
     plants["ramp_limit_up"] = (
-        plants.pop("rampup rate(mw/minute)") / plants.p_nom * 60
+        plants.pop("ads_rampup_ratemw/minute") / plants.p_nom * 60
     )  # MW/min to p.u./hour
     plants["ramp_limit_down"] = (
-        plants.pop("rampdn rate(mw/minute)") / plants.p_nom * 60
+        plants.pop("ads_rampdn_ratemw/minute") / plants.p_nom * 60
     )  # MW/min to p.u./hour
+    avg_prime_mover_ramp_rates = (
+        plants[["carrier", "ramp_limit_up", "ramp_limit_down"]]
+        .groupby("carrier")
+        .mean()
+    )
+    # fill missing ramp rates with average ramp rates of prime movers
+    plants.loc[plants.ramp_limit_up.isna(), "ramp_limit_up"] = plants.loc[
+        plants.ramp_limit_up.isna(), "carrier"
+    ].map(avg_prime_mover_ramp_rates.ramp_limit_up)
+    plants.loc[plants.ramp_limit_down.isna(), "ramp_limit_down"] = plants.loc[
+        plants.ramp_limit_down.isna(), "carrier"
+    ].map(avg_prime_mover_ramp_rates.ramp_limit_down)
+
+    # Timeline
     plants["build_year"] = plants.operating_year
-    plants["dateout"] = np.inf  # placeholder TODO FIX LIFETIME
+    plants["dateout"] = (
+        np.inf
+    )  # plants.planned_retirement_year.replace(' ').astype(int).fillna(np.inf)  # placeholder TODO Add retirement year
+
+    if interconnect:
+        plants["interconnection"] = plants["nerc_region"].map(const.NERC_REGION_MAPPER)
+        plants = plants[plants.interconnection == interconnect]
+
     return plants
 
 
@@ -1301,7 +1354,6 @@ def main(snakemake):
     if configuration == "pypsa-usa":
         plants = load_powerplants_eia(
             snakemake.input["plants_eia"],
-            const.EIA_CARRIER_MAPPER,
             interconnect=interconnection,
         )
     elif configuration == "ads2032":
@@ -1431,6 +1483,6 @@ if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
 
-        snakemake = mock_snakemake("add_electricity", interconnect="western")
+        snakemake = mock_snakemake("add_electricity", interconnect="usa")
     configure_logging(snakemake)
     main(snakemake)

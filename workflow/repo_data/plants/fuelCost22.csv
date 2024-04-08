@@ -1,0 +1,16 @@
+### Values for fuel prices are pulled from the 2022 AEO for the 2021 year in $2021 (https://www.eia.gov/outlooks/aeo/data/browser/#/?id=3-AEO2022&cases=ref2022&sourcekey=0),,
+"### Note that the ""primary_fuel"" column here should match those in plant_cost.csv",,
+### Biomass price is placeholder until better source found. EPA current Source.,,
+primary_fuel,fuel_price_per_mmbtu,heat_rate_btu_per_kwh
+coal,1.05,8638
+gas,5.15,6431
+CCGT,5.15,6431
+OCGT,5.15,9905
+oil,21.71,9124
+solar,0,0
+wind,0,0
+hydro,0,0
+geothermal,0,8881
+csp,0,0
+nuclear,0.72,10443
+biomass,3,13500
