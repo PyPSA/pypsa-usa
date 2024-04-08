@@ -83,7 +83,8 @@ wildcard_constraints:
 # -------------------------- Config and Subworkflows ------------------------- #
 
 # Merge subworkflow configs and main config
-configfile: "config/tests/config.test_simple.yaml"
+configfile: "config/config.default.yaml"
+# configfile: "config/tests/config.validation.yaml"
 configfile: "config/config.cluster.yaml"
 configfile: "config/config.osw.yaml"
 configfile: "config/config.plotting.yaml"
@@ -179,8 +180,6 @@ def sector_figures(wildcards):
 
 
 def validation_figures(wildcards):
-    print(config["run"])
-    print(config["run"]["validation"])
     if config["run"]["validation"]:
         return expand(
             RESULTS
