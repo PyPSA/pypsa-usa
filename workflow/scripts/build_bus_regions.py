@@ -129,7 +129,7 @@ def main(snakemake):
         agg_region_shapes = gpd_reeds.geometry
     else:
         ValueError(
-            "zonal_aggregation must be either balancing_area, country, reeds_id, or state"
+            "zonal_aggregation must be either balancing_area, country, reeds_id, or state",
         )
 
     gpd_offshore_shapes = gpd.read_file(snakemake.input.offshore_shapes)
