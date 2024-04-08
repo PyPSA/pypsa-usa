@@ -828,6 +828,9 @@ def attach_conventional_generators(
     # Add fuel and VOM costs to the network
     n.generators.loc[plants.index, "vom_cost"] = plants.carrier.map(costs.VOM)
     n.generators.loc[plants.index, "fuel_cost"] = plants.marginal_cost
+    n.generators.loc[plants.index, "heat_rate"] = plants.heat_rate
+    n.generators.loc[plants.index, "ba_eia"] = plants.balancing_authority_code
+    n.generators.loc[plants.index, "ba_ads"] = plants.ads_balancing_area
 
 
 

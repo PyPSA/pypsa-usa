@@ -218,6 +218,8 @@ if __name__ == "__main__":
 
     n = pypsa.Network(snakemake.input.network)
 
+    n.generators.drop(columns=['ba_eia', 'ba_ads'], inplace=True) # temp added these columns and need to drop for workflow
+
     n = convert_to_voltage_level(n, voltage_level)
     n, trafo_map = remove_transformers(n)
 
