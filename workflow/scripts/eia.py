@@ -365,14 +365,14 @@ class CoalCosts(DataExtractor):
         super().__init__(year, api_key)
 
     def build_url(self) -> str:
-        base_url = "coal/shipments/by-mine-by-plant/data/"
-        facets = f"frequency=quarterly&data[0]=price&start={self.year}-Q1&end={self.year+1}-Q1&sort[0][column]=period&sort[0][direction]=desc&offset=0&length=5000"
+        base_url = "coal/shipments/receipts/data/"
+        facets = f"frequency=quarterly&data[0]=price&facets[coalRankId][]=TOT&start={self.year}-Q1&end={self.year+1}-Q1&sort[0][column]=period&sort[0][direction]=desc&offset=0&length=5000"
         return f"{API_BASE}{base_url}?api_key={self.api_key}&{facets}"
 
     def format_data(self, df: pd.DataFrame) -> pd.DataFrame:
 
         df = df[
-            (df.coalType.isin(("All", "all")))
+            (df.coalRankId.isin(["TOT"]))
             & ~(df.price == "w")
             & ~(df.price.isna())  # withheld value. Will be assigned usa average
         ].copy()
@@ -388,8 +388,14 @@ class CoalCosts(DataExtractor):
         df[["year", "quarter"]] = df.period.str.split("-", expand=True)
         df = (
             df[["plantStateDescription", "price", "price-units", "year", "quarter"]]
-            .rename(columns={"plantStateDescription": "state", "price-units": "unit"})
-            .groupby(by=["state", "unit", "year", "quarter"])
+            .rename(
+                columns={
+                    "plantStateDescription": "state",
+                    "price-units": "units",
+                    "price": "value",
+                },
+            )
+            .groupby(by=["state", "units", "year", "quarter"])
             .mean()
             .reset_index()
         )
@@ -420,7 +426,7 @@ class CoalCosts(DataExtractor):
                 [
                     "U.S.",
                     "average dollars per ton",
-                    states[states.period == date].price.mean(),
+                    states[states.period == date].value.mean(),
                     date,
                 ],
             )
@@ -694,4 +700,4 @@ if __name__ == "__main__":
     with open("./../config/config.api.yaml") as file:
         yaml_data = yaml.safe_load(file)
     api = yaml_data["api"]["eia"]
-    print(Emissions("transport", 2022, api, "oil").get_data())
+    print(FuelCosts("coal", "power", 2019, api).get_data())
