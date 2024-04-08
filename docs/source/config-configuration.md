@@ -232,6 +232,7 @@ When clustering `aggregation_zones` defines the region boundaries which will be 
 
 Each clustering and interconnection option will have a different number of minimum nodes which can be clustered to, an error will be thrown in `cluster_network` notifying you of that number if you have selected a value too low.
 
+Cleaned and labeled REeDs Shapes are pulled from this github repository: https://github.com/pandaanson/NYU-law-work
 
 ```{eval-rst}
 .. literalinclude:: ../../workflow/config/config.default.yaml
