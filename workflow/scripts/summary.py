@@ -299,7 +299,9 @@ def get_generator_marginal_costs(
 
 def get_fuel_costs(n: pypsa.Network) -> pd.DataFrame:
     """
-    Gets fuel costs per generator, bus, and carrier. Units are $/MWh
+    Gets fuel costs per generator, bus, and carrier.
+
+    Units are $/MWh
     """
 
     # approximates for 2030
