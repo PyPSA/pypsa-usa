@@ -81,11 +81,11 @@ def add_osw_turbines(network, plant_name, capacity, pu_time_series):
 # Load Offshore Wind Time Series Data
 primary_path = os.path.join(
     os.getcwd(),
-    "../repo_data/plants/Offshore_Wind_CEC_PLEXOS_2030.csv",
+    "../repo_data/Offshore_Wind_CEC_PLEXOS_2030.csv",
 )
 secondary_path = os.path.join(
     os.getcwd(),
-    "repo_data/plants/Offshore_Wind_CEC_PLEXOS_2030.csv",
+    "repo_data/Offshore_Wind_CEC_PLEXOS_2030.csv",
 )
 # Check if the primary path exists
 if os.path.exists(primary_path):

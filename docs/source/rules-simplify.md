@@ -9,7 +9,7 @@
 (cluster)=
 ## Rule `cluster_network`
 ```{eval-rst}
-.. automodule:: cluster_network
+.. automodule:: cluster_network_eur
 ```
 
 (extra_components)=
