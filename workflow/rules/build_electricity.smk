@@ -39,7 +39,7 @@ rule build_base_network:
         onshore_shapes=RESOURCES + "{interconnect}/onshore_shapes.geojson",
         offshore_shapes=RESOURCES + "{interconnect}/offshore_shapes.geojson",
         state_shapes=RESOURCES + "{interconnect}/state_boundaries.geojson",
-        reeds_shapes= RESOURCES + "{interconnect}/reeds_shapes.geojson",
+        reeds_shapes=RESOURCES + "{interconnect}/reeds_shapes.geojson",
     output:
         bus2sub=DATA + "breakthrough_network/base_grid/{interconnect}/bus2sub.csv",
         sub=DATA + "breakthrough_network/base_grid/{interconnect}/sub.csv",
@@ -57,12 +57,12 @@ rule build_base_network:
 
 rule build_bus_regions:
     params:
-        aggregation_zone= config['clustering']['cluster_network']['aggregation_zones'],
+        aggregation_zone=config["clustering"]["cluster_network"]["aggregation_zones"],
     input:
         country_shapes=RESOURCES + "{interconnect}/country_shapes.geojson",
         state_shapes=RESOURCES + "{interconnect}/state_boundaries.geojson",
         ba_region_shapes=RESOURCES + "{interconnect}/onshore_shapes.geojson",
-        reeds_shapes= RESOURCES + "{interconnect}/reeds_shapes.geojson",
+        reeds_shapes=RESOURCES + "{interconnect}/reeds_shapes.geojson",
         offshore_shapes=RESOURCES + "{interconnect}/offshore_shapes.geojson",
         base_network=RESOURCES + "{interconnect}/elec_base_network.nc",
         bus2sub=DATA + "breakthrough_network/base_grid/{interconnect}/bus2sub.csv",
@@ -222,7 +222,6 @@ rule build_renewable_profiles:
         "../scripts/build_renewable_profiles.py"
 
 
-
 rule build_demand:
     params:
         planning_horizons=config["scenario"]["planning_horizons"],
@@ -249,7 +248,7 @@ rule build_demand:
         BENCHMARKS + "{interconnect}/build_demand"
     threads: 2
     resources:
-        mem_mb= interconnect_mem,
+        mem_mb=interconnect_mem,
     script:
         "../scripts/build_demand.py"
 
@@ -327,7 +326,7 @@ rule add_electricity:
             else []
         ),
         demand=RESOURCES + "{interconnect}/demand.csv",
-        fuel_costs= "repo_data/plants/fuelCost22.csv",
+        fuel_costs="repo_data/plants/fuelCost22.csv",
         ng_electric_power_price=(
             RESOURCES + "{interconnect}/ng_fuel_prices.csv"
             if config["conventional"]["dynamic_fuel_price"]
@@ -365,7 +364,7 @@ rule simplify_network:
         "logs/simplify_network/{interconnect}/elec_s.log",
     threads: 1
     resources:
-        mem_mb= interconnect_mem_s,
+        mem_mb=interconnect_mem_s,
     script:
         "../scripts/simplify_network.py"
 

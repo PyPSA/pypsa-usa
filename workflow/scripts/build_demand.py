@@ -294,12 +294,30 @@ def prepare_eia_demand(
 
     # Combine EIA Demand Data to Match GIS Shapes
     demand["Arizona"] = demand.pop("SRP") + demand.pop("AZPS")
-    demand["Carolina"] = demand.pop("CPLE") + demand.pop("CPLW") + demand.pop("DUK") + demand.pop("SC") + demand.pop("SCEG") + demand.pop("YAD")
-    demand["Florida"] = demand.pop("FPC") + demand.pop("FPL") + demand.pop("GVL") + demand.pop("JEA") + demand.pop("NSB") + demand.pop("SEC") + demand.pop("TAL") + demand.pop("TEC") + demand.pop("HST") + demand.pop("FMPP")
+    demand["Carolina"] = (
+        demand.pop("CPLE")
+        + demand.pop("CPLW")
+        + demand.pop("DUK")
+        + demand.pop("SC")
+        + demand.pop("SCEG")
+        + demand.pop("YAD")
+    )
+    demand["Florida"] = (
+        demand.pop("FPC")
+        + demand.pop("FPL")
+        + demand.pop("GVL")
+        + demand.pop("JEA")
+        + demand.pop("NSB")
+        + demand.pop("SEC")
+        + demand.pop("TAL")
+        + demand.pop("TEC")
+        + demand.pop("HST")
+        + demand.pop("FMPP")
+    )
 
     n.buses["load_dissag"] = n.buses.balancing_area.replace(
         {
-            "^CISO.*": "CISO", 
+            "^CISO.*": "CISO",
             "^ERCO.*": "ERCO",
             "^MISO.*": "MISO",
             "^SPP.*": "SPP",

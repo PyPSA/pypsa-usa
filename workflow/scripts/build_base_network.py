@@ -499,8 +499,8 @@ def assign_missing_state_regions(gdf_bus: gpd.GeoDataFrame):
     missing = match_missing_buses(buses, missing)
 
     # check if error western / texas. can make this a function
-    missing = missing.reset_index().drop_duplicates('Bus').set_index('Bus') 
-    buses = buses.reset_index().drop_duplicates('Bus').set_index('Bus') 
+    missing = missing.reset_index().drop_duplicates("Bus").set_index("Bus")
+    buses = buses.reset_index().drop_duplicates("Bus").set_index("Bus")
 
     missing.full_states = buses.loc[missing.bus_assignment.values].full_states.values
 
@@ -526,20 +526,24 @@ def assign_missing_states_countries(n: pypsa.Network):
     value.
     """
     buses = n.buses.copy()
-    missing = buses.loc[(
-        buses.state.isna() | 
-        buses.country.isna() | 
-        buses.balancing_area.isna() | 
-        buses.reeds_zone.isna() |
-        buses.reeds_ba.isna()
-    )]
-    buses = buses.loc[(
-        ~buses.state.isna() & 
-        ~buses.country.isna() & 
-        ~buses.balancing_area.isna() &
-        ~buses.reeds_zone.isna() &
-        ~buses.reeds_ba.isna()
-    )]
+    missing = buses.loc[
+        (
+            buses.state.isna()
+            | buses.country.isna()
+            | buses.balancing_area.isna()
+            | buses.reeds_zone.isna()
+            | buses.reeds_ba.isna()
+        )
+    ]
+    buses = buses.loc[
+        (
+            ~buses.state.isna()
+            & ~buses.country.isna()
+            & ~buses.balancing_area.isna()
+            & ~buses.reeds_zone.isna()
+            & ~buses.reeds_ba.isna()
+        )
+    ]
     buses = buses.loc[~buses.state.isin(["Offshore"])]
     missing = match_missing_buses(buses, missing)
     missing.balancing_area = buses.loc[missing.bus_assignment].balancing_area.values
@@ -552,7 +556,7 @@ def assign_missing_states_countries(n: pypsa.Network):
     n.buses.loc[missing.index, "state"] = missing.state
     n.buses.loc[missing.index, "country"] = missing.country
     n.buses.loc[missing.index, "reeds_zone"] = missing.reeds_zone
-    n.buses.loc[missing.index, "reeds_ba"] = missing.reeds_ba    
+    n.buses.loc[missing.index, "reeds_ba"] = missing.reeds_ba
     n.buses.loc[missing.index, "interconnect"] = missing.interconnect
 
 
@@ -635,8 +639,8 @@ def main(snakemake):
     df_bus = pd.read_csv(snakemake.input["buses"], index_col=0)
     df_bus = assign_sub_id(df_bus, buslocs)
     gdf_bus = assign_bus_location(df_bus, buslocs)
-    
-    #test dropping duplicate bus ids earlier
+
+    # test dropping duplicate bus ids earlier
     gdf_bus = (
         gdf_bus.reset_index()
         .drop_duplicates(subset="bus_id", keep="first")
@@ -655,14 +659,16 @@ def main(snakemake):
     state_shape = gpd.read_file(snakemake.input["state_shapes"])
     state_shape = state_shape.rename(columns={"name": "state"})
     na_shape = load_na_shapes(countries=["US"]).rename(columns={"name": "full_states"})
-    reeds_shape = gpd.read_file(snakemake.input["reeds_shapes"]).rename(columns={"name": "reeds_zone"})
+    reeds_shape = gpd.read_file(snakemake.input["reeds_shapes"]).rename(
+        columns={"name": "reeds_zone"}
+    )
 
     # assign ba, state, and country to each bus
     gdf_bus = map_bus_to_region(gdf_bus, na_shape, ["full_states"])
     gdf_bus = map_bus_to_region(gdf_bus, ba_shape, ["balancing_area"])
     gdf_bus = map_bus_to_region(gdf_bus, state_shape, ["state"])
     gdf_bus = map_bus_to_region(gdf_bus, state_shape, ["country"])
-    gdf_bus = map_bus_to_region(gdf_bus, reeds_shape, ["reeds_zone", 'reeds_ba'])
+    gdf_bus = map_bus_to_region(gdf_bus, reeds_shape, ["reeds_zone", "reeds_ba"])
 
     # assign load allocation factors to buses for state level dissagregation
     gdf_bus = assign_missing_state_regions(gdf_bus)

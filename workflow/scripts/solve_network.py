@@ -294,7 +294,7 @@ def add_RPS_constraints(n, config):
     for pct_tuple in pct.indexes["group"]:  # loop through each RPS policy
         region, carriers = pct_tuple
 
-        if region not in n.buses.country.values: 
+        if region not in n.buses.country.values:
             continue
 
         carriers_list = [carrier.strip() for carrier in carriers.split(",")]
@@ -421,19 +421,23 @@ def add_BAU_constraints(n, config):
     rhs = mincaps[index].rename_axis("carrier")
     n.model.add_constraints(lhs >= rhs, name="bau_mincaps")
 
+
 def add_interface_limits(n, sns, config):
     """
-    Adds interface transmission limits to constrain inter-regional transfer capacities based on user-defined inter-regional transfer capacity limits. 
+    Adds interface transmission limits to constrain inter-regional transfer
+    capacities based on user-defined inter-regional transfer capacity limits.
     """
     logger.info("Adding Interface Transmission Limits.")
     limits = pd.read_csv(snakemake.input.flowgates)
     user_limits = pd.read_csv(
-        config["electricity"]["transmission_interface_limits"]
+        config["electricity"]["transmission_interface_limits"],
     ).rename(
-        columns={'region_1':'r', 
-        'region_2':'rr',
-        'flow_12':'MW_f0',
-        'flow_21':'MW_r0'}
+        columns={
+            "region_1": "r",
+            "region_2": "rr",
+            "flow_12": "MW_f0",
+            "flow_21": "MW_r0",
+        },
     )
 
     limits = pd.concat([limits, user_limits])
@@ -441,28 +445,31 @@ def add_interface_limits(n, sns, config):
     lines_s = n.model["Line-s"]
 
     for idx, interface in limits.iterrows():
-        if interface.interface == 'p10|p11':
+        if interface.interface == "p10|p11":
             print(interface)
         regions_list_r = [region.strip() for region in interface.r.split(",")]
         regions_list_rr = [region.strip() for region in interface.rr.split(",")]
 
         zone0_buses = n.buses[n.buses.country.isin(regions_list_r)]
         zone1_buses = n.buses[n.buses.country.isin(regions_list_rr)]
-        if zone0_buses.empty | zone0_buses.empty: continue
-        interface_lines_pos = n.lines[n.lines.bus0.isin(zone0_buses.index) & n.lines.bus1.isin(zone1_buses.index)]
-        interface_lines_neg = n.lines[n.lines.bus0.isin(zone1_buses.index) & n.lines.bus1.isin(zone0_buses.index)]
+        if zone0_buses.empty | zone0_buses.empty:
+            continue
+        interface_lines_pos = n.lines[
+            n.lines.bus0.isin(zone0_buses.index) & n.lines.bus1.isin(zone1_buses.index)
+        ]
+        interface_lines_neg = n.lines[
+            n.lines.bus0.isin(zone1_buses.index) & n.lines.bus1.isin(zone0_buses.index)
+        ]
 
-        lhs = (
-            lines_s.loc[:, interface_lines_pos.index].sum(dims='Line') -
-            lines_s.loc[:, interface_lines_neg.index].sum(dims='Line')
-        )
+        lhs = lines_s.loc[:, interface_lines_pos.index].sum(dims="Line") - lines_s.loc[
+            :, interface_lines_neg.index
+        ].sum(dims="Line")
 
         rhs_pos = interface.MW_f0
         n.model.add_constraints(lhs <= rhs_pos, name=f"ITL_{interface.interface}_pos")
 
         rhs_neg = interface.MW_r0 * -1
         n.model.add_constraints(lhs >= rhs_neg, name=f"ITL_{interface.interface}_neg")
-
 
 
 def add_regional_co2limit(n, sns, config):

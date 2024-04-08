@@ -128,7 +128,9 @@ def main(snakemake):
     elif aggregation_zones == "reeds_zone":
         agg_region_shapes = gpd_reeds.geometry
     else:
-        ValueError("zonal_aggregation must be either balancing_area, country, reeds_id, or state")
+        ValueError(
+            "zonal_aggregation must be either balancing_area, country, reeds_id, or state"
+        )
 
     gpd_offshore_shapes = gpd.read_file(snakemake.input.offshore_shapes)
     offshore_shapes = gpd_offshore_shapes.reindex(columns=REGION_COLS).set_index(
@@ -140,7 +142,12 @@ def main(snakemake):
 
     all_locs = bus2sub[["x", "y"]]
     onshore_buses = n.buses[~n.buses.substation_off]
-    bus2sub = pd.merge(bus2sub.reset_index(), n.buses[['reeds_zone','reeds_ba']], left_on='Bus', right_on=n.buses.index).set_index('sub_id')
+    bus2sub = pd.merge(
+        bus2sub.reset_index(),
+        n.buses[["reeds_zone", "reeds_ba"]],
+        left_on="Bus",
+        right_on=n.buses.index,
+    ).set_index("sub_id")
     bus2sub_onshore = bus2sub[bus2sub.Bus.isin(onshore_buses.index)]
     bus2sub_offshore = bus2sub[~bus2sub.Bus.isin(onshore_buses.index)]
 
@@ -199,8 +206,10 @@ def main(snakemake):
         offshore_regions.append(offshore_regions_c)
 
     onshore_regions_concat = pd.concat(onshore_regions, ignore_index=True)
-    
-    onshore_regions_concat = onshore_regions_concat[~onshore_regions_concat.geometry.is_empty] #removing few buses which don't have geometry
+
+    onshore_regions_concat = onshore_regions_concat[
+        ~onshore_regions_concat.geometry.is_empty
+    ]  # removing few buses which don't have geometry
 
     onshore_regions_concat.to_file(snakemake.output.regions_onshore)
     if offshore_regions:
