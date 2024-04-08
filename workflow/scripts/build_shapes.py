@@ -152,10 +152,12 @@ def load_ba_shape(ba_file: str) -> gpd.GeoDataFrame:
     gdf = gdf.rename(columns={"BA": "name"})
     return gdf.to_crs(4326)
 
+
 def load_reeds_shape(reeds_shapes: str) -> gpd.GeoDataFrame:
     gdf = gpd.read_file(reeds_shapes)
-    gdf = gdf.rename(columns={"rb": "name", 'BA_Code':'reeds_ba'})
+    gdf = gdf.rename(columns={"rb": "name", "BA_Code": "reeds_ba"})
     return gdf.to_crs(4326)
+
 
 def combine_offshore_shapes(
     source: str,
@@ -235,6 +237,7 @@ def trim_states_to_interconnect(
         )
     return gdf_states
 
+
 def trim_shape_to_interconnect(
     gdf: gpd.GeoDataFrame,
     interconnect_regions: gpd.GeoDataFrame,
@@ -242,7 +245,8 @@ def trim_shape_to_interconnect(
     exclusion_dict: dict = None,
 ):
     """
-    Trim Shapes to only portions inside NERC/State Region to ensure renewables not built outside shape region 
+    Trim Shapes to only portions inside NERC/State Region to ensure renewables
+    not built outside shape region.
     """
     shape_intersect = gdf["geometry"].apply(
         lambda shp: shp.intersects(interconnect_regions.dissolve().iloc[0]["geometry"]),
@@ -250,7 +254,13 @@ def trim_shape_to_interconnect(
     shape_state_intersection = gdf[shape_intersect]
 
     if exclusion_dict is not None and interconnect in exclusion_dict.keys():
-        shape_state_intersection = shape_state_intersection[~(shape_state_intersection.name.str.contains('|'.join(exclusion_dict[interconnect])))]
+        shape_state_intersection = shape_state_intersection[
+            ~(
+                shape_state_intersection.name.str.contains(
+                    "|".join(exclusion_dict[interconnect])
+                )
+            )
+        ]
     return shape_state_intersection
 
 
@@ -283,8 +293,8 @@ def main(snakemake):
             interconnect=interconnect,
             # add_regions=
             # [
-            #     "Baja California", 
-            #     "British Columbia", 
+            #     "Baja California",
+            #     "British Columbia",
             #     "Alberta"
             # ],
         )
@@ -344,11 +354,13 @@ def main(snakemake):
     # Load & Trim balancing authority shapes
     gdf_ba = load_ba_shape(snakemake.input.onshore_shapes)
     ba_exclusion = {
-        'western': ['MISO', 'SPP'],
-        'texas':['MISO', 'SPP', 'EPE'],
-        'eastern':['PNM', 'EPE', 'PSCO', 'WACM', 'ERCO', 'NWMT'],
-        }
-    ba_states = trim_shape_to_interconnect(gdf_ba, interconnect_regions, interconnect, ba_exclusion)
+        "western": ["MISO", "SPP"],
+        "texas": ["MISO", "SPP", "EPE"],
+        "eastern": ["PNM", "EPE", "PSCO", "WACM", "ERCO", "NWMT"],
+    }
+    ba_states = trim_shape_to_interconnect(
+        gdf_ba, interconnect_regions, interconnect, ba_exclusion
+    )
 
     # Save BA shapes
     gdf_ba_states = ba_states.copy()
@@ -358,12 +370,14 @@ def main(snakemake):
     # Load, Trim, Save REeDs Shapes
     gdf_reeds = load_reeds_shape(snakemake.input.reeds_shapes)
     reeds_exclusion = {
-        'western': ['p36', 'p38', 'p32', 'p39', 'p52', 'p49', 'p48', 'p47'],
-        'eastern': ['p19', 'p34', 'p32', 'p31', 'p18'],
-        'texas' : ['p31', 'p59', 'p50', 'p85', 'p58', 'p57', 'p66', 'p47','p48']
-        }
+        "western": ["p36", "p38", "p32", "p39", "p52", "p49", "p48", "p47"],
+        "eastern": ["p19", "p34", "p32", "p31", "p18"],
+        "texas": ["p31", "p59", "p50", "p85", "p58", "p57", "p66", "p47", "p48"],
+    }
 
-    gdf_reeds = trim_shape_to_interconnect(gdf_reeds, interconnect_regions, interconnect, reeds_exclusion)
+    gdf_reeds = trim_shape_to_interconnect(
+        gdf_reeds, interconnect_regions, interconnect, reeds_exclusion
+    )
     gdf_reeds.to_file(snakemake.output.reeds_shapes)
 
     # Load and build offshore shapes
@@ -411,7 +425,7 @@ if __name__ == "__main__":
     logger = logging.getLogger(__name__)
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
-        snakemake = mock_snakemake("build_shapes", interconnect="western")
+
+        snakemake = mock_snakemake("build_shapes", interconnect="eastern")
     configure_logging(snakemake)
     main(snakemake)
-

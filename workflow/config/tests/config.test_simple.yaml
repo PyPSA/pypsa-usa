@@ -10,7 +10,7 @@ run:
 
 # docs :
 scenario:
-  interconnect: [texas] #"usa|texas|western|eastern"
+  interconnect: [eastern] #"usa|texas|western|eastern"
   clusters: [20]
   opts: [Co2L1.0-6H-RCo2L-SAFER-RPS]
   ll: [v1.0]

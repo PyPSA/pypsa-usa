@@ -133,6 +133,61 @@ rule retrieve_eia_data:
         "../scripts/retrieve_eia_data.py"
 
 
+RESSTOCK_FILES = [
+    "mobile_home",
+    "multi-family_with_2_-_4_units",
+    "multi-family_with_5plus_units",
+    "single-family_attached",
+    "single-family_detached",
+]
+
+COMSTOCK_FILES = [
+    "fullservicerestaurant",
+    "hospital",
+    "largehotel",
+    "largeoffice",
+    "mediumoffice",
+    "outpatient",
+    "primaryschool",
+    "quickservicerestaurant",
+    "retailstandalone",
+    "retailstripmall",
+    "secondaryschool",
+    "smallhotel",
+    "smalloffice",
+    "warehouse",
+]
+
+# need seperate rules cause cant access params in output
+# https://github.com/snakemake/snakemake/issues/1122
+
+
+rule retrieve_res_eulp:
+    log:
+        "logs/retrieve/retrieve_res_eulp/{state}.log",
+    params:
+        stock="res",
+        profiles=RESSTOCK_FILES,
+        save_dir=DATA + "eulp/res/",
+    output:
+        expand(DATA + "eulp/res/{{state}}/{profile}.csv", profile=RESSTOCK_FILES),
+    script:
+        "../scripts/retrieve_eulp.py"
+
+
+rule retrieve_com_eulp:
+    log:
+        "logs/retrieve/retrieve_com_eulp/{state}.log",
+    params:
+        stock="com",
+        profiles=COMSTOCK_FILES,
+        save_dir=DATA + "eulp/com/",
+    output:
+        expand(DATA + "eulp/com/{{state}}/{profile}.csv", profile=COMSTOCK_FILES),
+    script:
+        "../scripts/retrieve_eulp.py"
+
+
 rule retrieve_ship_raster:
     input:
         HTTP.remote(

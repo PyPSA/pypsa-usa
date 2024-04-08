@@ -154,7 +154,6 @@ Documentation of the configuration file ``config/config.yaml`` at
 
 - ``resources/costs.csv``
 
-
 (retrieve-caiso-data)=
 ## Rule `retrieve_caiso_data`
 ```{eval-rst}

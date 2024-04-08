@@ -1,10 +1,3 @@
-# SPDX-FileCopyrightText: : 2017-2023 The PyPSA-Eur Authors
-#
-# SPDX-License-Identifier: MIT
-
-# coding: utf-8
-
-# ADAPTED FROM PyPSA-Eur for PyPSA-USA
 """
 Creates networks clustered to ``{cluster}`` number of zones with aggregated
 buses, generators and transmission corridors.
@@ -29,7 +22,7 @@ Relevant Settings
 
 .. seealso::
     Documentation of the configuration file ``config/config.yaml`` at
-    :ref:`toplevel_cf`, :ref:`renewable_cf`, :ref:`solving_cf`, :ref:`lines_cf`
+    :ref:`renewable_cf`, :ref:`solving_cf`, :ref:`lines_cf`
 
 Inputs
 ------
@@ -44,21 +37,10 @@ Outputs
 -------
 
 - ``resources/regions_onshore_elec_s{simpl}_{clusters}.geojson``:
-
-    .. image:: img/regions_onshore_elec_s_X.png
-        :scale: 33 %
-
 - ``resources/regions_offshore_elec_s{simpl}_{clusters}.geojson``:
-
-    .. image:: img/regions_offshore_elec_s_X.png
-        :scale: 33 %
-
 - ``resources/busmap_elec_s{simpl}_{clusters}.csv``: Mapping of buses from ``networks/elec_s{simpl}.nc`` to ``networks/elec_s{simpl}_{clusters}.nc``;
 - ``resources/linemap_elec_s{simpl}_{clusters}.csv``: Mapping of lines from ``networks/elec_s{simpl}.nc`` to ``networks/elec_s{simpl}_{clusters}.nc``;
 - ``networks/elec_s{simpl}_{clusters}.nc``:
-
-    .. image:: img/elec_s_X.png
-        :scale: 40  %
 
 Description
 -----------
@@ -97,31 +79,12 @@ Description
     The rule :mod:`cluster_networks` runs
     for all ``scenario`` s in the configuration file
     the rule :mod:`cluster_network`.
-
-Exemplary unsolved network clustered to 512 nodes:
-
-.. image:: img/elec_s_512.png
-    :scale: 40  %
-    :align: center
-
-Exemplary unsolved network clustered to 256 nodes:
-
-.. image:: img/elec_s_256.png
-    :scale: 40  %
-    :align: center
-
-Exemplary unsolved network clustered to 128 nodes:
-
-.. image:: img/elec_s_128.png
-    :scale: 40  %
-    :align: center
-
-Exemplary unsolved network clustered to 37 nodes:
-
-.. image:: img/elec_s_37.png
-    :scale: 40  %
-    :align: center
 """
+# SPDX-FileCopyrightText: : 2017-2023 The PyPSA-Eur Authors
+#
+# SPDX-License-Identifier: MIT
+# coding: utf-8
+# ADAPTED FROM PyPSA-Eur for PyPSA-USA
 
 import logging
 import warnings
@@ -484,7 +447,9 @@ if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
 
-        snakemake = mock_snakemake("cluster_network", simpl="", clusters="45", interconnect='eastern')
+        snakemake = mock_snakemake(
+            "cluster_network", simpl="", clusters="45", interconnect="eastern"
+        )
     configure_logging(snakemake)
 
     params = snakemake.params

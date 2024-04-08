@@ -57,7 +57,7 @@ FIGURES_VALIDATE = [
     "production_deviation_bar.pdf",
     "val_bar_regional_emissions.pdf",
     "val_generator_data_panel.pdf",
-    #"val_heatmap_curtailment.pdf",
+    # "val_heatmap_curtailment.pdf",
     "val_heatmap_capacity_factor.pdf",
     "val_box_region_lmps.pdf",
     "val_map_load_shedding.pdf",
@@ -80,7 +80,9 @@ wildcard_constraints:
     scope="urban|rural|total",
     sector="([EG]-)*[EG]",
 
+
 # -------------------------- Config and Subworkflows ------------------------- #
+
 
 # Merge subworkflow configs and main config
 configfile: "config/config.default.yaml"
@@ -180,8 +182,6 @@ def sector_figures(wildcards):
 
 
 def validation_figures(wildcards):
-    print(config["run"])
-    print(config["run"]["validation"])
     if config["run"]["validation"]:
         return expand(
             RESULTS
