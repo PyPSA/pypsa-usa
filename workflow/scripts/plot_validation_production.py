@@ -76,7 +76,8 @@ def plot_regional_timeseries_comparison(
 ):
     """ """
     Path.mkdir(
-        Path(snakemake.output[0]).parents[0] / "regional_timeseries", exist_ok=True
+        Path(snakemake.output[0]).parents[0] / "regional_timeseries",
+        exist_ok=True,
     )
     regions = n.buses.country.unique()
     regions_clean = [ba.split("-")[0] for ba in regions]
@@ -145,7 +146,10 @@ def plot_timeseries_comparison(
             optimized[carrier] = 0
     diff = (optimized - historic).fillna(0).resample("1D").mean()
     diff.clip(lower=0).plot.area(
-        ax=axes[2], title=r"$\Delta$ (Optimized - Historic)", legend=False, **kwargs
+        ax=axes[2],
+        title=r"$\Delta$ (Optimized - Historic)",
+        legend=False,
+        **kwargs,
     )
     diff.clip(upper=0).plot.area(ax=axes[2], **kwargs, legend=False)
 
@@ -197,7 +201,8 @@ def plot_regional_bar_production_comparison(
 ):
     """ """
     Path.mkdir(
-        Path(snakemake.output[0]).parents[0] / "regional_bar_production", exist_ok=True
+        Path(snakemake.output[0]).parents[0] / "regional_bar_production",
+        exist_ok=True,
     )
     regions = n.buses.country.unique()
     regions_clean = [ba.split("-")[0] for ba in regions]
@@ -241,7 +246,7 @@ def plot_regional_bar_production_comparison(
 
     plt.tight_layout()
     fig.savefig(
-        Path(snakemake.output[0]).parents[0] / "production_deviation_by_region.png"
+        Path(snakemake.output[0]).parents[0] / "production_deviation_by_region.png",
     )
 
 

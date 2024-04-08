@@ -660,7 +660,7 @@ def main(snakemake):
     state_shape = state_shape.rename(columns={"name": "state"})
     na_shape = load_na_shapes(countries=["US"]).rename(columns={"name": "full_states"})
     reeds_shape = gpd.read_file(snakemake.input["reeds_shapes"]).rename(
-        columns={"name": "reeds_zone"}
+        columns={"name": "reeds_zone"},
     )
 
     # assign ba, state, and country to each bus

@@ -80,6 +80,7 @@ Description
     for all ``scenario`` s in the configuration file
     the rule :mod:`cluster_network`.
 """
+
 # SPDX-FileCopyrightText: : 2017-2023 The PyPSA-Eur Authors
 #
 # SPDX-License-Identifier: MIT
@@ -448,7 +449,10 @@ if __name__ == "__main__":
         from _helpers import mock_snakemake
 
         snakemake = mock_snakemake(
-            "cluster_network", simpl="", clusters="45", interconnect="eastern"
+            "cluster_network",
+            simpl="",
+            clusters="45",
+            interconnect="eastern",
         )
     configure_logging(snakemake)
 

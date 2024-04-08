@@ -1030,10 +1030,12 @@ def load_powerplants_eia(
     # Set Costs
     plants["heat_rate"] = plants.pop("ads_avg_hr")
     plants = add_missing_fuel_cost(
-        plants, snakemake.input.fuel_costs
+        plants,
+        snakemake.input.fuel_costs,
     )  # Only used for plants that don't have temporal data
     plants = add_missing_heat_rates(
-        plants, snakemake.input.fuel_costs
+        plants,
+        snakemake.input.fuel_costs,
     )  # Only used for plants that not included in ADS data
     plants["marginal_cost"] = (
         plants.heat_rate * plants.fuel_cost
@@ -1044,7 +1046,7 @@ def load_powerplants_eia(
     # plants.loc[plants.vom_costs.isna(),'vom_costs'] = plants.loc[plants.vom_costs.isna(),'carrier'].map(avg_prime_move_vom.vom_costs)
 
     plants["start_up_cost"] = plants["ads_startup_cost_fixed$"].fillna(
-        0
+        0,
     ) + +plants.ads_startfuelmmbtu.fillna(0) * plants.fuel_cost.fillna(0)
 
     plants["efficiency"] = 1 / (
@@ -1065,10 +1067,12 @@ def load_powerplants_eia(
     )
     # fill missing ramp rates with average ramp rates of prime movers
     plants.loc[plants.ramp_limit_up.isna(), "ramp_limit_up"] = plants.loc[
-        plants.ramp_limit_up.isna(), "carrier"
+        plants.ramp_limit_up.isna(),
+        "carrier",
     ].map(avg_prime_mover_ramp_rates.ramp_limit_up)
     plants.loc[plants.ramp_limit_down.isna(), "ramp_limit_down"] = plants.loc[
-        plants.ramp_limit_down.isna(), "carrier"
+        plants.ramp_limit_down.isna(),
+        "carrier",
     ].map(avg_prime_mover_ramp_rates.ramp_limit_down)
 
     # Timeline

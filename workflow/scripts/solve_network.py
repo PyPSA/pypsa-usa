@@ -462,7 +462,8 @@ def add_interface_limits(n, sns, config):
         ]
 
         lhs = lines_s.loc[:, interface_lines_pos.index].sum(dims="Line") - lines_s.loc[
-            :, interface_lines_neg.index
+            :,
+            interface_lines_neg.index,
         ].sum(dims="Line")
 
         rhs_pos = interface.MW_f0

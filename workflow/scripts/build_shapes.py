@@ -257,7 +257,7 @@ def trim_shape_to_interconnect(
         shape_state_intersection = shape_state_intersection[
             ~(
                 shape_state_intersection.name.str.contains(
-                    "|".join(exclusion_dict[interconnect])
+                    "|".join(exclusion_dict[interconnect]),
                 )
             )
         ]
@@ -359,7 +359,10 @@ def main(snakemake):
         "eastern": ["PNM", "EPE", "PSCO", "WACM", "ERCO", "NWMT"],
     }
     ba_states = trim_shape_to_interconnect(
-        gdf_ba, interconnect_regions, interconnect, ba_exclusion
+        gdf_ba,
+        interconnect_regions,
+        interconnect,
+        ba_exclusion,
     )
 
     # Save BA shapes
@@ -376,7 +379,10 @@ def main(snakemake):
     }
 
     gdf_reeds = trim_shape_to_interconnect(
-        gdf_reeds, interconnect_regions, interconnect, reeds_exclusion
+        gdf_reeds,
+        interconnect_regions,
+        interconnect,
+        reeds_exclusion,
     )
     gdf_reeds.to_file(snakemake.output.reeds_shapes)
 
