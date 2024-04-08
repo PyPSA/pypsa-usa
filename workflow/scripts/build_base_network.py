@@ -95,6 +95,8 @@ def add_buses_from_file(
         balancing_area=buses.balancing_area,
         state=buses.state,
         country=buses.country,
+        reeds_zone=buses.reeds_zone,
+        reeds_ba=buses.reeds_ba,
         interconnect=buses.interconnect,
         x=buses.lon,
         y=buses.lat,
@@ -206,7 +208,7 @@ def assign_bus_location(buses: pd.DataFrame, buslocs: pd.DataFrame) -> gpd.GeoDa
 def map_bus_to_region(
     buses: gpd.GeoDataFrame,
     shape: gpd.GeoDataFrame,
-    name: str,
+    names: str,
 ) -> gpd.GeoDataFrame:
     """
     Maps a bus to a geographic region.
@@ -217,7 +219,8 @@ def map_bus_to_region(
         name: str
             column name in shape to merge
     """
-    shape_filtered = shape[[name, "geometry"]]
+    names.append("geometry")
+    shape_filtered = shape[names]
     return gpd.sjoin(buses, shape_filtered, how="left").drop(columns=["index_right"])
 
 
@@ -347,8 +350,8 @@ def identify_osw_poi(n: pypsa.Network) -> pypsa.Network:
     return n
 
 
-def match_osw_to_poi(buses_to_match_to, missing_buses):
-    "Match offshore buses to their nearest POI bus"
+def match_missing_buses(buses_to_match_to, missing_buses):
+    "Match buses missing region assignment to their nearest bus"
     missing_buses = missing_buses.copy()
     missing_buses["bus_assignment"] = None
 
@@ -377,7 +380,7 @@ def build_offshore_transmission_configuration(n: pypsa.Network) -> pypsa.Network
     "Builds offshore transmission configurations connecting offshore buses to the POIs onshore."
     poi_buses = n.buses.loc[n.buses.poi_sub]  # identify the buses at the POI
     highest_voltage_buses = poi_buses.loc[poi_buses.groupby("sub_id")["v_nom"].idxmax()]
-    offshore_buses = match_osw_to_poi(
+    offshore_buses = match_missing_buses(
         highest_voltage_buses,
         n.buses.loc[n.buses.substation_off],
     )  # match offshore buses to POI
@@ -403,6 +406,12 @@ def build_offshore_transmission_configuration(n: pypsa.Network) -> pypsa.Network
     n.buses.loc[offshore_buses.index, "interconnect"] = n.buses.loc[
         offshore_buses.bus_assignment
     ].interconnect.values
+    n.buses.loc[offshore_buses.index, "reeds_zone"] = n.buses.loc[
+        offshore_buses.bus_assignment
+    ].reeds_zone.values
+    n.buses.loc[offshore_buses.index, "reeds_ba"] = n.buses.loc[
+        offshore_buses.bus_assignment
+    ].reeds_ba.values
 
     # add onshore poi buses @230kV
     n.madd(
@@ -483,10 +492,17 @@ def assign_missing_state_regions(gdf_bus: gpd.GeoDataFrame):
     )
 
     missing = buses.loc[buses.full_states.isna()]
+    if missing.empty:
+        return gdf_bus
     buses = buses.loc[~buses.full_states.isna()]
     buses = buses.loc[~buses.full_states.isin(["Offshore"])]
-    missing = match_osw_to_poi(buses, missing)
-    missing.full_states = buses.loc[missing.bus_assignment].full_states.values
+    missing = match_missing_buses(buses, missing)
+
+    # check if error western / texas. can make this a function
+    missing = missing.reset_index().drop_duplicates("Bus").set_index("Bus")
+    buses = buses.reset_index().drop_duplicates("Bus").set_index("Bus")
+
+    missing.full_states = buses.loc[missing.bus_assignment.values].full_states.values
 
     buses = (
         buses.reset_index()
@@ -511,39 +527,37 @@ def assign_missing_states_countries(n: pypsa.Network):
     """
     buses = n.buses.copy()
     missing = buses.loc[
-        buses.state.isna() | buses.country.isna() | buses.balancing_area.isna()
+        (
+            buses.state.isna()
+            | buses.country.isna()
+            | buses.balancing_area.isna()
+            | buses.reeds_zone.isna()
+            | buses.reeds_ba.isna()
+        )
     ]
     buses = buses.loc[
-        ~buses.state.isna() & ~buses.country.isna() & ~buses.balancing_area.isna()
+        (
+            ~buses.state.isna()
+            & ~buses.country.isna()
+            & ~buses.balancing_area.isna()
+            & ~buses.reeds_zone.isna()
+            & ~buses.reeds_ba.isna()
+        )
     ]
     buses = buses.loc[~buses.state.isin(["Offshore"])]
-    missing = match_osw_to_poi(buses, missing)
+    missing = match_missing_buses(buses, missing)
     missing.balancing_area = buses.loc[missing.bus_assignment].balancing_area.values
     missing.state = buses.loc[missing.bus_assignment].state.values
     missing.country = buses.loc[missing.bus_assignment].country.values
+    missing.reeds_zone = buses.loc[missing.bus_assignment].reeds_zone.values
+    missing.reeds_ba = buses.loc[missing.bus_assignment].reeds_ba.values
+
     n.buses.loc[missing.index, "balancing_area"] = missing.balancing_area
     n.buses.loc[missing.index, "state"] = missing.state
     n.buses.loc[missing.index, "country"] = missing.country
+    n.buses.loc[missing.index, "reeds_zone"] = missing.reeds_zone
+    n.buses.loc[missing.index, "reeds_ba"] = missing.reeds_ba
     n.buses.loc[missing.index, "interconnect"] = missing.interconnect
-
-
-# def modify_breakthrough_substations(n: pypsa.Network, interconnect: str):
-#     if interconnect == "Western" or interconnect == "usa":
-#         sub_fixes = {
-#             35017: {"x": -123.0922, "y": 48.5372},
-#             35033: {"x": -122.78053, "y": 48.65694},
-#             37584: {"x": -117.10501, "y": 32.54935},
-#             36116: {"x": -122.4555, "y": 37.8780},
-#             36145: {"x": -122.3121, "y": 37.8211},
-#             39718: {"x": -106.49655, "y": 31.76924},
-#             39731: {"x": -106.3232, "y": 31.7093},
-#             35116: {"x": -122.462, "y": 48.982},
-#             37707: {"x": -115.4550, "y": 32.6866},
-#         }
-#         for i in sub_fixes.keys():
-#             n.buses.loc[n.buses.sub_id == i, "x"] = sub_fixes[i]["x"]
-#             n.buses.loc[n.buses.sub_id == i, "y"] = sub_fixes[i]["y"]
-#     return n
 
 
 def modify_breakthrough_substations(buslocs: pd.DataFrame):
@@ -626,6 +640,13 @@ def main(snakemake):
     df_bus = assign_sub_id(df_bus, buslocs)
     gdf_bus = assign_bus_location(df_bus, buslocs)
 
+    # test dropping duplicate bus ids earlier
+    gdf_bus = (
+        gdf_bus.reset_index()
+        .drop_duplicates(subset="bus_id", keep="first")
+        .set_index("bus_id")
+    )
+
     # balancing authority shape
     ba_region_shapes = gpd.read_file(snakemake.input["onshore_shapes"])
     offshore_shapes = gpd.read_file(snakemake.input["offshore_shapes"])
@@ -634,16 +655,20 @@ def main(snakemake):
     )
     ba_shape = ba_shape.rename(columns={"name": "balancing_area"})
 
-    # country and state shapes
+    # Load country, state, and REeDs shapes
     state_shape = gpd.read_file(snakemake.input["state_shapes"])
     state_shape = state_shape.rename(columns={"name": "state"})
     na_shape = load_na_shapes(countries=["US"]).rename(columns={"name": "full_states"})
+    reeds_shape = gpd.read_file(snakemake.input["reeds_shapes"]).rename(
+        columns={"name": "reeds_zone"},
+    )
 
     # assign ba, state, and country to each bus
-    gdf_bus = map_bus_to_region(gdf_bus, na_shape, "full_states")
-    gdf_bus = map_bus_to_region(gdf_bus, ba_shape, "balancing_area")
-    gdf_bus = map_bus_to_region(gdf_bus, state_shape, "state")
-    gdf_bus = map_bus_to_region(gdf_bus, state_shape, "country")
+    gdf_bus = map_bus_to_region(gdf_bus, na_shape, ["full_states"])
+    gdf_bus = map_bus_to_region(gdf_bus, ba_shape, ["balancing_area"])
+    gdf_bus = map_bus_to_region(gdf_bus, state_shape, ["state"])
+    gdf_bus = map_bus_to_region(gdf_bus, state_shape, ["country"])
+    gdf_bus = map_bus_to_region(gdf_bus, reeds_shape, ["reeds_zone", "reeds_ba"])
 
     # assign load allocation factors to buses for state level dissagregation
     gdf_bus = assign_missing_state_regions(gdf_bus)
@@ -666,7 +691,7 @@ def main(snakemake):
 
     # identify offshore points of interconnection, and remove unncess components from BE network
     n = identify_osw_poi(n)
-    if interconnect == "Texas":
+    if interconnect == "Texas" or interconnect == "usa":
         n = assign_texas_poi(n)
     n = remove_breakthrough_offshore(n)
 
@@ -756,6 +781,6 @@ if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
 
-        snakemake = mock_snakemake("build_base_network", interconnect="western")
+        snakemake = mock_snakemake("build_base_network", interconnect="usa")
     configure_logging(snakemake)
     main(snakemake)

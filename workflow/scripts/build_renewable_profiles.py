@@ -181,8 +181,8 @@ if __name__ == "__main__":
 
         snakemake = mock_snakemake(
             "build_renewable_profiles",
-            technology="onwind",
-            interconnect="western",
+            technology="solar",
+            interconnect="eastern",
         )
     configure_logging(snakemake)
 
@@ -293,15 +293,14 @@ if __name__ == "__main__":
 
     # excluder.plot_shape_availability(regions)
 
+    logger.info("Calculate landuse availability...")
+    start = time.time()
+
     kwargs = dict(nprocesses=nprocesses, disable_progressbar=noprogress)
-    if noprogress:
-        logger.info("Calculate landuse availabilities...")
-        start = time.time()
-        availability = cutout.availabilitymatrix(regions, excluder, **kwargs)
-        duration = time.time() - start
-        logger.info(f"Completed availability calculation ({duration:2.2f}s)")
-    else:
-        availability = cutout.availabilitymatrix(regions, excluder, **kwargs)
+    availability = cutout.availabilitymatrix(regions, excluder, **kwargs)
+
+    duration = time.time() - start
+    logger.info(f"Completed landuse availability calculation ({duration:2.2f}s)")
 
     area = cutout.grid.to_crs("ESRI:54009").area / 1e6
     area = xr.DataArray(
