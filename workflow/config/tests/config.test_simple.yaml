@@ -10,8 +10,8 @@ run:
 
 # docs :
 scenario:
-  interconnect: [eastern] #"usa|texas|western|eastern"
-  clusters: [20]
+  interconnect: [western, texas, eastern] #"usa|texas|western|eastern"
+  clusters: [50]
   opts: [Co2L1.0-6H-RCo2L-SAFER-RPS]
   ll: [v1.0]
   scope: "total" # "urban", "rural", or "total"
@@ -252,6 +252,9 @@ clustering:
       committable: any
       ramp_limit_up: max
       ramp_limit_down: max
+      vom_cost: mean
+      fuel_cost: mean
+      heat_rate: mean
   temporal:
     resolution_elec: false
     resolution_sector: false

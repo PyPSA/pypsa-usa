@@ -7,7 +7,7 @@
 PyPSA-USA is an open-source power systems model of the bulk transmission systems in the United States. This workflow draws from the work of [pypsa-eur](https://pypsa-eur.readthedocs.io/en/latest/index.html) to build a highly configurable power systems model that can be used for capacity expansion modeling, production cost simulation, and power flow analysis.
 
 Example 500 Node Western Interconnection Network:
-![pypsa-usa Base Network](https://pypsa-usa.readthedocs.io/en/latest/_images/PyPSA-USA_network.jpg)
+![pypsa-usa Base Network](https://github.com/PyPSA/pypsa-usa/blob/0fe788397238b14f07857a9748aa86c7781bfa27/docs/source/_static/PyPSA-USA_network.png)
 
 # Contributing
 

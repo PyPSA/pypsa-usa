@@ -288,6 +288,7 @@ clustering:
       ramp_limit_down: max
       vom_cost: mean
       fuel_cost: mean
+      heat_rate: mean
   temporal:
     resolution_elec: false
     resolution_sector: false

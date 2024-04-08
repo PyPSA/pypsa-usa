@@ -10,7 +10,7 @@ run:
 
 # docs :
 scenario:
-  interconnect: ['usa'] #"usa|texas|western|eastern"
+  interconnect: [western] #"usa|texas|western|eastern"
   clusters: [150]
   opts: [Ep-Co2L0.2]
   ll: [v1.0]
@@ -255,6 +255,9 @@ clustering:
       committable: any
       ramp_limit_up: max
       ramp_limit_down: max
+      vom_cost: mean
+      fuel_cost: mean
+      heat_rate: mean
   temporal:
     resolution_elec: false
     resolution_sector: false

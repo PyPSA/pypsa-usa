@@ -1204,11 +1204,11 @@ if __name__ == "__main__":
         **snakemake.wildcards,
     )
 
-    if snakemake.wildcards["interconnect"] == "western":
-        # California Emissions
-        plot_california_emissions(
-            n,
-            Path(snakemake.output["region_lmps.pdf"]).parents[0]
-            / "california_emissions.png",
-            **snakemake.wildcards,
-        )
+    # if snakemake.wildcards["interconnect"] == "western":
+    #     # California Emissions
+    #     plot_california_emissions(
+    #         n,
+    #         Path(snakemake.output["region_lmps.pdf"]).parents[0]
+    #         / "california_emissions.png",
+    #         **snakemake.wildcards,
+    #     )

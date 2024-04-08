@@ -1013,9 +1013,6 @@ def load_powerplants_eia(
     if (interconnect is not None) & (interconnect != "usa"):
         plants["interconnection"] = plants["nerc_region"].map(const.NERC_REGION_MAPPER)
         plants = plants[plants.interconnection == interconnect]
-    # apply mappings if required
-    if carrier_mapper:
-        plants["carrier"] = plants.tech_type.map(carrier_mapper)
 
     plants["generator_name"] = (
         plants.index.astype(str)
