@@ -299,16 +299,16 @@ def get_generator_marginal_costs(
 
 def get_fuel_costs(n: pypsa.Network) -> pd.DataFrame:
     """
-    Gets fuel costs per generator, bus, and carrier.
+    Gets fuel costs per generator, bus, and carrier. Units are $/MWh
     """
 
     # approximates for 2030
     fixed_voms = {
-        "coal": 3.5 * constants.EUR_2_USD,
-        "oil": 6 * constants.EUR_2_USD,
-        "CCGT": 4.2 * constants.EUR_2_USD,
-        "OCGT": 4.5 * constants.EUR_2_USD,
-        "nuclear": 3.5 * constants.EUR_2_USD,
+        "coal": 8.18,
+        "oil": 6.42,
+        "CCGT": 1.84,
+        "OCGT": 6.44,
+        "nuclear": 2.47,
     }
 
     # will return generator level of (fuel_costs / efficiency)
