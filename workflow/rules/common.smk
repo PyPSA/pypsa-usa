@@ -98,11 +98,21 @@ def memory(w):
             factor *= int(m.group(1)) / 8760
             break
     if w.clusters.endswith("m") or w.clusters.endswith("c"):
-        return int(factor * (55000 + 600 * int(w.clusters[:-1])))
+        val = int(factor * (55000 + 600 * int(w.clusters[:-1])))
     elif w.clusters == "all":
-        return int(factor * (18000 + 180 * 4000))
+        val = int(factor * (18000 + 180 * 4000))
     else:
-        return int(factor * (15000 + 195 * int(w.clusters)))
+        val = int(factor * (15000 + 195 * int(w.clusters)))
+    
+    if w.interconnect == 'usa':
+        return int(val * 6)
+    elif w.interconnect == 'eastern':
+        return int(val * 1.5)
+    elif w.interconnect == 'western':
+        return int(val)
+    elif w.interconnect == 'texas':
+        return int(val * 0.5)
+
 
 def interconnect_mem(w):
     mem=20000
