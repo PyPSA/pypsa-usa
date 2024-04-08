@@ -10,8 +10,8 @@ run:
 
 # docs :
 scenario:
-  interconnect: [western] #"usa|texas|western|eastern"
-  clusters: [40]
+  interconnect: [western, texas, eastern] #"usa|texas|western|eastern"
+  clusters: [50]
   opts: [Co2L1.0-6H-RCo2L-SAFER-RPS]
   ll: [v1.0]
   scope: "total" # "urban", "rural", or "total"
