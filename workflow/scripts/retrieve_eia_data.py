@@ -191,7 +191,6 @@ if __name__ == "__main__":
     df = prepare_historical_load_data(PATH_DOWNLOAD)
     df.to_csv(f"{snakemake.output[0]}")
     logger.info("GridEmissions Demand Data bundle downloaded.")
-
     """
     # EIA 6 mo file method
     rootpath = "./"
