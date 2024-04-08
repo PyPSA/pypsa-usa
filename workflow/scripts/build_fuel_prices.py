@@ -113,16 +113,16 @@ def get_coal_prices(sns: pd.date_range, eia_api: str = None) -> pd.DataFrame:
         eia_coal = (
             eia.FuelCosts("coal", "power", sns.year[0], eia_api)
             .get_data()
-            .drop(columns=["series-description", "unit"])
+            .drop(columns=["series-description", "units"])
             .reset_index()
         )
-        eia_coal["price"] = (
-            eia_coal["price"].astype(float) * const.COAL_dol_ton_2_MWHthermal
+        eia_coal["value"] = (
+            eia_coal["value"].astype(float) * const.COAL_dol_ton_2_MWHthermal
         )
         eia_coal = eia_coal.pivot(
             index="period",
             columns="state",
-            values="price",
+            values="value",
         )
         eia_coal = make_hourly(eia_coal)
     else:
