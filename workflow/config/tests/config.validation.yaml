@@ -17,7 +17,7 @@ scenario:
   scope: "total" # "urban", "rural", or "total"
   sector: "" # G
   planning_horizons:
-  # - 2030   #(2030, 2040, 2050)
+  - 2030   #(2030, 2040, 2050)
 
 foresight:  # Only Single Stage Currently
 
@@ -59,14 +59,14 @@ atlite:
       dx: 0.3
       dy: 0.3
     usa:
-      x: [-126, -››65]
+      x: [-126, -65]
       y: [23, 50]
       dx: 0.3
       dy: 0.3
 
 # docs :
 electricity:
-  conventional_carriers: [nuclear, oil, OCGT, CCGT, coal, geothermal] # Choose the conventional plant types to include in network
+  conventional_carriers: [nuclear, oil, OCGT, CCGT, coal, geothermal, biomass] # Choose the conventional plant types to include in network
   renewable_carriers: [onwind, offwind, offwind_floating, solar, hydro] # Choose the renewable plant types to include in network
   voltage_simplified: 230 #Voltage level to simplify network to in rule "simplify network"
   co2limit: 1.4728e+9 # 0.8 * 1.841e+9
@@ -332,7 +332,7 @@ solving:
       parallel: "on"
       random_seed: 123
     gurobi-default:
-      threads: 8
+      threads: 32
       method: 2 # barrier
       crossover: 0
       BarConvTol: 1.e-4

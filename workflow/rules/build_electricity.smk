@@ -22,7 +22,7 @@ rule build_shapes:
         "logs/build_shapes/{interconnect}.log",
     threads: 1
     resources:
-        mem_mb=500,
+        mem_mb=2000,
     script:
         "../scripts/build_shapes.py"
 
@@ -222,6 +222,7 @@ rule build_renewable_profiles:
         "../scripts/build_renewable_profiles.py"
 
 
+
 rule build_demand:
     params:
         planning_horizons=config["scenario"]["planning_horizons"],
@@ -246,9 +247,9 @@ rule build_demand:
         LOGS + "{interconnect}/build_demand.log",
     benchmark:
         BENCHMARKS + "{interconnect}/build_demand"
-    threads: 1
+    threads: 2
     resources:
-        mem_mb=12000,
+        mem_mb= interconnect_mem,
     script:
         "../scripts/build_demand.py"
 
@@ -273,7 +274,7 @@ rule build_fuel_prices:
         BENCHMARKS + "{interconnect}/build_fuel_prices"
     threads: 1
     resources:
-        mem_mb=2000,
+        mem_mb=800,
     script:
         "../scripts/build_fuel_prices.py"
 
@@ -345,7 +346,7 @@ rule add_electricity:
         BENCHMARKS + "{interconnect}/add_electricity"
     threads: 1
     resources:
-        mem_mb=8000,
+        mem_mb=80000,
     script:
         "../scripts/add_electricity.py"
 
@@ -364,7 +365,7 @@ rule simplify_network:
         "logs/simplify_network/{interconnect}/elec_s.log",
     threads: 1
     resources:
-        mem_mb=12000,
+        mem_mb= interconnect_mem_s,
     script:
         "../scripts/simplify_network.py"
 
@@ -405,7 +406,7 @@ rule cluster_network:
         "benchmarks/cluster_network/{interconnect}/elec_s_{clusters}"
     threads: 1
     resources:
-        mem_mb=8000,
+        mem_mb=interconnect_mem_c,
     script:
         "../scripts/cluster_network_eur.py"
 

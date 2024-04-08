@@ -10,9 +10,9 @@ run:
 
 # docs :
 scenario:
-  interconnect: western #"usa|texas|western|eastern"
-  clusters: [100]
-  opts: [RCo2L-SAFER-RPS]
+  interconnect: ['usa'] #"usa|texas|western|eastern"
+  clusters: [150]
+  opts: [Ep-Co2L0.2]
   ll: [v1.0]
   scope: "total" # "urban", "rural", or "total"
   sector: "" # G
@@ -36,7 +36,7 @@ snapshots:
 
 # docs :
 electricity:
-  conventional_carriers: [nuclear, oil, OCGT, CCGT, coal, geothermal] # Choose the conventional plant types to include in network
+  conventional_carriers: [nuclear, oil, OCGT, CCGT, coal, geothermal, biomass] # Choose the conventional plant types to include in network
   renewable_carriers: [onwind, offwind, offwind_floating, solar, hydro] # Choose the renewable plant types to include in network
   voltage_simplified: 230 #Voltage level to simplify network to in rule "simplify network"
   co2limit: 1.4728e+9 # 0.8 * 1.841e+9
@@ -245,9 +245,9 @@ clustering:
     algorithm: kmeans # choose from: [hac, kmeans]
     feature: solar+onwind-time # only for hac. choose from: [solar+onwind-time, solar+onwind-cap, solar-time, solar-cap, solar+offwind-cap] etc.
   cluster_network:
-    algorithm: hac # choose from: [hac, kmeans]
+    algorithm: kmeans # choose from: [hac, kmeans]
     feature: solar+onwind-time
-    aggregation_zones: 'state' # [balancing_area, state, reeds_zone]
+    aggregation_zones: 'reeds_zone' # [balancing_area, state, reeds_zone]
     exclude_carriers: []
     consider_efficiency_classes: false
   aggregation_strategies:
@@ -309,7 +309,7 @@ solving:
     track_iterations: false
     min_iterations: 4
     max_iterations: 6
-    transmission_losses: 0
+    transmission_losses: 2
     linearized_unit_commitment: true
     horizon: 8760
     assign_all_duals: true
