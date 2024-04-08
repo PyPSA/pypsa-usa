@@ -393,7 +393,7 @@ class CoalCosts(DataExtractor):
                     "plantStateDescription": "state",
                     "price-units": "units",
                     "price": "value",
-                }
+                },
             )
             .groupby(by=["state", "units", "year", "quarter"])
             .mean()
