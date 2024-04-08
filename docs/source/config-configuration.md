@@ -1,8 +1,6 @@
 (config)=
 # Configuration
 
-**This workflow is currently only being tested for the `western` and  `texas` interconnection wildcards.**
-
 (network_cf)=
 ## Pre-set Configuration Options
 
@@ -15,13 +13,13 @@ Most users will leave this as `pypsa-usa`.
 | Configuration Options: | PyPSA-USA | ADS2032(lite) |
 |:----------:|:----------:|:----------:|
 | Transmission | TAMU/BE | TAMU/BE |
-| Thermal Generators | EIA860, WECC-ADS, CEC Plexos | WECC-ADS |
+| Thermal Generators | EIA860, WECC-ADS | WECC-ADS |
 | Renewable Time-Series | Atlite | WECC-ADS |
 | Hydro Time-Series | Breakthrough (temp) | WECC-ADS |
 | Demand | EIA930 | WECC-ADS |
 | Historical Demand | 2019-2023 | - |
 | Future Demand | NREL EFS | WECC ADS 2032 |
-| Interconnections Supported | WECC + ERCOT | WECC |
+| Interconnections Supported | western, texas, eastern, usa | WECC |
 | Capital Costs | NREL-ATB | NREL-ATB |
 | Fuel Costs | CAISO/EIA | CAISO/EIA |
 | Purpose[^+] | CEM, PCS | PCS |
@@ -230,13 +228,11 @@ If using the `{opts}` wildcard to reduce emissions, the user must put in a `co2b
 (clustering_cf)=
 ## `clustering`
 
-Minimum Number of clusters:
-```bash
-Eastern: TBD
-Western: 30
-Texas: TBD
-```
+When clustering `aggregation_zones` defines the region boundaries which will be respected through the clustering process; State boarders, balancing authority regions, or REeDs shapes. This feature is important for imposing constraints (`opts`) which are defined over specific regions. For example, the data included in the model on interface transfer capacities are prepared for REeDs shapes but not states and BA regions. Moving forward we plan to use REeDs shapes as our default however we will maintain States and BA regions as well.
 
+Each clustering and interconnection option will have a different number of minimum nodes which can be clustered to, an error will be thrown in `cluster_network` notifying you of that number if you have selected a value too low.
+
+Cleaned and labeled REeDs Shapes are pulled from this github repository: https://github.com/pandaanson/NYU-law-work
 
 ```{eval-rst}
 .. literalinclude:: ../../workflow/config/config.default.yaml
