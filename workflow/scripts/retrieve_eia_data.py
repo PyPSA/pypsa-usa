@@ -192,6 +192,7 @@ if __name__ == "__main__":
     df.to_csv(f"{snakemake.output[0]}")
     logger.info("GridEmissions Demand Data bundle downloaded.")
 
+    """
     # EIA 6 mo file method
     rootpath = "./"
     PATH_DOWNLOAD = Path(f"{rootpath}/data/eia")
@@ -218,3 +219,4 @@ if __name__ == "__main__":
     logger.info("Downloading EIA Data")
     download_csvs(urls, PATH_DOWNLOAD_CSV)
     read_and_concat_EIA_930(PATH_DOWNLOAD_CSV, PATH_DOWNLOAD)
+"""
