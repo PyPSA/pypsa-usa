@@ -407,10 +407,7 @@ rule cluster_network:
     resources:
         mem_mb=interconnect_mem_c,
     script:
-        "../scripts/cluster_network_eur.py"
-
-
-# "../scripts/subworkflows/pypsa-eur/scripts/cluster_network.py"
+        "../scripts/cluster_network.py"
 
 
 rule add_extra_components:

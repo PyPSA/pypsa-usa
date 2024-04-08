@@ -1,10 +1,3 @@
-# SPDX-FileCopyrightText: : 2017-2023 The PyPSA-Eur Authors
-#
-# SPDX-License-Identifier: MIT
-
-# coding: utf-8
-
-# ADAPTED FROM PyPSA-Eur for PyPSA-USA
 """
 Creates networks clustered to ``{cluster}`` number of zones with aggregated
 buses, generators and transmission corridors.
@@ -87,6 +80,11 @@ Description
     for all ``scenario`` s in the configuration file
     the rule :mod:`cluster_network`.
 """
+# SPDX-FileCopyrightText: : 2017-2023 The PyPSA-Eur Authors
+#
+# SPDX-License-Identifier: MIT
+# coding: utf-8
+# ADAPTED FROM PyPSA-Eur for PyPSA-USA
 
 import logging
 import warnings
