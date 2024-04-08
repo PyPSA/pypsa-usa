@@ -11,8 +11,8 @@ run:
 # docs :
 scenario:
   interconnect: ['usa'] #"usa|texas|western|eastern"
-  clusters: [100]
-  opts: [Ep]
+  clusters: [150]
+  opts: [Ep-Co2L0.2]
   ll: [v1.0]
   scope: "total" # "urban", "rural", or "total"
   sector: "" # G
@@ -247,7 +247,7 @@ clustering:
   cluster_network:
     algorithm: kmeans # choose from: [hac, kmeans]
     feature: solar+onwind-time
-    aggregation_zones: 'state' # [balancing_area, state, reeds_zone]
+    aggregation_zones: 'reeds_zone' # [balancing_area, state, reeds_zone]
     exclude_carriers: []
     consider_efficiency_classes: false
   aggregation_strategies:
@@ -309,7 +309,7 @@ solving:
     track_iterations: false
     min_iterations: 4
     max_iterations: 6
-    transmission_losses: 0
+    transmission_losses: 2
     linearized_unit_commitment: true
     horizon: 8760
     assign_all_duals: true

@@ -994,8 +994,7 @@ def load_powerplants_eia(
     plants = pd.read_csv(
         eia_dataset,
     )
-
-    if interconnect:
+    if (interconnect is not None) & (interconnect != "usa"):
         plants["interconnection"] = plants["nerc_region"].map(const.NERC_REGION_MAPPER)
         plants = plants[plants.interconnection == interconnect]
     # apply mappings if required
@@ -1427,6 +1426,6 @@ def main(snakemake):
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
-        snakemake = mock_snakemake("add_electricity", interconnect="western")
+        snakemake = mock_snakemake("add_electricity", interconnect="usa")
     configure_logging(snakemake)
     main(snakemake)

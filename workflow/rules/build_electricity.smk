@@ -249,7 +249,7 @@ rule build_demand:
         BENCHMARKS + "{interconnect}/build_demand"
     threads: 2
     resources:
-        mem_mb=interconnect_mem(w.interconnect, 20000),
+        mem_mb= interconnect_mem,
     script:
         "../scripts/build_demand.py"
 
@@ -347,7 +347,7 @@ rule add_electricity:
         BENCHMARKS + "{interconnect}/add_electricity"
     threads: 1
     resources:
-        mem_mb=8000,
+        mem_mb=80000,
     script:
         "../scripts/add_electricity.py"
 
@@ -364,7 +364,7 @@ rule simplify_network:
         "logs/simplify_network/{interconnect}/elec_s.log",
     threads: 1
     resources:
-        mem_mb=12000,
+        mem_mb= interconnect_mem_s,
     script:
         "../scripts/simplify_network.py"
 
@@ -405,7 +405,7 @@ rule cluster_network:
         "benchmarks/cluster_network/{interconnect}/elec_s_{clusters}"
     threads: 1
     resources:
-        mem_mb=8000,
+        mem_mb=interconnect_mem_c,
     script:
         "../scripts/cluster_network_eur.py"
 

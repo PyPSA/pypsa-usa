@@ -406,6 +406,12 @@ def build_offshore_transmission_configuration(n: pypsa.Network) -> pypsa.Network
     n.buses.loc[offshore_buses.index, "interconnect"] = n.buses.loc[
         offshore_buses.bus_assignment
     ].interconnect.values
+    n.buses.loc[offshore_buses.index, "reeds_zone"] = n.buses.loc[
+        offshore_buses.bus_assignment
+    ].reeds_zone.values
+    n.buses.loc[offshore_buses.index, "reeds_ba"] = n.buses.loc[
+        offshore_buses.bus_assignment
+    ].reeds_ba.values
 
     # add onshore poi buses @230kV
     n.madd(
@@ -679,7 +685,7 @@ def main(snakemake):
 
     # identify offshore points of interconnection, and remove unncess components from BE network
     n = identify_osw_poi(n)
-    if interconnect == "Texas":
+    if interconnect == "Texas" or interconnect == "usa":
         n = assign_texas_poi(n)
     n = remove_breakthrough_offshore(n)
 

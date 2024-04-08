@@ -156,7 +156,7 @@ def normed(x):
 
 
 def weighting_for_country(n, x):
-    conv_carriers = {"OCGT", "CCGT", "PHS", "hydro"}
+    conv_carriers = {"nuclear", "OCGT", "CCGT", "PHS", "hydro", "coal", "biomass"}
     gen = n.generators.loc[n.generators.carrier.isin(conv_carriers)].groupby(
         "bus",
     ).p_nom.sum().reindex(n.buses.index, fill_value=0.0) + n.storage_units.loc[

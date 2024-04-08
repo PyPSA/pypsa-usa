@@ -82,7 +82,8 @@ wildcard_constraints:
 # -------------------------- Config and Subworkflows ------------------------- #
 
 # Merge subworkflow configs and main config
-configfile: "config/tests/config.validation.yaml"
+configfile: "config/config.default.yaml"
+# configfile: "config/tests/config.validation.yaml"
 configfile: "config/config.cluster.yaml"
 configfile: "config/config.osw.yaml"
 configfile: "config/config.plotting.yaml"

@@ -104,14 +104,37 @@ def memory(w):
     else:
         return int(factor * (15000 + 195 * int(w.clusters)))
 
-def interconnect_mem(interconnect, mem):
-    if interconnect == 'usa':
+def interconnect_mem(w):
+    mem=20000
+    if w.interconnect == 'usa':
         return int(mem * 1.5)
-    elif interconnect == 'eastern':
+    elif w.interconnect == 'eastern':
         return int(mem * 1.5)
-    elif interconnect == 'western':
+    elif w.interconnect == 'western':
         return int(mem)
-    elif interconnect == 'texas':
+    elif w.interconnect == 'texas':
+        return int(mem * 0.5)
+
+def interconnect_mem_s(w):
+    mem=20000
+    if w.interconnect == 'usa':
+        return int(mem * 5)
+    elif w.interconnect == 'eastern':
+        return int(mem * 4)
+    elif w.interconnect == 'western':
+        return int(mem)
+    elif w.interconnect == 'texas':
+        return int(mem * 0.5)
+
+def interconnect_mem_c(w):
+    mem=8000
+    if w.interconnect == 'usa':
+        return int(mem * 10)
+    elif w.interconnect == 'eastern':
+        return int(mem * 3)
+    elif w.interconnect == 'western':
+        return int(mem)
+    elif w.interconnect == 'texas':
         return int(mem * 0.5)
 
 def input_custom_extra_functionality(w):
