@@ -8,7 +8,6 @@ rule build_shapes:
     input:
         zone=DATA + "breakthrough_network/base_grid/zone.csv",
         nerc_shapes="repo_data/NERC_Regions/NERC_Regions_Subregions.shp",
-        reeds_shapes="repo_data/Reeds_Shapes/rb_and_ba_areas.shp",
         onshore_shapes="repo_data/BA_shapes_new/Modified_BE_BA_Shapes.shp",
         offshore_shapes_ca_osw="repo_data/BOEM_CA_OSW_GIS/CA_OSW_BOEM_CallAreas.shp",
         offshore_shapes_eez=DATA + "eez/conus_eez.shp",
@@ -17,12 +16,11 @@ rule build_shapes:
         onshore_shapes=RESOURCES + "{interconnect}/onshore_shapes.geojson",
         offshore_shapes=RESOURCES + "{interconnect}/offshore_shapes.geojson",
         state_shapes=RESOURCES + "{interconnect}/state_boundaries.geojson",
-        reeds_shapes=RESOURCES + "{interconnect}/reeds_shapes.geojson",
     log:
         "logs/build_shapes/{interconnect}.log",
     threads: 1
     resources:
-        mem_mb=2000,
+        mem_mb=500,
     script:
         "../scripts/build_shapes.py"
 
@@ -39,7 +37,6 @@ rule build_base_network:
         onshore_shapes=RESOURCES + "{interconnect}/onshore_shapes.geojson",
         offshore_shapes=RESOURCES + "{interconnect}/offshore_shapes.geojson",
         state_shapes=RESOURCES + "{interconnect}/state_boundaries.geojson",
-        reeds_shapes=RESOURCES + "{interconnect}/reeds_shapes.geojson",
     output:
         bus2sub=DATA + "breakthrough_network/base_grid/{interconnect}/bus2sub.csv",
         sub=DATA + "breakthrough_network/base_grid/{interconnect}/sub.csv",
@@ -56,13 +53,10 @@ rule build_base_network:
 
 
 rule build_bus_regions:
-    params:
-        aggregation_zone=config["clustering"]["cluster_network"]["aggregation_zones"],
     input:
         country_shapes=RESOURCES + "{interconnect}/country_shapes.geojson",
         state_shapes=RESOURCES + "{interconnect}/state_boundaries.geojson",
         ba_region_shapes=RESOURCES + "{interconnect}/onshore_shapes.geojson",
-        reeds_shapes=RESOURCES + "{interconnect}/reeds_shapes.geojson",
         offshore_shapes=RESOURCES + "{interconnect}/offshore_shapes.geojson",
         base_network=RESOURCES + "{interconnect}/elec_base_network.nc",
         bus2sub=DATA + "breakthrough_network/base_grid/{interconnect}/bus2sub.csv",
@@ -246,9 +240,9 @@ rule build_demand:
         LOGS + "{interconnect}/build_demand.log",
     benchmark:
         BENCHMARKS + "{interconnect}/build_demand"
-    threads: 2
+    threads: 1
     resources:
-        mem_mb=interconnect_mem,
+        mem_mb=12000,
     script:
         "../scripts/build_demand.py"
 
@@ -273,7 +267,7 @@ rule build_fuel_prices:
         BENCHMARKS + "{interconnect}/build_fuel_prices"
     threads: 1
     resources:
-        mem_mb=800,
+        mem_mb=2000,
     script:
         "../scripts/build_fuel_prices.py"
 
@@ -308,8 +302,8 @@ rule add_electricity:
         base_network=RESOURCES + "{interconnect}/elec_base_network.nc",
         tech_costs=RESOURCES + f"costs_{config['costs']['year']}.csv",
         regions=RESOURCES + "{interconnect}/regions_onshore.geojson",
-        plants_eia="repo_data/plants/eia860_ads_merged.csv",
-        plants_ads="repo_data/plants/ads_plants_locs.csv",
+        plants_eia="repo_data/eia_plants.csv",
+        plants_ads="repo_data/ads_plants_locs.csv",
         plants_breakthrough=DATA + "breakthrough_network/base_grid/plant.csv",
         hydro_breakthrough=DATA + "breakthrough_network/base_grid/hydro.csv",
         wind_breakthrough=DATA + "breakthrough_network/base_grid/wind.csv",
@@ -326,17 +320,9 @@ rule add_electricity:
             else []
         ),
         demand=RESOURCES + "{interconnect}/demand.csv",
-        fuel_costs="repo_data/plants/fuelCost22.csv",
-        ng_electric_power_price=(
-            RESOURCES + "{interconnect}/ng_fuel_prices.csv"
-            if config["conventional"]["dynamic_fuel_price"]
-            else []
-        ),
-        coal_electric_power_price=(
-            RESOURCES + "{interconnect}/coal_fuel_prices.csv"
-            if config["conventional"]["dynamic_fuel_price"]
-            else []
-        ),
+        fuel_costs="repo_data/eia_mappings/fuelCost22.csv",
+        ng_electric_power_price=RESOURCES + "{interconnect}/ng_fuel_prices.csv",
+        coal_electric_power_price=RESOURCES + "{interconnect}/coal_fuel_prices.csv",
     output:
         RESOURCES + "{interconnect}/elec_base_network_l_pp.nc",
     log:
@@ -345,15 +331,13 @@ rule add_electricity:
         BENCHMARKS + "{interconnect}/add_electricity"
     threads: 1
     resources:
-        mem_mb=80000,
+        mem_mb=8000,
     script:
         "../scripts/add_electricity.py"
 
 
 ################# ----------- Rules to Aggregate & Simplify Network ---------- #################
 rule simplify_network:
-    params:
-        aggregation_strategies=config["clustering"].get("aggregation_strategies", {}),
     input:
         bus2sub=DATA + "breakthrough_network/base_grid/{interconnect}/bus2sub.csv",
         sub=DATA + "breakthrough_network/base_grid/{interconnect}/sub.csv",
@@ -364,7 +348,7 @@ rule simplify_network:
         "logs/simplify_network/{interconnect}/elec_s.log",
     threads: 1
     resources:
-        mem_mb=interconnect_mem_s,
+        mem_mb=12000,
     script:
         "../scripts/simplify_network.py"
 
@@ -405,9 +389,12 @@ rule cluster_network:
         "benchmarks/cluster_network/{interconnect}/elec_s_{clusters}"
     threads: 1
     resources:
-        mem_mb=interconnect_mem_c,
+        mem_mb=8000,
     script:
-        "../scripts/cluster_network.py"
+        "../scripts/cluster_network_eur.py"
+
+
+# "../scripts/subworkflows/pypsa-eur/scripts/cluster_network.py"
 
 
 rule add_extra_components:

@@ -90,8 +90,8 @@ def filter_small_polygons_gpd(
 
 
 def load_na_shapes(
-    state_shape: str = "admin_1_states_provinces_lakes",
-    countries: list = ["US"],
+    state_shape: str = "admin_1_states_provinces",
+    countries: list = ["US", "CA", "MX"],
 ) -> gpd.GeoDataFrame:
     """
     Creates geodataframe of north america.
@@ -150,12 +150,6 @@ def load_ba_shape(ba_file: str) -> gpd.GeoDataFrame:
     """
     gdf = gpd.read_file(ba_file)
     gdf = gdf.rename(columns={"BA": "name"})
-    return gdf.to_crs(4326)
-
-
-def load_reeds_shape(reeds_shapes: str) -> gpd.GeoDataFrame:
-    gdf = gpd.read_file(reeds_shapes)
-    gdf = gdf.rename(columns={"rb": "name", "BA_Code": "reeds_ba"})
     return gdf.to_crs(4326)
 
 
@@ -224,7 +218,7 @@ def trim_states_to_interconnect(
             how="difference",
         )
         texas_geometry = gdf_states.loc[gdf_states.name == "Texas", "geometry"]
-        texas_geometry = filter_small_polygons_gpd(texas_geometry, 1e8)
+        texas_geometry = filter_small_polygons_gpd(texas_geometry, 1e9)
         gdf_states.loc[gdf_states.name == "Texas", "geometry"] = (
             texas_geometry.geometry.values
         )
@@ -238,30 +232,26 @@ def trim_states_to_interconnect(
     return gdf_states
 
 
-def trim_shape_to_interconnect(
-    gdf: gpd.GeoDataFrame,
+def trim_ba_to_interconnect(
+    gdf_ba: gpd.GeoDataFrame,
     interconnect_regions: gpd.GeoDataFrame,
     interconnect: str,
-    exclusion_dict: dict = None,
 ):
     """
-    Trim Shapes to only portions inside NERC/State Region to ensure renewables
-    not built outside shape region.
+    Trims balancing authorities to only include portions of balancing
+    authorities in interconnect regions.
     """
-    shape_intersect = gdf["geometry"].apply(
+    ba_states_intersect = gdf_ba["geometry"].apply(
         lambda shp: shp.intersects(interconnect_regions.dissolve().iloc[0]["geometry"]),
     )
-    shape_state_intersection = gdf[shape_intersect]
-
-    if exclusion_dict is not None and interconnect in exclusion_dict.keys():
-        shape_state_intersection = shape_state_intersection[
-            ~(
-                shape_state_intersection.name.str.contains(
-                    "|".join(exclusion_dict[interconnect])
-                )
-            )
-        ]
-    return shape_state_intersection
+    ba_states = gdf_ba[ba_states_intersect]
+    if interconnect == "western":
+        ba_states = ba_states[~(ba_states.name.str.contains("MISO|SPP"))]
+    if interconnect == "texas":
+        ba_states = ba_states[~(ba_states.name.str.contains("MISO|SPP|EPE"))]
+    if interconnect == "eastern":
+        ba_states = ba_states[~(ba_states.name.str.contains("PNM|EPE|PSCO|WACM|ERCO"))]
+    return ba_states
 
 
 def main(snakemake):
@@ -285,18 +275,13 @@ def main(snakemake):
     # Load NERC Shapes
     gdf_nerc = gpd.read_file(snakemake.input.nerc_shapes)
 
-    # Build State Shapes filtered by interconnect
+    # apply interconnect wildcard
     if interconnect == "western":  # filter states that have any portion in interconnect
         gdf_states = filter_shapes(
             data=gdf_na,
             zones=breakthrough_zones,
             interconnect=interconnect,
-            # add_regions=
-            # [
-            #     "Baja California",
-            #     "British Columbia",
-            #     "Alberta"
-            # ],
+            add_regions=["Baja California", "British Columbia", "Alberta"],
         )
     elif interconnect == "texas":
         gdf_states = filter_shapes(
@@ -309,37 +294,37 @@ def main(snakemake):
             data=gdf_na,
             zones=breakthrough_zones,
             interconnect=interconnect,
-            # add_regions=[
-            #     "Saskatchewan",
-            #     "Manitoba",
-            #     "Ontario",
-            #     "Quebec",
-            #     "New Brunswick",
-            #     "Nova Scotia",
-            # ],
+            add_regions=[
+                "Saskatchewan",
+                "Manitoba",
+                "Ontario",
+                "Quebec",
+                "New Brunswick",
+                "Nova Scotia",
+            ],
         )
     else:  # Entire US + MX + CA
         gdf_states = filter_shapes(
             data=gdf_na,
             zones=breakthrough_zones,
             interconnect=interconnect,
-            # add_regions=[
-            #     "Baja California",
-            #     "British Columbia",
-            #     "Alberta",
-            #     "Saskatchewan",
-            #     "Manitoba",
-            #     "Ontario",
-            #     "Quebec",
-            #     "New Brunswick",
-            #     "Nova Scotia",
-            # ],
+            add_regions=[
+                "Baja California",
+                "British Columbia",
+                "Alberta",
+                "Saskatchewan",
+                "Manitoba",
+                "Ontario",
+                "Quebec",
+                "New Brunswick",
+                "Nova Scotia",
+            ],
         )
 
     # Trim gdf_states to only include portions of texas in NERC Interconnect
     gdf_states = trim_states_to_interconnect(gdf_states, gdf_nerc, interconnect)
 
-    # Save NERC Interconnection shapes
+    # save interconnection regions
     interconnect_regions = gpd.GeoDataFrame(
         [[gdf_states.unary_union, "NERC_Interconnect"]],
         columns=["geometry", "name"],
@@ -347,40 +332,21 @@ def main(snakemake):
     interconnect_regions = interconnect_regions.set_crs(GPS_CRS)
     interconnect_regions.to_file(snakemake.output.country_shapes)
 
-    # Save State shapes
+    # save state shapes
     state_boundaries = gdf_states[["name", "country", "geometry"]].set_crs(GPS_CRS)
     state_boundaries.to_file(snakemake.output.state_shapes)
 
-    # Load & Trim balancing authority shapes
+    # Load balancing authority shapes
     gdf_ba = load_ba_shape(snakemake.input.onshore_shapes)
-    ba_exclusion = {
-        "western": ["MISO", "SPP"],
-        "texas": ["MISO", "SPP", "EPE"],
-        "eastern": ["PNM", "EPE", "PSCO", "WACM", "ERCO", "NWMT"],
-    }
-    ba_states = trim_shape_to_interconnect(
-        gdf_ba, interconnect_regions, interconnect, ba_exclusion
-    )
 
-    # Save BA shapes
+    # Only include balancing authorities which have intersection with interconnection filtered states
+    ba_states = trim_ba_to_interconnect(gdf_ba, interconnect_regions, interconnect)
+
     gdf_ba_states = ba_states.copy()
     gdf_ba_states.rename(columns={"name_1": "name"})
     gdf_ba_states.to_file(snakemake.output.onshore_shapes)
 
-    # Load, Trim, Save REeDs Shapes
-    gdf_reeds = load_reeds_shape(snakemake.input.reeds_shapes)
-    reeds_exclusion = {
-        "western": ["p36", "p38", "p32", "p39", "p52", "p49", "p48", "p47"],
-        "eastern": ["p19", "p34", "p32", "p31", "p18"],
-        "texas": ["p31", "p59", "p50", "p85", "p58", "p57", "p66", "p47", "p48"],
-    }
-
-    gdf_reeds = trim_shape_to_interconnect(
-        gdf_reeds, interconnect_regions, interconnect, reeds_exclusion
-    )
-    gdf_reeds.to_file(snakemake.output.reeds_shapes)
-
-    # Load and build offshore shapes
+    # load offshore shapes
     offshore_config = snakemake.params.source_offshore_shapes["use"]
     if offshore_config == "ca_osw":
         logger.info("Building Offshore GIS shapes with CA OSW shapes")
@@ -392,7 +358,7 @@ def main(snakemake):
         logger.error(f"source {offshore_config} is invalid offshore data source")
         offshore = None
 
-    # Filter buffer from shore for Offshore Shapes
+    # filter buffer from shore
     buffer_distance_min = snakemake.params.offwind_params["min_shore_distance"]
     buffer_distance_max = snakemake.params.offwind_params["max_shore_distance"]
 
@@ -426,6 +392,16 @@ if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
 
-        snakemake = mock_snakemake("build_shapes", interconnect="eastern")
+        snakemake = mock_snakemake("build_shapes", interconnect="western")
     configure_logging(snakemake)
     main(snakemake)
+
+# CURRENT IMPLEMENTATION
+# COUNTRY SHAPE = UNION OF STATES THAT ARE CONTAINED IN NERC INTERCONNECT √
+# ONSHORE SHAPE = BA IN STATE SHAPES
+
+# TODO
+# COUNTRY SHAPE = NERC INTERCONNECT SHAPES
+# STATE SHAPE = PORTIONS OF STATES IN NERC INTERCONNECT
+# ONSHORE SHAPE = BA IN STATE SHAPES √
+# OFFSHORE SHAPE = OFFSHORE SHAPES NEAR BA's √

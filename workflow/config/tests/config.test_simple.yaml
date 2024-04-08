@@ -10,8 +10,8 @@ run:
 
 # docs :
 scenario:
-  interconnect: [eastern] #"usa|texas|western|eastern"
-  clusters: [20]
+  interconnect: [western] #"usa|texas|western|eastern"
+  clusters: [30]
   opts: [Co2L1.0-6H-RCo2L-SAFER-RPS]
   ll: [v1.0]
   scope: "total" # "urban", "rural", or "total"
@@ -29,12 +29,12 @@ countries: [US]
 
 snapshots:
   start: "2019-01-01"
-  end: "2019-01-07"
+  end: "2019-01-14"
   inclusive: 'left'
 
 # docs :
 electricity:
-  conventional_carriers: [nuclear, oil, OCGT, CCGT, coal, geothermal, biomass] # Choose the conventional plant types to include in network
+  conventional_carriers: [nuclear, oil, OCGT, CCGT, coal, geothermal] # Choose the conventional plant types to include in network
   renewable_carriers: [onwind, offwind, offwind_floating, solar, hydro] # Choose the renewable plant types to include in network
   voltage_simplified: 230 #Voltage level to simplify network to in rule "simplify network"
   co2limit: 1.4728e+9 # 0.8 * 1.841e+9
@@ -48,8 +48,6 @@ electricity:
   agg_p_nom_limits: 'config/policy_constraints/agg_p_nom_minmax.csv'
   portfolio_standards: 'config/policy_constraints/portfolio_standards.csv'
   SAFE_regional_reservemargins: 'config/policy_constraints/SAFE_regional_prm.csv'
-  transmission_interface_limits: 'config/policy_constraints/transmission_interface_limits.csv'
-
 
   operational_reserve:
     activate: false
@@ -78,7 +76,7 @@ electricity:
 # docs :
 conventional:
   unit_commitment: false
-  dynamic_fuel_price: false
+  dynamic_fuel_price: true
 
 # docs :
 renewable:
@@ -171,7 +169,7 @@ renewable:
 
 # docs :
 lines:
-  types: # remove, not used
+  types: # All temporary values, need to be updated
     115.: "Al/St 240/40 2-bundle 220.0"
     138.: "Al/St 240/40 2-bundle 220.0"
     161.: "Al/St 240/40 2-bundle 220.0"
@@ -183,7 +181,6 @@ lines:
   s_nom_max: .inf
   length_factor: 1.25
   under_construction: 'zero' # 'zero': set capacity to zero, 'remove': remove, 'keep': with full capacity
-  interface_transmission_limits: true
 
 # docs :
 links:
@@ -242,9 +239,9 @@ clustering:
     algorithm: hac # choose from: [hac, kmeans]
     feature: solar+onwind-time # only for hac. choose from: [solar+onwind-time, solar+onwind-cap, solar-time, solar-cap, solar+offwind-cap] etc.
   cluster_network:
-    algorithm: kmeans
+    algorithm: hac
     feature: solar+onwind-time
-    aggregation_zones: 'reeds_zone' # [balancing_area, state, reeds_zone]
+    aggregation_zones: 'state' # [balancing_area, state]
     exclude_carriers: []
     consider_efficiency_classes: false
   aggregation_strategies:
