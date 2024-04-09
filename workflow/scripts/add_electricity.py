@@ -298,91 +298,6 @@ def update_capital_costs(
     n.generators.loc[gen.index] = gen
 
 
-# def update_marginal_costs(
-#     n: pypsa.Network,
-#     carrier: str,
-#     fuel_costs: pd.DataFrame,
-#     vom_cost: float = 0,
-# ):
-#     """
-#     Applies regional and monthly marginal cost data.
-
-#     Arguments
-#     ---------
-#     n: pypsa.Network,
-#     carrier: str,
-#         carrier to apply fuel cost data to (ie. Gas)
-#     fuel_costs: pd.DataFrame,
-#         EIA fuel cost data
-#     vom_cost: float = 0
-#         Additional flat $/MWh cost to add onto the fuel costs
-#     efficiency: float = None
-#         Flat efficiency multiplier to apply to all generators. If not supplied,
-#         the efficiency is looked up at a generator level from the network
-#     """
-
-#     missed = []
-#     for fuel_region_type in ["balancing_area", "state"]:
-
-#         # map generators to fuel_region_type (state or BA)
-#         bus_region_mapper = n.buses.to_dict()[fuel_region_type]
-#         gen = (
-#             n.generators[n.generators.carrier == carrier].copy()
-#             if fuel_region_type == "balancing_area"
-#             else missed
-#         )
-#         gen[f"{fuel_region_type}"] = gen.bus.map(bus_region_mapper)
-#         gen[f"{fuel_region_type}"] = gen[f"{fuel_region_type}"].replace(
-#             {
-#                 "CISO-PGAE": "CISO",
-#                 "CISO-SCE": "CISO",
-#                 "CISO-SDGE": "CISO",
-#                 "CISO-VEA": "CISO",
-#                 "Arizona": "AZPS",
-#                 "NYISO": "NYISO",
-#                 "CAISO": "CAISO",
-#                 "BANC": "BANCSMUD",
-#             },
-#         )
-
-#         missed = gen[~gen[fuel_region_type].isin(fuel_costs.columns.unique())]
-#         gen = gen[
-#             gen[fuel_region_type].isin(fuel_costs.columns.unique())
-#         ]  # Filter for BAs which we have the fuel price data for
-
-#         if not missed.empty:
-#             logger.warning(
-#                 f"BA's missing historical daily fuel costs: {missed[fuel_region_type].unique()}. Using EIA Monthly State Averages.",
-#             )
-
-#         # apply all fuel cost values
-#         dfs = []
-#         # fuel_costs.set_index(fuel_region_type, inplace=True)
-#         for fuel_region in gen[fuel_region_type].unique():
-#             gens_in_region = gen[gen[fuel_region_type] == fuel_region].index.to_list()
-#             dfs.append(
-#                 pd.DataFrame(
-#                     {gen_: fuel_costs[fuel_region] for gen_ in gens_in_region},
-#                 ),
-#             )
-#         if len(dfs) == 0:
-#             continue
-#         df = pd.concat(dfs, axis=1)
-
-#         gen_eff_mapper = n.generators.to_dict()["efficiency"]
-#         df = df.apply(lambda x: x / gen_eff_mapper[x.name], axis=0)
-
-#         # apply fixed rate VOM cost
-#         df += vom_cost
-
-#         # join into exisitng time series marginal costs
-#         df.index = n.snapshots
-#         n.generators_t["marginal_cost"] = n.generators_t["marginal_cost"].join(
-#             df,
-#             how="inner",
-#         )
-
-
 def apply_dynamic_pricing(
     n: pypsa.Network,
     carrier: str,
@@ -433,11 +348,6 @@ def apply_dynamic_pricing(
         marginal_costs,
         how="inner",
     )
-
-        # Update n.generators table with the average fuel cost and vom cost- for analysis
-        n.generators.loc[gen.index, "marginal_cost"] = df.mean().values
-        n.generators.loc[gen.index, "vom_cost"] = vom_cost
-        n.generators.loc[gen.index, "fuel_cost"] = df.mean().values - vom_cost
 
 
 def update_transmission_costs(n, costs, length_factor=1.0):

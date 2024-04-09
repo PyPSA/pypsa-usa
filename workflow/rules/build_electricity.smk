@@ -280,6 +280,16 @@ rule build_fuel_prices:
         "../scripts/build_fuel_prices.py"
 
 
+def dynamic_fuel_price_files(wildcards):
+    if config["conventional"]["dynamic_fuel_price"]:
+        return {
+            "state_ng_fuel_prices":RESOURCES + "{interconnect}/state_ng_power_prices.csv",
+            "state_coal_fuel_prices":RESOURCES + "{interconnect}/state_coal_power_prices.csv",
+            "ba_ng_fuel_prices":RESOURCES + "{interconnect}/ba_ng_power_prices.csv",
+        }
+    else:
+        return {}
+
 rule add_electricity:
     params:
         length_factor=config["lines"]["length_factor"],
@@ -292,6 +302,7 @@ rule add_electricity:
         planning_horizons=config["scenario"]["planning_horizons"],
         eia_api=config["api"]["eia"],
     input:
+        unpack(dynamic_fuel_price_files),
         **{
             f"profile_{tech}": RESOURCES + "{interconnect}" + f"/profile_{tech}.nc"
             for tech in config["electricity"]["renewable_carriers"]
@@ -329,10 +340,9 @@ rule add_electricity:
             else []
         ),
         demand=RESOURCES + "{interconnect}/demand.csv",
-        fuel_costs="repo_data/eia_mappings/fuelCost22.csv",
-        state_ng_fuel_prices=RESOURCES + "{interconnect}/state_ng_power_prices.csv",
-        state_coal_fuel_prices=RESOURCES + "{interconnect}/state_coal_power_prices.csv",
-        ba_ng_fuel_prices=RESOURCES + "{interconnect}/ba_ng_power_prices.csv",
+        fuel_costs="repo_data/plants/fuelCost22.csv",
+
+
     output:
         RESOURCES + "{interconnect}/elec_base_network_l_pp.nc",
     log:
