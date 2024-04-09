@@ -282,7 +282,7 @@ rule add_electricity:
         conventional=config["conventional"],
         costs=config["costs"],
         planning_horizons=config["scenario"]["planning_horizons"],
-        eia_api=config["api"]["eia"]
+        eia_api=config["api"]["eia"],
     input:
         **{
             f"profile_{tech}": RESOURCES + "{interconnect}" + f"/profile_{tech}.nc"
