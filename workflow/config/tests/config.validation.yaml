@@ -11,13 +11,13 @@ run:
 # docs :
 scenario:
   interconnect: [western] #"usa|texas|western|eastern"
-  clusters: [40, 100]
+  clusters: [40]
   opts: [Ep]
   ll: [v1.0]
   scope: "total" # "urban", "rural", or "total"
   sector: "" # G
   planning_horizons:
-  # - 2030   #(2030, 2040, 2050)
+  - 2030   #(2030, 2040, 2050)
 
 foresight:  # Only Single Stage Currently
 
@@ -59,14 +59,14 @@ atlite:
       dx: 0.3
       dy: 0.3
     usa:
-      x: [-126, -››65]
+      x: [-126, -65]
       y: [23, 50]
       dx: 0.3
       dy: 0.3
 
 # docs :
 electricity:
-  conventional_carriers: [nuclear, oil, OCGT, CCGT, coal, geothermal] # Choose the conventional plant types to include in network
+  conventional_carriers: [nuclear, oil, OCGT, CCGT, coal, geothermal, biomass] # Choose the conventional plant types to include in network
   renewable_carriers: [onwind, offwind, offwind_floating, solar, hydro] # Choose the renewable plant types to include in network
   voltage_simplified: 230 #Voltage level to simplify network to in rule "simplify network"
   co2limit: 1.4728e+9 # 0.8 * 1.841e+9
@@ -80,6 +80,8 @@ electricity:
   agg_p_nom_limits: 'config/policy_constraints/agg_p_nom_minmax.csv'
   portfolio_standards: 'config/policy_constraints/portfolio_standards.csv'
   SAFE_regional_reservemargins: 'config/policy_constraints/SAFE_regional_prm.csv'
+  transmission_interface_limits: 'config/policy_constraints/transmission_interface_limits.csv'
+
 
   operational_reserve:
     activate: false
@@ -213,6 +215,8 @@ lines:
   s_nom_max: .inf
   length_factor: 1.25
   under_construction: 'zero' # 'zero': set capacity to zero, 'remove': remove, 'keep': with full capacity
+  interface_transmission_limits: true
+
 
 # docs :
 links:
@@ -274,7 +278,7 @@ clustering:
   cluster_network:
     algorithm: kmeans
     feature: solar+onwind-time
-    aggregation_zones: 'balancing_area' # [balancing_area, state]
+    aggregation_zones: 'balancing_area' # [balancing_area, state, reeds_zone]
     exclude_carriers: []
     consider_efficiency_classes: false
   aggregation_strategies:
@@ -282,6 +286,9 @@ clustering:
       committable: any
       ramp_limit_up: max
       ramp_limit_down: max
+      vom_cost: mean
+      fuel_cost: mean
+      heat_rate: mean
   temporal:
     resolution_elec: false
     resolution_sector: false
@@ -292,7 +299,7 @@ focus_weights:
 solving:
   #tmpdir: "path/to/tmp"
   options:
-    load_shedding: false
+    load_shedding: true
     clip_p_max_pu: 1.e-2
     noisy_costs: true
     skip_iterations: true
@@ -302,7 +309,7 @@ solving:
     track_iterations: false
     min_iterations: 4
     max_iterations: 6
-    transmission_losses: 0
+    transmission_losses: 2
     linearized_unit_commitment: true
     horizon: 8760
     assign_all_duals: true
@@ -326,7 +333,7 @@ solving:
       parallel: "on"
       random_seed: 123
     gurobi-default:
-      threads: 8
+      threads: 32
       method: 2 # barrier
       crossover: 0
       BarConvTol: 1.e-4
