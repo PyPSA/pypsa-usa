@@ -95,7 +95,8 @@ def get_state_coal_power_prices(sns: pd.date_range, eia_api: str) -> pd.DataFram
 
 
 def prepare_caiso_ng_power_prices(
-    caiso_fn: str, sns: pd.DatetimeIndex = None
+    caiso_fn: str,
+    sns: pd.DatetimeIndex = None,
 ) -> pd.DataFrame:
     caiso_ng = pd.read_csv(caiso_fn)
     caiso_ng["PRC"] = caiso_ng["PRC"] * const.NG_Dol_MMBTU_2_MWH
@@ -110,7 +111,9 @@ def prepare_caiso_ng_power_prices(
 
 
 def get_caiso_ng_power_prices(
-    sns: pd.date_range, filepath: str, **kwargs
+    sns: pd.date_range,
+    filepath: str,
+    **kwargs,
 ) -> pd.DataFrame:
 
     # pypsa-usa name: caiso name
@@ -198,6 +201,12 @@ if __name__ == "__main__":
     state_coal_power_prices = state_coal_power_prices.loc[snapshots]
     ba_ng_power_prices = ba_ng_power_prices.loc[snapshots]
 
-    state_ng_power_prices.to_csv(snakemake.output.state_ng_fuel_prices, index_label="snapshot")
-    state_coal_power_prices.to_csv(snakemake.output.state_coal_fuel_prices, index_label="snapshot")
-    ba_ng_power_prices.to_csv(snakemake.output.ba_ng_fuel_prices, index_label="snapshot")
+    state_ng_power_prices.to_csv(
+        snakemake.output.state_ng_fuel_prices, index_label="snapshot"
+    )
+    state_coal_power_prices.to_csv(
+        snakemake.output.state_coal_fuel_prices, index_label="snapshot"
+    )
+    ba_ng_power_prices.to_csv(
+        snakemake.output.ba_ng_fuel_prices, index_label="snapshot"
+    )
