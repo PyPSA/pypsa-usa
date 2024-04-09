@@ -391,7 +391,7 @@ def apply_dynamic_pricing(
     vom: float = 0,
 ):
     """
-    Applies user-supplied dynamic pricing
+    Applies user-supplied dynamic pricing.
 
     Arguments
     ---------

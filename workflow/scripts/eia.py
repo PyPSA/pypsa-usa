@@ -295,7 +295,7 @@ class DataExtractor(ABC):
     @staticmethod
     def _pivot_data(df: pd.DataFrame) -> pd.DataFrame:
         """
-        Pivots data on period and state
+        Pivots data on period and state.
         """
         df = df.reset_index()
         return df.pivot(
@@ -307,7 +307,7 @@ class DataExtractor(ABC):
     @staticmethod
     def _assign_dtypes(df: pd.DataFrame) -> pd.DataFrame:
         return df.astype(
-            {"series-description": str, "value": float, "units": str, "state": str}
+            {"series-description": str, "value": float, "units": str, "state": str},
         )
 
 
