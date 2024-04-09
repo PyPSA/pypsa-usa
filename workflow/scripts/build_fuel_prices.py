@@ -75,19 +75,10 @@ def get_ng_prices(
 
     if eia_api:
         eia_ng = (
-            eia.FuelCosts("gas", "power", sns.year[0], eia_api)
-            .get_data()
-            .drop(columns=["series-description", "units"])
-            .reset_index()
-        )
-        eia_ng["value"] = (
-            eia_ng["value"].astype(float) * 1000 / const.NG_MWH_2_MMCF
+            eia.FuelCosts("gas", "power", sns.year[0], eia_api).get_data(pivot=True)
+            * 1000
+            / const.NG_MWH_2_MMCF
         )  # $/MCF -> $/MWh
-        eia_ng = eia_ng.pivot(
-            index="period",
-            columns="state",
-            values="value",
-        )
         eia_ng = make_hourly(eia_ng)
     else:
         eia_ng = pd.DataFrame()
@@ -111,18 +102,8 @@ def get_coal_prices(sns: pd.date_range, eia_api: str = None) -> pd.DataFrame:
 
     if eia_api:
         eia_coal = (
-            eia.FuelCosts("coal", "power", sns.year[0], eia_api)
-            .get_data()
-            .drop(columns=["series-description", "units"])
-            .reset_index()
-        )
-        eia_coal["value"] = (
-            eia_coal["value"].astype(float) * const.COAL_dol_ton_2_MWHthermal
-        )
-        eia_coal = eia_coal.pivot(
-            index="period",
-            columns="state",
-            values="value",
+            eia.FuelCosts("coal", "power", sns.year[0], eia_api).get_data(pivot=True)
+            * const.COAL_dol_ton_2_MWHthermal
         )
         eia_coal = make_hourly(eia_coal)
     else:
