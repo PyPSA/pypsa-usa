@@ -406,21 +406,31 @@ def apply_dynamic_pricing(
         Additional flat $/MWh cost to add onto the fuel costs
     """
 
-    assert geography.isin(df.columns)
+    assert geography in n.buses.columns
 
-    gens = n.generators[
-        (n.generators.carrier == carrier) & (n.generators[geography].isin(df.columns))
-    ]
+    gens = n.generators.copy()
+    gens[geography] = gens.bus.map(n.buses[geography])
+    gens = gens[(gens.carrier == carrier) & (gens[geography].isin(df.columns))]
 
     eff = n.get_switchable_as_dense("Generator", "efficiency").T
-    eff = eff[eff.index.isin(gens.index)]
+    eff = eff[eff.index.isin(gens.index)].T
+    eff.columns.name = ""
 
-    fuel_cost = gens.div(eff, axis=0)
+    fuel_cost_per_gen = {gen: df[gens.at[gen, geography]] for gen in gens.index}
+    fuel_costs = pd.DataFrame.from_dict(fuel_cost_per_gen)
+    fuel_costs.index = pd.to_datetime(fuel_costs.index)
 
-    fuel_cost = fuel_cost + vom
+    marginal_costs = fuel_costs.div(eff, axis=1)
+    marginal_costs = marginal_costs + vom
 
+    # drop any data that has been assigned at a coarser resolution
+    n.generators_t["marginal_cost"] = n.generators_t["marginal_cost"][
+        [x for x in n.generators_t["marginal_cost"] if x not in marginal_costs]
+    ]
+
+    # assign new marginal costs
     n.generators_t["marginal_cost"] = n.generators_t["marginal_cost"].join(
-        fuel_cost,
+        marginal_costs,
         how="inner",
     )
 
@@ -1429,14 +1439,14 @@ def main(snakemake):
 
         dynamic_fuel_prices = {
             "OCGT": {
-                "state": "ng_electric_power_price_state",
-                "balancing_area": "ng_electric_power_price_ba",  # name of file in snakefile
+                "state": "state_ng_fuel_prices",
+                "balancing_area": "ba_ng_fuel_prices",  # name of file in snakefile
             },
             "CCGT": {
-                "state": "ng_electric_power_price_state",
-                "balancing_area": "ng_electric_power_price_ba",
+                "state": "state_ng_fuel_prices",
+                "balancing_area": "ba_ng_fuel_prices",
             },
-            "coal": {"state": "coal_electric_power_price"},
+            "coal": {"state": "state_coal_fuel_prices"},
         }
 
         # NOTE: Must go from most to least coarse data (ie. state then ba) to apply the
@@ -1451,7 +1461,7 @@ def main(snakemake):
                     continue
                 # if data should exist, try to read it in
                 try:
-                    df = pd.read_csv(snakemake.input[datafile], index_col="timestep")
+                    df = pd.read_csv(snakemake.input[datafile], index_col="snapshot")
                 except KeyError:
                     logger.warning(f"Can not find dynamic price file {datafile}")
                     continue
@@ -1462,8 +1472,8 @@ def main(snakemake):
                     n=n,
                     carrier=carrier,
                     geography=area,
-                    fuel_costs=df,
-                    vom_cost=vom,
+                    df=df,
+                    vom=vom,
                 )
                 logger.info(f"Applied dynamic price data for {carrier} from {datafile}")
 

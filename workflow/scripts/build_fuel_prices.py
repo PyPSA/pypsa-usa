@@ -113,15 +113,29 @@ def get_caiso_ng_power_prices(
     sns: pd.date_range, filepath: str, **kwargs
 ) -> pd.DataFrame:
 
+    # pypsa-usa name: caiso name
+    ba_mapper = {
+        "CISO-PGAE": "CISO",
+        "CISO-SCE": "CISO",
+        "CISO-SDGE": "CISO",
+        "CISO-VEA": "CISO",
+        "Arizona": "AZPS",
+        # "NYISO": "NYISO",
+        # "CAISO": "CAISO",
+        "BANC": "BANCSMUD",
+    }
+
     df = prepare_caiso_ng_power_prices(filepath, sns)
     df = df.pivot(
         index="period",
         columns="balancing_area",
         values="dol_mwh_th",
     )
-    caiso_ng = make_hourly(caiso_ng)
 
-    return df
+    for pypsa_usa_name, caiso_name in ba_mapper.items():
+        df[pypsa_usa_name] = df[caiso_name]
+
+    return make_hourly(df)
 
 
 ###
@@ -165,25 +179,25 @@ if __name__ == "__main__":
     # get any regional specific prices
     # only gas level ba implemented right now, but can be replicated for any
     # energy carrier and any geography (states, reeds, ect.)
-    if not snakemake.inputs.gas_balancing_area:
+    if not snakemake.input.gas_balancing_area:
         ba_ng_power_prices = pd.DataFrame(index=snapshots)
     else:
         ba_data = []
-        for filepath in snakemake.inputs.gas_balancing_area:
+        for filepath in snakemake.input.gas_balancing_area:
             file_name = Path(filepath).stem
 
             assert (
                 file_name in function_mapper
             ), f"Can not find {file_name} in dynamic fuel price mapper"
 
-            ba_data.append(function_mapper[filepath](filepath=filepath, sns=snapshots))
+            ba_data.append(function_mapper[file_name](filepath=filepath, sns=snapshots))
         ba_ng_power_prices = pd.concat(ba_data, axis=1)
 
     # filter all data on snapshots and return
     state_ng_power_prices = state_ng_power_prices.loc[snapshots]
-    state_coal_power_prices = state_ng_power_prices.loc[snapshots]
-    ba_ng_power_prices = state_ng_power_prices.loc[snapshots]
-    
-    state_ng_power_prices.to_csv(snakemake.output.state_ng_fuel_prices)
-    state_coal_power_prices.to_csv(snakemake.output.state_coal_fuel_prices)
-    ba_ng_power_prices.to_csv(snakemake.output.ba_ng_fuel_prices)
+    state_coal_power_prices = state_coal_power_prices.loc[snapshots]
+    ba_ng_power_prices = ba_ng_power_prices.loc[snapshots]
+
+    state_ng_power_prices.to_csv(snakemake.output.state_ng_fuel_prices, index_label="snapshot")
+    state_coal_power_prices.to_csv(snakemake.output.state_coal_fuel_prices, index_label="snapshot")
+    ba_ng_power_prices.to_csv(snakemake.output.ba_ng_fuel_prices, index_label="snapshot")
