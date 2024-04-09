@@ -249,14 +249,13 @@ rule build_demand:
 
 def ba_gas_dynamic_fuel_price_files(wildcards):
     files = []
-    if wildcards.interconnect.isin(["usa", "western"]):
+    if wildcards.interconnect in ("usa", "western"):
         files.append(DATA + "costs/caiso_ng_power_prices.csv")
     return files
 
 rule build_fuel_prices:
     params:
         snapshots=config["snapshots"],
-        fuel_year=config["costs"]["ng_fuel_year"],
         api_eia=config["api"]["eia"],
     input:
         gas_balancing_area = ba_gas_dynamic_fuel_price_files
@@ -325,8 +324,9 @@ rule add_electricity:
         ),
         demand=RESOURCES + "{interconnect}/demand.csv",
         fuel_costs="repo_data/eia_mappings/fuelCost22.csv",
-        ng_electric_power_price=RESOURCES + "{interconnect}/ng_fuel_prices.csv",
-        coal_electric_power_price=RESOURCES + "{interconnect}/coal_fuel_prices.csv",
+        state_ng_fuel_prices=RESOURCES + "{interconnect}/state_ng_power_prices.csv",
+        state_coal_fuel_prices=RESOURCES + "{interconnect}/state_coal_power_prices.csv",
+        ba_ng_fuel_prices=RESOURCES + "{interconnect}/ba_ng_power_prices.csv",
     output:
         RESOURCES + "{interconnect}/elec_base_network_l_pp.nc",
     log:
