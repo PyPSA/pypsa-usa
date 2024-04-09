@@ -239,10 +239,6 @@ rule retrieve_cost_data_usa:
     output:
         nrel_atb=DATA + "costs/nrel_atb.parquet",
         # nrel_atb_transport = DATA + "costs/nrel_atb_transport.xlsx",
-        ng_electric_power_price=DATA + "costs/ng_electric_power_price.csv",
-        ng_industrial_price=DATA + "costs/ng_industrial_price.csv",
-        ng_residential_price=DATA + "costs/ng_commercial_price.csv",
-        ng_commercial_price=DATA + "costs/ng_residential_price.csv",
     params:
         # eia_api_key = config["api"].get("eia", None),
         eia_api_key=None,
