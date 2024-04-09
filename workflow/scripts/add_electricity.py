@@ -303,7 +303,6 @@ def update_marginal_costs(
     carrier: str,
     fuel_costs: pd.DataFrame,
     vom_cost: float = 0,
-    efficiency: float = None,
 ):
     """
     Applies regional and monthly marginal cost data.
@@ -370,12 +369,8 @@ def update_marginal_costs(
             continue
         df = pd.concat(dfs, axis=1)
 
-        # apply efficiency of each generator to know fuel burn rate
-        if not efficiency:
-            gen_eff_mapper = n.generators.to_dict()["efficiency"]
-            df = df.apply(lambda x: x / gen_eff_mapper[x.name], axis=0)
-        else:
-            df = df.div(efficiency)
+        gen_eff_mapper = n.generators.to_dict()["efficiency"]
+        df = df.apply(lambda x: x / gen_eff_mapper[x.name], axis=0)
 
         # apply fixed rate VOM cost
         df += vom_cost
@@ -387,6 +382,33 @@ def update_marginal_costs(
             how="inner",
         )
 
+def apply_dynamic_pricing(
+    n: pypsa.Network,
+    carrier: str,
+    geography: str,
+    df: pd.DataFrame,
+    vom_cost: float = 0,
+):
+    """
+    Applies user-supplied dynamic pricing 
+
+    Arguments
+    ---------
+    n: pypsa.Network,
+    carrier: str,
+        carrier to apply fuel cost data to (ie. Gas)
+    geography: str,
+        column of geography to search over (ie. balancing_area, state, reeds_zone, ...)
+    df: pd.DataFrame,
+        EIA fuel cost data
+    vom_cost: float = 0
+        Additional flat $/MWh cost to add onto the fuel costs
+    """
+    pass
+    
+    
+    
+    
 
 def update_transmission_costs(n, costs, length_factor=1.0):
     # TODO: line length factor of lines is applied to lines and links.
@@ -1389,22 +1411,41 @@ def main(snakemake):
 
     if params.conventional["dynamic_fuel_price"]:
         assert(params.eia_api), f"Must provide EIA API key for dynamic fuel pricing"
-        fuel_costs = {
-            "CCGT": "ng_electric_power_price",
-            "OCGT": "ng_electric_power_price",
-            "coal": "coal_electric_power_price",
+        
+        dynamic_fuel_prices = {
+            "OCGT": {
+                "state": "ng_electric_power_price_state",
+                "balancing_area": "ng_electric_power_price_ba" # name of file in snakefile
+            },
+            "CCGT": {
+                "state": "ng_electric_power_price_state",
+                "balancing_area": "ng_electric_power_price_ba"
+            },
+            "coal": {
+                "state": "coal_electric_power_price"
+            }
         }
-        for carrier, cost_data in fuel_costs.items():
-            fuel_cost_file = snakemake.input[f"{cost_data}"]
-            df_fuel_costs = pd.read_csv(fuel_cost_file)
-            vom = costs.at[carrier, "VOM"]
-
-            update_marginal_costs(
-                n=n,
-                carrier=carrier,
-                fuel_costs=df_fuel_costs,
-                vom_cost=vom,
-            )
+        
+        for carrier, prices in dynamic_fuel_prices.items():
+            for area, datafile in prices.items():
+                try:
+                    df = pd.read_csv(snakemake.input[datafile], index_col="timestep")
+                except KeyError:
+                    logger.warning(f"Can not find dynamic price file {datafile}")
+                    continue
+                    
+                vom = costs.at[carrier, "VOM"]
+                
+                apply_dynamic_pricing(
+                    n=n,
+                    carrier=carrier,
+                    geography=area,
+                    fuel_costs=df,
+                    vom_cost=vom,
+                )
+                
+                logger.info(f"Applied dynamic price data for {carrier} from {datafile}")
+            
 
     # fix p_nom_min for extendable generators
     # The "- 0.001" is just to avoid numerical issues
