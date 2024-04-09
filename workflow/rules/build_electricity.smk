@@ -259,12 +259,13 @@ def ba_gas_dynamic_fuel_price_files(wildcards):
         files.append(DATA + "costs/caiso_ng_power_prices.csv")
     return files
 
+
 rule build_fuel_prices:
     params:
         snapshots=config["snapshots"],
         api_eia=config["api"]["eia"],
     input:
-        gas_balancing_area = ba_gas_dynamic_fuel_price_files
+        gas_balancing_area=ba_gas_dynamic_fuel_price_files,
     output:
         state_ng_fuel_prices=RESOURCES + "{interconnect}/state_ng_power_prices.csv",
         state_coal_fuel_prices=RESOURCES + "{interconnect}/state_coal_power_prices.csv",
