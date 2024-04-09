@@ -119,6 +119,7 @@ if config["network_configuration"] == "ads2032":
 
 DATAFILES_DMD = [
     "EIA_DMD_2018_2024.csv",
+    "EIA_GridEmissions_all_2018_2024.csv",
 ]
 
 
