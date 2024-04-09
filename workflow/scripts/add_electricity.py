@@ -1388,6 +1388,7 @@ def main(snakemake):
         update_capital_costs(n, carrier, costs, df_multiplier, Nyears)
 
     if params.conventional["dynamic_fuel_price"]:
+        assert(params.eia_api), f"Must provide EIA API key for dynamic fuel pricing"
         fuel_costs = {
             "CCGT": "ng_electric_power_price",
             "OCGT": "ng_electric_power_price",
