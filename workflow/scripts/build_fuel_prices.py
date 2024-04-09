@@ -202,11 +202,14 @@ if __name__ == "__main__":
     ba_ng_power_prices = ba_ng_power_prices.loc[snapshots]
 
     state_ng_power_prices.to_csv(
-        snakemake.output.state_ng_fuel_prices, index_label="snapshot"
+        snakemake.output.state_ng_fuel_prices,
+        index_label="snapshot",
     )
     state_coal_power_prices.to_csv(
-        snakemake.output.state_coal_fuel_prices, index_label="snapshot"
+        snakemake.output.state_coal_fuel_prices,
+        index_label="snapshot",
     )
     ba_ng_power_prices.to_csv(
-        snakemake.output.ba_ng_fuel_prices, index_label="snapshot"
+        snakemake.output.ba_ng_fuel_prices,
+        index_label="snapshot",
     )
