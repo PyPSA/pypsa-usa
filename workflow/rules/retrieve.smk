@@ -254,7 +254,7 @@ rule retrieve_caiso_data:
     params:
         fuel_year=config["costs"]["ng_fuel_year"],
     input:
-        fuel_regions="repo_data/wecc_fuelregions.xlsx",
+        fuel_regions="repo_data/plants/wecc_fuelregions.xlsx",
     output:
         fuel_prices=DATA + "costs/caiso_ng_power_prices.csv",
     log:
