@@ -74,10 +74,21 @@ class EiaData(ABC):
         """
         pass
 
-    def get_data(self) -> pd.DataFrame:
+    def get_data(self, pivot: bool = False) -> pd.DataFrame:
         product = self.data_creator()
-        data = product.retrieve_data()
-        return product.format_data(data)
+        df = product.retrieve_data()
+        df = product.format_data(df)
+        if pivot:
+            df = product._pivot_data(df)
+        return df
+
+    def get_api_call(self) -> pd.DataFrame:
+        product = self.data_creator()
+        return product.build_url()
+
+    def get_raw_data(self) -> pd.DataFrame:
+        product = self.data_creator()
+        return product.retrieve_data()
 
 
 # concrete creator
@@ -281,6 +292,24 @@ class DataExtractor(ABC):
             except ValueError:
                 return pd.NaT
 
+    @staticmethod
+    def _pivot_data(df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Pivots data on period and state.
+        """
+        df = df.reset_index()
+        return df.pivot(
+            index="period",
+            columns="state",
+            values="value",
+        )
+
+    @staticmethod
+    def _assign_dtypes(df: pd.DataFrame) -> pd.DataFrame:
+        return df.astype(
+            {"series-description": str, "value": float, "units": str, "state": str},
+        )
+
 
 # concrete product
 class GasCosts(DataExtractor):
@@ -340,11 +369,13 @@ class GasCosts(DataExtractor):
         )
         df = df.drop(columns=["use_average"]).copy()
 
-        return (
+        df = (
             df[["series-description", "value", "units", "state", "period"]]
             .sort_values(["state", "period"])
             .set_index("period")
         )
+
+        return self._assign_dtypes(df)
 
 
 # concrete product
@@ -437,7 +468,9 @@ class CoalCosts(DataExtractor):
             lambda x: f"{x} Coal Electric Power Price",
         )
 
-        return final.set_index("period")
+        final = final.set_index("period")
+
+        return self._assign_dtypes(final)
 
 
 class ElectricityDemand(DataExtractor):
@@ -492,11 +525,13 @@ class GasTrade(DataExtractor):
         df["period"] = self._format_period(df.period).copy()
         df["state"] = df["series-description"].map(self.extract_state)
 
-        return (
+        df = (
             df[["series-description", "value", "units", "state", "period"]]
             .sort_values(["state", "period"])
             .set_index("period")
         )
+
+        return self._assign_dtypes(df)
 
     @staticmethod
     def extract_state(description: str) -> str:
@@ -549,11 +584,13 @@ class GasStorage(DataExtractor):
             df["series-description"].map(self.extract_state).map(self.map_state_names)
         )
 
-        return (
+        df = (
             df[["series-description", "value", "units", "state", "period"]]
             .sort_values(["state", "period"])
             .set_index("period")
         )
+
+        return self._assign_dtypes(df)
 
     @staticmethod
     def extract_state(description: str) -> str:
@@ -603,11 +640,13 @@ class GasProduction(DataExtractor):
             df["series-description"].map(self.extract_state).map(self.map_state_names)
         )
 
-        return (
+        df = (
             df[["series-description", "value", "units", "state", "period"]]
             .sort_values(["state", "period"])
             .set_index("period")
         )
+
+        return self._assign_dtypes(df)
 
     @staticmethod
     def extract_state(description: str) -> str:
@@ -689,15 +728,20 @@ class StateEmissions(DataExtractor):
             sep=" - ",
         )
 
-        return (
+        df = (
             df[["series-description", "value", "units", "state", "period"]]
             .sort_values(["state", "period"])
             .set_index("period")
         )
+
+        return self._assign_dtypes(df)
 
 
 if __name__ == "__main__":
     with open("./../config/config.api.yaml") as file:
         yaml_data = yaml.safe_load(file)
     api = yaml_data["api"]["eia"]
-    print(FuelCosts("coal", "power", 2019, api).get_data())
+    # print(FuelCosts("coal", "power", 2019, api).get_data(pivot=True))
+    # print(FuelCosts("gas", "commercial", 2019, api).get_data(pivot=True))
+    # print(Emissions("transport", 2019, api).get_data(pivot=True))
+    print(Storage("gas", "total", 2019, api).get_data(pivot=True))

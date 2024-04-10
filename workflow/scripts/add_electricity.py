@@ -298,99 +298,56 @@ def update_capital_costs(
     n.generators.loc[gen.index] = gen
 
 
-def update_marginal_costs(
+def apply_dynamic_pricing(
     n: pypsa.Network,
     carrier: str,
-    fuel_costs: pd.DataFrame,
-    vom_cost: float = 0,
-    efficiency: float = None,
+    geography: str,
+    df: pd.DataFrame,
+    vom: float = 0,
 ):
     """
-    Applies regional and monthly marginal cost data.
+    Applies user-supplied dynamic pricing.
 
     Arguments
     ---------
     n: pypsa.Network,
     carrier: str,
         carrier to apply fuel cost data to (ie. Gas)
-    fuel_costs: pd.DataFrame,
-        EIA fuel cost data
-    vom_cost: float = 0
+    geography: str,
+        column of geography to search over (ie. balancing_area, state, reeds_zone, ...)
+    df: pd.DataFrame,
+        Fuel costs data
+    vom: float = 0
         Additional flat $/MWh cost to add onto the fuel costs
-    efficiency: float = None
-        Flat efficiency multiplier to apply to all generators. If not supplied,
-        the efficiency is looked up at a generator level from the network
     """
 
-    missed = []
-    for fuel_region_type in ["balancing_area", "state"]:
+    assert geography in n.buses.columns
 
-        # map generators to fuel_region_type (state or BA)
-        bus_region_mapper = n.buses.to_dict()[fuel_region_type]
-        gen = (
-            n.generators[n.generators.carrier == carrier].copy()
-            if fuel_region_type == "balancing_area"
-            else missed
-        )
-        gen[f"{fuel_region_type}"] = gen.bus.map(bus_region_mapper)
-        gen[f"{fuel_region_type}"] = gen[f"{fuel_region_type}"].replace(
-            {
-                "CISO-PGAE": "CISO",
-                "CISO-SCE": "CISO",
-                "CISO-SDGE": "CISO",
-                "CISO-VEA": "CISO",
-                "Arizona": "AZPS",
-                "NYISO": "NYISO",
-                "CAISO": "CAISO",
-                "BANC": "BANCSMUD",
-            },
-        )
+    gens = n.generators.copy()
+    gens[geography] = gens.bus.map(n.buses[geography])
+    gens = gens[(gens.carrier == carrier) & (gens[geography].isin(df.columns))]
 
-        missed = gen[~gen[fuel_region_type].isin(fuel_costs.columns.unique())]
-        gen = gen[
-            gen[fuel_region_type].isin(fuel_costs.columns.unique())
-        ]  # Filter for BAs which we have the fuel price data for
+    eff = n.get_switchable_as_dense("Generator", "efficiency").T
+    eff = eff[eff.index.isin(gens.index)].T
+    eff.columns.name = ""
 
-        if not missed.empty:
-            logger.warning(
-                f"BA's missing historical daily fuel costs: {missed[fuel_region_type].unique()}. Using EIA Monthly State Averages.",
-            )
+    fuel_cost_per_gen = {gen: df[gens.at[gen, geography]] for gen in gens.index}
+    fuel_costs = pd.DataFrame.from_dict(fuel_cost_per_gen)
+    fuel_costs.index = pd.to_datetime(fuel_costs.index)
 
-        # apply all fuel cost values
-        dfs = []
-        # fuel_costs.set_index(fuel_region_type, inplace=True)
-        for fuel_region in gen[fuel_region_type].unique():
-            gens_in_region = gen[gen[fuel_region_type] == fuel_region].index.to_list()
-            dfs.append(
-                pd.DataFrame(
-                    {gen_: fuel_costs[fuel_region] for gen_ in gens_in_region},
-                ),
-            )
-        if len(dfs) == 0:
-            continue
-        df = pd.concat(dfs, axis=1)
+    marginal_costs = fuel_costs.div(eff, axis=1)
+    marginal_costs = marginal_costs + vom
 
-        # apply efficiency of each generator to know fuel burn rate
-        if not efficiency:
-            gen_eff_mapper = n.generators.to_dict()["efficiency"]
-            df = df.apply(lambda x: x / gen_eff_mapper[x.name], axis=0)
-        else:
-            df = df.div(efficiency)
+    # drop any data that has been assigned at a coarser resolution
+    n.generators_t["marginal_cost"] = n.generators_t["marginal_cost"][
+        [x for x in n.generators_t["marginal_cost"] if x not in marginal_costs]
+    ]
 
-        # apply fixed rate VOM cost
-        df += vom_cost
-
-        # join into exisitng time series marginal costs
-        df.index = n.snapshots
-        n.generators_t["marginal_cost"] = n.generators_t["marginal_cost"].join(
-            df,
-            how="inner",
-        )
-
-        # Update n.generators table with the average fuel cost and vom cost- for analysis
-        n.generators.loc[gen.index, "marginal_cost"] = df.mean().values
-        n.generators.loc[gen.index, "vom_cost"] = vom_cost
-        n.generators.loc[gen.index, "fuel_cost"] = df.mean().values - vom_cost
+    # assign new marginal costs
+    n.generators_t["marginal_cost"] = n.generators_t["marginal_cost"].join(
+        marginal_costs,
+        how="inner",
+    )
 
 
 def update_transmission_costs(n, costs, length_factor=1.0):
@@ -1441,22 +1398,47 @@ def main(snakemake):
         update_capital_costs(n, carrier, costs, df_multiplier, Nyears)
 
     if params.conventional["dynamic_fuel_price"]:
-        fuel_costs = {
-            "CCGT": "ng_electric_power_price",
-            "OCGT": "ng_electric_power_price",
-            "coal": "coal_electric_power_price",
-        }
-        for carrier, cost_data in fuel_costs.items():
-            fuel_cost_file = snakemake.input[f"{cost_data}"]
-            df_fuel_costs = pd.read_csv(fuel_cost_file)
-            vom = costs.at[carrier, "VOM"]
+        assert params.eia_api, f"Must provide EIA API key for dynamic fuel pricing"
 
-            update_marginal_costs(
-                n=n,
-                carrier=carrier,
-                fuel_costs=df_fuel_costs,
-                vom_cost=vom,
-            )
+        dynamic_fuel_prices = {
+            "OCGT": {
+                "state": "state_ng_fuel_prices",
+                "balancing_area": "ba_ng_fuel_prices",  # name of file in snakefile
+            },
+            "CCGT": {
+                "state": "state_ng_fuel_prices",
+                "balancing_area": "ba_ng_fuel_prices",
+            },
+            "coal": {"state": "state_coal_fuel_prices"},
+        }
+
+        # NOTE: Must go from most to least coarse data (ie. state then ba) to apply the
+        # data correctly!
+
+        for carrier, prices in dynamic_fuel_prices.items():
+            for area in ("state", "reeds_zone", "balancing_area"):
+                # check if data is supplied for the area
+                try:
+                    datafile = prices[area]
+                except KeyError:
+                    continue
+                # if data should exist, try to read it in
+                try:
+                    df = pd.read_csv(snakemake.input[datafile], index_col="snapshot")
+                except KeyError:
+                    logger.warning(f"Can not find dynamic price file {datafile}")
+                    continue
+
+                vom = costs.at[carrier, "VOM"]
+
+                apply_dynamic_pricing(
+                    n=n,
+                    carrier=carrier,
+                    geography=area,
+                    df=df,
+                    vom=vom,
+                )
+                logger.info(f"Applied dynamic price data for {carrier} from {datafile}")
 
     # fix p_nom_min for extendable generators
     # The "- 0.001" is just to avoid numerical issues

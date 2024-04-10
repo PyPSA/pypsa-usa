@@ -253,20 +253,23 @@ rule build_demand:
         "../scripts/build_demand.py"
 
 
+def ba_gas_dynamic_fuel_price_files(wildcards):
+    files = []
+    if wildcards.interconnect in ("usa", "western"):
+        files.append(DATA + "costs/caiso_ng_power_prices.csv")
+    return files
+
+
 rule build_fuel_prices:
     params:
         snapshots=config["snapshots"],
-        fuel_year=config["costs"]["ng_fuel_year"],
         api_eia=config["api"]["eia"],
     input:
-        caiso_ng_prices=(
-            DATA + "costs/ng_caiso_prices.csv"
-            if "western" in config["scenario"]["interconnect"]
-            else []
-        ),
+        gas_balancing_area=ba_gas_dynamic_fuel_price_files,
     output:
-        ng_fuel_prices=RESOURCES + "{interconnect}/ng_fuel_prices.csv",
-        coal_fuel_prices=RESOURCES + "{interconnect}/coal_fuel_prices.csv",
+        state_ng_fuel_prices=RESOURCES + "{interconnect}/state_ng_power_prices.csv",
+        state_coal_fuel_prices=RESOURCES + "{interconnect}/state_coal_power_prices.csv",
+        ba_ng_fuel_prices=RESOURCES + "{interconnect}/ba_ng_power_prices.csv",
     log:
         LOGS + "{interconnect}/build_fuel_prices.log",
     benchmark:
@@ -276,6 +279,19 @@ rule build_fuel_prices:
         mem_mb=800,
     script:
         "../scripts/build_fuel_prices.py"
+
+
+def dynamic_fuel_price_files(wildcards):
+    if config["conventional"]["dynamic_fuel_price"]:
+        return {
+            "state_ng_fuel_prices": RESOURCES
+            + "{interconnect}/state_ng_power_prices.csv",
+            "state_coal_fuel_prices": RESOURCES
+            + "{interconnect}/state_coal_power_prices.csv",
+            "ba_ng_fuel_prices": RESOURCES + "{interconnect}/ba_ng_power_prices.csv",
+        }
+    else:
+        return {}
 
 
 rule add_electricity:
@@ -288,7 +304,9 @@ rule add_electricity:
         conventional=config["conventional"],
         costs=config["costs"],
         planning_horizons=config["scenario"]["planning_horizons"],
+        eia_api=config["api"]["eia"],
     input:
+        unpack(dynamic_fuel_price_files),
         **{
             f"profile_{tech}": RESOURCES + "{interconnect}" + f"/profile_{tech}.nc"
             for tech in config["electricity"]["renewable_carriers"]
@@ -327,16 +345,6 @@ rule add_electricity:
         ),
         demand=RESOURCES + "{interconnect}/demand.csv",
         fuel_costs="repo_data/plants/fuelCost22.csv",
-        ng_electric_power_price=(
-            RESOURCES + "{interconnect}/ng_fuel_prices.csv"
-            if config["conventional"]["dynamic_fuel_price"]
-            else []
-        ),
-        coal_electric_power_price=(
-            RESOURCES + "{interconnect}/coal_fuel_prices.csv"
-            if config["conventional"]["dynamic_fuel_price"]
-            else []
-        ),
     output:
         RESOURCES + "{interconnect}/elec_base_network_l_pp.nc",
     log:
