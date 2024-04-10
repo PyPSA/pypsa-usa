@@ -60,17 +60,29 @@ GE_carrier_names = {
     "OTH": "Other",
 }
 
+def add_missing_carriers(df1, df2):
+    # Create new columns for historic for missing carriers in optimized
+    for carrier in df1.columns:
+        if carrier not in df2.columns:
+            df2[carrier] = 0
+    for carrier in df2.columns:
+        if carrier not in df1.columns:
+            df1[carrier] = 0
+    return df1, df2
 
 def plot_timeseries_comparison(
     historic: pd.DataFrame,
     optimized: pd.DataFrame,
     save_path: str,
     colors=None,
+    title="Electricity Production by Carrier",
     **wildcards,
 ):
     """
     plots a stacked plot for seasonal production for snapshots: January 2 - December 30 (inclusive)
     """
+    historic, optimized = add_missing_carriers(historic, optimized)
+
     kwargs = dict(color=colors, ylabel="Production [GW]", xlabel="", linewidth=0)
 
     fig, axes = plt.subplots(3, 1, figsize=(9, 9))
@@ -120,7 +132,7 @@ def plot_timeseries_comparison(
         frameon=True,
         labelspacing=0.1,
     )
-    plt.suptitle(create_title("Electricity Production by Carrier", **wildcards))
+    plt.suptitle(create_title(title, **wildcards))
     fig.tight_layout()
     fig.savefig(save_path)
     plt.close()
@@ -185,12 +197,7 @@ def plot_regional_comparisons(
         )
 
         # Create new columns for historic for missing carriers in optimized
-        for carrier in optimized_region.columns:
-            if carrier not in historic_region.columns:
-                historic_region[carrier] = 0
-        for carrier in historic_region.columns:
-            if carrier not in optimized_region.columns:
-                optimized_region[carrier] = 0
+        historic_region, optimized_region = add_missing_carriers(historic_region, optimized_region)
 
         # Plot Timeseries Comparison
         plot_timeseries_comparison(
@@ -200,6 +207,7 @@ def plot_regional_comparisons(
             / "regional_timeseries"
             / f"{region}_seasonal_stacked_plot.png",
             colors=colors,
+            title=f"{region} Electricity Production by Carrier",
             **snakemake.wildcards,
         )
 
@@ -491,11 +499,13 @@ def main(snakemake):
     )
 
     # Time Series
+    
     plot_timeseries_comparison(
         ge_interconnect,
         optimized,
         save_path=snakemake.output["seasonal_stacked_plot.pdf"],
         colors=colors,
+        title="Electricity Production by Carrier",
         **snakemake.wildcards,
     )
 
