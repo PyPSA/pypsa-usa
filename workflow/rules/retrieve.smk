@@ -117,21 +117,22 @@ if config["network_configuration"] == "ads2032":
             "../scripts/retrieve_forecast_data.py"
 
 
-DATAFILES_DMD = [
+DATAFILES_GE = [
     "EIA_DMD_2018_2024.csv",
     "EIA_GridEmissions_all_2018_2024.csv",
+    "GridEmissions_co2_2018_2024.csv",
 ]
 
 
-rule retrieve_eia_data:
+rule retrieve_gridemissions_data:
     output:
-        expand(DATA + "GridEmissions/{file}", file=DATAFILES_DMD),
+        expand(DATA + "GridEmissions/{file}", file=DATAFILES_GE),
     log:
-        "logs/retrieve/retrieve_historical_load_data.log",
+        "logs/retrieve/retrieve_gridemissions_data.log",
     resources:
         mem_mb=5000,
     script:
-        "../scripts/retrieve_eia_data.py"
+        "../scripts/retrieve_gridemissions_data.py"
 
 
 RESSTOCK_FILES = [
