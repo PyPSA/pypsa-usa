@@ -1,4 +1,4 @@
-# PyPSA-USA Default Configuration File
+# PyPSA-USA Validation Configuration File
 network_configuration: "pypsa-usa" # "pypsa-usa" or "ads2032"
 
 run:
@@ -49,7 +49,6 @@ electricity:
   portfolio_standards: 'config/policy_constraints/portfolio_standards.csv'
   SAFE_regional_reservemargins: 'config/policy_constraints/SAFE_regional_prm.csv'
   transmission_interface_limits: 'config/policy_constraints/transmission_interface_limits.csv'
-
 
   operational_reserve:
     activate: false

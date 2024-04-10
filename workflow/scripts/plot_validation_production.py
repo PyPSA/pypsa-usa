@@ -388,6 +388,7 @@ def plot_generator_cost_stack(
 
 def plot_regional_emissions_historical_bar(
     n: pypsa.Network,
+    ge_emissions: pd.DataFrame,
     save: str,
     snapshots: pd.date_range,
     eia_api: str,
@@ -401,32 +402,43 @@ def plot_regional_emissions_historical_bar(
 
     sectors = wildcards["sector"].split("-")
     historical_emissions = []
-    if "T" in sectors:
-        historical_emissions.append(Emissions("transport", year, eia_api).get_data())
-    if "I" in sectors:
-        historical_emissions.append(Emissions("industrial", year, eia_api).get_data())
-    if "H" in sectors:
-        historical_emissions.append(Emissions("commercial", year, eia_api).get_data())
-        historical_emissions.append(Emissions("residential", year, eia_api).get_data())
-    historical_emissions.append(Emissions("power", year, eia_api).get_data())
 
-    historical_emissions = pd.concat(historical_emissions)
-    historical = (
-        historical_emissions.reset_index()[["value", "state"]]
-        .set_index("state")
-        .rename(columns={"value": "Actual"})
-    )
-    actual = pd.DataFrame(
+    if snakemake.params.eia_api and snakemake.config["clustering"]["cluster_network"]["aggregation_zones"] == 'state':
+        if "T" in sectors:
+            historical_emissions.append(Emissions("transport", year, eia_api).get_data())
+        if "I" in sectors:
+            historical_emissions.append(Emissions("industrial", year, eia_api).get_data())
+        if "H" in sectors:
+            historical_emissions.append(Emissions("commercial", year, eia_api).get_data())
+            historical_emissions.append(Emissions("residential", year, eia_api).get_data())
+        historical_emissions.append(Emissions("power", year, eia_api).get_data())
+
+        historical_emissions = pd.concat(historical_emissions)
+        historical = (
+            historical_emissions.reset_index()[["value", "state"]]
+            .set_index("state")
+            .rename(columns={"value": "Actual"})
+        )
+    else:
+        historical = ge_emissions['Net Generation'].dropna().groupby(level=0).sum() / 1e9
+        historical['Arizona'] = historical.loc[['AZPS', 'SRP']].sum()
+        historical.name = 'Historical'
+
+    optimized = pd.DataFrame(
         get_node_emissions_timeseries(n).T.groupby(n.buses.country).sum().T.sum() / 1e6,
         columns=["Optimized"],
     )
+    optimized.loc['CISO'] = optimized.loc[['CISO-PGAE', 'CISO-SCE', 'CISO-SDGE', 'CISO-VEA']].sum()
+    optimized.drop(index = ['CISO-PGAE', 'CISO-SCE', 'CISO-SDGE', 'CISO-VEA'], inplace=True)
+    optimized.sort_index(inplace=True)
 
-    final = actual.join(historical).reset_index()
+    historical = historical.loc[optimized.index]
+    final = optimized.join(historical).reset_index()
 
-    final = pd.melt(final, id_vars=["country"], value_vars=["Optimized", "Actual"])
+    final = pd.melt(final, id_vars=["country"], value_vars=["Optimized", "Historical"])
     final["value"] = final.value.astype("float")
 
-    fig, ax = plt.subplots(figsize=(10, 6))
+    fig, ax = plt.subplots(figsize=(8, 8))
     sns.barplot(
         data=final,
         y="country",
@@ -454,7 +466,7 @@ def main(snakemake):
     #Load Grid Emissions Electricity Data
     ge_all = pd.read_csv(snakemake.input.ge_all).drop(columns=["Unnamed: 0"])
     ge_all.period = pd.to_datetime(ge_all.period)
-    ge_all = ge_all.loc[ge_all.period.isin(snapshots)]
+    ge_all = ge_all.loc[ge_all.period.isin(snapshots),:]
     ge_all = ge_all.rename(columns=lambda x: x[2:] if x.startswith('E_') else x)
 
     ge_all.set_index("period", inplace=True)
@@ -472,6 +484,13 @@ def main(snakemake):
 
     # Load GridEmissions CO2 Data
     ge_co2 = pd.read_csv(snakemake.input.ge_co2).drop(columns=["Unnamed: 0"])
+    ge_co2.period = pd.to_datetime(ge_co2.period)
+    ge_co2 = ge_co2.loc[ge_co2.period.isin(snapshots),:]
+    ge_co2 = ge_co2.rename(columns=lambda x: x[4:] if x.startswith('CO2_') else x)
+    ge_co2.set_index("period", inplace=True)
+    ge_co2.columns = pd.MultiIndex.from_tuples(ge_co2.columns.str.split('_', expand=True).tolist())
+    ge_co2 = ge_co2.stack(level=0).swaplevel().sort_index(level=0)
+    ge_co2.columns = ge_co2.columns.map(GE_carrier_names).fillna('Interchange')
 
     # Create Optimized DataFrame
     optimized = create_optimized_by_carrier(n, order)
@@ -491,15 +510,7 @@ def main(snakemake):
         **snakemake.wildcards,
     )
 
-    plot_regional_comparisons(
-        n,
-        ge_all.drop(columns = ['Demand', 'Net Generation', 'Interchange']),
-        colors=colors,
-        **snakemake.wildcards,
-    )
-
     # Time Series
-    
     plot_timeseries_comparison(
         ge_interconnect,
         optimized,
@@ -508,12 +519,6 @@ def main(snakemake):
         title="Electricity Production by Carrier",
         **snakemake.wildcards,
     )
-
-    # plot_regional_timeseries_comparison(
-    #     n,
-    #     colors=colors,
-    #     **snakemake.wildcards,
-    # )
 
     # Box Plot
     plot_region_lmps(
@@ -540,24 +545,25 @@ def main(snakemake):
         **snakemake.wildcards,
     )
 
-    if snakemake.params.eia_api:
-        plot_regional_emissions_historical_bar(
-            n,
-            snakemake.output["val_bar_regional_emissions.pdf"],
-            pd.date_range(
-                start=snakemake.params.snapshots["start"],
-                end=snakemake.params.snapshots["end"],
-            ),
-            snakemake.params.eia_api,
-            **snakemake.wildcards,
-        )
-    else:
-        plot_regional_emissions_bar(
-            snakemake.output["val_bar_regional_emissions.pdf"],
-            **snakemake.wildcards,
-        )
+    # Regional Comparisons
+    plot_regional_comparisons(
+        n,
+        ge_all.drop(columns = ['Demand', 'Net Generation', 'Interchange']),
+        colors=colors,
+        **snakemake.wildcards,
+    )
 
-    n.statistics().to_csv(snakemake.output["val_statistics"])
+    plot_regional_emissions_historical_bar(
+        n,
+        ge_co2,
+        snakemake.output["val_bar_regional_emissions.pdf"],
+        pd.date_range(
+            start=snakemake.params.snapshots["start"],
+            end=snakemake.params.snapshots["end"],
+        ),
+        snakemake.params.eia_api,
+        **snakemake.wildcards,
+    )
 
     plot_load_shedding_map(
         n,
@@ -565,20 +571,13 @@ def main(snakemake):
         onshore_regions,
         **snakemake.wildcards,
     )
-    # if snakemake.wildcards.interconnect == "western":
-    #     plot_california_emissions(
-    #         n,
-    #         Path(snakemake.output["val_box_region_lmps"]).parents[0]
-    #         / "california_emissions.png",
-    #         **snakemake.wildcards,
-    #     )
 
+    n.statistics().to_csv(snakemake.output["val_statistics"])
     # plot_curtailment_heatmap(
     #     n,
     #     snakemake.output["val_heatmap_curtailment.pdf"],
     #     **snakemake.wildcards,
     # )
-
 
 
 if __name__ == "__main__":
