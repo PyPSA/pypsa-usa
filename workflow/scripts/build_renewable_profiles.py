@@ -9,8 +9,7 @@ under water.
 
 .. note:: Hydroelectric profiles are built in script :mod:`build_hydro_profiles`.
 
-Relevant settings
------------------
+**Relevant settings**
 
 .. code:: yaml
 
@@ -41,8 +40,7 @@ Relevant settings
     Documentation of the configuration file ``config/config.yaml`` at
     :ref:`snapshots_cf`, :ref:`atlite_cf`, :ref:`renewable_cf`
 
-Inputs
-------
+**Inputs**
 
 - ``data/bundle/corine/g250_clc06_V18_5.tif``: `CORINE Land Cover (CLC) <https://land.copernicus.eu/pan-european/corine-land-cover>`_ inventory on `44 classes <https://wiki.openstreetmap.org/wiki/Corine_Land_Cover#Tagging>`_ of land use (e.g. forests, arable land, industrial, urban areas).
 
@@ -63,8 +61,7 @@ Inputs
 - ``"cutouts/" + params["renewable"][{technology}]['cutout']``: :ref:`cutout`
 - ``networks/base.nc``: :ref:`base`
 
-Outputs
--------
+**Outputs**
 
 - `resources/profile_{technology}.nc` with the following structure
 
