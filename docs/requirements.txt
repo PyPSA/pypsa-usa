@@ -10,6 +10,9 @@ matplotlib
 scikit-learn
 pyyaml
 seaborn
+snakemake
+cartopy
+plotly
 
 # docs
 myst-parser
