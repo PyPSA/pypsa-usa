@@ -11,7 +11,7 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 from _helpers import configure_logging
-from constants import EIA_930_REGION_MAPPER
+from constants import EIA_930_REGION_MAPPER, EIA_BA_2_REGION
 from eia import Emissions
 
 from summary import get_node_emissions_timeseries
@@ -68,11 +68,25 @@ rename_his = {
     "Net Generation (MW) from Coal (Adjusted)": "Coal",
     "Net Generation (MW) from Other Fuel Sources (Adjusted)": "Other",
 }
-
+GE_carrier_names = {
+    "NG": "Net Generation",
+    "GAS": "Natural gas",
+    "D": "Demand",
+    "TI": "Total Interchange",
+    "OIL": "Oil",
+    "WAT": "Hydro",
+    "WND": "Onshore wind",
+    "SUN": "Solar",
+    "NUC": "Nuclear",
+    "COL": "Coal",
+    "UNK": "Unknown",
+    "OTH": "Other",
+}
 
 def plot_regional_timeseries_comparison(
     n: pypsa.Network,
     colors=None,
+    **wildcards,
 ):
     """ """
     Path.mkdir(
@@ -107,6 +121,7 @@ def plot_regional_timeseries_comparison(
             / "regional_timeseries"
             / f"{region}_seasonal_stacked_plot.png",
             colors=colors,
+            **snakemake.wildcards,
         )
 
 
@@ -115,6 +130,7 @@ def plot_timeseries_comparison(
     optimized: pd.DataFrame,
     save_path: str,
     colors=None,
+    **wildcards,
 ):
     """
     plots a stacked plot for seasonal production for snapshots: January 2 - December 30 (inclusive)
@@ -172,6 +188,7 @@ def plot_timeseries_comparison(
         frameon=True,
         labelspacing=0.1,
     )
+    plt.suptitle(create_title("Electricity Production by Carrier", **wildcards))
     fig.tight_layout()
     fig.savefig(save_path)
     plt.close()
@@ -181,6 +198,7 @@ def plot_bar_carrier_production(
     historic: pd.DataFrame,
     optimized: pd.DataFrame,
     save_path: str,
+    **wildcards,
 ):
     # plot by carrier
     data = pd.concat([historic, optimized], keys=["Historic", "Optimized"], axis=1)
@@ -189,7 +207,7 @@ def plot_bar_carrier_production(
     df = data.T.groupby(level=["Kind", "Carrier"]).sum().T.sum().unstack().T
     df = df / 1e3  # convert to TWh
     df.plot.barh(ax=ax, xlabel="Electricity Production [TWh]", ylabel="")
-    ax.set_title("Electricity Production by Carriers")
+    ax.set_title(create_title("Electricity Production by Carriers", **wildcards))
     ax.grid(axis="y")
     fig.savefig(save_path)
 
@@ -198,6 +216,8 @@ def plot_regional_bar_production_comparison(
     n: pypsa.Network,
     historic_full: pd.DataFrame,
     colors=None,
+    order=None,
+    **wildcards,
 ):
     """ """
     Path.mkdir(
@@ -207,10 +227,14 @@ def plot_regional_bar_production_comparison(
     regions = n.buses.country.unique()
     regions_clean = [ba.split("-")[0] for ba in regions]
     regions = list(OrderedDict.fromkeys(regions_clean))
+    # regions = [ba for ba in regions if ba in ["CISO"]]
 
-    # regions = [ba for ba in regions if ba in ["PACW"]]
     buses = n.buses.copy()
     buses["region"] = [ba.split("-")[0] for ba in buses.country]
+
+    historic_full['imports'] = historic_full['Total Interchange'].clip(upper=0) * -1
+    historic_full['exports'] = historic_full['Total Interchange'].clip(lower=0)
+    historic_full = historic_full.drop(columns = ['Total Interchange'])
 
     diff = pd.DataFrame()
 
@@ -221,6 +245,9 @@ def plot_regional_bar_production_comparison(
             historic_region = historic_full.loc[["AZPS", "SRP"]]
         else:
             historic_region = historic_full.loc[region]
+        
+        order = historic_region.columns
+
         optimized_region = create_optimized_by_carrier(
             n,
             order,
@@ -241,31 +268,13 @@ def plot_regional_bar_production_comparison(
     diff.T.plot(kind="barh", stacked=True, ax=ax)
     ax.set_xlabel("Production Deviation [TWh]")
     ax.set_ylabel("Region")
-    ax.set_title("Production Deviation by Region and Carrier")
+    ax.set_title(create_title("Generation Deviation by Region and Carrier", **wildcards))
     plt.legend(title="Carrier", bbox_to_anchor=(1.05, 1), loc="upper left")
 
     plt.tight_layout()
     fig.savefig(
         Path(snakemake.output[0]).parents[0] / "production_deviation_by_region.png",
     )
-
-
-def plot_bar_production_deviation(
-    historic: pd.DataFrame,
-    optimized: pd.DataFrame,
-    save_path: str,
-):
-    # plot strongest deviations for each carrier
-    fig, ax = plt.subplots(figsize=(6, 10))
-    diff = (optimized - historic).sum() / 1e3  # convert to TW
-    diff = diff.dropna().sort_values()
-    diff.plot.barh(
-        xlabel="Optimized Production - Historic Production [TWh]",
-        ax=ax,
-    )
-    ax.set_title("Strongest Deviations")
-    ax.grid(axis="y")
-    fig.savefig(save_path)
 
 
 def create_optimized_by_carrier(n, order, region=None):
@@ -302,7 +311,7 @@ def create_optimized_by_carrier(n, order, region=None):
     optimized = (
         gen_p.T.groupby(by=n.generators["carrier"])
         .sum()
-        .T.loc["2019-01-02 00:00:00":"2019-12-30 23:00:00"]
+        .T 
     )
 
     # Combine other carriers into "carrier"
@@ -555,7 +564,7 @@ def plot_generator_cost_stack(
 
     ax.set_xlabel("Capacity [MW]")
     ax.set_ylabel("Marginal Cost [USD/MWh]")
-    ax.set_title("Generator Marginal Costs Stack Plot")
+    ax.set_title(create_title("Generator Marginal Costs Stack", **wildcards))
     fig.savefig(save)
 
 
@@ -614,20 +623,10 @@ def plot_regional_emissions_historical_bar(
     fig.savefig(save)
 
 
-if __name__ == "__main__":
-    if "snakemake" not in globals():
-        from _helpers import mock_snakemake
-
-        snakemake = mock_snakemake(
-            "plot_validation_figures",
-            interconnect="western",
-            clusters=80,
-            ll="v1.0",
-            opts="Ep",
-            sector="E",
-        )
+def main(snakemake):
     configure_logging(snakemake)
     n = pypsa.Network(snakemake.input.network)
+    snapshots = n.snapshots
 
     onshore_regions = gpd.read_file(snakemake.input.regions_onshore)
     offshore_regions = gpd.read_file(snakemake.input.regions_offshore)
@@ -640,10 +639,24 @@ if __name__ == "__main__":
     )
     historic_interconnect = historical_full.groupby(["UTC Time at End of Hour"]).sum()
 
-    # historic, order = create_historical_df(
-    #     snakemake.input.historic_first,
-    #     snakemake.input.historic_second,
-    # )
+    #Load Grid Emissions Data
+    ge_all = pd.read_csv(snakemake.input.ge_all).drop(columns=["Unnamed: 0"])
+    ge_all.period = pd.to_datetime(ge_all.period)
+    ge_all = ge_all.loc[ge_all.period.isin(snapshots)]
+    ge_all = ge_all.rename(columns=lambda x: x[2:] if x.startswith('E_') else x)
+
+    ge_all.set_index("period", inplace=True)
+    ge_all.columns = pd.MultiIndex.from_tuples(ge_all.columns.str.split('_', expand=True).tolist())
+    ge_all = ge_all.stack(level=0).swaplevel().sort_index(level=0)
+    ge_all.columns = ge_all.columns.map(GE_carrier_names).fillna('Interchange')
+
+    ge_all['interconnect'] = ge_all.index.get_level_values(0).map(EIA_BA_2_REGION).map(EIA_930_REGION_MAPPER)
+    ge_interchange = ge_all.loc[ge_all.interconnect.isna(), 'Interchange']
+    ge_all = ge_all.loc[~ge_all.interconnect.isna()]
+
+    ge_all = ge_all.loc[ge_all.interconnect == snakemake.wildcards.interconnect].drop(columns="interconnect") / 1e3
+    ge_interconnect = ge_all.groupby('period').sum().drop(columns = ['Demand', 'Net Generation', 'Total Interchange', 'Interchange'])
+    order = ge_all.columns
 
     optimized = create_optimized_by_carrier(n, order)
 
@@ -653,35 +666,33 @@ if __name__ == "__main__":
     colors["exports"] = "#7d1caf"
 
     # Bar Production
-    plot_regional_bar_production_comparison(
-        n,
-        historical_full,
-        colors=colors,
-    )
-
     plot_bar_carrier_production(
-        historic_interconnect,
+        ge_interconnect,
         optimized,
         save_path=snakemake.output["carrier_production_bar.pdf"],
+        **snakemake.wildcards,
     )
 
-    plot_bar_production_deviation(
-        historic_interconnect,
-        optimized,
-        save_path=snakemake.output["production_deviation_bar.pdf"],
+    plot_regional_bar_production_comparison(
+        n,
+        ge_all.drop(columns = ['Demand', 'Net Generation', 'Interchange']),
+        colors=colors,
+        **snakemake.wildcards,
     )
 
     # Time Series
     plot_timeseries_comparison(
-        historic_interconnect,
+        ge_interconnect,
         optimized,
         save_path=snakemake.output["seasonal_stacked_plot.pdf"],
         colors=colors,
+        **snakemake.wildcards,
     )
 
     plot_regional_timeseries_comparison(
         n,
         colors=colors,
+        **snakemake.wildcards,
     )
 
     # Box Plot
@@ -747,3 +758,18 @@ if __name__ == "__main__":
     #     snakemake.output["val_heatmap_curtailment.pdf"],
     #     **snakemake.wildcards,
     # )
+
+
+
+if __name__ == "__main__":
+    if "snakemake" not in globals():
+        from _helpers import mock_snakemake
+        snakemake = mock_snakemake(
+            "plot_validation_figures",
+            interconnect="western",
+            clusters=40,
+            ll="v1.0",
+            opts="Ep",
+            sector="E",
+        )
+    main(snakemake)

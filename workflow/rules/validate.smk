@@ -9,6 +9,7 @@ rule plot_validation_figures:
         historic_first=DATA + "eia/6moFiles/EIA930_BALANCE_2019_Jan_Jun.csv",
         historic_second=DATA + "eia/6moFiles/EIA930_BALANCE_2019_Jul_Dec.csv",
         demand_ge=DATA + "GridEmissions/EIA_DMD_2018_2024.csv",
+        ge_all=DATA +"GridEmissions/EIA_GridEmissions_all_2018_2024.csv",
         regions_onshore=RESOURCES
         + "{interconnect}/regions_onshore_s_{clusters}.geojson",
         regions_offshore=RESOURCES

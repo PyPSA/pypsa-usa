@@ -226,6 +226,8 @@ EIA_930_REGION_MAPPER = {
     "TEX": "texas",
 }
 
+EIA_BA_2_REGION = {'AEC': 'SE', 'AECI': 'MIDW', 'AVA': 'NW', 'AVRN': 'NW', 'AZPS': 'SW', 'BANC': 'CAL', 'BPAT': 'NW', 'CHPD': 'NW', 'CISO': 'CAL', 'CPLE': 'CAR', 'CPLW': 'CAR', 'DEAA': 'SW', 'DOPD': 'NW', 'DUK': 'CAR', 'EEI': 'MIDW', 'EPE': 'SW', 'ERCO': 'TEX', 'FMPP': 'FLA', 'FPC': 'FLA', 'FPL': 'FLA', 'GCPD': 'NW', 'GRID': 'NW', 'GRIF': 'SW', 'GVL': 'FLA', 'GWA': 'NW', 'HGMA': 'SW', 'HST': 'FLA', 'IID': 'CAL', 'IPCO': 'NW', 'ISNE': 'NE', 'JEA': 'FLA', 'LDWP': 'CAL', 'LGEE': 'MIDW', 'MISO': 'MIDW', 'NEVP': 'NW', 'NSB': 'FLA', 'NWMT': 'NW', 'NYIS': 'NY', 'PACE': 'NW', 'PACW': 'NW', 'PGE': 'NW', 'PJM': 'MIDA', 'PNM': 'SW', 'PSCO': 'NW', 'PSEI': 'NW', 'SC': 'CAR', 'SCEG': 'CAR', 'SCL': 'NW', 'SEC': 'FLA', 'SEPA': 'SE', 'SOCO': 'SE', 'SPA': 'CENT', 'SRP': 'SW', 'SWPP': 'CENT', 'TAL': 'FLA', 'TEC': 'FLA', 'TEPC': 'SW', 'TIDC': 'CAL', 'TPWR': 'NW', 'TVA': 'TEN', 'WACM': 'NW', 'WALC': 'SW', 'WAUW': 'NW', 'WWA': 'NW', 'YAD': 'CAR'}
+
 STATES_INTERCONNECT_MAPPER = {
     "AL": "eastern",
     "AK": None,
@@ -376,6 +378,7 @@ STATE_2_CODE = {
     # Mexico
     "Mexico": "MX",
 }
+
 
 
 import pandas as pd
