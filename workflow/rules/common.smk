@@ -98,11 +98,56 @@ def memory(w):
             factor *= int(m.group(1)) / 8760
             break
     if w.clusters.endswith("m") or w.clusters.endswith("c"):
-        return int(factor * (55000 + 600 * int(w.clusters[:-1])))
+        val = int(factor * (55000 + 600 * int(w.clusters[:-1])))
     elif w.clusters == "all":
-        return int(factor * (18000 + 180 * 4000))
+        val = int(factor * (18000 + 180 * 4000))
     else:
-        return int(factor * (10000 + 195 * int(w.clusters)))
+        val = int(factor * (15000 + 195 * int(w.clusters)))
+
+    if w.interconnect == "usa":
+        return int(val * 6)
+    elif w.interconnect == "eastern":
+        return int(val * 1.5)
+    elif w.interconnect == "western":
+        return int(val)
+    elif w.interconnect == "texas":
+        return int(val * 0.5)
+
+
+def interconnect_mem(w):
+    mem = 20000
+    if w.interconnect == "usa":
+        return int(mem * 1.5)
+    elif w.interconnect == "eastern":
+        return int(mem * 1.5)
+    elif w.interconnect == "western":
+        return int(mem)
+    elif w.interconnect == "texas":
+        return int(mem * 0.5)
+
+
+def interconnect_mem_s(w):
+    mem = 20000
+    if w.interconnect == "usa":
+        return int(mem * 5)
+    elif w.interconnect == "eastern":
+        return int(mem * 4)
+    elif w.interconnect == "western":
+        return int(mem)
+    elif w.interconnect == "texas":
+        return int(mem * 0.5)
+
+
+def interconnect_mem_c(w):
+    mem = 8000
+    if w.interconnect == "usa":
+        return int(mem * 10)
+    elif w.interconnect == "eastern":
+        return int(mem * 3)
+    elif w.interconnect == "western":
+        return int(mem)
+    elif w.interconnect == "texas":
+        return int(mem * 0.5)
 
 
 def input_custom_extra_functionality(w):
@@ -141,23 +186,3 @@ def solved_previous_horizon(w):
         + planning_horizon_p
         + ".nc"
     )
-
-
-def memory(w):
-    factor = 3.0
-    for o in w.opts.split("-"):
-        m = re.match(r"^(\d+)h$", o, re.IGNORECASE)
-        if m is not None:
-            factor /= int(m.group(1))
-            break
-    for o in w.opts.split("-"):
-        m = re.match(r"^(\d+)seg$", o, re.IGNORECASE)
-        if m is not None:
-            factor *= int(m.group(1)) / 8760
-            break
-    if w.clusters.endswith("m"):
-        return int(factor * (18000 + 180 * int(w.clusters[:-1])))
-    elif w.clusters == "all":
-        return int(factor * (18000 + 180 * 4000))
-    else:
-        return int(factor * (10000 + 195 * int(w.clusters)))

@@ -13,6 +13,7 @@ rule solve_network:
         network=RESOURCES
         + "{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}_{sector}.nc",
         config=RESULTS + "config.yaml",
+        flowgates="repo_data/ReEDS_Constraints/transmission/transmission_capacity_init_AC_ba_NARIS2024.csv",
     output:
         network=RESULTS
         + "{interconnect}/networks/elec_s_{clusters}_ec_l{ll}_{opts}_{sector}.nc",
@@ -50,6 +51,7 @@ rule solve_network_operations:
         network=RESOURCES
         + "{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}_{sector}.nc",
         config=RESULTS + "config.yaml",
+        flowgates="repo_data/ReEDS_Constraints/transmission/transmission_capacity_init_AC_ba_NARIS2024.csv",
     output:
         network=RESULTS
         + "{interconnect}/networks/elec_s_{clusters}_ec_l{ll}_{opts}_{sector}_operations.nc",
@@ -69,9 +71,7 @@ rule solve_network_operations:
     resources:
         mem_mb=memory,
         walltime=config["solving"].get("walltime", "12:00:00"),
-    shadow:
-        "minimal"
     conda:
         "../envs/environment.yaml"
     script:
-        "../scripts/solve_operations_network.py"
+        "../scripts/solve_network.py"

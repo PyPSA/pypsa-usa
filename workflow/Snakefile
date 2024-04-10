@@ -58,10 +58,11 @@ FIGURES_VALIDATE = [
     "production_deviation_bar.pdf",
     "val_bar_regional_emissions.pdf",
     "val_generator_data_panel.pdf",
-    "val_heatmap_curtailment.pdf",
+    # "val_heatmap_curtailment.pdf",
     "val_heatmap_capacity_factor.pdf",
     "val_box_region_lmps.pdf",
     "val_map_load_shedding.pdf",
+    "val_generator_stack.pdf",
 ]
 
 
