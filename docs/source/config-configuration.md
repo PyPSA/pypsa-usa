@@ -86,7 +86,7 @@ Specifies the temporal range to build an energy system model for as arguments to
 Define and specify the `atlite.Cutout` used for calculating renewable potentials and time-series. All options except for `features` are directly used as [`cutout parameters`](https://atlite.readthedocs.io/en/latest/ref_api.html#cutout)
 
 ```{eval-rst}
-.. literalinclude:: ../../workflow/config/config.default.yaml
+.. literalinclude:: ../../workflow/config/config.common.yaml
    :language: yaml
    :start-at: atlite:
    :end-before: # docs
@@ -127,7 +127,7 @@ If using the `{opts}` wildcard to reduce emissions, the user must put in a `co2b
 
 ### `solar`
 ```{eval-rst}
-.. literalinclude:: ../../workflow/config/config.default.yaml
+.. literalinclude:: ../../workflow/config/config.common.yaml
    :language: yaml
    :start-at: solar:
    :end-before: # docs :
@@ -140,7 +140,7 @@ If using the `{opts}` wildcard to reduce emissions, the user must put in a `co2b
 
 ### `onwind`
 ```{eval-rst}
-.. literalinclude:: ../../workflow/config/config.default.yaml
+.. literalinclude:: ../../workflow/config/config.common.yaml
    :language: yaml
    :start-at: onwind:
    :end-before: # docs :

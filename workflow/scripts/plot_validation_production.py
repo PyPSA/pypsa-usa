@@ -215,7 +215,7 @@ def plot_regional_comparisons(
 
     # Plot Bar Production Differences of Regions
     fig, ax = plt.subplots(figsize=(10, 6))
-    diff.T.plot(kind="barh", stacked=True, ax=ax)
+    diff.T.plot(kind="barh", stacked=True, ax=ax, color=colors)
     ax.set_xlabel("Production Deviation [TWh]")
     ax.set_ylabel("Region")
     ax.set_title(create_title("Generation Deviation by Region and Carrier", **wildcards))

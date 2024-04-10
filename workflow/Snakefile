@@ -87,7 +87,7 @@ wildcard_constraints:
 # configfile: "config/config.default.yaml"
 configfile: "config/tests/config.validation.yaml"
 configfile: "config/config.cluster.yaml"
-configfile: "config/config.osw.yaml"
+configfile: "config/config.common.yaml"
 configfile: "config/config.plotting.yaml"
 configfile: "config/config.api.yaml"
 
