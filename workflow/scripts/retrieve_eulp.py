@@ -8,15 +8,14 @@ Notes:
     - https://data.openei.org/submissions/4520
 """
 
-import pandas as pd
-from typing import Optional, List
-import requests
-from pathlib import Path
-
-from _helpers import configure_logging
-import constants
-
 import logging
+from pathlib import Path
+from typing import List, Optional
+
+import constants
+import pandas as pd
+import requests
+from _helpers import configure_logging
 
 logger = logging.getLogger(__name__)
 

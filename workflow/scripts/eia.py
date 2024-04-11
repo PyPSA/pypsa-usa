@@ -26,18 +26,18 @@ period
 2020-12-01  Wyoming Price of Natural Gas Delivered to Resi...   8.00  $/MCF Wyoming
 """
 
-from abc import ABC, abstractmethod
-from typing import Union, Dict
+import logging
 import math
-import constants
-import yaml
+from abc import ABC, abstractmethod
+from typing import Dict, Union
 
+import constants
 import numpy as np
 import pandas as pd
 import requests
+import yaml
 from requests.adapters import HTTPAdapter
 from urllib3.util import Retry
-import logging
 
 logger = logging.getLogger(__name__)
 

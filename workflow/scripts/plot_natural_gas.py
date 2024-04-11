@@ -1,12 +1,10 @@
+import constants
+import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-import pandas as pd
-from plotly.subplots import make_subplots
-
-from _helpers import configure_logging
-
 import pypsa
-
+from _helpers import configure_logging
+from plotly.subplots import make_subplots
 from summary_natural_gas import (
     get_gas_demand,
     get_gas_processing,
@@ -14,7 +12,6 @@ from summary_natural_gas import (
     get_linepack,
     get_underground_storage,
 )
-import constants
 
 MWH_2_MMCF = constants.NG_MWH_2_MMCF
 

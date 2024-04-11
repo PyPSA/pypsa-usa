@@ -10,9 +10,7 @@ import logging
 import pandas as pd
 import pypsa
 from _helpers import configure_logging
-
-from pypsa.statistics import StatisticsAccessor
-from pypsa.statistics import get_bus_and_carrier
+from pypsa.statistics import StatisticsAccessor, get_bus_and_carrier
 
 logger = logging.getLogger(__name__)
 

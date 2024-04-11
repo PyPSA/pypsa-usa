@@ -33,33 +33,22 @@ import pandas as pd
 import pypsa
 import seaborn as sns
 from cartopy import crs as ccrs
-from pypsa.plot import add_legend_circles
-from pypsa.plot import add_legend_lines
-from pypsa.plot import add_legend_patches
+from pypsa.plot import add_legend_circles, add_legend_lines, add_legend_patches
 
 logger = logging.getLogger(__name__)
+import cartopy.crs as ccrs
+import geopandas as gpd
+import matplotlib.pyplot as plt
+import pandas as pd
 from _helpers import configure_logging
+from add_electricity import sanitize_carriers
+from matplotlib.lines import Line2D
 from summary import (
-    get_node_emissions_timeseries,
     get_capacity_base,
     get_capacity_brownfield,
     get_demand_base,
+    get_node_emissions_timeseries,
 )
-from add_electricity import (
-    sanitize_carriers,
-)
-
-import matplotlib.pyplot as plt
-from matplotlib.lines import Line2D
-import pandas as pd
-import geopandas as gpd
-import cartopy.crs as ccrs
-
-import matplotlib.pyplot as plt
-import pandas as pd
-import geopandas as gpd
-import cartopy.crs as ccrs
-
 
 # Global Plotting Settings
 TITLE_SIZE = 16

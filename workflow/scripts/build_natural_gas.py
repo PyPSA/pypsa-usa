@@ -54,27 +54,22 @@ Specifically, it will do the following
 - `pypsa.Network`
 """
 
-import pypsa
-import pandas as pd
-import geopandas as gpd
-from pypsa.components import Network
-import constants
 import logging
 
 import constants
 import geopandas as gpd
 import pandas as pd
 import pypsa
+from pypsa.components import Network
 
 logger = logging.getLogger(__name__)
-from typing import List, Dict, Union
+from abc import ABC, abstractmethod
 from math import pi
-import numpy as np
-import yaml
+from typing import Dict, List, Union
 
 import eia
-
-from abc import ABC, abstractmethod
+import numpy as np
+import yaml
 
 ###
 # Constants

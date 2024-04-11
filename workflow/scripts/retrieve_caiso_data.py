@@ -25,11 +25,11 @@ Imbalance Market (WEIM) during the time period designated in the configuration
 - ``data/fuel_prices.csv``: A CSV file containing the daily average fuel prices for each Balancing Authority in the WEIM.
 """
 
-import pandas as pd
-import requests
-from datetime import datetime, timedelta
 import os
 import time
+from datetime import datetime, timedelta
+
+import pandas as pd
 import requests
 import seaborn as sns
 

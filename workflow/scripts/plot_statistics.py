@@ -43,35 +43,24 @@ import pypsa
 import seaborn as sns
 
 logger = logging.getLogger(__name__)
-from _helpers import configure_logging
-from summary import (
-    get_demand_timeseries,
-    get_energy_timeseries,
-    get_node_emissions_timeseries,
-    get_tech_emissions_timeseries,
-    get_capital_costs,
-    get_generator_marginal_costs,
-    get_fuel_costs,
-)
-from add_electricity import (
-    add_nice_carrier_names,
-    sanitize_carriers,
-)
-
-import matplotlib.pyplot as plt
-from matplotlib.lines import Line2D
-import pandas as pd
-import geopandas as gpd
 import cartopy.crs as ccrs
-
+import geopandas as gpd
 import matplotlib.pyplot as plt
 import pandas as pd
-import geopandas as gpd
-import cartopy.crs as ccrs
-
 import plotly.express as px
 import plotly.graph_objects as go
-
+from _helpers import configure_logging
+from add_electricity import add_nice_carrier_names, sanitize_carriers
+from matplotlib.lines import Line2D
+from summary import (
+    get_capital_costs,
+    get_demand_timeseries,
+    get_energy_timeseries,
+    get_fuel_costs,
+    get_generator_marginal_costs,
+    get_node_emissions_timeseries,
+    get_tech_emissions_timeseries,
+)
 
 # Global Plotting Settings
 TITLE_SIZE = 16

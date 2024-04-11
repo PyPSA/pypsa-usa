@@ -479,8 +479,8 @@ def add_regional_co2limit(n, sns, config):
     """
     weightings = n.snapshot_weightings.loc[n.snapshots]
 
-    from pypsa.linopt import get_var
     from pypsa.descriptors import get_switchable_as_dense as get_as_dense
+    from pypsa.linopt import get_var
 
     regional_co2_lims = pd.read_csv(
         config["electricity"]["regional_Co2_limits"],
