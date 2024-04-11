@@ -2,7 +2,7 @@
 
 ## Step 1. Clone GitHub Repository
 
-Users can clone the repository using HTTPS, SSH, or GitHub CLI. Ensure you retrieve the submodules in the repository when cloning, using the `--recurse-submodules` flag. See [GitHub docs](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) for information on the different cloning methods. If you run into issues, follow GitHub troubleshooting suggestions [here](https://docs.github.com/en/repositories/creating-and-managing-repositories/troubleshooting-cloning-errors#https-cloning-errors). 
+Users can clone the repository using HTTPS, SSH, or GitHub CLI. Ensure you retrieve the submodules in the repository when cloning, using the `--recurse-submodules` flag. See [GitHub docs](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) for information on the different cloning methods. If you run into issues, follow GitHub troubleshooting suggestions [here](https://docs.github.com/en/repositories/creating-and-managing-repositories/troubleshooting-cloning-errors#https-cloning-errors).
 
 ```{note}
 If the repository is cloned without the `--recurse-submodules` flag, run the following commands.
@@ -13,7 +13,7 @@ If the repository is cloned without the `--recurse-submodules` flag, run the fol
 
 ### Using SSH-Key
 
-If it your first time cloning a **repository through ssh**, you will need to set up your git with an ssh-key by following these [directions](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/generating-a-new-ssh-key-and-adding-it-to-the-ssh-agent). 
+If it your first time cloning a **repository through ssh**, you will need to set up your git with an ssh-key by following these [directions](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/generating-a-new-ssh-key-and-adding-it-to-the-ssh-agent).
 
 ```bash
 $ git clone --recurse-submodules git@github.com:PyPSA/pypsa-usa.git
