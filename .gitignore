@@ -11,7 +11,7 @@ dconf
 *.dot
 *.tar.gz
 
-# configuration files 
+# configuration files
 config/
 
 # generated files

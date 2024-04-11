@@ -25,12 +25,12 @@ $ git clone --recurse-submodules git@github.com:PyPSA/pypsa-usa.git
 $ git clone --recurse-submodules https://github.com/PyPSA/pypsa-usa.git
 ```
 
-## Step 2. Initialize Configuration files 
+## Step 2. Initialize Configuration files
 
-From the command line, run the script `init_pypsa_usa.sh` to copy configuration file 
-templates into the `workflow/config` folder. 
+From the command line, run the script `init_pypsa_usa.sh` to copy configuration file
+templates into the `workflow/config` folder.
 
-```bash 
+```bash
 $ bash init_pypsa_usa.sh
 ```
 
