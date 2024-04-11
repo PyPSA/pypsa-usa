@@ -71,7 +71,9 @@ def plot_regional_timeseries_comparison(
     n: pypsa.Network,
     colors=None,
 ):
-    """ """
+    """
+    Plots regional timeseries plot.
+    """
     Path.mkdir(
         Path(snakemake.output[0]).parents[0] / "regional_timeseries",
         exist_ok=True,
@@ -196,7 +198,9 @@ def plot_regional_bar_production_comparison(
     historic_full: pd.DataFrame,
     colors=None,
 ):
-    """ """
+    """
+    Plots regional bar production plot.
+    """
     Path.mkdir(
         Path(snakemake.output[0]).parents[0] / "regional_bar_production",
         exist_ok=True,
