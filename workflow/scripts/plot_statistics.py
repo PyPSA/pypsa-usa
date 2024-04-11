@@ -1027,24 +1027,53 @@ def plot_fuel_costs(
 
     fuels = set(fuel_costs.index.get_level_values("carrier"))
 
-    fig, axs = plt.subplots(len(fuels), 1, figsize=(20, 40))
+    fig, axs = plt.subplots(len(fuels) + 1, 1, figsize=(20, 40))
 
+    color_palette = n.carriers.color.to_dict()
+
+    # plot error plot of all fuels
+    df = (
+        fuel_costs.droplevel(["bus", "Generator"])
+        .T.resample("d")
+        .mean()
+        .reset_index()
+        .melt(id_vars="snapshot")
+    )
+    sns.lineplot(
+        data=df,
+        x="snapshot",
+        y="value",
+        hue="carrier",
+        ax=axs[0],
+        legend=True,
+        palette=color_palette,
+    )
+    axs[0].set_title("Daily Average Fuel Costs [$/MWh]"),
+    axs[0].set_xlabel(""),
+    axs[0].set_ylabel("$/MWh"),
+
+    # plot bus fuel prices for each fuel
     for i, fuel in enumerate(fuels):
+        nice_name = n.carriers.at[fuel, "nice_name"]
         df = (
             fuel_costs.loc[fuel, :, :]
             .droplevel("Generator")
-            .reset_index()
-            .groupby("bus")
-            .sum()
+            .T.resample("d")
+            .mean()
+            .T.groupby(level=0)
+            .mean()
             .T
         )
-        df.plot(
-            ax=axs[i],
-            title=f"{fuel} costs [$/MWh]",
+        sns.lineplot(
+            data=df,
             legend=False,
-            xlabel="",
-            ylabel="$/MWh",
+            palette="muted",
+            dashes=False,
+            ax=axs[i + 1],
         )
+        axs[i + 1].set_title(f"Daily Average {nice_name} Fuel Costs per Bus [$/MWh]"),
+        axs[i + 1].set_xlabel(""),
+        axs[i + 1].set_ylabel("$/MWh"),
 
     fig.savefig(save)
 
@@ -1105,7 +1134,7 @@ if __name__ == "__main__":
             interconnect="western",
             clusters=80,
             ll="v1.0",
-            opts="RCo2L-SAFER-RPS",
+            opts="Ep-Co2L0.2",
             sector="E",
         )
     configure_logging(snakemake)

@@ -12,9 +12,7 @@ import pypsa
 from _helpers import configure_logging
 
 from pypsa.statistics import StatisticsAccessor
-from pypsa.statistics import get_bus_and_carrier, get_name_bus_and_carrier
-
-import constants
+from pypsa.statistics import get_bus_and_carrier
 
 logger = logging.getLogger(__name__)
 
@@ -333,7 +331,10 @@ def get_fuel_costs(n: pypsa.Network) -> pd.DataFrame:
     fuel_costs = fuel_costs.reset_index()
     fuel_costs["bus"] = fuel_costs.Generator.map(n.generators.bus)
     fuel_costs["carrier"] = fuel_costs.Generator.map(n.generators.carrier)
-    return fuel_costs.groupby(["carrier", "bus", "Generator"]).sum()
+    fuel_costs = fuel_costs.groupby(["carrier", "bus", "Generator"]).sum().T
+
+    fuel_costs.index = pd.to_datetime(fuel_costs.index)
+    return fuel_costs.T
 
 
 ###
