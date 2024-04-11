@@ -168,13 +168,18 @@ def plot_regional_comparisons(
         Path(snakemake.output[0]).parents[0] / "regional_timeseries",
         exist_ok=True,
     )
-    regions = n.buses.country.unique()
-    regions_clean = [ba.split("-")[0] for ba in regions]
-    regions = list(OrderedDict.fromkeys(regions_clean))
-    # regions = [ba for ba in regions if ba in ["CISO"]]
-
     buses = n.buses.copy()
-    buses["region"] = [ba.split("-")[0] for ba in buses.country]
+
+    if snakemake.config["clustering"]["cluster_network"]["aggregation_zones"] == 'reeds_zone':
+        regions = n.buses.reeds_ba.unique()
+        regions = list(OrderedDict.fromkeys(regions))
+        buses["region"] = buses.reeds_ba
+    else:
+        regions = n.buses.country.unique()
+        regions_clean = [ba.split("-")[0] for ba in regions]
+        regions = list(OrderedDict.fromkeys(regions_clean))
+        # regions = [ba for ba in regions if ba in ["CISO"]]
+        buses["region"] = [ba.split("-")[0] for ba in buses.country]
 
     historic_all_ba['imports'] = historic_all_ba['Total Interchange'].clip(upper=0) * -1
     historic_all_ba['exports'] = historic_all_ba['Total Interchange'].clip(lower=0)
@@ -183,7 +188,8 @@ def plot_regional_comparisons(
     diff = pd.DataFrame()
 
     for region in regions:
-        region_bus = buses.query(f"region == '{region}'").index
+        # if region in ['ERCO', 'SWPP']: continue
+        region_buses = buses.query(f"region == '{region}'").index
         if region == "Arizona":
             historic_region = historic_all_ba.loc[["AZPS", "SRP"]].groupby(level=1).sum()
         else:
@@ -193,7 +199,7 @@ def plot_regional_comparisons(
         optimized_region = create_optimized_by_carrier(
             n,
             order,
-            region=[region],
+            region_buses,
         )
 
         # Create new columns for historic for missing carriers in optimized
@@ -227,27 +233,26 @@ def plot_regional_comparisons(
     )
 
 
-def create_optimized_by_carrier(n, order, region=None):
+def create_optimized_by_carrier(n, order, region_buses=None):
     """
     Create a DataFrame from the model output/optimized.
     """
-    if region is not None:
+    if region_buses is not None:
         gen_p = n.generators_t["p"].loc[
             :,
-            n.generators.bus.map(n.buses.country).str.contains(region[0]),
+            n.generators.bus.isin(region_buses),
         ]
         # add imports to region
-        region_buses = n.buses[n.buses.country.str.contains(region[0])]
         interface_lines_b0 = n.lines[
             (
-                n.lines.bus0.isin(region_buses.index)
-                & ~n.lines.bus1.isin(region_buses.index)
+                n.lines.bus0.isin(region_buses)
+                & ~n.lines.bus1.isin(region_buses)
             )
         ]
         interface_lines_b1 = n.lines[
             (
-                n.lines.bus1.isin(region_buses.index)
-                & ~n.lines.bus0.isin(region_buses.index)
+                n.lines.bus1.isin(region_buses)
+                & ~n.lines.bus0.isin(region_buses)
             )
         ]
         flows = n.lines_t.p1.loc[:, interface_lines_b0.index].sum(axis=1)
@@ -428,8 +433,16 @@ def plot_regional_emissions_historical_bar(
         get_node_emissions_timeseries(n).T.groupby(n.buses.country).sum().T.sum() / 1e6,
         columns=["Optimized"],
     )
-    optimized.loc['CISO'] = optimized.loc[['CISO-PGAE', 'CISO-SCE', 'CISO-SDGE', 'CISO-VEA']].sum()
-    optimized.drop(index = ['CISO-PGAE', 'CISO-SCE', 'CISO-SDGE', 'CISO-VEA'], inplace=True)
+    
+    if snakemake.config["clustering"]["cluster_network"]["aggregation_zones"] == 'balancing_area':
+        optimized.loc['CISO'] = optimized.loc[['CISO-PGAE', 'CISO-SCE', 'CISO-SDGE', 'CISO-VEA']].sum()
+        optimized.drop(index = ['CISO-PGAE', 'CISO-SCE', 'CISO-SDGE', 'CISO-VEA'], inplace=True)
+    elif snakemake.config["clustering"]["cluster_network"]["aggregation_zones"] == 'reeds_zone':
+        region_mapper = n.buses[['country','reeds_ba']].drop_duplicates().set_index('country')['reeds_ba'].to_dict()
+        optimized['region'] = optimized.index.map(region_mapper)
+        optimized = optimized.groupby('region').sum()
+        optimized.index.name = 'country'
+
     optimized.sort_index(inplace=True)
 
     historical = historical.loc[optimized.index]
@@ -502,6 +515,26 @@ def main(snakemake):
     colors["imports"] = "#7d1caf"
     colors["exports"] = "#7d1caf"
 
+    # Regional Comparisons
+    plot_regional_comparisons(
+        n,
+        ge_all.drop(columns = ['Demand', 'Net Generation', 'Interchange']),
+        colors=colors,
+        **snakemake.wildcards,
+    )
+
+    plot_regional_emissions_historical_bar(
+        n,
+        ge_co2,
+        snakemake.output["val_bar_regional_emissions.pdf"],
+        pd.date_range(
+            start=snakemake.params.snapshots["start"],
+            end=snakemake.params.snapshots["end"],
+        ),
+        snakemake.params.eia_api,
+        **snakemake.wildcards,
+    )
+
     # Bar Production
     plot_bar_carrier_production(
         ge_interconnect,
@@ -545,25 +578,6 @@ def main(snakemake):
         **snakemake.wildcards,
     )
 
-    # Regional Comparisons
-    plot_regional_comparisons(
-        n,
-        ge_all.drop(columns = ['Demand', 'Net Generation', 'Interchange']),
-        colors=colors,
-        **snakemake.wildcards,
-    )
-
-    plot_regional_emissions_historical_bar(
-        n,
-        ge_co2,
-        snakemake.output["val_bar_regional_emissions.pdf"],
-        pd.date_range(
-            start=snakemake.params.snapshots["start"],
-            end=snakemake.params.snapshots["end"],
-        ),
-        snakemake.params.eia_api,
-        **snakemake.wildcards,
-    )
 
     plot_load_shedding_map(
         n,

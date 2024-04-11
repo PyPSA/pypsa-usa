@@ -183,6 +183,10 @@ def aggregate_to_substations(
         ],
         inplace=True,
     )
+
+    if aggregation_zones == "reeds_zone":
+        network_s.buses["reeds_ba"] = substations.reeds_ba
+
     return network_s
 
 

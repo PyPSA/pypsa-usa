@@ -8,7 +8,7 @@ renewable:
       turbine: Vestas_V112_3MW
       add_cutout_windspeed: true
     capacity_per_sqkm: 3 # conservative, ScholzPhd Tab 4.3.1: 10MW/km^2
-    # correction_factor: 0.93
+    correction_factor: 1 # 0.93
     corine:
       #all keys labeled corrine are actually copernicus codes. Using the name corrine bc using the pypsa-eur convention: https://land.copernicus.eu/global/sites/cgls.vito.be/files/products/CGLOPS1_PUM_LC100m-V3_I3.4.pdf
       grid_codes: [20, 30, 40, 60, 100, 112, 113, 114, 115]
@@ -26,7 +26,7 @@ renewable:
       turbine: NREL_ReferenceTurbine_2020ATB_5.5MW
       # add_cutout_windspeed: true
     capacity_per_sqkm: 3 # 2021–2022 Transmission Plan, CAISO
-    correction_factor: 0.8855 # proxy for wake losses, from 10.1016/j.energy.2018.08.153
+    correction_factor: 1 # 0.8855 # proxy for wake losses, from 10.1016/j.energy.2018.08.153
     corine:
       grid_codes: [80, 200] #page 28 of https://land.copernicus.eu/global/sites/cgls.vito.be/files/products/CGLOPS1_PUM_LC100m-V3_I3.4.pdf
     natura: true
@@ -44,8 +44,7 @@ renewable:
       turbine: NREL_ReferenceTurbine_2020ATB_15MW_offshore
       add_cutout_windspeed: true
     capacity_per_sqkm: 3 # 2021–2022 Transmission Plan, CAISO
-    correction_factor: 0.8855
-    # proxy for wake losses, from 10.1016/j.energy.2018.08.153
+    correction_factor: 1 # 0.8855 # proxy for wake losses, from 10.1016/j.energy.2018.08.153
     corine:
       grid_codes: [80, 200] #page 28 of https://land.copernicus.eu/global/sites/cgls.vito.be/files/products/CGLOPS1_PUM_LC100m-V3_I3.4.pdf
     natura: true
@@ -64,7 +63,7 @@ renewable:
       panel: CSi
       orientation: latitude_optimal # will lead into optimal
     capacity_per_sqkm: 4.6 # From 1.7 to 4.6 addresses issue #361 - TODO revisit this assumption
-    correction_factor: 0.854337
+    correction_factor: 1 # 0.854337
     corine:
       grid_codes: [20, 30, 40, 60, 90, 100] #see above for codes
     natura: true

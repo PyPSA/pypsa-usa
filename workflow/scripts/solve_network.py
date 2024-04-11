@@ -445,8 +445,8 @@ def add_interface_limits(n, sns, config):
     lines_s = n.model["Line-s"]
 
     for idx, interface in limits.iterrows():
-        if interface.interface == "p10|p11":
-            print(interface)
+        # if interface.interface == "p10|p11":
+        #     print(interface)
         regions_list_r = [region.strip() for region in interface.r.split(",")]
         regions_list_rr = [region.strip() for region in interface.rr.split(",")]
 

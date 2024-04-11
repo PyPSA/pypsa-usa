@@ -481,17 +481,19 @@ if __name__ == "__main__":
             gens = n.generators.query("carrier == @c")
             low = gens.efficiency.quantile(0.10)
             high = gens.efficiency.quantile(0.90)
-            if low >= high:
+            if low >= high or low.round(2) == high.round(2):
                 carriers += [c]
             else:
+                print([0, low, high, 1])
+                print(c)
+                # import pdb; pdb.set_trace()
                 labels = ["low", "medium", "high"]
-                suffix = pd.cut(
-                    gens.efficiency,
-                    bins=[0, low, high, 1],
-                    labels=labels,
+                suffix = pd.cut(gens.efficiency, bins=[0, low, high, 1], labels=labels
                 ).astype(str)
                 carriers += [f"{c} {label} efficiency" for label in labels]
-                n.generators.carrier.update(gens.carrier + " " + suffix + " efficiency")
+                n.generators.update(
+                    {"carrier": gens.carrier + " " + suffix + " efficiency"}
+                )
         aggregate_carriers = carriers
 
     if n_clusters == len(n.buses):

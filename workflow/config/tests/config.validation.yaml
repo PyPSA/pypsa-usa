@@ -154,7 +154,7 @@ clustering:
     feature: solar+onwind-time
     aggregation_zones: 'balancing_area' # [balancing_area, state, reeds_zone]
     exclude_carriers: []
-    consider_efficiency_classes: false
+    consider_efficiency_classes: True
   aggregation_strategies:
     generators:
       committable: any

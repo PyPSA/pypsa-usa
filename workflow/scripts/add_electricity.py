@@ -635,9 +635,8 @@ def add_missing_fuel_cost(plants, costs_fn):
 
 def add_missing_heat_rates(plants, heat_rates_fn):
     heat_rates = pd.read_csv(heat_rates_fn, index_col=0, skiprows=3)
-    hr_mapped = (
-        plants.fuel_type.map(heat_rates.heat_rate_btu_per_kwh) / 1000
-    )  # convert to mmbtu/mwh
+    heat_rates = heat_rates.loc[heat_rates.heat_rate_btu_per_kwh > 0]
+    hr_mapped = (plants.fuel_type.map(heat_rates.heat_rate_btu_per_kwh) / 1000)  # convert to mmbtu/mwh
     plants["heat_rate"].fillna(hr_mapped, inplace=True)
     return plants
 
@@ -746,7 +745,9 @@ def attach_conventional_generators(
         .join(costs, on="carrier", rsuffix="_r")
         .rename(index=lambda s: "C" + str(s))
     )
+
     plants["efficiency"] = plants.efficiency.fillna(plants.efficiency_r)
+    
     if unit_commitment is not None:
         committable_attrs = plants.carrier.isin(unit_commitment).to_frame("committable")
         for attr in unit_commitment.index:
@@ -777,7 +778,7 @@ def attach_conventional_generators(
         p_nom_extendable=plants.carrier.isin(extendable_carriers["Generator"]),
         ramp_limit_up=plants.ramp_limit_up,
         ramp_limit_down=plants.ramp_limit_down,
-        efficiency=plants.efficiency,
+        efficiency=plants.efficiency.round(3),
         marginal_cost=marginal_cost,
         capital_cost=plants.capital_cost,
         build_year=plants.build_year.fillna(0).astype(int),
@@ -982,7 +983,7 @@ def load_powerplants_eia(
     plants["p_nom"] = plants.pop("nameplate_capacity_mw")
 
     # Set Costs
-    plants["heat_rate"] = plants.pop("ads_avg_hr")
+    plants["heat_rate"] = plants.pop("egrid_heat_rate")
     plants = add_missing_fuel_cost(
         plants,
         snakemake.input.fuel_costs,
@@ -1041,6 +1042,24 @@ def load_powerplants_eia(
 
     return plants
 
+def apply_seasonal_capacity_derates(
+    n: pypsa.Network,
+    plants: pd.DataFrame,
+    conventional_carriers: list,
+    sns: pd.DatetimeIndex,
+    ):
+    "Applies rerate factor p_max_pu based on the seasonal capacity derates defined in eia860"
+    summer_sns = sns[sns.month.isin([6, 7, 8])]
+    winter_sns = sns[~sns.month.isin([6, 7, 8])]
+
+    conv_plants = plants.query("carrier in @conventional_carriers")
+    conv_plants.index = 'C' + conv_plants.index 
+    conv_gens = n.generators.query("carrier in @conventional_carriers")
+
+    p_max_pu = pd.DataFrame(1.0, index=sns, columns=conv_gens.index)
+    p_max_pu.loc[summer_sns, conv_gens.index] *= conv_plants.loc[:, "summer_derate"].astype(float)
+    p_max_pu.loc[winter_sns, conv_gens.index] *= conv_plants.loc[:, "winter_derate"].astype(float)
+    n.generators_t.p_max_pu = pd.concat([n.generators_t.p_max_pu, p_max_pu], axis=1)
 
 def assign_ads_missing_lat_lon(plants, n):
     plants_unmatched = plants[plants.latitude.isna() | plants.longitude.isna()]
@@ -1344,6 +1363,12 @@ def main(snakemake):
         unit_commitment=unit_commitment,
         fuel_price=None,  # update fuel prices later
     )
+    apply_seasonal_capacity_derates(
+        n, 
+        plants,
+        conventional_carriers,
+        n.snapshots
+    )
     attach_battery_storage(
         n,
         plants,
@@ -1466,6 +1491,6 @@ if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
 
-        snakemake = mock_snakemake("add_electricity", interconnect="usa")
+        snakemake = mock_snakemake("add_electricity", interconnect="western")
     configure_logging(snakemake)
     main(snakemake)

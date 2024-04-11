@@ -54,7 +54,6 @@ FIGURES_NATURAL_GAS = ["natural_gas.html"]
 FIGURES_VALIDATE = [
     "seasonal_stacked_plot.pdf",
     "carrier_production_bar.pdf",
-    "production_deviation_bar.pdf",
     "val_bar_regional_emissions.pdf",
     "val_generator_data_panel.pdf",
     "val_heatmap_capacity_factor.pdf",
