@@ -2,12 +2,12 @@
 
 templates="workflow/repo_data/config"
 destination="workflow/config"
-exisitng_config_files=$(ls "$destination" | grep -v ".gitkeep")
+exisitng_files=$(ls "$destination" | grep -v ".gitkeep")
 
-if [ -z "$files" ]; then
+if [ -z "$exisitng_files" ]; then
     echo "Copying config files from '$templates' to '$destination'..."
     cp -r "$templates"/* "$destination"
 else
     echo "Exisitng config files found in '$destination'. Delete the following files and rerun."
-    echo "$files"
+    echo "$exisitng_files"
 fi
