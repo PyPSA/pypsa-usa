@@ -22,12 +22,12 @@ $ git submodule init
 $ git submodule update
 ```
 
-## Step 3. Initialize Configuration files 
+## Step 3. Initialize Configuration files
 
-From the command line, run the script `init_pypsa_usa.sh` to copy configuration file 
-templates into the `workflow/config` folder. 
+From the command line, run the script `init_pypsa_usa.sh` to copy configuration file
+templates into the `workflow/config` folder.
 
-```bash 
+```bash
 $ bash init_pypsa_usa.sh
 ```
 
