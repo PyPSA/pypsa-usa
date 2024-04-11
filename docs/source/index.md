@@ -3,16 +3,24 @@
 % You can adapt this file completely to your liking, but it should at least
 % contain the root `toctree` directive.
 
-# PyPSA USA
+# PyPSA-USA
 
 ```{warning}
-**This model is under active development. The western interconnection is stable, however you are likely to find bugs in the workflow as we continue to develop the model. Please file [github issues](https://github.com/PyPSA/pypsa-usa/issues) or email ktehranchi@stanford.edu or trevor_barnes@sfu.ca for support**
+**This model is under active development. If you would like to chat about using the model please don't hesitate to reach out to ktehranchi@stanford.edu and trevor_barnes@sfu.ca for support**
 ```
 
-PyPSA-USA is an open-source power systems model of the transmission system in the United States. It is a highly configurable power systems model that can be used for capacity expansion modeling, production cost simulation, and power flow analysis. This workflow draws from the work of [pypsa-eur](https://pypsa-eur.readthedocs.io/en/latest/index.html) and [pypsa-meets-earth](https://pypsa-earth.readthedocs.io/en/latest/) projects.
+PyPSA-USA is an open-source energy system dataset of the United States energy system designed for expansion planning and operational simulations.
 
 % update to be a url
-![WECC-grid](_static/WECC.jpg)
+![PyPSA-USA_Network](_static/PyPSA-USA_network.png)
+
+PyPSA-USA provides you with a toolkit to customize the **data** and **policy constraints** of energy system planning model with ease. Through configuration file you can control the spatial, temporal, and operational resolution of your energy system model with access to cleaned and prepared historical and forecasted data. This means, you can build a model of **ERCOT, WECC, or the Eastern interconnection**, where the transmission network is clustered to **N nodes**, respecting the boundaries of **balancing areas, states, or REeDs shape boundaries**, using **historical EIA-930 demand data years 2018-2023** or **NREL EFS forcasted demand**, with **historical fuel prices from ISOs/EIA**, and capital cost projections from the **NREL Annual Technology Baseline**.
+
+You can create and export the power system data model to use in your own homebrewed optimization model OR use the built-in PyPSA-USA optimization features to layer on additional policy and operational constraints. For planning studies, we've integrated data on regional Renewable Portfolio Standards (RPS), emissions constraints, and other state-level policy constraints. We're actively building this model so more features are on the way!
+
+PyPSA-USA builds on and leverages the work of [PyPSA-EUR](https://pypsa-eur.readthedocs.io/en/latest/index.html) developed by TU Berlin. PyPSA-USA is actively developed by the [INES Research Group](https://ines.stanford.edu) at Stanford University and the [ΔE+ Research Group](https://www.sfu.ca/see/research/delta-e.html) at Simon Fraser University.
+
+
 
 <!-- ```{include} ../../README.md
 :relative-images:
@@ -47,6 +55,7 @@ about-tutorial
 config-wildcards
 config-configuration
 config-assumptions
+config-sectors
 ```
 
 ```{toctree}

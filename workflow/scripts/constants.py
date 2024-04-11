@@ -18,9 +18,22 @@ GPS_CRS = "EPSG:4326"
 EUR_2_USD = 1.07  # taken on 12-12-2023
 
 # energy content of natural gas
-# (1 MCF) * (1.036 MMBTU / 1 MCF) * (0.293 MWh / 1 MMBTU)
-# https://www.eia.gov/tools/faqs/faq.php?id=45&t=8
-NG_MCF_2_MWH = 0.3035
+# Assumes national averages for the conversion
+# https://www.eia.gov/naturalgas/monthly/pdf/table_25.pdf
+# (1036 BTU / CF) * (0.293 Wh / 1 BTU) * (1 MWh / 1,000,000 Wh) * (1,000,000 CF / 1 MMCF) = 303.5 MWh / MMCF
+
+NG_MWH_2_MMCF = 303.5  # MWh / MMCF
+NG_MCF_2_MWH = 0.3035  # TODO get rid of this and just use single constant
+
+# $/MMBtu * (1 MMBtu / 0.293 MWh) = $/MWh_thermal
+NG_Dol_MMBTU_2_MWH = 3.4129
+
+LBS_TON = 2000  # lbs/ short ton
+COAL_BTU_LB = 9396  # BTU/lb - EIA US AVERAGE TODO: differentiate between coal types
+MMBTU_MWHthemal = 3.4129  # MMBTU to MWh_thermal
+COAL_dol_ton_2_MWHthermal = (
+    LBS_TON**-1 * COAL_BTU_LB * 1000**-1 * MMBTU_MWHthemal
+)  # $/ton * ton/BTU * BTU/MWh_thermal
 
 ################################
 # Constants for ADS WECC mapping
@@ -170,47 +183,8 @@ ADS_FUEL_MAPPER = {
 # Constants for EIA mapping
 ###########################
 
-# maps EIA tech_type name to PyPSA name
-# {tech_type: pypsa carrier name}
-EIA_CARRIER_MAPPER = {
-    "Nuclear": "nuclear",
-    "Coal": "coal",
-    "Gas_SC": "OCGT",
-    "Gas_CC": "CCGT",
-    "Oil": "oil",
-    "Geothermal": "geothermal",
-    "Biomass": "biomass",
-    "Other": "other",
-    "Waste": "waste",
-    "Hydro": "hydro",
-    "Battery": "battery",
-    "Solar": "solar",
-    "Wind": "onwind",
-}
+# renaming moved to pre-processing
 
-EIA_PRIME_MOVER_MAPPER = {
-    "BA": "Energy Storage, Battery",
-    "CE": "Energy Storage, Compressed Air",
-    "CP": "Energy Storage, Concentrated Solar Power",
-    "FW": "Energy Storage, Flywheel",
-    "PS": "Energy Storage, Reversible Hydraulic Turbine (Pumped Storage)",
-    "ES": "Energy Storage, Other (specify in SCHEDULE 7)",
-    "ST": "Steam Turbine, including nuclear, geothermal and solar steam (does not include combined cycle)",
-    "GT": "Combustion (Gas) Turbine (does not include the combustion turbine part of a combined cycle; see code CT, below)",
-    "IC": "Internal Combustion Engine (diesel, piston, reciprocating)",
-    "CA": "Combined Cycle Steam Part",
-    "CT": "Combined Cycle Combustion Turbine Part",
-    "CS": "Combined Cycle Single Shaft (combustion turbine and steam turbine share a single generator)",
-    "HY": "Hydrokinetic, Axial Flow Turbine",
-    "HB": "Hydrokinetic, Wave Buoy",
-    "HK": "Hydrokinetic, Other (specify in SCHEDULE 7)",
-    "BT": "Hydroelectric Turbine (includes turbines associated with delivery of water by pipeline)",
-    "PV": "Photovoltaic",
-    "WT": "Wind Turbine, Onshore",
-    "WS": "Wind Turbine, Offshore",
-    "FC": "Fuel Cell",
-    "OT": "Other (specify in SCHEDULE 7)",
-}
 
 ###############################
 # Constants for Region Mappings
@@ -234,6 +208,22 @@ NERC_REGION_MAPPER = {
     "RFC": "eastern",
     "NPCC": "eastern",
     "MRO": "eastern",
+}
+
+EIA_930_REGION_MAPPER = {
+    "CAL": "western",
+    "CAR": "eastern",
+    "CENT": "eastern",
+    "FLA": "eastern",
+    "MIDA": "eastern",
+    "MIDW": "eastern",
+    "NW": "western",
+    "NE": "eastern",
+    "NY": "eastern",
+    "SE": "eastern",
+    "SW": "western",
+    "TEN": "eastern",
+    "TEX": "texas",
 }
 
 STATES_INTERCONNECT_MAPPER = {
@@ -476,7 +466,17 @@ ATB_TECH_MAPPER = {
         "crp": 45,
     },
     "coal": {
+        "display_name": "Coal-new",
+        "technology": "Coal_FE",
+        "crp": 30,
+    },
+    "coal_95CCS": {
         "display_name": "Coal-95%-CCS",
+        "technology": "Coal_FE",
+        "crp": 30,
+    },
+    "coal_99CCS": {
+        "display_name": "Coal-99%-CCS",
         "technology": "Coal_FE",
         "crp": 30,
     },
@@ -499,6 +499,11 @@ ATB_TECH_MAPPER = {
     },
     "OCGT": {  # natural gas
         "display_name": "NG Combustion Turbine (F-Frame)",
+        "technology": "NaturalGas_FE",
+        "crp": 30,
+    },
+    "CCGT_95CCS": {  # natural gas
+        "display_name": "NG Combined Cycle (F-Frame) 95% CCS",
         "technology": "NaturalGas_FE",
         "crp": 30,
     },

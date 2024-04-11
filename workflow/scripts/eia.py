@@ -26,20 +26,24 @@ period
 2020-12-01  Wyoming Price of Natural Gas Delivered to Resi...   8.00  $/MCF Wyoming
 """
 
-import logging
+from abc import ABC, abstractmethod
+from typing import Union, Dict
 import math
-from abc import ABC
-from abc import abstractmethod
-from typing import Dict
-from typing import Union
+import constants
+import yaml
 
 import numpy as np
 import pandas as pd
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util import Retry
+import logging
 
 logger = logging.getLogger(__name__)
 
 API_BASE = "https://api.eia.gov/v2/"
+
+STATE_CODES = constants.STATE_2_CODE
 
 
 # exceptions
@@ -70,10 +74,21 @@ class EiaData(ABC):
         """
         pass
 
-    def get_data(self) -> pd.DataFrame:
+    def get_data(self, pivot: bool = False) -> pd.DataFrame:
         product = self.data_creator()
-        data = product.retrieve_data()
-        return product.format_data(data)
+        df = product.retrieve_data()
+        df = product.format_data(df)
+        if pivot:
+            df = product._pivot_data(df)
+        return df
+
+    def get_api_call(self) -> pd.DataFrame:
+        product = self.data_creator()
+        return product.build_url()
+
+    def get_raw_data(self) -> pd.DataFrame:
+        product = self.data_creator()
+        return product.retrieve_data()
 
 
 # concrete creator
@@ -81,7 +96,9 @@ class FuelCosts(EiaData):
 
     def __init__(self, fuel: str, industry: str, year: int, api: str) -> None:
         self.fuel = fuel
-        self.industry = industry
+        self.industry = (
+            industry  # (power|residential|commercial|industrial|imports|exports)
+        )
         self.year = year
         self.api = api
 
@@ -103,7 +120,7 @@ class Trade(EiaData):
 
     def __init__(self, fuel: str, direction: str, year: int, api: str) -> None:
         self.fuel = fuel
-        self.direction = direction
+        self.direction = direction  # (imports|exports)
         self.year = year
         self.api = api
 
@@ -121,14 +138,21 @@ class Trade(EiaData):
 # concrete creator
 class Production(EiaData):
 
-    def __init__(self, fuel: str, industry: str, year: int, api: str) -> None:
+    def __init__(self, fuel: str, production: str, year: int, api: str) -> None:
         self.fuel = fuel
-        self.industry = industry
+        self.production = production  # (marketed|gross)
         self.year = year
         self.api = api
 
     def data_creator(self) -> pd.DataFrame:
-        pass
+        if self.fuel == "gas":
+            return GasProduction(self.production, self.year, self.api)
+        else:
+            raise InputException(
+                property="Production",
+                valid_options=["gas"],
+                recieved_option=self.fuel,
+            )
 
 
 # concrete creator
@@ -144,13 +168,46 @@ class Demand(EiaData):
 
     def data_creator(self) -> pd.DataFrame:
         if self.fuel == "electricity":
-            return ElectricityDemand(self.year, self.api)
+            raise NotImplementedError()
         else:
             raise InputException(
                 propery="Demand",
                 valid_options=["electricity"],
                 recived_option=self.fuel,
             )
+
+
+# concrete creator
+class Storage(EiaData):
+
+    def __init__(self, fuel: str, storage: str, year: int, api: str) -> None:
+        self.fuel = fuel
+        self.storage = storage  # (base|working|total|withdraw)
+        self.year = year
+        self.api = api
+
+    def data_creator(self) -> pd.DataFrame:
+        if self.fuel == "gas":
+            return GasStorage(self.storage, self.year, self.api)
+        else:
+            raise InputException(
+                propery="Storage",
+                valid_options=["gas"],
+                recived_option=self.fuel,
+            )
+
+
+# concrete creator
+class Emissions(EiaData):
+
+    def __init__(self, sector: str, year: int, api: str, fuel: str = None) -> None:
+        self.sector = sector  # (power|residential|commercial|industry|transport|total)
+        self.year = year  # 1970 - 2021
+        self.api = api
+        self.fuel = "all" if not fuel else fuel  # (coal|oil|gas|all)
+
+    def data_creator(self):
+        return StateEmissions(self.sector, self.fuel, self.year, self.api)
 
 
 # product
@@ -205,12 +262,22 @@ class DataExtractor(ABC):
 
         url in the form of "https://api.eia.gov/v2/" followed by api key and facets
         """
-        response = requests.get(url)
+
+        # sometimes running into HTTPSConnectionPool error. adding in retries helped
+        session = requests.Session()
+        retries = Retry(
+            total=3,
+            backoff_factor=0.1,
+            status_forcelist=[500, 502, 503, 504],
+        )
+        session.mount("https://", HTTPAdapter(max_retries=retries))
+
+        response = session.get(url, timeout=10)
         if response.status_code == 200:
             return response.json()  # Assumes the response is in JSON format
         else:
             logger.error(f"EIA Request failed with status code: {response.status_code}")
-            raise ValueError
+            raise requests.ConnectionError(f"Status code {response.status_code}")
 
     @staticmethod
     def _format_period(dates: pd.Series) -> pd.Series:
@@ -224,6 +291,24 @@ class DataExtractor(ABC):
                 return pd.to_datetime(dates + "-01", format="%Y-%m-%d")
             except ValueError:
                 return pd.NaT
+
+    @staticmethod
+    def _pivot_data(df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Pivots data on period and state.
+        """
+        df = df.reset_index()
+        return df.pivot(
+            index="period",
+            columns="state",
+            values="value",
+        )
+
+    @staticmethod
+    def _assign_dtypes(df: pd.DataFrame) -> pd.DataFrame:
+        return df.astype(
+            {"series-description": str, "value": float, "units": str, "state": str},
+        )
 
 
 # concrete product
@@ -240,13 +325,13 @@ class GasCosts(DataExtractor):
 
     def __init__(self, industry: str, year: int, api_key: str) -> None:
         self.industry = industry
-        super().__init__(year, api_key)
         if industry not in self.industry_codes.keys():
             raise InputException(
                 propery="Gas Costs",
                 valid_options=list(self.industry_codes),
                 recived_option=industry,
             )
+        super().__init__(year, api_key)
 
     def build_url(self) -> str:
         base_url = "natural-gas/pri/sum/data/"
@@ -284,11 +369,13 @@ class GasCosts(DataExtractor):
         )
         df = df.drop(columns=["use_average"]).copy()
 
-        return (
+        df = (
             df[["series-description", "value", "units", "state", "period"]]
             .sort_values(["state", "period"])
             .set_index("period")
         )
+
+        return self._assign_dtypes(df)
 
 
 # concrete product
@@ -300,23 +387,23 @@ class CoalCosts(DataExtractor):
 
     def __init__(self, industry: str, year: int, api_key: str) -> None:
         self.industry = industry
-        super().__init__(year, api_key)
         if industry != "power":
             raise InputException(
                 propery="Coal Costs",
                 valid_options=list(self.industry_codes),
                 recived_option=industry,
             )
+        super().__init__(year, api_key)
 
     def build_url(self) -> str:
-        base_url = "coal/shipments/by-mine-by-plant/data/"
-        facets = f"frequency=quarterly&data[0]=price&start={self.year}-Q1&end={self.year+1}-Q1&sort[0][column]=period&sort[0][direction]=desc&offset=0&length=5000"
+        base_url = "coal/shipments/receipts/data/"
+        facets = f"frequency=quarterly&data[0]=price&facets[coalRankId][]=TOT&start={self.year}-Q1&end={self.year+1}-Q1&sort[0][column]=period&sort[0][direction]=desc&offset=0&length=5000"
         return f"{API_BASE}{base_url}?api_key={self.api_key}&{facets}"
 
     def format_data(self, df: pd.DataFrame) -> pd.DataFrame:
 
         df = df[
-            (df.coalType.isin(("All", "all")))
+            (df.coalRankId.isin(["TOT"]))
             & ~(df.price == "w")
             & ~(df.price.isna())  # withheld value. Will be assigned usa average
         ].copy()
@@ -332,8 +419,14 @@ class CoalCosts(DataExtractor):
         df[["year", "quarter"]] = df.period.str.split("-", expand=True)
         df = (
             df[["plantStateDescription", "price", "price-units", "year", "quarter"]]
-            .rename(columns={"plantStateDescription": "state", "price-units": "unit"})
-            .groupby(by=["state", "unit", "year", "quarter"])
+            .rename(
+                columns={
+                    "plantStateDescription": "state",
+                    "price-units": "units",
+                    "price": "value",
+                },
+            )
+            .groupby(by=["state", "units", "year", "quarter"])
             .mean()
             .reset_index()
         )
@@ -345,7 +438,7 @@ class CoalCosts(DataExtractor):
         dfs = []
         dates = pd.date_range(
             start=f"{self.year}-01-01",
-            end="{self.year}-12-01",
+            end=f"{self.year}-12-01",
             freq="MS",
         )
         for date in dates:
@@ -364,7 +457,7 @@ class CoalCosts(DataExtractor):
                 [
                     "U.S.",
                     "average dollars per ton",
-                    states[states.period == date].price.mean(),
+                    states[states.period == date].value.mean(),
                     date,
                 ],
             )
@@ -375,7 +468,9 @@ class CoalCosts(DataExtractor):
             lambda x: f"{x} Coal Electric Power Price",
         )
 
-        return final.set_index("period")
+        final = final.set_index("period")
+
+        return self._assign_dtypes(final)
 
 
 class ElectricityDemand(DataExtractor):
@@ -412,13 +507,13 @@ class GasTrade(DataExtractor):
 
     def __init__(self, direction: str, year: int, api_key: str) -> None:
         self.direction = direction
-        super().__init__(year, api_key)
         if self.direction not in list(self.direction_codes):
             raise InputException(
                 propery="Natural Gas Imports and Exports",
                 valid_options=list(self.direction_codes),
                 recived_option=direction,
             )
+        super().__init__(year, api_key)
 
     def build_url(self) -> str:
         poe = "poe1" if self.direction == "imports" else "poe2"
@@ -430,11 +525,13 @@ class GasTrade(DataExtractor):
         df["period"] = self._format_period(df.period).copy()
         df["state"] = df["series-description"].map(self.extract_state)
 
-        return (
+        df = (
             df[["series-description", "value", "units", "state", "period"]]
             .sort_values(["state", "period"])
             .set_index("period")
         )
+
+        return self._assign_dtypes(df)
 
     @staticmethod
     def extract_state(description: str) -> str:
@@ -451,6 +548,200 @@ class GasTrade(DataExtractor):
             return description.split(" Natural Gas Pipeline")[0]
 
 
+class GasStorage(DataExtractor):
+    """
+    Underground storage facilites for natural gas.
+    """
+
+    # https://www.eia.gov/naturalgas/storage/basics/
+    storage_codes = {
+        "base": "SAB",
+        "working": "SAO",
+        "total": "SAT",
+        "withdraw": "SAW",
+    }
+
+    def __init__(self, storage: str, year: int, api_key: str) -> None:
+        self.storage = storage
+        if self.storage not in list(self.storage_codes):
+            raise InputException(
+                propery="Natural Gas Underground Storage",
+                valid_options=list(self.storage_codes),
+                recived_option=storage,
+            )
+        super().__init__(year, api_key)
+
+    def build_url(self) -> str:
+        base_url = "natural-gas/stor/sum/data/"
+        facets = f"frequency=monthly&data[0]=value&facets[process][]={self.storage_codes[self.storage]}&start={self.year}-01&end={self.year+1}-01&sort[0][column]=period&sort[0][direction]=desc&offset=0&length=5000"
+        return f"{API_BASE}{base_url}?api_key={self.api_key}&{facets}"
+
+    def format_data(self, df: pd.DataFrame) -> pd.DataFrame:
+
+        df = df[~(df["area-name"] == "NA")].copy()
+        df["period"] = self._format_period(df.period)
+        df["state"] = (
+            df["series-description"].map(self.extract_state).map(self.map_state_names)
+        )
+
+        df = (
+            df[["series-description", "value", "units", "state", "period"]]
+            .sort_values(["state", "period"])
+            .set_index("period")
+        )
+
+        return self._assign_dtypes(df)
+
+    @staticmethod
+    def extract_state(description: str) -> str:
+        """
+        Extracts state from series descripion.
+        """
+        return description.split(" Natural ")[0]
+
+    @staticmethod
+    def map_state_names(state: str) -> str:
+        """
+        Maps state name to code.
+        """
+        return "U.S." if state == "U.S. Total" else STATE_CODES[state]
+
+
+class GasProduction(DataExtractor):
+    """
+    Dry natural gas production.
+    """
+
+    production_codes = {
+        "market": "VGM",
+        "gross": "FGW",  # gross withdrawls
+    }
+
+    def __init__(self, production: str, year: int, api_key: str) -> None:
+        self.production = production
+        if self.production not in list(self.production_codes):
+            raise InputException(
+                propery="Natural Gas Production",
+                valid_options=list(self.production_codes),
+                recived_option=production,
+            )
+        super().__init__(year, api_key)
+
+    def build_url(self) -> str:
+        base_url = "natural-gas/prod/sum/data/"
+        facets = f"frequency=monthly&data[0]=value&facets[process][]={self.production_codes[self.production]}&start={self.year}-01&end={self.year+1}-01&sort[0][column]=period&sort[0][direction]=desc&offset=0&length=5000"
+        return f"{API_BASE}{base_url}?api_key={self.api_key}&{facets}"
+
+    def format_data(self, df: pd.DataFrame) -> pd.DataFrame:
+
+        df = df[~(df["area-name"] == "NA")].copy()
+        df["period"] = self._format_period(df.period)
+        df["state"] = (
+            df["series-description"].map(self.extract_state).map(self.map_state_names)
+        )
+
+        df = (
+            df[["series-description", "value", "units", "state", "period"]]
+            .sort_values(["state", "period"])
+            .set_index("period")
+        )
+
+        return self._assign_dtypes(df)
+
+    @staticmethod
+    def extract_state(description: str) -> str:
+        """
+        Extracts state from series descripion.
+
+        Input will be in one of the following forms
+        - "Maryland Natural Gas Marketed Production (MMcf)"
+        - "Idaho Marketed Production of Natural Gas (MMcf)"
+        """
+        return description.split(" Natural Gas")[0].split(" Marketed")[0]
+
+    @staticmethod
+    def map_state_names(state: str) -> str:
+        """
+        Maps state name to code.
+        """
+        return "U.S." if state == "U.S." else STATE_CODES[state]
+
+
+class StateEmissions(DataExtractor):
+    """
+    State Level CO2 Emissions.
+    """
+
+    sector_codes = {
+        "commercial": "CC",
+        "power": "EC",
+        "industrial": "IC",
+        "residential": "RC",
+        "transport": "TC",
+        "total": "TT",
+    }
+
+    fuel_codes = {
+        "coal": "CO",
+        "gas": "NG",
+        "oil": "PE",
+        "all": "TO",  # coal + gas + oil = all emissions
+    }
+
+    def __init__(self, sector: str, fuel: str, year: int, api_key: str) -> None:
+        self.sector = sector
+        self.fuel = fuel
+        if self.sector not in list(self.sector_codes):
+            raise InputException(
+                propery="State Level Emissions",
+                valid_options=list(self.sector_codes),
+                recived_option=sector,
+            )
+        if self.fuel not in list(self.fuel_codes):
+            raise InputException(
+                propery="State Level Emissions",
+                valid_options=list(self.fuel_codes),
+                recived_option=fuel,
+            )
+        super().__init__(year, api_key)
+        if self.year > 2021:
+            logger.warning(f"Emissions data only available until {2021}")
+            self.year = 2021
+
+    def build_url(self) -> str:
+        base_url = "co2-emissions/co2-emissions-aggregates/data/"
+        facets = f"frequency=annual&data[0]=value&facets[sectorId][]={self.sector_codes[self.sector]}&facets[fuelId][]={self.fuel_codes[self.fuel]}&start={self.year}&end={self.year}&sort[0][column]=period&sort[0][direction]=desc&offset=0&length=5000"
+        return f"{API_BASE}{base_url}?api_key={self.api_key}&{facets}"
+
+    def format_data(self, df: pd.DataFrame) -> pd.DataFrame:
+
+        df = df[~(df["state-name"] == "NA")].copy()
+        df = df.rename(
+            columns={
+                "value-units": "units",
+                "state-name": "state",
+                "sector-name": "series-description",
+            },
+        )
+        df["series-description"] = df["series-description"].str.cat(
+            df["fuel-name"],
+            sep=" - ",
+        )
+
+        df = (
+            df[["series-description", "value", "units", "state", "period"]]
+            .sort_values(["state", "period"])
+            .set_index("period")
+        )
+
+        return self._assign_dtypes(df)
+
+
 if __name__ == "__main__":
-    api_key = ""
-    print(Trade("gas", "imports", 2022, api_key).get_data())
+    with open("./../config/config.api.yaml") as file:
+        yaml_data = yaml.safe_load(file)
+    api = yaml_data["api"]["eia"]
+    # print(FuelCosts("coal", "power", 2019, api).get_data(pivot=True))
+    # print(FuelCosts("gas", "commercial", 2019, api).get_data(pivot=True))
+    # print(Emissions("transport", 2019, api).get_data(pivot=True))
+    print(Storage("gas", "total", 2019, api).get_data(pivot=True))

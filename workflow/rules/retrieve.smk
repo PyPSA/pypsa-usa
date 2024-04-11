@@ -32,7 +32,7 @@ def define_zenodo_databundles():
 
 def define_sector_databundles():
     return {
-        "pypsa_usa_sec": "https://zenodo.org/records/10067222/files/pypsa_usa_sec.zip?download=1"
+        "pypsa_usa_sec": "https://zenodo.org/records/10637836/files/pypsa_usa_sector_data.zip?download=1"
     }
 
 
@@ -72,9 +72,15 @@ rule retrieve_nrel_efs_data:
 
 
 sector_datafiles = [
+    # general
     "counties/cb_2020_us_county_500k.shp",
+    # heating sector
     "population/DECENNIALDHC2020.P1-Data.csv",
-    "urbanization/DECENNIALDHC2020.H1-Data.csv",
+    "urbanization/DECENNIALDHC2020.H2-Data.csv",
+    # natural gas
+    "natural_gas/EIA-757.csv",
+    "natural_gas/EIA-StatetoStateCapacity_Jan2023.xlsx",
+    "natural_gas/pipelines.geojson",
 ]
 
 
@@ -125,6 +131,61 @@ rule retrieve_eia_data:
         mem_mb=5000,
     script:
         "../scripts/retrieve_eia_data.py"
+
+
+RESSTOCK_FILES = [
+    "mobile_home",
+    "multi-family_with_2_-_4_units",
+    "multi-family_with_5plus_units",
+    "single-family_attached",
+    "single-family_detached",
+]
+
+COMSTOCK_FILES = [
+    "fullservicerestaurant",
+    "hospital",
+    "largehotel",
+    "largeoffice",
+    "mediumoffice",
+    "outpatient",
+    "primaryschool",
+    "quickservicerestaurant",
+    "retailstandalone",
+    "retailstripmall",
+    "secondaryschool",
+    "smallhotel",
+    "smalloffice",
+    "warehouse",
+]
+
+# need seperate rules cause cant access params in output
+# https://github.com/snakemake/snakemake/issues/1122
+
+
+rule retrieve_res_eulp:
+    log:
+        "logs/retrieve/retrieve_res_eulp/{state}.log",
+    params:
+        stock="res",
+        profiles=RESSTOCK_FILES,
+        save_dir=DATA + "eulp/res/",
+    output:
+        expand(DATA + "eulp/res/{{state}}/{profile}.csv", profile=RESSTOCK_FILES),
+    script:
+        "../scripts/retrieve_eulp.py"
+
+
+rule retrieve_com_eulp:
+    log:
+        "logs/retrieve/retrieve_com_eulp/{state}.log",
+    params:
+        stock="com",
+        profiles=COMSTOCK_FILES,
+        save_dir=DATA + "eulp/com/",
+    output:
+        expand(DATA + "eulp/com/{{state}}/{profile}.csv", profile=COMSTOCK_FILES),
+    script:
+        "../scripts/retrieve_eulp.py"
 
 
 rule retrieve_ship_raster:
@@ -178,15 +239,29 @@ rule retrieve_cost_data_usa:
     output:
         nrel_atb=DATA + "costs/nrel_atb.parquet",
         # nrel_atb_transport = DATA + "costs/nrel_atb_transport.xlsx",
-        ng_electric_power_price=DATA + "costs/ng_electric_power_price.csv",
-        ng_industrial_price=DATA + "costs/ng_industrial_price.csv",
-        ng_residential_price=DATA + "costs/ng_commercial_price.csv",
-        ng_commercial_price=DATA + "costs/ng_residential_price.csv",
     params:
-        eia_api_key=config["costs"].get("eia_aip_key", None),
+        # eia_api_key = config["api"].get("eia", None),
+        eia_api_key=None,
     log:
         LOGS + "retrieve_cost_data_usa.log",
     resources:
         mem_mb=1000,
     script:
         "../scripts/retrieve_cost_data_usa.py"
+
+
+rule retrieve_caiso_data:
+    params:
+        fuel_year=config["costs"]["ng_fuel_year"],
+    input:
+        fuel_regions="repo_data/plants/wecc_fuelregions.xlsx",
+    output:
+        fuel_prices=DATA + "costs/caiso_ng_power_prices.csv",
+    log:
+        LOGS + "retrieve_caiso_data.log",
+    shadow:
+        "minimal"
+    resources:
+        mem_mb=2000,
+    script:
+        "../scripts/retrieve_caiso_data.py"

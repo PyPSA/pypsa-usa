@@ -17,7 +17,7 @@ rule copy_config:
         "../scripts/subworkflows/pypsa-eur/scripts/copy_config.py"
 
 
-rule plot_figures:
+rule plot_network_maps:
     input:
         network=RESULTS
         + "{interconnect}/networks/elec_s_{clusters}_ec_l{ll}_{opts}_{sector}.nc",
@@ -32,38 +32,72 @@ rule plot_figures:
     output:
         **{
             fig: RESULTS
-            + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}_%s.pdf"
+            + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/maps/%s"
             % fig
-            for fig in FIGURES_SINGLE
+            for fig in FIGURES_MAPS
         },
-        **{
-            fig: RESULTS
-            + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}_%s.html"
-            % fig
-            for fig in FIGURES_SINGLE_HTML
-        },
+    log:
+        "logs/plot_figures/{interconnect}_{clusters}_l{ll}_{opts}_{sector}.log",
     threads: 1
     resources:
         mem_mb=5000,
     script:
-        "../scripts/plot_figures.py"
+        "../scripts/plot_network_maps.py"
 
 
-rule plot_validation_figures:
+rule plot_natural_gas:
     input:
-        network=RESULTS
-        + "{interconnect}/networks/elec_s_{clusters}_ec_l{ll}_{opts}_{sector}_operations.nc",
-        historic_first=DATA + "eia/6moFiles/EIA930_BALANCE_2019_Jan_Jun.csv",
-        historic_second=DATA + "eia/6moFiles/EIA930_BALANCE_2019_Jul_Dec.csv",
+        network="results/{interconnect}/networks/elec_s_{clusters}_ec_l{ll}_{opts}_{sector}.nc",
+    params:
+        plotting=config["plotting"],
     output:
         **{
             fig: RESULTS
-            + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}_%s.pdf"
+            + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/gas/%s"
             % fig
-            for fig in FIGURES_VALIDATE
+            for fig in FIGURES_NATURAL_GAS
         },
+    log:
+        "logs/plot_figures/gas/{interconnect}_{clusters}_l{ll}_{opts}_{sector}.log",
+    script:
+        "../scripts/plot_natural_gas.py"
+
+
+rule plot_statistics:
+    input:
+        network=RESULTS
+        + "{interconnect}/networks/elec_s_{clusters}_ec_l{ll}_{opts}_{sector}.nc",
+        regions_onshore=RESOURCES
+        + "{interconnect}/regions_onshore_s_{clusters}.geojson",
+        regions_offshore=RESOURCES
+        + "{interconnect}/regions_offshore_s_{clusters}.geojson",
+    params:
+        electricity=config["electricity"],
+        plotting=config["plotting"],
+        retirement=config["electricity"].get("retirement", "technical"),
+    output:
+        **{
+            fig: RESULTS
+            + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/emissions/%s"
+            % fig
+            for fig in FIGURES_EMISSIONS
+        },
+        **{
+            fig: RESULTS
+            + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/production/%s"
+            % fig
+            for fig in FIGURES_PRODUCTION
+        },
+        **{
+            fig: RESULTS
+            + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/system/%s"
+            % fig
+            for fig in FIGURES_SYSTEM
+        },
+    log:
+        "logs/plot_figures/{interconnect}_{clusters}_l{ll}_{opts}_{sector}.log",
     threads: 1
     resources:
         mem_mb=5000,
     script:
-        "../scripts/validate_data.py"
+        "../scripts/plot_statistics.py"

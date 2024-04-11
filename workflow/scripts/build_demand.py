@@ -43,7 +43,7 @@ from pathlib import Path
 from typing import Any
 from typing import Dict
 from typing import List
-from typing import Union
+from typing import Optional
 
 import constants as const
 import geopandas as gpd
@@ -64,6 +64,186 @@ from sklearn.neighbors import BallTree
 idx = pd.IndexSlice
 
 logger = logging.getLogger(__name__)
+
+
+class Eulp:
+    """Reads in an end use load profile from https://data.openei.org/submissions/4520"""
+
+    _elec_group = [
+        # res and com
+        "out.electricity.lighting_exterior.energy_consumption.kwh",  #
+        "out.electricity.lighting_interior.energy_consumption.kwh",  #
+        "out.electricity.water_systems.energy_consumption.kwh",
+        # res only
+        "out.electricity.bath_fan.energy_consumption.kwh",
+        "out.electricity.ceiling_fan.energy_consumption.kwh",  #
+        "out.electricity.clothes_dryer.energy_consumption.kwh",  #
+        "out.electricity.clothes_washer.energy_consumption.kwh",  #
+        "out.electricity.range_oven.energy_consumption.kwh",
+        "out.electricity.dishwasher.energy_consumption.kwh",  #
+        "out.electricity.ext_holiday_light.energy_consumption.kwh",
+        "out.electricity.extra_refrigerator.energy_consumption.kwh",
+        "out.electricity.freezer.energy_consumption.kwh",  #
+        "out.electricity.lighting_garage.energy_consumption.kwh",  #
+        "out.electricity.mech_vent.energy_consumption.kwh",  #
+        "out.electricity.permanent_spa_pump.energy_consumption.kwh",  #
+        "out.electricity.hot_tub_pump.energy_consumption.kwh",
+        "out.electricity.house_fan.energy_consumption.kwh",
+        "out.electricity.plug_loads.energy_consumption.kwh",  #
+        "out.electricity.pool_pump.energy_consumption.kwh",  #
+        "out.electricity.pv.energy_consumption.kwh",  #
+        "out.electricity.range_fan.energy_consumption.kwh",
+        "out.electricity.recirc_pump.energy_consumption.kwh",
+        "out.electricity.refrigerator.energy_consumption.kwh",  #
+        "out.electricity.vehicle.energy_consumption.kwh",
+        "out.electricity.well_pump.energy_consumption.kwh",  #
+        # com only
+        "out.electricity.fans.energy_consumption.kwh",
+        "out.electricity.interior_equipment.energy_consumption.kwh",
+        "out.electricity.pumps.energy_consumption.kwh",
+    ]
+
+    _heat_group = [
+        # res and com
+        "out.electricity.heating.energy_consumption.kwh",  #
+        "out.natural_gas.heating.energy_consumption.kwh",
+        "out.natural_gas.water_systems.energy_consumption.kwh",
+        "out.natural_gas.hot_water.energy_consumption.kwh",  #
+        # res only
+        "out.electricity.heating_fans_pumps.energy_consumption.kwh",  #
+        "out.electricity.heating_hp_bkup.energy_consumption.kwh",  #
+        "out.electricity.heating_hp_bkup_fa.energy_consumption.kwh",  #
+        "out.electricity.hot_water.energy_consumption.kwh",  #
+        "out.electricity.permanent_spa_heat.energy_consumption.kwh",  #
+        "out.electricity.pool_heater.energy_consumption.kwh",  #
+        "out.fuel_oil.heating.energy_consumption.kwh",  #
+        "out.fuel_oil.heating_hp_bkup.energy_consumption.kwh",  #
+        "out.fuel_oil.hot_water.energy_consumption.kwh",  #
+        "out.fuel_oil.total.energy_consumption.kwh",  #
+        "out.electricity.heating_supplement.energy_consumption.kwh",
+        "out.natural_gas.heating_hp_bkup.energy_consumption.kwh",  #
+        "out.electricity.fans_heating.energy_consumption.kwh",
+        "out.natural_gas.clothes_dryer.energy_consumption.kwh",  #
+        "out.natural_gas.cooking_range.energy_consumption.kwh",
+        "out.natural_gas.range_oven.energy_consumption.kwh",  #
+        "out.natural_gas.fireplace.energy_consumption.kwh",  #
+        "out.natural_gas.grill.energy_consumption.kwh",  #
+        "out.natural_gas.hot_tub_heater.energy_consumption.kwh",
+        "out.natural_gas.lighting.energy_consumption.kwh",  #
+        "out.natural_gas.permanent_spa_heat.energy_consumption.kwh",  #
+        "out.natural_gas.pool_heater.energy_consumption.kwh",  #
+        "out.natural_gas.permanent_spa_heat.energy_consumption.kwh",  #
+        "out.propane.clothes_dryer.energy_consumption.kwh",  #
+        "out.propane.cooking_range.energy_consumption.kwh",
+        "out.propane.heating.energy_consumption.kwh",  #
+        "out.propane.heating_hp_bkup.energy_consumption.kwh",  #
+        "out.propane.hot_water.energy_consumption.kwh",  #
+        "out.propane.range_oven.energy_consumption.kwh",  #
+        "out.propane.water_systems.energy_consumption.kwh",
+        "out.wood.heating.energy_consumption.kwh",
+        "out.electricity.hot_tub_heater.energy_consumption.kwh",
+        # com only
+        "out.other_fuel.heating.energy_consumption.kwh",
+    ]
+
+    _cool_group = [
+        # res and com
+        "out.electricity.cooling.energy_consumption.kwh",  #
+        # res only
+        "out.electricity.fans_cooling.energy_consumption.kwh",
+        "out.electricity.cooling_fans_pumps.energy_consumption.kwh",  #
+        # com only
+        "out.district_cooling.cooling.energy_consumption.kwh",
+        "out.electricity.heat_rejection.energy_consumption.kwh",
+        "out.electricity.refrigeration.energy_consumption.kwh",
+    ]
+
+    def __init__(
+        self,
+        filepath: Optional[str] = None,
+        df: Optional[pd.DataFrame] = None,
+    ) -> None:
+        if filepath:
+            df = self.read_data(filepath)
+            df = self.aggregate_data(df)
+            self.data = self.resample_data(df)
+        elif isinstance(df, pd.DataFrame):
+            self.data = df
+            assert (self.data.columns == ["electricity", "heating", "cooling"]).all()
+        else:
+            raise TypeError(
+                f"missing 1 required positional argument: 'filepath' or 'df'",
+            )
+
+    def __add__(self, other):
+        if isinstance(other, Eulp):
+            return Eulp(df=self.data.add(other.data))
+        else:
+            raise TypeError()
+
+    def __radd__(self, other):
+        return self.__add__(other)
+
+    def __str__(self):
+        return "Properties are 'data', 'electric', 'heating', 'cooling'"
+
+    def __repr__(self):
+        return f"\n{self.data.head(3)}\n\n from {self.data.index[0]} to {self.data.index[-1]}"
+
+    @property
+    def electric(self):
+        return self.data["electricity"]
+
+    @property
+    def heating(self):
+        return self.data["heating"]
+
+    @property
+    def cooling(self):
+        return self.data["heating"]
+
+    @classmethod
+    def read_data(self, filepath: str) -> pd.DataFrame:
+        df = pd.read_csv(filepath, engine="pyarrow", index_col="timestamp")
+        df.index = pd.to_datetime(df.index)
+        return df
+
+    @classmethod
+    def resample_data(self, df: pd.DataFrame, resample: str = "1h") -> pd.DataFrame:
+        if not isinstance(df.index, pd.DatetimeIndex):
+            df.index = pd.to_datetime(df.index)
+        return df.resample(resample).sum()
+
+    def aggregate_data(self, df: pd.DataFrame) -> pd.DataFrame:
+
+        def aggregate_sector(df: pd.DataFrame, columns: list[str]) -> pd.Series:
+            sector_columns = [x for x in columns if x in df.columns.to_list()]
+            return df[sector_columns].sum(axis=1)
+
+        dfs = []
+        sectors = {
+            "electricity": self._elec_group,
+            "heating": self._heat_group,
+            "cooling": self._cool_group,
+        }
+        for sector, sector_cols in sectors.items():
+            sector_load = aggregate_sector(df, sector_cols)
+            sector_load.name = sector
+            dfs.append(sector_load)
+
+        return pd.concat(dfs, axis=1).mul(1e-3)  # kwh -> MWh
+
+    def plot(
+        self,
+        sectors: Optional[list[str] | str] = ["electricity", "heating", "cooling"],
+    ):
+
+        if isinstance(sectors, str):
+            sectors = [sectors]
+
+        df = self.data[sectors]
+
+        return df.plot(xlabel="", ylabel="MWh")
 
 
 def prepare_ads_demand(
@@ -114,8 +294,37 @@ def prepare_eia_demand(
 
     # Combine EIA Demand Data to Match GIS Shapes
     demand["Arizona"] = demand.pop("SRP") + demand.pop("AZPS")
+    demand["Carolina"] = (
+        demand.pop("CPLE")
+        + demand.pop("CPLW")
+        + demand.pop("DUK")
+        + demand.pop("SC")
+        + demand.pop("SCEG")
+        + demand.pop("YAD")
+    )
+    demand["Florida"] = (
+        demand.pop("FPC")
+        + demand.pop("FPL")
+        + demand.pop("GVL")
+        + demand.pop("JEA")
+        + demand.pop("NSB")
+        + demand.pop("SEC")
+        + demand.pop("TAL")
+        + demand.pop("TEC")
+        + demand.pop("HST")
+        + demand.pop("FMPP")
+    )
+
     n.buses["load_dissag"] = n.buses.balancing_area.replace(
-        {"^CISO.*": "CISO", "^ERCO.*": "ERCO"},
+        {
+            "^CISO.*": "CISO",
+            "^ERCO.*": "ERCO",
+            "^MISO.*": "MISO",
+            "^SPP.*": "SPP",
+            "^PJM.*": "PJM",
+            "^NYISO.*": "NYIS",
+            "^ISONE.*": "ISNE",
+        },
         regex=True,
     )
 
@@ -153,7 +362,7 @@ def prepare_efs_demand(
         year=planning_horizons[0],
         month=1,
         day=1,
-    ) + pd.to_timedelta(demand["LocalHourID"] - 1, unit="H")
+    ) + pd.to_timedelta(demand["LocalHourID"] - 1, unit="h")
     demand["UTC_Time"] = demand.groupby(["State"])["DateTime"].transform(local_to_utc)
     demand.drop(columns=["LocalHourID", "DateTime"], inplace=True)
     demand.set_index("UTC_Time", inplace=True)
@@ -185,7 +394,11 @@ def prepare_efs_demand(
             .drop(columns="UTC_Time")
         )
 
+    # take the intersection of the demand and the snapshots by hour of year
+    hoy = (n.snapshots.dayofyear - 1) * 24 + n.snapshots.hour
+    demand_new = demand_new.loc[hoy]
     demand_new.index = n.snapshots
+
     n.buses.rename(columns={"LAF_states": "LAF"}, inplace=True)
     return disaggregate_demand_to_buses(n, demand_new)
 
@@ -223,6 +436,7 @@ def disaggregate_demand_to_buses(
         )
     bus_demand.index = n.snapshots
     n.buses.drop(columns=["LAF"], inplace=True)
+    bus_demand = bus_demand.loc[:, (bus_demand != 0).any(axis=0)]
     return bus_demand.fillna(0)
 
 
@@ -233,8 +447,8 @@ def main(snakemake):
     planning_horizons = snakemake.params["planning_horizons"]
 
     snapshot_config = snakemake.params["snapshots"]
-    sns_start = pd.to_datetime(snapshot_config["start"])  # + " 08:00:00")
-    sns_end = pd.to_datetime(snapshot_config["end"])  # + " 06:00:00")
+    sns_start = pd.to_datetime(snapshot_config["start"])
+    sns_end = pd.to_datetime(snapshot_config["end"])
     sns_inclusive = snapshot_config["inclusive"]
 
     n = pypsa.Network(snakemake.input.base_network)
@@ -262,13 +476,13 @@ def main(snakemake):
             "Invalid demand_type. Supported values are 'ads', and 'pypsa-usa'.",
         )
 
-    demand_per_bus.to_csv(snakemake.output.demand, index=True)
+    demand_per_bus.round(4).to_csv(snakemake.output.demand, index=True)
 
 
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
 
-        snakemake = mock_snakemake("build_demand", interconnect="western")
+        snakemake = mock_snakemake("build_demand", interconnect="eastern")
     configure_logging(snakemake)
     main(snakemake)

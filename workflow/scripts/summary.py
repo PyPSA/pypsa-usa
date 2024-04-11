@@ -11,12 +11,53 @@ import pandas as pd
 import pypsa
 from _helpers import configure_logging
 
+from pypsa.statistics import StatisticsAccessor
+from pypsa.statistics import get_bus_and_carrier
+
 logger = logging.getLogger(__name__)
 
 
 ###
 # ENERGY SUPLPY
 ###
+
+
+def get_primary_energy_use(n: pypsa.Network) -> pd.DataFrame:
+    """
+    Gets timeseries primary energy use by bus and carrier.
+    """
+
+    link_energy_use = (
+        StatisticsAccessor(n)
+        .withdrawal(
+            comps=["Link", "Store", "StorageUnit"],
+            aggregate_time=False,
+            groupby=get_bus_and_carrier,
+        )
+        .droplevel("component")
+    )
+
+    gen_dispatch = (
+        StatisticsAccessor(n)
+        .supply(
+            aggregate_time=False,
+            comps=["Generator"],
+            groupby=pypsa.statistics.get_name_bus_and_carrier,
+        )
+        .droplevel("component")
+    )
+    gen_eff = n.get_switchable_as_dense("Generator", "efficiency")
+
+    gen_energy_use = gen_dispatch.T.mul(1 / gen_eff, axis=0, level="name").T.droplevel(
+        "name",
+    )
+
+    return (
+        pd.concat([gen_energy_use, link_energy_use])
+        .reset_index()
+        .groupby(["bus", "carrier"])
+        .sum()
+    )
 
 
 def get_energy_total(n: pypsa.Network):
@@ -137,7 +178,8 @@ def get_capacity_base(n: pypsa.Network) -> pd.DataFrame:
     """
     Gets starting capacities.
 
-    Note, link capacities are grouped by bus0
+    NOTE: Link capacities are grouped by both bus0 and bus1!!
+    It is up to the user to filter this by bus on the returned dataframe
     """
     totals = []
     for c in n.iterate_components(n.one_port_components | n.branch_components):
@@ -149,58 +191,14 @@ def get_capacity_base(n: pypsa.Network) -> pd.DataFrame:
                 .groupby(by=[c.df.bus0, c.df.carrier])
                 .sum()
                 .rename_axis(index={"bus0": "bus"}),
+            ),
+            totals.append(
+                (c.df.p_nom)
+                .groupby(by=[c.df.bus1, c.df.carrier])
+                .sum()
+                .rename_axis(index={"bus1": "bus"}),
             )
     return pd.concat(totals)
-
-
-def get_capacity_greenfield(
-    n: pypsa.Network,
-    retirement_method="economic",
-) -> pd.DataFrame:
-    """
-    Gets optimal greenfield pnom capacity.
-
-    Note, link capacities are grouped by bus0
-    """
-
-    def _technical_retirement(c: pypsa.components.Component) -> pd.DataFrame:
-        if c.name == "Link":
-            return (
-                (c.pnl.p0.max())
-                .groupby(by=[c.df.bus0, c.df.carrier])
-                .sum()
-                .rename_axis(index={"bus0": "bus"})
-            )
-        else:
-            return (c.pnl.p.max()).groupby(by=[c.df.bus, c.df.carrier]).sum()
-
-    def _economic_retirement(c: pypsa.components.Component) -> pd.DataFrame:
-        if c.name == "Link":
-            return (
-                (c.df.p_nom_opt)
-                .groupby(by=[c.df.bus0, c.df.carrier])
-                .sum()
-                .rename_axis(index={"bus0": "bus"})
-            )
-        else:
-            return (c.df.p_nom_opt).groupby(by=[c.df.bus, c.df.carrier]).sum()
-
-    totals = []
-    if retirement_method == "technical":
-        for c in n.iterate_components(n.one_port_components | n.branch_components):
-            if c.name in ("Generator", "StorageUnit", "Link"):
-                totals.append(_technical_retirement(c))
-        return pd.concat(totals)
-    elif retirement_method == "economic":
-        for c in n.iterate_components(n.one_port_components | n.branch_components):
-            if c.name in ("Generator", "StorageUnit", "Link"):
-                totals.append(_economic_retirement(c))
-        return pd.concat(totals)
-    else:
-        logger.error(
-            f"Retirement method must be one of 'technical' or 'economic'. Recieved {retirement_method}.",
-        )
-        raise NotImplementedError
 
 
 def get_capacity_brownfield(
@@ -209,26 +207,41 @@ def get_capacity_brownfield(
 ) -> pd.DataFrame:
     """
     Gets optimal brownfield pnom capacity.
+
+    NOTE: Link capacities are grouped by both bus0 and bus1!!
+    It is up to the user to filter this by bus on the returned dataframe
     """
 
     def _technical_retirement(c: pypsa.components.Component) -> pd.DataFrame:
         if c.name == "Link":
-            return (
-                (c.df.p_nom_opt)
-                .groupby(by=[c.df.bus0, c.df.carrier])
-                .sum()
-                .rename_axis(index={"bus0": "bus"})
+            return pd.concat(
+                [
+                    (c.df.p_nom_opt)
+                    .groupby(by=[c.df.bus0, c.df.carrier])
+                    .sum()
+                    .rename_axis(index={"bus0": "bus"}),
+                    (c.df.p_nom_opt)
+                    .groupby(by=[c.df.bus1, c.df.carrier])
+                    .sum()
+                    .rename_axis(index={"bus1": "bus"}),
+                ],
             )
         else:
             return (c.df.p_nom_opt).groupby(by=[c.df.bus, c.df.carrier]).sum()
 
     def _economic_retirement(c: str) -> pd.DataFrame:
         if c.name == "Link":
-            return (
-                (c.df.p_nom_opt)
-                .groupby(by=[c.df.bus0, c.df.carrier])
-                .sum()
-                .rename_axis(index={"bus0": "bus"})
+            return pd.concat(
+                [
+                    (c.df.p_nom_opt)
+                    .groupby(by=[c.df.bus0, c.df.carrier])
+                    .sum()
+                    .rename_axis(index={"bus0": "bus"}),
+                    (c.df.p_nom_opt)
+                    .groupby(by=[c.df.bus1, c.df.carrier])
+                    .sum()
+                    .rename_axis(index={"bus1": "bus"}),
+                ],
             )
         else:
             return (c.df.p_nom_opt).groupby(by=[c.df.bus, c.df.carrier]).sum()
@@ -255,70 +268,73 @@ def get_capacity_brownfield(
 ###
 
 
-def get_operational_costs(n: pypsa.Network) -> pd.DataFrame:
-
-    def _get_energy_one_port(c: pypsa.components.Component) -> pd.DataFrame:
-        return c.pnl.p.abs()
-
-    def _get_energy_multi_port(c: pypsa.components.Component) -> pd.DataFrame:
-        return c.pnl.p0.abs()
-
-    totals = []
-    for c in n.iterate_components(n.one_port_components | n.branch_components):
-        if c.name in ("Generator", "StorageUnit", "Store"):
-            production = _get_energy_one_port(c)
-        elif c.name in ("Link"):
-            production = _get_energy_multi_port(c)
-        else:
-            continue
-
-        marginal_cost = c.pnl.marginal_cost
-        marginal_cost_static = {}
-        for item in [x for x in c.df.index if x not in marginal_cost.columns]:
-            marginal_cost_static[item] = [c.df.at[item, "marginal_cost"]] * len(
-                marginal_cost,
-            )
-        marginal_cost = pd.concat(
-            [
-                marginal_cost,
-                pd.DataFrame(marginal_cost_static, index=marginal_cost.index),
-            ],
-            axis=1,
-        )
-
-        opex = (
-            (production * marginal_cost).fillna(0).groupby(c.df.carrier, axis=1).sum()
-        )
-
-        totals.append(opex)
-
-    return pd.concat(totals, axis=1)
-
-
 def get_capital_costs(n: pypsa.Network) -> pd.DataFrame:
+    return n.statistics.capex() - n.statistics.installed_capex()
 
-    def _get_new_capacity_MW(c: pypsa.components.Component) -> pd.DataFrame:
-        return (c.df.p_nom_opt - c.df.p_nom).map(lambda x: x if x > 0 else 0)
 
-    def _get_new_capacity_MWh(c: pypsa.components.Component) -> pd.DataFrame:
-        return (c.df.e_nom_opt - c.df.e_nom).map(lambda x: x if x > 0 else 0)
+def get_generator_marginal_costs(
+    n: pypsa.Network,
+    resample_period: str = "d",
+) -> pd.DataFrame:
+    """
+    Gets generator marginal costs of Units with static MC and units with time
+    varying MC.
+    """
+    df_mc = (
+        n.get_switchable_as_dense("Generator", "marginal_cost")
+        .resample(resample_period)
+        .mean()
+    )
+    df_long = pd.melt(
+        df_mc.reset_index(),
+        id_vars=["snapshot"],
+        var_name="Generator",
+        value_name="Value",
+    )
+    df_long["Carrier"] = df_long["Generator"].map(n.generators.carrier)
+    return df_long
 
-    totals = []
-    for c in n.iterate_components(n.one_port_components | n.branch_components):
-        if c.name in ("Generator", "StorageUnit", "Link"):
-            new_capacity = _get_new_capacity_MW(c)
-        elif c.name in ("Store"):
-            new_capacity = _get_new_capacity_MWh(c)
-        else:
-            continue
 
-        capital_costs = c.df.capital_cost
+def get_fuel_costs(n: pypsa.Network) -> pd.DataFrame:
+    """
+    Gets fuel costs per generator, bus, and carrier.
 
-        capex = (new_capacity * capital_costs).fillna(0).groupby(c.df.carrier).sum()
+    Units are $/MWh
+    """
 
-        totals.append(capex)
+    # approximates for 2030
+    fixed_voms = {
+        "coal": 8.18,
+        "oil": 6.42,
+        "CCGT": 1.84,
+        "OCGT": 6.44,
+        "nuclear": 2.47,
+    }
 
-    return pd.concat(totals)
+    # will return generator level of (fuel_costs / efficiency)
+    marginal_costs = n.get_switchable_as_dense("Generator", "marginal_cost").T
+    marginal_costs = marginal_costs[
+        marginal_costs.index.map(n.generators.carrier).isin(list(fixed_voms))
+    ]
+    voms = pd.Series(
+        index=marginal_costs.index,
+        data=marginal_costs.index.map(n.generators.carrier).map(fixed_voms).fillna(0),
+    ).astype(float)
+    marginal_costs = marginal_costs.subtract(voms, axis=0)
+
+    # remove the efficiency cost
+    eff = n.get_switchable_as_dense("Generator", "efficiency").T
+    eff = eff[eff.index.map(n.generators.carrier).isin(list(fixed_voms))]
+    fuel_costs = marginal_costs.mul(eff, axis=0)
+
+    # add indices for bus and carrier
+    fuel_costs = fuel_costs.reset_index()
+    fuel_costs["bus"] = fuel_costs.Generator.map(n.generators.bus)
+    fuel_costs["carrier"] = fuel_costs.Generator.map(n.generators.carrier)
+    fuel_costs = fuel_costs.groupby(["carrier", "bus", "Generator"]).sum().T
+
+    fuel_costs.index = pd.to_datetime(fuel_costs.index)
+    return fuel_costs.T
 
 
 ###
@@ -326,45 +342,34 @@ def get_capital_costs(n: pypsa.Network) -> pd.DataFrame:
 ###
 
 
+def get_node_carrier_emissions_timeseries(n: pypsa.Network) -> pd.DataFrame:
+    """
+    Gets timeseries emissions by bus and carrier.
+    """
+
+    energy = get_primary_energy_use(n)
+    co2 = (
+        n.carriers[["nice_name", "co2_emissions"]]
+        .reset_index()
+        .set_index("nice_name")[["co2_emissions"]]
+        .squeeze()
+    )
+    return energy.mul(co2, level="carrier", axis=0)
+
+
 def get_node_emissions_timeseries(n: pypsa.Network) -> pd.DataFrame:
     """
     Gets timeseries emissions per node.
     """
 
-    totals = []
-    for c in n.iterate_components(n.one_port_components | n.branch_components):
-        if c.name in ("Generator"):
-
-            # get time series efficiency
-            eff = c.pnl.efficiency
-            eff_static = {}
-            for gen in [x for x in c.df.index if x not in eff.columns]:
-                eff_static[gen] = [c.df.at[gen, "efficiency"]] * len(eff)
-            eff = pd.concat([eff, pd.DataFrame(eff_static, index=eff.index)], axis=1)
-
-            co2_factor = c.df.carrier.map(n.carriers.co2_emissions).fillna(0)
-
-            totals.append(
-                (
-                    c.pnl.p.mul(1 / eff)
-                    .mul(co2_factor)
-                    .groupby(n.generators.bus, axis=1)
-                    .sum()
-                ),
-            )
-        elif c.name == "Link":  # efficiency taken into account by using p0
-
-            co2_factor = c.df.carrier.map(n.carriers.co2_emissions).fillna(0)
-
-            totals.append(
-                (
-                    c.pnl.p0.mul(co2_factor)
-                    .groupby(n.links.bus0, axis=1)
-                    .sum()
-                    .rename_axis(index={"bus0": "bus"})
-                ),
-            )
-    return pd.concat(totals, axis=1)
+    return (
+        get_node_carrier_emissions_timeseries(n)
+        .droplevel("carrier")
+        .reset_index()
+        .groupby("bus")
+        .sum()
+        .T
+    )
 
 
 def get_tech_emissions_timeseries(n: pypsa.Network) -> pd.DataFrame:
@@ -372,35 +377,14 @@ def get_tech_emissions_timeseries(n: pypsa.Network) -> pd.DataFrame:
     Gets timeseries emissions per technology.
     """
 
-    totals = []
-    for c in n.iterate_components(n.one_port_components | n.branch_components):
-        if c.name in ("Generator"):
-
-            # get time series efficiency
-            eff = c.pnl.efficiency
-            eff_static = {}
-            for gen in [x for x in c.df.index if x not in eff.columns]:
-                eff_static[gen] = [c.df.at[gen, "efficiency"]] * len(eff)
-            eff = pd.concat([eff, pd.DataFrame(eff_static, index=eff.index)], axis=1)
-
-            co2_factor = c.df.carrier.map(n.carriers.co2_emissions).fillna(0)
-
-            totals.append(
-                (
-                    c.pnl.p.mul(1 / eff)
-                    .mul(co2_factor)
-                    .groupby(n.generators.carrier, axis=1)
-                    .sum()
-                ),
-            )
-        elif c.name == "Link":  # efficiency taken into account by using p0
-
-            co2_factor = c.df.carrier.map(n.carriers.co2_emissions).fillna(0)
-
-            totals.append(
-                (c.pnl.p0.mul(co2_factor).groupby(n.links.carrier, axis=1).sum()),
-            )
-    return pd.concat(totals, axis=1)
+    return (
+        get_node_carrier_emissions_timeseries(n)
+        .droplevel("bus")
+        .reset_index()
+        .groupby("carrier")
+        .sum()
+        .T
+    )
 
 
 if __name__ == "__main__":

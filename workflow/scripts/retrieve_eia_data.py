@@ -1,8 +1,12 @@
 """
-Downloads historical BA Data from EIA, proccesses and saves to a csv file.
+**Description**
 
-github: https://github.com/jdechalendar/gridemissions
-site: https://gridemissions.jdechalendar.su.domains/#/code
+Historical electrical load data from 2019-2023 are retrieved from the `US Energy Information Agency <https://www.eia.gov/>`_ (EIA) and `GridEmissions <https://gridemissions.jdechalendar.su.domains/#/code>`_. Data is downloaded at hourly temporal resolution and at a spatial resolution of balancing authority region.
+
+**Outputs**
+
+- ``data/GridEmissions/EIA_DMD_2018_2024.csv``
+- ``data/eia/EIA_DMD_*.csv``
 """
 
 import glob
@@ -187,11 +191,10 @@ if __name__ == "__main__":
     df = prepare_historical_load_data(PATH_DOWNLOAD)
     df.to_csv(f"{snakemake.output[0]}")
     logger.info("GridEmissions Demand Data bundle downloaded.")
-
-    # EIA 6 mo file method
-    rootpath = "./"
-    PATH_DOWNLOAD = Path(f"{rootpath}/data/eia")
-    PATH_DOWNLOAD_CSV = Path(f"{rootpath}/data/eia/6moFiles")
+    """
+    # EIA 6 mo file method rootpath = "./" PATH_DOWNLOAD =
+    Path(f"{rootpath}/data/eia") PATH_DOWNLOAD_CSV =
+    Path(f"{rootpath}/data/eia/6moFiles")
 
     PATH_DOWNLOAD_CSV.mkdir(parents=True, exist_ok=True)
     PATH_DOWNLOAD.mkdir(parents=True, exist_ok=True)
@@ -214,3 +217,4 @@ if __name__ == "__main__":
     logger.info("Downloading EIA Data")
     download_csvs(urls, PATH_DOWNLOAD_CSV)
     read_and_concat_EIA_930(PATH_DOWNLOAD_CSV, PATH_DOWNLOAD)
+    """

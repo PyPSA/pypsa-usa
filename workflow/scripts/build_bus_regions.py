@@ -1,14 +1,15 @@
 # By PyPSA-USA Authors
 """
+**Description**
+
+Creates Voronoi shapes for each bus representing both onshore and offshore regions.
+
 **Relevant Settings**
 
 .. code:: yaml
 
     interconnect:
-    offshore_shape:
     aggregation_zones:
-    countries:
-
 
 **Inputs**
 
@@ -18,19 +19,8 @@
 
 **Outputs**
 
-- ``resources/regions_onshore.geojson``:
-
-    # .. image:: ../img/regions_onshore.png
-    #     :scale: 33 %
-
-- ``resources/regions_offshore.geojson``:
-
-    # .. image:: ../img/regions_offshore.png
-    #     :scale: 33 %
-
-**Description**
-
-Creates Voronoi shapes for each bus representing both onshore and offshore regions.
+- ``resources/regions_onshore.geojson``
+- ``resources/regions_offshore.geojson``
 """
 
 
@@ -45,8 +35,6 @@ from _helpers import configure_logging
 from _helpers import REGION_COLS
 from scipy.spatial import Voronoi
 from shapely.geometry import Polygon
-from simplify_network import aggregate_to_substations
-from simplify_network import simplify_network_to_voltage_level
 
 
 def voronoi_partition_pts(points, outline):
@@ -129,6 +117,7 @@ def main(snakemake):
     gpd_ba_shapes = gpd.read_file(snakemake.input.ba_region_shapes).set_index("name")[
         "geometry"
     ]
+    gpd_reeds = gpd.read_file(snakemake.input.reeds_shapes).set_index("name")
 
     if aggregation_zones == "country":
         agg_region_shapes = gpd_countries
@@ -136,8 +125,12 @@ def main(snakemake):
         agg_region_shapes = gpd_ba_shapes
     elif aggregation_zones == "state":
         agg_region_shapes = gpd_states.geometry
+    elif aggregation_zones == "reeds_zone":
+        agg_region_shapes = gpd_reeds.geometry
     else:
-        ValueError("zonal_aggregation must be either balancing_area, country or state")
+        ValueError(
+            "zonal_aggregation must be either balancing_area, country, reeds_id, or state",
+        )
 
     gpd_offshore_shapes = gpd.read_file(snakemake.input.offshore_shapes)
     offshore_shapes = gpd_offshore_shapes.reindex(columns=REGION_COLS).set_index(
@@ -147,13 +140,16 @@ def main(snakemake):
     onshore_regions = []
     offshore_regions = []
 
-    all_locs = bus2sub[
-        ["x", "y"]
-    ]  # all locations of substations in the bus2sub dataframe
+    all_locs = bus2sub[["x", "y"]]
     onshore_buses = n.buses[~n.buses.substation_off]
+    bus2sub = pd.merge(
+        bus2sub.reset_index(),
+        n.buses[["reeds_zone", "reeds_ba"]],
+        left_on="Bus",
+        right_on=n.buses.index,
+    ).set_index("sub_id")
     bus2sub_onshore = bus2sub[bus2sub.Bus.isin(onshore_buses.index)]
     bus2sub_offshore = bus2sub[~bus2sub.Bus.isin(onshore_buses.index)]
-    # need to get all agg types into the bus2sub
 
     logger.info("Building Onshore Regions")
     for region in agg_region_shapes.index:
@@ -210,6 +206,11 @@ def main(snakemake):
         offshore_regions.append(offshore_regions_c)
 
     onshore_regions_concat = pd.concat(onshore_regions, ignore_index=True)
+
+    onshore_regions_concat = onshore_regions_concat[
+        ~onshore_regions_concat.geometry.is_empty
+    ]  # removing few buses which don't have geometry
+
     onshore_regions_concat.to_file(snakemake.output.regions_onshore)
     if offshore_regions:
         pd.concat(offshore_regions, ignore_index=True).to_file(
@@ -219,7 +220,7 @@ def main(snakemake):
         offshore_shapes.to_frame().to_file(snakemake.output.regions_offshore)
 
     if onshore_regions_concat[onshore_regions_concat.geometry.is_empty].shape[0] > 0:
-        logger.error(f"Onshore Buses are missing geometry.")
+        raise ValueError("Onshore Buses are missing geometry.")
 
 
 if __name__ == "__main__":

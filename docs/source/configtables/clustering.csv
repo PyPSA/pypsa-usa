@@ -2,10 +2,10 @@
 simplify_network:,,,
 to_substations,bool,"{true, false}",Implementation curerntly overrides to true. Network is simplified to substation nodes with positive or negative power injection.
 algorithm,str,{'kmeans'},
-feature,str," {'solar+onwind-time', 'solar+onwind-cap', 'solar-time', 'solar-cap', 'solar+offwind-cap'}",For HAC clustering. Currenntly unused in pypsa-usa.
+feature,str," {'solar+onwind-time', 'solar+onwind-cap', 'solar-time', 'solar-cap', 'solar+offwind-cap'}",For HAC clustering.
 cluster_network:,,,
 algorithm,str,{'kmeans'},
-feature,str," {'solar+onwind-time', 'solar+onwind-cap', 'solar-time', 'solar-cap', 'solar+offwind-cap'}",For HAC clustering. Currenntly unused in pypsa-usa.
-aggregation_zones,str,"{'balancing_area', 'state', 'country'}",Boundaries of GIS shapes that are to be respected in clustering. Retain if you would like to analyze expansion within a given zone.
+feature,str," {'solar+onwind-time', 'solar+onwind-cap', 'solar-time', 'solar-cap', 'solar+offwind-cap'}",For HAC clustering.
+aggregation_zones,str,"{'balancing_area', 'state', 'reeds_zone'}",Boundaries of GIS shapes that are to be respected in clustering. Retain if you would like to analyze expansion within a given zone.
 aggregation_strategies:,,,
 table --> {key},str,"{'mean','max','min',etc}","Specifiy the method of aggregating fields within the generators, buses tables. "

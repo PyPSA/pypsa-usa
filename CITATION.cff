@@ -1,0 +1,20 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "PyPSA-USA: An Open-Source Energy System Optimization Model for the United States"
+version: 0.0.1
+repository: https://github.com/PyPSA/pypsa-usa
+license: MIT
+authors:
+- family-names: "Tehranchi"
+  given-names: "Kamran"
+  orchid: https://orcid.org/0009-0009-6186-6426
+- family-names: "Barnes"
+  given-names: "Trevor"
+  orchid: https://orcid.org/0000-0003-2458-2968
+- family-names: "Frysztacki"
+  given-names: "Martha"
+- family-names: "Hofmann"
+  given-names: "Fabian"
+- family-names: "Azevedo"
+  given-names: "Inês L."
+doi: 10.5281/zenodo.10815964
