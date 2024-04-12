@@ -484,9 +484,6 @@ if __name__ == "__main__":
             if low >= high or low.round(2) == high.round(2):
                 carriers += [c]
             else:
-                print([0, low, high, 1])
-                print(c)
-                # import pdb; pdb.set_trace()
                 labels = ["low", "medium", "high"]
                 suffix = pd.cut(gens.efficiency, bins=[0, low, high, 1], labels=labels
                 ).astype(str)

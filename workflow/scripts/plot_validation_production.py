@@ -174,11 +174,11 @@ def plot_regional_comparisons(
         regions = n.buses.reeds_ba.unique()
         regions = list(OrderedDict.fromkeys(regions))
         buses["region"] = buses.reeds_ba
-    else:
+    else: # For Balancing Authority Aggregation
         regions = n.buses.country.unique()
         regions_clean = [ba.split("-")[0] for ba in regions]
         regions = list(OrderedDict.fromkeys(regions_clean))
-        # regions = [ba for ba in regions if ba in ["CISO"]]
+        # regions = [ba for ba in regions if ba in ["CISO"]] # Run to only produce ciso
         buses["region"] = [ba.split("-")[0] for ba in buses.country]
 
     historic_all_ba['imports'] = historic_all_ba['Total Interchange'].clip(upper=0) * -1
