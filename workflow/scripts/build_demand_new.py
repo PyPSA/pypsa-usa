@@ -48,7 +48,7 @@ import logging
 from itertools import product
 from pathlib import Path
 
-from typing import List
+from typing import List, Optional
 
 import constants as const
 import pandas as pd
@@ -56,6 +56,8 @@ import xarray as xr
 import pypsa
 from _helpers import configure_logging
 from _helpers import local_to_utc
+
+import sys
 
 from abc import ABC, abstractmethod
 
@@ -141,81 +143,169 @@ class ReadStrategy(ABC):
     of some algorithm.
     """
 
-    # def __init__(self, filepath: str) -> None:
-    #     self.filepath = filepath
-    #     self.demand = self._get_demand()
-    #     self._check_index()
+    def __init__(self, filepath: Optional[str] = None) -> None:
+        self.filepath = filepath
+        self.demand = self._get_demand()
 
     @abstractmethod
-    def _read_data(self, filepath: str) -> pd.DataFrame:
+    def _read_data(self, **kwargs) -> pd.DataFrame:
         """
-        Reads raw data.
+        Reads raw data into any arbitraty data structure
         """
         pass
 
     @abstractmethod
-    def _format_data(self, data: pd.DataFrame) -> pd.DataFrame:
+    def _format_data(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        Formats raw data.
-        """
-        return data
+        Formats raw data into following datastructure.
 
-    def _get_demand(self, filepath: str) -> pd.DataFrame:
-        """
-        Gets raw data.
-        """
-        df = self._read_data(filepath)
-        return self._format_data(df)
+        This datastructure MUST be indexed with the following INDEX labels:
+        - Hourly snapshots
+        - Sector
+        - End use fuel
 
-    def _check_index(self) -> None:
+        This datastructure MUST be indexed with the following COLUMN labels:
+        - Per geography type (ie. dont mix state and ba headers)
+
+        |                     |        |        | geo_name_1 | geo_name_2 | ... | geo_name_n |
+        | snapshot            | sector | fuel   |            |            |     |            |
+        |---------------------|--------|--------|------------|------------|-----|------------|
+        | 2019-01-01 00:00:00 | all    | elec   |    ###     |    ###     |     |    ###     |
+        | 2019-01-01 01:00:00 | all    | elec   |    ###     |    ###     |     |    ###     |
+        | 2019-01-01 02:00:00 | all    | elec   |    ###     |    ###     |     |    ###     |
+        | ...                 | ...    | ...    |            |            |     |    ###     |
+        | 2019-12-31 23:00:00 | all    | elec   |    ###     |    ###     |     |    ###     |
+
         """
-        Add asserts on index labels.
+        pass
+
+    def _get_demand(self) -> pd.DataFrame:
         """
-        assert all(
-            x in ["YEAR", "HOUR", "REGION", "SECTOR", "FUEL", "VALUE"]
-            for x in self.demand.columns
-        )
+        Getter for returning all demand
+        """
+        df = self._read_data()
+        df = self._format_data(df)
+        self._check_index(df)
+        return df
+
+    def _check_index(self, df: pd.DataFrame) -> None:
+        """
+        Enforces dimension labels
+        """
+        assert all(x in ["snapshot", "sector", "fuel"] for x in df.index.names)
+
+    @staticmethod
+    def _format_snapshot_index(df: pd.DataFrame, assign_name=True) -> pd.DataFrame:
+        """Makes index into datetime"""
+        if df.index.nlevels > 1:
+            logger.warning("Can not format snapshot index level")
+            return df
+        df.index = pd.to_datetime(df.index)
+        if not assign_name:
+            return df
+        df.index.name = "snapshot"
+        return df
 
     @staticmethod
     def _filter_pandas(
-        df: pd.DataFrame, index: str, value: list[str] | list[int]
+        df: pd.DataFrame, index: str, value: List[str] | List[int]
     ) -> pd.DataFrame:
-        return df[df[index].isin(value)].copy()
+        return df[df.index.get_level_values(index).isin(value)].copy()
 
     def prepare_demand(
         self,
-        filepath: str,
-        fuel: str | list[str] = None,
-        sector: str | list[str] = None,
+        fuel: str | List[str] = None,
+        sector: str | List[str] = None,
         year: int = None,
     ) -> pd.DataFrame:
+        """
+        Public interface to extract data
+        """
 
-        demand = self._get_demand(filepath)
+        demand = self.demand
 
         if fuel:
             if isinstance(fuel, str):
                 fuel = [fuel]
-            self._filter_pandas(demand, "fuel", fuel)
+            demand = self._filter_pandas(demand, "fuel", fuel)
         if sector:
             if isinstance(sector, str):
                 sector = [sector]
-            self._filter_pandas(demand, "sector", sector)
+            demand = self._filter_pandas(demand, "sector", sector)
         if year:
-            self._filter_pandas(demand, "year", [year])
+            demand = self._filter_pandas(demand, "year", [year])
 
         return demand
 
 
 class ReadEia(ReadStrategy):
+    """Reads data from GridEmissions"""
 
-    def _read_data(self, filepath: str) -> pd.DataFrame:
+    def _read_data(self) -> pd.DataFrame:
         """
         Reads raw data.
         """
+
+        if not self.filepath:
+            logger.error("Must provide filepath for EIA data")
+            sys.exit()
+
+        logger.info("Building Load Data using EIA demand")
+        return pd.read_csv(self.filepath, engine="pyarrow", index_col="timestamp")
+
+    def _format_data(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Formats raw data.
+        """
+        df = self._correct_balancing_areas(df)
+        df = self._format_snapshot_index(df)
+        df["fuel"] = "electricity"
+        df["sector"] = "all"
+        df = df.set_index([df.index, "sector", "fuel"])
+        return df.fillna(0)
+
+    @staticmethod
+    def _correct_balancing_areas(df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Combine EIA Demand Data to Match GIS Shapes
+        """
+        df["Arizona"] = df.pop("SRP") + df.pop("AZPS")
+        df["Carolina"] = (
+            df.pop("CPLE")
+            + df.pop("CPLW")
+            + df.pop("DUK")
+            + df.pop("SC")
+            + df.pop("SCEG")
+            + df.pop("YAD")
+        )
+        df["Florida"] = (
+            df.pop("FPC")
+            + df.pop("FPL")
+            + df.pop("GVL")
+            + df.pop("JEA")
+            + df.pop("NSB")
+            + df.pop("SEC")
+            + df.pop("TAL")
+            + df.pop("TEC")
+            + df.pop("HST")
+            + df.pop("FMPP")
+        )
+        return df
+
+
+class ReadEfs(ReadStrategy):
+    """
+    Reads in electrifications future study demand
+    """
+
+    def _read_data(self, filepath: str) -> pd.DataFrame:
+
+        if not self.filepath:
+            logger.error("Must provide filepath for EFS data")
+            sys.exit()
+
         logger.info("Building Load Data using EFS demand")
         return pd.read_csv(filepath, engine="pyarrow")
-        # df = pd.read_csv(filepath, engine="pyarrow", index_col="timestamp").dropna(axis=1)
-        # return xr.Dataset.from_dataframe(df)
 
     def _format_data(self, df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -235,14 +325,6 @@ class ReadEia(ReadStrategy):
             },
         )
 
-    @staticmethod
-    def correct_data(df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Corrects balancing authority naming.
-        """
-        df["Arizona"] = df.pop("SRP") + df.pop("AZPS")
-        return df
-
 
 ###
 # WRITE STRATEGIES
@@ -251,19 +333,33 @@ class ReadEia(ReadStrategy):
 
 class WriteStrategy(ABC):
     """
-    Retrieves demand based on a specified network.
+    Disaggregates demand based on a specified method
     """
 
-    def retrieve_demand(self, demand: pd.DataFrame, n: pypsa.Network) -> pd.DataFrame:
+    def __init__(self, n: pypsa.Network) -> None:
+        self.n = n
+
+    def dissagregate_demand(self, demand: pd.DataFrame) -> pd.DataFrame:
         """
-        Writes demand.
+        Dissagregates demand based on user defined strategy
+
+        Data is returned in the format of:
+
+        |                     | BusName_1 | BusName_2 | ... | BusName_n |
+        |---------------------|-----------|-----------|-----|-----------|
+        | 2019-01-01 00:00:00 |    ###    |    ###    |     |    ###    |
+        | 2019-01-01 01:00:00 |    ###    |    ###    |     |    ###    |
+        | 2019-01-01 02:00:00 |    ###    |    ###    |     |    ###    |
+        | ...                 |           |           |     |    ###    |
+        | 2019-12-31 23:00:00 |    ###    |    ###    |     |    ###    |
+
         """
-        demand = self.filter_on_snapshots(demand, n)
+        demand = self.filter_on_snapshots(demand)
         demand = self.pivot_data(demand)
-        self.update_load_dissagregation_names(n)
-        demand = self.get_demand_buses(demand, n)
-        self.set_load_allocation_factor(n)
-        return self.disaggregate_demand_to_buses(demand, n)
+        # self.update_load_dissagregation_names(n)
+        demand = self.get_demand_buses(demand)
+        # self.set_load_allocation_factor(n)
+        return self.disaggregate_demand_to_buses(demand)
 
     @staticmethod
     def pivot_data(df: pd.DataFrame) -> pd.DataFrame:
@@ -274,44 +370,45 @@ class WriteStrategy(ABC):
         return df.loc[:, ("VALUE")]
 
     @abstractmethod
-    def update_load_dissagregation_names(self, n: pypsa.Network):
+    def update_load_dissagregation_names(self):
         """
         Corrects load dissagreagation names.
         """
         pass
 
     @abstractmethod
-    def get_demand_buses(self, demand: pd.DataFrame, n: pypsa.Network):
+    def get_demand_buses(self, demand: pd.DataFrame):
         """
         Applies load aggregation facto to network.
         """
         pass
 
-    def set_load_allocation_factor(self, n: pypsa.Network):
+    def set_load_allocation_factor(self):
         """
         Defines Load allocation factor for each bus according to load_dissag
         for balancing areas.
         """
-        n.buses.Pd = n.buses.Pd.fillna(0)
+        n = self.n
+        self.n.buses.Pd = n.buses.Pd.fillna(0)
         group_sums = n.buses.groupby("load_dissag")["Pd"].transform("sum")
         n.buses["LAF"] = n.buses["Pd"] / group_sums
 
-    def filter_on_snapshots(self, df: pd.DataFrame, n: pypsa.Network) -> pd.DataFrame:
+    def filter_on_snapshots(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         Filters demand on network snapshots.
         """
+        n = self.n
         df = df.set_index("HOUR")
         df = df.loc[n.snapshots.intersection(df.index)]
         return df.reset_index(names="HOUR").drop_duplicates(
             subset=["HOUR", "REGION", "YEAR", "FUEL", "SECTOR"], keep="first"
         )
 
-    def disaggregate_demand_to_buses(
-        self, df: pd.DataFrame, n: pypsa.Network
-    ) -> pd.DataFrame:
+    def disaggregate_demand_to_buses(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         Zone power demand is disaggregated to buses proportional to Pd.
         """
+        n = self.n
         demand_aligned = df.reindex(
             columns=n.buses["load_dissag"].unique(),
             fill_value=0,
@@ -395,12 +492,15 @@ if __name__ == "__main__":
     demand_path = snakemake.input.eia
     configuration = snakemake.config["network_configuration"]
 
-    if configuration == "eia":
-        demand_converter = Context(ReadEia(), WriteEia())
-    else:
-        demand_converter = Context(ReadEia(), WriteEia())
+    ReadEia(filepath=demand_path)
+    print("done")
 
-    # optional arguments of 'fuel', 'sector', 'year'
-    demand = demand_converter.retrieve_demand(demand_path, n)
+    # if configuration == "eia":
+    #     demand_converter = Context(ReadEia(), WriteEia())
+    # else:
+    #     demand_converter = Context(ReadEia(), WriteEia())
 
-    attach_demand(n, demand)
+    # # optional arguments of 'fuel', 'sector', 'year'
+    # demand = demand_converter.retrieve_demand(demand_path, n)
+
+    # attach_demand(n, demand)
