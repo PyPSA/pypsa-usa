@@ -347,7 +347,7 @@ class ReadEfs(ReadStrategy):
                 "Commercial": "commercial",
                 "Residential": "residential",
                 "Industrial": "industry",
-                "Trasportation": "transport",
+                "Transportation": "transport",
             }
         )
         df["fuel"] = "elec"
@@ -371,7 +371,7 @@ class ReadEfs(ReadStrategy):
 
     @staticmethod
     def _apply_timezones(df: pd.DataFrame) -> pd.DataFrame:
-        """Changes local time to relative time"""
+        """Changes local time to relative time from UTC"""
 
         def apply_timezone_shift(timezone: str) -> int:
             """All shifts realitive to UTC time"""
