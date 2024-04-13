@@ -55,13 +55,16 @@ import pandas as pd
 import xarray as xr
 import pypsa
 from _helpers import configure_logging
-from _helpers import local_to_utc
 
 import sys
 
 from abc import ABC, abstractmethod
 
 logger = logging.getLogger(__name__)
+
+STATE_2_CODE = const.STATE_2_CODE
+CODE_2_STATE = {value: key for key, value in STATE_2_CODE.items()}
+STATE_TIMEZONE = const.STATE_2_TIMEZONE
 
 
 class Context:
@@ -147,6 +150,10 @@ class ReadStrategy(ABC):
         self.filepath = filepath
         self.demand = self._get_demand()
 
+    @property
+    def units():
+        return "MW"
+
     @abstractmethod
     def _read_data(self, **kwargs) -> pd.DataFrame:
         """
@@ -160,21 +167,22 @@ class ReadStrategy(ABC):
         Formats raw data into following datastructure.
 
         This datastructure MUST be indexed with the following INDEX labels:
-        - Hourly snapshots
-        - Sector
-        - End use fuel
+        - snapshot (use self._format_snapshot_index() to format this)
+        - sector (must be in "all", "industry", "residential", "commercial", "transport")
+        - subsector (any value)
+        - end use fuel (must be in "all", "elec", "heat", "cool", "gas")
 
         This datastructure MUST be indexed with the following COLUMN labels:
         - Per geography type (ie. dont mix state and ba headers)
 
-        |                     |        |        | geo_name_1 | geo_name_2 | ... | geo_name_n |
-        | snapshot            | sector | fuel   |            |            |     |            |
-        |---------------------|--------|--------|------------|------------|-----|------------|
-        | 2019-01-01 00:00:00 | all    | elec   |    ###     |    ###     |     |    ###     |
-        | 2019-01-01 01:00:00 | all    | elec   |    ###     |    ###     |     |    ###     |
-        | 2019-01-01 02:00:00 | all    | elec   |    ###     |    ###     |     |    ###     |
-        | ...                 | ...    | ...    |            |            |     |    ###     |
-        | 2019-12-31 23:00:00 | all    | elec   |    ###     |    ###     |     |    ###     |
+        |                     |        |           |        | geo_name_1 | geo_name_2 | ... | geo_name_n |
+        | snapshot            | sector | subsector | fuel   |            |            |     |            |
+        |---------------------|--------|-----------|--------|------------|------------|-----|------------|
+        | 2019-01-01 00:00:00 | all    | all       | elec   |    ###     |    ###     |     |    ###     |
+        | 2019-01-01 01:00:00 | all    | all       | elec   |    ###     |    ###     |     |    ###     |
+        | 2019-01-01 02:00:00 | all    | all       | elec   |    ###     |    ###     |     |    ###     |
+        | ...                 | ...    | ...       | ...    |            |            |     |    ###     |
+        | 2019-12-31 23:00:00 | all    | all       | elec   |    ###     |    ###     |     |    ###     |
 
         """
         pass
@@ -192,19 +200,37 @@ class ReadStrategy(ABC):
         """
         Enforces dimension labels
         """
-        assert all(x in ["snapshot", "sector", "fuel"] for x in df.index.names)
+        assert all(
+            x in ["snapshot", "sector", "subsector", "fuel"] for x in df.index.names
+        )
+
+        assert all(
+            x in ["all", "industry", "residential", "commercial", "transport"]
+            for x in df.index.get_level_values("sector").unique()
+        )
+
+        assert all(
+            x in ["all", "elec", "heat", "cool", "gas"]
+            for x in df.index.get_level_values("fuel").unique()
+        )
 
     @staticmethod
-    def _format_snapshot_index(df: pd.DataFrame, assign_name=True) -> pd.DataFrame:
+    def _format_snapshot_index(df: pd.DataFrame) -> pd.DataFrame:
         """Makes index into datetime"""
         if df.index.nlevels > 1:
-            logger.warning("Can not format snapshot index level")
+            if "snapshot" not in df.index.names:
+                logger.warning("Can not format snapshot index level")
+                return df
+            else:
+                df.index = df.index.set_levels(
+                    pd.to_datetime(df.index.get_level_values("snapshot")),
+                    level="snapshot",
+                )
+                return df
+        else:
+            df.index = pd.to_datetime(df.index)
+            df.index.name = "snapshot"
             return df
-        df.index = pd.to_datetime(df.index)
-        if not assign_name:
-            return df
-        df.index.name = "snapshot"
-        return df
 
     @staticmethod
     def _filter_pandas(
@@ -261,7 +287,8 @@ class ReadEia(ReadStrategy):
         df = self._format_snapshot_index(df)
         df["fuel"] = "electricity"
         df["sector"] = "all"
-        df = df.set_index([df.index, "sector", "fuel"])
+        df["subsector"] = "all"
+        df = df.set_index([df.index, "sector", "subsector", "fuel"])
         return df.fillna(0)
 
     @staticmethod
@@ -298,32 +325,90 @@ class ReadEfs(ReadStrategy):
     Reads in electrifications future study demand
     """
 
-    def _read_data(self, filepath: str) -> pd.DataFrame:
+    def _read_data(self) -> pd.DataFrame:
 
         if not self.filepath:
             logger.error("Must provide filepath for EFS data")
             sys.exit()
 
         logger.info("Building Load Data using EFS demand")
-        return pd.read_csv(filepath, engine="pyarrow")
+        return pd.read_csv(self.filepath, engine="pyarrow")
 
     def _format_data(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         Formats raw data.
         """
-        df = self.correct_data(df)
-        df = df.melt(id_vars="timestamp")
-        df.timestamp = pd.to_datetime(df.timestamp)
-        df["YEAR"] = df.timestamp.dt.year
-        df["FUEL"] = "electricity"
-        df["SECTOR"] = "all"
-        return df.rename(
-            columns={
-                "timestamp": "HOUR",
-                "value": "VALUE",
-                "variable": "REGION",
-            },
+
+        df = self._build_snapshots(df)
+        df = self._format_snapshot_index(df).reset_index()
+        df = df.rename(columns={"Sector": "sector", "Subsector": "subsector"})
+        df["sector"] = df.sector.map(
+            {
+                "Commercial": "commercial",
+                "Residential": "residential",
+                "Industrial": "industry",
+                "Trasportation": "transport",
+            }
         )
+        df["fuel"] = "elec"
+        df["LoadMW"] = df.LoadMW.astype(float)
+        df["State"] = df.State.map(CODE_2_STATE)
+        df = pd.pivot_table(
+            df,
+            values="LoadMW",
+            index=["snapshot", "sector", "subsector", "fuel"],
+            columns=["State"],
+            aggfunc="sum",
+        )
+        return df
+
+    def _build_snapshots(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Builds snapshots based on UTC time"""
+
+        df = self._apply_timezones(df)
+        df = self._build_datetime(df)
+        return df.set_index("time").sort_index()
+
+    @staticmethod
+    def _apply_timezones(df: pd.DataFrame) -> pd.DataFrame:
+        """Changes local time to relative time"""
+
+        def apply_timezone_shift(timezone: str) -> int:
+            """All shifts realitive to UTC time"""
+            if timezone == "US/Pacific":
+                return -8
+            elif timezone == "US/Mountain":
+                return -7
+            elif timezone == "US/Central":
+                return -6
+            elif timezone == "US/Eastern":
+                return -5
+            elif timezone == "US/Alaska":
+                return -9
+            elif timezone == "Pacific/Honolulu":
+                return -11
+            else:
+                raise KeyError(f"Timezone {timezone} not mapped :(")
+
+        # mapper of {state:0} where value is offset from UTC
+        utc_shift = {
+            state: apply_timezone_shift(STATE_TIMEZONE[state])
+            for state in STATE_TIMEZONE
+        }
+
+        df["utc_shift"] = df.State.map(utc_shift)
+        df["UtcHourID"] = df.LocalHourID + df.utc_shift
+        df["UtcHourID"] = df.UtcHourID.map(lambda x: x if x > 0 else x + 8760)
+        df = df.drop(columns=["utc_shift"])
+        return df
+
+    @staticmethod
+    def _build_datetime(df: pd.DataFrame) -> pd.DataFrame:
+        """Builds snapshot from EFS data"""
+        # minus 1 cause indexing starts at 1
+        df["hoy"] = pd.to_timedelta(df.UtcHourID - 1, unit="h")
+        df["time"] = pd.to_datetime(df.Year, format="%Y") + df.hoy
+        return df.drop(columns=["Year", "UtcHourID", "hoy"])
 
 
 ###
@@ -456,7 +541,6 @@ def attach_demand(n: pypsa.Network, demand_per_bus: pd.DataFrame):
 
     Returns network with demand added.
     """
-    demand_per_bus.index = pd.to_datetime(demand_per_bus.index)
     n.madd(
         "Load",
         demand_per_bus.columns,
@@ -489,10 +573,10 @@ if __name__ == "__main__":
         ),
     )
 
-    demand_path = snakemake.input.eia
+    demand_path = snakemake.input.efs
     configuration = snakemake.config["network_configuration"]
 
-    ReadEia(filepath=demand_path)
+    ReadEfs(filepath=demand_path)
     print("done")
 
     # if configuration == "eia":
