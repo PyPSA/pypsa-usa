@@ -421,12 +421,26 @@ class WriteStrategy(ABC):
     Disaggregates demand based on a specified method
     """
 
-    def __init__(self, n: pypsa.Network) -> None:
+    def __init__(self, demand: pd.DataFrame, zone: str, n: pypsa.Network) -> None:
+        self.demand = demand
+        self._check_datastructure()
+        assert zone in ("ba", "state", "reeds")
+        self.zone = zone
         self.n = n
 
-    def dissagregate_demand(self, demand: pd.DataFrame) -> pd.DataFrame:
+    @abstractmethod
+    def _get_load_allocation_factor(self) -> pd.Series:
+        """Sets load allocation factor per bus"""
+        pass
+
+    def dissagregate_demand(
+        self,
+        sectors: Optional[str | List[str]] = None,
+        subsectors: Optional[str | List[str]] = None,
+        fuels: Optional[str | List[str]] = None,
+    ) -> pd.DataFrame:
         """
-        Dissagregates demand based on user defined strategy
+        Public load dissagregation method
 
         Data is returned in the format of:
 
@@ -437,72 +451,101 @@ class WriteStrategy(ABC):
         | 2019-01-01 02:00:00 |    ###    |    ###    |     |    ###    |
         | ...                 |           |           |     |    ###    |
         | 2019-12-31 23:00:00 |    ###    |    ###    |     |    ###    |
+        """
 
-        """
-        demand = self.filter_on_snapshots(demand)
-        demand = self.pivot_data(demand)
-        # self.update_load_dissagregation_names(n)
-        demand = self.get_demand_buses(demand)
-        # self.set_load_allocation_factor(n)
-        return self.disaggregate_demand_to_buses(demand)
+        # get zone area demand for specific sector and fuel
+        demand = self._filter_demand(sectors, subsectors, fuels)
+        demand = self._group_demand(demand)
 
-    @staticmethod
-    def pivot_data(df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Pivots data for easier processing.
-        """
-        df = df[["HOUR", "REGION", "VALUE"]].pivot(index="HOUR", columns="REGION")
-        return df.loc[:, ("VALUE")]
+        # assign buses to dissagregation zone
+        dissagregation_zones = self._get_load_dissagregation_zones()
 
-    @abstractmethod
-    def update_load_dissagregation_names(self):
-        """
-        Corrects load dissagreagation names.
-        """
-        pass
+        # get implementation specific dissgregation factors
+        laf = self._get_load_allocation_factor(dissagregation_zones)
 
-    @abstractmethod
-    def get_demand_buses(self, demand: pd.DataFrame):
-        """
-        Applies load aggregation facto to network.
-        """
-        pass
+        # disaggregate load to buses
+        return self._disaggregate_demand_to_buses(demand)
 
-    def set_load_allocation_factor(self):
-        """
-        Defines Load allocation factor for each bus according to load_dissag
-        for balancing areas.
-        """
-        n = self.n
-        self.n.buses.Pd = n.buses.Pd.fillna(0)
-        group_sums = n.buses.groupby("load_dissag")["Pd"].transform("sum")
-        n.buses["LAF"] = n.buses["Pd"] / group_sums
+    def _get_load_dissagregation_zones(self) -> pd.Series:
+        """Map each bus to the load dissagregation zone (ie. states, ba, ...)"""
+        if self.zone == "ba":
+            return self._get_balanceing_area_zones()
+        elif self.zone == "state":
+            return self._get_state_zones()
+        elif self.zone == "reeds":
+            return self._get_state_zones()
+        else:
+            raise NotImplementedError
 
-    def filter_on_snapshots(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _check_datastructure(self) -> None:
+        """Confirms formatting of input datastructure"""
+        assert all(
+            x in ["snapshot", "sector", "subsector", "fuel"]
+            for x in self.demand.index.names
+        )
+        assert not self.demand.empty
+
+    def _filter_on_snapshots(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         Filters demand on network snapshots.
         """
-        n = self.n
-        df = df.set_index("HOUR")
-        df = df.loc[n.snapshots.intersection(df.index)]
-        return df.reset_index(names="HOUR").drop_duplicates(
-            subset=["HOUR", "REGION", "YEAR", "FUEL", "SECTOR"], keep="first"
-        )
+        snapshots = n.snapshots
+        return df[df.index.get_level_values("snapshot") == snapshots].copy()
 
-    def disaggregate_demand_to_buses(self, df: pd.DataFrame) -> pd.DataFrame:
+    @staticmethod
+    def _filter_on_use(df: pd.DataFrame, level: str, values: List[str]):
+        return df[df.index.get_level_values(level) in values].copy()
+
+    @staticmethod
+    def _group_demand(df: pd.DataFrame, agg_strategy: str = "sum") -> pd.DataFrame:
+        grouped = df.index.droplevel(level=["sector", "subsector", "fuel"])
+        grouped = grouped.groupby(level="snapshot")
+        if agg_strategy == "sum":
+            return grouped.sum()
+        elif agg_strategy == "mean":
+            return grouped.mean()
+        else:
+            raise NotImplementedError
+
+    def _filter_demand(
+        self,
+        sectors: Optional[str | List[str]] = None,
+        subsectors: Optional[str | List[str]] = None,
+        fuels: Optional[str | List[str]] = None,
+    ) -> pd.DataFrame:
+        """Filters on snapshots, sector, and fuel"""
+
+        df = self.demand
+        df = self._filter_on_snapshots(df)
+        if sectors:
+            if isinstance(sectors, str):
+                sectors = [sectors]
+            df = self._filter_on_use(df, "sector", sectors)
+        if subsectors:
+            if isinstance(subsectors, str):
+                subsectors = [subsectors]
+            df = self._filter_on_use(df, "subsector", subsectors)
+        if fuels:
+            if isinstance(fuels, str):
+                fuels = [fuels]
+            df = self._filter_on_use(df, "fuel", fuels)
+
+        return df
+
+    def _disaggregate_demand_to_buses(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         Zone power demand is disaggregated to buses proportional to Pd.
         """
         n = self.n
         demand_aligned = df.reindex(
-            columns=n.buses["load_dissag"].unique(),
+            columns=n.buses["load_zone"].unique(),
             fill_value=0,
         )
         bus_demand = pd.DataFrame()
-        for load_dissag in n.buses["load_dissag"].unique():
-            LAF = n.buses.loc[n.buses["load_dissag"] == load_dissag, "LAF"]
+        for load_zone in n.buses["load_zone"].unique():
+            LAF = n.buses.loc[n.buses["load_zone"] == load_zone, "LAF"]
             zone_bus_demand = (
-                demand_aligned[load_dissag].values.reshape(-1, 1) * LAF.values.T
+                demand_aligned[load_zone].values.reshape(-1, 1) * LAF.values.T
             )
             bus_demand = pd.concat(
                 [bus_demand, pd.DataFrame(zone_bus_demand, columns=LAF.index)],
@@ -512,22 +555,48 @@ class WriteStrategy(ABC):
         n.buses.drop(columns=["LAF"], inplace=True)
         return bus_demand.fillna(0)
 
-
-class WriteEia(WriteStrategy):
-    """
-    Write EIA demand data.
-    """
-
-    def update_load_dissagregation_names(self, n: pypsa.Network):
-        n.buses["load_dissag"] = n.buses.balancing_area.replace(
-            {"^CISO.*": "CISO", "^ERCO.*": "ERCO"},
+    def _get_balanceing_area_zones(self) -> pd.Series:
+        n = self.n
+        zones = n.buses.balancing_area.replace(
+            {
+                "^CISO.*": "CISO",
+                "^ERCO.*": "ERCO",
+                "^MISO.*": "MISO",
+                "^SPP.*": "SPP",
+                "^PJM.*": "PJM",
+                "^NYISO.*": "NYIS",
+                "^ISONE.*": "ISNE",
+            },
             regex=True,
         )
-        n.buses["load_dissag"] = n.buses.load_dissag.replace({"": "missing_ba"})
+        zones = zones.replace({"": "missing"})
+        if "missing" in zones:
+            logger.warning("Missing BA Assignment for load dissagregation")
+        return zones
 
-    def get_demand_buses(self, demand: pd.DataFrame, n: pypsa.Network):
-        intersection = set(demand.columns).intersection(n.buses.load_dissag.unique())
-        return demand[list(intersection)]
+    def _get_state_zones(self) -> pd.Series:
+        n = self.n
+        return n.buses.state
+
+    def _get_reeds_zones(self) -> pd.Series:
+        n = self.n
+        return n.buses.reeds_zone
+
+
+class WritePopulation(WriteStrategy):
+    """Based on Population Density from Breakthrough Energy"""
+
+    def __init__(self, demand: pd.DataFrame, n: pypsa.Network) -> None:
+        super().__init__(demand, n)
+
+    def _get_load_allocation_factor(self, df: pd.Series) -> pd.Series:
+        """Load allocation set on population density"""
+
+        n = self.n
+        n.buses.Pd = n.buses.Pd.fillna(0)
+        group_sums = n.buses.groupby("load_zone")["Pd"].transform("sum")
+        n.buses["LAF"] = n.buses["Pd"] / group_sums
+        return n.buses.LAF
 
 
 ###
@@ -535,7 +604,7 @@ class WriteEia(WriteStrategy):
 ###
 
 
-def attach_demand(n: pypsa.Network, demand_per_bus: pd.DataFrame):
+def attach_demand(n: pypsa.Network, demand_per_bus: pd.DataFrame, carrier: str = "AC"):
     """
     Add demand to network from specified configuration setting.
 
