@@ -106,33 +106,26 @@ class Context:
         """
         self._write_strategy = strategy
 
-    def _read(self, filepath: str, **kwargs) -> pd.DataFrame:
+    def _read(self, filepath: Optional[str] = None) -> pd.DataFrame:
         """
         Delegate reading to the strategy.
         """
-        return self._read_strategy.prepare_demand(filepath, **kwargs)
+        return self._read_strategy.read_demand(filepath)
 
-    def _write(self, demand: pd.DataFrame, n: pypsa.Network) -> pd.DataFrame:
+    def _write(
+        self, demand: pd.DataFrame, zone: str, n: pypsa.Network, **kwargs
+    ) -> pd.DataFrame:
         """
         Delegate writing to the strategy.
         """
-        return self._write_strategy.retrieve_demand(demand, n)
+        return self._write_strategy.dissagregate_demand(demand, zone, n, **kwargs)
 
-    def prepare_demand(self, filepath: str, **kwargs) -> pd.DataFrame:
+    def prepare_demand(self, filepath: Optional[str] = None, **kwargs) -> pd.DataFrame:
         """
-        Arguments
-            fuel: str = None,
-            sector: str = None,
-            year: int = None
+        Read in and dissagregate demand
         """
-        return self._read(filepath, *kwargs)
-
-    def retrieve_demand(self, filepath: str, n: pypsa.Network, **kwargs) -> None:
-        """
-        Reads demand to apply to a network.
-        """
-        demand = self._read(filepath, *kwargs)
-        return self._write(demand, n)
+        demand = self._read(filepath)
+        return self._write(demand, n, self._read_strategy.zone, **kwargs)
 
 
 ###
@@ -161,6 +154,16 @@ class ReadStrategy(ABC):
         """
         pass
 
+    def read_demand(self) -> pd.DataFrame:
+        """
+        Public interface to extract data
+        """
+
+        df = self._read_data()
+        df = self._format_data(df)
+        self._check_index(df)
+        return df
+
     @abstractmethod
     def _format_data(self, df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -186,15 +189,6 @@ class ReadStrategy(ABC):
 
         """
         pass
-
-    def _get_demand(self) -> pd.DataFrame:
-        """
-        Getter for returning all demand
-        """
-        df = self._read_data()
-        df = self._format_data(df)
-        self._check_index(df)
-        return df
 
     def _check_index(self, df: pd.DataFrame) -> None:
         """
@@ -232,40 +226,17 @@ class ReadStrategy(ABC):
             df.index.name = "snapshot"
             return df
 
-    @staticmethod
-    def _filter_pandas(
-        df: pd.DataFrame, index: str, value: List[str] | List[int]
-    ) -> pd.DataFrame:
-        return df[df.index.get_level_values(index).isin(value)].copy()
-
-    def prepare_demand(
-        self,
-        fuel: str | List[str] = None,
-        sector: str | List[str] = None,
-        year: int = None,
-    ) -> pd.DataFrame:
-        """
-        Public interface to extract data
-        """
-
-        demand = self.demand
-
-        if fuel:
-            if isinstance(fuel, str):
-                fuel = [fuel]
-            demand = self._filter_pandas(demand, "fuel", fuel)
-        if sector:
-            if isinstance(sector, str):
-                sector = [sector]
-            demand = self._filter_pandas(demand, "sector", sector)
-        if year:
-            demand = self._filter_pandas(demand, "year", [year])
-
-        return demand
-
 
 class ReadEia(ReadStrategy):
     """Reads data from GridEmissions"""
+
+    def __init__(self, filepath: str | None = None) -> None:
+        super().__init__(filepath)
+        self._zone = "ba"
+
+    @property
+    def zone(self):
+        return self._zone
 
     def _read_data(self) -> pd.DataFrame:
         """
@@ -324,6 +295,14 @@ class ReadEfs(ReadStrategy):
     """
     Reads in electrifications future study demand
     """
+
+    def __init__(self, filepath: str | None = None) -> None:
+        super().__init__(filepath)
+        self._zone = "state"
+
+    @property
+    def zone(self):
+        return self._zone
 
     def _read_data(self) -> pd.DataFrame:
 
@@ -421,11 +400,8 @@ class WriteStrategy(ABC):
     Disaggregates demand based on a specified method
     """
 
-    def __init__(self, demand: pd.DataFrame, zone: str, n: pypsa.Network) -> None:
+    def __init__(self, n: pypsa.Network) -> None:
         self.demand = demand
-        self._check_datastructure()
-        assert zone in ("ba", "state", "reeds")
-        self.zone = zone
         self.n = n
 
     @abstractmethod
@@ -435,12 +411,25 @@ class WriteStrategy(ABC):
 
     def dissagregate_demand(
         self,
-        sectors: Optional[str | List[str]] = None,
-        subsectors: Optional[str | List[str]] = None,
-        fuels: Optional[str | List[str]] = None,
+        df: pd.DataFrame,
+        zone: str,
+        sector: Optional[str | List[str]] = None,
+        subsector: Optional[str | List[str]] = None,
+        fuel: Optional[str | List[str]] = None,
     ) -> pd.DataFrame:
         """
         Public load dissagregation method
+
+        df: pd.DataFrame
+            Demand dataframe
+        zone: str
+            Zones of demand ('ba', 'state', 'reeds')
+        sector: Optional[str | List[str]] = None,
+            Sectors to group
+        subsector: Optional[str | List[str]] = None,
+            Subsectors to group
+        fuel: Optional[str | List[str]] = None,
+            End use fules to group
 
         Data is returned in the format of:
 
@@ -453,12 +442,15 @@ class WriteStrategy(ABC):
         | 2019-12-31 23:00:00 |    ###    |    ###    |     |    ###    |
         """
 
+        assert zone in ("ba", "state", "reeds")
+        self._check_datastructure(df)
+
         # get zone area demand for specific sector and fuel
-        demand = self._filter_demand(sectors, subsectors, fuels)
+        demand = self._filter_demand(df, sector, subsector, fuel)
         demand = self._group_demand(demand)
 
         # assign buses to dissagregation zone
-        dissagregation_zones = self._get_load_dissagregation_zones()
+        dissagregation_zones = self._get_load_dissagregation_zones(zone)
 
         # get implementation specific dissgregation factors
         laf = self._get_load_allocation_factor(dissagregation_zones)
@@ -466,24 +458,24 @@ class WriteStrategy(ABC):
         # disaggregate load to buses
         return self._disaggregate_demand_to_buses(demand)
 
-    def _get_load_dissagregation_zones(self) -> pd.Series:
+    def _get_load_dissagregation_zones(self, zone: str) -> pd.Series:
         """Map each bus to the load dissagregation zone (ie. states, ba, ...)"""
-        if self.zone == "ba":
+        if zone == "ba":
             return self._get_balanceing_area_zones()
-        elif self.zone == "state":
+        elif zone == "state":
             return self._get_state_zones()
-        elif self.zone == "reeds":
+        elif zone == "reeds":
             return self._get_state_zones()
         else:
             raise NotImplementedError
 
-    def _check_datastructure(self) -> None:
+    @staticmethod
+    def _check_datastructure(df: pd.DataFrame) -> None:
         """Confirms formatting of input datastructure"""
         assert all(
-            x in ["snapshot", "sector", "subsector", "fuel"]
-            for x in self.demand.index.names
+            x in ["snapshot", "sector", "subsector", "fuel"] for x in df.index.names
         )
-        assert not self.demand.empty
+        assert not df.empty
 
     def _filter_on_snapshots(self, df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -509,13 +501,13 @@ class WriteStrategy(ABC):
 
     def _filter_demand(
         self,
+        df: pd.DataFrame,
         sectors: Optional[str | List[str]] = None,
         subsectors: Optional[str | List[str]] = None,
         fuels: Optional[str | List[str]] = None,
     ) -> pd.DataFrame:
         """Filters on snapshots, sector, and fuel"""
 
-        df = self.demand
         df = self._filter_on_snapshots(df)
         if sectors:
             if isinstance(sectors, str):
@@ -645,15 +637,12 @@ if __name__ == "__main__":
     demand_path = snakemake.input.efs
     configuration = snakemake.config["network_configuration"]
 
-    ReadEfs(filepath=demand_path)
-    print("done")
+    if configuration == "eia":
+        demand_converter = Context(ReadEia(demand_path), WritePopulation(n))
+    else:
+        demand_converter = Context(ReadEia(demand_path), WritePopulation(n))
 
-    # if configuration == "eia":
-    #     demand_converter = Context(ReadEia(), WriteEia())
-    # else:
-    #     demand_converter = Context(ReadEia(), WriteEia())
+    # optional arguments of 'fuel', 'sector', 'year'
+    demand = demand_converter.retrieve_demand(demand_path, n)
 
-    # # optional arguments of 'fuel', 'sector', 'year'
-    # demand = demand_converter.retrieve_demand(demand_path, n)
-
-    # attach_demand(n, demand)
+    attach_demand(n, demand)
