@@ -1,6 +1,14 @@
 """
 Extracts EIA data.
 
+Public Classes include: 
+- FuelCosts(fuel, industry, year, api)
+- Trade(fuel, direction, year, api)
+- Production(fuel, production, year, api)
+- EnergyDemand(sector, year, api, scenario)
+- Storage(fuel, storage, year, api)
+- Emissions(sector, year, api, fuel)
+
 Examples:
 >>> costs = FuelCosts("gas", "power", 2020, "xxxxxxxxxxxxxxxx")
 >>> costs.get_data()
@@ -27,7 +35,7 @@ period
 """
 
 from abc import ABC, abstractmethod
-from typing import Union, Dict
+from typing import Union, Dict, Optional
 import math
 import constants
 import yaml
@@ -139,7 +147,7 @@ class Trade(EiaData):
 class Production(EiaData):
 
     def __init__(self, fuel: str, production: str, year: int, api: str) -> None:
-        self.fuel = fuel
+        self.fuel = fuel  # (gas)
         self.production = production  # (marketed|gross)
         self.year = year
         self.api = api
@@ -156,19 +164,24 @@ class Production(EiaData):
 
 
 # concrete creator
-class Demand(EiaData):
+class EnergyDemand(EiaData):
     """
-    Not yet implemented.
+    Energy demand at a national level
     """
 
-    def __init__(self, fuel: str, year: int, api: str) -> None:
-        self.fuel = fuel
+    def __init__(
+        self, sector: str, year: int, api: str, scenario: Optional[str] = None
+    ) -> None:
+        self.sector = sector  # (residential, commercial, transport, industry)
         self.year = year
         self.api = api
+        self.scenario = scenario  # only for AEO scenario
 
     def data_creator(self) -> pd.DataFrame:
-        if self.fuel == "electricity":
-            raise NotImplementedError()
+        if self.year < 2024:
+            if not self.scenario:
+                logger.warning("Can not apply AEO scenario to hsitorical demand")
+                return HistoricalEnergyDemand(self.sector, self.year, self.api)
         else:
             raise InputException(
                 propery="Demand",
@@ -473,26 +486,58 @@ class CoalCosts(DataExtractor):
         return self._assign_dtypes(final)
 
 
-class ElectricityDemand(DataExtractor):
+class HistoricalEnergyDemand(DataExtractor):
     """
-    Extracts demand by balancing authority.
+    Extracts historical energy demand at a national level
 
-    TODO: Develop method to extract data 5000 entries at a time.
-    We can probably use the offset option in the EIA API to just call it
-    however many times we need
-    https://www.eia.gov/opendata/documentation.php
+    Note, this is total energy consumption, to match the AEO projections
+    (pg 17) https://www.eia.gov/outlooks/aeo/pdf/AEO2023_Release_Presentation.pdf
     """
 
-    def __init__(self, year: int, api_key: str) -> None:
-        super().__init__(year, api_key)
+    sector_codes = {
+        "residential": "TER",
+        "commercial": "TEC",
+        "industry": "TEI",
+        "transport": "TEA",
+    }
+
+    def __init__(self, sector: str, year: int, api: str) -> None:
+        self.sector = sector
+        if sector not in self.sector_codes.keys():
+            raise InputException(
+                propery="Historical Energy Demand",
+                valid_options=list(self.sector_codes),
+                recived_option=sector,
+            )
+        super().__init__(year, api)
 
     def build_url(self) -> str:
-        base_url = "electricity/rto/region-data/data/"
-        facets = f"frequency=hourly&data[0]=value&facets[type][]=D&start={self.year}-01-01T00&end={self.year}-12-31T00&sort[0][column]=period&sort[0][direction]=desc&offset=0&length=5000"
+        base_url = "total-energy/data/"
+        facets = f"frequency=monthly&data[0]=value&facets[msn][]={self.sector_codes[self.sector]}CBUS&start={self.year}-01&end={self.year}-12&sort[0][column]=period&sort[0][direction]=desc&offset=0&length=5000"
         return f"{API_BASE}{base_url}?api_key={self.api_key}&{facets}"
 
     def format_data(self, df: pd.DataFrame) -> pd.DataFrame:
-        return df
+        df.index = pd.to_datetime(df.period)
+        df = df.rename(
+            columns={"seriesDescription": "series-description", "unit": "units"}
+        )
+        df["state"] = "U.S."
+        return df[["series-description", "value", "units", "state"]].sort_index()
+
+
+# class ProjectedEnergyDemand(DataExtractor):
+#     """
+#     Extracts projected energy demand at a national level from AEO
+#     """
+
+#     def __init__(self, sector: str, year: int, api: str, scenario: Optional[str] = "reference"):
+#         super().__init__(year, api)
+#         if sector not in ("residential", "commercial", "industry", "transport"):
+#             raise InputException(
+#                 propery="Projected Energy Demand",
+#                 valid_options=list(self.industry_codes),
+#                 recived_option=industry,
+#             )
 
 
 class GasTrade(DataExtractor):
@@ -744,4 +789,5 @@ if __name__ == "__main__":
     # print(FuelCosts("coal", "power", 2019, api).get_data(pivot=True))
     # print(FuelCosts("gas", "commercial", 2019, api).get_data(pivot=True))
     # print(Emissions("transport", 2019, api).get_data(pivot=True))
-    print(Storage("gas", "total", 2019, api).get_data(pivot=True))
+    # print(Storage("gas", "total", 2019, api).get_data(pivot=True))
+    print(EnergyDemand("residential", 2019, api).get_data(pivot=False))
