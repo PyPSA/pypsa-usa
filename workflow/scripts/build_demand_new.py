@@ -545,9 +545,13 @@ class WriteStrategy(ABC):
             )
             dissag_load = load_per_bus.mul(laf.laf, axis=0).dropna()
             assert dissag_load.shape == load_per_bus.shape  # ensure no data is lost
+            dissag_load = dissag_load.T  # set snapshot as index
+            dissag_load = dissag_load.loc[:, (dissag_load != 0).any(axis=0)]
             all_load.append(dissag_load)
 
-        return pd.DataFrame(all_load)
+        load = pd.concat(all_load, axis=1)
+        assert not load.isna().any().any()  # no data should be added during concat
+        return load
 
     def _get_balanceing_area_zones(self) -> pd.Series:
         n = self.n
