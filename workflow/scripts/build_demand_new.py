@@ -110,22 +110,20 @@ class Context:
         """
         Delegate reading to the strategy.
         """
-        return self._read_strategy.read_demand(filepath)
+        return self._read_strategy.read_demand()
 
-    def _write(
-        self, demand: pd.DataFrame, zone: str, n: pypsa.Network, **kwargs
-    ) -> pd.DataFrame:
+    def _write(self, demand: pd.DataFrame, zone: str, **kwargs) -> pd.DataFrame:
         """
         Delegate writing to the strategy.
         """
-        return self._write_strategy.dissagregate_demand(demand, zone, n, **kwargs)
+        return self._write_strategy.dissagregate_demand(demand, zone, **kwargs)
 
-    def prepare_demand(self, filepath: Optional[str] = None, **kwargs) -> pd.DataFrame:
+    def prepare_demand(self, **kwargs) -> pd.DataFrame:
         """
         Read in and dissagregate demand
         """
-        demand = self._read(filepath)
-        return self._write(demand, n, self._read_strategy.zone, **kwargs)
+        demand = self._read()
+        return self._write(demand, self._read_strategy.zone, **kwargs)
 
 
 ###
@@ -141,7 +139,6 @@ class ReadStrategy(ABC):
 
     def __init__(self, filepath: Optional[str] = None) -> None:
         self.filepath = filepath
-        self.demand = self._get_demand()
 
     @property
     def units():
@@ -173,19 +170,19 @@ class ReadStrategy(ABC):
         - snapshot (use self._format_snapshot_index() to format this)
         - sector (must be in "all", "industry", "residential", "commercial", "transport")
         - subsector (any value)
-        - end use fuel (must be in "all", "elec", "heat", "cool", "gas")
+        - end use fuel (must be in "all", "electricity", "heat", "cool", "gas")
 
         This datastructure MUST be indexed with the following COLUMN labels:
         - Per geography type (ie. dont mix state and ba headers)
 
-        |                     |        |           |        | geo_name_1 | geo_name_2 | ... | geo_name_n |
-        | snapshot            | sector | subsector | fuel   |            |            |     |            |
-        |---------------------|--------|-----------|--------|------------|------------|-----|------------|
-        | 2019-01-01 00:00:00 | all    | all       | elec   |    ###     |    ###     |     |    ###     |
-        | 2019-01-01 01:00:00 | all    | all       | elec   |    ###     |    ###     |     |    ###     |
-        | 2019-01-01 02:00:00 | all    | all       | elec   |    ###     |    ###     |     |    ###     |
-        | ...                 | ...    | ...       | ...    |            |            |     |    ###     |
-        | 2019-12-31 23:00:00 | all    | all       | elec   |    ###     |    ###     |     |    ###     |
+        |                     |        |           |               | geo_name_1 | geo_name_2 | ... | geo_name_n |
+        | snapshot            | sector | subsector | fuel          |            |            |     |            |
+        |---------------------|--------|-----------|---------------|------------|------------|-----|------------|
+        | 2019-01-01 00:00:00 | all    | all       | electricity   |    ###     |    ###     |     |    ###     |
+        | 2019-01-01 01:00:00 | all    | all       | electricity   |    ###     |    ###     |     |    ###     |
+        | 2019-01-01 02:00:00 | all    | all       | electricity   |    ###     |    ###     |     |    ###     |
+        | ...                 | ...    | ...       | ...           |            |            |     |    ###     |
+        | 2019-12-31 23:00:00 | all    | all       | electricity   |    ###     |    ###     |     |    ###     |
 
         """
         pass
@@ -204,7 +201,7 @@ class ReadStrategy(ABC):
         )
 
         assert all(
-            x in ["all", "elec", "heat", "cool", "gas"]
+            x in ["all", "electricity", "heat", "cool", "gas"]
             for x in df.index.get_level_values("fuel").unique()
         )
 
@@ -329,7 +326,7 @@ class ReadEfs(ReadStrategy):
                 "Transportation": "transport",
             }
         )
-        df["fuel"] = "elec"
+        df["fuel"] = "electricity"
         df["LoadMW"] = df.LoadMW.astype(float)
         df["State"] = df.State.map(CODE_2_STATE)
         df = pd.pivot_table(
@@ -401,7 +398,6 @@ class WriteStrategy(ABC):
     """
 
     def __init__(self, n: pypsa.Network) -> None:
-        self.demand = demand
         self.n = n
 
     @abstractmethod
@@ -455,8 +451,14 @@ class WriteStrategy(ABC):
         # get implementation specific dissgregation factors
         laf = self._get_load_allocation_factor(dissagregation_zones)
 
+        # checks that sum of all LAFs is equal to the number of zones.
+        assert abs(laf.sum() - len(dissagregation_zones.unique())) <= 0.0001
+
         # disaggregate load to buses
-        return self._disaggregate_demand_to_buses(demand)
+        zone_data = dissagregation_zones.to_frame(name="zone").join(
+            laf.to_frame(name="laf")
+        )
+        return self._disaggregate_demand_to_buses(demand, zone_data)
 
     def _get_load_dissagregation_zones(self, zone: str) -> pd.Series:
         """Map each bus to the load dissagregation zone (ie. states, ba, ...)"""
@@ -482,7 +484,10 @@ class WriteStrategy(ABC):
         Filters demand on network snapshots.
         """
         snapshots = n.snapshots
-        return df[df.index.get_level_values("snapshot") == snapshots].copy()
+        filtered = df[df.index.get_level_values("snapshot").isin(snapshots)].copy()
+        filtered = filtered[~filtered.index.duplicated(keep="last")]  # issue-272
+        assert len(filtered) == len(snapshots)
+        return filtered
 
     @staticmethod
     def _filter_on_use(df: pd.DataFrame, level: str, values: List[str]):
@@ -490,7 +495,7 @@ class WriteStrategy(ABC):
 
     @staticmethod
     def _group_demand(df: pd.DataFrame, agg_strategy: str = "sum") -> pd.DataFrame:
-        grouped = df.index.droplevel(level=["sector", "subsector", "fuel"])
+        grouped = df.droplevel(level=["sector", "subsector", "fuel"])
         grouped = grouped.groupby(level="snapshot")
         if agg_strategy == "sum":
             return grouped.sum()
@@ -524,28 +529,25 @@ class WriteStrategy(ABC):
 
         return df
 
-    def _disaggregate_demand_to_buses(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _disaggregate_demand_to_buses(
+        self, demand: pd.DataFrame, laf: pd.DataFrame
+    ) -> pd.DataFrame:
         """
-        Zone power demand is disaggregated to buses proportional to Pd.
+        Zone power demand is disaggregated to buses proportional to laf
         """
-        n = self.n
-        demand_aligned = df.reindex(
-            columns=n.buses["load_zone"].unique(),
-            fill_value=0,
-        )
-        bus_demand = pd.DataFrame()
-        for load_zone in n.buses["load_zone"].unique():
-            LAF = n.buses.loc[n.buses["load_zone"] == load_zone, "LAF"]
-            zone_bus_demand = (
-                demand_aligned[load_zone].values.reshape(-1, 1) * LAF.values.T
+
+        all_load = []
+
+        for load_zone in laf.zone.unique():
+            load = laf[laf.zone == load_zone]
+            load_per_bus = pd.DataFrame(
+                data=([demand[load_zone]] * len(load.index)), index=load.index
             )
-            bus_demand = pd.concat(
-                [bus_demand, pd.DataFrame(zone_bus_demand, columns=LAF.index)],
-                axis=1,
-            )
-        bus_demand.index = n.snapshots
-        n.buses.drop(columns=["LAF"], inplace=True)
-        return bus_demand.fillna(0)
+            dissag_load = load_per_bus.mul(laf.laf, axis=0).dropna()
+            assert dissag_load.shape == load_per_bus.shape  # ensure no data is lost
+            all_load.append(dissag_load)
+
+        return pd.DataFrame(all_load)
 
     def _get_balanceing_area_zones(self) -> pd.Series:
         n = self.n
@@ -578,17 +580,28 @@ class WriteStrategy(ABC):
 class WritePopulation(WriteStrategy):
     """Based on Population Density from Breakthrough Energy"""
 
-    def __init__(self, demand: pd.DataFrame, n: pypsa.Network) -> None:
-        super().__init__(demand, n)
+    def __init__(self, n: pypsa.Network) -> None:
+        super().__init__(n)
 
     def _get_load_allocation_factor(self, df: pd.Series) -> pd.Series:
-        """Load allocation set on population density"""
+        """Load allocation set on population density
+
+        df: pd.Series
+            Load zone mapping from self._get_load_dissagregation_zones(...)
+
+        returns pd.Series
+            Format is a bus index, with the laf for the value. The sum of all
+            lafs in each zone must be one
+        """
 
         n = self.n
+
         n.buses.Pd = n.buses.Pd.fillna(0)
-        group_sums = n.buses.groupby("load_zone")["Pd"].transform("sum")
-        n.buses["LAF"] = n.buses["Pd"] / group_sums
-        return n.buses.LAF
+
+        bus_load = n.buses.Pd.to_frame(name="Pd").join(df.to_frame(name="zone"))
+        zone_loads = bus_load.groupby("zone")["Pd"].transform("sum")
+        laf = bus_load.Pd / zone_loads
+        return laf
 
 
 ###
@@ -634,7 +647,7 @@ if __name__ == "__main__":
         ),
     )
 
-    demand_path = snakemake.input.efs
+    demand_path = snakemake.input.eia
     configuration = snakemake.config["network_configuration"]
 
     if configuration == "eia":
@@ -643,6 +656,6 @@ if __name__ == "__main__":
         demand_converter = Context(ReadEia(demand_path), WritePopulation(n))
 
     # optional arguments of 'fuel', 'sector', 'year'
-    demand = demand_converter.retrieve_demand(demand_path, n)
+    demand = demand_converter.prepare_demand()
 
     attach_demand(n, demand)
