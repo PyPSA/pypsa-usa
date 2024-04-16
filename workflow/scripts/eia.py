@@ -544,18 +544,25 @@ class ProjectedSectorEnergyDemand(DataExtractor):
     # https://www.eia.gov/outlooks/aeo/assumptions/case_descriptions.php
     scenario_codes = {
         "reference": "ref2023",  # reference
-        "high_growth": "noIRA",  # High Economic Growth
-        "low_growth": "noIRA",  # Low Economic Growth
-        "high_oil_price": "noIRA",  # High Oil Price
-        "low_oil_price": "noIRA",  # Low Oil Price
-        "high_oil_gas_supply": "noIRA",  # High Oil and Gas Supply
-        "low_oil_gas_supply": "noIRA",  # Low Oil and Gas Supply
-        "high_ztc": "noIRA",  # High Zero-Carbon Technology Cost
-        "low_ztc": "noIRA",  # High Zero-Carbon Technology Cost
+        "aeo2022": "aeo2022ref",  # AEO2022 Reference case
+        "no_ira": "noIRA",  # No inflation reduction act
+        "low_ira": "lowupIRA",  # Low Uptake of Inflation Reduction Act
+        "high_ira": "highupIRA",  # High Uptake of Inflation Reduction Act
+        "high_growth": "highmacro",  # High Economic Growth
+        "low_growth": "lowmacro",  # Low Economic Growth
+        "high_oil_price": "highprice",  # High Oil Price
+        "low_oil_price": "lowprice",  # Low Oil Price
+        "high_oil_gas_supply": "highogs",  # High Oil and Gas Supply
+        "low_oil_gas_supply": "lowogs",  # Low Oil and Gas Supply
+        "high_ztc": "highZTC",  # High Zero-Carbon Technology Cost
+        "low_ztc": "lowZTC",  # Low Zero-Carbon Technology Cost
         "high_growth_high_ztc": "highmachighZTC",  # High Economic Growth-High Zero-Carbon Technology Cost
-        "high_growth_low_ztc": "highmachighZTC",  # High Economic Growth-Low Zero-Carbon Technology Cost
-        "low_growth_high_ztc": "highmachighZTC",  # Low Economic Growth-High Zero-Carbon Technology Cost
-        "low_growth_low_ztc": "highmachighZTC",  # Low Economic Growth-Low Zero-Carbon Technology Cost
+        "high_growth_low_ztc": "highmaclowZTC",  # High Economic Growth-Low Zero-Carbon Technology Cost
+        "low_growth_high_ztc": "lowmachighZTC",  # Low Economic Growth-High Zero-Carbon Technology Cost
+        "low_growth_low_ztc": "lowmaclowZTC",  # Low Economic Growth-Low Zero-Carbon Technology Cost
+        "fast_build_high_lng": "lng_hp_fast",  # Fast Builds Plus High LNG Price
+        "high_lng": "lng_hp",  # High LNG Price
+        "low_lng": "lng_lp",  # Low LNG Price
     }
 
     # note, these are all "total energy use by end use - total gross end use consumption"
@@ -586,7 +593,7 @@ class ProjectedSectorEnergyDemand(DataExtractor):
 
     def build_url(self) -> str:
         base_url = "aeo/2023/data/"
-        facets = f"frequency=annual&data[0]=value&facets[scenario][]={self.scenario_codes[self.scenario]}&facets[seriesId][]={self.sector_codes[self.sector]}&start={self.year}&end={self.year}&sort[0][column]=period&sort[0][direction]=desc&offset=0&length=5000"
+        facets = f"frequency=annual&data[0]=value&facets[scenario][]={self.scenario_codes[self.scenario]}&facets[seriesId][]={self.sector_codes[self.sector]}&start=2024&end={self.year}&sort[0][column]=period&sort[0][direction]=desc&offset=0&length=5000"
         return f"{API_BASE}{base_url}?api_key={self.api_key}&{facets}"
 
     def format_data(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -848,5 +855,4 @@ if __name__ == "__main__":
     # print(FuelCosts("gas", "commercial", 2019, api).get_data(pivot=True))
     # print(Emissions("transport", 2019, api).get_data(pivot=True))
     # print(Storage("gas", "total", 2019, api).get_data(pivot=True))
-    # df = EnergyDemand("residential", 2024, api).get_data(pivot=False)
-    # print(df[["value"]].sum())
+    print(EnergyDemand("residential", 2030, api).get_data(pivot=False))
