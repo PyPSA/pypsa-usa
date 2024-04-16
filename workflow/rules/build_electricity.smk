@@ -40,6 +40,7 @@ rule build_base_network:
         offshore_shapes=RESOURCES + "{interconnect}/offshore_shapes.geojson",
         state_shapes=RESOURCES + "{interconnect}/state_boundaries.geojson",
         reeds_shapes=RESOURCES + "{interconnect}/reeds_shapes.geojson",
+        reeds_memberships="repo_data/ReEDS_Constraints/membership.csv"
     output:
         bus2sub=DATA + "breakthrough_network/base_grid/{interconnect}/bus2sub.csv",
         sub=DATA + "breakthrough_network/base_grid/{interconnect}/sub.csv",

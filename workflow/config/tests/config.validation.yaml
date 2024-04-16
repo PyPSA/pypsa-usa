@@ -2,7 +2,7 @@
 network_configuration: "pypsa-usa" # "pypsa-usa" or "ads2032"
 
 run:
-  name: "Validation" # use this to keep track of runs with different settings
+  name: "Validation_REEDS" # use this to keep track of runs with different settings
   disable_progressbar: false # set to true to disable the progressbar
   shared_resources: false # set to true to share the default resources across runs
   shared_cutouts: true # set to true to share the default cutout(s) across runs
@@ -152,7 +152,7 @@ clustering:
   cluster_network:
     algorithm: kmeans
     feature: solar+onwind-time
-    aggregation_zones: 'balancing_area' # [balancing_area, state, reeds_zone]
+    aggregation_zones: 'reeds_zone' # [balancing_area, state, reeds_zone]
     exclude_carriers: []
     consider_efficiency_classes: True
   aggregation_strategies:

@@ -121,10 +121,6 @@ atlite:
 
 
 # docs :
-osw_config:
-  enable_osw: false
-  humboldt_capacity: 1607
-
 offshore_shape:
   use: eez #options are ca_osw, eez
 

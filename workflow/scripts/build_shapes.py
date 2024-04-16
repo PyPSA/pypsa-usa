@@ -373,7 +373,7 @@ def main(snakemake):
     # Load, Trim, Save REeDs Shapes
     gdf_reeds = load_reeds_shape(snakemake.input.reeds_shapes)
     reeds_exclusion = {
-        "western": ["p36", "p38", "p32", "p39", "p52", "p49", "p48", "p47"],
+        "western": ["p36", "p35", "p38", "p32", "p39", "p52", "p49", "p48", "p47", "p61", "p19"],
         "eastern": ["p19", "p34", "p32", "p31", "p18"],
         "texas": ["p31", "p59", "p50", "p85", "p58", "p57", "p66", "p47", "p48"],
     }

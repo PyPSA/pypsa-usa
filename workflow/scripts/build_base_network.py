@@ -560,6 +560,16 @@ def assign_missing_states_countries(n: pypsa.Network):
     n.buses.loc[missing.index, "interconnect"] = missing.interconnect
 
 
+def assign_reeds_memberships(n: pypsa.Network, fn_reeds_memberships: str):
+    """
+    Assigns REeDS zone and balancing area memberships to buses.
+    """
+    reeds_memberships = pd.read_csv(fn_reeds_memberships, index_col=0)
+    n.buses["nerc_reg"] = n.buses.reeds_zone.map(reeds_memberships.nercr)
+    n.buses["trans_reg"] = n.buses.reeds_zone.map(reeds_memberships.transreg)
+    n.buses["reeds_state"] = n.buses.reeds_zone.map(reeds_memberships.st)
+
+
 def modify_breakthrough_substations(buslocs: pd.DataFrame):
     sub_fixes = {
         35017: {"lon": -123.0922, "lat": 48.5372},
@@ -707,16 +717,12 @@ def main(snakemake):
     # Modify network lines to fix errors in breakthrough data
     n = modify_breakthrough_lines(n, interconnect)
 
-    if interconnect == "Eastern":
-        logger.warning(
-            f"Eastern Interconnect is missing {len(n.buses.loc[n.buses.balancing_area.isna() | n.buses.state.isna() | n.buses.country.isna()])} bus locations. Must clean-up GIS files before using!",
-        )
-
-    # asssign line types and lengths
+    # Assign Lines Types and Missing Region Memberships
     add_custom_line_type(n)
     assign_line_types(n)
     assign_line_length(n)
     assign_missing_states_countries(n)
+    assign_reeds_memberships(n, snakemake.input.reeds_memberships)
 
     # Tests
     logger.info(test_network_datatype_consistency(n))
