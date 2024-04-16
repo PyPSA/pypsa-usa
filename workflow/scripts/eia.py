@@ -167,6 +167,10 @@ class Production(EiaData):
 class EnergyDemand(EiaData):
     """
     Energy demand at a national level
+
+    If historical year is provided, monthly energy consumption for that year
+    is provided. If a future year is provided, annual projections from 2023 up to
+    that year are provided based on the scenario given
     """
 
     def __init__(
@@ -181,12 +185,15 @@ class EnergyDemand(EiaData):
         if self.year < 2024:
             if not self.scenario:
                 logger.warning("Can not apply AEO scenario to hsitorical demand")
-                return HistoricalEnergyDemand(self.sector, self.year, self.api)
+            return HistoricalEnergyDemand(self.sector, self.year, self.api)
+        elif self.year >= 2024:
+            aeo = "reference" if not self.scenario else self.scenario
+            return ProjectedEnergyDemand(self.sector, self.year, aeo, self.api)
         else:
             raise InputException(
-                propery="Demand",
-                valid_options=["electricity"],
-                recived_option=self.fuel,
+                propery="EnergyDemand",
+                valid_options="year",
+                recived_option=self.year,
             )
 
 
@@ -231,7 +238,8 @@ class DataExtractor(ABC):
 
     def __init__(self, year: int, api_key: str = None):
         self.api_key = api_key
-        self.year = self._set_year(year)
+        # self.year = self._set_year(year)
+        self.year = year
 
     @abstractmethod
     def format_data(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -525,19 +533,65 @@ class HistoricalEnergyDemand(DataExtractor):
         return df[["series-description", "value", "units", "state"]].sort_index()
 
 
-# class ProjectedEnergyDemand(DataExtractor):
-#     """
-#     Extracts projected energy demand at a national level from AEO
-#     """
+class ProjectedEnergyDemand(DataExtractor):
+    """
+    Extracts projected energy demand at a national level from AEO
+    """
 
-#     def __init__(self, sector: str, year: int, api: str, scenario: Optional[str] = "reference"):
-#         super().__init__(year, api)
-#         if sector not in ("residential", "commercial", "industry", "transport"):
-#             raise InputException(
-#                 propery="Projected Energy Demand",
-#                 valid_options=list(self.industry_codes),
-#                 recived_option=industry,
-#             )
+    # https://www.eia.gov/outlooks/aeo/assumptions/case_descriptions.php
+    scenario_codes = {
+        "reference": "ref2023",  # reference
+        "high_growth": "noIRA",  # High Economic Growth
+        "low_growth": "noIRA",  # Low Economic Growth
+        "high_oil_price": "noIRA",  # High Oil Price
+        "low_oil_price": "noIRA",  # Low Oil Price
+        "high_oil_gas_supply": "noIRA",  # High Oil and Gas Supply
+        "low_oil_gas_supply": "noIRA",  # Low Oil and Gas Supply
+        "high_ztc": "noIRA",  # High Zero-Carbon Technology Cost
+        "low_ztc": "noIRA",  # High Zero-Carbon Technology Cost
+        "high_growth_high_ztc": "highmachighZTC",  # High Economic Growth-High Zero-Carbon Technology Cost
+        "high_growth_low_ztc": "highmachighZTC",  # High Economic Growth-Low Zero-Carbon Technology Cost
+        "low_growth_high_ztc": "highmachighZTC",  # Low Economic Growth-High Zero-Carbon Technology Cost
+        "low_growth_low_ztc": "highmachighZTC",  # Low Economic Growth-Low Zero-Carbon Technology Cost
+    }
+
+    # note, these are all total energy use by end use - total gross end use consumption
+    sector_codes = {
+        "residential": "cnsm_NA_resd_totencons_tee_NA_usa_qbtu",
+        "commercial": "cnsm_NA_comm_NA_tee_NA_usa_qbtu",
+        "industry": "cnsm_NA_idal_NA_tot_NA_usa_qbtu",
+        "transport": "cnsm_NA_trn_NA_use_NA_NA_qbtu",
+    }
+
+    def __init__(self, sector: str, year: int, scenario: str, api: str):
+        super().__init__(year, api)
+        self.scenario = scenario
+        self.sector = sector
+        if scenario not in self.scenario_codes.keys():
+            raise InputException(
+                propery="Projected Energy Demand Scenario",
+                valid_options=list(self.scenario_codes),
+                recived_option=scenario,
+            )
+        if sector not in self.sector_codes.keys():
+            raise InputException(
+                propery="Projected Energy Demand Sector",
+                valid_options=list(self.sector_codes),
+                recived_option=sector,
+            )
+
+    def build_url(self) -> str:
+        base_url = "aeo/2023/data/"
+        facets = f"frequency=annual&data[0]=value&facets[scenario][]={self.scenario_codes[self.scenario]}&facets[seriesId][]={self.sector_codes[self.sector]}&start=2023&end={self.year}&sort[0][column]=period&sort[0][direction]=desc&offset=0&length=5000"
+        return f"{API_BASE}{base_url}?api_key={self.api_key}&{facets}"
+
+    def format_data(self, df: pd.DataFrame) -> pd.DataFrame:
+        print(self.year)
+        df.index = pd.to_datetime(df.period)
+        df.index = df.index.year
+        df = df.rename(columns={"seriesName": "series-description", "unit": "units"})
+        df["state"] = "U.S."
+        return df[["series-description", "value", "units", "state"]].sort_index()
 
 
 class GasTrade(DataExtractor):
@@ -790,4 +844,4 @@ if __name__ == "__main__":
     # print(FuelCosts("gas", "commercial", 2019, api).get_data(pivot=True))
     # print(Emissions("transport", 2019, api).get_data(pivot=True))
     # print(Storage("gas", "total", 2019, api).get_data(pivot=True))
-    print(EnergyDemand("residential", 2019, api).get_data(pivot=False))
+    print(EnergyDemand("residential", 2025, api).get_data(pivot=True))
