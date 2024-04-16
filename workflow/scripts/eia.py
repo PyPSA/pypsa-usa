@@ -183,12 +183,12 @@ class EnergyDemand(EiaData):
 
     def data_creator(self) -> pd.DataFrame:
         if self.year < 2024:
-            if not self.scenario:
+            if self.scenario:
                 logger.warning("Can not apply AEO scenario to hsitorical demand")
-            return HistoricalEnergyDemand(self.sector, self.year, self.api)
+            return HistoricalSectorEnergyDemand(self.sector, self.year, self.api)
         elif self.year >= 2024:
             aeo = "reference" if not self.scenario else self.scenario
-            return ProjectedEnergyDemand(self.sector, self.year, aeo, self.api)
+            return ProjectedSectorEnergyDemand(self.sector, self.year, aeo, self.api)
         else:
             raise InputException(
                 propery="EnergyDemand",
@@ -494,19 +494,21 @@ class CoalCosts(DataExtractor):
         return self._assign_dtypes(final)
 
 
-class HistoricalEnergyDemand(DataExtractor):
+class HistoricalSectorEnergyDemand(DataExtractor):
     """
     Extracts historical energy demand at a national level
 
-    Note, this is total energy consumption, to match the AEO projections
-    (pg 17) https://www.eia.gov/outlooks/aeo/pdf/AEO2023_Release_Presentation.pdf
+    Note, this is end use energy consumed (does not include losses)
+    - https://www.eia.gov/totalenergy/data/flow-graphs/electricity.php
+    - https://www.eia.gov/outlooks/aeo/pdf/AEO2023_Release_Presentation.pdf (pg 17)
     """
 
     sector_codes = {
-        "residential": "TER",
-        "commercial": "TEC",
-        "industry": "TEI",
-        "transport": "TEA",
+        "residential": "TNR",
+        "commercial": "TNC",
+        "industry": "TNI",
+        "transport": "TNA",
+        "all": "TNT",  # total energy consumed by all end-use sectors
     }
 
     def __init__(self, sector: str, year: int, api: str) -> None:
@@ -530,12 +532,13 @@ class HistoricalEnergyDemand(DataExtractor):
             columns={"seriesDescription": "series-description", "unit": "units"}
         )
         df["state"] = "U.S."
-        return df[["series-description", "value", "units", "state"]].sort_index()
+        df = df[["series-description", "value", "units", "state"]].sort_index()
+        return self._assign_dtypes(df)
 
 
-class ProjectedEnergyDemand(DataExtractor):
+class ProjectedSectorEnergyDemand(DataExtractor):
     """
-    Extracts projected energy demand at a national level from AEO
+    Extracts projected energy demand at a national level from AEO 2023
     """
 
     # https://www.eia.gov/outlooks/aeo/assumptions/case_descriptions.php
@@ -555,12 +558,13 @@ class ProjectedEnergyDemand(DataExtractor):
         "low_growth_low_ztc": "highmachighZTC",  # Low Economic Growth-Low Zero-Carbon Technology Cost
     }
 
-    # note, these are all total energy use by end use - total gross end use consumption
+    # note, these are all "total energy use by end use - total gross end use consumption"
+    # https://www.eia.gov/totalenergy/data/flow-graphs/electricity.php
     sector_codes = {
-        "residential": "cnsm_NA_resd_totencons_tee_NA_usa_qbtu",
-        "commercial": "cnsm_NA_comm_NA_tee_NA_usa_qbtu",
-        "industry": "cnsm_NA_idal_NA_tot_NA_usa_qbtu",
-        "transport": "cnsm_NA_trn_NA_use_NA_NA_qbtu",
+        "residential": "cnsm_enu_resd_NA_dele_NA_NA_qbtu",
+        "commercial": "cnsm_enu_comm_NA_dele_NA_NA_qbtu",
+        "industry": "cnsm_enu_idal_NA_dele_NA_NA_qbtu ",
+        "transport": "cnsm_enu_comm_NA_dele_NA_NA_qbtu",
     }
 
     def __init__(self, sector: str, year: int, scenario: str, api: str):
@@ -582,16 +586,16 @@ class ProjectedEnergyDemand(DataExtractor):
 
     def build_url(self) -> str:
         base_url = "aeo/2023/data/"
-        facets = f"frequency=annual&data[0]=value&facets[scenario][]={self.scenario_codes[self.scenario]}&facets[seriesId][]={self.sector_codes[self.sector]}&start=2023&end={self.year}&sort[0][column]=period&sort[0][direction]=desc&offset=0&length=5000"
+        facets = f"frequency=annual&data[0]=value&facets[scenario][]={self.scenario_codes[self.scenario]}&facets[seriesId][]={self.sector_codes[self.sector]}&start={self.year}&end={self.year}&sort[0][column]=period&sort[0][direction]=desc&offset=0&length=5000"
         return f"{API_BASE}{base_url}?api_key={self.api_key}&{facets}"
 
     def format_data(self, df: pd.DataFrame) -> pd.DataFrame:
-        print(self.year)
         df.index = pd.to_datetime(df.period)
         df.index = df.index.year
         df = df.rename(columns={"seriesName": "series-description", "unit": "units"})
         df["state"] = "U.S."
-        return df[["series-description", "value", "units", "state"]].sort_index()
+        df = df[["series-description", "value", "units", "state"]].sort_index()
+        return self._assign_dtypes(df)
 
 
 class GasTrade(DataExtractor):
@@ -844,4 +848,5 @@ if __name__ == "__main__":
     # print(FuelCosts("gas", "commercial", 2019, api).get_data(pivot=True))
     # print(Emissions("transport", 2019, api).get_data(pivot=True))
     # print(Storage("gas", "total", 2019, api).get_data(pivot=True))
-    print(EnergyDemand("residential", 2025, api).get_data(pivot=True))
+    # df = EnergyDemand("residential", 2024, api).get_data(pivot=False)
+    # print(df[["value"]].sum())
