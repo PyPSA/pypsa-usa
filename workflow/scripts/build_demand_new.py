@@ -50,6 +50,8 @@ from pathlib import Path
 
 from typing import List, Optional
 
+from eia import EnergyDemand
+
 import constants as const
 import pandas as pd
 import xarray as xr
@@ -386,6 +388,43 @@ class ReadEfs(ReadStrategy):
         df["time"] = pd.to_datetime(df.Year, format="%Y") + df.hoy
         return df.drop(columns=["Year", "UtcHourID", "hoy"])
 
+    def get_growth_rate(self):
+        """Public method to get yearly energy totals
+
+        Yearly values are linearlly interpolated between EFS planning years
+
+        Returns:
+
+        |      | State 1 | State 2 | ... | State n |
+        |----- |---------|---------|-----|---------|
+        | 2018 |  ###    |   ###   |     |   ###   |
+        | 2019 |  ###    |   ###   |     |   ###   |
+        | 2020 |  ###    |   ###   |     |   ###   |
+        | 2021 |  ###    |   ###   |     |   ###   |
+        | 2022 |  ###    |   ###   |     |   ###   |
+        | ...  |         |         |     |   ###   |
+        | 2049 |  ###    |   ###   |     |   ###   |
+        | 2050 |  ###    |   ###   |     |   ###   |
+
+        """
+
+        # extract efs provided data
+        efs_years = self._read_data()[["Year", "State", "LoadMW"]]
+        efs_years = efs_years.groupby(["Year", "State"]).sum().reset_index()
+        efs_years = efs_years.pivot(index="Year", columns="State", values="LoadMW")
+        efs_years.index = pd.to_datetime(efs_years.index, format="%Y")
+
+        # interpolate in between years
+        new_index = pd.date_range(
+            str(efs_years.index.min()), str(efs_years.index.max()), freq="YS"
+        )
+        all_years = efs_years.reindex(efs_years.index.union(new_index)).interpolate(
+            method="linear"
+        )
+        all_years.index = all_years.index.year
+
+        return all_years
+
 
 ###
 # WRITE STRATEGIES
@@ -412,6 +451,7 @@ class WriteStrategy(ABC):
         sector: Optional[str | List[str]] = None,
         subsector: Optional[str | List[str]] = None,
         fuel: Optional[str | List[str]] = None,
+        sns: Optional[pd.DatetimeIndex] = None,
     ) -> pd.DataFrame:
         """
         Public load dissagregation method
@@ -426,6 +466,8 @@ class WriteStrategy(ABC):
             Subsectors to group
         fuel: Optional[str | List[str]] = None,
             End use fules to group
+        sns: Optional[pd.DatetimeIndex] = None
+            Filter data over this period. If not provided, using network snapshots
 
         Data is returned in the format of:
 
@@ -442,7 +484,7 @@ class WriteStrategy(ABC):
         self._check_datastructure(df)
 
         # get zone area demand for specific sector and fuel
-        demand = self._filter_demand(df, sector, subsector, fuel)
+        demand = self._filter_demand(df, sector, subsector, fuel, sns)
         demand = self._group_demand(demand)
 
         # assign buses to dissagregation zone
@@ -479,14 +521,15 @@ class WriteStrategy(ABC):
         )
         assert not df.empty
 
-    def _filter_on_snapshots(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _filter_on_snapshots(
+        self, df: pd.DataFrame, sns: pd.DatetimeIndex
+    ) -> pd.DataFrame:
         """
         Filters demand on network snapshots.
         """
-        snapshots = n.snapshots
-        filtered = df[df.index.get_level_values("snapshot").isin(snapshots)].copy()
+        filtered = df[df.index.get_level_values("snapshot").isin(sns)].copy()
         filtered = filtered[~filtered.index.duplicated(keep="last")]  # issue-272
-        assert len(filtered) == len(snapshots)
+        assert len(filtered) == len(sns)
         return filtered
 
     @staticmethod
@@ -510,10 +553,21 @@ class WriteStrategy(ABC):
         sectors: Optional[str | List[str]] = None,
         subsectors: Optional[str | List[str]] = None,
         fuels: Optional[str | List[str]] = None,
+        sns: Optional[pd.DatetimeIndex] = None,
     ) -> pd.DataFrame:
         """Filters on snapshots, sector, and fuel"""
 
-        df = self._filter_on_snapshots(df)
+        n = self.n
+
+        if not sns:  # if demand year is same as snapshot year
+            snapshots = n.snapshots
+            df = self._filter_on_snapshots(df, snapshots)
+        else:  # not sure if leap years will wreak this
+            snapshots = sns
+            assert len(snapshots) == len(self.n.snapshots)
+            df = self._filter_on_snapshots(df, snapshots)
+            df = df.reindex(self.n.snapshots)
+
         if sectors:
             if isinstance(sectors, str):
                 sectors = [sectors]
@@ -613,6 +667,61 @@ class WritePopulation(WriteStrategy):
 ###
 
 
+def get_aeo_growth_rate(
+    api: str, years: List[str], aeo_scenario: str = "reference"
+) -> pd.DataFrame:
+    """Get sector yearly END-USE ENERGY growth rates from AEO at a NATIONAL level
+
+    |      | residential | commercial  | industrial  | transport  | units |
+    |----- |-------------|-------------|-------------|------------|-------|
+    | 2018 |     ###     |     ###     |     ###     |     ###    |  ###  |
+    | 2019 |     ###     |     ###     |     ###     |     ###    |  ###  |
+    | 2020 |     ###     |     ###     |     ###     |     ###    |  ###  |
+    | ...  |             |             |             |            |       |
+    | 2049 |     ###     |     ###     |     ###     |     ###    |  ###  |
+    | 2050 |     ###     |     ###     |     ###     |     ###    |  ###  |
+    """
+
+    def get_historical_value(api: str, year: int, sector: str) -> float:
+        """Returns single year value at a time"""
+        energy = EnergyDemand(sector=sector, year=year, api=api).get_data()
+        return energy.value.div(1000).sum()  # trillion btu -> quads
+
+    def get_future_values(
+        api: str, year: int, sector: str, scenario: str
+    ) -> pd.DataFrame:
+        """Returns all values from 2024 onwards"""
+        energy = EnergyDemand(
+            sector=sector, year=year, api=api, scenario=scenario
+        ).get_data()
+        return energy
+
+    assert min(years) > 2017
+    assert max(years) < 2051
+
+    sectors = ("residential", "commercial", "industry", "transport")
+
+    df = pd.DataFrame(
+        columns=["residential", "commercial", "industry", "transport"],
+        index=years,
+    )
+
+    for year in sorted(years):
+        if year < 2024:
+            for sector in sectors:
+                df.at[year, sector] = get_historical_value(api, year, sector)
+
+    for sector in sectors:
+        aeo = get_future_values(api, max(years), sector, aeo_scenario)
+        for year in years:
+            if year < 2024:
+                continue
+            df.at[year, sector] = aeo.at[year, "value"]
+
+    df["units"] = "quads"
+    return df
+
+
 def attach_demand(n: pypsa.Network, demand_per_bus: pd.DataFrame, carrier: str = "AC"):
     """
     Add demand to network from specified configuration setting.
@@ -641,6 +750,8 @@ if __name__ == "__main__":
 
     n = pypsa.Network(snakemake.input.base_network)
 
+    # build snapshots
+
     snapshot_config = snakemake.params["snapshots"]
     n.set_snapshots(
         pd.date_range(
@@ -651,15 +762,62 @@ if __name__ == "__main__":
         ),
     )
 
-    demand_path = snakemake.input.eia
-    configuration = snakemake.config["network_configuration"]
+    # extract user demand configuration parameters
 
-    if configuration == "eia":
-        demand_converter = Context(ReadEia(demand_path), WritePopulation(n))
+    demand_params = snakemake.params.demand_params
+    demand_profile = demand_params.get("profile", "eia")
+    demand_scale = demand_params.get("scale", 1)
+    demand_disaggregation = demand_params.get("disaggregation", "pop")
+    eia_api = snakemake.params.eia_api
+
+    if demand_scale == "aeo":
+        assert eia_api, "Must provide EIA API key to scale demand by AEO"
+
+    profile_year = pd.to_datetime(snapshot_config["start"]).year
+    planning_horizons = snakemake.params.planning_horizons
+    assert len(planning_horizons) == 1  # remove for myopic/rolling horizon
+    planning_year = planning_horizons[0]
+
+    # set reading and writitng strategies
+
+    if demand_profile == "efs":
+        assert planning_year in (2018, 2020, 2024, 2030, 2040, 2050)
+        reader = ReadEfs(snakemake.input.efs)
+        sns = n.snapshots.map(lambda x: x.replace(year=planning_year))
+        profile_year = planning_year  # do not scale EFS data
+
+    elif demand_profile == "eia":
+        assert profile_year in range(2018, 2023, 1)
+        reader = ReadEia(snakemake.input.eia)
+        sns = n.snapshots
+
     else:
-        demand_converter = Context(ReadEia(demand_path), WritePopulation(n))
+        raise NotImplementedError
 
-    # optional arguments of 'fuel', 'sector', 'year'
-    demand = demand_converter.prepare_demand()
+    if demand_disaggregation == "pop":
+        writer = WritePopulation(n)
+
+    else:
+        raise NotImplementedError
+
+    demand_converter = Context(reader, writer)
+
+    # extract demand based on strategies
+
+    # optional arguments of 'fuel', 'sector', 'subsector', 'sns'
+    demand = demand_converter.prepare_demand(sns=sns)
+
+    # scale demand based on planning year and user input
+
+    if profile_year == planning_year:
+        pass
+    elif isinstance(demand_scale, (int, float)):
+        demand *= demand_scale
+    elif demand_scale == "efs":
+        growth_rate = ReadEfs(snakemake.input.efs).get_growth_rate()
+        logger.warning("No scale appied for efs data")
+    elif demand_scale == "aeo":
+        growth_rate = get_aeo_growth_rate(eia_api, [profile_year, planning_year])
+        logger.warning("No scale appied for aeo data")
 
     attach_demand(n, demand)

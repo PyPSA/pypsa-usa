@@ -570,8 +570,8 @@ class ProjectedSectorEnergyDemand(DataExtractor):
     sector_codes = {
         "residential": "cnsm_enu_resd_NA_dele_NA_NA_qbtu",
         "commercial": "cnsm_enu_comm_NA_dele_NA_NA_qbtu",
-        "industry": "cnsm_enu_idal_NA_dele_NA_NA_qbtu ",
-        "transport": "cnsm_enu_comm_NA_dele_NA_NA_qbtu",
+        "industry": "cnsm_enu_idal_NA_dele_NA_NA_qbtu",
+        "transport": "cnsm_enu_trn_NA_dele_NA_NA_qbtu",
     }
 
     def __init__(self, sector: str, year: int, scenario: str, api: str):
