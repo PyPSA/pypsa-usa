@@ -1,7 +1,7 @@
 """
 Extracts EIA data.
 
-Public Classes include: 
+Public Classes include:
 - FuelCosts(fuel, industry, year, api)
 - Trade(fuel, direction, year, api)
 - Production(fuel, production, year, api)
@@ -166,15 +166,19 @@ class Production(EiaData):
 # concrete creator
 class EnergyDemand(EiaData):
     """
-    Energy demand at a national level
+    Energy demand at a national level.
 
-    If historical year is provided, monthly energy consumption for that year
-    is provided. If a future year is provided, annual projections from 2023 up to
-    that year are provided based on the scenario given
+    If historical year is provided, monthly energy consumption for that
+    year is provided. If a future year is provided, annual projections
+    from 2023 up to that year are provided based on the scenario given
     """
 
     def __init__(
-        self, sector: str, year: int, api: str, scenario: Optional[str] = None
+        self,
+        sector: str,
+        year: int,
+        api: str,
+        scenario: Optional[str] = None,
     ) -> None:
         self.sector = sector  # (residential, commercial, transport, industry)
         self.year = year
@@ -496,7 +500,7 @@ class CoalCosts(DataExtractor):
 
 class HistoricalSectorEnergyDemand(DataExtractor):
     """
-    Extracts historical energy demand at a national level
+    Extracts historical energy demand at a national level.
 
     Note, this is end use energy consumed (does not include losses)
     - https://www.eia.gov/totalenergy/data/flow-graphs/electricity.php
@@ -529,7 +533,7 @@ class HistoricalSectorEnergyDemand(DataExtractor):
     def format_data(self, df: pd.DataFrame) -> pd.DataFrame:
         df.index = pd.to_datetime(df.period)
         df = df.rename(
-            columns={"seriesDescription": "series-description", "unit": "units"}
+            columns={"seriesDescription": "series-description", "unit": "units"},
         )
         df["state"] = "U.S."
         df = df[["series-description", "value", "units", "state"]].sort_index()
@@ -538,7 +542,7 @@ class HistoricalSectorEnergyDemand(DataExtractor):
 
 class ProjectedSectorEnergyDemand(DataExtractor):
     """
-    Extracts projected energy demand at a national level from AEO 2023
+    Extracts projected energy demand at a national level from AEO 2023.
     """
 
     # https://www.eia.gov/outlooks/aeo/assumptions/case_descriptions.php

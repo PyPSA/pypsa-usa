@@ -225,9 +225,9 @@ rule build_renewable_profiles:
 rule build_demand:
     params:
         planning_horizons=config["scenario"]["planning_horizons"],
-        demand_params = config["electricity"]["demand"],
+        demand_params=config["electricity"]["demand"],
         snapshots=config["snapshots"],
-        eia_api=config["api"]["eia"]
+        eia_api=config["api"]["eia"],
     input:
         base_network=RESOURCES + "{interconnect}/elec_base_network.nc",
         eia=DATA + "GridEmissions/EIA_DMD_2018_2024.csv",
