@@ -463,6 +463,19 @@ def update_config_with_sector_opts(config, sector_opts):
             update_config(config, parse(l))
 
 
+def local_to_utc(group):
+    from constants import STATE_2_TIMEZONE
+    import pytz
+
+    timezone_str = STATE_2_TIMEZONE[group.name]
+    timezone = pytz.timezone(timezone_str)
+    time_shift = (
+        -1 * group.iloc[0].tz_localize(timezone).utcoffset().total_seconds() / 3600
+    )
+    utc = group + pd.Timedelta(hours=time_shift)
+    return utc
+
+
 def validate_checksum(file_path, zenodo_url=None, checksum=None):
     """
     Validate file checksum against provided or Zenodo-retrieved checksum.
