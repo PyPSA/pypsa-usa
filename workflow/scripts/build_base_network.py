@@ -664,17 +664,12 @@ def main(snakemake):
     )
 
     # assign ba, state, and country to each bus
-    gdf_bus = map_bus_to_region(gdf_bus, na_shape, ["full_states"])
+    gdf_bus = map_bus_to_region(gdf_bus, na_shape, ["true_state"])  # for laf
     gdf_bus = map_bus_to_region(gdf_bus, ba_shape, ["balancing_area"])
     gdf_bus = map_bus_to_region(gdf_bus, state_shape, ["state"])
     gdf_bus = map_bus_to_region(gdf_bus, state_shape, ["country"])
     gdf_bus = map_bus_to_region(gdf_bus, reeds_shape, ["reeds_zone", "reeds_ba"])
-
-    # assign load allocation factors to buses for state level dissagregation
     gdf_bus = assign_missing_state_regions(gdf_bus)
-    group_sums = gdf_bus.groupby("full_states")["Pd"].transform("sum")
-    gdf_bus["LAF_states"] = gdf_bus["Pd"] / group_sums
-    gdf_bus.drop(columns=["full_states"], inplace=True)
 
     # Removing few duplicated shapes where GIS shapes were overlapping. TODO Fix GIS shapes
     gdf_bus = (

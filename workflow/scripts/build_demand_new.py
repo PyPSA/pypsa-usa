@@ -299,7 +299,7 @@ class ReadEfs(ReadStrategy):
 
     def __init__(self, filepath: str | None = None) -> None:
         super().__init__(filepath)
-        self._zone = "state"
+        self._zone = "true_state"
 
     @property
     def zone(self):
@@ -482,7 +482,9 @@ class WriteStrategy(ABC):
         | 2019-12-31 23:00:00 |    ###    |    ###    |     |    ###    |
         """
 
-        assert zone in ("ba", "state", "reeds")
+        # 'state' is states based on power regions 
+        # 'true_state' is actual geographic boundaries  
+        assert zone in ("ba", "state", "true_state", "reeds")
         self._check_datastructure(df)
 
         # get zone area demand for specific sector and fuel
