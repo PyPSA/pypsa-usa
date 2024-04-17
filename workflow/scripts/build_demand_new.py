@@ -60,6 +60,8 @@ from _helpers import configure_logging
 
 import sys
 
+import pytz
+
 from abc import ABC, abstractmethod
 
 logger = logging.getLogger(__name__)
@@ -354,17 +356,17 @@ class ReadEfs(ReadStrategy):
         def apply_timezone_shift(timezone: str) -> int:
             """All shifts realitive to UTC time"""
             if timezone == "US/Pacific":
-                return -8
+                return 8
             elif timezone == "US/Mountain":
-                return -7
+                return 7
             elif timezone == "US/Central":
-                return -6
+                return 6
             elif timezone == "US/Eastern":
-                return -5
+                return 5
             elif timezone == "US/Alaska":
-                return -9
+                return 9
             elif timezone == "Pacific/Honolulu":
-                return -11
+                return 11
             else:
                 raise KeyError(f"Timezone {timezone} not mapped :(")
 
@@ -376,7 +378,7 @@ class ReadEfs(ReadStrategy):
 
         df["utc_shift"] = df.State.map(utc_shift)
         df["UtcHourID"] = df.LocalHourID + df.utc_shift
-        df["UtcHourID"] = df.UtcHourID.map(lambda x: x if x > 0 else x + 8760)
+        df["UtcHourID"] = df.UtcHourID.map(lambda x: x if x < 8761 else x - 8760)
         df = df.drop(columns=["utc_shift"])
         return df
 
@@ -529,7 +531,7 @@ class WriteStrategy(ABC):
         """
         filtered = df[df.index.get_level_values("snapshot").isin(sns)].copy()
         filtered = filtered[~filtered.index.duplicated(keep="last")]  # issue-272
-        assert len(filtered) == len(sns)
+        assert len(filtered.index.get_level_values("snapshot").unique()) == len(sns)
         return filtered
 
     @staticmethod
@@ -559,14 +561,19 @@ class WriteStrategy(ABC):
 
         n = self.n
 
-        if not sns:  # if demand year is same as snapshot year
+        if isinstance(sns, pd.DatetimeIndex):  # not sure if leap years will break this
+            snapshots = sns
+            assert len(snapshots) == len(n.snapshots)
+            filtered = self._filter_on_snapshots(df, snapshots)
+            df = filtered.reset_index()
+            df["snapshot"] = df.snapshot.map(
+                lambda x: x.replace(year=n.snapshots[0].year)
+            )
+            df = df.groupby(["snapshot", "sector", "subsector", "fuel"]).sum()
+            assert filtered.shape == df.shape  # no data should have changed
+        else:  # profile and planning year are the same
             snapshots = n.snapshots
             df = self._filter_on_snapshots(df, snapshots)
-        else:  # not sure if leap years will wreak this
-            snapshots = sns
-            assert len(snapshots) == len(self.n.snapshots)
-            df = self._filter_on_snapshots(df, snapshots)
-            df = df.reindex(self.n.snapshots)
 
         if sectors:
             if isinstance(sectors, str):
@@ -652,6 +659,8 @@ class WritePopulation(WriteStrategy):
             lafs in each zone must be one
         """
 
+        logger.info("Setting load allocation factors based on population density")
+
         n = self.n
 
         n.buses.Pd = n.buses.Pd.fillna(0)
@@ -720,21 +729,6 @@ def get_aeo_growth_rate(
 
     df["units"] = "quads"
     return df
-
-
-def attach_demand(n: pypsa.Network, demand_per_bus: pd.DataFrame, carrier: str = "AC"):
-    """
-    Add demand to network from specified configuration setting.
-
-    Returns network with demand added.
-    """
-    n.madd(
-        "Load",
-        demand_per_bus.columns,
-        bus=demand_per_bus.columns,
-        p_set=demand_per_bus,
-        carrier="AC",
-    )
 
 
 ###
@@ -820,4 +814,7 @@ if __name__ == "__main__":
         growth_rate = get_aeo_growth_rate(eia_api, [profile_year, planning_year])
         logger.warning("No scale appied for aeo data")
 
-    attach_demand(n, demand)
+    # attach_demand(n, demand)
+
+    # demand.round(4).to_csv(snakemake.output.demand, index=True)
+    demand.round(4).to_csv("efs_new.csv", index=True)
