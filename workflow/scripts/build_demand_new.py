@@ -2,17 +2,6 @@
 """
 Builds the demand data for the PyPSA network.
 
-Call a demand source, or multiple via...
-
-    context = Context(AdsDemand(demand_path))
-    context.prepare_demand(demand_path)
-    # logic to apply ADS demand
-
-    context.strategy = EiaDemand()
-    context.prepare_demand(demand_path)
-    # logic to apply other demand from eia
-
-
 **Relevant Settings**
 
 .. code:: yaml
@@ -54,13 +43,10 @@ from eia import EnergyDemand
 
 import constants as const
 import pandas as pd
-import xarray as xr
 import pypsa
 from _helpers import configure_logging
 
 import sys
-
-import pytz
 
 from abc import ABC, abstractmethod
 
@@ -482,8 +468,8 @@ class WriteStrategy(ABC):
         | 2019-12-31 23:00:00 |    ###    |    ###    |     |    ###    |
         """
 
-        # 'state' is states based on power regions 
-        # 'true_state' is actual geographic boundaries  
+        # 'state' is states based on power regions
+        # 'true_state' is actual geographic boundaries
         assert zone in ("ba", "state", "true_state", "reeds")
         self._check_datastructure(df)
 
@@ -819,4 +805,4 @@ if __name__ == "__main__":
     # attach_demand(n, demand)
 
     # demand.round(4).to_csv(snakemake.output.demand, index=True)
-    demand.round(4).to_csv("efs_new.csv", index=True)
+    demand.round(4).to_csv(snakemake.output.demand, index=True)

@@ -225,19 +225,11 @@ rule build_renewable_profiles:
 rule build_demand:
     params:
         planning_horizons=config["scenario"]["planning_horizons"],
+        demand_params = config["electricity"]["demand"],
         snapshots=config["snapshots"],
+        eia_api=config["api"]["eia"]
     input:
         base_network=RESOURCES + "{interconnect}/elec_base_network.nc",
-        ads_renewables=(
-            DATA + "WECC_ADS/processed/"
-            if config["network_configuration"] == "ads2032"
-            else []
-        ),
-        ads_2032=(
-            DATA + "WECC_ADS/downloads/2032/Public Data/Hourly Profiles in CSV format"
-            if config["network_configuration"] == "ads2032"
-            else []
-        ),
         eia=DATA + "GridEmissions/EIA_DMD_2018_2024.csv",
         efs=DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv",
     output:
