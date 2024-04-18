@@ -1,4 +1,5 @@
 [![DOI](https://zenodo.org/badge/500892486.svg)](https://zenodo.org/doi/10.5281/zenodo.10815964)
+[![Documentation Status](https://readthedocs.org/projects/pypsa-usa/badge/?version=latest)](https://pypsa-usa.readthedocs.io/en/latest/?badge=latest)
 
 # PyPSA-USA: An Open-Source Energy System Optimization Model for the United States
 

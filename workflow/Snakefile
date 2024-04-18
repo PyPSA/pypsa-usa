@@ -46,6 +46,7 @@ FIGURES_SYSTEM = [
     "generator_data_panel.pdf",
     "curtailment_heatmap.pdf",
     "capfac_heatmap.pdf",
+    "fuel_costs.pdf",
     "region_lmps.pdf",
 ]
 

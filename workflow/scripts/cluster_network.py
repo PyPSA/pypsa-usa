@@ -2,8 +2,7 @@
 Creates networks clustered to ``{cluster}`` number of zones with aggregated
 buses, generators and transmission corridors.
 
-Relevant Settings
------------------
+**Relevant Settings**
 
 .. code:: yaml
 
@@ -24,8 +23,7 @@ Relevant Settings
     Documentation of the configuration file ``config/config.yaml`` at
     :ref:`renewable_cf`, :ref:`solving_cf`, :ref:`lines_cf`
 
-Inputs
-------
+**Inputs**
 
 - ``resources/regions_onshore_elec_s{simpl}.geojson``: confer :ref:`simplify`
 - ``resources/regions_offshore_elec_s{simpl}.geojson``: confer :ref:`simplify`
@@ -33,8 +31,7 @@ Inputs
 - ``networks/elec_s{simpl}.nc``: confer :ref:`simplify`
 - ``data/custom_busmap_elec_s{simpl}_{clusters}.csv``: optional input
 
-Outputs
--------
+**Outputs**
 
 - ``resources/regions_onshore_elec_s{simpl}_{clusters}.geojson``:
 - ``resources/regions_offshore_elec_s{simpl}_{clusters}.geojson``:
@@ -42,8 +39,7 @@ Outputs
 - ``resources/linemap_elec_s{simpl}_{clusters}.csv``: Mapping of lines from ``networks/elec_s{simpl}.nc`` to ``networks/elec_s{simpl}_{clusters}.nc``;
 - ``networks/elec_s{simpl}_{clusters}.nc``:
 
-Description
------------
+**Description**
 
 .. note::
 
