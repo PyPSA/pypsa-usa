@@ -70,7 +70,7 @@ electricity:
     Link: [] #[H2 pipeline]
 
   demand: 
-    profile: eia # efs, eia
+    profile: efs # efs, eia
     scale: 1 # efs, aeo, or a number 
     disaggregation: pop # pop
     scenario: 
