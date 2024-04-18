@@ -61,7 +61,9 @@ class Context:
     """
 
     def __init__(self, read_strategy, write_strategy) -> None:
-        """(read_strategy: ReadStrategy, write_strategy: WriteStrategy)"""
+        """
+        (read_strategy: ReadStrategy, write_strategy: WriteStrategy)
+        """
         self._read_strategy = read_strategy
         self._write_strategy = write_strategy
 
@@ -438,8 +440,11 @@ class WriteStrategy(ABC):
         self.n = n
 
     @abstractmethod
-    def _get_load_allocation_factor(self, df: Optional[pd.Series] = None, **kwargs) -> pd.Series:
-        """Load allocation set on population density
+    def _get_load_allocation_factor(
+        self, df: Optional[pd.Series] = None, **kwargs
+    ) -> pd.Series:
+        """
+        Load allocation set on population density.
 
         df: pd.Series
             Load zone mapping from self._get_load_dissagregation_zones(...)
@@ -669,7 +674,9 @@ class WritePopulation(WriteStrategy):
         super().__init__(n)
 
     def _get_load_allocation_factor(self, df: pd.Series, zone: str) -> pd.Series:
-        """Pulls weighting from 'build_base_network'"""
+        """
+        Pulls weighting from 'build_base_network'.
+        """
         logger.info("Setting load allocation factors based on BE population density")
         n = self.n
         if zone == "state":
@@ -679,6 +686,7 @@ class WritePopulation(WriteStrategy):
             bus_load = n.buses.Pd.to_frame(name="Pd").join(df.to_frame(name="zone"))
             zone_loads = bus_load.groupby("zone")["Pd"].transform("sum")
             return bus_load.Pd / zone_loads
+
 
 ###
 # helpers
