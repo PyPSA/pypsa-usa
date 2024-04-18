@@ -107,7 +107,7 @@ class Context:
 
     def prepare_demand(self, **kwargs) -> pd.DataFrame:
         """
-        Read in and dissagregate demand
+        Read in and dissagregate demand.
         """
         demand = self._read()
         return self._write(demand, self._read_strategy.zone, **kwargs)
@@ -124,7 +124,7 @@ class ReadStrategy(ABC):
     of some algorithm.
     """
 
-    def __init__(self, filepath: Optional[str] = None) -> None:
+    def __init__(self, filepath: str | None = None) -> None:
         self.filepath = filepath
 
     @property
@@ -134,13 +134,13 @@ class ReadStrategy(ABC):
     @abstractmethod
     def _read_data(self, **kwargs) -> pd.DataFrame:
         """
-        Reads raw data into any arbitraty data structure
+        Reads raw data into any arbitraty data structure.
         """
         pass
 
     def read_demand(self) -> pd.DataFrame:
         """
-        Public interface to extract data
+        Public interface to extract data.
         """
 
         df = self._read_data()
@@ -170,13 +170,12 @@ class ReadStrategy(ABC):
         | 2019-01-01 02:00:00 | all    | all       | electricity   |    ###     |    ###     |     |    ###     |
         | ...                 | ...    | ...       | ...           |            |            |     |    ###     |
         | 2019-12-31 23:00:00 | all    | all       | electricity   |    ###     |    ###     |     |    ###     |
-
         """
         pass
 
     def _check_index(self, df: pd.DataFrame) -> None:
         """
-        Enforces dimension labels
+        Enforces dimension labels.
         """
         assert all(
             x in ["snapshot", "sector", "subsector", "fuel"] for x in df.index.names
@@ -194,7 +193,9 @@ class ReadStrategy(ABC):
 
     @staticmethod
     def _format_snapshot_index(df: pd.DataFrame) -> pd.DataFrame:
-        """Makes index into datetime"""
+        """
+        Makes index into datetime.
+        """
         if df.index.nlevels > 1:
             if "snapshot" not in df.index.names:
                 logger.warning("Can not format snapshot index level")
@@ -212,7 +213,9 @@ class ReadStrategy(ABC):
 
 
 class ReadEia(ReadStrategy):
-    """Reads data from GridEmissions"""
+    """
+    Reads data from GridEmissions.
+    """
 
     def __init__(self, filepath: str | None = None) -> None:
         super().__init__(filepath)
@@ -249,7 +252,7 @@ class ReadEia(ReadStrategy):
     @staticmethod
     def _correct_balancing_areas(df: pd.DataFrame) -> pd.DataFrame:
         """
-        Combine EIA Demand Data to Match GIS Shapes
+        Combine EIA Demand Data to Match GIS Shapes.
         """
         df["Arizona"] = df.pop("SRP") + df.pop("AZPS")
         df["Carolina"] = (
@@ -277,7 +280,7 @@ class ReadEia(ReadStrategy):
 
 class ReadEfs(ReadStrategy):
     """
-    Reads in electrifications future study demand
+    Reads in electrifications future study demand.
     """
 
     def __init__(self, filepath: str | None = None) -> None:
@@ -311,7 +314,7 @@ class ReadEfs(ReadStrategy):
                 "Residential": "residential",
                 "Industrial": "industry",
                 "Transportation": "transport",
-            }
+            },
         )
         df["fuel"] = "electricity"
         df["LoadMW"] = df.LoadMW.astype(float)
@@ -326,7 +329,9 @@ class ReadEfs(ReadStrategy):
         return df
 
     def _build_snapshots(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Builds snapshots based on UTC time"""
+        """
+        Builds snapshots based on UTC time.
+        """
 
         df = self._apply_timezones(df)
         df = self._build_datetime(df)
@@ -334,10 +339,14 @@ class ReadEfs(ReadStrategy):
 
     @staticmethod
     def _apply_timezones(df: pd.DataFrame) -> pd.DataFrame:
-        """Changes local time to relative time from UTC"""
+        """
+        Changes local time to relative time from UTC.
+        """
 
         def apply_timezone_shift(timezone: str) -> int:
-            """All shifts realitive to UTC time"""
+            """
+            All shifts realitive to UTC time.
+            """
             if timezone == "US/Pacific":
                 return 8
             elif timezone == "US/Mountain":
@@ -367,14 +376,17 @@ class ReadEfs(ReadStrategy):
 
     @staticmethod
     def _build_datetime(df: pd.DataFrame) -> pd.DataFrame:
-        """Builds snapshot from EFS data"""
+        """
+        Builds snapshot from EFS data.
+        """
         # minus 1 cause indexing starts at 1
         df["hoy"] = pd.to_timedelta(df.UtcHourID - 1, unit="h")
         df["time"] = pd.to_datetime(df.Year, format="%Y") + df.hoy
         return df.drop(columns=["Year", "UtcHourID", "hoy"])
 
     def get_growth_rate(self):
-        """Public method to get yearly energy totals
+        """
+        Public method to get yearly energy totals.
 
         Yearly values are linearlly interpolated between EFS planning years
 
@@ -390,7 +402,6 @@ class ReadEfs(ReadStrategy):
         | ...  |         |         |     |   ###   |
         | 2049 |  ###    |   ###   |     |   ###   |
         | 2050 |  ###    |   ###   |     |   ###   |
-
         """
 
         # extract efs provided data
@@ -401,10 +412,12 @@ class ReadEfs(ReadStrategy):
 
         # interpolate in between years
         new_index = pd.date_range(
-            str(efs_years.index.min()), str(efs_years.index.max()), freq="YS"
+            str(efs_years.index.min()),
+            str(efs_years.index.max()),
+            freq="YS",
         )
         all_years = efs_years.reindex(efs_years.index.union(new_index)).interpolate(
-            method="linear"
+            method="linear",
         )
         all_years.index = all_years.index.year
 
@@ -418,7 +431,7 @@ class ReadEfs(ReadStrategy):
 
 class WriteStrategy(ABC):
     """
-    Disaggregates demand based on a specified method
+    Disaggregates demand based on a specified method.
     """
 
     def __init__(self, n: pypsa.Network) -> None:
@@ -440,13 +453,13 @@ class WriteStrategy(ABC):
         self,
         df: pd.DataFrame,
         zone: str,
-        sector: Optional[str | List[str]] = None,
-        subsector: Optional[str | List[str]] = None,
-        fuel: Optional[str | List[str]] = None,
-        sns: Optional[pd.DatetimeIndex] = None,
+        sector: str | list[str] | None = None,
+        subsector: str | list[str] | None = None,
+        fuel: str | list[str] | None = None,
+        sns: pd.DatetimeIndex | None = None,
     ) -> pd.DataFrame:
         """
-        Public load dissagregation method
+        Public load dissagregation method.
 
         df: pd.DataFrame
             Demand dataframe
@@ -492,12 +505,16 @@ class WriteStrategy(ABC):
 
         # disaggregate load to buses
         zone_data = dissagregation_zones.to_frame(name="zone").join(
-            laf.to_frame(name="laf")
+            laf.to_frame(name="laf"),
         )
         return self._disaggregate_demand_to_buses(demand, zone_data)
 
     def _get_load_dissagregation_zones(self, zone: str) -> pd.Series:
-        """Map each bus to the load dissagregation zone (ie. states, ba, ...)"""
+        """
+        Map each bus to the load dissagregation zone (ie.
+
+        states, ba, ...)
+        """
         if zone == "ba":
             return self._get_balanceing_area_zones()
         elif zone == "state":
@@ -509,14 +526,18 @@ class WriteStrategy(ABC):
 
     @staticmethod
     def _check_datastructure(df: pd.DataFrame) -> None:
-        """Confirms formatting of input datastructure"""
+        """
+        Confirms formatting of input datastructure.
+        """
         assert all(
             x in ["snapshot", "sector", "subsector", "fuel"] for x in df.index.names
         )
         assert not df.empty
 
     def _filter_on_snapshots(
-        self, df: pd.DataFrame, sns: pd.DatetimeIndex
+        self,
+        df: pd.DataFrame,
+        sns: pd.DatetimeIndex,
     ) -> pd.DataFrame:
         """
         Filters demand on network snapshots.
@@ -527,7 +548,7 @@ class WriteStrategy(ABC):
         return filtered
 
     @staticmethod
-    def _filter_on_use(df: pd.DataFrame, level: str, values: List[str]):
+    def _filter_on_use(df: pd.DataFrame, level: str, values: list[str]):
         return df[df.index.get_level_values(level) in values].copy()
 
     @staticmethod
@@ -544,12 +565,14 @@ class WriteStrategy(ABC):
     def _filter_demand(
         self,
         df: pd.DataFrame,
-        sectors: Optional[str | List[str]] = None,
-        subsectors: Optional[str | List[str]] = None,
-        fuels: Optional[str | List[str]] = None,
-        sns: Optional[pd.DatetimeIndex] = None,
+        sectors: str | list[str] | None = None,
+        subsectors: str | list[str] | None = None,
+        fuels: str | list[str] | None = None,
+        sns: pd.DatetimeIndex | None = None,
     ) -> pd.DataFrame:
-        """Filters on snapshots, sector, and fuel"""
+        """
+        Filters on snapshots, sector, and fuel.
+        """
 
         n = self.n
 
@@ -559,7 +582,7 @@ class WriteStrategy(ABC):
             filtered = self._filter_on_snapshots(df, snapshots)
             df = filtered.reset_index()
             df["snapshot"] = df.snapshot.map(
-                lambda x: x.replace(year=n.snapshots[0].year)
+                lambda x: x.replace(year=n.snapshots[0].year),
             )
             df = df.groupby(["snapshot", "sector", "subsector", "fuel"]).sum()
             assert filtered.shape == df.shape  # no data should have changed
@@ -583,10 +606,12 @@ class WriteStrategy(ABC):
         return df
 
     def _disaggregate_demand_to_buses(
-        self, demand: pd.DataFrame, laf: pd.DataFrame
+        self,
+        demand: pd.DataFrame,
+        laf: pd.DataFrame,
     ) -> pd.DataFrame:
         """
-        Zone power demand is disaggregated to buses proportional to laf
+        Zone power demand is disaggregated to buses proportional to laf.
         """
 
         all_load = []
@@ -594,7 +619,8 @@ class WriteStrategy(ABC):
         for load_zone in laf.zone.unique():
             load = laf[laf.zone == load_zone]
             load_per_bus = pd.DataFrame(
-                data=([demand[load_zone]] * len(load.index)), index=load.index
+                data=([demand[load_zone]] * len(load.index)),
+                index=load.index,
             )
             dissag_load = load_per_bus.mul(laf.laf, axis=0).dropna()
             assert dissag_load.shape == load_per_bus.shape  # ensure no data is lost
@@ -635,7 +661,9 @@ class WriteStrategy(ABC):
 
 
 class WritePopulation(WriteStrategy):
-    """Based on Population Density from Breakthrough Energy"""
+    """
+    Based on Population Density from Breakthrough Energy.
+    """
 
     def __init__(self, n: pypsa.Network) -> None:
         super().__init__(n)
@@ -658,9 +686,12 @@ class WritePopulation(WriteStrategy):
 
 
 def get_aeo_growth_rate(
-    api: str, years: List[str], aeo_scenario: str = "reference"
+    api: str,
+    years: list[str],
+    aeo_scenario: str = "reference",
 ) -> pd.DataFrame:
-    """Get sector yearly END-USE ENERGY growth rates from AEO at a NATIONAL level
+    """
+    Get sector yearly END-USE ENERGY growth rates from AEO at a NATIONAL level.
 
     |      | residential | commercial  | industrial  | transport  | units |
     |----- |-------------|-------------|-------------|------------|-------|
@@ -673,16 +704,26 @@ def get_aeo_growth_rate(
     """
 
     def get_historical_value(api: str, year: int, sector: str) -> float:
-        """Returns single year value at a time"""
+        """
+        Returns single year value at a time.
+        """
         energy = EnergyDemand(sector=sector, year=year, api=api).get_data()
         return energy.value.div(1000).sum()  # trillion btu -> quads
 
     def get_future_values(
-        api: str, year: int, sector: str, scenario: str
+        api: str,
+        year: int,
+        sector: str,
+        scenario: str,
     ) -> pd.DataFrame:
-        """Returns all values from 2024 onwards"""
+        """
+        Returns all values from 2024 onwards.
+        """
         energy = EnergyDemand(
-            sector=sector, year=year, api=api, scenario=scenario
+            sector=sector,
+            year=year,
+            api=api,
+            scenario=scenario,
         ).get_data()
         return energy
 

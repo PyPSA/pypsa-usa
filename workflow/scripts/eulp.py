@@ -1,13 +1,15 @@
-"""Holds data processing class for NREL End Use Load Profiles 
+"""
+Holds data processing class for NREL End Use Load Profiles.
 
  See the <https://data.openei.org/submissions/4520>`_ (End Use Load Profile) data description for further information on the data
- 
+
 See `retrieve_eulp` rule for the data extraction
 """
 
 import logging
 from typing import Optional
 import pandas as pd
+
 
 class Eulp:
     _elec_group = [
