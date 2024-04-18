@@ -14,6 +14,7 @@ rule solve_network:
         + "{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}_{sector}.nc",
         config=RESULTS + "config.yaml",
         flowgates="repo_data/ReEDS_Constraints/transmission/transmission_capacity_init_AC_ba_NARIS2024.csv",
+        safer_reeds="repo_data/ReEDS_Constraints/reserves/prm_annual.csv",
     output:
         network=RESULTS
         + "{interconnect}/networks/elec_s_{clusters}_ec_l{ll}_{opts}_{sector}.nc",

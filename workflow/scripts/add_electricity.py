@@ -1061,6 +1061,16 @@ def apply_seasonal_capacity_derates(
     p_max_pu.loc[winter_sns, conv_gens.index] *= conv_plants.loc[:, "winter_derate"].astype(float)
     n.generators_t.p_max_pu = pd.concat([n.generators_t.p_max_pu, p_max_pu], axis=1)
 
+    conv_plants.loc[:,'ads_mustrun'] = conv_plants.ads_mustrun.fillna(False)
+    must_run = conv_plants.loc[conv_plants.ads_mustrun, :].copy()
+    must_run.loc[:, 'minimum_load_mw'] = must_run.minimum_load_mw.astype(float)
+    must_run.loc[:, 'minimum_cf'] = must_run.minimum_load_mw / must_run.p_nom
+    must_run.loc[:, 'minimum_cf'] = must_run.minimum_cf.clip(upper=np.minimum(must_run.summer_derate, must_run.winter_derate))
+
+    p_min_pu = pd.DataFrame(1.0, index=sns, columns=must_run.index)
+    p_min_pu.loc[:, must_run.index] *= must_run.loc[:, "minimum_cf"].astype(float)
+    n.generators_t.p_min_pu = pd.concat([n.generators_t.p_min_pu, p_min_pu], axis=1)
+
 def assign_ads_missing_lat_lon(plants, n):
     plants_unmatched = plants[plants.latitude.isna() | plants.longitude.isna()]
     plants_unmatched = plants_unmatched[~plants_unmatched.balancing_area.isna()]

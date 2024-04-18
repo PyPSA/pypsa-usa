@@ -724,6 +724,10 @@ def main(snakemake):
     assign_missing_states_countries(n)
     assign_reeds_memberships(n, snakemake.input.reeds_memberships)
 
+    p_max_pu = snakemake.params["links"].get("p_max_pu", 1.0)
+    n.links["p_max_pu"] = p_max_pu
+    n.links["p_min_pu"] = -p_max_pu
+
     # Tests
     logger.info(test_network_datatype_consistency(n))
 

@@ -443,10 +443,9 @@ def add_interface_limits(n, sns, config):
     limits = pd.concat([limits, user_limits])
 
     lines_s = n.model["Line-s"]
+    links_p = n.model["Link-p"]
 
     for idx, interface in limits.iterrows():
-        # if interface.interface == "p10|p11":
-        #     print(interface)
         regions_list_r = [region.strip() for region in interface.r.split(",")]
         regions_list_rr = [region.strip() for region in interface.rr.split(",")]
 
@@ -454,23 +453,37 @@ def add_interface_limits(n, sns, config):
         zone1_buses = n.buses[n.buses.country.isin(regions_list_rr)]
         if zone0_buses.empty | zone0_buses.empty:
             continue
-        interface_lines_pos = n.lines[
+
+        logger.info(f"Adding Interface Transmission Limit for {interface.interface}")
+        interface_lines_b0 = n.lines[
             n.lines.bus0.isin(zone0_buses.index) & n.lines.bus1.isin(zone1_buses.index)
         ]
-        interface_lines_neg = n.lines[
+        interface_lines_b1 = n.lines[
             n.lines.bus0.isin(zone1_buses.index) & n.lines.bus1.isin(zone0_buses.index)
         ]
+        interface_links_b0 = n.links[
+            n.links.bus0.isin(zone0_buses.index) & n.links.bus1.isin(zone1_buses.index)
+        ]
+        interface_links_b1 = n.links[
+            n.links.bus0.isin(zone1_buses.index) & n.links.bus1.isin(zone0_buses.index)
+        ]
 
-        lhs = lines_s.loc[:, interface_lines_pos.index].sum(dims="Line") - lines_s.loc[
-            :,
-            interface_lines_neg.index,
-        ].sum(dims="Line")
+        line_flows = (
+            lines_s.loc[:, interface_lines_b1.index].sum(dims="Line") -
+            lines_s.loc[:, interface_lines_b0.index].sum(dims="Line")
+        )
+        link_flows = (
+            links_p.loc[:, interface_links_b1.index].sum(dims="Link") -
+            links_p.loc[:, interface_links_b0.index].sum(dims="Link")
+        ) 
 
-        rhs_pos = interface.MW_f0
-        n.model.add_constraints(lhs <= rhs_pos, name=f"ITL_{interface.interface}_pos")
+        lhs = line_flows + link_flows if 'RESOLVE' in interface.interface else line_flows
 
-        rhs_neg = interface.MW_r0 * -1
-        n.model.add_constraints(lhs >= rhs_neg, name=f"ITL_{interface.interface}_neg")
+        rhs_pos =  interface.MW_f0 * -1
+        n.model.add_constraints(lhs >= rhs_pos, name=f"ITL_{interface.interface}_pos")
+
+        rhs_neg =  interface.MW_r0
+        n.model.add_constraints(lhs <= rhs_neg, name=f"ITL_{interface.interface}_neg")
 
 
 def add_regional_co2limit(n, sns, config):
@@ -608,6 +621,11 @@ def add_regional_SAFE_constraints(n, config):
         config["electricity"]["SAFE_regional_reservemargins"],
         index_col=[0],
     )
+
+    # reeds_prm= pd.read_csv(
+    #     snakemake.input.safer_reeds,
+    #     index_col=[0],
+    # )
     for region in regional_prm.index:
         if region not in n.buses.country.values:
             continue
@@ -903,7 +921,6 @@ def solve_network(n, config, solving, opts="", **kwargs):
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
-
         snakemake = mock_snakemake(
             "solve_network_operations",
             simpl="",
