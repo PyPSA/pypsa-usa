@@ -451,7 +451,7 @@ def add_interface_limits(n, sns, config):
 
         zone0_buses = n.buses[n.buses.country.isin(regions_list_r)]
         zone1_buses = n.buses[n.buses.country.isin(regions_list_rr)]
-        if zone0_buses.empty | zone0_buses.empty:
+        if zone0_buses.empty & zone1_buses.empty:
             continue
 
         logger.info(f"Adding Interface Transmission Limit for {interface.interface}")
@@ -501,21 +501,23 @@ def add_regional_co2limit(n, sns, config):
     )
     logger.info("Adding regional Co2 Limits.")
     regional_co2_lims = regional_co2_lims[
-        regional_co2_lims.planning_horizon == int(snakemake.params.planning_horizons[0])
+        regional_co2_lims.planning_horizon == 2030#int(snakemake.params.planning_horizons[0])
     ]
 
-    for region in regional_co2_lims.index:
-        if region not in n.buses.country.values:
-            continue
+    for idx, emmission_lim in regional_co2_lims.iterrows():
+        region_list = [region.strip() for region in emmission_lim.regions.split(",")]
+        region_buses = n.buses[n.buses.country.isin(region_list)]
 
-        region_co2lim = regional_co2_lims.loc[region].limit
-        EF_unspecified = regional_co2_lims.loc[
-            region
-        ].import_emissions_factor  # if not none #MT CO₂e/MWh_elec
+        if region_buses.empty:
+            continue
+        logger.info(f"Adding regional Co2 Limit for {emmission_lim.regions}")
+
+        region_co2lim = emmission_lim.limit
+        EF_imports = emmission_lim.import_emissions_factor  # if not none #MT CO₂e/MWh_elec
 
         emissions = n.carriers.co2_emissions
         # generators
-        region_gens = n.generators[n.generators.bus.str.contains(region)]
+        region_gens =  n.generators[n.generators.bus.isin(region_buses.index)]
         region_gens = region_gens.query("carrier in @emissions.index")
 
         if not region_gens.empty:
@@ -532,33 +534,12 @@ def add_regional_co2limit(n, sns, config):
             p = n.model["Generator-p"].loc[:, region_gens.index]
             lhs = (p * em_pu).sum()
 
-        # # Imports
-        # bus0 = n.lines.bus0
-        # bus1 = n.lines.bus1
-        # bus0_region = bus0[bus0.str.contains(region)]
-        # region_lines = n.lines.loc[bus0_region.index]
-        # inter_regional_lines = region_lines[~region_lines.bus1.str.contains(region)]
-        # if not inter_regional_lines.empty and EF_unspecified > 0.0001:
-        #     # Big-M Method
-        #     # M = 1e5
-        #     # n.model.add_variables(coords=[sns, inter_regional_lines.index], binary=True, name=f"BigM-{region}_co2_limit")
-        #     # bin_x = n.model[f"BigM-{region}_co2_limit"]
-        #     # n.model.add_variables(lower = 0, coords=[sns, inter_regional_lines.index], name=f"line_imports_{region}")
-        #     # line_imports = n.model[f"line_imports_{region}"]
+        #Imports
+        region_demand = n.model.constraints['Bus-nodal_balance'].rhs.loc[region_buses.index, :].sum()
+        lhs -= (p * EF_imports).sum()
 
-        #     # n.model.add_constraints( -1 * n.model["Line-s"].loc[:, inter_regional_lines.index] <= M * bin_x, name=f"BigM-{region}_pos_flow")
-        #     # # n.model.add_constraints(n.model["Line-s"].loc[:, inter_regional_lines.index]  >= -M * (1 + bin_x), name=f"BigM-{region}_neg_flow")
-        #     # n.model.add_constraints( line_imports >= n.model["Line-s"].loc[:, inter_regional_lines.index] + M * bin_x, name=f"line_imports_{region}_upper")
-
-        #     #Non Big-M
-        #     n.model.add_variables(lower = 0, coords=[sns, inter_regional_lines.index], name=f"line_imports_{region}")
-        #     line_imports = n.model[f"line_imports_{region}"]
-        #     n.model.add_constraints( line_imports >= n.model["Line-s"].loc[:, inter_regional_lines.index], name=f"line_imports_{region}_upper")
-
-        #     lhs += (line_imports.sum() * EF_unspecified)
-
-        rhs = region_co2lim
-        n.model.add_constraints(lhs <= rhs, name=f"GlobalConstraint-{region}_co2_limit")
+        rhs = region_co2lim - (region_demand * EF_imports)
+        n.model.add_constraints(lhs <= region_co2lim, name=f"GlobalConstraint-{emmission_lim.name}_co2_limit")
 
 
 def add_SAFE_constraints(n, config):

@@ -30,6 +30,7 @@ rule build_shapes:
 rule build_base_network:
     params:
         build_offshore_network=config["offshore_network"],
+        links=config["links"],
     input:
         buses=DATA + "breakthrough_network/base_grid/bus.csv",
         lines=DATA + "breakthrough_network/base_grid/branch.csv",
