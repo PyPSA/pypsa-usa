@@ -103,7 +103,7 @@ def add_buses_from_file(
         sub_id=buses.sub_id.astype(int),
         substation_off=False,
         poi=False,
-        LAF_states=buses.LAF_states,
+        LAF_state=buses.LAF_state,
     )
 
     n.buses.loc[n.buses.sub_id.astype(int) >= 41012, "substation_off"] = (
@@ -491,18 +491,18 @@ def assign_missing_state_regions(gdf_bus: gpd.GeoDataFrame):
         .set_index("Bus")
     )
 
-    missing = buses.loc[buses.full_states.isna()]
+    missing = buses.loc[buses.full_state.isna()]
     if missing.empty:
         return gdf_bus
-    buses = buses.loc[~buses.full_states.isna()]
-    buses = buses.loc[~buses.full_states.isin(["Offshore"])]
+    buses = buses.loc[~buses.full_state.isna()]
+    buses = buses.loc[~buses.full_state.isin(["Offshore"])]
     missing = match_missing_buses(buses, missing)
 
     # check if error western / texas. can make this a function
     missing = missing.reset_index().drop_duplicates("Bus").set_index("Bus")
     buses = buses.reset_index().drop_duplicates("Bus").set_index("Bus")
 
-    missing.full_states = buses.loc[missing.bus_assignment.values].full_states.values
+    missing.full_state = buses.loc[missing.bus_assignment.values].full_state.values
 
     buses = (
         buses.reset_index()
@@ -516,7 +516,7 @@ def assign_missing_state_regions(gdf_bus: gpd.GeoDataFrame):
     )
 
     # reassigning values to original dataframe
-    gdf_bus.loc[missing.index, "full_states"] = missing.full_states
+    gdf_bus.loc[missing.index, "full_state"] = missing.full_state
     return gdf_bus
 
 
@@ -658,18 +658,24 @@ def main(snakemake):
     # Load country, state, and REeDs shapes
     state_shape = gpd.read_file(snakemake.input["state_shapes"])
     state_shape = state_shape.rename(columns={"name": "state"})
-    na_shape = load_na_shapes(countries=["US"]).rename(columns={"name": "full_states"})
+    na_shape = load_na_shapes(countries=["US"]).rename(columns={"name": "full_state"})
     reeds_shape = gpd.read_file(snakemake.input["reeds_shapes"]).rename(
         columns={"name": "reeds_zone"},
     )
 
     # assign ba, state, and country to each bus
-    gdf_bus = map_bus_to_region(gdf_bus, na_shape, ["true_state"])  # for laf
+    gdf_bus = map_bus_to_region(gdf_bus, na_shape, ["full_state"])  # for laf
     gdf_bus = map_bus_to_region(gdf_bus, ba_shape, ["balancing_area"])
     gdf_bus = map_bus_to_region(gdf_bus, state_shape, ["state"])
     gdf_bus = map_bus_to_region(gdf_bus, state_shape, ["country"])
     gdf_bus = map_bus_to_region(gdf_bus, reeds_shape, ["reeds_zone", "reeds_ba"])
     gdf_bus = assign_missing_state_regions(gdf_bus)
+
+    # if dissagregating based with breakthrough energy on states, the LAF must
+    # be calcualted here to capture splitting of states from the interconnect
+    group_sums = gdf_bus.groupby("full_state")["Pd"].transform("sum")
+    gdf_bus["LAF_state"] = gdf_bus["Pd"] / group_sums
+    gdf_bus.drop(columns=["full_state"], inplace=True)
 
     # Removing few duplicated shapes where GIS shapes were overlapping. TODO Fix GIS shapes
     gdf_bus = (

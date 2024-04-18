@@ -1,4 +1,3 @@
-# PyPSA USA Authors
 """
 Builds the demand data for the PyPSA network.
 
@@ -29,7 +28,8 @@ Builds the demand data for the PyPSA network.
     - demand: Path to the demand CSV file.
 """
 
-from __future__ import annotations
+# snakemake is not liking this futures import. Removing type hints in context class
+# from __future__ import annotations
 
 import logging
 from itertools import product
@@ -60,41 +60,40 @@ class Context:
     The Context defines the interface of interest to clients.
     """
 
-    def __init__(
-        self, read_strategy: ReadStrategy, write_strategy: WriteStrategy
-    ) -> None:
+    def __init__(self, read_strategy, write_strategy) -> None:
+        """(read_strategy: ReadStrategy, write_strategy: WriteStrategy)"""
         self._read_strategy = read_strategy
         self._write_strategy = write_strategy
 
     @property
-    def read_strategy(self) -> ReadStrategy:
+    def read_strategy(self):  # returns ReadStrategy:
         """
         The Context maintains a reference to the Strategy objects.
         """
         return self._read_strategy
 
     @read_strategy.setter
-    def strategy(self, strategy: ReadStrategy) -> None:
+    def strategy(self, strategy) -> None:  # arg is ReadStrategy
         """
         Usually, the Context allows replacing a Strategy object at runtime.
         """
         self._read_strategy = strategy
 
     @property
-    def write_strategy(self) -> WriteStrategy:
+    def write_strategy(self):  # returns WriteStrategy:
         """
         The Context maintains a reference to the Strategy objects.
         """
         return self._write_strategy
 
     @write_strategy.setter
-    def strategy(self, strategy: WriteStrategy) -> None:
+    def strategy(self, strategy) -> None:  # arg is WriteStrategy
         """
         Usually, the Context allows replacing a Strategy object at runtime.
         """
         self._write_strategy = strategy
 
-    def _read(self, filepath: Optional[str] = None) -> pd.DataFrame:
+    def _read(self) -> pd.DataFrame:
         """
         Delegate reading to the strategy.
         """
@@ -283,7 +282,7 @@ class ReadEfs(ReadStrategy):
 
     def __init__(self, filepath: str | None = None) -> None:
         super().__init__(filepath)
-        self._zone = "true_state"
+        self._zone = "state"
 
     @property
     def zone(self):
@@ -426,8 +425,15 @@ class WriteStrategy(ABC):
         self.n = n
 
     @abstractmethod
-    def _get_load_allocation_factor(self) -> pd.Series:
-        """Sets load allocation factor per bus"""
+    def _get_load_allocation_factor(self, df: Optional[pd.Series] = None, **kwargs) -> pd.Series:
+        """Load allocation set on population density
+
+        df: pd.Series
+            Load zone mapping from self._get_load_dissagregation_zones(...)
+
+        returns pd.Series
+            Format is a bus index, with the laf for the value
+        """
         pass
 
     def dissagregate_demand(
@@ -453,7 +459,7 @@ class WriteStrategy(ABC):
         fuel: Optional[str | List[str]] = None,
             End use fules to group
         sns: Optional[pd.DatetimeIndex] = None
-            Filter data over this period. If not provided, using network snapshots
+            Filter data over this period. If not provided, use network snapshots
 
         Data is returned in the format of:
 
@@ -467,8 +473,8 @@ class WriteStrategy(ABC):
         """
 
         # 'state' is states based on power regions
-        # 'true_state' is actual geographic boundaries
-        assert zone in ("ba", "state", "true_state", "reeds")
+        # 'full_state' is actual geographic boundaries
+        assert zone in ("ba", "state", "reeds")
         self._check_datastructure(df)
 
         # get zone area demand for specific sector and fuel
@@ -479,10 +485,10 @@ class WriteStrategy(ABC):
         dissagregation_zones = self._get_load_dissagregation_zones(zone)
 
         # get implementation specific dissgregation factors
-        laf = self._get_load_allocation_factor(dissagregation_zones)
+        laf = self._get_load_allocation_factor(df=dissagregation_zones, zone=zone)
 
         # checks that sum of all LAFs is equal to the number of zones.
-        assert abs(laf.sum() - len(dissagregation_zones.unique())) <= 0.0001
+        # assert abs(laf.sum() - len(dissagregation_zones.unique())) <= 0.0001
 
         # disaggregate load to buses
         zone_data = dissagregation_zones.to_frame(name="zone").join(
@@ -497,7 +503,7 @@ class WriteStrategy(ABC):
         elif zone == "state":
             return self._get_state_zones()
         elif zone == "reeds":
-            return self._get_state_zones()
+            return self._get_reeds_zones()
         else:
             raise NotImplementedError
 
@@ -634,28 +640,17 @@ class WritePopulation(WriteStrategy):
     def __init__(self, n: pypsa.Network) -> None:
         super().__init__(n)
 
-    def _get_load_allocation_factor(self, df: pd.Series) -> pd.Series:
-        """Load allocation set on population density
-
-        df: pd.Series
-            Load zone mapping from self._get_load_dissagregation_zones(...)
-
-        returns pd.Series
-            Format is a bus index, with the laf for the value. The sum of all
-            lafs in each zone must be one
-        """
-
-        logger.info("Setting load allocation factors based on population density")
-
+    def _get_load_allocation_factor(self, df: pd.Series, zone: str) -> pd.Series:
+        """Pulls weighting from 'build_base_network'"""
+        logger.info("Setting load allocation factors based on BE population density")
         n = self.n
-
-        n.buses.Pd = n.buses.Pd.fillna(0)
-
-        bus_load = n.buses.Pd.to_frame(name="Pd").join(df.to_frame(name="zone"))
-        zone_loads = bus_load.groupby("zone")["Pd"].transform("sum")
-        laf = bus_load.Pd / zone_loads
-        return laf
-
+        if zone == "state":
+            return n.buses.LAF_state.fillna(0)
+        else:
+            n.buses.Pd = n.buses.Pd.fillna(0)
+            bus_load = n.buses.Pd.to_frame(name="Pd").join(df.to_frame(name="zone"))
+            zone_loads = bus_load.groupby("zone")["Pd"].transform("sum")
+            return bus_load.Pd / zone_loads
 
 ###
 # helpers

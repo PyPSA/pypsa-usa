@@ -289,7 +289,6 @@ def dynamic_fuel_price_files(wildcards):
 rule add_electricity:
     params:
         length_factor=config["lines"]["length_factor"],
-        scaling_factor=config["load"]["scaling_factor"],
         countries=config["countries"],
         renewable=config["renewable"],
         electricity=config["electricity"],
