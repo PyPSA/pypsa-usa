@@ -501,7 +501,7 @@ def add_regional_co2limit(n, sns, config):
     )
     logger.info("Adding regional Co2 Limits.")
     regional_co2_lims = regional_co2_lims[
-        regional_co2_lims.planning_horizon == 2030#int(snakemake.params.planning_horizons[0])
+        regional_co2_lims.planning_horizon == int(snakemake.params.planning_horizons[0])
     ]
 
     for idx, emmission_lim in regional_co2_lims.iterrows():
@@ -510,10 +510,9 @@ def add_regional_co2limit(n, sns, config):
 
         if region_buses.empty:
             continue
-        logger.info(f"Adding regional Co2 Limit for {emmission_lim.regions}")
 
         region_co2lim = emmission_lim.limit
-        EF_imports = emmission_lim.import_emissions_factor  # if not none #MT CO₂e/MWh_elec
+        EF_imports = emmission_lim.import_emissions_factor  #MT CO₂e/MWh_elec
 
         emissions = n.carriers.co2_emissions
         # generators
@@ -529,17 +528,19 @@ def add_regional_co2limit(n, sns, config):
             )  # mw_elect/mw_th
             em_pu = (
                 region_gens.carrier.map(emissions) / efficiency
-            )  # kg_co2/mw_electrical
+            )  # tonnes_co2/mw_electrical
             em_pu = em_pu.multiply(weightings.generators, axis=0)
             p = n.model["Generator-p"].loc[:, region_gens.index]
             lhs = (p * em_pu).sum()
 
-        #Imports
-        region_demand = n.model.constraints['Bus-nodal_balance'].rhs.loc[region_buses.index, :].sum()
-        lhs -= (p * EF_imports).sum()
+            #Imports
+            region_demand = n.model.constraints['Bus-nodal_balance'].rhs.loc[region_buses.index, :].sum()
+            lhs -= (p * EF_imports).sum()
 
-        rhs = region_co2lim - (region_demand * EF_imports)
-        n.model.add_constraints(lhs <= region_co2lim, name=f"GlobalConstraint-{emmission_lim.name}_co2_limit")
+            rhs = region_co2lim - (region_demand * EF_imports)
+            n.model.add_constraints(lhs <= rhs, name=f"GlobalConstraint-{emmission_lim.name}_co2_limit")
+            logger.info(f"Adding regional Co2 Limit for {emmission_lim.name}")
+
 
 
 def add_SAFE_constraints(n, config):
