@@ -8,6 +8,7 @@ See `retrieve_eulp` rule for the data extraction
 
 import logging
 from typing import Optional
+
 import pandas as pd
 
 
