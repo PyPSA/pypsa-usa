@@ -671,7 +671,7 @@ def main(snakemake):
         columns={"name": "reeds_zone"},
     )
     county_shape = gpd.read_file(snakemake.input["county_shapes"]).rename(
-        columns={"NAME": "county"}
+        columns={"GEOID": "county"}
     )
 
     # assign ba, state, and country to each bus
