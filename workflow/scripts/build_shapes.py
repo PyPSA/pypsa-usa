@@ -361,7 +361,7 @@ def main(snakemake):
     gdf_reeds.to_file(snakemake.output.reeds_shapes)
 
     # read county shapes
-    # takes ~10min to trim shap to interconnect, so skipping 
+    # takes ~10min to trim shap to interconnect, so skipping
     gdf_counties = load_counties_shape(snakemake.input.county_shapes)
     gdf_counties.to_file(snakemake.output.county_shapes)
 

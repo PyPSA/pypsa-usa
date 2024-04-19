@@ -1251,7 +1251,16 @@ def clean_bus_data(n: pypsa.Network):
     """
     Drops data from the network that are no longer needed in workflow.
     """
-    col_list = ["poi_bus", "poi_sub", "poi", "Pd", "load_dissag", "LAF", "LAF_states", "county"]
+    col_list = [
+        "poi_bus",
+        "poi_sub",
+        "poi",
+        "Pd",
+        "load_dissag",
+        "LAF",
+        "LAF_states",
+        "county",
+    ]
     n.buses.drop(columns=[col for col in col_list if col in n.buses], inplace=True)
 
 

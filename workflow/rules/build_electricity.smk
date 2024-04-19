@@ -19,7 +19,7 @@ rule build_shapes:
         offshore_shapes=RESOURCES + "{interconnect}/offshore_shapes.geojson",
         state_shapes=RESOURCES + "{interconnect}/state_boundaries.geojson",
         reeds_shapes=RESOURCES + "{interconnect}/reeds_shapes.geojson",
-        county_shapes=RESOURCES + "{interconnect}/county_shapes.geojson"
+        county_shapes=RESOURCES + "{interconnect}/county_shapes.geojson",
     log:
         "logs/build_shapes/{interconnect}.log",
     threads: 1
