@@ -1257,7 +1257,7 @@ def clean_bus_data(n: pypsa.Network):
         "Pd",
         "load_dissag",
         "LAF",
-        "LAF_states",
+        "LAF_state",
         "county",
     ]
     n.buses.drop(columns=[col for col in col_list if col in n.buses], inplace=True)

@@ -11,7 +11,7 @@ run:
 # docs :
 scenario:
   interconnect: [western] #"usa|texas|western|eastern"
-  clusters: [150]
+  clusters: [80]
   opts: [Ep-Co2L0.2]
   ll: [v1.0]
   scope: "total" # "urban", "rural", or "total"
@@ -69,9 +69,14 @@ electricity:
     Store: [] #[H2]
     Link: [] #[H2 pipeline]
 
-  demand: #EFS used for given planning_horizons year (only ref/mod implemented)
-    EFS_case: reference # reference, medium, high
-    EFS_speed: moderate # slow, moderate, rapid
+  demand: 
+    profile: efs # efs, eia
+    scale: 1 # efs, aeo, or a number 
+    disaggregation: pop # pop
+    scenario: 
+      efs_case: reference # reference, medium, high
+      efs_speed: moderate # slow, moderate, rapid
+      aeo: reference
 
   autarky:
     enable: false
@@ -196,10 +201,6 @@ links:
   under_construction: 'zero' # 'zero': set capacity to zero, 'remove': remove, 'keep': with full capacity
 
 # docs :
-load:
-  scaling_factor: 1.0
-
-# docs :
 costs:  # based on the potentials, assuming  (0.1 kW/m2 and 10 m2/person)
   year: 2030
   version: v0.6.0
@@ -237,6 +238,24 @@ sector:
     cyclic_storage: false
   heating:
     heat_pump_sink_T: 55.
+  demand:
+    profile:
+      residential: eulp # efs, eulp
+      commercial: eulp # efs, eulp
+      transport: efs # efs
+      industry: efs # efs
+    scale:
+      residential: aeo # efs, aeo
+      commercial: aeo # efs, aeo
+      transport: aeo # efs, aeo
+      industry: aeo # efs, aeo
+    disaggregation: 
+      residential: pop # pop
+      commercial: pop # pop
+      transport: pop # pop
+      industry: pop # pop
+    scenarios:
+      aeo: reference
 
 # docs :
 clustering:
