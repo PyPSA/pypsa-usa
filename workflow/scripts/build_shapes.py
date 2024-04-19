@@ -161,7 +161,6 @@ def load_reeds_shape(reeds_shapes: str) -> gpd.GeoDataFrame:
 
 def load_counties_shape(shp_file: str) -> gpd.GeoDataFrame:
     gdf = gpd.read_file(shp_file)
-    gdf = gdf.rename(columns={"rb": "name", "BA_Code": "reeds_ba"})
     return gdf.to_crs(4326)
 
 

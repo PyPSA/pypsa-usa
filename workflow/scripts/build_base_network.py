@@ -95,6 +95,7 @@ def add_buses_from_file(
         balancing_area=buses.balancing_area,
         state=buses.state,
         country=buses.country,
+        county=buses.county,
         reeds_zone=buses.reeds_zone,
         reeds_ba=buses.reeds_ba,
         interconnect=buses.interconnect,
@@ -412,6 +413,9 @@ def build_offshore_transmission_configuration(n: pypsa.Network) -> pypsa.Network
     n.buses.loc[offshore_buses.index, "reeds_ba"] = n.buses.loc[
         offshore_buses.bus_assignment
     ].reeds_ba.values
+    n.buses.loc[offshore_buses.index, "county"] = n.buses.loc[
+        offshore_buses.bus_assignment
+    ].county.values
 
     # add onshore poi buses @230kV
     n.madd(
@@ -533,6 +537,7 @@ def assign_missing_states_countries(n: pypsa.Network):
             | buses.balancing_area.isna()
             | buses.reeds_zone.isna()
             | buses.reeds_ba.isna()
+            | buses.county.isna()
         )
     ]
     buses = buses.loc[
@@ -542,6 +547,7 @@ def assign_missing_states_countries(n: pypsa.Network):
             & ~buses.balancing_area.isna()
             & ~buses.reeds_zone.isna()
             & ~buses.reeds_ba.isna()
+            & ~buses.county.isna()
         )
     ]
     buses = buses.loc[~buses.state.isin(["Offshore"])]
@@ -551,12 +557,14 @@ def assign_missing_states_countries(n: pypsa.Network):
     missing.country = buses.loc[missing.bus_assignment].country.values
     missing.reeds_zone = buses.loc[missing.bus_assignment].reeds_zone.values
     missing.reeds_ba = buses.loc[missing.bus_assignment].reeds_ba.values
+    missing.county = buses.loc[missing.bus_assignment].county.values
 
     n.buses.loc[missing.index, "balancing_area"] = missing.balancing_area
     n.buses.loc[missing.index, "state"] = missing.state
     n.buses.loc[missing.index, "country"] = missing.country
     n.buses.loc[missing.index, "reeds_zone"] = missing.reeds_zone
     n.buses.loc[missing.index, "reeds_ba"] = missing.reeds_ba
+    n.buses.loc[missing.index, "county"] = missing.county
     n.buses.loc[missing.index, "interconnect"] = missing.interconnect
 
 
@@ -655,12 +663,15 @@ def main(snakemake):
     )
     ba_shape = ba_shape.rename(columns={"name": "balancing_area"})
 
-    # Load country, state, and REeDs shapes
+    # Load country, state, county, and REeDs shapes
     state_shape = gpd.read_file(snakemake.input["state_shapes"])
     state_shape = state_shape.rename(columns={"name": "state"})
     na_shape = load_na_shapes(countries=["US"]).rename(columns={"name": "full_states"})
     reeds_shape = gpd.read_file(snakemake.input["reeds_shapes"]).rename(
         columns={"name": "reeds_zone"},
+    )
+    county_shape = gpd.read_file(snakemake.input["county_shapes"]).rename(
+        columns={"NAME": "county"}
     )
 
     # assign ba, state, and country to each bus
@@ -669,6 +680,7 @@ def main(snakemake):
     gdf_bus = map_bus_to_region(gdf_bus, state_shape, ["state"])
     gdf_bus = map_bus_to_region(gdf_bus, state_shape, ["country"])
     gdf_bus = map_bus_to_region(gdf_bus, reeds_shape, ["reeds_zone", "reeds_ba"])
+    gdf_bus = map_bus_to_region(gdf_bus, county_shape, ["county"])
 
     # assign load allocation factors to buses for state level dissagregation
     gdf_bus = assign_missing_state_regions(gdf_bus)
