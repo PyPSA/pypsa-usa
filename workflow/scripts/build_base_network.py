@@ -46,12 +46,10 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 import pypsa
-from _helpers import configure_logging
-from _helpers import test_network_datatype_consistency
+from _helpers import configure_logging, test_network_datatype_consistency
 from build_shapes import load_na_shapes
 from geopandas.tools import sjoin
-from shapely.geometry import Point
-from shapely.geometry import Polygon
+from shapely.geometry import Point, Polygon
 from sklearn.neighbors import BallTree
 
 

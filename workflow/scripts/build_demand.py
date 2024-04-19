@@ -40,10 +40,7 @@ import os
 import random
 from itertools import product
 from pathlib import Path
-from typing import Any
-from typing import Dict
-from typing import List
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
 import constants as const
 import geopandas as gpd
@@ -51,11 +48,13 @@ import numpy as np
 import pandas as pd
 import pypsa
 import xarray as xr
-from _helpers import configure_logging
-from _helpers import export_network_for_gis_mapping
-from _helpers import local_to_utc
-from _helpers import test_network_datatype_consistency
-from _helpers import update_p_nom_max
+from _helpers import (
+    configure_logging,
+    export_network_for_gis_mapping,
+    local_to_utc,
+    test_network_datatype_consistency,
+    update_p_nom_max,
+)
 from scipy import sparse
 from shapely.geometry import Point
 from shapely.prepared import prep

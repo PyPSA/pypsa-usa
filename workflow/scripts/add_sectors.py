@@ -12,11 +12,12 @@ import pandas as pd
 import pypsa
 
 logger = logging.getLogger(__name__)
+import sys
+
+import constants
 from _helpers import configure_logging
 from build_natural_gas import build_natural_gas
 from shapely.geometry import Point
-import constants
-import sys
 
 
 def assign_bus_2_state(

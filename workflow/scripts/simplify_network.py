@@ -11,8 +11,7 @@ from functools import reduce
 import numpy as np
 import pandas as pd
 import pypsa
-from _helpers import configure_logging
-from _helpers import export_network_for_gis_mapping
+from _helpers import configure_logging, export_network_for_gis_mapping
 from pypsa.clustering.spatial import get_clustering_from_busmap
 
 logger = logging.getLogger(__name__)

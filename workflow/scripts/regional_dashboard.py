@@ -2,36 +2,34 @@
 Dash app for exploring regional disaggregated data.
 """
 
-import pypsa
-from pypsa.statistics import StatisticsAccessor
+import logging
 
-from dash import Dash, html, dcc, Input, Output, callback
-import plotly.express as px
-import pandas as pd
 import geopandas as gpd
 import numpy as np
-
-import plotly.graph_objects as go
+import pandas as pd
+import plotly.express as px
 import plotly.figure_factory as ff
-
-import logging
+import plotly.graph_objects as go
+import pypsa
+from dash import Dash, Input, Output, callback, dcc, html
+from pypsa.statistics import StatisticsAccessor
 
 logging.basicConfig(format="%(levelname)s:%(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__)
 logger.propagate = False
 
-from pathlib import Path
-from typing import List, Dict
 import calendar
+from pathlib import Path
+from typing import Dict, List
 
+from plot_statistics import get_color_palette
 from summary import (
     get_demand_timeseries,
     get_energy_timeseries,
+    get_node_carrier_emissions_timeseries,
     get_node_emissions_timeseries,
     get_tech_emissions_timeseries,
-    get_node_carrier_emissions_timeseries,
 )
-from plot_statistics import get_color_palette
 
 ###
 # IDS

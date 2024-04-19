@@ -48,8 +48,7 @@ import cartopy.io.shapereader as shpreader
 import geopandas as gpd
 import matplotlib.pyplot as plt
 import pandas as pd
-from _helpers import configure_logging
-from _helpers import mock_snakemake
+from _helpers import configure_logging, mock_snakemake
 from constants import *
 from shapely.geometry import MultiPolygon
 

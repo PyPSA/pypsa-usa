@@ -1,10 +1,6 @@
 # By PyPSA-USA Authors
 
 
-from pathlib import Path
-
-
-import re
 import contextlib
 import copy
 import hashlib
@@ -16,13 +12,11 @@ from functools import partial
 from pathlib import Path
 
 import pandas as pd
-import pandas as pd
 import pytz
 import requests
 import yaml
 from snakemake.utils import update_config
 from tqdm import tqdm
-
 
 REGION_COLS = ["geometry", "name", "x", "y", "country"]
 
@@ -152,7 +146,7 @@ def pdbcast(v, h):
 
 def load_network_for_plots(fn, tech_costs, config, combine_hydro_ps=True):
     import pypsa
-    from add_electricity import update_transmission_costs, load_costs
+    from add_electricity import load_costs, update_transmission_costs
 
     n = pypsa.Network(fn)
 
@@ -294,6 +288,7 @@ def aggregate_costs(n, flatten=False, opts=None, existing_only=False):
 
 def progress_retrieve(url, file):
     import urllib
+
     from progressbar import ProgressBar
 
     pbar = ProgressBar(0, 100)
@@ -322,8 +317,9 @@ def get_aggregation_strategies(aggregation_strategies):
 
 
 def export_network_for_gis_mapping(n, output_path):
-    import pandas as pd
     import os
+
+    import pandas as pd
 
     # Creating GIS Table for Mapping Lines in QGIS
     lines_gis = n.lines.copy()
@@ -367,11 +363,12 @@ def mock_snakemake(rulename, **wildcards):
         keyword arguments fixing the wildcards. Only necessary if wildcards are
         needed.
     """
-    import snakemake as sm
     import os
+
+    import snakemake as sm
+    from packaging.version import Version, parse
     from pypsa.descriptors import Dict
     from snakemake.script import Snakemake
-    from packaging.version import Version, parse
 
     script_dir = Path(__file__).parent.resolve()
     assert (
@@ -455,8 +452,8 @@ def test_network_datatype_consistency(n):
 
 
 def local_to_utc(group):
-    from constants import STATE_2_TIMEZONE
     import pytz
+    from constants import STATE_2_TIMEZONE
 
     timezone_str = STATE_2_TIMEZONE[group.name]
     timezone = pytz.timezone(timezone_str)
