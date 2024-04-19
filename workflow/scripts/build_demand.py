@@ -32,11 +32,10 @@ Builds the demand data for the PyPSA network.
 # from __future__ import annotations
 
 import logging
+import sys
+from abc import ABC, abstractmethod
 from itertools import product
 from pathlib import Path
-
-
-from eia import EnergyDemand
 from typing import Any, Dict, List, Optional
 
 import constants as const
@@ -44,10 +43,7 @@ import pandas as pd
 import pypsa
 import xarray as xr
 from _helpers import configure_logging
-
-import sys
-
-from abc import ABC, abstractmethod
+from eia import EnergyDemand
 
 logger = logging.getLogger(__name__)
 
@@ -442,7 +438,9 @@ class WriteStrategy(ABC):
 
     @abstractmethod
     def _get_load_allocation_factor(
-        self, df: Optional[pd.Series] = None, **kwargs
+        self,
+        df: Optional[pd.Series] = None,
+        **kwargs,
     ) -> pd.Series:
         """
         Load allocation set on population density.

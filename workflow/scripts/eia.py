@@ -34,12 +34,10 @@ period
 2020-12-01  Wyoming Price of Natural Gas Delivered to Resi...   8.00  $/MCF Wyoming
 """
 
-from abc import ABC, abstractmethod
-from typing import Union, Dict, Optional
 import logging
 import math
 from abc import ABC, abstractmethod
-from typing import Dict, Union
+from typing import Dict, Optional, Union
 
 import constants
 import numpy as np
