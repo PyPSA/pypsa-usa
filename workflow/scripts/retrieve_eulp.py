@@ -19,6 +19,7 @@ from _helpers import configure_logging
 
 logger = logging.getLogger(__name__)
 
+from eulp import Eulp
 
 class OediDownload:
     """
@@ -110,8 +111,7 @@ class OediDownload:
     def download_data(
         self,
         state: str,
-        buildings: Optional[str | list[str]] = None,
-        upgrade: int = 0,
+        buildings: Optional[str | List[str]] = None,
         directory: Optional[str] = None,
     ) -> None:
         """
@@ -154,4 +154,25 @@ if __name__ == "__main__":
 
     oedi = OediDownload(stock)
 
+    # download all requested data 
     oedi.download_data(state, buildings, 0, save_dir)
+
+    # collapse into a single file
+    if stock == "res": 
+        files_to_combine = oedi.res_files
+    elif stock == "com":
+        files_to_combine = oedi.com_files
+    else:
+        raise NotImplementedError
+    
+    data_to_sum = []
+    for f_num, f_name in enumerate(files_to_combine):
+        if f_num == 0:
+            start_data = Eulp(f_name)
+        else:
+            data_to_sum.append(Eulp(f_name))
+            
+    summed_data = sum(data_to_sum, start_data)
+    summed_data.to_csv(f"{save_dir}_{state}.csv")
+    
+    
