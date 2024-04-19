@@ -7,9 +7,7 @@ import zipfile
 from pathlib import Path
 
 import requests
-from _helpers import configure_logging
-from _helpers import progress_retrieve
-
+from _helpers import configure_logging, progress_retrieve
 
 logger = logging.getLogger(__name__)
 

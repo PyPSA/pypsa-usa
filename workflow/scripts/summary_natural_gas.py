@@ -2,10 +2,11 @@
 Module for summarizing natural gas results.
 """
 
-import pypsa
-import pandas as pd
 from typing import List
+
 import constants
+import pandas as pd
+import pypsa
 
 CODE_2_STATE = {v: k for k, v in constants.STATE_2_CODE.items()}
 

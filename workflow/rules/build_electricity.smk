@@ -12,12 +12,14 @@ rule build_shapes:
         onshore_shapes="repo_data/BA_shapes_new/Modified_BE_BA_Shapes.shp",
         offshore_shapes_ca_osw="repo_data/BOEM_CA_OSW_GIS/CA_OSW_BOEM_CallAreas.shp",
         offshore_shapes_eez=DATA + "eez/conus_eez.shp",
+        county_shapes=DATA + "counties/cb_2020_us_county_500k.shp",
     output:
         country_shapes=RESOURCES + "{interconnect}/country_shapes.geojson",
         onshore_shapes=RESOURCES + "{interconnect}/onshore_shapes.geojson",
         offshore_shapes=RESOURCES + "{interconnect}/offshore_shapes.geojson",
         state_shapes=RESOURCES + "{interconnect}/state_boundaries.geojson",
         reeds_shapes=RESOURCES + "{interconnect}/reeds_shapes.geojson",
+        county_shapes=RESOURCES + "{interconnect}/county_shapes.geojson",
     log:
         "logs/build_shapes/{interconnect}.log",
     threads: 1
@@ -40,6 +42,7 @@ rule build_base_network:
         offshore_shapes=RESOURCES + "{interconnect}/offshore_shapes.geojson",
         state_shapes=RESOURCES + "{interconnect}/state_boundaries.geojson",
         reeds_shapes=RESOURCES + "{interconnect}/reeds_shapes.geojson",
+        county_shapes=RESOURCES + "{interconnect}/county_shapes.geojson",
     output:
         bus2sub=DATA + "breakthrough_network/base_grid/{interconnect}/bus2sub.csv",
         sub=DATA + "breakthrough_network/base_grid/{interconnect}/sub.csv",

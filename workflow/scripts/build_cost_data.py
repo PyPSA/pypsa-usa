@@ -3,9 +3,7 @@ Combines all time independent cost data sources into a standard format.
 """
 
 import logging
-from typing import Dict
-from typing import List
-from typing import Union
+from typing import Dict, List, Union
 
 import constants as const
 import pandas as pd

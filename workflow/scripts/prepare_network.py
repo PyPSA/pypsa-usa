@@ -117,8 +117,8 @@ def add_regional_co2limit(n, config):
 
     glcs = n.global_constraints.query('type == "primary_energy"')
 
-    from pypsa.linopt import get_var
     from pypsa.descriptors import get_switchable_as_dense as get_as_dense
+    from pypsa.linopt import get_var
 
     emissions = n.carriers.co2_emissions
     gens = n.generators.query("carrier in @emissions.index")

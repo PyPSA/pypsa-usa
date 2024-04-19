@@ -21,16 +21,15 @@ Build_fuel_prices.py is a script that prepares data for dynamic fuel prices to b
 - ''data/ng_fuel_prices.csv'': A CSV file containing the hourly fuel prices for each Balancing Authority and State.
 """
 
-import pandas as pd
-import constants as const
-from _helpers import mock_snakemake, configure_logging
-import eia
-from typing import List
+import logging
 import sys
 from pathlib import Path
+from typing import List
 
-
-import logging
+import constants as const
+import eia
+import pandas as pd
+from _helpers import configure_logging, mock_snakemake
 
 logger = logging.getLogger(__name__)
 

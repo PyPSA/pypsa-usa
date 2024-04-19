@@ -4,8 +4,8 @@ Retrieves cost data.
 
 import logging
 from pathlib import Path
-from _helpers import mock_snakemake
-from _helpers import progress_retrieve
+
+from _helpers import mock_snakemake, progress_retrieve
 
 logger = logging.getLogger(__name__)
 
