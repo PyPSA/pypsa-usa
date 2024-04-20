@@ -171,6 +171,7 @@ rule retrieve_res_eulp:
         save_dir=DATA + "eulp/res/",
     output:
         expand(DATA + "eulp/res/{{state}}/{profile}.csv", profile=RESSTOCK_FILES),
+        DATA+"eulp/res/{state}.csv"
     script:
         "../scripts/retrieve_eulp.py"
 
@@ -184,6 +185,7 @@ rule retrieve_com_eulp:
         save_dir=DATA + "eulp/com/",
     output:
         expand(DATA + "eulp/com/{{state}}/{profile}.csv", profile=COMSTOCK_FILES),
+        DATA+"eulp/com/{state}.csv"
     script:
         "../scripts/retrieve_eulp.py"
 
