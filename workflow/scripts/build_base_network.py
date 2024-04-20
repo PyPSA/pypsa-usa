@@ -785,6 +785,17 @@ def main(snakemake):
     )
     lines_gis.to_csv(snakemake.output.lines_gis)
 
+    # add snapshots
+    snapshot_config = snakemake.params["snapshots"]
+    n.set_snapshots(
+        pd.date_range(
+            freq="h",
+            start=pd.to_datetime(snapshot_config["start"]),
+            end=pd.to_datetime(snapshot_config["end"]),
+            inclusive=snapshot_config["inclusive"],
+        ),
+    )
+
     # export network
     n.export_to_netcdf(snakemake.output.network)
 
@@ -794,6 +805,6 @@ if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
 
-        snakemake = mock_snakemake("build_base_network", interconnect="usa")
+        snakemake = mock_snakemake("build_base_network", interconnect="western")
     configure_logging(snakemake)
     main(snakemake)

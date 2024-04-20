@@ -34,6 +34,7 @@ Builds the demand data for the PyPSA network.
 import logging
 import sys
 from abc import ABC, abstractmethod
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import constants as const
@@ -42,8 +43,6 @@ import pypsa
 from _helpers import configure_logging
 from eia import EnergyDemand
 from eulp import Eulp
-
-from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -112,10 +111,13 @@ class Context:
         return self._write(demand, self._read_strategy.zone, **kwargs)
 
     def prepare_multiple_demands(
-        self, sectors: str | list[str], fuels: str | list[str], **kwargs
+        self,
+        sectors: str | list[str],
+        fuels: str | list[str],
+        **kwargs,
     ) -> dict[str, dict[str, pd.DataFrame]]:
         """
-        Returns demand by end-use energy carrier and sector
+        Returns demand by end-use energy carrier and sector.
         """
         if isinstance(sectors, str):
             sectors = [sectors]
@@ -130,7 +132,11 @@ class Context:
             data[sector] = {}
             for fuel in fuels:
                 data[fuel] = self._write(
-                    demand, self._read_strategy.zone, sector=sector, fuel=fuel, **kwargs
+                    demand,
+                    self._read_strategy.zone,
+                    sector=sector,
+                    fuel=fuel,
+                    **kwargs,
                 )
 
         return data
@@ -147,7 +153,7 @@ class ReadStrategy(ABC):
     of some algorithm.
     """
 
-    def __init__(self, filepath: Optional[str | List[str]] = None) -> None:
+    def __init__(self, filepath: Optional[str | list[str]] = None) -> None:
         self.filepath = filepath
 
     @property
@@ -454,7 +460,7 @@ class ReadEulp(ReadStrategy):
     Reads in electrifications future study demand.
     """
 
-    def __init__(self, filepath: str | List[str], stock: str) -> None:
+    def __init__(self, filepath: str | list[str], stock: str) -> None:
         super().__init__(filepath)
         assert stock in ("res", "com")
         self._stock = stock
@@ -472,7 +478,7 @@ class ReadEulp(ReadStrategy):
         else:
             raise NotImplementedError
 
-    def _read_data(self) -> Dict[str, pd.DataFrame]:
+    def _read_data(self) -> dict[str, pd.DataFrame]:
         if isinstance(self.filepath, str):
             return {self._extract_state(self.filepath): Eulp(self.filepath).data}
 
@@ -482,7 +488,7 @@ class ReadEulp(ReadStrategy):
             data[state] = Eulp(f).data
         return data
 
-    def _format_data(self, data: Dict[str, pd.DataFrame]) -> pd.DataFrame:
+    def _format_data(self, data: dict[str, pd.DataFrame]) -> pd.DataFrame:
         df = self._collapse_data(data)
         df["sector"] = self.stock
         df["subsector"] = "all"
@@ -499,12 +505,14 @@ class ReadEulp(ReadStrategy):
         return Path(filepath).stem
 
     @staticmethod
-    def _collapse_data(data: Dict[str, pd.DataFrame]) -> pd.DataFrame:
+    def _collapse_data(data: dict[str, pd.DataFrame]) -> pd.DataFrame:
         dfs = []
         for state, state_df in data.items():
             df = (
                 state_df.data.melt(
-                    var_name="fuel", value_name=state, ignore_index=False
+                    var_name="fuel",
+                    value_name=state,
+                    ignore_index=False,
                 )
                 .reset_index()
                 .rename(columns={"timestamp": "snapshot"})
@@ -858,22 +866,14 @@ if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
 
-        snakemake = mock_snakemake("build_demand", interconnect="western")
+        snakemake = mock_snakemake(
+            "build_electrical_demand",
+            interconnect="western",
+            end_use="power",
+        )
     configure_logging(snakemake)
 
-    n = pypsa.Network(snakemake.input.base_network)
-
-    # build snapshots
-
-    snapshot_config = snakemake.params["snapshots"]
-    n.set_snapshots(
-        pd.date_range(
-            freq="h",
-            start=pd.to_datetime(snapshot_config["start"]),
-            end=pd.to_datetime(snapshot_config["end"]),
-            inclusive=snapshot_config["inclusive"],
-        ),
-    )
+    n = pypsa.Network(snakemake.input.network)
 
     # extract user demand configuration parameters
 
@@ -893,7 +893,7 @@ if __name__ == "__main__":
     if demand_scale == "aeo":
         assert eia_api, "Must provide EIA API key to scale demand by AEO"
 
-    profile_year = pd.to_datetime(snapshot_config["start"]).year
+    profile_year = int(n.snapshots[0].year)
     planning_horizons = snakemake.params.planning_horizons
     assert len(planning_horizons) == 1  # remove for myopic/rolling horizon
     planning_year = planning_horizons[0]
@@ -904,12 +904,12 @@ if __name__ == "__main__":
 
     if demand_profile == "efs":
         assert planning_year in (2018, 2020, 2024, 2030, 2040, 2050)
-        reader = ReadEfs(demand_files)
+        reader = ReadEfs(demand_files[0])
         sns = n.snapshots.map(lambda x: x.replace(year=planning_year))
         profile_year = planning_year  # do not scale EFS data
     elif demand_profile == "eia":
         assert profile_year in range(2018, 2023, 1)
-        reader = ReadEia(demand_files)
+        reader = ReadEia(demand_files[0])
         sns = n.snapshots
     elif demand_profile == "eulp":
         assert profile_year == 2018
@@ -934,7 +934,9 @@ if __name__ == "__main__":
         fuels = ("electricity", "heating", "cooling")
         sector = end_use  # residential, commercial, industry, transport
         demands = demand_converter.prepare_multiple_demands(
-            sector, fuels, sns=sns
+            sector,
+            fuels,
+            sns=sns,
         )  # dict[str, dict[str, pd.DataFrame]]
 
     # scale demand based on planning year and user input
@@ -951,15 +953,18 @@ if __name__ == "__main__":
         logger.warning("No scale appied for aeo data")
 
     # all sectors have electrical demand
-    demand[end_use]["electricity"].round(4).to_csv(
-        snakemake.output.elec_demand, index=True
+    demands[end_use]["electricity"].round(4).to_csv(
+        snakemake.output.elec_demand,
+        index=True,
     )
 
-    # sector coupling demand 
+    # sector coupling demand
     if end_use != "power":
-        demand[end_use]["heating"].round(4).to_csv(
-            snakemake.output.heat_demand, index=True
+        demands[end_use]["heating"].round(4).to_csv(
+            snakemake.output.heat_demand,
+            index=True,
         )
-        demand[end_use]["cooling"].round(4).to_csv(
-            snakemake.output.cool_demand, index=True
+        demands[end_use]["cooling"].round(4).to_csv(
+            snakemake.output.cool_demand,
+            index=True,
         )

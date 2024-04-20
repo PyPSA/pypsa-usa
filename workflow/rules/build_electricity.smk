@@ -32,6 +32,7 @@ rule build_shapes:
 rule build_base_network:
     params:
         build_offshore_network=config["offshore_network"],
+        snapshots=config["snapshots"],
     input:
         buses=DATA + "breakthrough_network/base_grid/bus.csv",
         lines=DATA + "breakthrough_network/base_grid/branch.csv",
@@ -225,55 +226,69 @@ rule build_renewable_profiles:
         "../scripts/build_renewable_profiles.py"
 
 
+# eastern broken into three just to aviod awful formatting issues of it
 INTERCONNECT_2_STATE = {
-    "eastern": ["AL","AR","CT","DE","DC","FL","GA","IL","IN","IA","KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","NE","NH","NJ","NY","NC","ND","OH","OK","PA","RI","SC","SD","TN","VT","VA","VI","WV","WI"],
+    "eastern": ["AL", "AR", "CT", "DE", "DC", "FL", "GA", "IL", "IN", "IA", "KS", "KY"],
     "western": ["AZ", "CA", "CO", "ID", "MT", "NV", "NM", "OR", "UT", "WA", "WY"],
     "texas": ["TX"],
 }
+INTERCONNECT_2_STATE["eastern"].extend(["LA", "ME", "MD", "MA", "MI", "MN", "MS", "MO"])
+INTERCONNECT_2_STATE["eastern"].extend(["NE", "NH", "NJ", "NY", "NC", "ND", "OH", "OK"])
+INTERCONNECT_2_STATE["eastern"].extend(["PA", "RI", "SC", "SD", "TN", "VT", "VA", "VI"])
+INTERCONNECT_2_STATE["eastern"].extend(["WV", "WI"])
 INTERCONNECT_2_STATE["usa"] = sum(INTERCONNECT_2_STATE.values(), [])
+
 
 def electricty_study_demand(wildcards):
     profile = config["electricity"]["demand"]["profile"]
     if profile == "eia":
-        return DATA + "GridEmissions/EIA_DMD_2018_2024.csv",
+        return (DATA + "GridEmissions/EIA_DMD_2018_2024.csv",)
     elif profile == "efs":
-        return DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv",
+        return (DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv",)
     else:
         return ""
+
 
 def sector_study_demand(wildcards):
     end_use = wildcards.end_use
     profile = config["sector"]["demand"]["profile"][end_use]
     if end_use == "residential":
         if profile == "eulp":
-            return [DATA+ f"eulp/res/{state}.csv" for state in states[wildcards.interconnect]]
+            return [
+                DATA + f"eulp/res/{state}.csv"
+                for state in states[wildcards.interconnect]
+            ]
         elif profile == "efs":
-            return DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv",
+            return (DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv",)
         else:
             return ""
     elif end_use == "commercial":
         if profile == "eulp":
-            return [DATA+ f"eulp/com/{state}.csv" for state in states[wildcards.interconnect]]
+            return [
+                DATA + f"eulp/com/{state}.csv"
+                for state in states[wildcards.interconnect]
+            ]
         elif profile == "efs":
-            return DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv",
+            return (DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv",)
         else:
             return ""
     elif end_use == "industry":
         if profile == "efs":
-            return DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv",
+            return (DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv",)
         else:
             return ""
     elif end_use == "transport":
         if profile == "efs":
-            return DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv",
+            return (DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv",)
         else:
             return ""
     else:
         return ""
 
+
 rule build_electrical_demand:
     wildcard_constraints:
-        end_use="power" # added for consistency in build_demand.py
+        end_use="power",  # added for consistency in build_demand.py
     params:
         planning_horizons=config["scenario"]["planning_horizons"],
         demand_params=config["electricity"]["demand"],
@@ -282,58 +297,61 @@ rule build_electrical_demand:
         network=RESOURCES + "{interconnect}/elec_base_network.nc",
         demand_files=electricty_study_demand,
     output:
-        elec_demand=RESOURCES + "{interconnect}/{end_use}_electricity_demand.csv".csv",
+        elec_demand=RESOURCES + "{interconnect}/{end_use}_electricity_demand.csv",
     log:
-        LOGS + "{interconnect}/build_demand.log",
+        LOGS + "{interconnect}/{end_use}_build_demand.log",
     benchmark:
-        BENCHMARKS + "{interconnect}/build_demand"
+        BENCHMARKS + "{interconnect}/{end_use}_build_demand"
     threads: 2
     resources:
         mem_mb=interconnect_mem,
     script:
         "../scripts/build_demand.py"
 
+
 rule build_sector_demand:
     wildcard_constraints:
-        end_use="^power"
+        end_use="^power",
     params:
         planning_horizons=config["scenario"]["planning_horizons"],
         demand_profile=config["sector"]["demand"],
         eia_api=config["api"]["eia"],
     input:
         base_network=RESOURCES + "{interconnect}/elec_base_network.nc",
-        demand_files= sector_study_demand
+        demand_files=sector_study_demand,
     output:
-        elec_demand=expand(RESOURCES + "{interconnect}/{end_use}_electricity_demand.csv")
-        heat_demand=expand(RESOURCES + "{interconnect}/{end_use}_heating_demand.csv")
-        cool_demand=expand(RESOURCES + "{interconnect}/{end_use}_cooling_demand.csv")
+        elec_demand=RESOURCES + "{interconnect}/{end_use}_electricity_demand.csv",
+        heat_demand=RESOURCES + "{interconnect}/{end_use}_heating_demand.csv",
+        cool_demand=RESOURCES + "{interconnect}/{end_use}_cooling_demand.csv",
     log:
-        LOGS + "{interconnect}/build_demand.log",
+        LOGS + "{interconnect}/{end_use}_build_demand.log",
     benchmark:
-        BENCHMARKS + "{interconnect}/build_demand"
+        BENCHMARKS + "{interconnect}/{end_use}_build_demand"
     threads: 2
     resources:
         mem_mb=interconnect_mem,
     script:
         "../scripts/build_demand.py"
 
+
 def demand_to_add(wildcards):
-    if wildcards.sector == "E":
-        return "{interconnect}}/power_electricity_demand.csv"
+    if config["scenario"]["sector"] == "E":
+        return RESOURCES + "{interconnect}/power_electricity_demand.csv"
     else:
         return [
-            "{interconnect}/residential_electricity_demand.csv",
-            "{interconnect}/residential_heating_demand.csv",
-            "{interconnect}/residential_cooling_demand.csv",
-            "{interconnect}/commercial_electricity_demand.csv",
-            "{interconnect}/commercial_heating_demand.csv",
-            "{interconnect}/commercial_cooling_demand.csv",
-            "{interconnect}/industry_electricity_demand.csv",
-            "{interconnect}/industry_heating_demand.csv",
-            "{interconnect}/industry_cooling_demand.csv",
-            "{interconnect}/transport_electricity_demand.csv",
+            RESOURCES + "{interconnect}/residential_electricity_demand.csv",
+            RESOURCES + "{interconnect}/residential_heating_demand.csv",
+            RESOURCES + "{interconnect}/residential_cooling_demand.csv",
+            RESOURCES + "{interconnect}/commercial_electricity_demand.csv",
+            RESOURCES + "{interconnect}/commercial_heating_demand.csv",
+            RESOURCES + "{interconnect}/commercial_cooling_demand.csv",
+            RESOURCES + "{interconnect}/industry_electricity_demand.csv",
+            RESOURCES + "{interconnect}/industry_heating_demand.csv",
+            RESOURCES + "{interconnect}/industry_cooling_demand.csv",
+            RESOURCES + "{interconnect}/transport_electricity_demand.csv",
         ]
-    
+
+
 rule add_demand:
     input:
         network=RESOURCES + "{interconnect}/elec_base_network.nc",
@@ -348,6 +366,7 @@ rule add_demand:
         mem_mb=800,
     script:
         "../scripts/add_demand.py"
+
 
 def ba_gas_dynamic_fuel_price_files(wildcards):
     files = []
@@ -388,6 +407,7 @@ def dynamic_fuel_price_files(wildcards):
         }
     else:
         return {}
+
 
 rule add_electricity:
     params:
@@ -437,7 +457,6 @@ rule add_electricity:
             if config["network_configuration"] == "ads2032"
             else []
         ),
-        demand=RESOURCES + "{interconnect}/demand.csv",
         fuel_costs="repo_data/plants/fuelCost22.csv",
     output:
         RESOURCES + "{interconnect}/elec_base_network_l_pp.nc",
