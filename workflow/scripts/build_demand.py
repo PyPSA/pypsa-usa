@@ -42,7 +42,6 @@ import pandas as pd
 import pypsa
 from _helpers import configure_logging
 from eia import EnergyDemand
-from eulp import Eulp
 
 logger = logging.getLogger(__name__)
 
@@ -480,18 +479,19 @@ class ReadEulp(ReadStrategy):
             raise NotImplementedError
 
     def _read_data(self) -> dict[str, pd.DataFrame]:
-        if isinstance(self.filepath, str):
-            return {self._extract_state(self.filepath): Eulp(self.filepath).data}
-
+        files = [self.filepath] if isinstance(self.filepath, str) else self.filepath
         data = {}
-        for f in self.filepath:
+        for f in files:
             state = self._extract_state(f)
-            data[state] = Eulp(f).data
+            data[state] = pd.read_csv(f, index_col="timestamp", parse_dates=True)
         return data
 
     def _format_data(self, data: dict[str, pd.DataFrame]) -> pd.DataFrame:
         df = self._collapse_data(data)
-        df["fuel"] = df.fuel.map({"cooling": "cool", "heating": "heat"})
+        df["fuel"] = df.fuel.map(
+            {"electricity": "electricity", "cooling": "cool", "heating": "heat"},
+        )
+        assert not df.fuel.isna().any()
         df["sector"] = self.stock
         df["subsector"] = "all"
         df = df.pivot_table(
@@ -511,6 +511,7 @@ class ReadEulp(ReadStrategy):
         ## REMOVE THIS ONCE 2018 CUTOUTS ARE CREATED
         ##################################################################
         df = df.rename(columns=CODE_2_STATE)
+        assert not df.empty
         return df
 
     @staticmethod
@@ -948,7 +949,7 @@ if __name__ == "__main__":
         demand = demand_converter.prepare_demand(sns=sns)  # pd.DataFrame
         demands = {"power": {"electricity": demand}}
     else:
-        fuels = ("electricity", "heating", "cooling")
+        fuels = ("electricity", "heat", "cool")
         sector = end_use  # residential, commercial, industry, transport
         demands = demand_converter.prepare_multiple_demands(
             sector,
@@ -981,11 +982,11 @@ if __name__ == "__main__":
             snakemake.output.elec_demand,
             index=True,
         )
-        demands[end_use]["heating"].round(4).to_csv(
+        demands[end_use]["heat"].round(4).to_csv(
             snakemake.output.heat_demand,
             index=True,
         )
-        demands[end_use]["cooling"].round(4).to_csv(
+        demands[end_use]["cool"].round(4).to_csv(
             snakemake.output.cool_demand,
             index=True,
         )
