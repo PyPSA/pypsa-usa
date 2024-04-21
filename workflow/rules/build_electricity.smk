@@ -226,7 +226,7 @@ rule build_renewable_profiles:
         "../scripts/build_renewable_profiles.py"
 
 
-# eastern broken into three just to aviod awful formatting issues of it
+# eastern broken out just to aviod awful formatting issues
 INTERCONNECT_2_STATE = {
     "eastern": ["AL", "AR", "CT", "DE", "DC", "FL", "GA", "IL", "IN", "IA", "KS", "KY"],
     "western": ["AZ", "CA", "CO", "ID", "MT", "NV", "NM", "OR", "UT", "WA", "WY"],
@@ -242,9 +242,9 @@ INTERCONNECT_2_STATE["usa"] = sum(INTERCONNECT_2_STATE.values(), [])
 def electricty_study_demand(wildcards):
     profile = config["electricity"]["demand"]["profile"]
     if profile == "eia":
-        return (DATA + "GridEmissions/EIA_DMD_2018_2024.csv",)
+        return DATA + "GridEmissions/EIA_DMD_2018_2024.csv"
     elif profile == "efs":
-        return (DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv",)
+        return DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv"
     else:
         return ""
 
@@ -256,30 +256,30 @@ def sector_study_demand(wildcards):
         if profile == "eulp":
             return [
                 DATA + f"eulp/res/{state}.csv"
-                for state in states[wildcards.interconnect]
+                for state in INTERCONNECT_2_STATE[wildcards.interconnect]
             ]
         elif profile == "efs":
-            return (DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv",)
+            return DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv"
         else:
             return ""
     elif end_use == "commercial":
         if profile == "eulp":
             return [
                 DATA + f"eulp/com/{state}.csv"
-                for state in states[wildcards.interconnect]
+                for state in INTERCONNECT_2_STATE[wildcards.interconnect]
             ]
         elif profile == "efs":
-            return (DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv",)
+            return DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv"
         else:
             return ""
     elif end_use == "industry":
         if profile == "efs":
-            return (DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv",)
+            return DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv"
         else:
             return ""
     elif end_use == "transport":
         if profile == "efs":
-            return (DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv",)
+            return DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv"
         else:
             return ""
     else:
@@ -311,7 +311,7 @@ rule build_electrical_demand:
 
 rule build_sector_demand:
     wildcard_constraints:
-        end_use="^power",
+        end_use="residential|commercial|industry|transport",
     params:
         planning_horizons=config["scenario"]["planning_horizons"],
         demand_profile=config["sector"]["demand"],

@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 from eulp import Eulp
 
+
 class OediDownload:
     """
     Downlaods Oedi restock or comstock data at a state level.
@@ -111,7 +112,7 @@ class OediDownload:
     def download_data(
         self,
         state: str,
-        buildings: Optional[str | List[str]] = None,
+        buildings: Optional[str | list[str]] = None,
         directory: Optional[str] = None,
     ) -> None:
         """
@@ -144,7 +145,7 @@ if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
 
-        snakemake = mock_snakemake("retrieve_res_eulp", state="WA")
+        snakemake = mock_snakemake("retrieve_res_eulp", state="TX")
     configure_logging(snakemake)
 
     stock = snakemake.params.stock
@@ -154,25 +155,24 @@ if __name__ == "__main__":
 
     oedi = OediDownload(stock)
 
-    # download all requested data 
-    oedi.download_data(state, buildings, 0, save_dir)
+    # download all requested data
+    oedi.download_data(state, buildings, save_dir)
 
     # collapse into a single file
-    if stock == "res": 
+    if stock == "res":
         files_to_combine = oedi.res_files
     elif stock == "com":
         files_to_combine = oedi.com_files
     else:
         raise NotImplementedError
-    
+
     data_to_sum = []
-    for f_num, f_name in enumerate(files_to_combine):
+    for f_num, building_name in enumerate(files_to_combine):
+        f_name = f"{save_dir}/{state}/{building_name}.csv"
         if f_num == 0:
             start_data = Eulp(f_name)
         else:
             data_to_sum.append(Eulp(f_name))
-            
+
     summed_data = sum(data_to_sum, start_data)
-    summed_data.to_csv(f"{save_dir}_{state}.csv")
-    
-    
+    summed_data.to_csv(f"{save_dir}/{state}.csv")
