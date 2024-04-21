@@ -131,7 +131,7 @@ class Context:
         for sector in sectors:
             data[sector] = {}
             for fuel in fuels:
-                data[fuel] = self._write(
+                data[sector][fuel] = self._write(
                     demand,
                     self._read_strategy.zone,
                     sector=sector,
@@ -464,6 +464,7 @@ class ReadEulp(ReadStrategy):
         super().__init__(filepath)
         assert stock in ("res", "com")
         self._stock = stock
+        self._zone = "state"
 
     @property
     def zone(self):
@@ -490,14 +491,26 @@ class ReadEulp(ReadStrategy):
 
     def _format_data(self, data: dict[str, pd.DataFrame]) -> pd.DataFrame:
         df = self._collapse_data(data)
+        df["fuel"] = df.fuel.map({"cooling": "cool", "heating": "heat"})
         df["sector"] = self.stock
         df["subsector"] = "all"
         df = df.pivot_table(
             index=["snapshot", "sector", "subsector", "fuel"],
-            values="state",
+            values="value",
+            columns="state",
             aggfunc="sum",
         )
-        assert len(df) == 8760  # full year of data
+        assert len(df.index.get_level_values("snapshot").unique()) == 8760
+        ##################################################################
+        ## REMOVE THIS ONCE 2018 CUTOUTS ARE CREATED
+        ##################################################################
+        df = df.reset_index()
+        df["snapshot"] = df.snapshot.map(lambda x: x.replace(year=2019))
+        df = df.set_index(["snapshot", "sector", "subsector", "fuel"])
+        ##################################################################
+        ## REMOVE THIS ONCE 2018 CUTOUTS ARE CREATED
+        ##################################################################
+        df = df.rename(columns=CODE_2_STATE)
         return df
 
     @staticmethod
@@ -509,14 +522,15 @@ class ReadEulp(ReadStrategy):
         dfs = []
         for state, state_df in data.items():
             df = (
-                state_df.data.melt(
+                state_df.melt(
                     var_name="fuel",
-                    value_name=state,
+                    value_name="value",
                     ignore_index=False,
                 )
                 .reset_index()
                 .rename(columns={"timestamp": "snapshot"})
             )
+            df["state"] = state
             dfs.append(df)
         return pd.concat(dfs)
 
@@ -651,7 +665,7 @@ class WriteStrategy(ABC):
 
     @staticmethod
     def _filter_on_use(df: pd.DataFrame, level: str, values: list[str]):
-        return df[df.index.get_level_values(level) in values].copy()
+        return df[df.index.get_level_values(level).isin(values)].copy()
 
     @staticmethod
     def _group_demand(df: pd.DataFrame, agg_strategy: str = "sum") -> pd.DataFrame:
@@ -832,6 +846,8 @@ def get_aeo_growth_rate(
         ).get_data()
         return energy
 
+    logger.info("Getting AEO growth rate")
+
     assert min(years) > 2017
     assert max(years) < 2051
 
@@ -867,9 +883,9 @@ if __name__ == "__main__":
         from _helpers import mock_snakemake
 
         snakemake = mock_snakemake(
-            "build_electrical_demand",
-            interconnect="western",
-            end_use="power",
+            "build_sector_demand",
+            interconnect="texas",
+            end_use="residential",
         )
     configure_logging(snakemake)
 
@@ -904,16 +920,17 @@ if __name__ == "__main__":
 
     if demand_profile == "efs":
         assert planning_year in (2018, 2020, 2024, 2030, 2040, 2050)
-        reader = ReadEfs(demand_files[0])
+        reader = ReadEfs(demand_files)
         sns = n.snapshots.map(lambda x: x.replace(year=planning_year))
         profile_year = planning_year  # do not scale EFS data
     elif demand_profile == "eia":
         assert profile_year in range(2018, 2023, 1)
-        reader = ReadEia(demand_files[0])
+        reader = ReadEia(demand_files)
         sns = n.snapshots
     elif demand_profile == "eulp":
-        assert profile_year == 2018
-        reader = ReadEulp(demand_files)
+        # assert profile_year == 2018
+        stock = {"residential": "res", "commercial": "com"}
+        reader = ReadEulp(demand_files, stock[end_use])  # 'res' or 'com'
         sns = n.snapshots
     else:
         raise NotImplementedError
@@ -952,14 +969,18 @@ if __name__ == "__main__":
         growth_rate = get_aeo_growth_rate(eia_api, [profile_year, planning_year])
         logger.warning("No scale appied for aeo data")
 
-    # all sectors have electrical demand
-    demands[end_use]["electricity"].round(4).to_csv(
-        snakemake.output.elec_demand,
-        index=True,
-    )
-
+    # electricity sector study
+    if end_use == "power":
+        demands[end_use]["electricity"].round(4).to_csv(
+            snakemake.output.elec_demand,
+            index=True,
+        )
     # sector coupling demand
-    if end_use != "power":
+    else:
+        demands[end_use]["electricity"].round(4).to_csv(
+            snakemake.output.elec_demand,
+            index=True,
+        )
         demands[end_use]["heating"].round(4).to_csv(
             snakemake.output.heat_demand,
             index=True,

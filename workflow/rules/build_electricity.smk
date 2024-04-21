@@ -314,10 +314,10 @@ rule build_sector_demand:
         end_use="residential|commercial|industry|transport",
     params:
         planning_horizons=config["scenario"]["planning_horizons"],
-        demand_profile=config["sector"]["demand"],
+        demand_params=config["sector"]["demand"],
         eia_api=config["api"]["eia"],
     input:
-        base_network=RESOURCES + "{interconnect}/elec_base_network.nc",
+        network=RESOURCES + "{interconnect}/elec_base_network.nc",
         demand_files=sector_study_demand,
     output:
         elec_demand=RESOURCES + "{interconnect}/{end_use}_electricity_demand.csv",
