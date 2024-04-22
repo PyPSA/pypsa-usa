@@ -473,7 +473,10 @@ def add_interface_limits(n, sns, config):
 
         lhs = line_flows
 
-        if not (pd.concat([interface_links_b0, interface_links_b1]).empty) and "RESOLVE" in interface.interface:
+        if (
+            not (pd.concat([interface_links_b0, interface_links_b1]).empty)
+            and "RESOLVE" in interface.interface
+        ):
             link_flows = n.model["Link-p"].loc[:, interface_links_b1.index].sum(
                 dims="Link",
             ) - n.model["Link-p"].loc[:, interface_links_b0.index].sum(dims="Link")
