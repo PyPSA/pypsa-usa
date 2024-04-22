@@ -15,19 +15,18 @@ from _helpers import configure_logging, mock_snakemake
 logger = logging.getLogger(__name__)
 
 
-def attach_demand(n: pypsa.Network, df: pd.DataFrame, load_name: str, carrier: str):
+def attach_demand(n: pypsa.Network, df: pd.DataFrame, carrier: str, suffix: str):
     """
     Add demand to network from specified configuration setting.
 
     Returns network with demand added.
     """
     df.index = pd.to_datetime(df.index)
-    buses = df.columns
-    df = df.rename({x: f"{x}{load_name}" for x in buses})
     n.madd(
         "Load",
         df.columns,
-        bus=buses,
+        suffix=suffix,
+        bus=df.columns,
         p_set=df,
         carrier=carrier,
     )
@@ -44,7 +43,7 @@ if __name__ == "__main__":
     if isinstance(demand_files, str):
         demand_files = [demand_files]
 
-    load_name_mapper = {
+    sector_mapper = {
         "power": "",
         "residential": "res",
         "commercial": "com",
@@ -52,7 +51,13 @@ if __name__ == "__main__":
         "transport": "trn",
     }
 
-    load_carrier_mapper = {
+    fuel_mapper = {
+        "electricity": "elec",
+        "heating": "heat",
+        "cooling": "cool",
+    }
+
+    carrier_mapper = {
         "electricity": "AC",
         "heating": "heat",
         "cooling": "cool",
@@ -62,11 +67,15 @@ if __name__ == "__main__":
         parsed_name = Path(demand_file).name.split("_")
         sector = parsed_name[0]
         end_use = parsed_name[1]
+        carrier = carrier_mapper[end_use]
+
+        if sector == "power":  # do not suffix elec only study
+            suffix = ""
+        else:
+            suffix = f"-{sector_mapper[sector]}-{fuel_mapper[end_use]}"
 
         df = pd.read_csv(demand_file, index_col=0)
-        sector_name = load_name_mapper[sector]
-        carrier_name = load_carrier_mapper[end_use]
-        attach_demand(n, df, sector_name, carrier_name)
+        attach_demand(n, df, carrier, suffix)
         logger.info(f"{sector} {end_use} demand added to network")
 
     n.export_to_netcdf(snakemake.output.network)
