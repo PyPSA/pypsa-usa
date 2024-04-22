@@ -109,7 +109,7 @@ If using the `{opts}` wildcard to reduce emissions, the user must put in a `co2b
 .. literalinclude:: ../../workflow/repo_data/config/config.common.yaml
    :language: yaml
    :start-at: solar:
-   :end-before: # docs :
+   :end-before: hydro:
 
 .. csv-table::
    :header-rows: 1
@@ -122,12 +122,20 @@ If using the `{opts}` wildcard to reduce emissions, the user must put in a `co2b
 .. literalinclude:: ../../workflow/repo_data/config/config.common.yaml
    :language: yaml
    :start-at: onwind:
-   :end-before: # docs :
+   :end-before: offwind:
 
 .. csv-table::
    :header-rows: 1
    :widths: 22,7,22,33
    :file: configtables/onwind.csv
+```
+
+### `Offshore wind`
+```{eval-rst}
+.. literalinclude:: ../../workflow/repo_data/config/config.common.yaml
+   :language: yaml
+   :start-at: offwind:
+   :end-before: solar:
 ```
 
 (lines_cf)=
@@ -228,8 +236,6 @@ Cleaned and labeled REeDs Shapes are pulled from this github repository: https:/
 
 ```{note}
 `feature:` in `simplify_network:` are only relevant if `hac` were chosen in `algorithm`.
-
-- Use `focus_weights` to specify the proportion of cluster nodes to be attributed to a given zone given by the `aggregation_zone` configuration.
 ```
 
 ```{tip}
