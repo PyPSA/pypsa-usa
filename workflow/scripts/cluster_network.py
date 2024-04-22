@@ -481,11 +481,14 @@ if __name__ == "__main__":
                 carriers += [c]
             else:
                 labels = ["low", "medium", "high"]
-                suffix = pd.cut(gens.efficiency, bins=[0, low, high, 1], labels=labels
+                suffix = pd.cut(
+                    gens.efficiency,
+                    bins=[0, low, high, 1],
+                    labels=labels,
                 ).astype(str)
                 carriers += [f"{c} {label} efficiency" for label in labels]
                 n.generators.update(
-                    {"carrier": gens.carrier + " " + suffix + " efficiency"}
+                    {"carrier": gens.carrier + " " + suffix + " efficiency"},
                 )
         aggregate_carriers = carriers
 

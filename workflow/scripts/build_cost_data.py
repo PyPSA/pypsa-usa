@@ -270,7 +270,7 @@ def get_atb_data(atb: pd.DataFrame, techs: str | list[str], **kwargs) -> pd.Data
                     technology,
                     "efficiency",
                     3.412 / atb.loc[core_metric_key]["value"],
-                    "MWH_th/MWH_elec" #atb.loc[core_metric_key]["units"],
+                    "MWH_th/MWH_elec"  # atb.loc[core_metric_key]["units"],
                     "NREL ATB",
                     core_metric_key,
                 ],

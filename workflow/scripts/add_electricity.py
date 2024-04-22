@@ -635,7 +635,9 @@ def add_missing_fuel_cost(plants, costs_fn):
 def add_missing_heat_rates(plants, heat_rates_fn):
     heat_rates = pd.read_csv(heat_rates_fn, index_col=0, skiprows=3)
     heat_rates = heat_rates.loc[heat_rates.heat_rate_btu_per_kwh > 0]
-    hr_mapped = (plants.fuel_type.map(heat_rates.heat_rate_btu_per_kwh) / 1000)  # convert to mmbtu/mwh
+    hr_mapped = (
+        plants.fuel_type.map(heat_rates.heat_rate_btu_per_kwh) / 1000
+    )  # convert to mmbtu/mwh
     plants["heat_rate"].fillna(hr_mapped, inplace=True)
     return plants
 
@@ -746,7 +748,7 @@ def attach_conventional_generators(
     )
 
     plants["efficiency"] = plants.efficiency.fillna(plants.efficiency_r)
-    
+
     if unit_commitment is not None:
         committable_attrs = plants.carrier.isin(unit_commitment).to_frame("committable")
         for attr in unit_commitment.index:
@@ -1041,34 +1043,42 @@ def load_powerplants_eia(
 
     return plants
 
+
 def apply_seasonal_capacity_derates(
     n: pypsa.Network,
     plants: pd.DataFrame,
     conventional_carriers: list,
     sns: pd.DatetimeIndex,
-    ):
+):
     "Applies rerate factor p_max_pu based on the seasonal capacity derates defined in eia860"
     summer_sns = sns[sns.month.isin([6, 7, 8])]
     winter_sns = sns[~sns.month.isin([6, 7, 8])]
 
     conv_plants = plants.query("carrier in @conventional_carriers")
-    conv_plants.index = 'C' + conv_plants.index 
+    conv_plants.index = "C" + conv_plants.index
     conv_gens = n.generators.query("carrier in @conventional_carriers")
 
     p_max_pu = pd.DataFrame(1.0, index=sns, columns=conv_gens.index)
-    p_max_pu.loc[summer_sns, conv_gens.index] *= conv_plants.loc[:, "summer_derate"].astype(float)
-    p_max_pu.loc[winter_sns, conv_gens.index] *= conv_plants.loc[:, "winter_derate"].astype(float)
+    p_max_pu.loc[summer_sns, conv_gens.index] *= conv_plants.loc[
+        :, "summer_derate"
+    ].astype(float)
+    p_max_pu.loc[winter_sns, conv_gens.index] *= conv_plants.loc[
+        :, "winter_derate"
+    ].astype(float)
     n.generators_t.p_max_pu = pd.concat([n.generators_t.p_max_pu, p_max_pu], axis=1)
 
-    conv_plants.loc[:,'ads_mustrun'] = conv_plants.ads_mustrun.fillna(False)
+    conv_plants.loc[:, "ads_mustrun"] = conv_plants.ads_mustrun.fillna(False)
     must_run = conv_plants.loc[conv_plants.ads_mustrun, :].copy()
-    must_run.loc[:, 'minimum_load_mw'] = must_run.minimum_load_mw.astype(float)
-    must_run.loc[:, 'minimum_cf'] = must_run.minimum_load_mw / must_run.p_nom
-    must_run.loc[:, 'minimum_cf'] = must_run.minimum_cf.clip(upper=np.minimum(must_run.summer_derate, must_run.winter_derate))
+    must_run.loc[:, "minimum_load_mw"] = must_run.minimum_load_mw.astype(float)
+    must_run.loc[:, "minimum_cf"] = must_run.minimum_load_mw / must_run.p_nom
+    must_run.loc[:, "minimum_cf"] = must_run.minimum_cf.clip(
+        upper=np.minimum(must_run.summer_derate, must_run.winter_derate)
+    )
 
     p_min_pu = pd.DataFrame(1.0, index=sns, columns=must_run.index)
     p_min_pu.loc[:, must_run.index] *= must_run.loc[:, "minimum_cf"].astype(float)
     n.generators_t.p_min_pu = pd.concat([n.generators_t.p_min_pu, p_min_pu], axis=1)
+
 
 def assign_ads_missing_lat_lon(plants, n):
     plants_unmatched = plants[plants.latitude.isna() | plants.longitude.isna()]
@@ -1382,10 +1392,10 @@ def main(snakemake):
         fuel_price=None,  # update fuel prices later
     )
     apply_seasonal_capacity_derates(
-        n, 
+        n,
         plants,
         conventional_carriers,
-        n.snapshots
+        n.snapshots,
     )
     attach_battery_storage(
         n,

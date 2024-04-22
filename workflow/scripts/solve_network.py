@@ -468,21 +468,21 @@ def add_interface_limits(n, sns, config):
             n.links.bus0.isin(zone1_buses.index) & n.links.bus1.isin(zone0_buses.index)
         ]
 
-        line_flows = (
-            lines_s.loc[:, interface_lines_b1.index].sum(dims="Line") -
-            lines_s.loc[:, interface_lines_b0.index].sum(dims="Line")
+        line_flows = lines_s.loc[:, interface_lines_b1.index].sum(
+            dims="Line"
+        ) - lines_s.loc[:, interface_lines_b0.index].sum(dims="Line")
+        link_flows = links_p.loc[:, interface_links_b1.index].sum(
+            dims="Link"
+        ) - links_p.loc[:, interface_links_b0.index].sum(dims="Link")
+
+        lhs = (
+            line_flows + link_flows if "RESOLVE" in interface.interface else line_flows
         )
-        link_flows = (
-            links_p.loc[:, interface_links_b1.index].sum(dims="Link") -
-            links_p.loc[:, interface_links_b0.index].sum(dims="Link")
-        ) 
 
-        lhs = line_flows + link_flows if 'RESOLVE' in interface.interface else line_flows
-
-        rhs_pos =  interface.MW_f0 * -1
+        rhs_pos = interface.MW_f0 * -1
         n.model.add_constraints(lhs >= rhs_pos, name=f"ITL_{interface.interface}_pos")
 
-        rhs_neg =  interface.MW_r0
+        rhs_neg = interface.MW_r0
         n.model.add_constraints(lhs <= rhs_neg, name=f"ITL_{interface.interface}_neg")
 
 
@@ -512,11 +512,11 @@ def add_regional_co2limit(n, sns, config):
             continue
 
         region_co2lim = emmission_lim.limit
-        EF_imports = emmission_lim.import_emissions_factor  #MT CO₂e/MWh_elec
+        EF_imports = emmission_lim.import_emissions_factor  # MT CO₂e/MWh_elec
 
         emissions = n.carriers.co2_emissions
         # generators
-        region_gens =  n.generators[n.generators.bus.isin(region_buses.index)]
+        region_gens = n.generators[n.generators.bus.isin(region_buses.index)]
         region_gens = region_gens.query("carrier in @emissions.index")
 
         if not region_gens.empty:
@@ -533,14 +533,19 @@ def add_regional_co2limit(n, sns, config):
             p = n.model["Generator-p"].loc[:, region_gens.index]
             lhs = (p * em_pu).sum()
 
-            #Imports
-            region_demand = n.model.constraints['Bus-nodal_balance'].rhs.loc[region_buses.index, :].sum()
+            # Imports
+            region_demand = (
+                n.model.constraints["Bus-nodal_balance"]
+                .rhs.loc[region_buses.index, :]
+                .sum()
+            )
             lhs -= (p * EF_imports).sum()
 
             rhs = region_co2lim - (region_demand * EF_imports)
-            n.model.add_constraints(lhs <= rhs, name=f"GlobalConstraint-{emmission_lim.name}_co2_limit")
+            n.model.add_constraints(
+                lhs <= rhs, name=f"GlobalConstraint-{emmission_lim.name}_co2_limit"
+            )
             logger.info(f"Adding regional Co2 Limit for {emmission_lim.name}")
-
 
 
 def add_SAFE_constraints(n, config):
@@ -903,6 +908,7 @@ def solve_network(n, config, solving, opts="", **kwargs):
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
+
         snakemake = mock_snakemake(
             "solve_network_operations",
             simpl="",
