@@ -171,17 +171,26 @@ def aggregate_to_substations(
     )
     network_s.lines["type"] = np.nan
 
-    network_s.buses.drop(
-        columns=[
+    if aggregation_zones != "reeds_zone":
+        cols2drop = [
             "balancing_area",
             "state",
             "substation_off",
             "sub_id",
             "reeds_zone",
             "reeds_ba",
-        ],
+            "nerc_reg",
+            "trans_reg",
+            "reeds_state",
+        ]
+    else:
+        cols2drop = ["balancing_area", "substation_off", "sub_id", "state"]
+
+    network_s.buses.drop(
+        columns=cols2drop,
         inplace=True,
     )
+
     return network_s
 
 

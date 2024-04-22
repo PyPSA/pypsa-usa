@@ -44,7 +44,7 @@ PyPSA-USA builds on and leverages the work of [PyPSA-EUR](https://pypsa-eur.read
 
 about-introduction
 about-install
-about-tutorial
+about-usage
 ```
 
 ```{toctree}
@@ -54,7 +54,6 @@ about-tutorial
 
 config-wildcards
 config-configuration
-config-assumptions
 config-sectors
 ```
 

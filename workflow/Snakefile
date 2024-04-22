@@ -55,14 +55,14 @@ FIGURES_NATURAL_GAS = ["natural_gas.html"]
 FIGURES_VALIDATE = [
     "seasonal_stacked_plot.pdf",
     "carrier_production_bar.pdf",
-    "production_deviation_bar.pdf",
     "val_bar_regional_emissions.pdf",
+    "val_bar_state_emissions.pdf",
     "val_generator_data_panel.pdf",
-    # "val_heatmap_curtailment.pdf",
     "val_heatmap_capacity_factor.pdf",
     "val_box_region_lmps.pdf",
     "val_map_load_shedding.pdf",
     "val_generator_stack.pdf",
+    "val_map_line_loading.pdf",
 ]
 
 
@@ -86,10 +86,10 @@ wildcard_constraints:
 
 
 # Merge subworkflow configs and main config
-configfile: "config/config.default.yaml"
-# configfile: "config/tests/config.validation.yaml"
+# configfile: "config/config.default.yaml"
+configfile: "config/tests/config.validation.yaml"
 configfile: "config/config.cluster.yaml"
-configfile: "config/config.osw.yaml"
+configfile: "config/config.common.yaml"
 configfile: "config/config.plotting.yaml"
 configfile: "config/config.api.yaml"
 
@@ -186,7 +186,7 @@ def validation_figures(wildcards):
     if config["run"]["validation"]:
         return expand(
             RESULTS
-            + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/validation/{figure}",
+            + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/{figure}",
             **config["scenario"],
             figure=FIGURES_VALIDATE,
         )
