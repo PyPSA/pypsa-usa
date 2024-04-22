@@ -11,7 +11,7 @@ investment changes as more ambitious greenhouse-gas emission reduction targets a
 The `run` section is used for running and storing scenarios with different configurations which are not covered by [wildcards](#wildcards). It determines the path at which resources, networks and results are stored. Therefore the user can run different configurations within the same directory.
 
 ```{eval-rst}
-.. literalinclude:: ../../workflow/config/config.default.yaml
+.. literalinclude:: ../../workflow/repo_data/config/config.default.yaml
    :language: yaml
    :start-at: run:
    :end-before: # docs :
@@ -31,10 +31,15 @@ The `scenario` section is used for setting the wildcards and defining planning h
 Planning horizons determines which year of future demand forecast to use for your planning model. If you leave `planning_horizons:` empty, historical demand will be set according to `snapshots`.
 
 ```{eval-rst}
-.. literalinclude:: ../../workflow/config/config.default.yaml
+.. literalinclude:: ../../workflow/repo_data/config/config.default.yaml
    :language: yaml
    :start-at: scenario:
    :end-before: # docs :
+
+.. csv-table::
+   :header-rows: 1
+   :widths: 22,7,22,33
+   :file: configtables/scenario.csv
 ```
 
 (snapshots_cf)=
@@ -43,7 +48,7 @@ Planning horizons determines which year of future demand forecast to use for you
 Specifies the temporal range to build an energy system model for as arguments to `(pandas.date_range)[https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.date_range.html]`
 
 ```{eval-rst}
-.. literalinclude:: ../../workflow/config/config.default.yaml
+.. literalinclude:: ../../workflow/repo_data/config/config.default.yaml
    :language: yaml
    :start-at: snapshots:
    :end-before: # docs :
@@ -60,7 +65,7 @@ Specifies the temporal range to build an energy system model for as arguments to
 Define and specify the `atlite.Cutout` used for calculating renewable potentials and time-series. All options except for `features` are directly used as [`cutout parameters`](https://atlite.readthedocs.io/en/latest/ref_api.html#cutout)
 
 ```{eval-rst}
-.. literalinclude:: ../../workflow/config/config.common.yaml
+.. literalinclude:: ../../workflow/repo_data/config/config.common.yaml
    :language: yaml
    :start-at: atlite:
    :end-before: # docs
@@ -77,7 +82,7 @@ Define and specify the `atlite.Cutout` used for calculating renewable potentials
 Specifies the types of generators that are included in the network, which are extendable, and the CO2 base for which the optimized reduction is relative to.
 
 ```{eval-rst}
-.. literalinclude:: ../../workflow/config/config.default.yaml
+.. literalinclude:: ../../workflow/repo_data/config/config.default.yaml
    :language: yaml
    :start-at: electricity:
    :end-before: # docs :
@@ -101,7 +106,7 @@ If using the `{opts}` wildcard to reduce emissions, the user must put in a `co2b
 
 ### `solar`
 ```{eval-rst}
-.. literalinclude:: ../../workflow/config/config.common.yaml
+.. literalinclude:: ../../workflow/repo_data/config/config.common.yaml
    :language: yaml
    :start-at: solar:
    :end-before: # docs :
@@ -114,7 +119,7 @@ If using the `{opts}` wildcard to reduce emissions, the user must put in a `co2b
 
 ### `onwind`
 ```{eval-rst}
-.. literalinclude:: ../../workflow/config/config.common.yaml
+.. literalinclude:: ../../workflow/repo_data/config/config.common.yaml
    :language: yaml
    :start-at: onwind:
    :end-before: # docs :
@@ -128,7 +133,7 @@ If using the `{opts}` wildcard to reduce emissions, the user must put in a `co2b
 (lines_cf)=
 ## `lines`
 ```{eval-rst}
-.. literalinclude:: ../../workflow/config/config.default.yaml
+.. literalinclude:: ../../workflow/repo_data/config/config.default.yaml
    :language: yaml
    :start-at: lines:
    :end-before: # docs
@@ -143,7 +148,7 @@ If using the `{opts}` wildcard to reduce emissions, the user must put in a `co2b
 ## `links`
 
 ```{eval-rst}
-.. literalinclude:: ../../workflow/config/config.default.yaml
+.. literalinclude:: ../../workflow/repo_data/config/config.default.yaml
    :language: yaml
    :start-at: links:
    :end-before: # docs
@@ -158,7 +163,7 @@ If using the `{opts}` wildcard to reduce emissions, the user must put in a `co2b
 ## `load`
 
 ```{eval-rst}
-.. literalinclude:: ../../workflow/config/config.default.yaml
+.. literalinclude:: ../../workflow/repo_data/config/config.default.yaml
    :language: yaml
    :start-after: load:
    :end-before: # docs
@@ -173,7 +178,7 @@ If using the `{opts}` wildcard to reduce emissions, the user must put in a `co2b
 ## `costs`
 
 ```{eval-rst}
-.. literalinclude:: ../../workflow/config/config.default.yaml
+.. literalinclude:: ../../workflow/repo_data/config/config.default.yaml
    :language: yaml
    :start-at: costs:
    :end-before: # docs
@@ -187,7 +192,7 @@ If using the `{opts}` wildcard to reduce emissions, the user must put in a `co2b
 (sector_cf)=
 ## `sector`
 ```{eval-rst}
-.. literalinclude:: ../../workflow/config/config.default.yaml
+.. literalinclude:: ../../workflow/repo_data/config/config.default.yaml
    :language: yaml
    :start-at: sector:
    :end-before: # docs
@@ -209,7 +214,7 @@ Each clustering and interconnection option will have a different number of minim
 Cleaned and labeled REeDs Shapes are pulled from this github repository: https://github.com/pandaanson/NYU-law-work
 
 ```{eval-rst}
-.. literalinclude:: ../../workflow/config/config.default.yaml
+.. literalinclude:: ../../workflow/repo_data/config/config.default.yaml
    :language: yaml
    :start-at: clustering:
    :end-before: # docs :
@@ -235,7 +240,7 @@ use `min` in `p_nom_max:` for more conservative assumptions.
 ## `solving`
 
 ```{eval-rst}
-.. literalinclude:: ../../workflow/config/config.default.yaml
+.. literalinclude:: ../../workflow/repo_data/config/config.default.yaml
    :language: yaml
    :start-at: solving:
 
@@ -249,7 +254,7 @@ use `min` in `p_nom_max:` for more conservative assumptions.
 ## `plotting`
 
 ```{eval-rst}
-.. literalinclude:: ../../workflow/config/config.plotting.yaml
+.. literalinclude:: ../../workflow/repo_data/config/config.plotting.yaml
    :language: yaml
 
 .. csv-table::
