@@ -11,8 +11,8 @@ run:
 scenario:
   interconnect: [texas] #"usa|texas|western|eastern"
   clusters: [20]
-  opts: [Co2L-240SEG]
-  ll: [v1.0]
+  opts: [Co2L]
+  ll: [v1.05]
   scope: "total" # "urban", "rural", or "total"
   sector: "" # G
   planning_horizons:
@@ -91,6 +91,7 @@ lines:
     765.: "Al/St 560/50 4-bundle 750.0"
   s_max_pu: 0.7
   s_nom_max: .inf
+  max_extension: 1000.0e+3
   length_factor: 1.25
   interface_transmission_limits: true
 
@@ -99,6 +100,7 @@ lines:
 links:
   p_max_pu: 1.0
   p_nom_max: .inf
+  max_extension: 1000.0e+3
 
 # docs :
 load:
