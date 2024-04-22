@@ -2,7 +2,7 @@
 # Tutorial
 
 ```{note}
-** If you have not done so, please follow the [installation instructions](https://pypsa-usa.readthedocs.io/en/latest/about-install.html) [github issues](https://github.com/PyPSA/pypsa-usa/issues) **
+**If you have not done so, please follow the [installation instructions](https://pypsa-usa.readthedocs.io/en/latest/about-install.html) [github issues](https://github.com/PyPSA/pypsa-usa/issues)**
 ```
 
 ## Set Configuration
@@ -22,6 +22,19 @@ snakemake -j1 --configfile config/config.default.yaml
 
 where 1 indicates the number of cores used.
 
+## Running on HPC Cluster
+
+If you are running the workflow on an High-Performance Compute (HPC) cluster, you will first need to update the configuration settings in `config.cluster.yaml`. Update the account, partition, email, and chdir fields to match the information of your institutions cluster.
+
+Next, identify the name of the configuration file you would like to run by editing the `run_slurm.sh` script. The default value is the `--configfile config/config.default.yaml`.
+
+To run, open a terminal within a login node of your cluster and run the script included in the `workflow` directory:
+
+```bash
+bash run_slurm.sh
+```
+
+We have included settings in the Snakemake workflow to dynamically request reasources from an HPC cluster based on the size of the pypsa-usa model you decide to run. To modify these resource selections checkout the `memory` and `threads` fields in individual snakemake rules.
 
 ## Examine Results
 

@@ -7,8 +7,6 @@
 
 PyPSA-USA is an open-source energy system dataset of the United States energy system with continental US coverage.
 
-You're might be here because you are interested in running planning or operations models of the United States energy system. You also might be asking yourself- "why would I want to use PyPSA-USA instead of the plethora of other energy system models available?"
-
 PyPSA-USA provides you with a toolkit to customize the **data** of energy system model with ease. Through configuration file you can control the spatial, temporal, and operational resolution of your energy system model with access to cleaned and prepared historical and forecasted data. This means, you can build a model of **ERCOT, WECC, or the Eastern interconnection**, where the transmission network is clustered to **N# of user defined nodes**, which can respect the boundaries of **balancing areas, states, or REeDs GIS Shapes**, using **historical EIA-930 demand data years 2018-2023** OR **NREL EFS forcasted demand [2030, 2040, 2050]**, with **historical daily/monthly fuel prices from ISOs/EIA [choice of year]**, AND imported capital cost projections from the **NREL Annual Technology Baseline**.
 
 You can create data model- and export to use in your own homebrewed optimization model via csv tables, or xarray netCDF model.
