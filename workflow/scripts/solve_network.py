@@ -443,7 +443,6 @@ def add_interface_limits(n, sns, config):
     limits = pd.concat([limits, user_limits])
 
     lines_s = n.model["Line-s"]
-    links_p = n.model["Link-p"]
 
     for idx, interface in limits.iterrows():
         regions_list_r = [region.strip() for region in interface.r.split(",")]
@@ -471,13 +470,14 @@ def add_interface_limits(n, sns, config):
         line_flows = lines_s.loc[:, interface_lines_b1.index].sum(
             dims="Line",
         ) - lines_s.loc[:, interface_lines_b0.index].sum(dims="Line")
-        link_flows = links_p.loc[:, interface_links_b1.index].sum(
-            dims="Link",
-        ) - links_p.loc[:, interface_links_b0.index].sum(dims="Link")
 
-        lhs = (
-            line_flows + link_flows if "RESOLVE" in interface.interface else line_flows
-        )
+        lhs = line_flows
+
+        if not (pd.concat([interface_links_b0, interface_links_b1]).empty) and "RESOLVE" in interface.interface:
+            link_flows = n.model["Link-p"].loc[:, interface_links_b1.index].sum(
+                dims="Link",
+            ) - n.model["Link-p"].loc[:, interface_links_b0.index].sum(dims="Link")
+            lhs += link_flows
 
         rhs_pos = interface.MW_f0 * -1
         n.model.add_constraints(lhs >= rhs_pos, name=f"ITL_{interface.interface}_pos")
