@@ -48,8 +48,7 @@ import cartopy.io.shapereader as shpreader
 import geopandas as gpd
 import matplotlib.pyplot as plt
 import pandas as pd
-from _helpers import configure_logging
-from _helpers import mock_snakemake
+from _helpers import configure_logging, mock_snakemake
 from constants import *
 from shapely.geometry import MultiPolygon
 
@@ -156,6 +155,11 @@ def load_ba_shape(ba_file: str) -> gpd.GeoDataFrame:
 def load_reeds_shape(reeds_shapes: str) -> gpd.GeoDataFrame:
     gdf = gpd.read_file(reeds_shapes)
     gdf = gdf.rename(columns={"rb": "name", "BA_Code": "reeds_ba"})
+    return gdf.to_crs(4326)
+
+
+def load_counties_shape(shp_file: str) -> gpd.GeoDataFrame:
+    gdf = gpd.read_file(shp_file)
     return gdf.to_crs(4326)
 
 
@@ -282,21 +286,12 @@ def main(snakemake):
     gdf_na = load_na_shapes()
     gdf_na = gdf_na.query("name not in ['Alaska', 'Hawaii']")
 
-    # Load NERC Shapes
-    gdf_nerc = gpd.read_file(snakemake.input.nerc_shapes)
-
     # Build State Shapes filtered by interconnect
     if interconnect == "western":  # filter states that have any portion in interconnect
         gdf_states = filter_shapes(
             data=gdf_na,
             zones=breakthrough_zones,
             interconnect=interconnect,
-            # add_regions=
-            # [
-            #     "Baja California",
-            #     "British Columbia",
-            #     "Alberta"
-            # ],
         )
     elif interconnect == "texas":
         gdf_states = filter_shapes(
@@ -309,34 +304,12 @@ def main(snakemake):
             data=gdf_na,
             zones=breakthrough_zones,
             interconnect=interconnect,
-            # add_regions=[
-            #     "Saskatchewan",
-            #     "Manitoba",
-            #     "Ontario",
-            #     "Quebec",
-            #     "New Brunswick",
-            #     "Nova Scotia",
-            # ],
         )
-    else:  # Entire US + MX + CA
-        gdf_states = filter_shapes(
-            data=gdf_na,
-            zones=breakthrough_zones,
-            interconnect=interconnect,
-            # add_regions=[
-            #     "Baja California",
-            #     "British Columbia",
-            #     "Alberta",
-            #     "Saskatchewan",
-            #     "Manitoba",
-            #     "Ontario",
-            #     "Quebec",
-            #     "New Brunswick",
-            #     "Nova Scotia",
-            # ],
-        )
+    else:
+        raise NotImplementedError
 
     # Trim gdf_states to only include portions of texas in NERC Interconnect
+    gdf_nerc = gpd.read_file(snakemake.input.nerc_shapes)
     gdf_states = trim_states_to_interconnect(gdf_states, gdf_nerc, interconnect)
 
     # Save NERC Interconnection shapes
@@ -385,6 +358,11 @@ def main(snakemake):
         reeds_exclusion,
     )
     gdf_reeds.to_file(snakemake.output.reeds_shapes)
+
+    # read county shapes
+    # takes ~10min to trim shap to interconnect, so skipping
+    gdf_counties = load_counties_shape(snakemake.input.county_shapes)
+    gdf_counties.to_file(snakemake.output.county_shapes)
 
     # Load and build offshore shapes
     offshore_config = snakemake.params.source_offshore_shapes["use"]

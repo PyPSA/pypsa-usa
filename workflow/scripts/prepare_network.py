@@ -106,7 +106,6 @@ def add_co2limit(n, co2limit, Nyears=1.0):
         constant=co2limit * Nyears,
     )
 
-
 def add_gaslimit(n, gaslimit, Nyears=1.0):
     sel = n.carriers.index.intersection(["OCGT", "CCGT", "CHP"])
     n.carriers.loc[sel, "gas_usage"] = 1.0

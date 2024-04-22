@@ -1,36 +1,33 @@
 import logging
 from collections import OrderedDict
+from pathlib import Path
 
+import geopandas as gpd
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 import pypsa
 import seaborn as sns
-from pathlib import Path
-import geopandas as gpd
-import numpy as np
 
 logger = logging.getLogger(__name__)
 from _helpers import configure_logging
 from constants import EIA_930_REGION_MAPPER, EIA_BA_2_REGION, STATE_2_CODE
 from eia import Emissions
-
-from summary import get_node_emissions_timeseries
-
-from plot_statistics import (
-    plot_region_lmps,
-    plot_capacity_factor_heatmap,
-    plot_curtailment_heatmap,
-    plot_generator_data_panel,
-    plot_regional_emissions_bar,
-    plot_california_emissions,
-)
-
 from plot_network_maps import (
-    plot_capacity_map,
     create_title,
     get_bus_scale,
     get_line_scale,
+    plot_capacity_map,
 )
+from plot_statistics import (
+    plot_california_emissions,
+    plot_capacity_factor_heatmap,
+    plot_curtailment_heatmap,
+    plot_generator_data_panel,
+    plot_region_lmps,
+    plot_regional_emissions_bar,
+)
+from summary import get_node_emissions_timeseries
 
 sns.set_theme("paper", style="whitegrid")
 
@@ -59,6 +56,7 @@ GE_carrier_names = {
     "UNK": "Unknown",
     "OTH": "Other",
 }
+
 
 def add_missing_carriers(df1, df2):
     # Create new columns for historic for missing carriers in optimized
@@ -156,7 +154,6 @@ def plot_bar_carrier_production(
     ax.set_title(create_title("Electricity Production by Carriers", **wildcards))
     ax.grid(axis="y")
     fig.savefig(save_path)
-
 
 
 def create_optimized_by_carrier(n, order, region_buses=None):
