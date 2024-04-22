@@ -55,3 +55,9 @@ and the non-free, commercial software (for some of which free academic licenses 
 
 - [Gurobi](https://www.gurobi.com/documentation/quickstart.html)
 - [CPLEX](https://www.ibm.com/products/ilog-cplex-optimization-studio)
+
+## Step 5: Get an EIA API Key
+
+The pypsa-usa workflow leverages the EIA API in several steps. The default configuration activates dynamic fuel-cost prices, which requires EIA API key. You can quickly get your key by completing this [form](https://www.eia.gov/opendata/register.php). 
+
+The API key will be emailed to you, and you can copy the key into the `config.api.yaml` file.
