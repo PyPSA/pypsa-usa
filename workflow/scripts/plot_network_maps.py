@@ -208,6 +208,9 @@ def plot_capacity_map(
     bus_scale=1,
     line_scale=1,
     title=None,
+    flow=None,
+    line_colors="teal",
+    link_colors="green",
 ) -> tuple[plt.figure, plt.axes]:
     """
     Generic network plotting function for capacity pie charts at each node.
@@ -228,10 +231,12 @@ def plot_capacity_map(
             bus_alpha=0.7,
             line_widths=line_width,
             link_widths=0 if link_width.empty else link_width,
-            line_colors="teal",
+            line_colors=line_colors,
+            link_colors=link_colors,
             ax=ax,
             margin=0.2,
             color_geomap=None,
+            flow=flow,
         )
 
     # onshore regions

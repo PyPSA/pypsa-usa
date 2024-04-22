@@ -1,0 +1,134 @@
+
+countries: [US]
+
+network_configuration: "pypsa-usa" # "pypsa-usa" or "ads2032"
+
+
+# docs :
+renewable:
+  onwind:
+    cutout: era5_2019
+    resource:
+      method: wind
+      turbine: Vestas_V112_3MW
+      add_cutout_windspeed: true
+    capacity_per_sqkm: 3 # conservative, ScholzPhd Tab 4.3.1: 10MW/km^2
+    correction_factor: 1 # 0.93
+    corine:
+      #all keys labeled corrine are actually copernicus codes. Using the name corrine bc using the pypsa-eur convention: https://land.copernicus.eu/global/sites/cgls.vito.be/files/products/CGLOPS1_PUM_LC100m-V3_I3.4.pdf
+      grid_codes: [20, 30, 40, 60, 100, 112, 113, 114, 115]
+      distance: 10 #buffer from distance_grid_codes that are to be excluded
+      distance_grid_codes: [50]
+    natura: true
+    cec: true
+    potential: conservative # simple or conservative
+    clip_p_max_pu: 1.e-2
+    extendable: true
+  offwind:
+    cutout: era5_2019
+    resource:
+      method: wind
+      turbine: NREL_ReferenceTurbine_2020ATB_5.5MW
+      # add_cutout_windspeed: true
+    capacity_per_sqkm: 3 # 2021–2022 Transmission Plan, CAISO
+    correction_factor: 1 # 0.8855 # proxy for wake losses, from 10.1016/j.energy.2018.08.153
+    corine:
+      grid_codes: [80, 200] #page 28 of https://land.copernicus.eu/global/sites/cgls.vito.be/files/products/CGLOPS1_PUM_LC100m-V3_I3.4.pdf
+    natura: true
+    boem_screen: true
+    max_depth: 60 # meters, ref https://www.nrel.gov/docs/fy16osti/66599.pdf
+    min_shore_distance: 22000 # meters
+    max_shore_distance: 65000 # meters
+    potential: conservative # simple or conservative
+    clip_p_max_pu: 1.e-2
+    extendable: true
+  offwind_floating:
+    cutout: era5_2019
+    resource:
+      method: wind
+      turbine: NREL_ReferenceTurbine_2020ATB_15MW_offshore
+      add_cutout_windspeed: true
+    capacity_per_sqkm: 3 # 2021–2022 Transmission Plan, CAISO
+    correction_factor: 1 # 0.8855 # proxy for wake losses, from 10.1016/j.energy.2018.08.153
+    corine:
+      grid_codes: [80, 200] #page 28 of https://land.copernicus.eu/global/sites/cgls.vito.be/files/products/CGLOPS1_PUM_LC100m-V3_I3.4.pdf
+    natura: true
+    boem_screen: true
+    min_depth: 60 # meters, ref https://www.nrel.gov/docs/fy16osti/66599.pdf
+    max_depth: 1300 # meters, ref https://www.nrel.gov/docs/fy22osti/83650.pdf
+    min_shore_distance: 22000 # meters
+    max_shore_distance: 65000 # meters
+    potential: conservative # simple or conservative
+    clip_p_max_pu: 1.e-2
+    extendable: true
+  solar:
+    cutout: era5_2019
+    resource:
+      method: pv
+      panel: CSi
+      orientation: latitude_optimal # will lead into optimal
+    capacity_per_sqkm: 4.6 # From 1.7 to 4.6 addresses issue #361 - TODO revisit this assumption
+    correction_factor: 1 # 0.854337
+    corine:
+      grid_codes: [20, 30, 40, 60, 90, 100] #see above for codes
+    natura: true
+    cec: true
+    potential: conservative # simple or conservative
+    clip_p_max_pu: 1.e-2
+    extendable: true
+  hydro:
+    cutout: era5_2019
+    carriers: [ror, PHS, hydro]
+    PHS_max_hours: 6
+    resource:
+      method: hydro
+      hydrobasins: resources/hybas_na_lev06_v1c.shp
+      flowspeed: 1.0  # m/s
+    hydro_max_hours: "energy_capacity_totals_by_country"  # not active
+    clip_min_inflow: 1.0
+    extendable: true
+    normalization:
+      method: hydro_capacities
+      year: 2013
+    multiplier: 1.1  # multiplier applied after the normalization of the hydro production; default 1.0
+
+
+# docs :
+atlite:
+  default_cutout: era5_2019
+  nprocesses: 8
+  show_progress: false # false saves time
+  cutouts:
+    era5_2019:
+      module: era5 # in priority order
+      time: ['2019', '2019']
+  interconnects:
+    western:
+      x: [-126, -99]
+      y: [27, 50]
+      dx: 0.3
+      dy: 0.3
+    eastern:
+      x: [-109, -65]
+      y: [23, 50]
+      dx: 0.3
+      dy: 0.3
+    texas:
+      x: [-110, -90]
+      y: [24, 37]
+      dx: 0.3
+      dy: 0.3
+    usa:
+      x: [-126, -65]
+      y: [23, 50]
+      dx: 0.3
+      dy: 0.3
+
+
+# docs :
+offshore_shape:
+  use: eez #options are ca_osw, eez
+
+offshore_network:
+  enable: true # set to true to enable offshore network
+  bus_spacing: 25000 # km

@@ -477,7 +477,7 @@ if __name__ == "__main__":
             gens = n.generators.query("carrier == @c")
             low = gens.efficiency.quantile(0.10)
             high = gens.efficiency.quantile(0.90)
-            if low >= high:
+            if low >= high or low.round(2) == high.round(2):
                 carriers += [c]
             else:
                 labels = ["low", "medium", "high"]
@@ -487,7 +487,9 @@ if __name__ == "__main__":
                     labels=labels,
                 ).astype(str)
                 carriers += [f"{c} {label} efficiency" for label in labels]
-                n.generators.carrier.update(gens.carrier + " " + suffix + " efficiency")
+                n.generators.update(
+                    {"carrier": gens.carrier + " " + suffix + " efficiency"},
+                )
         aggregate_carriers = carriers
 
     if n_clusters == len(n.buses):

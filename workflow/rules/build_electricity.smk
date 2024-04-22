@@ -32,6 +32,7 @@ rule build_shapes:
 rule build_base_network:
     params:
         build_offshore_network=config["offshore_network"],
+        links=config["links"],
     input:
         buses=DATA + "breakthrough_network/base_grid/bus.csv",
         lines=DATA + "breakthrough_network/base_grid/branch.csv",
@@ -42,6 +43,7 @@ rule build_base_network:
         offshore_shapes=RESOURCES + "{interconnect}/offshore_shapes.geojson",
         state_shapes=RESOURCES + "{interconnect}/state_boundaries.geojson",
         reeds_shapes=RESOURCES + "{interconnect}/reeds_shapes.geojson",
+        reeds_memberships="repo_data/ReEDS_Constraints/membership.csv",
         county_shapes=RESOURCES + "{interconnect}/county_shapes.geojson",
     output:
         bus2sub=DATA + "breakthrough_network/base_grid/{interconnect}/bus2sub.csv",
@@ -233,7 +235,7 @@ rule build_demand:
         eia_api=config["api"]["eia"],
     input:
         base_network=RESOURCES + "{interconnect}/elec_base_network.nc",
-        eia=DATA + "GridEmissions/EIA_DMD_2018_2024.csv",
+        eia=expand(DATA + "GridEmissions/{file}", file=DATAFILES_GE),
         efs=DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv",
     output:
         demand=RESOURCES + "{interconnect}/demand.csv",
@@ -320,7 +322,7 @@ rule add_electricity:
         base_network=RESOURCES + "{interconnect}/elec_base_network.nc",
         tech_costs=RESOURCES + f"costs_{config['costs']['year']}.csv",
         regions=RESOURCES + "{interconnect}/regions_onshore.geojson",
-        plants_eia="repo_data/plants/eia860_ads_merged.csv",
+        plants_eia="repo_data/plants/plants_merged.csv",
         plants_ads="repo_data/plants/ads_plants_locs.csv",
         plants_breakthrough=DATA + "breakthrough_network/base_grid/plant.csv",
         hydro_breakthrough=DATA + "breakthrough_network/base_grid/hydro.csv",

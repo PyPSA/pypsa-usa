@@ -811,7 +811,7 @@ if __name__ == "__main__":
 
     elif demand_profile == "eia":
         assert profile_year in range(2018, 2023, 1)
-        reader = ReadEia(snakemake.input.eia)
+        reader = ReadEia(snakemake.input.eia[0])
         sns = n.snapshots
 
     else:

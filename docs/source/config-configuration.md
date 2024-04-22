@@ -1,32 +1,6 @@
 (config)=
 # Configuration
 
-(network_cf)=
-## Pre-set Configuration Options
-
-## `network_configuration`
-
-The `network_configuration` option accepts 2 values: `pypsa-usa` and `ads2032` Each cooresponds to a different combiation of input datasources for the generators, demand data, and generation timeseries for renewable generators. The public version of the WECC ADS PCM does not include data on the transmission network, but does provide detailed information on generators. For this reason the WECC ADS generators are superimposed on the TAMU/BE network.
-
-Most users will leave this as `pypsa-usa`.
-
-| Configuration Options: | PyPSA-USA | ADS2032(lite) |
-|:----------:|:----------:|:----------:|
-| Transmission | TAMU/BE | TAMU/BE |
-| Thermal Generators | EIA860, WECC-ADS | WECC-ADS |
-| Renewable Time-Series | Atlite | WECC-ADS |
-| Hydro Time-Series | Breakthrough (temp) | WECC-ADS |
-| Demand | EIA930 | WECC-ADS |
-| Historical Demand | 2019-2023 | - |
-| Future Demand | NREL EFS | WECC ADS 2032 |
-| Interconnections Supported | western, texas, eastern, usa | WECC |
-| Capital Costs | NREL-ATB | NREL-ATB |
-| Fuel Costs | CAISO/EIA | CAISO/EIA |
-| Purpose[^+] | CEM, PCS | PCS |
-
-[^+]: CEM = Capacity Expansion Model, PCS = Production Cost Simulation
-
-
 (run_cf)=
 ## `run`
 
@@ -86,7 +60,7 @@ Specifies the temporal range to build an energy system model for as arguments to
 Define and specify the `atlite.Cutout` used for calculating renewable potentials and time-series. All options except for `features` are directly used as [`cutout parameters`](https://atlite.readthedocs.io/en/latest/ref_api.html#cutout)
 
 ```{eval-rst}
-.. literalinclude:: ../../workflow/config/config.default.yaml
+.. literalinclude:: ../../workflow/config/config.common.yaml
    :language: yaml
    :start-at: atlite:
    :end-before: # docs
@@ -127,7 +101,7 @@ If using the `{opts}` wildcard to reduce emissions, the user must put in a `co2b
 
 ### `solar`
 ```{eval-rst}
-.. literalinclude:: ../../workflow/config/config.default.yaml
+.. literalinclude:: ../../workflow/config/config.common.yaml
    :language: yaml
    :start-at: solar:
    :end-before: # docs :
@@ -140,7 +114,7 @@ If using the `{opts}` wildcard to reduce emissions, the user must put in a `co2b
 
 ### `onwind`
 ```{eval-rst}
-.. literalinclude:: ../../workflow/config/config.default.yaml
+.. literalinclude:: ../../workflow/config/config.common.yaml
    :language: yaml
    :start-at: onwind:
    :end-before: # docs :
