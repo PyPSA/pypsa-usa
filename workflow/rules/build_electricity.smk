@@ -126,28 +126,6 @@ if config["enable"].get("build_cutout", False):
             "../scripts/build_cutout.py"
 
 
-rule build_ship_raster:
-    input:
-        ship_density=DATA + "shipdensity_global.zip",
-        cutouts=expand(
-            "cutouts/" + CDIR + "western_{cutout}.nc",
-            cutout=[
-                config["renewable"][carrier]["cutout"]
-                for carrier in config["electricity"]["renewable_carriers"]
-            ],
-        ),
-    output:
-        RESOURCES + "{interconnect}/shipdensity_raster.tif",
-    log:
-        LOGS + "{interconnect}/build_ship_raster.log",
-    resources:
-        mem_mb=5000,
-    benchmark:
-        BENCHMARKS + "{interconnect}/build_ship_raster"
-    script:
-        "../subworkflows/pypsa-eur/scripts/build_ship_raster.py"
-
-
 rule build_hydro_profiles:
     params:
         hydro=config["renewable"]["hydro"],
@@ -192,11 +170,7 @@ rule build_renewable_profiles:
                 else []
             )
         ),
-        ship_density=lambda w: (
-            RESOURCES + "{interconnect}/shipdensity_raster.tif"
-            if "ship_threshold" in config["renewable"][w.technology].keys()
-            else []
-        ),
+        ship_density=[],
         country_shapes=RESOURCES + "{interconnect}/country_shapes.geojson",
         offshore_shapes=RESOURCES + "{interconnect}/offshore_shapes.geojson",
         cec_onwind="repo_data/CEC_Wind_BaseScreen_epsg3310.tif",
@@ -462,4 +436,4 @@ rule prepare_network:
     log:
         "logs/prepare_network",
     script:
-        "../scripts/subworkflows/pypsa-eur/scripts/prepare_network.py"
+        "../scripts/prepare_network.py"
