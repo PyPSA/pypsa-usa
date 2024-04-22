@@ -266,5 +266,6 @@ TSWLatexianTemp*
 
 # Exceptions to gitignore
 connect.sh
+/workflow/config/config.cluster.yaml
 /workflow/repo_data/dag.png
 !.pre-commit-config.yaml
