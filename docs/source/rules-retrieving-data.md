@@ -72,9 +72,9 @@ Natural Gas infrastructure includes:
 [![URL](https://img.shields.io/badge/URL-Processing_Capacity-blue)](<https://www.eia.gov/naturalgas/ngqs/#?report=RP9&year1=2017&year2=2017&company=Name>)
 
 (retrieve-eia)=
-## Rule `retrieve_eia_data`
+## Rule `retrieve_gridemissions_data`
 ```{eval-rst}
-.. automodule:: retrieve_eia_data
+.. automodule:: retrieve_gridemissions_data
 ```
 
 (retrieve-wecc)=

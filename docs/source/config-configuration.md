@@ -159,20 +159,20 @@ If using the `{opts}` wildcard to reduce emissions, the user must put in a `co2b
    :file: configtables/links.csv
 ```
 
-(load_cf)=
+<!-- (load_cf)=
 ## `load`
 
 ```{eval-rst}
 .. literalinclude:: ../../workflow/repo_data/config/config.default.yaml
    :language: yaml
-   :start-after: load:
+   :start-after: # p_nom_max:
    :end-before: # docs
 
 .. csv-table::
    :header-rows: 1
    :widths: 22,7,22,33
    :file: configtables/load.csv
-```
+``` -->
 
 (costs_cf)=
 ## `costs`
