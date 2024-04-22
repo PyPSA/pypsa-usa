@@ -327,7 +327,7 @@ class ReadEfs(ReadStrategy):
             sys.exit()
 
         logger.info("Building Load Data using EFS demand")
-        return pd.read_csv(self.filepath, engine="pyarrow")
+        return pd.read_csv(self.filepath, engine="pyarrow").round(3)
 
     def _format_data(self, data: pd.DataFrame) -> pd.DataFrame:
         """
@@ -500,7 +500,6 @@ class ReadEulp(ReadStrategy):
             columns="state",
             aggfunc="sum",
         )
-        assert len(df.index.get_level_values("snapshot").unique()) == 8760
         ##################################################################
         ## REMOVE THIS ONCE 2018 CUTOUTS ARE CREATED
         ##################################################################
@@ -511,6 +510,7 @@ class ReadEulp(ReadStrategy):
         ## REMOVE THIS ONCE 2018 CUTOUTS ARE CREATED
         ##################################################################
         df = df.rename(columns=CODE_2_STATE)
+        assert len(df.index.get_level_values("snapshot").unique()) == 8760
         assert not df.empty
         return df
 
@@ -610,6 +610,8 @@ class WriteStrategy(ABC):
         # get zone area demand for specific sector and fuel
         demand = self._filter_demand(df, sector, subsector, fuel, sns)
         demand = self._group_demand(demand)
+        if demand.empty:
+            demand = self._make_empty_demand(columns=df.columns)
 
         # assign buses to dissagregation zone
         dissagregation_zones = self._get_load_dissagregation_zones(zone)
@@ -776,6 +778,13 @@ class WriteStrategy(ABC):
         n = self.n
         return n.buses.reeds_zone
 
+    def _make_empty_demand(self, columns: list[str]) -> pd.DataFrame:
+        """
+        Make a demand dataframe with zeros.
+        """
+        n = self.n
+        return pd.DataFrame(columns=columns, index=n.snapshots).fillna(0)
+
 
 class WritePopulation(WriteStrategy):
     """
@@ -885,8 +894,8 @@ if __name__ == "__main__":
 
         snakemake = mock_snakemake(
             "build_sector_demand",
-            interconnect="texas",
-            end_use="residential",
+            interconnect="western",
+            end_use="transport",
         )
     configure_logging(snakemake)
 

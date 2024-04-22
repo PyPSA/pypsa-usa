@@ -227,9 +227,10 @@ rule build_renewable_profiles:
 
 
 # eastern broken out just to aviod awful formatting issues
+# texas in western due to spillover of interconnect
 INTERCONNECT_2_STATE = {
     "eastern": ["AL", "AR", "CT", "DE", "DC", "FL", "GA", "IL", "IN", "IA", "KS", "KY"],
-    "western": ["AZ", "CA", "CO", "ID", "MT", "NV", "NM", "OR", "UT", "WA", "WY"],
+    "western": ["AZ", "CA", "CO", "ID", "MT", "NV", "NM", "OR", "UT", "WA", "WY", "TX"],
     "texas": ["TX"],
 }
 INTERCONNECT_2_STATE["eastern"].extend(["LA", "ME", "MD", "MA", "MI", "MN", "MS", "MO"])
