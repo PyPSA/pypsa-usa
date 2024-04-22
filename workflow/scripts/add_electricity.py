@@ -1060,10 +1060,12 @@ def apply_seasonal_capacity_derates(
 
     p_max_pu = pd.DataFrame(1.0, index=sns, columns=conv_gens.index)
     p_max_pu.loc[summer_sns, conv_gens.index] *= conv_plants.loc[
-        :, "summer_derate"
+        :,
+        "summer_derate",
     ].astype(float)
     p_max_pu.loc[winter_sns, conv_gens.index] *= conv_plants.loc[
-        :, "winter_derate"
+        :,
+        "winter_derate",
     ].astype(float)
     n.generators_t.p_max_pu = pd.concat([n.generators_t.p_max_pu, p_max_pu], axis=1)
 
@@ -1072,7 +1074,7 @@ def apply_seasonal_capacity_derates(
     must_run.loc[:, "minimum_load_mw"] = must_run.minimum_load_mw.astype(float)
     must_run.loc[:, "minimum_cf"] = must_run.minimum_load_mw / must_run.p_nom
     must_run.loc[:, "minimum_cf"] = must_run.minimum_cf.clip(
-        upper=np.minimum(must_run.summer_derate, must_run.winter_derate)
+        upper=np.minimum(must_run.summer_derate, must_run.winter_derate),
     )
 
     p_min_pu = pd.DataFrame(1.0, index=sns, columns=must_run.index)
