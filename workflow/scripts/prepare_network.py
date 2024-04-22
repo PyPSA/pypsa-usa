@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # SPDX-FileCopyrightText: : 2017-2024 The PyPSA-Eur Authors
 #
 # SPDX-License-Identifier: MIT
@@ -222,7 +221,7 @@ def apply_time_segmentation(n, segments, solver_name="cbc"):
         import tsam.timeseriesaggregation as tsam
     except ImportError:
         raise ModuleNotFoundError(
-            "Optional dependency 'tsam' not found." "Install via 'pip install tsam'"
+            "Optional dependency 'tsam' not found." "Install via 'pip install tsam'",
         )
 
     p_max_pu_norm = n.generators_t.p_max_pu.max()
@@ -253,7 +252,10 @@ def apply_time_segmentation(n, segments, solver_name="cbc"):
 
     n.set_snapshots(pd.DatetimeIndex(snapshots, name="name"))
     n.snapshot_weightings = pd.Series(
-        weightings, index=snapshots, name="weightings", dtype="float64"
+        weightings,
+        index=snapshots,
+        name="weightings",
+        dtype="float64",
     )
 
     segmented.index = snapshots
@@ -304,7 +306,11 @@ if __name__ == "__main__":
         from _helpers import mock_snakemake
 
         snakemake = mock_snakemake(
-            "prepare_network", simpl="", clusters="37", ll="v1.0", opts="Co2L-4H"
+            "prepare_network",
+            simpl="",
+            clusters="37",
+            ll="v1.0",
+            opts="Co2L-4H",
         )
     configure_logging(snakemake)
     set_scenario_config(snakemake)
@@ -344,12 +350,13 @@ if __name__ == "__main__":
     emission_prices = snakemake.params.costs["emission_prices"]
     if emission_prices["co2_monthly_prices"]:
         logger.info(
-            "Setting time dependent emission prices according spot market price"
+            "Setting time dependent emission prices according spot market price",
         )
         add_dynamic_emission_prices(n)
     elif emission_prices["enable"]:
         add_emission_prices(
-            n, dict(co2=snakemake.params.costs["emission_prices"]["co2"])
+            n,
+            dict(co2=snakemake.params.costs["emission_prices"]["co2"]),
         )
 
     ll_type, factor = snakemake.wildcards.ll[0], snakemake.wildcards.ll[1:]

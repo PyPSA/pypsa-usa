@@ -11,8 +11,7 @@ from functools import reduce
 import numpy as np
 import pandas as pd
 import pypsa
-from _helpers import configure_logging
-from _helpers import export_network_for_gis_mapping
+from _helpers import configure_logging, export_network_for_gis_mapping
 from pypsa.clustering.spatial import get_clustering_from_busmap
 
 logger = logging.getLogger(__name__)
@@ -173,7 +172,17 @@ def aggregate_to_substations(
     network_s.lines["type"] = np.nan
 
     if aggregation_zones != "reeds_zone":
-        cols2drop = ["balancing_area", "state", "substation_off", "sub_id", "reeds_zone", "reeds_ba", "nerc_reg", "trans_reg", "reeds_state"]
+        cols2drop = [
+            "balancing_area",
+            "state",
+            "substation_off",
+            "sub_id",
+            "reeds_zone",
+            "reeds_ba",
+            "nerc_reg",
+            "trans_reg",
+            "reeds_state",
+        ]
     else:
         cols2drop = ["balancing_area", "substation_off", "sub_id", "state"]
 

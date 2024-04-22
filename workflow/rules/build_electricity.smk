@@ -12,12 +12,14 @@ rule build_shapes:
         onshore_shapes="repo_data/BA_shapes_new/Modified_BE_BA_Shapes.shp",
         offshore_shapes_ca_osw="repo_data/BOEM_CA_OSW_GIS/CA_OSW_BOEM_CallAreas.shp",
         offshore_shapes_eez=DATA + "eez/conus_eez.shp",
+        county_shapes=DATA + "counties/cb_2020_us_county_500k.shp",
     output:
         country_shapes=RESOURCES + "{interconnect}/country_shapes.geojson",
         onshore_shapes=RESOURCES + "{interconnect}/onshore_shapes.geojson",
         offshore_shapes=RESOURCES + "{interconnect}/offshore_shapes.geojson",
         state_shapes=RESOURCES + "{interconnect}/state_boundaries.geojson",
         reeds_shapes=RESOURCES + "{interconnect}/reeds_shapes.geojson",
+        county_shapes=RESOURCES + "{interconnect}/county_shapes.geojson",
     log:
         "logs/build_shapes/{interconnect}.log",
     threads: 1
@@ -42,6 +44,7 @@ rule build_base_network:
         state_shapes=RESOURCES + "{interconnect}/state_boundaries.geojson",
         reeds_shapes=RESOURCES + "{interconnect}/reeds_shapes.geojson",
         reeds_memberships="repo_data/ReEDS_Constraints/membership.csv"
+        county_shapes=RESOURCES + "{interconnect}/county_shapes.geojson",
     output:
         bus2sub=DATA + "breakthrough_network/base_grid/{interconnect}/bus2sub.csv",
         sub=DATA + "breakthrough_network/base_grid/{interconnect}/sub.csv",
@@ -227,19 +230,11 @@ rule build_renewable_profiles:
 rule build_demand:
     params:
         planning_horizons=config["scenario"]["planning_horizons"],
+        demand_params=config["electricity"]["demand"],
         snapshots=config["snapshots"],
+        eia_api=config["api"]["eia"],
     input:
         base_network=RESOURCES + "{interconnect}/elec_base_network.nc",
-        ads_renewables=(
-            DATA + "WECC_ADS/processed/"
-            if config["network_configuration"] == "ads2032"
-            else []
-        ),
-        ads_2032=(
-            DATA + "WECC_ADS/downloads/2032/Public Data/Hourly Profiles in CSV format"
-            if config["network_configuration"] == "ads2032"
-            else []
-        ),
         eia=expand(DATA + "GridEmissions/{file}", file=DATAFILES_GE),
         efs=DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv",
     output:
@@ -299,7 +294,6 @@ def dynamic_fuel_price_files(wildcards):
 rule add_electricity:
     params:
         length_factor=config["lines"]["length_factor"],
-        scaling_factor=config["load"]["scaling_factor"],
         countries=config["countries"],
         renewable=config["renewable"],
         electricity=config["electricity"],

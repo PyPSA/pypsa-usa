@@ -25,6 +25,7 @@ import requests
 
 logger = logging.getLogger(__name__)
 
+
 def download_and_extract(url, extract_path):
     # Get the file name from the URL
     filename = url.split("/")[-1]
@@ -55,7 +56,7 @@ def download_and_extract(url, extract_path):
     print(f"File extracted to {extract_path}")
 
 
-def prepare_historical_data(PATH_DOWNLOAD: str, suffix: str = 'elec') -> None:
+def prepare_historical_data(PATH_DOWNLOAD: str, suffix: str = "elec") -> None:
     """
     Combines and filters Data Files from GridEmissions files.
 
@@ -70,6 +71,7 @@ def prepare_historical_data(PATH_DOWNLOAD: str, suffix: str = 'elec') -> None:
     df["period"] = pd.to_datetime(df["period"])
     df.sort_values(by="period", inplace=True)
     return df
+
 
 def filter_demand_data(df: pd.DataFrame) -> pd.DataFrame:
     pattern = (
@@ -98,15 +100,17 @@ if __name__ == "__main__":
 
         snakemake = mock_snakemake("retrieve_eia_data")
 
-    grid_emissions_data_url = "https://gridemissions.s3.us-east-2.amazonaws.com/processed.tar.gz"
+    grid_emissions_data_url = (
+        "https://gridemissions.s3.us-east-2.amazonaws.com/processed.tar.gz"
+    )
 
     PATH_DOWNLOAD = Path(f"data/GridEmissions")
     PATH_DOWNLOAD.mkdir(parents=True, exist_ok=True)
     download_and_extract(grid_emissions_data_url, PATH_DOWNLOAD)
-    df_elec = prepare_historical_data(PATH_DOWNLOAD, suffix='elec')
+    df_elec = prepare_historical_data(PATH_DOWNLOAD, suffix="elec")
     df_demand = filter_demand_data(df_elec)
 
-    df_co2 = prepare_historical_data(PATH_DOWNLOAD, suffix='co2')
+    df_co2 = prepare_historical_data(PATH_DOWNLOAD, suffix="co2")
 
     df_demand.to_csv(f"{snakemake.output[0]}")
     df_elec.to_csv(f"{snakemake.output[1]}")

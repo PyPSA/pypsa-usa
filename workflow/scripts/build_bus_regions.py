@@ -31,8 +31,7 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 import pypsa
-from _helpers import configure_logging
-from _helpers import REGION_COLS
+from _helpers import REGION_COLS, configure_logging
 from scipy.spatial import Voronoi
 from shapely.geometry import Polygon
 

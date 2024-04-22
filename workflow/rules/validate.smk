@@ -7,8 +7,8 @@ rule plot_validation_figures:
         network=RESULTS
         + "{interconnect}/networks/elec_s_{clusters}_ec_l{ll}_{opts}_{sector}_operations.nc",
         demand_ge=DATA + "GridEmissions/EIA_DMD_2018_2024.csv",
-        ge_all=DATA +"GridEmissions/EIA_GridEmissions_all_2018_2024.csv",
-        ge_co2 = DATA + "GridEmissions/GridEmissions_co2_2018_2024.csv",
+        ge_all=DATA + "GridEmissions/EIA_GridEmissions_all_2018_2024.csv",
+        ge_co2=DATA + "GridEmissions/GridEmissions_co2_2018_2024.csv",
         regions_onshore=RESOURCES
         + "{interconnect}/regions_onshore_s_{clusters}.geojson",
         regions_offshore=RESOURCES

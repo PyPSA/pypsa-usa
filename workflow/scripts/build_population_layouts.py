@@ -44,15 +44,16 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-from _helpers import mock_snakemake, configure_logging
+from pathlib import Path
+
 import atlite
+import constants
 import geopandas as gpd
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import xarray as xr
-import matplotlib.pyplot as plt
-import constants
-from pathlib import Path
+from _helpers import configure_logging, mock_snakemake
 
 
 def load_urban_ratio(df: pd.DataFrame) -> pd.DataFrame:

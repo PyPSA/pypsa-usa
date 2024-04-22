@@ -1,36 +1,33 @@
 import logging
 from collections import OrderedDict
+from pathlib import Path
 
+import geopandas as gpd
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 import pypsa
 import seaborn as sns
-from pathlib import Path
-import geopandas as gpd
-import numpy as np
 
 logger = logging.getLogger(__name__)
 from _helpers import configure_logging
 from constants import EIA_930_REGION_MAPPER, EIA_BA_2_REGION, STATE_2_CODE
 from eia import Emissions
-
-from summary import get_node_emissions_timeseries
-
-from plot_statistics import (
-    plot_region_lmps,
-    plot_capacity_factor_heatmap,
-    plot_curtailment_heatmap,
-    plot_generator_data_panel,
-    plot_regional_emissions_bar,
-    plot_california_emissions,
-)
-
 from plot_network_maps import (
-    plot_capacity_map,
     create_title,
     get_bus_scale,
     get_line_scale,
+    plot_capacity_map,
 )
+from plot_statistics import (
+    plot_california_emissions,
+    plot_capacity_factor_heatmap,
+    plot_curtailment_heatmap,
+    plot_generator_data_panel,
+    plot_region_lmps,
+    plot_regional_emissions_bar,
+)
+from summary import get_node_emissions_timeseries
 
 sns.set_theme("paper", style="whitegrid")
 
@@ -60,6 +57,7 @@ GE_carrier_names = {
     "OTH": "Other",
 }
 
+
 def add_missing_carriers(df1, df2):
     # Create new columns for historic for missing carriers in optimized
     for carrier in df1.columns:
@@ -69,6 +67,7 @@ def add_missing_carriers(df1, df2):
         if carrier not in df1.columns:
             df1[carrier] = 0
     return df1, df2
+
 
 def plot_timeseries_comparison(
     historic: pd.DataFrame,
@@ -121,7 +120,9 @@ def plot_timeseries_comparison(
     # Set the limits for the difference subplot
     diff_lim_upper = diff.clip(lower=0).sum(axis=1).max()
     diff_lim_lower = diff.clip(upper=0).sum(axis=1).min()
-    axes[2].set_ylim(bottom=min(lower_lim, diff_lim_lower), top=max(upper_lim,diff_lim_upper) )
+    axes[2].set_ylim(
+        bottom=min(lower_lim, diff_lim_lower), top=max(upper_lim, diff_lim_upper)
+    )
 
     h, l = axes[0].get_legend_handles_labels()
     fig.legend(
@@ -151,12 +152,11 @@ def plot_bar_carrier_production(
     fig, ax = plt.subplots(figsize=(6, 6))
     df = data.T.groupby(level=["Kind", "Carrier"]).sum().T.sum().unstack().T
     df = df / 1e3  # convert to TWh
-    df = df.drop('Unknown', axis=0)
+    df = df.drop("Unknown", axis=0)
     df.plot.barh(ax=ax, xlabel="Electricity Production [TWh]", ylabel="")
     ax.set_title(create_title("Electricity Production by Carriers", **wildcards))
     ax.grid(axis="y")
     fig.savefig(save_path)
-
 
 
 def create_optimized_by_carrier(n, order, region_buses=None):
@@ -168,41 +168,29 @@ def create_optimized_by_carrier(n, order, region_buses=None):
             :,
             n.generators.bus.isin(region_buses),
         ]
-        # bus0 flow (pos if branch is withdrawing from region 0) 
+        # bus0 flow (pos if branch is withdrawing from region 0)
         # Pos = exports from region 0
         # Neg = imports to region 0
-        interface_lines_b0 = n.lines[ 
-            (
-                n.lines.bus0.isin(region_buses)
-                & ~n.lines.bus1.isin(region_buses)
-            )
+        interface_lines_b0 = n.lines[
+            (n.lines.bus0.isin(region_buses) & ~n.lines.bus1.isin(region_buses))
         ]
         interface_links_b0 = n.links[
-            (
-                n.links.bus0.isin(region_buses)
-                & ~n.links.bus1.isin(region_buses)
-            )
+            (n.links.bus0.isin(region_buses) & ~n.links.bus1.isin(region_buses))
         ]
 
         # bus1 branch flow (pos if branch is withdrawing from region 1)
         # Pos = imports to region 0
         # Neg = exports from region 0
         interface_lines_b1 = n.lines[
-            (
-                n.lines.bus1.isin(region_buses)
-                & ~n.lines.bus0.isin(region_buses)
-            )
+            (n.lines.bus1.isin(region_buses) & ~n.lines.bus0.isin(region_buses))
         ]
         interface_links_b1 = n.links[
-            (
-                n.links.bus1.isin(region_buses)
-                & ~n.links.bus0.isin(region_buses)
-            )
+            (n.links.bus1.isin(region_buses) & ~n.links.bus0.isin(region_buses))
         ]
 
         # imports positive, exports negative
-        flows = n.lines_t.p1.loc[:, interface_lines_b0.index].sum(axis=1) 
-        flows += n.lines_t.p0.loc[:, interface_lines_b1.index].sum(axis=1) 
+        flows = n.lines_t.p1.loc[:, interface_lines_b0.index].sum(axis=1)
+        flows += n.lines_t.p0.loc[:, interface_lines_b1.index].sum(axis=1)
         flows += n.links_t.p1.loc[:, interface_links_b0.index].sum(axis=1)
         flows += n.links_t.p0.loc[:, interface_links_b1.index].sum(axis=1)
         imports = flows.apply(lambda x: x if x > 0 else 0)
@@ -218,11 +206,7 @@ def create_optimized_by_carrier(n, order, region_buses=None):
         gen_p = n.generators_t["p"]
         imports = None
 
-    optimized = (
-        gen_p.T.groupby(by=n.generators["carrier"])
-        .sum()
-        .T 
-    )
+    optimized = gen_p.T.groupby(by=n.generators["carrier"]).sum().T
 
     # Combine other carriers into "carrier"
     other_carriers = optimized.columns.difference(EIA_carrier_names.keys())
@@ -244,9 +228,12 @@ def create_optimized_by_carrier(n, order, region_buses=None):
         optimized["exports"] = exports
 
     optimized = optimized.rename(columns=EIA_carrier_names)
-    optimized.loc[:, optimized.columns.str.contains("Load")] /= 1e3 #correct load shedding units
-    
+    optimized.loc[
+        :, optimized.columns.str.contains("Load")
+    ] /= 1e3  # correct load shedding units
+
     return optimized / 1e3
+
 
 def create_historic_region_data(
     n: pypsa.Network,
@@ -254,28 +241,49 @@ def create_historic_region_data(
     ge_interchange: pd.DataFrame,
     region: str,
     emissions: bool = False,
-    ):
+):
     region_mapper = {
-        "reeds_zone": {'BPAT': ['PGE', 'BPAT', 'GRID', 'CHPD', 'DOPD', 'PSEI', 'AVRN','TPWR'],'AZPS': ["AZPS", "SRP","HGMA","DEAA"], 'WALC': ["WALC", "GRIF"], 'NWMT': ["NWMT", "GWA", "WWA"], "CISO": ["CISO","BANC","IID","LDWP","TIDC"]}, 
-        "balancing_area": {'Arizona': ['AZPS', 'SRP'], 'WALC': ["WALC", "GRIF"], 'NWMT': ["NWMT", "GWA", "WWA"]}
+        "reeds_zone": {
+            "BPAT": ["PGE", "BPAT", "GRID", "CHPD", "DOPD", "PSEI", "AVRN", "TPWR"],
+            "AZPS": ["AZPS", "SRP", "HGMA", "DEAA"],
+            "WALC": ["WALC", "GRIF"],
+            "NWMT": ["NWMT", "GWA", "WWA"],
+            "CISO": ["CISO", "BANC", "IID", "LDWP", "TIDC"],
+        },
+        "balancing_area": {
+            "Arizona": ["AZPS", "SRP"],
+            "WALC": ["WALC", "GRIF"],
+            "NWMT": ["NWMT", "GWA", "WWA"],
+        },
     }
 
-    aggregation_zone = snakemake.config["clustering"]["cluster_network"]["aggregation_zones"]
-    regions = region_mapper[aggregation_zone][region] if region in region_mapper[aggregation_zone] else [region]
+    aggregation_zone = snakemake.config["clustering"]["cluster_network"][
+        "aggregation_zones"
+    ]
+    regions = (
+        region_mapper[aggregation_zone][region]
+        if region in region_mapper[aggregation_zone]
+        else [region]
+    )
     historic_region = historic_all_ba.loc[regions].groupby(level=1).sum()
-    
+
     if not emissions:
-        index_split = ge_interchange.index.get_level_values(0).str.split('-')
-        index_split = pd.DataFrame([x for x in ge_interchange.index.get_level_values(0).str.split('-')])
+        index_split = ge_interchange.index.get_level_values(0).str.split("-")
+        index_split = pd.DataFrame(
+            [x for x in ge_interchange.index.get_level_values(0).str.split("-")]
+        )
         from_region = index_split[0].isin(regions)
         to_region = index_split[1].isin(regions)
-        selected_transfers = ge_interchange[ge_interchange.index[from_region & ~to_region]]
+        selected_transfers = ge_interchange[
+            ge_interchange.index[from_region & ~to_region]
+        ]
         selected_transfers = selected_transfers.groupby(level=1).sum()
-        
-        historic_region['imports'] = selected_transfers.clip(upper=0) * -1
-        historic_region['exports'] = selected_transfers.clip(lower=0) * -1
+
+        historic_region["imports"] = selected_transfers.clip(upper=0) * -1
+        historic_region["exports"] = selected_transfers.clip(lower=0) * -1
 
     return historic_region
+
 
 def plot_regional_comparisons(
     n: pypsa.Network,
@@ -292,19 +300,22 @@ def plot_regional_comparisons(
     )
     buses = n.buses.copy()
 
-    if snakemake.config["clustering"]["cluster_network"]["aggregation_zones"] == 'reeds_zone':
+    if (
+        snakemake.config["clustering"]["cluster_network"]["aggregation_zones"]
+        == "reeds_zone"
+    ):
         regions = n.buses.reeds_ba.unique()
         regions = list(OrderedDict.fromkeys(regions))
         buses["region"] = buses.reeds_ba
-    else: # For Balancing Authority Aggregation
+    else:  # For Balancing Authority Aggregation
         regions = n.buses.country.unique()
         regions_clean = [ba.split("-")[0] for ba in regions]
         regions = list(OrderedDict.fromkeys(regions_clean))
         buses["region"] = [ba.split("-")[0] for ba in buses.country]
 
-    historic_all_ba['imports'] = historic_all_ba['Total Interchange'].clip(upper=0) * -1
-    historic_all_ba['exports'] = historic_all_ba['Total Interchange'].clip(lower=0)
-    historic_all_ba = historic_all_ba.drop(columns = ['Total Interchange'])
+    historic_all_ba["imports"] = historic_all_ba["Total Interchange"].clip(upper=0) * -1
+    historic_all_ba["exports"] = historic_all_ba["Total Interchange"].clip(lower=0)
+    historic_all_ba = historic_all_ba.drop(columns=["Total Interchange"])
 
     diff = pd.DataFrame()
     # regions = [ba for ba in regions if ba in ["CISO"]] # Run to only produce ciso
@@ -312,12 +323,12 @@ def plot_regional_comparisons(
         region_buses = buses.query(f"region == '{region}'").index
 
         historic_region = create_historic_region_data(
-            n, 
-            historic_all_ba, 
-            ge_interchange, 
-            region
-            )
-        
+            n,
+            historic_all_ba,
+            ge_interchange,
+            region,
+        )
+
         order = historic_region.columns
         optimized_region = create_optimized_by_carrier(
             n,
@@ -326,7 +337,9 @@ def plot_regional_comparisons(
         )
 
         # Create new columns for historic for missing carriers in optimized
-        historic_region, optimized_region = add_missing_carriers(historic_region, optimized_region)
+        historic_region, optimized_region = add_missing_carriers(
+            historic_region, optimized_region
+        )
 
         # Plot Timeseries Comparison
         plot_timeseries_comparison(
@@ -347,15 +360,15 @@ def plot_regional_comparisons(
     diff.T.plot(kind="barh", stacked=True, ax=ax, color=colors)
     ax.set_xlabel("Production Deviation [TWh]")
     ax.set_ylabel("Region")
-    ax.set_title(create_title("Generation Deviation by Region and Carrier", **wildcards))
+    ax.set_title(
+        create_title("Generation Deviation by Region and Carrier", **wildcards)
+    )
     plt.legend(title="Carrier", bbox_to_anchor=(1.05, 1), loc="upper left")
 
     plt.tight_layout()
     fig.savefig(
         Path(snakemake.output[0]).parents[0] / "production_deviation_by_region.png",
     )
-
-
 
 
 def get_regions(n):
@@ -403,13 +416,18 @@ def plot_load_shedding_map(
     )
     fig.savefig(save)
 
+
 def plot_line_loading_map(
     n: pypsa.Network,
     save: str,
     regions: gpd.GeoDataFrame,
     **wildcards,
 ):
-    gen = n.generators.assign(g=n.generators_t.p.mean()).groupby(["bus", "carrier"]).g.sum()
+    gen = (
+        n.generators.assign(g=n.generators_t.p.mean())
+        .groupby(["bus", "carrier"])
+        .g.sum()
+    )
 
     line_values = 50
 
@@ -421,19 +439,18 @@ def plot_line_loading_map(
 
     fig, _ = plot_capacity_map(
         n=n,
-        bus_values= gen / 5e3,
+        bus_values=gen / 5e3,
         line_values=line_values,
         link_values=n.links.p_nom.replace(to_replace={pd.NA: 0}),
         regions=regions,
         flow="mean",
         line_scale=line_scale,
         bus_scale=bus_scale,
-        line_colors=n.lines_t.p0.max().abs() /n.lines.s_nom,
-        link_colors=n.links_t.p0.max().abs() /n.links.p_nom,
+        line_colors=n.lines_t.p0.max().abs() / n.lines.s_nom,
+        link_colors=n.links_t.p0.max().abs() / n.links.p_nom,
         title=title,
     )
     fig.savefig(save)
-
 
 
 def plot_generator_cost_stack(
@@ -488,6 +505,7 @@ def plot_generator_cost_stack(
     ax.set_title(create_title("Generator Marginal Costs Stack", **wildcards))
     fig.savefig(save)
 
+
 def plot_state_emissions_historical_bar(
     n: pypsa.Network,
     ge_emissions: pd.DataFrame,
@@ -507,12 +525,20 @@ def plot_state_emissions_historical_bar(
 
     if snakemake.params.eia_api:
         if "T" in sectors:
-            historical_emissions.append(Emissions("transport", year, eia_api).get_data())
+            historical_emissions.append(
+                Emissions("transport", year, eia_api).get_data()
+            )
         if "I" in sectors:
-            historical_emissions.append(Emissions("industrial", year, eia_api).get_data())
+            historical_emissions.append(
+                Emissions("industrial", year, eia_api).get_data()
+            )
         if "H" in sectors:
-            historical_emissions.append(Emissions("commercial", year, eia_api).get_data())
-            historical_emissions.append(Emissions("residential", year, eia_api).get_data())
+            historical_emissions.append(
+                Emissions("commercial", year, eia_api).get_data()
+            )
+            historical_emissions.append(
+                Emissions("residential", year, eia_api).get_data()
+            )
         historical_emissions.append(Emissions("power", year, eia_api).get_data())
 
         historical_emissions = pd.concat(historical_emissions)
@@ -526,13 +552,18 @@ def plot_state_emissions_historical_bar(
         get_node_emissions_timeseries(n).T.groupby(n.buses.country).sum().T.sum() / 1e6,
         columns=["Optimized"],
     )
-    
-    region_mapper = n.buses[['country','reeds_state']].drop_duplicates().set_index('country')['reeds_state'].to_dict()
-    optimized['region'] = optimized.index.map(region_mapper)
-    optimized = optimized.groupby('region').sum()
+
+    region_mapper = (
+        n.buses[["country", "reeds_state"]]
+        .drop_duplicates()
+        .set_index("country")["reeds_state"]
+        .to_dict()
+    )
+    optimized["region"] = optimized.index.map(region_mapper)
+    optimized = optimized.groupby("region").sum()
     CODE_2_STATE = {v: k for k, v in STATE_2_CODE.items()}
     optimized.index = optimized.index.map(CODE_2_STATE)
-    optimized.index.name = 'state'
+    optimized.index.name = "state"
 
     optimized.sort_index(inplace=True)
 
@@ -542,7 +573,7 @@ def plot_state_emissions_historical_bar(
     final = pd.melt(final, id_vars=["state"], value_vars=["Optimized", "Historical"])
     final["value"] = final.value.astype("float")
 
-    final = final[~final['state'].str.contains('Texas')]
+    final = final[~final["state"].str.contains("Texas")]
 
     fig, ax = plt.subplots(figsize=(8, 8))
     sns.barplot(
@@ -578,25 +609,42 @@ def plot_ba_emissions_historical_bar(
 
     historical = pd.Series()
     for region in ge_emissions.index.get_level_values(0).unique():
-        region_em = create_historic_region_data(n, ge_emissions, None, region, emissions=True).sum(axis=0)['Net Generation']
+        region_em = create_historic_region_data(
+            n, ge_emissions, None, region, emissions=True
+        ).sum(axis=0)["Net Generation"]
         region_em = region_em.sum() / 1e9
         historical.loc[region] = region_em
-    historical.name = 'Historical'
-    historical = historical[historical.round(3) >0]
+    historical.name = "Historical"
+    historical = historical[historical.round(3) > 0]
 
     optimized = pd.DataFrame(
         get_node_emissions_timeseries(n).T.groupby(n.buses.country).sum().T.sum() / 1e6,
         columns=["Optimized"],
     )
-    
-    if snakemake.config["clustering"]["cluster_network"]["aggregation_zones"] == 'balancing_area':
-        optimized.loc['CISO'] = optimized.loc[['CISO-PGAE', 'CISO-SCE', 'CISO-SDGE', 'CISO-VEA']].sum()
-        optimized.drop(index = ['CISO-PGAE', 'CISO-SCE', 'CISO-SDGE', 'CISO-VEA'], inplace=True)
-    elif snakemake.config["clustering"]["cluster_network"]["aggregation_zones"] == 'reeds_zone':
-        region_mapper = n.buses[['country','reeds_ba']].drop_duplicates().set_index('country')['reeds_ba'].to_dict()
-        optimized['region'] = optimized.index.map(region_mapper)
-        optimized = optimized.groupby('region').sum()
-        optimized.index.name = 'country'
+
+    if (
+        snakemake.config["clustering"]["cluster_network"]["aggregation_zones"]
+        == "balancing_area"
+    ):
+        optimized.loc["CISO"] = optimized.loc[
+            ["CISO-PGAE", "CISO-SCE", "CISO-SDGE", "CISO-VEA"]
+        ].sum()
+        optimized.drop(
+            index=["CISO-PGAE", "CISO-SCE", "CISO-SDGE", "CISO-VEA"], inplace=True
+        )
+    elif (
+        snakemake.config["clustering"]["cluster_network"]["aggregation_zones"]
+        == "reeds_zone"
+    ):
+        region_mapper = (
+            n.buses[["country", "reeds_ba"]]
+            .drop_duplicates()
+            .set_index("country")["reeds_ba"]
+            .to_dict()
+        )
+        optimized["region"] = optimized.index.map(region_mapper)
+        optimized = optimized.groupby("region").sum()
+        optimized.index.name = "country"
 
     optimized.sort_index(inplace=True)
 
@@ -631,37 +679,50 @@ def main(snakemake):
 
     buses = get_regions(n)
 
-    #Load Grid Emissions Electricity Data
+    # Load Grid Emissions Electricity Data
     ge_all = pd.read_csv(snakemake.input.ge_all).drop(columns=["Unnamed: 0"])
     ge_all.period = pd.to_datetime(ge_all.period)
-    ge_all = ge_all.loc[ge_all.period.isin(snapshots),:]
-    ge_all = ge_all.rename(columns=lambda x: x[2:] if x.startswith('E_') else x)
+    ge_all = ge_all.loc[ge_all.period.isin(snapshots), :]
+    ge_all = ge_all.rename(columns=lambda x: x[2:] if x.startswith("E_") else x)
 
     ge_all.set_index("period", inplace=True)
-    ge_all.columns = pd.MultiIndex.from_tuples(ge_all.columns.str.split('_', expand=True).tolist())
+    ge_all.columns = pd.MultiIndex.from_tuples(
+        ge_all.columns.str.split("_", expand=True).tolist()
+    )
     ge_all = ge_all.stack(level=0).swaplevel().sort_index(level=0)
-    ge_all.columns = ge_all.columns.map(GE_carrier_names).fillna('Interchange')
+    ge_all.columns = ge_all.columns.map(GE_carrier_names).fillna("Interchange")
 
-    ge_all['interconnect'] = ge_all.index.get_level_values(0).map(EIA_BA_2_REGION).map(EIA_930_REGION_MAPPER)
-    ge_interchange = ge_all.loc[ge_all.interconnect.isna(), 'Interchange'] /1e3
+    ge_all["interconnect"] = (
+        ge_all.index.get_level_values(0).map(EIA_BA_2_REGION).map(EIA_930_REGION_MAPPER)
+    )
+    ge_interchange = ge_all.loc[ge_all.interconnect.isna(), "Interchange"] / 1e3
     ge_all = ge_all.loc[~ge_all.interconnect.isna()]
 
-    ge_all = ge_all.loc[ge_all.interconnect == snakemake.wildcards.interconnect].drop(columns="interconnect") / 1e3
-    ge_all.loc['SRP', 'Nuclear'] = 0 # Fix for double reported Palo Verde
-    ge_interconnect = ge_all.groupby('period').sum().drop(columns = ['Demand', 'Net Generation', 'Total Interchange', 'Interchange'])
+    ge_all = (
+        ge_all.loc[ge_all.interconnect == snakemake.wildcards.interconnect].drop(
+            columns="interconnect"
+        )
+        / 1e3
+    )
+    ge_all.loc["SRP", "Nuclear"] = 0  # Fix for double reported Palo Verde
+    ge_interconnect = (
+        ge_all.groupby("period")
+        .sum()
+        .drop(columns=["Demand", "Net Generation", "Total Interchange", "Interchange"])
+    )
     order = ge_all.columns
-
-    
 
     # Load GridEmissions CO2 Data
     ge_co2 = pd.read_csv(snakemake.input.ge_co2).drop(columns=["Unnamed: 0"])
     ge_co2.period = pd.to_datetime(ge_co2.period)
-    ge_co2 = ge_co2.loc[ge_co2.period.isin(snapshots),:]
-    ge_co2 = ge_co2.rename(columns=lambda x: x[4:] if x.startswith('CO2_') else x)
+    ge_co2 = ge_co2.loc[ge_co2.period.isin(snapshots), :]
+    ge_co2 = ge_co2.rename(columns=lambda x: x[4:] if x.startswith("CO2_") else x)
     ge_co2.set_index("period", inplace=True)
-    ge_co2.columns = pd.MultiIndex.from_tuples(ge_co2.columns.str.split('_', expand=True).tolist())
+    ge_co2.columns = pd.MultiIndex.from_tuples(
+        ge_co2.columns.str.split("_", expand=True).tolist()
+    )
     ge_co2 = ge_co2.stack(level=0).swaplevel().sort_index(level=0)
-    ge_co2.columns = ge_co2.columns.map(GE_carrier_names).fillna('Interchange')
+    ge_co2.columns = ge_co2.columns.map(GE_carrier_names).fillna("Interchange")
 
     # Create Optimized DataFrame
     optimized = create_optimized_by_carrier(n, order)
@@ -685,7 +746,6 @@ def main(snakemake):
         **snakemake.wildcards,
     )
 
-
     plot_line_loading_map(
         n,
         snakemake.output["val_map_line_loading.pdf"],
@@ -693,11 +753,10 @@ def main(snakemake):
         **snakemake.wildcards,
     )
 
-
     # Regional Comparisons
     plot_regional_comparisons(
         n,
-        ge_all.drop(columns = ['Demand', 'Net Generation', 'Interchange']),
+        ge_all.drop(columns=["Demand", "Net Generation", "Interchange"]),
         ge_interchange,
         colors=colors,
         **snakemake.wildcards,
@@ -714,8 +773,6 @@ def main(snakemake):
         snakemake.params.eia_api,
         **snakemake.wildcards,
     )
-
-
 
     # Bar Production
     plot_bar_carrier_production(
@@ -760,7 +817,6 @@ def main(snakemake):
         **snakemake.wildcards,
     )
 
-
     plot_load_shedding_map(
         n,
         snakemake.output["val_map_load_shedding.pdf"],
@@ -779,6 +835,7 @@ def main(snakemake):
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
+
         snakemake = mock_snakemake(
             "plot_validation_figures",
             interconnect="western",
