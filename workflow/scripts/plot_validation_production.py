@@ -121,7 +121,8 @@ def plot_timeseries_comparison(
     diff_lim_upper = diff.clip(lower=0).sum(axis=1).max()
     diff_lim_lower = diff.clip(upper=0).sum(axis=1).min()
     axes[2].set_ylim(
-        bottom=min(lower_lim, diff_lim_lower), top=max(upper_lim, diff_lim_upper)
+        bottom=min(lower_lim, diff_lim_lower),
+        top=max(upper_lim, diff_lim_upper),
     )
 
     h, l = axes[0].get_legend_handles_labels()
@@ -229,7 +230,8 @@ def create_optimized_by_carrier(n, order, region_buses=None):
 
     optimized = optimized.rename(columns=EIA_carrier_names)
     optimized.loc[
-        :, optimized.columns.str.contains("Load")
+        :,
+        optimized.columns.str.contains("Load"),
     ] /= 1e3  # correct load shedding units
 
     return optimized / 1e3
@@ -270,7 +272,7 @@ def create_historic_region_data(
     if not emissions:
         index_split = ge_interchange.index.get_level_values(0).str.split("-")
         index_split = pd.DataFrame(
-            [x for x in ge_interchange.index.get_level_values(0).str.split("-")]
+            [x for x in ge_interchange.index.get_level_values(0).str.split("-")],
         )
         from_region = index_split[0].isin(regions)
         to_region = index_split[1].isin(regions)
@@ -338,7 +340,8 @@ def plot_regional_comparisons(
 
         # Create new columns for historic for missing carriers in optimized
         historic_region, optimized_region = add_missing_carriers(
-            historic_region, optimized_region
+            historic_region,
+            optimized_region,
         )
 
         # Plot Timeseries Comparison
@@ -361,7 +364,7 @@ def plot_regional_comparisons(
     ax.set_xlabel("Production Deviation [TWh]")
     ax.set_ylabel("Region")
     ax.set_title(
-        create_title("Generation Deviation by Region and Carrier", **wildcards)
+        create_title("Generation Deviation by Region and Carrier", **wildcards),
     )
     plt.legend(title="Carrier", bbox_to_anchor=(1.05, 1), loc="upper left")
 
@@ -526,18 +529,18 @@ def plot_state_emissions_historical_bar(
     if snakemake.params.eia_api:
         if "T" in sectors:
             historical_emissions.append(
-                Emissions("transport", year, eia_api).get_data()
+                Emissions("transport", year, eia_api).get_data(),
             )
         if "I" in sectors:
             historical_emissions.append(
-                Emissions("industrial", year, eia_api).get_data()
+                Emissions("industrial", year, eia_api).get_data(),
             )
         if "H" in sectors:
             historical_emissions.append(
-                Emissions("commercial", year, eia_api).get_data()
+                Emissions("commercial", year, eia_api).get_data(),
             )
             historical_emissions.append(
-                Emissions("residential", year, eia_api).get_data()
+                Emissions("residential", year, eia_api).get_data(),
             )
         historical_emissions.append(Emissions("power", year, eia_api).get_data())
 
@@ -610,7 +613,11 @@ def plot_ba_emissions_historical_bar(
     historical = pd.Series()
     for region in ge_emissions.index.get_level_values(0).unique():
         region_em = create_historic_region_data(
-            n, ge_emissions, None, region, emissions=True
+            n,
+            ge_emissions,
+            None,
+            region,
+            emissions=True,
         ).sum(axis=0)["Net Generation"]
         region_em = region_em.sum() / 1e9
         historical.loc[region] = region_em
@@ -630,7 +637,8 @@ def plot_ba_emissions_historical_bar(
             ["CISO-PGAE", "CISO-SCE", "CISO-SDGE", "CISO-VEA"]
         ].sum()
         optimized.drop(
-            index=["CISO-PGAE", "CISO-SCE", "CISO-SDGE", "CISO-VEA"], inplace=True
+            index=["CISO-PGAE", "CISO-SCE", "CISO-SDGE", "CISO-VEA"],
+            inplace=True,
         )
     elif (
         snakemake.config["clustering"]["cluster_network"]["aggregation_zones"]
@@ -687,7 +695,7 @@ def main(snakemake):
 
     ge_all.set_index("period", inplace=True)
     ge_all.columns = pd.MultiIndex.from_tuples(
-        ge_all.columns.str.split("_", expand=True).tolist()
+        ge_all.columns.str.split("_", expand=True).tolist(),
     )
     ge_all = ge_all.stack(level=0).swaplevel().sort_index(level=0)
     ge_all.columns = ge_all.columns.map(GE_carrier_names).fillna("Interchange")
@@ -700,7 +708,7 @@ def main(snakemake):
 
     ge_all = (
         ge_all.loc[ge_all.interconnect == snakemake.wildcards.interconnect].drop(
-            columns="interconnect"
+            columns="interconnect",
         )
         / 1e3
     )
@@ -719,7 +727,7 @@ def main(snakemake):
     ge_co2 = ge_co2.rename(columns=lambda x: x[4:] if x.startswith("CO2_") else x)
     ge_co2.set_index("period", inplace=True)
     ge_co2.columns = pd.MultiIndex.from_tuples(
-        ge_co2.columns.str.split("_", expand=True).tolist()
+        ge_co2.columns.str.split("_", expand=True).tolist(),
     )
     ge_co2 = ge_co2.stack(level=0).swaplevel().sort_index(level=0)
     ge_co2.columns = ge_co2.columns.map(GE_carrier_names).fillna("Interchange")

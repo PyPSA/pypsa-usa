@@ -469,10 +469,10 @@ def add_interface_limits(n, sns, config):
         ]
 
         line_flows = lines_s.loc[:, interface_lines_b1.index].sum(
-            dims="Line"
+            dims="Line",
         ) - lines_s.loc[:, interface_lines_b0.index].sum(dims="Line")
         link_flows = links_p.loc[:, interface_links_b1.index].sum(
-            dims="Link"
+            dims="Link",
         ) - links_p.loc[:, interface_links_b0.index].sum(dims="Link")
 
         lhs = (
@@ -507,7 +507,7 @@ def add_regional_co2limit(n, sns, config):
     for idx, emmission_lim in regional_co2_lims.iterrows():
         region_list = [region.strip() for region in emmission_lim.regions.split(",")]
         region_buses = n.buses[n.buses.country.isin(region_list)]
-        
+
         if region_buses.empty:
             continue
 
@@ -533,14 +533,17 @@ def add_regional_co2limit(n, sns, config):
             p = n.model["Generator-p"].loc[:, region_gens.index]
             lhs = (p * em_pu).sum()
 
-            #Imports
+            # Imports
             # region_demand = n.model.constraints['Bus-nodal_balance'].rhs.loc[region_buses.index, :].sum()
-            region_demand = n.loads_t.p_set.loc[:, n.loads.bus.isin(region_buses.index)].sum().sum()
+            region_demand = (
+                n.loads_t.p_set.loc[:, n.loads.bus.isin(region_buses.index)].sum().sum()
+            )
             lhs -= (p * EF_imports).sum()
 
             rhs = region_co2lim - (region_demand * EF_imports)
             n.model.add_constraints(
-                lhs <= rhs, name=f"GlobalConstraint-{emmission_lim.name}_co2_limit"
+                lhs <= rhs,
+                name=f"GlobalConstraint-{emmission_lim.name}_co2_limit",
             )
             logger.info(f"Adding regional Co2 Limit for {emmission_lim.name}")
 
