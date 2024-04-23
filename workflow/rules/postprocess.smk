@@ -14,7 +14,7 @@ rule copy_config:
     conda:
         "../envs/environment.yaml"
     script:
-        "../scripts/subworkflows/pypsa-eur/scripts/copy_config.py"
+        "../scripts/copy_config.py"
 
 
 rule plot_network_maps:

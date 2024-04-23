@@ -76,7 +76,7 @@ The following steps will walk through how to submit code changes.
 
 ```{seealso}
 Before contributing, please see our
-[installation instructions](about-install.md) and working [tutorial](about-tutorial.md)
+[installation instructions](about-install.md) and [usage guide](about-usage.md)
 ```
 
 ### 1. Submit an Issue
