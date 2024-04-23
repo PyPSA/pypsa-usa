@@ -90,26 +90,31 @@ currently:
 (sector)=
 ## The `{sector}` wildcard
 
+```{warning}
+Sector coupling studies are all under active development
+```
+
 The `{sector}` wildcard is used to specify what sectors to include. If `None`
 is provided, an electrical only study is completed.
 
-| Sector      | Code | Description                                                  |
-|-------------|------|--------------------------------------------------------------|
-| Electricity | E    | Electrical sector. Will always be run.                       |
-| Natural Gas | G    | Natural gas sector                                           |
-| Heating     | H    | Residential and commercial heating and cooling demand        |
-<!-- | Transport   | T    | Residential and light duty commercial transportation demand  |
-| Methane     | M    | Methane tracking. Requires natural gas sector.               | -->
+| Sector      | Code | Description                                    | Status      |
+|-------------|------|------------------------------------------------|-------------|
+| Electricity | E    | Electrical sector. Will always be run.         | Runs        |
+| Natural Gas | G    | Natural gas sector                             | Development |
+| Heating     | H    | Heating and Cooling                            | Development |
+| Industry    | I    | Industrial Processes                           | Development |
+| Transport   | T    | Transportation sector                          | Development |
+| Methane     | M    | Methane tracking. Requires natural gas sector. | Future      |
 
 (scope)=
 ## The `{scope}` wildcard
-Takes values `residential`, `urban`, `total`. Used in sector coupling
-studies to define population breakdown.
 
-Used in the following rules:
-- `build_heat_demands`
-- `build_temperature_profiles`
-- `build_solar_thermal_profiles`
+```{warning}
+Sector coupling studies are all under active development
+```
+
+Takes values `residential`, `urban`, `total`. Used in sector coupling studies to define
+population breakdown.
 
 
 (cutout_wc)=
