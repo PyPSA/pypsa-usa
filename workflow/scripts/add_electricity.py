@@ -194,12 +194,12 @@ def load_costs(
         costs.loc["battery inverter"],
         max_hours=max_hours["battery"],
     )
-    # costs.loc["H2"] = costs_for_storage(
-    #     costs.loc["hydrogen storage underground"],
-    #     costs.loc["fuel cell"],
-    #     costs.loc["electrolysis"],
-    #     max_hours=max_hours["H2"],
-    # )
+    costs.loc["H2"] = costs_for_storage(
+        costs.loc["hydrogen storage underground"],
+        costs.loc["fuel cell"],
+        costs.loc["electrolysis"],
+        max_hours=max_hours["H2"],
+    )
 
     for attr in ("marginal_cost", "capital_cost"):
         overwrites = config.get(attr)
