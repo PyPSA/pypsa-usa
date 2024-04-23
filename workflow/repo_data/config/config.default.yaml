@@ -62,8 +62,8 @@ electricity:
 
   extendable_carriers:
     Generator: [solar, onwind, offwind, offwind_floating, OCGT, CCGT, coal] #offwind, offwind_floating,
-    StorageUnit: [4hr_battery_storage] # [Xhr-battery-storage (2-10 hours)]
-    Store: [] 
+    StorageUnit: [4hr_battery_storage] # [Xhr-battery-storage (2-10 hours), H2]
+    Store: []
     Link: [] 
 
   demand: 
