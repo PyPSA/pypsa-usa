@@ -40,42 +40,47 @@ if __name__ == "__main__":
     demand_files = snakemake.input.demand
     n = pypsa.Network(snakemake.input.network)
 
+    sectors = snakemake.params.sectors
+
     if isinstance(demand_files, str):
         demand_files = [demand_files]
 
     sector_mapper = {
-        "power": "",
         "residential": "res",
         "commercial": "com",
         "industry": "ind",
         "transport": "trn",
     }
 
-    fuel_mapper = {
+    carrier_mapper = {
         "electricity": "elec",
         "heating": "heat",
         "cooling": "cool",
     }
 
-    carrier_mapper = {
-        "electricity": "AC",
-        "heating": "heat",
-        "cooling": "cool",
-    }
+    if sectors == "E":
 
-    for demand_file in demand_files:
-        parsed_name = Path(demand_file).name.split("_")
-        sector = parsed_name[0]
-        end_use = parsed_name[1]
-        carrier = carrier_mapper[end_use]
+        assert len(demand_files) == 1
 
-        if sector == "power":  # do not suffix elec only study
-            suffix = ""
-        else:
-            suffix = f"-{sector_mapper[sector]}-{fuel_mapper[end_use]}"
+        suffix = ""
+        carrier = "AC"
 
-        df = pd.read_csv(demand_file, index_col=0)
+        df = pd.read_csv(demand_files[0], index_col=0)
         attach_demand(n, df, carrier, suffix)
-        logger.info(f"{sector} {end_use} demand added to network")
+
+    else:  # sector files
+
+        for demand_file in demand_files:
+
+            parsed_name = Path(demand_file).name.split("_")
+            sector = parsed_name[0]
+            end_use = parsed_name[1]
+
+            carrier = f"{sector_mapper[sector]}-{carrier_mapper[end_use]}"
+            suffix = f"-{carrier}"
+
+            df = pd.read_csv(demand_file, index_col=0)
+            attach_demand(n, df, carrier, suffix)
+            logger.info(f"{sector} {end_use} demand added to network")
 
     n.export_to_netcdf(snakemake.output.network)

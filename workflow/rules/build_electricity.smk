@@ -332,6 +332,8 @@ def demand_to_add(wildcards):
 
 
 rule add_demand:
+    params:
+        sectors=config["scenario"]["sector"],
     input:
         network=RESOURCES + "{interconnect}/elec_base_network.nc",
         demand=demand_to_add,
