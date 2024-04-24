@@ -1,6 +1,10 @@
 (sectors)=
 # Sectors
 
+```{note}
+More information to come!
+```
+
 (natural-gas-sector)=
 ## Natural Gas
 
