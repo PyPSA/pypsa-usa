@@ -45,7 +45,7 @@ Planning horizons determines which year of future demand forecast to use for you
 (snapshots_cf)=
 ## `snapshots`
 
-Specifies the temporal range to build an energy system model for as arguments to `(pandas.date_range)[https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.date_range.html]`
+Specifies the temporal range to build an energy system model for as arguments to [`pandas.date_range`](https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.date_range.html)
 
 ```{eval-rst}
 .. literalinclude:: ../../workflow/repo_data/config/config.default.yaml
@@ -93,14 +93,10 @@ Specifies the types of generators that are included in the network, which are ex
    :file: configtables/electricity.csv
 ```
 
-If using the `{opts}` wildcard to reduce emissions, the user must put in a `co2base` value. Provided below are historical yearly CO2 emission values for both the power sector and all sectors at an interconnect level. This data can be used as a starting point for users. **Note the units in this table are Million Metric Tons (MMT).** This data originates from the [EIA State Level CO2 database](https://www.eia.gov/opendata/browser/co2-emissions/co2-emissions-aggregates?frequency=annual&data=value;&sortColumn=period;&sortDirection=desc;), and is compiled by the script `workflow/notebooks/historical_emissions.ipynb`
-
-```{eval-rst}
-.. csv-table::
-   :header-rows: 1
-   :widths: 22,7,22,33
-   :file: configtables/emissions.csv
+```{note}
+See [here](./config-co2-base.md) for information on interconnect level base emission values.
 ```
+
 (renewable_cf)=
 ## `renewable`
 
@@ -199,12 +195,51 @@ If using the `{opts}` wildcard to reduce emissions, the user must put in a `co2b
 
 (sector_cf)=
 ## `sector`
-```{eval-rst}
+<!-- ```{eval-rst}
 .. literalinclude:: ../../workflow/repo_data/config/config.default.yaml
    :language: yaml
    :start-at: sector:
    :end-before: # docs
 
+.. csv-table::
+   :header-rows: 1
+   :widths: 22,7,22,33
+   :file: configtables/sector.csv
+``` -->
+
+```{warning}
+Sector coupling studies are all under active development
+```
+
+```yaml
+sector:
+  co2_sequestration_potential: 0
+  natural_gas:
+    allow_imports_exports: true # false to be implemented
+    cyclic_storage: false
+  heating:
+    heat_pump_sink_T: 55.
+  demand:
+    profile:
+      residential: eulp # efs, eulp
+      commercial: eulp # efs, eulp
+      transport: efs # efs
+      industry: efs # efs
+    scale:
+      residential: aeo # efs, aeo
+      commercial: aeo # efs, aeo
+      transport: aeo # efs, aeo
+      industry: aeo # efs, aeo
+    disaggregation:
+      residential: pop # pop
+      commercial: pop # pop
+      transport: pop # pop
+      industry: pop # pop
+    scenarios:
+      aeo: reference
+```
+
+```{eval-rst}
 .. csv-table::
    :header-rows: 1
    :widths: 22,7,22,33
