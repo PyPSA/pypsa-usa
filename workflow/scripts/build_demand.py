@@ -34,14 +34,12 @@ Builds the demand data for the PyPSA network.
 import logging
 import sys
 from abc import ABC, abstractmethod
-from itertools import product
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import constants as const
 import pandas as pd
 import pypsa
-import xarray as xr
 from _helpers import configure_logging
 from eia import EnergyDemand
 
@@ -111,6 +109,37 @@ class Context:
         demand = self._read()
         return self._write(demand, self._read_strategy.zone, **kwargs)
 
+    def prepare_multiple_demands(
+        self,
+        sectors: str | list[str],
+        fuels: str | list[str],
+        **kwargs,
+    ) -> dict[str, dict[str, pd.DataFrame]]:
+        """
+        Returns demand by end-use energy carrier and sector.
+        """
+        if isinstance(sectors, str):
+            sectors = [sectors]
+
+        if isinstance(fuels, str):
+            fuels = [fuels]
+
+        demand = self._read()
+
+        data = {}
+        for sector in sectors:
+            data[sector] = {}
+            for fuel in fuels:
+                data[sector][fuel] = self._write(
+                    demand,
+                    self._read_strategy.zone,
+                    sector=sector,
+                    fuel=fuel,
+                    **kwargs,
+                )
+
+        return data
+
 
 ###
 # READ STRATEGIES
@@ -123,7 +152,7 @@ class ReadStrategy(ABC):
     of some algorithm.
     """
 
-    def __init__(self, filepath: str | None = None) -> None:
+    def __init__(self, filepath: Optional[str | list[str]] = None) -> None:
         self.filepath = filepath
 
     @property
@@ -131,7 +160,7 @@ class ReadStrategy(ABC):
         return "MW"
 
     @abstractmethod
-    def _read_data(self, **kwargs) -> pd.DataFrame:
+    def _read_data(self, **kwargs) -> Any:
         """
         Reads raw data into any arbitraty data structure.
         """
@@ -142,13 +171,13 @@ class ReadStrategy(ABC):
         Public interface to extract data.
         """
 
-        df = self._read_data()
-        df = self._format_data(df)
+        data = self._read_data()
+        df = self._format_data(data)
         self._check_index(df)
         return df
 
     @abstractmethod
-    def _format_data(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _format_data(self, data: Any) -> pd.DataFrame:
         """
         Formats raw data into following datastructure.
 
@@ -236,10 +265,11 @@ class ReadEia(ReadStrategy):
         logger.info("Building Load Data using EIA demand")
         return pd.read_csv(self.filepath, engine="pyarrow", index_col="timestamp")
 
-    def _format_data(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _format_data(self, data: pd.DataFrame) -> pd.DataFrame:
         """
         Formats raw data.
         """
+        df = data.copy()
         df = self._correct_balancing_areas(df)
         df = self._format_snapshot_index(df)
         df["fuel"] = "electricity"
@@ -297,13 +327,14 @@ class ReadEfs(ReadStrategy):
             sys.exit()
 
         logger.info("Building Load Data using EFS demand")
-        return pd.read_csv(self.filepath, engine="pyarrow")
+        return pd.read_csv(self.filepath, engine="pyarrow").round(3)
 
-    def _format_data(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _format_data(self, data: pd.DataFrame) -> pd.DataFrame:
         """
         Formats raw data.
         """
 
+        df = data.copy()
         df = self._build_snapshots(df)
         df = self._format_snapshot_index(df).reset_index()
         df = df.rename(columns={"Sector": "sector", "Subsector": "subsector"})
@@ -423,6 +454,88 @@ class ReadEfs(ReadStrategy):
         return all_years
 
 
+class ReadEulp(ReadStrategy):
+    """
+    Reads in electrifications future study demand.
+    """
+
+    def __init__(self, filepath: str | list[str], stock: str) -> None:
+        super().__init__(filepath)
+        assert stock in ("res", "com")
+        self._stock = stock
+        self._zone = "state"
+
+    @property
+    def zone(self):
+        return self._zone
+
+    @property
+    def stock(self):
+        if self._stock == "res":
+            return "residential"
+        elif self._stock == "com":
+            return "commercial"
+        else:
+            raise NotImplementedError
+
+    def _read_data(self) -> dict[str, pd.DataFrame]:
+        files = [self.filepath] if isinstance(self.filepath, str) else self.filepath
+        data = {}
+        for f in files:
+            state = self._extract_state(f)
+            data[state] = pd.read_csv(f, index_col="timestamp", parse_dates=True)
+        return data
+
+    def _format_data(self, data: dict[str, pd.DataFrame]) -> pd.DataFrame:
+        df = self._collapse_data(data)
+        df["fuel"] = df.fuel.map(
+            {"electricity": "electricity", "cooling": "cool", "heating": "heat"},
+        )
+        assert not df.fuel.isna().any()
+        df["sector"] = self.stock
+        df["subsector"] = "all"
+        df = df.pivot_table(
+            index=["snapshot", "sector", "subsector", "fuel"],
+            values="value",
+            columns="state",
+            aggfunc="sum",
+        )
+        ##################################################################
+        ## REMOVE THIS ONCE 2018 CUTOUTS ARE CREATED
+        ##################################################################
+        df = df.reset_index()
+        df["snapshot"] = df.snapshot.map(lambda x: x.replace(year=2019))
+        df = df.set_index(["snapshot", "sector", "subsector", "fuel"])
+        ##################################################################
+        ## REMOVE THIS ONCE 2018 CUTOUTS ARE CREATED
+        ##################################################################
+        df = df.rename(columns=CODE_2_STATE)
+        assert len(df.index.get_level_values("snapshot").unique()) == 8760
+        assert not df.empty
+        return df
+
+    @staticmethod
+    def _extract_state(filepath: str) -> str:
+        return Path(filepath).stem
+
+    @staticmethod
+    def _collapse_data(data: dict[str, pd.DataFrame]) -> pd.DataFrame:
+        dfs = []
+        for state, state_df in data.items():
+            df = (
+                state_df.melt(
+                    var_name="fuel",
+                    value_name="value",
+                    ignore_index=False,
+                )
+                .reset_index()
+                .rename(columns={"timestamp": "snapshot"})
+            )
+            df["state"] = state
+            dfs.append(df)
+        return pd.concat(dfs)
+
+
 ###
 # WRITE STRATEGIES
 ###
@@ -497,6 +610,8 @@ class WriteStrategy(ABC):
         # get zone area demand for specific sector and fuel
         demand = self._filter_demand(df, sector, subsector, fuel, sns)
         demand = self._group_demand(demand)
+        if demand.empty:
+            demand = self._make_empty_demand(columns=df.columns)
 
         # assign buses to dissagregation zone
         dissagregation_zones = self._get_load_dissagregation_zones(zone)
@@ -553,7 +668,7 @@ class WriteStrategy(ABC):
 
     @staticmethod
     def _filter_on_use(df: pd.DataFrame, level: str, values: list[str]):
-        return df[df.index.get_level_values(level) in values].copy()
+        return df[df.index.get_level_values(level).isin(values)].copy()
 
     @staticmethod
     def _group_demand(df: pd.DataFrame, agg_strategy: str = "sum") -> pd.DataFrame:
@@ -663,6 +778,13 @@ class WriteStrategy(ABC):
         n = self.n
         return n.buses.reeds_zone
 
+    def _make_empty_demand(self, columns: list[str]) -> pd.DataFrame:
+        """
+        Make a demand dataframe with zeros.
+        """
+        n = self.n
+        return pd.DataFrame(columns=columns, index=n.snapshots).fillna(0)
+
 
 class WritePopulation(WriteStrategy):
     """
@@ -734,6 +856,8 @@ def get_aeo_growth_rate(
         ).get_data()
         return energy
 
+    logger.info("Getting AEO growth rate")
+
     assert min(years) > 2017
     assert max(years) < 2051
 
@@ -768,58 +892,61 @@ if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
 
-        snakemake = mock_snakemake("build_demand", interconnect="western")
+        snakemake = mock_snakemake(
+            "build_sector_demand",
+            interconnect="western",
+            end_use="transport",
+        )
     configure_logging(snakemake)
 
-    n = pypsa.Network(snakemake.input.base_network)
-
-    # build snapshots
-
-    snapshot_config = snakemake.params["snapshots"]
-    n.set_snapshots(
-        pd.date_range(
-            freq="h",
-            start=pd.to_datetime(snapshot_config["start"]),
-            end=pd.to_datetime(snapshot_config["end"]),
-            inclusive=snapshot_config["inclusive"],
-        ),
-    )
+    n = pypsa.Network(snakemake.input.network)
 
     # extract user demand configuration parameters
 
     demand_params = snakemake.params.demand_params
-    demand_profile = demand_params.get("profile", "eia")
-    demand_scale = demand_params.get("scale", 1)
-    demand_disaggregation = demand_params.get("disaggregation", "pop")
+    end_use = snakemake.wildcards.end_use
     eia_api = snakemake.params.eia_api
+
+    if end_use == "power":  # electricity only study
+        demand_profile = demand_params["profile"]
+        demand_scale = demand_params["scale"]
+        demand_disaggregation = demand_params["disaggregation"]
+    else:
+        demand_profile = demand_params["profile"][end_use]
+        demand_scale = demand_params["scale"][end_use]
+        demand_disaggregation = demand_params["disaggregation"][end_use]
 
     if demand_scale == "aeo":
         assert eia_api, "Must provide EIA API key to scale demand by AEO"
 
-    profile_year = pd.to_datetime(snapshot_config["start"]).year
+    profile_year = int(n.snapshots[0].year)
     planning_horizons = snakemake.params.planning_horizons
     assert len(planning_horizons) == 1  # remove for myopic/rolling horizon
     planning_year = planning_horizons[0]
 
     # set reading and writitng strategies
 
+    demand_files = snakemake.input.demand_files
+
     if demand_profile == "efs":
         assert planning_year in (2018, 2020, 2024, 2030, 2040, 2050)
-        reader = ReadEfs(snakemake.input.efs)
+        reader = ReadEfs(demand_files)
         sns = n.snapshots.map(lambda x: x.replace(year=planning_year))
         profile_year = planning_year  # do not scale EFS data
-
     elif demand_profile == "eia":
         assert profile_year in range(2018, 2023, 1)
-        reader = ReadEia(snakemake.input.eia[0])
+        reader = ReadEia(demand_files)
         sns = n.snapshots
-
+    elif demand_profile == "eulp":
+        # assert profile_year == 2018
+        stock = {"residential": "res", "commercial": "com"}
+        reader = ReadEulp(demand_files, stock[end_use])  # 'res' or 'com'
+        sns = n.snapshots
     else:
         raise NotImplementedError
 
     if demand_disaggregation == "pop":
         writer = WritePopulation(n)
-
     else:
         raise NotImplementedError
 
@@ -827,8 +954,17 @@ if __name__ == "__main__":
 
     # extract demand based on strategies
 
-    # optional arguments of 'fuel', 'sector', 'subsector', 'sns'
-    demand = demand_converter.prepare_demand(sns=sns)
+    if end_use == "power":  # only one demand for electricity only studies
+        demand = demand_converter.prepare_demand(sns=sns)  # pd.DataFrame
+        demands = {"power": {"electricity": demand}}
+    else:
+        fuels = ("electricity", "heat", "cool")
+        sector = end_use  # residential, commercial, industry, transport
+        demands = demand_converter.prepare_multiple_demands(
+            sector,
+            fuels,
+            sns=sns,
+        )  # dict[str, dict[str, pd.DataFrame]]
 
     # scale demand based on planning year and user input
 
@@ -843,4 +979,23 @@ if __name__ == "__main__":
         growth_rate = get_aeo_growth_rate(eia_api, [profile_year, planning_year])
         logger.warning("No scale appied for aeo data")
 
-    demand.round(4).to_csv(snakemake.output.demand, index=True)
+    # electricity sector study
+    if end_use == "power":
+        demands[end_use]["electricity"].round(4).to_csv(
+            snakemake.output.elec_demand,
+            index=True,
+        )
+    # sector coupling demand
+    else:
+        demands[end_use]["electricity"].round(4).to_csv(
+            snakemake.output.elec_demand,
+            index=True,
+        )
+        demands[end_use]["heat"].round(4).to_csv(
+            snakemake.output.heat_demand,
+            index=True,
+        )
+        demands[end_use]["cool"].round(4).to_csv(
+            snakemake.output.cool_demand,
+            index=True,
+        )

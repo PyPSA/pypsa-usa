@@ -703,23 +703,6 @@ def attach_renewable_capacities_to_atlite(
         n.generators.p_nom_min.update(generators_tech.bus.map(caps_per_bus).dropna())
 
 
-def attach_demand(n: pypsa.Network, demand_per_bus_fn: str):
-    """
-    Add demand to network from specified configuration setting.
-
-    Returns network with demand added.
-    """
-    demand_per_bus = pd.read_csv(demand_per_bus_fn, index_col=0)
-    demand_per_bus.index = pd.to_datetime(demand_per_bus.index)
-    n.madd(
-        "Load",
-        demand_per_bus.columns,
-        bus=demand_per_bus.columns,
-        p_set=demand_per_bus,
-        carrier="AC",
-    )
-
-
 def attach_conventional_generators(
     n: pypsa.Network,
     costs: pd.DataFrame,
@@ -1378,8 +1361,6 @@ def main(snakemake):
 
     # Applying to all configurations
     plants = match_plant_to_bus(n, plants)
-
-    attach_demand(n, snakemake.input.demand)
 
     attach_conventional_generators(
         n,

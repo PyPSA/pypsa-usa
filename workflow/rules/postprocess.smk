@@ -47,7 +47,8 @@ rule plot_network_maps:
 
 rule plot_natural_gas:
     input:
-        network="results/{interconnect}/networks/elec_s_{clusters}_ec_l{ll}_{opts}_{sector}.nc",
+        network=RESULTS
+        + "{interconnect}/networks/elec_s_{clusters}_ec_l{ll}_{opts}_{sector}.nc",
     params:
         plotting=config["plotting"],
     output:

@@ -163,8 +163,18 @@ def get_demand_timeseries(n: pypsa.Network) -> pd.DataFrame:
 def get_demand_base(n: pypsa.Network) -> pd.DataFrame:
     """
     Gets Nodal Sum of Demand.
+
+    This groups all demand per node togheter.
     """
-    return pd.DataFrame(n.loads_t.p).rename(columns=n.loads.bus).sum(0)
+    df = (
+        pd.DataFrame(n.loads_t.p)
+        .rename(columns=n.loads.bus)
+        .sum(0)
+        .groupby(level=0)
+        .sum()
+    )
+    assert len(df) == len(df.index.unique())
+    return df
 
 
 ###
