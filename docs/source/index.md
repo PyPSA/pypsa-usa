@@ -79,3 +79,9 @@ license
 changelog
 contributing
 ```
+
+```{toctree}
+:hidden:
+
+config-co2-base
+```

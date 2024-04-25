@@ -295,7 +295,9 @@ def plot_regional_comparisons(
     order=None,
     **wildcards,
 ):
-    """ """
+    """
+    Plot regional comparison of results.
+    """
     Path.mkdir(
         Path(snakemake.output[0]).parents[0] / "regional_timeseries",
         exist_ok=True,

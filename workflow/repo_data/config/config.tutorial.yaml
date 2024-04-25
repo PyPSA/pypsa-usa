@@ -1,7 +1,7 @@
 # PyPSA-USA Default Configuration File
 
 run:
-  name: "Default" # use this to keep track of runs with different settings
+  name: "Tutorial" # use this to keep track of runs with different settings
   disable_progressbar: false # set to true to disable the progressbar
   shared_resources: false # set to true to share the default resources across runs
   shared_cutouts: true # set to true to share the default cutout(s) across runs
@@ -9,14 +9,14 @@ run:
 
 # docs :
 scenario:
-  interconnect: [western] #"usa|texas|western|eastern"
-  clusters: [80]
-  opts: [Ep-Co2L0.2]
-  ll: [v1.0]
+  interconnect: [texas] #"usa|texas|western|eastern"
+  clusters: [20]
+  opts: [Co2L]
+  ll: [v1.05]
   scope: "total" # "urban", "rural", or "total"
   sector: "" # G
   planning_horizons:
-  - 2030    #(2030, 2040, 2050)
+  - 2030    #(2018-2023, 2030, 2040, 2050)
 
 foresight:  # Only Single Stage Currently
 
@@ -27,7 +27,7 @@ enable:
 
 snapshots:
   start: "2019-01-01"
-  end: "2020-01-01"
+  end: "2019-02-01"
   inclusive: "left"
 
 
@@ -36,9 +36,9 @@ electricity:
   conventional_carriers: [nuclear, oil, OCGT, CCGT, coal, geothermal, biomass] # Choose the conventional plant types to include in network
   renewable_carriers: [onwind, offwind, offwind_floating, solar, hydro] # Choose the renewable plant types to include in network
   voltage_simplified: 230 #Voltage level to simplify network to in rule "simplify network"
-  co2limit: 1.4728e+9 # 0.8 * 1.841e+9
-  co2limit_enable: false # For sector coupled studies
-  co2base: 226.86e+6 #base_from_2020 Locations of the 250 MMmt of CO2 emissions from the WECC 2021.
+  co2limit: 180.3e+3
+  co2limit_enable: true
+  co2base: 180.3e+6
   gaslimit: false # global gas usage limit of X MWh_th
   gaslimit_enable: false # For sector coupled studies
   retirement: economic # "economic" or "technical"
@@ -48,7 +48,6 @@ electricity:
   portfolio_standards: 'config/policy_constraints/portfolio_standards.csv'
   SAFE_regional_reservemargins: 'config/policy_constraints/SAFE_regional_prm.csv'
   transmission_interface_limits: 'config/policy_constraints/transmission_interface_limits.csv'
-
 
   operational_reserve:
     activate: false
@@ -62,18 +61,13 @@ electricity:
 
   extendable_carriers:
     Generator: [solar, onwind, offwind, offwind_floating, OCGT, CCGT, coal] #offwind, offwind_floating,
-    StorageUnit: [4hr_battery_storage] # [Xhr-battery-storage (2-10 hours)]
-    Store: []
-    Link: [] 
+    StorageUnit: [4hr_battery_storage] # [Xhr-battery-storage (2-10 hours), H2]
+    Store: [] #[H2]
+    Link: [] #[H2 pipeline]
 
-  demand: 
-    profile: efs # efs, eia
-    scale: 1 # efs, aeo, or a number 
-    disaggregation: pop # pop
-    scenario: 
-      efs_case: reference # reference, medium, high
-      efs_speed: moderate # slow, moderate, rapid
-      aeo: reference
+  demand: #EFS used for given planning_horizons year (only ref/mod implemented)
+    EFS_case: reference # reference, medium, high
+    EFS_speed: moderate # slow, moderate, rapid
 
   autarky:
     enable: false
@@ -108,6 +102,9 @@ links:
   p_nom_max: .inf
   max_extension: 1000.0e+3
 
+# docs :
+load:
+  scaling_factor: 1.0
 
 # docs :
 costs:  # based on the potentials, assuming  (0.1 kW/m2 and 10 m2/person)
@@ -147,24 +144,6 @@ sector:
     cyclic_storage: false
   heating:
     heat_pump_sink_T: 55.
-  demand:
-    profile:
-      residential: eulp # efs, eulp
-      commercial: eulp # efs, eulp
-      transport: efs # efs
-      industry: efs # efs
-    scale:
-      residential: aeo # efs, aeo
-      commercial: aeo # efs, aeo
-      transport: aeo # efs, aeo
-      industry: aeo # efs, aeo
-    disaggregation: 
-      residential: pop # pop
-      commercial: pop # pop
-      transport: pop # pop
-      industry: pop # pop
-    scenarios:
-      aeo: reference
 
 # docs :
 clustering:
@@ -183,9 +162,10 @@ clustering:
       committable: any
       ramp_limit_up: max
       ramp_limit_down: max
+      # Mean heat-rates, VOM, and fuel are not used in the model, only for post processing purposes
       vom_cost: mean
       fuel_cost: mean
-      heat_rate: mean
+      heat_rate: mean 
   temporal:
     resolution_elec: false
     resolution_sector: false
