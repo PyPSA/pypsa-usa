@@ -1,10 +1,11 @@
 atlite:
   cutouts:
-    era5_2023:
+    era5_2019:
       module: era5
       time:
-      - '2023'
-  default_cutout: era5_2023
+      - '2019'
+      - '2019'
+  default_cutout: era5_2019
   interconnects:
     eastern:
       dx: 0.3
@@ -44,7 +45,7 @@ atlite:
       - 50
   nprocesses: 8
   show_progress: false
-capacity_from_reeds: ercot_cap_2030
+capacity_from_reeds: ercot_cap_2030_rem_solar
 clustering:
   aggregation_strategies:
     generators:
@@ -61,12 +62,17 @@ clustering:
     algorithm: kmeans
     feature: solar+onwind-time
     to_substations: false
+  temporal:
+    resolution_elec: false
+    resolution_sector: false
 conventional:
   dynamic_fuel_price: true
   unit_commitment: false
 costs:
   emission_prices:
     co2: 0.0
+    co2_monthly_prices: false
+    enable: false
   fill_values:
     CO2 intensity: 0
     FOM: 0
@@ -96,8 +102,12 @@ electricity:
   SAFE_regional_reservemargins: config/policy_constraints/SAFE_regional_prm.csv
   SAFE_reservemargin: 0.14
   agg_p_nom_limits: config/policy_constraints/agg_p_nom_minmax.csv
+  autarky:
+    by_country: false
+    enable: false
   co2base: 226860000.0
-  co2limit: 1000000000.0
+  co2limit: 1472800000.0
+  co2limit_enable: false
   conventional_carriers:
   - nuclear
   - oil
@@ -116,6 +126,7 @@ electricity:
     StorageUnit: []
     Store: []
   gaslimit: false
+  gaslimit_enable: false
   max_hours:
     H2: 168
     battery: 2
@@ -137,7 +148,7 @@ enable:
   build_cutout: false
   casio: true
   download_cutout: false
-  download_eia: false
+  download_eia: true
 focus_weights: null
 foresight: null
 lines:
@@ -193,6 +204,7 @@ renewable:
       hydrobasins: resources/hybas_na_lev06_v1c.shp
       method: hydro
   offwind:
+    boem_screen: true
     capacity_per_sqkm: 3
     clip_p_max_pu: 0.01
     corine:
@@ -203,7 +215,7 @@ renewable:
     cutout: era5_2023
     extendable: true
     max_depth: 60
-    max_shore_distance: 90000
+    max_shore_distance: 65000
     min_shore_distance: 22000
     natura: true
     potential: conservative
@@ -211,6 +223,7 @@ renewable:
       method: wind
       turbine: NREL_ReferenceTurbine_2020ATB_5.5MW
   offwind_floating:
+    boem_screen: true
     capacity_per_sqkm: 3
     clip_p_max_pu: 0.01
     corine:
@@ -221,16 +234,18 @@ renewable:
     cutout: era5_2023
     extendable: true
     max_depth: 1300
-    max_shore_distance: 90000
+    max_shore_distance: 65000
     min_depth: 60
     min_shore_distance: 22000
     natura: true
     potential: conservative
     resource:
+      add_cutout_windspeed: true
       method: wind
       turbine: NREL_ReferenceTurbine_2020ATB_15MW_offshore
   onwind:
     capacity_per_sqkm: 3
+    cec: true
     clip_p_max_pu: 0.01
     corine:
       distance: 10
@@ -242,34 +257,27 @@ renewable:
       - 40
       - 60
       - 100
-      - 111
       - 112
       - 113
       - 114
       - 115
-      - 116
-      - 121
-      - 122
-      - 123
-      - 124
-      - 125
-      - 126
     cutout: era5_2023
     extendable: true
     natura: true
     potential: conservative
     resource:
+      add_cutout_windspeed: true
       method: wind
       turbine: Vestas_V112_3MW
   solar:
     capacity_per_sqkm: 4.6
+    cec: true
     clip_p_max_pu: 0.01
     corine:
       grid_codes:
       - 20
       - 30
       - 40
-      - 50
       - 60
       - 90
       - 100
@@ -285,7 +293,7 @@ renewable:
 replace_uri: true
 run:
   disable_progressbar: false
-  name: ref_2023
+  name: rem_solar_2023
   shared_cutouts: true
   shared_resources: false
   validation: false
@@ -294,13 +302,12 @@ scenario:
   - 10
   interconnect: texas
   ll:
-  - v1
-  - v2
+  - v1.0
+  - v2.0
   opts:
-  - Co2L1-1H
+  - RCo2L-SAFER-RPS
   planning_horizons: null
-  scope:
-  - total
+  scope: total
   sector: ''
 sector:
   co2_sequestration_potential: 0
@@ -316,6 +323,7 @@ snapshots:
 solving:
   mem: 30000
   options:
+    assign_all_duals: true
     clip_p_max_pu: 0.01
     horizon: 8760
     linearized_unit_commitment: true

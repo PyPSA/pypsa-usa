@@ -105,7 +105,6 @@ def get_ng_prices(
         caiso_ng = pd.DataFrame()
     
     ng = pd.concat([caiso_ng, eia_ng], axis=1)
-    ng.to_csv('./test.csv')
     return ng.loc[sns]
 
 

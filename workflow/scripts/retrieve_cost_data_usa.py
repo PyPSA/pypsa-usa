@@ -203,7 +203,6 @@ if __name__ == "__main__":
             facets = "frequency=monthly&data[0]=value&facets[process][]=PIN&start=2022-01&end=2023-01&sort[0][column]=period&sort[0][direction]=desc&offset=0&length=5000"
             logger.info(f"Downloading EIA industrial natural gas costs from '{url}'")
             df = get_eia_data_api(url, eia_api_key, facets)
-            df.to_csv('./test.csv')
             df = format_eia_api_data(df)
             df.to_csv(ng_industrial_price)
 

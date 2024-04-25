@@ -13,7 +13,7 @@ scenario:
   interconnect: texas #"usa|texas|western|eastern"
   clusters: [10]
   opts: [RCo2L-SAFER-RPS]
-  ll: [v1.0]
+  ll: [v1.0, v2.0]
   scope: "total" # "urban", "rural", or "total"
   sector: "" # G
   planning_horizons:
