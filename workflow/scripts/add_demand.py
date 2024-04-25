@@ -58,7 +58,7 @@ if __name__ == "__main__":
         "cooling": "cool",
     }
 
-    if sectors == "E":
+    if sectors == "E" or sectors == "":  # electricity only
 
         assert len(demand_files) == 1
 
@@ -67,6 +67,7 @@ if __name__ == "__main__":
 
         df = pd.read_csv(demand_files[0], index_col=0)
         attach_demand(n, df, carrier, suffix)
+        logger.info(f"Electricity demand added to network")
 
     else:  # sector files
 
