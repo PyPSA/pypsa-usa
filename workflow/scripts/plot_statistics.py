@@ -78,8 +78,8 @@ def get_color_palette(n: pypsa.Network) -> dict[str, str]:
         "Battery Discharge": n.carriers.loc["battery"].color,
         "battery_discharger": n.carriers.loc["battery"].color,
         "battery_charger": n.carriers.loc["battery"].color,
-        "4hr_battery_storage_discharger": n.carriers.loc["4hr_battery_storage"].color,
-        "4hr_battery_storage_charger": n.carriers.loc["4hr_battery_storage"].color,
+        # "4hr_battery_storage_discharger": n.carriers.loc["4hr_battery_storage"].color,
+        # "4hr_battery_storage_charger": n.carriers.loc["4hr_battery_storage"].color,
         "co2": "k",
     }
 

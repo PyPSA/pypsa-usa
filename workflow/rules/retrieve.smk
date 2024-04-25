@@ -58,17 +58,17 @@ def define_nrel_databundles():
     }
 
 
-rule retrieve_nrel_efs_data:
-    params:
-        define_nrel_databundles(),
-    output:
-        DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv",
-    log:
-        "logs/retrieve/retrieve_databundles.log",
-    conda:
-        "../envs/environment.yaml"
-    script:
-        "../scripts/retrieve_databundles.py"
+# rule retrieve_nrel_efs_data:
+#     params:
+#         define_nrel_databundles(),
+#     output:
+#         DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv",
+#     log:
+#         "logs/retrieve/retrieve_databundles.log",
+#     conda:
+#         "../envs/environment.yaml"
+#     script:
+#         "../scripts/retrieve_databundles.py"
 
 
 sector_datafiles = [
@@ -84,18 +84,18 @@ sector_datafiles = [
 ]
 
 
-rule retrieve_sector_databundle:
-    params:
-        define_sector_databundles(),
-    output:
-        expand(DATA + "{file}", file=sector_datafiles),
-    log:
-        LOGS + "retrieve_sector_databundle.log",
-    retries: 2
-    conda:
-        "../envs/environment.yaml"
-    script:
-        "../scripts/retrieve_databundles.py"
+# rule retrieve_sector_databundle:
+#     params:
+#         define_sector_databundles(),
+#     output:
+#         expand(DATA + "{file}", file=sector_datafiles),
+#     log:
+#         LOGS + "retrieve_sector_databundle.log",
+#     # retries: 2
+#     conda:
+#         "../envs/environment.yaml"
+#     script:
+#         "../scripts/retrieve_databundles.py"
 
 
 if config["network_configuration"] == "ads2032":
@@ -207,21 +207,21 @@ rule retrieve_ship_raster:
     run:
         move(input[0], output[0])
 
-
-rule retrieve_cutout:
-    input:
-        HTTP.remote(
-            "zenodo.org/records/10067222/files/{interconnect}_{cutout}.nc", static=True
-        ),
-    output:
-        "cutouts/" + CDIR + "{interconnect}_{cutout}.nc",
-    log:
-        "logs/" + CDIR + "retrieve_cutout_{interconnect}_{cutout}.log",
-    resources:
-        mem_mb=5000,
-    retries: 2
-    run:
-        move(input[0], output[0])
+if config["enable"].get("download_cutout", False):
+    rule retrieve_cutout:
+        input:
+            HTTP.remote(
+                'zenodo.org/records/10067222/files/{interconnect}_{cutout}.nc'
+                ,static=True),
+        output:
+            "cutouts/" + CDIR + "{interconnect}_{cutout}.nc",
+        log:
+            "logs/" + CDIR + "retrieve_cutout_{interconnect}_{cutout}.log",
+        resources:
+            mem_mb=5000,
+        retries: 2
+        run:
+            move(input[0], output[0])
 
 
 rule retrieve_cost_data_eur:
@@ -242,8 +242,8 @@ rule retrieve_cost_data_usa:
         nrel_atb=DATA + "costs/nrel_atb.parquet",
         # nrel_atb_transport = DATA + "costs/nrel_atb_transport.xlsx",
     params:
-        # eia_api_key = config["api"].get("eia", None),
-        eia_api_key=None,
+        eia_api_key = config["api"].get("eia", None),
+        #eia_api_key="NrkfRpT6pQFCVgYclaRCHuMOI7XmlcGXHGKIa7HP",
     log:
         LOGS + "retrieve_cost_data_usa.log",
     resources:

@@ -138,6 +138,9 @@ def add_co2_emissions(n, costs, carriers):
     suptechs = n.carriers.loc[carriers].index.str.split("-").str[0]
     n.carriers.loc[carriers, "co2_emissions"] = costs.co2_emissions[suptechs].values
 
+    # Remove CO2 from geothermal
+    n.carriers.loc['geothermal', "co2_emissions"] = 0
+
 
 def load_costs(
     tech_costs: str,
@@ -152,6 +155,16 @@ def load_costs(
     # correct units to MW
     costs.loc[costs.unit.str.contains("/kW"), "value"] *= 1e3
     costs.unit = costs.unit.str.replace("/kW", "/MW")
+
+    # Fix some FOMs where the units are not % but are USD/MW
+    tech_need_fix_fom = costs[(costs.index.get_level_values('parameter') == 'FOM') & (costs.unit.str.contains("USD"))].index.get_level_values('technology')
+    
+    if len(tech_need_fix_fom) > 0:
+        tech_need_fix_fom_wide = costs[(costs.index.get_level_values('technology').isin(tech_need_fix_fom))].value.unstack()
+        tech_need_fix_fom_wide['FOM'] = tech_need_fix_fom_wide['FOM']/tech_need_fix_fom_wide['investment']*100
+        costs.loc[(costs.index.get_level_values('parameter') == 'FOM') & (costs.unit.str.contains("USD")), 'value'] = tech_need_fix_fom_wide.FOM.values
+        costs.loc[(costs.index.get_level_values('parameter') == 'FOM') & (costs.unit.str.contains("USD")), 'unit'] = "%/year"
+
 
     # polulate missing values with user provided defaults
     fill_values = config["fill_values"]
@@ -766,6 +779,9 @@ def attach_conventional_generators(
     # Define generators using modified ppl DataFrame
     caps = plants.groupby("carrier").p_nom.sum().div(1e3).round(2)
     logger.info(f"Adding {len(plants)} generators with capacities [GW] \n{caps}")
+
+    # plants_bus = plants.groupby("carrier", "bus_assignment")
+
     n.madd(
         "Generator",
         plants.index,
@@ -924,12 +940,11 @@ def attach_wind_and_solar(
 
 
 # double check to make sure batteries are added regardless if they are extendable.
-def attach_battery_storage(
-    n: pypsa.Network,
-    plants: pd.DataFrame,
-    extendable_carriers,
-    costs,
-):
+def attach_battery_storage(n: pypsa.Network,
+                           plants: pd.DataFrame,
+                           extendable_carriers,
+                           costs,
+                           max_hours=1):
     """
     Attaches Battery Energy Storage Systems To the Network.
     """
@@ -1303,10 +1318,96 @@ def clean_bus_data(n: pypsa.Network):
     ]
     n.buses.drop(columns=[col for col in col_list if col in n.buses], inplace=True)
 
+def add_ercot_outage(n: pypsa.Network, 
+                     outage, 
+                     conventional_carriers: list,
+                     renewable_carriers: list,
+                     input_profiles: str,
+                     sns_start, 
+                     sns_end):
+    """
+    Add hourly outage rate to p_max_pu
+    """
+    # Get a list of buses
+    bus_list = pd.Series([x for x in n.buses.index if not x.startswith("OSW_POI_")])
+
+    # Read outage rate
+    ercot_outage = pd.read_csv(outage)
+    ercot_outage['snapshot'] = pd.to_datetime(ercot_outage['time'], utc=True).dt.tz_convert (tz='US/Central')
+    ercot_outage['snapshot'] = ercot_outage['snapshot'].dt.tz_localize(None)
+    ercot_outage['outage_rate'] = 1 - ercot_outage['outage_rate']
+    ercot_outage = ercot_outage.loc[(ercot_outage['snapshot'] >= sns_start) & (ercot_outage['snapshot'] <= sns_end)]
+
+    # First add outages to conventional plants
+    for car in conventional_carriers: 
+        print("Add outage rate for " + car)
+        ercot_outage_car = ercot_outage.loc[ercot_outage['tech_pypsa'] == car]
+        ercot_outage_car = ercot_outage_car[['snapshot', 'outage_rate']]
+
+        ercot_outage_car_bus = (ercot_outage_car.assign(dummy=1)
+            .merge(n.generators[n.generators.carrier == car].carrier.index.to_frame().assign(dummy=1), on='dummy')
+            .drop('dummy', axis=1)
+            .pivot_table(index = 'snapshot', columns='Generator',values='outage_rate')
+        )
+        ercot_outage_car_bus.index.name = None
+
+    # Add outage per hour
+        n.generators_t["p_max_pu"] = n.generators_t["p_max_pu"].join(
+            ercot_outage_car_bus,
+            how="outer",
+        )
+    # Second add outages to conventional plants
+    for car in ['solar', 'onwind']: 
+
+        if car not in renewable_carriers: 
+            continue
+
+        ercot_outage_car = ercot_outage.loc[ercot_outage['tech_pypsa'] == car][['snapshot', 'outage_rate']]
+
+
+        with xr.open_dataset(getattr(input_profiles, "profile_" + car)) as ds:
+            if ds.indexes["bus"].empty:
+                continue
+            bus2sub = (
+                pd.read_csv(input_profiles.bus2sub, dtype=str)
+                .drop("interconnect", axis=1)
+                .rename(columns={"Bus": "bus_id"})
+            )
+            bus_profiles = (
+                ds["profile"]
+                .transpose("time", "bus")
+                .to_pandas()
+                .T.merge(
+                    bus2sub[["bus_id", "sub_id"]],
+                    left_on="bus",
+                    right_on="sub_id",
+                )
+                .set_index("bus_id")
+                .drop(columns="sub_id")
+                .T
+            )
+
+            ercot_outage_car_bus = (ercot_outage_car.assign(dummy=1)
+                .merge(bus_list.to_frame(name = 'bus_id').assign(dummy=1), on='dummy')
+                .drop('dummy', axis=1)
+                .pivot_table(index = 'snapshot', columns='bus_id',values='outage_rate')
+                
+            )
+            ercot_outage_car_bus.index.name = None
+
+            n.madd(
+                "Generator",
+                bus_list,
+                " " + car,
+                bus=bus_list,
+                carrier=car,
+                p_max_pu=ercot_outage_car_bus * bus_profiles,
+            )
 
 def main(snakemake):
     params = snakemake.params
     configuration = snakemake.config["network_configuration"]
+    texas_reliability = snakemake.config["texas_reliability"]
     interconnection = snakemake.wildcards["interconnect"]
     planning_horizons = snakemake.params["planning_horizons"]
 
@@ -1359,7 +1460,10 @@ def main(snakemake):
         unit_commitment = None
 
     if configuration == "pypsa-usa":
-        plants = load_powerplants_eia(
+        if texas_reliability: 
+            plants = load_powerplants_texas(snakemake.input['plants_tx'])
+        else:
+            plants = load_powerplants_eia(
             snakemake.input["plants_eia"],
             interconnect=interconnection,
         )
@@ -1378,7 +1482,6 @@ def main(snakemake):
 
     # Applying to all configurations
     plants = match_plant_to_bus(n, plants)
-
     attach_demand(n, snakemake.input.demand)
 
     attach_conventional_generators(
@@ -1402,8 +1505,9 @@ def main(snakemake):
     attach_battery_storage(
         n,
         plants,
-        extendable_carriers,
+        extendable_carriers, 
         costs,
+        params.electricity["max_hours"],
     )
 
     if configuration == "ads2032":
@@ -1505,6 +1609,22 @@ def main(snakemake):
         ),
         axis=1,
     )
+
+    add_ercot_outage(n, 
+                     outage = snakemake.input['ercot_outage'], 
+                     conventional_carriers = conventional_carriers, 
+                     renewable_carriers = renewable_carriers, 
+                     input_profiles = snakemake.input,
+                     sns_start = sns_start,
+                     sns_end = sns_end)
+
+
+    if snakemake.config["osw_config"]["enable_osw"]:
+        logger.info("Adding OSW in network")
+        humboldt_capacity = snakemake.config["osw_config"]["humboldt_capacity"]
+        import modify_network_osw as osw
+
+        osw.build_OSW_base_configuration(n, osw_capacity=humboldt_capacity)
 
     output_folder = os.path.dirname(snakemake.output[0]) + "/base_network"
     export_network_for_gis_mapping(n, output_folder)

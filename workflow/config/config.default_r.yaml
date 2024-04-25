@@ -1,0 +1,397 @@
+atlite:
+  cutouts:
+    era5_2019:
+      module: era5
+      time:
+      - '2019'
+      - '2019'
+  default_cutout: era5_2019
+  interconnects:
+    eastern:
+      dx: 0.3
+      dy: 0.3
+      x:
+      - -109
+      - -65
+      y:
+      - 23
+      - 50
+    texas:
+      dx: 0.3
+      dy: 0.3
+      x:
+      - -110
+      - -90
+      y:
+      - 24
+      - 37
+    usa:
+      dx: 0.3
+      dy: 0.3
+      x:
+      - -126
+      - -65
+      y:
+      - 23
+      - 50
+    western:
+      dx: 0.3
+      dy: 0.3
+      x:
+      - -126
+      - -99
+      y:
+      - 27
+      - 50
+  nprocesses: 8
+  show_progress: false
+capacity_from_reeds: ercot_cap_2030_rem_solar
+clustering:
+  aggregation_strategies:
+    generators:
+      committable: any
+      ramp_limit_down: max
+      ramp_limit_up: max
+  cluster_network:
+    aggregation_zones: state
+    algorithm: hac
+    consider_efficiency_classes: false
+    exclude_carriers: []
+    feature: solar+onwind-time
+  simplify_network:
+    algorithm: kmeans
+    feature: solar+onwind-time
+    to_substations: false
+  temporal:
+    resolution_elec: false
+    resolution_sector: false
+conventional:
+  dynamic_fuel_price: true
+  unit_commitment: false
+costs:
+  emission_prices:
+    co2: 0.0
+    co2_monthly_prices: false
+    enable: false
+  fill_values:
+    CO2 intensity: 0
+    FOM: 0
+    VOM: 0
+    discount rate: 0.07
+    efficiency: 1
+    fuel: 0
+    investment: 0
+    lifetime: 25
+  marginal_cost:
+    H2: 0.0
+    battery: 0.0
+    battery inverter: 0.0
+    electrolysis: 0.0
+    fuel cell: 0.0
+    hydro: 0.0
+    offwind: 0.0
+    onwind: 0.0
+    solar: 0.0
+  ng_fuel_year: 2023
+  rooftop_share: 0.0
+  version: v0.6.0
+  year: 2030
+countries:
+- US
+electricity:
+  SAFE_regional_reservemargins: config/policy_constraints/SAFE_regional_prm.csv
+  SAFE_reservemargin: 0.14
+  agg_p_nom_limits: config/policy_constraints/agg_p_nom_minmax.csv
+  autarky:
+    by_country: false
+    enable: false
+  co2base: 226860000.0
+  co2limit: 1472800000.0
+  co2limit_enable: false
+  conventional_carriers:
+  - nuclear
+  - oil
+  - OCGT
+  - CCGT
+  - coal
+  - geothermal
+  demand:
+    EFS_case: reference
+    EFS_speed: moderate
+  egs: true
+  egs_reduction: 0.2
+  extendable_carriers:
+    Generator: []
+    Link: []
+    StorageUnit: []
+    Store: []
+  gaslimit: false
+  gaslimit_enable: false
+  max_hours:
+    H2: 168
+    battery: 2
+  operational_reserve:
+    activate: false
+    contingency: 4000
+    epsilon_load: 0.02
+    epsilon_vres: 0.02
+  portfolio_standards: config/policy_constraints/portfolio_standards.csv
+  regional_Co2_limits: config/policy_constraints/regional_Co2_limits.csv
+  renewable_carriers:
+  - onwind
+  - solar
+  - hydro
+  retirement: economic
+  voltage_simplified: 230
+enable:
+  allow_new_plant: false
+  build_cutout: false
+  casio: true
+  download_cutout: false
+  download_eia: true
+focus_weights: null
+foresight: null
+lines:
+  length_factor: 1.25
+  s_max_pu: 0.7
+  s_nom_max: .inf
+  types:
+    115.0: Al/St 240/40 2-bundle 220.0
+    138.0: Al/St 240/40 2-bundle 220.0
+    161.0: Al/St 240/40 2-bundle 220.0
+    230.0: Al/St 240/40 2-bundle 220.0
+    345.0: Al/St 240/40 4-bundle 380.0
+    500.0: Al/St 560/50 4-bundle 750.0
+    765.0: Al/St 560/50 4-bundle 750.0
+  under_construction: zero
+links:
+  p_max_pu: 1.0
+  p_nom_max: .inf
+  under_construction: zero
+load:
+  scaling_factor: 1.09
+  scaling_factor_monthly:
+  - 1.196442
+  - 1.27942
+  - 1.361699
+  - 1.206554
+  - 1.198357
+  - 1.04308
+  - 1.05757
+  - 1.056679
+  - 1.002989
+  - 1.111066
+  - 1.302436
+  - 1.367929
+network_configuration: pypsa-usa
+renewable:
+  hydro:
+    PHS_max_hours: 6
+    carriers:
+    - ror
+    - PHS
+    - hydro
+    clip_min_inflow: 1.0
+    cutout: era5_2023
+    extendable: true
+    hydro_max_hours: energy_capacity_totals_by_country
+    multiplier: 1.1
+    normalization:
+      method: hydro_capacities
+      year: 2013
+    resource:
+      flowspeed: 1.0
+      hydrobasins: resources/hybas_na_lev06_v1c.shp
+      method: hydro
+  offwind:
+    boem_screen: true
+    capacity_per_sqkm: 3
+    clip_p_max_pu: 0.01
+    corine:
+      grid_codes:
+      - 80
+      - 200
+    correction_factor: 0.8855
+    cutout: era5_2023
+    extendable: true
+    max_depth: 60
+    max_shore_distance: 65000
+    min_shore_distance: 22000
+    natura: true
+    potential: conservative
+    resource:
+      method: wind
+      turbine: NREL_ReferenceTurbine_2020ATB_5.5MW
+  offwind_floating:
+    boem_screen: true
+    capacity_per_sqkm: 3
+    clip_p_max_pu: 0.01
+    corine:
+      grid_codes:
+      - 80
+      - 200
+    correction_factor: 0.8855
+    cutout: era5_2023
+    extendable: true
+    max_depth: 1300
+    max_shore_distance: 65000
+    min_depth: 60
+    min_shore_distance: 22000
+    natura: true
+    potential: conservative
+    resource:
+      add_cutout_windspeed: true
+      method: wind
+      turbine: NREL_ReferenceTurbine_2020ATB_15MW_offshore
+  onwind:
+    capacity_per_sqkm: 3
+    cec: true
+    clip_p_max_pu: 0.01
+    corine:
+      distance: 10
+      distance_grid_codes:
+      - 50
+      grid_codes:
+      - 20
+      - 30
+      - 40
+      - 60
+      - 100
+      - 112
+      - 113
+      - 114
+      - 115
+    cutout: era5_2023
+    extendable: true
+    natura: true
+    potential: conservative
+    resource:
+      add_cutout_windspeed: true
+      method: wind
+      turbine: Vestas_V112_3MW
+  solar:
+    capacity_per_sqkm: 4.6
+    cec: true
+    clip_p_max_pu: 0.01
+    corine:
+      grid_codes:
+      - 20
+      - 30
+      - 40
+      - 60
+      - 90
+      - 100
+    correction_factor: 0.854337
+    cutout: era5_2023
+    extendable: true
+    natura: true
+    potential: conservative
+    resource:
+      method: pv
+      orientation: latitude_optimal
+      panel: CSi
+replace_uri: true
+run:
+  disable_progressbar: false
+  name: rem_solar_2023
+  shared_cutouts: true
+  shared_resources: false
+  validation: false
+scenario:
+  clusters:
+  - 10
+  interconnect: texas
+  ll:
+  - v1.0
+  - v2.0
+  opts:
+  - RCo2L-SAFER-RPS
+  planning_horizons: null
+  scope: total
+  sector: ''
+sector:
+  co2_sequestration_potential: 0
+  heating:
+    heat_pump_sink_T: 55.0
+  natural_gas:
+    allow_imports_exports: true
+    cyclic_storage: false
+snapshots:
+  end: '2024-01-01'
+  inclusive: left
+  start: '2023-01-01'
+solving:
+  mem: 30000
+  options:
+    assign_all_duals: true
+    clip_p_max_pu: 0.01
+    horizon: 8760
+    linearized_unit_commitment: true
+    load_shedding: true
+    max_iterations: 6
+    min_iterations: 4
+    noisy_costs: true
+    operations_only: false
+    rolling_horizon: false
+    seed: 122
+    skip_iterations: true
+    track_iterations: false
+    transmission_losses: 0
+  solver:
+    name: gurobi
+    options: gurobi-default
+  solver_options:
+    cbc-default: {}
+    cplex-default:
+      barrier.convergetol: 1.0e-05
+      feasopt.tolerance: 1.0e-06
+      lpmethod: 4
+      solutiontype: 2
+      threads: 4
+    glpk-default: {}
+    gurobi-default:
+      AggFill: 0
+      BarConvTol: 0.0001
+      FeasibilityTol: 0.001
+      GURO_PAR_BARDENSETHRESH: 200
+      OptimalityTol: 0.0001
+      PreDual: 0
+      Seed: 123
+      crossover: 0
+      method: 2
+      threads: 10
+    gurobi-fallback:
+      BarConvTol: 1.0e-05
+      BarHomogeneous: 1
+      FeasibilityTol: 1.0e-05
+      OptimalityTol: 1.0e-05
+      Seed: 123
+      crossover: 0
+      method: 2
+      name: gurobi
+      threads: 8
+    gurobi-numeric-focus:
+      BarConvTol: 1.0e-05
+      BarHomogeneous: 1
+      FeasibilityTol: 0.0001
+      NumericFocus: 3
+      ObjScale: -0.5
+      OptimalityTol: 0.0001
+      Seed: 124
+      crossover: 0
+      method: 2
+      name: gurobi
+      threads: 8
+    highs-default:
+      dual_feasibility_tolerance: 1e-5
+      ipm_optimality_tolerance: 1e-4
+      large_matrix_value: 1e9
+      parallel: 'on'
+      primal_feasibility_tolerance: 1e-5
+      random_seed: 123
+      run_crossover: 'off'
+      small_matrix_value: 1e-6
+      solver: ipm
+      threads: 4
+  walltime: '12:00:00'
+texas_reliability: true

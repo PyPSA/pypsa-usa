@@ -22,7 +22,7 @@ benchmarks/
 resources/
 notebooks/
 venv/
-logs/
+outputs/
 
 ## Core latex/pdflatex auxiliary files:
 *.aux
@@ -269,3 +269,34 @@ connect.sh
 /workflow/config/config.cluster.yaml
 /workflow/repo_data/dag.png
 !.pre-commit-config.yaml
+
+
+workflow/repo_data/ercot_specific/ercot_cap_2030_add_bat2.csv
+workflow/repo_data/ercot_specific/ercot_cap_2030_add_cc.csv
+workflow/repo_data/ercot_specific/ercot_cap_2030_add_ct.csv
+workflow/repo_data/ercot_specific/ercot_cap_2030_add_geo.csv
+workflow/repo_data/ercot_specific/ercot_cap_2030_add_mix.csv
+workflow/repo_data/ercot_specific/ercot_cap_2030.csv
+workflow/repo_data/ercot_specific/outage_share_2020_2024.csv
+workflow/repo_data/ercot_specific/uri_real_demand.csv
+workflow/outputs/all_cf.csv
+workflow/outputs/all_joined.csv
+workflow/outputs/all_mwh.csv
+workflow/outputs/all_sce_emissions_bus_sf.json
+workflow/outputs/store_mwh.csv
+workflow/outputs/texas_reliability_scenarios_no_uri.csv
+workflow/outputs/texas_reliability_scenarios.csv
+.idea/misc.xml
+.idea/modules.xml
+.idea/pypsa-usa.iml
+.idea/vcs.xml
+.idea/inspectionProfiles/profiles_settings.xml
+workflow/outputs/all_cf.csv
+workflow/outputs/all_joined.csv
+workflow/outputs/all_mwh.csv
+workflow/outputs/all_sce_emissions_bus_sf.json
+workflow/outputs/store_mwh.csv
+workflow/outputs/texas_reliability_scenarios_no_uri.csv
+workflow/outputs/texas_reliability_scenarios.csv
+workflow/repo_data/ercot_specific/ercot_cap_2030_rem_solar.csv
+workflow/repo_data/ercot_specific/ercot_cap_2030_rem_wind.csv

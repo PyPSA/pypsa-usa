@@ -160,7 +160,9 @@ def prepare_network(
         buses_i = n.buses.query("carrier == 'AC'").index
         if not np.isscalar(load_shedding):
             # TODO: do not scale via sign attribute (use Eur/MWh instead of Eur/kWh)
-            load_shedding = 1e2  # Eur/kWh
+            load_shedding = 1e8  # Eur/kWh
+        else:
+            load_shedding = 1e8  # Eur/kWh
 
         n.madd(
             "Generator",
@@ -686,8 +688,7 @@ def add_operational_reserve_margin(n, sns, config):
         )
         lhs = summed_reserve + (p_nom_vres * (-EPSILON_VRES * capacity_factor)).sum(
             "Generator",
-        )
-
+        ) 
     # Total demand per t
     demand = get_as_dense(n, "Load", "p_set").sum(axis=1)
 

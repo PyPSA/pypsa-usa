@@ -66,8 +66,8 @@ def get_color_palette(n: pypsa.Network) -> pd.Series:
         "Battery Discharge": n.carriers.loc["battery"].color,
         "battery_discharger": n.carriers.loc["battery"].color,
         "battery_charger": n.carriers.loc["battery"].color,
-        "4hr_battery_storage_discharger": n.carriers.loc["4hr_battery_storage"].color,
-        "4hr_battery_storage_charger": n.carriers.loc["4hr_battery_storage"].color,
+        # "4hr_battery_storage_discharger": n.carriers.loc["4hr_battery_storage"].color,
+        # "4hr_battery_storage_charger": n.carriers.loc["4hr_battery_storage"].color,
         "co2": "k",
     }
 
@@ -648,13 +648,13 @@ if __name__ == "__main__":
         **snakemake.wildcards,
         save=snakemake.output["capacity_map_optimized.pdf"],
     )
-    plot_new_capacity_map(
-        n,
-        onshore_regions,
-        carriers,
-        **snakemake.wildcards,
-        save=snakemake.output["capacity_map_new.pdf"],
-    )
+    # plot_new_capacity_map(
+    #     n,
+    #     onshore_regions,
+    #     carriers,
+    #     **snakemake.wildcards,
+    #     save=snakemake.output["capacity_map_new.pdf"],
+    # )
     plot_demand_map(
         n,
         onshore_regions,

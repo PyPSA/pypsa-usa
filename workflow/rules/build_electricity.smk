@@ -211,6 +211,7 @@ rule build_demand:
         base_network=RESOURCES + "{interconnect}/elec_base_network.nc",
         eia=expand(DATA + "GridEmissions/{file}", file=DATAFILES_GE),
         efs=DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv",
+        uri_demand="repo_data/ercot_specific/uri_real_demand.csv"
     output:
         demand=RESOURCES + "{interconnect}/demand.csv",
     log:
@@ -297,11 +298,13 @@ rule add_electricity:
         tech_costs=RESOURCES + f"costs_{config['costs']['year']}.csv",
         regions=RESOURCES + "{interconnect}/regions_onshore.geojson",
         plants_eia="repo_data/plants/plants_merged.csv",
+        plants_tx=f"repo_data/ercot_specific/{config['capacity_from_reeds']}.csv",
         plants_ads="repo_data/plants/ads_plants_locs.csv",
         plants_breakthrough=DATA + "breakthrough_network/base_grid/plant.csv",
         hydro_breakthrough=DATA + "breakthrough_network/base_grid/hydro.csv",
         wind_breakthrough=DATA + "breakthrough_network/base_grid/wind.csv",
         solar_breakthrough=DATA + "breakthrough_network/base_grid/solar.csv",
+        ercot_outage = "repo_data/ercot_specific/outage_share_2020_2024.csv",
         bus2sub=DATA + "breakthrough_network/base_grid/{interconnect}/bus2sub.csv",
         ads_renewables=(
             DATA + "WECC_ADS/processed/"
@@ -387,24 +390,34 @@ rule cluster_network:
     script:
         "../scripts/cluster_network.py"
 
-
-rule add_extra_components:
-    input:
-        network=RESOURCES + "{interconnect}/elec_s_{clusters}.nc",
-        tech_costs=RESOURCES + f"costs_{config['costs']['year']}.csv",
-    params:
-        retirement=config["electricity"].get("retirement", "technical"),
-    output:
-        RESOURCES + "{interconnect}/elec_s_{clusters}_ec.nc",
-    log:
-        "logs/add_extra_components/{interconnect}/elec_s_{clusters}_ec.log",
-    threads: 1
-    resources:
-        mem_mb=4000,
-    group:
-        "prepare"
-    script:
-        "../scripts/add_extra_components.py"
+if config["enable"].get("allow_new_plant", True):
+    rule add_extra_components:
+        input:
+            network=RESOURCES + "{interconnect}/elec_s_{clusters}.nc",
+            tech_costs=RESOURCES + f"costs_{config['costs']['year']}.csv",
+        params:
+            retirement=config["electricity"].get("retirement", "technical"),
+        output:
+            RESOURCES + "{interconnect}/elec_s_{clusters}_ec.nc",
+        log:
+            "logs/add_extra_components/{interconnect}/elec_s_{clusters}_ec.log",
+        threads: 1
+        resources:
+            mem_mb=4000,
+        group:
+            "prepare"
+        script:
+            "../scripts/add_extra_components.py"
+else: 
+    rule no_add_extra_components:
+        input:
+            network=RESOURCES + "{interconnect}/elec_s_{clusters}.nc",
+        output:
+            RESOURCES + "{interconnect}/elec_s_{clusters}_ec.nc",
+        resources:
+            mem=500,
+        run:
+            move(input[0], output[0])
 
 
 rule prepare_network:
