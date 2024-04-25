@@ -296,6 +296,9 @@ def add_RPS_constraints(n, config):
     for pct_tuple in pct.indexes["group"]:  # loop through each RPS policy
         region, carriers = pct_tuple
 
+        if region not in n.buses.country.values:
+            continue
+
         carriers_list = [carrier.strip() for carrier in carriers.split(",")]
         if isinstance(carriers_list, list):
             # Create a new tuple for each energy type and append to new list
@@ -421,14 +424,81 @@ def add_BAU_constraints(n, config):
     n.model.add_constraints(lhs >= rhs, name="bau_mincaps")
 
 
+def add_interface_limits(n, sns, config):
+    """
+    Adds interface transmission limits to constrain inter-regional transfer
+    capacities based on user-defined inter-regional transfer capacity limits.
+    """
+    logger.info("Adding Interface Transmission Limits.")
+    limits = pd.read_csv(snakemake.input.flowgates)
+    user_limits = pd.read_csv(
+        config["electricity"]["transmission_interface_limits"],
+    ).rename(
+        columns={
+            "region_1": "r",
+            "region_2": "rr",
+            "flow_12": "MW_f0",
+            "flow_21": "MW_r0",
+        },
+    )
+
+    limits = pd.concat([limits, user_limits])
+
+    lines_s = n.model["Line-s"]
+
+    for idx, interface in limits.iterrows():
+        regions_list_r = [region.strip() for region in interface.r.split(",")]
+        regions_list_rr = [region.strip() for region in interface.rr.split(",")]
+
+        zone0_buses = n.buses[n.buses.country.isin(regions_list_r)]
+        zone1_buses = n.buses[n.buses.country.isin(regions_list_rr)]
+        if zone0_buses.empty & zone1_buses.empty:
+            continue
+
+        logger.info(f"Adding Interface Transmission Limit for {interface.interface}")
+        interface_lines_b0 = n.lines[
+            n.lines.bus0.isin(zone0_buses.index) & n.lines.bus1.isin(zone1_buses.index)
+        ]
+        interface_lines_b1 = n.lines[
+            n.lines.bus0.isin(zone1_buses.index) & n.lines.bus1.isin(zone0_buses.index)
+        ]
+        interface_links_b0 = n.links[
+            n.links.bus0.isin(zone0_buses.index) & n.links.bus1.isin(zone1_buses.index)
+        ]
+        interface_links_b1 = n.links[
+            n.links.bus0.isin(zone1_buses.index) & n.links.bus1.isin(zone0_buses.index)
+        ]
+
+        line_flows = lines_s.loc[:, interface_lines_b1.index].sum(
+            dims="Line",
+        ) - lines_s.loc[:, interface_lines_b0.index].sum(dims="Line")
+
+        lhs = line_flows
+
+        if (
+            not (pd.concat([interface_links_b0, interface_links_b1]).empty)
+            and "RESOLVE" in interface.interface
+        ):
+            link_flows = n.model["Link-p"].loc[:, interface_links_b1.index].sum(
+                dims="Link",
+            ) - n.model["Link-p"].loc[:, interface_links_b0.index].sum(dims="Link")
+            lhs += link_flows
+
+        rhs_pos = interface.MW_f0 * -1
+        n.model.add_constraints(lhs >= rhs_pos, name=f"ITL_{interface.interface}_pos")
+
+        rhs_neg = interface.MW_r0
+        n.model.add_constraints(lhs <= rhs_neg, name=f"ITL_{interface.interface}_neg")
+
+
 def add_regional_co2limit(n, sns, config):
     """
     Adding regional regional CO2 Limits Specified in the config.yaml.
     """
     weightings = n.snapshot_weightings.loc[n.snapshots]
 
-    from pypsa.linopt import get_var
     from pypsa.descriptors import get_switchable_as_dense as get_as_dense
+    from pypsa.linopt import get_var
 
     regional_co2_lims = pd.read_csv(
         config["electricity"]["regional_Co2_limits"],
@@ -439,15 +509,19 @@ def add_regional_co2limit(n, sns, config):
         regional_co2_lims.planning_horizon == int(snakemake.params.planning_horizons[0])
     ]
 
-    for region in regional_co2_lims.index:
-        region_co2lim = regional_co2_lims.loc[region].limit
-        EF_unspecified = regional_co2_lims.loc[
-            region
-        ].import_emissions_factor  # if not none #MT CO₂e/MWh_elec
+    for idx, emmission_lim in regional_co2_lims.iterrows():
+        region_list = [region.strip() for region in emmission_lim.regions.split(",")]
+        region_buses = n.buses[n.buses.country.isin(region_list)]
+
+        if region_buses.empty:
+            continue
+
+        region_co2lim = emmission_lim.limit
+        EF_imports = emmission_lim.import_emissions_factor  # MT CO₂e/MWh_elec
 
         emissions = n.carriers.co2_emissions
         # generators
-        region_gens = n.generators[n.generators.bus.str.contains(region)]
+        region_gens = n.generators[n.generators.bus.isin(region_buses.index)]
         region_gens = region_gens.query("carrier in @emissions.index")
 
         if not region_gens.empty:
@@ -459,38 +533,24 @@ def add_regional_co2limit(n, sns, config):
             )  # mw_elect/mw_th
             em_pu = (
                 region_gens.carrier.map(emissions) / efficiency
-            )  # kg_co2/mw_electrical
+            )  # tonnes_co2/mw_electrical
             em_pu = em_pu.multiply(weightings.generators, axis=0)
             p = n.model["Generator-p"].loc[:, region_gens.index]
             lhs = (p * em_pu).sum()
 
-        # # Imports
-        # bus0 = n.lines.bus0
-        # bus1 = n.lines.bus1
-        # bus0_region = bus0[bus0.str.contains(region)]
-        # region_lines = n.lines.loc[bus0_region.index]
-        # inter_regional_lines = region_lines[~region_lines.bus1.str.contains(region)]
-        # if not inter_regional_lines.empty and EF_unspecified > 0.0001:
-        #     # Big-M Method
-        #     # M = 1e5
-        #     # n.model.add_variables(coords=[sns, inter_regional_lines.index], binary=True, name=f"BigM-{region}_co2_limit")
-        #     # bin_x = n.model[f"BigM-{region}_co2_limit"]
-        #     # n.model.add_variables(lower = 0, coords=[sns, inter_regional_lines.index], name=f"line_imports_{region}")
-        #     # line_imports = n.model[f"line_imports_{region}"]
+            # Imports
+            # region_demand = n.model.constraints['Bus-nodal_balance'].rhs.loc[region_buses.index, :].sum()
+            region_demand = (
+                n.loads_t.p_set.loc[:, n.loads.bus.isin(region_buses.index)].sum().sum()
+            )
+            lhs -= (p * EF_imports).sum()
 
-        #     # n.model.add_constraints( -1 * n.model["Line-s"].loc[:, inter_regional_lines.index] <= M * bin_x, name=f"BigM-{region}_pos_flow")
-        #     # # n.model.add_constraints(n.model["Line-s"].loc[:, inter_regional_lines.index]  >= -M * (1 + bin_x), name=f"BigM-{region}_neg_flow")
-        #     # n.model.add_constraints( line_imports >= n.model["Line-s"].loc[:, inter_regional_lines.index] + M * bin_x, name=f"line_imports_{region}_upper")
-
-        #     #Non Big-M
-        #     n.model.add_variables(lower = 0, coords=[sns, inter_regional_lines.index], name=f"line_imports_{region}")
-        #     line_imports = n.model[f"line_imports_{region}"]
-        #     n.model.add_constraints( line_imports >= n.model["Line-s"].loc[:, inter_regional_lines.index], name=f"line_imports_{region}_upper")
-
-        #     lhs += (line_imports.sum() * EF_unspecified)
-
-        rhs = region_co2lim
-        n.model.add_constraints(lhs <= rhs, name=f"GlobalConstraint-{region}_co2_limit")
+            rhs = region_co2lim - (region_demand * EF_imports)
+            n.model.add_constraints(
+                lhs <= rhs,
+                name=f"GlobalConstraint-{emmission_lim.name}_co2_limit",
+            )
+            logger.info(f"Adding regional Co2 Limit for {emmission_lim.name}")
 
 
 def add_SAFE_constraints(n, config):
@@ -553,7 +613,14 @@ def add_regional_SAFE_constraints(n, config):
         config["electricity"]["SAFE_regional_reservemargins"],
         index_col=[0],
     )
+
+    # reeds_prm= pd.read_csv(
+    #     snakemake.input.safer_reeds,
+    #     index_col=[0],
+    # )
     for region in regional_prm.index:
+        if region not in n.buses.country.values:
+            continue
         peakdemand = (
             n.loads_t.p_set.loc[:, n.loads.bus.str.contains(region)].sum(axis=1).max()
         )
@@ -781,6 +848,9 @@ def extra_functionality(n, snapshots):
     reserve = config["electricity"].get("operational_reserve", {})
     if reserve.get("activate"):
         add_operational_reserve_margin(n, snapshots, config)
+    interface_limits = config["lines"].get("interface_transmission_limits", {})
+    if interface_limits:
+        add_interface_limits(n, snapshots, config)
     for o in opts:
         if "EQ" in o:
             add_EQ_constraints(n, o)
@@ -844,14 +914,14 @@ if __name__ == "__main__":
         from _helpers import mock_snakemake
 
         snakemake = mock_snakemake(
-            "solve_network",
+            "solve_network_operations",
             simpl="",
-            opts="Co2L2.0-RPS",
+            opts="Ep",
             clusters="40",
             ll="v1.0",
             sector_opts="",
             sector="E",
-            planning_horizons="2030",
+            planning_horizons="",
             interconnect="western",
         )
     configure_logging(snakemake)

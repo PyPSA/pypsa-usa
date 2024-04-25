@@ -7,16 +7,6 @@ A solved network
 
 **Outputs**
 
-Capacity maps for:
-    - Base capacity
-    - New capacity
-    - Optimal capacity (does not show existing unused capacity)
-    - Optimal browfield capacity
-    - Renewable potential capacity
-
-    .. image:: _static/plots/capacity-map.png
-        :scale: 33 %
-
 System level charts for:
     - Hourly production
     - Generator costs
@@ -32,13 +22,9 @@ System level charts for:
         :scale: 33 %
 
 Emission charts for:
-    - Emissions map by node
     - Accumulated emissions
 
     .. image:: _static/plots/emissions-area.png
-        :scale: 33 %
-
-    .. image:: _static/plots/emissions-map.png
         :scale: 33 %
 """
 
@@ -57,34 +43,24 @@ import pypsa
 import seaborn as sns
 
 logger = logging.getLogger(__name__)
-from _helpers import configure_logging
-from summary import (
-    get_demand_timeseries,
-    get_energy_timeseries,
-    get_node_emissions_timeseries,
-    get_tech_emissions_timeseries,
-    get_capital_costs,
-    get_generator_marginal_costs,
-)
-from add_electricity import (
-    add_nice_carrier_names,
-    sanitize_carriers,
-)
-
-import matplotlib.pyplot as plt
-from matplotlib.lines import Line2D
-import pandas as pd
-import geopandas as gpd
 import cartopy.crs as ccrs
-
+import geopandas as gpd
 import matplotlib.pyplot as plt
 import pandas as pd
-import geopandas as gpd
-import cartopy.crs as ccrs
-
 import plotly.express as px
 import plotly.graph_objects as go
-
+from _helpers import configure_logging
+from add_electricity import add_nice_carrier_names, sanitize_carriers
+from matplotlib.lines import Line2D
+from summary import (
+    get_capital_costs,
+    get_demand_timeseries,
+    get_energy_timeseries,
+    get_fuel_costs,
+    get_generator_marginal_costs,
+    get_node_emissions_timeseries,
+    get_tech_emissions_timeseries,
+)
 
 # Global Plotting Settings
 TITLE_SIZE = 16
@@ -149,14 +125,8 @@ def plot_accumulated_emissions_tech_html(
     # get data
 
     emissions = get_tech_emissions_timeseries(n).cumsum().mul(1e-6)  # T -> MT
-    emissions = emissions[
-        [
-            x
-            for x in n.carriers[n.carriers.co2_emissions > 0].index
-            if x in emissions.columns
-        ]
-    ]
-    emissions = emissions.rename(columns=n.carriers.nice_name)
+    zeros = emissions.columns[(np.abs(emissions) < 1e-7).all()]
+    emissions = emissions.drop(columns=zeros)
 
     # plot
 
@@ -186,14 +156,8 @@ def plot_hourly_emissions_html(n: pypsa.Network, save: str, **wildcards) -> None
     # get data
 
     emissions = get_tech_emissions_timeseries(n).mul(1e-6)  # T -> MT
-    emissions = emissions[
-        [
-            x
-            for x in n.carriers[n.carriers.co2_emissions > 0].index
-            if x in emissions.columns
-        ]
-    ]
-    emissions = emissions.rename(columns=n.carriers.nice_name)
+    zeros = emissions.columns[(np.abs(emissions) < 1e-7).all()]
+    emissions = emissions.drop(columns=zeros)
 
     # plot
 
@@ -602,14 +566,8 @@ def plot_regional_emissions_bar(
     """
     PLOT OF CO2 EMISSIONS BY REGION.
     """
-    generator_emissions = n.generators_t.p * n.generators.carrier.map(
-        n.carriers.co2_emissions,
-    )
     regional_emisssions = (
-        generator_emissions.groupby(n.generators.bus.map(n.buses.country), axis=1)
-        .sum()
-        .sum()
-        / 1e6
+        get_node_emissions_timeseries(n).T.groupby(n.buses.country).sum().T.sum() / 1e6
     )
 
     plt.figure(figsize=(10, 10))
@@ -704,14 +662,8 @@ def plot_hourly_emissions(n: pypsa.Network, save: str, **wildcards) -> None:
     # get data
 
     emissions = get_tech_emissions_timeseries(n).mul(1e-6)  # T -> MT
-    emissions = emissions[
-        [
-            x
-            for x in n.carriers[n.carriers.co2_emissions > 0].index
-            if x in emissions.columns
-        ]
-    ]
-    emissions = emissions.rename(columns=n.carriers.nice_name)
+    zeros = emissions.columns[(np.abs(emissions) < 1e-7).all()]
+    emissions = emissions.drop(columns=zeros)
 
     # plot
     color_palette = get_color_palette(n)
@@ -741,14 +693,8 @@ def plot_accumulated_emissions_tech(n: pypsa.Network, save: str, **wildcards) ->
     # get data
 
     emissions = get_tech_emissions_timeseries(n).cumsum().mul(1e-6)  # T -> MT
-    emissions = emissions[
-        [
-            x
-            for x in n.carriers[n.carriers.co2_emissions > 0].index
-            if x in emissions.columns
-        ]
-    ]
-    emissions = emissions.rename(columns=n.carriers.nice_name)
+    zeros = emissions.columns[(np.abs(emissions) < 1e-7).all()]
+    emissions = emissions.drop(columns=zeros)
 
     # plot
 
@@ -959,7 +905,6 @@ def plot_generator_data_panel(
         x="snapshot",
         y="Value",
         hue="Carrier",
-        errorbar="sd",
         ax=axes[0, 0],
     )
     sns.barplot(data=df_capex_expand, x="carrier", y="capital_cost", ax=axes[0, 1])
@@ -991,6 +936,7 @@ def plot_generator_data_panel(
     # Set labels for each subplot
     axes[0, 0].set_xlabel("")
     axes[0, 0].set_ylabel("$ / MWh")
+    axes[0, 0].set_ylim(0, 300)
     axes[0, 1].set_xlabel("")
     axes[0, 1].set_ylabel("$ / MW-yr")
     axes[1, 0].set_xlabel("")
@@ -1057,6 +1003,70 @@ def plot_region_lmps(
     plt.savefig(save)
 
 
+#### Fuel costs
+
+
+def plot_fuel_costs(
+    n: pypsa.Network,
+    save: str,
+    **wildcards,
+) -> None:
+
+    fuel_costs = get_fuel_costs(n)
+
+    fuels = set(fuel_costs.index.get_level_values("carrier"))
+
+    fig, axs = plt.subplots(len(fuels) + 1, 1, figsize=(20, 40))
+
+    color_palette = n.carriers.color.to_dict()
+
+    # plot error plot of all fuels
+    df = (
+        fuel_costs.droplevel(["bus", "Generator"])
+        .T.resample("d")
+        .mean()
+        .reset_index()
+        .melt(id_vars="snapshot")
+    )
+    sns.lineplot(
+        data=df,
+        x="snapshot",
+        y="value",
+        hue="carrier",
+        ax=axs[0],
+        legend=True,
+        palette=color_palette,
+    )
+    axs[0].set_title("Daily Average Fuel Costs [$/MWh]"),
+    axs[0].set_xlabel(""),
+    axs[0].set_ylabel("$/MWh"),
+
+    # plot bus fuel prices for each fuel
+    for i, fuel in enumerate(fuels):
+        nice_name = n.carriers.at[fuel, "nice_name"]
+        df = (
+            fuel_costs.loc[fuel, :, :]
+            .droplevel("Generator")
+            .T.resample("d")
+            .mean()
+            .T.groupby(level=0)
+            .mean()
+            .T
+        )
+        sns.lineplot(
+            data=df,
+            legend=False,
+            palette="muted",
+            dashes=False,
+            ax=axs[i + 1],
+        )
+        axs[i + 1].set_title(f"Daily Average {nice_name} Fuel Costs per Bus [$/MWh]"),
+        axs[i + 1].set_xlabel(""),
+        axs[i + 1].set_ylabel("$/MWh"),
+
+    fig.savefig(save)
+
+
 # Pie Chart
 def plot_california_emissions(
     n: pypsa.Network,
@@ -1109,11 +1119,11 @@ if __name__ == "__main__":
         from _helpers import mock_snakemake
 
         snakemake = mock_snakemake(
-            "plot_figures",
+            "plot_statistics",
             interconnect="western",
-            clusters=30,
-            ll="v1.15",
-            opts="CO2L0.75-4H",
+            clusters=80,
+            ll="v1.0",
+            opts="Ep-Co2L0.2",
             sector="E",
         )
     configure_logging(snakemake)
@@ -1210,6 +1220,11 @@ if __name__ == "__main__":
         snakemake.output["capfac_heatmap.pdf"],
         **snakemake.wildcards,
     )
+    plot_fuel_costs(
+        n,
+        snakemake.output["fuel_costs.pdf"],
+        **snakemake.wildcards,
+    )
 
     # HTML Plots
     plot_production_html(
@@ -1248,11 +1263,11 @@ if __name__ == "__main__":
         **snakemake.wildcards,
     )
 
-    if snakemake.wildcards["interconnect"] == "western":
-        # California Emissions
-        plot_california_emissions(
-            n,
-            Path(snakemake.output["region_lmps.pdf"]).parents[0]
-            / "california_emissions.png",
-            **snakemake.wildcards,
-        )
+    # if snakemake.wildcards["interconnect"] == "western":
+    #     # California Emissions
+    #     plot_california_emissions(
+    #         n,
+    #         Path(snakemake.output["region_lmps.pdf"]).parents[0]
+    #         / "california_emissions.png",
+    #         **snakemake.wildcards,
+    #     )

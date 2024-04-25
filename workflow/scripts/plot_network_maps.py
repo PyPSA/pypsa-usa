@@ -17,26 +17,8 @@ Capacity maps for:
     .. image:: _static/plots/capacity-map.png
         :scale: 33 %
 
-System level charts for:
-    - Hourly production
-    - Generator costs
-    - Generator capacity
-
-    .. image:: _static/plots/production-area.png
-        :scale: 33 %
-
-    .. image:: _static/plots/costs-bar.png
-        :scale: 33 %
-
-    .. image:: _static/plots/capacity-bar.png
-        :scale: 33 %
-
 Emission charts for:
     - Emissions map by node
-    - Accumulated emissions
-
-    .. image:: _static/plots/emissions-area.png
-        :scale: 33 %
 
     .. image:: _static/plots/emissions-map.png
         :scale: 33 %
@@ -51,33 +33,22 @@ import pandas as pd
 import pypsa
 import seaborn as sns
 from cartopy import crs as ccrs
-from pypsa.plot import add_legend_circles
-from pypsa.plot import add_legend_lines
-from pypsa.plot import add_legend_patches
+from pypsa.plot import add_legend_circles, add_legend_lines, add_legend_patches
 
 logger = logging.getLogger(__name__)
+import cartopy.crs as ccrs
+import geopandas as gpd
+import matplotlib.pyplot as plt
+import pandas as pd
 from _helpers import configure_logging
+from add_electricity import sanitize_carriers
+from matplotlib.lines import Line2D
 from summary import (
-    get_node_emissions_timeseries,
     get_capacity_base,
     get_capacity_brownfield,
     get_demand_base,
+    get_node_emissions_timeseries,
 )
-from add_electricity import (
-    sanitize_carriers,
-)
-
-import matplotlib.pyplot as plt
-from matplotlib.lines import Line2D
-import pandas as pd
-import geopandas as gpd
-import cartopy.crs as ccrs
-
-import matplotlib.pyplot as plt
-import pandas as pd
-import geopandas as gpd
-import cartopy.crs as ccrs
-
 
 # Global Plotting Settings
 TITLE_SIZE = 16
@@ -237,6 +208,9 @@ def plot_capacity_map(
     bus_scale=1,
     line_scale=1,
     title=None,
+    flow=None,
+    line_colors="teal",
+    link_colors="green",
 ) -> tuple[plt.figure, plt.axes]:
     """
     Generic network plotting function for capacity pie charts at each node.
@@ -257,10 +231,12 @@ def plot_capacity_map(
             bus_alpha=0.7,
             line_widths=line_width,
             link_widths=0 if link_width.empty else link_width,
-            line_colors="teal",
+            line_colors=line_colors,
+            link_colors=link_colors,
             ax=ax,
             margin=0.2,
             color_geomap=None,
+            flow=flow,
         )
 
     # onshore regions

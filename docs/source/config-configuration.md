@@ -1,34 +1,6 @@
 (config)=
 # Configuration
 
-**This workflow is currently only being tested for the `western` and  `texas` interconnection wildcards.**
-
-(network_cf)=
-## Pre-set Configuration Options
-
-## `network_configuration`
-
-The `network_configuration` option accepts 2 values: `pypsa-usa` and `ads2032` Each cooresponds to a different combiation of input datasources for the generators, demand data, and generation timeseries for renewable generators. The public version of the WECC ADS PCM does not include data on the transmission network, but does provide detailed information on generators. For this reason the WECC ADS generators are superimposed on the TAMU/BE network.
-
-Most users will leave this as `pypsa-usa`.
-
-| Configuration Options: | PyPSA-USA | ADS2032(lite) |
-|:----------:|:----------:|:----------:|
-| Transmission | TAMU/BE | TAMU/BE |
-| Thermal Generators | EIA860, WECC-ADS, CEC Plexos | WECC-ADS |
-| Renewable Time-Series | Atlite | WECC-ADS |
-| Hydro Time-Series | Breakthrough (temp) | WECC-ADS |
-| Demand | EIA930 | WECC-ADS |
-| Historical Demand | 2019-2023 | - |
-| Future Demand | NREL EFS | WECC ADS 2032 |
-| Interconnections Supported | WECC + ERCOT | WECC |
-| Capital Costs | NREL-ATB | NREL-ATB |
-| Fuel Costs | CAISO/EIA | CAISO/EIA |
-| Purpose[^+] | CEM, PCS | PCS |
-
-[^+]: CEM = Capacity Expansion Model, PCS = Production Cost Simulation
-
-
 (run_cf)=
 ## `run`
 
@@ -39,7 +11,7 @@ investment changes as more ambitious greenhouse-gas emission reduction targets a
 The `run` section is used for running and storing scenarios with different configurations which are not covered by [wildcards](#wildcards). It determines the path at which resources, networks and results are stored. Therefore the user can run different configurations within the same directory.
 
 ```{eval-rst}
-.. literalinclude:: ../../workflow/config/config.default.yaml
+.. literalinclude:: ../../workflow/repo_data/config/config.default.yaml
    :language: yaml
    :start-at: run:
    :end-before: # docs :
@@ -59,19 +31,24 @@ The `scenario` section is used for setting the wildcards and defining planning h
 Planning horizons determines which year of future demand forecast to use for your planning model. If you leave `planning_horizons:` empty, historical demand will be set according to `snapshots`.
 
 ```{eval-rst}
-.. literalinclude:: ../../workflow/config/config.default.yaml
+.. literalinclude:: ../../workflow/repo_data/config/config.default.yaml
    :language: yaml
    :start-at: scenario:
    :end-before: # docs :
+
+.. csv-table::
+   :header-rows: 1
+   :widths: 22,7,22,33
+   :file: configtables/scenario.csv
 ```
 
 (snapshots_cf)=
 ## `snapshots`
 
-Specifies the temporal range to build an energy system model for as arguments to `(pandas.date_range)[https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.date_range.html]`
+Specifies the temporal range to build an energy system model for as arguments to [`pandas.date_range`](https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.date_range.html)
 
 ```{eval-rst}
-.. literalinclude:: ../../workflow/config/config.default.yaml
+.. literalinclude:: ../../workflow/repo_data/config/config.default.yaml
    :language: yaml
    :start-at: snapshots:
    :end-before: # docs :
@@ -88,7 +65,7 @@ Specifies the temporal range to build an energy system model for as arguments to
 Define and specify the `atlite.Cutout` used for calculating renewable potentials and time-series. All options except for `features` are directly used as [`cutout parameters`](https://atlite.readthedocs.io/en/latest/ref_api.html#cutout)
 
 ```{eval-rst}
-.. literalinclude:: ../../workflow/config/config.default.yaml
+.. literalinclude:: ../../workflow/repo_data/config/config.common.yaml
    :language: yaml
    :start-at: atlite:
    :end-before: # docs
@@ -105,7 +82,7 @@ Define and specify the `atlite.Cutout` used for calculating renewable potentials
 Specifies the types of generators that are included in the network, which are extendable, and the CO2 base for which the optimized reduction is relative to.
 
 ```{eval-rst}
-.. literalinclude:: ../../workflow/config/config.default.yaml
+.. literalinclude:: ../../workflow/repo_data/config/config.default.yaml
    :language: yaml
    :start-at: electricity:
    :end-before: # docs :
@@ -116,15 +93,19 @@ Specifies the types of generators that are included in the network, which are ex
    :file: configtables/electricity.csv
 ```
 
+```{note}
+See [here](./config-co2-base.md) for information on interconnect level base emission values.
+```
+
 (renewable_cf)=
 ## `renewable`
 
 ### `solar`
 ```{eval-rst}
-.. literalinclude:: ../../workflow/config/config.default.yaml
+.. literalinclude:: ../../workflow/repo_data/config/config.common.yaml
    :language: yaml
    :start-at: solar:
-   :end-before: # docs :
+   :end-before: hydro:
 
 .. csv-table::
    :header-rows: 1
@@ -134,10 +115,10 @@ Specifies the types of generators that are included in the network, which are ex
 
 ### `onwind`
 ```{eval-rst}
-.. literalinclude:: ../../workflow/config/config.default.yaml
+.. literalinclude:: ../../workflow/repo_data/config/config.common.yaml
    :language: yaml
    :start-at: onwind:
-   :end-before: # docs :
+   :end-before: offwind:
 
 .. csv-table::
    :header-rows: 1
@@ -145,10 +126,18 @@ Specifies the types of generators that are included in the network, which are ex
    :file: configtables/onwind.csv
 ```
 
+### `Offshore wind`
+```{eval-rst}
+.. literalinclude:: ../../workflow/repo_data/config/config.common.yaml
+   :language: yaml
+   :start-at: offwind:
+   :end-before: solar:
+```
+
 (lines_cf)=
 ## `lines`
 ```{eval-rst}
-.. literalinclude:: ../../workflow/config/config.default.yaml
+.. literalinclude:: ../../workflow/repo_data/config/config.default.yaml
    :language: yaml
    :start-at: lines:
    :end-before: # docs
@@ -163,7 +152,7 @@ Specifies the types of generators that are included in the network, which are ex
 ## `links`
 
 ```{eval-rst}
-.. literalinclude:: ../../workflow/config/config.default.yaml
+.. literalinclude:: ../../workflow/repo_data/config/config.default.yaml
    :language: yaml
    :start-at: links:
    :end-before: # docs
@@ -174,26 +163,26 @@ Specifies the types of generators that are included in the network, which are ex
    :file: configtables/links.csv
 ```
 
-(load_cf)=
+<!-- (load_cf)=
 ## `load`
 
 ```{eval-rst}
-.. literalinclude:: ../../workflow/config/config.default.yaml
+.. literalinclude:: ../../workflow/repo_data/config/config.default.yaml
    :language: yaml
-   :start-after: load:
+   :start-after: # p_nom_max:
    :end-before: # docs
 
 .. csv-table::
    :header-rows: 1
    :widths: 22,7,22,33
    :file: configtables/load.csv
-```
+``` -->
 
 (costs_cf)=
 ## `costs`
 
 ```{eval-rst}
-.. literalinclude:: ../../workflow/config/config.default.yaml
+.. literalinclude:: ../../workflow/repo_data/config/config.default.yaml
    :language: yaml
    :start-at: costs:
    :end-before: # docs
@@ -206,12 +195,51 @@ Specifies the types of generators that are included in the network, which are ex
 
 (sector_cf)=
 ## `sector`
-```{eval-rst}
-.. literalinclude:: ../../workflow/config/config.default.yaml
+<!-- ```{eval-rst}
+.. literalinclude:: ../../workflow/repo_data/config/config.default.yaml
    :language: yaml
    :start-at: sector:
    :end-before: # docs
 
+.. csv-table::
+   :header-rows: 1
+   :widths: 22,7,22,33
+   :file: configtables/sector.csv
+``` -->
+
+```{warning}
+Sector coupling studies are all under active development
+```
+
+```yaml
+sector:
+  co2_sequestration_potential: 0
+  natural_gas:
+    allow_imports_exports: true # false to be implemented
+    cyclic_storage: false
+  heating:
+    heat_pump_sink_T: 55.
+  demand:
+    profile:
+      residential: eulp # efs, eulp
+      commercial: eulp # efs, eulp
+      transport: efs # efs
+      industry: efs # efs
+    scale:
+      residential: aeo # efs, aeo
+      commercial: aeo # efs, aeo
+      transport: aeo # efs, aeo
+      industry: aeo # efs, aeo
+    disaggregation:
+      residential: pop # pop
+      commercial: pop # pop
+      transport: pop # pop
+      industry: pop # pop
+    scenarios:
+      aeo: reference
+```
+
+```{eval-rst}
 .. csv-table::
    :header-rows: 1
    :widths: 22,7,22,33
@@ -222,16 +250,14 @@ Specifies the types of generators that are included in the network, which are ex
 (clustering_cf)=
 ## `clustering`
 
-Minimum Number of clusters:
-```bash
-Eastern: TBD
-Western: 30
-Texas: TBD
-```
+When clustering `aggregation_zones` defines the region boundaries which will be respected through the clustering process; State boarders, balancing authority regions, or REeDs shapes. This feature is important for imposing constraints (`opts`) which are defined over specific regions. For example, the data included in the model on interface transfer capacities are prepared for REeDs shapes but not states and BA regions. Moving forward we plan to use REeDs shapes as our default however we will maintain States and BA regions as well.
 
+Each clustering and interconnection option will have a different number of minimum nodes which can be clustered to, an error will be thrown in `cluster_network` notifying you of that number if you have selected a value too low.
+
+Cleaned and labeled REeDs Shapes are pulled from this github repository: https://github.com/pandaanson/NYU-law-work
 
 ```{eval-rst}
-.. literalinclude:: ../../workflow/config/config.default.yaml
+.. literalinclude:: ../../workflow/repo_data/config/config.default.yaml
    :language: yaml
    :start-at: clustering:
    :end-before: # docs :
@@ -245,8 +271,6 @@ Texas: TBD
 
 ```{note}
 `feature:` in `simplify_network:` are only relevant if `hac` were chosen in `algorithm`.
-
-- Use `focus_weights` to specify the proportion of cluster nodes to be attributed to a given zone given by the `aggregation_zone` configuration.
 ```
 
 ```{tip}
@@ -257,7 +281,7 @@ use `min` in `p_nom_max:` for more conservative assumptions.
 ## `solving`
 
 ```{eval-rst}
-.. literalinclude:: ../../workflow/config/config.default.yaml
+.. literalinclude:: ../../workflow/repo_data/config/config.default.yaml
    :language: yaml
    :start-at: solving:
 
@@ -271,7 +295,7 @@ use `min` in `p_nom_max:` for more conservative assumptions.
 ## `plotting`
 
 ```{eval-rst}
-.. literalinclude:: ../../workflow/config/config.plotting.yaml
+.. literalinclude:: ../../workflow/repo_data/config/config.plotting.yaml
    :language: yaml
 
 .. csv-table::

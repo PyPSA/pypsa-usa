@@ -7,8 +7,7 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 import xarray as xr
-from dask.distributed import Client
-from dask.distributed import LocalCluster
+from dask.distributed import Client, LocalCluster
 
 if __name__ == "__main__":
     if "snakemake" not in globals():

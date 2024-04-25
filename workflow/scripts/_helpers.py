@@ -1,10 +1,6 @@
 # By PyPSA-USA Authors
 
 
-from pathlib import Path
-
-
-import re
 import contextlib
 import copy
 import hashlib
@@ -16,15 +12,28 @@ from functools import partial
 from pathlib import Path
 
 import pandas as pd
-import pandas as pd
 import pytz
 import requests
 import yaml
 from snakemake.utils import update_config
 from tqdm import tqdm
 
-
 REGION_COLS = ["geometry", "name", "x", "y", "country"]
+
+
+def set_scenario_config(snakemake):
+    scenario = snakemake.config["run"].get("scenarios", {})
+    if scenario.get("enable") and "run" in snakemake.wildcards.keys():
+        try:
+            with open(scenario["file"]) as f:
+                scenario_config = yaml.safe_load(f)
+        except FileNotFoundError:
+            # fallback for mock_snakemake
+            script_dir = Path(__file__).parent.resolve()
+            root_dir = script_dir.parent
+            with open(root_dir / scenario["file"]) as f:
+                scenario_config = yaml.safe_load(f)
+        update_config(snakemake.config, scenario_config[snakemake.wildcards.run])
 
 
 def configure_logging(snakemake, skip_handlers=False):
@@ -152,7 +161,7 @@ def pdbcast(v, h):
 
 def load_network_for_plots(fn, tech_costs, config, combine_hydro_ps=True):
     import pypsa
-    from add_electricity import update_transmission_costs, load_costs
+    from add_electricity import load_costs, update_transmission_costs
 
     n = pypsa.Network(fn)
 
@@ -294,6 +303,7 @@ def aggregate_costs(n, flatten=False, opts=None, existing_only=False):
 
 def progress_retrieve(url, file):
     import urllib
+
     from progressbar import ProgressBar
 
     pbar = ProgressBar(0, 100)
@@ -322,8 +332,9 @@ def get_aggregation_strategies(aggregation_strategies):
 
 
 def export_network_for_gis_mapping(n, output_path):
-    import pandas as pd
     import os
+
+    import pandas as pd
 
     # Creating GIS Table for Mapping Lines in QGIS
     lines_gis = n.lines.copy()
@@ -367,11 +378,12 @@ def mock_snakemake(rulename, **wildcards):
         keyword arguments fixing the wildcards. Only necessary if wildcards are
         needed.
     """
-    import snakemake as sm
     import os
+
+    import snakemake as sm
+    from packaging.version import Version, parse
     from pypsa.descriptors import Dict
     from snakemake.script import Snakemake
-    from packaging.version import Version, parse
 
     script_dir = Path(__file__).parent.resolve()
     assert (
@@ -474,9 +486,18 @@ def test_network_datatype_consistency(n):
         return None
 
 
+def update_config_with_sector_opts(config, sector_opts):
+    from snakemake.utils import update_config
+
+    for o in sector_opts.split("-"):
+        if o.startswith("CF+"):
+            l = o.split("+")[1:]
+            update_config(config, parse(l))
+
+
 def local_to_utc(group):
-    from constants import STATE_2_TIMEZONE
     import pytz
+    from constants import STATE_2_TIMEZONE
 
     timezone_str = STATE_2_TIMEZONE[group.name]
     timezone = pytz.timezone(timezone_str)
@@ -485,15 +506,6 @@ def local_to_utc(group):
     )
     utc = group + pd.Timedelta(hours=time_shift)
     return utc
-
-
-def update_config_with_sector_opts(config, sector_opts):
-    from snakemake.utils import update_config
-
-    for o in sector_opts.split("-"):
-        if o.startswith("CF+"):
-            l = o.split("+")[1:]
-            update_config(config, parse(l))
 
 
 def validate_checksum(file_path, zenodo_url=None, checksum=None):

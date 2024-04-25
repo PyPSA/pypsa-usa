@@ -1,0 +1,11 @@
+interface,region_1,region_2,flow_12,flow_21,Notes
+ReEDS_p10|p11,"CISO-SCE, IID",CISO-SDGE,1998.433,4701.644,For balancing_areas aggregation
+ReEDS_p10|p13,"CISO-SCE, IID","CISO-VEA, NEVP",8751.271,8049.93,For balancing_areas aggregation
+ReEDS_p10|p27,"CISO-SCE, IID",WALC,472.535,811,For balancing_areas aggregation
+ReEDS_p10|p28,"CISO-SCE, IID",Arizona,4899.847,4424.758,For balancing_areas aggregation
+ReEDS_p6+p8 | p9,PACW,CISO-PGAE,5100,5100,For balancing_areas aggregation
+ReEDS_p9|p10,CISO-PGAE,CISO-SCE,9328.34,6133.425,For balancing_areas aggregation
+ReEDS_p9|p12,CISO-PGAE,NEVP,297.86,436.768,For balancing_areas aggregation
+RESOLVE_CA_NW,"p9, p10, p11","p2, p5, p6, p7, p8",3591.96,9269.23,For ReEDS aggregation
+RESOLVE_CA_SW,"p9, p10, p11","p12, p13, p30, p28, p27, p25",10901,10463,For ReEDS aggregation
+RESOLVE_CAISO_Imports,"p9, p10, p11","p2, p5, p6, p7, p8, p12, p13, p30, p28, p27, p25",9728,10208,For ReEDS aggregation

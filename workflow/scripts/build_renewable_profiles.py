@@ -9,8 +9,7 @@ under water.
 
 .. note:: Hydroelectric profiles are built in script :mod:`build_hydro_profiles`.
 
-Relevant settings
------------------
+**Relevant settings**
 
 .. code:: yaml
 
@@ -41,8 +40,7 @@ Relevant settings
     Documentation of the configuration file ``config/config.yaml`` at
     :ref:`snapshots_cf`, :ref:`atlite_cf`, :ref:`renewable_cf`
 
-Inputs
-------
+**Inputs**
 
 - ``data/bundle/corine/g250_clc06_V18_5.tif``: `CORINE Land Cover (CLC) <https://land.copernicus.eu/pan-european/corine-land-cover>`_ inventory on `44 classes <https://wiki.openstreetmap.org/wiki/Corine_Land_Cover#Tagging>`_ of land use (e.g. forests, arable land, industrial, urban areas).
 
@@ -63,8 +61,7 @@ Inputs
 - ``"cutouts/" + params["renewable"][{technology}]['cutout']``: :ref:`cutout`
 - ``networks/base.nc``: :ref:`base`
 
-Outputs
--------
+**Outputs**
 
 - `resources/profile_{technology}.nc` with the following structure
 
@@ -181,8 +178,8 @@ if __name__ == "__main__":
 
         snakemake = mock_snakemake(
             "build_renewable_profiles",
-            technology="onwind",
-            interconnect="western",
+            technology="solar",
+            interconnect="eastern",
         )
     configure_logging(snakemake)
 
@@ -293,15 +290,14 @@ if __name__ == "__main__":
 
     # excluder.plot_shape_availability(regions)
 
+    logger.info("Calculate landuse availability...")
+    start = time.time()
+
     kwargs = dict(nprocesses=nprocesses, disable_progressbar=noprogress)
-    if noprogress:
-        logger.info("Calculate landuse availabilities...")
-        start = time.time()
-        availability = cutout.availabilitymatrix(regions, excluder, **kwargs)
-        duration = time.time() - start
-        logger.info(f"Completed availability calculation ({duration:2.2f}s)")
-    else:
-        availability = cutout.availabilitymatrix(regions, excluder, **kwargs)
+    availability = cutout.availabilitymatrix(regions, excluder, **kwargs)
+
+    duration = time.time() - start
+    logger.info(f"Completed landuse availability calculation ({duration:2.2f}s)")
 
     area = cutout.grid.to_crs("ESRI:54009").area / 1e6
     area = xr.DataArray(

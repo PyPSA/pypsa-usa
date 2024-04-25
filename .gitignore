@@ -9,10 +9,10 @@ dconf
 *.zip
 *.DS_Store
 *.dot
-*config.yaml
-*config.api.yaml
 *.tar.gz
 
+# configuration files
+config/
 
 # generated files
 results/
@@ -266,7 +266,7 @@ TSWLatexianTemp*
 
 # Exceptions to gitignore
 connect.sh
-config/config.cluster.yaml
+/workflow/config/config.cluster.yaml
 /workflow/repo_data/dag.png
 !.pre-commit-config.yaml
 

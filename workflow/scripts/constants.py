@@ -28,6 +28,13 @@ NG_MCF_2_MWH = 0.3035  # TODO get rid of this and just use single constant
 # $/MMBtu * (1 MMBtu / 0.293 MWh) = $/MWh_thermal
 NG_Dol_MMBTU_2_MWH = 3.4129
 
+LBS_TON = 2000  # lbs/ short ton
+COAL_BTU_LB = 9396  # BTU/lb - EIA US AVERAGE TODO: differentiate between coal types
+MMBTU_MWHthemal = 3.4129  # MMBTU to MWh_thermal
+COAL_dol_ton_2_MWHthermal = (
+    LBS_TON**-1 * COAL_BTU_LB * 1000**-1 * MMBTU_MWHthemal
+)  # $/ton * ton/BTU * BTU/MWh_thermal
+
 ################################
 # Constants for ADS WECC mapping
 ################################
@@ -176,47 +183,8 @@ ADS_FUEL_MAPPER = {
 # Constants for EIA mapping
 ###########################
 
-# maps EIA tech_type name to PyPSA name
-# {tech_type: pypsa carrier name}
-EIA_CARRIER_MAPPER = {
-    "Nuclear": "nuclear",
-    "Coal": "coal",
-    "Gas_SC": "OCGT",
-    "Gas_CC": "CCGT",
-    "Oil": "oil",
-    "Geothermal": "geothermal",
-    "Biomass": "biomass",
-    "Other": "other",
-    "Waste": "waste",
-    "Hydro": "hydro",
-    "Battery": "battery",
-    "Solar": "solar",
-    "Wind": "onwind",
-}
+# renaming moved to pre-processing
 
-EIA_PRIME_MOVER_MAPPER = {
-    "BA": "Energy Storage, Battery",
-    "CE": "Energy Storage, Compressed Air",
-    "CP": "Energy Storage, Concentrated Solar Power",
-    "FW": "Energy Storage, Flywheel",
-    "PS": "Energy Storage, Reversible Hydraulic Turbine (Pumped Storage)",
-    "ES": "Energy Storage, Other (specify in SCHEDULE 7)",
-    "ST": "Steam Turbine, including nuclear, geothermal and solar steam (does not include combined cycle)",
-    "GT": "Combustion (Gas) Turbine (does not include the combustion turbine part of a combined cycle; see code CT, below)",
-    "IC": "Internal Combustion Engine (diesel, piston, reciprocating)",
-    "CA": "Combined Cycle Steam Part",
-    "CT": "Combined Cycle Combustion Turbine Part",
-    "CS": "Combined Cycle Single Shaft (combustion turbine and steam turbine share a single generator)",
-    "HY": "Hydrokinetic, Axial Flow Turbine",
-    "HB": "Hydrokinetic, Wave Buoy",
-    "HK": "Hydrokinetic, Other (specify in SCHEDULE 7)",
-    "BT": "Hydroelectric Turbine (includes turbines associated with delivery of water by pipeline)",
-    "PV": "Photovoltaic",
-    "WT": "Wind Turbine, Onshore",
-    "WS": "Wind Turbine, Offshore",
-    "FC": "Fuel Cell",
-    "OT": "Other (specify in SCHEDULE 7)",
-}
 
 ###############################
 # Constants for Region Mappings
@@ -256,6 +224,74 @@ EIA_930_REGION_MAPPER = {
     "SW": "western",
     "TEN": "eastern",
     "TEX": "texas",
+}
+
+EIA_BA_2_REGION = {
+    "AEC": "SE",
+    "AECI": "MIDW",
+    "AVA": "NW",
+    "AVRN": "NW",
+    "AZPS": "SW",
+    "BANC": "CAL",
+    "BPAT": "NW",
+    "CHPD": "NW",
+    "CISO": "CAL",
+    "CPLE": "CAR",
+    "CPLW": "CAR",
+    "DEAA": "SW",
+    "DOPD": "NW",
+    "DUK": "CAR",
+    "EEI": "MIDW",
+    "EPE": "SW",
+    "ERCO": "TEX",
+    "FMPP": "FLA",
+    "FPC": "FLA",
+    "FPL": "FLA",
+    "GCPD": "NW",
+    "GRID": "NW",
+    "GRIF": "SW",
+    "GVL": "FLA",
+    "GWA": "NW",
+    "HGMA": "SW",
+    "HST": "FLA",
+    "IID": "CAL",
+    "IPCO": "NW",
+    "ISNE": "NE",
+    "JEA": "FLA",
+    "LDWP": "CAL",
+    "LGEE": "MIDW",
+    "MISO": "MIDW",
+    "NEVP": "NW",
+    "NSB": "FLA",
+    "NWMT": "NW",
+    "NYIS": "NY",
+    "PACE": "NW",
+    "PACW": "NW",
+    "PGE": "NW",
+    "PJM": "MIDA",
+    "PNM": "SW",
+    "PSCO": "NW",
+    "PSEI": "NW",
+    "SC": "CAR",
+    "SCEG": "CAR",
+    "SCL": "NW",
+    "SEC": "FLA",
+    "SEPA": "SE",
+    "SOCO": "SE",
+    "SPA": "CENT",
+    "SRP": "SW",
+    "SWPP": "CENT",
+    "TAL": "FLA",
+    "TEC": "FLA",
+    "TEPC": "SW",
+    "TIDC": "CAL",
+    "TPWR": "NW",
+    "TVA": "TEN",
+    "WACM": "NW",
+    "WALC": "SW",
+    "WAUW": "NW",
+    "WWA": "NW",
+    "YAD": "CAR",
 }
 
 STATES_INTERCONNECT_MAPPER = {
@@ -409,12 +445,6 @@ STATE_2_CODE = {
     "Mexico": "MX",
 }
 
-
-import pandas as pd
-import pytz
-from datetime import datetime, timedelta
-
-
 # Simplified dictionary to map states to their primary time zones.
 # Note: This does not account for states with multiple time zones or specific exceptions.
 STATE_2_TIMEZONE = {
@@ -498,7 +528,17 @@ ATB_TECH_MAPPER = {
         "crp": 45,
     },
     "coal": {
+        "display_name": "Coal-new",
+        "technology": "Coal_FE",
+        "crp": 30,
+    },
+    "coal_95CCS": {
         "display_name": "Coal-95%-CCS",
+        "technology": "Coal_FE",
+        "crp": 30,
+    },
+    "coal_99CCS": {
+        "display_name": "Coal-99%-CCS",
         "technology": "Coal_FE",
         "crp": 30,
     },
@@ -521,6 +561,11 @@ ATB_TECH_MAPPER = {
     },
     "OCGT": {  # natural gas
         "display_name": "NG Combustion Turbine (F-Frame)",
+        "technology": "NaturalGas_FE",
+        "crp": 30,
+    },
+    "CCGT_95CCS": {  # natural gas
+        "display_name": "NG Combined Cycle (F-Frame) 95% CCS",
         "technology": "NaturalGas_FE",
         "crp": 30,
     },

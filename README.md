@@ -1,4 +1,5 @@
 [![DOI](https://zenodo.org/badge/500892486.svg)](https://zenodo.org/doi/10.5281/zenodo.10815964)
+[![Documentation Status](https://readthedocs.org/projects/pypsa-usa/badge/?version=latest)](https://pypsa-usa.readthedocs.io/en/latest/?badge=latest)
 
 # PyPSA-USA: An Open-Source Energy System Optimization Model for the United States
 
@@ -6,8 +7,7 @@
 
 PyPSA-USA is an open-source power systems model of the bulk transmission systems in the United States. This workflow draws from the work of [pypsa-eur](https://pypsa-eur.readthedocs.io/en/latest/index.html) to build a highly configurable power systems model that can be used for capacity expansion modeling, production cost simulation, and power flow analysis.
 
-Example 500 Node Western Interconnection Network:
-![pypsa-usa Base Network](https://github.com/PyPSA/pypsa-usa/blob/master/workflow/repo_data/network_500.jpg)
+![pypsa-usa Base Network](https://github.com/PyPSA/pypsa-usa/blob/0fe788397238b14f07857a9748aa86c7781bfa27/docs/source/_static/PyPSA-USA_network.png)
 
 # Contributing
 

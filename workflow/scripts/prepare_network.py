@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: : 2017-2023 The PyPSA-Eur Authors - Adapted for PyPSA-USA
+# SPDX-FileCopyrightText: : 2017-2024 The PyPSA-Eur Authors
 #
 # SPDX-License-Identifier: MIT
 
@@ -57,18 +57,43 @@ Description
 """
 
 import logging
-import re
 
 import numpy as np
 import pandas as pd
 import pypsa
-from _helpers import configure_logging
+from _helpers import (
+    configure_logging,
+    set_scenario_config,
+    update_config_from_wildcards,
+)
 from add_electricity import load_costs, update_transmission_costs
 from pypsa.descriptors import expand_series
 
 idx = pd.IndexSlice
 
 logger = logging.getLogger(__name__)
+
+
+def maybe_adjust_costs_and_potentials(n, adjustments):
+    if not adjustments:
+        return
+
+    for attr, carrier_factor in adjustments.items():
+        for carrier, factor in carrier_factor.items():
+            # beware if factor is 0 and p_nom_max is np.inf, 0*np.inf is nan
+            if carrier == "AC":  # lines do not have carrier
+                n.lines[attr] *= factor
+                continue
+            comps = {
+                "p_nom_max": {"Generator", "Link", "StorageUnit"},
+                "e_nom_max": {"Store"},
+                "capital_cost": {"Generator", "Link", "StorageUnit", "Store"},
+                "marginal_cost": {"Generator", "Link", "StorageUnit", "Store"},
+            }
+            for c in n.iterate_components(comps[attr]):
+                sel = c.df.index[c.df.carrier == carrier]
+                c.df.loc[sel, attr] *= factor
+        logger.info(f"changing {attr} for {carrier} by factor {factor}")
 
 
 def add_co2limit(n, co2limit, Nyears=1.0):
@@ -79,126 +104,6 @@ def add_co2limit(n, co2limit, Nyears=1.0):
         sense="<=",
         constant=co2limit * Nyears,
     )
-
-
-def add_regional_co2limit(n, config):
-    """
-    Add CCL (country & carrier limit) constraint to the network.
-
-    Add minimum and maximum levels of generator nominal capacity per carrier
-    for individual countries. Opts and path for agg_p_nom_minmax.csv must be defined
-    in config.yaml. Default file is available at data/agg_p_nom_minmax.csv.
-
-    Parameters
-    ----------
-    n : pypsa.Network
-    config : dict
-
-    Example
-    -------
-    scenario:
-        opts: [Co2L-CCL-24H]
-    electricity:
-        agg_p_nom_limits: data/agg_p_nom_minmax.csv
-    """
-
-    def get_period(n, glc, sns):
-        period = slice(None)
-        if n._multi_invest and not np.isnan(glc["investment_period"]):
-            period = int(glc["investment_period"])
-            if period not in sns.unique("period"):
-                logger.warning(
-                    "Optimized snapshots do not contain the investment "
-                    f"period required for global constraint `{glc.name}`.",
-                )
-        return period
-
-    weightings = n.snapshot_weightings.loc[n.snapshots]
-
-    glcs = n.global_constraints.query('type == "primary_energy"')
-
-    from pypsa.linopt import get_var
-    from pypsa.descriptors import get_switchable_as_dense as get_as_dense
-
-    emissions = n.carriers.co2_emissions
-    gens = n.generators.query("carrier in @emissions.index")
-    if not gens.empty:
-        efficiency = get_as_dense(
-            n,
-            "Generator",
-            "efficiency",
-            inds=gens.index,
-        )  # mw_electrical/mw_th
-        em_pu = gens.carrier.map(emissions) / efficiency  # kg_co2/mw_electrical
-        em_pu = em_pu.multiply(weightings.generators, axis=0)
-        p = get_var(n, "Generator", "p").loc[sns, gens.index]
-
-        vals = linexpr((em_pu, p), as_pandas=False)
-        lhs += join_exprs(vals)
-
-        # storage units
-        sus = n.storage_units.query(
-            "carrier in @emissions.index and " "not cyclic_state_of_charge",
-        )
-        sus_i = sus.index
-        if not sus.empty:
-            em_pu = sus.carrier.map(emissions)
-            soc = (
-                get_var(n, "StorageUnit", "state_of_charge").loc[sns, sus_i].loc[period]
-            )
-            soc = soc.where(soc != -1).ffill().iloc[-1]
-            vals = linexpr((-em_pu, soc), as_pandas=False)
-            lhs = lhs + "\n" + join_exprs(vals)
-            rhs -= em_pu @ sus.state_of_charge_initial
-
-        # stores
-        n.stores["carrier"] = n.stores.bus.map(n.buses.carrier)
-        stores = n.stores.query("carrier in @emissions.index and not e_cyclic")
-        if not stores.empty:
-            em_pu = stores.carrier.map(emissions)
-            e = get_var(n, "Store", "e").loc[sns, stores.index].loc[period]
-            e = e.where(e != -1).ffill().iloc[-1]
-            vals = linexpr((-em_pu, e), as_pandas=False)
-            lhs = lhs + "\n" + join_exprs(vals)
-            rhs -= stores.carrier.map(emissions) @ stores.e_initial
-
-        define_constraints(
-            n,
-            lhs,
-            glc.sense,
-            rhs,
-            "GlobalConstraint",
-            "mu",
-            axes=pd.Index([name]),
-            spec=name,
-        )
-
-    agg_p_nom_minmax = pd.read_csv(
-        config["electricity"]["agg_p_nom_limits"],
-        index_col=[0, 1],
-    )
-    logger.info("Adding co2 constraints per state")
-    p_nom = n.model["Generator-p_nom"]
-
-    gens = n.generators.query("p_nom_extendable").rename_axis(index="Generator-ext")
-    grouper = pd.concat([gens.bus.map(n.buses.country), gens.carrier])
-    lhs = p_nom.groupby(grouper).sum().rename(bus="country")
-
-    minimum = xr.DataArray(agg_p_nom_minmax["min"].dropna()).rename(dim_0="group")
-    index = minimum.indexes["group"].intersection(lhs.indexes["group"])
-    if not index.empty:
-        n.model.add_constraints(
-            lhs.sel(group=index) >= minimum.loc[index],
-            name="agg_p_nom_min",
-        )
-
-    maximum = xr.DataArray(agg_p_nom_minmax["max"].dropna()).rename(dim_0="group")
-    index = maximum.indexes["group"].intersection(lhs.indexes["group"])
-    if not index.empty:
-        n.model.add_constraints(
-            lhs.sel(group=index) <= maximum.loc[index],
-            name="agg_p_nom_max",
-        )
 
 
 def add_gaslimit(n, gaslimit, Nyears=1.0):
@@ -228,23 +133,24 @@ def add_emission_prices(n, emission_prices={"co2": 0.0}, exclude_co2=False):
     n.storage_units["marginal_cost"] += su_ep
 
 
-def add_dynamic_emission_prices(n):
-    co2_price = pd.read_csv(snakemake.input.co2_price, index_col=0, parse_dates=True)
-    co2_price = co2_price[~co2_price.index.duplicated()]
-    co2_price = (
-        co2_price.reindex(n.snapshots).fillna(method="ffill").fillna(method="bfill")
-    )
+"""Revisit if we add dynamic emission prices in"""
+# def add_dynamic_emission_prices(n):
+#     co2_price = pd.read_csv(snakemake.input.co2_price, index_col=0, parse_dates=True)
+#     co2_price = co2_price[~co2_price.index.duplicated()]
+#     co2_price = (
+#         co2_price.reindex(n.snapshots).fillna(method="ffill").fillna(method="bfill")
+#     )
 
-    emissions = (
-        n.generators.carrier.map(n.carriers.co2_emissions) / n.generators.efficiency
-    )
-    co2_cost = expand_series(emissions, n.snapshots).T.mul(co2_price.iloc[:, 0], axis=0)
+#     emissions = (
+#         n.generators.carrier.map(n.carriers.co2_emissions) / n.generators.efficiency
+#     )
+#     co2_cost = expand_series(emissions, n.snapshots).T.mul(co2_price.iloc[:, 0], axis=0)
 
-    static = n.generators.marginal_cost
-    dynamic = n.get_switchable_as_dense("Generator", "marginal_cost")
+#     static = n.generators.marginal_cost
+#     dynamic = n.get_switchable_as_dense("Generator", "marginal_cost")
 
-    marginal_cost = dynamic + co2_cost.reindex(columns=dynamic.columns, fill_value=0)
-    n.generators_t.marginal_cost = marginal_cost.loc[:, marginal_cost.ne(static).any()]
+#     marginal_cost = dynamic + co2_cost.reindex(columns=dynamic.columns, fill_value=0)
+#     n.generators_t.marginal_cost = marginal_cost.loc[:, marginal_cost.ne(static).any()]
 
 
 def set_line_s_max_pu(n, s_max_pu=0.7):
@@ -314,7 +220,7 @@ def apply_time_segmentation(n, segments, solver_name="cbc"):
     logger.info(f"Aggregating time series to {segments} segments.")
     try:
         import tsam.timeseriesaggregation as tsam
-    except:
+    except ImportError:
         raise ModuleNotFoundError(
             "Optional dependency 'tsam' not found." "Install via 'pip install tsam'",
         )
@@ -388,30 +294,28 @@ def set_line_nom_max(
         n.lines["s_nom_max"] = n.lines["s_nom"] + s_nom_max_ext
 
     if np.isfinite(p_nom_max_ext) and p_nom_max_ext > 0:
-        logger.info(f"Limiting line extensions to {p_nom_max_ext} MW")
+        logger.info(f"Limiting link extensions to {p_nom_max_ext} MW")
         hvdc = n.links.index[n.links.carrier == "DC"]
         n.links.loc[hvdc, "p_nom_max"] = n.links.loc[hvdc, "p_nom"] + p_nom_max_ext
 
-    n.lines.s_nom_max.clip(upper=s_nom_max_set, inplace=True)
-    n.links.p_nom_max.clip(upper=p_nom_max_set, inplace=True)
+    n.lines["s_nom_max"] = n.lines.s_nom_max.clip(upper=s_nom_max_set)
+    n.links["p_nom_max"] = n.links.p_nom_max.clip(upper=p_nom_max_set)
 
 
-# %%
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
 
         snakemake = mock_snakemake(
             "prepare_network",
-            interconnect="western",
             simpl="",
-            clusters="30",
-            ll="v1.15",
-            opts="CO2L0.75-4H",
+            clusters="37",
+            ll="v1.0",
+            opts="Co2L-4H",
         )
     configure_logging(snakemake)
-
-    opts = snakemake.wildcards.opts.split("-")
+    set_scenario_config(snakemake)
+    update_config_from_wildcards(snakemake.config, snakemake.wildcards)
 
     n = pypsa.Network(snakemake.input[0])
     Nyears = n.snapshot_weightings.objective.sum() / 8760.0
@@ -424,79 +328,32 @@ if __name__ == "__main__":
 
     set_line_s_max_pu(n, snakemake.params.lines["s_max_pu"])
 
-    add_regional_co2limit(n, snakemake.config)
+    # temporal averaging
+    time_resolution = snakemake.params.time_resolution
+    is_string = isinstance(time_resolution, str)
+    if is_string and time_resolution.lower().endswith("h"):
+        n = average_every_nhours(n, time_resolution)
 
-    for o in opts:
-        m = re.match(r"^\d+h$", o, re.IGNORECASE)
-        if m is not None:
-            n = average_every_nhours(n, m.group(0))
-            break
+    # segments with package tsam
+    if is_string and time_resolution.lower().endswith("seg"):
+        solver_name = snakemake.config["solving"]["solver"]["name"]
+        segments = int(time_resolution.replace("seg", ""))
+        n = apply_time_segmentation(n, segments, solver_name)
 
-    for o in opts:
-        m = re.match(r"^\d+seg$", o, re.IGNORECASE)
-        if m is not None:
-            solver_name = snakemake.config["solving"]["solver"]["name"]
-            n = apply_time_segmentation(n, m.group(0)[:-3], solver_name)
-            break
+    if snakemake.params.co2limit_enable:
+        add_co2limit(n, snakemake.params.co2limit, Nyears)
 
-    for o in opts:
-        if "Co2L" in o:
-            m = re.findall(r"[0-9]*\.?[0-9]+$", o)
-            if len(m) > 0:
-                co2limit = float(m[0]) * snakemake.params.co2base
-                add_co2limit(n, co2limit, Nyears)
-                logger.info("Setting CO2 limit according to wildcard value.")
-            else:
-                add_co2limit(n, snakemake.params.co2limit, Nyears)
-                logger.info("Setting CO2 limit according to config value.")
-            break
+    if snakemake.params.gaslimit_enable:
+        add_gaslimit(n, snakemake.params.gaslimit, Nyears)
 
-    for o in opts:
-        if "CH4L" in o:
-            m = re.findall(r"[0-9]*\.?[0-9]+$", o)
-            if len(m) > 0:
-                limit = float(m[0]) * 1e6
-                add_gaslimit(n, limit, Nyears)
-                logger.info("Setting gas usage limit according to wildcard value.")
-            else:
-                add_gaslimit(n, snakemake.params.gaslimit, Nyears)
-                logger.info("Setting gas usage limit according to config value.")
-            break
+    maybe_adjust_costs_and_potentials(n, snakemake.params["adjustments"])
 
-    for o in opts:
-        if "+" not in o:
-            continue
-        oo = o.split("+")
-        suptechs = map(lambda c: c.split("-", 2)[0], n.carriers.index)
-        if oo[0].startswith(tuple(suptechs)):
-            carrier = oo[0]
-            # handles only p_nom_max as stores and lines have no potentials
-            attr_lookup = {"p": "p_nom_max", "c": "capital_cost", "m": "marginal_cost"}
-            attr = attr_lookup[oo[1][0]]
-            factor = float(oo[1][1:])
-            if carrier == "AC":  # lines do not have carrier
-                n.lines[attr] *= factor
-            else:
-                comps = {"Generator", "Link", "StorageUnit", "Store"}
-                for c in n.iterate_components(comps):
-                    sel = c.df.carrier.str.contains(carrier)
-                    c.df.loc[sel, attr] *= factor
-
-    for o in opts:
-        if "Ept" in o:
-            logger.info(
-                "Setting time dependent emission prices according spot market price",
-            )
-            add_dynamic_emission_prices(n)
-        elif "Ep" in o:
-            m = re.findall(r"[0-9]*\.?[0-9]+$", o)
-            if len(m) > 0:
-                logger.info("Setting emission prices according to wildcard value.")
-                add_emission_prices(n, dict(co2=float(m[0])))
-            else:
-                logger.info("Setting emission prices according to config value.")
-                add_emission_prices(n, snakemake.params.costs["emission_prices"])
-            break
+    emission_prices = snakemake.params.costs["emission_prices"]
+    if emission_prices["enable"]:
+        add_emission_prices(
+            n,
+            dict(co2=snakemake.params.costs["emission_prices"]["co2"]),
+        )
 
     ll_type, factor = snakemake.wildcards.ll[0], snakemake.wildcards.ll[1:]
     set_transmission_limit(n, ll_type, factor, costs, Nyears)
@@ -509,10 +366,9 @@ if __name__ == "__main__":
         p_nom_max_ext=snakemake.params.links.get("max_extension", np.inf),
     )
 
-    if "ATK" in opts:
-        enforce_autarky(n)
-    elif "ATKc" in opts:
-        enforce_autarky(n, only_crossborder=True)
+    if snakemake.params.autarky["enable"]:
+        only_crossborder = snakemake.params.autarky["by_country"]
+        enforce_autarky(n, only_crossborder=only_crossborder)
 
     n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))
     n.export_to_netcdf(snakemake.output[0])

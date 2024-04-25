@@ -11,39 +11,75 @@ from functools import reduce
 import numpy as np
 import pandas as pd
 import pypsa
-from _helpers import configure_logging
-from _helpers import export_network_for_gis_mapping
+from _helpers import configure_logging, export_network_for_gis_mapping
 from pypsa.clustering.spatial import get_clustering_from_busmap
 
 logger = logging.getLogger(__name__)
 
 
-def simplify_network_to_voltage_level(n, voltage_level):
+def convert_to_per_unit(df):
+    # Constants
+    sqrt_3 = 3**0.5
+
+    # Calculating base values per component
+    # df['base_current'] = df['s_nom'] / (df['v_nom'] * sqrt_3)
+    df["base_impedance"] = df["v_nom"] ** 2 / df["s_nom"]
+    df["base_susceptance"] = 1 / df["base_impedance"]
+
+    # Converting to per-unit values
+    df["resistance_pu"] = df["r"] / df["base_impedance"]
+    df["reactance_pu"] = df["x"] / df["base_impedance"]
+    df["susceptance_pu"] = df["b"] / df["base_susceptance"]
+
+    # Dropping intermediate columns (optional)
+    df.drop(["base_impedance", "base_susceptance"], axis=1, inplace=True)
+
+    return df
+
+
+def convert_to_voltage_level(n, new_voltage):
     """
-    Simplify network to a single voltage level.
+    Converts network.lines parameters to a given voltage.
 
-    Network Line Characteristics (s_nom, num_parallel, type) are mapped
-    to the new voltage level.
+    Parameters:
+    n (pypsa.Network): Network
+    new_voltage (float): New voltage level
     """
-    logger.info("Mapping all network lines onto a single layer")
+    df = convert_to_per_unit(n.lines.copy())
 
-    n.buses["v_nom"] = voltage_level
+    # Constants
+    sqrt_3 = 3**0.5
 
-    (linetype,) = n.lines.loc[n.lines.v_nom == voltage_level, "type"].unique()
-    lines_v_nom_b = n.lines.v_nom != voltage_level
-    n.lines.loc[lines_v_nom_b, "num_parallel"] *= (
-        n.lines.loc[lines_v_nom_b, "v_nom"] / voltage_level
-    ) ** 2
-    n.lines.loc[lines_v_nom_b, "v_nom"] = voltage_level
-    n.lines.loc[lines_v_nom_b, "type"] = linetype
-    n.lines.loc[lines_v_nom_b, "s_nom"] = (
-        np.sqrt(3)
-        * n.lines["type"].map(n.line_types.i_nom)
-        * n.lines.bus0.map(n.buses.v_nom)
-        * n.lines.num_parallel
+    df["new_base_impedance"] = new_voltage**2 / df["s_nom"]
+
+    # Convert per-unit values back to actual values using the new base impedance
+    df["r"] = df["resistance_pu"] * df["new_base_impedance"]
+    df["x"] = df["reactance_pu"] * df["new_base_impedance"]
+    df["b"] = df["susceptance_pu"] / df["new_base_impedance"]
+
+    df.v_nom = new_voltage
+
+    # Dropping intermediate column
+    df.drop(
+        ["new_base_impedance", "resistance_pu", "reactance_pu", "susceptance_pu"],
+        axis=1,
+        inplace=True,
     )
 
-    # Replace transformers by lines
+    # df.r = df.r.fillna(0) #how to deal with existing components that have zero power capacity s_nom
+    # df.x = df.x.fillna(0)
+    # df.b = df.b.fillna(0)
+
+    # Update network lines
+    (linetype,) = n.lines.loc[n.lines.v_nom == voltage_level, "type"].unique()
+    df.type = linetype  # Do I even need to set line types? Can drop.
+
+    n.buses["v_nom"] = voltage_level
+    n.lines = df
+    return n
+
+
+def remove_transformers(n):
     trafo_map = pd.Series(n.transformers.bus1.values, index=n.transformers.bus0.values)
     trafo_map = trafo_map[~trafo_map.index.duplicated(keep="first")]
     several_trafo_b = trafo_map.isin(trafo_map.index)
@@ -60,7 +96,6 @@ def simplify_network_to_voltage_level(n, voltage_level):
 
     n.mremove("Transformer", n.transformers.index)
     n.mremove("Bus", n.buses.index.difference(trafo_map))
-
     return n, trafo_map
 
 
@@ -69,6 +104,7 @@ def aggregate_to_substations(
     substations,
     busmap,
     aggregation_zones: str,
+    aggregation_strategies=dict(),
 ):
     """
     Aggregate network to substations.
@@ -78,6 +114,10 @@ def aggregate_to_substations(
     """
 
     logger.info("Aggregating buses to substation level...")
+
+    line_strategies = aggregation_strategies.get("lines", dict())
+    generator_strategies = aggregation_strategies.get("generators", dict())
+    one_port_strategies = aggregation_strategies.get("one_ports", dict())
 
     clustering = get_clustering_from_busmap(
         network,
@@ -89,14 +129,7 @@ def aggregate_to_substations(
             "type": "max",
             "Pd": "sum",
         },
-        generator_strategies={
-            "marginal_cost": "mean",
-            "p_nom_min": "sum",
-            "p_min_pu": "mean",
-            "p_max_pu": "mean",
-            "ramp_limit_up": "max",
-            "ramp_limit_down": "max",
-        },
+        generator_strategies=generator_strategies,
     )
 
     substations = network.buses[
@@ -106,6 +139,8 @@ def aggregate_to_substations(
             "state",
             "country",
             "balancing_area",
+            "reeds_zone",
+            "reeds_ba",
             "x",
             "y",
         ]
@@ -120,6 +155,8 @@ def aggregate_to_substations(
         zone = substations.country
     elif aggregation_zones == "state":
         zone = substations.state
+    elif aggregation_zones == "reeds_zone":
+        zone = substations.reeds_zone
     else:
         ValueError("zonal_aggregation must be either balancing_area, country or state")
 
@@ -134,10 +171,26 @@ def aggregate_to_substations(
     )
     network_s.lines["type"] = np.nan
 
+    if aggregation_zones != "reeds_zone":
+        cols2drop = [
+            "balancing_area",
+            "state",
+            "substation_off",
+            "sub_id",
+            "reeds_zone",
+            "reeds_ba",
+            "nerc_reg",
+            "trans_reg",
+            "reeds_state",
+        ]
+    else:
+        cols2drop = ["balancing_area", "substation_off", "sub_id", "state"]
+
     network_s.buses.drop(
-        columns=["balancing_area", "state", "substation_off", "sub_id"],
+        columns=cols2drop,
         inplace=True,
     )
+
     return network_s
 
 
@@ -168,8 +221,9 @@ if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
 
-        snakemake = mock_snakemake("simplify_network", interconnect="western")
+        snakemake = mock_snakemake("simplify_network", interconnect="eastern")
     configure_logging(snakemake)
+    params = snakemake.params
 
     voltage_level = snakemake.config["electricity"]["voltage_simplified"]
     aggregation_zones = snakemake.config["clustering"]["cluster_network"][
@@ -178,7 +232,13 @@ if __name__ == "__main__":
 
     n = pypsa.Network(snakemake.input.network)
 
-    n, trafo_map = simplify_network_to_voltage_level(n, voltage_level)
+    n.generators.drop(
+        columns=["ba_eia", "ba_ads"],
+        inplace=True,
+    )  # temp added these columns and need to drop for workflow
+
+    n = convert_to_voltage_level(n, voltage_level)
+    n, trafo_map = remove_transformers(n)
 
     substations = pd.read_csv(snakemake.input.sub, index_col=0)
     substations.index = substations.index.astype(str)
@@ -199,6 +259,7 @@ if __name__ == "__main__":
         substations,
         busmap_to_sub.sub_id,
         aggregation_zones,
+        params.aggregation_strategies,
     )
 
     n.export_to_netcdf(snakemake.output[0])

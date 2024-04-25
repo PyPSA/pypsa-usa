@@ -1,0 +1,249 @@
+# PyPSA-USA Validation Configuration File
+
+run:
+  name: "Validation_REEDS" # use this to keep track of runs with different settings
+  disable_progressbar: false # set to true to disable the progressbar
+  shared_resources: false # set to true to share the default resources across runs
+  shared_cutouts: true # set to true to share the default cutout(s) across runs
+  validation: true # set to true to run back-casting plots
+
+# docs :
+scenario:
+  interconnect: [western] #"usa|texas|western|eastern"
+  clusters: [40]
+  opts: [Ep]
+  ll: [v1.0]
+  scope: "total" # "urban", "rural", or "total"
+  sector: "" # G
+  planning_horizons:
+  # - 2030   #(2030, 2040, 2050)
+
+foresight:  # Only Single Stage Currently
+
+# docs :
+enable:
+  build_cutout: false
+
+snapshots:
+  start: "2019-01-01"
+  end: "2020-01-01"
+  inclusive: 'left'
+
+# docs :
+electricity:
+  conventional_carriers: [nuclear, oil, OCGT, CCGT, coal, geothermal, biomass] # Choose the conventional plant types to include in network
+  renewable_carriers: [onwind, offwind, offwind_floating, solar, hydro] # Choose the renewable plant types to include in network
+  voltage_simplified: 230 #Voltage level to simplify network to in rule "simplify network"
+  co2limit: 1.4728e+9 # 0.8 * 1.841e+9
+  co2limit_enable: false # For sector coupled studies
+  co2base: 226.86e+6 #base_from_2020 Locations of the 250 MMmt of CO2 emissions from the WECC 2021.
+  gaslimit: false # global gas usage limit of X MWh_th
+  gaslimit_enable: false # For sector coupled studies
+  retirement: economic # "economic" or "technical"
+  SAFE_reservemargin: 0.14
+  regional_Co2_limits: 'config/policy_constraints/regional_Co2_limits.csv'
+  agg_p_nom_limits: 'config/policy_constraints/agg_p_nom_minmax.csv'
+  portfolio_standards: 'config/policy_constraints/portfolio_standards.csv'
+  SAFE_regional_reservemargins: 'config/policy_constraints/SAFE_regional_prm.csv'
+  transmission_interface_limits: 'config/policy_constraints/transmission_interface_limits.csv'
+
+  operational_reserve:
+    activate: false
+    epsilon_load: 0.02
+    epsilon_vres: 0.02
+    contingency: 4000
+
+  max_hours:
+    battery: 6
+    H2: 168
+
+  extendable_carriers:
+    Generator: []
+    StorageUnit: []
+    Store: []
+    Link: []
+
+  demand: #EFS used for given planning_horizons year
+    EFS_case: reference # reference, medium, high
+    EFS_speed: moderate # slow, moderate, rapid
+
+  autarky:
+    enable: false
+    by_country: false
+
+# docs :
+conventional:
+  unit_commitment: false
+  dynamic_fuel_price: true
+
+# docs :
+lines:
+  types: # All temporary values, need to be updated
+    115.: "Al/St 240/40 2-bundle 220.0"
+    138.: "Al/St 240/40 2-bundle 220.0"
+    161.: "Al/St 240/40 2-bundle 220.0"
+    230.: "Al/St 240/40 2-bundle 220.0"
+    345.: "Al/St 240/40 4-bundle 380.0"
+    500.: "Al/St 560/50 4-bundle 750.0"
+    765.: "Al/St 560/50 4-bundle 750.0"
+  s_max_pu: 0.7
+  s_nom_max: .inf
+  length_factor: 1.25
+  interface_transmission_limits: true
+
+# docs :
+links:
+  p_max_pu: 0.7
+  p_nom_max: .inf
+
+# docs :
+load:
+  scaling_factor: 1.0
+
+# docs :
+costs:  # based on the potentials, assuming  (0.1 kW/m2 and 10 m2/person)
+  year: 2030
+  version: v0.6.0
+  rooftop_share: 0.0
+  ng_fuel_year: 2019 # year of the natural gas price from CAISO [2019- 2023]
+  fill_values:
+    FOM: 0
+    VOM: 0
+    efficiency: 1
+    fuel: 0
+    investment: 0
+    lifetime: 25
+    "CO2 intensity": 0
+    "discount rate": 0.07
+  marginal_cost:
+    solar: 0.00
+    onwind: 0.00
+    offwind: 0.00
+    hydro: 0.
+    H2: 0.
+    electrolysis: 0.
+    fuel cell: 0.
+    battery: 0.
+    battery inverter: 0.
+  emission_prices: # in currency per tonne emission, only used with the option Ep
+    enable: false
+    co2: 0.
+    co2_monthly_prices: false
+
+# docs :
+sector:
+  co2_sequestration_potential: 0
+  natural_gas:
+    allow_imports_exports: true # false to be implemented
+    copperplate: true # copperplates at a state level (only true works)
+    cyclic_storage: false
+  heating:
+    heat_pump_sink_T: 55.
+
+# docs :
+clustering:
+  simplify_network:
+    to_substations: false # network is simplified to nodes with positive or negative power injection (i.e. substations or offwind connections)
+    algorithm: kmeans # choose from: [hac, kmeans]
+    feature: solar+onwind-time # only for hac. choose from: [solar+onwind-time, solar+onwind-cap, solar-time, solar-cap, solar+offwind-cap] etc.
+  cluster_network:
+    algorithm: kmeans
+    feature: solar+onwind-time
+    aggregation_zones: 'reeds_zone' # [balancing_area, state, reeds_zone]
+    exclude_carriers: []
+    consider_efficiency_classes: False
+  aggregation_strategies:
+    generators:
+      committable: any
+      ramp_limit_up: max
+      ramp_limit_down: max
+      vom_cost: mean
+      fuel_cost: mean
+      heat_rate: mean
+  temporal:
+    resolution_elec: false
+    resolution_sector: false
+
+focus_weights:
+
+# docs :
+solving:
+  #tmpdir: "path/to/tmp"
+  options:
+    load_shedding: true
+    clip_p_max_pu: 1.e-2
+    noisy_costs: true
+    skip_iterations: true
+    rolling_horizon: false
+    seed: 123
+    # options that go into the optimize function
+    track_iterations: false
+    min_iterations: 4
+    max_iterations: 6
+    transmission_losses: 2
+    linearized_unit_commitment: true
+    horizon: 8760
+    assign_all_duals: true
+
+
+  solver:
+    name: gurobi
+    options: gurobi-default
+
+  solver_options:
+    highs-default:
+      # refer to https://ergo-code.github.io/HiGHS/options/definitions.html#solver
+      threads: 4
+      solver: "ipm"
+      run_crossover: "off"
+      small_matrix_value: 1e-6
+      large_matrix_value: 1e9
+      primal_feasibility_tolerance: 1e-5
+      dual_feasibility_tolerance: 1e-5
+      ipm_optimality_tolerance: 1e-4
+      parallel: "on"
+      random_seed: 123
+    gurobi-default:
+      threads: 32
+      method: 2 # barrier
+      crossover: 0
+      BarConvTol: 1.e-4
+      OptimalityTol: 1.e-4
+      FeasibilityTol: 1.e-3
+      Seed: 123
+      AggFill: 0
+      PreDual: 0
+      GURO_PAR_BARDENSETHRESH: 200
+    gurobi-numeric-focus:
+      name: gurobi
+      NumericFocus: 3       # Favour numeric stability over speed
+      method: 2             # barrier
+      crossover: 0          # do not use crossover
+      BarHomogeneous: 1     # Use homogeneous barrier if standard does not converge
+      BarConvTol: 1.e-5
+      FeasibilityTol: 1.e-4
+      OptimalityTol: 1.e-4
+      ObjScale: -0.5
+      threads: 8
+      Seed: 123
+    gurobi-fallback:        # Use gurobi defaults
+      name: gurobi
+      crossover: 0
+      method: 2             # barrier
+      BarHomogeneous: 1     # Use homogeneous barrier if standard does not converge
+      BarConvTol: 1.e-5
+      FeasibilityTol: 1.e-5
+      OptimalityTol: 1.e-5
+      Seed: 123
+      threads: 8
+    cplex-default:
+      threads: 4
+      lpmethod: 4 # barrier
+      solutiontype: 2 # non basic solution, ie no crossover
+      barrier.convergetol: 1.e-5
+      feasopt.tolerance: 1.e-6
+    cbc-default: {} # Used in CI
+    glpk-default: {} # Used in CI
+
+  mem: 30000 #memory in MB; 20 GB enough for 50+B+I+H2; 100 GB for 181+B+I+H2
+  walltime: "12:00:00"

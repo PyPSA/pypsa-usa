@@ -1,29 +1,27 @@
-exclude: "LICENSE*|repo_data/*"
+exclude: "LICENSE*|repo_data/"
 
 repos:
 - repo: https://github.com/pre-commit/pre-commit-hooks
-  rev: v4.5.0
+  rev: v4.6.0
   hooks:
   - id: trailing-whitespace
   - id: end-of-file-fixer
   - id: debug-statements
-  - id: fix-encoding-pragma
   - id: mixed-line-ending
   - id: check-added-large-files
     args: ['--maxkb=10000']
 
 - repo: https://github.com/macisamuele/language-formatters-pre-commit-hooks
-  rev: v2.12.0
+  rev: v2.13.0
   hooks:
   - id: pretty-format-yaml
     args: [--autofix, --indent, "2", --preserve-quotes]
 
-- repo: https://github.com/asottile/reorder-python-imports
-  rev: v3.12.0
+- repo: https://github.com/pycqa/isort
+  rev: 5.13.2
   hooks:
-  - id: reorder-python-imports
-    exclude: ^(pre_commit/resources/|testing/resources/python3_hooks_repo/)
-    args: [--py39-plus, --add-import]
+  - id: isort
+    name: isort (python)
 
 - repo: https://github.com/asottile/add-trailing-comma
   rev: v3.1.0
@@ -31,7 +29,7 @@ repos:
   - id: add-trailing-comma
 
 - repo: https://github.com/asottile/pyupgrade
-  rev: v3.15.1
+  rev: v3.15.2
   hooks:
   - id: pyupgrade
     args: [--py39-plus]
@@ -43,7 +41,7 @@ repos:
     exclude: examples/solve-on-remote.ipynb
 
 - repo: https://github.com/snakemake/snakefmt
-  rev: v0.10.0
+  rev: v0.10.1
   hooks:
   - id: snakefmt
 
@@ -59,7 +57,7 @@ repos:
   - id: blackdoc
 
 - repo: https://github.com/psf/black-pre-commit-mirror
-  rev: 24.2.0
+  rev: 24.4.0
   hooks:
   - id: black
   - id: black-jupyter

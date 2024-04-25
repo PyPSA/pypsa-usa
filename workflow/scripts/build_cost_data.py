@@ -3,9 +3,7 @@ Combines all time independent cost data sources into a standard format.
 """
 
 import logging
-from typing import Dict
-from typing import List
-from typing import Union
+from typing import Dict, List, Union
 
 import constants as const
 import pandas as pd
@@ -271,8 +269,8 @@ def get_atb_data(atb: pd.DataFrame, techs: str | list[str], **kwargs) -> pd.Data
                 [
                     technology,
                     "efficiency",
-                    atb.loc[core_metric_key]["value"],
-                    atb.loc[core_metric_key]["units"],
+                    3.412 / atb.loc[core_metric_key]["value"],
+                    "MWH_th/MWH_elec"  # atb.loc[core_metric_key]["units"],
                     "NREL ATB",
                     core_metric_key,
                 ],

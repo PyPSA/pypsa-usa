@@ -71,18 +71,11 @@ Natural Gas infrastructure includes:
 [![URL](https://img.shields.io/badge/URL-Pipeline_Shape-blue)](<https://hifld-geoplatform.opendata.arcgis.com/datasets/f44e00fce8b943f69a40a2324cf49dfd_0/explore>)
 [![URL](https://img.shields.io/badge/URL-Processing_Capacity-blue)](<https://www.eia.gov/naturalgas/ngqs/#?report=RP9&year1=2017&year2=2017&company=Name>)
 
-(retrieve-eia)=
-## Rule `retrieve_eia_data`
+(retrieve-gridemissions)=
+## Rule `retrieve_gridemissions_data`
 ```{eval-rst}
-.. automodule:: retrieve_eia_data
+.. automodule:: retrieve_gridemissions_data
 ```
-
-(retrieve-wecc)=
-## Rule `retrieve_WECC_forcast_data`
-
-Forecasted electricity demand data and generator operational charasteristics for the [Western Electricity Coordinating Council](https://www.wecc.org/Pages/home.aspx) (WECC) region are retrieved directly from WECC. Projected data for both 2030 and 2032 are retrieved (~300MB each).
-
-[![URL](https://img.shields.io/badge/URL-WECC_Data-blue)](<https://www.wecc.org/Reliability/Forms/Default%20View.aspx>)
 
 (retrieve-efs)=
 ## Rule `retrieve_nrel_efs_data`
@@ -153,7 +146,6 @@ Documentation of the configuration file ``config/config.yaml`` at
 **Outputs**
 
 - ``resources/costs.csv``
-
 
 (retrieve-caiso-data)=
 ## Rule `retrieve_caiso_data`
