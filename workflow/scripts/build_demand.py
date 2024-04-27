@@ -832,15 +832,39 @@ class WriteIndustrial(WriteStrategy):
         elif zone == "reeds":
             return self._dissagregate_on_reeds()
         elif zone == "ba":
-            return self._dissagregate_on_ba()
+            # return self._dissagregate_on_ba()
+            return self._dissagregate_on_state()
         else:
             raise NotImplementedError
 
     def _dissagregate_on_state(self) -> pd.Series:
-        pass
+        laf_per_county = self.data.copy()
+        totals = {}
+        for state in laf_per_county.state.unique():
+            df = self.data[self.data.state == state]
+            totals[state] = df.demand_TBtu.sum().round(3)
+
+        laf_per_county["laf"] = laf_per_county.apply(
+            lambda x: x.demand_TBtu / totals[x.state],
+            axis=1,
+        )
+        laf_per_county = laf_per_county.set_index("county")
+
+        # need to account for multiple buses being in a single county
+        dfs = []
+        load_buses = self.get_load_buses_per_county()
+        for county, buses in load_buses.items():
+            dfs.append(self.get_laf_per_bus(laf_per_county, county, buses))
+
+        laf_load_buses = pd.concat(dfs)
+
+        laf_all_buses = pd.Series(index=self.n.buses.index).fillna(0)
+        laf_all_buses[laf_load_buses.index] = laf_load_buses
+
+        return laf_all_buses
 
     def _dissagregate_on_ba(self) -> pd.Series:
-        pass
+        raise NotImplementedError
 
     def _dissagregate_on_reeds(self) -> pd.Series:
         raise NotImplementedError
@@ -864,15 +888,42 @@ class WriteIndustrial(WriteStrategy):
             .sum()
             .reset_index()
         )
-        df["state"] = df.state.map(FIPS_2_STATE)
+        df["state"] = df.state.map(lambda x: FIPS_2_STATE[f"{x:02d}"].title())
         return df
 
+    def get_load_buses_per_county(self) -> dict[str, list[str]]:
+        """
+        Gets a list of load buses, indexed by county.
+
+        Note, load buses follow BE mapping of Pd
+        """
+        n = self.n
+        buses_per_county = n.buses[["Pd", "county"]].fillna(0)
+        buses_per_county = buses_per_county[buses_per_county.Pd != 0]
+
+        mapper = {}
+
+        for county in buses_per_county.county.unique():
+            df = buses_per_county[buses_per_county.county == county]
+            mapper[county] = df.index.to_list()
+
+        return mapper
+
     @staticmethod
-    def normed(df: pd.DataFrame) -> pd.DataFrame:
+    def get_laf_per_bus(
+        df: pd.DataFrame,
+        county: str | int,
+        buses: list[str],
+    ) -> pd.Series:
         """
-        Normalize all values to sum to one.
+        Evenly distributes laf to buses within a county.
         """
-        return s / s.sum()
+
+        county_laf = df.at[int(county), "laf"]
+        num_buses = len(buses)
+        bus_laf = county_laf / num_buses
+
+        return pd.Series(index=buses).fillna(bus_laf).round(6)
 
 
 ###
@@ -959,9 +1010,9 @@ if __name__ == "__main__":
         from _helpers import mock_snakemake
 
         snakemake = mock_snakemake(
-            "build_sector_demand",
+            "build_electrical_demand",
             interconnect="western",
-            end_use="transport",
+            end_use="power",
         )
     configure_logging(snakemake)
 
@@ -1014,7 +1065,7 @@ if __name__ == "__main__":
     if demand_disaggregation == "pop":
         writer = WritePopulation(n)
     elif demand_disaggregation == "ind":
-        county_industrial_energy_file = snakemake.inputs.county_industrial_energy
+        county_industrial_energy_file = snakemake.input.county_industrial_energy
         writer = WriteIndustrial(n, county_industrial_energy_file)
     else:
         raise NotImplementedError
