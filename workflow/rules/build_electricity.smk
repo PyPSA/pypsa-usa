@@ -298,6 +298,8 @@ rule build_sector_demand:
     input:
         network=RESOURCES + "{interconnect}/elec_base_network.nc",
         demand_files=sector_study_demand,
+        county_industrial_energy=DATA
+        + "workflow/data/county_energy/2014_update_20170910-0116.csv",
     output:
         elec_demand=RESOURCES + "{interconnect}/{end_use}_electricity_demand.csv",
         heat_demand=RESOURCES + "{interconnect}/{end_use}_heating_demand.csv",
