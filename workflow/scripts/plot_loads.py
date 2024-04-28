@@ -25,8 +25,8 @@ from typing import Dict, List
 ###
 
 # dropdowns
-DROPDOWN_SELECT_SECTOR = "dropdown_select_state"
-DROPDOWN_SELECT_FUEL = "dropdown_select_node"
+DROPDOWN_SELECT_SECTOR = "dropdown_select_sector"
+DROPDOWN_SELECT_FUEL = "dropdown_select_fuel"
 
 # buttons
 BUTTON_SELECT_ALL_SECTORS = "button_all_sectors"
@@ -58,17 +58,20 @@ logger.info("Reading configuration options")
 network_path = Path(
     "..",
     "results",
-    "Default",
+    # "Default",
+    "Sector",
     "western",
     "networks",
     "elec_s_40_ec_lv1.0_Ep-Co2L0.2_E-G.nc",
+    # "elec_s_40_ec_lv1.0_Ep-Co2L0.2_E.nc",
 )
 NETWORK = pypsa.Network(str(network_path))
 
 shapes_path = Path(
     "..",
     "resources",
-    "Default",
+    # "Default",
+    "Sector",
     "western",
     "regions_onshore_s_40.geojson",
 )
@@ -77,21 +80,38 @@ SHAPES = gpd.read_file(shapes_path).set_index("name")
 TIMEFRAME = NETWORK.snapshots
 
 CARRIERS = NETWORK.loads.carrier.unique()
-SECTORS = list({x.split("-")[0] for x in CARRIERS})
-FUELS = list({x.split("-")[1] for x in CARRIERS})
 
-SECTOR_NICE_NAMES = {
-    "res": "Residential",
-    "com": "Commercial",
-    "ind": "Industrial",
-    "trn": "Transportation",
-}
+try:  # sector coupled studies
+    SECTORS = list({x.split("-")[0] for x in CARRIERS})
+    FUELS = list({x.split("-")[1] for x in CARRIERS})
 
-FUEL_NICE_NAMES = {
-    "heat": "Heating",
-    "cool": "Cooling",
-    "elec": "Electricity",
-}
+    SECTOR_NICE_NAMES = {
+        "res": "Residential",
+        "com": "Commercial",
+        "ind": "Industrial",
+        "trn": "Transportation",
+    }
+
+    FUEL_NICE_NAMES = {
+        "heat": "Heating",
+        "cool": "Cooling",
+        "elec": "Electricity",
+    }
+
+except IndexError:  # power only studies
+    SECTORS = ["pwr"]
+    FUELS = ["elec"]
+
+    SECTOR_NICE_NAMES = {
+        "pwr": "Power",
+    }
+
+    FUEL_NICE_NAMES = {
+        "elec": "Electricity",
+    }
+
+    NETWORK.buses.carrier = NETWORK.buses.carrier.map({"AC": "pwr-elec"})
+    NETWORK.loads.carrier = NETWORK.loads.carrier.map({"AC": "pwr-elec"})
 
 ###
 # INITIALIZATION
