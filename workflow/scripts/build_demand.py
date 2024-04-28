@@ -842,7 +842,7 @@ class WriteIndustrial(WriteStrategy):
         totals = {}
         for state in laf_per_county.state.unique():
             df = self.data[self.data.state == state]
-            totals[state] = df.demand_TBtu.sum().round(3)
+            totals[state] = df.demand_TBtu.sum().round(6)
 
         laf_per_county["laf"] = laf_per_county.apply(
             lambda x: x.demand_TBtu / totals[x.state],
@@ -874,7 +874,27 @@ class WriteIndustrial(WriteStrategy):
         """
         Unzipped 'County_industry_energy_use.gz' csv file.
         """
-        df = pd.read_csv(filepath)
+        df = pd.read_csv(
+            filepath,
+            dtype={
+                "fips_matching": int,
+                "naics": int,
+                "Coal": float,
+                "Coke_and_breeze": float,
+                "Diesel": float,
+                "LPG_NGL": float,
+                "MECS_NAICS": float,
+                "MECS_Region": str,
+                "Natural_gas": float,
+                "Net_electricity": float,
+                "Other": float,
+                "Residual_fuel_oil": float,
+                "Total": float,
+                "fipscty": int,
+                "fipstate": int,
+                "subsector": int,
+            },
+        )
         df = (
             df[["fips_matching", "fipstate", "Total"]]
             .rename(
@@ -1010,9 +1030,9 @@ if __name__ == "__main__":
         from _helpers import mock_snakemake
 
         snakemake = mock_snakemake(
-            "build_electrical_demand",
+            "build_sector_demand",
             interconnect="western",
-            end_use="power",
+            end_use="industry",
         )
     configure_logging(snakemake)
 
