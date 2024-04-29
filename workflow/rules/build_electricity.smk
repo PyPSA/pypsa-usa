@@ -275,6 +275,7 @@ rule build_electrical_demand:
         demand_files=electricty_study_demand,
         eia=expand(DATA + "GridEmissions/{file}", file=DATAFILES_GE),
         efs=DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv",
+        county_industrial_energy=DATA + "county_energy/2014_update_20170910-0116.csv",
     output:
         elec_demand=RESOURCES + "{interconnect}/{end_use}_electricity_demand.csv",
     log:
@@ -298,6 +299,7 @@ rule build_sector_demand:
     input:
         network=RESOURCES + "{interconnect}/elec_base_network.nc",
         demand_files=sector_study_demand,
+        county_industrial_energy=DATA + "county_energy/2014_update_20170910-0116.csv",
     output:
         elec_demand=RESOURCES + "{interconnect}/{end_use}_electricity_demand.csv",
         heat_demand=RESOURCES + "{interconnect}/{end_use}_heating_demand.csv",

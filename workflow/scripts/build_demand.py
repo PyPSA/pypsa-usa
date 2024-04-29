@@ -49,6 +49,8 @@ STATE_2_CODE = const.STATE_2_CODE
 CODE_2_STATE = {value: key for key, value in STATE_2_CODE.items()}
 STATE_TIMEZONE = const.STATE_2_TIMEZONE
 
+FIPS_2_STATE = const.FIPS_2_STATE
+
 
 class Context:
     """
@@ -630,9 +632,7 @@ class WriteStrategy(ABC):
 
     def _get_load_dissagregation_zones(self, zone: str) -> pd.Series:
         """
-        Map each bus to the load dissagregation zone (ie.
-
-        states, ba, ...)
+        Map each bus to the load dissagregation zone (states, ba, ...)
         """
         if zone == "ba":
             return self._get_balanceing_area_zones()
@@ -794,7 +794,12 @@ class WritePopulation(WriteStrategy):
     def __init__(self, n: pypsa.Network) -> None:
         super().__init__(n)
 
-    def _get_load_allocation_factor(self, df: pd.Series, zone: str) -> pd.Series:
+    def _get_load_allocation_factor(
+        self,
+        df: pd.Series,
+        zone: str,
+        **kwargs,
+    ) -> pd.Series:
         """
         Pulls weighting from 'build_base_network'.
         """
@@ -807,6 +812,138 @@ class WritePopulation(WriteStrategy):
             bus_load = n.buses.Pd.to_frame(name="Pd").join(df.to_frame(name="zone"))
             zone_loads = bus_load.groupby("zone")["Pd"].transform("sum")
             return bus_load.Pd / zone_loads
+
+
+class WriteIndustrial(WriteStrategy):
+    """
+    Based on county level energy use from 2014.
+
+    https://data.nrel.gov/submissions/97
+    """
+
+    def __init__(self, n: pypsa.Network, filepath: str) -> None:
+        super().__init__(n)
+        self.data = self._read_data(filepath)
+
+    def _get_load_allocation_factor(self, zone: str, **kwargs) -> pd.Series:
+        logger.info("Setting load allocation factors based on industrial demand")
+        if zone == "state":
+            return self._dissagregate_on_state()
+        elif zone == "reeds":
+            return self._dissagregate_on_reeds()
+        elif zone == "ba":
+            # return self._dissagregate_on_ba()
+            return self._dissagregate_on_state()
+        else:
+            raise NotImplementedError
+
+    def _dissagregate_on_state(self) -> pd.Series:
+        laf_per_county = self.data.copy()
+        totals = {}
+        for state in laf_per_county.state.unique():
+            df = self.data[self.data.state == state]
+            totals[state] = df.demand_TBtu.sum().round(6)
+
+        laf_per_county["laf"] = laf_per_county.apply(
+            lambda x: x.demand_TBtu / totals[x.state],
+            axis=1,
+        )
+        laf_per_county = laf_per_county.set_index("county")
+
+        # need to account for multiple buses being in a single county
+        dfs = []
+        load_buses = self.get_load_buses_per_county()
+        for county, buses in load_buses.items():
+            dfs.append(self.get_laf_per_bus(laf_per_county, county, buses))
+
+        laf_load_buses = pd.concat(dfs)
+
+        laf_all_buses = pd.Series(index=self.n.buses.index).fillna(0)
+        laf_all_buses[laf_load_buses.index] = laf_load_buses
+
+        return laf_all_buses
+
+    def _dissagregate_on_ba(self) -> pd.Series:
+        raise NotImplementedError
+
+    def _dissagregate_on_reeds(self) -> pd.Series:
+        raise NotImplementedError
+
+    @staticmethod
+    def _read_data(filepath: str) -> pd.DataFrame:
+        """
+        Unzipped 'County_industry_energy_use.gz' csv file.
+        """
+        df = pd.read_csv(
+            filepath,
+            dtype={
+                "fips_matching": int,
+                "naics": int,
+                "Coal": float,
+                "Coke_and_breeze": float,
+                "Diesel": float,
+                "LPG_NGL": float,
+                "MECS_NAICS": float,
+                "MECS_Region": str,
+                "Natural_gas": float,
+                "Net_electricity": float,
+                "Other": float,
+                "Residual_fuel_oil": float,
+                "Total": float,
+                "fipscty": int,
+                "fipstate": int,
+                "subsector": int,
+            },
+        )
+        df = (
+            df[["fips_matching", "fipstate", "Total"]]
+            .rename(
+                columns={
+                    "fips_matching": "county",
+                    "fipstate": "state",
+                    "Total": "demand_TBtu",
+                },
+            )
+            .groupby(["county", "state"])
+            .sum()
+            .reset_index()
+        )
+        df["state"] = df.state.map(lambda x: FIPS_2_STATE[f"{x:02d}"].title())
+        return df
+
+    def get_load_buses_per_county(self) -> dict[str, list[str]]:
+        """
+        Gets a list of load buses, indexed by county.
+
+        Note, load buses follow BE mapping of Pd
+        """
+        n = self.n
+        buses_per_county = n.buses[["Pd", "county"]].fillna(0)
+        buses_per_county = buses_per_county[buses_per_county.Pd != 0]
+
+        mapper = {}
+
+        for county in buses_per_county.county.unique():
+            df = buses_per_county[buses_per_county.county == county]
+            mapper[county] = df.index.to_list()
+
+        return mapper
+
+    @staticmethod
+    def get_laf_per_bus(
+        df: pd.DataFrame,
+        county: str | int,
+        buses: list[str],
+    ) -> pd.Series:
+        """
+        Evenly distributes laf to buses within a county.
+        """
+
+        county_laf = df.at[int(county), "laf"]
+        num_buses = len(buses)
+        bus_laf = county_laf / num_buses
+
+        return pd.Series(index=buses).fillna(bus_laf).round(6)
 
 
 ###
@@ -895,7 +1032,7 @@ if __name__ == "__main__":
         snakemake = mock_snakemake(
             "build_sector_demand",
             interconnect="western",
-            end_use="transport",
+            end_use="industry",
         )
     configure_logging(snakemake)
 
@@ -947,6 +1084,9 @@ if __name__ == "__main__":
 
     if demand_disaggregation == "pop":
         writer = WritePopulation(n)
+    elif demand_disaggregation == "ind":
+        county_industrial_energy_file = snakemake.input.county_industrial_energy
+        writer = WriteIndustrial(n, county_industrial_energy_file)
     else:
         raise NotImplementedError
 
