@@ -427,17 +427,6 @@ rule add_electricity:
         plants_breakthrough=DATA + "breakthrough_network/base_grid/plant.csv",
         hydro_breakthrough=DATA + "breakthrough_network/base_grid/hydro.csv",
         bus2sub=DATA + "breakthrough_network/base_grid/{interconnect}/bus2sub.csv",
-        demand=RESOURCES + "{interconnect}/demand.csv",
-        ads_renewables=(
-            DATA + "WECC_ADS/processed/"
-            if config["network_configuration"] == "ads2032"
-            else []
-        ),
-        ads_2032=(
-            DATA + "WECC_ADS/downloads/2032/Public Data/Hourly Profiles in CSV format"
-            if config["network_configuration"] == "ads2032"
-            else []
-        ),
         fuel_costs="repo_data/plants/fuelCost22.csv",
     output:
         RESOURCES + "{interconnect}/elec_base_network_l_pp.nc",

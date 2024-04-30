@@ -2,15 +2,13 @@
 """
 **Description**
 
-This module integrates data produced by `build_renewable_profiles`, `build_demand`, `build_cost_data`, `build_fuel_prices`, and `build_base_network` to create a network model that includes generators, demand, and costs. The module attaches generators, storage units, and loads to the network created by `build_base_network`. Each generator is assigned regional capital costs, and regional and daily or monthly marginal costs.
+This module integrates data produced by `build_renewable_profiles` and `build_cost_data`, `build_fuel_prices`, and `add_demand` to create a network model that includes generators and their associated costs. The module attaches generators and storage units to the network created by `add_demand`. Each generator is assigned regional capital costs, and regional and daily or monthly marginal costs.
 
 Extendable generators are assigned a maximum capacity based on land-use constraints defined in `build_renewable_profiles`.
 
 **Relevant Settings**
 
 .. code:: yaml
-
-    network_configuration:
 
     snapshots:
         start:
@@ -26,7 +24,6 @@ Extendable generators are assigned a maximum capacity based on land-use constrai
 **Inputs**
 
 - ``resources/costs.csv``: The database of cost assumptions for all included technologies for specific years from various sources; e.g. discount rate, lifetime, investment (CAPEX), fixed operation and maintenance (FOM), variable operation and maintenance (VOM), fuel costs, efficiency, carbon-dioxide intensity.
-- ``resources/demand.csv`` Hourly per-country load profiles.
 - ``resources/regions_onshore.geojson``: confer :ref:`busregions`
 - ``resources/profile_{}.nc``: all technologies in ``config["renewables"].keys()``, confer :ref:`renewableprofiles`.
 - ``networks/elec_base_network.nc``: confer :ref:`base`
@@ -912,25 +909,11 @@ def clean_bus_data(n: pypsa.Network):
 
 def main(snakemake):
     params = snakemake.params
-    configuration = snakemake.config["network_configuration"]
     interconnection = snakemake.wildcards["interconnect"]
     planning_horizons = snakemake.params["planning_horizons"]
 
     n = pypsa.Network(snakemake.input.base_network)
 
-    snapshot_config = snakemake.config["snapshots"]
-    sns_start = pd.to_datetime(snapshot_config["start"])
-    sns_end = pd.to_datetime(snapshot_config["end"])
-    sns_inclusive = snapshot_config["inclusive"]
-
-    n.set_snapshots(
-        pd.date_range(
-            freq="h",
-            start=sns_start,
-            end=sns_end,
-            inclusive=sns_inclusive,
-        ),
-    )
     Nyears = n.snapshot_weightings.objective.sum() / 8760.0
 
     costs = load_costs(
@@ -964,17 +947,11 @@ def main(snakemake):
     else:
         unit_commitment = None
 
-    if configuration == "pypsa-usa":
-        plants = load_powerplants_eia(
-            snakemake.input["plants_eia"],
-            interconnect=interconnection,
-        )
-    else:
-        raise ValueError(
-            f"Unknown network_configuration {snakemake.config['network_configuration']}",
-        )
+    plants = load_powerplants_eia(
+        snakemake.input["plants_eia"],
+        interconnect=interconnection,
+    )
 
-    # Applying to all configurations
     plants = match_plant_to_bus(n, plants)
 
     attach_conventional_generators(

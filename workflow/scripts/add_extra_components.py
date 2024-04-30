@@ -55,7 +55,6 @@ import pypsa
 from _helpers import configure_logging
 from add_electricity import (
     _add_missing_carriers_from_costs,
-    add_nice_carrier_names,
     load_costs,
 )
 
@@ -63,6 +62,20 @@ idx = pd.IndexSlice
 
 logger = logging.getLogger(__name__)
 
+
+def add_nice_carrier_names(n, config):
+    carrier_i = n.carriers.index
+    nice_names = (
+        pd.Series(config["plotting"]["nice_names"])
+        .reindex(carrier_i)
+        .fillna(carrier_i.to_series().str.title())
+    )
+    n.carriers["nice_name"] = nice_names
+    colors = pd.Series(config["plotting"]["tech_colors"]).reindex(carrier_i)
+    if colors.isna().any():
+        missing_i = list(colors.index[colors.isna()])
+        logger.warning(f"tech_colors for carriers {missing_i} not defined in config.")
+    n.carriers["color"] = colors
 
 def attach_storageunits(n, costs, elec_opts):
     carriers = elec_opts["extendable_carriers"]["StorageUnit"]

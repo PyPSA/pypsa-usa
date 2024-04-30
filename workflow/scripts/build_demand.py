@@ -5,8 +5,6 @@ Builds the demand data for the PyPSA network.
 
 .. code:: yaml
 
-    network_configuration:
-
     snapshots:
         start:
         end:

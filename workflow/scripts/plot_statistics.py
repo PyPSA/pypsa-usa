@@ -50,7 +50,8 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from _helpers import configure_logging
-from add_electricity import add_nice_carrier_names, sanitize_carriers
+from add_electricity import sanitize_carriers
+from add_extra_components import add_nice_carrier_names
 from matplotlib.lines import Line2D
 from summary import (
     get_capital_costs,
