@@ -81,6 +81,8 @@ sector_datafiles = [
     "natural_gas/EIA-757.csv",
     "natural_gas/EIA-StatetoStateCapacity_Jan2023.xlsx",
     "natural_gas/pipelines.geojson",
+    # industrial demand
+    "county_energy/2014_update_20170910-0116.csv",
 ]
 
 
@@ -150,9 +152,10 @@ rule retrieve_res_eulp:
     params:
         stock="res",
         profiles=RESSTOCK_FILES,
-        save_dir=DATA + "eulp/res/",
+        save_dir=DATA + "eulp/res",
     output:
         expand(DATA + "eulp/res/{{state}}/{profile}.csv", profile=RESSTOCK_FILES),
+        DATA + "eulp/res/{state}.csv",
     script:
         "../scripts/retrieve_eulp.py"
 
@@ -163,9 +166,10 @@ rule retrieve_com_eulp:
     params:
         stock="com",
         profiles=COMSTOCK_FILES,
-        save_dir=DATA + "eulp/com/",
+        save_dir=DATA + "eulp/com",
     output:
         expand(DATA + "eulp/com/{{state}}/{profile}.csv", profile=COMSTOCK_FILES),
+        DATA + "eulp/com/{state}.csv",
     script:
         "../scripts/retrieve_eulp.py"
 
@@ -219,8 +223,8 @@ rule retrieve_cost_data_eur:
 
 rule retrieve_cost_data_usa:
     output:
-        nrel_atb=DATA + "costs/nrel_atb.parquet",
         # nrel_atb_transport = DATA + "costs/nrel_atb_transport.xlsx",
+        nrel_atb=DATA + "costs/nrel_atb.parquet",
     params:
         # eia_api_key = config["api"].get("eia", None),
         eia_api_key=None,
