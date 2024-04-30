@@ -1,22 +1,6 @@
 """Rules for post procesing solved networks"""
 
 
-rule copy_config:
-    params:
-        RDIR=RDIR,
-    output:
-        RESULTS + "config.yaml",
-    threads: 1
-    resources:
-        mem_mb=1000,
-    benchmark:
-        BENCHMARKS + "copy_config"
-    conda:
-        "../envs/environment.yaml"
-    script:
-        "../scripts/copy_config.py"
-
-
 rule plot_network_maps:
     input:
         network=RESULTS

@@ -21,21 +21,6 @@ from tqdm import tqdm
 REGION_COLS = ["geometry", "name", "x", "y", "country"]
 
 
-def set_scenario_config(snakemake):
-    scenario = snakemake.config["run"].get("scenarios", {})
-    if scenario.get("enable") and "run" in snakemake.wildcards.keys():
-        try:
-            with open(scenario["file"]) as f:
-                scenario_config = yaml.safe_load(f)
-        except FileNotFoundError:
-            # fallback for mock_snakemake
-            script_dir = Path(__file__).parent.resolve()
-            root_dir = script_dir.parent
-            with open(root_dir / scenario["file"]) as f:
-                scenario_config = yaml.safe_load(f)
-        update_config(snakemake.config, scenario_config[snakemake.wildcards.run])
-
-
 def configure_logging(snakemake, skip_handlers=False):
     """
     Configure the basic behaviour for the logging module.
@@ -466,14 +451,6 @@ def test_network_datatype_consistency(n):
         return None
 
 
-def update_config_with_sector_opts(config, sector_opts):
-    from snakemake.utils import update_config
-
-    for o in sector_opts.split("-"):
-        if o.startswith("CF+"):
-            l = o.split("+")[1:]
-            update_config(config, parse(l))
-
 
 def local_to_utc(group):
     import pytz
@@ -533,6 +510,46 @@ def validate_checksum(file_path, zenodo_url=None, checksum=None):
     ), "Checksum is invalid. This may be due to an incomplete download. Delete the file and re-execute the rule."
 
 
+def get_checksum_from_zenodo(file_url):
+    parts = file_url.split("/")
+    record_id = parts[parts.index("record") + 1]
+    filename = parts[-1]
+
+    response = requests.get(f"https://zenodo.org/api/records/{record_id}", timeout=30)
+    response.raise_for_status()
+    data = response.json()
+
+    for file in data["files"]:
+        if file["key"] == filename:
+            return file["checksum"]
+    return None
+
+
+### Config Related Helpers ###
+
+def set_scenario_config(snakemake):
+    scenario = snakemake.config["run"].get("scenarios", {})
+    if scenario.get("enable") and "run" in snakemake.wildcards.keys():
+        try:
+            with open(scenario["file"]) as f:
+                scenario_config = yaml.safe_load(f)
+        except FileNotFoundError:
+            # fallback for mock_snakemake
+            script_dir = Path(__file__).parent.resolve()
+            root_dir = script_dir.parent
+            with open(root_dir / scenario["file"]) as f:
+                scenario_config = yaml.safe_load(f)
+        update_config(snakemake.config, scenario_config[snakemake.wildcards.run])
+
+
+def update_config_with_sector_opts(config, sector_opts):
+    from snakemake.utils import update_config
+
+    for o in sector_opts.split("-"):
+        if o.startswith("CF+"):
+            l = o.split("+")[1:]
+            update_config(config, parse(l))
+
 def get_opt(opts, expr, flags=None):
     """
     Return the first option matching the regular expression.
@@ -560,6 +577,7 @@ def find_opt(opts, expr):
             else:
                 return True, None
     return False, None
+
 
 
 def update_config_from_wildcards(config, w, inplace=True):
@@ -620,8 +638,7 @@ def update_config_from_wildcards(config, w, inplace=True):
             if not isinstance(config["adjustments"]["electricity"], dict):
                 config["adjustments"]["electricity"] = dict()
             update_config(
-                config["adjustments"]["electricity"],
-                {attr: {carrier: factor}},
+                config["adjustments"]["electricity"], {attr: {carrier: factor}}
             )
 
     if w.get("sector_opts"):
@@ -740,16 +757,97 @@ def update_config_from_wildcards(config, w, inplace=True):
         return config
 
 
-def get_checksum_from_zenodo(file_url):
-    parts = file_url.split("/")
-    record_id = parts[parts.index("record") + 1]
-    filename = parts[-1]
+def get_scenarios(run):
+    scenario_config = run.get("scenarios", {})
+    if run["name"] and scenario_config.get("enable"):
+        fn = Path(scenario_config["file"])
+        if fn.exists():
+            scenarios = yaml.safe_load(fn.read_text())
+            if run["name"] == "all":
+                run["name"] = list(scenarios.keys())
+            return scenarios
+    return {}
 
-    response = requests.get(f"https://zenodo.org/api/records/{record_id}", timeout=30)
-    response.raise_for_status()
-    data = response.json()
 
-    for file in data["files"]:
-        if file["key"] == filename:
-            return file["checksum"]
-    return None
+def get_rdir(run):
+    scenario_config = run.get("scenarios", {})
+    if run["name"] and scenario_config.get("enable"):
+        RDIR = "{run}/"
+    elif run["name"]:
+        RDIR = run["name"] + "/"
+    else:
+        RDIR = ""
+
+    prefix = run.get("prefix", "")
+    if prefix:
+        RDIR = f"{prefix}/{RDIR}"
+
+    return RDIR
+
+
+def get_run_path(fn, dir, rdir, shared_resources):
+    """
+    Dynamically provide paths based on shared resources and filename.
+
+    Use this function for snakemake rule inputs or outputs that should be
+    optionally shared across runs or created individually for each run.
+
+    Parameters
+    ----------
+    fn : str
+        The filename for the path to be generated.
+    dir : str
+        The base directory.
+    rdir : str
+        Relative directory for non-shared resources.
+    shared_resources : str or bool
+        Specifies which resources should be shared.
+        - If string is "base", special handling for shared "base" resources (see notes).
+        - If random string other than "base", this folder is used instead of the `rdir` keyword.
+        - If boolean, directly specifies if the resource is shared.
+
+    Returns
+    -------
+    str
+        Full path where the resource should be stored.
+
+    Notes
+    -----
+    Special case for "base" allows no wildcards other than "technology", "year"
+    and "scope" and excludes filenames starting with "networks/elec" or
+    "add_electricity". All other resources are shared.
+    """
+    if shared_resources == "base":
+        pattern = r"\{([^{}]+)\}"
+        existing_wildcards = set(re.findall(pattern, fn))
+        irrelevant_wildcards = {"technology", "year", "scope", "kind"}
+        no_relevant_wildcards = not existing_wildcards - irrelevant_wildcards
+        no_elec_rule = not fn.startswith("networks/elec") and not fn.startswith(
+            "add_electricity"
+        )
+        is_shared = no_relevant_wildcards and no_elec_rule
+        rdir = "" if is_shared else rdir
+    elif isinstance(shared_resources, str):
+        rdir = shared_resources + "/"
+    elif isinstance(shared_resources, bool):
+        rdir = "" if shared_resources else rdir
+    else:
+        raise ValueError(
+            "shared_resources must be a boolean, str, or 'base' for special handling."
+        )
+
+    return f"{dir}{rdir}{fn}"
+
+
+def path_provider(dir, rdir, shared_resources):
+    """
+    Returns a partial function that dynamically provides paths based on shared
+    resources and the filename.
+
+    Returns
+    -------
+    partial function
+        A partial function that takes a filename as input and
+        returns the path to the file based on the shared_resources parameter.
+    """
+    return partial(get_run_path, dir=dir, rdir=rdir, shared_resources=shared_resources)

@@ -3,8 +3,8 @@
 
 rule solve_network:
     params:
-        solving=config["solving"],
-        foresight=config["foresight"],
+        solving=config_provider("solving"),
+        foresight=config_provider("foresight"),
         planning_horizons=config["scenario"]["planning_horizons"],
         co2_sequestration_potential=config["sector"].get(
             "co2_sequestration_potential", 200
@@ -12,12 +12,13 @@ rule solve_network:
     input:
         network=RESOURCES
         + "{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}_{sector}.nc",
-        config=RESULTS + "config.yaml",
         flowgates="repo_data/ReEDS_Constraints/transmission/transmission_capacity_init_AC_ba_NARIS2024.csv",
         safer_reeds="repo_data/ReEDS_Constraints/reserves/prm_annual.csv",
     output:
         network=RESULTS
         + "{interconnect}/networks/elec_s_{clusters}_ec_l{ll}_{opts}_{sector}.nc",
+        config= RESULTS
+        + "{interconnect}/configs/config.elec_s_{clusters}_l{ll}_{opts}_{sector}.yaml",
     log:
         solver=normpath(
             LOGS
