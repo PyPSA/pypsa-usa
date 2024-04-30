@@ -40,6 +40,8 @@ if __name__ == "__main__":
     demand_files = snakemake.input.demand
     n = pypsa.Network(snakemake.input.network)
 
+    n.set_investment_periods(periods=snakemake.params.planning_horizons)
+
     sectors = snakemake.params.sectors
 
     if isinstance(demand_files, str):

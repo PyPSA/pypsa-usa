@@ -65,21 +65,6 @@ idx = pd.IndexSlice
 logger = logging.getLogger(__name__)
 
 
-# can we get rid of this function and use add_mising_carriers instead?
-def _add_missing_carriers_from_costs(n, costs, carriers):
-    missing_carriers = pd.Index(carriers).difference(n.carriers.index)
-    if missing_carriers.empty:
-        return
-
-    emissions_cols = (
-        costs.columns.to_series().loc[lambda s: s.str.endswith("_emissions")].values
-    )
-    suptechs = missing_carriers.str.split("-").str[0]
-    emissions = costs.loc[suptechs, emissions_cols].fillna(0.0)
-    emissions.index = missing_carriers
-    n.import_components_from_dataframe(emissions, "Carrier")
-
-
 def sanitize_carriers(n, config):
     """
     Sanitize the carrier information in a PyPSA Network object.
@@ -221,6 +206,49 @@ def add_annualized_capital_costs(
         * Nyears
     )
     return costs
+
+
+def calculate_annuity(n, r):
+    """
+    Calculate the annuity factor for an asset with lifetime n years and.
+
+    discount rate of r, e.g. annuity(20, 0.05) * 20 = 1.6
+    """
+    if isinstance(r, pd.Series):
+        return pd.Series(1 / n, index=r.index).where(
+            r == 0,
+            r / (1.0 - 1.0 / (1.0 + r) ** n),
+        )
+    elif r > 0:
+        return r / (1.0 - 1.0 / (1.0 + r) ** n)
+    else:
+        return 1 / n
+
+
+def add_missing_carriers(n, carriers):
+    """
+    Function to add missing carriers to the network without raising errors.
+    """
+    missing_carriers = set(carriers) - set(n.carriers.index)
+    if len(missing_carriers) > 0:
+        n.madd("Carrier", missing_carriers)
+
+
+def add_missing_fuel_cost(plants, costs_fn):
+    fuel_cost = pd.read_csv(costs_fn, index_col=0, skiprows=3)
+    plants["fuel_cost"] = plants.fuel_type.map(fuel_cost.fuel_price_per_mmbtu)
+    return plants
+
+
+def add_missing_heat_rates(plants, heat_rates_fn):
+    heat_rates = pd.read_csv(heat_rates_fn, index_col=0, skiprows=3)
+    heat_rates = heat_rates.loc[heat_rates.heat_rate_btu_per_kwh > 0]
+    hr_mapped = (
+        plants.fuel_type.map(heat_rates.heat_rate_btu_per_kwh) / 1000
+    )  # convert to mmbtu/mwh
+    plants["heat_rate"].fillna(hr_mapped, inplace=True)
+    return plants
+
 
 
 def clean_locational_multiplier(df: pd.DataFrame):
@@ -371,7 +399,7 @@ def attach_breakthrough_renewable_plants(
     costs,
 ):
 
-    _add_missing_carriers_from_costs(n, costs, renewable_carriers)
+    add_missing_carriers(n, renewable_carriers)
 
     plants = pd.read_csv(fn_plants, dtype={"bus_id": str}, index_col=0).query(
         "bus_id in @n.buses.index",
@@ -425,47 +453,6 @@ def attach_breakthrough_renewable_plants(
         )
     return n
 
-
-def calculate_annuity(n, r):
-    """
-    Calculate the annuity factor for an asset with lifetime n years and.
-
-    discount rate of r, e.g. annuity(20, 0.05) * 20 = 1.6
-    """
-    if isinstance(r, pd.Series):
-        return pd.Series(1 / n, index=r.index).where(
-            r == 0,
-            r / (1.0 - 1.0 / (1.0 + r) ** n),
-        )
-    elif r > 0:
-        return r / (1.0 - 1.0 / (1.0 + r) ** n)
-    else:
-        return 1 / n
-
-
-def add_missing_carriers(n, carriers):
-    """
-    Function to add missing carriers to the network without raising errors.
-    """
-    missing_carriers = set(carriers) - set(n.carriers.index)
-    if len(missing_carriers) > 0:
-        n.madd("Carrier", missing_carriers)
-
-
-def add_missing_fuel_cost(plants, costs_fn):
-    fuel_cost = pd.read_csv(costs_fn, index_col=0, skiprows=3)
-    plants["fuel_cost"] = plants.fuel_type.map(fuel_cost.fuel_price_per_mmbtu)
-    return plants
-
-
-def add_missing_heat_rates(plants, heat_rates_fn):
-    heat_rates = pd.read_csv(heat_rates_fn, index_col=0, skiprows=3)
-    heat_rates = heat_rates.loc[heat_rates.heat_rate_btu_per_kwh > 0]
-    hr_mapped = (
-        plants.fuel_type.map(heat_rates.heat_rate_btu_per_kwh) / 1000
-    )  # convert to mmbtu/mwh
-    plants["heat_rate"].fillna(hr_mapped, inplace=True)
-    return plants
 
 
 def match_plant_to_bus(n, plants):
@@ -731,8 +718,6 @@ def attach_wind_and_solar(
                 p_max_pu=bus_profiles,
             )
 
-
-# double check to make sure batteries are added regardless if they are extendable.
 def attach_battery_storage(
     n: pypsa.Network,
     plants: pd.DataFrame,
