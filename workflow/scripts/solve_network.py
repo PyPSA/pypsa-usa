@@ -33,7 +33,7 @@ import pandas as pd
 import pypsa
 import xarray as xr
 import yaml
-from _helpers import configure_logging, update_config_with_sector_opts
+from _helpers import configure_logging, update_config_with_sector_opts, update_config_from_wildcards
 
 logger = logging.getLogger(__name__)
 pypsa.pf.logger.setLevel(logging.WARNING)
@@ -925,6 +925,7 @@ if __name__ == "__main__":
             interconnect="western",
         )
     configure_logging(snakemake)
+    update_config_from_wildcards(snakemake.config, snakemake.wildcards)
     if "sector_opts" in snakemake.wildcards.keys():
         update_config_with_sector_opts(
             snakemake.config,
