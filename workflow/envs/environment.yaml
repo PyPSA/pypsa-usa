@@ -9,7 +9,7 @@ dependencies:
 
 - pypsa>=0.26.1
 - atlite>=0.2.9
-- linopy
+- linopy==0.3.8
 
 - dask==2023.7.0
 - dask-core==2023.7.0
