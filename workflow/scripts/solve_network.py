@@ -32,7 +32,8 @@ import numpy as np
 import pandas as pd
 import pypsa
 import xarray as xr
-from _helpers import configure_logging, update_config_with_sector_opts
+import yaml
+from _helpers import configure_logging, update_config_with_sector_opts, update_config_from_wildcards
 
 logger = logging.getLogger(__name__)
 pypsa.pf.logger.setLevel(logging.WARNING)
@@ -924,6 +925,7 @@ if __name__ == "__main__":
             interconnect="western",
         )
     configure_logging(snakemake)
+    update_config_from_wildcards(snakemake.config, snakemake.wildcards)
     if "sector_opts" in snakemake.wildcards.keys():
         update_config_with_sector_opts(
             snakemake.config,
@@ -959,3 +961,12 @@ if __name__ == "__main__":
 
     n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))
     n.export_to_netcdf(snakemake.output[0])
+
+    with open(snakemake.output.config, "w") as file:
+        yaml.dump(
+            n.meta,
+            file,
+            default_flow_style=False,
+            allow_unicode=True,
+            sort_keys=False,
+        )
