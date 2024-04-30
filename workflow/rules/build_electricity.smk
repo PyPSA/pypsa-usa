@@ -297,22 +297,9 @@ rule add_electricity:
         tech_costs=RESOURCES + f"costs_{config['costs']['year']}.csv",
         regions=RESOURCES + "{interconnect}/regions_onshore.geojson",
         plants_eia="repo_data/plants/plants_merged.csv",
-        plants_ads="repo_data/plants/ads_plants_locs.csv",
         plants_breakthrough=DATA + "breakthrough_network/base_grid/plant.csv",
         hydro_breakthrough=DATA + "breakthrough_network/base_grid/hydro.csv",
-        wind_breakthrough=DATA + "breakthrough_network/base_grid/wind.csv",
-        solar_breakthrough=DATA + "breakthrough_network/base_grid/solar.csv",
         bus2sub=DATA + "breakthrough_network/base_grid/{interconnect}/bus2sub.csv",
-        ads_renewables=(
-            DATA + "WECC_ADS/processed/"
-            if config["network_configuration"] == "ads2032"
-            else []
-        ),
-        ads_2032=(
-            DATA + "WECC_ADS/downloads/2032/Public Data/Hourly Profiles in CSV format"
-            if config["network_configuration"] == "ads2032"
-            else []
-        ),
         demand=RESOURCES + "{interconnect}/demand.csv",
         fuel_costs="repo_data/plants/fuelCost22.csv",
     output:

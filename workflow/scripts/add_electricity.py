@@ -226,21 +226,6 @@ def add_annualized_capital_costs(
     return costs
 
 
-def shapes_to_shapes(orig, dest):
-    """
-    Adopted from vresutils.transfer.Shapes2Shapes()
-    """
-    orig_prepped = list(map(prep, orig))
-    transfer = sparse.lil_matrix((len(dest), len(orig)), dtype=float)
-
-    for i, j in product(range(len(dest)), range(len(orig))):
-        if orig_prepped[j].intersects(dest[i]):
-            area = orig[j].intersection(dest[i]).area
-            transfer[i, j] = area / dest[i].area
-
-    return transfer
-
-
 def clean_locational_multiplier(df: pd.DataFrame):
     """
     Updates format of locational multiplier data.
@@ -381,140 +366,6 @@ def update_transmission_costs(n, costs, length_factor=1.0):
     n.links.loc[dc_b, "capital_cost"] = costs
 
 
-def attach_hydro(n, costs, ppl, profile_hydro, hydro_capacities, carriers, **params):
-    add_missing_carriers(n, carriers)
-    add_co2_emissions(n, costs, carriers)
-
-    ppl = (
-        ppl.query('carrier == "hydro"')
-        .reset_index(drop=True)
-        .rename(index=lambda s: str(s) + " hydro")
-    )
-    ror = ppl.query('technology == "Run-Of-River"')
-    phs = ppl.query('technology == "Pumped Storage"')
-    hydro = ppl.query('technology == "Reservoir"')
-
-    country = ppl["bus"].map(n.buses.country).rename("country")
-
-    inflow_idx = ror.index.union(hydro.index)
-    if not inflow_idx.empty:
-        dist_key = ppl.loc[inflow_idx, "p_nom"].groupby(country).transform(normed)
-
-        with xr.open_dataarray(profile_hydro) as inflow:
-            inflow_countries = pd.Index(country[inflow_idx])
-            missing_c = inflow_countries.unique().difference(
-                inflow.indexes["countries"],
-            )
-            assert missing_c.empty, (
-                f"'{profile_hydro}' is missing "
-                f"inflow time-series for at least one country: {', '.join(missing_c)}"
-            )
-
-            inflow_t = (
-                inflow.sel(countries=inflow_countries)
-                .rename({"countries": "name"})
-                .assign_coords(name=inflow_idx)
-                .transpose("time", "name")
-                .to_pandas()
-                .multiply(dist_key, axis=1)
-            )
-
-    if "ror" in carriers and not ror.empty:
-        n.madd(
-            "Generator",
-            ror.index,
-            carrier="ror",
-            bus=ror["bus"],
-            p_nom=ror["p_nom"],
-            efficiency=costs.at["ror", "efficiency"],
-            capital_cost=costs.at["ror", "capital_cost"],
-            weight=ror["p_nom"],
-            p_max_pu=(
-                inflow_t[ror.index]
-                .divide(ror["p_nom"], axis=1)
-                .where(lambda df: df <= 1.0, other=1.0)
-            ),
-        )
-
-    if "PHS" in carriers and not phs.empty:
-        # fill missing max hours to params value and
-        # assume no natural inflow due to lack of data
-        max_hours = params.get("PHS_max_hours", 6)
-        phs = phs.replace({"max_hours": {0: max_hours}})
-        n.madd(
-            "StorageUnit",
-            phs.index,
-            carrier="PHS",
-            bus=phs["bus"],
-            p_nom=phs["p_nom"],
-            capital_cost=costs.at["PHS", "capital_cost"],
-            max_hours=phs["max_hours"],
-            efficiency_store=np.sqrt(costs.at["PHS", "efficiency"]),
-            efficiency_dispatch=np.sqrt(costs.at["PHS", "efficiency"]),
-            cyclic_state_of_charge=True,
-        )
-
-    if "hydro" in carriers and not hydro.empty:
-        hydro_max_hours = params.get("hydro_max_hours")
-
-        assert hydro_max_hours is not None, "No path for hydro capacities given."
-
-        hydro_stats = pd.read_csv(
-            hydro_capacities,
-            comment="#",
-            na_values="-",
-            index_col=0,
-        )
-        e_target = hydro_stats["E_store[TWh]"].clip(lower=0.2) * 1e6
-        e_installed = hydro.eval("p_nom * max_hours").groupby(hydro.country).sum()
-        e_missing = e_target - e_installed
-        missing_mh_i = hydro.query("max_hours.isnull()").index
-
-        if hydro_max_hours == "energy_capacity_totals_by_country":
-            # watch out some p_nom values like IE's are totally underrepresented
-            max_hours_country = (
-                e_missing / hydro.loc[missing_mh_i].groupby("country").p_nom.sum()
-            )
-
-        elif hydro_max_hours == "estimate_by_large_installations":
-            max_hours_country = (
-                hydro_stats["E_store[TWh]"] * 1e3 / hydro_stats["p_nom_discharge[GW]"]
-            )
-
-        max_hours_country.clip(0, inplace=True)
-
-        missing_countries = pd.Index(hydro["country"].unique()).difference(
-            max_hours_country.dropna().index,
-        )
-        if not missing_countries.empty:
-            logger.warning(
-                "Assuming max_hours=6 for hydro reservoirs in the countries: {}".format(
-                    ", ".join(missing_countries),
-                ),
-            )
-        hydro_max_hours = hydro.max_hours.where(
-            hydro.max_hours > 0,
-            hydro.country.map(max_hours_country),
-        ).fillna(6)
-
-        n.madd(
-            "StorageUnit",
-            hydro.index,
-            carrier="hydro",
-            bus=hydro["bus"],
-            p_nom=hydro["p_nom"],
-            max_hours=hydro_max_hours,
-            capital_cost=costs.at["hydro", "capital_cost"],
-            marginal_cost=costs.at["hydro", "marginal_cost"],
-            p_max_pu=1.0,  # dispatch
-            p_min_pu=0.0,  # store
-            efficiency_dispatch=costs.at["hydro", "efficiency"],
-            efficiency_store=0.0,
-            cyclic_state_of_charge=True,
-            inflow=inflow_t.loc[:, hydro.index],
-        )
-
-
 def attach_breakthrough_renewable_plants(
     n,
     fn_plants,
@@ -576,28 +427,6 @@ def attach_breakthrough_renewable_plants(
             efficiency=costs.at[tech, "efficiency"],
         )
     return n
-
-
-def add_nice_carrier_names(n, config):
-    carrier_i = n.carriers.index
-    nice_names = (
-        pd.Series(config["plotting"]["nice_names"])
-        .reindex(carrier_i)
-        .fillna(carrier_i.to_series().str.title())
-    )
-    n.carriers["nice_name"] = nice_names
-    colors = pd.Series(config["plotting"]["tech_colors"]).reindex(carrier_i)
-    if colors.isna().any():
-        missing_i = list(colors.index[colors.isna()])
-        logger.warning(f"tech_colors for carriers {missing_i} not defined in config.")
-    n.carriers["color"] = colors
-
-
-def normed(s):
-    """
-    Normalize a pandas.Series to sum to 1.
-    """
-    return s / s.sum()
 
 
 def calculate_annuity(n, r):
