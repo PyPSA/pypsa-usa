@@ -187,7 +187,7 @@ class ReadStrategy(ABC):
         - snapshot (use self._format_snapshot_index() to format this)
         - sector (must be in "all", "industry", "residential", "commercial", "transport")
         - subsector (any value)
-        - end use fuel (must be in "all", "electricity", "heat", "cool", "gas")
+        - end use fuel (must be in "all", "electricity", "heat", "cool", "lpg")
 
         This datastructure MUST be indexed with the following COLUMN labels:
         - Per geography type (ie. dont mix state and ba headers)
@@ -217,7 +217,7 @@ class ReadStrategy(ABC):
         )
 
         assert all(
-            x in ["all", "electricity", "heat", "cool", "gas"]
+            x in ["all", "electricity", "heat", "cool", "lpg"]
             for x in df.index.get_level_values("fuel").unique()
         )
 
@@ -458,7 +458,7 @@ class ReadEfs(ReadStrategy):
 
 class ReadEulp(ReadStrategy):
     """
-    Reads in electrifications future study demand.
+    Reads in End Use Load Profile data.
     """
 
     def __init__(self, filepath: str | list[str], stock: str) -> None:
@@ -536,6 +536,97 @@ class ReadEulp(ReadStrategy):
             df["state"] = state
             dfs.append(df)
         return pd.concat(dfs)
+
+
+class ReadIndustry(ReadStrategy):
+    """
+    Reads in industry data.
+
+    Data is taken from:
+    - County level industrual use to get annual energy breakdown by fuel
+    - EPRI load profile to get hourly load profiles
+    """
+
+    def __init__(self, filepath: str | list[str], profiles_filepath: str) -> None:
+        super().__init__(filepath)  # filepath is CLIU data
+        assert len(filepath) == 1
+        self._profiles_filepath = profiles_filepath
+        self._zone = "county"
+
+    @property
+    def zone(self):
+        return self._zone
+
+    def _read_data(self) -> Any:
+        """
+        Unzipped 'County_industry_energy_use.gz' csv file.
+        """
+        df = pd.read_csv(
+            self.filepath,
+            dtype={
+                "fips_matching": int,
+                "naics": int,
+                "Coal": float,
+                "Coke_and_breeze": float,
+                "Diesel": float,
+                "LPG_NGL": float,
+                "MECS_NAICS": float,
+                "MECS_Region": str,
+                "Natural_gas": float,
+                "Net_electricity": float,
+                "Other": float,
+                "Residual_fuel_oil": float,
+                "Total": float,
+                "fipscty": int,
+                "fipstate": int,
+                "subsector": int,
+            },
+        )
+        df["fipstate"] = df.fipstate.map(lambda x: FIPS_2_STATE[f"{x:02d}"].title())
+        return df
+
+    def _format_data(self, data: Any) -> pd.DataFrame:
+        df = self._group_by_naics(data)
+        df = self._group_by_fuels(df)
+
+    @staticmethod
+    def _group_by_naics(data: pd.DataFrame) -> pd.DataFrame:
+        """
+        Groups by naics level 2 values (ie.
+
+        subsector) in TBtu
+        """
+        df = data.rename(columns={"fips_matching": "county"})
+        df = df.drop(
+            columns=["naics", "MECS_NAICS", "MECS_Region", "fipscty", "fipstate"],
+        )
+        return df.groupby(["county", "subsector"]).sum()
+
+    @staticmethod
+    def _group_by_fuels(data: pd.DataFrame) -> pd.DataFrame:
+
+        df = data.copy()
+        df["electricity"] = df["Net_electricity"] + df["Other"].div(3)
+        df["heating"] = (
+            df["Coal"] + df["Coke_and_breeze"] + df["Natural_gas"] + df["Other"].div(3)
+        )
+        df["cooling"] = 0
+        df["lpg"] = df["LPG_NGL"] + df["Residual_fuel_oil"] + df["Other"].div(3)
+        return df[["county", "subsector", "electricity", "heating", "cooling", "lpg"]]
+
+    def _read_profile_data(self) -> pd.DataFrame:
+        return pd.read_csv(self._profiles_filepath)
+
+    @staticmethod
+    def _format_profile_data(df: pd.DataFrame) -> pd.DataFrame:
+        pass
+
+    @staticmethod
+    def _apply_profile_data(
+        demand: pd.DataFrame,
+        profiles: pd.DataFrame,
+    ) -> pd.DataFrame:
+        pass
 
 
 ###

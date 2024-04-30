@@ -501,7 +501,7 @@ STATE_2_TIMEZONE = {
 }
 
 ################################
-# Constants for FIPS Matching
+# Constants for Industry Sector Loads
 ################################
 
 # https://transition.fcc.gov/oet/info/maps/census/fips/fips.txt
@@ -559,6 +559,59 @@ FIPS_2_STATE = {
     "56": "WYOMING",
 }
 
+# only grouped to level 2
+# https://www23.statcan.gc.ca/imdb/p3VD.pl?Function=getVD&TVD=1181553
+# https://github.com/NREL/Industry-Energy-Tool/tree/master/data_foundation/
+NAICS = {
+    11: "Agriculture, forestry, fishing and hunting Agriculture, forestry, fishing and hunting",
+    21: "Mining, quarrying, and oil and gas extraction Mining, quarrying, and oil and gas extraction",
+    22: "Utilities",
+    23: "Construction",
+    31: "Manufacturing",
+    32: "Manufacturing",
+    33: "Manufacturing",
+    41: "Wholesale trade",
+    44: "Retail trade",
+    45: "Retail trade",
+    48: "Transportation and warehousing",
+    49: "Transportation and warehousing",
+    51: "Information and cultural industries",
+    52: "Finance and insurance",
+    53: "Real estate and rental and leasing",
+    54: "Professional, scientific and technical services",
+    55: "Management of companies and enterprises",
+    56: "Administrative and support, waste management and remediation services",
+    61: "Educational services",
+    62: "Health care and social assistance",
+    71: "Arts, entertainment and recreation",
+    72: "Accommodation and food services",
+    81: "Other services (except public administration)",
+    91: "Public administration",
+}
+
+# these are super rough and can be imporoved
+# EPRI gives by old NERC regions, these are the mappings I used
+# ECAR -> RFC and some MRO
+# ERCOT -> ERCOT
+# MAAC -> SERC and NPCC
+# MAIN -> MRO
+# MAPP -> SPP and some MRO
+# WSCC -> WECC (but left seperate here)
+EPRI_NERC_2_STATE = {
+    "ECAR": ["IL", "IN", "KY", "MI", "OH", "WI", "WV"],
+    "ERCOT": ["TX"],
+    "MAAC": ["MD"],
+    "MAIN": ["IA", "KS", "MN", "NE", "ND", "SD"],
+    "MAPP": ["AR", "DE", "MO", "MT", "NM", "OK"],
+    "NYPCC_NY": ["NJ", "NY"],
+    "NPCC_NE": ["CT", "ME", "MA", "NH", "PA", "RI", "VT"],
+    "SERC_STV": ["AL", "GA", "LA", "MS", "NC", "SC", "TN", "VA"],
+    "SERC_FL": ["FL"],
+    "SPP": [],
+    "WSCC_NWP": ["ID", "OR", "WA"],
+    "WSCC_RA": ["AZ", "CO", "UT", "WY"],
+    "WSCC_CNV": ["CA", "NV"],
+}
 ################################
 # Constants for Breakthrough mapping
 ################################
