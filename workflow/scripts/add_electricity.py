@@ -307,6 +307,7 @@ def update_capital_costs(
     n.generators.loc[gen.index] = gen
 
 
+
 def apply_dynamic_pricing(
     n: pypsa.Network,
     carrier: str,
@@ -343,6 +344,7 @@ def apply_dynamic_pricing(
     fuel_cost_per_gen = {gen: df[gens.at[gen, geography]] for gen in gens.index}
     fuel_costs = pd.DataFrame.from_dict(fuel_cost_per_gen)
     fuel_costs.index = pd.to_datetime(fuel_costs.index)
+    fuel_costs = broadcast_investment_horizons_index(n.snapshots, fuel_costs)
 
     marginal_costs = fuel_costs.div(eff, axis=1)
     marginal_costs = marginal_costs + vom
@@ -684,6 +686,8 @@ def attach_wind_and_solar(
                 .drop(columns="sub_id")
                 .T
             )
+            broadcast_investment_horizons_index(n.snapshots, bus_profiles)
+
             if supcar == "offwind":
                 capital_cost = capital_cost.to_frame().reset_index()
                 capital_cost.bus = capital_cost.bus.astype(int)
@@ -701,7 +705,6 @@ def attach_wind_and_solar(
                 )
 
             logger.info(f"Adding {car} capacity-factor profiles to the network.")
-            # TODO: #24 VALIDATE TECHNICAL POTENTIALS
 
             n.madd(
                 "Generator",
@@ -737,7 +740,7 @@ def attach_battery_storage(
     logger.info(
         f"Added Batteries as Storage Units to the network.\n{np.round(plants_filt.p_nom.sum()/1000,2)} GW Power Capacity \n{np.round(plants_filt.nameplate_energy_capacity_mwh.sum()/1000, 2)} GWh Energy Capacity",
     )
-
+    
     plants_filt = plants_filt.dropna(subset=["nameplate_energy_capacity_mwh"])
     n.madd(
         "StorageUnit",
@@ -837,6 +840,12 @@ def load_powerplants_eia(
 
     return plants
 
+def broadcast_investment_horizons_index(sns, df):
+    """
+    Broadcast the index of a dataframe to match the potentially multi-indexed investment periods of a PyPSA network.
+    """
+    df.index = sns
+    return df
 
 def apply_seasonal_capacity_derates(
     n: pypsa.Network,
@@ -844,15 +853,16 @@ def apply_seasonal_capacity_derates(
     conventional_carriers: list,
     sns: pd.DatetimeIndex,
 ):
-    "Applies rerate factor p_max_pu based on the seasonal capacity derates defined in eia860"
-    summer_sns = sns[sns.month.isin([6, 7, 8])]
-    winter_sns = sns[~sns.month.isin([6, 7, 8])]
+    "Applies conventional rerate factor p_max_pu based on the seasonal capacity derates defined in eia860"
+    sns_dt = sns.get_level_values(1)
+    summer_sns = sns_dt[sns_dt.month.isin([6, 7, 8])]
+    winter_sns = sns_dt[~sns_dt.month.isin([6, 7, 8])]
 
     conv_plants = plants.query("carrier in @conventional_carriers")
     conv_plants.index = "C" + conv_plants.index
     conv_gens = n.generators.query("carrier in @conventional_carriers")
 
-    p_max_pu = pd.DataFrame(1.0, index=sns, columns=conv_gens.index)
+    p_max_pu = pd.DataFrame(1.0, index=sns_dt, columns=conv_gens.index)
     p_max_pu.loc[summer_sns, conv_gens.index] *= conv_plants.loc[
         :,
         "summer_derate",
@@ -861,7 +871,24 @@ def apply_seasonal_capacity_derates(
         :,
         "winter_derate",
     ].astype(float)
+
+    p_max_pu = broadcast_investment_horizons_index(sns, p_max_pu)
     n.generators_t.p_max_pu = pd.concat([n.generators_t.p_max_pu, p_max_pu], axis=1)
+
+
+def apply_must_run_capacity_ratings(
+    n: pypsa.Network,
+    plants: pd.DataFrame,
+    conventional_carriers: list,
+    sns: pd.DatetimeIndex,
+):
+    sns_dt = sns.get_level_values(1)
+    summer_sns = sns_dt[sns_dt.month.isin([6, 7, 8])]
+    winter_sns = sns_dt[~sns_dt.month.isin([6, 7, 8])]
+
+    conv_plants = plants.query("carrier in @conventional_carriers")
+    conv_plants.index = "C" + conv_plants.index
+    conv_gens = n.generators.query("carrier in @conventional_carriers")
 
     conv_plants.loc[:, "ads_mustrun"] = conv_plants.ads_mustrun.fillna(False)
     must_run = conv_plants.loc[conv_plants.ads_mustrun, :].copy()
@@ -871,8 +898,10 @@ def apply_seasonal_capacity_derates(
         upper=np.minimum(must_run.summer_derate, must_run.winter_derate),
     )
 
-    p_min_pu = pd.DataFrame(1.0, index=sns, columns=must_run.index)
+    p_min_pu = pd.DataFrame(1.0, index=sns_dt, columns=must_run.index)
     p_min_pu.loc[:, must_run.index] *= must_run.loc[:, "minimum_cf"].astype(float)
+
+    p_min_pu = broadcast_investment_horizons_index(sns, p_min_pu)
     n.generators_t.p_min_pu = pd.concat([n.generators_t.p_min_pu, p_min_pu], axis=1)
 
 def clean_bus_data(n: pypsa.Network):
@@ -952,6 +981,12 @@ def main(snakemake):
         fuel_price=None,  # update fuel prices later
     )
     apply_seasonal_capacity_derates(
+        n,
+        plants,
+        conventional_carriers,
+        n.snapshots,
+    )
+    apply_must_run_capacity_ratings(
         n,
         plants,
         conventional_carriers,
@@ -1070,6 +1105,6 @@ if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
 
-        snakemake = mock_snakemake("add_electricity", interconnect="western")
+        snakemake = mock_snakemake("add_electricity", interconnect="texas")
     configure_logging(snakemake)
     main(snakemake)

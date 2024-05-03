@@ -336,6 +336,7 @@ def demand_to_add(wildcards):
 rule add_demand:
     params:
         sectors=config["scenario"]["sector"],
+        planning_horizons=config["scenario"]["planning_horizons"],
     input:
         network=RESOURCES + "{interconnect}/elec_base_network.nc",
         demand=demand_to_add,
@@ -344,7 +345,7 @@ rule add_demand:
     log:
         LOGS + "{interconnect}/add_demand.log",
     benchmark:
-        BENCHMARKS + "{interconnect}/add_demand"
+        BENCHMARKS + "{interconnect}/add_demand",
     resources:
         mem_mb=800,
     script:

@@ -34,7 +34,7 @@ def attach_demand(n: pypsa.Network, df: pd.DataFrame, carrier: str, suffix: str)
 
 if __name__ == "__main__":
     if "snakemake" not in globals():
-        snakemake = mock_snakemake("add_demand", interconnect="western")
+        snakemake = mock_snakemake("add_demand", interconnect="texas")
     configure_logging(snakemake)
 
     demand_files = snakemake.input.demand
