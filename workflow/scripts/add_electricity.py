@@ -686,7 +686,7 @@ def attach_wind_and_solar(
                 .drop(columns="sub_id")
                 .T
             )
-            broadcast_investment_horizons_index(n.snapshots, bus_profiles)
+            bus_profiles = broadcast_investment_horizons_index(n.snapshots, bus_profiles)
 
             if supcar == "offwind":
                 capital_cost = capital_cost.to_frame().reset_index()
@@ -844,7 +844,10 @@ def broadcast_investment_horizons_index(sns, df):
     """
     Broadcast the index of a dataframe to match the potentially multi-indexed investment periods of a PyPSA network.
     """
-    df.index = sns
+    if len(df.index) == len(sns):
+        df.index = sns
+    else: # if broadcasting is necessary
+        df = df.reindex(sns, level=1)
     return df
 
 def apply_seasonal_capacity_derates(
