@@ -31,11 +31,12 @@ Builds the demand data for the PyPSA network.
 # snakemake is not liking this futures import. Removing type hints in context class
 # from __future__ import annotations
 
+import calendar
 import logging
 import sys
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 import constants as const
 import pandas as pd
@@ -547,15 +548,81 @@ class ReadIndustry(ReadStrategy):
     - EPRI load profile to get hourly load profiles
     """
 
-    def __init__(self, filepath: str | list[str], profiles_filepath: str) -> None:
+    # these are super rough and can be imporoved
+    # EPRI gives by old NERC regions, these are the mappings I used
+    # ECAR -> RFC and some MRO
+    # ERCOT -> ERCOT
+    # MAAC -> SERC and NPCC
+    # MAIN -> MRO
+    # MAPP -> SPP and some MRO
+    # WSCC -> WECC (but left seperate here)
+    EPRI_NERC_2_STATE = {
+        "ECAR": ["IL", "IN", "KY", "MI", "OH", "WI", "WV"],
+        "ERCOT": ["TX"],
+        "MAAC": ["MD"],
+        "MAIN": ["IA", "KS", "MN", "NE", "ND", "SD"],
+        "MAPP": ["AR", "DE", "MO", "MT", "NM", "OK"],
+        "NYPCC_NY": ["NJ", "NY"],
+        "NPCC_NE": ["CT", "ME", "MA", "NH", "PA", "RI", "VT"],
+        "SERC_STV": ["AL", "GA", "LA", "MS", "NC", "SC", "TN", "VA"],
+        "SERC_FL": ["FL"],
+        "SPP": [],
+        "WSCC_NWP": ["ID", "OR", "WA"],
+        "WSCC_RA": ["AZ", "CO", "UT", "WY"],
+        "WSCC_CNV": ["CA", "NV"],
+    }
+
+    # https://www.epri.com/research/products/000000003002018167
+    EPRI_SEASON_2_MONTH = {
+        "Peak": [5, 6, 7, 8, 9],  # may -> sept
+        "OffPeak": [1, 2, 3, 4, 10, 11, 12],  # oct -> april
+    }
+
+    EPRI_ENDUSE = {
+        "HVAC": "electricity",
+        "Lighting": "electricity",
+        "MachineDrives": "electricity",
+        "ProcessHeating": "heating",
+    }
+
+    def __init__(
+        self,
+        filepath: str | list[str],
+        profiles_filepath: Optional[str] = None,
+    ) -> None:
         super().__init__(filepath)  # filepath is CLIU data
-        assert len(filepath) == 1
-        self._profiles_filepath = profiles_filepath
+        self._profiles_filepath = profiles_filepath  # profiles is EPRI
         self._zone = "county"
 
     @property
     def zone(self):
         return self._zone
+
+    def _format_data(self, data: Any) -> pd.DataFrame:
+        df = self._group_by_naics(data)
+        df = self._group_by_fuels(df)
+
+    def get_county_demand(self):
+        """
+        Extracts CLIU data.
+        """
+        df = self._read_data()
+        df = self._group_by_naics(df)
+        return self._group_by_fuels(df)
+
+    def get_demand_profiles(self, year: Optional[int] = None):
+        """
+        Extracts EPRI data.
+        """
+        if not self._profiles_filepath:
+            logger.warning("No EPRI profiles provided")
+            return
+        df = self._read_epri_data()
+        df = self._format_epri_data(df)
+        if not year:
+            return df
+        else:
+            return self._add_epri_snapshots(df, year)
 
     def _read_data(self) -> Any:
         """
@@ -585,16 +652,10 @@ class ReadIndustry(ReadStrategy):
         df["fipstate"] = df.fipstate.map(lambda x: FIPS_2_STATE[f"{x:02d}"].title())
         return df
 
-    def _format_data(self, data: Any) -> pd.DataFrame:
-        df = self._group_by_naics(data)
-        df = self._group_by_fuels(df)
-
     @staticmethod
     def _group_by_naics(data: pd.DataFrame) -> pd.DataFrame:
         """
-        Groups by naics level 2 values (ie.
-
-        subsector) in TBtu
+        Groups by naics level 2 values (subsector) in TBtu.
         """
         df = data.rename(columns={"fips_matching": "county"})
         df = df.drop(
@@ -604,7 +665,9 @@ class ReadIndustry(ReadStrategy):
 
     @staticmethod
     def _group_by_fuels(data: pd.DataFrame) -> pd.DataFrame:
-
+        """
+        Groups in electricity, heating, cooling, and lpg.
+        """
         df = data.copy()
         df["electricity"] = df["Net_electricity"] + df["Other"].div(3)
         df["heating"] = (
@@ -614,12 +677,76 @@ class ReadIndustry(ReadStrategy):
         df["lpg"] = df["LPG_NGL"] + df["Residual_fuel_oil"] + df["Other"].div(3)
         return df[["county", "subsector", "electricity", "heating", "cooling", "lpg"]]
 
-    def _read_profile_data(self) -> pd.DataFrame:
+    def _read_epri_data(self) -> pd.DataFrame:
         return pd.read_csv(self._profiles_filepath)
 
+    def _format_epri_data(self, data: pd.DataFrame) -> pd.DataFrame:
+        """
+        Formats EPRI into following dataframe.
+
+        |       |       |      | electricity | heating |
+        | state | month | hour |             |         |
+        |-------|-------|------|-------------|---------|
+        | AL    |   1   |   0  | 0.70        |  0.80   |
+        | AL    |   1   |   1  | 0.75        |  0.82   |
+        | ...   |       |      |             |         |
+        | WY    |   12  |  23  | 0.80        |  0.85   |
+        """
+        df = data.copy()
+        df["end_use"] = df["End Use"].map(self.EPRI_ENDUSE)
+        df["state"] = df.Region.map(self.EPRI_NERC_2_STATE)
+        df["month"] = df.Season.map(self.EPRI_SEASON_2_MONTH)
+        df = (
+            df.explode("state")
+            .explode("month")
+            .drop(
+                columns=[
+                    "Day Type",
+                    "Sector",
+                    "End Use",
+                    "Scale Multiplier",
+                    "Region",
+                    "Season",
+                ],
+            )
+            .groupby(["state", "month", "end_use"])
+            .mean()
+            .rename(
+                columns={x: int(x.replace("HR", "")) - 1 for x in df.columns},
+            )  # start hour is zero
+            .melt(id_vars=["state", "month", "end_use"], var_name="hour")
+            .pivot(index=["state", "month", "hour"], columns=["end_use"])
+        )
+        df.columns = df.columns.droplevel(0)  # drops name "value"
+        df.columns.name = ""
+        return df
+
     @staticmethod
-    def _format_profile_data(df: pd.DataFrame) -> pd.DataFrame:
-        pass
+    def _add_epri_snapshots(data: pd.DataFrame, year: int) -> pd.DataFrame:
+        """
+        Sets up epri data with snapshots.
+
+        |       |                     | electricity | heating |
+        | state | snapshot            |             |         |
+        |-------|---------------------|-------------|---------|
+        | AL    | 2019-01-01 00:00:00 | 0.70        |  0.80   |
+        | AL    | 2019-01-01 01:00:00 | 0.75        |  0.82   |
+        | ...   |                     |             |         |
+        | WY    | 2019-12-31 23:00:00 | 0.80        |  0.85   |
+        """
+
+        def get_days_in_month(year: int, month: int) -> list[int]:
+            return [x for x in range(1, calendar.monthrange(year, month)[1])]
+
+        df = data.copy().reset_index()
+        df["day"] = 1
+        df["year"] = year
+        df["day"] = df.month.map(lambda x: get_days_in_month(year, x))
+        df = df.explode("day")
+        df["snapshot"] = pd.to_datetime(df[["year", "month", "day", "hour"]])
+        return df.set_index(["state", "snapshot"]).drop(
+            columns=["year", "month", "day", "hour"],
+        )
 
     @staticmethod
     def _apply_profile_data(

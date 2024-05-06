@@ -589,29 +589,6 @@ NAICS = {
     91: "Public administration",
 }
 
-# these are super rough and can be imporoved
-# EPRI gives by old NERC regions, these are the mappings I used
-# ECAR -> RFC and some MRO
-# ERCOT -> ERCOT
-# MAAC -> SERC and NPCC
-# MAIN -> MRO
-# MAPP -> SPP and some MRO
-# WSCC -> WECC (but left seperate here)
-EPRI_NERC_2_STATE = {
-    "ECAR": ["IL", "IN", "KY", "MI", "OH", "WI", "WV"],
-    "ERCOT": ["TX"],
-    "MAAC": ["MD"],
-    "MAIN": ["IA", "KS", "MN", "NE", "ND", "SD"],
-    "MAPP": ["AR", "DE", "MO", "MT", "NM", "OK"],
-    "NYPCC_NY": ["NJ", "NY"],
-    "NPCC_NE": ["CT", "ME", "MA", "NH", "PA", "RI", "VT"],
-    "SERC_STV": ["AL", "GA", "LA", "MS", "NC", "SC", "TN", "VA"],
-    "SERC_FL": ["FL"],
-    "SPP": [],
-    "WSCC_NWP": ["ID", "OR", "WA"],
-    "WSCC_RA": ["AZ", "CO", "UT", "WY"],
-    "WSCC_CNV": ["CA", "NV"],
-}
 ################################
 # Constants for Breakthrough mapping
 ################################
