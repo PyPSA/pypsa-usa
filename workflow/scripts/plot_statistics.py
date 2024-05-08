@@ -649,6 +649,7 @@ def plot_production_area(
             fig.suptitle(create_title("Production [GW]", **wildcards))
             save = Path(save)
             fig.savefig(save.parent / (save.stem + suffix + save.suffix))
+            plt.close()
         except KeyError:
             # outside slicing range
             continue
@@ -744,8 +745,8 @@ def plot_accumulated_emissions(n: pypsa.Network, save: str, **wildcards) -> None
     ax.set_title(create_title("Accumulated Emissions", **wildcards))
     ax.set_ylabel("Emissions [MT]")
     fig.tight_layout()
-
     fig.savefig(save)
+    plt.close()
 
 
 def plot_curtailment_heatmap(n: pypsa.Network, save: str, **wildcards) -> None:
@@ -804,7 +805,7 @@ def plot_capacity_factor_heatmap(n: pypsa.Network, save: str, **wildcards) -> No
     """
     HEATMAP OF RENEWABLE CAPACITY FACTORS BY CARRIER.
     """
-    df_long = n.generators_t.p_max_pu.melt(
+    df_long = n.generators_t.p_max_pu.loc[n.investment_periods[0]].melt(
         var_name="bus",
         value_name="p_max_pu",
         ignore_index=False,
@@ -902,7 +903,7 @@ def plot_generator_data_panel(
     # Plot on each subplot
     sns.lineplot(
         data=get_generator_marginal_costs(n),
-        x="snapshot",
+        x="timestep",
         y="Value",
         hue="Carrier",
         ax=axes[0, 0],
@@ -910,6 +911,7 @@ def plot_generator_data_panel(
     sns.barplot(data=df_capex_expand, x="carrier", y="capital_cost", ax=axes[0, 1])
     sns.boxplot(data=df_capex_expand, x="carrier", y="efficiency", ax=axes[1, 0])
     sns.barplot(data=df_capex_retire, x="carrier", y="capital_cost", ax=axes[1, 1])
+    n.generators.ramp_limit_up.fillna(0, inplace=True)
     sns.histplot(
         data=n.generators,
         x="ramp_limit_up",
@@ -976,13 +978,13 @@ def plot_region_lmps(
     df_lmp = n.buses_t.marginal_price
     df_long = pd.melt(
         df_lmp.reset_index(),
-        id_vars=["snapshot"],
+        id_vars=["timestep"],
         var_name="bus",
         value_name="lmp",
     )
-    df_long["season"] = df_long["snapshot"].dt.quarter
-    df_long["hour"] = df_long["snapshot"].dt.hour
-    df_long.drop(columns="snapshot", inplace=True)
+    df_long["season"] = df_long["timestep"].dt.quarter
+    df_long["hour"] = df_long["timestep"].dt.hour
+    df_long.drop(columns="timestep", inplace=True)
     df_long["region"] = df_long.bus.map(n.buses.country)
 
     plt.figure(figsize=(10, 10))
@@ -1026,11 +1028,11 @@ def plot_fuel_costs(
         .T.resample("d")
         .mean()
         .reset_index()
-        .melt(id_vars="snapshot")
+        .melt(id_vars="timestep")
     )
     sns.lineplot(
         data=df,
-        x="snapshot",
+        x="timestep",
         y="value",
         hue="carrier",
         ax=axs[0],
@@ -1226,28 +1228,28 @@ if __name__ == "__main__":
         **snakemake.wildcards,
     )
 
-    # HTML Plots
-    plot_production_html(
-        n,
-        carriers,
-        snakemake.output["production_area.html"],
-        **snakemake.wildcards,
-    )
-    plot_hourly_emissions_html(
-        n,
-        snakemake.output["emissions_area.html"],
-        **snakemake.wildcards,
-    )
-    plot_accumulated_emissions_tech_html(
-        n,
-        snakemake.output["emissions_accumulated_tech.html"],
-        **snakemake.wildcards,
-    )
-    plot_region_emissions_html(
-        n,
-        snakemake.output["emissions_region.html"],
-        **snakemake.wildcards,
-    )
+    # # HTML Plots
+    # plot_production_html(
+    #     n,
+    #     carriers,
+    #     snakemake.output["production_area.html"],
+    #     **snakemake.wildcards,
+    # )
+    # plot_hourly_emissions_html(
+    #     n,
+    #     snakemake.output["emissions_area.html"],
+    #     **snakemake.wildcards,
+    # )
+    # plot_accumulated_emissions_tech_html(
+    #     n,
+    #     snakemake.output["emissions_accumulated_tech.html"],
+    #     **snakemake.wildcards,
+    # )
+    # plot_region_emissions_html(
+    #     n,
+    #     snakemake.output["emissions_region.html"],
+    #     **snakemake.wildcards,
+    # )
 
     # Panel Plots
     plot_generator_data_panel(

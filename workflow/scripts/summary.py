@@ -289,13 +289,13 @@ def get_generator_marginal_costs(
     varying MC.
     """
     df_mc = (
-        n.get_switchable_as_dense("Generator", "marginal_cost")
+        n.get_switchable_as_dense("Generator", "marginal_cost").loc[n.investment_periods[0]]
         .resample(resample_period)
         .mean()
     )
     df_long = pd.melt(
         df_mc.reset_index(),
-        id_vars=["snapshot"],
+        id_vars=["timestep"],
         var_name="Generator",
         value_name="Value",
     )
@@ -320,7 +320,7 @@ def get_fuel_costs(n: pypsa.Network) -> pd.DataFrame:
     }
 
     # will return generator level of (fuel_costs / efficiency)
-    marginal_costs = n.get_switchable_as_dense("Generator", "marginal_cost").T
+    marginal_costs = n.get_switchable_as_dense("Generator", "marginal_cost").loc[n.investment_periods[0]].T
     marginal_costs = marginal_costs[
         marginal_costs.index.map(n.generators.carrier).isin(list(fixed_voms))
     ]
@@ -331,7 +331,7 @@ def get_fuel_costs(n: pypsa.Network) -> pd.DataFrame:
     marginal_costs = marginal_costs.subtract(voms, axis=0)
 
     # remove the efficiency cost
-    eff = n.get_switchable_as_dense("Generator", "efficiency").T
+    eff = n.get_switchable_as_dense("Generator", "efficiency").loc[n.investment_periods[0]].T
     eff = eff[eff.index.map(n.generators.carrier).isin(list(fixed_voms))]
     fuel_costs = marginal_costs.mul(eff, axis=0)
 
