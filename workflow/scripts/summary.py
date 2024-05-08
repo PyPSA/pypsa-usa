@@ -52,7 +52,7 @@ def get_primary_energy_use(n: pypsa.Network) -> pd.DataFrame:
 
     return (
         pd.concat([gen_energy_use, link_energy_use])
-        .reset_index()
+        #.reset_index() commenting this out seems to fix issue in multi-horizon indexing
         .groupby(["bus", "carrier"])
         .sum()
     )
@@ -373,7 +373,7 @@ def get_node_emissions_timeseries(n: pypsa.Network) -> pd.DataFrame:
     return (
         get_node_carrier_emissions_timeseries(n)
         .droplevel("carrier")
-        .reset_index()
+        #.reset_index() fix for multi-horizon
         .groupby("bus")
         .sum()
         .T
@@ -388,7 +388,7 @@ def get_tech_emissions_timeseries(n: pypsa.Network) -> pd.DataFrame:
     return (
         get_node_carrier_emissions_timeseries(n)
         .droplevel("bus")
-        .reset_index()
+        #.reset_index()
         .groupby("carrier")
         .sum()
         .T

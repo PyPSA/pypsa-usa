@@ -862,6 +862,7 @@ def solve_network(n, config, solving, opts="", **kwargs):
     set_of_options = solving["solver"]["options"]
     cf_solving = solving["options"]
 
+    kwargs["multi_investment_periods"] = config["foresight"] == "perfect"
     kwargs["solver_options"] = (
         solving["solver_options"][set_of_options] if set_of_options else {}
     )
@@ -914,7 +915,7 @@ if __name__ == "__main__":
         from _helpers import mock_snakemake
 
         snakemake = mock_snakemake(
-            "solve_network_operations",
+            "solve_network",
             simpl="",
             opts="Ep",
             clusters="40",
@@ -941,7 +942,7 @@ if __name__ == "__main__":
     np.random.seed(solve_opts.get("seed", 123))
 
     n = pypsa.Network(snakemake.input.network)
-
+    import pdb; pdb.set_trace() 
     n = prepare_network(
         n,
         solve_opts,

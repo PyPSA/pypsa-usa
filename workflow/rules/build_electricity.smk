@@ -472,6 +472,7 @@ rule cluster_network:
         max_hours=config["electricity"]["max_hours"],
         length_factor=config["lines"]["length_factor"],
         costs=config["costs"],
+        planning_horizons=config["scenario"]["planning_horizons"],
     input:
         network=RESOURCES + "{interconnect}/elec_s.nc",
         regions_onshore=RESOURCES + "{interconnect}/regions_onshore.geojson",
