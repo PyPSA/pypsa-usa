@@ -1134,7 +1134,6 @@ if __name__ == "__main__":
     n = pypsa.Network(snakemake.input.network)
     onshore_regions = gpd.read_file(snakemake.input.regions_onshore)
     retirement_method = snakemake.params.retirement
-    # n_hours = snakemake.config['solving']['options']['nhours']
 
     sanitize_carriers(n, snakemake.config)
 
@@ -1167,7 +1166,7 @@ if __name__ == "__main__":
     #     carriers,
     #     snakemake.output["costs_bar.pdf"],
     #     **snakemake.wildcards,
-    # ) @trevor I think we should change this to just output csvs of this data... for multihorizon this becomes a bit of a mess
+    # ) I think we should change this to just output csvs of this data... for multihorizon this becomes a bit of a mess
     plot_production_bar(
         n,
         carriers,
@@ -1228,29 +1227,6 @@ if __name__ == "__main__":
         **snakemake.wildcards,
     )
 
-    # # HTML Plots
-    # plot_production_html(
-    #     n,
-    #     carriers,
-    #     snakemake.output["production_area.html"],
-    #     **snakemake.wildcards,
-    # )
-    # plot_hourly_emissions_html(
-    #     n,
-    #     snakemake.output["emissions_area.html"],
-    #     **snakemake.wildcards,
-    # )
-    # plot_accumulated_emissions_tech_html(
-    #     n,
-    #     snakemake.output["emissions_accumulated_tech.html"],
-    #     **snakemake.wildcards,
-    # )
-    # plot_region_emissions_html(
-    #     n,
-    #     snakemake.output["emissions_region.html"],
-    #     **snakemake.wildcards,
-    # )
-
     # Panel Plots
     plot_generator_data_panel(
         n,
@@ -1264,12 +1240,3 @@ if __name__ == "__main__":
         snakemake.output["region_lmps.pdf"],
         **snakemake.wildcards,
     )
-
-    # if snakemake.wildcards["interconnect"] == "western":
-    #     # California Emissions
-    #     plot_california_emissions(
-    #         n,
-    #         Path(snakemake.output["region_lmps.pdf"]).parents[0]
-    #         / "california_emissions.png",
-    #         **snakemake.wildcards,
-    #     )

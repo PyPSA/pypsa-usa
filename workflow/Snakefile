@@ -25,9 +25,6 @@ FIGURES_EMISSIONS = [
     "emissions_area.pdf",
     "emissions_accumulated.pdf",
     "emissions_accumulated_tech.pdf",
-    #"emissions_area.html",
-    #"emissions_region.html",
-    #"emissions_accumulated_tech.html",
     "bar_regional_emissions.pdf",
 ]
 

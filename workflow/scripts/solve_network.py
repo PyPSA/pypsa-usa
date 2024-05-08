@@ -942,7 +942,7 @@ if __name__ == "__main__":
     np.random.seed(solve_opts.get("seed", 123))
 
     n = pypsa.Network(snakemake.input.network)
-    import pdb; pdb.set_trace() 
+
     n = prepare_network(
         n,
         solve_opts,

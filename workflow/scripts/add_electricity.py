@@ -581,7 +581,7 @@ def attach_conventional_generators(
         marginal_cost=marginal_cost,
         capital_cost=plants.capital_cost,
         build_year=plants.build_year.fillna(0).astype(int),
-        lifetime=(plants.dateout - plants.build_year).fillna(np.inf),
+        lifetime=plants.carrier.map(costs.lifetime),
         **committable_attrs,
     )
 
@@ -728,7 +728,7 @@ def attach_battery_storage(
     costs,
 ):
     """
-    Attaches Battery Energy Storage Systems To the Network.
+    Attaches Existing Battery Energy Storage Systems To the Network.
     """
     plants_filt = plants.query("carrier == 'battery' ")
     plants_filt.index = (
@@ -752,6 +752,7 @@ def attach_battery_storage(
         p_nom_extendable=False,
         max_hours=plants_filt.nameplate_energy_capacity_mwh / plants_filt.p_nom,
         build_year=plants_filt.operating_year,
+        lifetime= 30,  #replace with actual lifetime
         efficiency_store=0.9**0.5,
         efficiency_dispatch=0.9**0.5,
         cyclic_state_of_charge=True,
