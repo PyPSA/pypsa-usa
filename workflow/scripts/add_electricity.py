@@ -937,7 +937,7 @@ def main(snakemake):
     costs = load_costs(
         snakemake.input.tech_costs,
         params.costs,
-        params.electricity["max_hours"],
+        params.max_hours,
         Nyears,
     )
 
@@ -953,9 +953,9 @@ def main(snakemake):
 
     update_transmission_costs(n, costs, params.length_factor)
 
-    renewable_carriers = set(params.electricity["renewable_carriers"])
-    extendable_carriers = params.electricity["extendable_carriers"]
-    conventional_carriers = params.electricity["conventional_carriers"]
+    renewable_carriers = set(params.renewable_carriers)
+    extendable_carriers = params.extendable_carriers
+    conventional_carriers = params.conventional_carriers
     conventional_inputs = {
         k: v for k, v in snakemake.input.items() if k.startswith("conventional_")
     }

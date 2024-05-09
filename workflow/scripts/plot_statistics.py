@@ -333,10 +333,11 @@ def plot_capacity_additions_bar(
     fig, ax = plt.subplots(figsize=(10, 10))
 
     # Plotting
-    ax = optimal_capacity.T.plot(
+    optimal_capacity.T.plot(
         kind='bar', 
         stacked=True,
         color=color_mapper,
+        ax=ax,
         )
     ax.set_title(create_title("System Capacity Additions", **wildcards))
     ax.set_xlabel("")
@@ -608,7 +609,7 @@ def plot_production_area(
             energy_mix[carrier + "_charger"] = energy_mix[carrier].clip(upper=-0.0001)
             energy_mix = energy_mix.drop(columns=carrier)
             carriers_2_plot.append(f'{carrier}' + "_charger")
-            carriers_2_plot.append(f'{carrier}' + "_charger")
+            carriers_2_plot.append(f'{carrier}' + "_discharger")
     carriers_2_plot = list(set(carriers_2_plot))
     energy_mix = energy_mix[[x for x in carriers_2_plot if x in energy_mix]]
     energy_mix = energy_mix.rename(columns=n.carriers.nice_name)
