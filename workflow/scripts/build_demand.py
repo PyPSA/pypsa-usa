@@ -41,6 +41,7 @@ from typing import Any, Optional
 import constants as const
 import pandas as pd
 import pypsa
+import xarray as xr
 from _helpers import configure_logging
 from eia import EnergyDemand
 
@@ -51,6 +52,9 @@ CODE_2_STATE = {value: key for key, value in STATE_2_CODE.items()}
 STATE_TIMEZONE = const.STATE_2_TIMEZONE
 
 FIPS_2_STATE = const.FIPS_2_STATE
+NAICS = const.NAICS
+STATE_2_CODE = const.STATE_2_CODE
+CODE_2_STATE = {v: k for k, v in STATE_2_CODE.items()}
 
 
 class Context:
@@ -539,9 +543,9 @@ class ReadEulp(ReadStrategy):
         return pd.concat(dfs)
 
 
-class ReadIndustry(ReadStrategy):
+class ReadCliu(ReadStrategy):
     """
-    Reads in industry data.
+    Reads in county level industry data.
 
     Data is taken from:
     - County level industrual use to get annual energy breakdown by fuel
@@ -582,47 +586,137 @@ class ReadIndustry(ReadStrategy):
         "HVAC": "electricity",
         "Lighting": "electricity",
         "MachineDrives": "electricity",
-        "ProcessHeating": "heating",
+        "ProcessHeating": "heat",
     }
+
+    YEAR = 2014  # default year for CLIU
 
     def __init__(
         self,
         filepath: str | list[str],
+        # zone: Optional[str] = "county",
         profiles_filepath: Optional[str] = None,
     ) -> None:
         super().__init__(filepath)  # filepath is CLIU data
         self._profiles_filepath = profiles_filepath  # profiles is EPRI
-        self._zone = "county"
+        # assert zone in ("county", "state")
+        self._zone = "state"
 
     @property
     def zone(self):
         return self._zone
 
-    def _format_data(self, data: Any) -> pd.DataFrame:
-        df = self._group_by_naics(data)
-        df = self._group_by_fuels(df)
+    def _format_data(self, county_demand: Any) -> pd.DataFrame:
+
+        # get raw data
+        annual_demand = self._group_by_naics(county_demand, group_by_subsector=False)
+        annual_demand = self._group_by_fuels(annual_demand)
+        profiles = self.get_demand_profiles(add_lpg=True)
+        return self._apply_profiles(annual_demand, profiles)
 
     def get_county_demand(self):
         """
-        Extracts CLIU data.
+        Public method to extract CLIU data.
         """
         df = self._read_data()
-        df = self._group_by_naics(df)
+        df = self._group_by_naics(df, group_by_subsector=False)
         return self._group_by_fuels(df)
 
-    def get_demand_profiles(self, year: Optional[int] = None):
+    def get_demand_profiles(self, add_lpg: bool = True):
         """
-        Extracts EPRI data.
+        Public method to extract EPRI data.
         """
         if not self._profiles_filepath:
             logger.warning("No EPRI profiles provided")
             return
         df = self._read_epri_data()
-        df = self._format_epri_data(df)
-        if not year:
-            return df
+        df = self._format_epri_data(df, abrv=False)
+        df = self._add_epri_snapshots(df)
+        if add_lpg:
+            return self._add_lpg_epri(df)
         else:
-            return self._add_epri_snapshots(df, year)
+            return df
+
+    def _apply_profiles(
+        self,
+        annual_demand: pd.DataFrame,
+        profiles: pd.DataFrame,
+    ) -> pd.DataFrame:
+        """
+        Applies profile data to annual demand data.
+
+        This is quite a heavy operation, as it can be up to 8760hrs,
+        3000+ counties, 50+ subsectors and 4 fuels.
+        """
+
+        def profile_2_xarray(df: pd.DataFrame) -> xr.Dataset:
+            """
+            Converts EPRI profiles to dataset.
+            """
+            assert all(x in ("snapshot", "state") for x in df.index.names)
+            assert all(x in ("electricity", "cool", "heat", "lpg") for x in df.columns)
+            return xr.Dataset.from_dataframe(df)
+
+        def annual_demand_2_xarray(df: pd.DataFrame) -> xr.Dataset:
+            """
+            Converts CLIU profiles to dataset.
+            """
+            assert all(
+                x in ("state", "sector", "subsector", "end_use", "county")
+                for x in df.index.names
+            )
+            assert all(x in ("electricity", "cool", "heat", "lpg") for x in df.columns)
+            return xr.Dataset.from_dataframe(df)
+
+        def remove_counties(df: pd.DataFrame) -> pd.DataFrame:
+            """
+            Removes counties to reduce data.
+            """
+            indices = df.index.names
+            df.index = df.index.droplevel("county")
+            return df.reset_index().groupby([x for x in indices if x != "county"]).sum()
+
+        def check_variables(ds: xr.Dataset) -> xr.Dataset:
+            """
+            Confirms all data variables are present.
+            """
+
+            assert "electricity" in ds.data_vars
+
+            for fuel in ("heat", "cool", "lpg"):
+                if fuel not in ds.data_vars:
+                    var = {fuel: ds["electricity"] * 0}
+                    ds = ds.assign(var)
+
+            return ds
+
+        annual_demand = remove_counties(annual_demand)  # todo: retain county data
+        annual_demand = annual_demand_2_xarray(annual_demand)
+        profiles = profile_2_xarray(profiles)
+
+        annual_demand = check_variables(annual_demand)
+        profiles = check_variables(profiles)
+
+        demand = profiles * annual_demand
+        dims = [x for x in demand.sizes]
+
+        # todo: add county arregation
+        if "county" in dims:
+            indices = dims.remove("state")
+            columns = "county"
+        else:
+            indices = dims
+            columns = "state"
+
+        demand = (
+            demand.to_dataframe()
+            .reset_index()
+            .melt(id_vars=indices, var_name="fuel")
+            .pivot(index=["snapshot", "sector", "subsector", "fuel"], columns=columns)
+        )
+        demand.columns = demand.columns.droplevel(level=None)
+
+        return demand
 
     def _read_data(self) -> Any:
         """
@@ -653,38 +747,55 @@ class ReadIndustry(ReadStrategy):
         return df
 
     @staticmethod
-    def _group_by_naics(data: pd.DataFrame) -> pd.DataFrame:
+    def _group_by_naics(
+        data: pd.DataFrame,
+        group_by_subsector: bool = True,
+    ) -> pd.DataFrame:
         """
         Groups by naics level 2 values (subsector) in TBtu.
+
+        If group_by_subsector, all subsectors are collapsed into each
+        other
         """
-        df = data.rename(columns={"fips_matching": "county"})
+        df = data.rename(columns={"fips_matching": "county", "fipstate": "state"})
         df = df.drop(
-            columns=["naics", "MECS_NAICS", "MECS_Region", "fipscty", "fipstate"],
+            columns=["naics", "MECS_NAICS", "MECS_Region", "fipscty"],
         )
-        return df.groupby(["county", "subsector"]).sum()
+
+        if group_by_subsector:
+            df["subsector"] = df.subsector.map(NAICS)
+        else:
+            df["subsector"] = "all"
+
+        df["sector"] = "industry"
+
+        return df.groupby(["county", "state", "sector", "subsector"]).sum()
 
     @staticmethod
     def _group_by_fuels(data: pd.DataFrame) -> pd.DataFrame:
         """
-        Groups in electricity, heating, cooling, and lpg.
+        Groups in electricity, heat, cool, and lpg.
         """
         df = data.copy()
         df["electricity"] = df["Net_electricity"] + df["Other"].div(3)
-        df["heating"] = (
+        df["heat"] = (
             df["Coal"] + df["Coke_and_breeze"] + df["Natural_gas"] + df["Other"].div(3)
         )
-        df["cooling"] = 0
+        df["cool"] = 0
         df["lpg"] = df["LPG_NGL"] + df["Residual_fuel_oil"] + df["Other"].div(3)
-        return df[["county", "subsector", "electricity", "heating", "cooling", "lpg"]]
+        return df[["electricity", "heat", "cool", "lpg"]]
 
     def _read_epri_data(self) -> pd.DataFrame:
         return pd.read_csv(self._profiles_filepath)
 
-    def _format_epri_data(self, data: pd.DataFrame) -> pd.DataFrame:
+    def _format_epri_data(self, data: pd.DataFrame, abrv: bool = True) -> pd.DataFrame:
         """
         Formats EPRI into following dataframe.
 
-        |       |       |      | electricity | heating |
+        abrv: bool = True
+            Keep abreviated state name, else replace with full name
+
+        |       |       |      | electricity | heat    |
         | state | month | hour |             |         |
         |-------|-------|------|-------------|---------|
         | AL    |   1   |   0  | 0.70        |  0.80   |
@@ -711,28 +822,33 @@ class ReadIndustry(ReadStrategy):
             )
             .groupby(["state", "month", "end_use"])
             .mean()
-            .rename(
+        )
+        df = (
+            df.rename(
                 columns={x: int(x.replace("HR", "")) - 1 for x in df.columns},
             )  # start hour is zero
+            .reset_index()
             .melt(id_vars=["state", "month", "end_use"], var_name="hour")
             .pivot(index=["state", "month", "hour"], columns=["end_use"])
         )
         df.columns = df.columns.droplevel(0)  # drops name "value"
         df.columns.name = ""
-        return df
+        if abrv:
+            return df
+        else:
+            return df.rename(index=CODE_2_STATE, level="state")
 
-    @staticmethod
-    def _add_epri_snapshots(data: pd.DataFrame, year: int) -> pd.DataFrame:
+    def _add_epri_snapshots(self, data: pd.DataFrame) -> pd.DataFrame:
         """
         Sets up epri data with snapshots.
 
-        |       |                     | electricity | heating |
+        |       |                     | electricity | heat    |
         | state | snapshot            |             |         |
         |-------|---------------------|-------------|---------|
-        | AL    | 2019-01-01 00:00:00 | 0.70        |  0.80   |
-        | AL    | 2019-01-01 01:00:00 | 0.75        |  0.82   |
+        | AL    | 2014-01-01 00:00:00 | 0.70        |  0.80   |
+        | AL    | 2014-01-01 01:00:00 | 0.75        |  0.82   |
         | ...   |                     |             |         |
-        | WY    | 2019-12-31 23:00:00 | 0.80        |  0.85   |
+        | WY    | 2014-12-31 23:00:00 | 0.80        |  0.85   |
         """
 
         def get_days_in_month(year: int, month: int) -> list[int]:
@@ -740,8 +856,8 @@ class ReadIndustry(ReadStrategy):
 
         df = data.copy().reset_index()
         df["day"] = 1
-        df["year"] = year
-        df["day"] = df.month.map(lambda x: get_days_in_month(year, x))
+        df["year"] = self.YEAR
+        df["day"] = df.month.map(lambda x: get_days_in_month(self.YEAR, x))
         df = df.explode("day")
         df["snapshot"] = pd.to_datetime(df[["year", "month", "day", "hour"]])
         return df.set_index(["state", "snapshot"]).drop(
@@ -749,11 +865,12 @@ class ReadIndustry(ReadStrategy):
         )
 
     @staticmethod
-    def _apply_profile_data(
-        demand: pd.DataFrame,
-        profiles: pd.DataFrame,
-    ) -> pd.DataFrame:
-        pass
+    def _add_lpg_epri(df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Adds an LPG column of data as an average.
+        """
+        df["lpg"] = df.mean(axis=1)
+        return df
 
 
 ###
@@ -1283,6 +1400,8 @@ if __name__ == "__main__":
 
     demand_files = snakemake.input.demand_files
 
+    sns = n.snapshots
+
     if demand_profile == "efs":
         assert planning_year in (2018, 2020, 2024, 2030, 2040, 2050)
         reader = ReadEfs(demand_files)
@@ -1291,20 +1410,23 @@ if __name__ == "__main__":
     elif demand_profile == "eia":
         assert profile_year in range(2018, 2023, 1)
         reader = ReadEia(demand_files)
-        sns = n.snapshots
     elif demand_profile == "eulp":
         # assert profile_year == 2018
         stock = {"residential": "res", "commercial": "com"}
         reader = ReadEulp(demand_files, stock[end_use])  # 'res' or 'com'
-        sns = n.snapshots
+    elif demand_profile == "cliu":
+        cliu_file = demand_files[0]
+        epri_profiles = demand_files[1]
+        reader = ReadCliu(cliu_file, profiles_filepath=epri_profiles)
+        sns = n.snapshots.map(lambda x: x.replace(year=2014))
     else:
         raise NotImplementedError
 
     if demand_disaggregation == "pop":
         writer = WritePopulation(n)
-    elif demand_disaggregation == "ind":
-        county_industrial_energy_file = snakemake.input.county_industrial_energy
-        writer = WriteIndustrial(n, county_industrial_energy_file)
+    elif demand_disaggregation == "cliu":
+        cliu_file = snakemake.input.dissagregate_files
+        writer = WriteIndustrial(n, cliu_file)
     else:
         raise NotImplementedError
 
