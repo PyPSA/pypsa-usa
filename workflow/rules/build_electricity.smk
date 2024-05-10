@@ -226,6 +226,16 @@ def electricty_study_demand(wildcards):
         return ""
 
 
+def electricty_study_dissagregate(wildcards):
+    strategy = config["electricity"]["demand"]["disaggregation"]
+    if strategy == "pop":
+        return ""
+    elif strategy == "cliu":
+        return DATA + "industry_load/2014_update_20170910-0116.csv"
+    else:
+        return ""
+
+
 def sector_study_demand(wildcards):
     end_use = wildcards.end_use
     profile = config["sector"]["demand"]["profile"][end_use]
@@ -252,6 +262,11 @@ def sector_study_demand(wildcards):
     elif end_use == "industry":
         if profile == "efs":
             return DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv"
+        elif profile == "cliu":
+            return [
+                DATA + "industry_load/2014_update_20170910-0116.csv",
+                DATA + "industry_load/epri_industrial_loads.csv",
+            ]
         else:
             return ""
     elif end_use == "transport":
@@ -259,6 +274,28 @@ def sector_study_demand(wildcards):
             return DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv"
         else:
             return ""
+    else:
+        return ""
+
+
+def sector_study_dissagregate(wildcards):
+    end_use = wildcards.end_use
+    strategy = config["sector"]["demand"]["disaggregation"][end_use]
+    if end_use == "residential":
+        if strategy == "pop":
+            return ""
+    elif end_use == "commercial":
+        if strategy == "pop":
+            return ""
+    elif end_use == "industry":
+        if strategy == "pop":
+            return ""
+        elif strategy == "cliu":
+            return DATA + "industry_load/2014_update_20170910-0116.csv"
+        else:
+            return ""
+    elif end_use == "transport":
+        return ""
     else:
         return ""
 
@@ -273,9 +310,7 @@ rule build_electrical_demand:
     input:
         network=RESOURCES + "{interconnect}/elec_base_network.nc",
         demand_files=electricty_study_demand,
-        eia=expand(DATA + "GridEmissions/{file}", file=DATAFILES_GE),
-        efs=DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv",
-        county_industrial_energy=DATA + "county_energy/2014_update_20170910-0116.csv",
+        dissagregate_files=electricty_study_dissagregate,
     output:
         elec_demand=RESOURCES + "{interconnect}/{end_use}_electricity_demand.csv",
     log:
@@ -299,7 +334,7 @@ rule build_sector_demand:
     input:
         network=RESOURCES + "{interconnect}/elec_base_network.nc",
         demand_files=sector_study_demand,
-        county_industrial_energy=DATA + "county_energy/2014_update_20170910-0116.csv",
+        dissagregate_files=sector_study_dissagregate,
     output:
         elec_demand=RESOURCES + "{interconnect}/{end_use}_electricity_demand.csv",
         heat_demand=RESOURCES + "{interconnect}/{end_use}_heating_demand.csv",

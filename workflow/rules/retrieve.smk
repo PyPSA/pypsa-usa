@@ -82,7 +82,8 @@ sector_datafiles = [
     "natural_gas/EIA-StatetoStateCapacity_Jan2023.xlsx",
     "natural_gas/pipelines.geojson",
     # industrial demand
-    "county_energy/2014_update_20170910-0116.csv",
+    "industry_load/2014_update_20170910-0116.csv",
+    "industry_load/epri_industrial_loads.csv",
 ]
 
 
