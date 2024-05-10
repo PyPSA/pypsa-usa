@@ -633,9 +633,8 @@ class ReadCliu(ReadStrategy):
         df = self._format_epri_data(df, abrv=False)
         df = self._add_epri_snapshots(df)
         if add_lpg:
-            return self._add_lpg_epri(df)
-        else:
-            return df
+            df = self._add_lpg_epri(df)
+        return self._norm_epri_data(df)
 
     def _apply_profiles(
         self,
@@ -852,7 +851,7 @@ class ReadCliu(ReadStrategy):
         """
 
         def get_days_in_month(year: int, month: int) -> list[int]:
-            return [x for x in range(1, calendar.monthrange(year, month)[1])]
+            return [x for x in range(1, calendar.monthrange(year, month)[1] + 1)]
 
         df = data.copy().reset_index()
         df["day"] = 1
@@ -863,6 +862,14 @@ class ReadCliu(ReadStrategy):
         return df.set_index(["state", "snapshot"]).drop(
             columns=["year", "month", "day", "hour"],
         )
+
+    @staticmethod
+    def _norm_epri_data(data: pd.DataFrame) -> pd.DataFrame:
+        normed = []
+        for state in data.index.get_level_values("state").unique():
+            df = data.xs(state, level="state", drop_level=False)
+            normed.append(df.apply(lambda x: x / x.sum()))
+        return pd.concat(normed)
 
     @staticmethod
     def _add_lpg_epri(df: pd.DataFrame) -> pd.DataFrame:
