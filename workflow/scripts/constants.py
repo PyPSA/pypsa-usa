@@ -35,6 +35,9 @@ COAL_dol_ton_2_MWHthermal = (
     LBS_TON**-1 * COAL_BTU_LB * 1000**-1 * MMBTU_MWHthemal
 )  # $/ton * ton/BTU * BTU/MWh_thermal
 
+# (TBTU) (1e6 MMBTU / TBTU) (MWh / MMBTU)
+TBTU_2_MWH = 1e6 * (1 / MMBTU_MWHthemal)
+
 ################################
 # Constants for ADS WECC mapping
 ################################
