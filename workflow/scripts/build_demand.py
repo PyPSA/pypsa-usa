@@ -629,7 +629,7 @@ class ReadCliu(ReadStrategy):
         if not self._profiles_filepath:
             logger.warning("No EPRI profiles provided")
             return
-        df = self._read_epri_data()
+        df = self._read_epri_data(profile_only=False)
         df = self._format_epri_data(df, abrv=False)
         df = self._add_epri_snapshots(df)
         if add_lpg:
@@ -784,8 +784,31 @@ class ReadCliu(ReadStrategy):
         df["lpg"] = df["LPG_NGL"] + df["Residual_fuel_oil"] + df["Other"].div(3)
         return df[["electricity", "heat", "cool", "lpg"]]
 
-    def _read_epri_data(self) -> pd.DataFrame:
-        return pd.read_csv(self._profiles_filepath)
+    def _read_epri_data(self, profile_only=True) -> pd.DataFrame:
+        """
+        Reads EPRI shapes.
+
+        If profile only, daily normalized data is provided, without
+        magnitudes
+        """
+        dtypes = {f"HR{x}": float for x in range(1, 25)}
+        dtypes.update(
+            {
+                "Region": str,
+                "Season": str,
+                "Day Type": str,
+                "Sector": str,
+                "End Use": str,
+                "Scale Multiplier": float,
+            },
+        )
+        df = pd.read_csv(self._profiles_filepath, dtype=dtypes)
+
+        if not profile_only:
+            cols_2_scale = [f"HR{x}" for x in range(1, 25)]
+            df[cols_2_scale] = df[cols_2_scale].mul(df["Scale Multiplier"], axis=0)
+
+        return df.drop(columns="Scale Multiplier")
 
     def _format_epri_data(self, data: pd.DataFrame, abrv: bool = True) -> pd.DataFrame:
         """
@@ -814,7 +837,7 @@ class ReadCliu(ReadStrategy):
                     "Day Type",
                     "Sector",
                     "End Use",
-                    "Scale Multiplier",
+                    # "Scale Multiplier",
                     "Region",
                     "Season",
                 ],
