@@ -53,8 +53,7 @@ STATE_TIMEZONE = const.STATE_2_TIMEZONE
 
 FIPS_2_STATE = const.FIPS_2_STATE
 NAICS = const.NAICS
-STATE_2_CODE = const.STATE_2_CODE
-CODE_2_STATE = {v: k for k, v in STATE_2_CODE.items()}
+TBTU_2_MWH = const.TBTU_2_MWH
 
 
 class Context:
@@ -606,17 +605,44 @@ class ReadCliu(ReadStrategy):
     def zone(self):
         return self._zone
 
-    def _format_data(self, county_demand: Any) -> pd.DataFrame:
+    def _read_data(self) -> Any:
+        """
+        Unzipped 'County_industry_energy_use.gz' csv file.
+        """
+        df = pd.read_csv(
+            self.filepath,
+            dtype={
+                "fips_matching": int,
+                "naics": int,
+                "Coal": float,
+                "Coke_and_breeze": float,
+                "Diesel": float,
+                "LPG_NGL": float,
+                "MECS_NAICS": float,
+                "MECS_Region": str,
+                "Natural_gas": float,
+                "Net_electricity": float,
+                "Other": float,
+                "Residual_fuel_oil": float,
+                "Total": float,
+                "fipscty": int,
+                "fipstate": int,
+                "subsector": int,
+            },
+        )
+        df["fipstate"] = df.fipstate.map(lambda x: FIPS_2_STATE[f"{x:02d}"].title())
+        return df
 
-        # get raw data
+    def _format_data(self, county_demand: Any) -> pd.DataFrame:
         annual_demand = self._group_by_naics(county_demand, group_by_subsector=False)
         annual_demand = self._group_by_fuels(annual_demand)
+        annual_demand = annual_demand * TBTU_2_MWH
         profiles = self.get_demand_profiles(add_lpg=True)
         return self._apply_profiles(annual_demand, profiles)
 
     def get_county_demand(self):
         """
-        Public method to extract CLIU data.
+        Public method to extract CLIU data in TBTU.
         """
         df = self._read_data()
         df = self._group_by_naics(df, group_by_subsector=False)
@@ -716,34 +742,6 @@ class ReadCliu(ReadStrategy):
         demand.columns = demand.columns.droplevel(level=None)
 
         return demand
-
-    def _read_data(self) -> Any:
-        """
-        Unzipped 'County_industry_energy_use.gz' csv file.
-        """
-        df = pd.read_csv(
-            self.filepath,
-            dtype={
-                "fips_matching": int,
-                "naics": int,
-                "Coal": float,
-                "Coke_and_breeze": float,
-                "Diesel": float,
-                "LPG_NGL": float,
-                "MECS_NAICS": float,
-                "MECS_Region": str,
-                "Natural_gas": float,
-                "Net_electricity": float,
-                "Other": float,
-                "Residual_fuel_oil": float,
-                "Total": float,
-                "fipscty": int,
-                "fipstate": int,
-                "subsector": int,
-            },
-        )
-        df["fipstate"] = df.fipstate.map(lambda x: FIPS_2_STATE[f"{x:02d}"].title())
-        return df
 
     @staticmethod
     def _group_by_naics(
