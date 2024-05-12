@@ -295,6 +295,26 @@ def add_economic_retirement(
     n.generators_t["p_max_pu"] = n.generators_t["p_max_pu"].join(p_max_pu_t)
 
 
+def add_multi_investment_resources(
+    n: pypsa.Network,
+    costs_dict: dict,
+    carriers: List[str],
+):
+    """
+    Adds multiple investment options for a given set of extendable carriers.
+
+    Specifically this function does the following:
+    1. ....
+
+    Arguments:
+    n: pypsa.Network,
+    costs_dict: dict,
+        Dictionary of costs for each carrier
+    carriers: List[str]
+        List of carriers to add multiple investment options for
+    """
+    continue
+
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake

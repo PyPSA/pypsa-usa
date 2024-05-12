@@ -409,33 +409,32 @@ def attach_breakthrough_renewable_plants(
     plants.replace(["wind_offshore"], ["offwind"], inplace=True)
 
     for tech in renewable_carriers:
+        assert tech =="hydro"
         tech_plants = plants.query("type == @tech")
         tech_plants.index = tech_plants.index.astype(str)
-
         logger.info(f"Adding {len(tech_plants)} {tech} generators to the network.")
 
-        if tech in ["wind", "offwind"]:
-            p = pd.read_csv(snakemake.input["wind_breakthrough"], index_col=0)
-        else:
-            p = pd.read_csv(snakemake.input[f"{tech}_breakthrough"], index_col=0)
-        intersection = set(p.columns).intersection(
+        p_nom_be = pd.read_csv(snakemake.input[f"{tech}_breakthrough"], index_col=0)
+        
+        intersection = set(p_nom_be.columns).intersection(
             tech_plants.index,
         )  # filters by plants ID for the plants of type tech
-        p = p[list(intersection)]
+        p_nom_be = p_nom_be[list(intersection)]
 
-        Nhours = len(n.snapshots)
-        p = p.iloc[:Nhours, :]  # hotfix to fit 2016 renewable data to load data
-
-        p.index = n.snapshots
-        p.columns = p.columns.astype(str)
+        Nhours = len(n.snapshots.get_level_values(1).unique())
+        p_nom_be = p_nom_be.iloc[:Nhours, :]  # hotfix to fit 2016 renewable data to load data
+        p_nom_be.index = n.snapshots.get_level_values(1).unique()
+        p_nom_be.columns = p_nom_be.columns.astype(str)
 
         if (tech_plants.Pmax == 0).any():
             # p_nom is the maximum of {Pmax, dispatch}
-            p_nom = pd.concat([p.max(axis=0), tech_plants["Pmax"]], axis=1).max(axis=1)
-            p_max_pu = (p[p_nom.index] / p_nom).fillna(0)  # some values remain 0
+            p_nom = pd.concat([p_nom_be.max(axis=0), tech_plants["Pmax"]], axis=1).max(axis=1)
+            p_max_pu = (p_nom_be[p_nom.index] / p_nom).fillna(0)  # some values remain 0
         else:
             p_nom = tech_plants.Pmax
-            p_max_pu = p[tech_plants.index] / p_nom
+            p_max_pu = p_nom_be[tech_plants.index] / p_nom
+
+        p_max_pu = broadcast_investment_horizons_index(n.snapshots, p_max_pu)
 
         n.madd(
             "Generator",

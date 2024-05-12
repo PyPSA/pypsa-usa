@@ -212,7 +212,7 @@ rule retrieve_cutout:
 
 rule retrieve_cost_data_eur:
     output:
-        pypsa_technology_data=RESOURCES + "costs/{year}/pypsa_eur.csv",
+        pypsa_technology_data=RESOURCES + "costs/pypsa_eur_{year}.csv",
     params:
         pypsa_costs_version=config["costs"].get("version", "v0.6.0"),
     log:

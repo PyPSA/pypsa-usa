@@ -554,6 +554,7 @@ def add_regional_co2limit(n, sns, config):
                 lhs <= rhs,
                 name=f"GlobalConstraint-{emmission_lim.name}_co2_limit",
             )
+            import pdb; pdb.set_trace()
             logger.info(f"Adding regional Co2 Limit for {emmission_lim.name}")
 
 

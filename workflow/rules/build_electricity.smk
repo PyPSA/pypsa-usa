@@ -47,8 +47,8 @@ rule build_base_network:
         reeds_memberships="repo_data/ReEDS_Constraints/membership.csv",
         county_shapes=RESOURCES + "{interconnect}/county_shapes.geojson",
     output:
-        bus2sub=DATA + "breakthrough_network/base_grid/{interconnect}/bus2sub.csv",
-        sub=DATA + "breakthrough_network/base_grid/{interconnect}/sub.csv",
+        bus2sub=RESOURCES + "{interconnect}/bus2sub.csv",
+        sub=RESOURCES + "{interconnect}/sub.csv",
         bus_gis=RESOURCES + "{interconnect}/bus_gis.csv",
         lines_gis=RESOURCES + "{interconnect}/lines_gis.csv",
         network=RESOURCES + "{interconnect}/elec_base_network.nc",
@@ -71,8 +71,8 @@ rule build_bus_regions:
         reeds_shapes=RESOURCES + "{interconnect}/reeds_shapes.geojson",
         offshore_shapes=RESOURCES + "{interconnect}/offshore_shapes.geojson",
         base_network=RESOURCES + "{interconnect}/elec_base_network.nc",
-        bus2sub=DATA + "breakthrough_network/base_grid/{interconnect}/bus2sub.csv",
-        sub=DATA + "breakthrough_network/base_grid/{interconnect}/sub.csv",
+        bus2sub=RESOURCES + "{interconnect}/bus2sub.csv",
+        sub=RESOURCES + "{interconnect}/sub.csv",
     output:
         regions_onshore=RESOURCES + "{interconnect}/regions_onshore.geojson",
         regions_offshore=RESOURCES + "{interconnect}/regions_offshore.geojson",
@@ -88,9 +88,9 @@ rule build_bus_regions:
 rule build_cost_data:
     input:
         nrel_atb=DATA + "costs/nrel_atb.parquet",
-        pypsa_technology_data=RESOURCES + "costs/{year}/pypsa_eur.csv",
+        pypsa_technology_data=RESOURCES + "costs/pypsa_eur_{year}.csv",
     output:
-        tech_costs=RESOURCES + "costs_{year}.csv",
+        tech_costs=RESOURCES + "costs/costs_{year}.csv",
     log:
         LOGS + "costs_{year}.log",
     threads: 1
@@ -425,12 +425,12 @@ rule add_electricity:
             for x in Path("repo_data/locational_multipliers/").glob("*")
         },
         base_network=RESOURCES + "{interconnect}/elec_base_network_dem.nc",
-        tech_costs=RESOURCES + f"costs_{config['costs']['year']}.csv",
+        tech_costs=RESOURCES + f"costs/costs_{config['scenario']['planning_horizons'][0]}.csv", # attach first horizon costs
         regions=RESOURCES + "{interconnect}/regions_onshore.geojson",
         plants_eia="repo_data/plants/plants_merged.csv",
         plants_breakthrough=DATA + "breakthrough_network/base_grid/plant.csv",
         hydro_breakthrough=DATA + "breakthrough_network/base_grid/hydro.csv",
-        bus2sub=DATA + "breakthrough_network/base_grid/{interconnect}/bus2sub.csv",
+        bus2sub=RESOURCES + "{interconnect}/bus2sub.csv",
         fuel_costs="repo_data/plants/fuelCost22.csv",
     output:
         RESOURCES + "{interconnect}/elec_base_network_l_pp.nc",
@@ -450,8 +450,8 @@ rule simplify_network:
     params:
         aggregation_strategies=config["clustering"].get("aggregation_strategies", {}),
     input:
-        bus2sub=DATA + "breakthrough_network/base_grid/{interconnect}/bus2sub.csv",
-        sub=DATA + "breakthrough_network/base_grid/{interconnect}/sub.csv",
+        bus2sub=RESOURCES + "{interconnect}/bus2sub.csv",
+        sub=RESOURCES + "{interconnect}/sub.csv",
         network=RESOURCES + "{interconnect}/elec_base_network_l_pp.nc",
     output:
         network=RESOURCES + "{interconnect}/elec_s.nc",
@@ -480,13 +480,13 @@ rule cluster_network:
         network=RESOURCES + "{interconnect}/elec_s.nc",
         regions_onshore=RESOURCES + "{interconnect}/regions_onshore.geojson",
         regions_offshore=RESOURCES + "{interconnect}/regions_offshore.geojson",
-        busmap=DATA + "breakthrough_network/base_grid/{interconnect}/bus2sub.csv",
+        busmap=RESOURCES + "{interconnect}/bus2sub.csv",
         custom_busmap=(
             DATA + "{interconnect}/custom_busmap_{clusters}.csv"
             if config["enable"].get("custom_busmap", False)
             else []
         ),
-        tech_costs=RESOURCES + f"costs_{config['costs']['year']}.csv",
+        tech_costs=RESOURCES + f"costs/costs_{config['scenario']['planning_horizons'][0]}.csv",
     output:
         network=RESOURCES + "{interconnect}/elec_s_{clusters}.nc",
         regions_onshore=RESOURCES
@@ -509,7 +509,9 @@ rule cluster_network:
 rule add_extra_components:
     input:
         network=RESOURCES + "{interconnect}/elec_s_{clusters}.nc",
-        tech_costs=RESOURCES + f"costs_{config['costs']['year']}.csv",
+        tech_costs = lambda wildcards: expand(RESOURCES + "costs/costs_{year}.csv", 
+            year=config['scenario']['planning_horizons'],
+            ),
     params:
         retirement=config["electricity"].get("retirement", "technical"),
     output:
@@ -541,7 +543,7 @@ rule prepare_network:
         autarky=config["electricity"]["autarky"],
     input:
         network=RESOURCES + "{interconnect}/elec_s_{clusters}_ec.nc",
-        tech_costs=RESOURCES + f"costs_{config['costs']['year']}.csv",
+        tech_costs=RESOURCES + f"costs/costs_{config['scenario']['planning_horizons'][0]}.csv",
     output:
         RESOURCES + "{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}.nc",
     log:
