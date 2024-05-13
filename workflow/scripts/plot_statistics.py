@@ -324,7 +324,7 @@ def plot_capacity_additions_bar(
     # )
 
     optimal_capacity.set_index("carrier", inplace=True)
-    optimal_capacity.insert(0,'Existing', existing_capacity['Existing Capacity'])
+    optimal_capacity.insert(0, "Existing", existing_capacity["Existing Capacity"])
 
     color_palette = get_color_palette(n)
     color_mapper = [color_palette[carrier] for carrier in optimal_capacity.index]
@@ -334,11 +334,11 @@ def plot_capacity_additions_bar(
 
     # Plotting
     optimal_capacity.T.plot(
-        kind='bar', 
+        kind="bar",
         stacked=True,
         color=color_mapper,
         ax=ax,
-        )
+    )
     ax.set_title(create_title("System Capacity Additions", **wildcards))
     ax.set_xlabel("")
     ax.set_ylabel("Capacity [MW]")
@@ -366,7 +366,9 @@ def plot_production_bar(
         )
     ]
     energy_mix = energy_mix.groupby("carrier").sum().reset_index()
-    energy_mix = energy_mix.melt(id_vars="carrier", var_name="Investment Year", value_name="GWh")
+    energy_mix = energy_mix.melt(
+        id_vars="carrier", var_name="Investment Year", value_name="GWh"
+    )
 
     color_palette = get_color_palette(n)
 
@@ -608,8 +610,8 @@ def plot_production_area(
             energy_mix[carrier + "_discharger"] = energy_mix[carrier].clip(lower=0.0001)
             energy_mix[carrier + "_charger"] = energy_mix[carrier].clip(upper=-0.0001)
             energy_mix = energy_mix.drop(columns=carrier)
-            carriers_2_plot.append(f'{carrier}' + "_charger")
-            carriers_2_plot.append(f'{carrier}' + "_discharger")
+            carriers_2_plot.append(f"{carrier}" + "_charger")
+            carriers_2_plot.append(f"{carrier}" + "_discharger")
     carriers_2_plot = list(set(carriers_2_plot))
     energy_mix = energy_mix[[x for x in carriers_2_plot if x in energy_mix]]
     energy_mix = energy_mix.rename(columns=n.carriers.nice_name)
@@ -624,7 +626,9 @@ def plot_production_area(
             for i, investment_period in enumerate(n.investment_periods):
 
                 if not timeslice == "all":
-                    snapshot_period = n.snapshots[n.snapshots.get_level_values(0) == investment_period].get_level_values(1)
+                    snapshot_period = n.snapshots[
+                        n.snapshots.get_level_values(0) == investment_period
+                    ].get_level_values(1)
                     snapshots = snapshot_period.get_loc(f"{year}-{timeslice}")
                 else:
                     snapshots = slice(None, None)
@@ -634,7 +638,9 @@ def plot_production_area(
                     alpha=0.7,
                     color=color_palette,
                 )
-                demand.loc[investment_period][snapshots].plot.line(ax=ax[i], ls="-", color="darkblue")
+                demand.loc[investment_period][snapshots].plot.line(
+                    ax=ax[i], ls="-", color="darkblue"
+                )
 
                 suffix = (
                     "-" + datetime.strptime(str(timeslice), "%m").strftime("%b")

@@ -59,6 +59,7 @@ idx = pd.IndexSlice
 
 logger = logging.getLogger(__name__)
 
+
 def _add_missing_carriers_from_costs(n, costs, carriers):
     missing_carriers = pd.Index(carriers).difference(n.carriers.index)
     if missing_carriers.empty:
@@ -87,6 +88,7 @@ def add_nice_carrier_names(n, config):
         logger.warning(f"tech_colors for carriers {missing_i} not defined in config.")
     n.carriers["color"] = colors
 
+
 def attach_storageunits(n, costs, elec_opts, investment_year):
     carriers = elec_opts["extendable_carriers"]["StorageUnit"]
     buses_i = n.buses.index
@@ -102,7 +104,7 @@ def attach_storageunits(n, costs, elec_opts, investment_year):
         n.madd(
             "StorageUnit",
             buses_i,
-            suffix=f' {carrier}_{investment_year}',
+            suffix=f" {carrier}_{investment_year}",
             bus=buses_i,
             carrier=carrier,
             p_nom_extendable=True,
@@ -365,7 +367,9 @@ def attach_multihorizon_generators(
     p_max_pu_t = n.generators_t["p_max_pu"][
         [x for x in gens.index if x in n.generators_t["p_max_pu"].columns]
     ]
-    p_max_pu_t = p_max_pu_t.rename(columns={x: f"{x} {investment_year}" for x in p_max_pu_t.columns})
+    p_max_pu_t = p_max_pu_t.rename(
+        columns={x: f"{x} {investment_year}" for x in p_max_pu_t.columns}
+    )
     n.generators_t["p_max_pu"] = n.generators_t["p_max_pu"].join(p_max_pu_t)
 
 
@@ -387,21 +391,24 @@ if __name__ == "__main__":
 
     Nyears = n.snapshot_weightings.objective.sum() / 8760.0
 
-    costs_dict = {n.investment_periods[i] : load_costs(
-        snakemake.input.tech_costs[i],
-        snakemake.config["costs"],
-        elec_config["max_hours"],
-        Nyears,
-    ) for i in range(len(n.investment_periods))}
+    costs_dict = {
+        n.investment_periods[i]: load_costs(
+            snakemake.input.tech_costs[i],
+            snakemake.config["costs"],
+            elec_config["max_hours"],
+            Nyears,
+        )
+        for i in range(len(n.investment_periods))
+    }
 
     if snakemake.params.retirement == "economic":
         economic_retirement_gens = elec_config.get("conventional_carriers", None)
         add_economic_retirement(
-            n, 
-            costs_dict[n.investment_periods[0]], 
-            economic_retirement_gens
+            n,
+            costs_dict[n.investment_periods[0]],
+            economic_retirement_gens,
         )
-    
+
     gens = n.generators[n.generators["p_nom_extendable"] == True]
     gens = gens[gens["carrier"].isin(elec_config["extendable_carriers"]["Generator"])]
 
@@ -413,8 +420,6 @@ if __name__ == "__main__":
         attach_multihorizon_generators(n, costs, gens, investment_year)
 
     add_nice_carrier_names(n, snakemake.config)
-
-
 
     n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))
     n.export_to_netcdf(snakemake.output[0])

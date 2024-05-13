@@ -52,9 +52,8 @@ def get_primary_energy_use(n: pypsa.Network) -> pd.DataFrame:
 
     return (
         pd.concat([gen_energy_use, link_energy_use])
-        #.reset_index() commenting this out seems to fix issue in multi-horizon indexing
-        .groupby(["bus", "carrier"])
-        .sum()
+        # .reset_index() commenting this out seems to fix issue in multi-horizon indexing
+        .groupby(["bus", "carrier"]).sum()
     )
 
 
@@ -289,7 +288,8 @@ def get_generator_marginal_costs(
     varying MC.
     """
     df_mc = (
-        n.get_switchable_as_dense("Generator", "marginal_cost").loc[n.investment_periods[0]]
+        n.get_switchable_as_dense("Generator", "marginal_cost")
+        .loc[n.investment_periods[0]]
         .resample(resample_period)
         .mean()
     )
@@ -320,7 +320,11 @@ def get_fuel_costs(n: pypsa.Network) -> pd.DataFrame:
     }
 
     # will return generator level of (fuel_costs / efficiency)
-    marginal_costs = n.get_switchable_as_dense("Generator", "marginal_cost").loc[n.investment_periods[0]].T
+    marginal_costs = (
+        n.get_switchable_as_dense("Generator", "marginal_cost")
+        .loc[n.investment_periods[0]]
+        .T
+    )
     marginal_costs = marginal_costs[
         marginal_costs.index.map(n.generators.carrier).isin(list(fixed_voms))
     ]
@@ -331,7 +335,11 @@ def get_fuel_costs(n: pypsa.Network) -> pd.DataFrame:
     marginal_costs = marginal_costs.subtract(voms, axis=0)
 
     # remove the efficiency cost
-    eff = n.get_switchable_as_dense("Generator", "efficiency").loc[n.investment_periods[0]].T
+    eff = (
+        n.get_switchable_as_dense("Generator", "efficiency")
+        .loc[n.investment_periods[0]]
+        .T
+    )
     eff = eff[eff.index.map(n.generators.carrier).isin(list(fixed_voms))]
     fuel_costs = marginal_costs.mul(eff, axis=0)
 
@@ -373,7 +381,7 @@ def get_node_emissions_timeseries(n: pypsa.Network) -> pd.DataFrame:
     return (
         get_node_carrier_emissions_timeseries(n)
         .droplevel("carrier")
-        #.reset_index() fix for multi-horizon
+        # .reset_index() fix for multi-horizon
         .groupby("bus")
         .sum()
         .T
@@ -388,7 +396,7 @@ def get_tech_emissions_timeseries(n: pypsa.Network) -> pd.DataFrame:
     return (
         get_node_carrier_emissions_timeseries(n)
         .droplevel("bus")
-        #.reset_index()
+        # .reset_index()
         .groupby("carrier")
         .sum()
         .T

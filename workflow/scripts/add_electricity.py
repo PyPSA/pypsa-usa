@@ -250,7 +250,6 @@ def add_missing_heat_rates(plants, heat_rates_fn):
     return plants
 
 
-
 def clean_locational_multiplier(df: pd.DataFrame):
     """
     Updates format of locational multiplier data.
@@ -305,7 +304,6 @@ def update_capital_costs(
 
     # overwrite network generator dataframe with updated values
     n.generators.loc[gen.index] = gen
-
 
 
 def apply_dynamic_pricing(
@@ -409,26 +407,30 @@ def attach_breakthrough_renewable_plants(
     plants.replace(["wind_offshore"], ["offwind"], inplace=True)
 
     for tech in renewable_carriers:
-        assert tech =="hydro"
+        assert tech == "hydro"
         tech_plants = plants.query("type == @tech")
         tech_plants.index = tech_plants.index.astype(str)
         logger.info(f"Adding {len(tech_plants)} {tech} generators to the network.")
 
         p_nom_be = pd.read_csv(snakemake.input[f"{tech}_breakthrough"], index_col=0)
-        
+
         intersection = set(p_nom_be.columns).intersection(
             tech_plants.index,
         )  # filters by plants ID for the plants of type tech
         p_nom_be = p_nom_be[list(intersection)]
 
         Nhours = len(n.snapshots.get_level_values(1).unique())
-        p_nom_be = p_nom_be.iloc[:Nhours, :]  # hotfix to fit 2016 renewable data to load data
+        p_nom_be = p_nom_be.iloc[
+            :Nhours, :
+        ]  # hotfix to fit 2016 renewable data to load data
         p_nom_be.index = n.snapshots.get_level_values(1).unique()
         p_nom_be.columns = p_nom_be.columns.astype(str)
 
         if (tech_plants.Pmax == 0).any():
             # p_nom is the maximum of {Pmax, dispatch}
-            p_nom = pd.concat([p_nom_be.max(axis=0), tech_plants["Pmax"]], axis=1).max(axis=1)
+            p_nom = pd.concat([p_nom_be.max(axis=0), tech_plants["Pmax"]], axis=1).max(
+                axis=1
+            )
             p_max_pu = (p_nom_be[p_nom.index] / p_nom).fillna(0)  # some values remain 0
         else:
             p_nom = tech_plants.Pmax
@@ -453,7 +455,6 @@ def attach_breakthrough_renewable_plants(
             efficiency=costs.at[tech, "efficiency"],
         )
     return n
-
 
 
 def match_plant_to_bus(n, plants):
@@ -685,7 +686,9 @@ def attach_wind_and_solar(
                 .drop(columns="sub_id")
                 .T
             )
-            bus_profiles = broadcast_investment_horizons_index(n.snapshots, bus_profiles)
+            bus_profiles = broadcast_investment_horizons_index(
+                n.snapshots, bus_profiles
+            )
 
             if supcar == "offwind":
                 capital_cost = capital_cost.to_frame().reset_index()
@@ -720,6 +723,7 @@ def attach_wind_and_solar(
                 p_max_pu=bus_profiles,
             )
 
+
 def attach_battery_storage(
     n: pypsa.Network,
     plants: pd.DataFrame,
@@ -739,7 +743,7 @@ def attach_battery_storage(
     logger.info(
         f"Added Batteries as Storage Units to the network.\n{np.round(plants_filt.p_nom.sum()/1000,2)} GW Power Capacity \n{np.round(plants_filt.nameplate_energy_capacity_mwh.sum()/1000, 2)} GWh Energy Capacity",
     )
-    
+
     plants_filt = plants_filt.dropna(subset=["nameplate_energy_capacity_mwh"])
     n.madd(
         "StorageUnit",
@@ -751,7 +755,7 @@ def attach_battery_storage(
         p_nom_extendable=False,
         max_hours=plants_filt.nameplate_energy_capacity_mwh / plants_filt.p_nom,
         build_year=plants_filt.operating_year,
-        lifetime= 30,  #replace with actual lifetime
+        lifetime=30,  # replace with actual lifetime
         efficiency_store=0.9**0.5,
         efficiency_dispatch=0.9**0.5,
         cyclic_state_of_charge=True,
@@ -840,15 +844,18 @@ def load_powerplants_eia(
 
     return plants
 
+
 def broadcast_investment_horizons_index(sns, df):
     """
-    Broadcast the index of a dataframe to match the potentially multi-indexed investment periods of a PyPSA network.
+    Broadcast the index of a dataframe to match the potentially multi-indexed
+    investment periods of a PyPSA network.
     """
     if len(df.index) == len(sns):
         df.index = sns
-    else: # if broadcasting is necessary
+    else:  # if broadcasting is necessary
         df = df.reindex(sns, level=1)
     return df
+
 
 def apply_seasonal_capacity_derates(
     n: pypsa.Network,
@@ -906,6 +913,7 @@ def apply_must_run_capacity_ratings(
 
     p_min_pu = broadcast_investment_horizons_index(sns, p_min_pu)
     n.generators_t.p_min_pu = pd.concat([n.generators_t.p_min_pu, p_min_pu], axis=1)
+
 
 def clean_bus_data(n: pypsa.Network):
     """

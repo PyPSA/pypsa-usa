@@ -345,7 +345,7 @@ rule add_demand:
     log:
         LOGS + "{interconnect}/add_demand.log",
     benchmark:
-        BENCHMARKS + "{interconnect}/add_demand",
+        BENCHMARKS + "{interconnect}/add_demand"
     resources:
         mem_mb=800,
     script:
@@ -425,7 +425,8 @@ rule add_electricity:
             for x in Path("repo_data/locational_multipliers/").glob("*")
         },
         base_network=RESOURCES + "{interconnect}/elec_base_network_dem.nc",
-        tech_costs=RESOURCES + f"costs/costs_{config['scenario']['planning_horizons'][0]}.csv", # attach first horizon costs
+        tech_costs=RESOURCES
+        + f"costs/costs_{config['scenario']['planning_horizons'][0]}.csv",  # attach first horizon costs
         regions=RESOURCES + "{interconnect}/regions_onshore.geojson",
         plants_eia="repo_data/plants/plants_merged.csv",
         plants_breakthrough=DATA + "breakthrough_network/base_grid/plant.csv",
@@ -486,7 +487,8 @@ rule cluster_network:
             if config["enable"].get("custom_busmap", False)
             else []
         ),
-        tech_costs=RESOURCES + f"costs/costs_{config['scenario']['planning_horizons'][0]}.csv",
+        tech_costs=RESOURCES
+        + f"costs/costs_{config['scenario']['planning_horizons'][0]}.csv",
     output:
         network=RESOURCES + "{interconnect}/elec_s_{clusters}.nc",
         regions_onshore=RESOURCES
@@ -509,9 +511,10 @@ rule cluster_network:
 rule add_extra_components:
     input:
         network=RESOURCES + "{interconnect}/elec_s_{clusters}.nc",
-        tech_costs = lambda wildcards: expand(RESOURCES + "costs/costs_{year}.csv", 
-            year=config['scenario']['planning_horizons'],
-            ),
+        tech_costs=lambda wildcards: expand(
+            RESOURCES + "costs/costs_{year}.csv",
+            year=config["scenario"]["planning_horizons"],
+        ),
     params:
         retirement=config["electricity"].get("retirement", "technical"),
     output:
@@ -543,7 +546,8 @@ rule prepare_network:
         autarky=config_provider("electricity","autarky"),
     input:
         network=RESOURCES + "{interconnect}/elec_s_{clusters}_ec.nc",
-        tech_costs=RESOURCES + f"costs/costs_{config['scenario']['planning_horizons'][0]}.csv",
+        tech_costs=RESOURCES
+        + f"costs/costs_{config['scenario']['planning_horizons'][0]}.csv",
     output:
         RESOURCES + "{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}.nc",
     log:

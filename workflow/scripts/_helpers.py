@@ -451,7 +451,6 @@ def test_network_datatype_consistency(n):
         return None
 
 
-
 def local_to_utc(group):
     import pytz
     from constants import STATE_2_TIMEZONE
@@ -527,6 +526,7 @@ def get_checksum_from_zenodo(file_url):
 
 ### Config Related Helpers ###
 
+
 def set_scenario_config(snakemake):
     scenario = snakemake.config["run"].get("scenarios", {})
     if scenario.get("enable") and "run" in snakemake.wildcards.keys():
@@ -549,6 +549,7 @@ def update_config_with_sector_opts(config, sector_opts):
         if o.startswith("CF+"):
             l = o.split("+")[1:]
             update_config(config, parse(l))
+
 
 def get_opt(opts, expr, flags=None):
     """
@@ -577,7 +578,6 @@ def find_opt(opts, expr):
             else:
                 return True, None
     return False, None
-
 
 
 def update_config_from_wildcards(config, w, inplace=True):
@@ -638,7 +638,8 @@ def update_config_from_wildcards(config, w, inplace=True):
             if not isinstance(config["adjustments"]["electricity"], dict):
                 config["adjustments"]["electricity"] = dict()
             update_config(
-                config["adjustments"]["electricity"], {attr: {carrier: factor}}
+                config["adjustments"]["electricity"],
+                {attr: {carrier: factor}},
             )
 
     if w.get("sector_opts"):
@@ -823,7 +824,7 @@ def get_run_path(fn, dir, rdir, shared_resources):
         irrelevant_wildcards = {"technology", "year", "scope", "kind"}
         no_relevant_wildcards = not existing_wildcards - irrelevant_wildcards
         no_elec_rule = not fn.startswith("networks/elec") and not fn.startswith(
-            "add_electricity"
+            "add_electricity",
         )
         is_shared = no_relevant_wildcards and no_elec_rule
         rdir = "" if is_shared else rdir
@@ -833,7 +834,7 @@ def get_run_path(fn, dir, rdir, shared_resources):
         rdir = "" if shared_resources else rdir
     else:
         raise ValueError(
-            "shared_resources must be a boolean, str, or 'base' for special handling."
+            "shared_resources must be a boolean, str, or 'base' for special handling.",
         )
 
     return f"{dir}{rdir}{fn}"

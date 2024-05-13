@@ -549,7 +549,9 @@ if __name__ == "__main__":
         **dict(wildcards=dict(snakemake.wildcards)),
     )
 
-    clustering.network.set_investment_periods(periods=snakemake.params.planning_horizons)
+    clustering.network.set_investment_periods(
+        periods=snakemake.params.planning_horizons
+    )
 
     clustering.network.export_to_netcdf(snakemake.output.network)
     for attr in (

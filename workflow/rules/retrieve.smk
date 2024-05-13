@@ -101,6 +101,7 @@ rule retrieve_sector_databundle:
     script:
         "../scripts/retrieve_databundles.py"
 
+
 DATAFILES_GE = [
     "EIA_DMD_2018_2024.csv",
     "EIA_GridEmissions_all_2018_2024.csv",
