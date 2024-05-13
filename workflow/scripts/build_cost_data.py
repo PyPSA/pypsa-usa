@@ -389,12 +389,14 @@ if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
 
-        snakemake = mock_snakemake("build_cost_data", year=2030)
+        snakemake = mock_snakemake("build_cost_data", year=2019)
         rootpath = ".."
     else:
         rootpath = "."
 
     year = snakemake.wildcards.year
+    if int(year) <= 2021: # ATB data starts at 2022
+        year = 2022
 
     eur = pd.read_csv(snakemake.input.pypsa_technology_data)
     eur = correct_units(eur, {"USD": const.EUR_2_USD})
