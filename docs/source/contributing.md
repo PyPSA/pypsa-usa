@@ -106,7 +106,7 @@ to new functions, modules and classes.
 - Go to the web page of your fork and click
 [Create a Pull Request](https://github.com/PyPSA/pypsa-usa/pulls). Then make sure you are submitting the pull request from your_git/issue-xxx branch to the PyPSA/PyPSA-USA:develop branch.
 
-- Communicate on the github Pull Request page to reconcile any changes to be made! 
+- Communicate on the github Pull Request page to reconcile any changes to be made!
 
 ## Documentation Improvements
 
