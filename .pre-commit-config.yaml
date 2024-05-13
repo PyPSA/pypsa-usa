@@ -41,7 +41,7 @@ repos:
     exclude: examples/solve-on-remote.ipynb
 
 - repo: https://github.com/snakemake/snakefmt
-  rev: v0.10.1
+  rev: v0.10.2
   hooks:
   - id: snakefmt
 
