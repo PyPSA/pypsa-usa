@@ -389,7 +389,7 @@ if __name__ == "__main__":
 
     # n.buses["location"] = n.buses.index
 
-    Nyears = n.snapshot_weightings.objective.sum() / 8760.0
+    Nyears = n.snapshot_weightings.loc[n.investment_periods[0]].objective.sum() / 8760.0
 
     costs_dict = {
         n.investment_periods[i]: load_costs(

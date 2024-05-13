@@ -941,7 +941,7 @@ def main(snakemake):
 
     n = pypsa.Network(snakemake.input.base_network)
 
-    Nyears = n.snapshot_weightings.objective.sum() / 8760.0
+    Nyears = n.snapshot_weightings.loc[n.investment_periods[0]].objective.sum() / 8760.0
 
     costs = load_costs(
         snakemake.input.tech_costs,

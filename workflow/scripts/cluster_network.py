@@ -504,7 +504,7 @@ if __name__ == "__main__":
             pd.Series(dtype="O"),
         )
     else:
-        Nyears = n.snapshot_weightings.objective.sum() / 8760
+        Nyears = n.snapshot_weightings.loc[n.investment_periods[0]].objective.sum() / 8760.0
 
         hvac_overhead_cost = load_costs(
             snakemake.input.tech_costs,
