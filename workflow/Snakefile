@@ -30,13 +30,11 @@ FIGURES_EMISSIONS = [
 
 FIGURES_PRODUCTION = [
     "production_area.pdf",
-    #"production_area.html",
 ]
 
 FIGURES_SYSTEM = [
     "production_bar.pdf",
     "capacity_additions_bar.pdf",
-    #"costs_bar.pdf",
     "bar_regional_capacity_additions.pdf",
     "global_constraint_shadow_prices.pdf",
     "generator_data_panel.pdf",
@@ -82,7 +80,7 @@ wildcard_constraints:
 
 
 # Merge subworkflow configs and main config
-configfile: "config/config.tutorial.yaml"
+configfile: "config/config.default.yaml"
 configfile: "config/config.cluster.yaml"
 configfile: "config/config.common.yaml"
 configfile: "config/config.plotting.yaml"
