@@ -268,6 +268,7 @@ rule retrieve_caiso_data:
     script:
         "../scripts/retrieve_caiso_data.py"
 
+
 rule retrieve_pudl:
     output:
         pudl=DATA + "pudl/pudl.sqlite.gz",

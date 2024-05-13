@@ -20,7 +20,7 @@ if __name__ == "__main__":
         rootpath = "."
 
     # Recommended to use the stable version of PUDL documented here: https://catalystcoop-pudl.readthedocs.io/en/latest/data_access.html#stable-builds
-    url = 'http://pudl.catalyst.coop.s3.us-west-2.amazonaws.com/stable/pudl.sqlite.gz'
+    url = "http://pudl.catalyst.coop.s3.us-west-2.amazonaws.com/stable/pudl.sqlite.gz"
     save_pudl = snakemake.output.pudl
 
     if not Path(save_pudl).exists():
