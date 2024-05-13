@@ -656,6 +656,7 @@ def attach_wind_and_solar(
                 pd.read_csv(input_profiles.bus2sub, dtype=str)
                 .drop("interconnect", axis=1)
                 .rename(columns={"Bus": "bus_id"})
+                .drop_duplicates(subset='sub_id')
             )
             bus_list = (
                 ds.bus.to_dataframe("sub_id").merge(bus2sub).bus_id.astype(str).values
