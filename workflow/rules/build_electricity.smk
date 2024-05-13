@@ -426,7 +426,8 @@ rule add_electricity:
         },
         base_network=RESOURCES + "{interconnect}/elec_base_network_dem.nc",
         tech_costs=RESOURCES
-        + f"costs/costs_{config['scenario']['planning_horizons'][0]}.csv",  # attach first horizon costs
+        + f"costs/costs_{config['scenario']['planning_horizons'][0]}.csv",
+        # attach first horizon costs
         regions=RESOURCES + "{interconnect}/regions_onshore.geojson",
         plants_eia="repo_data/plants/plants_merged.csv",
         plants_breakthrough=DATA + "breakthrough_network/base_grid/plant.csv",
@@ -467,16 +468,16 @@ rule simplify_network:
 
 rule cluster_network:
     params:
-        cluster_network=config_provider("clustering","cluster_network"),
-        conventional_carriers=config_provider("electricity","conventional_carriers"),
-        renewable_carriers=config_provider("electricity","renewable_carriers"),
-        aggregation_strategies=config_provider("clustering","aggregation_strategies"),
-        custom_busmap=config_provider("enable","custom_busmap", default = False),
-        focus_weights=config_provider("focus_weights", default= False),
-        max_hours=config_provider("electricity","max_hours"),
-        length_factor=config_provider("lines","length_factor"),
+        cluster_network=config_provider("clustering", "cluster_network"),
+        conventional_carriers=config_provider("electricity", "conventional_carriers"),
+        renewable_carriers=config_provider("electricity", "renewable_carriers"),
+        aggregation_strategies=config_provider("clustering", "aggregation_strategies"),
+        custom_busmap=config_provider("enable", "custom_busmap", default=False),
+        focus_weights=config_provider("focus_weights", default=False),
+        max_hours=config_provider("electricity", "max_hours"),
+        length_factor=config_provider("lines", "length_factor"),
         costs=config_provider("costs"),
-        planning_horizons=config_provider("scenario","planning_horizons"),
+        planning_horizons=config_provider("scenario", "planning_horizons"),
     input:
         network=RESOURCES + "{interconnect}/elec_s.nc",
         regions_onshore=RESOURCES + "{interconnect}/regions_onshore.geojson",
@@ -532,18 +533,18 @@ rule add_extra_components:
 
 rule prepare_network:
     params:
-        time_resolution=config_provider("clustering","temporal","resolution_elec"),
+        time_resolution=config_provider("clustering", "temporal", "resolution_elec"),
         adjustments=False,
         links=config_provider("links"),
         lines=config_provider("lines"),
-        co2base=config_provider("electricity","co2base"),
-        co2limit=config_provider("electricity","co2limit"),
-        co2limit_enable=config_provider("electricity","co2limit_enable", default=False),
-        gaslimit=config_provider("electricity","gaslimit"),
-        gaslimit_enable=config_provider("electricity","gaslimit_enable", default=False),
-        max_hours=config_provider("electricity","max_hours"),
+        co2base=config_provider("electricity", "co2base"),
+        co2limit=config_provider("electricity", "co2limit"),
+        co2limit_enable=config_provider("electricity", "co2limit_enable", default=False),
+        gaslimit=config_provider("electricity", "gaslimit"),
+        gaslimit_enable=config_provider("electricity", "gaslimit_enable", default=False),
+        max_hours=config_provider("electricity", "max_hours"),
         costs=config_provider("costs"),
-        autarky=config_provider("electricity","autarky"),
+        autarky=config_provider("electricity", "autarky"),
     input:
         network=RESOURCES + "{interconnect}/elec_s_{clusters}_ec.nc",
         tech_costs=RESOURCES

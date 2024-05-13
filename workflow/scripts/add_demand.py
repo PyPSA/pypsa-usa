@@ -23,7 +23,7 @@ def attach_demand(n: pypsa.Network, df: pd.DataFrame, carrier: str, suffix: str)
     """
     df.index = pd.to_datetime(df.index)
     assert len(df.index) == len(
-        n.snapshots
+        n.snapshots,
     ), "Demand time series length does not match network snapshots"
     df.index = n.snapshots
     n.madd(

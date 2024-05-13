@@ -421,7 +421,8 @@ def attach_breakthrough_renewable_plants(
 
         Nhours = len(n.snapshots.get_level_values(1).unique())
         p_nom_be = p_nom_be.iloc[
-            :Nhours, :
+            :Nhours,
+            :,
         ]  # hotfix to fit 2016 renewable data to load data
         p_nom_be.index = n.snapshots.get_level_values(1).unique()
         p_nom_be.columns = p_nom_be.columns.astype(str)
@@ -429,7 +430,7 @@ def attach_breakthrough_renewable_plants(
         if (tech_plants.Pmax == 0).any():
             # p_nom is the maximum of {Pmax, dispatch}
             p_nom = pd.concat([p_nom_be.max(axis=0), tech_plants["Pmax"]], axis=1).max(
-                axis=1
+                axis=1,
             )
             p_max_pu = (p_nom_be[p_nom.index] / p_nom).fillna(0)  # some values remain 0
         else:
@@ -687,7 +688,8 @@ def attach_wind_and_solar(
                 .T
             )
             bus_profiles = broadcast_investment_horizons_index(
-                n.snapshots, bus_profiles
+                n.snapshots,
+                bus_profiles,
             )
 
             if supcar == "offwind":

@@ -367,7 +367,9 @@ def plot_production_bar(
     ]
     energy_mix = energy_mix.groupby("carrier").sum().reset_index()
     energy_mix = energy_mix.melt(
-        id_vars="carrier", var_name="Investment Year", value_name="GWh"
+        id_vars="carrier",
+        var_name="Investment Year",
+        value_name="GWh",
     )
 
     color_palette = get_color_palette(n)
@@ -639,7 +641,9 @@ def plot_production_area(
                     color=color_palette,
                 )
                 demand.loc[investment_period][snapshots].plot.line(
-                    ax=ax[i], ls="-", color="darkblue"
+                    ax=ax[i],
+                    ls="-",
+                    color="darkblue",
                 )
 
                 suffix = (

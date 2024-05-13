@@ -315,7 +315,8 @@ def add_RPS_constraints(n, config):
     rps_reeds.dropna(subset="region", inplace=True)
     rps_reeds["carrier"] = [", ".join(rps_carriers)] * len(rps_reeds)
     rps_reeds.rename(
-        columns={"t": "planning_horizon", "rps_all": "pct", "st": "name"}, inplace=True
+        columns={"t": "planning_horizon", "rps_all": "pct", "st": "name"},
+        inplace=True,
     )
     rps_reeds.drop(columns=["rps_solar", "rps_wind"], inplace=True)
 
@@ -366,7 +367,7 @@ def add_RPS_constraints(n, config):
                 name=f"GlobalConstraint-{pct_lim.name}_{pct_lim.planning_horizon}_rps_limit",
             )
             logger.info(
-                f"Adding {pct_lim.name} {pct_lim.name}_{pct_lim.planning_horizon} for {pct_lim.planning_horizon}."
+                f"Adding {pct_lim.name} {pct_lim.name}_{pct_lim.planning_horizon} for {pct_lim.planning_horizon}.",
             )
 
 
@@ -593,7 +594,8 @@ def add_regional_co2limit(n, sns, config):
             # Imports
             region_demand = (
                 n.loads_t.p_set.loc[
-                    planning_horizon, n.loads.bus.isin(region_buses.index)
+                    planning_horizon,
+                    n.loads.bus.isin(region_buses.index),
                 ]
                 .sum()
                 .sum()
@@ -694,7 +696,8 @@ def add_SAFER_constraints(n, config):
 
         peakdemand = (
             n.loads_t.p_set.loc[
-                prm.planning_horizon, n.loads.bus.isin(region_buses.index)
+                prm.planning_horizon,
+                n.loads.bus.isin(region_buses.index),
             ]
             .sum(axis=1)
             .max()
@@ -714,7 +717,8 @@ def add_SAFER_constraints(n, config):
         ).p_nom.sum()
         rhs = planning_reserve - exist_conv_caps
         n.model.add_constraints(
-            lhs >= rhs, name=f"GlobalConstraint-{prm.name}_{prm.planning_horizon}_PRM"
+            lhs >= rhs,
+            name=f"GlobalConstraint-{prm.name}_{prm.planning_horizon}_PRM",
         )
 
 
