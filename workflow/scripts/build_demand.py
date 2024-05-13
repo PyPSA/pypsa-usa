@@ -1070,7 +1070,7 @@ if __name__ == "__main__":
         sns_year = n.snapshots.get_level_values(0)
         sns_dt = n.snapshots.get_level_values(1)
         sns = pd.DatetimeIndex(
-            [x.replace(year=sns_year[i]) for i, x in enumerate(sns_dt)]
+            [x.replace(year=sns_year[i]) for i, x in enumerate(sns_dt)],
         )
         profile_year = planning_horizons[
             0
@@ -1081,7 +1081,7 @@ if __name__ == "__main__":
         sns_year = n.snapshots.get_level_values(0)
         sns_dt = n.snapshots.get_level_values(1)
         sns = pd.DatetimeIndex(
-            [x.replace(year=sns_year[i]) for i, x in enumerate(sns_dt)]
+            [x.replace(year=sns_year[i]) for i, x in enumerate(sns_dt)],
         )
     elif demand_profile == "eulp":
         # assert profile_year == 2018

@@ -368,7 +368,7 @@ def attach_multihorizon_generators(
         [x for x in gens.index if x in n.generators_t["p_max_pu"].columns]
     ]
     p_max_pu_t = p_max_pu_t.rename(
-        columns={x: f"{x} {investment_year}" for x in p_max_pu_t.columns}
+        columns={x: f"{x} {investment_year}" for x in p_max_pu_t.columns},
     )
     n.generators_t["p_max_pu"] = n.generators_t["p_max_pu"].join(p_max_pu_t)
 

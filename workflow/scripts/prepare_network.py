@@ -73,6 +73,7 @@ idx = pd.IndexSlice
 
 logger = logging.getLogger(__name__)
 
+
 def get_social_discount(t, r=0.01):
     """
     Calculate for a given time t and social discount rate r [per unit] the
@@ -203,7 +204,7 @@ def apply_time_segmentation(n, segments, solver_name="cbc"):
         import tsam.timeseriesaggregation as tsam
     except ImportError:
         raise ModuleNotFoundError(
-            "Optional dependency 'tsam' not found." "Install via 'pip install tsam'"
+            "Optional dependency 'tsam' not found." "Install via 'pip install tsam'",
         )
 
     # get all time-dependent data
@@ -241,7 +242,10 @@ def apply_time_segmentation(n, segments, solver_name="cbc"):
         timesteps = [raw_t.index[0] + pd.Timedelta(f"{offset}h") for offset in offsets]
         snapshots = pd.DatetimeIndex(timesteps)
         sn_weightings[year] = pd.Series(
-            weightings, index=snapshots, name="weightings", dtype="float64"
+            weightings,
+            index=snapshots,
+            name="weightings",
+            dtype="float64",
         )
 
     sn_weightings = pd.concat(sn_weightings)
@@ -317,10 +321,10 @@ if __name__ == "__main__":
     # set Investment Period Objective weightings
     social_discountrate = snakemake.params.costs["social_discount_rate"]
     objective_w = get_investment_weighting(
-        n.investment_period_weightings["years"], social_discountrate
+        n.investment_period_weightings["years"],
+        social_discountrate,
     )
     n.investment_period_weightings["objective"] = objective_w
-
 
     set_line_s_max_pu(n, snakemake.params.lines["s_max_pu"])
 

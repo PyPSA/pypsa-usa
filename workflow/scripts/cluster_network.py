@@ -550,7 +550,7 @@ if __name__ == "__main__":
     )
 
     clustering.network.set_investment_periods(
-        periods=snakemake.params.planning_horizons
+        periods=snakemake.params.planning_horizons,
     )
 
     clustering.network.export_to_netcdf(snakemake.output.network)
