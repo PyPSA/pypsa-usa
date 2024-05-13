@@ -264,5 +264,5 @@ if __name__ == "__main__":
 
     n.export_to_netcdf(snakemake.output[0])
 
-    output_path = os.path.dirname(snakemake.output[0]) + "_simplified_"
+    output_path = os.path.dirname(snakemake.output[0]) + "/simplified_"
     export_network_for_gis_mapping(n, output_path)

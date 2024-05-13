@@ -87,16 +87,14 @@ def add_nice_carrier_names(n, config):
         logger.warning(f"tech_colors for carriers {missing_i} not defined in config.")
     n.carriers["color"] = colors
 
-def attach_storageunits(n, costs, elec_opts):
+def attach_storageunits(n, costs, elec_opts, investment_year):
     carriers = elec_opts["extendable_carriers"]["StorageUnit"]
-
-    _add_missing_carriers_from_costs(n, costs, carriers)
-
     buses_i = n.buses.index
 
     lookup_store = {"H2": "electrolysis", "battery": "battery inverter"}
     lookup_dispatch = {"H2": "fuel cell", "battery": "battery inverter"}
 
+    _add_missing_carriers_from_costs(n, costs, carriers)
     for carrier in carriers:
         max_hours = int(carrier.split("hr_")[0])
         roundtrip_correction = 0.5 if "battery" in carrier else 1
@@ -104,7 +102,7 @@ def attach_storageunits(n, costs, elec_opts):
         n.madd(
             "StorageUnit",
             buses_i,
-            " " + carrier,
+            suffix=f' {carrier}_{investment_year}',
             bus=buses_i,
             carrier=carrier,
             p_nom_extendable=True,
@@ -114,10 +112,12 @@ def attach_storageunits(n, costs, elec_opts):
             efficiency_dispatch=costs.at[carrier, "efficiency"] ** roundtrip_correction,
             max_hours=max_hours,
             cyclic_state_of_charge=True,
+            build_year=investment_year,
+            lifetime=costs.at[carrier, "lifetime"],
         )
 
 
-def attach_stores(n, costs, elec_opts):
+def attach_stores(n, costs, elec_opts, investment_year):
     carriers = elec_opts["extendable_carriers"]["Store"]
 
     _add_missing_carriers_from_costs(n, costs, carriers)
@@ -136,6 +136,9 @@ def attach_stores(n, costs, elec_opts):
             e_nom_extendable=True,
             e_cyclic=True,
             capital_cost=costs.at["hydrogen storage underground", "capital_cost"],
+            build_year=investment_year,
+            lifetime=costs.at["hydrogen storage underground", "lifetime"],
+            suffix=f" {investment_year}",
         )
 
         n.madd(
@@ -148,6 +151,9 @@ def attach_stores(n, costs, elec_opts):
             efficiency=costs.at["electrolysis", "efficiency"],
             capital_cost=costs.at["electrolysis", "capital_cost"],
             marginal_cost=costs.at["electrolysis", "marginal_cost"],
+            build_year=investment_year,
+            lifetime=costs.at["electrolysis", "lifetime"],
+            suffix=str(investment_year),
         )
 
         n.madd(
@@ -162,10 +168,13 @@ def attach_stores(n, costs, elec_opts):
             capital_cost=costs.at["fuel cell", "capital_cost"]
             * costs.at["fuel cell", "efficiency"],
             marginal_cost=costs.at["fuel cell", "marginal_cost"],
+            build_year=investment_year,
+            lifetime=costs.at["fuel cell", "lifetime"],
+            suffix=str(investment_year),
         )
 
 
-def attach_hydrogen_pipelines(n, costs, elec_opts):
+def attach_hydrogen_pipelines(n, costs, elec_opts, investment_year):
     ext_carriers = elec_opts["extendable_carriers"]
     as_stores = ext_carriers.get("Store", [])
 
@@ -202,6 +211,9 @@ def attach_hydrogen_pipelines(n, costs, elec_opts):
         capital_cost=costs.at["H2 pipeline", "capital_cost"] * h2_links.length,
         efficiency=costs.at["H2 pipeline", "efficiency"],
         carrier="H2 pipeline",
+        build_year=investment_year,
+        lifetime=costs.at["H2 pipeline", "lifetime"],
+        suffix=f" {investment_year}",
     )
 
 
@@ -272,6 +284,7 @@ def add_economic_retirement(
         efficiency=extend.efficiency,
         marginal_cost=extend.marginal_cost,
         capital_cost=extend.capital_cost,
+        build_year=n.investment_periods[0],
         lifetime=extend.lifetime,
         p_min_pu=extend.p_min_pu,
         p_max_pu=extend.p_max_pu,
@@ -295,10 +308,11 @@ def add_economic_retirement(
     n.generators_t["p_max_pu"] = n.generators_t["p_max_pu"].join(p_max_pu_t)
 
 
-def add_multi_investment_resources(
+def attach_multihorizon_generators(
     n: pypsa.Network,
-    costs_dict: dict,
-    carriers: List[str],
+    costs: dict,
+    gens: pd.DataFrame,
+    investment_year: int,
 ):
     """
     Adds multiple investment options for a given set of extendable carriers.
@@ -309,11 +323,51 @@ def add_multi_investment_resources(
     Arguments:
     n: pypsa.Network,
     costs_dict: dict,
-        Dictionary of costs for each carrier
+        Dict of costs for each investment period
     carriers: List[str]
         List of carriers to add multiple investment options for
     """
-    continue
+    if gens.empty or len(n.investment_periods) == 1:
+        return
+
+    n.madd(
+        "Generator",
+        gens.index,
+        suffix=f" {investment_year}",
+        carrier=gens.carrier,
+        bus=gens.bus,
+        p_nom_min=0,
+        p_nom=0,
+        p_nom_max=gens.p_nom_max,
+        p_nom_extendable=True,
+        ramp_limit_up=gens.ramp_limit_up,
+        ramp_limit_down=gens.ramp_limit_down,
+        efficiency=gens.efficiency,
+        marginal_cost=gens.marginal_cost,
+        p_min_pu=gens.p_min_pu,
+        p_max_pu=gens.p_max_pu,
+        capital_cost=gens.carrier.map(costs.capital_cost),
+        build_year=investment_year,
+        lifetime=gens.carrier.map(costs.lifetime),
+    )
+
+    # time dependent factors added after as not all generators are time dependent
+    marginal_cost_t = n.generators_t["marginal_cost"][
+        [x for x in gens.index if x in n.generators_t.marginal_cost.columns]
+    ]
+    marginal_cost_t = marginal_cost_t.rename(
+        columns={x: f"{x} {investment_year}" for x in marginal_cost_t.columns},
+    )
+    n.generators_t["marginal_cost"] = n.generators_t["marginal_cost"].join(
+        marginal_cost_t,
+    )
+
+    p_max_pu_t = n.generators_t["p_max_pu"][
+        [x for x in gens.index if x in n.generators_t["p_max_pu"].columns]
+    ]
+    p_max_pu_t = p_max_pu_t.rename(columns={x: f"{x} {investment_year}" for x in p_max_pu_t.columns})
+    n.generators_t["p_max_pu"] = n.generators_t["p_max_pu"].join(p_max_pu_t)
+
 
 if __name__ == "__main__":
     if "snakemake" not in globals():
@@ -322,32 +376,45 @@ if __name__ == "__main__":
         snakemake = mock_snakemake(
             "add_extra_components",
             interconnect="texas",
-            clusters=40,
+            clusters=10,
         )
     configure_logging(snakemake)
 
     n = pypsa.Network(snakemake.input.network)
     elec_config = snakemake.config["electricity"]
 
+    # n.buses["location"] = n.buses.index
+
     Nyears = n.snapshot_weightings.objective.sum() / 8760.0
-    costs = load_costs(
-        snakemake.input.tech_costs,
+
+    costs_dict = {n.investment_periods[i] : load_costs(
+        snakemake.input.tech_costs[i],
         snakemake.config["costs"],
         elec_config["max_hours"],
         Nyears,
-    )
-
-    n.buses["location"] = n.buses.index
-
-    attach_storageunits(n, costs, elec_config)
-    attach_stores(n, costs, elec_config)
-    attach_hydrogen_pipelines(n, costs, elec_config)
-
-    add_nice_carrier_names(n, snakemake.config)
+    ) for i in range(len(n.investment_periods))}
 
     if snakemake.params.retirement == "economic":
         economic_retirement_gens = elec_config.get("conventional_carriers", None)
-        add_economic_retirement(n, costs, economic_retirement_gens)
+        add_economic_retirement(
+            n, 
+            costs_dict[n.investment_periods[0]], 
+            economic_retirement_gens
+        )
+    
+    gens = n.generators[n.generators["p_nom_extendable"] == True]
+    gens = gens[gens["carrier"].isin(elec_config["extendable_carriers"]["Generator"])]
+
+    for investment_year in n.investment_periods:
+        costs = costs_dict[investment_year]
+        attach_storageunits(n, costs, elec_config, investment_year)
+        attach_stores(n, costs, elec_config, investment_year)
+        attach_hydrogen_pipelines(n, costs, elec_config, investment_year)
+        attach_multihorizon_generators(n, costs, gens, investment_year)
+
+    add_nice_carrier_names(n, snakemake.config)
+
+
 
     n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))
     n.export_to_netcdf(snakemake.output[0])
