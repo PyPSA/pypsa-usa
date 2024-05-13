@@ -5,8 +5,6 @@ Builds the demand data for the PyPSA network.
 
 .. code:: yaml
 
-    network_configuration:
-
     snapshots:
         start:
         end:
@@ -700,10 +698,10 @@ class WriteStrategy(ABC):
             assert len(snapshots) == len(n.snapshots)
             filtered = self._filter_on_snapshots(df, snapshots)
             df = filtered.reset_index()
-            df["snapshot"] = df.snapshot.map(
-                lambda x: x.replace(year=n.snapshots[0].year),
-            )
             df = df.groupby(["snapshot", "sector", "subsector", "fuel"]).sum()
+            # df["snapshot"] = df.snapshot.map(
+            #     lambda x: x.replace(year=n.snapshots.get_level_values(1)[0].year),
+            # ) # remove this so we retain true snapshot dates
             assert filtered.shape == df.shape  # no data should have changed
         else:  # profile and planning year are the same
             snapshots = n.snapshots
@@ -1030,13 +1028,14 @@ if __name__ == "__main__":
         from _helpers import mock_snakemake
 
         snakemake = mock_snakemake(
-            "build_sector_demand",
-            interconnect="western",
-            end_use="industry",
+            "build_electrical_demand",
+            interconnect="texas",
+            end_use="power",
         )
     configure_logging(snakemake)
 
     n = pypsa.Network(snakemake.input.network)
+    n.set_investment_periods(periods=snakemake.params.planning_horizons)
 
     # extract user demand configuration parameters
 
@@ -1056,24 +1055,34 @@ if __name__ == "__main__":
     if demand_scale == "aeo":
         assert eia_api, "Must provide EIA API key to scale demand by AEO"
 
-    profile_year = int(n.snapshots[0].year)
+    profile_year = int(n.snapshots.get_level_values(1)[0].year)
     planning_horizons = snakemake.params.planning_horizons
-    assert len(planning_horizons) == 1  # remove for myopic/rolling horizon
-    planning_year = planning_horizons[0]
 
     # set reading and writitng strategies
 
     demand_files = snakemake.input.demand_files
 
     if demand_profile == "efs":
-        assert planning_year in (2018, 2020, 2024, 2030, 2040, 2050)
+        assert all(
+            year in (2018, 2020, 2024, 2030, 2040, 2050) for year in planning_horizons
+        )
         reader = ReadEfs(demand_files)
-        sns = n.snapshots.map(lambda x: x.replace(year=planning_year))
-        profile_year = planning_year  # do not scale EFS data
+        sns_year = n.snapshots.get_level_values(0)
+        sns_dt = n.snapshots.get_level_values(1)
+        sns = pd.DatetimeIndex(
+            [x.replace(year=sns_year[i]) for i, x in enumerate(sns_dt)],
+        )
+        profile_year = planning_horizons[
+            0
+        ]  # do not scale EFS data #revisit this if we want to scale
     elif demand_profile == "eia":
         assert profile_year in range(2018, 2023, 1)
         reader = ReadEia(demand_files)
-        sns = n.snapshots
+        sns_year = n.snapshots.get_level_values(0)
+        sns_dt = n.snapshots.get_level_values(1)
+        sns = pd.DatetimeIndex(
+            [x.replace(year=sns_year[i]) for i, x in enumerate(sns_dt)],
+        )
     elif demand_profile == "eulp":
         # assert profile_year == 2018
         stock = {"residential": "res", "commercial": "com"}
@@ -1107,8 +1116,7 @@ if __name__ == "__main__":
         )  # dict[str, dict[str, pd.DataFrame]]
 
     # scale demand based on planning year and user input
-
-    if profile_year == planning_year:
+    if profile_year == planning_horizons[0]:
         pass
     elif isinstance(demand_scale, (int, float)):
         demand *= demand_scale
@@ -1116,7 +1124,7 @@ if __name__ == "__main__":
         growth_rate = ReadEfs(snakemake.input.efs).get_growth_rate()
         logger.warning("No scale appied for efs data")
     elif demand_scale == "aeo":
-        growth_rate = get_aeo_growth_rate(eia_api, [profile_year, planning_year])
+        growth_rate = get_aeo_growth_rate(eia_api, [profile_year, planning_horizons])
         logger.warning("No scale appied for aeo data")
 
     # electricity sector study

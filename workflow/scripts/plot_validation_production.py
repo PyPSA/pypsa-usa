@@ -197,12 +197,6 @@ def create_optimized_by_carrier(n, order, region_buses=None):
         imports = flows.apply(lambda x: x if x > 0 else 0)
         exports = flows.apply(lambda x: x if x < 0 else 0)
 
-        # n.lines_t.p1.loc[:, interface_lines_b0.index].sum(axis=1).resample("1D").mean().plot(label="p0_b0")
-        # n.links_t.p0.loc[:, interface_links_b0.index].sum(axis=1).resample("1D").mean().plot(label="p0_l0")
-        # n.lines_t.p0.loc[:, interface_lines_b1.index].sum(axis=1).resample("1D").mean().plot(label="p0_b1")
-        # n.links_t.p0.loc[:, interface_links_b1.index].sum(axis=1).resample("1D").mean().plot(label="p0_l1")
-        # plt.legend()
-
     else:
         gen_p = n.generators_t["p"]
         imports = None
@@ -233,7 +227,7 @@ def create_optimized_by_carrier(n, order, region_buses=None):
         :,
         optimized.columns.str.contains("Load"),
     ] /= 1e3  # correct load shedding units
-
+    optimized.index = optimized.index.get_level_values(1)
     return optimized / 1e3
 
 
@@ -682,7 +676,7 @@ def plot_ba_emissions_historical_bar(
 def main(snakemake):
     configure_logging(snakemake)
     n = pypsa.Network(snakemake.input.network)
-    snapshots = n.snapshots
+    snapshots = n.snapshots.get_level_values(1)
 
     onshore_regions = gpd.read_file(snakemake.input.regions_onshore)
     offshore_regions = gpd.read_file(snakemake.input.regions_offshore)

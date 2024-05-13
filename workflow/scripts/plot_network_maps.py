@@ -603,11 +603,11 @@ if __name__ == "__main__":
 
         snakemake = mock_snakemake(
             "plot_network_maps",
-            interconnect="western",
-            clusters=80,
-            ll="v1.0",
-            opts="Ep-Co2L0.2",
-            sector="E-G",
+            interconnect="texas",
+            clusters=20,
+            ll="v1.00",
+            opts="Co2L-RCo2L-RPS-SAFE",
+            sector="E",
         )
     configure_logging(snakemake)
 

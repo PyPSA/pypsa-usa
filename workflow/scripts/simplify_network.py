@@ -221,7 +221,7 @@ if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
 
-        snakemake = mock_snakemake("simplify_network", interconnect="eastern")
+        snakemake = mock_snakemake("simplify_network", interconnect="texas")
     configure_logging(snakemake)
     params = snakemake.params
 
@@ -264,5 +264,5 @@ if __name__ == "__main__":
 
     n.export_to_netcdf(snakemake.output[0])
 
-    output_path = os.path.dirname(snakemake.output[0]) + "_simplified_"
+    output_path = os.path.dirname(snakemake.output[0]) + "/simplified_"
     export_network_for_gis_mapping(n, output_path)

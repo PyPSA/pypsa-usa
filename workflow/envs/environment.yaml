@@ -20,7 +20,7 @@ dependencies:
 - xlrd==2.0.1
 - openpyxl==3.1.2
 - pycountry==22.3.5
-- seaborn==0.12.2
+- seaborn==0.13.2
 - snakemake-minimal==7.32.4
 - memory_profiler==0.61.0
 - yaml==0.2.5
