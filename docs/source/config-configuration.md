@@ -28,7 +28,7 @@ The `run` section is used for running and storing scenarios with different confi
 
 The `scenario` section is used for setting the wildcards and defining planning horizon settings. All configurations within this section are described in [wildcards](#wildcards) with the exception of planning_horizons and foresight.
 
-Planning horizons determines which year of future demand forecast to use for your planning model. If you leave `planning_horizons:` empty, historical demand will be set according to `snapshots`.
+Planning horizons determines which year(s) of future demand forecast to use for your planning model. To build a multi-investment period model set multiple `planning_horizons:` years. The `foresight:` option specifies whether perfect foresight or myopoic foresight optimization model is developed. In perfect foresight, a monolithic model is developed where all `planning_horizons` specified are optimized at once, e.g. future horizon values of costs and demand are incorporated into decisions made in earlier planning horizons. Myopic optimization solves each planning horizon sequentially, and passes the results forward. Currently only `perfect` foresight is implemented.
 
 ```{eval-rst}
 .. literalinclude:: ../../workflow/repo_data/config/config.default.yaml
