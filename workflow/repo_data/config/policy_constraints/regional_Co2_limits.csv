@@ -1,11 +1,27 @@
 name,regions,planning_horizon,limit,import_emissions_factor,notes
-CA_AB32,California,2030,24300000,0.428,For State Aggregation
-CA_AB32,California,2040,18000000,0.428,For State Aggregation
-CA_AB32,California,2050,15000000,0.428,For State Aggregation
-OR_emms,Oregon,2030,3419959,0,For State Aggregation
-WA_emms,Washington,2045,0,0,For State Aggregation
-CA_AB32,"p8, p9, p10, p11",2030,30000000,0.428,For ReEDS Aggregation
-CA_AB32,"p8, p9, p10, p12",2040,18000000,0.428,For State Aggregation
-CA_AB32,"p8, p9, p10, p13",2050,15000000,0.428,For State Aggregation
 OR_emms,"p6, p7,  p8",2030,3419959,0,For ReEDS Aggregation
 WA_emms,"p1, p2, p3, p4",2045,0,0,For ReEDS Aggregation
+CA_AB32,"p8, p9, p10, p11",2025,46585434,0.428,2022 carb scoping plan
+CA_AB32,"p8, p9, p10, p12",2026,45781700,0.428,2022 carb scoping plan
+CA_AB32,"p8, p9, p10, p13",2027,44970660,0.428,2022 carb scoping plan
+CA_AB32,"p8, p9, p10, p14",2028,44158827,0.428,2022 carb scoping plan
+CA_AB32,"p8, p9, p10, p15",2029,41675827,0.428,2022 carb scoping plan
+CA_AB32,"p8, p9, p10, p16",2030,39199474,0.428,2022 carb scoping plan
+CA_AB32,"p8, p9, p10, p17",2031,37575685,0.428,2022 carb scoping plan
+CA_AB32,"p8, p9, p10, p18",2032,35953673,0.428,2022 carb scoping plan
+CA_AB32,"p8, p9, p10, p19",2033,34332999,0.428,2022 carb scoping plan
+CA_AB32,"p8, p9, p10, p20",2034,32717941,0.428,2022 carb scoping plan
+CA_AB32,"p8, p9, p10, p21",2035,31106889,0.428,2022 carb scoping plan
+CA_AB32,"p8, p9, p10, p22",2036,30471094,0.428,2022 carb scoping plan
+CA_AB32,"p8, p9, p10, p23",2037,29832376,0.428,2022 carb scoping plan
+CA_AB32,"p8, p9, p10, p24",2038,29195599,0.428,2022 carb scoping plan
+CA_AB32,"p8, p9, p10, p25",2039,28557104,0.428,2022 carb scoping plan
+CA_AB32,"p8, p9, p10, p26",2040,27921482,0.428,2022 carb scoping plan
+CA_AB32,"p8, p9, p10, p27",2041,27298498,0.428,2022 carb scoping plan
+CA_AB32,"p8, p9, p10, p28",2042,26680772,0.428,2022 carb scoping plan
+CA_AB32,"p8, p9, p10, p29",2043,26070729,0.428,2022 carb scoping plan
+CA_AB32,"p8, p9, p10, p30",2044,25466671,0.428,2022 carb scoping plan
+CA_AB32,"p8, p9, p10, p31",2045,8680822,0.428,2022 carb scoping plan
+CA_AB32,"p8, p9, p10, p31",2050,8680822,0.428,temp using 2045
+TX_example_2030,"p60, p61, p62, p63, p64, p65, p67",2030,700300,0,testing for multi-horizon
+TX_example_2050,"p60, p61, p62, p63, p64, p65, p67",2050,500300,0,testing for multi-horizon
