@@ -1063,18 +1063,26 @@ if __name__ == "__main__":
     demand_files = snakemake.input.demand_files
 
     if demand_profile == "efs":
-        assert all(year in (2018, 2020, 2024, 2030, 2040, 2050) for year in planning_horizons)
+        assert all(
+            year in (2018, 2020, 2024, 2030, 2040, 2050) for year in planning_horizons
+        )
         reader = ReadEfs(demand_files)
         sns_year = n.snapshots.get_level_values(0)
         sns_dt = n.snapshots.get_level_values(1)
-        sns = pd.DatetimeIndex([x.replace(year=sns_year[i]) for i, x in enumerate(sns_dt)])
-        profile_year = planning_horizons[0]  # do not scale EFS data #revisit this if we want to scale
+        sns = pd.DatetimeIndex(
+            [x.replace(year=sns_year[i]) for i, x in enumerate(sns_dt)]
+        )
+        profile_year = planning_horizons[
+            0
+        ]  # do not scale EFS data #revisit this if we want to scale
     elif demand_profile == "eia":
         assert profile_year in range(2018, 2023, 1)
         reader = ReadEia(demand_files)
         sns_year = n.snapshots.get_level_values(0)
         sns_dt = n.snapshots.get_level_values(1)
-        sns = pd.DatetimeIndex([x.replace(year=sns_year[i]) for i, x in enumerate(sns_dt)])
+        sns = pd.DatetimeIndex(
+            [x.replace(year=sns_year[i]) for i, x in enumerate(sns_dt)]
+        )
     elif demand_profile == "eulp":
         # assert profile_year == 2018
         stock = {"residential": "res", "commercial": "com"}

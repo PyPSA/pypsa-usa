@@ -14,7 +14,7 @@ rule solve_network_validation:
     output:
         network=RESULTS
         + "{interconnect}/networks/elec_s_{clusters}_ec_l{ll}_{opts}_{sector}_operations.nc",
-        config= RESULTS
+        config=RESULTS
         + "{interconnect}/configs/config.elec_s_{clusters}_l{ll}_{opts}_{sector}.yaml",
     log:
         solver=normpath(
@@ -36,6 +36,7 @@ rule solve_network_validation:
         "../envs/environment.yaml"
     script:
         "../scripts/solve_network.py"
+
 
 rule plot_validation_figures:
     params:

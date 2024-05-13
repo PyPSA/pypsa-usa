@@ -30,13 +30,13 @@ FIGURES_EMISSIONS = [
 
 FIGURES_PRODUCTION = [
     "production_area.pdf",
-    #"production_area.html",
+    # "production_area.html",
 ]
 
 FIGURES_SYSTEM = [
     "production_bar.pdf",
     "capacity_additions_bar.pdf",
-    #"costs_bar.pdf",
+    # "costs_bar.pdf",
     "bar_regional_capacity_additions.pdf",
     "global_constraint_shadow_prices.pdf",
     "generator_data_panel.pdf",

@@ -33,7 +33,11 @@ import pandas as pd
 import pypsa
 import xarray as xr
 import yaml
-from _helpers import configure_logging, update_config_with_sector_opts, update_config_from_wildcards
+from _helpers import (
+    configure_logging,
+    update_config_from_wildcards,
+    update_config_with_sector_opts,
+)
 
 logger = logging.getLogger(__name__)
 pypsa.pf.logger.setLevel(logging.WARNING)
@@ -226,7 +230,8 @@ def add_CCL_constraints(n, config):
         index_col=[1, 2],
     )
     agg_p_nom_minmax = agg_p_nom_minmax[
-        agg_p_nom_minmax.planning_horizon == int(snakemake.params.planning_horizons[0]) # need to make multi-horizon
+        agg_p_nom_minmax.planning_horizon
+        == int(snakemake.params.planning_horizons[0])  # need to make multi-horizon
     ].drop(columns="planning_horizon")
 
     logger.info("Adding generation capacity constraints per carrier and country")
@@ -274,33 +279,59 @@ def add_RPS_constraints(n, config):
         portfolio_standards: config/policy_constraints/portfolio_standards.csv
     """
     portfolio_standards = pd.read_csv(
-        config["electricity"]["portfolio_standards"]
+        config["electricity"]["portfolio_standards"],
     )
 
-    rps_carriers = ['onwind', 'offwind', 'offwind_floating', 'solar', 'hydro', 'geothermal', 'EGS']
-    ces_carriers = ['onwind', 'offwind', 'offwind_floating', 'solar', 'hydro', 'geothermal', 'EGS', 'biomass', 'nuclear']
-    state_memberships= n.buses.groupby('reeds_state')['reeds_zone'].apply(lambda x: ', '.join(x)).to_dict()
+    rps_carriers = [
+        "onwind",
+        "offwind",
+        "offwind_floating",
+        "solar",
+        "hydro",
+        "geothermal",
+        "EGS",
+    ]
+    ces_carriers = [
+        "onwind",
+        "offwind",
+        "offwind_floating",
+        "solar",
+        "hydro",
+        "geothermal",
+        "EGS",
+        "biomass",
+        "nuclear",
+    ]
+    state_memberships = (
+        n.buses.groupby("reeds_state")["reeds_zone"]
+        .apply(lambda x: ", ".join(x))
+        .to_dict()
+    )
 
-    rps_reeds= pd.read_csv(
+    rps_reeds = pd.read_csv(
         snakemake.input.rps_reeds,
     )
-    rps_reeds['region']= rps_reeds['st'].map(state_memberships)
-    rps_reeds.dropna(subset='region', inplace=True)
-    rps_reeds['carrier'] = [ ', '.join(rps_carriers)]*len(rps_reeds)
-    rps_reeds.rename(columns={'t':'planning_horizon', 'rps_all':'pct','st':'name'}, inplace=True)
-    rps_reeds.drop(columns=['rps_solar', 'rps_wind'], inplace=True)
+    rps_reeds["region"] = rps_reeds["st"].map(state_memberships)
+    rps_reeds.dropna(subset="region", inplace=True)
+    rps_reeds["carrier"] = [", ".join(rps_carriers)] * len(rps_reeds)
+    rps_reeds.rename(
+        columns={"t": "planning_horizon", "rps_all": "pct", "st": "name"}, inplace=True
+    )
+    rps_reeds.drop(columns=["rps_solar", "rps_wind"], inplace=True)
 
-    ces_reeds= pd.read_csv(
+    ces_reeds = pd.read_csv(
         snakemake.input.ces_reeds,
-    ).melt(id_vars='st', var_name='planning_horizon', value_name='pct')
-    ces_reeds['region']= ces_reeds['st'].map(state_memberships)
-    ces_reeds.dropna(subset='region', inplace=True)
-    ces_reeds['carrier'] = [ ', '.join(ces_carriers)]*len(ces_reeds)
-    ces_reeds.rename(columns={'st':'name'}, inplace=True)
+    ).melt(id_vars="st", var_name="planning_horizon", value_name="pct")
+    ces_reeds["region"] = ces_reeds["st"].map(state_memberships)
+    ces_reeds.dropna(subset="region", inplace=True)
+    ces_reeds["carrier"] = [", ".join(ces_carriers)] * len(ces_reeds)
+    ces_reeds.rename(columns={"st": "name"}, inplace=True)
 
     portfolio_standards = pd.concat([portfolio_standards, rps_reeds, ces_reeds])
     portfolio_standards = portfolio_standards[portfolio_standards.pct > 0.0]
-    portfolio_standards = portfolio_standards[portfolio_standards.planning_horizon.isin(snakemake.params.planning_horizons)]
+    portfolio_standards = portfolio_standards[
+        portfolio_standards.planning_horizon.isin(snakemake.params.planning_horizons)
+    ]
 
     for idx, pct_lim in portfolio_standards.iterrows():
         region_list = [region_.strip() for region_ in pct_lim.region.split(",")]
@@ -316,17 +347,27 @@ def add_RPS_constraints(n, config):
         region_gens_eligible = region_gens[region_gens.carrier.isin(carriers)]
 
         if not region_gens.empty:
-            p_eligible = n.model["Generator-p"].loc[:, region_gens_eligible.index].sel(period=pct_lim.planning_horizon)
+            p_eligible = (
+                n.model["Generator-p"]
+                .loc[:, region_gens_eligible.index]
+                .sel(period=pct_lim.planning_horizon)
+            )
             lhs = p_eligible.sum()
-            
-            p_region = n.model["Generator-p"].loc[:, region_gens.index].sel(period=pct_lim.planning_horizon)
+
+            p_region = (
+                n.model["Generator-p"]
+                .loc[:, region_gens.index]
+                .sel(period=pct_lim.planning_horizon)
+            )
             rhs = pct_lim.pct * p_region.sum()
 
             n.model.add_constraints(
                 lhs <= rhs,
                 name=f"GlobalConstraint-{pct_lim.name}_{pct_lim.planning_horizon}_rps_limit",
             )
-            logger.info(f"Adding {pct_lim.name} {pct_lim.name}_{pct_lim.planning_horizon} for {pct_lim.planning_horizon}.")
+            logger.info(
+                f"Adding {pct_lim.name} {pct_lim.name}_{pct_lim.planning_horizon} for {pct_lim.planning_horizon}."
+            )
 
 
 def add_EQ_constraints(n, o, scaling=1e-1):
@@ -511,7 +552,9 @@ def add_regional_co2limit(n, sns, config):
         index_col=[0],
     )
     logger.info("Adding regional Co2 Limits.")
-    regional_co2_lims = regional_co2_lims[regional_co2_lims.planning_horizon.isin(snakemake.params.planning_horizons)]
+    regional_co2_lims = regional_co2_lims[
+        regional_co2_lims.planning_horizon.isin(snakemake.params.planning_horizons)
+    ]
 
     for idx, emmission_lim in regional_co2_lims.iterrows():
         region_list = [region.strip() for region in emmission_lim.regions.split(",")]
@@ -540,12 +583,20 @@ def add_regional_co2limit(n, sns, config):
                 region_gens.carrier.map(emissions) / efficiency
             )  # tonnes_co2/mw_electrical
             em_pu = em_pu.multiply(weightings.generators, axis=0).loc[planning_horizon]
-            p = n.model["Generator-p"].loc[:, region_gens.index].sel(period=planning_horizon)
+            p = (
+                n.model["Generator-p"]
+                .loc[:, region_gens.index]
+                .sel(period=planning_horizon)
+            )
             lhs = (p * em_pu).sum()
 
             # Imports
             region_demand = (
-                n.loads_t.p_set.loc[planning_horizon, n.loads.bus.isin(region_buses.index)].sum().sum()
+                n.loads_t.p_set.loc[
+                    planning_horizon, n.loads.bus.isin(region_buses.index)
+                ]
+                .sum()
+                .sum()
             )
             lhs -= (p * EF_imports).sum()
 
@@ -554,7 +605,9 @@ def add_regional_co2limit(n, sns, config):
                 lhs <= rhs,
                 name=f"GlobalConstraint-{emmission_lim.name}_co2_limit",
             )
-            import pdb; pdb.set_trace()
+            import pdb
+
+            pdb.set_trace()
             logger.info(f"Adding regional Co2 Limit for {emmission_lim.name}")
 
 
@@ -596,32 +649,41 @@ def add_SAFE_constraints(n, config):
 
 def add_SAFER_constraints(n, config):
     """
-    Add a capacity reserve margin of a certain fraction above the peak demand for regions defined in configuration file.
-    Renewable generators and storage do not contribute towards PRM.
+    Add a capacity reserve margin of a certain fraction above the peak demand
+    for regions defined in configuration file. Renewable generators and storage
+    do not contribute towards PRM.
 
     Parameters
     ----------
         n : pypsa.Network
         config : dict
-
     """
     regional_prm = pd.read_csv(
         config["electricity"]["SAFE_regional_reservemargins"],
         index_col=[0],
     )
 
-    reeds_prm= pd.read_csv(
+    reeds_prm = pd.read_csv(
         snakemake.input.safer_reeds,
         index_col=[0],
     )
-    NERC_memberships= n.buses.groupby('nerc_reg')['reeds_zone'].apply(lambda x: ', '.join(x)).to_dict()
-    reeds_prm['region']= reeds_prm.index.map(NERC_memberships)
-    reeds_prm.dropna(subset='region', inplace=True)
-    reeds_prm.drop(columns=['none','ramp2025_20by50','ramp2025_25by50','ramp2025_30by50'], inplace=True)
-    reeds_prm.rename(columns={'static':'prm', 't':'planning_horizon'}, inplace=True)
+    NERC_memberships = (
+        n.buses.groupby("nerc_reg")["reeds_zone"]
+        .apply(lambda x: ", ".join(x))
+        .to_dict()
+    )
+    reeds_prm["region"] = reeds_prm.index.map(NERC_memberships)
+    reeds_prm.dropna(subset="region", inplace=True)
+    reeds_prm.drop(
+        columns=["none", "ramp2025_20by50", "ramp2025_25by50", "ramp2025_30by50"],
+        inplace=True,
+    )
+    reeds_prm.rename(columns={"static": "prm", "t": "planning_horizon"}, inplace=True)
 
     regional_prm = pd.concat([regional_prm, reeds_prm])
-    regional_prm = regional_prm[regional_prm.planning_horizon.isin(snakemake.params.planning_horizons)]
+    regional_prm = regional_prm[
+        regional_prm.planning_horizon.isin(snakemake.params.planning_horizons)
+    ]
 
     for idx, prm in regional_prm.iterrows():
         region_list = [region_.strip() for region_ in prm.region.split(",")]
@@ -631,7 +693,11 @@ def add_SAFER_constraints(n, config):
             continue
 
         peakdemand = (
-            n.loads_t.p_set.loc[prm.planning_horizon, n.loads.bus.isin(region_buses.index)].sum(axis=1).max()
+            n.loads_t.p_set.loc[
+                prm.planning_horizon, n.loads.bus.isin(region_buses.index)
+            ]
+            .sum(axis=1)
+            .max()
         )
         margin = 1.0 + prm.prm
         planning_reserve = peakdemand * margin
@@ -647,7 +713,9 @@ def add_SAFER_constraints(n, config):
             "~p_nom_extendable & carrier in @conventional_carriers",
         ).p_nom.sum()
         rhs = planning_reserve - exist_conv_caps
-        n.model.add_constraints(lhs >= rhs, name=f"GlobalConstraint-{prm.name}_{prm.planning_horizon}_PRM")
+        n.model.add_constraints(
+            lhs >= rhs, name=f"GlobalConstraint-{prm.name}_{prm.planning_horizon}_PRM"
+        )
 
 
 def add_operational_reserve_margin(n, sns, config):

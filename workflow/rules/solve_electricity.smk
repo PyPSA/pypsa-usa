@@ -19,7 +19,7 @@ rule solve_network:
     output:
         network=RESULTS
         + "{interconnect}/networks/elec_s_{clusters}_ec_l{ll}_{opts}_{sector}.nc",
-        config= RESULTS
+        config=RESULTS
         + "{interconnect}/configs/config.elec_s_{clusters}_l{ll}_{opts}_{sector}.yaml",
     log:
         solver=normpath(
@@ -41,5 +41,3 @@ rule solve_network:
         "../envs/environment.yaml"
     script:
         "../scripts/solve_network.py"
-
-
