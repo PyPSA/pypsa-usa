@@ -12,7 +12,7 @@ dconf
 *.tar.gz
 
 # configuration files
-config/
+# config/
 
 # generated files
 results/

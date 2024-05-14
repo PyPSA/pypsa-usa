@@ -790,6 +790,10 @@ if __name__ == "__main__":
     demand_params = snakemake.params.demand_params
     demand_profile = demand_params.get("profile", "eia")
     demand_scale = demand_params.get("scale", 1)
+    # demand_scale_monthly = snakemake.config['demand']['scaling_factor_monthly']
+    # if len(demand_scale_monthly)==12:
+    #     demand_scale = demand_scale_monthly
+
     demand_disaggregation = demand_params.get("disaggregation", "pop")
     eia_api = snakemake.params.eia_api
 

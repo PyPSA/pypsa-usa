@@ -413,4 +413,19 @@ if __name__ == "__main__":
     costs = costs.reset_index(drop=True)
     costs["value"] = costs["value"].round(3)
 
+    # Update efficiency for battery
+    storage_carriers = snakemake.config["electricity"]["extendable_carriers"]["StorageUnit"]
+    costs.value[(costs['technology'].isin(storage_carriers)) & (costs['parameter'] == 'efficiency')] = 0.88
+
+
+    # Add geothermal storage
+    if snakemake.config["electricity"]["geothermal"]["storage"]: 
+        carriers = snakemake.config["electricity"]["extendable_carriers"]["StorageUnit"]
+        geo_carriers = [k for k in carriers if 'geothermal' in k]
+
+        costs.value[(costs['technology'].isin(geo_carriers)) & (costs['parameter'] == 'investment')] = 3000
+        # costs.value[(costs['technology'].isin(geo_carriers)) & (costs['parameter'] == 'FOM')] = XX
+        costs.value[(costs['technology'].isin(geo_carriers)) & (costs['parameter'] == 'lifetime')] = 30
+        costs.value[(costs['technology'].isin(geo_carriers)) & (costs['parameter'] == 'VOM')] = 0.540
+
     costs.to_csv(snakemake.output.tech_costs, index=False)

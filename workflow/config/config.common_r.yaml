@@ -1,0 +1,162 @@
+atlite:
+  cutouts:
+    era5_2019:
+      module: era5
+      time:
+      - '2019'
+      - '2019'
+  default_cutout: era5_2019
+  interconnects:
+    eastern:
+      dx: 0.3
+      dy: 0.3
+      x:
+      - -109
+      - -65
+      y:
+      - 23
+      - 50
+    texas:
+      dx: 0.3
+      dy: 0.3
+      x:
+      - -110
+      - -90
+      y:
+      - 24
+      - 37
+    usa:
+      dx: 0.3
+      dy: 0.3
+      x:
+      - -126
+      - -65
+      y:
+      - 23
+      - 50
+    western:
+      dx: 0.3
+      dy: 0.3
+      x:
+      - -126
+      - -99
+      y:
+      - 27
+      - 50
+  nprocesses: 8
+  show_progress: false
+countries:
+- US
+network_configuration: pypsa-usa
+offshore_network:
+  bus_spacing: 25000
+  enable: true
+offshore_shape:
+  use: eez
+renewable:
+  hydro:
+    PHS_max_hours: 6
+    carriers:
+    - ror
+    - PHS
+    - hydro
+    clip_min_inflow: 1.0
+    cutout: era5_2019
+    extendable: true
+    hydro_max_hours: energy_capacity_totals_by_country
+    multiplier: 1.1
+    normalization:
+      method: hydro_capacities
+      year: 2013
+    resource:
+      flowspeed: 1.0
+      hydrobasins: resources/hybas_na_lev06_v1c.shp
+      method: hydro
+  offwind:
+    boem_screen: true
+    capacity_per_sqkm: 3
+    clip_p_max_pu: 0.01
+    corine:
+      grid_codes:
+      - 80
+      - 200
+    correction_factor: 1
+    cutout: era5_2019
+    extendable: true
+    max_depth: 60
+    max_shore_distance: 65000
+    min_shore_distance: 22000
+    natura: true
+    potential: conservative
+    resource:
+      method: wind
+      turbine: NREL_ReferenceTurbine_2020ATB_5.5MW
+  offwind_floating:
+    boem_screen: true
+    capacity_per_sqkm: 3
+    clip_p_max_pu: 0.01
+    corine:
+      grid_codes:
+      - 80
+      - 200
+    correction_factor: 1
+    cutout: era5_2019
+    extendable: true
+    max_depth: 1300
+    max_shore_distance: 65000
+    min_depth: 60
+    min_shore_distance: 22000
+    natura: true
+    potential: conservative
+    resource:
+      add_cutout_windspeed: true
+      method: wind
+      turbine: NREL_ReferenceTurbine_2020ATB_15MW_offshore
+  onwind:
+    capacity_per_sqkm: 3
+    cec: true
+    clip_p_max_pu: 0.01
+    corine:
+      distance: 10
+      distance_grid_codes:
+      - 50
+      grid_codes:
+      - 20
+      - 30
+      - 40
+      - 60
+      - 100
+      - 112
+      - 113
+      - 114
+      - 115
+    correction_factor: 1
+    cutout: era5_2019
+    extendable: true
+    natura: true
+    potential: conservative
+    resource:
+      add_cutout_windspeed: true
+      method: wind
+      turbine: Vestas_V112_3MW
+  solar:
+    capacity_per_sqkm: 4.6
+    cec: true
+    clip_p_max_pu: 0.01
+    corine:
+      grid_codes:
+      - 20
+      - 30
+      - 40
+      - 60
+      - 90
+      - 100
+    correction_factor: 1
+    cutout: era5_2019
+    extendable: true
+    natura: true
+    potential: conservative
+    resource:
+      method: pv
+      orientation: latitude_optimal
+      panel: CSi

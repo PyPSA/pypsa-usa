@@ -608,7 +608,7 @@ ATB_TECH_MAPPER = {
         "technology": "OffShoreWind",
         "crp": 30,
     },
-    "Pumped-Storage-Hydro-bicharger": {
+    "10hr_pumped_storage_hydro": {
         "display_name": "Pumped Storage Hydropower - National Class 1",
         "crp": 100,
     },
@@ -636,6 +636,19 @@ ATB_TECH_MAPPER = {
         "display_name": "Utility-Scale Battery Storage - 10Hr",
         "crp": 20,
     },
+    "egs": {
+        "display_name": "Geothermal - Deep EGS / Binary",
+        "crp": 30,
+    },
+    "18hr_geothermal": {
+        "display_name": "Pumped Storage Hydropower - National Class 1",
+        "crp": 20,
+    },
+    "18hr_geothermal_ht": {
+        "display_name": "Pumped Storage Hydropower - National Class 1",
+        "crp": 20,
+    },
+
 }
 
 ###########################################

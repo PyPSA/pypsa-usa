@@ -140,6 +140,7 @@ def add_co2_emissions(n, costs, carriers):
 
     # Remove CO2 from geothermal
     n.carriers.loc['geothermal', "co2_emissions"] = 0
+    # n.carriers.loc['egs', "co2_emissions"] = 0
 
 
 def load_costs(
@@ -1407,7 +1408,7 @@ def add_ercot_outage(n: pypsa.Network,
 def main(snakemake):
     params = snakemake.params
     configuration = snakemake.config["network_configuration"]
-    texas_reliability = snakemake.config["texas_reliability"]
+    # texas_reliability = snakemake.config["texas_reliability"]
     interconnection = snakemake.wildcards["interconnect"]
     planning_horizons = snakemake.params["planning_horizons"]
 
@@ -1460,13 +1461,11 @@ def main(snakemake):
         unit_commitment = None
 
     if configuration == "pypsa-usa":
-        if texas_reliability: 
-            plants = load_powerplants_texas(snakemake.input['plants_tx'])
-        else:
-            plants = load_powerplants_eia(
+        # if texas_reliability: 
+        #     plants = load_powerplants_texas(snakemake.input['plants_tx'])
+        plants = load_powerplants_eia(
             snakemake.input["plants_eia"],
-            interconnect=interconnection,
-        )
+            interconnect=interconnection)
     elif configuration == "ads2032":
         plants = load_powerplants_ads(
             snakemake.input["plants_ads"],
@@ -1610,21 +1609,14 @@ def main(snakemake):
         axis=1,
     )
 
-    add_ercot_outage(n, 
-                     outage = snakemake.input['ercot_outage'], 
-                     conventional_carriers = conventional_carriers, 
-                     renewable_carriers = renewable_carriers, 
-                     input_profiles = snakemake.input,
-                     sns_start = sns_start,
-                     sns_end = sns_end)
+    # add_ercot_outage(n, 
+    #                  outage = snakemake.input['ercot_outage'], 
+    #                  conventional_carriers = conventional_carriers, 
+    #                  renewable_carriers = renewable_carriers, 
+    #                  input_profiles = snakemake.input,
+    #                  sns_start = sns_start,
+    #                  sns_end = sns_end)
 
-
-    if snakemake.config["osw_config"]["enable_osw"]:
-        logger.info("Adding OSW in network")
-        humboldt_capacity = snakemake.config["osw_config"]["humboldt_capacity"]
-        import modify_network_osw as osw
-
-        osw.build_OSW_base_configuration(n, osw_capacity=humboldt_capacity)
 
     output_folder = os.path.dirname(snakemake.output[0]) + "/base_network"
     export_network_for_gis_mapping(n, output_folder)

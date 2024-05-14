@@ -60,7 +60,7 @@ electricity:
     by_country: false
     enable: false
   co2base: 226860000.0
-  co2limit: 1000000.0
+  co2limit: 0.0
   co2limit_enable: true
   conventional_carriers:
   - nuclear
@@ -74,7 +74,7 @@ electricity:
   demand:
     disaggregation: pop
     profile: efs
-    scale: 1
+    scale: 1.36
     scaling_factor_monthly:
     - 1.196442
     - 1.27942
@@ -110,9 +110,24 @@ electricity:
   gaslimit_enable: false
   geothermal:
     egs: true
-    egs_reduction: 0.8
+    egs_reduction: !!python/object/apply:numpy.core.multiarray.scalar
+    - !!python/object/apply:numpy.dtype
+      args:
+      - f8
+      - false
+      - true
+      state: !!python/tuple
+      - 3
+      - <
+      - null
+      - null
+      - null
+      - -1
+      - -1
+      - 0
+    - !!binary |
+      mpmZmZmZyT8=
     egs_sc_file: new_geo_egs_supply_curve.geojson
-    storage: true
   max_hours:
     H2: 168
     battery: 6
@@ -122,8 +137,6 @@ electricity:
     epsilon_load: 0.02
     epsilon_vres: 0.02
   portfolio_standards: config/policy_constraints/portfolio_standards.csv
-  psh:
-    sc_file: 40-100-dam-height-10hr-no-croplands-no-ephemeral-no-highways.gpkg
   regional_Co2_limits: config/policy_constraints/regional_Co2_limits.csv
   renewable_carriers:
   - onwind
@@ -161,16 +174,16 @@ run:
   disable_progressbar: false
   name: geo_2019
   shared_cutouts: true
-  shared_resources: true
+  shared_resources: false
   validation: false
 scenario:
   clusters:
-  - 40
+  - 10
   interconnect:
-  - western
+  - texas
   ll:
-  - v2
-  opts: Ep-Co2L0-egsR0.8
+  - v1.2
+  opts: Ep-Co2L0_egs0.2
   planning_horizons:
   - 2030
   scope: total
@@ -242,7 +255,7 @@ solving:
       Seed: 123
       crossover: 0
       method: 2
-      threads: 10
+      threads: 8
     gurobi-fallback:
       BarConvTol: 1.0e-05
       BarHomogeneous: 1

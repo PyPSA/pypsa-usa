@@ -117,9 +117,7 @@ def step_download_oasis_reports(
             node,
             resultformat,
         )
-        startdatetimename = startdatetime.replace(":", "")
-        enddatetimename = enddatetime.replace(":", "")
-        filename = f"/{queryname}_{startdatetimename}_{enddatetimename}.{resultformat}.zip"
+        filename = f"/{queryname}_{startdatetime}_{enddatetime}.{resultformat}.zip"
         file_names.append(filename)
         time.sleep(5)
 

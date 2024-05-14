@@ -607,7 +607,7 @@ def plot_production_area(
     demand = get_demand_timeseries(n).mul(1e-3)  # MW -> GW
 
     for carrier in energy_mix.columns:
-        if "battery" in carrier:
+        if "battery" in carrier or carrier in snakemake.params.electricity["extendable_carriers"]["StorageUnit"]:
             energy_mix[carrier + "_discharger"] = energy_mix[carrier].clip(lower=0.0001)
             energy_mix[carrier + "_charger"] = energy_mix[carrier].clip(upper=-0.0001)
             energy_mix = energy_mix.drop(columns=carrier)
@@ -666,23 +666,23 @@ def plot_hourly_emissions(n: pypsa.Network, save: str, **wildcards) -> None:
     emissions = emissions.drop(columns=zeros)
 
     # plot
-    color_palette = get_color_palette(n)
+    if not emissions.empty:
+        color_palette = get_color_palette(n)
+        fig, ax = plt.subplots(figsize=(14, 4))
+        
+        emissions.plot.area(
+            ax=ax,
+            alpha=0.7,
+            legend="reverse",
+            color=color_palette,
+        )
 
-    fig, ax = plt.subplots(figsize=(14, 4))
+        ax.legend(bbox_to_anchor=(1, 1), loc="upper left")
+        ax.set_title(create_title("Technology Emissions", **wildcards))
+        ax.set_ylabel("Emissions [MT]")
+        fig.tight_layout()
 
-    emissions.plot.area(
-        ax=ax,
-        alpha=0.7,
-        legend="reverse",
-        color=color_palette,
-    )
-
-    ax.legend(bbox_to_anchor=(1, 1), loc="upper left")
-    ax.set_title(create_title("Technology Emissions", **wildcards))
-    ax.set_ylabel("Emissions [MT]")
-    fig.tight_layout()
-
-    fig.savefig(save)
+        fig.savefig(save)
 
 
 def plot_accumulated_emissions_tech(n: pypsa.Network, save: str, **wildcards) -> None:
@@ -697,24 +697,24 @@ def plot_accumulated_emissions_tech(n: pypsa.Network, save: str, **wildcards) ->
     emissions = emissions.drop(columns=zeros)
 
     # plot
+    if not emissions.empty:
+        color_palette = get_color_palette(n)
 
-    color_palette = get_color_palette(n)
+        fig, ax = plt.subplots(figsize=(14, 4))
 
-    fig, ax = plt.subplots(figsize=(14, 4))
+        emissions.plot.area(
+            ax=ax,
+            alpha=0.7,
+            legend="reverse",
+            color=color_palette,
+        )
 
-    emissions.plot.area(
-        ax=ax,
-        alpha=0.7,
-        legend="reverse",
-        color=color_palette,
-    )
+        ax.legend(bbox_to_anchor=(1, 1), loc="upper left")
+        ax.set_title(create_title("Technology Accumulated Emissions", **wildcards))
+        ax.set_ylabel("Emissions [MT]")
+        fig.tight_layout()
 
-    ax.legend(bbox_to_anchor=(1, 1), loc="upper left")
-    ax.set_title(create_title("Technology Accumulated Emissions", **wildcards))
-    ax.set_ylabel("Emissions [MT]")
-    fig.tight_layout()
-
-    fig.savefig(save)
+        fig.savefig(save)
 
 
 def plot_accumulated_emissions(n: pypsa.Network, save: str, **wildcards) -> None:
@@ -869,6 +869,7 @@ def plot_generator_data_panel(
                 "offwind",
                 "offwind_floating",
                 "geothermal",
+                "egs",
                 "oil",
                 "hydro",
             ],
@@ -884,6 +885,7 @@ def plot_generator_data_panel(
                 "offwind",
                 "offwind_floating",
                 "geothermal",
+                "egs", 
                 "oil",
                 "hydro",
                 "nuclear",

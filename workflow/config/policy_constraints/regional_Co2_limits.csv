@@ -1,0 +1,11 @@
+name,regions,planning_horizon,limit,import_emissions_factor,notes
+CA_AB32,California,2030,24300000,0.428,For State Aggregation
+CA_AB32,California,2040,18000000,0.428,For State Aggregation
+CA_AB32,California,2050,15000000,0.428,For State Aggregation
+OR_emms,Oregon,2030,3419959,0,For State Aggregation
+WA_emms,Washington,2045,0,0,For State Aggregation
+CA_AB32,"p8, p9, p10, p11",2030,30000000,0.428,For ReEDS Aggregation
+CA_AB32,"p8, p9, p10, p12",2040,18000000,0.428,For State Aggregation
+CA_AB32,"p8, p9, p10, p13",2050,15000000,0.428,For State Aggregation
+OR_emms,"p6, p7,  p8",2030,3419959,0,For ReEDS Aggregation
+WA_emms,"p1, p2, p3, p4",2045,0,0,For ReEDS Aggregation

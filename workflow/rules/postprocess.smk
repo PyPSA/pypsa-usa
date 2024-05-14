@@ -78,12 +78,6 @@ rule plot_statistics:
     output:
         **{
             fig: RESULTS
-            + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/emissions/%s"
-            % fig
-            for fig in FIGURES_EMISSIONS
-        },
-        **{
-            fig: RESULTS
             + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/production/%s"
             % fig
             for fig in FIGURES_PRODUCTION
@@ -94,10 +88,16 @@ rule plot_statistics:
             % fig
             for fig in FIGURES_SYSTEM
         },
+        **{
+            fig: RESULTS
+            + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/emissions/%s"
+            % fig
+            for fig in FIGURES_EMISSIONS
+        },
     log:
         "logs/plot_figures/{interconnect}_{clusters}_l{ll}_{opts}_{sector}.log",
     threads: 1
     resources:
-        mem_mb=5000,
+        mem_mb=50000,
     script:
         "../scripts/plot_statistics.py"

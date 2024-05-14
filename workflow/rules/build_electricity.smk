@@ -298,7 +298,7 @@ rule add_electricity:
         tech_costs=RESOURCES + f"costs_{config['costs']['year']}.csv",
         regions=RESOURCES + "{interconnect}/regions_onshore.geojson",
         plants_eia="repo_data/plants/plants_merged.csv",
-        plants_tx=f"repo_data/ercot_specific/{config['capacity_from_reeds']}.csv",
+        # plants_tx=f"repo_data/ercot_specific/{config['capacity_from_reeds']}.csv",
         plants_ads="repo_data/plants/ads_plants_locs.csv",
         plants_breakthrough=DATA + "breakthrough_network/base_grid/plant.csv",
         hydro_breakthrough=DATA + "breakthrough_network/base_grid/hydro.csv",
@@ -395,8 +395,12 @@ if config["enable"].get("allow_new_plant", True):
         input:
             network=RESOURCES + "{interconnect}/elec_s_{clusters}.nc",
             tech_costs=RESOURCES + f"costs_{config['costs']['year']}.csv",
+            regions_onshore=RESOURCES + "{interconnect}/regions_onshore_s_{clusters}.geojson",
+            geo_egs_sc=DATA + config["electricity"]["geothermal"]["egs_sc_file"],
+            psh_sc= DATA + config["electricity"]["psh"]["sc_file"],
         params:
             retirement=config["electricity"].get("retirement", "technical"),
+            cost_reduction=config["electricity"]["geothermal"]["egs_reduction"],
         output:
             RESOURCES + "{interconnect}/elec_s_{clusters}_ec.nc",
         log:
@@ -418,7 +422,6 @@ else:
             mem=500,
         run:
             move(input[0], output[0])
-
 
 rule prepare_network:
     params:
