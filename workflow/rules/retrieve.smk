@@ -271,7 +271,7 @@ rule retrieve_caiso_data:
 
 rule retrieve_pudl:
     output:
-        pudl=DATA + "pudl/pudl.sqlite.gz",
+        pudl=DATA + "pudl/pudl.sqlite",
     params:
         # eia_api_key = config["api"].get("eia", None),
         eia_api_key=None,
