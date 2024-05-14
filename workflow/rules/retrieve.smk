@@ -254,3 +254,17 @@ rule retrieve_caiso_data:
         mem_mb=2000,
     script:
         "../scripts/retrieve_caiso_data.py"
+
+
+rule retrieve_pudl:
+    output:
+        pudl=DATA + "pudl/pudl.sqlite",
+    params:
+        # eia_api_key = config["api"].get("eia", None),
+        eia_api_key=None,
+    log:
+        LOGS + "retrieve_pudl.log",
+    resources:
+        mem_mb=1000,
+    script:
+        "../scripts/retrieve_pudl.py"
