@@ -464,7 +464,7 @@ def match_plant_to_bus(n, plants):
 
     buses = n.buses.copy()
     buses["geometry"] = gpd.points_from_xy(buses["x"], buses["y"])
-
+    import pdb; pdb.set_trace()
     # from: https://stackoverflow.com/questions/58893719/find-nearest-point-in-other-dataframe-with-a-lot-of-data
     # Create a BallTree
     tree = BallTree(buses[["x", "y"]].values, leaf_size=2)
@@ -773,6 +773,7 @@ def load_powerplants_eia(
     plants = pd.read_csv(
         eia_dataset,
     )
+    plants = plants[plants.nerc_region != 'non-conus']
     if (interconnect is not None) & (interconnect != "usa"):
         plants["interconnection"] = plants["nerc_region"].map(const.NERC_REGION_MAPPER)
         plants = plants[plants.interconnection == interconnect]
@@ -837,14 +838,6 @@ def load_powerplants_eia(
 
     # Timeline
     plants["build_year"] = plants.operating_year
-    plants["dateout"] = (
-        np.inf
-    )  # plants.planned_retirement_year.replace(' ').astype(int).fillna(np.inf)  # placeholder TODO Add retirement year
-
-    if interconnect:
-        plants["interconnection"] = plants["nerc_region"].map(const.NERC_REGION_MAPPER)
-        plants = plants[plants.interconnection == interconnect]
-
     return plants
 
 

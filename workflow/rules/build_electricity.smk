@@ -347,7 +347,7 @@ rule add_demand:
     benchmark:
         BENCHMARKS + "{interconnect}/add_demand"
     resources:
-        mem_mb=800,
+        mem_mb=interconnect_mem,
     script:
         "../scripts/add_demand.py"
 
