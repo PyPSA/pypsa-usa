@@ -40,6 +40,7 @@ Reads in Breakthrough Energy/TAMU transmission dataset, and converts it into PyP
 
 
 import logging
+from typing import Optional
 
 import constants as const
 import geopandas as gpd
@@ -635,6 +636,32 @@ def modify_breakthrough_lines(n: pypsa.Network, interconnect: str):
     return n
 
 
+def make_snapshots(
+    sns_config: dict[str, str],
+    invest_periods: Optional[list[int]],
+) -> pd.Index | pd.MultiIndex:
+    if not invest_periods:
+        return (
+            pd.date_range(
+                freq="h",
+                start=pd.to_datetime(sns_config["start"]),
+                end=pd.to_datetime(sns_config["end"]),
+                inclusive=sns_config["inclusive"],
+            ),
+        )
+    else:
+        sns = pd.DatetimeIndex([])
+        for year in invest_periods:
+            period = pd.date_range(
+                freq="h",
+                start=pd.to_datetime(sns_config["start"]).replace(year=year),
+                end=pd.to_datetime(sns_config["end"]).replace(year=year),
+                inclusive=sns_config["inclusive"],
+            )
+            sns = sns.append(period)
+        return pd.MultiIndex.from_arrays([sns.year, sns])
+
+
 def main(snakemake):
     # create network
     n = pypsa.Network()
@@ -796,15 +823,12 @@ def main(snakemake):
     lines_gis.to_csv(snakemake.output.lines_gis)
 
     # add snapshots
-    snapshot_config = snakemake.params["snapshots"]
-    n.set_snapshots(
-        pd.date_range(
-            freq="h",
-            start=pd.to_datetime(snapshot_config["start"]),
-            end=pd.to_datetime(snapshot_config["end"]),
-            inclusive=snapshot_config["inclusive"],
-        ),
-    )
+    sns_config = snakemake.params["snapshots"]
+    planning_horizons = snakemake.params.planning_horizons
+    sns = make_snapshots(sns_config, planning_horizons)
+    n.snapshots = sns
+    if planning_horizons:
+        n.set_investment_periods(periods=planning_horizons)
 
     # export network
     n.export_to_netcdf(snakemake.output.network)

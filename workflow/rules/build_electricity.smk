@@ -33,6 +33,7 @@ rule build_base_network:
     params:
         build_offshore_network=config["offshore_network"],
         snapshots=config["snapshots"],
+        planning_horizons=config["scenario"]["planning_horizons"],
         links=config["links"],
     input:
         buses=DATA + "breakthrough_network/base_grid/bus.csv",
