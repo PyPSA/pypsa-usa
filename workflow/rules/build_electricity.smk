@@ -205,13 +205,13 @@ rule build_renewable_profiles:
 # eastern broken out just to aviod awful formatting issues
 # texas in western due to spillover of interconnect
 INTERCONNECT_2_STATE = {
-    "eastern": ["AL", "AR", "CT", "DE", "DC", "FL", "GA", "IL", "IN", "IA", "KS", "KY"],
+    "eastern": ["AL", "AR", "CT", "DE", "FL", "GA", "IL", "IN", "IA", "KS", "KY"],
     "western": ["AZ", "CA", "CO", "ID", "MT", "NV", "NM", "OR", "UT", "WA", "WY", "TX"],
     "texas": ["TX"],
 }
 INTERCONNECT_2_STATE["eastern"].extend(["LA", "ME", "MD", "MA", "MI", "MN", "MS", "MO"])
 INTERCONNECT_2_STATE["eastern"].extend(["NE", "NH", "NJ", "NY", "NC", "ND", "OH", "OK"])
-INTERCONNECT_2_STATE["eastern"].extend(["PA", "RI", "SC", "SD", "TN", "VT", "VA", "VI"])
+INTERCONNECT_2_STATE["eastern"].extend(["PA", "RI", "SC", "SD", "TN", "VT", "VA"])
 INTERCONNECT_2_STATE["eastern"].extend(["WV", "WI"])
 INTERCONNECT_2_STATE["usa"] = sum(INTERCONNECT_2_STATE.values(), [])
 
@@ -334,7 +334,7 @@ rule build_sector_demand:
     input:
         network=RESOURCES + "{interconnect}/elec_base_network.nc",
         demand_files=sector_study_demand,
-        dissagregate_files=sector_study_dissagregate,
+        # dissagregate_files=sector_study_dissagregate,
     output:
         elec_demand=RESOURCES + "{interconnect}/{end_use}_electricity_demand.csv",
         heat_demand=RESOURCES + "{interconnect}/{end_use}_heating_demand.csv",

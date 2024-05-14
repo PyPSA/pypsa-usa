@@ -32,7 +32,7 @@ def define_zenodo_databundles():
 
 def define_sector_databundles():
     return {
-        "pypsa_usa_sec": "https://zenodo.org/records/10637836/files/pypsa_usa_sector_data.zip?download=1"
+        "pypsa_usa_sec": "https://zenodo.org/records/11095303/files/pypsa_usa_sector_data.zip??download=1"
     }
 
 
