@@ -205,14 +205,13 @@ rule build_renewable_profiles:
 # eastern broken out just to aviod awful formatting issues
 # texas in western due to spillover of interconnect
 INTERCONNECT_2_STATE = {
-    "eastern": ["AL", "AR", "CT", "DE", "FL", "GA", "IL", "IN", "IA", "KS", "KY"],
+    "eastern": ["AL", "AR", "CT", "DE", "FL", "GA", "IL", "IN", "IA", "KS", "KY", "LA"],
     "western": ["AZ", "CA", "CO", "ID", "MT", "NV", "NM", "OR", "UT", "WA", "WY", "TX"],
     "texas": ["TX"],
 }
-INTERCONNECT_2_STATE["eastern"].extend(["LA", "ME", "MD", "MA", "MI", "MN", "MS", "MO"])
-INTERCONNECT_2_STATE["eastern"].extend(["NE", "NH", "NJ", "NY", "NC", "ND", "OH", "OK"])
-INTERCONNECT_2_STATE["eastern"].extend(["PA", "RI", "SC", "SD", "TN", "VT", "VA"])
-INTERCONNECT_2_STATE["eastern"].extend(["WV", "WI"])
+INTERCONNECT_2_STATE["eastern"].extend(["ME", "MD", "MA", "MI", "MN", "MS", "MO", "NE"])
+INTERCONNECT_2_STATE["eastern"].extend(["NH", "NJ", "NY", "NC", "ND", "OH", "OK", "PA"])
+INTERCONNECT_2_STATE["eastern"].extend(["RI", "SC", "SD", "TN", "VT", "VA", "WV", "WI"])
 INTERCONNECT_2_STATE["usa"] = sum(INTERCONNECT_2_STATE.values(), [])
 
 
@@ -266,6 +265,7 @@ def sector_study_demand(wildcards):
             return [
                 DATA + "industry_load/2014_update_20170910-0116.csv",
                 DATA + "industry_load/epri_industrial_loads.csv",
+                DATA + "industry_load/table3_2.xlsx",  # mecs data
             ]
         else:
             return ""

@@ -37,6 +37,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 import constants as const
+import numpy as np
 import pandas as pd
 import pypsa
 import xarray as xr
@@ -547,6 +548,12 @@ class ReadCliu(ReadStrategy):
     Data is taken from:
     - County level industrual use to get annual energy breakdown by fuel
     - EPRI load profile to get hourly load profiles
+    - MECS is used to scale county level data
+
+    Sources:
+    - https://data.nrel.gov/submissions/97
+    - https://www.eia.gov/consumption/manufacturing/data/2014/#r3 (Table 3.2)
+    - https://loadshape.epri.com/enduse
     """
 
     # these are super rough and can be imporoved
@@ -591,12 +598,12 @@ class ReadCliu(ReadStrategy):
     def __init__(
         self,
         filepath: str | list[str],
-        # zone: Optional[str] = "county",
         profiles_filepath: Optional[str] = None,
+        mecs_filepath: Optional[str] = None,
     ) -> None:
         super().__init__(filepath)  # filepath is CLIU data
         self._profiles_filepath = profiles_filepath  # profiles is EPRI
-        # assert zone in ("county", "state")
+        self._mecs_filepath = mecs_filepath
         self._zone = "state"
 
     @property
@@ -638,12 +645,15 @@ class ReadCliu(ReadStrategy):
         profiles = self.get_demand_profiles(add_lpg=True)
         return self._apply_profiles(annual_demand, profiles)
 
-    def get_county_demand(self):
+    def get_county_demand(self, scale_mecs: bool = False) -> pd.DataFrame:
         """
         Public method to extract CLIU data in TBTU.
         """
         df = self._read_data()
         df = self._group_by_naics(df, group_by_subsector=False)
+        if scale_mecs:
+            assert self._mecs_filepath, "Must provide MECS data"
+            mecs = self._read_mecs_data()
         return self._group_by_fuels(df)
 
     def get_demand_profiles(self, add_lpg: bool = True):
@@ -897,6 +907,56 @@ class ReadCliu(ReadStrategy):
         """
         df["lpg"] = df.mean(axis=1)
         return df
+
+    def _read_mecs_data(self) -> pd.DataFrame:
+        """
+        Reads MECS data.
+
+        Adapted from:
+        https://github.com/NREL/Industry-Energy-Tool/data_foundation/data_comparison/compare_mecs.py
+        """
+
+        header_rows = 10
+
+        cols_renamed = {
+            "Code(a)": "NAICS",
+            "Electricity(b)": "Net_electricity",
+            "Fuel Oil": "Residual_fuel_oil",
+            "Fuel Oil(c)": "Diesel",
+            "Gas(d)": "Natural_gas",
+            "natural gasoline)(e)": "LPG_NGL",
+            "and Breeze": "Coke_and_breeze",
+            "Other(f)": "Other",
+        }
+
+        mecs = pd.read_excel(self._mecs, sheet_name="table 3.2", header=header_rows)
+        mecs = mecs.rename(columns=cols_renamed)
+        mecs = mecs.dropna(axis=0, how="all")
+        mecs.loc[:, "Region"] = mecs[mecs.Total.apply(lambda x: len(str(x)) > 7)].Total
+        mecs = mecs.Region.fillna(method="ffill")
+        mecs = mecs.dropna(axis=0)
+        mecs.loc[:, "NAICS"] = mecs.NAICS.apply(lambda x: int(x))
+        mecs = mecs.replace(to_replace={"*": np.nan, "Q": np.nan, "W": np.nan})
+        return mecs
+
+        # Need to convert 2007 NAICS used for MECS 2010 to 2012 NAICS
+        if year == 2010:
+
+            update_index = mecs[mecs.NAICS.apply(lambda x: len(str(x))) == 6].index
+
+            mecs.loc[update_index, "NAICS"] = mecs.loc[update_index, "NAICS"].map(
+                lambda x: naics_update[x],
+            )
+
+            mecs = mecs.groupby(["Region", "NAICS"], as_index=False).sum()
+
+        else:
+
+            mecs.drop("Subsector and Industry", axis=1, inplace=True)
+
+        mecs.set_index(["Region", "NAICS"], drop=True, inplace=True)
+
+        return mecs
 
 
 ###
@@ -1391,9 +1451,9 @@ if __name__ == "__main__":
         from _helpers import mock_snakemake
 
         snakemake = mock_snakemake(
-            "build_electrical_demand",
-            interconnect="texas",
-            end_use="power",
+            "build_sector_demand",
+            interconnect="western",
+            end_use="industry",
         )
     configure_logging(snakemake)
 
@@ -1455,15 +1515,19 @@ if __name__ == "__main__":
     elif demand_profile == "cliu":
         cliu_file = demand_files[0]
         epri_profiles = demand_files[1]
-        reader = ReadCliu(cliu_file, profiles_filepath=epri_profiles)
-        sns = n.snapshots.map(lambda x: x.replace(year=2014))
+        mecs_data = demand_files[1]
+        reader = ReadCliu(
+            cliu_file,
+            profiles_filepath=epri_profiles,
+            mecs_filepath=mecs_data,
+        )
     else:
         raise NotImplementedError
 
     if demand_disaggregation == "pop":
         writer = WritePopulation(n)
     elif demand_disaggregation == "cliu":
-        cliu_file = snakemake.input.dissagregate_files
+        cliu_file = snakemake.input.county_industrial_energy
         writer = WriteIndustrial(n, cliu_file)
     else:
         raise NotImplementedError
