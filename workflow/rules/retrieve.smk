@@ -32,7 +32,7 @@ def define_zenodo_databundles():
 
 def define_sector_databundles():
     return {
-        "pypsa_usa_sec": "https://zenodo.org/records/11095303/files/pypsa_usa_sector_data.zip??download=1"
+        "pypsa_usa_sec": "https://zenodo.org/records/11095303/files/pypsa_usa_sector_data.zip?download=1"
     }
 
 
@@ -84,6 +84,7 @@ sector_datafiles = [
     # industrial demand
     "industry_load/2014_update_20170910-0116.csv",
     "industry_load/epri_industrial_loads.csv",
+    "industry_load/fips_codes.csv",
 ]
 
 
@@ -99,25 +100,6 @@ rule retrieve_sector_databundle:
         "../envs/environment.yaml"
     script:
         "../scripts/retrieve_databundles.py"
-
-
-if config["network_configuration"] == "ads2032":
-
-    rule retrieve_WECC_forecast_data:
-        output:
-            ads_2032=directory(
-                DATA
-                + "WECC_ADS/downloads/2032/Public Data/Hourly Profiles in CSV format"
-            ),
-            ads_2030=directory(
-                DATA
-                + "WECC_ADS/downloads/2030/WECC 2030 ADS PCM 2020-12-16 (V1.5) Public Data/CSV Shape Files"
-            ),
-            ads_dir=directory(DATA + "WECC_ADS/processed"),
-        log:
-            "logs/retrieve/retrieve_WECC_forecast_data.log",
-        script:
-            "../scripts/retrieve_forecast_data.py"
 
 
 DATAFILES_GE = [
@@ -231,7 +213,7 @@ rule retrieve_cutout:
 
 rule retrieve_cost_data_eur:
     output:
-        pypsa_technology_data=RESOURCES + "costs/{year}/pypsa_eur.csv",
+        pypsa_technology_data=RESOURCES + "costs/pypsa_eur_{year}.csv",
     params:
         pypsa_costs_version=config["costs"].get("version", "v0.6.0"),
     log:

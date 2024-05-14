@@ -504,7 +504,9 @@ if __name__ == "__main__":
             pd.Series(dtype="O"),
         )
     else:
-        Nyears = n.snapshot_weightings.objective.sum() / 8760
+        Nyears = (
+            n.snapshot_weightings.loc[n.investment_periods[0]].objective.sum() / 8760.0
+        )
 
         hvac_overhead_cost = load_costs(
             snakemake.input.tech_costs,
@@ -548,6 +550,11 @@ if __name__ == "__main__":
         snakemake.config,
         **dict(wildcards=dict(snakemake.wildcards)),
     )
+
+    clustering.network.set_investment_periods(
+        periods=snakemake.params.planning_horizons,
+    )
+
     clustering.network.export_to_netcdf(snakemake.output.network)
     for attr in (
         "busmap",

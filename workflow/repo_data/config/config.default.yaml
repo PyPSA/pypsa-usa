@@ -16,9 +16,9 @@ scenario:
   scope: "total" # "urban", "rural", or "total"
   sector: "" # G
   planning_horizons:
-  - 2030    #(2030, 2040, 2050)
+  - 2030    #(2018-2023, 2030, 2040, 2050)
 
-foresight:  # Only Single Stage Currently
+foresight:  'perfect'
 
 
 # docs :
@@ -110,8 +110,8 @@ links:
 
 
 # docs :
-costs:  # based on the potentials, assuming  (0.1 kW/m2 and 10 m2/person)
-  year: 2030
+costs:
+  social_discount_rate: 0.02
   version: v0.6.0
   rooftop_share: 0.0
   ng_fuel_year: 2019 # year of the natural gas price from CAISO [2019- 2023]
