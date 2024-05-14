@@ -3,13 +3,12 @@ Retrieves PUDL data.
 """
 
 import logging
-from pathlib import Path
 import zlib
+from pathlib import Path
 
 import requests
-from tqdm import tqdm
-
 from _helpers import mock_snakemake
+from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 
@@ -28,12 +27,12 @@ if __name__ == "__main__":
 
     if not Path(save_pudl).exists():
         logger.info(f"Downloading PUDL from '{url}'")
-        d = zlib.decompressobj(16+zlib.MAX_WBITS)
+        d = zlib.decompressobj(16 + zlib.MAX_WBITS)
         with requests.get(url, stream=True) as r:
             r.raise_for_status()
             total_size = int(r.headers.get("content-length", 0))
             with tqdm(total=total_size, unit="B", unit_scale=True) as progress_bar:
-                with open(save_pudl, 'wb') as fd:
+                with open(save_pudl, "wb") as fd:
                     for chunk in r.iter_content(chunk_size=128):
                         progress_bar.update(len(chunk))
                         fd.write(d.decompress(chunk))
