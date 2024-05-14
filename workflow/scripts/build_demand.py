@@ -304,6 +304,7 @@ class ReadEia(ReadStrategy):
             + df.pop("HST")
             + df.pop("FMPP")
         )
+        df["SPP"] = df.pop("SWPP")
         return df
 
 
