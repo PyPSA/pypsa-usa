@@ -268,9 +268,9 @@ rule build_electrical_demand:
     wildcard_constraints:
         end_use="power",  # added for consistency in build_demand.py
     params:
-        planning_horizons=config["scenario"]["planning_horizons"],
         demand_params=config["electricity"]["demand"],
         eia_api=config["api"]["eia"],
+        profile_year=pd.to_datetime(config["snapshots"]["start"]).year,
     input:
         network=RESOURCES + "{interconnect}/elec_base_network.nc",
         demand_files=electricty_study_demand,

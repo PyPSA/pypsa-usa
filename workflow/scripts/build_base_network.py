@@ -639,27 +639,19 @@ def modify_breakthrough_lines(n: pypsa.Network, interconnect: str):
 def make_snapshots(
     sns_config: dict[str, str],
     invest_periods: Optional[list[int]],
-) -> pd.Index | pd.MultiIndex:
+) -> pd.MultiIndex:
     if not invest_periods:
-        return (
-            pd.date_range(
-                freq="h",
-                start=pd.to_datetime(sns_config["start"]),
-                end=pd.to_datetime(sns_config["end"]),
-                inclusive=sns_config["inclusive"],
-            ),
+        invest_periods = [pd.to_datetime(sns_config["start"]).year]
+    sns = pd.DatetimeIndex([])
+    for year in invest_periods:
+        period = pd.date_range(
+            freq="h",
+            start=pd.to_datetime(sns_config["start"]).replace(year=year),
+            end=pd.to_datetime(sns_config["end"]).replace(year=year),
+            inclusive=sns_config["inclusive"],
         )
-    else:
-        sns = pd.DatetimeIndex([])
-        for year in invest_periods:
-            period = pd.date_range(
-                freq="h",
-                start=pd.to_datetime(sns_config["start"]).replace(year=year),
-                end=pd.to_datetime(sns_config["end"]).replace(year=year),
-                inclusive=sns_config["inclusive"],
-            )
-            sns = sns.append(period)
-        return pd.MultiIndex.from_arrays([sns.year, sns])
+        sns = sns.append(period)
+    return pd.MultiIndex.from_arrays([sns.year, sns])
 
 
 def main(snakemake):
@@ -829,6 +821,8 @@ def main(snakemake):
     n.snapshots = sns
     if planning_horizons:
         n.set_investment_periods(periods=planning_horizons)
+    else:
+        n.set_investment_periods(periods=n.snapshots[0].year)
 
     # export network
     n.export_to_netcdf(snakemake.output.network)
