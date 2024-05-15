@@ -1178,7 +1178,7 @@ if __name__ == "__main__":
         )  # dict[str, dict[str, pd.DataFrame]]
 
     # assign demand to planning years and scale
-    demand = expand_demand(
+    demands = expand_demand(
         demands,
         planning_horizons,
         scale_method,
