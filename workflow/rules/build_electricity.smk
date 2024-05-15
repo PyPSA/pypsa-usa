@@ -392,6 +392,7 @@ rule add_extra_components:
     input:
         network=RESOURCES + "{interconnect}/elec_s_{clusters}.nc",
         tech_costs=RESOURCES + f"costs_{config['costs']['year']}.csv",
+        regions_onshore=RESOURCES + "{interconnect}/regions_onshore_s_{clusters}.geojson",
     params:
         retirement=config["electricity"].get("retirement", "technical"),
     output:

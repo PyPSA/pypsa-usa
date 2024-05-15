@@ -58,17 +58,17 @@ def define_nrel_databundles():
     }
 
 
-rule retrieve_nrel_efs_data:
-    params:
-        define_nrel_databundles(),
-    output:
-        DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv",
-    log:
-        "logs/retrieve/retrieve_databundles.log",
-    conda:
-        "../envs/environment.yaml"
-    script:
-        "../scripts/retrieve_databundles.py"
+# rule retrieve_nrel_efs_data:
+#     params:
+#         define_nrel_databundles(),
+#     output:
+#         DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv",
+#     log:
+#         "logs/retrieve/retrieve_databundles.log",
+#     conda:
+#         "../envs/environment.yaml"
+#     script:
+#         "../scripts/retrieve_databundles.py"
 
 
 sector_datafiles = [
@@ -84,18 +84,18 @@ sector_datafiles = [
 ]
 
 
-rule retrieve_sector_databundle:
-    params:
-        define_sector_databundles(),
-    output:
-        expand(DATA + "{file}", file=sector_datafiles),
-    log:
-        LOGS + "retrieve_sector_databundle.log",
-    retries: 2
-    conda:
-        "../envs/environment.yaml"
-    script:
-        "../scripts/retrieve_databundles.py"
+# rule retrieve_sector_databundle:
+#     params:
+#         define_sector_databundles(),
+#     output:
+#         expand(DATA + "{file}", file=sector_datafiles),
+#     log:
+#         LOGS + "retrieve_sector_databundle.log",
+#     retries: 2
+#     conda:
+#         "../envs/environment.yaml"
+#     script:
+#         "../scripts/retrieve_databundles.py"
 
 
 if config["network_configuration"] == "ads2032":
