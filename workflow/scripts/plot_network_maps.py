@@ -602,11 +602,11 @@ if __name__ == "__main__":
         from _helpers import mock_snakemake
 
         snakemake = mock_snakemake(
-            "plot_figures",
-            interconnect="western",
-            clusters=30,
-            ll="v1.15",
-            opts="CO2L0.75-4H",
+            "plot_network_maps",
+            interconnect="texas",
+            clusters=20,
+            ll="v1.00",
+            opts="Co2L-RCo2L-RPS-SAFE",
             sector="E",
         )
     configure_logging(snakemake)
