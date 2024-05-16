@@ -707,7 +707,6 @@ ATB_TECH_MAPPER = {
         "display_name": "Pumped Storage Hydropower - National Class 1",
         "crp": 100,
     },
-
 }
 
 ###########################################

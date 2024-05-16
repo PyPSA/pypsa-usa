@@ -512,7 +512,8 @@ rule cluster_network:
 rule add_extra_components:
     input:
         network=RESOURCES + "{interconnect}/elec_s_{clusters}.nc",
-        regions_onshore=RESOURCES + "{interconnect}/regions_onshore_s_{clusters}.geojson",
+        regions_onshore=RESOURCES
+        + "{interconnect}/regions_onshore_s_{clusters}.geojson",
         tech_costs=lambda wildcards: expand(
             RESOURCES + "costs/costs_{year}.csv",
             year=config["scenario"]["planning_horizons"],

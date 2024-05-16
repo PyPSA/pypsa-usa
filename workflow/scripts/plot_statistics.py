@@ -608,7 +608,11 @@ def plot_production_area(
     demand = get_demand_timeseries(n).mul(1e-3)  # MW -> GW
 
     for carrier in energy_mix.columns:
-        if "battery" in carrier or carrier in snakemake.params.electricity["extendable_carriers"]["StorageUnit"]:
+        if (
+            "battery" in carrier
+            or carrier
+            in snakemake.params.electricity["extendable_carriers"]["StorageUnit"]
+        ):
             energy_mix[carrier + "_discharger"] = energy_mix[carrier].clip(lower=0.0001)
             energy_mix[carrier + "_charger"] = energy_mix[carrier].clip(upper=-0.0001)
             energy_mix = energy_mix.drop(columns=carrier)

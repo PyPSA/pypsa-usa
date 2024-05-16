@@ -49,16 +49,16 @@ The rule :mod:`add_extra_components` attaches additional extendable components t
 import logging
 from typing import List
 
+import geopandas as gpd
 import numpy as np
 import pandas as pd
-import geopandas as gpd
 import pypsa
 from _helpers import configure_logging
 from add_electricity import (
     _add_missing_carriers_from_costs,
     add_nice_carrier_names,
+    calculate_annuity,
     load_costs,
-    calculate_annuity
 )
 
 idx = pd.IndexSlice
@@ -68,7 +68,8 @@ logger = logging.getLogger(__name__)
 
 def attach_storageunits(n, costs, elec_opts):
     carriers = elec_opts["extendable_carriers"]["StorageUnit"]
-    carriers = [k for k in carriers if 'battery' in k]
+    carriers = [k for k in carriers if "battery" in k]
+
 
 def _add_missing_carriers_from_costs(n, costs, carriers):
     missing_carriers = pd.Index(carriers).difference(n.carriers.index)
@@ -128,64 +129,93 @@ def attach_storageunits(n, costs, elec_opts, investment_year):
             lifetime=costs.at[carrier, "lifetime"],
         )
 
-def attach_phs_storageunits(n: pypsa.Network, elec_opts): 
+
+def attach_phs_storageunits(n: pypsa.Network, elec_opts):
     carriers = elec_opts["extendable_carriers"]["StorageUnit"]
-    carriers = [k for k in carriers if 'PHS' in k]
-    
-    for carrier in carriers: 
+    carriers = [k for k in carriers if "PHS" in k]
+
+    for carrier in carriers:
         max_hours = int(carrier.split("hr_")[0])
 
-        psh_resources = (gpd.read_file(f"./repo_data/psh/40-100-dam-height-{max_hours}hr-no-croplands-no-ephemeral-no-highways.gpkg")
-                        .to_crs(4326)
-                        .rename(columns={'System Installed Capacity (Megawatts)':'potential_mw', 
-                                        'System Energy Storage Capacity (Gigawatt hours)':'potential_gwh', 
-                                        'System Cost (2020 US Dollars per Installed Kilowatt)':'cost_kw', 
-                                        'Longitude': 'longitude', 
-                                        'Latitude': 'latitude'
-                                        })
-                        )[['longitude', 'latitude', 'potential_gwh', 'potential_mw', 'cost_kw', 'geometry']]
+        psh_resources = (
+            gpd.read_file(
+                f"./repo_data/psh/40-100-dam-height-{max_hours}hr-no-croplands-no-ephemeral-no-highways.gpkg"
+            )
+            .to_crs(4326)
+            .rename(
+                columns={
+                    "System Installed Capacity (Megawatts)": "potential_mw",
+                    "System Energy Storage Capacity (Gigawatt hours)": "potential_gwh",
+                    "System Cost (2020 US Dollars per Installed Kilowatt)": "cost_kw",
+                    "Longitude": "longitude",
+                    "Latitude": "latitude",
+                },
+            )
+        )[
+            [
+                "longitude",
+                "latitude",
+                "potential_gwh",
+                "potential_mw",
+                "cost_kw",
+                "geometry",
+            ]
+        ]
 
         # Round CAPEX to $500 interval
-        psh_resources['cost_kw_round'] = (psh_resources['cost_kw']/500).round()*500
+        psh_resources["cost_kw_round"] = (psh_resources["cost_kw"] / 500).round() * 500
 
         # Join SC to PyPSA cluster
         region_onshore = gpd.read_file(snakemake.input.regions_onshore)
-        region_onshore_psh = gpd.sjoin(region_onshore, psh_resources, how="inner").reset_index(drop=True)
-        region_onshore_psh_grp = region_onshore_psh.groupby(['name', 'cost_kw_round'])['potential_mw'].agg('sum').reset_index()
+        region_onshore_psh = gpd.sjoin(
+            region_onshore, psh_resources, how="inner"
+        ).reset_index(drop=True)
+        region_onshore_psh_grp = (
+            region_onshore_psh.groupby(["name", "cost_kw_round"])["potential_mw"]
+            .agg("sum")
+            .reset_index()
+        )
 
-        region_onshore_psh_grp['class'] = region_onshore_psh_grp.groupby(['name']).cumcount()+1
-        region_onshore_psh_grp['class'] = "c" + region_onshore_psh_grp['class'].astype(str)
-        region_onshore_psh_grp['tech'] = carrier
-        region_onshore_psh_grp['carrier'] = region_onshore_psh_grp[['tech', 'class']].agg('_'.join, axis=1)
-        region_onshore_psh_grp['Generator'] = region_onshore_psh_grp['name'] + ' ' + region_onshore_psh_grp['carrier']
-        region_onshore_psh_grp = region_onshore_psh_grp.set_index('Generator')
+        region_onshore_psh_grp["class"] = (
+            region_onshore_psh_grp.groupby(["name"]).cumcount() + 1
+        )
+        region_onshore_psh_grp["class"] = "c" + region_onshore_psh_grp["class"].astype(
+            str
+        )
+        region_onshore_psh_grp["tech"] = carrier
+        region_onshore_psh_grp["carrier"] = region_onshore_psh_grp[
+            ["tech", "class"]
+        ].agg("_".join, axis=1)
+        region_onshore_psh_grp["Generator"] = (
+            region_onshore_psh_grp["name"] + " " + region_onshore_psh_grp["carrier"]
+        )
+        region_onshore_psh_grp = region_onshore_psh_grp.set_index("Generator")
 
         # Updated annualize capital cost based on real location
-        psh_lifetime = 100 # years
-        psh_discount_rate = 0.055 # per unit
-        psh_fom = 0.885 # %/year
-        psh_vom = 0.54 # $/MWh_e	
-    
-        region_onshore_psh_grp["capital_cost"] = (
-                (
-                    calculate_annuity(psh_lifetime, psh_discount_rate)
-                    + psh_fom/100
-                )
-                * region_onshore_psh_grp["cost_kw_round"] * 1e3
-                * n.snapshot_weightings.objective.sum() / 8760.0
-            )
+        psh_lifetime = 100  # years
+        psh_discount_rate = 0.055  # per unit
+        psh_fom = 0.885  # %/year
+        psh_vom = 0.54  # $/MWh_e
 
-        region_onshore_psh_grp['marginal_cost'] = psh_vom
+        region_onshore_psh_grp["capital_cost"] = (
+            (calculate_annuity(psh_lifetime, psh_discount_rate) + psh_fom / 100)
+            * region_onshore_psh_grp["cost_kw_round"]
+            * 1e3
+            * n.snapshot_weightings.objective.sum()
+            / 8760.0
+        )
+
+        region_onshore_psh_grp["marginal_cost"] = psh_vom
 
         # Set RT efficiency = 0.8
-        efficiency_store = 0.894427191 # 0.894427191^2 = 0.8
-        efficiency_dispatch = 0.894427191 # 0.894427191^2 = 0.8
+        efficiency_store = 0.894427191  # 0.894427191^2 = 0.8
+        efficiency_dispatch = 0.894427191  # 0.894427191^2 = 0.8
 
         n.madd(
             "StorageUnit",
             region_onshore_psh_grp.index,
-            bus = region_onshore_psh_grp.name,
-            carrier = region_onshore_psh_grp.tech,
+            bus=region_onshore_psh_grp.name,
+            carrier=region_onshore_psh_grp.tech,
             p_nom_max=region_onshore_psh_grp.potential_mw,
             p_nom_extendable=True,
             capital_cost=region_onshore_psh_grp.capital_cost,
@@ -195,6 +225,7 @@ def attach_phs_storageunits(n: pypsa.Network, elec_opts):
             max_hours=max_hours,
             cyclic_state_of_charge=True,
         )
+
 
 def attach_stores(n, costs, elec_opts, investment_year):
     carriers = elec_opts["extendable_carriers"]["Store"]
@@ -467,13 +498,12 @@ if __name__ == "__main__":
     # n.buses["location"] = n.buses.index
 
     attach_storageunits(n, costs, elec_config)
-    if any("PHS" in s for s in elec_config['extendable_carriers']['StorageUnit']): 
+    if any("PHS" in s for s in elec_config["extendable_carriers"]["StorageUnit"]):
         attach_phs_storageunits(n, elec_config)
     attach_stores(n, costs, elec_config)
     attach_hydrogen_pipelines(n, costs, elec_config)
 
     Nyears = n.snapshot_weightings.loc[n.investment_periods[0]].objective.sum() / 8760.0
-
 
     costs_dict = {
         n.investment_periods[i]: load_costs(
