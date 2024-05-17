@@ -620,50 +620,50 @@ def plot_production_area(
 
     color_palette = get_color_palette(n)
 
-    year = n.snapshots.get_level_values(1)[0].year
-    for timeslice in ["all"] + list(range(1, 12)):
-        try:
-            fig, ax = plt.subplots(figsize=(14, 4), nrows=n.investment_periods.size)
+    months = n.snapshots.get_level_values(1).month.unique()
+    num_periods = len(n.investment_periods)
+    base_plot_size = 4
 
-            for i, investment_period in enumerate(n.investment_periods):
+    for month in ["all"] + months.to_list():
+        figsize = (14, (base_plot_size * num_periods))
+        fig, axs = plt.subplots(figsize=figsize, ncols=1, nrows=num_periods)
+        if not isinstance(axs, np.ndarray):  # only one horizon
+            axs = np.array([axs])
+        for i, investment_period in enumerate(n.investment_periods):
+            if month == "all":
+                sns = n.snapshots[n.snapshots.get_level_values(0) == investment_period]
+            else:
+                sns = n.snapshots[
+                    (n.snapshots.get_level_values(0) == investment_period)
+                    & (n.snapshots.get_level_values(1).month == month)
+                ]
 
-                if not timeslice == "all":
-                    snapshot_period = n.snapshots[
-                        n.snapshots.get_level_values(0) == investment_period
-                    ].get_level_values(1)
-                    snapshots = snapshot_period.get_loc(f"{year}-{timeslice}")
-                else:
-                    snapshots = slice(None, None)
+            energy_mix.loc[sns].droplevel("period").plot.area(
+                ax=axs[i],
+                alpha=0.7,
+                color=color_palette,
+            )
+            demand.loc[sns].droplevel("period").plot.line(
+                ax=axs[i],
+                ls="-",
+                color="darkblue",
+            )
 
-                energy_mix.loc[investment_period].iloc[snapshots].plot.area(
-                    ax=ax[i],
-                    alpha=0.7,
-                    color=color_palette,
-                )
-                demand.loc[investment_period][snapshots].plot.line(
-                    ax=ax[i],
-                    ls="-",
-                    color="darkblue",
-                )
+            suffix = (
+                "-" + datetime.strptime(str(month), "%m").strftime("%b")
+                if month != "all"
+                else ""
+            )
 
-                suffix = (
-                    "-" + datetime.strptime(str(timeslice), "%m").strftime("%b")
-                    if timeslice != "all"
-                    else ""
-                )
+            axs[i].legend(bbox_to_anchor=(1, 1), loc="upper left")
+            # axs[i].set_title(f"Production in {investment_period}")
+            axs[i].set_ylabel("Power [GW]")
+            axs[i].set_xlabel("")
 
-                ax[i].legend(bbox_to_anchor=(1, 1), loc="upper left")
-                ax[i].set_title(f"Production in {investment_period}")
-                ax[i].set_ylabel("Power [GW]")
-
-            fig.tight_layout()
-            fig.suptitle(create_title("Production [GW]", **wildcards))
-            save = Path(save)
-            fig.savefig(save.parent / (save.stem + suffix + save.suffix))
-            plt.close()
-        except KeyError:
-            # outside slicing range
-            continue
+        fig.tight_layout(rect=[0, 0, 1, 0.92])
+        fig.suptitle(create_title("Production [GW]", **wildcards))
+        save = Path(save)
+        fig.savefig(save.parent / (save.stem + suffix + save.suffix))
 
 
 def plot_hourly_emissions(n: pypsa.Network, save: str, **wildcards) -> None:
@@ -1133,10 +1133,10 @@ if __name__ == "__main__":
 
         snakemake = mock_snakemake(
             "plot_statistics",
-            interconnect="texas",
-            clusters=20,
-            ll="v1.00",
-            opts="Co2L-RCo2L-RPS-SAFE",
+            interconnect="western",
+            clusters=80,
+            ll="v1.0",
+            opts="Ep-Co2L0.2",
             sector="E",
         )
     configure_logging(snakemake)

@@ -10,6 +10,7 @@ HTTP = HTTPRemoteProvider()
 from os.path import normpath
 from itertools import chain
 from pathlib import Path
+import pandas as pd
 
 FIGURES_MAPS = [
     "capacity_map_base.pdf",
