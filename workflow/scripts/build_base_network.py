@@ -823,10 +823,7 @@ def main(snakemake):
     planning_horizons = snakemake.params.planning_horizons
     sns = make_snapshots(sns_config, planning_horizons)
     n.snapshots = sns
-    if planning_horizons:
-        n.set_investment_periods(periods=planning_horizons)
-    else:
-        n.set_investment_periods(periods=n.snapshots[0].year)
+    n.set_investment_periods(periods=planning_horizons)
 
     # export network
     n.export_to_netcdf(snakemake.output.network)
