@@ -605,9 +605,9 @@ def add_regional_co2limit(n, sns, config):
             rhs = region_co2lim - (region_demand * EF_imports)
             n.model.add_constraints(
                 lhs <= rhs,
-                name=f"GlobalConstraint-{emmission_lim.name}_co2_limit",
+                name=f"GlobalConstraint-{emmission_lim.name}_{planning_horizon}co2_limit",
             )
-            logger.info(f"Adding regional Co2 Limit for {emmission_lim.name}")
+            logger.info(f"Adding regional Co2 Limit for {emmission_lim.name} in {planning_horizon}")
 
 
 def add_SAFE_constraints(n, config):

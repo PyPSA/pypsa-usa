@@ -86,7 +86,7 @@ def solver_threads(w):
 
 
 def memory(w):
-    factor = 3.0
+    factor = 4.0
     for o in w.opts.split("-"):
         m = re.match(r"^(\d+)h$", o, re.IGNORECASE)
         if m is not None:
@@ -95,7 +95,7 @@ def memory(w):
     for o in w.opts.split("-"):
         m = re.match(r"^(\d+)seg$", o, re.IGNORECASE)
         if m is not None:
-            factor *= int(m.group(1)) / 8760
+            factor *= int(m.group(1)) / 2760
             break
     if w.clusters.endswith("m") or w.clusters.endswith("c"):
         val = int(factor * (55000 + 600 * int(w.clusters[:-1])))
@@ -109,13 +109,24 @@ def memory(w):
     elif w.interconnect == "eastern":
         return int(val * 1.5)
     elif w.interconnect == "western":
-        return int(val)
+        return int(val * 1.5)
     elif w.interconnect == "texas":
-        return int(val * 0.5)
+        return int(val * 1)
 
 
 def interconnect_mem(w):
     mem = 20000
+    if w.interconnect == "usa":
+        return int(mem * 1.5)
+    elif w.interconnect == "eastern":
+        return int(mem * 1.5)
+    elif w.interconnect == "western":
+        return int(mem)
+    elif w.interconnect == "texas":
+        return int(mem * 1)
+
+def interconnect_mem_a(w):
+    mem = 80000
     if w.interconnect == "usa":
         return int(mem * 1.5)
     elif w.interconnect == "eastern":

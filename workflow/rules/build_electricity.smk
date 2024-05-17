@@ -442,7 +442,7 @@ rule add_electricity:
         BENCHMARKS + "{interconnect}/add_electricity"
     threads: 1
     resources:
-        mem_mb=80000,
+        mem_mb=interconnect_mem_a,
     script:
         "../scripts/add_electricity.py"
 
