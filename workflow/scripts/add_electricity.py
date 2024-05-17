@@ -413,13 +413,12 @@ def attach_breakthrough_renewable_plants(
         )  # filters by plants ID for the plants of type tech
         p_nom_be = p_nom_be[list(intersection)]
 
-        Nhours = len(n.snapshots.get_level_values(1).unique())
-        p_nom_be = p_nom_be.iloc[
-            :Nhours,
-            :,
-        ]  # hotfix to fit 2016 renewable data to load data
-        p_nom_be.index = n.snapshots.get_level_values(1).unique()
+        # hotfix to fit 2016 renewable data to load data
         p_nom_be.columns = p_nom_be.columns.astype(str)
+        p_nom_be.index = pd.to_datetime(p_nom_be.index, format="%Y-%m-%d %H:%M:%S")
+        # convert to 2016 first to account for leap year
+        sns_2016 = n.snapshots.get_level_values(1).map(lambda x: x.replace(year=2016))
+        p_nom_be = p_nom_be[p_nom_be.index.isin(sns_2016)]
 
         if (tech_plants.Pmax == 0).any():
             # p_nom is the maximum of {Pmax, dispatch}
@@ -1116,6 +1115,6 @@ if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
 
-        snakemake = mock_snakemake("add_electricity", interconnect="western")
+        snakemake = mock_snakemake("add_electricity", interconnect="texas")
     configure_logging(snakemake)
     main(snakemake)
