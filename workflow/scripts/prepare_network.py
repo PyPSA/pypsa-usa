@@ -316,16 +316,11 @@ if __name__ == "__main__":
     )
 
     # Set Investment Period Year Weightings
-<<<<<<< HEAD
-    inv_per_time_weight = n.investment_periods.to_series().diff().shift(-1).ffill()
-    n.investment_period_weightings["years"] = inv_per_time_weight.fillna(1.0)
-=======
     # 'fillna(1)' needed if only one period
     inv_per_time_weight = (
         n.investment_periods.to_series().diff().shift(-1).ffill().fillna(1)
     )
     n.investment_period_weightings["years"] = inv_per_time_weight
->>>>>>> development_kamran
     # set Investment Period Objective weightings
     social_discountrate = snakemake.params.costs["social_discount_rate"]
     objective_w = get_investment_weighting(
