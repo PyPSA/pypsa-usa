@@ -40,6 +40,7 @@ Reads in Breakthrough Energy/TAMU transmission dataset, and converts it into PyP
 
 
 import logging
+from typing import Optional
 
 import constants as const
 import geopandas as gpd
@@ -635,6 +636,28 @@ def modify_breakthrough_lines(n: pypsa.Network, interconnect: str):
     return n
 
 
+def make_snapshots(
+    sns_config: dict[str, str],
+    invest_periods: Optional[list[int]],
+) -> pd.MultiIndex:
+    if not invest_periods:
+        invest_periods = [pd.to_datetime(sns_config["start"]).year]
+    sns = pd.DatetimeIndex([])
+    for year in invest_periods:
+        start = pd.to_datetime(sns_config["start"])
+        end = pd.to_datetime(sns_config["end"])
+        year_diff = end.year - start.year
+        assert year_diff in (0, 1)
+        period = pd.date_range(
+            freq="h",
+            start=start.replace(year=year),
+            end=end.replace(year=(year + year_diff)),
+            inclusive=sns_config["inclusive"],
+        )
+        sns = sns.append(period)
+    return pd.MultiIndex.from_arrays([sns.year, sns])
+
+
 def main(snakemake):
     # create network
     n = pypsa.Network()
@@ -796,15 +819,11 @@ def main(snakemake):
     lines_gis.to_csv(snakemake.output.lines_gis)
 
     # add snapshots
-    snapshot_config = snakemake.params["snapshots"]
-    n.set_snapshots(
-        pd.date_range(
-            freq="h",
-            start=pd.to_datetime(snapshot_config["start"]),
-            end=pd.to_datetime(snapshot_config["end"]),
-            inclusive=snapshot_config["inclusive"],
-        ),
-    )
+    sns_config = snakemake.params["snapshots"]
+    planning_horizons = snakemake.params.planning_horizons
+    sns = make_snapshots(sns_config, planning_horizons)
+    n.snapshots = sns
+    n.set_investment_periods(periods=planning_horizons)
 
     # export network
     n.export_to_netcdf(snakemake.output.network)
@@ -815,6 +834,6 @@ if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
 
-        snakemake = mock_snakemake("build_base_network", interconnect="western")
+        snakemake = mock_snakemake("build_base_network", interconnect="texas")
     configure_logging(snakemake)
     main(snakemake)

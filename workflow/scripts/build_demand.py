@@ -620,9 +620,6 @@ class WriteStrategy(ABC):
         # get implementation specific dissgregation factors
         laf = self._get_load_allocation_factor(df=dissagregation_zones, zone=zone)
 
-        # checks that sum of all LAFs is equal to the number of zones.
-        # assert abs(laf.sum() - len(dissagregation_zones.unique())) <= 0.0001
-
         # disaggregate load to buses
         zone_data = dissagregation_zones.to_frame(name="zone").join(
             laf.to_frame(name="laf"),
@@ -662,7 +659,9 @@ class WriteStrategy(ABC):
         """
         filtered = df[df.index.get_level_values("snapshot").isin(sns)].copy()
         filtered = filtered[~filtered.index.duplicated(keep="last")]  # issue-272
-        assert len(filtered.index.get_level_values("snapshot").unique()) == len(sns)
+        assert len(filtered.index.get_level_values("snapshot").unique()) == len(
+            sns.unique(),
+        )
         return filtered
 
     @staticmethod
@@ -694,15 +693,11 @@ class WriteStrategy(ABC):
 
         n = self.n
 
-        if isinstance(sns, pd.DatetimeIndex):  # not sure if leap years will break this
-            snapshots = sns
-            assert len(snapshots) == len(n.snapshots)
-            filtered = self._filter_on_snapshots(df, snapshots)
+        if isinstance(sns, pd.DatetimeIndex):
+            assert len(sns) == len(n.snapshots)
+            filtered = self._filter_on_snapshots(df, sns)
             df = filtered.reset_index()
             df = df.groupby(["snapshot", "sector", "subsector", "fuel"]).sum()
-            # df["snapshot"] = df.snapshot.map(
-            #     lambda x: x.replace(year=n.snapshots.get_level_values(1)[0].year),
-            # ) # remove this so we retain true snapshot dates
             assert filtered.shape == df.shape  # no data should have changed
         else:  # profile and planning year are the same
             snapshots = n.snapshots
@@ -950,6 +945,77 @@ class WriteIndustrial(WriteStrategy):
 ###
 
 
+def reindex_demand(df: pd.DataFrame, year: int) -> pd.DataFrame:
+    """
+    Reindex a dataframe for a different planning horizon.
+
+    Input dataframe will be...
+
+    |                     | BusName_1 | BusName_2 | ... | BusName_n |
+    |---------------------|-----------|-----------|-----|-----------|
+    | 2019-01-01 00:00:00 |    aaa    |    ddd    |     |    ggg    |
+    | 2019-01-01 01:00:00 |    bbb    |    eee    |     |    hhh    |
+    | ...                 |    ...    |    ...    |     |    ...    |
+    | 2019-02-28 23:00:00 |    ccc    |    fff    |     |    iii    |
+
+    Output dataframe will be...
+
+    |                     | BusName_1 | BusName_2 | ... | BusName_n |
+    |---------------------|-----------|-----------|-----|-----------|
+    | 2030-01-01 00:00:00 |    aaa    |    ddd    |     |    ggg    |
+    | 2030-01-01 01:00:00 |    bbb    |    eee    |     |    hhh    |
+    | ...                 |    ...    |    ...    |     |    ...    |
+    | 2030-02-28 23:00:00 |    ccc    |    fff    |     |    iii    |
+    """
+
+    new = df.copy()
+    new.index = new.index.map(lambda x: x.replace(year=year))
+    return new
+
+
+def expand_demand(
+    demands: dict[str, dict[str : pd.DataFrame]],
+    planning_horizons: list[int],
+    scale_method: str,
+) -> dict[str, dict[str : pd.DataFrame]]:
+    """
+    Expands demand to match planning horizons.
+    """
+
+    expanded = {}
+
+    for sector, fuels in demands.items():
+        expanded[sector] = {}
+        for fuel, demand in fuels.items():
+            dfs = []
+            for planning_horizon in planning_horizons:
+                df = demand[demand.index.year == planning_horizon]
+                if not df.empty:
+                    dfs.append(df)
+                else:
+                    profile_year = demand.index[0].year
+                    df = demand[demand.index.year == profile_year]
+                    df = reindex_demand(df, planning_horizon)
+                    # scale demand here
+                    dfs.append(df)
+            expanded[sector][fuel] = pd.concat(dfs)
+    return expanded
+
+
+def scale_demand(method: str):
+    """
+    Scales demand.
+    """
+    if method == "efs":
+        growth_rate = ReadEfs(snakemake.input.efs).get_growth_rate()
+        logger.warning("No scale appied for efs data")
+    elif method == "aeo":
+        growth_rate = get_aeo_growth_rate(eia_api, [profile_year, planning_horizons])
+        logger.warning("No scale appied for aeo data")
+    else:
+        raise NotImplementedError
+
+
 def get_aeo_growth_rate(
     api: str,
     years: list[str],
@@ -1030,13 +1096,12 @@ if __name__ == "__main__":
 
         snakemake = mock_snakemake(
             "build_electrical_demand",
-            interconnect="texas",
+            interconnect="western",
             end_use="power",
         )
     configure_logging(snakemake)
 
     n = pypsa.Network(snakemake.input.network)
-    n.set_investment_periods(periods=snakemake.params.planning_horizons)
 
     # extract user demand configuration parameters
 
@@ -1046,18 +1111,18 @@ if __name__ == "__main__":
 
     if end_use == "power":  # electricity only study
         demand_profile = demand_params["profile"]
-        demand_scale = demand_params["scale"]
+        scale_method = demand_params["scale"]
         demand_disaggregation = demand_params["disaggregation"]
     else:
         demand_profile = demand_params["profile"][end_use]
-        demand_scale = demand_params["scale"][end_use]
+        scale_method = demand_params["scale"][end_use]
         demand_disaggregation = demand_params["disaggregation"][end_use]
 
-    if demand_scale == "aeo":
+    if scale_method == "aeo":
         assert eia_api, "Must provide EIA API key to scale demand by AEO"
 
-    profile_year = int(n.snapshots.get_level_values(1)[0].year)
-    planning_horizons = snakemake.params.planning_horizons
+    planning_horizons = n.investment_periods.to_list()
+    profile_year = snakemake.params.profile_year
 
     # set reading and writitng strategies
 
@@ -1068,27 +1133,23 @@ if __name__ == "__main__":
             year in (2018, 2020, 2024, 2030, 2040, 2050) for year in planning_horizons
         )
         reader = ReadEfs(demand_files)
-        sns_year = n.snapshots.get_level_values(0)
-        sns_dt = n.snapshots.get_level_values(1)
-        sns = pd.DatetimeIndex(
-            [x.replace(year=sns_year[i]) for i, x in enumerate(sns_dt)],
-        )
-        profile_year = planning_horizons[
-            0
-        ]  # do not scale EFS data #revisit this if we want to scale
+        sns = n.snapshots.get_level_values(1)
+
     elif demand_profile == "eia":
         assert profile_year in range(2018, 2023, 1)
         reader = ReadEia(demand_files)
-        sns_year = n.snapshots.get_level_values(0)
-        sns_dt = n.snapshots.get_level_values(1)
-        sns = pd.DatetimeIndex(
-            [x.replace(year=sns_year[i]) for i, x in enumerate(sns_dt)],
+        sns = n.snapshots.get_level_values(1).map(
+            lambda x: x.replace(year=profile_year),
         )
+
     elif demand_profile == "eulp":
-        # assert profile_year == 2018
         stock = {"residential": "res", "commercial": "com"}
         reader = ReadEulp(demand_files, stock[end_use])  # 'res' or 'com'
-        sns = n.snapshots
+        # assert profile_year == 2018,
+        sns = n.snapshots.get_level_values(1).map(
+            lambda x: x.replace(year=profile_year),
+        )
+
     else:
         raise NotImplementedError
 
@@ -1103,6 +1164,7 @@ if __name__ == "__main__":
     demand_converter = Context(reader, writer)
 
     # extract demand based on strategies
+    # this is raw demand, not scaled or garunteed to align to snapshots
 
     if end_use == "power":  # only one demand for electricity only studies
         demand = demand_converter.prepare_demand(sns=sns)  # pd.DataFrame
@@ -1116,17 +1178,12 @@ if __name__ == "__main__":
             sns=sns,
         )  # dict[str, dict[str, pd.DataFrame]]
 
-    # scale demand based on planning year and user input
-    if profile_year == planning_horizons[0]:
-        pass
-    elif isinstance(demand_scale, (int, float)):
-        demand *= demand_scale
-    elif demand_scale == "efs":
-        growth_rate = ReadEfs(snakemake.input.efs).get_growth_rate()
-        logger.warning("No scale appied for efs data")
-    elif demand_scale == "aeo":
-        growth_rate = get_aeo_growth_rate(eia_api, [profile_year, planning_horizons])
-        logger.warning("No scale appied for aeo data")
+    # assign demand to planning years and scale
+    demands = expand_demand(
+        demands,
+        planning_horizons,
+        scale_method,
+    )  # dict[str, dict[str, pd.DataFrame]]
 
     # electricity sector study
     if end_use == "power":

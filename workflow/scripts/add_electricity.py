@@ -246,7 +246,7 @@ def add_missing_heat_rates(plants, heat_rates_fn):
     hr_mapped = (
         plants.fuel_type.map(heat_rates.heat_rate_btu_per_kwh) / 1000
     )  # convert to mmbtu/mwh
-    plants["heat_rate"].fillna(hr_mapped, inplace=True)
+    plants["heat_rate"] = plants["heat_rate"].fillna(hr_mapped)
     return plants
 
 
@@ -272,7 +272,7 @@ def update_capital_costs(
 
     # map generators to states
     bus_state_mapper = n.buses.to_dict()["state"]
-    gen = n.generators[n.generators.carrier == carrier].copy()  # copy with warning
+    gen = n.generators[n.generators.carrier == carrier].copy()
     gen["state"] = gen.bus.map(bus_state_mapper)
     gen = gen[
         gen["state"].isin(multiplier.index)
@@ -282,12 +282,6 @@ def update_capital_costs(
     missed = gen[~gen["state"].isin(multiplier.index)]
     if not missed.empty:
         logger.warning(f"CAPEX cost multiplier not applied to {missed.state.unique()}")
-
-    # apply multiplier
-
-    # commented code is if applying multiplier to (capex + fom)
-    # gen["capital_cost"] = gen.apply(
-    #     lambda x: x["capital_cost"] * multiplier.at[x["state"], "Location Variation"], axis=1)
 
     # apply multiplier to annualized capital investment cost
     gen["investment"] = gen.apply(
@@ -342,7 +336,7 @@ def apply_dynamic_pricing(
     fuel_cost_per_gen = {gen: df[gens.at[gen, geography]] for gen in gens.index}
     fuel_costs = pd.DataFrame.from_dict(fuel_cost_per_gen)
     fuel_costs.index = pd.to_datetime(fuel_costs.index)
-    fuel_costs = broadcast_investment_horizons_index(n.snapshots, fuel_costs)
+    fuel_costs = broadcast_investment_horizons_index(n, fuel_costs)
 
     marginal_costs = fuel_costs.div(eff, axis=1)
     marginal_costs = marginal_costs + vom
@@ -756,10 +750,7 @@ def attach_wind_and_solar(
                 .drop(columns="sub_id")
                 .T
             )
-            bus_profiles = broadcast_investment_horizons_index(
-                n.snapshots,
-                bus_profiles,
-            )
+            bus_profiles = broadcast_investment_horizons_index(n, bus_profiles)
 
             if supcar == "offwind":
                 capital_cost = capital_cost.to_frame().reset_index()
@@ -909,15 +900,22 @@ def load_powerplants_eia(
     return plants
 
 
-def broadcast_investment_horizons_index(sns, df):
+def broadcast_investment_horizons_index(n: pypsa.Network, df: pd.DataFrame):
     """
     Broadcast the index of a dataframe to match the potentially multi-indexed
     investment periods of a PyPSA network.
     """
-    if len(df.index) == len(sns):
-        df.index = sns
-    else:  # if broadcasting is necessary
-        df = df.reindex(sns, level=1)
+    sns = n.snapshots
+    if not len(df.index) == len(sns):  # if broadcasting is necessary
+        df.index = pd.to_datetime(df.index)
+        dfs = []
+        for planning_horizon in n.investment_periods.to_list():
+            period_data = df.copy()
+            period_data.index = df.index.map(lambda x: x.replace(year=planning_horizon))
+            dfs.append(period_data)
+        df = pd.concat(dfs)
+        assert len(df.index) == len(sns)
+    df.index = sns
     return df
 
 
@@ -946,7 +944,7 @@ def apply_seasonal_capacity_derates(
         "winter_derate",
     ].astype(float)
 
-    p_max_pu = broadcast_investment_horizons_index(sns, p_max_pu)
+    p_max_pu = broadcast_investment_horizons_index(n, p_max_pu)
     n.generators_t.p_max_pu = pd.concat([n.generators_t.p_max_pu, p_max_pu], axis=1)
 
 
@@ -975,7 +973,7 @@ def apply_must_run_capacity_ratings(
     p_min_pu = pd.DataFrame(1.0, index=sns_dt, columns=must_run.index)
     p_min_pu.loc[:, must_run.index] *= must_run.loc[:, "minimum_cf"].astype(float)
 
-    p_min_pu = broadcast_investment_horizons_index(sns, p_min_pu)
+    p_min_pu = broadcast_investment_horizons_index(n, p_min_pu)
     n.generators_t.p_min_pu = pd.concat([n.generators_t.p_min_pu, p_min_pu], axis=1)
 
 
@@ -1147,6 +1145,9 @@ def main(snakemake):
                 # if data should exist, try to read it in
                 try:
                     df = pd.read_csv(snakemake.input[datafile], index_col="snapshot")
+                    if df.empty:
+                        logger.warning(f"No data provided for {datafile}")
+                        continue
                 except KeyError:
                     logger.warning(f"Can not find dynamic price file {datafile}")
                     continue
