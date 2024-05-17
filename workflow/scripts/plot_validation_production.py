@@ -245,6 +245,8 @@ def create_historic_region_data(
             "WALC": ["WALC", "GRIF"],
             "NWMT": ["NWMT", "GWA", "WWA"],
             "CISO": ["CISO", "BANC", "IID", "LDWP", "TIDC"],
+            "SEC": ["SEC", "GVL", "TEC","JEA","FMPP", "FPC"],
+            "FPL": ["FPL", "HST"],
         },
         "balancing_area": {
             "Arizona": ["AZPS", "SRP"],
@@ -318,6 +320,8 @@ def plot_regional_comparisons(
     diff = pd.DataFrame()
     # regions = [ba for ba in regions if ba in ["CISO"]] # Run to only produce ciso
     for region in regions:
+        if region == "ERCO" and snakemake.wildcards.interconnect == "eastern":
+            continue
         region_buses = buses.query(f"region == '{region}'").index
 
         historic_region = create_historic_region_data(
@@ -842,8 +846,8 @@ if __name__ == "__main__":
 
         snakemake = mock_snakemake(
             "plot_validation_figures",
-            interconnect="western",
-            clusters=40,
+            interconnect="eastern",
+            clusters=100,
             ll="v1.0",
             opts="Ep",
             sector="E",
