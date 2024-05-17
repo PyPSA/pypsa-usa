@@ -464,7 +464,6 @@ def match_plant_to_bus(n, plants):
 
     buses = n.buses.copy()
     buses["geometry"] = gpd.points_from_xy(buses["x"], buses["y"])
-    import pdb; pdb.set_trace()
     # from: https://stackoverflow.com/questions/58893719/find-nearest-point-in-other-dataframe-with-a-lot-of-data
     # Create a BallTree
     tree = BallTree(buses[["x", "y"]].values, leaf_size=2)
