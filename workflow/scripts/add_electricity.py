@@ -1074,6 +1074,9 @@ def main(snakemake):
                 # if data should exist, try to read it in
                 try:
                     df = pd.read_csv(snakemake.input[datafile], index_col="snapshot")
+                    if df.empty:
+                        logger.warning(f"No data provided for {datafile}")
+                        continue
                 except KeyError:
                     logger.warning(f"Can not find dynamic price file {datafile}")
                     continue
