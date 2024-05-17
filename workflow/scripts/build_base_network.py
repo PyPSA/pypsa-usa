@@ -644,10 +644,14 @@ def make_snapshots(
         invest_periods = [pd.to_datetime(sns_config["start"]).year]
     sns = pd.DatetimeIndex([])
     for year in invest_periods:
+        start = pd.to_datetime(sns_config["start"])
+        end = pd.to_datetime(sns_config["end"])
+        year_diff = end.year - start.year
+        assert year_diff in (0, 1)
         period = pd.date_range(
             freq="h",
-            start=pd.to_datetime(sns_config["start"]).replace(year=year),
-            end=pd.to_datetime(sns_config["end"]).replace(year=year),
+            start=start.replace(year=year),
+            end=end.replace(year=(year + year_diff)),
             inclusive=sns_config["inclusive"],
         )
         sns = sns.append(period)
@@ -833,6 +837,6 @@ if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
 
-        snakemake = mock_snakemake("build_base_network", interconnect="western")
+        snakemake = mock_snakemake("build_base_network", interconnect="texas")
     configure_logging(snakemake)
     main(snakemake)
