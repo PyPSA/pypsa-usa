@@ -126,27 +126,28 @@ if config["enable"].get("build_cutout", False):
         script:
             "../scripts/build_cutout.py"
 
-
-rule build_hydro_profiles:
+rule build_hydro_profile:
     params:
-        hydro=config["renewable"]["hydro"],
-        countries=config["countries"],
+        hydro=config_provider("renewable", "hydro"),
+        snapshots=config_provider("snapshots"),
     input:
-        ba_region_shapes=RESOURCES + "{interconnect}/onshore_shapes.geojson",
-        # eia_hydro_generation=DATA + "eia_hydro_annual_generation.csv",
-        cutout=f"cutouts/"
+        reeds_shapes=RESOURCES + "{interconnect}/reeds_shapes.geojson",
+        eia_hydro_generation="data/eia_hydro_annual_generation.csv",
+        eia_hydro_capacity="data/eia_hydro_annual_capacity.csv",
+        era5_runoff="data/era5-annual-runoff-per-country.csv",
+        cutout=lambda w: f"cutouts/"
         + CDIR
         + "{interconnect}_"
-        + config["renewable"]["hydro"]["cutout"]
+        + config_provider("renewable", "hydro", "cutout")(w)
         + ".nc",
     output:
-        RESOURCES + "{interconnect}/profile_hydro.nc",
+        profile=RESOURCES + "{interconnect}/profile_hydro.nc",
     log:
         LOGS + "{interconnect}/build_hydro_profile.log",
     resources:
         mem_mb=5000,
     conda:
-        "envs/environment.yaml"
+        "../envs/environment.yaml"
     script:
         "../scripts/build_hydro_profile.py"
 
@@ -411,7 +412,6 @@ rule add_electricity:
         **{
             f"profile_{tech}": RESOURCES + "{interconnect}" + f"/profile_{tech}.nc"
             for tech in config["electricity"]["renewable_carriers"]
-            if tech != "hydro"
         },
         **{
             f"conventional_{carrier}_{attr}": fn
@@ -430,8 +430,6 @@ rule add_electricity:
         # attach first horizon costs
         regions=RESOURCES + "{interconnect}/regions_onshore.geojson",
         plants_eia="repo_data/plants/plants_merged.csv",
-        plants_breakthrough=DATA + "breakthrough_network/base_grid/plant.csv",
-        hydro_breakthrough=DATA + "breakthrough_network/base_grid/hydro.csv",
         bus2sub=RESOURCES + "{interconnect}/bus2sub.csv",
         fuel_costs="repo_data/plants/fuelCost22.csv",
     output:

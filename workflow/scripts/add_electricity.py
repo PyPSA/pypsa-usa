@@ -390,74 +390,6 @@ def update_transmission_costs(n, costs, length_factor=1.0):
     )
     n.links.loc[dc_b, "capital_cost"] = costs
 
-
-def attach_breakthrough_renewable_plants(
-    n,
-    fn_plants,
-    renewable_carriers,
-    extendable_carriers,
-    costs,
-):
-
-    add_missing_carriers(n, renewable_carriers)
-
-    plants = pd.read_csv(fn_plants, dtype={"bus_id": str}, index_col=0).query(
-        "bus_id in @n.buses.index",
-    )
-    plants.replace(["wind_offshore"], ["offwind"], inplace=True)
-
-    for tech in renewable_carriers:
-        assert tech == "hydro"
-        tech_plants = plants.query("type == @tech")
-        tech_plants.index = tech_plants.index.astype(str)
-        logger.info(f"Adding {len(tech_plants)} {tech} generators to the network.")
-
-        p_nom_be = pd.read_csv(snakemake.input[f"{tech}_breakthrough"], index_col=0)
-
-        intersection = set(p_nom_be.columns).intersection(
-            tech_plants.index,
-        )  # filters by plants ID for the plants of type tech
-        p_nom_be = p_nom_be[list(intersection)]
-
-        Nhours = len(n.snapshots.get_level_values(1).unique())
-        p_nom_be = p_nom_be.iloc[
-            :Nhours,
-            :,
-        ]  # hotfix to fit 2016 renewable data to load data
-        p_nom_be.index = n.snapshots.get_level_values(1).unique()
-        p_nom_be.columns = p_nom_be.columns.astype(str)
-
-        if (tech_plants.Pmax == 0).any():
-            # p_nom is the maximum of {Pmax, dispatch}
-            p_nom = pd.concat([p_nom_be.max(axis=0), tech_plants["Pmax"]], axis=1).max(
-                axis=1,
-            )
-            p_max_pu = (p_nom_be[p_nom.index] / p_nom).fillna(0)  # some values remain 0
-        else:
-            p_nom = tech_plants.Pmax
-            p_max_pu = p_nom_be[tech_plants.index] / p_nom
-
-        p_max_pu = broadcast_investment_horizons_index(n.snapshots, p_max_pu)
-
-        n.madd(
-            "Generator",
-            tech_plants.index,
-            bus=tech_plants.bus_id,
-            p_nom_min=p_nom,
-            p_nom=p_nom,
-            marginal_cost=tech_plants.GenIOB
-            * tech_plants.GenFuelCost,  # (MMBTu/MW) * (USD/MMBTu) = USD/MW
-            # marginal_cost_quadratic = tech_plants.GenIOC * tech_plants.GenFuelCost,
-            capital_cost=costs.at[tech, "capital_cost"],
-            p_max_pu=p_max_pu,  # timeseries of max power output pu
-            p_nom_extendable=tech in extendable_carriers["Generator"],
-            carrier=tech,
-            weight=1.0,
-            efficiency=costs.at[tech, "efficiency"],
-        )
-    return n
-
-
 def match_plant_to_bus(n, plants):
     plants_matched = plants.copy()
     plants_matched["bus_assignment"] = None
@@ -592,6 +524,143 @@ def attach_conventional_generators(
     n.generators.loc[plants.index, "ba_eia"] = plants.balancing_authority_code
     n.generators.loc[plants.index, "ba_ads"] = plants.ads_balancing_area
 
+def normed(s):
+    return s / s.sum()
+
+def attach_hydro(n, costs, plants, profile_hydro, carriers, **params):
+    add_missing_carriers(n, carriers)
+    add_co2_emissions(n, costs, carriers)
+
+    plants = (
+        plants.query('carrier == "hydro"')
+        .reset_index(drop=True)
+        .rename(index=lambda s: f"{str(s)} hydro")
+    )
+    ror = plants.query('technology == "Run-Of-River"')
+    phs = plants.query('technology == "Hydroelectric Pumped Storage"')
+    hydro = plants.query('technology == "Conventional Hydroelectric"')
+
+    region = plants["bus_assignment"].map(n.buses.reeds_zone).rename("countries")
+
+    inflow_idx = ror.index.union(hydro.index)
+    if not inflow_idx.empty:
+        dist_key = plants.loc[inflow_idx, "p_nom"].groupby(region).transform(normed)
+
+        with xr.open_dataarray(profile_hydro) as inflow:
+            inflow_countries = pd.Index(region[inflow_idx])
+            missing_c = inflow_countries.unique().difference(
+                inflow.indexes["countries"]
+            )
+            assert missing_c.empty, (
+                f"'{profile_hydro}' is missing "
+                f"inflow time-series for at least one country: {', '.join(missing_c)}"
+            )
+
+            inflow_t = (
+                inflow.sel(countries=inflow_countries)
+                .rename({"countries": "name"})
+                .assign_coords(name=inflow_idx)
+                .transpose("time", "name")
+                .to_pandas()
+                .multiply(dist_key, axis=1)
+            )
+
+    if "ror" in carriers and not ror.empty:
+        n.madd(
+            "Generator",
+            ror.index,
+            carrier="ror",
+            bus=ror["bus"],
+            p_nom=ror["p_nom"],
+            efficiency=costs.at["ror", "efficiency"],
+            capital_cost=costs.at["ror", "capital_cost"],
+            weight=ror["p_nom"],
+            p_max_pu=(
+                inflow_t[ror.index]
+                .divide(ror["p_nom"], axis=1)
+                .where(lambda df: df <= 1.0, other=1.0)
+            ),
+        )
+
+    if "PHS" in carriers and not phs.empty:
+        # fill missing max hours to params value and
+        # assume no natural inflow due to lack of data
+        max_hours = params.get("PHS_max_hours", 6)
+        phs = phs.replace({"max_hours": {0: max_hours, np.nan: max_hours}})
+        n.madd(
+            "StorageUnit",
+            phs.index,
+            carrier="PHS",
+            bus=phs["bus"],
+            p_nom=phs["p_nom"],
+            capital_cost=costs.at["PHS", "capital_cost"],
+            max_hours=phs["max_hours"],
+            efficiency_store=np.sqrt(costs.at["PHS", "efficiency"]),
+            efficiency_dispatch=np.sqrt(costs.at["PHS", "efficiency"]),
+            cyclic_state_of_charge=True,
+        )
+
+    if "hydro" in carriers and not hydro.empty:
+        hydro_max_hours = params.get("hydro_max_hours")
+
+        assert hydro_max_hours is not None, "No path for hydro capacities given."
+
+        # eur code used to estimate missing hydro storage capacity from external statistics
+        # hydro_stats = pd.read_csv(
+        #     hydro_capacities, comment="#", na_values="-", index_col=0
+        # )
+        # e_target = hydro_stats["E_store[TWh]"].clip(lower=0.2) * 1e6
+        # e_installed = hydro.eval("p_nom * max_hours").groupby(hydro.country).sum()
+        # e_missing = e_target - e_installed
+        # missing_mh_i = hydro.query("max_hours.isnull()").index
+
+        # if hydro_max_hours == "energy_capacity_totals_by_country":
+        #     # watch out some p_nom values like IE's are totally underrepresented
+        #     max_hours_country = (
+        #         e_missing / hydro.loc[missing_mh_i].groupby("country").p_nom.sum()
+        #     )
+
+        # elif hydro_max_hours == "estimate_by_large_installations":
+        #     max_hours_country = (
+        #         hydro_stats["E_store[TWh]"] * 1e3 / hydro_stats["p_nom_discharge[GW]"]
+        #     )
+
+        # max_hours_country.clip(0, inplace=True)
+
+        # missing_countries = pd.Index(hydro["country"].unique()).difference(
+        #     max_hours_country.dropna().index
+        # )
+        # if not missing_countries.empty:
+        #     logger.warning(
+        #         f'Assuming max_hours=6 for hydro reservoirs in the countries: {", ".join(missing_countries)}'
+        #     )
+        # hydro_max_hours = hydro.max_hours.where(
+        #     hydro.max_hours > 0, hydro.country.map(max_hours_country)
+        # ).fillna(6)
+
+        if params.get("flatten_dispatch", False):
+            buffer = params.get("flatten_dispatch_buffer", 0.2)
+            average_capacity_factor = inflow_t[hydro.index].mean() / hydro["p_nom"]
+            p_max_pu = (average_capacity_factor + buffer).clip(upper=1)
+        else:
+            p_max_pu = 1
+
+        n.madd(
+            "StorageUnit",
+            hydro.index,
+            carrier="hydro",
+            bus=hydro["bus_assignment"],
+            p_nom=hydro["p_nom"],
+            max_hours=8, #Need to get actual hours on hydro storage capacity by plant. must be in EIA data
+            capital_cost=costs.at["hydro", "capital_cost"],
+            marginal_cost=costs.at["hydro", "marginal_cost"],
+            p_max_pu=p_max_pu,  # dispatch
+            p_min_pu=0.0,  # store
+            efficiency_dispatch=costs.at["hydro", "efficiency"],
+            efficiency_store=0.0,
+            cyclic_state_of_charge=True,
+            inflow=inflow_t.loc[:, hydro.index],
+        )
 
 def attach_wind_and_solar(
     n: pypsa.Network,
@@ -974,6 +1043,19 @@ def main(snakemake):
 
     plants = match_plant_to_bus(n, plants)
 
+    if "hydro" in renewable_carriers:
+        p = params.renewable["hydro"]
+        carriers = p.pop("carriers", [])
+        attach_hydro(
+            n,
+            costs,
+            plants,
+            snakemake.input.profile_hydro,
+            carriers,
+            **p,
+        )
+
+
     attach_conventional_generators(
         n,
         costs,
@@ -1023,14 +1105,9 @@ def main(snakemake):
         plants,
         renewable_carriers,
     )
-    # temporarily adding hydro with breakthrough only data until I can correctly import hydro_data
-    n = attach_breakthrough_renewable_plants(
-        n,
-        snakemake.input["plants_breakthrough"],
-        ["hydro"],
-        extendable_carriers,
-        costs,
-    )
+
+
+
     update_p_nom_max(n)
 
     # apply regional multipliers to capital cost data
