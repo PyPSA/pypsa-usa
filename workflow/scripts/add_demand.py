@@ -38,12 +38,11 @@ def attach_demand(n: pypsa.Network, df: pd.DataFrame, carrier: str, suffix: str)
 
 if __name__ == "__main__":
     if "snakemake" not in globals():
-        snakemake = mock_snakemake("add_demand", interconnect="texas")
+        snakemake = mock_snakemake("add_demand", interconnect="western")
     configure_logging(snakemake)
 
     demand_files = snakemake.input.demand
     n = pypsa.Network(snakemake.input.network)
-    n.set_investment_periods(periods=snakemake.params.planning_horizons)
 
     sectors = snakemake.params.sectors
 
