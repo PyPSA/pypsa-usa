@@ -36,7 +36,6 @@ dependencies:
 - plotly==5.17.0
 - graphviz
 - powerplantmatching
-- pre-commit
 
 # Keep in conda environment when calling ipython
 - ipython==8.16.1
