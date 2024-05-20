@@ -389,12 +389,15 @@ if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
 
-        snakemake = mock_snakemake("build_cost_data", year=2030)
+        snakemake = mock_snakemake("build_cost_data", year=2019)
         rootpath = ".."
     else:
         rootpath = "."
 
-    year = snakemake.wildcards.year
+    tech_year = snakemake.wildcards.year
+
+    years = range(2021, 2051)
+    tech_year = min(years, key=lambda x: abs(x - int(tech_year)))
 
     eur = pd.read_csv(snakemake.input.pypsa_technology_data)
     eur = correct_units(eur, {"USD": const.EUR_2_USD})
@@ -402,7 +405,7 @@ if __name__ == "__main__":
     # Pull all "default" from ATB
     atb = pd.read_parquet(snakemake.input.nrel_atb).set_index("core_metric_key")
     techs = list(const.ATB_TECH_MAPPER.keys())
-    atb_extracted = get_atb_data(atb, techs, year=year)
+    atb_extracted = get_atb_data(atb, techs, year=tech_year)
     atb_extracted = correct_fixed_cost(atb_extracted)
 
     # merge dataframes
