@@ -147,10 +147,16 @@ class Eulp:
         return df
 
     @staticmethod
-    def _resample_data(df: pd.DataFrame, resample: str = "1h") -> pd.DataFrame:
+    def _resample_data(df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Locked to resampling at 1hr.
+        """
         if not isinstance(df.index, pd.DatetimeIndex):
             df.index = pd.to_datetime(df.index)
-        return df.resample(resample).sum()
+        df.index = df.index.map(lambda x: x.replace(year=2018))
+        resampled = df.resample("1h").sum()
+        assert len(resampled == 8760), "Length of resampled != 8760 :("
+        return resampled.sort_index()
 
     def _aggregate_data(self, df: pd.DataFrame) -> pd.DataFrame:
 
@@ -245,7 +251,7 @@ class EulpTotals:
         return self.data["oil"]
 
     @property
-    def oil(self):
+    def propane(self):
         return self.data["propane"]
 
     @staticmethod
@@ -255,10 +261,16 @@ class EulpTotals:
         return df
 
     @staticmethod
-    def _resample_data(df: pd.DataFrame, resample: str = "1h") -> pd.DataFrame:
+    def _resample_data(df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Locked to resampling at 1hr.
+        """
         if not isinstance(df.index, pd.DatetimeIndex):
             df.index = pd.to_datetime(df.index)
-        return df.resample(resample).sum()
+        df.index = df.index.map(lambda x: x.replace(year=2018))
+        resampled = df.resample("1h").sum()
+        assert len(resampled == 8760), "Length of resampled != 8760 :("
+        return resampled.sort_index()
 
     def _aggregate_data(self, df: pd.DataFrame) -> pd.DataFrame:
 
@@ -294,3 +306,7 @@ class EulpTotals:
 
     def to_csv(self, path_or_buf: str, **kwargs):
         self.data.to_csv(path_or_buf=path_or_buf, **kwargs)
+
+
+# if __name__ == "__main__":
+#     Eulp("./../data/eulp/res/TX/mobile_home.csv")
