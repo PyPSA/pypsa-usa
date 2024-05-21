@@ -505,15 +505,6 @@ class ReadEulp(ReadStrategy):
             columns="state",
             aggfunc="sum",
         )
-        ##################################################################
-        ## REMOVE THIS ONCE 2018 CUTOUTS ARE CREATED
-        ##################################################################
-        df = df.reset_index()
-        df["snapshot"] = df.snapshot.map(lambda x: x.replace(year=2019))
-        df = df.set_index(["snapshot", "sector", "subsector", "fuel"])
-        ##################################################################
-        ## REMOVE THIS ONCE 2018 CUTOUTS ARE CREATED
-        ##################################################################
         df = df.rename(columns=CODE_2_STATE)
         assert len(df.index.get_level_values("snapshot").unique()) == 8760
         assert not df.empty
@@ -1083,7 +1074,7 @@ class WriteStrategy(ABC):
         filtered = filtered[~filtered.index.duplicated(keep="last")]  # issue-272
         assert len(filtered.index.get_level_values("snapshot").unique()) == len(
             sns.unique(),
-        )
+        ), "Filtered snapshots do not match expected snapshots"
         return filtered
 
     @staticmethod
@@ -1199,7 +1190,11 @@ class WriteStrategy(ABC):
         Make a demand dataframe with zeros.
         """
         n = self.n
-        return pd.DataFrame(columns=columns, index=n.snapshots).fillna(0)
+        return (
+            pd.DataFrame(columns=columns, index=n.snapshots.get_level_values(1))
+            .infer_objects()
+            .fillna(0)
+        )
 
 
 class WritePopulation(WriteStrategy):
@@ -1395,7 +1390,7 @@ def reindex_demand(df: pd.DataFrame, year: int) -> pd.DataFrame:
     return new
 
 
-def expand_demand(
+def expand_demands(
     demands: dict[str, dict[str : pd.DataFrame]],
     planning_horizons: list[int],
     scale_method: str,
@@ -1409,19 +1404,25 @@ def expand_demand(
     for sector, fuels in demands.items():
         expanded[sector] = {}
         for fuel, demand in fuels.items():
-            dfs = []
-            for planning_horizon in planning_horizons:
-                df = demand[demand.index.year == planning_horizon]
-                if not df.empty:
-                    dfs.append(df)
-                else:
-                    profile_year = demand.index[0].year
-                    df = demand[demand.index.year == profile_year]
-                    df = reindex_demand(df, planning_horizon)
-                    # scale demand here
-                    dfs.append(df)
+            dfs = [expand_demand(demand, x) for x in planning_horizons]
             expanded[sector][fuel] = pd.concat(dfs)
     return expanded
+
+
+def expand_demand(
+    demand: pd.DataFrame,
+    planning_horizon: int,
+) -> pd.DataFrame:
+    df = demand[demand.index.year == planning_horizon]
+
+    if not df.empty:
+        return df
+
+    profile_year = demand.index[0].year
+    df = demand[demand.index.year == profile_year]
+    df = reindex_demand(df, planning_horizon)
+    # scale demand here
+    return df
 
 
 def scale_demand(method: str):
@@ -1516,10 +1517,15 @@ if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
 
+        # snakemake = mock_snakemake(
+        #     "build_electrical_demand",
+        #     interconnect="texas",
+        #     end_use="power",
+        # )
         snakemake = mock_snakemake(
             "build_sector_demand",
-            interconnect="western",
-            end_use="industry",
+            interconnect="texas",
+            end_use="transport",
         )
     configure_logging(snakemake)
 
@@ -1569,14 +1575,16 @@ if __name__ == "__main__":
     elif demand_profile == "eulp":
         stock = {"residential": "res", "commercial": "com"}
         reader = ReadEulp(demand_files, stock[end_use])  # 'res' or 'com'
-        # assert profile_year == 2018,
         sns = n.snapshots.get_level_values(1).map(
-            lambda x: x.replace(year=profile_year),
+            lambda x: x.replace(year=2018),
         )
     elif demand_profile == "cliu":
         cliu_file = demand_files[0]
         epri_profiles = demand_files[1]
         mecs_data = demand_files[1]
+        sns = n.snapshots.get_level_values(1).map(
+            lambda x: x.replace(year=2014),
+        )
         reader = ReadCliu(
             cliu_file,
             profiles_filepath=epri_profiles,
@@ -1612,7 +1620,7 @@ if __name__ == "__main__":
         )  # dict[str, dict[str, pd.DataFrame]]
 
     # assign demand to planning years and scale
-    demands = expand_demand(
+    demands = expand_demands(
         demands,
         planning_horizons,
         scale_method,

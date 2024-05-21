@@ -332,6 +332,7 @@ rule build_sector_demand:
         end_use="residential|commercial|industry|transport",
     params:
         planning_horizons=config["scenario"]["planning_horizons"],
+        profile_year=pd.to_datetime(config["snapshots"]["start"]).year,
         demand_params=config["sector"]["demand"],
         eia_api=config["api"]["eia"],
     input:
