@@ -675,7 +675,25 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
         costs = costs[["value"]].astype("float")
         costs = costs / 1000 * MWH_2_MMCF
 
-        return costs.resample("H").asfreq().interpolate(method=interpoloation_method)
+        return costs.resample("1h").asfreq().interpolate(method=interpoloation_method)
+
+    def _expand_costs(self, n: pypsa.Network, costs: pd.DataFrame) -> pd.DataFrame:
+        """
+        Expands import/export costs over snapshots and investment periods.
+        """
+        expanded_costs = []
+        for invesetment_period in n.investment_periods:
+            # reindex to match any tsa
+            cost = costs.copy()
+            cost.index = cost.index.map(lambda x: x.replace(year=invesetment_period))
+            cost = cost.reindex(n.snapshots.get_level_values(1), method="nearest")
+            # set investment periods
+            # https://stackoverflow.com/a/56278736/14961492
+            old_idx = cost.index.to_frame()
+            old_idx.insert(0, "period", invesetment_period)
+            cost.index = pd.MultiIndex.from_frame(old_idx)
+            expanded_costs.append(cost)
+        return pd.concat(expanded_costs)
 
     def build_infrastructure(self, n: pypsa.Network) -> None:
         """
@@ -740,10 +758,7 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
 
         if not self.domestic:
             export_costs = self._get_international_costs("exports")
-            export_costs = export_costs[
-                (export_costs.index >= n.snapshots[0])
-                & (export_costs.index <= n.snapshots[-1])
-            ].copy()
+            export_costs = self._expand_costs(n, export_costs)
             for link in to_from.index:
                 export_costs[link] = export_costs["value"]
             export_costs = export_costs.drop(columns=["value"])
@@ -767,12 +782,9 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
         )
 
         if not self.domestic:
-            import_costs = self._get_international_costs("imports")
-            import_costs = import_costs[
-                (import_costs.index >= n.snapshots[0])
-                & (import_costs.index <= n.snapshots[-1])
-            ].copy()
-            for link in from_to.index:
+            import_costs = self._get_international_costs("exports")
+            import_costs = self._expand_costs(n, import_costs)
+            for link in to_from.index:
                 import_costs[link] = import_costs["value"]
             import_costs = import_costs.drop(columns=["value"])
         else:

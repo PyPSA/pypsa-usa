@@ -45,7 +45,14 @@ FIGURES_SYSTEM = [
     "region_lmps.pdf",
 ]
 
-FIGURES_NATURAL_GAS = ["natural_gas.html"]
+FIGURES_NATURAL_GAS = [
+    "natural_gas_demand.html",
+    "natural_gas_processing.html",
+    "natural_gas_linepack.html",
+    "natural_gas_storage.html",
+    "natural_gas_domestic_trade.html",
+    "natural_gas_international_trade.html",
+]
 
 FIGURES_VALIDATE = [
     "seasonal_stacked_plot.pdf",
