@@ -133,9 +133,6 @@ rule build_hydro_profile:
         snapshots=config_provider("snapshots"),
     input:
         reeds_shapes=RESOURCES + "{interconnect}/reeds_shapes.geojson",
-        eia_hydro_generation="data/eia_hydro_annual_generation.csv",
-        eia_hydro_capacity="data/eia_hydro_annual_capacity.csv",
-        era5_runoff="data/era5-annual-runoff-per-country.csv",
         cutout=lambda w: f"cutouts/"
         + CDIR
         + "{interconnect}_"

@@ -585,10 +585,10 @@ def attach_hydro(n, costs, plants, profile_hydro, carriers, **params):
             "StorageUnit",
             phs.index,
             carrier="PHS",
-            bus=phs["bus"],
+            bus=phs["bus_assignment"],
             p_nom=phs["p_nom"],
-            capital_cost=costs.at["PHS", "capital_cost"],
-            max_hours=phs["max_hours"],
+            p_nom_extendable=False,
+            max_hours=6, # Need to pull actual max hours
             efficiency_store=np.sqrt(costs.at["PHS", "efficiency"]),
             efficiency_dispatch=np.sqrt(costs.at["PHS", "efficiency"]),
             cyclic_state_of_charge=True,
@@ -599,7 +599,7 @@ def attach_hydro(n, costs, plants, profile_hydro, carriers, **params):
 
         assert hydro_max_hours is not None, "No path for hydro capacities given."
 
-        # eur code used to estimate missing hydro storage capacity from external statistics
+        #### eur code used to estimate missing hydro storage capacity from external statistics
         # hydro_stats = pd.read_csv(
         #     hydro_capacities, comment="#", na_values="-", index_col=0
         # )
@@ -638,7 +638,7 @@ def attach_hydro(n, costs, plants, profile_hydro, carriers, **params):
             p_max_pu = (average_capacity_factor + buffer).clip(upper=1)
         else:
             p_max_pu = 1
-
+        # Need to fix scaling of hydro for each region and plant.
         n.madd(
             "StorageUnit",
             hydro.index,
@@ -906,6 +906,7 @@ def broadcast_investment_horizons_index(n: pypsa.Network, df: pd.DataFrame):
     investment periods of a PyPSA network.
     """
     sns = n.snapshots
+
     if not len(df.index) == len(sns):  # if broadcasting is necessary
         df.index = pd.to_datetime(df.index)
         dfs = []
@@ -1189,6 +1190,6 @@ if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
 
-        snakemake = mock_snakemake("add_electricity", interconnect="texas")
+        snakemake = mock_snakemake("add_electricity", interconnect="western")
     configure_logging(snakemake)
     main(snakemake)
