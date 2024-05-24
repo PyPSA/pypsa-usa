@@ -90,7 +90,7 @@ import logging
 import atlite
 import geopandas as gpd
 import pandas as pd
-from _helpers import configure_logging
+from _helpers import configure_logging, get_snapshots
 
 logger = logging.getLogger(__name__)
 
@@ -107,7 +107,7 @@ if __name__ == "__main__":
 
     # data set and temporal patameters
     cutout_params = snakemake.params.cutouts[snakemake.wildcards.cutout]
-    snapshots = pd.date_range(freq="h", **snakemake.params.snapshots)
+    snapshots = get_snapshots(snakemake.params.snapshots)
     time = [snapshots[0], snapshots[-1]]
     cutout_params["time"] = slice(*cutout_params.get("time", time))
 

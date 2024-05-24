@@ -1095,7 +1095,7 @@ if __name__ == "__main__":
 
         snakemake = mock_snakemake(
             "build_electrical_demand",
-            interconnect="western",
+            interconnect="texas",
             end_use="power",
         )
     configure_logging(snakemake)
