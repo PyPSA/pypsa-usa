@@ -29,7 +29,7 @@ from typing import List
 import constants as const
 import eia
 import pandas as pd
-from _helpers import configure_logging, mock_snakemake
+from _helpers import configure_logging, get_snapshots, mock_snakemake
 
 logger = logging.getLogger(__name__)
 
@@ -152,19 +152,9 @@ if __name__ == "__main__":
         snakemake = mock_snakemake("build_fuel_prices", interconnect="western")
     configure_logging(snakemake)
 
-    snapshot_config = snakemake.config["snapshots"]
-    sns_start = pd.to_datetime(snapshot_config["start"])
-    sns_end = pd.to_datetime(snapshot_config["end"])
-    sns_inclusive = snapshot_config["inclusive"]
-
     eia_api = snakemake.params.api_eia
 
-    snapshots = pd.date_range(
-        freq="h",
-        start=sns_start,
-        end=sns_end,
-        inclusive=sns_inclusive,
-    )
+    snapshots = get_snapshots(snakemake.params.snapshots)
 
     function_mapper = {
         "caiso_ng_power_prices": get_caiso_ng_power_prices,

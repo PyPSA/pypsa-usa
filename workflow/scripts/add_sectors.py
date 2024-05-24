@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 import sys
 
 import constants
-from _helpers import configure_logging
+from _helpers import configure_logging, get_snapshots
 from build_natural_gas import build_natural_gas
 from shapely.geometry import Point
 
@@ -94,10 +94,12 @@ if __name__ == "__main__":
     code_2_state = {v: k for k, v in constants.STATE_2_CODE.items()}
     assign_bus_2_state(n, snakemake.input.county, states_2_map, code_2_state)
 
+    sns = get_snapshots(snakemake.params.snapshots)
+
     if "G" in sectors:
         build_natural_gas(
             n=n,
-            year=pd.to_datetime(snakemake.params.snapshots["start"]).year,
+            year=sns[0].year,
             api=snakemake.params.api["eia"],
             interconnect=snakemake.wildcards.interconnect,
             county_path=snakemake.input.county,
