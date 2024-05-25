@@ -264,9 +264,10 @@ def sector_study_demand(wildcards):
             return DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv"
         elif profile == "cliu":
             return [
-                DATA + "industry_load/2014_update_20170910-0116.csv",
-                DATA + "industry_load/epri_industrial_loads.csv",
+                DATA + "industry_load/2014_update_20170910-0116.csv",  # cliu data
+                DATA + "industry_load/epri_industrial_loads.csv",  # epri data
                 DATA + "industry_load/table3_2.xlsx",  # mecs data
+                DATA + "industry_load/fips_codes.csv",  # fips data
             ]
         else:
             return ""

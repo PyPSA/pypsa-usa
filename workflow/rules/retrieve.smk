@@ -85,6 +85,7 @@ sector_datafiles = [
     "industry_load/2014_update_20170910-0116.csv",
     "industry_load/epri_industrial_loads.csv",
     "industry_load/fips_codes.csv",
+    "industry_load/table3_2.xlsx",
 ]
 
 

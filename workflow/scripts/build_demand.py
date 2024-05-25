@@ -545,6 +545,7 @@ class ReadCliu(ReadStrategy):
     - https://data.nrel.gov/submissions/97
     - https://www.eia.gov/consumption/manufacturing/data/2014/#r3 (Table 3.2)
     - https://loadshape.epri.com/enduse
+    - https://github.com/NREL/Industry-Energy-Tool/
     """
 
     # these are super rough and can be imporoved
@@ -589,12 +590,14 @@ class ReadCliu(ReadStrategy):
     def __init__(
         self,
         filepath: str | list[str],
-        profiles_filepath: Optional[str] = None,
+        epri_filepath: Optional[str] = None,
         mecs_filepath: Optional[str] = None,
+        fips_filepath: Optional[str] = None,
     ) -> None:
-        super().__init__(filepath)  # filepath is CLIU data
-        self._profiles_filepath = profiles_filepath  # profiles is EPRI
+        super().__init__(filepath)
+        self._epri_filepath = epri_filepath
         self._mecs_filepath = mecs_filepath
+        self._fips_filepath = fips_filepath
         self._zone = "state"
 
     @property
@@ -629,29 +632,23 @@ class ReadCliu(ReadStrategy):
         df["fipstate"] = df.fipstate.map(lambda x: FIPS_2_STATE[f"{x:02d}"].title())
         return df
 
-    def _format_data(self, county_demand: Any) -> pd.DataFrame:
+    def _format_data(self, county_demand: Any, scale_mecs: bool = True) -> pd.DataFrame:
         annual_demand = self._group_by_naics(county_demand, group_by_subsector=False)
-        annual_demand = self._group_by_fuels(annual_demand)
-        annual_demand = annual_demand * TBTU_2_MWH
-        profiles = self.get_demand_profiles(add_lpg=True)
-        return self._apply_profiles(annual_demand, profiles)
-
-    def get_county_demand(self, scale_mecs: bool = False) -> pd.DataFrame:
-        """
-        Public method to extract CLIU data in TBTU.
-        """
-        df = self._read_data()
-        df = self._group_by_naics(df, group_by_subsector=False)
         if scale_mecs:
             assert self._mecs_filepath, "Must provide MECS data"
+            assert self._fips_filepath, "Must provide FIPS data"
             mecs = self._read_mecs_data()
-        return self._group_by_fuels(df)
+            fips = self._read_fips_data()
+            annual_demand = self._apply_mecs(annual_demand, mecs, fips)
+        annual_demand = self._group_by_fuels(annual_demand) * TBTU_2_MWH
+        profiles = self.get_demand_profiles(add_lpg=True)
+        return self._apply_profiles(annual_demand, profiles)
 
     def get_demand_profiles(self, add_lpg: bool = True):
         """
         Public method to extract EPRI data.
         """
-        if not self._profiles_filepath:
+        if not self._epri_filepath:
             logger.warning("No EPRI profiles provided")
             return
         df = self._read_epri_data(profile_only=False)
@@ -799,7 +796,7 @@ class ReadCliu(ReadStrategy):
                 "Scale Multiplier": float,
             },
         )
-        df = pd.read_csv(self._profiles_filepath, dtype=dtypes)
+        df = pd.read_csv(self._epri_filepath, dtype=dtypes)
 
         if not profile_only:
             cols_2_scale = [f"HR{x}" for x in range(1, 25)]
@@ -901,13 +898,11 @@ class ReadCliu(ReadStrategy):
 
     def _read_mecs_data(self) -> pd.DataFrame:
         """
-        Reads MECS data.
+        Reads MECS data; units of TBTU.
 
         Adapted from:
-        https://github.com/NREL/Industry-Energy-Tool/data_foundation/data_comparison/compare_mecs.py
+        https://github.com/NREL/Industry-Energy-Tool/blob/master/data_foundation/data_comparison/compare_mecs.py
         """
-
-        header_rows = 10
 
         cols_renamed = {
             "Code(a)": "NAICS",
@@ -920,34 +915,67 @@ class ReadCliu(ReadStrategy):
             "Other(f)": "Other",
         }
 
-        mecs = pd.read_excel(self._mecs, sheet_name="table 3.2", header=header_rows)
-        mecs = mecs.rename(columns=cols_renamed)
-        mecs = mecs.dropna(axis=0, how="all")
-        mecs.loc[:, "Region"] = mecs[mecs.Total.apply(lambda x: len(str(x)) > 7)].Total
-        mecs = mecs.Region.fillna(method="ffill")
-        mecs = mecs.dropna(axis=0)
-        mecs.loc[:, "NAICS"] = mecs.NAICS.apply(lambda x: int(x))
-        mecs = mecs.replace(to_replace={"*": np.nan, "Q": np.nan, "W": np.nan})
+        mecs = (
+            pd.read_excel(self._mecs_filepath, sheet_name="table 3.2", header=10)
+            .rename(columns=cols_renamed)
+            .dropna(axis=0, how="all")
+        )
+        # >7 filters out all naics codes
+        mecs["Region"] = mecs[mecs.Total.apply(lambda x: len(str(x)) > 7)].Total
+        mecs["Region"] = mecs.Region.ffill()
+        mecs = mecs.dropna(axis=0).drop("Subsector and Industry", axis=1)
+        mecs["NAICS"] = mecs.NAICS.astype(int)
+        mecs = (
+            mecs.set_index(["Region", "NAICS"], drop=True)
+            .replace({"*": "0", "Q": "0", "W": "0"})
+            .astype(float)
+        )
+        assert not (mecs == np.NaN).any().any()
         return mecs
 
-        # Need to convert 2007 NAICS used for MECS 2010 to 2012 NAICS
-        if year == 2010:
+    def _apply_mecs(
+        self,
+        cliu: pd.DataFrame,
+        mecs: pd.DataFrame,
+        fips: pd.DataFrame,
+    ) -> pd.DataFrame:
+        """
+        Scales CLIU data by MECS data.
+        """
+        cliu = self._assign_mecs_regions(cliu, fips)
+        cliu = self._scale_cliu_on_mecs(cliu, mecs)
+        return cliu.drop(columns=["mecs"])
 
-            update_index = mecs[mecs.NAICS.apply(lambda x: len(str(x))) == 6].index
+    def _read_fips_data(self) -> pd.DataFrame:
+        """
+        Reads FIPS data.
+        """
 
-            mecs.loc[update_index, "NAICS"] = mecs.loc[update_index, "NAICS"].map(
-                lambda x: naics_update[x],
+        return (
+            pd.read_csv(self._fips_filepath)
+            .drop(columns=["FIPS_County", "FIPS State"])
+            .rename(
+                columns={
+                    "State": "state",
+                    "County_Name": "county",
+                    "COUNTY_FIPS": "county_code",
+                    "MECS_Region": "mecs",
+                },
             )
+        )
 
-            mecs = mecs.groupby(["Region", "NAICS"], as_index=False).sum()
+    @staticmethod
+    def _assign_mecs_regions(cliu: pd.DataFrame, fips: pd.DataFrame) -> pd.DataFrame:
 
-        else:
+        cliu["mecs"] = cliu.index.get_level_values("state").map(
+            fips.set_index("state")["mecs"].to_dict(),
+        )
+        return cliu
 
-            mecs.drop("Subsector and Industry", axis=1, inplace=True)
+    @staticmethod
+    def _scale_cliu_on_mecs(cliu: pd.DataFrame, mecs: pd.DataFrame) -> pd.DataFrame:
 
-        mecs.set_index(["Region", "NAICS"], drop=True, inplace=True)
-
-        return mecs
+        return cliu
 
 
 ###
@@ -1525,7 +1553,7 @@ if __name__ == "__main__":
         snakemake = mock_snakemake(
             "build_sector_demand",
             interconnect="texas",
-            end_use="transport",
+            end_use="industry",
         )
     configure_logging(snakemake)
 
@@ -1580,15 +1608,17 @@ if __name__ == "__main__":
         )
     elif demand_profile == "cliu":
         cliu_file = demand_files[0]
-        epri_profiles = demand_files[1]
-        mecs_data = demand_files[1]
+        epri_file = demand_files[1]
+        mecs_file = demand_files[2]
+        fips_file = demand_files[3]
         sns = n.snapshots.get_level_values(1).map(
             lambda x: x.replace(year=2014),
         )
         reader = ReadCliu(
             cliu_file,
-            profiles_filepath=epri_profiles,
-            mecs_filepath=mecs_data,
+            epri_filepath=epri_file,
+            mecs_filepath=mecs_file,
+            fips_filepath=fips_file,
         )
 
     else:
