@@ -298,7 +298,7 @@ rule add_electricity:
         tech_costs=RESOURCES + f"costs_{config['costs']['year']}.csv",
         regions=RESOURCES + "{interconnect}/regions_onshore.geojson",
         plants_eia="repo_data/plants/plants_merged.csv",
-        # plants_tx=f"repo_data/ercot_specific/{config['capacity_from_reeds']}.csv",
+        plants_tx=f"repo_data/ercot_specific/{config['texas_specific']['capacity_ercot']}.csv",
         plants_ads="repo_data/plants/ads_plants_locs.csv",
         plants_breakthrough=DATA + "breakthrough_network/base_grid/plant.csv",
         hydro_breakthrough=DATA + "breakthrough_network/base_grid/hydro.csv",

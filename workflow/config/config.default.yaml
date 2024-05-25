@@ -9,8 +9,8 @@ run:
 
 # docs :
 scenario:
-  interconnect: [western] #"usa|texas|western|eastern"
-  clusters: [40]
+  interconnect: [texas] #"usa|texas|western|eastern"
+  clusters: [10]
   opts: [Ep-Co2L1-egs0]
   ll: [v2]
   scope: "total" # "urban", "rural", or "total"
@@ -31,16 +31,21 @@ snapshots:
   end: "2020-01-01"
   inclusive: "left"
 
+# Texas reliability study
+texas_specific: 
+  texas_reliability: true
+  replace_uri: true
+  capacity_ercot: 'ercot_cap_2024_jul'
 
 # docs :
 electricity:
   conventional_carriers: [nuclear, oil, OCGT, CCGT, coal, egs, geothermal, biomass] # Choose the conventional plant types to include in network
   renewable_carriers: [onwind, offwind, offwind_floating, solar, hydro] # Choose the renewable plant types to include in network
   voltage_simplified: 230 #Voltage level to simplify network to in rule "simplify network"
-  co2limit: 1.0e+6 # 0.8 * 1.841e+9
+  co2limit: 663.5e+6 # 0.8 * 1.841e+9
   co2limit_enable: true # For sector coupled studies
-  co2base: 226.86e+6 #base_from_2020 Locations of the 250 MMmt of CO2 emissions from the WECC 2021.
-  # co2base: 663.5e+6 #Texas in 2021
+  #co2base: 226.86e+6 #base_from_2020 Locations of the 250 MMmt of CO2 emissions from the WECC 2021.
+  co2base: 663.5e+6 #Texas in 2021
   gaslimit: false # global gas usage limit of X MWh_th
   gaslimit_enable: false # For sector coupled studies
   retirement: economic # "economic" or "technical"
@@ -57,9 +62,9 @@ electricity:
 
   geothermal:
     egs: true
-    egs_reduction: 0.3
+    egs_reduction: 0.9
     egs_sc_file: 'new_geo_egs_supply_curve.geojson'
-    storage: true
+    storage: false
 
   operational_reserve:
     activate: false
@@ -80,7 +85,7 @@ electricity:
 
   demand: 
     profile: efs # efs, eia
-    scale: 1 # efs, aeo, or a number 
+    scale: 1.36 # efs, aeo, or a number 
     scaling_factor_monthly: [1.196442, 1.279420, 1.361699, 1.206554, 1.198357, 1.043080, 1.057570, 1.056679, 1.002989, 1.111066, 1.302436, 1.367929]
     disaggregation: pop # pop
     scenario: 

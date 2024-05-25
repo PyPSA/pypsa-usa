@@ -59,8 +59,8 @@ electricity:
   autarky:
     by_country: false
     enable: false
-  co2base: 226860000.0
-  co2limit: 1000000.0
+  co2base: 663500000.0
+  co2limit: 663500000.0
   co2limit_enable: true
   conventional_carriers:
   - nuclear
@@ -74,7 +74,7 @@ electricity:
   demand:
     disaggregation: pop
     profile: efs
-    scale: 1
+    scale: 1.36
     scaling_factor_monthly:
     - 1.196442
     - 1.27942
@@ -110,9 +110,9 @@ electricity:
   gaslimit_enable: false
   geothermal:
     egs: true
-    egs_reduction: 0.8
+    egs_reduction: 0.9
     egs_sc_file: new_geo_egs_supply_curve.geojson
-    storage: true
+    storage: false
   max_hours:
     H2: 168
     battery: 6
@@ -165,12 +165,12 @@ run:
   validation: false
 scenario:
   clusters:
-  - 40
+  - 10
   interconnect:
-  - western
+  - texas
   ll:
   - v2
-  opts: Ep-Co2L0-egsR0.8
+  opts: Ep-Co2L1-egsR0.9
   planning_horizons:
   - 2030
   scope: total
@@ -277,3 +277,7 @@ solving:
       solver: ipm
       threads: 4
   walltime: '12:00:00'
+texas_specific:
+  capacity_ercot: ercot_cap_2024_jul
+  replace_uri: true
+  texas_reliability: true

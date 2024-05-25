@@ -1059,6 +1059,27 @@ def load_powerplants_eia(
 
     return plants
 
+def load_powerplants_texas(
+    dataset: str
+) -> pd.DataFrame:
+    # load data
+    plants = pd.read_csv(
+        dataset, 
+        dtype={"bus_assignment": "str"}).rename(columns=str.lower)
+
+    plants['interconnection'] = 'texas'
+
+    plants = add_missing_fuel_cost(plants, snakemake.input.fuel_costs)
+    plants = add_missing_heat_rates(plants, snakemake.input.fuel_costs)
+
+    plants.set_index('generator_name', inplace=True)
+    plants['marginal_cost'] = plants.heat_rate * plants.fuel_cost  #(MMBTu/MW) * (USD/MMBTu) = USD/MW
+    plants["efficiency"] = 1 / (
+        plants["heat_rate"] / 3.412
+    )  # MMBTu/MWh to MWh_electric/MWh_thermal
+
+    return plants
+
 
 def apply_seasonal_capacity_derates(
     n: pypsa.Network,
@@ -1408,7 +1429,7 @@ def add_ercot_outage(n: pypsa.Network,
 def main(snakemake):
     params = snakemake.params
     configuration = snakemake.config["network_configuration"]
-    # texas_reliability = snakemake.config["texas_reliability"]
+    texas_reliability = snakemake.config['texas_specific']["texas_reliability"]
     interconnection = snakemake.wildcards["interconnect"]
     planning_horizons = snakemake.params["planning_horizons"]
 
@@ -1461,11 +1482,12 @@ def main(snakemake):
         unit_commitment = None
 
     if configuration == "pypsa-usa":
-        # if texas_reliability: 
-        #     plants = load_powerplants_texas(snakemake.input['plants_tx'])
-        plants = load_powerplants_eia(
-            snakemake.input["plants_eia"],
-            interconnect=interconnection)
+        if texas_reliability: 
+            plants = load_powerplants_texas(snakemake.input['plants_tx'])
+        else:
+            plants = load_powerplants_eia(
+                snakemake.input["plants_eia"],
+                interconnect=interconnection)
     elif configuration == "ads2032":
         plants = load_powerplants_ads(
             snakemake.input["plants_ads"],
