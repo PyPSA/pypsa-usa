@@ -416,7 +416,18 @@ class ReadEfs(ReadStrategy):
         """
         # minus 1 cause indexing starts at 1
         df["hoy"] = pd.to_timedelta(df.UtcHourID - 1, unit="h")
-        df["time"] = pd.to_datetime(df.Year, format="%Y") + df.hoy
+        # assign everything 2018 (non-leap year) then correct just the year
+        # EFS does not do leap-years, so we must do this
+        df["time"] = pd.to_datetime(2018, format="%Y") + df.hoy
+        time = pd.to_datetime(
+            {
+                "year": df.Year,
+                "month": df.time.dt.month,
+                "day": df.time.dt.day,
+                "hour": df.time.dt.hour,
+            },
+        )
+        df["time"] = time
         return df.drop(columns=["Year", "UtcHourID", "hoy"])
 
     def get_growth_rate(self):
@@ -1596,7 +1607,7 @@ if __name__ == "__main__":
         snakemake = mock_snakemake(
             "build_sector_demand",
             interconnect="texas",
-            end_use="industry",
+            end_use="transport",
         )
     configure_logging(snakemake)
 
