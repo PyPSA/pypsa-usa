@@ -206,14 +206,13 @@ rule build_renewable_profiles:
 # eastern broken out just to aviod awful formatting issues
 # texas in western due to spillover of interconnect
 INTERCONNECT_2_STATE = {
-    "eastern": ["AL", "AR", "CT", "DE", "DC", "FL", "GA", "IL", "IN", "IA", "KS", "KY"],
+    "eastern": ["AL", "AR", "CT", "DE", "FL", "GA", "IL", "IN", "IA", "KS", "KY", "LA"],
     "western": ["AZ", "CA", "CO", "ID", "MT", "NV", "NM", "OR", "UT", "WA", "WY", "TX"],
     "texas": ["TX"],
 }
-INTERCONNECT_2_STATE["eastern"].extend(["LA", "ME", "MD", "MA", "MI", "MN", "MS", "MO"])
-INTERCONNECT_2_STATE["eastern"].extend(["NE", "NH", "NJ", "NY", "NC", "ND", "OH", "OK"])
-INTERCONNECT_2_STATE["eastern"].extend(["PA", "RI", "SC", "SD", "TN", "VT", "VA", "VI"])
-INTERCONNECT_2_STATE["eastern"].extend(["WV", "WI"])
+INTERCONNECT_2_STATE["eastern"].extend(["ME", "MD", "MA", "MI", "MN", "MS", "MO", "NE"])
+INTERCONNECT_2_STATE["eastern"].extend(["NH", "NJ", "NY", "NC", "ND", "OH", "OK", "PA"])
+INTERCONNECT_2_STATE["eastern"].extend(["RI", "SC", "SD", "TN", "VT", "VA", "WV", "WI"])
 INTERCONNECT_2_STATE["usa"] = sum(INTERCONNECT_2_STATE.values(), [])
 
 
@@ -223,6 +222,16 @@ def electricty_study_demand(wildcards):
         return DATA + "GridEmissions/EIA_DMD_2018_2024.csv"
     elif profile == "efs":
         return DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv"
+    else:
+        return ""
+
+
+def electricty_study_dissagregate(wildcards):
+    strategy = config["electricity"]["demand"]["disaggregation"]
+    if strategy == "pop":
+        return ""
+    elif strategy == "cliu":
+        return DATA + "industry_load/2014_update_20170910-0116.csv"
     else:
         return ""
 
@@ -253,6 +262,13 @@ def sector_study_demand(wildcards):
     elif end_use == "industry":
         if profile == "efs":
             return DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv"
+        elif profile == "cliu":
+            return [
+                DATA + "industry_load/2014_update_20170910-0116.csv",  # cliu data
+                DATA + "industry_load/epri_industrial_loads.csv",  # epri data
+                DATA + "industry_load/table3_2.xlsx",  # mecs data
+                DATA + "industry_load/fips_codes.csv",  # fips data
+            ]
         else:
             return ""
     elif end_use == "transport":
@@ -260,6 +276,28 @@ def sector_study_demand(wildcards):
             return DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv"
         else:
             return ""
+    else:
+        return ""
+
+
+def sector_study_dissagregate(wildcards):
+    end_use = wildcards.end_use
+    strategy = config["sector"]["demand"]["disaggregation"][end_use]
+    if end_use == "residential":
+        if strategy == "pop":
+            return ""
+    elif end_use == "commercial":
+        if strategy == "pop":
+            return ""
+    elif end_use == "industry":
+        if strategy == "pop":
+            return ""
+        elif strategy == "cliu":
+            return DATA + "industry_load/2014_update_20170910-0116.csv"
+        else:
+            return ""
+    elif end_use == "transport":
+        return ""
     else:
         return ""
 
@@ -295,6 +333,7 @@ rule build_sector_demand:
         end_use="residential|commercial|industry|transport",
     params:
         planning_horizons=config["scenario"]["planning_horizons"],
+        profile_year=pd.to_datetime(config["snapshots"]["start"]).year,
         demand_params=config["sector"]["demand"],
         eia_api=config["api"]["eia"],
     input:

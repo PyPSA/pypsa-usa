@@ -605,9 +605,9 @@ if __name__ == "__main__":
             "plot_network_maps",
             interconnect="texas",
             clusters=20,
-            ll="v1.00",
-            opts="Co2L-RCo2L-RPS-SAFE",
-            sector="E",
+            ll="v1.0",
+            opts="500SEG",
+            sector="E-G",
         )
     configure_logging(snakemake)
 

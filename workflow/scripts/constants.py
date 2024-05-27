@@ -35,6 +35,9 @@ COAL_dol_ton_2_MWHthermal = (
     LBS_TON**-1 * COAL_BTU_LB * 1000**-1 * MMBTU_MWHthemal
 )  # $/ton * ton/BTU * BTU/MWh_thermal
 
+# (TBTU) (1e6 MMBTU / TBTU) (MWh / MMBTU)
+TBTU_2_MWH = 1e6 * (1 / MMBTU_MWHthemal)
+
 ################################
 # Constants for ADS WECC mapping
 ################################
@@ -501,7 +504,7 @@ STATE_2_TIMEZONE = {
 }
 
 ################################
-# Constants for FIPS Matching
+# Constants for Industry Sector Loads
 ################################
 
 # https://transition.fcc.gov/oet/info/maps/census/fips/fips.txt
@@ -557,6 +560,36 @@ FIPS_2_STATE = {
     "54": "WEST VIRGINIA",
     "55": "WISCONSIN",
     "56": "WYOMING",
+}
+
+# only grouped to level 2
+# https://www23.statcan.gc.ca/imdb/p3VD.pl?Function=getVD&TVD=1181553
+# https://github.com/NREL/Industry-Energy-Tool/tree/master/data_foundation/
+NAICS = {
+    11: "Agriculture, forestry, fishing and hunting Agriculture, forestry, fishing and hunting",
+    21: "Mining, quarrying, and oil and gas extraction Mining, quarrying, and oil and gas extraction",
+    22: "Utilities",
+    23: "Construction",
+    31: "Manufacturing",
+    32: "Manufacturing",
+    33: "Manufacturing",
+    41: "Wholesale trade",
+    44: "Retail trade",
+    45: "Retail trade",
+    48: "Transportation and warehousing",
+    49: "Transportation and warehousing",
+    51: "Information and cultural industries",
+    52: "Finance and insurance",
+    53: "Real estate and rental and leasing",
+    54: "Professional, scientific and technical services",
+    55: "Management of companies and enterprises",
+    56: "Administrative and support, waste management and remediation services",
+    61: "Educational services",
+    62: "Health care and social assistance",
+    71: "Arts, entertainment and recreation",
+    72: "Accommodation and food services",
+    81: "Other services (except public administration)",
+    91: "Public administration",
 }
 
 ################################
