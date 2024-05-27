@@ -20,19 +20,20 @@ pypsa_usa_datafiles = [
     "copernicus/PROBAV_LC100_global_v3.0.1_2019-nrt_Discrete-Classification-map_USA_EPSG-4326.tif",
     "eez/conus_eez.shp",
     "natura.tiff",
+    "counties/cb_2020_us_county_500k.shp",
 ]
 
 
 def define_zenodo_databundles():
     return {
         "USATestSystem": "https://zenodo.org/record/4538590/files/USATestSystem.zip",
-        "pypsa_usa_data": "https://zenodo.org/records/10995249/files/pypsa_usa_data.zip",
+        "pypsa_usa_data": "https://zenodo.org/records/11359263/files/pypsa_usa_data.zip",
     }
 
 
 def define_sector_databundles():
     return {
-        "pypsa_usa_sec": "https://zenodo.org/records/11095303/files/pypsa_usa_sector_data.zip?download=1"
+        "pypsa_usa_sec": "https://zenodo.org/records/11358880/files/pypsa_usa_sector_data.zip"
     }
 
 
@@ -72,8 +73,6 @@ rule retrieve_nrel_efs_data:
 
 
 sector_datafiles = [
-    # general
-    "counties/cb_2020_us_county_500k.shp",
     # heating sector
     "population/DECENNIALDHC2020.P1-Data.csv",
     "urbanization/DECENNIALDHC2020.H2-Data.csv",
