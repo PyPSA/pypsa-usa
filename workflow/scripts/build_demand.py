@@ -942,9 +942,65 @@ class ReadCliu(ReadStrategy):
         """
         Scales CLIU data by MECS data.
         """
-        cliu = self._assign_mecs_regions(cliu, fips)
-        cliu = self._scale_cliu_on_mecs(cliu, mecs)
-        return cliu.drop(columns=["mecs"])
+
+        def assign_mecs_regions(cliu: pd.DataFrame, fips: pd.DataFrame) -> pd.DataFrame:
+            """
+            Adds a mecs column to the cliu df with associated fips region.
+            """
+            df = cliu.copy()
+            df["Region"] = df.index.get_level_values("state").map(
+                fips.set_index("state")["mecs"].to_dict(),
+            )
+            return df
+
+        def get_cliu_totals(cliu: pd.DataFrame, fips: pd.DataFrame) -> pd.DataFrame:
+            """
+            Gets regional energy totals for the year per fuel from CLIU.
+
+            |           | Coal | Coke_and_breeze | Diesel | LPG_NGL | Natural_gas | Net_electricity | Other | Residual_fuel_oil | Total |
+            |-----------|------|-----------------|--------|---------|-------------|-----------------|-------|-------------------|-------|
+            | Midwest   | 462  | 23              | 377    | 97      | 2249        | 1188            | 806   | 15                | 5220  |
+            | Northeast | 72   | 5               | 162    | 20      | 609         | 308             | 325   | 32                | 1536  |
+            | South     | 406  | 7               | 511    | 55      | 4376        | 1502            | 2823  | 66                | 9749  |
+            | West      | 167  | 1               | 321    | 26      | 1567        | 582             | 619   | 33                | 3320  |
+            """
+            df = cliu.copy()
+            df = assign_mecs_regions(df, fips)
+            return df.reset_index(drop=True).groupby("Region").sum()
+
+        def get_mecs_totals(mecs: pd.DataFrame) -> pd.DataFrame:
+            """
+            Gets regional energy totals for the year per fuel from MECS.
+            """
+            df = mecs.copy()
+            df = df.reset_index().drop(columns=["NAICS"])
+            df["Region"] = df.Region.map(lambda x: x.split(" ")[0])
+            df = df[df.Region != "Total"].copy()
+            return df.groupby("Region").sum()
+
+        def get_scaling_factors(df1: pd.DataFrame, df2: pd.DataFrame) -> pd.DataFrame:
+            """
+            Gets factor to multiply df1 by to become df2.
+            """
+            assert all([x in df2.columns for x in df1.columns])
+            assert all([x in df2.index for x in df1.index.unique()])
+            return df2.div(df1)
+
+        def scale_industrial_demand(
+            cliu: pd.DataFrame,
+            factor: pd.DataFrame,
+        ) -> pd.DataFrame:
+            fuels = cliu.columns
+            cliu = assign_mecs_regions(cliu, fips)
+            for fuel in fuels:
+                cliu["scale"] = cliu.Region.map(factor[fuel])
+                cliu[fuel] *= cliu.scale
+            return cliu.drop(columns=["Region", "scale"])
+
+        cliu_totals = get_cliu_totals(cliu, fips)
+        mecs_total = get_mecs_totals(mecs)
+        scaling_factors = get_scaling_factors(cliu_totals, mecs_total)
+        return scale_industrial_demand(cliu, scaling_factors)
 
     def _read_fips_data(self) -> pd.DataFrame:
         """
@@ -963,19 +1019,6 @@ class ReadCliu(ReadStrategy):
                 },
             )
         )
-
-    @staticmethod
-    def _assign_mecs_regions(cliu: pd.DataFrame, fips: pd.DataFrame) -> pd.DataFrame:
-
-        cliu["mecs"] = cliu.index.get_level_values("state").map(
-            fips.set_index("state")["mecs"].to_dict(),
-        )
-        return cliu
-
-    @staticmethod
-    def _scale_cliu_on_mecs(cliu: pd.DataFrame, mecs: pd.DataFrame) -> pd.DataFrame:
-
-        return cliu
 
 
 ###
