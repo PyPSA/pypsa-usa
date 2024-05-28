@@ -211,7 +211,9 @@ class GasData(ABC):
             states_2_remove += additional_removals
 
         if "STATE" not in df.columns:
-            logger.debug("Natual gas data notfiltered due to incorrect data formatting")
+            logger.debug(
+                "Natual gas data not filtered due to incorrect data formatting",
+            )
             return df
 
         df = df[~df.STATE.isin(states_2_remove)].copy()
@@ -332,6 +334,8 @@ class GasStorage(GasData):
             suffix=" gas storage",
             carrier="gas storage",
             unit="MWh_th",
+            interconnect=self.interconnect,
+            country=df.index,
         )
 
         cyclic_storage = kwargs.get("cyclic_storage", True)
@@ -738,7 +742,7 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
             names=to_from.index,
             suffix=" gas export",
             carrier="gas export",
-            unit="",
+            unit="MWh_th",
             country=to_from.STATE_TO,
             interconnect=self.interconnect,
         )
@@ -751,7 +755,7 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
             names=from_to.index,
             suffix=" gas import",
             carrier="gas import",
-            unit="",
+            unit="MWh_th",
             country=from_to.STATE_FROM,
             interconnect=self.interconnect,
         )

@@ -13,11 +13,14 @@ import pypsa
 
 logger = logging.getLogger(__name__)
 import sys
+from typing import Optional
 
-import constants
 from _helpers import configure_logging, get_snapshots
-from build_natural_gas import build_natural_gas
+from build_natural_gas import StateGeometry, build_natural_gas
+from constants import STATE_2_CODE, STATES_INTERCONNECT_MAPPER
 from shapely.geometry import Point
+
+CODE_2_STATE = {v: k for k, v in STATE_2_CODE.items()}
 
 
 def assign_bus_2_state(
@@ -52,6 +55,85 @@ def assign_bus_2_state(
         n.buses["STATE_NAME"] = n.buses.STATE.map(state_2_state_name)
 
 
+def add_sector_foundation(
+    n: pypsa.Network,
+    carrier: str,
+    center_points: Optional[pd.DataFrame] = pd.DataFrame(),
+) -> None:
+    """
+    Adds carrier and state level bus for the energy carrier.
+    """
+
+    if carrier == "gas":
+        carrier_kwargs = {"color": "#d35050", "nice_name": "Natural Gas"}
+    elif carrier == "coal":
+        carrier_kwargs = {"color": "#d35050", "nice_name": "Coal"}
+    elif carrier == "lpg":
+        carrier_kwargs = {"color": "#d35050", "nice_name": "Liquid Petroleum Gas"}
+    else:
+        carrier_kwargs = {}
+
+    # make primary energy carriers
+
+    if carrier not in n.carriers.index:
+        n.add("Carrier", carrier, **carrier_kwargs)
+
+    # make state level primary energy carrier buses
+
+    states = n.buses.STATE.dropna().unique()
+
+    zero_center_points = pd.DataFrame(
+        index=states,
+        columns=["x", "y"],
+        dtype=float,
+    ).fillna(0)
+    zero_center_points.index.name = "STATE"
+
+    if not center_points.empty:
+        points = center_points.loc[states].copy()
+        points = (
+            pd.concat([points, zero_center_points])
+            .reset_index(names=["STATE"])
+            .drop_duplicates(keep="first", subset="STATE")
+            .set_index("STATE")
+        )
+    else:
+        points = zero_center_points.copy()
+
+    points["name"] = points.index.map(CODE_2_STATE)
+    points["interconnect"] = points.index.map(STATES_INTERCONNECT_MAPPER)
+
+    buses_to_create = [f"{x} {carrier}" for x in points.index]
+    existing = n.buses.loc[buses_to_create].STATE.dropna().unique()
+
+    points = points[~points.index.isin(existing)]
+
+    n.madd(
+        "Bus",
+        names=points.index,
+        suffix=f" {carrier}",
+        x=points.x,
+        y=points.y,
+        carrier=carrier,
+        unit="MWh_th",
+        interconnect=points.interconnect,
+        country=points.index,  # for consistency
+        STATE=points.index,
+        STATE_NAME=points.name,
+    )
+
+
+def split_loads_by_carrier(n: pypsa.Network):
+    """
+    Splits loads by carrier.
+
+    At this point, all loads (ie. com-elec, com-heat, com-cool) will be
+    nested under the elec bus. This function will create a new bus-load
+    pair for each energy carrier
+    """
+    pass
+
+
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
@@ -81,30 +163,38 @@ if __name__ == "__main__":
     if snakemake.wildcards.interconnect == "usa":
         states_2_map = [
             x
-            for x, y in constants.STATES_INTERCONNECT_MAPPER.items()
+            for x, y in STATES_INTERCONNECT_MAPPER.items()
             if y in ("western", "eastern", "texas")
         ]
     else:
         states_2_map = [
             x
-            for x, y in constants.STATES_INTERCONNECT_MAPPER.items()
+            for x, y in STATES_INTERCONNECT_MAPPER.items()
             if y == snakemake.wildcards.interconnect
         ]
 
-    code_2_state = {v: k for k, v in constants.STATE_2_CODE.items()}
-    assign_bus_2_state(n, snakemake.input.county, states_2_map, code_2_state)
+    assign_bus_2_state(n, snakemake.input.county, states_2_map, CODE_2_STATE)
 
     sns = get_snapshots(snakemake.params.snapshots)
 
-    if "G" in sectors:
-        build_natural_gas(
-            n=n,
-            year=sns[0].year,
-            api=snakemake.params.api["eia"],
-            interconnect=snakemake.wildcards.interconnect,
-            county_path=snakemake.input.county,
-            pipelines_path=snakemake.input.pipeline_capacity,
-            pipeline_shape_path=snakemake.input.pipeline_shape,
-        )
+    ###
+    # Sector addition starts here
+    ###
+
+    build_natural_gas(
+        n=n,
+        year=sns[0].year,
+        api=snakemake.params.api["eia"],
+        interconnect=snakemake.wildcards.interconnect,
+        county_path=snakemake.input.county,
+        pipelines_path=snakemake.input.pipeline_capacity,
+        pipeline_shape_path=snakemake.input.pipeline_shape,
+    )
+
+    center_points = StateGeometry(snakemake.input.county).state_center_points.set_index(
+        "STATE",
+    )
+    for carrier in ("gas", "lpg", "coal"):
+        add_sector_foundation(n, carrier, center_points)
 
     n.export_to_netcdf(snakemake.output.network)
