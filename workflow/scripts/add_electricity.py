@@ -384,6 +384,7 @@ def update_transmission_costs(n, costs, length_factor=1.0):
     )
     n.links.loc[dc_b, "capital_cost"] = costs
 
+
 def match_plant_to_bus(n, plants):
     plants_matched = plants.copy()
     plants_matched["bus_assignment"] = None
@@ -518,8 +519,10 @@ def attach_conventional_generators(
     n.generators.loc[plants.index, "ba_eia"] = plants.balancing_authority_code
     n.generators.loc[plants.index, "ba_ads"] = plants.ads_balancing_area
 
+
 def normed(s):
     return s / s.sum()
+
 
 def attach_hydro(n, costs, plants, profile_hydro, carriers, **params):
     add_missing_carriers(n, carriers)
@@ -543,7 +546,7 @@ def attach_hydro(n, costs, plants, profile_hydro, carriers, **params):
         with xr.open_dataarray(profile_hydro) as inflow:
             inflow_countries = pd.Index(region[inflow_idx])
             missing_c = inflow_countries.unique().difference(
-                inflow.indexes["countries"]
+                inflow.indexes["countries"],
             )
             assert missing_c.empty, (
                 f"'{profile_hydro}' is missing "
@@ -588,7 +591,7 @@ def attach_hydro(n, costs, plants, profile_hydro, carriers, **params):
             bus=phs["bus_assignment"],
             p_nom=phs["p_nom"],
             p_nom_extendable=False,
-            max_hours=6, # Need to pull actual max hours
+            max_hours=6,  # Need to pull actual max hours
             efficiency_store=np.sqrt(costs.at["PHS", "efficiency"]),
             efficiency_dispatch=np.sqrt(costs.at["PHS", "efficiency"]),
             cyclic_state_of_charge=True,
@@ -645,7 +648,7 @@ def attach_hydro(n, costs, plants, profile_hydro, carriers, **params):
             carrier="hydro",
             bus=hydro["bus_assignment"],
             p_nom=hydro["p_nom"],
-            max_hours=8, #Need to get actual hours on hydro storage capacity by plant. must be in EIA data
+            max_hours=8,  # Need to get actual hours on hydro storage capacity by plant. must be in EIA data
             capital_cost=costs.at["hydro", "capital_cost"],
             marginal_cost=costs.at["hydro", "marginal_cost"],
             p_max_pu=p_max_pu,  # dispatch
@@ -655,6 +658,7 @@ def attach_hydro(n, costs, plants, profile_hydro, carriers, **params):
             cyclic_state_of_charge=True,
             inflow=inflow_t.loc[:, hydro.index],
         )
+
 
 def attach_wind_and_solar(
     n: pypsa.Network,
@@ -718,7 +722,7 @@ def attach_wind_and_solar(
                 pd.read_csv(input_profiles.bus2sub, dtype=str)
                 .drop("interconnect", axis=1)
                 .rename(columns={"Bus": "bus_id"})
-                .drop_duplicates(subset='sub_id')
+                .drop_duplicates(subset="sub_id")
             )
             bus_list = (
                 ds.bus.to_dataframe("sub_id").merge(bus2sub).bus_id.astype(str).values
@@ -832,7 +836,7 @@ def load_powerplants_eia(
     plants = pd.read_csv(
         eia_dataset,
     )
-    plants = plants[plants.nerc_region != 'non-conus']
+    plants = plants[plants.nerc_region != "non-conus"]
     if (interconnect is not None) & (interconnect != "usa"):
         plants["interconnection"] = plants["nerc_region"].map(const.NERC_REGION_MAPPER)
         plants = plants[plants.interconnection == interconnect]
@@ -995,7 +999,6 @@ def clean_bus_data(n: pypsa.Network):
     n.buses.drop(columns=[col for col in col_list if col in n.buses], inplace=True)
 
 
-
 def attach_breakthrough_renewable_plants(
     n,
     fn_plants,
@@ -1122,7 +1125,6 @@ def main(snakemake):
     #         **p,
     #     )
 
-
     attach_conventional_generators(
         n,
         costs,
@@ -1181,7 +1183,6 @@ def main(snakemake):
         extendable_carriers,
         costs,
     )
-
 
     update_p_nom_max(n)
 

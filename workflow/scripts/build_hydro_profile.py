@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 
 # SPDX-FileCopyrightText: : 2017-2024 The PyPSA-Eur Authors
 #
@@ -79,10 +78,14 @@ def get_eia_annual_hydro_generation(fn, countries, capacities=False):
 
     former_countries = {
         "Former Czechoslovakia": dict(
-            countries=["Czechia", "Slovakia"], start=1980, end=1992
+            countries=["Czechia", "Slovakia"],
+            start=1980,
+            end=1992,
         ),
         "Former Serbia and Montenegro": dict(
-            countries=["Serbia", "Montenegro"], start=1992, end=2005
+            countries=["Serbia", "Montenegro"],
+            start=1992,
+            end=2005,
         ),
         "Former Yugoslavia": dict(
             countries=[
@@ -163,7 +166,8 @@ logger = logging.getLogger(__name__)
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
-        snakemake = mock_snakemake("build_hydro_profile", interconnect='texas')
+
+        snakemake = mock_snakemake("build_hydro_profile", interconnect="texas")
     configure_logging(snakemake)
     set_scenario_config(snakemake)
 
@@ -174,9 +178,9 @@ if __name__ == "__main__":
     cutout = atlite.Cutout(snakemake.input.cutout).sel(time=time)
 
     # countries = snakemake.params.countries
-    country_shapes = (
-        gpd.read_file(snakemake.input.reeds_shapes)
-        .set_index("name")["geometry"])
+    country_shapes = gpd.read_file(snakemake.input.reeds_shapes).set_index("name")[
+        "geometry"
+    ]
     country_shapes.index.name = "countries"
 
     # fn = snakemake.input.eia_hydro_generation

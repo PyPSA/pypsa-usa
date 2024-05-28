@@ -127,6 +127,7 @@ if config["enable"].get("build_cutout", False):
         script:
             "../scripts/build_cutout.py"
 
+
 rule build_hydro_profile:
     params:
         hydro=config_provider("renewable", "hydro"),

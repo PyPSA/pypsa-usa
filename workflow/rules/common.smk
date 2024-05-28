@@ -125,6 +125,7 @@ def interconnect_mem(w):
     elif w.interconnect == "texas":
         return int(mem * 1)
 
+
 def interconnect_mem_a(w):
     mem = 80000
     if w.interconnect == "usa":

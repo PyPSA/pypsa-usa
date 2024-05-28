@@ -607,8 +607,10 @@ def add_regional_co2limit(n, sns, config):
                 lhs <= rhs,
                 name=f"GlobalConstraint-{emmission_lim.name}_{planning_horizon}co2_limit",
             )
-            
-            logger.info(f"Adding regional Co2 Limit for {emmission_lim.name} in {planning_horizon}")
+
+            logger.info(
+                f"Adding regional Co2 Limit for {emmission_lim.name} in {planning_horizon}"
+            )
 
 
 def add_SAFE_constraints(n, config):
@@ -768,7 +770,7 @@ def add_operational_reserve_margin(n, sns, config):
         lhs = summed_reserve + (p_nom_vres * (-EPSILON_VRES * capacity_factor)).sum(
             "Generator",
         )
-    else: # if no extendable VRES
+    else:  # if no extendable VRES
         lhs = summed_reserve
 
     # Total demand per t
@@ -795,7 +797,7 @@ def add_operational_reserve_margin(n, sns, config):
     capacity_fixed = n.generators.p_nom[fix_i]
 
     p_max_pu = get_as_dense(n, "Generator", "p_max_pu")
-    
+
     if not ext_i.empty:
         capacity_variable = n.model["Generator-p_nom"].rename(
             {"Generator-ext": "Generator"},

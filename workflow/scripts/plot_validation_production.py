@@ -245,7 +245,7 @@ def create_historic_region_data(
             "WALC": ["WALC", "GRIF"],
             "NWMT": ["NWMT", "GWA", "WWA"],
             "CISO": ["CISO", "BANC", "IID", "LDWP", "TIDC"],
-            "SEC": ["SEC", "GVL", "TEC","JEA","FMPP", "FPC"],
+            "SEC": ["SEC", "GVL", "TEC", "JEA", "FMPP", "FPC"],
             "FPL": ["FPL", "HST"],
         },
         "balancing_area": {
@@ -360,7 +360,9 @@ def plot_regional_comparisons(
         )
         # Calculate Production Deviation by percentage
         total_region = historic_region.sum().sum()
-        diff[region] = (optimized_region.sum() - historic_region.sum()) / total_region * 1e2
+        diff[region] = (
+            (optimized_region.sum() - historic_region.sum()) / total_region * 1e2
+        )
 
     # Plot Bar Production Differences of Regions
     fig, ax = plt.subplots(figsize=(10, 6))
