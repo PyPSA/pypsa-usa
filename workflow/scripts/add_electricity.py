@@ -1042,7 +1042,7 @@ def attach_breakthrough_renewable_plants(
             p_nom = tech_plants.Pmax
             p_max_pu = p_nom_be[tech_plants.index] / p_nom
 
-        p_max_pu = broadcast_investment_horizons_index(n.snapshots, p_max_pu)
+        p_max_pu = broadcast_investment_horizons_index(n, p_max_pu)
 
         n.madd(
             "Generator",
