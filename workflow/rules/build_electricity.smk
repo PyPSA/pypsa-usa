@@ -410,6 +410,7 @@ rule add_electricity:
         **{
             f"profile_{tech}": RESOURCES + "{interconnect}" + f"/profile_{tech}.nc"
             for tech in config["electricity"]["renewable_carriers"]
+            if tech != "hydro"
         },
         **{
             f"conventional_{carrier}_{attr}": fn
@@ -428,6 +429,8 @@ rule add_electricity:
         # attach first horizon costs
         regions=RESOURCES + "{interconnect}/regions_onshore.geojson",
         plants_eia="repo_data/plants/plants_merged.csv",
+        plants_breakthrough=DATA + "breakthrough_network/base_grid/plant.csv",
+        hydro_breakthrough=DATA + "breakthrough_network/base_grid/hydro.csv",
         bus2sub=RESOURCES + "{interconnect}/bus2sub.csv",
         fuel_costs="repo_data/plants/fuelCost22.csv",
     output:

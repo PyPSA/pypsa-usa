@@ -995,6 +995,74 @@ def clean_bus_data(n: pypsa.Network):
     n.buses.drop(columns=[col for col in col_list if col in n.buses], inplace=True)
 
 
+
+def attach_breakthrough_renewable_plants(
+    n,
+    fn_plants,
+    renewable_carriers,
+    extendable_carriers,
+    costs,
+):
+
+    add_missing_carriers(n, renewable_carriers)
+
+    plants = pd.read_csv(fn_plants, dtype={"bus_id": str}, index_col=0).query(
+        "bus_id in @n.buses.index",
+    )
+    plants.replace(["wind_offshore"], ["offwind"], inplace=True)
+
+    for tech in renewable_carriers:
+        assert tech == "hydro"
+        tech_plants = plants.query("type == @tech")
+        tech_plants.index = tech_plants.index.astype(str)
+        logger.info(f"Adding {len(tech_plants)} {tech} generators to the network.")
+
+        p_nom_be = pd.read_csv(snakemake.input[f"{tech}_breakthrough"], index_col=0)
+
+        intersection = set(p_nom_be.columns).intersection(
+            tech_plants.index,
+        )  # filters by plants ID for the plants of type tech
+        p_nom_be = p_nom_be[list(intersection)]
+
+        Nhours = len(n.snapshots.get_level_values(1).unique())
+        p_nom_be = p_nom_be.iloc[
+            :Nhours,
+            :,
+        ]  # hotfix to fit 2016 renewable data to load data
+        p_nom_be.index = n.snapshots.get_level_values(1).unique()
+        p_nom_be.columns = p_nom_be.columns.astype(str)
+
+        if (tech_plants.Pmax == 0).any():
+            # p_nom is the maximum of {Pmax, dispatch}
+            p_nom = pd.concat([p_nom_be.max(axis=0), tech_plants["Pmax"]], axis=1).max(
+                axis=1,
+            )
+            p_max_pu = (p_nom_be[p_nom.index] / p_nom).fillna(0)  # some values remain 0
+        else:
+            p_nom = tech_plants.Pmax
+            p_max_pu = p_nom_be[tech_plants.index] / p_nom
+
+        p_max_pu = broadcast_investment_horizons_index(n.snapshots, p_max_pu)
+
+        n.madd(
+            "Generator",
+            tech_plants.index,
+            bus=tech_plants.bus_id,
+            p_nom_min=p_nom,
+            p_nom=p_nom,
+            marginal_cost=tech_plants.GenIOB
+            * tech_plants.GenFuelCost,  # (MMBTu/MW) * (USD/MMBTu) = USD/MW
+            # marginal_cost_quadratic = tech_plants.GenIOC * tech_plants.GenFuelCost,
+            capital_cost=costs.at[tech, "capital_cost"],
+            p_max_pu=p_max_pu,  # timeseries of max power output pu
+            p_nom_extendable=tech in extendable_carriers["Generator"],
+            carrier=tech,
+            weight=1.0,
+            efficiency=costs.at[tech, "efficiency"],
+        )
+    return n
+
+
 def main(snakemake):
     params = snakemake.params
     interconnection = snakemake.wildcards["interconnect"]
@@ -1042,17 +1110,17 @@ def main(snakemake):
 
     plants = match_plant_to_bus(n, plants)
 
-    if "hydro" in renewable_carriers:
-        p = params.renewable["hydro"]
-        carriers = p.pop("carriers", [])
-        attach_hydro(
-            n,
-            costs,
-            plants,
-            snakemake.input.profile_hydro,
-            carriers,
-            **p,
-        )
+    # if "hydro" in renewable_carriers:
+    #     p = params.renewable["hydro"]
+    #     carriers = p.pop("carriers", [])
+    #     attach_hydro(
+    #         n,
+    #         costs,
+    #         plants,
+    #         snakemake.input.profile_hydro,
+    #         carriers,
+    #         **p,
+    #     )
 
 
     attach_conventional_generators(
@@ -1105,6 +1173,14 @@ def main(snakemake):
         renewable_carriers,
     )
 
+    # temporarily adding hydro with breakthrough only data until I can correctly import hydro_data
+    n = attach_breakthrough_renewable_plants(
+        n,
+        snakemake.input["plants_breakthrough"],
+        ["hydro"],
+        extendable_carriers,
+        costs,
+    )
 
 
     update_p_nom_max(n)
