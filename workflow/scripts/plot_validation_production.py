@@ -10,7 +10,7 @@ import pypsa
 import seaborn as sns
 
 logger = logging.getLogger(__name__)
-from _helpers import configure_logging
+from _helpers import configure_logging, get_snapshots
 from constants import EIA_930_REGION_MAPPER, EIA_BA_2_REGION, STATE_2_CODE
 from eia import Emissions
 from plot_network_maps import (
@@ -746,14 +746,13 @@ def main(snakemake):
     colors["imports"] = "#7d1caf"
     colors["exports"] = "#d624d9"
 
+    snapshots = get_snapshots(snakemake.params.snapshots)
+
     plot_state_emissions_historical_bar(
         n,
         ge_co2,
         snakemake.output["val_bar_state_emissions.pdf"],
-        pd.date_range(
-            start=snakemake.params.snapshots["start"],
-            end=snakemake.params.snapshots["end"],
-        ),
+        snapshots,
         snakemake.params.eia_api,
         **snakemake.wildcards,
     )
@@ -778,10 +777,7 @@ def main(snakemake):
         n,
         ge_co2,
         snakemake.output["val_bar_regional_emissions.pdf"],
-        pd.date_range(
-            start=snakemake.params.snapshots["start"],
-            end=snakemake.params.snapshots["end"],
-        ),
+        snapshots,
         snakemake.params.eia_api,
         **snakemake.wildcards,
     )

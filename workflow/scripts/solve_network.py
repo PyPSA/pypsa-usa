@@ -607,6 +607,7 @@ def add_regional_co2limit(n, sns, config):
                 lhs <= rhs,
                 name=f"GlobalConstraint-{emmission_lim.name}_{planning_horizon}co2_limit",
             )
+            
             logger.info(f"Adding regional Co2 Limit for {emmission_lim.name} in {planning_horizon}")
 
 

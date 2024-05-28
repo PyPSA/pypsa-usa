@@ -47,7 +47,7 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 import pypsa
-from _helpers import configure_logging, test_network_datatype_consistency
+from _helpers import configure_logging, get_snapshots, test_network_datatype_consistency
 from build_shapes import load_na_shapes
 from geopandas.tools import sjoin
 from shapely.geometry import Point, Polygon
@@ -636,25 +636,15 @@ def modify_breakthrough_lines(n: pypsa.Network, interconnect: str):
     return n
 
 
-def make_snapshots(
+def get_multiindex_snapshots(
     sns_config: dict[str, str],
-    invest_periods: Optional[list[int]],
+    invest_periods: list[int],
 ) -> pd.MultiIndex:
-    if not invest_periods:
-        invest_periods = [pd.to_datetime(sns_config["start"]).year]
     sns = pd.DatetimeIndex([])
     for year in invest_periods:
-        start = pd.to_datetime(sns_config["start"])
-        end = pd.to_datetime(sns_config["end"])
-        year_diff = end.year - start.year
-        assert year_diff in (0, 1)
-        period = pd.date_range(
-            freq="h",
-            start=start.replace(year=year),
-            end=end.replace(year=(year + year_diff)),
-            inclusive=sns_config["inclusive"],
+        sns = sns.append(
+            get_snapshots(sns_config).map(lambda x: x.replace(year=year)),
         )
-        sns = sns.append(period)
     return pd.MultiIndex.from_arrays([sns.year, sns])
 
 
@@ -819,10 +809,10 @@ def main(snakemake):
     lines_gis.to_csv(snakemake.output.lines_gis)
 
     # add snapshots
-    sns_config = snakemake.params["snapshots"]
+    sns_config = snakemake.params.snapshots
     planning_horizons = snakemake.params.planning_horizons
-    sns = make_snapshots(sns_config, planning_horizons)
-    n.snapshots = sns
+
+    n.snapshots = get_multiindex_snapshots(sns_config, planning_horizons)
     n.set_investment_periods(periods=planning_horizons)
 
     # export network

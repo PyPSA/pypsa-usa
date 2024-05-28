@@ -164,7 +164,7 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 import xarray as xr
-from _helpers import configure_logging
+from _helpers import configure_logging, get_snapshots
 from dask.distributed import Client
 from pypsa.geo import haversine
 from shapely.geometry import LineString
@@ -203,7 +203,7 @@ if __name__ == "__main__":
     else:
         client = None
 
-    sns = pd.date_range(freq="h", **snakemake.config["snapshots"])
+    sns = get_snapshots(snakemake.params.snapshots)
     cutout = atlite.Cutout(snakemake.input.cutout).sel(time=sns)
 
     regions = gpd.read_file(snakemake.input.regions)
