@@ -135,7 +135,24 @@ def split_loads_by_carrier(n: pypsa.Network):
     nested under the elec bus. This function will create a new bus-load
     pair for each energy carrier
     """
-    pass
+
+    for bus in n.buses.index.unique():
+        df = n.loads[n.loads.bus == bus][["bus", "carrier"]]
+
+        n.madd(
+            "Bus",
+            df.index,
+            v_nom=1,
+            x=n.buses.at[bus, "x"],
+            y=n.buses.at[bus, "y"],
+            carrier=df.carrier,
+            country=n.buses.at[bus, "country"],
+            interconnect=n.buses.at[bus, "interconnect"],
+            STATE=n.buses.at[bus, "STATE"],
+            STATE_NAME=n.buses.at[bus, "STATE_NAME"],
+        )
+
+    n.loads["bus"] = n.loads.index
 
 
 if __name__ == "__main__":
@@ -184,6 +201,8 @@ if __name__ == "__main__":
     ###
     # Sector addition starts here
     ###
+
+    split_loads_by_carrier(n)
 
     # build this first! As it will build primary energy buses for the state
     build_natural_gas(
