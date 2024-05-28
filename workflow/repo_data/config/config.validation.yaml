@@ -63,9 +63,14 @@ electricity:
     Store: []
     Link: []
 
-  demand: #EFS used for given planning_horizons year
-    EFS_case: reference # reference, medium, high
-    EFS_speed: moderate # slow, moderate, rapid
+  demand: 
+    profile: eia # efs, eia
+    scale: 1 # efs, aeo, or a number 
+    disaggregation: pop # pop
+    scenario: 
+      efs_case: reference # reference, medium, high
+      efs_speed: moderate # slow, moderate, rapid
+      aeo: reference
 
   autarky:
     enable: false

@@ -305,6 +305,12 @@ def main(snakemake):
             zones=breakthrough_zones,
             interconnect=interconnect,
         )
+    elif interconnect == "usa":
+        gdf_states = filter_shapes(
+            data=gdf_na,
+            zones=breakthrough_zones,
+            interconnect=interconnect,
+        )
     else:
         raise NotImplementedError
 

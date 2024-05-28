@@ -128,26 +128,25 @@ if config["enable"].get("build_cutout", False):
             "../scripts/build_cutout.py"
 
 
-rule build_hydro_profiles:
+rule build_hydro_profile:
     params:
-        hydro=config["renewable"]["hydro"],
-        countries=config["countries"],
+        hydro=config_provider("renewable", "hydro"),
+        snapshots=config_provider("snapshots"),
     input:
-        ba_region_shapes=RESOURCES + "{interconnect}/onshore_shapes.geojson",
-        # eia_hydro_generation=DATA + "eia_hydro_annual_generation.csv",
-        cutout=f"cutouts/"
+        reeds_shapes=RESOURCES + "{interconnect}/reeds_shapes.geojson",
+        cutout=lambda w: f"cutouts/"
         + CDIR
         + "{interconnect}_"
-        + config["renewable"]["hydro"]["cutout"]
+        + config_provider("renewable", "hydro", "cutout")(w)
         + ".nc",
     output:
-        RESOURCES + "{interconnect}/profile_hydro.nc",
+        profile=RESOURCES + "{interconnect}/profile_hydro.nc",
     log:
         LOGS + "{interconnect}/build_hydro_profile.log",
     resources:
         mem_mb=5000,
     conda:
-        "envs/environment.yaml"
+        "../envs/environment.yaml"
     script:
         "../scripts/build_hydro_profile.py"
 
@@ -387,7 +386,7 @@ rule add_demand:
     benchmark:
         BENCHMARKS + "{interconnect}/add_demand"
     resources:
-        mem_mb=800,
+        mem_mb=interconnect_mem,
     script:
         "../scripts/add_demand.py"
 
@@ -482,7 +481,7 @@ rule add_electricity:
         BENCHMARKS + "{interconnect}/add_electricity"
     threads: 1
     resources:
-        mem_mb=80000,
+        mem_mb=interconnect_mem_a,
     script:
         "../scripts/add_electricity.py"
 

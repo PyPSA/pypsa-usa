@@ -605,9 +605,12 @@ def add_regional_co2limit(n, sns, config):
             rhs = region_co2lim - (region_demand * EF_imports)
             n.model.add_constraints(
                 lhs <= rhs,
-                name=f"GlobalConstraint-{emmission_lim.name}_co2_limit",
+                name=f"GlobalConstraint-{emmission_lim.name}_{planning_horizon}co2_limit",
             )
-            logger.info(f"Adding regional Co2 Limit for {emmission_lim.name}")
+
+            logger.info(
+                f"Adding regional Co2 Limit for {emmission_lim.name} in {planning_horizon}"
+            )
 
 
 def add_SAFE_constraints(n, config):
@@ -767,6 +770,8 @@ def add_operational_reserve_margin(n, sns, config):
         lhs = summed_reserve + (p_nom_vres * (-EPSILON_VRES * capacity_factor)).sum(
             "Generator",
         )
+    else:  # if no extendable VRES
+        lhs = summed_reserve
 
     # Total demand per t
     demand = get_as_dense(n, "Load", "p_set").sum(axis=1)
@@ -789,14 +794,17 @@ def add_operational_reserve_margin(n, sns, config):
     dispatch = n.model["Generator-p"]
     reserve = n.model["Generator-r"]
 
-    capacity_variable = n.model["Generator-p_nom"].rename(
-        {"Generator-ext": "Generator"},
-    )
     capacity_fixed = n.generators.p_nom[fix_i]
 
     p_max_pu = get_as_dense(n, "Generator", "p_max_pu")
 
-    lhs = dispatch + reserve - capacity_variable * p_max_pu[ext_i]
+    if not ext_i.empty:
+        capacity_variable = n.model["Generator-p_nom"].rename(
+            {"Generator-ext": "Generator"},
+        )
+        lhs = dispatch + reserve - capacity_variable * p_max_pu[ext_i]
+    else:
+        lhs = dispatch + reserve
 
     rhs = (p_max_pu[fix_i] * capacity_fixed).reindex(columns=gen_i, fill_value=0)
 

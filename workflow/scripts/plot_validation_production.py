@@ -245,6 +245,8 @@ def create_historic_region_data(
             "WALC": ["WALC", "GRIF"],
             "NWMT": ["NWMT", "GWA", "WWA"],
             "CISO": ["CISO", "BANC", "IID", "LDWP", "TIDC"],
+            "SEC": ["SEC", "GVL", "TEC", "JEA", "FMPP", "FPC"],
+            "FPL": ["FPL", "HST"],
         },
         "balancing_area": {
             "Arizona": ["AZPS", "SRP"],
@@ -261,6 +263,7 @@ def create_historic_region_data(
         if region in region_mapper[aggregation_zone]
         else [region]
     )
+
     historic_region = historic_all_ba.loc[regions].groupby(level=1).sum()
 
     if not emissions:
@@ -318,6 +321,10 @@ def plot_regional_comparisons(
     diff = pd.DataFrame()
     # regions = [ba for ba in regions if ba in ["CISO"]] # Run to only produce ciso
     for region in regions:
+        if region == "ERCO" and snakemake.wildcards.interconnect == "eastern":
+            continue
+        if region == "SWPP" and snakemake.wildcards.interconnect == "texas":
+            continue
         region_buses = buses.query(f"region == '{region}'").index
 
         historic_region = create_historic_region_data(
@@ -351,13 +358,16 @@ def plot_regional_comparisons(
             title=f"{region} Electricity Production by Carrier",
             **snakemake.wildcards,
         )
-
-        diff[region] = (optimized_region.sum() - historic_region.sum()) / 1e3
+        # Calculate Production Deviation by percentage
+        total_region = historic_region.sum().sum()
+        diff[region] = (
+            (optimized_region.sum() - historic_region.sum()) / total_region * 1e2
+        )
 
     # Plot Bar Production Differences of Regions
     fig, ax = plt.subplots(figsize=(10, 6))
     diff.T.plot(kind="barh", stacked=True, ax=ax, color=colors)
-    ax.set_xlabel("Production Deviation [TWh]")
+    ax.set_xlabel("Production Deviation [% of Total]")
     ax.set_ylabel("Region")
     ax.set_title(
         create_title("Generation Deviation by Region and Carrier", **wildcards),
@@ -572,7 +582,7 @@ def plot_state_emissions_historical_bar(
     final = pd.melt(final, id_vars=["state"], value_vars=["Optimized", "Historical"])
     final["value"] = final.value.astype("float")
 
-    final = final[~final["state"].str.contains("Texas")]
+    # final = final[~final["state"].str.contains("Texas")]
 
     fig, ax = plt.subplots(figsize=(8, 8))
     sns.barplot(
@@ -838,8 +848,8 @@ if __name__ == "__main__":
 
         snakemake = mock_snakemake(
             "plot_validation_figures",
-            interconnect="western",
-            clusters=40,
+            interconnect="eastern",
+            clusters=100,
             ll="v1.0",
             opts="Ep",
             sector="E",
