@@ -16,7 +16,11 @@ import sys
 from typing import Optional
 
 from _helpers import configure_logging, get_snapshots
-from build_natural_gas import StateGeometry, build_natural_gas
+from build_natural_gas import (
+    StateGeometry,
+    build_natural_gas,
+    convert_generators_2_links,
+)
 from constants import STATE_2_CODE, STATES_INTERCONNECT_MAPPER
 from shapely.geometry import Point
 
@@ -104,7 +108,7 @@ def add_sector_foundation(
     points["interconnect"] = points.index.map(STATES_INTERCONNECT_MAPPER)
 
     buses_to_create = [f"{x} {carrier}" for x in points.index]
-    existing = n.buses.loc[buses_to_create].STATE.dropna().unique()
+    existing = n.buses[n.buses.index.isin(buses_to_create)].STATE.dropna().unique()
 
     points = points[~points.index.isin(existing)]
 
@@ -181,6 +185,7 @@ if __name__ == "__main__":
     # Sector addition starts here
     ###
 
+    # build this first! As it will build primary energy buses for the state
     build_natural_gas(
         n=n,
         year=sns[0].year,
@@ -194,7 +199,8 @@ if __name__ == "__main__":
     center_points = StateGeometry(snakemake.input.county).state_center_points.set_index(
         "STATE",
     )
-    for carrier in ("gas", "lpg", "coal"):
+    for carrier in ("oil", "coal"):
         add_sector_foundation(n, carrier, center_points)
+        convert_generators_2_links(n, carrier, f" {carrier}")
 
     n.export_to_netcdf(snakemake.output.network)

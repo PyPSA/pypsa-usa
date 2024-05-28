@@ -1015,9 +1015,9 @@ class ImportExportLimits(GasData):
         pass
 
 
-def convert_generators_2_links(n: pypsa.Network, carrier: str):
+def convert_generators_2_links(n: pypsa.Network, carrier: str, bus0_suffix: str):
     """
-    Replace Generators with cross sector links.
+    Replace Generators with a link connecting to a state level primary energy.
 
     Links bus1 are the bus the generator is attached to. Links bus0 are state
     level followed by the suffix (ie. "WA gas" if " gas" is the bus0_suffix)
@@ -1056,7 +1056,7 @@ def convert_generators_2_links(n: pypsa.Network, carrier: str):
     n.madd(
         "Link",
         names=plants.index,
-        bus0=plants.STATE + " gas",
+        bus0=plants.STATE + bus0_suffix,
         bus1=plants.bus,
         carrier=plants.carrier,
         p_nom_min=plants.p_nom_min / plants.efficiency,
@@ -1154,7 +1154,7 @@ def build_natural_gas(
 
     # convert existing generators to cross-sector links
     for carrier in ("CCGT", "OCGT"):
-        convert_generators_2_links(n, carrier)
+        convert_generators_2_links(n, carrier, " gas")
 
 
 if __name__ == "__main__":
