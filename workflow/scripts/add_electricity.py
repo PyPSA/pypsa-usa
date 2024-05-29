@@ -827,7 +827,7 @@ def attach_battery_storage(
         p_nom_min=plants_filt.p_nom,
         p_nom_extendable=False,
         max_hours=plants_filt.nameplate_energy_capacity_mwh / plants_filt.p_nom,
-        build_year=plants_filt.operating_year,
+        build_year=plants_filt.build_year,
         lifetime=30,  # replace with actual lifetime
         efficiency_store=0.9**0.5,
         efficiency_dispatch=0.9**0.5,
@@ -837,16 +837,13 @@ def attach_battery_storage(
 
 def load_powerplants_eia(
     eia_dataset: str,
+    investment_periods: List[int],
     interconnect: str = None,
 ) -> pd.DataFrame:
 
     plants = pd.read_csv(
         eia_dataset,
     )
-    plants = plants[plants.nerc_region != "non-conus"]
-    if (interconnect is not None) & (interconnect != "usa"):
-        plants["interconnection"] = plants["nerc_region"].map(const.NERC_REGION_MAPPER)
-        plants = plants[plants.interconnection == interconnect]
 
     plants["generator_name"] = (
         plants.index.astype(str)
@@ -857,59 +854,80 @@ def load_powerplants_eia(
     )
     plants.set_index("generator_name", inplace=True)
     plants["p_nom"] = plants.pop("nameplate_capacity_mw")
-
-    # Set Costs
+    plants["build_year"] = plants.pop('operating_year')
     plants["heat_rate"] = plants.pop("egrid_heat_rate")
+
     plants = add_missing_fuel_cost(
         plants,
         snakemake.input.fuel_costs,
-    )  # Only used for plants that don't have temporal data
-    plants = add_missing_heat_rates(
-        plants,
-        snakemake.input.fuel_costs,
-    )  # Only used for plants that not included in ADS data
+    )  # National Avg used for start-up costs
+
+    # Unit Commitment Parameters
+    plants["start_up_cost"] = plants["ads_startup_cost_fixed$"] + plants.ads_startfuelmmbtu * plants.fuel_cost
+    plants["min_down_time"] = plants.pop("ads_minimumdowntimehr")
+    plants["min_up_time"] = plants.pop("ads_minimumuptimehr")
+
+    # Ramp Limit Parameters
+    plants["ramp_limit_up"] = (
+        plants.pop("ads_rampup_ratemw/minute") / plants.p_nom * 60
+    ).clip(lower=0, upper=1)  # MW/min to p.u./hour
+    plants["ramp_limit_down"] = (
+        plants.pop("ads_rampdn_ratemw/minute") / plants.p_nom * 60
+    ).clip(lower=0, upper=1) # MW/min to p.u./hour
+
+    #Impute missing data based on average values of a given aggregation
+    aggregation_fields = ["technology"]
+    data_fields = ['start_up_cost', 'min_down_time', 'min_up_time', "ramp_limit_up", "ramp_limit_down"]
+    plants = impute_missing_plant_data(plants, aggregation_fields, data_fields)
+
     plants["marginal_cost"] = (
         plants.heat_rate * plants.fuel_cost
     )  # (MMBTu/MW) * (USD/MMBTu) = USD/MW
-
-    # plants["vom_costs"] = plants.pop("ads_vom_cost")
-    # avg_prime_move_vom = plants[['carrier','vom_costs']].groupby('carrier').mean()
-    # plants.loc[plants.vom_costs.isna(),'vom_costs'] = plants.loc[plants.vom_costs.isna(),'carrier'].map(avg_prime_move_vom.vom_costs)
-
-    plants["start_up_cost"] = plants["ads_startup_cost_fixed$"].fillna(
-        0,
-    ) + +plants.ads_startfuelmmbtu.fillna(0) * plants.fuel_cost.fillna(0)
-
     plants["efficiency"] = 1 / (
         plants["heat_rate"] / 3.412
     )  # MMBTu/MWh to MWh_electric/MWh_thermal
 
-    # Set Ramp Rates
-    plants["ramp_limit_up"] = (
-        plants.pop("ads_rampup_ratemw/minute") / plants.p_nom * 60
-    )  # MW/min to p.u./hour
-    plants["ramp_limit_down"] = (
-        plants.pop("ads_rampdn_ratemw/minute") / plants.p_nom * 60
-    )  # MW/min to p.u./hour
-    avg_prime_mover_ramp_rates = (
-        plants[["carrier", "ramp_limit_up", "ramp_limit_down"]]
-        .groupby("carrier")
-        .mean()
-    )
-    # fill missing ramp rates with average ramp rates of prime movers
-    plants.loc[plants.ramp_limit_up.isna(), "ramp_limit_up"] = plants.loc[
-        plants.ramp_limit_up.isna(),
-        "carrier",
-    ].map(avg_prime_mover_ramp_rates.ramp_limit_up)
-    plants.loc[plants.ramp_limit_down.isna(), "ramp_limit_down"] = plants.loc[
-        plants.ramp_limit_down.isna(),
-        "carrier",
-    ].map(avg_prime_mover_ramp_rates.ramp_limit_down)
+    # Filter out non-conus plants and plants that are not built by first investment period.
+    plants = plants[plants.build_year <= investment_periods[0]]
+    plants = plants[plants.nerc_region != "non-conus"]
+    if (interconnect is not None) & (interconnect != "usa"):
+        plants["interconnection"] = plants["nerc_region"].map(const.NERC_REGION_MAPPER)
+        plants = plants[plants.interconnection == interconnect]
 
-    # Timeline
-    plants["build_year"] = plants.operating_year
     return plants
 
+def impute_missing_plant_data(
+    plants: pd.DataFrame, 
+    aggregation_fields: 
+    list[str], 
+    data_fields: list[str]
+    ) -> pd.DataFrame:
+    """
+    Imputes missing data in the plants dataframe based on the average values of the data dataframe.
+    """
+    # Function to calculate weighted average
+    def weighted_avg(df, values, weights):
+        valid = df[values].notna()
+        if valid.sum() == 0:
+            return np.nan  # Return NaN if no valid entries
+        return np.average(df[values][valid], weights=df[weights][valid])
+
+    # Calculate the weighted averages excluding NaNs
+    weighted_averages = plants.groupby(aggregation_fields).apply(lambda x: pd.Series({
+        field: weighted_avg(x, field, 'p_nom') for field in data_fields
+    })).reset_index()
+
+    # Merge weighted averages back into the original DataFrame
+    plants_merged = pd.merge(plants.reset_index(), weighted_averages, on=aggregation_fields, suffixes=('', '_weighted'))
+
+    # Fill NaN values using the weighted averages
+    for field in data_fields:
+        plants_merged[field] = plants_merged[field].fillna(plants_merged[f'{field}_weighted'])
+
+    # Drop the weighted average columns after filling NaNs
+    plants_merged = plants_merged.drop(columns=[f'{field}_weighted' for field in data_fields])
+    plants_merged.set_index("generator_name", inplace=True)
+    return plants_merged
 
 def broadcast_investment_horizons_index(n: pypsa.Network, df: pd.DataFrame):
     """
@@ -1115,6 +1133,7 @@ def main(snakemake):
 
     plants = load_powerplants_eia(
         snakemake.input["plants_eia"],
+        n.investment_periods,
         interconnect=interconnection,
     )
 
