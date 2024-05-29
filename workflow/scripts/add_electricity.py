@@ -481,17 +481,14 @@ def attach_conventional_generators(
 
     plants["efficiency"] = plants.efficiency.fillna(plants.efficiency_r)
 
-    if unit_commitment is not None:
-        committable_attrs = plants.carrier.isin(unit_commitment).to_frame("committable")
-        for attr in unit_commitment.index:
-            default = pypsa.components.component_attrs["Generator"].default[attr]
-            committable_attrs[attr] = plants.carrier.map(
-                unit_commitment.loc[attr],
-            ).fillna(
-                default,
-            )
-    else:
-        committable_attrs = {}
+    committable_fields = ['start_up_cost', 'min_down_time', 'min_up_time']
+    for attr in committable_fields:
+        default = pypsa.components.component_attrs["Generator"].default[attr]
+        if unit_commitment:
+            plants[attr] = plants[attr].fillna(default)
+        else:
+            plants[attr] = default
+    committable_attrs = {attr: plants[attr] for attr in committable_fields}
 
     marginal_cost = plants.carrier.map(costs.VOM) + plants.marginal_cost
 
@@ -516,6 +513,7 @@ def attach_conventional_generators(
         capital_cost=plants.capital_cost,
         build_year=plants.build_year.fillna(0).astype(int),
         lifetime=plants.carrier.map(costs.lifetime),
+        committable = unit_commitment,
         **committable_attrs,
     )
 
@@ -1126,11 +1124,6 @@ def main(snakemake):
         k: v for k, v in snakemake.input.items() if k.startswith("conventional_")
     }
 
-    if params.conventional["unit_commitment"]:
-        unit_commitment = pd.read_csv(snakemake.input.unit_commitment, index_col=0)
-    else:
-        unit_commitment = None
-
     plants = load_powerplants_eia(
         snakemake.input["plants_eia"],
         n.investment_periods,
@@ -1160,7 +1153,7 @@ def main(snakemake):
         params.conventional,
         renewable_carriers,
         conventional_inputs,
-        unit_commitment=unit_commitment,
+        unit_commitment=params.conventional["unit_commitment"],
         fuel_price=None,  # update fuel prices later
     )
     apply_seasonal_capacity_derates(
