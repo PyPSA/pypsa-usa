@@ -422,18 +422,25 @@ def attach_renewable_capacities_to_atlite(
         plants_filt = plants.query("carrier == @tech")
         if plants_filt.empty:
             continue
-        generators_tech = n.generators[n.generators.carrier == tech]
+
+        generators_tech = n.generators[n.generators.carrier == tech].copy()
+        generators_tech['sub_assignment'] = generators_tech.bus.map(n.buses.sub_id)
+        plants_filt['sub_assignment'] = plants_filt.bus_assignment.map(n.buses.sub_id)
         caps_per_bus = (
-            plants_filt[["bus_assignment", "p_nom"]]
-            .groupby("bus_assignment")
+            plants_filt[["sub_assignment", "p_nom"]]
+            .groupby("sub_assignment")
             .sum()
             .p_nom
-        )  # namplate capacity per bus
-        # TODO: #16 Gens excluded from atlite profiles bc of landuse/etc will not be able to be attached if in the breakthrough network
-        if caps_per_bus[~caps_per_bus.index.isin(generators_tech.bus)].sum() > 0:
+        )  # namplate capacity per sub_id
+        
+        if caps_per_bus[~caps_per_bus.index.isin(generators_tech.sub_assignment)].sum() > 0:
+            p_all = (plants_filt[["sub_assignment", "p_nom",'latitude','longitude']])
+            missing_plants = p_all[~p_all.sub_assignment.isin(generators_tech.sub_assignment)]
             missing_capacity = caps_per_bus[
-                ~caps_per_bus.index.isin(generators_tech.bus)
+                ~caps_per_bus.index.isin(generators_tech.sub_assignment)
             ].sum()
+            missing_plants.to_csv(f"missing_{tech}_plants.csv",)
+
             logger.info(
                 f"There are {np.round(missing_capacity/1000,4)} GW of {tech} plants that are not in the network. See git issue #16.",
             )
@@ -441,8 +448,8 @@ def attach_renewable_capacities_to_atlite(
         logger.info(
             f"{np.round(caps_per_bus.sum()/1000,2)} GW of {tech} capacity added.",
         )
-        n.generators.p_nom.update(generators_tech.bus.map(caps_per_bus).dropna())
-        n.generators.p_nom_min.update(generators_tech.bus.map(caps_per_bus).dropna())
+        n.generators.p_nom.update(generators_tech.sub_assignment.map(caps_per_bus).dropna())
+        n.generators.p_nom_min.update(generators_tech.sub_assignment.map(caps_per_bus).dropna())
 
 
 def attach_conventional_generators(
@@ -1267,6 +1274,6 @@ if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
 
-        snakemake = mock_snakemake("add_electricity", interconnect="western")
+        snakemake = mock_snakemake("add_electricity", interconnect="texas")
     configure_logging(snakemake)
     main(snakemake)
