@@ -8,6 +8,7 @@ future, it would be good to integrate this logic into snakemake
 import logging
 
 import geopandas as gpd
+import numpy as np
 import pandas as pd
 import pypsa
 
@@ -16,6 +17,14 @@ import sys
 from typing import Optional
 
 from _helpers import configure_logging, get_snapshots
+from add_sector_techs import (
+    add_air_cons,
+    add_coal_furnaces,
+    add_electrical_distribution,
+    add_evs,
+    add_gas_furnaces,
+    add_heat_pumps,
+)
 from build_natural_gas import (
     StateGeometry,
     build_natural_gas,
@@ -65,7 +74,7 @@ def add_sector_foundation(
     center_points: Optional[pd.DataFrame] = pd.DataFrame(),
 ) -> None:
     """
-    Adds carrier and state level bus for the energy carrier.
+    Adds carrier, state level bus and generator for the energy carrier.
     """
 
     if carrier == "gas":
@@ -126,6 +135,20 @@ def add_sector_foundation(
         STATE_NAME=points.name,
     )
 
+    n.madd(
+        "Generator",
+        names=points.index,
+        suffix=f" {carrier}",
+        bus=[f"{x} {carrier}" for x in points.index],
+        p_nom=0,
+        p_nom_extendable=True,
+        capital_cost=0,
+        p_nom_min=0,
+        p_nom_max=np.inf,
+        carrier=carrier,
+        unit="MWh_th",
+    )
+
 
 def split_loads_by_carrier(n: pypsa.Network):
     """
@@ -134,6 +157,9 @@ def split_loads_by_carrier(n: pypsa.Network):
     At this point, all loads (ie. com-elec, com-heat, com-cool) will be
     nested under the elec bus. This function will create a new bus-load
     pair for each energy carrier
+
+    Note: This will break the flow of energy in the model! You must add a
+    new link between the new bus and old bus if you want to retain the flow
     """
 
     for bus in n.buses.index.unique():
@@ -221,5 +247,13 @@ if __name__ == "__main__":
     for carrier in ("oil", "coal"):
         add_sector_foundation(n, carrier, center_points)
         convert_generators_2_links(n, carrier, f" {carrier}")
+
+    # add links to connect sector
+    add_electrical_distribution(n)
+    add_evs(n)
+    add_heat_pumps(n)
+    add_air_cons(n)
+    add_coal_furnaces(n)
+    add_gas_furnaces(n)
 
     n.export_to_netcdf(snakemake.output.network)
