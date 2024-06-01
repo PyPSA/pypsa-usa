@@ -358,8 +358,8 @@ if __name__ == "__main__":
 
     for investment_period in n.investment_periods:
 
-        data = get_sankey_dataframe(n, investment_period)
-        data = format_sankey_data(data)
+        df = get_sankey_dataframe(n, investment_period)
+        df = format_sankey_data(df)
 
         fig = go.Figure(
             data=[
@@ -374,11 +374,11 @@ if __name__ == "__main__":
                         color=[COLORS[x] for x in SANKEY_CODE_MAPPER.keys()],
                     ),
                     link=dict(
-                        source=data.source.to_list(),
-                        target=data.target.to_list(),
-                        value=data.value.to_list(),
+                        source=df.source.to_list(),
+                        target=df.target.to_list(),
+                        value=df.value.to_list(),
                         # label =  sankey_data.label.to_list(),
-                        color=data.link_color.to_list(),
+                        color=df.link_color.to_list(),
                     ),
                 ),
             ],
