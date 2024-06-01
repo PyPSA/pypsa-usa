@@ -13,23 +13,25 @@ from constants import TBTU_2_MWH
 from pypsa.descriptors import get_switchable_as_dense
 from pypsa.statistics import StatisticsAccessor
 
+# These are node colors! Energy Services and Rejected Energy links do not
+# follow node color assignment and are corrected in code
 COLORS = {
-    "Solar": "#ffd800",
-    "Nuclear": "#cd0000",
-    "Hydro": "#0000ff",
-    "Wind": "#920a92",
-    "Geothermal": "#925a0a",
-    "Natural Gas": "#44acf5",
-    "Coal": "#696969",
-    "Biomass": "#91ef91",
-    "Petroleum": "#006000",
-    "Electricity Generation": "#e79b34",
-    "Residential": "#ffbcc8",
-    "Commercial": "#ffbcc8",
-    "Industrial": "#ffbcc8",
-    "Transportation": "#ffbcc8",
-    "Rejected Energy": "#bababa",
-    "Energy Services": "#616161",
+    "Solar": "rgba(255,216,0,1)",
+    "Nuclear": "rgba(205,0,0,1)",
+    "Hydro": "rgba(0,0,255,1)",
+    "Wind": "rgba(146,10,146,1)",
+    "Geothermal": "rgba(146,90,10,1)",
+    "Natural Gas": "rgba(68,172,245,1)",
+    "Coal": "rgba(105,105,105,1)",
+    "Biomass": "rgba(145,239,145,1)",
+    "Petroleum": "rgba(0,96,0,1)",
+    "Electricity Generation": "rgba(231,155,52,1)",
+    "Residential": "rgba(255,188,200,1)",
+    "Commercial": "rgba(255,188,200,1)",
+    "Industrial": "rgba(255,188,200,1)",
+    "Transportation": "rgba(255,188,200,1)",
+    "Rejected Energy": "rgba(186,186,186,1)",
+    "Energy Services": "rgba(97,97,97,1)",
 }
 
 SANKEY_CODE_MAPPER = {name: num for num, name in enumerate(COLORS)}
@@ -61,7 +63,7 @@ NAME_MAPPER = {
 END_USE_TECH_EXCLUSIONS = {"air-con", "heat-pump"}
 
 ###
-# GENERATORS
+# POWER GENERATION SECTOR
 ###
 
 
@@ -123,11 +125,6 @@ def get_AC_generator_rejected(n: pypsa.Network, investment_period: int) -> pd.Da
     return df[["source", "target", "value"]]
 
 
-###
-# ELECTRICITY GENERATION
-###
-
-
 def get_AC_link_primary(n: pypsa.Network, investment_period: int) -> pd.DataFrame:
     """
     Gets AC links primary energy usage.
@@ -161,8 +158,10 @@ def get_AC_link_rejected(n: pypsa.Network, investment_period: int) -> pd.DataFra
     carriers = ac_links(n, investment_period)
     df = df[df.carrier.isin(carriers)]
 
-    primary = df[~(df.bus_carrier == "AC")].drop(columns=["bus_carrier"])
-    used = df[df.bus_carrier == "AC"].drop(columns=["bus_carrier"])
+    primary = (
+        df[~(df.bus_carrier == "AC")].drop(columns=["bus_carrier"]).set_index("carrier")
+    )
+    used = df[df.bus_carrier == "AC"].drop(columns=["bus_carrier"]).set_index("carrier")
     rejected = primary.mul(-1) - used  # -1 because links remove energy from bus0
 
     rejected = rejected.reset_index().rename(columns={investment_period: "value"})
@@ -173,7 +172,7 @@ def get_AC_link_rejected(n: pypsa.Network, investment_period: int) -> pd.DataFra
 
 
 ###
-# END-USE
+# END-USE ENERGY TRACKING
 ###
 
 
@@ -205,7 +204,7 @@ def _get_end_use_delievered_per_sector(
     """
 
     def assign_source(s: str) -> str:
-        if s == "dist":
+        if (s == "dist") or (s == "evs"):
             return "Electricity Generation"
         else:
             return s
@@ -214,7 +213,7 @@ def _get_end_use_delievered_per_sector(
 
     df = StatisticsAccessor(n).energy_balance("Link")[[investment_period]]
     df = df.reset_index()
-    df = df[df.bus_carrier.map(lambda x: True if "ind-" in x else False)]
+    df = df[df.bus_carrier.map(lambda x: True if f"{sector}-" in x else False)]
     df = df[~(df.carrier.isin(exclusion))]
     df["carrier"] = df.carrier.map(lambda x: x.split("-")[0])
     df["source"] = df.carrier.map(assign_source)
@@ -315,9 +314,20 @@ def get_sankey_dataframe(n: pypsa.Network, investment_period: int) -> pd.DataFra
 
 
 def format_sankey_data(data: pd.DataFrame) -> pd.DataFrame:
+
+    def assign_link_color(row: pd.Series) -> str:
+        if row.target == "Rejected Energy":
+            return COLORS["Rejected Energy"]
+        elif row.target == "Energy Services":
+            return COLORS["Energy Services"]
+        else:
+            return COLORS[row.source]
+
     df = data.copy()
     df["value"] = df.value.mul(1 / TBTU_2_MWH)
-    df["color"] = df.source.map(COLORS)
+    df["node_color"] = df.source.map(COLORS)
+    df["link_color"] = df.apply(assign_link_color, axis=1)
+    df["link_color"] = df.link_color.str.replace(",1)", ",0.5)")
     df["source"] = df.source.map(SANKEY_CODE_MAPPER)
     df["target"] = df.target.map(SANKEY_CODE_MAPPER)
     return df
@@ -368,7 +378,7 @@ if __name__ == "__main__":
                         target=data.target.to_list(),
                         value=data.value.to_list(),
                         # label =  sankey_data.label.to_list(),
-                        color=data.color.to_list(),
+                        color=data.link_color.to_list(),
                     ),
                 ),
             ],
