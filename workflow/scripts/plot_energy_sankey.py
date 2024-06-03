@@ -324,7 +324,7 @@ def format_sankey_data(data: pd.DataFrame) -> pd.DataFrame:
             return COLORS[row.source]
 
     df = data.copy()
-    df["value"] = df.value.mul(1 / TBTU_2_MWH)
+    df["value"] = df.value.mul(1 / TBTU_2_MWH).div(1000)  # MWH -> quads
     df["node_color"] = df.source.map(COLORS)
     df["link_color"] = df.apply(assign_link_color, axis=1)
     df["link_color"] = df.link_color.str.replace(",1)", ",0.5)")

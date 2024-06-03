@@ -17,19 +17,13 @@ import sys
 from typing import Optional
 
 from _helpers import configure_logging, get_snapshots
-from add_sector_techs import (
-    add_air_cons,
-    add_coal_furnaces,
-    add_electrical_distribution,
-    add_evs,
-    add_gas_furnaces,
-    add_heat_pumps,
-)
+from build_heat import build_heat
 from build_natural_gas import (
     StateGeometry,
     build_natural_gas,
     convert_generators_2_links,
 )
+from build_transportation import build_transportation
 from constants import STATE_2_CODE, STATES_INTERCONNECT_MAPPER
 from shapely.geometry import Point
 
@@ -228,9 +222,19 @@ if __name__ == "__main__":
     # Sector addition starts here
     ###
 
+    # break out loads into sector specific buses
     split_loads_by_carrier(n)
 
-    # build this first! As it will build primary energy buses for the state
+    # add primary energy carriers for each state
+    # natural gas is added in build_natural_gas(..)
+    center_points = StateGeometry(snakemake.input.county).state_center_points.set_index(
+        "STATE",
+    )
+    for carrier in ("oil", "coal"):
+        add_sector_foundation(n, carrier, center_points)
+        convert_generators_2_links(n, carrier, f" {carrier}")
+
+    # add natural gas infrastructure and data
     build_natural_gas(
         n=n,
         year=sns[0].year,
@@ -241,19 +245,24 @@ if __name__ == "__main__":
         pipeline_shape_path=snakemake.input.pipeline_shape,
     )
 
-    center_points = StateGeometry(snakemake.input.county).state_center_points.set_index(
-        "STATE",
-    )
-    for carrier in ("oil", "coal"):
-        add_sector_foundation(n, carrier, center_points)
-        convert_generators_2_links(n, carrier, f" {carrier}")
+    pop_layout_path = snakemake.input.clustered_pop_layout
+    cop_ashp_path = snakemake.input.cop_air_total
+    cop_gshp_path = snakemake.input.cop_ground_total
+    costs_path = snakemake.input.costs
 
-    # add links to connect sector
-    add_electrical_distribution(n)
-    add_evs(n)
-    add_heat_pumps(n)
-    add_air_cons(n)
-    add_coal_furnaces(n)
-    add_gas_furnaces(n)
+    # add heating and cooling delievery infrastructure and data
+    build_heat(
+        n=n,
+        costs_path=costs_path,
+        pop_layout_path=pop_layout_path,
+        cop_ashp_path=cop_ashp_path,
+        cop_gshp_path=cop_gshp_path,
+    )
+
+    # add transportation
+    build_transportation(
+        n=n,
+        costs_path=costs_path,
+    )
 
     n.export_to_netcdf(snakemake.output.network)

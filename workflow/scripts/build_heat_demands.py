@@ -19,9 +19,9 @@ if __name__ == "__main__":
 
         snakemake = mock_snakemake(
             "build_heat_demands",
-            interconnect="western",
+            interconnect="texas",
             # simpl="",
-            clusters=60,
+            clusters=20,
             scope="total",
         )
 

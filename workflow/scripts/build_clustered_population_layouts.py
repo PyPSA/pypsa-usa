@@ -14,9 +14,8 @@ if __name__ == "__main__":
 
         snakemake = mock_snakemake(
             "build_clustered_population_layouts",
-            interconnect="western",
-            # simpl="",
-            clusters=60,
+            interconnect="texas",
+            clusters=20,
         )
 
     cutout = atlite.Cutout(snakemake.input.cutout)
@@ -37,8 +36,14 @@ if __name__ == "__main__":
 
     pop = pd.DataFrame(pop, index=clustered_regions.index)
 
-    pop["ba"] = pop.index.map(lambda x: x.split(" ")[0])
-    ba_population = pop.total.groupby(pop.ba).sum()
-    pop["fraction"] = pop.total / pop.ba.map(ba_population)
+    pop["country"] = pop.index.map(lambda x: x.split(" ")[0])
+
+    # get fraction of each clustering area population at each node
+    country_population = pop.total.groupby(pop.country).sum()
+    pop["fraction_per_node"] = pop.total / pop.country.map(country_population)
+
+    # get fraction of popuation that is classified as urban or rural
+    pop["urban_fraction"] = pop.urban / pop.total
+    pop["rural_fraction"] = pop.rural / pop.total
 
     pop.to_csv(snakemake.output.clustered_pop_layout)
