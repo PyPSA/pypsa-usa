@@ -609,3 +609,7 @@ rule build_powerplants:
         eia_ads_generator_mapping="repo_data/eia_ads_generator_mapping_updated.csv"
     output:
         powerplants=RESOURCES + "powerplants.csv"
+    log:
+        "logs/build_powerplants"
+    script:
+        "../scripts/build_powerplants.py"
