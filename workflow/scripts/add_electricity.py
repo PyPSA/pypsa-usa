@@ -424,18 +424,23 @@ def attach_renewable_capacities_to_atlite(
             continue
 
         generators_tech = n.generators[n.generators.carrier == tech].copy()
-        generators_tech['sub_assignment'] = generators_tech.bus.map(n.buses.sub_id)
-        plants_filt['sub_assignment'] = plants_filt.bus_assignment.map(n.buses.sub_id)
+        generators_tech["sub_assignment"] = generators_tech.bus.map(n.buses.sub_id)
+        plants_filt["sub_assignment"] = plants_filt.bus_assignment.map(n.buses.sub_id)
         caps_per_bus = (
             plants_filt[["sub_assignment", "p_nom"]]
             .groupby("sub_assignment")
             .sum()
             .p_nom
         )  # namplate capacity per sub_id
-        
-        if caps_per_bus[~caps_per_bus.index.isin(generators_tech.sub_assignment)].sum() > 0:
-            p_all = (plants_filt[["sub_assignment", "p_nom",'latitude','longitude']])
-            missing_plants = p_all[~p_all.sub_assignment.isin(generators_tech.sub_assignment)]
+
+        if (
+            caps_per_bus[~caps_per_bus.index.isin(generators_tech.sub_assignment)].sum()
+            > 0
+        ):
+            p_all = plants_filt[["sub_assignment", "p_nom", "latitude", "longitude"]]
+            missing_plants = p_all[
+                ~p_all.sub_assignment.isin(generators_tech.sub_assignment)
+            ]
             missing_capacity = caps_per_bus[
                 ~caps_per_bus.index.isin(generators_tech.sub_assignment)
             ].sum()
@@ -448,8 +453,12 @@ def attach_renewable_capacities_to_atlite(
         logger.info(
             f"{np.round(caps_per_bus.sum()/1000,2)} GW of {tech} capacity added.",
         )
-        n.generators.p_nom.update(generators_tech.sub_assignment.map(caps_per_bus).dropna())
-        n.generators.p_nom_min.update(generators_tech.sub_assignment.map(caps_per_bus).dropna())
+        n.generators.p_nom.update(
+            generators_tech.sub_assignment.map(caps_per_bus).dropna()
+        )
+        n.generators.p_nom_min.update(
+            generators_tech.sub_assignment.map(caps_per_bus).dropna()
+        )
 
 
 def attach_conventional_generators(
@@ -481,7 +490,7 @@ def attach_conventional_generators(
 
     plants["efficiency"] = plants.efficiency.fillna(plants.efficiency_r)
 
-    committable_fields = ['start_up_cost', 'min_down_time', 'min_up_time']
+    committable_fields = ["start_up_cost", "min_down_time", "min_up_time"]
     for attr in committable_fields:
         default = pypsa.components.component_attrs["Generator"].default[attr]
         if unit_commitment:
@@ -513,7 +522,7 @@ def attach_conventional_generators(
         capital_cost=plants.capital_cost,
         build_year=plants.build_year.fillna(0).astype(int),
         lifetime=plants.carrier.map(costs.lifetime),
-        committable = unit_commitment,
+        committable=unit_commitment,
         **committable_attrs,
     )
 
@@ -835,7 +844,7 @@ def attach_battery_storage(
 
 def load_powerplants_eia(
     eia_dataset: str,
-    investment_periods: List[int],
+    investment_periods: list[int],
     interconnect: str = None,
 ) -> pd.DataFrame:
 
@@ -852,7 +861,7 @@ def load_powerplants_eia(
     )
     plants.set_index("generator_name", inplace=True)
     plants["p_nom"] = plants.pop("nameplate_capacity_mw")
-    plants["build_year"] = plants.pop('operating_year')
+    plants["build_year"] = plants.pop("operating_year")
     plants["heat_rate"] = plants.pop("egrid_heat_rate")
 
     plants = add_missing_fuel_cost(
@@ -861,25 +870,37 @@ def load_powerplants_eia(
     )  # National Avg used for start-up costs
 
     # Unit Commitment Parameters
-    plants["start_up_cost"] = plants["ads_startup_cost_fixed$"] + plants.ads_startfuelmmbtu * plants.fuel_cost
+    plants["start_up_cost"] = (
+        plants["ads_startup_cost_fixed$"] + plants.ads_startfuelmmbtu * plants.fuel_cost
+    )
     plants["min_down_time"] = plants.pop("ads_minimumdowntimehr")
     plants["min_up_time"] = plants.pop("ads_minimumuptimehr")
 
     # Ramp Limit Parameters
     plants["ramp_limit_up"] = (
         plants.pop("ads_rampup_ratemw/minute") / plants.p_nom * 60
-    ).clip(lower=0, upper=1)  # MW/min to p.u./hour
+    ).clip(
+        lower=0, upper=1
+    )  # MW/min to p.u./hour
     plants["ramp_limit_down"] = (
         plants.pop("ads_rampdn_ratemw/minute") / plants.p_nom * 60
-    ).clip(lower=0, upper=1) # MW/min to p.u./hour
+    ).clip(
+        lower=0, upper=1
+    )  # MW/min to p.u./hour
 
-    #Impute missing data based on average values of a given aggregation
+    # Impute missing data based on average values of a given aggregation
     aggregation_fields = ["technology"]
-    data_fields = ['start_up_cost', 'min_down_time', 'min_up_time', "ramp_limit_up", "ramp_limit_down"]
+    data_fields = [
+        "start_up_cost",
+        "min_down_time",
+        "min_up_time",
+        "ramp_limit_up",
+        "ramp_limit_down",
+    ]
     plants = impute_missing_plant_data(plants, aggregation_fields, data_fields)
 
     aggregation_fields = ["nerc_region", "technology"]
-    data_fields = ['heat_rate']
+    data_fields = ["heat_rate"]
     plants = impute_missing_plant_data(plants, aggregation_fields, data_fields)
 
     plants["marginal_cost"] = (
@@ -898,15 +919,17 @@ def load_powerplants_eia(
 
     return plants
 
+
 def impute_missing_plant_data(
-    plants: pd.DataFrame, 
-    aggregation_fields: 
-    list[str], 
-    data_fields: list[str]
-    ) -> pd.DataFrame:
+    plants: pd.DataFrame,
+    aggregation_fields: list[str],
+    data_fields: list[str],
+) -> pd.DataFrame:
     """
-    Imputes missing data in the plants dataframe based on the average values of the data dataframe.
+    Imputes missing data in the plants dataframe based on the average values of
+    the data dataframe.
     """
+
     # Function to calculate weighted average
     def weighted_avg(df, values, weights):
         valid = df[values].notna()
@@ -915,21 +938,37 @@ def impute_missing_plant_data(
         return np.average(df[values][valid], weights=df[weights][valid])
 
     # Calculate the weighted averages excluding NaNs
-    weighted_averages = plants.groupby(aggregation_fields).apply(lambda x: pd.Series({
-        field: weighted_avg(x, field, 'p_nom') for field in data_fields
-    })).reset_index()
+    weighted_averages = (
+        plants.groupby(aggregation_fields)
+        .apply(
+            lambda x: pd.Series(
+                {field: weighted_avg(x, field, "p_nom") for field in data_fields}
+            ),
+        )
+        .reset_index()
+    )
 
     # Merge weighted averages back into the original DataFrame
-    plants_merged = pd.merge(plants.reset_index(), weighted_averages, on=aggregation_fields, suffixes=('', '_weighted'))
+    plants_merged = pd.merge(
+        plants.reset_index(),
+        weighted_averages,
+        on=aggregation_fields,
+        suffixes=("", "_weighted"),
+    )
 
     # Fill NaN values using the weighted averages
     for field in data_fields:
-        plants_merged[field] = plants_merged[field].fillna(plants_merged[f'{field}_weighted'])
+        plants_merged[field] = plants_merged[field].fillna(
+            plants_merged[f"{field}_weighted"]
+        )
 
     # Drop the weighted average columns after filling NaNs
-    plants_merged = plants_merged.drop(columns=[f'{field}_weighted' for field in data_fields])
+    plants_merged = plants_merged.drop(
+        columns=[f"{field}_weighted" for field in data_fields]
+    )
     plants_merged.set_index("generator_name", inplace=True)
     return plants_merged
+
 
 def broadcast_investment_horizons_index(n: pypsa.Network, df: pd.DataFrame):
     """
@@ -1066,7 +1105,7 @@ def attach_breakthrough_renewable_plants(
             p_nom = tech_plants.Pmax
             p_max_pu = p_nom_be[tech_plants.index] / p_nom
 
-        leap_day = p_max_pu.loc['2016-02-29 00:00:00':'2016-02-29 23:00:00']
+        leap_day = p_max_pu.loc["2016-02-29 00:00:00":"2016-02-29 23:00:00"]
         p_max_pu = p_max_pu.drop(leap_day.index)
         p_max_pu = broadcast_investment_horizons_index(n, p_max_pu)
 

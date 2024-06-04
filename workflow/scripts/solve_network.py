@@ -609,7 +609,7 @@ def add_regional_co2limit(n, sns, config):
             )
 
             logger.info(
-                f"Adding regional Co2 Limit for {emmission_lim.name} in {planning_horizon}"
+                f"Adding regional Co2 Limit for {emmission_lim.name} in {planning_horizon}",
             )
 
 
