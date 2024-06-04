@@ -545,8 +545,6 @@ def merge_ads_data(eia_data_operable):
 
     # Check for inf and nan values in avg_hr, and replace with nan.
     # This is done so we can identify plants without data, then replace with averages later
-    print("# of np.inf in avg_hr: ", np.sum(abs(ads_ioc["avg_hr"]) == np.inf))
-    print("# of np.nan in avg_hr: ", np.sum(abs(ads_ioc["avg_hr"]) == np.nan))
     ads_ioc["avg_hr"] = ads_ioc["avg_hr"].replace([np.inf, -np.inf], np.nan)
 
     # Plotting IOC Results
