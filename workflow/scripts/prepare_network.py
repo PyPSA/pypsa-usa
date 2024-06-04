@@ -297,10 +297,10 @@ if __name__ == "__main__":
         snakemake = mock_snakemake(
             "prepare_network",
             simpl="",
-            clusters="80",
+            clusters="36",
             interconnect="western",
             ll="v1.0",
-            opts="Ep-Co2L0.2.nc",
+            opts="REM-1000SEG",
         )
     configure_logging(snakemake)
     set_scenario_config(snakemake)
