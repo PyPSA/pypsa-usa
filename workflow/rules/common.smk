@@ -157,9 +157,9 @@ def interconnect_mem_c(w):
     elif w.interconnect == "eastern":
         return int(mem * 3)
     elif w.interconnect == "western":
-        return int(mem)
+        return int(mem) * 2
     elif w.interconnect == "texas":
-        return int(mem * 0.5)
+        return int(mem * 0.75)
 
 
 def input_custom_extra_functionality(w):
