@@ -1,12 +1,11 @@
 import pandas as pd
 import duckdb
 import re
-import os
 import numpy as np
 from scipy.optimize import minimize
 
-def load_pudl_data():
 
+def load_pudl_data():
     duckdb.connect(database=":memory:", read_only=False)
 
     duckdb.query("INSTALL sqlite;")
@@ -67,14 +66,15 @@ def load_pudl_data():
 
     return eia_data_operable
 
-def set_non_conus(eia_data_operable):
 
+def set_non_conus(eia_data_operable):
     eia_data_operable.loc[eia_data_operable.state.isin(["AK", "HI"]), "nerc_region"] = (
         "non-conus"
     )
     eia_data_operable.loc[
         eia_data_operable.state.isin(["AK", "HI"]), "balancing_authority_code"
     ] = "non-conus"
+
 
 def set_derates(eia_data_operable):
     eia_data_operable["summer_derate"] = 1 - (
@@ -85,12 +85,13 @@ def set_derates(eia_data_operable):
         (eia_data_operable.capacity_mw - eia_data_operable.winter_capacity_mw)
         / eia_data_operable.capacity_mw
     )
-    eia_data_operable.summer_derate = eia_data_operable.summer_derate.clip(upper=1).clip(
-        lower=0
-    )
-    eia_data_operable.winter_derate = eia_data_operable.winter_derate.clip(upper=1).clip(
-        lower=0
-    )
+    eia_data_operable.summer_derate = eia_data_operable.summer_derate.clip(
+        upper=1
+    ).clip(lower=0)
+    eia_data_operable.winter_derate = eia_data_operable.winter_derate.clip(
+        upper=1
+    ).clip(lower=0)
+
 
 # Assign PyPSA Carrier Names, Fuel Types, and Prime Movers Names
 eia_tech_map = pd.DataFrame(
@@ -340,12 +341,22 @@ eia_primemover_map = pd.DataFrame(
 )
 eia_primemover_map.set_index("Prime Mover", inplace=True)
 
+
 def set_tech_fuels_primer_movers(eia_data_operable):
     # Map technologies, fuels, and prime movers
     maps = {
-        "carrier": (eia_data_operable["technology_description"], eia_tech_map["tech_type"]),
-        "fuel_type": (eia_data_operable["energy_source_code_1"], eia_fuel_map["fuel_type"]),
-        "fuel_name": (eia_data_operable["energy_source_code_1"], eia_fuel_map["fuel_name"]),
+        "carrier": (
+            eia_data_operable["technology_description"],
+            eia_tech_map["tech_type"],
+        ),
+        "fuel_type": (
+            eia_data_operable["energy_source_code_1"],
+            eia_fuel_map["fuel_type"],
+        ),
+        "fuel_name": (
+            eia_data_operable["energy_source_code_1"],
+            eia_fuel_map["fuel_name"],
+        ),
         "prime_mover_name": (
             eia_data_operable["prime_mover_code"],
             eia_primemover_map["prime_mover"],
@@ -363,6 +374,7 @@ def standardize_col_names(columns, prefix="", suffix=""):
         + suffix
         for col in columns
     ]
+
 
 def merge_ads_data(eia_data_operable):
     ADS_PATH = snakemake.input.wecc_ads
@@ -471,12 +483,10 @@ def merge_ads_data(eia_data_operable):
         y_pred = a * x**2 + b * x + c
         return np.sum((y_true - y_pred) ** 2)
 
-
     def linear_error_function(params, x, y_true):
         a, b = params
         y_pred = a * x + b
         return np.sum((y_true - y_pred) ** 2)
-
 
     ads_ioc["linear_a"] = 0
     ads_ioc["linear_b"] = 0
@@ -487,14 +497,22 @@ def merge_ads_data(eia_data_operable):
 
     for generator_index in range(ads_ioc.shape[0]):
         # generator_index = 0
-        x_set_points = ads_ioc[["x_1", "x_2", "x_3", "x_4", "x_5", "x_6", "x_7"]].values[
-            generator_index, :
-        ]
+        x_set_points = ads_ioc[
+            ["x_1", "x_2", "x_3", "x_4", "x_5", "x_6", "x_7"]
+        ].values[generator_index, :]
         y_vals_hr = ads_ioc[["hr1", "hr2", "hr3", "hr4", "hr5", "hr6", "hr7"]].values[
             generator_index, :
         ]
         y_vals = ads_ioc[
-            ["mmbtu_1", "mmbtu_2", "mmbtu_3", "mmbtu_4", "mmbtu_5", "mmbtu_6", "mmbtu_7"]
+            [
+                "mmbtu_1",
+                "mmbtu_2",
+                "mmbtu_3",
+                "mmbtu_4",
+                "mmbtu_5",
+                "mmbtu_6",
+                "mmbtu_7",
+            ]
         ].values[generator_index, :]
 
         x_linspace, y_linspace = detail_linspace(x_set_points, y_vals, 10)
@@ -562,7 +580,9 @@ def merge_ads_data(eia_data_operable):
     ads["Long Name"] = ads["Long Name"].apply(
         lambda x: re.sub(r"[^a-zA-Z0-9]", "", x).lower()
     )
-    ads["SubType"] = ads["SubType"].apply(lambda x: re.sub(r"[^a-zA-Z0-9]", "", x).lower())
+    ads["SubType"] = ads["SubType"].apply(
+        lambda x: re.sub(r"[^a-zA-Z0-9]", "", x).lower()
+    )
     ads.rename(
         {
             "Name": "ads_name",
@@ -578,7 +598,10 @@ def merge_ads_data(eia_data_operable):
     ads.rename(str.lower, axis="columns", inplace=True)
     ads["long id"] = ads["long id"].astype(str)
     ads = ads.loc[
-        :, ~ads.columns.isin(["save to binary", "county", "city", "zipcode", "internalid"])
+        :,
+        ~ads.columns.isin(
+            ["save to binary", "county", "city", "zipcode", "internalid"]
+        ),
     ]
     ads_name_key_dict = dict(zip(ads["ads_name"], ads["generatorkey"]))
     ads.columns
@@ -613,9 +636,18 @@ def merge_ads_data(eia_data_operable):
     # load mapping file to match the ads thermal to the eia_plants_locs file
     eia_ads_mapper = pd.read_csv(snakemake.input.eia_ads_generator_mapping)
     eia_ads_mapper = eia_ads_mapper.loc[
-        :, ["generatorkey", "ads_name", "plant_id_ads", "plant_id_eia", "generator_id_ads"]
+        :,
+        [
+            "generatorkey",
+            "ads_name",
+            "plant_id_ads",
+            "plant_id_eia",
+            "generator_id_ads",
+        ],
     ]
-    eia_ads_mapper.columns = standardize_col_names(eia_ads_mapper.columns, prefix="mapper_")
+    eia_ads_mapper.columns = standardize_col_names(
+        eia_ads_mapper.columns, prefix="mapper_"
+    )
     eia_ads_mapper.dropna(subset=["mapper_plant_id_eia"], inplace=True)
     eia_ads_mapper.mapper_plant_id_eia = eia_ads_mapper.mapper_plant_id_eia.astype(int)
     eia_ads_mapper.mapper_ads_name = eia_ads_mapper.mapper_ads_name.astype(str)
@@ -692,6 +724,7 @@ def merge_ads_data(eia_data_operable):
 
     return eia_ads_merged
 
+
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
@@ -707,5 +740,3 @@ if __name__ == "__main__":
     set_tech_fuels_primer_movers(eia_data_operable)
     eia_ads_merged = merge_ads_data(eia_data_operable)
     eia_ads_merged.to_csv(snakemake.output.powerplants, index=False)
-
-    
