@@ -1054,12 +1054,6 @@ def attach_breakthrough_renewable_plants(
         )  # filters by plants ID for the plants of type tech
         p_nom_be = p_nom_be[list(intersection)]
 
-        Nhours = len(n.snapshots.get_level_values(1).unique())
-        p_nom_be = p_nom_be.iloc[
-            :Nhours,
-            :,
-        ]  # hotfix to fit 2016 renewable data to load data
-        p_nom_be.index = n.snapshots.get_level_values(1).unique()
         p_nom_be.columns = p_nom_be.columns.astype(str)
 
         if (tech_plants.Pmax == 0).any():
@@ -1072,6 +1066,8 @@ def attach_breakthrough_renewable_plants(
             p_nom = tech_plants.Pmax
             p_max_pu = p_nom_be[tech_plants.index] / p_nom
 
+        leap_day = p_max_pu.loc['2016-02-29 00:00:00':'2016-02-29 23:00:00']
+        p_max_pu = p_max_pu.drop(leap_day.index)
         p_max_pu = broadcast_investment_horizons_index(n, p_max_pu)
 
         n.madd(
