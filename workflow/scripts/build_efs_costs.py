@@ -10,6 +10,7 @@ from typing import Optional
 
 import pandas as pd
 import xarray as xr
+from constants import MMBTU_MWHthemal
 
 
 class EfsTechnologyData:
@@ -50,7 +51,7 @@ class EfsTechnologyData:
     def initialize(self, sector: str):  # returns EfsSectorData
         if sector == "Transportation":
             return EfsTransportationData(self.data, self.efs_case)
-        elif sector == "Building":
+        elif sector == "Buildings":
             return EfsBuildingData(self.data, self.efs_case)
         else:
             raise NotImplementedError
@@ -270,68 +271,113 @@ class EfsTransportationData(EfsSectorData):
 
 class EfsBuildingData(EfsSectorData):
 
-    # Assumptions from https://www.nrel.gov/docs/fy18osti/70485.pdf
-    wh_per_gallon = 33700  # footnote 24
+    mmbtu_2_mwh = MMBTU_MWHthemal
 
     # Assumptions from https://atb.nrel.gov/transportation/2022/definitions
-    lifetime_miles = {
-        "light_duty_cars": 178000,
-        "light_duty_trucks": 198000,
-        "medium_duty_trucks": 198000,
-        "heavy_duty_trucks": 538000,  # class 8
-        "buses": 335000,  # class 4
+
+    # table a3
+    lifetimes = {  # units in years
+        "ashp": 15,
+        "furnace": 15,
+        "elec_resistance": 20,
+        "hpwh": 13,  # heat pump water heater
+        "ngwh": 13,  # natural gas water heater
+        "ewh": 13,  # electrical water heater
     }
 
-    lifetime = 15
+    # table a3
+    # using commercal since it gives at a per-unit level
+    fixed_cost = {  # units in $/kBTU/yr
+        "ashp": 1.47,
+        "furnace": 1.03,
+        "elec_resistance": 0.01,
+        "hpwh": 2.29,
+        "ngwh": 0.55,
+        "ewh": 0.88,
+    }
 
-    def __init__(self, data: pd.DataFrame, sector: str) -> None:
-        super().__init__(data, sector)
+    def __init__(self, data: pd.DataFrame, efs_case: str) -> None:
+        super().__init__(data, efs_case)
 
     def get_capex(self):
-
         df = self.data.copy()
         df = df[
-            (df.Sector == self.sector)
+            (df.Sector == "Buildings")
             & (df["EFS Case"] == self.efs_case)
-            & (df.Metric == "Capital Cost")
+            & (df.Metric == "Installed Cost")
+            & (df.Units.str.startswith("2016$/kBtu/hr"))
         ].copy()
-        df = self._format_data_structure(df)
-        df = self.correct_capex_units(df)
+        source = "NREL EFS at https://data.nrel.gov/submissions/78"
+        description = ""
+        df["Metric"] = "investment"
+        df = self._format_data_structure(df, source=source, description=description)
+        df = self._correct_capex_units(df)
         return self.expand_data(df)
 
-    def assign_vehicle_miles(self, name: str) -> float:
+    def get_lifetime(self):
+        df = self.get_capex()
+        df["tech_type"] = df.technology.map(self.assign_tech_types)
+        df["value"] = df.tech_type.map(self.lifetimes)
+        df["unit"] = "years"
+        df["parameter"] = "lifetime"
+        return df.drop(columns=["tech_type"])
+
+    def get_efficiency(self):
+        df = self.data.copy()
+        df = df[
+            (df.Sector == "Buildings")
+            & (df["EFS Case"] == self.efs_case)
+            & (df.Metric == "Efficiency")
+        ].copy()
+        source = "NREL EFS at https://data.nrel.gov/submissions/78"
+        df["Metric"] = "efficiency"
+        df["Units"] = "per unit"
+        df = self._format_data_structure(df, source=source, description="")
+        return self.expand_data(df)
+
+    def get_fixed_costs(self):
+        df = self.get_capex()
+        df["parameter"] = "FOM"
+        return self._correct_fom_units(df)
+
+    def assign_tech_types(self, name: str) -> float:
         """
         Must match class level VMT assumptions.
         """
-        if name.startswith("Light Duty Cars"):
-            return self.lifetime_miles["light_duty_cars"]
-        elif name.startswith("Light Duty Trucks"):
-            return self.lifetime_miles["light_duty_trucks"]
-        elif name.startswith("Medium Duty Trucks"):
-            return self.lifetime_miles["medium_duty_trucks"]
-        elif name.startswith("Heavy Duty Trucks"):
-            return self.lifetime_miles["heavy_duty_trucks"]
-        elif name.startswith("Bus"):
-            return self.lifetime_miles["buses"]
+        if name.endswith("Air Source Heat Pump"):
+            return "ashp"
+        elif name.endswith("Heat Pump Water Heater"):
+            return "hpwh"
         else:
-            print(f"Not assigning miles for {name}")
+            print(f"Not assigning tech type for {name}")
             return 0
 
-    def correct_capex_units(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _correct_capex_units(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        Coverts per unit into per VMT.
+        Coverts $/kBtu to $/MWh.
         """
         corrected = df.copy()
-        corrected["miles"] = corrected.technology.map(self.assign_vehicle_miles)
-        corrected["value"] = corrected.value.div(corrected.miles)
-        corrected["unit"] = "$/mile"
-        return corrected.drop(columns=["miles"])
+        corrected["value"] = corrected.value.mul(1000).mul(self.mmbtu_2_mwh)
+        corrected["unit"] = "$/Mwh"
+        return corrected
+
+    def _correct_fom_units(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Converts $/kBtu costs to %/year.
+        """
+        corrected = df.copy()
+        corrected["tech_type"] = corrected.technology.map(self.assign_tech_types)
+        corrected["fom"] = corrected.tech_type.map(self.fixed_cost)  # $ /kBTU
+        corrected["fom"] = corrected.fom.mul(1000).mul(self.mmbtu_2_mwh)  # $ /MWh
+        corrected["value"] = corrected.fom.div(corrected.value).mul(100)
+        corrected["unit"] = "%/year"
+        return corrected.drop(columns=["tech_type", "fom"])
 
 
 if __name__ == "__main__":
     file_path = "../data/costs/EFS_Technology_Data.xlsx"
     efs = EfsTechnologyData(file_path)
-    print(efs.get_capex("Transportation"))
-    print(efs.get_fixed_costs("Transportation"))
-    print(efs.get_lifetime("Transportation"))
-    print(efs.get_efficiency("Transportation"))
+    print(efs.get_capex("Buildings"))
+    print(efs.get_fixed_costs("Buildings"))
+    print(efs.get_lifetime("Buildings"))
+    print(efs.get_efficiency("Buildings"))
