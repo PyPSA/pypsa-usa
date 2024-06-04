@@ -601,3 +601,11 @@ rule prepare_network:
         "logs/prepare_network",
     script:
         "../scripts/prepare_network.py"
+
+rule build_powerplants:
+    input:
+        pudl=DATA + "pudl/pudl.sqlite",
+        wecc_ads=DATA + "WECC_ADS/downloads/2032/Public Data",
+        eia_ads_generator_mapping="repo_data/eia_ads_generator_mapping_updated.csv"
+    output:
+        powerplants=RESOURCES + "powerplants.csv"
