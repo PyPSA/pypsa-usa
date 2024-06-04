@@ -439,7 +439,7 @@ def attach_renewable_capacities_to_atlite(
             missing_capacity = caps_per_bus[
                 ~caps_per_bus.index.isin(generators_tech.sub_assignment)
             ].sum()
-            missing_plants.to_csv(f"missing_{tech}_plants.csv",)
+            # missing_plants.to_csv(f"missing_{tech}_plants.csv",)
 
             logger.info(
                 f"There are {np.round(missing_capacity/1000,4)} GW of {tech} plants that are not in the network. See git issue #16.",
@@ -878,6 +878,10 @@ def load_powerplants_eia(
     data_fields = ['start_up_cost', 'min_down_time', 'min_up_time', "ramp_limit_up", "ramp_limit_down"]
     plants = impute_missing_plant_data(plants, aggregation_fields, data_fields)
 
+    aggregation_fields = ["nerc_region", "technology"]
+    data_fields = ['heat_rate']
+    plants = impute_missing_plant_data(plants, aggregation_fields, data_fields)
+
     plants["marginal_cost"] = (
         plants.heat_rate * plants.fuel_cost
     )  # (MMBTu/MW) * (USD/MMBTu) = USD/MW
@@ -1286,6 +1290,6 @@ if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
 
-        snakemake = mock_snakemake("add_electricity", interconnect="texas")
+        snakemake = mock_snakemake("add_electricity", interconnect="western")
     configure_logging(snakemake)
     main(snakemake)
