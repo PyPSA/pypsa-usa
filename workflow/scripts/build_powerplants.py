@@ -1,7 +1,8 @@
-import pandas as pd
-import duckdb
 import re
+
+import duckdb
 import numpy as np
+import pandas as pd
 from scipy.optimize import minimize
 
 
@@ -13,7 +14,7 @@ def load_pudl_data():
         f"""
         ATTACH '{snakemake.input.pudl}' (TYPE SQLITE);
         USE pudl;
-        """
+        """,
     )
 
     eia_data_operable = duckdb.query(
@@ -61,7 +62,7 @@ def load_pudl_data():
         LEFT JOIN monthly_generators ON out_eia__yearly_generators.plant_id_eia = monthly_generators.plant_id_eia AND out_eia__yearly_generators.generator_id = monthly_generators.generator_id
         WHERE out_eia__yearly_generators.operational_status = 'existing'
         GROUP BY out_eia__yearly_generators.plant_id_eia, out_eia__yearly_generators.generator_id
-    """
+    """,
     ).to_df()
 
     return eia_data_operable
@@ -72,7 +73,8 @@ def set_non_conus(eia_data_operable):
         "non-conus"
     )
     eia_data_operable.loc[
-        eia_data_operable.state.isin(["AK", "HI"]), "balancing_authority_code"
+        eia_data_operable.state.isin(["AK", "HI"]),
+        "balancing_authority_code",
     ] = "non-conus"
 
 
@@ -86,10 +88,10 @@ def set_derates(eia_data_operable):
         / eia_data_operable.capacity_mw
     )
     eia_data_operable.summer_derate = eia_data_operable.summer_derate.clip(
-        upper=1
+        upper=1,
     ).clip(lower=0)
     eia_data_operable.winter_derate = eia_data_operable.winter_derate.clip(
-        upper=1
+        upper=1,
     ).clip(lower=0)
 
 
@@ -154,7 +156,7 @@ eia_tech_map = pd.DataFrame(
             "other",
             "offwind",
         ],
-    }
+    },
 )
 eia_tech_map.set_index("Technology", inplace=True)
 eia_fuel_map = pd.DataFrame(
@@ -282,7 +284,7 @@ eia_fuel_map = pd.DataFrame(
             "Energy Storage",
             "Other",
         ],
-    }
+    },
 )
 eia_fuel_map.set_index("Energy Source 1", inplace=True)
 eia_primemover_map = pd.DataFrame(
@@ -337,7 +339,7 @@ eia_primemover_map = pd.DataFrame(
             "Fuel Cell",
             "Other",
         ],
-    }
+    },
 )
 eia_primemover_map.set_index("Prime Mover", inplace=True)
 
@@ -367,7 +369,10 @@ def set_tech_fuels_primer_movers(eia_data_operable):
 
 
 def standardize_col_names(columns, prefix="", suffix=""):
-    """Standardize column names by removing spaces, converting to lowercase, removing parentheses, and adding prefix and suffix."""
+    """
+    Standardize column names by removing spaces, converting to lowercase,
+    removing parentheses, and adding prefix and suffix.
+    """
     return [
         prefix
         + col.lower().replace(" ", "_").replace("(", "").replace(")", "")
@@ -462,7 +467,10 @@ def merge_ads_data(eia_data_operable):
                 continue
             # Generate linspace for x values
             x_segment = np.linspace(
-                x_values[i], x_values[i + 1], num_points, endpoint=False
+                x_values[i],
+                x_values[i + 1],
+                num_points,
+                endpoint=False,
             )
 
             # Calculate the slope of the segment
@@ -501,7 +509,8 @@ def merge_ads_data(eia_data_operable):
             ["x_1", "x_2", "x_3", "x_4", "x_5", "x_6", "x_7"]
         ].values[generator_index, :]
         y_vals_hr = ads_ioc[["hr1", "hr2", "hr3", "hr4", "hr5", "hr6", "hr7"]].values[
-            generator_index, :
+            generator_index,
+            :,
         ]
         y_vals = ads_ioc[
             [
@@ -519,12 +528,16 @@ def merge_ads_data(eia_data_operable):
 
         initial_guess = [0.1, 0.1, 0.1]
         result_quad = minimize(
-            quadratic_error_function, initial_guess, args=(x_linspace, y_linspace)
+            quadratic_error_function,
+            initial_guess,
+            args=(x_linspace, y_linspace),
         )
 
         initial_guess_lin = [0.1, 0.1]
         result_linear = minimize(
-            linear_error_function, initial_guess_lin, args=(x_linspace, y_linspace)
+            linear_error_function,
+            initial_guess_lin,
+            args=(x_linspace, y_linspace),
         )
 
         a_opt, b_opt, c_opt = result_quad.x
@@ -550,7 +563,8 @@ def merge_ads_data(eia_data_operable):
     # Plotting IOC Results
     generator_index = 102  # 1050
     x_set_points = ads_ioc[["x_1", "x_2", "x_3", "x_4", "x_5", "x_6", "x_7"]].values[
-        generator_index, :
+        generator_index,
+        :,
     ]
     y_vals = ads_ioc[
         ["mmbtu_1", "mmbtu_2", "mmbtu_3", "mmbtu_4", "mmbtu_5", "mmbtu_6", "mmbtu_7"]
@@ -558,7 +572,8 @@ def merge_ads_data(eia_data_operable):
     x_linspace, y_linspace = detail_linspace(x_set_points, y_vals, 10)
 
     a_opt, b_opt, c_opt = ads_ioc.loc[
-        generator_index, ["quadratic_a", "quadratic_b", "quadratic_c"]
+        generator_index,
+        ["quadratic_a", "quadratic_b", "quadratic_c"],
     ]
     a_opt_lin, b_opt_lin = ads_ioc.loc[generator_index, ["linear_a", "linear_b"]]
 
@@ -568,7 +583,9 @@ def merge_ads_data(eia_data_operable):
 
     # loading ads to match ads_name with generator key in order to link with ads thermal file
     ads = pd.read_csv(
-        ADS_PATH + "/GeneratorList.csv", skiprows=2, encoding="unicode_escape"
+        ADS_PATH + "/GeneratorList.csv",
+        skiprows=2,
+        encoding="unicode_escape",
     )
     # ads = ads[ads['State'].isin(['NM', 'AZ', 'CA', 'WA', 'OR', 'ID', 'WY', 'MT', 'UT', 'SD', 'CO', 'NV', 'NE', '0', 'TX'])]
     ads["Long Name"] = ads["Long Name"].astype(str)
@@ -576,10 +593,10 @@ def merge_ads_data(eia_data_operable):
     ads["Name"] = ads["Name"].apply(lambda x: re.sub(r"[^a-zA-Z0-9]", "", x).lower())
     ads["Long Name"] = ads["Long Name"].str.replace(" ", "")
     ads["Long Name"] = ads["Long Name"].apply(
-        lambda x: re.sub(r"[^a-zA-Z0-9]", "", x).lower()
+        lambda x: re.sub(r"[^a-zA-Z0-9]", "", x).lower(),
     )
     ads["SubType"] = ads["SubType"].apply(
-        lambda x: re.sub(r"[^a-zA-Z0-9]", "", x).lower()
+        lambda x: re.sub(r"[^a-zA-Z0-9]", "", x).lower(),
     )
     ads.rename(
         {
@@ -598,7 +615,7 @@ def merge_ads_data(eia_data_operable):
     ads = ads.loc[
         :,
         ~ads.columns.isin(
-            ["save to binary", "county", "city", "zipcode", "internalid"]
+            ["save to binary", "county", "city", "zipcode", "internalid"],
         ),
     ]
     ads_name_key_dict = dict(zip(ads["ads_name"], ads["generatorkey"]))
@@ -612,7 +629,7 @@ def merge_ads_data(eia_data_operable):
         .str.replace("-", "")
     )
     ads_thermal_ioc["generator_key"] = ads_thermal_ioc["generator_name_alt"].map(
-        ads_name_key_dict
+        ads_name_key_dict,
     )
 
     # Identify Generators not in ads generator list that are in the IOC curve. This could potentially be matched with manual work.
@@ -621,14 +638,19 @@ def merge_ads_data(eia_data_operable):
     # Merge ads thermal_IOC data with ads generator data
     # Only keeping thermal plants for their heat rate and ramping data
     ads_complete = ads_thermal_ioc.merge(
-        ads, left_on="generator_key", right_on="generatorkey", how="left"
+        ads,
+        left_on="generator_key",
+        right_on="generatorkey",
+        how="left",
     )
     ads_complete.columns = standardize_col_names(ads_complete.columns, prefix="ads_")
     ads_complete = ads_complete.loc[~ads_complete.ads_state.isin(["MX"])]
     ads_complete
 
     ads_complete.pivot_table(
-        index=["ads_fueltype"], values="ads_avg_hr", aggfunc="mean"
+        index=["ads_fueltype"],
+        values="ads_avg_hr",
+        aggfunc="mean",
     ).sort_values("ads_avg_hr", ascending=False)
 
     # load mapping file to match the ads thermal to the eia_plants_locs file
@@ -644,7 +666,8 @@ def merge_ads_data(eia_data_operable):
         ],
     ]
     eia_ads_mapper.columns = standardize_col_names(
-        eia_ads_mapper.columns, prefix="mapper_"
+        eia_ads_mapper.columns,
+        prefix="mapper_",
     )
     eia_ads_mapper.dropna(subset=["mapper_plant_id_eia"], inplace=True)
     eia_ads_mapper.mapper_plant_id_eia = eia_ads_mapper.mapper_plant_id_eia.astype(int)
@@ -717,7 +740,8 @@ def merge_ads_data(eia_data_operable):
         inplace=True,
     )
     eia_ads_merged = eia_ads_merged.drop_duplicates(
-        subset=["plant_id_eia", "generator_id"], keep="first"
+        subset=["plant_id_eia", "generator_id"],
+        keep="first",
     )
 
     return eia_ads_merged

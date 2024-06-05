@@ -454,10 +454,10 @@ def attach_renewable_capacities_to_atlite(
             f"{np.round(caps_per_bus.sum()/1000,2)} GW of {tech} capacity added.",
         )
         n.generators.p_nom.update(
-            generators_tech.sub_assignment.map(caps_per_bus).dropna()
+            generators_tech.sub_assignment.map(caps_per_bus).dropna(),
         )
         n.generators.p_nom_min.update(
-            generators_tech.sub_assignment.map(caps_per_bus).dropna()
+            generators_tech.sub_assignment.map(caps_per_bus).dropna(),
         )
 
 
@@ -880,12 +880,14 @@ def load_powerplants_eia(
     plants["ramp_limit_up"] = (
         plants.pop("ads_rampup_ratemw/minute") / plants.p_nom * 60
     ).clip(
-        lower=0, upper=1
+        lower=0,
+        upper=1,
     )  # MW/min to p.u./hour
     plants["ramp_limit_down"] = (
         plants.pop("ads_rampdn_ratemw/minute") / plants.p_nom * 60
     ).clip(
-        lower=0, upper=1
+        lower=0,
+        upper=1,
     )  # MW/min to p.u./hour
 
     # Impute missing data based on average values of a given aggregation
@@ -942,7 +944,7 @@ def impute_missing_plant_data(
         plants.groupby(aggregation_fields)
         .apply(
             lambda x: pd.Series(
-                {field: weighted_avg(x, field, "p_nom") for field in data_fields}
+                {field: weighted_avg(x, field, "p_nom") for field in data_fields},
             ),
         )
         .reset_index()
@@ -959,12 +961,12 @@ def impute_missing_plant_data(
     # Fill NaN values using the weighted averages
     for field in data_fields:
         plants_merged[field] = plants_merged[field].fillna(
-            plants_merged[f"{field}_weighted"]
+            plants_merged[f"{field}_weighted"],
         )
 
     # Drop the weighted average columns after filling NaNs
     plants_merged = plants_merged.drop(
-        columns=[f"{field}_weighted" for field in data_fields]
+        columns=[f"{field}_weighted" for field in data_fields],
     )
     plants_merged.set_index("generator_name", inplace=True)
     return plants_merged
