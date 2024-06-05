@@ -65,6 +65,7 @@ rule build_base_network:
 rule build_bus_regions:
     params:
         aggregation_zone=config["clustering"]["cluster_network"]["aggregation_zones"],
+        focus_weights=config["focus_weights"]
     input:
         country_shapes=RESOURCES + "{interconnect}/country_shapes.geojson",
         state_shapes=RESOURCES + "{interconnect}/state_boundaries.geojson",
