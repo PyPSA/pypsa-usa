@@ -711,7 +711,7 @@ def set_parameters(plants: pd.DataFrame):
     plants["efficiency"] = 1 / (
         plants["heat_rate"] / 3.412
     )  # MMBTu/MWh to MWh_electric/MWh_thermal
-    return plants
+    return plants.reset_index()
 
 
 def prepare_heat_rates(
@@ -778,4 +778,11 @@ if __name__ == "__main__":
     set_tech_fuels_primer_movers(eia_data_operable)
     eia_ads_merged = merge_ads_data(eia_data_operable)
     plants = set_parameters(eia_ads_merged)
+
+    # temp throwing out plants without
+    missing_locations = plants[plants.longitude.isna() | plants.latitude.isna()]
+    print('Tossing out plants without locations:', missing_locations.shape[0])
+    plants = plants[~plants.index.isin(missing_locations.index)]
+    print(plants)
+
     plants.to_csv(snakemake.output.powerplants, index=False)
