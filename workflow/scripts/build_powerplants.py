@@ -3,8 +3,6 @@ import re
 import duckdb
 import numpy as np
 import pandas as pd
-from scipy.optimize import minimize
-
 
 def load_pudl_data():
     duckdb.connect(database=":memory:", read_only=False)
@@ -65,7 +63,36 @@ def load_pudl_data():
     """,
     ).to_df()
 
-    return eia_data_operable
+    heat_rates = duckdb.query(
+        """
+        WITH monthly_generators AS (
+            SELECT
+                plant_id_eia,
+                generator_id,
+                report_date,
+                unit_heat_rate_mmbtu_per_mwh
+            FROM out_eia__monthly_generators
+            WHERE operational_status = 'existing' 
+            AND report_date >= CURRENT_DATE - INTERVAL '3 years'
+            AND unit_heat_rate_mmbtu_per_mwh IS NOT NULL
+        )
+        SELECT
+            mg.plant_id_eia,
+            mg.generator_id,
+            mg.report_date,
+            mg.unit_heat_rate_mmbtu_per_mwh,
+            yg.plant_name_eia,
+            yg.technology_description,
+            yg.operational_status,
+        FROM monthly_generators mg
+        LEFT JOIN out_eia__yearly_generators yg ON mg.plant_id_eia = yg.plant_id_eia AND mg.generator_id = yg.generator_id
+        LEFT JOIN core_eia860__scd_plants p ON mg.plant_id_eia = p.plant_id_eia
+        WHERE yg.operational_status = 'existing'
+        ORDER BY mg.report_date DESC
+        """,
+    ).to_df()
+
+    return eia_data_operable, heat_rates
 
 
 def set_non_conus(eia_data_operable):
@@ -415,171 +442,14 @@ def merge_ads_data(eia_data_operable):
             "IOMaxCap(MW)",
             "IOMinCap(MW)",
             "MinInput(MMBTu)",
-            "IncCap2(MW)",
-            "IncHR2(MMBTu/MWh)",
-            "IncCap3(MW)",
-            "IncHR3(MMBTu/MWh)",
-            "IncCap4(MW)",
-            "IncHR4(MMBTu/MWh)",
-            "IncCap5(MW)",
-            "IncHR5(MMBTu/MWh)",
-            "IncCap6(MW)",
-            "IncHR6(MMBTu/MWh)",
-            "IncCap7(MW)",
-            "IncHR7(MMBTu/MWh)",
         ]
     ]
-    ads_ioc["IncHR2(MMBTu/MWh)"] = ads_ioc["IncHR2(MMBTu/MWh)"].replace(0, np.nan)
     ads_ioc.columns = standardize_col_names(ads_ioc.columns)
 
-    ads_ioc["inchr1mmbtu/mwh"] = ads_ioc.mininputmmbtu / ads_ioc.iomincapmw
-    ads_ioc.rename(
-        columns={
-            "inchr1mmbtu/mwh": "hr1",
-            "inchr2mmbtu/mwh": "hr2",
-            "inchr3mmbtu/mwh": "hr3",
-            "inchr4mmbtu/mwh": "hr4",
-            "inchr5mmbtu/mwh": "hr5",
-            "inchr6mmbtu/mwh": "hr6",
-            "inchr7mmbtu/mwh": "hr7",
-            "iomincapmw": "x_1",
-            "mininputmmbtu": "mmbtu_1",
-        },
-        inplace=True,
-    )
-
-    for i in range(2, 8):
-        ads_ioc[f"x_{i}"] = ads_ioc[f"x_{i-1}"] + ads_ioc[f"inccap{i}mw"]
-        ads_ioc[f"mmbtu_{i}"] = ads_ioc[f"x_{i}"] * ads_ioc[f"hr{i}"]
-
-    for i in range(0, ads_ioc.shape[0]):
-        for j in range(2, 8):
-            if ads_ioc[f"hr{j}"][i] == 0:
-                ads_ioc[f"hr{j}"][i] = ads_ioc[f"hr{j-1}"][i]
-
-    def detail_linspace(x_values, y_values, num_points):
-        # Arrays to hold the detailed linspace results
-        x_detailed = np.array([])
-        y_detailed = np.array([])
-
-        for i in range(len(x_values) - 1):
-            if x_values[i] == x_values[i + 1]:
-                continue
-            # Generate linspace for x values
-            x_segment = np.linspace(
-                x_values[i],
-                x_values[i + 1],
-                num_points,
-                endpoint=False,
-            )
-
-            # Calculate the slope of the segment
-            slope = (y_values[i + 1] - y_values[i]) / (x_values[i + 1] - x_values[i])
-
-            # Generate y values based on the slope and start point
-            y_segment = slope * (x_segment - x_values[i]) + y_values[i]
-
-            # Append the segment to the detailed arrays
-            x_detailed = np.concatenate((x_detailed, x_segment))
-            y_detailed = np.concatenate((y_detailed, y_segment))
-
-        return x_detailed, y_detailed
-
-    # Define quadratic error function
-    def quadratic_error_function(params, x, y_true):
-        a, b, c = params
-        y_pred = a * x**2 + b * x + c
-        return np.sum((y_true - y_pred) ** 2)
-
-    def linear_error_function(params, x, y_true):
-        a, b = params
-        y_pred = a * x + b
-        return np.sum((y_true - y_pred) ** 2)
-
-    ads_ioc["linear_a"] = 0
-    ads_ioc["linear_b"] = 0
-    ads_ioc["quadratic_a"] = 0
-    ads_ioc["quadratic_b"] = 0
-    ads_ioc["quadratic_c"] = 0
-    ads_ioc["avg_hr"] = 0
-
-    for generator_index in range(ads_ioc.shape[0]):
-        # generator_index = 0
-        x_set_points = ads_ioc[
-            ["x_1", "x_2", "x_3", "x_4", "x_5", "x_6", "x_7"]
-        ].values[generator_index, :]
-        y_vals_hr = ads_ioc[["hr1", "hr2", "hr3", "hr4", "hr5", "hr6", "hr7"]].values[
-            generator_index,
-            :,
-        ]
-        y_vals = ads_ioc[
-            [
-                "mmbtu_1",
-                "mmbtu_2",
-                "mmbtu_3",
-                "mmbtu_4",
-                "mmbtu_5",
-                "mmbtu_6",
-                "mmbtu_7",
-            ]
-        ].values[generator_index, :]
-
-        x_linspace, y_linspace = detail_linspace(x_set_points, y_vals, 10)
-
-        initial_guess = [0.1, 0.1, 0.1]
-        result_quad = minimize(
-            quadratic_error_function,
-            initial_guess,
-            args=(x_linspace, y_linspace),
-        )
-
-        initial_guess_lin = [0.1, 0.1]
-        result_linear = minimize(
-            linear_error_function,
-            initial_guess_lin,
-            args=(x_linspace, y_linspace),
-        )
-
-        a_opt, b_opt, c_opt = result_quad.x
-        # print(f"Quadratic parameters: a = {a_opt}, b = {b_opt}, c = {c_opt}")
-
-        a_opt_lin, b_opt_lin = result_linear.x
-        # print(f"Linear parameters: a = {a_opt_lin}, b = {b_opt_lin}")
-
-        avg_hr = np.mean((a_opt_lin * x_linspace + b_opt_lin) / x_linspace)
-        # print(f"Average heat rate: {avg_hr}")
-
-        ads_ioc.loc[generator_index, "linear_a"] = a_opt_lin
-        ads_ioc.loc[generator_index, "linear_b"] = b_opt_lin
-        ads_ioc.loc[generator_index, "quadratic_a"] = a_opt
-        ads_ioc.loc[generator_index, "quadratic_b"] = b_opt
-        ads_ioc.loc[generator_index, "quadratic_c"] = c_opt
-        ads_ioc.loc[generator_index, "avg_hr"] = avg_hr
-
-    # Check for inf and nan values in avg_hr, and replace with nan.
-    # This is done so we can identify plants without data, then replace with averages later
-    ads_ioc["avg_hr"] = ads_ioc["avg_hr"].replace([np.inf, -np.inf], np.nan)
-
-    # Plotting IOC Results
-    generator_index = 102  # 1050
-    x_set_points = ads_ioc[["x_1", "x_2", "x_3", "x_4", "x_5", "x_6", "x_7"]].values[
-        generator_index,
-        :,
-    ]
-    y_vals = ads_ioc[
-        ["mmbtu_1", "mmbtu_2", "mmbtu_3", "mmbtu_4", "mmbtu_5", "mmbtu_6", "mmbtu_7"]
-    ].values[generator_index, :]
-    x_linspace, y_linspace = detail_linspace(x_set_points, y_vals, 10)
-
-    a_opt, b_opt, c_opt = ads_ioc.loc[
-        generator_index,
-        ["quadratic_a", "quadratic_b", "quadratic_c"],
-    ]
-    a_opt_lin, b_opt_lin = ads_ioc.loc[generator_index, ["linear_a", "linear_b"]]
 
     # Merge ADS plant data with thermal IOC data
     ads_thermal_ioc = pd.merge(ads_thermal, ads_ioc, on="generatorname", how="left")
-    ads_thermal_ioc.dropna(subset=["avg_hr"])
+    # ads_thermal_ioc.dropna(subset=["avg_hr"])
 
     # loading ads to match ads_name with generator key in order to link with ads thermal file
     ads = pd.read_csv(
@@ -645,13 +515,6 @@ def merge_ads_data(eia_data_operable):
     )
     ads_complete.columns = standardize_col_names(ads_complete.columns, prefix="ads_")
     ads_complete = ads_complete.loc[~ads_complete.ads_state.isin(["MX"])]
-    ads_complete
-
-    ads_complete.pivot_table(
-        index=["ads_fueltype"],
-        values="ads_avg_hr",
-        aggfunc="mean",
-    ).sort_values("ads_avg_hr", ascending=False)
 
     # load mapping file to match the ads thermal to the eia_plants_locs file
     eia_ads_mapper = pd.read_csv(snakemake.input.eia_ads_generator_mapping)
@@ -697,33 +560,6 @@ def merge_ads_data(eia_data_operable):
     eia_ads_merged.drop(columns=eia_ads_mapper.columns, inplace=True)
     eia_ads_merged.drop(
         columns=[
-            "ads_x_1",
-            "ads_mmbtu_1",
-            "ads_inccap2mw",
-            "ads_hr2",
-            "ads_inccap3mw",
-            "ads_hr3",
-            "ads_inccap4mw",
-            "ads_hr4",
-            "ads_inccap5mw",
-            "ads_hr5",
-            "ads_inccap6mw",
-            "ads_hr6",
-            "ads_inccap7mw",
-            "ads_hr7",
-            "ads_hr1",
-            "ads_x_2",
-            "ads_mmbtu_2",
-            "ads_x_3",
-            "ads_mmbtu_3",
-            "ads_x_4",
-            "ads_mmbtu_4",
-            "ads_x_5",
-            "ads_mmbtu_5",
-            "ads_x_6",
-            "ads_mmbtu_6",
-            "ads_x_7",
-            "ads_mmbtu_7",
             "ads_generator_name_alt",
             "ads_generator_key",
             "ads_generatorkey",
@@ -736,6 +572,12 @@ def merge_ads_data(eia_data_operable):
             "ads_subtype",
             "ads_long_id",
             "ads_ads_long_name",
+            "ads_state",
+            "ads_btm",
+            "ads_devstatus",
+            "ads_retirement_date",
+            "ads_commission_date",
+            "ads_servicestatus",
         ],
         inplace=True,
     )
@@ -747,6 +589,179 @@ def merge_ads_data(eia_data_operable):
     return eia_ads_merged
 
 
+
+def add_missing_fuel_cost(plants, costs_fn):
+    fuel_cost = pd.read_csv(costs_fn, index_col=0, skiprows=3)
+    plants["fuel_cost"] = plants.fuel_type.map(fuel_cost.fuel_price_per_mmbtu)
+    return plants
+
+
+def impute_missing_plant_data(
+    plants: pd.DataFrame,
+    aggregation_fields: list[str],
+    data_fields: list[str],
+) -> pd.DataFrame:
+    """
+    Imputes missing data in the plants dataframe based on the average values of
+    the data dataframe.
+    """
+
+    # Function to calculate weighted average
+    def weighted_avg(df, values, weights):
+        valid = df[values].notna()
+        if valid.sum() == 0:
+            return np.nan  # Return NaN if no valid entries
+        return np.average(df[values][valid], weights=df[weights][valid])
+
+    # Calculate the weighted averages excluding NaNs
+    weighted_averages = (
+        plants.groupby(aggregation_fields)
+        .apply(
+            lambda x: pd.Series(
+                {field: weighted_avg(x, field, "p_nom") for field in data_fields},
+            ),
+        )
+        .reset_index()
+    )
+
+    # Merge weighted averages back into the original DataFrame
+    plants_merged = pd.merge(
+        plants.reset_index(),
+        weighted_averages,
+        on=aggregation_fields,
+        suffixes=("", "_weighted"),
+    )
+
+    # Fill NaN values using the weighted averages
+    for field in data_fields:
+        plants_merged[field] = plants_merged[field].fillna(
+            plants_merged[f"{field}_weighted"],
+        )
+
+    # Drop the weighted average columns after filling NaNs
+    plants_merged = plants_merged.drop(
+        columns=[f"{field}_weighted" for field in data_fields],
+    )
+    plants_merged.set_index("generator_name", inplace=True)
+    return plants_merged
+
+
+def set_parameters(plants: pd.DataFrame):
+    """
+    Sets generator naming schemes, updates parameter names, and imputes missing data.
+    """
+    plants["generator_name"] = (
+        plants.index.astype(str)
+        + "_"
+        + plants.plant_name_eia.astype(str)
+        + "_"
+        + plants.plant_id_eia.astype(str)
+        + "_"
+        + plants.generator_id.astype(str)
+    )
+    plants.set_index("generator_name", inplace=True)
+    plants["p_nom"] = plants.pop("capacity_mw")
+    plants["build_year"] = plants.pop("generator_operating_date").dt.year
+    plants["heat_rate"] = plants.pop("unit_heat_rate_mmbtu_per_mwh")
+
+    plants = add_missing_fuel_cost(
+        plants,
+        snakemake.input.fuel_costs,
+    )  # National Avg used for start-up costs
+
+    # Unit Commitment Parameters
+    plants["start_up_cost"] = (
+        plants.pop("ads_startup_cost_fixed$") + plants.ads_startfuelmmbtu * plants.fuel_cost
+    )
+    plants["min_down_time"] = plants.pop("ads_minimumdowntimehr")
+    plants["min_up_time"] = plants.pop("ads_minimumuptimehr")
+
+    # Ramp Limit Parameters
+    plants["ramp_limit_up"] = (
+        plants.pop("ads_rampup_ratemw/minute") / plants.p_nom * 60
+    ).clip(
+        lower=0,
+        upper=1,
+    )  # MW/min to p.u./hour
+    plants["ramp_limit_down"] = (
+        plants.pop("ads_rampdn_ratemw/minute") / plants.p_nom * 60
+    ).clip(
+        lower=0,
+        upper=1,
+    )  # MW/min to p.u./hour
+
+    # Impute missing data based on average values of a given aggregation
+    aggregation_fields = ["technology_description"]
+    data_fields = [
+        "start_up_cost",
+        "min_down_time",
+        "min_up_time",
+        "ramp_limit_up",
+        "ramp_limit_down",
+    ]
+    plants = impute_missing_plant_data(plants, aggregation_fields, data_fields)
+
+    aggregation_fields = ["nerc_region", "technology_description"]
+    data_fields = ["heat_rate"]
+    plants = impute_missing_plant_data(plants, aggregation_fields, data_fields)
+
+    plants["marginal_cost"] = (
+        plants.heat_rate * plants.fuel_cost
+    )  # (MMBTu/MW) * (USD/MMBTu) = USD/MW
+    plants["efficiency"] = 1 / (
+        plants["heat_rate"] / 3.412
+    )  # MMBTu/MWh to MWh_electric/MWh_thermal
+    return plants
+
+
+def prepare_heat_rates(
+    plants: pd.DataFrame,
+    heat_rates: pd.DataFrame,
+):
+    heat_rates['generator_name'] = (
+        heat_rates['plant_name_eia'].astype(str) + '_' + 
+        heat_rates['plant_id_eia'].astype(str) + '_' + 
+        heat_rates['generator_id'].astype(str)
+    )
+
+    # Calculate mean and standard deviation for each generator
+    heat_rate_stats_temporal = heat_rates.groupby(['generator_name'])['unit_heat_rate_mmbtu_per_mwh'].agg(['mean', 'std']).reset_index()
+    heat_rate_stats_temporal['mean'] = heat_rate_stats_temporal['mean'].replace(np.inf, np.nan)
+    heat_rate_stats_temporal.dropna(inplace=True)
+
+    # Merge mean and std back to the original dataframe
+    heat_rates = heat_rates.merge(
+        heat_rate_stats_temporal,
+        on=['generator_name'],
+        how='left',
+        suffixes=('', '_stats')
+    )
+
+    # Calculate the Z-score for each month's entry
+    heat_rates['z_score'] = (heat_rates['unit_heat_rate_mmbtu_per_mwh'] - heat_rates['mean']) / heat_rates['std']
+
+    # Filter out the outliers using Z-score
+    threshold = 3
+    filtered_heat_rates = heat_rates[np.abs(heat_rates['z_score']) <= threshold]
+
+    # Further filter outliers using IQR for each generator
+    def filter_outliers_iqr_grouped(df, group_column, value_column):
+        def filter_outliers(group):
+            Q1 = group[value_column].quantile(0.25)
+            Q3 = group[value_column].quantile(0.75)
+            IQR = Q3 - Q1
+            lower_bound = Q1 - 1.5 * IQR
+            upper_bound = Q3 + 1.5 * IQR
+            return group[(group[value_column] >= lower_bound) & (group[value_column] <= upper_bound)]
+        return df.groupby(group_column).apply(filter_outliers).reset_index(drop=True)
+
+    # Apply IQR filtering to each generator group
+    filtered_heat_rates =  filter_outliers_iqr_grouped(filtered_heat_rates, 'technology_description', 'unit_heat_rate_mmbtu_per_mwh')
+    average_heat_rates = filtered_heat_rates.groupby(['plant_id_eia', 'generator_id'])['unit_heat_rate_mmbtu_per_mwh'].mean().reset_index()
+    plants.drop(columns = 'unit_heat_rate_mmbtu_per_mwh', inplace = True)
+    return pd.merge(left=plants, right= average_heat_rates, on = ['plant_id_eia', 'generator_id'], how = 'left')
+
+
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
@@ -756,9 +771,11 @@ if __name__ == "__main__":
     else:
         rootpath = "."
 
-    eia_data_operable = load_pudl_data()
+    eia_data_operable, heat_rates = load_pudl_data()
+    eia_data_operable = prepare_heat_rates(eia_data_operable, heat_rates)
     set_non_conus(eia_data_operable)
     set_derates(eia_data_operable)
     set_tech_fuels_primer_movers(eia_data_operable)
     eia_ads_merged = merge_ads_data(eia_data_operable)
-    eia_ads_merged.to_csv(snakemake.output.powerplants, index=False)
+    plants = set_parameters(eia_ads_merged)
+    plants.to_csv(snakemake.output.powerplants, index=False)

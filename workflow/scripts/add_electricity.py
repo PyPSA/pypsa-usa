@@ -240,16 +240,6 @@ def add_missing_fuel_cost(plants, costs_fn):
     return plants
 
 
-def add_missing_heat_rates(plants, heat_rates_fn):
-    heat_rates = pd.read_csv(heat_rates_fn, index_col=0, skiprows=3)
-    heat_rates = heat_rates.loc[heat_rates.heat_rate_btu_per_kwh > 0]
-    hr_mapped = (
-        plants.fuel_type.map(heat_rates.heat_rate_btu_per_kwh) / 1000
-    )  # convert to mmbtu/mwh
-    plants["heat_rate"] = plants["heat_rate"].fillna(hr_mapped)
-    return plants
-
-
 def clean_locational_multiplier(df: pd.DataFrame):
     """
     Updates format of locational multiplier data.
@@ -841,6 +831,22 @@ def attach_battery_storage(
         cyclic_state_of_charge=True,
     )
 
+def load_powerplants(
+    plants_fn,
+    investment_periods: list[int],
+    interconnect: str = None,
+) -> pd.DataFrame:
+    plants = pd.read_csv(
+        plants_fn
+    )
+    # Filter out non-conus plants and plants that are not built by first investment period.
+    plants = plants[plants.build_year <= investment_periods[0]]
+    plants = plants[plants.nerc_region != "non-conus"]
+    if (interconnect is not None) & (interconnect != "usa"):
+        plants["interconnection"] = plants["nerc_region"].map(const.NERC_REGION_MAPPER)
+        plants = plants[plants.interconnection == interconnect]
+    return plants
+
 
 def load_powerplants_eia(
     eia_dataset: str,
@@ -1165,10 +1171,15 @@ def main(snakemake):
         k: v for k, v in snakemake.input.items() if k.startswith("conventional_")
     }
 
-    plants = load_powerplants_eia(
-        snakemake.input["plants_eia"],
+    # plants = load_powerplants_eia(
+    #     snakemake.input["plants_eia"],
+    #     n.investment_periods,
+    #     interconnect=interconnection,
+    # )
+    plants = load_powerplants(
+        snakemake.input["powerplants"],
         n.investment_periods,
-        interconnect=interconnection,
+        interconnect= interconnection,
     )
 
     plants = match_plant_to_bus(n, plants)

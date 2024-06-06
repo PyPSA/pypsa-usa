@@ -469,6 +469,7 @@ rule add_electricity:
         + f"costs/costs_{config['scenario']['planning_horizons'][0]}.csv",
         # attach first horizon costs
         regions=RESOURCES + "{interconnect}/regions_onshore.geojson",
+        powerplants=RESOURCES + "powerplants.csv",
         plants_eia="repo_data/plants/plants_merged.csv",
         plants_breakthrough=DATA + "breakthrough_network/base_grid/plant.csv",
         hydro_breakthrough=DATA + "breakthrough_network/base_grid/hydro.csv",
@@ -616,6 +617,7 @@ rule build_powerplants:
         pudl=DATA + "pudl/pudl.sqlite",
         wecc_ads=DATA + "WECC_ADS/downloads/2032/Public Data",
         eia_ads_generator_mapping="repo_data/eia_ads_generator_mapping_updated.csv",
+        fuel_costs="repo_data/plants/fuelCost22.csv",
     output:
         powerplants=RESOURCES + "powerplants.csv",
     log:
