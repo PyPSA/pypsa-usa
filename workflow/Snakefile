@@ -65,6 +65,8 @@ FIGURES_VALIDATE = [
     "val_map_load_shedding.pdf",
     "val_generator_stack.pdf",
     "val_map_line_loading.pdf",
+    "val_mix_state_generation.pdf",
+    "val_cap_state_generation.pdf",
 ]
 
 
@@ -88,7 +90,7 @@ wildcard_constraints:
 
 
 # Merge subworkflow configs and main config
-configfile: "config/config.default.yaml"
+configfile: "config/config.validation.yaml"
 configfile: "config/config.cluster.yaml"
 configfile: "config/config.common.yaml"
 configfile: "config/config.plotting.yaml"

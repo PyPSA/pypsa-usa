@@ -446,6 +446,10 @@ def plot_line_loading_map(
     bus_scale = get_bus_scale(interconnect) if interconnect else 1
     line_scale = get_line_scale(interconnect) if interconnect else 1
 
+    line_loading = n.lines_t.p0.abs().mean() / n.lines.s_nom / n.lines.s_max_pu * 100
+    link_loading = n.links_t.p0.abs().mean() / n.links.p_nom / n.links.p_max_pu * 100
+    norm = plt.Normalize(vmin=0, vmax=100)
+
     fig, _ = plot_capacity_map(
         n=n,
         bus_values=gen / 5e3,
@@ -455,10 +459,20 @@ def plot_line_loading_map(
         flow="mean",
         line_scale=line_scale,
         bus_scale=bus_scale,
-        line_colors=n.lines_t.p0.max().abs() / n.lines.s_nom,
-        link_colors=n.links_t.p0.max().abs() / n.links.p_nom,
+        line_colors=line_loading,
+        link_colors=link_loading,
+        line_cmap="plasma",
+        line_norm=norm,
         title=title,
     )
+
+    # plt.colorbar(
+    #     plt.cm.ScalarMappable(cmap="plasma", norm=norm),
+    #     label="Relative line loading [%]",
+    #     shrink=0.6,
+    #     ax=_,
+    # )
+
     fig.savefig(save)
 
 
@@ -682,6 +696,76 @@ def plot_ba_emissions_historical_bar(
     ax.set_ylabel("")
     fig.savefig(save)
 
+def get_state_generation_mix(n: pypsa.Network, var='p'):
+    gens = n.generators.copy()
+    gens['state'] = gens.bus.map(n.buses.reeds_state)
+    gens['state_carrier'] = gens['state'] + "_" + gens['carrier']
+    #Group by state and carrier
+    generation = n.generators_t[var].copy()
+    generation = generation.T.groupby(gens['state_carrier']).sum().T
+    generation.index = generation.index.droplevel(1)
+    generation = generation.groupby('period').sum().T
+    generation = generation / 1e3 # convert to GWh
+    generation = generation.reset_index()
+    generation.columns = ['state_carrier', 'generation']
+    generation['state'] = generation['state_carrier'].str.split('_').str[0]
+    generation['carrier'] = generation['state_carrier'].str.split('_').str[1]
+    generation_pivot = generation.pivot(index='state', columns='carrier', values='generation')
+    if 'load' in generation_pivot.columns:
+        generation_pivot.load = generation_pivot.load.mul(1e-3)
+    return generation_pivot
+
+def get_state_loads(n: pypsa.Network):
+    loads = n.loads_t.p
+    n.loads['state'] = n.loads.bus.map(n.buses.reeds_state)
+    loads = loads.T.groupby(n.loads.state).sum().T
+    loads = loads / 1e3 # convert to GW
+
+def plot_state_generation_mix(
+    n: pypsa.Network,
+    save: str,
+    **wildcards,
+):
+    """Creates a stacked bar chart for each state's generation mix"""
+    generation_pivot = get_state_generation_mix(n)
+
+    # Create Stacked Bar Plot for each State's Generation Mix
+    colors = n.carriers.color.to_dict()
+    fig, ax = plt.subplots(figsize=(10, 8))
+    generation_pivot.plot(kind='bar', stacked=True, ax=ax, color=colors)
+    ax.set_title(create_title("State Generation Mix", **wildcards))
+    ax.set_xlabel("State")
+    ax.set_ylabel("Generation Mix [GWh]")
+    fig.savefig(save)
+
+def plot_state_generation_capacities(
+    n: pypsa.Network,
+    save: str,
+    **wildcards,
+):
+    """Creates a stacked bar chart for each state's generation mix"""
+    n.generators['state'] = n.generators.bus.map(n.buses.reeds_state)
+    n.generators['state_carrier'] = n.generators['state'] + "_" + n.generators['carrier']
+
+    #Group by state and carrier
+    generation = n.generators.groupby('state_carrier').p_nom.sum()
+    generation = generation / 1e3 # convert to GW
+    generation = generation.reset_index()
+    generation.columns = ['state_carrier', 'capacity']
+    generation['state'] = generation['state_carrier'].str.split('_').str[0]
+    generation['carrier'] = generation['state_carrier'].str.split('_').str[1]
+    generation_pivot = generation.pivot(index='state', columns='carrier', values='capacity')
+    generation_pivot.drop(columns=['load'], inplace=True)
+
+    # Create Stacked Bar Plot for each State's Generation Mix
+    colors = n.carriers.color.to_dict()
+    fig, ax = plt.subplots(figsize=(10, 8))
+    generation_pivot.plot(kind='bar', stacked=True, ax=ax, color=colors)
+    ax.set_title(create_title("State Generation Capacities ", **wildcards))
+    ax.set_xlabel("State")
+    ax.set_ylabel("Generation Capacity [GW]")
+    fig.savefig(save)
+
 
 def main(snakemake):
     configure_logging(snakemake)
@@ -750,6 +834,26 @@ def main(snakemake):
 
     snapshots = get_snapshots(snakemake.params.snapshots)
 
+
+    plot_line_loading_map(
+        n,
+        snakemake.output["val_map_line_loading.pdf"],
+        onshore_regions,
+        **snakemake.wildcards,
+    )
+
+    plot_state_generation_mix(
+        n,
+        snakemake.output["val_mix_state_generation.pdf"],
+        **snakemake.wildcards,
+    )
+
+    plot_state_generation_capacities(
+        n,
+        snakemake.output["val_cap_state_generation.pdf"],
+        **snakemake.wildcards,
+    )
+
     plot_state_emissions_historical_bar(
         n,
         ge_co2,
@@ -759,12 +863,6 @@ def main(snakemake):
         **snakemake.wildcards,
     )
 
-    plot_line_loading_map(
-        n,
-        snakemake.output["val_map_line_loading.pdf"],
-        onshore_regions,
-        **snakemake.wildcards,
-    )
 
     # Regional Comparisons
     plot_regional_comparisons(
@@ -848,8 +946,8 @@ if __name__ == "__main__":
 
         snakemake = mock_snakemake(
             "plot_validation_figures",
-            interconnect="eastern",
-            clusters=100,
+            interconnect="western",
+            clusters=36,
             ll="v1.0",
             opts="Ep",
             sector="E",
