@@ -31,6 +31,7 @@ Builds the demand data for the PyPSA network.
 
 import calendar
 import logging
+import sqlite3
 import sys
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -1504,27 +1505,75 @@ def expand_demand(
     profile_year = demand.index[0].year
     df = demand[demand.index.year == profile_year]
     df = reindex_demand(df, planning_horizon)
-    # scale demand here
     return df
 
 
-def scale_demand(method: str):
+def scale_demand(
+    end_use: str,
+    scenario: str = "reference",
+    api: Optional[str] = None,
+    pudl: Optional[str] = None,
+) -> pd.DataFrame:
     """
     Scales demand.
     """
-    if method == "efs":
-        growth_rate = ReadEfs(snakemake.input.efs).get_growth_rate()
-        logger.warning("No scale appied for efs data")
-    elif method == "aeo":
-        growth_rate = get_aeo_growth_rate(eia_api, [profile_year, planning_horizons])
-        logger.warning("No scale appied for aeo data")
+    if end_use == "power":
+        assert pudl
+        df = get_aeo_electricity_growth_rate(pudl, scenario)
+    elif end_use in ("residential", "commercial", "industrial", "transport"):
+        assert api
+        df = get_aeo_energy_growth_rate(api)
     else:
         raise NotImplementedError
 
 
-def get_aeo_growth_rate(
+def get_aeo_electricity_growth_rate(
+    db: str,
+    aeo_scenario: str = "reference",
+    region: str = "united_states",
+) -> pd.DataFrame:
+    """
+    Get sector yearly END-USE ELECTRICITY growth rates from AEO.
+
+    |      | power | units |
+    |----- |-------|-------|
+    | 2021 |  ###  |  ###  |
+    | 2022 |  ###  |  ###  |
+    | 2023 |  ###  |  ###  |
+    | ...  |       |       |
+    | 2049 |  ###  |  ###  |
+    | 2050 |  ###  |  ###  |
+    """
+
+    con = sqlite3.connect(db)
+
+    df = pd.read_sql_query(
+        f"""
+    SELECT
+    projection_year,
+    technology_description_eiaaeo,
+    gross_generation_mwh
+    FROM
+    core_eiaaeo__yearly_projected_generation_in_electric_sector_by_technology
+    WHERE
+    electricity_market_module_region_eiaaeo = "{region}" AND
+    model_case_eiaaeo = "{aeo_scenario}"
+    """,
+        con,
+    )
+
+    df = (
+        df.drop(columns=["technology_description_eiaaeo"])
+        .rename(columns={"projection_year": "year", "power": "mwh"})
+        .groupby("year")
+        .sum()
+    )
+    df["units"] = "mwh"
+    return df
+
+
+def get_aeo_energy_growth_rate(
     api: str,
-    years: list[str],
     aeo_scenario: str = "reference",
 ) -> pd.DataFrame:
     """
@@ -1566,8 +1615,7 @@ def get_aeo_growth_rate(
 
     logger.info("Getting AEO growth rate")
 
-    assert min(years) > 2017
-    assert max(years) < 2051
+    years = range(2017, 2051)
 
     sectors = ("residential", "commercial", "industry", "transport")
 
