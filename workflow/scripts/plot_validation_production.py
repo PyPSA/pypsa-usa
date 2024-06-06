@@ -26,6 +26,7 @@ from plot_statistics import (
     plot_generator_data_panel,
     plot_region_lmps,
     plot_regional_emissions_bar,
+    plot_fuel_costs,
 )
 from summary import get_node_emissions_timeseries
 
@@ -709,7 +710,7 @@ def get_state_generation_mix(n: pypsa.Network, var='p'):
     generation = generation.reset_index()
     generation.columns = ['state_carrier', 'generation']
     generation['state'] = generation['state_carrier'].str.split('_').str[0]
-    generation['carrier'] = generation['state_carrier'].str.split('_').str[1]
+    generation['carrier'] = generation['state_carrier'].str.split('_').str[1:].str.join('_')
     generation_pivot = generation.pivot(index='state', columns='carrier', values='generation')
     if 'load' in generation_pivot.columns:
         generation_pivot.load = generation_pivot.load.mul(1e-3)
@@ -753,7 +754,7 @@ def plot_state_generation_capacities(
     generation = generation.reset_index()
     generation.columns = ['state_carrier', 'capacity']
     generation['state'] = generation['state_carrier'].str.split('_').str[0]
-    generation['carrier'] = generation['state_carrier'].str.split('_').str[1]
+    generation['carrier'] = generation['state_carrier'].str.split('_').str[1:].str.join('_')
     generation_pivot = generation.pivot(index='state', columns='carrier', values='capacity')
     generation_pivot.drop(columns=['load'], inplace=True)
 
@@ -834,6 +835,11 @@ def main(snakemake):
 
     snapshots = get_snapshots(snakemake.params.snapshots)
 
+    plot_fuel_costs(
+        n,
+        snakemake.output["val_fuel_costs.pdf"],
+        **snakemake.wildcards,
+    )
 
     plot_line_loading_map(
         n,
@@ -931,6 +937,8 @@ def main(snakemake):
         onshore_regions,
         **snakemake.wildcards,
     )
+
+
 
     n.statistics().to_csv(snakemake.output["val_statistics"])
     # plot_curtailment_heatmap(

@@ -73,7 +73,7 @@ def load_pudl_data():
                 unit_heat_rate_mmbtu_per_mwh
             FROM out_eia__monthly_generators
             WHERE operational_status = 'existing' 
-            AND report_date >= CURRENT_DATE - INTERVAL '3 years'
+            AND report_date >= CURRENT_DATE - INTERVAL '2 years'
             AND unit_heat_rate_mmbtu_per_mwh IS NOT NULL
         )
         SELECT
@@ -717,6 +717,8 @@ def set_parameters(plants: pd.DataFrame):
 def prepare_heat_rates(
     plants: pd.DataFrame,
     heat_rates: pd.DataFrame,
+    cems_fn: str,
+    crosswalk_fn: str,
 ):
     heat_rates['generator_name'] = (
         heat_rates['plant_name_eia'].astype(str) + '_' + 
@@ -759,7 +761,18 @@ def prepare_heat_rates(
     filtered_heat_rates =  filter_outliers_iqr_grouped(filtered_heat_rates, 'technology_description', 'unit_heat_rate_mmbtu_per_mwh')
     average_heat_rates = filtered_heat_rates.groupby(['plant_id_eia', 'generator_id'])['unit_heat_rate_mmbtu_per_mwh'].mean().reset_index()
     plants.drop(columns = 'unit_heat_rate_mmbtu_per_mwh', inplace = True)
-    return pd.merge(left=plants, right= average_heat_rates, on = ['plant_id_eia', 'generator_id'], how = 'left')
+    plants = pd.merge(left=plants, right= average_heat_rates, on = ['plant_id_eia', 'generator_id'], how = 'left')
+
+    cems_hr = pd.read_excel(cems_fn)[['Facility ID','Unit ID', 'Heat Input (mmBtu/MWh)']]
+    crosswalk = pd.read_csv(crosswalk_fn)[['CAMD_PLANT_ID','CAMD_UNIT_ID', 'EIA_PLANT_ID', 'EIA_GENERATOR_ID']]
+    cems_hr = pd.merge(cems_hr, crosswalk, left_on=['Facility ID','Unit ID'], right_on=['CAMD_PLANT_ID','CAMD_UNIT_ID'], how = 'inner')
+    plants = pd.merge(cems_hr, plants, left_on=['EIA_PLANT_ID', 'EIA_GENERATOR_ID'], right_on=['plant_id_eia','generator_id'], how='right')
+    plants.rename(columns={'Heat Input (mmBtu/MWh)':'heat_rate_'}, inplace=True)
+    plants['heat_rate_'] = plants['heat_rate_']/1e3
+    plants.heat_rate_.fillna(plants.unit_heat_rate_mmbtu_per_mwh)
+    plants.unit_heat_rate_mmbtu_per_mwh = plants.pop('heat_rate_')
+    plants.drop(columns=['Facility ID','Unit ID','CAMD_PLANT_ID','CAMD_UNIT_ID', 'EIA_PLANT_ID', 'EIA_GENERATOR_ID'], inplace=True)
+    return plants
 
 
 if __name__ == "__main__":
@@ -772,7 +785,7 @@ if __name__ == "__main__":
         rootpath = "."
 
     eia_data_operable, heat_rates = load_pudl_data()
-    eia_data_operable = prepare_heat_rates(eia_data_operable, heat_rates)
+    eia_data_operable = prepare_heat_rates(eia_data_operable, heat_rates, snakemake.input.cems, snakemake.input.epa_crosswalk)
     set_non_conus(eia_data_operable)
     set_derates(eia_data_operable)
     set_tech_fuels_primer_movers(eia_data_operable)

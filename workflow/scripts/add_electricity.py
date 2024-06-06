@@ -1037,11 +1037,6 @@ def main(snakemake):
         k: v for k, v in snakemake.input.items() if k.startswith("conventional_")
     }
 
-    # plants = load_powerplants_eia(
-    #     snakemake.input["plants_eia"],
-    #     n.investment_periods,
-    #     interconnect=interconnection,
-    # )
     plants = load_powerplants(
         snakemake.input["powerplants"],
         n.investment_periods,

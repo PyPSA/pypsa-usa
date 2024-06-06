@@ -618,6 +618,8 @@ rule build_powerplants:
         wecc_ads=DATA + "WECC_ADS/downloads/2032/Public Data",
         eia_ads_generator_mapping="repo_data/eia_ads_generator_mapping_updated.csv",
         fuel_costs="repo_data/plants/fuelCost22.csv",
+        cems="repo_data/plants/cems_heat_rates.xlsx",
+        epa_crosswalk="repo_data/plants/epa_eia_crosswalk.csv",
     output:
         powerplants=RESOURCES + "powerplants.csv",
     log:

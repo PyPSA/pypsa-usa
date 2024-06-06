@@ -67,6 +67,7 @@ FIGURES_VALIDATE = [
     "val_map_line_loading.pdf",
     "val_mix_state_generation.pdf",
     "val_cap_state_generation.pdf",
+    "val_fuel_costs.pdf",
 ]
 
 
