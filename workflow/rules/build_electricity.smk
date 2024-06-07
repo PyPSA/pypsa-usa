@@ -405,10 +405,12 @@ rule build_fuel_prices:
         api_eia=config["api"]["eia"],
     input:
         gas_balancing_area=ba_gas_dynamic_fuel_price_files,
+        pudl=DATA + "pudl/pudl.sqlite",
     output:
         state_ng_fuel_prices=RESOURCES + "{interconnect}/state_ng_power_prices.csv",
         state_coal_fuel_prices=RESOURCES + "{interconnect}/state_coal_power_prices.csv",
         ba_ng_fuel_prices=RESOURCES + "{interconnect}/ba_ng_power_prices.csv",
+        pudl_fuel_costs=RESOURCES + "{interconnect}/pudl_fuel_costs.csv",
     log:
         LOGS + "{interconnect}/build_fuel_prices.log",
     benchmark:
@@ -474,7 +476,7 @@ rule add_electricity:
         plants_breakthrough=DATA + "breakthrough_network/base_grid/plant.csv",
         hydro_breakthrough=DATA + "breakthrough_network/base_grid/hydro.csv",
         bus2sub=RESOURCES + "{interconnect}/bus2sub.csv",
-        fuel_costs="repo_data/plants/fuelCost22.csv",
+        pudl_fuel_costs=RESOURCES + "{interconnect}/pudl_fuel_costs.csv",
     output:
         RESOURCES + "{interconnect}/elec_base_network_l_pp.nc",
     log:

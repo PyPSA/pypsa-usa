@@ -899,6 +899,7 @@ def plot_generator_data_panel(
                 "oil",
                 "hydro",
                 "nuclear",
+                "load"
             ],
         ),
         :,
@@ -907,6 +908,8 @@ def plot_generator_data_panel(
     df_storage_units = n.storage_units
     df_storage_units["efficiency"] = df_storage_units.efficiency_dispatch
     df_capex_expand = pd.concat([df_capex_expand, df_storage_units])
+
+    df_efficiency = n.generators.loc[~n.generators.carrier.isin(["solar", "onwind", "offwind", "offwind_floating", "hydro","load"]), :]
 
     # Create a figure and subplots with 2 rows and 2 columns
     fig, axes = plt.subplots(3, 2, figsize=(10, 12))
@@ -920,7 +923,7 @@ def plot_generator_data_panel(
         ax=axes[0, 0],
     )
     sns.barplot(data=df_capex_expand, x="carrier", y="capital_cost", ax=axes[0, 1])
-    sns.boxplot(data=df_capex_expand, x="carrier", y="efficiency", ax=axes[1, 0])
+    sns.boxplot(data=df_efficiency, x="carrier", y="efficiency", ax=axes[1, 0])
     sns.barplot(data=df_capex_retire, x="carrier", y="capital_cost", ax=axes[1, 1])
     n.generators.ramp_limit_up.fillna(0, inplace=True)
     sns.histplot(
@@ -941,7 +944,7 @@ def plot_generator_data_panel(
     # Set titles for each subplot
     axes[0, 0].set_title("Generator Marginal Costs")
     axes[0, 1].set_title("Extendable Capital Costs")
-    axes[1, 0].set_title("Energy Efficiency")
+    axes[1, 0].set_title("Plant Efficiency")
     axes[1, 1].set_title("Fixed O&M Costs of Retiring Units")
     axes[2, 0].set_title("Generator Ramp Up Limits")
     axes[2, 1].set_title("Existing Capacity by Carrier")

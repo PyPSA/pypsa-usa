@@ -526,7 +526,7 @@ def plot_generator_cost_stack(
 
     ax.set_xlabel("Capacity [MW]")
     ax.set_ylabel("Marginal Cost [USD/MWh]")
-    ax.set_title(create_title("Generator Marginal Costs Stack", **wildcards))
+    ax.set_title(create_title("Average Generator Merit Order Curve", **wildcards))
     fig.savefig(save)
 
 
@@ -835,6 +835,19 @@ def main(snakemake):
 
     snapshots = get_snapshots(snakemake.params.snapshots)
 
+    plot_generator_data_panel(
+        n,
+        snakemake.output["val_generator_data_panel.pdf"],
+        **snakemake.wildcards,
+    )
+
+    plot_generator_cost_stack(
+        n,
+        snakemake.output["val_generator_stack.pdf"],
+        **snakemake.wildcards,
+    )
+
+
     plot_fuel_costs(
         n,
         snakemake.output["val_fuel_costs.pdf"],
@@ -919,17 +932,7 @@ def main(snakemake):
         **snakemake.wildcards,
     )
 
-    plot_generator_data_panel(
-        n,
-        snakemake.output["val_generator_data_panel.pdf"],
-        **snakemake.wildcards,
-    )
 
-    plot_generator_cost_stack(
-        n,
-        snakemake.output["val_generator_stack.pdf"],
-        **snakemake.wildcards,
-    )
 
     plot_load_shedding_map(
         n,
@@ -954,8 +957,8 @@ if __name__ == "__main__":
 
         snakemake = mock_snakemake(
             "plot_validation_figures",
-            interconnect="western",
-            clusters=36,
+            interconnect="texas",
+            clusters=50,
             ll="v1.0",
             opts="Ep",
             sector="E",

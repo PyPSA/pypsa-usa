@@ -29,9 +29,13 @@ from typing import List
 import constants as const
 import eia
 import pandas as pd
+import duckdb
+import numpy as np
 from _helpers import configure_logging, get_snapshots, mock_snakemake
+from build_powerplants import load_pudl_data
 
 logger = logging.getLogger(__name__)
+
 
 
 ###
@@ -149,7 +153,7 @@ if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
 
-        snakemake = mock_snakemake("build_fuel_prices", interconnect="western")
+        snakemake = mock_snakemake("build_fuel_prices", interconnect="texas")
     configure_logging(snakemake)
 
     eia_api = snakemake.params.api_eia
@@ -159,6 +163,26 @@ if __name__ == "__main__":
     function_mapper = {
         "caiso_ng_power_prices": get_caiso_ng_power_prices,
     }
+
+
+    start_date = '2019-01-01'
+    end_date = '2019-12-31'
+    _ , pudl_fuel_costs = load_pudl_data(snakemake.input.pudl, start_date, end_date)
+    pudl_fuel_costs['interconnect'] = pudl_fuel_costs['nerc_region'].map(const.NERC_REGION_MAPPER)
+    pudl_fuel_costs = pudl_fuel_costs[pudl_fuel_costs['interconnect'] == snakemake.wildcards.interconnect]
+    pudl_fuel_costs.dropna(subset=["fuel_cost_per_mwh"], inplace=True)
+    pudl_fuel_costs['generator_name'] = (
+        pudl_fuel_costs['plant_name_eia'].astype(str) + '_' + 
+        pudl_fuel_costs['plant_id_eia'].astype(str) + '_' + 
+        pudl_fuel_costs['generator_id'].astype(str)
+    )
+    pudl_fuel_costs = pudl_fuel_costs.groupby(["generator_name",'report_date'])['fuel_cost_per_mwh'].mean()
+    pudl_fuel_costs = pudl_fuel_costs.unstack(level=0)
+    # Fill the missing values with the previous value
+    plant_fuel_costs = pudl_fuel_costs.reindex(snapshots).ffill()
+    plant_fuel_costs.index = snapshots
+    plant_fuel_costs.to_csv(snakemake.output.pudl_fuel_costs, index_label="snapshot")
+
 
     # state level prices are always attempted
     if not eia_api:

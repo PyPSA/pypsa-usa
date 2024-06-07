@@ -1173,6 +1173,27 @@ def main(snakemake):
                 )
                 logger.info(f"Applied dynamic price data for {carrier} from {datafile}")
 
+        # Apply PuDL Fuel Costs for plants where listed
+        pudl_fuel_costs = pd.read_csv(snakemake.input["pudl_fuel_costs"], index_col=0)
+        import pdb; pdb.set_trace()
+        """
+        signinng off from first june 7- need to apply these pudl fuel costs to each plant with the correct VOM for each carrier from the costs table
+        marginal_costs = marginal_costs + vom
+
+        # drop any data that has been assigned at a coarser resolution
+        n.generators_t["marginal_cost"] = n.generators_t["marginal_cost"][
+            [x for x in n.generators_t["marginal_cost"] if x not in marginal_costs]
+        ]
+
+        # assign new marginal costs
+        n.generators_t["marginal_cost"] = n.generators_t["marginal_cost"].join(
+            marginal_costs,
+            how="inner",
+        )
+        """
+
+
+
     # fix p_nom_min for extendable generators
     # The "- 0.001" is just to avoid numerical issues
     n.generators["p_nom_min"] = n.generators.apply(

@@ -4,13 +4,13 @@ import duckdb
 import numpy as np
 import pandas as pd
 
-def load_pudl_data():
+def load_pudl_data(pudl_fn: str, start_date: str, end_date: str):
     duckdb.connect(database=":memory:", read_only=False)
 
     duckdb.query("INSTALL sqlite;")
     duckdb.query(
         f"""
-        ATTACH '{snakemake.input.pudl}' (TYPE SQLITE);
+        ATTACH '{pudl_fn}' (TYPE SQLITE);
         USE pudl;
         """,
     )
@@ -63,17 +63,19 @@ def load_pudl_data():
     """,
     ).to_df()
 
-    heat_rates = duckdb.query(
-        """
+    def get_heat_rates(start_date, end_date):
+        query = f"""
         WITH monthly_generators AS (
             SELECT
                 plant_id_eia,
                 generator_id,
                 report_date,
-                unit_heat_rate_mmbtu_per_mwh
+                unit_heat_rate_mmbtu_per_mwh,
+                fuel_cost_per_mwh,
+                fuel_cost_per_mmbtu
             FROM out_eia__monthly_generators
             WHERE operational_status = 'existing' 
-            AND report_date >= CURRENT_DATE - INTERVAL '2 years'
+            AND report_date BETWEEN '{start_date}' AND '{end_date}'
             AND unit_heat_rate_mmbtu_per_mwh IS NOT NULL
         )
         SELECT
@@ -81,16 +83,25 @@ def load_pudl_data():
             mg.generator_id,
             mg.report_date,
             mg.unit_heat_rate_mmbtu_per_mwh,
+            mg.fuel_cost_per_mwh,
+            mg.fuel_cost_per_mmbtu,
             yg.plant_name_eia,
+            yg.capacity_mw,
+            yg.energy_source_code_1,
             yg.technology_description,
             yg.operational_status,
+            yg.prime_mover_code,
+            yg.state,
+            p.nerc_region,
+            p.balancing_authority_code_eia
         FROM monthly_generators mg
         LEFT JOIN out_eia__yearly_generators yg ON mg.plant_id_eia = yg.plant_id_eia AND mg.generator_id = yg.generator_id
         LEFT JOIN core_eia860__scd_plants p ON mg.plant_id_eia = p.plant_id_eia
         WHERE yg.operational_status = 'existing'
         ORDER BY mg.report_date DESC
-        """,
-    ).to_df()
+        """
+        return duckdb.query(query).to_df()
+    heat_rates = get_heat_rates(start_date, end_date)
 
     return eia_data_operable, heat_rates
 
@@ -589,13 +600,6 @@ def merge_ads_data(eia_data_operable):
     return eia_ads_merged
 
 
-
-def add_missing_fuel_cost(plants, costs_fn):
-    fuel_cost = pd.read_csv(costs_fn, index_col=0, skiprows=3)
-    plants["fuel_cost"] = plants.fuel_type.map(fuel_cost.fuel_price_per_mmbtu)
-    return plants
-
-
 def impute_missing_plant_data(
     plants: pd.DataFrame,
     aggregation_fields: list[str],
@@ -664,10 +668,8 @@ def set_parameters(plants: pd.DataFrame):
     plants["build_year"] = plants.pop("generator_operating_date").dt.year
     plants["heat_rate"] = plants.pop("unit_heat_rate_mmbtu_per_mwh")
 
-    plants = add_missing_fuel_cost(
-        plants,
-        snakemake.input.fuel_costs,
-    )  # National Avg used for start-up costs
+    plants['fuel_cost'] = plants.pop("fuel_cost_per_mwh")
+    plants = impute_missing_plant_data(plants, ["nerc_region", "technology_description"], ['fuel_cost'])
 
     # Unit Commitment Parameters
     plants["start_up_cost"] = (
@@ -700,6 +702,9 @@ def set_parameters(plants: pd.DataFrame):
         "ramp_limit_down",
     ]
     plants = impute_missing_plant_data(plants, aggregation_fields, data_fields)
+
+    # replace heat-rate above theoretical minimum with nan
+    plants.loc[plants.heat_rate < 3.412, "heat_rate"] = np.nan
 
     aggregation_fields = ["nerc_region", "technology_description"]
     data_fields = ["heat_rate"]
@@ -758,17 +763,24 @@ def prepare_heat_rates(
         return df.groupby(group_column).apply(filter_outliers).reset_index(drop=True)
 
     # Apply IQR filtering to each generator group
-    filtered_heat_rates =  filter_outliers_iqr_grouped(filtered_heat_rates, 'technology_description', 'unit_heat_rate_mmbtu_per_mwh')
-    average_heat_rates = filtered_heat_rates.groupby(['plant_id_eia', 'generator_id'])['unit_heat_rate_mmbtu_per_mwh'].mean().reset_index()
-    plants.drop(columns = 'unit_heat_rate_mmbtu_per_mwh', inplace = True)
-    plants = pd.merge(left=plants, right= average_heat_rates, on = ['plant_id_eia', 'generator_id'], how = 'left')
+    filtered_heat_rates =  filter_outliers_iqr_grouped(filtered_heat_rates, 'technology_description','unit_heat_rate_mmbtu_per_mwh')
+    filtered_fuel_cost =  filter_outliers_iqr_grouped(filtered_heat_rates, 'technology_description', 'fuel_cost_per_mwh')
 
+    # Apply averge heat rates to pants dataframe
+    average_heat_rates = filtered_heat_rates.groupby(['plant_id_eia', 'generator_id'])['unit_heat_rate_mmbtu_per_mwh'].mean().reset_index()
+    average_fuel_cost = filtered_fuel_cost.groupby(['plant_id_eia', 'generator_id'])['fuel_cost_per_mwh'].mean().reset_index()
+
+
+    plants.drop(columns = ['unit_heat_rate_mmbtu_per_mwh'], inplace = True)
+    plants = pd.merge(left= plants, right= average_heat_rates, on = ['plant_id_eia', 'generator_id'], how = 'left')
+    plants = pd.merge(left= plants, right= average_fuel_cost, on = ['plant_id_eia', 'generator_id'], how = 'left')
+
+    # Apply CEMS calculated heat rates
     cems_hr = pd.read_excel(cems_fn)[['Facility ID','Unit ID', 'Heat Input (mmBtu/MWh)']]
     crosswalk = pd.read_csv(crosswalk_fn)[['CAMD_PLANT_ID','CAMD_UNIT_ID', 'EIA_PLANT_ID', 'EIA_GENERATOR_ID']]
     cems_hr = pd.merge(cems_hr, crosswalk, left_on=['Facility ID','Unit ID'], right_on=['CAMD_PLANT_ID','CAMD_UNIT_ID'], how = 'inner')
     plants = pd.merge(cems_hr, plants, left_on=['EIA_PLANT_ID', 'EIA_GENERATOR_ID'], right_on=['plant_id_eia','generator_id'], how='right')
     plants.rename(columns={'Heat Input (mmBtu/MWh)':'heat_rate_'}, inplace=True)
-    plants['heat_rate_'] = plants['heat_rate_']/1e3
     plants.heat_rate_.fillna(plants.unit_heat_rate_mmbtu_per_mwh)
     plants.unit_heat_rate_mmbtu_per_mwh = plants.pop('heat_rate_')
     plants.drop(columns=['Facility ID','Unit ID','CAMD_PLANT_ID','CAMD_UNIT_ID', 'EIA_PLANT_ID', 'EIA_GENERATOR_ID'], inplace=True)
@@ -784,7 +796,9 @@ if __name__ == "__main__":
     else:
         rootpath = "."
 
-    eia_data_operable, heat_rates = load_pudl_data()
+    start_date = '2022-01-01'
+    end_date = '2023-12-31'
+    eia_data_operable, heat_rates = load_pudl_data(snakemake.input.pudl, start_date, end_date)
     eia_data_operable = prepare_heat_rates(eia_data_operable, heat_rates, snakemake.input.cems, snakemake.input.epa_crosswalk)
     set_non_conus(eia_data_operable)
     set_derates(eia_data_operable)
