@@ -117,15 +117,13 @@ class Context:
 
     def prepare_multiple_demands(
         self,
-        sectors: str | list[str],
+        sector: str,
         fuels: str | list[str],
         **kwargs,
-    ) -> dict[str, dict[str, pd.DataFrame]]:
+    ) -> dict[str, pd.DataFrame]:
         """
-        Returns demand by end-use energy carrier and sector.
+        Returns demand by end-use energy carrier.
         """
-        if isinstance(sectors, str):
-            sectors = [sectors]
 
         if isinstance(fuels, str):
             fuels = [fuels]
@@ -133,16 +131,14 @@ class Context:
         demand = self._read()
 
         data = {}
-        for sector in sectors:
-            data[sector] = {}
-            for fuel in fuels:
-                data[sector][fuel] = self._write(
-                    demand,
-                    self._read_strategy.zone,
-                    sector=sector,
-                    fuel=fuel,
-                    **kwargs,
-                )
+        for fuel in fuels:
+            data[fuel] = self._write(
+                demand,
+                self._read_strategy.zone,
+                sector=sector,
+                fuel=fuel,
+                **kwargs,
+            )
 
         return data
 
@@ -1156,9 +1152,6 @@ class WriteStrategy(ABC):
         """
         filtered = df[df.index.get_level_values("snapshot").isin(sns)].copy()
         filtered = filtered[~filtered.index.duplicated(keep="last")]  # issue-272
-        assert len(filtered.index.get_level_values("snapshot").unique()) == len(
-            sns.unique(),
-        ), "Filtered snapshots do not match expected snapshots"
         return filtered
 
     @staticmethod
@@ -1191,14 +1184,10 @@ class WriteStrategy(ABC):
         n = self.n
 
         if isinstance(sns, pd.DatetimeIndex):
-            assert len(sns) == len(n.snapshots)
             filtered = self._filter_on_snapshots(df, sns)
             df = filtered.reset_index()
             df = df.groupby(["snapshot", "sector", "subsector", "fuel"]).sum()
             assert filtered.shape == df.shape  # no data should have changed
-        else:  # profile and planning year are the same
-            snapshots = n.snapshots
-            df = self._filter_on_snapshots(df, snapshots)
 
         if sectors:
             if isinstance(sectors, str):
@@ -1446,148 +1435,229 @@ class WriteIndustrial(WriteStrategy):
 ###
 
 
-def reindex_demand(df: pd.DataFrame, year: int) -> pd.DataFrame:
+class DemandFormatter:
     """
-    Reindex a dataframe for a different planning horizon.
+    Scales and formats demand to pass into PyPSA Network.
 
-    Input dataframe will be...
-
-    |                     | BusName_1 | BusName_2 | ... | BusName_n |
-    |---------------------|-----------|-----------|-----|-----------|
-    | 2019-01-01 00:00:00 |    aaa    |    ddd    |     |    ggg    |
-    | 2019-01-01 01:00:00 |    bbb    |    eee    |     |    hhh    |
-    | ...                 |    ...    |    ...    |     |    ...    |
-    | 2019-02-28 23:00:00 |    ccc    |    fff    |     |    iii    |
-
-    Output dataframe will be...
-
-    |                     | BusName_1 | BusName_2 | ... | BusName_n |
-    |---------------------|-----------|-----------|-----|-----------|
-    | 2030-01-01 00:00:00 |    aaa    |    ddd    |     |    ggg    |
-    | 2030-01-01 01:00:00 |    bbb    |    eee    |     |    hhh    |
-    | ...                 |    ...    |    ...    |     |    ...    |
-    | 2030-02-28 23:00:00 |    ccc    |    fff    |     |    iii    |
+    Nomenclature used is:
+    - demand_period is the year of actual input demnad
+    - investment_period is the investment period in the pypsa network
+    - For example, if you plan to use 2020 EIA demand data for a 2030 study,
+    then the demand_period is 2020 and the invesment_period is 2030
+    - Or if you plan to use 2040 EFS data for a 2045 study, the demand period
+    is 2040 and the investment period is 2045
     """
 
-    new = df.copy()
-    new.index = new.index.map(lambda x: x.replace(year=year))
-    return new
+    def __init__(
+        self,
+        n: pypsa.Network,
+        scaling_method: Optional[str] = None,
+        pudl: Optional[str] = None,
+        api: Optional[str] = None,
+    ):
+        self.n = n
+        self.sns = n.snapshots
+        self.investment_periods = n.investment_periods.to_list()
+        self.scaling_method = scaling_method
+        self.pudl = pudl
+        self.api = api
+        if scaling_method:
+            logger.info(f"Assigning {self.scaling_method} demand scaling method")
+            self.scaler = self.assign_scaler()
+        else:
+            self.scaler = None
+
+    def format_demand(self, df: pd.DataFrame, sector: str, **kwargs) -> pd.DataFrame:
+        """
+        Public method to format demand ready to be ingested into the model.
+        """
+
+        assert sector in (
+            "power",
+            "residential",
+            "commercial",
+            "industrial",
+            "transportation",
+        )
+
+        if self.need_scaling(df):
+            assert isinstance(self.scaler, DemandScaler)
+
+        demand_periods = df.index.year.unique().to_list()
+        if demand_periods == self.investment_periods:
+            logger.info("No demand formatting required")
+            return df
+
+        # need a starting reference year for scaling
+        assert min(demand_periods) <= min(self.investment_periods)
+        demand_per_period = []
+        for investment_year in self.investment_periods:
+            formatted_demand = df[df.index.year == investment_year]
+            if not formatted_demand.empty:
+                demand_per_period.append(formatted_demand)
+            else:
+                nearest_year = max([x for x in demand_periods if x < investment_year])
+                formatted_demand = df[df.index.year == nearest_year]
+                demand_per_period.append(
+                    self.scaler.scale(
+                        formatted_demand,
+                        nearest_year,
+                        investment_year,
+                        sector,
+                    ),
+                )
+        demand = pd.concat(demand_per_period)
+        assert len(demand) == len(self.sns)
+        return demand
+
+    def need_scaling(self, df: pd.DataFrame) -> bool:
+        """
+        Checks if any demand needs to be scaled.
+        """
+        if len(df.index) != len(self.sns):
+            return True
+        return False
+
+    def assign_scaler(self):  # type DemandScaler
+        if self.scaling_method == "aeo_energy":
+            assert self.pudl, "Must provide eia api key"
+            return AeoEnergyScaler(self.api)
+        elif self.scaling_method == "aeo_electricity":
+            assert self.pudl, "Must provide pudl.sqlite file"
+            return AeoElectricityScaler(self.pudl)
+        else:
+            raise NotImplementedError
 
 
-def expand_demands(
-    demands: dict[str, dict[str : pd.DataFrame]],
-    planning_horizons: list[int],
-    scale_method: str,
-) -> dict[str, dict[str : pd.DataFrame]]:
-    """
-    Expands demand to match planning horizons.
-    """
+class DemandScaler(ABC):
 
-    expanded = {}
+    def __init__(self):
+        self.projection = self.get_projections()
 
-    for sector, fuels in demands.items():
-        expanded[sector] = {}
-        for fuel, demand in fuels.items():
-            dfs = [expand_demand(demand, x) for x in planning_horizons]
-            expanded[sector][fuel] = pd.concat(dfs)
-    return expanded
+    @abstractmethod
+    def get_projections(self) -> pd.DataFrame:
+        pass
+
+    def get_growth(self, start_year: int, end_year: int, sector: str) -> float:
+        """
+        Returns decimal change between two years.
+        """
+
+        min_year = self.projection.index.min()
+        max_year = self.projection.index.max()
+
+        if start_year < min_year:
+            logger.warning(f"Setting base demand scaling year to {min_year}")
+            start_year = min_year
+        if end_year > max_year:
+            logger.warning(f"Setting final demand scaling year to {max_year}")
+            end_year = max_year
+
+        start = self.projection.at[start_year, sector]
+        end = self.projection.at[end_year, sector]
+
+        return end / start
+
+    def scale(
+        self,
+        df: pd.DataFrame,
+        start_year: int,
+        end_year: int,
+        sector: str,
+    ) -> pd.DataFrame:
+        """
+        Scales data.
+        """
+        growth = self.get_growth(start_year, end_year, sector)
+        new = df.mul(growth)
+        return self.reindex(new, end_year)
+
+    @staticmethod
+    def reindex(df: pd.DataFrame, year: int) -> pd.DataFrame:
+        """
+        Reindex a dataframe for a different planning horizon.
+
+        Input dataframe will be...
+
+        |                     | BusName_1 | BusName_2 | ... | BusName_n |
+        |---------------------|-----------|-----------|-----|-----------|
+        | 2019-01-01 00:00:00 |    aaa    |    ddd    |     |    ggg    |
+        | 2019-01-01 01:00:00 |    bbb    |    eee    |     |    hhh    |
+        | ...                 |    ...    |    ...    |     |    ...    |
+        | 2019-02-28 23:00:00 |    ccc    |    fff    |     |    iii    |
+
+        Output dataframe will be...
+
+        |                     | BusName_1 | BusName_2 | ... | BusName_n |
+        |---------------------|-----------|-----------|-----|-----------|
+        | 2030-01-01 00:00:00 |    aaa    |    ddd    |     |    ggg    |
+        | 2030-01-01 01:00:00 |    bbb    |    eee    |     |    hhh    |
+        | ...                 |    ...    |    ...    |     |    ...    |
+        | 2030-02-28 23:00:00 |    ccc    |    fff    |     |    iii    |
+        """
+
+        new = df.copy()
+        new.index = new.index.map(lambda x: x.replace(year=year))
+        return new
 
 
-def expand_demand(
-    demand: pd.DataFrame,
-    planning_horizon: int,
-) -> pd.DataFrame:
-    df = demand[demand.index.year == planning_horizon]
+class AeoElectricityScaler(DemandScaler):
 
-    if not df.empty:
+    def __init__(self, pudl: str, scenario: str = "reference"):
+        self.pudl = pudl
+        self.scenario = scenario
+        self.region = "united_states"
+        super().__init__()
+
+    def get_projections(self) -> pd.DataFrame:
+        """
+        Get sector yearly END-USE ELECTRICITY growth rates from AEO.
+
+        |      | power | units |
+        |----- |-------|-------|
+        | 2021 |  ###  |  ###  |
+        | 2022 |  ###  |  ###  |
+        | 2023 |  ###  |  ###  |
+        | ...  |       |       |
+        | 2049 |  ###  |  ###  |
+        | 2050 |  ###  |  ###  |
+        """
+
+        con = sqlite3.connect(self.pudl)
+        df = pd.read_sql_query(
+            f"""
+        SELECT
+        projection_year,
+        technology_description_eiaaeo,
+        gross_generation_mwh
+        FROM
+        core_eiaaeo__yearly_projected_generation_in_electric_sector_by_technology
+        WHERE
+        electricity_market_module_region_eiaaeo = "{self.region}" AND
+        model_case_eiaaeo = "{self.scenario}"
+        """,
+            con,
+        )
+
+        df = (
+            df.drop(columns=["technology_description_eiaaeo"])
+            .rename(
+                columns={"projection_year": "year", "gross_generation_mwh": "power"},
+            )
+            .groupby("year")
+            .sum()
+        )
+        df["units"] = "mwh"
         return df
 
-    profile_year = demand.index[0].year
-    df = demand[demand.index.year == profile_year]
-    df = reindex_demand(df, planning_horizon)
-    return df
 
+class AeoEnergyScaler(DemandScaler):
 
-def scale_demand(
-    end_use: str,
-    scenario: str = "reference",
-    api: Optional[str] = None,
-    pudl: Optional[str] = None,
-) -> pd.DataFrame:
-    """
-    Scales demand.
-    """
-    if end_use == "power":
-        assert pudl
-        df = get_aeo_electricity_growth_rate(pudl, scenario)
-    elif end_use in ("residential", "commercial", "industrial", "transport"):
-        assert api
-        df = get_aeo_energy_growth_rate(api)
-    else:
-        raise NotImplementedError
-
-
-def get_aeo_electricity_growth_rate(
-    db: str,
-    aeo_scenario: str = "reference",
-    region: str = "united_states",
-) -> pd.DataFrame:
-    """
-    Get sector yearly END-USE ELECTRICITY growth rates from AEO.
-
-    |      | power | units |
-    |----- |-------|-------|
-    | 2021 |  ###  |  ###  |
-    | 2022 |  ###  |  ###  |
-    | 2023 |  ###  |  ###  |
-    | ...  |       |       |
-    | 2049 |  ###  |  ###  |
-    | 2050 |  ###  |  ###  |
-    """
-
-    con = sqlite3.connect(db)
-
-    df = pd.read_sql_query(
-        f"""
-    SELECT
-    projection_year,
-    technology_description_eiaaeo,
-    gross_generation_mwh
-    FROM
-    core_eiaaeo__yearly_projected_generation_in_electric_sector_by_technology
-    WHERE
-    electricity_market_module_region_eiaaeo = "{region}" AND
-    model_case_eiaaeo = "{aeo_scenario}"
-    """,
-        con,
-    )
-
-    df = (
-        df.drop(columns=["technology_description_eiaaeo"])
-        .rename(columns={"projection_year": "year", "power": "mwh"})
-        .groupby("year")
-        .sum()
-    )
-    df["units"] = "mwh"
-    return df
-
-
-def get_aeo_energy_growth_rate(
-    api: str,
-    aeo_scenario: str = "reference",
-) -> pd.DataFrame:
-    """
-    Get sector yearly END-USE ENERGY growth rates from AEO at a NATIONAL level.
-
-    |      | residential | commercial  | industrial  | transport  | units |
-    |----- |-------------|-------------|-------------|------------|-------|
-    | 2018 |     ###     |     ###     |     ###     |     ###    |  ###  |
-    | 2019 |     ###     |     ###     |     ###     |     ###    |  ###  |
-    | 2020 |     ###     |     ###     |     ###     |     ###    |  ###  |
-    | ...  |             |             |             |            |       |
-    | 2049 |     ###     |     ###     |     ###     |     ###    |  ###  |
-    | 2050 |     ###     |     ###     |     ###     |     ###    |  ###  |
-    """
+    def __init__(self, api: str, scenario: str = "reference"):
+        super().__init__()
+        self.api = api
+        self.scenario = scenario
+        self.region = "united_states"
 
     def get_historical_value(api: str, year: int, sector: str) -> float:
         """
@@ -1613,31 +1683,48 @@ def get_aeo_energy_growth_rate(
         ).get_data()
         return energy
 
-    logger.info("Getting AEO growth rate")
+    def get_projections(self) -> pd.DataFrame:
+        """
+        Get sector yearly END-USE ENERGY growth rates from AEO at a NATIONAL
+        level.
 
-    years = range(2017, 2051)
+        |      | residential | commercial  | industrial  | transport  | units |
+        |----- |-------------|-------------|-------------|------------|-------|
+        | 2018 |     ###     |     ###     |     ###     |     ###    |  ###  |
+        | 2019 |     ###     |     ###     |     ###     |     ###    |  ###  |
+        | 2020 |     ###     |     ###     |     ###     |     ###    |  ###  |
+        | ...  |             |             |             |            |       |
+        | 2049 |     ###     |     ###     |     ###     |     ###    |  ###  |
+        | 2050 |     ###     |     ###     |     ###     |     ###    |  ###  |
+        """
 
-    sectors = ("residential", "commercial", "industry", "transport")
+        years = range(2017, 2051)
 
-    df = pd.DataFrame(
-        columns=["residential", "commercial", "industry", "transport"],
-        index=years,
-    )
+        sectors = ("residential", "commercial", "industry", "transport")
 
-    for year in sorted(years):
-        if year < 2024:
-            for sector in sectors:
-                df.at[year, sector] = get_historical_value(api, year, sector)
+        df = pd.DataFrame(
+            columns=["residential", "commercial", "industry", "transport"],
+            index=years,
+        )
 
-    for sector in sectors:
-        aeo = get_future_values(api, max(years), sector, aeo_scenario)
-        for year in years:
+        for year in sorted(years):
             if year < 2024:
-                continue
-            df.at[year, sector] = aeo.at[year, "value"]
+                for sector in sectors:
+                    df.at[year, sector] = self.get_historical_value(
+                        self.api,
+                        year,
+                        sector,
+                    )
 
-    df["units"] = "quads"
-    return df
+        for sector in sectors:
+            aeo = self.get_future_values(self.api, max(years), sector, self.scenario)
+            for year in years:
+                if year < 2024:
+                    continue
+                df.at[year, sector] = aeo.at[year, "value"]
+
+        df["units"] = "quads"
+        return df
 
 
 ###
@@ -1648,16 +1735,16 @@ if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
 
-        # snakemake = mock_snakemake(
-        #     "build_electrical_demand",
-        #     interconnect="texas",
-        #     end_use="power",
-        # )
         snakemake = mock_snakemake(
-            "build_sector_demand",
+            "build_electrical_demand",
             interconnect="texas",
-            end_use="transport",
+            end_use="power",
         )
+        # snakemake = mock_snakemake(
+        #     "build_sector_demand",
+        #     interconnect="texas",
+        #     end_use="transport",
+        # )
     configure_logging(snakemake)
 
     n = pypsa.Network(snakemake.input.network)
@@ -1667,18 +1754,14 @@ if __name__ == "__main__":
     demand_params = snakemake.params.demand_params
     end_use = snakemake.wildcards.end_use
     eia_api = snakemake.params.eia_api
+    pudl = snakemake.input.pudl
 
     if end_use == "power":  # electricity only study
         demand_profile = demand_params["profile"]
-        scale_method = demand_params["scale"]
         demand_disaggregation = demand_params["disaggregation"]
     else:
         demand_profile = demand_params["profile"][end_use]
-        scale_method = demand_params["scale"][end_use]
         demand_disaggregation = demand_params["disaggregation"][end_use]
-
-    if scale_method == "aeo":
-        assert eia_api, "Must provide EIA API key to scale demand by AEO"
 
     planning_horizons = n.investment_periods.to_list()
     profile_year = snakemake.params.profile_year
@@ -1690,14 +1773,13 @@ if __name__ == "__main__":
     sns = n.snapshots
 
     if demand_profile == "efs":
-        assert all(
-            year in (2018, 2020, 2024, 2030, 2040, 2050) for year in planning_horizons
-        )
+        # guarantee EFS data will have a base year to scale
+        assert min(planning_horizons in (2018, 2020, 2024, 2030, 2040, 2050))
         reader = ReadEfs(demand_files)
         sns = n.snapshots.get_level_values(1)
 
     elif demand_profile == "eia":
-        assert profile_year in range(2018, 2023, 1)
+        assert profile_year in range(2018, 2023)
         reader = ReadEia(demand_files)
         sns = n.snapshots.get_level_values(1).map(
             lambda x: x.replace(year=profile_year),
@@ -1738,44 +1820,58 @@ if __name__ == "__main__":
     demand_converter = Context(reader, writer)
 
     # extract demand based on strategies
-    # this is raw demand, not scaled or garunteed to align to snapshots
+    # this is raw demand, not scaled or garunteed to align to network snapshots
 
     if end_use == "power":  # only one demand for electricity only studies
         demand = demand_converter.prepare_demand(sns=sns)  # pd.DataFrame
-        demands = {"power": {"electricity": demand}}
+        demands = {"electricity": demand}
     else:
         fuels = ("electricity", "heat", "cool")
-        sector = end_use  # residential, commercial, industry, transport
         demands = demand_converter.prepare_multiple_demands(
-            sector,
+            end_use,  # residential, commercial, industry, transport
             fuels,
             sns=sns,
-        )  # dict[str, dict[str, pd.DataFrame]]
+        )  # dict[str, pd.DataFrame]
 
-    # assign demand to planning years and scale
-    demands = expand_demands(
-        demands,
-        planning_horizons,
-        scale_method,
-    )  # dict[str, dict[str, pd.DataFrame]]
+    # scale demand and align snapshots. this is outside the main read/write
+    # strategy as extra arguments are required to fill in data
+
+    scaling_methods = {
+        "power": "aeo_electricity",
+        "commercial": "aeo_energy",
+        "residential": "aeo_energy",
+        "transport": "aeo_energy",
+        "industry": "aeo_energy",
+    }
+
+    demand_formatter = DemandFormatter(
+        n=n,
+        scaling_method=scaling_methods[end_use],
+        pudl=pudl,
+        api=eia_api,
+    )
+
+    formatted_demand = {}
+    for sector, demand in demands.items():
+        formatted_demand[sector] = demand_formatter.format_demand(demand, end_use)
 
     # electricity sector study
     if end_use == "power":
-        demands[end_use]["electricity"].round(4).to_csv(
+        formatted_demand["electricity"].round(4).to_csv(
             snakemake.output.elec_demand,
             index=True,
         )
     # sector coupling demand
     else:
-        demands[end_use]["electricity"].round(4).to_csv(
+        formatted_demand["electricity"].round(4).to_csv(
             snakemake.output.elec_demand,
             index=True,
         )
-        demands[end_use]["heat"].round(4).to_csv(
+        formatted_demand["heat"].round(4).to_csv(
             snakemake.output.heat_demand,
             index=True,
         )
-        demands[end_use]["cool"].round(4).to_csv(
+        formatted_demand["cool"].round(4).to_csv(
             snakemake.output.cool_demand,
             index=True,
         )

@@ -311,9 +311,7 @@ rule build_electrical_demand:
     input:
         network=RESOURCES + "{interconnect}/elec_base_network.nc",
         demand_files=electricty_study_demand,
-        eia=expand(DATA + "GridEmissions/{file}", file=DATAFILES_GE),
-        efs=DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv",
-        county_industrial_energy=DATA + "industry_load/2014_update_20170910-0116.csv",
+        pudl=DATA + "pudl/pudl.sqlite",
     output:
         elec_demand=RESOURCES + "{interconnect}/{end_use}_electricity_demand.csv",
     log:
