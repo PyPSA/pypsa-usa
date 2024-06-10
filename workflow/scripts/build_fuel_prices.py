@@ -32,7 +32,7 @@ import pandas as pd
 import duckdb
 import numpy as np
 from _helpers import configure_logging, get_snapshots, mock_snakemake
-from build_powerplants import load_pudl_data
+from build_powerplants import load_pudl_data, filter_outliers_iqr_grouped
 
 logger = logging.getLogger(__name__)
 
@@ -170,17 +170,22 @@ if __name__ == "__main__":
     _ , pudl_fuel_costs = load_pudl_data(snakemake.input.pudl, start_date, end_date)
     pudl_fuel_costs['interconnect'] = pudl_fuel_costs['nerc_region'].map(const.NERC_REGION_MAPPER)
     pudl_fuel_costs = pudl_fuel_costs[pudl_fuel_costs['interconnect'] == snakemake.wildcards.interconnect]
-    pudl_fuel_costs.dropna(subset=["fuel_cost_per_mwh"], inplace=True)
+    pudl_fuel_costs.dropna(subset=["fuel_cost_per_mwh"], inplace=True) # move further down?
     pudl_fuel_costs['generator_name'] = (
         pudl_fuel_costs['plant_name_eia'].astype(str) + '_' + 
         pudl_fuel_costs['plant_id_eia'].astype(str) + '_' + 
         pudl_fuel_costs['generator_id'].astype(str)
     )
+
+    # Apply IQR filtering to each generator group
+    pudl_fuel_costs = filter_outliers_iqr_grouped(pudl_fuel_costs, 'technology_description', 'fuel_cost_per_mwh')
+
     pudl_fuel_costs = pudl_fuel_costs.groupby(["generator_name",'report_date'])['fuel_cost_per_mwh'].mean()
     pudl_fuel_costs = pudl_fuel_costs.unstack(level=0)
     # Fill the missing values with the previous value
-    plant_fuel_costs = pudl_fuel_costs.reindex(snapshots).ffill()
+    plant_fuel_costs = pudl_fuel_costs.reindex(snapshots)
     plant_fuel_costs.index = snapshots
+    plant_fuel_costs = plant_fuel_costs.ffill().bfill()
     plant_fuel_costs.to_csv(snakemake.output.pudl_fuel_costs, index_label="snapshot")
 
 

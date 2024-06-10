@@ -655,9 +655,7 @@ def set_parameters(plants: pd.DataFrame):
     Sets generator naming schemes, updates parameter names, and imputes missing data.
     """
     plants["generator_name"] = (
-        plants.index.astype(str)
-        + "_"
-        + plants.plant_name_eia.astype(str)
+        plants.plant_name_eia.astype(str)
         + "_"
         + plants.plant_id_eia.astype(str)
         + "_"
@@ -719,6 +717,18 @@ def set_parameters(plants: pd.DataFrame):
     return plants.reset_index()
 
 
+def filter_outliers_iqr_grouped(df, group_column, value_column):
+    """filter outliers using IQR for each generator group"""
+    def filter_outliers(group):
+        Q1 = group[value_column].quantile(0.25)
+        Q3 = group[value_column].quantile(0.75)
+        IQR = Q3 - Q1
+        lower_bound = Q1 - 1.5 * IQR
+        upper_bound = Q3 + 1.5 * IQR
+        return group[(group[value_column] >= lower_bound) & (group[value_column] <= upper_bound)]
+    return df.groupby(group_column).apply(filter_outliers).reset_index(drop=True)
+
+
 def prepare_heat_rates(
     plants: pd.DataFrame,
     heat_rates: pd.DataFrame,
@@ -750,17 +760,6 @@ def prepare_heat_rates(
     # Filter out the outliers using Z-score
     threshold = 3
     filtered_heat_rates = heat_rates[np.abs(heat_rates['z_score']) <= threshold]
-
-    # Further filter outliers using IQR for each generator
-    def filter_outliers_iqr_grouped(df, group_column, value_column):
-        def filter_outliers(group):
-            Q1 = group[value_column].quantile(0.25)
-            Q3 = group[value_column].quantile(0.75)
-            IQR = Q3 - Q1
-            lower_bound = Q1 - 1.5 * IQR
-            upper_bound = Q3 + 1.5 * IQR
-            return group[(group[value_column] >= lower_bound) & (group[value_column] <= upper_bound)]
-        return df.groupby(group_column).apply(filter_outliers).reset_index(drop=True)
 
     # Apply IQR filtering to each generator group
     filtered_heat_rates =  filter_outliers_iqr_grouped(filtered_heat_rates, 'technology_description','unit_heat_rate_mmbtu_per_mwh')

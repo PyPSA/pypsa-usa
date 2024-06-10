@@ -1045,18 +1045,6 @@ def main(snakemake):
 
     plants = match_plant_to_bus(n, plants)
 
-    # if "hydro" in renewable_carriers:
-    #     p = params.renewable["hydro"]
-    #     carriers = p.pop("carriers", [])
-    #     attach_hydro(
-    #         n,
-    #         costs,
-    #         plants,
-    #         snakemake.input.profile_hydro,
-    #         carriers,
-    #         **p,
-    #     )
-
     attach_conventional_generators(
         n,
         costs,
@@ -1175,24 +1163,33 @@ def main(snakemake):
 
         # Apply PuDL Fuel Costs for plants where listed
         pudl_fuel_costs = pd.read_csv(snakemake.input["pudl_fuel_costs"], index_col=0)
-        import pdb; pdb.set_trace()
-        """
-        signinng off from first june 7- need to apply these pudl fuel costs to each plant with the correct VOM for each carrier from the costs table
-        marginal_costs = marginal_costs + vom
+
+        # Construct the VOM table for each generator by carrier
+        vom = pd.DataFrame(index=pudl_fuel_costs.columns)
+        for gen in pudl_fuel_costs.columns:
+            if gen not in plants.index:
+                continue
+            carrier = plants.loc[gen, "carrier"]
+            vom.loc[gen, "VOM"] = costs.at[carrier, "VOM"]
+
+        # Apply the VOM to the fuel costs
+        pudl_fuel_costs = pudl_fuel_costs + vom.squeeze()
+        pudl_fuel_costs = broadcast_investment_horizons_index(n, pudl_fuel_costs)
+
+        # Drop any columns that are not in the network
+        pudl_fuel_costs.columns = "C" + pudl_fuel_costs.columns
+        pudl_fuel_costs = pudl_fuel_costs[
+            [x for x in pudl_fuel_costs.columns if x in n.generators.index]
+        ]
 
         # drop any data that has been assigned at a coarser resolution
         n.generators_t["marginal_cost"] = n.generators_t["marginal_cost"][
-            [x for x in n.generators_t["marginal_cost"] if x not in marginal_costs]
+            [x for x in n.generators_t["marginal_cost"] if x not in pudl_fuel_costs]
         ]
 
         # assign new marginal costs
-        n.generators_t["marginal_cost"] = n.generators_t["marginal_cost"].join(
-            marginal_costs,
-            how="inner",
-        )
-        """
-
-
+        n.generators_t["marginal_cost"] = n.generators_t["marginal_cost"].join(pudl_fuel_costs)
+        # Why are there so few of the pudl fuel costs columns?
 
     # fix p_nom_min for extendable generators
     # The "- 0.001" is just to avoid numerical issues
