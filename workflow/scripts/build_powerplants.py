@@ -665,7 +665,7 @@ def set_parameters(plants: pd.DataFrame):
     plants["p_nom"] = plants.pop("capacity_mw")
     plants["build_year"] = plants.pop("generator_operating_date").dt.year
     plants["heat_rate"] = plants.pop("unit_heat_rate_mmbtu_per_mwh")
-
+    plants["vom"] = plants.pop("ads_vom_cost")
     plants['fuel_cost'] = plants.pop("fuel_cost_per_mwh")
     plants = impute_missing_plant_data(plants, ["nerc_region", "technology_description"], ['fuel_cost'])
 
@@ -698,9 +698,10 @@ def set_parameters(plants: pd.DataFrame):
         "min_up_time",
         "ramp_limit_up",
         "ramp_limit_down",
+        "vom",
     ]
     plants = impute_missing_plant_data(plants, aggregation_fields, data_fields)
-
+    
     # replace heat-rate above theoretical minimum with nan
     plants.loc[plants.heat_rate < 3.412, "heat_rate"] = np.nan
 
@@ -709,7 +710,7 @@ def set_parameters(plants: pd.DataFrame):
     plants = impute_missing_plant_data(plants, aggregation_fields, data_fields)
 
     plants["marginal_cost"] = (
-        plants.heat_rate * plants.fuel_cost
+        plants.vom + plants.fuel_cost
     )  # (MMBTu/MW) * (USD/MMBTu) = USD/MW
     plants["efficiency"] = 1 / (
         plants["heat_rate"] / 3.412
@@ -729,51 +730,51 @@ def filter_outliers_iqr_grouped(df, group_column, value_column):
     return df.groupby(group_column).apply(filter_outliers).reset_index(drop=True)
 
 
-def prepare_heat_rates(
+def merge_fc_hr_data(
     plants: pd.DataFrame,
-    heat_rates: pd.DataFrame,
-    cems_fn: str,
-    crosswalk_fn: str,
+    temporal_data: pd.DataFrame,
+    target_field_name: str,
 ):
-    heat_rates['generator_name'] = (
-        heat_rates['plant_name_eia'].astype(str) + '_' + 
-        heat_rates['plant_id_eia'].astype(str) + '_' + 
-        heat_rates['generator_id'].astype(str)
+    temporal_data['generator_name'] = (
+        temporal_data['plant_name_eia'].astype(str) + '_' + 
+        temporal_data['plant_id_eia'].astype(str) + '_' + 
+        temporal_data['generator_id'].astype(str)
     )
 
     # Calculate mean and standard deviation for each generator
-    heat_rate_stats_temporal = heat_rates.groupby(['generator_name'])['unit_heat_rate_mmbtu_per_mwh'].agg(['mean', 'std']).reset_index()
-    heat_rate_stats_temporal['mean'] = heat_rate_stats_temporal['mean'].replace(np.inf, np.nan)
-    heat_rate_stats_temporal.dropna(inplace=True)
+    stats = temporal_data.groupby(['generator_name'])[target_field_name].agg(['mean', 'std']).reset_index()
+    stats['mean'] = stats['mean'].replace(np.inf, np.nan)
+    stats.dropna(inplace=True)
 
     # Merge mean and std back to the original dataframe
-    heat_rates = heat_rates.merge(
-        heat_rate_stats_temporal,
+    temporal_stats = temporal_data.merge(
+        stats,
         on=['generator_name'],
         how='left',
         suffixes=('', '_stats')
     )
 
     # Calculate the Z-score for each month's entry
-    heat_rates['z_score'] = (heat_rates['unit_heat_rate_mmbtu_per_mwh'] - heat_rates['mean']) / heat_rates['std']
-
+    temporal_stats['z_score'] = (temporal_stats[target_field_name] - temporal_stats['mean']) / temporal_stats['std']
+    
     # Filter out the outliers using Z-score
     threshold = 3
-    filtered_heat_rates = heat_rates[np.abs(heat_rates['z_score']) <= threshold]
+    filtered_temporal = temporal_stats[np.abs(temporal_stats['z_score']) <= threshold]
+    temporal_stats.drop(columns=['mean', 'std', 'z_score'], inplace=True)
 
     # Apply IQR filtering to each generator group
-    filtered_heat_rates =  filter_outliers_iqr_grouped(filtered_heat_rates, 'technology_description','unit_heat_rate_mmbtu_per_mwh')
-    filtered_fuel_cost =  filter_outliers_iqr_grouped(filtered_heat_rates, 'technology_description', 'fuel_cost_per_mwh')
+    filtered_temporal =  filter_outliers_iqr_grouped(filtered_temporal, 'technology_description', target_field_name)
 
-    # Apply averge heat rates to pants dataframe
-    average_heat_rates = filtered_heat_rates.groupby(['plant_id_eia', 'generator_id'])['unit_heat_rate_mmbtu_per_mwh'].mean().reset_index()
-    average_fuel_cost = filtered_fuel_cost.groupby(['plant_id_eia', 'generator_id'])['fuel_cost_per_mwh'].mean().reset_index()
+    # Apply temporal average heat rates to plants dataframe
+    temporal_average = filtered_temporal.groupby(['plant_id_eia', 'generator_id'])[target_field_name].mean().reset_index()
 
+    if target_field_name in plants.columns:
+        plants.drop(columns = [target_field_name], inplace = True)
 
-    plants.drop(columns = ['unit_heat_rate_mmbtu_per_mwh'], inplace = True)
-    plants = pd.merge(left= plants, right= average_heat_rates, on = ['plant_id_eia', 'generator_id'], how = 'left')
-    plants = pd.merge(left= plants, right= average_fuel_cost, on = ['plant_id_eia', 'generator_id'], how = 'left')
+    plants = pd.merge(left= plants, right= temporal_average, on = ['plant_id_eia', 'generator_id'], how = 'left')
+    return plants
 
+def apply_cems_heat_rates(plants, crosswalk_fn, cems_fn):
     # Apply CEMS calculated heat rates
     cems_hr = pd.read_excel(cems_fn)[['Facility ID','Unit ID', 'Heat Input (mmBtu/MWh)']]
     crosswalk = pd.read_csv(crosswalk_fn)[['CAMD_PLANT_ID','CAMD_UNIT_ID', 'EIA_PLANT_ID', 'EIA_GENERATOR_ID']]
@@ -784,7 +785,6 @@ def prepare_heat_rates(
     plants.unit_heat_rate_mmbtu_per_mwh = plants.pop('heat_rate_')
     plants.drop(columns=['Facility ID','Unit ID','CAMD_PLANT_ID','CAMD_UNIT_ID', 'EIA_PLANT_ID', 'EIA_GENERATOR_ID'], inplace=True)
     return plants
-
 
 if __name__ == "__main__":
     if "snakemake" not in globals():
@@ -798,7 +798,9 @@ if __name__ == "__main__":
     start_date = '2022-01-01'
     end_date = '2023-12-31'
     eia_data_operable, heat_rates = load_pudl_data(snakemake.input.pudl, start_date, end_date)
-    eia_data_operable = prepare_heat_rates(eia_data_operable, heat_rates, snakemake.input.cems, snakemake.input.epa_crosswalk)
+    eia_data_operable = merge_fc_hr_data(eia_data_operable, heat_rates, 'unit_heat_rate_mmbtu_per_mwh')
+    eia_data_operable = merge_fc_hr_data(eia_data_operable, heat_rates, 'fuel_cost_per_mwh')
+    eia_data_operable = apply_cems_heat_rates(eia_data_operable, snakemake.input.epa_crosswalk, snakemake.input.cems)
     set_non_conus(eia_data_operable)
     set_derates(eia_data_operable)
     set_tech_fuels_primer_movers(eia_data_operable)
