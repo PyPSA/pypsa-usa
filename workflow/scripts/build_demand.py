@@ -1431,7 +1431,7 @@ class WriteIndustrial(WriteStrategy):
 
 
 ###
-# helpers
+# Formatters and Scalers
 ###
 
 
@@ -1452,14 +1452,14 @@ class DemandFormatter:
         self,
         n: pypsa.Network,
         scaling_method: Optional[str] = None,
-        pudl: Optional[str] = None,
+        filepath: Optional[str] = None,
         api: Optional[str] = None,
     ):
         self.n = n
         self.sns = n.snapshots
         self.investment_periods = n.investment_periods.to_list()
         self.scaling_method = scaling_method
-        self.pudl = pudl
+        self.filepath = filepath
         self.api = api
         if scaling_method:
             logger.info(f"Assigning {self.scaling_method} demand scaling method")
@@ -1520,11 +1520,14 @@ class DemandFormatter:
 
     def assign_scaler(self):  # type DemandScaler
         if self.scaling_method == "aeo_energy":
-            assert self.pudl, "Must provide eia api key"
+            assert self.api, "Must provide eia api key"
             return AeoEnergyScaler(self.api)
         elif self.scaling_method == "aeo_electricity":
-            assert self.pudl, "Must provide pudl.sqlite file"
-            return AeoElectricityScaler(self.pudl)
+            assert self.filepath.endswith(".sqlite"), "Must provide pudl.sqlite file"
+            return AeoElectricityScaler(self.filepath)
+        elif self.scaling_method == "efs":
+            assert self.filepath.endswith(".csv"), "Must provide EFS.csv data"
+            return EfsElectricityScalar(self.filepath)
         else:
             raise NotImplementedError
 
@@ -1727,6 +1730,60 @@ class AeoEnergyScaler(DemandScaler):
         return df
 
 
+class EfsElectricityScalar(DemandScaler):
+
+    def __init__(self, filepath: str):
+        self.efs = filepath
+        self.region = "united_states"
+        super().__init__()
+
+    def read(self) -> pd.DataFrame:
+        df = pd.read_csv(self.efs, engine="pyarrow")
+        return (
+            df.drop(
+                columns=[
+                    "Electrification",
+                    "TechnologyAdvancement",
+                    "LocalHourID",
+                    "Sector",
+                    "Subsector",
+                ],
+            )
+            .groupby(["Year", "State"])
+            .sum()
+        )
+
+    def interpolate(self, df: pd.DataFrame) -> pd.DataFrame:
+        efs_years = df.index
+        new_years = range(min(efs_years), max(efs_years) + 1)
+        df = df.reindex(new_years)
+        return df.interpolate()
+
+    def get_projections(self) -> pd.DataFrame:
+        """
+        Get sector yearly END-USE ELECTRICITY growth rates from EFS. Linear
+        interpolates missing values.
+
+        |      | power | units |
+        |----- |-------|-------|
+        | 2018 |  ###  |  ###  |
+        | 2019 |  ###  |  ###  |
+        | 2020 |  ###  |  ###  |
+        | ...  |       |       |
+        | 2049 |  ###  |  ###  |
+        | 2050 |  ###  |  ###  |
+        """
+        df = self.read().reset_index()
+        if self.region == "united_states":
+            df = df.drop(columns="State").groupby("Year").sum()
+        else:
+            raise NotImplementedError
+        df = self.interpolate(df)
+        df = df.rename(columns={"LoadMW": "power"})
+        df["units"] = "MWh"
+        return df
+
+
 ###
 # main entry point
 ###
@@ -1754,14 +1811,22 @@ if __name__ == "__main__":
     demand_params = snakemake.params.demand_params
     end_use = snakemake.wildcards.end_use
     eia_api = snakemake.params.eia_api
-    pudl = snakemake.input.pudl
 
     if end_use == "power":  # electricity only study
         demand_profile = demand_params["profile"]
-        demand_disaggregation = demand_params["disaggregation"]
+        demand_disaggregation = "pop"
+        if demand_profile == "efs":
+            scaling_method = "efs"
+        elif demand_profile == "eia":
+            scaling_method = "aeo_electricity"
+        else:
+            logger.warning(
+                f"No scaling method available for {demand_profile} profile. Setting to 'aeo_electricity'",
+            )
     else:
         demand_profile = demand_params["profile"][end_use]
         demand_disaggregation = demand_params["disaggregation"][end_use]
+        scaling_method = "aeo_energy"
 
     planning_horizons = n.investment_periods.to_list()
     profile_year = snakemake.params.profile_year
@@ -1774,7 +1839,7 @@ if __name__ == "__main__":
 
     if demand_profile == "efs":
         # guarantee EFS data will have a base year to scale
-        assert min(planning_horizons in (2018, 2020, 2024, 2030, 2040, 2050))
+        assert min(planning_horizons) in (2018, 2020, 2024, 2030, 2040, 2050)
         reader = ReadEfs(demand_files)
         sns = n.snapshots.get_level_values(1)
 
@@ -1836,24 +1901,18 @@ if __name__ == "__main__":
     # scale demand and align snapshots. this is outside the main read/write
     # strategy as extra arguments are required to fill in data
 
-    scaling_methods = {
-        "power": "aeo_electricity",
-        "commercial": "aeo_energy",
-        "residential": "aeo_energy",
-        "transport": "aeo_energy",
-        "industry": "aeo_energy",
-    }
+    demand_scale_file = snakemake.input.demand_scaling_file
 
     demand_formatter = DemandFormatter(
         n=n,
-        scaling_method=scaling_methods[end_use],
-        pudl=pudl,
+        scaling_method=scaling_method,
+        filepath=demand_scale_file,
         api=eia_api,
     )
 
     formatted_demand = {}
-    for sector, demand in demands.items():
-        formatted_demand[sector] = demand_formatter.format_demand(demand, end_use)
+    for fuel, demand in demands.items():
+        formatted_demand[fuel] = demand_formatter.format_demand(demand, end_use)
 
     # electricity sector study
     if end_use == "power":
