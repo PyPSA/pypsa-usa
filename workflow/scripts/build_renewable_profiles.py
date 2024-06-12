@@ -178,8 +178,8 @@ if __name__ == "__main__":
 
         snakemake = mock_snakemake(
             "build_renewable_profiles",
-            technology="solar",
-            interconnect="eastern",
+            technology="offwind",
+            interconnect="texas",
         )
     configure_logging(snakemake)
 

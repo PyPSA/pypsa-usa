@@ -102,6 +102,22 @@ rule retrieve_sector_databundle:
         "../scripts/retrieve_databundles.py"
 
 
+rule retrieve_WECC_forecast_data:
+    output:
+        ads_2032=directory(
+            DATA + "WECC_ADS/downloads/2032/Public Data/Hourly Profiles in CSV format"
+        ),
+        ads_2030=directory(
+            DATA
+            + "WECC_ADS/downloads/2030/WECC 2030 ADS PCM 2020-12-16 (V1.5) Public Data/CSV Shape Files"
+        ),
+        ads_dir=directory(DATA + "WECC_ADS/processed"),
+    log:
+        "logs/retrieve/retrieve_WECC_forecast_data.log",
+    script:
+        "../scripts/retrieve_forecast_data.py"
+
+
 DATAFILES_GE = [
     "EIA_DMD_2018_2024.csv",
     "EIA_GridEmissions_all_2018_2024.csv",

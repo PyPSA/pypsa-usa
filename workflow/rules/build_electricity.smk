@@ -128,26 +128,25 @@ if config["enable"].get("build_cutout", False):
             "../scripts/build_cutout.py"
 
 
-rule build_hydro_profiles:
+rule build_hydro_profile:
     params:
-        hydro=config["renewable"]["hydro"],
-        countries=config["countries"],
+        hydro=config_provider("renewable", "hydro"),
+        snapshots=config_provider("snapshots"),
     input:
-        ba_region_shapes=RESOURCES + "{interconnect}/onshore_shapes.geojson",
-        # eia_hydro_generation=DATA + "eia_hydro_annual_generation.csv",
-        cutout=f"cutouts/"
+        reeds_shapes=RESOURCES + "{interconnect}/reeds_shapes.geojson",
+        cutout=lambda w: f"cutouts/"
         + CDIR
         + "{interconnect}_"
-        + config["renewable"]["hydro"]["cutout"]
+        + config_provider("renewable", "hydro", "cutout")(w)
         + ".nc",
     output:
-        RESOURCES + "{interconnect}/profile_hydro.nc",
+        profile=RESOURCES + "{interconnect}/profile_hydro.nc",
     log:
         LOGS + "{interconnect}/build_hydro_profile.log",
     resources:
         mem_mb=5000,
     conda:
-        "envs/environment.yaml"
+        "../envs/environment.yaml"
     script:
         "../scripts/build_hydro_profile.py"
 
@@ -216,18 +215,40 @@ INTERCONNECT_2_STATE["eastern"].extend(["RI", "SC", "SD", "TN", "VT", "VA", "WV"
 INTERCONNECT_2_STATE["usa"] = sum(INTERCONNECT_2_STATE.values(), [])
 
 
-def electricty_study_demand(wildcards):
-    profile = config["electricity"]["demand"]["profile"]
+def demand_raw_data(wildcards):
+    end_use = wildcards.end_use
+    if end_use == "power":
+        profile = config["electricity"]["demand"]["profile"]
+    else:
+        profile = config["sector"]["demand"]["profile"][end_use]
+
     if profile == "eia":
         return DATA + "GridEmissions/EIA_DMD_2018_2024.csv"
     elif profile == "efs":
         return DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv"
+    elif profile == "eulp":
+        return [
+            DATA + f"eulp/res/{state}.csv"
+            for state in INTERCONNECT_2_STATE[wildcards.interconnect]
+        ]
+    elif profile == "cliu":
+        return [
+            DATA + "industry_load/2014_update_20170910-0116.csv",  # cliu data
+            DATA + "industry_load/epri_industrial_loads.csv",  # epri data
+            DATA + "industry_load/table3_2.xlsx",  # mecs data
+            DATA + "industry_load/fips_codes.csv",  # fips data
+        ]
     else:
         return ""
 
 
-def electricty_study_dissagregate(wildcards):
-    strategy = config["electricity"]["demand"]["disaggregation"]
+def demand_dissagregate_data(wildcards):
+    end_use = wildcards.end_use
+    if end_use == "power":
+        strategy = "pop"
+    else:
+        strategy = config["sector"]["demand"]["disaggregation"][end_use]
+
     if strategy == "pop":
         return ""
     elif strategy == "cliu":
@@ -236,68 +257,18 @@ def electricty_study_dissagregate(wildcards):
         return ""
 
 
-def sector_study_demand(wildcards):
+def demand_scaling_data(wildcards):
+
     end_use = wildcards.end_use
-    profile = config["sector"]["demand"]["profile"][end_use]
-    if end_use == "residential":
-        if profile == "eulp":
-            return [
-                DATA + f"eulp/res/{state}.csv"
-                for state in INTERCONNECT_2_STATE[wildcards.interconnect]
-            ]
-        elif profile == "efs":
-            return DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv"
-        else:
-            return ""
-    elif end_use == "commercial":
-        if profile == "eulp":
-            return [
-                DATA + f"eulp/com/{state}.csv"
-                for state in INTERCONNECT_2_STATE[wildcards.interconnect]
-            ]
-        elif profile == "efs":
-            return DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv"
-        else:
-            return ""
-    elif end_use == "industry":
-        if profile == "efs":
-            return DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv"
-        elif profile == "cliu":
-            return [
-                DATA + "industry_load/2014_update_20170910-0116.csv",  # cliu data
-                DATA + "industry_load/epri_industrial_loads.csv",  # epri data
-                DATA + "industry_load/table3_2.xlsx",  # mecs data
-                DATA + "industry_load/fips_codes.csv",  # fips data
-            ]
-        else:
-            return ""
-    elif end_use == "transport":
-        if profile == "efs":
-            return DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv"
-        else:
-            return ""
+    if end_use == "power":
+        profile = config["electricity"]["demand"]["profile"]
     else:
-        return ""
+        profile = config["sector"]["demand"]["profile"][end_use]
 
-
-def sector_study_dissagregate(wildcards):
-    end_use = wildcards.end_use
-    strategy = config["sector"]["demand"]["disaggregation"][end_use]
-    if end_use == "residential":
-        if strategy == "pop":
-            return ""
-    elif end_use == "commercial":
-        if strategy == "pop":
-            return ""
-    elif end_use == "industry":
-        if strategy == "pop":
-            return ""
-        elif strategy == "cliu":
-            return DATA + "industry_load/2014_update_20170910-0116.csv"
-        else:
-            return ""
-    elif end_use == "transport":
-        return ""
+    if profile == "efs":
+        return DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv"
+    elif profile == "eia":
+        return DATA + "pudl/pudl.sqlite"
     else:
         return ""
 
@@ -311,10 +282,8 @@ rule build_electrical_demand:
         profile_year=pd.to_datetime(config["snapshots"]["start"]).year,
     input:
         network=RESOURCES + "{interconnect}/elec_base_network.nc",
-        demand_files=electricty_study_demand,
-        eia=expand(DATA + "GridEmissions/{file}", file=DATAFILES_GE),
-        efs=DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv",
-        county_industrial_energy=DATA + "industry_load/2014_update_20170910-0116.csv",
+        demand_files=demand_raw_data,
+        demand_scaling_file=demand_scaling_data,
     output:
         elec_demand=RESOURCES + "{interconnect}/{end_use}_electricity_demand.csv",
     log:
@@ -338,8 +307,9 @@ rule build_sector_demand:
         eia_api=config["api"]["eia"],
     input:
         network=RESOURCES + "{interconnect}/elec_base_network.nc",
-        demand_files=sector_study_demand,
-        county_industrial_energy=DATA + "industry_load/2014_update_20170910-0116.csv",
+        demand_files=demand_raw_data,
+        dissagregate_files=demand_dissagregate_data,
+        demand_scaling_file=demand_scaling_data,
     output:
         elec_demand=RESOURCES + "{interconnect}/{end_use}_electricity_demand.csv",
         heat_demand=RESOURCES + "{interconnect}/{end_use}_heating_demand.csv",
@@ -387,7 +357,7 @@ rule add_demand:
     benchmark:
         BENCHMARKS + "{interconnect}/add_demand"
     resources:
-        mem_mb=800,
+        mem_mb=interconnect_mem,
     script:
         "../scripts/add_demand.py"
 
@@ -482,7 +452,7 @@ rule add_electricity:
         BENCHMARKS + "{interconnect}/add_electricity"
     threads: 1
     resources:
-        mem_mb=80000,
+        mem_mb=interconnect_mem_a,
     script:
         "../scripts/add_electricity.py"
 
@@ -602,3 +572,16 @@ rule prepare_network:
         "logs/prepare_network",
     script:
         "../scripts/prepare_network.py"
+
+
+rule build_powerplants:
+    input:
+        pudl=DATA + "pudl/pudl.sqlite",
+        wecc_ads=DATA + "WECC_ADS/downloads/2032/Public Data",
+        eia_ads_generator_mapping="repo_data/eia_ads_generator_mapping_updated.csv",
+    output:
+        powerplants=RESOURCES + "powerplants.csv",
+    log:
+        "logs/build_powerplants",
+    script:
+        "../scripts/build_powerplants.py"
