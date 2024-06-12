@@ -952,7 +952,7 @@ def plot_generator_data_panel(
     # Set labels for each subplot
     axes[0, 0].set_xlabel("")
     axes[0, 0].set_ylabel("$ / MWh")
-    axes[0, 0].set_ylim(0, 300)
+    axes[0, 0].set_ylim(0, 200)
     axes[0, 1].set_xlabel("")
     axes[0, 1].set_ylabel("$ / MW-yr")
     axes[1, 0].set_xlabel("")
