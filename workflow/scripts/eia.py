@@ -53,6 +53,30 @@ API_BASE = "https://api.eia.gov/v2/"
 
 STATE_CODES = constants.STATE_2_CODE
 
+# https://www.eia.gov/outlooks/aeo/assumptions/case_descriptions.php
+AEO_SCENARIOS = {
+    "reference": "ref2023",  # reference
+    "aeo2022": "aeo2022ref",  # AEO2022 Reference case
+    "no_ira": "noIRA",  # No inflation reduction act
+    "low_ira": "lowupIRA",  # Low Uptake of Inflation Reduction Act
+    "high_ira": "highupIRA",  # High Uptake of Inflation Reduction Act
+    "high_growth": "highmacro",  # High Economic Growth
+    "low_growth": "lowmacro",  # Low Economic Growth
+    "high_oil_price": "highprice",  # High Oil Price
+    "low_oil_price": "lowprice",  # Low Oil Price
+    "high_oil_gas_supply": "highogs",  # High Oil and Gas Supply
+    "low_oil_gas_supply": "lowogs",  # Low Oil and Gas Supply
+    "high_ztc": "highZTC",  # High Zero-Carbon Technology Cost
+    "low_ztc": "lowZTC",  # Low Zero-Carbon Technology Cost
+    "high_growth_high_ztc": "highmachighZTC",  # High Economic Growth-High Zero-Carbon Technology Cost
+    "high_growth_low_ztc": "highmaclowZTC",  # High Economic Growth-Low Zero-Carbon Technology Cost
+    "low_growth_high_ztc": "lowmachighZTC",  # Low Economic Growth-High Zero-Carbon Technology Cost
+    "low_growth_low_ztc": "lowmaclowZTC",  # Low Economic Growth-Low Zero-Carbon Technology Cost
+    "fast_build_high_lng": "lng_hp_fast",  # Fast Builds Plus High LNG Price
+    "high_lng": "lng_hp",  # High LNG Price
+    "low_lng": "lng_lp",  # Low LNG Price
+}
+
 
 # exceptions
 class InputException(Exception):
@@ -188,7 +212,7 @@ class EnergyDemand(EiaData):
     def data_creator(self) -> pd.DataFrame:
         if self.year < 2024:
             if self.scenario:
-                logger.warning("Can not apply AEO scenario to hsitorical demand")
+                logger.warning("Can not apply AEO scenario to historical demand")
             return HistoricalSectorEnergyDemand(self.sector, self.year, self.api)
         elif self.year >= 2024:
             aeo = "reference" if not self.scenario else self.scenario
@@ -196,6 +220,43 @@ class EnergyDemand(EiaData):
         else:
             raise InputException(
                 propery="EnergyDemand",
+                valid_options="year",
+                recived_option=self.year,
+            )
+
+
+class TransportationDemand(EiaData):
+    """
+    Transportation demand in VMT (or similar).
+
+    If historical year is provided, monthly energy consumption for that
+    year is provided. If a future year is provided, annual projections
+    from 2023 up to that year are provided based on the scenario given
+    """
+
+    def __init__(
+        self,
+        vehicle: str,
+        year: int,
+        api: str,
+        scenario: Optional[str] = None,
+    ) -> None:
+        self.vehicle = vehicle  # (light_duty, med_duty, heavy_duty, bus)
+        self.year = year
+        self.api = api
+        self.scenario = scenario  # only for AEO scenario
+
+    def data_creator(self) -> pd.DataFrame:
+        if self.year < 2024:
+            if self.scenario:
+                logger.warning("Can not apply AEO scenario to historical demand")
+            return HistoricalSectorEnergyDemand(self.sector, self.year, self.api)
+        elif self.year >= 2024:
+            aeo = "reference" if not self.scenario else self.scenario
+            return ProjectedTransportDemand(self.vehicle, self.year, aeo, self.api)
+        else:
+            raise InputException(
+                propery="TransportationDemand",
                 valid_options="year",
                 recived_option=self.year,
             )
@@ -546,28 +607,7 @@ class ProjectedSectorEnergyDemand(DataExtractor):
     """
 
     # https://www.eia.gov/outlooks/aeo/assumptions/case_descriptions.php
-    scenario_codes = {
-        "reference": "ref2023",  # reference
-        "aeo2022": "aeo2022ref",  # AEO2022 Reference case
-        "no_ira": "noIRA",  # No inflation reduction act
-        "low_ira": "lowupIRA",  # Low Uptake of Inflation Reduction Act
-        "high_ira": "highupIRA",  # High Uptake of Inflation Reduction Act
-        "high_growth": "highmacro",  # High Economic Growth
-        "low_growth": "lowmacro",  # Low Economic Growth
-        "high_oil_price": "highprice",  # High Oil Price
-        "low_oil_price": "lowprice",  # Low Oil Price
-        "high_oil_gas_supply": "highogs",  # High Oil and Gas Supply
-        "low_oil_gas_supply": "lowogs",  # Low Oil and Gas Supply
-        "high_ztc": "highZTC",  # High Zero-Carbon Technology Cost
-        "low_ztc": "lowZTC",  # Low Zero-Carbon Technology Cost
-        "high_growth_high_ztc": "highmachighZTC",  # High Economic Growth-High Zero-Carbon Technology Cost
-        "high_growth_low_ztc": "highmaclowZTC",  # High Economic Growth-Low Zero-Carbon Technology Cost
-        "low_growth_high_ztc": "lowmachighZTC",  # Low Economic Growth-High Zero-Carbon Technology Cost
-        "low_growth_low_ztc": "lowmaclowZTC",  # Low Economic Growth-Low Zero-Carbon Technology Cost
-        "fast_build_high_lng": "lng_hp_fast",  # Fast Builds Plus High LNG Price
-        "high_lng": "lng_hp",  # High LNG Price
-        "low_lng": "lng_lp",  # Low LNG Price
-    }
+    scenario_codes = AEO_SCENARIOS
 
     # note, these are all "total energy use by end use - total gross end use consumption"
     # https://www.eia.gov/totalenergy/data/flow-graphs/electricity.php
@@ -605,6 +645,58 @@ class ProjectedSectorEnergyDemand(DataExtractor):
         df.index = df.index.year
         df = df.rename(columns={"seriesName": "series-description", "unit": "units"})
         df["state"] = "U.S."
+        df = df[["series-description", "value", "units", "state"]].sort_index()
+        return self._assign_dtypes(df)
+
+
+class ProjectedTransportDemand(DataExtractor):
+
+    # https://www.eia.gov/outlooks/aeo/assumptions/case_descriptions.php
+    scenario_codes = AEO_SCENARIOS
+
+    # units will be different umong these!
+    vehicle_codes = {
+        "light_duty": "kei_trv_trn_NA_ldv_NA_NA_blnvehmls",
+        "med_duty": "kei_trv_trn_NA_cml_NA_NA_blnvehmls",
+        "heavy_duty": "kei_trv_trn_NA_fght_NA_NA_blnvehmls",
+        "bus": "_trv_trn_NA_bst_NA_NA_bpm",
+        "passenger_rail": "_trv_trn_NA_rlp_NA_NA_bpm",
+        "shipping_boat": "kei_trv_trn_NA_dmt_NA_NA_blntnmls",
+        "shipping_rail": "kei_trv_trn_NA_rail_NA_NA_blntnmls",
+        "air": "kei_trv_trn_NA_air_NA_NA_blnseatmls",
+    }
+
+    def __init__(self, vehicle: str, year: int, scenario: str, api: str) -> None:
+        self.vehicle = vehicle
+        self.scenario = scenario
+        if scenario not in self.scenario_codes.keys():
+            raise InputException(
+                propery="Projected Transport Demand Scenario",
+                valid_options=list(self.scenario_codes),
+                recived_option=scenario,
+            )
+        if vehicle not in self.vehicle_codes.keys():
+            raise InputException(
+                propery="Projected Transport Demand",
+                valid_options=list(self.vehicle_codes),
+                recived_option=vehicle,
+            )
+        super().__init__(year, api)
+
+    def build_url(self) -> str:
+        base_url = "aeo/2023/data/"
+        facets = f"frequency=annual&data[0]=value&facets[scenario][]={self.scenario_codes[self.scenario]}&facets[seriesId][]={self.vehicle_codes[self.vehicle]}&start=2024&end={self.year}&sort[0][column]=period&sort[0][direction]=desc&offset=0&length=5000"
+        return f"{API_BASE}{base_url}?api_key={self.api_key}&{facets}"
+
+    def format_data(self, df: pd.DataFrame) -> pd.DataFrame:
+        df.index = pd.to_datetime(df.period)
+        df = df.rename(
+            columns={"seriesName": "series-description", "unit": "units"},
+        )
+        df["state"] = "U.S."
+        df["series-description"] = df["series-description"].map(
+            lambda x: x.split("Transportation : Travel Indicators : ")[1],
+        )
         df = df[["series-description", "value", "units", "state"]].sort_index()
         return self._assign_dtypes(df)
 
@@ -859,4 +951,5 @@ if __name__ == "__main__":
     # print(FuelCosts("gas", "commercial", 2019, api).get_data(pivot=True))
     # print(Emissions("transport", 2019, api).get_data(pivot=True))
     # print(Storage("gas", "total", 2019, api).get_data(pivot=True))
-    print(EnergyDemand("residential", 2030, api).get_data(pivot=False))
+    # print(EnergyDemand("residential", 2030, api).get_data(pivot=False))
+    print(TransportationDemand("bus", 2030, api).get_data(pivot=False))
