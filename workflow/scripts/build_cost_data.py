@@ -3,11 +3,15 @@ Combines all time independent cost data sources into a standard format.
 """
 
 import logging
-from typing import Dict, List, Union
 
 import constants as const
 import pandas as pd
 from _helpers import mock_snakemake
+from build_sector_costs import (
+    EfsIceTransportationData,
+    EfsTechnologyData,
+    EiaBuildingData,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -389,7 +393,7 @@ if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
 
-        snakemake = mock_snakemake("build_cost_data", year=2019)
+        snakemake = mock_snakemake("build_cost_data", year=2040)
         rootpath = ".."
     else:
         rootpath = "."
@@ -408,8 +412,20 @@ if __name__ == "__main__":
     atb_extracted = get_atb_data(atb, techs, year=tech_year)
     atb_extracted = correct_fixed_cost(atb_extracted)
 
+    # Get sector coupling data
+    sector_costs = pd.concat(
+        [
+            EfsTechnologyData(snakemake.input.efs_tech_costs).get_data(
+                "Transportation",
+            ),
+            EfsIceTransportationData(snakemake.input.efs_icev_costs).get_data(),
+            EiaBuildingData(snakemake.input.eia_tech_costs).get_data(),
+        ],
+    )
+    sector_costs = sector_costs[sector_costs.year == tech_year].drop(columns="year")
+
     # merge dataframes
-    costs = pd.concat([eur, atb_extracted])
+    costs = pd.concat([eur, atb_extracted, sector_costs])
     costs = costs.drop_duplicates(subset=["technology", "parameter"], keep="last")
 
     # align merged data

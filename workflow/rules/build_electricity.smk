@@ -90,6 +90,9 @@ rule build_cost_data:
     input:
         nrel_atb=DATA + "costs/nrel_atb.parquet",
         pypsa_technology_data=RESOURCES + "costs/pypsa_eur_{year}.csv",
+        efs_tech_costs="repo_data/costs/EFS_Technology_Data.xlsx",
+        efs_icev_costs="repo_data/costs/efs_icev_costs.csv",
+        eia_tech_costs="repo_data/costs/eia_tech_costs.csv",
     output:
         tech_costs=RESOURCES + "costs/costs_{year}.csv",
     log:

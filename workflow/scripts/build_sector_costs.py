@@ -155,7 +155,7 @@ class EfsTechnologyData:
                 self.get_efficiency(sector),
                 self.get_fixed_costs(sector),
             ],
-        )
+        )[self.columns]
 
     def get_capex(self, sector: str) -> pd.DataFrame:
         return self.initialize(sector).get_capex()
