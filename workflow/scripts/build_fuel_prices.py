@@ -167,8 +167,6 @@ def build_pudl_fuel_costs(snapshots: pd.DatetimeIndex, start_date: str, end_date
     # Apply IQR filtering to each generator group
     fuel_cost_temporal = filter_outliers_iqr_grouped(fuel_cost_temporal, 'technology_description', 'fuel_cost_per_mwh')
 
-    # fuel_cost_temporal.dropna(subset=["fuel_cost_per_mwh"], inplace=True)
-
     fuel_cost_temporal = fuel_cost_temporal.groupby(["generator_name",'report_date'])['fuel_cost_per_mwh'].mean()
     fuel_cost_temporal = fuel_cost_temporal.unstack(level=0)
     # Fill the missing values with the previous value

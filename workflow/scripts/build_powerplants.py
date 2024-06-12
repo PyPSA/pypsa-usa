@@ -735,8 +735,8 @@ def set_parameters(plants: pd.DataFrame):
         plants["heat_rate"] / 3.412
     )  # MMBTu/MWh to MWh_electric/MWh_thermal
 
-    plants[f'heat_rate_source'].fillna('NA', inplace=True)
-    plants[f'fuel_cost_source'].fillna('NA', inplace=True)
+    plants[f'heat_rate_source'] = plants[f'heat_rate_source'].fillna('NA')
+    plants[f'fuel_cost_source'] = plants[f'fuel_cost_source'].fillna('NA')
     return plants.reset_index()
 
 
@@ -831,8 +831,8 @@ if __name__ == "__main__":
     else:
         rootpath = "."
 
-    start_date = '2022-01-01'
-    end_date = '2023-12-31'
+    start_date = '2019-01-01'
+    end_date = '2020-01-01'
     eia_data_operable, heat_rates = load_pudl_data(snakemake.input.pudl, start_date, end_date)
     eia_data_operable = merge_fc_hr_data(eia_data_operable, heat_rates, 'unit_heat_rate_mmbtu_per_mwh')
     eia_data_operable = merge_fc_hr_data(eia_data_operable, heat_rates, 'fuel_cost_per_mwh')
@@ -846,6 +846,7 @@ if __name__ == "__main__":
     # temp throwing out plants without
     missing_locations = plants[plants.longitude.isna() | plants.latitude.isna()]
     print('Tossing out plants without locations:', missing_locations.shape[0])
+    plants[plants.index.isin(missing_locations.index)].to_csv('missing_gps_pudl.csv')
     plants = plants[~plants.index.isin(missing_locations.index)]
     print(plants)
 
