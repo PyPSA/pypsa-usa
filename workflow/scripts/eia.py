@@ -247,13 +247,16 @@ class TransportationDemand(EiaData):
         self.scenario = scenario  # only for AEO scenario
 
     def data_creator(self) -> pd.DataFrame:
-        if self.year < 2024:
-            if self.scenario:
-                logger.warning("Can not apply AEO scenario to historical demand")
-            return HistoricalSectorEnergyDemand(self.sector, self.year, self.api)
+        if self.year < 2021:
+            logger.warning(
+                "No Transport Demand available before 2021. Returning 2021 data.",
+            )
+            aeo = "reference"
+            year = 2021
+            return TransportDemand(self.vehicle, year, aeo, self.api)
         elif self.year >= 2024:
             aeo = "reference" if not self.scenario else self.scenario
-            return ProjectedTransportDemand(self.vehicle, self.year, aeo, self.api)
+            return TransportDemand(self.vehicle, self.year, aeo, self.api)
         else:
             raise InputException(
                 propery="TransportationDemand",
@@ -649,7 +652,7 @@ class ProjectedSectorEnergyDemand(DataExtractor):
         return self._assign_dtypes(df)
 
 
-class ProjectedTransportDemand(DataExtractor):
+class TransportDemand(DataExtractor):
 
     # https://www.eia.gov/outlooks/aeo/assumptions/case_descriptions.php
     scenario_codes = AEO_SCENARIOS
