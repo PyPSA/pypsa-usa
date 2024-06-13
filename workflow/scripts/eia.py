@@ -244,23 +244,18 @@ class TransportationDemand(EiaData):
         self.vehicle = vehicle  # (light_duty, med_duty, heavy_duty, bus)
         self.year = year
         self.api = api
-        self.scenario = scenario  # only for AEO scenario
+        self.scenario = scenario
 
     def data_creator(self) -> pd.DataFrame:
-        if self.year < 2021:
-            logger.warning(
-                "No Transport Demand available before 2021. Returning 2021 data.",
-            )
-            aeo = "reference"
-            year = 2021
-            return TransportDemand(self.vehicle, year, aeo, self.api)
+        if self.year < 2024:
+            return HistoricalTransportDemand(self.vehicle, self.year, self.api)
         elif self.year >= 2024:
             aeo = "reference" if not self.scenario else self.scenario
-            return TransportDemand(self.vehicle, self.year, aeo, self.api)
+            return ProjectedTransportDemand(self.vehicle, self.year, aeo, self.api)
         else:
             raise InputException(
                 propery="TransportationDemand",
-                valid_options="year",
+                valid_options=range(2017, 2051),
                 recived_option=self.year,
             )
 
@@ -652,7 +647,66 @@ class ProjectedSectorEnergyDemand(DataExtractor):
         return self._assign_dtypes(df)
 
 
-class TransportDemand(DataExtractor):
+class HistoricalTransportDemand(DataExtractor):
+
+    # https://www.eia.gov/outlooks/aeo/assumptions/case_descriptions.php
+    scenario_codes = AEO_SCENARIOS
+
+    # units will be different umong these!
+    vehicle_codes = {
+        "light_duty": "kei_trv_trn_NA_ldv_NA_NA_blnvehmls",
+        "med_duty": "kei_trv_trn_NA_cml_NA_NA_blnvehmls",
+        "heavy_duty": "kei_trv_trn_NA_fght_NA_NA_blnvehmls",
+        "bus": "_trv_trn_NA_bst_NA_NA_bpm",
+        "passenger_rail": "_trv_trn_NA_rlp_NA_NA_bpm",
+        "shipping_boat": "kei_trv_trn_NA_dmt_NA_NA_blntnmls",
+        "shipping_rail": "kei_trv_trn_NA_rail_NA_NA_blntnmls",
+        "air": "kei_trv_trn_NA_air_NA_NA_blnseatmls",
+    }
+
+    def __init__(self, vehicle: str, year: int, api: str) -> None:
+        self.vehicle = vehicle
+        if vehicle not in self.vehicle_codes.keys():
+            raise InputException(
+                propery="Projected Transport Demand",
+                valid_options=list(self.vehicle_codes),
+                recived_option=vehicle,
+            )
+        super().__init__(year, api)
+
+    def build_url(self) -> str:
+        if self.year <= 2018:
+            aeo = 2019
+        elif self.year == 2019:
+            aeo = 2020
+        elif self.year == 2020:
+            aeo = 2021
+        elif self.year == 2021:
+            aeo = 2022
+        elif self.year >= 2022:
+            aeo = 2023
+
+        logger.info(f"Using AEO {aeo} for historical data")
+        base_url = f"aeo/{aeo}/data/"
+        scenario = f"ref{aeo}"
+
+        facets = f"frequency=annual&data[0]=value&facets[scenario][]={scenario}&facets[seriesId][]={self.vehicle_codes[self.vehicle]}&start={self.year}&end={self.year}&sort[0][column]=period&sort[0][direction]=desc&offset=0&length=5000"
+        return f"{API_BASE}{base_url}?api_key={self.api_key}&{facets}"
+
+    def format_data(self, df: pd.DataFrame) -> pd.DataFrame:
+        df.index = pd.to_datetime(df.period)
+        df = df.rename(
+            columns={"seriesName": "series-description", "unit": "units"},
+        )
+        df["state"] = "U.S."
+        df["series-description"] = df["series-description"].map(
+            lambda x: x.split("Transportation : Travel Indicators : ")[1],
+        )
+        df = df[["series-description", "value", "units", "state"]].sort_index()
+        return self._assign_dtypes(df)
+
+
+class ProjectedTransportDemand(DataExtractor):
 
     # https://www.eia.gov/outlooks/aeo/assumptions/case_descriptions.php
     scenario_codes = AEO_SCENARIOS
@@ -955,4 +1009,4 @@ if __name__ == "__main__":
     # print(Emissions("transport", 2019, api).get_data(pivot=True))
     # print(Storage("gas", "total", 2019, api).get_data(pivot=True))
     # print(EnergyDemand("residential", 2030, api).get_data(pivot=False))
-    print(TransportationDemand("bus", 2030, api).get_data(pivot=False))
+    print(TransportationDemand("bus", 2022, api).get_data(pivot=False))
