@@ -43,7 +43,7 @@ import pandas as pd
 import pypsa
 import xarray as xr
 from _helpers import configure_logging
-from eia import EnergyDemand
+from eia import EnergyDemand, TransportationDemand
 
 logger = logging.getLogger(__name__)
 
@@ -1030,6 +1030,255 @@ class ReadCliu(ReadStrategy):
         )
 
 
+class ReadTransportVmt(ReadStrategy):
+    """
+    Calculates 100% VMT demand for both electricity and lpg.
+
+    This will take EFS charging profiles and apply state level VMT
+    statistics to calculate 100% electrified profiles.
+
+    Honestly, this is kinda an awkward implementation. But is works, so
+    it is what it is at this point.
+
+    - filepath: str
+        path to a user defined file that has breakdown of state level VMT by
+        vehicle type. Current data come from,
+        https://www.fhwa.dot.gov/policyinformation/travel_monitoring/tvt.cfm
+    - api: str
+        EIA API to extract national level VMT data
+    - efs_path: str
+        path to efs file to extract load profiles at a state level
+    - efs_path: str
+        path to efs file to extract load profiles at a state level
+    """
+
+    # TODO: extract this out directly from EFS
+    efs_years = [2018, 2020, 2022, 2024, 2030, 2040, 2050]
+
+    def __init__(self, filepath: str, api: str, efs_path: str) -> None:
+        """
+        Filepath is state level breakdown of VMT by vehicle type.
+        """
+        super().__init__(filepath)
+        self._zone = "state"
+        # self.units = "VMT"
+        self.efs_path = efs_path
+        self.api = api
+
+        # read in annual demand and profiles
+        self.aeo_demand = self._read_demand_aeo()
+        self.efs_profile = self._read_efs_data()
+
+    @property
+    def zone(self):
+        return self._zone
+
+    def _read_data(self) -> pd.DataFrame:
+        """
+        Will return VMT by state and vehicle type. The sum of each vehicle type
+        over all states will be 100%.
+
+        |                     |            | Percent |
+        |---------------------|------------|---------|
+        | Vehicle             | State      |         |
+        |---------------------|------------|---------|
+        | light-duty vehicles | Alabama    | 2.5     |
+        | medium-duty trucks  | Oregon     | 5       |
+        | heavy-duty trucks   | Washington | 2       |
+        | ...                 | ...        | ...     |
+        | other               | Texas      | 1.5     |
+        """
+
+        def assign_vehicle_type(s: str) -> str:
+            """
+            Maps PyPSA type to EFS type.
+            """
+            if s.startswith("light_duty"):
+                return "light-duty vehicles"
+            elif s.startswith("med_duty"):
+                return "medium-duty trucks"
+            elif s.startswith("heavy_duty"):
+                return "heavy-duty trucks"
+            elif s.startswith("buses"):
+                return "other"
+            else:
+                return s
+
+        df = pd.read_csv(self.filepath, index_col=0, header=0)
+
+        # check as these are user defined
+        totals = df.sum()
+        assert all(totals > 99.99) and all(totals < 100.01)
+
+        df = df.T
+        df.index.name = "vehicle"
+        df.index = df.index.map(assign_vehicle_type)
+        df = (
+            df.reset_index()
+            .melt(id_vars="vehicle", var_name="state", value_name="percent")
+            .set_index(["vehicle", "state"])
+        )
+
+        return df
+
+    def _read_efs_data(self):
+        """
+        Extracts profile data.
+
+        For each hour, vehicle, and state, the sum of these values over
+        the year will equal ONE THOUSAND!! Its scaled from 1 to 1000
+        just to avoid numerical issues.
+        """
+        efs = ReadEfs(self.efs_path).read_demand()
+        transport = efs[efs.index.get_level_values("sector") == "transport"].droplevel(
+            ["sector", "fuel"],
+        )
+
+        dfs = []
+        for year in set(transport.index.get_level_values("snapshot").year):
+            for subsector in set(transport.index.get_level_values("subsector")):
+                df = transport[
+                    (transport.index.get_level_values("snapshot").year == year)
+                    & (transport.index.get_level_values("subsector") == subsector)
+                ]
+                dfs.append(self._get_yearly_energy_efs(df))
+        yearly_demand = pd.concat(dfs).reindex_like(transport)
+
+        return transport.div(yearly_demand).fillna(0).mul(1000)
+
+    @staticmethod
+    def _get_yearly_energy_efs(df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Creates yearly energy per state, per vehicle type to create the
+        profile.
+        """
+        totals = pd.DataFrame(df.sum()).T
+        totals = totals.set_index(
+            pd.MultiIndex.from_tuples([df.index[0]], names=df.index.names),
+        )
+        return totals.reindex_like(df).ffill()
+
+    def _read_demand_aeo(self) -> pd.DataFrame:
+        """
+        Gets yearly national level VMT data.
+        """
+
+        def assign_vehicle_type(s: str) -> str:
+            """
+            Maps EIA type to EFS type.
+            """
+            if s.startswith("Light-Duty"):
+                return "light-duty vehicles"
+            elif s.startswith("Commercial Light"):
+                return "medium-duty trucks"
+            elif s.startswith("Freight Trucks"):
+                return "heavy-duty trucks"
+            elif s.startswith("Bus"):
+                return "other"
+            else:
+                return s
+
+        demand = []
+        for vehicle in ("light_duty", "med_duty", "heavy_duty", "bus"):
+            demand.append(TransportationDemand(vehicle, 2050, self.api).get_data())
+            for year in (2018, 2020, 2022):  # histroical efs years
+                # historical will only return one year at a time
+                demand.append(TransportationDemand(vehicle, year, self.api).get_data())
+        vmt_demand = pd.concat(demand).sort_index()
+        vmt_demand["vehicle"] = vmt_demand["series-description"].map(
+            assign_vehicle_type,
+        )
+        vmt_demand["year"] = vmt_demand.index.year
+        vmt_demand = vmt_demand[vmt_demand.year.isin(self.efs_years)].copy()
+        return vmt_demand[["vehicle", "year", "value", "units"]].set_index(
+            ["vehicle", "year"],
+        )
+
+    def _format_data(self, data: pd.DataFrame) -> pd.DataFrame:
+        """
+        Merges national VMT data (self.aeo_demand), proportions of VMT
+        travelled per state (data), and electric charging profiles
+        (self.efs_profile)
+
+        This is one ugly function. holy.
+        """
+
+        ds = xr.Dataset.from_dataframe(data)  # (vehicle, state)
+
+        aeo = self.aeo_demand.drop(columns="units")
+        aeo = xr.DataArray.from_series(aeo.squeeze())
+
+        ds["yearly_demand"] = aeo  # (vehicle, year)
+        ds["yearly_demand_per_state"] = (
+            ds.percent * ds.total_demand * (1 / 100)
+        )  # (vehicle, year, state)
+
+        efs = (
+            self.efs_profile.reset_index()
+            .melt(
+                id_vars=["snapshot", "subsector"],
+                var_name="state",
+                value_name="profile",
+            )
+            .rename(columns={"subsector": "vehicle"})
+            .set_index(["snapshot", "vehicle", "state"])
+        )
+        elec_profile = efs.squeeze()
+        lpg_profile = elec_profile.copy()
+        lpg_profile[:] = 1 / 8760  # uniform profile assumption
+
+        ds["elec_profile"] = xr.DataArray.from_series(
+            elec_profile,
+        )  # (snapshot, vehicle, state)
+        ds["lpg_profile"] = xr.DataArray.from_series(
+            lpg_profile,
+        )  # (snapshot, vehicle, state)
+
+        # I think there is probably a more efficienct way to do this, I just couldnt figure out
+        # how to multiply one year into another and not get pointless indices.
+        # (ie. not having snapshots in 2018 indexed over years other than 2018)
+        dfs = []
+        for year in self.efs_years:
+            elec_demand = ds.yearly_demand.sel(year=year) * ds.elec_profile.sel(
+                snapshot=f"{year}",
+            )
+            elec_demand = pd.DataFrame(
+                elec_demand.dropna(dim="state").to_series(),
+                columns=["value"],
+            ).reset_index()
+            elec_demand = elec_demand.rename(columns={"vehicle": "subsector"})
+            elec_demand["sector"] = "transport"
+            elec_demand["fuel"] = "electricity"
+            elec_demand = elec_demand.pivot(
+                columns="state",
+                index=["snapshot", "sector", "subsector", "fuel"],
+                values="value",
+            )
+
+            lpg_demand = ds.yearly_demand.sel(year=year) * ds.lpg_profile.sel(
+                snapshot=f"{year}",
+            )
+            lpg_demand = (
+                pd.DataFrame(
+                    lpg_demand.dropna(dim="state").to_series(),
+                    columns=["value"],
+                )
+                .reset_index()
+                .pivot(columns="state", index=["snapshot", "vehicle"], values="value")
+            )
+            lpg_demand["sector"] = "transport"
+            lpg_demand["fuel"] = "lpg"
+            lpg_demand = lpg_demand.pivot(
+                columns="state",
+                index=["snapshot", "sector", "subsector", "fuel"],
+                values="value",
+            )
+
+            dfs.extend([elec_demand, lpg_demand])
+
+        return pd.concat(dfs)
+
+
 ###
 # WRITE STRATEGIES
 ###
@@ -1869,6 +2118,17 @@ if __name__ == "__main__":
             epri_filepath=epri_file,
             mecs_filepath=mecs_file,
             fips_filepath=fips_file,
+        )
+    elif demand_profile == "efs_aeo":
+        vmt_ratios_file = demand_files[0]
+        efs_file = demand_files[0]
+        policy_file = demand_files[0]
+        sns = n.snapshots.get_level_values(1)
+        reader = ReadTransportVmt(
+            vmt_ratios_file,
+            efs_path=efs_file,
+            policy_path=policy_file,
+            api=eia_api,
         )
 
     else:
