@@ -32,6 +32,7 @@ from summary import get_node_emissions_timeseries
 
 sns.set_theme("paper", style="whitegrid")
 
+DPI=300
 EIA_carrier_names = {
     "CCGT": "Natural gas",
     "OCGT": "Natural gas",
@@ -138,7 +139,7 @@ def plot_timeseries_comparison(
     )
     plt.suptitle(create_title(title, **wildcards))
     fig.tight_layout()
-    fig.savefig(save_path)
+    fig.savefig(save_path, dpi=DPI)
     plt.close()
 
 
@@ -158,7 +159,7 @@ def plot_bar_carrier_production(
     df.plot.barh(ax=ax, xlabel="Electricity Production [TWh]", ylabel="")
     ax.set_title(create_title("Electricity Production by Carriers", **wildcards))
     ax.grid(axis="y")
-    fig.savefig(save_path)
+    fig.savefig(save_path, dpi =DPI)
 
 
 def create_optimized_by_carrier(n, order, region_buses=None):
@@ -377,7 +378,7 @@ def plot_regional_comparisons(
 
     plt.tight_layout()
     fig.savefig(
-        Path(snakemake.output[0]).parents[0] / "production_deviation_by_region.png",
+        Path(snakemake.output[0]).parents[0] / "production_deviation_by_region.png", dpi =DPI
     )
 
 
@@ -424,7 +425,7 @@ def plot_load_shedding_map(
         bus_scale=bus_scale,
         title=title,
     )
-    fig.savefig(save)
+    fig.savefig(save, dpi =DPI)
 
 
 def plot_line_loading_map(
@@ -474,7 +475,7 @@ def plot_line_loading_map(
     #     ax=_,
     # )
 
-    fig.savefig(save)
+    fig.savefig(save, dpi =DPI)
 
 
 def plot_generator_cost_stack(
@@ -527,7 +528,7 @@ def plot_generator_cost_stack(
     ax.set_xlabel("Capacity [MW]")
     ax.set_ylabel("Marginal Cost [USD/MWh]")
     ax.set_title(create_title("Average Generator Merit Order Curve", **wildcards))
-    fig.savefig(save)
+    fig.savefig(save, dpi =DPI)
 
 
 def plot_state_emissions_historical_bar(
@@ -611,7 +612,7 @@ def plot_state_emissions_historical_bar(
     ax.set_title(create_title("CO2 Emissions by Region", **wildcards))
     ax.set_xlabel("CO2 Emissions [MMtCO2]")
     ax.set_ylabel("")
-    fig.savefig(save)
+    fig.savefig(save, dpi =DPI)
 
 
 def plot_ba_emissions_historical_bar(
@@ -695,7 +696,7 @@ def plot_ba_emissions_historical_bar(
     ax.set_title(create_title("CO2 Emissions by Region", **wildcards))
     ax.set_xlabel("CO2 Emissions [MMtCO2]")
     ax.set_ylabel("")
-    fig.savefig(save)
+    fig.savefig(save, dpi =DPI)
 
 def get_state_generation_mix(n: pypsa.Network, var='p'):
     gens = n.generators.copy()
@@ -737,7 +738,7 @@ def plot_state_generation_mix(
     ax.set_title(create_title("State Generation Mix", **wildcards))
     ax.set_xlabel("State")
     ax.set_ylabel("Generation Mix [GWh]")
-    fig.savefig(save)
+    fig.savefig(save, dpi =DPI)
 
 def plot_state_generation_capacities(
     n: pypsa.Network,
@@ -765,8 +766,55 @@ def plot_state_generation_capacities(
     ax.set_title(create_title("State Generation Capacities ", **wildcards))
     ax.set_xlabel("State")
     ax.set_ylabel("Generation Capacity [GW]")
-    fig.savefig(save)
+    fig.savefig(save, dpi =DPI)
 
+def plot_lmp_distribution_comparison(
+    n: pypsa.Network,
+    lmps_true: pd.DataFrame,
+    save: str,
+    **wildcards,
+):
+    lmps = n.buses_t.marginal_price.copy()
+    ISOs = ['CISO', 'MISO', 'ERCO', 'ISNE', 'NYIS', 'PJM', 'SWPP']
+    iso_buses = n.buses[n.buses.reeds_ba.isin(ISOs)]
+    lmps_iso = lmps.loc[:, iso_buses.index]
+    lmps_iso.index = lmps_iso.index.get_level_values(1)
+
+    df_long = pd.melt(
+        lmps_iso.reset_index(),
+        id_vars=["timestep"],
+        var_name="bus",
+        value_name="lmp",
+    )
+    df_long["season"] = df_long["timestep"].dt.quarter
+    df_long["hour"] = df_long["timestep"].dt.hour
+    # df_long.drop(columns="timestep", inplace=True)
+    df_long["region"] = df_long.bus.map(n.buses.reeds_ba)
+    df_long["source"] = 'simulated'
+
+    df_true = df_long.copy()
+    df_true = df_true.region.isin(df_long.region.unique())
+    df_true['source'] = 'historical'
+    df_plot = pd.concat([df_long, df_true])
+
+    sns.boxplot(
+        df_plot,
+        x="lmp",
+        y="region",
+        hue='source',
+        width=0.5,
+        fliersize=0.5,
+        linewidth=1,
+    )
+    sns.despine(offset=10, trim=True)
+
+    plt.title(create_title("LMPs by Region", **wildcards))
+    plt.xlabel("LMP [$/MWh]")
+    plt.ylabel("Region")
+    plt.tight_layout()
+    plt.savefig(save, dpi =DPI)
+
+    return None
 
 def main(snakemake):
     configure_logging(snakemake)
@@ -834,6 +882,13 @@ def main(snakemake):
     colors["exports"] = "#d624d9"
 
     snapshots = get_snapshots(snakemake.params.snapshots)
+
+    plot_lmp_distribution_comparison(
+        n,
+        None,
+        snakemake.output["val_lmp_comparison.pdf"],
+        **snakemake.wildcards,
+    )
 
     plot_generator_data_panel(
         n,
