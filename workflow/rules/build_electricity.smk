@@ -123,8 +123,6 @@ if config["enable"].get("build_cutout", False):
         threads: ATLITE_NPROCESSES
         resources:
             mem_mb=ATLITE_NPROCESSES * 1000,
-        conda:
-            "envs/environment.yaml"
         script:
             "../scripts/build_cutout.py"
 
