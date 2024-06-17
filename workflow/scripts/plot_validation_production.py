@@ -881,12 +881,12 @@ def main(snakemake):
 
     snapshots = get_snapshots(snakemake.params.snapshots)
 
-    plot_lmp_distribution_comparison(
-        n,
-        None,
-        snakemake.output["val_lmp_comparison.pdf"],
-        **snakemake.wildcards,
-    )
+    # plot_lmp_distribution_comparison(
+    #     n,
+    #     None,
+    #     snakemake.output["val_lmp_comparison.pdf"],
+    #     **snakemake.wildcards,
+    # )
 
     plot_generator_data_panel(
         n,

@@ -189,8 +189,7 @@ if __name__ == "__main__":
     function_mapper = {
         "caiso_ng_power_prices": get_caiso_ng_power_prices,
     }
-
-
+    
     start_date = '2019-01-01'
     end_date = '2019-12-31'
     build_pudl_fuel_costs(snapshots, start_date, end_date)
