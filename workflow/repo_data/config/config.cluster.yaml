@@ -8,11 +8,22 @@ __default__:
   output: logs/{rule}/log-%j.out
   error: logs/{rule}/errlog-%j.err
 
+
+
 build_renewable_profiles:
+  walltime: 02:00:00
+
+add_electricity:
+  walltime: 02:00:00
+
+simplify_network:
+  walltime: 02:00:00
+
+cluster_network:
   walltime: 02:00:00
 
 solve_network:
   walltime: 06:00:00
 
-solve_network_operations:
+solve_network_validation:
   walltime: 06:00:00
