@@ -417,7 +417,7 @@ rule build_fuel_prices:
         BENCHMARKS + "{interconnect}/build_fuel_prices"
     threads: 1
     resources:
-        mem_mb=3000,
+        mem_mb=30000,
     script:
         "../scripts/build_fuel_prices.py"
 
@@ -627,6 +627,6 @@ rule build_powerplants:
     log:
         "logs/build_powerplants",
     resources:
-        mem_mb=5000,
+        mem_mb=30000,
     script:
         "../scripts/build_powerplants.py"

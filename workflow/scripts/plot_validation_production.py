@@ -797,12 +797,10 @@ def main(snakemake):
     ge_interchange = ge_all.loc[ge_all.interconnect.isna(), "Interchange"] / 1e3
     ge_all = ge_all.loc[~ge_all.interconnect.isna()]
 
-    ge_all = (
-        ge_all.loc[ge_all.interconnect == snakemake.wildcards.interconnect].drop(
-            columns="interconnect",
-        )
-        / 1e3
-    )
+    if not snakemake.wildcards.interconnect == "usa":
+        ge_all = ge_all.loc[ge_all.interconnect == snakemake.wildcards.interconnect]
+    ge_all = ge_all.drop(columns="interconnect") / 1e3  
+
     ge_all.loc["SRP", "Nuclear"] = 0  # Fix for double reported Palo Verde
     ge_interconnect = (
         ge_all.groupby("period")
