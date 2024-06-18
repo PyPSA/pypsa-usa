@@ -1210,7 +1210,7 @@ class ReadTransportVmt(ReadStrategy):
 
         ds["yearly_demand"] = aeo  # (vehicle, year)
         ds["yearly_demand_per_state"] = (
-            ds.percent * ds.total_demand * (1 / 100)
+            ds.percent * ds.yearly_demand * (1 / 100)
         )  # (vehicle, year, state)
 
         efs = (
@@ -1258,14 +1258,11 @@ class ReadTransportVmt(ReadStrategy):
             lpg_demand = ds.yearly_demand.sel(year=year) * ds.lpg_profile.sel(
                 snapshot=f"{year}",
             )
-            lpg_demand = (
-                pd.DataFrame(
-                    lpg_demand.dropna(dim="state").to_series(),
-                    columns=["value"],
-                )
-                .reset_index()
-                .pivot(columns="state", index=["snapshot", "vehicle"], values="value")
-            )
+            lpg_demand = pd.DataFrame(
+                lpg_demand.dropna(dim="state").to_series(),
+                columns=["value"],
+            ).reset_index()
+            lpg_demand = lpg_demand.rename(columns={"vehicle": "subsector"})
             lpg_demand["sector"] = "transport"
             lpg_demand["fuel"] = "lpg"
             lpg_demand = lpg_demand.pivot(
