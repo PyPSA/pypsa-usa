@@ -63,4 +63,3 @@ dependencies:
   - tsam>=1.1.0
   - gurobipy==10.0.3
   - highspy
-  - gridstatusio==0.5.9
