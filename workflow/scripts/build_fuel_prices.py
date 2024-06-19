@@ -190,9 +190,6 @@ if __name__ == "__main__":
         "caiso_ng_power_prices": get_caiso_ng_power_prices,
     }
     
-    start_date = '2019-01-01'
-    end_date = '2019-12-31'
-    build_pudl_fuel_costs(snapshots, start_date, end_date)
 
     # state level prices are always attempted
     if not eia_api:
@@ -236,3 +233,8 @@ if __name__ == "__main__":
         snakemake.output.ba_ng_fuel_prices,
         index_label="snapshot",
     )
+
+    start_date = '2019-01-01'
+    end_date = '2019-12-31'
+    build_pudl_fuel_costs(snapshots, start_date, end_date)
+

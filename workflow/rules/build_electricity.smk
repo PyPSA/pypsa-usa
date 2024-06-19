@@ -414,6 +414,7 @@ rule build_fuel_prices:
     benchmark:
         BENCHMARKS + "{interconnect}/build_fuel_prices"
     threads: 1
+    retries: 3
     resources:
         mem_mb=30000,
     script:
