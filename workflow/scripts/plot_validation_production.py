@@ -740,7 +740,8 @@ def plot_state_generation_mix(
     n: pypsa.Network,
     snapshots: pd.date_range,
     eia_api: str,
-    save: str,
+    save_total: str,
+    save_carrier: str,
     **wildcards,
 ):
     """Creates a stacked bar chart for each state's generation mix"""
@@ -766,18 +767,27 @@ def plot_state_generation_mix(
 
     historical_gen, optimized = add_missing_carriers(historical_gen, optimized)
 
-    diff_carrier = ((optimized - historical_gen).fillna(0) / historical_gen).mul(1e2).round(1)
     diff_total = ((optimized - historical_gen).fillna(0) / historical_gen.sum(axis=0) * 1e2).round(1)
+    diff_carrier = ((optimized - historical_gen).fillna(0) / historical_gen).mul(1e2).round(1)
 
 
     # Create Stacked Bar Plot for each State's Generation Mix
     colors = n.carriers.color.to_dict()
     fig, ax = plt.subplots(figsize=(10, 8))
-    sns.heatmap(diff_carrier, annot=True, center= 0.0, fmt=".1f", cmap='coolwarm', ax=ax)
-    ax.set_title(create_title("State Generation Mix Difference", **wildcards))
+    sns.heatmap(diff_total, annot=True, center= 0.0, fmt=".1f", cmap='coolwarm', ax=ax)
+    ax.set_title(create_title("State Total Generation Mix Difference [%]", **wildcards))
     ax.set_xlabel("Carrier")
     ax.set_ylabel("State")
-    fig.savefig(save, dpi =DPI)
+    fig.savefig(save_total, dpi =DPI)
+
+    # Create Stacked Bar Plot for each State's Generation Mix
+    colors = n.carriers.color.to_dict()
+    fig, ax = plt.subplots(figsize=(10, 8))
+    sns.heatmap(diff_carrier, annot=True, center= 0.0, fmt=".1f", cmap='coolwarm', ax=ax)
+    ax.set_title(create_title("Difference in Carrier Level Production[%]", **wildcards))
+    ax.set_xlabel("Carrier")
+    ax.set_ylabel("State")
+    fig.savefig(save_carrier, dpi =DPI)
 
 def plot_state_generation_capacities(
     n: pypsa.Network,
@@ -941,7 +951,8 @@ def main(snakemake):
         n,
         snapshots,
         snakemake.params.eia_api,
-        snakemake.output["val_mix_state_generation.pdf"],
+        snakemake.output["val_heatmap_state_generation_total.pdf"],
+        snakemake.output["val_heatmap_state_generation_carrier.pdf"],
         **snakemake.wildcards,
     )
 
