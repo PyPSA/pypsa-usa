@@ -883,15 +883,15 @@ class ElectricPowerOperationalData(DataExtractor):
         df = df.rename(
             columns={
                 "generation-units": "units",
-                "stateDescription": "state",
+                "stateDescription": "stateName",
                 "fuelTypeDescription": "series-description",
+                "location": "state",
                 "generation": "value",
             },
         )
         df = (
-            df[["location", "state","fueltypeid", "series-description", "value", "units"]]
-            .sort_values(["location"])
-            .set_index("location")
+            df[["state", "stateName","fueltypeid", "series-description", "value", "units"]]
+            .sort_values(["state"])
         )
 
         return self._assign_dtypes(df)

@@ -11,7 +11,12 @@ import seaborn as sns
 
 logger = logging.getLogger(__name__)
 from _helpers import configure_logging, get_snapshots
-from constants import EIA_930_REGION_MAPPER, EIA_BA_2_REGION, STATE_2_CODE
+from constants import (
+    EIA_930_REGION_MAPPER, 
+    EIA_BA_2_REGION, 
+    STATE_2_CODE,
+    EIA_FUEL_MAPPER_2,
+)
 from eia import Emissions, ElectricPowerData
 from plot_network_maps import (
     create_title,
@@ -733,48 +738,37 @@ def plot_state_generation_mix(
     """Creates a stacked bar chart for each state's generation mix"""
     year = snapshots[0].year
 
-    historical_production = []
-    import pdb; pdb.set_trace()
+    optimized = get_state_generation_mix(n)
 
-    if snakemake.params.eia_api:
-        historical_production.append(ElectricPowerData(year, eia_api).get_data())
-
-        historical_production = pd.concat(historical_production)
-        historical = (
-            historical_production.reset_index()[["value", "state"]]
-            .set_index("state")
-            .rename(columns={"value": "Historical"})
-        )
-    historical = historical.loc[optimized.index]
-    # final = optimized.join(historical).reset_index()
-
-    # final = pd.melt(final, id_vars=["state"], value_vars=["Optimized", "Historical"])
-    # final["value"] = final.value.astype("float")
-
-    # fig, ax = plt.subplots(figsize=(8, 8))
-    # sns.barplot(
-    #     data=final,
-    #     y="state",
-    #     x="value",
-    #     hue="variable",
-    #     orient="horizontal",
-    #     ax=ax,
-    # )
-    # ax.set_title(create_title("CO2 Emissions by Region", **wildcards))
-    # ax.set_xlabel("CO2 Emissions [MMtCO2]")
-    # ax.set_ylabel("")
-    # fig.savefig(save, dpi =DPI)
+    historical_gen = pd.read_excel(snakemake.input.historical_generation, skiprows=1)
+    historical_gen = historical_gen.set_index("STATE").loc[optimized.index]
+    historical_gen = historical_gen[historical_gen.YEAR == year]
+    historical_gen = historical_gen[historical_gen['TYPE OF PRODUCER'] == 'Total Electric Power Industry']
+    historical_gen = historical_gen[historical_gen['ENERGY SOURCE'] != 'Total']
+    historical_gen.drop(columns=['YEAR','TYPE OF PRODUCER'], inplace=True)
+    historical_gen.rename(columns={'ENERGY SOURCE':'carrier','GENERATION (Megawatthours)': 'Historical' }, inplace=True)
+    historical_gen['carrier'] = historical_gen.carrier.map(EIA_FUEL_MAPPER_2)
+    historical_gen = historical_gen.reset_index().groupby(['state','carrier']).sum().reset_index()
+    historical_gen = historical_gen.pivot(index='state', columns='carrier', values='Historical') / 1e3
 
 
-    generation_pivot = get_state_generation_mix(n)
+    optimized['gas'] = optimized.pop('CCGT') + optimized.pop('OCGT')
+    optimized.pop('load')
+    optimized.pop('offwind_floating')
+
+    historical_gen, optimized = add_missing_carriers(historical_gen, optimized)
+
+    diff_carrier = ((optimized - historical_gen).fillna(0) / historical_gen).mul(1e2).round(1)
+    diff_total = ((optimized - historical_gen).fillna(0) / historical_gen.sum(axis=0) * 1e2).round(1)
+
 
     # Create Stacked Bar Plot for each State's Generation Mix
     colors = n.carriers.color.to_dict()
     fig, ax = plt.subplots(figsize=(10, 8))
-    generation_pivot.plot(kind='bar', stacked=True, ax=ax, color=colors)
-    ax.set_title(create_title("State Generation Mix", **wildcards))
-    ax.set_xlabel("State")
-    ax.set_ylabel("Generation Mix [GWh]")
+    sns.heatmap(diff_carrier, annot=True, center= 0.0, fmt=".1f", cmap='coolwarm', ax=ax)
+    ax.set_title(create_title("State Generation Mix Difference", **wildcards))
+    ax.set_xlabel("Carrier")
+    ax.set_ylabel("State")
     fig.savefig(save, dpi =DPI)
 
 def plot_state_generation_capacities(

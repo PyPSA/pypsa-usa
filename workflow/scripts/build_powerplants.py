@@ -278,7 +278,7 @@ eia_fuel_map = pd.DataFrame(
             "other",
             "other",
             "other",
-            "other",
+            "battery",
             "other",
         ],
         "fuel_name": [
