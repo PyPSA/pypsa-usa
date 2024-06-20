@@ -29,7 +29,7 @@ repos:
   - id: add-trailing-comma
 
 - repo: https://github.com/asottile/pyupgrade
-  rev: v3.15.2
+  rev: v3.16.0
   hooks:
   - id: pyupgrade
     args: [--py39-plus]
@@ -41,7 +41,7 @@ repos:
     exclude: examples/solve-on-remote.ipynb
 
 - repo: https://github.com/snakemake/snakefmt
-  rev: v0.10.1
+  rev: v0.10.2
   hooks:
   - id: snakefmt
 
@@ -57,7 +57,7 @@ repos:
   - id: blackdoc
 
 - repo: https://github.com/psf/black-pre-commit-mirror
-  rev: 24.4.0
+  rev: 24.4.2
   hooks:
   - id: black
   - id: black-jupyter
