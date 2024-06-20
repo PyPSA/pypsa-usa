@@ -189,7 +189,6 @@ if __name__ == "__main__":
     function_mapper = {
         "caiso_ng_power_prices": get_caiso_ng_power_prices,
     }
-    
 
     # state level prices are always attempted
     if not eia_api:
@@ -234,7 +233,5 @@ if __name__ == "__main__":
         index_label="snapshot",
     )
 
-    start_date = '2019-01-01'
-    end_date = '2019-12-31'
-    build_pudl_fuel_costs(snapshots, start_date, end_date)
+    build_pudl_fuel_costs(snapshots,  snakemake.params.snapshots["start"], snakemake.params.snapshots["end"])
 
