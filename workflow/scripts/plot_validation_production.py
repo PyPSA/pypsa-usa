@@ -12,7 +12,7 @@ import seaborn as sns
 logger = logging.getLogger(__name__)
 from _helpers import configure_logging, get_snapshots
 from constants import EIA_930_REGION_MAPPER, EIA_BA_2_REGION, STATE_2_CODE
-from eia import Emissions
+from eia import Emissions, ElectricPowerData
 from plot_network_maps import (
     create_title,
     get_bus_scale,
@@ -725,10 +725,47 @@ def get_state_loads(n: pypsa.Network):
 
 def plot_state_generation_mix(
     n: pypsa.Network,
+    snapshots: pd.date_range,
+    eia_api: str,
     save: str,
     **wildcards,
 ):
     """Creates a stacked bar chart for each state's generation mix"""
+    year = snapshots[0].year
+
+    historical_production = []
+    import pdb; pdb.set_trace()
+
+    if snakemake.params.eia_api:
+        historical_production.append(ElectricPowerData(year, eia_api).get_data())
+
+        historical_production = pd.concat(historical_production)
+        historical = (
+            historical_production.reset_index()[["value", "state"]]
+            .set_index("state")
+            .rename(columns={"value": "Historical"})
+        )
+    historical = historical.loc[optimized.index]
+    # final = optimized.join(historical).reset_index()
+
+    # final = pd.melt(final, id_vars=["state"], value_vars=["Optimized", "Historical"])
+    # final["value"] = final.value.astype("float")
+
+    # fig, ax = plt.subplots(figsize=(8, 8))
+    # sns.barplot(
+    #     data=final,
+    #     y="state",
+    #     x="value",
+    #     hue="variable",
+    #     orient="horizontal",
+    #     ax=ax,
+    # )
+    # ax.set_title(create_title("CO2 Emissions by Region", **wildcards))
+    # ax.set_xlabel("CO2 Emissions [MMtCO2]")
+    # ax.set_ylabel("")
+    # fig.savefig(save, dpi =DPI)
+
+
     generation_pivot = get_state_generation_mix(n)
 
     # Create Stacked Bar Plot for each State's Generation Mix
@@ -888,6 +925,14 @@ def main(snakemake):
     #     **snakemake.wildcards,
     # )
 
+    plot_state_generation_mix(
+        n,
+        snapshots,
+        snakemake.params.eia_api,
+        snakemake.output["val_mix_state_generation.pdf"],
+        **snakemake.wildcards,
+    )
+
     plot_generator_data_panel(
         n,
         snakemake.output["val_generator_data_panel.pdf"],
@@ -899,7 +944,6 @@ def main(snakemake):
         snakemake.output["val_generator_stack.pdf"],
         **snakemake.wildcards,
     )
-
 
     plot_fuel_costs(
         n,
@@ -914,11 +958,6 @@ def main(snakemake):
         **snakemake.wildcards,
     )
 
-    plot_state_generation_mix(
-        n,
-        snakemake.output["val_mix_state_generation.pdf"],
-        **snakemake.wildcards,
-    )
 
     plot_state_generation_capacities(
         n,
@@ -985,8 +1024,6 @@ def main(snakemake):
         **snakemake.wildcards,
     )
 
-
-
     plot_load_shedding_map(
         n,
         snakemake.output["val_map_load_shedding.pdf"],
@@ -994,15 +1031,7 @@ def main(snakemake):
         **snakemake.wildcards,
     )
 
-
-
     n.statistics().to_csv(snakemake.output["val_statistics"])
-    # plot_curtailment_heatmap(
-    #     n,
-    #     snakemake.output["val_heatmap_curtailment.pdf"],
-    #     **snakemake.wildcards,
-    # )
-
 
 if __name__ == "__main__":
     if "snakemake" not in globals():
