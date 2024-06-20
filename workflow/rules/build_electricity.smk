@@ -65,6 +65,7 @@ rule build_base_network:
 rule build_bus_regions:
     params:
         aggregation_zone=config["clustering"]["cluster_network"]["aggregation_zones"],
+        focus_weights=config["focus_weights"],
     input:
         country_shapes=RESOURCES + "{interconnect}/country_shapes.geojson",
         state_shapes=RESOURCES + "{interconnect}/state_boundaries.geojson",
@@ -122,8 +123,6 @@ if config["enable"].get("build_cutout", False):
         threads: ATLITE_NPROCESSES
         resources:
             mem_mb=ATLITE_NPROCESSES * 1000,
-        conda:
-            "envs/environment.yaml"
         script:
             "../scripts/build_cutout.py"
 
@@ -375,17 +374,20 @@ rule build_fuel_prices:
         api_eia=config["api"]["eia"],
     input:
         gas_balancing_area=ba_gas_dynamic_fuel_price_files,
+        pudl=DATA + "pudl/pudl.sqlite",
     output:
         state_ng_fuel_prices=RESOURCES + "{interconnect}/state_ng_power_prices.csv",
         state_coal_fuel_prices=RESOURCES + "{interconnect}/state_coal_power_prices.csv",
         ba_ng_fuel_prices=RESOURCES + "{interconnect}/ba_ng_power_prices.csv",
+        pudl_fuel_costs=RESOURCES + "{interconnect}/pudl_fuel_costs.csv",
     log:
         LOGS + "{interconnect}/build_fuel_prices.log",
     benchmark:
         BENCHMARKS + "{interconnect}/build_fuel_prices"
     threads: 1
+    retries: 3
     resources:
-        mem_mb=800,
+        mem_mb=30000,
     script:
         "../scripts/build_fuel_prices.py"
 
@@ -439,11 +441,12 @@ rule add_electricity:
         + f"costs/costs_{config['scenario']['planning_horizons'][0]}.csv",
         # attach first horizon costs
         regions=RESOURCES + "{interconnect}/regions_onshore.geojson",
+        powerplants=RESOURCES + "powerplants.csv",
         plants_eia="repo_data/plants/plants_merged.csv",
         plants_breakthrough=DATA + "breakthrough_network/base_grid/plant.csv",
         hydro_breakthrough=DATA + "breakthrough_network/base_grid/hydro.csv",
         bus2sub=RESOURCES + "{interconnect}/bus2sub.csv",
-        fuel_costs="repo_data/plants/fuelCost22.csv",
+        pudl_fuel_costs=RESOURCES + "{interconnect}/pudl_fuel_costs.csv",
     output:
         RESOURCES + "{interconnect}/elec_base_network_l_pp.nc",
     log:
@@ -556,9 +559,18 @@ rule prepare_network:
         costs=config_provider("costs"),
         autarky=config_provider("electricity", "autarky"),
     input:
-        network=RESOURCES + "{interconnect}/elec_s_{clusters}_ec.nc",
-        tech_costs=RESOURCES
-        + f"costs/costs_{config['scenario']['planning_horizons'][0]}.csv",
+        network=(
+            config["custom_files"]["files_path"]
+            + config["custom_files"]["network_name"]
+            if config["custom_files"].get("activate", False)
+            else RESOURCES + "{interconnect}/elec_s_{clusters}_ec.nc"
+        ),
+        tech_costs=(
+            config["custom_files"]["files_path"] + "costs_2030.csv"
+            if config["custom_files"].get("activate", False)
+            else RESOURCES
+            + f"costs/costs_{config['scenario']['planning_horizons'][0]}.csv"
+        ),
     output:
         RESOURCES + "{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}.nc",
     log:
@@ -579,9 +591,14 @@ rule build_powerplants:
         pudl=DATA + "pudl/pudl.sqlite",
         wecc_ads=DATA + "WECC_ADS/downloads/2032/Public Data",
         eia_ads_generator_mapping="repo_data/eia_ads_generator_mapping_updated.csv",
+        fuel_costs="repo_data/plants/fuelCost22.csv",
+        cems="repo_data/plants/cems_heat_rates.xlsx",
+        epa_crosswalk="repo_data/plants/epa_eia_crosswalk.csv",
     output:
         powerplants=RESOURCES + "powerplants.csv",
     log:
         "logs/build_powerplants",
+    resources:
+        mem_mb=30000,
     script:
         "../scripts/build_powerplants.py"

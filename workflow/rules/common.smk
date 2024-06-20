@@ -103,15 +103,7 @@ def memory(w):
         val = int(factor * (18000 + 180 * 4000))
     else:
         val = int(factor * (15000 + 195 * int(w.clusters)))
-
-    if w.interconnect == "usa":
-        return int(val * 6)
-    elif w.interconnect == "eastern":
-        return int(val * 1.5)
-    elif w.interconnect == "western":
-        return int(val * 1.5)
-    elif w.interconnect == "texas":
-        return int(val * 1)
+    return int(val)
 
 
 def interconnect_mem(w):
@@ -127,7 +119,7 @@ def interconnect_mem(w):
 
 
 def interconnect_mem_a(w):
-    mem = 80000
+    mem = 30000
     if w.interconnect == "usa":
         return int(mem * 1.5)
     elif w.interconnect == "eastern":

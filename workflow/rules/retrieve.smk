@@ -104,9 +104,7 @@ rule retrieve_sector_databundle:
 
 rule retrieve_WECC_forecast_data:
     output:
-        ads_2032=directory(
-            DATA + "WECC_ADS/downloads/2032/Public Data/Hourly Profiles in CSV format"
-        ),
+        ads_2032=directory(DATA + "WECC_ADS/downloads/2032/Public Data"),
         ads_2030=directory(
             DATA
             + "WECC_ADS/downloads/2030/WECC 2030 ADS PCM 2020-12-16 (V1.5) Public Data/CSV Shape Files"
@@ -211,20 +209,23 @@ rule retrieve_ship_raster:
         move(input[0], output[0])
 
 
-rule retrieve_cutout:
-    input:
-        HTTP.remote(
-            "zenodo.org/records/10067222/files/{interconnect}_{cutout}.nc", static=True
-        ),
-    output:
-        "cutouts/" + CDIR + "{interconnect}_{cutout}.nc",
-    log:
-        "logs/" + CDIR + "retrieve_cutout_{interconnect}_{cutout}.log",
-    resources:
-        mem_mb=5000,
-    retries: 2
-    run:
-        move(input[0], output[0])
+if not config["enable"].get("build_cutout", False):
+
+    rule retrieve_cutout:
+        input:
+            HTTP.remote(
+                "zenodo.org/records/10067222/files/{interconnect}_{cutout}.nc",
+                static=True,
+            ),
+        output:
+            "cutouts/" + CDIR + "{interconnect}_{cutout}.nc",
+        log:
+            "logs/" + CDIR + "retrieve_cutout_{interconnect}_{cutout}.log",
+        resources:
+            mem_mb=5000,
+        retries: 2
+        run:
+            move(input[0], output[0])
 
 
 rule retrieve_cost_data_eur:

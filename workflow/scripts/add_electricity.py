@@ -234,22 +234,6 @@ def add_missing_carriers(n, carriers):
         n.madd("Carrier", missing_carriers)
 
 
-def add_missing_fuel_cost(plants, costs_fn):
-    fuel_cost = pd.read_csv(costs_fn, index_col=0, skiprows=3)
-    plants["fuel_cost"] = plants.fuel_type.map(fuel_cost.fuel_price_per_mmbtu)
-    return plants
-
-
-def add_missing_heat_rates(plants, heat_rates_fn):
-    heat_rates = pd.read_csv(heat_rates_fn, index_col=0, skiprows=3)
-    heat_rates = heat_rates.loc[heat_rates.heat_rate_btu_per_kwh > 0]
-    hr_mapped = (
-        plants.fuel_type.map(heat_rates.heat_rate_btu_per_kwh) / 1000
-    )  # convert to mmbtu/mwh
-    plants["heat_rate"] = plants["heat_rate"].fillna(hr_mapped)
-    return plants
-
-
 def clean_locational_multiplier(df: pd.DataFrame):
     """
     Updates format of locational multiplier data.
@@ -425,7 +409,9 @@ def attach_renewable_capacities_to_atlite(
 
         generators_tech = n.generators[n.generators.carrier == tech].copy()
         generators_tech["sub_assignment"] = generators_tech.bus.map(n.buses.sub_id)
-        plants_filt["sub_assignment"] = plants_filt.bus_assignment.map(n.buses.sub_id)
+        plants_filt.loc[:, "sub_assignment"] = plants_filt.bus_assignment.map(
+            n.buses.sub_id
+        )
         caps_per_bus = (
             plants_filt[["sub_assignment", "p_nom"]]
             .groupby("sub_assignment")
@@ -490,7 +476,13 @@ def attach_conventional_generators(
 
     plants["efficiency"] = plants.efficiency.fillna(plants.efficiency_r)
 
-    committable_fields = ["start_up_cost", "min_down_time", "min_up_time"]
+    plants.loc[:, "p_min_pu"] = plants.minimum_load_mw / plants.p_nom
+    plants.loc[:, "p_min_pu"] = plants.p_min_pu.clip(
+        upper=np.minimum(plants.summer_derate, plants.winter_derate),
+        lower=0,
+    ).fillna(0)
+
+    committable_fields = ["start_up_cost", "min_down_time", "min_up_time", "p_min_pu"]
     for attr in committable_fields:
         default = pypsa.components.component_attrs["Generator"].default[attr]
         if unit_commitment:
@@ -817,14 +809,16 @@ def attach_battery_storage(
     plants_filt.index = (
         plants_filt.index.astype(str) + "_" + plants_filt.generator_id.astype(str)
     )
-    plants_filt.nameplate_energy_capacity_mwh = (
-        plants_filt.nameplate_energy_capacity_mwh.astype(float)
+    plants_filt.loc[:, "energy_storage_capacity_mwh"] = (
+        plants_filt.energy_storage_capacity_mwh.astype(float)
     )
+    plants_filt.dropna(subset=["energy_storage_capacity_mwh"], inplace=True)
+
     logger.info(
-        f"Added Batteries as Storage Units to the network.\n{np.round(plants_filt.p_nom.sum()/1000,2)} GW Power Capacity \n{np.round(plants_filt.nameplate_energy_capacity_mwh.sum()/1000, 2)} GWh Energy Capacity",
+        f"Added Batteries as Storage Units to the network.\n{np.round(plants_filt.p_nom.sum()/1000,2)} GW Power Capacity \n{np.round(plants_filt.energy_storage_capacity_mwh.sum()/1000, 2)} GWh Energy Capacity",
     )
 
-    plants_filt = plants_filt.dropna(subset=["nameplate_energy_capacity_mwh"])
+    plants_filt = plants_filt.dropna(subset=["energy_storage_capacity_mwh"])
     n.madd(
         "StorageUnit",
         plants_filt.index,
@@ -833,7 +827,7 @@ def attach_battery_storage(
         p_nom=plants_filt.p_nom,
         p_nom_min=plants_filt.p_nom,
         p_nom_extendable=False,
-        max_hours=plants_filt.nameplate_energy_capacity_mwh / plants_filt.p_nom,
+        max_hours=plants_filt.energy_storage_capacity_mwh / plants_filt.p_nom,
         build_year=plants_filt.build_year,
         lifetime=30,  # replace with actual lifetime
         efficiency_store=0.9**0.5,
@@ -842,134 +836,22 @@ def attach_battery_storage(
     )
 
 
-def load_powerplants_eia(
-    eia_dataset: str,
+def load_powerplants(
+    plants_fn,
     investment_periods: list[int],
     interconnect: str = None,
 ) -> pd.DataFrame:
-
     plants = pd.read_csv(
-        eia_dataset,
+        plants_fn,
     )
-
-    plants["generator_name"] = (
-        plants.index.astype(str)
-        + "_"
-        + plants.plant_code.astype(str)
-        + "_"
-        + plants.generator_id.astype(str)
-    )
-    plants.set_index("generator_name", inplace=True)
-    plants["p_nom"] = plants.pop("nameplate_capacity_mw")
-    plants["build_year"] = plants.pop("operating_year")
-    plants["heat_rate"] = plants.pop("egrid_heat_rate")
-
-    plants = add_missing_fuel_cost(
-        plants,
-        snakemake.input.fuel_costs,
-    )  # National Avg used for start-up costs
-
-    # Unit Commitment Parameters
-    plants["start_up_cost"] = (
-        plants["ads_startup_cost_fixed$"] + plants.ads_startfuelmmbtu * plants.fuel_cost
-    )
-    plants["min_down_time"] = plants.pop("ads_minimumdowntimehr")
-    plants["min_up_time"] = plants.pop("ads_minimumuptimehr")
-
-    # Ramp Limit Parameters
-    plants["ramp_limit_up"] = (
-        plants.pop("ads_rampup_ratemw/minute") / plants.p_nom * 60
-    ).clip(
-        lower=0,
-        upper=1,
-    )  # MW/min to p.u./hour
-    plants["ramp_limit_down"] = (
-        plants.pop("ads_rampdn_ratemw/minute") / plants.p_nom * 60
-    ).clip(
-        lower=0,
-        upper=1,
-    )  # MW/min to p.u./hour
-
-    # Impute missing data based on average values of a given aggregation
-    aggregation_fields = ["technology"]
-    data_fields = [
-        "start_up_cost",
-        "min_down_time",
-        "min_up_time",
-        "ramp_limit_up",
-        "ramp_limit_down",
-    ]
-    plants = impute_missing_plant_data(plants, aggregation_fields, data_fields)
-
-    aggregation_fields = ["nerc_region", "technology"]
-    data_fields = ["heat_rate"]
-    plants = impute_missing_plant_data(plants, aggregation_fields, data_fields)
-
-    plants["marginal_cost"] = (
-        plants.heat_rate * plants.fuel_cost
-    )  # (MMBTu/MW) * (USD/MMBTu) = USD/MW
-    plants["efficiency"] = 1 / (
-        plants["heat_rate"] / 3.412
-    )  # MMBTu/MWh to MWh_electric/MWh_thermal
-
     # Filter out non-conus plants and plants that are not built by first investment period.
+    plants.set_index("generator_name", inplace=True)
     plants = plants[plants.build_year <= investment_periods[0]]
     plants = plants[plants.nerc_region != "non-conus"]
     if (interconnect is not None) & (interconnect != "usa"):
         plants["interconnection"] = plants["nerc_region"].map(const.NERC_REGION_MAPPER)
         plants = plants[plants.interconnection == interconnect]
-
     return plants
-
-
-def impute_missing_plant_data(
-    plants: pd.DataFrame,
-    aggregation_fields: list[str],
-    data_fields: list[str],
-) -> pd.DataFrame:
-    """
-    Imputes missing data in the plants dataframe based on the average values of
-    the data dataframe.
-    """
-
-    # Function to calculate weighted average
-    def weighted_avg(df, values, weights):
-        valid = df[values].notna()
-        if valid.sum() == 0:
-            return np.nan  # Return NaN if no valid entries
-        return np.average(df[values][valid], weights=df[weights][valid])
-
-    # Calculate the weighted averages excluding NaNs
-    weighted_averages = (
-        plants.groupby(aggregation_fields)
-        .apply(
-            lambda x: pd.Series(
-                {field: weighted_avg(x, field, "p_nom") for field in data_fields},
-            ),
-        )
-        .reset_index()
-    )
-
-    # Merge weighted averages back into the original DataFrame
-    plants_merged = pd.merge(
-        plants.reset_index(),
-        weighted_averages,
-        on=aggregation_fields,
-        suffixes=("", "_weighted"),
-    )
-
-    # Fill NaN values using the weighted averages
-    for field in data_fields:
-        plants_merged[field] = plants_merged[field].fillna(
-            plants_merged[f"{field}_weighted"],
-        )
-
-    # Drop the weighted average columns after filling NaNs
-    plants_merged = plants_merged.drop(
-        columns=[f"{field}_weighted" for field in data_fields],
-    )
-    plants_merged.set_index("generator_name", inplace=True)
-    return plants_merged
 
 
 def broadcast_investment_horizons_index(n: pypsa.Network, df: pd.DataFrame):
@@ -1018,36 +900,37 @@ def apply_seasonal_capacity_derates(
     ].astype(float)
 
     p_max_pu = broadcast_investment_horizons_index(n, p_max_pu)
-    n.generators_t.p_max_pu = pd.concat([n.generators_t.p_max_pu, p_max_pu], axis=1)
+    n.generators_t.p_max_pu = pd.concat(
+        [n.generators_t.p_max_pu, p_max_pu], axis=1
+    ).round(3)
 
 
-def apply_must_run_capacity_ratings(
+def apply_must_run_ratings(
     n: pypsa.Network,
     plants: pd.DataFrame,
     conventional_carriers: list,
     sns: pd.DatetimeIndex,
 ):
-    sns_dt = sns.get_level_values(1)
-    summer_sns = sns_dt[sns_dt.month.isin([6, 7, 8])]
-    winter_sns = sns_dt[~sns_dt.month.isin([6, 7, 8])]
-
-    conv_plants = plants.query("carrier in @conventional_carriers")
+    """
+    Applies Minimum Loading Capacities only to WECC ADS designated Plants.
+    """
+    conv_plants = plants.query("carrier in @conventional_carriers").copy()
     conv_plants.index = "C" + conv_plants.index
-    conv_gens = n.generators.query("carrier in @conventional_carriers")
 
-    conv_plants.loc[:, "ads_mustrun"] = conv_plants.ads_mustrun.fillna(False)
-    must_run = conv_plants.loc[conv_plants.ads_mustrun, :].copy()
-    must_run.loc[:, "minimum_load_mw"] = must_run.minimum_load_mw.astype(float)
-    must_run.loc[:, "minimum_cf"] = must_run.minimum_load_mw / must_run.p_nom
-    must_run.loc[:, "minimum_cf"] = must_run.minimum_cf.clip(
-        upper=np.minimum(must_run.summer_derate, must_run.winter_derate),
+    conv_plants.loc[:, "ads_mustrun"] = conv_plants.ads_mustrun.infer_objects(
+        copy=False
+    ).fillna(False)
+    conv_plants.loc[:, "minimum_load_pu"] = (
+        conv_plants.minimum_load_mw / conv_plants.p_nom
     )
-
-    p_min_pu = pd.DataFrame(1.0, index=sns_dt, columns=must_run.index)
-    p_min_pu.loc[:, must_run.index] *= must_run.loc[:, "minimum_cf"].astype(float)
-
-    p_min_pu = broadcast_investment_horizons_index(n, p_min_pu)
-    n.generators_t.p_min_pu = pd.concat([n.generators_t.p_min_pu, p_min_pu], axis=1)
+    conv_plants.loc[:, "minimum_load_pu"] = conv_plants.minimum_load_pu.clip(
+        upper=np.minimum(conv_plants.summer_derate, conv_plants.winter_derate),
+        lower=0,
+    ).fillna(0)
+    must_run = conv_plants.query("ads_mustrun == True")
+    n.generators.loc[must_run.index, "p_min_pu"] = (
+        must_run.minimum_load_pu.round(3) * 0.95
+    )
 
 
 def clean_bus_data(n: pypsa.Network):
@@ -1130,6 +1013,46 @@ def attach_breakthrough_renewable_plants(
     return n
 
 
+def apply_pudl_fuel_costs(
+    n,
+    plants,
+    costs,
+):
+
+    # Apply PuDL Fuel Costs for plants where listed
+    pudl_fuel_costs = pd.read_csv(snakemake.input["pudl_fuel_costs"], index_col=0)
+
+    # Construct the VOM table for each generator by carrier
+    vom = pd.DataFrame(index=pudl_fuel_costs.columns)
+    for gen in pudl_fuel_costs.columns:
+        if gen not in plants.index:
+            continue
+        carrier = plants.loc[gen, "carrier"]
+        vom.loc[gen, "VOM"] = costs.at[carrier, "VOM"]
+
+    # Apply the VOM to the fuel costs
+    pudl_fuel_costs = pudl_fuel_costs + vom.squeeze()
+    pudl_fuel_costs = broadcast_investment_horizons_index(n, pudl_fuel_costs)
+
+    # Drop any columns that are not in the network
+    pudl_fuel_costs.columns = "C" + pudl_fuel_costs.columns
+    pudl_fuel_costs = pudl_fuel_costs[
+        [x for x in pudl_fuel_costs.columns if x in n.generators.index]
+    ]
+
+    # drop any data that has been assigned at a coarser resolution
+    n.generators_t["marginal_cost"] = n.generators_t["marginal_cost"][
+        [x for x in n.generators_t["marginal_cost"] if x not in pudl_fuel_costs]
+    ]
+
+    # assign new marginal costs
+    n.generators_t["marginal_cost"] = n.generators_t["marginal_cost"].join(
+        pudl_fuel_costs
+    )
+    # Why are there so few of the pudl fuel costs columns?
+    return n
+
+
 def main(snakemake):
     params = snakemake.params
     interconnection = snakemake.wildcards["interconnect"]
@@ -1165,25 +1088,13 @@ def main(snakemake):
         k: v for k, v in snakemake.input.items() if k.startswith("conventional_")
     }
 
-    plants = load_powerplants_eia(
-        snakemake.input["plants_eia"],
+    plants = load_powerplants(
+        snakemake.input["powerplants"],
         n.investment_periods,
         interconnect=interconnection,
     )
 
     plants = match_plant_to_bus(n, plants)
-
-    # if "hydro" in renewable_carriers:
-    #     p = params.renewable["hydro"]
-    #     carriers = p.pop("carriers", [])
-    #     attach_hydro(
-    #         n,
-    #         costs,
-    #         plants,
-    #         snakemake.input.profile_hydro,
-    #         carriers,
-    #         **p,
-    #     )
 
     attach_conventional_generators(
         n,
@@ -1203,7 +1114,7 @@ def main(snakemake):
         conventional_carriers,
         n.snapshots,
     )
-    apply_must_run_capacity_ratings(
+    apply_must_run_ratings(
         n,
         plants,
         conventional_carriers,
@@ -1301,6 +1212,8 @@ def main(snakemake):
                 )
                 logger.info(f"Applied dynamic price data for {carrier} from {datafile}")
 
+        n = apply_pudl_fuel_costs(n, plants, costs)
+
     # fix p_nom_min for extendable generators
     # The "- 0.001" is just to avoid numerical issues
     n.generators["p_nom_min"] = n.generators.apply(
@@ -1327,6 +1240,6 @@ if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
 
-        snakemake = mock_snakemake("add_electricity", interconnect="western")
+        snakemake = mock_snakemake("add_electricity", interconnect="texas")
     configure_logging(snakemake)
     main(snakemake)
