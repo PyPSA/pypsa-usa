@@ -67,9 +67,7 @@ electricity:
     Link: [] 
 
   demand: 
-    profile: efs # efs, eia
-    scale: 1 # efs, aeo, or a number 
-    disaggregation: pop # pop
+    profile: eia # efs, eia
     scenario: 
       efs_case: reference # reference, medium, high
       efs_speed: moderate # slow, moderate, rapid
