@@ -916,7 +916,7 @@ def plot_generator_data_panel(
                 "oil",
                 "hydro",
                 "nuclear",
-                "load"
+                "load",
             ],
         ),
         :,
@@ -926,7 +926,12 @@ def plot_generator_data_panel(
     df_storage_units["efficiency"] = df_storage_units.efficiency_dispatch
     df_capex_expand = pd.concat([df_capex_expand, df_storage_units])
 
-    df_efficiency = n.generators.loc[~n.generators.carrier.isin(["solar", "onwind", "offwind", "offwind_floating", "hydro","load"]), :]
+    df_efficiency = n.generators.loc[
+        ~n.generators.carrier.isin(
+            ["solar", "onwind", "offwind", "offwind_floating", "hydro", "load"]
+        ),
+        :,
+    ]
 
     # Create a figure and subplots with 2 rows and 2 columns
     fig, axes = plt.subplots(3, 2, figsize=(10, 12))

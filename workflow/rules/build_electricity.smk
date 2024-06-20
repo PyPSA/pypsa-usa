@@ -65,7 +65,7 @@ rule build_base_network:
 rule build_bus_regions:
     params:
         aggregation_zone=config["clustering"]["cluster_network"]["aggregation_zones"],
-        focus_weights=config["focus_weights"]
+        focus_weights=config["focus_weights"],
     input:
         country_shapes=RESOURCES + "{interconnect}/country_shapes.geojson",
         state_shapes=RESOURCES + "{interconnect}/state_boundaries.geojson",
@@ -560,14 +560,16 @@ rule prepare_network:
         autarky=config_provider("electricity", "autarky"),
     input:
         network=(
-                    config["custom_files"]["files_path"] + config["custom_files"]["network_name"]
-                    if config["custom_files"].get("activate", False)
-                    else RESOURCES + "{interconnect}/elec_s_{clusters}_ec.nc"
+            config["custom_files"]["files_path"]
+            + config["custom_files"]["network_name"]
+            if config["custom_files"].get("activate", False)
+            else RESOURCES + "{interconnect}/elec_s_{clusters}_ec.nc"
         ),
         tech_costs=(
-                    config["custom_files"]["files_path"] + 'costs_2030.csv'
-                    if config["custom_files"].get("activate", False)
-                    else RESOURCES + f"costs/costs_{config['scenario']['planning_horizons'][0]}.csv"
+            config["custom_files"]["files_path"] + "costs_2030.csv"
+            if config["custom_files"].get("activate", False)
+            else RESOURCES
+            + f"costs/costs_{config['scenario']['planning_horizons'][0]}.csv"
         ),
     output:
         RESOURCES + "{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}.nc",
