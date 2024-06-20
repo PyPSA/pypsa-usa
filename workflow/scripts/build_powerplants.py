@@ -4,6 +4,7 @@ import duckdb
 import numpy as np
 import pandas as pd
 
+
 def load_pudl_data(pudl_fn: str, start_date: str, end_date: str):
     duckdb.connect(database=":memory:", read_only=False)
 
@@ -74,7 +75,7 @@ def load_pudl_data(pudl_fn: str, start_date: str, end_date: str):
                 fuel_cost_per_mwh,
                 fuel_cost_per_mmbtu
             FROM out_eia__monthly_generators
-            WHERE operational_status = 'existing' 
+            WHERE operational_status = 'existing'
             AND report_date BETWEEN '{start_date}' AND '{end_date}'
             AND unit_heat_rate_mmbtu_per_mwh IS NOT NULL
         )
@@ -101,6 +102,7 @@ def load_pudl_data(pudl_fn: str, start_date: str, end_date: str):
         ORDER BY mg.report_date DESC
         """
         return duckdb.query(query).to_df()
+
     heat_rates = get_heat_rates(start_date, end_date)
 
     return eia_data_operable, heat_rates
@@ -457,7 +459,6 @@ def merge_ads_data(eia_data_operable):
     ]
     ads_ioc.columns = standardize_col_names(ads_ioc.columns)
 
-
     # Merge ADS plant data with thermal IOC data
     ads_thermal_ioc = pd.merge(ads_thermal, ads_ioc, on="generatorname", how="left")
     # ads_thermal_ioc.dropna(subset=["avg_hr"])
@@ -644,10 +645,10 @@ def impute_missing_plant_data(
         if field in ["fuel_cost", "heat_rate"]:
             # need to properly assign weighted average to the entries which took their values
             # if the field has values equal to the _weighted column, then the source is the weighted average
-            plants_merged[f'{field}_source'] = np.where(
-                plants_merged[field] == plants_merged[f'{field}_weighted'],
-                'weighted_average',
-                plants_merged[f'{field}_source']
+            plants_merged[f"{field}_source"] = np.where(
+                plants_merged[field] == plants_merged[f"{field}_weighted"],
+                "weighted_average",
+                plants_merged[f"{field}_source"],
             )
     # Drop the weighted average columns after filling NaNs
     plants_merged = plants_merged.drop(
@@ -659,18 +660,21 @@ def impute_missing_plant_data(
 
 def set_parameters(plants: pd.DataFrame):
     """
-    Sets generator naming schemes, updates parameter names, and imputes missing data.
+    Sets generator naming schemes, updates parameter names, and imputes missing
+    data.
     """
-    plants = plants[plants.nerc_region.isin(["WECC", "TRE", "MRO", "SERC", "RFC", "NPCC"])]
+    plants = plants[
+        plants.nerc_region.isin(["WECC", "TRE", "MRO", "SERC", "RFC", "NPCC"])
+    ]
 
     plants.rename(
         {
             "fuel_cost_per_mwh_source": "fuel_cost_source",
             "unit_heat_rate_mmbtu_per_mwh_source": "heat_rate_source",
-            }, 
-        axis=1, 
-        inplace=True
-        )
+        },
+        axis=1,
+        inplace=True,
+    )
 
     plants["generator_name"] = (
         plants.plant_name_eia.astype(str)
@@ -684,14 +688,18 @@ def set_parameters(plants: pd.DataFrame):
     plants["build_year"] = plants.pop("generator_operating_date").dt.year
     plants["heat_rate"] = plants.pop("unit_heat_rate_mmbtu_per_mwh")
     plants["vom"] = plants.pop("ads_vom_cost")
-    plants['fuel_cost'] = plants.pop("fuel_cost_per_mwh")
-    plants = impute_missing_plant_data(plants, ["nerc_region", "technology_description"], ['fuel_cost'])
-    plants = impute_missing_plant_data(plants, ["technology_description"], ['fuel_cost'])
-
+    plants["fuel_cost"] = plants.pop("fuel_cost_per_mwh")
+    plants = impute_missing_plant_data(
+        plants, ["nerc_region", "technology_description"], ["fuel_cost"]
+    )
+    plants = impute_missing_plant_data(
+        plants, ["technology_description"], ["fuel_cost"]
+    )
 
     # Unit Commitment Parameters
     plants["start_up_cost"] = (
-        plants.pop("ads_startup_cost_fixed$") + plants.ads_startfuelmmbtu * plants.fuel_cost
+        plants.pop("ads_startup_cost_fixed$")
+        + plants.ads_startfuelmmbtu * plants.fuel_cost
     )
     plants["min_down_time"] = plants.pop("ads_minimumdowntimehr")
     plants["min_up_time"] = plants.pop("ads_minimumuptimehr")
@@ -720,13 +728,16 @@ def set_parameters(plants: pd.DataFrame):
         "vom",
     ]
     plants = impute_missing_plant_data(plants, ["technology_description"], data_fields)
-    
+
     # replace heat-rate above theoretical minimum with nan
     plants.loc[plants.heat_rate < 3.412, "heat_rate"] = np.nan
 
-    plants = impute_missing_plant_data(plants, ["nerc_region", "technology_description"], ["heat_rate"])
-    plants = impute_missing_plant_data(plants, ["technology_description"], ["heat_rate"])
-
+    plants = impute_missing_plant_data(
+        plants, ["nerc_region", "technology_description"], ["heat_rate"]
+    )
+    plants = impute_missing_plant_data(
+        plants, ["technology_description"], ["heat_rate"]
+    )
 
     plants["marginal_cost"] = (
         plants.vom + plants.fuel_cost
@@ -735,92 +746,151 @@ def set_parameters(plants: pd.DataFrame):
         plants["heat_rate"] / 3.412
     )  # MMBTu/MWh to MWh_electric/MWh_thermal
 
-    plants[f'heat_rate_source'] = plants[f'heat_rate_source'].fillna('NA')
-    plants[f'fuel_cost_source'] = plants[f'fuel_cost_source'].fillna('NA')
+    plants[f"heat_rate_source"] = plants[f"heat_rate_source"].fillna("NA")
+    plants[f"fuel_cost_source"] = plants[f"fuel_cost_source"].fillna("NA")
     return plants.reset_index()
 
 
 def filter_outliers_iqr_grouped(df, group_column, value_column):
-    """filter outliers using IQR for each generator group"""
+    """
+    Filter outliers using IQR for each generator group.
+    """
+
     def filter_outliers(group):
         Q1 = group[value_column].quantile(0.25)
         Q3 = group[value_column].quantile(0.75)
         IQR = Q3 - Q1
         lower_bound = Q1 - 1.5 * IQR
         upper_bound = Q3 + 1.5 * IQR
-        return group[(group[value_column] >= lower_bound) & (group[value_column] <= upper_bound)]
+        return group[
+            (group[value_column] >= lower_bound) & (group[value_column] <= upper_bound)
+        ]
+
     return df.groupby(group_column).apply(filter_outliers).reset_index(drop=True)
 
+
 def filter_outliers_zscore(temporal_data, target_field_name):
-    """filter outliers using Z-score"""
+    """
+    Filter outliers using Z-score.
+    """
     # Calculate mean and standard deviation for each generator
-    stats = temporal_data.groupby(['generator_name'])[target_field_name].agg(['mean', 'std']).reset_index()
-    stats['mean'] = stats['mean'].replace(np.inf, np.nan)
+    stats = (
+        temporal_data.groupby(["generator_name"])[target_field_name]
+        .agg(["mean", "std"])
+        .reset_index()
+    )
+    stats["mean"] = stats["mean"].replace(np.inf, np.nan)
     stats.dropna(inplace=True)
 
     # Merge mean and std back to the original dataframe
     temporal_stats = temporal_data.merge(
         stats,
-        on=['generator_name'],
-        how='left',
-        suffixes=('', '_stats')
+        on=["generator_name"],
+        how="left",
+        suffixes=("", "_stats"),
     )
 
     # Calculate the Z-score for each month's entry
-    temporal_stats['z_score'] = (temporal_stats[target_field_name] - temporal_stats['mean']) / temporal_stats['std']
-    
+    temporal_stats["z_score"] = (
+        temporal_stats[target_field_name] - temporal_stats["mean"]
+    ) / temporal_stats["std"]
+
     # Filter out the outliers using Z-score
     threshold = 3
-    filtered_temporal = temporal_stats[np.abs(temporal_stats['z_score']) <= threshold]
-    filtered_temporal.drop(columns=['mean', 'std', 'z_score'], inplace=True)
+    filtered_temporal = temporal_stats[np.abs(temporal_stats["z_score"]) <= threshold]
+    filtered_temporal.drop(columns=["mean", "std", "z_score"], inplace=True)
     return filtered_temporal
+
 
 def merge_fc_hr_data(
     plants: pd.DataFrame,
     temporal_data: pd.DataFrame,
     target_field_name: str,
 ):
-    temporal_data['generator_name'] = (
-        temporal_data['plant_name_eia'].astype(str) + '_' + 
-        temporal_data['plant_id_eia'].astype(str) + '_' + 
-        temporal_data['generator_id'].astype(str)
+    temporal_data["generator_name"] = (
+        temporal_data["plant_name_eia"].astype(str)
+        + "_"
+        + temporal_data["plant_id_eia"].astype(str)
+        + "_"
+        + temporal_data["generator_id"].astype(str)
     )
 
     # Apply Z-score filtering to each generator
     filtered_temporal = filter_outliers_zscore(temporal_data, target_field_name)
 
     # Apply IQR filtering to each generator group
-    filtered_temporal =  filter_outliers_iqr_grouped(filtered_temporal, 'technology_description', target_field_name)
+    filtered_temporal = filter_outliers_iqr_grouped(
+        filtered_temporal, "technology_description", target_field_name
+    )
 
     # Apply temporal average heat rates to plants dataframe
-    temporal_average = filtered_temporal.groupby(['plant_id_eia', 'generator_id'])[target_field_name].mean().reset_index()
+    temporal_average = (
+        filtered_temporal.groupby(["plant_id_eia", "generator_id"])[target_field_name]
+        .mean()
+        .reset_index()
+    )
 
     if target_field_name in plants.columns:
-        plants.drop(columns = [target_field_name], inplace = True)
+        plants.drop(columns=[target_field_name], inplace=True)
 
-    temporal_average[f'{target_field_name}_source'] = 'pudl_reciepts'
+    temporal_average[f"{target_field_name}_source"] = "pudl_reciepts"
 
-    plants = pd.merge(left= plants, right= temporal_average, on = ['plant_id_eia', 'generator_id'], how = 'left')
+    plants = pd.merge(
+        left=plants,
+        right=temporal_average,
+        on=["plant_id_eia", "generator_id"],
+        how="left",
+    )
     return plants
+
 
 def apply_cems_heat_rates(plants, crosswalk_fn, cems_fn):
     # Apply CEMS calculated heat rates
-    cems_hr = pd.read_excel(cems_fn)[['Facility ID','Unit ID', 'Heat Input (mmBtu/MWh)']]
-    crosswalk = pd.read_csv(crosswalk_fn)[['CAMD_PLANT_ID','CAMD_UNIT_ID', 'EIA_PLANT_ID', 'EIA_GENERATOR_ID']]
-    cems_hr = pd.merge(cems_hr, crosswalk, left_on=['Facility ID','Unit ID'], right_on=['CAMD_PLANT_ID','CAMD_UNIT_ID'], how = 'inner')
-    cems_hr['hr_source_cems'] = 'cems'
-    plants = pd.merge(cems_hr, plants, left_on=['EIA_PLANT_ID', 'EIA_GENERATOR_ID'], right_on=['plant_id_eia','generator_id'], how='right')
+    cems_hr = pd.read_excel(cems_fn)[
+        ["Facility ID", "Unit ID", "Heat Input (mmBtu/MWh)"]
+    ]
+    crosswalk = pd.read_csv(crosswalk_fn)[
+        ["CAMD_PLANT_ID", "CAMD_UNIT_ID", "EIA_PLANT_ID", "EIA_GENERATOR_ID"]
+    ]
+    cems_hr = pd.merge(
+        cems_hr,
+        crosswalk,
+        left_on=["Facility ID", "Unit ID"],
+        right_on=["CAMD_PLANT_ID", "CAMD_UNIT_ID"],
+        how="inner",
+    )
+    cems_hr["hr_source_cems"] = "cems"
+    plants = pd.merge(
+        cems_hr,
+        plants,
+        left_on=["EIA_PLANT_ID", "EIA_GENERATOR_ID"],
+        right_on=["plant_id_eia", "generator_id"],
+        how="right",
+    )
 
-    plants.rename(columns={'Heat Input (mmBtu/MWh)':'heat_rate_'}, inplace=True)
+    plants.rename(columns={"Heat Input (mmBtu/MWh)": "heat_rate_"}, inplace=True)
     plants.heat_rate_.fillna(plants.unit_heat_rate_mmbtu_per_mwh)
-    plants.unit_heat_rate_mmbtu_per_mwh = plants.pop('heat_rate_')
+    plants.unit_heat_rate_mmbtu_per_mwh = plants.pop("heat_rate_")
 
-    plants.hr_source_cems = plants.hr_source_cems.fillna('unit_heat_rate_mmbtu_per_mwh_source')
-    plants.unit_heat_rate_mmbtu_per_mwh_source = plants.pop('hr_source_cems')
+    plants.hr_source_cems = plants.hr_source_cems.fillna(
+        "unit_heat_rate_mmbtu_per_mwh_source"
+    )
+    plants.unit_heat_rate_mmbtu_per_mwh_source = plants.pop("hr_source_cems")
 
-    plants.drop(columns=['Facility ID','Unit ID','CAMD_PLANT_ID','CAMD_UNIT_ID', 'EIA_PLANT_ID', 'EIA_GENERATOR_ID'], inplace=True)
+    plants.drop(
+        columns=[
+            "Facility ID",
+            "Unit ID",
+            "CAMD_PLANT_ID",
+            "CAMD_UNIT_ID",
+            "EIA_PLANT_ID",
+            "EIA_GENERATOR_ID",
+        ],
+        inplace=True,
+    )
 
     return plants
+
 
 if __name__ == "__main__":
     if "snakemake" not in globals():
@@ -831,12 +901,20 @@ if __name__ == "__main__":
     else:
         rootpath = "."
 
-    start_date = '2019-01-01'
-    end_date = '2020-01-01'
-    eia_data_operable, heat_rates = load_pudl_data(snakemake.input.pudl, start_date, end_date)
-    eia_data_operable = merge_fc_hr_data(eia_data_operable, heat_rates, 'unit_heat_rate_mmbtu_per_mwh')
-    eia_data_operable = merge_fc_hr_data(eia_data_operable, heat_rates, 'fuel_cost_per_mwh')
-    eia_data_operable = apply_cems_heat_rates(eia_data_operable, snakemake.input.epa_crosswalk, snakemake.input.cems)
+    start_date = "2019-01-01"
+    end_date = "2020-01-01"
+    eia_data_operable, heat_rates = load_pudl_data(
+        snakemake.input.pudl, start_date, end_date
+    )
+    eia_data_operable = merge_fc_hr_data(
+        eia_data_operable, heat_rates, "unit_heat_rate_mmbtu_per_mwh"
+    )
+    eia_data_operable = merge_fc_hr_data(
+        eia_data_operable, heat_rates, "fuel_cost_per_mwh"
+    )
+    eia_data_operable = apply_cems_heat_rates(
+        eia_data_operable, snakemake.input.epa_crosswalk, snakemake.input.cems
+    )
     set_non_conus(eia_data_operable)
     set_derates(eia_data_operable)
     set_tech_fuels_primer_movers(eia_data_operable)
@@ -845,7 +923,7 @@ if __name__ == "__main__":
 
     # temp throwing out plants without
     missing_locations = plants[plants.longitude.isna() | plants.latitude.isna()]
-    print('Tossing out plants without locations:', missing_locations.shape[0])
+    print("Tossing out plants without locations:", missing_locations.shape[0])
     # plants[plants.index.isin(missing_locations.index)].to_csv('missing_gps_pudl.csv')
     plants = plants[~plants.index.isin(missing_locations.index)]
     # print(plants)

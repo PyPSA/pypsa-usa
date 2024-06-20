@@ -6,14 +6,16 @@ rule plot_network_maps:
         network=RESULTS
         + "{interconnect}/networks/elec_s_{clusters}_ec_l{ll}_{opts}_{sector}.nc",
         regions_onshore=(
-                config["custom_files"]["files_path"] + 'regions_onshore_s_{clusters}.geojson'
-                if config["custom_files"].get("activate", False)
-                else RESOURCES + "{interconnect}/regions_onshore_s_{clusters}.geojson"
+            config["custom_files"]["files_path"]
+            + "regions_onshore_s_{clusters}.geojson"
+            if config["custom_files"].get("activate", False)
+            else RESOURCES + "{interconnect}/regions_onshore_s_{clusters}.geojson"
         ),
         regions_offshore=(
-                config["custom_files"]["files_path"] + 'regions_offshore_s_{clusters}.geojson'
-                if config["custom_files"].get("activate", False)
-                else RESOURCES + "{interconnect}/regions_offshore_s_{clusters}.geojson"
+            config["custom_files"]["files_path"]
+            + "regions_offshore_s_{clusters}.geojson"
+            if config["custom_files"].get("activate", False)
+            else RESOURCES + "{interconnect}/regions_offshore_s_{clusters}.geojson"
         ),
     params:
         electricity=config["electricity"],
@@ -59,14 +61,16 @@ rule plot_statistics:
         network=RESULTS
         + "{interconnect}/networks/elec_s_{clusters}_ec_l{ll}_{opts}_{sector}.nc",
         regions_onshore=(
-                config["custom_files"]["files_path"] + 'regions_onshore_s_{clusters}.geojson'
-                if config["custom_files"].get("activate", False)
-                else RESOURCES + "{interconnect}/regions_onshore_s_{clusters}.geojson"
+            config["custom_files"]["files_path"]
+            + "regions_onshore_s_{clusters}.geojson"
+            if config["custom_files"].get("activate", False)
+            else RESOURCES + "{interconnect}/regions_onshore_s_{clusters}.geojson"
         ),
         regions_offshore=(
-                config["custom_files"]["files_path"] + 'regions_offshore_s_{clusters}.geojson'
-                if config["custom_files"].get("activate", False)
-                else RESOURCES + "{interconnect}/regions_offshore_s_{clusters}.geojson"
+            config["custom_files"]["files_path"]
+            + "regions_offshore_s_{clusters}.geojson"
+            if config["custom_files"].get("activate", False)
+            else RESOURCES + "{interconnect}/regions_offshore_s_{clusters}.geojson"
         ),
     params:
         electricity=config["electricity"],

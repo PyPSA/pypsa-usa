@@ -75,14 +75,31 @@ def get_color_palette(n: pypsa.Network) -> dict[str, str]:
     colors = (n.carriers.reset_index().set_index("nice_name")).color
 
     additional = {
-        "Battery Charge": n.carriers.loc["battery"].color,
-        "Battery Discharge": n.carriers.loc["battery"].color,
-        "battery_discharger": n.carriers.loc["battery"].color,
-        "battery_charger": n.carriers.loc["battery"].color,
-        "4hr_battery_storage_discharger": n.carriers.loc["4hr_battery_storage"].color,
-        "4hr_battery_storage_charger": n.carriers.loc["4hr_battery_storage"].color,
+        "Battery Charge": n.carriers.at["battery", "color"],
+        "Battery Discharge": n.carriers.at["battery", "color"],
+        "battery_discharger": n.carriers.at["battery", "color"],
+        "battery_charger": n.carriers.at["battery", "color"],
         "co2": "k",
     }
+    for hr in ("4", "8"):
+        try:
+            additional[f"{hr}hr_battery_storage_discharger"] = n.carriers.at[
+                f"{hr}hr_battery_storage",
+                "color",
+            ]
+            additional[f"{hr}hr_battery_storage_charger"] = n.carriers.at[
+                f"{hr}hr_battery_storage",
+                "color",
+            ]
+        except KeyError:
+            additional[f"{hr}hr_battery_storage_discharger"] = n.carriers.at[
+                "battery",
+                "color",
+            ]
+            additional[f"{hr}hr_battery_storage_charger"] = n.carriers.at[
+                "battery",
+                "color",
+            ]
 
     return pd.concat([colors, pd.Series(additional)]).to_dict()
 
@@ -899,7 +916,7 @@ def plot_generator_data_panel(
                 "oil",
                 "hydro",
                 "nuclear",
-                "load"
+                "load",
             ],
         ),
         :,
@@ -909,7 +926,12 @@ def plot_generator_data_panel(
     df_storage_units["efficiency"] = df_storage_units.efficiency_dispatch
     df_capex_expand = pd.concat([df_capex_expand, df_storage_units])
 
-    df_efficiency = n.generators.loc[~n.generators.carrier.isin(["solar", "onwind", "offwind", "offwind_floating", "hydro","load"]), :]
+    df_efficiency = n.generators.loc[
+        ~n.generators.carrier.isin(
+            ["solar", "onwind", "offwind", "offwind_floating", "hydro", "load"]
+        ),
+        :,
+    ]
 
     # Create a figure and subplots with 2 rows and 2 columns
     fig, axes = plt.subplots(3, 2, figsize=(10, 12))
@@ -1136,10 +1158,10 @@ if __name__ == "__main__":
 
         snakemake = mock_snakemake(
             "plot_statistics",
-            interconnect="western",
-            clusters=80,
+            interconnect="texas",
+            clusters=20,
             ll="v1.0",
-            opts="Ep-Co2L0.2",
+            opts="500SEG",
             sector="E",
         )
     configure_logging(snakemake)

@@ -65,7 +65,7 @@ rule build_base_network:
 rule build_bus_regions:
     params:
         aggregation_zone=config["clustering"]["cluster_network"]["aggregation_zones"],
-        focus_weights=config["focus_weights"]
+        focus_weights=config["focus_weights"],
     input:
         country_shapes=RESOURCES + "{interconnect}/country_shapes.geojson",
         state_shapes=RESOURCES + "{interconnect}/state_boundaries.geojson",
@@ -214,18 +214,40 @@ INTERCONNECT_2_STATE["eastern"].extend(["RI", "SC", "SD", "TN", "VT", "VA", "WV"
 INTERCONNECT_2_STATE["usa"] = sum(INTERCONNECT_2_STATE.values(), [])
 
 
-def electricty_study_demand(wildcards):
-    profile = config["electricity"]["demand"]["profile"]
+def demand_raw_data(wildcards):
+    end_use = wildcards.end_use
+    if end_use == "power":
+        profile = config["electricity"]["demand"]["profile"]
+    else:
+        profile = config["sector"]["demand"]["profile"][end_use]
+
     if profile == "eia":
         return DATA + "GridEmissions/EIA_DMD_2018_2024.csv"
     elif profile == "efs":
         return DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv"
+    elif profile == "eulp":
+        return [
+            DATA + f"eulp/res/{state}.csv"
+            for state in INTERCONNECT_2_STATE[wildcards.interconnect]
+        ]
+    elif profile == "cliu":
+        return [
+            DATA + "industry_load/2014_update_20170910-0116.csv",  # cliu data
+            DATA + "industry_load/epri_industrial_loads.csv",  # epri data
+            DATA + "industry_load/table3_2.xlsx",  # mecs data
+            DATA + "industry_load/fips_codes.csv",  # fips data
+        ]
     else:
         return ""
 
 
-def electricty_study_dissagregate(wildcards):
-    strategy = config["electricity"]["demand"]["disaggregation"]
+def demand_dissagregate_data(wildcards):
+    end_use = wildcards.end_use
+    if end_use == "power":
+        strategy = "pop"
+    else:
+        strategy = config["sector"]["demand"]["disaggregation"][end_use]
+
     if strategy == "pop":
         return ""
     elif strategy == "cliu":
@@ -234,68 +256,18 @@ def electricty_study_dissagregate(wildcards):
         return ""
 
 
-def sector_study_demand(wildcards):
+def demand_scaling_data(wildcards):
+
     end_use = wildcards.end_use
-    profile = config["sector"]["demand"]["profile"][end_use]
-    if end_use == "residential":
-        if profile == "eulp":
-            return [
-                DATA + f"eulp/res/{state}.csv"
-                for state in INTERCONNECT_2_STATE[wildcards.interconnect]
-            ]
-        elif profile == "efs":
-            return DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv"
-        else:
-            return ""
-    elif end_use == "commercial":
-        if profile == "eulp":
-            return [
-                DATA + f"eulp/com/{state}.csv"
-                for state in INTERCONNECT_2_STATE[wildcards.interconnect]
-            ]
-        elif profile == "efs":
-            return DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv"
-        else:
-            return ""
-    elif end_use == "industry":
-        if profile == "efs":
-            return DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv"
-        elif profile == "cliu":
-            return [
-                DATA + "industry_load/2014_update_20170910-0116.csv",  # cliu data
-                DATA + "industry_load/epri_industrial_loads.csv",  # epri data
-                DATA + "industry_load/table3_2.xlsx",  # mecs data
-                DATA + "industry_load/fips_codes.csv",  # fips data
-            ]
-        else:
-            return ""
-    elif end_use == "transport":
-        if profile == "efs":
-            return DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv"
-        else:
-            return ""
+    if end_use == "power":
+        profile = config["electricity"]["demand"]["profile"]
     else:
-        return ""
+        profile = config["sector"]["demand"]["profile"][end_use]
 
-
-def sector_study_dissagregate(wildcards):
-    end_use = wildcards.end_use
-    strategy = config["sector"]["demand"]["disaggregation"][end_use]
-    if end_use == "residential":
-        if strategy == "pop":
-            return ""
-    elif end_use == "commercial":
-        if strategy == "pop":
-            return ""
-    elif end_use == "industry":
-        if strategy == "pop":
-            return ""
-        elif strategy == "cliu":
-            return DATA + "industry_load/2014_update_20170910-0116.csv"
-        else:
-            return ""
-    elif end_use == "transport":
-        return ""
+    if profile == "efs":
+        return DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv"
+    elif profile == "eia":
+        return DATA + "pudl/pudl.sqlite"
     else:
         return ""
 
@@ -309,10 +281,8 @@ rule build_electrical_demand:
         profile_year=pd.to_datetime(config["snapshots"]["start"]).year,
     input:
         network=RESOURCES + "{interconnect}/elec_base_network.nc",
-        demand_files=electricty_study_demand,
-        eia=expand(DATA + "GridEmissions/{file}", file=DATAFILES_GE),
-        efs=DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv",
-        county_industrial_energy=DATA + "industry_load/2014_update_20170910-0116.csv",
+        demand_files=demand_raw_data,
+        demand_scaling_file=demand_scaling_data,
     output:
         elec_demand=RESOURCES + "{interconnect}/{end_use}_electricity_demand.csv",
     log:
@@ -336,8 +306,9 @@ rule build_sector_demand:
         eia_api=config["api"]["eia"],
     input:
         network=RESOURCES + "{interconnect}/elec_base_network.nc",
-        demand_files=sector_study_demand,
-        county_industrial_energy=DATA + "industry_load/2014_update_20170910-0116.csv",
+        demand_files=demand_raw_data,
+        dissagregate_files=demand_dissagregate_data,
+        demand_scaling_file=demand_scaling_data,
     output:
         elec_demand=RESOURCES + "{interconnect}/{end_use}_electricity_demand.csv",
         heat_demand=RESOURCES + "{interconnect}/{end_use}_heating_demand.csv",
@@ -589,14 +560,16 @@ rule prepare_network:
         autarky=config_provider("electricity", "autarky"),
     input:
         network=(
-                    config["custom_files"]["files_path"] + config["custom_files"]["network_name"]
-                    if config["custom_files"].get("activate", False)
-                    else RESOURCES + "{interconnect}/elec_s_{clusters}_ec.nc"
+            config["custom_files"]["files_path"]
+            + config["custom_files"]["network_name"]
+            if config["custom_files"].get("activate", False)
+            else RESOURCES + "{interconnect}/elec_s_{clusters}_ec.nc"
         ),
         tech_costs=(
-                    config["custom_files"]["files_path"] + 'costs_2030.csv'
-                    if config["custom_files"].get("activate", False)
-                    else RESOURCES + f"costs/costs_{config['scenario']['planning_horizons'][0]}.csv"
+            config["custom_files"]["files_path"] + "costs_2030.csv"
+            if config["custom_files"].get("activate", False)
+            else RESOURCES
+            + f"costs/costs_{config['scenario']['planning_horizons'][0]}.csv"
         ),
     output:
         RESOURCES + "{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}.nc",

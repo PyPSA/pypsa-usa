@@ -233,6 +233,7 @@ def add_missing_carriers(n, carriers):
     if len(missing_carriers) > 0:
         n.madd("Carrier", missing_carriers)
 
+
 def clean_locational_multiplier(df: pd.DataFrame):
     """
     Updates format of locational multiplier data.
@@ -408,7 +409,9 @@ def attach_renewable_capacities_to_atlite(
 
         generators_tech = n.generators[n.generators.carrier == tech].copy()
         generators_tech["sub_assignment"] = generators_tech.bus.map(n.buses.sub_id)
-        plants_filt.loc[: ,"sub_assignment"] = plants_filt.bus_assignment.map(n.buses.sub_id)
+        plants_filt.loc[:, "sub_assignment"] = plants_filt.bus_assignment.map(
+            n.buses.sub_id
+        )
         caps_per_bus = (
             plants_filt[["sub_assignment", "p_nom"]]
             .groupby("sub_assignment")
@@ -473,10 +476,11 @@ def attach_conventional_generators(
 
     plants["efficiency"] = plants.efficiency.fillna(plants.efficiency_r)
 
-    plants.loc[:,'p_min_pu'] = (plants.minimum_load_mw / plants.p_nom)
-    plants.loc[:, 'p_min_pu'] = plants.p_min_pu.clip(
+    plants.loc[:, "p_min_pu"] = plants.minimum_load_mw / plants.p_nom
+    plants.loc[:, "p_min_pu"] = plants.p_min_pu.clip(
         upper=np.minimum(plants.summer_derate, plants.winter_derate),
-        lower=0,).fillna(0)
+        lower=0,
+    ).fillna(0)
 
     committable_fields = ["start_up_cost", "min_down_time", "min_up_time", "p_min_pu"]
     for attr in committable_fields:
@@ -805,10 +809,10 @@ def attach_battery_storage(
     plants_filt.index = (
         plants_filt.index.astype(str) + "_" + plants_filt.generator_id.astype(str)
     )
-    plants_filt.loc[:, 'energy_storage_capacity_mwh'] = (
+    plants_filt.loc[:, "energy_storage_capacity_mwh"] = (
         plants_filt.energy_storage_capacity_mwh.astype(float)
     )
-    plants_filt.dropna(subset=["energy_storage_capacity_mwh"], inplace= True)
+    plants_filt.dropna(subset=["energy_storage_capacity_mwh"], inplace=True)
 
     logger.info(
         f"Added Batteries as Storage Units to the network.\n{np.round(plants_filt.p_nom.sum()/1000,2)} GW Power Capacity \n{np.round(plants_filt.energy_storage_capacity_mwh.sum()/1000, 2)} GWh Energy Capacity",
@@ -831,13 +835,14 @@ def attach_battery_storage(
         cyclic_state_of_charge=True,
     )
 
+
 def load_powerplants(
     plants_fn,
     investment_periods: list[int],
     interconnect: str = None,
 ) -> pd.DataFrame:
     plants = pd.read_csv(
-        plants_fn
+        plants_fn,
     )
     # Filter out non-conus plants and plants that are not built by first investment period.
     plants.set_index("generator_name", inplace=True)
@@ -895,7 +900,9 @@ def apply_seasonal_capacity_derates(
     ].astype(float)
 
     p_max_pu = broadcast_investment_horizons_index(n, p_max_pu)
-    n.generators_t.p_max_pu = pd.concat([n.generators_t.p_max_pu, p_max_pu], axis=1).round(3)
+    n.generators_t.p_max_pu = pd.concat(
+        [n.generators_t.p_max_pu, p_max_pu], axis=1
+    ).round(3)
 
 
 def apply_must_run_ratings(
@@ -904,17 +911,26 @@ def apply_must_run_ratings(
     conventional_carriers: list,
     sns: pd.DatetimeIndex,
 ):
-    """ Applies Minimum Loading Capacities only to WECC ADS designated Plants"""
+    """
+    Applies Minimum Loading Capacities only to WECC ADS designated Plants.
+    """
     conv_plants = plants.query("carrier in @conventional_carriers").copy()
     conv_plants.index = "C" + conv_plants.index
 
-    conv_plants.loc[:, "ads_mustrun"] = conv_plants.ads_mustrun.infer_objects(copy=False).fillna(False)
-    conv_plants.loc[:,'minimum_load_pu'] = (conv_plants.minimum_load_mw / conv_plants.p_nom)
-    conv_plants.loc[:, 'minimum_load_pu'] = conv_plants.minimum_load_pu.clip(
+    conv_plants.loc[:, "ads_mustrun"] = conv_plants.ads_mustrun.infer_objects(
+        copy=False
+    ).fillna(False)
+    conv_plants.loc[:, "minimum_load_pu"] = (
+        conv_plants.minimum_load_mw / conv_plants.p_nom
+    )
+    conv_plants.loc[:, "minimum_load_pu"] = conv_plants.minimum_load_pu.clip(
         upper=np.minimum(conv_plants.summer_derate, conv_plants.winter_derate),
-        lower=0,).fillna(0)
+        lower=0,
+    ).fillna(0)
     must_run = conv_plants.query("ads_mustrun == True")
-    n.generators.loc[must_run.index, "p_min_pu"] = must_run.minimum_load_pu.round(3) * 0.95
+    n.generators.loc[must_run.index, "p_min_pu"] = (
+        must_run.minimum_load_pu.round(3) * 0.95
+    )
 
 
 def clean_bus_data(n: pypsa.Network):
@@ -996,11 +1012,12 @@ def attach_breakthrough_renewable_plants(
         )
     return n
 
+
 def apply_pudl_fuel_costs(
-        n,
-        plants,
-        costs,
-    ):
+    n,
+    plants,
+    costs,
+):
 
     # Apply PuDL Fuel Costs for plants where listed
     pudl_fuel_costs = pd.read_csv(snakemake.input["pudl_fuel_costs"], index_col=0)
@@ -1029,9 +1046,12 @@ def apply_pudl_fuel_costs(
     ]
 
     # assign new marginal costs
-    n.generators_t["marginal_cost"] = n.generators_t["marginal_cost"].join(pudl_fuel_costs)
+    n.generators_t["marginal_cost"] = n.generators_t["marginal_cost"].join(
+        pudl_fuel_costs
+    )
     # Why are there so few of the pudl fuel costs columns?
     return n
+
 
 def main(snakemake):
     params = snakemake.params
@@ -1071,7 +1091,7 @@ def main(snakemake):
     plants = load_powerplants(
         snakemake.input["powerplants"],
         n.investment_periods,
-        interconnect= interconnection,
+        interconnect=interconnection,
     )
 
     plants = match_plant_to_bus(n, plants)
@@ -1193,7 +1213,6 @@ def main(snakemake):
                 logger.info(f"Applied dynamic price data for {carrier} from {datafile}")
 
         n = apply_pudl_fuel_costs(n, plants, costs)
-
 
     # fix p_nom_min for extendable generators
     # The "- 0.001" is just to avoid numerical issues
