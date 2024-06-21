@@ -920,7 +920,7 @@ def extra_functionality(n, snapshots):
     config = n.config
     if "RPS" in opts and n.generators.p_nom_extendable.any():
         add_RPS_constraints(n, config)
-    if "RCo2L" in opts and n.generators.p_nom_extendable.any():
+    if "REM" in opts and n.generators.p_nom_extendable.any():
         add_regional_co2limit(n, snapshots, config)
     if "BAU" in opts and n.generators.p_nom_extendable.any():
         add_BAU_constraints(n, config)
@@ -1002,7 +1002,7 @@ if __name__ == "__main__":
         snakemake = mock_snakemake(
             "solve_network",
             simpl="",
-            opts="500SEG",
+            opts="REM-RPS-SAFER",
             clusters="20",
             ll="v1.0",
             sector_opts="",

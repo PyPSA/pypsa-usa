@@ -2265,7 +2265,8 @@ if __name__ == "__main__":
         sns = n.snapshots.get_level_values(1)
 
     elif demand_profile == "eia":
-        assert profile_year in range(2018, 2023)
+        assert profile_year in range(2018, 2024)
+
         reader = ReadEia(demand_files)
         sns = n.snapshots.get_level_values(1).map(
             lambda x: x.replace(year=profile_year),

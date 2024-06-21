@@ -65,6 +65,10 @@ FIGURES_VALIDATE = [
     "val_map_load_shedding.pdf",
     "val_generator_stack.pdf",
     "val_map_line_loading.pdf",
+    "val_mix_state_generation.pdf",
+    "val_cap_state_generation.pdf",
+    "val_fuel_costs.pdf",
+    # "val_lmp_comparison.pdf",
 ]
 
 

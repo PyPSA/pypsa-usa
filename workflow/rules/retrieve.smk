@@ -53,19 +53,22 @@ rule retrieve_zenodo_databundles:
         "../scripts/retrieve_databundles.py"
 
 
-def define_nrel_databundles():
+def efs_databundle(wildcards):
     return {
-        "EFS": "https://data.nrel.gov/system/files/126/EFSLoadProfile_Reference_Moderate.zip"
+        "EFS": f"https://data.nrel.gov/system/files/126/EFSLoadProfile_{wildcards.efs_case}_{wildcards.efs_speed}.zip"
     }
 
 
 rule retrieve_nrel_efs_data:
+    wildcard_constraints:
+        efs_case="Reference|Medium|High",
+        efs_speed="Slow|Moderate|Rapid",
     params:
-        define_nrel_databundles(),
+        efs_databundle,
     output:
-        DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv",
+        DATA + "nrel_efs/EFSLoadProfile_{efs_case}_{efs_speed}.csv",
     log:
-        "logs/retrieve/retrieve_databundles.log",
+        "logs/retrieve/retrieve_efs_{efs_case}_{efs_speed}.log",
     conda:
         "../envs/environment.yaml"
     script:
@@ -104,9 +107,7 @@ rule retrieve_sector_databundle:
 
 rule retrieve_WECC_forecast_data:
     output:
-        ads_2032=directory(
-            DATA + "WECC_ADS/downloads/2032/Public Data/Hourly Profiles in CSV format"
-        ),
+        ads_2032=directory(DATA + "WECC_ADS/downloads/2032/Public Data"),
         ads_2030=directory(
             DATA
             + "WECC_ADS/downloads/2030/WECC 2030 ADS PCM 2020-12-16 (V1.5) Public Data/CSV Shape Files"
@@ -211,20 +212,23 @@ rule retrieve_ship_raster:
         move(input[0], output[0])
 
 
-rule retrieve_cutout:
-    input:
-        HTTP.remote(
-            "zenodo.org/records/10067222/files/{interconnect}_{cutout}.nc", static=True
-        ),
-    output:
-        "cutouts/" + CDIR + "{interconnect}_{cutout}.nc",
-    log:
-        "logs/" + CDIR + "retrieve_cutout_{interconnect}_{cutout}.log",
-    resources:
-        mem_mb=5000,
-    retries: 2
-    run:
-        move(input[0], output[0])
+if not config["enable"].get("build_cutout", False):
+
+    rule retrieve_cutout:
+        input:
+            HTTP.remote(
+                "zenodo.org/records/10067222/files/{interconnect}_{cutout}.nc",
+                static=True,
+            ),
+        output:
+            "cutouts/" + CDIR + "{interconnect}_{cutout}.nc",
+        log:
+            "logs/" + CDIR + "retrieve_cutout_{interconnect}_{cutout}.log",
+        resources:
+            mem_mb=5000,
+        retries: 2
+        run:
+            move(input[0], output[0])
 
 
 rule retrieve_cost_data_eur:
