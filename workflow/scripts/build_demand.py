@@ -2381,10 +2381,11 @@ if __name__ == "__main__":
         )
     # transport demand is by subsector
     elif end_use == "transport":
+        file_mapper = {"electricity": "elec", "lpg": "lpg"}
         for fuel in ("electricity", "lpg"):
             for vehicle in ("light_duty", "med_duty", "heavy_duty", "bus"):
                 formatted_demand[fuel][vehicle].round(4).to_csv(
-                    snakemake.output[f"{fuel}_{vehicle}"],
+                    snakemake.output[f"{file_mapper[fuel]}_{vehicle}"],
                     index=True,
                 )
     else:

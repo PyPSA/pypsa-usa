@@ -301,7 +301,7 @@ rule build_electrical_demand:
         demand_files=demand_raw_data,
         demand_scaling_file=demand_scaling_data,
     output:
-        elec_demand=RESOURCES + "{interconnect}/{end_use}_electricity_demand.csv",
+        elec_demand=RESOURCES + "{interconnect}/{end_use}_electricity.csv",
     log:
         LOGS + "{interconnect}/{end_use}_build_demand.log",
     benchmark:
@@ -327,10 +327,10 @@ rule build_sector_demand:
         dissagregate_files=demand_dissagregate_data,
         demand_scaling_file=demand_scaling_data,
     output:
-        elec_demand=RESOURCES + "{interconnect}/{end_use}_electricity_demand.csv",
-        heat_demand=RESOURCES + "{interconnect}/{end_use}_heating_demand.csv",
-        cool_demand=RESOURCES + "{interconnect}/{end_use}_cooling_demand.csv",
-        lpg_demand=RESOURCES + "{interconnect}/{end_use}_lpg_demand.csv",
+        elec_demand=RESOURCES + "{interconnect}/{end_use}_electricity.csv",
+        heat_demand=RESOURCES + "{interconnect}/{end_use}_heating.csv",
+        cool_demand=RESOURCES + "{interconnect}/{end_use}_cooling.csv",
+        lpg_demand=RESOURCES + "{interconnect}/{end_use}_lpg.csv",
     log:
         LOGS + "{interconnect}/{end_use}_build_demand.log",
     benchmark:
@@ -356,18 +356,16 @@ rule build_transport_demand:
         dissagregate_files=demand_dissagregate_data,
         demand_scaling_file=demand_scaling_data,
     output:
-        electricity_light_duty=RESOURCES
-        + "{interconnect}/{end_use}_light_duty_electricity_demand.csv",
-        electricity_med_duty=RESOURCES
-        + "{interconnect}/{end_use}_med_duty_electricity_demand.csv",
-        electricity_heavy_duty=RESOURCES
-        + "{interconnect}/{end_use}_heavy_duty_electricity_demand.csv",
-        electricity_bus=RESOURCES
-        + "{interconnect}/{end_use}_bus_electricity_demand.csv",
-        lpg_light_duty=RESOURCES + "{interconnect}/{end_use}_light_duty_lpg_demand.csv",
-        lpg_med_duty=RESOURCES + "{interconnect}/{end_use}_med_duty_lpg_demand.csv",
-        lpg_heavy_duty=RESOURCES + "{interconnect}/{end_use}_heavy_duty_lpg_demand.csv",
-        lpg_bus=RESOURCES + "{interconnect}/{end_use}_bus_lpg_demand.csv",
+        elec_light_duty=RESOURCES
+        + "{interconnect}/{end_use}_light-duty_electricity.csv",
+        elec_med_duty=RESOURCES + "{interconnect}/{end_use}_med-duty_electricity.csv",
+        elec_heavy_duty=RESOURCES
+        + "{interconnect}/{end_use}_heavy-duty_electricity.csv",
+        elec_bus=RESOURCES + "{interconnect}/{end_use}_bus_electricity.csv",
+        lpg_light_duty=RESOURCES + "{interconnect}/{end_use}_light-duty_lpg.csv",
+        lpg_med_duty=RESOURCES + "{interconnect}/{end_use}_med-duty_lpg.csv",
+        lpg_heavy_duty=RESOURCES + "{interconnect}/{end_use}_heavy-duty_lpg.csv",
+        lpg_bus=RESOURCES + "{interconnect}/{end_use}_bus_lpg.csv",
     log:
         LOGS + "{interconnect}/{end_use}_build_demand.log",
     benchmark:

@@ -62,6 +62,13 @@ if __name__ == "__main__":
         "cooling": "cool",
     }
 
+    vehicle_mapper = {
+        "bus": "bus",
+        "heavy-duty": "hvy",
+        "light-duty": "lgt",
+        "medium-duty": "med",
+    }
+
     if sectors == "E" or sectors == "":  # electricity only
 
         assert len(demand_files) == 1
@@ -78,11 +85,26 @@ if __name__ == "__main__":
         for demand_file in demand_files:
 
             parsed_name = Path(demand_file).name.split("_")
-            sector = parsed_name[0]
-            end_use = parsed_name[1]
 
-            carrier = f"{sector_mapper[sector]}-{carrier_mapper[end_use]}"
-            suffix = f"-{carrier}"
+            if len(parsed_name) == 2:
+
+                sector = parsed_name[0]
+                end_use = parsed_name[1]
+
+                carrier = f"{sector_mapper[sector]}-{carrier_mapper[end_use]}"
+                suffix = f"-{carrier}"
+
+            elif len(parsed_name) == 3:
+
+                sector = parsed_name[0]
+                subsector = parsed_name[1]
+                end_use = parsed_name[2]
+
+                carrier = f"{sector_mapper[sector]}-{carrier_mapper[end_use]}-{vehicle_mapper[subsector]}"
+                suffix = f"-{carrier}"
+
+            else:
+                raise NotImplementedError
 
             df = pd.read_csv(demand_file, index_col=0)
             attach_demand(n, df, carrier, suffix)
