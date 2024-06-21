@@ -222,8 +222,16 @@ def demand_raw_data(wildcards):
     end_use = wildcards.end_use
     if end_use == "power":
         profile = config["electricity"]["demand"]["profile"]
+    elif end_use == "res":
+        profile = "eulp"
+    elif end_use == "com":
+        profile = "eulp"
+    elif end_use == "transport":
+        profile = "efs_aeo"
+    elif end_use == "industry":
+        profile = "cliu"
     else:
-        profile = config["sector"]["demand"]["profile"][end_use]
+        profile = ""
 
     if profile == "eia":
         return DATA + "GridEmissions/EIA_DMD_2018_2024.csv"
@@ -241,16 +249,21 @@ def demand_raw_data(wildcards):
             DATA + "industry_load/table3_2.xlsx",  # mecs data
             DATA + "industry_load/fips_codes.csv",  # fips data
         ]
+    elif profile == "efs_aeo":
+        return [
+            DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv",
+            DATA + "transportation/transport_ratios.csv",
+        ]
     else:
         return ""
 
 
 def demand_dissagregate_data(wildcards):
     end_use = wildcards.end_use
-    if end_use == "power":
-        strategy = "pop"
+    if end_use == "industry":
+        strategy = "cliu"
     else:
-        strategy = config["sector"]["demand"]["disaggregation"][end_use]
+        strategy = "pop"
 
     if strategy == "pop":
         return ""
@@ -266,7 +279,7 @@ def demand_scaling_data(wildcards):
     if end_use == "power":
         profile = config["electricity"]["demand"]["profile"]
     else:
-        profile = config["sector"]["demand"]["profile"][end_use]
+        profile = "eia"
 
     if profile == "efs":
         return DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv"
@@ -302,7 +315,7 @@ rule build_electrical_demand:
 
 rule build_sector_demand:
     wildcard_constraints:
-        end_use="residential|commercial|industry|transport",
+        end_use="residential|commercial|industry",
     params:
         planning_horizons=config["scenario"]["planning_horizons"],
         profile_year=pd.to_datetime(config["snapshots"]["start"]).year,
@@ -317,6 +330,44 @@ rule build_sector_demand:
         elec_demand=RESOURCES + "{interconnect}/{end_use}_electricity_demand.csv",
         heat_demand=RESOURCES + "{interconnect}/{end_use}_heating_demand.csv",
         cool_demand=RESOURCES + "{interconnect}/{end_use}_cooling_demand.csv",
+        lpg_demand=RESOURCES + "{interconnect}/{end_use}_lpg_demand.csv",
+    log:
+        LOGS + "{interconnect}/{end_use}_build_demand.log",
+    benchmark:
+        BENCHMARKS + "{interconnect}/{end_use}_build_demand"
+    threads: 2
+    resources:
+        mem_mb=interconnect_mem,
+    script:
+        "../scripts/build_demand.py"
+
+
+rule build_transport_demand:
+    wildcard_constraints:
+        end_use="transport",
+    params:
+        planning_horizons=config["scenario"]["planning_horizons"],
+        profile_year=pd.to_datetime(config["snapshots"]["start"]).year,
+        demand_params=config["sector"]["demand"],
+        eia_api=config["api"]["eia"],
+    input:
+        network=RESOURCES + "{interconnect}/elec_base_network.nc",
+        demand_files=demand_raw_data,
+        dissagregate_files=demand_dissagregate_data,
+        demand_scaling_file=demand_scaling_data,
+    output:
+        electricity_light_duty=RESOURCES
+        + "{interconnect}/{end_use}_light_duty_electricity_demand.csv",
+        electricity_med_duty=RESOURCES
+        + "{interconnect}/{end_use}_med_duty_electricity_demand.csv",
+        electricity_heavy_duty=RESOURCES
+        + "{interconnect}/{end_use}_heavy_duty_electricity_demand.csv",
+        electricity_bus=RESOURCES
+        + "{interconnect}/{end_use}_bus_electricity_demand.csv",
+        lpg_light_duty=RESOURCES + "{interconnect}/{end_use}_light_duty_lpg_demand.csv",
+        lpg_med_duty=RESOURCES + "{interconnect}/{end_use}_med_duty_lpg_demand.csv",
+        lpg_heavy_duty=RESOURCES + "{interconnect}/{end_use}_heavy_duty_lpg_demand.csv",
+        lpg_bus=RESOURCES + "{interconnect}/{end_use}_bus_lpg_demand.csv",
     log:
         LOGS + "{interconnect}/{end_use}_build_demand.log",
     benchmark:

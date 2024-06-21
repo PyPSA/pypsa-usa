@@ -142,6 +142,43 @@ class Context:
 
         return data
 
+    def prepare_demand_by_subsector(
+        self,
+        sector: str,
+        fuels: str | list[str],
+        **kwargs,
+    ) -> dict[str, dict[str, pd.DataFrame]]:
+        """
+        Returns demand by end-use energy carrier and subsector.
+
+        For example:
+        > result = context.prepare_demand_by_subsector("transport", ["electricity", "lpg"])
+        > result["electricity"]["light-duty"]
+        > result["lpg"]["heavy-duty"]
+        """
+
+        if isinstance(fuels, str):
+            fuels = [fuels]
+
+        demand = self._read()
+        demand_sector = demand[demand.index.get_level_values("sector") == sector]
+        subsectors = demand_sector.index.get_level_values("subsector").unique()
+
+        data = {}
+        for fuel in fuels:
+            data[fuel] = {}
+            for subsector in subsectors:
+                data[fuel][subsector] = self._write(
+                    demand,
+                    self._read_strategy.zone,
+                    sector=sector,
+                    subsector=subsector,
+                    fuel=fuel,
+                    **kwargs,
+                )
+
+        return data
+
 
 ###
 # READ STRATEGIES
@@ -1048,8 +1085,6 @@ class ReadTransportVmt(ReadStrategy):
         EIA API to extract national level VMT data
     - efs_path: str
         path to efs file to extract load profiles at a state level
-    - efs_path: str
-        path to efs file to extract load profiles at a state level
     """
 
     # TODO: extract this out directly from EFS
@@ -1094,13 +1129,13 @@ class ReadTransportVmt(ReadStrategy):
             Maps PyPSA type to EFS type.
             """
             if s.startswith("light_duty"):
-                return "light-duty vehicles"
+                return "light_duty"
             elif s.startswith("med_duty"):
-                return "medium-duty trucks"
+                return "med_duty"
             elif s.startswith("heavy_duty"):
-                return "heavy-duty trucks"
+                return "heavy_duty"
             elif s.startswith("buses"):
-                return "other"
+                return "bus"
             else:
                 return s
 
@@ -1126,9 +1161,25 @@ class ReadTransportVmt(ReadStrategy):
         Extracts profile data.
 
         For each hour, vehicle, and state, the sum of these values over
-        the year will equal ONE THOUSAND!! Its scaled from 1 to 1000
+        the year will equal **ONE THOUSAND** Its scaled from 1 to 1000
         just to avoid numerical issues.
         """
+
+        def assign_vehicle_type(s: str) -> str:
+            """
+            Maps efs type to pypsa type.
+            """
+            if s.startswith("light-duty vehicles"):
+                return "light_duty"
+            elif s.startswith("medium-duty trucks"):
+                return "med_duty"
+            elif s.startswith("heavy-duty trucks"):
+                return "heavy_duty"
+            elif s.startswith("other"):
+                return "bus"
+            else:
+                return s
+
         efs = ReadEfs(self.efs_path).read_demand()
         transport = efs[efs.index.get_level_values("sector") == "transport"].droplevel(
             ["sector", "fuel"],
@@ -1143,6 +1194,14 @@ class ReadTransportVmt(ReadStrategy):
                 ]
                 dfs.append(self._get_yearly_energy_efs(df))
         yearly_demand = pd.concat(dfs).reindex_like(transport)
+
+        # rename subsector names
+        index_order = transport.index.names
+        transport = transport.reset_index(level="subsector")
+        transport["subsector"] = transport.subsector.map(assign_vehicle_type)
+        transport = transport.set_index([transport.index, "subsector"]).reorder_levels(
+            index_order,
+        )
 
         return transport.div(yearly_demand).fillna(0).mul(1000)
 
@@ -1165,16 +1224,16 @@ class ReadTransportVmt(ReadStrategy):
 
         def assign_vehicle_type(s: str) -> str:
             """
-            Maps EIA type to EFS type.
+            Maps EIA type to pypsa type.
             """
             if s.startswith("Light-Duty"):
-                return "light-duty vehicles"
+                return "light_duty"
             elif s.startswith("Commercial Light"):
-                return "medium-duty trucks"
+                return "med_duty"
             elif s.startswith("Freight Trucks"):
-                return "heavy-duty trucks"
+                return "heavy_duty"
             elif s.startswith("Bus"):
-                return "other"
+                return "bus"
             else:
                 return s
 
@@ -1718,14 +1777,6 @@ class DemandFormatter:
         Public method to format demand ready to be ingested into the model.
         """
 
-        assert sector in (
-            "power",
-            "residential",
-            "commercial",
-            "industrial",
-            "transportation",
-        )
-
         if self.need_scaling(df):
             assert isinstance(self.scaler, DemandScaler)
 
@@ -1742,7 +1793,7 @@ class DemandFormatter:
             if not formatted_demand.empty:
                 demand_per_period.append(formatted_demand)
             else:
-                nearest_year = max([x for x in demand_periods if x < investment_year])
+                nearest_year = max([x for x in demand_periods if x <= investment_year])
                 formatted_demand = df[df.index.year == nearest_year]
                 demand_per_period.append(
                     self.scaler.scale(
@@ -1774,6 +1825,10 @@ class DemandFormatter:
         elif self.scaling_method == "efs":
             assert self.filepath.endswith(".csv"), "Must provide EFS.csv data"
             return EfsElectricityScalar(self.filepath)
+        elif self.scaling_method == "aeo_vmt":
+            assert self.api, "Must provide eia api key"
+            return AeoVmtScaler(self.api)
+
         else:
             raise NotImplementedError
 
@@ -1976,6 +2031,82 @@ class AeoEnergyScaler(DemandScaler):
         return df
 
 
+class AeoVmtScaler(DemandScaler):
+
+    def __init__(self, api: str, scenario: str = "reference"):
+        self.api = api
+        self.scenario = scenario
+        self.region = "united_states"
+        super().__init__()
+
+    def get_historical_value(self, year: int, sector: str) -> float:
+        """
+        Returns single year value at a time.
+        """
+        vmt = TransportationDemand(vehicle=sector, year=year, api=self.api).get_data()
+        vmt.index = vmt.index.year
+        return vmt.value.mul(1000000).sum()  # billion VMT -> thousand VMT
+
+    def get_future_values(
+        self,
+        year: int,
+        sector: str,
+    ) -> pd.DataFrame:
+        """
+        Returns all values from 2024 onwards.
+        """
+        vmt = TransportationDemand(
+            vehicle=sector,
+            year=year,
+            api=self.api,
+            scenario=self.scenario,
+        ).get_data()
+        vmt.index = vmt.index.year
+        return vmt
+
+    def get_projections(self) -> pd.DataFrame:
+        """
+        Get sector yearly END-USE ENERGY growth rates from AEO at a NATIONAL
+        level.
+
+        |      | light_duty | med_duty  | heavy_duty  | bus  | units |
+        |----- |------------|-----------|-------------|------|-------|
+        | 2018 |     ###    |    ###    |     ###     | ###  |  ###  |
+        | 2019 |     ###    |    ###    |     ###     | ###  |  ###  |
+        | 2020 |     ###    |    ###    |     ###     | ###  |  ###  |
+        | ...  |            |           |             |      |       |
+        | 2049 |     ###    |    ###    |     ###     | ###  |  ###  |
+        | 2050 |     ###    |    ###    |     ###     | ###  |  ###  |
+        """
+
+        years = range(2017, 2051)
+
+        vehicles = ("light_duty", "med_duty", "heavy_duty", "bus")
+
+        df = pd.DataFrame(
+            columns=["light_duty", "med_duty", "heavy_duty", "bus"],
+            index=years,
+        )
+
+        for year in sorted(years):
+            if year < 2024:
+                for vehicle in vehicles:
+                    df.at[year, vehicle] = self.get_historical_value(
+                        year,
+                        vehicle,
+                    )
+
+        for vehicle in vehicles:
+            aeo = self.get_future_values(max(years), vehicle)
+            for year in years:
+                if year < 2024:
+                    continue
+                df.at[year, vehicle] = aeo.at[year, "value"]
+
+        df["units"] = "thousand VMT"
+        return df
+
+
 class EfsElectricityScalar(DemandScaler):
 
     def __init__(self, filepath: str):
@@ -2031,32 +2162,17 @@ class EfsElectricityScalar(DemandScaler):
 
 
 ###
-# main entry point
+# helpers
 ###
 
-if __name__ == "__main__":
-    if "snakemake" not in globals():
-        from _helpers import mock_snakemake
 
-        snakemake = mock_snakemake(
-            "build_electrical_demand",
-            interconnect="texas",
-            end_use="power",
-        )
-        # snakemake = mock_snakemake(
-        #     "build_sector_demand",
-        #     interconnect="texas",
-        #     end_use="transport",
-        # )
-    configure_logging(snakemake)
-
-    n = pypsa.Network(snakemake.input.network)
-
-    # extract user demand configuration parameters
-
-    demand_params = snakemake.params.demand_params
-    end_use = snakemake.wildcards.end_use
-    eia_api = snakemake.params.eia_api
+def get_demand_params(
+    end_use: str,
+    demand_params: Optional[dict[str, str]] = None,
+) -> tuple:
+    """
+    Gets hard coded demand options.
+    """
 
     if end_use == "power":  # electricity only study
         demand_profile = demand_params["profile"]
@@ -2069,13 +2185,63 @@ if __name__ == "__main__":
             logger.warning(
                 f"No scaling method available for {demand_profile} profile. Setting to 'aeo_electricity'",
             )
-    else:
-        demand_profile = demand_params["profile"][end_use]
-        demand_disaggregation = demand_params["disaggregation"][end_use]
+    elif end_use == "res":
+        demand_profile = "eulp"
+        demand_disaggregation = "pop"
         scaling_method = "aeo_energy"
+    elif end_use == "com":
+        demand_profile = "eulp"
+        demand_disaggregation = "pop"
+        scaling_method = "aeo_energy"
+    elif end_use == "industry":
+        demand_profile = "cliu"
+        demand_disaggregation = "cliu"
+        scaling_method = "aeo_energy"
+    elif end_use == "transport":
+        demand_profile = "efs_aeo"
+        demand_disaggregation = "pop"
+        scaling_method = "aeo_vmt"
+    else:
+        raise NotImplementedError
+
+    return demand_profile, demand_disaggregation, scaling_method
+
+
+###
+# main entry point
+###
+
+if __name__ == "__main__":
+    if "snakemake" not in globals():
+        from _helpers import mock_snakemake
+
+        # snakemake = mock_snakemake(
+        #     "build_electrical_demand",
+        #     interconnect="texas",
+        #     end_use="power",
+        # )
+        snakemake = mock_snakemake(
+            "build_transport_demand",
+            interconnect="texas",
+            end_use="transport",
+        )
+    configure_logging(snakemake)
+
+    n = pypsa.Network(snakemake.input.network)
+
+    # extract user demand configuration parameters
+
+    demand_params = snakemake.params.demand_params
+    end_use = snakemake.wildcards.end_use
+    eia_api = snakemake.params.eia_api
 
     planning_horizons = n.investment_periods.to_list()
     profile_year = snakemake.params.profile_year
+
+    demand_profile, demand_disaggregation, scaling_method = get_demand_params(
+        end_use,
+        demand_params,
+    )
 
     # set reading and writitng strategies
 
@@ -2117,14 +2283,12 @@ if __name__ == "__main__":
             fips_filepath=fips_file,
         )
     elif demand_profile == "efs_aeo":
-        vmt_ratios_file = demand_files[0]
         efs_file = demand_files[0]
-        policy_file = demand_files[0]
+        vmt_ratios_file = demand_files[1]
         sns = n.snapshots.get_level_values(1)
         reader = ReadTransportVmt(
             vmt_ratios_file,
             efs_path=efs_file,
-            policy_path=policy_file,
             api=eia_api,
         )
 
@@ -2147,6 +2311,13 @@ if __name__ == "__main__":
     if end_use == "power":  # only one demand for electricity only studies
         demand = demand_converter.prepare_demand(sns=sns)  # pd.DataFrame
         demands = {"electricity": demand}
+    elif end_use == "transport":
+        fuels = ("electricity", "lpg")
+        demands = demand_converter.prepare_demand_by_subsector(
+            end_use,
+            fuels,
+            sns=sns,
+        )  # dict[str, dict[str, pd.DataFrame]]
     else:
         fuels = ("electricity", "heat", "cool")
         demands = demand_converter.prepare_multiple_demands(
@@ -2154,6 +2325,18 @@ if __name__ == "__main__":
             fuels,
             sns=sns,
         )  # dict[str, pd.DataFrame]
+
+    #########################################################################
+    ############### TEMPORARY FOR TRANSPORT DEMAND ##########################
+    #########################################################################
+    # assume 50/50 split of gas and elec to get workflow going
+    if end_use == "transport":
+        for fuel, _ in demands.items():
+            for vehicle, df in demands[fuel].items():
+                demands[fuel][vehicle] = df.mul(0.5)
+    #########################################################################
+    ############### TEMPORARY FOR TRANSPORT DEMAND ##########################
+    #########################################################################
 
     # scale demand and align snapshots. this is outside the main read/write
     # strategy as extra arguments are required to fill in data
@@ -2168,8 +2351,18 @@ if __name__ == "__main__":
     )
 
     formatted_demand = {}
-    for fuel, demand in demands.items():
-        formatted_demand[fuel] = demand_formatter.format_demand(demand, end_use)
+    # transport is by subsector
+    if end_use == "transport":
+        for fuel, _ in demands.items():
+            formatted_demand[fuel] = {}
+            for vehicle, demand in demands[fuel].items():
+                formatted_demand[fuel][vehicle] = demand_formatter.format_demand(
+                    demand,
+                    vehicle,
+                )
+    else:
+        for fuel, demand in demands.items():
+            formatted_demand[fuel] = demand_formatter.format_demand(demand, end_use)
 
     # electricity sector study
     if end_use == "power":
@@ -2177,7 +2370,14 @@ if __name__ == "__main__":
             snakemake.output.elec_demand,
             index=True,
         )
-    # sector coupling demand
+    # transport demand is by subsector
+    elif end_use == "transport":
+        for fuel in ("electricity", "lpg"):
+            for vehicle in ("light_duty", "med_duty", "heavy_duty", "bus"):
+                formatted_demand[fuel][vehicle].round(4).to_csv(
+                    snakemake.output[f"{fuel}_{vehicle}"],
+                    index=True,
+                )
     else:
         formatted_demand["electricity"].round(4).to_csv(
             snakemake.output.elec_demand,
@@ -2189,5 +2389,9 @@ if __name__ == "__main__":
         )
         formatted_demand["cool"].round(4).to_csv(
             snakemake.output.cool_demand,
+            index=True,
+        )
+        formatted_demand["lpg"].round(4).to_csv(
+            snakemake.output.lpg_demand,
             index=True,
         )
