@@ -60,6 +60,9 @@ def efs_databundle(wildcards):
 
 
 rule retrieve_nrel_efs_data:
+    wildcard_constraints:
+        efs_case="Reference|Medium|High",
+        efs_speed="Slow|Moderate|Rapid",
     params:
         efs_databundle,
     output:
