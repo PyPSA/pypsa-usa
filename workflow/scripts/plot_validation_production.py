@@ -717,7 +717,9 @@ def get_state_generation_mix(n: pypsa.Network, var="p"):
         generation["state_carrier"].str.split("_").str[1:].str.join("_")
     )
     generation_pivot = generation.pivot(
-        index="state", columns="carrier", values="generation"
+        index="state",
+        columns="carrier",
+        values="generation",
     )
     if "load" in generation_pivot.columns:
         generation_pivot.load = generation_pivot.load.mul(1e-3)
@@ -774,7 +776,9 @@ def plot_state_generation_capacities(
         generation["state_carrier"].str.split("_").str[1:].str.join("_")
     )
     generation_pivot = generation.pivot(
-        index="state", columns="carrier", values="capacity"
+        index="state",
+        columns="carrier",
+        values="capacity",
     )
     generation_pivot.drop(columns=["load"], inplace=True)
 

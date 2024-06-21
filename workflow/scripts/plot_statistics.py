@@ -928,7 +928,7 @@ def plot_generator_data_panel(
 
     df_efficiency = n.generators.loc[
         ~n.generators.carrier.isin(
-            ["solar", "onwind", "offwind", "offwind_floating", "hydro", "load"]
+            ["solar", "onwind", "offwind", "offwind_floating", "hydro", "load"],
         ),
         :,
     ]
