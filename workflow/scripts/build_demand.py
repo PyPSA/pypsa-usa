@@ -1195,6 +1195,9 @@ class ReadTransportVmt(ReadStrategy):
                 dfs.append(self._get_yearly_energy_efs(df))
         yearly_demand = pd.concat(dfs).reindex_like(transport)
 
+        # profile of each vehicle per state will sum to 1000 over the year
+        transport = transport.div(yearly_demand).fillna(0)
+
         # rename subsector names
         index_order = transport.index.names
         transport = transport.reset_index(level="subsector")
@@ -1203,7 +1206,7 @@ class ReadTransportVmt(ReadStrategy):
             index_order,
         )
 
-        return transport.div(yearly_demand).fillna(0).mul(1000)
+        return transport
 
     @staticmethod
     def _get_yearly_energy_efs(df: pd.DataFrame) -> pd.DataFrame:
@@ -1249,9 +1252,15 @@ class ReadTransportVmt(ReadStrategy):
         )
         vmt_demand["year"] = vmt_demand.index.year
         vmt_demand = vmt_demand[vmt_demand.year.isin(self.efs_years)].copy()
-        return vmt_demand[["vehicle", "year", "value", "units"]].set_index(
+        vmt_demand = vmt_demand[["vehicle", "year", "value", "units"]].set_index(
             ["vehicle", "year"],
         )
+        vmt_demand["value"] = vmt_demand.value.mul(1000000)  # billion VMT to kVMT
+        vmt_demand["units"] = vmt_demand.units.map(
+            lambda x: x.replace("billion", "thousand"),
+        )
+
+        return vmt_demand
 
     def _format_data(self, data: pd.DataFrame) -> pd.DataFrame:
         """
@@ -2045,7 +2054,7 @@ class AeoVmtScaler(DemandScaler):
         """
         vmt = TransportationDemand(vehicle=sector, year=year, api=self.api).get_data()
         vmt.index = vmt.index.year
-        return vmt.value.mul(1000000).sum()  # billion VMT -> thousand VMT
+        return vmt
 
     def get_future_values(
         self,
