@@ -757,37 +757,50 @@ def plot_state_generation_mix(
     historical_gen.drop(columns=['YEAR','TYPE OF PRODUCER'], inplace=True)
     historical_gen.rename(columns={'ENERGY SOURCE':'carrier','GENERATION (Megawatthours)': 'Historical' }, inplace=True)
     historical_gen['carrier'] = historical_gen.carrier.map(EIA_FUEL_MAPPER_2)
+    historical_gen.carrier = historical_gen.carrier.str.lower()
     historical_gen = historical_gen.reset_index().groupby(['state','carrier']).sum().reset_index()
     historical_gen = historical_gen.pivot(index='state', columns='carrier', values='Historical') / 1e3
 
-
-    optimized['gas'] = optimized.pop('CCGT') + optimized.pop('OCGT')
+    optimized['natural gas'] = optimized.pop('CCGT') + optimized.pop('OCGT')
     optimized.pop('load')
     optimized.pop('offwind_floating')
 
     historical_gen, optimized = add_missing_carriers(historical_gen, optimized)
 
+    joined = historical_gen.join(optimized, lsuffix='_historical', rsuffix='_optimized').sort_index(axis=1).round(1)
+    joined.to_csv(save_total.replace('.pdf','.csv'))
+
     diff_total = ((optimized - historical_gen).fillna(0) / historical_gen.sum(axis=0) * 1e2).round(1)
     diff_carrier = ((optimized - historical_gen).fillna(0) / historical_gen).mul(1e2).round(1)
 
-
-    # Create Stacked Bar Plot for each State's Generation Mix
     colors = n.carriers.color.to_dict()
-    fig, ax = plt.subplots(figsize=(10, 8))
-    sns.heatmap(diff_total, annot=True, center= 0.0, fmt=".1f", cmap='coolwarm', ax=ax)
-    ax.set_title(create_title("State Total Generation Mix Difference [%]", **wildcards))
-    ax.set_xlabel("Carrier")
-    ax.set_ylabel("State")
-    fig.savefig(save_total, dpi =DPI)
+    colors['natural gas'] = colors.pop('CCGT')
+    colors['other'] = colors.pop('load')
 
-    # Create Stacked Bar Plot for each State's Generation Mix
-    colors = n.carriers.color.to_dict()
-    fig, ax = plt.subplots(figsize=(10, 8))
+    # Create Heatmap
+    fig, ax = plt.subplots()
     sns.heatmap(diff_carrier, annot=True, center= 0.0, fmt=".1f", cmap='coolwarm', ax=ax)
     ax.set_title(create_title("Difference in Carrier Level Production[%]", **wildcards))
     ax.set_xlabel("Carrier")
     ax.set_ylabel("State")
     fig.savefig(save_carrier, dpi =DPI)
+
+
+    # Create difference stacked bar
+    fig, ax = plt.subplots(figsize=(10, 6))
+    diff_total.plot(kind="barh", stacked=True, ax=ax, color=colors)
+    ax.set_xlabel("Production Deviation [% of Total]")
+    ax.set_ylabel("Region")
+    ax.set_title(
+        create_title("Generation Deviation by Region and Carrier", **wildcards),
+    )
+    plt.legend(title="Carrier", bbox_to_anchor=(1.05, 1), loc="upper left")
+
+    plt.tight_layout()
+    fig.savefig(
+        save_total,
+        dpi=DPI,
+    )
 
 def plot_state_generation_capacities(
     n: pypsa.Network,
@@ -951,7 +964,7 @@ def main(snakemake):
         n,
         snapshots,
         snakemake.params.eia_api,
-        snakemake.output["val_heatmap_state_generation_total.pdf"],
+        snakemake.output["val_state_generation_deviation.pdf"],
         snakemake.output["val_heatmap_state_generation_carrier.pdf"],
         **snakemake.wildcards,
     )
