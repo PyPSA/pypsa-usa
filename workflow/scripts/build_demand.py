@@ -1967,23 +1967,22 @@ class AeoElectricityScaler(DemandScaler):
 class AeoEnergyScaler(DemandScaler):
 
     def __init__(self, api: str, scenario: str = "reference"):
-        super().__init__()
         self.api = api
         self.scenario = scenario
         self.region = "united_states"
+        super().__init__()
 
-    def get_historical_value(api: str, year: int, sector: str) -> float:
+    def get_historical_value(self, year: int, sector: str) -> float:
         """
         Returns single year value at a time.
         """
-        energy = EnergyDemand(sector=sector, year=year, api=api).get_data()
+        energy = EnergyDemand(sector=sector, year=year, api=self.api).get_data()
         return energy.value.div(1000).sum()  # trillion btu -> quads
 
     def get_future_values(
-        api: str,
+        self,
         year: int,
         sector: str,
-        scenario: str,
     ) -> pd.DataFrame:
         """
         Returns all values from 2024 onwards.
@@ -1991,8 +1990,8 @@ class AeoEnergyScaler(DemandScaler):
         energy = EnergyDemand(
             sector=sector,
             year=year,
-            api=api,
-            scenario=scenario,
+            api=self.api,
+            scenario=self.scenario,
         ).get_data()
         return energy
 
@@ -2024,13 +2023,12 @@ class AeoEnergyScaler(DemandScaler):
             if year < 2024:
                 for sector in sectors:
                     df.at[year, sector] = self.get_historical_value(
-                        self.api,
                         year,
                         sector,
                     )
 
         for sector in sectors:
-            aeo = self.get_future_values(self.api, max(years), sector, self.scenario)
+            aeo = self.get_future_values(max(years), sector)
             for year in years:
                 if year < 2024:
                     continue
@@ -2194,11 +2192,11 @@ def get_demand_params(
             logger.warning(
                 f"No scaling method available for {demand_profile} profile. Setting to 'aeo_electricity'",
             )
-    elif end_use == "res":
+    elif end_use == "residential":
         demand_profile = "eulp"
         demand_disaggregation = "pop"
         scaling_method = "aeo_energy"
-    elif end_use == "com":
+    elif end_use == "commercial":
         demand_profile = "eulp"
         demand_disaggregation = "pop"
         scaling_method = "aeo_energy"
@@ -2230,9 +2228,9 @@ if __name__ == "__main__":
         #     end_use="power",
         # )
         snakemake = mock_snakemake(
-            "build_transport_demand",
+            "build_sector_demand",
             interconnect="texas",
-            end_use="transport",
+            end_use="commercial",
         )
     configure_logging(snakemake)
 
@@ -2240,7 +2238,7 @@ if __name__ == "__main__":
 
     # extract user demand configuration parameters
 
-    demand_params = snakemake.params.demand_params
+    demand_params = snakemake.params.get("demand_params", None)
     end_use = snakemake.wildcards.end_use
     eia_api = snakemake.params.eia_api
 

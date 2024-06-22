@@ -221,16 +221,14 @@ def demand_raw_data(wildcards):
     end_use = wildcards.end_use
     if end_use == "power":
         profile = config["electricity"]["demand"]["profile"]
-    elif end_use == "res":
+    elif end_use == "residential":
         profile = "eulp"
-    elif end_use == "com":
+    elif end_use == "commercial":
         profile = "eulp"
     elif end_use == "transport":
         profile = "efs_aeo"
     elif end_use == "industry":
         profile = "cliu"
-    else:
-        profile = ""
 
     if profile == "eia":
         return DATA + "GridEmissions/EIA_DMD_2018_2024.csv"
@@ -257,8 +255,6 @@ def demand_raw_data(wildcards):
             DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv",
             DATA + "transportation/transport_ratios.csv",
         ]
-    else:
-        return ""
 
 
 def demand_dissagregate_data(wildcards):
@@ -269,11 +265,9 @@ def demand_dissagregate_data(wildcards):
         strategy = "pop"
 
     if strategy == "pop":
-        return ""
+        return []
     elif strategy == "cliu":
         return DATA + "industry_load/2014_update_20170910-0116.csv"
-    else:
-        return ""
 
 
 def demand_scaling_data(wildcards):
@@ -292,8 +286,6 @@ def demand_scaling_data(wildcards):
         return DATA + f"nrel_efs/EFSLoadProfile_{efs_case}_{efs_speed}.csv"
     elif profile == "eia":
         return DATA + "pudl/pudl.sqlite"
-    else:
-        return ""
 
 
 rule build_electrical_demand:
@@ -326,7 +318,6 @@ rule build_sector_demand:
     params:
         planning_horizons=config["scenario"]["planning_horizons"],
         profile_year=pd.to_datetime(config["snapshots"]["start"]).year,
-        demand_params=config["sector"]["demand"],
         eia_api=config["api"]["eia"],
     input:
         network=RESOURCES + "{interconnect}/elec_base_network.nc",
@@ -337,7 +328,6 @@ rule build_sector_demand:
         elec_demand=RESOURCES + "{interconnect}/{end_use}_electricity.csv",
         heat_demand=RESOURCES + "{interconnect}/{end_use}_heating.csv",
         cool_demand=RESOURCES + "{interconnect}/{end_use}_cooling.csv",
-        lpg_demand=RESOURCES + "{interconnect}/{end_use}_lpg.csv",
     log:
         LOGS + "{interconnect}/{end_use}_build_demand.log",
     benchmark:
@@ -355,7 +345,6 @@ rule build_transport_demand:
     params:
         planning_horizons=config["scenario"]["planning_horizons"],
         profile_year=pd.to_datetime(config["snapshots"]["start"]).year,
-        demand_params=config["sector"]["demand"],
         eia_api=config["api"]["eia"],
     input:
         network=RESOURCES + "{interconnect}/elec_base_network.nc",
@@ -386,19 +375,26 @@ rule build_transport_demand:
 
 def demand_to_add(wildcards):
     if config["scenario"]["sector"] == "E":
-        return RESOURCES + "{interconnect}/power_electricity_demand.csv"
+        return RESOURCES + "{interconnect}/power_electricity.csv"
     else:
         return [
-            RESOURCES + "{interconnect}/residential_electricity_demand.csv",
-            RESOURCES + "{interconnect}/residential_heating_demand.csv",
-            RESOURCES + "{interconnect}/residential_cooling_demand.csv",
-            RESOURCES + "{interconnect}/commercial_electricity_demand.csv",
-            RESOURCES + "{interconnect}/commercial_heating_demand.csv",
-            RESOURCES + "{interconnect}/commercial_cooling_demand.csv",
-            RESOURCES + "{interconnect}/industry_electricity_demand.csv",
-            RESOURCES + "{interconnect}/industry_heating_demand.csv",
-            RESOURCES + "{interconnect}/industry_cooling_demand.csv",
-            RESOURCES + "{interconnect}/transport_electricity_demand.csv",
+            RESOURCES + "{interconnect}/residential_electricity.csv",
+            RESOURCES + "{interconnect}/residential_heating.csv",
+            RESOURCES + "{interconnect}/residential_cooling.csv",
+            RESOURCES + "{interconnect}/commercial_electricity.csv",
+            RESOURCES + "{interconnect}/commercial_heating.csv",
+            RESOURCES + "{interconnect}/commercial_cooling.csv",
+            RESOURCES + "{interconnect}/industry_electricity.csv",
+            RESOURCES + "{interconnect}/industry_heating.csv",
+            RESOURCES + "{interconnect}/industry_cooling.csv",
+            RESOURCES + "{interconnect}/transport_light-duty_electricity.csv",
+            RESOURCES + "{interconnect}/transport_light-duty_lpg.csv",
+            RESOURCES + "{interconnect}/transport_med-duty_electricity.csv",
+            RESOURCES + "{interconnect}/transport_med-duty_lpg.csv",
+            RESOURCES + "{interconnect}/transport_heavy-duty_electricity.csv",
+            RESOURCES + "{interconnect}/transport_heavy-duty_lpg.csv",
+            RESOURCES + "{interconnect}/transport_bus_electricity.csv",
+            RESOURCES + "{interconnect}/transport_bus_lpg.csv",
         ]
 
 
