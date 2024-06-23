@@ -190,7 +190,7 @@ class Production(EiaData):
 # concrete creator
 class EnergyDemand(EiaData):
     """
-    Energy demand at a national level.
+    Energy demand at a annual national level.
 
     If historical year is provided, monthly energy consumption for that
     year is provided. If a future year is provided, annual projections
@@ -557,9 +557,51 @@ class CoalCosts(DataExtractor):
         return self._assign_dtypes(final)
 
 
+# class HistoricalMonthlySectorEnergyDemand(DataExtractor):
+#     """
+#     Extracts historical energy demand at a monthly and national level.
+
+#     Note, this is end use energy consumed (does not include losses)
+#     - https://www.eia.gov/totalenergy/data/flow-graphs/electricity.php
+#     - https://www.eia.gov/outlooks/aeo/pdf/AEO2023_Release_Presentation.pdf (pg 17)
+#     """
+
+#     sector_codes = {
+#         "residential": "TNR",
+#         "commercial": "TNC",
+#         "industry": "TNI",
+#         "transport": "TNA",
+#         "all": "TNT",  # total energy consumed by all end-use sectors
+#     }
+
+#     def __init__(self, sector: str, year: int, api: str) -> None:
+#         self.sector = sector
+#         if sector not in self.sector_codes.keys():
+#             raise InputException(
+#                 propery="Historical Energy Demand",
+#                 valid_options=list(self.sector_codes),
+#                 recived_option=sector,
+#             )
+#         super().__init__(year, api)
+
+#     def build_url(self) -> str:
+#         base_url = "total-energy/data/"
+#         facets = f"frequency=monthly&data[0]=value&facets[msn][]={self.sector_codes[self.sector]}CBUS&start={self.year}-01&end={self.year}-12&sort[0][column]=period&sort[0][direction]=desc&offset=0&length=5000"
+#         return f"{API_BASE}{base_url}?api_key={self.api_key}&{facets}"
+
+#     def format_data(self, df: pd.DataFrame) -> pd.DataFrame:
+#         df.index = pd.to_datetime(df.period)
+#         df = df.rename(
+#             columns={"seriesDescription": "series-description", "unit": "units"},
+#         )
+#         df["state"] = "U.S."
+#         df = df[["series-description", "value", "units", "state"]].sort_index()
+#         return self._assign_dtypes(df)
+
+
 class HistoricalSectorEnergyDemand(DataExtractor):
     """
-    Extracts historical energy demand at a national level.
+    Extracts historical energy demand at a yearly national level.
 
     Note, this is end use energy consumed (does not include losses)
     - https://www.eia.gov/totalenergy/data/flow-graphs/electricity.php
@@ -586,16 +628,22 @@ class HistoricalSectorEnergyDemand(DataExtractor):
 
     def build_url(self) -> str:
         base_url = "total-energy/data/"
-        facets = f"frequency=monthly&data[0]=value&facets[msn][]={self.sector_codes[self.sector]}CBUS&start={self.year}-01&end={self.year}-12&sort[0][column]=period&sort[0][direction]=desc&offset=0&length=5000"
+        facets = f"frequency=annual&data[0]=value&facets[msn][]={self.sector_codes[self.sector]}CBUS&start={self.year}&end=2023&sort[0][column]=period&sort[0][direction]=desc&offset=0&length=5000"
         return f"{API_BASE}{base_url}?api_key={self.api_key}&{facets}"
 
     def format_data(self, df: pd.DataFrame) -> pd.DataFrame:
         df.index = pd.to_datetime(df.period)
+        df.index = df.index.year
         df = df.rename(
             columns={"seriesDescription": "series-description", "unit": "units"},
         )
         df["state"] = "U.S."
         df = df[["series-description", "value", "units", "state"]].sort_index()
+        assert len(df.units.unique()) == 1
+        assert df.units.unique()[0] == "Trillion Btu"
+        df["value"] = df.value.astype(float)
+        df["value"] = df.value.div(1000).round(6)
+        df["units"] = "quads"
         return self._assign_dtypes(df)
 
 
@@ -686,7 +734,6 @@ class HistoricalTransportDemand(DataExtractor):
         elif self.year >= 2022:
             aeo = 2023
 
-        logger.info(f"Using AEO {aeo} for historical data")
         base_url = f"aeo/{aeo}/data/"
         scenario = f"ref{aeo}"
 
@@ -1009,4 +1056,5 @@ if __name__ == "__main__":
     # print(Emissions("transport", 2019, api).get_data(pivot=True))
     # print(Storage("gas", "total", 2019, api).get_data(pivot=True))
     # print(EnergyDemand("residential", 2030, api).get_data(pivot=False))
-    print(TransportationDemand("bus", 2022, api).get_data(pivot=False))
+    # print(TransportationDemand("bus", 2022, api).get_data(pivot=False))
+    print(EnergyDemand("residential", 2015, api).get_data(pivot=False))
