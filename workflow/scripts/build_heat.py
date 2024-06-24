@@ -128,10 +128,14 @@ def add_air_cons(
 
     assert sector in ("com", "res")
 
-    # Estimates found online, and need to update!
-    capex = 0.04  # $ / BTU ######################################### UPDATE!!
-    efficiency = 3
-    lifetime = 25
+    if sector == "res":
+        costs_name = "Residential Central Air Conditioner"
+    elif sector == "com":
+        costs_name = "Rooftop Air Conditioners"
+
+    capex = costs.at[costs_name, "capex"]
+    efficiency = costs.at[costs_name, "efficiency"]
+    lifetime = costs.at[costs_name, "lifetime"]
 
     carrier_name = f"{sector}-cool"
 
@@ -247,7 +251,6 @@ def add_service_gas_furnaces(
     elif sector == "com":
         costs_name = "Commercial Gas-Fired Furnaces"
 
-    # Estimates found online, and need to update!
     capex = costs.at[costs_name, "capex"]
     efficiency = costs.at[costs_name, "efficiency"]
     lifetime = costs.at[costs_name, "lifetime"]
@@ -303,7 +306,6 @@ def add_service_elec_furnaces(
     elif sector == "com":
         costs_name = "Commercial Electric Resistance Heaters"
 
-    # Estimates found online, and need to update!
     capex = costs.at[costs_name, "capex"]
     efficiency = costs.at[costs_name, "efficiency"]
     lifetime = costs.at[costs_name, "lifetime"]
