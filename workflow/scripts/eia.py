@@ -720,19 +720,25 @@ class HistoricalTransportDemand(DataExtractor):
                 valid_options=list(self.vehicle_codes),
                 recived_option=vehicle,
             )
+        year = self.check_available_data_year(year)
         super().__init__(year, api)
 
+    def check_available_data_year(self, year: int) -> int:
+        if self.vehicle in ("bus", "passenger_rail"):
+            if year < 2018:
+                logger.error(
+                    f"{self.vehicle} data not available for {year}. Returning data for year 2018.",
+                )
+                return 2018
+        return year
+
     def build_url(self) -> str:
-        if self.year <= 2018:
-            aeo = 2019
-        elif self.year == 2019:
-            aeo = 2020
-        elif self.year == 2020:
-            aeo = 2021
-        elif self.year == 2021:
-            aeo = 2022
-        elif self.year >= 2022:
+        if self.year >= 2022:
             aeo = 2023
+        elif self.year >= 2015:
+            aeo = self.year + 1
+        else:
+            raise NotImplementedError
 
         base_url = f"aeo/{aeo}/data/"
         scenario = f"ref{aeo}"
@@ -742,6 +748,7 @@ class HistoricalTransportDemand(DataExtractor):
 
     def format_data(self, df: pd.DataFrame) -> pd.DataFrame:
         df.index = pd.to_datetime(df.period)
+        df.index = df.index.year
         df = df.rename(
             columns={"seriesName": "series-description", "unit": "units"},
         )
@@ -1056,5 +1063,5 @@ if __name__ == "__main__":
     # print(Emissions("transport", 2019, api).get_data(pivot=True))
     # print(Storage("gas", "total", 2019, api).get_data(pivot=True))
     # print(EnergyDemand("residential", 2030, api).get_data(pivot=False))
-    # print(TransportationDemand("bus", 2022, api).get_data(pivot=False))
-    print(EnergyDemand("residential", 2015, api).get_data(pivot=False))
+    print(TransportationDemand("light_duty", 2015, api).get_data(pivot=False))
+    # print(EnergyDemand("residential", 2015, api).get_data(pivot=False))
