@@ -60,6 +60,8 @@ def add_service_heat(
     **kwargs,
 ):
     """
+    Adds heating links for residential and commercial sectors.
+
     Costs and efficiencies are taken from:
     - https://www.eia.gov/analysis/studies/buildings/equipcosts/pdf/full.pdf
     - https://www.nrel.gov/docs/fy18osti/70485.pdf (Fig. 24)
@@ -69,8 +71,6 @@ def add_service_heat(
     assert sector in ("res", "com")
 
     heat_systems = ("rural", "urban")
-
-    plotting = kwargs.get("plotting", None)
 
     # seperates total heat load to urban/rural
     # note, this is different than pypsa-eur implementation, as we add all load before
@@ -88,7 +88,7 @@ def add_service_heat(
 
         efficiency = cop[heat_pump_type]
 
-        add_heat_pumps(
+        add_service_heat_pumps(
             n,
             sector,
             heat_system,
@@ -98,10 +98,9 @@ def add_service_heat(
             efficiency,
         )
 
-    # add gas furnaces
-    for heat_system in heat_systems:
+        add_service_gas_furnaces(n, sector, heat_system, costs)
 
-        add_service_furnaces(n, sector, costs)
+        add_service_elec_furnaces(n, sector, heat_system, costs)
 
 
 def add_service_cooling(
@@ -223,32 +222,46 @@ def _split_urban_rural_load(
     n.mremove("Load", new_buses.index)
 
 
-def add_service_furnaces(
+def add_service_gas_furnaces(
     n: pypsa.Network,
     sector: str,
+    heat_system: str,
     costs: pd.DataFrame,
 ) -> None:
     """
     Adds gas furnaces to the system.
+
+    n: pypsa.Network
+    sector: str
+        ("com" or "res")
+    heat_system: str
+        ("rural" or "urban")
+    costs: pd.DataFrame
     """
 
     assert sector in ("com", "res")
+    assert heat_system in ("urban", "rural")
+
+    if sector == "res":
+        costs_name = "Residential Gas-Fired Furnaces"
+    elif sector == "com":
+        costs_name = "Commercial Gas-Fired Furnaces"
 
     # Estimates found online, and need to update!
-    capex = 0.04  # $ / BTU ######################################### UPDATE!!
-    efficiency = 0.90
-    lifetime = 25
+    capex = costs.at[costs_name, "capex"]
+    efficiency = costs.at[costs_name, "efficiency"]
+    lifetime = costs.at[costs_name, "lifetime"]
 
     carrier_name = f"{sector}-heat"
 
     loads = n.loads[
-        (n.loads.carrier == carrier_name) & (n.loads.bus.str.contains("urban"))
+        (n.loads.carrier == carrier_name) & (n.loads.bus.str.contains(heat_system))
     ]
 
     furnaces = pd.DataFrame(index=loads.bus)
     furnaces["bus0"] = furnaces.index.map(n.buses.STATE)
     furnaces["bus0"] = furnaces.index.map(lambda x: f"{x} gas")
-    furnaces["bus1"] = furnaces.index.map(lambda x: f"{x} {sector}-urban")
+    furnaces["bus1"] = furnaces.index.map(lambda x: f"{x} {sector}-{heat_system}")
     furnaces["carrier"] = furnaces.index.map(lambda x: f"{x} {sector}-gas")
 
     n.madd(
@@ -265,12 +278,67 @@ def add_service_furnaces(
     )
 
 
-def add_heat_pumps(
+def add_service_elec_furnaces(
+    n: pypsa.Network,
+    sector: str,
+    heat_system: str,
+    costs: pd.DataFrame,
+) -> None:
+    """
+    Adds gas furnaces to the system.
+
+    n: pypsa.Network
+    sector: str
+        ("com" or "res")
+    heat_system: str
+        ("rural" or "urban")
+    costs: pd.DataFrame
+    """
+
+    assert sector in ("com", "res")
+    assert heat_system in ("urban", "rural")
+
+    if sector == "res":
+        costs_name = "Residential Electric Resistance Heaters"
+    elif sector == "com":
+        costs_name = "Commercial Electric Resistance Heaters"
+
+    # Estimates found online, and need to update!
+    capex = costs.at[costs_name, "capex"]
+    efficiency = costs.at[costs_name, "efficiency"]
+    lifetime = costs.at[costs_name, "lifetime"]
+
+    carrier_name = f"{sector}-heat"
+
+    loads = n.loads[
+        (n.loads.carrier == carrier_name) & (n.loads.bus.str.contains(heat_system))
+    ]
+
+    furnaces = pd.DataFrame(index=loads.bus)
+    furnaces["bus0"] = furnaces.index.map(n.buses.country)
+    furnaces["bus1"] = furnaces.index.map(lambda x: f"{x} {sector}-{heat_system}")
+    furnaces["carrier"] = "AC"
+
+    n.madd(
+        "Link",
+        furnaces.index,
+        suffix=f" {sector} elec furnace",
+        bus0=furnaces.bus0,
+        bus1=furnaces.bus1,
+        carrier=furnaces.carrier,
+        efficiency=efficiency,
+        capital_cost=capex,
+        p_nom_extendable=True,
+        lifetime=lifetime,
+    )
+
+
+def add_service_heat_pumps(
     n: pypsa.Network,
     sector: str,
     heat_system: str,
     name_type: str,
-    heat_pump_type: str,
+    hp_type: str,
     costs: pd.DataFrame,
     cop: Optional[pd.DataFrame] = None,
 ) -> None:
@@ -291,11 +359,18 @@ def add_heat_pumps(
         If not provided, uses eff in costs
     """
 
+    hp_type = hp_type.capitalize()
+
     assert sector in ("com", "res")
+    assert hp_type in ("Air", "Ground")
+    assert heat_system in ("urban", "rural")
 
     carrier_name = f"{sector}-heat"
 
-    costs_name = f"{name_type} {heat_pump_type}-sourced heat pump"
+    if sector == "res":
+        costs_name = f"Residential {hp_type}-Sourced Heat Pump"
+    elif sector == "com":
+        costs_name = f"Commercial {hp_type}-Sourced Heat Pump"
 
     loads = n.loads[
         (n.loads.carrier == carrier_name) & (n.loads.bus.str.contains(heat_system))
@@ -303,8 +378,8 @@ def add_heat_pumps(
 
     hps = pd.DataFrame(index=loads.bus)
     hps["bus0"] = hps.index.map(lambda x: f"{x} {sector}")
-    hps["bus1"] = hps.index.map(lambda x: f"{x} {sector}-{heat_system}")
-    hps["carrier"] = hps.index.map(lambda x: f"{x} {sector}-{heat_system}")
+    hps["bus1"] = hps.index.map(lambda x: f"{x} {sector}-{heat_system.lower()}")
+    hps["carrier"] = hps.index.map(lambda x: f"{x} {sector}-{heat_system.lower()}")
 
     if isinstance(cop, pd.DataFrame):
         efficiency = cop[loads.index.to_list()]
@@ -314,7 +389,7 @@ def add_heat_pumps(
     n.madd(
         "Link",
         hps.index,
-        suffix=f" {sector} {heat_pump_type} heat pump",
+        suffix=f" {sector} {hp_type.lower()} heat pump",
         bus0=hps.bus0,
         bus1=hps.bus1,
         carrier=hps.carrier,
