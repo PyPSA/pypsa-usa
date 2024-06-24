@@ -1837,7 +1837,6 @@ class DemandFormatter:
         elif self.scaling_method == "aeo_vmt":
             assert self.api, "Must provide eia api key"
             return AeoVmtScaler(self.api)
-
         else:
             raise NotImplementedError
 
@@ -1972,28 +1971,24 @@ class AeoEnergyScaler(DemandScaler):
         self.region = "united_states"
         super().__init__()
 
-    def get_historical_value(self, year: int, sector: str) -> float:
+    def get_sector_data(self, years: list[int], sector: str) -> pd.DataFrame:
         """
-        Returns single year value at a time.
+        Function to piece togehter historical and projected values.
         """
-        energy = EnergyDemand(sector=sector, year=year, api=self.api).get_data()
-        return energy.value.div(1000).sum()  # trillion btu -> quads
+        start_year = min(years)
+        end_year = max(years)
 
-    def get_future_values(
-        self,
-        year: int,
-        sector: str,
-    ) -> pd.DataFrame:
-        """
-        Returns all values from 2024 onwards.
-        """
-        energy = EnergyDemand(
-            sector=sector,
-            year=year,
-            api=self.api,
-            scenario=self.scenario,
-        ).get_data()
-        return energy
+        data = []
+
+        if start_year < 2024:
+            data.append(
+                EnergyDemand(sector=sector, year=start_year, api=self.api).get_data(),
+            )
+        if end_year >= 2024:
+            data.append(
+                EnergyDemand(sector=sector, year=end_year, api=self.api).get_data(),
+            )
+        return pd.concat(data)
 
     def get_projections(self) -> pd.DataFrame:
         """
@@ -2012,27 +2007,16 @@ class AeoEnergyScaler(DemandScaler):
 
         years = range(2017, 2051)
 
-        sectors = ("residential", "commercial", "industry", "transport")
+        # sectors = ("residential", "commercial", "industry", "transport")
+        sectors = ("residential", "commercial", "industry")
 
         df = pd.DataFrame(
-            columns=["residential", "commercial", "industry", "transport"],
             index=years,
         )
 
-        for year in sorted(years):
-            if year < 2024:
-                for sector in sectors:
-                    df.at[year, sector] = self.get_historical_value(
-                        year,
-                        sector,
-                    )
-
         for sector in sectors:
-            aeo = self.get_future_values(max(years), sector)
-            for year in years:
-                if year < 2024:
-                    continue
-                df.at[year, sector] = aeo.at[year, "value"]
+            sector_data = self.get_sector_data(years, sector).sort_index()
+            df[sector] = sector_data.value
 
         df["units"] = "quads"
         return df
@@ -2398,9 +2382,5 @@ if __name__ == "__main__":
         )
         formatted_demand["cool"].round(4).to_csv(
             snakemake.output.cool_demand,
-            index=True,
-        )
-        formatted_demand["lpg"].round(4).to_csv(
-            snakemake.output.lpg_demand,
             index=True,
         )
