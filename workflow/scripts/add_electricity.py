@@ -1166,7 +1166,7 @@ def main(snakemake):
         df_multiplier = clean_locational_multiplier(df_multiplier)
         update_capital_costs(n, carrier, costs, df_multiplier, Nyears)
 
-    if params.conventional["dynamic_fuel_price"]:
+    if params.conventional["dynamic_fuel_price"]["wholesale"]:
         assert params.eia_api, f"Must provide EIA API key for dynamic fuel pricing"
 
         dynamic_fuel_prices = {
@@ -1212,6 +1212,7 @@ def main(snakemake):
                 )
                 logger.info(f"Applied dynamic price data for {carrier} from {datafile}")
 
+    if params.conventional["dynamic_fuel_price"]["pudl"]:
         n = apply_pudl_fuel_costs(n, plants, costs)
 
     # fix p_nom_min for extendable generators

@@ -28,7 +28,7 @@ def load_pudl_data(pudl_fn: str, start_date: str, end_date: str):
                 generator_id,
                 array_agg(out_eia__monthly_generators.unit_heat_rate_mmbtu_per_mwh ORDER BY out_eia__monthly_generators.report_date DESC) FILTER (WHERE out_eia__monthly_generators.unit_heat_rate_mmbtu_per_mwh IS NOT NULL)[1] AS unit_heat_rate_mmbtu_per_mwh
             FROM out_eia__monthly_generators
-            WHERE operational_status = 'existing' AND report_date >= '2022-01-01'
+            WHERE operational_status = 'existing' AND report_date >= '2023-01-01'
             GROUP BY plant_id_eia, generator_id
         )
         SELECT
@@ -41,7 +41,7 @@ def load_pudl_data(pudl_fn: str, start_date: str, end_date: str):
             array_agg(out_eia__yearly_generators.minimum_load_mw ORDER BY out_eia__yearly_generators.report_date DESC) FILTER (WHERE out_eia__yearly_generators.minimum_load_mw IS NOT NULL)[1] AS minimum_load_mw,
             array_agg(out_eia__yearly_generators.energy_source_code_1 ORDER BY out_eia__yearly_generators.report_date DESC) FILTER (WHERE out_eia__yearly_generators.energy_source_code_1 IS NOT NULL)[1] AS energy_source_code_1,
             array_agg(out_eia__yearly_generators.technology_description ORDER BY out_eia__yearly_generators.report_date DESC) FILTER (WHERE out_eia__yearly_generators.technology_description IS NOT NULL)[1] AS technology_description,
-            arbitrary(out_eia__yearly_generators.operational_status) AS operational_status,
+            array_agg(out_eia__yearly_generators.operational_status ORDER BY out_eia__yearly_generators.report_date DESC) FILTER (WHERE out_eia__yearly_generators.operational_status IS NOT NULL)[1] AS operational_status,
             array_agg(out_eia__yearly_generators.prime_mover_code ORDER BY out_eia__yearly_generators.report_date DESC) FILTER (WHERE out_eia__yearly_generators.prime_mover_code IS NOT NULL)[1] AS prime_mover_code,
             array_agg(out_eia__yearly_generators.planned_generator_retirement_date ORDER BY out_eia__yearly_generators.report_date DESC) FILTER (WHERE out_eia__yearly_generators.planned_generator_retirement_date IS NOT NULL)[1] AS planned_generator_retirement_date,
             array_agg(out_eia__yearly_generators.energy_storage_capacity_mwh ORDER BY out_eia__yearly_generators.report_date DESC) FILTER (WHERE out_eia__yearly_generators.energy_storage_capacity_mwh IS NOT NULL)[1] AS energy_storage_capacity_mwh,
@@ -59,7 +59,7 @@ def load_pudl_data(pudl_fn: str, start_date: str, end_date: str):
         LEFT JOIN core_eia860__scd_generators_energy_storage ON out_eia__yearly_generators.plant_id_eia = core_eia860__scd_generators_energy_storage.plant_id_eia AND out_eia__yearly_generators.generator_id = core_eia860__scd_generators_energy_storage.generator_id
         LEFT JOIN core_eia860__scd_plants ON out_eia__yearly_generators.plant_id_eia = core_eia860__scd_plants.plant_id_eia
         LEFT JOIN monthly_generators ON out_eia__yearly_generators.plant_id_eia = monthly_generators.plant_id_eia AND out_eia__yearly_generators.generator_id = monthly_generators.generator_id
-        WHERE out_eia__yearly_generators.operational_status = 'existing'
+        WHERE out_eia__yearly_generators.operational_status = 'existing' AND out_eia__yearly_generators.report_date >= '2024-01-01'
         GROUP BY out_eia__yearly_generators.plant_id_eia, out_eia__yearly_generators.generator_id
     """,
     ).to_df()
@@ -906,6 +906,8 @@ if __name__ == "__main__":
     eia_data_operable, heat_rates = load_pudl_data(
         snakemake.input.pudl, start_date, end_date
     )
+    # eia_data_operable.to_csv("eia_data_operable.csv")
+
     eia_data_operable = merge_fc_hr_data(
         eia_data_operable, heat_rates, "unit_heat_rate_mmbtu_per_mwh"
     )
