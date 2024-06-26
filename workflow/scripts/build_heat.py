@@ -12,7 +12,7 @@ from add_electricity import load_costs
 
 def build_heat(
     n: pypsa.Network,
-    costs_path: str,
+    costs: pd.DataFrame,
     pop_layout_path: str,
     cop_ashp_path: str,
     cop_gshp_path: str,
@@ -21,13 +21,15 @@ def build_heat(
     Main funtion to interface with.
     """
 
-    costs = load_costs(costs_path)
+    sns = n.snapshots
 
     pop_layout = pd.read_csv(pop_layout_path).set_index("name")
 
-    ashp_cop = xr.open_dataarray(cop_ashp_path).to_pandas().reindex(index=n.snapshots)
+    ashp_cop = xr.open_dataarray(cop_ashp_path)
+    gshp_cop = xr.open_dataarray(cop_gshp_path)
 
-    gshp_cop = xr.open_dataarray(cop_gshp_path).to_pandas().reindex(index=n.snapshots)
+    ashp_cop = reindex_cop(sns, ashp_cop)
+    gshp_cop = reindex_cop(sns, gshp_cop)
 
     for sector in ("res", "com"):
         add_service_heat(n, sector, pop_layout, costs, ashp_cop, gshp_cop)
@@ -35,6 +37,41 @@ def build_heat(
 
     for sector in "ind":
         add_industrial_heat(n, sector, costs)
+
+
+def reindex_cop(sns: pd.MultiIndex, da: xr.DataArray) -> pd.DataFrame:
+    """
+    Reindex a COP dataarray.
+
+    This will allign snapshots to match the planning horizon. This will
+    also calcualte the mean COP for each period if tsa has occured
+    """
+
+    cop = da.to_pandas()
+    investment_years = sns.get_level_values(0).unique()
+
+    # use first investment year, as weather profiles dont change between years
+    cop.index = cop.index.map(lambda x: x.replace(year=investment_years[0]))
+
+    # need to account for tsa with variable lengths per snapshot
+    sns_per_year = sns.get_level_values(1).unique()
+    groups = {snapshot: group for group, snapshot in enumerate(sns_per_year)}
+    cop["group"] = cop.index.map(groups)
+    cop["group"] = cop.group.ffill().astype(int)
+    cop = cop.groupby("group").mean()
+    cop.index = sns_per_year
+
+    # index to match network multiindex
+    cops = []
+    for investment_year in investment_years:
+        cop_investment_year = cop.copy()
+        cop_investment_year.index = cop_investment_year.index.map(
+            lambda x: x.replace(year=investment_year),
+        )
+        cop_investment_year["year"] = investment_year
+        cops.append(cop_investment_year.set_index(["year", cop_investment_year.index]))
+
+    return pd.concat(cops).reindex(sns)
 
 
 def add_industrial_heat(
@@ -186,7 +223,7 @@ def _split_urban_rural_load(
 
         # add buses to connect the new loads to
         new_buses = pd.DataFrame(index=load_names)
-        new_buses.index = new_buses.index.map(n.loads.buses)
+        new_buses.index = new_buses.index.map(n.loads.bus)
         new_buses["x"] = new_buses.index.map(n.buses.x)
         new_buses["y"] = new_buses.index.map(n.buses.y)
         new_buses["country"] = new_buses.index.map(n.buses.country)
@@ -198,21 +235,19 @@ def _split_urban_rural_load(
             "Bus",
             new_buses.index,
             suffix=f" {sector}-{system}-heat",
-            x=new_buses.buses.x,
-            y=new_buses.buses.y,
+            x=new_buses.x,
+            y=new_buses.y,
             carrier=f"{sector}-heat",
-            country=new_buses.buses.country,
-            interconnect=new_buses.buses.interconnect,
-            STATE=new_buses.buses.STATE,
-            STATE_NAME=new_buses.buses.STATE_NAME,
+            country=new_buses.country,
+            interconnect=new_buses.interconnect,
+            STATE=new_buses.STATE,
+            STATE_NAME=new_buses.STATE_NAME,
         )
 
         # add system specific loads to the network
         loads_t = n.loads_t.p_set[load_names]
-        loads_t.columns = loads_t.columns.map(n.loads.bus)
-        loads_t = loads_t.mul(ratios[f"{system}_fraction"]).rename(
-            columns={x: f"{x} {sector}-{system}-heat" for x in loads_t.columns},
-        )
+        ratios.index = ratios.index.map(lambda x: f"{x} {sector}-heat")
+        loads_t = loads_t.mul(ratios[f"{system}_fraction"])
 
         n.madd(
             "Load",
