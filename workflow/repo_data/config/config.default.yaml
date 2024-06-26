@@ -80,7 +80,9 @@ electricity:
 # docs :
 conventional:
   unit_commitment: false
-  dynamic_fuel_price: true
+  dynamic_fuel_price: 
+    pudl: true
+    wholesale: true
 
 
 # docs :

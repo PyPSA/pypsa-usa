@@ -393,7 +393,7 @@ rule build_fuel_prices:
 
 
 def dynamic_fuel_price_files(wildcards):
-    if config["conventional"]["dynamic_fuel_price"]:
+    if config["conventional"]["dynamic_fuel_price"]["wholesale"]:
         return {
             "state_ng_fuel_prices": RESOURCES
             + "{interconnect}/state_ng_power_prices.csv",
