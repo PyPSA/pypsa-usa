@@ -801,6 +801,7 @@ class ProjectedTransportDemand(DataExtractor):
 
     def format_data(self, df: pd.DataFrame) -> pd.DataFrame:
         df.index = pd.to_datetime(df.period)
+        df.index = df.index.year
         df = df.rename(
             columns={"seriesName": "series-description", "unit": "units"},
         )

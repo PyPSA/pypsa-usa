@@ -1250,7 +1250,7 @@ class ReadTransportVmt(ReadStrategy):
         vmt_demand["vehicle"] = vmt_demand["series-description"].map(
             assign_vehicle_type,
         )
-        vmt_demand["year"] = vmt_demand.index.year
+        vmt_demand = vmt_demand.reset_index().rename(columns={"period": "year"})
         vmt_demand = vmt_demand[vmt_demand.year.isin(self.efs_years)].copy()
         vmt_demand = vmt_demand[["vehicle", "year", "value", "units"]].set_index(
             ["vehicle", "year"],
@@ -2034,9 +2034,7 @@ class AeoVmtScaler(DemandScaler):
         """
         Returns single year value at a time.
         """
-        vmt = TransportationDemand(vehicle=sector, year=year, api=self.api).get_data()
-        vmt.index = vmt.index.year
-        return vmt
+        return TransportationDemand(vehicle=sector, year=year, api=self.api).get_data()
 
     def get_future_values(
         self,
@@ -2046,14 +2044,12 @@ class AeoVmtScaler(DemandScaler):
         """
         Returns all values from 2024 onwards.
         """
-        vmt = TransportationDemand(
+        return TransportationDemand(
             vehicle=sector,
             year=year,
             api=self.api,
             scenario=self.scenario,
         ).get_data()
-        vmt.index = vmt.index.year
-        return vmt
 
     def get_projections(self) -> pd.DataFrame:
         """
@@ -2211,10 +2207,15 @@ if __name__ == "__main__":
         #     interconnect="texas",
         #     end_use="power",
         # )
+        # snakemake = mock_snakemake(
+        #     "build_transport_demand",
+        #     interconnect="texas",
+        #     end_use="transport",
+        # )
         snakemake = mock_snakemake(
             "build_sector_demand",
             interconnect="texas",
-            end_use="commercial",
+            end_use="industry",
         )
     configure_logging(snakemake)
 
@@ -2290,7 +2291,7 @@ if __name__ == "__main__":
     if demand_disaggregation == "pop":
         writer = WritePopulation(n)
     elif demand_disaggregation == "cliu":
-        cliu_file = snakemake.input.county_industrial_energy
+        cliu_file = snakemake.input.dissagregate_files
         writer = WriteIndustrial(n, cliu_file)
     else:
         raise NotImplementedError
