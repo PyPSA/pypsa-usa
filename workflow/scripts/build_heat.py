@@ -126,12 +126,13 @@ def add_air_cons(
     Adds gas furnaces to the system.
     """
 
-    assert sector in ("com", "res")
-
-    if sector == "res":
-        costs_name = "Residential Central Air Conditioner"
-    elif sector == "com":
-        costs_name = "Rooftop Air Conditioners"
+    match sector:
+        case "res" | "Res" | "residential" | "Residential":
+            costs_name = "Residential Central Air Conditioner"
+        case "com" | "Com" | "commercial" | "Commercial":
+            costs_name = "Rooftop Air Conditioners"
+        case _:
+            raise NotImplementedError
 
     capex = costs.at[costs_name, "capex"]
     efficiency = costs.at[costs_name, "efficiency"]
@@ -298,13 +299,15 @@ def add_service_elec_furnaces(
     costs: pd.DataFrame
     """
 
-    assert sector in ("com", "res")
     assert heat_system in ("urban", "rural")
 
-    if sector == "res":
-        costs_name = "Residential Electric Resistance Heaters"
-    elif sector == "com":
-        costs_name = "Commercial Electric Resistance Heaters"
+    match sector:
+        case "res" | "Res" | "residential" | "Residential":
+            costs_name = "Residential Electric Resistance Heaters"
+        case "com" | "Com" | "commercial" | "Commercial":
+            costs_name = "Commercial Electric Resistance Heaters"
+        case _:
+            raise NotImplementedError
 
     capex = costs.at[costs_name, "capex"]
     efficiency = costs.at[costs_name, "efficiency"]
