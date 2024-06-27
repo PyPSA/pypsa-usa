@@ -21,6 +21,7 @@ def load_pudl_data(pudl_fn: str, start_date: str, end_date: str):
         # usually we want to get the most recent data for each plant_id_eia, generator_id
         # but sometimes the most recent data has null values, so we need to fill in with older data
         # this is why many of the columns are aggregated with array_agg and FILTER so we can get the most recent non-null value
+        # TODO: reconsider pulling PuDL report date according to snapshot year, to match historic operational_status_code 
         """
         WITH monthly_generators AS (
             SELECT
@@ -59,7 +60,7 @@ def load_pudl_data(pudl_fn: str, start_date: str, end_date: str):
         LEFT JOIN core_eia860__scd_generators_energy_storage ON out_eia__yearly_generators.plant_id_eia = core_eia860__scd_generators_energy_storage.plant_id_eia AND out_eia__yearly_generators.generator_id = core_eia860__scd_generators_energy_storage.generator_id
         LEFT JOIN core_eia860__scd_plants ON out_eia__yearly_generators.plant_id_eia = core_eia860__scd_plants.plant_id_eia
         LEFT JOIN monthly_generators ON out_eia__yearly_generators.plant_id_eia = monthly_generators.plant_id_eia AND out_eia__yearly_generators.generator_id = monthly_generators.generator_id
-        WHERE out_eia__yearly_generators.operational_status = 'existing' AND out_eia__yearly_generators.report_date >= '2024-01-01'
+        WHERE out_eia__yearly_generators.operational_status = 'existing' AND out_eia__yearly_generators.operational_status_code = 'OP' AND out_eia__yearly_generators.report_date >= '2024-01-01'
         GROUP BY out_eia__yearly_generators.plant_id_eia, out_eia__yearly_generators.generator_id
     """,
     ).to_df()
@@ -118,19 +119,24 @@ def set_non_conus(eia_data_operable):
     ] = "non-conus"
 
 
-def set_derates(eia_data_operable):
-    eia_data_operable["summer_derate"] = 1 - (
-        (eia_data_operable.capacity_mw - eia_data_operable.summer_capacity_mw)
-        / eia_data_operable.capacity_mw
+def set_derates(plants):
+    plants["derate_summer_capacity"] = np.minimum(
+        plants.summer_capacity_mw, plants.ads_maxcapmw.fillna(np.inf))
+    plants["derate_winter_capacity"] = np.minimum(
+        plants.winter_capacity_mw, plants.ads_maxcapmw.fillna(np.inf))
+
+    plants["summer_derate"] = 1 - (
+        (plants.p_nom - plants.derate_summer_capacity)
+        / plants.p_nom
     )
-    eia_data_operable["winter_derate"] = 1 - (
-        (eia_data_operable.capacity_mw - eia_data_operable.winter_capacity_mw)
-        / eia_data_operable.capacity_mw
+    plants["winter_derate"] = 1 - (
+        (plants.p_nom - plants.derate_winter_capacity)
+        / plants.p_nom
     )
-    eia_data_operable.summer_derate = eia_data_operable.summer_derate.clip(
+    plants.summer_derate = plants.summer_derate.clip(
         upper=1,
     ).clip(lower=0)
-    eia_data_operable.winter_derate = eia_data_operable.winter_derate.clip(
+    plants.winter_derate = plants.winter_derate.clip(
         upper=1,
     ).clip(lower=0)
 
@@ -461,7 +467,6 @@ def merge_ads_data(eia_data_operable):
 
     # Merge ADS plant data with thermal IOC data
     ads_thermal_ioc = pd.merge(ads_thermal, ads_ioc, on="generatorname", how="left")
-    # ads_thermal_ioc.dropna(subset=["avg_hr"])
 
     # loading ads to match ads_name with generator key in order to link with ads thermal file
     ads = pd.read_csv(
@@ -469,7 +474,6 @@ def merge_ads_data(eia_data_operable):
         skiprows=2,
         encoding="unicode_escape",
     )
-    # ads = ads[ads['State'].isin(['NM', 'AZ', 'CA', 'WA', 'OR', 'ID', 'WY', 'MT', 'UT', 'SD', 'CO', 'NV', 'NE', '0', 'TX'])]
     ads["Long Name"] = ads["Long Name"].astype(str)
     ads["Name"] = ads["Name"].str.replace(" ", "")
     ads["Name"] = ads["Name"].apply(lambda x: re.sub(r"[^a-zA-Z0-9]", "", x).lower())
@@ -746,6 +750,8 @@ def set_parameters(plants: pd.DataFrame):
         plants["heat_rate"] / 3.412
     )  # MMBTu/MWh to MWh_electric/MWh_thermal
 
+    set_derates(plants)
+    
     plants[f"heat_rate_source"] = plants[f"heat_rate_source"].fillna("NA")
     plants[f"fuel_cost_source"] = plants[f"fuel_cost_source"].fillna("NA")
     return plants.reset_index()
@@ -918,7 +924,6 @@ if __name__ == "__main__":
         eia_data_operable, snakemake.input.epa_crosswalk, snakemake.input.cems
     )
     set_non_conus(eia_data_operable)
-    set_derates(eia_data_operable)
     set_tech_fuels_primer_movers(eia_data_operable)
     eia_ads_merged = merge_ads_data(eia_data_operable)
     plants = set_parameters(eia_ads_merged)
