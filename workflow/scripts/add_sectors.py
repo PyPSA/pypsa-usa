@@ -17,6 +17,7 @@ import sys
 from typing import Optional
 
 from _helpers import configure_logging, get_snapshots
+from add_electricity import load_costs
 from build_heat import build_heat
 from build_natural_gas import (
     StateGeometry,
@@ -234,6 +235,14 @@ if __name__ == "__main__":
         add_sector_foundation(n, carrier, center_points)
         convert_generators_2_links(n, carrier, f" {carrier}")
 
+    Nyears = n.snapshot_weightings.loc[n.investment_periods[0]].objective.sum() / 8760.0
+    costs = load_costs(
+        snakemake.input.tech_costs,
+        snakemake.params.costs,
+        snakemake.params.max_hours,
+        Nyears,
+    )
+
     # add natural gas infrastructure and data
     build_natural_gas(
         n=n,
@@ -247,13 +256,12 @@ if __name__ == "__main__":
 
     pop_layout_path = snakemake.input.clustered_pop_layout
     cop_ashp_path = snakemake.input.cop_air_total
-    cop_gshp_path = snakemake.input.cop_ground_total
-    costs_path = snakemake.input.costs
+    cop_gshp_path = snakemake.input.cop_soil_total
 
-    # add heating and cooling delievery infrastructure and data
+    # add heating and cooling
     build_heat(
         n=n,
-        costs_path=costs_path,
+        costs=costs,
         pop_layout_path=pop_layout_path,
         cop_ashp_path=cop_ashp_path,
         cop_gshp_path=cop_gshp_path,
@@ -262,7 +270,7 @@ if __name__ == "__main__":
     # add transportation
     build_transportation(
         n=n,
-        costs_path=costs_path,
+        costs=costs,
     )
 
     n.export_to_netcdf(snakemake.output.network)

@@ -231,10 +231,16 @@ def _split_urban_rural_load(
         new_buses["STATE"] = new_buses.index.map(n.buses.STATE)
         new_buses["STATE_NAME"] = new_buses.index.map(n.buses.STATE_NAME)
 
+        # strip out the 'res-heat' and 'com-heat' to add in 'rural' and 'urban'
+        new_buses.index = new_buses.index.str.replace(
+            f"{sector}-heat",
+            f"{sector}-{system}-heat",
+        )
+
         n.madd(
             "Bus",
             new_buses.index,
-            suffix=f" {sector}-{system}-heat",
+            # suffix=f" {sector}-{system}-heat",
             x=new_buses.x,
             y=new_buses.y,
             carrier=f"{sector}-heat",
@@ -244,22 +250,27 @@ def _split_urban_rural_load(
             STATE_NAME=new_buses.STATE_NAME,
         )
 
-        # add system specific loads to the network
+        # get rural or urban loads
         loads_t = n.loads_t.p_set[load_names]
         ratios.index = ratios.index.map(lambda x: f"{x} {sector}-heat")
         loads_t = loads_t.mul(ratios[f"{system}_fraction"])
 
+        loads_t.columns = loads_t.columns.str.replace(
+            f"{sector}-heat",
+            f"{sector}-{system}-heat",
+        )
+
         n.madd(
             "Load",
             new_buses.index,
-            bus=new_buses.index + f" {sector}-{system}-heat",
+            # suffix=f" {sector}-{system}-heat",
+            bus=new_buses.index,
             p_set=loads_t[new_buses.index],
-            suffix=f" {sector}-{system}-heat",
             carrier=f"{sector}-heat",
         )
 
     # remove old combined loads from the network
-    n.mremove("Load", new_buses.index)
+    n.mremove("Load", load_names)
 
 
 def add_service_gas_furnaces(
@@ -408,35 +419,41 @@ def add_service_heat_pumps(
     carrier_name = f"{sector}-heat"
 
     if sector == "res":
-        costs_name = f"Residential {hp_type}-Sourced Heat Pump"
+        costs_name = f"Residential {hp_type}-Source Heat Pump"
     elif sector == "com":
-        costs_name = f"Commercial {hp_type}-Sourced Heat Pump"
+        costs_name = f"Commercial {hp_type}-Source Heat Pump"
 
     loads = n.loads[
         (n.loads.carrier == carrier_name) & (n.loads.bus.str.contains(heat_system))
     ]
 
     hps = pd.DataFrame(index=loads.bus)
-    hps["bus0"] = hps.index.map(lambda x: f"{x} {sector}")
-    hps["bus1"] = hps.index.map(lambda x: f"{x} {sector}-{heat_system.lower()}")
-    hps["carrier"] = hps.index.map(lambda x: f"{x} {sector}-{heat_system.lower()}")
+    hps["bus0"] = hps.index.map(lambda x: x.split(f" {sector}-{heat_system}-heat")[0])
+    hps["bus1"] = hps.index
+    hps["carrier"] = f"{sector}-heat"
+    hps = hps.add_suffix(" heat-pump", axis=0)
 
     if isinstance(cop, pd.DataFrame):
+        cop = cop.add_suffix(f" {sector}-{heat_system}-heat")
         efficiency = cop[loads.index.to_list()]
+        efficiency = efficiency.add_suffix(" heat-pump")
     else:
         efficiency = costs.at[costs_name, "efficiency"]
+
+    capex = costs.at[costs_name, "capital_cost"]
+    lifetime = costs.at[costs_name, "lifetime"]
 
     n.madd(
         "Link",
         hps.index,
-        suffix=f" {sector} {hp_type.lower()} heat pump",
+        # suffix=" heat-pump",
         bus0=hps.bus0,
         bus1=hps.bus1,
         carrier=hps.carrier,
         efficiency=efficiency,
-        capital_cost=costs.at[costs_name, "efficiency"] * costs.at[costs_name, "fixed"],
+        capital_cost=capex,
         p_nom_extendable=True,
-        lifetime=costs.at[costs_name, "lifetime"],
+        lifetime=lifetime,
     )
 
 
