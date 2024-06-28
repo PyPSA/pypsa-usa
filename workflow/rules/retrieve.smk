@@ -275,10 +275,8 @@ rule retrieve_caiso_data:
 
 rule retrieve_pudl:
     output:
-        pudl=DATA + "pudl/pudl.sqlite",
-    params:
-        # eia_api_key = config["api"].get("eia", None),
-        eia_api_key=None,
+        pudl= DATA + "pudl/pudl.sqlite",
+        pudl_ferc714= DATA + "pudl/out_ferc714__hourly_estimated_state_demand.parquet",
     log:
         LOGS + "retrieve_pudl.log",
     resources:

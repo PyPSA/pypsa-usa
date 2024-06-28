@@ -309,6 +309,44 @@ class ReadEia(ReadStrategy):
         df["SPP"] = df.pop("SWPP")
         return df
 
+class ReadFERC714(ReadStrategy):
+    """
+    Reads data from PuDLs FERC 714 based State historical Demand.
+    """
+
+    def __init__(self, filepath: str | None = None) -> None:
+        super().__init__(filepath)
+        self._zone = "state"
+
+    @property
+    def zone(self):
+        return self._zone
+
+    def _read_data(self) -> pd.DataFrame:
+        """
+        Reads raw data.
+        """
+
+        if not self.filepath:
+            logger.error("Must provide filepath for FERC714 data")
+            sys.exit()
+
+        logger.info("Building Load Data using PUDL FERC 714 demand")
+        return pd.read_parquet(self.filepath)
+
+    def _format_data(self, data: pd.DataFrame) -> pd.DataFrame:
+        """
+        Formats raw data.
+        """
+        df = data.copy()
+        df = self._format_snapshot_index(df)
+        df["fuel"] = "electricity"
+        df["sector"] = "all"
+        df["subsector"] = "all"
+        df["State"] = df.State.map(CODE_2_STATE)
+        df = df.set_index([df.index, "sector", "subsector", "fuel"])
+        return df.fillna(0)
+
 
 class ReadEfs(ReadStrategy):
     """
@@ -1819,6 +1857,8 @@ if __name__ == "__main__":
             scaling_method = "efs"
         elif demand_profile == "eia":
             scaling_method = "aeo_electricity"
+        elif demand_profile == "ferc":
+            scaling_method = "aeo_electricity"
         else:
             logger.warning(
                 f"No scaling method available for {demand_profile} profile. Setting to 'aeo_electricity'",
@@ -1847,6 +1887,14 @@ if __name__ == "__main__":
         assert profile_year in range(2018, 2024)
 
         reader = ReadEia(demand_files)
+        sns = n.snapshots.get_level_values(1).map(
+            lambda x: x.replace(year=profile_year),
+        )
+    
+    elif demand_profile == "ferc":
+        assert profile_year in range(2018, 2024)
+
+        reader = ReadFERC714(demand_files)
         sns = n.snapshots.get_level_values(1).map(
             lambda x: x.replace(year=profile_year),
         )

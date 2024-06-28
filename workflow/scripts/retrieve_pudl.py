@@ -7,7 +7,7 @@ import zlib
 from pathlib import Path
 
 import requests
-from _helpers import mock_snakemake
+from _helpers import mock_snakemake, progress_retrieve
 from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
@@ -36,3 +36,12 @@ if __name__ == "__main__":
                     for chunk in r.iter_content(chunk_size=128):
                         progress_bar.update(len(chunk))
                         fd.write(d.decompress(chunk))
+    
+    # Get PUDL FERC Form 714 Parquet
+    parquet = f"https://zenodo.org/records/11292273/files/out_ferc714__hourly_estimated_state_demand.parquet?download=1"
+    
+    save_ferc = snakemake.output.pudl_ferc714
+
+    if not Path(save_ferc).exists():
+        logger.info(f"Downloading FERC 714 Demand from '{parquet}'")
+        progress_retrieve(parquet, save_ferc)
