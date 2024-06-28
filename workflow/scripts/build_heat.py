@@ -35,7 +35,7 @@ def build_heat(
         add_service_heat(n, sector, pop_layout, costs, ashp_cop, gshp_cop)
         add_service_cooling(n, sector, costs)
 
-    for sector in "ind":
+    for sector in ["ind"]:
         add_industrial_heat(n, sector, costs)
 
 
@@ -481,15 +481,18 @@ def add_industrial_furnace(n: pypsa.Network, costs: pd.DataFrame) -> None:
     loads = n.loads[(n.loads.carrier == carrier_name)]
 
     furnaces = pd.DataFrame(index=loads.bus)
-    furnaces["bus0"] = furnaces.index.map(n.buses.STATE)
-    furnaces["bus0"] = furnaces.index.map(lambda x: f"{x} gas")
-    furnaces["bus1"] = furnaces.index.map(lambda x: f"{x} {sector}")
-    furnaces["carrier"] = furnaces.index.map(lambda x: f"{x} {sector}-gas")
+    furnaces["bus0"] = furnaces.index.map(lambda x: x.split(f" {sector}-heat")[0]).map(
+        n.buses.STATE,
+    )
+    furnaces["bus0"] = furnaces.bus0 + " gas"
+    furnaces["bus1"] = furnaces.index
+    furnaces["carrier"] = f"{sector}-heat"
+    furnaces.index = furnaces.index.map(lambda x: x.split("-heat")[0])
 
     n.madd(
         "Link",
         furnaces.index,
-        suffix=f" {sector} gas furnace",
+        suffix=" gas-furnace",
         bus0=furnaces.bus0,
         bus1=furnaces.bus1,
         carrier=furnaces.carrier,
@@ -513,19 +516,22 @@ def add_industrial_boiler(n: pypsa.Network, costs: pd.DataFrame) -> None:
 
     loads = n.loads[(n.loads.carrier == carrier_name)]
 
-    furnaces = pd.DataFrame(index=loads.bus)
-    furnaces["bus0"] = furnaces.index.map(n.buses.STATE)
-    furnaces["bus0"] = furnaces.index.map(lambda x: f"{x} coal")
-    furnaces["bus1"] = furnaces.index.map(lambda x: f"{x} {sector}")
-    furnaces["carrier"] = furnaces.index.map(lambda x: f"{x} {sector}-coal")
+    boiler = pd.DataFrame(index=loads.bus)
+    boiler["bus0"] = boiler.index.map(lambda x: x.split(f" {sector}-heat")[0]).map(
+        n.buses.STATE,
+    )
+    boiler["bus0"] = boiler.bus0 + " coal"
+    boiler["bus1"] = boiler.index
+    boiler["carrier"] = f"{sector}-heat"
+    boiler.index = boiler.index.map(lambda x: x.split("-heat")[0])
 
     n.madd(
         "Link",
-        furnaces.index,
-        suffix=f" {sector} coal boiler",
-        bus0=furnaces.bus0,
-        bus1=furnaces.bus1,
-        carrier=furnaces.carrier,
+        boiler.index,
+        suffix=" coal-boiler",
+        bus0=boiler.bus0,
+        bus1=boiler.bus1,
+        carrier=boiler.carrier,
         efficiency=efficiency,
         capital_cost=capex,
         p_nom_extendable=True,

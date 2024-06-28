@@ -10,13 +10,17 @@ from add_electricity import load_costs
 
 def build_transportation(
     n: pypsa.Network,
-    costs_path: str,
+    costs: pd.DataFrame,
 ) -> None:
     """
     Main funtion to interface with.
     """
 
-    costs = load_costs(costs_path)
+    for fuel in ("elec", "lpg"):
+        if fuel == "elec":
+            add_ev_infrastructure(n)  # attaches at node level
+        else:
+            add_fossil_infrastructure(n, fuel)  # attaches at state level
 
     for vehicle in ("lgt", "med", "hvy", "bus"):
         add_elec_vehicle(n, vehicle, costs)
@@ -25,7 +29,7 @@ def build_transportation(
 
 def add_ev_infrastructure(n: pypsa.Network) -> None:
     """
-    Adds node that all EVs attach to.
+    Adds bus that all EVs attach to at a node level.
     """
 
     nodes = n.buses[n.buses.carrier == "AC"]
@@ -37,7 +41,7 @@ def add_ev_infrastructure(n: pypsa.Network) -> None:
         x=nodes.x,
         y=nodes.y,
         country=nodes.country,
-        state=nodes.state,
+        state=nodes.STATE,
         carrier="trn-elec",
     )
 
@@ -48,6 +52,43 @@ def add_ev_infrastructure(n: pypsa.Network) -> None:
         bus0=nodes.index,
         bus1=nodes.index + " trn-elec",
         carrier="trn-elec",
+        efficiency=1,
+        capital_cost=0,
+        p_nom_extendable=True,
+        lifetime=np.inf,
+    )
+
+
+def add_fossil_infrastructure(n: pypsa.Network, carrier: str) -> None:
+    """
+    Adds bus that all fossil vehicles attach to at a state level.
+    """
+
+    nodes = n.buses[n.buses.carrier == "AC"]
+
+    n.madd(
+        "Bus",
+        nodes.index,
+        suffix=f" trn-{carrier}",
+        x=nodes.x,
+        y=nodes.y,
+        country=nodes.country,
+        state=nodes.state,
+        carrier=f"trn-{carrier}",
+    )
+
+    # alings oil and lpg
+    corrected_carrier = carrier if not carrier == "lpg" else "oil"
+
+    nodes["bus0"] = nodes.STATE + f" {corrected_carrier}"
+
+    n.madd(
+        "Link",
+        nodes.index,
+        suffix=f" trn-{carrier}",
+        bus0=nodes.bus0,
+        bus1=nodes.index + f" trn-{carrier}",
+        carrier=f"trn-{carrier}",
         efficiency=1,
         capital_cost=0,
         p_nom_extendable=True,
@@ -91,7 +132,7 @@ def add_elec_vehicle(
         case _:
             raise NotImplementedError
 
-    capex = costs.at[costs_name, "capex"]
+    capex = costs.at[costs_name, "capital_cost"]
     efficiency = costs.at[costs_name, "efficiency"]
     lifetime = costs.at[costs_name, "lifetime"]
 
@@ -100,14 +141,15 @@ def add_elec_vehicle(
     loads = n.loads[n.loads.carrier == carrier_name]
 
     vehicles = pd.DataFrame(index=loads.bus)
-    vehicles["bus0"] = vehicles.index
-    vehicles["bus1"] = vehicles.index.map(lambda x: f"{x} trn-elec-{vehicle}")
-    vehicles["carrier"] = carrier_name
+    vehicles.index = vehicles.index.map(lambda x: x.split(f" trn-elec-{vehicle}")[0])
+    vehicles["bus0"] = vehicles.index + " trn-elec"
+    vehicles["bus1"] = vehicles.index + f" trn-elec-{vehicle}"
+    vehicles["carrier"] = "trn-elec"
 
     n.madd(
         "Link",
         vehicles.index,
-        suffix=f" trn-elec",
+        suffix=f" trn-elec-{vehicle}",
         bus0=vehicles.bus0,
         bus1=vehicles.bus1,
         carrier=vehicles.carrier,
@@ -146,7 +188,7 @@ def add_lpg_vehicle(
         case _:
             raise NotImplementedError
 
-    capex = costs.at[costs_name, "capex"]
+    capex = costs.at[costs_name, "capital_cost"]
     efficiency = costs.at[costs_name, "efficiency"]
     lifetime = costs.at[costs_name, "lifetime"]
 
@@ -155,14 +197,15 @@ def add_lpg_vehicle(
     loads = n.loads[n.loads.carrier == carrier_name]
 
     vehicles = pd.DataFrame(index=loads.bus)
-    vehicles["bus0"] = vehicles.index
-    vehicles["bus1"] = vehicles.index.map(lambda x: f"{x} trn-lpg-{vehicle}")
-    vehicles["carrier"] = carrier_name
+    vehicles.index = vehicles.index.map(lambda x: x.split(f" trn-lpg-{vehicle}")[0])
+    vehicles["bus0"] = vehicles.index + " trn-lpg"
+    vehicles["bus1"] = vehicles.index + f" trn-lpg-{vehicle}"
+    vehicles["carrier"] = "trn-lpg"
 
     n.madd(
         "Link",
         vehicles.index,
-        suffix=f" trn-lpg",
+        suffix=f" trn-lpg-{vehicle}",
         bus0=vehicles.bus0,
         bus1=vehicles.bus1,
         carrier=vehicles.carrier,
