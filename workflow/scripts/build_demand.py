@@ -44,6 +44,8 @@ import pypsa
 import xarray as xr
 from _helpers import configure_logging
 from eia import EnergyDemand
+import geopandas as gpd
+import duckdb
 
 logger = logging.getLogger(__name__)
 
@@ -332,20 +334,68 @@ class ReadFERC714(ReadStrategy):
             sys.exit()
 
         logger.info("Building Load Data using PUDL FERC 714 demand")
-        return pd.read_parquet(self.filepath)
+        return pd.read_parquet(self.filepath[0], dtype_backend="pyarrow")
+
+    def _read_census_data(self) -> pd.DataFrame:
+        """
+        Reads in census data for population weighting.
+        """
+        duckdb.connect(database=":memory:", read_only=False)
+
+        duckdb.query("INSTALL sqlite;")
+        duckdb.query(
+            f"""
+            ATTACH '{self.filepath[1]}' (TYPE SQLITE);
+            """,
+        )
+
+        sql = """
+        SELECT
+        stusps10 as state_abbr,
+        geoid10 as state_id_fips,
+        name10 as state_name,
+        shape as geom
+        FROM
+        censusdp1tract.state_2010census_dp1;
+        """
+        # df = duckdb.query(sql).to_df()
+        states = (
+            gpd.read_postgis(sql, duckdb, crs="EPSG:4326")
+            .convert_dtypes()
+            .sort_values("state_abbr")
+            .set_index("state_id_fips")
+        )
+        return states
 
     def _format_data(self, data: pd.DataFrame) -> pd.DataFrame:
         """
         Formats raw data.
         """
+        states = self._read_census_data()
+
         df = data.copy()
+
+        df['State'] = df.state_id_fips.map(states.state_abbr)
+        df = df.drop(columns=["state_id_fips",'demand_mwh'])
+        df = df.groupby(['datetime_utc','State']).sum().reset_index()
+
+
+        df = df.rename(columns={"datetime_utc": "snapshot"}).set_index("snapshot")
         df = self._format_snapshot_index(df)
         df["fuel"] = "electricity"
         df["sector"] = "all"
         df["subsector"] = "all"
         df["State"] = df.State.map(CODE_2_STATE)
-        df = df.set_index([df.index, "sector", "subsector", "fuel"])
-        return df.fillna(0)
+        
+        df = pd.pivot_table(
+            df,
+            values="scaled_demand_mwh",
+            index=["snapshot", "sector", "subsector", "fuel"],
+            columns=["State"],
+            aggfunc="sum",
+        )
+
+        return df.fillna(0).round(2)
 
 
 class ReadEfs(ReadStrategy):
@@ -1832,7 +1882,7 @@ if __name__ == "__main__":
 
         snakemake = mock_snakemake(
             "build_electrical_demand",
-            interconnect="texas",
+            interconnect="western",
             end_use="power",
         )
         # snakemake = mock_snakemake(
