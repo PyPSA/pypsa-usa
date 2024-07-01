@@ -48,7 +48,7 @@ def add_ev_infrastructure(n: pypsa.Network) -> None:
     n.madd(
         "Link",
         nodes.index,
-        suffix=" trn-elec",
+        suffix=" trn elec-infra",
         bus0=nodes.index,
         bus1=nodes.index + " trn-elec",
         carrier="trn-elec",
@@ -85,7 +85,7 @@ def add_fossil_infrastructure(n: pypsa.Network, carrier: str) -> None:
     n.madd(
         "Link",
         nodes.index,
-        suffix=f" trn-{carrier}",
+        suffix=f" trn {carrier}-infra",
         bus0=nodes.bus0,
         bus1=nodes.index + f" trn-{carrier}",
         carrier=f"trn-{carrier}",
