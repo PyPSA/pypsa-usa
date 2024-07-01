@@ -155,18 +155,14 @@ def split_loads_by_carrier(n: pypsa.Network):
 
     At this point, all loads (ie. com-elec, com-heat, com-cool) will be
     nested under the elec bus. This function will create a new bus-load
-    pair for each energy carrier that is NOT electricity. Electricity loads
-    are still attached to the main node from the electrical model.
+    pair for each energy carrier that is NOT electricity.
 
     Note: This will break the flow of energy in the model! You must add a
     new link between the new bus and old bus if you want to retain the flow
     """
 
-    exclusion = "-elec"
-
     for bus in n.buses.index.unique():
         df = n.loads[n.loads.bus == bus][["bus", "carrier"]]
-        df = df[~(df.carrier.str.endswith(exclusion))]
 
         n.madd(
             "Bus",
@@ -181,9 +177,35 @@ def split_loads_by_carrier(n: pypsa.Network):
             STATE_NAME=n.buses.at[bus, "STATE_NAME"],
         )
 
-    n.loads["bus"] = n.loads.apply(
-        lambda row: row.bus if row.carrier.endswith(exclusion) else row.name,
-        axis=1,
+    n.loads["bus"] = n.loads.index
+
+
+def build_electricity_infra(n: pypsa.Network):
+    """
+    Adds links to connect electricity nodes.
+
+    For example, will build the link between "p480 0" and "p480 0 res-
+    elec"
+    """
+
+    df = n.loads[n.loads.index.str.endswith("-elec")].copy()
+
+    df["bus0"] = df.apply(lambda row: row.bus.split(f" {row.carrier}")[0], axis=1)
+    df["bus1"] = df.bus
+    df["sector"] = df.carrier.map(lambda x: x.split("-")[0])
+    df.index = df["bus0"] + " " + df["sector"]
+
+    n.madd(
+        "Link",
+        df.index,
+        suffix=" elec-infra",
+        bus0=df.bus0,
+        bus1=df.bus1,
+        carrier=df.carrier,
+        efficiency=1,
+        capital_cost=0,
+        p_nom_extendable=True,
+        lifetime=np.inf,
     )
 
 
@@ -268,6 +290,9 @@ if __name__ == "__main__":
     pop_layout_path = snakemake.input.clustered_pop_layout
     cop_ashp_path = snakemake.input.cop_air_total
     cop_gshp_path = snakemake.input.cop_soil_total
+
+    # add electricity infrastructure
+    build_electricity_infra(n=n)
 
     # add heating and cooling
     build_heat(
