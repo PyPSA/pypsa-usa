@@ -63,7 +63,7 @@ BEV_MAINTENANCE_COSTS = {  # units of $ / miles
 }
 """
 
-# to coordinate cocating different datasets
+# to coordinate concating different datasets
 COLUMN_ORDER = [
     "technology",
     "parameter",
@@ -102,12 +102,6 @@ class EfsTechnologyData:
         file_path: str
             Path to this file https://data.nrel.gov/submissions/78 which is the
             data from this report https://www.nrel.gov/docs/fy18osti/70485.pdf
-
-    Public methods for "Transportation" and "Buildings" sector include:
-    - get_capex()
-    - get_lifetime()
-    - get_efficiency()
-    - get_fixed_costs()
 
     Buildings sector will return both commercial and residential data
     """
@@ -724,11 +718,11 @@ class EiaBuildingData:
 
 
 if __name__ == "__main__":
-    file_path = "../data/costs/EFS_Technology_Data.xlsx"
+    file_path = "../repo_data/costs/EFS_Technology_Data.xlsx"
     bev = EfsTechnologyData(file_path)
-    file_path = "../data/costs/efs_icev_costs.csv"
+    file_path = "../repo_data/costs/efs_icev_costs.csv"
     ice = EfsIceTransportationData(file_path)
-    file_path = "../data/costs/eia_tech_costs.csv"
+    file_path = "../repo_data/costs/eia_tech_costs.csv"
     eia = EiaBuildingData(file_path)
     print(bev.get_data("Transportation"))
     print(ice.get_data())

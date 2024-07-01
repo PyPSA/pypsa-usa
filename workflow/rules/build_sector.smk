@@ -3,7 +3,9 @@
 
 def sector_input_files(wildcards):
     input_files = {
-        "network": RESOURCES + "{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}.nc"
+        "network": RESOURCES + "{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}.nc",
+        "tech_costs": RESOURCES
+        + f"costs/costs_{config['scenario']['planning_horizons'][0]}.csv",
     }
     sectors = wildcards.sector.split("-")
     if "G" in sectors:
@@ -37,6 +39,7 @@ rule add_sectors:
     params:
         electricity=config["electricity"],
         costs=config["costs"],
+        max_hours=config["electricity"]["max_hours"],
         plotting=config["plotting"],
         natural_gas=config["sector"].get("natural_gas", None),
         snapshots=config["snapshots"],

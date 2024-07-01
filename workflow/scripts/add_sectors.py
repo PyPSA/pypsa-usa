@@ -72,14 +72,15 @@ def add_sector_foundation(
     Adds carrier, state level bus and generator for the energy carrier.
     """
 
-    if carrier == "gas":
-        carrier_kwargs = {"color": "#d35050", "nice_name": "Natural Gas"}
-    elif carrier == "coal":
-        carrier_kwargs = {"color": "#d35050", "nice_name": "Coal"}
-    elif carrier == "lpg":
-        carrier_kwargs = {"color": "#d35050", "nice_name": "Liquid Petroleum Gas"}
-    else:
-        carrier_kwargs = {}
+    match carrier:
+        case "gas":
+            carrier_kwargs = {"color": "#d35050", "nice_name": "Natural Gas"}
+        case "coal":
+            carrier_kwargs = {"color": "#d35050", "nice_name": "Coal"}
+        case "oil" | "lpg":
+            carrier_kwargs = {"color": "#d35050", "nice_name": "Liquid Petroleum Gas"}
+        case _:
+            carrier_kwargs = {}
 
     # make primary energy carriers
 
@@ -131,15 +132,18 @@ def add_sector_foundation(
     )
 
     n.madd(
-        "Generator",
+        "Store",
         names=points.index,
         suffix=f" {carrier}",
         bus=[f"{x} {carrier}" for x in points.index],
-        p_nom=0,
-        p_nom_extendable=True,
+        e_nom=0,
+        e_nom_extendable=True,
         capital_cost=0,
-        p_nom_min=0,
-        p_nom_max=np.inf,
+        e_nom_min=0,
+        e_nom_max=np.inf,
+        e_min_pu=-1,
+        e_max_pu=0,
+        e_cyclic_per_period=False,
         carrier=carrier,
         unit="MWh_th",
     )
@@ -151,14 +155,18 @@ def split_loads_by_carrier(n: pypsa.Network):
 
     At this point, all loads (ie. com-elec, com-heat, com-cool) will be
     nested under the elec bus. This function will create a new bus-load
-    pair for each energy carrier
+    pair for each energy carrier that is NOT electricity. Electricity loads
+    are still attached to the main node from the electrical model.
 
     Note: This will break the flow of energy in the model! You must add a
     new link between the new bus and old bus if you want to retain the flow
     """
 
+    exclusion = "-elec"
+
     for bus in n.buses.index.unique():
         df = n.loads[n.loads.bus == bus][["bus", "carrier"]]
+        df = df[~(df.carrier.str.endswith(exclusion))]
 
         n.madd(
             "Bus",
@@ -173,7 +181,10 @@ def split_loads_by_carrier(n: pypsa.Network):
             STATE_NAME=n.buses.at[bus, "STATE_NAME"],
         )
 
-    n.loads["bus"] = n.loads.index
+    n.loads["bus"] = n.loads.apply(
+        lambda row: row.bus if row.carrier.endswith(exclusion) else row.name,
+        axis=1,
+    )
 
 
 if __name__ == "__main__":

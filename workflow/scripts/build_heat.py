@@ -271,6 +271,7 @@ def _split_urban_rural_load(
 
     # remove old combined loads from the network
     n.mremove("Load", load_names)
+    n.mremove("Bus", load_names)
 
 
 def add_service_gas_furnaces(
