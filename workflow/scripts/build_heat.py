@@ -232,15 +232,12 @@ def _split_urban_rural_load(
         new_buses["STATE_NAME"] = new_buses.index.map(n.buses.STATE_NAME)
 
         # strip out the 'res-heat' and 'com-heat' to add in 'rural' and 'urban'
-        new_buses.index = new_buses.index.str.replace(
-            f"{sector}-heat",
-            f"{sector}-{system}-heat",
-        )
+        new_buses.index = new_buses.index.str.strip(f" {sector}-heat")
 
         n.madd(
             "Bus",
             new_buses.index,
-            # suffix=f" {sector}-{system}-heat",
+            suffix=f" {sector}-{system}-heat",
             x=new_buses.x,
             y=new_buses.y,
             carrier=f"{sector}-heat",
@@ -252,20 +249,22 @@ def _split_urban_rural_load(
 
         # get rural or urban loads
         loads_t = n.loads_t.p_set[load_names]
-        ratios.index = ratios.index.map(lambda x: f"{x} {sector}-heat")
+        loads_t = loads_t.rename(
+            columns={x: x.strip(f" {sector}-heat") for x in loads_t.columns},
+        )
         loads_t = loads_t.mul(ratios[f"{system}_fraction"])
 
-        loads_t.columns = loads_t.columns.str.replace(
-            f"{sector}-heat",
-            f"{sector}-{system}-heat",
-        )
+        # loads_t.columns = loads_t.columns.str.replace(
+        #     f"{sector}-heat",
+        #     f"{sector}-{system}-heat",
+        # )
 
         n.madd(
             "Load",
             new_buses.index,
-            # suffix=f" {sector}-{system}-heat",
-            bus=new_buses.index,
-            p_set=loads_t[new_buses.index],
+            suffix=f" {sector}-{system}-heat",
+            bus=new_buses.index + f" {sector}-{system}-heat",
+            p_set=loads_t,
             carrier=f"{sector}-heat",
         )
 
