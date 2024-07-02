@@ -183,13 +183,13 @@ def add_air_cons(
     acs = pd.DataFrame(index=loads.bus)
     acs["bus0"] = acs.index.map(lambda x: x.split(f" {sector}-cool")[0])
     acs["bus1"] = acs.index
-    acs["carrier"] = carrier_name
+    acs["carrier"] = f"{sector}-air-con"
     acs.index = acs.bus0
 
     n.madd(
         "Link",
         acs.index,
-        suffix=f" {sector} air-con",
+        suffix=f" {sector}-air-con",
         bus0=acs.bus0,
         bus1=acs.bus1,
         carrier=acs.carrier,
@@ -313,7 +313,7 @@ def add_service_gas_furnaces(
     furnaces = pd.DataFrame(index=loads.bus)
     furnaces["bus0"] = furnaces.index.map(n.buses.STATE).map(lambda x: f"{x} gas")
     furnaces["bus1"] = furnaces.index
-    furnaces["carrier"] = f"{sector}-heat"
+    furnaces["carrier"] = f"{sector}-{heat_system}-gas-furnace"
     furnaces.index = furnaces.bus1.map(
         lambda x: x.split(f" {sector}-{heat_system}-heat")[0],
     )
@@ -321,7 +321,7 @@ def add_service_gas_furnaces(
     n.madd(
         "Link",
         furnaces.index,
-        suffix=f" {sector}-{heat_system} gas-furnace",
+        suffix=f" {sector}-{heat_system}-gas-furnace",
         bus0=furnaces.bus0,
         bus1=furnaces.bus1,
         carrier=furnaces.carrier,
@@ -374,13 +374,13 @@ def add_service_elec_furnaces(
         lambda x: x.split(f" {sector}-{heat_system}-heat")[0],
     )
     furnaces["bus1"] = furnaces.index
-    furnaces["carrier"] = f"{sector}-heat"
+    furnaces["carrier"] = f"{sector}-{heat_system}-elec-furnace"
     furnaces.index = furnaces.bus0
 
     n.madd(
         "Link",
         furnaces.index,
-        suffix=f" {sector}-{heat_system} elec-furnace",
+        suffix=f" {sector}-{heat_system}-elec-furnace",
         bus0=furnaces.bus0,
         bus1=furnaces.bus1,
         carrier=furnaces.carrier,
@@ -433,6 +433,8 @@ def add_service_heat_pumps(
         else:
             costs_name = "Commercial Rooftop Heat Pumps"
 
+    hp_abrev = "ashp" if heat_system == "urban" else "gshp"
+
     loads = n.loads[
         (n.loads.carrier == carrier_name) & (n.loads.bus.str.contains(heat_system))
     ]
@@ -440,7 +442,7 @@ def add_service_heat_pumps(
     hps = pd.DataFrame(index=loads.bus)
     hps["bus0"] = hps.index.map(lambda x: x.split(f" {sector}-{heat_system}-heat")[0])
     hps["bus1"] = hps.index
-    hps["carrier"] = f"{sector}-heat"
+    hps["carrier"] = f"{sector}-{heat_system}-{hp_abrev}"
     hps.index = hps.bus0  # just node name (ie. p480 0)
 
     if isinstance(cop, pd.DataFrame):
@@ -451,12 +453,10 @@ def add_service_heat_pumps(
     capex = costs.at[costs_name, "capital_cost"].round(1)
     lifetime = costs.at[costs_name, "lifetime"]
 
-    suffix = "ashp" if heat_system == "urban" else "gshp"
-
     n.madd(
         "Link",
         hps.index,
-        suffix=f" {sector} {suffix}",
+        suffix=f" {sector}-{heat_system}-{hp_abrev}",
         bus0=hps.bus0,
         bus1=hps.bus1,
         carrier=hps.carrier,
@@ -486,13 +486,13 @@ def add_industrial_furnace(n: pypsa.Network, costs: pd.DataFrame) -> None:
     )
     furnaces["bus0"] = furnaces.bus0 + " gas"
     furnaces["bus1"] = furnaces.index
-    furnaces["carrier"] = f"{sector}-heat"
+    furnaces["carrier"] = f"{sector}-gas-furnace"
     furnaces.index = furnaces.index.map(lambda x: x.split("-heat")[0])
 
     n.madd(
         "Link",
         furnaces.index,
-        suffix=" gas-furnace",
+        suffix="-gas-furnace",  #'ind' included in index already
         bus0=furnaces.bus0,
         bus1=furnaces.bus1,
         carrier=furnaces.carrier,
@@ -522,13 +522,13 @@ def add_industrial_boiler(n: pypsa.Network, costs: pd.DataFrame) -> None:
     )
     boiler["bus0"] = boiler.bus0 + " coal"
     boiler["bus1"] = boiler.index
-    boiler["carrier"] = f"{sector}-heat"
+    boiler["carrier"] = f"{sector}-coal-boiler"
     boiler.index = boiler.index.map(lambda x: x.split("-heat")[0])
 
     n.madd(
         "Link",
         boiler.index,
-        suffix=" coal-boiler",
+        suffix="-coal-boiler",  # 'ind' included in index already
         bus0=boiler.bus0,
         bus1=boiler.bus1,
         carrier=boiler.carrier,

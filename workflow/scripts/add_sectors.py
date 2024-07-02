@@ -194,11 +194,12 @@ def build_electricity_infra(n: pypsa.Network):
     df["bus1"] = df.bus
     df["sector"] = df.carrier.map(lambda x: x.split("-")[0])
     df.index = df["bus0"] + " " + df["sector"]
+    df["carrier"] = df["sector"] + "-elec-infra"
 
     n.madd(
         "Link",
         df.index,
-        suffix=" elec-infra",
+        suffix="-elec-infra",
         bus0=df.bus0,
         bus1=df.bus1,
         carrier=df.carrier,

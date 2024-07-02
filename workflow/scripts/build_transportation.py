@@ -144,7 +144,7 @@ def add_elec_vehicle(
     vehicles.index = vehicles.index.map(lambda x: x.split(f" trn-elec-{vehicle}")[0])
     vehicles["bus0"] = vehicles.index + " trn-elec"
     vehicles["bus1"] = vehicles.index + f" trn-elec-{vehicle}"
-    vehicles["carrier"] = "trn-elec"
+    vehicles["carrier"] = f"trn-elec-{vehicle}"
 
     n.madd(
         "Link",
@@ -200,7 +200,7 @@ def add_lpg_vehicle(
     vehicles.index = vehicles.index.map(lambda x: x.split(f" trn-lpg-{vehicle}")[0])
     vehicles["bus0"] = vehicles.index + " trn-lpg"
     vehicles["bus1"] = vehicles.index + f" trn-lpg-{vehicle}"
-    vehicles["carrier"] = "trn-lpg"
+    vehicles["carrier"] = f"trn-lpg-{vehicle}"
 
     n.madd(
         "Link",
