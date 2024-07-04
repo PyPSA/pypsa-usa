@@ -39,6 +39,8 @@ SLIDER_SELECT_TIME = "slider_select_time"
 # radio buttons
 RADIO_BUTTON_RESAMPLE = "radio_button_resample"
 RADIO_BUTTON_LOAD = "radio_button_load"
+RADIO_BUTTON_GROUP_CARRIERS = "radio_button_group_carriers"
+RADIO_BUTTON_PLOT_TYPE = "radio_button_plot_type"
 
 # graphics
 GRAPHIC_CONTAINER = "graphic_container"
@@ -158,7 +160,6 @@ def get_load_timeseries(n: pypsa.Network, loads: list[str], year: int) -> pd.Dat
     """
     Gets timeseries of select carriers.
     """
-    print(year)
     df = n.loads_t.p_set[loads].loc[year]
     df.index = pd.to_datetime(df.index)
     return df
@@ -172,6 +173,11 @@ def filter_on_time(df: pd.DataFrame, doy: pd.Timestamp, year: int) -> pd.Series:
     day = datetime(year, 1, 1) + timedelta(doy - 1)
     assert isinstance(df.index, pd.DatetimeIndex)
     return df[df.index.date == day.date()]
+
+
+def group_load_on_carriers(n: pypsa.Network, df: pd.DataFrame) -> pd.DataFrame:
+    bus_2_carrier = n.buses.carrier.to_dict()
+    return df.rename(columns=bus_2_carrier).T.groupby(level=0).sum().T
 
 
 def group_sum_by_carrier(n: pypsa.Network, df: pd.Series) -> pd.Series:
@@ -210,15 +216,22 @@ def format_timeseries(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def time_slider(snapshots: pd.DatetimeIndex) -> html.Div:
+    min_day = snapshots.min()[1].timetuple().tm_yday
+    max_day = snapshots.max()[1].timetuple().tm_yday
+    interval = round((max_day - min_day) / 50)
     return html.Div(
         children=[
             html.H4("Day To Plot"),
             dcc.Slider(
                 id=SLIDER_SELECT_TIME,
-                min=snapshots.min()[1].timetuple().tm_yday,
-                max=snapshots.max()[1].timetuple().tm_yday,
-                step=1,
-                value=snapshots.min()[1].timetuple().tm_yday,
+                min=min_day,
+                max=max_day,
+                step=None,
+                value=min_day,
+                marks={
+                    x: str(x) if (x % interval == 0) else ""
+                    for x in range(min_day, max_day, 1)
+                },
             ),
         ],
     )
@@ -235,11 +248,6 @@ def sector_dropdown(sector: str) -> html.Div:
                 multi=False,
                 persistence=True,
             ),
-            # html.Button(
-            #     children=["Select All"],
-            #     id=BUTTON_SELECT_ALL_SECTORS,
-            #     n_clicks=0,
-            # ),
         ],
     )
 
@@ -259,14 +267,6 @@ def investment_year_dropdown(investment_year: int) -> html.Div:
     )
 
 
-# @app.callback(
-#     Output(DROPDOWN_SELECT_SECTOR, "value"),
-#     Input(BUTTON_SELECT_ALL_SECTORS, "n_clicks"),
-# )
-# def select_all_sectors(_: int) -> list[str]:
-#     return SECTORS
-
-
 def fuel_dropdown(fuels: list[str]) -> html.Div:
     return html.Div(
         children=[
@@ -278,21 +278,55 @@ def fuel_dropdown(fuels: list[str]) -> html.Div:
                 multi=True,
                 persistence=True,
             ),
-            html.Button(
-                children=["Select All"],
-                id=BUTTON_SELECT_ALL_FUELS,
-                n_clicks=0,
+            # html.Button(
+            #     children=["Select All"],
+            #     id=BUTTON_SELECT_ALL_FUELS,
+            #     n_clicks=0,
+            # ),
+        ],
+    )
+
+
+# @app.callback(
+#     Output(DROPDOWN_SELECT_FUEL, "value"),
+#     Input(BUTTON_SELECT_ALL_FUELS, "n_clicks"),
+# )
+# def select_all_fuels(_: int) -> list[str]:
+#     return FUELS
+
+
+def group_carriers_radio() -> html.Div:
+    return html.Div(
+        children=[
+            html.H4("Group Carriers"),
+            dcc.RadioItems(
+                id=RADIO_BUTTON_GROUP_CARRIERS,
+                options=[
+                    {"label": "True", "value": True},
+                    {"label": "False", "value": False},
+                ],
+                value=True,
+                inline=True,
             ),
         ],
     )
 
 
-@app.callback(
-    Output(DROPDOWN_SELECT_FUEL, "value"),
-    Input(BUTTON_SELECT_ALL_FUELS, "n_clicks"),
-)
-def select_all_fuels(_: int) -> list[str]:
-    return FUELS
+def plot_type_radio() -> html.Div:
+    return html.Div(
+        children=[
+            html.H4("Plot Type"),
+            dcc.RadioItems(
+                id=RADIO_BUTTON_PLOT_TYPE,
+                options=[
+                    {"label": "Line", "value": "line"},
+                    {"label": "Area", "value": "area"},
+                ],
+                value="line",
+                inline=True,
+            ),
+        ],
+    )
 
 
 def plot_load(
@@ -302,6 +336,8 @@ def plot_load(
     fuels: list[str],
     year: int,
     doy: pd.Timestamp,
+    group_carriers: bool,
+    plot_type: str,
 ) -> html.Div:
 
     carriers = get_load_carriers(sector, fuels)
@@ -320,7 +356,7 @@ def plot_load(
                 },
             ),
             html.Div(
-                [plot_timeseries(n, loads)],
+                [plot_timeseries(n, loads, plot_type, group_carriers)],
                 style={
                     "width": "48%",
                     "display": "inline-block",
@@ -338,22 +374,39 @@ def plot_load(
     Input(DROPDOWN_SELECT_FUEL, "value"),
     Input(DROPDOWN_SELECT_YEAR, "value"),
     Input(SLIDER_SELECT_TIME, "value"),
+    Input(RADIO_BUTTON_GROUP_CARRIERS, "value"),
+    Input(RADIO_BUTTON_PLOT_TYPE, "value"),
 )
 def plot_load_callback(
     sector: str = SECTORS[0],
     fuels: list[str] = FUELS,
     year: int = INVESTMENT_YEARS[0],
     doy: pd.DatetimeIndex = NETWORK.snapshots.min()[1].timetuple().tm_yday,
+    group_carriers: bool = True,
+    plot_type: str = "line",
 ) -> html.Div:
-    return plot_load(NETWORK, SHAPES, sector, fuels, year, doy)
+    return plot_load(
+        NETWORK,
+        SHAPES,
+        sector,
+        fuels,
+        year,
+        doy,
+        group_carriers,
+        plot_type,
+    )
 
 
 def plot_map(n: pypsa.Network, shapes: gpd.GeoDataFrame, df: pd.DataFrame) -> html.Div:
 
     loads = df.sum()  # get daily total
-    loads = group_sum_by_carrier(n, loads)
 
-    gdf = shapes.join(loads)
+    if not loads.empty:
+        loads = group_sum_by_carrier(n, loads)
+        gdf = shapes.join(loads)
+    else:
+        gdf = shapes.copy()
+        gdf["value"] = 0
 
     fig = px.choropleth(
         gdf,
@@ -376,12 +429,19 @@ def plot_map(n: pypsa.Network, shapes: gpd.GeoDataFrame, df: pd.DataFrame) -> ht
 def plot_timeseries(
     n: pypsa.Network,
     df: pd.DataFrame,
+    plot_type: str,
+    group_carriers: bool,
 ) -> html.Div:
 
     load = group_by_bus(n, df)
+    if group_carriers:
+        load = group_load_on_carriers(n, load)
     load = format_timeseries(load)
 
-    fig = px.line(load, x="hour", y="value", color="region")
+    if plot_type == "area":
+        fig = px.area(load, x="hour", y="value", color="region")
+    else:
+        fig = px.line(load, x="hour", y="value", color="region")
 
     title = "Loads [GW]"
     fig.update_layout(
@@ -402,9 +462,9 @@ app.layout = html.Div(
         html.Div(
             [
                 html.Div(
-                    [sector_dropdown(SECTORS)],
+                    [sector_dropdown(SECTORS[0])],
                     style={
-                        "width": "20%",
+                        "width": "15%",
                         "display": "inline-block",
                         "padding": "10px",
                     },
@@ -412,15 +472,31 @@ app.layout = html.Div(
                 html.Div(
                     [fuel_dropdown(FUELS)],
                     style={
-                        "width": "20%",
+                        "width": "25%",
                         "display": "inline-block",
                         "padding": "10px",
                     },
                 ),
                 html.Div(
-                    [investment_year_dropdown(INVESTMENT_YEARS)],
+                    [investment_year_dropdown(INVESTMENT_YEARS[0])],
                     style={
-                        "width": "20%",
+                        "width": "15%",
+                        "display": "inline-block",
+                        "padding": "10px",
+                    },
+                ),
+                html.Div(
+                    [group_carriers_radio()],
+                    style={
+                        "width": "15%",
+                        "display": "inline-block",
+                        "padding": "10px",
+                    },
+                ),
+                html.Div(
+                    [plot_type_radio()],
+                    style={
+                        "width": "15%",
                         "display": "inline-block",
                         "padding": "10px",
                     },
