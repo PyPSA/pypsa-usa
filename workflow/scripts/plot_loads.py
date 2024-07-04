@@ -27,6 +27,7 @@ from typing import Dict, List
 # dropdowns
 DROPDOWN_SELECT_SECTOR = "dropdown_select_sector"
 DROPDOWN_SELECT_FUEL = "dropdown_select_fuel"
+DROPDOWN_SELECT_YEAR = "dropdown_select_year"
 
 # buttons
 BUTTON_SELECT_ALL_SECTORS = "button_all_sectors"
@@ -58,11 +59,10 @@ logger.info("Reading configuration options")
 network_path = Path(
     "..",
     "results",
-    # "Default",
-    "Sector",
-    "western",
+    "Default",
+    "texas",
     "networks",
-    "elec_s_40_ec_lv1.0_Ep-Co2L0.2_E-G.nc",
+    "elec_s_20_ec_lv1.0_500SEG_E-G.nc",
     # "elec_s_40_ec_lv1.0_Ep-Co2L0.2_E.nc",
 )
 NETWORK = pypsa.Network(str(network_path))
@@ -70,16 +70,18 @@ NETWORK = pypsa.Network(str(network_path))
 shapes_path = Path(
     "..",
     "resources",
-    # "Default",
-    "Sector",
-    "western",
-    "regions_onshore_s_40.geojson",
+    "Default",
+    # "Sector",
+    "texas",
+    "regions_onshore_s_20.geojson",
 )
 SHAPES = gpd.read_file(shapes_path).set_index("name")
 
 TIMEFRAME = NETWORK.snapshots
 
 CARRIERS = NETWORK.loads.carrier.unique()
+
+INVESTMENT_YEARS = NETWORK.investment_periods.to_list()
 
 try:  # sector coupled studies
     SECTORS = list({x.split("-")[0] for x in CARRIERS})
@@ -126,15 +128,22 @@ app.title = "PyPSA-USA Dashboard"
 ###
 
 
-def get_load_carriers(sectors: list[str], fuels: list[str]) -> list[str]:
+def get_load_carriers(sector: str, fuels: list[str]) -> list[str]:
     """
     Gets all permutations of load carriers.
     """
 
     carriers = []
-    for sector in sectors:
+    if not sector == "trn":
         for fuel in fuels:
             carriers.append(f"{sector}-{fuel}")
+            if fuel == "heat":
+                carriers.append(f"{sector}-urban-{fuel}")
+                carriers.append(f"{sector}-rural-{fuel}")
+    else:
+        for fuel in fuels:
+            for vehicle in ("lgt", "med", "hvy", "bus"):
+                carriers.append(f"{sector}-{fuel}-{vehicle}")
     return carriers
 
 
@@ -145,11 +154,12 @@ def get_load_names(n: pypsa.Network, carriers: list[str]) -> list[str]:
     return n.loads[n.loads.carrier.isin(carriers)].index.to_list()
 
 
-def get_load_timeseries(n: pypsa.Network, loads: list[str]) -> pd.DataFrame:
+def get_load_timeseries(n: pypsa.Network, loads: list[str], year: int) -> pd.DataFrame:
     """
     Gets timeseries of select carriers.
     """
-    df = n.loads_t.p_set[loads]
+    print(year)
+    df = n.loads_t.p_set[loads].loc[year]
     df.index = pd.to_datetime(df.index)
     return df
 
@@ -158,8 +168,8 @@ def resample_load(df: pd.DataFrame) -> pd.DataFrame:
     return df.resample("24h").sum()
 
 
-def filter_on_time(df: pd.DataFrame, doy: pd.Timestamp) -> pd.Series:
-    day = datetime(2019, 1, 1) + timedelta(doy - 1)
+def filter_on_time(df: pd.DataFrame, doy: pd.Timestamp, year: int) -> pd.Series:
+    day = datetime(year, 1, 1) + timedelta(doy - 1)
     assert isinstance(df.index, pd.DatetimeIndex)
     return df[df.index.date == day.date()]
 
@@ -171,8 +181,12 @@ def group_sum_by_carrier(n: pypsa.Network, df: pd.Series) -> pd.Series:
     loads = df.copy()
     loads.name = "value"
     loads = loads.reset_index()
-    loads["region"] = loads.Load.map(n.loads.bus)
-    loads = loads.drop(columns="Load")
+    loads["carrier"] = loads.Load.map(n.buses.carrier)
+    loads["region"] = loads.apply(
+        lambda row: row.Load.split(row.carrier)[0].rstrip(),
+        axis=1,
+    )
+    loads = loads.drop(columns=["Load", "carrier"])
     return loads.groupby("region").sum()
 
 
@@ -185,7 +199,7 @@ def group_by_bus(n: pypsa.Network, df: pd.DataFrame) -> pd.DataFrame:
 
 def format_timeseries(df: pd.DataFrame) -> pd.DataFrame:
     load = df.melt(ignore_index=False).reset_index()
-    load["hour"] = load.snapshot.map(lambda x: x.hour)
+    load["hour"] = load.timestep.map(lambda x: x.hour)
     load = load.rename(columns={"Load": "region"})
     return load[["region", "value", "hour"]]
 
@@ -201,47 +215,62 @@ def time_slider(snapshots: pd.DatetimeIndex) -> html.Div:
             html.H4("Day To Plot"),
             dcc.Slider(
                 id=SLIDER_SELECT_TIME,
-                min=snapshots.min().timetuple().tm_yday,
-                max=snapshots.max().timetuple().tm_yday,
+                min=snapshots.min()[1].timetuple().tm_yday,
+                max=snapshots.max()[1].timetuple().tm_yday,
                 step=1,
-                value=snapshots.min().timetuple().tm_yday,
+                value=snapshots.min()[1].timetuple().tm_yday,
             ),
         ],
     )
 
 
-def sector_dropdown(sectors: list[str]) -> html.Div:
+def sector_dropdown(sector: str) -> html.Div:
     return html.Div(
         children=[
-            html.H4("Sectors to Include"),
+            html.H4("Sectors"),
             dcc.Dropdown(
                 id=DROPDOWN_SELECT_SECTOR,
                 options=SECTOR_NICE_NAMES,
-                value=sectors,
-                multi=True,
+                value=sector,
+                multi=False,
                 persistence=True,
             ),
-            html.Button(
-                children=["Select All"],
-                id=BUTTON_SELECT_ALL_SECTORS,
-                n_clicks=0,
+            # html.Button(
+            #     children=["Select All"],
+            #     id=BUTTON_SELECT_ALL_SECTORS,
+            #     n_clicks=0,
+            # ),
+        ],
+    )
+
+
+def investment_year_dropdown(investment_year: int) -> html.Div:
+    return html.Div(
+        children=[
+            html.H4("Investment Year"),
+            dcc.Dropdown(
+                id=DROPDOWN_SELECT_YEAR,
+                options=INVESTMENT_YEARS,
+                value=investment_year,
+                multi=False,
+                persistence=True,
             ),
         ],
     )
 
 
-@app.callback(
-    Output(DROPDOWN_SELECT_SECTOR, "value"),
-    Input(BUTTON_SELECT_ALL_SECTORS, "n_clicks"),
-)
-def select_all_sectors(_: int) -> list[str]:
-    return SECTORS
+# @app.callback(
+#     Output(DROPDOWN_SELECT_SECTOR, "value"),
+#     Input(BUTTON_SELECT_ALL_SECTORS, "n_clicks"),
+# )
+# def select_all_sectors(_: int) -> list[str]:
+#     return SECTORS
 
 
 def fuel_dropdown(fuels: list[str]) -> html.Div:
     return html.Div(
         children=[
-            html.H4("Fuels to Include"),
+            html.H4("Fuels"),
             dcc.Dropdown(
                 id=DROPDOWN_SELECT_FUEL,
                 options=FUEL_NICE_NAMES,
@@ -269,15 +298,16 @@ def select_all_fuels(_: int) -> list[str]:
 def plot_load(
     n: pypsa.Network,
     shapes: gpd.GeoDataFrame,
-    sectors: list[str],
+    sector: str,
     fuels: list[str],
+    year: int,
     doy: pd.Timestamp,
 ) -> html.Div:
 
-    carriers = get_load_carriers(sectors, fuels)
+    carriers = get_load_carriers(sector, fuels)
     load_names = get_load_names(n, carriers)
-    loads = get_load_timeseries(n, load_names)
-    loads = filter_on_time(loads, doy)
+    loads = get_load_timeseries(n, load_names, year)
+    loads = filter_on_time(loads, doy, year)
 
     return html.Div(
         [
@@ -306,14 +336,16 @@ def plot_load(
     Output(GRAPHIC_CONTAINER, "children"),
     Input(DROPDOWN_SELECT_SECTOR, "value"),
     Input(DROPDOWN_SELECT_FUEL, "value"),
+    Input(DROPDOWN_SELECT_YEAR, "value"),
     Input(SLIDER_SELECT_TIME, "value"),
 )
 def plot_load_callback(
-    sectors: list[str] = SECTORS,
+    sector: str = SECTORS[0],
     fuels: list[str] = FUELS,
-    doy: pd.DatetimeIndex = NETWORK.snapshots.min().timetuple().tm_yday,
+    year: int = INVESTMENT_YEARS[0],
+    doy: pd.DatetimeIndex = NETWORK.snapshots.min()[1].timetuple().tm_yday,
 ) -> html.Div:
-    return plot_load(NETWORK, SHAPES, sectors, fuels, doy)
+    return plot_load(NETWORK, SHAPES, sector, fuels, year, doy)
 
 
 def plot_map(n: pypsa.Network, shapes: gpd.GeoDataFrame, df: pd.DataFrame) -> html.Div:
@@ -372,7 +404,7 @@ app.layout = html.Div(
                 html.Div(
                     [sector_dropdown(SECTORS)],
                     style={
-                        "width": "40%",
+                        "width": "20%",
                         "display": "inline-block",
                         "padding": "10px",
                     },
@@ -380,14 +412,22 @@ app.layout = html.Div(
                 html.Div(
                     [fuel_dropdown(FUELS)],
                     style={
-                        "width": "40%",
+                        "width": "20%",
+                        "display": "inline-block",
+                        "padding": "10px",
+                    },
+                ),
+                html.Div(
+                    [investment_year_dropdown(INVESTMENT_YEARS)],
+                    style={
+                        "width": "20%",
                         "display": "inline-block",
                         "padding": "10px",
                     },
                 ),
             ],
         ),
-        plot_load_callback(SECTORS, FUELS),
+        plot_load_callback(),
     ],
     style={
         "width": "100%",
