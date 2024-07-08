@@ -64,6 +64,56 @@ GE_carrier_names = {
     "OTH": "Other",
 }
 
+def get_regions(n):
+    regions = n.buses.country.unique()
+    regions_clean = [ba.split("0")[0] for ba in regions]
+    regions_clean = [ba.split("-")[0] for ba in regions_clean]
+    regions = list(OrderedDict.fromkeys(regions_clean))
+    return regions
+
+
+def get_state_generation_mix(n: pypsa.Network, var="p"):
+    storage_devices = n.storage_units.copy()
+    storage_devices["state"] = storage_devices.bus.map(n.buses.reeds_state)
+    storage_devices["state_carrier"] = storage_devices["state"] + "_" + storage_devices["carrier"]
+    # Group by state and carrier
+    storage = n.storage_units_t[var].clip(lower=0).copy()
+    storage = storage.T.groupby(storage_devices["state_carrier"]).sum().T
+    storage.index = storage.index.droplevel(1)
+    storage = storage.groupby("period").sum().T.mul(1e-3)  # convert to GW
+
+    gens = n.generators.copy()
+    gens["state"] = gens.bus.map(n.buses.reeds_state)
+    gens["state_carrier"] = gens["state"] + "_" + gens["carrier"]
+    # Group by state and carrier
+    generation = n.generators_t[var].copy()
+    generation = generation.T.groupby(gens["state_carrier"]).sum().T
+    generation.index = generation.index.droplevel(1)
+    generation = generation.groupby("period").sum().T
+    generation = generation / 1e3  # convert to GWh
+
+    production = pd.concat([generation, storage], axis=0)
+    production = production.reset_index()
+    production.columns = ["state_carrier", "generation"]
+    production["state"] = production["state_carrier"].str.split("_").str[0]
+    production["carrier"] = (
+        production["state_carrier"].str.split("_").str[1:].str.join("_")
+    )
+    production_pivot = production.pivot(
+        index="state", columns="carrier", values="generation"
+    )
+    if "load" in production_pivot.columns:
+        production_pivot.load = production_pivot.load.mul(1e-3)
+    return production_pivot
+
+
+def get_state_loads(n: pypsa.Network):
+    loads = n.loads_t.p
+    n.loads["state"] = n.loads.bus.map(n.buses.reeds_state)
+    loads = loads.T.groupby(n.loads.state).sum().T
+    loads = loads / 1e3  # convert to GW
+
+
 
 def add_missing_carriers(df1, df2):
     # Create new columns for historic for missing carriers in optimized
@@ -382,18 +432,10 @@ def plot_regional_comparisons(
     plt.legend(title="Carrier", bbox_to_anchor=(1.05, 1), loc="upper left")
 
     plt.tight_layout()
-    fig.savefig(
-        Path(snakemake.output[0]).parents[0] / "production_deviation_by_region.png",
-        dpi=DPI,
-    )
-
-
-def get_regions(n):
-    regions = n.buses.country.unique()
-    regions_clean = [ba.split("0")[0] for ba in regions]
-    regions_clean = [ba.split("-")[0] for ba in regions_clean]
-    regions = list(OrderedDict.fromkeys(regions_clean))
-    return regions
+    # fig.savefig(
+    #     Path(snakemake.output[0]).parents[0] / "production_deviation_by_region.png",
+    #     dpi=DPI,
+    # )
 
 
 def plot_load_shedding_map(
@@ -705,37 +747,6 @@ def plot_ba_emissions_historical_bar(
     fig.savefig(save, dpi=DPI)
 
 
-def get_state_generation_mix(n: pypsa.Network, var="p"):
-    gens = n.generators.copy()
-    gens["state"] = gens.bus.map(n.buses.reeds_state)
-    gens["state_carrier"] = gens["state"] + "_" + gens["carrier"]
-    # Group by state and carrier
-    generation = n.generators_t[var].copy()
-    generation = generation.T.groupby(gens["state_carrier"]).sum().T
-    generation.index = generation.index.droplevel(1)
-    generation = generation.groupby("period").sum().T
-    generation = generation / 1e3  # convert to GWh
-    generation = generation.reset_index()
-    generation.columns = ["state_carrier", "generation"]
-    generation["state"] = generation["state_carrier"].str.split("_").str[0]
-    generation["carrier"] = (
-        generation["state_carrier"].str.split("_").str[1:].str.join("_")
-    )
-    generation_pivot = generation.pivot(
-        index="state", columns="carrier", values="generation"
-    )
-    if "load" in generation_pivot.columns:
-        generation_pivot.load = generation_pivot.load.mul(1e-3)
-    return generation_pivot
-
-
-def get_state_loads(n: pypsa.Network):
-    loads = n.loads_t.p
-    n.loads["state"] = n.loads.bus.map(n.buses.reeds_state)
-    loads = loads.T.groupby(n.loads.state).sum().T
-    loads = loads / 1e3  # convert to GW
-
-
 def plot_state_generation_mix(
     n: pypsa.Network,
     snapshots: pd.date_range,
@@ -761,7 +772,9 @@ def plot_state_generation_mix(
     historical_gen = historical_gen.reset_index().groupby(['state','carrier']).sum().reset_index()
     historical_gen = historical_gen.pivot(index='state', columns='carrier', values='Historical') / 1e3
 
+    # Rename Optimized Carriers to Match EIA Historical Data
     optimized['natural gas'] = optimized.pop('CCGT') + optimized.pop('OCGT')
+    optimized['other'] = optimized.pop('battery') + optimized.pop('waste')
     optimized.pop('load')
     optimized.pop('offwind_floating')
 
@@ -1040,7 +1053,7 @@ def main(snakemake):
     plot_timeseries_comparison(
         ge_interconnect,
         optimized,
-        save_path=snakemake.output["seasonal_stacked_plot.pdf"],
+        save_path=snakemake.output["daily_stacked_comparison.pdf"],
         colors=colors,
         title="Electricity Production by Carrier",
         **snakemake.wildcards,
@@ -1053,11 +1066,11 @@ def main(snakemake):
         **snakemake.wildcards,
     )
 
-    plot_capacity_factor_heatmap(
-        n,
-        snakemake.output["val_heatmap_capacity_factor.pdf"],
-        **snakemake.wildcards,
-    )
+    # plot_capacity_factor_heatmap(
+    #     n,
+    #     snakemake.output["val_heatmap_capacity_factor.pdf"],
+    #     **snakemake.wildcards,
+    # )
 
     plot_load_shedding_map(
         n,

@@ -60,7 +60,7 @@ def load_pudl_data(pudl_fn: str, start_date: str, end_date: str):
         LEFT JOIN core_eia860__scd_generators_energy_storage ON out_eia__yearly_generators.plant_id_eia = core_eia860__scd_generators_energy_storage.plant_id_eia AND out_eia__yearly_generators.generator_id = core_eia860__scd_generators_energy_storage.generator_id
         LEFT JOIN core_eia860__scd_plants ON out_eia__yearly_generators.plant_id_eia = core_eia860__scd_plants.plant_id_eia
         LEFT JOIN monthly_generators ON out_eia__yearly_generators.plant_id_eia = monthly_generators.plant_id_eia AND out_eia__yearly_generators.generator_id = monthly_generators.generator_id
-        WHERE out_eia__yearly_generators.operational_status = 'existing' AND out_eia__yearly_generators.operational_status_code = 'OP' AND out_eia__yearly_generators.report_date >= '2024-01-01'
+        WHERE out_eia__yearly_generators.operational_status = 'existing' AND out_eia__yearly_generators.operational_status_code = 'OP' AND out_eia__yearly_generators.report_date >= '2023-01-01'
         GROUP BY out_eia__yearly_generators.plant_id_eia, out_eia__yearly_generators.generator_id
     """,
     ).to_df()
@@ -751,7 +751,7 @@ def set_parameters(plants: pd.DataFrame):
     )  # MMBTu/MWh to MWh_electric/MWh_thermal
 
     set_derates(plants)
-    
+
     plants[f"heat_rate_source"] = plants[f"heat_rate_source"].fillna("NA")
     plants[f"fuel_cost_source"] = plants[f"fuel_cost_source"].fillna("NA")
     return plants.reset_index()
