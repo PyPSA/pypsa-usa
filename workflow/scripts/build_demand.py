@@ -287,7 +287,7 @@ class ReadEia(ReadStrategy):
         """
         Combine EIA Demand Data to Match GIS Shapes.
         """
-        df["Arizona"] = df.pop("SRP") + df.pop("AZPS")
+        df["Arizona"] = df.pop("SRP") + df.pop("AZPS") + df.pop("TEPC")
         df["Carolina"] = (
             df.pop("CPLE")
             + df.pop("CPLW")

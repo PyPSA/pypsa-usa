@@ -157,6 +157,7 @@ def load_costs(
 
     costs.at["OCGT", "co2_emissions"] = costs.at["gas", "co2_emissions"]
     costs.at["CCGT", "co2_emissions"] = costs.at["gas", "co2_emissions"]
+    costs.loc["waste", "co2_emissions"] = 0.1016 # revisit, EPA data 
 
     costs.at["solar", "capital_cost"] = (
         config["rooftop_share"] * costs.at["solar-rooftop", "capital_cost"]
@@ -465,6 +466,7 @@ def attach_conventional_generators(
         | set(extendable_carriers["Generator"])
         if carrier not in renewable_carriers
     ]
+    import pdb; pdb.set_trace()
     add_missing_carriers(n, carriers)
     add_co2_emissions(n, costs, carriers)
 
@@ -885,6 +887,8 @@ def apply_seasonal_capacity_derates(
     summer_sns = sns_dt[sns_dt.month.isin([6, 7, 8])]
     winter_sns = sns_dt[~sns_dt.month.isin([6, 7, 8])]
 
+    # conventional_carriers = ['geothermal'] # testing override impact
+    
     conv_plants = plants.query("carrier in @conventional_carriers")
     conv_plants.index = "C" + conv_plants.index
     conv_gens = n.generators.query("carrier in @conventional_carriers")
