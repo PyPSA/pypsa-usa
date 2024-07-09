@@ -4,6 +4,7 @@ Module for building heating and cooling infrastructure.
 
 from typing import Optional
 
+import numpy as np
 import pandas as pd
 import pypsa
 import xarray as xr
@@ -140,6 +141,8 @@ def add_service_heat(
 
         add_service_elec_furnaces(n, sector, heat_system, costs)
 
+        add_service_heat_stores(n, sector, heat_system, costs)
+
 
 def add_service_cooling(
     n: pypsa.Network,
@@ -240,7 +243,7 @@ def _split_urban_rural_load(
             suffix=f" {sector}-{system}-heat",
             x=new_buses.x,
             y=new_buses.y,
-            carrier=f"{sector}-heat",
+            carrier=f"{sector}-{system}-heat",
             country=new_buses.country,
             interconnect=new_buses.interconnect,
             STATE=new_buses.STATE,
@@ -254,18 +257,13 @@ def _split_urban_rural_load(
         )
         loads_t = loads_t.mul(ratios[f"{system}_fraction"])
 
-        # loads_t.columns = loads_t.columns.str.replace(
-        #     f"{sector}-heat",
-        #     f"{sector}-{system}-heat",
-        # )
-
         n.madd(
             "Load",
             new_buses.index,
             suffix=f" {sector}-{system}-heat",
             bus=new_buses.index + f" {sector}-{system}-heat",
             p_set=loads_t,
-            carrier=f"{sector}-heat",
+            carrier=f"{sector}-{system}-heat",
         )
 
     # remove old combined loads from the network
@@ -304,7 +302,7 @@ def add_service_gas_furnaces(
     efficiency = costs.at[costs_name, "efficiency"].round(1)
     lifetime = costs.at[costs_name, "lifetime"]
 
-    carrier_name = f"{sector}-heat"
+    carrier_name = f"{sector}-{heat_system}-heat"
 
     loads = n.loads[
         (n.loads.carrier == carrier_name) & (n.loads.bus.str.contains(heat_system))
@@ -363,7 +361,7 @@ def add_service_elec_furnaces(
     efficiency = costs.at[costs_name, "efficiency"].round(1)
     lifetime = costs.at[costs_name, "lifetime"]
 
-    carrier_name = f"{sector}-heat"
+    carrier_name = f"{sector}-{heat_system}-heat"
 
     loads = n.loads[
         (n.loads.carrier == carrier_name) & (n.loads.bus.str.contains(heat_system))
@@ -387,6 +385,117 @@ def add_service_elec_furnaces(
         efficiency=efficiency,
         capital_cost=capex,
         p_nom_extendable=True,
+        lifetime=lifetime,
+    )
+
+
+def add_service_heat_stores(
+    n: pypsa.Network,
+    sector: str,
+    heat_system: str,
+    costs: pd.DataFrame,
+) -> None:
+    """
+    Adds end-use thermal storage to the system.
+
+    Will add a heat-store-bus. Two uni-directional links to connect the heat-
+    store-bus to the heat-bus. A store to connect to the heat-store-bus.
+
+    Parameters are average of all storage technologies.
+
+    n: pypsa.Network
+    sector: str
+        ("com" or "res")
+    heat_system: str
+        ("rural" or "urban")
+    costs: pd.DataFrame
+    """
+
+    assert heat_system in ("urban", "rural")
+
+    match sector:
+        case "res" | "Res" | "residential" | "Residential":
+            costs_names = [
+                "Residential Gas-Fired Storage Water Heaters",
+                "Residential Electric-Resistance Storage Water Heaters",
+            ]
+        case "com" | "Com" | "commercial" | "Commercial":
+            costs_names = [
+                "Commercial Electric Resistance Storage Water Heaters",
+                "Commercial Gas-Fired Storage Water Heaters",
+            ]
+        case _:
+            raise NotImplementedError
+
+    capex = round(
+        sum([costs.at[x, "capital_cost"] for x in costs_names]) / len(costs_names),
+        1,
+    )
+    efficiency = round(
+        sum([costs.at[x, "efficiency"] for x in costs_names]) / len(costs_names),
+        1,
+    )
+    lifetime = round(
+        sum([costs.at[x, "lifetime"] for x in costs_names]) / len(costs_names),
+        1,
+    )
+    tau = 3 if heat_system == "rural" else 180
+    standing_loss = (1 - np.exp(-1 / 24 / tau),)
+
+    carrier_name = f"{sector}-{heat_system}-heat"
+
+    # must be run after rural/urban load split
+    buses = n.buses[n.buses.carrier == carrier_name]
+
+    therm_store = pd.DataFrame(index=buses.index)
+    therm_store["bus0"] = therm_store.index
+    therm_store["bus1"] = therm_store.index + "-store"
+    therm_store["x"] = therm_store.index.map(n.buses.x)
+    therm_store["y"] = therm_store.index.map(n.buses.y)
+    therm_store["carrier"] = f"{sector}-{heat_system}-heat-store"
+
+    n.madd(
+        "Bus",
+        therm_store.index,
+        suffix="-store",
+        x=therm_store.x,
+        y=therm_store.y,
+        carrier=therm_store.carrier,
+        unit="MWh",
+    )
+
+    n.madd(
+        "Link",
+        therm_store.index,
+        suffix="-store-charger",
+        bus0=therm_store.bus0,
+        bus1=therm_store.bus1,
+        efficiency=efficiency,
+        carrier=therm_store.carrier,
+        p_nom_extendable=True,
+    )
+
+    n.madd(
+        "Link",
+        therm_store.index,
+        suffix="-store-discharger",
+        bus0=therm_store.bus1,
+        bus1=therm_store.bus0,
+        efficiency=1,  # efficiency in first link is round trip
+        carrier=therm_store.carrier,
+        p_nom_extendable=True,
+    )
+
+    n.madd(
+        "Store",
+        therm_store.index,
+        suffix="-store",
+        bus=therm_store.bus1,
+        e_cyclic=True,
+        e_nom_extendable=True,
+        carrier=therm_store.carrier,
+        standing_loss=standing_loss,
+        capital_cost=capex,
         lifetime=lifetime,
     )
 
@@ -423,7 +532,7 @@ def add_service_heat_pumps(
     assert hp_type in ("Air", "Ground")
     assert heat_system in ("urban", "rural")
 
-    carrier_name = f"{sector}-heat"
+    carrier_name = f"{sector}-{heat_system}-heat"
 
     if sector == "res":
         costs_name = f"Residential {hp_type}-Source Heat Pump"
