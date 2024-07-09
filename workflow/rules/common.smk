@@ -143,11 +143,11 @@ def interconnect_mem_s(w):
 
 
 def interconnect_mem_c(w):
-    mem = 8000
+    mem = 20000
     if w.interconnect == "usa":
-        return int(mem * 10)
+        return int(mem * 12)
     elif w.interconnect == "eastern":
-        return int(mem * 3)
+        return int(mem * 4)
     elif w.interconnect == "western":
         return int(mem) * 2
     elif w.interconnect == "texas":
