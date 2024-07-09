@@ -54,6 +54,7 @@ from _helpers import (
     local_to_utc,
     test_network_datatype_consistency,
     update_p_nom_max,
+    reduce_float_memory,
 )
 from scipy import sparse
 from shapely.geometry import Point
@@ -466,7 +467,6 @@ def attach_conventional_generators(
         | set(extendable_carriers["Generator"])
         if carrier not in renewable_carriers
     ]
-    import pdb; pdb.set_trace()
     add_missing_carriers(n, carriers)
     add_co2_emissions(n, costs, carriers)
 
@@ -1236,6 +1236,10 @@ def main(snakemake):
     clean_bus_data(n)
     sanitize_carriers(n, snakemake.config)
     n.meta = snakemake.config
+
+    n.generators_t.p_max_pu = reduce_float_memory(n.generators_t.p_max_pu)
+    n.generators_t.marginal_cost = reduce_float_memory(n.generators_t.marginal_cost)
+
     n.export_to_netcdf(snakemake.output[0])
 
     logger.info(test_network_datatype_consistency(n))
@@ -1245,6 +1249,6 @@ if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
 
-        snakemake = mock_snakemake("add_electricity", interconnect="texas")
+        snakemake = mock_snakemake("add_electricity", interconnect="western")
     configure_logging(snakemake)
     main(snakemake)

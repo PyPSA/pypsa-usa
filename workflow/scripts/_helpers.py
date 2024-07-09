@@ -871,3 +871,22 @@ def get_snapshots(
         time = time[~((time.month == 2) & (time.day == 29))]
 
     return time
+
+
+def reduce_float_memory(df):
+    """
+    Reduce memory usage of a DataFrame by converting float64 columns to float32.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        The DataFrame to reduce memory usage for.
+
+    Returns
+    -------
+    pd.DataFrame
+        The DataFrame with float64 columns converted to float32.
+    """
+    for col in df.select_dtypes(include=["float64"]).columns:
+        df[col] = pd.to_numeric(df[col], downcast="float")
+    return df

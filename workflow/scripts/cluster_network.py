@@ -94,7 +94,7 @@ import pandas as pd
 import pyomo.environ as po
 import pypsa
 import seaborn as sns
-from _helpers import configure_logging, update_p_nom_max
+from _helpers import configure_logging, update_p_nom_max, reduce_float_memory
 from pypsa.clustering.spatial import (
     busmap_by_greedy_modularity,
     busmap_by_hac,
@@ -556,6 +556,17 @@ if __name__ == "__main__":
 
     clustering.network.set_investment_periods(
         periods=snakemake.params.planning_horizons,
+    )
+
+    clustering.network.loads_t.p_set = reduce_float_memory(clustering.network.loads_t.p_set)
+    clustering.network.generators_t.p_max_pu = reduce_float_memory(
+        clustering.network.generators_t.p_max_pu,
+    )
+    clustering.network.generators_t.p_min_pu = reduce_float_memory(
+        clustering.network.generators_t.p_min_pu,
+    )
+    clustering.network.generators_t.marginal_cost = reduce_float_memory(
+        clustering.network.generators_t.marginal_cost,
     )
 
     clustering.network.export_to_netcdf(snakemake.output.network)

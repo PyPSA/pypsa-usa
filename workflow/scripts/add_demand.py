@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pandas as pd
 import pypsa
-from _helpers import configure_logging, mock_snakemake
+from _helpers import configure_logging, mock_snakemake, reduce_float_memory
 
 logger = logging.getLogger(__name__)
 
@@ -88,4 +88,6 @@ if __name__ == "__main__":
             attach_demand(n, df, carrier, suffix)
             logger.info(f"{sector} {end_use} demand added to network")
 
+    # n.loads_t.p_set = n.loads_t.p_set.apply(lambda col: col.astype('float32') if col.dtype == 'float64' else col)
+    n.loads_t.p_set = reduce_float_memory(n.loads_t.p_set)
     n.export_to_netcdf(snakemake.output.network)
