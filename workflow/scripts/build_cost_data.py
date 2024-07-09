@@ -348,6 +348,14 @@ def correct_units(
     )
     df.unit = df.unit.str.replace("MMBtu/MWh", "per unit")
 
+    # USD/gal -> USD/MWh (water storage)
+    # assume cp = 4.186 kJ/kg/C
+    # (USD / gal) * (1 gal / 3.75 liter) * (1L / 1 kg H2O) = 0.267 USD / kg water
+    # (0.267 USD / kg) * (1 / 4.186 kJ/kg/C) * (1 / 1C) = 0.0637 USD / kJ
+    # (0.0637 USD / kJ) * (1000 kJ / 1 MJ) * (3600sec / 1hr) = 229335 USD / MWh
+    df.loc[df.unit.str.contains("USD/gal"), "value"] *= 229335
+    df.unit = df.unit.str.replace("USD/gal", "USD/MWh")
+
     # Eur -> USD
     if eur_conversion:
         convert_to = list(eur_conversion.keys())[0]  # ie. USD
