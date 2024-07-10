@@ -875,7 +875,7 @@ def apply_cems_heat_rates(plants, crosswalk_fn, cems_fn):
     )
 
     plants.rename(columns={"Heat Input (mmBtu/MWh)": "heat_rate_"}, inplace=True)
-    plants.heat_rate_.fillna(plants.unit_heat_rate_mmbtu_per_mwh)
+    plants.heat_rate_ = plants.heat_rate_.fillna(plants.unit_heat_rate_mmbtu_per_mwh) # First take CEMS, then use PUDL
     plants.unit_heat_rate_mmbtu_per_mwh = plants.pop("heat_rate_")
 
     plants.hr_source_cems = plants.hr_source_cems.fillna(
