@@ -229,6 +229,11 @@ def demand_raw_data(wildcards):
             "efs_speed"
         ].capitalize()
         return DATA + f"nrel_efs/EFSLoadProfile_{efs_case}_{efs_speed}.csv"
+    elif profile == "ferc":
+        return [
+            DATA + "pudl/out_ferc714__hourly_estimated_state_demand.parquet",
+            DATA + "pudl/censusdp1tract.sqlite",
+        ]
     elif profile == "eulp":
         return [
             DATA + f"eulp/res/{state}.csv"
@@ -275,6 +280,8 @@ def demand_scaling_data(wildcards):
         ].capitalize()
         return DATA + f"nrel_efs/EFSLoadProfile_{efs_case}_{efs_speed}.csv"
     elif profile == "eia":
+        return DATA + "pudl/pudl.sqlite"
+    elif profile == "ferc":
         return DATA + "pudl/pudl.sqlite"
     else:
         return ""
@@ -401,7 +408,7 @@ rule build_fuel_prices:
 
 
 def dynamic_fuel_price_files(wildcards):
-    if config["conventional"]["dynamic_fuel_price"]:
+    if config["conventional"]["dynamic_fuel_price"]["wholesale"]:
         return {
             "state_ng_fuel_prices": RESOURCES
             + "{interconnect}/state_ng_power_prices.csv",

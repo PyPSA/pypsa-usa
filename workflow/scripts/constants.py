@@ -2,6 +2,8 @@
 Module for holding global constant values.
 """
 
+import pandas as pd
+
 ###########################################
 # Constants for GIS Coordinate Reference Systems
 ###########################################
@@ -745,4 +747,91 @@ CAPEX_LOCATIONAL_MULTIPLIER = {
     "solar": "spv-150mw",
     "onwind": "onshore-wind-200mw",
     "hydro": "hydro-100mw",
+}
+
+###########################################
+# Constants for NREL Locational Multipliers
+###########################################
+
+EIA_FUEL_MAPPER = {
+    "ANT": "coal",
+    "BIT": "coal",
+    "LIG": "coal",
+    "SGC": "coal",
+    "SUB": "coal",
+    "WC": "coal",
+    "RC": "coal",
+    "DFO": "oil",
+    "JF": "oil",
+    "KER": "oil",
+    "PC": "oil",
+    "PG": "oil",
+    "RFO": "oil",
+    "SGP": "oil",
+    "WO": "oil",
+    "BFG": "gas",
+    "NG": "gas",
+    "H2": "gas",
+    "OG": "gas",
+    "AB": "waste",
+    "MSW": "waste",
+    "OBS": "waste",
+    "WDS": "waste",
+    "OBL": "biomass",
+    "SLW": "biomass",
+    "BLQ": "biomass",
+    "WDL": "biomass",
+    "LFG": "biomass",
+    "OBG": "biomass",
+    "SUN": "solar",
+    "WND": "onwind",
+    "GEO": "geothermal",
+    "WAT": "hydro",
+    "NUC": "nuclear",
+    "PUR": "other",
+    "WH": "other",
+    "TDF": "other",
+    "MWH": "battery",
+    "OTH": "other",
+    "HPS": "hydro",
+    "PEL": "oil",
+    "PET": "oil",
+    "WNT": "onwind",
+    "NGO": "gas",
+    "COW": "coal",
+    "BIS": "coal",
+    "HYC": "hydro",
+    "BIO": "biomass",
+    "ALL": "other",
+    "SPV": "solar",
+    "FOS": "other",
+    "AOR": "other",
+    "MLG": "waste",
+    "STH": "other",
+    "WAS": "biomass",
+    "COL": "coal",
+    "WWW": "biomass",
+    "OB2": "biomass",
+    "ORW": "other",
+    "MSB": "biomass",
+    "WOO": "oil",
+    "OOG": "other",
+    "OBW": "biomass",
+    "WOC": "coal",
+}
+
+EIA_FUEL_MAPPER_2 = {
+    "Coal": "coal",
+    "Geothermal": "geothermal",
+    "Hydroelectric Conventional": "hydro",
+    "Natural Gas": "Natural gas",
+    "Nuclear": "Nuclear",
+    "Other": "other",
+    "Other Biomass": "biomass",
+    "Other Gases": "other",
+    "Petroleum": "oil",
+    "Pumped Storage": "hydro",
+    "Solar Thermal and Photovoltaic": "solar",
+    "Wind": "onwind",
+    "Wood and Wood Derived Fuels": "biomass",
 }

@@ -55,20 +55,20 @@ FIGURES_NATURAL_GAS = [
 ]
 
 FIGURES_VALIDATE = [
-    "seasonal_stacked_plot.pdf",
+    "daily_stacked_comparison.pdf",
     "carrier_production_bar.pdf",
     "val_bar_regional_emissions.pdf",
     "val_bar_state_emissions.pdf",
     "val_generator_data_panel.pdf",
-    "val_heatmap_capacity_factor.pdf",
+    # "val_heatmap_capacity_factor.pdf",
     "val_box_region_lmps.pdf",
     "val_map_load_shedding.pdf",
     "val_generator_stack.pdf",
     "val_map_line_loading.pdf",
-    "val_mix_state_generation.pdf",
+    "val_state_generation_deviation.pdf",
+    "val_heatmap_state_generation_carrier.pdf",
     "val_cap_state_generation.pdf",
     "val_fuel_costs.pdf",
-    # "val_lmp_comparison.pdf",
 ]
 
 
@@ -92,7 +92,7 @@ wildcard_constraints:
 
 
 # Merge subworkflow configs and main config
-configfile: "config/config.default.yaml"
+configfile: "config/config.validation.yaml"
 configfile: "config/config.cluster.yaml"
 configfile: "config/config.common.yaml"
 configfile: "config/config.plotting.yaml"

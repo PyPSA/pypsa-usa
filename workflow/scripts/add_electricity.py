@@ -52,6 +52,7 @@ from _helpers import (
     configure_logging,
     export_network_for_gis_mapping,
     local_to_utc,
+    reduce_float_memory,
     test_network_datatype_consistency,
     update_p_nom_max,
 )
@@ -157,6 +158,7 @@ def load_costs(
 
     costs.at["OCGT", "co2_emissions"] = costs.at["gas", "co2_emissions"]
     costs.at["CCGT", "co2_emissions"] = costs.at["gas", "co2_emissions"]
+    costs.loc["waste", "co2_emissions"] = 0.1016  # revisit, EPA data
 
     costs.at["solar", "capital_cost"] = (
         config["rooftop_share"] * costs.at["solar-rooftop", "capital_cost"]
@@ -885,6 +887,8 @@ def apply_seasonal_capacity_derates(
     summer_sns = sns_dt[sns_dt.month.isin([6, 7, 8])]
     winter_sns = sns_dt[~sns_dt.month.isin([6, 7, 8])]
 
+    # conventional_carriers = ['geothermal'] # testing override impact
+
     conv_plants = plants.query("carrier in @conventional_carriers")
     conv_plants.index = "C" + conv_plants.index
     conv_gens = n.generators.query("carrier in @conventional_carriers")
@@ -1167,7 +1171,7 @@ def main(snakemake):
         df_multiplier = clean_locational_multiplier(df_multiplier)
         update_capital_costs(n, carrier, costs, df_multiplier, Nyears)
 
-    if params.conventional["dynamic_fuel_price"]:
+    if params.conventional["dynamic_fuel_price"]["wholesale"]:
         assert params.eia_api, f"Must provide EIA API key for dynamic fuel pricing"
 
         dynamic_fuel_prices = {
@@ -1213,6 +1217,7 @@ def main(snakemake):
                 )
                 logger.info(f"Applied dynamic price data for {carrier} from {datafile}")
 
+    if params.conventional["dynamic_fuel_price"]["pudl"]:
         n = apply_pudl_fuel_costs(n, plants, costs)
 
     # fix p_nom_min for extendable generators
@@ -1232,6 +1237,10 @@ def main(snakemake):
     clean_bus_data(n)
     sanitize_carriers(n, snakemake.config)
     n.meta = snakemake.config
+
+    n.generators_t.p_max_pu = reduce_float_memory(n.generators_t.p_max_pu)
+    n.generators_t.marginal_cost = reduce_float_memory(n.generators_t.marginal_cost)
+
     n.export_to_netcdf(snakemake.output[0])
 
     logger.info(test_network_datatype_consistency(n))
@@ -1241,6 +1250,6 @@ if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
 
-        snakemake = mock_snakemake("add_electricity", interconnect="texas")
+        snakemake = mock_snakemake("add_electricity", interconnect="western")
     configure_logging(snakemake)
     main(snakemake)

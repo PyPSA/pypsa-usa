@@ -54,6 +54,7 @@ rule plot_validation_figures:
         + "{interconnect}/regions_onshore_s_{clusters}.geojson",
         regions_offshore=RESOURCES
         + "{interconnect}/regions_offshore_s_{clusters}.geojson",
+        historical_generation="repo_data/annual_generation_state.xls",
     output:
         **{
             fig: RESULTS
