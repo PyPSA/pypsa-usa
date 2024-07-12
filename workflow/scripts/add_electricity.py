@@ -412,7 +412,7 @@ def attach_renewable_capacities_to_atlite(
         generators_tech = n.generators[n.generators.carrier == tech].copy()
         generators_tech["sub_assignment"] = generators_tech.bus.map(n.buses.sub_id)
         plants_filt.loc[:, "sub_assignment"] = plants_filt.bus_assignment.map(
-            n.buses.sub_id
+            n.buses.sub_id,
         )
         caps_per_bus = (
             plants_filt[["sub_assignment", "p_nom"]]
@@ -905,7 +905,8 @@ def apply_seasonal_capacity_derates(
 
     p_max_pu = broadcast_investment_horizons_index(n, p_max_pu)
     n.generators_t.p_max_pu = pd.concat(
-        [n.generators_t.p_max_pu, p_max_pu], axis=1
+        [n.generators_t.p_max_pu, p_max_pu],
+        axis=1,
     ).round(3)
 
 
@@ -922,7 +923,7 @@ def apply_must_run_ratings(
     conv_plants.index = "C" + conv_plants.index
 
     conv_plants.loc[:, "ads_mustrun"] = conv_plants.ads_mustrun.infer_objects(
-        copy=False
+        copy=False,
     ).fillna(False)
     conv_plants.loc[:, "minimum_load_pu"] = (
         conv_plants.minimum_load_mw / conv_plants.p_nom
@@ -1051,7 +1052,7 @@ def apply_pudl_fuel_costs(
 
     # assign new marginal costs
     n.generators_t["marginal_cost"] = n.generators_t["marginal_cost"].join(
-        pudl_fuel_costs
+        pudl_fuel_costs,
     )
     # Why are there so few of the pudl fuel costs columns?
     return n

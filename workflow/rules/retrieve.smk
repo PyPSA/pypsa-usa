@@ -53,19 +53,22 @@ rule retrieve_zenodo_databundles:
         "../scripts/retrieve_databundles.py"
 
 
-def define_nrel_databundles():
+def efs_databundle(wildcards):
     return {
-        "EFS": "https://data.nrel.gov/system/files/126/EFSLoadProfile_Reference_Moderate.zip"
+        "EFS": f"https://data.nrel.gov/system/files/126/EFSLoadProfile_{wildcards.efs_case}_{wildcards.efs_speed}.zip"
     }
 
 
 rule retrieve_nrel_efs_data:
+    wildcard_constraints:
+        efs_case="Reference|Medium|High",
+        efs_speed="Slow|Moderate|Rapid",
     params:
-        define_nrel_databundles(),
+        efs_databundle,
     output:
-        DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv",
+        DATA + "nrel_efs/EFSLoadProfile_{efs_case}_{efs_speed}.csv",
     log:
-        "logs/retrieve/retrieve_databundles.log",
+        "logs/retrieve/retrieve_efs_{efs_case}_{efs_speed}.log",
     conda:
         "../envs/environment.yaml"
     script:

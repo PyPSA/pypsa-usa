@@ -747,6 +747,38 @@ def plot_ba_emissions_historical_bar(
     fig.savefig(save, dpi=DPI)
 
 
+def get_state_generation_mix(n: pypsa.Network, var="p"):
+    gens = n.generators.copy()
+    gens["state"] = gens.bus.map(n.buses.reeds_state)
+    gens["state_carrier"] = gens["state"] + "_" + gens["carrier"]
+    # Group by state and carrier
+    generation = n.generators_t[var].copy()
+    generation = generation.T.groupby(gens["state_carrier"]).sum().T
+    generation.index = generation.index.droplevel(1)
+    generation = generation.groupby("period").sum().T
+    generation = generation / 1e3  # convert to GWh
+    generation = generation.reset_index()
+    generation.columns = ["state_carrier", "generation"]
+    generation["state"] = generation["state_carrier"].str.split("_").str[0]
+    generation["carrier"] = (
+        generation["state_carrier"].str.split("_").str[1:].str.join("_")
+    )
+    generation_pivot = generation.pivot(
+        index="state",
+        columns="carrier",
+        values="generation",
+    )
+    if "load" in generation_pivot.columns:
+        generation_pivot.load = generation_pivot.load.mul(1e-3)
+    return generation_pivot
+
+
+def get_state_loads(n: pypsa.Network):
+    loads = n.loads_t.p
+    n.loads["state"] = n.loads.bus.map(n.buses.reeds_state)
+    loads = loads.T.groupby(n.loads.state).sum().T
+    loads = loads / 1e3  # convert to GW
+
 def plot_state_generation_mix(
     n: pypsa.Network,
     snapshots: pd.date_range,
@@ -838,7 +870,9 @@ def plot_state_generation_capacities(
         generation["state_carrier"].str.split("_").str[1:].str.join("_")
     )
     generation_pivot = generation.pivot(
-        index="state", columns="carrier", values="capacity"
+        index="state",
+        columns="carrier",
+        values="capacity",
     )
     generation_pivot.drop(columns=["load"], inplace=True)
 

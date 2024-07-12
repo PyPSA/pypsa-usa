@@ -159,7 +159,7 @@ def build_pudl_fuel_costs(snapshots: pd.DatetimeIndex, start_date: str, end_date
     """
     _, fuel_cost_temporal = load_pudl_data(snakemake.input.pudl, start_date, end_date)
     fuel_cost_temporal["interconnect"] = fuel_cost_temporal["nerc_region"].map(
-        const.NERC_REGION_MAPPER
+        const.NERC_REGION_MAPPER,
     )
     fuel_cost_temporal = fuel_cost_temporal[
         fuel_cost_temporal["interconnect"] == snakemake.wildcards.interconnect
@@ -177,7 +177,9 @@ def build_pudl_fuel_costs(snapshots: pd.DatetimeIndex, start_date: str, end_date
 
     # Apply IQR filtering to each generator group
     fuel_cost_temporal = filter_outliers_iqr_grouped(
-        fuel_cost_temporal, "technology_description", "fuel_cost_per_mwh"
+        fuel_cost_temporal,
+        "technology_description",
+        "fuel_cost_per_mwh",
     )
 
     fuel_cost_temporal = fuel_cost_temporal.groupby(["generator_name", "report_date"])[
