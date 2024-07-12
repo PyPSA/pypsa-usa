@@ -21,7 +21,7 @@ def load_pudl_data(pudl_fn: str, start_date: str, end_date: str):
         # usually we want to get the most recent data for each plant_id_eia, generator_id
         # but sometimes the most recent data has null values, so we need to fill in with older data
         # this is why many of the columns are aggregated with array_agg and FILTER so we can get the most recent non-null value
-        # TODO: reconsider pulling PuDL report date according to snapshot year, to match historic operational_status_code 
+        # TODO: reconsider pulling PuDL report date according to snapshot year, to match historic operational_status_code
         """
         WITH monthly_generators AS (
             SELECT
@@ -121,17 +121,19 @@ def set_non_conus(eia_data_operable):
 
 def set_derates(plants):
     plants["derate_summer_capacity"] = np.minimum(
-        plants.summer_capacity_mw, plants.ads_maxcapmw.fillna(np.inf))
+        plants.summer_capacity_mw,
+        plants.ads_maxcapmw.fillna(np.inf),
+    )
     plants["derate_winter_capacity"] = np.minimum(
-        plants.winter_capacity_mw, plants.ads_maxcapmw.fillna(np.inf))
+        plants.winter_capacity_mw,
+        plants.ads_maxcapmw.fillna(np.inf),
+    )
 
     plants["summer_derate"] = 1 - (
-        (plants.p_nom - plants.derate_summer_capacity)
-        / plants.p_nom
+        (plants.p_nom - plants.derate_summer_capacity) / plants.p_nom
     )
     plants["winter_derate"] = 1 - (
-        (plants.p_nom - plants.derate_winter_capacity)
-        / plants.p_nom
+        (plants.p_nom - plants.derate_winter_capacity) / plants.p_nom
     )
     plants.summer_derate = plants.summer_derate.clip(
         upper=1,
@@ -885,7 +887,9 @@ def apply_cems_heat_rates(plants, crosswalk_fn, cems_fn):
     )
 
     plants.rename(columns={"Heat Input (mmBtu/MWh)": "heat_rate_"}, inplace=True)
-    plants.heat_rate_ = plants.heat_rate_.fillna(plants.unit_heat_rate_mmbtu_per_mwh) # First take CEMS, then use PUDL
+    plants.heat_rate_ = plants.heat_rate_.fillna(
+        plants.unit_heat_rate_mmbtu_per_mwh
+    )  # First take CEMS, then use PUDL
     plants.unit_heat_rate_mmbtu_per_mwh = plants.pop("heat_rate_")
 
     plants.hr_source_cems = plants.hr_source_cems.fillna(

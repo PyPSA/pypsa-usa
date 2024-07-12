@@ -52,9 +52,9 @@ from _helpers import (
     configure_logging,
     export_network_for_gis_mapping,
     local_to_utc,
+    reduce_float_memory,
     test_network_datatype_consistency,
     update_p_nom_max,
-    reduce_float_memory,
 )
 from scipy import sparse
 from shapely.geometry import Point
@@ -158,7 +158,7 @@ def load_costs(
 
     costs.at["OCGT", "co2_emissions"] = costs.at["gas", "co2_emissions"]
     costs.at["CCGT", "co2_emissions"] = costs.at["gas", "co2_emissions"]
-    costs.loc["waste", "co2_emissions"] = 0.1016 # revisit, EPA data 
+    costs.loc["waste", "co2_emissions"] = 0.1016  # revisit, EPA data
 
     costs.at["solar", "capital_cost"] = (
         config["rooftop_share"] * costs.at["solar-rooftop", "capital_cost"]
@@ -888,7 +888,7 @@ def apply_seasonal_capacity_derates(
     winter_sns = sns_dt[~sns_dt.month.isin([6, 7, 8])]
 
     # conventional_carriers = ['geothermal'] # testing override impact
-    
+
     conv_plants = plants.query("carrier in @conventional_carriers")
     conv_plants.index = "C" + conv_plants.index
     conv_gens = n.generators.query("carrier in @conventional_carriers")

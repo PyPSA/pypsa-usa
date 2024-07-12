@@ -233,6 +233,7 @@ class Emissions(EiaData):
     def data_creator(self):
         return StateEmissions(self.sector, self.fuel, self.year, self.api)
 
+
 class ElectricPowerData(EiaData):
     def __init__(self, year: int, api_key: str) -> None:
         self.year = year
@@ -240,6 +241,7 @@ class ElectricPowerData(EiaData):
 
     def data_creator(self):
         return ElectricPowerOperationalData(self.year, self.api_key)
+
 
 # product
 class DataExtractor(ABC):
@@ -870,7 +872,9 @@ class ElectricPowerOperationalData(DataExtractor):
     def __init__(self, year: int, api_key: str) -> None:
         super().__init__(year, api_key)
         if self.year > 2021:
-            logger.warning(f"Electric power operational data only available until {2021}")
+            logger.warning(
+                f"Electric power operational data only available until {2021}"
+            )
             self.year = 2021
 
     def build_url(self) -> str:
@@ -889,13 +893,11 @@ class ElectricPowerOperationalData(DataExtractor):
                 "generation": "value",
             },
         )
-        df = (
-            df[["state", "stateName","fueltypeid", "series-description", "value", "units"]]
-            .sort_values(["state"])
-        )
+        df = df[
+            ["state", "stateName", "fueltypeid", "series-description", "value", "units"]
+        ].sort_values(["state"])
 
         return self._assign_dtypes(df)
-
 
 
 if __name__ == "__main__":

@@ -278,9 +278,9 @@ rule retrieve_caiso_data:
 
 rule retrieve_pudl:
     output:
-        pudl= DATA + "pudl/pudl.sqlite",
-        pudl_ferc714= DATA + "pudl/out_ferc714__hourly_estimated_state_demand.parquet",
-        census= DATA + "pudl/censusdp1tract.sqlite",
+        pudl=DATA + "pudl/pudl.sqlite",
+        pudl_ferc714=DATA + "pudl/out_ferc714__hourly_estimated_state_demand.parquet",
+        census=DATA + "pudl/censusdp1tract.sqlite",
     log:
         LOGS + "retrieve_pudl.log",
     resources:

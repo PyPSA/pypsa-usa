@@ -11,7 +11,11 @@ from functools import reduce
 import numpy as np
 import pandas as pd
 import pypsa
-from _helpers import configure_logging, export_network_for_gis_mapping, reduce_float_memory
+from _helpers import (
+    configure_logging,
+    export_network_for_gis_mapping,
+    reduce_float_memory,
+)
 from pypsa.clustering.spatial import get_clustering_from_busmap
 
 logger = logging.getLogger(__name__)
@@ -266,7 +270,7 @@ if __name__ == "__main__":
     n.generators_t.p_max_pu = reduce_float_memory(n.generators_t.p_max_pu)
     n.generators_t.p_min_pu = reduce_float_memory(n.generators_t.p_min_pu)
     n.generators_t.marginal_cost = reduce_float_memory(n.generators_t.marginal_cost)
-    
+
     n.export_to_netcdf(snakemake.output[0])
 
     output_path = os.path.dirname(snakemake.output[0]) + "/simplified_"
