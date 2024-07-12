@@ -145,6 +145,9 @@ sector:
     cyclic_storage: false
   heating:
     heat_pump_sink_T: 55.
+  transport:
+    exogenous: True # false to be implemented 
+    ev_policy: "config/policy_constraints/ev_policy.csv"
 
 # docs :
 clustering:

@@ -55,6 +55,17 @@ FIPS_2_STATE = const.FIPS_2_STATE
 NAICS = const.NAICS
 TBTU_2_MWH = const.TBTU_2_MWH
 
+# bus conversion:
+# - (pg 4) https://www.apta.com/wp-content/uploads/APTA-2022-Public-Transportation-Fact-Book.pdf
+# - (141.5 / 999.5) = 0.14157
+
+VMT_UNIT_CONVERSION = {
+    "light_duty": 1,  # VMT
+    "med_duty": 1,  # VMT
+    "heavy_duty": 1,  # VMT
+    "bus": 0.14157,  # PMT -> VMT
+}
+
 
 class Context:
     """
@@ -1108,6 +1119,28 @@ class ReadTransportVmt(ReadStrategy):
     def zone(self):
         return self._zone
 
+    @staticmethod
+    def _assign_vehicle_type(vehicle: str) -> str:
+        """
+        Coordinates vehicle names.
+        """
+        match vehicle:
+            case v if v.startswith(("light_duty", "light-duty vehicles", "Light-Duty")):
+                return "light_duty"
+            case v if v.startswith(
+                ("med_duty", "medium-duty trucks", "Commercial Light"),
+            ):
+                return "med_duty"
+            case v if v.startswith(
+                ("heavy_duty", "heavy-duty trucks", "Freight Trucks"),
+            ):
+                return "heavy_duty"
+            case v if v.startswith(("buses", "other", "Bus")):
+                return "bus"
+            case _:
+                logger.warning(f"Can not match {v}")
+                return v
+
     def _read_data(self) -> pd.DataFrame:
         """
         Will return VMT by state and vehicle type. The sum of each vehicle type
@@ -1124,21 +1157,6 @@ class ReadTransportVmt(ReadStrategy):
         | other               | Texas      | 1.5     |
         """
 
-        def assign_vehicle_type(s: str) -> str:
-            """
-            Maps PyPSA type to EFS type.
-            """
-            if s.startswith("light_duty"):
-                return "light_duty"
-            elif s.startswith("med_duty"):
-                return "med_duty"
-            elif s.startswith("heavy_duty"):
-                return "heavy_duty"
-            elif s.startswith("buses"):
-                return "bus"
-            else:
-                return s
-
         df = pd.read_csv(self.filepath, index_col=0, header=0)
 
         # check as these are user defined
@@ -1147,7 +1165,7 @@ class ReadTransportVmt(ReadStrategy):
 
         df = df.T
         df.index.name = "vehicle"
-        df.index = df.index.map(assign_vehicle_type)
+        df.index = df.index.map(self._assign_vehicle_type)
         df = (
             df.reset_index()
             .melt(id_vars="vehicle", var_name="state", value_name="percent")
@@ -1164,21 +1182,6 @@ class ReadTransportVmt(ReadStrategy):
         the year will equal **ONE THOUSAND** Its scaled from 1 to 1000
         just to avoid numerical issues.
         """
-
-        def assign_vehicle_type(s: str) -> str:
-            """
-            Maps efs type to pypsa type.
-            """
-            if s.startswith("light-duty vehicles"):
-                return "light_duty"
-            elif s.startswith("medium-duty trucks"):
-                return "med_duty"
-            elif s.startswith("heavy-duty trucks"):
-                return "heavy_duty"
-            elif s.startswith("other"):
-                return "bus"
-            else:
-                return s
 
         efs = ReadEfs(self.efs_path).read_demand()
         transport = efs[efs.index.get_level_values("sector") == "transport"].droplevel(
@@ -1201,7 +1204,7 @@ class ReadTransportVmt(ReadStrategy):
         # rename subsector names
         index_order = transport.index.names
         transport = transport.reset_index(level="subsector")
-        transport["subsector"] = transport.subsector.map(assign_vehicle_type)
+        transport["subsector"] = transport.subsector.map(self._assign_vehicle_type)
         transport = transport.set_index([transport.index, "subsector"]).reorder_levels(
             index_order,
         )
@@ -1225,21 +1228,6 @@ class ReadTransportVmt(ReadStrategy):
         Gets yearly national level VMT data.
         """
 
-        def assign_vehicle_type(s: str) -> str:
-            """
-            Maps EIA type to pypsa type.
-            """
-            if s.startswith("Light-Duty"):
-                return "light_duty"
-            elif s.startswith("Commercial Light"):
-                return "med_duty"
-            elif s.startswith("Freight Trucks"):
-                return "heavy_duty"
-            elif s.startswith("Bus"):
-                return "bus"
-            else:
-                return s
-
         demand = []
         for vehicle in ("light_duty", "med_duty", "heavy_duty", "bus"):
             demand.append(TransportationDemand(vehicle, 2050, self.api).get_data())
@@ -1248,7 +1236,7 @@ class ReadTransportVmt(ReadStrategy):
                 demand.append(TransportationDemand(vehicle, year, self.api).get_data())
         vmt_demand = pd.concat(demand).sort_index()
         vmt_demand["vehicle"] = vmt_demand["series-description"].map(
-            assign_vehicle_type,
+            self._assign_vehicle_type,
         )
         vmt_demand = vmt_demand.reset_index().rename(columns={"period": "year"})
         vmt_demand = vmt_demand[vmt_demand.year.isin(self.efs_years)].copy()
@@ -2207,16 +2195,16 @@ if __name__ == "__main__":
         #     interconnect="texas",
         #     end_use="power",
         # )
-        # snakemake = mock_snakemake(
-        #     "build_transport_demand",
-        #     interconnect="texas",
-        #     end_use="transport",
-        # )
         snakemake = mock_snakemake(
-            "build_sector_demand",
+            "build_transport_demand",
             interconnect="texas",
-            end_use="industry",
+            end_use="transport",
         )
+        # snakemake = mock_snakemake(
+        #     "build_sector_demand",
+        #     interconnect="texas",
+        #     end_use="industry",
+        # )
     configure_logging(snakemake)
 
     n = pypsa.Network(snakemake.input.network)
@@ -2319,18 +2307,6 @@ if __name__ == "__main__":
             sns=sns,
         )  # dict[str, pd.DataFrame]
 
-    #########################################################################
-    ############### TEMPORARY FOR TRANSPORT DEMAND ##########################
-    #########################################################################
-    # assume 50/50 split of gas and elec to get workflow going
-    if end_use == "transport":
-        for fuel, _ in demands.items():
-            for vehicle, df in demands[fuel].items():
-                demands[fuel][vehicle] = df.mul(0.5)
-    #########################################################################
-    ############### TEMPORARY FOR TRANSPORT DEMAND ##########################
-    #########################################################################
-
     # scale demand and align snapshots. this is outside the main read/write
     # strategy as extra arguments are required to fill in data
 
@@ -2349,10 +2325,11 @@ if __name__ == "__main__":
         for fuel, _ in demands.items():
             formatted_demand[fuel] = {}
             for vehicle, demand in demands[fuel].items():
+                vmt_conversion = VMT_UNIT_CONVERSION.get(vehicle, 1)
                 formatted_demand[fuel][vehicle] = demand_formatter.format_demand(
                     demand,
                     vehicle,
-                )
+                ).mul(vmt_conversion)
     else:
         for fuel, demand in demands.items():
             formatted_demand[fuel] = demand_formatter.format_demand(demand, end_use)

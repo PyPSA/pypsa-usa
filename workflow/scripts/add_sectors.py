@@ -24,7 +24,7 @@ from build_natural_gas import (
     build_natural_gas,
     convert_generators_2_links,
 )
-from build_transportation import build_transportation
+from build_transportation import apply_exogenous_ev_policy, build_transportation
 from constants import STATE_2_CODE, STATES_INTERCONNECT_MAPPER
 from shapely.geometry import Point
 
@@ -305,6 +305,8 @@ if __name__ == "__main__":
     )
 
     # add transportation
+    ev_policy = pd.read_csv(snakemake.input.ev_policy, index_col=0)
+    apply_exogenous_ev_policy(n, ev_policy)
     build_transportation(
         n=n,
         costs=costs,

@@ -29,6 +29,7 @@ def sector_input_files(wildcards):
             + "{interconnect}/cop_air_urban_elec_s_{clusters}.nc",
             "clustered_pop_layout": RESOURCES
             + "{interconnect}/pop_layout_elec_s_{clusters}.csv",
+            "ev_policy": config["sector"]["transport"]["ev_policy"],
         }
         input_files.update(ng_files)
 

@@ -85,6 +85,8 @@ if __name__ == "__main__":
 
         for demand_file in demand_files:
 
+            load_multiplier = 1
+
             parsed_name = Path(demand_file).name.split("_")
             parsed_name[-1] = parsed_name[-1].split(".csv")[0]
 
@@ -96,6 +98,8 @@ if __name__ == "__main__":
                 carrier = f"{sector_mapper[sector]}-{carrier_mapper[end_use]}"
                 suffix = f"-{carrier}"
 
+                log_statement = f"{sector} {end_use} demand added to network"
+
             elif len(parsed_name) == 3:
 
                 sector = parsed_name[0]
@@ -105,11 +109,15 @@ if __name__ == "__main__":
                 carrier = f"{sector_mapper[sector]}-{carrier_mapper[end_use]}-{vehicle_mapper[subsector]}"
                 suffix = f"-{carrier}"
 
+                log_statement = (
+                    f"{sector} {subsector} {end_use} demand added to network"
+                )
+
             else:
                 raise NotImplementedError
 
             df = pd.read_csv(demand_file, index_col=0)
             attach_demand(n, df, carrier, suffix)
-            logger.info(f"{sector} {end_use} demand added to network")
+            logger.info(log_statement)
 
     n.export_to_netcdf(snakemake.output.network)

@@ -132,8 +132,11 @@ def add_elec_vehicle(
         case _:
             raise NotImplementedError
 
-    capex = costs.at[costs_name, "capital_cost"]
-    efficiency = costs.at[costs_name, "efficiency"]
+    # 1000s to convert:
+    #  $/mile -> $/k-miles
+    #  miles/MWh -> k-miles/MWh
+    capex = costs.at[costs_name, "capital_cost"] * 1000
+    efficiency = costs.at[costs_name, "efficiency"] / 1000
     lifetime = costs.at[costs_name, "lifetime"]
 
     carrier_name = f"trn-elec-{vehicle}"
@@ -188,8 +191,12 @@ def add_lpg_vehicle(
         case _:
             raise NotImplementedError
 
-    capex = costs.at[costs_name, "capital_cost"]
-    efficiency = costs.at[costs_name, "efficiency"]
+    # 1000s to convert:
+    #  $/mile -> $/k-miles
+    #  miles/MWh -> k-miles/MWh
+
+    capex = costs.at[costs_name, "capital_cost"] * 1000
+    efficiency = costs.at[costs_name, "efficiency"] / 1000
     lifetime = costs.at[costs_name, "lifetime"]
 
     carrier_name = f"trn-lpg-{vehicle}"
@@ -214,3 +221,53 @@ def add_lpg_vehicle(
         p_nom_extendable=True,
         lifetime=lifetime,
     )
+
+
+def apply_exogenous_ev_policy(n: pypsa.Network, policy: pd.DataFrame) -> None:
+    """
+    If transport investment is exogenous, applies policy to control loads.
+
+    At this point, all vehicle loads are represented as if the entire load is
+    met through that fuel type (ie. if there is elec and lpg load, there will
+    be 2x the amount of load in the system). This function will adjust the
+    amount of load attributed to each fuel.
+
+    The EFS ev policies come from:
+    - Figure 6.3 at https://www.nrel.gov/docs/fy18osti/71500.pdf
+    - Sheet 6.3 at https://data.nrel.gov/submissions/90
+    """
+
+    vehicle_mapper = {
+        "light_duty": "lgt",
+        "med_duty": "med",
+        "heavy_duty": "hvy",
+        "bus": "bus",
+    }
+
+    adjusted_loads = []
+
+    for vehicle in policy.columns:  # name of vehicle type
+        for period in n.investment_periods:
+            ev_share = policy.at[period, vehicle]
+            for fuel in ("elec", "lpg"):
+
+                # adjust load value
+                load_names = [
+                    x
+                    for x in n.loads.index
+                    if x.endswith(f"trn-{fuel}-{vehicle_mapper[vehicle]}")
+                ]
+                df = n.loads_t.p_set.loc[period,][load_names]
+                multiplier = ev_share if fuel == "elec" else (100 - ev_share)
+                df *= multiplier / 100  # divide by 100 to get rid of percent
+
+                # reapply period index level
+                df["period"] = period
+                df = df.set_index(["period", df.index])  # df.index is snapshots
+
+                adjusted_loads.append(df)
+
+    adjusted = pd.concat(adjusted_loads, axis=1)
+
+    adjusted_loads = adjusted.columns
+    n.loads_t.p_set[adjusted_loads] = adjusted[adjusted_loads]

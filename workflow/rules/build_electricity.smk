@@ -253,7 +253,7 @@ def demand_raw_data(wildcards):
     elif profile == "efs_aeo":
         return [
             DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv",
-            DATA + "transportation/transport_ratios.csv",
+            "repo_data/sectors/transport_ratios.csv",
         ]
 
 
