@@ -1,4 +1,4 @@
- # PyPSA USA Authors
+# PyPSA USA Authors
 """
 **Description**
 
@@ -922,6 +922,7 @@ def attach_wind_and_solar(
                 p_max_pu=bus_profiles,
             )
 
+
 def attach_egs(
     n: pypsa.Network,
     costs: pd.DataFrame,
@@ -940,14 +941,23 @@ def attach_egs(
 
     add_missing_carriers(n, carriers)
 
-    with xr.open_dataset(getattr(input_profiles, "specs_EGS")) as ds_specs, xr.open_dataset(getattr(input_profiles, "profile_EGS")) as ds_profile:
-        
-        data_year = str(pd.to_datetime(ds_profile["Date"].to_dataframe().iloc[0]).iloc[0].year)
+    with xr.open_dataset(
+        getattr(input_profiles, "specs_EGS")
+    ) as ds_specs, xr.open_dataset(
+        getattr(input_profiles, "profile_EGS")
+    ) as ds_profile:
+
+        data_year = str(
+            pd.to_datetime(ds_profile["Date"].to_dataframe().iloc[0]).iloc[0].year
+        )
         snapshot_year = str(n.snapshots[0].year)
 
-        ds_profile["Date"] = (
-                pd.to_datetime(ds_profile["Date"].to_dataframe().astype(str)
-                .replace(data_year, snapshot_year, regex=True)["Date"].values)
+        ds_profile["Date"] = pd.to_datetime(
+            ds_profile["Date"]
+            .to_dataframe()
+            .astype(str)
+            .replace(data_year, snapshot_year, regex=True)["Date"]
+            .values,
         )
 
         bus2sub = (
@@ -956,46 +966,62 @@ def attach_egs(
             .rename(columns={"Bus": "bus_id"})
         )
 
-        df_specs = pd.merge(ds_specs.to_dataframe().reset_index(), bus2sub, on="sub_id", how="left")
+        df_specs = pd.merge(
+            ds_specs.to_dataframe().reset_index(), bus2sub, on="sub_id", how="left"
+        )
         df_specs["bus_id"] = df_specs["bus_id"].astype(str)
 
         # bus_id must be in index for pypsa to read it
         df_specs.set_index("bus_id", inplace=True)
 
         # columns must be renamed to refer to the right quantities for pypsa to read it correctly
-        df_specs = df_specs.rename(columns={"capex_usd_kw": "capital_cost", 
-                                            "avail_capacity_mw": "p_nom_max",
-                                            "fixed_om": "fixed_om"})
-        
+        df_specs = df_specs.rename(
+            columns={
+                "capex_usd_kw": "capital_cost",
+                "avail_capacity_mw": "p_nom_max",
+                "fixed_om": "fixed_om",
+            },
+        )
 
         # TODO: come up with proper values for these params
         i = 0.07
         L = 25
-        CRF = (i * (1 + i)**L) / ((1 + i)**L-1)
-        df_specs["capital_cost"] = 1000 * (df_specs["capital_cost"] * CRF + df_specs["fixed_om"]) #convert and annualize USD/kW to USD/MW-year
+        CRF = (i * (1 + i) ** L) / ((1 + i) ** L - 1)
+        df_specs["capital_cost"] = 1000 * (
+            df_specs["capital_cost"] * CRF + df_specs["fixed_om"]
+        )  # convert and annualize USD/kW to USD/MW-year
         # df_specs["capital_cost"] *= 0.66 #testing: drilling costs result in a 25% drop of around total project costs ... exact numbers can be retrieved for each proejct based on the FGEM
         # df_specs["marginal_cost"] = 0.0 # revisit to incorporate opex ... FOM/VOM
         df_specs["efficiency"] = 1.0
 
         # TODO: review what qualities need to be included. Currently limited for speedup.
-        qualities = [1]#df_specs.Quality.unique()
+        qualities = [1]  # df_specs.Quality.unique()
 
         for q in qualities:
             suffix = " " + car + f" Q{q}"
             df_q = df_specs[df_specs["Quality"] == q]
 
             bus_list = df_q.index.values
-            names = ("EGS_Q" + df_q.Quality.astype(str) + "_" + df_q.index.astype(str)).values
-            capital_cost = df_q["capital_cost"] 
+            names = (
+                "EGS_Q" + df_q.Quality.astype(str) + "_" + df_q.index.astype(str)
+            ).values
+            capital_cost = df_q["capital_cost"]
             p_nom_max_bus = df_q["p_nom_max"]
             weight_bus = df_q["weight"]
-            efficiency = df_q["efficiency"] # for now.
-            
-            df_q_profile = pd.merge(ds_profile.sel(Quality=q).to_dataframe().reset_index(), 
-                                    bus2sub,
-                                    on="sub_id", how="left")
-            bus_profiles = pd.pivot_table(df_q_profile, columns="bus_id", 
-            index="Date", values="capacity_factor")
+            efficiency = df_q["efficiency"]  # for now.
+
+            df_q_profile = pd.merge(
+                ds_profile.sel(Quality=q).to_dataframe().reset_index(),
+                bus2sub,
+                on="sub_id",
+                how="left",
+            )
+            bus_profiles = pd.pivot_table(
+                df_q_profile,
+                columns="bus_id",
+                index="Date",
+                values="capacity_factor",
+            )
 
             # TODO: this is only an approximation, which should be removed in favor of fully simulated EGS pumping/maintenance requirements
             # bus_profiles -= 0.2
@@ -1005,7 +1031,9 @@ def attach_egs(
             # import pdb
             # pdb.set_trace()
 
-            logger.info(f"Adding EGS (Resource Quality-{q}) capacity-factor profiles to the network.")
+            logger.info(
+                f"Adding EGS (Resource Quality-{q}) capacity-factor profiles to the network."
+            )
 
             # TODO: #24 VALIDATE TECHNICAL POTENTIALS
 
@@ -1629,6 +1657,7 @@ def main(snakemake):
     n.export_to_netcdf(snakemake.output[0])
 
     logger.info(test_network_datatype_consistency(n))
+
 
 if __name__ == "__main__":
     if "snakemake" not in globals():

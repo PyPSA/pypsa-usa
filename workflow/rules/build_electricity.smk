@@ -186,7 +186,6 @@ rule build_renewable_profiles:
         + "{interconnect}_"
         + config["renewable"][w.technology]["cutout"]
         + ".nc",
-        
     output:
         profile=RESOURCES + "{interconnect}/profile_{technology}.nc",
     log:
@@ -305,7 +304,6 @@ rule add_electricity:
         solar_breakthrough=DATA + "breakthrough_network/base_grid/solar.csv",
         bus2sub=DATA + "breakthrough_network/base_grid/{interconnect}/bus2sub.csv",
         specs_EGS=RESOURCES + "{interconnect}/specs_EGS.nc",
-
         ads_renewables=(
             DATA + "WECC_ADS/processed/"
             if config["network_configuration"] == "ads2032"
