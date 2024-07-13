@@ -1,4 +1,4 @@
-# PyPSA USA Authors
+ # PyPSA USA Authors
 """
 **Description**
 
@@ -809,7 +809,7 @@ def attach_wind_and_solar(
     """
     add_missing_carriers(n, carriers)
     for car in carriers:
-        if car == "hydro":
+        if car in ["hydro", "EGS"]:
             continue
 
         with xr.open_dataset(getattr(input_profiles, "profile_" + car)) as ds:
@@ -919,6 +919,105 @@ def attach_wind_and_solar(
                 marginal_cost=costs.at[car, "marginal_cost"],
                 capital_cost=capital_cost,
                 efficiency=costs.at[car, "efficiency"],
+                p_max_pu=bus_profiles,
+            )
+
+def attach_egs(
+    n: pypsa.Network,
+    costs: pd.DataFrame,
+    input_profiles: str,
+    carriers: list[str],
+    extendable_carriers: dict[str, list[str]],
+    line_length_factor=1,
+):
+    """
+    Attached STM Calculated wind and solar capacity factor profiles to the
+    network.
+    """
+    car = "EGS"
+    if car not in carriers:
+        return
+
+    add_missing_carriers(n, carriers)
+
+    with xr.open_dataset(getattr(input_profiles, "specs_EGS")) as ds_specs, xr.open_dataset(getattr(input_profiles, "profile_EGS")) as ds_profile:
+        
+        data_year = str(pd.to_datetime(ds_profile["Date"].to_dataframe().iloc[0]).iloc[0].year)
+        snapshot_year = str(n.snapshots[0].year)
+
+        ds_profile["Date"] = (
+                pd.to_datetime(ds_profile["Date"].to_dataframe().astype(str)
+                .replace(data_year, snapshot_year, regex=True)["Date"].values)
+        )
+
+        bus2sub = (
+            pd.read_csv(input_profiles.bus2sub, dtype=str)
+            .drop("interconnect", axis=1)
+            .rename(columns={"Bus": "bus_id"})
+        )
+
+        df_specs = pd.merge(ds_specs.to_dataframe().reset_index(), bus2sub, on="sub_id", how="left")
+        df_specs["bus_id"] = df_specs["bus_id"].astype(str)
+
+        # bus_id must be in index for pypsa to read it
+        df_specs.set_index("bus_id", inplace=True)
+
+        # columns must be renamed to refer to the right quantities for pypsa to read it correctly
+        df_specs = df_specs.rename(columns={"capex_usd_kw": "capital_cost", 
+                                            "avail_capacity_mw": "p_nom_max",
+                                            "opex_usd_mwh": "marginal_cost"})
+        
+        # TODO: come up with proper values for these params
+        i = 0.07
+        L = 25
+        CRF = (i * (1 + i)**L) / ((1 + i)**L-1)
+        df_specs["capital_cost"] *= 1000 * CRF #convert and annualize USD/kW to USD/MW-year
+        # df_specs["capital_cost"] *= 0.66 #testing: drilling costs result in a 25% drop of around total project costs ... exact numbers can be retrieved for each proejct based on the FGEM
+        # df_specs["marginal_cost"] = 0.0 # revisit to incorporate opex ... FOM/VOM
+        df_specs["efficiency"] = 1.0
+
+        # TODO: review what qualities need to be included. Currently limited for speedup.
+        qualities = [1]#df_specs.Quality.unique()
+
+        for q in qualities:
+            suffix = " " + car + f" Q{q}"
+            df_q = df_specs[df_specs["Quality"] == q]
+
+            bus_list = df_q.index.values
+            names = ("EGS_Q" + df_q.Quality.astype(str) + "_" + df_q.index.astype(str)).values
+            capital_cost = df_q["capital_cost"] 
+            marginal_cost = df_q["marginal_cost"]
+            p_nom_max_bus = df_q["p_nom_max"]
+            weight_bus = df_q["weight"]
+            efficiency = df_q["efficiency"] # for now.
+             
+            df_q_profile = pd.merge(ds_profile.sel(Quality=q).to_dataframe().reset_index(), 
+                                    bus2sub,
+                                    on="sub_id", how="left")
+            bus_profiles = pd.pivot_table(df_q_profile, columns="bus_id", 
+            index="Date", values="capacity_factor")
+
+            # TODO: this is only an approximation, which should be removed in favor of fully simulated EGS pumping/maintenance requirements
+            bus_profiles -= 0.2
+            # TODO: what if it is flexible generation to maximize capacity factor?
+            # bus_profiles = 1.0
+
+            logger.info(f"Adding EGS (Resource Quality-{q}) capacity-factor profiles to the network.")
+
+            # TODO: #24 VALIDATE TECHNICAL POTENTIALS
+
+            n.madd(
+                "Generator",
+                bus_list,
+                suffix,
+                bus=bus_list,
+                carrier=car,
+                p_nom_extendable=car in extendable_carriers["Generator"],
+                p_nom_max=p_nom_max_bus,
+                weight=weight_bus,
+                marginal_cost=marginal_cost,
+                capital_cost=capital_cost,
+                efficiency=efficiency,
                 p_max_pu=bus_profiles,
             )
 
@@ -1415,6 +1514,7 @@ def main(snakemake):
             costs,
         )
     else:
+
         attach_wind_and_solar(
             n,
             costs,
@@ -1423,6 +1523,16 @@ def main(snakemake):
             extendable_carriers,
             params.length_factor,
         )
+
+        attach_egs(
+            n,
+            costs,
+            snakemake.input,
+            renewable_carriers,
+            extendable_carriers,
+            params.length_factor,
+        )
+
         renewable_carriers = list(
             set(snakemake.config["electricity"]["renewable_carriers"]).intersection(
                 {"onwind", "solar", "offwind", "offwind_floating"},
@@ -1433,6 +1543,7 @@ def main(snakemake):
             plants,
             renewable_carriers,
         )
+
         # temporarily adding hydro with breakthrough only data until I can correctly import hydro_data
         n = attach_breakthrough_renewable_plants(
             n,
@@ -1441,6 +1552,7 @@ def main(snakemake):
             extendable_carriers,
             costs,
         )
+
     update_p_nom_max(n)
 
     # apply regional multipliers to capital cost data
@@ -1515,7 +1627,6 @@ def main(snakemake):
     n.export_to_netcdf(snakemake.output[0])
 
     logger.info(test_network_datatype_consistency(n))
-
 
 if __name__ == "__main__":
     if "snakemake" not in globals():

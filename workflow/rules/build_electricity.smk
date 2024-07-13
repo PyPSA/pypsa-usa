@@ -186,6 +186,7 @@ rule build_renewable_profiles:
         + "{interconnect}_"
         + config["renewable"][w.technology]["cutout"]
         + ".nc",
+        
     output:
         profile=RESOURCES + "{interconnect}/profile_{technology}.nc",
     log:
@@ -196,7 +197,7 @@ rule build_renewable_profiles:
     resources:
         mem_mb=ATLITE_NPROCESSES * 5000,
     wildcard_constraints:
-        technology="(?!hydro).*",  # Any technology other than hydro
+        technology="(?!hydro|EGS).*",  # Any technology other than hydro and EGS
     script:
         "../scripts/build_renewable_profiles.py"
 
@@ -303,6 +304,8 @@ rule add_electricity:
         wind_breakthrough=DATA + "breakthrough_network/base_grid/wind.csv",
         solar_breakthrough=DATA + "breakthrough_network/base_grid/solar.csv",
         bus2sub=DATA + "breakthrough_network/base_grid/{interconnect}/bus2sub.csv",
+        specs_EGS=RESOURCES + "{interconnect}/specs_EGS.nc",
+
         ads_renewables=(
             DATA + "WECC_ADS/processed/"
             if config["network_configuration"] == "ads2032"
