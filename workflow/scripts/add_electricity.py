@@ -965,13 +965,14 @@ def attach_egs(
         # columns must be renamed to refer to the right quantities for pypsa to read it correctly
         df_specs = df_specs.rename(columns={"capex_usd_kw": "capital_cost", 
                                             "avail_capacity_mw": "p_nom_max",
-                                            "opex_usd_mwh": "marginal_cost"})
+                                            "fixed_om": "fixed_om"})
         
+
         # TODO: come up with proper values for these params
         i = 0.07
         L = 25
         CRF = (i * (1 + i)**L) / ((1 + i)**L-1)
-        df_specs["capital_cost"] *= 1000 * CRF #convert and annualize USD/kW to USD/MW-year
+        df_specs["capital_cost"] = 1000 * (df_specs["capital_cost"] * CRF + df_specs["fixed_om"]) #convert and annualize USD/kW to USD/MW-year
         # df_specs["capital_cost"] *= 0.66 #testing: drilling costs result in a 25% drop of around total project costs ... exact numbers can be retrieved for each proejct based on the FGEM
         # df_specs["marginal_cost"] = 0.0 # revisit to incorporate opex ... FOM/VOM
         df_specs["efficiency"] = 1.0
@@ -986,11 +987,10 @@ def attach_egs(
             bus_list = df_q.index.values
             names = ("EGS_Q" + df_q.Quality.astype(str) + "_" + df_q.index.astype(str)).values
             capital_cost = df_q["capital_cost"] 
-            marginal_cost = df_q["marginal_cost"]
             p_nom_max_bus = df_q["p_nom_max"]
             weight_bus = df_q["weight"]
             efficiency = df_q["efficiency"] # for now.
-             
+            
             df_q_profile = pd.merge(ds_profile.sel(Quality=q).to_dataframe().reset_index(), 
                                     bus2sub,
                                     on="sub_id", how="left")
@@ -998,9 +998,12 @@ def attach_egs(
             index="Date", values="capacity_factor")
 
             # TODO: this is only an approximation, which should be removed in favor of fully simulated EGS pumping/maintenance requirements
-            bus_profiles -= 0.2
+            # bus_profiles -= 0.2
             # TODO: what if it is flexible generation to maximize capacity factor?
             # bus_profiles = 1.0
+
+            # import pdb
+            # pdb.set_trace()
 
             logger.info(f"Adding EGS (Resource Quality-{q}) capacity-factor profiles to the network.")
 
@@ -1015,7 +1018,6 @@ def attach_egs(
                 p_nom_extendable=car in extendable_carriers["Generator"],
                 p_nom_max=p_nom_max_bus,
                 weight=weight_bus,
-                marginal_cost=marginal_cost,
                 capital_cost=capital_cost,
                 efficiency=efficiency,
                 p_max_pu=bus_profiles,
