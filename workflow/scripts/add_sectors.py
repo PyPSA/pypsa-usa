@@ -19,11 +19,7 @@ from typing import Optional
 from _helpers import configure_logging, get_snapshots
 from add_electricity import load_costs
 from build_heat import build_heat
-from build_natural_gas import (
-    StateGeometry,
-    build_natural_gas,
-    convert_generators_2_links,
-)
+from build_natural_gas import StateGeometry, build_natural_gas
 from build_transportation import apply_exogenous_ev_policy, build_transportation
 from constants import STATE_2_CODE, STATES_INTERCONNECT_MAPPER
 from shapely.geometry import Point
@@ -66,10 +62,16 @@ def assign_bus_2_state(
 def add_sector_foundation(
     n: pypsa.Network,
     carrier: str,
+    add_supply: bool = True,
+    costs: Optional[pd.DataFrame] = pd.DataFrame(),
     center_points: Optional[pd.DataFrame] = pd.DataFrame(),
 ) -> None:
     """
-    Adds carrier, state level bus and generator for the energy carrier.
+    Adds carrier, state level bus and store for the energy carrier.
+
+    If add_supply, the store to supply energy will be added. If false,
+    only the bus is created and no energy supply will be added to the
+    state level bus.
     """
 
     match carrier:
@@ -81,6 +83,11 @@ def add_sector_foundation(
             carrier_kwargs = {"color": "#d35050", "nice_name": "Liquid Petroleum Gas"}
         case _:
             carrier_kwargs = {}
+
+    try:
+        carrier_kwargs["co2_emissions"] = costs.at[carrier, "co2_emissions"]
+    except KeyError:
+        pass
 
     # make primary energy carriers
 
@@ -131,22 +138,93 @@ def add_sector_foundation(
         STATE_NAME=points.name,
     )
 
+    if add_supply:
+
+        n.madd(
+            "Store",
+            names=points.index,
+            suffix=f" {carrier}",
+            bus=[f"{x} {carrier}" for x in points.index],
+            e_nom=0,
+            e_nom_extendable=True,
+            capital_cost=0,
+            e_nom_min=0,
+            e_nom_max=np.inf,
+            e_min_pu=-1,
+            e_max_pu=0,
+            e_cyclic_per_period=False,
+            carrier=carrier,
+            unit="MWh_th",
+        )
+
+
+def convert_generators_2_links(n: pypsa.Network, carrier: str, bus0_suffix: str):
+    """
+    Replace Generators with a link connecting to a state level primary energy.
+
+    Links bus1 are the bus the generator is attached to. Links bus0 are state
+    level followed by the suffix (ie. "WA gas" if " gas" is the bus0_suffix)
+
+    n: pypsa.Network,
+    carrier: str,
+        carrier of the generator to convert to a link
+    bus0_suffix: str,
+        suffix to attach link to
+    """
+
+    plants = n.generators[n.generators.carrier == carrier].copy()
+
+    if plants.empty:
+        return
+
+    plants["STATE"] = plants.bus.map(n.buses.STATE)
+
+    pnl = {}
+
+    # copy over pnl parameters
+    for c in n.iterate_components(["Generator"]):
+        for param, df in c.pnl.items():
+            # skip result vars
+            if param not in (
+                "p_min_pu",
+                "p_max_pu",
+                "p_set",
+                "q_set",
+                "marginal_cost",
+                "marginal_cost_quadratic",
+                "efficiency",
+                "stand_by_cost",
+            ):
+                continue
+            cols = [p for p in plants.index if p in df.columns]
+            if cols:
+                pnl[param] = df[cols]
+
     n.madd(
-        "Store",
-        names=points.index,
-        suffix=f" {carrier}",
-        bus=[f"{x} {carrier}" for x in points.index],
-        e_nom=0,
-        e_nom_extendable=True,
-        capital_cost=0,
-        e_nom_min=0,
-        e_nom_max=np.inf,
-        e_min_pu=-1,
-        e_max_pu=0,
-        e_cyclic_per_period=False,
-        carrier=carrier,
-        unit="MWh_th",
+        "Link",
+        names=plants.index,
+        bus0=plants.STATE + bus0_suffix,
+        bus1=plants.bus,
+        carrier=plants.carrier,
+        p_nom_min=plants.p_nom_min / plants.efficiency,
+        p_nom=plants.p_nom / plants.efficiency,  # links rated on input capacity
+        p_nom_max=plants.p_nom_max / plants.efficiency,
+        p_nom_extendable=plants.p_nom_extendable,
+        ramp_limit_up=plants.ramp_limit_up,
+        ramp_limit_down=plants.ramp_limit_down,
+        efficiency=plants.efficiency,
+        marginal_cost=plants.marginal_cost
+        * plants.efficiency,  # fuel costs rated at delievered
+        capital_cost=plants.capital_cost
+        * plants.efficiency,  # links rated on input capacity
+        lifetime=plants.lifetime,
     )
+
+    for param, df in pnl.items():
+        n.links_t[param] = n.links_t[param].join(df, how="inner")
+
+    # remove generators
+    n.mremove("Generator", plants.index)
 
 
 def split_loads_by_carrier(n: pypsa.Network):
@@ -253,6 +331,14 @@ if __name__ == "__main__":
 
     sns = get_snapshots(snakemake.params.snapshots)
 
+    Nyears = n.snapshot_weightings.loc[n.investment_periods[0]].objective.sum() / 8760.0
+    costs = load_costs(
+        snakemake.input.tech_costs,
+        snakemake.params.costs,
+        snakemake.params.max_hours,
+        Nyears,
+    )
+
     ###
     # Sector addition starts here
     ###
@@ -261,21 +347,16 @@ if __name__ == "__main__":
     split_loads_by_carrier(n)
 
     # add primary energy carriers for each state
-    # natural gas is added in build_natural_gas(..)
     center_points = StateGeometry(snakemake.input.county).state_center_points.set_index(
         "STATE",
     )
-    for carrier in ("oil", "coal"):
-        add_sector_foundation(n, carrier, center_points)
+    for carrier in ("oil", "coal", "gas"):
+        add_supply = False if carrier == "gas" else True  # gas added in build_ng()
+        add_sector_foundation(n, carrier, add_supply, costs, center_points)
         convert_generators_2_links(n, carrier, f" {carrier}")
 
-    Nyears = n.snapshot_weightings.loc[n.investment_periods[0]].objective.sum() / 8760.0
-    costs = load_costs(
-        snakemake.input.tech_costs,
-        snakemake.params.costs,
-        snakemake.params.max_hours,
-        Nyears,
-    )
+    for carrier in ("OCGT", "CCGT"):
+        convert_generators_2_links(n, carrier, f" gas")
 
     # add natural gas infrastructure and data
     build_natural_gas(

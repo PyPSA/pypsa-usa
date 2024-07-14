@@ -6,8 +6,6 @@ Module for adding the gas sector.
 This module will add a state level copperplate natural gas network to the model.
 Specifically, it will do the following
 
-- Adds state level natural gas buses
-- Converts exisitng OCGT and CCGT generators to links
 - Creates capacity constrained pipelines between state gas buses (links)
 - Creates capacity constraind natural gas processing facilites (generators)
 - Creates capacity and energy constrainted underground gas storage facilities
@@ -1015,71 +1013,6 @@ class ImportExportLimits(GasData):
         pass
 
 
-def convert_generators_2_links(n: pypsa.Network, carrier: str, bus0_suffix: str):
-    """
-    Replace Generators with a link connecting to a state level primary energy.
-
-    Links bus1 are the bus the generator is attached to. Links bus0 are state
-    level followed by the suffix (ie. "WA gas" if " gas" is the bus0_suffix)
-
-    n: pypsa.Network,
-    carrier: str,
-        carrier of the generator to convert to a link
-    bus0_suffix: str,
-        suffix to attach link to
-    """
-
-    plants = n.generators[n.generators.carrier == carrier].copy()
-    plants["STATE"] = plants.bus.map(n.buses.STATE)
-
-    pnl = {}
-
-    # copy over pnl parameters
-    for c in n.iterate_components(["Generator"]):
-        for param, df in c.pnl.items():
-            # skip result vars
-            if param not in (
-                "p_min_pu",
-                "p_max_pu",
-                "p_set",
-                "q_set",
-                "marginal_cost",
-                "marginal_cost_quadratic",
-                "efficiency",
-                "stand_by_cost",
-            ):
-                continue
-            cols = [p for p in plants.index if p in df.columns]
-            if cols:
-                pnl[param] = df[cols]
-
-    n.madd(
-        "Link",
-        names=plants.index,
-        bus0=plants.STATE + bus0_suffix,
-        bus1=plants.bus,
-        carrier=plants.carrier,
-        p_nom_min=plants.p_nom_min / plants.efficiency,
-        p_nom=plants.p_nom / plants.efficiency,  # links rated on input capacity
-        p_nom_max=plants.p_nom_max / plants.efficiency,
-        p_nom_extendable=plants.p_nom_extendable,
-        ramp_limit_up=plants.ramp_limit_up,
-        ramp_limit_down=plants.ramp_limit_down,
-        efficiency=plants.efficiency,
-        marginal_cost=plants.marginal_cost
-        * plants.efficiency,  # fuel costs rated at delievered
-        capital_cost=plants.capital_cost
-        * plants.efficiency,  # links rated on input capacity
-        lifetime=plants.lifetime,
-    )
-
-    for param, df in pnl.items():
-        n.links_t[param] = n.links_t[param].join(df, how="inner")
-
-    # remove generators
-    n.mremove("Generator", plants.index)
-
-
 ###
 # MAIN FUNCTION TO EXECUTE
 ###
@@ -1097,15 +1030,6 @@ def build_natural_gas(
 ) -> None:
 
     cyclic_storage = kwargs.get("cyclic_storage", True)
-
-    # add gas carrier
-
-    n.add("Carrier", "gas", color="#d35050", nice_name="Natural Gas")
-
-    # add state level gas buses
-
-    buses = GasBuses(interconnect, county_path)
-    buses.build_infrastructure(n)
 
     # add state level natural gas processing facilities
 
@@ -1151,10 +1075,6 @@ def build_natural_gas(
 
     linepack = PipelineLinepack(year, interconnect, county_path, pipeline_shape_path)
     linepack.build_infrastructure(n, cyclic_storage=cyclic_storage)
-
-    # convert existing generators to cross-sector links
-    for carrier in ("CCGT", "OCGT"):
-        convert_generators_2_links(n, carrier, " gas")
 
 
 if __name__ == "__main__":
