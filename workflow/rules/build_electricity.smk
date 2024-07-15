@@ -392,7 +392,13 @@ rule add_extra_components:
     input:
         network=RESOURCES + "{interconnect}/elec_s_{clusters}.nc",
         tech_costs=RESOURCES + f"costs_{config['costs']['year']}.csv",
-        regions_onshore=RESOURCES + "{interconnect}/regions_onshore_s_{clusters}.geojson",
+        regions_onshore=RESOURCES + "{interconnect}/regions_onshore_s_{clusters}.geojson", 
+        **{
+        f"phs_shp_{hour}": DATA + f"psh/40-100-dam-height-{hour}hr-no-croplands-no-ephemeral-no-highways.gpkg"
+        for phs_tech in config["electricity"]["extendable_carriers"]["StorageUnit"]
+        if 'PHS' in phs_tech
+        for hour in phs_tech.split("hr_") if hour.isdigit()
+        },
     params:
         retirement=config["electricity"].get("retirement", "technical"),
     output:

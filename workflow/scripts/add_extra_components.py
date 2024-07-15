@@ -103,7 +103,7 @@ def attach_phs_storageunits(n: pypsa.Network, elec_opts):
     for carrier in carriers: 
         max_hours = int(carrier.split("hr_")[0])
 
-        psh_resources = (gpd.read_file(f"./repo_data/psh/40-100-dam-height-{max_hours}hr-no-croplands-no-ephemeral-no-highways.gpkg")
+        psh_resources = (gpd.read_file(snakemake.input[f"phs_shp_{max_hours}"])
                         .to_crs(4326)
                         .rename(columns={'System Installed Capacity (Megawatts)':'potential_mw', 
                                         'System Energy Storage Capacity (Gigawatt hours)':'potential_gwh', 
