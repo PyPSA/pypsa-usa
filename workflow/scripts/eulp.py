@@ -108,9 +108,9 @@ class Eulp:
         df: Optional[pd.DataFrame] = None,
     ) -> None:
         if filepath:
-            df = self.read_data(filepath)
-            df = self.aggregate_data(df)
-            self.data = self.resample_data(df)
+            df = self._read_data(filepath)
+            df = self._aggregate_data(df)
+            self.data = self._resample_data(df)
         elif isinstance(df, pd.DataFrame):
             self.data = df
             assert (self.data.columns == ["electricity", "heating", "cooling"]).all()
@@ -144,21 +144,21 @@ class Eulp:
 
     @property
     def cooling(self):
-        return self.data["heating"]
+        return self.data["cooling"]
 
-    @classmethod
-    def read_data(self, filepath: str) -> pd.DataFrame:
+    @staticmethod
+    def _read_data(filepath: str) -> pd.DataFrame:
         df = pd.read_csv(filepath, engine="pyarrow", index_col="timestamp")
         df.index = pd.to_datetime(df.index)
         return df
 
-    @classmethod
-    def resample_data(self, df: pd.DataFrame, resample: str = "1h") -> pd.DataFrame:
+    @staticmethod
+    def _resample_data(df: pd.DataFrame, resample: str = "1h") -> pd.DataFrame:
         if not isinstance(df.index, pd.DatetimeIndex):
             df.index = pd.to_datetime(df.index)
         return df.resample(resample).sum()
 
-    def aggregate_data(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _aggregate_data(self, df: pd.DataFrame) -> pd.DataFrame:
 
         def aggregate_sector(df: pd.DataFrame, columns: list[str]) -> pd.Series:
             sector_columns = [x for x in columns if x in df.columns.to_list()]
@@ -188,3 +188,6 @@ class Eulp:
         df = self.data[sectors]
 
         return df.plot(xlabel="", ylabel="MWh")
+
+    def to_csv(self, path_or_buf: str, **kwargs):
+        self.data.to_csv(path_or_buf=path_or_buf, **kwargs)

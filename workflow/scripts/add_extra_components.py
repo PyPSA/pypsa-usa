@@ -49,16 +49,16 @@ The rule :mod:`add_extra_components` attaches additional extendable components t
 import logging
 from typing import List
 
+import geopandas as gpd
 import numpy as np
 import pandas as pd
-import geopandas as gpd
 import pypsa
 from _helpers import configure_logging
 from add_electricity import (
     _add_missing_carriers_from_costs,
     add_nice_carrier_names,
+    calculate_annuity,
     load_costs,
-    calculate_annuity
 )
 
 idx = pd.IndexSlice
@@ -68,15 +68,46 @@ logger = logging.getLogger(__name__)
 
 def attach_storageunits(n, costs, elec_opts):
     carriers = elec_opts["extendable_carriers"]["StorageUnit"]
-    carriers = [k for k in carriers if 'battery' in k]
+    carriers = [k for k in carriers if "battery" in k]
 
-    _add_missing_carriers_from_costs(n, costs, carriers)
 
+def _add_missing_carriers_from_costs(n, costs, carriers):
+    missing_carriers = pd.Index(carriers).difference(n.carriers.index)
+    if missing_carriers.empty:
+        return
+
+    emissions_cols = (
+        costs.columns.to_series().loc[lambda s: s.str.endswith("_emissions")].values
+    )
+    suptechs = missing_carriers.str.split("-").str[0]
+    emissions = costs.loc[suptechs, emissions_cols].fillna(0.0)
+    emissions.index = missing_carriers
+    n.import_components_from_dataframe(emissions, "Carrier")
+
+
+def add_nice_carrier_names(n, config):
+    carrier_i = n.carriers.index
+    nice_names = (
+        pd.Series(config["plotting"]["nice_names"])
+        .reindex(carrier_i)
+        .fillna(carrier_i.to_series().str.title())
+    )
+    n.carriers["nice_name"] = nice_names
+    colors = pd.Series(config["plotting"]["tech_colors"]).reindex(carrier_i)
+    if colors.isna().any():
+        missing_i = list(colors.index[colors.isna()])
+        logger.warning(f"tech_colors for carriers {missing_i} not defined in config.")
+    n.carriers["color"] = colors
+
+
+def attach_storageunits(n, costs, elec_opts, investment_year):
+    carriers = elec_opts["extendable_carriers"]["StorageUnit"]
     buses_i = n.buses.index
 
     lookup_store = {"H2": "electrolysis", "battery": "battery inverter"}
     lookup_dispatch = {"H2": "fuel cell", "battery": "battery inverter"}
 
+    _add_missing_carriers_from_costs(n, costs, carriers)
     for carrier in carriers:
         max_hours = int(carrier.split("hr_")[0])
         roundtrip_correction = 0.5 if "battery" in carrier else 1
@@ -84,7 +115,7 @@ def attach_storageunits(n, costs, elec_opts):
         n.madd(
             "StorageUnit",
             buses_i,
-            " " + carrier,
+            suffix=f" {carrier}_{investment_year}",
             bus=buses_i,
             carrier=carrier,
             p_nom_extendable=True,
@@ -94,15 +125,19 @@ def attach_storageunits(n, costs, elec_opts):
             efficiency_dispatch=costs.at[carrier, "efficiency"] ** roundtrip_correction,
             max_hours=max_hours,
             cyclic_state_of_charge=True,
+            build_year=investment_year,
+            lifetime=costs.at[carrier, "lifetime"],
         )
 
-def attach_phs_storageunits(n: pypsa.Network, elec_opts): 
+
+def attach_phs_storageunits(n: pypsa.Network, elec_opts):
     carriers = elec_opts["extendable_carriers"]["StorageUnit"]
-    carriers = [k for k in carriers if 'PHS' in k]
-    
-    for carrier in carriers: 
+    carriers = [k for k in carriers if "PHS" in k]
+
+    for carrier in carriers:
         max_hours = int(carrier.split("hr_")[0])
 
+<<<<<<< HEAD
         psh_resources = (gpd.read_file(snakemake.input[f"phs_shp_{max_hours}"])
                         .to_crs(4326)
                         .rename(columns={'System Installed Capacity (Megawatts)':'potential_mw', 
@@ -112,48 +147,87 @@ def attach_phs_storageunits(n: pypsa.Network, elec_opts):
                                         'Latitude': 'latitude'
                                         })
                         )[['longitude', 'latitude', 'potential_gwh', 'potential_mw', 'cost_kw', 'geometry']]
+=======
+        psh_resources = (
+            gpd.read_file(
+                f"./repo_data/psh/40-100-dam-height-{max_hours}hr-no-croplands-no-ephemeral-no-highways.gpkg"
+            )
+            .to_crs(4326)
+            .rename(
+                columns={
+                    "System Installed Capacity (Megawatts)": "potential_mw",
+                    "System Energy Storage Capacity (Gigawatt hours)": "potential_gwh",
+                    "System Cost (2020 US Dollars per Installed Kilowatt)": "cost_kw",
+                    "Longitude": "longitude",
+                    "Latitude": "latitude",
+                },
+            )
+        )[
+            [
+                "longitude",
+                "latitude",
+                "potential_gwh",
+                "potential_mw",
+                "cost_kw",
+                "geometry",
+            ]
+        ]
+>>>>>>> 7f68662fc41cca3d7174b7f754abbe75cbcccf48
 
         # Round CAPEX to $500 interval
-        psh_resources['cost_kw_round'] = (psh_resources['cost_kw']/500).round()*500
+        psh_resources["cost_kw_round"] = (psh_resources["cost_kw"] / 500).round() * 500
 
         # Join SC to PyPSA cluster
         region_onshore = gpd.read_file(snakemake.input.regions_onshore)
-        region_onshore_psh = gpd.sjoin(region_onshore, psh_resources, how="inner").reset_index(drop=True)
-        region_onshore_psh_grp = region_onshore_psh.groupby(['name', 'cost_kw_round'])['potential_mw'].agg('sum').reset_index()
+        region_onshore_psh = gpd.sjoin(
+            region_onshore, psh_resources, how="inner"
+        ).reset_index(drop=True)
+        region_onshore_psh_grp = (
+            region_onshore_psh.groupby(["name", "cost_kw_round"])["potential_mw"]
+            .agg("sum")
+            .reset_index()
+        )
 
-        region_onshore_psh_grp['class'] = region_onshore_psh_grp.groupby(['name']).cumcount()+1
-        region_onshore_psh_grp['class'] = "c" + region_onshore_psh_grp['class'].astype(str)
-        region_onshore_psh_grp['tech'] = carrier
-        region_onshore_psh_grp['carrier'] = region_onshore_psh_grp[['tech', 'class']].agg('_'.join, axis=1)
-        region_onshore_psh_grp['Generator'] = region_onshore_psh_grp['name'] + ' ' + region_onshore_psh_grp['carrier']
-        region_onshore_psh_grp = region_onshore_psh_grp.set_index('Generator')
+        region_onshore_psh_grp["class"] = (
+            region_onshore_psh_grp.groupby(["name"]).cumcount() + 1
+        )
+        region_onshore_psh_grp["class"] = "c" + region_onshore_psh_grp["class"].astype(
+            str
+        )
+        region_onshore_psh_grp["tech"] = carrier
+        region_onshore_psh_grp["carrier"] = region_onshore_psh_grp[
+            ["tech", "class"]
+        ].agg("_".join, axis=1)
+        region_onshore_psh_grp["Generator"] = (
+            region_onshore_psh_grp["name"] + " " + region_onshore_psh_grp["carrier"]
+        )
+        region_onshore_psh_grp = region_onshore_psh_grp.set_index("Generator")
 
         # Updated annualize capital cost based on real location
-        psh_lifetime = 100 # years
-        psh_discount_rate = 0.055 # per unit
-        psh_fom = 0.885 # %/year
-        psh_vom = 0.54 # $/MWh_e	
-    
-        region_onshore_psh_grp["capital_cost"] = (
-                (
-                    calculate_annuity(psh_lifetime, psh_discount_rate)
-                    + psh_fom/100
-                )
-                * region_onshore_psh_grp["cost_kw_round"] * 1e3
-                * n.snapshot_weightings.objective.sum() / 8760.0
-            )
+        psh_lifetime = 100  # years
+        psh_discount_rate = 0.055  # per unit
+        psh_fom = 0.885  # %/year
+        psh_vom = 0.54  # $/MWh_e
 
-        region_onshore_psh_grp['marginal_cost'] = psh_vom
+        region_onshore_psh_grp["capital_cost"] = (
+            (calculate_annuity(psh_lifetime, psh_discount_rate) + psh_fom / 100)
+            * region_onshore_psh_grp["cost_kw_round"]
+            * 1e3
+            * n.snapshot_weightings.objective.sum()
+            / 8760.0
+        )
+
+        region_onshore_psh_grp["marginal_cost"] = psh_vom
 
         # Set RT efficiency = 0.8
-        efficiency_store = 0.894427191 # 0.894427191^2 = 0.8
-        efficiency_dispatch = 0.894427191 # 0.894427191^2 = 0.8
+        efficiency_store = 0.894427191  # 0.894427191^2 = 0.8
+        efficiency_dispatch = 0.894427191  # 0.894427191^2 = 0.8
 
         n.madd(
             "StorageUnit",
             region_onshore_psh_grp.index,
-            bus = region_onshore_psh_grp.name,
-            carrier = region_onshore_psh_grp.tech,
+            bus=region_onshore_psh_grp.name,
+            carrier=region_onshore_psh_grp.tech,
             p_nom_max=region_onshore_psh_grp.potential_mw,
             p_nom_extendable=True,
             capital_cost=region_onshore_psh_grp.capital_cost,
@@ -164,7 +238,8 @@ def attach_phs_storageunits(n: pypsa.Network, elec_opts):
             cyclic_state_of_charge=True,
         )
 
-def attach_stores(n, costs, elec_opts):
+
+def attach_stores(n, costs, elec_opts, investment_year):
     carriers = elec_opts["extendable_carriers"]["Store"]
 
     _add_missing_carriers_from_costs(n, costs, carriers)
@@ -183,6 +258,9 @@ def attach_stores(n, costs, elec_opts):
             e_nom_extendable=True,
             e_cyclic=True,
             capital_cost=costs.at["hydrogen storage underground", "capital_cost"],
+            build_year=investment_year,
+            lifetime=costs.at["hydrogen storage underground", "lifetime"],
+            suffix=f" {investment_year}",
         )
 
         n.madd(
@@ -195,6 +273,9 @@ def attach_stores(n, costs, elec_opts):
             efficiency=costs.at["electrolysis", "efficiency"],
             capital_cost=costs.at["electrolysis", "capital_cost"],
             marginal_cost=costs.at["electrolysis", "marginal_cost"],
+            build_year=investment_year,
+            lifetime=costs.at["electrolysis", "lifetime"],
+            suffix=str(investment_year),
         )
 
         n.madd(
@@ -209,10 +290,13 @@ def attach_stores(n, costs, elec_opts):
             capital_cost=costs.at["fuel cell", "capital_cost"]
             * costs.at["fuel cell", "efficiency"],
             marginal_cost=costs.at["fuel cell", "marginal_cost"],
+            build_year=investment_year,
+            lifetime=costs.at["fuel cell", "lifetime"],
+            suffix=str(investment_year),
         )
 
 
-def attach_hydrogen_pipelines(n, costs, elec_opts):
+def attach_hydrogen_pipelines(n, costs, elec_opts, investment_year):
     ext_carriers = elec_opts["extendable_carriers"]
     as_stores = ext_carriers.get("Store", [])
 
@@ -249,6 +333,9 @@ def attach_hydrogen_pipelines(n, costs, elec_opts):
         capital_cost=costs.at["H2 pipeline", "capital_cost"] * h2_links.length,
         efficiency=costs.at["H2 pipeline", "efficiency"],
         carrier="H2 pipeline",
+        build_year=investment_year,
+        lifetime=costs.at["H2 pipeline", "lifetime"],
+        suffix=f" {investment_year}",
     )
 
 
@@ -319,6 +406,7 @@ def add_economic_retirement(
         efficiency=extend.efficiency,
         marginal_cost=extend.marginal_cost,
         capital_cost=extend.capital_cost,
+        build_year=n.investment_periods[0],
         lifetime=extend.lifetime,
         p_min_pu=extend.p_min_pu,
         p_max_pu=extend.p_max_pu,
@@ -342,6 +430,69 @@ def add_economic_retirement(
     n.generators_t["p_max_pu"] = n.generators_t["p_max_pu"].join(p_max_pu_t)
 
 
+def attach_multihorizon_generators(
+    n: pypsa.Network,
+    costs: dict,
+    gens: pd.DataFrame,
+    investment_year: int,
+):
+    """
+    Adds multiple investment options for a given set of extendable carriers.
+
+    Specifically this function does the following:
+    1. ....
+
+    Arguments:
+    n: pypsa.Network,
+    costs_dict: dict,
+        Dict of costs for each investment period
+    carriers: List[str]
+        List of carriers to add multiple investment options for
+    """
+    if gens.empty or len(n.investment_periods) == 1:
+        return
+
+    n.madd(
+        "Generator",
+        gens.index,
+        suffix=f" {investment_year}",
+        carrier=gens.carrier,
+        bus=gens.bus,
+        p_nom_min=0,
+        p_nom=0,
+        p_nom_max=gens.p_nom_max,
+        p_nom_extendable=True,
+        ramp_limit_up=gens.ramp_limit_up,
+        ramp_limit_down=gens.ramp_limit_down,
+        efficiency=gens.efficiency,
+        marginal_cost=gens.marginal_cost,
+        p_min_pu=gens.p_min_pu,
+        p_max_pu=gens.p_max_pu,
+        capital_cost=gens.carrier.map(costs.capital_cost),
+        build_year=investment_year,
+        lifetime=gens.carrier.map(costs.lifetime),
+    )
+
+    # time dependent factors added after as not all generators are time dependent
+    marginal_cost_t = n.generators_t["marginal_cost"][
+        [x for x in gens.index if x in n.generators_t.marginal_cost.columns]
+    ]
+    marginal_cost_t = marginal_cost_t.rename(
+        columns={x: f"{x} {investment_year}" for x in marginal_cost_t.columns},
+    )
+    n.generators_t["marginal_cost"] = n.generators_t["marginal_cost"].join(
+        marginal_cost_t,
+    )
+
+    p_max_pu_t = n.generators_t["p_max_pu"][
+        [x for x in gens.index if x in n.generators_t["p_max_pu"].columns]
+    ]
+    p_max_pu_t = p_max_pu_t.rename(
+        columns={x: f"{x} {investment_year}" for x in p_max_pu_t.columns},
+    )
+    n.generators_t["p_max_pu"] = n.generators_t["p_max_pu"].join(p_max_pu_t)
+
+
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
@@ -349,34 +500,52 @@ if __name__ == "__main__":
         snakemake = mock_snakemake(
             "add_extra_components",
             interconnect="texas",
-            clusters=40,
+            clusters=10,
         )
     configure_logging(snakemake)
 
     n = pypsa.Network(snakemake.input.network)
     elec_config = snakemake.config["electricity"]
 
-    Nyears = n.snapshot_weightings.objective.sum() / 8760.0
-    costs = load_costs(
-        snakemake.input.tech_costs,
-        snakemake.config["costs"],
-        elec_config["max_hours"],
-        Nyears,
-    )
-
-    n.buses["location"] = n.buses.index
+    # n.buses["location"] = n.buses.index
 
     attach_storageunits(n, costs, elec_config)
-    if any("PHS" in s for s in elec_config['extendable_carriers']['StorageUnit']): 
+    if any("PHS" in s for s in elec_config["extendable_carriers"]["StorageUnit"]):
         attach_phs_storageunits(n, elec_config)
     attach_stores(n, costs, elec_config)
     attach_hydrogen_pipelines(n, costs, elec_config)
 
-    add_nice_carrier_names(n, snakemake.config)
+    Nyears = n.snapshot_weightings.loc[n.investment_periods[0]].objective.sum() / 8760.0
+
+    costs_dict = {
+        n.investment_periods[i]: load_costs(
+            snakemake.input.tech_costs[i],
+            snakemake.config["costs"],
+            elec_config["max_hours"],
+            Nyears,
+        )
+        for i in range(len(n.investment_periods))
+    }
 
     if snakemake.params.retirement == "economic":
         economic_retirement_gens = elec_config.get("conventional_carriers", None)
-        add_economic_retirement(n, costs, economic_retirement_gens)
+        add_economic_retirement(
+            n,
+            costs_dict[n.investment_periods[0]],
+            economic_retirement_gens,
+        )
+
+    gens = n.generators[n.generators["p_nom_extendable"] == True]
+    gens = gens[gens["carrier"].isin(elec_config["extendable_carriers"]["Generator"])]
+
+    for investment_year in n.investment_periods:
+        costs = costs_dict[investment_year]
+        attach_storageunits(n, costs, elec_config, investment_year)
+        attach_stores(n, costs, elec_config, investment_year)
+        attach_hydrogen_pipelines(n, costs, elec_config, investment_year)
+        attach_multihorizon_generators(n, costs, gens, investment_year)
+
+    add_nice_carrier_names(n, snakemake.config)
 
     n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))
     n.export_to_netcdf(snakemake.output[0])

@@ -32,6 +32,7 @@ rule build_shapes:
 rule build_base_network:
     params:
         build_offshore_network=config["offshore_network"],
+        snapshots=config["snapshots"],
         links=config["links"],
     input:
         buses=DATA + "breakthrough_network/base_grid/bus.csv",
@@ -46,8 +47,8 @@ rule build_base_network:
         reeds_memberships="repo_data/ReEDS_Constraints/membership.csv",
         county_shapes=RESOURCES + "{interconnect}/county_shapes.geojson",
     output:
-        bus2sub=DATA + "breakthrough_network/base_grid/{interconnect}/bus2sub.csv",
-        sub=DATA + "breakthrough_network/base_grid/{interconnect}/sub.csv",
+        bus2sub=RESOURCES + "{interconnect}/bus2sub.csv",
+        sub=RESOURCES + "{interconnect}/sub.csv",
         bus_gis=RESOURCES + "{interconnect}/bus_gis.csv",
         lines_gis=RESOURCES + "{interconnect}/lines_gis.csv",
         network=RESOURCES + "{interconnect}/elec_base_network.nc",
@@ -70,8 +71,8 @@ rule build_bus_regions:
         reeds_shapes=RESOURCES + "{interconnect}/reeds_shapes.geojson",
         offshore_shapes=RESOURCES + "{interconnect}/offshore_shapes.geojson",
         base_network=RESOURCES + "{interconnect}/elec_base_network.nc",
-        bus2sub=DATA + "breakthrough_network/base_grid/{interconnect}/bus2sub.csv",
-        sub=DATA + "breakthrough_network/base_grid/{interconnect}/sub.csv",
+        bus2sub=RESOURCES + "{interconnect}/bus2sub.csv",
+        sub=RESOURCES + "{interconnect}/sub.csv",
     output:
         regions_onshore=RESOURCES + "{interconnect}/regions_onshore.geojson",
         regions_offshore=RESOURCES + "{interconnect}/regions_offshore.geojson",
@@ -87,9 +88,9 @@ rule build_bus_regions:
 rule build_cost_data:
     input:
         nrel_atb=DATA + "costs/nrel_atb.parquet",
-        pypsa_technology_data=RESOURCES + "costs/{year}/pypsa_eur.csv",
+        pypsa_technology_data=RESOURCES + "costs/pypsa_eur_{year}.csv",
     output:
-        tech_costs=RESOURCES + "costs_{year}.csv",
+        tech_costs=RESOURCES + "costs/costs_{year}.csv",
     log:
         LOGS + "costs_{year}.log",
     threads: 1
@@ -201,27 +202,154 @@ rule build_renewable_profiles:
         "../scripts/build_renewable_profiles.py"
 
 
-rule build_demand:
+# eastern broken out just to aviod awful formatting issues
+# texas in western due to spillover of interconnect
+INTERCONNECT_2_STATE = {
+    "eastern": ["AL", "AR", "CT", "DE", "DC", "FL", "GA", "IL", "IN", "IA", "KS", "KY"],
+    "western": ["AZ", "CA", "CO", "ID", "MT", "NV", "NM", "OR", "UT", "WA", "WY", "TX"],
+    "texas": ["TX"],
+}
+INTERCONNECT_2_STATE["eastern"].extend(["LA", "ME", "MD", "MA", "MI", "MN", "MS", "MO"])
+INTERCONNECT_2_STATE["eastern"].extend(["NE", "NH", "NJ", "NY", "NC", "ND", "OH", "OK"])
+INTERCONNECT_2_STATE["eastern"].extend(["PA", "RI", "SC", "SD", "TN", "VT", "VA", "VI"])
+INTERCONNECT_2_STATE["eastern"].extend(["WV", "WI"])
+INTERCONNECT_2_STATE["usa"] = sum(INTERCONNECT_2_STATE.values(), [])
+
+
+def electricty_study_demand(wildcards):
+    profile = config["electricity"]["demand"]["profile"]
+    if profile == "eia":
+        return DATA + "GridEmissions/EIA_DMD_2018_2024.csv"
+    elif profile == "efs":
+        return DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv"
+    else:
+        return ""
+
+
+def sector_study_demand(wildcards):
+    end_use = wildcards.end_use
+    profile = config["sector"]["demand"]["profile"][end_use]
+    if end_use == "residential":
+        if profile == "eulp":
+            return [
+                DATA + f"eulp/res/{state}.csv"
+                for state in INTERCONNECT_2_STATE[wildcards.interconnect]
+            ]
+        elif profile == "efs":
+            return DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv"
+        else:
+            return ""
+    elif end_use == "commercial":
+        if profile == "eulp":
+            return [
+                DATA + f"eulp/com/{state}.csv"
+                for state in INTERCONNECT_2_STATE[wildcards.interconnect]
+            ]
+        elif profile == "efs":
+            return DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv"
+        else:
+            return ""
+    elif end_use == "industry":
+        if profile == "efs":
+            return DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv"
+        else:
+            return ""
+    elif end_use == "transport":
+        if profile == "efs":
+            return DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv"
+        else:
+            return ""
+    else:
+        return ""
+
+
+rule build_electrical_demand:
+    wildcard_constraints:
+        end_use="power",  # added for consistency in build_demand.py
     params:
         planning_horizons=config["scenario"]["planning_horizons"],
         demand_params=config["electricity"]["demand"],
-        snapshots=config["snapshots"],
         eia_api=config["api"]["eia"],
     input:
-        base_network=RESOURCES + "{interconnect}/elec_base_network.nc",
+        network=RESOURCES + "{interconnect}/elec_base_network.nc",
+        demand_files=electricty_study_demand,
         eia=expand(DATA + "GridEmissions/{file}", file=DATAFILES_GE),
         efs=DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv",
+        county_industrial_energy=DATA + "industry_load/2014_update_20170910-0116.csv",
     output:
-        demand=RESOURCES + "{interconnect}/demand.csv",
+        elec_demand=RESOURCES + "{interconnect}/{end_use}_electricity_demand.csv",
     log:
-        LOGS + "{interconnect}/build_demand.log",
+        LOGS + "{interconnect}/{end_use}_build_demand.log",
     benchmark:
-        BENCHMARKS + "{interconnect}/build_demand"
+        BENCHMARKS + "{interconnect}/{end_use}_build_demand"
     threads: 2
     resources:
         mem_mb=interconnect_mem,
     script:
         "../scripts/build_demand.py"
+
+
+rule build_sector_demand:
+    wildcard_constraints:
+        end_use="residential|commercial|industry|transport",
+    params:
+        planning_horizons=config["scenario"]["planning_horizons"],
+        demand_params=config["sector"]["demand"],
+        eia_api=config["api"]["eia"],
+    input:
+        network=RESOURCES + "{interconnect}/elec_base_network.nc",
+        demand_files=sector_study_demand,
+        county_industrial_energy=DATA + "industry_load/2014_update_20170910-0116.csv",
+    output:
+        elec_demand=RESOURCES + "{interconnect}/{end_use}_electricity_demand.csv",
+        heat_demand=RESOURCES + "{interconnect}/{end_use}_heating_demand.csv",
+        cool_demand=RESOURCES + "{interconnect}/{end_use}_cooling_demand.csv",
+    log:
+        LOGS + "{interconnect}/{end_use}_build_demand.log",
+    benchmark:
+        BENCHMARKS + "{interconnect}/{end_use}_build_demand"
+    threads: 2
+    resources:
+        mem_mb=interconnect_mem,
+    script:
+        "../scripts/build_demand.py"
+
+
+def demand_to_add(wildcards):
+    if config["scenario"]["sector"] == "E":
+        return RESOURCES + "{interconnect}/power_electricity_demand.csv"
+    else:
+        return [
+            RESOURCES + "{interconnect}/residential_electricity_demand.csv",
+            RESOURCES + "{interconnect}/residential_heating_demand.csv",
+            RESOURCES + "{interconnect}/residential_cooling_demand.csv",
+            RESOURCES + "{interconnect}/commercial_electricity_demand.csv",
+            RESOURCES + "{interconnect}/commercial_heating_demand.csv",
+            RESOURCES + "{interconnect}/commercial_cooling_demand.csv",
+            RESOURCES + "{interconnect}/industry_electricity_demand.csv",
+            RESOURCES + "{interconnect}/industry_heating_demand.csv",
+            RESOURCES + "{interconnect}/industry_cooling_demand.csv",
+            RESOURCES + "{interconnect}/transport_electricity_demand.csv",
+        ]
+
+
+rule add_demand:
+    params:
+        sectors=config["scenario"]["sector"],
+        planning_horizons=config["scenario"]["planning_horizons"],
+    input:
+        network=RESOURCES + "{interconnect}/elec_base_network.nc",
+        demand=demand_to_add,
+    output:
+        network=RESOURCES + "{interconnect}/elec_base_network_dem.nc",
+    log:
+        LOGS + "{interconnect}/add_demand.log",
+    benchmark:
+        BENCHMARKS + "{interconnect}/add_demand"
+    resources:
+        mem_mb=800,
+    script:
+        "../scripts/add_demand.py"
 
 
 def ba_gas_dynamic_fuel_price_files(wildcards):
@@ -270,7 +398,10 @@ rule add_electricity:
         length_factor=config["lines"]["length_factor"],
         countries=config["countries"],
         renewable=config["renewable"],
-        electricity=config["electricity"],
+        max_hours=config["electricity"]["max_hours"],
+        renewable_carriers=config["electricity"]["renewable_carriers"],
+        extendable_carriers=config["electricity"]["extendable_carriers"],
+        conventional_carriers=config["electricity"]["conventional_carriers"],
         conventional=config["conventional"],
         costs=config["costs"],
         planning_horizons=config["scenario"]["planning_horizons"],
@@ -293,27 +424,15 @@ rule add_electricity:
             f"gen_cost_mult_{Path(x).stem}": f"repo_data/locational_multipliers/{Path(x).name}"
             for x in Path("repo_data/locational_multipliers/").glob("*")
         },
-        base_network=RESOURCES + "{interconnect}/elec_base_network.nc",
-        tech_costs=RESOURCES + f"costs_{config['costs']['year']}.csv",
+        base_network=RESOURCES + "{interconnect}/elec_base_network_dem.nc",
+        tech_costs=RESOURCES
+        + f"costs/costs_{config['scenario']['planning_horizons'][0]}.csv",
+        # attach first horizon costs
         regions=RESOURCES + "{interconnect}/regions_onshore.geojson",
         plants_eia="repo_data/plants/plants_merged.csv",
-        plants_ads="repo_data/plants/ads_plants_locs.csv",
         plants_breakthrough=DATA + "breakthrough_network/base_grid/plant.csv",
         hydro_breakthrough=DATA + "breakthrough_network/base_grid/hydro.csv",
-        wind_breakthrough=DATA + "breakthrough_network/base_grid/wind.csv",
-        solar_breakthrough=DATA + "breakthrough_network/base_grid/solar.csv",
-        bus2sub=DATA + "breakthrough_network/base_grid/{interconnect}/bus2sub.csv",
-        ads_renewables=(
-            DATA + "WECC_ADS/processed/"
-            if config["network_configuration"] == "ads2032"
-            else []
-        ),
-        ads_2032=(
-            DATA + "WECC_ADS/downloads/2032/Public Data/Hourly Profiles in CSV format"
-            if config["network_configuration"] == "ads2032"
-            else []
-        ),
-        demand=RESOURCES + "{interconnect}/demand.csv",
+        bus2sub=RESOURCES + "{interconnect}/bus2sub.csv",
         fuel_costs="repo_data/plants/fuelCost22.csv",
     output:
         RESOURCES + "{interconnect}/elec_base_network_l_pp.nc",
@@ -333,8 +452,8 @@ rule simplify_network:
     params:
         aggregation_strategies=config["clustering"].get("aggregation_strategies", {}),
     input:
-        bus2sub=DATA + "breakthrough_network/base_grid/{interconnect}/bus2sub.csv",
-        sub=DATA + "breakthrough_network/base_grid/{interconnect}/sub.csv",
+        bus2sub=RESOURCES + "{interconnect}/bus2sub.csv",
+        sub=RESOURCES + "{interconnect}/sub.csv",
         network=RESOURCES + "{interconnect}/elec_base_network_l_pp.nc",
     output:
         network=RESOURCES + "{interconnect}/elec_s.nc",
@@ -349,26 +468,28 @@ rule simplify_network:
 
 rule cluster_network:
     params:
-        cluster_network=config["clustering"]["cluster_network"],
-        conventional_carriers=config["electricity"].get("conventional_carriers", []),
-        renewable_carriers=config["electricity"]["renewable_carriers"],
-        aggregation_strategies=config["clustering"].get("aggregation_strategies", {}),
-        custom_busmap=config["enable"].get("custom_busmap", False),
-        focus_weights=config.get("focus_weights", None),
-        max_hours=config["electricity"]["max_hours"],
-        length_factor=config["lines"]["length_factor"],
-        costs=config["costs"],
+        cluster_network=config_provider("clustering", "cluster_network"),
+        conventional_carriers=config_provider("electricity", "conventional_carriers"),
+        renewable_carriers=config_provider("electricity", "renewable_carriers"),
+        aggregation_strategies=config_provider("clustering", "aggregation_strategies"),
+        custom_busmap=config_provider("enable", "custom_busmap", default=False),
+        focus_weights=config_provider("focus_weights", default=False),
+        max_hours=config_provider("electricity", "max_hours"),
+        length_factor=config_provider("lines", "length_factor"),
+        costs=config_provider("costs"),
+        planning_horizons=config_provider("scenario", "planning_horizons"),
     input:
         network=RESOURCES + "{interconnect}/elec_s.nc",
         regions_onshore=RESOURCES + "{interconnect}/regions_onshore.geojson",
         regions_offshore=RESOURCES + "{interconnect}/regions_offshore.geojson",
-        busmap=DATA + "breakthrough_network/base_grid/{interconnect}/bus2sub.csv",
+        busmap=RESOURCES + "{interconnect}/bus2sub.csv",
         custom_busmap=(
             DATA + "{interconnect}/custom_busmap_{clusters}.csv"
             if config["enable"].get("custom_busmap", False)
             else []
         ),
-        tech_costs=RESOURCES + f"costs_{config['costs']['year']}.csv",
+        tech_costs=RESOURCES
+        + f"costs/costs_{config['scenario']['planning_horizons'][0]}.csv",
     output:
         network=RESOURCES + "{interconnect}/elec_s_{clusters}.nc",
         regions_onshore=RESOURCES
@@ -391,6 +512,7 @@ rule cluster_network:
 rule add_extra_components:
     input:
         network=RESOURCES + "{interconnect}/elec_s_{clusters}.nc",
+<<<<<<< HEAD
         tech_costs=RESOURCES + f"costs_{config['costs']['year']}.csv",
         regions_onshore=RESOURCES + "{interconnect}/regions_onshore_s_{clusters}.geojson", 
         **{
@@ -399,6 +521,14 @@ rule add_extra_components:
         if 'PHS' in phs_tech
         for hour in phs_tech.split("hr_") if hour.isdigit()
         },
+=======
+        regions_onshore=RESOURCES
+        + "{interconnect}/regions_onshore_s_{clusters}.geojson",
+        tech_costs=lambda wildcards: expand(
+            RESOURCES + "costs/costs_{year}.csv",
+            year=config["scenario"]["planning_horizons"],
+        ),
+>>>>>>> 7f68662fc41cca3d7174b7f754abbe75cbcccf48
     params:
         retirement=config["electricity"].get("retirement", "technical"),
     output:
@@ -416,21 +546,22 @@ rule add_extra_components:
 
 rule prepare_network:
     params:
-        time_resolution=config["clustering"]["temporal"]["resolution_elec"],
+        time_resolution=config_provider("clustering", "temporal", "resolution_elec"),
         adjustments=False,
-        links=config["links"],
-        lines=config["lines"],
-        co2base=config["electricity"]["co2base"],
-        co2limit=config["electricity"]["co2limit"],
-        co2limit_enable=config["electricity"]["co2limit_enable"],
-        gaslimit=config["electricity"].get("gaslimit"),
-        gaslimit_enable=config["electricity"].get("gaslimit_enable"),
-        max_hours=config["electricity"]["max_hours"],
-        costs=config["costs"],
-        autarky=config["electricity"]["autarky"],
+        links=config_provider("links"),
+        lines=config_provider("lines"),
+        co2base=config_provider("electricity", "co2base"),
+        co2limit=config_provider("electricity", "co2limit"),
+        co2limit_enable=config_provider("electricity", "co2limit_enable", default=False),
+        gaslimit=config_provider("electricity", "gaslimit"),
+        gaslimit_enable=config_provider("electricity", "gaslimit_enable", default=False),
+        max_hours=config_provider("electricity", "max_hours"),
+        costs=config_provider("costs"),
+        autarky=config_provider("electricity", "autarky"),
     input:
         network=RESOURCES + "{interconnect}/elec_s_{clusters}_ec.nc",
-        tech_costs=RESOURCES + f"costs_{config['costs']['year']}.csv",
+        tech_costs=RESOURCES
+        + f"costs/costs_{config['scenario']['planning_horizons'][0]}.csv",
     output:
         RESOURCES + "{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}.nc",
     log:

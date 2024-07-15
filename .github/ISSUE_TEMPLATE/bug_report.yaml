@@ -9,22 +9,12 @@ body:
 - type: checkboxes
   attributes:
     label: Checklist
-    description: Environment checks
+    description: Code and environment checks
     options:
+    - label: I am using the current [`master`](https://github.com/PyPSA/pypsa-usa/tree/master) branch
+      required: true
     - label: I am running on an up-to-date [`pypsa-usa` environment](https://github.com/PyPSA/pypsa-usa/blob/master/workflow/envs/environment.yaml). Update via `conda env update -f envs/environment.yaml`
       required: true
-
-- type: dropdown
-  attributes:
-    label: Issue exisits on what branch
-    description: Code checks
-    multiple: true
-    options:
-    - Master
-    - Develop
-    - Other
-  validations:
-    required: true
 
 - type: textarea
   attributes:
