@@ -45,15 +45,6 @@ FIGURES_SYSTEM = [
     "region_lmps.pdf",
 ]
 
-FIGURES_NATURAL_GAS = [
-    "natural_gas_demand.html",
-    "natural_gas_processing.html",
-    "natural_gas_linepack.html",
-    "natural_gas_storage.html",
-    "natural_gas_domestic_trade.html",
-    "natural_gas_international_trade.html",
-]
-
 FIGURES_VALIDATE = [
     "seasonal_stacked_plot.pdf",
     "carrier_production_bar.pdf",
@@ -116,6 +107,7 @@ include: "rules/build_electricity.smk"
 include: "rules/build_sector.smk"
 include: "rules/solve_electricity.smk"
 include: "rules/postprocess.smk"
+include: "rules/postprocess_sector.smk"
 include: "rules/validate.smk"
 
 
@@ -130,7 +122,9 @@ if "E" not in config["scenario"]["sector"]:
 
 def electricity_figures(wildcards):
     figs = []
-    if not config["run"]["validation"]:
+    if "G" in config["scenario"]["sector"].split("-"):
+        return []
+    elif not config["run"]["validation"]:
         # maps
         figs.append(
             expand(
@@ -175,16 +169,48 @@ def electricity_figures(wildcards):
 def sector_figures(wildcards):
     figs = []
     if "G" in config["scenario"]["sector"].split("-"):
-        figs.append("natural_gas.html")
-    if not figs:
-        return []
-    else:
-        return expand(
-            RESULTS
-            + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/gas/{figure}",
-            **config["scenario"],
-            figure=FIGURES_NATURAL_GAS,
+        figs.append(
+            expand(
+                RESULTS
+                + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/gas/{figure}",
+                **config["scenario"],
+                figure=FIGURES_SECTOR_NATURAL_GAS,
+            )
         )
+        figs.append(
+            expand(
+                RESULTS
+                + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/emissions/{figure}.png",
+                **config["scenario"],
+                figure=FIGURES_SECTOR_EMISSIONS,
+            )
+        )
+        figs.append(
+            expand(
+                RESULTS
+                + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/production/{figure}.png",
+                **config["scenario"],
+                figure=FIGURES_SECTOR_PRODUCTION,
+            )
+        )
+        figs.append(
+            expand(
+                RESULTS
+                + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/capacity/{figure}.png",
+                **config["scenario"],
+                figure=FIGURES_SECTOR_CAPACITY,
+            )
+        )
+        figs.append(
+            expand(
+                RESULTS
+                + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/loads/{figure}.png",
+                **config["scenario"],
+                figure=FIGURES_SECTOR_LOADS,
+            )
+        )
+        return list(chain(*figs))
+    return figs
 
 
 def validation_figures(wildcards):

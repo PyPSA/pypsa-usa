@@ -2,12 +2,20 @@
 Plots Sector Coupling Statistics.
 """
 
+import logging
 from math import ceil
+from typing import Callable
 
+import geopandas as gpd
 import matplotlib.pyplot as plt
 import pandas as pd
 import pypsa
 import seaborn as sns
+from _helpers import configure_logging, mock_snakemake
+from add_electricity import sanitize_carriers
+from plot_statistics import create_title
+
+logger = logging.getLogger(__name__)
 
 ###
 # HELPERS
@@ -26,6 +34,28 @@ def get_load_name_per_sector(sector: str) -> list[str]:
             return [f"{f}-{v}" for v in vehicles for f in fuels]
         case _:
             raise NotImplementedError
+
+
+def save_fig(
+    fn: Callable,
+    n: pypsa.Network,
+    save: str,
+    title: str,
+    wildcards: dict[str, any] = {},
+    **kwargs,
+) -> None:
+    """
+    Saves the result figure.
+    """
+
+    fig, _ = fn(n, **kwargs)
+
+    fig_title = create_title(title, **wildcards)
+
+    fig.suptitle(fig_title)
+    fig.tight_layout()
+
+    fig.savefig(save)
 
 
 ###
@@ -163,6 +193,7 @@ def plot_load_per_sector(
     sector: str,
     sharey: bool = True,
     log: bool = True,
+    **kwargs,
 ) -> tuple:
     """
     Load per bus per sector per fuel.
@@ -236,7 +267,7 @@ def plot_load_per_sector(
     return fig, axs
 
 
-def plot_hp_cop(n: pypsa.Network) -> tuple:
+def plot_hp_cop(n: pypsa.Network, **kwargs) -> tuple:
     """
     Plots gshp and ashp cops.
     """
@@ -266,14 +297,18 @@ def plot_hp_cop(n: pypsa.Network) -> tuple:
     return fig, axs
 
 
-def plot_sector_production_timeseries(n: pypsa.Network, sharey: bool = True) -> tuple:
+def plot_sector_production_timeseries(
+    n: pypsa.Network,
+    sharey: bool = True,
+    **kwargs,
+) -> tuple:
     """
     Plots timeseries production.
     """
 
     investment_period = n.investment_periods[0]
 
-    sectors = ("res", "com", "ind", "trn")
+    sectors = ("res", "com", "ind")
 
     nrows = ceil(len(sectors) / 2)
 
@@ -318,7 +353,7 @@ def plot_sector_production_timeseries(n: pypsa.Network, sharey: bool = True) -> 
     return fig, axs
 
 
-def plot_sector_production(n: pypsa.Network, sharey: bool = True) -> tuple:
+def plot_sector_production(n: pypsa.Network, sharey: bool = True, **kwargws) -> tuple:
     """
     Plots model period production.
     """
@@ -373,7 +408,11 @@ def plot_sector_production(n: pypsa.Network, sharey: bool = True) -> tuple:
     return fig, axs
 
 
-def plot_capacity_percentage_per_node(n: pypsa.Network, sharey: bool = True) -> tuple:
+def plot_capacity_percentage_per_node(
+    n: pypsa.Network,
+    sharey: bool = True,
+    **kwargs,
+) -> tuple:
     """
     Plots capacity percentage per node.
     """
@@ -420,7 +459,11 @@ def plot_capacity_percentage_per_node(n: pypsa.Network, sharey: bool = True) -> 
     return fig, axs
 
 
-def plot_sector_load_factor_timeseries(n: pypsa.Network, sharey: bool = True) -> tuple:
+def plot_sector_load_factor_timeseries(
+    n: pypsa.Network,
+    sharey: bool = True,
+    **kwargs,
+) -> tuple:
     """
     Plots timeseries of load factor resampled to days.
     """
@@ -473,7 +516,11 @@ def plot_sector_load_factor_timeseries(n: pypsa.Network, sharey: bool = True) ->
     return fig, axs
 
 
-def plot_sector_load_factor_boxplot(n: pypsa.Network, sharey: bool = True) -> tuple:
+def plot_sector_load_factor_boxplot(
+    n: pypsa.Network,
+    sharey: bool = True,
+    **kwargs,
+) -> tuple:
     """
     Plots boxplot of load factors.
     """
@@ -487,7 +534,7 @@ def plot_sector_load_factor_boxplot(n: pypsa.Network, sharey: bool = True) -> tu
     fig, axs = plt.subplots(
         ncols=2,
         nrows=nrows,
-        figsize=(14, 5 * nrows),
+        figsize=(14, 6 * nrows),
         sharey=sharey,
     )
 
@@ -517,6 +564,49 @@ def plot_sector_load_factor_boxplot(n: pypsa.Network, sharey: bool = True) -> tu
             axs[i].set_title(f"{sector}")
             axs[i].tick_params(axis="x", labelrotation=45)
 
-    fig.tight_layout()
+    # fig.tight_layout()
 
     return fig, axs
+
+
+# maps figure name to the function
+FIGURE_FUNCTION = {"load_factor_boxplot": plot_sector_load_factor_boxplot}
+
+FIGURE_NICE_NAME = {"load_factor_boxplot": "Load Factor"}
+
+if __name__ == "__main__":
+    if "snakemake" not in globals():
+        from _helpers import mock_snakemake
+
+        snakemake = mock_snakemake(
+            "plot_sector_prduction",
+            interconnect="texas",
+            clusters=20,
+            ll="v1.0",
+            opts="500SEG",
+            sector="E-G",
+        )
+    configure_logging(snakemake)
+
+    # extract shared plotting files
+    n = pypsa.Network(snakemake.input.network)
+
+    sanitize_carriers(n, snakemake.config)
+
+    wildcards = snakemake.wildcards
+    fn_inputs = {}
+
+    for f, f_path in snakemake.output.items():
+
+        try:
+            fn = FIGURE_FUNCTION[f]
+        except KeyError as ex:
+            logger.error(f"Must provide a function for plot {f}!")
+            print(ex)
+
+        try:
+            title = FIGURE_NICE_NAME[f]
+        except KeyError:
+            title = f
+
+        save_fig(fn, n, f_path, title, wildcards, **fn_inputs)
