@@ -18,6 +18,7 @@ from typing import Optional
 
 from _helpers import configure_logging, get_snapshots
 from add_electricity import load_costs
+from build_co2_tracking import build_co2_tracking
 from build_heat import build_heat
 from build_natural_gas import StateGeometry, build_natural_gas
 from build_transportation import apply_exogenous_ev_policy, build_transportation
@@ -158,9 +159,16 @@ def add_sector_foundation(
         )
 
 
-def convert_generators_2_links(n: pypsa.Network, carrier: str, bus0_suffix: str):
+def convert_generators_2_links(
+    n: pypsa.Network,
+    carrier: str,
+    bus0_suffix: str,
+    co2_intensity: float = 0,
+):
     """
     Replace Generators with a link connecting to a state level primary energy.
+
+    NOTE: THIS WILL ACCOUNT EMISSIONS TOWARDS THE PWR SECTOR
 
     Links bus1 are the bus the generator is attached to. Links bus0 are state
     level followed by the suffix (ie. "WA gas" if " gas" is the bus0_suffix)
@@ -205,6 +213,7 @@ def convert_generators_2_links(n: pypsa.Network, carrier: str, bus0_suffix: str)
         names=plants.index,
         bus0=plants.STATE + bus0_suffix,
         bus1=plants.bus,
+        bus2=plants.STATE + " pwr-co2",
         carrier=plants.carrier,
         p_nom_min=plants.p_nom_min / plants.efficiency,
         p_nom=plants.p_nom / plants.efficiency,  # links rated on input capacity
@@ -213,6 +222,7 @@ def convert_generators_2_links(n: pypsa.Network, carrier: str, bus0_suffix: str)
         ramp_limit_up=plants.ramp_limit_up,
         ramp_limit_down=plants.ramp_limit_down,
         efficiency=plants.efficiency,
+        efficiency2=co2_intensity,
         marginal_cost=plants.marginal_cost
         * plants.efficiency,  # fuel costs rated at delievered
         capital_cost=plants.capital_cost
@@ -288,6 +298,25 @@ def build_electricity_infra(n: pypsa.Network):
     )
 
 
+def get_pwr_co2_intensity(carrier: str, costs: pd.DataFrame) -> float:
+    """
+    Gets co2 intensity to apply to pwr links.
+
+    Spereate function, as there is some odd logic to account for
+    different names in translation to a sector study.
+    """
+
+    match carrier:
+        case "gas":
+            return 0
+        case "CCGT" | "OCGT" | "ccgt" | "ocgt":
+            return costs.at["gas", "co2_emissions"]
+        case "lpg":
+            return costs.at["oil", "co2_emissions"]
+        case _:
+            return costs.at[carrier, "co2_emissions"]
+
+
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
@@ -343,6 +372,9 @@ if __name__ == "__main__":
     # Sector addition starts here
     ###
 
+    # add sector specific emission tracking
+    build_co2_tracking(n)
+
     # break out loads into sector specific buses
     split_loads_by_carrier(n)
 
@@ -353,10 +385,12 @@ if __name__ == "__main__":
     for carrier in ("oil", "coal", "gas"):
         add_supply = False if carrier == "gas" else True  # gas added in build_ng()
         add_sector_foundation(n, carrier, add_supply, costs, center_points)
-        convert_generators_2_links(n, carrier, f" {carrier}")
+        co2_intensity = get_pwr_co2_intensity(carrier, costs)
+        convert_generators_2_links(n, carrier, f" {carrier}", co2_intensity)
 
     for carrier in ("OCGT", "CCGT"):
-        convert_generators_2_links(n, carrier, f" gas")
+        co2_intensity = get_pwr_co2_intensity(carrier, costs)
+        convert_generators_2_links(n, carrier, f" gas", co2_intensity)
 
     # add natural gas infrastructure and data
     build_natural_gas(

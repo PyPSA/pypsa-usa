@@ -315,6 +315,8 @@ def add_service_gas_furnaces(
     furnaces.index = furnaces.bus1.map(
         lambda x: x.split(f" {sector}-{heat_system}-heat")[0],
     )
+    furnaces["bus2"] = furnaces.index.map(n.buses.STATE) + f" {sector}-co2"
+    furnaces["efficiency2"] = costs.at["gas", "co2_emissions"]
 
     n.madd(
         "Link",
@@ -322,8 +324,10 @@ def add_service_gas_furnaces(
         suffix=f" {sector}-{heat_system}-gas-furnace",
         bus0=furnaces.bus0,
         bus1=furnaces.bus1,
+        bus2=furnaces.bus2,
         carrier=furnaces.carrier,
         efficiency=efficiency,
+        efficiency2=furnaces.efficiency2,
         capital_cost=capex,
         p_nom_extendable=True,
         lifetime=lifetime,
@@ -593,10 +597,12 @@ def add_industrial_furnace(n: pypsa.Network, costs: pd.DataFrame) -> None:
     furnaces["bus0"] = furnaces.index.map(lambda x: x.split(f" {sector}-heat")[0]).map(
         n.buses.STATE,
     )
+    furnaces["bus2"] = furnaces.bus0 + " ind-co2"
     furnaces["bus0"] = furnaces.bus0 + " gas"
     furnaces["bus1"] = furnaces.index
     furnaces["carrier"] = f"{sector}-gas-furnace"
     furnaces.index = furnaces.index.map(lambda x: x.split("-heat")[0])
+    furnaces["efficiency2"] = costs.at["gas", "co2_emissions"]
 
     n.madd(
         "Link",
@@ -604,8 +610,10 @@ def add_industrial_furnace(n: pypsa.Network, costs: pd.DataFrame) -> None:
         suffix="-gas-furnace",  #'ind' included in index already
         bus0=furnaces.bus0,
         bus1=furnaces.bus1,
+        bus2=furnaces.bus2,
         carrier=furnaces.carrier,
         efficiency=efficiency,
+        efficiency2=furnaces.efficiency2,
         capital_cost=capex,
         p_nom_extendable=True,
         lifetime=lifetime,
@@ -629,10 +637,12 @@ def add_industrial_boiler(n: pypsa.Network, costs: pd.DataFrame) -> None:
     boiler["bus0"] = boiler.index.map(lambda x: x.split(f" {sector}-heat")[0]).map(
         n.buses.STATE,
     )
+    boiler["bus2"] = boiler.bus0 + " ind-co2"
     boiler["bus0"] = boiler.bus0 + " coal"
     boiler["bus1"] = boiler.index
     boiler["carrier"] = f"{sector}-coal-boiler"
     boiler.index = boiler.index.map(lambda x: x.split("-heat")[0])
+    boiler["efficiency2"] = costs.at["coal", "co2_emissions"]
 
     n.madd(
         "Link",
@@ -640,8 +650,10 @@ def add_industrial_boiler(n: pypsa.Network, costs: pd.DataFrame) -> None:
         suffix="-coal-boiler",  # 'ind' included in index already
         bus0=boiler.bus0,
         bus1=boiler.bus1,
+        bus2=boiler.bus2,
         carrier=boiler.carrier,
         efficiency=efficiency,
+        efficiency2=boiler.efficiency2,
         capital_cost=capex,
         p_nom_extendable=True,
         lifetime=lifetime,

@@ -2,6 +2,8 @@
 Module for building transportation infrastructure.
 """
 
+from typing import Optional
+
 import numpy as np
 import pandas as pd
 import pypsa
@@ -20,7 +22,7 @@ def build_transportation(
         if fuel == "elec":
             add_ev_infrastructure(n)  # attaches at node level
         else:
-            add_fossil_infrastructure(n, fuel)  # attaches at state level
+            add_fossil_infrastructure(n, fuel, costs)  # attaches at state level
 
     for vehicle in ("lgt", "med", "hvy", "bus"):
         add_elec_vehicle(n, vehicle, costs)
@@ -59,7 +61,11 @@ def add_ev_infrastructure(n: pypsa.Network) -> None:
     )
 
 
-def add_fossil_infrastructure(n: pypsa.Network, carrier: str) -> None:
+def add_fossil_infrastructure(
+    n: pypsa.Network,
+    carrier: str,
+    costs: Optional[pd.DataFrame] = pd.DataFrame(),
+) -> None:
     """
     Adds bus that all fossil vehicles attach to at a state level.
     """
@@ -82,14 +88,21 @@ def add_fossil_infrastructure(n: pypsa.Network, carrier: str) -> None:
 
     nodes["bus0"] = nodes.STATE + f" {corrected_carrier}"
 
+    try:
+        efficiency2 = costs.at["oil", "co2_emissions"]
+    except KeyError:
+        efficiency2 = 0
+
     n.madd(
         "Link",
         nodes.index,
         suffix=f" trn {carrier}-infra",
         bus0=nodes.bus0,
         bus1=nodes.index + f" trn-{carrier}",
+        bus2=nodes.STATE + " trn-co2",
         carrier=f"trn-{carrier}",
         efficiency=1,
+        efficiency2=efficiency2,
         capital_cost=0,
         p_nom_extendable=True,
         lifetime=np.inf,
