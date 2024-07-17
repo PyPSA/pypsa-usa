@@ -16,6 +16,7 @@ from plot_statistics import create_title
 from summary_sector import (
     get_capacity_per_node,
     get_emission_timeseries_by_sector,
+    get_historical_emissions,
     get_hp_cop,
     get_load_factor_timeseries,
     get_load_name_per_sector,
@@ -24,6 +25,27 @@ from summary_sector import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+SECTOR_MAPPER = {
+    "res": "residential",
+    "com": "commercial",
+    "pwr": "power",
+    "ind": "industrial",
+    "trn": "transport",
+}
+
+###
+# HELPERS
+###
+
+
+def percent_difference(col_1: pd.Series, col_2: pd.Series) -> pd.Series:
+    """
+    Calculates percent difference between two columns of numbers.
+    """
+    return abs(col_1 - col_2).div((col_1 + col_2).div(2)).mul(100)
+
 
 ###
 # PLOTTERS
@@ -443,6 +465,131 @@ def plot_sector_load_factor_boxplot(
     return fig, axs
 
 
+def plot_sector_emissions_validation(
+    n: pypsa.Network,
+    eia_api: str,
+    sharey: bool = False,
+    **kwargs,
+) -> tuple:
+    """
+    Plots state by state sector emission comparison.
+    """
+
+    investment_period = n.investment_periods[0]
+
+    historical_emissions = get_historical_emissions(
+        ["residential", "commercial", "power", "industrial", "transport"],
+        investment_period,
+        eia_api,
+    )
+
+    modelled_emissions = (
+        get_emission_timeseries_by_sector(n)
+        .loc[investment_period,]
+        .iloc[-1]
+        .to_frame(name="Texas")
+    )
+    modelled_emissions.index = modelled_emissions.index.map(
+        lambda x: x.split("-co2")[0][-3:],
+    ).map(SECTOR_MAPPER)
+
+    states = modelled_emissions.columns
+
+    nrows = ceil(len(states) / 2)
+
+    fig, axs = plt.subplots(
+        ncols=2,
+        nrows=nrows,
+        figsize=(14, 6 * nrows),
+        sharey=sharey,
+    )
+
+    row = 0
+    col = 0
+
+    for i, state in enumerate(states):
+
+        row = i // 2
+        col = i % 2
+
+        modelled = modelled_emissions[state].to_frame(name="Modelled")
+        historical = historical_emissions[state].to_frame(name="Actual")
+
+        assert modelled.shape == historical.shape
+
+        df = modelled.join(historical)
+        df["Difference"] = percent_difference(df.Modelled, df.Actual)
+
+        if nrows > 1:
+
+            df[["Modelled", "Actual"]].T.plot.bar(ax=axs[row, col])
+            axs[row, col].set_xlabel("")
+            axs[row, col].set_ylabel("Emissions (MT)")
+            axs[row, col].set_title(f"{state}")
+            axs[row, col].tick_params(axis="x", labelrotation=0)
+
+        else:
+
+            df[["Modelled", "Actual"]].T.plot.bar(ax=axs[i])
+            axs[i].set_xlabel("")
+            axs[i].set_ylabel("Emissions (MT)")
+            axs[i].set_title(f"{state}")
+            axs[i].tick_params(axis="x", labelrotation=0)
+
+    return fig, axs
+
+
+def plot_state_emissions_validation(
+    n: pypsa.Network,
+    eia_api: str,
+    **kwargs,
+) -> tuple:
+    """
+    Plots total state emission comparison.
+    """
+
+    investment_period = n.investment_periods[0]
+
+    historical_emissions = get_historical_emissions(
+        "total",
+        investment_period,
+        eia_api,
+    ).T.rename(columns={"total": "Actual"})
+
+    modelled_emissions = (
+        (
+            get_emission_timeseries_by_sector(n)
+            .loc[investment_period,]
+            .iloc[-1]
+            .to_frame(name="Texas")
+        )
+        .sum()
+        .to_frame(name="Modelled")
+    )
+
+    states = modelled_emissions.index
+
+    df = historical_emissions.T[states]
+    if isinstance(df, pd.Series):
+        df = df.to_frame(name="Modelled")
+
+    df = df.T.join(modelled_emissions)
+
+    fig, axs = plt.subplots(
+        ncols=1,
+        nrows=1,
+        figsize=(14, 6),
+    )
+
+    df.plot.bar(ax=axs)
+    axs.set_xlabel("")
+    axs.set_ylabel("Emissions (MT)")
+    axs.set_title(f"{investment_period} State Emissions")
+    axs.tick_params(axis="x", labelrotation=0)
+
+    return fig, axs
+
+
 ###
 # HELPERS
 ###
@@ -486,6 +633,9 @@ FIGURE_FUNCTION = {
     # emissions
     "emissions_by_sector": plot_sector_emissions,
     "emissions_by_state": plot_state_emissions,
+    # validation
+    "emissions_by_sector_validation": plot_sector_emissions_validation,
+    "emissions_by_state_validation": plot_state_emissions_validation,
 }
 
 FIGURE_NICE_NAME = {
@@ -500,6 +650,9 @@ FIGURE_NICE_NAME = {
     # emissions
     "emissions_by_sector": "",
     "emissions_by_state": "",
+    # validation
+    "emissions_by_sector_validation": "",
+    "emissions_by_state_validation": "",
 }
 
 FN_ARGS = {
@@ -511,7 +664,7 @@ if __name__ == "__main__":
         from _helpers import mock_snakemake
 
         snakemake = mock_snakemake(
-            "plot_sector_production",
+            "plot_sector_validate",
             interconnect="texas",
             clusters=20,
             ll="v1.0",
@@ -526,6 +679,9 @@ if __name__ == "__main__":
     sanitize_carriers(n, snakemake.config)
 
     wildcards = snakemake.wildcards
+
+    params = snakemake.params
+    eia_api = params.get("eia_api", None)
 
     for f, f_path in snakemake.output.items():
 
@@ -544,5 +700,8 @@ if __name__ == "__main__":
             fn_inputs = FN_ARGS[f]
         except KeyError:
             fn_inputs = {}
+
+        if eia_api:
+            fn_inputs["eia_api"] = eia_api
 
         save_fig(fn, n, f_path, title, wildcards, **fn_inputs)

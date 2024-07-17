@@ -12,6 +12,10 @@ FIGURES_SECTOR_CAPACITY = [
     "end_use_capacity_per_node_percentage",
 ]
 FIGURES_SECTOR_LOADS = []
+FIGURES_SECTOR_VALIDATE = [
+    "emissions_by_sector_validation",
+    "emissions_by_state_validation",
+]
 FIGURES_SECTOR_NATURAL_GAS = [
     "natural_gas_demand.html",
     "natural_gas_processing.html",
@@ -122,6 +126,29 @@ rule plot_sector_loads:
         },
     log:
         "logs/plot_figures/{interconnect}_{clusters}_l{ll}_{opts}_{sector}_loads.log",
+    threads: 1
+    resources:
+        mem_mb=5000,
+    script:
+        "../scripts/plot_statistics_sector.py"
+
+
+rule plot_sector_validate:
+    input:
+        network=RESULTS
+        + "{interconnect}/networks/elec_s_{clusters}_ec_l{ll}_{opts}_{sector}.nc",
+    params:
+        plotting=config["plotting"],
+        eia_api=config["api"]["eia"],
+    output:
+        **{
+            fig: RESULTS
+            + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/validate/%s.png"
+            % fig
+            for fig in FIGURES_SECTOR_VALIDATE
+        },
+    log:
+        "logs/plot_figures/{interconnect}_{clusters}_l{ll}_{opts}_{sector}_validate.log",
     threads: 1
     resources:
         mem_mb=5000,

@@ -7,6 +7,7 @@ from typing import Optional
 
 import pandas as pd
 import pypsa
+from eia import Emissions
 
 logger = logging.getLogger(__name__)
 
@@ -189,3 +190,29 @@ def get_emission_timeseries_by_sector(
     else:
         stores = [x for x in n.stores.index if f"-co2" in x]
     return n.stores_t.e[stores].mul(1e-6)
+
+
+def get_historical_emissions(
+    sectors: str | list[str],
+    year: int,
+    api: str,
+) -> pd.DataFrame:
+    """
+    Emissions by state/sector in units of million metric tons.
+    """
+
+    dfs = []
+
+    if isinstance(sectors, str):
+        sectors = [sectors]
+
+    for sector in sectors:
+        dfs.append(
+            Emissions(sector, year, api)
+            .get_data(pivot=True)
+            .rename(index={f"{year}": f"{sector}"}),
+        )
+
+    df = pd.concat(dfs)
+    df.index.name = "sector"
+    return df
