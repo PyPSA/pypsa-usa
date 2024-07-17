@@ -4,9 +4,8 @@ Plots Sector Coupling Statistics.
 
 import logging
 from math import ceil
-from typing import Callable
+from typing import Callable, Optional
 
-import geopandas as gpd
 import matplotlib.pyplot as plt
 import pandas as pd
 import pypsa
@@ -14,174 +13,17 @@ import seaborn as sns
 from _helpers import configure_logging, mock_snakemake
 from add_electricity import sanitize_carriers
 from plot_statistics import create_title
+from summary_sector import (
+    get_capacity_per_node,
+    get_emission_timeseries_by_sector,
+    get_hp_cop,
+    get_load_factor_timeseries,
+    get_load_name_per_sector,
+    get_load_per_sector_per_fuel,
+    get_sector_production_timeseries,
+)
 
 logger = logging.getLogger(__name__)
-
-###
-# HELPERS
-###
-
-
-def get_load_name_per_sector(sector: str) -> list[str]:
-    match sector:
-        case "res" | "com":
-            return ["elec", "urban-heat", "rural-heat", "cool"]
-        case "ind":
-            return ["elec", "heat"]
-        case "trn":
-            vehicles = ("lgt", "med", "hvy", "bus")
-            fuels = ("elec", "lpg")
-            return [f"{f}-{v}" for v in vehicles for f in fuels]
-        case _:
-            raise NotImplementedError
-
-
-def save_fig(
-    fn: Callable,
-    n: pypsa.Network,
-    save: str,
-    title: str,
-    wildcards: dict[str, any] = {},
-    **kwargs,
-) -> None:
-    """
-    Saves the result figure.
-    """
-
-    fig, _ = fn(n, **kwargs)
-
-    fig_title = create_title(title, **wildcards)
-
-    fig.suptitle(fig_title)
-    fig.tight_layout()
-
-    fig.savefig(save)
-
-
-###
-# GETTERS
-###
-
-
-def get_load_per_sector_per_fuel(n: pypsa.Network, sector: str, fuel: str, period: int):
-    """
-    Time series load per bus per fuel per sector.
-    """
-    loads = n.loads[
-        (n.loads.carrier.str.startswith(sector)) & (n.loads.carrier.str.endswith(fuel))
-    ]
-    return n.loads_t.p[loads.index].loc[period]
-
-
-def get_hp_cop(n: pypsa.Network) -> pd.DataFrame:
-    """
-    Com and res hps have the same cop.
-    """
-    cops = n.links_t.efficiency
-    ashp = cops[[x for x in cops.columns if x.endswith("res-urban-ashp")]]
-    ashp = ashp.rename(
-        columns={x: x.replace("res-urban-ashp", "ashp") for x in ashp.columns},
-    )
-    gshp = cops[[x for x in cops.columns if x.endswith("res-rural-gshp")]]
-    gshp = gshp.rename(
-        columns={x: x.replace("res-rural-gshp", "gshp") for x in gshp.columns},
-    )
-    return ashp.join(gshp)
-
-
-def get_sector_production_timeseries(n: pypsa.Network, sector: str) -> pd.DataFrame:
-    """
-    Gets timeseries production to meet sectoral demand.
-    """
-    supply = n.statistics.supply("Link", nice_names=False, aggregate_time=False).T
-    return supply[[x for x in supply.columns if x.startswith(sector)]]
-
-
-def get_capacity_per_link_per_node(
-    n: pypsa.Network,
-    sector: str,
-    include_elec: bool = False,
-) -> pd.Series:
-    if include_elec:
-        df = n.links[n.links.carrier.str.startswith(sector)]
-    else:
-        df = n.links[
-            (n.links.carrier.str.startswith(sector))
-            & ~(n.links.carrier.str.endswith("elec-infra"))
-        ]
-    df = df[["carrier", "p_nom_opt"]]
-    df["node"] = df.index.map(lambda x: x.split(f" {sector}-")[0])
-    df["carrier"] = df.carrier.map(lambda x: x.split(f"{sector}-")[1])
-    return df.reset_index(drop=True).groupby(["node", "carrier"]).sum().squeeze()
-
-
-def get_total_capacity_per_node(
-    n: pypsa.Network,
-    sector: str,
-    include_elec: bool = False,
-) -> pd.Series:
-    if include_elec:
-        df = n.links[n.links.carrier.str.startswith(sector)]
-    else:
-        df = n.links[
-            (n.links.carrier.str.startswith(sector))
-            & ~(n.links.carrier.str.endswith("elec-infra"))
-        ]
-    df = df[["p_nom_opt"]]
-    df["node"] = df.index.map(lambda x: x.split(f" {sector}-")[0])
-    return df.reset_index(drop=True).groupby(["node"]).sum().squeeze()
-
-
-def get_capacity_percentage_per_node(
-    n: pypsa.Network,
-    sector: str,
-    include_elec: bool = False,
-) -> pd.DataFrame:
-    total = get_total_capacity_per_node(n, sector, include_elec)
-    df = get_capacity_per_link_per_node(n, sector, include_elec).to_frame()
-    df["total"] = df.index.get_level_values("node").map(total)
-    df["percentage"] = (df.p_nom_opt / df.total).round(4) * 100
-    return df
-
-
-def get_sector_max_production_timeseries(n: pypsa.Network, sector: str) -> pd.DataFrame:
-    """
-    Max production timeseries at a carrier level.
-    """
-    eff = n.get_switchable_as_dense("Link", "efficiency")
-    eff = eff[[x for x in eff.columns if f"{sector}-" in x]]
-    cap = n.links[n.links.index.str.contains(f"{sector}-")].p_nom_opt
-    return eff.mul(cap)
-
-
-def get_load_factor_timeseries(
-    n: pypsa.Network,
-    sector: str,
-    include_elec: bool = False,
-) -> pd.DataFrame:
-    max_prod = get_sector_max_production_timeseries(n, sector)
-    act_prod = get_sector_production_timeseries(n, sector)
-
-    max_prod = (
-        max_prod.rename(columns={x: x.split(f"{sector}-")[1] for x in max_prod.columns})
-        .T.groupby(level=0)
-        .sum()
-        .T
-    )
-    act_prod = (
-        act_prod.rename(columns={x: x.split(f"{sector}-")[1] for x in act_prod.columns})
-        .T.groupby(level=0)
-        .sum()
-        .T
-    )
-
-    lf = act_prod.div(max_prod).mul(100).round(3)
-
-    if include_elec:
-        return lf
-    else:
-        return lf[[x for x in lf.columns if not x.endswith("-infra")]]
-
 
 ###
 # PLOTTERS
@@ -262,8 +104,6 @@ def plot_load_per_sector(
             if log:
                 axs[i].set(yscale="log")
 
-    fig.tight_layout()
-
     return fig, axs
 
 
@@ -292,14 +132,12 @@ def plot_hp_cop(n: pypsa.Network, **kwargs) -> tuple:
         axs[i].set_ylabel("COP")
         axs[i].set_title(f"{hp}")
 
-    fig.tight_layout()
-
     return fig, axs
 
 
 def plot_sector_production_timeseries(
     n: pypsa.Network,
-    sharey: bool = True,
+    sharey: bool = False,
     **kwargs,
 ) -> tuple:
     """
@@ -310,45 +148,25 @@ def plot_sector_production_timeseries(
 
     sectors = ("res", "com", "ind")
 
-    nrows = ceil(len(sectors) / 2)
+    nrows = len(sectors)
 
     fig, axs = plt.subplots(
-        ncols=2,
+        ncols=1,
         nrows=nrows,
         figsize=(14, 5 * nrows),
         sharey=sharey,
     )
 
-    row = 0
-    col = 0
-
     for i, sector in enumerate(sectors):
 
-        row = i // 2
-        col = i % 2
+        df = get_sector_production_timeseries(n, sector).loc[investment_period].T
+        df.index = df.index.map(n.links.carrier)
+        df = df.groupby(level=0).sum().T
 
-        df = get_sector_production_timeseries(n, sector).loc[investment_period]
-        df = df.rename(columns={x: x.split(f"{sector}-")[1] for x in df.columns})
-
-        # get rid of vehicle specific VMT demand data
-        if sector == "trn":
-            df = df[[x for x in df.columns if len(x.split("-")) <= 1]]
-
-        if nrows > 1:
-
-            df.plot.area(ax=axs[row, col])
-            axs[row, col].set_xlabel("")
-            axs[row, col].set_ylabel("MW")
-            axs[row, col].set_title(f"{sector}")
-
-        else:
-
-            df.plot.area(ax=axs[i])
-            axs[i].set_xlabel("")
-            axs[i].set_ylabel("MW")
-            axs[i].set_title(f"{sector}")
-
-    fig.tight_layout()
+        df.plot.area(ax=axs[i])
+        axs[i].set_xlabel("")
+        axs[i].set_ylabel("MW")
+        axs[i].set_title(f"{sector}")
 
     return fig, axs
 
@@ -379,14 +197,9 @@ def plot_sector_production(n: pypsa.Network, sharey: bool = True, **kwargws) -> 
         row = i // 2
         col = i % 2
 
-        df = get_sector_production_timeseries(n, sector).loc[investment_period]
-        df = df.rename(columns={x: x.split(f"{sector}-")[1] for x in df.columns})
-
-        # get rid of vehicle specific VMT demand data
-        if sector == "trn":
-            df = df[[x for x in df.columns if len(x.split("-")) <= 1]]
-
-        df = df.sum(axis=0).to_frame(name="value")
+        df = get_sector_production_timeseries(n, sector).loc[investment_period].T
+        df.index = df.index.map(n.links.carrier)
+        df = df.groupby(level=0).sum().T.sum()
 
         if nrows > 1:
 
@@ -400,17 +213,81 @@ def plot_sector_production(n: pypsa.Network, sharey: bool = True, **kwargws) -> 
 
             df.plot.bar(ax=axs[i])
             axs[i].set_xlabel("")
-            axs[i].set_ylabel("MW")
+            axs[i].set_ylabel("MWh")
             axs[i].set_title(f"{sector}")
-
-    fig.tight_layout()
 
     return fig, axs
 
 
-def plot_capacity_percentage_per_node(
+def plot_sector_emissions(n: pypsa.Network, **kwargws) -> tuple:
+    """
+    Plots model period emissions by sector.
+    """
+
+    investment_period = n.investment_periods[0]
+
+    sectors = ("res", "com", "ind", "trn", "pwr")
+
+    data = []
+
+    for sector in sectors:
+
+        data.append(
+            get_emission_timeseries_by_sector(n, sector)
+            .loc[investment_period,]
+            .iloc[-1]
+            .values[0],
+        )
+
+    df = pd.DataFrame([data], columns=sectors)
+
+    fig, axs = plt.subplots(
+        ncols=1,
+        nrows=1,
+        figsize=(14, 5),
+    )
+
+    df.T.plot.bar(ax=axs, legend=False)
+    axs.set_ylabel("MT CO2e")
+    axs.set_title("CO2e Emissions by Sector")
+
+    return fig, axs
+
+
+def plot_state_emissions(n: pypsa.Network, **kwargws) -> tuple:
+    """
+    Plots stacked bar plot of state level emissions.
+    """
+
+    investment_period = n.investment_periods[0]
+
+    state = "Texas"
+
+    fig, axs = plt.subplots(
+        ncols=1,
+        nrows=1,
+        figsize=(14, 5),
+    )
+
+    df = (
+        get_emission_timeseries_by_sector(n)
+        .loc[investment_period,]
+        .iloc[-1]
+        .to_frame(name=state)
+    )
+    df.index = df.index.map(lambda x: x.split("-co2")[0][-3:])
+    df.T.plot.bar(stacked=True, ax=axs)
+
+    axs.set_ylabel("MT CO2e")
+    axs.set_title("CO2e Emissions by State")
+
+    return fig, axs
+
+
+def plot_capacity_per_node(
     n: pypsa.Network,
     sharey: bool = True,
+    percentage: bool = True,
     **kwargs,
 ) -> tuple:
     """
@@ -431,30 +308,31 @@ def plot_capacity_percentage_per_node(
     row = 0
     col = 0
 
+    data_col = "percentage" if percentage else "p_nom_opt"
+    y_label = "Percentage (%)" if percentage else "Capacity (MW)"
+
     for i, sector in enumerate(sectors):
 
         row = i // 2
         col = i % 2
 
-        df = get_capacity_percentage_per_node(n, sector)
-        df = df.reset_index()[["node", "carrier", "percentage"]]
-        df = df.pivot(columns="carrier", index="node", values="percentage")
+        df = get_capacity_per_node(n, sector)
+        df = df.reset_index()[["node", "carrier", data_col]]
+        df = df.pivot(columns="carrier", index="node", values=data_col)
 
         if nrows > 1:
 
             df.plot(kind="bar", stacked=True, ax=axs[row, col])
             axs[row, col].set_xlabel("")
-            axs[row, col].set_ylabel("Percentage (%)")
+            axs[row, col].set_ylabel(y_label)
             axs[row, col].set_title(f"{sector} Capacity")
 
         else:
 
             df.plot(kind="bar", stacked=True, ax=axs[i])
             axs[i].set_xlabel("")
-            axs[i].set_ylabel("Percentage (%)")
+            axs[i].set_ylabel(y_label)
             axs[i].set_title(f"{sector} Capacity")
-
-    fig.tight_layout()
 
     return fig, axs
 
@@ -511,8 +389,6 @@ def plot_sector_load_factor_timeseries(
             axs[i].set_ylabel("Load Factor (%)")
             axs[i].set_title(f"{sector}")
 
-    fig.tight_layout()
-
     return fig, axs
 
 
@@ -564,22 +440,78 @@ def plot_sector_load_factor_boxplot(
             axs[i].set_title(f"{sector}")
             axs[i].tick_params(axis="x", labelrotation=45)
 
-    # fig.tight_layout()
-
     return fig, axs
 
 
-# maps figure name to the function
-FIGURE_FUNCTION = {"load_factor_boxplot": plot_sector_load_factor_boxplot}
+###
+# HELPERS
+###
 
-FIGURE_NICE_NAME = {"load_factor_boxplot": "Load Factor"}
+
+def save_fig(
+    fn: Callable,
+    n: pypsa.Network,
+    save: str,
+    title: str,
+    wildcards: dict[str, any] = {},
+    **kwargs,
+) -> None:
+    """
+    Saves the result figure.
+    """
+
+    fig, _ = fn(n, **kwargs)
+
+    fig_title = create_title(title, **wildcards)
+
+    fig.suptitle(fig_title)
+    fig.tight_layout()
+
+    fig.savefig(save)
+
+
+###
+# PUBLIC INTERFACE
+###
+
+FIGURE_FUNCTION = {
+    # production
+    "load_factor_boxplot": plot_sector_load_factor_boxplot,
+    "hp_cop": plot_hp_cop,
+    "production_time_series": plot_sector_production_timeseries,
+    "production_total": plot_sector_production,
+    # capacity
+    "end_use_capacity_per_node_absolute": plot_capacity_per_node,
+    "end_use_capacity_per_node_percentage": plot_capacity_per_node,
+    # emissions
+    "emissions_by_sector": plot_sector_emissions,
+    "emissions_by_state": plot_state_emissions,
+}
+
+FIGURE_NICE_NAME = {
+    # production
+    "load_factor_boxplot": "Load Factor",
+    "hp_cop": "Heat Pump Coefficient of Performance",
+    "production_time_series": "End Use Technology Production",
+    "production_total": "End Use Technology Production",
+    # capacity
+    "end_use_capacity_per_node_absolute": "Capacity Per Node",
+    "end_use_capacity_per_node_percentage": "Capacity Per Node",
+    # emissions
+    "emissions_by_sector": "",
+    "emissions_by_state": "",
+}
+
+FN_ARGS = {
+    "end_use_capacity_per_node_absolute": {"percentage": False},
+}
 
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
 
         snakemake = mock_snakemake(
-            "plot_sector_prduction",
+            "plot_sector_production",
             interconnect="texas",
             clusters=20,
             ll="v1.0",
@@ -594,7 +526,6 @@ if __name__ == "__main__":
     sanitize_carriers(n, snakemake.config)
 
     wildcards = snakemake.wildcards
-    fn_inputs = {}
 
     for f, f_path in snakemake.output.items():
 
@@ -608,5 +539,10 @@ if __name__ == "__main__":
             title = FIGURE_NICE_NAME[f]
         except KeyError:
             title = f
+
+        try:
+            fn_inputs = FN_ARGS[f]
+        except KeyError:
+            fn_inputs = {}
 
         save_fig(fn, n, f_path, title, wildcards, **fn_inputs)

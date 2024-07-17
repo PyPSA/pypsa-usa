@@ -1,8 +1,16 @@
-"""Rules for post procesing solved networks"""
+"""Rules for post procesing solved sector coupled networks"""
 
-FIGURES_SECTOR_EMISSIONS = []
-FIGURES_SECTOR_PRODUCTION = ["load_factor_boxplot"]
-FIGURES_SECTOR_CAPACITY = []
+FIGURES_SECTOR_EMISSIONS = ["emissions_by_sector", "emissions_by_state"]
+FIGURES_SECTOR_PRODUCTION = [
+    "load_factor_boxplot",
+    "hp_cop",
+    "production_time_series",
+    "production_total",
+]
+FIGURES_SECTOR_CAPACITY = [
+    "end_use_capacity_per_node_absolute",
+    "end_use_capacity_per_node_percentage",
+]
 FIGURES_SECTOR_LOADS = []
 FIGURES_SECTOR_NATURAL_GAS = [
     "natural_gas_demand.html",
@@ -55,7 +63,7 @@ rule plot_sector_emissions:
         "../scripts/plot_statistics_sector.py"
 
 
-rule plot_sector_prduction:
+rule plot_sector_production:
     input:
         network=RESULTS
         + "{interconnect}/networks/elec_s_{clusters}_ec_l{ll}_{opts}_{sector}.nc",
