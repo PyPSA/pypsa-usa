@@ -99,7 +99,8 @@ lines:
   s_nom_max: .inf
   max_extension: 1000.0e+3
   length_factor: 1.25
-  interface_transmission_limits: true
+  interface_transmission_limits: true # Imposes ITLs over AC Lines
+  transport_model: false # If minimum nodes set, AC lines will be replaced with links according to ITLs
 
 
 # docs :

@@ -417,6 +417,46 @@ def clustering_for_n_clusters(
 
     return clustering
 
+def replace_lines_with_links(n, itl_fn):
+    """
+    Replaces all Lines according to Links with the transfer capacity specified by the ITLs.
+
+    TODO: Modify native PyPSA Links table to support bi-directional link limits.
+    """
+    lines = n.lines
+
+    itls = pd.read_csv(itl_fn)
+
+    itls['bus0'] = itls.r + '0 0'
+    itls['bus1'] = itls.rr + '0 0'
+    itls = itls[itls.bus0.isin(n.buses.index) | itls.bus1.isin(n.buses.index)]
+
+    itls["p_nom"] = np.maximum(itls["MW_f0"], itls["MW_r0"])
+
+    def find_eq_line(itl):
+        try:
+            return lines[
+                (lines.bus0 == itl.bus0) & (lines.bus1 == itl.bus1) |
+                (lines.bus0 == itl.bus1) & (lines.bus1 == itl.bus0)
+            ].index[0]
+        except:
+            return np.nan
+
+
+    itls['eq_line'] = itls.apply(find_eq_line, axis=1)
+    itls["capex"] =  itls.eq_line.map(lines.capital_cost)
+
+    n.mremove("Line", n.lines.index)
+    n.madd(
+        "Link", 
+        itls.index, #itl name
+        bus0=itls.bus0, 
+        bus1=itls.bus1, 
+        p_nom=itls.p_nom, 
+        capital_cost=itls.capex, #revisit capex assignment for links
+        p_nom_extendable= False,
+    )
+
 
 def cluster_regions(busmaps, input=None, output=None):
     busmap = reduce(lambda x, y: x.map(y), busmaps[1:], busmaps[0])
@@ -447,8 +487,8 @@ if __name__ == "__main__":
         snakemake = mock_snakemake(
             "cluster_network",
             simpl="",
-            clusters="45",
-            interconnect="eastern",
+            clusters="33",
+            interconnect="western",
         )
     configure_logging(snakemake)
 
@@ -541,6 +581,12 @@ if __name__ == "__main__":
             hvac_overhead_cost,
             params.focus_weights,
         )
+        if params.replace_lines_with_links:
+            N = n.buses.groupby(["country", "sub_network"]).size()
+            assert (
+                n_clusters == len(N)
+            ), f"Number of clusters must be {len(N)} to model as transport model."
+            replace_lines_with_links(clustering.network, snakemake.input.itls)
 
     update_p_nom_max(clustering.network)
 
