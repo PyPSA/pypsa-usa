@@ -492,18 +492,17 @@ def add_interface_limits(n, sns, config):
 
     limits = pd.concat([limits, user_limits])
 
-    lines_s = n.model["Line-s"]
-
     for idx, interface in limits.iterrows():
         regions_list_r = [region.strip() for region in interface.r.split(",")]
         regions_list_rr = [region.strip() for region in interface.rr.split(",")]
 
         zone0_buses = n.buses[n.buses.country.isin(regions_list_r)]
         zone1_buses = n.buses[n.buses.country.isin(regions_list_rr)]
-        if zone0_buses.empty & zone1_buses.empty:
+        if zone0_buses.empty | zone1_buses.empty:
             continue
 
         logger.info(f"Adding Interface Transmission Limit for {interface.interface}")
+
         interface_lines_b0 = n.lines[
             n.lines.bus0.isin(zone0_buses.index) & n.lines.bus1.isin(zone1_buses.index)
         ]
@@ -517,15 +516,18 @@ def add_interface_limits(n, sns, config):
             n.links.bus0.isin(zone1_buses.index) & n.links.bus1.isin(zone0_buses.index)
         ]
 
-        line_flows = lines_s.loc[:, interface_lines_b1.index].sum(
-            dims="Line",
-        ) - lines_s.loc[:, interface_lines_b0.index].sum(dims="Line")
-
+        if not n.lines.empty:
+            line_flows = n.model["Line-s"].loc[:, interface_lines_b1.index].sum(
+                dims="Line",
+            ) - n.model["Line-s"].loc[:, interface_lines_b0.index].sum(dims="Line")
+        else:
+            line_flows = 0.0
         lhs = line_flows
 
         if (
             not (pd.concat([interface_links_b0, interface_links_b1]).empty)
-            and "RESOLVE" in interface.interface
+            and ("RESOLVE" in interface.interface or config['lines']['transport_model']) 
+            # Apply link constraints if RESOLVE constraint or if zonal model. ITLs should usually only apply to AC lines if DC PF is used.
         ):
             link_flows = n.model["Link-p"].loc[:, interface_links_b1.index].sum(
                 dims="Link",
