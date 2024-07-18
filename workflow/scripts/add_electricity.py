@@ -52,9 +52,9 @@ from _helpers import (
     configure_logging,
     export_network_for_gis_mapping,
     local_to_utc,
+    reduce_float_memory,
     test_network_datatype_consistency,
     update_p_nom_max,
-    reduce_float_memory,
 )
 from scipy import sparse
 from shapely.geometry import Point
@@ -158,7 +158,7 @@ def load_costs(
 
     costs.at["OCGT", "co2_emissions"] = costs.at["gas", "co2_emissions"]
     costs.at["CCGT", "co2_emissions"] = costs.at["gas", "co2_emissions"]
-    costs.loc["waste", "co2_emissions"] = 0.1016 # revisit, EPA data 
+    costs.loc["waste", "co2_emissions"] = 0.1016  # revisit, EPA data
 
     costs.at["solar", "capital_cost"] = (
         config["rooftop_share"] * costs.at["solar-rooftop", "capital_cost"]
@@ -412,7 +412,7 @@ def attach_renewable_capacities_to_atlite(
         generators_tech = n.generators[n.generators.carrier == tech].copy()
         generators_tech["sub_assignment"] = generators_tech.bus.map(n.buses.sub_id)
         plants_filt.loc[:, "sub_assignment"] = plants_filt.bus_assignment.map(
-            n.buses.sub_id
+            n.buses.sub_id,
         )
         caps_per_bus = (
             plants_filt[["sub_assignment", "p_nom"]]
@@ -888,7 +888,7 @@ def apply_seasonal_capacity_derates(
     winter_sns = sns_dt[~sns_dt.month.isin([6, 7, 8])]
 
     # conventional_carriers = ['geothermal'] # testing override impact
-    
+
     conv_plants = plants.query("carrier in @conventional_carriers")
     conv_plants.index = "C" + conv_plants.index
     conv_gens = n.generators.query("carrier in @conventional_carriers")
@@ -905,7 +905,8 @@ def apply_seasonal_capacity_derates(
 
     p_max_pu = broadcast_investment_horizons_index(n, p_max_pu)
     n.generators_t.p_max_pu = pd.concat(
-        [n.generators_t.p_max_pu, p_max_pu], axis=1
+        [n.generators_t.p_max_pu, p_max_pu],
+        axis=1,
     ).round(3)
 
 
@@ -922,7 +923,7 @@ def apply_must_run_ratings(
     conv_plants.index = "C" + conv_plants.index
 
     conv_plants.loc[:, "ads_mustrun"] = conv_plants.ads_mustrun.infer_objects(
-        copy=False
+        copy=False,
     ).fillna(False)
     conv_plants.loc[:, "minimum_load_pu"] = (
         conv_plants.minimum_load_mw / conv_plants.p_nom
@@ -1051,7 +1052,7 @@ def apply_pudl_fuel_costs(
 
     # assign new marginal costs
     n.generators_t["marginal_cost"] = n.generators_t["marginal_cost"].join(
-        pudl_fuel_costs
+        pudl_fuel_costs,
     )
     # Why are there so few of the pudl fuel costs columns?
     return n

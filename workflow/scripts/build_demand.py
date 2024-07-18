@@ -38,14 +38,14 @@ from pathlib import Path
 from typing import Any, Optional
 
 import constants as const
+import duckdb
+import geopandas as gpd
 import numpy as np
 import pandas as pd
 import pypsa
 import xarray as xr
 from _helpers import configure_logging
 from eia import EnergyDemand
-import geopandas as gpd
-import duckdb
 
 logger = logging.getLogger(__name__)
 
@@ -311,6 +311,7 @@ class ReadEia(ReadStrategy):
         df["SPP"] = df.pop("SWPP")
         return df
 
+
 class ReadFERC714(ReadStrategy):
     """
     Reads data from PuDLs FERC 714 based State historical Demand.
@@ -375,10 +376,9 @@ class ReadFERC714(ReadStrategy):
 
         df = data.copy()
 
-        df['State'] = df.state_id_fips.map(states.state_abbr)
-        df = df.drop(columns=["state_id_fips",'demand_mwh'])
-        df = df.groupby(['datetime_utc','State']).sum().reset_index()
-
+        df["State"] = df.state_id_fips.map(states.state_abbr)
+        df = df.drop(columns=["state_id_fips", "demand_mwh"])
+        df = df.groupby(["datetime_utc", "State"]).sum().reset_index()
 
         df = df.rename(columns={"datetime_utc": "snapshot"}).set_index("snapshot")
         df = self._format_snapshot_index(df)
@@ -386,7 +386,7 @@ class ReadFERC714(ReadStrategy):
         df["sector"] = "all"
         df["subsector"] = "all"
         df["State"] = df.State.map(CODE_2_STATE)
-        
+
         df = pd.pivot_table(
             df,
             values="scaled_demand_mwh",
@@ -1940,7 +1940,7 @@ if __name__ == "__main__":
         sns = n.snapshots.get_level_values(1).map(
             lambda x: x.replace(year=profile_year),
         )
-    
+
     elif demand_profile == "ferc":
         assert profile_year in range(2018, 2024)
 

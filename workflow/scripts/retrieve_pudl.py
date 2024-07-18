@@ -12,6 +12,7 @@ from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 
+
 def retrieve_gzip(url: str, save: str):
     """
     Retrieves a gzip file from a URL and saves it to a local file.
@@ -31,6 +32,7 @@ def retrieve_gzip(url: str, save: str):
                     progress_bar.update(len(chunk))
                     fd.write(d.decompress(chunk))
 
+
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
@@ -41,8 +43,12 @@ if __name__ == "__main__":
         rootpath = "."
 
     # Recommended to use the stable version of PUDL documented here: https://catalystcoop-pudl.readthedocs.io/en/latest/data_access.html#stable-builds
-    url_pudl = "http://pudl.catalyst.coop.s3.us-west-2.amazonaws.com/stable/pudl.sqlite.gz"
-    url_census = "https://zenodo.org/records/11292273/files/censusdp1tract.sqlite.gz?download=1"
+    url_pudl = (
+        "http://pudl.catalyst.coop.s3.us-west-2.amazonaws.com/stable/pudl.sqlite.gz"
+    )
+    url_census = (
+        "https://zenodo.org/records/11292273/files/censusdp1tract.sqlite.gz?download=1"
+    )
     save_pudl = snakemake.output.pudl
     save_census = snakemake.output.census
 
@@ -52,10 +58,9 @@ if __name__ == "__main__":
     if not Path(save_pudl).exists():
         retrieve_gzip(url_pudl, save_pudl)
 
-    
     # Get PUDL FERC Form 714 Parquet
     parquet = f"https://zenodo.org/records/11292273/files/out_ferc714__hourly_estimated_state_demand.parquet?download=1"
-    
+
     save_ferc = snakemake.output.pudl_ferc714
 
     if not Path(save_ferc).exists():

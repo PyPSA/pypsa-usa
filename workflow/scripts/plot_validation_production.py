@@ -12,12 +12,12 @@ import seaborn as sns
 logger = logging.getLogger(__name__)
 from _helpers import configure_logging, get_snapshots
 from constants import (
-    EIA_930_REGION_MAPPER, 
-    EIA_BA_2_REGION, 
-    STATE_2_CODE,
+    EIA_930_REGION_MAPPER,
+    EIA_BA_2_REGION,
     EIA_FUEL_MAPPER_2,
+    STATE_2_CODE,
 )
-from eia import Emissions, ElectricPowerData
+from eia import ElectricPowerData, Emissions
 from plot_network_maps import (
     create_title,
     get_bus_scale,
@@ -64,6 +64,7 @@ GE_carrier_names = {
     "OTH": "Other",
 }
 
+
 def get_regions(n):
     regions = n.buses.country.unique()
     regions_clean = [ba.split("0")[0] for ba in regions]
@@ -75,7 +76,9 @@ def get_regions(n):
 def get_state_generation_mix(n: pypsa.Network, var="p"):
     storage_devices = n.storage_units.copy()
     storage_devices["state"] = storage_devices.bus.map(n.buses.reeds_state)
-    storage_devices["state_carrier"] = storage_devices["state"] + "_" + storage_devices["carrier"]
+    storage_devices["state_carrier"] = (
+        storage_devices["state"] + "_" + storage_devices["carrier"]
+    )
     # Group by state and carrier
     storage = n.storage_units_t[var].clip(lower=0).copy()
     storage = storage.T.groupby(storage_devices["state_carrier"]).sum().T
@@ -100,7 +103,9 @@ def get_state_generation_mix(n: pypsa.Network, var="p"):
         production["state_carrier"].str.split("_").str[1:].str.join("_")
     )
     production_pivot = production.pivot(
-        index="state", columns="carrier", values="generation"
+        index="state",
+        columns="carrier",
+        values="generation",
     )
     if "load" in production_pivot.columns:
         production_pivot.load = production_pivot.load.mul(1e-3)
@@ -112,7 +117,6 @@ def get_state_loads(n: pypsa.Network):
     n.loads["state"] = n.loads.bus.map(n.buses.reeds_state)
     loads = loads.T.groupby(n.loads.state).sum().T
     loads = loads / 1e3  # convert to GW
-
 
 
 def add_missing_carriers(df1, df2):
@@ -747,6 +751,39 @@ def plot_ba_emissions_historical_bar(
     fig.savefig(save, dpi=DPI)
 
 
+def get_state_generation_mix(n: pypsa.Network, var="p"):
+    gens = n.generators.copy()
+    gens["state"] = gens.bus.map(n.buses.reeds_state)
+    gens["state_carrier"] = gens["state"] + "_" + gens["carrier"]
+    # Group by state and carrier
+    generation = n.generators_t[var].copy()
+    generation = generation.T.groupby(gens["state_carrier"]).sum().T
+    generation.index = generation.index.droplevel(1)
+    generation = generation.groupby("period").sum().T
+    generation = generation / 1e3  # convert to GWh
+    generation = generation.reset_index()
+    generation.columns = ["state_carrier", "generation"]
+    generation["state"] = generation["state_carrier"].str.split("_").str[0]
+    generation["carrier"] = (
+        generation["state_carrier"].str.split("_").str[1:].str.join("_")
+    )
+    generation_pivot = generation.pivot(
+        index="state",
+        columns="carrier",
+        values="generation",
+    )
+    if "load" in generation_pivot.columns:
+        generation_pivot.load = generation_pivot.load.mul(1e-3)
+    return generation_pivot
+
+
+def get_state_loads(n: pypsa.Network):
+    loads = n.loads_t.p
+    n.loads["state"] = n.loads.bus.map(n.buses.reeds_state)
+    loads = loads.T.groupby(n.loads.state).sum().T
+    loads = loads / 1e3  # convert to GW
+
+
 def plot_state_generation_mix(
     n: pypsa.Network,
     snapshots: pd.date_range,
@@ -755,7 +792,9 @@ def plot_state_generation_mix(
     save_carrier: str,
     **wildcards,
 ):
-    """Creates a stacked bar chart for each state's generation mix"""
+    """
+    Creates a stacked bar chart for each state's generation mix.
+    """
     year = snapshots[0].year
 
     optimized = get_state_generation_mix(n)
@@ -763,41 +802,61 @@ def plot_state_generation_mix(
     historical_gen = pd.read_excel(snakemake.input.historical_generation, skiprows=1)
     historical_gen = historical_gen.set_index("STATE").loc[optimized.index]
     historical_gen = historical_gen[historical_gen.YEAR == year]
-    historical_gen = historical_gen[historical_gen['TYPE OF PRODUCER'] == 'Total Electric Power Industry']
-    historical_gen = historical_gen[historical_gen['ENERGY SOURCE'] != 'Total']
-    historical_gen.drop(columns=['YEAR','TYPE OF PRODUCER'], inplace=True)
-    historical_gen.rename(columns={'ENERGY SOURCE':'carrier','GENERATION (Megawatthours)': 'Historical' }, inplace=True)
-    historical_gen['carrier'] = historical_gen.carrier.map(EIA_FUEL_MAPPER_2)
+    historical_gen = historical_gen[
+        historical_gen["TYPE OF PRODUCER"] == "Total Electric Power Industry"
+    ]
+    historical_gen = historical_gen[historical_gen["ENERGY SOURCE"] != "Total"]
+    historical_gen.drop(columns=["YEAR", "TYPE OF PRODUCER"], inplace=True)
+    historical_gen.rename(
+        columns={
+            "ENERGY SOURCE": "carrier",
+            "GENERATION (Megawatthours)": "Historical",
+        },
+        inplace=True,
+    )
+    historical_gen["carrier"] = historical_gen.carrier.map(EIA_FUEL_MAPPER_2)
     historical_gen.carrier = historical_gen.carrier.str.lower()
-    historical_gen = historical_gen.reset_index().groupby(['state','carrier']).sum().reset_index()
-    historical_gen = historical_gen.pivot(index='state', columns='carrier', values='Historical') / 1e3
+    historical_gen = (
+        historical_gen.reset_index().groupby(["state", "carrier"]).sum().reset_index()
+    )
+    historical_gen = (
+        historical_gen.pivot(index="state", columns="carrier", values="Historical")
+        / 1e3
+    )
 
     # Rename Optimized Carriers to Match EIA Historical Data
-    optimized['natural gas'] = optimized.pop('CCGT') + optimized.pop('OCGT')
-    optimized['other'] = optimized.pop('battery') + optimized.pop('waste')
-    optimized.pop('load')
-    optimized.pop('offwind_floating')
+    optimized["natural gas"] = optimized.pop("CCGT") + optimized.pop("OCGT")
+    optimized["other"] = optimized.pop("battery") + optimized.pop("waste")
+    optimized.pop("load")
+    optimized.pop("offwind_floating")
 
     historical_gen, optimized = add_missing_carriers(historical_gen, optimized)
 
-    joined = historical_gen.join(optimized, lsuffix='_historical', rsuffix='_optimized').sort_index(axis=1).round(1)
-    joined.to_csv(save_total.replace('.pdf','.csv'))
+    joined = (
+        historical_gen.join(optimized, lsuffix="_historical", rsuffix="_optimized")
+        .sort_index(axis=1)
+        .round(1)
+    )
+    joined.to_csv(save_total.replace(".pdf", ".csv"))
 
-    diff_total = ((optimized - historical_gen).fillna(0) / historical_gen.sum(axis=0) * 1e2).round(1)
-    diff_carrier = ((optimized - historical_gen).fillna(0) / historical_gen).mul(1e2).round(1)
+    diff_total = (
+        (optimized - historical_gen).fillna(0) / historical_gen.sum(axis=0) * 1e2
+    ).round(1)
+    diff_carrier = (
+        ((optimized - historical_gen).fillna(0) / historical_gen).mul(1e2).round(1)
+    )
 
     colors = n.carriers.color.to_dict()
-    colors['natural gas'] = colors.pop('CCGT')
-    colors['other'] = colors.pop('load')
+    colors["natural gas"] = colors.pop("CCGT")
+    colors["other"] = colors.pop("load")
 
     # Create Heatmap
     fig, ax = plt.subplots()
-    sns.heatmap(diff_carrier, annot=True, center= 0.0, fmt=".1f", cmap='coolwarm', ax=ax)
+    sns.heatmap(diff_carrier, annot=True, center=0.0, fmt=".1f", cmap="coolwarm", ax=ax)
     ax.set_title(create_title("Difference in Carrier Level Production[%]", **wildcards))
     ax.set_xlabel("Carrier")
     ax.set_ylabel("State")
-    fig.savefig(save_carrier, dpi =DPI)
-
+    fig.savefig(save_carrier, dpi=DPI)
 
     # Create difference stacked bar
     fig, ax = plt.subplots(figsize=(10, 6))
@@ -814,6 +873,7 @@ def plot_state_generation_mix(
         save_total,
         dpi=DPI,
     )
+
 
 def plot_state_generation_capacities(
     n: pypsa.Network,
@@ -838,7 +898,9 @@ def plot_state_generation_capacities(
         generation["state_carrier"].str.split("_").str[1:].str.join("_")
     )
     generation_pivot = generation.pivot(
-        index="state", columns="carrier", values="capacity"
+        index="state",
+        columns="carrier",
+        values="capacity",
     )
     generation_pivot.drop(columns=["load"], inplace=True)
 
@@ -1007,7 +1069,6 @@ def main(snakemake):
         **snakemake.wildcards,
     )
 
-
     plot_state_generation_capacities(
         n,
         snakemake.output["val_cap_state_generation.pdf"],
@@ -1080,6 +1141,7 @@ def main(snakemake):
     )
 
     n.statistics().to_csv(snakemake.output["val_statistics"])
+
 
 if __name__ == "__main__":
     if "snakemake" not in globals():

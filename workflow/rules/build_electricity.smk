@@ -224,7 +224,11 @@ def demand_raw_data(wildcards):
     if profile == "eia":
         return DATA + "GridEmissions/EIA_DMD_2018_2024.csv"
     elif profile == "efs":
-        return DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv"
+        efs_case = config["electricity"]["demand"]["scenario"]["efs_case"].capitalize()
+        efs_speed = config["electricity"]["demand"]["scenario"][
+            "efs_speed"
+        ].capitalize()
+        return DATA + f"nrel_efs/EFSLoadProfile_{efs_case}_{efs_speed}.csv"
     elif profile == "ferc":
         return [
             DATA + "pudl/out_ferc714__hourly_estimated_state_demand.parquet",
@@ -270,7 +274,11 @@ def demand_scaling_data(wildcards):
         profile = config["sector"]["demand"]["profile"][end_use]
 
     if profile == "efs":
-        return DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv"
+        efs_case = config["electricity"]["demand"]["scenario"]["efs_case"].capitalize()
+        efs_speed = config["electricity"]["demand"]["scenario"][
+            "efs_speed"
+        ].capitalize()
+        return DATA + f"nrel_efs/EFSLoadProfile_{efs_case}_{efs_speed}.csv"
     elif profile == "eia":
         return DATA + "pudl/pudl.sqlite"
     elif profile == "ferc":

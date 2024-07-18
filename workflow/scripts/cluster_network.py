@@ -94,7 +94,7 @@ import pandas as pd
 import pyomo.environ as po
 import pypsa
 import seaborn as sns
-from _helpers import configure_logging, update_p_nom_max, reduce_float_memory
+from _helpers import configure_logging, reduce_float_memory, update_p_nom_max
 from pypsa.clustering.spatial import (
     busmap_by_greedy_modularity,
     busmap_by_hac,
@@ -117,16 +117,9 @@ def normed(x):
 
 def weighting_for_country(n, x):
     conv_carriers = {"nuclear", "OCGT", "CCGT", "PHS", "hydro", "coal", "biomass"}
-    gen = n.generators.loc[n.generators.carrier.isin(conv_carriers)].groupby(
-        "bus",
-    ).p_nom.sum().reindex(n.buses.index, fill_value=0.0) + n.storage_units.loc[
-        n.storage_units.carrier.isin(conv_carriers)
-    ].groupby(
-        "bus",
-    ).p_nom.sum().reindex(
-        n.buses.index,
-        fill_value=0.0,
-    )
+    generators = n.generators
+    generators["carrier_base"] = generators.carrier.str.split().str[0]
+    gen = generators.loc[generators.carrier_base.isin(conv_carriers)].groupby("bus",).p_nom.sum().reindex(n.buses.index, fill_value=0.0) + n.storage_units.loc[n.storage_units.carrier.isin(conv_carriers)].groupby("bus",).p_nom.sum().reindex(n.buses.index,fill_value=0.0,)
     load = n.loads_t.p_set.mean().groupby(n.loads.bus).sum()
 
     b_i = x.index
@@ -608,7 +601,9 @@ if __name__ == "__main__":
         periods=snakemake.params.planning_horizons,
     )
 
-    clustering.network.loads_t.p_set = reduce_float_memory(clustering.network.loads_t.p_set)
+    clustering.network.loads_t.p_set = reduce_float_memory(
+        clustering.network.loads_t.p_set
+    )
     clustering.network.generators_t.p_max_pu = reduce_float_memory(
         clustering.network.generators_t.p_max_pu,
     )
