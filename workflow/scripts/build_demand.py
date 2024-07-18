@@ -273,14 +273,14 @@ class ReadEia(ReadStrategy):
         """
         Formats raw data.
         """
-        df = data.copy()
+        df = data.copy().fillna(0)
         df = self._correct_balancing_areas(df)
         df = self._format_snapshot_index(df)
         df["fuel"] = "electricity"
         df["sector"] = "all"
         df["subsector"] = "all"
         df = df.set_index([df.index, "sector", "subsector", "fuel"])
-        return df.fillna(0)
+        return df
 
     @staticmethod
     def _correct_balancing_areas(df: pd.DataFrame) -> pd.DataFrame:
@@ -1882,7 +1882,7 @@ if __name__ == "__main__":
 
         snakemake = mock_snakemake(
             "build_electrical_demand",
-            interconnect="western",
+            interconnect="usa",
             end_use="power",
         )
         # snakemake = mock_snakemake(
