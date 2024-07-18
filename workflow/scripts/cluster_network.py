@@ -117,16 +117,9 @@ def normed(x):
 
 def weighting_for_country(n, x):
     conv_carriers = {"nuclear", "OCGT", "CCGT", "PHS", "hydro", "coal", "biomass"}
-    gen = n.generators.loc[n.generators.carrier.isin(conv_carriers)].groupby(
-        "bus",
-    ).p_nom.sum().reindex(n.buses.index, fill_value=0.0) + n.storage_units.loc[
-        n.storage_units.carrier.isin(conv_carriers)
-    ].groupby(
-        "bus",
-    ).p_nom.sum().reindex(
-        n.buses.index,
-        fill_value=0.0,
-    )
+    generators = n.generators
+    generators["carrier_base"] = generators.carrier.str.split().str[0]
+    gen = generators.loc[generators.carrier_base.isin(conv_carriers)].groupby("bus",).p_nom.sum().reindex(n.buses.index, fill_value=0.0) + n.storage_units.loc[n.storage_units.carrier.isin(conv_carriers)].groupby("bus",).p_nom.sum().reindex(n.buses.index,fill_value=0.0,)
     load = n.loads_t.p_set.mean().groupby(n.loads.bus).sum()
 
     b_i = x.index
