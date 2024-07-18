@@ -293,6 +293,28 @@ class Emissions(EiaData):
         return StateEmissions(self.sector, self.fuel, self.year, self.api)
 
 
+class Seds(EiaData):
+    """
+    State Energy Demand System.
+    """
+
+    def __init__(self, metric: str, sector: str, year: int, api: str) -> None:
+        self.metric = metric  # (consumption)
+        self.sector = sector  # (residential|commercial|industry|transport|total)
+        self.year = year  # 1970 - 2022
+        self.api = api
+
+    def data_creator(self):
+        if self.metric == "consumption":
+            return SedsConsumption(self.sector, self.year, self.api)
+        else:
+            raise InputException(
+                propery="SEDS",
+                valid_options=["consumption"],
+                recived_option=self.metric,
+            )
+
+
 # product
 class DataExtractor(ABC):
     """
@@ -1055,6 +1077,56 @@ class StateEmissions(DataExtractor):
         return self._assign_dtypes(df)
 
 
+class SedsConsumption(DataExtractor):
+    """
+    State Level End-Use Consumption.
+    """
+
+    sector_codes = {
+        "commercial": "TNACB",
+        "industrial": "TNICB",
+        "residential": "TNRCB",
+        "transport": "TNACB",
+        "total": "TNTCB",
+    }
+
+    def __init__(self, sector: str, year: int, api_key: str) -> None:
+        self.sector = sector
+        if self.sector not in list(self.sector_codes):
+            raise InputException(
+                propery="State Level Emissions",
+                valid_options=list(self.sector_codes),
+                recived_option=sector,
+            )
+        super().__init__(year, api_key)
+        if self.year > 2022:
+            logger.warning(f"SEDS data only available until {2022}")
+            self.year = 2022
+
+    def build_url(self) -> str:
+        base_url = "seds/data/"
+        facets = f"frequency=annual&data[0]=value&facets[seriesId][]={self.sector_codes[self.sector]}&start={self.year - 1}&end={self.year}&sort[0][column]=period&sort[0][direction]=desc&offset=0&length=5000"
+        return f"{API_BASE}{base_url}?api_key={self.api_key}&{facets}"
+
+    def format_data(self, df: pd.DataFrame) -> pd.DataFrame:
+
+        df = df.rename(
+            columns={
+                "unit": "units",
+                "stateId": "state",
+                "seriesDescription": "series-description",
+            },
+        )
+
+        df = (
+            df[["series-description", "value", "units", "state", "period"]]
+            .sort_values(["state", "period"])
+            .set_index("period")
+        )
+
+        return self._assign_dtypes(df)
+
+
 if __name__ == "__main__":
     with open("./../config/config.api.yaml") as file:
         yaml_data = yaml.safe_load(file)
@@ -1064,5 +1136,6 @@ if __name__ == "__main__":
     # print(Emissions("transport", 2019, api).get_data(pivot=True))
     # print(Storage("gas", "total", 2019, api).get_data(pivot=True))
     # print(EnergyDemand("residential", 2030, api).get_data(pivot=False))
-    print(TransportationDemand("light_duty", 2015, api).get_data(pivot=False))
+    # print(TransportationDemand("light_duty", 2015, api).get_data(pivot=False))
     # print(EnergyDemand("residential", 2015, api).get_data(pivot=False))
+    print(Seds("consumption", "residential", 2021, api).get_data(pivot=True))
