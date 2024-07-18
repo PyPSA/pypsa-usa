@@ -21,7 +21,7 @@ def load_pudl_data(pudl_fn: str, start_date: str, end_date: str):
         # usually we want to get the most recent data for each plant_id_eia, generator_id
         # but sometimes the most recent data has null values, so we need to fill in with older data
         # this is why many of the columns are aggregated with array_agg and FILTER so we can get the most recent non-null value
-        # TODO: reconsider pulling PuDL report date according to snapshot year, to match historic operational_status_code 
+        # TODO: reconsider pulling PuDL report date according to snapshot year, to match historic operational_status_code
         """
         WITH monthly_generators AS (
             SELECT
@@ -121,17 +121,19 @@ def set_non_conus(eia_data_operable):
 
 def set_derates(plants):
     plants["derate_summer_capacity"] = np.minimum(
-        plants.summer_capacity_mw, plants.ads_maxcapmw.fillna(np.inf))
+        plants.summer_capacity_mw,
+        plants.ads_maxcapmw.fillna(np.inf),
+    )
     plants["derate_winter_capacity"] = np.minimum(
-        plants.winter_capacity_mw, plants.ads_maxcapmw.fillna(np.inf))
+        plants.winter_capacity_mw,
+        plants.ads_maxcapmw.fillna(np.inf),
+    )
 
     plants["summer_derate"] = 1 - (
-        (plants.p_nom - plants.derate_summer_capacity)
-        / plants.p_nom
+        (plants.p_nom - plants.derate_summer_capacity) / plants.p_nom
     )
     plants["winter_derate"] = 1 - (
-        (plants.p_nom - plants.derate_winter_capacity)
-        / plants.p_nom
+        (plants.p_nom - plants.derate_winter_capacity) / plants.p_nom
     )
     plants.summer_derate = plants.summer_derate.clip(
         upper=1,
@@ -694,10 +696,14 @@ def set_parameters(plants: pd.DataFrame):
     plants["vom"] = plants.pop("ads_vom_cost")
     plants["fuel_cost"] = plants.pop("fuel_cost_per_mwh")
     plants = impute_missing_plant_data(
-        plants, ["nerc_region", "technology_description"], ["fuel_cost"]
+        plants,
+        ["nerc_region", "technology_description"],
+        ["fuel_cost"],
     )
     plants = impute_missing_plant_data(
-        plants, ["technology_description"], ["fuel_cost"]
+        plants,
+        ["technology_description"],
+        ["fuel_cost"],
     )
 
     # Unit Commitment Parameters
@@ -737,10 +743,14 @@ def set_parameters(plants: pd.DataFrame):
     plants.loc[plants.heat_rate < 3.412, "heat_rate"] = np.nan
 
     plants = impute_missing_plant_data(
-        plants, ["nerc_region", "technology_description"], ["heat_rate"]
+        plants,
+        ["nerc_region", "technology_description"],
+        ["heat_rate"],
     )
     plants = impute_missing_plant_data(
-        plants, ["technology_description"], ["heat_rate"]
+        plants,
+        ["technology_description"],
+        ["heat_rate"],
     )
 
     plants["marginal_cost"] = (
@@ -826,7 +836,9 @@ def merge_fc_hr_data(
 
     # Apply IQR filtering to each generator group
     filtered_temporal = filter_outliers_iqr_grouped(
-        filtered_temporal, "technology_description", target_field_name
+        filtered_temporal,
+        "technology_description",
+        target_field_name,
     )
 
     # Apply temporal average heat rates to plants dataframe
@@ -875,11 +887,13 @@ def apply_cems_heat_rates(plants, crosswalk_fn, cems_fn):
     )
 
     plants.rename(columns={"Heat Input (mmBtu/MWh)": "heat_rate_"}, inplace=True)
-    plants.heat_rate_ = plants.heat_rate_.fillna(plants.unit_heat_rate_mmbtu_per_mwh) # First take CEMS, then use PUDL
+    plants.heat_rate_ = plants.heat_rate_.fillna(
+        plants.unit_heat_rate_mmbtu_per_mwh
+    )  # First take CEMS, then use PUDL
     plants.unit_heat_rate_mmbtu_per_mwh = plants.pop("heat_rate_")
 
     plants.hr_source_cems = plants.hr_source_cems.fillna(
-        "unit_heat_rate_mmbtu_per_mwh_source"
+        "unit_heat_rate_mmbtu_per_mwh_source",
     )
     plants.unit_heat_rate_mmbtu_per_mwh_source = plants.pop("hr_source_cems")
 
@@ -910,18 +924,26 @@ if __name__ == "__main__":
     start_date = "2019-01-01"
     end_date = "2020-01-01"
     eia_data_operable, heat_rates = load_pudl_data(
-        snakemake.input.pudl, start_date, end_date
+        snakemake.input.pudl,
+        start_date,
+        end_date,
     )
     # eia_data_operable.to_csv("eia_data_operable.csv")
 
     eia_data_operable = merge_fc_hr_data(
-        eia_data_operable, heat_rates, "unit_heat_rate_mmbtu_per_mwh"
+        eia_data_operable,
+        heat_rates,
+        "unit_heat_rate_mmbtu_per_mwh",
     )
     eia_data_operable = merge_fc_hr_data(
-        eia_data_operable, heat_rates, "fuel_cost_per_mwh"
+        eia_data_operable,
+        heat_rates,
+        "fuel_cost_per_mwh",
     )
     eia_data_operable = apply_cems_heat_rates(
-        eia_data_operable, snakemake.input.epa_crosswalk, snakemake.input.cems
+        eia_data_operable,
+        snakemake.input.epa_crosswalk,
+        snakemake.input.cems,
     )
     set_non_conus(eia_data_operable)
     set_tech_fuels_primer_movers(eia_data_operable)

@@ -50,7 +50,11 @@ if __name__ == "__main__":
 
         # snakemake = mock_snakemake("retrieve_zenodo_databundles")
         # snakemake = mock_snakemake('retrieve_sector_databundle')
-        snakemake = mock_snakemake("retrieve_nrel_efs_data")
+        snakemake = mock_snakemake(
+            "retrieve_nrel_efs_data",
+            efs_case="Reference",
+            efs_speed="Moderate",
+        )
         rootpath = ".."
     else:
         rootpath = "."

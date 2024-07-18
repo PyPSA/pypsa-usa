@@ -875,7 +875,8 @@ def get_snapshots(
 
 def reduce_float_memory(df):
     """
-    Reduce memory usage of a DataFrame by converting float64 columns to float32.
+    Reduce memory usage of a DataFrame by converting float64 columns to
+    float32.
 
     Parameters
     ----------
