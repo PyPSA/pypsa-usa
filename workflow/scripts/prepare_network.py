@@ -186,16 +186,25 @@ def average_every_nhours(n, offset):
     logger.info(f"Resampling the network to {offset}")
     m = n.copy(with_time=False)
 
-    snapshot_weightings = n.snapshot_weightings.resample(offset).sum()
+    def resample_multi_index(df, offset, func):
+        sw = []
+        for year in df.index.levels[0]:
+            sw.append(df.loc[year].resample(offset).apply(func))
+        snapshot_weightings = pd.concat(sw)
+        snapshot_weightings.index = pd.MultiIndex.from_arrays([snapshot_weightings.index.year, snapshot_weightings.index], names=["period", "timestep"])
+        return snapshot_weightings
+
+    snapshot_weightings = resample_multi_index(n.snapshot_weightings, offset, 'sum')
+
     m.set_snapshots(snapshot_weightings.index)
     m.snapshot_weightings = snapshot_weightings
+    m.investment_periods = n.investment_periods
 
     for c in n.iterate_components():
         pnl = getattr(m, c.list_name + "_t")
         for k, df in c.pnl.items():
             if not df.empty:
-                pnl[k] = df.resample(offset).mean()
-
+                pnl[k] = resample_multi_index(df, offset, 'mean')
     return m
 
 
