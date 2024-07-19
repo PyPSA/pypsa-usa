@@ -506,6 +506,7 @@ rule cluster_network:
         length_factor=config_provider("lines", "length_factor"),
         costs=config_provider("costs"),
         planning_horizons=config_provider("scenario", "planning_horizons"),
+        replace_lines_with_links=config_provider("lines", "transport_model"),
     input:
         network=RESOURCES + "{interconnect}/elec_s.nc",
         regions_onshore=RESOURCES + "{interconnect}/regions_onshore.geojson",
@@ -518,6 +519,7 @@ rule cluster_network:
         ),
         tech_costs=RESOURCES
         + f"costs/costs_{config['scenario']['planning_horizons'][0]}.csv",
+        itls="repo_data/ReEDS_Constraints/transmission/transmission_capacity_init_AC_ba_NARIS2024.csv",
     output:
         network=RESOURCES + "{interconnect}/elec_s_{clusters}.nc",
         regions_onshore=RESOURCES

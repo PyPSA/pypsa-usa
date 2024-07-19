@@ -117,7 +117,9 @@ def normed(x):
 
 def weighting_for_country(n, x):
     conv_carriers = {"nuclear", "OCGT", "CCGT", "PHS", "hydro", "coal", "biomass"}
-    gen = n.generators.loc[n.generators.carrier.isin(conv_carriers)].groupby(
+    generators = n.generators
+    generators["carrier_base"] = generators.carrier.str.split().str[0]
+    gen = generators.loc[generators.carrier_base.isin(conv_carriers)].groupby(
         "bus",
     ).p_nom.sum().reindex(n.buses.index, fill_value=0.0) + n.storage_units.loc[
         n.storage_units.carrier.isin(conv_carriers)
@@ -418,6 +420,54 @@ def clustering_for_n_clusters(
     return clustering
 
 
+def replace_lines_with_links(clustering, itl_fn):
+    """
+    Replaces all Lines according to Links with the transfer capacity specified
+    by the ITLs.
+
+    TODO: Modify native PyPSA Links table to support bi-directional link limits.
+    """
+    lines = clustering.network.lines.copy()
+    buses = clustering.network.buses.copy()
+
+    itls = pd.read_csv(itl_fn)
+
+    itls["bus0"] = (itls.r + "0 0").astype(str)
+    itls["bus1"] = (itls.rr + "0 0").astype(str)
+    itls = itls[
+        itls.bus0.isin(clustering.network.buses.index)
+        & itls.bus1.isin(clustering.network.buses.index)
+    ]
+
+    itls["p_nom"] = np.maximum(itls["MW_f0"], itls["MW_r0"])
+
+    def find_eq_line(itl):
+        try:
+            return lines[
+                (lines.bus0 == itl.bus0) & (lines.bus1 == itl.bus1)
+                | (lines.bus0 == itl.bus1) & (lines.bus1 == itl.bus0)
+            ].index[0]
+        except:
+            return np.nan
+
+    itls["eq_line"] = itls.apply(find_eq_line, axis=1)
+    itls["capex"] = itls.eq_line.map(lines.capital_cost)
+
+    clustering.network.mremove("Line", clustering.network.lines.index)
+    clustering.network.madd(
+        "Link",
+        names=itls.interface,  # itl name
+        bus0=buses.loc[itls.bus0].index,
+        bus1=buses.loc[itls.bus1].index,
+        p_nom=itls.p_nom.values,
+        capital_cost=itls.capex.values,  # revisit capex assignment for links
+        p_nom_extendable=False,
+        carrier="AC",
+    )
+    logger.info(f"Replaced Lines with Links for zonal model configuration.")
+    return clustering
+
+
 def cluster_regions(busmaps, input=None, output=None):
     busmap = reduce(lambda x, y: x.map(y), busmaps[1:], busmaps[0])
 
@@ -447,8 +497,8 @@ if __name__ == "__main__":
         snakemake = mock_snakemake(
             "cluster_network",
             simpl="",
-            clusters="45",
-            interconnect="eastern",
+            clusters="33",
+            interconnect="western",
         )
     configure_logging(snakemake)
 
@@ -541,6 +591,12 @@ if __name__ == "__main__":
             hvac_overhead_cost,
             params.focus_weights,
         )
+        if params.replace_lines_with_links:
+            N = n.buses.groupby(["country", "sub_network"]).size()
+            assert n_clusters == len(
+                N,
+            ), f"Number of clusters must be {len(N)} to model as transport model."
+            clustering = replace_lines_with_links(clustering, snakemake.input.itls)
 
     update_p_nom_max(clustering.network)
 
@@ -559,7 +615,7 @@ if __name__ == "__main__":
     )
 
     clustering.network.loads_t.p_set = reduce_float_memory(
-        clustering.network.loads_t.p_set
+        clustering.network.loads_t.p_set,
     )
     clustering.network.generators_t.p_max_pu = reduce_float_memory(
         clustering.network.generators_t.p_max_pu,
