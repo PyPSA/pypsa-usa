@@ -156,7 +156,9 @@ def get_demand_timeseries(n: pypsa.Network) -> pd.DataFrame:
     """
     Gets timeseries energy demand.
     """
-    return pd.DataFrame(n.loads_t.p.multiply(n.snapshot_weightings.objective,axis=0,).sum(1)).rename(columns={0: "Demand"})
+    return pd.DataFrame(
+        n.loads_t.p.multiply(n.snapshot_weightings.objective, axis=0).sum(1)
+    ).rename(columns={0: "Demand"})
 
 
 def get_demand_base(n: pypsa.Network) -> pd.DataFrame:
