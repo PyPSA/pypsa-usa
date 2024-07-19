@@ -107,9 +107,8 @@ def get_energy_timeseries(n: pypsa.Network) -> pd.DataFrame:
 
     def _get_energy_one_port(n: pypsa.Network, c: str) -> pd.DataFrame:
         return (
-            c.pnl.p.multiply(  # .multiply(n.snapshot_weightings.generators, axis=0)
-                c.df.sign
-            )
+            c.pnl.p.multiply(n.snapshot_weightings.generators, axis=0)
+            .multiply(c.df.sign)
             .T.groupby(c.df.carrier)
             .sum()
             .T
@@ -123,9 +122,10 @@ def get_energy_timeseries(n: pypsa.Network) -> pd.DataFrame:
         for port in [col[3:] for col in c.df.columns if col[:3] == "bus"]:
             if port == "0":  # only track flow in one direction
                 continue
-            totals = c.pnl[
-                "p" + port
-            ]  # .multiply(n.snapshot_weightings.generators,axis=0,)
+            totals = c.pnl["p" + port].multiply(
+                n.snapshot_weightings.generators,
+                axis=0,
+            )
             # remove values where bus is missing (bug in nomopyomo)
             no_bus = c.df.index[c.df["bus" + port] == ""]
             totals.loc[no_bus] = float(
@@ -156,7 +156,7 @@ def get_demand_timeseries(n: pypsa.Network) -> pd.DataFrame:
     """
     Gets timeseries energy demand.
     """
-    return pd.DataFrame(n.loads_t.p.sum(1)).rename(columns={0: "Demand"})
+    return pd.DataFrame(n.loads_t.p.multiply(n.snapshot_weightings.objective,axis=0,).sum(1)).rename(columns={0: "Demand"})
 
 
 def get_demand_base(n: pypsa.Network) -> pd.DataFrame:
