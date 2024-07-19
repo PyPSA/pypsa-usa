@@ -339,7 +339,7 @@ def attach_multihorizon_generators(
         carrier=gens.carrier,
         bus=gens.bus,
         p_nom_min=0,
-        p_nom=0,
+        p_nom=0 if investment_year != n.investment_periods[0] else gens.p_nom,
         p_nom_max=gens.p_nom_max,
         p_nom_extendable=True,
         ramp_limit_up=gens.ramp_limit_up,
@@ -387,8 +387,6 @@ if __name__ == "__main__":
     n = pypsa.Network(snakemake.input.network)
     elec_config = snakemake.config["electricity"]
 
-    # n.buses["location"] = n.buses.index
-
     Nyears = n.snapshot_weightings.loc[n.investment_periods[0]].objective.sum() / 8760.0
 
     costs_dict = {
@@ -418,6 +416,8 @@ if __name__ == "__main__":
         attach_stores(n, costs, elec_config, investment_year)
         attach_hydrogen_pipelines(n, costs, elec_config, investment_year)
         attach_multihorizon_generators(n, costs, gens, investment_year)
+
+    n.mremove("Generator", gens.index) # Remove duplicate generators from first investment period
 
     add_nice_carrier_names(n, snakemake.config)
 

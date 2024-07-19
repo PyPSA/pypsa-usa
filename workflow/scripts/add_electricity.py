@@ -871,6 +871,7 @@ def broadcast_investment_horizons_index(n: pypsa.Network, df: pd.DataFrame):
             period_data.index = df.index.map(lambda x: x.replace(year=planning_horizon))
             dfs.append(period_data)
         df = pd.concat(dfs)
+        df = pd.merge(df, sns.to_frame().droplevel(0), left_index=True, right_index=True).drop(columns=["period", "timestep"])
         assert len(df.index) == len(sns)
     df.index = sns
     return df
