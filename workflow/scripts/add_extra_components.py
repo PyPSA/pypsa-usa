@@ -418,7 +418,8 @@ if __name__ == "__main__":
         attach_multihorizon_generators(n, costs, gens, investment_year)
 
     n.mremove(
-        "Generator", gens.index
+        "Generator",
+        gens.index,
     )  # Remove duplicate generators from first investment period
 
     add_nice_carrier_names(n, snakemake.config)

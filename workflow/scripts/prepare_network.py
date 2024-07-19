@@ -191,10 +191,13 @@ def average_every_nhours(n, offset):
         for year in df.index.levels[0]:
             sw.append(df.loc[year].resample(offset).apply(func))
         snapshot_weightings = pd.concat(sw)
-        snapshot_weightings.index = pd.MultiIndex.from_arrays([snapshot_weightings.index.year, snapshot_weightings.index], names=["period", "timestep"])
+        snapshot_weightings.index = pd.MultiIndex.from_arrays(
+            [snapshot_weightings.index.year, snapshot_weightings.index],
+            names=["period", "timestep"],
+        )
         return snapshot_weightings
 
-    snapshot_weightings = resample_multi_index(n.snapshot_weightings, offset, 'sum')
+    snapshot_weightings = resample_multi_index(n.snapshot_weightings, offset, "sum")
 
     m.set_snapshots(snapshot_weightings.index)
     m.snapshot_weightings = snapshot_weightings
@@ -204,7 +207,7 @@ def average_every_nhours(n, offset):
         pnl = getattr(m, c.list_name + "_t")
         for k, df in c.pnl.items():
             if not df.empty:
-                pnl[k] = resample_multi_index(df, offset, 'mean')
+                pnl[k] = resample_multi_index(df, offset, "mean")
     return m
 
 
