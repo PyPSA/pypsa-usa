@@ -1083,7 +1083,7 @@ class SedsConsumption(DataExtractor):
     """
 
     sector_codes = {
-        "commercial": "TNACB",
+        "commercial": "TNCCB",
         "industrial": "TNICB",
         "residential": "TNRCB",
         "transport": "TNACB",
@@ -1094,7 +1094,7 @@ class SedsConsumption(DataExtractor):
         self.sector = sector
         if self.sector not in list(self.sector_codes):
             raise InputException(
-                propery="State Level Emissions",
+                propery="State Level Consumption",
                 valid_options=list(self.sector_codes),
                 recived_option=sector,
             )
@@ -1138,4 +1138,4 @@ if __name__ == "__main__":
     # print(EnergyDemand("residential", 2030, api).get_data(pivot=False))
     # print(TransportationDemand("light_duty", 2015, api).get_data(pivot=False))
     # print(EnergyDemand("residential", 2015, api).get_data(pivot=False))
-    print(Seds("consumption", "residential", 2021, api).get_data(pivot=True))
+    print(Seds("consumption", "residential", 2022, api).get_data(pivot=False))

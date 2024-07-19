@@ -16,7 +16,9 @@ from plot_statistics import create_title
 from summary_sector import (
     get_capacity_per_node,
     get_emission_timeseries_by_sector,
+    get_end_use_consumption,
     get_historical_emissions,
+    get_historical_end_use_consumption,
     get_hp_cop,
     get_load_factor_timeseries,
     get_load_name_per_sector,
@@ -590,6 +592,49 @@ def plot_state_emissions_validation(
     return fig, axs
 
 
+def plot_sector_consumption_validation(
+    n: pypsa.Network,
+    eia_api: str,
+    **kwargs,
+) -> tuple:
+    """
+    Plots sector energy consumption comparison.
+    """
+
+    investment_period = n.investment_periods[0]
+
+    historical = get_historical_end_use_consumption(
+        ["residential", "commercial", "industrial", "transport"],
+        investment_period,
+        eia_api,
+    )
+
+    data = []
+
+    for sector in ("res", "com", "ind", "trn"):
+        modelled = get_end_use_consumption(n, sector, investment_period).sum().sum()
+        data.append([sector, modelled, historical.at[SECTOR_MAPPER[sector], "TX"]])
+
+    df = pd.DataFrame(data, columns=["sector", "Modelled", "Actual"]).set_index(
+        "sector",
+    )
+    df.index = df.index.map(SECTOR_MAPPER)
+
+    fig, axs = plt.subplots(
+        ncols=1,
+        nrows=1,
+        figsize=(14, 6),
+    )
+
+    df.plot.bar(ax=axs)
+    axs.set_xlabel("")
+    axs.set_ylabel("End Use Consumption (MWh)")
+    axs.set_title(f"{investment_period} State Generation")
+    axs.tick_params(axis="x", labelrotation=0)
+
+    return fig, axs
+
+
 ###
 # HELPERS
 ###
@@ -636,6 +681,7 @@ FIGURE_FUNCTION = {
     # validation
     "emissions_by_sector_validation": plot_sector_emissions_validation,
     "emissions_by_state_validation": plot_state_emissions_validation,
+    "generation_by_state_validation": plot_sector_consumption_validation,
 }
 
 FIGURE_NICE_NAME = {
@@ -653,6 +699,7 @@ FIGURE_NICE_NAME = {
     # validation
     "emissions_by_sector_validation": "",
     "emissions_by_state_validation": "",
+    "generation_by_state_validation": "",
 }
 
 FN_ARGS = {

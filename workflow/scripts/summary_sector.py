@@ -7,7 +7,7 @@ from typing import Optional
 
 import pandas as pd
 import pypsa
-from eia import Emissions
+from eia import Emissions, Seds
 
 logger = logging.getLogger(__name__)
 
@@ -216,3 +216,68 @@ def get_historical_emissions(
     df = pd.concat(dfs)
     df.index.name = "sector"
     return df
+
+
+def get_historical_end_use_consumption(
+    sectors: str | list[str],
+    year: int,
+    api: str,
+) -> pd.DataFrame:
+    """
+    End-Use consumption by state/sector in units of MWh.
+    """
+
+    dfs = []
+
+    if isinstance(sectors, str):
+        sectors = [sectors]
+
+    for sector in sectors:
+        dfs.append(
+            Seds("consumption", sector, year, api)
+            .get_data(pivot=True)
+            .rename(index={f"{year}": f"{sector}"}),
+        )
+
+    df = pd.concat(dfs)
+    df.index.name = "sector"
+
+    # convert billion BTU to MWH
+    return df.mul(293.07)
+
+
+def get_end_use_consumption(n: pypsa.Network, sector: str, year: int) -> pd.DataFrame:
+    """
+    Gets timeseries energy consumption in MWh.
+    """
+
+    def get_service_consumption(n: pypsa.Network, sector: str) -> pd.DataFrame:
+        assert sector in ("res", "com", "ind")
+        loads = n.loads[n.loads.carrier.str.startswith(sector)]
+        df = n.loads_t.p[loads.index].mul(n.snapshot_weightings["objective"], axis=0).T
+        df.index = df.index.map(n.loads.carrier).map(lambda x: x.split("-")[1:])
+        df.index = df.index.map(lambda x: "-".join(x))
+        return df.groupby(level=0).sum().T
+
+    def get_transport_consumption(n: pypsa.Network) -> pd.DataFrame:
+        """
+        Takes load from p0 link as loads are in kVMT.
+        """
+        loads = n.links[
+            (n.links.carrier.str.startswith("trn-"))
+            & ~(n.links.index.str.endswith("infra"))
+        ].index.to_list()
+        df = n.links_t.p0[loads].mul(n.snapshot_weightings["objective"], axis=0).T
+        df.index = df.index.map(n.loads.carrier).map(lambda x: x.split("-")[1:])
+        df.index = df.index.map(lambda x: "-".join(x))
+        return df.groupby(level=0).sum().T
+
+    match sector:
+        case "res" | "com" | "ind":
+            df = get_service_consumption(n, sector)
+        case "trn":
+            df = get_transport_consumption(n)
+        case _:
+            raise NotImplementedError
+
+    return df.loc[year]
