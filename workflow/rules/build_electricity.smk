@@ -506,7 +506,7 @@ rule cluster_network:
         length_factor=config_provider("lines", "length_factor"),
         costs=config_provider("costs"),
         planning_horizons=config_provider("scenario", "planning_horizons"),
-        replace_lines_with_links=config_provider("lines","transport_model"),
+        replace_lines_with_links=config_provider("lines", "transport_model"),
     input:
         network=RESOURCES + "{interconnect}/elec_s.nc",
         regions_onshore=RESOURCES + "{interconnect}/regions_onshore.geojson",

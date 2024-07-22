@@ -873,7 +873,7 @@ class ElectricPowerOperationalData(DataExtractor):
         super().__init__(year, api_key)
         if self.year > 2021:
             logger.warning(
-                f"Electric power operational data only available until {2021}"
+                f"Electric power operational data only available until {2021}",
             )
             self.year = 2021
 
