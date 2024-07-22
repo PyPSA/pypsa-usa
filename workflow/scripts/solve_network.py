@@ -74,7 +74,7 @@ def add_land_use_constraint_perfect(n):
         )
         if check.sum():
             logger.warning(
-                f"summed p_min_pu values at node larger than technical potential {check[check].index}"
+                f"summed p_min_pu values at node larger than technical potential {check[check].index}",
             )
 
     grouper = [n.generators.carrier, n.generators.bus, n.generators.build_year]
@@ -105,7 +105,6 @@ def add_land_use_constraint_perfect(n):
         n.buses.loc[bus, name] = df_carrier.p_nom_max.values
 
     return n
-
 
 
 def add_co2_sequestration_limit(n, limit=200):
@@ -193,7 +192,6 @@ def prepare_network(
         n = add_land_use_constraint_perfect(n)
         # if snakemake.params["sector"]["limit_max_growth"]["enable"]:
         #     n = add_max_growth(n)
-
 
     if n.stores.carrier.eq("co2 stored").any():
         limit = co2_sequestration_potential
@@ -331,12 +329,16 @@ def add_RPS_constraints(n, config):
 
     for idx, pct_lim in portfolio_standards.iterrows():
         region_list = [region_.strip() for region_ in pct_lim.region.split(",")]
-        region_buses = n.buses[(
-            n.buses.country.isin(region_list)
-            | n.buses.state.isin(region_list)
-            | n.buses.interconnect.str.lower().isin(region_list)
-            | 1 if "all" in region_list else 0
-            )]
+        region_buses = n.buses[
+            (
+                n.buses.country.isin(region_list)
+                | n.buses.state.isin(region_list)
+                | n.buses.interconnect.str.lower().isin(region_list)
+                | 1
+                if "all" in region_list
+                else 0
+            )
+        ]
 
         if region_buses.empty:
             continue
@@ -561,12 +563,16 @@ def add_regional_co2limit(n, sns, config):
 
     for idx, emmission_lim in regional_co2_lims.iterrows():
         region_list = [region.strip() for region in emmission_lim.regions.split(",")]
-        region_buses = n.buses[(
-            n.buses.country.isin(region_list)
-            | n.buses.state.isin(region_list)
-            | n.buses.interconnect.str.lower().isin(region_list)
-            | 1 if "all" in region_list else 0
-            )]
+        region_buses = n.buses[
+            (
+                n.buses.country.isin(region_list)
+                | n.buses.state.isin(region_list)
+                | n.buses.interconnect.str.lower().isin(region_list)
+                | 1
+                if "all" in region_list
+                else 0
+            )
+        ]
 
         if region_buses.empty:
             continue
@@ -696,14 +702,18 @@ def add_SAFER_constraints(n, config):
 
     for idx, prm in regional_prm.iterrows():
         region_list = [region_.strip() for region_ in prm.region.split(",")]
-        region_buses = n.buses[(
-            n.buses.country.isin(region_list)
-            | n.buses.state.isin(region_list)
-            | n.buses.interconnect.str.lower().isin(region_list)
-            | n.buses.nerc_reg.isin(region_list)
-            | 1 if "all" in region_list else 0
-            )]
-            
+        region_buses = n.buses[
+            (
+                n.buses.country.isin(region_list)
+                | n.buses.state.isin(region_list)
+                | n.buses.interconnect.str.lower().isin(region_list)
+                | n.buses.nerc_reg.isin(region_list)
+                | 1
+                if "all" in region_list
+                else 0
+            )
+        ]
+
         if region_buses.empty:
             continue
 
