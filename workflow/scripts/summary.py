@@ -108,7 +108,7 @@ def get_energy_timeseries(n: pypsa.Network) -> pd.DataFrame:
     def _get_energy_one_port(n: pypsa.Network, c: str) -> pd.DataFrame:
         return (
             c.pnl.p.multiply(  # .multiply(n.snapshot_weightings.generators, axis=0)
-                c.df.sign
+                c.df.sign,
             )
             .T.groupby(c.df.carrier)
             .sum()

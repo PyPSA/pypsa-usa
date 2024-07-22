@@ -76,8 +76,13 @@ The wildcard, in general, consists of two parts:
 The `{opts}` wildcard is used for electricity-only studies. It triggers
 optional constraints, which are activated in either :mod:`prepare_network` or
 the :mod:`solve_network` step. It may hold multiple triggers separated by `-`,
-i.e. `Co2L-3H` contains the `Co2L` trigger and the `3H` switch. There are
-currently:
+i.e. `Co2L-3H` contains the `Co2L` trigger and the `3H` switch.
+
+The REM, SAFER, RPS can be defined using either the reeds zone name 'p##"
+the state code (eg, TX, CA, MT), pypsa-usa interconnect name (western, eastern, texas, usa),
+or nerc region name.
+
+There are currently:
 
 ```{eval-rst}
 .. csv-table::
