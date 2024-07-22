@@ -122,19 +122,68 @@ def get_sector_production_timeseries(
     include_storage: bool = False,
 ) -> pd.DataFrame:
     """
-    Gets timeseries production to meet sectoral demand. Gets p1 supply.
+    Gets timeseries production to meet sectoral demand.
+
+    Gets p1 supply for service and industry techs. Gets p0 withdrawl for
+    transport production (as p1 will be in units of kVMT).
 
     Note: can not use statistics module as multi-output links for co2 tracking
     > n.statistics.supply("Link", nice_names=False, aggregate_time=False).T
     """
-    if include_storage:
-        links = [x for x in n.links.index if f"{sector}-" in x]
-    else:
-        links = [
-            x for x in n.links.index if f"{sector}-" in x and not x.endswith("charger")
-        ]
-    prod = n.links_t.p1[links].mul(-1)
-    return prod.mul(n.snapshot_weightings.generators, axis=0)
+
+    def get_service_production_timeseries(
+        n: pypsa.Network,
+        sector: str,
+    ) -> pd.DataFrame:
+        assert sector in ("res", "com", "ind")
+        if include_storage:
+            links = [x for x in n.links.index if f"{sector}-" in x]
+        else:
+            links = [
+                x
+                for x in n.links.index
+                if f"{sector}-" in x and not x.endswith("charger")
+            ]
+        return n.links_t.p1[links].mul(-1).mul(n.snapshot_weightings.generators, axis=0)
+
+    def get_transport_production_timeseries(n: pypsa.Network) -> pd.DataFrame:
+        """
+        Takes load from p0 link as loads are in kVMT.
+        """
+        if include_storage:
+            links = n.links[
+                (n.links.carrier.str.startswith("trn-"))
+                & ~(n.links.index.str.endswith("infra"))
+            ].index.to_list()
+        else:
+            links = n.links[
+                (n.links.carrier.str.startswith("trn-"))
+                & ~(n.links.index.str.endswith("infra"))
+                & ~(n.links.index.str.endswith("charger"))
+            ].index.to_list()
+
+        return n.links_t.p0[links].mul(n.snapshot_weightings["objective"], axis=0)
+
+    match sector:
+        case "res" | "com" | "ind":
+            return get_service_production_timeseries(n, sector)
+        case "trn":
+            return get_transport_production_timeseries(n)
+        case _:
+            raise NotImplementedError
+
+
+def get_sector_production_timeseries_by_carrier(
+    n: pypsa.Network,
+    sector: str,
+) -> pd.DataFrame:
+    """
+    Gets timeseries production by carrier.
+    """
+
+    df = get_sector_production_timeseries(n, sector).T
+    df.index = df.index.map(n.links.carrier)
+    return df.groupby(level=0).sum().T
 
 
 def get_sector_max_production_timeseries(n: pypsa.Network, sector: str) -> pd.DataFrame:
@@ -280,4 +329,41 @@ def get_end_use_consumption(n: pypsa.Network, sector: str, year: int) -> pd.Data
         case _:
             raise NotImplementedError
 
-    return df.loc[year]
+    return df
+
+
+def get_end_use_load_timeseries(
+    n: pypsa.Network,
+    sector: str,
+    sns_weight: bool = True,
+) -> pd.DataFrame:
+    """
+    Gets timeseries load per node.
+
+    - Residential, Commercial, Industrial are in untis of MWh
+    - Transport is in units of kVMT
+    """
+
+    loads = n.loads[n.loads.carrier.str.startswith(sector)]
+    df = n.loads_t.p[loads.index]
+    if sns_weight:
+        df = df.mul(n.snapshot_weightings["objective"], axis=0)
+    return df.T
+
+
+def get_end_use_load_timeseries_carrier(
+    n: pypsa.Network,
+    sector: str,
+    sns_weight: bool = True,
+) -> pd.DataFrame:
+    """
+    Gets timeseries load per node per carrier.
+
+    - Residential, Commercial, Industrial are in untis of MWh
+    - Transport is in units of kVMT
+    """
+
+    df = get_end_use_load_timeseries(n, sector, sns_weight).T
+    df.index = df.index.map(n.loads.carrier).map(lambda x: x.split("-")[1:])
+    df.index = df.index.map(lambda x: "-".join(x))
+    return df.groupby(level=0).sum().T

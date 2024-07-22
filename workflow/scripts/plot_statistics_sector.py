@@ -17,6 +17,8 @@ from summary_sector import (
     get_capacity_per_node,
     get_emission_timeseries_by_sector,
     get_end_use_consumption,
+    get_end_use_load_timeseries,
+    get_end_use_load_timeseries_carrier,
     get_historical_emissions,
     get_historical_end_use_consumption,
     get_hp_cop,
@@ -24,6 +26,7 @@ from summary_sector import (
     get_load_name_per_sector,
     get_load_per_sector_per_fuel,
     get_sector_production_timeseries,
+    get_sector_production_timeseries_by_carrier,
 )
 
 logger = logging.getLogger(__name__)
@@ -221,16 +224,18 @@ def plot_sector_production(n: pypsa.Network, sharey: bool = True, **kwargws) -> 
         row = i // 2
         col = i % 2
 
-        df = get_sector_production_timeseries(n, sector).loc[investment_period].T
-        df.index = df.index.map(n.links.carrier)
-        df = df.groupby(level=0).sum().T.sum()
+        df = (
+            get_sector_production_timeseries_by_carrier(n, sector)
+            .loc[investment_period]
+            .sum()
+        )
 
         if nrows > 1:
 
             df.plot.bar(ax=axs[row, col])
             axs[row, col].set_xlabel("")
             axs[row, col].set_ylabel("MWh")
-            axs[row, col].set_title(f"{sector}")
+            axs[row, col].set_title(f"{SECTOR_MAPPER[sector]}")
             axs[row, col].tick_params(axis="x", labelrotation=45)
 
         else:
@@ -238,7 +243,7 @@ def plot_sector_production(n: pypsa.Network, sharey: bool = True, **kwargws) -> 
             df.plot.bar(ax=axs[i])
             axs[i].set_xlabel("")
             axs[i].set_ylabel("MWh")
-            axs[i].set_title(f"{sector}")
+            axs[i].set_title(f"{SECTOR_MAPPER[sector]}")
 
     return fig, axs
 
@@ -612,7 +617,7 @@ def plot_sector_consumption_validation(
     data = []
 
     for sector in ("res", "com", "ind", "trn"):
-        modelled = get_end_use_consumption(n, sector, investment_period).sum().sum()
+        modelled = get_end_use_consumption(n, sector).loc[investment_period].sum().sum()
         data.append([sector, modelled, historical.at[SECTOR_MAPPER[sector], "TX"]])
 
     df = pd.DataFrame(data, columns=["sector", "Modelled", "Actual"]).set_index(
@@ -631,6 +636,62 @@ def plot_sector_consumption_validation(
     axs.set_ylabel("End Use Consumption (MWh)")
     axs.set_title(f"{investment_period} State Generation")
     axs.tick_params(axis="x", labelrotation=0)
+
+    return fig, axs
+
+
+def plot_sector_load_timeseries(
+    n: pypsa.Network,
+    sector: str,
+    sharey: bool = False,
+    **kwargs,
+) -> tuple:
+
+    investment_period = n.investment_periods[0]
+
+    df = (
+        get_end_use_load_timeseries(n, sector, sns_weight=False)
+        .T.loc[investment_period]
+        .T
+    )
+    df.index = df.index.map(n.loads.carrier).map(lambda x: x.split("-")[1:])
+    df.index = df.index.map(lambda x: "-".join(x))
+    df = df.T
+
+    loads = df.columns.unique()
+    nrows = len(loads)
+    ylabel = "MW" if sector != "trn" else "kVMT"
+
+    fig, axs = plt.subplots(
+        ncols=1,
+        nrows=nrows,
+        figsize=(14, 6 * nrows),
+        sharey=sharey,
+    )
+
+    for i, load in enumerate(loads):
+
+        l = df[load]
+
+        # sns.lineplot(l, ax=axs[i], legend=False)
+
+        avg = l.mean(axis=1)
+
+        palette = sns.color_palette(["lightgray"])
+
+        sns.lineplot(
+            l,
+            color="lightgray",
+            legend=False,
+            # palette=palette,
+            ax=axs[i],
+            errorbar=("ci", 95),
+        )
+        sns.lineplot(avg, ax=axs[i])
+
+        axs[i].set_xlabel("")
+        axs[i].set_ylabel(ylabel)
+        axs[i].set_title(f"{SECTOR_MAPPER[sector]} {load} Load")
 
     return fig, axs
 
@@ -657,9 +718,12 @@ def save_fig(
     fig_title = create_title(title, **wildcards)
 
     fig.suptitle(fig_title)
+
     fig.tight_layout()
 
     fig.savefig(save)
+
+    plt.close(fig)
 
 
 ###
@@ -667,6 +731,11 @@ def save_fig(
 ###
 
 FIGURE_FUNCTION = {
+    # load
+    "load_timeseries_residential": plot_sector_load_timeseries,
+    "load_timeseries_commercial": plot_sector_load_timeseries,
+    "load_timeseries_industrial": plot_sector_load_timeseries,
+    "load_timeseries_transport": plot_sector_load_timeseries,
     # production
     "load_factor_boxplot": plot_sector_load_factor_boxplot,
     "hp_cop": plot_hp_cop,
@@ -703,7 +772,13 @@ FIGURE_NICE_NAME = {
 }
 
 FN_ARGS = {
+    # production
     "end_use_capacity_per_node_absolute": {"percentage": False},
+    # loads
+    "load_timeseries_residential": {"sector": "res"},
+    "load_timeseries_commercial": {"sector": "com"},
+    "load_timeseries_industrial": {"sector": "ind"},
+    "load_timeseries_transport": {"sector": "trn"},
 }
 
 if __name__ == "__main__":
@@ -711,7 +786,8 @@ if __name__ == "__main__":
         from _helpers import mock_snakemake
 
         snakemake = mock_snakemake(
-            "plot_sector_validate",
+            # "plot_sector_validate",
+            "plot_sector_loads",
             interconnect="texas",
             clusters=20,
             ll="v1.0",
