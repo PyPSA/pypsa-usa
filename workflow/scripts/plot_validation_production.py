@@ -826,9 +826,11 @@ def plot_state_generation_mix(
 
     # Rename Optimized Carriers to Match EIA Historical Data
     optimized["natural gas"] = optimized.pop("CCGT") + optimized.pop("OCGT")
-    optimized["other"] = optimized.pop("battery") + optimized.pop("waste")
-    optimized.pop("load")
-    optimized.pop("offwind_floating")
+    optimized["other"] = optimized.get("battery", 0) + optimized.get("waste", 0)
+
+    for car in ["battery", "waste", "load", "offwind_floating"]:
+        if car in optimized.columns:
+            optimized.pop(car)
 
     historical_gen, optimized = add_missing_carriers(historical_gen, optimized)
 
@@ -859,7 +861,7 @@ def plot_state_generation_mix(
     fig.savefig(save_carrier, dpi=DPI)
 
     # Create difference stacked bar
-    fig, ax = plt.subplots(figsize=(10, 6))
+    fig, ax = plt.subplots(figsize=(10, 10))
     diff_total.plot(kind="barh", stacked=True, ax=ax, color=colors)
     ax.set_xlabel("Production Deviation [% of Total]")
     ax.set_ylabel("Region")
@@ -1085,22 +1087,22 @@ def main(snakemake):
     )
 
     # Regional Comparisons
-    plot_regional_comparisons(
-        n,
-        ge_all.drop(columns=["Demand", "Net Generation", "Interchange"]),
-        ge_interchange,
-        colors=colors,
-        **snakemake.wildcards,
-    )
+    # plot_regional_comparisons(
+    #     n,
+    #     ge_all.drop(columns=["Demand", "Net Generation", "Interchange"]),
+    #     ge_interchange,
+    #     colors=colors,
+    #     **snakemake.wildcards,
+    # )
 
-    plot_ba_emissions_historical_bar(
-        n,
-        ge_co2,
-        snakemake.output["val_bar_regional_emissions.pdf"],
-        snapshots,
-        snakemake.params.eia_api,
-        **snakemake.wildcards,
-    )
+    # plot_ba_emissions_historical_bar(
+    #     n,
+    #     ge_co2,
+    #     snakemake.output["val_bar_regional_emissions.pdf"],
+    #     snapshots,
+    #     snakemake.params.eia_api,
+    #     **snakemake.wildcards,
+    # )
 
     # Bar Production
     plot_bar_carrier_production(
