@@ -334,9 +334,7 @@ def add_RPS_constraints(n, config):
                 n.buses.country.isin(region_list)
                 | n.buses.reeds_state.isin(region_list)
                 | n.buses.interconnect.str.lower().isin(region_list)
-                | (1
-                if "all" in region_list
-                else 0)
+                | (1 if "all" in region_list else 0)
             )
         ]
 
@@ -569,9 +567,7 @@ def add_regional_co2limit(n, sns, config):
                 n.buses.country.isin(region_list)
                 | n.buses.reeds_state.isin(region_list)
                 | n.buses.interconnect.str.lower().isin(region_list)
-                | (1
-                if "all" in region_list
-                else 0)
+                | (1 if "all" in region_list else 0)
             )
         ]
 
@@ -709,9 +705,7 @@ def add_SAFER_constraints(n, config):
                 | n.buses.reeds_state.isin(region_list)
                 | n.buses.interconnect.str.lower().isin(region_list)
                 | n.buses.nerc_reg.isin(region_list)
-                | (1
-                if "all" in region_list
-                else 0)
+                | (1 if "all" in region_list else 0)
             )
         ]
 
