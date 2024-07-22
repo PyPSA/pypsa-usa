@@ -696,6 +696,55 @@ def plot_sector_load_timeseries(
     return fig, axs
 
 
+def plot_sector_load_bar(n: pypsa.Network, **kwargs) -> tuple:
+
+    investment_period = n.investment_periods[0]
+
+    sectors = ("res", "com", "ind", "trn")
+
+    nrows = ceil(len(sectors) / 2)
+
+    fig, axs = plt.subplots(
+        ncols=2,
+        nrows=nrows,
+        figsize=(14, 6 * nrows),
+    )
+
+    row = 0
+    col = 0
+
+    for i, sector in enumerate(sectors):
+
+        ylabel = "MWh" if sector != "trn" else "kVMT"
+
+        row = i // 2
+        col = i % 2
+
+        df = (
+            get_end_use_load_timeseries_carrier(n, sector, sns_weight=True)
+            .loc[investment_period]
+            .sum()
+        )
+
+        if nrows > 1:
+
+            df.T.plot.bar(ax=axs[row, col])
+            axs[row, col].set_xlabel("")
+            axs[row, col].set_ylabel(f"Load ({ylabel})")
+            axs[row, col].set_title(f"{SECTOR_MAPPER[sector]}")
+            axs[row, col].tick_params(axis="x", labelrotation=0)
+
+        else:
+
+            df.T.plot.bar(ax=axs[i])
+            axs[i].set_xlabel("")
+            axs[i].set_ylabel(f"Load ({ylabel})")
+            axs[i].set_title(f"{SECTOR_MAPPER[sector]}")
+            axs[i].tick_params(axis="x", labelrotation=0)
+
+    return fig, axs
+
+
 ###
 # HELPERS
 ###
@@ -736,6 +785,7 @@ FIGURE_FUNCTION = {
     "load_timeseries_commercial": plot_sector_load_timeseries,
     "load_timeseries_industrial": plot_sector_load_timeseries,
     "load_timeseries_transport": plot_sector_load_timeseries,
+    "load_barplot": plot_sector_load_bar,
     # production
     "load_factor_boxplot": plot_sector_load_factor_boxplot,
     "hp_cop": plot_hp_cop,
@@ -754,6 +804,12 @@ FIGURE_FUNCTION = {
 }
 
 FIGURE_NICE_NAME = {
+    # load
+    "load_timeseries_residential": "",
+    "load_timeseries_commercial": "",
+    "load_timeseries_industrial": "",
+    "load_timeseries_transport": "",
+    "load_barplot": "Load per Sector per Fuel",
     # production
     "load_factor_boxplot": "Load Factor",
     "hp_cop": "Heat Pump Coefficient of Performance",

@@ -363,7 +363,7 @@ def get_end_use_load_timeseries_carrier(
     - Transport is in units of kVMT
     """
 
-    df = get_end_use_load_timeseries(n, sector, sns_weight).T
+    df = get_end_use_load_timeseries(n, sector, sns_weight)
     df.index = df.index.map(n.loads.carrier).map(lambda x: x.split("-")[1:])
     df.index = df.index.map(lambda x: "-".join(x))
     return df.groupby(level=0).sum().T
