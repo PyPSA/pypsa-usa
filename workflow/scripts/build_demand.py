@@ -1295,7 +1295,9 @@ class ReadTransportVmt(ReadStrategy):
         # (ie. not having snapshots in 2018 indexed over years other than 2018)
         dfs = []
         for year in self.efs_years:
-            elec_demand = ds.yearly_demand.sel(year=year) * ds.elec_profile.sel(
+            elec_demand = ds.yearly_demand_per_state.sel(
+                year=year,
+            ) * ds.elec_profile.sel(
                 snapshot=f"{year}",
             )
             elec_demand = pd.DataFrame(
@@ -1311,7 +1313,7 @@ class ReadTransportVmt(ReadStrategy):
                 values="value",
             )
 
-            lpg_demand = ds.yearly_demand.sel(year=year) * ds.lpg_profile.sel(
+            lpg_demand = ds.yearly_demand_per_state.sel(year=year) * ds.lpg_profile.sel(
                 snapshot=f"{year}",
             )
             lpg_demand = pd.DataFrame(
