@@ -23,5 +23,3 @@ CA_AB32,"p8, p9, p10, p29",2043,26070729,0.428,2022 carb scoping plan
 CA_AB32,"p8, p9, p10, p30",2044,25466671,0.428,2022 carb scoping plan
 CA_AB32,"p8, p9, p10, p31",2045,8680822,0.428,2022 carb scoping plan
 CA_AB32,"p8, p9, p10, p31",2050,8680822,0.428,temp using 2045
-TX_example_2030,"p60, p61, p62, p63, p64, p65, p67",2030,700300,0,testing for multi-horizon
-TX_example_2050,"p60, p61, p62, p63, p64, p65, p67",2050,500300,0,testing for multi-horizon
