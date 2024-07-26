@@ -218,6 +218,7 @@ INTERCONNECT_2_STATE["usa"] = sum(INTERCONNECT_2_STATE.values(), [])
 
 
 def demand_raw_data(wildcards):
+    # get profile to use
     end_use = wildcards.end_use
     if end_use == "power":
         profile = config["electricity"]["demand"]["profile"]
@@ -226,10 +227,15 @@ def demand_raw_data(wildcards):
     elif end_use == "commercial":
         profile = "eulp"
     elif end_use == "transport":
-        profile = "efs_aeo"
+        vehicle = wildcards.get("vehicle", None)
+        if vehicle:  # non-road transport
+            profile = "transport_aeo"
+        else:
+            profile = "transport_efs_aeo"
     elif end_use == "industry":
         profile = "cliu"
 
+    # get required input data based on profile
     if profile == "eia":
         return DATA + "GridEmissions/EIA_DMD_2018_2024.csv"
     elif profile == "efs":
@@ -250,11 +256,21 @@ def demand_raw_data(wildcards):
             DATA + "industry_load/table3_2.xlsx",  # mecs data
             DATA + "industry_load/fips_codes.csv",  # fips data
         ]
-    elif profile == "efs_aeo":
+    elif profile == "transport_efs_aeo":
+        efs_case = config["electricity"]["demand"]["scenario"]["efs_case"].capitalize()
+        efs_speed = config["electricity"]["demand"]["scenario"][
+            "efs_speed"
+        ].capitalize()
         return [
-            DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv",
+            DATA + f"nrel_efs/EFSLoadProfile_{efs_case}_{efs_speed}.csv",
             "repo_data/sectors/transport_ratios.csv",
         ]
+    elif profile == "transport_aeo":
+        return [
+            "repo_data/sectors/transport_ratios.csv",
+        ]
+    else:
+        return []
 
 
 def demand_dissagregate_data(wildcards):
@@ -339,7 +355,7 @@ rule build_sector_demand:
         "../scripts/build_demand.py"
 
 
-rule build_transport_demand:
+rule build_transport_road_demand:
     wildcard_constraints:
         end_use="transport",
     params:
@@ -373,6 +389,30 @@ rule build_transport_demand:
         "../scripts/build_demand.py"
 
 
+rule build_transport_other_demand:
+    wildcard_constraints:
+        end_use="transport",
+        vehicle="boat-shipping|air|rail-shipping|rail-passenger",
+    params:
+        planning_horizons=config["scenario"]["planning_horizons"],
+        eia_api=config["api"]["eia"],
+    input:
+        network=RESOURCES + "{interconnect}/elec_base_network.nc",
+        demand_files=demand_raw_data,
+        dissagregate_files=demand_dissagregate_data,
+    output:
+        RESOURCES + "{interconnect}/{end_use}_{vehicle}_lpg.csv",
+    log:
+        LOGS + "{interconnect}/{end_use}_{vehicle}_build_demand.log",
+    benchmark:
+        BENCHMARKS + "{interconnect}/{end_use}_{vehicle}_build_demand"
+    threads: 2
+    resources:
+        mem_mb=interconnect_mem,
+    script:
+        "../scripts/build_demand.py"
+
+
 def demand_to_add(wildcards):
     if config["scenario"]["sector"] == "E":
         return RESOURCES + "{interconnect}/power_electricity.csv"
@@ -395,6 +435,10 @@ def demand_to_add(wildcards):
             RESOURCES + "{interconnect}/transport_heavy-duty_lpg.csv",
             RESOURCES + "{interconnect}/transport_bus_electricity.csv",
             RESOURCES + "{interconnect}/transport_bus_lpg.csv",
+            RESOURCES + "{interconnect}/transport_shipping_lpg.csv",
+            RESOURCES + "{interconnect}/transport_air_lpg.csv",
+            RESOURCES + "{interconnect}/transport_rail-shipping_lpg.csv",
+            RESOURCES + "{interconnect}/transport_rail-passenger_lpg.csv",
         ]
 
 

@@ -728,9 +728,9 @@ class HistoricalTransportDemand(DataExtractor):
         "med_duty": "kei_trv_trn_NA_cml_NA_NA_blnvehmls",
         "heavy_duty": "kei_trv_trn_NA_fght_NA_NA_blnvehmls",
         "bus": "_trv_trn_NA_bst_NA_NA_bpm",
-        "passenger_rail": "_trv_trn_NA_rlp_NA_NA_bpm",
-        "shipping_boat": "kei_trv_trn_NA_dmt_NA_NA_blntnmls",
-        "shipping_rail": "kei_trv_trn_NA_rail_NA_NA_blntnmls",
+        "rail_passenger": "_trv_trn_NA_rlp_NA_NA_bpm",
+        "boat_shipping": "kei_trv_trn_NA_dmt_NA_NA_blntnmls",
+        "rail_shipping": "kei_trv_trn_NA_rail_NA_NA_blntnmls",
         "air": "kei_trv_trn_NA_air_NA_NA_blnseatmls",
     }
 
@@ -746,7 +746,7 @@ class HistoricalTransportDemand(DataExtractor):
         super().__init__(year, api)
 
     def check_available_data_year(self, year: int) -> int:
-        if self.vehicle in ("bus", "passenger_rail"):
+        if self.vehicle in ("bus", "rail_passenger"):
             if year < 2018:
                 logger.error(
                     f"{self.vehicle} data not available for {year}. Returning data for year 2018.",
@@ -793,9 +793,9 @@ class ProjectedTransportDemand(DataExtractor):
         "med_duty": "kei_trv_trn_NA_cml_NA_NA_blnvehmls",
         "heavy_duty": "kei_trv_trn_NA_fght_NA_NA_blnvehmls",
         "bus": "_trv_trn_NA_bst_NA_NA_bpm",
-        "passenger_rail": "_trv_trn_NA_rlp_NA_NA_bpm",
-        "shipping_boat": "kei_trv_trn_NA_dmt_NA_NA_blntnmls",
-        "shipping_rail": "kei_trv_trn_NA_rail_NA_NA_blntnmls",
+        "rail_passenger": "_trv_trn_NA_rlp_NA_NA_bpm",
+        "boat_shipping": "kei_trv_trn_NA_dmt_NA_NA_blntnmls",
+        "rail_shipping": "kei_trv_trn_NA_rail_NA_NA_blntnmls",
         "air": "kei_trv_trn_NA_air_NA_NA_blnseatmls",
     }
 
@@ -1136,6 +1136,6 @@ if __name__ == "__main__":
     # print(Emissions("transport", 2019, api).get_data(pivot=True))
     # print(Storage("gas", "total", 2019, api).get_data(pivot=True))
     # print(EnergyDemand("residential", 2030, api).get_data(pivot=False))
-    # print(TransportationDemand("light_duty", 2015, api).get_data(pivot=False))
+    print(TransportationDemand("bus", 2020, api).get_data(pivot=False))
     # print(EnergyDemand("residential", 2015, api).get_data(pivot=False))
-    print(Seds("consumption", "residential", 2022, api).get_data(pivot=False))
+    # print(Seds("consumption", "residential", 2022, api).get_data(pivot=False))
