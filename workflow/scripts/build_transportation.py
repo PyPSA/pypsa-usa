@@ -13,6 +13,9 @@ from add_electricity import load_costs
 def build_transportation(
     n: pypsa.Network,
     costs: pd.DataFrame,
+    air: bool = True,
+    rail: bool = True,
+    boat: bool = True,
 ) -> None:
     """
     Main funtion to interface with.
@@ -27,6 +30,18 @@ def build_transportation(
     for vehicle in ("lgt", "med", "hvy", "bus"):
         add_elec_vehicle(n, vehicle, costs)
         add_lpg_vehicle(n, vehicle, costs)
+
+    if air:
+        add_lpg_infrastructure(n, "air", costs)
+        add_air(n, costs)
+
+    if rail:
+        add_lpg_infrastructure(n, "rail", costs)
+        add_rail(n, costs)
+
+    if boat:
+        add_lpg_infrastructure(n, "boat", costs)
+        add_boat(n, costs)
 
 
 def add_ev_infrastructure(n: pypsa.Network) -> None:
@@ -101,6 +116,51 @@ def add_fossil_infrastructure(
         bus1=nodes.index + f" trn-{carrier}",
         bus2=nodes.STATE + " trn-co2",
         carrier=f"trn-{carrier}",
+        efficiency=1,
+        efficiency2=efficiency2,
+        capital_cost=0,
+        p_nom_extendable=True,
+        lifetime=np.inf,
+    )
+
+
+def add_lpg_infrastructure(
+    n: pypsa.Network,
+    vehicle: str,
+    costs: Optional[pd.DataFrame] = pd.DataFrame(),
+) -> None:
+    """
+    Adds lpg connections for vehicle type.
+    """
+
+    nodes = n.buses[n.buses.carrier == "AC"]
+
+    n.madd(
+        "Bus",
+        nodes.index,
+        suffix=f" trn-lpg-{vehicle}",
+        x=nodes.x,
+        y=nodes.y,
+        country=nodes.country,
+        state=nodes.state,
+        carrier=f"trn-lpg",
+    )
+
+    nodes["bus0"] = nodes.STATE + " oil"
+
+    try:
+        efficiency2 = costs.at["oil", "co2_emissions"]
+    except KeyError:
+        efficiency2 = 0
+
+    n.madd(
+        "Link",
+        nodes.index,
+        suffix=f" trn-lpg-{vehicle}",
+        bus0=nodes.bus0,
+        bus1=nodes.index + f" trn-lpg-{vehicle}",
+        bus2=nodes.STATE + " trn-co2",
+        carrier=f"trn-{vehicle}",
         efficiency=1,
         efficiency2=efficiency2,
         capital_cost=0,
@@ -236,11 +296,189 @@ def add_lpg_vehicle(
     )
 
 
+def add_air(
+    n: pypsa.Network,
+    costs: pd.DataFrame,
+) -> None:
+    """
+    Adds air transport to the model.
+
+    NOTE: COSTS ARE CURRENTLY HARD CODED IN FROM 2030. Look at travel indicators here:
+    - https://www.eia.gov/outlooks/aeo/data/browser/
+    """
+
+    # Assumptions from https://www.nrel.gov/docs/fy18osti/70485.pdf
+    wh_per_gallon = 33700  # footnote 24
+
+    # 1000s to convert:
+    #  $/mile -> $/k-miles
+    #  miles/MWh -> k-miles/MWh
+
+    capex = 1
+    # efficiency = costs.at[costs_name, "efficiency"] / 1000
+    efficiency = 76.5 / wh_per_gallon / 1000  # 76.5 seat miles per gallon
+    lifetime = 25
+
+    loads = n.loads[
+        (n.loads.carrier.str.contains("trn-"))
+        & (n.loads.carrier.str.contains("air-psg"))
+    ]
+
+    vehicles = pd.DataFrame(index=loads.bus)
+    vehicles.index = vehicles.index.map(lambda x: x.split(f" trn-")[0])
+    vehicles["bus0"] = vehicles.index + " trn-lpg-air"
+    vehicles["bus1"] = vehicles.index + f" trn-lpg-air-psg"
+    vehicles["carrier"] = f"trn-lpg-air"
+
+    n.madd(
+        "Link",
+        vehicles.index,
+        suffix=f" trn-lpg-air-psg",
+        bus0=vehicles.bus0,
+        bus1=vehicles.bus1,
+        carrier=vehicles.carrier,
+        efficiency=efficiency,
+        capital_cost=capex,
+        p_nom_extendable=True,
+        lifetime=lifetime,
+    )
+
+
+def add_boat(
+    n: pypsa.Network,
+    costs: pd.DataFrame,
+) -> None:
+    """
+    Adds boat transport to the model.
+
+    NOTE: COSTS ARE CURRENTLY HARD CODED IN FROM 2030. Look at travel indicators here:
+    - https://www.eia.gov/outlooks/aeo/data/browser/
+    """
+
+    # efficiency = costs.at[costs_name, "efficiency"] / 1000
+    # base efficiency is 5 ton miles per thousand Btu
+    # 1 kBTU / 0.000293 MWh
+    efficiency = 5 / 0.000293 / 1000
+    lifetime = 25
+    capex = 1
+
+    loads = n.loads[
+        (n.loads.carrier.str.contains("trn-"))
+        & (n.loads.carrier.str.contains("boat-ship"))
+    ]
+
+    vehicles = pd.DataFrame(index=loads.bus)
+    vehicles.index = vehicles.index.map(lambda x: x.split(f" trn-")[0])
+    vehicles["bus0"] = vehicles.index + " trn-lpg-boat"
+    vehicles["bus1"] = vehicles.index + f" trn-lpg-boat-ship"
+    vehicles["carrier"] = f"trn-lpg-boat"
+
+    n.madd(
+        "Link",
+        vehicles.index,
+        suffix=f" trn-lpg-boat-ship",
+        bus0=vehicles.bus0,
+        bus1=vehicles.bus1,
+        carrier=vehicles.carrier,
+        efficiency=efficiency,
+        capital_cost=capex,
+        p_nom_extendable=True,
+        lifetime=lifetime,
+    )
+
+
+def add_rail(
+    n: pypsa.Network,
+    costs: pd.DataFrame,
+) -> None:
+    """
+    Adds rail (shipping and passenger) transport to the model.
+
+    NOTE: COSTS ARE CURRENTLY HARD CODED IN FROM 2030. Look at travel indicators here:
+    - https://www.eia.gov/outlooks/aeo/data/browser/
+    """
+
+    def add_rail_shipping(
+        n: pypsa.Network,
+        costs: pd.DataFrame,
+    ) -> None:
+
+        # efficiency = costs.at[costs_name, "efficiency"] / 1000
+        # base efficiency is 3.4 ton miles per thousand Btu
+        # 1 kBTU / 0.000293 MWh
+        efficiency = 3.4 / 0.000293 / 1000
+        lifetime = 25
+        capex = 1
+
+        loads = n.loads[
+            (n.loads.carrier.str.contains("trn-"))
+            & (n.loads.carrier.str.contains("rail-ship"))
+        ]
+
+        vehicles = pd.DataFrame(index=loads.bus)
+        vehicles.index = vehicles.index.map(lambda x: x.split(f" trn-")[0])
+        vehicles["bus0"] = vehicles.index + " trn-lpg-rail"
+        vehicles["bus1"] = vehicles.index + f" trn-lpg-rail-ship"
+        vehicles["carrier"] = f"trn-lpg-rail"
+
+        n.madd(
+            "Link",
+            vehicles.index,
+            suffix=f" trn-lpg-rail-ship",
+            bus0=vehicles.bus0,
+            bus1=vehicles.bus1,
+            carrier=vehicles.carrier,
+            efficiency=efficiency,
+            capital_cost=capex,
+            p_nom_extendable=True,
+            lifetime=lifetime,
+        )
+
+    def add_rail_passenger(
+        n: pypsa.Network,
+        costs: pd.DataFrame,
+    ) -> None:
+
+        # efficiency = costs.at[costs_name, "efficiency"] / 1000
+        # base efficiency is 1506 BTU / Passenger Mile
+        # https://www.amtrak.com/content/dam/projects/dotcom/english/public/documents/environmental1/Amtrak-Sustainability-Report-FY21.pdf
+        efficiency = 1506 / 3.412e6 * 1000  # MWh / k passenger miles
+        lifetime = 25
+        capex = 1
+
+        loads = n.loads[
+            (n.loads.carrier.str.contains("trn-"))
+            & (n.loads.carrier.str.contains("rail-psg"))
+        ]
+
+        vehicles = pd.DataFrame(index=loads.bus)
+        vehicles.index = vehicles.index.map(lambda x: x.split(f" trn-")[0])
+        vehicles["bus0"] = vehicles.index + " trn-lpg-rail"
+        vehicles["bus1"] = vehicles.index + f" trn-lpg-rail-psg"
+        vehicles["carrier"] = f"trn-lpg-rail"
+
+        n.madd(
+            "Link",
+            vehicles.index,
+            suffix=f" trn-lpg-rail-psg",
+            bus0=vehicles.bus0,
+            bus1=vehicles.bus1,
+            carrier=vehicles.carrier,
+            efficiency=efficiency,
+            capital_cost=capex,
+            p_nom_extendable=True,
+            lifetime=lifetime,
+        )
+
+    add_rail_shipping(n, costs)
+    add_rail_passenger(n, costs)
+
+
 def apply_exogenous_ev_policy(n: pypsa.Network, policy: pd.DataFrame) -> None:
     """
     If transport investment is exogenous, applies policy to control loads.
 
-    At this point, all vehicle loads are represented as if the entire load is
+    At this point, all road-vehicle loads are represented as if the entire load is
     met through that fuel type (ie. if there is elec and lpg load, there will
     be 2x the amount of load in the system). This function will adjust the
     amount of load attributed to each fuel.

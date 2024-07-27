@@ -435,7 +435,7 @@ def demand_to_add(wildcards):
             RESOURCES + "{interconnect}/transport_heavy-duty_lpg.csv",
             RESOURCES + "{interconnect}/transport_bus_electricity.csv",
             RESOURCES + "{interconnect}/transport_bus_lpg.csv",
-            RESOURCES + "{interconnect}/transport_shipping_lpg.csv",
+            RESOURCES + "{interconnect}/transport_boat-shipping_lpg.csv",
             RESOURCES + "{interconnect}/transport_air_lpg.csv",
             RESOURCES + "{interconnect}/transport_rail-shipping_lpg.csv",
             RESOURCES + "{interconnect}/transport_rail-passenger_lpg.csv",

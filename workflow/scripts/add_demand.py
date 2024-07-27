@@ -68,6 +68,10 @@ if __name__ == "__main__":
         "heavy-duty": "hvy",
         "light-duty": "lgt",
         "med-duty": "med",
+        "air": "air-psg",
+        "rail-shipping": "rail-ship",
+        "rail-passenger": "rail-psg",
+        "boat-shipping": "boat-ship",
     }
 
     if sectors == "E" or sectors == "":  # electricity only
@@ -84,8 +88,6 @@ if __name__ == "__main__":
     else:  # sector files
 
         for demand_file in demand_files:
-
-            load_multiplier = 1
 
             parsed_name = Path(demand_file).name.split("_")
             parsed_name[-1] = parsed_name[-1].split(".csv")[0]

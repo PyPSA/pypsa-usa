@@ -1343,7 +1343,7 @@ class ReadTransportAeo(ReadStrategy):
     Calculates uniform lpg demand for non-road vehicle types.
 
     Vehicles include:
-    - air (units of thousand passenger miles)
+    - air (units of thousand seat miles)
     - shipping (units of throusand ton miles)
     - rail_shipping (units of throusand ton miles)
     - rail_passenger (units of throusand passenger miles)
@@ -2353,15 +2353,16 @@ def get_demand_params(
             scaling_method = "aeo_energy"
         case "transport":
             vehicle = kwargs.get("vehicle", None)
-            match vehicle:
-                case v if v.startswith(("air", "rail", "boat")):
-                    demand_profile = "transport_aeo"
-                    demand_disaggregation = "pop"
-                    scaling_method = None  # will extract data for any year
-                case _:  # road transport
-                    demand_profile = "transport_efs_aeo"
-                    demand_disaggregation = "pop"
-                    scaling_method = "aeo_vmt"
+            if not vehicle:  # road transport
+                demand_profile = "transport_efs_aeo"
+                demand_disaggregation = "pop"
+                scaling_method = "aeo_vmt"
+            elif vehicle.startswith(("air", "rail", "boat")):
+                demand_profile = "transport_aeo"
+                demand_disaggregation = "pop"
+                scaling_method = None  # will extract data for any year
+            else:
+                raise NotImplementedError
         case _:
             raise NotImplementedError
 
