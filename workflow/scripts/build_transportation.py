@@ -310,13 +310,10 @@ def add_air(
     # Assumptions from https://www.nrel.gov/docs/fy18osti/70485.pdf
     wh_per_gallon = 33700  # footnote 24
 
-    # 1000s to convert:
-    #  $/mile -> $/k-miles
-    #  miles/MWh -> k-miles/MWh
-
     capex = 1
     # efficiency = costs.at[costs_name, "efficiency"] / 1000
-    efficiency = 76.5 / wh_per_gallon / 1000  # 76.5 seat miles per gallon
+    #  (seat miles / gallon) * ( 1 gal / 33700 wh) * (1k seat mile / 1000 seat miles) * (1000 * 1000 Wh / MWh)
+    efficiency = 76.5 / wh_per_gallon / 1000 * 1000 * 1000
     lifetime = 25
 
     loads = n.loads[
