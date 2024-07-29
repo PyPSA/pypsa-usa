@@ -78,7 +78,7 @@ def add_land_use_constraint_perfect(n):
             )
 
     grouper = [n.generators.carrier, n.generators.bus, n.generators.build_year]
-    ext_i = n.generators.p_nom_extendable
+    ext_i = n.generators.p_nom_extendable & ~n.generators.index.str.contains("existing")
     # get technical limit per node and investment period
     p_nom_max = n.generators[ext_i].groupby(grouper).min().p_nom_max
     # drop carriers without tech limit

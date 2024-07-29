@@ -225,11 +225,11 @@ def add_economic_retirement(
     gens: list[str] = None,
 ):
     """
-    Adds dummy generators to account for economic retirement.
+    Seperates extendable conventional generators into existing and new generators to support economic retirement.
 
     Specifically this function does the following:
     1. Creates duplicate generators for any that are tagged as extendable. For
-    example, an extendable "CCGT" generator will be split into "CCGT" and "CCGT new"
+    example, an extendable "CCGT" generator will be split into "CCGT existing" and "CCGT"
     2. Capital costs of existing extendable generators are replaced with fixed costs
     3. p_nom_max of existing extendable generators are set to p_nom
     4. p_nom_min of existing and new generators is set to zero
@@ -241,72 +241,78 @@ def add_economic_retirement(
         List of generators to apply economic retirment to. If none provided, it is
         applied to all extendable generators
     """
-
-    # only assign dummy generators to extendable generators
-    extend = n.generators[n.generators["p_nom_extendable"] == True]
-    if gens:
-        extend = extend[extend["carrier"].isin(gens)]
-    if extend.empty:
+    retirement_mask = (n.generators["p_nom_extendable"] & (n.generators["carrier"].isin(gens) if gens else True))
+    retirement_gens = n.generators[retirement_mask]
+    if retirement_gens.empty:
         return
 
     # divide by 100 b/c FOM expressed as percentage of CAPEX
     n.generators["capital_cost"] = n.generators.apply(
         lambda row: (
             row["capital_cost"]
-            if not row.name in (extend.index)
+            if not row.name in (retirement_gens.index)
             else row["capital_cost"] * costs.at[row["carrier"], "FOM"] / 100
         ),
         axis=1,
     )
 
+    # rename retiring generators to include "existing" suffix
+    n.generators.index = n.generators.apply(
+        lambda row: (
+            row.name
+            if not row.name in (retirement_gens.index)
+            else row.name + " existing"
+        ),
+        axis=1,
+    )
+
     n.generators["p_nom_max"] = np.where(
-        n.generators["p_nom_extendable"] & n.generators.carrier.isin(gens),
+        retirement_mask,
         n.generators["p_nom"],
         n.generators["p_nom_max"],
     )
 
     n.generators["p_nom_min"] = np.where(
-        n.generators["p_nom_extendable"] & n.generators.carrier.isin(gens),
+        retirement_mask,
         0,
         n.generators["p_nom_min"],
     )
 
     n.madd(
         "Generator",
-        extend.index,
-        suffix=" new",
-        carrier=extend.carrier,
-        bus=extend.bus,
+        retirement_gens.index,
+        carrier=retirement_gens.carrier,
+        bus=retirement_gens.bus,
         p_nom_min=0,
         p_nom=0,
-        p_nom_max=extend.p_nom_max,
+        p_nom_max=retirement_gens.p_nom_max,
         p_nom_extendable=True,
-        ramp_limit_up=extend.ramp_limit_up,
-        ramp_limit_down=extend.ramp_limit_down,
-        efficiency=extend.efficiency,
-        marginal_cost=extend.marginal_cost,
-        capital_cost=extend.capital_cost,
+        ramp_limit_up=retirement_gens.ramp_limit_up,
+        ramp_limit_down=retirement_gens.ramp_limit_down,
+        efficiency=retirement_gens.efficiency,
+        marginal_cost=retirement_gens.marginal_cost,
+        capital_cost=retirement_gens.capital_cost,
         build_year=n.investment_periods[0],
-        lifetime=extend.lifetime,
-        p_min_pu=extend.p_min_pu,
-        p_max_pu=extend.p_max_pu,
+        lifetime=retirement_gens.lifetime,
+        p_min_pu=retirement_gens.p_min_pu,
+        p_max_pu=retirement_gens.p_max_pu,
     )
 
     # time dependent factors added after as not all generators are time dependent
     marginal_cost_t = n.generators_t["marginal_cost"][
-        [x for x in extend.index if x in n.generators_t.marginal_cost.columns]
+        [x for x in retirement_gens.index if x in n.generators_t.marginal_cost.columns]
     ]
     marginal_cost_t = marginal_cost_t.rename(
-        columns={x: f"{x} new" for x in marginal_cost_t.columns},
+        columns={x: f"{x} existing" for x in marginal_cost_t.columns},
     )
     n.generators_t["marginal_cost"] = n.generators_t["marginal_cost"].join(
         marginal_cost_t,
     )
 
     p_max_pu_t = n.generators_t["p_max_pu"][
-        [x for x in extend.index if x in n.generators_t["p_max_pu"].columns]
+        [x for x in retirement_gens.index if x in n.generators_t["p_max_pu"].columns]
     ]
-    p_max_pu_t = p_max_pu_t.rename(columns={x: f"{x} new" for x in p_max_pu_t.columns})
+    p_max_pu_t = p_max_pu_t.rename(columns={x: f"{x} existing" for x in p_max_pu_t.columns})
     n.generators_t["p_max_pu"] = n.generators_t["p_max_pu"].join(p_max_pu_t)
 
 
@@ -407,8 +413,11 @@ if __name__ == "__main__":
             economic_retirement_gens,
         )
 
-    gens = n.generators[n.generators["p_nom_extendable"] == True]
-    gens = gens[gens["carrier"].isin(elec_config["extendable_carriers"]["Generator"])]
+    gens = n.generators[
+        n.generators["p_nom_extendable"] & 
+        n.generators["carrier"].isin(elec_config["extendable_carriers"]["Generator"]) & 
+        ~n.generators.index.str.contains("existing")
+    ]
 
     for investment_year in n.investment_periods:
         costs = costs_dict[investment_year]
