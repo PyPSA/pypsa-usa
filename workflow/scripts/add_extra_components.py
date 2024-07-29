@@ -378,6 +378,37 @@ def attach_multihorizon_generators(
     )
     n.generators_t["p_max_pu"] = n.generators_t["p_max_pu"].join(p_max_pu_t)
 
+def apply_itc(n, itc_modifier):
+    """
+    Applies investment tax credit to all extendable components in the network.
+
+    Arguments:
+    n: pypsa.Network,
+    costs_dict: dict,
+        Dict of costs
+    carriers: List[str]
+        List of carriers to apply ITS for
+    """
+    for carrier in itc_modifier.keys():
+        carrier_mask = n.generators["carrier"] == carrier
+        n.generators.loc[carrier_mask, "capital_cost"] *= 1 - itc_modifier[carrier]
+
+def apply_ptc(n, ptc_modifier):
+    """
+    Applies production tax credit to all extendable components in the network.
+
+    Arguments:
+    n: pypsa.Network,
+    costs_dict: dict,
+        Dict of costs
+    carriers: List[str]
+        List of carriers to apply ITS for
+    """
+    for carrier in ptc_modifier.keys():
+        carrier_mask = n.generators["carrier"] == carrier
+        mc = n.get_switchable_as_dense("Generator", "marginal_cost").loc[:, carrier_mask]
+        n.generators_t.marginal_cost.loc[:, carrier_mask] = mc  - ptc_modifier[carrier]
+        n.generators.loc[carrier_mask, "marginal_cost"] -= ptc_modifier[carrier]
 
 if __name__ == "__main__":
     if "snakemake" not in globals():
@@ -431,6 +462,8 @@ if __name__ == "__main__":
         gens.index,
     )  # Remove duplicate generators from first investment period
 
+    apply_itc(n, snakemake.config["costs"]["itc_modifier"])
+    apply_ptc(n, snakemake.config["costs"]["ptc_modifier"])
     add_nice_carrier_names(n, snakemake.config)
 
     n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))
