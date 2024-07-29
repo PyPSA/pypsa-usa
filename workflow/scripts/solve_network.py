@@ -103,7 +103,7 @@ def add_land_use_constraint_perfect(n):
         df_carrier = df[df.name == name]
         bus = df_carrier.bus
         n.buses.loc[bus, name] = df_carrier.p_nom_max.values
-
+    # breakpoint()
     return n
 
 
@@ -188,10 +188,10 @@ def prepare_network(
         n.set_snapshots(n.snapshots[:nhours])
         n.snapshot_weightings[:] = 8760.0 / nhours
 
-    if foresight == "perfect":
-        n = add_land_use_constraint_perfect(n)
-        # if snakemake.params["sector"]["limit_max_growth"]["enable"]:
-        #     n = add_max_growth(n)
+    # if foresight == "perfect":
+    #     n = add_land_use_constraint_perfect(n)
+    #     # if snakemake.params["sector"]["limit_max_growth"]["enable"]:
+    #     #     n = add_max_growth(n)
 
     if n.stores.carrier.eq("co2 stored").any():
         limit = co2_sequestration_potential
