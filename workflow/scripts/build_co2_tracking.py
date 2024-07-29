@@ -43,7 +43,7 @@ def build_co2_bus(n: pypsa.Network, states: list[str], sectors: list[str]):
     df = pd.DataFrame(itertools.product(states, sectors), columns=["state", "sector"])
     df.index = df.state + " " + df.sector
 
-    n.madd("Bus", df.index, suffix="-co2", carrier="co2")
+    n.madd("Bus", df.index, suffix="-co2", carrier="co2", STATE=df.state)
 
 
 def build_co2_store(n: pypsa.Network, states: list[str], sectors: list[str]):

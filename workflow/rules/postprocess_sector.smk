@@ -11,10 +11,18 @@ FIGURES_SECTOR_CAPACITY = [
     "end_use_capacity_per_node_absolute",
     "end_use_capacity_per_node_percentage",
 ]
-FIGURES_SECTOR_LOADS = []
+FIGURES_SECTOR_LOADS = [
+    # "load_timeseries_residential",
+    # "load_timeseries_commercial",
+    # "load_timeseries_industrial",
+    # "load_timeseries_transport",
+    "load_barplot"
+]
 FIGURES_SECTOR_VALIDATE = [
     "emissions_by_sector_validation",
     "emissions_by_state_validation",
+    "generation_by_state_validation",
+    "transportation_by_mode_validation",
 ]
 FIGURES_SECTOR_NATURAL_GAS = [
     "natural_gas_demand.html",
@@ -54,12 +62,12 @@ rule plot_sector_emissions:
     output:
         **{
             fig: RESULTS
-            + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/emissions/%s.png"
+            + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/{state}/emissions/%s.png"
             % fig
             for fig in FIGURES_SECTOR_EMISSIONS
         },
     log:
-        "logs/plot_figures/{interconnect}_{clusters}_l{ll}_{opts}_{sector}_emissions.log",
+        "logs/plot_figures/{interconnect}_{clusters}_l{ll}_{opts}_{sector}_{state}_emissions.log",
     threads: 1
     resources:
         mem_mb=5000,
@@ -76,12 +84,12 @@ rule plot_sector_production:
     output:
         **{
             fig: RESULTS
-            + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/production/%s.png"
+            + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/{state}/production/%s.png"
             % fig
             for fig in FIGURES_SECTOR_PRODUCTION
         },
     log:
-        "logs/plot_figures/{interconnect}_{clusters}_l{ll}_{opts}_{sector}_production.log",
+        "logs/plot_figures/{interconnect}_{clusters}_l{ll}_{opts}_{sector}_{state}_production.log",
     threads: 1
     resources:
         mem_mb=5000,
@@ -98,12 +106,12 @@ rule plot_sector_capacity:
     output:
         **{
             fig: RESULTS
-            + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/capacity/%s.png"
+            + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/{state}/capacity/%s.png"
             % fig
             for fig in FIGURES_SECTOR_CAPACITY
         },
     log:
-        "logs/plot_figures/{interconnect}_{clusters}_l{ll}_{opts}_{sector}_capacity.log",
+        "logs/plot_figures/{interconnect}_{clusters}_l{ll}_{opts}_{sector}_{state}_capacity.log",
     threads: 1
     resources:
         mem_mb=5000,
@@ -120,12 +128,12 @@ rule plot_sector_loads:
     output:
         **{
             fig: RESULTS
-            + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/loads/%s.png"
+            + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/{state}/loads/%s.png"
             % fig
             for fig in FIGURES_SECTOR_LOADS
         },
     log:
-        "logs/plot_figures/{interconnect}_{clusters}_l{ll}_{opts}_{sector}_loads.log",
+        "logs/plot_figures/{interconnect}_{clusters}_l{ll}_{opts}_{sector}_{state}_loads.log",
     threads: 1
     resources:
         mem_mb=5000,
@@ -143,12 +151,12 @@ rule plot_sector_validate:
     output:
         **{
             fig: RESULTS
-            + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/validate/%s.png"
+            + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/{state}/validate/%s.png"
             % fig
             for fig in FIGURES_SECTOR_VALIDATE
         },
     log:
-        "logs/plot_figures/{interconnect}_{clusters}_l{ll}_{opts}_{sector}_validate.log",
+        "logs/plot_figures/{interconnect}_{clusters}_l{ll}_{opts}_{sector}_{state}_validate.log",
     threads: 1
     resources:
         mem_mb=5000,
@@ -156,18 +164,18 @@ rule plot_sector_validate:
         "../scripts/plot_statistics_sector.py"
 
 
-rule plot_energy_sankey:
-    input:
-        network=RESULTS
-        + "{interconnect}/networks/elec_s_{clusters}_ec_l{ll}_{opts}_{sector}.nc",
-    output:
-        **{
-            fig: RESULTS
-            + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/sankey/%s"
-            % fig
-            for fig in ["usa.pdf"]
-        },
-    log:
-        "logs/plot_figures/sankey/{interconnect}_{clusters}_l{ll}_{opts}_{sector}.log",
-    script:
-        "../scripts/plot_energy_sankey.py"
+# rule plot_energy_sankey:
+#     input:
+#         network=RESULTS
+#         + "{interconnect}/networks/elec_s_{clusters}_ec_l{ll}_{opts}_{sector}.nc",
+#     output:
+#         **{
+#             fig: RESULTS
+#             + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/sankey/%s"
+#             % fig
+#             for fig in ["usa.pdf"]
+#         },
+#     log:
+#         "logs/plot_figures/sankey/{interconnect}_{clusters}_l{ll}_{opts}_{sector}.log",
+#     script:
+#         "../scripts/plot_energy_sankey.py"

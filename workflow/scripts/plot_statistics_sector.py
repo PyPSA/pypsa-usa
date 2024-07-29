@@ -12,6 +12,7 @@ import pypsa
 import seaborn as sns
 from _helpers import configure_logging, mock_snakemake
 from add_electricity import sanitize_carriers
+from constants import STATE_2_CODE
 from plot_statistics import create_title
 from summary_sector import (
     get_capacity_per_node,
@@ -21,12 +22,14 @@ from summary_sector import (
     get_end_use_load_timeseries_carrier,
     get_historical_emissions,
     get_historical_end_use_consumption,
+    get_historical_transport_consumption_by_mode,
     get_hp_cop,
     get_load_factor_timeseries,
     get_load_name_per_sector,
     get_load_per_sector_per_fuel,
     get_sector_production_timeseries,
     get_sector_production_timeseries_by_carrier,
+    get_transport_consumption_by_mode,
 )
 
 logger = logging.getLogger(__name__)
@@ -57,91 +60,91 @@ def percent_difference(col_1: pd.Series, col_2: pd.Series) -> pd.Series:
 ###
 
 
-def plot_load_per_sector(
-    n: pypsa.Network,
-    sector: str,
-    sharey: bool = True,
-    log: bool = True,
-    **kwargs,
-) -> tuple:
-    """
-    Load per bus per sector per fuel.
-    """
+# def plot_load_per_sector(
+#     n: pypsa.Network,
+#     sector: str,
+#     sharey: bool = True,
+#     log: bool = True,
+#     **kwargs,
+# ) -> tuple:
+#     """
+#     Load per bus per sector per fuel.
+#     """
 
-    fuels = get_load_name_per_sector(sector)
-    investment_period = n.investment_periods[0]
+#     fuels = get_load_name_per_sector(sector)
+#     investment_period = n.investment_periods[0]
 
-    nrows = ceil(len(fuels) / 2)
+#     nrows = ceil(len(fuels) / 2)
 
-    fig, axs = plt.subplots(
-        ncols=2,
-        nrows=nrows,
-        figsize=(14, 5 * nrows),
-        sharey=sharey,
-    )
+#     fig, axs = plt.subplots(
+#         ncols=2,
+#         nrows=nrows,
+#         figsize=(14, 5 * nrows),
+#         sharey=sharey,
+#     )
 
-    ylabel = "VMT" if sector == "trn" else "MW"
+#     ylabel = "VMT" if sector == "trn" else "MW"
 
-    row = 0
-    col = 0
+#     row = 0
+#     col = 0
 
-    for i, fuel in enumerate(fuels):
+#     for i, fuel in enumerate(fuels):
 
-        row = i // 2
-        col = i % 2
+#         row = i // 2
+#         col = i % 2
 
-        df = get_load_per_sector_per_fuel(n, sector, fuel, investment_period)
-        avg = df.mean(axis=1)
+#         df = get_load_per_sector_per_fuel(n, sector, fuel, investment_period)
+#         avg = df.mean(axis=1)
 
-        palette = sns.color_palette(["lightgray"], df.shape[1])
+#         palette = sns.color_palette(["lightgray"], df.shape[1])
 
-        if nrows > 1:
+#         if nrows > 1:
 
-            sns.lineplot(
-                df,
-                color="lightgray",
-                legend=False,
-                palette=palette,
-                ax=axs[row, col],
-            )
-            sns.lineplot(avg, ax=axs[row, col])
+#             sns.lineplot(
+#                 df,
+#                 color="lightgray",
+#                 legend=False,
+#                 palette=palette,
+#                 ax=axs[row, col],
+#             )
+#             sns.lineplot(avg, ax=axs[row, col])
 
-            axs[row, col].set_xlabel("")
-            axs[row, col].set_ylabel(ylabel)
-            axs[row, col].set_title(f"{fuel} load")
+#             axs[row, col].set_xlabel("")
+#             axs[row, col].set_ylabel(ylabel)
+#             axs[row, col].set_title(f"{fuel} load")
 
-            if log:
-                axs[row, col].set(yscale="log")
+#             if log:
+#                 axs[row, col].set(yscale="log")
 
-        else:
+#         else:
 
-            sns.lineplot(
-                df,
-                color="lightgray",
-                legend=False,
-                palette=palette,
-                ax=axs[i],
-            )
-            sns.lineplot(avg, ax=axs[i])
+#             sns.lineplot(
+#                 df,
+#                 color="lightgray",
+#                 legend=False,
+#                 palette=palette,
+#                 ax=axs[i],
+#             )
+#             sns.lineplot(avg, ax=axs[i])
 
-            axs[i].set_xlabel("")
-            axs[i].set_ylabel(ylabel)
-            axs[i].set_title(f"{fuel} load")
+#             axs[i].set_xlabel("")
+#             axs[i].set_ylabel(ylabel)
+#             axs[i].set_title(f"{fuel} load")
 
-            if log:
-                axs[i].set(yscale="log")
+#             if log:
+#                 axs[i].set(yscale="log")
 
-    return fig, axs
+#     return fig, axs
 
 
-def plot_hp_cop(n: pypsa.Network, **kwargs) -> tuple:
+def plot_hp_cop(n: pypsa.Network, state: Optional[str] = None, **kwargs) -> tuple:
     """
     Plots gshp and ashp cops.
     """
 
     investment_period = n.investment_periods[0]
 
-    cops = get_hp_cop(n).loc[investment_period]
+    cops = get_hp_cop(n, state).loc[investment_period]
 
     fig, axs = plt.subplots(nrows=1, ncols=2, figsize=(14, 6), sharey=True)
 
@@ -165,6 +168,7 @@ def plot_hp_cop(n: pypsa.Network, **kwargs) -> tuple:
 def plot_sector_production_timeseries(
     n: pypsa.Network,
     sharey: bool = False,
+    state: Optional[str] = None,
     **kwargs,
 ) -> tuple:
     """
@@ -186,7 +190,12 @@ def plot_sector_production_timeseries(
 
     for i, sector in enumerate(sectors):
 
-        df = get_sector_production_timeseries(n, sector).loc[investment_period].T
+        df = (
+            get_sector_production_timeseries(n, sector, state=state)
+            .loc[investment_period]
+            .T
+        )
+
         df.index = df.index.map(n.links.carrier)
         df = df.groupby(level=0).sum().T
 
@@ -198,7 +207,12 @@ def plot_sector_production_timeseries(
     return fig, axs
 
 
-def plot_sector_production(n: pypsa.Network, sharey: bool = True, **kwargws) -> tuple:
+def plot_sector_production(
+    n: pypsa.Network,
+    sharey: bool = True,
+    state: Optional[str] = None,
+    **kwargs,
+) -> tuple:
     """
     Plots model period production.
     """
@@ -225,7 +239,7 @@ def plot_sector_production(n: pypsa.Network, sharey: bool = True, **kwargws) -> 
         col = i % 2
 
         df = (
-            get_sector_production_timeseries_by_carrier(n, sector)
+            get_sector_production_timeseries_by_carrier(n, sector, state=state)
             .loc[investment_period]
             .sum()
         )
@@ -248,7 +262,11 @@ def plot_sector_production(n: pypsa.Network, sharey: bool = True, **kwargws) -> 
     return fig, axs
 
 
-def plot_sector_emissions(n: pypsa.Network, **kwargws) -> tuple:
+def plot_sector_emissions(
+    n: pypsa.Network,
+    state: Optional[str] = None,
+    **kwargws,
+) -> tuple:
     """
     Plots model period emissions by sector.
     """
@@ -262,7 +280,7 @@ def plot_sector_emissions(n: pypsa.Network, **kwargws) -> tuple:
     for sector in sectors:
 
         data.append(
-            get_emission_timeseries_by_sector(n, sector)
+            get_emission_timeseries_by_sector(n, sector, state=state)
             .loc[investment_period,]
             .iloc[-1]
             .values[0],
@@ -283,14 +301,16 @@ def plot_sector_emissions(n: pypsa.Network, **kwargws) -> tuple:
     return fig, axs
 
 
-def plot_state_emissions(n: pypsa.Network, **kwargws) -> tuple:
+def plot_state_emissions(
+    n: pypsa.Network,
+    state: Optional[str] = None,
+    **kwargws,
+) -> tuple:
     """
     Plots stacked bar plot of state level emissions.
     """
 
     investment_period = n.investment_periods[0]
-
-    state = "Texas"
 
     fig, axs = plt.subplots(
         ncols=1,
@@ -299,7 +319,7 @@ def plot_state_emissions(n: pypsa.Network, **kwargws) -> tuple:
     )
 
     df = (
-        get_emission_timeseries_by_sector(n)
+        get_emission_timeseries_by_sector(n, state=state)
         .loc[investment_period,]
         .iloc[-1]
         .to_frame(name=state)
@@ -317,6 +337,7 @@ def plot_capacity_per_node(
     n: pypsa.Network,
     sharey: bool = True,
     percentage: bool = True,
+    state: Optional[str] = None,
     **kwargs,
 ) -> tuple:
     """
@@ -345,7 +366,7 @@ def plot_capacity_per_node(
         row = i // 2
         col = i % 2
 
-        df = get_capacity_per_node(n, sector)
+        df = get_capacity_per_node(n, sector, state=state)
         df = df.reset_index()[["node", "carrier", data_col]]
         df = df.pivot(columns="carrier", index="node", values=data_col)
 
@@ -369,6 +390,7 @@ def plot_capacity_per_node(
 def plot_sector_load_factor_timeseries(
     n: pypsa.Network,
     sharey: bool = True,
+    state: Optional[str] = None,
     **kwargs,
 ) -> tuple:
     """
@@ -397,7 +419,7 @@ def plot_sector_load_factor_timeseries(
         col = i % 2
 
         df = (
-            get_load_factor_timeseries(n, sector)
+            get_load_factor_timeseries(n, sector, state=state)
             .loc[investment_period]
             .resample("d")
             .mean()
@@ -424,6 +446,7 @@ def plot_sector_load_factor_timeseries(
 def plot_sector_load_factor_boxplot(
     n: pypsa.Network,
     sharey: bool = True,
+    state: Optional[str] = None,
     **kwargs,
 ) -> tuple:
     """
@@ -451,7 +474,7 @@ def plot_sector_load_factor_boxplot(
         row = i // 2
         col = i % 2
 
-        df = get_load_factor_timeseries(n, sector).loc[investment_period]
+        df = get_load_factor_timeseries(n, sector, state=state).loc[investment_period]
 
         if nrows > 1:
 
@@ -475,6 +498,7 @@ def plot_sector_load_factor_boxplot(
 def plot_sector_emissions_validation(
     n: pypsa.Network,
     eia_api: str,
+    state: Optional[str] = None,
     sharey: bool = False,
     **kwargs,
 ) -> tuple:
@@ -484,25 +508,33 @@ def plot_sector_emissions_validation(
 
     investment_period = n.investment_periods[0]
 
-    historical_emissions = get_historical_emissions(
+    historical = get_historical_emissions(
         ["residential", "commercial", "power", "industrial", "transport"],
         investment_period,
         eia_api,
     )
+    historical = historical.rename(columns=STATE_2_CODE)
 
-    modelled_emissions = (
-        get_emission_timeseries_by_sector(n)
+    modelled = (
+        get_emission_timeseries_by_sector(n, state=None)
         .loc[investment_period,]
         .iloc[-1]
-        .to_frame(name="Texas")
+        .to_frame(name="value")
     )
-    modelled_emissions.index = modelled_emissions.index.map(
-        lambda x: x.split("-co2")[0][-3:],
-    ).map(SECTOR_MAPPER)
+    modelled["sector"] = modelled.index.map(lambda x: x.split("-co2")[0][-3:])
+    modelled["sector"] = modelled.sector.map(SECTOR_MAPPER)
+    modelled["state"] = modelled.index.map(lambda x: x.split(" ")[0])
+    modelled = modelled.pivot(index="sector", columns="state", values="value")
 
-    states = modelled_emissions.columns
+    if state:
+        if isinstance(state, list):
+            states_to_plot = state
+        else:
+            states_to_plot = [state]
+    else:
+        states_to_plot = modelled.columns
 
-    nrows = ceil(len(states) / 2)
+    nrows = ceil(len(states_to_plot) / 2)
 
     fig, axs = plt.subplots(
         ncols=2,
@@ -514,13 +546,13 @@ def plot_sector_emissions_validation(
     row = 0
     col = 0
 
-    for i, state in enumerate(states):
+    for i, state_to_plot in enumerate(states_to_plot):
 
         row = i // 2
         col = i % 2
 
-        modelled = modelled_emissions[state].to_frame(name="Modelled")
-        historical = historical_emissions[state].to_frame(name="Actual")
+        modelled = modelled[state_to_plot].to_frame(name="Modelled")
+        historical = historical[state_to_plot].to_frame(name="Actual")
 
         assert modelled.shape == historical.shape
 
@@ -532,7 +564,7 @@ def plot_sector_emissions_validation(
             df[["Modelled", "Actual"]].T.plot.bar(ax=axs[row, col])
             axs[row, col].set_xlabel("")
             axs[row, col].set_ylabel("Emissions (MT)")
-            axs[row, col].set_title(f"{state}")
+            axs[row, col].set_title(f"{state_to_plot}")
             axs[row, col].tick_params(axis="x", labelrotation=0)
 
         else:
@@ -540,7 +572,7 @@ def plot_sector_emissions_validation(
             df[["Modelled", "Actual"]].T.plot.bar(ax=axs[i])
             axs[i].set_xlabel("")
             axs[i].set_ylabel("Emissions (MT)")
-            axs[i].set_title(f"{state}")
+            axs[i].set_title(f"{state_to_plot}")
             axs[i].tick_params(axis="x", labelrotation=0)
 
     return fig, axs
@@ -549,6 +581,7 @@ def plot_sector_emissions_validation(
 def plot_state_emissions_validation(
     n: pypsa.Network,
     eia_api: str,
+    state: Optional[str] = None,
     **kwargs,
 ) -> tuple:
     """
@@ -557,30 +590,34 @@ def plot_state_emissions_validation(
 
     investment_period = n.investment_periods[0]
 
-    historical_emissions = get_historical_emissions(
+    historical = get_historical_emissions(
         "total",
         investment_period,
         eia_api,
-    ).T.rename(columns={"total": "Actual"})
+    ).T.rename(columns={"total": "Actual"}, index=STATE_2_CODE)
 
-    modelled_emissions = (
-        (
-            get_emission_timeseries_by_sector(n)
-            .loc[investment_period,]
-            .iloc[-1]
-            .to_frame(name="Texas")
-        )
-        .sum()
+    modelled = (
+        get_emission_timeseries_by_sector(n, state=None)
+        .loc[investment_period,]
+        .iloc[-1]
         .to_frame(name="Modelled")
     )
+    modelled["state"] = modelled.index.map(lambda x: x.split(" ")[0])
+    modelled = modelled.groupby("state").sum()
 
-    states = modelled_emissions.index
+    if state:
+        if isinstance(state, list):
+            states_to_plot = state
+        else:
+            states_to_plot = [state]
+    else:
+        states_to_plot = modelled.index
 
-    df = historical_emissions.T[states]
+    df = historical.T[states_to_plot]
     if isinstance(df, pd.Series):
         df = df.to_frame(name="Modelled")
 
-    df = df.T.join(modelled_emissions)
+    df = df.T.join(modelled)
 
     fig, axs = plt.subplots(
         ncols=1,
@@ -600,6 +637,7 @@ def plot_state_emissions_validation(
 def plot_sector_consumption_validation(
     n: pypsa.Network,
     eia_api: str,
+    state: Optional[str] = None,
     **kwargs,
 ) -> tuple:
     """
@@ -617,8 +655,13 @@ def plot_sector_consumption_validation(
     data = []
 
     for sector in ("res", "com", "ind", "trn"):
-        modelled = get_end_use_consumption(n, sector).loc[investment_period].sum().sum()
-        data.append([sector, modelled, historical.at[SECTOR_MAPPER[sector], "TX"]])
+        modelled = (
+            get_end_use_consumption(n, sector, state).loc[investment_period].sum().sum()
+        )
+        if state:
+            data.append([sector, modelled, historical.at[SECTOR_MAPPER[sector], state]])
+        else:
+            data.append([sector, modelled, historical.loc[SECTOR_MAPPER[sector]].sum()])
 
     df = pd.DataFrame(data, columns=["sector", "Modelled", "Actual"]).set_index(
         "sector",
@@ -644,14 +687,15 @@ def plot_sector_load_timeseries(
     n: pypsa.Network,
     sector: str,
     sharey: bool = False,
+    state: Optional[str] = None,
     **kwargs,
 ) -> tuple:
 
     investment_period = n.investment_periods[0]
 
     df = (
-        get_end_use_load_timeseries(n, sector, sns_weight=False)
-        .T.loc[investment_period]
+        get_end_use_load_timeseries(n, sector, sns_weight=False, state=state)
+        .loc[investment_period]
         .T
     )
     df.index = df.index.map(n.loads.carrier).map(lambda x: x.split("-")[1:])
@@ -660,7 +704,7 @@ def plot_sector_load_timeseries(
 
     loads = df.columns.unique()
     nrows = len(loads)
-    ylabel = "MW" if sector != "trn" else "kVMT"
+    ylabel = "MW"
 
     fig, axs = plt.subplots(
         ncols=1,
@@ -696,11 +740,15 @@ def plot_sector_load_timeseries(
     return fig, axs
 
 
-def plot_sector_load_bar(n: pypsa.Network, **kwargs) -> tuple:
+def plot_sector_load_bar(
+    n: pypsa.Network,
+    state: Optional[str] = None,
+    **kwargs,
+) -> tuple:
 
     investment_period = n.investment_periods[0]
 
-    sectors = ("res", "com", "ind", "trn")
+    sectors = ("res", "com", "ind")
 
     nrows = ceil(len(sectors) / 2)
 
@@ -713,15 +761,15 @@ def plot_sector_load_bar(n: pypsa.Network, **kwargs) -> tuple:
     row = 0
     col = 0
 
-    for i, sector in enumerate(sectors):
+    title = state if state else "System"
 
-        ylabel = "MWh" if sector != "trn" else "kVMT"
+    for i, sector in enumerate(sectors):
 
         row = i // 2
         col = i % 2
 
         df = (
-            get_end_use_load_timeseries_carrier(n, sector, sns_weight=True)
+            get_end_use_load_timeseries_carrier(n, sector, sns_weight=True, state=state)
             .loc[investment_period]
             .sum()
         )
@@ -730,17 +778,124 @@ def plot_sector_load_bar(n: pypsa.Network, **kwargs) -> tuple:
 
             df.T.plot.bar(ax=axs[row, col])
             axs[row, col].set_xlabel("")
-            axs[row, col].set_ylabel(f"Load ({ylabel})")
-            axs[row, col].set_title(f"{SECTOR_MAPPER[sector]}")
+            axs[row, col].set_ylabel(f"Load (MWh)")
+            axs[row, col].set_title(f"{title} {SECTOR_MAPPER[sector]}")
             axs[row, col].tick_params(axis="x", labelrotation=0)
 
         else:
 
             df.T.plot.bar(ax=axs[i])
             axs[i].set_xlabel("")
-            axs[i].set_ylabel(f"Load ({ylabel})")
-            axs[i].set_title(f"{SECTOR_MAPPER[sector]}")
+            axs[i].set_ylabel(f"Load (MWh)")
+            axs[i].set_title(f"{title} {SECTOR_MAPPER[sector]}")
             axs[i].tick_params(axis="x", labelrotation=0)
+
+    return fig, axs
+
+
+def plot_transportation_by_mode_validation(
+    n: pypsa.Network,
+    eia_api: str,
+    state: Optional[str] = None,
+    **kwargs,
+) -> tuple:
+
+    # to pull in from snakemake inputs
+    transport_ratios = {
+        "Alabama": 2.05,
+        "Alaska": 0.75,
+        "Arizona": 2.12,
+        "Arkansas": 1.08,
+        "California": 9.87,
+        "Colorado": 1.59,
+        "Connecticut": 0.79,
+        "Delaware": 0.3,
+        "District of Columbia": 0.05,
+        "Florida": 6.31,
+        "Georgia": 3.23,
+        "Hawaii": 0.55,
+        "Idaho": 0.64,
+        "Illinois": 3.31,
+        "Indiana": 2.19,
+        "Iowa": 1.09,
+        "Kansas": 0.97,
+        "Kentucky": 1.86,
+        "Louisiana": 2.47,
+        "Maine": 0.39,
+        "Maryland": 1.52,
+        "Massachusetts": 1.4747,
+        "Michigan": 2.62,
+        "Minnesota": 1.6,
+        "Mississippi": 1.29,
+        "Missouri": 2.05,
+        "Montana": 0.45,
+        "Nebraska": 0.76,
+        "Nevada": 0.98,
+        "New Hampshire": 0.3636,
+        "New Jersey": 2.35,
+        "New Mexico": 0.9,
+        "New York": 3.71,
+        "North Carolina": 3.02,
+        "North Dakota": 0.49,
+        "Ohio": 3.24,
+        "Oklahoma": 1.7,
+        "Oregon": 1.12,
+        "Pennsylvania": 3.08,
+        "Rhode Island": 0.2,
+        "South Carolina": 1.8,
+        "South Dakota": 0.38,
+        "Tennessee": 2.52,
+        "Texas": 11.86,
+        "Utah": 1,
+        "Vermont": 0.16,
+        "Virginia": 2.74,
+        "Washington": 2.29,
+        "West Virginia": 0.71,
+        "Wisconsin": 1.62,
+        "Wyoming": 0.41,
+    }
+    ratios = {STATE_2_CODE[x]: y / 100 for x, y in transport_ratios.items()}
+
+    investment_period = n.investment_periods[0]
+
+    fig, axs = plt.subplots(
+        ncols=1,
+        nrows=1,
+        figsize=(14, 6),
+    )
+
+    modelled = (
+        get_transport_consumption_by_mode(n, state)
+        .loc[investment_period]
+        .rename(
+            columns={
+                "air-psg": "Air",
+                "boat-ship": "Shipping, Domestic",
+                "bus": "Bus Transportation",
+                "hvy": "Freight Trucks",
+                "lgt": "Light-Duty Vehicles",
+                "med": "Commercial Light Trucks",
+                "rail-psg": "Rail, Passenger",
+                "rail-ship": "Rail, Freight",
+            },
+        )
+        .sum()
+    )
+
+    historical = get_historical_transport_consumption_by_mode(eia_api)
+
+    if state:
+        data = pd.DataFrame(index=historical.index)
+        data["historical"] = historical.mul(ratios[state])
+    else:
+        data = historical.to_frame(name="historical")
+
+    data = data.join(modelled.to_frame(name="modelled")).fillna(0)
+
+    data.plot.bar(ax=axs)
+    axs.set_xlabel("")
+    axs.set_ylabel(f"Energy Consumption by Transport Mode (MWh)")
+    axs.tick_params(axis="x", labelrotation=45)
 
     return fig, axs
 
@@ -801,6 +956,7 @@ FIGURE_FUNCTION = {
     "emissions_by_sector_validation": plot_sector_emissions_validation,
     "emissions_by_state_validation": plot_state_emissions_validation,
     "generation_by_state_validation": plot_sector_consumption_validation,
+    "transportation_by_mode_validation": plot_transportation_by_mode_validation,
 }
 
 FIGURE_NICE_NAME = {
@@ -825,6 +981,7 @@ FIGURE_NICE_NAME = {
     "emissions_by_sector_validation": "",
     "emissions_by_state_validation": "",
     "generation_by_state_validation": "",
+    "transportation_by_mode_validation": "",
 }
 
 FN_ARGS = {
@@ -842,13 +999,14 @@ if __name__ == "__main__":
         from _helpers import mock_snakemake
 
         snakemake = mock_snakemake(
-            # "plot_sector_validate",
-            "plot_sector_loads",
+            "plot_sector_validate",
+            # "plot_sector_production",
             interconnect="texas",
             clusters=20,
             ll="v1.0",
             opts="500SEG",
             sector="E-G",
+            state="TX",
         )
     configure_logging(snakemake)
 
@@ -861,6 +1019,7 @@ if __name__ == "__main__":
 
     params = snakemake.params
     eia_api = params.get("eia_api", None)
+    state = wildcards.state
 
     for f, f_path in snakemake.output.items():
 
@@ -882,5 +1041,10 @@ if __name__ == "__main__":
 
         if eia_api:
             fn_inputs["eia_api"] = eia_api
+
+        if state == "system":
+            fn_inputs["state"] = None
+        else:
+            fn_inputs["state"] = state
 
         save_fig(fn, n, f_path, title, wildcards, **fn_inputs)
