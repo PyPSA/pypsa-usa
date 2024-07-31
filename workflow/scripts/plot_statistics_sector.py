@@ -155,12 +155,23 @@ def plot_hp_cop(n: pypsa.Network, state: Optional[str] = None, **kwargs) -> tupl
 
         palette = sns.color_palette(["lightgray"], df.shape[1])
 
-        sns.lineplot(df, color="lightgray", legend=False, palette=palette, ax=axs[i])
-        sns.lineplot(avg, ax=axs[i])
+        try:
 
-        axs[i].set_xlabel("")
-        axs[i].set_ylabel("COP")
-        axs[i].set_title(f"{hp}")
+            sns.lineplot(
+                df,
+                color="lightgray",
+                legend=False,
+                palette=palette,
+                ax=axs[i],
+            )
+            sns.lineplot(avg, ax=axs[i])
+
+            axs[i].set_xlabel("")
+            axs[i].set_ylabel("COP")
+            axs[i].set_title(f"{hp}")
+
+        except TypeError:  # no numeric data to plot
+            logger.warning(f"No data to plot for {state}")
 
     return fig, axs
 
@@ -199,10 +210,15 @@ def plot_sector_production_timeseries(
         df.index = df.index.map(n.links.carrier)
         df = df.groupby(level=0).sum().T
 
-        df.plot.area(ax=axs[i])
-        axs[i].set_xlabel("")
-        axs[i].set_ylabel("MW")
-        axs[i].set_title(f"{sector}")
+        try:
+
+            df.plot.area(ax=axs[i])
+            axs[i].set_xlabel("")
+            axs[i].set_ylabel("MW")
+            axs[i].set_title(f"{sector}")
+
+        except TypeError:  # no numeric data to plot
+            logger.warning(f"No data to plot for {state}")
 
     return fig, axs
 
@@ -244,20 +260,29 @@ def plot_sector_production(
             .sum()
         )
 
-        if nrows > 1:
+        if df.empty:
+            logger.warning(f"No data to plot for {state}")
+            continue
 
-            df.plot.bar(ax=axs[row, col])
-            axs[row, col].set_xlabel("")
-            axs[row, col].set_ylabel("MWh")
-            axs[row, col].set_title(f"{SECTOR_MAPPER[sector]}")
-            axs[row, col].tick_params(axis="x", labelrotation=45)
+        try:
 
-        else:
+            if nrows > 1:
 
-            df.plot.bar(ax=axs[i])
-            axs[i].set_xlabel("")
-            axs[i].set_ylabel("MWh")
-            axs[i].set_title(f"{SECTOR_MAPPER[sector]}")
+                df.plot.bar(ax=axs[row, col])
+                axs[row, col].set_xlabel("")
+                axs[row, col].set_ylabel("MWh")
+                axs[row, col].set_title(f"{SECTOR_MAPPER[sector]}")
+                axs[row, col].tick_params(axis="x", labelrotation=45)
+
+            else:
+
+                df.plot.bar(ax=axs[i])
+                axs[i].set_xlabel("")
+                axs[i].set_ylabel("MWh")
+                axs[i].set_title(f"{SECTOR_MAPPER[sector]}")
+
+        except TypeError:  # no numeric data to plot
+            logger.warning(f"No data to plot for {state}")
 
     return fig, axs
 
@@ -279,11 +304,14 @@ def plot_sector_emissions(
 
     for sector in sectors:
 
+        df = get_emission_timeseries_by_sector(n, sector, state=state)
+
+        if df.empty:
+            logger.warning(f"No data for {state}")
+            continue
+
         data.append(
-            get_emission_timeseries_by_sector(n, sector, state=state)
-            .loc[investment_period,]
-            .iloc[-1]
-            .values[0],
+            df.loc[investment_period,].iloc[-1].values[0],
         )
 
     df = pd.DataFrame([data], columns=sectors)
@@ -294,7 +322,11 @@ def plot_sector_emissions(
         figsize=(14, 5),
     )
 
-    df.T.plot.bar(ax=axs, legend=False)
+    try:
+        df.T.plot.bar(ax=axs, legend=False)
+    except TypeError:  # no numeric data to plot
+        logger.warning(f"No data to plot for {state}")
+
     axs.set_ylabel("MT CO2e")
     axs.set_title("CO2e Emissions by Sector")
 
@@ -325,7 +357,11 @@ def plot_state_emissions(
         .to_frame(name=state)
     )
     df.index = df.index.map(lambda x: x.split("-co2")[0][-3:])
-    df.T.plot.bar(stacked=True, ax=axs)
+
+    try:
+        df.T.plot.bar(stacked=True, ax=axs)
+    except TypeError:  # no numeric data to plot
+        logger.warning(f"No data to plot for {state}")
 
     axs.set_ylabel("MT CO2e")
     axs.set_title("CO2e Emissions by State")
@@ -370,19 +406,24 @@ def plot_capacity_per_node(
         df = df.reset_index()[["node", "carrier", data_col]]
         df = df.pivot(columns="carrier", index="node", values=data_col)
 
-        if nrows > 1:
+        try:
 
-            df.plot(kind="bar", stacked=True, ax=axs[row, col])
-            axs[row, col].set_xlabel("")
-            axs[row, col].set_ylabel(y_label)
-            axs[row, col].set_title(f"{sector} Capacity")
+            if nrows > 1:
 
-        else:
+                df.plot(kind="bar", stacked=True, ax=axs[row, col])
+                axs[row, col].set_xlabel("")
+                axs[row, col].set_ylabel(y_label)
+                axs[row, col].set_title(f"{sector} Capacity")
 
-            df.plot(kind="bar", stacked=True, ax=axs[i])
-            axs[i].set_xlabel("")
-            axs[i].set_ylabel(y_label)
-            axs[i].set_title(f"{sector} Capacity")
+            else:
+
+                df.plot(kind="bar", stacked=True, ax=axs[i])
+                axs[i].set_xlabel("")
+                axs[i].set_ylabel(y_label)
+                axs[i].set_title(f"{sector} Capacity")
+
+        except TypeError:  # no numeric data to plot
+            logger.warning(f"No data to plot for {state}")
 
     return fig, axs
 
@@ -426,19 +467,24 @@ def plot_sector_load_factor_timeseries(
             .dropna()
         )
 
-        if nrows > 1:
+        try:
 
-            df.plot(ax=axs[row, col])
-            axs[row, col].set_xlabel("")
-            axs[row, col].set_ylabel("Load Factor (%)")
-            axs[row, col].set_title(f"{sector}")
+            if nrows > 1:
 
-        else:
+                df.plot(ax=axs[row, col])
+                axs[row, col].set_xlabel("")
+                axs[row, col].set_ylabel("Load Factor (%)")
+                axs[row, col].set_title(f"{sector}")
 
-            df.plot(ax=axs[i])
-            axs[i].set_xlabel("")
-            axs[i].set_ylabel("Load Factor (%)")
-            axs[i].set_title(f"{sector}")
+            else:
+
+                df.plot(ax=axs[i])
+                axs[i].set_xlabel("")
+                axs[i].set_ylabel("Load Factor (%)")
+                axs[i].set_title(f"{sector}")
+
+        except TypeError:  # no numeric data to plot
+            logger.warning(f"No data to plot for {state}")
 
     return fig, axs
 
@@ -476,21 +522,26 @@ def plot_sector_load_factor_boxplot(
 
         df = get_load_factor_timeseries(n, sector, state=state).loc[investment_period]
 
-        if nrows > 1:
+        try:
 
-            sns.boxplot(df, ax=axs[row, col])
-            axs[row, col].set_xlabel("")
-            axs[row, col].set_ylabel("Load Factor (%)")
-            axs[row, col].set_title(f"{sector}")
-            axs[row, col].tick_params(axis="x", labelrotation=45)
+            if nrows > 1:
 
-        else:
+                sns.boxplot(df, ax=axs[row, col])
+                axs[row, col].set_xlabel("")
+                axs[row, col].set_ylabel("Load Factor (%)")
+                axs[row, col].set_title(f"{sector}")
+                axs[row, col].tick_params(axis="x", labelrotation=45)
 
-            sns.boxplot(df, ax=axs[i])
-            axs[i].set_xlabel("")
-            axs[i].set_ylabel("Load Factor (%)")
-            axs[i].set_title(f"{sector}")
-            axs[i].tick_params(axis="x", labelrotation=45)
+            else:
+
+                sns.boxplot(df, ax=axs[i])
+                axs[i].set_xlabel("")
+                axs[i].set_ylabel("Load Factor (%)")
+                axs[i].set_title(f"{sector}")
+                axs[i].tick_params(axis="x", labelrotation=45)
+
+        except TypeError:  # no numeric data to plot
+            logger.warning(f"No data to plot for {state}")
 
     return fig, axs
 
@@ -551,29 +602,38 @@ def plot_sector_emissions_validation(
         row = i // 2
         col = i % 2
 
-        modelled = modelled[state_to_plot].to_frame(name="Modelled")
-        historical = historical[state_to_plot].to_frame(name="Actual")
+        try:
+            m = modelled[state_to_plot].to_frame(name="Modelled")
+            h = historical[state_to_plot].to_frame(name="Actual")
+        except KeyError:
+            logger.warning(f"No data for {state_to_plot}")
+            continue
 
-        assert modelled.shape == historical.shape
+        assert m.shape == h.shape
 
-        df = modelled.join(historical)
+        df = m.join(h)
         df["Difference"] = percent_difference(df.Modelled, df.Actual)
 
-        if nrows > 1:
+        try:
 
-            df[["Modelled", "Actual"]].T.plot.bar(ax=axs[row, col])
-            axs[row, col].set_xlabel("")
-            axs[row, col].set_ylabel("Emissions (MT)")
-            axs[row, col].set_title(f"{state_to_plot}")
-            axs[row, col].tick_params(axis="x", labelrotation=0)
+            if nrows > 1:
 
-        else:
+                df[["Modelled", "Actual"]].T.plot.bar(ax=axs[row, col])
+                axs[row, col].set_xlabel("")
+                axs[row, col].set_ylabel("Emissions (MT)")
+                axs[row, col].set_title(f"{state_to_plot}")
+                axs[row, col].tick_params(axis="x", labelrotation=0)
 
-            df[["Modelled", "Actual"]].T.plot.bar(ax=axs[i])
-            axs[i].set_xlabel("")
-            axs[i].set_ylabel("Emissions (MT)")
-            axs[i].set_title(f"{state_to_plot}")
-            axs[i].tick_params(axis="x", labelrotation=0)
+            else:
+
+                df[["Modelled", "Actual"]].T.plot.bar(ax=axs[i])
+                axs[i].set_xlabel("")
+                axs[i].set_ylabel("Emissions (MT)")
+                axs[i].set_title(f"{state_to_plot}")
+                axs[i].tick_params(axis="x", labelrotation=0)
+
+        except TypeError:  # no numeric data to plot
+            logger.warning(f"No data to plot for {state}")
 
     return fig, axs
 
@@ -625,11 +685,14 @@ def plot_state_emissions_validation(
         figsize=(14, 6),
     )
 
-    df.plot.bar(ax=axs)
-    axs.set_xlabel("")
-    axs.set_ylabel("Emissions (MT)")
-    axs.set_title(f"{investment_period} State Emissions")
-    axs.tick_params(axis="x", labelrotation=0)
+    try:
+        df.plot.bar(ax=axs)
+        axs.set_xlabel("")
+        axs.set_ylabel("Emissions (MT)")
+        axs.set_title(f"{investment_period} State Emissions")
+        axs.tick_params(axis="x", labelrotation=0)
+    except TypeError:  # no numeric data to plot
+        logger.warning(f"No data to plot for {state}")
 
     return fig, axs
 
@@ -674,11 +737,14 @@ def plot_sector_consumption_validation(
         figsize=(14, 6),
     )
 
-    df.plot.bar(ax=axs)
-    axs.set_xlabel("")
-    axs.set_ylabel("End Use Consumption (MWh)")
-    axs.set_title(f"{investment_period} State Generation")
-    axs.tick_params(axis="x", labelrotation=0)
+    try:
+        df.plot.bar(ax=axs)
+        axs.set_xlabel("")
+        axs.set_ylabel("End Use Consumption (MWh)")
+        axs.set_title(f"{investment_period} State Generation")
+        axs.tick_params(axis="x", labelrotation=0)
+    except TypeError:  # no numeric data to plot
+        logger.warning(f"No data to plot for {state}")
 
     return fig, axs
 
@@ -723,19 +789,24 @@ def plot_sector_load_timeseries(
 
         palette = sns.color_palette(["lightgray"])
 
-        sns.lineplot(
-            l,
-            color="lightgray",
-            legend=False,
-            # palette=palette,
-            ax=axs[i],
-            errorbar=("ci", 95),
-        )
-        sns.lineplot(avg, ax=axs[i])
+        try:
 
-        axs[i].set_xlabel("")
-        axs[i].set_ylabel(ylabel)
-        axs[i].set_title(f"{SECTOR_MAPPER[sector]} {load} Load")
+            sns.lineplot(
+                l,
+                color="lightgray",
+                legend=False,
+                # palette=palette,
+                ax=axs[i],
+                errorbar=("ci", 95),
+            )
+            sns.lineplot(avg, ax=axs[i])
+
+            axs[i].set_xlabel("")
+            axs[i].set_ylabel(ylabel)
+            axs[i].set_title(f"{SECTOR_MAPPER[sector]} {load} Load")
+
+        except TypeError:
+            logger.warning(f"No data to plot for {state}")
 
     return fig, axs
 
@@ -774,21 +845,30 @@ def plot_sector_load_bar(
             .sum()
         )
 
-        if nrows > 1:
+        if df.empty:
+            logger.warning(f"No data to plot for {state}")
+            continue
 
-            df.T.plot.bar(ax=axs[row, col])
-            axs[row, col].set_xlabel("")
-            axs[row, col].set_ylabel(f"Load (MWh)")
-            axs[row, col].set_title(f"{title} {SECTOR_MAPPER[sector]}")
-            axs[row, col].tick_params(axis="x", labelrotation=0)
+        try:
 
-        else:
+            if nrows > 1:
 
-            df.T.plot.bar(ax=axs[i])
-            axs[i].set_xlabel("")
-            axs[i].set_ylabel(f"Load (MWh)")
-            axs[i].set_title(f"{title} {SECTOR_MAPPER[sector]}")
-            axs[i].tick_params(axis="x", labelrotation=0)
+                df.T.plot.bar(ax=axs[row, col])
+                axs[row, col].set_xlabel("")
+                axs[row, col].set_ylabel(f"Load (MWh)")
+                axs[row, col].set_title(f"{title} {SECTOR_MAPPER[sector]}")
+                axs[row, col].tick_params(axis="x", labelrotation=0)
+
+            else:
+
+                df.T.plot.bar(ax=axs[i])
+                axs[i].set_xlabel("")
+                axs[i].set_ylabel(f"Load (MWh)")
+                axs[i].set_title(f"{title} {SECTOR_MAPPER[sector]}")
+                axs[i].tick_params(axis="x", labelrotation=0)
+
+        except TypeError:  # no numeric data to plot
+            logger.warning(f"No data to plot for {state}")
 
     return fig, axs
 
@@ -892,10 +972,15 @@ def plot_transportation_by_mode_validation(
 
     data = data.join(modelled.to_frame(name="modelled")).fillna(0)
 
-    data.plot.bar(ax=axs)
-    axs.set_xlabel("")
-    axs.set_ylabel(f"Energy Consumption by Transport Mode (MWh)")
-    axs.tick_params(axis="x", labelrotation=45)
+    try:
+
+        data.plot.bar(ax=axs)
+        axs.set_xlabel("")
+        axs.set_ylabel(f"Energy Consumption by Transport Mode (MWh)")
+        axs.tick_params(axis="x", labelrotation=45)
+
+    except TypeError:  # no numeric data to plot
+        logger.warning(f"No data to plot for {state}")
 
     return fig, axs
 
@@ -999,14 +1084,13 @@ if __name__ == "__main__":
         from _helpers import mock_snakemake
 
         snakemake = mock_snakemake(
-            "plot_sector_validate",
-            # "plot_sector_production",
-            interconnect="texas",
-            clusters=20,
+            "plot_sector_loads",
+            interconnect="western",
+            clusters=100,
             ll="v1.0",
             opts="500SEG",
             sector="E-G",
-            state="TX",
+            state="system",
         )
     configure_logging(snakemake)
 
