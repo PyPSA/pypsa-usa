@@ -295,6 +295,44 @@ class TransportationDemand(EiaData):
             )
 
 
+class TransportationFuelUse(EiaData):
+    """
+    Transportation energy use by fuel type in TBTU.
+
+    If historical year is provided, energy use for that year is
+    provided. If a future year is provided, annual projections from 2023
+    up to that year are provided based on the scenario given
+    """
+
+    def __init__(
+        self,
+        vehicle: str,
+        year: int,
+        api: str,
+        scenario: Optional[str] = None,
+    ) -> None:
+        self.vehicle = vehicle
+        self.year = year
+        self.api = api
+        self.scenario = scenario
+        self.aeo = "reference" if not self.scenario else self.scenario
+
+    def data_creator(self) -> pd.DataFrame:
+        if self.year > 2016:
+            return HistoricalProjectedTransportFuelUse(
+                self.vehicle,
+                self.year,
+                self.aeo,
+                self.api,
+            )
+        else:
+            raise InputException(
+                propery="TransportationFuelUse",
+                valid_options=range(2017, 2051),
+                recived_option=self.year,
+            )
+
+
 # concrete creator
 class Storage(EiaData):
 
@@ -1007,6 +1045,103 @@ class ProjectedTransportBtuDemand(DataExtractor):
         return self._assign_dtypes(df)
 
 
+class HistoricalProjectedTransportFuelUse(DataExtractor):
+    """
+    Gets Transport Energy Use by fuel.
+    """
+
+    # https://www.eia.gov/outlooks/aeo/assumptions/case_descriptions.php
+    scenario_codes = AEO_SCENARIOS
+
+    # units will be different umong these!
+    vehicle_codes = {
+        "light_duty": [
+            f"&facets[seriesId][]=cnsm_NA_trn_ldty_{x}_NA_NA_trlbtu"
+            for x in ("NA", "dfo", "elc", "eth", "hdg", "mgs", "ng", "prop")
+        ],
+        "med_duty": [
+            f"&facets[seriesId][]=cnsm_NA_trn_cltr_{x}_NA_NA_trlbtu"
+            for x in ("NA", "dfo", "elc", "e85", "hdg", "mgs", "ng", "prop")
+        ],
+        "heavy_duty": [
+            f"&facets[seriesId][]=cnsm_NA_trn_frtt_{x}_NA_NA_trlbtu"
+            for x in ("NA", "dfo", "elc", "e85", "hdg", "mgs", "ng", "prop")
+        ],
+        "bus": [  # transit bus
+            f"&facets[seriesId][]=cnsm_NA_trn_tbus_{x}_NA_NA_trlbtu"
+            for x in ("NA", "dfo", "elc", "e85", "hdg", "mgs", "ng", "prop")
+        ],
+        "rail_passenger": [  # commuter rail
+            f"&facets[seriesId][]=cnsm_NA_trn_crail_{x}_NA_NA_trlbtu"
+            for x in ("NA", "dsl", "lng", "cng", "elc")
+        ],
+        "boat_shipping": [
+            f"&facets[seriesId][]=cnsm_NA_trn_dmt_{x}_NA_NA_trlbtu"
+            for x in ("NA", "cng", "dfo", "lng", "rfo")
+        ],
+        "rail_shipping": [
+            f"&facets[seriesId][]=cnsm_NA_trn_frail_{x}_NA_NA_trlbtu"
+            for x in ("NA", "cng", "dfo", "lng", "rfo")
+        ],
+        "air": [
+            f"&facets[seriesId][]=cnsm_NA_trn_air_{x}_NA_NA_trlbtu"
+            for x in ("NA", "avga", "dac", "gav", "dft", "iac", "jfl")
+        ],
+    }
+
+    def __init__(self, vehicle: str, year: int, scenario: str, api: str) -> None:
+        self.vehicle = vehicle
+        self.scenario = scenario
+        if vehicle not in self.vehicle_codes.keys():
+            raise InputException(
+                propery="Transport Energy Use by Fuel",
+                valid_options=list(self.vehicle_codes),
+                recived_option=vehicle,
+            )
+        if scenario not in self.scenario_codes.keys():
+            raise InputException(
+                propery="Transport Energy Use by Fuel",
+                valid_options=list(self.scenario_codes),
+                recived_option=scenario,
+            )
+        super().__init__(year, api)
+
+    def build_url(self) -> str:
+        if self.year >= 2022:
+            aeo = 2023
+        elif self.year >= 2015:
+            aeo = self.year + 1
+        else:
+            raise NotImplementedError
+
+        base_url = f"aeo/{aeo}/data/"
+        scenario = f"ref{aeo}"
+
+        if self.year >= 2022:
+            facets = f"frequency=annual&data[0]=value&facets[scenario][]={self.scenario_codes[self.scenario]}&facets[seriesId][]={''.join(self.vehicle_codes[self.vehicle])}&start=2024&end={self.year}&sort[0][column]=period&sort[0][direction]=desc&offset=0&length=5000"
+        else:
+            facets = f"frequency=annual&data[0]=value&facets[scenario][]={scenario}&facets[seriesId][]={''.join(self.vehicle_codes[self.vehicle])}&start={self.year}&end={self.year}&sort[0][column]=period&sort[0][direction]=desc&offset=0&length=5000"
+
+        return f"{API_BASE}{base_url}?api_key={self.api_key}&{facets}"
+
+    def format_data(self, df: pd.DataFrame) -> pd.DataFrame:
+        df.index = pd.to_datetime(df.period)
+        df.index = df.index.year
+        df = df.rename(
+            columns={"seriesName": "series-description", "unit": "units"},
+        )
+        df["state"] = "U.S."
+        df["series-description"] = (
+            df["series-description"]
+            .map(
+                lambda x: x.split("Transportation Energy Use : ")[1],
+            )
+            .map(lambda x: x.split(" : ")[1])
+        )  # strip out vehicle type
+        df = df[["series-description", "value", "units", "state"]].sort_index()
+        return self._assign_dtypes(df)
+
+
 class GasTrade(DataExtractor):
     """
     Gets imports/exports by point of entry.
@@ -1309,7 +1444,7 @@ if __name__ == "__main__":
     # print(Storage("gas", "total", 2019, api).get_data(pivot=True))
     # print(EnergyDemand("residential", 2030, api).get_data(pivot=False))
     print(
-        TransportationDemand("rail_passenger", 2020, api, units="btu").get_data(
+        TransportationFuelUse("heavy_duty", 2040, api).get_data(
             pivot=False,
         ),
     )
