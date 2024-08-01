@@ -239,24 +239,59 @@ class TransportationDemand(EiaData):
         vehicle: str,
         year: int,
         api: str,
+        units: str = "travel",  # travel | btu
         scenario: Optional[str] = None,
     ) -> None:
-        self.vehicle = vehicle  # (light_duty, med_duty, heavy_duty, bus)
+        self.vehicle = vehicle
         self.year = year
         self.api = api
+        self.units = units
         self.scenario = scenario
 
     def data_creator(self) -> pd.DataFrame:
-        if self.year < 2024:
-            return HistoricalTransportDemand(self.vehicle, self.year, self.api)
-        elif self.year >= 2024:
-            aeo = "reference" if not self.scenario else self.scenario
-            return ProjectedTransportDemand(self.vehicle, self.year, aeo, self.api)
+        if self.units == "travel":
+            if self.year < 2024:
+                return HistoricalTransportTravelDemand(
+                    self.vehicle,
+                    self.year,
+                    self.api,
+                )
+            elif self.year >= 2024:
+                aeo = "reference" if not self.scenario else self.scenario
+                return ProjectedTransportTravelDemand(
+                    self.vehicle,
+                    self.year,
+                    aeo,
+                    self.api,
+                )
+            else:
+                raise InputException(
+                    propery="TransportationTravelDemand",
+                    valid_options=range(2017, 2051),
+                    recived_option=self.year,
+                )
+        elif self.units == "btu":
+            if self.year < 2024:
+                return HistoricalTransportBtuDemand(self.vehicle, self.year, self.api)
+            elif self.year >= 2024:
+                aeo = "reference" if not self.scenario else self.scenario
+                return ProjectedTransportBtuDemand(
+                    self.vehicle,
+                    self.year,
+                    aeo,
+                    self.api,
+                )
+            else:
+                raise InputException(
+                    propery="TransportationBtuDemand",
+                    valid_options=range(2017, 2051),
+                    recived_option=self.year,
+                )
         else:
             raise InputException(
                 propery="TransportationDemand",
-                valid_options=range(2017, 2051),
-                recived_option=self.year,
+                valid_options=("travel", "btu"),
+                recived_option=self.units,
             )
 
 
@@ -717,7 +752,10 @@ class ProjectedSectorEnergyDemand(DataExtractor):
         return self._assign_dtypes(df)
 
 
-class HistoricalTransportDemand(DataExtractor):
+class HistoricalTransportTravelDemand(DataExtractor):
+    """
+    Gets Transport demand in units of travel.
+    """
 
     # https://www.eia.gov/outlooks/aeo/assumptions/case_descriptions.php
     scenario_codes = AEO_SCENARIOS
@@ -738,7 +776,7 @@ class HistoricalTransportDemand(DataExtractor):
         self.vehicle = vehicle
         if vehicle not in self.vehicle_codes.keys():
             raise InputException(
-                propery="Projected Transport Demand",
+                propery="Historical Transport Travel Demand",
                 valid_options=list(self.vehicle_codes),
                 recived_option=vehicle,
             )
@@ -782,7 +820,10 @@ class HistoricalTransportDemand(DataExtractor):
         return self._assign_dtypes(df)
 
 
-class ProjectedTransportDemand(DataExtractor):
+class ProjectedTransportTravelDemand(DataExtractor):
+    """
+    Gets Transport demand in units of travel.
+    """
 
     # https://www.eia.gov/outlooks/aeo/assumptions/case_descriptions.php
     scenario_codes = AEO_SCENARIOS
@@ -804,13 +845,13 @@ class ProjectedTransportDemand(DataExtractor):
         self.scenario = scenario
         if scenario not in self.scenario_codes.keys():
             raise InputException(
-                propery="Projected Transport Demand Scenario",
+                propery="Projected Transport Travel Demand Scenario",
                 valid_options=list(self.scenario_codes),
                 recived_option=scenario,
             )
         if vehicle not in self.vehicle_codes.keys():
             raise InputException(
-                propery="Projected Transport Demand",
+                propery="Projected Transport Travel Demand",
                 valid_options=list(self.vehicle_codes),
                 recived_option=vehicle,
             )
@@ -830,6 +871,137 @@ class ProjectedTransportDemand(DataExtractor):
         df["state"] = "U.S."
         df["series-description"] = df["series-description"].map(
             lambda x: x.split("Transportation : Travel Indicators : ")[1],
+        )
+        df = df[["series-description", "value", "units", "state"]].sort_index()
+        return self._assign_dtypes(df)
+
+
+class HistoricalTransportBtuDemand(DataExtractor):
+    """
+    Gets Transport demand in units of btu.
+    """
+
+    # units will be different umong these!
+    vehicle_codes = {
+        "light_duty": "cnsm_NA_trn_ldv_use_NA_NA_qbtu",
+        "med_duty": "cnsm_NA_trn_cml_use_NA_NA_qbtu",
+        "heavy_duty": "cnsm_NA_trn_fght_use_NA_NA_qbtu",
+        "bus": "cnsm_NA_trn_bst_use_NA_NA_qbtu",
+        "rail_passenger": "cnsm_NA_trn_rlp_use_NA_NA_qbtu",
+        "boat_shipping": "cnsm_NA_trn_shdt_use_NA_NA_qbtu",
+        "rail_shipping": "cnsm_NA_trn_rlf_use_NA_NA_qbtu",
+        "air": "cnsm_NA_trn_air_use_NA_NA_qbtu",
+        "boat_international": "cnsm_NA_trn_shint_use_NA_NA_qbtu",
+        "boat_recreational": "cnsm_NA_trn_rbt_use_NA_NA_qbtu",
+        "military": "cnsm_NA_trn_milu_use_NA_NA_qbtu",
+        "lubricants": "cnsm_NA_trn_lbc_use_NA_NA_qbtu",
+        "pipeline": "cnsm_NA_trn_pft_use_NA_NA_qbtu",
+    }
+
+    def __init__(self, vehicle: str, year: int, api: str) -> None:
+        self.vehicle = vehicle
+        if vehicle not in self.vehicle_codes.keys():
+            raise InputException(
+                propery="Historical BTU Transport Demand",
+                valid_options=list(self.vehicle_codes),
+                recived_option=vehicle,
+            )
+        year = self.check_available_data_year(year)
+        super().__init__(year, api)
+
+    def check_available_data_year(self, year: int) -> int:
+        if self.vehicle in ("bus", "rail_passenger"):
+            if year < 2018:
+                logger.error(
+                    f"{self.vehicle} data not available for {year}. Returning data for year 2018.",
+                )
+                return 2018
+        return year
+
+    def build_url(self) -> str:
+        if self.year >= 2022:
+            aeo = 2023
+        elif self.year >= 2015:
+            aeo = self.year + 1
+        else:
+            raise NotImplementedError
+
+        base_url = f"aeo/{aeo}/data/"
+        scenario = f"ref{aeo}"
+
+        facets = f"frequency=annual&data[0]=value&facets[scenario][]={scenario}&facets[seriesId][]={self.vehicle_codes[self.vehicle]}&start={self.year}&end={self.year}&sort[0][column]=period&sort[0][direction]=desc&offset=0&length=5000"
+        return f"{API_BASE}{base_url}?api_key={self.api_key}&{facets}"
+
+    def format_data(self, df: pd.DataFrame) -> pd.DataFrame:
+        df.index = pd.to_datetime(df.period)
+        df.index = df.index.year
+        df = df.rename(
+            columns={"seriesName": "series-description", "unit": "units"},
+        )
+        df["state"] = "U.S."
+        df["series-description"] = df["series-description"].map(
+            lambda x: x.split("Transportation : Energy Use by Mode : ")[1],
+        )
+        df = df[["series-description", "value", "units", "state"]].sort_index()
+        return self._assign_dtypes(df)
+
+
+class ProjectedTransportBtuDemand(DataExtractor):
+    """
+    Gets Transport demand in units of quads.
+    """
+
+    # https://www.eia.gov/outlooks/aeo/assumptions/case_descriptions.php
+    scenario_codes = AEO_SCENARIOS
+
+    # units will be different umong these!
+    vehicle_codes = {
+        "light_duty": "cnsm_NA_trn_ldv_use_NA_NA_qbtu",
+        "med_duty": "cnsm_NA_trn_cml_use_NA_NA_qbtu",
+        "heavy_duty": "cnsm_NA_trn_fght_use_NA_NA_qbtu",
+        "bus": "cnsm_NA_trn_bst_use_NA_NA_qbtu",
+        "rail_passenger": "cnsm_NA_trn_rlp_use_NA_NA_qbtu",
+        "boat_shipping": "cnsm_NA_trn_shdt_use_NA_NA_qbtu",
+        "rail_shipping": "cnsm_NA_trn_rlf_use_NA_NA_qbtu",
+        "air": "cnsm_NA_trn_air_use_NA_NA_qbtu",
+        "boat_international": "cnsm_NA_trn_shint_use_NA_NA_qbtu",
+        "boat_recreational": "cnsm_NA_trn_rbt_use_NA_NA_qbtu",
+        "military": "cnsm_NA_trn_milu_use_NA_NA_qbtu",
+        "lubricants": "cnsm_NA_trn_lbc_use_NA_NA_qbtu",
+        "pipeline": "cnsm_NA_trn_pft_use_NA_NA_qbtu",
+    }
+
+    def __init__(self, vehicle: str, year: int, scenario: str, api: str) -> None:
+        self.vehicle = vehicle
+        self.scenario = scenario
+        if scenario not in self.scenario_codes.keys():
+            raise InputException(
+                propery="Projected Transport BTU Demand Scenario",
+                valid_options=list(self.scenario_codes),
+                recived_option=scenario,
+            )
+        if vehicle not in self.vehicle_codes.keys():
+            raise InputException(
+                propery="Projected Transport BTU Demand",
+                valid_options=list(self.vehicle_codes),
+                recived_option=vehicle,
+            )
+        super().__init__(year, api)
+
+    def build_url(self) -> str:
+        base_url = "aeo/2023/data/"
+        facets = f"frequency=annual&data[0]=value&facets[scenario][]={self.scenario_codes[self.scenario]}&facets[seriesId][]={self.vehicle_codes[self.vehicle]}&start=2024&end={self.year}&sort[0][column]=period&sort[0][direction]=desc&offset=0&length=5000"
+        return f"{API_BASE}{base_url}?api_key={self.api_key}&{facets}"
+
+    def format_data(self, df: pd.DataFrame) -> pd.DataFrame:
+        df.index = pd.to_datetime(df.period)
+        df.index = df.index.year
+        df = df.rename(
+            columns={"seriesName": "series-description", "unit": "units"},
+        )
+        df["state"] = "U.S."
+        df["series-description"] = df["series-description"].map(
+            lambda x: x.split("Transportation : Energy Use by Mode : ")[1],
         )
         df = df[["series-description", "value", "units", "state"]].sort_index()
         return self._assign_dtypes(df)
@@ -1136,6 +1308,10 @@ if __name__ == "__main__":
     # print(Emissions("transport", 2019, api).get_data(pivot=True))
     # print(Storage("gas", "total", 2019, api).get_data(pivot=True))
     # print(EnergyDemand("residential", 2030, api).get_data(pivot=False))
-    print(TransportationDemand("bus", 2020, api).get_data(pivot=False))
+    print(
+        TransportationDemand("rail_passenger", 2020, api, units="btu").get_data(
+            pivot=False,
+        ),
+    )
     # print(EnergyDemand("residential", 2015, api).get_data(pivot=False))
     # print(Seds("consumption", "residential", 2022, api).get_data(pivot=False))
