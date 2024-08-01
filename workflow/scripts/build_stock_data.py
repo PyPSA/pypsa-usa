@@ -23,18 +23,6 @@ CECS_BUILD_YEARS = {
     2000: 50.0,  # assumed from replacement from 2000 data
 }
 """
-Hardcoded build years based on building year constructed starting from 2000
-https://www.eia.gov/consumption/commercial/data/2018/bc/pdf/b6.pdf
-"""
-CECS_STOCK = {
-    # name: percent of stock
-    "phu": 9.1,  # packaged heating unit
-    "gas-furnace": 15.6,
-    "elec-furnace": 50.0,
-    "boilers": 50.0,
-    "heat_pump": 50.0,
-}
-"""
 Hardcoded appliance build years from residenital energy consumption survey
 https://www.eia.gov/consumption/residential/data/2020/hc/pdf/HC%206.1.pdf
 """
@@ -49,7 +37,7 @@ RECS_BUILD_YEARS = {
 }
 
 
-class RecsStock:
+class Recs:
     """
     Processes state level residential energy consumption survey stock data.
 
@@ -130,12 +118,16 @@ class RecsStock:
             .astype(float)
         )
 
-    def _get_data(self, stock: str) -> pd.DataFrame:
+    def _get_data(self, stock: str, fillna: bool = True) -> pd.DataFrame:
         """
         Formats data.
         """
         self._valid_name(stock)
-        return self._read(stock)
+        df = self._read(stock)
+        if fillna:
+            return self._fill_missing(df)
+        else:
+            return df
 
     def get_percentage(self, stock: str) -> pd.DataFrame:
         """
@@ -151,7 +143,108 @@ class RecsStock:
         df = self._get_data(stock)
         return df[[x for x in df.columns if x.endswith("stock")]]
 
+    def _fill_missing(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Fills missing values with USA average.
+        """
+        columns = df.columns
+        for col in columns:
+            df[col] = df[col].fillna(df.at["USA", col])
+        return df
+
+
+@dataclass
+class CecsTechnology:
+    num_buildings: int  # number of buildings with heating/cooling/water
+    equipment: dict[str, int]  # equipment name and number of units
+
+
+class Cecs:
+    """
+    Processes NATIONAL level commercial energy consumption survey stock data.
+    - https://www.eia.gov/consumption/commercial/data/2018/ce/pdf/c1.pdf
+
+    This is hardcoded in as data is not given on a state-by-state level
+    """
+
+    total_buildings = 5918
+
+    def __init__(self) -> None:
+        pass
+
+    @staticmethod
+    def _valid_name(s: str):
+        assert s in ["aircon", "space_heat", "water_heat"]
+
+    @staticmethod
+    def _assign_stock_data(stock: str):  # Returns ComStockTechnology
+        """Hard coded tech adoption values from CECS
+        https://www.eia.gov/consumption/commercial/data/2018/ce/pdf/c1.pdf
+        """
+
+        match stock:
+            case "water_heat":
+                num_buildings = 4595
+                equipment = {
+                    "gas_furnace": 1885,
+                    "elec_furnace": 2785,
+                }
+            case "space_heat":
+                num_buildings = 4901
+                equipment = {
+                    "phu": 2187,  # packaged heating unit
+                    "gas_furnace": 1621,
+                    "elec_furnace": 1246,
+                    "boilers": 703,
+                    "heat_pump": 673,
+                }
+
+            case "aircon":
+                num_buildings = 4631
+                equipment = {
+                    "pau": 2565,  # Packaged air-conditioning units
+                    "air_con": 2044,
+                    "heat_pump": 492,
+                }
+            case _:
+                raise NotImplementedError
+
+        return CecsTechnology(num_buildings, equipment)
+
+    def _get_data(self, stock: str, as_percent: bool = True) -> pd.DataFrame:
+        """
+        Formats data.
+        """
+        self._valid_name(stock)
+        data = self._assign_stock_data(stock)
+
+        df = pd.DataFrame.from_dict({x: [y] for x, y in data.equipment.items()})
+        df.index = ["USA"]
+
+        if as_percent:
+            return df.div(data.num_buildings)
+        else:
+            return df
+
+    """
+    The two following functions are included for consistencey with the ResStock class
+    """
+
+    def get_percentage(self, stock: str) -> pd.DataFrame:
+        """
+        Gets percentage of stock at a national level.
+        """
+        return self._get_data(stock, as_percent=True).mul(100)
+
+    def get_absolute(self, stock: str) -> pd.DataFrame:
+        """
+        Gets raw stock values at national level.
+        """
+        return self._get_data(stock, as_percent=False)
+
 
 if __name__ == "__main__":
-    recs = RecsStock("./../../testing")
-    print(recs.get_percentage("space_heat"))
+    # recs = RecsStock("./../../testing")
+    # print(recs.get_percentage("space_heat"))
+    cecs = Cecs()
+    print(cecs.get_percentage("aircon"))
