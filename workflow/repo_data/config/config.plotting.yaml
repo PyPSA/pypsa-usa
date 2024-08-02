@@ -77,6 +77,10 @@ plotting:
     "ind-elec": "#f9d002"
     "ind-heat": "#E79CA2"
     "trn-elec": "#f9d002"
+    "coal-95CCS": "#4b4b4b"
+    "coal-99CCS": "#2e2e2e"
+    "SMR": "#ff5733"
+    "CCGT-95CCS": "#800000"
 
   nice_names:
     OCGT: "Open-Cycle Gas"
