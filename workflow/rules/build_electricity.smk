@@ -554,7 +554,7 @@ rule add_extra_components:
         "logs/add_extra_components/{interconnect}/elec_s_{clusters}_ec.log",
     threads: 1
     resources:
-        mem_mb=4000,
+        mem_mb=interconnect_mem_prepare,
     group:
         "prepare"
     script:
@@ -594,7 +594,7 @@ rule prepare_network:
         solver="logs/prepare_network/{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}.log",
     threads: 1
     resources:
-        mem_mb=4000,
+        mem_mb=interconnect_mem_prepare,
     group:
         "prepare"
     log:
