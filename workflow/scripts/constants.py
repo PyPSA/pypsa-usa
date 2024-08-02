@@ -626,12 +626,12 @@ ATB_TECH_MAPPER = {
         "technology": "Coal_FE",
         "crp": 30,
     },
-    "coal_95CCS": {
+    "coal-95CCS": {
         "display_name": "Coal-95%-CCS",
         "technology": "Coal_FE",
         "crp": 30,
     },
-    "coal_99CCS": {
+    "coal-99CCS": {
         "display_name": "Coal-99%-CCS",
         "technology": "Coal_FE",
         "crp": 30,
@@ -658,7 +658,7 @@ ATB_TECH_MAPPER = {
         "technology": "NaturalGas_FE",
         "crp": 30,
     },
-    "CCGT_95CCS": {  # natural gas
+    "CCGT-95CCS": {  # natural gas
         "display_name": "NG Combined Cycle (F-Frame) 95% CCS",
         "technology": "NaturalGas_FE",
         "crp": 30,

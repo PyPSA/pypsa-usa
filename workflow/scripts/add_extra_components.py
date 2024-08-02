@@ -53,26 +53,11 @@ import numpy as np
 import pandas as pd
 import pypsa
 from _helpers import configure_logging
-from add_electricity import load_costs
+from add_electricity import load_costs, add_missing_carriers, add_co2_emissions
 
 idx = pd.IndexSlice
 
 logger = logging.getLogger(__name__)
-
-
-def _add_missing_carriers_from_costs(n, costs, carriers):
-    missing_carriers = pd.Index(carriers).difference(n.carriers.index)
-    if missing_carriers.empty:
-        return
-
-    emissions_cols = (
-        costs.columns.to_series().loc[lambda s: s.str.endswith("_emissions")].values
-    )
-    suptechs = missing_carriers.str.split("-").str[0]
-    emissions = costs.loc[suptechs, emissions_cols].fillna(0.0)
-    emissions.index = missing_carriers
-    n.import_components_from_dataframe(emissions, "Carrier")
-
 
 def add_nice_carrier_names(n, config):
     carrier_i = n.carriers.index
@@ -96,7 +81,8 @@ def attach_storageunits(n, costs, elec_opts, investment_year):
     lookup_store = {"H2": "electrolysis", "battery": "battery inverter"}
     lookup_dispatch = {"H2": "fuel cell", "battery": "battery inverter"}
 
-    _add_missing_carriers_from_costs(n, costs, carriers)
+    add_missing_carriers(n, carriers)
+    add_co2_emissions(n, costs, carriers)
     for carrier in carriers:
         max_hours = int(carrier.split("hr_")[0])
         roundtrip_correction = 0.5 if "battery" in carrier else 1
@@ -122,7 +108,8 @@ def attach_storageunits(n, costs, elec_opts, investment_year):
 def attach_stores(n, costs, elec_opts, investment_year):
     carriers = elec_opts["extendable_carriers"]["Store"]
 
-    _add_missing_carriers_from_costs(n, costs, carriers)
+    add_missing_carriers(n, carriers)
+    add_co2_emissions(n, costs, carriers)
 
     buses_i = n.buses.index
     bus_sub_dict = {k: n.buses[k].values for k in ["x", "y", "country"]}
@@ -378,16 +365,53 @@ def attach_multihorizon_generators(
     )
     n.generators_t["p_max_pu"] = n.generators_t["p_max_pu"].join(p_max_pu_t)
 
+def attach_newCarrier_generators(n, costs, carriers, investment_year):
+    """
+    Adds new carriers to the network.
+
+    Specifically this function does the following:
+    1. Adds new carriers to the network
+    2. Adds generators for the new carriers
+
+    Arguments:
+    n: pypsa.Network,
+    costs: pd.DataFrame,
+    carriers: List[str]
+        List of carriers to add to the network
+    investment_year: int
+        Year of investment
+    """
+    if not carriers:
+        return
+
+    add_missing_carriers(n, carriers)
+    add_co2_emissions(n, costs, carriers)
+
+    buses_i = n.buses.index
+    for carrier in carriers:
+        n.madd(
+            "Generator",
+            buses_i,
+            suffix=f" {carrier}_{investment_year}",
+            bus=buses_i,
+            carrier=carrier,
+            p_nom_extendable=True,
+            capital_cost=costs.at[carrier, "capital_cost"],
+            marginal_cost=costs.at[carrier, "marginal_cost"],
+            efficiency=costs.at[carrier, "efficiency"],
+            build_year=investment_year,
+            lifetime=costs.at[carrier, "lifetime"],
+        )
+
+
 def apply_itc(n, itc_modifier):
     """
     Applies investment tax credit to all extendable components in the network.
 
     Arguments:
     n: pypsa.Network,
-    costs_dict: dict,
-        Dict of costs
-    carriers: List[str]
-        List of carriers to apply ITS for
+    itc_modifier: dict,
+        Dict of ITC modifiers for each carrier
     """
     for carrier in itc_modifier.keys():
         carrier_mask = n.generators["carrier"] == carrier
@@ -399,10 +423,9 @@ def apply_ptc(n, ptc_modifier):
 
     Arguments:
     n: pypsa.Network,
-    costs_dict: dict,
-        Dict of costs
-    carriers: List[str]
-        List of carriers to apply ITS for
+    ptc_modifier: dict,
+        Dict of PTC modifiers for each carrier
+
     """
     for carrier in ptc_modifier.keys():
         carrier_mask = n.generators["carrier"] == carrier
@@ -444,6 +467,8 @@ if __name__ == "__main__":
             economic_retirement_gens,
         )
 
+    new_carriers = list(set(elec_config["extendable_carriers"].get("Generator", [])) - set(n.generators.carrier.unique()))
+
     gens = n.generators[
         n.generators["p_nom_extendable"] & 
         n.generators["carrier"].isin(elec_config["extendable_carriers"]["Generator"]) & 
@@ -456,6 +481,7 @@ if __name__ == "__main__":
         attach_stores(n, costs, elec_config, investment_year)
         attach_hydrogen_pipelines(n, costs, elec_config, investment_year)
         attach_multihorizon_generators(n, costs, gens, investment_year)
+        attach_newCarrier_generators(n, costs, new_carriers, investment_year)
 
     n.mremove(
         "Generator",
