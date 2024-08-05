@@ -13,7 +13,9 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import yaml
 from constants import STATE_2_CODE, STATES_CENSUS_DIVISION_MAPPER
+from eia import TransportationFuelUse
 
 logger = logging.getLogger(__name__)
 
@@ -430,6 +432,88 @@ def get_commercial_stock(root_dir: Path | str, fuel: str) -> pd.DataFrame:
     return df.rename(columns=fuels)
 
 
+def get_transport_stock(api: str, year: int) -> pd.DataFrame:
+    """
+    Gets exisiting transport stock by fuel consumption.
+
+    Note: 'gas' in the return dataframe is natural gas! 'lpg' is motor
+    gasoline and disel
+    """
+
+    def _get_data(api: str, year: int) -> pd.DataFrame:
+
+        dfs = []
+
+        for vehicle in ("light_duty", "med_duty", "heavy_duty", "bus"):
+            df = TransportationFuelUse(vehicle, year, api).get_data(
+                pivot=False,
+            )  # note: cannot pivot this due to a bug
+            df = df[df.index == year].reset_index()
+            df["vehicle"] = vehicle
+
+            # needed since transit bus is a subset of bus category
+            if vehicle == "bus":
+                df["series-description"] = df["series-description"].str.replace(
+                    "Transit Bus",
+                    "Total",
+                )
+
+            dfs.append(
+                df.pivot(
+                    index="series-description",
+                    columns="vehicle",
+                    values="value",
+                ),
+            )
+
+        return pd.concat(dfs, axis=1).fillna(0)
+
+    def get_percentage(api: str, year: int) -> pd.DataFrame:
+        """
+        Gets percentage of stock at a national level.
+        """
+        df = get_absolute(api, year)
+
+        for col in df.columns:
+            df[col] = df[col].div(df.at["Total", col])
+
+        df = df.drop(index=["Total"])
+
+        return df.mul(100).round(2)
+
+    def get_absolute(api: str, year: int) -> pd.DataFrame:
+        """
+        Gets raw stock values at national level.
+        """
+        return _get_data(api, year).round(2)
+
+    df = get_percentage(api, year).T
+    df = (
+        df.rename(
+            columns={
+                "Distillate Fuel Oil": "lpg",
+                "Electricity": "electricity",
+                "Ethanol": "ethanol",
+                "Hydrogen": "hydrogen",
+                "Motor Gasoline": "lpg",
+                "Natural Gas": "gas",
+                "Propane": "propane",
+                "E85": "e85",
+            },
+        )
+        .T.groupby(level=0)
+        .sum()
+    )
+
+    return df.loc[["electricity", "lpg", "gas"]]
+
+
 if __name__ == "__main__":
     # print(get_residential_stock("./../../testing", "space_heating"))
-    print(get_commercial_stock("./../../testing", "space_heating"))
+    # print(get_commercial_stock("./../../testing", "space_heating"))
+
+    with open("./../config/config.api.yaml") as file:
+        yaml_data = yaml.safe_load(file)
+    api = yaml_data["api"]["eia"]
+
+    print(get_transport_stock(api, 2024))
