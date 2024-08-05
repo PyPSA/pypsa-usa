@@ -53,25 +53,11 @@ import numpy as np
 import pandas as pd
 import pypsa
 from _helpers import configure_logging
-from add_electricity import load_costs
+from add_electricity import add_co2_emissions, add_missing_carriers, load_costs
 
 idx = pd.IndexSlice
 
 logger = logging.getLogger(__name__)
-
-
-def _add_missing_carriers_from_costs(n, costs, carriers):
-    missing_carriers = pd.Index(carriers).difference(n.carriers.index)
-    if missing_carriers.empty:
-        return
-
-    emissions_cols = (
-        costs.columns.to_series().loc[lambda s: s.str.endswith("_emissions")].values
-    )
-    suptechs = missing_carriers.str.split("-").str[0]
-    emissions = costs.loc[suptechs, emissions_cols].fillna(0.0)
-    emissions.index = missing_carriers
-    n.import_components_from_dataframe(emissions, "Carrier")
 
 
 def add_nice_carrier_names(n, config):
@@ -96,7 +82,8 @@ def attach_storageunits(n, costs, elec_opts, investment_year):
     lookup_store = {"H2": "electrolysis", "battery": "battery inverter"}
     lookup_dispatch = {"H2": "fuel cell", "battery": "battery inverter"}
 
-    _add_missing_carriers_from_costs(n, costs, carriers)
+    add_missing_carriers(n, carriers)
+    add_co2_emissions(n, costs, carriers)
     for carrier in carriers:
         max_hours = int(carrier.split("hr_")[0])
         roundtrip_correction = 0.5 if "battery" in carrier else 1
@@ -122,7 +109,8 @@ def attach_storageunits(n, costs, elec_opts, investment_year):
 def attach_stores(n, costs, elec_opts, investment_year):
     carriers = elec_opts["extendable_carriers"]["Store"]
 
-    _add_missing_carriers_from_costs(n, costs, carriers)
+    add_missing_carriers(n, carriers)
+    add_co2_emissions(n, costs, carriers)
 
     buses_i = n.buses.index
     bus_sub_dict = {k: n.buses[k].values for k in ["x", "y", "country"]}
@@ -225,11 +213,12 @@ def add_economic_retirement(
     gens: list[str] = None,
 ):
     """
-    Adds dummy generators to account for economic retirement.
+    Seperates extendable conventional generators into existing and new
+    generators to support economic retirement.
 
     Specifically this function does the following:
     1. Creates duplicate generators for any that are tagged as extendable. For
-    example, an extendable "CCGT" generator will be split into "CCGT" and "CCGT new"
+    example, an extendable "CCGT" generator will be split into "CCGT existing" and "CCGT"
     2. Capital costs of existing extendable generators are replaced with fixed costs
     3. p_nom_max of existing extendable generators are set to p_nom
     4. p_nom_min of existing and new generators is set to zero
@@ -241,72 +230,82 @@ def add_economic_retirement(
         List of generators to apply economic retirment to. If none provided, it is
         applied to all extendable generators
     """
-
-    # only assign dummy generators to extendable generators
-    extend = n.generators[n.generators["p_nom_extendable"] == True]
-    if gens:
-        extend = extend[extend["carrier"].isin(gens)]
-    if extend.empty:
+    retirement_mask = n.generators["p_nom_extendable"] & (
+        n.generators["carrier"].isin(gens) if gens else True
+    )
+    retirement_gens = n.generators[retirement_mask]
+    if retirement_gens.empty:
         return
 
     # divide by 100 b/c FOM expressed as percentage of CAPEX
     n.generators["capital_cost"] = n.generators.apply(
         lambda row: (
             row["capital_cost"]
-            if not row.name in (extend.index)
+            if not row.name in (retirement_gens.index)
             else row["capital_cost"] * costs.at[row["carrier"], "FOM"] / 100
         ),
         axis=1,
     )
 
+    # rename retiring generators to include "existing" suffix
+    n.generators.index = n.generators.apply(
+        lambda row: (
+            row.name
+            if not row.name in (retirement_gens.index)
+            else row.name + " existing"
+        ),
+        axis=1,
+    )
+
     n.generators["p_nom_max"] = np.where(
-        n.generators["p_nom_extendable"] & n.generators.carrier.isin(gens),
+        retirement_mask,
         n.generators["p_nom"],
         n.generators["p_nom_max"],
     )
 
     n.generators["p_nom_min"] = np.where(
-        n.generators["p_nom_extendable"] & n.generators.carrier.isin(gens),
+        retirement_mask,
         0,
         n.generators["p_nom_min"],
     )
 
     n.madd(
         "Generator",
-        extend.index,
-        suffix=" new",
-        carrier=extend.carrier,
-        bus=extend.bus,
+        retirement_gens.index,
+        carrier=retirement_gens.carrier,
+        bus=retirement_gens.bus,
         p_nom_min=0,
         p_nom=0,
-        p_nom_max=extend.p_nom_max,
+        p_nom_max=retirement_gens.p_nom_max,
         p_nom_extendable=True,
-        ramp_limit_up=extend.ramp_limit_up,
-        ramp_limit_down=extend.ramp_limit_down,
-        efficiency=extend.efficiency,
-        marginal_cost=extend.marginal_cost,
-        capital_cost=extend.capital_cost,
+        ramp_limit_up=retirement_gens.ramp_limit_up,
+        ramp_limit_down=retirement_gens.ramp_limit_down,
+        efficiency=retirement_gens.efficiency,
+        marginal_cost=retirement_gens.marginal_cost,
+        capital_cost=retirement_gens.capital_cost,
         build_year=n.investment_periods[0],
-        lifetime=extend.lifetime,
-        p_min_pu=extend.p_min_pu,
-        p_max_pu=extend.p_max_pu,
+        lifetime=retirement_gens.lifetime,
+        p_min_pu=retirement_gens.p_min_pu,
+        p_max_pu=retirement_gens.p_max_pu,
     )
 
     # time dependent factors added after as not all generators are time dependent
     marginal_cost_t = n.generators_t["marginal_cost"][
-        [x for x in extend.index if x in n.generators_t.marginal_cost.columns]
+        [x for x in retirement_gens.index if x in n.generators_t.marginal_cost.columns]
     ]
     marginal_cost_t = marginal_cost_t.rename(
-        columns={x: f"{x} new" for x in marginal_cost_t.columns},
+        columns={x: f"{x} existing" for x in marginal_cost_t.columns},
     )
     n.generators_t["marginal_cost"] = n.generators_t["marginal_cost"].join(
         marginal_cost_t,
     )
 
     p_max_pu_t = n.generators_t["p_max_pu"][
-        [x for x in extend.index if x in n.generators_t["p_max_pu"].columns]
+        [x for x in retirement_gens.index if x in n.generators_t["p_max_pu"].columns]
     ]
-    p_max_pu_t = p_max_pu_t.rename(columns={x: f"{x} new" for x in p_max_pu_t.columns})
+    p_max_pu_t = p_max_pu_t.rename(
+        columns={x: f"{x} existing" for x in p_max_pu_t.columns},
+    )
     n.generators_t["p_max_pu"] = n.generators_t["p_max_pu"].join(p_max_pu_t)
 
 
@@ -373,6 +372,78 @@ def attach_multihorizon_generators(
     n.generators_t["p_max_pu"] = n.generators_t["p_max_pu"].join(p_max_pu_t)
 
 
+def attach_newCarrier_generators(n, costs, carriers, investment_year):
+    """
+    Adds new carriers to the network.
+
+    Specifically this function does the following:
+    1. Adds new carriers to the network
+    2. Adds generators for the new carriers
+
+    Arguments:
+    n: pypsa.Network,
+    costs: pd.DataFrame,
+    carriers: List[str]
+        List of carriers to add to the network
+    investment_year: int
+        Year of investment
+    """
+    if not carriers:
+        return
+
+    add_missing_carriers(n, carriers)
+    add_co2_emissions(n, costs, carriers)
+
+    buses_i = n.buses.index
+    for carrier in carriers:
+        n.madd(
+            "Generator",
+            buses_i,
+            suffix=f" {carrier}_{investment_year}",
+            bus=buses_i,
+            carrier=carrier,
+            p_nom_extendable=True,
+            capital_cost=costs.at[carrier, "capital_cost"],
+            marginal_cost=costs.at[carrier, "marginal_cost"],
+            efficiency=costs.at[carrier, "efficiency"],
+            build_year=investment_year,
+            lifetime=costs.at[carrier, "lifetime"],
+        )
+
+
+def apply_itc(n, itc_modifier):
+    """
+    Applies investment tax credit to all extendable components in the network.
+
+    Arguments:
+    n: pypsa.Network,
+    itc_modifier: dict,
+        Dict of ITC modifiers for each carrier
+    """
+    for carrier in itc_modifier.keys():
+        carrier_mask = n.generators["carrier"] == carrier
+        n.generators.loc[carrier_mask, "capital_cost"] *= 1 - itc_modifier[carrier]
+
+
+def apply_ptc(n, ptc_modifier):
+    """
+    Applies production tax credit to all extendable components in the network.
+
+    Arguments:
+    n: pypsa.Network,
+    ptc_modifier: dict,
+        Dict of PTC modifiers for each carrier
+    """
+    for carrier in ptc_modifier.keys():
+        carrier_mask = n.generators["carrier"] == carrier
+        mc = n.get_switchable_as_dense("Generator", "marginal_cost").loc[
+            :,
+            carrier_mask,
+        ]
+        n.generators_t.marginal_cost.loc[:, carrier_mask] = mc - ptc_modifier[carrier]
+        n.generators.loc[carrier_mask, "marginal_cost"] -= ptc_modifier[carrier]
+
+
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
@@ -407,8 +478,16 @@ if __name__ == "__main__":
             economic_retirement_gens,
         )
 
-    gens = n.generators[n.generators["p_nom_extendable"] == True]
-    gens = gens[gens["carrier"].isin(elec_config["extendable_carriers"]["Generator"])]
+    new_carriers = list(
+        set(elec_config["extendable_carriers"].get("Generator", []))
+        - set(n.generators.carrier.unique()),
+    )
+
+    gens = n.generators[
+        n.generators["p_nom_extendable"]
+        & n.generators["carrier"].isin(elec_config["extendable_carriers"]["Generator"])
+        & ~n.generators.index.str.contains("existing")
+    ]
 
     for investment_year in n.investment_periods:
         costs = costs_dict[investment_year]
@@ -416,12 +495,15 @@ if __name__ == "__main__":
         attach_stores(n, costs, elec_config, investment_year)
         attach_hydrogen_pipelines(n, costs, elec_config, investment_year)
         attach_multihorizon_generators(n, costs, gens, investment_year)
+        attach_newCarrier_generators(n, costs, new_carriers, investment_year)
 
     n.mremove(
         "Generator",
         gens.index,
     )  # Remove duplicate generators from first investment period
 
+    apply_itc(n, snakemake.config["costs"]["itc_modifier"])
+    apply_ptc(n, snakemake.config["costs"]["ptc_modifier"])
     add_nice_carrier_names(n, snakemake.config)
 
     n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))
