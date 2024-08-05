@@ -304,7 +304,7 @@ def add_economic_retirement(
         [x for x in retirement_gens.index if x in n.generators_t["p_max_pu"].columns]
     ]
     p_max_pu_t = p_max_pu_t.rename(
-        columns={x: f"{x} existing" for x in p_max_pu_t.columns}
+        columns={x: f"{x} existing" for x in p_max_pu_t.columns},
     )
     n.generators_t["p_max_pu"] = n.generators_t["p_max_pu"].join(p_max_pu_t)
 
@@ -437,7 +437,8 @@ def apply_ptc(n, ptc_modifier):
     for carrier in ptc_modifier.keys():
         carrier_mask = n.generators["carrier"] == carrier
         mc = n.get_switchable_as_dense("Generator", "marginal_cost").loc[
-            :, carrier_mask
+            :,
+            carrier_mask,
         ]
         n.generators_t.marginal_cost.loc[:, carrier_mask] = mc - ptc_modifier[carrier]
         n.generators.loc[carrier_mask, "marginal_cost"] -= ptc_modifier[carrier]
@@ -479,7 +480,7 @@ if __name__ == "__main__":
 
     new_carriers = list(
         set(elec_config["extendable_carriers"].get("Generator", []))
-        - set(n.generators.carrier.unique())
+        - set(n.generators.carrier.unique()),
     )
 
     gens = n.generators[
