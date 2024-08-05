@@ -139,6 +139,15 @@ costs:
     enable: false
     co2: 0.
     co2_monthly_prices: false
+  ptc_modifier:
+    onwind: 18.2547
+    geothermal: 18.2547
+    biomass: 18.2547
+  itc_modifier:
+    solar: 0.3
+    offwind: 0.3
+    offwind_floating: 0.3
+    EGS: 0.3
 
 # docs :
 sector:
