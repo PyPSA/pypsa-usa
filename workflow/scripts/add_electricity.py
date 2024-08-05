@@ -121,7 +121,16 @@ def add_co2_emissions(n, costs, carriers):
     suptechs = n.carriers.loc[carriers].index.str.split("-").str[0]
     n.carriers.loc[carriers, "co2_emissions"] = costs.co2_emissions[suptechs].values
     if any("CCS" in carrier for carrier in carriers):
-        ccs_factor = 1 - pd.Series(carriers, index=carriers).str.split("-").str[1].str.replace('CCS', '').fillna(0).astype(int) / 100
+        ccs_factor = (
+            1
+            - pd.Series(carriers, index=carriers)
+            .str.split("-")
+            .str[1]
+            .str.replace("CCS", "")
+            .fillna(0)
+            .astype(int)
+            / 100
+        )
         n.carriers.loc[ccs_factor.index, "co2_emissions"] *= ccs_factor
 
 
