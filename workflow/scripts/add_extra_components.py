@@ -605,10 +605,11 @@ if __name__ == "__main__":
         attach_multihorizon_generators(n, costs, gens, investment_year)
         attach_newCarrier_generators(n, costs, new_carriers, investment_year)
 
-    n.mremove(
-        "Generator",
-        gens.index,
-    )  # Remove duplicate generators from first investment period
+    if not gens.empty and not len(n.investment_periods) == 1:
+        n.mremove(
+            "Generator",
+            gens.index,
+        )  # Remove duplicate generators from first investment period
 
     apply_itc(n, snakemake.config["costs"]["itc_modifier"])
     apply_ptc(n, snakemake.config["costs"]["ptc_modifier"])
