@@ -10,8 +10,8 @@ run:
 # docs :
 scenario:
   interconnect: [western] #"usa|texas|western|eastern"
-  clusters: [80]
-  opts: [Ep-Co2L0.2]
+  clusters: [40]
+  opts: [REM-1000SEG]
   ll: [v1.0]
   scope: "total" # "urban", "rural", or "total"
   sector: "" # G
@@ -36,11 +36,11 @@ electricity:
   conventional_carriers: [nuclear, oil, OCGT, CCGT, coal, geothermal, biomass] # Choose the conventional plant types to include in network
   renewable_carriers: [onwind, offwind, offwind_floating, solar, hydro] # Choose the renewable plant types to include in network
   voltage_simplified: 230 #Voltage level to simplify network to in rule "simplify network"
-  co2limit: 1.4728e+9 # 0.8 * 1.841e+9
-  co2limit_enable: false # For sector coupled studies
-  co2base: 226.86e+6 #base_from_2020 Locations of the 250 MMmt of CO2 emissions from the WECC 2021.
+  co2limit: 1.4728e+9 
+  co2limit_enable: false
+  co2base: 226.86e+6
   gaslimit: false # global gas usage limit of X MWh_th
-  gaslimit_enable: false # For sector coupled studies
+  gaslimit_enable: false
   retirement: economic # "economic" or "technical"
   SAFE_reservemargin: 0.14
   regional_Co2_limits: 'config/policy_constraints/regional_Co2_limits.csv'
@@ -61,8 +61,8 @@ electricity:
     H2: 168
 
   extendable_carriers:
-    Generator: [solar, onwind, offwind, offwind_floating, OCGT, CCGT, coal] #offwind, offwind_floating,
-    StorageUnit: [4hr_battery_storage] # [Xhr-battery-storage (2-10 hours)]
+    Generator: [solar, onwind, offwind, offwind_floating, OCGT, CCGT, coal] # Select Generator types allowed to be built/retired
+    StorageUnit: [4hr_battery_storage] # [Xhr-battery-storage (2-10 hours), Xhr-PHS (8,10,12 hrs)]
     Store: []
     Link: [] 
 
@@ -139,6 +139,15 @@ costs:
     enable: false
     co2: 0.
     co2_monthly_prices: false
+  ptc_modifier:
+    onwind: 18.2547
+    geothermal: 18.2547
+    biomass: 18.2547
+  itc_modifier:
+    solar: 0.3
+    offwind: 0.3
+    offwind_floating: 0.3
+    EGS: 0.3
 
 # docs :
 sector:
