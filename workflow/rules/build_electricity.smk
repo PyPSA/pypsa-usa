@@ -550,7 +550,10 @@ rule add_extra_components:
             if hour.isdigit()
         },
         network=RESOURCES + "{interconnect}/elec_s_{clusters}.nc",
-        tech_costs=RESOURCES + f"costs_{config['costs']['year']}.csv",
+        tech_costs=lambda wildcards: expand(
+            RESOURCES + "costs/costs_{year}.csv",
+            year=config["scenario"]["planning_horizons"],
+        ),
         regions_onshore=RESOURCES
         + "{interconnect}/regions_onshore_s_{clusters}.geojson",
     params:
