@@ -9,13 +9,14 @@ rule solve_network:
         co2_sequestration_potential=config["sector"].get(
             "co2_sequestration_potential", 200
         ),
+        replace_lines_with_links=config_provider("lines", "transport_model"),
     input:
         network=RESOURCES
         + "{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}_{sector}.nc",
         flowgates="repo_data/ReEDS_Constraints/transmission/transmission_capacity_init_AC_ba_NARIS2024.csv",
-        safer_reeds="repo_data/ReEDS_Constraints/reserves/prm_annual.csv",
-        rps_reeds="repo_data/ReEDS_Constraints/state_policies/rps_fraction.csv",
-        ces_reeds="repo_data/ReEDS_Constraints/state_policies/ces_fraction.csv",
+        safer_reeds="config/policy_constraints/reeds/prm_annual.csv",
+        rps_reeds="config/policy_constraints/reeds/rps_fraction.csv",
+        ces_reeds="config/policy_constraints/reeds/ces_fraction.csv",
     output:
         network=RESULTS
         + "{interconnect}/networks/elec_s_{clusters}_ec_l{ll}_{opts}_{sector}.nc",

@@ -852,3 +852,42 @@ def path_provider(dir, rdir, shared_resources):
         returns the path to the file based on the shared_resources parameter.
     """
     return partial(get_run_path, dir=dir, rdir=rdir, shared_resources=shared_resources)
+
+
+def get_snapshots(
+    snapshots: dict[str, str],
+    drop_leap_day: bool = True,
+    freq: str = "h",
+    **kwargs,
+) -> pd.date_range:
+    """
+    Returns pandas DateTimeIndex potentially without leap days.
+
+    Taken from PyPSA-Eur implementation
+    """
+
+    time = pd.date_range(freq=freq, **snapshots, **kwargs)
+    if drop_leap_day and time.is_leap_year.any():
+        time = time[~((time.month == 2) & (time.day == 29))]
+
+    return time
+
+
+def reduce_float_memory(df):
+    """
+    Reduce memory usage of a DataFrame by converting float64 columns to
+    float32.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        The DataFrame to reduce memory usage for.
+
+    Returns
+    -------
+    pd.DataFrame
+        The DataFrame with float64 columns converted to float32.
+    """
+    for col in df.select_dtypes(include=["float64"]).columns:
+        df[col] = pd.to_numeric(df[col], downcast="float")
+    return df

@@ -20,19 +20,20 @@ pypsa_usa_datafiles = [
     "copernicus/PROBAV_LC100_global_v3.0.1_2019-nrt_Discrete-Classification-map_USA_EPSG-4326.tif",
     "eez/conus_eez.shp",
     "natura.tiff",
+    "counties/cb_2020_us_county_500k.shp",
 ]
 
 
 def define_zenodo_databundles():
     return {
         "USATestSystem": "https://zenodo.org/record/4538590/files/USATestSystem.zip",
-        "pypsa_usa_data": "https://zenodo.org/records/10995249/files/pypsa_usa_data.zip",
+        "pypsa_usa_data": "https://zenodo.org/records/11359263/files/pypsa_usa_data.zip",
     }
 
 
 def define_sector_databundles():
     return {
-        "pypsa_usa_sec": "https://zenodo.org/records/11095303/files/pypsa_usa_sector_data.zip?download=1"
+        "pypsa_usa_sec": "https://zenodo.org/records/11358880/files/pypsa_usa_sector_data.zip"
     }
 
 
@@ -52,19 +53,22 @@ rule retrieve_zenodo_databundles:
         "../scripts/retrieve_databundles.py"
 
 
-def define_nrel_databundles():
+def efs_databundle(wildcards):
     return {
-        "EFS": "https://data.nrel.gov/system/files/126/EFSLoadProfile_Reference_Moderate.zip"
+        "EFS": f"https://data.nrel.gov/system/files/126/EFSLoadProfile_{wildcards.efs_case}_{wildcards.efs_speed}.zip"
     }
 
 
 rule retrieve_nrel_efs_data:
+    wildcard_constraints:
+        efs_case="Reference|Medium|High",
+        efs_speed="Slow|Moderate|Rapid",
     params:
-        define_nrel_databundles(),
+        efs_databundle,
     output:
-        DATA + "nrel_efs/EFSLoadProfile_Reference_Moderate.csv",
+        DATA + "nrel_efs/EFSLoadProfile_{efs_case}_{efs_speed}.csv",
     log:
-        "logs/retrieve/retrieve_databundles.log",
+        "logs/retrieve/retrieve_efs_{efs_case}_{efs_speed}.log",
     conda:
         "../envs/environment.yaml"
     script:
@@ -72,8 +76,6 @@ rule retrieve_nrel_efs_data:
 
 
 sector_datafiles = [
-    # general
-    "counties/cb_2020_us_county_500k.shp",
     # heating sector
     "population/DECENNIALDHC2020.P1-Data.csv",
     "urbanization/DECENNIALDHC2020.H2-Data.csv",
@@ -85,6 +87,7 @@ sector_datafiles = [
     "industry_load/2014_update_20170910-0116.csv",
     "industry_load/epri_industrial_loads.csv",
     "industry_load/fips_codes.csv",
+    "industry_load/table3_2.xlsx",
 ]
 
 
@@ -195,20 +198,23 @@ rule retrieve_ship_raster:
         move(input[0], output[0])
 
 
-rule retrieve_cutout:
-    input:
-        HTTP.remote(
-            "zenodo.org/records/10067222/files/{interconnect}_{cutout}.nc", static=True
-        ),
-    output:
-        "cutouts/" + CDIR + "{interconnect}_{cutout}.nc",
-    log:
-        "logs/" + CDIR + "retrieve_cutout_{interconnect}_{cutout}.log",
-    resources:
-        mem_mb=5000,
-    retries: 2
-    run:
-        move(input[0], output[0])
+if not config["enable"].get("build_cutout", False):
+
+    rule retrieve_cutout:
+        input:
+            HTTP.remote(
+                "zenodo.org/records/10067222/files/{interconnect}_{cutout}.nc",
+                static=True,
+            ),
+        output:
+            "cutouts/" + CDIR + "{interconnect}_{cutout}.nc",
+        log:
+            "logs/" + CDIR + "retrieve_cutout_{interconnect}_{cutout}.log",
+        resources:
+            mem_mb=5000,
+        retries: 2
+        run:
+            move(input[0], output[0])
 
 
 rule retrieve_cost_data_eur:
@@ -259,9 +265,8 @@ rule retrieve_caiso_data:
 rule retrieve_pudl:
     output:
         pudl=DATA + "pudl/pudl.sqlite",
-    params:
-        # eia_api_key = config["api"].get("eia", None),
-        eia_api_key=None,
+        pudl_ferc714=DATA + "pudl/out_ferc714__hourly_estimated_state_demand.parquet",
+        census=DATA + "pudl/censusdp1tract.sqlite",
     log:
         LOGS + "retrieve_pudl.log",
     resources:

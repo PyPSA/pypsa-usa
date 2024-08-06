@@ -305,6 +305,12 @@ def main(snakemake):
             zones=breakthrough_zones,
             interconnect=interconnect,
         )
+    elif interconnect == "usa":
+        gdf_states = filter_shapes(
+            data=gdf_na,
+            zones=breakthrough_zones,
+            interconnect=interconnect,
+        )
     else:
         raise NotImplementedError
 
@@ -360,7 +366,7 @@ def main(snakemake):
             "p19",
         ],
         "eastern": ["p19", "p34", "p32", "p31", "p18"],
-        "texas": ["p31", "p59", "p50", "p85", "p58", "p57", "p66", "p47", "p48"],
+        "texas": ["p31", "p59", "p50", "p85", "p58", "p57", "p66", "p47"],
     }
 
     gdf_reeds = trim_shape_to_interconnect(

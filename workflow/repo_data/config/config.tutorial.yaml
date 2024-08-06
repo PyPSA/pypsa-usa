@@ -93,7 +93,8 @@ lines:
   s_nom_max: .inf
   max_extension: 1000.0e+3
   length_factor: 1.25
-  interface_transmission_limits: true
+  interface_transmission_limits: true # Imposes ITLs over AC Lines
+  transport_model: false # If minimum nodes set, AC lines will be replaced with links according to ITLs
 
 
 # docs :
@@ -135,6 +136,16 @@ costs:
     enable: false
     co2: 0.
     co2_monthly_prices: false
+  ptc_modifier:
+    onwind: 18.2547
+    geothermal: 18.2547
+    biomass: 18.2547
+  itc_modifier:
+    solar: 0.3
+    offwind: 0.3
+    offwind_floating: 0.3
+    EGS: 0.3
+
 
 # docs :
 sector:

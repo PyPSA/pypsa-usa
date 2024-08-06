@@ -35,7 +35,7 @@ dependencies:
 - matplotlib==3.8.0
 - plotly==5.17.0
 - graphviz
-- powerplantmatching
+- duckdb==1.0.0
 
 # Keep in conda environment when calling ipython
 - ipython==8.16.1

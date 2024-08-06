@@ -2,6 +2,8 @@
 Module for holding global constant values.
 """
 
+import pandas as pd
+
 ###########################################
 # Constants for GIS Coordinate Reference Systems
 ###########################################
@@ -34,6 +36,9 @@ MMBTU_MWHthemal = 3.4129  # MMBTU to MWh_thermal
 COAL_dol_ton_2_MWHthermal = (
     LBS_TON**-1 * COAL_BTU_LB * 1000**-1 * MMBTU_MWHthemal
 )  # $/ton * ton/BTU * BTU/MWh_thermal
+
+# (TBTU) (1e6 MMBTU / TBTU) (MWh / MMBTU)
+TBTU_2_MWH = 1e6 * (1 / MMBTU_MWHthemal)
 
 ################################
 # Constants for ADS WECC mapping
@@ -501,7 +506,7 @@ STATE_2_TIMEZONE = {
 }
 
 ################################
-# Constants for FIPS Matching
+# Constants for Industry Sector Loads
 ################################
 
 # https://transition.fcc.gov/oet/info/maps/census/fips/fips.txt
@@ -559,6 +564,36 @@ FIPS_2_STATE = {
     "56": "WYOMING",
 }
 
+# only grouped to level 2
+# https://www23.statcan.gc.ca/imdb/p3VD.pl?Function=getVD&TVD=1181553
+# https://github.com/NREL/Industry-Energy-Tool/tree/master/data_foundation/
+NAICS = {
+    11: "Agriculture, forestry, fishing and hunting Agriculture, forestry, fishing and hunting",
+    21: "Mining, quarrying, and oil and gas extraction Mining, quarrying, and oil and gas extraction",
+    22: "Utilities",
+    23: "Construction",
+    31: "Manufacturing",
+    32: "Manufacturing",
+    33: "Manufacturing",
+    41: "Wholesale trade",
+    44: "Retail trade",
+    45: "Retail trade",
+    48: "Transportation and warehousing",
+    49: "Transportation and warehousing",
+    51: "Information and cultural industries",
+    52: "Finance and insurance",
+    53: "Real estate and rental and leasing",
+    54: "Professional, scientific and technical services",
+    55: "Management of companies and enterprises",
+    56: "Administrative and support, waste management and remediation services",
+    61: "Educational services",
+    62: "Health care and social assistance",
+    71: "Arts, entertainment and recreation",
+    72: "Accommodation and food services",
+    81: "Other services (except public administration)",
+    91: "Public administration",
+}
+
 ################################
 # Constants for Breakthrough mapping
 ################################
@@ -591,12 +626,12 @@ ATB_TECH_MAPPER = {
         "technology": "Coal_FE",
         "crp": 30,
     },
-    "coal_95CCS": {
+    "coal-95CCS": {
         "display_name": "Coal-95%-CCS",
         "technology": "Coal_FE",
         "crp": 30,
     },
-    "coal_99CCS": {
+    "coal-99CCS": {
         "display_name": "Coal-99%-CCS",
         "technology": "Coal_FE",
         "crp": 30,
@@ -623,7 +658,7 @@ ATB_TECH_MAPPER = {
         "technology": "NaturalGas_FE",
         "crp": 30,
     },
-    "CCGT_95CCS": {  # natural gas
+    "CCGT-95CCS": {  # natural gas
         "display_name": "NG Combined Cycle (F-Frame) 95% CCS",
         "technology": "NaturalGas_FE",
         "crp": 30,
@@ -724,4 +759,91 @@ CAPEX_LOCATIONAL_MULTIPLIER = {
     "solar": "spv-150mw",
     "onwind": "onshore-wind-200mw",
     "hydro": "hydro-100mw",
+}
+
+###########################################
+# Constants for NREL Locational Multipliers
+###########################################
+
+EIA_FUEL_MAPPER = {
+    "ANT": "coal",
+    "BIT": "coal",
+    "LIG": "coal",
+    "SGC": "coal",
+    "SUB": "coal",
+    "WC": "coal",
+    "RC": "coal",
+    "DFO": "oil",
+    "JF": "oil",
+    "KER": "oil",
+    "PC": "oil",
+    "PG": "oil",
+    "RFO": "oil",
+    "SGP": "oil",
+    "WO": "oil",
+    "BFG": "gas",
+    "NG": "gas",
+    "H2": "gas",
+    "OG": "gas",
+    "AB": "waste",
+    "MSW": "waste",
+    "OBS": "waste",
+    "WDS": "waste",
+    "OBL": "biomass",
+    "SLW": "biomass",
+    "BLQ": "biomass",
+    "WDL": "biomass",
+    "LFG": "biomass",
+    "OBG": "biomass",
+    "SUN": "solar",
+    "WND": "onwind",
+    "GEO": "geothermal",
+    "WAT": "hydro",
+    "NUC": "nuclear",
+    "PUR": "other",
+    "WH": "other",
+    "TDF": "other",
+    "MWH": "battery",
+    "OTH": "other",
+    "HPS": "hydro",
+    "PEL": "oil",
+    "PET": "oil",
+    "WNT": "onwind",
+    "NGO": "gas",
+    "COW": "coal",
+    "BIS": "coal",
+    "HYC": "hydro",
+    "BIO": "biomass",
+    "ALL": "other",
+    "SPV": "solar",
+    "FOS": "other",
+    "AOR": "other",
+    "MLG": "waste",
+    "STH": "other",
+    "WAS": "biomass",
+    "COL": "coal",
+    "WWW": "biomass",
+    "OB2": "biomass",
+    "ORW": "other",
+    "MSB": "biomass",
+    "WOO": "oil",
+    "OOG": "other",
+    "OBW": "biomass",
+    "WOC": "coal",
+}
+
+EIA_FUEL_MAPPER_2 = {
+    "Coal": "coal",
+    "Geothermal": "geothermal",
+    "Hydroelectric Conventional": "hydro",
+    "Natural Gas": "Natural gas",
+    "Nuclear": "Nuclear",
+    "Other": "other",
+    "Other Biomass": "biomass",
+    "Other Gases": "other",
+    "Petroleum": "oil",
+    "Pumped Storage": "hydro",
+    "Solar Thermal and Photovoltaic": "solar",
+    "Wind": "onwind",
+    "Wood and Wood Derived Fuels": "biomass",
 }
