@@ -54,11 +54,17 @@ import numpy as np
 import pandas as pd
 import pypsa
 from _helpers import configure_logging
-from add_electricity import add_co2_emissions, add_missing_carriers, load_costs, calculate_annuity
+from add_electricity import (
+    add_co2_emissions,
+    add_missing_carriers,
+    calculate_annuity,
+    load_costs,
+)
 
 idx = pd.IndexSlice
 
 logger = logging.getLogger(__name__)
+
 
 def add_nice_carrier_names(n, config):
     carrier_i = n.carriers.index
@@ -78,7 +84,7 @@ def add_nice_carrier_names(n, config):
 def attach_storageunits(n, costs, elec_opts, investment_year):
     carriers = elec_opts["extendable_carriers"]["StorageUnit"]
     carriers = [k for k in carriers if "battery_storage" in k]
-    
+
     buses_i = n.buses.index
 
     lookup_store = {"H2": "electrolysis", "battery": "battery inverter"}
@@ -115,15 +121,28 @@ def attach_phs_storageunits(n: pypsa.Network, elec_opts):
     for carrier in carriers:
         max_hours = int(carrier.split("hr_")[0])
 
-        psh_resources = (gpd.read_file(snakemake.input[f"phs_shp_{max_hours}"])
-                        .to_crs(4326)
-                        .rename(columns={'System Installed Capacity (Megawatts)':'potential_mw', 
-                                        'System Energy Storage Capacity (Gigawatt hours)':'potential_gwh', 
-                                        'System Cost (2020 US Dollars per Installed Kilowatt)':'cost_kw', 
-                                        'Longitude': 'longitude', 
-                                        'Latitude': 'latitude'
-                                        })
-                        )[['longitude', 'latitude', 'potential_gwh', 'potential_mw', 'cost_kw', 'geometry']]
+        psh_resources = (
+            gpd.read_file(snakemake.input[f"phs_shp_{max_hours}"])
+            .to_crs(4326)
+            .rename(
+                columns={
+                    "System Installed Capacity (Megawatts)": "potential_mw",
+                    "System Energy Storage Capacity (Gigawatt hours)": "potential_gwh",
+                    "System Cost (2020 US Dollars per Installed Kilowatt)": "cost_kw",
+                    "Longitude": "longitude",
+                    "Latitude": "latitude",
+                },
+            )
+        )[
+            [
+                "longitude",
+                "latitude",
+                "potential_gwh",
+                "potential_mw",
+                "cost_kw",
+                "geometry",
+            ]
+        ]
 
         # Round CAPEX to $500 interval
         psh_resources["cost_kw_round"] = (psh_resources["cost_kw"] / 500).round() * 500
@@ -131,7 +150,9 @@ def attach_phs_storageunits(n: pypsa.Network, elec_opts):
         # Join SC to PyPSA cluster
         region_onshore = gpd.read_file(snakemake.input.regions_onshore)
         region_onshore_psh = gpd.sjoin(
-            region_onshore, psh_resources, how="inner"
+            region_onshore,
+            psh_resources,
+            how="inner",
         ).reset_index(drop=True)
         region_onshore_psh_grp = (
             region_onshore_psh.groupby(["name", "cost_kw_round"])["potential_mw"]
@@ -143,7 +164,7 @@ def attach_phs_storageunits(n: pypsa.Network, elec_opts):
             region_onshore_psh_grp.groupby(["name"]).cumcount() + 1
         )
         region_onshore_psh_grp["class"] = "c" + region_onshore_psh_grp["class"].astype(
-            str
+            str,
         )
         region_onshore_psh_grp["tech"] = carrier
         region_onshore_psh_grp["carrier"] = region_onshore_psh_grp[
@@ -572,10 +593,10 @@ if __name__ == "__main__":
         & n.generators["carrier"].isin(elec_config["extendable_carriers"]["Generator"])
         & ~n.generators.index.str.contains("existing")
     ]
-    
+
     if any("PHS" in s for s in elec_config["extendable_carriers"]["StorageUnit"]):
         attach_phs_storageunits(n, elec_config)
-    
+
     for investment_year in n.investment_periods:
         costs = costs_dict[investment_year]
         attach_storageunits(n, costs, elec_config, investment_year)
