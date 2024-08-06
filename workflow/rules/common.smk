@@ -153,6 +153,7 @@ def interconnect_mem_c(w):
     elif w.interconnect == "texas":
         return int(mem * 0.75)
 
+
 def interconnect_mem_prepare(w):
     mem = 5000 * len(config_provider("scenario", "planning_horizons")(w))
     if w.interconnect == "usa":
