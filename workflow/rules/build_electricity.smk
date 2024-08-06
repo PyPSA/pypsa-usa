@@ -606,7 +606,7 @@ rule prepare_network:
 rule build_powerplants:
     input:
         pudl=DATA + "pudl/pudl.sqlite",
-        wecc_ads=DATA + "WECC_ADS/downloads/2032/Public Data",
+        wecc_ads= "repo_data/WECC_ADS_public",
         eia_ads_generator_mapping="repo_data/eia_ads_generator_mapping_updated.csv",
         fuel_costs="repo_data/plants/fuelCost22.csv",
         cems="repo_data/plants/cems_heat_rates.xlsx",
