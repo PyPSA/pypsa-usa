@@ -23,6 +23,10 @@ if __name__ == "__main__":
     # get european template data
     version = snakemake.params.pypsa_costs_version
     tech_year = snakemake.wildcards.year
+
+    years = (2020, 2025, 2030, 2035, 2040, 2045, 2050)
+    tech_year = min(years, key=lambda x: abs(x - int(tech_year)))
+
     csv = f"https://raw.githubusercontent.com/PyPSA/technology-data/{version}/outputs/costs_{tech_year}.csv"
     save_tech_data = snakemake.output.pypsa_technology_data
     if not Path(save_tech_data).exists():

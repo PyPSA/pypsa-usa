@@ -74,26 +74,29 @@ idx = pd.IndexSlice
 logger = logging.getLogger(__name__)
 
 
-def maybe_adjust_costs_and_potentials(n, adjustments):
-    if not adjustments:
-        return
+def get_social_discount(t, r=0.01):
+    """
+    Calculate for a given time t and social discount rate r [per unit] the
+    social discount.
+    """
+    return 1 / (1 + r) ** t
 
-    for attr, carrier_factor in adjustments.items():
-        for carrier, factor in carrier_factor.items():
-            # beware if factor is 0 and p_nom_max is np.inf, 0*np.inf is nan
-            if carrier == "AC":  # lines do not have carrier
-                n.lines[attr] *= factor
-                continue
-            comps = {
-                "p_nom_max": {"Generator", "Link", "StorageUnit"},
-                "e_nom_max": {"Store"},
-                "capital_cost": {"Generator", "Link", "StorageUnit", "Store"},
-                "marginal_cost": {"Generator", "Link", "StorageUnit", "Store"},
-            }
-            for c in n.iterate_components(comps[attr]):
-                sel = c.df.index[c.df.carrier == carrier]
-                c.df.loc[sel, attr] *= factor
-        logger.info(f"changing {attr} for {carrier} by factor {factor}")
+
+def get_investment_weighting(time_weighting, r=0.01):
+    """
+    Define cost weighting.
+
+    Returns cost weightings depending on the the time_weighting
+    (pd.Series) and the social discountrate r
+    """
+    end = time_weighting.cumsum()
+    start = time_weighting.cumsum().shift().fillna(0)
+    return pd.concat([start, end], axis=1).apply(
+        lambda x: sum(
+            get_social_discount(t, r) for t in range(int(x.iloc[0]), int(x.iloc[1]))
+        ),
+        axis=1,
+    )
 
 
 def add_co2limit(n, co2limit, Nyears=1.0):
@@ -131,26 +134,6 @@ def add_emission_prices(n, emission_prices={"co2": 0.0}, exclude_co2=False):
     n.generators_t["marginal_cost"] += gen_ep[n.generators_t["marginal_cost"].columns]
     su_ep = n.storage_units.carrier.map(ep) / n.storage_units.efficiency_dispatch
     n.storage_units["marginal_cost"] += su_ep
-
-
-"""Revisit if we add dynamic emission prices in"""
-# def add_dynamic_emission_prices(n):
-#     co2_price = pd.read_csv(snakemake.input.co2_price, index_col=0, parse_dates=True)
-#     co2_price = co2_price[~co2_price.index.duplicated()]
-#     co2_price = (
-#         co2_price.reindex(n.snapshots).fillna(method="ffill").fillna(method="bfill")
-#     )
-
-#     emissions = (
-#         n.generators.carrier.map(n.carriers.co2_emissions) / n.generators.efficiency
-#     )
-#     co2_cost = expand_series(emissions, n.snapshots).T.mul(co2_price.iloc[:, 0], axis=0)
-
-#     static = n.generators.marginal_cost
-#     dynamic = n.get_switchable_as_dense("Generator", "marginal_cost")
-
-#     marginal_cost = dynamic + co2_cost.reindex(columns=dynamic.columns, fill_value=0)
-#     n.generators_t.marginal_cost = marginal_cost.loc[:, marginal_cost.ne(static).any()]
 
 
 def set_line_s_max_pu(n, s_max_pu=0.7):
@@ -203,21 +186,32 @@ def average_every_nhours(n, offset):
     logger.info(f"Resampling the network to {offset}")
     m = n.copy(with_time=False)
 
-    snapshot_weightings = n.snapshot_weightings.resample(offset).sum()
+    def resample_multi_index(df, offset, func):
+        sw = []
+        for year in df.index.levels[0]:
+            sw.append(df.loc[year].resample(offset).apply(func))
+        snapshot_weightings = pd.concat(sw)
+        snapshot_weightings.index = pd.MultiIndex.from_arrays(
+            [snapshot_weightings.index.year, snapshot_weightings.index],
+            names=["period", "timestep"],
+        )
+        return snapshot_weightings
+
+    snapshot_weightings = resample_multi_index(n.snapshot_weightings, offset, "sum")
+
     m.set_snapshots(snapshot_weightings.index)
     m.snapshot_weightings = snapshot_weightings
+    m.investment_periods = n.investment_periods
 
     for c in n.iterate_components():
         pnl = getattr(m, c.list_name + "_t")
         for k, df in c.pnl.items():
             if not df.empty:
-                pnl[k] = df.resample(offset).mean()
-
+                pnl[k] = resample_multi_index(df, offset, "mean")
     return m
 
 
 def apply_time_segmentation(n, segments, solver_name="cbc"):
-    logger.info(f"Aggregating time series to {segments} segments.")
     try:
         import tsam.timeseriesaggregation as tsam
     except ImportError:
@@ -225,44 +219,50 @@ def apply_time_segmentation(n, segments, solver_name="cbc"):
             "Optional dependency 'tsam' not found." "Install via 'pip install tsam'",
         )
 
-    p_max_pu_norm = n.generators_t.p_max_pu.max()
-    p_max_pu = n.generators_t.p_max_pu / p_max_pu_norm
+    # get all time-dependent data
+    columns = pd.MultiIndex.from_tuples([], names=["component", "key", "asset"])
+    raw = pd.DataFrame(index=n.snapshots, columns=columns)
+    for c in n.iterate_components():
+        for attr, pnl in c.pnl.items():
+            # exclude e_min_pu which is used for SOC of EVs in the morning
+            if not pnl.empty and attr != "e_min_pu":
+                df = pnl.copy()
+                df.columns = pd.MultiIndex.from_product([[c.name], [attr], df.columns])
+                raw = pd.concat([raw, df], axis=1)
+    raw = raw.dropna(axis=1)
+    sn_weightings = {}
 
-    load_norm = n.loads_t.p_set.max()
-    load = n.loads_t.p_set / load_norm
+    for year in raw.index.levels[0]:
+        logger.info(f"Find representative snapshots for {year}.")
+        raw_t = raw.loc[year]
+        # normalise all time-dependent data
+        annual_max = raw_t.max().replace(0, 1)
+        raw_t = raw_t.div(annual_max, level=0)
+        # get representative segments
+        agg = tsam.TimeSeriesAggregation(
+            raw_t,
+            hoursPerPeriod=len(raw_t),
+            noTypicalPeriods=1,
+            noSegments=int(segments),
+            segmentation=True,
+            solver=solver_name,
+        )
+        segmented = agg.createTypicalPeriods()
 
-    inflow_norm = n.storage_units_t.inflow.max()
-    inflow = n.storage_units_t.inflow / inflow_norm
+        weightings = segmented.index.get_level_values("Segment Duration")
+        offsets = np.insert(np.cumsum(weightings[:-1]), 0, 0)
+        timesteps = [raw_t.index[0] + pd.Timedelta(f"{offset}h") for offset in offsets]
+        snapshots = pd.DatetimeIndex(timesteps)
+        sn_weightings[year] = pd.Series(
+            weightings,
+            index=snapshots,
+            name="weightings",
+            dtype="float64",
+        )
 
-    raw = pd.concat([p_max_pu, load, inflow], axis=1, sort=False)
-
-    agg = tsam.TimeSeriesAggregation(
-        raw,
-        hoursPerPeriod=len(raw),
-        noTypicalPeriods=1,
-        noSegments=int(segments),
-        segmentation=True,
-        solver=solver_name,
-    )
-
-    segmented = agg.createTypicalPeriods()
-
-    weightings = segmented.index.get_level_values("Segment Duration")
-    offsets = np.insert(np.cumsum(weightings[:-1]), 0, 0)
-    snapshots = [n.snapshots[0] + pd.Timedelta(f"{offset}h") for offset in offsets]
-
-    n.set_snapshots(pd.DatetimeIndex(snapshots, name="name"))
-    n.snapshot_weightings = pd.Series(
-        weightings,
-        index=snapshots,
-        name="weightings",
-        dtype="float64",
-    )
-
-    segmented.index = snapshots
-    n.generators_t.p_max_pu = segmented[n.generators_t.p_max_pu.columns] * p_max_pu_norm
-    n.loads_t.p_set = segmented[n.loads_t.p_set.columns] * load_norm
-    n.storage_units_t.inflow = segmented[n.storage_units_t.inflow.columns] * inflow_norm
+    sn_weightings = pd.concat(sn_weightings)
+    n.set_snapshots(sn_weightings.index)
+    n.snapshot_weightings = n.snapshot_weightings.mul(sn_weightings, axis=0)
 
     return n
 
@@ -309,22 +309,37 @@ if __name__ == "__main__":
         snakemake = mock_snakemake(
             "prepare_network",
             simpl="",
-            clusters="37",
+            clusters="36",
+            interconnect="western",
             ll="v1.0",
-            opts="Co2L-4H",
+            opts="REM-1000SEG",
         )
     configure_logging(snakemake)
     set_scenario_config(snakemake)
     update_config_from_wildcards(snakemake.config, snakemake.wildcards)
 
     n = pypsa.Network(snakemake.input[0])
-    Nyears = n.snapshot_weightings.objective.sum() / 8760.0
+    Nyears = n.snapshot_weightings.loc[n.investment_periods[0]].objective.sum() / 8760.0
     costs = load_costs(
         snakemake.input.tech_costs,
         snakemake.params.costs,
         snakemake.params.max_hours,
         Nyears,
     )
+
+    # Set Investment Period Year Weightings
+    # 'fillna(1)' needed if only one period
+    inv_per_time_weight = (
+        n.investment_periods.to_series().diff().shift(-1).ffill().fillna(1)
+    )
+    n.investment_period_weightings["years"] = inv_per_time_weight
+    # set Investment Period Objective weightings
+    social_discountrate = snakemake.params.costs["social_discount_rate"]
+    objective_w = get_investment_weighting(
+        n.investment_period_weightings["years"],
+        social_discountrate,
+    )
+    n.investment_period_weightings["objective"] = objective_w
 
     set_line_s_max_pu(n, snakemake.params.lines["s_max_pu"])
 
@@ -335,9 +350,10 @@ if __name__ == "__main__":
         n = average_every_nhours(n, time_resolution)
 
     # segments with package tsam
+
     if is_string and time_resolution.lower().endswith("seg"):
         solver_name = snakemake.config["solving"]["solver"]["name"]
-        segments = int(time_resolution.replace("seg", ""))
+        segments = int(time_resolution.lower().replace("seg", ""))
         n = apply_time_segmentation(n, segments, solver_name)
 
     if snakemake.params.co2limit_enable:
@@ -345,8 +361,6 @@ if __name__ == "__main__":
 
     if snakemake.params.gaslimit_enable:
         add_gaslimit(n, snakemake.params.gaslimit, Nyears)
-
-    maybe_adjust_costs_and_potentials(n, snakemake.params["adjustments"])
 
     emission_prices = snakemake.params.costs["emission_prices"]
     if emission_prices["enable"]:

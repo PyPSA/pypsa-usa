@@ -40,13 +40,14 @@ Reads in Breakthrough Energy/TAMU transmission dataset, and converts it into PyP
 
 
 import logging
+from typing import Optional
 
 import constants as const
 import geopandas as gpd
 import numpy as np
 import pandas as pd
 import pypsa
-from _helpers import configure_logging, test_network_datatype_consistency
+from _helpers import configure_logging, get_snapshots, test_network_datatype_consistency
 from build_shapes import load_na_shapes
 from geopandas.tools import sjoin
 from shapely.geometry import Point, Polygon
@@ -635,6 +636,18 @@ def modify_breakthrough_lines(n: pypsa.Network, interconnect: str):
     return n
 
 
+def get_multiindex_snapshots(
+    sns_config: dict[str, str],
+    invest_periods: list[int],
+) -> pd.MultiIndex:
+    sns = pd.DatetimeIndex([])
+    for year in invest_periods:
+        sns = sns.append(
+            get_snapshots(sns_config).map(lambda x: x.replace(year=year)),
+        )
+    return pd.MultiIndex.from_arrays([sns.year, sns])
+
+
 def main(snakemake):
     # create network
     n = pypsa.Network()
@@ -795,6 +808,13 @@ def main(snakemake):
     )
     lines_gis.to_csv(snakemake.output.lines_gis)
 
+    # add snapshots
+    sns_config = snakemake.params.snapshots
+    planning_horizons = snakemake.params.planning_horizons
+
+    n.snapshots = get_multiindex_snapshots(sns_config, planning_horizons)
+    n.set_investment_periods(periods=planning_horizons)
+
     # export network
     n.export_to_netcdf(snakemake.output.network)
 
@@ -804,6 +824,6 @@ if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
 
-        snakemake = mock_snakemake("build_base_network", interconnect="usa")
+        snakemake = mock_snakemake("build_base_network", interconnect="texas")
     configure_logging(snakemake)
     main(snakemake)

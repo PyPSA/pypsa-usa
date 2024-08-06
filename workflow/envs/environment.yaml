@@ -9,7 +9,7 @@ dependencies:
 
 - pypsa>=0.26.1
 - atlite>=0.2.9
-- linopy
+- linopy==0.3.8
 
 - dask==2023.7.0
 - dask-core==2023.7.0
@@ -20,7 +20,7 @@ dependencies:
 - xlrd==2.0.1
 - openpyxl==3.1.2
 - pycountry==22.3.5
-- seaborn==0.12.2
+- seaborn==0.13.2
 - snakemake-minimal==7.32.4
 - memory_profiler==0.61.0
 - yaml==0.2.5
@@ -35,7 +35,7 @@ dependencies:
 - matplotlib==3.8.0
 - plotly==5.17.0
 - graphviz
-- powerplantmatching
+- duckdb==1.0.0
 
 # Keep in conda environment when calling ipython
 - ipython==8.16.1

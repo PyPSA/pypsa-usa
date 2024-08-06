@@ -1,0 +1,24 @@
+cluster: sbatch --partition=serc --cpus-per-task={threads} --mem={resources.mem_mb} --job-name=smk-{rule}-{wildcards} --output=logs/{rule}/{rule}-{wildcards}-%j.out --error=logs/{rule}/{rule}-{wildcards}-.%j.err --mail-type ALL --mail-user ktehranchi@stanford.edu --account=iazevedo --ntasks=1 --nodes=1 --time={resources.walltime}
+default-resources:
+- mem_mb=1000
+- walltime=00:30:00
+restart-times: 1
+max-jobs-per-second: 10
+max-status-checks-per-second: 1
+latency-wait: 60
+jobs: 1
+keep-going: false
+rerun-incomplete: false
+printshellcmds: true
+scheduler: greedy
+cluster-cancel: "scancel"
+use-envmodules: true
+
+#     ml python/3.9.0
+#     ml gurobi/10.0.1_py39
+
+# build_renewable_profiles:
+#   walltime: 02:00:00
+
+# solve_network:
+#   walltime: 06:00:00

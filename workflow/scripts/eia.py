@@ -234,6 +234,15 @@ class Emissions(EiaData):
         return StateEmissions(self.sector, self.fuel, self.year, self.api)
 
 
+class ElectricPowerData(EiaData):
+    def __init__(self, year: int, api_key: str) -> None:
+        self.year = year
+        self.api_key = api_key
+
+    def data_creator(self):
+        return ElectricPowerOperationalData(self.year, self.api_key)
+
+
 # product
 class DataExtractor(ABC):
     """
@@ -847,6 +856,46 @@ class StateEmissions(DataExtractor):
             .sort_values(["state", "period"])
             .set_index("period")
         )
+
+        return self._assign_dtypes(df)
+
+
+class ElectricPowerOperationalData(DataExtractor):
+    """
+    Electric Power Operational Data.
+    """
+
+    sector_codes = {
+        "all_sectors": [98],
+    }
+
+    def __init__(self, year: int, api_key: str) -> None:
+        super().__init__(year, api_key)
+        if self.year > 2021:
+            logger.warning(
+                f"Electric power operational data only available until {2021}",
+            )
+            self.year = 2021
+
+    def build_url(self) -> str:
+        base_url = "electricity/electric-power-operational-data/data/"
+        facets = f"frequency=annual&data[0]=generation&facets[sectorid][]={self.sector_codes['all_sectors'][0]}&start={self.year-1}&end={self.year+1}&sort[0][column]=period&sort[0][direction]=desc&offset=0&length=5000"
+        return f"{API_BASE}{base_url}?api_key={self.api_key}&{facets}"
+
+    def format_data(self, df: pd.DataFrame) -> pd.DataFrame:
+        df = df[df.period.astype(int) == self.year].copy()
+        df = df.rename(
+            columns={
+                "generation-units": "units",
+                "stateDescription": "stateName",
+                "fuelTypeDescription": "series-description",
+                "location": "state",
+                "generation": "value",
+            },
+        )
+        df = df[
+            ["state", "stateName", "fueltypeid", "series-description", "value", "units"]
+        ].sort_values(["state"])
 
         return self._assign_dtypes(df)
 
