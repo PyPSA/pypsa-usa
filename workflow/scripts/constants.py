@@ -730,6 +730,18 @@ ATB_TECH_MAPPER = {
         "display_name": "Utility-Scale Battery Storage - 10Hr",
         "crp": 20,
     },
+    "8hr_PHS": {
+        "display_name": "Pumped Storage Hydropower - National Class 1",
+        "crp": 100,
+    },
+    "10hr_PHS": {
+        "display_name": "Pumped Storage Hydropower - National Class 1",
+        "crp": 100,
+    },
+    "12hr_PHS": {
+        "display_name": "Pumped Storage Hydropower - National Class 1",
+        "crp": 100,
+    },
 }
 
 ###########################################

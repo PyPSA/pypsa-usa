@@ -541,11 +541,21 @@ rule cluster_network:
 
 rule add_extra_components:
     input:
+        **{
+            f"phs_shp_{hour}": DATA
+            + f"psh/40-100-dam-height-{hour}hr-no-croplands-no-ephemeral-no-highways.gpkg"
+            for phs_tech in config["electricity"]["extendable_carriers"]["StorageUnit"]
+            if "PHS" in phs_tech
+            for hour in phs_tech.split("hr_")
+            if hour.isdigit()
+        },
         network=RESOURCES + "{interconnect}/elec_s_{clusters}.nc",
         tech_costs=lambda wildcards: expand(
             RESOURCES + "costs/costs_{year}.csv",
             year=config["scenario"]["planning_horizons"],
         ),
+        regions_onshore=RESOURCES
+        + "{interconnect}/regions_onshore_s_{clusters}.geojson",
     params:
         retirement=config["electricity"].get("retirement", "technical"),
     output:
