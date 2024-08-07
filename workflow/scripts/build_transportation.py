@@ -25,7 +25,7 @@ def build_transportation(
         if fuel == "elec":
             add_ev_infrastructure(n)  # attaches at node level
         else:
-            add_fossil_infrastructure(n, fuel, costs)  # attaches at state level
+            add_lpg_infrastructure(n, "veh", costs)  # attaches at state level
 
     for vehicle in ("lgt", "med", "hvy", "bus"):
         add_elec_vehicle(n, vehicle, costs)
@@ -54,70 +54,22 @@ def add_ev_infrastructure(n: pypsa.Network) -> None:
     n.madd(
         "Bus",
         nodes.index,
-        suffix=" trn-elec",
+        suffix=" trn-elec-veh",
         x=nodes.x,
         y=nodes.y,
         country=nodes.country,
         state=nodes.STATE,
-        carrier="trn-elec",
+        carrier="trn-elec-veh",
     )
 
     n.madd(
         "Link",
         nodes.index,
-        suffix=" trn elec-infra",
+        suffix=" trn-elec-infra",
         bus0=nodes.index,
-        bus1=nodes.index + " trn-elec",
-        carrier="trn-elec",
+        bus1=nodes.index + " trn-elec-veh",
+        carrier="trn-elec-veh",
         efficiency=1,
-        capital_cost=0,
-        p_nom_extendable=True,
-        lifetime=np.inf,
-    )
-
-
-def add_fossil_infrastructure(
-    n: pypsa.Network,
-    carrier: str,
-    costs: Optional[pd.DataFrame] = pd.DataFrame(),
-) -> None:
-    """
-    Adds bus that all fossil vehicles attach to at a state level.
-    """
-
-    nodes = n.buses[n.buses.carrier == "AC"]
-
-    n.madd(
-        "Bus",
-        nodes.index,
-        suffix=f" trn-{carrier}",
-        x=nodes.x,
-        y=nodes.y,
-        country=nodes.country,
-        state=nodes.state,
-        carrier=f"trn-{carrier}",
-    )
-
-    # alings oil and lpg
-    corrected_carrier = carrier if not carrier == "lpg" else "oil"
-
-    nodes["bus0"] = nodes.STATE + f" {corrected_carrier}"
-
-    try:
-        efficiency2 = costs.at["oil", "co2_emissions"]
-    except KeyError:
-        efficiency2 = 0
-
-    n.madd(
-        "Link",
-        nodes.index,
-        suffix=f" trn {carrier}-infra",
-        bus0=nodes.bus0,
-        bus1=nodes.index + f" trn-{carrier}",
-        bus2=nodes.STATE + " trn-co2",
-        carrier=f"trn-{carrier}",
-        efficiency=1,
-        efficiency2=efficiency2,
         capital_cost=0,
         p_nom_extendable=True,
         lifetime=np.inf,
@@ -218,7 +170,7 @@ def add_elec_vehicle(
 
     vehicles = pd.DataFrame(index=loads.bus)
     vehicles.index = vehicles.index.map(lambda x: x.split(f" trn-elec-{vehicle}")[0])
-    vehicles["bus0"] = vehicles.index + " trn-elec"
+    vehicles["bus0"] = vehicles.index + " trn-elec-veh"
     vehicles["bus1"] = vehicles.index + f" trn-elec-{vehicle}"
     vehicles["carrier"] = f"trn-elec-{vehicle}"
 
@@ -278,7 +230,7 @@ def add_lpg_vehicle(
 
     vehicles = pd.DataFrame(index=loads.bus)
     vehicles.index = vehicles.index.map(lambda x: x.split(f" trn-lpg-{vehicle}")[0])
-    vehicles["bus0"] = vehicles.index + " trn-lpg"
+    vehicles["bus0"] = vehicles.index + " trn-lpg-veh"
     vehicles["bus1"] = vehicles.index + f" trn-lpg-{vehicle}"
     vehicles["carrier"] = f"trn-lpg-{vehicle}"
 
