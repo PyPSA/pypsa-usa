@@ -545,7 +545,7 @@ def _get_brownfield_template_df(
     | ... | ...                   | ...    | ...            | ...   | ...       |
     """
 
-    assert fuel in ("cool", "elec", "heat")
+    assert fuel in ("cool", "elec", "heat", "lpg")
 
     if subsector:
         loads = n.loads[
@@ -572,14 +572,183 @@ def _get_brownfield_template_df(
 
 def add_transport_brownfield(
     n: pypsa.Network,
-    df: pd.DataFrame,
+    vehicle: str,
     growth_multiplier: float,
+    ratios: pd.DataFrame,
+    costs: pd.DataFrame,
 ) -> None:
     """
     Adds existing stock to transportation sector.
     """
 
-    pass
+    def add_brownfield_ev(
+        n: pypsa.Network,
+        df: pd.DataFrame,
+        vehicle: str,
+        ratios: pd.DataFrame,
+        costs: pd.DataFrame,
+    ) -> None:
+
+        match vehicle:
+            case "lgt":
+                costs_name = "Light Duty Cars BEV 300"
+                ratio_name = "light_duty"
+            case "med":
+                costs_name = "Medium Duty Trucks BEV"
+                ratio_name = "med_duty"
+            case "hvy":
+                costs_name = "Heavy Duty Trucks BEV"
+                ratio_name = "heavy_duty"
+            case "bus":
+                costs_name = "Buses BEV"
+                ratio_name = "bus"
+            case _:
+                raise NotImplementedError
+
+        # dont bother adding in extra for less than 0.5% market share
+        if ratios.at["electricity", ratio_name] < 0.5:
+            logger.info(f"No Brownfield for {costs_name}")
+            return
+
+        # 1000s to convert:
+        #  miles/MWh -> k-miles/MWh
+        efficiency = costs.at[costs_name, "efficiency"] / 1000
+        lifetime = costs.at[costs_name, "lifetime"]
+
+        df["bus1"] = df.name + f" trn-elec-{vehicle}"
+        df["carrier"] = f"trn-elec-{vehicle}"
+
+        df["ratio"] = ratios.at["electricity", ratio_name]
+        df["p_nom"] = df.p_max.mul(df.ratio).div(100)  # div to convert from %
+
+        # roll back vehicle stock in 5 year segments
+
+        periods = lifetime // 5
+
+        start_year = n.investment_periods[0]
+        start_year = start_year if start_year <= 2023 else 2023
+
+        for period in range(periods + 1):
+
+            vehicles = df.copy()
+
+            build_year = start_year - period * 5
+            percent = (1 / lifetime) + (period * 5 / lifetime)
+
+            vehicles["name"] = (
+                vehicles.name + f" existing_{build_year} " + vehicles.carrier
+            )
+            vehicles["p_nom"] = vehicles.p_nom.mul(percent).round(2)
+
+            n.madd(
+                "Link",
+                vehicles.index,
+                suffix=f"existing_{build_year} trn-elec-{vehicle}",
+                bus0=vehicles.bus0,
+                bus1=vehicles.bus1,
+                carrier=vehicles.carrier,
+                efficiency=efficiency,
+                capital_cost=0,
+                p_nom_extendable=False,
+                p_nom=vehicles.p_nom,
+                lifetime=lifetime,
+                build_year=build_year,
+            )
+
+    def add_brownfield_lpg(
+        n: pypsa.Network,
+        df: pd.DataFrame,
+        vehicle: str,
+        ratios: pd.DataFrame,
+        costs: pd.DataFrame,
+    ) -> None:
+
+        # existing stock efficiencies taken from 2016 EFS Technology data
+        # This is consistent with where future efficiencies are taken from
+        # https://data.nrel.gov/submissions/93
+        # https://www.nrel.gov/docs/fy18osti/70485.pdf
+
+        match vehicle:
+            case "lgt":
+                costs_name = "Light Duty Cars ICEV"
+                ratio_name = "light_duty"
+                efficiency = 25.9  # mpg
+            case "med":
+                costs_name = "Medium Duty Trucks ICEV"
+                ratio_name = "med_duty"
+                efficiency = 16.35  # mpg
+            case "hvy":
+                costs_name = "Heavy Duty Trucks ICEV"
+                ratio_name = "heavy_duty"
+                efficiency = 5.44  # mpg
+            case "bus":
+                costs_name = "Buses ICEV"
+                ratio_name = "bus"
+                efficiency = 3.67  # mpg
+            case _:
+                raise NotImplementedError
+
+        # dont bother adding in extra for less than 0.5% market share
+        if ratios.at["lpg", ratio_name] < 0.5:
+            logger.info(f"No Brownfield for {costs_name}")
+            return
+
+        # same assumption when building future efficiences in 'build_sector_costs.py'
+        # Assumptions from https://www.nrel.gov/docs/fy18osti/70485.pdf
+        wh_per_gallon = 33700  # footnote 24
+
+        # mpg -> miles/wh -> miles/MWh -> k miles / MWH
+        efficiency *= (1 / wh_per_gallon) * 1000000 / 1000
+        lifetime = costs.at[costs_name, "lifetime"]
+
+        df["bus0"] = df.name + " trn-lpg-veh"
+        df["carrier"] = f"trn-lpg-{vehicle}"
+
+        df["ratio"] = ratios.at["lpg", ratio_name]
+        df["p_nom"] = df.p_max.mul(df.ratio).div(100)  # div to convert from %
+
+        # roll back vehicle stock in 5 year segments
+        step = 5  # years
+        periods = int(lifetime // step)
+
+        start_year = n.investment_periods[0]
+        start_year = start_year if start_year <= 2023 else 2023
+
+        for period in range(1, periods + 1):
+
+            vehicles = df.copy()
+
+            build_year = start_year - period * step
+            percent = step / lifetime  # given as a ratio
+
+            vehicles["name"] = (
+                vehicles.name + f" existing_{build_year} " + vehicles.carrier
+            )
+            vehicles["p_nom"] = vehicles.p_nom.mul(percent).round(2)
+
+            n.madd(
+                "Link",
+                vehicles.name,
+                bus0=vehicles.bus1,
+                bus1=vehicles.bus1,
+                carrier=vehicles.carrier,
+                efficiency=efficiency,
+                capital_cost=0,
+                p_nom_extendable=False,
+                p_nom=vehicles.p_nom,
+                lifetime=lifetime,
+                build_year=build_year,
+            )
+
+    # ev brownfield
+    df = _get_brownfield_template_df(n, "elec", "trn", vehicle)
+    df["p_nom"] = df.p_max.mul(growth_multiplier)
+    add_brownfield_ev(n, df, vehicle, ratios, costs)
+
+    # lpg brownfield
+    df = _get_brownfield_template_df(n, "lpg", "trn", vehicle)
+    df["p_nom"] = df.p_max.mul(growth_multiplier)
+    add_brownfield_lpg(n, df, vehicle, ratios, costs)
 
 
 def add_service_brownfield(
@@ -845,10 +1014,15 @@ def add_service_brownfield(
 
 if __name__ == "__main__":
     # print(get_residential_stock("./../../testing", "space_heating"))
-    # print(get_commercial_stock("./../../testing", "space_heating"))
+    print(
+        get_commercial_stock(
+            "./../repo_data/sectors/commercial_stock",
+            "space_heating",
+        ),
+    )
 
     with open("./../config/config.api.yaml") as file:
         yaml_data = yaml.safe_load(file)
     api = yaml_data["api"]["eia"]
 
-    print(get_transport_stock(api, 2024))
+    # print(get_transport_stock(api, 2024))

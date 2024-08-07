@@ -23,6 +23,7 @@ from build_heat import build_heat
 from build_natural_gas import StateGeometry, build_natural_gas
 from build_stock_data import (
     add_service_brownfield,
+    add_transport_brownfield,
     get_commercial_stock,
     get_residential_stock,
     get_transport_stock,
@@ -436,8 +437,10 @@ if __name__ == "__main__":
     base_year = 2024 if any(n.investment_periods > 2024) else min(n.investment_periods)
 
     # check for end-use brownfield requirements
-    # if snakemake.params.sector["transport"]["brownfield"]:
-    #     stock = get_transport_stock(snakemake.params.api["eia"], base_year)
+    if snakemake.params.sector["transport"]["brownfield"]:
+        ratios = get_transport_stock(snakemake.params.api["eia"], base_year)
+        for vehicle in ("lgt", "med", "hvy", "bus"):
+            add_transport_brownfield(n, vehicle, 1, ratios, costs)
     if snakemake.params.sector["residential"]["brownfield"]:
         res_stock_dir = snakemake.input.residential_stock
         for fuel in ["space_heating", "aircon"]:
@@ -449,5 +452,8 @@ if __name__ == "__main__":
         com_stock_dir = snakemake.input.residential_stock
         for fuel in ["space_heating", "aircon"]:
             ratios = get_commercial_stock(com_stock_dir, fuel)
+            ratios.index = ratios.index.map(STATE_2_CODE)
+            ratios = ratios.dropna()  # na is USA
+            add_service_brownfield(n, "com", fuel, 1, ratios, costs)
 
     n.export_to_netcdf(snakemake.output.network)
