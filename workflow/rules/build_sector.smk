@@ -30,6 +30,8 @@ def sector_input_files(wildcards):
             "clustered_pop_layout": RESOURCES
             + "{interconnect}/pop_layout_elec_s_{clusters}.csv",
             "ev_policy": config["sector"]["transport"]["ev_policy"],
+            "residential_stock": "repo_data/sectors/residential_stock",
+            "commercial_stock": "repo_data/sectors/commercial_stock",
         }
         input_files.update(ng_files)
 
@@ -42,9 +44,9 @@ rule add_sectors:
         costs=config["costs"],
         max_hours=config["electricity"]["max_hours"],
         plotting=config["plotting"],
-        natural_gas=config["sector"].get("natural_gas", None),
         snapshots=config["snapshots"],
         api=config["api"],
+        sector=config["sector"],
     input:
         unpack(sector_input_files),
     output:

@@ -10,9 +10,11 @@ warnings.simplefilter("ignore")
 
 import logging
 from pathlib import Path
+from typing import Optional
 
 import numpy as np
 import pandas as pd
+import pypsa
 import yaml
 from constants import STATE_2_CODE, STATES_CENSUS_DIVISION_MAPPER
 from eia import TransportationFuelUse
@@ -506,6 +508,339 @@ def get_transport_stock(api: str, year: int) -> pd.DataFrame:
     )
 
     return df.loc[["electricity", "lpg", "gas"]]
+
+
+###
+# brownfield application
+###
+
+"""
+Brownfield is added as a percentage of max load. For example, if we are adding
+brownfield capacity for 2030, we take max load in modelled 2030 year, use the
+growth multiplier to determine how much load has increased from 2023, then
+apply the brownfield capacity to the 2023 value.
+
+For example.
+> Max load in 2030 is 1GW
+> Growth multiplier is 0.8 -> Max load in 2023 is 0.80GW
+> Browfield capacity of natural gas is 50%
+> Applied capacity is 0.40GW with a build year of 2023
+"""
+
+
+def _get_brownfield_template_df(
+    n: pypsa.Network,
+    fuel: str,
+    sector: str,
+    subsector: Optional[str] = None,
+) -> None:
+    """
+    Gets a dataframe in the following form.
+
+    |     | bus1                  | name   | suffix         | state | p_max     |
+    |-----|-----------------------|--------|----------------|-------|-----------|
+    | 0   | p480 0 com-urban-heat | p480 0 | com-urban-heat | TX    | 90.0544   |
+    | 1   | p600 0 com-urban-heat | p600 0 | com-urban-heat | TX    | 716.606   |
+    | 2   | p610 0 com-urban-heat | p610 0 | com-urban-heat | TX    | 1999.486  |
+    | ... | ...                   | ...    | ...            | ...   | ...       |
+    """
+
+    assert fuel in ("cool", "elec", "heat")
+
+    if subsector:
+        loads = n.loads[
+            (n.loads.carrier.str.endswith(f"{fuel}-{subsector}"))
+            & (n.loads.carrier.str.startswith(sector))
+        ]
+    else:
+        loads = n.loads[
+            (n.loads.carrier.str.endswith(fuel))
+            & (n.loads.carrier.str.startswith(sector))
+        ]
+
+    df = n.loads_t.p_set[loads.index].max().to_frame(name="p_max")
+
+    df["state"] = df.index.map(n.loads.bus).map(n.buses.STATE)
+    df = df.reset_index(names="bus1")
+    df["name"] = df.bus1.map(lambda x: x.split(f" {sector}")[0])
+    df["suffix"] = [
+        bus.split(name)[1].strip() for (bus, name) in df[["bus1", "name"]].values
+    ]
+
+    return df[["bus1", "name", "suffix", "state", "p_max"]]
+
+
+def add_transport_brownfield(
+    n: pypsa.Network,
+    df: pd.DataFrame,
+    growth_multiplier: float,
+) -> None:
+    """
+    Adds existing stock to transportation sector.
+    """
+
+    pass
+
+
+def add_service_brownfield(
+    n: pypsa.Network,
+    sector: str,
+    fuel: str,
+    growth_multiplier: float,
+    ratios: pd.DataFrame,
+    costs: pd.DataFrame,
+) -> None:
+    """
+    Adds existing stock to res/com sector.
+    """
+
+    def add_brownfield_gas_furnace(
+        n: pypsa.Network,
+        df: pd.DataFrame,
+        sector: str,
+        ratios: pd.DataFrame,
+        costs: pd.DataFrame,
+    ) -> None:
+
+        # existing efficiency values taken from:
+        # https://www.eia.gov/analysis/studies/buildings/equipcosts/pdf/full.pdf
+
+        # will give approximate installed capacity percentage by year
+        if sector == "res":
+            installed_capacity = RECS_BUILD_YEARS
+            lifetime = costs.at["lifetime", "Residential Gas-Fired Furnaces"]
+            efficiency = 0.80
+        elif sector == "com":
+            installed_capacity = CECS_BUILD_YEARS
+            lifetime = costs.at["lifetime", "Commercial Gas-Fired Furnaces"]
+            lifetime = 0.80
+
+        efficiency2 = costs.at["gas", "co2_emissions"]
+
+        df["bus0"] = df.state + " gas"
+        df["bus2"] = df.state + f" {sector}-co2"
+
+        # remove 'heat' or 'cool' ect.. from suffix
+        df["carrier"] = df.suffix.map(lambda x: "-".join(x.split("-")[:-1]))
+        df["carrier"] = df.carrier + "-gas-furnace"
+
+        df["ratio"] = df.state.map(ratios.gas)
+        df["p_nom"] = df.p_max.mul(df.ratio).div(100)  # div to convert from %
+
+        for build_year, percent in installed_capacity.items():
+
+            furnaces = df.copy()
+            furnaces["name"] = (
+                furnaces.name + f" existing_{build_year} " + furnaces.carrier
+            )
+            furnaces["p_nom"] = furnaces.p_nom.mul(percent).div(100).round(2)
+
+            n.madd(
+                "Link",
+                furnaces.name,
+                bus0=furnaces.bus0,
+                bus1=furnaces.bus1,
+                bus2=furnaces.bus2,
+                carrier=furnaces.carrier,
+                efficiency=efficiency,
+                efficiency2=efficiency2,
+                capital_cost=0,
+                p_nom_extendable=False,
+                p_nom=furnaces.p_nom,
+                lifetime=lifetime,
+                build_year=build_year,
+            )
+
+    def add_brownfield_oil(
+        n: pypsa.Network,
+        df: pd.DataFrame,
+        sector: str,
+        ratios: pd.DataFrame,
+        costs: pd.DataFrame,
+    ) -> None:
+
+        # existing efficiency values taken from:
+        # https://www.eia.gov/analysis/studies/buildings/equipcosts/pdf/full.pdf
+
+        # will give approximate installed capacity percentage by year
+        if sector == "res":
+            installed_capacity = RECS_BUILD_YEARS
+            lifetime = costs.at["lifetime", "Residential Oil-Fired Furnaces"]
+            efficiency = 0.83
+        elif sector == "com":
+            installed_capacity = CECS_BUILD_YEARS
+            lifetime = costs.at["lifetime", "Commercial Oil-Fired Furnaces"]
+            lifetime = 0.81
+
+        efficiency2 = costs.at["oil", "co2_emissions"]
+
+        df["bus0"] = df.state + " lpg"
+        df["bus2"] = df.state + f" {sector}-co2"
+
+        # remove 'heat' or 'cool' ect.. from suffix
+        df["carrier"] = df.suffix.map(lambda x: "-".join(x.split("-")[:-1]))
+        df["carrier"] = df.carrier + "-lpg-furnace"
+
+        df["ratio"] = df.state.map(ratios.lpg)
+        df["p_nom"] = df.p_max.mul(df.ratio).div(100)  # div to convert from %
+
+        for build_year, percent in installed_capacity.items():
+
+            furnaces = df.copy()
+            furnaces["name"] = (
+                furnaces.name + f" existing_{build_year} " + furnaces.carrier
+            )
+            furnaces["p_nom"] = furnaces.p_nom.mul(percent).div(100).round(2)
+
+            n.madd(
+                "Link",
+                furnaces.name,
+                bus0=furnaces.bus0,
+                bus1=furnaces.bus1,
+                bus2=furnaces.bus2,
+                carrier=furnaces.carrier,
+                efficiency=efficiency,
+                efficiency2=efficiency2,
+                capital_cost=0,
+                p_nom_extendable=False,
+                p_nom=furnaces.p_nom,
+                lifetime=lifetime,
+                build_year=build_year,
+            )
+
+    def add_brownfield_elec_furnace(
+        n: pypsa.Network,
+        df: pd.DataFrame,
+        sector: str,
+        ratios: pd.DataFrame,
+        costs: pd.DataFrame,
+    ) -> None:
+
+        # existing efficiency values taken from:
+        # https://www.eia.gov/analysis/studies/buildings/equipcosts/pdf/full.pdf
+
+        # will give approximate installed capacity percentage by year
+        if sector == "res":
+            installed_capacity = RECS_BUILD_YEARS
+            lifetime = costs.at["lifetime", "Residential Electric Resistance Heaters"]
+            efficiency = 1.0
+        elif sector == "com":
+            installed_capacity = CECS_BUILD_YEARS
+            lifetime = costs.at["lifetime", "Commercial Electric Resistance Heaters"]
+            efficiency = 1.0
+
+        df["bus0"] = df.name  # central electricity bus
+
+        # remove 'heat' or 'cool' ect.. from suffix
+        df["carrier"] = df.suffix.map(lambda x: "-".join(x.split("-")[:-1]))
+        df["carrier"] = df.carrier + "-elec-furnace"
+
+        df["ratio"] = df.state.map(ratios.electricity)
+        df["p_nom"] = df.p_max.mul(df.ratio).div(100)  # div to convert from %
+
+        for build_year, percent in installed_capacity.items():
+
+            furnaces = df.copy()
+            furnaces["name"] = (
+                furnaces.name + f" existing_{build_year} " + furnaces.carrier
+            )
+            furnaces["p_nom"] = furnaces.p_nom.mul(percent).div(100).round(2)
+
+            n.madd(
+                "Link",
+                furnaces.name,
+                bus0=furnaces.bus0,
+                bus1=furnaces.bus1,
+                carrier=furnaces.carrier,
+                efficiency=efficiency,
+                capital_cost=0,
+                p_nom_extendable=False,
+                p_nom=furnaces.p_nom,
+                lifetime=lifetime,
+                build_year=build_year,
+            )
+
+    def add_brownfield_heat_pump(
+        n: pypsa.Network,
+        df: pd.DataFrame,
+        sector: str,
+        ratios: pd.DataFrame,
+        costs: pd.DataFrame,
+    ) -> None:
+        """
+        Need to pull in existing COP profiles.
+        """
+        pass
+
+    def add_brownfield_aircon(
+        n: pypsa.Network,
+        df: pd.DataFrame,
+        sector: str,
+        ratios: pd.DataFrame,
+        costs: pd.DataFrame,
+    ) -> None:
+        # existing efficiency values taken from:
+        # https://www.eia.gov/analysis/studies/buildings/equipcosts/pdf/full.pdf
+
+        # will give approximate installed capacity percentage by year
+        if sector == "res":
+            installed_capacity = RECS_BUILD_YEARS
+            lifetime = costs.at["lifetime", "Residential Central Air Conditioner"]
+            efficiency = 3.17  # 12.4 SEER2 converted to COP
+        elif sector == "com":
+            installed_capacity = CECS_BUILD_YEARS
+            lifetime = costs.at["lifetime", "Commercial Rooftop Air Conditioners"]
+            efficiency = 3.11  # 10.6 EER converted to COP
+
+        df["bus0"] = df.name  # central electricity bus
+
+        # remove 'heat' or 'cool' ect.. from suffix
+        df["carrier"] = df.suffix.map(lambda x: "-".join(x.split("-")[:-1]))
+        df["carrier"] = df.carrier + "-air-con"
+
+        df["ratio"] = df.state.map(ratios.electricity)
+        df["p_nom"] = df.p_max.mul(df.ratio).div(100)  # div to convert from %
+
+        for build_year, percent in installed_capacity.items():
+
+            aircon = df.copy()
+            aircon["name"] = aircon.name + f" existing_{build_year} " + aircon.carrier
+            aircon["p_nom"] = aircon.p_nom.mul(percent).div(100).round(2)
+
+            n.madd(
+                "Link",
+                aircon.name,
+                bus0=aircon.bus0,
+                bus1=aircon.bus1,
+                carrier=aircon.carrier,
+                efficiency=efficiency,
+                capital_cost=0,
+                p_nom_extendable=False,
+                p_nom=aircon.p_nom,
+                lifetime=lifetime,
+                build_year=build_year,
+            )
+
+    assert sector in ("res", "com")
+
+    match fuel:
+        case "space_heating" | "water_heating":
+            load = "heat"
+        case "aircon":
+            load = "cool"
+        case _:
+            raise NotImplementedError
+
+    df = _get_brownfield_template_df(n, load, sector)
+    df["p_nom"] = df.p_max.mul(growth_multiplier)
+
+    add_brownfield_gas_furnace(n, df, sector, ratios, costs)
+    add_brownfield_oil(n, df, sector, ratios, costs)
+    add_brownfield_elec_furnace(n, df, sector, ratios, costs)
+    add_brownfield_aircon(n, df, sector, ratios, costs)
+
+    # need to add in logic to pull eff profile from new builds
+    # add_brownfield_heat_pump(n, df, sector, ratios, costs)
 
 
 if __name__ == "__main__":

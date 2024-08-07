@@ -21,6 +21,12 @@ from add_electricity import load_costs
 from build_co2_tracking import build_co2_tracking
 from build_heat import build_heat
 from build_natural_gas import StateGeometry, build_natural_gas
+from build_stock_data import (
+    add_service_brownfield,
+    get_commercial_stock,
+    get_residential_stock,
+    get_transport_stock,
+)
 from build_transportation import apply_exogenous_ev_policy, build_transportation
 from constants import STATE_2_CODE, STATES_INTERCONNECT_MAPPER
 from shapely.geometry import Point
@@ -323,9 +329,9 @@ if __name__ == "__main__":
 
         snakemake = mock_snakemake(
             "add_sectors",
-            interconnect="texas",
+            interconnect="western",
             # simpl="",
-            clusters="20",
+            clusters="100",
             ll="v1.0",
             opts="500SEG",
             sector="E-G",
@@ -393,15 +399,15 @@ if __name__ == "__main__":
         convert_generators_2_links(n, carrier, f" gas", co2_intensity)
 
     # add natural gas infrastructure and data
-    build_natural_gas(
-        n=n,
-        year=sns[0].year,
-        api=snakemake.params.api["eia"],
-        interconnect=snakemake.wildcards.interconnect,
-        county_path=snakemake.input.county,
-        pipelines_path=snakemake.input.pipeline_capacity,
-        pipeline_shape_path=snakemake.input.pipeline_shape,
-    )
+    # build_natural_gas(
+    #     n=n,
+    #     year=sns[0].year,
+    #     api=snakemake.params.api["eia"],
+    #     interconnect=snakemake.wildcards.interconnect,
+    #     county_path=snakemake.input.county,
+    #     pipelines_path=snakemake.input.pipeline_capacity,
+    #     pipeline_shape_path=snakemake.input.pipeline_shape,
+    # )
 
     pop_layout_path = snakemake.input.clustered_pop_layout
     cop_ashp_path = snakemake.input.cop_air_total
@@ -426,5 +432,22 @@ if __name__ == "__main__":
         n=n,
         costs=costs,
     )
+
+    base_year = 2024 if any(n.investment_periods > 2024) else min(n.investment_periods)
+
+    # check for end-use brownfield requirements
+    # if snakemake.params.sector["transport"]["brownfield"]:
+    #     stock = get_transport_stock(snakemake.params.api["eia"], base_year)
+    if snakemake.params.sector["residential"]["brownfield"]:
+        res_stock_dir = snakemake.input.residential_stock
+        for fuel in ["space_heating", "aircon"]:
+            ratios = get_residential_stock(res_stock_dir, fuel)
+            ratios.index = ratios.index.map(STATE_2_CODE)
+            ratios = ratios.dropna()  # na is USA
+            add_service_brownfield(n, "res", fuel, 1, ratios, costs)
+    if snakemake.params.sector["commercial"]["brownfield"]:
+        com_stock_dir = snakemake.input.residential_stock
+        for fuel in ["space_heating", "aircon"]:
+            ratios = get_commercial_stock(com_stock_dir, fuel)
 
     n.export_to_netcdf(snakemake.output.network)
