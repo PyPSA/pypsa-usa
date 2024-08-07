@@ -376,7 +376,7 @@ def add_service_lpg_furnaces(
     ]
 
     furnaces = pd.DataFrame(index=loads.bus)
-    furnaces["bus0"] = furnaces.index.map(n.buses.STATE).map(lambda x: f"{x} lpg")
+    furnaces["bus0"] = furnaces.index.map(n.buses.STATE).map(lambda x: f"{x} oil")
     furnaces["bus1"] = furnaces.index
     furnaces["carrier"] = f"{sector}-{heat_system}-lpg-furnace"
     furnaces.index = furnaces.bus1.map(
