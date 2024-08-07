@@ -585,7 +585,8 @@ if __name__ == "__main__":
 
     new_carriers = list(
         set(elec_config["extendable_carriers"].get("Generator", []))
-        - set(n.generators.carrier.unique()),
+        - set(elec_config["conventional_carriers"])
+        - set(elec_config["renewable_carriers"]),
     )
 
     gens = n.generators[

@@ -81,6 +81,15 @@ plotting:
     "coal-99CCS": "#2e2e2e"
     "SMR": "#ff5733"
     "CCGT-95CCS": "#800000"
+    "8hr_PHS": "#069686"
+    "10hr_PHS": "#058a79"
+    "12hr_PHS": "#047d6c"    
+    "8hr_PHS_discharger": "#069686"
+    "10hr_PHS_discharger": "#058a79"
+    "12hr_PHS_discharger": "#047d6c"
+    "8hr_PHS_charger": "#069686"
+    "10hr_PHS_charger": "#058a79"
+    "12hr_PHS_charger": "#047d6c"  
 
   nice_names:
     OCGT: "Open-Cycle Gas"
