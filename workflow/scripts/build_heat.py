@@ -136,8 +136,12 @@ def add_service_heat(
             efficiency,
         )
 
-        if heat_system == "urban":
-            add_service_gas_furnaces(n, sector, heat_system, costs)
+        # if heat_system == "urban":
+        #     add_service_gas_furnaces(n, sector, heat_system, costs)
+
+        add_service_gas_furnaces(n, sector, heat_system, costs)
+
+        add_service_lpg_furnaces(n, sector, heat_system, costs)
 
         add_service_elec_furnaces(n, sector, heat_system, costs)
 
@@ -322,6 +326,69 @@ def add_service_gas_furnaces(
         "Link",
         furnaces.index,
         suffix=f" {sector}-{heat_system}-gas-furnace",
+        bus0=furnaces.bus0,
+        bus1=furnaces.bus1,
+        bus2=furnaces.bus2,
+        carrier=furnaces.carrier,
+        efficiency=efficiency,
+        efficiency2=furnaces.efficiency2,
+        capital_cost=capex,
+        p_nom_extendable=True,
+        lifetime=lifetime,
+    )
+
+
+def add_service_lpg_furnaces(
+    n: pypsa.Network,
+    sector: str,
+    heat_system: str,
+    costs: pd.DataFrame,
+) -> None:
+    """
+    Adds oil furnaces to the system.
+
+    n: pypsa.Network
+    sector: str
+        ("com" or "res")
+    heat_system: str
+        ("rural" or "urban")
+    costs: pd.DataFrame
+    """
+
+    assert heat_system in ("urban", "rural")
+
+    match sector:
+        case "res" | "Res" | "residential" | "Residential":
+            costs_name = "Residential Oil-Fired Furnaces"
+        case "com" | "Com" | "commercial" | "Commercial":
+            costs_name = "Commercial Oil-Fired Furnaces"
+        case _:
+            raise NotImplementedError
+
+    capex = costs.at[costs_name, "capital_cost"].round(1)
+    efficiency = costs.at[costs_name, "efficiency"].round(1)
+    lifetime = costs.at[costs_name, "lifetime"]
+
+    carrier_name = f"{sector}-{heat_system}-heat"
+
+    loads = n.loads[
+        (n.loads.carrier == carrier_name) & (n.loads.bus.str.contains(heat_system))
+    ]
+
+    furnaces = pd.DataFrame(index=loads.bus)
+    furnaces["bus0"] = furnaces.index.map(n.buses.STATE).map(lambda x: f"{x} lpg")
+    furnaces["bus1"] = furnaces.index
+    furnaces["carrier"] = f"{sector}-{heat_system}-lpg-furnace"
+    furnaces.index = furnaces.bus1.map(
+        lambda x: x.split(f" {sector}-{heat_system}-heat")[0],
+    )
+    furnaces["bus2"] = furnaces.index.map(n.buses.STATE) + f" {sector}-co2"
+    furnaces["efficiency2"] = costs.at["oil", "co2_emissions"]
+
+    n.madd(
+        "Link",
+        furnaces.index,
+        suffix=f" {sector}-{heat_system}-lpg-furnace",
         bus0=furnaces.bus0,
         bus1=furnaces.bus1,
         bus2=furnaces.bus2,
