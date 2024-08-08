@@ -697,6 +697,76 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
             expanded_costs.append(cost)
         return pd.concat(expanded_costs)
 
+    def _add_zero_capacity_connections(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Will add a zero capacity link if a connection is missing due to no
+        capacity.
+
+        For example, the input data frame of...
+
+        |   | STATE_NAME_TO    | STATE_NAME_FROM  | CAPACITY_MW | STATE_TO | STATE_FROM | INTERCONNECT_TO | INTERCONNECT_FROM |
+        |---|------------------|------------------|-------------|----------|------------|-----------------|-------------------|
+        | 0 | British Columbia | Washington       | 100         | BC       | WA         | canada          | western           |
+        | 1 | Idaho            | British Columbia | 50          | ID       | BC         | western         | canada            |
+        | 2 | Washington       | British Columbia | 120         | WA       | BC         | western         | canada            |
+
+        Will get converted to...
+
+        |   | STATE_NAME_TO    | STATE_NAME_FROM  | CAPACITY_MW | STATE_TO | STATE_FROM | INTERCONNECT_TO | INTERCONNECT_FROM |
+        |---|------------------|------------------|-------------|----------|------------|-----------------|-------------------|
+        | 0 | British Columbia | Washington       | 100         | BC       | WA         | canada          | western           |
+        | 1 | Idaho            | British Columbia | 50          | ID       | BC         | western         | canada            |
+        | 2 | Washington       | British Columbia | 120         | WA       | BC         | western         | canada            |
+        | 3 | British Columbia | Idaho            | 0           | BC       | ID         | canada          | western           |
+        """
+
+        @staticmethod
+        def missing_connections(df: pd.DataFrame) -> list[tuple[str, str]]:
+            connections = set(
+                map(tuple, df[["STATE_NAME_TO", "STATE_NAME_FROM"]].values),
+            )
+            missing_connections = []
+
+            for conn in connections:
+                reverse_conn = (conn[1], conn[0])
+                if reverse_conn not in connections:
+                    missing_connections.append(reverse_conn)
+
+            return missing_connections
+
+        connections = missing_connections(df)
+
+        if not connections:
+            return df
+
+        state_2_code = df.set_index("STATE_NAME_TO")["STATE_TO"].to_dict()
+        state_2_code.update(df.set_index("STATE_NAME_FROM")["STATE_FROM"].to_dict())
+
+        state_2_interconnect = df.set_index("STATE_NAME_TO")[
+            "INTERCONNECT_TO"
+        ].to_dict()
+        state_2_interconnect.update(
+            df.set_index("STATE_NAME_FROM")["INTERCONNECT_FROM"].to_dict(),
+        )
+
+        zero_capacity = []
+        for connection in connections:
+            zero_capacity.append(
+                [
+                    connection[0],
+                    connection[1],
+                    0,
+                    state_2_code[connection[0]],
+                    state_2_code[connection[1]],
+                    state_2_interconnect[connection[0]],
+                    state_2_interconnect[connection[1]],
+                ],
+            )
+
+        zero_df = pd.DataFrame(zero_capacity, columns=df.columns)
+
+        return pd.concat([df, zero_df])
+
     def build_infrastructure(self, n: pypsa.Network) -> None:
         """
         Builds import and export bus+link+store to connect to.
@@ -718,6 +788,8 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
         """
 
         df = self.data.copy()
+
+        df = self._add_zero_capacity_connections(df)
 
         if self.interconnect != "usa":
             to_from = df[df.INTERCONNECT_TO == self.interconnect].copy()  # exports
@@ -1079,7 +1151,7 @@ def build_natural_gas(
 
 if __name__ == "__main__":
 
-    n = pypsa.Network("../resources/western/elec_s_40_ec_lv1.25_Co2L1.25.nc")
+    n = pypsa.Network("../resources/Default/western/elec_s_100_ec_lv1.0_500SEG.nc")
     year = 2019
     with open("./../config/config.api.yaml") as file:
         yaml_data = yaml.safe_load(file)
