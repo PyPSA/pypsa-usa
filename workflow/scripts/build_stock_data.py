@@ -400,7 +400,11 @@ def get_residential_stock(root_dir: str, load: str) -> pd.DataFrame:
         case "water_heating":
             df = recs.get_percentage("water_heat_fuel")
         case "cooling":
-            df = recs.get_percentage("aircon")
+            # dont have fuels, so take ac stock percentage and convert to electricity
+            df = recs.get_percentage("aircon_stock")
+            df = df.rename(
+                columns={x: x.replace("ac_", "electricity_") for x in df.columns},
+            )
         case _:
             raise NotImplementedError
 
@@ -615,30 +619,31 @@ def add_transport_brownfield(
         efficiency = costs.at[costs_name, "efficiency"] / 1000
         lifetime = costs.at[costs_name, "lifetime"]
 
-        df["bus1"] = df.name + f" trn-elec-{vehicle}"
+        df["bus0"] = df.name + " trn-elec-veh"
         df["carrier"] = f"trn-elec-{vehicle}"
 
         df["ratio"] = ratios.at["electricity", ratio_name]
         df["p_nom"] = df.p_max.mul(df.ratio).div(100)  # div to convert from %
 
         # roll back vehicle stock in 5 year segments
-
-        periods = lifetime // 5
+        step = 5  # years
+        periods = int(lifetime // step)
 
         start_year = n.investment_periods[0]
         start_year = start_year if start_year <= 2023 else 2023
 
-        for period in range(periods + 1):
+        for period in range(1, periods + 1):
 
             vehicles = df.copy()
 
-            build_year = start_year - period * 5
-            percent = (1 / lifetime) + (period * 5 / lifetime)
+            build_year = start_year - period * step
+            percent = step / lifetime  # given as a ratio
 
             vehicles["name"] = (
                 vehicles.name + f" existing_{build_year} " + vehicles.carrier
             )
             vehicles["p_nom"] = vehicles.p_nom.mul(percent).round(2)
+            vehicles = vehicles.set_index("name")
 
             n.madd(
                 "Link",
@@ -725,11 +730,12 @@ def add_transport_brownfield(
                 vehicles.name + f" existing_{build_year} " + vehicles.carrier
             )
             vehicles["p_nom"] = vehicles.p_nom.mul(percent).round(2)
+            vehicles = vehicles.set_index("name")
 
             n.madd(
                 "Link",
-                vehicles.name,
-                bus0=vehicles.bus1,
+                vehicles.index,
+                bus0=vehicles.bus0,
                 bus1=vehicles.bus1,
                 carrier=vehicles.carrier,
                 efficiency=efficiency,
@@ -777,12 +783,12 @@ def add_service_brownfield(
         # will give approximate installed capacity percentage by year
         if sector == "res":
             installed_capacity = RECS_BUILD_YEARS
-            lifetime = costs.at["lifetime", "Residential Gas-Fired Furnaces"]
+            lifetime = costs.at["Residential Gas-Fired Furnaces", "lifetime"]
             efficiency = 0.80
         elif sector == "com":
             installed_capacity = CECS_BUILD_YEARS
-            lifetime = costs.at["lifetime", "Commercial Gas-Fired Furnaces"]
-            lifetime = 0.80
+            lifetime = costs.at["Commercial Gas-Fired Furnaces", "lifetime"]
+            efficiency = 0.80
 
         efficiency2 = costs.at["gas", "co2_emissions"]
 
@@ -803,10 +809,11 @@ def add_service_brownfield(
                 furnaces.name + f" existing_{build_year} " + furnaces.carrier
             )
             furnaces["p_nom"] = furnaces.p_nom.mul(percent).div(100).round(2)
+            furnaces = furnaces.set_index("name")
 
             n.madd(
                 "Link",
-                furnaces.name,
+                furnaces.index,
                 bus0=furnaces.bus0,
                 bus1=furnaces.bus1,
                 bus2=furnaces.bus2,
@@ -834,16 +841,16 @@ def add_service_brownfield(
         # will give approximate installed capacity percentage by year
         if sector == "res":
             installed_capacity = RECS_BUILD_YEARS
-            lifetime = costs.at["lifetime", "Residential Oil-Fired Furnaces"]
+            lifetime = costs.at["Residential Oil-Fired Furnaces", "lifetime"]
             efficiency = 0.83
         elif sector == "com":
             installed_capacity = CECS_BUILD_YEARS
-            lifetime = costs.at["lifetime", "Commercial Oil-Fired Furnaces"]
-            lifetime = 0.81
+            lifetime = costs.at["Commercial Oil-Fired Furnaces", "lifetime"]
+            efficiency = 0.81
 
         efficiency2 = costs.at["oil", "co2_emissions"]
 
-        df["bus0"] = df.state + " lpg"
+        df["bus0"] = df.state + " oil"
         df["bus2"] = df.state + f" {sector}-co2"
 
         # remove 'heat' or 'cool' ect.. from suffix
@@ -860,10 +867,11 @@ def add_service_brownfield(
                 furnaces.name + f" existing_{build_year} " + furnaces.carrier
             )
             furnaces["p_nom"] = furnaces.p_nom.mul(percent).div(100).round(2)
+            furnaces = furnaces.set_index("name")
 
             n.madd(
                 "Link",
-                furnaces.name,
+                furnaces.index,
                 bus0=furnaces.bus0,
                 bus1=furnaces.bus1,
                 bus2=furnaces.bus2,
@@ -891,11 +899,11 @@ def add_service_brownfield(
         # will give approximate installed capacity percentage by year
         if sector == "res":
             installed_capacity = RECS_BUILD_YEARS
-            lifetime = costs.at["lifetime", "Residential Electric Resistance Heaters"]
+            lifetime = costs.at["Residential Electric Resistance Heaters", "lifetime"]
             efficiency = 1.0
         elif sector == "com":
             installed_capacity = CECS_BUILD_YEARS
-            lifetime = costs.at["lifetime", "Commercial Electric Resistance Heaters"]
+            lifetime = costs.at["Commercial Electric Resistance Heaters", "lifetime"]
             efficiency = 1.0
 
         df["bus0"] = df.name  # central electricity bus
@@ -914,10 +922,11 @@ def add_service_brownfield(
                 furnaces.name + f" existing_{build_year} " + furnaces.carrier
             )
             furnaces["p_nom"] = furnaces.p_nom.mul(percent).div(100).round(2)
+            furnaces = furnaces.set_index("name")
 
             n.madd(
                 "Link",
-                furnaces.name,
+                furnaces.index,
                 bus0=furnaces.bus0,
                 bus1=furnaces.bus1,
                 carrier=furnaces.carrier,
@@ -954,11 +963,11 @@ def add_service_brownfield(
         # will give approximate installed capacity percentage by year
         if sector == "res":
             installed_capacity = RECS_BUILD_YEARS
-            lifetime = costs.at["lifetime", "Residential Central Air Conditioner"]
+            lifetime = costs.at["Residential Central Air Conditioner", "lifetime"]
             efficiency = 3.17  # 12.4 SEER2 converted to COP
         elif sector == "com":
             installed_capacity = CECS_BUILD_YEARS
-            lifetime = costs.at["lifetime", "Commercial Rooftop Air Conditioners"]
+            lifetime = costs.at["Commercial Rooftop Air Conditioners", "lifetime"]
             efficiency = 3.11  # 10.6 EER converted to COP
 
         df["bus0"] = df.name  # central electricity bus
@@ -975,10 +984,11 @@ def add_service_brownfield(
             aircon = df.copy()
             aircon["name"] = aircon.name + f" existing_{build_year} " + aircon.carrier
             aircon["p_nom"] = aircon.p_nom.mul(percent).div(100).round(2)
+            aircon = aircon.set_index("name")
 
             n.madd(
                 "Link",
-                aircon.name,
+                aircon.index,
                 bus0=aircon.bus0,
                 bus1=aircon.bus1,
                 carrier=aircon.carrier,
@@ -995,7 +1005,7 @@ def add_service_brownfield(
     match fuel:
         case "space_heating" | "water_heating":
             load = "heat"
-        case "aircon":
+        case "cooling":
             load = "cool"
         case _:
             raise NotImplementedError
@@ -1003,26 +1013,24 @@ def add_service_brownfield(
     df = _get_brownfield_template_df(n, load, sector)
     df["p_nom"] = df.p_max.mul(growth_multiplier)
 
-    add_brownfield_gas_furnace(n, df, sector, ratios, costs)
-    add_brownfield_oil(n, df, sector, ratios, costs)
-    add_brownfield_elec_furnace(n, df, sector, ratios, costs)
-    add_brownfield_aircon(n, df, sector, ratios, costs)
+    if load == "heat":
+        add_brownfield_gas_furnace(n, df, sector, ratios, costs)
+        add_brownfield_oil(n, df, sector, ratios, costs)
+        add_brownfield_elec_furnace(n, df, sector, ratios, costs)
+    elif load == "cool":
+        add_brownfield_aircon(n, df, sector, ratios, costs)
+    else:
+        raise NotImplementedError
 
     # need to add in logic to pull eff profile from new builds
     # add_brownfield_heat_pump(n, df, sector, ratios, costs)
 
 
 if __name__ == "__main__":
-    # print(get_residential_stock("./../../testing", "space_heating"))
-    print(
-        get_commercial_stock(
-            "./../repo_data/sectors/commercial_stock",
-            "space_heating",
-        ),
-    )
+    print(get_residential_stock("./../repo_data/sectors/residential_stock", "cooling"))
 
-    with open("./../config/config.api.yaml") as file:
-        yaml_data = yaml.safe_load(file)
-    api = yaml_data["api"]["eia"]
+    # with open("./../config/config.api.yaml") as file:
+    #     yaml_data = yaml.safe_load(file)
+    # api = yaml_data["api"]["eia"]
 
     # print(get_transport_stock(api, 2024))

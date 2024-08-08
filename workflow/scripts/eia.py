@@ -37,7 +37,7 @@ period
 import logging
 import math
 from abc import ABC, abstractmethod
-from typing import Dict, Optional, Union
+from typing import Optional
 
 import constants
 import numpy as np
@@ -1117,8 +1117,10 @@ class HistoricalProjectedTransportFuelUse(DataExtractor):
         base_url = f"aeo/{aeo}/data/"
         scenario = f"ref{aeo}"
 
-        if self.year >= 2022:
+        if self.year >= 2024:
             facets = f"frequency=annual&data[0]=value&facets[scenario][]={self.scenario_codes[self.scenario]}&facets[seriesId][]={''.join(self.vehicle_codes[self.vehicle])}&start=2024&end={self.year}&sort[0][column]=period&sort[0][direction]=desc&offset=0&length=5000"
+        elif self.year >= 2022:  # switch years in api call
+            facets = f"frequency=annual&data[0]=value&facets[scenario][]={self.scenario_codes[self.scenario]}&facets[seriesId][]={''.join(self.vehicle_codes[self.vehicle])}&start={self.year}&end={self.year}&sort[0][column]=period&sort[0][direction]=desc&offset=0&length=5000"
         else:
             facets = f"frequency=annual&data[0]=value&facets[scenario][]={scenario}&facets[seriesId][]={''.join(self.vehicle_codes[self.vehicle])}&start={self.year}&end={self.year}&sort[0][column]=period&sort[0][direction]=desc&offset=0&length=5000"
 
@@ -1136,7 +1138,7 @@ class HistoricalProjectedTransportFuelUse(DataExtractor):
             .map(
                 lambda x: x.split("Transportation Energy Use : ")[1],
             )
-            .map(lambda x: x.split(" : ")[1])
+            .map(lambda x: x.split(" : ")[-1])
         )  # strip out vehicle type
         df = df[["series-description", "value", "units", "state"]].sort_index()
         return self._assign_dtypes(df)
@@ -1444,7 +1446,7 @@ if __name__ == "__main__":
     # print(Storage("gas", "total", 2019, api).get_data(pivot=True))
     # print(EnergyDemand("residential", 2030, api).get_data(pivot=False))
     print(
-        TransportationFuelUse("heavy_duty", 2040, api).get_data(
+        TransportationFuelUse("light_duty", 2023, api).get_data(
             pivot=False,
         ),
     )

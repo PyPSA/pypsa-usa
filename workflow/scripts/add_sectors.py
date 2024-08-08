@@ -400,15 +400,15 @@ if __name__ == "__main__":
         convert_generators_2_links(n, carrier, f" gas", co2_intensity)
 
     # add natural gas infrastructure and data
-    # build_natural_gas(
-    #     n=n,
-    #     year=sns[0].year,
-    #     api=snakemake.params.api["eia"],
-    #     interconnect=snakemake.wildcards.interconnect,
-    #     county_path=snakemake.input.county,
-    #     pipelines_path=snakemake.input.pipeline_capacity,
-    #     pipeline_shape_path=snakemake.input.pipeline_shape,
-    # )
+    build_natural_gas(
+        n=n,
+        year=sns[0].year,
+        api=snakemake.params.api["eia"],
+        interconnect=snakemake.wildcards.interconnect,
+        county_path=snakemake.input.county,
+        pipelines_path=snakemake.input.pipeline_capacity,
+        pipeline_shape_path=snakemake.input.pipeline_shape,
+    )
 
     pop_layout_path = snakemake.input.clustered_pop_layout
     cop_ashp_path = snakemake.input.cop_air_total
@@ -434,26 +434,44 @@ if __name__ == "__main__":
         costs=costs,
     )
 
-    base_year = 2024 if any(n.investment_periods > 2024) else min(n.investment_periods)
-
     # check for end-use brownfield requirements
+
+    if any(
+        [
+            snakemake.params.sector["transport"]["brownfield"],
+            snakemake.params.sector["residential"]["brownfield"],
+            snakemake.params.sector["commercial"]["brownfield"],
+        ],
+    ):
+        if all(n.investment_periods > 2023):
+            # this is quite crude assumption and should get updated
+            # assume a 0.5% energy growth per year
+            # https://www.eia.gov/todayinenergy/detail.php?id=56040
+            base_year = 2023
+            growth_multiplier = 1 - (min(n.investment_periods) - 2023) * (0.005)
+        else:
+            base_year = min(n.investment_periods)
+            growth_multiplier = 1
+
     if snakemake.params.sector["transport"]["brownfield"]:
         ratios = get_transport_stock(snakemake.params.api["eia"], base_year)
         for vehicle in ("lgt", "med", "hvy", "bus"):
-            add_transport_brownfield(n, vehicle, 1, ratios, costs)
+            add_transport_brownfield(n, vehicle, growth_multiplier, ratios, costs)
+
     if snakemake.params.sector["residential"]["brownfield"]:
         res_stock_dir = snakemake.input.residential_stock
-        for fuel in ["space_heating", "aircon"]:
+        for fuel in ["space_heating", "cooling"]:
             ratios = get_residential_stock(res_stock_dir, fuel)
             ratios.index = ratios.index.map(STATE_2_CODE)
             ratios = ratios.dropna()  # na is USA
-            add_service_brownfield(n, "res", fuel, 1, ratios, costs)
+            add_service_brownfield(n, "res", fuel, growth_multiplier, ratios, costs)
+
     if snakemake.params.sector["commercial"]["brownfield"]:
-        com_stock_dir = snakemake.input.residential_stock
-        for fuel in ["space_heating", "aircon"]:
+        com_stock_dir = snakemake.input.commercial_stock
+        for fuel in ["space_heating", "cooling"]:
             ratios = get_commercial_stock(com_stock_dir, fuel)
             ratios.index = ratios.index.map(STATE_2_CODE)
             ratios = ratios.dropna()  # na is USA
-            add_service_brownfield(n, "com", fuel, 1, ratios, costs)
+            add_service_brownfield(n, "com", fuel, growth_multiplier, ratios, costs)
 
     n.export_to_netcdf(snakemake.output.network)
