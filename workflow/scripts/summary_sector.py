@@ -101,6 +101,7 @@ def get_capacity_per_link_per_node(
     n: pypsa.Network,
     sector: str,
     include_elec: bool = False,
+    group_existing: bool = True,
     state: Optional[str] = None,
 ) -> pd.Series:
     if include_elec:
@@ -122,6 +123,10 @@ def get_capacity_per_link_per_node(
     df = df[["carrier", "p_nom_opt"]]
     df["node"] = df.index.map(lambda x: x.split(f" {sector}-")[0])
     df["carrier"] = df.carrier.map(lambda x: x.split(f"{sector}-")[1])
+
+    if group_existing:
+        df["node"] = df.node.map(lambda x: x.split(" existing")[0])
+
     return df.reset_index(drop=True).groupby(["node", "carrier"]).sum().squeeze()
 
 
@@ -129,6 +134,7 @@ def get_total_capacity_per_node(
     n: pypsa.Network,
     sector: str,
     include_elec: bool = False,
+    group_existing: bool = True,
     state: Optional[str] = None,
 ) -> pd.Series:
     if include_elec:
@@ -149,6 +155,10 @@ def get_total_capacity_per_node(
 
     df = df[["p_nom_opt"]]
     df["node"] = df.index.map(lambda x: x.split(f" {sector}-")[0])
+
+    if group_existing:
+        df["node"] = df.node.map(lambda x: x.split(" existing")[0])
+
     return df.reset_index(drop=True).groupby(["node"]).sum().squeeze()
 
 
@@ -156,14 +166,51 @@ def get_capacity_per_node(
     n: pypsa.Network,
     sector: str,
     include_elec: bool = False,
+    group_existing: bool = True,
     state: Optional[str] = None,
     **kwargs,
 ) -> pd.DataFrame:
-    total = get_total_capacity_per_node(n, sector, include_elec, state=state)
-    df = get_capacity_per_link_per_node(n, sector, include_elec, state=state).to_frame()
+    total = get_total_capacity_per_node(n, sector, include_elec, group_existing, state)
+    df = get_capacity_per_link_per_node(
+        n,
+        sector,
+        include_elec,
+        group_existing,
+        state,
+    ).to_frame()
     df["total"] = df.index.get_level_values("node").map(total)
     df["percentage"] = (df.p_nom_opt / df.total).round(4) * 100
     return df
+
+
+def get_brownfield_capacity_per_state(
+    n: pypsa.Network,
+    sector: str,
+    state: Optional[str] = None,
+    **kwargs,
+) -> pd.DataFrame:
+
+    assert sector in ("res", "com", "ind", "trn")
+
+    df = get_capacity_per_node(n, sector, group_existing=False, state=state)
+
+    data = []
+
+    for carrier in df.index.get_level_values("carrier").unique():
+        temp = df[df.index.get_level_values("carrier") == carrier].droplevel("carrier")
+        temp["existing"] = temp.index.map(lambda x: True if "existing" in x else False)
+
+        data.append(
+            [
+                carrier,
+                temp[temp.existing == True].p_nom_opt.sum(),
+                temp[temp.existing == False].p_nom_opt.sum(),
+            ],
+        )
+
+    capacity = pd.DataFrame(data, columns=["carrier", "Existing", "New Build"])
+
+    return capacity.set_index("carrier")
 
 
 def get_sector_production_timeseries(
@@ -406,17 +453,16 @@ def get_end_use_consumption(
         """
         loads = n.links[
             (n.links.carrier.str.startswith("trn-"))
-            & ~(n.links.index.str.endswith("infra"))
-            & ~(n.links.index.str.endswith("boat"))
-            & ~(n.links.index.str.endswith("rail"))
-            & ~(n.links.index.str.endswith("air"))
+            & ~(n.links.carrier.str.endswith("-veh"))
+            & ~(n.links.carrier == ("trn-air"))
+            & ~(n.links.carrier == ("trn-rail"))
+            & ~(n.links.carrier == ("trn-boat"))
         ]
         if state:
             l = _get_links_in_state(n, state)
             loads = loads[loads.index.isin(l)]
         df = n.links_t.p0[loads.index].mul(n.snapshot_weightings["objective"], axis=0).T
-        df.index = df.index.map(n.loads.carrier).map(lambda x: x.split("-")[1:])
-        df.index = df.index.map(lambda x: "-".join(x))
+        df.index = df.index.map(lambda x: x.split("trn-")[1])
         return df.groupby(level=0).sum().T
 
     match sector:

@@ -15,6 +15,7 @@ from add_electricity import sanitize_carriers
 from constants import STATE_2_CODE
 from plot_statistics import create_title
 from summary_sector import (
+    get_brownfield_capacity_per_state,
     get_capacity_per_node,
     get_emission_timeseries_by_sector,
     get_end_use_consumption,
@@ -314,7 +315,11 @@ def plot_sector_emissions(
             df.loc[investment_period,].iloc[-1].values[0],
         )
 
-    df = pd.DataFrame([data], columns=sectors)
+    if not data:
+        # empty data to be caught by type error below
+        df = pd.DataFrame(data, columns=sectors)
+    else:
+        df = pd.DataFrame([data], columns=sectors)
 
     fig, axs = plt.subplots(
         ncols=1,
@@ -382,27 +387,21 @@ def plot_capacity_per_node(
 
     sectors = ("res", "com", "ind")
 
-    nrows = ceil(len(sectors) / 2)
+    nrows = len(sectors)
 
     fig, axs = plt.subplots(
-        ncols=2,
+        ncols=1,
         nrows=nrows,
         figsize=(14, 5 * nrows),
         sharey=sharey,
     )
-
-    row = 0
-    col = 0
 
     data_col = "percentage" if percentage else "p_nom_opt"
     y_label = "Percentage (%)" if percentage else "Capacity (MW)"
 
     for i, sector in enumerate(sectors):
 
-        row = i // 2
-        col = i % 2
-
-        df = get_capacity_per_node(n, sector, state=state)
+        df = get_capacity_per_node(n, sector, group_existing=True, state=state)
         df = df.reset_index()[["node", "carrier", data_col]]
         df = df.pivot(columns="carrier", index="node", values=data_col)
 
@@ -410,17 +409,66 @@ def plot_capacity_per_node(
 
             if nrows > 1:
 
-                df.plot(kind="bar", stacked=True, ax=axs[row, col])
-                axs[row, col].set_xlabel("")
-                axs[row, col].set_ylabel(y_label)
-                axs[row, col].set_title(f"{sector} Capacity")
-
-            else:
-
                 df.plot(kind="bar", stacked=True, ax=axs[i])
                 axs[i].set_xlabel("")
                 axs[i].set_ylabel(y_label)
                 axs[i].set_title(f"{sector} Capacity")
+
+            else:
+
+                df.plot(kind="bar", stacked=True, ax=axs)
+                axs.set_xlabel("")
+                axs.set_ylabel(y_label)
+                axs.set_title(f"{sector} Capacity")
+
+        except TypeError:  # no numeric data to plot
+            logger.warning(f"No data to plot for {state}")
+
+    return fig, axs
+
+
+def plot_capacity_brownfield(
+    n: pypsa.Network,
+    sharey: bool = True,
+    state: Optional[str] = None,
+    **kwargs,
+) -> tuple:
+    """
+    Plots old and new capacity at a state level by carrier.
+    """
+
+    sectors = ("res", "com", "ind", "trn")
+
+    nrows = len(sectors)
+
+    fig, axs = plt.subplots(
+        ncols=1,
+        nrows=nrows,
+        figsize=(14, 5 * nrows),
+        sharey=sharey,
+    )
+
+    y_label = "Capacity (MW)"
+
+    for i, sector in enumerate(sectors):
+
+        df = get_brownfield_capacity_per_state(n, sector, state=state)
+
+        try:
+
+            if nrows > 1:
+
+                df.plot(kind="bar", ax=axs[i])
+                axs[i].set_xlabel("")
+                axs[i].set_ylabel(y_label)
+                axs[i].set_title(f"{sector} Capacity")
+
+            else:
+
+                df.plot(kind="bar", ax=axs)
+                axs.set_xlabel("")
+                axs.set_ylabel(y_label)
+                axs.set_title(f"{sector} Capacity")
 
         except TypeError:  # no numeric data to plot
             logger.warning(f"No data to plot for {state}")
@@ -585,57 +633,108 @@ def plot_sector_emissions_validation(
     else:
         states_to_plot = modelled.columns
 
-    nrows = ceil(len(states_to_plot) / 2)
+    if state:  # plot at state level
 
-    fig, axs = plt.subplots(
-        ncols=2,
-        nrows=nrows,
-        figsize=(14, 6 * nrows),
-        sharey=sharey,
-    )
+        nrows = ceil(len(states_to_plot) / 2)
 
-    row = 0
-    col = 0
+        fig, axs = plt.subplots(
+            ncols=2,
+            nrows=nrows,
+            figsize=(14, 6 * nrows),
+            sharey=sharey,
+        )
 
-    for i, state_to_plot in enumerate(states_to_plot):
+        row = 0
+        col = 0
 
-        row = i // 2
-        col = i % 2
+        for i, state_to_plot in enumerate(states_to_plot):
 
-        try:
-            m = modelled[state_to_plot].to_frame(name="Modelled")
-            h = historical[state_to_plot].to_frame(name="Actual")
-        except KeyError:
-            logger.warning(f"No data for {state_to_plot}")
-            continue
+            row = i // 2
+            col = i % 2
 
-        assert m.shape == h.shape
+            try:
+                m = modelled[state_to_plot].to_frame(name="Modelled")
+                h = historical[state_to_plot].to_frame(name="Actual")
+            except KeyError:
+                logger.warning(f"No data for {state_to_plot}")
+                continue
 
-        df = m.join(h)
-        df["Difference"] = percent_difference(df.Modelled, df.Actual)
+            assert m.shape == h.shape
 
-        try:
+            df = m.join(h)
+            df["Difference"] = percent_difference(df.Modelled, df.Actual)
 
-            if nrows > 1:
+            try:
 
-                df[["Modelled", "Actual"]].T.plot.bar(ax=axs[row, col])
-                axs[row, col].set_xlabel("")
-                axs[row, col].set_ylabel("Emissions (MT)")
-                axs[row, col].set_title(f"{state_to_plot}")
-                axs[row, col].tick_params(axis="x", labelrotation=0)
+                if nrows > 1:
 
-            else:
+                    df[["Modelled", "Actual"]].T.plot.bar(ax=axs[row, col])
+                    axs[row, col].set_xlabel("")
+                    axs[row, col].set_ylabel("Emissions (MT)")
+                    axs[row, col].set_title(f"{state_to_plot}")
+                    axs[row, col].tick_params(axis="x", labelrotation=0)
 
-                df[["Modelled", "Actual"]].T.plot.bar(ax=axs[i])
-                axs[i].set_xlabel("")
-                axs[i].set_ylabel("Emissions (MT)")
-                axs[i].set_title(f"{state_to_plot}")
-                axs[i].tick_params(axis="x", labelrotation=0)
+                else:
 
-        except TypeError:  # no numeric data to plot
-            logger.warning(f"No data to plot for {state}")
+                    df[["Modelled", "Actual"]].T.plot.bar(ax=axs[i])
+                    axs[i].set_xlabel("")
+                    axs[i].set_ylabel("Emissions (MT)")
+                    axs[i].set_title(f"{state_to_plot}")
+                    axs[i].tick_params(axis="x", labelrotation=0)
 
-    return fig, axs
+            except TypeError:  # no numeric data to plot
+                logger.warning(f"No data to plot for {state}")
+
+        return fig, axs
+
+    else:  # plot at system level
+
+        modelled = modelled.T
+        historical = historical.T
+
+        sectors = modelled.columns
+
+        nrows = len(sectors)  # one sector per row
+
+        fig, axs = plt.subplots(
+            ncols=1,
+            nrows=nrows,
+            figsize=(14, 6 * nrows),
+            sharey=False,
+        )
+
+        for i, sector in enumerate(sectors):
+
+            df = pd.concat(
+                [
+                    historical[sector].to_frame(name="Actual"),
+                    modelled[sector].to_frame(name="Modelled"),
+                ],
+                axis=1,
+            ).dropna()
+
+            try:
+
+                if nrows > 1:
+
+                    df[["Actual", "Modelled"]].plot.bar(ax=axs[i])
+                    axs[i].set_xlabel("")
+                    axs[i].set_ylabel("Emissions (MT)")
+                    axs[i].set_title(f"{sector} Emissions")
+                    axs[i].tick_params(axis="x", labelrotation=0)
+
+                else:
+
+                    df[["Actual", "Modelled"]].plot.bar(ax=axs)
+                    axs.set_xlabel("")
+                    axs.set_ylabel("Emissions (MT)")
+                    axs.set_title(f"{sector} Emissions")
+                    axs.tick_params(axis="x", labelrotation=0)
+
+            except TypeError:  # no numeric data to plot
+                logger.warning(f"No emission data to plot for {sector}")
+
+        return fig, axs
 
 
 def plot_state_emissions_validation(
@@ -1084,13 +1183,14 @@ if __name__ == "__main__":
         from _helpers import mock_snakemake
 
         snakemake = mock_snakemake(
-            "plot_sector_loads",
+            "plot_sector_capacity",
+            # "plot_sector_validate",
             interconnect="western",
             clusters=100,
             ll="v1.0",
             opts="500SEG",
             sector="E-G",
-            state="system",
+            state="CA",
         )
     configure_logging(snakemake)
 
