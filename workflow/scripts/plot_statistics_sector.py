@@ -1084,6 +1084,122 @@ def plot_transportation_by_mode_validation(
     return fig, axs
 
 
+def plot_system_consumption_by_state(
+    n: pypsa.Network,
+    **kwargs,
+) -> tuple:
+
+    states = n.buses.STATE.unique()
+
+    sectors = ("res", "com", "ind", "trn")
+
+    nrows = len(sectors)
+
+    fig, axs = plt.subplots(
+        ncols=1,
+        nrows=nrows,
+        figsize=(14, 5 * nrows),
+    )
+
+    y_label = "Energy (MWh)"
+
+    for i, sector in enumerate(sectors):
+
+        dfs = []
+
+        for state in states:
+            dfs.append(
+                get_end_use_consumption(n, sector, state)
+                .sum(axis=0)
+                .to_frame(name=state)
+                .T,
+            )
+
+        df = pd.concat(dfs)
+
+        try:
+
+            if nrows > 1:
+
+                df.plot(kind="bar", ax=axs[i])
+                axs[i].set_xlabel("")
+                axs[i].set_ylabel(y_label)
+                axs[i].set_title(f"{sector} Production")
+
+            else:
+
+                df.plot(kind="bar", ax=axs)
+                axs.set_xlabel("")
+                axs.set_ylabel(y_label)
+                axs.set_title(f"{sector} Production")
+
+        except TypeError:  # no numeric data to plot
+            logger.warning(f"No data to plot for {state}")
+
+    return fig, axs
+
+
+def plot_system_consumption_validation_by_state(
+    n: pypsa.Network,
+    eia_api: str,
+    **kwargs,
+) -> tuple:
+
+    states = [x for x in n.buses.STATE.unique() if x]  # remove non-classified buses
+
+    sectors = ("res", "com", "ind", "trn")
+
+    nrows = len(sectors)
+
+    fig, axs = plt.subplots(
+        ncols=1,
+        nrows=nrows,
+        figsize=(14, 5 * nrows),
+    )
+
+    y_label = "Energy (MWh)"
+
+    for i, sector in enumerate(sectors):
+
+        historical = get_historical_end_use_consumption(
+            SECTOR_MAPPER[sector],
+            2020,
+            eia_api,
+        )
+
+        data = []
+
+        for state in states:
+            modelled = get_end_use_consumption(n, sector, state)
+
+            data.append([state, modelled.sum().sum(), historical[state].values[0]])
+
+        df = pd.DataFrame(data, columns=["State", "Modelled", "Historical"]).set_index(
+            "State",
+        )
+
+        try:
+
+            if nrows > 1:
+
+                df.plot(kind="bar", ax=axs[i])
+                axs[i].set_xlabel("")
+                axs[i].set_ylabel(y_label)
+                axs[i].set_title(f"{sector} Production")
+
+            else:
+
+                df.plot(kind="bar", ax=axs)
+                axs.set_xlabel("")
+                axs.set_ylabel(y_label)
+                axs.set_title(f"{sector} Production")
+
+        except TypeError:  # no numeric data to plot
+            logger.warning(f"No data to plot for {sector}")
+
+    return fig, axs
+
+
 ###
 # HELPERS
 ###
@@ -1133,14 +1249,18 @@ FIGURE_FUNCTION = {
     # capacity
     "end_use_capacity_per_node_absolute": plot_capacity_per_node,
     "end_use_capacity_per_node_percentage": plot_capacity_per_node,
+    "end_use_capacity_state_brownfield": plot_capacity_brownfield,
     # emissions
     "emissions_by_sector": plot_sector_emissions,
     "emissions_by_state": plot_state_emissions,
+    # system
+    "system_consumption": plot_system_consumption_by_state,
     # validation
     "emissions_by_sector_validation": plot_sector_emissions_validation,
     "emissions_by_state_validation": plot_state_emissions_validation,
     "generation_by_state_validation": plot_sector_consumption_validation,
     "transportation_by_mode_validation": plot_transportation_by_mode_validation,
+    "system_consumption_validation": plot_system_consumption_validation_by_state,
 }
 
 FIGURE_NICE_NAME = {
@@ -1155,9 +1275,11 @@ FIGURE_NICE_NAME = {
     "hp_cop": "Heat Pump Coefficient of Performance",
     "production_time_series": "End Use Technology Production",
     "production_total": "End Use Technology Production",
+    "system_consumption": "End Use Consumption by Sector",
     # capacity
     "end_use_capacity_per_node_absolute": "Capacity Per Node",
     "end_use_capacity_per_node_percentage": "Capacity Per Node",
+    "end_use_capacity_state_brownfield": "Brownfield Capacity Per State",
     # emissions
     "emissions_by_sector": "",
     "emissions_by_state": "",
@@ -1166,6 +1288,7 @@ FIGURE_NICE_NAME = {
     "emissions_by_state_validation": "",
     "generation_by_state_validation": "",
     "transportation_by_mode_validation": "",
+    "system_consumption_validation": "",
 }
 
 FN_ARGS = {
@@ -1183,14 +1306,14 @@ if __name__ == "__main__":
         from _helpers import mock_snakemake
 
         snakemake = mock_snakemake(
-            "plot_sector_capacity",
+            "plot_system_production",
             # "plot_sector_validate",
             interconnect="western",
             clusters=100,
             ll="v1.0",
             opts="500SEG",
             sector="E-G",
-            state="CA",
+            # state="CA",
         )
     configure_logging(snakemake)
 
@@ -1203,7 +1326,13 @@ if __name__ == "__main__":
 
     params = snakemake.params
     eia_api = params.get("eia_api", None)
-    state = wildcards.state
+
+    try:
+        state = wildcards.state
+    # AttributeError: 'Wildcards' object has no attribute 'state'
+    # appears for system only plots
+    except AttributeError:
+        state = "system"
 
     for f, f_path in snakemake.output.items():
 

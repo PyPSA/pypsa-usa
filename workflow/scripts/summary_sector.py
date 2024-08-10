@@ -427,6 +427,9 @@ def get_end_use_consumption(
 ) -> pd.DataFrame:
     """
     Gets timeseries energy consumption in MWh.
+
+    - Will get "p_set" load for "res", "com", "ind"
+    - WIll get "p0" link for "trn"
     """
 
     def get_service_consumption(
