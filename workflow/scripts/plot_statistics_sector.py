@@ -1089,7 +1089,7 @@ def plot_system_consumption_by_state(
     **kwargs,
 ) -> tuple:
 
-    states = n.buses.STATE.unique()
+    states = [x for x in n.buses.STATE.unique() if x]
 
     sectors = ("res", "com", "ind", "trn")
 
