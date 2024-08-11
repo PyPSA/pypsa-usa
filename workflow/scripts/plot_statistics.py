@@ -62,47 +62,10 @@ from summary import (
     get_node_emissions_timeseries,
     get_tech_emissions_timeseries,
 )
+from plot_network_maps import get_color_palette
 
 # Global Plotting Settings
 TITLE_SIZE = 16
-
-
-def get_color_palette(n: pypsa.Network) -> dict[str, str]:
-    """
-    Returns colors based on nice name.
-    """
-
-    colors = (n.carriers.reset_index().set_index("nice_name")).color
-
-    additional = {
-        "Battery Charge": n.carriers.at["battery", "color"],
-        "Battery Discharge": n.carriers.at["battery", "color"],
-        "battery_discharger": n.carriers.at["battery", "color"],
-        "battery_charger": n.carriers.at["battery", "color"],
-        "co2": "k",
-    }
-    for hr in ("4", "8"):
-        try:
-            additional[f"{hr}hr_battery_storage_discharger"] = n.carriers.at[
-                f"{hr}hr_battery_storage",
-                "color",
-            ]
-            additional[f"{hr}hr_battery_storage_charger"] = n.carriers.at[
-                f"{hr}hr_battery_storage",
-                "color",
-            ]
-        except KeyError:
-            additional[f"{hr}hr_battery_storage_discharger"] = n.carriers.at[
-                "battery",
-                "color",
-            ]
-            additional[f"{hr}hr_battery_storage_charger"] = n.carriers.at[
-                "battery",
-                "color",
-            ]
-
-    return pd.concat([colors, pd.Series(additional)]).to_dict()
-
 
 def create_title(title: str, **wildcards) -> str:
     """
@@ -658,7 +621,7 @@ def plot_production_area(
                     (n.snapshots.get_level_values(0) == investment_period)
                     & (n.snapshots.get_level_values(1).month == month)
                 ]
-
+            breakpoint()
             energy_mix.loc[sns].droplevel("period").plot.area(
                 ax=axs[i],
                 alpha=0.7,
@@ -1163,9 +1126,9 @@ if __name__ == "__main__":
         snakemake = mock_snakemake(
             "plot_statistics",
             interconnect="texas",
-            clusters=20,
-            ll="v1.0",
-            opts="500SEG",
+            clusters=7,
+            ll="v1.00",
+            opts="REM-400SEG",
             sector="E",
         )
     configure_logging(snakemake)
