@@ -424,44 +424,44 @@ def replace_lines_with_links(clustering, itl_fn):
     """
     Replaces all Lines according to Links with the transfer capacity specified
     by the ITLs.
-
-    TODO: Modify native PyPSA Links table to support bi-directional link limits.
     """
     lines = clustering.network.lines.copy()
     buses = clustering.network.buses.copy()
 
     itls = pd.read_csv(itl_fn)
 
-    itls["bus0"] = (itls.r + "0 0").astype(str)
-    itls["bus1"] = (itls.rr + "0 0").astype(str)
     itls = itls[
-        itls.bus0.isin(clustering.network.buses.index)
-        & itls.bus1.isin(clustering.network.buses.index)
+        itls.r.isin(clustering.network.buses.reeds_zone)
+        & itls.rr.isin(clustering.network.buses.reeds_zone)
     ]
 
     itls["p_nom"] = np.maximum(itls["MW_f0"], itls["MW_r0"])
-
-    def find_eq_line(itl):
-        try:
-            return lines[
-                (lines.bus0 == itl.bus0) & (lines.bus1 == itl.bus1)
-                | (lines.bus0 == itl.bus1) & (lines.bus1 == itl.bus0)
-            ].index[0]
-        except:
-            return np.nan
-
-    itls["eq_line"] = itls.apply(find_eq_line, axis=1)
-    itls["capex"] = itls.eq_line.map(lines.capital_cost)
 
     clustering.network.mremove("Line", clustering.network.lines.index)
     clustering.network.madd(
         "Link",
         names=itls.interface,  # itl name
-        bus0=buses.loc[itls.bus0].index,
-        bus1=buses.loc[itls.bus1].index,
-        p_nom=itls.p_nom.values,
-        capital_cost=itls.capex.values,  # revisit capex assignment for links
+        suffix="fwd",
+        bus0=buses.loc[itls.r].index,
+        bus1=buses.loc[itls.rr].index,
+        p_nom=itls.MW_r0.values,
+        capital_cost=0,  # revisit capex assignment for links
         p_nom_extendable=False,
+        p_max_pu=1.0,
+        p_min_pu=0,
+        carrier="AC",
+    )
+    clustering.network.madd(
+        "Link",
+        names=itls.interface,  # itl name
+        suffix="rev",
+        bus0=buses.loc[itls.r].index,
+        bus1=buses.loc[itls.rr].index,
+        p_nom=itls.MW_r0.values,
+        capital_cost=0,  # revisit capex assignment for links
+        p_nom_extendable=False,
+        p_max_pu=0,
+        p_min_pu=-1.0,
         carrier="AC",
     )
     logger.info(f"Replaced Lines with Links for zonal model configuration.")
@@ -497,8 +497,8 @@ if __name__ == "__main__":
         snakemake = mock_snakemake(
             "cluster_network",
             simpl="",
-            clusters="33",
-            interconnect="western",
+            clusters="7",
+            interconnect="texas",
         )
     configure_logging(snakemake)
 
@@ -577,6 +577,9 @@ if __name__ == "__main__":
             )
             custom_busmap.index = custom_busmap.index.astype(str)
             logger.info(f"Imported custom busmap from {snakemake.input.custom_busmap}")
+
+        if params.replace_lines_with_links:
+            custom_busmap = n.buses.reeds_zone
 
         clustering = clustering_for_n_clusters(
             n,
