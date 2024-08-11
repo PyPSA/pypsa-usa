@@ -126,23 +126,36 @@ class EiaData(ABC):
 # concrete creator
 class FuelCosts(EiaData):
 
-    def __init__(self, fuel: str, industry: str, year: int, api: str) -> None:
+    def __init__(
+        self,
+        fuel: str,
+        year: int,
+        api: str,
+        industry: Optional[str] = None,
+        grade: Optional[str] = None,
+    ) -> None:
         self.fuel = fuel
+        self.year = year
+        self.api = api
         self.industry = (
             industry  # (power|residential|commercial|industrial|imports|exports)
         )
-        self.year = year
-        self.api = api
+        self.grade = grade  # (total|regular|premium|midgrade|diesel)
 
     def data_creator(self) -> pd.DataFrame:
         if self.fuel == "gas":
+            assert self.industry
             return GasCosts(self.industry, self.year, self.api)
         elif self.fuel == "coal":
+            assert self.industry
             return CoalCosts(self.industry, self.year, self.api)
+        elif self.fuel == "lpg":
+            assert self.grade
+            return LpgCosts(self.grade, self.year, self.api)
         else:
             raise InputException(
                 propery="Fuel Costs",
-                valid_options=["gas", "coal"],
+                valid_options=["gas", "coal", "lpg"],
                 recived_option=self.fuel,
             )
 
@@ -477,11 +490,22 @@ class DataExtractor(ABC):
         Pivots data on period and state.
         """
         df = df.reset_index()
-        return df.pivot(
-            index="period",
-            columns="state",
-            values="value",
-        )
+        try:
+            return df.pivot(
+                index="period",
+                columns="state",
+                values="value",
+            )
+        # Im not actually sure why sometimes we are hitting this :(
+        # ValueError: Index contains duplicate entries, cannot reshape
+        except ValueError:
+            logger.info("Reshaping using pivot_table and aggfunc='mean'")
+            return df.pivot_table(
+                index="period",
+                columns="state",
+                values="value",
+                aggfunc="mean",
+            )
 
     @staticmethod
     def _assign_dtypes(df: pd.DataFrame) -> pd.DataFrame:
@@ -648,6 +672,79 @@ class CoalCosts(DataExtractor):
         )
 
         final = final.set_index("period")
+
+        return self._assign_dtypes(final)
+
+
+class LpgCosts(DataExtractor):
+    """
+    This is motor gasoline!
+
+    Not heating fuel!
+    """
+
+    grade_codes = {
+        "total": "EPM0",
+        "regular": "EPMR",
+        "premium": "EPMP",
+        "midgrade": "EPMM",
+        "diesel": "EPD2D",
+    }
+
+    # https://en.wikipedia.org/wiki/Petroleum_Administration_for_Defense_Districts
+    padd_2_state = {
+        "PADD 1A": ["CT", "ME", "MA", "NH", "RI", "VT"],
+        "PADD 1B": ["DE", "DC", "MD", "NJ", "NY", "PA"],
+        "PADD 1C": ["FL", "GA", "NC", "SC", "VA", "WV"],
+        "PADD 2": [
+            "IL",
+            "IN",
+            "IA",
+            "KS",
+            "KY",
+            "MI",
+            "MN",
+            "MO",
+            "NE",
+            "ND",
+            "SD",
+            "OH",
+            "OK",
+            "TN",
+            "WI",
+        ],
+        "PADD 3": ["AL", "AR", "LA", "MS", "NM", "TX"],
+        "PADD 4": ["CO", "ID", "MT", "UT", "WY"],
+        "PADD 5": ["AL", "AZ", "CA", "HI", "NV", "OR", "WA"],
+    }
+
+    def __init__(self, grade: str, year: int, api_key: str) -> None:
+        self.grade = grade
+        if not grade in self.grade_codes:
+            raise InputException(
+                propery="Lpg Costs",
+                valid_options=list(self.grade_codes),
+                recived_option=grade,
+            )
+        super().__init__(year, api_key)
+
+    def build_url(self) -> str:
+        base_url = "petroleum/pri/gnd/data/"
+        facets = f"frequency=weekly&data[0]=value&facets[product][]={self.grade_codes[self.grade]}&facets[duoarea][]=R1X&facets[duoarea][]=R1Y&facets[duoarea][]=R1Z&facets[duoarea][]=R20&facets[duoarea][]=R30&facets[duoarea][]=R40&facets[duoarea][]=R50&start={self.year}-01-01&end={self.year}-12-31&sort[0][column]=period&sort[0][direction]=desc&offset=0&length=5000"
+        return f"{API_BASE}{base_url}?api_key={self.api_key}&{facets}"
+
+    def format_data(self, df: pd.DataFrame) -> pd.DataFrame:
+
+        data = df[
+            ["period", "area-name", "series-description", "value", "units"]
+        ].copy()
+
+        data["state"] = data["area-name"].map(self.padd_2_state)
+        data = data.explode("state")
+
+        data["units"] = data.units.str.replace("GAL", "gal")
+
+        final = data.set_index("period").drop(columns="area-name")
 
         return self._assign_dtypes(final)
 
@@ -1440,15 +1537,15 @@ if __name__ == "__main__":
     with open("./../config/config.api.yaml") as file:
         yaml_data = yaml.safe_load(file)
     api = yaml_data["api"]["eia"]
-    # print(FuelCosts("coal", "power", 2019, api).get_data(pivot=True))
-    # print(FuelCosts("gas", "commercial", 2019, api).get_data(pivot=True))
+    # print(FuelCosts("gas", 2020, api, industry="commercial").get_data(pivot=True))
+    print(FuelCosts("lpg", 2020, api, grade="total").get_data(pivot=True))
     # print(Emissions("transport", 2019, api).get_data(pivot=True))
     # print(Storage("gas", "total", 2019, api).get_data(pivot=True))
     # print(EnergyDemand("residential", 2030, api).get_data(pivot=False))
-    print(
-        TransportationFuelUse("light_duty", 2023, api).get_data(
-            pivot=False,
-        ),
-    )
+    # print(
+    #     TransportationFuelUse("light_duty", 2023, api).get_data(
+    #         pivot=False,
+    #     ),
+    # )
     # print(EnergyDemand("residential", 2015, api).get_data(pivot=False))
     # print(Seds("consumption", "residential", 2022, api).get_data(pivot=False))
