@@ -152,10 +152,14 @@ class FuelCosts(EiaData):
         elif self.fuel == "lpg":
             assert self.grade
             return LpgCosts(self.grade, self.year, self.api)
+        elif self.fuel == "heating_oil":
+            return HeatingFuelCosts("fuel_oil", self.year, self.api)
+        elif self.fuel == "propane":
+            return HeatingFuelCosts("propane", self.year, self.api)
         else:
             raise InputException(
                 propery="Fuel Costs",
-                valid_options=["gas", "coal", "lpg"],
+                valid_options=["gas", "coal", "lpg", "heating_oil", "propane"],
                 recived_option=self.fuel,
             )
 
@@ -745,6 +749,53 @@ class LpgCosts(DataExtractor):
         data["units"] = data.units.str.replace("GAL", "gal")
 
         final = data.set_index("period").drop(columns="area-name")
+
+        return self._assign_dtypes(final)
+
+
+class HeatingFuelCosts(DataExtractor):
+    """
+    Note, only returns data from October to March!
+    """
+
+    heating_fuel_codes = {"fuel_oil": "No 2 Fuel Oil", "propane": "Propane"}
+
+    def __init__(self, heating_fuel: str, year: int, api_key: str) -> None:
+        self.heating_fuel = heating_fuel
+        if not heating_fuel in self.heating_fuel_codes:
+            raise InputException(
+                propery="Heating Fuel Costs",
+                valid_options=list(self.heating_fuel_codes),
+                recived_option=heating_fuel,
+            )
+        super().__init__(year, api_key)
+
+    def build_url(self) -> str:
+        base_url = "petroleum/pri/wfr/data/"
+        facets = f"frequency=weekly&data[0]=value&facets[process][]=PRS&start={self.year}-01-01&end={self.year}-12-31&sort[0][column]=period&sort[0][direction]=desc&offset=0&length=5000"
+        return f"{API_BASE}{base_url}?api_key={self.api_key}&{facets}"
+
+    def format_data(self, df: pd.DataFrame) -> pd.DataFrame:
+
+        data = df[
+            (
+                df["product-name"].str.startswith(
+                    self.heating_fuel_codes[self.heating_fuel],
+                )
+            )
+            & ~(df.duoarea.str.startswith("R"))
+        ].copy()
+
+        data = data[["period", "duoarea", "series-description", "value", "units"]]
+
+        data["state"] = data.duoarea.str[1:]
+        data["state"] = data.state.map(lambda x: "USA" if x == "US" else x)
+
+        data["units"] = data.units.str.replace("GAL", "gal")
+
+        final = data[~(data.value.isna())].copy()
+
+        final = final.set_index("period").drop(columns="duoarea")
 
         return self._assign_dtypes(final)
 
@@ -1538,7 +1589,7 @@ if __name__ == "__main__":
         yaml_data = yaml.safe_load(file)
     api = yaml_data["api"]["eia"]
     # print(FuelCosts("gas", 2020, api, industry="commercial").get_data(pivot=True))
-    print(FuelCosts("lpg", 2020, api, grade="total").get_data(pivot=True))
+    print(FuelCosts("heating_oil", 2020, api).get_data(pivot=True))
     # print(Emissions("transport", 2019, api).get_data(pivot=True))
     # print(Storage("gas", "total", 2019, api).get_data(pivot=True))
     # print(EnergyDemand("residential", 2030, api).get_data(pivot=False))
