@@ -101,6 +101,7 @@ from pypsa.clustering.spatial import (
     busmap_by_kmeans,
     get_clustering_from_busmap,
 )
+from constants import *
 
 warnings.filterwarnings(action="ignore", category=UserWarning)
 
@@ -389,6 +390,7 @@ def clustering_for_n_clusters(
 
     line_strategies = aggregation_strategies.get("lines", dict())
     generator_strategies = aggregation_strategies.get("generators", dict())
+    bus_strategies = aggregation_strategies.get("buses", dict())
     one_port_strategies = aggregation_strategies.get("one_ports", dict())
 
     clustering = get_clustering_from_busmap(
@@ -580,6 +582,7 @@ if __name__ == "__main__":
 
         if params.replace_lines_with_links:
             custom_busmap = n.buses.reeds_zone
+            n.buses.interconnect = n.buses.nerc_reg.map(REEDS_NERC_INTERCONNECT_MAPPER)
 
         clustering = clustering_for_n_clusters(
             n,
