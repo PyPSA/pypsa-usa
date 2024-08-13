@@ -466,7 +466,7 @@ def plot_opt_capacity_map(
         n=n,
         bus_values=bus_values,
         line_values=line_values,
-        link_values=n.links.p_nom.replace(to_replace={pd.NA: 0}),
+        link_values=n.links.p_nom_opt.replace(to_replace={pd.NA: 0}),
         regions=regions,
         line_scale=line_scale,
         bus_scale=bus_scale,
@@ -510,6 +510,10 @@ def plot_new_capacity_map(
     line_snom_opt = n.lines.s_nom_opt
     line_values = line_snom_opt - line_snom
 
+    link_pnom = n.links.p_nom
+    link_pnom_opt = n.links.p_nom_opt
+    link_values = link_pnom_opt - link_pnom
+
     # plot data
     title = create_title("New Network Capacities", **wildcards)
     interconnect = wildcards.get("interconnect", None)
@@ -520,7 +524,7 @@ def plot_new_capacity_map(
         n=n,
         bus_values=bus_values,
         line_values=line_values,
-        link_values=n.links.p_nom.replace(to_replace={pd.NA: 0}),
+        link_values=link_values.replace(to_replace={pd.NA: 0}),
         regions=regions,
         line_scale=line_scale,
         bus_scale=bus_scale,

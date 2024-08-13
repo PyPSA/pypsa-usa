@@ -621,7 +621,6 @@ def plot_production_area(
                     (n.snapshots.get_level_values(0) == investment_period)
                     & (n.snapshots.get_level_values(1).month == month)
                 ]
-            breakpoint()
             energy_mix.loc[sns].droplevel("period").plot.area(
                 ax=axs[i],
                 alpha=0.7,

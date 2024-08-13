@@ -422,7 +422,7 @@ def clustering_for_n_clusters(
     return clustering
 
 
-def replace_lines_with_links(clustering, itl_fn):
+def replace_lines_with_links(clustering, itl_fn, capex):
     """
     Replaces all Lines according to Links with the transfer capacity specified
     by the ITLs.
@@ -447,7 +447,8 @@ def replace_lines_with_links(clustering, itl_fn):
         bus0=buses.loc[itls.r].index,
         bus1=buses.loc[itls.rr].index,
         p_nom=itls.MW_r0.values,
-        capital_cost=0,  # revisit capex assignment for links
+        p_nom_min=itls.MW_r0.values,
+        capital_cost=capex,
         p_nom_extendable=False,
         p_max_pu=1.0,
         p_min_pu=0,
@@ -460,7 +461,8 @@ def replace_lines_with_links(clustering, itl_fn):
         bus0=buses.loc[itls.r].index,
         bus1=buses.loc[itls.rr].index,
         p_nom=itls.MW_r0.values,
-        capital_cost=0,  # revisit capex assignment for links
+        p_nom_min=itls.MW_r0.values,
+        capital_cost=capex,
         p_nom_extendable=False,
         p_max_pu=0,
         p_min_pu=-1.0,
@@ -602,7 +604,7 @@ if __name__ == "__main__":
             assert n_clusters == len(
                 N,
             ), f"Number of clusters must be {len(N)} to model as transport model."
-            clustering = replace_lines_with_links(clustering, snakemake.input.itls)
+            clustering = replace_lines_with_links(clustering, snakemake.input.itls, hvac_overhead_cost)
 
     update_p_nom_max(clustering.network)
 
