@@ -671,7 +671,7 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
         assert direction in ("imports", "exports")
 
         # fuel costs/profits at a national level
-        costs = eia.FuelCosts("gas", direction, self.year, self.api).get_data()
+        costs = eia.FuelCosts("gas", self.year, self.api, industry=direction).get_data()
 
         # fuel costs come in MCF, so first convert to MMCF
         costs = costs[["value"]].astype("float")

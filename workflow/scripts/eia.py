@@ -1588,8 +1588,8 @@ if __name__ == "__main__":
     with open("./../config/config.api.yaml") as file:
         yaml_data = yaml.safe_load(file)
     api = yaml_data["api"]["eia"]
-    # print(FuelCosts("gas", 2020, api, industry="commercial").get_data(pivot=True))
-    print(FuelCosts("heating_oil", 2020, api).get_data(pivot=True))
+    # print(FuelCosts("coal", 2020, api, industry="power").get_data(pivot=True))
+    print(FuelCosts("heating_oil", 2020, api).get_data(pivot=False))
     # print(Emissions("transport", 2019, api).get_data(pivot=True))
     # print(Storage("gas", "total", 2019, api).get_data(pivot=True))
     # print(EnergyDemand("residential", 2030, api).get_data(pivot=False))
