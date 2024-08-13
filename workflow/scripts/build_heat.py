@@ -231,6 +231,7 @@ def add_industrial_heat(
 
     add_industrial_furnace(n, costs, marginal_gas)
     add_industrial_boiler(n, costs, marginal_coal)
+    add_indusrial_heat_pump(n, costs)
 
 
 def add_service_heat(
@@ -933,4 +934,45 @@ def add_industrial_boiler(
         p_nom_extendable=True,
         lifetime=lifetime,
         marginal_cost=mc,
+    )
+
+
+def add_indusrial_heat_pump(
+    n: pypsa.Network,
+    costs: pd.DataFrame,
+) -> None:
+
+    sector = "ind"
+
+    capex = costs.at["industrial heat pump high temperature", "capital_cost"].round(1)
+    efficiency = costs.at["industrial heat pump high temperature", "efficiency"].round(
+        1,
+    )
+    lifetime = costs.at["industrial heat pump high temperature", "lifetime"].round(1)
+
+    carrier_name = f"{sector}-heat"
+
+    loads = n.loads[(n.loads.carrier == carrier_name)]
+
+    hp = pd.DataFrame(index=loads.bus)
+    hp["state"] = hp.index.map(n.buses.STATE)
+    hp["bus0"] = hp.index.map(lambda x: x.split(f" {sector}-heat")[0]).map(
+        n.buses.STATE,
+    )
+    hp["bus0"] = hp.bus0
+    hp["bus1"] = hp.index
+    hp["carrier"] = f"{sector}-heat-pump"
+    hp.index = hp.index.map(lambda x: x.split("-heat")[0])
+
+    n.madd(
+        "Link",
+        hp.index,
+        suffix="-heat-pump",  # 'ind' included in index already
+        bus0=hp.bus0,
+        bus1=hp.bus1,
+        carrier=hp.carrier,
+        efficiency=efficiency,
+        capital_cost=capex,
+        p_nom_extendable=True,
+        lifetime=lifetime,
     )
