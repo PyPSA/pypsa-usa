@@ -469,6 +469,17 @@ def replace_lines_with_links(clustering, itl_fn, capex):
         carrier="AC",
     )
     logger.info(f"Replaced Lines with Links for zonal model configuration.")
+
+    # Remove any disconnected buses
+    unique_buses = buses.loc[itls.r].index.union(buses.loc[itls.rr].index).unique()
+    disconnected_buses = clustering.network.buses.index[~clustering.network.buses.index.isin(unique_buses)]
+    if len(disconnected_buses) > 0:
+        logger.warning(f"Removed {len(disconnected_buses)} disconnected buses from the network.")
+        clustering.network.mremove("Bus", disconnected_buses)
+        clustering.network.mremove("Generator", clustering.network.generators.query("bus in @disconnected_buses").index)
+        clustering.network.mremove("StorageUnit", clustering.network.storage_units.query("bus in @disconnected_buses").index)
+        clustering.network.mremove("Store", clustering.network.stores.query("bus in @disconnected_buses").index)
+        clustering.network.mremove("Load", clustering.network.loads.query("bus in @disconnected_buses").index)
     return clustering
 
 
@@ -600,11 +611,11 @@ if __name__ == "__main__":
             params.focus_weights,
         )
         if params.replace_lines_with_links:
-            N = n.buses.groupby(["country", "sub_network"]).size()
+            clustering = replace_lines_with_links(clustering, snakemake.input.itls, hvac_overhead_cost)
+            N = clustering.network.buses.reeds_zone.unique()
             assert n_clusters == len(
                 N,
             ), f"Number of clusters must be {len(N)} to model as transport model."
-            clustering = replace_lines_with_links(clustering, snakemake.input.itls, hvac_overhead_cost)
 
     update_p_nom_max(clustering.network)
 
