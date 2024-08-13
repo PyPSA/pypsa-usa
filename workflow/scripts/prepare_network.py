@@ -143,15 +143,9 @@ def set_line_s_max_pu(n, s_max_pu=0.7):
 
 def set_transmission_limit(n, ll_type, factor, costs, Nyears=1):
     links_dc_b = n.links.carrier == "DC" if not n.links.empty else pd.Series()
+    # TODO: implement update for transport model
 
-    _lines_s_nom = (
-        np.sqrt(3)
-        * n.lines.type.map(n.line_types.i_nom)
-        * n.lines.num_parallel
-        * n.lines.bus0.map(n.buses.v_nom)
-    )
-    lines_s_nom = n.lines.s_nom.where(n.lines.type == "", _lines_s_nom)
-
+    lines_s_nom = n.lines.s_nom
     col = "capital_cost" if ll_type == "c" else "length"
     ref = (
         lines_s_nom @ n.lines[col]

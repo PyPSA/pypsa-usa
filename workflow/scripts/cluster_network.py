@@ -95,6 +95,7 @@ import pyomo.environ as po
 import pypsa
 import seaborn as sns
 from _helpers import configure_logging, reduce_float_memory, update_p_nom_max
+from constants import *
 from pypsa.clustering.spatial import (
     busmap_by_greedy_modularity,
     busmap_by_hac,
@@ -389,6 +390,7 @@ def clustering_for_n_clusters(
 
     line_strategies = aggregation_strategies.get("lines", dict())
     generator_strategies = aggregation_strategies.get("generators", dict())
+    bus_strategies = aggregation_strategies.get("buses", dict())
     one_port_strategies = aggregation_strategies.get("one_ports", dict())
 
     clustering = get_clustering_from_busmap(
@@ -420,51 +422,78 @@ def clustering_for_n_clusters(
     return clustering
 
 
-def replace_lines_with_links(clustering, itl_fn):
+def replace_lines_with_links(clustering, itl_fn, capex):
     """
     Replaces all Lines according to Links with the transfer capacity specified
     by the ITLs.
-
-    TODO: Modify native PyPSA Links table to support bi-directional link limits.
     """
     lines = clustering.network.lines.copy()
     buses = clustering.network.buses.copy()
 
     itls = pd.read_csv(itl_fn)
 
-    itls["bus0"] = (itls.r + "0 0").astype(str)
-    itls["bus1"] = (itls.rr + "0 0").astype(str)
     itls = itls[
-        itls.bus0.isin(clustering.network.buses.index)
-        & itls.bus1.isin(clustering.network.buses.index)
+        itls.r.isin(clustering.network.buses.reeds_zone)
+        & itls.rr.isin(clustering.network.buses.reeds_zone)
     ]
 
     itls["p_nom"] = np.maximum(itls["MW_f0"], itls["MW_r0"])
-
-    def find_eq_line(itl):
-        try:
-            return lines[
-                (lines.bus0 == itl.bus0) & (lines.bus1 == itl.bus1)
-                | (lines.bus0 == itl.bus1) & (lines.bus1 == itl.bus0)
-            ].index[0]
-        except:
-            return np.nan
-
-    itls["eq_line"] = itls.apply(find_eq_line, axis=1)
-    itls["capex"] = itls.eq_line.map(lines.capital_cost)
 
     clustering.network.mremove("Line", clustering.network.lines.index)
     clustering.network.madd(
         "Link",
         names=itls.interface,  # itl name
-        bus0=buses.loc[itls.bus0].index,
-        bus1=buses.loc[itls.bus1].index,
-        p_nom=itls.p_nom.values,
-        capital_cost=itls.capex.values,  # revisit capex assignment for links
+        suffix="fwd",
+        bus0=buses.loc[itls.r].index,
+        bus1=buses.loc[itls.rr].index,
+        p_nom=itls.MW_r0.values,
+        p_nom_min=itls.MW_r0.values,
+        capital_cost=capex,
         p_nom_extendable=False,
+        p_max_pu=1.0,
+        p_min_pu=0,
+        carrier="AC",
+    )
+    clustering.network.madd(
+        "Link",
+        names=itls.interface,  # itl name
+        suffix="rev",
+        bus0=buses.loc[itls.r].index,
+        bus1=buses.loc[itls.rr].index,
+        p_nom=itls.MW_r0.values,
+        p_nom_min=itls.MW_r0.values,
+        capital_cost=capex,
+        p_nom_extendable=False,
+        p_max_pu=0,
+        p_min_pu=-1.0,
         carrier="AC",
     )
     logger.info(f"Replaced Lines with Links for zonal model configuration.")
+
+    # Remove any disconnected buses
+    unique_buses = buses.loc[itls.r].index.union(buses.loc[itls.rr].index).unique()
+    disconnected_buses = clustering.network.buses.index[
+        ~clustering.network.buses.index.isin(unique_buses)
+    ]
+    if len(disconnected_buses) > 0:
+        logger.warning(
+            f"Removed {len(disconnected_buses)} disconnected buses from the network."
+        )
+        clustering.network.mremove("Bus", disconnected_buses)
+        clustering.network.mremove(
+            "Generator",
+            clustering.network.generators.query("bus in @disconnected_buses").index,
+        )
+        clustering.network.mremove(
+            "StorageUnit",
+            clustering.network.storage_units.query("bus in @disconnected_buses").index,
+        )
+        clustering.network.mremove(
+            "Store", clustering.network.stores.query("bus in @disconnected_buses").index
+        )
+        clustering.network.mremove(
+            "Load", clustering.network.loads.query("bus in @disconnected_buses").index
+        )
     return clustering
 
 
@@ -497,8 +526,8 @@ if __name__ == "__main__":
         snakemake = mock_snakemake(
             "cluster_network",
             simpl="",
-            clusters="33",
-            interconnect="western",
+            clusters="7",
+            interconnect="texas",
         )
     configure_logging(snakemake)
 
@@ -578,6 +607,10 @@ if __name__ == "__main__":
             custom_busmap.index = custom_busmap.index.astype(str)
             logger.info(f"Imported custom busmap from {snakemake.input.custom_busmap}")
 
+        if params.replace_lines_with_links:
+            custom_busmap = n.buses.reeds_zone
+            n.buses.interconnect = n.buses.nerc_reg.map(REEDS_NERC_INTERCONNECT_MAPPER)
+
         clustering = clustering_for_n_clusters(
             n,
             n_clusters,
@@ -592,11 +625,13 @@ if __name__ == "__main__":
             params.focus_weights,
         )
         if params.replace_lines_with_links:
-            N = n.buses.groupby(["country", "sub_network"]).size()
+            clustering = replace_lines_with_links(
+                clustering, snakemake.input.itls, hvac_overhead_cost
+            )
+            N = clustering.network.buses.reeds_zone.unique()
             assert n_clusters == len(
                 N,
             ), f"Number of clusters must be {len(N)} to model as transport model."
-            clustering = replace_lines_with_links(clustering, snakemake.input.itls)
 
     update_p_nom_max(clustering.network)
 

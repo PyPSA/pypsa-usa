@@ -103,7 +103,7 @@ def memory(w):
         val = int(factor * (18000 + 180 * 4000))
     else:
         val = int(factor * (15000 + 195 * int(w.clusters)))
-    return int(val)
+    return int(val * len(config_provider("scenario", "planning_horizons")(w)))
 
 
 def interconnect_mem(w):
