@@ -796,6 +796,49 @@ def plot_state_emissions_validation(
     return fig, axs
 
 
+def plot_system_emissions_validation_by_state(
+    n: pypsa.Network,
+    eia_api: str,
+    **kwargs,
+) -> tuple:
+    """
+    Plots all states modelled and historcal.
+    """
+
+    investment_period = n.investment_periods[0]
+
+    historical = get_historical_emissions(
+        "total",
+        investment_period,
+        eia_api,
+    ).T.rename(columns={"total": "Actual"}, index=STATE_2_CODE)
+
+    modelled = (
+        get_emission_timeseries_by_sector(n, state=None)
+        .loc[investment_period,]
+        .iloc[-1]  # casue cumulative
+        .to_frame(name="Modelled")
+    )
+    modelled["state"] = modelled.index.map(lambda x: x.split(" ")[0])
+    modelled = modelled.groupby("state").sum()
+
+    df = historical.join(modelled).dropna()
+
+    fig, axs = plt.subplots(
+        ncols=1,
+        nrows=1,
+        figsize=(14, 8),
+    )
+
+    df.plot.bar(ax=axs)
+    axs.set_xlabel("")
+    axs.set_ylabel("Emissions (MT)")
+    axs.set_title(f"{investment_period} State Emissions")
+    axs.tick_params(axis="x", labelrotation=0)
+
+    return fig, axs
+
+
 def plot_sector_consumption_validation(
     n: pypsa.Network,
     eia_api: str,
@@ -1261,6 +1304,7 @@ FIGURE_FUNCTION = {
     "generation_by_state_validation": plot_sector_consumption_validation,
     "transportation_by_mode_validation": plot_transportation_by_mode_validation,
     "system_consumption_validation": plot_system_consumption_validation_by_state,
+    "system_emission_validation_state": plot_system_emissions_validation_by_state,
 }
 
 FIGURE_NICE_NAME = {
@@ -1289,6 +1333,7 @@ FIGURE_NICE_NAME = {
     "generation_by_state_validation": "",
     "transportation_by_mode_validation": "",
     "system_consumption_validation": "",
+    "system_emission_validation_state": "",
 }
 
 FN_ARGS = {
@@ -1306,7 +1351,7 @@ if __name__ == "__main__":
         from _helpers import mock_snakemake
 
         snakemake = mock_snakemake(
-            "plot_system_production",
+            "plot_system_validate",
             # "plot_sector_validate",
             interconnect="western",
             clusters=100,
