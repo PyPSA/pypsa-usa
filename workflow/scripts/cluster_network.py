@@ -95,13 +95,13 @@ import pyomo.environ as po
 import pypsa
 import seaborn as sns
 from _helpers import configure_logging, reduce_float_memory, update_p_nom_max
+from constants import *
 from pypsa.clustering.spatial import (
     busmap_by_greedy_modularity,
     busmap_by_hac,
     busmap_by_kmeans,
     get_clustering_from_busmap,
 )
-from constants import *
 
 warnings.filterwarnings(action="ignore", category=UserWarning)
 
@@ -472,14 +472,28 @@ def replace_lines_with_links(clustering, itl_fn, capex):
 
     # Remove any disconnected buses
     unique_buses = buses.loc[itls.r].index.union(buses.loc[itls.rr].index).unique()
-    disconnected_buses = clustering.network.buses.index[~clustering.network.buses.index.isin(unique_buses)]
+    disconnected_buses = clustering.network.buses.index[
+        ~clustering.network.buses.index.isin(unique_buses)
+    ]
     if len(disconnected_buses) > 0:
-        logger.warning(f"Removed {len(disconnected_buses)} disconnected buses from the network.")
+        logger.warning(
+            f"Removed {len(disconnected_buses)} disconnected buses from the network."
+        )
         clustering.network.mremove("Bus", disconnected_buses)
-        clustering.network.mremove("Generator", clustering.network.generators.query("bus in @disconnected_buses").index)
-        clustering.network.mremove("StorageUnit", clustering.network.storage_units.query("bus in @disconnected_buses").index)
-        clustering.network.mremove("Store", clustering.network.stores.query("bus in @disconnected_buses").index)
-        clustering.network.mremove("Load", clustering.network.loads.query("bus in @disconnected_buses").index)
+        clustering.network.mremove(
+            "Generator",
+            clustering.network.generators.query("bus in @disconnected_buses").index,
+        )
+        clustering.network.mremove(
+            "StorageUnit",
+            clustering.network.storage_units.query("bus in @disconnected_buses").index,
+        )
+        clustering.network.mremove(
+            "Store", clustering.network.stores.query("bus in @disconnected_buses").index
+        )
+        clustering.network.mremove(
+            "Load", clustering.network.loads.query("bus in @disconnected_buses").index
+        )
     return clustering
 
 
@@ -611,7 +625,9 @@ if __name__ == "__main__":
             params.focus_weights,
         )
         if params.replace_lines_with_links:
-            clustering = replace_lines_with_links(clustering, snakemake.input.itls, hvac_overhead_cost)
+            clustering = replace_lines_with_links(
+                clustering, snakemake.input.itls, hvac_overhead_cost
+            )
             N = clustering.network.buses.reeds_zone.unique()
             assert n_clusters == len(
                 N,

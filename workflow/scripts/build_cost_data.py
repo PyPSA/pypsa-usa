@@ -401,21 +401,16 @@ if __name__ == "__main__":
 
     eur = pd.read_csv(snakemake.input.pypsa_technology_data)
     eur = correct_units(eur, {"USD": const.EUR_2_USD})
-    
-    eur.loc[
-        (
-            (eur.technology == "HVAC overhead")
-            & (eur["parameter"] == "investment")
-        ),
-            "value"] = 2481.43 # TEPCC USD2023
 
     eur.loc[
-        (
-            (eur.technology == "HVDC overhead")
-            & (eur["parameter"] == "investment")
-        ),
-            "value"] = 1026.53 # TEPCC USD2023
+        ((eur.technology == "HVAC overhead") & (eur["parameter"] == "investment")),
+        "value",
+    ] = 2481.43  # TEPCC USD2023
 
+    eur.loc[
+        ((eur.technology == "HVDC overhead") & (eur["parameter"] == "investment")),
+        "value",
+    ] = 1026.53  # TEPCC USD2023
 
     # Pull all "default" from ATB
     atb = pd.read_parquet(snakemake.input.nrel_atb).set_index("core_metric_key")

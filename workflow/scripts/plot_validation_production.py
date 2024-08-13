@@ -841,7 +841,14 @@ def plot_state_generation_mix(
     )
     joined.to_csv(save_total.replace(".pdf", ".csv"))
 
-    diff_total = (optimized - historical_gen).fillna(0).T.div(historical_gen.sum(axis=1)).mul(1e2).round(1).T
+    diff_total = (
+        (optimized - historical_gen)
+        .fillna(0)
+        .T.div(historical_gen.sum(axis=1))
+        .mul(1e2)
+        .round(1)
+        .T
+    )
     diff_carrier = (
         ((optimized - historical_gen).fillna(0) / historical_gen).mul(1e2).round(1)
     )

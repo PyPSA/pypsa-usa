@@ -451,16 +451,16 @@ STATE_2_CODE = {
 }
 
 REEDS_NERC_INTERCONNECT_MAPPER = {
-    'PJM': 'eastern',
-    'WECC_CA': 'western',
-    'SERC': 'eastern',
-    'MISO': 'eastern',
-    'WECC_NWPP': 'western',
-    'NPCC_NY': 'eastern',
-    'NPCC_NE': 'eastern',
-    'WECC_SRSG': 'western',
-    'SPP': 'eastern',
-    'ERCOT': 'texas',
+    "PJM": "eastern",
+    "WECC_CA": "western",
+    "SERC": "eastern",
+    "MISO": "eastern",
+    "WECC_NWPP": "western",
+    "NPCC_NY": "eastern",
+    "NPCC_NE": "eastern",
+    "WECC_SRSG": "western",
+    "SPP": "eastern",
+    "ERCOT": "texas",
 }
 
 # Simplified dictionary to map states to their primary time zones.

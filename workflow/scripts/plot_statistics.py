@@ -53,6 +53,7 @@ from _helpers import configure_logging
 from add_electricity import sanitize_carriers
 from add_extra_components import add_nice_carrier_names
 from matplotlib.lines import Line2D
+from plot_network_maps import get_color_palette
 from summary import (
     get_capital_costs,
     get_demand_timeseries,
@@ -62,10 +63,10 @@ from summary import (
     get_node_emissions_timeseries,
     get_tech_emissions_timeseries,
 )
-from plot_network_maps import get_color_palette
 
 # Global Plotting Settings
 TITLE_SIZE = 16
+
 
 def create_title(title: str, **wildcards) -> str:
     """

@@ -77,17 +77,19 @@ def get_color_palette(n: pypsa.Network) -> pd.Series:
 
     # Initialize the additional dictionary
     additional = {
-        "co2": "k"
+        "co2": "k",
     }
 
     # Loop through the carriers DataFrame
     for index, row in n.carriers.iterrows():
         if "battery" in index or "PHS" in index:
             color = row.color
-            additional.update({
-                f"{index}_charger": color,
-                f"{index}_discharger": color,
-            })
+            additional.update(
+                {
+                    f"{index}_charger": color,
+                    f"{index}_discharger": color,
+                }
+            )
 
     return pd.concat([colors, pd.Series(additional)]).to_dict()
 
