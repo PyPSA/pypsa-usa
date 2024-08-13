@@ -135,7 +135,7 @@ def electricity_figures(wildcards):
         figs.append(
             expand(
                 RESULTS
-                + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/maps/{figure}",
+                + "{interconnect}/figures/s{simpl}_cluster_{clusters}/l{ll}_{opts}_{sector}/maps/{figure}",
                 **config["scenario"],
                 figure=FIGURES_MAPS,
             )
@@ -144,7 +144,7 @@ def electricity_figures(wildcards):
         figs.append(
             expand(
                 RESULTS
-                + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/emissions/{figure}",
+                + "{interconnect}/figures/s{simpl}_cluster_{clusters}/l{ll}_{opts}_{sector}/emissions/{figure}",
                 **config["scenario"],
                 figure=FIGURES_EMISSIONS,
             )
@@ -153,7 +153,7 @@ def electricity_figures(wildcards):
         figs.append(
             expand(
                 RESULTS
-                + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/production/{figure}",
+                + "{interconnect}/figures/s{simpl}_cluster_{clusters}/l{ll}_{opts}_{sector}/production/{figure}",
                 **config["scenario"],
                 figure=FIGURES_PRODUCTION,
             )
@@ -162,7 +162,7 @@ def electricity_figures(wildcards):
         figs.append(
             expand(
                 RESULTS
-                + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/system/{figure}",
+                + "{interconnect}/figures/s{simpl}_cluster_{clusters}/l{ll}_{opts}_{sector}/system/{figure}",
                 **config["scenario"],
                 figure=FIGURES_SYSTEM,
             )
@@ -181,7 +181,7 @@ def sector_figures(wildcards):
     else:
         return expand(
             RESULTS
-            + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/gas/{figure}",
+            + "{interconnect}/figures/s{simpl}_cluster_{clusters}/l{ll}_{opts}_{sector}/gas/{figure}",
             **config["scenario"],
             figure=FIGURES_NATURAL_GAS,
         )
@@ -191,7 +191,7 @@ def validation_figures(wildcards):
     if config["run"]["validation"]:
         return expand(
             RESULTS
-            + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/{figure}",
+            + "{interconnect}/figures/s{simpl}_cluster_{clusters}/l{ll}_{opts}_{sector}/{figure}",
             **config["scenario"],
             figure=FIGURES_VALIDATE,
         )

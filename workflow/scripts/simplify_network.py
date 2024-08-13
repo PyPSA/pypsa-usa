@@ -16,6 +16,7 @@ from _helpers import (
     export_network_for_gis_mapping,
     reduce_float_memory,
 )
+from cluster_network import cluster_regions, clustering_for_n_clusters
 from pypsa.clustering.spatial import get_clustering_from_busmap
 
 logger = logging.getLogger(__name__)
@@ -224,10 +225,14 @@ def assign_line_lengths(n, line_length_factor):
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
-
-        snakemake = mock_snakemake("simplify_network", interconnect="western")
+        snakemake = mock_snakemake(
+            "simplify_network", 
+            interconnect="texas",
+            simpl="50",
+            )
     configure_logging(snakemake)
     params = snakemake.params
+    solver_name = snakemake.config["solving"]["solver"]["name"]
 
     voltage_level = snakemake.config["electricity"]["voltage_simplified"]
     aggregation_zones = snakemake.config["clustering"]["cluster_network"][
@@ -253,7 +258,6 @@ if __name__ == "__main__":
     busmaps = [trafo_map, busmap_to_sub.sub_id]
     busmaps = reduce(lambda x, y: x.map(y), busmaps[1:], busmaps[0])
 
-    # Haversine is a poor approximation... use 1.25 as an approximiation, but should be replaced with actual line lengths.
     # TODO: WHEN WE REPLACE NETWORK WITH NEW NETWORK WE SHOULD CALACULATE LINE LENGTHS BASED ON THE actual GIS line files.
     n = assign_line_lengths(n, 1.25)
     n.links["underwater_fraction"] = 0  # TODO: CALULATE UNDERWATER FRACTIONS.
@@ -265,6 +269,24 @@ if __name__ == "__main__":
         aggregation_zones,
         params.aggregation_strategies,
     )
+
+    if snakemake.wildcards.simpl:
+        n, cluster_map = clustering_for_n_clusters(
+            n,
+            int(snakemake.wildcards.simpl),
+            focus_weights=params.focus_weights,
+            solver_name=solver_name,
+            algorithm=params.simplify_network["algorithm"],
+            feature=params.simplify_network["feature"],
+            aggregation_strategies=params.aggregation_strategies
+        )
+
+        busmaps.append(cluster_map)
+
+        cluster_regions((clustering.busmap,), snakemake.input, snakemake.output)
+
+
+    update_p_nom_max(n)
 
     n.loads_t.p_set = reduce_float_memory(n.loads_t.p_set)
     n.generators_t.p_max_pu = reduce_float_memory(n.generators_t.p_max_pu)
