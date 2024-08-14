@@ -10,7 +10,7 @@ run:
 # docs :
 scenario:
   interconnect: [texas] #"usa|texas|western|eastern"
-  clusters: [8]
+  clusters: [7]
   opts: [REM-2000SEG]
   ll: [v1.0]
   scope: "total" # "urban", "rural", or "total"
@@ -62,7 +62,7 @@ electricity:
 
   extendable_carriers:
     Generator: [solar, onwind, offwind, offwind_floating, OCGT, CCGT, coal, CCGT-95CCS, coal-99CCS, coal-95CCS, SMR] #offwind, offwind_floating, maybe include CCGT-CCS
-    StorageUnit: [4hr_battery_storage, 6hr_battery_storage, 8hr_battery_storage, 10hr_battery_storage] # [Xhr-battery-storage (2-10 hours)]
+    StorageUnit: [4hr_battery_storage, 6hr_battery_storage, 8hr_battery_storage, 10hr_battery_storage, 8hr_PHS, 10hr_PHS, 12hr_PHS] # [Xhr-battery-storage (2-10 hours)]
     Store: []
     Link: [] 
 
