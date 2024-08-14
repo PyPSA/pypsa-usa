@@ -20,6 +20,7 @@ from _helpers import (
 )
 from cluster_network import cluster_regions, clustering_for_n_clusters
 from pypsa.clustering.spatial import get_clustering_from_busmap
+import dill as pickle
 
 logger = logging.getLogger(__name__)
 
@@ -230,7 +231,8 @@ if __name__ == "__main__":
         "aggregation_zones"
     ]
 
-    n = pypsa.Network(snakemake.input.network)
+    # n = pypsa.Network(snakemake.input.network)
+    n = pickle.load(open(snakemake.input.network, "rb"))
 
     n.generators.drop(
         columns=["ba_eia", "ba_ads"],

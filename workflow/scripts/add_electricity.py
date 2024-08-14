@@ -60,6 +60,7 @@ from scipy import sparse
 from shapely.geometry import Point
 from shapely.prepared import prep
 from sklearn.neighbors import BallTree
+import dill as pickle
 
 idx = pd.IndexSlice
 
@@ -1350,7 +1351,8 @@ def main(snakemake):
     n.generators_t.p_max_pu = reduce_float_memory(n.generators_t.p_max_pu)
     n.generators_t.marginal_cost = reduce_float_memory(n.generators_t.marginal_cost)
 
-    n.export_to_netcdf(snakemake.output[0])
+    pickle.dump(n, open(snakemake.output[0], "wb"))
+    # n.export_to_netcdf(snakemake.output[0])
 
     logger.info(test_network_datatype_consistency(n))
 

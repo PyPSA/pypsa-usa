@@ -464,7 +464,7 @@ rule add_electricity:
         pudl_fuel_costs=RESOURCES + "{interconnect}/pudl_fuel_costs.csv",
         #specs_EGS=RESOURCES + "{interconnect}/specs_EGS.nc",
     output:
-        RESOURCES + "{interconnect}/elec_base_network_l_pp.nc",
+        RESOURCES + "{interconnect}/elec_base_network_l_pp.pkl",
     log:
         LOGS + "{interconnect}/add_electricity.log",
     benchmark:
@@ -486,7 +486,7 @@ rule simplify_network:
     input:
         bus2sub=RESOURCES + "{interconnect}/bus2sub.csv",
         sub=RESOURCES + "{interconnect}/sub.csv",
-        network=RESOURCES + "{interconnect}/elec_base_network_l_pp.nc",
+        network=RESOURCES + "{interconnect}/elec_base_network_l_pp.pkl",
         regions_onshore=RESOURCES + "{interconnect}/regions_onshore.geojson",
         regions_offshore=RESOURCES + "{interconnect}/regions_offshore.geojson",
     output:

@@ -11,6 +11,7 @@ run:
 scenario:
   interconnect: [texas] #"usa|texas|western|eastern"
   clusters: [7]
+  simpl: [200]
   opts: [REM-2000SEG]
   ll: [v1.0]
   scope: "total" # "urban", "rural", or "total"
