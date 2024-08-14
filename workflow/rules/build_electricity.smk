@@ -122,7 +122,7 @@ if config["enable"].get("build_cutout", False):
             "benchmarks/" + CDIR + "build_cutout_{interconnect}_{cutout}"
         threads: ATLITE_NPROCESSES
         resources:
-            mem_mb=ATLITE_NPROCESSES * 1000,
+            mem_mb=ATLITE_NPROCESSES * 5000,
         script:
             "../scripts/build_cutout.py"
 

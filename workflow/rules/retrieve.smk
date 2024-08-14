@@ -47,6 +47,8 @@ rule retrieve_zenodo_databundles:
         expand(DATA + "{file}", file=pypsa_usa_datafiles),
     log:
         "logs/retrieve/retrieve_databundles.log",
+    resources:
+        mem_mb=5000,
     conda:
         "../envs/environment.yaml"
     script:
