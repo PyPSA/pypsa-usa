@@ -477,7 +477,7 @@ def replace_lines_with_links(clustering, itl_fn, capex):
     ]
     if len(disconnected_buses) > 0:
         logger.warning(
-            f"Removed {len(disconnected_buses)} disconnected buses from the network."
+            f"Removed {len(disconnected_buses)} disconnected buses from the network.",
         )
         clustering.network.mremove("Bus", disconnected_buses)
         clustering.network.mremove(
@@ -489,10 +489,12 @@ def replace_lines_with_links(clustering, itl_fn, capex):
             clustering.network.storage_units.query("bus in @disconnected_buses").index,
         )
         clustering.network.mremove(
-            "Store", clustering.network.stores.query("bus in @disconnected_buses").index
+            "Store",
+            clustering.network.stores.query("bus in @disconnected_buses").index,
         )
         clustering.network.mremove(
-            "Load", clustering.network.loads.query("bus in @disconnected_buses").index
+            "Load",
+            clustering.network.loads.query("bus in @disconnected_buses").index,
         )
     return clustering
 
@@ -626,7 +628,9 @@ if __name__ == "__main__":
         )
         if params.replace_lines_with_links:
             clustering = replace_lines_with_links(
-                clustering, snakemake.input.itls, hvac_overhead_cost
+                clustering,
+                snakemake.input.itls,
+                hvac_overhead_cost,
             )
             N = clustering.network.buses.reeds_zone.unique()
             assert n_clusters == len(
@@ -670,6 +674,3 @@ if __name__ == "__main__":
         getattr(clustering, attr).to_csv(snakemake.output[attr])
 
     cluster_regions((clustering.busmap,), snakemake.input, snakemake.output)
-
-    # output_path = os.path.dirname(snakemake.output[0]) + "_clustered_"
-    # export_network_for_gis_mapping(clustering.network, output_path)

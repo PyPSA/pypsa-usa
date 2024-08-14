@@ -8,6 +8,7 @@ import logging
 import os
 from functools import reduce
 
+import geopandas as gpd
 import numpy as np
 import pandas as pd
 import pypsa
@@ -15,18 +16,16 @@ from _helpers import (
     configure_logging,
     export_network_for_gis_mapping,
     reduce_float_memory,
+    update_p_nom_max,
 )
+from cluster_network import cluster_regions, clustering_for_n_clusters
 from pypsa.clustering.spatial import get_clustering_from_busmap
 
 logger = logging.getLogger(__name__)
 
 
 def convert_to_per_unit(df):
-    # Constants
-    sqrt_3 = 3**0.5
-
     # Calculating base values per component
-    # df['base_current'] = df['s_nom'] / (df['v_nom'] * sqrt_3)
     df["base_impedance"] = df["v_nom"] ** 2 / df["s_nom"]
     df["base_susceptance"] = 1 / df["base_impedance"]
 
@@ -51,9 +50,6 @@ def convert_to_voltage_level(n, new_voltage):
     """
     df = convert_to_per_unit(n.lines.copy())
 
-    # Constants
-    sqrt_3 = 3**0.5
-
     df["new_base_impedance"] = new_voltage**2 / df["s_nom"]
 
     # Convert per-unit values back to actual values using the new base impedance
@@ -69,10 +65,6 @@ def convert_to_voltage_level(n, new_voltage):
         axis=1,
         inplace=True,
     )
-
-    # df.r = df.r.fillna(0) #how to deal with existing components that have zero power capacity s_nom
-    # df.x = df.x.fillna(0)
-    # df.b = df.b.fillna(0)
 
     # Update network lines
     (linetype,) = n.lines.loc[n.lines.v_nom == voltage_level, "type"].unique()
@@ -194,8 +186,7 @@ def aggregate_to_substations(
         columns=cols2drop,
         inplace=True,
     )
-
-    return network_s
+    return network_s, clustering.busmap
 
 
 def assign_line_lengths(n, line_length_factor):
@@ -225,9 +216,14 @@ if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
 
-        snakemake = mock_snakemake("simplify_network", interconnect="western")
+        snakemake = mock_snakemake(
+            "simplify_network",
+            interconnect="texas",
+            simpl="50",
+        )
     configure_logging(snakemake)
     params = snakemake.params
+    solver_name = snakemake.config["solving"]["solver"]["name"]
 
     voltage_level = snakemake.config["electricity"]["voltage_simplified"]
     aggregation_zones = snakemake.config["clustering"]["cluster_network"][
@@ -253,12 +249,11 @@ if __name__ == "__main__":
     busmaps = [trafo_map, busmap_to_sub.sub_id]
     busmaps = reduce(lambda x, y: x.map(y), busmaps[1:], busmaps[0])
 
-    # Haversine is a poor approximation... use 1.25 as an approximiation, but should be replaced with actual line lengths.
     # TODO: WHEN WE REPLACE NETWORK WITH NEW NETWORK WE SHOULD CALACULATE LINE LENGTHS BASED ON THE actual GIS line files.
     n = assign_line_lengths(n, 1.25)
     n.links["underwater_fraction"] = 0  # TODO: CALULATE UNDERWATER FRACTIONS.
 
-    n = aggregate_to_substations(
+    n, busmap = aggregate_to_substations(
         n,
         substations,
         busmap_to_sub.sub_id,
@@ -266,12 +261,46 @@ if __name__ == "__main__":
         params.aggregation_strategies,
     )
 
+    if snakemake.wildcards.simpl:
+        n.set_investment_periods(periods=snakemake.params.planning_horizons)
+
+        n.loads_t.p = n.loads_t.p.iloc[:, 0:0]
+        n.loads_t.q = n.loads_t.q.iloc[:, 0:0]
+        attr = [
+            "p",
+            "q",
+            "state_of_charge",
+            "mu_state_of_charge_set",
+            "mu_energy_balance",
+            "mu_lower",
+            "mu_upper",
+            "spill",
+            "p_dispatch",
+            "p_store",
+        ]
+        for attr in attr:
+            n.storage_units_t[attr] = n.storage_units_t[attr].iloc[:, 0:0]
+
+        clustering = clustering_for_n_clusters(
+            n,
+            int(snakemake.wildcards.simpl),
+            focus_weights=params.focus_weights,
+            solver_name=solver_name,
+            algorithm=params.simplify_network["algorithm"],
+            feature=params.simplify_network["feature"],
+            aggregation_strategies=params.aggregation_strategies,
+        )
+        n = clustering.network
+        cluster_regions((clustering.busmap,), snakemake.input, snakemake.output)
+    else:
+        for which in ("regions_onshore", "regions_offshore"):  # pass through regions
+            regions = gpd.read_file(getattr(snakemake.input, which))
+            regions.to_file(getattr(snakemake.output, which))
+
+    update_p_nom_max(n)
     n.loads_t.p_set = reduce_float_memory(n.loads_t.p_set)
     n.generators_t.p_max_pu = reduce_float_memory(n.generators_t.p_max_pu)
     n.generators_t.p_min_pu = reduce_float_memory(n.generators_t.p_min_pu)
     n.generators_t.marginal_cost = reduce_float_memory(n.generators_t.marginal_cost)
 
     n.export_to_netcdf(snakemake.output[0])
-
-    output_path = os.path.dirname(snakemake.output[0]) + "/simplified_"
-    export_network_for_gis_mapping(n, output_path)
