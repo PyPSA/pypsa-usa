@@ -3,7 +3,8 @@
 
 def sector_input_files(wildcards):
     input_files = {
-        "network": RESOURCES + "{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}.nc"
+        "network": RESOURCES
+        + "{interconnect}/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}.nc"
     }
     sectors = wildcards.sector.split("-")
     if "G" in sectors:
@@ -31,9 +32,9 @@ rule add_sectors:
         unpack(sector_input_files),
     output:
         network=RESOURCES
-        + "{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}_{sector}.nc",
+        + "{interconnect}/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc",
     log:
-        "logs/add_sectors/{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}_{sector}.log",
+        "logs/add_sectors/{interconnect}/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.log",
     group:
         "prepare"
     threads: 1
@@ -77,7 +78,7 @@ rule build_heat_demands:
         pop_layout=RESOURCES + "{interconnect}/pop_layout_{scope}.nc",
         # regions_onshore=RESOURCES + "regions_onshore_elec_s{simpl}_{clusters}.geojson",
         regions_onshore=RESOURCES
-        + "{interconnect}/regions_onshore_s_{clusters}.geojson",
+        + "{interconnect}/regions_onshore_s{simpl}_c{clusters}.geojson",
         cutout="cutouts/"
         + CDIR
         + "{interconnect}_"
@@ -86,15 +87,15 @@ rule build_heat_demands:
     output:
         # heat_demand=RESOURCES + "heat_demand_{scope}_elec_s{simpl}_{clusters}.nc",
         heat_demand=RESOURCES
-        + "{interconnect}/heat_demand_{scope}_elec_s_{clusters}.nc",
+        + "{interconnect}/heat_demand_{scope}_elec_s{simpl}_c{clusters}.nc",
     resources:
         mem_mb=20000,
     threads: 8
     log:
         # LOGS + "build_heat_demands_{scope}_{simpl}_{clusters}.loc",
-        LOGS + "{interconnect}/build_heat_demands_{scope}_{clusters}.loc",
+        LOGS + "{interconnect}/build_heat_demands_{scope}_{simpl}_{clusters}.loc",
     benchmark:
-        BENCHMARKS + "{interconnect}/build_heat_demands/{scope}_s_{clusters}"
+        BENCHMARKS + "{interconnect}/build_heat_demands/{scope}_s{simpl}_c{clusters}"
         # BENCHMARKS + "build_heat_demands/{scope}_s{simpl}_{clusters}"
     conda:
         "../envs/environment.yaml"
@@ -109,7 +110,7 @@ rule build_temperature_profiles:
         pop_layout=RESOURCES + "{interconnect}/pop_layout_{scope}.nc",
         # regions_onshore = RESOURCES + "regions_onshore_elec_s{simpl}_{clusters}.geojson",
         regions_onshore=RESOURCES
-        + "{interconnect}/regions_onshore_s_{clusters}.geojson",
+        + "{interconnect}/regions_onshore_s{simpl}_c{clusters}.geojson",
         cutout="cutouts/"
         + CDIR
         + "{interconnect}_"
@@ -118,17 +119,23 @@ rule build_temperature_profiles:
     output:
         # temp_soil = RESOURCES + "temp_soil_{scope}_elec_s{simpl}_{clusters}.nc",
         # temp_air = RESOURCES + "temp_air_{scope}_elec_s{simpl}_{clusters}.nc",
-        temp_soil=RESOURCES + "{interconnect}/temp_soil_{scope}_elec_s_{clusters}.nc",
-        temp_air=RESOURCES + "{interconnect}/temp_air_{scope}_elec_s_{clusters}.nc",
+        temp_soil=RESOURCES
+        + "{interconnect}/temp_soil_{scope}_elec_s{simpl}_c{clusters}.nc",
+        temp_air=RESOURCES
+        + "{interconnect}/temp_air_{scope}_elec_s{simpl}_c{clusters}.nc",
     resources:
         mem_mb=20000,
     threads: 8
     log:
-        LOGS + "{interconnect}/build_temperature_profiles_{scope}_{clusters}.log",
+        LOGS
+        + "{interconnect}/build_temperature_profiles_{scope}_{simpl}_{clusters}.log",
         # LOGS + "build_temperature_profiles_{scope}_{simpl}_{clusters}.log",
     benchmark:
         # BENCHMARKS + "build_temperature_profiles/{scope}_s{simpl}_{clusters}"
-        BENCHMARKS + "{interconnect}/build_temperature_profiles/{scope}_s_{clusters}"
+        (
+            BENCHMARKS
+            + "{interconnect}/build_temperature_profiles/{scope}_s{simpl}_c{clusters}"
+        )
     conda:
         "../envs/environment.yaml"
     script:
@@ -164,7 +171,7 @@ rule build_simplified_population_layouts:
         pop_layout_urban=RESOURCES + "{interconnect}/pop_layout_urban.nc",
         pop_layout_rural=RESOURCES + "{interconnect}/pop_layout_rural.nc",
         # regions_onshore=RESOURCES + "regions_onshore_elec_s{simpl}.geojson",
-        regions_onshore=RESOURCES + "{interconnect}/regions_onshore.geojson",
+        regions_onshore=RESOURCES + "{interconnect}/regions_onshore_s{simpl}.geojson",
         cutout="cutouts/"
         + CDIR
         + "{interconnect}_"
@@ -194,7 +201,7 @@ rule build_clustered_population_layouts:
         pop_layout_rural=RESOURCES + "{interconnect}/pop_layout_rural.nc",
         # regions_onshore=RESOURCES + "regions_onshore_elec_s{simpl}_{clusters}.geojson",
         regions_onshore=RESOURCES
-        + "{interconnect}/regions_onshore_s_{clusters}.geojson",
+        + "{interconnect}/regions_onshore_s{simpl}_c{clusters}.geojson",
         cutout="cutouts/"
         + CDIR
         + "{interconnect}_"
@@ -203,15 +210,19 @@ rule build_clustered_population_layouts:
     output:
         # clustered_pop_layout=RESOURCES + "pop_layout_elec_s{simpl}_{clusters}.csv",
         clustered_pop_layout=RESOURCES
-        + "{interconnect}/pop_layout_elec_s_{clusters}.csv",
+        + "{interconnect}/pop_layout_elec_s{simpl}_c{clusters}.csv",
     log:
         # LOGS + "build_clustered_population_layouts_{simpl}_{clusters}.log",
-        LOGS + "{interconnect}/build_clustered_population_layouts_{clusters}.log",
+        LOGS
+        + "{interconnect}/build_clustered_population_layouts_{simpl}_{clusters}.log",
     resources:
         mem_mb=10000,
     benchmark:
-        # BENCHMARKS + "build_clustered_population_layouts/s{simpl}_{clusters}"
-        BENCHMARKS + "{interconnect}/build_clustered_population_layouts/s_{clusters}"
+        # BENCHMARKS + "build_clustered_population_layouts/s{simpl}_{simpl}_{clusters}"
+        (
+            BENCHMARKS
+            + "{interconnect}/build_clustered_population_layouts/s{simpl}_c{clusters}"
+        )
     conda:
         "../envs/environment.yaml"
     script:
@@ -223,14 +234,17 @@ rule build_cop_profiles:
         heat_pump_sink_T=config["sector"]["heating"]["heat_pump_sink_T"],
     input:
         temp_soil_total=RESOURCES
-        + "{interconnect}/temp_soil_total_elec_s_{clusters}.nc",
+        + "{interconnect}/temp_soil_total_elec_s{simpl}_c{clusters}.nc",
         temp_soil_rural=RESOURCES
-        + "{interconnect}/temp_soil_rural_elec_s_{clusters}.nc",
+        + "{interconnect}/temp_soil_rural_elec_s{simpl}_c{clusters}.nc",
         temp_soil_urban=RESOURCES
-        + "{interconnect}/temp_soil_urban_elec_s_{clusters}.nc",
-        temp_air_total=RESOURCES + "{interconnect}/temp_air_total_elec_s_{clusters}.nc",
-        temp_air_rural=RESOURCES + "{interconnect}/temp_air_rural_elec_s_{clusters}.nc",
-        temp_air_urban=RESOURCES + "{interconnect}/temp_air_urban_elec_s_{clusters}.nc",
+        + "{interconnect}/temp_soil_urban_elec_s{simpl}_c{clusters}.nc",
+        temp_air_total=RESOURCES
+        + "{interconnect}/temp_air_total_elec_s{simpl}_c{clusters}.nc",
+        temp_air_rural=RESOURCES
+        + "{interconnect}/temp_air_rural_elec_s{simpl}_c{clusters}.nc",
+        temp_air_urban=RESOURCES
+        + "{interconnect}/temp_air_urban_elec_s{simpl}_c{clusters}.nc",
         # temp_soil_total=RESOURCES + "temp_soil_total_elec_s{simpl}_{clusters}.nc",
         # temp_soil_rural=RESOURCES + "temp_soil_rural_elec_s{simpl}_{clusters}.nc",
         # temp_soil_urban=RESOURCES + "temp_soil_urban_elec_s{simpl}_{clusters}.nc",
@@ -238,12 +252,18 @@ rule build_cop_profiles:
         # temp_air_rural=RESOURCES + "temp_air_rural_elec_s{simpl}_{clusters}.nc",
         # temp_air_urban=RESOURCES + "temp_air_urban_elec_s{simpl}_{clusters}.nc",
     output:
-        cop_soil_total=RESOURCES + "{interconnect}/cop_soil_total_elec_s_{clusters}.nc",
-        cop_soil_rural=RESOURCES + "{interconnect}/cop_soil_rural_elec_s_{clusters}.nc",
-        cop_soil_urban=RESOURCES + "{interconnect}/cop_soil_urban_elec_s_{clusters}.nc",
-        cop_air_total=RESOURCES + "{interconnect}/cop_air_total_elec_s_{clusters}.nc",
-        cop_air_rural=RESOURCES + "{interconnect}/cop_air_rural_elec_s_{clusters}.nc",
-        cop_air_urban=RESOURCES + "{interconnect}/cop_air_urban_elec_s_{clusters}.nc",
+        cop_soil_total=RESOURCES
+        + "{interconnect}/cop_soil_total_elec_s{simpl}_c{clusters}.nc",
+        cop_soil_rural=RESOURCES
+        + "{interconnect}/cop_soil_rural_elec_s{simpl}_c{clusters}.nc",
+        cop_soil_urban=RESOURCES
+        + "{interconnect}/cop_soil_urban_elec_s{simpl}_c{clusters}.nc",
+        cop_air_total=RESOURCES
+        + "{interconnect}/cop_air_total_elec_s{simpl}_c{clusters}.nc",
+        cop_air_rural=RESOURCES
+        + "{interconnect}/cop_air_rural_elec_s{simpl}_c{clusters}.nc",
+        cop_air_urban=RESOURCES
+        + "{interconnect}/cop_air_urban_elec_s{simpl}_c{clusters}.nc",
         # cop_soil_total=RESOURCES + "cop_soil_total_elec_s{simpl}_{clusters}.nc",
         # cop_soil_rural=RESOURCES + "cop_soil_rural_elec_s{simpl}_{clusters}.nc",
         # cop_soil_urban=RESOURCES + "cop_soil_urban_elec_s{simpl}_{clusters}.nc",
@@ -253,11 +273,9 @@ rule build_cop_profiles:
     resources:
         mem_mb=20000,
     log:
-        LOGS + "{interconnect}/build_cop_profiles_s{clusters}.log",
-        # LOGS + "build_cop_profiles_s{simpl}_{clusters}.log",
+        LOGS + "{interconnect}/build_cop_profiles_s{simpl}_c{clusters}.log",
     benchmark:
-        # BENCHMARKS + "build_cop_profiles/s{simpl}_{clusters}"
-        BENCHMARKS + "{interconnect}/build_cop_profiles/s_{clusters}"
+        BENCHMARKS + "{interconnect}/build_cop_profiles/s{simpl}_c{clusters}"
     conda:
         "../envs/environment.yaml"
     script:

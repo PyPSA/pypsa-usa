@@ -88,7 +88,7 @@ def get_color_palette(n: pypsa.Network) -> pd.Series:
                 {
                     f"{index}_charger": color,
                     f"{index}_discharger": color,
-                }
+                },
             )
 
     return pd.concat([colors, pd.Series(additional)]).to_dict()
