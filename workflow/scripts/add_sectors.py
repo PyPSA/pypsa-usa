@@ -436,6 +436,8 @@ if __name__ == "__main__":
     build_transportation(
         n=n,
         costs=costs,
+        dynamic_pricing=True,
+        eia=eia_api,
     )
 
     # check for end-use brownfield requirements

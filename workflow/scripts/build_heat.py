@@ -61,6 +61,7 @@ def build_heat(
             add_service_cooling(n, sector, costs)
 
         elif sector == "ind":
+
             if dynamic_pricing:
                 assert eia
                 gas_costs = _get_dynamic_marginal_costs(n, "gas", eia, sector=sector)
@@ -120,6 +121,9 @@ def _get_dynamic_marginal_costs(
     sector: Optional[str] = None,
     **kwargs,
 ) -> pd.DataFrame:
+    """
+    Gets end-use fuel costs at a state level.
+    """
 
     sector_mapper = {
         "res": "residential",
@@ -149,7 +153,15 @@ def _get_dynamic_marginal_costs(
                 * COAL_dol_ton_2_MWHthermal
             )  # $/Ton -> $/MWh
         case "lpg":
-            raw = FuelCosts(fuel, year, eia, grade="total").get_data(pivot=True)
+            # https://afdc.energy.gov/fuels/properties
+            btu_per_gallon = 112000
+            wh_per_btu = 0.29307
+            raw = (
+                FuelCosts(fuel, year, eia, grade="total").get_data(pivot=True)
+                * (1 / btu_per_gallon)
+                * (1 / wh_per_btu)
+                * (1000000)
+            )  # $/gal -> $/MWh
         case "heating_oil":
             # https://www.eia.gov/energyexplained/units-and-calculators/british-thermal-units.php
             btu_per_gallon = 138500

@@ -2,12 +2,16 @@
 Module for building transportation infrastructure.
 """
 
+import logging
 from typing import Optional
 
 import numpy as np
 import pandas as pd
 import pypsa
 from add_electricity import load_costs
+from build_heat import _get_dynamic_marginal_costs, get_link_marginal_costs
+
+logger = logging.getLogger(__name__)
 
 
 def build_transportation(
@@ -16,6 +20,8 @@ def build_transportation(
     air: bool = True,
     rail: bool = True,
     boat: bool = True,
+    dynamic_pricing: bool = False,
+    eia: Optional[str] = None,  # for dynamic pricing
 ) -> None:
     """
     Main funtion to interface with.
@@ -27,9 +33,16 @@ def build_transportation(
         else:
             add_lpg_infrastructure(n, "veh", costs)  # attaches at state level
 
+    if dynamic_pricing:
+        assert eia
+        lpg_cost = _get_dynamic_marginal_costs(n, "lpg", eia)
+    else:
+        logger.warning("Marginal lpg cost set to zero :(")
+        lpg_cost = 0  # TODO: No static cost found :(
+
     for vehicle in ("lgt", "med", "hvy", "bus"):
         add_elec_vehicle(n, vehicle, costs)
-        add_lpg_vehicle(n, vehicle, costs)
+        add_lpg_vehicle(n, vehicle, costs, lpg_cost)
 
     if air:
         add_lpg_infrastructure(n, "air", costs)
@@ -185,6 +198,7 @@ def add_elec_vehicle(
         capital_cost=capex,
         p_nom_extendable=True,
         lifetime=lifetime,
+        marginal_cost=0,
     )
 
 
@@ -192,6 +206,7 @@ def add_lpg_vehicle(
     n: pypsa.Network,
     vehicle: str,
     costs: pd.DataFrame,
+    marginal_cost: Optional[pd.DataFrame | float] = None,
 ) -> None:
     """
     Adds electric vehicle to the network.
@@ -229,10 +244,21 @@ def add_lpg_vehicle(
     loads = n.loads[n.loads.carrier == carrier_name]
 
     vehicles = pd.DataFrame(index=loads.bus)
+    vehicles["state"] = vehicles.index.map(n.buses.STATE)
     vehicles.index = vehicles.index.map(lambda x: x.split(f" trn-lpg-{vehicle}")[0])
     vehicles["bus0"] = vehicles.index + " trn-lpg-veh"
     vehicles["bus1"] = vehicles.index + f" trn-lpg-{vehicle}"
     vehicles["carrier"] = f"trn-lpg-{vehicle}"
+
+    if isinstance(marginal_cost, pd.DataFrame):
+        assert "state" in vehicles.columns
+        mc = get_link_marginal_costs(n, vehicles, marginal_cost)
+    elif isinstance(marginal_cost, (int, float)):
+        mc = marginal_cost
+    elif isinstance(marginal_cost, None):
+        mc = 0
+    else:
+        raise TypeError
 
     n.madd(
         "Link",
@@ -245,6 +271,7 @@ def add_lpg_vehicle(
         capital_cost=capex,
         p_nom_extendable=True,
         lifetime=lifetime,
+        marginal_cost=mc,
     )
 
 
