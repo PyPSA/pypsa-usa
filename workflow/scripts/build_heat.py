@@ -48,6 +48,8 @@ def build_heat(
                 gas_costs = costs.at["gas", "fuel"]
                 heating_oil_costs = costs.at["oil", "fuel"]
 
+            # NOTE: Cooling MUST come first, as HPs attach to cooling buses
+            add_service_cooling(n, sector, pop_layout, costs)
             add_service_heat(
                 n,
                 sector,
@@ -58,7 +60,6 @@ def build_heat(
                 marginal_gas=gas_costs,
                 marginal_oil=heating_oil_costs,
             )
-            add_service_cooling(n, sector, costs)
 
         elif sector == "ind":
 
@@ -307,25 +308,37 @@ def add_service_heat(
 def add_service_cooling(
     n: pypsa.Network,
     sector: str,
+    pop_layout: pd.DataFrame,
     costs: pd.DataFrame,
     **kwargs,
 ):
 
     assert sector in ("res", "com")
 
-    plotting = kwargs.get("plotting", None)
+    heat_systems = ("rural", "urban")
 
-    add_air_cons(n, sector, costs)
+    # seperates total heat load to urban/rural
+    # note, this is different than pypsa-eur implementation, as we add all load before
+    # clustering; we are not adding load here, rather just splitting it up
+    _split_urban_rural_load(n, sector, pop_layout)
+
+    # add heat pumps
+    for heat_system in heat_systems:
+
+        add_air_cons(n, sector, heat_system, costs)
 
 
 def add_air_cons(
     n: pypsa.Network,
     sector: str,
+    heat_system: str,
     costs: pd.DataFrame,
 ) -> None:
     """
     Adds gas furnaces to the system.
     """
+
+    assert heat_system in ("urban", "rural")
 
     match sector:
         case "res" | "Res" | "residential" | "Residential":
@@ -339,20 +352,22 @@ def add_air_cons(
     efficiency = costs.at[costs_name, "efficiency"].round(1)
     lifetime = costs.at[costs_name, "lifetime"]
 
-    carrier_name = f"{sector}-cool"
+    carrier_name = f"{sector}-{heat_system}-cool"
 
-    loads = n.loads[n.loads.carrier == carrier_name]
+    loads = n.loads[
+        (n.loads.carrier == carrier_name) & (n.loads.bus.str.contains(heat_system))
+    ]
 
     acs = pd.DataFrame(index=loads.bus)
-    acs["bus0"] = acs.index.map(lambda x: x.split(f" {sector}-cool")[0])
+    acs["bus0"] = acs.index.map(lambda x: x.split(f" {sector}-{heat_system}-cool")[0])
     acs["bus1"] = acs.index
-    acs["carrier"] = f"{sector}-air-con"
+    acs["carrier"] = f"{sector}-{heat_system}-air-con"
     acs.index = acs.bus0
 
     n.madd(
         "Link",
         acs.index,
-        suffix=f" {sector}-air-con",
+        suffix=f" {sector}-{heat_system}-air-con",
         bus0=acs.bus0,
         bus1=acs.bus1,
         carrier=acs.carrier,
