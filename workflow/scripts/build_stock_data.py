@@ -380,6 +380,21 @@ class Cecs:
         return self._get_data(fuel, as_percent=False, by_state=by_state, fillna=False)
 
 
+def _already_retired(build_year: int, lifetime: int, year: int) -> bool:
+    """
+    Checks if brownfield capacity should already be retired.
+
+    remove any exiting brownfield that already exceeds its lifetime '<='
+    instead of '<' to follow pypsa convention. See folling link
+    https://pypsa.readthedocs.io/en/latest/examples/multi-investment-optimisation.html#Multi-Investment-Optimization
+    """
+
+    if (build_year + lifetime) <= year:
+        return True
+    else:
+        return False
+
+
 ###
 # Public methods
 ###
@@ -634,10 +649,13 @@ def add_transport_brownfield(
 
         for period in range(1, periods + 1):
 
-            vehicles = df.copy()
-
             build_year = start_year - period * step
             percent = step / lifetime  # given as a ratio
+
+            if _already_retired(build_year, lifetime, start_year):
+                continue
+
+            vehicles = df.copy()
 
             vehicles["name"] = (
                 vehicles.name + f" existing_{build_year} " + vehicles.carrier
@@ -648,7 +666,6 @@ def add_transport_brownfield(
             n.madd(
                 "Link",
                 vehicles.index,
-                suffix=f"existing_{build_year} trn-elec-{vehicle}",
                 bus0=vehicles.bus0,
                 bus1=vehicles.bus1,
                 carrier=vehicles.carrier,
@@ -677,19 +694,23 @@ def add_transport_brownfield(
             case "lgt":
                 costs_name = "Light Duty Cars ICEV"
                 ratio_name = "light_duty"
-                efficiency = 25.9  # mpg
+                # efficiency = 25.9  # mpg
+                efficiency = 5  # mpg
             case "med":
                 costs_name = "Medium Duty Trucks ICEV"
                 ratio_name = "med_duty"
-                efficiency = 16.35  # mpg
+                # efficiency = 16.35  # mpg
+                efficiency = 3  # mpg
             case "hvy":
                 costs_name = "Heavy Duty Trucks ICEV"
                 ratio_name = "heavy_duty"
-                efficiency = 5.44  # mpg
+                # efficiency = 5.44  # mpg
+                efficiency = 1  # mpg
             case "bus":
                 costs_name = "Buses ICEV"
                 ratio_name = "bus"
-                efficiency = 3.67  # mpg
+                # efficiency = 3.67  # mpg
+                efficiency = 0.75  # mpg
             case _:
                 raise NotImplementedError
 
@@ -721,10 +742,13 @@ def add_transport_brownfield(
 
         for period in range(1, periods + 1):
 
-            vehicles = df.copy()
-
             build_year = start_year - period * step
             percent = step / lifetime  # given as a ratio
+
+            if _already_retired(build_year, lifetime, start_year):
+                continue
+
+            vehicles = df.copy()
 
             vehicles["name"] = (
                 vehicles.name + f" existing_{build_year} " + vehicles.carrier
@@ -802,7 +826,13 @@ def add_service_brownfield(
         df["ratio"] = df.state.map(ratios.gas)
         df["p_nom"] = df.p_max.mul(df.ratio).div(100)  # div to convert from %
 
+        start_year = n.investment_periods[0]
+        start_year = start_year if start_year <= 2023 else 2023
+
         for build_year, percent in installed_capacity.items():
+
+            if _already_retired(build_year, lifetime, start_year):
+                continue
 
             furnaces = df.copy()
             furnaces["name"] = (
@@ -860,7 +890,13 @@ def add_service_brownfield(
         df["ratio"] = df.state.map(ratios.lpg)
         df["p_nom"] = df.p_max.mul(df.ratio).div(100)  # div to convert from %
 
+        start_year = n.investment_periods[0]
+        start_year = start_year if start_year <= 2023 else 2023
+
         for build_year, percent in installed_capacity.items():
+
+            if _already_retired(build_year, lifetime, start_year):
+                continue
 
             furnaces = df.copy()
             furnaces["name"] = (
@@ -915,7 +951,13 @@ def add_service_brownfield(
         df["ratio"] = df.state.map(ratios.electricity)
         df["p_nom"] = df.p_max.mul(df.ratio).div(100)  # div to convert from %
 
+        start_year = n.investment_periods[0]
+        start_year = start_year if start_year <= 2023 else 2023
+
         for build_year, percent in installed_capacity.items():
+
+            if _already_retired(build_year, lifetime, start_year):
+                continue
 
             furnaces = df.copy()
             furnaces["name"] = (
@@ -979,7 +1021,13 @@ def add_service_brownfield(
         df["ratio"] = df.state.map(ratios.electricity)
         df["p_nom"] = df.p_max.mul(df.ratio).div(100)  # div to convert from %
 
+        start_year = n.investment_periods[0]
+        start_year = start_year if start_year <= 2023 else 2023
+
         for build_year, percent in installed_capacity.items():
+
+            if _already_retired(build_year, lifetime, start_year):
+                continue
 
             aircon = df.copy()
             aircon["name"] = aircon.name + f" existing_{build_year} " + aircon.carrier
