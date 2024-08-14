@@ -42,7 +42,7 @@ rule add_brownfield:
         + "prenetworks-brownfield/elec_s{simpl}_{clusters}_l{ll}_{opts}_{sector_opts}_{planning_horizons}.nc",
     threads: 4
     resources:
-        mem_mb=10000,
+        mem_mb=50000,
     log:
         LOGS
         + "add_brownfield_elec_s{simpl}_{clusters}_l{ll}_{opts}_{sector_opts}_{planning_horizons}.log",

@@ -57,7 +57,7 @@ rule build_base_network:
         "logs/create_network/{interconnect}.log",
     threads: 1
     resources:
-        mem_mb=1000,
+        mem_mb=5000,
     script:
         "../scripts/build_base_network.py"
 
@@ -82,7 +82,7 @@ rule build_bus_regions:
         "logs/build_bus_regions/{interconnect}.log",
     threads: 1
     resources:
-        mem_mb=1000,
+        mem_mb=5000,
     script:
         "../scripts/build_bus_regions.py"
 
@@ -97,7 +97,7 @@ rule build_cost_data:
         LOGS + "costs_{year}.log",
     threads: 1
     resources:
-        mem_mb=1000,
+        mem_mb=5000,
     script:
         "../scripts/build_cost_data.py"
 
