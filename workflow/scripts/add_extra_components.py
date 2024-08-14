@@ -588,7 +588,7 @@ def attach_newCarrier_generators(n, costs, carriers, investment_year):
             lifetime=costs.at[carrier, "lifetime"],
         )
 
-def apply_itc(n, itc_modifier, all_itc_eligible_carriers):
+def apply_itc(n, itc_modifier):
     """
     Applies investment tax credit to all extendable components in the network.
     Arguments:
@@ -596,15 +596,17 @@ def apply_itc(n, itc_modifier, all_itc_eligible_carriers):
     itc_modifier: dict,
         Dict of ITC modifiers for each carrier
     """
-    if "all" in itc_modifier.keys():
-        val = itc_modifier["all"]
-        itc_modifier = {car:val for car in all_itc_eligible_carriers}
 
     for carrier in itc_modifier.keys():
+        # apply to generators
         carrier_mask = n.generators["carrier"] == carrier
         n.generators.loc[carrier_mask, "capital_cost"] *= (1 - itc_modifier[carrier])
 
-def apply_ptc(n, ptc_modifier, all_ptc_eligible_carriers):
+        # apply to storage units
+        carrier_mask = n.storage_units["carrier"] == carrier
+        n.storage_units.loc[carrier_mask, "capital_cost"] *= (1 - itc_modifier[carrier])
+
+def apply_ptc(n, ptc_modifier):
     """
     Applies production tax credit to all extendable components in the network.
     Arguments:
@@ -612,10 +614,6 @@ def apply_ptc(n, ptc_modifier, all_ptc_eligible_carriers):
     ptc_modifier: dict,
         Dict of PTC modifiers for each carrier
     """
-
-    if "all" in ptc_modifier.keys():
-        val = ptc_modifier["all"]
-        ptc_modifier = {car:val for car in all_ptc_eligible_carriers}
 
     for carrier in ptc_modifier.keys():
         carrier_mask = n.generators["carrier"] == carrier
@@ -695,20 +693,8 @@ if __name__ == "__main__":
             gens.index,
         )  # Remove duplicate generators from first investment period
 
-    all_itc_eligible_carriers = (
-        set(
-            elec_config["renewable_carriers"] + 
-            elec_config["extendable_carriers"]["StorageUnit"]
-            )
-    )
-
-    all_ptc_eligible_carriers = (
-        set(
-            elec_config["renewable_carriers"]
-            )
-    )
-    apply_itc(n, snakemake.config["costs"]["itc_modifier"], all_itc_eligible_carriers)
-    apply_ptc(n, snakemake.config["costs"]["ptc_modifier"], all_ptc_eligible_carriers)
+    apply_itc(n, snakemake.config["costs"]["itc_modifier"])
+    apply_ptc(n, snakemake.config["costs"]["ptc_modifier"])
     
     add_nice_carrier_names(n, snakemake.config)
 

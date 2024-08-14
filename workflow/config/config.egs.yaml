@@ -62,8 +62,8 @@ electricity:
     H2: 168
 
   extendable_carriers:
-    Generator: [solar, onwind, offwind, offwind_floating, EGS, OCGT, CCGT, coal, CCGT-95CCS] #offwind, offwind_floating, maybe include CCGT-CCS
-    StorageUnit: [4hr_battery_storage] # [Xhr-battery-storage (2-10 hours)]
+    Generator: [solar, onwind, offwind, offwind_floating, EGS, OCGT, CCGT, coal, CCGT-95CCS, coal-99CCS, coal-95CCS, SMR] #offwind, offwind_floating, maybe include CCGT-CCS
+    StorageUnit: [4hr_battery_storage, 6hr_battery_storage, 8hr_battery_storage, 10hr_battery_storage, 8hr_PHS, 10hr_PHS, 12hr_PHS] # [Xhr-battery-storage (2-10 hours)]
     Store: []
     Link: [] 
 
