@@ -481,6 +481,7 @@ rule simplify_network:
         aggregation_strategies=config["clustering"].get("aggregation_strategies", {}),
         focus_weights=config_provider("focus_weights", default=False),
         simplify_network=config_provider("clustering", "simplify_network"),
+        planning_horizons=config_provider("scenario", "planning_horizons"),
     input:
         bus2sub=RESOURCES + "{interconnect}/bus2sub.csv",
         sub=RESOURCES + "{interconnect}/sub.csv",
@@ -517,7 +518,7 @@ rule cluster_network:
         network=RESOURCES + "{interconnect}/elec_s{simpl}.nc",
         regions_onshore=RESOURCES + "{interconnect}/regions_onshore_s{simpl}.geojson",
         regions_offshore=RESOURCES + "{interconnect}/regions_offshore_s{simpl}.geojson",
-        busmap=RESOURCES + "{interconnect}/bus2sub.csv",
+        # busmap=RESOURCES + "{interconnect}/bus2sub.csv",
         custom_busmap=(
             DATA + "{interconnect}/custom_busmap_{clusters}.csv"
             if config["enable"].get("custom_busmap", False)
