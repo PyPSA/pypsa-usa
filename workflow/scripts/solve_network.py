@@ -521,7 +521,7 @@ def add_interface_limits(n, sns, config):
                 dims="Line",
             ) - n.model["Line-s"].loc[:, interface_lines_b0.index].sum(dims="Line")
         else:
-            line_flows = 0.0
+            continue
         lhs = line_flows
 
         if (

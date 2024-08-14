@@ -743,6 +743,10 @@ ATB_TECH_MAPPER = {
         "display_name": "Utility-Scale Battery Storage - 10Hr",
         "crp": 20,
     },
+    "EGS": {
+        "display_name": "Geothermal - Hydro / Flash",
+        "crp": 30,
+    },
     "8hr_PHS": {
         "display_name": "Pumped Storage Hydropower - National Class 1",
         "crp": 100,

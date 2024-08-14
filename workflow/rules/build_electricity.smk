@@ -196,7 +196,7 @@ rule build_renewable_profiles:
     resources:
         mem_mb=ATLITE_NPROCESSES * 5000,
     wildcard_constraints:
-        technology="(?!hydro).*",  # Any technology other than hydro
+        technology="(?!hydro|EGS).*",  # Any technology other than hydro
     script:
         "../scripts/build_renewable_profiles.py"
 
@@ -462,6 +462,7 @@ rule add_electricity:
         hydro_breakthrough=DATA + "breakthrough_network/base_grid/hydro.csv",
         bus2sub=RESOURCES + "{interconnect}/bus2sub.csv",
         pudl_fuel_costs=RESOURCES + "{interconnect}/pudl_fuel_costs.csv",
+        #specs_EGS=RESOURCES + "{interconnect}/specs_EGS.nc",
     output:
         RESOURCES + "{interconnect}/elec_base_network_l_pp.nc",
     log:
