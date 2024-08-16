@@ -395,6 +395,26 @@ def _already_retired(build_year: int, lifetime: int, year: int) -> bool:
         return False
 
 
+def _get_marginal_cost(n: pypsa.Network, names: list[str]) -> float | pd.DataFrame:
+    """
+    Gets marginal cost from the investable link.
+
+    If dyanmic costs are applied, returns the marginal cost dataframe.
+    Else, returns the static cost associated with the first name in the
+    list
+    """
+
+    df = pd.DataFrame(index=n.links_t.marginal_cost.index)
+
+    try:
+        for name in names:
+            df[name] = n.links_t.marginal_cost[name]
+        return df
+    except KeyError:
+        logger.info(f"No dynamic cost found for {names[0]} and similar")
+        return n.links.at[name, "marginal_cost"]
+
+
 ###
 # Public methods
 ###
@@ -733,6 +753,8 @@ def add_transport_brownfield(
         df["ratio"] = ratios.at["lpg", ratio_name]
         df["p_nom"] = df.p_max.mul(df.ratio).div(100)  # div to convert from %
 
+        marginal_cost = _get_marginal_cost(n, df.bus1.to_list())
+
         # roll back vehicle stock in 5 year segments
         step = 5  # years
         periods = int(lifetime // step)
@@ -756,6 +778,14 @@ def add_transport_brownfield(
             vehicles["p_nom"] = vehicles.p_nom.mul(percent).round(2)
             vehicles = vehicles.set_index("name")
 
+            if isinstance(marginal_cost, pd.DataFrame):
+                mc = marginal_cost.copy()
+                name_mapper = vehicles["bus1"].to_dict()
+                mc = mc.rename(columns={v: k for k, v in name_mapper.items()})
+            else:
+                mc = marginal_cost
+                assert isinstance(mc, (float, int))
+
             n.madd(
                 "Link",
                 vehicles.index,
@@ -768,6 +798,7 @@ def add_transport_brownfield(
                 p_nom=vehicles.p_nom,
                 lifetime=lifetime,
                 build_year=build_year,
+                marginal_cost=mc,
             )
 
     # ev brownfield
@@ -826,6 +857,11 @@ def add_service_brownfield(
         df["ratio"] = df.state.map(ratios.gas)
         df["p_nom"] = df.p_max.mul(df.ratio).div(100)  # div to convert from %
 
+        marginal_cost_names = [
+            x.replace("heat", "gas-furnace") for x in df.bus1.to_list()
+        ]
+        marginal_cost = _get_marginal_cost(n, marginal_cost_names)
+
         start_year = n.investment_periods[0]
         start_year = start_year if start_year <= 2023 else 2023
 
@@ -835,11 +871,22 @@ def add_service_brownfield(
                 continue
 
             furnaces = df.copy()
+
             furnaces["name"] = (
                 furnaces.name + f" existing_{build_year} " + furnaces.carrier
             )
             furnaces["p_nom"] = furnaces.p_nom.mul(percent).div(100).round(2)
             furnaces = furnaces.set_index("name")
+
+            if isinstance(marginal_cost, pd.DataFrame):
+                mc = marginal_cost.copy()
+                name_mapper = (
+                    furnaces["bus1"].str.replace("-heat", "-gas-furnace").to_dict()
+                )
+                mc = mc.rename(columns={v: k for k, v in name_mapper.items()})
+            else:
+                mc = marginal_cost
+                assert isinstance(mc, (float, int))
 
             n.madd(
                 "Link",
@@ -855,6 +902,7 @@ def add_service_brownfield(
                 p_nom=furnaces.p_nom,
                 lifetime=lifetime,
                 build_year=build_year,
+                marginal_cost=mc,
             )
 
     def add_brownfield_oil(
@@ -890,6 +938,11 @@ def add_service_brownfield(
         df["ratio"] = df.state.map(ratios.lpg)
         df["p_nom"] = df.p_max.mul(df.ratio).div(100)  # div to convert from %
 
+        marginal_cost_names = [
+            x.replace("heat", "lpg-furnace") for x in df.bus1.to_list()
+        ]
+        marginal_cost = _get_marginal_cost(n, marginal_cost_names)
+
         start_year = n.investment_periods[0]
         start_year = start_year if start_year <= 2023 else 2023
 
@@ -899,11 +952,22 @@ def add_service_brownfield(
                 continue
 
             furnaces = df.copy()
+
             furnaces["name"] = (
                 furnaces.name + f" existing_{build_year} " + furnaces.carrier
             )
             furnaces["p_nom"] = furnaces.p_nom.mul(percent).div(100).round(2)
             furnaces = furnaces.set_index("name")
+
+            if isinstance(marginal_cost, pd.DataFrame):
+                mc = marginal_cost.copy()
+                name_mapper = (
+                    furnaces["bus1"].str.replace("-heat", "-oil-furnace").to_dict()
+                )
+                mc = mc.rename(columns={v: k for k, v in name_mapper.items()})
+            else:
+                mc = marginal_cost
+                assert isinstance(mc, (float, int))
 
             n.madd(
                 "Link",
@@ -919,6 +983,7 @@ def add_service_brownfield(
                 p_nom=furnaces.p_nom,
                 lifetime=lifetime,
                 build_year=build_year,
+                marginal_cost=mc,
             )
 
     def add_brownfield_elec_furnace(

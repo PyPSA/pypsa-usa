@@ -61,6 +61,8 @@ def build_heat(
                 marginal_oil=heating_oil_costs,
             )
 
+            assert not n.links_t.p_set.isna().any().any()
+
         elif sector == "ind":
 
             if dynamic_pricing:
@@ -273,7 +275,7 @@ def add_service_heat(
     # seperates total heat load to urban/rural
     # note, this is different than pypsa-eur implementation, as we add all load before
     # clustering; we are not adding load here, rather just splitting it up
-    _split_urban_rural_load(n, sector, pop_layout)
+    _split_urban_rural_load(n, sector, "heat", pop_layout)
 
     # add heat pumps
     for heat_system in heat_systems:
@@ -320,7 +322,7 @@ def add_service_cooling(
     # seperates total heat load to urban/rural
     # note, this is different than pypsa-eur implementation, as we add all load before
     # clustering; we are not adding load here, rather just splitting it up
-    _split_urban_rural_load(n, sector, pop_layout)
+    _split_urban_rural_load(n, sector, "cool", pop_layout)
 
     # add heat pumps
     for heat_system in heat_systems:
@@ -381,6 +383,7 @@ def add_air_cons(
 def _split_urban_rural_load(
     n: pypsa.Network,
     sector: str,
+    fuel: str,
     ratios: pd.DataFrame,
 ) -> None:
     """
@@ -394,8 +397,9 @@ def _split_urban_rural_load(
     """
 
     assert sector in ("com", "res")
+    assert fuel in ("heat", "cool")
 
-    load_names = n.loads[n.loads.carrier == f"{sector}-heat"].index.to_list()
+    load_names = n.loads[n.loads.carrier == f"{sector}-{fuel}"].index.to_list()
 
     for system in ("urban", "rural"):
 
@@ -410,15 +414,15 @@ def _split_urban_rural_load(
         new_buses["STATE_NAME"] = new_buses.index.map(n.buses.STATE_NAME)
 
         # strip out the 'res-heat' and 'com-heat' to add in 'rural' and 'urban'
-        new_buses.index = new_buses.index.str.strip(f" {sector}-heat")
+        new_buses.index = new_buses.index.str.strip(f" {sector}-{fuel}")
 
         n.madd(
             "Bus",
             new_buses.index,
-            suffix=f" {sector}-{system}-heat",
+            suffix=f" {sector}-{system}-{fuel}",
             x=new_buses.x,
             y=new_buses.y,
-            carrier=f"{sector}-{system}-heat",
+            carrier=f"{sector}-{system}-{fuel}",
             country=new_buses.country,
             interconnect=new_buses.interconnect,
             STATE=new_buses.STATE,
@@ -428,17 +432,17 @@ def _split_urban_rural_load(
         # get rural or urban loads
         loads_t = n.loads_t.p_set[load_names]
         loads_t = loads_t.rename(
-            columns={x: x.strip(f" {sector}-heat") for x in loads_t.columns},
+            columns={x: x.strip(f" {sector}-{fuel}") for x in loads_t.columns},
         )
         loads_t = loads_t.mul(ratios[f"{system}_fraction"])
 
         n.madd(
             "Load",
             new_buses.index,
-            suffix=f" {sector}-{system}-heat",
-            bus=new_buses.index + f" {sector}-{system}-heat",
+            suffix=f" {sector}-{system}-{fuel}",
+            bus=new_buses.index + f" {sector}-{system}-{fuel}",
             p_set=loads_t,
-            carrier=f"{sector}-{system}-heat",
+            carrier=f"{sector}-{system}-{fuel}",
         )
 
     # remove old combined loads from the network
@@ -983,10 +987,7 @@ def add_indusrial_heat_pump(
 
     hp = pd.DataFrame(index=loads.bus)
     hp["state"] = hp.index.map(n.buses.STATE)
-    hp["bus0"] = hp.index.map(lambda x: x.split(f" {sector}-heat")[0]).map(
-        n.buses.STATE,
-    )
-    hp["bus0"] = hp.bus0
+    hp["bus0"] = hp.index.map(lambda x: x.split(f" {sector}-heat")[0])
     hp["bus1"] = hp.index
     hp["carrier"] = f"{sector}-heat-pump"
     hp.index = hp.index.map(lambda x: x.split("-heat")[0])
