@@ -163,6 +163,10 @@ def load_costs(
 
     costs.at["OCGT", "fuel"] = costs.at["gas", "fuel"]
     costs.at["CCGT", "fuel"] = costs.at["gas", "fuel"]
+    costs.at["CCGT-95CCS", "fuel"] = costs.at["gas", "fuel"]
+    costs.at["coal-95CCS", "fuel"] = costs.at["coal", "fuel"]
+    costs.at["coal-99CCS", "fuel"] = costs.at["coal", "fuel"]
+    costs.at["SMR", "fuel"] = costs.at["nuclear", "fuel"]
 
     costs["marginal_cost"] = costs["VOM"] + costs["fuel"] / costs["efficiency"]
 
