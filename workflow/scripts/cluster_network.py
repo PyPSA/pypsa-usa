@@ -612,6 +612,7 @@ if __name__ == "__main__":
         if params.replace_lines_with_links:
             custom_busmap = n.buses.reeds_zone
             n.buses.interconnect = n.buses.nerc_reg.map(REEDS_NERC_INTERCONNECT_MAPPER)
+            n.lines.drop(columns=["interconnect"], inplace= True)
 
         clustering = clustering_for_n_clusters(
             n,
