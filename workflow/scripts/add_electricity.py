@@ -1256,8 +1256,8 @@ def main(snakemake):
     sanitize_carriers(n, snakemake.config)
     n.meta = snakemake.config
 
-    n.generators_t.p_max_pu = reduce_float_memory(n.generators_t.p_max_pu)
-    n.generators_t.marginal_cost = reduce_float_memory(n.generators_t.marginal_cost)
+    # n.generators_t.p_max_pu = reduce_float_memory(n.generators_t.p_max_pu)
+    # n.generators_t.marginal_cost = reduce_float_memory(n.generators_t.marginal_cost)
 
     n.export_to_netcdf(snakemake.output[0])
 

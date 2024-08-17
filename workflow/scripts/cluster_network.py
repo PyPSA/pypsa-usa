@@ -654,18 +654,6 @@ if __name__ == "__main__":
         periods=snakemake.params.planning_horizons,
     )
 
-    clustering.network.loads_t.p_set = reduce_float_memory(
-        clustering.network.loads_t.p_set,
-    )
-    clustering.network.generators_t.p_max_pu = reduce_float_memory(
-        clustering.network.generators_t.p_max_pu,
-    )
-    clustering.network.generators_t.p_min_pu = reduce_float_memory(
-        clustering.network.generators_t.p_min_pu,
-    )
-    clustering.network.generators_t.marginal_cost = reduce_float_memory(
-        clustering.network.generators_t.marginal_cost,
-    )
 
     clustering.network.export_to_netcdf(snakemake.output.network)
     for attr in (

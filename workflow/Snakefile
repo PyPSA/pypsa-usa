@@ -19,7 +19,7 @@ FIGURES_MAPS = [
     "emissions_map.pdf",
     "renewable_potential_map.pdf",
     "demand_map.pdf",
-    "lmp_map.pdf",
+    # "lmp_map.pdf",
 ]
 
 FIGURES_EMISSIONS = [
@@ -92,7 +92,7 @@ wildcard_constraints:
 
 
 # Merge subworkflow configs and main config
-configfile: "config/config.tutorial.yaml"
+# configfile: "config/config.tutorial.yaml"
 configfile: "config/config.cluster.yaml"
 configfile: "config/config.common.yaml"
 configfile: "config/config.plotting.yaml"
