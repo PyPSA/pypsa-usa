@@ -103,7 +103,7 @@ def add_land_use_constraint_perfect(n):
         df_carrier = df[df.name == name]
         bus = df_carrier.bus
         n.buses.loc[bus, name] = df_carrier.p_nom_max.values
-    # breakpoint()
+
     return n
 
 
@@ -274,7 +274,6 @@ def add_RPS_constraints(n, config):
     portfolio_standards = pd.read_csv(
         config["electricity"]["portfolio_standards"],
     )
-
     rps_carriers = [
         "onwind",
         "offwind",
@@ -350,20 +349,24 @@ def add_RPS_constraints(n, config):
         if not region_gens.empty:
             p_eligible = (
                 n.model["Generator-p"]
-                .loc[:, region_gens_eligible.index]
-                .sel(period=pct_lim.planning_horizon)
+                .sel(
+                    period=pct_lim.planning_horizon,
+                    Generator=region_gens_eligible.index,
+                )
             )
             lhs = p_eligible.sum()
 
             p_region = (
                 n.model["Generator-p"]
-                .loc[:, region_gens.index]
-                .sel(period=pct_lim.planning_horizon)
+                .sel(
+                    period=pct_lim.planning_horizon,
+                    Generator=region_gens.index,
+                    )
             )
             rhs = pct_lim.pct * p_region.sum()
 
             n.model.add_constraints(
-                lhs <= rhs,
+                lhs >= rhs,
                 name=f"GlobalConstraint-{pct_lim.name}_{pct_lim.planning_horizon}_rps_limit",
             )
             logger.info(
