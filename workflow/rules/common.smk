@@ -121,11 +121,11 @@ def interconnect_mem(w):
 def interconnect_mem_a(w):
     mem = 15000 * len(config_provider("scenario", "planning_horizons")(w))
     if w.interconnect == "usa":
-        return int(mem * 2)
+        return int(mem * 4)
     elif w.interconnect == "eastern":
-        return int(mem * 1.5)
+        return int(mem * 3)
     elif w.interconnect == "western":
-        return int(mem)
+        return int(mem * 2)
     elif w.interconnect == "texas":
         return int(mem * 0.5)
 
@@ -137,7 +137,7 @@ def interconnect_mem_s(w):
     elif w.interconnect == "eastern":
         return int(mem * 3)
     elif w.interconnect == "western":
-        return int(mem)
+        return int(mem * 2)
     elif w.interconnect == "texas":
         return int(mem * 0.5)
 
@@ -149,7 +149,7 @@ def interconnect_mem_c(w):
     elif w.interconnect == "eastern":
         return int(mem * 3)
     elif w.interconnect == "western":
-        return int(mem) * 2
+        return int(mem * 2)
     elif w.interconnect == "texas":
         return int(mem * 0.75)
 
@@ -161,7 +161,7 @@ def interconnect_mem_prepare(w):
     elif w.interconnect == "eastern":
         return int(mem * 3)
     elif w.interconnect == "western":
-        return int(mem) * 2
+        return int(mem * 2)
     elif w.interconnect == "texas":
         return int(mem * 0.75)
 

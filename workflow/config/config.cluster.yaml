@@ -2,7 +2,7 @@ __default__:
   account: horne
   partition: serc
   email: m.j.aljubran@gmail.com
-  walltime: 00:30:00   # time limit for each job
+  walltime: "04:00:00"   # time limit for each job
   cpus_per_task: 1   # number of cores per job
   chdir: $GROUP_SCRATCH/aljubrmj/framework_4/hl_markets/pypsa-usa/workflow/
   output: logs/{rule}/log-%j.out
@@ -11,19 +11,19 @@ __default__:
 
 
 build_renewable_profiles:
-  walltime: 02:00:00
+  walltime: "04:00:00"
 
 add_electricity:
-  walltime: 02:00:00
+  walltime: "04:00:00"
 
 simplify_network:
-  walltime: 02:00:00
+  walltime: "04:00:00"
 
 cluster_network:
-  walltime: 02:00:00
+  walltime: "04:00:00"
 
 solve_network:
-  walltime: 06:00:00
+  walltime: "24:00:00"
 
 solve_network_validation:
-  walltime: 06:00:00
+  walltime: "24:00:00"

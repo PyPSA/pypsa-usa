@@ -181,6 +181,8 @@ clustering:
   aggregation_strategies:
     generators:
       committable: any
+      build_year: 'capacity_weighted_average'
+      lifetime: 'capacity_weighted_average'
       start_up_cost: 'capacity_weighted_average'
       min_up_time: 'capacity_weighted_average'
       min_down_time: 'capacity_weighted_average'
@@ -276,6 +278,7 @@ solving:
 
   mem: 30000 #memory in MB; 20 GB enough for 50+B+I+H2; 100 GB for 181+B+I+H2
   walltime: "24:00:00"
+  cores: 24
 
 
 # docs :
