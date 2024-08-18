@@ -442,7 +442,7 @@ def attach_multihorizon_generators(
         suffix=f" {investment_year}",
         carrier=gens.carrier,
         bus=gens.bus,
-        p_nom_min=0,
+        p_nom_min=0 if investment_year != n.investment_periods[0] else gens.p_nom_min,
         p_nom=0 if investment_year != n.investment_periods[0] else gens.p_nom,
         p_nom_max=gens.p_nom_max,
         p_nom_extendable=True,
@@ -528,6 +528,9 @@ def apply_itc(n, itc_modifier):
     for carrier in itc_modifier.keys():
         carrier_mask = n.generators["carrier"] == carrier
         n.generators.loc[carrier_mask, "capital_cost"] *= 1 - itc_modifier[carrier]
+
+        carrier_mask = n.storage_units["carrier"] == carrier
+        n.storage_units.loc[carrier_mask, "capital_cost"] *= 1 - itc_modifier[carrier]
 
 
 def apply_ptc(n, ptc_modifier):
