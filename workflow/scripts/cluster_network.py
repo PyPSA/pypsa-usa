@@ -613,7 +613,7 @@ if __name__ == "__main__":
             custom_busmap = n.buses.reeds_zone
             n.buses.interconnect = n.buses.nerc_reg.map(REEDS_NERC_INTERCONNECT_MAPPER)
             n.lines.drop(columns=["interconnect"], inplace=True)
-            
+
         clustering = clustering_for_n_clusters(
             n,
             n_clusters,
@@ -652,19 +652,6 @@ if __name__ == "__main__":
 
     clustering.network.set_investment_periods(
         periods=snakemake.params.planning_horizons,
-    )
-
-    clustering.network.loads_t.p_set = reduce_float_memory(
-        clustering.network.loads_t.p_set,
-    )
-    clustering.network.generators_t.p_max_pu = reduce_float_memory(
-        clustering.network.generators_t.p_max_pu,
-    )
-    clustering.network.generators_t.p_min_pu = reduce_float_memory(
-        clustering.network.generators_t.p_min_pu,
-    )
-    clustering.network.generators_t.marginal_cost = reduce_float_memory(
-        clustering.network.generators_t.marginal_cost,
     )
 
     clustering.network.export_to_netcdf(snakemake.output.network)

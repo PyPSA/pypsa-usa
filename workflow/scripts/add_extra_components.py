@@ -442,7 +442,7 @@ def attach_multihorizon_generators(
         suffix=f" {investment_year}",
         carrier=gens.carrier,
         bus=gens.bus,
-        p_nom_min=0,
+        p_nom_min=0 if investment_year != n.investment_periods[0] else gens.p_nom_min,
         p_nom=0 if investment_year != n.investment_periods[0] else gens.p_nom,
         p_nom_max=gens.p_nom_max,
         p_nom_extendable=True,

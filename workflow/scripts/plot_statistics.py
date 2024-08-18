@@ -94,178 +94,85 @@ def create_title(title: str, **wildcards) -> str:
     return f"{title} \n ({wildcards_joined})"
 
 
-#### Plot HTML ####
-def plot_accumulated_emissions_tech_html(
-    n: pypsa.Network,
-    save: str,
-    **wildcards,
-) -> None:
-    """
-    Plots accumulated emissions by technology.
-    """
-
-    # get data
-
-    emissions = get_tech_emissions_timeseries(n).cumsum().mul(1e-6)  # T -> MT
-    zeros = emissions.columns[(np.abs(emissions) < 1e-7).all()]
-    emissions = emissions.drop(columns=zeros)
-
-    # plot
-
-    color_palette = get_color_palette(n)
-
-    fig = px.area(
-        emissions,
-        x=emissions.index,
-        y=emissions.columns,
-        color_discrete_map=color_palette,
+def stacked_bar_horizons(
+    stats,
+    variable,
+    variable_units,
+    carriers,
+):
+    carriers = carriers.set_index("nice_name")
+    colors_ = carriers["color"]
+    carriers_legend = carriers  # to track which carriers have non-zero values
+    # Create subplots
+    planning_horizons = stats[list(stats.keys())[0]].columns
+    fig, axes = plt.subplots(
+        nrows=len(planning_horizons),
+        ncols=1,
+        figsize=(8, 1.2 * len(planning_horizons)),
+        sharex=True,
     )
 
-    title = create_title("Technology Accumulated Emissions", **wildcards)
-    fig.update_layout(
-        title=dict(text=title, font=dict(size=TITLE_SIZE)),
-        xaxis_title="",
-        yaxis_title="Emissions [MT]",
-    )
-    fig.write_html(save)
+    # Ensure axes is always iterable (even if there's only one planning horizon)
+    if len(planning_horizons) == 1:
+        axes = [axes]
 
+    # Loop through each planning horizon
+    for ax, horizon in zip(axes, planning_horizons):
+        y_positions = np.arange(len(stats))  # One position for each scenario
+        for j, (scenario, df) in enumerate(stats.items()):
+            bottoms = np.zeros(
+                len(df.columns)
+            )  # Initialize the bottom positions for stacking
+            # Stack the technologies for each scenario
+            for i, technology in enumerate(df.index.unique()):
+                values = df.loc[technology, horizon]
+                values = values / (1e3) if "GW" in variable_units else values
+                ax.barh(
+                    y_positions[j],
+                    values,
+                    left=bottoms[j],
+                    color=colors_[technology],
+                    label=technology if j == 0 else "",
+                )
+                bottoms[j] += values
+                carriers_legend.loc[technology, "value"] = values
 
-def plot_hourly_emissions_html(n: pypsa.Network, save: str, **wildcards) -> None:
-    """
-    Plots interactive snapshot emissions by technology.
-    """
+        # Set the title for each subplot
+        ax.text(
+            1.01,
+            0.5,
+            f"{horizon}",
+            transform=ax.transAxes,
+            va="center",
+            rotation="vertical",
+        )
+        ax.set_yticks(y_positions)  # Positioning scenarios on the y-axis
+        ax.set_yticklabels(stats.keys())  # Labeling y-axis with scenario names
+        ax.grid(True, axis="x", linestyle="--", alpha=0.5)
 
-    # get data
-
-    emissions = get_tech_emissions_timeseries(n).mul(1e-6)  # T -> MT
-    zeros = emissions.columns[(np.abs(emissions) < 1e-7).all()]
-    emissions = emissions.drop(columns=zeros)
-
-    # plot
-
-    color_palette = get_color_palette(n)
-
-    fig = px.area(
-        emissions,
-        x=emissions.index,
-        y=emissions.columns,
-        color_discrete_map=color_palette,
-    )
-
-    title = create_title("Technology Emissions", **wildcards)
-    fig.update_layout(
-        title=dict(text=title, font=dict(size=TITLE_SIZE)),
-        xaxis_title="",
-        yaxis_title="Emissions [MT]",
-    )
-    fig.write_html(save)
-
-
-def plot_production_html(
-    n: pypsa.Network,
-    carriers_2_plot: list[str],
-    save: str,
-    **wildcards,
-) -> None:
-    """
-    Plots interactive timeseries production chart.
-    """
-    # get data
-
-    energy_mix = get_energy_timeseries(n).mul(1e-3)  # MW -> GW
-
-    # fix battery charge/discharge to only be positive
-    if "battery" in energy_mix:
-        col_rename = {
-            "battery charger": "battery",
-            "battery discharger": "battery",
-        }
-        energy_mix = energy_mix.rename(columns=col_rename)
-        energy_mix = energy_mix.groupby(level=0, axis=1).sum()
-        energy_mix["battery"] = energy_mix.battery.map(lambda x: max(0, x))
-
-    carriers_2_plot.append("battery")
-    energy_mix = energy_mix[[x for x in carriers_2_plot if x in energy_mix]]
-    energy_mix = energy_mix.rename(columns=n.carriers.nice_name)
-    energy_mix["Demand"] = get_demand_timeseries(n).mul(1e-3)  # MW -> GW
-
-    color_palette = get_color_palette(n)
-
-    fig = px.area(
-        energy_mix,
-        x=energy_mix.index,
-        y=[c for c in energy_mix.columns if c != "Demand"],
-        color_discrete_map=color_palette,
-    )
-    fig.add_trace(
-        go.Scatter(
-            x=energy_mix.index,
-            y=energy_mix.Demand,
-            mode="lines",
-            name="Demand",
-            line_color="darkblue",
-        ),
-    )
-    title = create_title("Production [GW]", **wildcards)
-    fig.update_layout(
-        title=dict(text=title, font=dict(size=TITLE_SIZE)),
-        xaxis_title="",
-        yaxis_title="Power [GW]",
-    )
-    fig.write_html(save)
-
-
-def plot_region_emissions_html(n: pypsa.Network, save: str, **wildcards) -> None:
-    """
-    Plots interactive region level emissions.
-    """
-
-    # get data
-    emissions = get_node_emissions_timeseries(n).mul(1e-6)  # T -> MT
-    emissions = emissions.T.groupby(n.buses.country).sum().T
-
-    # plot data
-    fig = px.area(
-        emissions,
-        x=emissions.index,
-        y=emissions.columns,
+    # Create legend handles and labels from the carriers DataFrame
+    carriers_legend = carriers_legend[carriers_legend["value"] > 0.01]
+    colors_ = carriers_legend["color"]
+    legend_handles = [
+        plt.Rectangle((0, 0), 1, 1, color=colors_[tech])
+        for tech in carriers_legend.index
+    ]
+    # fig.legend(handles=legend_handles, labels=carriers.index.tolist(), loc='lower center', bbox_to_anchor=(0.5, -0.4), ncol=4, title='Technologies')
+    ax.legend(
+        handles=legend_handles,
+        labels=carriers_legend.index.tolist(),
+        loc="upper center",
+        bbox_to_anchor=(0.5, -1.3),
+        ncol=4,
+        title="Technologies",
     )
 
-    title = create_title("Regional CO2 Emissions", **wildcards)
-    fig.update_layout(
-        title=dict(text=title, font=dict(size=TITLE_SIZE)),
-        xaxis_title="",
-        yaxis_title="Emissions [MT]",
-    )
-    fig.write_html(save)
-
-
-def plot_node_emissions_html(n: pypsa.Network, save: str, **wildcards) -> None:
-    """
-    Plots interactive node level emissions.
-
-    Performance issues of this with many nodes!!
-    """
-
-    # get data
-
-    emissions = get_node_emissions_timeseries(n).mul(1e-6)  # T -> MT
-
-    # plot
-
-    fig = px.area(
-        emissions,
-        x=emissions.index,
-        y=emissions.columns,
-    )
-
-    title = create_title("Node Emissions", **wildcards)
-    fig.update_layout(
-        title=dict(text=title, font=dict(size=TITLE_SIZE)),
-        xaxis_title="",
-        yaxis_title="Emissions [MT]",
-    )
-    fig.write_html(save)
+    fig.subplots_adjust(hspace=0, bottom=0.5)
+    fig.suptitle(f"{variable}", fontsize=12, fontweight="bold")
+    plt.xlabel(f"{variable} {variable_units}")
+    fig.tight_layout()
+    # plt.show(block=True)
+    return fig
 
 
 #### Bar Plots ####
@@ -298,34 +205,17 @@ def plot_capacity_additions_bar(
     optimal_capacity.index = optimal_capacity.index.droplevel(0)
     optimal_capacity.reset_index(inplace=True)
     optimal_capacity.rename(columns={"index": "carrier"}, inplace=True)
-    # capacity_melt = optimal_capacity.melt(
-    #     id_vars="carrier",
-    #     var_name="Investment Period",
-    #     value_name="Capacity",
-    # )
 
     optimal_capacity.set_index("carrier", inplace=True)
     optimal_capacity.insert(0, "Existing", existing_capacity["Existing Capacity"])
-
     color_palette = get_color_palette(n)
     color_mapper = [color_palette[carrier] for carrier in optimal_capacity.index]
-    bar_height = 0.35
 
-    fig, ax = plt.subplots(figsize=(10, 10))
-
-    # Plotting
-    optimal_capacity.T.plot(
-        kind="bar",
-        stacked=True,
-        color=color_mapper,
-        ax=ax,
-    )
-    ax.set_title(create_title("System Capacity Additions", **wildcards))
-    ax.set_xlabel("")
-    ax.set_ylabel("Capacity [MW]")
-
-    fig.tight_layout()
-    fig.savefig(save)
+    stats = {"": optimal_capacity}
+    variable = "Optimal Capacity"
+    variable_units = " GW"
+    fig_ = stacked_bar_horizons(stats, variable, variable_units, n.carriers)
+    fig_.savefig(save)
 
 
 def plot_production_bar(
@@ -338,36 +228,19 @@ def plot_production_bar(
     Plot diaptch per carrier.
     """
 
-    # get data
-    energy_mix = n.statistics.dispatch().mul(1e-3)  # MW -> GW
-    energy_mix.name = "dispatch"
+    energy_mix = n.statistics.supply().round(0)
     energy_mix = energy_mix[
         energy_mix.index.get_level_values("component").isin(
             ["Generator", "StorageUnit"],
         )
     ]
-    energy_mix = energy_mix.groupby("carrier").sum().reset_index()
-    energy_mix = energy_mix.melt(
-        id_vars="carrier",
-        var_name="Investment Year",
-        value_name="GWh",
-    )
+    energy_mix.index = energy_mix.index.droplevel(0)
 
-    color_palette = get_color_palette(n)
-
-    fig, ax = plt.subplots(figsize=(10, 10))
-    sns.barplot(
-        data=energy_mix,
-        y="GWh",
-        x="Investment Year",
-        hue="carrier",
-        palette=color_palette,
-    )
-
-    ax.set_title(create_title("Dispatch [GWh]", **wildcards))
-    ax.set_ylabel("Energy Produced [GWh]")
-    fig.tight_layout()
-    fig.savefig(save)
+    stats = {"": energy_mix}
+    variable = "Energy Mix"
+    variable_units = " GWh"
+    fig_ = stacked_bar_horizons(stats, variable, variable_units, n.carriers)
+    fig_.savefig(save)
 
 
 def plot_costs_bar(
@@ -941,7 +814,7 @@ def plot_generator_data_panel(
     # Set labels for each subplot
     axes[0, 0].set_xlabel("")
     axes[0, 0].set_ylabel("$ / MWh")
-    axes[0, 0].set_ylim(0, 200)
+    # axes[0, 0].set_ylim(0, 200)
     axes[0, 1].set_xlabel("")
     axes[0, 1].set_ylabel("$ / MW-yr")
     axes[1, 0].set_xlabel("")
@@ -1155,7 +1028,7 @@ if __name__ == "__main__":
     carriers = list(set(carriers))  # remove any duplicates
 
     # plotting theme
-    sns.set_theme("paper", style="darkgrid")
+    # sns.set_theme("paper", style="darkgrid")
 
     # Bar Plots
     plot_capacity_additions_bar(

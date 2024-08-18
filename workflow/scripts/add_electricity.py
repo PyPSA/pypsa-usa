@@ -164,6 +164,10 @@ def load_costs(
 
     costs.at["OCGT", "fuel"] = costs.at["gas", "fuel"]
     costs.at["CCGT", "fuel"] = costs.at["gas", "fuel"]
+    costs.at["CCGT-95CCS", "fuel"] = costs.at["gas", "fuel"]
+    costs.at["coal-95CCS", "fuel"] = costs.at["coal", "fuel"]
+    costs.at["coal-99CCS", "fuel"] = costs.at["coal", "fuel"]
+    costs.at["SMR", "fuel"] = costs.at["nuclear", "fuel"]
 
     costs["marginal_cost"] = costs["VOM"] + costs["fuel"] / costs["efficiency"]
 
@@ -173,10 +177,10 @@ def load_costs(
     costs.at["CCGT", "co2_emissions"] = costs.at["gas", "co2_emissions"]
     costs.loc["waste", "co2_emissions"] = 0.1016  # revisit, EPA data
 
-    costs.at["solar", "capital_cost"] = (
-        config["rooftop_share"] * costs.at["solar-rooftop", "capital_cost"]
-        + (1 - config["rooftop_share"]) * costs.at["solar-utility", "capital_cost"]
-    )
+    # costs.at["solar", "capital_cost"] = (
+    #     config["rooftop_share"] * costs.at["solar-rooftop", "capital_cost"]
+    #     + (1 - config["rooftop_share"]) * costs.at["solar", "capital_cost"]
+    # )
 
     def costs_for_storage(store, link1, link2=None, max_hours=1.0):
         capital_cost = link1["capital_cost"] + max_hours * store["capital_cost"]
@@ -1348,8 +1352,8 @@ def main(snakemake):
     sanitize_carriers(n, snakemake.config)
     n.meta = snakemake.config
 
-    n.generators_t.p_max_pu = reduce_float_memory(n.generators_t.p_max_pu)
-    n.generators_t.marginal_cost = reduce_float_memory(n.generators_t.marginal_cost)
+    # n.generators_t.p_max_pu = reduce_float_memory(n.generators_t.p_max_pu)
+    # n.generators_t.marginal_cost = reduce_float_memory(n.generators_t.marginal_cost)
 
     pickle.dump(n, open(snakemake.output[0], "wb"))
     # n.export_to_netcdf(snakemake.output[0])

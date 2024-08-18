@@ -702,4 +702,4 @@ if __name__ == "__main__":
         snakemake.output["renewable_potential_map.pdf"],
         **snakemake.wildcards,
     )
-    plot_lmp_map(n, snakemake.output["lmp_map.pdf"], **snakemake.wildcards)
+    # plot_lmp_map(n, snakemake.output["lmp_map.pdf"], **snakemake.wildcards)
