@@ -527,10 +527,10 @@ def apply_itc(n, itc_modifier):
     """
     for carrier in itc_modifier.keys():
         carrier_mask = n.generators["carrier"] == carrier
-        n.generators.loc[carrier_mask, "capital_cost"] *= (1 - itc_modifier[carrier])
+        n.generators.loc[carrier_mask, "capital_cost"] *= 1 - itc_modifier[carrier]
 
         carrier_mask = n.storage_units["carrier"] == carrier
-        n.storage_units.loc[carrier_mask, "capital_cost"] *= (1 - itc_modifier[carrier])
+        n.storage_units.loc[carrier_mask, "capital_cost"] *= 1 - itc_modifier[carrier]
 
 
 def apply_ptc(n, ptc_modifier):
@@ -548,7 +548,7 @@ def apply_ptc(n, ptc_modifier):
             :,
             carrier_mask,
         ]
-        n.generators_t.marginal_cost.loc[:, carrier_mask] = (mc - ptc_modifier[carrier])
+        n.generators_t.marginal_cost.loc[:, carrier_mask] = mc - ptc_modifier[carrier]
         n.generators.loc[carrier_mask, "marginal_cost"] -= ptc_modifier[carrier]
 
 

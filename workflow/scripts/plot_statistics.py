@@ -95,17 +95,22 @@ def create_title(title: str, **wildcards) -> str:
 
 
 def stacked_bar_horizons(
-    stats, 
-    variable, 
-    variable_units, 
-    carriers
-    ):
-    carriers = carriers.set_index('nice_name')
-    colors_ = carriers['color']
-    carriers_legend = carriers # to track which carriers have non-zero values
+    stats,
+    variable,
+    variable_units,
+    carriers,
+):
+    carriers = carriers.set_index("nice_name")
+    colors_ = carriers["color"]
+    carriers_legend = carriers  # to track which carriers have non-zero values
     # Create subplots
-    planning_horizons = stats[list(stats.keys())[0]].columns  
-    fig, axes = plt.subplots(nrows=len(planning_horizons), ncols=1, figsize=(8, 1.2 * len(planning_horizons)), sharex=True)
+    planning_horizons = stats[list(stats.keys())[0]].columns
+    fig, axes = plt.subplots(
+        nrows=len(planning_horizons),
+        ncols=1,
+        figsize=(8, 1.2 * len(planning_horizons)),
+        sharex=True,
+    )
 
     # Ensure axes is always iterable (even if there's only one planning horizon)
     if len(planning_horizons) == 1:
@@ -115,34 +120,60 @@ def stacked_bar_horizons(
     for ax, horizon in zip(axes, planning_horizons):
         y_positions = np.arange(len(stats))  # One position for each scenario
         for j, (scenario, df) in enumerate(stats.items()):
-            bottoms = np.zeros(len(df.columns))  # Initialize the bottom positions for stacking
+            bottoms = np.zeros(
+                len(df.columns)
+            )  # Initialize the bottom positions for stacking
             # Stack the technologies for each scenario
             for i, technology in enumerate(df.index.unique()):
                 values = df.loc[technology, horizon]
-                values = values / (1e3) if 'GW' in variable_units else values
-                ax.barh(y_positions[j], values, left=bottoms[j], color=colors_[technology], label=technology if j == 0 else "")
+                values = values / (1e3) if "GW" in variable_units else values
+                ax.barh(
+                    y_positions[j],
+                    values,
+                    left=bottoms[j],
+                    color=colors_[technology],
+                    label=technology if j == 0 else "",
+                )
                 bottoms[j] += values
-                carriers_legend.loc[technology, 'value'] = values
+                carriers_legend.loc[technology, "value"] = values
 
         # Set the title for each subplot
-        ax.text(1.01, 0.5, f"{horizon}", transform=ax.transAxes, va='center', rotation='vertical')
+        ax.text(
+            1.01,
+            0.5,
+            f"{horizon}",
+            transform=ax.transAxes,
+            va="center",
+            rotation="vertical",
+        )
         ax.set_yticks(y_positions)  # Positioning scenarios on the y-axis
         ax.set_yticklabels(stats.keys())  # Labeling y-axis with scenario names
-        ax.grid(True, axis='x', linestyle='--', alpha=0.5)
+        ax.grid(True, axis="x", linestyle="--", alpha=0.5)
 
     # Create legend handles and labels from the carriers DataFrame
-    carriers_legend = carriers_legend[carriers_legend['value'] > 0.01]
-    colors_ = carriers_legend['color']
-    legend_handles = [plt.Rectangle((0, 0), 1, 1, color=colors_[tech]) for tech in carriers_legend.index]
+    carriers_legend = carriers_legend[carriers_legend["value"] > 0.01]
+    colors_ = carriers_legend["color"]
+    legend_handles = [
+        plt.Rectangle((0, 0), 1, 1, color=colors_[tech])
+        for tech in carriers_legend.index
+    ]
     # fig.legend(handles=legend_handles, labels=carriers.index.tolist(), loc='lower center', bbox_to_anchor=(0.5, -0.4), ncol=4, title='Technologies')
-    ax.legend(handles=legend_handles, labels=carriers_legend.index.tolist(), loc='upper center', bbox_to_anchor=(0.5, -1.3), ncol=4, title='Technologies')
+    ax.legend(
+        handles=legend_handles,
+        labels=carriers_legend.index.tolist(),
+        loc="upper center",
+        bbox_to_anchor=(0.5, -1.3),
+        ncol=4,
+        title="Technologies",
+    )
 
     fig.subplots_adjust(hspace=0, bottom=0.5)
-    fig.suptitle(f'{variable}', fontsize=12, fontweight='bold')
-    plt.xlabel(f'{variable} {variable_units}')
+    fig.suptitle(f"{variable}", fontsize=12, fontweight="bold")
+    plt.xlabel(f"{variable} {variable_units}")
     fig.tight_layout()
-    # plt.show(block=True)   
+    # plt.show(block=True)
     return fig
+
 
 #### Bar Plots ####
 def plot_capacity_additions_bar(
@@ -180,11 +211,12 @@ def plot_capacity_additions_bar(
     color_palette = get_color_palette(n)
     color_mapper = [color_palette[carrier] for carrier in optimal_capacity.index]
 
-    stats = {'': optimal_capacity}
-    variable = 'Optimal Capacity'
-    variable_units = ' GW'
+    stats = {"": optimal_capacity}
+    variable = "Optimal Capacity"
+    variable_units = " GW"
     fig_ = stacked_bar_horizons(stats, variable, variable_units, n.carriers)
     fig_.savefig(save)
+
 
 def plot_production_bar(
     n: pypsa.Network,
@@ -204,9 +236,9 @@ def plot_production_bar(
     ]
     energy_mix.index = energy_mix.index.droplevel(0)
 
-    stats = {'': energy_mix}
-    variable = 'Energy Mix'
-    variable_units = ' GWh'
+    stats = {"": energy_mix}
+    variable = "Energy Mix"
+    variable_units = " GWh"
     fig_ = stacked_bar_horizons(stats, variable, variable_units, n.carriers)
     fig_.savefig(save)
 

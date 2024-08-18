@@ -347,21 +347,15 @@ def add_RPS_constraints(n, config):
         region_gens_eligible = region_gens[region_gens.carrier.isin(carriers)]
 
         if not region_gens.empty:
-            p_eligible = (
-                n.model["Generator-p"]
-                .sel(
-                    period=pct_lim.planning_horizon,
-                    Generator=region_gens_eligible.index,
-                )
+            p_eligible = n.model["Generator-p"].sel(
+                period=pct_lim.planning_horizon,
+                Generator=region_gens_eligible.index,
             )
             lhs = p_eligible.sum()
 
-            p_region = (
-                n.model["Generator-p"]
-                .sel(
-                    period=pct_lim.planning_horizon,
-                    Generator=region_gens.index,
-                    )
+            p_region = n.model["Generator-p"].sel(
+                period=pct_lim.planning_horizon,
+                Generator=region_gens.index,
             )
             rhs = pct_lim.pct * p_region.sum()
 
