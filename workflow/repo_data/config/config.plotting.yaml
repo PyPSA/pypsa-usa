@@ -38,6 +38,7 @@ plotting:
     'biogas': '#23932d'
     'waste': '#68896b'
     'geothermal': '#ba91b1'
+    'EGS': '#DAA520'
     "OCGT": "#d35050"
     "gas": "#d35050"
     "ng": "#d35050"
@@ -98,6 +99,11 @@ plotting:
     offwind_floating: "Floating Offshore Wind"
     onwind: "Onshore Wind"
     solar: "Solar"
+    EGS: "EGS"
+    coal-99CCS: "Coal-99CCS"
+    coal-95CCS: "Coal-95CCS"
+    CCGT-95CCS: "Gas-95CCS"
+    SMR: "SMR"
     PHS: "Pumped Hydro Storage"
     hydro: "Reservoir & Dam"
     battery: "Battery Storage"
