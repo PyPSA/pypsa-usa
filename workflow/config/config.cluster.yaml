@@ -11,16 +11,16 @@ __default__:
 
 
 build_renewable_profiles:
-  walltime: "04:00:00"
+  walltime: "24:00:00"
 
 add_electricity:
-  walltime: "04:00:00"
+  walltime: "24:00:00"
 
 simplify_network:
-  walltime: "04:00:00"
+  walltime: "24:00:00"
 
 cluster_network:
-  walltime: "04:00:00"
+  walltime: "24:00:00"
 
 solve_network:
   walltime: "24:00:00"
