@@ -43,6 +43,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Union
 
 import constants as const
+import dill as pickle
 import geopandas as gpd
 import numpy as np
 import pandas as pd
@@ -60,7 +61,6 @@ from scipy import sparse
 from shapely.geometry import Point
 from shapely.prepared import prep
 from sklearn.neighbors import BallTree
-import dill as pickle
 
 idx = pd.IndexSlice
 
@@ -814,6 +814,7 @@ def attach_wind_and_solar(
                 p_max_pu=bus_profiles,
             )
 
+
 def attach_egs(
     n: pypsa.Network,
     costs: pd.DataFrame,
@@ -832,10 +833,16 @@ def attach_egs(
 
     add_missing_carriers(n, carriers)
 
-    lifetime = 25 # Following EGS supply curves by Aljubran et al. (2024)
-    discount_rate = load_costs(snakemake.input.tech_costs, snakemake.params.costs, snakemake.params.max_hours).loc[car, "discount rate"]
+    lifetime = 25  # Following EGS supply curves by Aljubran et al. (2024)
+    discount_rate = load_costs(
+        snakemake.input.tech_costs, snakemake.params.costs, snakemake.params.max_hours
+    ).loc[car, "discount rate"]
 
-    with xr.open_dataset(getattr(input_profiles, "specs_EGS")) as ds_specs, xr.open_dataset(getattr(input_profiles, "profile_EGS")) as ds_profile:
+    with xr.open_dataset(
+        getattr(input_profiles, "specs_EGS")
+    ) as ds_specs, xr.open_dataset(
+        getattr(input_profiles, "profile_EGS")
+    ) as ds_profile:
 
         bus2sub = (
             pd.read_csv(input_profiles.bus2sub, dtype=str)
@@ -844,44 +851,64 @@ def attach_egs(
         )
 
         # IGNORE: Remove dropna(). Rather, apply dropna when creating the original dataset
-        df_specs = pd.merge(ds_specs.to_dataframe().reset_index().dropna(), bus2sub, on="sub_id", how="left")
+        df_specs = pd.merge(
+            ds_specs.to_dataframe().reset_index().dropna(),
+            bus2sub,
+            on="sub_id",
+            how="left",
+        )
         df_specs["bus_id"] = df_specs["bus_id"].astype(str)
 
         # bus_id must be in index for pypsa to read it
         df_specs.set_index("bus_id", inplace=True)
 
         # columns must be renamed to refer to the right quantities for pypsa to read it correctly
-        df_specs = df_specs.rename(columns={
-            "capex_usd_kw": "capital_cost", 
-            #"advanced_capex_usd_kw": "capital_cost", 
-            "avail_capacity_mw": "p_nom_max",
-            "fixed_om": "fixed_om"})
+        df_specs = df_specs.rename(
+            columns={
+                "capex_usd_kw": "capital_cost",
+                # "advanced_capex_usd_kw": "capital_cost",
+                "avail_capacity_mw": "p_nom_max",
+                "fixed_om": "fixed_om",
+            },
+        )
 
         # TODO: come up with proper values for these params
 
-        df_specs["capital_cost"] = 1000 * (df_specs["capital_cost"] * calculate_annuity(lifetime, discount_rate) + df_specs["fixed_om"])#convert and annualize USD/kW to USD/MW-year
+        df_specs["capital_cost"] = 1000 * (
+            df_specs["capital_cost"] * calculate_annuity(lifetime, discount_rate)
+            + df_specs["fixed_om"]
+        )  # convert and annualize USD/kW to USD/MW-year
         df_specs["efficiency"] = 1.0
 
         # TODO: review what qualities need to be included. Currently limited for speedup.
-        qualities = [1]#df_specs.Quality.unique()
+        qualities = [1]  # df_specs.Quality.unique()
 
         for q in qualities:
-            suffix = " " + car# + f" Q{q}"
+            suffix = " " + car  # + f" Q{q}"
             df_q = df_specs[df_specs["Quality"] == q]
 
             bus_list = df_q.index.values
-            capital_cost = df_q["capital_cost"] 
+            capital_cost = df_q["capital_cost"]
             p_nom_max_bus = df_q["p_nom_max"]
-            efficiency = df_q["efficiency"] # for now.
+            efficiency = df_q["efficiency"]  # for now.
 
             # IGNORE: Remove dropna(). Rather, apply dropna when creating the original dataset
-            df_q_profile = pd.merge(ds_profile.sel(Quality=q).to_dataframe().dropna().reset_index(), 
-                                    bus2sub,
-                                    on="sub_id", how="left")
-            bus_profiles = pd.pivot_table(df_q_profile, columns="bus_id", 
-            index=["year", "Date"], values="capacity_factor")
+            df_q_profile = pd.merge(
+                ds_profile.sel(Quality=q).to_dataframe().dropna().reset_index(),
+                bus2sub,
+                on="sub_id",
+                how="left",
+            )
+            bus_profiles = pd.pivot_table(
+                df_q_profile,
+                columns="bus_id",
+                index=["year", "Date"],
+                values="capacity_factor",
+            )
 
-            logger.info(f"Adding EGS (Resource Quality-{q}) capacity-factor profiles to the network.")
+            logger.info(
+                f"Adding EGS (Resource Quality-{q}) capacity-factor profiles to the network."
+            )
 
             n.madd(
                 "Generator",
@@ -896,6 +923,7 @@ def attach_egs(
                 efficiency=efficiency,
                 p_max_pu=bus_profiles,
             )
+
 
 def attach_battery_storage(
     n: pypsa.Network,
@@ -1207,14 +1235,14 @@ def main(snakemake):
     plants = match_plant_to_bus(n, plants)
 
     attach_egs(
-            n,
-            costs,
-            snakemake.input,
-            renewable_carriers,
-            extendable_carriers,
-            params.length_factor,
-        )
-        
+        n,
+        costs,
+        snakemake.input,
+        renewable_carriers,
+        extendable_carriers,
+        params.length_factor,
+    )
+
     attach_conventional_generators(
         n,
         costs,

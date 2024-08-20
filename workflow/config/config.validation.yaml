@@ -18,7 +18,7 @@ scenario:
   planning_horizons:
   - 2019   #(2018-2023)
 
-foresight:  'perfect'
+foresight: 'perfect'
 
 # docs :
 enable:
@@ -63,11 +63,11 @@ electricity:
     Store: []
     Link: []
 
-  demand: 
+  demand:
     profile: eia # efs, eia
-    scale: 1 # efs, aeo, or a number 
+    scale: 1 # efs, aeo, or a number
     disaggregation: pop # pop
-    scenario: 
+    scenario:
       efs_case: reference # reference, medium, high
       efs_speed: moderate # slow, moderate, rapid
       aeo: reference
@@ -79,7 +79,7 @@ electricity:
 # docs :
 conventional:
   unit_commitment: false
-  dynamic_fuel_price: 
+  dynamic_fuel_price:
     pudl: true
     wholesale: true
 
@@ -157,7 +157,7 @@ sector:
       commercial: aeo # efs, aeo
       transport: aeo # efs, aeo
       industry: aeo # efs, aeo
-    disaggregation: 
+    disaggregation:
       residential: pop # pop
       commercial: pop # pop
       transport: pop # pop
@@ -176,7 +176,7 @@ clustering:
     feature: solar+onwind-time
     aggregation_zones: 'reeds_zone' # [balancing_area, state, reeds_zone]
     exclude_carriers: []
-    consider_efficiency_classes: False
+    consider_efficiency_classes: false
   aggregation_strategies:
     generators:
       committable: any

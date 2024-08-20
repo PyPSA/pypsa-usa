@@ -121,7 +121,7 @@ def stacked_bar_horizons(
         y_positions = np.arange(len(stats))  # One position for each scenario
         for j, (scenario, df) in enumerate(stats.items()):
             bottoms = np.zeros(
-                len(df.columns)
+                len(df.columns),
             )  # Initialize the bottom positions for stacking
             # Stack the technologies for each scenario
             for i, technology in enumerate(df.index.unique()):

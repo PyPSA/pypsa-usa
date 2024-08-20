@@ -91,4 +91,3 @@ rule solve_sector_network_myopic:
         "../envs/environment.yaml"
     script:
         "../scripts/solve_network.py"
-

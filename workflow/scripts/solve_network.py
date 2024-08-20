@@ -77,7 +77,7 @@ def add_land_use_constraint_perfect(n):
                 f"summed p_min_pu values at node larger than technical potential {check[check].index}",
             )
 
-    grouper = [n.generators.carrier, n.generators.bus]#, n.generators.build_year]
+    grouper = [n.generators.carrier, n.generators.bus]  # , n.generators.build_year]
     ext_i = n.generators.p_nom_extendable & ~n.generators.index.str.contains("existing")
     # get technical limit per node and investment period
     p_nom_max = n.generators[ext_i].groupby(grouper).min().p_nom_max

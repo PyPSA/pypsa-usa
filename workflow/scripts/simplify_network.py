@@ -8,6 +8,7 @@ import logging
 import os
 from functools import reduce
 
+import dill as pickle
 import geopandas as gpd
 import numpy as np
 import pandas as pd
@@ -20,7 +21,6 @@ from _helpers import (
 )
 from cluster_network import cluster_regions, clustering_for_n_clusters
 from pypsa.clustering.spatial import get_clustering_from_busmap
-import dill as pickle
 
 logger = logging.getLogger(__name__)
 

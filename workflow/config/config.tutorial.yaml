@@ -18,7 +18,7 @@ scenario:
   planning_horizons:
   - 2030    #(2018-2023, 2030, 2040, 2050)
 
-foresight:  'perfect'
+foresight: 'perfect'
 
 
 # docs :
@@ -63,7 +63,7 @@ electricity:
     Generator: [solar, onwind, offwind, offwind_floating, OCGT, CCGT, coal] # Select Generator types allowed to be built/retired
     StorageUnit: [4hr_battery_storage] # [Xhr-battery-storage (2-10 hours), Xhr-PHS (8,10,12 hrs)]
     Store: []
-    Link: [] 
+    Link: []
 
   demand: #EFS used for given planning_horizons year (only ref/mod implemented)
     EFS_case: reference # reference, medium, high
@@ -76,7 +76,7 @@ electricity:
 # docs :
 conventional:
   unit_commitment: false
-  dynamic_fuel_price: 
+  dynamic_fuel_price:
     pudl: true
     wholesale: true
 
@@ -109,7 +109,7 @@ load:
   scaling_factor: 1.0
 
 # docs :
-costs:  
+costs:
   social_discount_rate: 0.02
   version: v0.6.0
   rooftop_share: 0.0
@@ -167,7 +167,7 @@ sector:
       commercial: aeo # efs, aeo
       transport: aeo # efs, aeo
       industry: aeo # efs, aeo
-    disaggregation: 
+    disaggregation:
       residential: pop # pop
       commercial: pop # pop
       transport: pop # pop
@@ -195,7 +195,7 @@ clustering:
       # Mean heat-rates, VOM, and fuel are not used in the model, only for post processing purposes
       vom_cost: mean
       fuel_cost: mean
-      heat_rate: mean 
+      heat_rate: mean
   temporal:
     resolution_elec: false
     resolution_sector: false

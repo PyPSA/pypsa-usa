@@ -476,6 +476,7 @@ def attach_multihorizon_generators(
     )
     n.generators_t["p_max_pu"] = n.generators_t["p_max_pu"].join(p_max_pu_t)
 
+
 def attach_multihorizon_egs(
     n: pypsa.Network,
     costs: pd.DataFrame,
@@ -485,6 +486,7 @@ def attach_multihorizon_egs(
 ):
     """
     Adds multiple investment options for EGS.
+
     Arguments:
     n: pypsa.Network,
     costs: pd.DataFrame,
@@ -497,10 +499,12 @@ def attach_multihorizon_egs(
     if gens.empty or len(n.investment_periods) == 1:
         return
 
-    lifetime = 25 # Following EGS supply curves by Aljubran et al. (2024)
+    lifetime = 25  # Following EGS supply curves by Aljubran et al. (2024)
     base_year = n.investment_periods[0]
     base_capex = costs_dict[base_year].loc["EGS", "investment"]
-    learning_ratio = costs.loc["EGS", "investment"]/costs_dict[base_year].loc["EGS", "investment"]
+    learning_ratio = (
+        costs.loc["EGS", "investment"] / costs_dict[base_year].loc["EGS", "investment"]
+    )
     capital_cost = learning_ratio * gens["capital_cost"]
 
     n.madd(
@@ -547,8 +551,21 @@ def attach_multihorizon_egs(
 
     # shift over time to capture decline
     investment_year_idx = np.where(n.investment_periods == investment_year)[0][0]
-    cars = list(n.generators_t["p_max_pu"].filter(like="EGS").filter(like=str(investment_year)).columns)
-    n.generators_t["p_max_pu"].loc[n.investment_periods[investment_year_idx:], cars] = n.generators_t["p_max_pu"].loc[n.investment_periods[:len(n.investment_periods)-investment_year_idx], cars].values
+    cars = list(
+        n.generators_t["p_max_pu"]
+        .filter(like="EGS")
+        .filter(like=str(investment_year))
+        .columns
+    )
+    n.generators_t["p_max_pu"].loc[n.investment_periods[investment_year_idx:], cars] = (
+        n.generators_t["p_max_pu"]
+        .loc[
+            n.investment_periods[: len(n.investment_periods) - investment_year_idx],
+            cars,
+        ]
+        .values
+    )
+
 
 def attach_newCarrier_generators(n, costs, carriers, investment_year):
     """
@@ -588,9 +605,11 @@ def attach_newCarrier_generators(n, costs, carriers, investment_year):
             lifetime=costs.at[carrier, "lifetime"],
         )
 
+
 def apply_itc(n, itc_modifier):
     """
     Applies investment tax credit to all extendable components in the network.
+
     Arguments:
     n: pypsa.Network,
     itc_modifier: dict,
@@ -600,15 +619,17 @@ def apply_itc(n, itc_modifier):
     for carrier in itc_modifier.keys():
         # apply to generators
         carrier_mask = n.generators["carrier"] == carrier
-        n.generators.loc[carrier_mask, "capital_cost"] *= (1 - itc_modifier[carrier])
+        n.generators.loc[carrier_mask, "capital_cost"] *= 1 - itc_modifier[carrier]
 
         # apply to storage units
         carrier_mask = n.storage_units["carrier"] == carrier
-        n.storage_units.loc[carrier_mask, "capital_cost"] *= (1 - itc_modifier[carrier])
+        n.storage_units.loc[carrier_mask, "capital_cost"] *= 1 - itc_modifier[carrier]
+
 
 def apply_ptc(n, ptc_modifier):
     """
     Applies production tax credit to all extendable components in the network.
+
     Arguments:
     n: pypsa.Network,
     ptc_modifier: dict,
@@ -674,7 +695,15 @@ if __name__ == "__main__":
     if any("PHS" in s for s in elec_config["extendable_carriers"]["StorageUnit"]):
         attach_phs_storageunits(n, elec_config)
 
-    gens = gens[gens["carrier"].isin([car for car in elec_config["extendable_carriers"]["Generator"] if "EGS" not in car])]
+    gens = gens[
+        gens["carrier"].isin(
+            [
+                car
+                for car in elec_config["extendable_carriers"]["Generator"]
+                if "EGS" not in car
+            ]
+        )
+    ]
     egs_gens = n.generators[n.generators["p_nom_extendable"] == True]
     egs_gens = egs_gens.loc[egs_gens["carrier"].str.contains("EGS")]
 
@@ -695,7 +724,7 @@ if __name__ == "__main__":
 
     apply_itc(n, snakemake.config["costs"]["itc_modifier"])
     apply_ptc(n, snakemake.config["costs"]["ptc_modifier"])
-    
+
     add_nice_carrier_names(n, snakemake.config)
 
     n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))

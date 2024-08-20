@@ -18,7 +18,7 @@ scenario:
   planning_horizons:
   - 2030    #(2018-2023, 2030, 2040, 2050)
 
-foresight:  'perfect'
+foresight: 'perfect'
 
 
 # docs :
@@ -36,7 +36,7 @@ electricity:
   conventional_carriers: [nuclear, oil, OCGT, CCGT, coal, geothermal, biomass] # Choose the conventional plant types to include in network
   renewable_carriers: [onwind, offwind, offwind_floating, solar, hydro] # Choose the renewable plant types to include in network
   voltage_simplified: 230 #Voltage level to simplify network to in rule "simplify network"
-  co2limit: 1.4728e+9 
+  co2limit: 1.4728e+9
   co2limit_enable: false
   co2base: 226.86e+6
   gaslimit: false # global gas usage limit of X MWh_th
@@ -64,11 +64,11 @@ electricity:
     Generator: [solar, onwind, offwind, offwind_floating, OCGT, CCGT, coal] # Select Generator types allowed to be built/retired
     StorageUnit: [4hr_battery_storage] # [Xhr-battery-storage (2-10 hours), Xhr-PHS (8,10,12 hrs)]
     Store: []
-    Link: [] 
+    Link: []
 
-  demand: 
+  demand:
     profile: eia # efs, eia
-    scenario: 
+    scenario:
       efs_case: reference # reference, medium, high
       efs_speed: moderate # slow, moderate, rapid
       aeo: reference
@@ -80,7 +80,7 @@ electricity:
 # docs :
 conventional:
   unit_commitment: false
-  dynamic_fuel_price: 
+  dynamic_fuel_price:
     pudl: true
     wholesale: true
 
@@ -168,7 +168,7 @@ sector:
       commercial: aeo # efs, aeo
       transport: aeo # efs, aeo
       industry: aeo # efs, aeo
-    disaggregation: 
+    disaggregation:
       residential: pop # pop
       commercial: pop # pop
       transport: pop # pop

@@ -19,7 +19,7 @@ scenario:
   planning_horizons: [2030, 2040, 2050]
   # - 2030    #(2018-2023, 2030, 2040, 2050)
 
-foresight:  'perfect'
+foresight: 'perfect'
 
 
 # docs :
@@ -65,11 +65,11 @@ electricity:
     Generator: [solar, onwind, offwind, offwind_floating, OCGT, CCGT, coal, CCGT-95CCS, coal-99CCS, coal-95CCS, SMR, nuclear] #offwind, offwind_floating, maybe include CCGT-CCS
     StorageUnit: [4hr_battery_storage, 6hr_battery_storage, 8hr_battery_storage, 10hr_battery_storage, 8hr_PHS, 10hr_PHS, 12hr_PHS] # [Xhr-battery-storage (2-10 hours)]
     Store: []
-    Link: [] 
+    Link: []
 
-  demand: 
+  demand:
     profile: efs # efs, eia
-    scenario: 
+    scenario:
       efs_case: reference # reference, medium, high
       efs_speed: moderate # slow, moderate, rapid
       aeo: reference
@@ -81,7 +81,7 @@ electricity:
 # docs :
 conventional:
   unit_commitment: false
-  dynamic_fuel_price: 
+  dynamic_fuel_price:
     pudl: true
     wholesale: true
 
@@ -100,7 +100,7 @@ lines:
   max_extension: 1000.0e+3
   length_factor: 1.25
   interface_transmission_limits: true
-  transport_model : true
+  transport_model: true
 
 # docs :
 links:
@@ -158,7 +158,7 @@ sector:
       commercial: aeo # efs, aeo
       transport: aeo # efs, aeo
       industry: aeo # efs, aeo
-    disaggregation: 
+    disaggregation:
       residential: pop # pop
       commercial: pop # pop
       transport: pop # pop
