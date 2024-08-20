@@ -131,7 +131,7 @@ def interconnect_mem_a(w):
 
 
 def interconnect_mem_s(w):
-    mem = 15000 * len(config_provider("scenario", "planning_horizons")(w))
+    mem = 30000 * len(config_provider("scenario", "planning_horizons")(w))
     if w.interconnect == "usa":
         return int(mem * 4)
     elif w.interconnect == "eastern":

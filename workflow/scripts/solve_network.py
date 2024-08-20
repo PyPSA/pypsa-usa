@@ -77,7 +77,7 @@ def add_land_use_constraint_perfect(n):
                 f"summed p_min_pu values at node larger than technical potential {check[check].index}",
             )
 
-    grouper = [n.generators.carrier, n.generators.bus, n.generators.build_year]
+    grouper = [n.generators.carrier, n.generators.bus]#, n.generators.build_year]
     ext_i = n.generators.p_nom_extendable & ~n.generators.index.str.contains("existing")
     # get technical limit per node and investment period
     p_nom_max = n.generators[ext_i].groupby(grouper).min().p_nom_max
@@ -95,7 +95,7 @@ def add_land_use_constraint_perfect(n):
     df = p_nom_max.reset_index()
     df["name"] = df.apply(
         lambda row: f"nom_max_{row['carrier']}"
-        + (f"_{row['build_year']}" if row["build_year"] is not None else ""),
+        + (f"_{row['build_year']}" if row.get["build_year"] is not None else ""),
         axis=1,
     )
 
@@ -188,8 +188,8 @@ def prepare_network(
         n.set_snapshots(n.snapshots[:nhours])
         n.snapshot_weightings[:] = 8760.0 / nhours
 
-    # if foresight == "perfect":
-    #     n = add_land_use_constraint_perfect(n)
+    if foresight == "perfect":
+        n = add_land_use_constraint_perfect(n)
     #     # if snakemake.params["sector"]["limit_max_growth"]["enable"]:
     #     #     n = add_max_growth(n)
 
