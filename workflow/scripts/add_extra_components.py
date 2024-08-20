@@ -477,6 +477,96 @@ def attach_multihorizon_generators(
     n.generators_t["p_max_pu"] = n.generators_t["p_max_pu"].join(p_max_pu_t)
 
 
+def attach_multihorizon_egs(
+    n: pypsa.Network,
+    costs: pd.DataFrame,
+    costs_dict: dict,
+    gens: pd.DataFrame,
+    investment_year: int,
+):
+    """
+    Adds multiple investment options for EGS.
+
+    Arguments:
+    n: pypsa.Network,
+    costs: pd.DataFrame,
+        dataframe with costs of investment year
+    costs_dict: dict,
+        Dict of costs for each investment period
+    carriers: List[str]
+        List of carriers to add multiple investment options for
+    """
+    if gens.empty or len(n.investment_periods) == 1:
+        return
+
+    lifetime = 25  # Following EGS supply curves by Aljubran et al. (2024)
+    base_year = n.investment_periods[0]
+    base_capex = costs_dict[base_year].loc["EGS", "investment"]
+    learning_ratio = (
+        costs.loc["EGS", "investment"] / costs_dict[base_year].loc["EGS", "investment"]
+    )
+    capital_cost = learning_ratio * gens["capital_cost"]
+
+    n.madd(
+        "Generator",
+        gens.index,
+        suffix=f" {investment_year}",
+        carrier=gens.carrier,
+        bus=gens.bus,
+        p_nom_min=0,
+        p_nom=0,
+        p_nom_max=gens.p_nom_max,
+        p_nom_extendable=True,
+        ramp_limit_up=gens.ramp_limit_up,
+        ramp_limit_down=gens.ramp_limit_down,
+        efficiency=gens.efficiency,
+        marginal_cost=gens.marginal_cost,
+        p_min_pu=gens.p_min_pu,
+        p_max_pu=gens.p_max_pu,
+        capital_cost=capital_cost,
+        build_year=investment_year,
+        lifetime=lifetime,
+    )
+
+    # time dependent factors added after
+    marginal_cost_t = n.generators_t["marginal_cost"][
+        [x for x in gens.index if x in n.generators_t.marginal_cost.columns]
+    ]
+    marginal_cost_t = marginal_cost_t.rename(
+        columns={x: f"{x} {investment_year}" for x in marginal_cost_t.columns},
+    )
+    n.generators_t["marginal_cost"] = n.generators_t["marginal_cost"].join(
+        marginal_cost_t,
+    )
+
+    p_max_pu_t = n.generators_t["p_max_pu"][
+        [x for x in gens.index if x in n.generators_t["p_max_pu"].columns]
+    ]
+
+    p_max_pu_t = p_max_pu_t.rename(
+        columns={x: f"{x} {investment_year}" for x in p_max_pu_t.columns},
+    )
+
+    n.generators_t["p_max_pu"] = n.generators_t["p_max_pu"].join(p_max_pu_t)
+
+    # shift over time to capture decline
+    investment_year_idx = np.where(n.investment_periods == investment_year)[0][0]
+    cars = list(
+        n.generators_t["p_max_pu"]
+        .filter(like="EGS")
+        .filter(like=str(investment_year))
+        .columns
+    )
+    n.generators_t["p_max_pu"].loc[n.investment_periods[investment_year_idx:], cars] = (
+        n.generators_t["p_max_pu"]
+        .loc[
+            n.investment_periods[: len(n.investment_periods) - investment_year_idx],
+            cars,
+        ]
+        .values
+    )
+
+
 def attach_newCarrier_generators(n, costs, carriers, investment_year):
     """
     Adds new carriers to the network.
@@ -525,10 +615,13 @@ def apply_itc(n, itc_modifier):
     itc_modifier: dict,
         Dict of ITC modifiers for each carrier
     """
+
     for carrier in itc_modifier.keys():
+        # apply to generators
         carrier_mask = n.generators["carrier"] == carrier
         n.generators.loc[carrier_mask, "capital_cost"] *= 1 - itc_modifier[carrier]
 
+        # apply to storage units
         carrier_mask = n.storage_units["carrier"] == carrier
         n.storage_units.loc[carrier_mask, "capital_cost"] *= 1 - itc_modifier[carrier]
 
@@ -542,6 +635,7 @@ def apply_ptc(n, ptc_modifier):
     ptc_modifier: dict,
         Dict of PTC modifiers for each carrier
     """
+
     for carrier in ptc_modifier.keys():
         carrier_mask = n.generators["carrier"] == carrier
         mc = n.get_switchable_as_dense("Generator", "marginal_cost").loc[
@@ -601,12 +695,25 @@ if __name__ == "__main__":
     if any("PHS" in s for s in elec_config["extendable_carriers"]["StorageUnit"]):
         attach_phs_storageunits(n, elec_config)
 
+    gens = gens[
+        gens["carrier"].isin(
+            [
+                car
+                for car in elec_config["extendable_carriers"]["Generator"]
+                if "EGS" not in car
+            ]
+        )
+    ]
+    egs_gens = n.generators[n.generators["p_nom_extendable"] == True]
+    egs_gens = egs_gens.loc[egs_gens["carrier"].str.contains("EGS")]
+
     for investment_year in n.investment_periods:
         costs = costs_dict[investment_year]
         attach_storageunits(n, costs, elec_config, investment_year)
         attach_stores(n, costs, elec_config, investment_year)
         attach_hydrogen_pipelines(n, costs, elec_config, investment_year)
         attach_multihorizon_generators(n, costs, gens, investment_year)
+        attach_multihorizon_egs(n, costs, costs_dict, egs_gens, investment_year)
         attach_newCarrier_generators(n, costs, new_carriers, investment_year)
 
     if not gens.empty and not len(n.investment_periods) == 1:
@@ -617,6 +724,7 @@ if __name__ == "__main__":
 
     apply_itc(n, snakemake.config["costs"]["itc_modifier"])
     apply_ptc(n, snakemake.config["costs"]["ptc_modifier"])
+
     add_nice_carrier_names(n, snakemake.config)
 
     n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))

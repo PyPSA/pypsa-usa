@@ -57,7 +57,7 @@ rule build_base_network:
         "logs/create_network/{interconnect}.log",
     threads: 1
     resources:
-        mem_mb=1000,
+        mem_mb=5000,
     script:
         "../scripts/build_base_network.py"
 
@@ -82,7 +82,7 @@ rule build_bus_regions:
         "logs/build_bus_regions/{interconnect}.log",
     threads: 1
     resources:
-        mem_mb=1000,
+        mem_mb=5000,
     script:
         "../scripts/build_bus_regions.py"
 
@@ -97,7 +97,7 @@ rule build_cost_data:
         LOGS + "costs_{year}.log",
     threads: 1
     resources:
-        mem_mb=1000,
+        mem_mb=5000,
     script:
         "../scripts/build_cost_data.py"
 
@@ -122,7 +122,7 @@ if config["enable"].get("build_cutout", False):
             "benchmarks/" + CDIR + "build_cutout_{interconnect}_{cutout}"
         threads: ATLITE_NPROCESSES
         resources:
-            mem_mb=ATLITE_NPROCESSES * 1000,
+            mem_mb=ATLITE_NPROCESSES * 5000,
         script:
             "../scripts/build_cutout.py"
 
@@ -196,7 +196,7 @@ rule build_renewable_profiles:
     resources:
         mem_mb=ATLITE_NPROCESSES * 5000,
     wildcard_constraints:
-        technology="(?!hydro).*",  # Any technology other than hydro
+        technology="(?!hydro|EGS).*",  # Any technology other than hydro
     script:
         "../scripts/build_renewable_profiles.py"
 
@@ -462,8 +462,9 @@ rule add_electricity:
         hydro_breakthrough=DATA + "breakthrough_network/base_grid/hydro.csv",
         bus2sub=RESOURCES + "{interconnect}/bus2sub.csv",
         pudl_fuel_costs=RESOURCES + "{interconnect}/pudl_fuel_costs.csv",
+        #specs_EGS=RESOURCES + "{interconnect}/specs_EGS.nc",
     output:
-        RESOURCES + "{interconnect}/elec_base_network_l_pp.nc",
+        RESOURCES + "{interconnect}/elec_base_network_l_pp.pkl",
     log:
         LOGS + "{interconnect}/add_electricity.log",
     benchmark:
@@ -485,7 +486,7 @@ rule simplify_network:
     input:
         bus2sub=RESOURCES + "{interconnect}/bus2sub.csv",
         sub=RESOURCES + "{interconnect}/sub.csv",
-        network=RESOURCES + "{interconnect}/elec_base_network_l_pp.nc",
+        network=RESOURCES + "{interconnect}/elec_base_network_l_pp.pkl",
         regions_onshore=RESOURCES + "{interconnect}/regions_onshore.geojson",
         regions_offshore=RESOURCES + "{interconnect}/regions_offshore.geojson",
     output:
@@ -549,8 +550,7 @@ rule cluster_network:
 rule add_extra_components:
     input:
         **{
-            f"phs_shp_{hour}": DATA
-            + f"psh/40-100-dam-height-{hour}hr-no-croplands-no-ephemeral-no-highways.gpkg"
+            f"phs_shp_{hour}": f"repo_data/psh/40-100-dam-height-{hour}hr-no-croplands-no-ephemeral-no-highways.gpkg"
             for phs_tech in config["electricity"]["extendable_carriers"]["StorageUnit"]
             if "PHS" in phs_tech
             for hour in phs_tech.split("hr_")

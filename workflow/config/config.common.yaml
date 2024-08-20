@@ -1,4 +1,3 @@
-
 countries: [US]
 
 network_configuration: "pypsa-usa" # "pypsa-usa" or "ads2032"
@@ -140,16 +139,16 @@ costs:
     EGS: 0.3
     geothermal: 0.3
     SMR: 0.3
-    nuclear: 0.3 
+    nuclear: 0.3
     hydro: 0.3
     4hr_battery_storage: 0.3
     6hr_battery_storage: 0.3
-    8hr_battery_storage: 0.3 
+    8hr_battery_storage: 0.3
     10hr_battery_storage: 0.3
     8hr_PHS: 0.3
     10hr_PHS: 0.3
     12hr_PHS: 0.3
-  ptc_modifier: 
+  ptc_modifier:
     solar: 27.5
     onwind: 27.5
     biomass: 27.5

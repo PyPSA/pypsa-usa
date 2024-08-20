@@ -47,6 +47,8 @@ rule retrieve_zenodo_databundles:
         expand(DATA + "{file}", file=pypsa_usa_datafiles),
     log:
         "logs/retrieve/retrieve_databundles.log",
+    resources:
+        mem_mb=5000,
     conda:
         "../envs/environment.yaml"
     script:
@@ -225,7 +227,7 @@ rule retrieve_cost_data_eur:
     log:
         LOGS + "retrieve_cost_data_eur_{year}.log",
     resources:
-        mem_mb=1000,
+        mem_mb=5000,
     script:
         "../scripts/retrieve_cost_data_eur.py"
 
@@ -240,7 +242,7 @@ rule retrieve_cost_data_usa:
     log:
         LOGS + "retrieve_cost_data_usa.log",
     resources:
-        mem_mb=1000,
+        mem_mb=5000,
     script:
         "../scripts/retrieve_cost_data_usa.py"
 
@@ -270,6 +272,6 @@ rule retrieve_pudl:
     log:
         LOGS + "retrieve_pudl.log",
     resources:
-        mem_mb=1000,
+        mem_mb=5000,
     script:
         "../scripts/retrieve_pudl.py"

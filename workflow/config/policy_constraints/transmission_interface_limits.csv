@@ -1,0 +1,4 @@
+interface,region_1,region_2,flow_12,flow_21,Notes
+CA_NW,"p9, p10, p11","p2, p5, p6, p7, p8",3591.96,9269.23,RESOLVE
+CA_SW,"p9, p10, p11","p12, p13, p30, p28, p27, p25",10901,10463,RESOLVE
+CAISO_Imports,"p9, p10, p11","p2, p5, p6, p7, p8, p12, p13, p30, p28, p27, p25",9728,10208,RESOLVE

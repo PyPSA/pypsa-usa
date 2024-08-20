@@ -8,6 +8,7 @@ import logging
 import os
 from functools import reduce
 
+import dill as pickle
 import geopandas as gpd
 import numpy as np
 import pandas as pd
@@ -230,7 +231,8 @@ if __name__ == "__main__":
         "aggregation_zones"
     ]
 
-    n = pypsa.Network(snakemake.input.network)
+    # n = pypsa.Network(snakemake.input.network)
+    n = pickle.load(open(snakemake.input.network, "rb"))
 
     n.generators.drop(
         columns=["ba_eia", "ba_ads"],

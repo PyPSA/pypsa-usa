@@ -181,7 +181,7 @@ rule build_simplified_population_layouts:
         # clustered_pop_layout=RESOURCES + "pop_layout_elec_s{simpl}.csv",
         clustered_pop_layout=RESOURCES + "{interconnect}/pop_layout_elec_s.csv",
     resources:
-        mem_mb=10000,
+        mem_mb=50000,
     log:
         # LOGS + "build_simplified_population_layouts_{simpl}",
         LOGS + "{interconnect}/build_simplified_population_layouts",
@@ -216,7 +216,7 @@ rule build_clustered_population_layouts:
         LOGS
         + "{interconnect}/build_clustered_population_layouts_{simpl}_{clusters}.log",
     resources:
-        mem_mb=10000,
+        mem_mb=50000,
     benchmark:
         # BENCHMARKS + "build_clustered_population_layouts/s{simpl}_{simpl}_{clusters}"
         (
