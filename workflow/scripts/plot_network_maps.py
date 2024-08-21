@@ -447,7 +447,6 @@ def plot_opt_capacity_map(
     # capacity.index = capacity.index.droplevel(0)
 
     bus_values = get_capacity_brownfield(n)
-
     bus_values = bus_values[bus_values.index.get_level_values("carrier").isin(carriers)]
     bus_values = (
         remove_sector_buses(bus_values)
@@ -546,28 +545,31 @@ def plot_renewable_potential(
     """
 
     # get data
-
-    renew = n.generators[
-        (n.generators.p_nom_max != np.inf)
+    renew = n.generators[ (n.generators.p_nom_max != np.inf)
+        & (n.generators.build_year == 2030) 
         & (
             n.generators.carrier.isin(
-                ["onwind", "offwind", "offwind_floating", "solar"],
+                ["onwind", "offwind", "offwind_floating", "solar", "EGS"],
             )
         )
     ]
+
     bus_values = renew.groupby(["bus", "carrier"]).p_nom_max.sum()
+
+    # bus_pnom_opt = get_capacity_brownfield(n)
+    # bus_pnom_opt = bus_pnom_opt.loc[bus_values.index]
+    # print((bus_values - bus_pnom_opt)/bus_values)
 
     # do not show lines or links
     line_values = pd.Series(0, index=n.lines.s_nom.index)
     link_values = pd.Series(0, index=n.links.p_nom.index)
 
     # plot data
-
     title = create_title("Renewable Capacity Potential", **wildcards)
     interconnect = wildcards.get("interconnect", None)
     bus_scale = get_bus_scale(interconnect) if interconnect else 1
 
-    bus_scale *= 12  # since potential capacity is so big
+    bus_scale *= 15  # since potential capacity is so big
 
     fig, ax = plot_capacity_map(
         n=n,
@@ -583,7 +585,7 @@ def plot_renewable_potential(
     fig.artists[-2].remove()  # remove line width legend
     fig.artists[-1].remove()  # remove existing colour legend
     renew_carriers = n.carriers[
-        n.carriers.index.isin(["onwind", "offwind", "offwind_floating", "solar"])
+        n.carriers.index.isin(["onwind", "offwind", "offwind_floating", "solar", "EGS"])
     ]
     add_legend_patches(
         ax,
@@ -652,6 +654,7 @@ if __name__ == "__main__":
     carriers = (
         snakemake.params.electricity["conventional_carriers"]
         + snakemake.params.electricity["renewable_carriers"]
+        + snakemake.params.electricity["extendable_carriers"]["Generator"]
         + snakemake.params.electricity["extendable_carriers"]["StorageUnit"]
         + snakemake.params.electricity["extendable_carriers"]["Store"]
         + snakemake.params.electricity["extendable_carriers"]["Link"]

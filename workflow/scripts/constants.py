@@ -721,7 +721,7 @@ ATB_TECH_MAPPER = {
     },
     "solar": {
         "display_name": "Utility PV - Class 5",
-        "crp": 20,
+        "crp": 30,
     },
     "2hr_battery_storage": {
         "display_name": "Utility-Scale Battery Storage - 2Hr",
