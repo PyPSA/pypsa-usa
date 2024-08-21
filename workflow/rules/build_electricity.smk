@@ -170,7 +170,6 @@ rule build_renewable_profiles:
                 else []
             )
         ),
-        ship_density=[],
         country_shapes=RESOURCES + "{interconnect}/country_shapes.geojson",
         offshore_shapes=RESOURCES + "{interconnect}/offshore_shapes.geojson",
         cec_onwind="repo_data/CEC_Wind_BaseScreen_epsg3310.tif",
@@ -188,6 +187,7 @@ rule build_renewable_profiles:
         + ".nc",
     output:
         profile=RESOURCES + "{interconnect}/profile_{technology}.nc",
+        availability=RESULTS + "{interconnect}/land_use_availability_{technology}.png",
     log:
         LOGS + "{interconnect}/build_renewable_profile_{technology}.log",
     benchmark:
