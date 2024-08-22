@@ -1028,7 +1028,7 @@ if __name__ == "__main__":
 
     # plotting theme
     # sns.set_theme("paper", style="darkgrid")
-
+    n.statistics().round(2).to_csv(snakemake.output.statistics)
     # Bar Plots
     plot_capacity_additions_bar(
         n,

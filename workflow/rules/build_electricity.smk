@@ -518,7 +518,6 @@ rule cluster_network:
         network=RESOURCES + "{interconnect}/elec_s{simpl}.nc",
         regions_onshore=RESOURCES + "{interconnect}/regions_onshore_s{simpl}.geojson",
         regions_offshore=RESOURCES + "{interconnect}/regions_offshore_s{simpl}.geojson",
-        # busmap=RESOURCES + "{interconnect}/bus2sub.csv",
         custom_busmap=(
             DATA + "{interconnect}/custom_busmap_{clusters}.csv"
             if config["enable"].get("custom_busmap", False)
@@ -527,6 +526,7 @@ rule cluster_network:
         tech_costs=RESOURCES
         + f"costs/costs_{config['scenario']['planning_horizons'][0]}.csv",
         itls="repo_data/ReEDS_Constraints/transmission/transmission_capacity_init_AC_ba_NARIS2024.csv",
+        itl_costs="repo_data/ReEDS_Constraints/transmission/transmission_distance_cost_500kVdc_ba.csv",
     output:
         network=RESOURCES + "{interconnect}/elec_s{simpl}_c{clusters}.nc",
         regions_onshore=RESOURCES
@@ -549,7 +549,7 @@ rule cluster_network:
 rule add_extra_components:
     input:
         **{
-            f"phs_shp_{hour}": DATA
+            f"phs_shp_{hour}": "repo_data/"
             + f"psh/40-100-dam-height-{hour}hr-no-croplands-no-ephemeral-no-highways.gpkg"
             for phs_tech in config["electricity"]["extendable_carriers"]["StorageUnit"]
             if "PHS" in phs_tech

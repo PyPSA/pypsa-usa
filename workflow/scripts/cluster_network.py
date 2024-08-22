@@ -95,6 +95,7 @@ import pyomo.environ as po
 import pypsa
 import seaborn as sns
 from _helpers import configure_logging, reduce_float_memory, update_p_nom_max
+from add_electricity import calculate_annuity
 from constants import *
 from pypsa.clustering.spatial import (
     busmap_by_greedy_modularity,
@@ -437,8 +438,14 @@ def replace_lines_with_links(clustering, itl_fn, capex):
         & itls.rr.isin(clustering.network.buses.reeds_zone)
     ]
 
-    itls["p_nom"] = np.maximum(itls["MW_f0"], itls["MW_r0"])
+    itl_cost = pd.read_csv(snakemake.input.itl_costs)
+    itl_cost['interface'] = itl_cost.r + "||" + itl_cost.rr
+    itl_cost = itl_cost[itl_cost.interface.isin(itls.interface) ] 
+    itl_cost['USD2023perMW'] = itl_cost['USD2004perMW'] * (314.54 / 188.9)
+    itl_cost['USD2023perMWyr'] = calculate_annuity(60, 0.025) * itl_cost['USD2023perMW']
+    itls = itls.merge(itl_cost[['interface', 'length_miles', 'USD2023perMWyr']], on='interface', how='left',) 
 
+    itls['p_min_pu_Rev'] = -1 * (itls.MW_r0 / itls.MW_f0)
     clustering.network.mremove("Line", clustering.network.lines.index)
     clustering.network.madd(
         "Link",
@@ -446,26 +453,12 @@ def replace_lines_with_links(clustering, itl_fn, capex):
         suffix="fwd",
         bus0=buses.loc[itls.r].index,
         bus1=buses.loc[itls.rr].index,
-        p_nom=itls.MW_r0.values,
-        p_nom_min=itls.MW_r0.values,
-        capital_cost=capex,
-        p_nom_extendable=False,
-        p_max_pu=1.0,
-        p_min_pu=0,
-        carrier="AC",
-    )
-    clustering.network.madd(
-        "Link",
-        names=itls.interface,  # itl name
-        suffix="rev",
-        bus0=buses.loc[itls.r].index,
-        bus1=buses.loc[itls.rr].index,
-        p_nom=itls.MW_r0.values,
-        p_nom_min=itls.MW_r0.values,
-        capital_cost=capex,
-        p_nom_extendable=False,
-        p_max_pu=0,
-        p_min_pu=-1.0,
+        p_nom=itls.MW_f0.values,
+        p_nom_min=itls.MW_f0.values,
+        p_max_pu= 1.0,
+        p_min_pu=itls.p_min_pu_Rev.values,
+        capital_cost=itls.USD2023perMWyr.values,
+        p_nom_extendable=True,
         carrier="AC",
     )
     logger.info(f"Replaced Lines with Links for zonal model configuration.")
@@ -477,7 +470,7 @@ def replace_lines_with_links(clustering, itl_fn, capex):
     ]
     if len(disconnected_buses) > 0:
         logger.warning(
-            f"Removed {len(disconnected_buses)} disconnected buses from the network.",
+            f"Removed {len(disconnected_buses)} sub-network buses from the network.",
         )
         clustering.network.mremove("Bus", disconnected_buses)
         clustering.network.mremove(
