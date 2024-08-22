@@ -551,9 +551,11 @@ def apply_ptc(n, ptc_modifier):
         n.generators_t.marginal_cost.loc[:, carrier_mask] = mc - ptc_modifier[carrier]
         n.generators.loc[carrier_mask, "marginal_cost"] -= ptc_modifier[carrier]
 
+
 def apply_max_annual_growth_rate(n, max_growth):
     """
-    Applies maximum annual growth rate to all extendable components in the network.
+    Applies maximum annual growth rate to all extendable components in the
+    network.
 
     Arguments:
     n: pypsa.Network,
@@ -566,10 +568,13 @@ def apply_max_annual_growth_rate(n, max_growth):
     years = years.dropna().values.mean()
     for carrier in max_annual_growth_rate.keys():
         ann_growth_rate = max_annual_growth_rate[carrier]
-        growth_factor = ann_growth_rate ** years
+        growth_factor = ann_growth_rate**years
         p_nom = n.generators.p_nom.loc[n.generators.carrier == carrier].sum()
-        n.carriers.loc[carrier, "max_growth"] = growth_base.get(carrier) or p_nom 
-        n.carriers.loc[carrier, "max_relative_growth"] = max_annual_growth_rate[carrier] ** years
+        n.carriers.loc[carrier, "max_growth"] = growth_base.get(carrier) or p_nom
+        n.carriers.loc[carrier, "max_relative_growth"] = (
+            max_annual_growth_rate[carrier] ** years
+        )
+
 
 if __name__ == "__main__":
     if "snakemake" not in globals():

@@ -161,6 +161,7 @@ import time
 
 import atlite
 import geopandas as gpd
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import xarray as xr
@@ -168,23 +169,25 @@ from _helpers import configure_logging, get_snapshots
 from dask.distributed import Client
 from pypsa.geo import haversine
 from shapely.geometry import LineString
-import matplotlib.pyplot as plt
 
 logger = logging.getLogger(__name__)
 
 
 def plot_data(data):
-    x = data.coords['x'].values  # Longitude
-    y = data.coords['y'].values  # Latitude
-    values = data.values 
+    x = data.coords["x"].values  # Longitude
+    y = data.coords["y"].values  # Latitude
+    values = data.values
 
     fig, ax = plt.subplots(figsize=(10, 8))
-    im = ax.pcolormesh(x, y, values, shading='auto', cmap='viridis')
-    fig.colorbar(im, ax=ax, label='Value')  # Add a colorbar to represent the value scale
+    im = ax.pcolormesh(x, y, values, shading="auto", cmap="viridis")
+    fig.colorbar(
+        im, ax=ax, label="Value"
+    )  # Add a colorbar to represent the value scale
 
-    ax.set_xlabel('Longitude')
-    ax.set_ylabel('Latitude')
+    ax.set_xlabel("Longitude")
+    ax.set_ylabel("Latitude")
     return fig, ax
+
 
 if __name__ == "__main__":
     if "snakemake" not in globals():
@@ -234,20 +237,20 @@ if __name__ == "__main__":
 
     if params["natura"]:
         excluder.add_raster(
-            snakemake.input.natura, 
-            nodata=0, 
-            allow_no_overlap=True
-            )
+            snakemake.input.natura,
+            nodata=0,
+            allow_no_overlap=True,
+        )
 
     corine = params.get("corine", {})
     if "grid_codes" in corine:
         codes = corine["grid_codes"]
         excluder.add_raster(
-            snakemake.input.corine, 
-            codes=codes, 
-            invert=True, 
-            #crs=4326
-            )
+            snakemake.input.corine,
+            codes=codes,
+            invert=True,
+            # crs=4326
+        )
     if corine.get("distance", 0.0) > 0.0:
         codes = corine["distance_grid_codes"]
         buffer = corine["distance"]
@@ -255,7 +258,7 @@ if __name__ == "__main__":
             snakemake.input.corine,
             codes=codes,
             buffer=buffer,
-            #crs=4326,
+            # crs=4326,
         )
 
     if params.get("cec", 0):
@@ -279,11 +282,11 @@ if __name__ == "__main__":
         # and exclude areas where: -max_depth > grid cell depth
         func = functools.partial(np.greater, -params["max_depth"])
         excluder.add_raster(
-            snakemake.input.gebco, 
-            codes=func, 
+            snakemake.input.gebco,
+            codes=func,
             nodata=-1000,
-            # crs=4326, 
-            )
+            # crs=4326,
+        )
 
     if params.get("min_depth"):
         # lambda not supported for atlite + multiprocessing
@@ -291,11 +294,11 @@ if __name__ == "__main__":
         # and exclude areas where: -min_depth < grid cell depth
         func = functools.partial(np.less, -params["min_depth"])
         excluder.add_raster(
-            snakemake.input.gebco, 
-            codes=func, 
+            snakemake.input.gebco,
+            codes=func,
             nodata=-1000,
             # crs=4326,
-            )
+        )
 
     if "min_shore_distance" in params:
         buffer = params["min_shore_distance"]
@@ -308,7 +311,6 @@ if __name__ == "__main__":
             buffer=buffer,
             invert=True,
         )
-
 
     logger.info("Calculate landuse availability...")
     start = time.time()
