@@ -121,7 +121,7 @@ def stacked_bar_horizons(
         y_positions = np.arange(len(stats))  # One position for each scenario
         for j, (scenario, df) in enumerate(stats.items()):
             bottoms = np.zeros(
-                len(df.columns)
+                len(df.columns),
             )  # Initialize the bottom positions for stacking
             # Stack the technologies for each scenario
             for i, technology in enumerate(df.index.unique()):
@@ -185,18 +185,13 @@ def plot_capacity_additions_bar(
     """
     Plots base capacity vs optimal capacity as a bar chart.
     """
-    existing_capacity = n.statistics.installed_capacity()
-    existing_capacity = existing_capacity[
-        existing_capacity.index.get_level_values(0).isin(
-            ["Generator", "StorageUnit"],
-        )
-    ]
-    existing_capacity.index = existing_capacity.index.droplevel(0)
-    existing_capacity.reset_index(inplace=True)
-    existing_capacity.rename(columns={"index": "carrier"}, inplace=True)
-    existing_capacity = existing_capacity.iloc[:, :2]
-    existing_capacity.columns = ["carrier", "Existing Capacity"]
-    existing_capacity.set_index("carrier", inplace=True)
+
+    existing_capacity = n.generators.groupby("carrier").p_nom.sum().round(0)
+    existing_capacity = existing_capacity.to_frame(name="Existing Capacity")
+    storage_units = n.storage_units.groupby("carrier").p_nom.sum().round(0)
+    storage_units = storage_units.to_frame(name="Existing Capacity")
+    existing_capacity = pd.concat([existing_capacity, storage_units])
+    existing_capacity.index = existing_capacity.index.map(n.carriers.nice_name)
 
     optimal_capacity = n.statistics.optimal_capacity()
     optimal_capacity = optimal_capacity[
@@ -216,6 +211,7 @@ def plot_capacity_additions_bar(
     variable_units = " GW"
     fig_ = stacked_bar_horizons(stats, variable, variable_units, n.carriers)
     fig_.savefig(save)
+    plt.close()
 
 
 def plot_production_bar(
@@ -241,6 +237,7 @@ def plot_production_bar(
     variable_units = " GWh"
     fig_ = stacked_bar_horizons(stats, variable, variable_units, n.carriers)
     fig_.savefig(save)
+    plt.close()
 
 
 def plot_costs_bar(
@@ -297,6 +294,7 @@ def plot_costs_bar(
     ax.set_xlabel("CAPEX & OPEX [M$]")
     fig.tight_layout()
     fig.savefig(save)
+    plt.close()
 
 
 def plot_global_constraint_shadow_prices(
@@ -1020,6 +1018,7 @@ if __name__ == "__main__":
     carriers = (
         snakemake.params.electricity["conventional_carriers"]
         + snakemake.params.electricity["renewable_carriers"]
+        + snakemake.params.electricity["extendable_carriers"]["Generator"]
         + snakemake.params.electricity["extendable_carriers"]["StorageUnit"]
         + snakemake.params.electricity["extendable_carriers"]["Store"]
         + snakemake.params.electricity["extendable_carriers"]["Link"]
@@ -1029,7 +1028,7 @@ if __name__ == "__main__":
 
     # plotting theme
     # sns.set_theme("paper", style="darkgrid")
-
+    n.statistics().round(2).to_csv(snakemake.output.statistics)
     # Bar Plots
     plot_capacity_additions_bar(
         n,

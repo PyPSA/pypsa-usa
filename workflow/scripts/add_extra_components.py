@@ -552,6 +552,30 @@ def apply_ptc(n, ptc_modifier):
         n.generators.loc[carrier_mask, "marginal_cost"] -= ptc_modifier[carrier]
 
 
+def apply_max_annual_growth_rate(n, max_growth):
+    """
+    Applies maximum annual growth rate to all extendable components in the
+    network.
+
+    Arguments:
+    n: pypsa.Network,
+    max_annual_growth_rate: dict,
+        Dict of maximum annual growth rate for each carrier
+    """
+    max_annual_growth_rate = max_growth["rate"]
+    growth_base = max_growth["base"]
+    years = n.investment_period_weightings.index.diff()
+    years = years.dropna().values.mean()
+    for carrier in max_annual_growth_rate.keys():
+        ann_growth_rate = max_annual_growth_rate[carrier]
+        growth_factor = ann_growth_rate**years
+        p_nom = n.generators.p_nom.loc[n.generators.carrier == carrier].sum()
+        n.carriers.loc[carrier, "max_growth"] = growth_base.get(carrier) or p_nom
+        n.carriers.loc[carrier, "max_relative_growth"] = (
+            max_annual_growth_rate[carrier] ** years
+        )
+
+
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
@@ -617,6 +641,7 @@ if __name__ == "__main__":
 
     apply_itc(n, snakemake.config["costs"]["itc_modifier"])
     apply_ptc(n, snakemake.config["costs"]["ptc_modifier"])
+    apply_max_annual_growth_rate(n, snakemake.config["costs"]["max_growth"])
     add_nice_carrier_names(n, snakemake.config)
 
     n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))

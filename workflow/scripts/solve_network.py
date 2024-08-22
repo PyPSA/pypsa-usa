@@ -77,9 +77,9 @@ def add_land_use_constraint_perfect(n):
                 f"summed p_min_pu values at node larger than technical potential {check[check].index}",
             )
 
-    grouper = [n.generators.carrier, n.generators.bus, n.generators.build_year]
+    grouper = [n.generators.carrier, n.generators.bus]
     ext_i = n.generators.p_nom_extendable & ~n.generators.index.str.contains("existing")
-    # get technical limit per node and investment period
+    # get technical limit per node
     p_nom_max = n.generators[ext_i].groupby(grouper).min().p_nom_max
     # drop carriers without tech limit
     p_nom_max = p_nom_max[~p_nom_max.isin([np.inf, np.nan])]
@@ -89,21 +89,14 @@ def add_land_use_constraint_perfect(n):
     n.generators.loc[gen_i, "p_nom_min"] = 0
     # check minimum capacities
     check_p_min_p_max(p_nom_max)
-    # drop multi entries in case p_nom_max stays constant in different periods
-    # p_nom_max = compress_series(p_nom_max)
-    # adjust name to fit syntax of nominal constraint per bus
+
     df = p_nom_max.reset_index()
-    df["name"] = df.apply(
-        lambda row: f"nom_max_{row['carrier']}"
-        + (f"_{row['build_year']}" if row["build_year"] is not None else ""),
-        axis=1,
-    )
+    df["name"] = df.apply(lambda row: f"nom_max_{row['carrier']}", axis=1)
 
     for name in df.name.unique():
         df_carrier = df[df.name == name]
         bus = df_carrier.bus
         n.buses.loc[bus, name] = df_carrier.p_nom_max.values
-
     return n
 
 
@@ -188,10 +181,10 @@ def prepare_network(
         n.set_snapshots(n.snapshots[:nhours])
         n.snapshot_weightings[:] = 8760.0 / nhours
 
-    # if foresight == "perfect":
-    #     n = add_land_use_constraint_perfect(n)
-    #     # if snakemake.params["sector"]["limit_max_growth"]["enable"]:
-    #     #     n = add_max_growth(n)
+    if foresight == "perfect":
+        n = add_land_use_constraint_perfect(n)
+        # if snakemake.params["sector"]["limit_max_growth"]["enable"]:
+        #     n = add_max_growth(n)
 
     if n.stores.carrier.eq("co2 stored").any():
         limit = co2_sequestration_potential
