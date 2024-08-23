@@ -265,7 +265,8 @@ class ReadStrategy(ABC):
         )
 
         assert all(
-            x in ["all", "electricity", "heat", "cool", "lpg"]
+            x
+            in ["all", "electricity", "heat", "cool", "lpg", "space_heat", "water_heat"]
             for x in df.index.get_level_values("fuel").unique()
         )
 
@@ -551,7 +552,13 @@ class ReadEulp(ReadStrategy):
     def _format_data(self, data: dict[str, pd.DataFrame]) -> pd.DataFrame:
         df = self._collapse_data(data)
         df["fuel"] = df.fuel.map(
-            {"electricity": "electricity", "cooling": "cool", "heating": "heat"},
+            {
+                "electricity": "electricity",
+                "cooling": "cool",
+                "heating": "heat",
+                "water_heating": "water_heat",
+                "space_heating": "space_heat",
+            },
         )
         assert not df.fuel.isna().any()
         df["sector"] = self.stock
@@ -2382,17 +2389,17 @@ if __name__ == "__main__":
         #     interconnect="texas",
         #     end_use="power",
         # )
-        snakemake = mock_snakemake(
-            "build_transport_other_demand",
-            interconnect="texas",
-            end_use="transport",
-            vehicle="rail-passenger",
-        )
         # snakemake = mock_snakemake(
-        #     "build_sector_demand",
+        #     "build_transport_other_demand",
         #     interconnect="texas",
-        #     end_use="industry",
+        #     end_use="transport",
+        #     vehicle="rail-passenger",
         # )
+        snakemake = mock_snakemake(
+            "build_sector_demand",
+            interconnect="western",
+            end_use="residential",
+        )
     configure_logging(snakemake)
 
     n = pypsa.Network(snakemake.input.network)
@@ -2502,7 +2509,7 @@ if __name__ == "__main__":
             sns=sns,
         )  # dict[str, dict[str, pd.DataFrame]]
     else:
-        fuels = ("electricity", "heat", "cool")
+        fuels = ("electricity", "heat", "cool", "space_heat", "water_heat")
         demands = demand_converter.prepare_multiple_demands(
             end_use,  # residential, commercial, industry, transport
             fuels,
@@ -2565,6 +2572,14 @@ if __name__ == "__main__":
         )
         formatted_demand["heat"].round(4).to_csv(
             snakemake.output.heat_demand,
+            index=True,
+        )
+        formatted_demand["space_heat"].round(4).to_csv(
+            snakemake.output.space_heat_demand,
+            index=True,
+        )
+        formatted_demand["water_heat"].round(4).to_csv(
+            snakemake.output.water_heat_demand,
             index=True,
         )
         formatted_demand["cool"].round(4).to_csv(

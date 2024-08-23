@@ -38,7 +38,7 @@ def attach_demand(n: pypsa.Network, df: pd.DataFrame, carrier: str, suffix: str)
 
 if __name__ == "__main__":
     if "snakemake" not in globals():
-        snakemake = mock_snakemake("add_demand", interconnect="texas")
+        snakemake = mock_snakemake("add_demand", interconnect="western")
     configure_logging(snakemake)
 
     demand_files = snakemake.input.demand
@@ -61,6 +61,8 @@ if __name__ == "__main__":
         "heating": "heat",
         "cooling": "cool",
         "lpg": "lpg",
+        "space-heating": "space-heat",
+        "water-heating": "water-heat",
     }
 
     vehicle_mapper = {
