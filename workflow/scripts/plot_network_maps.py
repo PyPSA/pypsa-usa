@@ -211,6 +211,8 @@ def plot_capacity_map(
     flow=None,
     line_colors="teal",
     link_colors="green",
+    line_cmap="viridis",
+    line_norm=None,
 ) -> tuple[plt.figure, plt.axes]:
     """
     Generic network plotting function for capacity pie charts at each node.
@@ -237,6 +239,8 @@ def plot_capacity_map(
             margin=0.2,
             color_geomap=None,
             flow=flow,
+            line_cmap=line_cmap,
+            line_norm=line_norm,
         )
 
     # onshore regions
@@ -602,12 +606,12 @@ if __name__ == "__main__":
         from _helpers import mock_snakemake
 
         snakemake = mock_snakemake(
-            "plot_figures",
-            interconnect="western",
-            clusters=30,
-            ll="v1.15",
-            opts="CO2L0.75-4H",
-            sector="E",
+            "plot_network_maps",
+            interconnect="texas",
+            clusters=20,
+            ll="v1.0",
+            opts="500SEG",
+            sector="E-G",
         )
     configure_logging(snakemake)
 

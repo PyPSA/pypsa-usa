@@ -11,21 +11,21 @@ run:
 scenario:
   interconnect: [texas] #"usa|texas|western|eastern"
   clusters: [20]
-  opts: [Co2L]
+  opts: [REM-1000SEG]
   ll: [v1.05]
   scope: "total" # "urban", "rural", or "total"
   sector: "" # G
   planning_horizons:
   - 2030    #(2018-2023, 2030, 2040, 2050)
 
-foresight:  # Only Single Stage Currently
+foresight:  'perfect'
 
 
 # docs :
 enable:
   build_cutout: false
 
-snapshots:
+snapshots: # Defines renewable weather year, and annual snapshot time-scope
   start: "2019-01-01"
   end: "2019-02-01"
   inclusive: "left"
@@ -35,12 +35,12 @@ snapshots:
 electricity:
   conventional_carriers: [nuclear, oil, OCGT, CCGT, coal, geothermal, biomass] # Choose the conventional plant types to include in network
   renewable_carriers: [onwind, offwind, offwind_floating, solar, hydro] # Choose the renewable plant types to include in network
-  voltage_simplified: 230 #Voltage level to simplify network to in rule "simplify network"
+  voltage_simplified: 230
   co2limit: 180.3e+3
   co2limit_enable: true
   co2base: 180.3e+6
   gaslimit: false # global gas usage limit of X MWh_th
-  gaslimit_enable: false # For sector coupled studies
+  gaslimit_enable: false
   retirement: economic # "economic" or "technical"
   SAFE_reservemargin: 0.14
   regional_Co2_limits: 'config/policy_constraints/regional_Co2_limits.csv'
@@ -60,10 +60,10 @@ electricity:
     H2: 168
 
   extendable_carriers:
-    Generator: [solar, onwind, offwind, offwind_floating, OCGT, CCGT, coal] #offwind, offwind_floating,
-    StorageUnit: [4hr_battery_storage] # [Xhr-battery-storage (2-10 hours), H2]
-    Store: [] #[H2]
-    Link: [] #[H2 pipeline]
+    Generator: [solar, onwind, offwind, offwind_floating, OCGT, CCGT, coal] # Select Generator types allowed to be built/retired
+    StorageUnit: [4hr_battery_storage] # [Xhr-battery-storage (2-10 hours), Xhr-PHS (8,10,12 hrs)]
+    Store: []
+    Link: [] 
 
   demand: #EFS used for given planning_horizons year (only ref/mod implemented)
     EFS_case: reference # reference, medium, high
@@ -76,8 +76,9 @@ electricity:
 # docs :
 conventional:
   unit_commitment: false
-  dynamic_fuel_price: true
-
+  dynamic_fuel_price: 
+    pudl: true
+    wholesale: true
 
 # docs :
 lines:
@@ -93,7 +94,8 @@ lines:
   s_nom_max: .inf
   max_extension: 1000.0e+3
   length_factor: 1.25
-  interface_transmission_limits: true
+  interface_transmission_limits: true # Imposes ITLs over AC Lines
+  transport_model: false # If minimum nodes set, AC lines will be replaced with links according to ITLs
 
 
 # docs :
@@ -107,8 +109,8 @@ load:
   scaling_factor: 1.0
 
 # docs :
-costs:  # based on the potentials, assuming  (0.1 kW/m2 and 10 m2/person)
-  year: 2030
+costs:  
+  social_discount_rate: 0.02
   version: v0.6.0
   rooftop_share: 0.0
   ng_fuel_year: 2019 # year of the natural gas price from CAISO [2019- 2023]
@@ -135,6 +137,16 @@ costs:  # based on the potentials, assuming  (0.1 kW/m2 and 10 m2/person)
     enable: false
     co2: 0.
     co2_monthly_prices: false
+  ptc_modifier:
+    onwind: 18.2547
+    geothermal: 18.2547
+    biomass: 18.2547
+  itc_modifier:
+    solar: 0.3
+    offwind: 0.3
+    offwind_floating: 0.3
+    EGS: 0.3
+
 
 # docs :
 sector:
@@ -144,6 +156,24 @@ sector:
     cyclic_storage: false
   heating:
     heat_pump_sink_T: 55.
+  demand:
+    profile:
+      residential: eulp # efs, eulp
+      commercial: eulp # efs, eulp
+      transport: efs # efs
+      industry: efs # efs
+    scale:
+      residential: aeo # efs, aeo
+      commercial: aeo # efs, aeo
+      transport: aeo # efs, aeo
+      industry: aeo # efs, aeo
+    disaggregation: 
+      residential: pop # pop
+      commercial: pop # pop
+      transport: pop # pop
+      industry: pop # pop
+    scenarios:
+      aeo: reference
 
 # docs :
 clustering:

@@ -1,11 +1,51 @@
 name,regions,planning_horizon,limit,import_emissions_factor,notes
-CA_AB32,California,2030,24300000,0.428,For State Aggregation
-CA_AB32,California,2040,18000000,0.428,For State Aggregation
-CA_AB32,California,2050,15000000,0.428,For State Aggregation
-OR_emms,Oregon,2030,3419959,0,For State Aggregation
-WA_emms,Washington,2045,0,0,For State Aggregation
-CA_AB32,"p8, p9, p10, p11",2030,30000000,0.428,For ReEDS Aggregation
-CA_AB32,"p8, p9, p10, p12",2040,18000000,0.428,For State Aggregation
-CA_AB32,"p8, p9, p10, p13",2050,15000000,0.428,For State Aggregation
-OR_emms,"p6, p7,  p8",2030,3419959,0,For ReEDS Aggregation
-WA_emms,"p1, p2, p3, p4",2045,0,0,For ReEDS Aggregation
+OR_emms,OR,2030,3419959,0,For ReEDS Aggregation
+WA_emms,WA,2045,0,0,For ReEDS Aggregation
+CA_AB32,CA,2025,46585434,0.428,2022 carb scoping plan
+CA_AB32,CA,2026,45781700,0.428,2022 carb scoping plan
+CA_AB32,CA,2027,44970660,0.428,2022 carb scoping plan
+CA_AB32,CA,2028,44158827,0.428,2022 carb scoping plan
+CA_AB32,CA,2029,41675827,0.428,2022 carb scoping plan
+CA_AB32,CA,2030,39199474,0.428,2022 carb scoping plan
+CA_AB32,CA,2031,37575685,0.428,2022 carb scoping plan
+CA_AB32,CA,2032,35953673,0.428,2022 carb scoping plan
+CA_AB32,CA,2033,34332999,0.428,2022 carb scoping plan
+CA_AB32,CA,2034,32717941,0.428,2022 carb scoping plan
+CA_AB32,CA,2035,31106889,0.428,2022 carb scoping plan
+CA_AB32,CA,2036,30471094,0.428,2022 carb scoping plan
+CA_AB32,CA,2037,29832376,0.428,2022 carb scoping plan
+CA_AB32,CA,2038,29195599,0.428,2022 carb scoping plan
+CA_AB32,CA,2039,28557104,0.428,2022 carb scoping plan
+CA_AB32,CA,2040,27921482,0.428,2022 carb scoping plan
+CA_AB32,CA,2041,27298498,0.428,2022 carb scoping plan
+CA_AB32,CA,2042,26680772,0.428,2022 carb scoping plan
+CA_AB32,CA,2043,26070729,0.428,2022 carb scoping plan
+CA_AB32,CA,2044,25466671,0.428,2022 carb scoping plan
+CA_AB32,CA,2045,8680822,0.428,2022 carb scoping plan
+CA_AB32,CA,2050,8680822,0.428,temp using 2045
+RGGI,"CT, DE, MA, MD, ME, NH, NJ, NY, RI, VA, VT",2025,95390589,0,reeds data
+RGGI,"CT, DE, MA, MD, ME, NH, NJ, NY, RI, VA, VT",2026,92074825,0,reeds data
+RGGI,"CT, DE, MA, MD, ME, NH, NJ, NY, RI, VA, VT",2027,88759061,0,reeds data
+RGGI,"CT, DE, MA, MD, ME, NH, NJ, NY, RI, VA, VT",2028,85443296,0,reeds data
+RGGI,"CT, DE, MA, MD, ME, NH, NJ, NY, RI, VA, VT",2029,82127532,0,reeds data
+RGGI,"CT, DE, MA, MD, ME, NH, NJ, NY, RI, VA, VT",2030,78811768,0,reeds data
+RGGI,"CT, DE, MA, MD, ME, NH, NJ, NY, RI, VA, VT",2031,78811768,0,reeds data
+RGGI,"CT, DE, MA, MD, ME, NH, NJ, NY, RI, VA, VT",2032,78811768,0,reeds data
+RGGI,"CT, DE, MA, MD, ME, NH, NJ, NY, RI, VA, VT",2033,78811768,0,reeds data
+RGGI,"CT, DE, MA, MD, ME, NH, NJ, NY, RI, VA, VT",2034,78811768,0,reeds data
+RGGI,"CT, DE, MA, MD, ME, NH, NJ, NY, RI, VA, VT",2035,78811768,0,reeds data
+RGGI,"CT, DE, MA, MD, ME, NH, NJ, NY, RI, VA, VT",2036,78811768,0,reeds data
+RGGI,"CT, DE, MA, MD, ME, NH, NJ, NY, RI, VA, VT",2037,78811768,0,reeds data
+RGGI,"CT, DE, MA, MD, ME, NH, NJ, NY, RI, VA, VT",2038,78811768,0,reeds data
+RGGI,"CT, DE, MA, MD, ME, NH, NJ, NY, RI, VA, VT",2039,78811768,0,reeds data
+RGGI,"CT, DE, MA, MD, ME, NH, NJ, NY, RI, VA, VT",2040,78811768,0,reeds data
+RGGI,"CT, DE, MA, MD, ME, NH, NJ, NY, RI, VA, VT",2041,78811768,0,reeds data
+RGGI,"CT, DE, MA, MD, ME, NH, NJ, NY, RI, VA, VT",2042,78811768,0,reeds data
+RGGI,"CT, DE, MA, MD, ME, NH, NJ, NY, RI, VA, VT",2043,78811768,0,reeds data
+RGGI,"CT, DE, MA, MD, ME, NH, NJ, NY, RI, VA, VT",2044,78811768,0,reeds data
+RGGI,"CT, DE, MA, MD, ME, NH, NJ, NY, RI, VA, VT",2045,78811768,0,reeds data
+RGGI,"CT, DE, MA, MD, ME, NH, NJ, NY, RI, VA, VT",2046,78811768,0,reeds data
+RGGI,"CT, DE, MA, MD, ME, NH, NJ, NY, RI, VA, VT",2047,78811768,0,reeds data
+RGGI,"CT, DE, MA, MD, ME, NH, NJ, NY, RI, VA, VT",2048,78811768,0,reeds data
+RGGI,"CT, DE, MA, MD, ME, NH, NJ, NY, RI, VA, VT",2049,78811768,0,reeds data
+RGGI,"CT, DE, MA, MD, ME, NH, NJ, NY, RI, VA, VT",2050,78811768,0,reeds data

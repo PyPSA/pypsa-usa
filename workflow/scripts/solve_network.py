@@ -33,83 +33,78 @@ import pandas as pd
 import pypsa
 import xarray as xr
 import yaml
-from _helpers import configure_logging, update_config_with_sector_opts, update_config_from_wildcards
+from _helpers import (
+    configure_logging,
+    update_config_from_wildcards,
+    update_config_with_sector_opts,
+)
 
 logger = logging.getLogger(__name__)
 pypsa.pf.logger.setLevel(logging.WARNING)
 from pypsa.descriptors import get_switchable_as_dense as get_as_dense
 
 
-def add_land_use_constraint(n, planning_horizons, config):
-    if "m" in snakemake.wildcards.clusters:
-        _add_land_use_constraint_m(n, planning_horizons, config)
-    else:
-        _add_land_use_constraint(n)
+def add_land_use_constraint_perfect(n):
+    """
+    Add global constraints for tech capacity limit.
+    """
+    logger.info("Add land-use constraint for perfect foresight")
 
+    def compress_series(s):
+        def process_group(group):
+            if group.nunique() == 1:
+                return pd.Series(group.iloc[0], index=[None])
+            else:
+                return group
 
-def _add_land_use_constraint(n):
-    # warning: this will miss existing offwind which is not classed AC-DC and has carrier 'offwind'
+        return s.groupby(level=[0, 1]).apply(process_group)
 
-    for carrier in ["solar", "onwind", "offwind-ac", "offwind-dc"]:
-        extendable_i = (n.generators.carrier == carrier) & n.generators.p_nom_extendable
-        n.generators.loc[extendable_i, "p_nom_min"] = 0
+    def new_index_name(t):
+        # Convert all elements to string and filter out None values
+        parts = [str(x) for x in t if x is not None]
+        # Join with space, but use a dash for the last item if not None
+        return " ".join(parts[:2]) + (f"-{parts[-1]}" if len(parts) > 2 else "")
 
-        ext_i = (n.generators.carrier == carrier) & ~n.generators.p_nom_extendable
-        existing = (
-            n.generators.loc[ext_i, "p_nom"]
-            .groupby(n.generators.bus.map(n.buses.location))
-            .sum()
+    def check_p_min_p_max(p_nom_max):
+        p_nom_min = n.generators[ext_i].groupby(grouper).sum().p_nom_min
+        p_nom_min = p_nom_min.reindex(p_nom_max.index)
+        check = (
+            p_nom_min.groupby(level=[0, 1]).sum()
+            > p_nom_max.groupby(level=[0, 1]).min()
         )
-        existing.index += " " + carrier + "-" + snakemake.wildcards.planning_horizons
-        n.generators.loc[existing.index, "p_nom_max"] -= existing
+        if check.sum():
+            logger.warning(
+                f"summed p_min_pu values at node larger than technical potential {check[check].index}",
+            )
 
-    # check if existing capacities are larger than technical potential
-    existing_large = n.generators[
-        n.generators["p_nom_min"] > n.generators["p_nom_max"]
-    ].index
-    if len(existing_large):
-        logger.warning(
-            f"Existing capacities larger than technical potential for {existing_large},\
-                        adjust technical potential to existing capacities",
-        )
-        n.generators.loc[existing_large, "p_nom_max"] = n.generators.loc[
-            existing_large,
-            "p_nom_min",
-        ]
+    grouper = [n.generators.carrier, n.generators.bus, n.generators.build_year]
+    ext_i = n.generators.p_nom_extendable & ~n.generators.index.str.contains("existing")
+    # get technical limit per node and investment period
+    p_nom_max = n.generators[ext_i].groupby(grouper).min().p_nom_max
+    # drop carriers without tech limit
+    p_nom_max = p_nom_max[~p_nom_max.isin([np.inf, np.nan])]
+    # carrier
+    carriers = p_nom_max.index.get_level_values(0).unique()
+    gen_i = n.generators[(n.generators.carrier.isin(carriers)) & (ext_i)].index
+    n.generators.loc[gen_i, "p_nom_min"] = 0
+    # check minimum capacities
+    check_p_min_p_max(p_nom_max)
+    # drop multi entries in case p_nom_max stays constant in different periods
+    # p_nom_max = compress_series(p_nom_max)
+    # adjust name to fit syntax of nominal constraint per bus
+    df = p_nom_max.reset_index()
+    df["name"] = df.apply(
+        lambda row: f"nom_max_{row['carrier']}"
+        + (f"_{row['build_year']}" if row["build_year"] is not None else ""),
+        axis=1,
+    )
 
-    n.generators.p_nom_max.clip(lower=0, inplace=True)
-
-
-def _add_land_use_constraint_m(n, planning_horizons, config):
-    # if generators clustering is lower than network clustering, land_use accounting is at generators clusters
-
-    planning_horizons = param["planning_horizons"]
-    grouping_years = config["existing_capacities"]["grouping_years"]
-    current_horizon = snakemake.wildcards.planning_horizons
-
-    for carrier in ["solar", "onwind", "offwind-ac", "offwind-dc"]:
-        existing = n.generators.loc[n.generators.carrier == carrier, "p_nom"]
-        ind = list(
-            {i.split(sep=" ")[0] + " " + i.split(sep=" ")[1] for i in existing.index},
-        )
-
-        previous_years = [
-            str(y)
-            for y in planning_horizons + grouping_years
-            if y < int(snakemake.wildcards.planning_horizons)
-        ]
-
-        for p_year in previous_years:
-            ind2 = [
-                i for i in ind if i + " " + carrier + "-" + p_year in existing.index
-            ]
-            sel_current = [i + " " + carrier + "-" + current_horizon for i in ind2]
-            sel_p_year = [i + " " + carrier + "-" + p_year for i in ind2]
-            n.generators.loc[sel_current, "p_nom_max"] -= existing.loc[
-                sel_p_year
-            ].rename(lambda x: x[:-4] + current_horizon)
-
-    n.generators.p_nom_max.clip(lower=0, inplace=True)
+    for name in df.name.unique():
+        df_carrier = df[df.name == name]
+        bus = df_carrier.bus
+        n.buses.loc[bus, name] = df_carrier.p_nom_max.values
+    # breakpoint()
+    return n
 
 
 def add_co2_sequestration_limit(n, limit=200):
@@ -193,8 +188,10 @@ def prepare_network(
         n.set_snapshots(n.snapshots[:nhours])
         n.snapshot_weightings[:] = 8760.0 / nhours
 
-    if foresight == "myopic":
-        add_land_use_constraint(n, planning_horizons, config)
+    # if foresight == "perfect":
+    #     n = add_land_use_constraint_perfect(n)
+    #     # if snakemake.params["sector"]["limit_max_growth"]["enable"]:
+    #     #     n = add_max_growth(n)
 
     if n.stores.carrier.eq("co2 stored").any():
         limit = co2_sequestration_potential
@@ -226,7 +223,8 @@ def add_CCL_constraints(n, config):
         index_col=[1, 2],
     )
     agg_p_nom_minmax = agg_p_nom_minmax[
-        agg_p_nom_minmax.planning_horizon == int(snakemake.params.planning_horizons[0])
+        agg_p_nom_minmax.planning_horizon
+        == int(snakemake.params.planning_horizons[0])  # need to make multi-horizon
     ].drop(columns="planning_horizon")
 
     logger.info("Adding generation capacity constraints per carrier and country")
@@ -275,50 +273,101 @@ def add_RPS_constraints(n, config):
     """
     portfolio_standards = pd.read_csv(
         config["electricity"]["portfolio_standards"],
-        index_col=[1, 2],
     )
+
+    rps_carriers = [
+        "onwind",
+        "offwind",
+        "offwind_floating",
+        "solar",
+        "hydro",
+        "geothermal",
+        "EGS",
+    ]
+    ces_carriers = [
+        "onwind",
+        "offwind",
+        "offwind_floating",
+        "solar",
+        "hydro",
+        "geothermal",
+        "EGS",
+        "biomass",
+        "nuclear",
+    ]
+    state_memberships = (
+        n.buses.groupby("reeds_state")["reeds_zone"]
+        .apply(lambda x: ", ".join(x))
+        .to_dict()
+    )
+
+    rps_reeds = pd.read_csv(
+        snakemake.input.rps_reeds,
+    )
+    rps_reeds["region"] = rps_reeds["st"].map(state_memberships)
+    rps_reeds.dropna(subset="region", inplace=True)
+    rps_reeds["carrier"] = [", ".join(rps_carriers)] * len(rps_reeds)
+    rps_reeds.rename(
+        columns={"t": "planning_horizon", "rps_all": "pct", "st": "name"},
+        inplace=True,
+    )
+    rps_reeds.drop(columns=["rps_solar", "rps_wind"], inplace=True)
+
+    ces_reeds = pd.read_csv(
+        snakemake.input.ces_reeds,
+    ).melt(id_vars="st", var_name="planning_horizon", value_name="pct")
+    ces_reeds["region"] = ces_reeds["st"].map(state_memberships)
+    ces_reeds.dropna(subset="region", inplace=True)
+    ces_reeds["carrier"] = [", ".join(ces_carriers)] * len(ces_reeds)
+    ces_reeds.rename(columns={"st": "name"}, inplace=True)
+
+    portfolio_standards = pd.concat([portfolio_standards, rps_reeds, ces_reeds])
+    portfolio_standards = portfolio_standards[portfolio_standards.pct > 0.0]
     portfolio_standards = portfolio_standards[
-        portfolio_standards.planning_horizon
-        == int(snakemake.params.planning_horizons[0])
-    ].drop(columns="planning_horizon")
+        portfolio_standards.planning_horizon.isin(snakemake.params.planning_horizons)
+    ]
 
-    logger.info("Adding generation capacity constraints per carrier and country")
-    p = n.model["Generator-p"]
+    for idx, pct_lim in portfolio_standards.iterrows():
+        region_list = [region_.strip() for region_ in pct_lim.region.split(",")]
+        region_buses = n.buses[
+            (
+                n.buses.country.isin(region_list)
+                | n.buses.reeds_state.isin(region_list)
+                | n.buses.interconnect.str.lower().isin(region_list)
+                | (1 if "all" in region_list else 0)
+            )
+        ]
 
-    gens = n.generators.rename_axis(index="Generator")
-
-    grouper = pd.concat([gens.bus.map(n.buses.country), gens.carrier], axis=1)
-    lhs = p.groupby(grouper).sum().rename(bus="country")
-
-    pct = xr.DataArray(portfolio_standards["pct"].dropna()).rename(dim_0="group")
-    new_tuples = []
-    for pct_tuple in pct.indexes["group"]:  # loop through each RPS policy
-        region, carriers = pct_tuple
-
-        if region not in n.buses.country.values:
+        if region_buses.empty:
             continue
 
-        carriers_list = [carrier.strip() for carrier in carriers.split(",")]
-        if isinstance(carriers_list, list):
-            # Create a new tuple for each energy type and append to new list
-            for carrier in carriers_list:
-                new_tuples.append((region, carrier))
-        else:
-            # If it's not a list, just append the original tuple
-            new_tuples.append(pct_tuple)
+        carriers = [carrier_.strip() for carrier_ in pct_lim.carrier.split(",")]
 
-        new_multi_index = pd.MultiIndex.from_tuples(
-            new_tuples,
-            names=["region", "carrier"],
-        )
-        index = new_multi_index.intersection(lhs.indexes["group"])
-        if not index.empty:
-            logger.info(f"Adding RPS constraint for {region}")
+        # generators
+        region_gens = n.generators[n.generators.bus.isin(region_buses.index)]
+        region_gens_eligible = region_gens[region_gens.carrier.isin(carriers)]
+
+        if not region_gens.empty:
+            p_eligible = (
+                n.model["Generator-p"]
+                .loc[:, region_gens_eligible.index]
+                .sel(period=pct_lim.planning_horizon)
+            )
+            lhs = p_eligible.sum()
+
+            p_region = (
+                n.model["Generator-p"]
+                .loc[:, region_gens.index]
+                .sel(period=pct_lim.planning_horizon)
+            )
+            rhs = pct_lim.pct * p_region.sum()
 
             n.model.add_constraints(
-                lhs.sel(group=index).sum()
-                >= pct.loc[region].values[0] * (lhs.sel(group=region).sum()),
-                name=f"GlobalConstraint-{region}_portfolio_standard",
+                lhs <= rhs,
+                name=f"GlobalConstraint-{pct_lim.name}_{pct_lim.planning_horizon}_rps_limit",
+            )
+            logger.info(
+                f"Adding {pct_lim.name} {pct_lim.name}_{pct_lim.planning_horizon} for {pct_lim.planning_horizon}.",
             )
 
 
@@ -443,18 +492,17 @@ def add_interface_limits(n, sns, config):
 
     limits = pd.concat([limits, user_limits])
 
-    lines_s = n.model["Line-s"]
-
     for idx, interface in limits.iterrows():
         regions_list_r = [region.strip() for region in interface.r.split(",")]
         regions_list_rr = [region.strip() for region in interface.rr.split(",")]
 
         zone0_buses = n.buses[n.buses.country.isin(regions_list_r)]
         zone1_buses = n.buses[n.buses.country.isin(regions_list_rr)]
-        if zone0_buses.empty & zone1_buses.empty:
+        if zone0_buses.empty | zone1_buses.empty:
             continue
 
         logger.info(f"Adding Interface Transmission Limit for {interface.interface}")
+
         interface_lines_b0 = n.lines[
             n.lines.bus0.isin(zone0_buses.index) & n.lines.bus1.isin(zone1_buses.index)
         ]
@@ -468,15 +516,18 @@ def add_interface_limits(n, sns, config):
             n.links.bus0.isin(zone1_buses.index) & n.links.bus1.isin(zone0_buses.index)
         ]
 
-        line_flows = lines_s.loc[:, interface_lines_b1.index].sum(
-            dims="Line",
-        ) - lines_s.loc[:, interface_lines_b0.index].sum(dims="Line")
-
+        if not n.lines.empty:
+            line_flows = n.model["Line-s"].loc[:, interface_lines_b1.index].sum(
+                dims="Line",
+            ) - n.model["Line-s"].loc[:, interface_lines_b0.index].sum(dims="Line")
+        else:
+            line_flows = 0.0
         lhs = line_flows
 
         if (
             not (pd.concat([interface_links_b0, interface_links_b1]).empty)
-            and "RESOLVE" in interface.interface
+            and ("RESOLVE" in interface.interface or config["lines"]["transport_model"])
+            # Apply link constraints if RESOLVE constraint or if zonal model. ITLs should usually only apply to AC lines if DC PF is used.
         ):
             link_flows = n.model["Link-p"].loc[:, interface_links_b1.index].sum(
                 dims="Link",
@@ -505,18 +556,27 @@ def add_regional_co2limit(n, sns, config):
     )
     logger.info("Adding regional Co2 Limits.")
     regional_co2_lims = regional_co2_lims[
-        regional_co2_lims.planning_horizon == int(snakemake.params.planning_horizons[0])
+        regional_co2_lims.planning_horizon.isin(snakemake.params.planning_horizons)
     ]
 
     for idx, emmission_lim in regional_co2_lims.iterrows():
         region_list = [region.strip() for region in emmission_lim.regions.split(",")]
-        region_buses = n.buses[n.buses.country.isin(region_list)]
+
+        region_buses = n.buses[
+            (
+                n.buses.country.isin(region_list)
+                | n.buses.reeds_state.isin(region_list)
+                | n.buses.interconnect.str.lower().isin(region_list)
+                | (1 if "all" in region_list else 0)
+            )
+        ]
 
         if region_buses.empty:
             continue
 
         region_co2lim = emmission_lim.limit
         EF_imports = emmission_lim.import_emissions_factor  # MT CO₂e/MWh_elec
+        planning_horizon = emmission_lim.planning_horizon
 
         emissions = n.carriers.co2_emissions
         # generators
@@ -533,23 +593,34 @@ def add_regional_co2limit(n, sns, config):
             em_pu = (
                 region_gens.carrier.map(emissions) / efficiency
             )  # tonnes_co2/mw_electrical
-            em_pu = em_pu.multiply(weightings.generators, axis=0)
-            p = n.model["Generator-p"].loc[:, region_gens.index]
+            em_pu = em_pu.multiply(weightings.generators, axis=0).loc[planning_horizon]
+            p = (
+                n.model["Generator-p"]
+                .loc[:, region_gens.index]
+                .sel(period=planning_horizon)
+            )
             lhs = (p * em_pu).sum()
 
             # Imports
-            # region_demand = n.model.constraints['Bus-nodal_balance'].rhs.loc[region_buses.index, :].sum()
             region_demand = (
-                n.loads_t.p_set.loc[:, n.loads.bus.isin(region_buses.index)].sum().sum()
+                n.loads_t.p_set.loc[
+                    planning_horizon,
+                    n.loads.bus.isin(region_buses.index),
+                ]
+                .sum()
+                .sum()
             )
             lhs -= (p * EF_imports).sum()
 
             rhs = region_co2lim - (region_demand * EF_imports)
             n.model.add_constraints(
                 lhs <= rhs,
-                name=f"GlobalConstraint-{emmission_lim.name}_co2_limit",
+                name=f"GlobalConstraint-{emmission_lim.name}_{planning_horizon}co2_limit",
             )
-            logger.info(f"Adding regional Co2 Limit for {emmission_lim.name}")
+
+            logger.info(
+                f"Adding regional Co2 Limit for {emmission_lim.name} in {planning_horizon}",
+            )
 
 
 def add_SAFE_constraints(n, config):
@@ -588,46 +659,72 @@ def add_SAFE_constraints(n, config):
     n.model.add_constraints(lhs >= rhs, name="safe_mintotalcap")
 
 
-def add_regional_SAFE_constraints(n, config):
+def add_SAFER_constraints(n, config):
     """
-    Add a capacity reserve margin of a certain fraction above the peak demand.
-    Renewable generators and storage do not contribute. Ignores network.
+    Add a capacity reserve margin of a certain fraction above the peak demand
+    for regions defined in configuration file. Renewable generators and storage
+    do not contribute towards PRM.
 
     Parameters
     ----------
         n : pypsa.Network
         config : dict
-
-    Example
-    -------
-    config.yaml requires to specify opts:
-
-    scenario:
-        opts: [Co2L-SAFE-24H]
-    electricity:
-        SAFE_reservemargin: 0.1
-    Which sets a reserve margin of 10% above the peak demand.
     """
     regional_prm = pd.read_csv(
         config["electricity"]["SAFE_regional_reservemargins"],
         index_col=[0],
     )
 
-    # reeds_prm= pd.read_csv(
-    #     snakemake.input.safer_reeds,
-    #     index_col=[0],
-    # )
-    for region in regional_prm.index:
-        if region not in n.buses.country.values:
+    reeds_prm = pd.read_csv(
+        snakemake.input.safer_reeds,
+        index_col=[0],
+    )
+    NERC_memberships = (
+        n.buses.groupby("nerc_reg")["reeds_zone"]
+        .apply(lambda x: ", ".join(x))
+        .to_dict()
+    )
+    reeds_prm["region"] = reeds_prm.index.map(NERC_memberships)
+    reeds_prm.dropna(subset="region", inplace=True)
+    reeds_prm.drop(
+        columns=["none", "ramp2025_20by50", "ramp2025_25by50", "ramp2025_30by50"],
+        inplace=True,
+    )
+    reeds_prm.rename(columns={"static": "prm", "t": "planning_horizon"}, inplace=True)
+
+    regional_prm = pd.concat([regional_prm, reeds_prm])
+    regional_prm = regional_prm[
+        regional_prm.planning_horizon.isin(snakemake.params.planning_horizons)
+    ]
+
+    for idx, prm in regional_prm.iterrows():
+        region_list = [region_.strip() for region_ in prm.region.split(",")]
+        region_buses = n.buses[
+            (
+                n.buses.country.isin(region_list)
+                | n.buses.reeds_state.isin(region_list)
+                | n.buses.interconnect.str.lower().isin(region_list)
+                | n.buses.nerc_reg.isin(region_list)
+                | (1 if "all" in region_list else 0)
+            )
+        ]
+
+        if region_buses.empty:
             continue
+
         peakdemand = (
-            n.loads_t.p_set.loc[:, n.loads.bus.str.contains(region)].sum(axis=1).max()
+            n.loads_t.p_set.loc[
+                prm.planning_horizon,
+                n.loads.bus.isin(region_buses.index),
+            ]
+            .sum(axis=1)
+            .max()
         )
-        margin = 1.0 + regional_prm.loc[region].item()
-        reserve_margin = peakdemand * margin
+        margin = 1.0 + prm.prm
+        planning_reserve = peakdemand * margin
         conventional_carriers = config["electricity"]["conventional_carriers"]
 
-        region_gens = n.generators[n.generators.bus.str.contains(region)]
+        region_gens = n.generators[n.generators.bus.isin(region_buses.index)]
         ext_gens_i = region_gens.query(
             "carrier in @conventional_carriers & p_nom_extendable",
         ).index
@@ -636,8 +733,11 @@ def add_regional_SAFE_constraints(n, config):
         exist_conv_caps = region_gens.query(
             "~p_nom_extendable & carrier in @conventional_carriers",
         ).p_nom.sum()
-        rhs = reserve_margin - exist_conv_caps
-        n.model.add_constraints(lhs >= rhs, name=f"GlobalConstraint-{region}_PRM")
+        rhs = planning_reserve - exist_conv_caps
+        n.model.add_constraints(
+            lhs >= rhs,
+            name=f"GlobalConstraint-{prm.name}_{prm.planning_horizon}_PRM",
+        )
 
 
 def add_operational_reserve_margin(n, sns, config):
@@ -688,6 +788,8 @@ def add_operational_reserve_margin(n, sns, config):
         lhs = summed_reserve + (p_nom_vres * (-EPSILON_VRES * capacity_factor)).sum(
             "Generator",
         )
+    else:  # if no extendable VRES
+        lhs = summed_reserve
 
     # Total demand per t
     demand = get_as_dense(n, "Load", "p_set").sum(axis=1)
@@ -710,14 +812,17 @@ def add_operational_reserve_margin(n, sns, config):
     dispatch = n.model["Generator-p"]
     reserve = n.model["Generator-r"]
 
-    capacity_variable = n.model["Generator-p_nom"].rename(
-        {"Generator-ext": "Generator"},
-    )
     capacity_fixed = n.generators.p_nom[fix_i]
 
     p_max_pu = get_as_dense(n, "Generator", "p_max_pu")
 
-    lhs = dispatch + reserve - capacity_variable * p_max_pu[ext_i]
+    if not ext_i.empty:
+        capacity_variable = n.model["Generator-p_nom"].rename(
+            {"Generator-ext": "Generator"},
+        )
+        lhs = dispatch + reserve - capacity_variable * p_max_pu[ext_i]
+    else:
+        lhs = dispatch + reserve
 
     rhs = (p_max_pu[fix_i] * capacity_fixed).reindex(columns=gen_i, fill_value=0)
 
@@ -835,14 +940,14 @@ def extra_functionality(n, snapshots):
     config = n.config
     if "RPS" in opts and n.generators.p_nom_extendable.any():
         add_RPS_constraints(n, config)
-    if "RCo2L" in opts and n.generators.p_nom_extendable.any():
+    if "REM" in opts and n.generators.p_nom_extendable.any():
         add_regional_co2limit(n, snapshots, config)
     if "BAU" in opts and n.generators.p_nom_extendable.any():
         add_BAU_constraints(n, config)
     if "SAFE" in opts and n.generators.p_nom_extendable.any():
         add_SAFE_constraints(n, config)
     if "SAFER" in opts and n.generators.p_nom_extendable.any():
-        add_regional_SAFE_constraints(n, config)
+        add_SAFER_constraints(n, config)
     if "CCL" in opts and n.generators.p_nom_extendable.any():
         add_CCL_constraints(n, config)
     reserve = config["electricity"].get("operational_reserve", {})
@@ -862,6 +967,7 @@ def solve_network(n, config, solving, opts="", **kwargs):
     set_of_options = solving["solver"]["options"]
     cf_solving = solving["options"]
 
+    kwargs["multi_investment_periods"] = config["foresight"] == "perfect"
     kwargs["solver_options"] = (
         solving["solver_options"][set_of_options] if set_of_options else {}
     )
@@ -914,15 +1020,15 @@ if __name__ == "__main__":
         from _helpers import mock_snakemake
 
         snakemake = mock_snakemake(
-            "solve_network_operations",
+            "solve_network",
             simpl="",
-            opts="Ep",
-            clusters="40",
-            ll="v1.0",
+            opts="REM-48SEG",
+            clusters="10",
+            ll="v1.00",
             sector_opts="",
             sector="E",
-            planning_horizons="",
-            interconnect="western",
+            planning_horizons="[2030, 2050]",
+            interconnect="texas",
         )
     configure_logging(snakemake)
     update_config_from_wildcards(snakemake.config, snakemake.wildcards)

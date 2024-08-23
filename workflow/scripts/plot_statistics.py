@@ -50,7 +50,8 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from _helpers import configure_logging
-from add_electricity import add_nice_carrier_names, sanitize_carriers
+from add_electricity import sanitize_carriers
+from add_extra_components import add_nice_carrier_names
 from matplotlib.lines import Line2D
 from summary import (
     get_capital_costs,
@@ -74,14 +75,31 @@ def get_color_palette(n: pypsa.Network) -> dict[str, str]:
     colors = (n.carriers.reset_index().set_index("nice_name")).color
 
     additional = {
-        "Battery Charge": n.carriers.loc["battery"].color,
-        "Battery Discharge": n.carriers.loc["battery"].color,
-        "battery_discharger": n.carriers.loc["battery"].color,
-        "battery_charger": n.carriers.loc["battery"].color,
-        "4hr_battery_storage_discharger": n.carriers.loc["4hr_battery_storage"].color,
-        "4hr_battery_storage_charger": n.carriers.loc["4hr_battery_storage"].color,
+        "Battery Charge": n.carriers.at["battery", "color"],
+        "Battery Discharge": n.carriers.at["battery", "color"],
+        "battery_discharger": n.carriers.at["battery", "color"],
+        "battery_charger": n.carriers.at["battery", "color"],
         "co2": "k",
     }
+    for hr in ("4", "8"):
+        try:
+            additional[f"{hr}hr_battery_storage_discharger"] = n.carriers.at[
+                f"{hr}hr_battery_storage",
+                "color",
+            ]
+            additional[f"{hr}hr_battery_storage_charger"] = n.carriers.at[
+                f"{hr}hr_battery_storage",
+                "color",
+            ]
+        except KeyError:
+            additional[f"{hr}hr_battery_storage_discharger"] = n.carriers.at[
+                "battery",
+                "color",
+            ]
+            additional[f"{hr}hr_battery_storage_charger"] = n.carriers.at[
+                "battery",
+                "color",
+            ]
 
     return pd.concat([colors, pd.Series(additional)]).to_dict()
 
@@ -296,57 +314,51 @@ def plot_capacity_additions_bar(
     """
     Plots base capacity vs optimal capacity as a bar chart.
     """
-    capacity = n.statistics()[["Optimal Capacity", "Installed Capacity"]]
-    capacity = capacity[
-        capacity.index.get_level_values(0).isin(["Generator", "StorageUnit"])
+    existing_capacity = n.statistics.installed_capacity()
+    existing_capacity = existing_capacity[
+        existing_capacity.index.get_level_values(0).isin(
+            ["Generator", "StorageUnit"],
+        )
     ]
-    capacity.index = capacity.index.droplevel(0)
-    capacity.reset_index(inplace=True)
-    capacity.rename(columns={"index": "carrier"}, inplace=True)
-    capacity_melt = capacity.melt(
-        id_vars="carrier",
-        var_name="Capacity Type",
-        value_name="Capacity",
-    )
+    existing_capacity.index = existing_capacity.index.droplevel(0)
+    existing_capacity.reset_index(inplace=True)
+    existing_capacity.rename(columns={"index": "carrier"}, inplace=True)
+    existing_capacity = existing_capacity.iloc[:, :2]
+    existing_capacity.columns = ["carrier", "Existing Capacity"]
+    existing_capacity.set_index("carrier", inplace=True)
+
+    optimal_capacity = n.statistics.optimal_capacity()
+    optimal_capacity = optimal_capacity[
+        optimal_capacity.index.get_level_values(0).isin(["Generator", "StorageUnit"])
+    ]
+    optimal_capacity.index = optimal_capacity.index.droplevel(0)
+    optimal_capacity.reset_index(inplace=True)
+    optimal_capacity.rename(columns={"index": "carrier"}, inplace=True)
+    # capacity_melt = optimal_capacity.melt(
+    #     id_vars="carrier",
+    #     var_name="Investment Period",
+    #     value_name="Capacity",
+    # )
+
+    optimal_capacity.set_index("carrier", inplace=True)
+    optimal_capacity.insert(0, "Existing", existing_capacity["Existing Capacity"])
 
     color_palette = get_color_palette(n)
-    color_mapper = [color_palette[carrier] for carrier in capacity.carrier]
+    color_mapper = [color_palette[carrier] for carrier in optimal_capacity.index]
     bar_height = 0.35
 
     fig, ax = plt.subplots(figsize=(10, 10))
 
-    ax.barh(
-        capacity.carrier,
-        capacity["Installed Capacity"],
-        height=bar_height,
-        align="center",
+    # Plotting
+    optimal_capacity.T.plot(
+        kind="bar",
+        stacked=True,
         color=color_mapper,
+        ax=ax,
     )
-    ax.barh(
-        [i + bar_height for i in range(len(capacity))],
-        capacity["Optimal Capacity"],
-        height=bar_height,
-        align="center",
-        alpha=0.50,
-        color=color_mapper,
-    )
-    ax.invert_yaxis()
-    ax.set_yticks([i + bar_height / 2 for i in range(len(capacity))])
-
-    legend_lines = [
-        Line2D([0], [0], color="k", alpha=1, lw=7),
-        Line2D([0], [0], color="k", alpha=0.5, lw=7),
-    ]
-    ax.legend(
-        legend_lines,
-        ["Installed Capacity", "Optimal Capacity"],
-        loc="lower right",
-        borderpad=0.75,
-    )
-
     ax.set_title(create_title("System Capacity Additions", **wildcards))
-    ax.set_ylabel("")
-    ax.set_xlabel("Capacity [MW]")
+    ax.set_xlabel("")
+    ax.set_ylabel("Capacity [MW]")
 
     fig.tight_layout()
     fig.savefig(save)
@@ -371,19 +383,25 @@ def plot_production_bar(
         )
     ]
     energy_mix = energy_mix.groupby("carrier").sum().reset_index()
+    energy_mix = energy_mix.melt(
+        id_vars="carrier",
+        var_name="Investment Year",
+        value_name="GWh",
+    )
 
     color_palette = get_color_palette(n)
 
     fig, ax = plt.subplots(figsize=(10, 10))
     sns.barplot(
         data=energy_mix,
-        y="carrier",
-        x="dispatch",
+        y="GWh",
+        x="Investment Year",
+        hue="carrier",
         palette=color_palette,
     )
 
     ax.set_title(create_title("Dispatch [GWh]", **wildcards))
-    ax.set_ylabel("")
+    ax.set_ylabel("Energy Produced [GWh]")
     fig.tight_layout()
     fig.savefig(save)
 
@@ -607,51 +625,66 @@ def plot_production_area(
     demand = get_demand_timeseries(n).mul(1e-3)  # MW -> GW
 
     for carrier in energy_mix.columns:
-        if "battery" in carrier:
+        if (
+            "battery" in carrier
+            or carrier
+            in snakemake.params.electricity["extendable_carriers"]["StorageUnit"]
+        ):
             energy_mix[carrier + "_discharger"] = energy_mix[carrier].clip(lower=0.0001)
             energy_mix[carrier + "_charger"] = energy_mix[carrier].clip(upper=-0.0001)
             energy_mix = energy_mix.drop(columns=carrier)
-            # carriers_2_plot.append("battery_charger")
-            # carriers_2_plot.append("battery_discharger")
+            carriers_2_plot.append(f"{carrier}" + "_charger")
+            carriers_2_plot.append(f"{carrier}" + "_discharger")
+    carriers_2_plot = list(set(carriers_2_plot))
     energy_mix = energy_mix[[x for x in carriers_2_plot if x in energy_mix]]
-    energy_mix = energy_mix.rename(columns=n.carriers.nice_name)
-
     energy_mix = energy_mix.rename(columns=n.carriers.nice_name)
 
     color_palette = get_color_palette(n)
 
-    year = n.snapshots[0].year
-    for timeslice in ["all"] + list(range(1, 12)):
-        try:
-            if not timeslice == "all":
-                snapshots = n.snapshots.get_loc(f"{year}-{timeslice}")
+    months = n.snapshots.get_level_values(1).month.unique()
+    num_periods = len(n.investment_periods)
+    base_plot_size = 4
+
+    for month in ["all"] + months.to_list():
+        figsize = (14, (base_plot_size * num_periods))
+        fig, axs = plt.subplots(figsize=figsize, ncols=1, nrows=num_periods)
+        if not isinstance(axs, np.ndarray):  # only one horizon
+            axs = np.array([axs])
+        for i, investment_period in enumerate(n.investment_periods):
+            if month == "all":
+                sns = n.snapshots[n.snapshots.get_level_values(0) == investment_period]
             else:
-                snapshots = slice(None, None)
+                sns = n.snapshots[
+                    (n.snapshots.get_level_values(0) == investment_period)
+                    & (n.snapshots.get_level_values(1).month == month)
+                ]
 
-            fig, ax = plt.subplots(figsize=(14, 4))
-
-            energy_mix[snapshots].plot.area(
-                ax=ax,
+            energy_mix.loc[sns].droplevel("period").plot.area(
+                ax=axs[i],
                 alpha=0.7,
                 color=color_palette,
             )
-            demand[snapshots].plot.line(ax=ax, ls="-", color="darkblue")
+            demand.loc[sns].droplevel("period").plot.line(
+                ax=axs[i],
+                ls="-",
+                color="darkblue",
+            )
 
             suffix = (
-                "-" + datetime.strptime(str(timeslice), "%m").strftime("%b")
-                if timeslice != "all"
+                "-" + datetime.strptime(str(month), "%m").strftime("%b")
+                if month != "all"
                 else ""
             )
 
-            ax.legend(bbox_to_anchor=(1, 1), loc="upper left")
-            ax.set_title(create_title("Production [GW]", **wildcards))
-            ax.set_ylabel("Power [GW]")
-            fig.tight_layout()
-            save = Path(save)
-            fig.savefig(save.parent / (save.stem + suffix + save.suffix))
-        except KeyError:
-            # outside slicing range
-            continue
+            axs[i].legend(bbox_to_anchor=(1, 1), loc="upper left")
+            # axs[i].set_title(f"Production in {investment_period}")
+            axs[i].set_ylabel("Power [GW]")
+            axs[i].set_xlabel("")
+
+        fig.tight_layout(rect=[0, 0, 1, 0.92])
+        fig.suptitle(create_title("Production [GW]", **wildcards))
+        save = Path(save)
+        fig.savefig(save.parent / (save.stem + suffix + save.suffix))
 
 
 def plot_hourly_emissions(n: pypsa.Network, save: str, **wildcards) -> None:
@@ -744,12 +777,12 @@ def plot_accumulated_emissions(n: pypsa.Network, save: str, **wildcards) -> None
     ax.set_title(create_title("Accumulated Emissions", **wildcards))
     ax.set_ylabel("Emissions [MT]")
     fig.tight_layout()
-
     fig.savefig(save)
+    plt.close()
 
 
 def plot_curtailment_heatmap(n: pypsa.Network, save: str, **wildcards) -> None:
-    curtailment = n.statistics.curtailment(aggregate_time=False)
+    curtailment = n.statistics.curtailment()
     curtailment = curtailment[
         curtailment.index.get_level_values(0).isin(["StorageUnit", "Generator"])
     ].droplevel(0)
@@ -804,7 +837,7 @@ def plot_capacity_factor_heatmap(n: pypsa.Network, save: str, **wildcards) -> No
     """
     HEATMAP OF RENEWABLE CAPACITY FACTORS BY CARRIER.
     """
-    df_long = n.generators_t.p_max_pu.melt(
+    df_long = n.generators_t.p_max_pu.loc[n.investment_periods[0]].melt(
         var_name="bus",
         value_name="p_max_pu",
         ignore_index=False,
@@ -887,6 +920,7 @@ def plot_generator_data_panel(
                 "oil",
                 "hydro",
                 "nuclear",
+                "load",
             ],
         ),
         :,
@@ -896,20 +930,28 @@ def plot_generator_data_panel(
     df_storage_units["efficiency"] = df_storage_units.efficiency_dispatch
     df_capex_expand = pd.concat([df_capex_expand, df_storage_units])
 
+    df_efficiency = n.generators.loc[
+        ~n.generators.carrier.isin(
+            ["solar", "onwind", "offwind", "offwind_floating", "hydro", "load"],
+        ),
+        :,
+    ]
+
     # Create a figure and subplots with 2 rows and 2 columns
     fig, axes = plt.subplots(3, 2, figsize=(10, 12))
 
     # Plot on each subplot
     sns.lineplot(
         data=get_generator_marginal_costs(n),
-        x="snapshot",
+        x="timestep",
         y="Value",
         hue="Carrier",
         ax=axes[0, 0],
     )
     sns.barplot(data=df_capex_expand, x="carrier", y="capital_cost", ax=axes[0, 1])
-    sns.boxplot(data=df_capex_expand, x="carrier", y="efficiency", ax=axes[1, 0])
+    sns.boxplot(data=df_efficiency, x="carrier", y="efficiency", ax=axes[1, 0])
     sns.barplot(data=df_capex_retire, x="carrier", y="capital_cost", ax=axes[1, 1])
+    n.generators.ramp_limit_up.fillna(0, inplace=True)
     sns.histplot(
         data=n.generators,
         x="ramp_limit_up",
@@ -928,7 +970,7 @@ def plot_generator_data_panel(
     # Set titles for each subplot
     axes[0, 0].set_title("Generator Marginal Costs")
     axes[0, 1].set_title("Extendable Capital Costs")
-    axes[1, 0].set_title("Energy Efficiency")
+    axes[1, 0].set_title("Plant Efficiency")
     axes[1, 1].set_title("Fixed O&M Costs of Retiring Units")
     axes[2, 0].set_title("Generator Ramp Up Limits")
     axes[2, 1].set_title("Existing Capacity by Carrier")
@@ -936,7 +978,7 @@ def plot_generator_data_panel(
     # Set labels for each subplot
     axes[0, 0].set_xlabel("")
     axes[0, 0].set_ylabel("$ / MWh")
-    axes[0, 0].set_ylim(0, 300)
+    axes[0, 0].set_ylim(0, 200)
     axes[0, 1].set_xlabel("")
     axes[0, 1].set_ylabel("$ / MW-yr")
     axes[1, 0].set_xlabel("")
@@ -976,13 +1018,13 @@ def plot_region_lmps(
     df_lmp = n.buses_t.marginal_price
     df_long = pd.melt(
         df_lmp.reset_index(),
-        id_vars=["snapshot"],
+        id_vars=["timestep"],
         var_name="bus",
         value_name="lmp",
     )
-    df_long["season"] = df_long["snapshot"].dt.quarter
-    df_long["hour"] = df_long["snapshot"].dt.hour
-    df_long.drop(columns="snapshot", inplace=True)
+    df_long["season"] = df_long["timestep"].dt.quarter
+    df_long["hour"] = df_long["timestep"].dt.hour
+    df_long.drop(columns="timestep", inplace=True)
     df_long["region"] = df_long.bus.map(n.buses.country)
 
     plt.figure(figsize=(10, 10))
@@ -1026,11 +1068,11 @@ def plot_fuel_costs(
         .T.resample("d")
         .mean()
         .reset_index()
-        .melt(id_vars="snapshot")
+        .melt(id_vars="timestep")
     )
     sns.lineplot(
         data=df,
-        x="snapshot",
+        x="timestep",
         y="value",
         hue="carrier",
         ax=axs[0],
@@ -1120,10 +1162,10 @@ if __name__ == "__main__":
 
         snakemake = mock_snakemake(
             "plot_statistics",
-            interconnect="western",
-            clusters=80,
+            interconnect="texas",
+            clusters=20,
             ll="v1.0",
-            opts="Ep-Co2L0.2",
+            opts="500SEG",
             sector="E",
         )
     configure_logging(snakemake)
@@ -1132,7 +1174,6 @@ if __name__ == "__main__":
     n = pypsa.Network(snakemake.input.network)
     onshore_regions = gpd.read_file(snakemake.input.regions_onshore)
     retirement_method = snakemake.params.retirement
-    # n_hours = snakemake.config['solving']['options']['nhours']
 
     sanitize_carriers(n, snakemake.config)
 
@@ -1160,12 +1201,12 @@ if __name__ == "__main__":
         snakemake.output["capacity_additions_bar.pdf"],
         **snakemake.wildcards,
     )
-    plot_costs_bar(
-        n,
-        carriers,
-        snakemake.output["costs_bar.pdf"],
-        **snakemake.wildcards,
-    )
+    # plot_costs_bar(
+    #     n,
+    #     carriers,
+    #     snakemake.output["costs_bar.pdf"],
+    #     **snakemake.wildcards,
+    # ) I think we should change this to just output csvs of this data... for multihorizon this becomes a bit of a mess
     plot_production_bar(
         n,
         carriers,
@@ -1226,29 +1267,6 @@ if __name__ == "__main__":
         **snakemake.wildcards,
     )
 
-    # HTML Plots
-    plot_production_html(
-        n,
-        carriers,
-        snakemake.output["production_area.html"],
-        **snakemake.wildcards,
-    )
-    plot_hourly_emissions_html(
-        n,
-        snakemake.output["emissions_area.html"],
-        **snakemake.wildcards,
-    )
-    plot_accumulated_emissions_tech_html(
-        n,
-        snakemake.output["emissions_accumulated_tech.html"],
-        **snakemake.wildcards,
-    )
-    plot_region_emissions_html(
-        n,
-        snakemake.output["emissions_region.html"],
-        **snakemake.wildcards,
-    )
-
     # Panel Plots
     plot_generator_data_panel(
         n,
@@ -1262,12 +1280,3 @@ if __name__ == "__main__":
         snakemake.output["region_lmps.pdf"],
         **snakemake.wildcards,
     )
-
-    # if snakemake.wildcards["interconnect"] == "western":
-    #     # California Emissions
-    #     plot_california_emissions(
-    #         n,
-    #         Path(snakemake.output["region_lmps.pdf"]).parents[0]
-    #         / "california_emissions.png",
-    #         **snakemake.wildcards,
-    #     )

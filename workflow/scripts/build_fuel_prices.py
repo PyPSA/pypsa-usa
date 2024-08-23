@@ -27,9 +27,16 @@ from pathlib import Path
 from typing import List
 
 import constants as const
+import duckdb
 import eia
+import numpy as np
 import pandas as pd
-from _helpers import configure_logging, mock_snakemake
+from _helpers import configure_logging, get_snapshots, mock_snakemake
+from build_powerplants import (
+    filter_outliers_iqr_grouped,
+    filter_outliers_zscore,
+    load_pudl_data,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -122,8 +129,6 @@ def get_caiso_ng_power_prices(
         "CISO-SDGE": "CISO",
         "CISO-VEA": "CISO",
         "Arizona": "AZPS",
-        # "NYISO": "NYISO",
-        # "CAISO": "CAISO",
         "BANC": "BANCSMUD",
     }
 
@@ -145,26 +150,59 @@ def get_caiso_ng_power_prices(
 ###
 
 
+###
+# Build PuDL EIA 923 Fuel Recipts based fuel costs
+###
+def build_pudl_fuel_costs(snapshots: pd.DatetimeIndex, start_date: str, end_date: str):
+    """
+    Build fuel costs based on PUDL EIA 923 Fuel Receipts data.
+    """
+    _, fuel_cost_temporal = load_pudl_data(snakemake.input.pudl, start_date, end_date)
+    fuel_cost_temporal["interconnect"] = fuel_cost_temporal["nerc_region"].map(
+        const.NERC_REGION_MAPPER,
+    )
+    fuel_cost_temporal = fuel_cost_temporal[
+        fuel_cost_temporal["interconnect"] == snakemake.wildcards.interconnect
+    ]
+    fuel_cost_temporal["generator_name"] = (
+        fuel_cost_temporal["plant_name_eia"].astype(str)
+        + "_"
+        + fuel_cost_temporal["plant_id_eia"].astype(str)
+        + "_"
+        + fuel_cost_temporal["generator_id"].astype(str)
+    )
+
+    # Apply Z-score filtering to each generator
+    fuel_cost_temporal = filter_outliers_zscore(fuel_cost_temporal, "fuel_cost_per_mwh")
+
+    # Apply IQR filtering to each generator group
+    fuel_cost_temporal = filter_outliers_iqr_grouped(
+        fuel_cost_temporal,
+        "technology_description",
+        "fuel_cost_per_mwh",
+    )
+
+    fuel_cost_temporal = fuel_cost_temporal.groupby(["generator_name", "report_date"])[
+        "fuel_cost_per_mwh"
+    ].mean()
+    fuel_cost_temporal = fuel_cost_temporal.unstack(level=0)
+    # Fill the missing values with the previous value
+    plant_fuel_costs = fuel_cost_temporal.reindex(snapshots)
+    plant_fuel_costs.index = snapshots
+    plant_fuel_costs = plant_fuel_costs.ffill().bfill()
+    plant_fuel_costs.to_csv(snakemake.output.pudl_fuel_costs, index_label="snapshot")
+
+
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
 
-        snakemake = mock_snakemake("build_fuel_prices", interconnect="western")
+        snakemake = mock_snakemake("build_fuel_prices", interconnect="texas")
     configure_logging(snakemake)
-
-    snapshot_config = snakemake.config["snapshots"]
-    sns_start = pd.to_datetime(snapshot_config["start"])
-    sns_end = pd.to_datetime(snapshot_config["end"])
-    sns_inclusive = snapshot_config["inclusive"]
 
     eia_api = snakemake.params.api_eia
 
-    snapshots = pd.date_range(
-        freq="h",
-        start=sns_start,
-        end=sns_end,
-        inclusive=sns_inclusive,
-    )
+    snapshots = get_snapshots(snakemake.params.snapshots)
 
     function_mapper = {
         "caiso_ng_power_prices": get_caiso_ng_power_prices,
@@ -211,4 +249,10 @@ if __name__ == "__main__":
     ba_ng_power_prices.to_csv(
         snakemake.output.ba_ng_fuel_prices,
         index_label="snapshot",
+    )
+
+    build_pudl_fuel_costs(
+        snapshots,
+        snakemake.params.snapshots["start"],
+        snakemake.params.snapshots["end"],
     )

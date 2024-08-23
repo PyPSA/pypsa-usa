@@ -5,3 +5,4 @@ s_nom_max,MW,float,Global upper limit for the maximum capacity of each extendabl
 max_extension,MW,float,Upper limit for the extended capacity of each extendable line.
 length_factor,--,float,Correction factor to account for the fact that buses are *not* connected by lines through air-line distance.
 interface_transmission_limits, --, true or false, Activate the Interface Transmission Limits (ITL) zones limits.
+transport_model,--,true or false,Converts model from DC PF to Transport Model by replacing lines with Links. Link p_nom value uses NARIS network. Must be used with n_clusters == minimum # of Clusters.

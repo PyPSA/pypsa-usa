@@ -52,9 +52,8 @@ def get_primary_energy_use(n: pypsa.Network) -> pd.DataFrame:
 
     return (
         pd.concat([gen_energy_use, link_energy_use])
-        .reset_index()
-        .groupby(["bus", "carrier"])
-        .sum()
+        # .reset_index() commenting this out seems to fix issue in multi-horizon indexing
+        .groupby(["bus", "carrier"]).sum()
     )
 
 
@@ -108,8 +107,9 @@ def get_energy_timeseries(n: pypsa.Network) -> pd.DataFrame:
 
     def _get_energy_one_port(n: pypsa.Network, c: str) -> pd.DataFrame:
         return (
-            c.pnl.p.multiply(n.snapshot_weightings.generators, axis=0)
-            .multiply(c.df.sign)
+            c.pnl.p.multiply(  # .multiply(n.snapshot_weightings.generators, axis=0)
+                c.df.sign,
+            )
             .T.groupby(c.df.carrier)
             .sum()
             .T
@@ -123,10 +123,9 @@ def get_energy_timeseries(n: pypsa.Network) -> pd.DataFrame:
         for port in [col[3:] for col in c.df.columns if col[:3] == "bus"]:
             if port == "0":  # only track flow in one direction
                 continue
-            totals = c.pnl["p" + port].multiply(
-                n.snapshot_weightings.generators,
-                axis=0,
-            )
+            totals = c.pnl[
+                "p" + port
+            ]  # .multiply(n.snapshot_weightings.generators,axis=0,)
             # remove values where bus is missing (bug in nomopyomo)
             no_bus = c.df.index[c.df["bus" + port] == ""]
             totals.loc[no_bus] = float(
@@ -163,8 +162,18 @@ def get_demand_timeseries(n: pypsa.Network) -> pd.DataFrame:
 def get_demand_base(n: pypsa.Network) -> pd.DataFrame:
     """
     Gets Nodal Sum of Demand.
+
+    This groups all demand per node togheter.
     """
-    return pd.DataFrame(n.loads_t.p).rename(columns=n.loads.bus).sum(0)
+    df = (
+        pd.DataFrame(n.loads_t.p)
+        .rename(columns=n.loads.bus)
+        .sum(0)
+        .groupby(level=0)
+        .sum()
+    )
+    assert len(df) == len(df.index.unique())
+    return df
 
 
 ###
@@ -280,12 +289,13 @@ def get_generator_marginal_costs(
     """
     df_mc = (
         n.get_switchable_as_dense("Generator", "marginal_cost")
+        .loc[n.investment_periods[0]]
         .resample(resample_period)
         .mean()
     )
     df_long = pd.melt(
         df_mc.reset_index(),
-        id_vars=["snapshot"],
+        id_vars=["timestep"],
         var_name="Generator",
         value_name="Value",
     )
@@ -310,7 +320,11 @@ def get_fuel_costs(n: pypsa.Network) -> pd.DataFrame:
     }
 
     # will return generator level of (fuel_costs / efficiency)
-    marginal_costs = n.get_switchable_as_dense("Generator", "marginal_cost").T
+    marginal_costs = (
+        n.get_switchable_as_dense("Generator", "marginal_cost")
+        .loc[n.investment_periods[0]]
+        .T
+    )
     marginal_costs = marginal_costs[
         marginal_costs.index.map(n.generators.carrier).isin(list(fixed_voms))
     ]
@@ -321,7 +335,11 @@ def get_fuel_costs(n: pypsa.Network) -> pd.DataFrame:
     marginal_costs = marginal_costs.subtract(voms, axis=0)
 
     # remove the efficiency cost
-    eff = n.get_switchable_as_dense("Generator", "efficiency").T
+    eff = (
+        n.get_switchable_as_dense("Generator", "efficiency")
+        .loc[n.investment_periods[0]]
+        .T
+    )
     eff = eff[eff.index.map(n.generators.carrier).isin(list(fixed_voms))]
     fuel_costs = marginal_costs.mul(eff, axis=0)
 
@@ -363,7 +381,7 @@ def get_node_emissions_timeseries(n: pypsa.Network) -> pd.DataFrame:
     return (
         get_node_carrier_emissions_timeseries(n)
         .droplevel("carrier")
-        .reset_index()
+        # .reset_index() fix for multi-horizon
         .groupby("bus")
         .sum()
         .T
@@ -378,7 +396,7 @@ def get_tech_emissions_timeseries(n: pypsa.Network) -> pd.DataFrame:
     return (
         get_node_carrier_emissions_timeseries(n)
         .droplevel("bus")
-        .reset_index()
+        # .reset_index()
         .groupby("carrier")
         .sum()
         .T

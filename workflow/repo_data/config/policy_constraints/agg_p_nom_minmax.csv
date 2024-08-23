@@ -1,3 +1,2 @@
 planning_horizon,region,carrier,min,max
-2030,California,onwind,0,
-2030,Washington,coal,,0
+2030,p63,solar,0,

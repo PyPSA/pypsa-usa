@@ -172,7 +172,7 @@ def load_network_for_plots(fn, tech_costs, config, combine_hydro_ps=True):
     # bus_carrier = n.storage_units.bus.map(n.buses.carrier)
     # n.storage_units.loc[bus_carrier == "heat","carrier"] = "water tanks"
 
-    Nyears = n.snapshot_weightings.objective.sum() / 8760.0
+    Nyears = n.snapshot_weightings.loc[n.investment_periods[0]].objective.sum() / 8760.0
     costs = load_costs(tech_costs, config["costs"], config["electricity"], Nyears)
     update_transmission_costs(n, costs)
 
@@ -451,7 +451,6 @@ def test_network_datatype_consistency(n):
         return None
 
 
-
 def local_to_utc(group):
     import pytz
     from constants import STATE_2_TIMEZONE
@@ -527,6 +526,7 @@ def get_checksum_from_zenodo(file_url):
 
 ### Config Related Helpers ###
 
+
 def set_scenario_config(snakemake):
     scenario = snakemake.config["run"].get("scenarios", {})
     if scenario.get("enable") and "run" in snakemake.wildcards.keys():
@@ -549,6 +549,7 @@ def update_config_with_sector_opts(config, sector_opts):
         if o.startswith("CF+"):
             l = o.split("+")[1:]
             update_config(config, parse(l))
+
 
 def get_opt(opts, expr, flags=None):
     """
@@ -577,7 +578,6 @@ def find_opt(opts, expr):
             else:
                 return True, None
     return False, None
-
 
 
 def update_config_from_wildcards(config, w, inplace=True):
@@ -638,7 +638,8 @@ def update_config_from_wildcards(config, w, inplace=True):
             if not isinstance(config["adjustments"]["electricity"], dict):
                 config["adjustments"]["electricity"] = dict()
             update_config(
-                config["adjustments"]["electricity"], {attr: {carrier: factor}}
+                config["adjustments"]["electricity"],
+                {attr: {carrier: factor}},
             )
 
     if w.get("sector_opts"):
@@ -823,7 +824,7 @@ def get_run_path(fn, dir, rdir, shared_resources):
         irrelevant_wildcards = {"technology", "year", "scope", "kind"}
         no_relevant_wildcards = not existing_wildcards - irrelevant_wildcards
         no_elec_rule = not fn.startswith("networks/elec") and not fn.startswith(
-            "add_electricity"
+            "add_electricity",
         )
         is_shared = no_relevant_wildcards and no_elec_rule
         rdir = "" if is_shared else rdir
@@ -833,7 +834,7 @@ def get_run_path(fn, dir, rdir, shared_resources):
         rdir = "" if shared_resources else rdir
     else:
         raise ValueError(
-            "shared_resources must be a boolean, str, or 'base' for special handling."
+            "shared_resources must be a boolean, str, or 'base' for special handling.",
         )
 
     return f"{dir}{rdir}{fn}"
@@ -851,3 +852,42 @@ def path_provider(dir, rdir, shared_resources):
         returns the path to the file based on the shared_resources parameter.
     """
     return partial(get_run_path, dir=dir, rdir=rdir, shared_resources=shared_resources)
+
+
+def get_snapshots(
+    snapshots: dict[str, str],
+    drop_leap_day: bool = True,
+    freq: str = "h",
+    **kwargs,
+) -> pd.date_range:
+    """
+    Returns pandas DateTimeIndex potentially without leap days.
+
+    Taken from PyPSA-Eur implementation
+    """
+
+    time = pd.date_range(freq=freq, **snapshots, **kwargs)
+    if drop_leap_day and time.is_leap_year.any():
+        time = time[~((time.month == 2) & (time.day == 29))]
+
+    return time
+
+
+def reduce_float_memory(df):
+    """
+    Reduce memory usage of a DataFrame by converting float64 columns to
+    float32.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        The DataFrame to reduce memory usage for.
+
+    Returns
+    -------
+    pd.DataFrame
+        The DataFrame with float64 columns converted to float32.
+    """
+    for col in df.select_dtypes(include=["float64"]).columns:
+        df[col] = pd.to_numeric(df[col], downcast="float")
+    return df

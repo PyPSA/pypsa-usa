@@ -34,41 +34,8 @@ New issue reports should include information about your programming environment
 (e.g., operating system, Python version) and steps to reproduce the problem.
 Please try also to simplify the reproduction steps to a very minimal example
 that still illustrates the problem you are facing. By removing other factors,
-you help us to identify the root cause of the issue. There are four templates
-set up to help with this process:
+you help us to identify the root cause of the issue.
 
-## Documentation Improvements
-
-You can help improve PyPSA-USA docs by making them more readable and
-coherent, or by adding missing information and correcting mistakes.
-
-PyPSA-USA's documentation uses
-[Sphinx](https://www.sphinx-doc.org/en/master/) as its main documentation
-compiler. This means that the docs are kept in the same repository as the
-project code, and that any documentation update is done in the same way was a
-code contribution. We use Markdown language with
-[MyST](https://myst-parser.readthedocs.io/en/latest/syntax/syntax.html)
-extensions
-
-When working on documentation changes, first install the required dependencies
-in your environment
-
-```bash
-~/pypsa-usa $ pip install sphinx sphinx-book-theme myst-parser
-```
-
-Then compile the documentation on your local machine
-
-```bash
-~/pypsa-usa $ cd docs && make html && cd ..
-```
-
-And use Python's built-in web server for a preview in your web browser
-(`http://localhost:8000`)
-
-```bash
-~/pypsa-usa $ python3 -m http.server --directory 'docs/build/html'
-```
 
 ## Code Contributions
 
@@ -103,7 +70,7 @@ copy of the code under your account on the repository service.
     ~/repositories/pypsa-usa $
     ```
 
-### 4. Implement your changes
+### 3. Implement your changes
 
 - Create a new branch with a name in the form of `issue-###` where `###` is
 the auto assigned issue number from GitHub.
@@ -128,15 +95,48 @@ to new functions, modules and classes.
 
    to record your changes in [git](https://git-scm.com).
 
-### 5. Submit your contribution
+### 4. Submit a Pull Request to the **`develop`** branch
 
-- If everything works fine, push your local branch to
-[GitHub](https://github.com/PyPSA/pypsa-usa) with:
+- If everything works fine, push your local branch to your fork with:
 
     ```bash
     git push -u origin my-feature
     ```
 
 - Go to the web page of your fork and click
-[Create a Pull Request](https://github.com/PyPSA/pypsa-usa/pulls) to
-send your changes for review.
+[Create a Pull Request](https://github.com/PyPSA/pypsa-usa/pulls). Then make sure you are submitting the pull request from your_git/issue-xxx branch to the PyPSA/PyPSA-USA:develop branch.
+
+- Communicate on the github Pull Request page to reconcile any changes to be made!
+
+## Documentation Improvements
+
+You can help improve PyPSA-USA docs by making them more readable and
+coherent, or by adding missing information and correcting mistakes.
+
+PyPSA-USA's documentation uses
+[Sphinx](https://www.sphinx-doc.org/en/master/) as its main documentation
+compiler. This means that the docs are kept in the same repository as the
+project code, and that any documentation update is done in the same way was a
+code contribution. We use Markdown language with
+[MyST](https://myst-parser.readthedocs.io/en/latest/syntax/syntax.html)
+extensions
+
+When working on documentation changes, first install the required dependencies
+in your environment
+
+```bash
+~/pypsa-usa $ pip install sphinx sphinx-book-theme myst-parser
+```
+
+Then compile the documentation on your local machine
+
+```bash
+~/pypsa-usa $ cd docs && make html && cd ..
+```
+
+And use Python's built-in web server for a preview in your web browser
+(`http://localhost:8000`)
+
+```bash
+~/pypsa-usa $ python3 -m http.server --directory 'docs/build/html'
+```
