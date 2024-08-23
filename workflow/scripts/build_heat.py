@@ -84,7 +84,7 @@ def build_heat(
 
 def combined_heat(n: pypsa.Network, sector: str) -> bool:
     """
-    Searches load for combined or split heat loads.
+    Searches loads for combined or split heat loads.
 
     Returns:
         True - If only '-heat' is used in load indexing
@@ -101,9 +101,9 @@ def combined_heat(n: pypsa.Network, sector: str) -> bool:
 
     if water_loads or space_loads:
         assert len(water_loads) + len(space_loads) == len(combined_loads)
-        return True
-    else:
         return False
+    else:
+        return True
 
 
 def reindex_cop(sns: pd.MultiIndex, da: xr.DataArray) -> pd.DataFrame:
@@ -463,7 +463,7 @@ def _split_urban_rural_load(
         new_buses["STATE_NAME"] = new_buses.index.map(n.buses.STATE_NAME)
 
         # strip out the 'res-heat' and 'com-heat' to add in 'rural' and 'urban'
-        new_buses.index = new_buses.index.str.strip(f" {sector}-{fuel}")
+        new_buses.index = new_buses.index.str.rstrip(f" {sector}-{fuel}")
 
         n.madd(
             "Bus",
@@ -481,7 +481,7 @@ def _split_urban_rural_load(
         # get rural or urban loads
         loads_t = n.loads_t.p_set[load_names]
         loads_t = loads_t.rename(
-            columns={x: x.strip(f" {sector}-{fuel}") for x in loads_t.columns},
+            columns={x: x.rstrip(f" {sector}-{fuel}") for x in loads_t.columns},
         )
         loads_t = loads_t.mul(ratios[f"{system}_fraction"])
 
@@ -559,10 +559,8 @@ def add_service_gas_furnaces(
         mc = get_link_marginal_costs(n, furnaces, marginal_cost)
     elif isinstance(marginal_cost, (int, float)):
         mc = marginal_cost
-    elif isinstance(marginal_cost, None):
-        mc = 0
     else:
-        raise TypeError
+        mc = 0
 
     n.madd(
         "Link",
@@ -641,10 +639,8 @@ def add_service_lpg_furnaces(
         mc = get_link_marginal_costs(n, furnaces, marginal_cost)
     elif isinstance(marginal_cost, (int, float)):
         mc = marginal_cost
-    elif isinstance(marginal_cost, None):
-        mc = 0
     else:
-        raise TypeError
+        mc = 0
 
     n.madd(
         "Link",
@@ -906,18 +902,21 @@ def add_service_water_store(
 
     df = pd.DataFrame(index=buses.index)
     df["state"] = df.index.map(n.buses.STATE)
-    df["bus0"] = df.index
-    df["bus1"] = df.index + "-store"
-    df["bus2"] = df.state + f" {sector}-co2"
     df["x"] = df.index.map(n.buses.x)
     df["y"] = df.index.map(n.buses.y)
-    df["carrier"] = f"{sector}-{heat_system}-{heat_carrier}-store"
+    df.index = df.index.str.replace("-heat", "")
+    df["bus1"] = df.index + f"-{fuel}-heater"
+    df["bus2"] = df.index + "-heat"
+    df["bus3"] = df.state + f" {sector}-co2"
+    df["carrier"] = f"{sector}-{heat_system}-water-{fuel}"
 
     if fuel == "elec":
-        df["primary"] = df.index.map(lambda x: x.split(" ")[0])
+        df["bus0"] = df.index.map(
+            lambda x: x.split(f" {sector}-{heat_system}-water")[0],
+        )
     else:
         fuel_name = "oil" if fuel == "lpg" else fuel
-        df["primary"] = df.state + " " + fuel_name
+        df["bus0"] = df.state + " " + fuel_name
         efficiency2 = costs.at[fuel_name, "co2_emissions"]
 
     if isinstance(marginal_cost, pd.DataFrame):
@@ -925,63 +924,59 @@ def add_service_water_store(
         mc = get_link_marginal_costs(n, df, marginal_cost)
     elif isinstance(marginal_cost, (int, float)):
         mc = marginal_cost
-    elif isinstance(marginal_cost, None):
-        mc = 0
     else:
-        raise TypeError
+        mc = 0
 
-    # remove "-heat" suffix from name
-    # add nodes at this point should end with "-heat"
-    df.index = df.index.str.replace("-heat", "")
-
+    buses = df.copy().set_index("bus1")
     n.madd(
         "Bus",
-        df.index,
-        suffix="-heat-store",
-        x=df.x,
-        y=df.y,
-        carrier=df.carrier,
+        buses.index,
+        x=buses.x,
+        y=buses.y,
+        carrier=buses.carrier,
         unit="MWh",
     )
 
     # limitless one directional link from primary energy to water store
-    # fixed cost applied here to prevent free hot water
+    # capital cost applied here to prevent free hot water
     if fuel == "elec":
         n.madd(
             "Link",
             df.index,
             suffix=f"-{fuel}-heater",
-            bus0=df.primary,
-            bus1=df.bus0,
+            bus0=df.bus0,
+            bus1=df.bus1,
             efficiency=costs.at[cost_name, "efficiency"],
             carrier=df.carrier,
             p_nom_extendable=True,
-            capital_cost=costs.at[cost_name, "fixed_cost"],
+            capital_cost=costs.at[cost_name, "capital_cost"],
             marginal_cost=mc,
+            lifetime=costs.at[cost_name, "lifetime"],
         )
     else:  # emission tracking
         n.madd(
             "Link",
             df.index,
             suffix=f"-{fuel}-heater",
-            bus0=df.primary,
-            bus1=df.bus0,
-            bus2=df.bus2,
+            bus0=df.bus0,
+            bus1=df.bus1,
+            bus2=df.bus3,
             efficiency=costs.at[cost_name, "efficiency"],
             efficiency2=efficiency2,
             carrier=df.carrier,
             p_nom_extendable=True,
-            capital_cost=costs.at[cost_name, "fixed_cost"],
+            capital_cost=costs.at[cost_name, "capital_cost"],
             marginal_cost=mc,
+            lifetime=costs.at[cost_name, "lifetime"],
         )
 
     # limitless one directional link from water store to water demand
     n.madd(
         "Link",
         df.index,
-        suffix="-store-discharger",
-        bus0=df.bus0,
-        bus1=df.bus1,
+        suffix=f"-{fuel}-heater-discharger",
+        bus0=df.bus1,
+        bus1=df.bus2,
         efficiency=1,
         carrier=df.carrier,
         p_nom_extendable=True,
@@ -992,13 +987,13 @@ def add_service_water_store(
     n.madd(
         "Store",
         df.index,
-        suffix="-store",
+        suffix=f"-{fuel}-heater-store",
         bus=df.bus1,
         e_cyclic=True,
         e_nom_extendable=True,
         carrier=df.carrier,
         standing_loss=0,  # to correct
-        capital_cost=costs.at[cost_name, "fixed_cost"],
+        capital_cost=costs.at[cost_name, "investment"],
         lifetime=costs.at[cost_name, "lifetime"],
     )
 
@@ -1119,10 +1114,8 @@ def add_industrial_furnace(
         mc = get_link_marginal_costs(n, furnaces, marginal_cost)
     elif isinstance(marginal_cost, (int, float)):
         mc = marginal_cost
-    elif isinstance(marginal_cost, None):
-        mc = 0
     else:
-        raise TypeError
+        mc = 0
 
     n.madd(
         "Link",
@@ -1179,10 +1172,8 @@ def add_industrial_boiler(
         mc = get_link_marginal_costs(n, boiler, marginal_cost)
     elif isinstance(marginal_cost, (int, float)):
         mc = marginal_cost
-    elif isinstance(marginal_cost, None):
-        mc = 0
     else:
-        raise TypeError
+        mc = 0
 
     n.madd(
         "Link",
