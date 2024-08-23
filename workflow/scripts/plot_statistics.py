@@ -235,6 +235,7 @@ def plot_production_bar(
     stats = {"": energy_mix}
     variable = "Energy Mix"
     variable_units = " GWh"
+
     fig_ = stacked_bar_horizons(stats, variable, variable_units, n.carriers)
     fig_.savefig(save)
     plt.close()

@@ -445,7 +445,12 @@ def replace_lines_with_links(clustering, itl_fn, capex):
     itl_cost['USD2023perMWyr'] = calculate_annuity(60, 0.025) * itl_cost['USD2023perMW']
     itls = itls.merge(itl_cost[['interface', 'length_miles', 'USD2023perMWyr']], on='interface', how='left',) 
 
-    itls['p_min_pu_Rev'] = -1 * (itls.MW_r0 / itls.MW_f0)
+    itls['p_min_pu_Rev'] = (-1 * (itls.MW_r0 / itls.MW_f0)).fillna(0)
+
+    #lines to add in reverse if forward direction is zero
+    itls_rev = itls[itls.MW_f0 == 0].copy()
+    itls = itls[itls.MW_f0 != 0]
+
     clustering.network.mremove("Line", clustering.network.lines.index)
     clustering.network.madd(
         "Link",
@@ -459,7 +464,22 @@ def replace_lines_with_links(clustering, itl_fn, capex):
         p_min_pu=itls.p_min_pu_Rev.values,
         capital_cost=itls.USD2023perMWyr.values,
         p_nom_extendable=True,
-        carrier="AC",
+        carrier="DC",
+    )
+
+    clustering.network.madd(
+        "Link",
+        names=itls_rev.interface,  # itl name
+        suffix="rev",
+        bus0=buses.loc[itls_rev.r].index,
+        bus1=buses.loc[itls_rev.rr].index,
+        p_nom=itls_rev.MW_r0.values,
+        p_nom_min=itls_rev.MW_r0.values,
+        p_max_pu= 0,
+        p_min_pu=-1,
+        capital_cost=itls_rev.USD2023perMWyr.values,
+        p_nom_extendable=True,
+        carrier="DC",
     )
     logger.info(f"Replaced Lines with Links for zonal model configuration.")
 
