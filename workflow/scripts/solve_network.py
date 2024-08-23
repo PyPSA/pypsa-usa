@@ -76,6 +76,7 @@ def add_land_use_constraint_perfect(n):
             logger.warning(
                 f"summed p_min_pu values at node larger than technical potential {check[check].index}",
             )
+
     grouper = [n.generators.carrier, n.generators.bus]
     ext_i = n.generators.p_nom_extendable & ~n.generators.index.str.contains("existing")
     # get technical limit per node
@@ -90,7 +91,7 @@ def add_land_use_constraint_perfect(n):
     check_p_min_p_max(p_nom_max)
 
     df = p_nom_max.reset_index()
-    df["name"] = df.apply(lambda row: f"nom_max_{row['carrier']}", axis=1, )
+    df["name"] = df.apply(lambda row: f"nom_max_{row['carrier']}", axis=1)
 
     for name in df.name.unique():
         df_carrier = df[df.name == name]
@@ -183,7 +184,7 @@ def prepare_network(
     if foresight == "perfect":
         n = add_land_use_constraint_perfect(n)
         # if snakemake.params["sector"]["limit_max_growth"]["enable"]:
-         #     n = add_max_growth(n)
+        #     n = add_max_growth(n)
 
     if n.stores.carrier.eq("co2 stored").any():
         limit = co2_sequestration_potential

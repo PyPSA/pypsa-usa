@@ -121,7 +121,7 @@ def stacked_bar_horizons(
         y_positions = np.arange(len(stats))  # One position for each scenario
         for j, (scenario, df) in enumerate(stats.items()):
             bottoms = np.zeros(
-                len(df.columns)
+                len(df.columns),
             )  # Initialize the bottom positions for stacking
             # Stack the technologies for each scenario
             for i, technology in enumerate(df.index.unique()):
@@ -185,10 +185,10 @@ def plot_capacity_additions_bar(
     """
     Plots base capacity vs optimal capacity as a bar chart.
     """
-     
-    existing_capacity = n.generators.groupby('carrier').p_nom.sum().round(0)
+
+    existing_capacity = n.generators.groupby("carrier").p_nom.sum().round(0)
     existing_capacity = existing_capacity.to_frame(name="Existing Capacity")
-    storage_units = n.storage_units.groupby('carrier').p_nom.sum().round(0)
+    storage_units = n.storage_units.groupby("carrier").p_nom.sum().round(0)
     storage_units = storage_units.to_frame(name="Existing Capacity")
     existing_capacity = pd.concat([existing_capacity, storage_units])
     existing_capacity.index = existing_capacity.index.map(n.carriers.nice_name)
