@@ -545,8 +545,9 @@ def plot_renewable_potential(
     """
 
     # get data
-    renew = n.generators[ (n.generators.p_nom_max != np.inf)
-        & (n.generators.build_year == 2030) 
+    renew = n.generators[
+        (n.generators.p_nom_max != np.inf)
+        & (n.generators.build_year == 2030)
         & (
             n.generators.carrier.isin(
                 ["onwind", "offwind", "offwind_floating", "solar", "EGS"],

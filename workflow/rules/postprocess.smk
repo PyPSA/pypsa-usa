@@ -81,7 +81,6 @@ rule plot_statistics:
         plotting=config["plotting"],
         retirement=config["electricity"].get("retirement", "technical"),
     output:
-        statistics = RESULTS + "{interconnect}/figures/s{simpl}_cluster_{clusters}/l{ll}_{opts}_{sector}/system/statistics.csv",
         **{
             fig: RESULTS
             + "{interconnect}/figures/s{simpl}_cluster_{clusters}/l{ll}_{opts}_{sector}/emissions/%s"
@@ -100,6 +99,8 @@ rule plot_statistics:
             % fig
             for fig in FIGURES_SYSTEM
         },
+        statistics=RESULTS
+        + "{interconnect}/figures/s{simpl}_cluster_{clusters}/l{ll}_{opts}_{sector}/system/statistics.csv",
     log:
         "logs/plot_figures/{interconnect}_{simpl}_{clusters}_l{ll}_{opts}_{sector}.log",
     threads: 1

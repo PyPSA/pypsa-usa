@@ -61,5 +61,5 @@ dependencies:
 - pip:
   - vresutils==0.3.1
   - tsam>=1.1.0
-  - gurobipy==10.0.3
+  - gurobipy==11.0.3
   - highspy
