@@ -158,16 +158,17 @@ class Eulp:
             self.data = self._resample_data(df)
         elif isinstance(df, pd.DataFrame):
             self.data = df
-            assert (
-                self.data.columns
-                == [
+            assert all(
+                x
+                in [
                     "electricity",
                     "heating",
                     "cooling",
                     "water_heating",
                     "space_heating",
                 ]
-            ).all()
+                for x in self.data.columns
+            )
         else:
             raise TypeError(
                 f"missing 1 required positional argument: 'filepath' or 'df'",
