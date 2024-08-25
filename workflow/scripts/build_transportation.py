@@ -22,6 +22,7 @@ def build_transportation(
     boat: bool = True,
     dynamic_pricing: bool = False,
     eia: Optional[str] = None,  # for dynamic pricing
+    year: Optional[int] = None,  # for dynamic pricing
 ) -> None:
     """
     Main funtion to interface with.
@@ -35,7 +36,8 @@ def build_transportation(
 
     if dynamic_pricing:
         assert eia
-        lpg_cost = _get_dynamic_marginal_costs(n, "lpg", eia)
+        assert year
+        lpg_cost = _get_dynamic_marginal_costs(n, "lpg", eia, year)
     else:
         logger.warning("Marginal lpg cost set to zero :(")
         lpg_cost = 0  # TODO: No static cost found :(

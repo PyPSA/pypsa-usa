@@ -2,6 +2,7 @@
 Module for building heating and cooling infrastructure.
 """
 
+import logging
 from typing import Optional
 
 import numpy as np
@@ -12,6 +13,8 @@ from add_electricity import load_costs
 from constants import NG_MWH_2_MMCF, STATE_2_CODE, COAL_dol_ton_2_MWHthermal
 from eia import FuelCosts
 
+logger = logging.getLogger(__name__)
+
 
 def build_heat(
     n: pypsa.Network,
@@ -21,6 +24,8 @@ def build_heat(
     cop_gshp_path: str,
     dynamic_pricing: bool = False,
     eia: Optional[str] = None,  # for dynamic pricing
+    year: Optional[int] = None,  # for dynamic pricing
+    **kwargs,
 ) -> None:
     """
     Main funtion to interface with.
@@ -36,14 +41,28 @@ def build_heat(
     ashp_cop = reindex_cop(sns, ashp_cop)
     gshp_cop = reindex_cop(sns, gshp_cop)
 
+    if dynamic_pricing:
+        assert year
+
     for sector in ("res", "com", "ind"):
 
         if sector in ("res", "com"):
 
             if dynamic_pricing:
                 assert eia
-                gas_costs = _get_dynamic_marginal_costs(n, "gas", eia, sector=sector)
-                heating_oil_costs = _get_dynamic_marginal_costs(n, "heating_oil", eia)
+                gas_costs = _get_dynamic_marginal_costs(
+                    n,
+                    "gas",
+                    eia,
+                    year,
+                    sector=sector,
+                )
+                heating_oil_costs = _get_dynamic_marginal_costs(
+                    n,
+                    "heating_oil",
+                    eia,
+                    year,
+                )
             else:
                 gas_costs = costs.at["gas", "fuel"]
                 heating_oil_costs = costs.at["oil", "fuel"]
@@ -67,8 +86,14 @@ def build_heat(
 
             if dynamic_pricing:
                 assert eia
-                gas_costs = _get_dynamic_marginal_costs(n, "gas", eia, sector=sector)
-                coal_costs = _get_dynamic_marginal_costs(n, "coal", eia)
+                gas_costs = _get_dynamic_marginal_costs(
+                    n,
+                    "gas",
+                    eia,
+                    year,
+                    sector=sector,
+                )
+                coal_costs = _get_dynamic_marginal_costs(n, "coal", eia, year)
             else:
                 gas_costs = costs.at["gas", "fuel"]
                 coal_costs = costs.at["coal", "fuel"]
@@ -145,6 +170,7 @@ def _get_dynamic_marginal_costs(
     n: pypsa.Network,
     fuel: str,
     eia: str,
+    year: int,
     sector: Optional[str] = None,
     **kwargs,
 ) -> pd.DataFrame:
@@ -161,8 +187,6 @@ def _get_dynamic_marginal_costs(
     }
 
     assert fuel in ("gas", "lpg", "coal", "heating_oil")
-
-    year = n.investment_periods[0]
 
     match fuel:
         case "gas":
@@ -208,6 +232,8 @@ def _get_dynamic_marginal_costs(
 
     raw.index = pd.DatetimeIndex(raw.index)
 
+    investment_year = n.investment_periods[0]
+
     hourly_index = pd.date_range(
         start=f"{year}-01-01",
         end=f"{year}-12-31 23:00:00",
@@ -218,6 +244,9 @@ def _get_dynamic_marginal_costs(
     # timeframe required
     costs_hourly = raw.reindex(hourly_index)
     costs_hourly = costs_hourly.ffill().bfill()
+    costs_hourly.index = costs_hourly.index.map(
+        lambda x: x.replace(year=investment_year),
+    )
 
     return costs_hourly[costs_hourly.index.isin(n.snapshots.get_level_values(1))]
 
@@ -325,25 +354,25 @@ def add_service_heat(
             hp_efficiency,
         )
 
-        add_service_gas_furnaces(
+        add_service_furnace(n, sector, heat_system, heat_carrier, "elec", costs)
+        add_service_furnace(
             n,
             sector,
             heat_system,
             heat_carrier,
+            "gas",
             costs,
             marginal_gas,
         )
-
-        add_service_lpg_furnaces(
+        add_service_furnace(
             n,
             sector,
             heat_system,
             heat_carrier,
+            "lpg",
             costs,
             marginal_oil,
         )
-
-        add_service_elec_furnaces(n, sector, heat_system, heat_carrier, costs)
 
         add_service_heat_stores(n, sector, heat_system, heat_carrier, costs)
 
@@ -499,16 +528,19 @@ def _split_urban_rural_load(
     n.mremove("Bus", load_names)
 
 
-def add_service_gas_furnaces(
+def add_service_furnace(
     n: pypsa.Network,
     sector: str,
     heat_system: str,
     heat_carrier: str,
+    fuel: str,
     costs: pd.DataFrame,
     marginal_cost: Optional[pd.DataFrame | float] = None,
 ) -> None:
     """
-    Adds gas furnaces to the system.
+    Adds direct furnace heating to the system.
+
+    Parameters are average of all storage technologies.
 
     n: pypsa.Network
     sector: str
@@ -518,18 +550,25 @@ def add_service_gas_furnaces(
     heat_carrier: str
         ("heat" or "space-heat")
     costs: pd.DataFrame
-    marginal_cost: Optional[pd.DataFrame | float] = None
-        Fuel costs at a state level
     """
-
     assert heat_system in ("urban", "rural")
     assert heat_carrier in ("heat", "space-heat")
 
     match sector:
         case "res" | "Res" | "residential" | "Residential":
-            costs_name = "Residential Gas-Fired Furnaces"
+            if fuel == "lpg":
+                costs_name = "Residential Oil-Fired Furnaces"
+            elif fuel == "gas":
+                costs_name = "Residential Gas-Fired Furnaces"
+            elif fuel == "elec":
+                costs_name = "Residential Electric Resistance Heaters"
         case "com" | "Com" | "commercial" | "Commercial":
-            costs_name = "Commercial Gas-Fired Furnaces"
+            if fuel == "lpg":
+                costs_name = "Commercial Oil-Fired Furnaces"
+            elif fuel == "gas":
+                costs_name = "Commercial Gas-Fired Furnaces"
+            elif fuel == "elec":
+                costs_name = "Commercial Electric Resistance Heaters"
         case _:
             raise NotImplementedError
 
@@ -543,183 +582,284 @@ def add_service_gas_furnaces(
         (n.loads.carrier == carrier_name) & (n.loads.bus.str.contains(heat_system))
     ]
 
-    furnaces = pd.DataFrame(index=loads.bus)
-    furnaces["state"] = furnaces.index.map(n.buses.STATE)
-    furnaces["bus0"] = furnaces.index.map(n.buses.STATE).map(lambda x: f"{x} gas")
-    furnaces["bus1"] = furnaces.index
-    furnaces["carrier"] = f"{sector}-{heat_system}-gas-furnace"
-    furnaces.index = furnaces.bus1.map(
+    df = pd.DataFrame(index=loads.bus)
+    df["state"] = df.index.map(n.buses.STATE)
+    df["bus1"] = df.index
+    df["carrier"] = f"{sector}-{heat_system}-{fuel}-furnace"
+    df.index = df.bus1.map(
         lambda x: x.split(f" {sector}-{heat_system}-{heat_carrier}")[0],
     )
-    furnaces["bus2"] = furnaces.index.map(n.buses.STATE) + f" {sector}-co2"
-    furnaces["efficiency2"] = costs.at["gas", "co2_emissions"]
+    df["bus2"] = df.index.map(n.buses.STATE) + f" {sector}-co2"
+
+    if fuel == "elec":
+        df["bus0"] = df.index.map(
+            lambda x: x.split(f" {sector}-{heat_system}-{heat_carrier}")[0],
+        )
+    else:
+        fuel_name = "oil" if fuel == "lpg" else fuel
+        df["bus0"] = df.state + " " + fuel_name
+        df["efficiency2"] = costs.at[fuel_name, "co2_emissions"]
 
     if isinstance(marginal_cost, pd.DataFrame):
-        assert "state" in furnaces.columns
-        mc = get_link_marginal_costs(n, furnaces, marginal_cost)
+        assert "state" in df.columns
+        mc = get_link_marginal_costs(n, df, marginal_cost)
     elif isinstance(marginal_cost, (int, float)):
         mc = marginal_cost
     else:
         mc = 0
 
-    n.madd(
-        "Link",
-        furnaces.index,
-        suffix=f" {sector}-{heat_system}-gas-furnace",
-        bus0=furnaces.bus0,
-        bus1=furnaces.bus1,
-        bus2=furnaces.bus2,
-        carrier=furnaces.carrier,
-        efficiency=efficiency,
-        efficiency2=furnaces.efficiency2,
-        capital_cost=capex,
-        p_nom_extendable=True,
-        lifetime=lifetime,
-        marginal_cost=mc,
-    )
-
-
-def add_service_lpg_furnaces(
-    n: pypsa.Network,
-    sector: str,
-    heat_system: str,
-    heat_carrier: str,
-    costs: pd.DataFrame,
-    marginal_cost: Optional[pd.DataFrame | float] = None,
-) -> None:
-    """
-    Adds oil furnaces to the system.
-
-    n: pypsa.Network
-    sector: str
-        ("com" or "res")
-    heat_system: str
-        ("rural" or "urban")
-    heat_carrier: str
-        ("heat" or "space-heat")
-    costs: pd.DataFrame
-    marginal_cost: Optional[pd.DataFrame | float] = None
-        Fuel costs at a state level
-    """
-
-    assert heat_system in ("urban", "rural")
-    assert heat_carrier in ("heat", "space-heat")
-
-    match sector:
-        case "res" | "Res" | "residential" | "Residential":
-            costs_name = "Residential Oil-Fired Furnaces"
-        case "com" | "Com" | "commercial" | "Commercial":
-            costs_name = "Commercial Oil-Fired Furnaces"
-        case _:
-            raise NotImplementedError
-
-    capex = costs.at[costs_name, "capital_cost"].round(1)
-    efficiency = costs.at[costs_name, "efficiency"].round(1)
-    lifetime = costs.at[costs_name, "lifetime"]
-
-    carrier_name = f"{sector}-{heat_system}-{heat_carrier}"
-
-    loads = n.loads[
-        (n.loads.carrier == carrier_name) & (n.loads.bus.str.contains(heat_system))
-    ]
-
-    furnaces = pd.DataFrame(index=loads.bus)
-    furnaces["state"] = furnaces.index.map(n.buses.STATE)
-    furnaces["bus0"] = furnaces.index.map(n.buses.STATE).map(lambda x: f"{x} oil")
-    furnaces["bus1"] = furnaces.index
-    furnaces["carrier"] = f"{sector}-{heat_system}-lpg-furnace"
-    furnaces.index = furnaces.bus1.map(
-        lambda x: x.split(f" {sector}-{heat_system}-{heat_carrier}")[0],
-    )
-    furnaces["bus2"] = furnaces.index.map(n.buses.STATE) + f" {sector}-co2"
-    furnaces["efficiency2"] = costs.at["oil", "co2_emissions"]
-
-    if isinstance(marginal_cost, pd.DataFrame):
-        assert "state" in furnaces.columns
-        mc = get_link_marginal_costs(n, furnaces, marginal_cost)
-    elif isinstance(marginal_cost, (int, float)):
-        mc = marginal_cost
+    if fuel == "elec":
+        n.madd(
+            "Link",
+            df.index,
+            suffix=f" {sector}-{heat_system}-{fuel}-furnace",
+            bus0=df.bus0,
+            bus1=df.bus1,
+            carrier=df.carrier,
+            efficiency=efficiency,
+            capital_cost=capex,
+            p_nom_extendable=True,
+            lifetime=lifetime,
+        )
     else:
-        mc = 0
-
-    n.madd(
-        "Link",
-        furnaces.index,
-        suffix=f" {sector}-{heat_system}-lpg-furnace",
-        bus0=furnaces.bus0,
-        bus1=furnaces.bus1,
-        bus2=furnaces.bus2,
-        carrier=furnaces.carrier,
-        efficiency=efficiency,
-        efficiency2=furnaces.efficiency2,
-        capital_cost=capex,
-        p_nom_extendable=True,
-        lifetime=lifetime,
-        marginal_cost=mc,
-    )
+        n.madd(
+            "Link",
+            df.index,
+            suffix=f" {sector}-{heat_system}-{fuel}-furnace",
+            bus0=df.bus0,
+            bus1=df.bus1,
+            bus2=df.bus2,
+            carrier=df.carrier,
+            efficiency=efficiency,
+            efficiency2=df.efficiency2,
+            capital_cost=capex,
+            p_nom_extendable=True,
+            lifetime=lifetime,
+            marginal_cost=mc,
+        )
 
 
-def add_service_elec_furnaces(
-    n: pypsa.Network,
-    sector: str,
-    heat_system: str,
-    heat_carrier: str,
-    costs: pd.DataFrame,
-) -> None:
-    """
-    Adds gas furnaces to the system.
+# def add_service_gas_furnaces(
+#     n: pypsa.Network,
+#     sector: str,
+#     heat_system: str,
+#     heat_carrier: str,
+#     costs: pd.DataFrame,
+#     marginal_cost: Optional[pd.DataFrame | float] = None,
+# ) -> None:
+#     """
+#     Adds gas furnaces to the system.
 
-    n: pypsa.Network
-    sector: str
-        ("com" or "res")
-    heat_system: str
-        ("rural" or "urban")
-    heat_carrier: str
-        ("heat" or "space-heat")
-    costs: pd.DataFrame
-    """
+#     n: pypsa.Network
+#     sector: str
+#         ("com" or "res")
+#     heat_system: str
+#         ("rural" or "urban")
+#     heat_carrier: str
+#         ("heat" or "space-heat")
+#     costs: pd.DataFrame
+#     marginal_cost: Optional[pd.DataFrame | float] = None
+#         Fuel costs at a state level
+#     """
 
-    assert heat_system in ("urban", "rural")
-    assert heat_carrier in ("heat", "space-heat")
+#     assert heat_system in ("urban", "rural")
+#     assert heat_carrier in ("heat", "space-heat")
 
-    match sector:
-        case "res" | "Res" | "residential" | "Residential":
-            costs_name = "Residential Electric Resistance Heaters"
-        case "com" | "Com" | "commercial" | "Commercial":
-            costs_name = "Commercial Electric Resistance Heaters"
-        case _:
-            raise NotImplementedError
+#     match sector:
+#         case "res" | "Res" | "residential" | "Residential":
+#             costs_name = "Residential Gas-Fired Furnaces"
+#         case "com" | "Com" | "commercial" | "Commercial":
+#             costs_name = "Commercial Gas-Fired Furnaces"
+#         case _:
+#             raise NotImplementedError
 
-    capex = costs.at[costs_name, "capital_cost"].round(1)
-    efficiency = costs.at[costs_name, "efficiency"].round(1)
-    lifetime = costs.at[costs_name, "lifetime"]
+#     capex = costs.at[costs_name, "capital_cost"].round(1)
+#     efficiency = costs.at[costs_name, "efficiency"].round(1)
+#     lifetime = costs.at[costs_name, "lifetime"]
 
-    carrier_name = f"{sector}-{heat_system}-{heat_carrier}"
+#     carrier_name = f"{sector}-{heat_system}-{heat_carrier}"
 
-    loads = n.loads[
-        (n.loads.carrier == carrier_name) & (n.loads.bus.str.contains(heat_system))
-    ]
+#     loads = n.loads[
+#         (n.loads.carrier == carrier_name) & (n.loads.bus.str.contains(heat_system))
+#     ]
 
-    furnaces = pd.DataFrame(index=loads.bus)
-    furnaces["bus0"] = furnaces.index.map(
-        lambda x: x.split(f" {sector}-{heat_system}-{heat_carrier}")[0],
-    )
-    furnaces["bus1"] = furnaces.index
-    furnaces["carrier"] = f"{sector}-{heat_system}-elec-furnace"
-    furnaces.index = furnaces.bus0
+#     furnaces = pd.DataFrame(index=loads.bus)
+#     furnaces["state"] = furnaces.index.map(n.buses.STATE)
+#     furnaces["bus0"] = furnaces.index.map(n.buses.STATE).map(lambda x: f"{x} gas")
+#     furnaces["bus1"] = furnaces.index
+#     furnaces["carrier"] = f"{sector}-{heat_system}-gas-furnace"
+#     furnaces.index = furnaces.bus1.map(
+#         lambda x: x.split(f" {sector}-{heat_system}-{heat_carrier}")[0],
+#     )
+#     furnaces["bus2"] = furnaces.index.map(n.buses.STATE) + f" {sector}-co2"
+#     furnaces["efficiency2"] = costs.at["gas", "co2_emissions"]
 
-    n.madd(
-        "Link",
-        furnaces.index,
-        suffix=f" {sector}-{heat_system}-elec-furnace",
-        bus0=furnaces.bus0,
-        bus1=furnaces.bus1,
-        carrier=furnaces.carrier,
-        efficiency=efficiency,
-        capital_cost=capex,
-        p_nom_extendable=True,
-        lifetime=lifetime,
-    )
+#     if isinstance(marginal_cost, pd.DataFrame):
+#         assert "state" in furnaces.columns
+#         mc = get_link_marginal_costs(n, furnaces, marginal_cost)
+#     elif isinstance(marginal_cost, (int, float)):
+#         mc = marginal_cost
+#     else:
+#         mc = 0
+
+#     n.madd(
+#         "Link",
+#         furnaces.index,
+#         suffix=f" {sector}-{heat_system}-gas-furnace",
+#         bus0=furnaces.bus0,
+#         bus1=furnaces.bus1,
+#         bus2=furnaces.bus2,
+#         carrier=furnaces.carrier,
+#         efficiency=efficiency,
+#         efficiency2=furnaces.efficiency2,
+#         capital_cost=capex,
+#         p_nom_extendable=True,
+#         lifetime=lifetime,
+#         marginal_cost=mc,
+#     )
+
+
+# def add_service_lpg_furnaces(
+#     n: pypsa.Network,
+#     sector: str,
+#     heat_system: str,
+#     heat_carrier: str,
+#     costs: pd.DataFrame,
+#     marginal_cost: Optional[pd.DataFrame | float] = None,
+# ) -> None:
+#     """
+#     Adds oil furnaces to the system.
+
+#     n: pypsa.Network
+#     sector: str
+#         ("com" or "res")
+#     heat_system: str
+#         ("rural" or "urban")
+#     heat_carrier: str
+#         ("heat" or "space-heat")
+#     costs: pd.DataFrame
+#     marginal_cost: Optional[pd.DataFrame | float] = None
+#         Fuel costs at a state level
+#     """
+
+#     assert heat_system in ("urban", "rural")
+#     assert heat_carrier in ("heat", "space-heat")
+
+#     match sector:
+#         case "res" | "Res" | "residential" | "Residential":
+#             costs_name = "Residential Oil-Fired Furnaces"
+#         case "com" | "Com" | "commercial" | "Commercial":
+#             costs_name = "Commercial Oil-Fired Furnaces"
+#         case _:
+#             raise NotImplementedError
+
+#     capex = costs.at[costs_name, "capital_cost"].round(1)
+#     efficiency = costs.at[costs_name, "efficiency"].round(1)
+#     lifetime = costs.at[costs_name, "lifetime"]
+
+#     carrier_name = f"{sector}-{heat_system}-{heat_carrier}"
+
+#     loads = n.loads[
+#         (n.loads.carrier == carrier_name) & (n.loads.bus.str.contains(heat_system))
+#     ]
+
+#     furnaces = pd.DataFrame(index=loads.bus)
+#     furnaces["state"] = furnaces.index.map(n.buses.STATE)
+#     furnaces["bus0"] = furnaces.index.map(n.buses.STATE).map(lambda x: f"{x} oil")
+#     furnaces["bus1"] = furnaces.index
+#     furnaces["carrier"] = f"{sector}-{heat_system}-lpg-furnace"
+#     furnaces.index = furnaces.bus1.map(
+#         lambda x: x.split(f" {sector}-{heat_system}-{heat_carrier}")[0],
+#     )
+#     furnaces["bus2"] = furnaces.index.map(n.buses.STATE) + f" {sector}-co2"
+#     furnaces["efficiency2"] = costs.at["oil", "co2_emissions"]
+
+#     if isinstance(marginal_cost, pd.DataFrame):
+#         assert "state" in furnaces.columns
+#         mc = get_link_marginal_costs(n, furnaces, marginal_cost)
+#     elif isinstance(marginal_cost, (int, float)):
+#         mc = marginal_cost
+#     else:
+#         mc = 0
+
+#     n.madd(
+#         "Link",
+#         furnaces.index,
+#         suffix=f" {sector}-{heat_system}-lpg-furnace",
+#         bus0=furnaces.bus0,
+#         bus1=furnaces.bus1,
+#         bus2=furnaces.bus2,
+#         carrier=furnaces.carrier,
+#         efficiency=efficiency,
+#         efficiency2=furnaces.efficiency2,
+#         capital_cost=capex,
+#         p_nom_extendable=True,
+#         lifetime=lifetime,
+#         marginal_cost=mc,
+#     )
+
+
+# def add_service_elec_furnaces(
+#     n: pypsa.Network,
+#     sector: str,
+#     heat_system: str,
+#     heat_carrier: str,
+#     costs: pd.DataFrame,
+# ) -> None:
+#     """
+#     Adds gas furnaces to the system.
+
+#     n: pypsa.Network
+#     sector: str
+#         ("com" or "res")
+#     heat_system: str
+#         ("rural" or "urban")
+#     heat_carrier: str
+#         ("heat" or "space-heat")
+#     costs: pd.DataFrame
+#     """
+
+#     assert heat_system in ("urban", "rural")
+#     assert heat_carrier in ("heat", "space-heat")
+
+#     match sector:
+#         case "res" | "Res" | "residential" | "Residential":
+#             costs_name = "Residential Electric Resistance Heaters"
+#         case "com" | "Com" | "commercial" | "Commercial":
+#             costs_name = "Commercial Electric Resistance Heaters"
+#         case _:
+#             raise NotImplementedError
+
+#     capex = costs.at[costs_name, "capital_cost"].round(1)
+#     efficiency = costs.at[costs_name, "efficiency"].round(1)
+#     lifetime = costs.at[costs_name, "lifetime"]
+
+#     carrier_name = f"{sector}-{heat_system}-{heat_carrier}"
+
+#     loads = n.loads[
+#         (n.loads.carrier == carrier_name) & (n.loads.bus.str.contains(heat_system))
+#     ]
+
+#     furnaces = pd.DataFrame(index=loads.bus)
+#     furnaces["bus0"] = furnaces.index.map(
+#         lambda x: x.split(f" {sector}-{heat_system}-{heat_carrier}")[0],
+#     )
+#     furnaces["bus1"] = furnaces.index
+#     furnaces["carrier"] = f"{sector}-{heat_system}-elec-furnace"
+#     furnaces.index = furnaces.bus0
+
+#     n.madd(
+#         "Link",
+#         furnaces.index,
+#         suffix=f" {sector}-{heat_system}-elec-furnace",
+#         bus0=furnaces.bus0,
+#         bus1=furnaces.bus1,
+#         carrier=furnaces.carrier,
+#         efficiency=efficiency,
+#         capital_cost=capex,
+#         p_nom_extendable=True,
+#         lifetime=lifetime,
+#     )
 
 
 def add_service_heat_stores(
@@ -1066,10 +1206,16 @@ def add_service_heat_pumps(
     capex = costs.at[costs_name, "capital_cost"].round(1)
     lifetime = costs.at[costs_name, "lifetime"]
 
+    if heat_carrier == "space-heat":
+        suffix = f" {sector}-{heat_system}-space-{hp_abrev}"
+    else:
+        suffix = f" {sector}-{heat_system}-{hp_abrev}"
+
+    # use suffix to retain COP profiles
     n.madd(
         "Link",
         hps.index,
-        suffix=f" {sector}-{heat_system}-{hp_abrev}",
+        suffix=suffix,
         bus0=hps.bus0,
         bus1=hps.bus1,
         carrier=hps.carrier,

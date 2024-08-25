@@ -16,6 +16,7 @@ import numpy as np
 import pandas as pd
 import pypsa
 import yaml
+from build_heat import combined_heat
 from constants import STATE_2_CODE, STATES_CENSUS_DIVISION_MAPPER
 from eia import TransportationFuelUse
 
@@ -395,7 +396,11 @@ def _already_retired(build_year: int, lifetime: int, year: int) -> bool:
         return False
 
 
-def _get_marginal_cost(n: pypsa.Network, names: list[str]) -> float | pd.DataFrame:
+def _get_marginal_cost(
+    n: pypsa.Network,
+    names: list[str],
+    fuel: Optional[str] = None,
+) -> float | pd.DataFrame:
     """
     Gets marginal cost from the investable link.
 
@@ -411,8 +416,11 @@ def _get_marginal_cost(n: pypsa.Network, names: list[str]) -> float | pd.DataFra
             df[name] = n.links_t.marginal_cost[name]
         return df
     except KeyError:
-        logger.info(f"No dynamic cost found for {names[0]} and similar")
-        return n.links.at[name, "marginal_cost"]
+        logger.info(f"No dynamic cost found for {name}")
+        if fuel:
+            return n.links.at[fuel, "marginal_cost"]
+        else:
+            logger.warning(f"No fuel costs applied for {name}")
 
 
 ###
@@ -584,7 +592,7 @@ def _get_brownfield_template_df(
     | ... | ...                   | ...    | ...            | ...   | ...       |
     """
 
-    assert fuel in ("cool", "elec", "heat", "lpg")
+    assert fuel in ("cool", "elec", "heat", "lpg", "space-heat", "water-heat")
 
     if subsector:
         loads = n.loads[
@@ -858,7 +866,8 @@ def add_service_brownfield(
         df["p_nom"] = df.p_max.mul(df.ratio).div(100)  # div to convert from %
 
         marginal_cost_names = [
-            x.replace("heat", "gas-furnace") for x in df.bus1.to_list()
+            x.replace("heat", "gas-furnace").replace("-space", "")
+            for x in df.bus1.to_list()
         ]
         marginal_cost = _get_marginal_cost(n, marginal_cost_names)
 
@@ -939,7 +948,8 @@ def add_service_brownfield(
         df["p_nom"] = df.p_max.mul(df.ratio).div(100)  # div to convert from %
 
         marginal_cost_names = [
-            x.replace("heat", "lpg-furnace") for x in df.bus1.to_list()
+            x.replace("heat", "lpg-furnace").replace("-space", "")
+            for x in df.bus1.to_list()
         ]
         marginal_cost = _get_marginal_cost(n, marginal_cost_names)
 
@@ -1116,7 +1126,11 @@ def add_service_brownfield(
     assert sector in ("res", "com")
 
     match fuel:
-        case "space_heating" | "water_heating":
+        case "space_heating":
+            load = "space-heat"
+        case "water_heating":
+            load = "water-heat"
+        case "heating":
             load = "heat"
         case "cooling":
             load = "cool"
@@ -1132,6 +1146,12 @@ def add_service_brownfield(
         add_brownfield_elec_furnace(n, df, sector, ratios, costs)
     elif load == "cool":
         add_brownfield_aircon(n, df, sector, ratios, costs)
+    elif load == "space-heat":
+        add_brownfield_gas_furnace(n, df, sector, ratios, costs)
+        add_brownfield_oil(n, df, sector, ratios, costs)
+        add_brownfield_elec_furnace(n, df, sector, ratios, costs)
+    elif load == "water-heat":
+        pass
     else:
         raise NotImplementedError
 

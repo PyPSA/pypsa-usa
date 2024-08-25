@@ -419,6 +419,8 @@ if __name__ == "__main__":
     # add electricity infrastructure
     build_electricity_infra(n=n)
 
+    dynamic_cost_year = sns.year.min()
+
     # add heating and cooling
     build_heat(
         n=n,
@@ -428,6 +430,7 @@ if __name__ == "__main__":
         cop_gshp_path=cop_gshp_path,
         dynamic_pricing=True,
         eia=eia_api,
+        year=dynamic_cost_year,
     )
 
     # add transportation
@@ -438,6 +441,7 @@ if __name__ == "__main__":
         costs=costs,
         dynamic_pricing=True,
         eia=eia_api,
+        year=dynamic_cost_year,
     )
 
     # check for end-use brownfield requirements
@@ -466,7 +470,11 @@ if __name__ == "__main__":
 
     if snakemake.params.sector["residential"]["brownfield"]:
         res_stock_dir = snakemake.input.residential_stock
-        for fuel in ["space_heating", "cooling"]:
+        if snakemake.params.sector["split_space_water_heating"]:
+            fuels = ["space_heating", "water_heating", "cooling"]
+        else:
+            fuels = ["heating", "cooling"]
+        for fuel in fuels:
             ratios = get_residential_stock(res_stock_dir, fuel)
             ratios.index = ratios.index.map(STATE_2_CODE)
             ratios = ratios.dropna()  # na is USA
@@ -474,7 +482,11 @@ if __name__ == "__main__":
 
     if snakemake.params.sector["commercial"]["brownfield"]:
         com_stock_dir = snakemake.input.commercial_stock
-        for fuel in ["space_heating", "cooling"]:
+        if snakemake.params.sector["split_space_water_heating"]:
+            fuels = ["space_heating", "water_heating", "cooling"]
+        else:
+            fuels = ["heating", "cooling"]
+        for fuel in fuels:
             ratios = get_commercial_stock(com_stock_dir, fuel)
             ratios.index = ratios.index.map(STATE_2_CODE)
             ratios = ratios.dropna()  # na is USA
