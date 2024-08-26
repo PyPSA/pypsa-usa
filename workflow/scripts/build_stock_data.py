@@ -866,13 +866,11 @@ def add_service_brownfield(
         df["p_nom"] = df.p_max.mul(df.ratio).div(100)  # div to convert from %
 
         marginal_cost_names = [
-            x.replace("heat", "gas-furnace").replace("-space", "")
-            for x in df.bus1.to_list()
+            x.replace("heat", "gas-furnace") for x in df.bus1.to_list()
         ]
         marginal_cost = _get_marginal_cost(n, marginal_cost_names)
 
         start_year = n.investment_periods[0]
-        start_year = start_year if start_year <= 2023 else 2023
 
         for build_year, percent in installed_capacity.items():
 
@@ -948,8 +946,7 @@ def add_service_brownfield(
         df["p_nom"] = df.p_max.mul(df.ratio).div(100)  # div to convert from %
 
         marginal_cost_names = [
-            x.replace("heat", "lpg-furnace").replace("-space", "")
-            for x in df.bus1.to_list()
+            x.replace("heat", "lpg-furnace") for x in df.bus1.to_list()
         ]
         marginal_cost = _get_marginal_cost(n, marginal_cost_names)
 
@@ -972,7 +969,7 @@ def add_service_brownfield(
             if isinstance(marginal_cost, pd.DataFrame):
                 mc = marginal_cost.copy()
                 name_mapper = (
-                    furnaces["bus1"].str.replace("-heat", "-oil-furnace").to_dict()
+                    furnaces["bus1"].str.replace("-heat", "-lpg-furnace").to_dict()
                 )
                 mc = mc.rename(columns={v: k for k, v in name_mapper.items()})
             else:
