@@ -39,8 +39,8 @@ FIGURES_SYSTEM = [
     "bar_regional_capacity_additions.pdf",
     "global_constraint_shadow_prices.pdf",
     "generator_data_panel.pdf",
-    "curtailment_heatmap.pdf",
-    "capfac_heatmap.pdf",
+    # "curtailment_heatmap.pdf",
+    # "capfac_heatmap.pdf",
     "fuel_costs.pdf",
     "region_lmps.pdf",
 ]
