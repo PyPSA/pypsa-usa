@@ -16,18 +16,18 @@ logger = logging.getLogger(__name__)
 ###
 
 
-def get_load_name_per_sector(sector: str) -> list[str]:
-    match sector:
-        case "res" | "com":
-            return ["elec", "urban-heat", "rural-heat", "cool"]
-        case "ind":
-            return ["elec", "heat"]
-        case "trn":
-            vehicles = ("lgt", "med", "hvy", "bus")
-            fuels = ("elec", "lpg")
-            return [f"{f}-{v}" for v in vehicles for f in fuels]
-        case _:
-            raise NotImplementedError
+# def get_load_name_per_sector(sector: str) -> list[str]:
+#     match sector:
+#         case "res" | "com":
+#             return ["elec", "urban-heat", "rural-heat", "cool"]
+#         case "ind":
+#             return ["elec", "heat"]
+#         case "trn":
+#             vehicles = ("lgt", "med", "hvy", "bus")
+#             fuels = ("elec", "lpg")
+#             return [f"{f}-{v}" for v in vehicles for f in fuels]
+#         case _:
+#             raise NotImplementedError
 
 
 def _get_buses_in_state(n: pypsa.Network, state: str) -> list[str]:
@@ -59,6 +59,34 @@ def _get_stores_in_state(n: pypsa.Network, state: str) -> list[str]:
     """
     buses = _get_buses_in_state(n, state)
     return n.stores[n.stores.bus.isin(buses)].index.to_list()
+
+
+def _filter_link_on_sector(n: pypsa.Network, sector: str) -> pd.DataFrame:
+    """
+    Filters network links to exclude dummy links.
+    """
+    match sector:
+        case "res" | "res-urban" | "res-rural" | "com" | "com-urban" | "com-rural":
+            return n.links[
+                (n.links.carrier.str.startswith(sector))
+                & ~(n.links.carrier.str.endswith("-store"))
+                & ~(n.links.carrier.str.contains("-water"))  # hot water heaters
+            ]
+        case "ind":
+            return n.links[
+                (n.links.carrier.str.startswith(sector))
+                & ~(n.links.carrier.str.endswith("-store"))
+            ]
+        case "trn":
+            return n.links[
+                (n.links.carrier.str.startswith(sector))
+                & ~(n.links.carrier.str.endswith("-veh"))
+                & ~(n.links.carrier.str.endswith("-boat"))
+                & ~(n.links.carrier.str.endswith("-rail"))
+                & ~(n.links.carrier.str.endswith("-air"))
+            ]
+        case _:
+            raise NotImplementedError
 
 
 ###
@@ -104,17 +132,11 @@ def get_capacity_per_link_per_node(
     group_existing: bool = True,
     state: Optional[str] = None,
 ) -> pd.Series:
-    if include_elec:
-        df = n.links[
-            (n.links.carrier.str.startswith(sector))
-            & ~(n.links.carrier.str.endswith("-store"))
-        ]
-    else:
-        df = n.links[
-            (n.links.carrier.str.startswith(sector))
-            & ~(n.links.carrier.str.endswith("elec-infra"))
-            & ~(n.links.carrier.str.endswith("-store"))
-        ]
+
+    df = _filter_link_on_sector(n, sector)
+
+    if not include_elec:
+        df = df[~df.carrier.str.endswith("elec-infra")].copy()
 
     if state:
         links = _get_links_in_state(n, state)
@@ -122,7 +144,6 @@ def get_capacity_per_link_per_node(
 
     df = df[["carrier", "p_nom_opt"]]
     df["node"] = df.index.map(lambda x: x.split(f" {sector}-")[0])
-    df["carrier"] = df.carrier.map(lambda x: x.split(f"{sector}-")[1])
 
     if group_existing:
         df["node"] = df.node.map(lambda x: x.split(" existing")[0])
@@ -137,17 +158,11 @@ def get_total_capacity_per_node(
     group_existing: bool = True,
     state: Optional[str] = None,
 ) -> pd.Series:
-    if include_elec:
-        df = n.links[
-            (n.links.carrier.str.startswith(sector))
-            & ~(n.links.carrier.str.endswith("-store"))
-        ]
-    else:
-        df = n.links[
-            (n.links.carrier.str.startswith(sector))
-            & ~(n.links.carrier.str.endswith("elec-infra"))
-            & ~(n.links.carrier.str.endswith("-store"))
-        ]
+
+    df = _filter_link_on_sector(n, sector)
+
+    if not include_elec:
+        df = df[~df.carrier.str.endswith("elec-infra")].copy()
 
     if state:
         links = _get_links_in_state(n, state)
@@ -190,7 +205,16 @@ def get_brownfield_capacity_per_state(
     **kwargs,
 ) -> pd.DataFrame:
 
-    assert sector in ("res", "com", "ind", "trn")
+    assert sector in (
+        "res",
+        "com",
+        "ind",
+        "trn",
+        "res-rural",
+        "res-urban",
+        "com-rural",
+        "com-urban",
+    )
 
     df = get_capacity_per_node(n, sector, group_existing=False, state=state)
 

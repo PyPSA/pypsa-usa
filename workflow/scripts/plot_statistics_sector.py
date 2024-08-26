@@ -76,6 +76,14 @@ def is_urban_rural_split(n: pypsa.Network) -> bool:
         return False
 
 
+def get_plotting_colors(n: pypsa.Network, nice_name: bool) -> dict[str, str]:
+
+    if nice_name:
+        return n.carriers.set_index("nice_name")["color"].to_dict()
+    else:
+        return n.carriers["color"].to_dict()
+
+
 ###
 # PLOTTERS
 ###
@@ -399,6 +407,7 @@ def plot_capacity_per_node(
     sharey: bool = True,
     percentage: bool = True,
     state: Optional[str] = None,
+    nice_name: Optional[bool] = True,
     **kwargs,
 ) -> tuple:
     """
@@ -422,24 +431,30 @@ def plot_capacity_per_node(
     data_col = "percentage" if percentage else "p_nom_opt"
     y_label = "Percentage (%)" if percentage else "Capacity (MW)"
 
+    colors = get_plotting_colors(n, nice_name)
+
     for i, sector in enumerate(sectors):
 
         df = get_capacity_per_node(n, sector, group_existing=True, state=state)
         df = df.reset_index()[["node", "carrier", data_col]]
+
+        if nice_name:
+            df["carrier"] = df.carrier.map(n.carriers.nice_name)
+
         df = df.pivot(columns="carrier", index="node", values=data_col)
 
         try:
 
             if nrows > 1:
 
-                df.plot(kind="bar", stacked=True, ax=axs[i])
+                df.plot(kind="bar", stacked=True, ax=axs[i], color=colors)
                 axs[i].set_xlabel("")
                 axs[i].set_ylabel(y_label)
                 axs[i].set_title(f"{sector} Capacity")
 
             else:
 
-                df.plot(kind="bar", stacked=True, ax=axs)
+                df.plot(kind="bar", stacked=True, ax=axs, color=colors)
                 axs.set_xlabel("")
                 axs.set_ylabel(y_label)
                 axs.set_title(f"{sector} Capacity")
@@ -454,6 +469,7 @@ def plot_capacity_brownfield(
     n: pypsa.Network,
     sharey: bool = True,
     state: Optional[str] = None,
+    nice_name: Optional[bool] = True,
     **kwargs,
 ) -> tuple:
     """
@@ -479,6 +495,9 @@ def plot_capacity_brownfield(
     for i, sector in enumerate(sectors):
 
         df = get_brownfield_capacity_per_state(n, sector, state=state)
+
+        if nice_name:
+            df.index = df.index.map(n.carriers.nice_name)
 
         try:
 
