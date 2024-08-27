@@ -15,7 +15,6 @@ import pypsa
 from _helpers import (
     configure_logging,
     export_network_for_gis_mapping,
-    reduce_float_memory,
     update_p_nom_max,
 )
 from cluster_network import cluster_regions, clustering_for_n_clusters
@@ -298,9 +297,5 @@ if __name__ == "__main__":
             regions.to_file(getattr(snakemake.output, which))
 
     update_p_nom_max(n)
-    # n.loads_t.p_set = reduce_float_memory(n.loads_t.p_set)
-    # n.generators_t.p_max_pu = reduce_float_memory(n.generators_t.p_max_pu)
-    # n.generators_t.p_min_pu = reduce_float_memory(n.generators_t.p_min_pu)
-    # n.generators_t.marginal_cost = reduce_float_memory(n.generators_t.marginal_cost)
 
     n.export_to_netcdf(snakemake.output[0])

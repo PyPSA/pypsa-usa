@@ -94,8 +94,7 @@ import pandas as pd
 import pyomo.environ as po
 import pypsa
 import seaborn as sns
-from _helpers import configure_logging, reduce_float_memory, update_p_nom_max
-from add_electricity import calculate_annuity
+from _helpers import configure_logging, update_p_nom_max, calculate_annuity
 from constants import *
 from pypsa.clustering.spatial import (
     busmap_by_greedy_modularity,
@@ -105,8 +104,6 @@ from pypsa.clustering.spatial import (
 )
 
 warnings.filterwarnings(action="ignore", category=UserWarning)
-
-from add_electricity import load_costs
 
 idx = pd.IndexSlice
 
@@ -609,12 +606,7 @@ if __name__ == "__main__":
             n.snapshot_weightings.loc[n.investment_periods[0]].objective.sum() / 8760.0
         )
 
-        hvac_overhead_cost = load_costs(
-            snakemake.input.tech_costs,
-            params.costs,
-            params.max_hours,
-            Nyears,
-        ).at["HVAC overhead", "capital_cost"]
+        hvac_overhead_cost = pd.read_csv(snakemake.input.tech_costs).at["HVAC overhead", "annualized_capex_per_mw_km"]
 
         custom_busmap = params.custom_busmap
         if custom_busmap:

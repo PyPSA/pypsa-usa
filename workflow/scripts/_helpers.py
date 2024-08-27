@@ -143,6 +143,21 @@ def pdbcast(v, h):
         columns=h.index,
     )
 
+def calculate_annuity(n, r):
+    """
+    Calculate the annuity factor for an asset with lifetime n years and.
+
+    discount rate of r, e.g. annuity(20, 0.05) * 20 = 1.6
+    """
+    if isinstance(r, pd.Series):
+        return pd.Series(1 / n, index=r.index).where(
+            r == 0,
+            r / (1.0 - 1.0 / (1.0 + r) ** n),
+        )
+    elif r > 0:
+        return r / (1.0 - 1.0 / (1.0 + r) ** n)
+    else:
+        return 1 / n
 
 def load_network_for_plots(fn, tech_costs, config, combine_hydro_ps=True):
     import pypsa
@@ -871,23 +886,3 @@ def get_snapshots(
         time = time[~((time.month == 2) & (time.day == 29))]
 
     return time
-
-
-def reduce_float_memory(df):
-    """
-    Reduce memory usage of a DataFrame by converting float64 columns to
-    float32.
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        The DataFrame to reduce memory usage for.
-
-    Returns
-    -------
-    pd.DataFrame
-        The DataFrame with float64 columns converted to float32.
-    """
-    for col in df.select_dtypes(include=["float64"]).columns:
-        df[col] = pd.to_numeric(df[col], downcast="float")
-    return df

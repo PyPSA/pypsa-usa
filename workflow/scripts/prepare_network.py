@@ -66,7 +66,7 @@ from _helpers import (
     set_scenario_config,
     update_config_from_wildcards,
 )
-from add_electricity import load_costs, update_transmission_costs
+from add_electricity import update_transmission_costs
 from pypsa.descriptors import expand_series
 
 idx = pd.IndexSlice
@@ -314,12 +314,7 @@ if __name__ == "__main__":
 
     n = pypsa.Network(snakemake.input[0])
     Nyears = n.snapshot_weightings.loc[n.investment_periods[0]].objective.sum() / 8760.0
-    costs = load_costs(
-        snakemake.input.tech_costs,
-        snakemake.params.costs,
-        snakemake.params.max_hours,
-        Nyears,
-    )
+    costs = pd.read_csv(snakemake.input.costs)
 
     # Set Investment Period Year Weightings
     # 'fillna(1)' needed if only one period
