@@ -216,6 +216,8 @@ def plot_sector_production_timeseries(
     n: pypsa.Network,
     sharey: bool = False,
     state: Optional[str] = None,
+    nice_name: Optional[bool] = True,
+    remove_sns_weights: bool = True,
     **kwargs,
 ) -> tuple:
     """
@@ -224,7 +226,7 @@ def plot_sector_production_timeseries(
 
     investment_period = n.investment_periods[0]
 
-    sectors = ("res", "com", "ind")
+    sectors = get_sectors(n)
 
     nrows = len(sectors)
 
@@ -235,23 +237,41 @@ def plot_sector_production_timeseries(
         sharey=sharey,
     )
 
+    colors = get_plotting_colors(n, nice_name=nice_name)
+
     for i, sector in enumerate(sectors):
 
-        df = (
-            get_sector_production_timeseries(n, sector, state=state)
-            .loc[investment_period]
-            .T
-        )
+        y_label = "kVMT" if sector == "trn" else "MW"
 
+        df = get_sector_production_timeseries(n, sector, state=state)
+
+        if remove_sns_weights:
+            df = df.div(n.snapshot_weightings.generators, axis=0)
+
+        df = df.loc[investment_period].T
         df.index = df.index.map(n.links.carrier)
         df = df.groupby(level=0).sum().T
 
+        if nice_name:
+            df = df.rename(columns=n.carriers.nice_name.to_dict())
+
         try:
 
-            df.plot.area(ax=axs[i])
-            axs[i].set_xlabel("")
-            axs[i].set_ylabel("MW")
-            axs[i].set_title(f"{sector}")
+            if nrows > 1:
+
+                df.plot(kind="area", ax=axs[i], color=colors)
+                axs[i].set_xlabel("")
+                axs[i].set_ylabel(y_label)
+                axs[i].set_title(f"{SECTOR_MAPPER[sector]} Production")
+                axs[i].tick_params(axis="x", labelrotation=45)
+
+            else:
+
+                df.plot(kind="bar", ax=axs, color=colors)
+                axs.set_xlabel("")
+                axs.set_ylabel(y_label)
+                axs.set_title(f"{SECTOR_MAPPER[sector]} Production")
+                axs.tick_params(axis="x", labelrotation=45)
 
         except TypeError:  # no numeric data to plot
             logger.warning(f"No data to plot for {state}")
@@ -263,6 +283,7 @@ def plot_sector_production(
     n: pypsa.Network,
     sharey: bool = True,
     state: Optional[str] = None,
+    nice_name: Optional[bool] = True,
     **kwargs,
 ) -> tuple:
     """
@@ -271,7 +292,7 @@ def plot_sector_production(
 
     investment_period = n.investment_periods[0]
 
-    sectors = ("res", "com", "ind", "trn")
+    sectors = get_sectors(n)
 
     nrows = ceil(len(sectors) / 2)
 
@@ -279,7 +300,7 @@ def plot_sector_production(
         ncols=2,
         nrows=nrows,
         figsize=(14, 5 * nrows),
-        sharey=sharey,
+        sharey=False,  # transport not in vmt
     )
 
     row = 0
@@ -290,15 +311,21 @@ def plot_sector_production(
         row = i // 2
         col = i % 2
 
+        y_label = "kVMT" if sector == "trn" else "MWh"
+
         df = (
             get_sector_production_timeseries_by_carrier(n, sector, state=state)
             .loc[investment_period]
             .sum()
         )
 
+        # issue with texas in western interconnect
         if df.empty:
             logger.warning(f"No data to plot for {state}")
             continue
+
+        if nice_name:
+            df.index = df.index.map(n.carriers.nice_name)
 
         try:
 
@@ -306,7 +333,7 @@ def plot_sector_production(
 
                 df.plot.bar(ax=axs[row, col])
                 axs[row, col].set_xlabel("")
-                axs[row, col].set_ylabel("MWh")
+                axs[row, col].set_ylabel(y_label)
                 axs[row, col].set_title(f"{SECTOR_MAPPER[sector]}")
                 axs[row, col].tick_params(axis="x", labelrotation=45)
 
@@ -314,7 +341,7 @@ def plot_sector_production(
 
                 df.plot.bar(ax=axs[i])
                 axs[i].set_xlabel("")
-                axs[i].set_ylabel("MWh")
+                axs[i].set_ylabel(y_label)
                 axs[i].set_title(f"{SECTOR_MAPPER[sector]}")
 
         except TypeError:  # no numeric data to plot

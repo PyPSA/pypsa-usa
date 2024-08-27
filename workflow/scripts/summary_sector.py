@@ -245,57 +245,14 @@ def get_sector_production_timeseries(
     """
     Gets timeseries production to meet sectoral demand.
 
-    Gets p1 supply for service and industry techs. Gets p0 withdrawl for
-    transport production (as p1 will be in units of kVMT).
+    Rememeber units! Transport will be in units of kVMT or similar.
 
     Note: can not use statistics module as multi-output links for co2 tracking
     > n.statistics.supply("Link", nice_names=False, aggregate_time=False).T
     """
 
-    def get_service_production_timeseries(
-        n: pypsa.Network,
-        sector: str,
-    ) -> pd.DataFrame:
-        assert sector in (
-            "res",
-            "res-rural",
-            "res-urban",
-            "com",
-            "com-rural",
-            "com-urban",
-            "ind",
-        )
-        links = _filter_link_on_sector(n, sector).index.to_list()
-        return n.links_t.p1[links].mul(-1).mul(n.snapshot_weightings.generators, axis=0)
-
-    def get_transport_production_timeseries(n: pypsa.Network) -> pd.DataFrame:
-        """
-        Takes load from p0 link as loads are in kVMT.
-        """
-        assert sector == "trn"
-        links = _filter_link_on_sector(n, sector).index.to_list()
-        eff = n.get_switchable_as_dense("Link", "efficiency")
-        eff = eff[links]
-
-        cap = n.links_t.p0[links]
-
-        return eff.mul(cap).mul(n.snapshot_weightings.generators, axis=0)
-
-    match sector:
-        case (
-            "res"
-            | "res-rural"
-            | "res-urban"
-            | "com"
-            | "com-rural"
-            | "com-urban"
-            | "ind"
-        ):
-            df = get_service_production_timeseries(n, sector)
-        case "trn":
-            df = get_transport_production_timeseries(n)
-        case _:
-            raise NotImplementedError
+    links = _filter_link_on_sector(n, sector).index.to_list()
+    df = n.links_t.p1[links].mul(-1).mul(n.snapshot_weightings.generators, axis=0)
 
     if state:
         links = _get_links_in_state(n, state)
