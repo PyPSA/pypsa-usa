@@ -84,6 +84,13 @@ def get_plotting_colors(n: pypsa.Network, nice_name: bool) -> dict[str, str]:
         return n.carriers["color"].to_dict()
 
 
+def get_sectors(n: pypsa.Network) -> list[str]:
+    if is_urban_rural_split(n):
+        return ("res-rural", "res-urban", "com-rural", "com-urban", "ind", "trn")
+    else:
+        return ("res", "com", "ind", "trn")
+
+
 ###
 # PLOTTERS
 ###
@@ -402,6 +409,63 @@ def plot_state_emissions(
     return fig, axs
 
 
+def plot_capacity_by_carrier(
+    n: pypsa.Network,
+    sharey: bool = True,
+    percentage: bool = True,
+    state: Optional[str] = None,
+    nice_name: Optional[bool] = True,
+    **kwargs,
+) -> tuple:
+    """
+    Bar plot of capacity by carrier.
+    """
+
+    sectors = get_sectors(n)
+
+    nrows = len(sectors)
+
+    fig, axs = plt.subplots(
+        ncols=1,
+        nrows=nrows,
+        figsize=(14, 5 * nrows),
+        sharey=sharey,
+    )
+
+    for i, sector in enumerate(sectors):
+
+        df = get_capacity_per_node(n, sector, group_existing=True, state=state)
+        df = df.reset_index()[["carrier", "p_nom_opt"]]
+
+        if nice_name:
+            df["carrier"] = df.carrier.map(n.carriers.nice_name)
+
+        df = df.groupby("carrier").sum()
+
+        try:
+
+            if nrows > 1:
+
+                df.plot(kind="bar", stacked=False, ax=axs[i])
+                axs[i].set_xlabel("")
+                axs[i].set_ylabel("Capacity (MW)")
+                axs[i].set_title(f"{sector} Capacity")
+                axs[i].tick_params(axis="x", labelrotation=45)
+
+            else:
+
+                df.plot(kind="bar", stacked=False, ax=axs)
+                axs.set_xlabel("")
+                axs.set_ylabel("Capacity (MW)")
+                axs.set_title(f"{sector} Capacity")
+                axs.tick_params(axis="x", labelrotation=45)
+
+        except TypeError:  # no numeric data to plot
+            logger.warning(f"No data to plot for {state}")
+
+    return fig, axs
+
+
 def plot_capacity_per_node(
     n: pypsa.Network,
     sharey: bool = True,
@@ -414,10 +478,7 @@ def plot_capacity_per_node(
     Plots capacity percentage per node.
     """
 
-    if is_urban_rural_split(n):
-        sectors = ("res-rural", "res-urban", "com-rural", "com-urban", "ind", "trn")
-    else:
-        sectors = ("res", "com", "ind", "trn")
+    sectors = get_sectors(n)
 
     nrows = len(sectors)
 
@@ -476,10 +537,7 @@ def plot_capacity_brownfield(
     Plots old and new capacity at a state level by carrier.
     """
 
-    if is_urban_rural_split(n):
-        sectors = ("res-rural", "res-urban", "com-rural", "com-urban", "ind", "trn")
-    else:
-        sectors = ("res", "com", "ind", "trn")
+    sectors = get_sectors(n)
 
     nrows = len(sectors)
 
@@ -1335,6 +1393,7 @@ FIGURE_FUNCTION = {
     "production_time_series": plot_sector_production_timeseries,
     "production_total": plot_sector_production,
     # capacity
+    "end_use_capacity_per_carrier": plot_capacity_by_carrier,
     "end_use_capacity_per_node_absolute": plot_capacity_per_node,
     "end_use_capacity_per_node_percentage": plot_capacity_per_node,
     "end_use_capacity_state_brownfield": plot_capacity_brownfield,
