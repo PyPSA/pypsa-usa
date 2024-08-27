@@ -183,9 +183,14 @@ if __name__ == "__main__":
     # Apply: marginal_cost = opex_variable_per_mwh + fuel_cost_real_per_mwhth / efficiency
     pivot_atb = pudl_atb.pivot(index='pypsa-name', columns='parameter', values='value').reset_index()
 
+    pivot_atb["efficiency"] = 3.412 / pivot_atb["heat_rate_mmbtu_per_mwh"]
+    pivot_atb['fuel_cost'] = pivot_atb['fuel_cost_real_per_mwhth'] / pivot_atb['efficiency']
+    pivot_atb['marginal_cost'] = pivot_atb['opex_variable_per_mwh'] + pivot_atb['fuel_cost']
+    
     #Impute storage WACC from Utility Scale Solar. TODO: Revisit this assumption
     for x in [2, 4, 6, 8, 10]:
         pivot_atb.loc[pivot_atb['pypsa-name'] == f'{x}hr_battery_storage', 'wacc_real'] = pivot_atb.loc[pivot_atb['pypsa-name'] == 'solar', 'wacc_real'].values[0]
+        pivot_atb.loc[pivot_atb['pypsa-name'] == f'{x}hr_battery_storage', 'efficiency'] = 0.85 # 2023 ATB
 
     pivot_atb["annualized_capex_per_mw"] = (
         (calculate_annuity(pivot_atb["cost_recovery_period_years"], pivot_atb["wacc_real"])
@@ -211,12 +216,8 @@ if __name__ == "__main__":
         * 1) # change to nyears
     )
 
-    pivot_atb["efficiency"] = 3.412 / pivot_atb["heat_rate_mmbtu_per_mwh"]
-    pivot_atb['fuel_cost'] = pivot_atb['fuel_cost_real_per_mwhth'] / pivot_atb['efficiency']
-    pivot_atb['marginal_cost'] = pivot_atb['opex_variable_per_mwh'] + pivot_atb['fuel_cost']
-    pivot_atb.to_csv('test.csv')
+    pivot_atb["annualized_capex_fom"] = pivot_atb["annualized_capex_per_mw"] + (pivot_atb["opex_fixed_per_kw"] * 1e3)
     pudl_atb = pivot_atb.melt(id_vars=['pypsa-name'], value_vars=pivot_atb.columns.difference(['pypsa-name']), var_name='parameter', value_name='value')
-    # pudl_atb = pd.concat([pudl_atb, melted[melted['parameter'].isin(['marginal_cost',])]], ignore_index=True)
 
     # Export
     pudl_atb = pudl_atb.reset_index(drop=True)

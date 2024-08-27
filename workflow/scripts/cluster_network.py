@@ -606,8 +606,10 @@ if __name__ == "__main__":
             n.snapshot_weightings.loc[n.investment_periods[0]].objective.sum() / 8760.0
         )
 
-        hvac_overhead_cost = pd.read_csv(snakemake.input.tech_costs).at["HVAC overhead", "annualized_capex_per_mw_km"]
-
+        costs = pd.read_csv(snakemake.input.tech_costs)
+        costs = costs.pivot(index="pypsa-name", columns="parameter", values="value")
+        hvac_overhead_cost = costs.at["HVAC overhead", "annualized_capex_per_mw_km"]
+        
         custom_busmap = params.custom_busmap
         if custom_busmap:
             custom_busmap = pd.read_csv(

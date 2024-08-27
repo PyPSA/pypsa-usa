@@ -314,8 +314,8 @@ if __name__ == "__main__":
 
     n = pypsa.Network(snakemake.input[0])
     Nyears = n.snapshot_weightings.loc[n.investment_periods[0]].objective.sum() / 8760.0
-    costs = pd.read_csv(snakemake.input.costs)
-
+    costs = pd.read_csv(snakemake.input.tech_costs)
+    costs = costs.pivot(index="pypsa-name", columns="parameter", values="value")
     # Set Investment Period Year Weightings
     # 'fillna(1)' needed if only one period
     inv_per_time_weight = (

@@ -415,7 +415,7 @@ def attach_conventional_generators(
         ramp_limit_down=plants.ramp_limit_down,
         efficiency=plants.efficiency.round(3),
         marginal_cost=plants.marginal_cost,
-        capital_cost=plants.annualized_capex_per_mw,
+        capital_cost=plants.annualized_capex_fom,
         build_year=plants.build_year.fillna(0).astype(int),
         lifetime=plants.carrier.map(costs.cost_recovery_period_years),
         committable=unit_commitment,
@@ -477,7 +477,7 @@ def attach_wind_and_solar(
             #     #     ),
             #     # )
             # else:
-            capital_cost = costs.at[car, "annualized_capex_per_mw"]
+            capital_cost = costs.at[car, "annualized_capex_fom"]
 
             bus2sub = (
                 pd.read_csv(input_profiles.bus2sub, dtype=str)
