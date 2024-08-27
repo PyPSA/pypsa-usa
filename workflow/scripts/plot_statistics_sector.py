@@ -412,7 +412,6 @@ def plot_state_emissions(
 def plot_capacity_by_carrier(
     n: pypsa.Network,
     sharey: bool = True,
-    percentage: bool = True,
     state: Optional[str] = None,
     nice_name: Optional[bool] = True,
     **kwargs,
@@ -644,6 +643,7 @@ def plot_sector_load_factor_boxplot(
     n: pypsa.Network,
     sharey: bool = True,
     state: Optional[str] = None,
+    nice_name: Optional[bool] = True,
     **kwargs,
 ) -> tuple:
     """
@@ -652,7 +652,7 @@ def plot_sector_load_factor_boxplot(
 
     investment_period = n.investment_periods[0]
 
-    sectors = ("res", "com", "ind")
+    sectors = get_sectors(n)
 
     nrows = ceil(len(sectors) / 2)
 
@@ -672,6 +672,12 @@ def plot_sector_load_factor_boxplot(
         col = i % 2
 
         df = get_load_factor_timeseries(n, sector, state=state).loc[investment_period]
+
+        if nice_name:
+            cols = df.columns
+            df = df.rename(columns={x: f"{sector}-{x}" for x in cols}).rename(
+                columns=n.carriers.nice_name.to_dict(),
+            )
 
         try:
 
@@ -1425,6 +1431,7 @@ FIGURE_NICE_NAME = {
     "production_total": "End Use Technology Production",
     "system_consumption": "End Use Consumption by Sector",
     # capacity
+    "end_use_capacity_per_carrier": "Capacity by Carrier",
     "end_use_capacity_per_node_absolute": "Capacity Per Node",
     "end_use_capacity_per_node_percentage": "Capacity Per Node",
     "end_use_capacity_state_brownfield": "Brownfield Capacity Per State",
@@ -1455,7 +1462,7 @@ if __name__ == "__main__":
         from _helpers import mock_snakemake
 
         snakemake = mock_snakemake(
-            "plot_sector_capacity",
+            "plot_sector_production",
             interconnect="western",
             clusters=100,
             ll="v1.0",

@@ -240,7 +240,6 @@ def get_brownfield_capacity_per_state(
 def get_sector_production_timeseries(
     n: pypsa.Network,
     sector: str,
-    include_storage: bool = False,
     state: Optional[str] = None,
 ) -> pd.DataFrame:
     """
@@ -257,37 +256,41 @@ def get_sector_production_timeseries(
         n: pypsa.Network,
         sector: str,
     ) -> pd.DataFrame:
-        assert sector in ("res", "com", "ind")
-        if include_storage:
-            links = [x for x in n.links.index if f"{sector}-" in x]
-        else:
-            links = [
-                x
-                for x in n.links.index
-                if f"{sector}-" in x and not x.endswith("charger")
-            ]
+        assert sector in (
+            "res",
+            "res-rural",
+            "res-urban",
+            "com",
+            "com-rural",
+            "com-urban",
+            "ind",
+        )
+        links = _filter_link_on_sector(n, sector).index.to_list()
         return n.links_t.p1[links].mul(-1).mul(n.snapshot_weightings.generators, axis=0)
 
     def get_transport_production_timeseries(n: pypsa.Network) -> pd.DataFrame:
         """
         Takes load from p0 link as loads are in kVMT.
         """
-        if include_storage:
-            links = n.links[
-                (n.links.carrier.str.startswith("trn-"))
-                & ~(n.links.index.str.endswith("infra"))
-            ].index.to_list()
-        else:
-            links = n.links[
-                (n.links.carrier.str.startswith("trn-"))
-                & ~(n.links.index.str.endswith("infra"))
-                & ~(n.links.index.str.endswith("charger"))
-            ].index.to_list()
+        assert sector == "trn"
+        links = _filter_link_on_sector(n, sector).index.to_list()
+        eff = n.get_switchable_as_dense("Link", "efficiency")
+        eff = eff[links]
 
-        return n.links_t.p0[links].mul(n.snapshot_weightings["objective"], axis=0)
+        cap = n.links_t.p0[links]
+
+        return eff.mul(cap).mul(n.snapshot_weightings.generators, axis=0)
 
     match sector:
-        case "res" | "com" | "ind":
+        case (
+            "res"
+            | "res-rural"
+            | "res-urban"
+            | "com"
+            | "com-rural"
+            | "com-urban"
+            | "ind"
+        ):
             df = get_service_production_timeseries(n, sector)
         case "trn":
             df = get_transport_production_timeseries(n)
@@ -329,10 +332,10 @@ def get_sector_max_production_timeseries(
         links_in_state = _get_links_in_state(n, state)
         eff = eff[[x for x in eff.columns if x in links_in_state]]
 
-    links_in_sector = [
-        x for x in eff.columns if f"{sector}-" in x and not x.endswith("charger")
-    ]
-    eff = eff[links_in_sector]
+    links_in_sector = _filter_link_on_sector(n, sector).index.to_list()
+    links_in_sector_state = [x for x in links_in_sector if x in eff.columns]
+    eff = eff[links_in_sector_state]
+
     cap = n.links.loc[eff.columns].p_nom_opt
     return eff.mul(cap).mul(n.snapshot_weightings.generators, axis=0)
 
