@@ -183,8 +183,6 @@ def prepare_network(
 
     if foresight == "perfect":
         n = add_land_use_constraint_perfect(n)
-        # if snakemake.params["sector"]["limit_max_growth"]["enable"]:
-        #     n = add_max_growth(n)
 
     if n.stores.carrier.eq("co2 stored").any():
         limit = co2_sequestration_potential
@@ -274,6 +272,7 @@ def add_RPS_constraints(n, config):
         "solar",
         "hydro",
         "geothermal",
+        "biomass",
         "EGS",
     ]
     ces_carriers = [
@@ -318,6 +317,7 @@ def add_RPS_constraints(n, config):
     portfolio_standards = portfolio_standards[
         portfolio_standards.planning_horizon.isin(snakemake.params.planning_horizons)
     ]
+    portfolio_standards.set_index("name", inplace=True)
 
     for idx, pct_lim in portfolio_standards.iterrows():
         region_list = [region_.strip() for region_ in pct_lim.region.split(",")]
@@ -346,18 +346,23 @@ def add_RPS_constraints(n, config):
             )
             lhs = p_eligible.sum()
 
-            p_region = n.model["Generator-p"].sel(
-                period=pct_lim.planning_horizon,
-                Generator=region_gens.index,
+            region_demand = (
+                n.loads_t.p_set.loc[
+                    pct_lim.planning_horizon,
+                    n.loads.bus.isin(region_buses.index),
+                ]
+                .sum()
+                .sum()
             )
-            rhs = pct_lim.pct * p_region.sum()
+
+            rhs = pct_lim.pct * region_demand
 
             n.model.add_constraints(
                 lhs >= rhs,
                 name=f"GlobalConstraint-{pct_lim.name}_{pct_lim.planning_horizon}_rps_limit",
             )
             logger.info(
-                f"Adding {pct_lim.name} {pct_lim.name}_{pct_lim.planning_horizon} for {pct_lim.planning_horizon}.",
+                f"Adding RPS {pct_lim.name}_{pct_lim.planning_horizon} for {pct_lim.planning_horizon}.",
             )
 
 
@@ -572,6 +577,7 @@ def add_regional_co2limit(n, sns, config):
         # generators
         region_gens = n.generators[n.generators.bus.isin(region_buses.index)]
         region_gens = region_gens.query("carrier in @emissions.index")
+        region_storage = n.storage_units[n.storage_units.bus.isin(region_buses.index)]
 
         if not region_gens.empty:
             efficiency = get_as_dense(
@@ -590,8 +596,16 @@ def add_regional_co2limit(n, sns, config):
                 .sel(period=planning_horizon)
             )
             lhs = (p * em_pu).sum()
+            lhs -= (p * EF_imports).sum()
 
-            # Imports
+            if not region_storage.empty:
+                p_store_discharge = (
+                    n.model["StorageUnit-p_dispatch"]
+                    .loc[:, region_gens.index]
+                    .sel(period=planning_horizon)
+                )
+                lhs -= (p_store_discharge * EF_imports).sum()
+
             region_demand = (
                 n.loads_t.p_set.loc[
                     planning_horizon,
@@ -600,7 +614,6 @@ def add_regional_co2limit(n, sns, config):
                 .sum()
                 .sum()
             )
-            lhs -= (p * EF_imports).sum()
 
             rhs = region_co2lim - (region_demand * EF_imports)
             n.model.add_constraints(
