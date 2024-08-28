@@ -47,10 +47,18 @@ def _get_loads_in_state(n: pypsa.Network, state: str) -> list[str]:
 
 def _get_links_in_state(n: pypsa.Network, state: str) -> list[str]:
     """
-    Returns buses in a specified state.
+    Returns links in a specified state.
     """
     buses = _get_buses_in_state(n, state)
     return n.links[n.links.bus0.isin(buses) | n.links.bus1.isin(buses)].index.to_list()
+
+
+def _get_gens_in_state(n: pypsa.Network, state: str) -> list[str]:
+    """
+    Returns buses in a specified state.
+    """
+    buses = _get_buses_in_state(n, state)
+    return n.generators[n.generators.bus.isin(buses)].index.to_list()
 
 
 def _get_stores_in_state(n: pypsa.Network, state: str) -> list[str]:
@@ -87,6 +95,14 @@ def _filter_link_on_sector(n: pypsa.Network, sector: str) -> pd.DataFrame:
             ]
         case _:
             raise NotImplementedError
+
+
+def _filter_link_on_carrier(n: pypsa.Network, carriers: list[str]) -> pd.DataFrame:
+    return n.links[n.links.carrier.isin(carriers)]
+
+
+def _filter_gens_on_carrier(n: pypsa.Network, carriers: list[str]) -> pd.DataFrame:
+    return n.generators[n.generators.carrier.isin(carriers)]
 
 
 ###
@@ -191,6 +207,36 @@ def get_capacity_per_node(
     df["total"] = df.index.get_level_values("node").map(total)
     df["percentage"] = (df.p_nom_opt / df.total).round(4) * 100
     return df
+
+
+def get_power_capacity_per_carrier(
+    n: pypsa.Network,
+    carriers: str | list[str],
+    group_existing: bool = True,
+    state: Optional[str] = None,
+    **kwargs,
+) -> pd.DataFrame:
+
+    if isinstance(carriers, str):
+        carriers = [carriers]
+
+    links = _filter_link_on_carrier(n, carriers)
+    gens = _filter_gens_on_carrier(n, carriers)
+
+    if state:
+        link_names = _get_links_in_state(n, state)
+        links = links[links.index.isin(link_names)]
+        gen_names = _get_gens_in_state(n, state)
+        gens = gens[gens.index.isin(gen_names)]
+
+    gens["node"] = gens["bus"]
+    links["node"] = links["bus1"]
+
+    cols = ["carrier", "p_nom_opt", "node"]
+
+    df = pd.concat([links[cols], gens[cols]])
+
+    return df.reset_index(drop=True).groupby(["node", "carrier"]).sum().squeeze()
 
 
 def get_brownfield_capacity_per_state(

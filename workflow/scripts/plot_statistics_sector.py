@@ -27,6 +27,7 @@ from summary_sector import (  # get_load_name_per_sector,
     get_hp_cop,
     get_load_factor_timeseries,
     get_load_per_sector_per_fuel,
+    get_power_capacity_per_carrier,
     get_sector_production_timeseries,
     get_sector_production_timeseries_by_carrier,
     get_transport_consumption_by_mode,
@@ -45,7 +46,11 @@ SECTOR_MAPPER = {
     "pwr": "power",
     "ind": "industrial",
     "trn": "transport",
+    "pwr": "Power",
 }
+
+FIG_WIDTH = 14
+FIG_HEIGHT = 6
 
 ###
 # HELPERS
@@ -182,7 +187,12 @@ def plot_hp_cop(n: pypsa.Network, state: Optional[str] = None, **kwargs) -> tupl
 
     cops = get_hp_cop(n, state).loc[investment_period]
 
-    fig, axs = plt.subplots(nrows=1, ncols=2, figsize=(14, 6), sharey=True)
+    fig, axs = plt.subplots(
+        nrows=1,
+        ncols=2,
+        figsize=(FIG_WIDTH, FIG_HEIGHT),
+        sharey=True,
+    )
 
     for i, hp in enumerate(["ashp", "gshp"]):
 
@@ -233,7 +243,7 @@ def plot_sector_production_timeseries(
     fig, axs = plt.subplots(
         ncols=1,
         nrows=nrows,
-        figsize=(14, 5 * nrows),
+        figsize=(FIG_WIDTH, FIG_HEIGHT * nrows),
         sharey=sharey,
     )
 
@@ -299,7 +309,7 @@ def plot_sector_production(
     fig, axs = plt.subplots(
         ncols=2,
         nrows=nrows,
-        figsize=(14, 5 * nrows),
+        figsize=(FIG_WIDTH, FIG_HEIGHT * nrows),
         sharey=False,  # transport not in vmt
     )
 
@@ -386,7 +396,7 @@ def plot_sector_emissions(
     fig, axs = plt.subplots(
         ncols=1,
         nrows=1,
-        figsize=(14, 5),
+        figsize=(FIG_WIDTH, FIG_HEIGHT),
     )
 
     try:
@@ -414,7 +424,7 @@ def plot_state_emissions(
     fig, axs = plt.subplots(
         ncols=1,
         nrows=1,
-        figsize=(14, 5),
+        figsize=(FIG_WIDTH, FIG_HEIGHT),
     )
 
     df = (
@@ -454,7 +464,7 @@ def plot_capacity_by_carrier(
     fig, axs = plt.subplots(
         ncols=1,
         nrows=nrows,
-        figsize=(14, 5 * nrows),
+        figsize=(FIG_WIDTH, FIG_HEIGHT * nrows),
         sharey=sharey,
     )
 
@@ -511,7 +521,7 @@ def plot_capacity_per_node(
     fig, axs = plt.subplots(
         ncols=1,
         nrows=nrows,
-        figsize=(14, 5 * nrows),
+        figsize=(FIG_WIDTH, FIG_HEIGHT * nrows),
         sharey=sharey,
     )
 
@@ -570,7 +580,7 @@ def plot_capacity_brownfield(
     fig, axs = plt.subplots(
         ncols=1,
         nrows=nrows,
-        figsize=(14, 5 * nrows),
+        figsize=(FIG_WIDTH, FIG_HEIGHT * nrows),
         sharey=sharey,
     )
 
@@ -605,6 +615,56 @@ def plot_capacity_brownfield(
     return fig, axs
 
 
+def plot_power_capacity(
+    n: pypsa.Network,
+    carriers: list[str],
+    sharey: bool = True,
+    state: Optional[str] = None,
+    nice_name: Optional[bool] = True,
+    **kwargs,
+) -> tuple:
+    """
+    Plots capacity of generators in the power sector.
+    """
+
+    sector = "pwr"
+
+    nrows = 1
+
+    fig, axs = plt.subplots(
+        ncols=1,
+        nrows=nrows,
+        figsize=(FIG_WIDTH, FIG_HEIGHT * nrows),
+        sharey=sharey,
+    )
+
+    df = get_power_capacity_per_carrier(
+        n,
+        carriers,
+        group_existing=True,
+        state=state,
+    )
+    df = df.reset_index()[["carrier", "p_nom_opt"]]
+
+    if nice_name:
+        df["carrier"] = df.carrier.map(n.carriers.nice_name)
+
+    df = df.groupby("carrier").sum()
+
+    try:
+
+        df.plot(kind="bar", stacked=False, ax=axs)
+        axs.set_xlabel("")
+        axs.set_ylabel("Capacity (MW)")
+        axs.set_title(f"{SECTOR_MAPPER[sector]} Capacity")
+        axs.tick_params(axis="x", labelrotation=45)
+
+    except TypeError:  # no numeric data to plot
+        logger.warning(f"No data to plot for {state}")
+
+    return fig, axs
+
+
 def plot_sector_load_factor_timeseries(
     n: pypsa.Network,
     sharey: bool = True,
@@ -624,7 +684,7 @@ def plot_sector_load_factor_timeseries(
     fig, axs = plt.subplots(
         ncols=2,
         nrows=nrows,
-        figsize=(14, 5 * nrows),
+        figsize=(FIG_WIDTH, FIG_HEIGHT * nrows),
         sharey=sharey,
     )
 
@@ -686,7 +746,7 @@ def plot_sector_load_factor_boxplot(
     fig, axs = plt.subplots(
         ncols=2,
         nrows=nrows,
-        figsize=(14, 6 * nrows),
+        figsize=(FIG_WIDTH, FIG_HEIGHT * nrows),
         sharey=sharey,
     )
 
@@ -776,7 +836,7 @@ def plot_sector_emissions_validation(
         fig, axs = plt.subplots(
             ncols=2,
             nrows=nrows,
-            figsize=(14, 6 * nrows),
+            figsize=(FIG_WIDTH, FIG_HEIGHT * nrows),
             sharey=sharey,
         )
 
@@ -835,7 +895,7 @@ def plot_sector_emissions_validation(
         fig, axs = plt.subplots(
             ncols=1,
             nrows=nrows,
-            figsize=(14, 6 * nrows),
+            figsize=(FIG_WIDTH, FIG_HEIGHT * nrows),
             sharey=False,
         )
 
@@ -917,7 +977,7 @@ def plot_state_emissions_validation(
     fig, axs = plt.subplots(
         ncols=1,
         nrows=1,
-        figsize=(14, 6),
+        figsize=(FIG_WIDTH, FIG_HEIGHT),
     )
 
     try:
@@ -963,7 +1023,7 @@ def plot_system_emissions_validation_by_state(
     fig, axs = plt.subplots(
         ncols=1,
         nrows=1,
-        figsize=(14, 8),
+        figsize=(FIG_WIDTH, 8),
     )
 
     df.plot.bar(ax=axs)
@@ -1012,7 +1072,7 @@ def plot_sector_consumption_validation(
     fig, axs = plt.subplots(
         ncols=1,
         nrows=1,
-        figsize=(14, 6),
+        figsize=(FIG_WIDTH, FIG_HEIGHT),
     )
 
     try:
@@ -1053,7 +1113,7 @@ def plot_sector_load_timeseries(
     fig, axs = plt.subplots(
         ncols=1,
         nrows=nrows,
-        figsize=(14, 6 * nrows),
+        figsize=(FIG_WIDTH, FIG_HEIGHT * nrows),
         sharey=sharey,
     )
 
@@ -1104,7 +1164,7 @@ def plot_sector_load_bar(
     fig, axs = plt.subplots(
         ncols=2,
         nrows=nrows,
-        figsize=(14, 6 * nrows),
+        figsize=(FIG_WIDTH, FIG_HEIGHT * nrows),
     )
 
     row = 0
@@ -1219,7 +1279,7 @@ def plot_transportation_by_mode_validation(
     fig, axs = plt.subplots(
         ncols=1,
         nrows=1,
-        figsize=(14, 6),
+        figsize=(FIG_WIDTH, FIG_HEIGHT),
     )
 
     modelled = (
@@ -1277,7 +1337,7 @@ def plot_system_consumption_by_state(
     fig, axs = plt.subplots(
         ncols=1,
         nrows=nrows,
-        figsize=(14, 5 * nrows),
+        figsize=(FIG_WIDTH, FIG_HEIGHT * nrows),
     )
 
     y_label = "Energy (MWh)"
@@ -1333,7 +1393,7 @@ def plot_system_consumption_validation_by_state(
     fig, axs = plt.subplots(
         ncols=1,
         nrows=nrows,
-        figsize=(14, 5 * nrows),
+        figsize=(FIG_WIDTH, FIG_HEIGHT * nrows),
     )
 
     y_label = "Energy (MWh)"
@@ -1430,6 +1490,7 @@ FIGURE_FUNCTION = {
     "end_use_capacity_per_node_absolute": plot_capacity_per_node,
     "end_use_capacity_per_node_percentage": plot_capacity_per_node,
     "end_use_capacity_state_brownfield": plot_capacity_brownfield,
+    "power_capacity_per_carrier": plot_power_capacity,
     # emissions
     "emissions_by_sector": plot_sector_emissions,
     "emissions_by_state": plot_state_emissions,
@@ -1475,8 +1536,25 @@ FIGURE_NICE_NAME = {
 }
 
 FN_ARGS = {
-    # production
+    # capacity
     "end_use_capacity_per_node_absolute": {"percentage": False},
+    "power_capacity_per_carrier": {  # TODO: Pull these from the config file
+        "carriers": [
+            "nuclear",
+            "oil",
+            "OCGT",
+            "CCGT",
+            "coal",
+            "geothermal",
+            "biomass",
+            "onwind",
+            "offwind",
+            "offwind_floating",
+            "solar",
+            "hydro",
+        ],
+    },
+    # production
     # loads
     "load_timeseries_residential": {"sector": "res"},
     "load_timeseries_commercial": {"sector": "com"},
@@ -1489,7 +1567,7 @@ if __name__ == "__main__":
         from _helpers import mock_snakemake
 
         snakemake = mock_snakemake(
-            "plot_sector_production",
+            "plot_sector_capacity",
             interconnect="western",
             clusters=100,
             ll="v1.0",
