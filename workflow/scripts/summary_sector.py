@@ -114,14 +114,9 @@ def get_hp_cop(n: pypsa.Network, state: Optional[str] = None) -> pd.DataFrame:
         links = _get_links_in_state(n, state)
         cops = cops[[x for x in cops.columns if x in links]]
 
-    ashp = cops[[x for x in cops.columns if x.endswith("res-urban-ashp")]]
-    ashp = ashp.rename(
-        columns={x: x.replace("res-urban-ashp", "ashp") for x in ashp.columns},
-    )
-    gshp = cops[[x for x in cops.columns if x.endswith("res-rural-gshp")]]
-    gshp = gshp.rename(
-        columns={x: x.replace("res-rural-gshp", "gshp") for x in gshp.columns},
-    )
+    ashp = cops[[x for x in cops.columns if x.endswith("ashp")]]
+    gshp = cops[[x for x in cops.columns if x.endswith("gshp")]]
+
     return ashp.join(gshp)
 
 
