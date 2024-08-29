@@ -59,7 +59,7 @@ def attach_storageunits(n, costs, elec_opts, investment_year):
             efficiency_store=costs.at[carrier, "efficiency"] ** roundtrip_correction,
             efficiency_dispatch=costs.at[carrier, "efficiency"] ** roundtrip_correction,
             max_hours=max_hours,
-            cyclic_state_of_charge=True,
+            cyclic_state_of_charge=False,
             build_year=investment_year,
             lifetime=costs.at[carrier, "cost_recovery_period_years"],
         )

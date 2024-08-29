@@ -122,7 +122,8 @@ if __name__ == "__main__":
         {'pypsa-name': 'waste', 'parameter': 'co2_emissions', 'value': 0.1016},
         {'pypsa-name': 'gas', 'parameter': 'co2_emissions', 'value': 0.18058},
         {'pypsa-name': 'CCGT', 'parameter': 'co2_emissions', 'value': 0.18058},
-        {'pypsa-name': 'OCGT', 'parameter': 'co2_emissions', 'value': 0.18058}
+        {'pypsa-name': 'OCGT', 'parameter': 'co2_emissions', 'value': 0.18058},
+        {'pypsa-name': 'geothermal', 'parameter': 'heat_rate_mmbtu_per_mwh', 'value': 8881}, #AEO 2023
     ]
     # Impute Transmission Data
     # TEPCC 2023
@@ -143,6 +144,7 @@ if __name__ == "__main__":
         {'pypsa-name': 'HVDC inverter pair', 'parameter': 'wacc_real', 'value': 0.044},
     ]
     pudl_atb = pd.concat([pudl_atb, pd.DataFrame(emissions_data), pd.DataFrame(transmission_data)], ignore_index=True)
+    pudl_atb.drop_duplicates(subset=['pypsa-name', 'parameter'], inplace=True)
 
     # Load AEO Fuel Cost Data
     aeo = load_pudl_aeo_data()
@@ -182,7 +184,7 @@ if __name__ == "__main__":
     # Calculate Annualized Costs and Marinal Costs
     # Apply: marginal_cost = opex_variable_per_mwh + fuel_cost_real_per_mwhth / efficiency
     pivot_atb = pudl_atb.pivot(index='pypsa-name', columns='parameter', values='value').reset_index()
-
+    
     pivot_atb["efficiency"] = 3.412 / pivot_atb["heat_rate_mmbtu_per_mwh"]
     pivot_atb['fuel_cost'] = pivot_atb['fuel_cost_real_per_mwhth'] / pivot_atb['efficiency']
     pivot_atb['marginal_cost'] = pivot_atb['opex_variable_per_mwh'] + pivot_atb['fuel_cost']

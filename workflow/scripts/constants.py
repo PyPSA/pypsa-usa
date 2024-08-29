@@ -796,7 +796,6 @@ ATB_TECH_MAPPER = {
 # {pypsa-name: csv-name}
 CAPEX_LOCATIONAL_MULTIPLIER = {
     "nuclear": "nuclear-1117mw",
-    # "oil",
     "CCGT": "natural-gas-430mw-90ccs",
     "OCGT": "natural-gas-430mw-90ccs",
     "coal": "coal-ultra-supercritical-90ccs",

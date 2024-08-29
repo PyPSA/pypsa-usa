@@ -369,9 +369,5 @@ if __name__ == "__main__":
         p_nom_max_ext=snakemake.params.links.get("max_extension", np.inf),
     )
 
-    if snakemake.params.autarky["enable"]:
-        only_crossborder = snakemake.params.autarky["by_country"]
-        enforce_autarky(n, only_crossborder=only_crossborder)
-
     n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))
     n.export_to_netcdf(snakemake.output[0])
