@@ -26,12 +26,12 @@ A visual representation of each `{interconnect}` is shown below:
     :scale: 100 %
 ```
 
-<!-- (simpl)=
-## The ``{simpl}`` wildcard -->
+(simpl)=
+## The ``{simpl}`` wildcard
 
-<!-- The ``{simpl}`` wildcard specifies number of buses a detailed
+The ``{simpl}`` wildcard specifies number of buses a detailed
 network model should be pre-clustered to in the rule
-:mod:`simplify_network` (before :mod:`cluster_network`). -->
+:mod:`simplify_network` (before :mod:`cluster_network`).
 
 (clusters)=
 ## The `{clusters}` wildcard

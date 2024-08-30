@@ -48,6 +48,22 @@ about-usage
 ```
 
 ```{toctree}
+:caption: 'Data Sources:'
+:maxdepth: 1
+:hidden:
+
+data-transmission
+data-demand
+data-generators
+data-renewables
+data-costs
+data-naturalgas
+data-services
+data-industrial
+data-transportation
+```
+
+```{toctree}
 :caption: 'Configuration:'
 :maxdepth: 1
 :hidden:
@@ -55,19 +71,6 @@ about-usage
 config-wildcards
 config-configuration
 config-sectors
-```
-
-```{toctree}
-:caption: 'Rules Overview:'
-:maxdepth: 1
-:hidden:
-
-rules-retrieving-data
-rules-build-network
-rules-build-sector-network
-rules-simplify
-rules-solve
-rules-summary
 ```
 
 ```{toctree}
@@ -84,4 +87,5 @@ contributing
 :hidden:
 
 config-co2-base
+rules-retrieving-data
 ```
