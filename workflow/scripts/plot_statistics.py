@@ -670,7 +670,8 @@ def plot_generator_data_panel(
 ):
 
     df_capex_expand = n.generators.loc[
-        n.generators.p_nom_extendable & ~n.generators.index.str.contains("existing"), :
+        n.generators.p_nom_extendable & ~n.generators.index.str.contains("existing"),
+        :,
     ]
     df_capex_retire = n.generators.loc[
         n.generators.index.str.contains("existing")

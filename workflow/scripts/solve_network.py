@@ -580,7 +580,10 @@ def add_regional_co2limit(n, sns, config):
         planning_horizon = emmission_lim.planning_horizon
 
         efficiency = get_as_dense(
-            n, "Generator", "efficiency", inds=region_gens_em.index
+            n,
+            "Generator",
+            "efficiency",
+            inds=region_gens_em.index,
         )  # mw_elect/mw_th
         em_pu = (
             region_gens_em.carrier.map(emissions) / efficiency

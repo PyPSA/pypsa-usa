@@ -544,7 +544,9 @@ if __name__ == "__main__":
 
     costs_dict = {
         n.investment_periods[i]: pd.read_csv(snakemake.input.tech_costs[i]).pivot(
-            index="pypsa-name", columns="parameter", values="value"
+            index="pypsa-name",
+            columns="parameter",
+            values="value",
         )
         for i in range(len(n.investment_periods))
     }

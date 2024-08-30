@@ -427,7 +427,7 @@ def attach_conventional_generators(
 
     # Add fuel and VOM costs to the network
     n.generators.loc[plants.index, "vom_cost"] = plants.carrier.map(
-        costs.opex_variable_per_mwh
+        costs.opex_variable_per_mwh,
     )
     n.generators.loc[plants.index, "fuel_cost"] = plants.fuel_cost
     n.generators.loc[plants.index, "heat_rate"] = plants.heat_rate_mmbtu_per_mwh

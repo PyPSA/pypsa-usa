@@ -99,7 +99,9 @@ if __name__ == "__main__":
     # Import PUDLs ATB data
     pudl_atb = load_pudl_atb_data()
     pudl_atb["pypsa-name"] = pudl_atb.apply(
-        match_technology, axis=1, tech_dict=const.ATB_TECH_MAPPER
+        match_technology,
+        axis=1,
+        tech_dict=const.ATB_TECH_MAPPER,
     )
     pudl_atb = pudl_atb[pudl_atb["pypsa-name"].notnull()]
 
@@ -110,7 +112,7 @@ if __name__ == "__main__":
             lambda x: x[
                 x["cost_recovery_period_years"]
                 == const.ATB_TECH_MAPPER[x.name].get("crp", 30)
-            ]
+            ],
         )
         .reset_index(drop=True)
     )
@@ -143,7 +145,10 @@ if __name__ == "__main__":
     ]
     # pivot such that cols all get moved to one column
     pudl_atb = pudl_atb.melt(
-        id_vars="pypsa-name", value_vars=cols, var_name="parameter", value_name="value"
+        id_vars="pypsa-name",
+        value_vars=cols,
+        var_name="parameter",
+        value_name="value",
     )
 
     # Impute emissions factor data
@@ -218,7 +223,9 @@ if __name__ == "__main__":
         ignore_index=True,
     )
     pudl_atb.drop_duplicates(
-        subset=["pypsa-name", "parameter"], keep="last", inplace=True
+        subset=["pypsa-name", "parameter"],
+        keep="last",
+        inplace=True,
     )
 
     # Load AEO Fuel Cost Data
@@ -250,7 +257,7 @@ if __name__ == "__main__":
                 "parameter": "fuel_cost_real_per_mwhth",
                 "value": 7.49,
             },
-        ]
+        ],
     )
     aeo = pd.concat([aeo, addnl_fuels], ignore_index=True)
 
@@ -271,7 +278,7 @@ if __name__ == "__main__":
                 "value": aeo.loc[aeo["pypsa-name"] == source_name, "value"].values[0],
             }
             for new_name, source_name in tech_fuel_map.items()
-        ]
+        ],
     )
     aeo = pd.concat([aeo, tech_fuels], ignore_index=True)
     pudl_atb = pd.concat([pudl_atb, aeo], ignore_index=True)
@@ -279,7 +286,9 @@ if __name__ == "__main__":
     # Calculate Annualized Costs and Marinal Costs
     # Apply: marginal_cost = opex_variable_per_mwh + fuel_cost_real_per_mwhth / efficiency
     pivot_atb = pudl_atb.pivot(
-        index="pypsa-name", columns="parameter", values="value"
+        index="pypsa-name",
+        columns="parameter",
+        values="value",
     ).reset_index()
 
     pivot_atb["efficiency"] = 3.412 / pivot_atb["heat_rate_mmbtu_per_mwh"]
@@ -293,15 +302,18 @@ if __name__ == "__main__":
     # Impute storage WACC from Utility Scale Solar. TODO: Revisit this assumption
     for x in [2, 4, 6, 8, 10]:
         pivot_atb.loc[
-            pivot_atb["pypsa-name"] == f"{x}hr_battery_storage", "wacc_real"
+            pivot_atb["pypsa-name"] == f"{x}hr_battery_storage",
+            "wacc_real",
         ] = pivot_atb.loc[pivot_atb["pypsa-name"] == "solar", "wacc_real"].values[0]
         pivot_atb.loc[
-            pivot_atb["pypsa-name"] == f"{x}hr_battery_storage", "efficiency"
+            pivot_atb["pypsa-name"] == f"{x}hr_battery_storage",
+            "efficiency",
         ] = 0.85  # 2023 ATB
 
     pivot_atb["annualized_capex_per_mw"] = (
         calculate_annuity(
-            pivot_atb["cost_recovery_period_years"], pivot_atb["wacc_real"]
+            pivot_atb["cost_recovery_period_years"],
+            pivot_atb["wacc_real"],
         )
         * pivot_atb["capex_per_kw"]
         * 1
@@ -310,7 +322,8 @@ if __name__ == "__main__":
 
     pivot_atb["annualized_capex_per_mw_km"] = (
         calculate_annuity(
-            pivot_atb["cost_recovery_period_years"], pivot_atb["wacc_real"]
+            pivot_atb["cost_recovery_period_years"],
+            pivot_atb["wacc_real"],
         )
         * pivot_atb["capex_per_mw_km"]
         * 1
@@ -332,7 +345,8 @@ if __name__ == "__main__":
 
     pivot_atb["annualized_connection_capex_per_mw_km"] = (
         calculate_annuity(
-            pivot_atb["cost_recovery_period_years"], pivot_atb["wacc_real"]
+            pivot_atb["cost_recovery_period_years"],
+            pivot_atb["wacc_real"],
         )
         * pivot_atb["capex_grid_connection_per_kw_km"]
         * 1
