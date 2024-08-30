@@ -907,6 +907,74 @@ def add_pipe_retrofit_constraint(n):
     n.model.add_constraints(lhs == rhs, name="Link-pipe_retrofit")
 
 
+def add_sector_co2_constraints(n, config):
+    """
+    Adds sector co2 constraints.
+
+    Parameters
+    ----------
+        n : pypsa.Network
+        config : dict
+    """
+
+    def apply_total_state_limit(n, year, state, value):
+        pass
+
+    def apply_sector_state_limit(n, year, state, sector, value):
+        pass
+
+    def apply_total_national_limit(n, year, value):
+        pass
+
+    def apply_sector_national_limit(n, year, sector, value):
+        pass
+
+    try:
+        f = config["sector"]["co2"]["policy"]
+    except KeyError:
+        logger.error("No co2 policy constraint file found")
+        return
+
+    df = pd.read_csv(f)
+
+    if df.empty:
+        logger.warning("No co2 policies applied")
+        return
+
+    sectors = df.sector.unique()
+
+    for sector in sectors:
+
+        df_sector = df[df.sector == sector]
+        states = df_sector.state.unique()
+
+        for state in states:
+
+            df_state = df_sector[df_sector.state == state]
+            years = df_state.year.unique()
+
+            for year in years:
+
+                df_limit = df_state[df_state.year == year].reset_index()
+                assert df_limit.shape[0] == 1
+
+                value = df_limit.loc[0, "co2_limit_mmt"]
+
+                if state.upper() == "USA":
+
+                    if sector == "all":
+                        apply_total_national_limit(n, year, value)
+                    else:
+                        apply_sector_national_limit(n, year, sector, value)
+
+                else:
+
+                    if sector == "all":
+                        apply_total_state_limit(n, year, state, value)
+                    else:
+                        apply_sector_state_limit(n, year, state, sector, value)
+
+
 def extra_functionality(n, snapshots):
     """
     Collects supplementary constraints which will be passed to
@@ -947,7 +1015,11 @@ def solve_network(n, config, solving, opts="", **kwargs):
     set_of_options = solving["solver"]["options"]
     cf_solving = solving["options"]
 
+    # if len(n.investment_periods) > 1:
+    #     kwargs["multi_investment_periods"] = config["foresight"] == "perfect"
+
     kwargs["multi_investment_periods"] = config["foresight"] == "perfect"
+
     kwargs["solver_options"] = (
         solving["solver_options"][set_of_options] if set_of_options else {}
     )
@@ -1001,13 +1073,13 @@ if __name__ == "__main__":
 
         snakemake = mock_snakemake(
             "solve_network",
-            simpl="",
-            opts="REM-RPS-SAFER",
+            # simpl="",
+            opts="500SEG",
             clusters="20",
             ll="v1.0",
             sector_opts="",
             sector="E-G",
-            planning_horizons="[2030]",
+            planning_horizons="2040",
             interconnect="texas",
         )
     configure_logging(snakemake)
