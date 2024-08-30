@@ -918,16 +918,78 @@ def add_sector_co2_constraints(n, config):
     """
 
     def apply_total_state_limit(n, year, state, value):
-        pass
+
+        sns = n.snapshots
+        snapshot = sns[sns.get_level_values("period") == year][-1]
+
+        stores = n.stores[
+            (n.stores.index.str.startswith(state))
+            & (n.stores.index.str.endswith("-co2"))
+        ].index
+
+        lhs = n.model["Store-e"].loc[snapshot, stores].sum()
+
+        rhs = value  # value in T CO2
+
+        n.model.add_constraints(lhs <= rhs, name=f"co2_limit-{year}-{state}")
+
+        logger.info(
+            f"Adding {state} co2 Limit in {year} of {rhs* 1e-6} MMT CO2",
+        )
 
     def apply_sector_state_limit(n, year, state, sector, value):
-        pass
+
+        sns = n.snapshots
+        snapshot = sns[sns.get_level_values("period") == year][-1]
+
+        stores = n.stores[
+            (n.stores.index.str.startswith(state))
+            & (n.stores.index.str.endswith(f"{sector}-co2"))
+        ].index
+
+        lhs = n.model["Store-e"].loc[snapshot, stores].sum()
+
+        rhs = value  # value in T CO2
+
+        n.model.add_constraints(lhs <= rhs, name=f"co2_limit-{year}-{state}-{sector}")
+
+        logger.info(
+            f"Adding {state} co2 Limit for {sector} in {year} of {rhs* 1e-6} MMT CO2",
+        )
 
     def apply_total_national_limit(n, year, value):
-        pass
+
+        sns = n.snapshots
+        snapshot = sns[sns.get_level_values("period") == year][-1]
+
+        stores = n.stores[n.stores.index.str.endswith("-co2")].index
+
+        lhs = n.model["Store-e"].loc[snapshot, stores].sum()
+
+        rhs = value  # value in T CO2
+
+        n.model.add_constraints(lhs <= rhs, name=f"co2_limit-{year}")
+
+        logger.info(
+            f"Adding national co2 Limit in {year} of {rhs* 1e-6} MMT CO2",
+        )
 
     def apply_sector_national_limit(n, year, sector, value):
-        pass
+
+        sns = n.snapshots
+        snapshot = sns[sns.get_level_values("period") == year][-1]
+
+        stores = n.stores[n.stores.index.str.endswith(f"{sector}-co2")].index
+
+        lhs = n.model["Store-e"].loc[snapshot, stores].sum()
+
+        rhs = value  # value in T CO2
+
+        n.model.add_constraints(lhs <= rhs, name=f"co2_limit-{year}-{sector}")
+
+        logger.info(
+            f"Adding national co2 Limit for {sector} sector in {year} of {rhs* 1e-6} MMT CO2",
+        )
 
     try:
         f = config["sector"]["co2"]["policy"]
@@ -951,14 +1013,19 @@ def add_sector_co2_constraints(n, config):
         for state in states:
 
             df_state = df_sector[df_sector.state == state]
-            years = df_state.year.unique()
+            years = [x for x in df_state.year.unique() if x in n.investment_periods]
+
+            if not years:
+                logger.warning(f"No co2 policies applied for {sector} in {year}")
+                continue
 
             for year in years:
 
-                df_limit = df_state[df_state.year == year].reset_index()
+                df_limit = df_state[df_state.year == year].reset_index(drop=True)
                 assert df_limit.shape[0] == 1
 
-                value = df_limit.loc[0, "co2_limit_mmt"]
+                # results calcualted in T CO2, policy given in MMT CO2
+                value = df_limit.loc[0, "co2_limit_mmt"] * 1e6
 
                 if state.upper() == "USA":
 
@@ -1004,6 +1071,11 @@ def extra_functionality(n, snapshots):
     interface_limits = config["lines"].get("interface_transmission_limits", {})
     if interface_limits:
         add_interface_limits(n, snapshots, config)
+    if "sector" in opts:
+        sector_co2_limits = config["sector"]["co2"].get("policy", {})
+        if sector_co2_limits:
+            add_sector_co2_constraints(n, config)
+
     for o in opts:
         if "EQ" in o:
             add_EQ_constraints(n, o)
@@ -1075,12 +1147,12 @@ if __name__ == "__main__":
             "solve_network",
             # simpl="",
             opts="500SEG",
-            clusters="20",
+            clusters="100",
             ll="v1.0",
             sector_opts="",
             sector="E-G",
-            planning_horizons="2040",
-            interconnect="texas",
+            planning_horizons="2030",
+            interconnect="western",
         )
     configure_logging(snakemake)
     update_config_from_wildcards(snakemake.config, snakemake.wildcards)
@@ -1095,6 +1167,12 @@ if __name__ == "__main__":
         opts += "-" + snakemake.wildcards.sector_opts
     opts = [o for o in opts.split("-") if o != ""]
     solve_opts = snakemake.params.solving["options"]
+
+    # sector specific co2 options
+    if snakemake.wildcards.sector != "E":
+        # sector co2 limits applied via config file, not through Co2L
+        opts = [x for x in opts if not x.startswith("Co2L")]
+        opts.append("sector")
 
     np.random.seed(solve_opts.get("seed", 123))
 
