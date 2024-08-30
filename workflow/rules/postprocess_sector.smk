@@ -9,9 +9,11 @@ FIGURES_SECTOR_PRODUCTION = [
     "production_total",
 ]
 FIGURES_SECTOR_CAPACITY = [
+    "end_use_capacity_per_carrier",
     "end_use_capacity_per_node_absolute",
     "end_use_capacity_per_node_percentage",
     "end_use_capacity_state_brownfield",
+    "power_capacity_per_carrier",
 ]
 FIGURES_SECTOR_LOADS = [
     # "load_timeseries_residential",

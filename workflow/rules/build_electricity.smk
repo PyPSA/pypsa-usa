@@ -3,11 +3,6 @@
 from itertools import chain
 
 
-# service demand will output seperate water and space heat demands
-# sector demand will output a single heat demand
-ruleorder: build_service_demand > build_sector_demand
-
-
 rule build_shapes:
     params:
         source_offshore_shapes=config["offshore_shape"],
@@ -350,34 +345,8 @@ rule build_sector_demand:
     output:
         elec_demand=RESOURCES + "{interconnect}/{end_use}_electricity.csv",
         heat_demand=RESOURCES + "{interconnect}/{end_use}_heating.csv",
-        cool_demand=RESOURCES + "{interconnect}/{end_use}_cooling.csv",
-    log:
-        LOGS + "{interconnect}/{end_use}_build_demand.log",
-    benchmark:
-        BENCHMARKS + "{interconnect}/{end_use}_build_demand"
-    threads: 2
-    resources:
-        mem_mb=interconnect_mem,
-    script:
-        "../scripts/build_demand.py"
-
-
-rule build_service_demand:
-    wildcard_constraints:
-        end_use="residential|commercial",
-    params:
-        planning_horizons=config["scenario"]["planning_horizons"],
-        profile_year=pd.to_datetime(config["snapshots"]["start"]).year,
-        eia_api=config["api"]["eia"],
-    input:
-        network=RESOURCES + "{interconnect}/elec_base_network.nc",
-        demand_files=demand_raw_data,
-        dissagregate_files=demand_dissagregate_data,
-        demand_scaling_file=demand_scaling_data,
-    output:
-        elec_demand=RESOURCES + "{interconnect}/{end_use}_electricity.csv",
-        space_heat_demand=RESOURCES + "{interconnect}/{end_use}_space_heating.csv",
-        water_heat_demand=RESOURCES + "{interconnect}/{end_use}_water_heating.csv",
+        space_heat_demand=RESOURCES + "{interconnect}/{end_use}_space-heating.csv",
+        water_heat_demand=RESOURCES + "{interconnect}/{end_use}_water-heating.csv",
         cool_demand=RESOURCES + "{interconnect}/{end_use}_cooling.csv",
     log:
         LOGS + "{interconnect}/{end_use}_build_demand.log",
@@ -458,7 +427,7 @@ def demand_to_add(wildcards):
         # service demand
         services = ["residential", "commercial"]
         if config["sector"]["split_space_water_heating"]:
-            fuels = ["electricity", "cooling", "space_heating", "water_heating"]
+            fuels = ["electricity", "cooling", "space-heating", "water-heating"]
         else:
             fuels = ["electricity", "cooling", "heating"]
         service_demands = [
@@ -492,30 +461,6 @@ def demand_to_add(wildcards):
         ]
 
         return chain(service_demands, industrial_demands, road_demand, non_road_demand)
-
-        # return [
-        #     RESOURCES + "{interconnect}/residential_electricity.csv",
-        #     RESOURCES + "{interconnect}/residential_heating.csv",
-        #     RESOURCES + "{interconnect}/residential_cooling.csv",
-        #     RESOURCES + "{interconnect}/commercial_electricity.csv",
-        #     RESOURCES + "{interconnect}/commercial_heating.csv",
-        #     RESOURCES + "{interconnect}/commercial_cooling.csv",
-        #     RESOURCES + "{interconnect}/industry_electricity.csv",
-        #     RESOURCES + "{interconnect}/industry_heating.csv",
-        #     RESOURCES + "{interconnect}/industry_cooling.csv",
-        #     RESOURCES + "{interconnect}/transport_light-duty_electricity.csv",
-        #     RESOURCES + "{interconnect}/transport_light-duty_lpg.csv",
-        #     RESOURCES + "{interconnect}/transport_med-duty_electricity.csv",
-        #     RESOURCES + "{interconnect}/transport_med-duty_lpg.csv",
-        #     RESOURCES + "{interconnect}/transport_heavy-duty_electricity.csv",
-        #     RESOURCES + "{interconnect}/transport_heavy-duty_lpg.csv",
-        #     RESOURCES + "{interconnect}/transport_bus_electricity.csv",
-        #     RESOURCES + "{interconnect}/transport_bus_lpg.csv",
-        #     RESOURCES + "{interconnect}/transport_boat-shipping_lpg.csv",
-        #     RESOURCES + "{interconnect}/transport_air_lpg.csv",
-        #     RESOURCES + "{interconnect}/transport_rail-shipping_lpg.csv",
-        #     RESOURCES + "{interconnect}/transport_rail-passenger_lpg.csv",
-        # ]
 
 
 rule add_demand:

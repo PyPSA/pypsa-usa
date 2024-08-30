@@ -197,7 +197,6 @@ def sector_figures(wildcards):
                 + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/system/emissions/{figure}.png",
                 **config["scenario"],
                 figure=FIGURES_SECTOR_EMISSIONS,
-                s=states,
             )
         )
         figs.append(
@@ -215,7 +214,6 @@ def sector_figures(wildcards):
                 + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/system/production/{figure}.png",
                 **config["scenario"],
                 figure=FIGURES_SECTOR_PRODUCTION,
-                s=states,
             )
         )
         figs.append(
@@ -233,7 +231,6 @@ def sector_figures(wildcards):
                 + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/system/capacity/{figure}.png",
                 **config["scenario"],
                 figure=FIGURES_SECTOR_CAPACITY,
-                s=states,
             )
         )
         figs.append(
@@ -251,9 +248,9 @@ def sector_figures(wildcards):
                 + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/system/loads/{figure}.png",
                 **config["scenario"],
                 figure=FIGURES_SECTOR_LOADS,
-                s=states,
             )
         )
+        """
         figs.append(
             expand(
                 RESULTS
@@ -269,9 +266,25 @@ def sector_figures(wildcards):
                 + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/system/validate/{figure}.png",
                 **config["scenario"],
                 figure=FIGURES_SECTOR_VALIDATE,
-                s=states,
             )
         )
+        figs.append(
+            expand(
+                RESULTS
+                + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/system/validate/{figure}.png",
+                **config["scenario"],
+                figure=FIGURES_SYSTEM_VALIDATION,
+            )
+        )
+        figs.append(
+            expand(
+                RESULTS
+                + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/system/production/{figure}.png",
+                **config["scenario"],
+                figure=FIGURES_SYSTEM_PRODUCTION,
+            )
+        )
+        """
         return list(chain(*figs))
     return figs
 
