@@ -1041,6 +1041,7 @@ if __name__ == "__main__":
 
     n = pypsa.Network(snakemake.input.network)
 
+
     n = prepare_network(
         n,
         solve_opts,
@@ -1050,6 +1051,7 @@ if __name__ == "__main__":
         co2_sequestration_potential=snakemake.params["co2_sequestration_potential"],
     )
 
+
     n = solve_network(
         n,
         config=snakemake.config,
@@ -1057,7 +1059,6 @@ if __name__ == "__main__":
         opts=opts,
         log_fn=snakemake.log.solver,
     )
-
     n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))
     n.export_to_netcdf(snakemake.output[0])
 

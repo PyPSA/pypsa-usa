@@ -123,7 +123,7 @@ if __name__ == "__main__":
         {'pypsa-name': 'gas', 'parameter': 'co2_emissions', 'value': 0.18058},
         {'pypsa-name': 'CCGT', 'parameter': 'co2_emissions', 'value': 0.18058},
         {'pypsa-name': 'OCGT', 'parameter': 'co2_emissions', 'value': 0.18058},
-        {'pypsa-name': 'geothermal', 'parameter': 'heat_rate_mmbtu_per_mwh', 'value': 8881}, #AEO 2023
+        {'pypsa-name': 'geothermal', 'parameter': 'heat_rate_mmbtu_per_mwh', 'value': 8.881}, #AEO 2023
     ]
     # Impute Transmission Data
     # TEPCC 2023
@@ -144,7 +144,7 @@ if __name__ == "__main__":
         {'pypsa-name': 'HVDC inverter pair', 'parameter': 'wacc_real', 'value': 0.044},
     ]
     pudl_atb = pd.concat([pudl_atb, pd.DataFrame(emissions_data), pd.DataFrame(transmission_data)], ignore_index=True)
-    pudl_atb.drop_duplicates(subset=['pypsa-name', 'parameter'], inplace=True)
+    pudl_atb.drop_duplicates(subset=['pypsa-name', 'parameter'], keep='last', inplace=True)
 
     # Load AEO Fuel Cost Data
     aeo = load_pudl_aeo_data()
@@ -220,7 +220,6 @@ if __name__ == "__main__":
 
     pivot_atb["annualized_capex_fom"] = pivot_atb["annualized_capex_per_mw"] + (pivot_atb["opex_fixed_per_kw"] * 1e3)
     pudl_atb = pivot_atb.melt(id_vars=['pypsa-name'], value_vars=pivot_atb.columns.difference(['pypsa-name']), var_name='parameter', value_name='value')
-
     # Export
     pudl_atb = pudl_atb.reset_index(drop=True)
     pudl_atb["value"] = pudl_atb["value"].round(3)
