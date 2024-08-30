@@ -632,127 +632,159 @@ pypsa-name:{
 ATB_TECH_MAPPER = {
     "biomass": {
         "display_name": "Biopower - Dedicated",
+        "technology": "Biopower",
+        "techdetail": "Dedicated",
         "crp": 45,
     },
     "coal": {
         "display_name": "Coal-new",
         "technology": "Coal_FE",
+        "techdetail2": "New",
         "crp": 30,
     },
     "coal-95CCS": {
         "display_name": "Coal-95%-CCS",
         "technology": "Coal_FE",
+        "techdetail2": "95%-CCS",
         "crp": 30,
     },
     "coal-99CCS": {
         "display_name": "Coal-99%-CCS",
         "technology": "Coal_FE",
+        "techdetail2": "99%-CCS",
         "crp": 30,
     },
     "geothermal": {
         "display_name": "Geothermal - Hydro / Flash",
+        "technology": "Geothermal",
+        "techdetail": "HydroFlash",
         "crp": 30,
     },
     "hydro": {  # dammed hydro
         "display_name": "Hydropower - NPD 1",
+        "technology": "Hydropower",
+        "techdetail": "NPD1",
         "crp": 100,
     },
     "ror": {  # run of river
         "display_name": "Hydropower - NSD 1",
+        "technology": "Hydropower",
+        "techdetail": "NSD1",
         "crp": 100,
     },
     "CCGT": {  # natural gas
         "display_name": "NG Combined Cycle (F-Frame)",
         "technology": "NaturalGas_FE",
+        "techdetail2": "F-Frame CC",
         "crp": 30,
     },
     "OCGT": {  # natural gas
         "display_name": "NG Combustion Turbine (F-Frame)",
         "technology": "NaturalGas_FE",
+        "techdetail2": "F-Frame CT",
         "crp": 30,
     },
     "CCGT-95CCS": {  # natural gas
         "display_name": "NG Combined Cycle (F-Frame) 95% CCS",
         "technology": "NaturalGas_FE",
+        "techdetail2": "F-Frame CC 95% CCS",
+        "crp": 30,
+    },
+    "CCGT-97CCS": {  # natural gas
+        "display_name": "NG Combined Cycle (F-Frame) 97% CCS",
+        "technology": "NaturalGas_FE",
+        "techdetail2": "F-Frame CC 97% CCS",
         "crp": 30,
     },
     "nuclear": {  # large scale nuclear
         "display_name": "Nuclear - AP1000",
+        "technology": "Nuclear",
+        "techdetail": "Nuclear - Large",
         "crp": 60,
     },
     "SMR": {  # small modular reactor
         "display_name": "Nuclear - Small Modular Reactor",
+        "technology": "Nuclear",
+        "techdetail": "Nuclear - Small",
         "crp": 60,
-    },
-    "solar-rooftop commercial": {
-        "display_name": "Commercial PV - Class 5",
-        "crp": 20,
-    },
-    "solar-rooftop": {
-        "display_name": "Residential PV - Class 5",
-        "crp": 20,
-    },
-    "central solar thermal": {
-        "display_name": "CSP - Class 2",
-        "crp": 30,
-    },
-    "home battery storage": {
-        "display_name": "Residential Battery Storage - 5 kW - 12.5 kWh",
-        "crp": 20,
     },
     "onwind": {
         "display_name": "Land-Based Wind - Class 4 - Technology 1",
         "technology": "LandbasedWind",
+        "techdetail": "Class4",
+        # "techdetail2": "Wind Turbine Technology 1",
         "crp": 30,
     },
     "offwind": {
         "display_name": "Offshore Wind - Class 5",
         "technology": "OffShoreWind",
+        "techdetail": "Class5",
         "crp": 30,
     },
     "offwind_floating": {
         "display_name": "Offshore Wind - Class 13",
         "technology": "OffShoreWind",
+        "techdetail": "Class13",
         "crp": 30,
-    },
-    "Pumped-Storage-Hydro-bicharger": {
-        "display_name": "Pumped Storage Hydropower - National Class 1",
-        "crp": 100,
     },
     "solar": {
         "display_name": "Utility PV - Class 5",
+        "technology": "UtilityPV",
+        "techdetail": "Class5",
         "crp": 30,
     },
     "2hr_battery_storage": {
         "display_name": "Utility-Scale Battery Storage - 2Hr",
-        "crp": 20,
+        "technology": "Utility-Scale Battery Storage",
+        "techdetail": "2Hr Battery Storage",
+        "crp": 30,
     },
     "4hr_battery_storage": {
         "display_name": "Utility-Scale Battery Storage - 4Hr",
-        "crp": 20,
+        "technology": "Utility-Scale Battery Storage",
+        "techdetail": "4Hr Battery Storage",
+        "crp": 30,
     },
     "6hr_battery_storage": {
         "display_name": "Utility-Scale Battery Storage - 6Hr",
-        "crp": 20,
+        "technology": "Utility-Scale Battery Storage",
+        "techdetail": "6Hr Battery Storage",
+        "crp": 30,
     },
     "8hr_battery_storage": {
         "display_name": "Utility-Scale Battery Storage - 8Hr",
-        "crp": 20,
+        "technology": "Utility-Scale Battery Storage",
+        "techdetail": "8Hr Battery Storage",
+        "crp": 30,
     },
     "10hr_battery_storage": {
         "display_name": "Utility-Scale Battery Storage - 10Hr",
-        "crp": 20,
+        "technology": "Utility-Scale Battery Storage",
+        "techdetail": "10Hr Battery Storage",
+        "crp": 30,
     },
-    "8hr_PHS": {
+    "Pumped-Storage-Hydro-bicharger": {
         "display_name": "Pumped Storage Hydropower - National Class 1",
+        "technology": "PumpedStorageHydro",
+        "techdetail": "NatlClass1",
         "crp": 100,
     },
-    "10hr_PHS": {
+    "8hr_PHS": {  # Costs replaced with location specific data in workflow
         "display_name": "Pumped Storage Hydropower - National Class 1",
+        "technology": "PumpedStorageHydro",
+        "techdetail": "NatlClass1",
         "crp": 100,
     },
-    "12hr_PHS": {
+    "10hr_PHS": {  # Costs replaced with location specific data in workflow
         "display_name": "Pumped Storage Hydropower - National Class 1",
+        "technology": "PumpedStorageHydro",
+        "techdetail": "NatlClass1",
+        "crp": 100,
+    },
+    "12hr_PHS": {  # Costs replaced with location specific data in workflow
+        "display_name": "Pumped Storage Hydropower - National Class 1",
+        "technology": "PumpedStorageHydro",
+        "techdetail": "NatlClass1",
         "crp": 100,
     },
 }
@@ -764,7 +796,6 @@ ATB_TECH_MAPPER = {
 # {pypsa-name: csv-name}
 CAPEX_LOCATIONAL_MULTIPLIER = {
     "nuclear": "nuclear-1117mw",
-    # "oil",
     "CCGT": "natural-gas-430mw-90ccs",
     "OCGT": "natural-gas-430mw-90ccs",
     "coal": "coal-ultra-supercritical-90ccs",

@@ -34,7 +34,6 @@ rule build_base_network:
         build_offshore_network=config["offshore_network"],
         snapshots=config["snapshots"],
         planning_horizons=config["scenario"]["planning_horizons"],
-        links=config["links"],
     input:
         buses=DATA + "breakthrough_network/base_grid/bus.csv",
         lines=DATA + "breakthrough_network/base_grid/branch.csv",
@@ -88,9 +87,10 @@ rule build_bus_regions:
 
 
 rule build_cost_data:
+    params:
+        costs=config_provider("costs"),
     input:
-        nrel_atb=DATA + "costs/nrel_atb.parquet",
-        pypsa_technology_data=RESOURCES + "costs/pypsa_eur_{year}.csv",
+        pudl=DATA + "pudl/pudl.sqlite",
     output:
         tech_costs=RESOURCES + "costs/costs_{year}.csv",
     log:
@@ -395,6 +395,7 @@ rule build_fuel_prices:
         state_coal_fuel_prices=RESOURCES + "{interconnect}/state_coal_power_prices.csv",
         ba_ng_fuel_prices=RESOURCES + "{interconnect}/ba_ng_power_prices.csv",
         pudl_fuel_costs=RESOURCES + "{interconnect}/pudl_fuel_costs.csv",
+        # aeo_fuel_costs=RESOURCES + "{interconnect}/aeo_fuel_costs.csv",
     log:
         LOGS + "{interconnect}/build_fuel_prices.log",
     benchmark:

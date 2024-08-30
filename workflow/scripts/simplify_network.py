@@ -12,12 +12,7 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 import pypsa
-from _helpers import (
-    configure_logging,
-    export_network_for_gis_mapping,
-    reduce_float_memory,
-    update_p_nom_max,
-)
+from _helpers import configure_logging, export_network_for_gis_mapping, update_p_nom_max
 from cluster_network import cluster_regions, clustering_for_n_clusters
 from pypsa.clustering.spatial import get_clustering_from_busmap
 
@@ -68,7 +63,7 @@ def convert_to_voltage_level(n, new_voltage):
 
     # Update network lines
     (linetype,) = n.lines.loc[n.lines.v_nom == voltage_level, "type"].unique()
-    df.type = linetype  # Do I even need to set line types? Can drop.
+    df.type = linetype
 
     n.buses["v_nom"] = voltage_level
     n.lines = df
@@ -260,7 +255,6 @@ if __name__ == "__main__":
         aggregation_zones,
         params.aggregation_strategies,
     )
-
     if snakemake.wildcards.simpl:
         n.set_investment_periods(periods=snakemake.params.planning_horizons)
 
@@ -291,6 +285,7 @@ if __name__ == "__main__":
             aggregation_strategies=params.aggregation_strategies,
         )
         n = clustering.network
+
         cluster_regions((clustering.busmap,), snakemake.input, snakemake.output)
     else:
         for which in ("regions_onshore", "regions_offshore"):  # pass through regions
@@ -298,9 +293,5 @@ if __name__ == "__main__":
             regions.to_file(getattr(snakemake.output, which))
 
     update_p_nom_max(n)
-    # n.loads_t.p_set = reduce_float_memory(n.loads_t.p_set)
-    # n.generators_t.p_max_pu = reduce_float_memory(n.generators_t.p_max_pu)
-    # n.generators_t.p_min_pu = reduce_float_memory(n.generators_t.p_min_pu)
-    # n.generators_t.marginal_cost = reduce_float_memory(n.generators_t.marginal_cost)
 
     n.export_to_netcdf(snakemake.output[0])

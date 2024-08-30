@@ -94,8 +94,7 @@ import pandas as pd
 import pyomo.environ as po
 import pypsa
 import seaborn as sns
-from _helpers import configure_logging, reduce_float_memory, update_p_nom_max
-from add_electricity import calculate_annuity
+from _helpers import calculate_annuity, configure_logging, update_p_nom_max
 from constants import *
 from pypsa.clustering.spatial import (
     busmap_by_greedy_modularity,
@@ -105,8 +104,6 @@ from pypsa.clustering.spatial import (
 )
 
 warnings.filterwarnings(action="ignore", category=UserWarning)
-
-from add_electricity import load_costs
 
 idx = pd.IndexSlice
 
@@ -449,7 +446,12 @@ def replace_lines_with_links(clustering, itl_fn, capex):
         how="left",
     )
 
-    itls["p_min_pu_Rev"] = -1 * (itls.MW_r0 / itls.MW_f0)
+    itls["p_min_pu_Rev"] = (-1 * (itls.MW_r0 / itls.MW_f0)).fillna(0)
+
+    # lines to add in reverse if forward direction is zero
+    itls_rev = itls[itls.MW_f0 == 0].copy()
+    itls = itls[itls.MW_f0 != 0]
+
     clustering.network.mremove("Line", clustering.network.lines.index)
     clustering.network.madd(
         "Link",
@@ -463,7 +465,22 @@ def replace_lines_with_links(clustering, itl_fn, capex):
         p_min_pu=itls.p_min_pu_Rev.values,
         capital_cost=itls.USD2023perMWyr.values,
         p_nom_extendable=True,
-        carrier="AC",
+        carrier="DC",
+    )
+
+    clustering.network.madd(
+        "Link",
+        names=itls_rev.interface,  # itl name
+        suffix="rev",
+        bus0=buses.loc[itls_rev.r].index,
+        bus1=buses.loc[itls_rev.rr].index,
+        p_nom=itls_rev.MW_r0.values,
+        p_nom_min=itls_rev.MW_r0.values,
+        p_max_pu=0,
+        p_min_pu=-1,
+        capital_cost=itls_rev.USD2023perMWyr.values,
+        p_nom_extendable=True,
+        carrier="DC",
     )
     logger.info(f"Replaced Lines with Links for zonal model configuration.")
 
@@ -543,7 +560,7 @@ if __name__ == "__main__":
     conventional_carriers = set(params.conventional_carriers)
     if snakemake.wildcards.clusters.endswith("m"):
         n_clusters = int(snakemake.wildcards.clusters[:-1])
-        aggregate_carriers = params.conventional_carriers & aggregate_carriers
+        aggregate_carriers = set(params.conventional_carriers) & aggregate_carriers
     elif snakemake.wildcards.clusters.endswith("c"):
         n_clusters = int(snakemake.wildcards.clusters[:-1])
         aggregate_carriers = aggregate_carriers - conventional_carriers
@@ -589,12 +606,9 @@ if __name__ == "__main__":
             n.snapshot_weightings.loc[n.investment_periods[0]].objective.sum() / 8760.0
         )
 
-        hvac_overhead_cost = load_costs(
-            snakemake.input.tech_costs,
-            params.costs,
-            params.max_hours,
-            Nyears,
-        ).at["HVAC overhead", "capital_cost"]
+        costs = pd.read_csv(snakemake.input.tech_costs)
+        costs = costs.pivot(index="pypsa-name", columns="parameter", values="value")
+        hvac_overhead_cost = costs.at["HVAC overhead", "annualized_capex_per_mw_km"]
 
         custom_busmap = params.custom_busmap
         if custom_busmap:

@@ -119,6 +119,7 @@ def add_branches_from_file(n: pypsa.Network, fn_branches: str) -> pypsa.Network:
         dtype={"from_bus_id": str, "to_bus_id": str},
         index_col=0,
     ).query("from_bus_id in @n.buses.index and to_bus_id in @n.buses.index")
+    branches.loc[branches.rateA == 0, "rateA"] = 0.01
 
     for tech in ["Line", "Transformer"]:
         tech_branches = branches.query("branch_device_type == @tech")
@@ -446,7 +447,7 @@ def build_offshore_transmission_configuration(n: pypsa.Network) -> pypsa.Network
         carrier="AC",
         x=0.1,
         r=0.1,
-        s_nom=0,
+        s_nom=0.01,
         underwater_fraction=0.0,  # temporarily setting to investigate clustering underwater issues later
         interconnect=n.buses.loc[offshore_buses.bus_assignment].interconnect.values,
     )
@@ -458,7 +459,7 @@ def build_offshore_transmission_configuration(n: pypsa.Network) -> pypsa.Network
         + osw_offsub_bus_ids,  # name transformer after offshore substation
         bus0="OSW_POI_" + osw_offsub_bus_ids,
         bus1=offshore_buses.bus_assignment.astype(str).values,
-        s_nom=0,
+        s_nom=0.01,
         type="temp",
         carrier="AC",
         v_nom=230,
@@ -750,7 +751,7 @@ def main(snakemake):
     assign_missing_states_countries(n)
     assign_reeds_memberships(n, snakemake.input.reeds_memberships)
 
-    p_max_pu = snakemake.params["links"].get("p_max_pu", 1.0)
+    p_max_pu = 1  # snakemake.params["links"].get("p_max_pu", 1.0)
     n.links["p_max_pu"] = p_max_pu
     n.links["p_min_pu"] = -p_max_pu
 
@@ -824,6 +825,6 @@ if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
 
-        snakemake = mock_snakemake("build_base_network", interconnect="texas")
+        snakemake = mock_snakemake("build_base_network", interconnect="western")
     configure_logging(snakemake)
     main(snakemake)
