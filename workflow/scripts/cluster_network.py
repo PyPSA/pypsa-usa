@@ -94,7 +94,7 @@ import pandas as pd
 import pyomo.environ as po
 import pypsa
 import seaborn as sns
-from _helpers import configure_logging, update_p_nom_max, calculate_annuity
+from _helpers import calculate_annuity, configure_logging, update_p_nom_max
 from constants import *
 from pypsa.clustering.spatial import (
     busmap_by_greedy_modularity,
@@ -446,9 +446,9 @@ def replace_lines_with_links(clustering, itl_fn, capex):
         how="left",
     )
 
-    itls['p_min_pu_Rev'] = (-1 * (itls.MW_r0 / itls.MW_f0)).fillna(0)
+    itls["p_min_pu_Rev"] = (-1 * (itls.MW_r0 / itls.MW_f0)).fillna(0)
 
-    #lines to add in reverse if forward direction is zero
+    # lines to add in reverse if forward direction is zero
     itls_rev = itls[itls.MW_f0 == 0].copy()
     itls = itls[itls.MW_f0 != 0]
 
@@ -476,7 +476,7 @@ def replace_lines_with_links(clustering, itl_fn, capex):
         bus1=buses.loc[itls_rev.rr].index,
         p_nom=itls_rev.MW_r0.values,
         p_nom_min=itls_rev.MW_r0.values,
-        p_max_pu= 0,
+        p_max_pu=0,
         p_min_pu=-1,
         capital_cost=itls_rev.USD2023perMWyr.values,
         p_nom_extendable=True,
@@ -609,7 +609,7 @@ if __name__ == "__main__":
         costs = pd.read_csv(snakemake.input.tech_costs)
         costs = costs.pivot(index="pypsa-name", columns="parameter", values="value")
         hvac_overhead_cost = costs.at["HVAC overhead", "annualized_capex_per_mw_km"]
-        
+
         custom_busmap = params.custom_busmap
         if custom_busmap:
             custom_busmap = pd.read_csv(

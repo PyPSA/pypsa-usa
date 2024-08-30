@@ -579,11 +579,19 @@ def add_regional_co2limit(n, sns, config):
         EF_imports = emmission_lim.import_emissions_factor  # MT CO₂e/MWh_elec
         planning_horizon = emmission_lim.planning_horizon
 
-        efficiency = get_as_dense(n, "Generator", "efficiency", inds=region_gens_em.index)  # mw_elect/mw_th
-        em_pu = (region_gens_em.carrier.map(emissions) / efficiency)  # tonnes_co2/mw_electrical
-        em_pu = em_pu.multiply(weightings.generators, axis=0).loc[planning_horizon].fillna(0)
+        efficiency = get_as_dense(
+            n, "Generator", "efficiency", inds=region_gens_em.index
+        )  # mw_elect/mw_th
+        em_pu = (
+            region_gens_em.carrier.map(emissions) / efficiency
+        )  # tonnes_co2/mw_electrical
+        em_pu = (
+            em_pu.multiply(weightings.generators, axis=0)
+            .loc[planning_horizon]
+            .fillna(0)
+        )
 
-        #Emitting Gens 
+        # Emitting Gens
         p_em = (
             n.model["Generator-p"]
             .loc[:, region_gens_em.index]
@@ -591,17 +599,19 @@ def add_regional_co2limit(n, sns, config):
         )
         lhs = (p_em * em_pu).sum()
 
-        #All Gens
+        # All Gens
         p = (
             n.model["Generator-p"]
             .loc[:, region_gens.index]
             .sel(period=planning_horizon)
-        )     
+        )
         lhs -= (p * EF_imports).sum()
 
         if not region_storage.empty:
             p_store_discharge = (
-                n.model["StorageUnit-p_dispatch"].loc[:, region_storage.index].sel(period=planning_horizon)
+                n.model["StorageUnit-p_dispatch"]
+                .loc[:, region_storage.index]
+                .sel(period=planning_horizon)
             )
             lhs -= (p_store_discharge * EF_imports).sum()
 
@@ -1050,7 +1060,6 @@ if __name__ == "__main__":
 
     n = pypsa.Network(snakemake.input.network)
 
-
     n = prepare_network(
         n,
         solve_opts,
@@ -1059,7 +1068,6 @@ if __name__ == "__main__":
         planning_horizons=snakemake.params.planning_horizons,
         co2_sequestration_potential=snakemake.params["co2_sequestration_potential"],
     )
-
 
     n = solve_network(
         n,

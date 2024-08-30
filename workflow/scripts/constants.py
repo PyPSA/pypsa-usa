@@ -675,25 +675,25 @@ ATB_TECH_MAPPER = {
     "CCGT": {  # natural gas
         "display_name": "NG Combined Cycle (F-Frame)",
         "technology": "NaturalGas_FE",
-        "techdetail2":"F-Frame CC",
+        "techdetail2": "F-Frame CC",
         "crp": 30,
     },
     "OCGT": {  # natural gas
         "display_name": "NG Combustion Turbine (F-Frame)",
         "technology": "NaturalGas_FE",
-        "techdetail2":"F-Frame CT",
+        "techdetail2": "F-Frame CT",
         "crp": 30,
     },
     "CCGT-95CCS": {  # natural gas
         "display_name": "NG Combined Cycle (F-Frame) 95% CCS",
         "technology": "NaturalGas_FE",
-        "techdetail2":"F-Frame CC 95% CCS",
+        "techdetail2": "F-Frame CC 95% CCS",
         "crp": 30,
     },
     "CCGT-97CCS": {  # natural gas
         "display_name": "NG Combined Cycle (F-Frame) 97% CCS",
         "technology": "NaturalGas_FE",
-        "techdetail2":"F-Frame CC 97% CCS",
+        "techdetail2": "F-Frame CC 97% CCS",
         "crp": 30,
     },
     "nuclear": {  # large scale nuclear
@@ -712,7 +712,7 @@ ATB_TECH_MAPPER = {
         "display_name": "Land-Based Wind - Class 4 - Technology 1",
         "technology": "LandbasedWind",
         "techdetail": "Class4",
-        #"techdetail2": "Wind Turbine Technology 1",
+        # "techdetail2": "Wind Turbine Technology 1",
         "crp": 30,
     },
     "offwind": {
@@ -769,19 +769,19 @@ ATB_TECH_MAPPER = {
         "techdetail": "NatlClass1",
         "crp": 100,
     },
-    "8hr_PHS": { # Costs replaced with location specific data in workflow
+    "8hr_PHS": {  # Costs replaced with location specific data in workflow
         "display_name": "Pumped Storage Hydropower - National Class 1",
         "technology": "PumpedStorageHydro",
         "techdetail": "NatlClass1",
         "crp": 100,
     },
-    "10hr_PHS": { # Costs replaced with location specific data in workflow
+    "10hr_PHS": {  # Costs replaced with location specific data in workflow
         "display_name": "Pumped Storage Hydropower - National Class 1",
         "technology": "PumpedStorageHydro",
         "techdetail": "NatlClass1",
         "crp": 100,
     },
-    "12hr_PHS": { # Costs replaced with location specific data in workflow
+    "12hr_PHS": {  # Costs replaced with location specific data in workflow
         "display_name": "Pumped Storage Hydropower - National Class 1",
         "technology": "PumpedStorageHydro",
         "techdetail": "NatlClass1",
