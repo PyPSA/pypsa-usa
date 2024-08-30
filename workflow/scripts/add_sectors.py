@@ -402,15 +402,15 @@ if __name__ == "__main__":
         convert_generators_2_links(n, carrier, f" gas", co2_intensity)
 
     # add natural gas infrastructure and data
-    # build_natural_gas(
-    #     n=n,
-    #     year=sns[0].year,
-    #     api=eia_api,
-    #     interconnect=snakemake.wildcards.interconnect,
-    #     county_path=snakemake.input.county,
-    #     pipelines_path=snakemake.input.pipeline_capacity,
-    #     pipeline_shape_path=snakemake.input.pipeline_shape,
-    # )
+    build_natural_gas(
+        n=n,
+        year=sns[0].year,
+        api=eia_api,
+        interconnect=snakemake.wildcards.interconnect,
+        county_path=snakemake.input.county,
+        pipelines_path=snakemake.input.pipeline_capacity,
+        pipeline_shape_path=snakemake.input.pipeline_shape,
+    )
 
     pop_layout_path = snakemake.input.clustered_pop_layout
     cop_ashp_path = snakemake.input.cop_air_total
