@@ -143,6 +143,7 @@ def pdbcast(v, h):
         columns=h.index,
     )
 
+
 def calculate_annuity(n, r):
     """
     Calculate the annuity factor for an asset with lifetime n years and.
@@ -158,6 +159,7 @@ def calculate_annuity(n, r):
         return r / (1.0 - 1.0 / (1.0 + r) ** n)
     else:
         return 1 / n
+
 
 def load_network_for_plots(fn, tech_costs, config, combine_hydro_ps=True):
     import pypsa

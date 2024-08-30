@@ -9,11 +9,8 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 import pypsa
-from _helpers import configure_logging, calculate_annuity
-from add_electricity import (
-    add_co2_emissions,
-    add_missing_carriers
-    )
+from _helpers import calculate_annuity, configure_logging
+from add_electricity import add_co2_emissions, add_missing_carriers
 
 idx = pd.IndexSlice
 
@@ -298,7 +295,9 @@ def add_economic_retirement(
         lambda row: (
             row["capital_cost"]
             if not row.name in (retirement_gens.index)
-            else row["capital_cost"] * costs.at[row["carrier"], "opex_variable_per_mwh"] / 100
+            else row["capital_cost"]
+            * costs.at[row["carrier"], "opex_variable_per_mwh"]
+            / 100
         ),
         axis=1,
     )
@@ -544,7 +543,9 @@ if __name__ == "__main__":
     Nyears = n.snapshot_weightings.loc[n.investment_periods[0]].objective.sum() / 8760.0
 
     costs_dict = {
-        n.investment_periods[i]: pd.read_csv(snakemake.input.tech_costs[i]).pivot(index="pypsa-name", columns="parameter", values="value")
+        n.investment_periods[i]: pd.read_csv(snakemake.input.tech_costs[i]).pivot(
+            index="pypsa-name", columns="parameter", values="value"
+        )
         for i in range(len(n.investment_periods))
     }
 

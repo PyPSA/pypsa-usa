@@ -87,8 +87,8 @@ rule build_bus_regions:
 
 
 rule build_cost_data:
-    params: 
-        costs= config_provider("costs"),
+    params:
+        costs=config_provider("costs"),
     input:
         pudl=DATA + "pudl/pudl.sqlite",
     output:

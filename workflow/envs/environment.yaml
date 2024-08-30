@@ -63,4 +63,3 @@ dependencies:
   - gurobipy==11.0.3
   - highspy
   - duckdb==0.10.0
-

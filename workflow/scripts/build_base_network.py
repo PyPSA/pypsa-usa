@@ -120,7 +120,7 @@ def add_branches_from_file(n: pypsa.Network, fn_branches: str) -> pypsa.Network:
         index_col=0,
     ).query("from_bus_id in @n.buses.index and to_bus_id in @n.buses.index")
     branches.loc[branches.rateA == 0, "rateA"] = 0.01
-    
+
     for tech in ["Line", "Transformer"]:
         tech_branches = branches.query("branch_device_type == @tech")
         logger.info(f"Adding {len(tech_branches)} branches as {tech}s to the network.")
@@ -751,7 +751,7 @@ def main(snakemake):
     assign_missing_states_countries(n)
     assign_reeds_memberships(n, snakemake.input.reeds_memberships)
 
-    p_max_pu = 1 #snakemake.params["links"].get("p_max_pu", 1.0)
+    p_max_pu = 1  # snakemake.params["links"].get("p_max_pu", 1.0)
     n.links["p_max_pu"] = p_max_pu
     n.links["p_min_pu"] = -p_max_pu
 

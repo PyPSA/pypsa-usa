@@ -216,6 +216,7 @@ if not config["enable"].get("build_cutout", False):
         run:
             move(input[0], output[0])
 
+
 rule retrieve_caiso_data:
     params:
         fuel_year=config["costs"]["ng_fuel_year"],

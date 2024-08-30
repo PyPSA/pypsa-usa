@@ -132,6 +132,7 @@ def add_co2_emissions(n, costs, carriers):
         )
         n.carriers.loc[ccs_factor.index, "co2_emissions"] *= ccs_factor
 
+
 def add_missing_carriers(n, carriers):
     """
     Function to add missing carriers to the network without raising errors.
@@ -248,7 +249,9 @@ def update_transmission_costs(n, costs, length_factor=1.0):
     # TODO: line length factor of lines is applied to lines and links.
     # Separate the function to distinguish
     n.lines["capital_cost"] = (
-        n.lines["length"] * length_factor * costs.at["HVAC overhead", "annualized_capex_per_mw_km"]
+        n.lines["length"]
+        * length_factor
+        * costs.at["HVAC overhead", "annualized_capex_per_mw_km"]
     )
 
     if n.links.empty:
@@ -423,7 +426,9 @@ def attach_conventional_generators(
     )
 
     # Add fuel and VOM costs to the network
-    n.generators.loc[plants.index, "vom_cost"] = plants.carrier.map(costs.opex_variable_per_mwh)
+    n.generators.loc[plants.index, "vom_cost"] = plants.carrier.map(
+        costs.opex_variable_per_mwh
+    )
     n.generators.loc[plants.index, "fuel_cost"] = plants.fuel_cost
     n.generators.loc[plants.index, "heat_rate"] = plants.heat_rate_mmbtu_per_mwh
     n.generators.loc[plants.index, "ba_eia"] = plants.balancing_authority_code
@@ -767,8 +772,8 @@ def attach_breakthrough_renewable_plants(
             p_max_pu=p_max_pu,  # timeseries of max power output pu
             p_nom_extendable=False,
             carrier=tech,
-            weight=1.0
-            )
+            weight=1.0,
+        )
     return n
 
 
@@ -868,7 +873,7 @@ def main(snakemake):
     attach_battery_storage(
         n,
         plants,
-        extendable_carriers
+        extendable_carriers,
     )
 
     attach_wind_and_solar(

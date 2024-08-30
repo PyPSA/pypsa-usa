@@ -669,7 +669,9 @@ def plot_generator_data_panel(
     **wildcards,
 ):
 
-    df_capex_expand = n.generators.loc[n.generators.p_nom_extendable &  ~n.generators.index.str.contains("existing"), :]
+    df_capex_expand = n.generators.loc[
+        n.generators.p_nom_extendable & ~n.generators.index.str.contains("existing"), :
+    ]
     df_capex_retire = n.generators.loc[
         n.generators.index.str.contains("existing")
         & ~n.generators.carrier.isin(
@@ -715,11 +717,11 @@ def plot_generator_data_panel(
 
     # Create line plot of declining capital costs
     sns.lineplot(
-        data = df_capex_expand[df_capex_expand.build_year > 0],
-        x = "build_year",
-        y = "capital_cost",
-        hue = "carrier",
-        ax = axes[2, 0]
+        data=df_capex_expand[df_capex_expand.build_year > 0],
+        x="build_year",
+        y="capital_cost",
+        hue="carrier",
+        ax=axes[2, 0],
     )
 
     sns.barplot(
