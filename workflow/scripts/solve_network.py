@@ -582,12 +582,21 @@ def add_regional_co2limit(n, sns, config):
         efficiency = get_as_dense(n, "Generator", "efficiency", inds=region_gens_em.index)  # mw_elect/mw_th
         em_pu = (region_gens_em.carrier.map(emissions) / efficiency)  # tonnes_co2/mw_electrical
         em_pu = em_pu.multiply(weightings.generators, axis=0).loc[planning_horizon].fillna(0)
-        p = (
+
+        #Emitting Gens 
+        p_em = (
             n.model["Generator-p"]
             .loc[:, region_gens_em.index]
             .sel(period=planning_horizon)
         )
-        lhs = (p * em_pu).sum()
+        lhs = (p_em * em_pu).sum()
+
+        #All Gens
+        p = (
+            n.model["Generator-p"]
+            .loc[:, region_gens.index]
+            .sel(period=planning_horizon)
+        )     
         lhs -= (p * EF_imports).sum()
 
         if not region_storage.empty:
