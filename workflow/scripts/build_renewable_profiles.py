@@ -181,7 +181,9 @@ def plot_data(data):
     fig, ax = plt.subplots(figsize=(10, 8))
     im = ax.pcolormesh(x, y, values, shading="auto", cmap="viridis")
     fig.colorbar(
-        im, ax=ax, label="Value"
+        im,
+        ax=ax,
+        label="Value",
     )  # Add a colorbar to represent the value scale
 
     ax.set_xlabel("Longitude")
