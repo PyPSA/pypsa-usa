@@ -105,20 +105,6 @@ rule retrieve_sector_databundle:
         "../scripts/retrieve_databundles.py"
 
 
-rule retrieve_WECC_forecast_data:
-    output:
-        ads_2032=directory(DATA + "WECC_ADS/downloads/2032/Public Data"),
-        ads_2030=directory(
-            DATA
-            + "WECC_ADS/downloads/2030/WECC 2030 ADS PCM 2020-12-16 (V1.5) Public Data/CSV Shape Files"
-        ),
-        ads_dir=directory(DATA + "WECC_ADS/processed"),
-    log:
-        "logs/retrieve/retrieve_WECC_forecast_data.log",
-    script:
-        "../scripts/retrieve_forecast_data.py"
-
-
 DATAFILES_GE = [
     "EIA_DMD_2018_2024.csv",
     "EIA_GridEmissions_all_2018_2024.csv",
@@ -231,34 +217,6 @@ if not config["enable"].get("build_cutout", False):
             move(input[0], output[0])
 
 
-rule retrieve_cost_data_eur:
-    output:
-        pypsa_technology_data=RESOURCES + "costs/pypsa_eur_{year}.csv",
-    params:
-        pypsa_costs_version=config["costs"].get("version", "v0.6.0"),
-    log:
-        LOGS + "retrieve_cost_data_eur_{year}.log",
-    resources:
-        mem_mb=1000,
-    script:
-        "../scripts/retrieve_cost_data_eur.py"
-
-
-rule retrieve_cost_data_usa:
-    output:
-        # nrel_atb_transport = DATA + "costs/nrel_atb_transport.xlsx",
-        nrel_atb=DATA + "costs/nrel_atb.parquet",
-    params:
-        # eia_api_key = config["api"].get("eia", None),
-        eia_api_key=None,
-    log:
-        LOGS + "retrieve_cost_data_usa.log",
-    resources:
-        mem_mb=1000,
-    script:
-        "../scripts/retrieve_cost_data_usa.py"
-
-
 rule retrieve_caiso_data:
     params:
         fuel_year=config["costs"]["ng_fuel_year"],
@@ -279,9 +237,8 @@ rule retrieve_caiso_data:
 rule retrieve_pudl:
     output:
         pudl=DATA + "pudl/pudl.sqlite",
-    params:
-        # eia_api_key = config["api"].get("eia", None),
-        eia_api_key=None,
+        pudl_ferc714=DATA + "pudl/out_ferc714__hourly_estimated_state_demand.parquet",
+        census=DATA + "pudl/censusdp1tract.sqlite",
     log:
         LOGS + "retrieve_pudl.log",
     resources:

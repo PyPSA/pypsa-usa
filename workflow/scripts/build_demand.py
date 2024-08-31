@@ -38,6 +38,8 @@ from pathlib import Path
 from typing import Any, Optional
 
 import constants as const
+import duckdb
+import geopandas as gpd
 import numpy as np
 import pandas as pd
 import pypsa
@@ -320,21 +322,21 @@ class ReadEia(ReadStrategy):
         """
         Formats raw data.
         """
-        df = data.copy()
+        df = data.copy().fillna(0)
         df = self._correct_balancing_areas(df)
         df = self._format_snapshot_index(df)
         df["fuel"] = "electricity"
         df["sector"] = "all"
         df["subsector"] = "all"
         df = df.set_index([df.index, "sector", "subsector", "fuel"])
-        return df.fillna(0)
+        return df
 
     @staticmethod
     def _correct_balancing_areas(df: pd.DataFrame) -> pd.DataFrame:
         """
         Combine EIA Demand Data to Match GIS Shapes.
         """
-        df["Arizona"] = df.pop("SRP") + df.pop("AZPS")
+        df["Arizona"] = df.pop("SRP") + df.pop("AZPS") + df.pop("TEPC")
         df["Carolina"] = (
             df.pop("CPLE")
             + df.pop("CPLW")
@@ -357,6 +359,92 @@ class ReadEia(ReadStrategy):
         )
         df["SPP"] = df.pop("SWPP")
         return df
+
+
+class ReadFERC714(ReadStrategy):
+    """
+    Reads data from PuDLs FERC 714 based State historical Demand.
+    """
+
+    def __init__(self, filepath: str | None = None) -> None:
+        super().__init__(filepath)
+        self._zone = "state"
+
+    @property
+    def zone(self):
+        return self._zone
+
+    def _read_data(self) -> pd.DataFrame:
+        """
+        Reads raw data.
+        """
+
+        if not self.filepath:
+            logger.error("Must provide filepath for FERC714 data")
+            sys.exit()
+
+        logger.info("Building Load Data using PUDL FERC 714 demand")
+        return pd.read_parquet(self.filepath[0], dtype_backend="pyarrow")
+
+    def _read_census_data(self) -> pd.DataFrame:
+        """
+        Reads in census data for population weighting.
+        """
+        duckdb.connect(database=":memory:", read_only=False)
+
+        duckdb.query("INSTALL sqlite;")
+        duckdb.query(
+            f"""
+            ATTACH '{self.filepath[1]}' (TYPE SQLITE);
+            """,
+        )
+
+        sql = """
+        SELECT
+        stusps10 as state_abbr,
+        geoid10 as state_id_fips,
+        name10 as state_name,
+        shape as geom
+        FROM
+        censusdp1tract.state_2010census_dp1;
+        """
+        # df = duckdb.query(sql).to_df()
+        states = (
+            gpd.read_postgis(sql, duckdb, crs="EPSG:4326")
+            .convert_dtypes()
+            .sort_values("state_abbr")
+            .set_index("state_id_fips")
+        )
+        return states
+
+    def _format_data(self, data: pd.DataFrame) -> pd.DataFrame:
+        """
+        Formats raw data.
+        """
+        states = self._read_census_data()
+
+        df = data.copy()
+
+        df["State"] = df.state_id_fips.map(states.state_abbr)
+        df = df.drop(columns=["state_id_fips", "demand_mwh"])
+        df = df.groupby(["datetime_utc", "State"]).sum().reset_index()
+
+        df = df.rename(columns={"datetime_utc": "snapshot"}).set_index("snapshot")
+        df = self._format_snapshot_index(df)
+        df["fuel"] = "electricity"
+        df["sector"] = "all"
+        df["subsector"] = "all"
+        df["State"] = df.State.map(CODE_2_STATE)
+
+        df = pd.pivot_table(
+            df,
+            values="scaled_demand_mwh",
+            index=["snapshot", "sector", "subsector", "fuel"],
+            columns=["State"],
+            aggfunc="sum",
+        )
+
+        return df.fillna(0).round(2)
 
 
 class ReadEfs(ReadStrategy):
@@ -2384,6 +2472,11 @@ if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
 
+        snakemake = mock_snakemake(
+            "build_electrical_demand",
+            interconnect="usa",
+            end_use="power",
+        )
         # snakemake = mock_snakemake(
         #     "build_electrical_demand",
         #     interconnect="texas",
@@ -2412,6 +2505,24 @@ if __name__ == "__main__":
 
     vehicle = snakemake.wildcards.get("vehicle", None)
 
+    if end_use == "power":  # electricity only study
+        demand_profile = demand_params["profile"]
+        demand_disaggregation = "pop"
+        if demand_profile == "efs":
+            scaling_method = "efs"
+        elif demand_profile == "eia":
+            scaling_method = "aeo_electricity"
+        elif demand_profile == "ferc":
+            scaling_method = "aeo_electricity"
+        else:
+            logger.warning(
+                f"No scaling method available for {demand_profile} profile. Setting to 'aeo_electricity'",
+            )
+    else:
+        demand_profile = demand_params["profile"][end_use]
+        demand_disaggregation = demand_params["disaggregation"][end_use]
+        scaling_method = "aeo_energy"
+
     planning_horizons = n.investment_periods.to_list()
     profile_year = snakemake.params.get("profile_year", None)
 
@@ -2437,6 +2548,14 @@ if __name__ == "__main__":
         assert profile_year in range(2018, 2024)
 
         reader = ReadEia(demand_files)
+        sns = n.snapshots.get_level_values(1).map(
+            lambda x: x.replace(year=profile_year),
+        )
+
+    elif demand_profile == "ferc":
+        assert profile_year in range(2018, 2024)
+
+        reader = ReadFERC714(demand_files)
         sns = n.snapshots.get_level_values(1).map(
             lambda x: x.replace(year=profile_year),
         )

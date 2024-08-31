@@ -66,7 +66,7 @@ from _helpers import (
     set_scenario_config,
     update_config_from_wildcards,
 )
-from add_electricity import load_costs, update_transmission_costs
+from add_electricity import update_transmission_costs
 from pypsa.descriptors import expand_series
 
 idx = pd.IndexSlice
@@ -143,15 +143,9 @@ def set_line_s_max_pu(n, s_max_pu=0.7):
 
 def set_transmission_limit(n, ll_type, factor, costs, Nyears=1):
     links_dc_b = n.links.carrier == "DC" if not n.links.empty else pd.Series()
+    # TODO: implement update for transport model
 
-    _lines_s_nom = (
-        np.sqrt(3)
-        * n.lines.type.map(n.line_types.i_nom)
-        * n.lines.num_parallel
-        * n.lines.bus0.map(n.buses.v_nom)
-    )
-    lines_s_nom = n.lines.s_nom.where(n.lines.type == "", _lines_s_nom)
-
+    lines_s_nom = n.lines.s_nom
     col = "capital_cost" if ll_type == "c" else "length"
     ref = (
         lines_s_nom @ n.lines[col]
@@ -186,16 +180,28 @@ def average_every_nhours(n, offset):
     logger.info(f"Resampling the network to {offset}")
     m = n.copy(with_time=False)
 
-    snapshot_weightings = n.snapshot_weightings.resample(offset).sum()
+    def resample_multi_index(df, offset, func):
+        sw = []
+        for year in df.index.levels[0]:
+            sw.append(df.loc[year].resample(offset).apply(func))
+        snapshot_weightings = pd.concat(sw)
+        snapshot_weightings.index = pd.MultiIndex.from_arrays(
+            [snapshot_weightings.index.year, snapshot_weightings.index],
+            names=["period", "timestep"],
+        )
+        return snapshot_weightings
+
+    snapshot_weightings = resample_multi_index(n.snapshot_weightings, offset, "sum")
+
     m.set_snapshots(snapshot_weightings.index)
     m.snapshot_weightings = snapshot_weightings
+    m.investment_periods = n.investment_periods
 
     for c in n.iterate_components():
         pnl = getattr(m, c.list_name + "_t")
         for k, df in c.pnl.items():
             if not df.empty:
-                pnl[k] = df.resample(offset).mean()
-
+                pnl[k] = resample_multi_index(df, offset, "mean")
     return m
 
 
@@ -328,13 +334,8 @@ if __name__ == "__main__":
 
     n = pypsa.Network(snakemake.input[0])
     Nyears = n.snapshot_weightings.loc[n.investment_periods[0]].objective.sum() / 8760.0
-    costs = load_costs(
-        snakemake.input.tech_costs,
-        snakemake.params.costs,
-        snakemake.params.max_hours,
-        Nyears,
-    )
-
+    costs = pd.read_csv(snakemake.input.tech_costs)
+    costs = costs.pivot(index="pypsa-name", columns="parameter", values="value")
     # Set Investment Period Year Weightings
     # 'fillna(1)' needed if only one period
     inv_per_time_weight = (
@@ -387,10 +388,6 @@ if __name__ == "__main__":
         s_nom_max_ext=snakemake.params.lines.get("max_extension", np.inf),
         p_nom_max_ext=snakemake.params.links.get("max_extension", np.inf),
     )
-
-    if snakemake.params.autarky["enable"]:
-        only_crossborder = snakemake.params.autarky["by_country"]
-        enforce_autarky(n, only_crossborder=only_crossborder)
 
     n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))
     n.export_to_netcdf(snakemake.output[0])

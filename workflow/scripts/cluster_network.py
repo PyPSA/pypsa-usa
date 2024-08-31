@@ -94,7 +94,8 @@ import pandas as pd
 import pyomo.environ as po
 import pypsa
 import seaborn as sns
-from _helpers import configure_logging, update_p_nom_max
+from _helpers import calculate_annuity, configure_logging, update_p_nom_max
+from constants import *
 from pypsa.clustering.spatial import (
     busmap_by_greedy_modularity,
     busmap_by_hac,
@@ -103,8 +104,6 @@ from pypsa.clustering.spatial import (
 )
 
 warnings.filterwarnings(action="ignore", category=UserWarning)
-
-from add_electricity import load_costs
 
 idx = pd.IndexSlice
 
@@ -117,7 +116,9 @@ def normed(x):
 
 def weighting_for_country(n, x):
     conv_carriers = {"nuclear", "OCGT", "CCGT", "PHS", "hydro", "coal", "biomass"}
-    gen = n.generators.loc[n.generators.carrier.isin(conv_carriers)].groupby(
+    generators = n.generators
+    generators["carrier_base"] = generators.carrier.str.split().str[0]
+    gen = generators.loc[generators.carrier_base.isin(conv_carriers)].groupby(
         "bus",
     ).p_nom.sum().reindex(n.buses.index, fill_value=0.0) + n.storage_units.loc[
         n.storage_units.carrier.isin(conv_carriers)
@@ -387,6 +388,7 @@ def clustering_for_n_clusters(
 
     line_strategies = aggregation_strategies.get("lines", dict())
     generator_strategies = aggregation_strategies.get("generators", dict())
+    bus_strategies = aggregation_strategies.get("buses", dict())
     one_port_strategies = aggregation_strategies.get("one_ports", dict())
 
     clustering = get_clustering_from_busmap(
@@ -415,6 +417,99 @@ def clustering_for_n_clusters(
             fill_value=0,
         )
 
+    return clustering
+
+
+def replace_lines_with_links(clustering, itl_fn, capex):
+    """
+    Replaces all Lines according to Links with the transfer capacity specified
+    by the ITLs.
+    """
+    lines = clustering.network.lines.copy()
+    buses = clustering.network.buses.copy()
+
+    itls = pd.read_csv(itl_fn)
+
+    itls = itls[
+        itls.r.isin(clustering.network.buses.reeds_zone)
+        & itls.rr.isin(clustering.network.buses.reeds_zone)
+    ]
+
+    itl_cost = pd.read_csv(snakemake.input.itl_costs)
+    itl_cost["interface"] = itl_cost.r + "||" + itl_cost.rr
+    itl_cost = itl_cost[itl_cost.interface.isin(itls.interface)]
+    itl_cost["USD2023perMW"] = itl_cost["USD2004perMW"] * (314.54 / 188.9)
+    itl_cost["USD2023perMWyr"] = calculate_annuity(60, 0.025) * itl_cost["USD2023perMW"]
+    itls = itls.merge(
+        itl_cost[["interface", "length_miles", "USD2023perMWyr"]],
+        on="interface",
+        how="left",
+    )
+
+    itls["p_min_pu_Rev"] = (-1 * (itls.MW_r0 / itls.MW_f0)).fillna(0)
+
+    # lines to add in reverse if forward direction is zero
+    itls_rev = itls[itls.MW_f0 == 0].copy()
+    itls = itls[itls.MW_f0 != 0]
+
+    clustering.network.mremove("Line", clustering.network.lines.index)
+    clustering.network.madd(
+        "Link",
+        names=itls.interface,  # itl name
+        suffix="fwd",
+        bus0=buses.loc[itls.r].index,
+        bus1=buses.loc[itls.rr].index,
+        p_nom=itls.MW_f0.values,
+        p_nom_min=itls.MW_f0.values,
+        p_max_pu=1.0,
+        p_min_pu=itls.p_min_pu_Rev.values,
+        capital_cost=itls.USD2023perMWyr.values,
+        p_nom_extendable=True,
+        carrier="DC",
+    )
+
+    clustering.network.madd(
+        "Link",
+        names=itls_rev.interface,  # itl name
+        suffix="rev",
+        bus0=buses.loc[itls_rev.r].index,
+        bus1=buses.loc[itls_rev.rr].index,
+        p_nom=itls_rev.MW_r0.values,
+        p_nom_min=itls_rev.MW_r0.values,
+        p_max_pu=0,
+        p_min_pu=-1,
+        capital_cost=itls_rev.USD2023perMWyr.values,
+        p_nom_extendable=True,
+        carrier="DC",
+    )
+    logger.info(f"Replaced Lines with Links for zonal model configuration.")
+
+    # Remove any disconnected buses
+    unique_buses = buses.loc[itls.r].index.union(buses.loc[itls.rr].index).unique()
+    disconnected_buses = clustering.network.buses.index[
+        ~clustering.network.buses.index.isin(unique_buses)
+    ]
+    if len(disconnected_buses) > 0:
+        logger.warning(
+            f"Removed {len(disconnected_buses)} sub-network buses from the network.",
+        )
+        clustering.network.mremove("Bus", disconnected_buses)
+        clustering.network.mremove(
+            "Generator",
+            clustering.network.generators.query("bus in @disconnected_buses").index,
+        )
+        clustering.network.mremove(
+            "StorageUnit",
+            clustering.network.storage_units.query("bus in @disconnected_buses").index,
+        )
+        clustering.network.mremove(
+            "Store",
+            clustering.network.stores.query("bus in @disconnected_buses").index,
+        )
+        clustering.network.mremove(
+            "Load",
+            clustering.network.loads.query("bus in @disconnected_buses").index,
+        )
     return clustering
 
 
@@ -447,8 +542,8 @@ if __name__ == "__main__":
         snakemake = mock_snakemake(
             "cluster_network",
             simpl="",
-            clusters="45",
-            interconnect="eastern",
+            clusters="7",
+            interconnect="texas",
         )
     configure_logging(snakemake)
 
@@ -465,7 +560,7 @@ if __name__ == "__main__":
     conventional_carriers = set(params.conventional_carriers)
     if snakemake.wildcards.clusters.endswith("m"):
         n_clusters = int(snakemake.wildcards.clusters[:-1])
-        aggregate_carriers = params.conventional_carriers & aggregate_carriers
+        aggregate_carriers = set(params.conventional_carriers) & aggregate_carriers
     elif snakemake.wildcards.clusters.endswith("c"):
         n_clusters = int(snakemake.wildcards.clusters[:-1])
         aggregate_carriers = aggregate_carriers - conventional_carriers
@@ -511,12 +606,9 @@ if __name__ == "__main__":
             n.snapshot_weightings.loc[n.investment_periods[0]].objective.sum() / 8760.0
         )
 
-        hvac_overhead_cost = load_costs(
-            snakemake.input.tech_costs,
-            params.costs,
-            params.max_hours,
-            Nyears,
-        ).at["HVAC overhead", "capital_cost"]
+        costs = pd.read_csv(snakemake.input.tech_costs)
+        costs = costs.pivot(index="pypsa-name", columns="parameter", values="value")
+        hvac_overhead_cost = costs.at["HVAC overhead", "annualized_capex_per_mw_km"]
 
         custom_busmap = params.custom_busmap
         if custom_busmap:
@@ -527,6 +619,11 @@ if __name__ == "__main__":
             )
             custom_busmap.index = custom_busmap.index.astype(str)
             logger.info(f"Imported custom busmap from {snakemake.input.custom_busmap}")
+
+        if params.replace_lines_with_links:
+            custom_busmap = n.buses.reeds_zone
+            n.buses.interconnect = n.buses.nerc_reg.map(REEDS_NERC_INTERCONNECT_MAPPER)
+            n.lines.drop(columns=["interconnect"], inplace=True)
 
         clustering = clustering_for_n_clusters(
             n,
@@ -541,6 +638,16 @@ if __name__ == "__main__":
             hvac_overhead_cost,
             params.focus_weights,
         )
+        if params.replace_lines_with_links:
+            clustering = replace_lines_with_links(
+                clustering,
+                snakemake.input.itls,
+                hvac_overhead_cost,
+            )
+            N = clustering.network.buses.reeds_zone.unique()
+            assert n_clusters == len(
+                N,
+            ), f"Number of clusters must be {len(N)} to model as transport model."
 
     update_p_nom_max(clustering.network)
 
@@ -566,6 +673,3 @@ if __name__ == "__main__":
         getattr(clustering, attr).to_csv(snakemake.output[attr])
 
     cluster_regions((clustering.busmap,), snakemake.input, snakemake.output)
-
-    # output_path = os.path.dirname(snakemake.output[0]) + "_clustered_"
-    # export_network_for_gis_mapping(clustering.network, output_path)

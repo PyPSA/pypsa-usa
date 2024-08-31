@@ -1,8 +1,7 @@
 
 countries: [US]
 
-network_configuration: "pypsa-usa" # "pypsa-usa" or "ads2032"
-
+foresight:  'perfect'
 
 # docs :
 renewable:
@@ -16,7 +15,7 @@ renewable:
     correction_factor: 1 # 0.93
     corine:
       #all keys labeled corrine are actually copernicus codes. Using the name corrine bc using the pypsa-eur convention: https://land.copernicus.eu/global/sites/cgls.vito.be/files/products/CGLOPS1_PUM_LC100m-V3_I3.4.pdf
-      grid_codes: [20, 30, 40, 60, 100, 112, 113, 114, 115]
+      grid_codes: [20, 30, 40, 60, 100, 111, 112, 113, 114, 115]
       distance: 10 #buffer from distance_grid_codes that are to be excluded
       distance_grid_codes: [50]
     natura: true
@@ -35,7 +34,7 @@ renewable:
     corine:
       grid_codes: [80, 200] #page 28 of https://land.copernicus.eu/global/sites/cgls.vito.be/files/products/CGLOPS1_PUM_LC100m-V3_I3.4.pdf
     natura: true
-    boem_screen: true
+    boem_screen: False
     max_depth: 60 # meters, ref https://www.nrel.gov/docs/fy16osti/66599.pdf
     min_shore_distance: 22000 # meters
     max_shore_distance: 65000 # meters
@@ -70,7 +69,7 @@ renewable:
     capacity_per_sqkm: 4.6 # From 1.7 to 4.6 addresses issue #361 - TODO revisit this assumption
     correction_factor: 1 # 0.854337
     corine:
-      grid_codes: [20, 30, 40, 60, 90, 100] #see above for codes
+      grid_codes: [20, 30, 60, 90, 100] #see above for codes
     natura: true
     cec: true
     potential: conservative # simple or conservative

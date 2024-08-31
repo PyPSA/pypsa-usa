@@ -144,6 +144,23 @@ def pdbcast(v, h):
     )
 
 
+def calculate_annuity(n, r):
+    """
+    Calculate the annuity factor for an asset with lifetime n years and.
+
+    discount rate of r, e.g. annuity(20, 0.05) * 20 = 1.6
+    """
+    if isinstance(r, pd.Series):
+        return pd.Series(1 / n, index=r.index).where(
+            r == 0,
+            r / (1.0 - 1.0 / (1.0 + r) ** n),
+        )
+    elif r > 0:
+        return r / (1.0 - 1.0 / (1.0 + r) ** n)
+    else:
+        return 1 / n
+
+
 def load_network_for_plots(fn, tech_costs, config, combine_hydro_ps=True):
     import pypsa
     from add_electricity import load_costs, update_transmission_costs
