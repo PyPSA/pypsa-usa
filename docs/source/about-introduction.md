@@ -1,22 +1,32 @@
 (introduction)=
 # Introduction
 
-```{warning}
-**This model is under active development. If you would like to chat about using the model please don't hesitate to reach out to ktehranchi@stanford.edu and trevor_barnes@sfu.ca for support**
-```
+PyPSA-USA is an open-source tool that enables you to model and simulate the United States energy system with flexibility.
 
-PyPSA-USA is an open-source energy system dataset of the United States energy system with continental US coverage.
+PyPSA-USA offers a versatile toolkit that allows you to customize the **data** for your energy system model with ease. Through a simple configuration file, you can control the spatial, temporal, and operational resolution of your model. Access a range of cleaned and prepared historical and forecasted data to build a model tailored to your needs. 
 
-PyPSA-USA provides you with a toolkit to customize the **data** of energy system model with ease. Through configuration file you can control the spatial, temporal, and operational resolution of your energy system model with access to cleaned and prepared historical and forecasted data. This means, you can build a model of **ERCOT, WECC, or the Eastern interconnection**, where the transmission network is clustered to **N# of user defined nodes**, which can respect the boundaries of **balancing areas, states, or REeDs GIS Shapes**, using **historical EIA-930 demand data years 2018-2023** OR **NREL EFS forcasted demand [2030, 2040, 2050]**, with **historical daily/monthly fuel prices from ISOs/EIA [choice of year]**, AND imported capital cost projections from the **NREL Annual Technology Baseline**.
+Whether you’re focusing on **ERCOT, WECC, or the Eastern Interconnection**, PyPSA-USA gives you the flexibility to:
+- Choose betweenn two transmission networks. One of which you can cluster to a user-defined number of nodes, respecting boundaries which respect county lines, balancing areas, states, NERC regions.
+- Utilize **historical EIA-930 demand data** (2018-2023) or **NREL EFS forecasted demand** (2030, 2040, 2050).
+- Incorporate **historical daily/monthly fuel prices** from ISOs/EIA for your chosen year.
+- Import capital cost projections from the **NREL Annual Technology Baseline**.
 
-You can create data model- and export to use in your own homebrewed optimization model via csv tables, or xarray netCDF model.
+You can create and export data models for use in your own optimization models via CSV tables or xarray netCDF formats.
 
-Beyond creating a data model, PyPSA-USA also provides an interface for running capacity expansion planning and operational simulation models with DC power flow with the Python for Power System Analysis package. You can run expansion planning exercises which integrate regional and national policy constraints like RPS standards, emissions standards, PRMs, and more.
+Beyond creating a data model, PyPSA-USA also provides an interface for running capacity expansion planning and operational simulation models with the Python for Power System Analysis package. You can run expansion planning exercises which integrate regional and national policy constraints like RPS standards, emissions standards, PRMs, and more.
 
-PyPSA-USA builds on and leverages the work of [PyPSA-EUR](https://pypsa-eur.readthedocs.io/en/latest/index.html) developed by TU Berlin. PyPSA-USA is actively developed by the [INES Research Group](https://ines.stanford.edu) at Stanford University and the [ΔE+ Research Group](https://www.sfu.ca/see/research/delta-e.html) at Simon Fraser University.
+PyPSA-USA builds on and leverages the work of [PyPSA-EUR](https://pypsa-eur.readthedocs.io/en/latest/index.html) developed by TU Berlin. It is actively developed by the [INES Research Group](https://ines.stanford.edu) at Stanford University and the [ΔE+ Research Group](https://www.sfu.ca/see/research/delta-e.html) at Simon Fraser University. We welcome contributions and collaborations from the community—join us in advancing energy system modeling!
 
 (workflow)=
 ## Workflow
+
+The diagram below illustrates the workflow of PyPSA-USA, highlighting how the data flows through the model scripts.
+
+![pypsa-usa workflow](https://github.com/PyPSA/pypsa-usa/blob/master/workflow/repo_data/dag.jpg?raw=true)
+
+## Folder Structure
+
+PyPSA-USA is organized to facilitate easy navigation and efficient execution. Below is the folder structure of the project. Each folder serves a specific purpose, from environment setup to data processing and storage. After running the Snakemake file for the first time, your directory will be built and populated with the necessary data files.
 
 ![pypsa-usa workflow](https://github.com/PyPSA/pypsa-usa/blob/master/workflow/repo_data/dag.jpg?raw=true)
 
@@ -59,3 +69,7 @@ The envs folder contains the conda env yaml files neccesary to build your mamba/
 |   │   └── example_data.csv
 |   └── Snakefile
 ```
+
+
+```{notice}
+**This model is under active development. If you need assistance or would like to discuss using the model, please reach out to ktehranchi@stanford.edu and trevor_barnes@sfu.ca.**

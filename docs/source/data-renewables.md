@@ -1,4 +1,34 @@
 (data-renewables)=
 # Renewables
 
-Lorem ipsum odor amet, consectetuer adipiscing elit. Ultrices natoque massa montes donec, ut sagittis massa euismod. Duis adipiscing nostra justo iaculis luctus potenti fames. Vivamus sodales integer ex potenti nostra porta. Eget maximus turpis ornare auctor risus.
+## Weather Data and Renewable Resource Availability
+
+As energy systems integrate more renewable resources, their stability and reliability become increasingly dependent on climate systems. Weather conditions affect not only the availability of renewable resources but also influence the efficiency of thermal generators, transmission line capacities, heating and cooling demand, generator outages, and other critical parameters. These weather-driven variables are crucial for ensuring resource adequacy and reliability. To support robust planning decisions, PyPSA-USA integrates high-resolution weather data through the Atlite climate-energy modeling tool.
+
+### Integration with Atlite
+
+PyPSA-USA leverages the Atlite tool to provide access to decades of weather data with varying spatial resolutions, as detailed in Table X. Atlite is used to estimate hourly renewable resource availability across the United States, typically at a spatial resolution of 30 km² cells. Within PyPSA-USA, users can configure:
+
+- **Weather Year**
+- **Turbine Type**
+- **Solar Array Type**
+- **Land-Use Parameters**
+- **Simulation Parameters**
+
+The hourly renewable capacity factors calculated by Atlite are weighted based on land-use availability factors. This ensures that areas unsuitable for specific technology types do not disproportionately affect the renewable resource capacity assigned to each node. These weighted capacity factors are aggregated into 41,564 distinct zones across the United States. These zones are then clustered using one of the clustering algorithms developed for PyPSA-Eur.
+
+### Land-Use Data and Renewable Integration
+
+Land-use data is a critical factor in determining the technical potential for renewable energy integration. PyPSA-USA provides users with data on renewable resource availability, which is informed by layers of flexibly assigned land-use classifications, including:
+
+- **Urban Areas**
+- **Forested Regions**
+- **Scrub-Land**
+- **Satellite Imagery**
+- **Federally Protected Lands**
+- **Bathymetry**
+- **State-Level Land Exclusions**
+
+These land exclusion layers are combined to create estimates of land available for renewable energy development, which can be customized for different technologies. This approach allows users to accurately assess the technical potential for renewable integration based on realistic land-use constraints.
+
+Additional details on the configurations available in the Atlite weather-energy simulation tool can be found in the Atlite documentation.
