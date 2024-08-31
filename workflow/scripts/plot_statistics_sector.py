@@ -473,6 +473,10 @@ def plot_capacity_by_carrier(
         df = get_capacity_per_node(n, sector, group_existing=True, state=state)
         df = df.reset_index()[["carrier", "p_nom_opt"]]
 
+        if df.empty:
+            logger.warning(f"No data to plot for {state} sector {sector}")
+            continue
+
         if nice_name:
             df["carrier"] = df.carrier.map(n.carriers.nice_name)
 
@@ -645,6 +649,10 @@ def plot_power_capacity(
         state=state,
     )
     df = df.reset_index()[["carrier", "p_nom_opt"]]
+
+    if df.empty:
+        logger.warning(f"No data to plot for {state} sector pwr")
+        return fig, axs
 
     if nice_name:
         df["carrier"] = df.carrier.map(n.carriers.nice_name)
@@ -1573,7 +1581,7 @@ if __name__ == "__main__":
             ll="v1.0",
             opts="500SEG",
             sector="E-G",
-            state="AZ",
+            state="TX",
         )
     configure_logging(snakemake)
 
