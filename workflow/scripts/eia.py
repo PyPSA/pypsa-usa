@@ -468,7 +468,7 @@ class DataExtractor(ABC):
         )
         session.mount("https://", HTTPAdapter(max_retries=retries))
 
-        response = session.get(url, timeout=10)
+        response = session.get(url, timeout=30)
         if response.status_code == 200:
             return response.json()  # Assumes the response is in JSON format
         else:
