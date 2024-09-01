@@ -1,0 +1,62 @@
+# sector coupling studies 
+
+# docs :
+sector:
+  co2:
+    sequestration_potential: 0
+    policy: "config/policy_constraints/sector_co2_limits.csv"
+  natural_gas:
+    allow_imports_exports: true # false to be implemented
+    cyclic_storage: false
+  methane:
+    leakage_rate: 2 # percent # to be implemented 
+    gwp: 18 # to be implemented 
+  heating:
+    heat_pump_sink_T: 55.
+    standing_loss_space: 0
+    standing_loss_water: 0.032
+  service_sector:
+    dynamic_costs: True # false to be implemented 
+    split_res_com: True # false to be implemented 
+    split_urban_rural: True # false to be implemented 
+    split_space_water_heating: True # false to be implemented 
+    brownfield: True
+    gas_connection:
+      rural: 1 # to be implemented
+      urban: 1 # to be implemented
+      total: 1 # to be implemented
+    technologies:
+      space_heating:
+        elec_furnace: true
+        gas_furnace: true
+        oil_furnace: true
+        heat_pump: true
+        air_con: true
+      water_heating: # false to be implemented
+        elec_water_tank: false # true to be implemented
+        elec_instant: false # true to be implemented
+        gas_water_tank: true
+        gas_instant: true
+        oil_water_tank: true
+    loads:
+      heating: true
+      cooling: true
+  transport_sector:
+    brownfield: True # false to be implemented
+    dynamic_costs: True # false to be implemented 
+    exogenous: True # false to be implemented 
+    ev_policy: "config/policy_constraints/ev_policy.csv"
+    modes: # false to be implemented 
+      vehicle: true
+      rail: true
+      air: true
+      boat: true
+  industrial_sector: 
+    brownfield: True # false to be implemented
+    dynamic_costs: True # false to be implemented 
+    technologies: # false to be implemented
+      gas_furnace: true
+      coal_furnace: true
+      heat_pump: true
+  
+    

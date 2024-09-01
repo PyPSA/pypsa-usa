@@ -83,7 +83,7 @@ wildcard_constraints:
 
 
 # Merge subworkflow configs and main config
-configfile: "config/config.tutorial.yaml"
+configfile: "config/config.default.yaml"
 configfile: "config/config.cluster.yaml"
 configfile: "config/config.common.yaml"
 configfile: "config/config.plotting.yaml"
@@ -276,6 +276,7 @@ def sector_figures(wildcards):
                 figure=FIGURES_SYSTEM_VALIDATION,
             )
         )
+        """
         figs.append(
             expand(
                 RESULTS
@@ -284,7 +285,6 @@ def sector_figures(wildcards):
                 figure=FIGURES_SYSTEM_PRODUCTION,
             )
         )
-        """
         return list(chain(*figs))
     return figs
 
