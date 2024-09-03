@@ -157,7 +157,8 @@ def calculate_annuity(n, r):
 
 
 def load_costs(tech_costs: str) -> pd.DataFrame:
-    pass
+    df = pd.read_csv(tech_costs)
+    return df.pivot(index="technology", columns="parameter", values="value").fillna(0)
 
 
 def load_network_for_plots(fn, tech_costs, config, combine_hydro_ps=True):

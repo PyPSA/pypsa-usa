@@ -16,8 +16,7 @@ logger = logging.getLogger(__name__)
 import sys
 from typing import Optional
 
-from _helpers import configure_logging, get_snapshots
-from add_electricity import load_costs
+from _helpers import configure_logging, get_snapshots, load_costs
 from build_co2_tracking import build_co2_tracking
 from build_heat import build_heat
 from build_natural_gas import StateGeometry, build_natural_gas
