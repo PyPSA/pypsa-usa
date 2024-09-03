@@ -27,7 +27,7 @@ For plants outside the WECC, and for internal plants missing data, PyPSA-USA imp
 
 In production cost-minimizing optimization models, a generator’s marginal cost to produce electricity is a primary driver of dispatch decisions and electricity prices. However, generator fuel prices and efficiencies are not uniformly available across the United States, and generators often enter into bilateral contracts that are not directly correlated with wholesale fuel prices. To address these challenges, PyPSA-USA integrates fuel prices and unit-level fuel costs across varying spatial scopes and temporal scales.
 
-- **Fuel Price Integration**: 
+- **Fuel Price Integration**:
     - Fuel prices are collected and overlaid to select the highest resolution available, defaulting to coarser data if necessary.
     - Single-point unit-level generator fuel efficiencies are sourced from a CEMS-based dataset (D. Suri et. al.) (citation inbound).
     - Monthly unit-level fuel prices and additional plant efficiencies are collected via PUDL EIA-923.

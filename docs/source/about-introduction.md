@@ -3,10 +3,10 @@
 
 PyPSA-USA is an open-source tool that enables you to model and simulate the United States energy system with flexibility.
 
-PyPSA-USA offers a versatile toolkit that allows you to customize the **data** for your energy system model with ease. Through a simple configuration file, you can control the spatial, temporal, and operational resolution of your model. Access a range of cleaned and prepared historical and forecasted data to build a model tailored to your needs. 
+PyPSA-USA offers a versatile toolkit that allows you to customize the **data** for your energy system model with ease. Through a simple configuration file, you can control the spatial, temporal, and operational resolution of your model. Access a range of cleaned and prepared historical and forecasted data to build a model tailored to your needs.
 
 Whether you’re focusing on **ERCOT, WECC, or the Eastern Interconnection**, PyPSA-USA gives you the flexibility to:
-- Choose between multiple transmission networks. 
+- Choose between multiple transmission networks.
 - Cluster the nodal network a user-defined number of nodes, respecting county lines, balancing areas, states, NERC region boundaries.
 - Utilize **historical EIA-930 demand data** (2018-2023) or **NREL EFS forecasted demand** (2030, 2040, 2050).
 - Incorporate **historical daily/monthly fuel prices** from ISOs/EIA for your chosen year.

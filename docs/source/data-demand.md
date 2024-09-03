@@ -17,20 +17,20 @@ The EFS also provides electrification cases, with reference, medium, and high el
 
 ## Usage
 
-The user determines weather to use historical demand years via a combination of the planning horizons setting, and the electricity demand setting. If conducting historical simulations, the user must select a planning horizon in the past (2018-2023), and set `profile: eia`. 
+The user determines weather to use historical demand years via a combination of the planning horizons setting, and the electricity demand setting. If conducting historical simulations, the user must select a planning horizon in the past (2018-2023), and set `profile: eia`.
 
 If conducting forward-looking planning cases the user must set future planning_horizon year (2025- 2050) and set `profile: efs`.
 
-For the years between 2030, 2040, and 2050, PyPSA-USA implements a scaling factor that interpolates between future years or scales historical demand using forecasts from the Annual Energy Outlook (AEO). 
+For the years between 2030, 2040, and 2050, PyPSA-USA implements a scaling factor that interpolates between future years or scales historical demand using forecasts from the Annual Energy Outlook (AEO).
 
 ```
 scenario:
   planning_horizons: [] # Historical or Future Year(s)
 
 electricity:
-  demand: 
+  demand:
     profile: efs # efs, eia
-    scenario: 
+    scenario:
       efs_case: reference # reference, medium, high
       efs_speed: moderate # slow, moderate, rapid
       aeo: reference

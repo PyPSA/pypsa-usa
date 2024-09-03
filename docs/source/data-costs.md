@@ -35,4 +35,3 @@ Renewable resources like solar and wind are constrained by technical capacity li
 - **Geothermal and Pumped Hydro Storage (PHS)**: These resources require more complex modeling due to subsurface and surface characteristics. Regional supply curves for these resources, including capital costs and technical capacity, are incorporated from specialized datasets.
     - **PHS**: Uses data from the NREL Closed-Loop PHS dataset.
     - **Geothermal Resources**: Availability data is sourced from FGEM, with further details to be provided in a forthcoming paper.
-
