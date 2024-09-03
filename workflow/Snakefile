@@ -177,7 +177,7 @@ def sector_figures(wildcards):
         figs.append(
             expand(
                 RESULTS
-                + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/gas/{figure}",
+                + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/gas/{figure}",
                 **config["scenario"],
                 figure=FIGURES_SECTOR_NATURAL_GAS,
             )
@@ -185,7 +185,7 @@ def sector_figures(wildcards):
         figs.append(
             expand(
                 RESULTS
-                + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/{s}/emissions/{figure}.png",
+                + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/{s}/emissions/{figure}.png",
                 **config["scenario"],
                 figure=FIGURES_SECTOR_EMISSIONS,
                 s=states,
@@ -194,7 +194,7 @@ def sector_figures(wildcards):
         figs.append(
             expand(
                 RESULTS
-                + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/system/emissions/{figure}.png",
+                + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/system/emissions/{figure}.png",
                 **config["scenario"],
                 figure=FIGURES_SECTOR_EMISSIONS,
             )
@@ -202,7 +202,7 @@ def sector_figures(wildcards):
         figs.append(
             expand(
                 RESULTS
-                + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/{s}/production/{figure}.png",
+                + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/{s}/production/{figure}.png",
                 **config["scenario"],
                 figure=FIGURES_SECTOR_PRODUCTION,
                 s=states,
@@ -211,7 +211,7 @@ def sector_figures(wildcards):
         figs.append(
             expand(
                 RESULTS
-                + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/system/production/{figure}.png",
+                + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/system/production/{figure}.png",
                 **config["scenario"],
                 figure=FIGURES_SECTOR_PRODUCTION,
             )
@@ -219,7 +219,7 @@ def sector_figures(wildcards):
         figs.append(
             expand(
                 RESULTS
-                + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/{s}/capacity/{figure}.png",
+                + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/{s}/capacity/{figure}.png",
                 **config["scenario"],
                 figure=FIGURES_SECTOR_CAPACITY,
                 s=states,
@@ -228,7 +228,7 @@ def sector_figures(wildcards):
         figs.append(
             expand(
                 RESULTS
-                + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/system/capacity/{figure}.png",
+                + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/system/capacity/{figure}.png",
                 **config["scenario"],
                 figure=FIGURES_SECTOR_CAPACITY,
             )
@@ -236,7 +236,7 @@ def sector_figures(wildcards):
         figs.append(
             expand(
                 RESULTS
-                + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/{s}/loads/{figure}.png",
+                + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/{s}/loads/{figure}.png",
                 **config["scenario"],
                 figure=FIGURES_SECTOR_LOADS,
                 s=states,
@@ -245,7 +245,7 @@ def sector_figures(wildcards):
         figs.append(
             expand(
                 RESULTS
-                + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/system/loads/{figure}.png",
+                + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/system/loads/{figure}.png",
                 **config["scenario"],
                 figure=FIGURES_SECTOR_LOADS,
             )
@@ -254,7 +254,7 @@ def sector_figures(wildcards):
         figs.append(
             expand(
                 RESULTS
-                + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/{s}/validate/{figure}.png",
+                + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/{s}/validate/{figure}.png",
                 **config["scenario"],
                 figure=FIGURES_SECTOR_VALIDATE,
                 s=states,
@@ -263,7 +263,7 @@ def sector_figures(wildcards):
         figs.append(
             expand(
                 RESULTS
-                + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/system/validate/{figure}.png",
+                + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/system/validate/{figure}.png",
                 **config["scenario"],
                 figure=FIGURES_SECTOR_VALIDATE,
             )
@@ -271,7 +271,7 @@ def sector_figures(wildcards):
         figs.append(
             expand(
                 RESULTS
-                + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/system/validate/{figure}.png",
+                + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/system/validate/{figure}.png",
                 **config["scenario"],
                 figure=FIGURES_SYSTEM_VALIDATION,
             )
@@ -280,7 +280,7 @@ def sector_figures(wildcards):
         figs.append(
             expand(
                 RESULTS
-                + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/system/production/{figure}.png",
+                + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/system/production/{figure}.png",
                 **config["scenario"],
                 figure=FIGURES_SYSTEM_PRODUCTION,
             )

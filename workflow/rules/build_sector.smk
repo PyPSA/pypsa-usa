@@ -4,9 +4,9 @@
 def sector_input_files(wildcards):
     input_files = {
         "network": RESOURCES
-        + "{interconnect}/elec_s{simpl}_{clusters}_ec_l{ll}_{opts}.nc",
+        + "{interconnect}/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}.nc",
         "tech_costs": RESOURCES
-        + f"costs/costs_{config['scenario']['planning_horizons'][0]}.csv",
+        + f"costs/sector_costs_{config['scenario']['planning_horizons'][0]}.csv",
     }
     sectors = wildcards.sector.split("-")
     if "G" in sectors:
@@ -17,19 +17,19 @@ def sector_input_files(wildcards):
             "pipeline_shape": DATA + "natural_gas/pipelines.geojson",
             "eia_757": DATA + "natural_gas/EIA-757.csv",
             "cop_soil_total": RESOURCES
-            + "{interconnect}/cop_soil_total_elec_s_{clusters}.nc",
+            + "{interconnect}/cop_soil_total_elec_s{simpl}_c{clusters}.nc",
             "cop_soil_rural": RESOURCES
-            + "{interconnect}/cop_soil_rural_elec_s_{clusters}.nc",
+            + "{interconnect}/cop_soil_rural_elec_s{simpl}_c{clusters}.nc",
             "cop_soil_urban": RESOURCES
-            + "{interconnect}/cop_soil_urban_elec_s_{clusters}.nc",
+            + "{interconnect}/cop_soil_urban_elec_s{simpl}_c{clusters}.nc",
             "cop_air_total": RESOURCES
-            + "{interconnect}/cop_air_total_elec_s_{clusters}.nc",
+            + "{interconnect}/cop_air_total_elec_s{simpl}_c{clusters}.nc",
             "cop_air_rural": RESOURCES
-            + "{interconnect}/cop_air_rural_elec_s_{clusters}.nc",
+            + "{interconnect}/cop_air_rural_elec_s{simpl}_c{clusters}.nc",
             "cop_air_urban": RESOURCES
-            + "{interconnect}/cop_air_urban_elec_s_{clusters}.nc",
+            + "{interconnect}/cop_air_urban_elec_s{simpl}_c{clusters}.nc",
             "clustered_pop_layout": RESOURCES
-            + "{interconnect}/pop_layout_elec_s_{clusters}.csv",
+            + "{interconnect}/pop_layout_elec_s{simpl}_c{clusters}.csv",
             "ev_policy": config["sector"]["transport"]["ev_policy"],
             "residential_stock": "repo_data/sectors/residential_stock",
             "commercial_stock": "repo_data/sectors/commercial_stock",
@@ -129,7 +129,7 @@ rule build_temperature_profiles:
     input:
         pop_layout=RESOURCES + "{interconnect}/pop_layout_{scope}.nc",
         regions_onshore=RESOURCES
-        + "{interconnect}/regions_onshore_s{simpl}_c{clusters}.geojson",
+        + "{interconnect}/regions_onshore_s{simpl}_{clusters}.geojson",
         cutout="cutouts/"
         + CDIR
         + "{interconnect}_"
@@ -219,7 +219,7 @@ rule build_clustered_population_layouts:
         pop_layout_urban=RESOURCES + "{interconnect}/pop_layout_urban.nc",
         pop_layout_rural=RESOURCES + "{interconnect}/pop_layout_rural.nc",
         regions_onshore=RESOURCES
-        + "{interconnect}/regions_onshore_s{simpl}_c{clusters}.geojson",
+        + "{interconnect}/regions_onshore_s{simpl}_{clusters}.geojson",
         cutout="cutouts/"
         + CDIR
         + "{interconnect}_"
