@@ -2434,6 +2434,8 @@ def get_demand_params(
                 scaling_method = "efs"
             elif demand_profile == "eia":
                 scaling_method = "aeo_electricity"
+            elif demand_profile == "ferc":
+                scaling_method = "aeo_electricity"
             else:
                 logger.warning(
                     f"No scaling method available for {demand_profile} profile. Setting to 'aeo_electricity'",
@@ -2504,24 +2506,6 @@ if __name__ == "__main__":
     eia_api = snakemake.params.eia_api
 
     vehicle = snakemake.wildcards.get("vehicle", None)
-
-    if end_use == "power":  # electricity only study
-        demand_profile = demand_params["profile"]
-        demand_disaggregation = "pop"
-        if demand_profile == "efs":
-            scaling_method = "efs"
-        elif demand_profile == "eia":
-            scaling_method = "aeo_electricity"
-        elif demand_profile == "ferc":
-            scaling_method = "aeo_electricity"
-        else:
-            logger.warning(
-                f"No scaling method available for {demand_profile} profile. Setting to 'aeo_electricity'",
-            )
-    else:
-        demand_profile = demand_params["profile"][end_use]
-        demand_disaggregation = demand_params["disaggregation"][end_use]
-        scaling_method = "aeo_energy"
 
     planning_horizons = n.investment_periods.to_list()
     profile_year = snakemake.params.get("profile_year", None)
