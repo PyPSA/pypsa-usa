@@ -92,14 +92,14 @@ rule build_cost_data:
     params:
         costs=config_provider("costs"),
     input:
-        nrel_atb=DATA + "costs/nrel_atb.parquet",
-        pypsa_technology_data=RESOURCES + "costs/pypsa_eur_{year}.csv",
+        pudl=DATA + "pudl/pudl.sqlite",
         efs_tech_costs="repo_data/costs/EFS_Technology_Data.xlsx",
         efs_icev_costs="repo_data/costs/efs_icev_costs.csv",
         eia_tech_costs="repo_data/costs/eia_tech_costs.csv",
-        pudl=DATA + "pudl/pudl.sqlite",
+        additional_costs="repo_data/costs/additional_costs.csv",
     output:
         tech_costs=RESOURCES + "costs/costs_{year}.csv",
+        sector_costs=RESOURCES + "costs/sector_costs_{year}.csv",
     log:
         LOGS + "costs_{year}.log",
     threads: 1
@@ -437,7 +437,7 @@ def demand_to_add(wildcards):
 
         # service demand
         services = ["residential", "commercial"]
-        if config["sector"]["split_space_water_heating"]:
+        if config["sector"]["service_sector"]["split_space_water_heating"]:
             fuels = ["electricity", "cooling", "space-heating", "water-heating"]
         else:
             fuels = ["electricity", "cooling", "heating"]

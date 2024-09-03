@@ -3,6 +3,7 @@ Combines all time independent cost data sources into a standard format.
 """
 
 import logging
+from typing import Any, Optional
 
 import constants as const
 import duckdb
@@ -15,6 +16,24 @@ from build_sector_costs import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Impute emissions factor data
+# https://www.eia.gov/environment/emissions/co2_vol_mass.php
+# Units: [tCO2/MWh_thermal]
+EMISSIONS_DATA = [
+    {"pypsa-name": "coal", "parameter": "co2_emissions", "value": 0.3453},
+    {"pypsa-name": "oil", "parameter": "co2_emissions", "value": 0.34851},
+    {"pypsa-name": "geothermal", "parameter": "co2_emissions", "value": 0.04029},
+    {"pypsa-name": "waste", "parameter": "co2_emissions", "value": 0.1016},
+    {"pypsa-name": "gas", "parameter": "co2_emissions", "value": 0.18058},
+    {"pypsa-name": "CCGT", "parameter": "co2_emissions", "value": 0.18058},
+    {"pypsa-name": "OCGT", "parameter": "co2_emissions", "value": 0.18058},
+    {
+        "pypsa-name": "geothermal",
+        "parameter": "heat_rate_mmbtu_per_mwh",
+        "value": 8.881,
+    },  # AEO 2023
+]
 
 
 def create_duckdb_instance(pudl_fn: str):
@@ -81,6 +100,100 @@ def match_technology(row, tech_dict):
     return None
 
 
+def get_sector_costs(
+    efs_tech_costs: str,
+    efs_icev_costs: str,
+    eia_tech_costs,
+    year: int,
+    additional_costs_csv: Optional[str] = None,
+) -> pd.DataFrame:
+    """
+    Gets end-use tech costs for sector coupling studies.
+    """
+
+    def correct_units(df: pd.DataFrame) -> pd.DataFrame:
+        # USD/gal -> USD/MWh (water storage)
+        # assume cp = 4.186 kJ/kg/C
+        # (USD / gal) * (1 gal / 3.75 liter) * (1L / 1 kg H2O) = 0.267 USD / kg water
+        # (0.267 USD / kg) * (1 / 4.186 kJ/kg/C) * (1 / 1C) = 0.0637 USD / kJ
+        # (0.0637 USD / kJ) * (1000 kJ / 1 MJ) * (3600sec / 1hr) = 229335 USD / MWh
+        df.loc[df.unit.str.contains("USD/gal"), "value"] *= 229335
+        df.unit = df.unit.str.replace("USD/gal", "USD/MWh")
+
+        df.unit = df.unit.str.replace("$/", "USD/")
+
+        df.loc[df.unit.str.contains("/kW"), "value"] *= 1e3
+        df.unit = df.unit.str.replace("/kW", "/MW")
+
+        # 1 euro = 1.11 USD
+        # taked on Sept. 2, 2024
+
+        df.loc[df.unit.str.contains("EUR/"), "value"] *= 1.11
+        df.unit = df.unit.str.replace("EUR/", "USD/")
+
+        return df
+
+    def get_investment_year_data(df: pd.DataFrame, year: int) -> pd.DataFrame:
+        return df[df.year == year].drop(columns="year")
+
+    def calculate_capex(df: pd.DataFrame, discount_rate: float) -> pd.DataFrame:
+        """
+        Calcualtes capex based on annuity payments.
+        """
+
+        capex = df.copy().set_index(["technology", "parameter"])
+        capex = capex.value.unstack().fillna(0)
+
+        capex["capital_cost"] = (
+            (
+                calculate_annuity(
+                    capex["lifetime"],
+                    discount_rate,
+                )
+                + capex["FOM"] / 100
+            )
+            * capex["investment"]
+            * 1
+        )
+
+        capex = capex["capital_cost"].dropna().to_frame(name="value")
+
+        investment = df[df.parameter == "investment"].set_index("technology")
+
+        assert len(capex) == len(investment)
+
+        final = capex.reindex_like(investment)
+        final["parameter"] = "capital_cost"
+        final["unit"] = investment.unit
+        final["source"] = investment.source
+        final["further_description"] = investment.further_description
+
+        return final
+
+    bev = EfsTechnologyData(efs_tech_costs).get_data("Transportation")
+    ice = EfsIceTransportationData(efs_icev_costs).get_data()
+    builidng = EiaBuildingData(eia_tech_costs).get_data()
+
+    df = pd.concat([bev, ice, builidng])
+    df = get_investment_year_data(df, year)
+    df = df.rename(columns={"further description": "further_description"})
+
+    if additional_costs_csv:
+        additional = pd.read_csv(additional_costs_csv)
+        assert all(x in df.columns for x in additional.columns)
+        df = pd.concat([df, additional]).reset_index(drop=True)
+
+    df = correct_units(df)
+
+    discount_rate = 0.05
+    capex = calculate_capex(df, discount_rate)
+    capex = capex.reset_index()[df.columns]
+
+    final = pd.concat([df, capex])
+    final["value"] = final.value.round(4)
+    return final
+
+
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
@@ -97,6 +210,8 @@ if __name__ == "__main__":
     tech_year = snakemake.wildcards.year
     years = range(2021, 2051)
     tech_year = min(years, key=lambda x: abs(x - int(tech_year)))
+
+    emissions_data = EMISSIONS_DATA
 
     create_duckdb_instance(snakemake.input.pudl)
 
@@ -155,23 +270,8 @@ if __name__ == "__main__":
         value_name="value",
     )
 
-    # Impute emissions factor data
-    # https://www.eia.gov/environment/emissions/co2_vol_mass.php
-    # Units: [tCO2/MWh_thermal]
-    emissions_data = [
-        {"pypsa-name": "coal", "parameter": "co2_emissions", "value": 0.3453},
-        {"pypsa-name": "oil", "parameter": "co2_emissions", "value": 0.34851},
-        {"pypsa-name": "geothermal", "parameter": "co2_emissions", "value": 0.04029},
-        {"pypsa-name": "waste", "parameter": "co2_emissions", "value": 0.1016},
-        {"pypsa-name": "gas", "parameter": "co2_emissions", "value": 0.18058},
-        {"pypsa-name": "CCGT", "parameter": "co2_emissions", "value": 0.18058},
-        {"pypsa-name": "OCGT", "parameter": "co2_emissions", "value": 0.18058},
-        {
-            "pypsa-name": "geothermal",
-            "parameter": "heat_rate_mmbtu_per_mwh",
-            "value": 8.881,
-        },  # AEO 2023
-    ]
+    emissions_data = EMISSIONS_DATA
+
     # Impute Transmission Data
     # TEPCC 2023
     # WACC & Lifetime: https://emp.lbl.gov/publications/improving-estimates-transmission
@@ -366,7 +466,17 @@ if __name__ == "__main__":
         var_name="parameter",
         value_name="value",
     )
-    # Export
     pudl_atb = pudl_atb.reset_index(drop=True)
     pudl_atb["value"] = pudl_atb["value"].round(3)
     pudl_atb.to_csv(snakemake.output.tech_costs, index=False)
+
+    # sector costs
+
+    sector_costs = get_sector_costs(
+        snakemake.input.efs_tech_costs,
+        snakemake.input.efs_icev_costs,
+        snakemake.input.eia_tech_costs,
+        tech_year,
+        snakemake.input.additional_costs,
+    )
+    sector_costs.to_csv(snakemake.output.sector_costs, index=False)

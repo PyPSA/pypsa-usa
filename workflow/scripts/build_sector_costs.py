@@ -412,7 +412,7 @@ class EfsIceTransportationData:
         assert len(reindexed.index.get_level_values("parameter").unique() == 1)
         param = reindexed.index.get_level_values("parameter").unique()[0]
         dfs = []
-        for tech in reindexed.index.get_level_values("technology"):
+        for tech in reindexed.index.get_level_values("technology").unique():
             interp = reindexed.loc[
                 (
                     tech,
