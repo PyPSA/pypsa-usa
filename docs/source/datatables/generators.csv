@@ -1,0 +1,16 @@
+Characteristic,Data Source,Spatial Scale,Temporal Scale
+Nameplate Capacity,EIA860 (PUDL),Unit Level,-
+Storage Energy Capacity,EIA860 (PUDL),Unit Level,-
+Seasonal Derating,EIA860 (PUDL),Unit Level,Summer / Winter
+Minimum Capacity,EIA860 (PUDL),Unit Level,-
+Heat Rate,"EIA-923 (PUDL), CEMS ",Unit / Plant Levels,-
+Operation & Maint. Costs,WECC ADS + NREL ATB (PUDL),Unit / Plant Levels,-
+Historical Fuel Costs,PUDL ,,
+Fuel Costs (Natural Gas),CAISO OASIS,WECC Fuel Region (~BA),Daily
+Fuel Costs (Natural Gas),EIA API,State Level,Monthly
+Fuel Costs (Coal),EIA API ,State Level,Quarterly
+Fuel Costs (Nuclear & Biomass),NREL ATB (PUDL),National,Annual
+Unit Commitment Costs,WECC ADS,WECC Unit-level,-
+Future Fuel Costs,EIA AEO (PUDL),9 CONUS Regions,Annual
+Fuel Emissions Rates,NREL ATB (PUDL),National,-
+Capital Costs,NREL ATB (PUDL),EIA State Multipliers,2022-2050

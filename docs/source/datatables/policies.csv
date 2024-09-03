@@ -1,0 +1,5 @@
+Policy Constraint,Data Source,Spatial Resolution,Temporal Scope
+Renewable Portfolio Standards,NREL ReEDS,States,Annual (present - 2050)
+Planning Reserve Margins,NREL ReEDS,NERC Regions,-
+Technology Capacity Constraints,-,-,-
+Emissions Constraints,NREL ReEDS,States,Annual (present - 2050)
