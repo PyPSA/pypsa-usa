@@ -143,16 +143,16 @@ def set_line_s_max_pu(n, s_max_pu=0.7):
 
 def set_transmission_limit(n, ll_type, factor, costs, Nyears=1):
     links_dc_b = n.links.carrier == "DC" if not n.links.empty else pd.Series()
-    # TODO: implement update for transport model
+    ac_links = n.links.carrier == "AC_trans" if not n.links.empty else pd.Series()
+    n.links.loc[ac_links, "carrier"] = "AC"
 
     lines_s_nom = n.lines.s_nom
     col = "capital_cost" if ll_type == "c" else "length"
     ref = (
         lines_s_nom @ n.lines[col]
         + n.links.loc[links_dc_b, "p_nom"] @ n.links.loc[links_dc_b, col]
+        + n.links.loc[ac_links, "p_nom"] @ n.links.loc[ac_links, col]
     )
-
-    update_transmission_costs(n, costs)
 
     if factor == "opt" or float(factor) > 1.0:
         n.lines["s_nom_min"] = lines_s_nom
