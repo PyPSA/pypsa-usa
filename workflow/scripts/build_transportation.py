@@ -8,7 +8,6 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 import pypsa
-from _helpers import load_costs
 from build_heat import _get_dynamic_marginal_costs, get_link_marginal_costs
 
 logger = logging.getLogger(__name__)

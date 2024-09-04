@@ -257,6 +257,7 @@ class Eulp:
             "space_heating",
             "water_heating",
         ],
+        resample: Optional[str] = None,
     ):
 
         if isinstance(sectors, str):
@@ -264,7 +265,10 @@ class Eulp:
 
         df = self.data[sectors]
 
-        return df.plot(xlabel="", ylabel="MWh")
+        if resample:
+            df = df.resample(resample).sum()
+
+        return df.plot(xlabel="", ylabel="MW")
 
     def to_csv(self, path_or_buf: str, **kwargs):
         self.data.to_csv(path_or_buf=path_or_buf, **kwargs)

@@ -368,13 +368,7 @@ if __name__ == "__main__":
 
     sns = get_snapshots(snakemake.params.snapshots)
 
-    Nyears = n.snapshot_weightings.loc[n.investment_periods[0]].objective.sum() / 8760.0
-    costs = load_costs(
-        snakemake.input.tech_costs,
-        snakemake.params.costs,
-        snakemake.params.max_hours,
-        Nyears,
-    )
+    costs = load_costs(snakemake.input.tech_costs)
 
     ###
     # Sector addition starts here
@@ -447,9 +441,9 @@ if __name__ == "__main__":
 
     if any(
         [
-            snakemake.params.sector["transport"]["brownfield"],
-            snakemake.params.sector["residential"]["brownfield"],
-            snakemake.params.sector["commercial"]["brownfield"],
+            snakemake.params.sector["service_sector"]["brownfield"],
+            snakemake.params.sector["transport_sector"]["brownfield"],
+            snakemake.params.sector["industrial_sector"]["brownfield"],
         ],
     ):
         if all(n.investment_periods > 2023):
@@ -462,30 +456,29 @@ if __name__ == "__main__":
             base_year = min(n.investment_periods)
             growth_multiplier = 1
 
-    if snakemake.params.sector["transport"]["brownfield"]:
+    if snakemake.params.sector["transport_sector"]["brownfield"]:
         ratios = get_transport_stock(snakemake.params.api["eia"], base_year)
         for vehicle in ("lgt", "med", "hvy", "bus"):
             add_transport_brownfield(n, vehicle, growth_multiplier, ratios, costs)
 
-    if snakemake.params.sector["residential"]["brownfield"]:
+    if snakemake.params.sector["service_sector"]["brownfield"]:
+
         res_stock_dir = snakemake.input.residential_stock
-        if snakemake.params.sector["split_space_water_heating"]:
+        com_stock_dir = snakemake.input.commercial_stock
+
+        if snakemake.params.sector["service_sector"]["split_space_water_heating"]:
             fuels = ["space_heating", "water_heating", "cooling"]
         else:
             fuels = ["heating", "cooling"]
         for fuel in fuels:
+
+            # residential sector
             ratios = get_residential_stock(res_stock_dir, fuel)
             ratios.index = ratios.index.map(STATE_2_CODE)
             ratios = ratios.dropna()  # na is USA
             add_service_brownfield(n, "res", fuel, growth_multiplier, ratios, costs)
 
-    if snakemake.params.sector["commercial"]["brownfield"]:
-        com_stock_dir = snakemake.input.commercial_stock
-        if snakemake.params.sector["split_space_water_heating"]:
-            fuels = ["space_heating", "water_heating", "cooling"]
-        else:
-            fuels = ["heating", "cooling"]
-        for fuel in fuels:
+            # commercial sector
             ratios = get_commercial_stock(com_stock_dir, fuel)
             ratios.index = ratios.index.map(STATE_2_CODE)
             ratios = ratios.dropna()  # na is USA

@@ -144,6 +144,9 @@ def get_sector_costs(
         capex = df.copy().set_index(["technology", "parameter"])
         capex = capex.value.unstack().fillna(0)
 
+        # n years should be
+        # n.snapshot_weightings.loc[n.investment_periods[x]].objective.sum() / 8760.0
+
         capex["capital_cost"] = (
             (
                 calculate_annuity(
