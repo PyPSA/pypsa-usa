@@ -23,6 +23,15 @@ To model thermal unit commitment and ramping constraints, data from the WECC Anc
 
 For plants outside the WECC, and for internal plants missing data, PyPSA-USA imputes values using capacity-weighted averages by technology type.
 
+## Renewable Resource Constraints
+
+Renewable resources like solar and wind are constrained by technical capacity limits based on land-use and resource characteristics. These limits are calculated using various land-use layers that progressively reduce the land available for resource development.
+
+- **Solar and Wind Capacity Limits**: Determined by multiple land-use layers.
+- **Geothermal and Pumped Hydro Storage (PHS)**: These resources require more complex modeling due to subsurface and surface characteristics. Regional supply curves for these resources, including capital costs and technical capacity, are incorporated from specialized datasets.
+    - **PHS**: Uses data from the NREL Closed-Loop PHS dataset.
+    - **Geothermal Resources**: Availability data is sourced from FGEM, with further details to be provided in a forthcoming paper.
+
 ## Fuel Costs
 
 In production cost-minimizing optimization models, a generator’s marginal cost to produce electricity is a primary driver of dispatch decisions and electricity prices. However, generator fuel prices and efficiencies are not uniformly available across the United States, and generators often enter into bilateral contracts that are not directly correlated with wholesale fuel prices. To address these challenges, PyPSA-USA integrates fuel prices and unit-level fuel costs across varying spatial scopes and temporal scales.

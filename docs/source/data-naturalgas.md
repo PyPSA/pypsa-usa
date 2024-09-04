@@ -1,4 +1,4 @@
 (data-naturalgas)=
 # Natural Gas Sector
 
-Lorem ipsum odor amet, consectetuer adipiscing elit. Ultrices natoque massa montes donec, ut sagittis massa euismod. Duis adipiscing nostra justo iaculis luctus potenti fames. Vivamus sodales integer ex potenti nostra porta. Eget maximus turpis ornare auctor risus.
+The natural gas network in PyPSA-USA is represented at a state level and overlayed ontop of the electrical network. This

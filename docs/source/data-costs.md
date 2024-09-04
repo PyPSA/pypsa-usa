@@ -25,13 +25,12 @@ The model uses forecasted data from the NREL ATB for:
 - **Fuel Efficiencies**
 - **Weighted Average Cost of Capital (WACC)**
 
-To reflect regional differences, capital costs are adjusted using EIA state-level CapEx multipliers.
+To reflect regional differences, capital costs are adjusted using [EIA state-level CapEx multipliers](https://www.eia.gov/analysis/studies/powerplants/capitalcost/pdf/capital_cost_AEO2020.pdf).
 
-### Renewable Resource Constraints
+## Fuel Costs
 
-Renewable resources like solar and wind are constrained by technical capacity limits based on land-use and resource characteristics. These limits are calculated using various land-use layers that progressively reduce the land available for resource development.
+PyPSA-USA integrates fuel costs that varry across spatial scopes and temporal scales. For more information, see [here](./data-generators.md#fuel-costs)
 
-- **Solar and Wind Capacity Limits**: Determined by multiple land-use layers.
-- **Geothermal and Pumped Hydro Storage (PHS)**: These resources require more complex modeling due to subsurface and surface characteristics. Regional supply curves for these resources, including capital costs and technical capacity, are incorporated from specialized datasets.
-    - **PHS**: Uses data from the NREL Closed-Loop PHS dataset.
-    - **Geothermal Resources**: Availability data is sourced from FGEM, with further details to be provided in a forthcoming paper.
+## Sector Costs
+
+Running sector studies will use the same power system costs as electrical only studies. Costs specific to each sector can be found in the [service sector](./data-services.md), [transportation sector](./data-transportation.md), and [industrial sector](./data-industrial.md) pages accordingly.

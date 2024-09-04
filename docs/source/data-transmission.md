@@ -7,7 +7,7 @@ PyPSA-USA offers a unique capability by integrating two options of transmission 
 
 ### TAMU Synthetic Nodal Network
 
-The **TAMU synthetic nodal network** offers a high-resolution representation of the US power system, specifically designed for operational simulations. This network includes:
+The **TAMU synthetic nodal network** offers a high-resolution representation of the US power system, specifically designed for operational simulations. See the [Xu. et al.](https://arxiv.org/abs/2002.06155) paper for a detailed description of the network. This network includes:
 
 - **High Spatial Resolution**: Comprising 82,549 buses, 41,561 substations, 83,497 AC lines, and 17 HVDC lines, it provides a detailed view of the transmission grid.
 - **DC Power Flow**: Provides data for DC-power flow approximation.
@@ -16,7 +16,6 @@ The **TAMU synthetic nodal network** offers a high-resolution representation of 
 While representative of the US electricity system, the TAMU network is synthetic and not precisely aligned with the actual US transmission network. As such we integrated the ReEDS NARIS dataset for planning applications where more precise inter-regional transfer capacity ratings are neccesary.
 
 ![TAMU_clustered](./_static/networks/TAMU_Clustered_500.png)
-
 
 ### ReEDS NARIS Zonal Network
 
@@ -43,6 +42,7 @@ To use the ReEDS network in PyPSA-USA, you must enable the `links: transport_mod
    :file: datatables/transmission_nodes.csv
 ```
 
+(transmission-data)=
 ### Data
 ```{eval-rst}
 .. csv-table::

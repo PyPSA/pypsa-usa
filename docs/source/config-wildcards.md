@@ -105,11 +105,7 @@ is provided, an electrical only study is completed.
 | Sector      | Code | Description                                    | Status      |
 |-------------|------|------------------------------------------------|-------------|
 | Electricity | E    | Electrical sector. Will always be run.         | Runs        |
-| Natural Gas | G    | Natural gas sector                             | Development |
-| Heating     | H    | Heating and Cooling                            | Development |
-| Industry    | I    | Industrial Processes                           | Development |
-| Transport   | T    | Transportation sector                          | Development |
-| Methane     | M    | Methane tracking. Requires natural gas sector. | Future      |
+| Natural Gas | G    | All sectors added                              | Development |
 
 (scope)=
 ## The `{scope}` wildcard
@@ -120,7 +116,6 @@ Sector coupling studies are all under active development
 
 Takes values `residential`, `urban`, `total`. Used in sector coupling studies to define
 population breakdown.
-
 
 (cutout_wc)=
 ## The `{cutout}` wildcard

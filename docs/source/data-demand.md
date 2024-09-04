@@ -13,7 +13,9 @@ Forecasted demand is sourced from the NREL Electrification Futures Study (EFS), 
 
 The EFS also provides electrification cases, with reference, medium, and high electrification cases, with slow, moderate, and rapid speeds. These scenarios can be controlled via the configuration `demand: scenario: efs_case: / efs_speed:`.
 
+## Demand Disaggregation
 
+Electrical load is disaggregated based on population, folling the implementation in the nodal network dataset. See the paper on the [nodal network](./data-generators.md#fuel-costs) for more information on specifics of load disaggregation.
 
 ## Usage
 

@@ -1,0 +1,21 @@
+Sector,Technology,Metric,Source
+Residential,Furnaces,Costs,EIA Buildings Sector Appliance and Equipment Costs and Efficiencies
+,Water Heaters,Costs,EIA Buildings Sector Appliance and Equipment Costs and Efficiencies
+,Air Conditioners,Costs,EIA Buildings Sector Appliance and Equipment Costs and Efficiencies
+,Air Source Heat Pump,Costs,EIA Buildings Sector Appliance and Equipment Costs and Efficiencies
+Commercial,Furnaces,Costs,EIA Buildings Sector Appliance and Equipment Costs and Efficiencies
+,Water Heaters,Costs,EIA Buildings Sector Appliance and Equipment Costs and Efficiencies
+,Air Conditioners,Costs,EIA Buildings Sector Appliance and Equipment Costs and Efficiencies
+,Ground Source Heat Pump,Costs,EIA Buildings Sector Appliance and Equipment Costs and Efficiencies
+Residential,Air Source Heat Pump,Efficiency,Time dependent COP calculated
+,Ground Source Heat Pump,Efficiency,Time dependent COP calculated
+Commercial,Air Source Heat Pump,Efficiency,Time dependent COP calculated
+,Ground Source Heat Pump,Efficiency,Time dependent COP calculated
+Residential,Furnaces,Existing Stock,EIA Residential Energy Consumption Survey
+,Water Heaters,Existing Stock,EIA Residential Energy Consumption Survey
+,Air Conditioners,Existing Stock,EIA Residential Energy Consumption Survey
+,Heat Pumps,Existing Stock,EIA Residential Energy Consumption Survey
+Commercial,Furnaces,Existing Stock,EIA Commercial Energy Consumption Survey
+,Water Heaters,Existing Stock,EIA Commercial Energy Consumption Survey
+,Air Conditioners,Existing Stock,EIA Commercial Energy Consumption Survey
+,Heat Pumps,Existing Stock,EIA Commercial Energy Consumption Survey

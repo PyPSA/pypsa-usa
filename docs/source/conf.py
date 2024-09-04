@@ -7,7 +7,7 @@
 
 
 project = "pypsa-usa"
-copyright = "2023, Kamran Tehranchi, Trevor Barnes"
+copyright = "2024, Kamran Tehranchi, Trevor Barnes"
 author = "Kamran Tehranchi, Trevor Barnes"
 
 # -- General configuration ---------------------------------------------------
@@ -37,6 +37,7 @@ extensions = [
     #'rinoh.frontend.sphinx',
     "sphinx.ext.imgconverter",  # for SVG conversion
 ]
+myst_heading_anchors = 3
 
 templates_path = ["_templates"]
 exclude_patterns = []
