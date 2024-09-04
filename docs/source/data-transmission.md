@@ -15,7 +15,7 @@ The **TAMU synthetic nodal network** offers a high-resolution representation of 
 
 While representative of the US electricity system, the TAMU network is synthetic and not precisely aligned with the actual US transmission network. As such we integrated the ReEDS NARIS dataset for planning applications where more precise inter-regional transfer capacity ratings are neccesary.
 
-![TAMU_clustered](https://github.com/PyPSA/pypsa-usa/blob/docs-v0.3/docs/source/_static/networks/TAMU_Clustered_500.png)
+![TAMU_clustered](./_static/networks/TAMU_Clustered_500.png)
 
 
 ### ReEDS NARIS Zonal Network
@@ -27,7 +27,7 @@ The **ReEDS zonal network** is a Balancing Authority resolution transmission net
 - **Suitable for Capacity Expansion**: The zonal network's lower spatial resolution is well-suited for capacity expansion planning, as it simplifies computational requirements.
 
 
-![ReEDS_topology](https://github.com/PyPSA/pypsa-usa/blob/docs-v0.3/docs/source/_static/networks/ReEDS_Topology.png)
+![ReEDS_topology](./_static/networks/ReEDS_Topology.png)
 
 
 ### Usage
