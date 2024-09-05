@@ -5,7 +5,6 @@ Retrieves PUDL data.
 import logging
 import zipfile
 import zlib
-import zipfile
 from pathlib import Path
 
 import requests
