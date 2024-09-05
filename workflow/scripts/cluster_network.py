@@ -95,8 +95,8 @@ import pyomo.environ as po
 import pypsa
 import seaborn as sns
 from _helpers import calculate_annuity, configure_logging, update_p_nom_max
-from constants import *
 from add_electricity import update_transmission_costs
+from constants import *
 from pypsa.clustering.spatial import (
     busmap_by_greedy_modularity,
     busmap_by_hac,
@@ -661,7 +661,7 @@ if __name__ == "__main__":
         if params.replace_lines_with_links:
             clustering = replace_lines_with_links(
                 clustering,
-                snakemake.input.itls
+                snakemake.input.itls,
             )
             N = clustering.network.buses.reeds_zone.unique()
             assert n_clusters == len(
