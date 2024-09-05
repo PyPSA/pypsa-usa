@@ -34,7 +34,7 @@ rule solve_network:
             BENCHMARKS
             + "solve_network/{interconnect}/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}"
         )
-    threads: 8
+    threads: solver_threads
     resources:
         mem_mb=memory,
         walltime=config["solving"].get("walltime", "12:00:00"),
