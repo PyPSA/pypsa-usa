@@ -95,6 +95,7 @@ import pyomo.environ as po
 import pypsa
 import seaborn as sns
 from _helpers import calculate_annuity, configure_logging, update_p_nom_max
+from add_electricity import update_transmission_costs
 from constants import *
 from pypsa.clustering.spatial import (
     busmap_by_greedy_modularity,
@@ -420,7 +421,7 @@ def clustering_for_n_clusters(
     return clustering
 
 
-def replace_lines_with_links(clustering, itl_fn, capex):
+def replace_lines_with_links(clustering, itl_fn):
     """
     Replaces all Lines according to Links with the transfer capacity specified
     by the ITLs.
@@ -450,22 +451,22 @@ def replace_lines_with_links(clustering, itl_fn, capex):
 
     # lines to add in reverse if forward direction is zero
     itls_rev = itls[itls.MW_f0 == 0].copy()
-    itls = itls[itls.MW_f0 != 0]
+    itls_fwd = itls[itls.MW_f0 != 0]
 
     clustering.network.mremove("Line", clustering.network.lines.index)
     clustering.network.madd(
         "Link",
-        names=itls.interface,  # itl name
-        suffix="fwd",
-        bus0=buses.loc[itls.r].index,
-        bus1=buses.loc[itls.rr].index,
-        p_nom=itls.MW_f0.values,
-        p_nom_min=itls.MW_f0.values,
+        names=itls_fwd.interface,  # itl name
+        bus0=buses.loc[itls_fwd.r].index,
+        bus1=buses.loc[itls_fwd.rr].index,
+        p_nom=itls_fwd.MW_f0.values,
+        p_nom_min=itls_fwd.MW_f0.values,
         p_max_pu=1.0,
-        p_min_pu=itls.p_min_pu_Rev.values,
-        capital_cost=itls.USD2023perMWyr.values,
-        p_nom_extendable=True,
-        carrier="DC",
+        p_min_pu=itls_fwd.p_min_pu_Rev.values,
+        length=itls_fwd.length_miles.values,
+        capital_cost=itls_fwd.USD2023perMWyr.values,
+        p_nom_extendable=False,
+        carrier="AC_trans",
     )
 
     clustering.network.madd(
@@ -478,10 +479,29 @@ def replace_lines_with_links(clustering, itl_fn, capex):
         p_nom_min=itls_rev.MW_r0.values,
         p_max_pu=0,
         p_min_pu=-1,
+        length=itls_rev.length_miles.values,
         capital_cost=itls_rev.USD2023perMWyr.values,
-        p_nom_extendable=True,
+        p_nom_extendable=False,
+        carrier="AC_trans",
+    )
+
+    # for tracking expansion of Zonal Links
+    clustering.network.madd(
+        "Link",
+        names=itls.interface,  # itl name
+        suffix="exp",
+        bus0=buses.loc[itls.r].index,
+        bus1=buses.loc[itls.rr].index,
+        p_nom=0,
+        p_nom_min=0,
+        p_max_pu=1,
+        p_min_pu=-1,
+        length=itls.length_miles.values,
+        capital_cost=itls.USD2023perMWyr.values,
+        p_nom_extendable=False,
         carrier="DC",
     )
+
     logger.info(f"Replaced Lines with Links for zonal model configuration.")
 
     # Remove any disconnected buses
@@ -642,12 +662,13 @@ if __name__ == "__main__":
             clustering = replace_lines_with_links(
                 clustering,
                 snakemake.input.itls,
-                hvac_overhead_cost,
             )
             N = clustering.network.buses.reeds_zone.unique()
             assert n_clusters == len(
                 N,
             ), f"Number of clusters must be {len(N)} to model as transport model."
+        else:
+            update_transmission_costs(clustering.network, costs)
 
     update_p_nom_max(clustering.network)
 

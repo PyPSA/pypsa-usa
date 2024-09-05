@@ -95,10 +95,10 @@ def memory(w):
     for o in w.opts.split("-"):
         m = re.match(r"^(\d+)seg$", o, re.IGNORECASE)
         if m is not None:
-            factor *= int(m.group(1)) / 2760
+            factor *= int(m.group(1)) / 8760
             break
     if w.clusters.endswith("m") or w.clusters.endswith("c"):
-        val = int(factor * (55000 + 600 * int(w.clusters[:-1])))
+        val = int(factor * (55000 + 100 * int(w.simpl) + 195 * int(w.clusters[:-1])))
     elif w.clusters == "all":
         val = int(factor * (18000 + 180 * 4000))
     else:
