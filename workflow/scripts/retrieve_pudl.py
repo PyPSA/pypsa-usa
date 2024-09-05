@@ -5,6 +5,7 @@ Retrieves PUDL data.
 import logging
 import zipfile
 import zlib
+import zipfile
 from pathlib import Path
 
 import requests
@@ -24,6 +25,7 @@ if __name__ == "__main__":
 
     # Recommended to use the stable version of PUDL documented here: https://catalystcoop-pudl.readthedocs.io/en/latest/data_access.html#stable-builds
     url_pudl = "https://zenodo.org/records/13346011/files/pudl.sqlite.zip?download=1"
+
     url_census = (
         "https://zenodo.org/records/13346011/files/censusdp1tract.sqlite.zip?download=1"
     )
