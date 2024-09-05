@@ -12,29 +12,29 @@ rule solve_network:
         replace_lines_with_links=config_provider("lines", "transport_model"),
     input:
         network=RESOURCES
-        + "{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}_{sector}.nc",
+        + "{interconnect}/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc",
         flowgates="repo_data/ReEDS_Constraints/transmission/transmission_capacity_init_AC_ba_NARIS2024.csv",
         safer_reeds="config/policy_constraints/reeds/prm_annual.csv",
         rps_reeds="config/policy_constraints/reeds/rps_fraction.csv",
         ces_reeds="config/policy_constraints/reeds/ces_fraction.csv",
     output:
         network=RESULTS
-        + "{interconnect}/networks/elec_s_{clusters}_ec_l{ll}_{opts}_{sector}.nc",
+        + "{interconnect}/networks/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc",
         config=RESULTS
-        + "{interconnect}/configs/config.elec_s_{clusters}_l{ll}_{opts}_{sector}.yaml",
+        + "{interconnect}/configs/config.elec_s{simpl}_c{clusters}_l{ll}_{opts}_{sector}.yaml",
     log:
         solver=normpath(
             LOGS
-            + "solve_network/{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}_{sector}_solver.log"
+            + "solve_network/{interconnect}/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}_solver.log"
         ),
         python=LOGS
-        + "solve_network/{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}_{sector}_python.log",
+        + "solve_network/{interconnect}/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}_python.log",
     benchmark:
         (
             BENCHMARKS
-            + "solve_network/{interconnect}/elec_s_{clusters}_ec_l{ll}_{opts}_{sector}"
+            + "solve_network/{interconnect}/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}"
         )
-    threads: 8
+    threads: solver_threads
     resources:
         mem_mb=memory,
         walltime=config["solving"].get("walltime", "12:00:00"),

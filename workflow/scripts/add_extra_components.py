@@ -1,50 +1,6 @@
-# SPDX-FileCopyrightText: : 2017-2022 The PyPSA-Eur Authors
-#
-# SPDX-License-Identifier: MIT
-# coding: utf-8
 """
 Adds extra extendable components to the clustered and simplified network.
-
-**Relevant Settings**
-
-.. code:: yaml
-
-    costs:
-        year:
-        version:
-        dicountrate:
-        emission_prices:
-
-    electricity:
-        max_hours:
-        marginal_cost:
-        capital_cost:
-        extendable_carriers:
-            StorageUnit:
-            Store:
-
-.. seealso::
-    Documentation of the configuration file ``config.yaml`` at :ref:`costs_cf`,
-    :ref:`electricity_cf`
-
-**Inputs**
-
-- ``resources/costs.csv``: The database of cost assumptions for all included technologies for specific years from various sources; e.g. discount rate, lifetime, investment (CAPEX), fixed operation and maintenance (FOM), variable operation and maintenance (VOM), fuel costs, efficiency, carbon-dioxide intensity.
-
-**Outputs**
-
-- ``networks/elec_s{simpl}_{clusters}_ec.nc``:
-
-
-**Description**
-
-The rule :mod:`add_extra_components` attaches additional extendable components to the clustered and simplified network. These can be configured in the ``config.yaml`` at ``electricity: extendable_carriers:``. It processes ``networks/elec_s{simpl}_{clusters}.nc`` to build ``networks/elec_s{simpl}_{clusters}_ec.nc``, which in contrast to the former (depending on the configuration) contain with **zero** initial capacity
-
-- ``StorageUnits`` of carrier 'H2' and/or 'battery'. If this option is chosen, every bus is given an extendable ``StorageUnit`` of the corresponding carrier. The energy and power capacities are linked through a parameter that specifies the energy capacity as maximum hours at full dispatch power and is configured in ``electricity: max_hours:``. This linkage leads to one investment variable per storage unit. The default ``max_hours`` lead to long-term hydrogen and short-term battery storage units.
-
-- ``Stores`` of carrier 'H2' and/or 'battery' in combination with ``Links``. If this option is chosen, the script adds extra buses with corresponding carrier where energy ``Stores`` are attached and which are connected to the corresponding power buses via two links, one each for charging and discharging. This leads to three investment variables for the energy capacity, charging and discharging capacity of the storage unit.
 """
-
 
 import logging
 from typing import List
@@ -53,13 +9,8 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 import pypsa
-from _helpers import configure_logging
-from add_electricity import (
-    add_co2_emissions,
-    add_missing_carriers,
-    calculate_annuity,
-    load_costs,
-)
+from _helpers import calculate_annuity, configure_logging
+from add_electricity import add_co2_emissions, add_missing_carriers
 
 idx = pd.IndexSlice
 
@@ -87,9 +38,6 @@ def attach_storageunits(n, costs, elec_opts, investment_year):
 
     buses_i = n.buses.index
 
-    lookup_store = {"H2": "electrolysis", "battery": "battery inverter"}
-    lookup_dispatch = {"H2": "fuel cell", "battery": "battery inverter"}
-
     add_missing_carriers(n, carriers)
     add_co2_emissions(n, costs, carriers)
     for carrier in carriers:
@@ -103,14 +51,14 @@ def attach_storageunits(n, costs, elec_opts, investment_year):
             bus=buses_i,
             carrier=carrier,
             p_nom_extendable=True,
-            capital_cost=costs.at[carrier, "capital_cost"],
+            capital_cost=costs.at[carrier, "annualized_capex_fom"],
             marginal_cost=costs.at[carrier, "marginal_cost"],
             efficiency_store=costs.at[carrier, "efficiency"] ** roundtrip_correction,
             efficiency_dispatch=costs.at[carrier, "efficiency"] ** roundtrip_correction,
             max_hours=max_hours,
-            cyclic_state_of_charge=True,
+            cyclic_state_of_charge=False,
             build_year=investment_year,
-            lifetime=costs.at[carrier, "lifetime"],
+            lifetime=costs.at[carrier, "cost_recovery_period_years"],
         )
 
 
@@ -347,7 +295,9 @@ def add_economic_retirement(
         lambda row: (
             row["capital_cost"]
             if not row.name in (retirement_gens.index)
-            else row["capital_cost"] * costs.at[row["carrier"], "FOM"] / 100
+            else row["capital_cost"]
+            * costs.at[row["carrier"], "opex_variable_per_mwh"]
+            / 100
         ),
         axis=1,
     )
@@ -442,7 +392,7 @@ def attach_multihorizon_generators(
         suffix=f" {investment_year}",
         carrier=gens.carrier,
         bus=gens.bus,
-        p_nom_min=0,
+        p_nom_min=0 if investment_year != n.investment_periods[0] else gens.p_nom_min,
         p_nom=0 if investment_year != n.investment_periods[0] else gens.p_nom,
         p_nom_max=gens.p_nom_max,
         p_nom_extendable=True,
@@ -452,9 +402,9 @@ def attach_multihorizon_generators(
         marginal_cost=gens.marginal_cost,
         p_min_pu=gens.p_min_pu,
         p_max_pu=gens.p_max_pu,
-        capital_cost=gens.carrier.map(costs.capital_cost),
+        capital_cost=gens.carrier.map(costs.annualized_capex_fom),
         build_year=investment_year,
-        lifetime=gens.carrier.map(costs.lifetime),
+        lifetime=gens.carrier.map(costs.cost_recovery_period_years),
     )
 
     # time dependent factors added after as not all generators are time dependent
@@ -508,11 +458,11 @@ def attach_newCarrier_generators(n, costs, carriers, investment_year):
             bus=buses_i,
             carrier=carrier,
             p_nom_extendable=True,
-            capital_cost=costs.at[carrier, "capital_cost"],
+            capital_cost=costs.at[carrier, "annualized_capex_fom"],
             marginal_cost=costs.at[carrier, "marginal_cost"],
             efficiency=costs.at[carrier, "efficiency"],
             build_year=investment_year,
-            lifetime=costs.at[carrier, "lifetime"],
+            lifetime=costs.at[carrier, "cost_recovery_period_years"],
         )
 
 
@@ -528,6 +478,9 @@ def apply_itc(n, itc_modifier):
     for carrier in itc_modifier.keys():
         carrier_mask = n.generators["carrier"] == carrier
         n.generators.loc[carrier_mask, "capital_cost"] *= 1 - itc_modifier[carrier]
+
+        carrier_mask = n.storage_units["carrier"] == carrier
+        n.storage_units.loc[carrier_mask, "capital_cost"] *= 1 - itc_modifier[carrier]
 
 
 def apply_ptc(n, ptc_modifier):
@@ -549,6 +502,30 @@ def apply_ptc(n, ptc_modifier):
         n.generators.loc[carrier_mask, "marginal_cost"] -= ptc_modifier[carrier]
 
 
+def apply_max_annual_growth_rate(n, max_growth):
+    """
+    Applies maximum annual growth rate to all extendable components in the
+    network.
+
+    Arguments:
+    n: pypsa.Network,
+    max_annual_growth_rate: dict,
+        Dict of maximum annual growth rate for each carrier
+    """
+    max_annual_growth_rate = max_growth["rate"]
+    growth_base = max_growth["base"]
+    years = n.investment_period_weightings.index.diff()
+    years = years.dropna().values.mean()
+    for carrier in max_annual_growth_rate.keys():
+        ann_growth_rate = max_annual_growth_rate[carrier]
+        growth_factor = ann_growth_rate**years
+        p_nom = n.generators.p_nom.loc[n.generators.carrier == carrier].sum()
+        n.carriers.loc[carrier, "max_growth"] = growth_base.get(carrier) or p_nom
+        n.carriers.loc[carrier, "max_relative_growth"] = (
+            max_annual_growth_rate[carrier] ** years
+        )
+
+
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
@@ -566,11 +543,10 @@ if __name__ == "__main__":
     Nyears = n.snapshot_weightings.loc[n.investment_periods[0]].objective.sum() / 8760.0
 
     costs_dict = {
-        n.investment_periods[i]: load_costs(
-            snakemake.input.tech_costs[i],
-            snakemake.config["costs"],
-            elec_config["max_hours"],
-            Nyears,
+        n.investment_periods[i]: pd.read_csv(snakemake.input.tech_costs[i]).pivot(
+            index="pypsa-name",
+            columns="parameter",
+            values="value",
         )
         for i in range(len(n.investment_periods))
     }
@@ -601,8 +577,8 @@ if __name__ == "__main__":
     for investment_year in n.investment_periods:
         costs = costs_dict[investment_year]
         attach_storageunits(n, costs, elec_config, investment_year)
-        attach_stores(n, costs, elec_config, investment_year)
-        attach_hydrogen_pipelines(n, costs, elec_config, investment_year)
+        # attach_stores(n, costs, elec_config, investment_year)
+        # attach_hydrogen_pipelines(n, costs, elec_config, investment_year)
         attach_multihorizon_generators(n, costs, gens, investment_year)
         attach_newCarrier_generators(n, costs, new_carriers, investment_year)
 
@@ -614,6 +590,7 @@ if __name__ == "__main__":
 
     apply_itc(n, snakemake.config["costs"]["itc_modifier"])
     apply_ptc(n, snakemake.config["costs"]["ptc_modifier"])
+    apply_max_annual_growth_rate(n, snakemake.config["costs"]["max_growth"])
     add_nice_carrier_names(n, snakemake.config)
 
     n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))

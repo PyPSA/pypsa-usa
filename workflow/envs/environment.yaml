@@ -35,7 +35,6 @@ dependencies:
 - matplotlib==3.8.0
 - plotly==5.17.0
 - graphviz
-- duckdb==1.0.0
 
 # Keep in conda environment when calling ipython
 - ipython==8.16.1
@@ -61,5 +60,6 @@ dependencies:
 - pip:
   - vresutils==0.3.1
   - tsam>=1.1.0
-  - gurobipy==10.0.3
+  - gurobipy==11.0.3
   - highspy
+  - duckdb==0.10.0

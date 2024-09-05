@@ -9,17 +9,14 @@ run:
 
 # docs :
 scenario:
-  interconnect: [western] #"usa|texas|western|eastern"
-  clusters: [40]
-  opts: [REM-1000SEG]
+  interconnect: [texas] #"usa|texas|western|eastern"
+  clusters: [10]
+  simpl: [20]
+  opts: [RPS-REM-500SEG]
   ll: [v1.0]
   scope: "total" # "urban", "rural", or "total"
   sector: "" # G
-  planning_horizons:
-  - 2030    #(2018-2023, 2030, 2040, 2050)
-
-foresight:  'perfect'
-
+  planning_horizons: [2030, 2040, 2050]
 
 # docs :
 enable:
@@ -33,14 +30,14 @@ snapshots:
 
 # docs :
 electricity:
-  conventional_carriers: [nuclear, oil, OCGT, CCGT, coal, geothermal, biomass] # Choose the conventional plant types to include in network
+  conventional_carriers: [nuclear, oil, OCGT, CCGT, coal, geothermal, biomass, waste] # Choose the conventional plant types to include in network
   renewable_carriers: [onwind, offwind, offwind_floating, solar, hydro] # Choose the renewable plant types to include in network
   voltage_simplified: 230 #Voltage level to simplify network to in rule "simplify network"
-  co2limit: 1.4728e+9 
-  co2limit_enable: false
-  co2base: 226.86e+6
+  co2limit: 1.4728e+9 # 0.8 * 1.841e+9
+  co2limit_enable: false # For sector coupled studies
+  co2base: 226.86e+6 #base_from_2020 Locations of the 250 MMmt of CO2 emissions from the WECC 2021.
   gaslimit: false # global gas usage limit of X MWh_th
-  gaslimit_enable: false
+  gaslimit_enable: false # For sector coupled studies
   retirement: economic # "economic" or "technical"
   SAFE_reservemargin: 0.14
   regional_Co2_limits: 'config/policy_constraints/regional_Co2_limits.csv'
@@ -48,7 +45,6 @@ electricity:
   portfolio_standards: 'config/policy_constraints/portfolio_standards.csv'
   SAFE_regional_reservemargins: 'config/policy_constraints/SAFE_regional_prm.csv'
   transmission_interface_limits: 'config/policy_constraints/transmission_interface_limits.csv'
-
 
   operational_reserve:
     activate: false
@@ -61,21 +57,17 @@ electricity:
     H2: 168
 
   extendable_carriers:
-    Generator: [solar, onwind, offwind, offwind_floating, OCGT, CCGT, coal] # Select Generator types allowed to be built/retired
-    StorageUnit: [4hr_battery_storage] # [Xhr-battery-storage (2-10 hours), Xhr-PHS (8,10,12 hrs)]
+    Generator: [solar, onwind, offwind, offwind_floating, OCGT, CCGT, coal, nuclear, coal-95CCS, CCGT-95CCS, SMR] #include CCGT-CCS
+    StorageUnit: [4hr_battery_storage, 8hr_battery_storage] # [Xhr-battery-storage (2-10 hours)]
     Store: []
     Link: [] 
 
   demand: 
-    profile: eia # efs, eia
+    profile: efs # efs, eia
     scenario: 
       efs_case: reference # reference, medium, high
       efs_speed: moderate # slow, moderate, rapid
       aeo: reference
-
-  autarky:
-    enable: false
-    by_country: false
 
 # docs :
 conventional:
@@ -84,70 +76,62 @@ conventional:
     pudl: true
     wholesale: true
 
-
 # docs :
 lines:
-  types: # All temporary values, need to be updated
-    115.: "Al/St 240/40 2-bundle 220.0"
-    138.: "Al/St 240/40 2-bundle 220.0"
-    161.: "Al/St 240/40 2-bundle 220.0"
-    230.: "Al/St 240/40 2-bundle 220.0"
-    345.: "Al/St 240/40 4-bundle 380.0"
-    500.: "Al/St 560/50 4-bundle 750.0"
-    765.: "Al/St 560/50 4-bundle 750.0"
   s_max_pu: 0.7
   s_nom_max: .inf
-  max_extension: 1000.0e+3
+  max_extension: 2000 #MW
   length_factor: 1.25
-  interface_transmission_limits: true # Imposes ITLs over AC Lines
-  transport_model: false # If minimum nodes set, AC lines will be replaced with links according to ITLs
-
+  interface_transmission_limits: false
+  transport_model: false
 
 # docs :
 links:
   p_max_pu: 1.0
   p_nom_max: .inf
-  max_extension: 1000.0e+3
-
+  max_extension: 2000 #MW
 
 # docs :
 costs:
+  atb:
+    model_case: "Market" # Market, R&D
+    scenario: "Moderate" # Advanced, Conservative, Moderate
+  aeo:
+    scenario: "reference" # reference, high, low
   social_discount_rate: 0.02
   version: v0.6.0
-  rooftop_share: 0.0
   ng_fuel_year: 2019 # year of the natural gas price from CAISO [2019- 2023]
-  fill_values:
-    FOM: 0
-    VOM: 0
-    efficiency: 1
-    fuel: 0
-    investment: 0
-    lifetime: 25
-    "CO2 intensity": 0
-    "discount rate": 0.07
-  marginal_cost:
-    solar: 0.00
-    onwind: 0.00
-    offwind: 0.00
-    hydro: 0.
-    H2: 0.
-    electrolysis: 0.
-    fuel cell: 0.
-    battery: 0.
-    battery inverter: 0.
   emission_prices: # in currency per tonne emission, only used with the option Ep
     enable: false
     co2: 0.
     co2_monthly_prices: false
   ptc_modifier:
-    onwind: 18.2547
-    geothermal: 18.2547
-    biomass: 18.2547
+    onwind: 27.50
+    biomass: 27.50
   itc_modifier:
     solar: 0.3
     offwind: 0.3
     offwind_floating: 0.3
     EGS: 0.3
+    geothermal: 0.3
+    SMR: 0.3
+    nuclear: 0.3
+    hydro: 0.3
+    2hr_battery_storage: 0.3
+    4hr_battery_storage: 0.3
+    6hr_battery_storage: 0.3
+    8hr_battery_storage: 0.3
+    10hr_battery_storage: 0.3
+    8hr_PHS: 0.3
+    10hr_PHS: 0.3
+    12hr_PHS: 0.3
+  max_growth:
+    base:
+      SMR: 1000
+    rate:
+      SMR: 1.15
+      nuclear: 1.15
+
 
 # docs :
 sector:
@@ -157,24 +141,9 @@ sector:
     cyclic_storage: false
   heating:
     heat_pump_sink_T: 55.
-  demand:
-    profile:
-      residential: eulp # efs, eulp
-      commercial: eulp # efs, eulp
-      transport: efs # efs
-      industry: efs # efs
-    scale:
-      residential: aeo # efs, aeo
-      commercial: aeo # efs, aeo
-      transport: aeo # efs, aeo
-      industry: aeo # efs, aeo
-    disaggregation: 
-      residential: pop # pop
-      commercial: pop # pop
-      transport: pop # pop
-      industry: pop # pop
-    scenarios:
-      aeo: reference
+  transport:
+    exogenous: True # false to be implemented 
+    ev_policy: "config/policy_constraints/ev_policy.csv"
 
 # docs :
 clustering:
@@ -190,12 +159,14 @@ clustering:
     consider_efficiency_classes: false
   aggregation_strategies:
     generators:
-      committable: any
+      build_year: 'capacity_weighted_average'
+      lifetime: 'capacity_weighted_average'
       start_up_cost: 'capacity_weighted_average'
       min_up_time: 'capacity_weighted_average'
       min_down_time: 'capacity_weighted_average'
       ramp_limit_up: max
       ramp_limit_down: max
+      committable: any
       vom_cost: mean
       fuel_cost: mean
       heat_rate: mean

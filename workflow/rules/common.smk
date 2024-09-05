@@ -95,15 +95,15 @@ def memory(w):
     for o in w.opts.split("-"):
         m = re.match(r"^(\d+)seg$", o, re.IGNORECASE)
         if m is not None:
-            factor *= int(m.group(1)) / 2760
+            factor *= int(m.group(1)) / 8760
             break
     if w.clusters.endswith("m") or w.clusters.endswith("c"):
-        val = int(factor * (55000 + 600 * int(w.clusters[:-1])))
+        val = int(factor * (55000 + 100 * int(w.simpl) + 195 * int(w.clusters[:-1])))
     elif w.clusters == "all":
         val = int(factor * (18000 + 180 * 4000))
     else:
         val = int(factor * (15000 + 195 * int(w.clusters)))
-    return int(val)
+    return int(val * len(config_provider("scenario", "planning_horizons")(w)))
 
 
 def interconnect_mem(w):
@@ -121,7 +121,7 @@ def interconnect_mem(w):
 def interconnect_mem_a(w):
     mem = 15000 * len(config_provider("scenario", "planning_horizons")(w))
     if w.interconnect == "usa":
-        return int(mem * 2)
+        return int(mem * 4)
     elif w.interconnect == "eastern":
         return int(mem * 1.5)
     elif w.interconnect == "western":

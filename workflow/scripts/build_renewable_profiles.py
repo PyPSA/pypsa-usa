@@ -161,6 +161,7 @@ import time
 
 import atlite
 import geopandas as gpd
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import xarray as xr
@@ -172,13 +173,31 @@ from shapely.geometry import LineString
 logger = logging.getLogger(__name__)
 
 
+def plot_data(data):
+    x = data.coords["x"].values  # Longitude
+    y = data.coords["y"].values  # Latitude
+    values = data.values
+
+    fig, ax = plt.subplots(figsize=(10, 8))
+    im = ax.pcolormesh(x, y, values, shading="auto", cmap="viridis")
+    fig.colorbar(
+        im,
+        ax=ax,
+        label="Value",
+    )  # Add a colorbar to represent the value scale
+
+    ax.set_xlabel("Longitude")
+    ax.set_ylabel("Latitude")
+    return fig, ax
+
+
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
 
         snakemake = mock_snakemake(
             "build_renewable_profiles",
-            technology="offwind",
+            technology="solar",
             interconnect="texas",
         )
     configure_logging(snakemake)
@@ -219,12 +238,21 @@ if __name__ == "__main__":
     excluder = atlite.ExclusionContainer(crs=5070, res=res)
 
     if params["natura"]:
-        excluder.add_raster(snakemake.input.natura, nodata=0, allow_no_overlap=True)
+        excluder.add_raster(
+            snakemake.input.natura,
+            nodata=0,
+            allow_no_overlap=True,
+        )
 
     corine = params.get("corine", {})
     if "grid_codes" in corine:
         codes = corine["grid_codes"]
-        excluder.add_raster(snakemake.input.corine, codes=codes, invert=True, crs=4326)
+        excluder.add_raster(
+            snakemake.input.corine,
+            codes=codes,
+            invert=True,
+            # crs=4326
+        )
     if corine.get("distance", 0.0) > 0.0:
         codes = corine["distance_grid_codes"]
         buffer = corine["distance"]
@@ -232,7 +260,7 @@ if __name__ == "__main__":
             snakemake.input.corine,
             codes=codes,
             buffer=buffer,
-            crs=4326,
+            # crs=4326,
         )
 
     if params.get("cec", 0):
@@ -250,31 +278,29 @@ if __name__ == "__main__":
             allow_no_overlap=True,
         )
 
-    if "ship_threshold" in params:
-        shipping_threshold = (
-            params["ship_threshold"] * 8760 * 6
-        )  # approximation because 6 years of data which is hourly collected
-        func = functools.partial(np.less, shipping_threshold)
-        excluder.add_raster(
-            snakemake.input.ship_density,
-            codes=func,
-            crs=4326,
-            allow_no_overlap=True,
-        )
-
     if params.get("max_depth"):
         # lambda not supported for atlite + multiprocessing
         # use named function np.greater with partially frozen argument instead
         # and exclude areas where: -max_depth > grid cell depth
         func = functools.partial(np.greater, -params["max_depth"])
-        excluder.add_raster(snakemake.input.gebco, codes=func, crs=4326, nodata=-1000)
+        excluder.add_raster(
+            snakemake.input.gebco,
+            codes=func,
+            nodata=-1000,
+            # crs=4326,
+        )
 
     if params.get("min_depth"):
         # lambda not supported for atlite + multiprocessing
         # use named function np.greater with partially frozen argument instead
         # and exclude areas where: -min_depth < grid cell depth
         func = functools.partial(np.less, -params["min_depth"])
-        excluder.add_raster(snakemake.input.gebco, codes=func, crs=4326, nodata=-1000)
+        excluder.add_raster(
+            snakemake.input.gebco,
+            codes=func,
+            nodata=-1000,
+            # crs=4326,
+        )
 
     if "min_shore_distance" in params:
         buffer = params["min_shore_distance"]
@@ -288,8 +314,6 @@ if __name__ == "__main__":
             invert=True,
         )
 
-    # excluder.plot_shape_availability(regions)
-
     logger.info("Calculate landuse availability...")
     start = time.time()
 
@@ -299,7 +323,14 @@ if __name__ == "__main__":
     duration = time.time() - start
     logger.info(f"Completed landuse availability calculation ({duration:2.2f}s)")
 
-    area = cutout.grid.to_crs("ESRI:54009").area / 1e6
+    # fig, ax = plt.subplots()
+    # excluder.plot_shape_availability(regions, ax=ax)
+    fig, ax = plot_data(availability.sum("bus"))
+    ax.set_title(f"Availability of {snakemake.wildcards.technology} Technology")
+    plt.savefig(snakemake.output.availability)
+    plt.close(fig)
+
+    area = cutout.grid.to_crs("EPSG: 5070").area / 1e6
     area = xr.DataArray(
         area.values.reshape(cutout.shape),
         [cutout.coords["y"], cutout.coords["x"]],

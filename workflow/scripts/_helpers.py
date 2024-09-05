@@ -1,22 +1,17 @@
 # By PyPSA-USA Authors
 
 
-import contextlib
 import copy
 import hashlib
 import logging
-import os
 import re
-import urllib
 from functools import partial
 from pathlib import Path
 
 import pandas as pd
-import pytz
 import requests
 import yaml
 from snakemake.utils import update_config
-from tqdm import tqdm
 
 REGION_COLS = ["geometry", "name", "x", "y", "country"]
 
@@ -142,6 +137,28 @@ def pdbcast(v, h):
         index=v.index,
         columns=h.index,
     )
+
+
+def calculate_annuity(n, r):
+    """
+    Calculate the annuity factor for an asset with lifetime n years and.
+
+    discount rate of r, e.g. annuity(20, 0.05) * 20 = 1.6
+    """
+    if isinstance(r, pd.Series):
+        return pd.Series(1 / n, index=r.index).where(
+            r == 0,
+            r / (1.0 - 1.0 / (1.0 + r) ** n),
+        )
+    elif r > 0:
+        return r / (1.0 - 1.0 / (1.0 + r) ** n)
+    else:
+        return 1 / n
+
+
+def load_costs(tech_costs: str) -> pd.DataFrame:
+    df = pd.read_csv(tech_costs)
+    return df.pivot(index="technology", columns="parameter", values="value").fillna(0)
 
 
 def load_network_for_plots(fn, tech_costs, config, combine_hydro_ps=True):
@@ -871,23 +888,3 @@ def get_snapshots(
         time = time[~((time.month == 2) & (time.day == 29))]
 
     return time
-
-
-def reduce_float_memory(df):
-    """
-    Reduce memory usage of a DataFrame by converting float64 columns to
-    float32.
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        The DataFrame to reduce memory usage for.
-
-    Returns
-    -------
-    pd.DataFrame
-        The DataFrame with float64 columns converted to float32.
-    """
-    for col in df.select_dtypes(include=["float64"]).columns:
-        df[col] = pd.to_numeric(df[col], downcast="float")
-    return df

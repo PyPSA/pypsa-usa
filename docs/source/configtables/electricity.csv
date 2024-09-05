@@ -7,7 +7,7 @@ co2limit,:math:`t_{CO_2-eq}/a`,float,Cap on total annual system carbon dioxide e
 co2base,:math:`t_{CO_2-eq}/a`,float,Reference value of total annual system carbon dioxide emissions if relative emission reduction target is specified in ``{opts}`` wildcard.
 retirement, --,One of ``economic`` or ``technical``,"Sets the retirement method for converntional generators. If ``technical`` all generators ``p_nom_min`` are set to ``p_nom`` to prevent selling off of the asset. Retirements are then tracked in post-proccessing. If ``economic`` existing plants have their ``p_nom_min`` set as ``0``,  ``p_nom_max`` set to ``p_nom``,  and capital costs set to fixed costs. Generators with ``p_nom`` are then added to handle capacity expansion."""
 ,,,
-operational_reserve:,,,Settings for reserve requirements following `GenX <https://genxproject.github.io/GenX/dev/core/#Reserves>`_
+operational_reserve:,,,Settings for reserve requirements following `GenX <https://genxproject.github.io/GenX.jl/stable/Model_Reference/core/#Operational-Reserves>`_
 --activate,bool,true or false,Whether to take operational reserve requirements into account during optimisation
 --epsilon_load,--,float,share of total load
 --epsilon_vres,--,float,share of total renewable supply

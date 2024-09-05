@@ -66,7 +66,7 @@ from _helpers import (
     set_scenario_config,
     update_config_from_wildcards,
 )
-from add_electricity import load_costs, update_transmission_costs
+from add_electricity import update_transmission_costs
 from pypsa.descriptors import expand_series
 
 idx = pd.IndexSlice
@@ -143,22 +143,16 @@ def set_line_s_max_pu(n, s_max_pu=0.7):
 
 def set_transmission_limit(n, ll_type, factor, costs, Nyears=1):
     links_dc_b = n.links.carrier == "DC" if not n.links.empty else pd.Series()
+    ac_links = n.links.carrier == "AC_trans" if not n.links.empty else pd.Series()
+    n.links.loc[ac_links, "carrier"] = "AC"
 
-    _lines_s_nom = (
-        np.sqrt(3)
-        * n.lines.type.map(n.line_types.i_nom)
-        * n.lines.num_parallel
-        * n.lines.bus0.map(n.buses.v_nom)
-    )
-    lines_s_nom = n.lines.s_nom.where(n.lines.type == "", _lines_s_nom)
-
+    lines_s_nom = n.lines.s_nom
     col = "capital_cost" if ll_type == "c" else "length"
     ref = (
         lines_s_nom @ n.lines[col]
         + n.links.loc[links_dc_b, "p_nom"] @ n.links.loc[links_dc_b, col]
+        + n.links.loc[ac_links, "p_nom"] @ n.links.loc[ac_links, col]
     )
-
-    update_transmission_costs(n, costs)
 
     if factor == "opt" or float(factor) > 1.0:
         n.lines["s_nom_min"] = lines_s_nom
@@ -211,6 +205,16 @@ def average_every_nhours(n, offset):
     return m
 
 
+def is_leap_year(year: int) -> bool:
+    """
+    Check if a given year is a leap year.
+    """
+    if (year % 4 == 0 and year % 100 != 0) or (year % 400 == 0):
+        return True
+    else:
+        return False
+
+
 def apply_time_segmentation(n, segments, solver_name="cbc"):
     try:
         import tsam.timeseriesaggregation as tsam
@@ -238,6 +242,11 @@ def apply_time_segmentation(n, segments, solver_name="cbc"):
         # normalise all time-dependent data
         annual_max = raw_t.max().replace(0, 1)
         raw_t = raw_t.div(annual_max, level=0)
+
+        # hack to get around that TSAM will add leap days in
+        if is_leap_year(year):
+            raw_t.index = raw_t.index.map(lambda x: x.replace(year=year + 1))
+
         # get representative segments
         agg = tsam.TimeSeriesAggregation(
             raw_t,
@@ -252,7 +261,12 @@ def apply_time_segmentation(n, segments, solver_name="cbc"):
         weightings = segmented.index.get_level_values("Segment Duration")
         offsets = np.insert(np.cumsum(weightings[:-1]), 0, 0)
         timesteps = [raw_t.index[0] + pd.Timedelta(f"{offset}h") for offset in offsets]
+
         snapshots = pd.DatetimeIndex(timesteps)
+
+        if is_leap_year(year):
+            snapshots = snapshots.map(lambda x: x.replace(year=year))
+
         sn_weightings[year] = pd.Series(
             weightings,
             index=snapshots,
@@ -308,11 +322,11 @@ if __name__ == "__main__":
 
         snakemake = mock_snakemake(
             "prepare_network",
-            simpl="",
-            clusters="36",
+            # simpl="",
+            clusters="100",
             interconnect="western",
             ll="v1.0",
-            opts="REM-1000SEG",
+            opts="500SEG",
         )
     configure_logging(snakemake)
     set_scenario_config(snakemake)
@@ -320,13 +334,8 @@ if __name__ == "__main__":
 
     n = pypsa.Network(snakemake.input[0])
     Nyears = n.snapshot_weightings.loc[n.investment_periods[0]].objective.sum() / 8760.0
-    costs = load_costs(
-        snakemake.input.tech_costs,
-        snakemake.params.costs,
-        snakemake.params.max_hours,
-        Nyears,
-    )
-
+    costs = pd.read_csv(snakemake.input.tech_costs)
+    costs = costs.pivot(index="pypsa-name", columns="parameter", values="value")
     # Set Investment Period Year Weightings
     # 'fillna(1)' needed if only one period
     inv_per_time_weight = (
@@ -379,10 +388,6 @@ if __name__ == "__main__":
         s_nom_max_ext=snakemake.params.lines.get("max_extension", np.inf),
         p_nom_max_ext=snakemake.params.links.get("max_extension", np.inf),
     )
-
-    if snakemake.params.autarky["enable"]:
-        only_crossborder = snakemake.params.autarky["by_country"]
-        enforce_autarky(n, only_crossborder=only_crossborder)
 
     n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))
     n.export_to_netcdf(snakemake.output[0])

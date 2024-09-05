@@ -1,0 +1,24 @@
+technology,parameter,value,unit,source,further_description
+gas,co2_emissions,0.18058,tCO2/MWh_th,EIA,https://www.eia.gov/environment/emissions/co2_vol_mass.php
+coal,co2_emissions,0.3453,tCO2/MWh_th,EIA,https://www.eia.gov/environment/emissions/co2_vol_mass.php
+oil,co2_emissions,0.34851,tCO2/MWh_th,EIA,https://www.eia.gov/environment/emissions/co2_vol_mass.php
+direct firing gas,FOM,1.1818,%/year,"Danish Energy Agency,technology_data_for_industrial_process_heat.xlsx",312.a Direct firing Natural Gas:  Fixed O&M
+direct firing gas,VOM,0.2794,EUR/MWh,"Danish Energy Agency,technology_data_for_industrial_process_heat.xlsx",312.a Direct firing Natural Gas:  Variable O&M
+direct firing gas,efficiency,1,per unit,"Danish Energy Agency,technology_data_for_industrial_process_heat.xlsx","312.a Direct firing Natural Gas:  Total efficiency,net,annual average"
+direct firing gas,investment,15.105,EUR/kW,"Danish Energy Agency,technology_data_for_industrial_process_heat.xlsx",312.a Direct firing Natural Gas:  Nominal investment
+direct firing gas,lifetime,15,years,"Danish Energy Agency,technology_data_for_industrial_process_heat.xlsx",312.a Direct firing Natural Gas:  Technical lifetime
+central coal CHP,FOM,1.6316,%/year,"Danish Energy Agency,technology_data_for_el_and_dh.xlsx",01 Coal CHP:  Fixed O&M
+central coal CHP,VOM,3.005,EUR/MWh,"Danish Energy Agency,technology_data_for_el_and_dh.xlsx",01 Coal CHP:  Variable O&M
+central coal CHP,efficiency,0.52,per unit,"Danish Energy Agency,technology_data_for_el_and_dh.xlsx","01 Coal CHP:  Electricity efficiency,condensation mode,net"
+central coal CHP,investment,1968.795,EUR/kW,"Danish Energy Agency,technology_data_for_el_and_dh.xlsx",01 Coal CHP:  Nominal investment
+central coal CHP,lifetime,25,years,"Danish Energy Agency,technology_data_for_el_and_dh.xlsx",01 Coal CHP:  Technical lifetime
+industrial heat pump high temperature,FOM,0.0931,%/year,"Danish Energy Agency,technology_data_for_industrial_process_heat.xlsx",302.b High temp. hp Up to 150:  Fixed O&M
+industrial heat pump high temperature,VOM,3.2224,EUR/MWh,"Danish Energy Agency,technology_data_for_industrial_process_heat.xlsx",302.b High temp. hp Up to 150:  Variable O&M
+industrial heat pump high temperature,efficiency,3.05,per unit,"Danish Energy Agency,technology_data_for_industrial_process_heat.xlsx","302.b High temp. hp Up to 150:  Total efficiency,net,annual average"
+industrial heat pump high temperature,investment,941.1019,EUR/kW,"Danish Energy Agency,technology_data_for_industrial_process_heat.xlsx",302.b High temp. hp Up to 150:  Nominal investment
+industrial heat pump high temperature,lifetime,20,years,"Danish Energy Agency,technology_data_for_industrial_process_heat.xlsx",302.b High temp. hp Up to 150:  Technical lifetime
+industrial heat pump medium temperature,FOM,0.1117,%/year,"Danish Energy Agency,technology_data_for_industrial_process_heat.xlsx",302.a High temp. hp Up to 125 C:  Fixed O&M
+industrial heat pump medium temperature,VOM,3.2224,EUR/MWh,"Danish Energy Agency,technology_data_for_industrial_process_heat.xlsx",302.a High temp. hp Up to 125 C:  Variable O&M
+industrial heat pump medium temperature,efficiency,2.7,per unit,"Danish Energy Agency,technology_data_for_industrial_process_heat.xlsx","302.a High temp. hp Up to 125 C:  Total efficiency,net,annual average"
+industrial heat pump medium temperature,investment,784.2516,EUR/kW,"Danish Energy Agency,technology_data_for_industrial_process_heat.xlsx",302.a High temp. hp Up to 125 C:  Nominal investment
+industrial heat pump medium temperature,lifetime,20,years,"Danish Energy Agency,technology_data_for_industrial_process_heat.xlsx",302.a High temp. hp Up to 125 C:  Technical lifetime

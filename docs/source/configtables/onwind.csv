@@ -9,6 +9,6 @@ grid codes,--,Any subset of the Copornicus Land Cover code list (see assumptions
 distance,m,float,Distance to keep from areas specified in ``distance_grid_codes``
 distance_grid_codes,--,Any subset of the Copornicus Land Cover code list (see assumptions).,Specifies areas according to Land Cover codes which are generally eligible for wind turbine placement.
 natura,bool,"{true, false}",Switch to exclude Protected Planet natural protection areas. Area is excluded if ``true``.
-potential,--,"One of {'simple', 'conservative'}",Method to compute the maximal installable potential for a node; confer :ref:`renewableprofiles`
+potential,--,"One of {'simple', 'conservative'}",Method to compute the maximal installable potential for a node
 clip_p_max_pu,p.u.,float,To avoid too small values in the renewables` per-unit availability time series values below this threshold are set to zero.
 correction_factor,--,float,Correction factor for capacity factor time series.

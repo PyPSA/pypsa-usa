@@ -61,15 +61,35 @@ def get_color_palette(n: pypsa.Network) -> pd.Series:
 
     colors = (n.carriers.reset_index().set_index("nice_name")).color
 
+    # additional = {
+    #     "Battery Charge": n.carriers.loc["battery"].color,
+    #     "Battery Discharge": n.carriers.loc["battery"].color,
+    #     "battery_discharger": n.carriers.loc["battery"].color,
+    #     "battery_charger": n.carriers.loc["battery"].color,
+    #     "4hr_battery_storage_discharger": n.carriers.loc["4hr_battery_storage"].color,
+    #     "4hr_battery_storage_charger": n.carriers.loc["4hr_battery_storage"].color,
+    #     "8hr_PHS_charger": n.carriers.loc["8hr_PHS"].color,
+    #     "8hr_PHS_discharger": n.carriers.loc["8hr_PHS"].color,
+    #     "10hr_PHS_charger": n.carriers.loc["10hr_PHS"].color,
+    #     "10hr_PHS_discharger": n.carriers.loc["10hr_PHS"].color,
+    #     "co2": "k",
+    # }
+
+    # Initialize the additional dictionary
     additional = {
-        "Battery Charge": n.carriers.loc["battery"].color,
-        "Battery Discharge": n.carriers.loc["battery"].color,
-        "battery_discharger": n.carriers.loc["battery"].color,
-        "battery_charger": n.carriers.loc["battery"].color,
-        "4hr_battery_storage_discharger": n.carriers.loc["4hr_battery_storage"].color,
-        "4hr_battery_storage_charger": n.carriers.loc["4hr_battery_storage"].color,
         "co2": "k",
     }
+
+    # Loop through the carriers DataFrame
+    for index, row in n.carriers.iterrows():
+        if "battery" in index or "PHS" in index:
+            color = row.color
+            additional.update(
+                {
+                    f"{index}_charger": color,
+                    f"{index}_discharger": color,
+                },
+            )
 
     return pd.concat([colors, pd.Series(additional)]).to_dict()
 
@@ -272,7 +292,7 @@ def plot_capacity_map(
     )
     add_legend_patches(
         ax,
-        n.carriers.color,
+        n.carriers.color.fillna("#000000"),
         n.carriers.nice_name,
         legend_kw={"bbox_to_anchor": (1, 0), **legend_kwargs, "loc": "lower left"},
     )
@@ -358,7 +378,7 @@ def plot_demand_map(
     )
     add_legend_patches(
         ax,
-        n.carriers.color,
+        n.carriers.color.fillna("#000000"),
         n.carriers.nice_name,
         legend_kw={"bbox_to_anchor": (1, 0), **legend_kwargs, "loc": "lower left"},
     )
@@ -427,7 +447,6 @@ def plot_opt_capacity_map(
     # capacity.index = capacity.index.droplevel(0)
 
     bus_values = get_capacity_brownfield(n)
-
     bus_values = bus_values[bus_values.index.get_level_values("carrier").isin(carriers)]
     bus_values = (
         remove_sector_buses(bus_values)
@@ -448,7 +467,7 @@ def plot_opt_capacity_map(
         n=n,
         bus_values=bus_values,
         line_values=line_values,
-        link_values=n.links.p_nom.replace(to_replace={pd.NA: 0}),
+        link_values=n.links.p_nom_opt.replace(to_replace={pd.NA: 0}),
         regions=regions,
         line_scale=line_scale,
         bus_scale=bus_scale,
@@ -492,6 +511,10 @@ def plot_new_capacity_map(
     line_snom_opt = n.lines.s_nom_opt
     line_values = line_snom_opt - line_snom
 
+    link_pnom = n.links.p_nom
+    link_pnom_opt = n.links.p_nom_opt
+    link_values = link_pnom_opt - link_pnom
+
     # plot data
     title = create_title("New Network Capacities", **wildcards)
     interconnect = wildcards.get("interconnect", None)
@@ -502,7 +525,7 @@ def plot_new_capacity_map(
         n=n,
         bus_values=bus_values,
         line_values=line_values,
-        link_values=n.links.p_nom.replace(to_replace={pd.NA: 0}),
+        link_values=link_values.replace(to_replace={pd.NA: 0}),
         regions=regions,
         line_scale=line_scale,
         bus_scale=bus_scale,
@@ -522,28 +545,32 @@ def plot_renewable_potential(
     """
 
     # get data
-
     renew = n.generators[
         (n.generators.p_nom_max != np.inf)
+        & (n.generators.build_year == 2030)
         & (
             n.generators.carrier.isin(
-                ["onwind", "offwind", "offwind_floating", "solar"],
+                ["onwind", "offwind", "offwind_floating", "solar", "EGS"],
             )
         )
     ]
+
     bus_values = renew.groupby(["bus", "carrier"]).p_nom_max.sum()
+
+    # bus_pnom_opt = get_capacity_brownfield(n)
+    # bus_pnom_opt = bus_pnom_opt.loc[bus_values.index]
+    # print((bus_values - bus_pnom_opt)/bus_values)
 
     # do not show lines or links
     line_values = pd.Series(0, index=n.lines.s_nom.index)
     link_values = pd.Series(0, index=n.links.p_nom.index)
 
     # plot data
-
     title = create_title("Renewable Capacity Potential", **wildcards)
     interconnect = wildcards.get("interconnect", None)
     bus_scale = get_bus_scale(interconnect) if interconnect else 1
 
-    bus_scale *= 12  # since potential capacity is so big
+    bus_scale *= 15  # since potential capacity is so big
 
     fig, ax = plot_capacity_map(
         n=n,
@@ -559,7 +586,7 @@ def plot_renewable_potential(
     fig.artists[-2].remove()  # remove line width legend
     fig.artists[-1].remove()  # remove existing colour legend
     renew_carriers = n.carriers[
-        n.carriers.index.isin(["onwind", "offwind", "offwind_floating", "solar"])
+        n.carriers.index.isin(["onwind", "offwind", "offwind_floating", "solar", "EGS"])
     ]
     add_legend_patches(
         ax,
@@ -608,10 +635,10 @@ if __name__ == "__main__":
         snakemake = mock_snakemake(
             "plot_network_maps",
             interconnect="texas",
-            clusters=20,
-            ll="v1.0",
-            opts="500SEG",
-            sector="E-G",
+            clusters=7,
+            ll="v1.00",
+            opts="REM-400SEG",
+            sector="E",
         )
     configure_logging(snakemake)
 
@@ -628,6 +655,7 @@ if __name__ == "__main__":
     carriers = (
         snakemake.params.electricity["conventional_carriers"]
         + snakemake.params.electricity["renewable_carriers"]
+        + snakemake.params.electricity["extendable_carriers"]["Generator"]
         + snakemake.params.electricity["extendable_carriers"]["StorageUnit"]
         + snakemake.params.electricity["extendable_carriers"]["Store"]
         + snakemake.params.electricity["extendable_carriers"]["Link"]
@@ -678,4 +706,4 @@ if __name__ == "__main__":
         snakemake.output["renewable_potential_map.pdf"],
         **snakemake.wildcards,
     )
-    plot_lmp_map(n, snakemake.output["lmp_map.pdf"], **snakemake.wildcards)
+    # plot_lmp_map(n, snakemake.output["lmp_map.pdf"], **snakemake.wildcards)
