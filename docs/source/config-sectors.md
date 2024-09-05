@@ -1,16 +1,6 @@
 (sectors)=
 # Sectors
 
-```{note}
-More information to come!
-```
-
-(natural-gas-sector)=
-## Natural Gas
-
-Below is a schematic showing the representation of the natural gas network.
-
-```{eval-rst}
-.. image:: _static/sectors/natural-gas.png
-    :scale: 20 %
+```{warning}
+Sector coupling studies are all under active development. More info to come!
 ```

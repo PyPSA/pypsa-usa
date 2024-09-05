@@ -15,7 +15,7 @@ The EFS also provides electrification cases, with reference, medium, and high el
 
 ## Demand Disaggregation
 
-Electrical load is disaggregated based on population, folling the implementation in the nodal network dataset. See the paper on the [nodal network](./data-generators.md#fuel-costs) for more information on specifics of load disaggregation.
+Electrical load is disaggregated based on population, folling the implementation in the nodal network dataset. See the paper on the [nodal network](./data-transmission.md#tamu-synthetic-nodal-network) for more information on specifics of load disaggregation.
 
 ## Usage
 
