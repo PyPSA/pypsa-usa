@@ -12,6 +12,6 @@ capacity_per_sqkm,:math:`MW/km^2`,float,Allowable density of solar panel placeme
 correction_factor,--,float,A correction factor for the capacity factor (availability) time series.
 corine,--,Any subset of the Copornicus Land Cover code list (see assumptions).,Specifies areas according to Land Cover codes which are generally eligible for wind turbine placement.
 natura,bool,"{true, false}",Switch to exclude Protected Planet natural protection areas. Area is excluded if ``true``.
-potential,--,"One of {'simple', 'conservative'}",Method to compute the maximal installable potential for a node; confer :ref:`renewableprofiles`
+potential,--,"One of {'simple', 'conservative'}",Method to compute the maximal installable potential for a node
 clip_p_max_pu,p.u.,float,To avoid too small values in the renewables` per-unit availability time series values below this threshold are set to zero.
 excluder_resolution,m,float,Resolution on which to perform geographical elibility analysis.

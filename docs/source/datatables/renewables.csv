@@ -1,0 +1,9 @@
+Characteristic,Data Source,Spatial Scale,Temporal Scale
+Nameplate Capacity,EIA860,Unit Level,-
+Capacity Factor Profiles,Atlite (ERA5),30 km,Hourly (1940 - present)
+Hydro Profiles,BE/TAMU,Unit Level,Hourly (2019)
+Technical Potential,CEC Wind and Solar Screens,Variable (< 30 km),-
+,Copernicus Land-Sat,,-
+,GEBCO Bathymetry,,-
+,BOEM Planning Areas,,-
+Operation & Maint. Costs,WECC ADS + NREL ATB,Unit / Plant Levels,-

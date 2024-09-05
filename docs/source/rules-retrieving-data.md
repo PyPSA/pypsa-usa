@@ -1,3 +1,4 @@
+(retrieve-data)=
 # Retrieve Data
 
 Numerous datasets used in PyPSA USA are large and are not stored on GitHub. Insted, data is stored on Zenodo or supplier websites, and the workflow will automatically download these datasets via the `retrieve` rules

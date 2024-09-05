@@ -208,42 +208,7 @@ See [here](./config-co2-base.md) for information on interconnect level base emis
 ``` -->
 
 ```{warning}
-Sector coupling studies are all under active development
-```
-
-```yaml
-sector:
-  co2_sequestration_potential: 0
-  natural_gas:
-    allow_imports_exports: true # false to be implemented
-    cyclic_storage: false
-  heating:
-    heat_pump_sink_T: 55.
-  demand:
-    profile:
-      residential: eulp # efs, eulp
-      commercial: eulp # efs, eulp
-      transport: efs # efs
-      industry: efs # efs
-    scale:
-      residential: aeo # efs, aeo
-      commercial: aeo # efs, aeo
-      transport: aeo # efs, aeo
-      industry: aeo # efs, aeo
-    disaggregation:
-      residential: pop # pop
-      commercial: pop # pop
-      transport: pop # pop
-      industry: pop # pop
-    scenarios:
-      aeo: reference
-```
-
-```{eval-rst}
-.. csv-table::
-   :header-rows: 1
-   :widths: 22,7,22,33
-   :file: configtables/sector.csv
+Sector coupling studies are all under active development. More info to come!
 ```
 
 
