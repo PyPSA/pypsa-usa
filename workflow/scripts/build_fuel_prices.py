@@ -78,7 +78,9 @@ def make_hourly(df: pd.DataFrame) -> pd.DataFrame:
 
 def get_state_ng_power_prices(sns: pd.date_range, eia_api: str) -> pd.DataFrame:
     df = (
-        eia.FuelCosts("gas", "power", sns.year[0], eia_api).get_data(pivot=True)
+        eia.FuelCosts("gas", sns.year[0], eia_api, industry="power").get_data(
+            pivot=True,
+        )
         * 1000
         / const.NG_MWH_2_MMCF
     )  # $/MCF -> $/MWh
@@ -87,7 +89,9 @@ def get_state_ng_power_prices(sns: pd.date_range, eia_api: str) -> pd.DataFrame:
 
 def get_state_coal_power_prices(sns: pd.date_range, eia_api: str) -> pd.DataFrame:
     eia_coal = (
-        eia.FuelCosts("coal", "power", sns.year[0], eia_api).get_data(pivot=True)
+        eia.FuelCosts("coal", sns.year[0], eia_api, industry="power").get_data(
+            pivot=True,
+        )
         * const.COAL_dol_ton_2_MWHthermal
     )
     return make_hourly(eia_coal)

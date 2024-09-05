@@ -39,25 +39,6 @@ rule plot_network_maps:
         "../scripts/plot_network_maps.py"
 
 
-rule plot_natural_gas:
-    input:
-        network=RESULTS
-        + "{interconnect}/networks/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc",
-    params:
-        plotting=config["plotting"],
-    output:
-        **{
-            fig: RESULTS
-            + "{interconnect}/figures/cluster_{clusters}/l{ll}_{opts}_{sector}/gas/%s"
-            % fig
-            for fig in FIGURES_NATURAL_GAS
-        },
-    log:
-        "logs/plot_figures/gas/{interconnect}_{clusters}_l{ll}_{opts}_{sector}.log",
-    script:
-        "../scripts/plot_natural_gas.py"
-
-
 rule plot_statistics:
     input:
         network=RESULTS

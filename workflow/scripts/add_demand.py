@@ -60,6 +60,20 @@ if __name__ == "__main__":
         "electricity": "elec",
         "heating": "heat",
         "cooling": "cool",
+        "lpg": "lpg",
+        "space-heating": "space-heat",
+        "water-heating": "water-heat",
+    }
+
+    vehicle_mapper = {
+        "bus": "bus",
+        "heavy-duty": "hvy",
+        "light-duty": "lgt",
+        "med-duty": "med",
+        "air": "air-psg",
+        "rail-shipping": "rail-ship",
+        "rail-passenger": "rail-psg",
+        "boat-shipping": "boat-ship",
     }
 
     if sectors == "E" or sectors == "":  # electricity only
@@ -78,14 +92,36 @@ if __name__ == "__main__":
         for demand_file in demand_files:
 
             parsed_name = Path(demand_file).name.split("_")
-            sector = parsed_name[0]
-            end_use = parsed_name[1]
+            parsed_name[-1] = parsed_name[-1].split(".csv")[0]
 
-            carrier = f"{sector_mapper[sector]}-{carrier_mapper[end_use]}"
-            suffix = f"-{carrier}"
+            if len(parsed_name) == 2:
+
+                sector = parsed_name[0]
+                end_use = parsed_name[1]
+
+                carrier = f"{sector_mapper[sector]}-{carrier_mapper[end_use]}"
+                suffix = f"-{carrier}"
+
+                log_statement = f"{sector} {end_use} demand added to network"
+
+            elif len(parsed_name) == 3:
+
+                sector = parsed_name[0]
+                subsector = parsed_name[1]
+                end_use = parsed_name[2]
+
+                carrier = f"{sector_mapper[sector]}-{carrier_mapper[end_use]}-{vehicle_mapper[subsector]}"
+                suffix = f"-{carrier}"
+
+                log_statement = (
+                    f"{sector} {subsector} {end_use} demand added to network"
+                )
+
+            else:
+                raise NotImplementedError
 
             df = pd.read_csv(demand_file, index_col=0)
             attach_demand(n, df, carrier, suffix)
-            logger.info(f"{sector} {end_use} demand added to network")
+            logger.info(log_statement)
 
     n.export_to_netcdf(snakemake.output.network)

@@ -1,0 +1,59 @@
+technology,parameter,value,unit,year,source,further description
+Light Duty Cars ICEV,investment,23389,Capital Cost (2016$),2015,https://www.nrel.gov/docs/fy18osti/70485.pdf,Table 4 at https://data.nrel.gov/submissions/93
+Light Duty Cars ICEV,investment,25104,Capital Cost (2016$),2020,https://www.nrel.gov/docs/fy18osti/70485.pdf,Table 4 at https://data.nrel.gov/submissions/93
+Light Duty Cars ICEV,investment,26792,Capital Cost (2016$),2030,https://www.nrel.gov/docs/fy18osti/70485.pdf,Table 4 at https://data.nrel.gov/submissions/93
+Light Duty Cars ICEV,investment,26918,Capital Cost (2016$),2040,https://www.nrel.gov/docs/fy18osti/70485.pdf,Table 4 at https://data.nrel.gov/submissions/93
+Light Duty Cars ICEV,investment,26918,Capital Cost (2016$),2050,https://www.nrel.gov/docs/fy18osti/70485.pdf,Table 4 at https://data.nrel.gov/submissions/93
+Light Duty Trucks ICEV,investment,28061,Capital Cost (2016$),2015,https://www.nrel.gov/docs/fy18osti/70485.pdf,Table 5 at https://data.nrel.gov/submissions/93
+Light Duty Trucks ICEV,investment,29606,Capital Cost (2016$),2020,https://www.nrel.gov/docs/fy18osti/70485.pdf,Table 5 at https://data.nrel.gov/submissions/93
+Light Duty Trucks ICEV,investment,31275,Capital Cost (2016$),2030,https://www.nrel.gov/docs/fy18osti/70485.pdf,Table 5 at https://data.nrel.gov/submissions/93
+Light Duty Trucks ICEV,investment,31421,Capital Cost (2016$),2040,https://www.nrel.gov/docs/fy18osti/70485.pdf,Table 5 at https://data.nrel.gov/submissions/93
+Light Duty Trucks ICEV,investment,31421,Capital Cost (2016$),2050,https://www.nrel.gov/docs/fy18osti/70485.pdf,Table 5 at https://data.nrel.gov/submissions/93
+Medium Duty Trucks ICEV,investment,55000,Capital Cost (2016$),2017,https://www.nrel.gov/docs/fy18osti/70485.pdf,Table 8 at https://data.nrel.gov/submissions/93
+Medium Duty Trucks ICEV,investment,56072,Capital Cost (2016$),2020,https://www.nrel.gov/docs/fy18osti/70485.pdf,Table 8 at https://data.nrel.gov/submissions/93
+Medium Duty Trucks ICEV,investment,57679,Capital Cost (2016$),2025,https://www.nrel.gov/docs/fy18osti/70485.pdf,Table 8 at https://data.nrel.gov/submissions/93
+Medium Duty Trucks ICEV,investment,59188,Capital Cost (2016$),2030,https://www.nrel.gov/docs/fy18osti/70485.pdf,Table 8 at https://data.nrel.gov/submissions/93
+Medium Duty Trucks ICEV,investment,60029,Capital Cost (2016$),2040,https://www.nrel.gov/docs/fy18osti/70485.pdf,Table 8 at https://data.nrel.gov/submissions/93
+Medium Duty Trucks ICEV,investment,61126,Capital Cost (2016$),2050,https://www.nrel.gov/docs/fy18osti/70485.pdf,Table 8 at https://data.nrel.gov/submissions/93
+Heavy Duty Trucks ICEV,investment,120000,Capital Cost (2016$),2017,https://www.nrel.gov/docs/fy18osti/70485.pdf,Table 9 at https://data.nrel.gov/submissions/93
+Heavy Duty Trucks ICEV,investment,120908,Capital Cost (2016$),2020,https://www.nrel.gov/docs/fy18osti/70485.pdf,Table 9 at https://data.nrel.gov/submissions/93
+Heavy Duty Trucks ICEV,investment,122271,Capital Cost (2016$),2025,https://www.nrel.gov/docs/fy18osti/70485.pdf,Table 9 at https://data.nrel.gov/submissions/93
+Heavy Duty Trucks ICEV,investment,128470,Capital Cost (2016$),2030,https://www.nrel.gov/docs/fy18osti/70485.pdf,Table 9 at https://data.nrel.gov/submissions/93
+Heavy Duty Trucks ICEV,investment,129377,Capital Cost (2016$),2040,https://www.nrel.gov/docs/fy18osti/70485.pdf,Table 9 at https://data.nrel.gov/submissions/93
+Heavy Duty Trucks ICEV,investment,129886,Capital Cost (2016$),2050,https://www.nrel.gov/docs/fy18osti/70485.pdf,Table 9 at https://data.nrel.gov/submissions/93
+Buses ICEV,investment,435000,Capital Cost (2016$),2017,https://www.nrel.gov/docs/fy18osti/70485.pdf,Table 11 at https://data.nrel.gov/submissions/93
+Buses ICEV,investment,435000,Capital Cost (2016$),2020,https://www.nrel.gov/docs/fy18osti/70485.pdf,Table 11 at https://data.nrel.gov/submissions/93
+Buses ICEV,investment,435000,Capital Cost (2016$),2025,https://www.nrel.gov/docs/fy18osti/70485.pdf,Table 11 at https://data.nrel.gov/submissions/93
+Buses ICEV,investment,435000,Capital Cost (2016$),2030,https://www.nrel.gov/docs/fy18osti/70485.pdf,Table 11 at https://data.nrel.gov/submissions/93
+Buses ICEV,investment,435000,Capital Cost (2016$),2040,https://www.nrel.gov/docs/fy18osti/70485.pdf,Table 11 at https://data.nrel.gov/submissions/93
+Buses ICEV,investment,435000,Capital Cost (2016$),2050,https://www.nrel.gov/docs/fy18osti/70485.pdf,Table 11 at https://data.nrel.gov/submissions/93
+Light Duty Cars ICEV,efficiency,25.9,MPGe,2015,https://www.nrel.gov/docs/fy18osti/70485.pdf,Table 6 at https://data.nrel.gov/submissions/93
+Light Duty Cars ICEV,efficiency,30.7,MPGe,2020,https://www.nrel.gov/docs/fy18osti/70485.pdf,Table 6 at https://data.nrel.gov/submissions/93
+Light Duty Cars ICEV,efficiency,36,MPGe,2030,https://www.nrel.gov/docs/fy18osti/70485.pdf,Table 6 at https://data.nrel.gov/submissions/93
+Light Duty Cars ICEV,efficiency,39.9,MPGe,2040,https://www.nrel.gov/docs/fy18osti/70485.pdf,Table 6 at https://data.nrel.gov/submissions/93
+Light Duty Cars ICEV,efficiency,42.5,MPGe,2050,https://www.nrel.gov/docs/fy18osti/70485.pdf,Table 6 at https://data.nrel.gov/submissions/93
+Light Duty Trucks ICEV,efficiency,16.35,MPGe,2015,https://www.nrel.gov/docs/fy18osti/70485.pdf,Table 7 at https://data.nrel.gov/submissions/93
+Light Duty Trucks ICEV,efficiency,18.69,MPGe,2020,https://www.nrel.gov/docs/fy18osti/70485.pdf,Table 7 at https://data.nrel.gov/submissions/93
+Light Duty Trucks ICEV,efficiency,20.47,MPGe,2030,https://www.nrel.gov/docs/fy18osti/70485.pdf,Table 7 at https://data.nrel.gov/submissions/93
+Light Duty Trucks ICEV,efficiency,24.35,MPGe,2040,https://www.nrel.gov/docs/fy18osti/70485.pdf,Table 7 at https://data.nrel.gov/submissions/93
+Light Duty Trucks ICEV,efficiency,25.06,MPGe,2050,https://www.nrel.gov/docs/fy18osti/70485.pdf,Table 7 at https://data.nrel.gov/submissions/93
+Medium Duty Trucks ICEV,efficiency,7.61,MPGe,2015,https://www.nrel.gov/docs/fy18osti/70485.pdf,Table 10 at https://data.nrel.gov/submissions/93
+Medium Duty Trucks ICEV,efficiency,7.71,MPGe,2017,https://www.nrel.gov/docs/fy18osti/70485.pdf,Table 10 at https://data.nrel.gov/submissions/93
+Medium Duty Trucks ICEV,efficiency,8.02,MPGe,2020,https://www.nrel.gov/docs/fy18osti/70485.pdf,Table 10 at https://data.nrel.gov/submissions/93
+Medium Duty Trucks ICEV,efficiency,9.62,MPGe,2030,https://www.nrel.gov/docs/fy18osti/70485.pdf,Table 10 at https://data.nrel.gov/submissions/93
+Medium Duty Trucks ICEV,efficiency,11.1,MPGe,2040,https://www.nrel.gov/docs/fy18osti/70485.pdf,Table 10 at https://data.nrel.gov/submissions/93
+Medium Duty Trucks ICEV,efficiency,11.51,MPGe,2050,https://www.nrel.gov/docs/fy18osti/70485.pdf,Table 10 at https://data.nrel.gov/submissions/93
+Heavy Duty Trucks ICEV,efficiency,5.33,MPGe,2015,https://www.nrel.gov/docs/fy18osti/70485.pdf,Table 10 at https://data.nrel.gov/submissions/93
+Heavy Duty Trucks ICEV,efficiency,5.44,MPGe,2017,https://www.nrel.gov/docs/fy18osti/70485.pdf,Table 10 at https://data.nrel.gov/submissions/93
+Heavy Duty Trucks ICEV,efficiency,5.67,MPGe,2020,https://www.nrel.gov/docs/fy18osti/70485.pdf,Table 10 at https://data.nrel.gov/submissions/93
+Heavy Duty Trucks ICEV,efficiency,6.61,MPGe,2030,https://www.nrel.gov/docs/fy18osti/70485.pdf,Table 10 at https://data.nrel.gov/submissions/93
+Heavy Duty Trucks ICEV,efficiency,7.41,MPGe,2040,https://www.nrel.gov/docs/fy18osti/70485.pdf,Table 10 at https://data.nrel.gov/submissions/93
+Heavy Duty Trucks ICEV,efficiency,7.6,MPGe,2050,https://www.nrel.gov/docs/fy18osti/70485.pdf,Table 10 at https://data.nrel.gov/submissions/93
+Buses ICEV,efficiency,3.45,MPGe,2016,https://www.nrel.gov/docs/fy18osti/70485.pdf,Table 12 at https://data.nrel.gov/submissions/93
+Buses ICEV,efficiency,3.67,MPGe,2020,https://www.nrel.gov/docs/fy18osti/70485.pdf,Table 12 at https://data.nrel.gov/submissions/93
+Buses ICEV,efficiency,3.92,MPGe,2025,https://www.nrel.gov/docs/fy18osti/70485.pdf,Table 12 at https://data.nrel.gov/submissions/93
+Buses ICEV,efficiency,4.28,MPGe,2030,https://www.nrel.gov/docs/fy18osti/70485.pdf,Table 12 at https://data.nrel.gov/submissions/93
+Buses ICEV,efficiency,4.61,MPGe,2035,https://www.nrel.gov/docs/fy18osti/70485.pdf,Table 12 at https://data.nrel.gov/submissions/93
+Buses ICEV,efficiency,4.8,MPGe,2040,https://www.nrel.gov/docs/fy18osti/70485.pdf,Table 12 at https://data.nrel.gov/submissions/93
+Buses ICEV,efficiency,4.88,MPGe,2045,https://www.nrel.gov/docs/fy18osti/70485.pdf,Table 12 at https://data.nrel.gov/submissions/93
+Buses ICEV,efficiency,4.92,MPGe,2050,https://www.nrel.gov/docs/fy18osti/70485.pdf,Table 12 at https://data.nrel.gov/submissions/93

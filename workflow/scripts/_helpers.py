@@ -1,22 +1,17 @@
 # By PyPSA-USA Authors
 
 
-import contextlib
 import copy
 import hashlib
 import logging
-import os
 import re
-import urllib
 from functools import partial
 from pathlib import Path
 
 import pandas as pd
-import pytz
 import requests
 import yaml
 from snakemake.utils import update_config
-from tqdm import tqdm
 
 REGION_COLS = ["geometry", "name", "x", "y", "country"]
 
@@ -159,6 +154,11 @@ def calculate_annuity(n, r):
         return r / (1.0 - 1.0 / (1.0 + r) ** n)
     else:
         return 1 / n
+
+
+def load_costs(tech_costs: str) -> pd.DataFrame:
+    df = pd.read_csv(tech_costs)
+    return df.pivot(index="technology", columns="parameter", values="value").fillna(0)
 
 
 def load_network_for_plots(fn, tech_costs, config, combine_hydro_ps=True):

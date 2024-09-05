@@ -15,6 +15,13 @@ import pandas as pd
 class Eulp:
     """
     End use by sector.
+
+    The groups are:
+    - electric -> end use electricity
+    - cooling -> end use space cooling
+    - heat -> end use space and water cooling
+    - space_heat -> end use space heating
+    - water_heat -> end use water heating
     """
 
     _elec_group = [
@@ -85,6 +92,50 @@ class Eulp:
         "out.electricity.heating.energy_consumption.kwh",
     ]
 
+    _space_heat_group = [
+        # residential
+        "out.electricity.heating.energy_consumption.kwh",
+        "out.electricity.heating_fans_pumps.energy_consumption.kwh",
+        "out.electricity.heating_hp_bkup.energy_consumption.kwh",
+        "out.electricity.heating_hp_bkup_fa.energy_consumption.kwh",
+        "out.natural_gas.heating.energy_consumption.kwh",
+        "out.natural_gas.heating_hp_bkup.energy_consumption.kwh",
+        "out.natural_gas.clothes_dryer.energy_consumption.kwh",
+        "out.natural_gas.fireplace.energy_consumption.kwh",
+        "out.natural_gas.grill.energy_consumption.kwh",
+        "out.natural_gas.range_oven.energy_consumption.kwh",
+        "out.propane.clothes_dryer.energy_consumption.kwh",
+        "out.propane.heating.energy_consumption.kwh",
+        "out.propane.heating_hp_bkup.energy_consumption.kwh",
+        "out.propane.range_oven.energy_consumption.kwh",
+        "out.fuel_oil.heating.energy_consumption.kwh",
+        "out.fuel_oil.heating_hp_bkup.energy_consumption.kwh",
+        # commercial
+        "out.district_heating.heating.energy_consumption.kwh",
+        "out.district_heating.water_systems.energy_consumption.kwh",
+        "out.natural_gas.heating.energy_consumption.kwh",
+        "out.natural_gas.interior_equipment.energy_consumption.kwh",
+        "out.natural_gas.water_systems.energy_consumption.kwh",
+        "out.other_fuel.heating.energy_consumption.kwh",
+        "out.other_fuel.water_systems.energy_consumption.kwh",
+        "out.electricity.heating.energy_consumption.kwh",
+    ]
+
+    _water_heat_group = [
+        # residential
+        "out.electricity.hot_water.energy_consumption.kwh",
+        "out.electricity.pool_heater.energy_consumption.kwh",
+        "out.natural_gas.hot_water.energy_consumption.kwh",
+        "out.propane.hot_water.energy_consumption.kwh",
+        "out.fuel_oil.hot_water.energy_consumption.kwh",
+        "out.natural_gas.permanent_spa_heat.energy_consumption.kwh",
+        "out.natural_gas.pool_heater.energy_consumption.kwh",
+        # commercial
+        "out.district_heating.water_systems.energy_consumption.kwh",
+        "out.natural_gas.water_systems.energy_consumption.kwh",
+        "out.other_fuel.water_systems.energy_consumption.kwh",
+    ]
+
     _cool_group = [
         # residential
         "out.electricity.cooling.energy_consumption.kwh",
@@ -107,7 +158,17 @@ class Eulp:
             self.data = self._resample_data(df)
         elif isinstance(df, pd.DataFrame):
             self.data = df
-            assert (self.data.columns == ["electricity", "heating", "cooling"]).all()
+            assert all(
+                x
+                in [
+                    "electricity",
+                    "heating",
+                    "cooling",
+                    "water_heating",
+                    "space_heating",
+                ]
+                for x in self.data.columns
+            )
         else:
             raise TypeError(
                 f"missing 1 required positional argument: 'filepath' or 'df'",
@@ -123,7 +184,7 @@ class Eulp:
         return self.__add__(other)
 
     def __str__(self):
-        return "Properties are 'data', 'electric', 'heating', 'cooling'"
+        return f"Properties are {self.data.columns}"
 
     def __repr__(self):
         return f"\n{self.data.head(3)}\n\n from {self.data.index[0]} to {self.data.index[-1]}"
@@ -135,6 +196,14 @@ class Eulp:
     @property
     def heating(self):
         return self.data["heating"]
+
+    @property
+    def space_heating(self):
+        return self.data["space_heating"]
+
+    @property
+    def water_heating(self):
+        return self.data["water_heating"]
 
     @property
     def cooling(self):
@@ -168,6 +237,8 @@ class Eulp:
         sectors = {
             "electricity": self._elec_group,
             "heating": self._heat_group,
+            "space_heating": self._space_heat_group,
+            "water_heating": self._water_heat_group,
             "cooling": self._cool_group,
         }
         for sector, sector_cols in sectors.items():
@@ -179,7 +250,14 @@ class Eulp:
 
     def plot(
         self,
-        sectors: Optional[list[str] | str] = ["electricity", "heating", "cooling"],
+        sectors: Optional[list[str] | str] = [
+            "electricity",
+            "heating",
+            "cooling",
+            "space_heating",
+            "water_heating",
+        ],
+        resample: Optional[str] = None,
     ):
 
         if isinstance(sectors, str):
@@ -187,7 +265,10 @@ class Eulp:
 
         df = self.data[sectors]
 
-        return df.plot(xlabel="", ylabel="MWh")
+        if resample:
+            df = df.resample(resample).sum()
+
+        return df.plot(xlabel="", ylabel="MW")
 
     def to_csv(self, path_or_buf: str, **kwargs):
         self.data.to_csv(path_or_buf=path_or_buf, **kwargs)
@@ -308,5 +389,5 @@ class EulpTotals:
         self.data.to_csv(path_or_buf=path_or_buf, **kwargs)
 
 
-# if __name__ == "__main__":
-#     Eulp("./../data/eulp/res/TX/mobile_home.csv")
+if __name__ == "__main__":
+    print(Eulp("./../data/eulp/res/TX/mobile_home.csv"))

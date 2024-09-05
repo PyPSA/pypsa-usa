@@ -141,24 +141,9 @@ sector:
     cyclic_storage: false
   heating:
     heat_pump_sink_T: 55.
-  demand:
-    profile:
-      residential: eulp # efs, eulp
-      commercial: eulp # efs, eulp
-      transport: efs # efs
-      industry: efs # efs
-    scale:
-      residential: aeo # efs, aeo
-      commercial: aeo # efs, aeo
-      transport: aeo # efs, aeo
-      industry: aeo # efs, aeo
-    disaggregation: 
-      residential: pop # pop
-      commercial: pop # pop
-      transport: pop # pop
-      industry: pop # pop
-    scenarios:
-      aeo: reference
+  transport:
+    exogenous: True # false to be implemented 
+    ev_policy: "config/policy_constraints/ev_policy.csv"
 
 # docs :
 clustering:

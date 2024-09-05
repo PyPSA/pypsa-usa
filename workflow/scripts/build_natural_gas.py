@@ -6,8 +6,6 @@ Module for adding the gas sector.
 This module will add a state level copperplate natural gas network to the model.
 Specifically, it will do the following
 
-- Adds state level natural gas buses
-- Converts exisitng OCGT and CCGT generators to links
 - Creates capacity constrained pipelines between state gas buses (links)
 - Creates capacity constraind natural gas processing facilites (generators)
 - Creates capacity and energy constrainted underground gas storage facilities
@@ -211,7 +209,9 @@ class GasData(ABC):
             states_2_remove += additional_removals
 
         if "STATE" not in df.columns:
-            logger.debug("Natual gas data notfiltered due to incorrect data formatting")
+            logger.debug(
+                "Natual gas data not filtered due to incorrect data formatting",
+            )
             return df
 
         df = df[~df.STATE.isin(states_2_remove)].copy()
@@ -332,6 +332,8 @@ class GasStorage(GasData):
             suffix=" gas storage",
             carrier="gas storage",
             unit="MWh_th",
+            interconnect=self.interconnect,
+            country=df.index,
         )
 
         cyclic_storage = kwargs.get("cyclic_storage", True)
@@ -669,7 +671,7 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
         assert direction in ("imports", "exports")
 
         # fuel costs/profits at a national level
-        costs = eia.FuelCosts("gas", direction, self.year, self.api).get_data()
+        costs = eia.FuelCosts("gas", self.year, self.api, industry=direction).get_data()
 
         # fuel costs come in MCF, so first convert to MMCF
         costs = costs[["value"]].astype("float")
@@ -695,6 +697,76 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
             expanded_costs.append(cost)
         return pd.concat(expanded_costs)
 
+    def _add_zero_capacity_connections(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Will add a zero capacity link if a connection is missing due to no
+        capacity.
+
+        For example, the input data frame of...
+
+        |   | STATE_NAME_TO    | STATE_NAME_FROM  | CAPACITY_MW | STATE_TO | STATE_FROM | INTERCONNECT_TO | INTERCONNECT_FROM |
+        |---|------------------|------------------|-------------|----------|------------|-----------------|-------------------|
+        | 0 | British Columbia | Washington       | 100         | BC       | WA         | canada          | western           |
+        | 1 | Idaho            | British Columbia | 50          | ID       | BC         | western         | canada            |
+        | 2 | Washington       | British Columbia | 120         | WA       | BC         | western         | canada            |
+
+        Will get converted to...
+
+        |   | STATE_NAME_TO    | STATE_NAME_FROM  | CAPACITY_MW | STATE_TO | STATE_FROM | INTERCONNECT_TO | INTERCONNECT_FROM |
+        |---|------------------|------------------|-------------|----------|------------|-----------------|-------------------|
+        | 0 | British Columbia | Washington       | 100         | BC       | WA         | canada          | western           |
+        | 1 | Idaho            | British Columbia | 50          | ID       | BC         | western         | canada            |
+        | 2 | Washington       | British Columbia | 120         | WA       | BC         | western         | canada            |
+        | 3 | British Columbia | Idaho            | 0           | BC       | ID         | canada          | western           |
+        """
+
+        @staticmethod
+        def missing_connections(df: pd.DataFrame) -> list[tuple[str, str]]:
+            connections = set(
+                map(tuple, df[["STATE_NAME_TO", "STATE_NAME_FROM"]].values),
+            )
+            missing_connections = []
+
+            for conn in connections:
+                reverse_conn = (conn[1], conn[0])
+                if reverse_conn not in connections:
+                    missing_connections.append(reverse_conn)
+
+            return missing_connections
+
+        connections = missing_connections(df)
+
+        if not connections:
+            return df
+
+        state_2_code = df.set_index("STATE_NAME_TO")["STATE_TO"].to_dict()
+        state_2_code.update(df.set_index("STATE_NAME_FROM")["STATE_FROM"].to_dict())
+
+        state_2_interconnect = df.set_index("STATE_NAME_TO")[
+            "INTERCONNECT_TO"
+        ].to_dict()
+        state_2_interconnect.update(
+            df.set_index("STATE_NAME_FROM")["INTERCONNECT_FROM"].to_dict(),
+        )
+
+        zero_capacity = []
+        for connection in connections:
+            zero_capacity.append(
+                [
+                    connection[0],
+                    connection[1],
+                    0,
+                    state_2_code[connection[0]],
+                    state_2_code[connection[1]],
+                    state_2_interconnect[connection[0]],
+                    state_2_interconnect[connection[1]],
+                ],
+            )
+
+        zero_df = pd.DataFrame(zero_capacity, columns=df.columns)
+
+        return pd.concat([df, zero_df])
+
     def build_infrastructure(self, n: pypsa.Network) -> None:
         """
         Builds import and export bus+link+store to connect to.
@@ -717,6 +789,8 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
 
         df = self.data.copy()
 
+        df = self._add_zero_capacity_connections(df)
+
         if self.interconnect != "usa":
             to_from = df[df.INTERCONNECT_TO == self.interconnect].copy()  # exports
             from_to = df[df.INTERCONNECT_FROM == self.interconnect].copy()  # imports
@@ -738,7 +812,7 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
             names=to_from.index,
             suffix=" gas export",
             carrier="gas export",
-            unit="",
+            unit="MWh_th",
             country=to_from.STATE_TO,
             interconnect=self.interconnect,
         )
@@ -751,7 +825,7 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
             names=from_to.index,
             suffix=" gas import",
             carrier="gas import",
-            unit="",
+            unit="MWh_th",
             country=from_to.STATE_FROM,
             interconnect=self.interconnect,
         )
@@ -1011,71 +1085,6 @@ class ImportExportLimits(GasData):
         pass
 
 
-def convert_generators_2_links(n: pypsa.Network, carrier: str):
-    """
-    Replace Generators with cross sector links.
-
-    Links bus1 are the bus the generator is attached to. Links bus0 are state
-    level followed by the suffix (ie. "WA gas" if " gas" is the bus0_suffix)
-
-    n: pypsa.Network,
-    carrier: str,
-        carrier of the generator to convert to a link
-    bus0_suffix: str,
-        suffix to attach link to
-    """
-
-    plants = n.generators[n.generators.carrier == carrier].copy()
-    plants["STATE"] = plants.bus.map(n.buses.STATE)
-
-    pnl = {}
-
-    # copy over pnl parameters
-    for c in n.iterate_components(["Generator"]):
-        for param, df in c.pnl.items():
-            # skip result vars
-            if param not in (
-                "p_min_pu",
-                "p_max_pu",
-                "p_set",
-                "q_set",
-                "marginal_cost",
-                "marginal_cost_quadratic",
-                "efficiency",
-                "stand_by_cost",
-            ):
-                continue
-            cols = [p for p in plants.index if p in df.columns]
-            if cols:
-                pnl[param] = df[cols]
-
-    n.madd(
-        "Link",
-        names=plants.index,
-        bus0=plants.STATE + " gas",
-        bus1=plants.bus,
-        carrier=plants.carrier,
-        p_nom_min=plants.p_nom_min / plants.efficiency,
-        p_nom=plants.p_nom / plants.efficiency,  # links rated on input capacity
-        p_nom_max=plants.p_nom_max / plants.efficiency,
-        p_nom_extendable=plants.p_nom_extendable,
-        ramp_limit_up=plants.ramp_limit_up,
-        ramp_limit_down=plants.ramp_limit_down,
-        efficiency=plants.efficiency,
-        marginal_cost=plants.marginal_cost
-        * plants.efficiency,  # fuel costs rated at delievered
-        capital_cost=plants.capital_cost
-        * plants.efficiency,  # links rated on input capacity
-        lifetime=plants.lifetime,
-    )
-
-    for param, df in pnl.items():
-        n.links_t[param] = n.links_t[param].join(df, how="inner")
-
-    # remove generators
-    n.mremove("Generator", plants.index)
-
-
 ###
 # MAIN FUNCTION TO EXECUTE
 ###
@@ -1093,15 +1102,6 @@ def build_natural_gas(
 ) -> None:
 
     cyclic_storage = kwargs.get("cyclic_storage", True)
-
-    # add gas carrier
-
-    n.add("Carrier", "gas", color="#d35050", nice_name="Natural Gas")
-
-    # add state level gas buses
-
-    buses = GasBuses(interconnect, county_path)
-    buses.build_infrastructure(n)
 
     # add state level natural gas processing facilities
 
@@ -1148,14 +1148,10 @@ def build_natural_gas(
     linepack = PipelineLinepack(year, interconnect, county_path, pipeline_shape_path)
     linepack.build_infrastructure(n, cyclic_storage=cyclic_storage)
 
-    # convert existing generators to cross-sector links
-    for carrier in ("CCGT", "OCGT"):
-        convert_generators_2_links(n, carrier)
-
 
 if __name__ == "__main__":
 
-    n = pypsa.Network("../resources/western/elec_s_40_ec_lv1.25_Co2L1.25.nc")
+    n = pypsa.Network("../resources/Default/western/elec_s_100_ec_lv1.0_500SEG.nc")
     year = 2019
     with open("./../config/config.api.yaml") as file:
         yaml_data = yaml.safe_load(file)

@@ -292,7 +292,7 @@ def plot_capacity_map(
     )
     add_legend_patches(
         ax,
-        n.carriers.color,
+        n.carriers.color.fillna("#000000"),
         n.carriers.nice_name,
         legend_kw={"bbox_to_anchor": (1, 0), **legend_kwargs, "loc": "lower left"},
     )
@@ -378,7 +378,7 @@ def plot_demand_map(
     )
     add_legend_patches(
         ax,
-        n.carriers.color,
+        n.carriers.color.fillna("#000000"),
         n.carriers.nice_name,
         legend_kw={"bbox_to_anchor": (1, 0), **legend_kwargs, "loc": "lower left"},
     )

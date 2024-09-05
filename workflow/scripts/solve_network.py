@@ -164,8 +164,6 @@ def prepare_network(
 
     if solve_opts.get("noisy_costs"):
         for t in n.iterate_components():
-            # if 'capital_cost' in t.df:
-            #    t.df['capital_cost'] += 1e1 + 2.*(np.random.random(len(t.df)) - 0.5)
             if "marginal_cost" in t.df:
                 t.df["marginal_cost"] += 1e-2 + 2e-3 * (
                     np.random.random(len(t.df)) - 0.5
@@ -942,6 +940,141 @@ def add_pipe_retrofit_constraint(n):
     n.model.add_constraints(lhs == rhs, name="Link-pipe_retrofit")
 
 
+def add_sector_co2_constraints(n, config):
+    """
+    Adds sector co2 constraints.
+
+    Parameters
+    ----------
+        n : pypsa.Network
+        config : dict
+    """
+
+    def apply_total_state_limit(n, year, state, value):
+
+        sns = n.snapshots
+        snapshot = sns[sns.get_level_values("period") == year][-1]
+
+        stores = n.stores[
+            (n.stores.index.str.startswith(state))
+            & (n.stores.index.str.endswith("-co2"))
+        ].index
+
+        lhs = n.model["Store-e"].loc[snapshot, stores].sum()
+
+        rhs = value  # value in T CO2
+
+        n.model.add_constraints(lhs <= rhs, name=f"co2_limit-{year}-{state}")
+
+        logger.info(
+            f"Adding {state} co2 Limit in {year} of {rhs* 1e-6} MMT CO2",
+        )
+
+    def apply_sector_state_limit(n, year, state, sector, value):
+
+        sns = n.snapshots
+        snapshot = sns[sns.get_level_values("period") == year][-1]
+
+        stores = n.stores[
+            (n.stores.index.str.startswith(state))
+            & (n.stores.index.str.endswith(f"{sector}-co2"))
+        ].index
+
+        lhs = n.model["Store-e"].loc[snapshot, stores].sum()
+
+        rhs = value  # value in T CO2
+
+        n.model.add_constraints(lhs <= rhs, name=f"co2_limit-{year}-{state}-{sector}")
+
+        logger.info(
+            f"Adding {state} co2 Limit for {sector} in {year} of {rhs* 1e-6} MMT CO2",
+        )
+
+    def apply_total_national_limit(n, year, value):
+
+        sns = n.snapshots
+        snapshot = sns[sns.get_level_values("period") == year][-1]
+
+        stores = n.stores[n.stores.index.str.endswith("-co2")].index
+
+        lhs = n.model["Store-e"].loc[snapshot, stores].sum()
+
+        rhs = value  # value in T CO2
+
+        n.model.add_constraints(lhs <= rhs, name=f"co2_limit-{year}")
+
+        logger.info(
+            f"Adding national co2 Limit in {year} of {rhs* 1e-6} MMT CO2",
+        )
+
+    def apply_sector_national_limit(n, year, sector, value):
+
+        sns = n.snapshots
+        snapshot = sns[sns.get_level_values("period") == year][-1]
+
+        stores = n.stores[n.stores.index.str.endswith(f"{sector}-co2")].index
+
+        lhs = n.model["Store-e"].loc[snapshot, stores].sum()
+
+        rhs = value  # value in T CO2
+
+        n.model.add_constraints(lhs <= rhs, name=f"co2_limit-{year}-{sector}")
+
+        logger.info(
+            f"Adding national co2 Limit for {sector} sector in {year} of {rhs* 1e-6} MMT CO2",
+        )
+
+    try:
+        f = config["sector"]["co2"]["policy"]
+    except KeyError:
+        logger.error("No co2 policy constraint file found")
+        return
+
+    df = pd.read_csv(f)
+
+    if df.empty:
+        logger.warning("No co2 policies applied")
+        return
+
+    sectors = df.sector.unique()
+
+    for sector in sectors:
+
+        df_sector = df[df.sector == sector]
+        states = df_sector.state.unique()
+
+        for state in states:
+
+            df_state = df_sector[df_sector.state == state]
+            years = [x for x in df_state.year.unique() if x in n.investment_periods]
+
+            if not years:
+                logger.warning(f"No co2 policies applied for {sector} in {year}")
+                continue
+
+            for year in years:
+
+                df_limit = df_state[df_state.year == year].reset_index(drop=True)
+                assert df_limit.shape[0] == 1
+
+                # results calcualted in T CO2, policy given in MMT CO2
+                value = df_limit.loc[0, "co2_limit_mmt"] * 1e6
+
+                if state.upper() == "USA":
+
+                    if sector == "all":
+                        apply_total_national_limit(n, year, value)
+                    else:
+                        apply_sector_national_limit(n, year, sector, value)
+
+                else:
+
+                    if sector == "all":
+                        apply_total_state_limit(n, year, state, value)
+                    else:
+                        apply_sector_state_limit(n, year, state, sector, value)
+
+
 def extra_functionality(n, snapshots):
     """
     Collects supplementary constraints which will be passed to
@@ -971,6 +1104,11 @@ def extra_functionality(n, snapshots):
     interface_limits = config["lines"].get("interface_transmission_limits", {})
     if interface_limits:
         add_interface_limits(n, snapshots, config)
+    if "sector" in opts:
+        sector_co2_limits = config["sector"]["co2"].get("policy", {})
+        if sector_co2_limits:
+            add_sector_co2_constraints(n, config)
+
     for o in opts:
         if "EQ" in o:
             add_EQ_constraints(n, o)
@@ -982,7 +1120,11 @@ def solve_network(n, config, solving, opts="", **kwargs):
     set_of_options = solving["solver"]["options"]
     cf_solving = solving["options"]
 
+    # if len(n.investment_periods) > 1:
+    #     kwargs["multi_investment_periods"] = config["foresight"] == "perfect"
+
     kwargs["multi_investment_periods"] = config["foresight"] == "perfect"
+
     kwargs["solver_options"] = (
         solving["solver_options"][set_of_options] if set_of_options else {}
     )
@@ -1058,6 +1200,12 @@ if __name__ == "__main__":
         opts += "-" + snakemake.wildcards.sector_opts
     opts = [o for o in opts.split("-") if o != ""]
     solve_opts = snakemake.params.solving["options"]
+
+    # sector specific co2 options
+    if snakemake.wildcards.sector != "E":
+        # sector co2 limits applied via config file, not through Co2L
+        opts = [x for x in opts if not x.startswith("Co2L")]
+        opts.append("sector")
 
     np.random.seed(solve_opts.get("seed", 123))
 

@@ -205,6 +205,16 @@ def average_every_nhours(n, offset):
     return m
 
 
+def is_leap_year(year: int) -> bool:
+    """
+    Check if a given year is a leap year.
+    """
+    if (year % 4 == 0 and year % 100 != 0) or (year % 400 == 0):
+        return True
+    else:
+        return False
+
+
 def apply_time_segmentation(n, segments, solver_name="cbc"):
     try:
         import tsam.timeseriesaggregation as tsam
@@ -232,6 +242,11 @@ def apply_time_segmentation(n, segments, solver_name="cbc"):
         # normalise all time-dependent data
         annual_max = raw_t.max().replace(0, 1)
         raw_t = raw_t.div(annual_max, level=0)
+
+        # hack to get around that TSAM will add leap days in
+        if is_leap_year(year):
+            raw_t.index = raw_t.index.map(lambda x: x.replace(year=year + 1))
+
         # get representative segments
         agg = tsam.TimeSeriesAggregation(
             raw_t,
@@ -246,7 +261,12 @@ def apply_time_segmentation(n, segments, solver_name="cbc"):
         weightings = segmented.index.get_level_values("Segment Duration")
         offsets = np.insert(np.cumsum(weightings[:-1]), 0, 0)
         timesteps = [raw_t.index[0] + pd.Timedelta(f"{offset}h") for offset in offsets]
+
         snapshots = pd.DatetimeIndex(timesteps)
+
+        if is_leap_year(year):
+            snapshots = snapshots.map(lambda x: x.replace(year=year))
+
         sn_weightings[year] = pd.Series(
             weightings,
             index=snapshots,
@@ -302,11 +322,11 @@ if __name__ == "__main__":
 
         snakemake = mock_snakemake(
             "prepare_network",
-            simpl="",
-            clusters="36",
+            # simpl="",
+            clusters="100",
             interconnect="western",
             ll="v1.0",
-            opts="REM-1000SEG",
+            opts="500SEG",
         )
     configure_logging(snakemake)
     set_scenario_config(snakemake)
