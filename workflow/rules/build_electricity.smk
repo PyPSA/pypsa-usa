@@ -227,8 +227,10 @@ def demand_raw_data(wildcards):
     if end_use == "power":
         profile = config["electricity"]["demand"]["profile"]
     elif end_use == "residential":
+        eulp_sector = "res"
         profile = "eulp"
     elif end_use == "commercial":
+        eulp_sector = "res"
         profile = "eulp"
     elif end_use == "transport":
         vehicle = wildcards.get("vehicle", None)
@@ -255,7 +257,7 @@ def demand_raw_data(wildcards):
         ]
     elif profile == "eulp":
         return [
-            DATA + f"eulp/res/{state}.csv"
+            DATA + f"eulp/{eulp_sector}/{state}.csv"
             for state in INTERCONNECT_2_STATE[wildcards.interconnect]
         ]
     elif profile == "cliu":
@@ -329,7 +331,7 @@ rule build_electrical_demand:
         demand_files=demand_raw_data,
         demand_scaling_file=demand_scaling_data,
     output:
-        elec_demand=RESOURCES + "{interconnect}/{end_use}_electricity.csv",
+        elec_demand=RESOURCES + "{interconnect}/demand/{end_use}_electricity.csv",
     log:
         LOGS + "{interconnect}/{end_use}_build_demand.log",
     benchmark:
@@ -354,15 +356,17 @@ rule build_sector_demand:
         dissagregate_files=demand_dissagregate_data,
         demand_scaling_file=demand_scaling_data,
     output:
-        elec_demand=RESOURCES + "{interconnect}/{end_use}_electricity.csv",
-        heat_demand=RESOURCES + "{interconnect}/{end_use}_heating.csv",
-        space_heat_demand=RESOURCES + "{interconnect}/{end_use}_space-heating.csv",
-        water_heat_demand=RESOURCES + "{interconnect}/{end_use}_water-heating.csv",
-        cool_demand=RESOURCES + "{interconnect}/{end_use}_cooling.csv",
+        elec_demand=RESOURCES + "{interconnect}/demand/{end_use}_electricity.csv",
+        heat_demand=RESOURCES + "{interconnect}/demand/{end_use}_heating.csv",
+        space_heat_demand=RESOURCES
+        + "{interconnect}/demand/{end_use}_space-heating.csv",
+        water_heat_demand=RESOURCES
+        + "{interconnect}/demand/{end_use}_water-heating.csv",
+        cool_demand=RESOURCES + "{interconnect}/demand/{end_use}_cooling.csv",
     log:
-        LOGS + "{interconnect}/{end_use}_build_demand.log",
+        LOGS + "{interconnect}/demand/{end_use}_build_demand.log",
     benchmark:
-        BENCHMARKS + "{interconnect}/{end_use}_build_demand"
+        BENCHMARKS + "{interconnect}/demand/{end_use}_build_demand"
     threads: 2
     resources:
         mem_mb=interconnect_mem,
@@ -384,19 +388,20 @@ rule build_transport_road_demand:
         demand_scaling_file=demand_scaling_data,
     output:
         elec_light_duty=RESOURCES
-        + "{interconnect}/{end_use}_light-duty_electricity.csv",
-        elec_med_duty=RESOURCES + "{interconnect}/{end_use}_med-duty_electricity.csv",
+        + "{interconnect}/demand/{end_use}_light-duty_electricity.csv",
+        elec_med_duty=RESOURCES
+        + "{interconnect}/demand/{end_use}_med-duty_electricity.csv",
         elec_heavy_duty=RESOURCES
-        + "{interconnect}/{end_use}_heavy-duty_electricity.csv",
-        elec_bus=RESOURCES + "{interconnect}/{end_use}_bus_electricity.csv",
-        lpg_light_duty=RESOURCES + "{interconnect}/{end_use}_light-duty_lpg.csv",
-        lpg_med_duty=RESOURCES + "{interconnect}/{end_use}_med-duty_lpg.csv",
-        lpg_heavy_duty=RESOURCES + "{interconnect}/{end_use}_heavy-duty_lpg.csv",
-        lpg_bus=RESOURCES + "{interconnect}/{end_use}_bus_lpg.csv",
+        + "{interconnect}/demand/{end_use}_heavy-duty_electricity.csv",
+        elec_bus=RESOURCES + "{interconnect}/demand/{end_use}_bus_electricity.csv",
+        lpg_light_duty=RESOURCES + "{interconnect}/demand/{end_use}_light-duty_lpg.csv",
+        lpg_med_duty=RESOURCES + "{interconnect}/demand/{end_use}_med-duty_lpg.csv",
+        lpg_heavy_duty=RESOURCES + "{interconnect}/demand/{end_use}_heavy-duty_lpg.csv",
+        lpg_bus=RESOURCES + "{interconnect}/demand/{end_use}_bus_lpg.csv",
     log:
-        LOGS + "{interconnect}/{end_use}_build_demand.log",
+        LOGS + "{interconnect}/demand/{end_use}_build_demand.log",
     benchmark:
-        BENCHMARKS + "{interconnect}/{end_use}_build_demand"
+        BENCHMARKS + "{interconnect}/demand/{end_use}_build_demand"
     threads: 2
     resources:
         mem_mb=interconnect_mem,
@@ -416,11 +421,11 @@ rule build_transport_other_demand:
         demand_files=demand_raw_data,
         dissagregate_files=demand_dissagregate_data,
     output:
-        RESOURCES + "{interconnect}/{end_use}_{vehicle}_lpg.csv",
+        RESOURCES + "{interconnect}/demand/{end_use}_{vehicle}_lpg.csv",
     log:
-        LOGS + "{interconnect}/{end_use}_{vehicle}_build_demand.log",
+        LOGS + "{interconnect}/demand/{end_use}_{vehicle}_build_demand.log",
     benchmark:
-        BENCHMARKS + "{interconnect}/{end_use}_{vehicle}_build_demand"
+        BENCHMARKS + "{interconnect}/demand/{end_use}_{vehicle}_build_demand"
     threads: 2
     resources:
         mem_mb=interconnect_mem,
@@ -431,7 +436,7 @@ rule build_transport_other_demand:
 def demand_to_add(wildcards):
 
     if config["scenario"]["sector"] == "E":
-        return RESOURCES + "{interconnect}/power_electricity.csv"
+        return RESOURCES + "{interconnect}/demand/power_electricity.csv"
 
     else:
 
@@ -442,7 +447,7 @@ def demand_to_add(wildcards):
         else:
             fuels = ["electricity", "cooling", "heating"]
         service_demands = [
-            RESOURCES + "{interconnect}/" + service + "_" + fuel + ".csv"
+            RESOURCES + "{interconnect}/demand/" + service + "_" + fuel + ".csv"
             for service in services
             for fuel in fuels
         ]
@@ -450,14 +455,20 @@ def demand_to_add(wildcards):
         # industrial demand
         fuels = ["electricity", "heating"]
         industrial_demands = [
-            RESOURCES + "{interconnect}/industry_" + fuel + ".csv" for fuel in fuels
+            RESOURCES + "{interconnect}/demand/industry_" + fuel + ".csv"
+            for fuel in fuels
         ]
 
         # road transport demands
         vehicles = ["light-duty", "med-duty", "heavy-duty", "bus"]
         fuels = ["lpg", "electricity"]
         road_demand = [
-            RESOURCES + "{interconnect}/transport_" + vehicle + "_" + fuel + ".csv"
+            RESOURCES
+            + "{interconnect}/demand/transport_"
+            + vehicle
+            + "_"
+            + fuel
+            + ".csv"
             for vehicle in vehicles
             for fuel in fuels
         ]
@@ -466,7 +477,12 @@ def demand_to_add(wildcards):
         vehicles = ["boat-shipping", "rail-shipping", "rail-passenger", "air"]
         fuels = ["lpg"]
         non_road_demand = [
-            RESOURCES + "{interconnect}/transport_" + vehicle + "_" + fuel + ".csv"
+            RESOURCES
+            + "{interconnect}/demand/transport_"
+            + vehicle
+            + "_"
+            + fuel
+            + ".csv"
             for vehicle in vehicles
             for fuel in fuels
         ]
