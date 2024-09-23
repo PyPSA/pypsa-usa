@@ -47,8 +47,6 @@ rule retrieve_zenodo_databundles:
         expand(DATA + "{file}", file=pypsa_usa_datafiles),
     log:
         "logs/retrieve/retrieve_databundles.log",
-    conda:
-        "../envs/environment.yaml"
     script:
         "../scripts/retrieve_databundles.py"
 
@@ -69,8 +67,6 @@ rule retrieve_nrel_efs_data:
         DATA + "nrel_efs/EFSLoadProfile_{efs_case}_{efs_speed}.csv",
     log:
         "logs/retrieve/retrieve_efs_{efs_case}_{efs_speed}.log",
-    conda:
-        "../envs/environment.yaml"
     script:
         "../scripts/retrieve_databundles.py"
 
@@ -99,8 +95,6 @@ rule retrieve_sector_databundle:
     log:
         LOGS + "retrieve_sector_databundle.log",
     retries: 2
-    conda:
-        "../envs/environment.yaml"
     script:
         "../scripts/retrieve_databundles.py"
 
