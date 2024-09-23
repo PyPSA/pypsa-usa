@@ -211,7 +211,11 @@ if __name__ == "__main__":
     aeo_params = costs.get("aeo")
 
     tech_year = snakemake.wildcards.year
-    years = range(2021, 2051)
+    if int(tech_year) < 2024:
+        logger.warning(
+            "Minimum cost year supported is 2024, using 2024 expansion costs.",
+        )
+    years = range(2024, 2051)
     tech_year = min(years, key=lambda x: abs(x - int(tech_year)))
 
     emissions_data = EMISSIONS_DATA
@@ -240,7 +244,22 @@ if __name__ == "__main__":
     )
 
     # Filter for the correct year, scenario, and model case
-    pudl_atb = pudl_atb[pudl_atb.projection_year == tech_year]
+    pudl_atb_filt = pudl_atb[pudl_atb.projection_year == tech_year]
+    if tech_year < 2030:
+        logger.warning(
+            "Using 2030 ATB data for offwind_floating; earlier data not available.",
+        )
+        pudl_atb_offwind_floating = pudl_atb[
+            (pudl_atb["pypsa-name"] == "offwind_floating")
+            & (pudl_atb.projection_year == 2030)
+        ]
+        pudl_atb = pd.concat(
+            [pudl_atb_filt, pudl_atb_offwind_floating],
+            ignore_index=True,
+        )
+    else:
+        pudl_atb = pudl_atb_filt
+
     pudl_atb = pudl_atb[pudl_atb.scenario_atb == atb_params.get("scenario", "Moderate")]
     pudl_atb = pudl_atb[
         pudl_atb.model_case_nrelatb == atb_params.get("model_case", "Market")
@@ -474,7 +493,6 @@ if __name__ == "__main__":
     pudl_atb.to_csv(snakemake.output.tech_costs, index=False)
 
     # sector costs
-
     sector_costs = get_sector_costs(
         snakemake.input.efs_tech_costs,
         snakemake.input.efs_icev_costs,

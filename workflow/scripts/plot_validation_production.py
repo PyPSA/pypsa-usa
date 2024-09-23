@@ -25,7 +25,6 @@ from plot_network_maps import (
     plot_capacity_map,
 )
 from plot_statistics import (
-    plot_california_emissions,
     plot_capacity_factor_heatmap,
     plot_curtailment_heatmap,
     plot_fuel_costs,
@@ -941,7 +940,6 @@ def plot_lmp_distribution_comparison(
     )
     df_long["season"] = df_long["timestep"].dt.quarter
     df_long["hour"] = df_long["timestep"].dt.hour
-    # df_long.drop(columns="timestep", inplace=True)
     df_long["region"] = df_long.bus.map(n.buses.reeds_ba)
     df_long["source"] = "simulated"
 
