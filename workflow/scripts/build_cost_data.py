@@ -211,7 +211,9 @@ if __name__ == "__main__":
     aeo_params = costs.get("aeo")
 
     tech_year = snakemake.wildcards.year
-    years = range(2021, 2051)
+    if int(tech_year) < 2025:
+        logger.warning("Minimum cost year supported is 2025, using 2025 expansion costs.")
+    years = range(2025, 2051)
     tech_year = min(years, key=lambda x: abs(x - int(tech_year)))
 
     emissions_data = EMISSIONS_DATA

@@ -460,7 +460,7 @@ def attach_wind_and_solar(
             if ds.indexes["bus"].empty:
                 continue
 
-            supcar = car.split("-", 2)[0]
+            # supcar = car.split("-", 2)[0]
             # if supcar == "offwind" or supcar == "offwind_floating":
             #     # if supcar == "offwind_floating":
             #     #     supcar = "offwind"
