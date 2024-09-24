@@ -2,11 +2,10 @@
 
 ## Configuring Spatial Scope
 
-PyPSA-USA allows for flexible configuration of the spatial scope of your energy model, enabling you to define the geographical area and level of detail for your simulations.
+PyPSA-USA allows for flexible configuration of the spatial scope of your energy model, enabling you to define the geographical area and level of detail for your simulations. The **spatial scope** is determined by the `interconnect`, `model_topology` configuration settings.
 
-- The **spatial scope** is determined by the `{interconnect}` wildcard and the `model_topology` configuration setting.
-- You can use `{interconnect}` to model entire interconnections independently.
-- Alternatively, the `model_topology: include:` option allows you to filter individual states or balancing authorities to be included in your model.
+- `{interconnect}` is used to select which of the three asynchronous interconnection to model. You can select `western`, `eastern`, `texas`, or `usa` to model the entire US.
+- After selecting your `{interconnect}`, you can specify `model_topology: include:` to filter individual states or balancing authorities to be selected in your model.
 
 ### Example: Modeling California
 
