@@ -35,6 +35,7 @@ import xarray as xr
 import yaml
 from _helpers import (
     configure_logging,
+    is_transport_model,
     update_config_from_wildcards,
     update_config_with_sector_opts,
 )
@@ -471,6 +472,7 @@ def add_interface_limits(n, sns, config):
     capacities based on user-defined inter-regional transfer capacity limits.
     """
     logger.info("Adding Interface Transmission Limits.")
+    transport_model = is_transport_model(snakemake.params.transmission_network)
     limits = pd.read_csv(snakemake.input.flowgates)
     user_limits = pd.read_csv(
         config["electricity"]["transmission_interface_limits"],
@@ -519,10 +521,7 @@ def add_interface_limits(n, sns, config):
 
         if (
             not (pd.concat([interface_links_b0, interface_links_b1]).empty)
-            and (
-                "RESOLVE" in interface.interface
-                or config["model_topology"]["transport_model"]
-            )
+            and ("RESOLVE" in interface.interface or transport_model)
             # Apply link constraints if RESOLVE constraint or if zonal model. ITLs should usually only apply to AC lines if DC PF is used.
         ):
             link_flows = n.model["Link-p"].loc[:, interface_links_b1.index].sum(

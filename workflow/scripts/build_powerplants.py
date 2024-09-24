@@ -626,12 +626,11 @@ def impute_missing_plant_data(
 
     # Calculate the weighted averages excluding NaNs
     weighted_averages = (
-        plants.groupby(aggregation_fields)
+        plants.groupby(aggregation_fields)[plants.columns]
         .apply(
             lambda x: pd.Series(
                 {field: weighted_avg(x, field, "p_nom") for field in data_fields},
             ),
-            include_groups=False,
         )
         .reset_index()
     )
@@ -781,8 +780,8 @@ def filter_outliers_iqr_grouped(df, group_column, value_column):
         ]
 
     return (
-        df.groupby(group_column)
-        .apply(filter_outliers, include_groups=False)
+        df.groupby(group_column)[df.columns]
+        .apply(filter_outliers)
         .reset_index(drop=True)
     )
 

@@ -94,7 +94,12 @@ import pandas as pd
 import pyomo.environ as po
 import pypsa
 import seaborn as sns
-from _helpers import calculate_annuity, configure_logging, update_p_nom_max
+from _helpers import (
+    calculate_annuity,
+    configure_logging,
+    is_transport_model,
+    update_p_nom_max,
+)
 from add_electricity import update_transmission_costs
 from constants import *
 from pypsa.clustering.spatial import (
@@ -421,7 +426,7 @@ def clustering_for_n_clusters(
     return clustering
 
 
-def replace_lines_with_links(clustering, itl_fn, itl_cost_fn, topological_boundaries):
+def convert_to_transport(clustering, itl_fn, itl_cost_fn, topological_boundaries):
     """
     Replaces all Lines according to Links with the transfer capacity specified
     by the ITLs.
@@ -577,6 +582,8 @@ if __name__ == "__main__":
     )
 
     topological_boundaries = params.topological_boundaries
+    transport_model = is_transport_model(params.transmission_network)
+
     exclude_carriers = params.cluster_network["exclude_carriers"]
     aggregate_carriers = set(n.generators.carrier) - set(exclude_carriers)
     conventional_carriers = set(params.conventional_carriers)
@@ -590,6 +597,13 @@ if __name__ == "__main__":
         n_clusters = len(n.buses)
     else:
         n_clusters = int(snakemake.wildcards.clusters)
+
+    if transport_model:
+        logger.info(f"Using Transport Model.")
+        nodes_req = n.buses[f"{topological_boundaries}"].unique()
+        assert n_clusters == len(
+            nodes_req,
+        ), f"Number of clusters must be {len(nodes_req)} to use the Reeds Network. Check your config."
 
     if params.cluster_network.get("consider_efficiency_classes", False):
         carriers = []
@@ -620,8 +634,6 @@ if __name__ == "__main__":
             n,
             busmap,
             linemap,
-            linemap,
-            pd.Series(dtype="O"),
         )
     else:
         Nyears = (
@@ -642,7 +654,8 @@ if __name__ == "__main__":
             custom_busmap.index = custom_busmap.index.astype(str)
             logger.info(f"Imported custom busmap from {snakemake.input.custom_busmap}")
 
-        if params.transport_model:
+        if transport_model:
+            # Prepare data for transport model
             logger.info(
                 f"Aggregating to transport model with {topological_boundaries} zones.",
             )
@@ -672,18 +685,14 @@ if __name__ == "__main__":
             hvac_overhead_cost,
             params.focus_weights,
         )
-        if params.transport_model:
+        if transport_model:
             # Use Reeds Data
-            clustering = replace_lines_with_links(
+            clustering = convert_to_transport(
                 clustering,
                 itl_fn,
                 itl_cost_fn,
                 topological_boundaries,
             )
-            N = clustering.network.buses[f"{topological_boundaries}"].unique()
-            assert n_clusters == len(
-                N,
-            ), f"Number of clusters must be {len(N)} to model as transport model."
         else:
             # Use standard transmission cost estimates
             update_transmission_costs(clustering.network, costs)

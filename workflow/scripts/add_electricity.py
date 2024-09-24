@@ -512,7 +512,6 @@ def attach_wind_and_solar(
             #     #     supcar = "offwind"
             #     # underwater_fraction = ds["underwater_fraction"].to_pandas()
             #     # 30 km of cable already assumed in capex
-            #     # breakpoint()
             #     # connection_cost = (
             #     #     costs.at[supcar, "annualized_connection_capex_per_mw_km"] * (line_length_factor * ds["average_distance"].to_pandas() - 30)
             #     # )
@@ -818,6 +817,10 @@ def apply_pudl_fuel_costs(
 
     # Apply PuDL Fuel Costs for plants where listed
     pudl_fuel_costs = pd.read_csv(snakemake.input["pudl_fuel_costs"], index_col=0)
+
+    # Check if any of the plants are in the pudl fuel costs
+    if not set(plants.index).intersection(pudl_fuel_costs.columns):
+        return n
 
     # Construct the VOM table for each generator by carrier
     vom = pd.DataFrame(index=pudl_fuel_costs.columns)

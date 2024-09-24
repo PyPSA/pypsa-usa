@@ -62,9 +62,7 @@ def convert_to_voltage_level(n, new_voltage):
     )
 
     # Update network lines
-    (linetype,) = n.lines.loc[n.lines.v_nom == voltage_level, "type"].unique()
-    df.type = linetype
-
+    df.type = "Al/St 240/40 2-bundle 220.0"
     n.buses["v_nom"] = voltage_level
     n.lines = df
     return n

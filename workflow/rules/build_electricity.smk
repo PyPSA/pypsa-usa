@@ -535,7 +535,6 @@ rule build_fuel_prices:
         state_coal_fuel_prices=RESOURCES + "{interconnect}/state_coal_power_prices.csv",
         ba_ng_fuel_prices=RESOURCES + "{interconnect}/ba_ng_power_prices.csv",
         pudl_fuel_costs=RESOURCES + "{interconnect}/pudl_fuel_costs.csv",
-        # aeo_fuel_costs=RESOURCES + "{interconnect}/aeo_fuel_costs.csv",
     log:
         LOGS + "{interconnect}/build_fuel_prices.log",
     benchmark:
@@ -661,7 +660,7 @@ rule cluster_network:
         length_factor=config_provider("lines", "length_factor"),
         costs=config_provider("costs"),
         planning_horizons=config_provider("scenario", "planning_horizons"),
-        transport_model=config_provider("model_topology", "transport_model"),
+        transmission_network=config_provider("model_topology", "transmission_network"),
         topological_boundaries=config_provider(
             "model_topology", "topological_boundaries"
         ),
