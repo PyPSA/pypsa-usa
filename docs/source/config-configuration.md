@@ -215,7 +215,7 @@ Sector coupling studies are all under active development. More info to come!
 (clustering_cf)=
 ## `clustering`
 
-When clustering `aggregation_zones` defines the region boundaries which will be respected through the clustering process; State boarders, balancing authority regions, or REeDs shapes. This feature is important for imposing constraints (`opts`) which are defined over specific regions. For example, the data included in the model on interface transfer capacities are prepared for REeDs shapes but not states and BA regions. Moving forward we plan to use REeDs shapes as our default however we will maintain States and BA regions as well.
+When clustering `topological_boundaries` defines the region boundaries which will be respected through the clustering process; State boarders, balancing authority regions, or REeDs shapes. This feature is important for imposing constraints (`opts`) which are defined over specific regions. For example, the data included in the model on interface transfer capacities are prepared for REeDs shapes but not states and BA regions. Moving forward we plan to use REeDs shapes as our default however we will maintain States and BA regions as well.
 
 Each clustering and interconnection option will have a different number of minimum nodes which can be clustered to, an error will be thrown in `cluster_network` notifying you of that number if you have selected a value too low.
 
