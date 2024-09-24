@@ -178,6 +178,7 @@ def main(snakemake):
     onshore_regions_concat = onshore_regions_concat[
         ~onshore_regions_concat.geometry.is_empty
     ]  # removing few buses which don't have geometry
+    onshore_regions_concat.set_crs(epsg=4326, inplace=True)
     onshore_regions_concat.to_file(snakemake.output.regions_onshore)
     combined_onshore = onshore_regions_concat.geometry.union_all()
 
@@ -209,11 +210,12 @@ def main(snakemake):
             offshore_regions_c.area > 1e-2
         ]  # remove extremely small regions
         offshore_regions.append(offshore_regions_c)
-
     # Exporting
     if offshore_regions:
-        pd.concat(offshore_regions, ignore_index=True).to_file(
-            snakemake.output.regions_offshore,
+        (
+            pd.concat(offshore_regions, ignore_index=True)
+            .set_crs(epsg=4326)
+            .to_file(snakemake.output.regions_offshore)
         )
     else:
         offshore_shapes.to_frame().to_file(snakemake.output.regions_offshore)
