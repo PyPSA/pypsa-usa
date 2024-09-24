@@ -421,7 +421,7 @@ def clustering_for_n_clusters(
     return clustering
 
 
-def replace_lines_with_links(clustering, itl_fn):
+def replace_lines_with_links(clustering, itl_fn, itl_cost_fn, aggregation_zone):
     """
     Replaces all Lines according to Links with the transfer capacity specified
     by the ITLs.
@@ -431,12 +431,13 @@ def replace_lines_with_links(clustering, itl_fn):
 
     itls = pd.read_csv(itl_fn)
 
+    itls.columns = itls.columns.str.lower()
     itls = itls[
-        itls.r.isin(clustering.network.buses.reeds_zone)
-        & itls.rr.isin(clustering.network.buses.reeds_zone)
+        itls.r.isin(clustering.network.buses[f"{aggregation_zone}"])
+        & itls.rr.isin(clustering.network.buses[f"{aggregation_zone}"])
     ]
 
-    itl_cost = pd.read_csv(snakemake.input.itl_costs)
+    itl_cost = pd.read_csv(itl_cost_fn)
     itl_cost["interface"] = itl_cost.r + "||" + itl_cost.rr
     itl_cost = itl_cost[itl_cost.interface.isin(itls.interface)]
     itl_cost["USD2023perMW"] = itl_cost["USD2004perMW"] * (314.54 / 188.9)
@@ -447,11 +448,11 @@ def replace_lines_with_links(clustering, itl_fn):
         how="left",
     )
 
-    itls["p_min_pu_Rev"] = (-1 * (itls.MW_r0 / itls.MW_f0)).fillna(0)
+    itls["p_min_pu_Rev"] = (-1 * (itls.mw_r0 / itls.mw_f0)).fillna(0)
 
     # lines to add in reverse if forward direction is zero
-    itls_rev = itls[itls.MW_f0 == 0].copy()
-    itls_fwd = itls[itls.MW_f0 != 0]
+    itls_rev = itls[itls.mw_f0 == 0].copy()
+    itls_fwd = itls[itls.mw_f0 != 0]
 
     clustering.network.mremove("Line", clustering.network.lines.index)
     clustering.network.madd(
@@ -459,8 +460,8 @@ def replace_lines_with_links(clustering, itl_fn):
         names=itls_fwd.interface,  # itl name
         bus0=buses.loc[itls_fwd.r].index,
         bus1=buses.loc[itls_fwd.rr].index,
-        p_nom=itls_fwd.MW_f0.values,
-        p_nom_min=itls_fwd.MW_f0.values,
+        p_nom=itls_fwd.mw_f0.values,
+        p_nom_min=itls_fwd.mw_f0.values,
         p_max_pu=1.0,
         p_min_pu=itls_fwd.p_min_pu_Rev.values,
         length=itls_fwd.length_miles.values,
@@ -475,8 +476,8 @@ def replace_lines_with_links(clustering, itl_fn):
         suffix="rev",
         bus0=buses.loc[itls_rev.r].index,
         bus1=buses.loc[itls_rev.rr].index,
-        p_nom=itls_rev.MW_r0.values,
-        p_nom_min=itls_rev.MW_r0.values,
+        p_nom=itls_rev.mw_r0.values,
+        p_nom_min=itls_rev.mw_r0.values,
         p_max_pu=0,
         p_min_pu=-1,
         length=itls_rev.length_miles.values,
@@ -575,6 +576,7 @@ if __name__ == "__main__":
         periods=snakemake.params.planning_horizons,
     )
 
+    aggregation_zone = params.aggregation_zone
     exclude_carriers = params.cluster_network["exclude_carriers"]
     aggregate_carriers = set(n.generators.carrier) - set(exclude_carriers)
     conventional_carriers = set(params.conventional_carriers)
@@ -640,8 +642,17 @@ if __name__ == "__main__":
             custom_busmap.index = custom_busmap.index.astype(str)
             logger.info(f"Imported custom busmap from {snakemake.input.custom_busmap}")
 
-        if params.replace_lines_with_links:
-            custom_busmap = n.buses.reeds_zone
+        if params.transport_model:
+            if aggregation_zone == "reeds_zone":
+                custom_busmap = n.buses.reeds_zone
+                itl_fn = snakemake.input.itl_ba
+                itl_cost_fn = snakemake.input.itl_costs_ba
+            elif aggregation_zone == "county":
+                custom_busmap = n.buses.county
+                itl_fn = snakemake.input.itl_county
+                itl_cost_fn = snakemake.input.itl_costs_county
+            else:
+                raise ValueError(f"Unknown aggregation zone {aggregation_zone}")
             n.buses.interconnect = n.buses.nerc_reg.map(REEDS_NERC_INTERCONNECT_MAPPER)
             n.lines.drop(columns=["interconnect"], inplace=True)
 
@@ -658,16 +669,20 @@ if __name__ == "__main__":
             hvac_overhead_cost,
             params.focus_weights,
         )
-        if params.replace_lines_with_links:
+        if params.transport_model:
+            # Use Reeds Data
             clustering = replace_lines_with_links(
                 clustering,
-                snakemake.input.itls,
+                itl_fn,
+                itl_cost_fn,
+                aggregation_zone,
             )
-            N = clustering.network.buses.reeds_zone.unique()
+            N = clustering.network.buses[f"{aggregation_zone}"].unique()
             assert n_clusters == len(
                 N,
             ), f"Number of clusters must be {len(N)} to model as transport model."
         else:
+            # Use standard transmission cost estimates
             update_transmission_costs(clustering.network, costs)
 
     update_p_nom_max(clustering.network)

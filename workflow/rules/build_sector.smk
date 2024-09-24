@@ -98,7 +98,7 @@ rule build_population_layouts:
 #         pop_layout=RESOURCES + "{interconnect}/pop_layout_{scope}.nc",
 #         # regions_onshore=RESOURCES + "regions_onshore_elec_s{simpl}_{clusters}.geojson",
 #         regions_onshore=RESOURCES
-#         + "{interconnect}/regions_onshore_s{simpl}_c{clusters}.geojson",
+#         + "{interconnect}/Geospatial/regions_onshore_s{simpl}_c{clusters}.geojson",
 #         cutout="cutouts/"
 #         + CDIR
 #         + "{interconnect}_"
@@ -129,7 +129,7 @@ rule build_temperature_profiles:
     input:
         pop_layout=RESOURCES + "{interconnect}/pop_layout_{scope}.nc",
         regions_onshore=RESOURCES
-        + "{interconnect}/regions_onshore_s{simpl}_{clusters}.geojson",
+        + "{interconnect}/Geospatial/regions_onshore_s{simpl}_{clusters}.geojson",
         cutout="cutouts/"
         + CDIR
         + "{interconnect}_"
@@ -190,7 +190,8 @@ rule build_simplified_population_layouts:
         pop_layout_urban=RESOURCES + "{interconnect}/pop_layout_urban.nc",
         pop_layout_rural=RESOURCES + "{interconnect}/pop_layout_rural.nc",
         # regions_onshore=RESOURCES + "regions_onshore_elec_s{simpl}.geojson",
-        regions_onshore=RESOURCES + "{interconnect}/regions_onshore_s{simpl}.geojson",
+        regions_onshore=RESOURCES
+        + "{interconnect}/Geospatial/regions_onshore_s{simpl}.geojson",
         cutout="cutouts/"
         + CDIR
         + "{interconnect}_"
@@ -219,7 +220,7 @@ rule build_clustered_population_layouts:
         pop_layout_urban=RESOURCES + "{interconnect}/pop_layout_urban.nc",
         pop_layout_rural=RESOURCES + "{interconnect}/pop_layout_rural.nc",
         regions_onshore=RESOURCES
-        + "{interconnect}/regions_onshore_s{simpl}_{clusters}.geojson",
+        + "{interconnect}/Geospatial/regions_onshore_s{simpl}_{clusters}.geojson",
         cutout="cutouts/"
         + CDIR
         + "{interconnect}_"
@@ -311,7 +312,7 @@ rule build_heat_demands:
     input:
         pop_layout=RESOURCES + "{interconnect}/pop_layout_{scope}.nc",
         regions_onshore=RESOURCES
-        + "{interconnect}/regions_onshore_s_{clusters}.geojson",
+        + "{interconnect}/Geospatial/regions_onshore_s_{clusters}.geojson",
         cutout="cutouts/"
         + CDIR
         + "{interconnect}_"

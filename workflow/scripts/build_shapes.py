@@ -380,6 +380,7 @@ def main(snakemake):
     # read county shapes
     # takes ~10min to trim shap to interconnect, so skipping
     gdf_counties = load_counties_shape(snakemake.input.county_shapes)
+    gdf_counties["GEOID"] = "p" + gdf_counties["GEOID"]
     gdf_counties.to_file(snakemake.output.county_shapes)
 
     # Load and build offshore shapes

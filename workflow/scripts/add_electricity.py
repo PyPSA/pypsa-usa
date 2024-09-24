@@ -221,6 +221,9 @@ def apply_dynamic_pricing(
     gens[geography] = gens.bus.map(n.buses[geography])
     gens = gens[(gens.carrier == carrier) & (gens[geography].isin(df.columns))]
 
+    if gens.empty:
+        return
+
     eff = n.get_switchable_as_dense("Generator", "efficiency").T
     eff = eff[eff.index.isin(gens.index)].T
     eff.columns.name = ""
@@ -278,6 +281,24 @@ def update_transmission_costs(n, costs, length_factor=1.0):
     n.links.loc[dc_b, "capital_cost"] = costs
 
 
+def load_powerplants(
+    plants_fn,
+    investment_periods: list[int],
+    interconnect: str = None,
+) -> pd.DataFrame:
+    plants = pd.read_csv(
+        plants_fn,
+    )
+    # Filter out non-conus plants and plants that are not built by first investment period.
+    plants.set_index("generator_name", inplace=True)
+    plants = plants[plants.build_year <= investment_periods[0]]
+    plants = plants[plants.nerc_region != "non-conus"]
+    if (interconnect is not None) & (interconnect != "usa"):
+        plants["interconnection"] = plants["nerc_region"].map(const.NERC_REGION_MAPPER)
+        plants = plants[plants.interconnection == interconnect]
+    return plants
+
+
 def match_plant_to_bus(n, plants):
     plants_matched = plants.copy()
     plants_matched["bus_assignment"] = None
@@ -301,6 +322,30 @@ def match_plant_to_bus(n, plants):
     plants_matched.drop(columns=["id_nearest"], inplace=True)
 
     return plants_matched
+
+
+def filter_plants_by_region(
+    plants: pd.DataFrame,
+    regions_onshore: gpd.GeoDataFrame,
+    regions_offshore: gpd.GeoDataFrame,
+) -> pd.DataFrame:
+    """
+    Filters the plants dataframe to remove plants not within the onshore and
+    offshore geometries.
+    """
+    plants = plants.copy()
+    plants["geometry"] = gpd.points_from_xy(
+        plants.longitude,
+        plants.latitude,
+        crs="EPSG:4326",
+    )
+    gdp_plants = gpd.GeoDataFrame(plants, geometry="geometry")
+    plants_onshore = gpd.sjoin(gdp_plants, regions_onshore, how="inner")
+    plants_offshore = gpd.sjoin(gdp_plants, regions_offshore, how="inner")
+    plants = pd.concat([plants_onshore, plants_offshore])
+    plants.drop(columns=["geometry"], inplace=True)
+    plants = plants[~plants_onshore.index.duplicated()]
+    return pd.DataFrame(plants)
 
 
 def attach_renewable_capacities_to_atlite(
@@ -595,31 +640,12 @@ def attach_battery_storage(
     )
 
 
-def load_powerplants(
-    plants_fn,
-    investment_periods: list[int],
-    interconnect: str = None,
-) -> pd.DataFrame:
-    plants = pd.read_csv(
-        plants_fn,
-    )
-    # Filter out non-conus plants and plants that are not built by first investment period.
-    plants.set_index("generator_name", inplace=True)
-    plants = plants[plants.build_year <= investment_periods[0]]
-    plants = plants[plants.nerc_region != "non-conus"]
-    if (interconnect is not None) & (interconnect != "usa"):
-        plants["interconnection"] = plants["nerc_region"].map(const.NERC_REGION_MAPPER)
-        plants = plants[plants.interconnection == interconnect]
-    return plants
-
-
 def broadcast_investment_horizons_index(n: pypsa.Network, df: pd.DataFrame):
     """
     Broadcast the index of a dataframe to match the potentially multi-indexed
     investment periods of a PyPSA network.
     """
     sns = n.snapshots
-
     if not len(df.index) == len(sns):  # if broadcasting is necessary
         df.index = pd.to_datetime(df.index)
         dfs = []
@@ -691,10 +717,14 @@ def apply_must_run_ratings(
     conv_plants.loc[:, "minimum_load_pu"] = (
         conv_plants.minimum_load_mw / conv_plants.p_nom
     )
-    conv_plants.loc[:, "minimum_load_pu"] = conv_plants.minimum_load_pu.clip(
-        upper=np.minimum(conv_plants.summer_derate, conv_plants.winter_derate),
-        lower=0,
-    ).fillna(0)
+    conv_plants.loc[:, "minimum_load_pu"] = (
+        conv_plants.minimum_load_pu.clip(
+            upper=np.minimum(conv_plants.summer_derate, conv_plants.winter_derate),
+            lower=0,
+        )
+        .astype(float)
+        .fillna(0)
+    )
     must_run = conv_plants.query("ads_mustrun == True")
     n.generators.loc[must_run.index, "p_min_pu"] = (
         must_run.minimum_load_pu.round(3) * 0.95
@@ -706,14 +736,10 @@ def clean_bus_data(n: pypsa.Network):
     Drops data from the network that are no longer needed in workflow.
     """
     col_list = [
-        "poi_bus",
-        "poi_sub",
-        "poi",
         "Pd",
         "load_dissag",
         "LAF",
         "LAF_state",
-        "county",
     ]
     n.buses.drop(columns=[col for col in col_list if col in n.buses], inplace=True)
 
@@ -824,6 +850,9 @@ def main(snakemake):
 
     n = pypsa.Network(snakemake.input.base_network)
 
+    regions_onshore = gpd.read_file(snakemake.input.regions_onshore)
+    regions_offshore = gpd.read_file(snakemake.input.regions_offshore)
+
     Nyears = n.snapshot_weightings.loc[n.investment_periods[0]].objective.sum() / 8760.0
 
     costs = pd.read_csv(snakemake.input.tech_costs)
@@ -843,7 +872,11 @@ def main(snakemake):
         n.investment_periods,
         interconnect=interconnection,
     )
-
+    plants = filter_plants_by_region(
+        plants,
+        regions_onshore,
+        regions_offshore,
+    )
     plants = match_plant_to_bus(n, plants)
 
     attach_conventional_generators(
@@ -932,7 +965,6 @@ def main(snakemake):
 
         # NOTE: Must go from most to least coarse data (ie. state then ba) to apply the
         # data correctly!
-
         for carrier, prices in dynamic_fuel_prices.items():
             for area in ("state", "reeds_zone", "balancing_area"):
                 # check if data is supplied for the area

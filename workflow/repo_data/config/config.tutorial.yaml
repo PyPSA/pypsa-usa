@@ -90,6 +90,11 @@ links:
   p_nom_max: .inf
   max_extension: 2000 #MW
 
+model_topology:
+  include: # does not support mixed zone specification yet
+    # reeds_zone: ['p62', 'p63', 'p64']
+    # state: ['California']
+
 # docs :
 costs:
   atb:

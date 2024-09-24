@@ -102,6 +102,10 @@ def attach_phs_storageunits(n: pypsa.Network, elec_opts):
             psh_resources,
             how="inner",
         ).reset_index(drop=True)
+
+        if region_onshore_psh.empty:
+            continue
+
         region_onshore_psh_grp = (
             region_onshore_psh.groupby(["name", "cost_kw_round"])["potential_mw"]
             .agg("sum")

@@ -92,8 +92,6 @@ def voronoi_partition_pts(points, outline):
 
 def main(snakemake):
     # Configurations
-    countries = snakemake.config["countries"]
-    voltage_level = snakemake.config["electricity"]["voltage_simplified"]
     aggregation_zones = snakemake.config["clustering"]["cluster_network"][
         "aggregation_zones"
     ]
@@ -113,31 +111,28 @@ def main(snakemake):
 
     gpd_countries = gpd.read_file(snakemake.input.country_shapes).set_index("name")
     gpd_states = gpd.read_file(snakemake.input.state_shapes).set_index("name")
-    gpd_ba_shapes = gpd.read_file(snakemake.input.ba_region_shapes).set_index("name")[
-        "geometry"
-    ]
+    gpd_counties = gpd.read_file(snakemake.input.county_shapes).set_index("GEOID")
+    gpd_ba_shapes = gpd.read_file(snakemake.input.ba_region_shapes).set_index("name")
     gpd_reeds = gpd.read_file(snakemake.input.reeds_shapes).set_index("name")
 
     if aggregation_zones == "country":
         agg_region_shapes = gpd_countries
     elif aggregation_zones == "balancing_area":
-        agg_region_shapes = gpd_ba_shapes
+        agg_region_shapes = gpd_ba_shapes.geometry
     elif aggregation_zones == "state":
         agg_region_shapes = gpd_states.geometry
+    elif aggregation_zones == "county":
+        agg_region_shapes = gpd_counties.geometry
     elif aggregation_zones == "reeds_zone":
         agg_region_shapes = gpd_reeds.geometry
     else:
         ValueError(
             "zonal_aggregation must be either balancing_area, country, reeds_id, or state",
         )
-
     gpd_offshore_shapes = gpd.read_file(snakemake.input.offshore_shapes)
     offshore_shapes = gpd_offshore_shapes.reindex(columns=REGION_COLS).set_index(
         "name",
     )["geometry"]
-
-    onshore_regions = []
-    offshore_regions = []
 
     all_locs = bus2sub[["x", "y"]]
     onshore_buses = n.buses[~n.buses.substation_off]
@@ -151,8 +146,9 @@ def main(snakemake):
     bus2sub_offshore = bus2sub[~bus2sub.Bus.isin(onshore_buses.index)]
 
     logger.info("Building Onshore Regions")
-    for region in agg_region_shapes.index:
-        region_shape = agg_region_shapes[region]  # current shape
+    onshore_regions = []
+    for region in bus2sub_onshore[f"{aggregation_zones}"].unique():
+        region_shape = agg_region_shapes.loc[f"{region}"]  # current shape
         region_subs = bus2sub_onshore[f"{aggregation_zones}"][
             bus2sub_onshore[f"{aggregation_zones}"] == region
         ]  # series of substations in the current BA
@@ -166,7 +162,6 @@ def main(snakemake):
             region_shape = (
                 gpd.GeoDataFrame(geometry=region_shape).dissolve().iloc[0].geometry
             )
-
         onshore_regions.append(
             gpd.GeoDataFrame(
                 {
@@ -181,6 +176,7 @@ def main(snakemake):
 
     ### Defining Offshore Regions ###
     logger.info("Building Offshore Regions")
+    offshore_regions = []
     for i in range(len(offshore_shapes)):
         offshore_shape = offshore_shapes.iloc[i]
         shape_name = offshore_shapes.index[i]
@@ -204,6 +200,7 @@ def main(snakemake):
         ]  # remove extremely small regions
         offshore_regions.append(offshore_regions_c)
 
+    # Exporting
     onshore_regions_concat = pd.concat(onshore_regions, ignore_index=True)
 
     onshore_regions_concat = onshore_regions_concat[

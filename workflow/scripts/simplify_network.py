@@ -129,6 +129,7 @@ def aggregate_to_substations(
             "interconnect",
             "state",
             "country",
+            "county",
             "balancing_area",
             "reeds_zone",
             "reeds_ba",
@@ -146,6 +147,8 @@ def aggregate_to_substations(
         zone = substations.country
     elif aggregation_zones == "state":
         zone = substations.state
+    elif aggregation_zones == "county":
+        zone = substations.county
     elif aggregation_zones == "reeds_zone":
         zone = substations.reeds_zone
     else:
@@ -158,11 +161,11 @@ def aggregate_to_substations(
     network_s.buses["y"] = substations.y
     network_s.buses["substation_lv"] = True
     network_s.buses["country"] = (
-        zone  # country field used bc pypsa-eur aggregates based on country boundary
+        zone  # country field used bc pypsa algo aggregates based on country field
     )
     network_s.lines["type"] = np.nan
 
-    if aggregation_zones != "reeds_zone":
+    if aggregation_zones != "reeds_zone" and aggregation_zones != "county":
         cols2drop = [
             "balancing_area",
             "state",
@@ -221,9 +224,7 @@ if __name__ == "__main__":
     solver_name = snakemake.config["solving"]["solver"]["name"]
 
     voltage_level = snakemake.config["electricity"]["voltage_simplified"]
-    aggregation_zones = snakemake.config["clustering"]["cluster_network"][
-        "aggregation_zones"
-    ]
+    aggregation_zones = snakemake.params.aggregation_zone
 
     n = pypsa.Network(snakemake.input.network)
 
