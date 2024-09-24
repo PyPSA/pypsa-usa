@@ -734,7 +734,12 @@ def main(snakemake):
         n.mremove("Transformer", rm_transformers.index.tolist())
         n.mremove("Link", rm_links.index.tolist())
         n.mremove("Bus", rm_buses.index.tolist())
-        logger.info(f"Filtered network to {model_topology[region_type]}.")
+        logger.info(
+            f"Filtered network to {model_topology[region_type]}. Removed {len(rm_buses)} buses, {len(n.buses)} remaining.",
+        )
+        assert (
+            len(n.buses) > 0
+        ), "No buses remaining in network. Check your model_topology configuration settings."
 
     # Tests
     logger.info(test_network_datatype_consistency(n))

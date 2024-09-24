@@ -356,7 +356,7 @@ def busmap_for_n_clusters(
 
     return (
         n.buses.groupby(["country", "sub_network"], group_keys=False)
-        .apply(busmap_for_country)
+        .apply(busmap_for_country, include_groups=False)
         .squeeze()
         .rename("busmap")
     )
@@ -643,6 +643,9 @@ if __name__ == "__main__":
             logger.info(f"Imported custom busmap from {snakemake.input.custom_busmap}")
 
         if params.transport_model:
+            logger.info(
+                f"Aggregating to transport model with {aggregation_zone} zones.",
+            )
             if aggregation_zone == "reeds_zone":
                 custom_busmap = n.buses.reeds_zone
                 itl_fn = snakemake.input.itl_ba

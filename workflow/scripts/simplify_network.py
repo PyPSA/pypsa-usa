@@ -256,6 +256,10 @@ if __name__ == "__main__":
         aggregation_zones,
         params.aggregation_strategies,
     )
+
+    if aggregation_zones == "reeds_zone":
+        n.buses.drop(columns=["county"], inplace=True)
+
     if snakemake.wildcards.simpl:
         n.set_investment_periods(periods=snakemake.params.planning_horizons)
 

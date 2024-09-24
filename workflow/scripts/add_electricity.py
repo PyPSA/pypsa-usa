@@ -343,8 +343,9 @@ def filter_plants_by_region(
     plants_onshore = gpd.sjoin(gdp_plants, regions_onshore, how="inner")
     plants_offshore = gpd.sjoin(gdp_plants, regions_offshore, how="inner")
     plants = pd.concat([plants_onshore, plants_offshore])
+    logger.warning(f"Offshore plants: {plants_offshore}")
     plants.drop(columns=["geometry"], inplace=True)
-    plants = plants[~plants_onshore.index.duplicated()]
+    plants = plants[~plants.index.duplicated()]
     return pd.DataFrame(plants)
 
 

@@ -174,11 +174,21 @@ def main(snakemake):
             ),
         )
 
+    onshore_regions_concat = pd.concat(onshore_regions, ignore_index=True)
+    onshore_regions_concat = onshore_regions_concat[
+        ~onshore_regions_concat.geometry.is_empty
+    ]  # removing few buses which don't have geometry
+    onshore_regions_concat.to_file(snakemake.output.regions_onshore)
+    combined_onshore = onshore_regions_concat.geometry.union_all()
+
     ### Defining Offshore Regions ###
     logger.info("Building Offshore Regions")
     offshore_regions = []
+    buffered = combined_onshore.buffer(0.9)
     for i in range(len(offshore_shapes)):
         offshore_shape = offshore_shapes.iloc[i]
+        # Trip shape to be within certain distance from onshore_regions
+        offshore_shape = offshore_shape.intersection(buffered)
         shape_name = offshore_shapes.index[i]
         offshore_buses = bus2sub_offshore[["x", "y"]]
         if offshore_buses.empty:
@@ -201,13 +211,6 @@ def main(snakemake):
         offshore_regions.append(offshore_regions_c)
 
     # Exporting
-    onshore_regions_concat = pd.concat(onshore_regions, ignore_index=True)
-
-    onshore_regions_concat = onshore_regions_concat[
-        ~onshore_regions_concat.geometry.is_empty
-    ]  # removing few buses which don't have geometry
-
-    onshore_regions_concat.to_file(snakemake.output.regions_onshore)
     if offshore_regions:
         pd.concat(offshore_regions, ignore_index=True).to_file(
             snakemake.output.regions_offshore,
