@@ -66,7 +66,9 @@ rule build_base_network:
 
 rule build_bus_regions:
     params:
-        aggregation_zone=config["clustering"]["cluster_network"]["aggregation_zones"],
+        topological_boundaries=config_provider(
+            "model_topology", "topological_boundaries"
+        ),
         focus_weights=config["focus_weights"],
     input:
         country_shapes=RESOURCES + "{interconnect}/Geospatial/country_shapes.geojson",
@@ -622,7 +624,9 @@ rule simplify_network:
         focus_weights=config_provider("focus_weights", default=False),
         simplify_network=config_provider("clustering", "simplify_network"),
         planning_horizons=config_provider("scenario", "planning_horizons"),
-        aggregation_zone=config["clustering"]["cluster_network"]["aggregation_zones"],
+        topological_boundaries=config_provider(
+            "model_topology", "topological_boundaries"
+        ),
     input:
         bus2sub=RESOURCES + "{interconnect}/bus2sub.csv",
         sub=RESOURCES + "{interconnect}/sub.csv",
@@ -657,8 +661,10 @@ rule cluster_network:
         length_factor=config_provider("lines", "length_factor"),
         costs=config_provider("costs"),
         planning_horizons=config_provider("scenario", "planning_horizons"),
-        transport_model=config_provider("lines", "transport_model"),
-        aggregation_zone=config["clustering"]["cluster_network"]["aggregation_zones"],
+        transport_model=config_provider("model_topology", "transport_model"),
+        topological_boundaries=config_provider(
+            "model_topology", "topological_boundaries"
+        ),
     input:
         network=RESOURCES + "{interconnect}/elec_s{simpl}.nc",
         regions_onshore=RESOURCES

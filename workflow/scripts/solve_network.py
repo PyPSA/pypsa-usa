@@ -519,7 +519,10 @@ def add_interface_limits(n, sns, config):
 
         if (
             not (pd.concat([interface_links_b0, interface_links_b1]).empty)
-            and ("RESOLVE" in interface.interface or config["lines"]["transport_model"])
+            and (
+                "RESOLVE" in interface.interface
+                or config["model_topology"]["transport_model"]
+            )
             # Apply link constraints if RESOLVE constraint or if zonal model. ITLs should usually only apply to AC lines if DC PF is used.
         ):
             link_flows = n.model["Link-p"].loc[:, interface_links_b1.index].sum(

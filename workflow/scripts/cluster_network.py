@@ -421,7 +421,7 @@ def clustering_for_n_clusters(
     return clustering
 
 
-def replace_lines_with_links(clustering, itl_fn, itl_cost_fn, aggregation_zone):
+def replace_lines_with_links(clustering, itl_fn, itl_cost_fn, topological_boundaries):
     """
     Replaces all Lines according to Links with the transfer capacity specified
     by the ITLs.
@@ -433,8 +433,8 @@ def replace_lines_with_links(clustering, itl_fn, itl_cost_fn, aggregation_zone):
 
     itls.columns = itls.columns.str.lower()
     itls = itls[
-        itls.r.isin(clustering.network.buses[f"{aggregation_zone}"])
-        & itls.rr.isin(clustering.network.buses[f"{aggregation_zone}"])
+        itls.r.isin(clustering.network.buses[f"{topological_boundaries}"])
+        & itls.rr.isin(clustering.network.buses[f"{topological_boundaries}"])
     ]
 
     itl_cost = pd.read_csv(itl_cost_fn)
@@ -576,7 +576,7 @@ if __name__ == "__main__":
         periods=snakemake.params.planning_horizons,
     )
 
-    aggregation_zone = params.aggregation_zone
+    topological_boundaries = params.topological_boundaries
     exclude_carriers = params.cluster_network["exclude_carriers"]
     aggregate_carriers = set(n.generators.carrier) - set(exclude_carriers)
     conventional_carriers = set(params.conventional_carriers)
@@ -644,18 +644,18 @@ if __name__ == "__main__":
 
         if params.transport_model:
             logger.info(
-                f"Aggregating to transport model with {aggregation_zone} zones.",
+                f"Aggregating to transport model with {topological_boundaries} zones.",
             )
-            if aggregation_zone == "reeds_zone":
+            if topological_boundaries == "reeds_zone":
                 custom_busmap = n.buses.reeds_zone
                 itl_fn = snakemake.input.itl_ba
                 itl_cost_fn = snakemake.input.itl_costs_ba
-            elif aggregation_zone == "county":
+            elif topological_boundaries == "county":
                 custom_busmap = n.buses.county
                 itl_fn = snakemake.input.itl_county
                 itl_cost_fn = snakemake.input.itl_costs_county
             else:
-                raise ValueError(f"Unknown aggregation zone {aggregation_zone}")
+                raise ValueError(f"Unknown aggregation zone {topological_boundaries}")
             n.buses.interconnect = n.buses.nerc_reg.map(REEDS_NERC_INTERCONNECT_MAPPER)
             n.lines.drop(columns=["interconnect"], inplace=True)
 
@@ -678,9 +678,9 @@ if __name__ == "__main__":
                 clustering,
                 itl_fn,
                 itl_cost_fn,
-                aggregation_zone,
+                topological_boundaries,
             )
-            N = clustering.network.buses[f"{aggregation_zone}"].unique()
+            N = clustering.network.buses[f"{topological_boundaries}"].unique()
             assert n_clusters == len(
                 N,
             ), f"Number of clusters must be {len(N)} to model as transport model."

@@ -315,12 +315,12 @@ def create_historic_region_data(
         },
     }
 
-    aggregation_zone = snakemake.config["clustering"]["cluster_network"][
-        "aggregation_zones"
+    topological_boundaries = snakemake.config["model_topology"][
+        "topological_boundaries"
     ]
     regions = (
-        region_mapper[aggregation_zone][region]
-        if region in region_mapper[aggregation_zone]
+        region_mapper[topological_boundaries][region]
+        if region in region_mapper[topological_boundaries]
         else [region]
     )
 
@@ -361,10 +361,7 @@ def plot_regional_comparisons(
     )
     buses = n.buses.copy()
 
-    if (
-        snakemake.config["clustering"]["cluster_network"]["aggregation_zones"]
-        == "reeds_zone"
-    ):
+    if snakemake.config["model_topology"]["topological_boundaries"] == "reeds_zone":
         regions = n.buses.reeds_ba.unique()
         regions = list(OrderedDict.fromkeys(regions))
         buses["region"] = buses.reeds_ba
@@ -702,10 +699,7 @@ def plot_ba_emissions_historical_bar(
         columns=["Optimized"],
     )
 
-    if (
-        snakemake.config["clustering"]["cluster_network"]["aggregation_zones"]
-        == "balancing_area"
-    ):
+    if snakemake.config["model_topology"]["topological_boundaries"] == "balancing_area":
         optimized.loc["CISO"] = optimized.loc[
             ["CISO-PGAE", "CISO-SCE", "CISO-SDGE", "CISO-VEA"]
         ].sum()
@@ -713,10 +707,7 @@ def plot_ba_emissions_historical_bar(
             index=["CISO-PGAE", "CISO-SCE", "CISO-SDGE", "CISO-VEA"],
             inplace=True,
         )
-    elif (
-        snakemake.config["clustering"]["cluster_network"]["aggregation_zones"]
-        == "reeds_zone"
-    ):
+    elif snakemake.config["model_topology"]["topological_boundaries"] == "reeds_zone":
         region_mapper = (
             n.buses[["country", "reeds_ba"]]
             .drop_duplicates()

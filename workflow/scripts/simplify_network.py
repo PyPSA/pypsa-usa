@@ -94,7 +94,7 @@ def aggregate_to_substations(
     network: pypsa.Network,
     substations,
     busmap,
-    aggregation_zones: str,
+    topological_boundaries: str,
     aggregation_strategies=dict(),
 ):
     """
@@ -141,18 +141,21 @@ def aggregate_to_substations(
     substations.sub_id = substations.sub_id.astype(int).astype(str)
     substations.index = substations.sub_id
 
-    if aggregation_zones == "balancing_area":
-        zone = substations.balancing_area
-    elif aggregation_zones == "country":
-        zone = substations.country
-    elif aggregation_zones == "state":
-        zone = substations.state
-    elif aggregation_zones == "county":
-        zone = substations.county
-    elif aggregation_zones == "reeds_zone":
-        zone = substations.reeds_zone
-    else:
-        ValueError("zonal_aggregation must be either balancing_area, country or state")
+    match topological_boundaries:
+        case "balancing_area":
+            zone = substations.balancing_area
+        case "country":
+            zone = substations.country
+        case "state":
+            zone = substations.state
+        case "county":
+            zone = substations.county
+        case "reeds_zone":
+            zone = substations.reeds_zone
+        case _:
+            raise ValueError(
+                "zonal_aggregation must be either balancing_area, country, or state",
+            )
 
     network_s = clustering.network
 
@@ -165,7 +168,7 @@ def aggregate_to_substations(
     )
     network_s.lines["type"] = np.nan
 
-    if aggregation_zones != "reeds_zone" and aggregation_zones != "county":
+    if topological_boundaries != "reeds_zone" and topological_boundaries != "county":
         cols2drop = [
             "balancing_area",
             "state",
@@ -224,7 +227,7 @@ if __name__ == "__main__":
     solver_name = snakemake.config["solving"]["solver"]["name"]
 
     voltage_level = snakemake.config["electricity"]["voltage_simplified"]
-    aggregation_zones = snakemake.params.aggregation_zone
+    topological_boundaries = snakemake.params.topological_boundaries
 
     n = pypsa.Network(snakemake.input.network)
 
@@ -253,11 +256,11 @@ if __name__ == "__main__":
         n,
         substations,
         busmap_to_sub.sub_id,
-        aggregation_zones,
+        topological_boundaries,
         params.aggregation_strategies,
     )
 
-    if aggregation_zones == "reeds_zone":
+    if topological_boundaries == "reeds_zone":
         n.buses.drop(columns=["county"], inplace=True)
 
     if snakemake.wildcards.simpl:

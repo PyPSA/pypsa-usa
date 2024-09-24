@@ -9,7 +9,7 @@ Creates Voronoi shapes for each bus representing both onshore and offshore regio
 .. code:: yaml
 
     interconnect:
-    aggregation_zones:
+    topological_boundaries:
 
 **Inputs**
 
@@ -91,16 +91,14 @@ def voronoi_partition_pts(points, outline):
 
 
 def main(snakemake):
-    # Configurations
-    aggregation_zones = snakemake.config["clustering"]["cluster_network"][
-        "aggregation_zones"
-    ]
+    # Params
+    topological_boundaries = snakemake.params.topological_boundaries
 
     logger.info(
         "Building bus regions for %s Interconnect",
         snakemake.wildcards.interconnect,
     )
-    logger.info("Built for aggregation with %s zones", aggregation_zones)
+    logger.info("Built for aggregation with %s zones", topological_boundaries)
 
     n = pypsa.Network(snakemake.input.base_network)
 
@@ -115,20 +113,22 @@ def main(snakemake):
     gpd_ba_shapes = gpd.read_file(snakemake.input.ba_region_shapes).set_index("name")
     gpd_reeds = gpd.read_file(snakemake.input.reeds_shapes).set_index("name")
 
-    if aggregation_zones == "country":
-        agg_region_shapes = gpd_countries
-    elif aggregation_zones == "balancing_area":
-        agg_region_shapes = gpd_ba_shapes.geometry
-    elif aggregation_zones == "state":
-        agg_region_shapes = gpd_states.geometry
-    elif aggregation_zones == "county":
-        agg_region_shapes = gpd_counties.geometry
-    elif aggregation_zones == "reeds_zone":
-        agg_region_shapes = gpd_reeds.geometry
-    else:
-        ValueError(
-            "zonal_aggregation must be either balancing_area, country, reeds_id, or state",
-        )
+    match topological_boundaries:
+        case "country":
+            agg_region_shapes = gpd_countries
+        case "balancing_area":
+            agg_region_shapes = gpd_ba_shapes.geometry
+        case "state":
+            agg_region_shapes = gpd_states.geometry
+        case "county":
+            agg_region_shapes = gpd_counties.geometry
+        case "reeds_zone":
+            agg_region_shapes = gpd_reeds.geometry
+        case _:
+            raise ValueError(
+                "zonal_aggregation must be either balancing_area, country, reeds_id, or state",
+            )
+
     gpd_offshore_shapes = gpd.read_file(snakemake.input.offshore_shapes)
     offshore_shapes = gpd_offshore_shapes.reindex(columns=REGION_COLS).set_index(
         "name",
@@ -147,10 +147,10 @@ def main(snakemake):
 
     logger.info("Building Onshore Regions")
     onshore_regions = []
-    for region in bus2sub_onshore[f"{aggregation_zones}"].unique():
+    for region in bus2sub_onshore[f"{topological_boundaries}"].unique():
         region_shape = agg_region_shapes.loc[f"{region}"]  # current shape
-        region_subs = bus2sub_onshore[f"{aggregation_zones}"][
-            bus2sub_onshore[f"{aggregation_zones}"] == region
+        region_subs = bus2sub_onshore[f"{topological_boundaries}"][
+            bus2sub_onshore[f"{topological_boundaries}"] == region
         ]  # series of substations in the current BA
         region_locs = all_locs.loc[
             region_subs.index
