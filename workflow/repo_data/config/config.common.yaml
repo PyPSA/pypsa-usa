@@ -120,6 +120,20 @@ atlite:
       dx: 0.3
       dy: 0.3
 
+lines:
+  types: # All temporary values, need to be updated
+    115.: "Al/St 240/40 2-bundle 220.0"
+    138.: "Al/St 240/40 2-bundle 220.0"
+    161.: "Al/St 240/40 2-bundle 220.0"
+    230.: "Al/St 240/40 2-bundle 220.0"
+    345.: "Al/St 240/40 4-bundle 380.0"
+    500.: "Al/St 560/50 4-bundle 750.0"
+    765.: "Al/St 560/50 4-bundle 750.0"
+
+model_topology:
+  interface_transmission_limits: false
+  topological_boundaries: 'reeds_zone' # [state, reeds_zone]
+
 
 # docs :
 offshore_shape:

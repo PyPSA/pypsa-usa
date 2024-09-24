@@ -19,6 +19,13 @@ scenario:
   planning_horizons: [2030, 2040, 2050]
 
 # docs :
+model_topology:
+  transmission_network: 'tamu' # [reeds, tamu]
+  include: # mixed zone types not supported
+    reeds_zone: ['p8']
+    # reeds_state: ['CO']
+
+# docs :
 enable:
   build_cutout: false
 
@@ -82,19 +89,12 @@ lines:
   s_nom_max: .inf
   max_extension: 2000 #MW
   length_factor: 1.25
-  interface_transmission_limits: false
-  transport_model: false
 
 # docs :
 links:
   p_max_pu: 1.0
   p_nom_max: .inf
   max_extension: 2000 #MW
-
-model_topology:
-  include: # does not support mixed zone specification yet
-    # reeds_zone: ['p62', 'p63', 'p64']
-    # state: ['California']
 
 # docs :
 costs:
@@ -159,7 +159,6 @@ clustering:
   cluster_network:
     algorithm: kmeans # choose from: [hac, kmeans]
     feature: solar+onwind-time
-    aggregation_zones: 'reeds_zone' # [balancing_area, state, reeds_zone]
     exclude_carriers: []
     consider_efficiency_classes: false
   aggregation_strategies:
