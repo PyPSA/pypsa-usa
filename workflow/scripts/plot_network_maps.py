@@ -257,7 +257,7 @@ def plot_capacity_map(
             link_colors=link_colors,
             ax=ax,
             margin=0.2,
-            color_geomap=None,
+            color_geomap=True,
             flow=flow,
             line_cmap=line_cmap,
             line_norm=line_norm,
@@ -408,7 +408,7 @@ def plot_base_capacity_map(
     bus_values = remove_sector_buses(bus_values).groupby(by=["bus", "carrier"]).sum()
 
     line_values = n.lines.s_nom
-    link_values = n.links.p_nom.replace(0)
+    link_values = n.links.p_nom.replace(0, None)
 
     # plot data
 

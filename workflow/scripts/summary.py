@@ -116,10 +116,14 @@ def get_energy_timeseries(n: pypsa.Network) -> pd.DataFrame:
         )
 
     def _get_energy_multi_port(n: pypsa.Network, c: str) -> pd.DataFrame:
-        c_energies = pd.DataFrame(
-            index=n.snapshots,
-            columns=c.df.carrier.unique(),
-        ).fillna(0)
+        c_energies = (
+            pd.DataFrame(
+                index=n.snapshots,
+                columns=c.df.carrier.unique(),
+            )
+            .astype(float)
+            .fillna(0)
+        )
         for port in [col[3:] for col in c.df.columns if col[:3] == "bus"]:
             if port == "0":  # only track flow in one direction
                 continue
@@ -330,7 +334,10 @@ def get_fuel_costs(n: pypsa.Network) -> pd.DataFrame:
     ]
     voms = pd.Series(
         index=marginal_costs.index,
-        data=marginal_costs.index.map(n.generators.carrier).map(fixed_voms).fillna(0),
+        data=marginal_costs.index.map(n.generators.carrier)
+        .map(fixed_voms)
+        .astype(float)
+        .fillna(0),
     ).astype(float)
     marginal_costs = marginal_costs.subtract(voms, axis=0)
 

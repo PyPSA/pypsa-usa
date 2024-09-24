@@ -343,7 +343,8 @@ def filter_plants_by_region(
     plants_onshore = gpd.sjoin(gdp_plants, regions_onshore, how="inner")
     plants_offshore = gpd.sjoin(gdp_plants, regions_offshore, how="inner")
     plants = pd.concat([plants_onshore, plants_offshore])
-    logger.warning(f"Offshore plants: {plants_offshore}")
+    if not plants_offshore.empty:
+        logger.warning(f"Offshore plants: {plants_offshore}")
     plants.drop(columns=["geometry"], inplace=True)
     plants = plants[~plants.index.duplicated()]
     return pd.DataFrame(plants)
@@ -358,15 +359,13 @@ def attach_renewable_capacities_to_atlite(
         "bus_assignment in @n.buses.index",
     )
     for tech in renewable_carriers:
-        plants_filt = plants.query("carrier == @tech")
+        plants_filt = plants.query("carrier == @tech").copy()
         if plants_filt.empty:
             continue
 
         generators_tech = n.generators[n.generators.carrier == tech].copy()
         generators_tech["sub_assignment"] = generators_tech.bus.map(n.buses.sub_id)
-        plants_filt.loc[:, "sub_assignment"] = plants_filt.bus_assignment.map(
-            n.buses.sub_id,
-        )
+        plants_filt["sub_assignment"] = plants_filt.bus_assignment.map(n.buses.sub_id)
         caps_per_bus = (
             plants_filt[["sub_assignment", "p_nom"]]
             .groupby("sub_assignment")
@@ -394,12 +393,9 @@ def attach_renewable_capacities_to_atlite(
         logger.info(
             f"{np.round(caps_per_bus.sum()/1000,2)} GW of {tech} capacity added.",
         )
-        n.generators.p_nom.update(
-            generators_tech.sub_assignment.map(caps_per_bus).dropna(),
-        )
-        n.generators.p_nom_min.update(
-            generators_tech.sub_assignment.map(caps_per_bus).dropna(),
-        )
+        mapped_values = generators_tech.sub_assignment.map(caps_per_bus).dropna()
+        n.generators.loc[mapped_values.index, "p_nom"] = mapped_values
+        n.generators.loc[mapped_values.index, "p_nom_min"] = mapped_values
 
 
 def attach_conventional_generators(
@@ -429,19 +425,23 @@ def attach_conventional_generators(
         .rename(index=lambda s: "C" + str(s))
     )
 
-    plants["efficiency"] = plants.efficiency.fillna(plants.efficiency_r)
+    plants["efficiency"] = plants.efficiency.astype(float).fillna(plants.efficiency_r)
 
     plants.loc[:, "p_min_pu"] = plants.minimum_load_mw / plants.p_nom
-    plants.loc[:, "p_min_pu"] = plants.p_min_pu.clip(
-        upper=np.minimum(plants.summer_derate, plants.winter_derate),
-        lower=0,
-    ).fillna(0)
+    plants.loc[:, "p_min_pu"] = (
+        plants.p_min_pu.clip(
+            upper=np.minimum(plants.summer_derate, plants.winter_derate),
+            lower=0,
+        )
+        .astype(float)
+        .fillna(0)
+    )
 
     committable_fields = ["start_up_cost", "min_down_time", "min_up_time", "p_min_pu"]
     for attr in committable_fields:
         default = pypsa.components.component_attrs["Generator"].default[attr]
         if unit_commitment:
-            plants[attr] = plants[attr].fillna(default)
+            plants[attr] = plants[attr].astype(float).fillna(default)
         else:
             plants[attr] = default
     committable_attrs = {attr: plants[attr] for attr in committable_fields}
@@ -465,7 +465,7 @@ def attach_conventional_generators(
         efficiency=plants.efficiency.round(3),
         marginal_cost=plants.marginal_cost,
         capital_cost=plants.annualized_capex_fom,
-        build_year=plants.build_year.fillna(0).astype(int),
+        build_year=plants.build_year.astype(int).fillna(0),
         lifetime=plants.carrier.map(costs.cost_recovery_period_years),
         committable=unit_commitment,
         **committable_attrs,
@@ -617,7 +617,7 @@ def attach_battery_storage(
     plants_filt.loc[:, "energy_storage_capacity_mwh"] = (
         plants_filt.energy_storage_capacity_mwh.astype(float)
     )
-    plants_filt.dropna(subset=["energy_storage_capacity_mwh"], inplace=True)
+    plants_filt = plants_filt.dropna(subset=["energy_storage_capacity_mwh"])
 
     logger.info(
         f"Added Batteries as Storage Units to the network.\n{np.round(plants_filt.p_nom.sum()/1000,2)} GW Power Capacity \n{np.round(plants_filt.energy_storage_capacity_mwh.sum()/1000, 2)} GWh Energy Capacity",
@@ -712,9 +712,13 @@ def apply_must_run_ratings(
     conv_plants = plants.query("carrier in @conventional_carriers").copy()
     conv_plants.index = "C" + conv_plants.index
 
-    conv_plants.loc[:, "ads_mustrun"] = conv_plants.ads_mustrun.infer_objects(
-        copy=False,
-    ).fillna(False)
+    conv_plants.loc[:, "ads_mustrun"] = (
+        conv_plants.ads_mustrun.infer_objects(
+            copy=False,
+        )
+        .astype(bool)
+        .fillna(False)
+    )
     conv_plants.loc[:, "minimum_load_pu"] = (
         conv_plants.minimum_load_mw / conv_plants.p_nom
     )
@@ -780,7 +784,9 @@ def attach_breakthrough_renewable_plants(
             p_nom = pd.concat([p_nom_be.max(axis=0), tech_plants["Pmax"]], axis=1).max(
                 axis=1,
             )
-            p_max_pu = (p_nom_be[p_nom.index] / p_nom).fillna(0)  # some values remain 0
+            p_max_pu = (
+                (p_nom_be[p_nom.index] / p_nom).astype(float).fillna(0)
+            )  # some values remain 0
         else:
             p_nom = tech_plants.Pmax
             p_max_pu = p_nom_be[tech_plants.index] / p_nom

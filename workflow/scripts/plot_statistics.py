@@ -170,7 +170,7 @@ def stacked_bar_horizons(
     fig.subplots_adjust(hspace=0, bottom=0.5)
     fig.suptitle(f"{variable}", fontsize=12, fontweight="bold")
     plt.xlabel(f"{variable} {variable_units}")
-    fig.tight_layout()
+    # fig.tight_layout()
     # plt.show(block=True)
     return fig
 
@@ -340,7 +340,7 @@ def plot_regional_capacity_additions_bar(
     # Adjust legend to include all carriers
     handles, labels = [], []
     for i, carrier in enumerate(df_sorted["carrier"].unique()):
-        handle = plt.Rectangle((0, 0), 1, 1, color=palette[carrier], edgecolor="w")
+        handle = plt.Rectangle((0, 0), 1, 1, color=palette[carrier])
         handles.append(handle)
         labels.append(f"{carrier}")
 
@@ -371,6 +371,8 @@ def plot_regional_emissions_bar(
         x=regional_emisssions.values,
         y=regional_emisssions.index,
         palette="viridis",
+        hue=regional_emisssions.index,
+        legend=False,
     )
 
     plt.xlabel("CO2 Emissions [MMtCO2]")
@@ -595,6 +597,7 @@ def plot_curtailment_heatmap(n: pypsa.Network, save: str, **wildcards) -> None:
         pivot_table = (
             df_long[df_long.carrier == carrier]
             .pivot(index="month", columns="hour", values="MW")
+            .astype(float)
             .fillna(0)
         )
         sns.heatmap(pivot_table, ax=axes[i], cmap="viridis")
@@ -645,6 +648,7 @@ def plot_capacity_factor_heatmap(n: pypsa.Network, save: str, **wildcards) -> No
         pivot_table = (
             df_long[df_long.carrier == carrier]
             .pivot(index="month", columns="hour", values="p_max_pu")
+            .astype(float)
             .fillna(0)
         )
         sns.heatmap(pivot_table, ax=axes[i], cmap="viridis")
@@ -691,8 +695,8 @@ def plot_generator_data_panel(
         :,
     ]
 
-    df_storage_units = n.storage_units.loc[n.storage_units.p_nom_extendable, :]
-    df_storage_units["efficiency"] = df_storage_units.efficiency_dispatch
+    df_storage_units = n.storage_units.loc[n.storage_units.p_nom_extendable, :].copy()
+    df_storage_units.loc[:, "efficiency"] = df_storage_units.efficiency_dispatch
     df_capex_expand = pd.concat([df_capex_expand, df_storage_units])
 
     df_efficiency = n.generators.loc[
