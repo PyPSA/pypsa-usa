@@ -438,12 +438,12 @@ def plot_production_area(
                     (n.snapshots.get_level_values(0) == investment_period)
                     & (n.snapshots.get_level_values(1).month == month)
                 ]
-            energy_mix.loc[sns].droplevel("period").plot.area(
+            energy_mix.loc[sns].droplevel("period").round(2).plot.area(
                 ax=axs[i],
                 alpha=0.7,
                 color=color_palette,
             )
-            demand.loc[sns].droplevel("period").plot.line(
+            demand.loc[sns].droplevel("period").round(2).plot.line(
                 ax=axs[i],
                 ls="-",
                 color="darkblue",
