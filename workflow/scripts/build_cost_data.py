@@ -233,7 +233,7 @@ if __name__ == "__main__":
 
     # Group by pypsa-name and filter for correct cost recovery period
     pudl_atb = (
-        pudl_atb.groupby("pypsa-name")
+        pudl_atb.groupby("pypsa-name")[pudl_atb.columns]
         .apply(
             lambda x: x[
                 x["cost_recovery_period_years"]
