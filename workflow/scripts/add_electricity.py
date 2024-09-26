@@ -113,26 +113,6 @@ def sanitize_carriers(n, config):
     n.carriers["color"] = n.carriers.color.where(n.carriers.color != "", colors)
 
 
-def add_co2_emissions(n, costs, carriers):
-    """
-    Add CO2 emissions to the network's carriers attribute.
-    """
-    suptechs = n.carriers.loc[carriers].index.str.split("-").str[0]
-    n.carriers.loc[carriers, "co2_emissions"] = costs.co2_emissions[suptechs].values
-    if any("CCS" in carrier for carrier in carriers):
-        ccs_factor = (
-            1
-            - pd.Series(carriers, index=carriers)
-            .str.split("-")
-            .str[1]
-            .str.replace("CCS", "")
-            .fillna(0)
-            .astype(int)
-            / 100
-        )
-        n.carriers.loc[ccs_factor.index, "co2_emissions"] *= ccs_factor
-
-
 def add_missing_carriers(n, carriers):
     """
     Function to add missing carriers to the network without raising errors.
@@ -417,7 +397,6 @@ def attach_conventional_generators(
         if carrier not in renewable_carriers
     ]
     add_missing_carriers(n, carriers)
-    add_co2_emissions(n, costs, carriers)
 
     plants = (
         plants.query("carrier in @carriers")
@@ -865,9 +844,9 @@ def main(snakemake):
 
     Nyears = n.snapshot_weightings.loc[n.investment_periods[0]].objective.sum() / 8760.0
 
+    ### TODO COSTS TO REMOVE ###
     costs = pd.read_csv(snakemake.input.tech_costs)
     costs = costs.pivot(index="pypsa-name", columns="parameter", values="value")
-
     update_transmission_costs(n, costs, params.length_factor)
 
     renewable_carriers = set(params.renewable_carriers)

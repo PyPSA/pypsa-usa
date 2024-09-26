@@ -10,11 +10,35 @@ import numpy as np
 import pandas as pd
 import pypsa
 from _helpers import calculate_annuity, configure_logging
-from add_electricity import add_co2_emissions, add_missing_carriers
+from add_electricity import add_missing_carriers
 
 idx = pd.IndexSlice
 
 logger = logging.getLogger(__name__)
+
+
+def add_co2_emissions(n, costs, carriers):
+    """
+    Add CO2 emissions to the network's carriers attribute.
+    """
+    suptechs = n.carriers.loc[carriers].index.str.split("-").str[0]
+    n.carriers.loc[carriers, "co2_emissions"] = costs.co2_emissions[suptechs].values
+    n.carriers.fillna(
+        {"co2_emissions": 0},
+        inplace=True,
+    )  # TODO: FIX THIS ISSUE IN BUILD_COST_DATA
+    if any("CCS" in carrier for carrier in carriers):
+        ccs_factor = (
+            1
+            - pd.Series(carriers, index=carriers)
+            .str.split("-")
+            .str[1]
+            .str.replace("CCS", "")
+            .fillna(0)
+            .astype(int)
+            / 100
+        )
+        n.carriers.loc[ccs_factor.index, "co2_emissions"] *= ccs_factor
 
 
 def add_nice_carrier_names(n, config):
@@ -52,7 +76,7 @@ def attach_storageunits(n, costs, elec_opts, investment_year):
             carrier=carrier,
             p_nom_extendable=True,
             capital_cost=costs.at[carrier, "annualized_capex_fom"],
-            marginal_cost=costs.at[carrier, "marginal_cost"],
+            marginal_cost=0,  # costs.at[carrier, "marginal_cost"], # TODO: FIX THIS ISSUE IN BUILD_COST_DATA
             efficiency_store=costs.at[carrier, "efficiency"] ** roundtrip_correction,
             efficiency_dispatch=costs.at[carrier, "efficiency"] ** roundtrip_correction,
             max_hours=max_hours,
@@ -62,7 +86,7 @@ def attach_storageunits(n, costs, elec_opts, investment_year):
         )
 
 
-def attach_phs_storageunits(n: pypsa.Network, elec_opts):
+def attach_phs_storageunits(n: pypsa.Network, elec_opts, costs: pd.DataFrame):
     carriers = elec_opts["extendable_carriers"]["StorageUnit"]
     carriers = [k for k in carriers if "PHS" in k]
 
@@ -147,11 +171,15 @@ def attach_phs_storageunits(n: pypsa.Network, elec_opts):
         efficiency_store = 0.894427191  # 0.894427191^2 = 0.8
         efficiency_dispatch = 0.894427191  # 0.894427191^2 = 0.8
 
+        costs.at["PHS", "efficiency"] = efficiency_store
+        costs.at["PHS", "co2_emissions"] = 0
+        add_missing_carriers(n, ["PHS"])
+        add_co2_emissions(n, costs, ["PHS"])
         n.madd(
             "StorageUnit",
             region_onshore_psh_grp.index,
             bus=region_onshore_psh_grp.name,
-            carrier=region_onshore_psh_grp.tech,
+            carrier="PHS",  # region_onshore_psh_grp.tech,
             p_nom_max=region_onshore_psh_grp.potential_mw,
             p_nom_extendable=True,
             capital_cost=region_onshore_psh_grp.capital_cost,
@@ -576,7 +604,7 @@ if __name__ == "__main__":
     ]
 
     if any("PHS" in s for s in elec_config["extendable_carriers"]["StorageUnit"]):
-        attach_phs_storageunits(n, elec_config)
+        attach_phs_storageunits(n, elec_config, costs_dict[n.investment_periods[0]])
 
     for investment_year in n.investment_periods:
         costs = costs_dict[investment_year]
@@ -597,5 +625,6 @@ if __name__ == "__main__":
     apply_max_annual_growth_rate(n, snakemake.config["costs"]["max_growth"])
     add_nice_carrier_names(n, snakemake.config)
 
+    n.consistency_check()
     n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))
     n.export_to_netcdf(snakemake.output[0])

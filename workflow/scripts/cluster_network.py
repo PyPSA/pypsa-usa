@@ -507,7 +507,8 @@ def convert_to_transport(clustering, itl_fn, itl_cost_fn, topological_boundaries
         p_nom_extendable=False,
         carrier="DC",
     )
-
+    clustering.network.add("Carrier", "DC", co2_emissions=0)
+    clustering.network.add("Carrier", "AC_trans", co2_emissions=0)
     logger.info(f"Replaced Lines with Links for zonal model configuration.")
 
     # Remove any disconnected buses
@@ -721,3 +722,5 @@ if __name__ == "__main__":
         getattr(clustering, attr).to_csv(snakemake.output[attr])
 
     cluster_regions((clustering.busmap,), snakemake.input, snakemake.output)
+    n.consistency_check()
+    logger.info(f"Saved clustered network to {snakemake.output.network}")
