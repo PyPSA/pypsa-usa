@@ -1,11 +1,21 @@
+import logging
 import re
 
 import duckdb
 import numpy as np
 import pandas as pd
+from _helpers import configure_logging
+
+logger = logging.getLogger(__name__)
 
 
 def load_pudl_data(pudl_fn: str, start_date: str, end_date: str):
+    """
+    Queries the PUDL database for plant data.
+
+    Date parameters are used to filter years of heat-rate and fuel cost
+    data.
+    """
     duckdb.connect(database=":memory:", read_only=False)
 
     duckdb.query("INSTALL sqlite;")
@@ -17,11 +27,6 @@ def load_pudl_data(pudl_fn: str, start_date: str, end_date: str):
     )
 
     eia_data_operable = duckdb.query(
-        # the pudl data is organised into a row per plant_id_eia, generator_id, and report_date
-        # usually we want to get the most recent data for each plant_id_eia, generator_id
-        # but sometimes the most recent data has null values, so we need to fill in with older data
-        # this is why many of the columns are aggregated with array_agg and FILTER so we can get the most recent non-null value
-        # TODO: reconsider pulling PuDL report date according to snapshot year, to match historic operational_status_code
         """
         WITH monthly_generators AS (
             SELECT
@@ -110,6 +115,9 @@ def load_pudl_data(pudl_fn: str, start_date: str, end_date: str):
 
 
 def set_non_conus(eia_data_operable):
+    """
+    Set NERC region and balancing authority code for non-CONUS plants.
+    """
     eia_data_operable.loc[eia_data_operable.state.isin(["AK", "HI"]), "nerc_region"] = (
         "non-conus"
     )
@@ -393,7 +401,10 @@ eia_primemover_map.set_index("Prime Mover", inplace=True)
 
 
 def set_tech_fuels_primer_movers(eia_data_operable):
-    # Map technologies, fuels, and prime movers
+    """
+    Maps technologies, fuels, and prime movers from EIA data to PyPSA carrier
+    names.
+    """
     maps = {
         "carrier": (
             eia_data_operable["technology_description"],
@@ -430,6 +441,9 @@ def standardize_col_names(columns, prefix="", suffix=""):
 
 
 def merge_ads_data(eia_data_operable):
+    """
+    Merges WECC ADS Data into the prepared EIA Data.
+    """
     ADS_PATH = snakemake.input.wecc_ads
     ads_thermal = pd.read_csv(
         ADS_PATH + "/Thermal_General_Info.csv",
@@ -613,8 +627,8 @@ def impute_missing_plant_data(
     data_fields: list[str],
 ) -> pd.DataFrame:
     """
-    Imputes missing data in the plants dataframe based on the average values of
-    the data dataframe.
+    Imputes missing data for the`data_fields` in the plants dataframe based on
+    the average values of the  `aggregation_fields`.
     """
 
     # Function to calculate weighted average
@@ -692,6 +706,14 @@ def set_parameters(plants: pd.DataFrame):
     plants["heat_rate"] = plants.pop("unit_heat_rate_mmbtu_per_mwh")
     plants["vom"] = plants.pop("ads_vom_cost")
     plants["fuel_cost"] = plants.pop("fuel_cost_per_mwh")
+
+    zero_mc_fuel_types = ["solar", "wind", "hydro", "geothermal", "battery"]
+    plants.loc[plants.fuel_type.isin(zero_mc_fuel_types), "fuel_cost"] = 0
+    plants = impute_missing_plant_data(
+        plants,
+        ["nerc_region", "prime_mover_code", "fuel_type"],
+        ["fuel_cost"],
+    )
     plants = impute_missing_plant_data(
         plants,
         ["nerc_region", "technology_description"],
@@ -699,9 +721,12 @@ def set_parameters(plants: pd.DataFrame):
     )
     plants = impute_missing_plant_data(
         plants,
-        ["technology_description"],
+        ["nerc_region", "fuel_type"],
         ["fuel_cost"],
     )
+    plants = impute_missing_plant_data(plants, ["fuel_type"], ["fuel_cost"])
+    plants = impute_missing_plant_data(plants, ["prime_mover_code"], ["fuel_cost"])
+    plants.loc[plants.carrier.isin(["nuclear"]), "fuel_cost"] = 10.497
 
     # Unit Commitment Parameters
     plants["start_up_cost"] = (
@@ -735,10 +760,21 @@ def set_parameters(plants: pd.DataFrame):
         "vom",
     ]
     plants = impute_missing_plant_data(plants, ["technology_description"], data_fields)
+    plants = impute_missing_plant_data(plants, ["prime_mover_code"], data_fields)
+    plants = impute_missing_plant_data(plants, ["carrier"], data_fields)
 
     # replace heat-rate above theoretical minimum with nan
     plants.loc[plants.heat_rate < 3.412, "heat_rate"] = np.nan
+    plants.loc[
+        plants.fuel_type.isin(["solar", "wind", "hydro", "battery"]),
+        "heat_rate",
+    ] = 3.412
 
+    plants = impute_missing_plant_data(
+        plants,
+        ["nerc_region", "prime_mover_code", "fuel_type"],
+        ["heat_rate"],
+    )
     plants = impute_missing_plant_data(
         plants,
         ["nerc_region", "technology_description"],
@@ -746,13 +782,18 @@ def set_parameters(plants: pd.DataFrame):
     )
     plants = impute_missing_plant_data(
         plants,
+        ["nerc_region", "prime_mover_code"],
+        ["heat_rate"],
+    )
+    plants = impute_missing_plant_data(plants, ["prime_mover_code"], ["heat_rate"])
+    plants = impute_missing_plant_data(
+        plants,
         ["technology_description"],
         ["heat_rate"],
     )
+    plants = impute_missing_plant_data(plants, ["carrier"], ["heat_rate"])
 
-    plants["marginal_cost"] = (
-        plants.vom + plants.fuel_cost
-    )  # (MMBTu/MW) * (USD/MMBTu) = USD/MW
+    plants["marginal_cost"] = plants.vom + plants.fuel_cost
     plants["efficiency"] = 1 / (
         plants["heat_rate"] / 3.412
     )  # MMBTu/MWh to MWh_electric/MWh_thermal
@@ -761,6 +802,18 @@ def set_parameters(plants: pd.DataFrame):
 
     plants[f"heat_rate_source"] = plants[f"heat_rate_source"].fillna("NA")
     plants[f"fuel_cost_source"] = plants[f"fuel_cost_source"].fillna("NA")
+
+    # Check for missing heat rate data
+    if plants["heat_rate"].isna().sum() > 0:
+        logger.warning(
+            "Missing {} heat rate records.".format(plants["heat_rate"].isna().sum()),
+        )
+
+    # Check for missing fuel cost data
+    if plants["fuel_cost"].isna().sum() > 0:
+        logger.warning(
+            "Missing {} fuel cost records.".format(plants["fuel_cost"].isna().sum()),
+        )
     return plants.reset_index()
 
 
@@ -921,7 +974,7 @@ if __name__ == "__main__":
         rootpath = ".."
     else:
         rootpath = "."
-
+    configure_logging(snakemake)
     start_date = "2019-01-01"
     end_date = "2020-01-01"
     eia_data_operable, heat_rates = load_pudl_data(
