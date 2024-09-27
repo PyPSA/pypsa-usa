@@ -1,4 +1,6 @@
-
+[build-system]
+requires = ["setuptools >= 61.0"]
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "PyPSA-USA"
@@ -17,6 +19,13 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Operating System :: OS Independent",
 ]
+license = {file = "LICENSE.md"}
+readme = "README.md"
+
+[project.urls]
+Documentation = "https://pypsa-usa.readthedocs.io/en/latest/"
+Issues = "https://github.com/PyPSA/pypsa-usa/issues"
+Source = "https://github.com/PyPSA/pypsa-usa"
 
 [project.optional-dependencies]
 dev = [
@@ -32,6 +41,14 @@ dev = [
     "sphinx-book-theme",
     "myst-parser",
 ]
+
+[tool.setuptools.package-dir]
+myproj = "workflow/scripts"
+
+[tool.black]
+target-version = ["py37"]
+line-length = 120
+skip-string-normalization = true
 
 [tool.ruff]
 line-length = 110
