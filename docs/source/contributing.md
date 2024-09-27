@@ -75,7 +75,7 @@ copy of the code under your account on the repository service.
 - Create a new branch with a name in the form of `issue-###` where `###` is
 the auto assigned issue number from GitHub.
 
-    ```bash
+    ```console
     ~/repositories/pypsa-usa $ git checkout -b issue-###
     ```
 
@@ -87,7 +87,7 @@ to new functions, modules and classes.
 
 - When you’re done editing:
 
-    ```bash
+    ```console
     ~/repositories/pypsa-usa $ git add <MODIFIED FILES>
     ~/repositories/pypsa-usa $ git commit -m 'descripitve commit message'
     ~/repositories/pypsa-usa $ git push
@@ -99,7 +99,7 @@ to new functions, modules and classes.
 
 - If everything works fine, push your local branch to your fork with:
 
-    ```bash
+    ```console
     git push -u origin my-feature
     ```
 
@@ -124,19 +124,19 @@ extensions
 When working on documentation changes, first install the required dependencies
 in your environment
 
-```bash
+```console
 ~/pypsa-usa $ pip install sphinx sphinx-book-theme myst-parser
 ```
 
 Then compile the documentation on your local machine
 
-```bash
+```console
 ~/pypsa-usa $ cd docs && make html && cd ..
 ```
 
 And use Python's built-in web server for a preview in your web browser
 (`http://localhost:8000`)
 
-```bash
+```console
 ~/pypsa-usa $ python3 -m http.server --directory 'docs/build/html'
 ```

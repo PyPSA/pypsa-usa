@@ -1,0 +1,83 @@
+
+
+[project]
+name = "PyPSA-USA"
+dynamic = ["version"]
+authors = [
+    { name = "Kamran Tehranchi", email = "ktehranchi@stanford.edu" },
+    { name = "Trevor Barnes", email = "trevor_barnes@sfu.ca" },
+]
+description = "PyPSA-USA"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: MIT License",
+    "Topic :: Energy Systems Modeling",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: OS Independent",
+]
+
+[project.optional-dependencies]
+dev = [
+    "bump2version",
+    "ipython",
+    "pudb",
+    "mypy~=1.11.0",
+    "pre-commit",
+    "ruff~=0.5.2",
+    "types-PyYAML",
+    "sphinx-autobuild",
+    "sphinx",
+    "sphinx-book-theme",
+    "myst-parser",
+]
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+exclude = [
+    ".eggs",
+    ".git",
+    ".git-rewrite",
+    ".hg",
+    ".ipynb_checkpoints",
+    ".mypy_cache",
+    ".ruff_cache",
+    ".svn",
+    ".tox",
+    ".venv",
+    ".vscode",
+    "__pypackages__",
+    "_build",
+    "buck-out",
+    "build",
+    "dist",
+    "site-packages",
+    "venv",
+]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle
+    "TD",  # flake-8 todos
+    "PD",  # pandas vet
+    "RUF", # Ruff rules
+    "N",   # pep8
+    "F",   # pyflakes
+    "UP",  # pyupgrade
+    "D",   # pydocstyle
+    "C90", # Complex code
+]
+# Allow unused variables when underscore-prefixed.
+dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+extend-ignore = ['D105', 'D107', 'D205', 'D415']
+pydocstyle.convention = "numpy"
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+docstring-code-format = true
+docstring-code-line-length = "dynamic"
