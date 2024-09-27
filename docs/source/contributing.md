@@ -70,7 +70,23 @@ copy of the code under your account on the repository service.
     ~/repositories/pypsa-usa $
     ```
 
-### 3. Implement your changes
+### 3. Install developer dependencies
+
+If you plan on contributing to the respository, please install these packages into your activated mamba environment
+
+```console
+python -m pip install -e ".[dev]"
+```
+
+### 4. Install pre-commit hooks:
+
+Pre-commit hooks will format your code to match the styles used in PyPSA-USA.
+
+```console
+pre-commit install
+```
+
+### 5. Implement your changes
 
 - Create a new branch with a name in the form of `issue-###` where `###` is
 the auto assigned issue number from GitHub.
@@ -95,7 +111,7 @@ to new functions, modules and classes.
 
    to record your changes in [git](https://git-scm.com).
 
-### 4. Submit a Pull Request to the **`develop`** branch
+### 6. Submit a Pull Request to the **`develop`** branch
 
 - If everything works fine, push your local branch to your fork with:
 

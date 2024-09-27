@@ -40,18 +40,8 @@ mamba activate pypsa-usa
 
 You also have the option to use miniconda. Download [Miniconda](https://docs.conda.io/en/latest/miniconda.html) following their [instructions](https://docs.conda.io/en/latest/miniconda.html).
 
-
-### Step 3a: Developer Install (optional)
-
-If you plan on contributing to the respository, please also install these packages into your activated mamba environment
-
-```console
-python -m pip install -e ".[dev]"
-```
-
-#### Install pre-commit hooks:
-```console
-pre-commit install
+```{seealso}
+If you are planning to develop PyPSA-USA, please see our [contribution guidelines](./contributing.md#code-contributions) for installing additional dependencies
 ```
 
 ## Step 4: Install a Solver
