@@ -5,14 +5,13 @@ Aggregates network to substations and simplifies to a single voltage level.
 
 
 import logging
-import os
 from functools import reduce
 
 import geopandas as gpd
 import numpy as np
 import pandas as pd
 import pypsa
-from _helpers import configure_logging, export_network_for_gis_mapping, update_p_nom_max
+from _helpers import configure_logging, update_p_nom_max
 from cluster_network import cluster_regions, clustering_for_n_clusters
 from pypsa.clustering.spatial import get_clustering_from_busmap
 

@@ -37,10 +37,6 @@ Extendable generators are assigned a maximum capacity based on land-use constrai
 
 import logging
 import os
-import random
-from itertools import product
-from pathlib import Path
-from typing import Any, Dict, List, Union
 
 import constants as const
 import geopandas as gpd
@@ -51,13 +47,9 @@ import xarray as xr
 from _helpers import (
     configure_logging,
     export_network_for_gis_mapping,
-    local_to_utc,
     test_network_datatype_consistency,
     update_p_nom_max,
 )
-from scipy import sparse
-from shapely.geometry import Point
-from shapely.prepared import prep
 from sklearn.neighbors import BallTree
 
 idx = pd.IndexSlice
@@ -690,13 +682,9 @@ def apply_must_run_ratings(
     conv_plants = plants.query("carrier in @conventional_carriers").copy()
     conv_plants.index = "C" + conv_plants.index
 
-    conv_plants.loc[:, "ads_mustrun"] = (
-        conv_plants.ads_mustrun.infer_objects(
-            copy=False,
-        )
-        .astype(bool)
-        .fillna(False)
-    )
+    conv_plants.loc[:, "ads_mustrun"] = conv_plants.ads_mustrun.infer_objects(
+        copy=False,
+    ).fillna(False)
     conv_plants.loc[:, "minimum_load_pu"] = (
         conv_plants.minimum_load_mw / conv_plants.p_nom
     )
@@ -835,7 +823,6 @@ def apply_pudl_fuel_costs(
 def main(snakemake):
     params = snakemake.params
     interconnection = snakemake.wildcards["interconnect"]
-    planning_horizons = snakemake.params["planning_horizons"]
 
     n = pypsa.Network(snakemake.input.base_network)
 

@@ -61,3 +61,9 @@ repos:
   hooks:
   - id: black
   - id: black-jupyter
+
+- repo: https://github.com/pycqa/flake8
+  rev: 6.0.0
+  hooks:
+  - id: flake8
+    args: [--select=F841]    # F841 is the error code for unused variables

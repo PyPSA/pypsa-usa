@@ -33,6 +33,7 @@ dependencies:
 - progressbar2==4.3.2
 - matplotlib==3.8.0
 - plotly==5.17.0
+- pyomo==6.6.1
 - graphviz
 - cyipopt
 
@@ -62,3 +63,4 @@ dependencies:
   - gurobipy==11.0.3
   - highspy
   - duckdb==0.10.0
+  - flake8
