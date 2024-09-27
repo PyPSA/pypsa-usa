@@ -108,7 +108,7 @@ to new functions, modules and classes.
 
 - Communicate on the github Pull Request page to reconcile any changes to be made!
 
-## Documentation Improvements
+## Updating Documentation
 
 You can help improve PyPSA-USA docs by making them more readable and
 coherent, or by adding missing information and correcting mistakes.
@@ -121,22 +121,15 @@ code contribution. We use Markdown language with
 [MyST](https://myst-parser.readthedocs.io/en/latest/syntax/syntax.html)
 extensions
 
-When working on documentation changes, first install the required dependencies
-in your environment
+When working on documentation changes, ensure you have completed the developer installation instructions. Then compile the documentation on your local machine:
 
 ```console
-~/pypsa-usa $ pip install sphinx sphinx-book-theme myst-parser
-```
-
-Then compile the documentation on your local machine
-
-```console
-~/pypsa-usa $ cd docs && make html && cd ..
+cd docs && make html && cd ..
 ```
 
 And use Python's built-in web server for a preview in your web browser
 (`http://localhost:8000`)
 
 ```console
-~/pypsa-usa $ python3 -m http.server --directory 'docs/build/html'
+python3 -m http.server --directory 'docs/build/html'
 ```
