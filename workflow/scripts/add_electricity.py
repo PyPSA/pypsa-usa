@@ -571,12 +571,8 @@ def attach_battery_storage(
     Attaches Existing Battery Energy Storage Systems To the Network.
     """
     plants_filt = plants.query("carrier == 'battery' ")
-    plants_filt.index = (
-        plants_filt.index.astype(str) + "_" + plants_filt.generator_id.astype(str)
-    )
-    plants_filt.loc[:, "energy_storage_capacity_mwh"] = (
-        plants_filt.energy_storage_capacity_mwh.astype(float)
-    )
+    plants_filt.index = plants_filt.index.astype(str) + "_" + plants_filt.generator_id.astype(str)
+    plants_filt.loc[:, "energy_storage_capacity_mwh"] = plants_filt.energy_storage_capacity_mwh.astype(float)
     plants_filt = plants_filt.dropna(subset=["energy_storage_capacity_mwh"])
 
     logger.info(
@@ -676,9 +672,7 @@ def apply_must_run_ratings(
         copy=False,
     ).fillna(False)
 
-    conv_plants.loc[:, "minimum_load_pu"] = (
-        conv_plants.minimum_load_mw / conv_plants.p_nom
-    )
+    conv_plants.loc[:, "minimum_load_pu"] = conv_plants.minimum_load_mw / conv_plants.p_nom
     conv_plants.loc[:, "minimum_load_pu"] = (
         conv_plants.minimum_load_pu.clip(
             upper=np.minimum(conv_plants.summer_derate, conv_plants.winter_derate),
@@ -739,9 +733,7 @@ def attach_breakthrough_renewable_plants(
             p_nom = pd.concat([p_nom_be.max(axis=0), tech_plants["Pmax"]], axis=1).max(
                 axis=1,
             )
-            p_max_pu = (
-                (p_nom_be[p_nom.index] / p_nom).astype(float).fillna(0)
-            )  # some values remain 0
+            p_max_pu = (p_nom_be[p_nom.index] / p_nom).astype(float).fillna(0)  # some values remain 0
         else:
             p_nom = tech_plants.Pmax
             p_max_pu = p_nom_be[tech_plants.index] / p_nom

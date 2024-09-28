@@ -39,10 +39,8 @@ rule plot_validation_figures:
         demand_ge=DATA + "GridEmissions/EIA_DMD_2018_2024.csv",
         ge_all=DATA + "GridEmissions/EIA_GridEmissions_all_2018_2024.csv",
         ge_co2=DATA + "GridEmissions/GridEmissions_co2_2018_2024.csv",
-        regions_onshore=RESOURCES
-        + "{interconnect}/Geospatial/regions_onshore_s{simpl}_{clusters}.geojson",
-        regions_offshore=RESOURCES
-        + "{interconnect}/Geospatial/regions_offshore_s{simpl}_{clusters}.geojson",
+        regions_onshore=RESOURCES + "{interconnect}/Geospatial/regions_onshore_s{simpl}_{clusters}.geojson",
+        regions_offshore=RESOURCES + "{interconnect}/Geospatial/regions_offshore_s{simpl}_{clusters}.geojson",
         historical_generation="repo_data/annual_generation_state.xls",
     output:
         **{

@@ -653,11 +653,8 @@ def set_parameters(plants: pd.DataFrame):
     Sets generator naming schemes, updates parameter names, and imputes missing
     data.
     """
-    plants = plants[
-        plants.nerc_region.isin(["WECC", "TRE", "MRO", "SERC", "RFC", "NPCC"])
-    ]
+    plants = plants[plants.nerc_region.isin(["WECC", "TRE", "MRO", "SERC", "RFC", "NPCC"])]
     plants = plants.rename(
-
         {
             "fuel_cost_per_mwh_source": "fuel_cost_source",
             "unit_heat_rate_mmbtu_per_mwh_source": "heat_rate_source",
@@ -752,11 +749,7 @@ def filter_outliers_iqr_grouped(df, group_column, value_column):
         upper_bound = Q3 + 1.5 * IQR
         return group[(group[value_column] >= lower_bound) & (group[value_column] <= upper_bound)]
 
-    return (
-        df.groupby(group_column)[df.columns]
-        .apply(filter_outliers)
-        .reset_index(drop=True)
-    )
+    return df.groupby(group_column)[df.columns].apply(filter_outliers).reset_index(drop=True)
 
 
 def filter_outliers_zscore(temporal_data, target_field_name):

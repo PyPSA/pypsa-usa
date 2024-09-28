@@ -421,7 +421,8 @@ if __name__ == "__main__":
             pivot_atb["pypsa-name"] == f"{x}hr_battery_storage",
             "wacc_real",
         ] = pivot_atb.loc[
-            pivot_atb["pypsa-name"] == "solar", "wacc_real"
+            pivot_atb["pypsa-name"] == "solar",
+            "wacc_real",
         ].values[0]
         pivot_atb.loc[
             pivot_atb["pypsa-name"] == f"{x}hr_battery_storage",

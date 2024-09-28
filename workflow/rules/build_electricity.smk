@@ -66,9 +66,7 @@ rule build_base_network:
 
 rule build_bus_regions:
     params:
-        topological_boundaries=config_provider(
-            "model_topology", "topological_boundaries"
-        ),
+        topological_boundaries=config_provider("model_topology", "topological_boundaries"),
         focus_weights=config["focus_weights"],
     input:
         country_shapes=RESOURCES + "{interconnect}/Geospatial/country_shapes.geojson",
@@ -82,8 +80,7 @@ rule build_bus_regions:
         sub=RESOURCES + "{interconnect}/sub.csv",
     output:
         regions_onshore=RESOURCES + "{interconnect}/Geospatial/regions_onshore.geojson",
-        regions_offshore=RESOURCES
-        + "{interconnect}/Geospatial/regions_offshore.geojson",
+        regions_offshore=RESOURCES + "{interconnect}/Geospatial/regions_offshore.geojson",
     log:
         "logs/build_bus_regions/{interconnect}.log",
     threads: 1
@@ -124,10 +121,8 @@ if config["enable"].get("build_cutout", False):
             cutouts=config["atlite"]["cutouts"],
             interconnects=config["atlite"]["interconnects"],
         input:
-            regions_onshore=RESOURCES
-            + "{interconnect}/Geospatial/country_shapes.geojson",
-            regions_offshore=RESOURCES
-            + "{interconnect}/Geospatial/offshore_shapes.geojson",
+            regions_onshore=RESOURCES + "{interconnect}/Geospatial/country_shapes.geojson",
+            regions_offshore=RESOURCES + "{interconnect}/Geospatial/offshore_shapes.geojson",
         output:
             protected("cutouts/" + CDIR + "{interconnect}_{cutout}.nc"),
         log:
@@ -558,8 +553,7 @@ rule add_electricity:
         tech_costs=RESOURCES + f"costs/costs_{config['scenario']['planning_horizons'][0]}.csv",
         # attach first horizon costs
         regions_onshore=RESOURCES + "{interconnect}/Geospatial/regions_onshore.geojson",
-        regions_offshore=RESOURCES
-        + "{interconnect}/Geospatial/regions_offshore.geojson",
+        regions_offshore=RESOURCES + "{interconnect}/Geospatial/regions_offshore.geojson",
         powerplants=RESOURCES + "powerplants.csv",
         plants_eia="repo_data/plants/plants_merged.csv",
         plants_breakthrough=DATA + "breakthrough_network/base_grid/plant.csv",
@@ -586,22 +580,17 @@ rule simplify_network:
         focus_weights=config_provider("focus_weights", default=False),
         simplify_network=config_provider("clustering", "simplify_network"),
         planning_horizons=config_provider("scenario", "planning_horizons"),
-        topological_boundaries=config_provider(
-            "model_topology", "topological_boundaries"
-        ),
+        topological_boundaries=config_provider("model_topology", "topological_boundaries"),
     input:
         bus2sub=RESOURCES + "{interconnect}/bus2sub.csv",
         sub=RESOURCES + "{interconnect}/sub.csv",
         network=RESOURCES + "{interconnect}/elec_base_network_l_pp.nc",
         regions_onshore=RESOURCES + "{interconnect}/Geospatial/regions_onshore.geojson",
-        regions_offshore=RESOURCES
-        + "{interconnect}/Geospatial/regions_offshore.geojson",
+        regions_offshore=RESOURCES + "{interconnect}/Geospatial/regions_offshore.geojson",
     output:
         network=RESOURCES + "{interconnect}/elec_s{simpl}.nc",
-        regions_onshore=RESOURCES
-        + "{interconnect}/Geospatial/regions_onshore_s{simpl}.geojson",
-        regions_offshore=RESOURCES
-        + "{interconnect}/Geospatial/regions_offshore_s{simpl}.geojson",
+        regions_onshore=RESOURCES + "{interconnect}/Geospatial/regions_onshore_s{simpl}.geojson",
+        regions_offshore=RESOURCES + "{interconnect}/Geospatial/regions_offshore_s{simpl}.geojson",
     log:
         "logs/simplify_network/{interconnect}/elec_s{simpl}.log",
     threads: 1
@@ -624,32 +613,25 @@ rule cluster_network:
         costs=config_provider("costs"),
         planning_horizons=config_provider("scenario", "planning_horizons"),
         transmission_network=config_provider("model_topology", "transmission_network"),
-        topological_boundaries=config_provider(
-            "model_topology", "topological_boundaries"
-        ),
+        topological_boundaries=config_provider("model_topology", "topological_boundaries"),
     input:
         network=RESOURCES + "{interconnect}/elec_s{simpl}.nc",
-        regions_onshore=RESOURCES
-        + "{interconnect}/Geospatial/regions_onshore_s{simpl}.geojson",
-        regions_offshore=RESOURCES
-        + "{interconnect}/Geospatial/regions_offshore_s{simpl}.geojson",
+        regions_onshore=RESOURCES + "{interconnect}/Geospatial/regions_onshore_s{simpl}.geojson",
+        regions_offshore=RESOURCES + "{interconnect}/Geospatial/regions_offshore_s{simpl}.geojson",
         custom_busmap=(
             DATA + "{interconnect}/custom_busmap_{clusters}.csv"
             if config["enable"].get("custom_busmap", False)
             else []
         ),
-        tech_costs=RESOURCES
-        + f"costs/costs_{config['scenario']['planning_horizons'][0]}.csv",
+        tech_costs=RESOURCES + f"costs/costs_{config['scenario']['planning_horizons'][0]}.csv",
         itl_ba="repo_data/ReEDS_Constraints/transmission/transmission_capacity_init_AC_ba_NARIS2024.csv",
         itl_county="repo_data/ReEDS_Constraints/transmission/transmission_capacity_init_AC_county_NARIS2024.csv",
         itl_costs_ba="repo_data/ReEDS_Constraints/transmission/transmission_distance_cost_500kVdc_ba.csv",
         itl_costs_county="repo_data/ReEDS_Constraints/transmission/transmission_distance_cost_500kVdc_ba.csv",
     output:
         network=RESOURCES + "{interconnect}/elec_s{simpl}_c{clusters}.nc",
-        regions_onshore=RESOURCES
-        + "{interconnect}/Geospatial/regions_onshore_s{simpl}_{clusters}.geojson",
-        regions_offshore=RESOURCES
-        + "{interconnect}/Geospatial/regions_offshore_s{simpl}_{clusters}.geojson",
+        regions_onshore=RESOURCES + "{interconnect}/Geospatial/regions_onshore_s{simpl}_{clusters}.geojson",
+        regions_offshore=RESOURCES + "{interconnect}/Geospatial/regions_offshore_s{simpl}_{clusters}.geojson",
         busmap=RESOURCES + "{interconnect}/busmap_s{simpl}_{clusters}.csv",
         linemap=RESOURCES + "{interconnect}/linemap_s{simpl}_{clusters}.csv",
     log:
@@ -678,8 +660,7 @@ rule add_extra_components:
             RESOURCES + "costs/costs_{year}.csv",
             year=config["scenario"]["planning_horizons"],
         ),
-        regions_onshore=RESOURCES
-        + "{interconnect}/Geospatial/regions_onshore_s{simpl}_{clusters}.geojson",
+        regions_onshore=RESOURCES + "{interconnect}/Geospatial/regions_onshore_s{simpl}_{clusters}.geojson",
     params:
         retirement=config["electricity"].get("retirement", "technical"),
     output:

@@ -448,7 +448,8 @@ for sample_num in range(0, num_samples):
 
         if i % 24 != 0:
             ratio_samples.loc[i, ratio_samples.columns.str.contains("daily")] = ratio_samples.loc[
-                i - 1, ratio_samples.columns.str.contains("daily")
+                i - 1,
+                ratio_samples.columns.str.contains("daily"),
             ]
             epsilon_samples.loc[i, epsilon_samples.columns.str.contains("daily")] = epsilon_samples.loc[
                 i - 1,

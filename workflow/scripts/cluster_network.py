@@ -127,7 +127,8 @@ def weighting_for_country(n, x):
     gen = generators.loc[generators.carrier_base.isin(conv_carriers)].groupby(
         "bus",
     ).p_nom.sum().reindex(
-        n.buses.index, fill_value=0.0
+        n.buses.index,
+        fill_value=0.0,
     ) + n.storage_units.loc[n.storage_units.carrier.isin(conv_carriers)].groupby(
         "bus",
     ).p_nom.sum().reindex(
@@ -426,7 +427,6 @@ def convert_to_transport(clustering, itl_fn, itl_cost_fn, topological_boundaries
         itls.r.isin(clustering.network.buses[f"{topological_boundaries}"])
         & itls.rr.isin(clustering.network.buses[f"{topological_boundaries}"])
     ]
-
 
     itl_cost = pd.read_csv(itl_cost_fn)
     itl_cost["interface"] = itl_cost.r + "||" + itl_cost.rr

@@ -619,7 +619,6 @@ def plot_capacity_factor_heatmap(n: pypsa.Network, save: str, **wildcards) -> No
             .pivot(index="month", columns="hour", values="p_max_pu")
             .astype(float)
             .fillna(0)
-
         )
         sns.heatmap(pivot_table, ax=axes[i], cmap="viridis")
         axes[i].set_title(carrier)

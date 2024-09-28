@@ -303,15 +303,10 @@ def create_historic_region_data(
         },
     }
 
-    topological_boundaries = snakemake.config["model_topology"][
-        "topological_boundaries"
-    ]
+    topological_boundaries = snakemake.config["model_topology"]["topological_boundaries"]
     regions = (
-        region_mapper[topological_boundaries][region]
-        if region in region_mapper[topological_boundaries]
-        else [region]
+        region_mapper[topological_boundaries][region] if region in region_mapper[topological_boundaries] else [region]
     )
-
 
     historic_region = historic_all_ba.loc[regions].groupby(level=1).sum()
 
@@ -663,7 +658,7 @@ def plot_ba_emissions_historical_bar(
             region,
             emissions=True,
         ).sum(
-            axis=0
+            axis=0,
         )["Net Generation"]
         region_em = region_em.sum() / 1e9
         historical.loc[region] = region_em
@@ -676,21 +671,14 @@ def plot_ba_emissions_historical_bar(
     )
 
     if snakemake.config["model_topology"]["topological_boundaries"] == "balancing_area":
-        optimized.loc["CISO"] = optimized.loc[
-            ["CISO-PGAE", "CISO-SCE", "CISO-SDGE", "CISO-VEA"]
-        ].sum()
+        optimized.loc["CISO"] = optimized.loc[["CISO-PGAE", "CISO-SCE", "CISO-SDGE", "CISO-VEA"]].sum()
 
         optimized.drop(
             index=["CISO-PGAE", "CISO-SCE", "CISO-SDGE", "CISO-VEA"],
             inplace=True,
         )
     elif snakemake.config["model_topology"]["topological_boundaries"] == "reeds_zone":
-        region_mapper = (
-            n.buses[["country", "reeds_ba"]]
-            .drop_duplicates()
-            .set_index("country")["reeds_ba"]
-            .to_dict()
-        )
+        region_mapper = n.buses[["country", "reeds_ba"]].drop_duplicates().set_index("country")["reeds_ba"].to_dict()
 
         optimized["region"] = optimized.index.map(region_mapper)
         optimized = optimized.groupby("region").sum()

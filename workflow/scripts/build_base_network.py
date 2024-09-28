@@ -668,21 +668,12 @@ def main(snakemake):
     # Filter Network to Only Specified Regions
     if model_topology is not None:
         for region_type in model_topology:
-            rm_buses = n.buses.loc[
-                ~(n.buses[f"{region_type}"].isin(model_topology[region_type]))
-            ]
-            rm_lines = n.lines.loc[
-                (n.lines.bus0.isin(rm_buses.index))
-                | (n.lines.bus1.isin(rm_buses.index))
-            ]
+            rm_buses = n.buses.loc[~(n.buses[f"{region_type}"].isin(model_topology[region_type]))]
+            rm_lines = n.lines.loc[(n.lines.bus0.isin(rm_buses.index)) | (n.lines.bus1.isin(rm_buses.index))]
             rm_transformers = n.transformers.loc[
-                (n.transformers.bus0.isin(rm_buses.index))
-                | (n.transformers.bus1.isin(rm_buses.index))
+                (n.transformers.bus0.isin(rm_buses.index)) | (n.transformers.bus1.isin(rm_buses.index))
             ]
-            rm_links = n.links.loc[
-                (n.links.bus0.isin(rm_buses.index))
-                | (n.links.bus1.isin(rm_buses.index))
-            ]
+            rm_links = n.links.loc[(n.links.bus0.isin(rm_buses.index)) | (n.links.bus1.isin(rm_buses.index))]
             n.mremove("Line", rm_lines.index.tolist())
             n.mremove("Transformer", rm_transformers.index.tolist())
             n.mremove("Link", rm_links.index.tolist())

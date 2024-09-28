@@ -298,10 +298,7 @@ def get_fuel_costs(n: pypsa.Network) -> pd.DataFrame:
     marginal_costs = marginal_costs[marginal_costs.index.map(n.generators.carrier).isin(list(fixed_voms))]
     voms = pd.Series(
         index=marginal_costs.index,
-        data=marginal_costs.index.map(n.generators.carrier)
-        .map(fixed_voms)
-        .astype(float)
-        .fillna(0),
+        data=marginal_costs.index.map(n.generators.carrier).map(fixed_voms).astype(float).fillna(0),
     ).astype(float)
     marginal_costs = marginal_costs.subtract(voms, axis=0)
 

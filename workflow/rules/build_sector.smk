@@ -113,13 +113,8 @@ rule build_temperature_profiles:
         snapshots=config["snapshots"],
     input:
         pop_layout=RESOURCES + "{interconnect}/pop_layout_{scope}.nc",
-        regions_onshore=RESOURCES
-        + "{interconnect}/Geospatial/regions_onshore_s{simpl}_{clusters}.geojson",
-        cutout="cutouts/"
-        + CDIR
-        + "{interconnect}_"
-        + config["atlite"]["default_cutout"]
-        + ".nc",
+        regions_onshore=RESOURCES + "{interconnect}/Geospatial/regions_onshore_s{simpl}_{clusters}.geojson",
+        cutout="cutouts/" + CDIR + "{interconnect}_" + config["atlite"]["default_cutout"] + ".nc",
     output:
         # temp_soil = RESOURCES + "temp_soil_{scope}_elec_s{simpl}_{clusters}.nc",
         # temp_air = RESOURCES + "temp_air_{scope}_elec_s{simpl}_{clusters}.nc",
@@ -169,13 +164,8 @@ rule build_simplified_population_layouts:
         pop_layout_urban=RESOURCES + "{interconnect}/pop_layout_urban.nc",
         pop_layout_rural=RESOURCES + "{interconnect}/pop_layout_rural.nc",
         # regions_onshore=RESOURCES + "regions_onshore_elec_s{simpl}.geojson",
-        regions_onshore=RESOURCES
-        + "{interconnect}/Geospatial/regions_onshore_s{simpl}.geojson",
-        cutout="cutouts/"
-        + CDIR
-        + "{interconnect}_"
-        + config["atlite"]["default_cutout"]
-        + ".nc",
+        regions_onshore=RESOURCES + "{interconnect}/Geospatial/regions_onshore_s{simpl}.geojson",
+        cutout="cutouts/" + CDIR + "{interconnect}_" + config["atlite"]["default_cutout"] + ".nc",
     output:
         # clustered_pop_layout=RESOURCES + "pop_layout_elec_s{simpl}.csv",
         clustered_pop_layout=RESOURCES + "{interconnect}/pop_layout_elec_s.csv",
@@ -198,13 +188,8 @@ rule build_clustered_population_layouts:
         pop_layout_total=RESOURCES + "{interconnect}/pop_layout_total.nc",
         pop_layout_urban=RESOURCES + "{interconnect}/pop_layout_urban.nc",
         pop_layout_rural=RESOURCES + "{interconnect}/pop_layout_rural.nc",
-        regions_onshore=RESOURCES
-        + "{interconnect}/Geospatial/regions_onshore_s{simpl}_{clusters}.geojson",
-        cutout="cutouts/"
-        + CDIR
-        + "{interconnect}_"
-        + config["atlite"]["default_cutout"]
-        + ".nc",
+        regions_onshore=RESOURCES + "{interconnect}/Geospatial/regions_onshore_s{simpl}_{clusters}.geojson",
+        cutout="cutouts/" + CDIR + "{interconnect}_" + config["atlite"]["default_cutout"] + ".nc",
     output:
         clustered_pop_layout=RESOURCES + "{interconnect}/pop_layout_elec_s{simpl}_c{clusters}.csv",
     log:
@@ -273,13 +258,8 @@ rule build_heat_demands:
         snapshots=config["snapshots"],
     input:
         pop_layout=RESOURCES + "{interconnect}/pop_layout_{scope}.nc",
-        regions_onshore=RESOURCES
-        + "{interconnect}/Geospatial/regions_onshore_s_{clusters}.geojson",
-        cutout="cutouts/"
-        + CDIR
-        + "{interconnect}_"
-        + config["atlite"]["default_cutout"]
-        + ".nc",
+        regions_onshore=RESOURCES + "{interconnect}/Geospatial/regions_onshore_s_{clusters}.geojson",
+        cutout="cutouts/" + CDIR + "{interconnect}_" + config["atlite"]["default_cutout"] + ".nc",
     output:
         heat_demand=RESOURCES + "{interconnect}/heat_demand_{scope}_elec_s_{clusters}.nc",
     resources:

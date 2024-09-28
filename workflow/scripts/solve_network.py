@@ -479,7 +479,8 @@ def add_interface_limits(n, sns, config):
             line_flows = n.model["Line-s"].loc[:, interface_lines_b1.index].sum(
                 dims="Line",
             ) - n.model["Line-s"].loc[
-                :, interface_lines_b0.index
+                :,
+                interface_lines_b0.index,
             ].sum(dims="Line")
         else:
             line_flows = 0.0
@@ -493,7 +494,8 @@ def add_interface_limits(n, sns, config):
             link_flows = n.model["Link-p"].loc[:, interface_links_b1.index].sum(
                 dims="Link",
             ) - n.model["Link-p"].loc[
-                :, interface_links_b0.index
+                :,
+                interface_links_b0.index,
             ].sum(dims="Link")
             lhs += link_flows
 
