@@ -157,9 +157,7 @@ def aggregate_to_substations(
     network_s.buses["x"] = substations.x
     network_s.buses["y"] = substations.y
     network_s.buses["substation_lv"] = True
-    network_s.buses["country"] = (
-        zone  # country field used bc pypsa-eur aggregates based on country boundary
-    )
+    network_s.buses["country"] = zone  # country field used bc pypsa-eur aggregates based on country boundary
     network_s.lines["type"] = np.nan
 
     if aggregation_zones != "reeds_zone":
@@ -221,9 +219,7 @@ if __name__ == "__main__":
     solver_name = snakemake.config["solving"]["solver"]["name"]
 
     voltage_level = snakemake.config["electricity"]["voltage_simplified"]
-    aggregation_zones = snakemake.config["clustering"]["cluster_network"][
-        "aggregation_zones"
-    ]
+    aggregation_zones = snakemake.config["clustering"]["cluster_network"]["aggregation_zones"]
 
     n = pypsa.Network(snakemake.input.network)
 

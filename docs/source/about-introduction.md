@@ -30,7 +30,7 @@ The diagram below illustrates the workflow of PyPSA-USA, highlighting how the da
 
 PyPSA-USA is organized to facilitate easy navigation and efficient execution. Below is the folder structure of the project. Each folder serves a specific purpose, from environment setup to data processing and storage. After running the Snakemake file for the first time, your directory will be built and populated with the necessary data files.
 
-```bash
+```console
 ├── .gitignore
 ├── README.md
 ├── LICENSE.md

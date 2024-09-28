@@ -98,9 +98,7 @@ def sanitize_carriers(n, config):
 
     carrier_i = n.carriers.index
     nice_names = (
-        pd.Series(config["plotting"]["nice_names"])
-        .reindex(carrier_i)
-        .fillna(carrier_i.to_series().str.title())
+        pd.Series(config["plotting"]["nice_names"]).reindex(carrier_i).fillna(carrier_i.to_series().str.title())
     )
     n.carriers["nice_name"] = n.carriers.nice_name.where(
         n.carriers.nice_name != "",
@@ -122,12 +120,7 @@ def add_co2_emissions(n, costs, carriers):
     if any("CCS" in carrier for carrier in carriers):
         ccs_factor = (
             1
-            - pd.Series(carriers, index=carriers)
-            .str.split("-")
-            .str[1]
-            .str.replace("CCS", "")
-            .fillna(0)
-            .astype(int)
+            - pd.Series(carriers, index=carriers).str.split("-").str[1].str.replace("CCS", "").fillna(0).astype(int)
             / 100
         )
         n.carriers.loc[ccs_factor.index, "co2_emissions"] *= ccs_factor
@@ -166,9 +159,7 @@ def update_capital_costs(
     bus_state_mapper = n.buses.to_dict()["state"]
     gen = n.generators[n.generators.carrier == carrier].copy()
     gen["state"] = gen.bus.map(bus_state_mapper)
-    gen = gen[
-        gen["state"].isin(multiplier.index)
-    ]  # drops any regions that do not have cost multipliers
+    gen = gen[gen["state"].isin(multiplier.index)]  # drops any regions that do not have cost multipliers
 
     # log any states that do not have multipliers attached
     missed = gen[~gen["state"].isin(multiplier.index)]
@@ -177,8 +168,7 @@ def update_capital_costs(
 
     # apply multiplier to annualized capital investment cost
     gen["annualized_capex_per_mw"] = gen.apply(
-        lambda x: costs.at[carrier, "annualized_capex_per_mw"]
-        * multiplier.at[x["state"], "Location Variation"],
+        lambda x: costs.at[carrier, "annualized_capex_per_mw"] * multiplier.at[x["state"], "Location Variation"],
         axis=1,
     )
 
@@ -249,9 +239,7 @@ def update_transmission_costs(n, costs, length_factor=1.0):
     # TODO: line length factor of lines is applied to lines and links.
     # Separate the function to distinguish
     n.lines["capital_cost"] = (
-        n.lines["length"]
-        * length_factor
-        * costs.at["HVAC overhead", "annualized_capex_per_mw_km"]
+        n.lines["length"] * length_factor * costs.at["HVAC overhead", "annualized_capex_per_mw_km"]
     )
 
     if n.links.empty:
@@ -268,10 +256,8 @@ def update_transmission_costs(n, costs, length_factor=1.0):
         n.links.loc[dc_b, "length"]
         * length_factor
         * (
-            (1.0 - n.links.loc[dc_b, "underwater_fraction"])
-            * costs.at["HVDC overhead", "annualized_capex_per_mw_km"]
-            + n.links.loc[dc_b, "underwater_fraction"]
-            * costs.at["HVDC submarine", "annualized_capex_per_mw_km"]
+            (1.0 - n.links.loc[dc_b, "underwater_fraction"]) * costs.at["HVDC overhead", "annualized_capex_per_mw_km"]
+            + n.links.loc[dc_b, "underwater_fraction"] * costs.at["HVDC submarine", "annualized_capex_per_mw_km"]
         )
         + costs.at["HVDC inverter pair", "annualized_capex_per_mw"]
     )
@@ -290,14 +276,10 @@ def match_plant_to_bus(n, plants):
     # Query the BallTree on each feature from 'appart' to find the distance
     # to the nearest 'pharma' and its id
     plants_matched["distance_nearest"], plants_matched["id_nearest"] = tree.query(
-        plants_matched[
-            ["longitude", "latitude"]
-        ].values,  # The input array for the query
+        plants_matched[["longitude", "latitude"]].values,  # The input array for the query
         k=1,  # The number of nearest neighbors
     )
-    plants_matched.bus_assignment = (
-        buses.reset_index().iloc[plants_matched.id_nearest].Bus.values
-    )
+    plants_matched.bus_assignment = buses.reset_index().iloc[plants_matched.id_nearest].Bus.values
     plants_matched.drop(columns=["id_nearest"], inplace=True)
 
     return plants_matched
@@ -322,23 +304,13 @@ def attach_renewable_capacities_to_atlite(
             n.buses.sub_id,
         )
         caps_per_bus = (
-            plants_filt[["sub_assignment", "p_nom"]]
-            .groupby("sub_assignment")
-            .sum()
-            .p_nom
+            plants_filt[["sub_assignment", "p_nom"]].groupby("sub_assignment").sum().p_nom
         )  # namplate capacity per sub_id
 
-        if (
-            caps_per_bus[~caps_per_bus.index.isin(generators_tech.sub_assignment)].sum()
-            > 0
-        ):
+        if caps_per_bus[~caps_per_bus.index.isin(generators_tech.sub_assignment)].sum() > 0:
             p_all = plants_filt[["sub_assignment", "p_nom", "latitude", "longitude"]]
-            missing_plants = p_all[
-                ~p_all.sub_assignment.isin(generators_tech.sub_assignment)
-            ]
-            missing_capacity = caps_per_bus[
-                ~caps_per_bus.index.isin(generators_tech.sub_assignment)
-            ].sum()
+            missing_plants = p_all[~p_all.sub_assignment.isin(generators_tech.sub_assignment)]
+            missing_capacity = caps_per_bus[~caps_per_bus.index.isin(generators_tech.sub_assignment)].sum()
             # missing_plants.to_csv(f"missing_{tech}_plants.csv",)
 
             logger.info(
@@ -370,8 +342,7 @@ def attach_conventional_generators(
 ):
     carriers = [
         carrier
-        for carrier in set(conventional_carriers)
-        | set(extendable_carriers["Generator"])
+        for carrier in set(conventional_carriers) | set(extendable_carriers["Generator"])
         if carrier not in renewable_carriers
     ]
     add_missing_carriers(n, carriers)
@@ -490,9 +461,7 @@ def attach_wind_and_solar(
                 .rename(columns={"Bus": "bus_id"})
                 .drop_duplicates(subset="sub_id")
             )
-            bus_list = (
-                ds.bus.to_dataframe("sub_id").merge(bus2sub).bus_id.astype(str).values
-            )
+            bus_list = ds.bus.to_dataframe("sub_id").merge(bus2sub).bus_id.astype(str).values
             p_nom_max_bus = (
                 ds["p_nom_max"]
                 .to_dataframe()
@@ -565,12 +534,8 @@ def attach_battery_storage(
     Attaches Existing Battery Energy Storage Systems To the Network.
     """
     plants_filt = plants.query("carrier == 'battery' ")
-    plants_filt.index = (
-        plants_filt.index.astype(str) + "_" + plants_filt.generator_id.astype(str)
-    )
-    plants_filt.loc[:, "energy_storage_capacity_mwh"] = (
-        plants_filt.energy_storage_capacity_mwh.astype(float)
-    )
+    plants_filt.index = plants_filt.index.astype(str) + "_" + plants_filt.generator_id.astype(str)
+    plants_filt.loc[:, "energy_storage_capacity_mwh"] = plants_filt.energy_storage_capacity_mwh.astype(float)
     plants_filt.dropna(subset=["energy_storage_capacity_mwh"], inplace=True)
 
     logger.info(
@@ -688,17 +653,13 @@ def apply_must_run_ratings(
     conv_plants.loc[:, "ads_mustrun"] = conv_plants.ads_mustrun.infer_objects(
         copy=False,
     ).fillna(False)
-    conv_plants.loc[:, "minimum_load_pu"] = (
-        conv_plants.minimum_load_mw / conv_plants.p_nom
-    )
+    conv_plants.loc[:, "minimum_load_pu"] = conv_plants.minimum_load_mw / conv_plants.p_nom
     conv_plants.loc[:, "minimum_load_pu"] = conv_plants.minimum_load_pu.clip(
         upper=np.minimum(conv_plants.summer_derate, conv_plants.winter_derate),
         lower=0,
     ).fillna(0)
     must_run = conv_plants.query("ads_mustrun == True")
-    n.generators.loc[must_run.index, "p_min_pu"] = (
-        must_run.minimum_load_pu.round(3) * 0.95
-    )
+    n.generators.loc[must_run.index, "p_min_pu"] = must_run.minimum_load_pu.round(3) * 0.95
 
 
 def clean_bus_data(n: pypsa.Network):
@@ -800,9 +761,7 @@ def apply_pudl_fuel_costs(
 
     # Drop any columns that are not in the network
     pudl_fuel_costs.columns = "C" + pudl_fuel_costs.columns
-    pudl_fuel_costs = pudl_fuel_costs[
-        [x for x in pudl_fuel_costs.columns if x in n.generators.index]
-    ]
+    pudl_fuel_costs = pudl_fuel_costs[[x for x in pudl_fuel_costs.columns if x in n.generators.index]]
 
     # drop any data that has been assigned at a coarser resolution
     n.generators_t["marginal_cost"] = n.generators_t["marginal_cost"][
@@ -834,9 +793,7 @@ def main(snakemake):
     renewable_carriers = set(params.renewable_carriers)
     extendable_carriers = params.extendable_carriers
     conventional_carriers = params.conventional_carriers
-    conventional_inputs = {
-        k: v for k, v in snakemake.input.items() if k.startswith("conventional_")
-    }
+    conventional_inputs = {k: v for k, v in snakemake.input.items() if k.startswith("conventional_")}
 
     plants = load_powerplants(
         snakemake.input["powerplants"],
@@ -967,11 +924,7 @@ def main(snakemake):
     # fix p_nom_min for extendable generators
     # The "- 0.001" is just to avoid numerical issues
     n.generators["p_nom_min"] = n.generators.apply(
-        lambda x: (
-            (x["p_nom"] - 0.001)
-            if (x["p_nom_extendable"] and x["p_nom_min"] == 0)
-            else x["p_nom_min"]
-        ),
+        lambda x: ((x["p_nom"] - 0.001) if (x["p_nom_extendable"] and x["p_nom_min"] == 0) else x["p_nom_min"]),
         axis=1,
     )
 

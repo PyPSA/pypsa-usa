@@ -112,9 +112,7 @@ if __name__ == "__main__":
     cutout_params["time"] = slice(*cutout_params.get("time", time))
 
     # geographical extent parameters
-    interconnect_params = snakemake.params.interconnects[
-        snakemake.wildcards.interconnect
-    ]
+    interconnect_params = snakemake.params.interconnects[snakemake.wildcards.interconnect]
 
     if {"x", "y", "bounds"}.isdisjoint(interconnect_params):
         # Determine the bounds from bus regions with a buffer of two grid cells

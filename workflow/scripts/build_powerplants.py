@@ -110,9 +110,7 @@ def load_pudl_data(pudl_fn: str, start_date: str, end_date: str):
 
 
 def set_non_conus(eia_data_operable):
-    eia_data_operable.loc[eia_data_operable.state.isin(["AK", "HI"]), "nerc_region"] = (
-        "non-conus"
-    )
+    eia_data_operable.loc[eia_data_operable.state.isin(["AK", "HI"]), "nerc_region"] = "non-conus"
     eia_data_operable.loc[
         eia_data_operable.state.isin(["AK", "HI"]),
         "balancing_authority_code",
@@ -129,12 +127,8 @@ def set_derates(plants):
         plants.ads_maxcapmw.fillna(np.inf),
     )
 
-    plants["summer_derate"] = 1 - (
-        (plants.p_nom - plants.derate_summer_capacity) / plants.p_nom
-    )
-    plants["winter_derate"] = 1 - (
-        (plants.p_nom - plants.derate_winter_capacity) / plants.p_nom
-    )
+    plants["summer_derate"] = 1 - ((plants.p_nom - plants.derate_summer_capacity) / plants.p_nom)
+    plants["winter_derate"] = 1 - ((plants.p_nom - plants.derate_winter_capacity) / plants.p_nom)
     plants.summer_derate = plants.summer_derate.clip(
         upper=1,
     ).clip(lower=0)
@@ -421,12 +415,7 @@ def standardize_col_names(columns, prefix="", suffix=""):
     Standardize column names by removing spaces, converting to lowercase,
     removing parentheses, and adding prefix and suffix.
     """
-    return [
-        prefix
-        + col.lower().replace(" ", "_").replace("(", "").replace(")", "")
-        + suffix
-        for col in columns
-    ]
+    return [prefix + col.lower().replace(" ", "_").replace("(", "").replace(")", "") + suffix for col in columns]
 
 
 def merge_ads_data(eia_data_operable):
@@ -510,11 +499,7 @@ def merge_ads_data(eia_data_operable):
     ads.columns
 
     ads_thermal_ioc["generator_name_alt"] = (
-        ads_thermal_ioc["generatorname"]
-        .str.replace(" ", "")
-        .str.lower()
-        .str.replace("_", "")
-        .str.replace("-", "")
+        ads_thermal_ioc["generatorname"].str.replace(" ", "").str.lower().str.replace("_", "").str.replace("-", "")
     )
     ads_thermal_ioc["generator_key"] = ads_thermal_ioc["generator_name_alt"].map(
         ads_name_key_dict,
@@ -669,9 +654,7 @@ def set_parameters(plants: pd.DataFrame):
     Sets generator naming schemes, updates parameter names, and imputes missing
     data.
     """
-    plants = plants[
-        plants.nerc_region.isin(["WECC", "TRE", "MRO", "SERC", "RFC", "NPCC"])
-    ]
+    plants = plants[plants.nerc_region.isin(["WECC", "TRE", "MRO", "SERC", "RFC", "NPCC"])]
 
     plants.rename(
         {
@@ -707,23 +690,16 @@ def set_parameters(plants: pd.DataFrame):
     )
 
     # Unit Commitment Parameters
-    plants["start_up_cost"] = (
-        plants.pop("ads_startup_cost_fixed$")
-        + plants.ads_startfuelmmbtu * plants.fuel_cost
-    )
+    plants["start_up_cost"] = plants.pop("ads_startup_cost_fixed$") + plants.ads_startfuelmmbtu * plants.fuel_cost
     plants["min_down_time"] = plants.pop("ads_minimumdowntimehr")
     plants["min_up_time"] = plants.pop("ads_minimumuptimehr")
 
     # Ramp Limit Parameters
-    plants["ramp_limit_up"] = (
-        plants.pop("ads_rampup_ratemw/minute") / plants.p_nom * 60
-    ).clip(
+    plants["ramp_limit_up"] = (plants.pop("ads_rampup_ratemw/minute") / plants.p_nom * 60).clip(
         lower=0,
         upper=1,
     )  # MW/min to p.u./hour
-    plants["ramp_limit_down"] = (
-        plants.pop("ads_rampdn_ratemw/minute") / plants.p_nom * 60
-    ).clip(
+    plants["ramp_limit_down"] = (plants.pop("ads_rampdn_ratemw/minute") / plants.p_nom * 60).clip(
         lower=0,
         upper=1,
     )  # MW/min to p.u./hour
@@ -753,12 +729,8 @@ def set_parameters(plants: pd.DataFrame):
         ["heat_rate"],
     )
 
-    plants["marginal_cost"] = (
-        plants.vom + plants.fuel_cost
-    )  # (MMBTu/MW) * (USD/MMBTu) = USD/MW
-    plants["efficiency"] = 1 / (
-        plants["heat_rate"] / 3.412
-    )  # MMBTu/MWh to MWh_electric/MWh_thermal
+    plants["marginal_cost"] = plants.vom + plants.fuel_cost  # (MMBTu/MW) * (USD/MMBTu) = USD/MW
+    plants["efficiency"] = 1 / (plants["heat_rate"] / 3.412)  # MMBTu/MWh to MWh_electric/MWh_thermal
 
     set_derates(plants)
 
@@ -778,9 +750,7 @@ def filter_outliers_iqr_grouped(df, group_column, value_column):
         IQR = Q3 - Q1
         lower_bound = Q1 - 1.5 * IQR
         upper_bound = Q3 + 1.5 * IQR
-        return group[
-            (group[value_column] >= lower_bound) & (group[value_column] <= upper_bound)
-        ]
+        return group[(group[value_column] >= lower_bound) & (group[value_column] <= upper_bound)]
 
     return df.groupby(group_column).apply(filter_outliers).reset_index(drop=True)
 
@@ -790,11 +760,7 @@ def filter_outliers_zscore(temporal_data, target_field_name):
     Filter outliers using Z-score.
     """
     # Calculate mean and standard deviation for each generator
-    stats = (
-        temporal_data.groupby(["generator_name"])[target_field_name]
-        .agg(["mean", "std"])
-        .reset_index()
-    )
+    stats = temporal_data.groupby(["generator_name"])[target_field_name].agg(["mean", "std"]).reset_index()
     stats["mean"] = stats["mean"].replace(np.inf, np.nan)
     stats.dropna(inplace=True)
 
@@ -807,9 +773,7 @@ def filter_outliers_zscore(temporal_data, target_field_name):
     )
 
     # Calculate the Z-score for each month's entry
-    temporal_stats["z_score"] = (
-        temporal_stats[target_field_name] - temporal_stats["mean"]
-    ) / temporal_stats["std"]
+    temporal_stats["z_score"] = (temporal_stats[target_field_name] - temporal_stats["mean"]) / temporal_stats["std"]
 
     # Filter out the outliers using Z-score
     threshold = 3
@@ -843,9 +807,7 @@ def merge_fc_hr_data(
 
     # Apply temporal average heat rates to plants dataframe
     temporal_average = (
-        filtered_temporal.groupby(["plant_id_eia", "generator_id"])[target_field_name]
-        .mean()
-        .reset_index()
+        filtered_temporal.groupby(["plant_id_eia", "generator_id"])[target_field_name].mean().reset_index()
     )
 
     if target_field_name in plants.columns:
@@ -864,12 +826,8 @@ def merge_fc_hr_data(
 
 def apply_cems_heat_rates(plants, crosswalk_fn, cems_fn):
     # Apply CEMS calculated heat rates
-    cems_hr = pd.read_excel(cems_fn)[
-        ["Facility ID", "Unit ID", "Heat Input (mmBtu/MWh)"]
-    ]
-    crosswalk = pd.read_csv(crosswalk_fn)[
-        ["CAMD_PLANT_ID", "CAMD_UNIT_ID", "EIA_PLANT_ID", "EIA_GENERATOR_ID"]
-    ]
+    cems_hr = pd.read_excel(cems_fn)[["Facility ID", "Unit ID", "Heat Input (mmBtu/MWh)"]]
+    crosswalk = pd.read_csv(crosswalk_fn)[["CAMD_PLANT_ID", "CAMD_UNIT_ID", "EIA_PLANT_ID", "EIA_GENERATOR_ID"]]
     cems_hr = pd.merge(
         cems_hr,
         crosswalk,
