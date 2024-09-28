@@ -20,10 +20,11 @@ scenario:
 
 # docs :
 model_topology:
-  transmission_network: 'tamu' # [reeds, tamu]
+  transmission_network: 'reeds' # [reeds, tamu]
   include: # mixed zone types not supported
-    reeds_zone: ['p8']
+    reeds_zone: ['p62']
     # reeds_state: ['CO']
+    # reeds_ba: ['ERCO']
 
 # docs :
 enable:
@@ -38,7 +39,7 @@ snapshots:
 # docs :
 electricity:
   conventional_carriers: [nuclear, oil, OCGT, CCGT, coal, geothermal, biomass, waste] # Choose the conventional plant types to include in network
-  renewable_carriers: [onwind, offwind, offwind_floating, solar, hydro] # Choose the renewable plant types to include in network
+  renewable_carriers: [onwind, solar, hydro] # Choose the renewable plant types to include in network
   voltage_simplified: 230 #Voltage level to simplify network to in rule "simplify network"
   co2limit: 1.4728e+9 # 0.8 * 1.841e+9
   co2limit_enable: false # For sector coupled studies
@@ -64,7 +65,7 @@ electricity:
     H2: 168
 
   extendable_carriers:
-    Generator: [solar, onwind, offwind, offwind_floating, OCGT, CCGT, coal, nuclear, coal-95CCS, CCGT-95CCS, SMR] #include CCGT-CCS
+    Generator: [solar, onwind, OCGT, CCGT, coal, nuclear, coal-95CCS, CCGT-95CCS, SMR] #include CCGT-CCS
     StorageUnit: [4hr_battery_storage, 8hr_battery_storage] # [Xhr-battery-storage (2-10 hours)]
     Store: []
     Link: [] 

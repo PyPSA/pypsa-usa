@@ -25,7 +25,6 @@ Creates Voronoi shapes for each bus representing both onshore and offshore regio
 
 
 import logging
-from functools import reduce
 
 import geopandas as gpd
 import numpy as np
@@ -107,26 +106,17 @@ def main(snakemake):
     bus2sub.index = bus2sub.index.astype(str)
     bus2sub = bus2sub.reset_index().drop_duplicates(subset="sub_id").set_index("sub_id")
 
-    gpd_countries = gpd.read_file(snakemake.input.country_shapes).set_index("name")
-    gpd_states = gpd.read_file(snakemake.input.state_shapes).set_index("name")
     gpd_counties = gpd.read_file(snakemake.input.county_shapes).set_index("GEOID")
-    gpd_ba_shapes = gpd.read_file(snakemake.input.ba_region_shapes).set_index("name")
     gpd_reeds = gpd.read_file(snakemake.input.reeds_shapes).set_index("name")
 
     match topological_boundaries:
-        case "country":
-            agg_region_shapes = gpd_countries
-        case "balancing_area":
-            agg_region_shapes = gpd_ba_shapes.geometry
-        case "state":
-            agg_region_shapes = gpd_states.geometry
         case "county":
             agg_region_shapes = gpd_counties.geometry
         case "reeds_zone":
             agg_region_shapes = gpd_reeds.geometry
         case _:
             raise ValueError(
-                "zonal_aggregation must be either balancing_area, country, reeds_id, or state",
+                "Valid values for `model_topology: zonal_aggregation:` are `reeds_zone` or `county`",
             )
 
     gpd_offshore_shapes = gpd.read_file(snakemake.input.offshore_shapes)

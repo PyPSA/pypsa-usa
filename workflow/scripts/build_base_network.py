@@ -742,7 +742,7 @@ def main(snakemake):
             )
             assert (
                 len(n.buses) > 0
-            ), "No buses remaining in network. Check your model_topology configuration settings."
+            ), "No buses remaining in network. Check your model_topology: inclusion:, you may be filtering the wrong zones for the selected interconnect"
 
     # Tests
     logger.info(test_network_datatype_consistency(n))
