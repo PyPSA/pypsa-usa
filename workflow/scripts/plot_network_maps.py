@@ -448,13 +448,7 @@ def plot_opt_capacity_map(
 
     bus_values = get_capacity_brownfield(n)
     bus_values = bus_values[bus_values.index.get_level_values("carrier").isin(carriers)]
-    bus_values = (
-        remove_sector_buses(bus_values)
-        .reset_index()
-        .groupby(by=["bus", "carrier"])
-        .sum()
-        .squeeze()
-    )
+    bus_values = remove_sector_buses(bus_values).reset_index().groupby(by=["bus", "carrier"]).sum().squeeze()
     line_values = n.lines.s_nom_opt
 
     # plot data
@@ -496,16 +490,8 @@ def plot_new_capacity_map(
     bus_pnom_opt = get_capacity_brownfield(n)
 
     bus_values = bus_pnom_opt - bus_pnom
-    bus_values = bus_values[
-        (bus_values > 0) & (bus_values.index.get_level_values(1).isin(carriers))
-    ]
-    bus_values = (
-        remove_sector_buses(bus_values)
-        .reset_index()
-        .groupby(by=["bus", "carrier"])
-        .sum()
-        .squeeze()
-    )
+    bus_values = bus_values[(bus_values > 0) & (bus_values.index.get_level_values(1).isin(carriers))]
+    bus_values = remove_sector_buses(bus_values).reset_index().groupby(by=["bus", "carrier"]).sum().squeeze()
 
     line_snom = n.lines.s_nom
     line_snom_opt = n.lines.s_nom_opt
@@ -585,9 +571,7 @@ def plot_renewable_potential(
     # only show renewables in legend
     fig.artists[-2].remove()  # remove line width legend
     fig.artists[-1].remove()  # remove existing colour legend
-    renew_carriers = n.carriers[
-        n.carriers.index.isin(["onwind", "offwind", "offwind_floating", "solar", "EGS"])
-    ]
+    renew_carriers = n.carriers[n.carriers.index.isin(["onwind", "offwind", "offwind_floating", "solar", "EGS"])]
     add_legend_patches(
         ax,
         renew_carriers.color,

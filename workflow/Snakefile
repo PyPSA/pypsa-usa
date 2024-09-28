@@ -128,8 +128,7 @@ def electricity_figures(wildcards):
         # maps
         figs.append(
             expand(
-                RESULTS
-                + "{interconnect}/figures/s{simpl}_cluster_{clusters}/l{ll}_{opts}_{sector}/maps/{figure}",
+                RESULTS + "{interconnect}/figures/s{simpl}_cluster_{clusters}/l{ll}_{opts}_{sector}/maps/{figure}",
                 **config["scenario"],
                 figure=FIGURES_MAPS,
             )
@@ -137,8 +136,7 @@ def electricity_figures(wildcards):
         # emissions
         figs.append(
             expand(
-                RESULTS
-                + "{interconnect}/figures/s{simpl}_cluster_{clusters}/l{ll}_{opts}_{sector}/emissions/{figure}",
+                RESULTS + "{interconnect}/figures/s{simpl}_cluster_{clusters}/l{ll}_{opts}_{sector}/emissions/{figure}",
                 **config["scenario"],
                 figure=FIGURES_EMISSIONS,
             )
@@ -155,8 +153,7 @@ def electricity_figures(wildcards):
         # system
         figs.append(
             expand(
-                RESULTS
-                + "{interconnect}/figures/s{simpl}_cluster_{clusters}/l{ll}_{opts}_{sector}/system/{figure}",
+                RESULTS + "{interconnect}/figures/s{simpl}_cluster_{clusters}/l{ll}_{opts}_{sector}/system/{figure}",
                 **config["scenario"],
                 figure=FIGURES_SYSTEM,
             )
@@ -175,8 +172,7 @@ def sector_figures(wildcards):
     if "G" in config["scenario"]["sector"].split("-"):
         figs.append(
             expand(
-                RESULTS
-                + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/gas/{figure}",
+                RESULTS + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/gas/{figure}",
                 **config["scenario"],
                 figure=FIGURES_SECTOR_NATURAL_GAS,
             )
@@ -217,8 +213,7 @@ def sector_figures(wildcards):
         )
         figs.append(
             expand(
-                RESULTS
-                + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/{s}/capacity/{figure}.png",
+                RESULTS + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/{s}/capacity/{figure}.png",
                 **config["scenario"],
                 figure=FIGURES_SECTOR_CAPACITY,
                 s=states,
@@ -234,8 +229,7 @@ def sector_figures(wildcards):
         )
         figs.append(
             expand(
-                RESULTS
-                + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/{s}/loads/{figure}.png",
+                RESULTS + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/{s}/loads/{figure}.png",
                 **config["scenario"],
                 figure=FIGURES_SECTOR_LOADS,
                 s=states,
@@ -243,8 +237,7 @@ def sector_figures(wildcards):
         )
         figs.append(
             expand(
-                RESULTS
-                + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/system/loads/{figure}.png",
+                RESULTS + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/system/loads/{figure}.png",
                 **config["scenario"],
                 figure=FIGURES_SECTOR_LOADS,
             )
@@ -291,8 +284,7 @@ def sector_figures(wildcards):
 def validation_figures(wildcards):
     if config["run"]["validation"]:
         return expand(
-            RESULTS
-            + "{interconnect}/figures/s{simpl}_cluster_{clusters}/l{ll}_{opts}_{sector}/{figure}",
+            RESULTS + "{interconnect}/figures/s{simpl}_cluster_{clusters}/l{ll}_{opts}_{sector}/{figure}",
             **config["scenario"],
             figure=FIGURES_VALIDATE,
         )

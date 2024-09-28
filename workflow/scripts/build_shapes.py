@@ -70,11 +70,7 @@ def filter_small_polygons_gpd(
     """
     # Explode the MultiPolygons into individual Polygons
     original_crs = geo_series.crs
-    exploded = (
-        geo_series.to_crs(MEASUREMENT_CRS)
-        .explode(index_parts=True)
-        .reset_index(drop=True)
-    )
+    exploded = geo_series.to_crs(MEASUREMENT_CRS).explode(index_parts=True).reset_index(drop=True)
 
     # Filter based on area
     filtered = exploded[exploded.area >= min_area]
@@ -229,9 +225,7 @@ def trim_states_to_interconnect(
         )
         texas_geometry = gdf_states.loc[gdf_states.name == "Texas", "geometry"]
         texas_geometry = filter_small_polygons_gpd(texas_geometry, 1e8)
-        gdf_states.loc[gdf_states.name == "Texas", "geometry"] = (
-            texas_geometry.geometry.values
-        )
+        gdf_states.loc[gdf_states.name == "Texas", "geometry"] = texas_geometry.geometry.values
     elif interconnect == "eastern":
         gdf_nerc_f = gdf_nerc[gdf_nerc.OBJECTID.isin([1, 3, 6, 7])]
         gdf_states = gpd.overlay(

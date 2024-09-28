@@ -68,10 +68,7 @@ def add_land_use_constraint_perfect(n):
     def check_p_min_p_max(p_nom_max):
         p_nom_min = n.generators[ext_i].groupby(grouper).sum().p_nom_min
         p_nom_min = p_nom_min.reindex(p_nom_max.index)
-        check = (
-            p_nom_min.groupby(level=[0, 1]).sum()
-            > p_nom_max.groupby(level=[0, 1]).min()
-        )
+        check = p_nom_min.groupby(level=[0, 1]).sum() > p_nom_max.groupby(level=[0, 1]).min()
         if check.sum():
             logger.warning(
                 f"summed p_min_pu values at node larger than technical potential {check[check].index}",
@@ -165,14 +162,10 @@ def prepare_network(
     if solve_opts.get("noisy_costs"):
         for t in n.iterate_components():
             if "marginal_cost" in t.df:
-                t.df["marginal_cost"] += 1e-2 + 2e-3 * (
-                    np.random.random(len(t.df)) - 0.5
-                )
+                t.df["marginal_cost"] += 1e-2 + 2e-3 * (np.random.random(len(t.df)) - 0.5)
 
         for t in n.iterate_components(["Line", "Link"]):
-            t.df["capital_cost"] += (
-                1e-1 + 2e-2 * (np.random.random(len(t.df)) - 0.5)
-            ) * t.df["length"]
+            t.df["capital_cost"] += (1e-1 + 2e-2 * (np.random.random(len(t.df)) - 0.5)) * t.df["length"]
 
     if solve_opts.get("nhours"):
         nhours = solve_opts["nhours"]
@@ -212,8 +205,7 @@ def add_CCL_constraints(n, config):
         index_col=[1, 2],
     )
     agg_p_nom_minmax = agg_p_nom_minmax[
-        agg_p_nom_minmax.planning_horizon
-        == int(snakemake.params.planning_horizons[0])  # need to make multi-horizon
+        agg_p_nom_minmax.planning_horizon == int(snakemake.params.planning_horizons[0])  # need to make multi-horizon
     ].drop(columns="planning_horizon")
 
     logger.info("Adding generation capacity constraints per carrier and country")
@@ -284,11 +276,7 @@ def add_RPS_constraints(n, config):
         "biomass",
         "nuclear",
     ]
-    state_memberships = (
-        n.buses.groupby("reeds_state")["reeds_zone"]
-        .apply(lambda x: ", ".join(x))
-        .to_dict()
-    )
+    state_memberships = n.buses.groupby("reeds_state")["reeds_zone"].apply(lambda x: ", ".join(x)).to_dict()
 
     rps_reeds = pd.read_csv(
         snakemake.input.rps_reeds,
@@ -398,31 +386,17 @@ def add_EQ_constraints(n, o, scaling=1e-1):
         ggrouper = n.generators.bus
         lgrouper = n.loads.bus
         sgrouper = n.storage_units.bus
-    load = (
-        n.snapshot_weightings.generators
-        @ n.loads_t.p_set.groupby(lgrouper, axis=1).sum()
-    )
-    inflow = (
-        n.snapshot_weightings.stores
-        @ n.storage_units_t.inflow.groupby(sgrouper, axis=1).sum()
-    )
+    load = n.snapshot_weightings.generators @ n.loads_t.p_set.groupby(lgrouper, axis=1).sum()
+    inflow = n.snapshot_weightings.stores @ n.storage_units_t.inflow.groupby(sgrouper, axis=1).sum()
     inflow = inflow.reindex(load.index).fillna(0.0)
     rhs = scaling * (level * load - inflow)
     p = n.model["Generator-p"]
-    lhs_gen = (
-        (p * (n.snapshot_weightings.generators * scaling))
-        .groupby(ggrouper.to_xarray())
-        .sum()
-        .sum("snapshot")
-    )
+    lhs_gen = (p * (n.snapshot_weightings.generators * scaling)).groupby(ggrouper.to_xarray()).sum().sum("snapshot")
     # TODO: double check that this is really needed, why do have to subtract the spillage
     if not n.storage_units_t.inflow.empty:
         spillage = n.model["StorageUnit-spill"]
         lhs_spill = (
-            (spillage * (-n.snapshot_weightings.stores * scaling))
-            .groupby(sgrouper.to_xarray())
-            .sum()
-            .sum("snapshot")
+            (spillage * (-n.snapshot_weightings.stores * scaling)).groupby(sgrouper.to_xarray()).sum().sum("snapshot")
         )
         lhs = lhs_gen + lhs_spill
     else:
@@ -496,23 +470,17 @@ def add_interface_limits(n, sns, config):
 
         logger.info(f"Adding Interface Transmission Limit for {interface.interface}")
 
-        interface_lines_b0 = n.lines[
-            n.lines.bus0.isin(zone0_buses.index) & n.lines.bus1.isin(zone1_buses.index)
-        ]
-        interface_lines_b1 = n.lines[
-            n.lines.bus0.isin(zone1_buses.index) & n.lines.bus1.isin(zone0_buses.index)
-        ]
-        interface_links_b0 = n.links[
-            n.links.bus0.isin(zone0_buses.index) & n.links.bus1.isin(zone1_buses.index)
-        ]
-        interface_links_b1 = n.links[
-            n.links.bus0.isin(zone1_buses.index) & n.links.bus1.isin(zone0_buses.index)
-        ]
+        interface_lines_b0 = n.lines[n.lines.bus0.isin(zone0_buses.index) & n.lines.bus1.isin(zone1_buses.index)]
+        interface_lines_b1 = n.lines[n.lines.bus0.isin(zone1_buses.index) & n.lines.bus1.isin(zone0_buses.index)]
+        interface_links_b0 = n.links[n.links.bus0.isin(zone0_buses.index) & n.links.bus1.isin(zone1_buses.index)]
+        interface_links_b1 = n.links[n.links.bus0.isin(zone1_buses.index) & n.links.bus1.isin(zone0_buses.index)]
 
         if not n.lines.empty:
             line_flows = n.model["Line-s"].loc[:, interface_lines_b1.index].sum(
                 dims="Line",
-            ) - n.model["Line-s"].loc[:, interface_lines_b0.index].sum(dims="Line")
+            ) - n.model["Line-s"].loc[
+                :, interface_lines_b0.index
+            ].sum(dims="Line")
         else:
             line_flows = 0.0
         lhs = line_flows
@@ -524,7 +492,9 @@ def add_interface_limits(n, sns, config):
         ):
             link_flows = n.model["Link-p"].loc[:, interface_links_b1.index].sum(
                 dims="Link",
-            ) - n.model["Link-p"].loc[:, interface_links_b0.index].sum(dims="Link")
+            ) - n.model["Link-p"].loc[
+                :, interface_links_b0.index
+            ].sum(dims="Link")
             lhs += link_flows
 
         rhs_pos = interface.MW_f0 * -1
@@ -546,9 +516,7 @@ def add_regional_co2limit(n, sns, config):
         index_col=[0],
     )
     logger.info("Adding regional Co2 Limits.")
-    regional_co2_lims = regional_co2_lims[
-        regional_co2_lims.planning_horizon.isin(snakemake.params.planning_horizons)
-    ]
+    regional_co2_lims = regional_co2_lims[regional_co2_lims.planning_horizon.isin(snakemake.params.planning_horizons)]
 
     weightings = n.snapshot_weightings.loc[n.snapshots]
     # period_weightings = n.investment_period_weightings.years
@@ -583,36 +551,20 @@ def add_regional_co2limit(n, sns, config):
             "efficiency",
             inds=region_gens_em.index,
         )  # mw_elect/mw_th
-        em_pu = (
-            region_gens_em.carrier.map(emissions) / efficiency
-        )  # tonnes_co2/mw_electrical
-        em_pu = (
-            em_pu.multiply(weightings.generators, axis=0)
-            .loc[planning_horizon]
-            .fillna(0)
-        )
+        em_pu = region_gens_em.carrier.map(emissions) / efficiency  # tonnes_co2/mw_electrical
+        em_pu = em_pu.multiply(weightings.generators, axis=0).loc[planning_horizon].fillna(0)
 
         # Emitting Gens
-        p_em = (
-            n.model["Generator-p"]
-            .loc[:, region_gens_em.index]
-            .sel(period=planning_horizon)
-        )
+        p_em = n.model["Generator-p"].loc[:, region_gens_em.index].sel(period=planning_horizon)
         lhs = (p_em * em_pu).sum()
 
         # All Gens
-        p = (
-            n.model["Generator-p"]
-            .loc[:, region_gens.index]
-            .sel(period=planning_horizon)
-        )
+        p = n.model["Generator-p"].loc[:, region_gens.index].sel(period=planning_horizon)
         lhs -= (p * EF_imports).sum()
 
         if not region_storage.empty:
             p_store_discharge = (
-                n.model["StorageUnit-p_dispatch"]
-                .loc[:, region_storage.index]
-                .sel(period=planning_horizon)
+                n.model["StorageUnit-p_dispatch"].loc[:, region_storage.index].sel(period=planning_horizon)
             )
             lhs -= (p_store_discharge * EF_imports).sum()
 
@@ -692,11 +644,7 @@ def add_SAFER_constraints(n, config):
         snakemake.input.safer_reeds,
         index_col=[0],
     )
-    NERC_memberships = (
-        n.buses.groupby("nerc_reg")["reeds_zone"]
-        .apply(lambda x: ", ".join(x))
-        .to_dict()
-    )
+    NERC_memberships = n.buses.groupby("nerc_reg")["reeds_zone"].apply(lambda x: ", ".join(x)).to_dict()
     reeds_prm["region"] = reeds_prm.index.map(NERC_memberships)
     reeds_prm.dropna(subset="region", inplace=True)
     reeds_prm.drop(
@@ -706,9 +654,7 @@ def add_SAFER_constraints(n, config):
     reeds_prm.rename(columns={"static": "prm", "t": "planning_horizon"}, inplace=True)
 
     regional_prm = pd.concat([regional_prm, reeds_prm])
-    regional_prm = regional_prm[
-        regional_prm.planning_horizon.isin(snakemake.params.planning_horizons)
-    ]
+    regional_prm = regional_prm[regional_prm.planning_horizon.isin(snakemake.params.planning_horizons)]
 
     for idx, prm in regional_prm.iterrows():
         region_list = [region_.strip() for region_ in prm.region.split(",")]
@@ -793,11 +739,7 @@ def add_operational_reserve_margin(n, sns, config):
     vres_i = n.generators_t.p_max_pu.columns
     if not ext_i.empty and not vres_i.empty:
         capacity_factor = n.generators_t.p_max_pu[vres_i.intersection(ext_i)]
-        p_nom_vres = (
-            n.model["Generator-p_nom"]
-            .loc[vres_i.intersection(ext_i)]
-            .rename({"Generator-ext": "Generator"})
-        )
+        p_nom_vres = n.model["Generator-p_nom"].loc[vres_i.intersection(ext_i)].rename({"Generator-ext": "Generator"})
         lhs = summed_reserve + (p_nom_vres * (-EPSILON_VRES * capacity_factor)).sum(
             "Generator",
         )
@@ -857,10 +799,7 @@ def add_battery_constraints(n):
     chargers_ext = n.links[charger_bool].query("p_nom_extendable").index
 
     eff = n.links.efficiency[dischargers_ext].values
-    lhs = (
-        n.model["Link-p_nom"].loc[chargers_ext]
-        - n.model["Link-p_nom"].loc[dischargers_ext] * eff
-    )
+    lhs = n.model["Link-p_nom"].loc[chargers_ext] - n.model["Link-p_nom"].loc[dischargers_ext] * eff
 
     n.model.add_constraints(lhs == 0, name="Link-charger_ratio")
 
@@ -890,18 +829,13 @@ def add_chp_constraints(n):
         p_nom = n.model["Link-p_nom"]
 
         lhs = (
-            p_nom.loc[electric_ext]
-            * (n.links.p_nom_ratio * n.links.efficiency)[electric_ext].values
+            p_nom.loc[electric_ext] * (n.links.p_nom_ratio * n.links.efficiency)[electric_ext].values
             - p_nom.loc[heat_ext] * n.links.efficiency[heat_ext].values
         )
         n.model.add_constraints(lhs == 0, name="chplink-fix_p_nom_ratio")
 
         rename = {"Link-ext": "Link"}
-        lhs = (
-            p.loc[:, electric_ext]
-            + p.loc[:, heat_ext]
-            - p_nom.rename(rename).loc[electric_ext]
-        )
+        lhs = p.loc[:, electric_ext] + p.loc[:, heat_ext] - p_nom.rename(rename).loc[electric_ext]
         n.model.add_constraints(lhs <= 0, name="chplink-top_iso_fuel_line_ext")
 
     # top_iso_fuel_line for fixed
@@ -955,10 +889,7 @@ def add_sector_co2_constraints(n, config):
         sns = n.snapshots
         snapshot = sns[sns.get_level_values("period") == year][-1]
 
-        stores = n.stores[
-            (n.stores.index.str.startswith(state))
-            & (n.stores.index.str.endswith("-co2"))
-        ].index
+        stores = n.stores[(n.stores.index.str.startswith(state)) & (n.stores.index.str.endswith("-co2"))].index
 
         lhs = n.model["Store-e"].loc[snapshot, stores].sum()
 
@@ -975,10 +906,7 @@ def add_sector_co2_constraints(n, config):
         sns = n.snapshots
         snapshot = sns[sns.get_level_values("period") == year][-1]
 
-        stores = n.stores[
-            (n.stores.index.str.startswith(state))
-            & (n.stores.index.str.endswith(f"{sector}-co2"))
-        ].index
+        stores = n.stores[(n.stores.index.str.startswith(state)) & (n.stores.index.str.endswith(f"{sector}-co2"))].index
 
         lhs = n.model["Store-e"].loc[snapshot, stores].sum()
 
@@ -1123,9 +1051,7 @@ def solve_network(n, config, solving, opts="", **kwargs):
     if len(n.investment_periods) > 1:
         kwargs["multi_investment_periods"] = config["foresight"] == "perfect"
 
-    kwargs["solver_options"] = (
-        solving["solver_options"][set_of_options] if set_of_options else {}
-    )
+    kwargs["solver_options"] = solving["solver_options"][set_of_options] if set_of_options else {}
     kwargs["solver_name"] = solving["solver"]["name"]
     kwargs["extra_functionality"] = extra_functionality
     kwargs["transmission_losses"] = cf_solving.get("transmission_losses", False)
