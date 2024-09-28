@@ -155,6 +155,7 @@ def aggregate_to_substations(
     network_s.buses["country"] = (
         zone  # country field used bc pypsa algo aggregates based on country field
     )
+
     network_s.lines["type"] = np.nan
 
     if topological_boundaries != "reeds_zone" and topological_boundaries != "county":
@@ -217,6 +218,7 @@ if __name__ == "__main__":
 
     voltage_level = snakemake.config["electricity"]["voltage_simplified"]
     topological_boundaries = snakemake.params.topological_boundaries
+
 
     n = pypsa.Network(snakemake.input.network)
 

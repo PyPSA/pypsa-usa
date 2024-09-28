@@ -75,9 +75,7 @@ def get_regions(n):
 def get_state_generation_mix(n: pypsa.Network, var="p"):
     storage_devices = n.storage_units.copy()
     storage_devices["state"] = storage_devices.bus.map(n.buses.reeds_state)
-    storage_devices["state_carrier"] = (
-        storage_devices["state"] + "_" + storage_devices["carrier"]
-    )
+    storage_devices["state_carrier"] = storage_devices["state"] + "_" + storage_devices["carrier"]
     # Group by state and carrier
     storage = n.storage_units_t[var].clip(lower=0).copy()
     storage = storage.T.groupby(storage_devices["state_carrier"]).sum().T
@@ -98,9 +96,7 @@ def get_state_generation_mix(n: pypsa.Network, var="p"):
     production = production.reset_index()
     production.columns = ["state_carrier", "generation"]
     production["state"] = production["state_carrier"].str.split("_").str[0]
-    production["carrier"] = (
-        production["state_carrier"].str.split("_").str[1:].str.join("_")
-    )
+    production["carrier"] = production["state_carrier"].str.split("_").str[1:].str.join("_")
     production_pivot = production.pivot(
         index="state",
         columns="carrier",
@@ -232,22 +228,14 @@ def create_optimized_by_carrier(n, order, region_buses=None):
         # bus0 flow (pos if branch is withdrawing from region 0)
         # Pos = exports from region 0
         # Neg = imports to region 0
-        interface_lines_b0 = n.lines[
-            (n.lines.bus0.isin(region_buses) & ~n.lines.bus1.isin(region_buses))
-        ]
-        interface_links_b0 = n.links[
-            (n.links.bus0.isin(region_buses) & ~n.links.bus1.isin(region_buses))
-        ]
+        interface_lines_b0 = n.lines[(n.lines.bus0.isin(region_buses) & ~n.lines.bus1.isin(region_buses))]
+        interface_links_b0 = n.links[(n.links.bus0.isin(region_buses) & ~n.links.bus1.isin(region_buses))]
 
         # bus1 branch flow (pos if branch is withdrawing from region 1)
         # Pos = imports to region 0
         # Neg = exports from region 0
-        interface_lines_b1 = n.lines[
-            (n.lines.bus1.isin(region_buses) & ~n.lines.bus0.isin(region_buses))
-        ]
-        interface_links_b1 = n.links[
-            (n.links.bus1.isin(region_buses) & ~n.links.bus0.isin(region_buses))
-        ]
+        interface_lines_b1 = n.lines[(n.lines.bus1.isin(region_buses) & ~n.lines.bus0.isin(region_buses))]
+        interface_links_b1 = n.links[(n.links.bus1.isin(region_buses) & ~n.links.bus0.isin(region_buses))]
 
         # imports positive, exports negative
         flows = n.lines_t.p1.loc[:, interface_lines_b0.index].sum(axis=1)
@@ -324,6 +312,7 @@ def create_historic_region_data(
         else [region]
     )
 
+
     historic_region = historic_all_ba.loc[regions].groupby(level=1).sum()
 
     if not emissions:
@@ -333,9 +322,7 @@ def create_historic_region_data(
         )
         from_region = index_split[0].isin(regions)
         to_region = index_split[1].isin(regions)
-        selected_transfers = ge_interchange[
-            ge_interchange.index[from_region & ~to_region]
-        ]
+        selected_transfers = ge_interchange[ge_interchange.index[from_region & ~to_region]]
         selected_transfers = selected_transfers.groupby(level=1).sum()
 
         historic_region["imports"] = selected_transfers.clip(upper=0) * -1
@@ -362,6 +349,7 @@ def plot_regional_comparisons(
     buses = n.buses.copy()
 
     if snakemake.config["model_topology"]["topological_boundaries"] == "reeds_zone":
+
         regions = n.buses.reeds_ba.unique()
         regions = list(OrderedDict.fromkeys(regions))
         buses["region"] = buses.reeds_ba
@@ -417,9 +405,7 @@ def plot_regional_comparisons(
         )
         # Calculate Production Deviation by percentage
         total_region = historic_region.sum().sum()
-        diff[region] = (
-            (optimized_region.sum() - historic_region.sum()) / total_region * 1e2
-        )
+        diff[region] = (optimized_region.sum() - historic_region.sum()) / total_region * 1e2
 
     # Plot Bar Production Differences of Regions
     fig, ax = plt.subplots(figsize=(10, 6))
@@ -482,11 +468,7 @@ def plot_line_loading_map(
     regions: gpd.GeoDataFrame,
     **wildcards,
 ):
-    gen = (
-        n.generators.assign(g=n.generators_t.p.mean())
-        .groupby(["bus", "carrier"])
-        .g.sum()
-    )
+    gen = n.generators.assign(g=n.generators_t.p.mean()).groupby(["bus", "carrier"]).g.sum()
 
     line_values = 50
 
@@ -564,10 +546,7 @@ def plot_generator_cost_stack(
         )
 
     fig.legend(
-        handles=[
-            plt.Rectangle((0, 0), 1, 1, color=colors[carrier], label=carrier)
-            for carrier in colors
-        ],
+        handles=[plt.Rectangle((0, 0), 1, 1, color=colors[carrier], label=carrier) for carrier in colors],
         loc="upper left",
         bbox_to_anchor=(0.12, 0.875),
         title="Carrier",
@@ -626,12 +605,7 @@ def plot_state_emissions_historical_bar(
         columns=["Optimized"],
     )
 
-    region_mapper = (
-        n.buses[["country", "reeds_state"]]
-        .drop_duplicates()
-        .set_index("country")["reeds_state"]
-        .to_dict()
-    )
+    region_mapper = n.buses[["country", "reeds_state"]].drop_duplicates().set_index("country")["reeds_state"].to_dict()
     optimized["region"] = optimized.index.map(region_mapper)
     optimized = optimized.groupby("region").sum()
     CODE_2_STATE = {v: k for k, v in STATE_2_CODE.items()}
@@ -688,7 +662,9 @@ def plot_ba_emissions_historical_bar(
             None,
             region,
             emissions=True,
-        ).sum(axis=0)["Net Generation"]
+        ).sum(
+            axis=0
+        )["Net Generation"]
         region_em = region_em.sum() / 1e9
         historical.loc[region] = region_em
     historical.name = "Historical"
@@ -703,6 +679,7 @@ def plot_ba_emissions_historical_bar(
         optimized.loc["CISO"] = optimized.loc[
             ["CISO-PGAE", "CISO-SCE", "CISO-SDGE", "CISO-VEA"]
         ].sum()
+
         optimized.drop(
             index=["CISO-PGAE", "CISO-SCE", "CISO-SDGE", "CISO-VEA"],
             inplace=True,
@@ -714,6 +691,7 @@ def plot_ba_emissions_historical_bar(
             .set_index("country")["reeds_ba"]
             .to_dict()
         )
+
         optimized["region"] = optimized.index.map(region_mapper)
         optimized = optimized.groupby("region").sum()
         optimized.index.name = "country"
@@ -754,9 +732,7 @@ def get_state_generation_mix(n: pypsa.Network, var="p"):
     generation = generation.reset_index()
     generation.columns = ["state_carrier", "generation"]
     generation["state"] = generation["state_carrier"].str.split("_").str[0]
-    generation["carrier"] = (
-        generation["state_carrier"].str.split("_").str[1:].str.join("_")
-    )
+    generation["carrier"] = generation["state_carrier"].str.split("_").str[1:].str.join("_")
     generation_pivot = generation.pivot(
         index="state",
         columns="carrier",
@@ -792,9 +768,7 @@ def plot_state_generation_mix(
     historical_gen = pd.read_excel(snakemake.input.historical_generation, skiprows=1)
     historical_gen = historical_gen.set_index("STATE").loc[optimized.index]
     historical_gen = historical_gen[historical_gen.YEAR == year]
-    historical_gen = historical_gen[
-        historical_gen["TYPE OF PRODUCER"] == "Total Electric Power Industry"
-    ]
+    historical_gen = historical_gen[historical_gen["TYPE OF PRODUCER"] == "Total Electric Power Industry"]
     historical_gen = historical_gen[historical_gen["ENERGY SOURCE"] != "Total"]
     historical_gen.drop(columns=["YEAR", "TYPE OF PRODUCER"], inplace=True)
     historical_gen.rename(
@@ -806,13 +780,8 @@ def plot_state_generation_mix(
     )
     historical_gen["carrier"] = historical_gen.carrier.map(EIA_FUEL_MAPPER_2)
     historical_gen.carrier = historical_gen.carrier.str.lower()
-    historical_gen = (
-        historical_gen.reset_index().groupby(["state", "carrier"]).sum().reset_index()
-    )
-    historical_gen = (
-        historical_gen.pivot(index="state", columns="carrier", values="Historical")
-        / 1e3
-    )
+    historical_gen = historical_gen.reset_index().groupby(["state", "carrier"]).sum().reset_index()
+    historical_gen = historical_gen.pivot(index="state", columns="carrier", values="Historical") / 1e3
 
     # Rename Optimized Carriers to Match EIA Historical Data
     optimized["natural gas"] = optimized.pop("CCGT") + optimized.pop("OCGT")
@@ -824,24 +793,11 @@ def plot_state_generation_mix(
 
     historical_gen, optimized = add_missing_carriers(historical_gen, optimized)
 
-    joined = (
-        historical_gen.join(optimized, lsuffix="_historical", rsuffix="_optimized")
-        .sort_index(axis=1)
-        .round(1)
-    )
+    joined = historical_gen.join(optimized, lsuffix="_historical", rsuffix="_optimized").sort_index(axis=1).round(1)
     joined.to_csv(save_total.replace(".pdf", ".csv"))
 
-    diff_total = (
-        (optimized - historical_gen)
-        .fillna(0)
-        .T.div(historical_gen.sum(axis=1))
-        .mul(1e2)
-        .round(1)
-        .T
-    )
-    diff_carrier = (
-        ((optimized - historical_gen).fillna(0) / historical_gen).mul(1e2).round(1)
-    )
+    diff_total = (optimized - historical_gen).fillna(0).T.div(historical_gen.sum(axis=1)).mul(1e2).round(1).T
+    diff_carrier = ((optimized - historical_gen).fillna(0) / historical_gen).mul(1e2).round(1)
 
     colors = n.carriers.color.to_dict()
     colors["natural gas"] = colors.pop("CCGT")
@@ -881,9 +837,7 @@ def plot_state_generation_capacities(
     Creates a stacked bar chart for each state's generation mix.
     """
     n.generators["state"] = n.generators.bus.map(n.buses.reeds_state)
-    n.generators["state_carrier"] = (
-        n.generators["state"] + "_" + n.generators["carrier"]
-    )
+    n.generators["state_carrier"] = n.generators["state"] + "_" + n.generators["carrier"]
 
     # Group by state and carrier
     generation = n.generators.groupby("state_carrier").p_nom.sum()
@@ -891,9 +845,7 @@ def plot_state_generation_capacities(
     generation = generation.reset_index()
     generation.columns = ["state_carrier", "capacity"]
     generation["state"] = generation["state_carrier"].str.split("_").str[0]
-    generation["carrier"] = (
-        generation["state_carrier"].str.split("_").str[1:].str.join("_")
-    )
+    generation["carrier"] = generation["state_carrier"].str.split("_").str[1:].str.join("_")
     generation_pivot = generation.pivot(
         index="state",
         columns="carrier",
@@ -982,9 +934,7 @@ def main(snakemake):
     ge_all = ge_all.stack(level=0).swaplevel().sort_index(level=0)
     ge_all.columns = ge_all.columns.map(GE_carrier_names).fillna("Interchange")
 
-    ge_all["interconnect"] = (
-        ge_all.index.get_level_values(0).map(EIA_BA_2_REGION).map(EIA_930_REGION_MAPPER)
-    )
+    ge_all["interconnect"] = ge_all.index.get_level_values(0).map(EIA_BA_2_REGION).map(EIA_930_REGION_MAPPER)
     ge_interchange = ge_all.loc[ge_all.interconnect.isna(), "Interchange"] / 1e3
     ge_all = ge_all.loc[~ge_all.interconnect.isna()]
 
@@ -994,9 +944,7 @@ def main(snakemake):
 
     ge_all.loc["SRP", "Nuclear"] = 0  # Fix for double reported Palo Verde
     ge_interconnect = (
-        ge_all.groupby("period")
-        .sum()
-        .drop(columns=["Demand", "Net Generation", "Total Interchange", "Interchange"])
+        ge_all.groupby("period").sum().drop(columns=["Demand", "Net Generation", "Total Interchange", "Interchange"])
     )
     order = ge_all.columns
 

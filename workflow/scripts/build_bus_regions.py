@@ -142,9 +142,7 @@ def main(snakemake):
         region_subs = bus2sub_onshore[f"{topological_boundaries}"][
             bus2sub_onshore[f"{topological_boundaries}"] == region
         ]  # series of substations in the current BA
-        region_locs = all_locs.loc[
-            region_subs.index
-        ]  # locations of substations in the current BA
+        region_locs = all_locs.loc[region_subs.index]  # locations of substations in the current BA
         if region_locs.empty:
             continue  # skip empty BA's which are not in the bus dataframe. ex. portions of eastern texas BA when using the WECC interconnect
 
@@ -152,6 +150,7 @@ def main(snakemake):
             region_shape = (
                 gpd.GeoDataFrame(geometry=region_shape).dissolve().iloc[0].geometry
             )
+
         onshore_regions.append(
             gpd.GeoDataFrame(
                 {
@@ -196,9 +195,7 @@ def main(snakemake):
                 "country": shape_name,
             },
         )
-        offshore_regions_c = offshore_regions_c.loc[
-            offshore_regions_c.area > 1e-2
-        ]  # remove extremely small regions
+        offshore_regions_c = offshore_regions_c.loc[offshore_regions_c.area > 1e-2]  # remove extremely small regions
         offshore_regions.append(offshore_regions_c)
     # Exporting
     if offshore_regions:

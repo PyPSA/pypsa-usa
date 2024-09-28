@@ -53,22 +53,14 @@ def make_hourly(df: pd.DataFrame) -> pd.DataFrame:
 
     start = df.index.min()
     end = (
-        pd.to_datetime(start)
-        .to_period("Y")
-        .to_timestamp("Y")
-        .to_period("Y")
-        .to_timestamp("Y")
+        pd.to_datetime(start).to_period("Y").to_timestamp("Y").to_period("Y").to_timestamp("Y")
         + pd.offsets.MonthEnd(0)
         + pd.Timedelta(hours=23)
     )
     hourly_df = pd.DataFrame(
         index=pd.date_range(start=start, end=end + pd.Timedelta(days=1), freq="h"),
     )
-    return (
-        hourly_df.merge(df, how="left", left_index=True, right_index=True)
-        .ffill()
-        .bfill()
-    )
+    return hourly_df.merge(df, how="left", left_index=True, right_index=True).ffill().bfill()
 
 
 ###
@@ -165,9 +157,7 @@ def build_pudl_fuel_costs(snapshots: pd.DatetimeIndex, start_date: str, end_date
     fuel_cost_temporal["interconnect"] = fuel_cost_temporal["nerc_region"].map(
         const.NERC_REGION_MAPPER,
     )
-    fuel_cost_temporal = fuel_cost_temporal[
-        fuel_cost_temporal["interconnect"] == snakemake.wildcards.interconnect
-    ]
+    fuel_cost_temporal = fuel_cost_temporal[fuel_cost_temporal["interconnect"] == snakemake.wildcards.interconnect]
     fuel_cost_temporal["generator_name"] = (
         fuel_cost_temporal["plant_name_eia"].astype(str)
         + "_"
@@ -186,9 +176,7 @@ def build_pudl_fuel_costs(snapshots: pd.DatetimeIndex, start_date: str, end_date
         "fuel_cost_per_mwh",
     )
 
-    fuel_cost_temporal = fuel_cost_temporal.groupby(["generator_name", "report_date"])[
-        "fuel_cost_per_mwh"
-    ].mean()
+    fuel_cost_temporal = fuel_cost_temporal.groupby(["generator_name", "report_date"])["fuel_cost_per_mwh"].mean()
     fuel_cost_temporal = fuel_cost_temporal.unstack(level=0)
     # Fill the missing values with the previous value
     plant_fuel_costs = fuel_cost_temporal.reindex(snapshots)
@@ -230,9 +218,7 @@ if __name__ == "__main__":
         for filepath in snakemake.input.gas_balancing_area:
             file_name = Path(filepath).stem
 
-            assert (
-                file_name in function_mapper
-            ), f"Can not find {file_name} in dynamic fuel price mapper"
+            assert file_name in function_mapper, f"Can not find {file_name} in dynamic fuel price mapper"
 
             ba_data.append(function_mapper[file_name](filepath=filepath, sns=snapshots))
         ba_ng_power_prices = pd.concat(ba_data, axis=1)

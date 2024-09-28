@@ -245,9 +245,7 @@ if __name__ == "__main__":
     if save_path:
 
         plotting_data = counties.copy()
-        plotting_data["density_person_per_km2"] = (
-            plotting_data.population / counties.ALAND * 1000000
-        )
+        plotting_data["density_person_per_km2"] = plotting_data.population / counties.ALAND * 1000000
         columns = {
             "Geographic Area Name": "name",
             "NAMELSAD": "county",

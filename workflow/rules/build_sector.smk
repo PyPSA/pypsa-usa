@@ -3,33 +3,23 @@
 
 def sector_input_files(wildcards):
     input_files = {
-        "network": RESOURCES
-        + "{interconnect}/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}.nc",
-        "tech_costs": RESOURCES
-        + f"costs/sector_costs_{config['scenario']['planning_horizons'][0]}.csv",
+        "network": RESOURCES + "{interconnect}/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}.nc",
+        "tech_costs": RESOURCES + f"costs/sector_costs_{config['scenario']['planning_horizons'][0]}.csv",
     }
     sectors = wildcards.sector.split("-")
     if "G" in sectors:
         ng_files = {
             "county": DATA + "counties/cb_2020_us_county_500k.shp",
-            "pipeline_capacity": DATA
-            + "natural_gas/EIA-StatetoStateCapacity_Jan2023.xlsx",
+            "pipeline_capacity": DATA + "natural_gas/EIA-StatetoStateCapacity_Jan2023.xlsx",
             "pipeline_shape": DATA + "natural_gas/pipelines.geojson",
             "eia_757": DATA + "natural_gas/EIA-757.csv",
-            "cop_soil_total": RESOURCES
-            + "{interconnect}/cop_soil_total_elec_s{simpl}_c{clusters}.nc",
-            "cop_soil_rural": RESOURCES
-            + "{interconnect}/cop_soil_rural_elec_s{simpl}_c{clusters}.nc",
-            "cop_soil_urban": RESOURCES
-            + "{interconnect}/cop_soil_urban_elec_s{simpl}_c{clusters}.nc",
-            "cop_air_total": RESOURCES
-            + "{interconnect}/cop_air_total_elec_s{simpl}_c{clusters}.nc",
-            "cop_air_rural": RESOURCES
-            + "{interconnect}/cop_air_rural_elec_s{simpl}_c{clusters}.nc",
-            "cop_air_urban": RESOURCES
-            + "{interconnect}/cop_air_urban_elec_s{simpl}_c{clusters}.nc",
-            "clustered_pop_layout": RESOURCES
-            + "{interconnect}/pop_layout_elec_s{simpl}_c{clusters}.csv",
+            "cop_soil_total": RESOURCES + "{interconnect}/cop_soil_total_elec_s{simpl}_c{clusters}.nc",
+            "cop_soil_rural": RESOURCES + "{interconnect}/cop_soil_rural_elec_s{simpl}_c{clusters}.nc",
+            "cop_soil_urban": RESOURCES + "{interconnect}/cop_soil_urban_elec_s{simpl}_c{clusters}.nc",
+            "cop_air_total": RESOURCES + "{interconnect}/cop_air_total_elec_s{simpl}_c{clusters}.nc",
+            "cop_air_rural": RESOURCES + "{interconnect}/cop_air_rural_elec_s{simpl}_c{clusters}.nc",
+            "cop_air_urban": RESOURCES + "{interconnect}/cop_air_urban_elec_s{simpl}_c{clusters}.nc",
+            "clustered_pop_layout": RESOURCES + "{interconnect}/pop_layout_elec_s{simpl}_c{clusters}.csv",
             "ev_policy": config["sector"]["transport"]["ev_policy"],
             "residential_stock": "repo_data/sectors/residential_stock",
             "commercial_stock": "repo_data/sectors/commercial_stock",
@@ -51,8 +41,7 @@ rule add_sectors:
     input:
         unpack(sector_input_files),
     output:
-        network=RESOURCES
-        + "{interconnect}/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc",
+        network=RESOURCES + "{interconnect}/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc",
     log:
         "logs/add_sectors/{interconnect}/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.log",
     group:
@@ -69,11 +58,7 @@ rule build_population_layouts:
         county_shapes=DATA + "counties/cb_2020_us_county_500k.shp",
         urban_percent=DATA + "urbanization/DECENNIALDHC2020.H2-Data.csv",
         population=DATA + "population/DECENNIALDHC2020.P1-Data.csv",
-        cutout="cutouts/"
-        + CDIR
-        + "{interconnect}_"
-        + config["atlite"]["default_cutout"]
-        + ".nc",
+        cutout="cutouts/" + CDIR + "{interconnect}_" + config["atlite"]["default_cutout"] + ".nc",
     output:
         pop_layout_total=RESOURCES + "{interconnect}/pop_layout_total.nc",
         pop_layout_urban=RESOURCES + "{interconnect}/pop_layout_urban.nc",
@@ -138,23 +123,17 @@ rule build_temperature_profiles:
     output:
         # temp_soil = RESOURCES + "temp_soil_{scope}_elec_s{simpl}_{clusters}.nc",
         # temp_air = RESOURCES + "temp_air_{scope}_elec_s{simpl}_{clusters}.nc",
-        temp_soil=RESOURCES
-        + "{interconnect}/temp_soil_{scope}_elec_s{simpl}_c{clusters}.nc",
-        temp_air=RESOURCES
-        + "{interconnect}/temp_air_{scope}_elec_s{simpl}_c{clusters}.nc",
+        temp_soil=RESOURCES + "{interconnect}/temp_soil_{scope}_elec_s{simpl}_c{clusters}.nc",
+        temp_air=RESOURCES + "{interconnect}/temp_air_{scope}_elec_s{simpl}_c{clusters}.nc",
     resources:
         mem_mb=20000,
     threads: 8
     log:
-        LOGS
-        + "{interconnect}/build_temperature_profiles_{scope}_{simpl}_{clusters}.log",
+        LOGS + "{interconnect}/build_temperature_profiles_{scope}_{simpl}_{clusters}.log",
         # LOGS + "build_temperature_profiles_{scope}_{simpl}_{clusters}.log",
     benchmark:
         # BENCHMARKS + "build_temperature_profiles/{scope}_s{simpl}_{clusters}"
-        (
-            BENCHMARKS
-            + "{interconnect}/build_temperature_profiles/{scope}_s{simpl}_c{clusters}"
-        )
+        (BENCHMARKS + "{interconnect}/build_temperature_profiles/{scope}_s{simpl}_c{clusters}")
     conda:
         "../envs/environment.yaml"
     script:
@@ -227,20 +206,15 @@ rule build_clustered_population_layouts:
         + config["atlite"]["default_cutout"]
         + ".nc",
     output:
-        clustered_pop_layout=RESOURCES
-        + "{interconnect}/pop_layout_elec_s{simpl}_c{clusters}.csv",
+        clustered_pop_layout=RESOURCES + "{interconnect}/pop_layout_elec_s{simpl}_c{clusters}.csv",
     log:
         # LOGS + "build_clustered_population_layouts_{simpl}_{clusters}.log",
-        LOGS
-        + "{interconnect}/build_clustered_population_layouts_{simpl}_{clusters}.log",
+        LOGS + "{interconnect}/build_clustered_population_layouts_{simpl}_{clusters}.log",
     resources:
         mem_mb=10000,
     benchmark:
         # BENCHMARKS + "build_clustered_population_layouts/s{simpl}_{simpl}_{clusters}"
-        (
-            BENCHMARKS
-            + "{interconnect}/build_clustered_population_layouts/s{simpl}_c{clusters}"
-        )
+        (BENCHMARKS + "{interconnect}/build_clustered_population_layouts/s{simpl}_c{clusters}")
     conda:
         "../envs/environment.yaml"
     script:
@@ -251,18 +225,12 @@ rule build_cop_profiles:
     params:
         heat_pump_sink_T=config["sector"]["heating"]["heat_pump_sink_T"],
     input:
-        temp_soil_total=RESOURCES
-        + "{interconnect}/temp_soil_total_elec_s{simpl}_c{clusters}.nc",
-        temp_soil_rural=RESOURCES
-        + "{interconnect}/temp_soil_rural_elec_s{simpl}_c{clusters}.nc",
-        temp_soil_urban=RESOURCES
-        + "{interconnect}/temp_soil_urban_elec_s{simpl}_c{clusters}.nc",
-        temp_air_total=RESOURCES
-        + "{interconnect}/temp_air_total_elec_s{simpl}_c{clusters}.nc",
-        temp_air_rural=RESOURCES
-        + "{interconnect}/temp_air_rural_elec_s{simpl}_c{clusters}.nc",
-        temp_air_urban=RESOURCES
-        + "{interconnect}/temp_air_urban_elec_s{simpl}_c{clusters}.nc",
+        temp_soil_total=RESOURCES + "{interconnect}/temp_soil_total_elec_s{simpl}_c{clusters}.nc",
+        temp_soil_rural=RESOURCES + "{interconnect}/temp_soil_rural_elec_s{simpl}_c{clusters}.nc",
+        temp_soil_urban=RESOURCES + "{interconnect}/temp_soil_urban_elec_s{simpl}_c{clusters}.nc",
+        temp_air_total=RESOURCES + "{interconnect}/temp_air_total_elec_s{simpl}_c{clusters}.nc",
+        temp_air_rural=RESOURCES + "{interconnect}/temp_air_rural_elec_s{simpl}_c{clusters}.nc",
+        temp_air_urban=RESOURCES + "{interconnect}/temp_air_urban_elec_s{simpl}_c{clusters}.nc",
         # temp_soil_total=RESOURCES + "temp_soil_total_elec_s{simpl}_{clusters}.nc",
         # temp_soil_rural=RESOURCES + "temp_soil_rural_elec_s{simpl}_{clusters}.nc",
         # temp_soil_urban=RESOURCES + "temp_soil_urban_elec_s{simpl}_{clusters}.nc",
@@ -270,18 +238,12 @@ rule build_cop_profiles:
         # temp_air_rural=RESOURCES + "temp_air_rural_elec_s{simpl}_{clusters}.nc",
         # temp_air_urban=RESOURCES + "temp_air_urban_elec_s{simpl}_{clusters}.nc",
     output:
-        cop_soil_total=RESOURCES
-        + "{interconnect}/cop_soil_total_elec_s{simpl}_c{clusters}.nc",
-        cop_soil_rural=RESOURCES
-        + "{interconnect}/cop_soil_rural_elec_s{simpl}_c{clusters}.nc",
-        cop_soil_urban=RESOURCES
-        + "{interconnect}/cop_soil_urban_elec_s{simpl}_c{clusters}.nc",
-        cop_air_total=RESOURCES
-        + "{interconnect}/cop_air_total_elec_s{simpl}_c{clusters}.nc",
-        cop_air_rural=RESOURCES
-        + "{interconnect}/cop_air_rural_elec_s{simpl}_c{clusters}.nc",
-        cop_air_urban=RESOURCES
-        + "{interconnect}/cop_air_urban_elec_s{simpl}_c{clusters}.nc",
+        cop_soil_total=RESOURCES + "{interconnect}/cop_soil_total_elec_s{simpl}_c{clusters}.nc",
+        cop_soil_rural=RESOURCES + "{interconnect}/cop_soil_rural_elec_s{simpl}_c{clusters}.nc",
+        cop_soil_urban=RESOURCES + "{interconnect}/cop_soil_urban_elec_s{simpl}_c{clusters}.nc",
+        cop_air_total=RESOURCES + "{interconnect}/cop_air_total_elec_s{simpl}_c{clusters}.nc",
+        cop_air_rural=RESOURCES + "{interconnect}/cop_air_rural_elec_s{simpl}_c{clusters}.nc",
+        cop_air_urban=RESOURCES + "{interconnect}/cop_air_urban_elec_s{simpl}_c{clusters}.nc",
         # cop_soil_total=RESOURCES + "cop_soil_total_elec_s{simpl}_{clusters}.nc",
         # cop_soil_rural=RESOURCES + "cop_soil_rural_elec_s{simpl}_{clusters}.nc",
         # cop_soil_urban=RESOURCES + "cop_soil_urban_elec_s{simpl}_{clusters}.nc",
@@ -319,8 +281,7 @@ rule build_heat_demands:
         + config["atlite"]["default_cutout"]
         + ".nc",
     output:
-        heat_demand=RESOURCES
-        + "{interconnect}/heat_demand_{scope}_elec_s_{clusters}.nc",
+        heat_demand=RESOURCES + "{interconnect}/heat_demand_{scope}_elec_s_{clusters}.nc",
     resources:
         mem_mb=20000,
     threads: 8
