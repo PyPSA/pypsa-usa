@@ -345,8 +345,8 @@ def attach_renewable_capacities_to_atlite(
         )  # namplate capacity per sub_id
 
         if caps_per_bus[~caps_per_bus.index.isin(generators_tech.sub_assignment)].sum() > 0:
-            p_all = plants_filt[["sub_assignment", "p_nom", "latitude", "longitude"]]
-            missing_plants = p_all[~p_all.sub_assignment.isin(generators_tech.sub_assignment)]
+            # p_all = plants_filt[["sub_assignment", "p_nom", "latitude", "longitude"]]
+            # missing_plants = p_all[~p_all.sub_assignment.isin(generators_tech.sub_assignment)]
             missing_capacity = caps_per_bus[~caps_per_bus.index.isin(generators_tech.sub_assignment)].sum()
             # missing_plants.to_csv(f"missing_{tech}_plants.csv",)
 

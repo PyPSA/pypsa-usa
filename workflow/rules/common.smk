@@ -42,7 +42,9 @@ def scenario_config(scenario_name):
 
 def static_getter(wildcards, keys, default):
     """Getter function for static config values."""
-    config_with_wildcards = update_config_from_wildcards(config, wildcards, inplace=False)
+    config_with_wildcards = update_config_from_wildcards(
+        config, wildcards, inplace=False
+    )
     return get_config(config_with_wildcards, keys, default)
 
 
@@ -52,9 +54,13 @@ def dynamic_getter(wildcards, keys, default):
         return get_config(config, keys, default)
     scenario_name = wildcards.run
     if scenario_name not in scenarios:
-        raise ValueError(f"Scenario {scenario_name} not found in file {config['run']['scenario']['file']}.")
+        raise ValueError(
+            f"Scenario {scenario_name} not found in file {config['run']['scenario']['file']}."
+        )
     config_with_scenario = scenario_config(scenario_name)
-    config_with_wildcards = update_config_from_wildcards(config_with_scenario, wildcards, inplace=False)
+    config_with_wildcards = update_config_from_wildcards(
+        config_with_scenario, wildcards, inplace=False
+    )
     return get_config(config_with_wildcards, keys, default)
 
 
@@ -161,7 +167,9 @@ def interconnect_mem_prepare(w):
 
 
 def input_custom_extra_functionality(w):
-    path = config_provider("solving", "options", "custom_extra_functionality", default=False)(w)
+    path = config_provider(
+        "solving", "options", "custom_extra_functionality", default=False
+    )(w)
     if path:
         return os.path.join(os.path.dirname(workflow.snakefile), path)
     return []
@@ -188,4 +196,9 @@ def solved_previous_horizon(w):
     i = planning_horizons.index(int(w.planning_horizons))
     planning_horizon_p = str(planning_horizons[i - 1])
 
-    return RESULTS + "postnetworks/elec_s{simpl}_{clusters}_l{ll}_{opts}_{sector_opts}_" + planning_horizon_p + ".nc"
+    return (
+        RESULTS
+        + "postnetworks/elec_s{simpl}_{clusters}_l{ll}_{opts}_{sector_opts}_"
+        + planning_horizon_p
+        + ".nc"
+    )

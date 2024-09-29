@@ -408,7 +408,7 @@ def plot_base_capacity_map(
     bus_values = remove_sector_buses(bus_values).groupby(by=["bus", "carrier"]).sum()
 
     line_values = n.lines.s_nom
-    link_values = n.links.p_nom.replace(0, None)
+    # link_values = n.links.p_nom.replace(0, None)
 
     # plot data
 

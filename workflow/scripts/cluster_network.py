@@ -385,7 +385,7 @@ def clustering_for_n_clusters(
 
     line_strategies = aggregation_strategies.get("lines", dict())
     generator_strategies = aggregation_strategies.get("generators", dict())
-    bus_strategies = aggregation_strategies.get("buses", dict())
+    # bus_strategies = aggregation_strategies.get("buses", dict())
     one_port_strategies = aggregation_strategies.get("one_ports", dict())
 
     clustering = get_clustering_from_busmap(
@@ -417,7 +417,7 @@ def convert_to_transport(clustering, itl_fn, itl_cost_fn, topological_boundaries
     Replaces all Lines according to Links with the transfer capacity specified
     by the ITLs.
     """
-    lines = clustering.network.lines.copy()
+    # lines = clustering.network.lines.copy()
     buses = clustering.network.buses.copy()
 
     itls = pd.read_csv(itl_fn)

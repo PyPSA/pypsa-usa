@@ -45,11 +45,6 @@ dev = [
 [tool.setuptools.package-dir]
 myproj = "workflow/scripts"
 
-[tool.black]
-target-version = ["py311"]
-line-length = 120
-skip-string-normalization = true
-
 [tool.ruff]
 line-length = 110
 target-version = "py311"

@@ -32,14 +32,18 @@ def define_zenodo_databundles():
 
 
 def define_sector_databundles():
-    return {"pypsa_usa_sec": "https://zenodo.org/records/11358880/files/pypsa_usa_sector_data.zip"}
+    return {
+        "pypsa_usa_sec": "https://zenodo.org/records/11358880/files/pypsa_usa_sector_data.zip"
+    }
 
 
 rule retrieve_zenodo_databundles:
     params:
         define_zenodo_databundles(),
     output:
-        expand(DATA + "breakthrough_network/base_grid/{file}", file=breakthrough_datafiles),
+        expand(
+            DATA + "breakthrough_network/base_grid/{file}", file=breakthrough_datafiles
+        ),
         expand(DATA + "{file}", file=pypsa_usa_datafiles),
     log:
         "logs/retrieve/retrieve_databundles.log",

@@ -198,8 +198,8 @@ def plot_capacity_additions_bar(
 
     optimal_capacity.set_index("carrier", inplace=True)
     optimal_capacity.insert(0, "Existing", existing_capacity["Existing Capacity"])
-    color_palette = get_color_palette(n)
-    color_mapper = [color_palette[carrier] for carrier in optimal_capacity.index]
+    # color_palette = get_color_palette(n)
+    # color_mapper = [color_palette[carrier] for carrier in optimal_capacity.index]
 
     stats = {"": optimal_capacity}
     variable = "Optimal Capacity"
