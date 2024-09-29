@@ -257,9 +257,7 @@ class ReadStrategy(ABC):
         """
         Enforces dimension labels.
         """
-        assert all(
-            x in ["snapshot", "sector", "subsector", "fuel"] for x in df.index.names
-        )
+        assert all(x in ["snapshot", "sector", "subsector", "fuel"] for x in df.index.names)
 
         assert all(
             x in ["all", "industry", "residential", "commercial", "transport"]
@@ -267,8 +265,7 @@ class ReadStrategy(ABC):
         )
 
         assert all(
-            x
-            in ["all", "electricity", "heat", "cool", "lpg", "space_heat", "water_heat"]
+            x in ["all", "electricity", "heat", "cool", "lpg", "space_heat", "water_heat"]
             for x in df.index.get_level_values("fuel").unique()
         )
 
@@ -337,14 +334,7 @@ class ReadEia(ReadStrategy):
         Combine EIA Demand Data to Match GIS Shapes.
         """
         df["Arizona"] = df.pop("SRP") + df.pop("AZPS") + df.pop("TEPC")
-        df["Carolina"] = (
-            df.pop("CPLE")
-            + df.pop("CPLW")
-            + df.pop("DUK")
-            + df.pop("SC")
-            + df.pop("SCEG")
-            + df.pop("YAD")
-        )
+        df["Carolina"] = df.pop("CPLE") + df.pop("CPLW") + df.pop("DUK") + df.pop("SC") + df.pop("SCEG") + df.pop("YAD")
         df["Florida"] = (
             df.pop("FPC")
             + df.pop("FPL")
@@ -533,10 +523,7 @@ class ReadEfs(ReadStrategy):
                 raise KeyError(f"Timezone {timezone} not mapped :(")
 
         # mapper of {state:0} where value is offset from UTC
-        utc_shift = {
-            state: apply_timezone_shift(STATE_TIMEZONE[state])
-            for state in STATE_TIMEZONE
-        }
+        utc_shift = {state: apply_timezone_shift(STATE_TIMEZONE[state]) for state in STATE_TIMEZONE}
 
         df["utc_shift"] = df.State.map(utc_shift)
         df["UtcHourID"] = df.LocalHourID + df.utc_shift
@@ -834,10 +821,7 @@ class ReadCliu(ReadStrategy):
             """
             Converts CLIU profiles to dataset.
             """
-            assert all(
-                x in ("state", "sector", "subsector", "end_use", "county")
-                for x in df.index.names
-            )
+            assert all(x in ("state", "sector", "subsector", "end_use", "county") for x in df.index.names)
             assert all(x in ("electricity", "cool", "heat", "lpg") for x in df.columns)
             return xr.Dataset.from_dataframe(df)
 
@@ -923,9 +907,7 @@ class ReadCliu(ReadStrategy):
         """
         df = data.copy()
         df["electricity"] = df["Net_electricity"] + df["Other"].div(3)
-        df["heat"] = (
-            df["Coal"] + df["Coke_and_breeze"] + df["Natural_gas"] + df["Other"].div(3)
-        )
+        df["heat"] = df["Coal"] + df["Coke_and_breeze"] + df["Natural_gas"] + df["Other"].div(3)
         df["cool"] = 0
         df["lpg"] = df["LPG_NGL"] + df["Residual_fuel_oil"] + df["Other"].div(3)
         return df[["electricity", "heat", "cool", "lpg"]]
@@ -1077,11 +1059,7 @@ class ReadCliu(ReadStrategy):
         mecs["Region"] = mecs.Region.ffill()
         mecs = mecs.dropna(axis=0).drop("Subsector and Industry", axis=1)
         mecs["NAICS"] = mecs.NAICS.astype(int)
-        mecs = (
-            mecs.set_index(["Region", "NAICS"], drop=True)
-            .replace({"*": "0", "Q": "0", "W": "0"})
-            .astype(float)
-        )
+        mecs = mecs.set_index(["Region", "NAICS"], drop=True).replace({"*": "0", "Q": "0", "W": "0"}).astype(float)
         assert not (mecs == np.NaN).any().any()
         return mecs
 
@@ -1364,9 +1342,7 @@ class ReadTransportEfsAeo(ReadStrategy):
         ds = ds.sel(vehicle=aeo.vehicle.values)
 
         ds["yearly_demand"] = aeo  # (vehicle, year)
-        ds["yearly_demand_per_state"] = (
-            ds.percent * ds.yearly_demand * (1 / 100)
-        )  # (vehicle, year, state)
+        ds["yearly_demand_per_state"] = ds.percent * ds.yearly_demand * (1 / 100)  # (vehicle, year, state)
 
         efs = (
             self.efs_profile.reset_index()
@@ -1715,9 +1691,7 @@ class WriteStrategy(ABC):
         """
         Confirms formatting of input datastructure.
         """
-        assert all(
-            x in ["snapshot", "sector", "subsector", "fuel"] for x in df.index.names
-        )
+        assert all(x in ["snapshot", "sector", "subsector", "fuel"] for x in df.index.names)
         assert not df.empty
 
     def _filter_on_snapshots(
@@ -1759,7 +1733,7 @@ class WriteStrategy(ABC):
         Filters on snapshots, sector, and fuel.
         """
 
-        n = self.n
+        n = self.n  # noqa
 
         if isinstance(sns, pd.DatetimeIndex):
             filtered = self._filter_on_snapshots(df, sns)
@@ -1841,11 +1815,7 @@ class WriteStrategy(ABC):
         Make a demand dataframe with zeros.
         """
         n = self.n
-        return (
-            pd.DataFrame(columns=columns, index=n.snapshots.get_level_values(1))
-            .infer_objects()
-            .fillna(0)
-        )
+        return pd.DataFrame(columns=columns, index=n.snapshots.get_level_values(1)).infer_objects().fillna(0)
 
 
 class WritePopulation(WriteStrategy):

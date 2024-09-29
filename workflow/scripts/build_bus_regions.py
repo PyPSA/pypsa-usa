@@ -147,9 +147,7 @@ def main(snakemake):
             continue  # skip empty BA's which are not in the bus dataframe. ex. portions of eastern texas BA when using the WECC interconnect
 
         if region == "MISO-0001":
-            region_shape = (
-                gpd.GeoDataFrame(geometry=region_shape).dissolve().iloc[0].geometry
-            )
+            region_shape = gpd.GeoDataFrame(geometry=region_shape).dissolve().iloc[0].geometry
 
         onshore_regions.append(
             gpd.GeoDataFrame(
@@ -199,11 +197,7 @@ def main(snakemake):
         offshore_regions.append(offshore_regions_c)
     # Exporting
     if offshore_regions:
-        (
-            pd.concat(offshore_regions, ignore_index=True)
-            .set_crs(epsg=4326)
-            .to_file(snakemake.output.regions_offshore)
-        )
+        (pd.concat(offshore_regions, ignore_index=True).set_crs(epsg=4326).to_file(snakemake.output.regions_offshore))
     else:
         offshore_shapes.to_frame().to_file(snakemake.output.regions_offshore)
 

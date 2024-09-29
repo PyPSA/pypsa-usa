@@ -81,10 +81,7 @@ def _filter_link_on_sector(n: pypsa.Network, sector: str) -> pd.DataFrame:
                 & ~(n.links.carrier.str.contains("-water"))  # hot water heaters
             ]
         case "ind":
-            return n.links[
-                (n.links.carrier.str.startswith(sector))
-                & ~(n.links.carrier.str.endswith("-store"))
-            ]
+            return n.links[(n.links.carrier.str.startswith(sector)) & ~(n.links.carrier.str.endswith("-store"))]
         case "trn":
             return n.links[
                 (n.links.carrier.str.startswith(sector))
@@ -114,9 +111,7 @@ def get_load_per_sector_per_fuel(n: pypsa.Network, sector: str, fuel: str, perio
     """
     Time series load per bus per fuel per sector.
     """
-    loads = n.loads[
-        (n.loads.carrier.str.startswith(sector)) & (n.loads.carrier.str.endswith(fuel))
-    ]
+    loads = n.loads[(n.loads.carrier.str.startswith(sector)) & (n.loads.carrier.str.endswith(fuel))]
     return n.loads_t.p[loads.index].loc[period]
 
 
@@ -349,16 +344,10 @@ def get_load_factor_timeseries(
     act_prod = get_sector_production_timeseries(n, sector, state=state)
 
     max_prod = (
-        max_prod.rename(columns={x: x.split(f"{sector}-")[1] for x in max_prod.columns})
-        .T.groupby(level=0)
-        .sum()
-        .T
+        max_prod.rename(columns={x: x.split(f"{sector}-")[1] for x in max_prod.columns}).T.groupby(level=0).sum().T
     )
     act_prod = (
-        act_prod.rename(columns={x: x.split(f"{sector}-")[1] for x in act_prod.columns})
-        .T.groupby(level=0)
-        .sum()
-        .T
+        act_prod.rename(columns={x: x.split(f"{sector}-")[1] for x in act_prod.columns}).T.groupby(level=0).sum().T
     )
 
     lf = act_prod.div(max_prod).mul(100).round(3)
@@ -407,9 +396,7 @@ def get_historical_emissions(
 
     for sector in sectors:
         dfs.append(
-            Emissions(sector, year, api)
-            .get_data(pivot=True)
-            .rename(index={f"{year}": f"{sector}"}),
+            Emissions(sector, year, api).get_data(pivot=True).rename(index={f"{year}": f"{sector}"}),
         )
 
     df = pd.concat(dfs)
@@ -433,9 +420,7 @@ def get_historical_end_use_consumption(
 
     for sector in sectors:
         dfs.append(
-            Seds("consumption", sector, year, api)
-            .get_data(pivot=True)
-            .rename(index={f"{year}": f"{sector}"}),
+            Seds("consumption", sector, year, api).get_data(pivot=True).rename(index={f"{year}": f"{sector}"}),
         )
 
     df = pd.concat(dfs)

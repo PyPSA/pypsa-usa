@@ -46,7 +46,7 @@ dev = [
 myproj = "workflow/scripts"
 
 [tool.black]
-target-version = ["py37"]
+target-version = ["py311"]
 line-length = 120
 skip-string-normalization = true
 

@@ -229,10 +229,8 @@ def convert_generators_2_links(
         ramp_limit_down=plants.ramp_limit_down,
         efficiency=plants.efficiency,
         efficiency2=co2_intensity,
-        marginal_cost=plants.marginal_cost
-        * plants.efficiency,  # fuel costs rated at delievered
-        capital_cost=plants.capital_cost
-        * plants.efficiency,  # links rated on input capacity
+        marginal_cost=plants.marginal_cost * plants.efficiency,  # fuel costs rated at delievered
+        capital_cost=plants.capital_cost * plants.efficiency,  # links rated on input capacity
         lifetime=plants.lifetime,
     )
 
@@ -352,17 +350,9 @@ if __name__ == "__main__":
     # map states to each clustered bus
 
     if snakemake.wildcards.interconnect == "usa":
-        states_2_map = [
-            x
-            for x, y in STATES_INTERCONNECT_MAPPER.items()
-            if y in ("western", "eastern", "texas")
-        ]
+        states_2_map = [x for x, y in STATES_INTERCONNECT_MAPPER.items() if y in ("western", "eastern", "texas")]
     else:
-        states_2_map = [
-            x
-            for x, y in STATES_INTERCONNECT_MAPPER.items()
-            if y == snakemake.wildcards.interconnect
-        ]
+        states_2_map = [x for x, y in STATES_INTERCONNECT_MAPPER.items() if y == snakemake.wildcards.interconnect]
 
     assign_bus_2_state(n, snakemake.input.county, states_2_map, CODE_2_STATE)
 
