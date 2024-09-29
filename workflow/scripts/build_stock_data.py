@@ -368,11 +368,7 @@ class Cecs:
         """
         Gets percentage of stock at a national level.
         """
-        return (
-            self._get_data(fuel, as_percent=True, by_state=by_state, fillna=True)
-            .mul(100)
-            .round(2)
-        )
+        return self._get_data(fuel, as_percent=True, by_state=by_state, fillna=True).mul(100).round(2)
 
     def get_absolute(self, fuel: str, by_state: bool = True) -> pd.DataFrame:
         """
@@ -596,23 +592,17 @@ def _get_brownfield_template_df(
 
     if subsector:
         loads = n.loads[
-            (n.loads.carrier.str.endswith(f"{fuel}-{subsector}"))
-            & (n.loads.carrier.str.startswith(sector))
+            (n.loads.carrier.str.endswith(f"{fuel}-{subsector}")) & (n.loads.carrier.str.startswith(sector))
         ]
     else:
-        loads = n.loads[
-            (n.loads.carrier.str.endswith(fuel))
-            & (n.loads.carrier.str.startswith(sector))
-        ]
+        loads = n.loads[(n.loads.carrier.str.endswith(fuel)) & (n.loads.carrier.str.startswith(sector))]
 
     df = n.loads_t.p_set[loads.index].max().to_frame(name="p_max")
 
     df["state"] = df.index.map(n.loads.bus).map(n.buses.STATE)
     df = df.reset_index(names="bus1")
     df["name"] = df.bus1.map(lambda x: x.split(f" {sector}")[0])
-    df["suffix"] = [
-        bus.split(name)[1].strip() for (bus, name) in df[["bus1", "name"]].values
-    ]
+    df["suffix"] = [bus.split(name)[1].strip() for (bus, name) in df[["bus1", "name"]].values]
 
     return df[["bus1", "name", "suffix", "state", "p_max"]]
 
@@ -685,9 +675,7 @@ def add_transport_brownfield(
 
             vehicles = df.copy()
 
-            vehicles["name"] = (
-                vehicles.name + f" existing_{build_year} " + vehicles.carrier
-            )
+            vehicles["name"] = vehicles.name + f" existing_{build_year} " + vehicles.carrier
             vehicles["p_nom"] = vehicles.p_nom.mul(percent).round(2)
             vehicles = vehicles.set_index("name")
 
@@ -780,9 +768,7 @@ def add_transport_brownfield(
 
             vehicles = df.copy()
 
-            vehicles["name"] = (
-                vehicles.name + f" existing_{build_year} " + vehicles.carrier
-            )
+            vehicles["name"] = vehicles.name + f" existing_{build_year} " + vehicles.carrier
             vehicles["p_nom"] = vehicles.p_nom.mul(percent).round(2)
             vehicles = vehicles.set_index("name")
 
@@ -865,9 +851,7 @@ def add_service_brownfield(
         df["ratio"] = df.state.map(ratios.gas)
         df["p_nom"] = df.p_max.mul(df.ratio).div(100)  # div to convert from %
 
-        marginal_cost_names = [
-            x.replace("heat", "gas-furnace") for x in df.bus1.to_list()
-        ]
+        marginal_cost_names = [x.replace("heat", "gas-furnace") for x in df.bus1.to_list()]
         marginal_cost = _get_marginal_cost(n, marginal_cost_names)
 
         start_year = n.investment_periods[0]
@@ -879,17 +863,13 @@ def add_service_brownfield(
 
             furnaces = df.copy()
 
-            furnaces["name"] = (
-                furnaces.name + f" existing_{build_year} " + furnaces.carrier
-            )
+            furnaces["name"] = furnaces.name + f" existing_{build_year} " + furnaces.carrier
             furnaces["p_nom"] = furnaces.p_nom.mul(percent).div(100).round(2)
             furnaces = furnaces.set_index("name")
 
             if isinstance(marginal_cost, pd.DataFrame):
                 mc = marginal_cost.copy()
-                name_mapper = (
-                    furnaces["bus1"].str.replace("-heat", "-gas-furnace").to_dict()
-                )
+                name_mapper = furnaces["bus1"].str.replace("-heat", "-gas-furnace").to_dict()
                 mc = mc.rename(columns={v: k for k, v in name_mapper.items()})
             else:
                 mc = marginal_cost
@@ -945,9 +925,7 @@ def add_service_brownfield(
         df["ratio"] = df.state.map(ratios.lpg)
         df["p_nom"] = df.p_max.mul(df.ratio).div(100)  # div to convert from %
 
-        marginal_cost_names = [
-            x.replace("heat", "lpg-furnace") for x in df.bus1.to_list()
-        ]
+        marginal_cost_names = [x.replace("heat", "lpg-furnace") for x in df.bus1.to_list()]
         marginal_cost = _get_marginal_cost(n, marginal_cost_names)
 
         start_year = n.investment_periods[0]
@@ -960,17 +938,13 @@ def add_service_brownfield(
 
             furnaces = df.copy()
 
-            furnaces["name"] = (
-                furnaces.name + f" existing_{build_year} " + furnaces.carrier
-            )
+            furnaces["name"] = furnaces.name + f" existing_{build_year} " + furnaces.carrier
             furnaces["p_nom"] = furnaces.p_nom.mul(percent).div(100).round(2)
             furnaces = furnaces.set_index("name")
 
             if isinstance(marginal_cost, pd.DataFrame):
                 mc = marginal_cost.copy()
-                name_mapper = (
-                    furnaces["bus1"].str.replace("-heat", "-lpg-furnace").to_dict()
-                )
+                name_mapper = furnaces["bus1"].str.replace("-heat", "-lpg-furnace").to_dict()
                 mc = mc.rename(columns={v: k for k, v in name_mapper.items()})
             else:
                 mc = marginal_cost
@@ -1032,9 +1006,7 @@ def add_service_brownfield(
                 continue
 
             furnaces = df.copy()
-            furnaces["name"] = (
-                furnaces.name + f" existing_{build_year} " + furnaces.carrier
-            )
+            furnaces["name"] = furnaces.name + f" existing_{build_year} " + furnaces.carrier
             furnaces["p_nom"] = furnaces.p_nom.mul(percent).div(100).round(2)
             furnaces = furnaces.set_index("name")
 

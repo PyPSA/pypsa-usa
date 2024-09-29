@@ -124,7 +124,7 @@ def add_emission_prices(n, emission_prices={"co2": 0.0}, exclude_co2=False):
     if exclude_co2:
         emission_prices.pop("co2")
     ep = (pd.Series(emission_prices).rename(lambda x: x + "_emissions") * n.carriers.filter(like="_emissions")).sum(
-        axis=1
+        axis=1,
     )
     gen_ep = n.generators.carrier.map(ep) / n.generators.efficiency
     n.generators["marginal_cost"] += gen_ep

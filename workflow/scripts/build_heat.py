@@ -199,8 +199,7 @@ def _get_dynamic_marginal_costs(
             )  # $/MCF -> $/MWh
         case "coal":
             raw = (
-                FuelCosts(fuel, year, eia, industry="power").get_data(pivot=True)
-                * COAL_dol_ton_2_MWHthermal
+                FuelCosts(fuel, year, eia, industry="power").get_data(pivot=True) * COAL_dol_ton_2_MWHthermal
             )  # $/Ton -> $/MWh
         case "lpg":
             # https://afdc.energy.gov/fuels/properties
@@ -433,9 +432,7 @@ def add_air_cons(
 
     carrier_name = f"{sector}-{heat_system}-cool"
 
-    loads = n.loads[
-        (n.loads.carrier == carrier_name) & (n.loads.bus.str.contains(heat_system))
-    ]
+    loads = n.loads[(n.loads.carrier == carrier_name) & (n.loads.bus.str.contains(heat_system))]
 
     acs = pd.DataFrame(index=loads.bus)
     acs["bus0"] = acs.index.map(lambda x: x.split(f" {sector}-{heat_system}-cool")[0])
@@ -577,9 +574,7 @@ def add_service_furnace(
 
     carrier_name = f"{sector}-{heat_system}-{heat_carrier}"
 
-    loads = n.loads[
-        (n.loads.carrier == carrier_name) & (n.loads.bus.str.contains(heat_system))
-    ]
+    loads = n.loads[(n.loads.carrier == carrier_name) & (n.loads.bus.str.contains(heat_system))]
 
     df = pd.DataFrame(index=loads.bus)
     df["state"] = df.index.map(n.buses.STATE)
@@ -966,9 +961,7 @@ def add_service_heat_pumps(
 
     hp_abrev = "ashp" if heat_system == "urban" else "gshp"
 
-    loads = n.loads[
-        (n.loads.carrier == carrier_name) & (n.loads.bus.str.contains(heat_system))
-    ]
+    loads = n.loads[(n.loads.carrier == carrier_name) & (n.loads.bus.str.contains(heat_system))]
 
     hps = pd.DataFrame(index=loads.bus)
     hps["bus0"] = hps.index.map(

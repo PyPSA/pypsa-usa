@@ -19,6 +19,14 @@ scenario:
   planning_horizons: [2030, 2050]    #(2018-2023, 2030, 2040, 2050)
 
 # docs :
+model_topology:
+  transmission_network: 'tamu' # [reeds, tamu]
+  include: # mixed zone types not supported
+    # reeds_zone: ['p63']
+    # reeds_state: ['CO']
+    # reeds_ba: ['ERCO']
+
+# docs :
 enable:
   build_cutout: false
 
@@ -30,7 +38,7 @@ snapshots:
 # docs :
 electricity:
   conventional_carriers: [nuclear, oil, OCGT, CCGT, coal, geothermal, biomass, waste] # Choose the conventional plant types to include in network
-  renewable_carriers: [onwind, offwind, offwind_floating, solar, hydro] # Choose the renewable plant types to include in network
+  renewable_carriers: [onwind, solar, hydro] # Choose the renewable plant types to include in network
   voltage_simplified: 230 #Voltage level to simplify network to in rule "simplify network"
   co2limit: 1.4728e+9 # 0.8 * 1.841e+9
   co2limit_enable: false # For sector coupled studies
@@ -56,7 +64,7 @@ electricity:
     H2: 168
 
   extendable_carriers:
-    Generator: [solar, onwind, offwind, offwind_floating, OCGT, CCGT, coal, nuclear, coal-95CCS, CCGT-95CCS, SMR] #include CCGT-CCS
+    Generator: [solar, onwind, OCGT, CCGT, coal, nuclear, coal-95CCS, CCGT-95CCS, SMR] #include CCGT-CCS
     StorageUnit: [4hr_battery_storage, 8hr_battery_storage, 8hr_PHS, 10hr_PHS, 12hr_PHS] # [Xhr-battery-storage (2-10 hours)]
     Store: []
     Link: [] 
@@ -81,8 +89,6 @@ lines:
   s_nom_max: .inf
   max_extension: 2000 #MW
   length_factor: 1.25
-  interface_transmission_limits: false
-  transport_model: false
 
 # docs :
 links:
@@ -165,7 +171,6 @@ clustering:
   cluster_network:
     algorithm: kmeans # choose from: [hac, kmeans]
     feature: solar+onwind-time
-    aggregation_zones: 'reeds_zone' # [balancing_area, state, reeds_zone]
     exclude_carriers: []
     consider_efficiency_classes: false
   aggregation_strategies:

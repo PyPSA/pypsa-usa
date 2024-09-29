@@ -233,7 +233,7 @@ if __name__ == "__main__":
 
     # Group by pypsa-name and filter for correct cost recovery period
     pudl_atb = (
-        pudl_atb.groupby("pypsa-name")
+        pudl_atb.groupby("pypsa-name")[pudl_atb.columns]
         .apply(
             lambda x: x[x["cost_recovery_period_years"] == const.ATB_TECH_MAPPER[x.name].get("crp", 30)],
         )
@@ -421,7 +421,8 @@ if __name__ == "__main__":
             pivot_atb["pypsa-name"] == f"{x}hr_battery_storage",
             "wacc_real",
         ] = pivot_atb.loc[
-            pivot_atb["pypsa-name"] == "solar", "wacc_real"
+            pivot_atb["pypsa-name"] == "solar",
+            "wacc_real",
         ].values[0]
         pivot_atb.loc[
             pivot_atb["pypsa-name"] == f"{x}hr_battery_storage",

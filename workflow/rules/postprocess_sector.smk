@@ -47,12 +47,15 @@ FIGURES_SYSTEM_VALIDATION = [
 
 rule plot_natural_gas:
     input:
-        network=RESULTS + "{interconnect}/networks/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc",
+        network=RESULTS
+        + "{interconnect}/networks/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc",
     params:
         plotting=config["plotting"],
     output:
         **{
-            fig: RESULTS + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/gas/%s" % fig
+            fig: RESULTS
+            + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/gas/%s"
+            % fig
             for fig in FIGURES_SECTOR_NATURAL_GAS
         },
     log:
@@ -63,13 +66,15 @@ rule plot_natural_gas:
 
 rule plot_sector_emissions:
     input:
-        network=RESULTS + "{interconnect}/networks/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc",
+        network=RESULTS
+        + "{interconnect}/networks/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc",
     params:
         plotting=config["plotting"],
     output:
         **{
             fig: RESULTS
-            + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/{state}/emissions/%s.png" % fig
+            + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/{state}/emissions/%s.png"
+            % fig
             for fig in FIGURES_SECTOR_EMISSIONS
         },
     log:
@@ -83,13 +88,15 @@ rule plot_sector_emissions:
 
 rule plot_sector_production:
     input:
-        network=RESULTS + "{interconnect}/networks/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc",
+        network=RESULTS
+        + "{interconnect}/networks/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc",
     params:
         plotting=config["plotting"],
     output:
         **{
             fig: RESULTS
-            + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/{state}/production/%s.png" % fig
+            + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/{state}/production/%s.png"
+            % fig
             for fig in FIGURES_SECTOR_PRODUCTION
         },
     log:
@@ -103,13 +110,15 @@ rule plot_sector_production:
 
 rule plot_sector_capacity:
     input:
-        network=RESULTS + "{interconnect}/networks/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc",
+        network=RESULTS
+        + "{interconnect}/networks/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc",
     params:
         plotting=config["plotting"],
     output:
         **{
             fig: RESULTS
-            + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/{state}/capacity/%s.png" % fig
+            + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/{state}/capacity/%s.png"
+            % fig
             for fig in FIGURES_SECTOR_CAPACITY
         },
     log:
@@ -123,13 +132,15 @@ rule plot_sector_capacity:
 
 rule plot_sector_loads:
     input:
-        network=RESULTS + "{interconnect}/networks/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc",
+        network=RESULTS
+        + "{interconnect}/networks/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc",
     params:
         plotting=config["plotting"],
     output:
         **{
             fig: RESULTS
-            + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/{state}/loads/%s.png" % fig
+            + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/{state}/loads/%s.png"
+            % fig
             for fig in FIGURES_SECTOR_LOADS
         },
     log:
@@ -143,14 +154,16 @@ rule plot_sector_loads:
 
 rule plot_sector_validate:
     input:
-        network=RESULTS + "{interconnect}/networks/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc",
+        network=RESULTS
+        + "{interconnect}/networks/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc",
     params:
         plotting=config["plotting"],
         eia_api=config["api"]["eia"],
     output:
         **{
             fig: RESULTS
-            + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/{state}/validate/%s.png" % fig
+            + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/{state}/validate/%s.png"
+            % fig
             for fig in FIGURES_SECTOR_VALIDATE
         },
     log:
@@ -164,13 +177,15 @@ rule plot_sector_validate:
 
 rule plot_system_production:
     input:
-        network=RESULTS + "{interconnect}/networks/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc",
+        network=RESULTS
+        + "{interconnect}/networks/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc",
     params:
         plotting=config["plotting"],
     output:
         **{
             fig: RESULTS
-            + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/system/production/%s.png" % fig
+            + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/system/production/%s.png"
+            % fig
             for fig in FIGURES_SYSTEM_PRODUCTION
         },
     log:
@@ -184,14 +199,16 @@ rule plot_system_production:
 
 rule plot_system_validate:
     input:
-        network=RESULTS + "{interconnect}/networks/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc",
+        network=RESULTS
+        + "{interconnect}/networks/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc",
     params:
         plotting=config["plotting"],
         eia_api=config["api"]["eia"],
     output:
         **{
             fig: RESULTS
-            + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/system/validate/%s.png" % fig
+            + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/system/validate/%s.png"
+            % fig
             for fig in FIGURES_SYSTEM_VALIDATION
         },
     log:

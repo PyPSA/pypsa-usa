@@ -226,7 +226,8 @@ if __name__ == "__main__":
     cutout = atlite.Cutout(snakemake.input.cutout).sel(time=sns)
 
     regions = gpd.read_file(snakemake.input.regions)
-    assert not regions.empty, (
+
+    assert "x" in regions.columns and "y" in regions.columns, (
         f"List of regions in {snakemake.input.regions} is empty, please "
         "disable the corresponding renewable technology"
     )

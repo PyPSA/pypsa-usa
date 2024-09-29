@@ -303,8 +303,10 @@ def create_historic_region_data(
         },
     }
 
-    aggregation_zone = snakemake.config["clustering"]["cluster_network"]["aggregation_zones"]
-    regions = region_mapper[aggregation_zone][region] if region in region_mapper[aggregation_zone] else [region]
+    topological_boundaries = snakemake.config["model_topology"]["topological_boundaries"]
+    regions = (
+        region_mapper[topological_boundaries][region] if region in region_mapper[topological_boundaries] else [region]
+    )
 
     historic_region = historic_all_ba.loc[regions].groupby(level=1).sum()
 
@@ -341,7 +343,8 @@ def plot_regional_comparisons(
     )
     buses = n.buses.copy()
 
-    if snakemake.config["clustering"]["cluster_network"]["aggregation_zones"] == "reeds_zone":
+    if snakemake.config["model_topology"]["topological_boundaries"] == "reeds_zone":
+
         regions = n.buses.reeds_ba.unique()
         regions = list(OrderedDict.fromkeys(regions))
         buses["region"] = buses.reeds_ba
@@ -641,10 +644,10 @@ def plot_ba_emissions_historical_bar(
     Compares regional annual emissions to the year.
     """
 
-    year = snapshots[0].year
+    # year = snapshots[0].year
 
-    sectors = wildcards["sector"].split("-")
-    historical_emissions = []
+    # sectors = wildcards["sector"].split("-")
+    # historical_emissions = []
 
     historical = pd.Series()
     for region in ge_emissions.index.get_level_values(0).unique():
@@ -655,7 +658,7 @@ def plot_ba_emissions_historical_bar(
             region,
             emissions=True,
         ).sum(
-            axis=0
+            axis=0,
         )["Net Generation"]
         region_em = region_em.sum() / 1e9
         historical.loc[region] = region_em
@@ -667,14 +670,16 @@ def plot_ba_emissions_historical_bar(
         columns=["Optimized"],
     )
 
-    if snakemake.config["clustering"]["cluster_network"]["aggregation_zones"] == "balancing_area":
+    if snakemake.config["model_topology"]["topological_boundaries"] == "balancing_area":
         optimized.loc["CISO"] = optimized.loc[["CISO-PGAE", "CISO-SCE", "CISO-SDGE", "CISO-VEA"]].sum()
+
         optimized.drop(
             index=["CISO-PGAE", "CISO-SCE", "CISO-SDGE", "CISO-VEA"],
             inplace=True,
         )
-    elif snakemake.config["clustering"]["cluster_network"]["aggregation_zones"] == "reeds_zone":
+    elif snakemake.config["model_topology"]["topological_boundaries"] == "reeds_zone":
         region_mapper = n.buses[["country", "reeds_ba"]].drop_duplicates().set_index("country")["reeds_ba"].to_dict()
+
         optimized["region"] = optimized.index.map(region_mapper)
         optimized = optimized.groupby("region").sum()
         optimized.index.name = "country"
@@ -900,9 +905,9 @@ def main(snakemake):
     snapshots = n.snapshots.get_level_values(1)
 
     onshore_regions = gpd.read_file(snakemake.input.regions_onshore)
-    offshore_regions = gpd.read_file(snakemake.input.regions_offshore)
+    # offshore_regions = gpd.read_file(snakemake.input.regions_offshore)
 
-    buses = get_regions(n)
+    # buses = get_regions(n)
 
     # Load Grid Emissions Electricity Data
     ge_all = pd.read_csv(snakemake.input.ge_all).drop(columns=["Unnamed: 0"])
@@ -918,7 +923,7 @@ def main(snakemake):
     ge_all.columns = ge_all.columns.map(GE_carrier_names).fillna("Interchange")
 
     ge_all["interconnect"] = ge_all.index.get_level_values(0).map(EIA_BA_2_REGION).map(EIA_930_REGION_MAPPER)
-    ge_interchange = ge_all.loc[ge_all.interconnect.isna(), "Interchange"] / 1e3
+    # ge_interchange = ge_all.loc[ge_all.interconnect.isna(), "Interchange"] / 1e3
     ge_all = ge_all.loc[~ge_all.interconnect.isna()]
 
     if not snakemake.wildcards.interconnect == "usa":

@@ -1102,7 +1102,7 @@ def plot_sector_load_timeseries(
 
         avg = l.mean(axis=1)
 
-        palette = sns.color_palette(["lightgray"])
+        # palette = sns.color_palette(["lightgray"])
 
         try:
 

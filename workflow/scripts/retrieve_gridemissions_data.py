@@ -35,9 +35,12 @@ def download_and_extract(url, extract_path):
     total_size_in_bytes = int(response.headers.get("content-length", 0))
 
     # Setup progress bar
-    with open(filename, "wb") as file, progressbar.ProgressBar(
-        max_value=total_size_in_bytes,
-    ) as bar:
+    with (
+        open(filename, "wb") as file,
+        progressbar.ProgressBar(
+            max_value=total_size_in_bytes,
+        ) as bar,
+    ):
         for data in response.iter_content(1024):
             file.write(data)
             bar.update(bar.value + len(data))

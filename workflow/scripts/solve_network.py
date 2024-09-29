@@ -35,13 +35,14 @@ import xarray as xr
 import yaml
 from _helpers import (
     configure_logging,
+    is_transport_model,
     update_config_from_wildcards,
     update_config_with_sector_opts,
 )
+from pypsa.descriptors import get_switchable_as_dense as get_as_dense
 
 logger = logging.getLogger(__name__)
 pypsa.pf.logger.setLevel(logging.WARNING)
-from pypsa.descriptors import get_switchable_as_dense as get_as_dense
 
 
 def add_land_use_constraint_perfect(n):
@@ -214,8 +215,6 @@ def add_CCL_constraints(n, config):
     gens = n.generators.query("p_nom_extendable").rename_axis(index="Generator-ext")
     grouper = pd.concat([gens.bus.map(n.buses.country), gens.carrier], axis=1)
     lhs = p_nom.groupby(grouper).sum().rename(bus="country")
-
-    gens_non_extendable = n.generators.query("not p_nom_extendable")
 
     minimum = xr.DataArray(agg_p_nom_minmax["min"].dropna()).rename(dim_0="group")
     index = minimum.indexes["group"].intersection(lhs.indexes["group"])
@@ -445,6 +444,7 @@ def add_interface_limits(n, sns, config):
     capacities based on user-defined inter-regional transfer capacity limits.
     """
     logger.info("Adding Interface Transmission Limits.")
+    transport_model = is_transport_model(snakemake.params.transmission_network)
     limits = pd.read_csv(snakemake.input.flowgates)
     user_limits = pd.read_csv(
         config["electricity"]["transmission_interface_limits"],
@@ -479,7 +479,8 @@ def add_interface_limits(n, sns, config):
             line_flows = n.model["Line-s"].loc[:, interface_lines_b1.index].sum(
                 dims="Line",
             ) - n.model["Line-s"].loc[
-                :, interface_lines_b0.index
+                :,
+                interface_lines_b0.index,
             ].sum(dims="Line")
         else:
             line_flows = 0.0
@@ -487,13 +488,14 @@ def add_interface_limits(n, sns, config):
 
         if (
             not (pd.concat([interface_links_b0, interface_links_b1]).empty)
-            and ("RESOLVE" in interface.interface or config["lines"]["transport_model"])
+            and ("RESOLVE" in interface.interface or transport_model)
             # Apply link constraints if RESOLVE constraint or if zonal model. ITLs should usually only apply to AC lines if DC PF is used.
         ):
             link_flows = n.model["Link-p"].loc[:, interface_links_b1.index].sum(
                 dims="Link",
             ) - n.model["Link-p"].loc[
-                :, interface_links_b0.index
+                :,
+                interface_links_b0.index,
             ].sum(dims="Link")
             lhs += link_flows
 
@@ -509,7 +511,6 @@ def add_regional_co2limit(n, sns, config):
     Adding regional regional CO2 Limits Specified in the config.yaml.
     """
     from pypsa.descriptors import get_switchable_as_dense as get_as_dense
-    from pypsa.linopt import get_var
 
     regional_co2_lims = pd.read_csv(
         config["electricity"]["regional_Co2_limits"],
@@ -611,7 +612,6 @@ def add_SAFE_constraints(n, config):
     peakdemand = n.loads_t.p_set.sum(axis=1).max()
     margin = 1.0 + config["electricity"]["SAFE_reservemargin"]
     reserve_margin = peakdemand * margin
-    conventional_carriers = config["electricity"]["conventional_carriers"]
     ext_gens_i = n.generators.query(
         "carrier in @conventional_carriers & p_nom_extendable",
     ).index
@@ -681,7 +681,6 @@ def add_SAFER_constraints(n, config):
         )
         margin = 1.0 + prm.prm
         planning_reserve = peakdemand * margin
-        conventional_carriers = config["electricity"]["conventional_carriers"]
 
         region_gens = n.generators[n.generators.bus.isin(region_buses.index)]
         ext_gens_i = region_gens.query(

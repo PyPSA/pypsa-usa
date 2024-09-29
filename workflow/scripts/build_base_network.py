@@ -1,44 +1,4 @@
 # BY PyPSA-USA Authors
-"""
-**Relevant Settings**
-
-.. code:: yaml
-
-    interconnect:
-    offshore_shape:
-    aggregation_zones:
-    countries:
-
-
-**Inputs**
-
-- ``data/breakthrough_network/base_grid/{interconnect}/bus.csv``
-- ``data/breakthrough_network/base_grid/{interconnect}/branch.csv``
-- ``data/breakthrough_network/base_grid/{interconnect}/dcline.csv``
-- ``data/breakthrough_network/base_grid/{interconnect}/bus2sub.csv``
-- ``data/breakthrough_network/base_grid/{interconnect}/sub.csv``
-- ``resources/country_shapes.geojson``: confer :ref:`shapes`
-- ``resources/offshore_shapes.geojson``: confer :ref:`shapes`
-- ``resources/{interconnect}/state_boundaries.geojson``: confer :ref:`shapes`
-
-
-**Outputs**
-
-- ``networks/base.nc``:
-- ``data/breakthrough_network/base_grid/{interconnect}/bus2sub.csv``
-- ``data/breakthrough_network/base_grid/{interconnect}/sub.csv``
-- ``resources/{interconnect}/elec_base_network.nc``
-
-
-**Description**
-
-Reads in Breakthrough Energy/TAMU transmission dataset, and converts it into PyPSA compatible components. A base netowork file (`*.nc`) is written out. Included in this network are:
-    - Geolocated buses
-    - Geoloactated AC and DC transmission lines + links
-    - Transformers
-"""
-
-
 import logging
 from typing import Optional
 
@@ -337,8 +297,8 @@ def identify_osw_poi(n: pypsa.Network) -> pypsa.Network:
     poi_sub_ids = n.buses.loc[poi_bus_ids, "sub_id"].unique()
     n.buses.loc[n.buses.index.isin(poi_bus_ids), "poi_bus"] = True
     n.buses.loc[n.buses.sub_id.isin(poi_sub_ids), "poi_sub"] = True
-    n.buses.poi_bus = n.buses.poi_bus.fillna(False)
-    n.buses.poi_sub = n.buses.poi_sub.fillna(False)
+    n.buses.poi_bus = n.buses.poi_bus.astype(bool).fillna(False)
+    n.buses.poi_sub = n.buses.poi_sub.astype(bool).fillna(False)
     return n
 
 
@@ -612,6 +572,7 @@ def main(snakemake):
     n = pypsa.Network()
     n.name = "PyPSA-USA"
 
+    model_topology = snakemake.params.model_topology
     interconnect = snakemake.wildcards.interconnect
     # interconnect in raw data given with an uppercase first letter
     if interconnect != "usa":
@@ -638,7 +599,6 @@ def main(snakemake):
         pd.concat([ba_region_shapes, offshore_shapes], ignore_index=True),
     )
     ba_shape = ba_shape.rename(columns={"name": "balancing_area"})
-
     # Load country, state, county, and REeDs shapes
     state_shape = gpd.read_file(snakemake.input["state_shapes"])
     state_shape = state_shape.rename(columns={"name": "state"})
@@ -701,12 +661,35 @@ def main(snakemake):
     assign_missing_states_countries(n)
     assign_reeds_memberships(n, snakemake.input.reeds_memberships)
 
-    p_max_pu = 1  # snakemake.params["links"].get("p_max_pu", 1.0)
+    p_max_pu = 1
     n.links["p_max_pu"] = p_max_pu
     n.links["p_min_pu"] = -p_max_pu
 
+    # Filter Network to Only Specified Regions
+    if model_topology is not None:
+        for region_type in model_topology:
+            rm_buses = n.buses.loc[~(n.buses[f"{region_type}"].isin(model_topology[region_type]))]
+            rm_lines = n.lines.loc[(n.lines.bus0.isin(rm_buses.index)) | (n.lines.bus1.isin(rm_buses.index))]
+            rm_transformers = n.transformers.loc[
+                (n.transformers.bus0.isin(rm_buses.index)) | (n.transformers.bus1.isin(rm_buses.index))
+            ]
+            rm_links = n.links.loc[(n.links.bus0.isin(rm_buses.index)) | (n.links.bus1.isin(rm_buses.index))]
+            n.mremove("Line", rm_lines.index.tolist())
+            n.mremove("Transformer", rm_transformers.index.tolist())
+            n.mremove("Link", rm_links.index.tolist())
+            n.mremove("Bus", rm_buses.index.tolist())
+            logger.info(
+                f"Filtered network to {model_topology[region_type]}. Removed {len(rm_buses)} buses, {len(n.buses)} remaining.",
+            )
+            assert (
+                len(n.buses) > 0
+            ), "No buses remaining in network. Check your model_topology: inclusion:, you may be filtering the wrong zones for the selected interconnect"
+
     # Tests
     logger.info(test_network_datatype_consistency(n))
+
+    col_list = ["poi_bus", "poi_sub", "poi"]
+    n.buses.drop(columns=[col for col in col_list if col in n.buses], inplace=True)
 
     if (
         len(
@@ -719,9 +702,19 @@ def main(snakemake):
         )
 
     # export bus2sub interconnect data
-    logger.info(f"Exporting bus2sub and sub data for {interconnect}")
+    bus2sub = n.buses[
+        [
+            "sub_id",
+            "interconnect",
+            "balancing_area",
+            "x",
+            "y",
+            "state",
+            "country",
+            "county",
+        ]
+    ]
 
-    bus2sub = n.buses[["sub_id", "interconnect", "balancing_area", "x", "y", "state", "country"]]
     bus2sub.to_csv(snakemake.output.bus2sub)
     subs = (
         n.buses[["sub_id", "x", "y", "interconnect"]]
@@ -769,6 +762,6 @@ if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
 
-        snakemake = mock_snakemake("build_base_network", interconnect="western")
+        snakemake = mock_snakemake("build_base_network", interconnect="texas")
     configure_logging(snakemake)
     main(snakemake)

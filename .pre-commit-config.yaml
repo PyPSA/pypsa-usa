@@ -60,4 +60,15 @@ repos:
   rev: 24.8.0
   hooks:
   - id: black
+    language_version: python3.11
+    args: ["--line-length", "120"]
   - id: black-jupyter
+    language_version: python3.11
+    args: ["--line-length", "120"]
+
+
+- repo: https://github.com/pycqa/flake8
+  rev: 7.1.1
+  hooks:
+  - id: flake8
+    args: [--select=F841]    # F841 is the error code for unused variables

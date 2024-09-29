@@ -611,7 +611,7 @@ def impute_missing_plant_data(
 
     # Calculate the weighted averages excluding NaNs
     weighted_averages = (
-        plants.groupby(aggregation_fields)
+        plants.groupby(aggregation_fields)[plants.columns]
         .apply(
             lambda x: pd.Series(
                 {field: weighted_avg(x, field, "p_nom") for field in data_fields},
@@ -645,8 +645,7 @@ def impute_missing_plant_data(
     plants_merged = plants_merged.drop(
         columns=[f"{field}_weighted" for field in data_fields],
     )
-    plants_merged.set_index("generator_name", inplace=True)
-    return plants_merged
+    return plants_merged.set_index("generator_name")
 
 
 def set_parameters(plants: pd.DataFrame):
@@ -655,14 +654,12 @@ def set_parameters(plants: pd.DataFrame):
     data.
     """
     plants = plants[plants.nerc_region.isin(["WECC", "TRE", "MRO", "SERC", "RFC", "NPCC"])]
-
-    plants.rename(
+    plants = plants.rename(
         {
             "fuel_cost_per_mwh_source": "fuel_cost_source",
             "unit_heat_rate_mmbtu_per_mwh_source": "heat_rate_source",
         },
         axis=1,
-        inplace=True,
     )
 
     plants["generator_name"] = (
@@ -672,7 +669,7 @@ def set_parameters(plants: pd.DataFrame):
         + "_"
         + plants.generator_id.astype(str)
     )
-    plants.set_index("generator_name", inplace=True)
+    plants = plants.set_index("generator_name")
     plants["p_nom"] = plants.pop("capacity_mw")
     plants["build_year"] = plants.pop("generator_operating_date").dt.year
     plants["heat_rate"] = plants.pop("unit_heat_rate_mmbtu_per_mwh")
@@ -752,7 +749,7 @@ def filter_outliers_iqr_grouped(df, group_column, value_column):
         upper_bound = Q3 + 1.5 * IQR
         return group[(group[value_column] >= lower_bound) & (group[value_column] <= upper_bound)]
 
-    return df.groupby(group_column).apply(filter_outliers).reset_index(drop=True)
+    return df.groupby(group_column)[df.columns].apply(filter_outliers).reset_index(drop=True)
 
 
 def filter_outliers_zscore(temporal_data, target_field_name):
@@ -778,7 +775,7 @@ def filter_outliers_zscore(temporal_data, target_field_name):
     # Filter out the outliers using Z-score
     threshold = 3
     filtered_temporal = temporal_stats[np.abs(temporal_stats["z_score"]) <= threshold]
-    filtered_temporal.drop(columns=["mean", "std", "z_score"], inplace=True)
+    filtered_temporal = filtered_temporal.drop(columns=["mean", "std", "z_score"])
     return filtered_temporal
 
 
@@ -910,9 +907,11 @@ if __name__ == "__main__":
 
     # temp throwing out plants without
     missing_locations = plants[plants.longitude.isna() | plants.latitude.isna()]
-    print("Tossing out plants without locations:", missing_locations.shape[0])
+    logger.warning(
+        f"Tossing out plants without locations: {missing_locations.shape[0]}",
+    )
     # plants[plants.index.isin(missing_locations.index)].to_csv('missing_gps_pudl.csv')
     plants = plants[~plants.index.isin(missing_locations.index)]
     # print(plants)
-
+    logger.info(f"Exporting Powerplants, with {plants.shape[0]} entries.")
     plants.to_csv(snakemake.output.powerplants, index=False)

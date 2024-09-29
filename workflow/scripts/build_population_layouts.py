@@ -144,8 +144,8 @@ def plot_county_data(
 
     sm = plt.cm.ScalarMappable(norm=plt.Normalize(vmin=vmin, vmax=vmax), cmap=cmap)
     sm._A = []  # Empty array for the data range
-    cbaxes = fig.add_axes([0.15, 0.25, 0.01, 0.4])
-    cbar = fig.colorbar(sm, cax=cbaxes)
+    # cbaxes = fig.add_axes([0.15, 0.25, 0.01, 0.4])
+    # cbar = fig.colorbar(sm, cax=cbaxes)
 
     if save:
         fig.savefig(save)

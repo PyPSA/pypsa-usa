@@ -29,19 +29,6 @@ The **ReEDS zonal network** is a Balancing Authority resolution transmission net
 ![ReEDS_topology](./_static/networks/ReEDS_Topology.png)
 
 
-### Usage
-
-The TAMU network is the default transmission network in PyPSA-USA, you can modify it's resolution though the `simpl` and `clusters` wildcards in the configuration files.
-
-To use the ReEDS network in PyPSA-USA, you must enable the `links: transport_model` setting, and set the proper number of `cluster` nodes for your modeled interconnection. You can find the details on number of nodes in each zone in the table below.
-
-```{eval-rst}
-.. csv-table::
-   :header-rows: 1
-   :widths: 22,22,33
-   :file: datatables/transmission_nodes.csv
-```
-
 (transmission-data)=
 ### Data
 ```{eval-rst}

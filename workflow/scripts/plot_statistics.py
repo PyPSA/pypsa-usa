@@ -167,7 +167,7 @@ def stacked_bar_horizons(
     fig.subplots_adjust(hspace=0, bottom=0.5)
     fig.suptitle(f"{variable}", fontsize=12, fontweight="bold")
     plt.xlabel(f"{variable} {variable_units}")
-    fig.tight_layout()
+    # fig.tight_layout()
     # plt.show(block=True)
     return fig
 
@@ -198,8 +198,8 @@ def plot_capacity_additions_bar(
 
     optimal_capacity.set_index("carrier", inplace=True)
     optimal_capacity.insert(0, "Existing", existing_capacity["Existing Capacity"])
-    color_palette = get_color_palette(n)
-    color_mapper = [color_palette[carrier] for carrier in optimal_capacity.index]
+    # color_palette = get_color_palette(n)
+    # color_mapper = [color_palette[carrier] for carrier in optimal_capacity.index]
 
     stats = {"": optimal_capacity}
     variable = "Optimal Capacity"
@@ -329,7 +329,7 @@ def plot_regional_capacity_additions_bar(
     # Adjust legend to include all carriers
     handles, labels = [], []
     for i, carrier in enumerate(df_sorted["carrier"].unique()):
-        handle = plt.Rectangle((0, 0), 1, 1, color=palette[carrier], edgecolor="w")
+        handle = plt.Rectangle((0, 0), 1, 1, color=palette[carrier])
         handles.append(handle)
         labels.append(f"{carrier}")
 
@@ -358,6 +358,8 @@ def plot_regional_emissions_bar(
         x=regional_emisssions.values,
         y=regional_emisssions.index,
         palette="viridis",
+        hue=regional_emisssions.index,
+        legend=False,
     )
 
     plt.xlabel("CO2 Emissions [MMtCO2]")
@@ -419,12 +421,12 @@ def plot_production_area(
                     (n.snapshots.get_level_values(0) == investment_period)
                     & (n.snapshots.get_level_values(1).month == month)
                 ]
-            energy_mix.loc[sns].droplevel("period").plot.area(
+            energy_mix.loc[sns].droplevel("period").round(2).plot.area(
                 ax=axs[i],
                 alpha=0.7,
                 color=color_palette,
             )
-            demand.loc[sns].droplevel("period").plot.line(
+            demand.loc[sns].droplevel("period").round(2).plot.line(
                 ax=axs[i],
                 ls="-",
                 color="darkblue",
@@ -565,7 +567,13 @@ def plot_curtailment_heatmap(n: pypsa.Network, save: str, **wildcards) -> None:
     axes = axes.flatten()  # Flatten the axes array for easy iteration
 
     for i, carrier in enumerate(carriers):
-        pivot_table = df_long[df_long.carrier == carrier].pivot(index="month", columns="hour", values="MW").fillna(0)
+        pivot_table = (
+            df_long[df_long.carrier == carrier]
+            .pivot(index="month", columns="hour", values="MW")
+            .astype(float)
+            .fillna(0)
+        )
+
         sns.heatmap(pivot_table, ax=axes[i], cmap="viridis")
         axes[i].set_title(carrier)
 
@@ -607,7 +615,10 @@ def plot_capacity_factor_heatmap(n: pypsa.Network, save: str, **wildcards) -> No
 
     for i, carrier in enumerate(unique_groups):
         pivot_table = (
-            df_long[df_long.carrier == carrier].pivot(index="month", columns="hour", values="p_max_pu").fillna(0)
+            df_long[df_long.carrier == carrier]
+            .pivot(index="month", columns="hour", values="p_max_pu")
+            .astype(float)
+            .fillna(0)
         )
         sns.heatmap(pivot_table, ax=axes[i], cmap="viridis")
         axes[i].set_title(carrier)
@@ -653,8 +664,8 @@ def plot_generator_data_panel(
         :,
     ]
 
-    df_storage_units = n.storage_units.loc[n.storage_units.p_nom_extendable, :]
-    df_storage_units["efficiency"] = df_storage_units.efficiency_dispatch
+    df_storage_units = n.storage_units.loc[n.storage_units.p_nom_extendable, :].copy()
+    df_storage_units.loc[:, "efficiency"] = df_storage_units.efficiency_dispatch
     df_capex_expand = pd.concat([df_capex_expand, df_storage_units])
 
     df_efficiency = n.generators.loc[

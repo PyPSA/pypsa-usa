@@ -94,7 +94,12 @@ import pandas as pd
 import pyomo.environ as po
 import pypsa
 import seaborn as sns
-from _helpers import calculate_annuity, configure_logging, update_p_nom_max
+from _helpers import (
+    calculate_annuity,
+    configure_logging,
+    is_transport_model,
+    update_p_nom_max,
+)
 from add_electricity import update_transmission_costs
 from constants import *
 from pypsa.clustering.spatial import (
@@ -122,7 +127,8 @@ def weighting_for_country(n, x):
     gen = generators.loc[generators.carrier_base.isin(conv_carriers)].groupby(
         "bus",
     ).p_nom.sum().reindex(
-        n.buses.index, fill_value=0.0
+        n.buses.index,
+        fill_value=0.0,
     ) + n.storage_units.loc[n.storage_units.carrier.isin(conv_carriers)].groupby(
         "bus",
     ).p_nom.sum().reindex(
@@ -346,7 +352,7 @@ def busmap_for_n_clusters(
 
     return (
         n.buses.groupby(["country", "sub_network"], group_keys=False)
-        .apply(busmap_for_country)
+        .apply(busmap_for_country, include_groups=False)
         .squeeze()
         .rename("busmap")
     )
@@ -379,7 +385,7 @@ def clustering_for_n_clusters(
 
     line_strategies = aggregation_strategies.get("lines", dict())
     generator_strategies = aggregation_strategies.get("generators", dict())
-    bus_strategies = aggregation_strategies.get("buses", dict())
+    # bus_strategies = aggregation_strategies.get("buses", dict())
     one_port_strategies = aggregation_strategies.get("one_ports", dict())
 
     clustering = get_clustering_from_busmap(
@@ -406,19 +412,23 @@ def clustering_for_n_clusters(
     return clustering
 
 
-def replace_lines_with_links(clustering, itl_fn):
+def convert_to_transport(clustering, itl_fn, itl_cost_fn, topological_boundaries):
     """
     Replaces all Lines according to Links with the transfer capacity specified
     by the ITLs.
     """
-    lines = clustering.network.lines.copy()
+    # lines = clustering.network.lines.copy()
     buses = clustering.network.buses.copy()
 
     itls = pd.read_csv(itl_fn)
 
-    itls = itls[itls.r.isin(clustering.network.buses.reeds_zone) & itls.rr.isin(clustering.network.buses.reeds_zone)]
+    itls.columns = itls.columns.str.lower()
+    itls = itls[
+        itls.r.isin(clustering.network.buses[f"{topological_boundaries}"])
+        & itls.rr.isin(clustering.network.buses[f"{topological_boundaries}"])
+    ]
 
-    itl_cost = pd.read_csv(snakemake.input.itl_costs)
+    itl_cost = pd.read_csv(itl_cost_fn)
     itl_cost["interface"] = itl_cost.r + "||" + itl_cost.rr
     itl_cost = itl_cost[itl_cost.interface.isin(itls.interface)]
     itl_cost["USD2023perMW"] = itl_cost["USD2004perMW"] * (314.54 / 188.9)
@@ -429,11 +439,11 @@ def replace_lines_with_links(clustering, itl_fn):
         how="left",
     )
 
-    itls["p_min_pu_Rev"] = (-1 * (itls.MW_r0 / itls.MW_f0)).fillna(0)
+    itls["p_min_pu_Rev"] = (-1 * (itls.mw_r0 / itls.mw_f0)).fillna(0)
 
     # lines to add in reverse if forward direction is zero
-    itls_rev = itls[itls.MW_f0 == 0].copy()
-    itls_fwd = itls[itls.MW_f0 != 0]
+    itls_rev = itls[itls.mw_f0 == 0].copy()
+    itls_fwd = itls[itls.mw_f0 != 0]
 
     clustering.network.mremove("Line", clustering.network.lines.index)
     clustering.network.madd(
@@ -441,8 +451,8 @@ def replace_lines_with_links(clustering, itl_fn):
         names=itls_fwd.interface,  # itl name
         bus0=buses.loc[itls_fwd.r].index,
         bus1=buses.loc[itls_fwd.rr].index,
-        p_nom=itls_fwd.MW_f0.values,
-        p_nom_min=itls_fwd.MW_f0.values,
+        p_nom=itls_fwd.mw_f0.values,
+        p_nom_min=itls_fwd.mw_f0.values,
         p_max_pu=1.0,
         p_min_pu=itls_fwd.p_min_pu_Rev.values,
         length=itls_fwd.length_miles.values,
@@ -457,8 +467,8 @@ def replace_lines_with_links(clustering, itl_fn):
         suffix="rev",
         bus0=buses.loc[itls_rev.r].index,
         bus1=buses.loc[itls_rev.rr].index,
-        p_nom=itls_rev.MW_r0.values,
-        p_nom_min=itls_rev.MW_r0.values,
+        p_nom=itls_rev.mw_r0.values,
+        p_nom_min=itls_rev.mw_r0.values,
         p_max_pu=0,
         p_min_pu=-1,
         length=itls_rev.length_miles.values,
@@ -555,6 +565,9 @@ if __name__ == "__main__":
         periods=snakemake.params.planning_horizons,
     )
 
+    topological_boundaries = params.topological_boundaries
+    transport_model = is_transport_model(params.transmission_network)
+
     exclude_carriers = params.cluster_network["exclude_carriers"]
     aggregate_carriers = set(n.generators.carrier) - set(exclude_carriers)
     conventional_carriers = set(params.conventional_carriers)
@@ -568,6 +581,13 @@ if __name__ == "__main__":
         n_clusters = len(n.buses)
     else:
         n_clusters = int(snakemake.wildcards.clusters)
+
+    if transport_model:
+        logger.info(f"Using Transport Model.")
+        nodes_req = n.buses[f"{topological_boundaries}"].unique()
+        assert n_clusters == len(
+            nodes_req,
+        ), f"Number of clusters must be {len(nodes_req)} to use the Reeds Network. Check your config."
 
     if params.cluster_network.get("consider_efficiency_classes", False):
         carriers = []
@@ -598,8 +618,6 @@ if __name__ == "__main__":
             n,
             busmap,
             linemap,
-            linemap,
-            pd.Series(dtype="O"),
         )
     else:
         Nyears = n.snapshot_weightings.loc[n.investment_periods[0]].objective.sum() / 8760.0
@@ -618,8 +636,21 @@ if __name__ == "__main__":
             custom_busmap.index = custom_busmap.index.astype(str)
             logger.info(f"Imported custom busmap from {snakemake.input.custom_busmap}")
 
-        if params.replace_lines_with_links:
-            custom_busmap = n.buses.reeds_zone
+        if transport_model:
+            # Prepare data for transport model
+            logger.info(
+                f"Aggregating to transport model with {topological_boundaries} zones.",
+            )
+            if topological_boundaries == "reeds_zone":
+                custom_busmap = n.buses.reeds_zone
+                itl_fn = snakemake.input.itl_ba
+                itl_cost_fn = snakemake.input.itl_costs_ba
+            elif topological_boundaries == "county":
+                custom_busmap = n.buses.county
+                itl_fn = snakemake.input.itl_county
+                itl_cost_fn = snakemake.input.itl_costs_county
+            else:
+                raise ValueError(f"Unknown aggregation zone {topological_boundaries}")
             n.buses.interconnect = n.buses.nerc_reg.map(REEDS_NERC_INTERCONNECT_MAPPER)
             n.lines.drop(columns=["interconnect"], inplace=True)
 
@@ -636,16 +667,16 @@ if __name__ == "__main__":
             hvac_overhead_cost,
             params.focus_weights,
         )
-        if params.replace_lines_with_links:
-            clustering = replace_lines_with_links(
+        if transport_model:
+            # Use Reeds Data
+            clustering = convert_to_transport(
                 clustering,
-                snakemake.input.itls,
+                itl_fn,
+                itl_cost_fn,
+                topological_boundaries,
             )
-            N = clustering.network.buses.reeds_zone.unique()
-            assert n_clusters == len(
-                N,
-            ), f"Number of clusters must be {len(N)} to model as transport model."
         else:
+            # Use standard transmission cost estimates
             update_transmission_costs(clustering.network, costs)
 
     update_p_nom_max(clustering.network)

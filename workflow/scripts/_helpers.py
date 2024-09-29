@@ -194,6 +194,18 @@ def load_network_for_plots(fn, tech_costs, config, combine_hydro_ps=True):
     return n
 
 
+def is_transport_model(transmission_network):
+    match transmission_network:
+        case "reeds":
+            return True
+        case "tamu":
+            return False
+        case _:
+            return ValueError(
+                "transmission network not specified correctly. Check config",
+            )
+
+
 def update_p_nom_max(n):
     # if extendable carriers (solar/onwind/...) have capacity >= 0,
     # e.g. existing assets from the OPSD project are included to the network,

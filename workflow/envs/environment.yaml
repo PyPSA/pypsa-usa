@@ -4,20 +4,19 @@ channels:
 - bioconda
 
 dependencies:
-- python>=3.8
+- python==3.11.9
 - pip
 
-- pypsa>=0.26.1
-- atlite>=0.2.9
-- linopy==0.3.8
-
-- dask==2023.7.0
-- dask-core==2023.7.0
+- pypsa==0.30.2
+- atlite==0.2.14
+- linopy==0.3.14
 
 # Dependencies of the workflow itself
-- pandas>=2.1
-- xarray>=2023.11.0
+- pandas==2.2.2
+- pyarrow==16.1.0
+- xarray==2024.9.0
 - xlrd==2.0.1
+- dask>=2023.7.0
 - openpyxl==3.1.2
 - pycountry==22.3.5
 - seaborn==0.13.2
@@ -34,7 +33,9 @@ dependencies:
 - progressbar2==4.3.2
 - matplotlib==3.8.0
 - plotly==5.17.0
+- pyomo==6.6.1
 - graphviz
+- cyipopt
 
 # Keep in conda environment when calling ipython
 - ipython==8.16.1
@@ -44,11 +45,10 @@ dependencies:
 
 # GIS dependencies:
 - geopy==2.4.0
-- cartopy==0.22.0
+- cartopy==0.23.0
 - descartes==1.1.0
 - rasterio==1.3.8
-- geopandas>=0.11.0
-- geopandas-base==0.14.0
+- geopandas==1.0.1
 
 # TODO: check these dependencies
 - tqdm==4.66.1
@@ -63,3 +63,4 @@ dependencies:
   - gurobipy==11.0.3
   - highspy
   - duckdb==0.10.0
+  - flake8
