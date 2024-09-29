@@ -16,10 +16,7 @@ def _rename_columns(df: pd.DataFrame) -> pd.DataFrame:
     Renames columns to States.
     """
     return df.rename(
-        columns={
-            x: CODE_2_STATE[x.split(" ")[0]] if x.split(" ")[0] in CODE_2_STATE else x
-            for x in df.columns
-        },
+        columns={x: CODE_2_STATE[x.split(" ")[0]] if x.split(" ")[0] in CODE_2_STATE else x for x in df.columns},
     )
 
 

@@ -133,9 +133,7 @@ def define_solar_hours(solar_profile, timestamps):
         last_hour_idx = day_of_year_df.solar_profile[::-1].idxmax()
         start_hour = day_of_year_df.solar_profile.idxmin()
         first_hour[first_hour_idx] = 1
-        yesterday_last_hour[first_hour_idx] = (
-            0 if start_hour < 23 else last_selected_index
-        )
+        yesterday_last_hour[first_hour_idx] = 0 if start_hour < 23 else last_selected_index
         last_hour[last_hour_idx] = 1
         last_selected_index = last_hour_idx
 
@@ -163,11 +161,7 @@ def assign_stochastic_mu(df_params, timestamp_reference, column_name="profile_ty
         how="outer",
     )
     order = df_mu_hourly["area_id"].unique()
-    df_mu_hourly_unstack = (
-        df_mu_hourly.set_index(["timestamp", column_name, "area_id"])["mu"]
-        .unstack()
-        .reset_index()
-    )
+    df_mu_hourly_unstack = df_mu_hourly.set_index(["timestamp", column_name, "area_id"])["mu"].unstack().reset_index()
     df_mu_hourly_unstack.columns = df_mu_hourly_unstack.columns.map(str)
     df_mu_hourly_unstack = df_mu_hourly_unstack[np.append("timestamp", order)]
     return df_mu_hourly_unstack
@@ -226,9 +220,7 @@ def resample_ratio(
             rng,
         )  # resample epsilon for values to resample
         resampled_ratio[mask_to_resample] = (
-            original_ratio[mask_to_resample]
-            - original_epsilon[mask_to_resample]
-            + resampled_epsilon.values
+            original_ratio[mask_to_resample] - original_epsilon[mask_to_resample] + resampled_epsilon.values
         )  # resample ratio. subtract original epsilon and add new epsilon
         resample_count += 1
 
@@ -247,9 +239,7 @@ def resample_ratio(
                 if not initialization:
                     resampled_epsilon.index = resampled_epsilon.index.map(param_dict)
                 original_ratio.loc[in_bounds_mask] = resampled_ratio[in_bounds_mask]
-                original_epsilon.loc[in_bounds_mask] = resampled_epsilon[
-                    in_bounds_mask
-                ].values
+                original_epsilon.loc[in_bounds_mask] = resampled_epsilon[in_bounds_mask].values
 
         else:  # if no values are out of bounds, then set original ratio to resampled ratio, and we are done.
             original_ratio = resampled_ratio.copy(deep=True)
@@ -279,7 +269,9 @@ load_ratio_threshold = 5
 solar_ratio_threshold = 5
 wind_ratio_threshold = 100000
 year = 2016
-NETWORK_PATH = "/Users/kamrantehranchi/Local_Documents/pypsa-breakthroughenergy-usa/workflow/notebooks/elec_s_96_offwind_2.nc"
+NETWORK_PATH = (
+    "/Users/kamrantehranchi/Local_Documents/pypsa-breakthroughenergy-usa/workflow/notebooks/elec_s_96_offwind_2.nc"
+)
 num_clusters = 96
 
 ################### Sampling ###################
@@ -298,34 +290,18 @@ Path("sampled_data").mkdir(parents=True, exist_ok=True)
 PATH_SAMPLE = Path("sampled_data")
 num_hours = load_base.shape[0]
 
-solar_parameters = solar_parameters[
-    solar_parameters.area_id.isin(area_mapping_solar.area_id.unique())
-]
-wind_parameters = wind_parameters[
-    wind_parameters.area_id.isin(area_mapping_wind.area_id.unique())
-]
+solar_parameters = solar_parameters[solar_parameters.area_id.isin(area_mapping_solar.area_id.unique())]
+wind_parameters = wind_parameters[wind_parameters.area_id.isin(area_mapping_wind.area_id.unique())]
 
 # Define Sampling IDs
 load_parameters["sampling_id"] = (
-    load_parameters.index
-    + "_"
-    + load_parameters.timescale
-    + "_"
-    + load_parameters.area_id.astype(str)
+    load_parameters.index + "_" + load_parameters.timescale + "_" + load_parameters.area_id.astype(str)
 )
 solar_parameters["sampling_id"] = (
-    solar_parameters.index
-    + "_"
-    + solar_parameters.timescale
-    + "_"
-    + solar_parameters.area_id.astype(str)
+    solar_parameters.index + "_" + solar_parameters.timescale + "_" + solar_parameters.area_id.astype(str)
 )
 wind_parameters["sampling_id"] = (
-    wind_parameters.index
-    + "_"
-    + wind_parameters.timescale
-    + "_"
-    + wind_parameters.area_id.astype(str)
+    wind_parameters.index + "_" + wind_parameters.timescale + "_" + wind_parameters.area_id.astype(str)
 )
 parameters_concat = pd.concat(
     [load_parameters, solar_parameters, wind_parameters],
@@ -461,28 +437,24 @@ for sample_num in range(0, num_samples):
 
     for i in range(1, n_hours):
 
-        season_df = parameters_concat[
-            parameters_concat.season == timestamp_reference.iloc[i].season_num
-        ]
+        season_df = parameters_concat[parameters_concat.season == timestamp_reference.iloc[i].season_num]
         p_eps = rng_eps(season_df, rng)
         ratio_samples.iloc[i, :] = (
             ratio_samples.iloc[i - 1, :]
-            + season_df.kai.values
-            * (season_df.mu.values - ratio_samples.iloc[i - 1, :])
+            + season_df.kai.values * (season_df.mu.values - ratio_samples.iloc[i - 1, :])
             + p_eps.values
         )
         epsilon_samples.iloc[i, :] = p_eps.values
 
         if i % 24 != 0:
-            ratio_samples.loc[i, ratio_samples.columns.str.contains("daily")] = (
-                ratio_samples.loc[i - 1, ratio_samples.columns.str.contains("daily")]
-            )
-            epsilon_samples.loc[i, epsilon_samples.columns.str.contains("daily")] = (
-                epsilon_samples.loc[
-                    i - 1,
-                    epsilon_samples.columns.str.contains("daily"),
-                ]
-            )
+            ratio_samples.loc[i, ratio_samples.columns.str.contains("daily")] = ratio_samples.loc[
+                i - 1,
+                ratio_samples.columns.str.contains("daily"),
+            ]
+            epsilon_samples.loc[i, epsilon_samples.columns.str.contains("daily")] = epsilon_samples.loc[
+                i - 1,
+                epsilon_samples.columns.str.contains("daily"),
+            ]
 
         previous_sunset_idx = df_daytime_solar_tracking.iloc[i].astype(int)
         if (previous_sunset_idx > 0).any():
@@ -512,14 +484,10 @@ for sample_num in range(0, num_samples):
                 .values
             )
             ratio_samples.loc[i, previous_mu_vals.index] = (
-                previous_mu_vals.values
-                + solar_kai_vals * (solar_mu_vals - previous_mu_vals.values)
-                + eps_filtered
+                previous_mu_vals.values + solar_kai_vals * (solar_mu_vals - previous_mu_vals.values) + eps_filtered
             )
 
-        if (ratio_samples.iloc[i] > thresholds).any() or (
-            ratio_samples.iloc[i] < 0
-        ).any():
+        if (ratio_samples.iloc[i] > thresholds).any() or (ratio_samples.iloc[i] < 0).any():
             r0, eps = ratio_samples.iloc[i], epsilon_samples.iloc[i, :]
             ratios_new, eps_new, resample_count = resample_ratio(
                 r0,
@@ -540,11 +508,7 @@ for sample_num in range(0, num_samples):
 
     # Load Calculation
     sampled_load_ratio = ratio_samples.filter(like="load")
-    sampled_load = (
-        load_base
-        * sampled_load_ratio.values
-        / df_mu_load_hourly_unstack.iloc[:, 1:].values
-    )
+    sampled_load = load_base * sampled_load_ratio.values / df_mu_load_hourly_unstack.iloc[:, 1:].values
     sampled_load["timestamp"] = timestamp_reference.timestamp
     sampled_load.set_index("timestamp", inplace=True)
     sampled_load.columns = load_base.columns
@@ -555,20 +519,12 @@ for sample_num in range(0, num_samples):
     sampled_daily_solar_ratio = ratio_samples.filter(regex="solar.*daily")
     sampled_solar = (
         solar_base_area.values
-        * (
-            0.333 * sampled_hourly_solar_ratio.values
-            + 0.667 * sampled_daily_solar_ratio.values
-        )
-        / (
-            df_mu_solar_hourly_unstack.iloc[:, 1:] * 0.333
-            + df_mu_solar_daily_unstack.iloc[:, 1:] * 0.667
-        )
+        * (0.333 * sampled_hourly_solar_ratio.values + 0.667 * sampled_daily_solar_ratio.values)
+        / (df_mu_solar_hourly_unstack.iloc[:, 1:] * 0.333 + df_mu_solar_daily_unstack.iloc[:, 1:] * 0.667)
     )
     sampled_solar[sampled_solar > 1] = 1  # capacity factor cannot be greater than 1
 
-    sampled_solar_generatorlvl = (
-        np.ones_like(solar_base.values) * solar_allocation.values
-    )
+    sampled_solar_generatorlvl = np.ones_like(solar_base.values) * solar_allocation.values
     sampled_solar_generatorlvl = pd.DataFrame(
         sampled_solar_generatorlvl,
         index=sampled_solar.index,
@@ -587,14 +543,8 @@ for sample_num in range(0, num_samples):
     sampled_daily_wind_ratio = ratio_samples.filter(regex="wind.*daily")
     sampled_wind = (
         wind_base_area.values
-        * (
-            0.333 * sampled_hourly_wind_ratio.values
-            + 0.667 * sampled_daily_wind_ratio.values
-        )
-        / (
-            df_mu_wind_hourly_unstack.iloc[:, 1:] * 0.333
-            + df_mu_wind_daily_unstack.iloc[:, 1:] * 0.667
-        )
+        * (0.333 * sampled_hourly_wind_ratio.values + 0.667 * sampled_daily_wind_ratio.values)
+        / (df_mu_wind_hourly_unstack.iloc[:, 1:] * 0.333 + df_mu_wind_daily_unstack.iloc[:, 1:] * 0.667)
     )
     sampled_wind[sampled_wind > 1] = 1  # capacity factor cannot be greater than 1
 
@@ -697,9 +647,7 @@ base_zones_wind = pd.DataFrame(
     columns=["wind"],
 )
 
-base_zones_wind = base_zones_wind[
-    ~base_zones_wind.wind.str.contains("SDGE")
-].reset_index(
+base_zones_wind = base_zones_wind[~base_zones_wind.wind.str.contains("SDGE")].reset_index(
     drop=True,
 )  # temporary fix
 df_zone_ind_match = base_zones_solar.reset_index(names="solar_ind").merge(
@@ -710,12 +658,8 @@ df_zone_ind_match = base_zones_solar.reset_index(names="solar_ind").merge(
 )
 # combine non nan values into new column
 zone_coords = df_zone_ind_match.solar.combine_first(df_zone_ind_match.wind)
-solar_zone_inds_combined = df_zone_ind_match.solar_ind.values[
-    ~np.isnan(df_zone_ind_match.solar_ind.values)
-].astype(int)
-wind_zone_inds_combined = df_zone_ind_match.wind_ind.values[
-    ~np.isnan(df_zone_ind_match.wind_ind.values)
-].astype(int)
+solar_zone_inds_combined = df_zone_ind_match.solar_ind.values[~np.isnan(df_zone_ind_match.solar_ind.values)].astype(int)
+wind_zone_inds_combined = df_zone_ind_match.wind_ind.values[~np.isnan(df_zone_ind_match.wind_ind.values)].astype(int)
 wind_zone_inds_orig = df_zone_ind_match.wind_ind.dropna().astype(int).values
 solar_zone_inds_orig = df_zone_ind_match.solar_ind.dropna().astype(int).values
 

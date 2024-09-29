@@ -74,11 +74,7 @@ def get_energy_total(n: pypsa.Network):
     def _get_energy_multi_port(n: pypsa.Network, c: str) -> pd.DataFrame:
         c_energies = pd.Series(0.0, c.df.carrier.unique())
         for port in [col[3:] for col in c.df.columns if col[:3] == "bus"]:
-            totals = (
-                c.pnl["p" + port]
-                .multiply(n.snapshot_weightings.generators, axis=0)
-                .sum()
-            )
+            totals = c.pnl["p" + port].multiply(n.snapshot_weightings.generators, axis=0).sum()
             # remove values where bus is missing (bug in nomopyomo)
             no_bus = c.df.index[c.df["bus" + port] == ""]
             totals.loc[no_bus] = float(
@@ -127,9 +123,7 @@ def get_energy_timeseries(n: pypsa.Network) -> pd.DataFrame:
         for port in [col[3:] for col in c.df.columns if col[:3] == "bus"]:
             if port == "0":  # only track flow in one direction
                 continue
-            totals = c.pnl[
-                "p" + port
-            ]  # .multiply(n.snapshot_weightings.generators,axis=0,)
+            totals = c.pnl["p" + port]  # .multiply(n.snapshot_weightings.generators,axis=0,)
             # remove values where bus is missing (bug in nomopyomo)
             no_bus = c.df.index[c.df["bus" + port] == ""]
             totals.loc[no_bus] = float(
@@ -169,13 +163,7 @@ def get_demand_base(n: pypsa.Network) -> pd.DataFrame:
 
     This groups all demand per node togheter.
     """
-    df = (
-        pd.DataFrame(n.loads_t.p)
-        .rename(columns=n.loads.bus)
-        .sum(0)
-        .groupby(level=0)
-        .sum()
-    )
+    df = pd.DataFrame(n.loads_t.p).rename(columns=n.loads.bus).sum(0).groupby(level=0).sum()
     assert len(df) == len(df.index.unique())
     return df
 
@@ -198,16 +186,10 @@ def get_capacity_base(n: pypsa.Network) -> pd.DataFrame:
             totals.append((c.df.p_nom).groupby(by=[c.df.bus, c.df.carrier]).sum())
         elif c.name == "Link":
             totals.append(
-                (c.df.p_nom)
-                .groupby(by=[c.df.bus0, c.df.carrier])
-                .sum()
-                .rename_axis(index={"bus0": "bus"}),
+                (c.df.p_nom).groupby(by=[c.df.bus0, c.df.carrier]).sum().rename_axis(index={"bus0": "bus"}),
             ),
             totals.append(
-                (c.df.p_nom)
-                .groupby(by=[c.df.bus1, c.df.carrier])
-                .sum()
-                .rename_axis(index={"bus1": "bus"}),
+                (c.df.p_nom).groupby(by=[c.df.bus1, c.df.carrier]).sum().rename_axis(index={"bus1": "bus"}),
             )
     return pd.concat(totals)
 
@@ -227,14 +209,8 @@ def get_capacity_brownfield(
         if c.name == "Link":
             return pd.concat(
                 [
-                    (c.df.p_nom_opt)
-                    .groupby(by=[c.df.bus0, c.df.carrier])
-                    .sum()
-                    .rename_axis(index={"bus0": "bus"}),
-                    (c.df.p_nom_opt)
-                    .groupby(by=[c.df.bus1, c.df.carrier])
-                    .sum()
-                    .rename_axis(index={"bus1": "bus"}),
+                    (c.df.p_nom_opt).groupby(by=[c.df.bus0, c.df.carrier]).sum().rename_axis(index={"bus0": "bus"}),
+                    (c.df.p_nom_opt).groupby(by=[c.df.bus1, c.df.carrier]).sum().rename_axis(index={"bus1": "bus"}),
                 ],
             )
         else:
@@ -244,14 +220,8 @@ def get_capacity_brownfield(
         if c.name == "Link":
             return pd.concat(
                 [
-                    (c.df.p_nom_opt)
-                    .groupby(by=[c.df.bus0, c.df.carrier])
-                    .sum()
-                    .rename_axis(index={"bus0": "bus"}),
-                    (c.df.p_nom_opt)
-                    .groupby(by=[c.df.bus1, c.df.carrier])
-                    .sum()
-                    .rename_axis(index={"bus1": "bus"}),
+                    (c.df.p_nom_opt).groupby(by=[c.df.bus0, c.df.carrier]).sum().rename_axis(index={"bus0": "bus"}),
+                    (c.df.p_nom_opt).groupby(by=[c.df.bus1, c.df.carrier]).sum().rename_axis(index={"bus1": "bus"}),
                 ],
             )
         else:
@@ -324,29 +294,16 @@ def get_fuel_costs(n: pypsa.Network) -> pd.DataFrame:
     }
 
     # will return generator level of (fuel_costs / efficiency)
-    marginal_costs = (
-        n.get_switchable_as_dense("Generator", "marginal_cost")
-        .loc[n.investment_periods[0]]
-        .T
-    )
-    marginal_costs = marginal_costs[
-        marginal_costs.index.map(n.generators.carrier).isin(list(fixed_voms))
-    ]
+    marginal_costs = n.get_switchable_as_dense("Generator", "marginal_cost").loc[n.investment_periods[0]].T
+    marginal_costs = marginal_costs[marginal_costs.index.map(n.generators.carrier).isin(list(fixed_voms))]
     voms = pd.Series(
         index=marginal_costs.index,
-        data=marginal_costs.index.map(n.generators.carrier)
-        .map(fixed_voms)
-        .astype(float)
-        .fillna(0),
+        data=marginal_costs.index.map(n.generators.carrier).map(fixed_voms).astype(float).fillna(0),
     ).astype(float)
     marginal_costs = marginal_costs.subtract(voms, axis=0)
 
     # remove the efficiency cost
-    eff = (
-        n.get_switchable_as_dense("Generator", "efficiency")
-        .loc[n.investment_periods[0]]
-        .T
-    )
+    eff = n.get_switchable_as_dense("Generator", "efficiency").loc[n.investment_periods[0]].T
     eff = eff[eff.index.map(n.generators.carrier).isin(list(fixed_voms))]
     fuel_costs = marginal_costs.mul(eff, axis=0)
 
@@ -371,12 +328,7 @@ def get_node_carrier_emissions_timeseries(n: pypsa.Network) -> pd.DataFrame:
     """
 
     energy = get_primary_energy_use(n)
-    co2 = (
-        n.carriers[["nice_name", "co2_emissions"]]
-        .reset_index()
-        .set_index("nice_name")[["co2_emissions"]]
-        .squeeze()
-    )
+    co2 = n.carriers[["nice_name", "co2_emissions"]].reset_index().set_index("nice_name")[["co2_emissions"]].squeeze()
     return energy.mul(co2, level="carrier", axis=0)
 
 

@@ -85,9 +85,7 @@ class InputException(Exception):
     """
 
     def __init__(self, propery, valid_options, recived_option) -> None:
-        self.message = (
-            f" {propery} must be in {valid_options}; recieved {recived_option}"
-        )
+        self.message = f" {propery} must be in {valid_options}; recieved {recived_option}"
 
     def __str__(self):
         return self.message
@@ -137,9 +135,7 @@ class FuelCosts(EiaData):
         self.fuel = fuel
         self.year = year
         self.api = api
-        self.industry = (
-            industry  # (power|residential|commercial|industrial|imports|exports)
-        )
+        self.industry = industry  # (power|residential|commercial|industrial|imports|exports)
         self.grade = grade  # (total|regular|premium|midgrade|diesel)
 
     def data_creator(self) -> pd.DataFrame:
@@ -626,9 +622,7 @@ class CoalCosts(DataExtractor):
 
         # sometimes prices come in the format of xx.xx.xx, so drop everything after the second "."
         df["price"] = df.price.map(
-            lambda x: (
-                float(x) if len(x.split(".")) < 2 else float(".".join(x.split(".")[:2]))
-            ),
+            lambda x: (float(x) if len(x.split(".")) < 2 else float(".".join(x.split(".")[:2]))),
         )
 
         # get data at a per quarter level
@@ -646,9 +640,7 @@ class CoalCosts(DataExtractor):
             .mean()
             .reset_index()
         )
-        df = df[
-            df.year.astype(int) == self.year
-        ].copy()  # api is bringing in an extra quarter
+        df = df[df.year.astype(int) == self.year].copy()  # api is bringing in an extra quarter
 
         # Expand data to be at a per month level
         dfs = []
@@ -658,9 +650,7 @@ class CoalCosts(DataExtractor):
             freq="MS",
         )
         for date in dates:
-            quarter = (
-                math.floor((date.month - 1) / 3) + 1
-            )  # months 1-3 are Q1, months 4-6 are Q2 ...
+            quarter = math.floor((date.month - 1) / 3) + 1  # months 1-3 are Q1, months 4-6 are Q2 ...
             df_month = df[df.quarter == f"Q{quarter}"].copy()
             df_month["period"] = date
             dfs.append(df_month)
@@ -748,9 +738,7 @@ class LpgCosts(DataExtractor):
 
     def format_data(self, df: pd.DataFrame) -> pd.DataFrame:
 
-        data = df[
-            ["period", "area-name", "series-description", "value", "units"]
-        ].copy()
+        data = df[["period", "area-name", "series-description", "value", "units"]].copy()
 
         data["state"] = data["area-name"].map(self.padd_2_state)
         data = data.explode("state")
@@ -1229,16 +1217,13 @@ class HistoricalProjectedTransportFuelUse(DataExtractor):
             for x in ("NA", "dfo", "elc", "e85", "hdg", "mgs", "ng", "prop")
         ],
         "rail_passenger": [  # commuter rail
-            f"&facets[seriesId][]=cnsm_NA_trn_crail_{x}_NA_NA_trlbtu"
-            for x in ("NA", "dsl", "lng", "cng", "elc")
+            f"&facets[seriesId][]=cnsm_NA_trn_crail_{x}_NA_NA_trlbtu" for x in ("NA", "dsl", "lng", "cng", "elc")
         ],
         "boat_shipping": [
-            f"&facets[seriesId][]=cnsm_NA_trn_dmt_{x}_NA_NA_trlbtu"
-            for x in ("NA", "cng", "dfo", "lng", "rfo")
+            f"&facets[seriesId][]=cnsm_NA_trn_dmt_{x}_NA_NA_trlbtu" for x in ("NA", "cng", "dfo", "lng", "rfo")
         ],
         "rail_shipping": [
-            f"&facets[seriesId][]=cnsm_NA_trn_frail_{x}_NA_NA_trlbtu"
-            for x in ("NA", "cng", "dfo", "lng", "rfo")
+            f"&facets[seriesId][]=cnsm_NA_trn_frail_{x}_NA_NA_trlbtu" for x in ("NA", "cng", "dfo", "lng", "rfo")
         ],
         "air": [
             f"&facets[seriesId][]=cnsm_NA_trn_air_{x}_NA_NA_trlbtu"
@@ -1386,9 +1371,7 @@ class GasStorage(DataExtractor):
 
         df = df[~(df["area-name"] == "NA")].copy()
         df["period"] = self._format_period(df.period)
-        df["state"] = (
-            df["series-description"].map(self.extract_state).map(self.map_state_names)
-        )
+        df["state"] = df["series-description"].map(self.extract_state).map(self.map_state_names)
 
         df = (
             df[["series-description", "value", "units", "state", "period"]]
@@ -1442,9 +1425,7 @@ class GasProduction(DataExtractor):
 
         df = df[~(df["area-name"] == "NA")].copy()
         df["period"] = self._format_period(df.period)
-        df["state"] = (
-            df["series-description"].map(self.extract_state).map(self.map_state_names)
-        )
+        df["state"] = df["series-description"].map(self.extract_state).map(self.map_state_names)
 
         df = (
             df[["series-description", "value", "units", "state", "period"]]
@@ -1626,9 +1607,7 @@ class ElectricPowerOperationalData(DataExtractor):
                 "generation": "value",
             },
         )
-        df = df[
-            ["state", "stateName", "fueltypeid", "series-description", "value", "units"]
-        ].sort_values(["state"])
+        df = df[["state", "stateName", "fueltypeid", "series-description", "value", "units"]].sort_values(["state"])
 
         return self._assign_dtypes(df)
 

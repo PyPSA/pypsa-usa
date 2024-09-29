@@ -69,9 +69,7 @@ def is_urban_rural_split(n: pypsa.Network) -> bool:
     Checks for urban/rural split based on com/res load names.
     """
 
-    com_res_load = n.loads[
-        (n.loads.index.str.contains("res-")) | (n.loads.index.str.contains("com-"))
-    ].index.to_list()
+    com_res_load = n.loads[(n.loads.index.str.contains("res-")) | (n.loads.index.str.contains("com-"))].index.to_list()
 
     rural_urban_loads = ["res-urban-", "res-rural-", "com-urban-", "com-rural-"]
 
@@ -323,11 +321,7 @@ def plot_sector_production(
 
         y_label = "kVMT" if sector == "trn" else "MWh"
 
-        df = (
-            get_sector_production_timeseries_by_carrier(n, sector, state=state)
-            .loc[investment_period]
-            .sum()
-        )
+        df = get_sector_production_timeseries_by_carrier(n, sector, state=state).loc[investment_period].sum()
 
         # issue with texas in western interconnect
         if df.empty:
@@ -427,12 +421,7 @@ def plot_state_emissions(
         figsize=(FIG_WIDTH, FIG_HEIGHT),
     )
 
-    df = (
-        get_emission_timeseries_by_sector(n, state=state)
-        .loc[investment_period,]
-        .iloc[-1]
-        .to_frame(name=state)
-    )
+    df = get_emission_timeseries_by_sector(n, state=state).loc[investment_period,].iloc[-1].to_frame(name=state)
     df.index = df.index.map(lambda x: x.split("-co2")[0][-3:])
 
     try:
@@ -704,13 +693,7 @@ def plot_sector_load_factor_timeseries(
         row = i // 2
         col = i % 2
 
-        df = (
-            get_load_factor_timeseries(n, sector, state=state)
-            .loc[investment_period]
-            .resample("d")
-            .mean()
-            .dropna()
-        )
+        df = get_load_factor_timeseries(n, sector, state=state).loc[investment_period].resample("d").mean().dropna()
 
         try:
 
@@ -818,12 +801,7 @@ def plot_sector_emissions_validation(
     )
     historical = historical.rename(columns=STATE_2_CODE)
 
-    modelled = (
-        get_emission_timeseries_by_sector(n, state=None)
-        .loc[investment_period,]
-        .iloc[-1]
-        .to_frame(name="value")
-    )
+    modelled = get_emission_timeseries_by_sector(n, state=None).loc[investment_period,].iloc[-1].to_frame(name="value")
     modelled["sector"] = modelled.index.map(lambda x: x.split("-co2")[0][-3:])
     modelled["sector"] = modelled.sector.map(SECTOR_MAPPER)
     modelled["state"] = modelled.index.map(lambda x: x.split(" ")[0])
@@ -960,10 +938,7 @@ def plot_state_emissions_validation(
     ).T.rename(columns={"total": "Actual"}, index=STATE_2_CODE)
 
     modelled = (
-        get_emission_timeseries_by_sector(n, state=None)
-        .loc[investment_period,]
-        .iloc[-1]
-        .to_frame(name="Modelled")
+        get_emission_timeseries_by_sector(n, state=None).loc[investment_period,].iloc[-1].to_frame(name="Modelled")
     )
     modelled["state"] = modelled.index.map(lambda x: x.split(" ")[0])
     modelled = modelled.groupby("state").sum()
@@ -1064,9 +1039,7 @@ def plot_sector_consumption_validation(
     data = []
 
     for sector in ("res", "com", "ind", "trn"):
-        modelled = (
-            get_end_use_consumption(n, sector, state).loc[investment_period].sum().sum()
-        )
+        modelled = get_end_use_consumption(n, sector, state).loc[investment_period].sum().sum()
         if state:
             data.append([sector, modelled, historical.at[SECTOR_MAPPER[sector], state]])
         else:
@@ -1105,11 +1078,7 @@ def plot_sector_load_timeseries(
 
     investment_period = n.investment_periods[0]
 
-    df = (
-        get_end_use_load_timeseries(n, sector, sns_weight=False, state=state)
-        .loc[investment_period]
-        .T
-    )
+    df = get_end_use_load_timeseries(n, sector, sns_weight=False, state=state).loc[investment_period].T
     df.index = df.index.map(n.loads.carrier).map(lambda x: x.split("-")[1:])
     df.index = df.index.map(lambda x: "-".join(x))
     df = df.T
@@ -1133,7 +1102,7 @@ def plot_sector_load_timeseries(
 
         avg = l.mean(axis=1)
 
-        palette = sns.color_palette(["lightgray"])
+        # palette = sns.color_palette(["lightgray"])
 
         try:
 
@@ -1185,11 +1154,7 @@ def plot_sector_load_bar(
         row = i // 2
         col = i % 2
 
-        df = (
-            get_end_use_load_timeseries_carrier(n, sector, sns_weight=True, state=state)
-            .loc[investment_period]
-            .sum()
-        )
+        df = get_end_use_load_timeseries_carrier(n, sector, sns_weight=True, state=state).loc[investment_period].sum()
 
         if df.empty:
             logger.warning(f"No data to plot for {state}")
@@ -1356,10 +1321,7 @@ def plot_system_consumption_by_state(
 
         for state in states:
             dfs.append(
-                get_end_use_consumption(n, sector, state)
-                .sum(axis=0)
-                .to_frame(name=state)
-                .T,
+                get_end_use_consumption(n, sector, state).sum(axis=0).to_frame(name=state).T,
             )
 
         df = pd.concat(dfs)

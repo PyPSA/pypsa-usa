@@ -25,7 +25,6 @@ Creates Voronoi shapes for each bus representing both onshore and offshore regio
 
 
 import logging
-from functools import reduce
 
 import geopandas as gpd
 import numpy as np
@@ -107,26 +106,17 @@ def main(snakemake):
     bus2sub.index = bus2sub.index.astype(str)
     bus2sub = bus2sub.reset_index().drop_duplicates(subset="sub_id").set_index("sub_id")
 
-    gpd_countries = gpd.read_file(snakemake.input.country_shapes).set_index("name")
-    gpd_states = gpd.read_file(snakemake.input.state_shapes).set_index("name")
     gpd_counties = gpd.read_file(snakemake.input.county_shapes).set_index("GEOID")
-    gpd_ba_shapes = gpd.read_file(snakemake.input.ba_region_shapes).set_index("name")
     gpd_reeds = gpd.read_file(snakemake.input.reeds_shapes).set_index("name")
 
     match topological_boundaries:
-        case "country":
-            agg_region_shapes = gpd_countries
-        case "balancing_area":
-            agg_region_shapes = gpd_ba_shapes.geometry
-        case "state":
-            agg_region_shapes = gpd_states.geometry
         case "county":
             agg_region_shapes = gpd_counties.geometry
         case "reeds_zone":
             agg_region_shapes = gpd_reeds.geometry
         case _:
             raise ValueError(
-                "zonal_aggregation must be either balancing_area, country, reeds_id, or state",
+                "Valid values for `model_topology: zonal_aggregation:` are `reeds_zone` or `county`",
             )
 
     gpd_offshore_shapes = gpd.read_file(snakemake.input.offshore_shapes)
@@ -152,16 +142,13 @@ def main(snakemake):
         region_subs = bus2sub_onshore[f"{topological_boundaries}"][
             bus2sub_onshore[f"{topological_boundaries}"] == region
         ]  # series of substations in the current BA
-        region_locs = all_locs.loc[
-            region_subs.index
-        ]  # locations of substations in the current BA
+        region_locs = all_locs.loc[region_subs.index]  # locations of substations in the current BA
         if region_locs.empty:
             continue  # skip empty BA's which are not in the bus dataframe. ex. portions of eastern texas BA when using the WECC interconnect
 
         if region == "MISO-0001":
-            region_shape = (
-                gpd.GeoDataFrame(geometry=region_shape).dissolve().iloc[0].geometry
-            )
+            region_shape = gpd.GeoDataFrame(geometry=region_shape).dissolve().iloc[0].geometry
+
         onshore_regions.append(
             gpd.GeoDataFrame(
                 {
@@ -206,17 +193,11 @@ def main(snakemake):
                 "country": shape_name,
             },
         )
-        offshore_regions_c = offshore_regions_c.loc[
-            offshore_regions_c.area > 1e-2
-        ]  # remove extremely small regions
+        offshore_regions_c = offshore_regions_c.loc[offshore_regions_c.area > 1e-2]  # remove extremely small regions
         offshore_regions.append(offshore_regions_c)
     # Exporting
     if offshore_regions:
-        (
-            pd.concat(offshore_regions, ignore_index=True)
-            .set_crs(epsg=4326)
-            .to_file(snakemake.output.regions_offshore)
-        )
+        (pd.concat(offshore_regions, ignore_index=True).set_crs(epsg=4326).to_file(snakemake.output.regions_offshore))
     else:
         offshore_shapes.to_frame().to_file(snakemake.output.regions_offshore)
 

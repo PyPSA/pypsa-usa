@@ -296,10 +296,7 @@ def add_air(
     efficiency = 76.5 / wh_per_gallon / 1000 * 1000 * 1000
     lifetime = 25
 
-    loads = n.loads[
-        (n.loads.carrier.str.contains("trn-"))
-        & (n.loads.carrier.str.contains("air-psg"))
-    ]
+    loads = n.loads[(n.loads.carrier.str.contains("trn-")) & (n.loads.carrier.str.contains("air-psg"))]
 
     vehicles = pd.DataFrame(index=loads.bus)
     vehicles.index = vehicles.index.map(lambda x: x.split(f" trn-")[0])
@@ -339,10 +336,7 @@ def add_boat(
     lifetime = 25
     capex = 1
 
-    loads = n.loads[
-        (n.loads.carrier.str.contains("trn-"))
-        & (n.loads.carrier.str.contains("boat-ship"))
-    ]
+    loads = n.loads[(n.loads.carrier.str.contains("trn-")) & (n.loads.carrier.str.contains("boat-ship"))]
 
     vehicles = pd.DataFrame(index=loads.bus)
     vehicles.index = vehicles.index.map(lambda x: x.split(f" trn-")[0])
@@ -387,10 +381,7 @@ def add_rail(
         lifetime = 25
         capex = 1
 
-        loads = n.loads[
-            (n.loads.carrier.str.contains("trn-"))
-            & (n.loads.carrier.str.contains("rail-ship"))
-        ]
+        loads = n.loads[(n.loads.carrier.str.contains("trn-")) & (n.loads.carrier.str.contains("rail-ship"))]
 
         vehicles = pd.DataFrame(index=loads.bus)
         vehicles.index = vehicles.index.map(lambda x: x.split(f" trn-")[0])
@@ -423,10 +414,7 @@ def add_rail(
         lifetime = 25
         capex = 1
 
-        loads = n.loads[
-            (n.loads.carrier.str.contains("trn-"))
-            & (n.loads.carrier.str.contains("rail-psg"))
-        ]
+        loads = n.loads[(n.loads.carrier.str.contains("trn-")) & (n.loads.carrier.str.contains("rail-psg"))]
 
         vehicles = pd.DataFrame(index=loads.bus)
         vehicles.index = vehicles.index.map(lambda x: x.split(f" trn-")[0])
@@ -480,11 +468,7 @@ def apply_exogenous_ev_policy(n: pypsa.Network, policy: pd.DataFrame) -> None:
             for fuel in ("elec", "lpg"):
 
                 # adjust load value
-                load_names = [
-                    x
-                    for x in n.loads.index
-                    if x.endswith(f"trn-{fuel}-{vehicle_mapper[vehicle]}")
-                ]
+                load_names = [x for x in n.loads.index if x.endswith(f"trn-{fuel}-{vehicle_mapper[vehicle]}")]
                 df = n.loads_t.p_set.loc[period,][load_names]
                 multiplier = ev_share if fuel == "elec" else (100 - ev_share)
                 df *= multiplier / 100  # divide by 100 to get rid of percent

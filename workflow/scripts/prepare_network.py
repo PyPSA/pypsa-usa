@@ -92,9 +92,7 @@ def get_investment_weighting(time_weighting, r=0.01):
     end = time_weighting.cumsum()
     start = time_weighting.cumsum().shift().fillna(0)
     return pd.concat([start, end], axis=1).apply(
-        lambda x: sum(
-            get_social_discount(t, r) for t in range(int(x.iloc[0]), int(x.iloc[1]))
-        ),
+        lambda x: sum(get_social_discount(t, r) for t in range(int(x.iloc[0]), int(x.iloc[1]))),
         axis=1,
     )
 
@@ -125,10 +123,9 @@ def add_gaslimit(n, gaslimit, Nyears=1.0):
 def add_emission_prices(n, emission_prices={"co2": 0.0}, exclude_co2=False):
     if exclude_co2:
         emission_prices.pop("co2")
-    ep = (
-        pd.Series(emission_prices).rename(lambda x: x + "_emissions")
-        * n.carriers.filter(like="_emissions")
-    ).sum(axis=1)
+    ep = (pd.Series(emission_prices).rename(lambda x: x + "_emissions") * n.carriers.filter(like="_emissions")).sum(
+        axis=1,
+    )
     gen_ep = n.generators.carrier.map(ep) / n.generators.efficiency
     n.generators["marginal_cost"] += gen_ep
     n.generators_t["marginal_cost"] += gen_ep[n.generators_t["marginal_cost"].columns]
@@ -283,12 +280,8 @@ def apply_time_segmentation(n, segments, solver_name="cbc"):
 
 def enforce_autarky(n, only_crossborder=False):
     if only_crossborder:
-        lines_rm = n.lines.loc[
-            n.lines.bus0.map(n.buses.country) != n.lines.bus1.map(n.buses.country)
-        ].index
-        links_rm = n.links.loc[
-            n.links.bus0.map(n.buses.country) != n.links.bus1.map(n.buses.country)
-        ].index
+        lines_rm = n.lines.loc[n.lines.bus0.map(n.buses.country) != n.lines.bus1.map(n.buses.country)].index
+        links_rm = n.links.loc[n.links.bus0.map(n.buses.country) != n.links.bus1.map(n.buses.country)].index
     else:
         lines_rm = n.lines.index
         links_rm = n.links.loc[n.links.carrier == "DC"].index
@@ -338,9 +331,7 @@ if __name__ == "__main__":
     costs = costs.pivot(index="pypsa-name", columns="parameter", values="value")
     # Set Investment Period Year Weightings
     # 'fillna(1)' needed if only one period
-    inv_per_time_weight = (
-        n.investment_periods.to_series().diff().shift(-1).ffill().fillna(1)
-    )
+    inv_per_time_weight = n.investment_periods.to_series().diff().shift(-1).ffill().fillna(1)
     n.investment_period_weightings["years"] = inv_per_time_weight
     # set Investment Period Objective weightings
     social_discountrate = snakemake.params.costs["social_discount_rate"]

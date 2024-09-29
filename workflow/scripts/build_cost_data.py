@@ -235,10 +235,7 @@ if __name__ == "__main__":
     pudl_atb = (
         pudl_atb.groupby("pypsa-name")[pudl_atb.columns]
         .apply(
-            lambda x: x[
-                x["cost_recovery_period_years"]
-                == const.ATB_TECH_MAPPER[x.name].get("crp", 30)
-            ],
+            lambda x: x[x["cost_recovery_period_years"] == const.ATB_TECH_MAPPER[x.name].get("crp", 30)],
         )
         .reset_index(drop=True)
     )
@@ -250,8 +247,7 @@ if __name__ == "__main__":
             "Using 2030 ATB data for offwind_floating; earlier data not available.",
         )
         pudl_atb_offwind_floating = pudl_atb[
-            (pudl_atb["pypsa-name"] == "offwind_floating")
-            & (pudl_atb.projection_year == 2030)
+            (pudl_atb["pypsa-name"] == "offwind_floating") & (pudl_atb.projection_year == 2030)
         ]
         pudl_atb = pd.concat(
             [pudl_atb_filt, pudl_atb_offwind_floating],
@@ -261,9 +257,7 @@ if __name__ == "__main__":
         pudl_atb = pudl_atb_filt
 
     pudl_atb = pudl_atb[pudl_atb.scenario_atb == atb_params.get("scenario", "Moderate")]
-    pudl_atb = pudl_atb[
-        pudl_atb.model_case_nrelatb == atb_params.get("model_case", "Market")
-    ]
+    pudl_atb = pudl_atb[pudl_atb.model_case_nrelatb == atb_params.get("model_case", "Market")]
 
     pudl_premelt = pudl_atb.copy()
     # Pivot Data
@@ -418,19 +412,18 @@ if __name__ == "__main__":
     ).reset_index()
 
     pivot_atb["efficiency"] = 3.412 / pivot_atb["heat_rate_mmbtu_per_mwh"]
-    pivot_atb["fuel_cost"] = (
-        pivot_atb["fuel_cost_real_per_mwhth"] / pivot_atb["efficiency"]
-    )
-    pivot_atb["marginal_cost"] = (
-        pivot_atb["opex_variable_per_mwh"] + pivot_atb["fuel_cost"]
-    )
+    pivot_atb["fuel_cost"] = pivot_atb["fuel_cost_real_per_mwhth"] / pivot_atb["efficiency"]
+    pivot_atb["marginal_cost"] = pivot_atb["opex_variable_per_mwh"] + pivot_atb["fuel_cost"]
 
     # Impute storage WACC from Utility Scale Solar. TODO: Revisit this assumption
     for x in [2, 4, 6, 8, 10]:
         pivot_atb.loc[
             pivot_atb["pypsa-name"] == f"{x}hr_battery_storage",
             "wacc_real",
-        ] = pivot_atb.loc[pivot_atb["pypsa-name"] == "solar", "wacc_real"].values[0]
+        ] = pivot_atb.loc[
+            pivot_atb["pypsa-name"] == "solar",
+            "wacc_real",
+        ].values[0]
         pivot_atb.loc[
             pivot_atb["pypsa-name"] == f"{x}hr_battery_storage",
             "efficiency",
@@ -459,9 +452,7 @@ if __name__ == "__main__":
     # Calculate grid interrconnection costs per MW-KM
     # All land-based resources assume 1 mile of spur line
     # All offshore resources assume 30 km of subsea cable
-    pivot_atb["capex_grid_connection_per_kw_km"] = (
-        pivot_atb["capex_grid_connection_per_kw"] / 1.609
-    )
+    pivot_atb["capex_grid_connection_per_kw_km"] = pivot_atb["capex_grid_connection_per_kw"] / 1.609
     pivot_atb.loc[
         pivot_atb["pypsa-name"].str.contains("offshore"),
         "capex_grid_connection_per_kw_km",
@@ -479,9 +470,7 @@ if __name__ == "__main__":
         # change to nyears
     )
 
-    pivot_atb["annualized_capex_fom"] = pivot_atb["annualized_capex_per_mw"] + (
-        pivot_atb["opex_fixed_per_kw"] * 1e3
-    )
+    pivot_atb["annualized_capex_fom"] = pivot_atb["annualized_capex_per_mw"] + (pivot_atb["opex_fixed_per_kw"] * 1e3)
     pudl_atb = pivot_atb.melt(
         id_vars=["pypsa-name"],
         value_vars=pivot_atb.columns.difference(["pypsa-name"]),

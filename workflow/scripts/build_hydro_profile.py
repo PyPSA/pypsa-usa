@@ -109,9 +109,7 @@ def get_eia_annual_hydro_generation(fn, countries, capacities=False):
             df.loc[country, period] = df.loc[k, period] * ratio[country]
 
     baltic_states = ["Latvia", "Estonia", "Lithuania"]
-    df.loc[baltic_states] = (
-        df.loc[baltic_states].T.fillna(df.loc[baltic_states].mean(axis=1)).T
-    )
+    df.loc[baltic_states] = df.loc[baltic_states].T.fillna(df.loc[baltic_states].mean(axis=1)).T
 
     df.loc["Germany"] = df.filter(like="Germany", axis=0).sum()
     df.loc["Serbia"] += df.loc["Kosovo"].fillna(0.0)
@@ -178,9 +176,7 @@ if __name__ == "__main__":
     cutout = atlite.Cutout(snakemake.input.cutout).sel(time=time)
 
     # countries = snakemake.params.countries
-    country_shapes = gpd.read_file(snakemake.input.reeds_shapes).set_index("name")[
-        "geometry"
-    ]
+    country_shapes = gpd.read_file(snakemake.input.reeds_shapes).set_index("name")["geometry"]
     country_shapes.index.name = "countries"
 
     # fn = snakemake.input.eia_hydro_generation

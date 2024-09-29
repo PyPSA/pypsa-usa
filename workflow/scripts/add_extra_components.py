@@ -30,12 +30,7 @@ def add_co2_emissions(n, costs, carriers):
     if any("CCS" in carrier for carrier in carriers):
         ccs_factor = (
             1
-            - pd.Series(carriers, index=carriers)
-            .str.split("-")
-            .str[1]
-            .str.replace("CCS", "")
-            .fillna(0)
-            .astype(int)
+            - pd.Series(carriers, index=carriers).str.split("-").str[1].str.replace("CCS", "").fillna(0).astype(int)
             / 100
         )
         n.carriers.loc[ccs_factor.index, "co2_emissions"] *= ccs_factor
@@ -44,9 +39,7 @@ def add_co2_emissions(n, costs, carriers):
 def add_nice_carrier_names(n, config):
     carrier_i = n.carriers.index
     nice_names = (
-        pd.Series(config["plotting"]["nice_names"])
-        .reindex(carrier_i)
-        .fillna(carrier_i.to_series().str.title())
+        pd.Series(config["plotting"]["nice_names"]).reindex(carrier_i).fillna(carrier_i.to_series().str.title())
     )
     n.carriers["nice_name"] = nice_names
     colors = pd.Series(config["plotting"]["tech_colors"]).reindex(carrier_i)
@@ -131,24 +124,16 @@ def attach_phs_storageunits(n: pypsa.Network, elec_opts, costs: pd.DataFrame):
             continue
 
         region_onshore_psh_grp = (
-            region_onshore_psh.groupby(["name", "cost_kw_round"])["potential_mw"]
-            .agg("sum")
-            .reset_index()
+            region_onshore_psh.groupby(["name", "cost_kw_round"])["potential_mw"].agg("sum").reset_index()
         )
 
-        region_onshore_psh_grp["class"] = (
-            region_onshore_psh_grp.groupby(["name"]).cumcount() + 1
-        )
+        region_onshore_psh_grp["class"] = region_onshore_psh_grp.groupby(["name"]).cumcount() + 1
         region_onshore_psh_grp["class"] = "c" + region_onshore_psh_grp["class"].astype(
             str,
         )
         region_onshore_psh_grp["tech"] = carrier
-        region_onshore_psh_grp["carrier"] = region_onshore_psh_grp[
-            ["tech", "class"]
-        ].agg("_".join, axis=1)
-        region_onshore_psh_grp["Generator"] = (
-            region_onshore_psh_grp["name"] + " " + region_onshore_psh_grp["carrier"]
-        )
+        region_onshore_psh_grp["carrier"] = region_onshore_psh_grp[["tech", "class"]].agg("_".join, axis=1)
+        region_onshore_psh_grp["Generator"] = region_onshore_psh_grp["name"] + " " + region_onshore_psh_grp["carrier"]
         region_onshore_psh_grp = region_onshore_psh_grp.set_index("Generator")
 
         # Updated annualize capital cost based on real location
@@ -240,8 +225,7 @@ def attach_stores(n, costs, elec_opts, investment_year):
             p_nom_extendable=True,
             efficiency=costs.at["fuel cell", "efficiency"],
             # NB: fixed cost is per MWel
-            capital_cost=costs.at["fuel cell", "capital_cost"]
-            * costs.at["fuel cell", "efficiency"],
+            capital_cost=costs.at["fuel cell", "capital_cost"] * costs.at["fuel cell", "efficiency"],
             marginal_cost=costs.at["fuel cell", "marginal_cost"],
             build_year=investment_year,
             lifetime=costs.at["fuel cell", "lifetime"],
@@ -269,9 +253,7 @@ def attach_hydrogen_pipelines(n, costs, elec_opts, investment_year):
     ).reset_index(drop=True)
 
     # remove bus pair duplicates regardless of order of bus0 and bus1
-    h2_links = candidates[
-        ~pd.DataFrame(np.sort(candidates[["bus0", "bus1"]])).duplicated()
-    ]
+    h2_links = candidates[~pd.DataFrame(np.sort(candidates[["bus0", "bus1"]])).duplicated()]
     h2_links.index = h2_links.apply(lambda c: f"H2 pipeline {c.bus0}-{c.bus1}", axis=1)
 
     # add pipelines
@@ -315,9 +297,7 @@ def add_economic_retirement(
         List of generators to apply economic retirment to. If none provided, it is
         applied to all extendable generators
     """
-    retirement_mask = n.generators["p_nom_extendable"] & (
-        n.generators["carrier"].isin(gens) if gens else True
-    )
+    retirement_mask = n.generators["p_nom_extendable"] & (n.generators["carrier"].isin(gens) if gens else True)
     retirement_gens = n.generators[retirement_mask]
     if retirement_gens.empty:
         return
@@ -327,20 +307,14 @@ def add_economic_retirement(
         lambda row: (
             row["capital_cost"]
             if not row.name in (retirement_gens.index)
-            else row["capital_cost"]
-            * costs.at[row["carrier"], "opex_variable_per_mwh"]
-            / 100
+            else row["capital_cost"] * costs.at[row["carrier"], "opex_variable_per_mwh"] / 100
         ),
         axis=1,
     )
 
     # rename retiring generators to include "existing" suffix
     n.generators.index = n.generators.apply(
-        lambda row: (
-            row.name
-            if not row.name in (retirement_gens.index)
-            else row.name + " existing"
-        ),
+        lambda row: (row.name if not row.name in (retirement_gens.index) else row.name + " existing"),
         axis=1,
     )
 
@@ -450,9 +424,7 @@ def attach_multihorizon_generators(
         marginal_cost_t,
     )
 
-    p_max_pu_t = n.generators_t["p_max_pu"][
-        [x for x in gens.index if x in n.generators_t["p_max_pu"].columns]
-    ]
+    p_max_pu_t = n.generators_t["p_max_pu"][[x for x in gens.index if x in n.generators_t["p_max_pu"].columns]]
     p_max_pu_t = p_max_pu_t.rename(
         columns={x: f"{x} {investment_year}" for x in p_max_pu_t.columns},
     )
@@ -549,13 +521,9 @@ def apply_max_annual_growth_rate(n, max_growth):
     years = n.investment_period_weightings.index.diff()
     years = years.dropna().values.mean()
     for carrier in max_annual_growth_rate.keys():
-        ann_growth_rate = max_annual_growth_rate[carrier]
-        growth_factor = ann_growth_rate**years
         p_nom = n.generators.p_nom.loc[n.generators.carrier == carrier].sum()
         n.carriers.loc[carrier, "max_growth"] = growth_base.get(carrier) or p_nom
-        n.carriers.loc[carrier, "max_relative_growth"] = (
-            max_annual_growth_rate[carrier] ** years
-        )
+        n.carriers.loc[carrier, "max_relative_growth"] = max_annual_growth_rate[carrier] ** years
 
 
 if __name__ == "__main__":

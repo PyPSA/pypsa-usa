@@ -132,7 +132,7 @@ lines:
 
 model_topology:
   interface_transmission_limits: false
-  topological_boundaries: 'reeds_zone' # [state, reeds_zone]
+  topological_boundaries: 'reeds_zone' # [reeds_zone]
 
 
 # docs :

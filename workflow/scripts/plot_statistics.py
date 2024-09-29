@@ -153,10 +153,7 @@ def stacked_bar_horizons(
     # Create legend handles and labels from the carriers DataFrame
     carriers_legend = carriers_legend[carriers_legend["value"] > 0.01]
     colors_ = carriers_legend["color"]
-    legend_handles = [
-        plt.Rectangle((0, 0), 1, 1, color=colors_[tech])
-        for tech in carriers_legend.index
-    ]
+    legend_handles = [plt.Rectangle((0, 0), 1, 1, color=colors_[tech]) for tech in carriers_legend.index]
     # fig.legend(handles=legend_handles, labels=carriers.index.tolist(), loc='lower center', bbox_to_anchor=(0.5, -0.4), ncol=4, title='Technologies')
     ax.legend(
         handles=legend_handles,
@@ -194,17 +191,15 @@ def plot_capacity_additions_bar(
     existing_capacity.index = existing_capacity.index.map(n.carriers.nice_name)
 
     optimal_capacity = n.statistics.optimal_capacity()
-    optimal_capacity = optimal_capacity[
-        optimal_capacity.index.get_level_values(0).isin(["Generator", "StorageUnit"])
-    ]
+    optimal_capacity = optimal_capacity[optimal_capacity.index.get_level_values(0).isin(["Generator", "StorageUnit"])]
     optimal_capacity.index = optimal_capacity.index.droplevel(0)
     optimal_capacity.reset_index(inplace=True)
     optimal_capacity.rename(columns={"index": "carrier"}, inplace=True)
 
     optimal_capacity.set_index("carrier", inplace=True)
     optimal_capacity.insert(0, "Existing", existing_capacity["Existing Capacity"])
-    color_palette = get_color_palette(n)
-    color_mapper = [color_palette[carrier] for carrier in optimal_capacity.index]
+    # color_palette = get_color_palette(n)
+    # color_mapper = [color_palette[carrier] for carrier in optimal_capacity.index]
 
     stats = {"": optimal_capacity}
     variable = "Optimal Capacity"
@@ -298,14 +293,8 @@ def plot_regional_capacity_additions_bar(
     expanded_capacity["positive"] = expanded_capacity["mw"] > 0
     df_sorted = expanded_capacity.sort_values(by=["region", "carrier"])
     # Correcting the bottoms for positive and negative values
-    bottoms_pos = (
-        df_sorted[df_sorted["positive"]].groupby("region")["mw"].cumsum()
-        - df_sorted["mw"]
-    )
-    bottoms_neg = (
-        df_sorted[~df_sorted["positive"]].groupby("region")["mw"].cumsum()
-        - df_sorted["mw"]
-    )
+    bottoms_pos = df_sorted[df_sorted["positive"]].groupby("region")["mw"].cumsum() - df_sorted["mw"]
+    bottoms_neg = df_sorted[~df_sorted["positive"]].groupby("region")["mw"].cumsum() - df_sorted["mw"]
 
     # Re-initialize plot to address the legend and gap issues
     fig, ax = plt.subplots(figsize=(10, 6))
@@ -362,9 +351,7 @@ def plot_regional_emissions_bar(
     """
     PLOT OF CO2 EMISSIONS BY REGION.
     """
-    regional_emisssions = (
-        get_node_emissions_timeseries(n).T.groupby(n.buses.country).sum().T.sum() / 1e6
-    )
+    regional_emisssions = get_node_emissions_timeseries(n).T.groupby(n.buses.country).sum().T.sum() / 1e6
 
     plt.figure(figsize=(10, 10))
     sns.barplot(
@@ -405,11 +392,7 @@ def plot_production_area(
     demand = get_demand_timeseries(n).mul(1e-3)  # MW -> GW
 
     for carrier in energy_mix.columns:
-        if (
-            "battery" in carrier
-            or carrier
-            in snakemake.params.electricity["extendable_carriers"]["StorageUnit"]
-        ):
+        if "battery" in carrier or carrier in snakemake.params.electricity["extendable_carriers"]["StorageUnit"]:
             energy_mix[carrier + "_discharger"] = energy_mix[carrier].clip(lower=0.0001)
             energy_mix[carrier + "_charger"] = energy_mix[carrier].clip(upper=-0.0001)
             energy_mix = energy_mix.drop(columns=carrier)
@@ -449,11 +432,7 @@ def plot_production_area(
                 color="darkblue",
             )
 
-            suffix = (
-                "-" + datetime.strptime(str(month), "%m").strftime("%b")
-                if month != "all"
-                else ""
-            )
+            suffix = "-" + datetime.strptime(str(month), "%m").strftime("%b") if month != "all" else ""
 
             axs[i].legend(bbox_to_anchor=(1, 1), loc="upper left")
             # axs[i].set_title(f"Production in {investment_period}")
@@ -562,15 +541,9 @@ def plot_accumulated_emissions(n: pypsa.Network, save: str, **wildcards) -> None
 
 def plot_curtailment_heatmap(n: pypsa.Network, save: str, **wildcards) -> None:
     curtailment = n.statistics.curtailment()
-    curtailment = curtailment[
-        curtailment.index.get_level_values(0).isin(["StorageUnit", "Generator"])
-    ].droplevel(0)
+    curtailment = curtailment[curtailment.index.get_level_values(0).isin(["StorageUnit", "Generator"])].droplevel(0)
     curtailment = curtailment[curtailment.sum(1) > 0.001].T
-    curtailment.index = (
-        pd.to_datetime(curtailment.index)
-        .tz_localize("utc")
-        .tz_convert("America/Los_Angeles")
-    )
+    curtailment.index = pd.to_datetime(curtailment.index).tz_localize("utc").tz_convert("America/Los_Angeles")
     curtailment["month"] = curtailment.index.month
     curtailment["hour"] = curtailment.index.hour
     curtailment_group = curtailment.groupby(["month", "hour"]).mean()
@@ -600,6 +573,7 @@ def plot_curtailment_heatmap(n: pypsa.Network, save: str, **wildcards) -> None:
             .astype(float)
             .fillna(0)
         )
+
         sns.heatmap(pivot_table, ax=axes[i], cmap="viridis")
         axes[i].set_title(carrier)
 
@@ -627,12 +601,7 @@ def plot_capacity_factor_heatmap(n: pypsa.Network, save: str, **wildcards) -> No
     df_long["hour"] = df_long.index.hour
     df_long["month"] = df_long.index.month
     df_long.drop(columns="bus", inplace=True)
-    df_long = (
-        df_long.drop(columns="region")
-        .groupby(["carrier", "month", "hour"])
-        .mean()
-        .reset_index()
-    )
+    df_long = df_long.drop(columns="region").groupby(["carrier", "month", "hour"]).mean().reset_index()
 
     unique_groups = df_long["carrier"].unique()
     num_groups = len(unique_groups)
@@ -832,13 +801,7 @@ def plot_fuel_costs(
     color_palette = n.carriers.color.to_dict()
 
     # plot error plot of all fuels
-    df = (
-        fuel_costs.droplevel(["bus", "Generator"])
-        .T.resample("d")
-        .mean()
-        .reset_index()
-        .melt(id_vars="timestep")
-    )
+    df = fuel_costs.droplevel(["bus", "Generator"]).T.resample("d").mean().reset_index().melt(id_vars="timestep")
     sns.lineplot(
         data=df,
         x="timestep",
@@ -855,15 +818,7 @@ def plot_fuel_costs(
     # plot bus fuel prices for each fuel
     for i, fuel in enumerate(fuels):
         nice_name = n.carriers.at[fuel, "nice_name"]
-        df = (
-            fuel_costs.loc[fuel, :, :]
-            .droplevel("Generator")
-            .T.resample("d")
-            .mean()
-            .T.groupby(level=0)
-            .mean()
-            .T
-        )
+        df = fuel_costs.loc[fuel, :, :].droplevel("Generator").T.resample("d").mean().T.groupby(level=0).mean().T
         sns.lineplot(
             data=df,
             legend=False,

@@ -180,9 +180,7 @@ if __name__ == "__main__":
 
     # {feature: save_file}
     # ie. {"demand": results/gas/natural_gas_demand.html}
-    figures = {
-        x.split("natural_gas_")[1].split(".")[0]: y for x, y in output_files.items()
-    }
+    figures = {x.split("natural_gas_")[1].split(".")[0]: y for x, y in output_files.items()}
 
     assert figures, "No natural gas figures to create"
 

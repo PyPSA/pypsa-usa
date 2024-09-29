@@ -162,9 +162,7 @@ class GasData(ABC):
     state_2_interconnect = constants.STATES_INTERCONNECT_MAPPER
     state_2_name = {v: k for k, v in constants.STATE_2_CODE.items()}
     name_2_state = constants.STATE_2_CODE
-    states_2_remove = [
-        x for x, y in constants.STATES_INTERCONNECT_MAPPER.items() if not y
-    ]
+    states_2_remove = [x for x, y in constants.STATES_INTERCONNECT_MAPPER.items() if not y]
 
     def __init__(self, year: int, interconnect: str) -> None:
         self.year = year
@@ -455,9 +453,7 @@ class _GasPipelineCapacity(GasData):
         df = data.copy()
         df.columns = df.columns.str.strip()
         df = df[df.index == int(self.year)]
-        df["Capacity (mmcfd)"] = (
-            df["Capacity (mmcfd)"] * MWH_2_MMCF / 24
-        )  # divide by 24 to get hourly
+        df["Capacity (mmcfd)"] = df["Capacity (mmcfd)"] * MWH_2_MMCF / 24  # divide by 24 to get hourly
         df = df.rename(
             columns={
                 "State From": "STATE_NAME_FROM",
@@ -545,10 +541,7 @@ class InterconnectGasPipelineCapacity(_GasPipelineCapacity):
         df = df[~df.apply(lambda x: x.STATE_TO == x.STATE_FROM, axis=1)].copy()
 
         if self.interconnect != "usa":
-            df = df[
-                (df.INTERCONNECT_TO == self.interconnect)
-                & (df.INTERCONNECT_FROM == self.interconnect)
-            ]
+            df = df[(df.INTERCONNECT_TO == self.interconnect) & (df.INTERCONNECT_FROM == self.interconnect)]
             if df.empty:
                 logger.error(
                     f"Empty natural gas domestic pipelines for interconnect {self.interconnect}",
@@ -623,38 +616,23 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
         else:
             # get rid of international connections
             df = df[
-                ~(
-                    (df.INTERCONNECT_TO.isin(["canada", "mexico"]))
-                    | (df.INTERCONNECT_FROM.isin(["canada", "mexico"]))
-                )
+                ~((df.INTERCONNECT_TO.isin(["canada", "mexico"])) | (df.INTERCONNECT_FROM.isin(["canada", "mexico"])))
             ]
             # get rid of pipelines within the interconnect
             return df[
-                (
-                    df["INTERCONNECT_TO"].eq(self.interconnect)
-                    | df["INTERCONNECT_FROM"].eq(self.interconnect)
-                )
-                & ~(
-                    df["INTERCONNECT_TO"].eq(self.interconnect)
-                    & df["INTERCONNECT_FROM"].eq(self.interconnect)
-                )
+                (df["INTERCONNECT_TO"].eq(self.interconnect) | df["INTERCONNECT_FROM"].eq(self.interconnect))
+                & ~(df["INTERCONNECT_TO"].eq(self.interconnect) & df["INTERCONNECT_FROM"].eq(self.interconnect))
             ]
 
     def _get_international_pipeline_connections(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         Gets all international pipeline connections.
         """
-        df = df[
-            (df.INTERCONNECT_TO.isin(["canada", "mexico"]))
-            | (df.INTERCONNECT_FROM.isin(["canada", "mexico"]))
-        ]
+        df = df[(df.INTERCONNECT_TO.isin(["canada", "mexico"])) | (df.INTERCONNECT_FROM.isin(["canada", "mexico"]))]
         if self.interconnect == "usa":
             return df
         else:
-            return df[
-                (df.INTERCONNECT_TO == self.interconnect)
-                | (df.INTERCONNECT_FROM == self.interconnect)
-            ]
+            return df[(df.INTERCONNECT_TO == self.interconnect) | (df.INTERCONNECT_FROM == self.interconnect)]
 
     def _get_international_costs(
         self,
@@ -742,9 +720,7 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
         state_2_code = df.set_index("STATE_NAME_TO")["STATE_TO"].to_dict()
         state_2_code.update(df.set_index("STATE_NAME_FROM")["STATE_FROM"].to_dict())
 
-        state_2_interconnect = df.set_index("STATE_NAME_TO")[
-            "INTERCONNECT_TO"
-        ].to_dict()
+        state_2_interconnect = df.set_index("STATE_NAME_TO")["INTERCONNECT_TO"].to_dict()
         state_2_interconnect.update(
             df.set_index("STATE_NAME_FROM")["INTERCONNECT_FROM"].to_dict(),
         )
@@ -975,9 +951,7 @@ class PipelineLinepack(GasData):
             predicate="within",
         ).reset_index()
         length_in_state = (
-            length_in_state[
-                ["STATE_NAME", "STATE", "TYPEPIPE", "Shape_Leng", "Shape__Length"]
-            ]
+            length_in_state[["STATE_NAME", "STATE", "TYPEPIPE", "Shape_Leng", "Shape__Length"]]
             .rename(columns={"Shape_Leng": "LENGTH_DEG", "Shape__Length": "LENGTH_M"})
             .groupby(by=["STATE_NAME", "STATE", "TYPEPIPE"])
             .sum()
@@ -992,9 +966,7 @@ class PipelineLinepack(GasData):
         volumne_in_state["RADIUS"] = volumne_in_state.TYPEPIPE.map(
             lambda x: interstate_radius if x == "Interstate" else intrastate_radius,
         )
-        volumne_in_state["VOLUME_M3"] = (
-            volumne_in_state.LENGTH_M * pi * volumne_in_state.RADIUS**2
-        )
+        volumne_in_state["VOLUME_M3"] = volumne_in_state.LENGTH_M * pi * volumne_in_state.RADIUS**2
         volumne_in_state = volumne_in_state[["STATE_NAME", "STATE", "VOLUME_M3"]]
         volumne_in_state = volumne_in_state.groupby(by=["STATE_NAME", "STATE"]).sum()
 
@@ -1005,18 +977,14 @@ class PipelineLinepack(GasData):
         energy_in_state = volumne_in_state.copy()
         energy_in_state["MAX_ENERGY_kJ"] = energy_in_state.VOLUME_M3 * max_pressure
         energy_in_state["MIN_ENERGY_kJ"] = energy_in_state.VOLUME_M3 * min_pressure
-        energy_in_state["NOMINAL_ENERGY_kJ"] = (
-            energy_in_state.MAX_ENERGY_kJ + energy_in_state.MIN_ENERGY_kJ
-        ) / 2
+        energy_in_state["NOMINAL_ENERGY_kJ"] = (energy_in_state.MAX_ENERGY_kJ + energy_in_state.MIN_ENERGY_kJ) / 2
 
         final = energy_in_state.copy()
         final["MAX_ENERGY_MWh"] = final.MAX_ENERGY_kJ * KJ_2_MWH
         final["MIN_ENERGY_MWh"] = final.MIN_ENERGY_kJ * KJ_2_MWH
         final["NOMINAL_ENERGY_MWh"] = final.NOMINAL_ENERGY_kJ * KJ_2_MWH
 
-        final = final[
-            ["MAX_ENERGY_MWh", "MIN_ENERGY_MWh", "NOMINAL_ENERGY_MWh"]
-        ].reset_index()
+        final = final[["MAX_ENERGY_MWh", "MIN_ENERGY_MWh", "NOMINAL_ENERGY_MWh"]].reset_index()
         return self.filter_on_interconnect(final)
 
     def build_infrastructure(self, n: pypsa.Network, **kwargs) -> None:

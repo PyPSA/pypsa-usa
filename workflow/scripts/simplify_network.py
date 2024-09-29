@@ -103,9 +103,7 @@ def aggregate_to_substations(
 
     logger.info("Aggregating buses to substation level...")
 
-    line_strategies = aggregation_strategies.get("lines", dict())
     generator_strategies = aggregation_strategies.get("generators", dict())
-    one_port_strategies = aggregation_strategies.get("one_ports", dict())
 
     clustering = get_clustering_from_busmap(
         network,
@@ -139,12 +137,6 @@ def aggregate_to_substations(
     substations.index = substations.sub_id
 
     match topological_boundaries:
-        case "balancing_area":
-            zone = substations.balancing_area
-        case "country":
-            zone = substations.country
-        case "state":
-            zone = substations.state
         case "county":
             zone = substations.county
         case "reeds_zone":
@@ -160,9 +152,8 @@ def aggregate_to_substations(
     network_s.buses["x"] = substations.x
     network_s.buses["y"] = substations.y
     network_s.buses["substation_lv"] = True
-    network_s.buses["country"] = (
-        zone  # country field used bc pypsa algo aggregates based on country field
-    )
+    network_s.buses["country"] = zone  # country field used bc pypsa algo aggregates based on country field
+
     network_s.lines["type"] = np.nan
 
     if topological_boundaries != "reeds_zone" and topological_boundaries != "county":

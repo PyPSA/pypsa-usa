@@ -6,16 +6,16 @@ Users can clone the repository using HTTPS, SSH, or GitHub CLI. See [GitHub docs
 
 ### Using HTTPS
 
-```bash
-$ git clone https://github.com/PyPSA/pypsa-usa.git
+```console
+git clone https://github.com/PyPSA/pypsa-usa.git
 ```
 
 ### Using SSH-Key
 
 If it your first time cloning a **repository through ssh**, you will need to set up your git with an ssh-key by following these [directions](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/generating-a-new-ssh-key-and-adding-it-to-the-ssh-agent).
 
-```bash
-$ git clone git@github.com:PyPSA/pypsa-usa.git
+```console
+git clone git@github.com:PyPSA/pypsa-usa.git
 ```
 
 ## Step 2. Initialize Configuration files
@@ -23,23 +23,26 @@ $ git clone git@github.com:PyPSA/pypsa-usa.git
 From the command line, run the script `init_pypsa_usa.sh` to copy configuration file
 templates into the `workflow/config` folder.
 
-```bash
-$ bash init_pypsa_usa.sh
+```console
+bash init_pypsa_usa.sh
 ```
 
-## Step 3: Create Conda Environment
+## Step 3: Create Mamba Environment
 
 PyPSA-USA uses conda/mamba to manage project dependencies. You can download and install mamba following the [instructions](https://mamba.readthedocs.io/en/latest/mamba-installation.html). Follow links for mambaforge installation. There are two ways to install mamba, the first (recommended) method will start with a fresh install, meaning if you have previously installed conda environments, you will need to recreate these conda envs. If you already have conda installed and do not wish to install mamba, you can follow the same set of instructions replacing any `mamba` with `conda`
 
 Once mamba is installed, use the environment file within your git repository to activate the `pypsa-usa` conda environment. This step can take ~10-20 minutes. After creating the mamba environment, you will only need to activate it before running the snakemake workflow.
 
-```bash
-$ mamba env create -f workflow/envs/environment.yaml
-$ mamba activate pypsa-usa
+```console
+mamba env create -f workflow/envs/environment.yaml
+mamba activate pypsa-usa
 ```
 
 You also have the option to use miniconda. Download [Miniconda](https://docs.conda.io/en/latest/miniconda.html) following their [instructions](https://docs.conda.io/en/latest/miniconda.html).
 
+```{seealso}
+If you are planning to develop PyPSA-USA, please see our [contribution guidelines](./contributing.md#code-contributions) for installing additional dependencies
+```
 
 ## Step 4: Install a Solver
 

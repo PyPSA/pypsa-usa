@@ -126,9 +126,10 @@ def weighting_for_country(n, x):
     generators["carrier_base"] = generators.carrier.str.split().str[0]
     gen = generators.loc[generators.carrier_base.isin(conv_carriers)].groupby(
         "bus",
-    ).p_nom.sum().reindex(n.buses.index, fill_value=0.0) + n.storage_units.loc[
-        n.storage_units.carrier.isin(conv_carriers)
-    ].groupby(
+    ).p_nom.sum().reindex(
+        n.buses.index,
+        fill_value=0.0,
+    ) + n.storage_units.loc[n.storage_units.carrier.isin(conv_carriers)].groupby(
         "bus",
     ).p_nom.sum().reindex(
         n.buses.index,
@@ -163,11 +164,7 @@ def get_feature_for_hac(n, buses_i=None, feature=None):
         feature_data = pd.DataFrame(index=buses_i, columns=carriers)
         for carrier in carriers:
             gen_i = n.generators.query("carrier == @carrier").index
-            attach = (
-                n.generators_t.p_max_pu[gen_i]
-                .mean()
-                .rename(index=n.generators.loc[gen_i].bus)
-            )
+            attach = n.generators_t.p_max_pu[gen_i].mean().rename(index=n.generators.loc[gen_i].bus)
             feature_data[carrier] = attach
 
     if feature.split("-")[1] == "time":
@@ -210,16 +207,12 @@ def distribute_clusters(n, n_clusters, focus_weights=None, solver_name="cbc"):
     if focus_weights is not None:
         total_focus = sum(list(focus_weights.values()))
 
-        assert (
-            total_focus <= 1.0
-        ), "The sum of focus weights must be less than or equal to 1."
+        assert total_focus <= 1.0, "The sum of focus weights must be less than or equal to 1."
 
         for country, weight in focus_weights.items():
             L[country] = weight / len(L[country])
 
-        remainder = [
-            c not in focus_weights.keys() for c in L.index.get_level_values("country")
-        ]
+        remainder = [c not in focus_weights.keys() for c in L.index.get_level_values("country")]
         L[remainder] = L.loc[remainder].pipe(normed) * (1 - total_focus)
 
         logger.warning("Using custom focus weights for determining number of clusters.")
@@ -250,9 +243,7 @@ def distribute_clusters(n, n_clusters, focus_weights=None, solver_name="cbc"):
         opt = po.SolverFactory("ipopt")
 
     results = opt.solve(m)
-    assert (
-        results["Solver"][0]["Status"] == "ok"
-    ), f"Solver returned non-optimally: {results}"
+    assert results["Solver"][0]["Status"] == "ok", f"Solver returned non-optimally: {results}"
 
     return pd.Series(m.n.get_values(), index=L.index).round().astype(int)
 
@@ -288,13 +279,13 @@ def busmap_for_n_clusters(
             component_sizes = component.value_counts()
 
             if len(component_sizes) > 1:
-                disconnected_bus = component[
-                    component == component_sizes.index[-1]
-                ].index[0]
+                disconnected_bus = component[component == component_sizes.index[-1]].index[0]
 
                 neighbor_bus = n.lines.query(
                     "bus0 == @disconnected_bus or bus1 == @disconnected_bus",
-                ).iloc[0][["bus0", "bus1"]]
+                ).iloc[
+                    0
+                ][["bus0", "bus1"]]
                 new_country = list(
                     set(n.buses.loc[neighbor_bus].country) - {country},
                 )[0]
@@ -394,7 +385,7 @@ def clustering_for_n_clusters(
 
     line_strategies = aggregation_strategies.get("lines", dict())
     generator_strategies = aggregation_strategies.get("generators", dict())
-    bus_strategies = aggregation_strategies.get("buses", dict())
+    # bus_strategies = aggregation_strategies.get("buses", dict())
     one_port_strategies = aggregation_strategies.get("one_ports", dict())
 
     clustering = get_clustering_from_busmap(
@@ -412,14 +403,9 @@ def clustering_for_n_clusters(
 
     if not n.links.empty:
         nc = clustering.network
-        nc.links["underwater_fraction"] = (
-            n.links.eval("underwater_fraction * length").div(nc.links.length).dropna()
-        )
+        nc.links["underwater_fraction"] = n.links.eval("underwater_fraction * length").div(nc.links.length).dropna()
         nc.links["capital_cost"] = nc.links["capital_cost"].add(
-            (nc.links.length - n.links.length)
-            .clip(lower=0)
-            .mul(extended_link_costs)
-            .dropna(),
+            (nc.links.length - n.links.length).clip(lower=0).mul(extended_link_costs).dropna(),
             fill_value=0,
         )
 
@@ -431,7 +417,7 @@ def convert_to_transport(clustering, itl_fn, itl_cost_fn, topological_boundaries
     Replaces all Lines according to Links with the transfer capacity specified
     by the ITLs.
     """
-    lines = clustering.network.lines.copy()
+    # lines = clustering.network.lines.copy()
     buses = clustering.network.buses.copy()
 
     itls = pd.read_csv(itl_fn)
@@ -513,9 +499,7 @@ def convert_to_transport(clustering, itl_fn, itl_cost_fn, topological_boundaries
 
     # Remove any disconnected buses
     unique_buses = buses.loc[itls.r].index.union(buses.loc[itls.rr].index).unique()
-    disconnected_buses = clustering.network.buses.index[
-        ~clustering.network.buses.index.isin(unique_buses)
-    ]
+    disconnected_buses = clustering.network.buses.index[~clustering.network.buses.index.isin(unique_buses)]
     if len(disconnected_buses) > 0:
         logger.warning(
             f"Removed {len(disconnected_buses)} sub-network buses from the network.",
@@ -637,9 +621,7 @@ if __name__ == "__main__":
             linemap,
         )
     else:
-        Nyears = (
-            n.snapshot_weightings.loc[n.investment_periods[0]].objective.sum() / 8760.0
-        )
+        Nyears = n.snapshot_weightings.loc[n.investment_periods[0]].objective.sum() / 8760.0
 
         costs = pd.read_csv(snakemake.input.tech_costs)
         costs = costs.pivot(index="pypsa-name", columns="parameter", values="value")

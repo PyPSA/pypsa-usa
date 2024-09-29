@@ -35,9 +35,12 @@ def download_and_extract(url, extract_path):
     total_size_in_bytes = int(response.headers.get("content-length", 0))
 
     # Setup progress bar
-    with open(filename, "wb") as file, progressbar.ProgressBar(
-        max_value=total_size_in_bytes,
-    ) as bar:
+    with (
+        open(filename, "wb") as file,
+        progressbar.ProgressBar(
+            max_value=total_size_in_bytes,
+        ) as bar,
+    ):
         for data in response.iter_content(1024):
             file.write(data)
             bar.update(bar.value + len(data))
@@ -74,9 +77,7 @@ def prepare_historical_data(PATH_DOWNLOAD: str, suffix: str = "elec") -> None:
 
 
 def filter_demand_data(df: pd.DataFrame) -> pd.DataFrame:
-    pattern = (
-        r".*_D$"  # Define the header filter pattern to match columns ending with "_D"
-    )
+    pattern = r".*_D$"  # Define the header filter pattern to match columns ending with "_D"
     filtered_columns = [col for col in df.columns if re.match(pattern, col)]
     filtered_columns.insert(0, "period")
     filtered_df = df[filtered_columns]
@@ -100,9 +101,7 @@ if __name__ == "__main__":
 
         snakemake = mock_snakemake("retrieve_eia_data")
 
-    grid_emissions_data_url = (
-        "https://gridemissions.s3.us-east-2.amazonaws.com/processed.tar.gz"
-    )
+    grid_emissions_data_url = "https://gridemissions.s3.us-east-2.amazonaws.com/processed.tar.gz"
 
     PATH_DOWNLOAD = Path(f"data/GridEmissions")
     PATH_DOWNLOAD.mkdir(parents=True, exist_ok=True)

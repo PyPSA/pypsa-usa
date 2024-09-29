@@ -78,9 +78,7 @@ def _get_generator_primary_energy(n: pypsa.Network) -> pd.DataFrame:
     p["carrier"] = p.index.map(n.generators.carrier).map(n.carriers.nice_name)
     p["bus_carrier"] = p.index.map(n.generators.bus).map(n.buses.carrier)
     p["Component"] = "Generator"
-    return (
-        p.reset_index(drop=True).groupby(["Component", "carrier", "bus_carrier"]).sum()
-    )
+    return p.reset_index(drop=True).groupby(["Component", "carrier", "bus_carrier"]).sum()
 
 
 def get_AC_generator_primary(n: pypsa.Network, investment_period: int) -> pd.DataFrame:
@@ -89,11 +87,7 @@ def get_AC_generator_primary(n: pypsa.Network, investment_period: int) -> pd.Dat
     """
     df = _get_generator_primary_energy(n).droplevel("Component")[[investment_period]]
     df = df.reset_index()
-    df = (
-        df[df.bus_carrier == "AC"]
-        .rename(columns={"carrier": "source", investment_period: "value"})
-        .copy()
-    )
+    df = df[df.bus_carrier == "AC"].rename(columns={"carrier": "source", investment_period: "value"}).copy()
     df["target"] = "Electricity Generation"
     return df[["source", "target", "value"]]
 
@@ -158,9 +152,7 @@ def get_AC_link_rejected(n: pypsa.Network, investment_period: int) -> pd.DataFra
     carriers = ac_links(n, investment_period)
     df = df[df.carrier.isin(carriers)]
 
-    primary = (
-        df[~(df.bus_carrier == "AC")].drop(columns=["bus_carrier"]).set_index("carrier")
-    )
+    primary = df[~(df.bus_carrier == "AC")].drop(columns=["bus_carrier"]).set_index("carrier")
     used = df[df.bus_carrier == "AC"].drop(columns=["bus_carrier"]).set_index("carrier")
     rejected = primary.mul(-1) - used  # -1 because links remove energy from bus0
 
@@ -249,11 +241,7 @@ def _get_end_use_rejected_per_sector(
         investment_period,
         sector,
     ).value.sum()
-    used = (
-        get_energy_services(n, investment_period)
-        .set_index("source")
-        .at[sector, "value"]
-    )
+    used = get_energy_services(n, investment_period).set_index("source").at[sector, "value"]
     rejected = delievered - used
     assert rejected >= 0
 
@@ -308,9 +296,7 @@ def get_sankey_dataframe(n: pypsa.Network, investment_period: int) -> pd.DataFra
     df = pd.concat(dfs).groupby(["source", "target"], as_index=False).sum()
     df["source"] = df.source.map(map_sankey_name)
     df["target"] = df.target.map(map_sankey_name)
-    return df.groupby(["source", "target"], as_index=False).sum()[
-        ["source", "target", "value"]
-    ]
+    return df.groupby(["source", "target"], as_index=False).sum()[["source", "target", "value"]]
 
 
 def format_sankey_data(data: pd.DataFrame) -> pd.DataFrame:
