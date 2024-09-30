@@ -240,47 +240,6 @@ def attach_stores(n, costs, elec_opts, investment_year):
         )
 
 
-def attach_hydrogen_pipelines(n, costs, elec_opts, investment_year):
-    ext_carriers = elec_opts["extendable_carriers"]
-    as_stores = ext_carriers.get("Store", [])
-
-    if "H2 pipeline" not in ext_carriers.get("Link", []):
-        return
-
-    assert "H2" in as_stores, (
-        "Attaching hydrogen pipelines requires hydrogen "
-        "storage to be modelled as Store-Link-Bus combination. See "
-        "`config.yaml` at `electricity: extendable_carriers: Store:`."
-    )
-
-    # determine bus pairs
-    attrs = ["bus0", "bus1", "length"]
-    candidates = pd.concat(
-        [n.lines[attrs], n.links.query('carrier=="DC"')[attrs]],
-    ).reset_index(drop=True)
-
-    # remove bus pair duplicates regardless of order of bus0 and bus1
-    h2_links = candidates[~pd.DataFrame(np.sort(candidates[["bus0", "bus1"]])).duplicated()]
-    h2_links.index = h2_links.apply(lambda c: f"H2 pipeline {c.bus0}-{c.bus1}", axis=1)
-
-    # add pipelines
-    n.madd(
-        "Link",
-        h2_links.index,
-        bus0=h2_links.bus0.values + " H2",
-        bus1=h2_links.bus1.values + " H2",
-        p_min_pu=-1,
-        p_nom_extendable=True,
-        length=h2_links.length.values,
-        capital_cost=costs.at["H2 pipeline", "capital_cost"] * h2_links.length,
-        efficiency=costs.at["H2 pipeline", "efficiency"],
-        carrier="H2 pipeline",
-        build_year=investment_year,
-        lifetime=costs.at["H2 pipeline", "lifetime"],
-        suffix=f" {investment_year}",
-    )
-
-
 def add_economic_retirement(
     n: pypsa.Network,
     costs: pd.DataFrame,
@@ -309,17 +268,17 @@ def add_economic_retirement(
     if retirement_gens.empty:
         return
 
-    # divide by 100 b/c FOM expressed as percentage of CAPEX
+    # Change capex to fixed OM cost for retiring generators
     n.generators["capital_cost"] = n.generators.apply(
         lambda row: (
             row["capital_cost"]
             if not row.name in (retirement_gens.index)
-            else row["capital_cost"] * costs.at[row["carrier"], "opex_variable_per_mwh"] / 100
+            else costs.at[row["carrier"], "opex_fixed_per_kw"] * 1e3
         ),
         axis=1,
     )
 
-    # rename retiring generators to include "existing" suffix
+    # Rename retiring generators to include "existing" suffix
     n.generators.index = n.generators.apply(
         lambda row: (row.name if not row.name in (retirement_gens.index) else row.name + " existing"),
         axis=1,
@@ -337,7 +296,7 @@ def add_economic_retirement(
         n.generators["p_nom_min"],
     )
 
-    n.madd(
+    n.madd(  # Adding Expanding generators for the first investment period
         "Generator",
         retirement_gens.index,
         carrier=retirement_gens.carrier,
@@ -352,7 +311,7 @@ def add_economic_retirement(
         marginal_cost=retirement_gens.marginal_cost,
         capital_cost=retirement_gens.capital_cost,
         build_year=n.investment_periods[0],
-        lifetime=retirement_gens.lifetime,
+        lifetime=retirement_gens.carrier.map(costs.lifetime).fillna(np.inf),
         p_min_pu=retirement_gens.p_min_pu,
         p_max_pu=retirement_gens.p_max_pu,
     )
@@ -384,10 +343,15 @@ def attach_multihorizon_generators(
     investment_year: int,
 ):
     """
-    Adds multiple investment options for a given set of extendable carriers.
+    Adds multiple investment options for generators types that were already
+    existing in the network. Function used for all carriers, renewable and
+    conventional.
 
     Specifically this function does the following:
-    1. ....
+    1. Adds new generators for the given investment year, according that year's costs.
+        if this is the first investment period we use the existing generator's p_nom and p_nom_min
+    2. Adds time dependent factors for the new generators
+
 
     Arguments:
     n: pypsa.Network,
@@ -440,7 +404,8 @@ def attach_multihorizon_generators(
 
 def attach_newCarrier_generators(n, costs, carriers, investment_year):
     """
-    Adds new carriers to the network.
+    Attaches generators for carriers which did not previously exist in the
+    network.
 
     Specifically this function does the following:
     1. Adds new carriers to the network
@@ -585,15 +550,16 @@ if __name__ == "__main__":
         costs = costs_dict[investment_year]
         attach_storageunits(n, costs, elec_config, investment_year)
         # attach_stores(n, costs, elec_config, investment_year)
-        # attach_hydrogen_pipelines(n, costs, elec_config, investment_year)
         attach_multihorizon_generators(n, costs, gens, investment_year)
         attach_newCarrier_generators(n, costs, new_carriers, investment_year)
 
     if not gens.empty and not len(n.investment_periods) == 1:
+        # Remove duplicate generators from first investment period,
+        # created by attach_multihorizon_generators
         n.mremove(
             "Generator",
             gens.index,
-        )  # Remove duplicate generators from first investment period
+        )
 
     apply_itc(n, snakemake.config["costs"]["itc_modifier"])
     apply_ptc(n, snakemake.config["costs"]["ptc_modifier"])

@@ -35,6 +35,35 @@ EMISSIONS_DATA = [
     },  # AEO 2023
 ]
 
+LIFETIME_DATA = [
+    {"pypsa-name": "coal", "parameter": "lifetime", "value": 70},
+    {"pypsa-name": "oil", "parameter": "lifetime", "value": 55},  # using gas CT
+    {"pypsa-name": "geothermal", "parameter": "lifetime", "value": 30},
+    {"pypsa-name": "waste", "parameter": "lifetime", "value": 55},  # using gas CT
+    {"pypsa-name": "CCGT", "parameter": "lifetime", "value": 55},
+    {"pypsa-name": "OCGT", "parameter": "lifetime", "value": 55},
+    {"pypsa-name": "CCGT-95CCS", "parameter": "lifetime", "value": 55},
+    {"pypsa-name": "CCGT-97CCS", "parameter": "lifetime", "value": 55},
+    {"pypsa-name": "coal-95CCS", "parameter": "lifetime", "value": 70},
+    {"pypsa-name": "coal-99CCS", "parameter": "lifetime", "value": 70},
+    {"pypsa-name": "SMR", "parameter": "lifetime", "value": 40},
+    {"pypsa-name": "nuclear", "parameter": "lifetime", "value": 60},
+    {"pypsa-name": "biomass", "parameter": "lifetime", "value": 30},
+    {"pypsa-name": "offwind_floating", "parameter": "lifetime", "value": 30},
+    {"pypsa-name": "offwind", "parameter": "lifetime", "value": 30},
+    {"pypsa-name": "onwind", "parameter": "lifetime", "value": 30},
+    {"pypsa-name": "solar", "parameter": "lifetime", "value": 30},
+    {
+        "pypsa-name": "2hr_battery_storage",
+        "parameter": "lifetime",
+        "value": 20,
+    },  # inquired with NREL on why they have CRP of 20 but lifetime of 15
+    {"pypsa-name": "4hr_battery_storage", "parameter": "lifetime", "value": 20},
+    {"pypsa-name": "6hr_battery_storage", "parameter": "lifetime", "value": 20},
+    {"pypsa-name": "8hr_battery_storage", "parameter": "lifetime", "value": 20},
+    {"pypsa-name": "10hr_battery_storage", "parameter": "lifetime", "value": 20},
+]  # https://github.com/NREL/ReEDS-2.0/blob/e65ed5ed4ffff973071839481309f77d12d802cd/inputs/plant_characteristics/maxage.csv#L4
+
 
 def create_duckdb_instance(pudl_fn: str):
     duckdb.connect(database=":memory:", read_only=False)
@@ -339,7 +368,12 @@ if __name__ == "__main__":
         {"pypsa-name": "HVDC inverter pair", "parameter": "wacc_real", "value": 0.044},
     ]
     pudl_atb = pd.concat(
-        [pudl_atb, pd.DataFrame(emissions_data), pd.DataFrame(transmission_data)],
+        [
+            pudl_atb,
+            pd.DataFrame(emissions_data),
+            pd.DataFrame(transmission_data),
+            pd.DataFrame(LIFETIME_DATA),
+        ],
         ignore_index=True,
     )
     pudl_atb.drop_duplicates(
