@@ -237,6 +237,9 @@ def distribute_clusters(n, n_clusters, focus_weights=None, solver_name="cbc"):
         sense=po.minimize,
     )
 
+    if solver_name == "highs":
+        solver_name = "ipopt"
+
     opt = po.SolverFactory(solver_name)
     if not opt.has_capability("quadratic_objective"):
         logger.warning(
