@@ -58,7 +58,7 @@ def voronoi_partition_pts(points, outline):
         xmax, ymax = np.amax(points, axis=0)
         xspan = xmax - xmin
         yspan = ymax - ymin
-
+        buffer = 70.0
         # to avoid any network positions outside all Voronoi cells, append
         # the corners of a rectangle framing these points
         vor = Voronoi(
@@ -66,10 +66,10 @@ def voronoi_partition_pts(points, outline):
                 (
                     points,
                     [
-                        [xmin - 3.0 * xspan, ymin - 3.0 * yspan],
-                        [xmin - 3.0 * xspan, ymax + 3.0 * yspan],
-                        [xmax + 3.0 * xspan, ymin - 3.0 * yspan],
-                        [xmax + 3.0 * xspan, ymax + 3.0 * yspan],
+                        [xmin - buffer * xspan, ymin - buffer * yspan],
+                        [xmin - buffer * xspan, ymax + buffer * yspan],
+                        [xmax + buffer * xspan, ymin - buffer * yspan],
+                        [xmax + buffer * xspan, ymax + buffer * yspan],
                     ],
                 ),
             ),
@@ -138,6 +138,8 @@ def main(snakemake):
     logger.info("Building Onshore Regions")
     onshore_regions = []
     for region in bus2sub_onshore[f"{topological_boundaries}"].unique():
+        if region == "p06069":
+            pass
         region_shape = agg_region_shapes.loc[f"{region}"]  # current shape
         region_subs = bus2sub_onshore[f"{topological_boundaries}"][
             bus2sub_onshore[f"{topological_boundaries}"] == region
