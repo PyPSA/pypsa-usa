@@ -22,11 +22,18 @@ def add_co2_emissions(n, costs, carriers):
     Add CO2 emissions to the network's carriers attribute.
     """
     suptechs = n.carriers.loc[carriers].index.str.split("-").str[0]
-    n.carriers.loc[carriers, "co2_emissions"] = costs.co2_emissions[suptechs].values
+
+    missing_carriers = set(suptechs) - set(costs.index)
+    if missing_carriers:
+        logger.warning(f"CO2 emissions for carriers {missing_carriers} not defined in cost data.")
+        suptechs = suptechs.difference(missing_carriers)
+    n.carriers.loc[suptechs, "co2_emissions"] = costs.co2_emissions[suptechs].values
+
     n.carriers.fillna(
         {"co2_emissions": 0},
         inplace=True,
-    )  # TODO: FIX THIS ISSUE IN BUILD_COST_DATA
+    )  # TODO: FIX THIS ISSUE IN BUILD_COST_DATA- missing co2_emissions for some VRE carriers
+
     if any("CCS" in carrier for carrier in carriers):
         ccs_factor = (
             1
@@ -592,6 +599,8 @@ if __name__ == "__main__":
     apply_ptc(n, snakemake.config["costs"]["ptc_modifier"])
     apply_max_annual_growth_rate(n, snakemake.config["costs"]["max_growth"])
     add_nice_carrier_names(n, snakemake.config)
+
+    add_co2_emissions(n, costs_dict[n.investment_periods[0]], n.carriers.index)
 
     n.consistency_check()
     n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))

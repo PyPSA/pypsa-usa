@@ -460,7 +460,6 @@ def plot_hourly_emissions(n: pypsa.Network, save: str, **wildcards) -> None:
     color_palette = get_color_palette(n)
 
     fig, ax = plt.subplots(figsize=(14, 4))
-
     emissions.plot.area(
         ax=ax,
         alpha=0.7,

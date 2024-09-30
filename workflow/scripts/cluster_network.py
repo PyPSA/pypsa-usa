@@ -493,7 +493,7 @@ def convert_to_transport(clustering, itl_fn, itl_cost_fn, topological_boundaries
         p_nom_extendable=False,
         carrier="DC",
     )
-    clustering.network.add("Carrier", "DC", co2_emissions=0)
+    # clustering.network.add("Carrier", "DC", co2_emissions=0)
     clustering.network.add("Carrier", "AC_trans", co2_emissions=0)
     logger.info(f"Replaced Lines with Links for zonal model configuration.")
 

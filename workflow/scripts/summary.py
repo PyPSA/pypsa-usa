@@ -326,7 +326,6 @@ def get_node_carrier_emissions_timeseries(n: pypsa.Network) -> pd.DataFrame:
     """
     Gets timeseries emissions by bus and carrier.
     """
-
     energy = get_primary_energy_use(n)
     co2 = n.carriers[["nice_name", "co2_emissions"]].reset_index().set_index("nice_name")[["co2_emissions"]].squeeze()
     return energy.mul(co2, level="carrier", axis=0)

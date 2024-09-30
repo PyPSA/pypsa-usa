@@ -529,11 +529,11 @@ def plot_renewable_potential(
     """
     Plots wind and solar resource potential by node.
     """
-
+    # breakpoint()
     # get data
     renew = n.generators[
         (n.generators.p_nom_max != np.inf)
-        & (n.generators.build_year == 2030)
+        & (n.generators.build_year == n.investment_periods[0])
         & (
             n.generators.carrier.isin(
                 ["onwind", "offwind", "offwind_floating", "solar", "EGS"],
