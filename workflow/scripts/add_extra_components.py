@@ -524,7 +524,9 @@ if __name__ == "__main__":
     }
 
     if snakemake.params.retirement == "economic":
-        economic_retirement_gens = elec_config.get("conventional_carriers", None)
+        economic_retirement_gens = set(
+            elec_config.get("conventional_carriers", None) + elec_config.get("renewable_carriers", None),
+        ) - {"hydro"}
         add_economic_retirement(
             n,
             costs_dict[n.investment_periods[0]],

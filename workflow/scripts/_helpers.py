@@ -8,6 +8,7 @@ import re
 from functools import partial
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import requests
 import yaml
@@ -879,3 +880,14 @@ def get_snapshots(
         time = time[~((time.month == 2) & (time.day == 29))]
 
     return time
+
+
+def weighted_avg(df, values, weights):
+    """
+    Return the weighted average of a DataFrame column(s) `values` with weights
+    `weights`.
+    """
+    valid = df[values].notna()
+    if valid.sum() == 0:
+        return np.nan  # Return NaN if no valid entries
+    return np.average(df[values][valid], weights=df[weights][valid])
