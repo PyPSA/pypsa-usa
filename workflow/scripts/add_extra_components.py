@@ -240,10 +240,11 @@ def attach_stores(n, costs, elec_opts, investment_year):
         )
 
 
-def add_economic_retirement(
+def split_retirement_gens(
     n: pypsa.Network,
     costs: pd.DataFrame,
     gens: list[str] = None,
+    economic: bool = True,
 ):
     """
     Seperates extendable conventional generators into existing and new
@@ -294,6 +295,10 @@ def add_economic_retirement(
         retirement_mask,
         0,
         n.generators["p_nom_min"],
+    )
+
+    n.generators.loc[retirement_mask.values, "p_nom_extendable"] = (
+        economic  # if economic retirement is true enable extendable
     )
 
     n.madd(  # Adding Expanding generators for the first investment period
@@ -523,44 +528,50 @@ if __name__ == "__main__":
         for i in range(len(n.investment_periods))
     }
 
-    if snakemake.params.retirement == "economic":
-        economic_retirement_gens = set(
-            elec_config.get("conventional_carriers", None) + elec_config.get("renewable_carriers", None),
-        ) - {"hydro"}
-        add_economic_retirement(
-            n,
-            costs_dict[n.investment_periods[0]],
-            economic_retirement_gens,
-        )
-
     new_carriers = list(
         set(elec_config["extendable_carriers"].get("Generator", []))
         - set(elec_config["conventional_carriers"])
         - set(elec_config["renewable_carriers"]),
     )
 
-    gens = n.generators[
+    if any("PHS" in s for s in elec_config["extendable_carriers"]["StorageUnit"]):
+        attach_phs_storageunits(n, elec_config, costs_dict[n.investment_periods[0]])
+
+    if snakemake.params.retirement == "economic":
+        economic_retirement_gens = set(elec_config.get("conventional_carriers", None))
+        split_retirement_gens(
+            n,
+            costs_dict[n.investment_periods[0]],
+            economic_retirement_gens,
+            economic=True,
+        )
+
+    split_retirement_gens(
+        n,
+        costs_dict[n.investment_periods[0]],
+        set(elec_config.get("renewable_carriers", None)),
+        economic=False,
+    )
+
+    multi_horizon_gens = n.generators[
         n.generators["p_nom_extendable"]
         & n.generators["carrier"].isin(elec_config["extendable_carriers"]["Generator"])
         & ~n.generators.index.str.contains("existing")
     ]
 
-    if any("PHS" in s for s in elec_config["extendable_carriers"]["StorageUnit"]):
-        attach_phs_storageunits(n, elec_config, costs_dict[n.investment_periods[0]])
-
     for investment_year in n.investment_periods:
         costs = costs_dict[investment_year]
         attach_storageunits(n, costs, elec_config, investment_year)
         # attach_stores(n, costs, elec_config, investment_year)
-        attach_multihorizon_generators(n, costs, gens, investment_year)
+        attach_multihorizon_generators(n, costs, multi_horizon_gens, investment_year)
         attach_newCarrier_generators(n, costs, new_carriers, investment_year)
 
-    if not gens.empty and not len(n.investment_periods) == 1:
+    if not multi_horizon_gens.empty and not len(n.investment_periods) == 1:
         # Remove duplicate generators from first investment period,
         # created by attach_multihorizon_generators
         n.mremove(
             "Generator",
-            gens.index,
+            multi_horizon_gens.index,
         )
 
     apply_itc(n, snakemake.config["costs"]["itc_modifier"])
@@ -569,7 +580,7 @@ if __name__ == "__main__":
     add_nice_carrier_names(n, snakemake.config)
 
     add_co2_emissions(n, costs_dict[n.investment_periods[0]], n.carriers.index)
-
+    n.generators.to_csv("generators_ec.csv")
     n.consistency_check()
     n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))
     n.export_to_netcdf(snakemake.output[0])

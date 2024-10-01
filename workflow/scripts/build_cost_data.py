@@ -38,7 +38,7 @@ EMISSIONS_DATA = [
 LIFETIME_DATA = [
     {"pypsa-name": "coal", "parameter": "lifetime", "value": 70},
     {"pypsa-name": "oil", "parameter": "lifetime", "value": 55},  # using gas CT
-    {"pypsa-name": "geothermal", "parameter": "lifetime", "value": 30},
+    {"pypsa-name": "geothermal", "parameter": "lifetime", "value": 70},  # Confirm with Jabs / NREL. 30 is way too small
     {"pypsa-name": "waste", "parameter": "lifetime", "value": 55},  # using gas CT
     {"pypsa-name": "CCGT", "parameter": "lifetime", "value": 55},
     {"pypsa-name": "OCGT", "parameter": "lifetime", "value": 55},

@@ -512,7 +512,7 @@ def attach_wind_and_solar(
                 weight=weight_bus,
                 marginal_cost=costs.at[car, "marginal_cost"],
                 capital_cost=capital_cost,
-                efficiency=costs.at[car, "efficiency"],
+                efficiency=1,
                 lifetime=costs.at[car, "lifetime"],
                 p_max_pu=bus_profiles,
             )
@@ -536,14 +536,16 @@ def attach_battery_storage(
     )
 
     plants_filt = plants_filt.dropna(subset=["energy_storage_capacity_mwh"])
-    n.madd(
+    n.madd(  # Adds storage units which can retire economically or at their lifetime
         "StorageUnit",
         plants_filt.index,
         carrier="battery",
         bus=plants_filt.bus_assignment,
         p_nom=plants_filt.p_nom,
-        p_nom_min=plants_filt.p_nom,
-        p_nom_extendable=False,
+        p_nom_max=plants_filt.p_nom,
+        p_nom_min=0,
+        p_nom_extendable=True,
+        capital_cost=costs.at["4hr_battery_storage", "opex_fixed_per_kw"] * 1e3,
         max_hours=plants_filt.energy_storage_capacity_mwh / plants_filt.p_nom,
         build_year=plants_filt.build_year,
         lifetime=costs.at["4hr_battery_storage", "lifetime"],
