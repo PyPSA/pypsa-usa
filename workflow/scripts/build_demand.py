@@ -1940,6 +1940,10 @@ class WriteIndustrial(WriteStrategy):
             .sum()
             .reset_index()
         )
+
+        # 'p' added to match reeds naming
+        df["county"] = "p" + df.county.astype(str).str.zfill(5)
+
         df["state"] = df.state.map(lambda x: FIPS_2_STATE[f"{x:02d}"].title())
         return df
 
@@ -1971,7 +1975,7 @@ class WriteIndustrial(WriteStrategy):
         Evenly distributes laf to buses within a county.
         """
 
-        county_laf = df.at[int(county), "laf"]
+        county_laf = df.at[county, "laf"]
         num_buses = len(buses)
         bus_laf = county_laf / num_buses
 
@@ -2463,7 +2467,7 @@ if __name__ == "__main__":
         snakemake = mock_snakemake(
             "build_sector_demand",
             interconnect="western",
-            end_use="residential",
+            end_use="industry",
         )
     configure_logging(snakemake)
 

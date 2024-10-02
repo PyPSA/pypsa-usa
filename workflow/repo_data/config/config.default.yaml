@@ -138,19 +138,6 @@ costs:
       SMR: 1.15
       nuclear: 1.15
 
-
-# docs :
-sector:
-  co2_sequestration_potential: 0
-  natural_gas:
-    allow_imports_exports: true # false to be implemented
-    cyclic_storage: false
-  heating:
-    heat_pump_sink_T: 55.
-  transport:
-    exogenous: True # false to be implemented 
-    ev_policy: "config/policy_constraints/ev_policy.csv"
-
 # docs :
 clustering:
   simplify_network:

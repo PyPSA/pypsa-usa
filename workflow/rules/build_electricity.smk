@@ -237,7 +237,7 @@ def demand_raw_data(wildcards):
         eulp_sector = "res"
         profile = "eulp"
     elif end_use == "commercial":
-        eulp_sector = "res"
+        eulp_sector = "com"
         profile = "eulp"
     elif end_use == "transport":
         vehicle = wildcards.get("vehicle", None)

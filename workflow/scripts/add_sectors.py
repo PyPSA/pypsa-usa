@@ -17,6 +17,7 @@ import sys
 from typing import Optional
 
 from _helpers import configure_logging, get_snapshots, load_costs
+from add_electricity import sanitize_carriers
 from build_co2_tracking import build_co2_tracking
 from build_heat import build_heat
 from build_natural_gas import StateGeometry, build_natural_gas
@@ -60,7 +61,7 @@ def assign_bus_2_state(
     states_projected = states.to_crs("EPSG:3857")
     gdf = gpd.sjoin_nearest(buses_projected, states_projected, how="left")
 
-    n.buses["STATE"] = n.buses.index.map(gdf.index_right)
+    n.buses["STATE"] = n.buses.index.map(gdf.STUSPS)
 
     if state_2_state_name:
         n.buses["STATE_NAME"] = n.buses.STATE.map(state_2_state_name)
@@ -328,10 +329,10 @@ if __name__ == "__main__":
         snakemake = mock_snakemake(
             "add_sectors",
             interconnect="western",
-            # simpl="",
-            clusters="100",
+            simpl="12",
+            clusters="6",
             ll="v1.0",
-            opts="500SEG",
+            opts="48SEG",
             sector="E-G",
         )
     configure_logging(snakemake)
@@ -473,5 +474,8 @@ if __name__ == "__main__":
             ratios.index = ratios.index.map(STATE_2_CODE)
             ratios = ratios.dropna()  # na is USA
             add_service_brownfield(n, "com", fuel, growth_multiplier, ratios, costs)
+
+    # Needed as loads may be split off to urban/rural
+    sanitize_carriers(n, snakemake.config)
 
     n.export_to_netcdf(snakemake.output.network)
