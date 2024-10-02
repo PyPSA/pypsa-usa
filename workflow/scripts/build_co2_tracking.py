@@ -3,22 +3,16 @@ Module for building state and sector level co2 tracking.
 """
 
 import itertools
+from typing import Any, Optional
 
 import numpy as np
 import pandas as pd
 import pypsa
 
-TECHS_PER_SECTOR = {
-    "pwr": ["ccgt", "ocgt", "coal", "oil"],
-    "res": ["gas-furnace"],
-    "com": ["gas-furnace"],
-    "ind": ["gas-furnace", "coal-boiler"],
-    "trn": ["lpg"],
-}
-
 
 def build_co2_tracking(
     n: pypsa.Network,
+    config: Optional[dict[str, Any]] = None,
 ) -> None:
     """
     Main funtion to interface with.
@@ -28,17 +22,33 @@ def build_co2_tracking(
 
     sectors = ["pwr", "trn", "res", "com", "ind"]
 
+    if not config:
+        config = {}
+
+    if "co2" not in n.carriers:
+        _add_co2_carrier(n, config)
+
     build_co2_bus(n, states, sectors)
     build_co2_store(n, states, sectors)
+
+
+def _add_co2_carrier(n, config: dict[Any]):
+    try:
+        nice_name = config["plotting"]["nice_names"]["co2"]
+    except KeyError:
+        nice_name = "CO2"
+    try:
+        color = config["plotting"]["tech_colors"]["co2"]
+    except KeyError:
+        color = "#000000"  # black
+
+    n.add("Carrier", "co2", nice_name=nice_name, color=color)
 
 
 def build_co2_bus(n: pypsa.Network, states: list[str], sectors: list[str]):
     """
     Builds state level co2 bus per sector.
     """
-
-    if "co2" not in n.carriers:
-        n.add("Carrier", "co2", nice_name="CO2")
 
     df = pd.DataFrame(itertools.product(states, sectors), columns=["state", "sector"])
     df.index = df.state + " " + df.sector
