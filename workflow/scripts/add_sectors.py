@@ -17,6 +17,7 @@ import sys
 from typing import Optional
 
 from _helpers import configure_logging, get_snapshots, load_costs
+from add_electricity import sanitize_carriers
 from build_co2_tracking import build_co2_tracking
 from build_heat import build_heat
 from build_natural_gas import StateGeometry, build_natural_gas
@@ -473,5 +474,8 @@ if __name__ == "__main__":
             ratios.index = ratios.index.map(STATE_2_CODE)
             ratios = ratios.dropna()  # na is USA
             add_service_brownfield(n, "com", fuel, growth_multiplier, ratios, costs)
+
+    # Needed as loads may be split off to urban/rural
+    sanitize_carriers(n, snakemake.config)
 
     n.export_to_netcdf(snakemake.output.network)
