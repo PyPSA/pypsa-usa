@@ -60,7 +60,7 @@ def assign_bus_2_state(
     states_projected = states.to_crs("EPSG:3857")
     gdf = gpd.sjoin_nearest(buses_projected, states_projected, how="left")
 
-    n.buses["STATE"] = n.buses.index.map(gdf.index_right)
+    n.buses["STATE"] = n.buses.index.map(gdf.STUSPS)
 
     if state_2_state_name:
         n.buses["STATE_NAME"] = n.buses.STATE.map(state_2_state_name)
@@ -328,10 +328,10 @@ if __name__ == "__main__":
         snakemake = mock_snakemake(
             "add_sectors",
             interconnect="western",
-            # simpl="",
-            clusters="100",
+            simpl="12",
+            clusters="6",
             ll="v1.0",
-            opts="500SEG",
+            opts="48SEG",
             sector="E-G",
         )
     configure_logging(snakemake)
