@@ -4,7 +4,7 @@ import re
 import duckdb
 import numpy as np
 import pandas as pd
-from _helpers import configure_logging
+from _helpers import configure_logging, weighted_avg
 
 logger = logging.getLogger(__name__)
 
@@ -615,14 +615,6 @@ def impute_missing_plant_data(
     Imputes missing data for the`data_fields` in the plants dataframe based on
     the average values of the  `aggregation_fields`.
     """
-
-    # Function to calculate weighted average
-    def weighted_avg(df, values, weights):
-        valid = df[values].notna()
-        if valid.sum() == 0:
-            return np.nan  # Return NaN if no valid entries
-        return np.average(df[values][valid], weights=df[weights][valid])
-
     # Calculate the weighted averages excluding NaNs
     weighted_averages = (
         plants.groupby(aggregation_fields)[plants.columns]
