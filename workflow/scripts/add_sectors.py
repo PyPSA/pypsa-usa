@@ -14,7 +14,7 @@ import pypsa
 
 logger = logging.getLogger(__name__)
 import sys
-from typing import Optional
+from typing import Any, Optional
 
 from _helpers import configure_logging, get_snapshots, load_costs
 from add_electricity import sanitize_carriers
@@ -406,16 +406,32 @@ if __name__ == "__main__":
     dynamic_cost_year = sns.year.min()
 
     # add heating and cooling
-    build_heat(
-        n=n,
-        costs=costs,
-        pop_layout_path=pop_layout_path,
-        cop_ashp_path=cop_ashp_path,
-        cop_gshp_path=cop_gshp_path,
-        dynamic_pricing=True,
-        eia=eia_api,
-        year=dynamic_cost_year,
+    split_res_com = snakemake.params.sector["service_sector"].get(
+        "split_res_com",
+        False,
     )
+    heat_sectors = ["res", "com", "ind"] if split_res_com else ["srv", "ind"]
+    for heat_sector in heat_sectors:
+        if heat_sector == "srv":
+            raise NotImplementedError
+        elif heat_sector in ["res", "com"]:
+            options = snakemake.params.sector["service_sector"]
+        elif heat_sector == "ind":
+            options = snakemake.params.sector["industrial_sector"]
+        else:
+            logger.warning(f"No config options found for {heat_sector}")
+            options = {}
+        build_heat(
+            n=n,
+            costs=costs,
+            sector=heat_sector,
+            pop_layout_path=pop_layout_path,
+            cop_ashp_path=cop_ashp_path,
+            cop_gshp_path=cop_gshp_path,
+            options=options,
+            eia=eia_api,
+            year=dynamic_cost_year,
+        )
 
     # add transportation
     ev_policy = pd.read_csv(snakemake.input.ev_policy, index_col=0)

@@ -14,16 +14,19 @@ from eia import FuelCosts
 
 logger = logging.getLogger(__name__)
 
+VALID_HEAT_SYSTEMS = ("urban", "rural", "total")
+
 
 def build_heat(
     n: pypsa.Network,
     costs: pd.DataFrame,
+    sector: str,
     pop_layout_path: str,
     cop_ashp_path: str,
     cop_gshp_path: str,
-    dynamic_pricing: bool = False,
     eia: Optional[str] = None,  # for dynamic pricing
     year: Optional[int] = None,  # for dynamic pricing
+    options: Optional[dict[str, str | bool | float]] = None,
     **kwargs,
 ) -> None:
     """
@@ -40,70 +43,85 @@ def build_heat(
     ashp_cop = reindex_cop(sns, ashp_cop)
     gshp_cop = reindex_cop(sns, gshp_cop)
 
-    if dynamic_pricing:
-        assert year
+    if not options:
+        options = {}
 
-    for sector in ("res", "com", "ind"):
+    dynamic_costs = options.get("dynamic_costs", False)
 
-        if sector in ("res", "com"):
+    if dynamic_costs:
+        assert eia and year, "Must supply EIA API and costs year for dynamic fuel costs"
 
-            if dynamic_pricing:
-                assert eia
-                gas_costs = _get_dynamic_marginal_costs(
-                    n,
-                    "gas",
-                    eia,
-                    year,
-                    sector=sector,
-                )
-                heating_oil_costs = _get_dynamic_marginal_costs(
-                    n,
-                    "heating_oil",
-                    eia,
-                    year,
-                )
-            else:
-                gas_costs = costs.at["gas", "fuel"]
-                heating_oil_costs = costs.at["oil", "fuel"]
+    if sector in ("res", "com", "srv"):
 
-            # NOTE: Cooling MUST come first, as HPs attach to cooling buses
-            add_service_cooling(n, sector, pop_layout, costs)
-            add_service_heat(
+        split_urban_rural = options.get("split_urban_rural", False)
+        split_space_water = options.get("split_space_water_heating", False)
+        technologies = options.get("technologies")
+
+        if dynamic_costs:
+            gas_costs = _get_dynamic_marginal_costs(
                 n,
-                sector,
-                pop_layout,
-                costs,
-                ashp_cop=ashp_cop,
-                gshp_cop=gshp_cop,
-                marginal_gas=gas_costs,
-                marginal_oil=heating_oil_costs,
+                "gas",
+                eia,
+                year,
+                sector=sector,
             )
-
-            assert not n.links_t.p_set.isna().any().any()
-
-        elif sector == "ind":
-
-            if dynamic_pricing:
-                assert eia
-                gas_costs = _get_dynamic_marginal_costs(
-                    n,
-                    "gas",
-                    eia,
-                    year,
-                    sector=sector,
-                )
-                coal_costs = _get_dynamic_marginal_costs(n, "coal", eia, year)
-            else:
-                gas_costs = costs.at["gas", "fuel"]
-                coal_costs = costs.at["coal", "fuel"]
-
-            add_industrial_heat(
+            heating_oil_costs = _get_dynamic_marginal_costs(
                 n,
-                sector,
-                costs,
-                marginal_gas=gas_costs,
-                marginal_coal=coal_costs,
+                "heating_oil",
+                eia,
+                year,
             )
+        else:
+            gas_costs = costs.at["gas", "fuel_cost"]
+            heating_oil_costs = costs.at["oil", "fuel_cost"]
+
+        # NOTE: Cooling MUST come first, as HPs attach to cooling buses
+        add_service_cooling(
+            n=n,
+            sector=sector,
+            pop_layout=pop_layout,
+            costs=costs,
+            split_urban_rural=split_urban_rural,
+            technologies=technologies,
+        )
+        add_service_heat(
+            n=n,
+            sector=sector,
+            pop_layout=pop_layout,
+            costs=costs,
+            split_urban_rural=split_urban_rural,
+            split_space_water=split_space_water,
+            technologies=technologies,
+            ashp_cop=ashp_cop,
+            gshp_cop=gshp_cop,
+            marginal_gas=gas_costs,
+            marginal_oil=heating_oil_costs,
+        )
+
+        assert not n.links_t.p_set.isna().any().any()
+
+    elif sector == "ind":
+
+        if dynamic_costs:
+            gas_costs = _get_dynamic_marginal_costs(
+                n,
+                "gas",
+                eia,
+                year,
+                sector=sector,
+            )
+            coal_costs = _get_dynamic_marginal_costs(n, "coal", eia, year)
+        else:
+            gas_costs = costs.at["gas", "fuel_cost"]
+            coal_costs = costs.at["coal", "fuel_cost"]
+
+        add_industrial_heat(
+            n,
+            sector,
+            costs,
+            marginal_gas=gas_costs,
+            marginal_coal=coal_costs,
+        )
 
 
 def combined_heat(n: pypsa.Network, sector: str) -> bool:
@@ -305,6 +323,9 @@ def add_service_heat(
     sector: str,
     pop_layout: pd.DataFrame,
     costs: pd.DataFrame,
+    split_urban_rural: bool,
+    split_space_water: bool,
+    technologies: Optional[dict[str, str | bool | float]] = None,
     ashp_cop: Optional[pd.DataFrame] = None,
     gshp_cop: Optional[pd.DataFrame] = None,
     marginal_gas: Optional[pd.DataFrame | float] = None,
@@ -314,73 +335,116 @@ def add_service_heat(
     Adds heating links for residential and commercial sectors.
     """
 
-    assert sector in ("res", "com")
+    assert sector in ("res", "com", "srv")
 
-    heat_systems = ("rural", "urban")
+    if not technologies:
+        technologies = {}
+    space_heating_techs = technologies.get("space_heating", {})
+    water_heating_techs = technologies.get("water_heating", {})
 
-    # seperates total heat load to urban/rural
-    # note, this is different than pypsa-eur implementation, as we add all load before
-    # clustering; we are not adding load here, rather just splitting it up
-    heat_split = False if combined_heat(n, sector) else True
-    if heat_split:
+    if split_urban_rural:
+        heat_systems = ("rural", "urban")
         _split_urban_rural_load(n, sector, "space-heat", pop_layout)
         _split_urban_rural_load(n, sector, "water-heat", pop_layout)
     else:
-        _split_urban_rural_load(n, sector, "heat", pop_layout)
+        heat_systems = ["total"]
+        _format_total_load(n, sector, "space-heat")
+        _format_total_load(n, sector, "water-heat")
+
+    heat_carrier = "space-heat" if split_space_water else "heat"
+
+    include_hps = space_heating_techs.get("heat_pump", True)
+    include_elec_furnace = space_heating_techs.get("elec_furnace", True)
+    include_gas_furnace = space_heating_techs.get("gas_furnace", True)
+    include_oil_furnace = space_heating_techs.get("oil_furnace", True)
+    include_elec_water_furnace = water_heating_techs.get("elec_water_tank", True)
+    include_gas_water_furnace = water_heating_techs.get("gas_water_tank", True)
+    include_oil_water_furnace = water_heating_techs.get("oil_water_tank", True)
 
     # add heat pumps
     for heat_system in heat_systems:
 
-        name_type = "central"  # no district heating (see PyPSA-Eur for how to add)
+        if (heat_system in ["urban", "total"]) and include_hps:
 
-        heat_pump_type = "air" if heat_system == "urban" else "ground"
+            heat_pump_type = "air"
 
-        cop = {"air": ashp_cop, "ground": gshp_cop}
+            cop = ashp_cop
 
-        hp_efficiency = cop[heat_pump_type]
+            add_service_heat_pumps(
+                n,
+                sector,
+                heat_system,
+                heat_carrier,
+                heat_pump_type,
+                costs,
+                cop,
+            )
 
-        heat_carrier = "space-heat" if heat_split else "heat"
+        if (heat_system in ["rural", "total"]) and include_hps:
 
-        add_service_heat_pumps(
-            n,
-            sector,
-            heat_system,
-            heat_carrier,
-            name_type,
-            heat_pump_type,
-            costs,
-            hp_efficiency,
-        )
+            heat_pump_type = "ground"
 
-        add_service_furnace(n, sector, heat_system, heat_carrier, "elec", costs)
-        add_service_furnace(
-            n,
-            sector,
-            heat_system,
-            heat_carrier,
-            "gas",
-            costs,
-            marginal_gas,
-        )
-        add_service_furnace(
-            n,
-            sector,
-            heat_system,
-            heat_carrier,
-            "lpg",
-            costs,
-            marginal_oil,
-        )
+            cop = gshp_cop
+
+            add_service_heat_pumps(
+                n,
+                sector,
+                heat_system,
+                heat_carrier,
+                heat_pump_type,
+                costs,
+                cop,
+            )
+
+        if include_elec_furnace:
+            add_service_furnace(n, sector, heat_system, heat_carrier, "elec", costs)
+
+        if include_gas_furnace:
+            add_service_furnace(
+                n,
+                sector,
+                heat_system,
+                heat_carrier,
+                "gas",
+                costs,
+                marginal_gas,
+            )
+
+        if include_oil_furnace:
+            add_service_furnace(
+                n,
+                sector,
+                heat_system,
+                heat_carrier,
+                "lpg",
+                costs,
+                marginal_oil,
+            )
 
         add_service_heat_stores(n, sector, heat_system, heat_carrier, costs)
 
         # check if water heat is needed
-        if heat_split:
-            # add_service_instant_elec_water_heater(n, sector, heat_system, costs)
-            # add_service_instant_gas_water_heater(n, sector, heat_system, costs, marginal_gas)
-            add_service_water_store(n, sector, heat_system, "elec", costs)
-            add_service_water_store(n, sector, heat_system, "gas", costs, marginal_gas)
-            add_service_water_store(n, sector, heat_system, "lpg", costs, marginal_oil)
+        if split_space_water:
+            if include_elec_water_furnace:
+                add_service_water_store(n, sector, heat_system, "elec", costs)
+            if include_gas_water_furnace:
+                add_service_water_store(
+                    n,
+                    sector,
+                    heat_system,
+                    "gas",
+                    costs,
+                    marginal_gas,
+                )
+            if include_oil_water_furnace:
+                add_service_water_store(
+                    n,
+                    sector,
+                    heat_system,
+                    "lpg",
+                    costs,
+                    marginal_oil,
+                )
 
 
 def add_service_cooling(
@@ -388,22 +452,27 @@ def add_service_cooling(
     sector: str,
     pop_layout: pd.DataFrame,
     costs: pd.DataFrame,
+    split_urban_rural: Optional[bool] = True,
+    technologies: Optional[dict[str, bool]] = None,
     **kwargs,
 ):
 
-    assert sector in ("res", "com")
+    assert sector in ("res", "com", "srv")
 
-    heat_systems = ("rural", "urban")
+    if not technologies:
+        technologies = {}
 
-    # seperates total heat load to urban/rural
-    # note, this is different than pypsa-eur implementation, as we add all load before
-    # clustering; we are not adding load here, rather just splitting it up
-    _split_urban_rural_load(n, sector, "cool", pop_layout)
+    if split_urban_rural:
+        heat_systems = ("rural", "urban")
+        _split_urban_rural_load(n, sector, "cool", pop_layout)
+    else:
+        heat_systems = ["total"]
+        _format_total_load(n, sector, "cool")
 
     # add heat pumps
     for heat_system in heat_systems:
-
-        add_air_cons(n, sector, heat_system, costs)
+        if technologies.get("air_con", True):
+            add_air_cons(n, sector, heat_system, costs)
 
 
 def add_air_cons(
@@ -416,7 +485,7 @@ def add_air_cons(
     Adds gas furnaces to the system.
     """
 
-    assert heat_system in ("urban", "rural")
+    assert heat_system in ("urban", "rural", "total")
 
     match sector:
         case "res" | "Res" | "residential" | "Residential":
@@ -468,6 +537,10 @@ def _split_urban_rural_load(
     buses for these loads are also added (under the name, for example
     "p600 0 com-urban-heat" and "p600 0 com-rural-heat" at the same
     location as "p600 0").
+
+    seperates total heat load to urban/rural note, this is different
+    than pypsa-eur implementation, as we add all load before clustering;
+    we are not adding load here, rather just splitting it up
     """
 
     assert sector in ("com", "res")
@@ -524,6 +597,66 @@ def _split_urban_rural_load(
     n.mremove("Bus", load_names)
 
 
+def _format_total_load(
+    n: pypsa.Network,
+    sector: str,
+    fuel: str,
+) -> None:
+    """
+    Formats load with 'total' prefix to match urban/rural split.
+    """
+
+    assert sector in ("com", "res", "srv")
+    assert fuel in ("heat", "cool", "space-heat", "water-heat")
+
+    load_names = n.loads[n.loads.carrier == f"{sector}-{fuel}"].index.to_list()
+
+    # add buses to connect the new loads to
+    new_buses = pd.DataFrame(index=load_names)
+    new_buses.index = new_buses.index.map(n.loads.bus)
+    new_buses["x"] = new_buses.index.map(n.buses.x)
+    new_buses["y"] = new_buses.index.map(n.buses.y)
+    new_buses["country"] = new_buses.index.map(n.buses.country)
+    new_buses["interconnect"] = new_buses.index.map(n.buses.interconnect)
+    new_buses["STATE"] = new_buses.index.map(n.buses.STATE)
+    new_buses["STATE_NAME"] = new_buses.index.map(n.buses.STATE_NAME)
+
+    # strip out the 'res-heat' and 'com-heat' to add in 'rural' and 'urban'
+    new_buses.index = new_buses.index.str.rstrip(f" {sector}-{fuel}")
+
+    n.madd(
+        "Bus",
+        new_buses.index,
+        suffix=f" {sector}-total-{fuel}",
+        x=new_buses.x,
+        y=new_buses.y,
+        carrier=f"{sector}-total-{fuel}",
+        country=new_buses.country,
+        interconnect=new_buses.interconnect,
+        STATE=new_buses.STATE,
+        STATE_NAME=new_buses.STATE_NAME,
+    )
+
+    # get rural or urban loads
+    loads_t = n.loads_t.p_set[load_names]
+    loads_t = loads_t.rename(
+        columns={x: x.rstrip(f" {sector}-{fuel}") for x in loads_t.columns},
+    )
+
+    n.madd(
+        "Load",
+        new_buses.index,
+        suffix=f" {sector}-total-{fuel}",
+        bus=new_buses.index + f" {sector}-total-{fuel}",
+        p_set=loads_t,
+        carrier=f"{sector}-total-{fuel}",
+    )
+
+    # remove old combined loads from the network
+    n.mremove("Load", load_names)
+    n.mremove("Bus", load_names)
+
+
 def add_service_furnace(
     n: pypsa.Network,
     sector: str,
@@ -547,7 +680,7 @@ def add_service_furnace(
         ("heat" or "space-heat")
     costs: pd.DataFrame
     """
-    assert heat_system in ("urban", "rural")
+    assert heat_system in ("urban", "rural", "total")
     assert heat_carrier in ("heat", "space-heat")
 
     match sector:
@@ -662,7 +795,7 @@ def add_service_heat_stores(
     costs: pd.DataFrame
     """
 
-    assert heat_system in ("urban", "rural")
+    assert heat_system in ("urban", "rural", "total")
     assert heat_carrier in ("heat", "space-heat")
 
     match sector:
@@ -787,7 +920,7 @@ def add_service_water_store(
     """
 
     assert sector in ("res", "com")
-    assert heat_system in ("urban", "rural")
+    assert heat_system in ("urban", "rural", "total")
 
     heat_carrier = "water-heat"
 
@@ -918,7 +1051,6 @@ def add_service_heat_pumps(
     sector: str,
     heat_system: str,
     heat_carrier: str,
-    name_type: str,
     hp_type: str,
     costs: pd.DataFrame,
     cop: Optional[pd.DataFrame] = None,
@@ -946,7 +1078,7 @@ def add_service_heat_pumps(
 
     assert sector in ("com", "res")
     assert hp_type in ("Air", "Ground")
-    assert heat_system in ("urban", "rural")
+    assert heat_system in ("urban", "rural", "total")
     assert heat_carrier in ("heat", "space-heat")
 
     carrier_name = f"{sector}-{heat_system}-{heat_carrier}"
@@ -959,7 +1091,7 @@ def add_service_heat_pumps(
         else:
             costs_name = "Commercial Rooftop Heat Pumps"
 
-    hp_abrev = "ashp" if heat_system == "urban" else "gshp"
+    hp_abrev = "ashp" if hp_type == "Air" else "gshp"
 
     loads = n.loads[(n.loads.carrier == carrier_name) & (n.loads.bus.str.contains(heat_system))]
 
