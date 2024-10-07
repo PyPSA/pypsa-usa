@@ -218,7 +218,6 @@ def plot_production_bar(
     """
     Plot diaptch per carrier.
     """
-
     energy_mix = n.statistics.supply().round(0)
     energy_mix = energy_mix[
         energy_mix.index.get_level_values("component").isin(
@@ -871,6 +870,7 @@ if __name__ == "__main__":
     # plotting theme
     # sns.set_theme("paper", style="darkgrid")
     n.statistics().round(2).to_csv(snakemake.output.statistics)
+    n.generators.to_csv(snakemake.output.statistics[:-15] + "/generators.csv")
     # Bar Plots
     plot_capacity_additions_bar(
         n,

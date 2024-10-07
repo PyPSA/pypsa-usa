@@ -443,7 +443,7 @@ def attach_newCarrier_generators(n, costs, carriers, investment_year):
             marginal_cost=costs.at[carrier, "marginal_cost"],
             efficiency=costs.at[carrier, "efficiency"],
             build_year=investment_year,
-            lifetime=costs.at[carrier, "cost_recovery_period_years"],
+            lifetime=costs.at[carrier, "lifetime"],
         )
 
 
@@ -578,7 +578,6 @@ if __name__ == "__main__":
     apply_ptc(n, snakemake.config["costs"]["ptc_modifier"])
     apply_max_annual_growth_rate(n, snakemake.config["costs"]["max_growth"])
     add_nice_carrier_names(n, snakemake.config)
-
     add_co2_emissions(n, costs_dict[n.investment_periods[0]], n.carriers.index)
     n.generators.to_csv("generators_ec.csv")
     n.consistency_check()
