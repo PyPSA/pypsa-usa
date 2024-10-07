@@ -2,6 +2,9 @@ technology,parameter,value,unit,source,further_description
 gas,co2_emissions,0.18058,tCO2/MWh_th,EIA,https://www.eia.gov/environment/emissions/co2_vol_mass.php
 coal,co2_emissions,0.3453,tCO2/MWh_th,EIA,https://www.eia.gov/environment/emissions/co2_vol_mass.php
 oil,co2_emissions,0.34851,tCO2/MWh_th,EIA,https://www.eia.gov/environment/emissions/co2_vol_mass.php
+gas,fuel_costs,10.365,USD/MWh_th,NREL,https://atb.nrel.gov/
+coal,fuel_costs,4.588,USD/MWh_th,NREL,https://atb.nrel.gov/
+oil,fuel_costs,11.758,USD/MWh_th,NREL,https://atb.nrel.gov/
 direct firing gas,FOM,1.1818,%/year,"Danish Energy Agency,technology_data_for_industrial_process_heat.xlsx",312.a Direct firing Natural Gas:  Fixed O&M
 direct firing gas,VOM,0.2794,EUR/MWh,"Danish Energy Agency,technology_data_for_industrial_process_heat.xlsx",312.a Direct firing Natural Gas:  Variable O&M
 direct firing gas,efficiency,1,per unit,"Danish Energy Agency,technology_data_for_industrial_process_heat.xlsx","312.a Direct firing Natural Gas:  Total efficiency,net,annual average"
