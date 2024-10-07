@@ -368,7 +368,6 @@ def clustering_for_n_clusters(
     solver_name="cbc",
     algorithm="hac",
     feature=None,
-    extended_link_costs=0,
     focus_weights=None,
 ):
     if not isinstance(custom_busmap, pd.Series):
@@ -385,7 +384,6 @@ def clustering_for_n_clusters(
 
     line_strategies = aggregation_strategies.get("lines", dict())
     generator_strategies = aggregation_strategies.get("generators", dict())
-    # bus_strategies = aggregation_strategies.get("buses", dict())
     one_port_strategies = aggregation_strategies.get("one_ports", dict())
 
     clustering = get_clustering_from_busmap(
@@ -401,34 +399,13 @@ def clustering_for_n_clusters(
         scale_link_capital_costs=False,
     )
 
-    if not n.links.empty:
-        nc = clustering.network
-        nc.links["underwater_fraction"] = n.links.eval("underwater_fraction * length").div(nc.links.length).dropna()
-        nc.links["capital_cost"] = nc.links["capital_cost"].add(
-            (nc.links.length - n.links.length).clip(lower=0).mul(extended_link_costs).dropna(),
-            fill_value=0,
-        )
-
     return clustering
 
 
-def convert_to_transport(clustering, itl_fn, itl_cost_fn, topological_boundaries):
+def add_itls(buses, itls, itl_cost, expansion=True):
     """
-    Replaces all Lines according to Links with the transfer capacity specified
-    by the ITLs.
+    Adds ITL limits.
     """
-    # lines = clustering.network.lines.copy()
-    buses = clustering.network.buses.copy()
-
-    itls = pd.read_csv(itl_fn)
-
-    itls.columns = itls.columns.str.lower()
-    itls = itls[
-        itls.r.isin(clustering.network.buses[f"{topological_boundaries}"])
-        & itls.rr.isin(clustering.network.buses[f"{topological_boundaries}"])
-    ]
-
-    itl_cost = pd.read_csv(itl_cost_fn)
     itl_cost["interface"] = itl_cost.r + "||" + itl_cost.rr
     itl_cost = itl_cost[itl_cost.interface.isin(itls.interface)]
     itl_cost["USD2023perMW"] = itl_cost["USD2004perMW"] * (314.54 / 188.9)
@@ -445,7 +422,6 @@ def convert_to_transport(clustering, itl_fn, itl_cost_fn, topological_boundaries
     itls_rev = itls[itls.mw_f0 == 0].copy()
     itls_fwd = itls[itls.mw_f0 != 0]
 
-    clustering.network.mremove("Line", clustering.network.lines.index)
     clustering.network.madd(
         "Link",
         names=itls_fwd.interface,  # itl name
@@ -477,6 +453,9 @@ def convert_to_transport(clustering, itl_fn, itl_cost_fn, topological_boundaries
         carrier="AC_trans",
     )
 
+    if not expansion:
+        return
+
     # for tracking expansion of Zonal Links
     clustering.network.madd(
         "Link",
@@ -493,11 +472,92 @@ def convert_to_transport(clustering, itl_fn, itl_cost_fn, topological_boundaries
         p_nom_extendable=False,
         carrier="DC",
     )
-    # clustering.network.add("Carrier", "DC", co2_emissions=0)
+
+
+def convert_to_transport(
+    clustering,
+    itl_fn,
+    itl_cost_fn,
+    itl_agg_fn,
+    itl_agg_costs_fn,
+    topological_boundaries,
+):
+    """
+    Replaces all Lines according to Links with the transfer capacity specified
+    by the ITLs.
+    """
+    clustering.network.mremove("Line", clustering.network.lines.index)
+    buses = clustering.network.buses.copy()
+
+    itls = pd.read_csv(itl_fn)
+    itl_cost = pd.read_csv(itl_cost_fn)
+    itls.columns = itls.columns.str.lower()
+    itls_filt = itls[
+        itls.r.isin(clustering.network.buses[f"{topological_boundaries}"])
+        & itls.rr.isin(clustering.network.buses[f"{topological_boundaries}"])
+    ]
+    add_itls(buses, itls_filt, itl_cost)
+
+    if itl_agg_fn:
+        itl_agg = pd.read_csv(itl_agg_fn)
+        itl_agg_costs = pd.read_csv(itl_agg_costs_fn)
+        itl_agg.columns = itl_agg.columns.str.lower()
+        itl_agg = itl_agg[
+            itl_agg.r.isin(clustering.network.buses["country"]) | itl_agg.rr.isin(clustering.network.buses["country"])
+        ]
+        non_agg_buses = buses[~buses.index.isin(agg_busmap.values)]
+        non_agg_buses = non_agg_buses[
+            non_agg_buses["reeds_zone"].isin(itl_agg.r) | non_agg_buses["reeds_zone"].isin(itl_agg.rr)
+        ]
+        virtual_buses = non_agg_buses.groupby("reeds_zone")[non_agg_buses.columns].min()
+        virtual_buses["x"] = non_agg_buses.groupby("reeds_zone").x.mean()
+        virtual_buses["y"] = non_agg_buses.groupby("reeds_zone").y.mean()
+
+        clustering.network.madd(
+            "Bus",
+            virtual_buses["reeds_zone"],
+            country=virtual_buses["reeds_zone"],
+            reeds_zone=virtual_buses["reeds_zone"],
+            reeds_ba=virtual_buses["reeds_ba"],
+            interconnect=virtual_buses["interconnect"],
+            nerc_reg=virtual_buses["nerc_reg"],
+            trans_reg=virtual_buses["trans_reg"],
+            reeds_state=virtual_buses["reeds_state"],
+            x=virtual_buses.x,
+            y=virtual_buses.y,
+        )
+        itl_agg = itl_agg[
+            itl_agg.r.isin(clustering.network.buses["country"])
+            & itl_agg.rr.isin(clustering.network.buses["country"])
+            & (itl_agg.r.isin(agg_busmap.values) | itl_agg.rr.isin(agg_busmap.values))
+        ]
+
+        buses = clustering.network.buses.copy()
+        # itls from county to respective virtual bus
+        aggregated_buses = agg_busmap.rename(index=lambda x: x.strip(" 0"))
+        itls_to_virtual = itls[
+            (itls.r.isin(aggregated_buses.index) | itls.rr.isin(aggregated_buses.index))
+            & ~(itls.r.isin(aggregated_buses.index) & itls.rr.isin(aggregated_buses.index))
+        ]
+        itls_to_virtual = itls_to_virtual[itls_to_virtual.r.isin(buses.index) | itls_to_virtual.rr.isin(buses.index)]
+        # Update the itls virtual such that the existing bus : virtual bus
+        itls_to_virtual.loc[itls_to_virtual.r.isin(non_agg_buses.index), "rr"] = non_agg_buses.loc[
+            itls_to_virtual.r[itls_to_virtual.r.isin(non_agg_buses.index)],
+            "reeds_zone",
+        ].values
+        itls_to_virtual.loc[itls_to_virtual.rr.isin(non_agg_buses.index), "r"] = non_agg_buses.loc[
+            itls_to_virtual.rr[itls_to_virtual.rr.isin(non_agg_buses.index)],
+            "reeds_zone",
+        ].values
+
+        itl_agg = pd.concat([itl_agg, itls_to_virtual])
+        add_itls(buses, itl_agg, itl_agg_costs, expansion=False)
+
     clustering.network.add("Carrier", "AC_trans", co2_emissions=0)
     logger.info(f"Replaced Lines with Links for zonal model configuration.")
 
     # Remove any disconnected buses
+    itls = pd.concat([itls_filt, itl_agg])
     unique_buses = buses.loc[itls.r].index.union(buses.loc[itls.rr].index).unique()
     disconnected_buses = clustering.network.buses.index[~clustering.network.buses.index.isin(unique_buses)]
     if len(disconnected_buses) > 0:
@@ -568,6 +628,7 @@ if __name__ == "__main__":
 
     topological_boundaries = params.topological_boundaries
     transport_model = is_transport_model(params.transmission_network)
+    topology_aggregation = params.topology_aggregation
 
     exclude_carriers = params.cluster_network["exclude_carriers"]
     aggregate_carriers = set(n.generators.carrier) - set(exclude_carriers)
@@ -582,13 +643,6 @@ if __name__ == "__main__":
         n_clusters = len(n.buses)
     else:
         n_clusters = int(snakemake.wildcards.clusters)
-
-    if transport_model:
-        logger.info(f"Using Transport Model.")
-        nodes_req = n.buses[f"{topological_boundaries}"].unique()
-        assert n_clusters == len(
-            nodes_req,
-        ), f"Number of clusters must be {len(nodes_req)} to use the Reeds Network. Check your config."
 
     if params.cluster_network.get("consider_efficiency_classes", False):
         carriers = []
@@ -639,19 +693,37 @@ if __name__ == "__main__":
 
         if transport_model:
             # Prepare data for transport model
+            itl_agg_fn = None
+            itl_agg_costs_fn = None
             logger.info(
                 f"Aggregating to transport model with {topological_boundaries} zones.",
             )
-            if topological_boundaries == "reeds_zone":
-                custom_busmap = n.buses.reeds_zone
-                itl_fn = snakemake.input.itl_ba
-                itl_cost_fn = snakemake.input.itl_costs_ba
-            elif topological_boundaries == "county":
-                custom_busmap = n.buses.county
-                itl_fn = snakemake.input.itl_county
-                itl_cost_fn = snakemake.input.itl_costs_county
-            else:
-                raise ValueError(f"Unknown aggregation zone {topological_boundaries}")
+            match topological_boundaries:
+                case "reeds_zone":
+                    custom_busmap = n.buses.reeds_zone
+                    itl_fn = snakemake.input.itl_reeds_zone
+                    itl_cost_fn = snakemake.input.itl_costs_reeds_zone
+                case "county":
+                    custom_busmap = n.buses.county
+                    itl_fn = snakemake.input.itl_county
+                    itl_cost_fn = snakemake.input.itl_costs_county
+                case _:
+                    raise ValueError(f"Unknown aggregation zone {topological_boundaries}")
+
+            if topology_aggregation:
+                for key, value in topology_aggregation.items():
+                    agg_busmap = n.buses[key][n.buses[key].isin(value)]
+                    custom_busmap.update(agg_busmap)
+                    n.buses.loc[agg_busmap.index, "country"] = agg_busmap
+                    itl_agg_fn = snakemake.input[f"itl_{key}"]
+                    itl_agg_costs_fn = snakemake.input[f"itl_costs_{key}"]
+
+            logger.info(f"Using Transport Model.")
+            nodes_req = custom_busmap.unique()
+            assert n_clusters == len(
+                nodes_req,
+            ), f"Number of clusters must be {len(nodes_req)} to use the Reeds Network. Check your config."
+
             n.buses.interconnect = n.buses.nerc_reg.map(REEDS_NERC_INTERCONNECT_MAPPER)
             n.lines.drop(columns=["interconnect"], inplace=True)
 
@@ -665,15 +737,17 @@ if __name__ == "__main__":
             solver_name,
             params.cluster_network["algorithm"],
             params.cluster_network["feature"],
-            hvac_overhead_cost,
             params.focus_weights,
         )
+
         if transport_model:
             # Use Reeds Data
             clustering = convert_to_transport(
                 clustering,
                 itl_fn,
                 itl_cost_fn,
+                itl_agg_fn,
+                itl_agg_costs_fn,
                 topological_boundaries,
             )
         else:
