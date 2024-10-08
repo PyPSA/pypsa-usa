@@ -1124,6 +1124,7 @@ class PipelineLinepack(GasData):
             n.add("Carrier", "gas pipeline", color="#d35050", nice_name="Gas Pipeline")
 
         cyclic_storage = kwargs.get("cyclic_storage", True)
+        standing_loss = kwargs.get("standing_loss", 0)
 
         n.madd(
             "Store",
@@ -1145,7 +1146,7 @@ class PipelineLinepack(GasData):
             p_set=0,
             marginal_cost=0,
             capital_cost=1,
-            standing_loss=0,
+            standing_loss=standing_loss,
             lifetime=np.inf,
         )
 
@@ -1223,7 +1224,7 @@ def build_natural_gas(
 
     cyclic_storage = options.get("cyclic_storage", True)
     # force_imports_exports = options.get("cyclic_storage", True)
-    # standing_loss = options.get("cyclic_storage", True)
+    standing_loss = options.get("cyclic_storage", True)
 
     # add state level natural gas processing facilities
 
@@ -1268,7 +1269,7 @@ def build_natural_gas(
     # add pipeline linepack
 
     linepack = PipelineLinepack(year, interconnect, county_path, pipeline_shape_path)
-    linepack.build_infrastructure(n, cyclic_storage=cyclic_storage)
+    linepack.build_infrastructure(n, cyclic_storage=cyclic_storage, standing_loss=standing_loss)
 
 
 if __name__ == "__main__":
