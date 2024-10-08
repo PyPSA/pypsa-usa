@@ -198,6 +198,7 @@ def plot_capacity_additions_bar(
 
     optimal_capacity.set_index("carrier", inplace=True)
     optimal_capacity.insert(0, "Existing", existing_capacity["Existing Capacity"])
+    optimal_capacity = optimal_capacity.fillna(0)
     # color_palette = get_color_palette(n)
     # color_mapper = [color_palette[carrier] for carrier in optimal_capacity.index]
 
@@ -225,7 +226,7 @@ def plot_production_bar(
         )
     ]
     energy_mix.index = energy_mix.index.droplevel(0)
-
+    energy_mix = energy_mix.fillna(0)
     stats = {"": energy_mix}
     variable = "Energy Mix"
     variable_units = " GWh"
@@ -262,6 +263,7 @@ def plot_global_constraint_shadow_prices(
     ax.set_xlabel("Shadow Price [$/MWh]")
     fig.tight_layout()
     fig.savefig(save)
+    plt.close()
 
 
 def plot_regional_capacity_additions_bar(
@@ -340,6 +342,7 @@ def plot_regional_capacity_additions_bar(
 
     fig.tight_layout()
     fig.savefig(save)
+    plt.close()
 
 
 def plot_regional_emissions_bar(
@@ -367,6 +370,7 @@ def plot_regional_emissions_bar(
 
     plt.tight_layout()
     plt.savefig(save)
+    plt.close()
 
 
 #### Temporal Plots ####
@@ -442,6 +446,7 @@ def plot_production_area(
         fig.suptitle(create_title("Production [GW]", **wildcards))
         save = Path(save)
         fig.savefig(save.parent / (save.stem + suffix + save.suffix))
+        plt.close()
 
 
 def plot_hourly_emissions(n: pypsa.Network, save: str, **wildcards) -> None:
@@ -472,6 +477,7 @@ def plot_hourly_emissions(n: pypsa.Network, save: str, **wildcards) -> None:
     fig.tight_layout()
 
     fig.savefig(save)
+    plt.close()
 
 
 def plot_accumulated_emissions_tech(n: pypsa.Network, save: str, **wildcards) -> None:
@@ -504,6 +510,7 @@ def plot_accumulated_emissions_tech(n: pypsa.Network, save: str, **wildcards) ->
     fig.tight_layout()
 
     fig.savefig(save)
+    plt.close()
 
 
 def plot_accumulated_emissions(n: pypsa.Network, save: str, **wildcards) -> None:
@@ -583,6 +590,7 @@ def plot_curtailment_heatmap(n: pypsa.Network, save: str, **wildcards) -> None:
 
     plt.tight_layout()
     plt.savefig(save)
+    plt.close()
 
 
 def plot_capacity_factor_heatmap(n: pypsa.Network, save: str, **wildcards) -> None:
@@ -629,6 +637,7 @@ def plot_capacity_factor_heatmap(n: pypsa.Network, save: str, **wildcards) -> No
 
     plt.tight_layout()
     plt.savefig(save)
+    plt.close()
 
 
 #### Panel / Mixed Plots ####
@@ -741,6 +750,7 @@ def plot_generator_data_panel(
 
     fig.tight_layout()
     fig.savefig(save)
+    plt.close()
 
 
 def plot_region_lmps(
@@ -779,6 +789,7 @@ def plot_region_lmps(
     plt.ylabel("Region")
     plt.tight_layout()
     plt.savefig(save)
+    plt.close()
 
 
 #### Fuel costs
@@ -829,6 +840,7 @@ def plot_fuel_costs(
         axs[i + 1].set_ylabel("$/MWh"),
 
     fig.savefig(save)
+    plt.close()
 
 
 if __name__ == "__main__":

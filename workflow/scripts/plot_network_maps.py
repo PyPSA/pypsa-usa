@@ -215,8 +215,8 @@ def plot_emissions_map(
     title = create_title("Emissions (MTonne)", **wildcards)
     ax.set_title(title, fontsize=TITLE_SIZE, pad=20)
     fig.tight_layout()
-
     fig.savefig(save)
+    plt.close()
 
 
 def plot_capacity_map(
@@ -388,6 +388,7 @@ def plot_demand_map(
         ax.set_title(title, fontsize=TITLE_SIZE, pad=20)
     fig.tight_layout()
     fig.savefig(save)
+    plt.close()
 
 
 def plot_base_capacity_map(
@@ -428,6 +429,7 @@ def plot_base_capacity_map(
         title=title,
     )
     fig.savefig(save)
+    plt.close()
 
 
 def plot_opt_capacity_map(
@@ -468,6 +470,7 @@ def plot_opt_capacity_map(
         title=title,
     )
     fig.savefig(save)
+    plt.close()
 
 
 def plot_new_capacity_map(
@@ -518,6 +521,7 @@ def plot_new_capacity_map(
         title=title,
     )
     fig.savefig(save)
+    plt.close()
 
 
 def plot_renewable_potential(
@@ -580,6 +584,7 @@ def plot_renewable_potential(
     )
 
     fig.savefig(save)
+    plt.close()
 
 
 def plot_lmp_map(network: pypsa.Network, save: str, **wildcards):
@@ -610,6 +615,7 @@ def plot_lmp_map(network: pypsa.Network, save: str, **wildcards):
         rect=[0, 0, 1, 0.95],
     )  # Adjust the rect values to make the layout tighter
     plt.savefig(save)
+    plt.close()
 
 
 if __name__ == "__main__":

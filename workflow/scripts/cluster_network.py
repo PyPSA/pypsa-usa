@@ -93,6 +93,7 @@ import numpy as np
 import pandas as pd
 import pyomo.environ as po
 import pypsa
+import linopy
 import seaborn as sns
 from _helpers import (
     calculate_annuity,
@@ -234,7 +235,6 @@ def distribute_clusters(n, n_clusters, focus_weights=None, solver_name="cbc"):
         expr=sum((m.n[i] - L.loc[i] * n_clusters) ** 2 for i in L.index),
         sense=po.minimize,
     )
-
     opt = po.SolverFactory(solver_name)
     if not opt.has_capability("quadratic_objective"):
         logger.warning(
