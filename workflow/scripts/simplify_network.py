@@ -166,7 +166,7 @@ def aggregate_to_substations(
             "reeds_ba",
             "nerc_reg",
             "trans_reg",
-            "reeds_state",
+            "trans_grp" "reeds_state",
         ]
     else:
         cols2drop = ["balancing_area", "substation_off", "sub_id", "state"]

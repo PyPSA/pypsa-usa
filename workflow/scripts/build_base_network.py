@@ -499,6 +499,7 @@ def assign_reeds_memberships(n: pypsa.Network, fn_reeds_memberships: str):
     reeds_memberships = pd.read_csv(fn_reeds_memberships, index_col=0)
     n.buses["nerc_reg"] = n.buses.reeds_zone.map(reeds_memberships.nercr)
     n.buses["trans_reg"] = n.buses.reeds_zone.map(reeds_memberships.transreg)
+    n.buses["trans_grp"] = n.buses.reeds_zone.map(reeds_memberships.transgrp)
     n.buses["reeds_state"] = n.buses.reeds_zone.map(reeds_memberships.st)
 
 

@@ -406,15 +406,16 @@ def add_itls(buses, itls, itl_cost, expansion=True):
     """
     Adds ITL limits.
     """
-    itl_cost["interface"] = itl_cost.r + "||" + itl_cost.rr
-    itl_cost = itl_cost[itl_cost.interface.isin(itls.interface)]
-    itl_cost["USD2023perMW"] = itl_cost["USD2004perMW"] * (314.54 / 188.9)
-    itl_cost["USD2023perMWyr"] = calculate_annuity(60, 0.025) * itl_cost["USD2023perMW"]
-    itls = itls.merge(
-        itl_cost[["interface", "length_miles", "USD2023perMWyr"]],
-        on="interface",
-        how="left",
-    )
+    if itl_cost is not None:
+        itl_cost["interface"] = itl_cost.r + "||" + itl_cost.rr
+        itl_cost = itl_cost[itl_cost.interface.isin(itls.interface)]
+        itl_cost["USD2023perMW"] = itl_cost["USD2004perMW"] * (314.54 / 188.9)
+        itl_cost["USD2023perMWyr"] = calculate_annuity(60, 0.025) * itl_cost["USD2023perMW"]
+        itls = itls.merge(
+            itl_cost[["interface", "length_miles", "USD2023perMWyr"]],
+            on="interface",
+            how="left",
+        )
 
     itls["p_min_pu_Rev"] = (-1 * (itls.mw_r0 / itls.mw_f0)).fillna(0)
 
@@ -431,8 +432,8 @@ def add_itls(buses, itls, itl_cost, expansion=True):
         p_nom_min=itls_fwd.mw_f0.values,
         p_max_pu=1.0,
         p_min_pu=itls_fwd.p_min_pu_Rev.values,
-        length=itls_fwd.length_miles.values,
-        capital_cost=itls_fwd.USD2023perMWyr.values,
+        length=0 if itl_cost is None else itls_fwd.length_miles.values,
+        capital_cost=0 if itl_cost is None else itls_fwd.USD2023perMWyr.values,
         p_nom_extendable=False,
         carrier="AC_trans",
     )
@@ -447,8 +448,8 @@ def add_itls(buses, itls, itl_cost, expansion=True):
         p_nom_min=itls_rev.mw_r0.values,
         p_max_pu=0,
         p_min_pu=-1,
-        length=itls_rev.length_miles.values,
-        capital_cost=itls_rev.USD2023perMWyr.values,
+        length=0 if itl_cost is None else itls_rev.length_miles.values,
+        capital_cost=0 if itl_cost is None else itls_rev.USD2023perMWyr.values,
         p_nom_extendable=False,
         carrier="AC_trans",
     )
@@ -467,8 +468,8 @@ def add_itls(buses, itls, itl_cost, expansion=True):
         p_nom_min=0,
         p_max_pu=1,
         p_min_pu=-1,
-        length=itls.length_miles.values,
-        capital_cost=itls.USD2023perMWyr.values,
+        length=0 if itl_cost is None else itls.length_miles.values,
+        capital_cost=0 if itl_cost is None else itls.USD2023perMWyr.values,
         p_nom_extendable=False,
         carrier="DC",
     )
@@ -481,6 +482,7 @@ def convert_to_transport(
     itl_agg_fn,
     itl_agg_costs_fn,
     topological_boundaries,
+    topology_aggregation,
 ):
     """
     Replaces all Lines according to Links with the transfer capacity specified
@@ -499,29 +501,32 @@ def convert_to_transport(
     add_itls(buses, itls_filt, itl_cost)
 
     if itl_agg_fn:
+        topology_aggregation_key = list(topology_aggregation.keys())[0]
         itl_agg = pd.read_csv(itl_agg_fn)
-        itl_agg_costs = pd.read_csv(itl_agg_costs_fn)
         itl_agg.columns = itl_agg.columns.str.lower()
+        itl_agg = itl_agg.rename(columns={"transgrp": "r", "transgrpp": "rr"})
         itl_agg = itl_agg[
             itl_agg.r.isin(clustering.network.buses["country"]) | itl_agg.rr.isin(clustering.network.buses["country"])
         ]
         non_agg_buses = buses[~buses.index.isin(agg_busmap.values)]
         non_agg_buses = non_agg_buses[
-            non_agg_buses["reeds_zone"].isin(itl_agg.r) | non_agg_buses["reeds_zone"].isin(itl_agg.rr)
+            non_agg_buses[topology_aggregation_key].isin(itl_agg.r)
+            | non_agg_buses[topology_aggregation_key].isin(itl_agg.rr)
         ]
-        virtual_buses = non_agg_buses.groupby("reeds_zone")[non_agg_buses.columns].min()
-        virtual_buses["x"] = non_agg_buses.groupby("reeds_zone").x.mean()
-        virtual_buses["y"] = non_agg_buses.groupby("reeds_zone").y.mean()
+        virtual_buses = non_agg_buses.groupby(topology_aggregation_key)[non_agg_buses.columns].min()
+        virtual_buses["x"] = non_agg_buses.groupby(topology_aggregation_key).x.mean()
+        virtual_buses["y"] = non_agg_buses.groupby(topology_aggregation_key).y.mean()
 
         clustering.network.madd(
             "Bus",
-            virtual_buses["reeds_zone"],
-            country=virtual_buses["reeds_zone"],
+            virtual_buses[topology_aggregation_key],
+            country=virtual_buses[topology_aggregation_key],
             reeds_zone=virtual_buses["reeds_zone"],
             reeds_ba=virtual_buses["reeds_ba"],
             interconnect=virtual_buses["interconnect"],
             nerc_reg=virtual_buses["nerc_reg"],
             trans_reg=virtual_buses["trans_reg"],
+            trans_grp=virtual_buses["trans_grp"],
             reeds_state=virtual_buses["reeds_state"],
             x=virtual_buses.x,
             y=virtual_buses.y,
@@ -543,14 +548,15 @@ def convert_to_transport(
         # Update the itls virtual such that the existing bus : virtual bus
         itls_to_virtual.loc[itls_to_virtual.r.isin(non_agg_buses.index), "rr"] = non_agg_buses.loc[
             itls_to_virtual.r[itls_to_virtual.r.isin(non_agg_buses.index)],
-            "reeds_zone",
+            topology_aggregation_key,
         ].values
         itls_to_virtual.loc[itls_to_virtual.rr.isin(non_agg_buses.index), "r"] = non_agg_buses.loc[
             itls_to_virtual.rr[itls_to_virtual.rr.isin(non_agg_buses.index)],
-            "reeds_zone",
+            topology_aggregation_key,
         ].values
 
         itl_agg = pd.concat([itl_agg, itls_to_virtual])
+        itl_agg_costs = None if itl_agg_costs_fn is None else pd.read_csv(itl_agg_costs_fn)
         add_itls(buses, itl_agg, itl_agg_costs, expansion=False)
 
     clustering.network.add("Carrier", "AC_trans", co2_emissions=0)
@@ -712,17 +718,19 @@ if __name__ == "__main__":
 
             if topology_aggregation:
                 for key, value in topology_aggregation.items():
+                    # n.buses.loc[n.buses.trans_grp == 'NorthernGrid', 'trans_grp'] = 'NorthernGrid_West'
                     agg_busmap = n.buses[key][n.buses[key].isin(value)]
                     custom_busmap.update(agg_busmap)
                     n.buses.loc[agg_busmap.index, "country"] = agg_busmap
                     itl_agg_fn = snakemake.input[f"itl_{key}"]
-                    itl_agg_costs_fn = snakemake.input[f"itl_costs_{key}"]
+                    itl_agg_costs_fn = snakemake.input.get(f"itl_costs_{key}", None)
 
             logger.info(f"Using Transport Model.")
             nodes_req = custom_busmap.unique()
+
             assert n_clusters == len(
                 nodes_req,
-            ), f"Number of clusters must be {len(nodes_req)} to use the Reeds Network. Check your config."
+            ), f"Number of clusters must be {len(nodes_req)} for current configuration."
 
             n.buses.interconnect = n.buses.nerc_reg.map(REEDS_NERC_INTERCONNECT_MAPPER)
             n.lines.drop(columns=["interconnect"], inplace=True)
@@ -749,6 +757,7 @@ if __name__ == "__main__":
                 itl_agg_fn,
                 itl_agg_costs_fn,
                 topological_boundaries,
+                topology_aggregation,
             )
         else:
             # Use standard transmission cost estimates
