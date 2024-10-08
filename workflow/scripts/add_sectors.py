@@ -385,6 +385,8 @@ if __name__ == "__main__":
         co2_intensity = get_pwr_co2_intensity(carrier, costs)
         convert_generators_2_links(n, carrier, f" gas", co2_intensity)
 
+    ng_options = snakemake.params.sector["natural_gas"]
+
     # add natural gas infrastructure and data
     build_natural_gas(
         n=n,
@@ -394,6 +396,7 @@ if __name__ == "__main__":
         county_path=snakemake.input.county,
         pipelines_path=snakemake.input.pipeline_capacity,
         pipeline_shape_path=snakemake.input.pipeline_shape,
+        options=ng_options,
     )
 
     pop_layout_path = snakemake.input.clustered_pop_layout

@@ -63,7 +63,7 @@ from pypsa.components import Network
 logger = logging.getLogger(__name__)
 from abc import ABC, abstractmethod
 from math import pi
-from typing import Dict, List, Union
+from typing import Any, Optional
 
 import eia
 import numpy as np
@@ -178,11 +178,11 @@ class GasData(ABC):
         return self._data
 
     @abstractmethod
-    def read_data(self) -> Union[pd.DataFrame, gpd.GeoDataFrame]:
+    def read_data(self) -> pd.DataFrame | gpd.GeoDataFrame:
         pass
 
     @abstractmethod
-    def format_data(self, data: Union[pd.DataFrame, gpd.GeoDataFrame]) -> pd.DataFrame:
+    def format_data(self, data: pd.DataFrame | gpd.GeoDataFrame) -> pd.DataFrame:
         pass
 
     def _get_data(self) -> pd.DataFrame:
@@ -1214,10 +1214,16 @@ def build_natural_gas(
     county_path: str = "../data/counties/cb_2020_us_county_500k.shp",
     pipelines_path: str = "../data/natural_gas/EIA-StatetoStateCapacity_Jan2023.xlsx",
     pipeline_shape_path: str = "../data/natural_gas/pipelines.geojson",
+    options: Optional[dict[str, Any]] = None,
     **kwargs,
 ) -> None:
 
-    cyclic_storage = kwargs.get("cyclic_storage", True)
+    if not options:
+        options = {}
+
+    cyclic_storage = options.get("cyclic_storage", True)
+    # force_imports_exports = options.get("cyclic_storage", True)
+    # standing_loss = options.get("cyclic_storage", True)
 
     # add state level natural gas processing facilities
 
