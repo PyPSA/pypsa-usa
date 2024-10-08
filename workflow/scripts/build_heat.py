@@ -341,6 +341,7 @@ def add_service_heat(
         technologies = {}
     space_heating_techs = technologies.get("space_heating", {})
     water_heating_techs = technologies.get("water_heating", {})
+    standing_losses = technologies.get("standing_losses", {})
 
     if split_urban_rural:
         heat_systems = ("rural", "urban")
@@ -360,6 +361,9 @@ def add_service_heat(
     include_elec_water_furnace = water_heating_techs.get("elec_water_tank", True)
     include_gas_water_furnace = water_heating_techs.get("gas_water_tank", True)
     include_oil_water_furnace = water_heating_techs.get("oil_water_tank", True)
+
+    standing_loss_space_heat = standing_losses.get("space", 0)
+    standing_loss_water_heat = standing_losses.get("water", 0)
 
     # add heat pumps
     for heat_system in heat_systems:
@@ -421,29 +425,45 @@ def add_service_heat(
                 marginal_oil,
             )
 
-        add_service_heat_stores(n, sector, heat_system, heat_carrier, costs)
+        add_service_heat_stores(
+            n,
+            sector,
+            heat_system,
+            heat_carrier,
+            costs,
+            standing_loss_space_heat,
+        )
 
         # check if water heat is needed
         if split_space_water:
             if include_elec_water_furnace:
-                add_service_water_store(n, sector, heat_system, "elec", costs)
+                add_service_water_store(
+                    n=n,
+                    sector=sector,
+                    heat_system=heat_system,
+                    fuel="elec",
+                    costs=costs,
+                    standing_loss=standing_loss_water_heat,
+                )
             if include_gas_water_furnace:
                 add_service_water_store(
-                    n,
-                    sector,
-                    heat_system,
-                    "gas",
-                    costs,
-                    marginal_gas,
+                    n=n,
+                    sector=sector,
+                    heat_system=heat_system,
+                    fuel="gas",
+                    costs=costs,
+                    marginal_cost=marginal_gas,
+                    standing_loss=standing_loss_water_heat,
                 )
             if include_oil_water_furnace:
                 add_service_water_store(
-                    n,
-                    sector,
-                    heat_system,
-                    "lpg",
-                    costs,
-                    marginal_oil,
+                    n=n,
+                    sector=sector,
+                    heat_system=heat_system,
+                    fuel="lpg",
+                    costs=costs,
+                    marginal_cost=marginal_gas,
+                    standing_loss=standing_loss_water_heat,
                 )
 
 
@@ -776,6 +796,7 @@ def add_service_heat_stores(
     heat_system: str,
     heat_carrier: str,
     costs: pd.DataFrame,
+    standing_loss: Optional[float] = None,
 ) -> None:
     """
     Adds end-use thermal storage to the system.
@@ -812,6 +833,9 @@ def add_service_heat_stores(
         case _:
             raise NotImplementedError
 
+    if not standing_loss:
+        standing_loss = 0
+
     if heat_carrier == "heat":
 
         capex = round(
@@ -826,15 +850,12 @@ def add_service_heat_stores(
             sum([costs.at[x, "lifetime"] for x in costs_names]) / len(costs_names),
             1,
         )
-        tau = 3 if heat_system == "rural" else 180
-        standing_loss = (1 - np.exp(-1 / 24 / tau),)
 
     elif heat_carrier == "space-heat":
 
         capex = 0
         efficiency = 1
         lifetime = np.inf
-        standing_loss = 0
 
     carrier_name = f"{sector}-{heat_system}-{heat_carrier}"
 
@@ -901,6 +922,7 @@ def add_service_water_store(
     fuel: str,
     costs: pd.DataFrame,
     marginal_cost: Optional[pd.DataFrame | float] = None,
+    standing_loss: Optional[float] = None,
 ) -> None:
     """
     Adds end-use water heat storage system.
@@ -975,6 +997,9 @@ def add_service_water_store(
     else:
         mc = 0
 
+    if not standing_loss:
+        standing_loss = 0
+
     buses = df.copy().set_index("bus1")
     n.madd(
         "Bus",
@@ -1040,7 +1065,7 @@ def add_service_water_store(
         e_cyclic=True,
         e_nom_extendable=True,
         carrier=df.carrier,
-        standing_loss=0,  # to correct
+        standing_loss=standing_loss,
         capital_cost=costs.at[cost_name, "investment"],
         lifetime=costs.at[cost_name, "lifetime"],
     )
