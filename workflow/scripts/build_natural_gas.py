@@ -269,7 +269,9 @@ class GasBuses(GasData):
         df: pd.DataFrame,
     ) -> pd.DataFrame:
         states_in_model = n.buses[
-            ~n.buses.carrier.isin(["gas storage", "gas export", "gas import", "gas pipeline"])
+            ~n.buses.carrier.isin(
+                ["gas storage", "gas export", "gas import", "gas pipeline"],
+            )
         ].STATE.unique()
 
         if "STATE" not in df.columns:
@@ -355,7 +357,9 @@ class GasStorage(GasData):
         df: pd.DataFrame,
     ) -> pd.DataFrame:
         states_in_model = n.buses[
-            ~n.buses.carrier.isin(["gas storage", "gas export", "gas import", "gas pipeline"])
+            ~n.buses.carrier.isin(
+                ["gas storage", "gas export", "gas import", "gas pipeline"],
+            )
         ].STATE.unique()
 
         if "STATE" not in df.columns:
@@ -468,7 +472,9 @@ class GasProcessing(GasData):
         df: pd.DataFrame,
     ) -> pd.DataFrame:
         states_in_model = n.buses[
-            ~n.buses.carrier.isin(["gas storage", "gas export", "gas import", "gas pipeline"])
+            ~n.buses.carrier.isin(
+                ["gas storage", "gas export", "gas import", "gas pipeline"],
+            )
         ].STATE.unique()
 
         if "STATE" not in df.columns:
@@ -521,6 +527,13 @@ class _GasPipelineCapacity(GasData):
             index_col=0,
         )
 
+    def get_states_in_model(self, n: pypsa.Network) -> list[str]:
+        return n.buses[
+            ~n.buses.carrier.isin(
+                ["gas storage", "gas export", "gas import", "gas pipeline"],
+            )
+        ].STATE.unique()
+
     def filter_on_sate(
         self,
         n: pypsa.Network,
@@ -528,9 +541,7 @@ class _GasPipelineCapacity(GasData):
         in_spatial_scope: bool,
     ) -> pd.DataFrame:
 
-        states_in_model = n.buses[
-            ~n.buses.carrier.isin(["gas storage", "gas export", "gas import", "gas pipeline"])
-        ].STATE.unique()
+        states_in_model = self.get_states_in_model(n)
 
         if ("STATE_TO" and "STATE_FROM") not in df.columns:
             logger.debug(
@@ -543,7 +554,7 @@ class _GasPipelineCapacity(GasData):
         else:
             df = df[(df.STATE_TO.isin(states_in_model)) | (df.STATE_FROM.isin(states_in_model))].copy()
 
-        return df
+        return df[~(df.STATE_TO == df.STATE_FROM)].copy()
 
     def format_data(self, data: pd.DataFrame) -> pd.DataFrame:
         df = data.copy()
@@ -711,19 +722,14 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
         Gets all pipelines within the usa that connect to the interconnect.
         """
 
+        # get rid of international connections
+        df = df[~((df.INTERCONNECT_TO.isin(["canada", "mexico"])) | (df.INTERCONNECT_FROM.isin(["canada", "mexico"])))]
+
         if self.interconnect == "usa":
-            # no domestic connections
-            return pd.DataFrame(columns=df.columns)
+            return df
         else:
-            # get rid of international connections
-            df = df[
-                ~((df.INTERCONNECT_TO.isin(["canada", "mexico"])) | (df.INTERCONNECT_FROM.isin(["canada", "mexico"])))
-            ]
-            # get rid of pipelines within the interconnect
-            return df[
-                (df["INTERCONNECT_TO"].eq(self.interconnect) | df["INTERCONNECT_FROM"].eq(self.interconnect))
-                & ~(df["INTERCONNECT_TO"].eq(self.interconnect) & df["INTERCONNECT_FROM"].eq(self.interconnect))
-            ]
+            # get rid of pipelines that exist only in other interconnects
+            return df[df["INTERCONNECT_TO"].eq(self.interconnect) | df["INTERCONNECT_FROM"].eq(self.interconnect)]
 
     def _get_international_pipeline_connections(self, df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -868,12 +874,10 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
 
         df = self._add_zero_capacity_connections(df)
 
-        if self.interconnect != "usa":
-            to_from = df[df.INTERCONNECT_TO == self.interconnect].copy()  # exports
-            from_to = df[df.INTERCONNECT_FROM == self.interconnect].copy()  # imports
-        else:
-            to_from = df[~df.INTERCONNECT_TO.isin(["canada", "mexico"])].copy()
-            from_to = df[~df.INTERCONNECT_FROM.isin(["canada", "mexico"])].copy()
+        states_in_model = self.get_states_in_model(n)
+
+        to_from = df[df.STATE_TO.isin(states_in_model)].copy()  # exports
+        from_to = df[df.STATE_FROM.isin(states_in_model)].copy()  # imports
 
         to_from["NAME"] = to_from.STATE_TO + " " + to_from.STATE_FROM
         from_to["NAME"] = from_to.STATE_FROM + " " + from_to.STATE_TO
@@ -1055,7 +1059,9 @@ class PipelineLinepack(GasData):
     ) -> pd.DataFrame:
 
         states_in_model = n.buses[
-            ~n.buses.carrier.isin(["gas storage", "gas export", "gas import", "gas pipeline"])
+            ~n.buses.carrier.isin(
+                ["gas storage", "gas export", "gas import", "gas pipeline"],
+            )
         ].STATE.unique()
 
         if "STATE" not in df.columns:
@@ -1185,7 +1191,9 @@ class ImportExportLimits(GasData):
     ) -> pd.DataFrame:
 
         states_in_model = n.buses[
-            ~n.buses.carrier.isin(["gas storage", "gas export", "gas import", "gas pipeline"])
+            ~n.buses.carrier.isin(
+                ["gas storage", "gas export", "gas import", "gas pipeline"],
+            )
         ].STATE.unique()
 
         if ("STATE_TO" and "STATE_FROM") not in df.columns:
@@ -1269,7 +1277,11 @@ def build_natural_gas(
     # add pipeline linepack
 
     linepack = PipelineLinepack(year, interconnect, county_path, pipeline_shape_path)
-    linepack.build_infrastructure(n, cyclic_storage=cyclic_storage, standing_loss=standing_loss)
+    linepack.build_infrastructure(
+        n,
+        cyclic_storage=cyclic_storage,
+        standing_loss=standing_loss,
+    )
 
 
 if __name__ == "__main__":
