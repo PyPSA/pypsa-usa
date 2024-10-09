@@ -508,21 +508,26 @@ def convert_to_transport(
         itl_agg = itl_agg[
             itl_agg.r.isin(clustering.network.buses["country"]) | itl_agg.rr.isin(clustering.network.buses["country"])
         ]
+        aggregated_buses = agg_busmap.rename(index=lambda x: x.strip(" 0"))
         non_agg_buses = buses[~buses.index.isin(agg_busmap.values)]
         non_agg_buses = non_agg_buses[
             non_agg_buses[topology_aggregation_key].isin(itl_agg.r)
             | non_agg_buses[topology_aggregation_key].isin(itl_agg.rr)
         ]
         virtual_buses = non_agg_buses.groupby(topology_aggregation_key)[non_agg_buses.columns].min()
-        virtual_buses["x"] = non_agg_buses.groupby(topology_aggregation_key).x.mean()
-        virtual_buses["y"] = non_agg_buses.groupby(topology_aggregation_key).y.mean()
+        existing_x = non_agg_buses.groupby(topology_aggregation_key).x.mean()
+        existing_y = non_agg_buses.groupby(topology_aggregation_key).y.mean()
+        agg_x = buses.loc[agg_busmap.unique()].x.mean()
+        agg_y = buses.loc[agg_busmap.unique()].y.mean()
+        virtual_buses["x"] = 0.3 * agg_x + 0.7 * existing_x
+        virtual_buses["y"] = 0.3 * agg_y + 0.7 * existing_y
 
         clustering.network.madd(
             "Bus",
             virtual_buses[topology_aggregation_key],
             country=virtual_buses[topology_aggregation_key],
-            reeds_zone=virtual_buses["reeds_zone"],
-            reeds_ba=virtual_buses["reeds_ba"],
+            reeds_zone="na" if topology_aggregation_key == "trans_grp" else virtual_buses["reeds_zone"],
+            reeds_ba="na" if topology_aggregation_key == "trans_grp" else virtual_buses["reeds_ba"],
             interconnect=virtual_buses["interconnect"],
             nerc_reg=virtual_buses["nerc_reg"],
             trans_reg=virtual_buses["trans_reg"],
@@ -539,7 +544,6 @@ def convert_to_transport(
 
         buses = clustering.network.buses.copy()
         # itls from county to respective virtual bus
-        aggregated_buses = agg_busmap.rename(index=lambda x: x.strip(" 0"))
         itls_to_virtual = itls[
             (itls.r.isin(aggregated_buses.index) | itls.rr.isin(aggregated_buses.index))
             & ~(itls.r.isin(aggregated_buses.index) & itls.rr.isin(aggregated_buses.index))
@@ -718,10 +722,14 @@ if __name__ == "__main__":
 
             if topology_aggregation:
                 for key, value in topology_aggregation.items():
-                    # n.buses.loc[n.buses.trans_grp == 'NorthernGrid', 'trans_grp'] = 'NorthernGrid_West'
                     agg_busmap = n.buses[key][n.buses[key].isin(value)]
+                    logger.info(f"Aggregating {agg_busmap.unique()} {key} zones.")
                     custom_busmap.update(agg_busmap)
                     n.buses.loc[agg_busmap.index, "country"] = agg_busmap
+                    if key == "trans_grp":
+                        n.buses.loc[agg_busmap.index, "reeds_zone"] = "na"
+                        n.buses.loc[agg_busmap.index, "reeds_ba"] = "na"
+                        n.buses.loc[agg_busmap.index, "reeds_state"] = "na"
                     itl_agg_fn = snakemake.input[f"itl_{key}"]
                     itl_agg_costs_fn = snakemake.input.get(f"itl_costs_{key}", None)
 

@@ -502,6 +502,23 @@ def assign_reeds_memberships(n: pypsa.Network, fn_reeds_memberships: str):
     n.buses["trans_grp"] = n.buses.reeds_zone.map(reeds_memberships.transgrp)
     n.buses["reeds_state"] = n.buses.reeds_zone.map(reeds_memberships.st)
 
+    # Groupby county, and assign the most common reeds_zone, reeds_ba, reeds_state, nerc
+    # This is a fix for the few counties that are split between unaligned county GIS and Reeds Zone Shapes.
+    n.buses["reeds_zone"] = n.buses.groupby("county")["reeds_zone"].transform(lambda x: x.mode()[0])
+    n.buses["reeds_ba"] = n.buses.groupby("county")["reeds_ba"].transform(lambda x: x.mode()[0])
+    n.buses["reeds_state"] = n.buses.groupby("county")["reeds_state"].transform(lambda x: x.mode()[0])
+    n.buses["nerc_reg"] = n.buses.groupby("county")["nerc_reg"].transform(lambda x: x.mode()[0])
+    n.buses["trans_reg"] = n.buses.groupby("county")["trans_reg"].transform(lambda x: x.mode()[0])
+    n.buses["trans_grp"] = n.buses.groupby("county")["trans_grp"].transform(lambda x: x.mode()[0])
+
+    # # Assert that each county must have the same reeds_ba, reeds_zone, reeds_state, nerc_reg, and trans_reg
+    # assert n.buses.groupby("county")["reeds_ba"].nunique().eq(1).all()
+    # assert n.buses.groupby("county")["reeds_zone"].nunique().eq(1).all()
+    # assert n.buses.groupby("county")["reeds_state"].nunique().eq(1).all()
+    # assert n.buses.groupby("county")["nerc_reg"].nunique().eq(1).all()
+    # assert n.buses.groupby("county")["trans_reg"].nunique().eq(1).all()
+    # assert n.buses.groupby("county")["trans_grp"].nunique().eq(1).all()
+
 
 def modify_breakthrough_substations(buslocs: pd.DataFrame):
     sub_fixes = {
@@ -515,6 +532,13 @@ def modify_breakthrough_substations(buslocs: pd.DataFrame):
         35116: {"lon": -122.462, "lat": 48.982},
         37707: {"lon": -115.4550, "lat": 32.6866},
         35976: {"lon": -120.8735, "lat": 39.4691},
+        39211: {"lon": -104.6295, "lat": 39.3372},
+        38886: {"lon": -106.5569, "lat": 31.8004},
+        39574: {"lon": -115.0836, "lat": 42.8692},
+        39547: {"lon": -113.4500, "lat": 42.6942},
+        38928: {"lon": -108.0648, "lat": 39.0692},
+        39570: {"lon": -114.3526, "lat": 42.6286},
+        39571: {"lon": -114.0353, "lat": 42.5435},
     }
     for i in sub_fixes.keys():
         buslocs.loc[buslocs.sub_id == i, "lon"] = sub_fixes[i]["lon"]
