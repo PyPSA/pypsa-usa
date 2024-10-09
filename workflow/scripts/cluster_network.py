@@ -88,12 +88,12 @@ import warnings
 from functools import reduce
 
 import geopandas as gpd
+import linopy
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pyomo.environ as po
 import pypsa
-import linopy
 import seaborn as sns
 from _helpers import (
     calculate_annuity,
