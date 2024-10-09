@@ -1157,59 +1157,6 @@ class PipelineLinepack(GasData):
         )
 
 
-class ImportExportLimits(GasData):
-    """
-    Adds constraints for import export limits.
-    """
-
-    def __init__(self, year: int, interconnect: str, api: str) -> None:
-        self.api = api
-        super().__init__(year, interconnect)
-
-    def read_data(self) -> pd.DataFrame:
-        imports = eia.Trade("gas", "imports", self.year, self.api).get_data()
-        exports = eia.Trade("gas", "exports", self.year, self.api).get_data()
-        return pd.concat([imports, exports])
-
-    def format_data(self, data: pd.DataFrame) -> pd.DataFrame:
-        df = (
-            data.reset_index()
-            .drop(columns=["series-description"])
-            .groupby(["period", "units", "state"])
-            .sum()
-            .reset_index()
-            .rename(columns={"state": "STATE"})
-            .copy()
-        )
-        # may need to add ["U.S."] to states to remove here
-        return self.filter_on_interconnect(df)
-
-    def filter_on_sate(
-        self,
-        n: pypsa.Network,
-        df: pd.DataFrame,
-    ) -> pd.DataFrame:
-
-        states_in_model = n.buses[
-            ~n.buses.carrier.isin(
-                ["gas storage", "gas export", "gas import", "gas pipeline"],
-            )
-        ].STATE.unique()
-
-        if ("STATE_TO" and "STATE_FROM") not in df.columns:
-            logger.debug(
-                "Natual gas data not filtered due to incorrect data formatting",
-            )
-            return df
-
-        df = df[df.STATE.isin(states_in_model)].copy()
-
-        return df
-
-    def build_infrastructure(self, n: pypsa.Network) -> None:
-        pass
-
-
 ###
 # MAIN FUNCTION TO EXECUTE
 ###
