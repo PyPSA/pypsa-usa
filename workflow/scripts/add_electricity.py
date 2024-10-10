@@ -288,6 +288,7 @@ def filter_plants_by_region(
     plants: pd.DataFrame,
     regions_onshore: gpd.GeoDataFrame,
     regions_offshore: gpd.GeoDataFrame,
+    reeds_shapes: gpd.GeoDataFrame,
 ) -> pd.DataFrame:
     """
     Filters the plants dataframe to remove plants not within the onshore and
@@ -299,15 +300,36 @@ def filter_plants_by_region(
         plants.latitude,
         crs="EPSG:4326",
     )
-    gdp_plants = gpd.GeoDataFrame(plants, geometry="geometry")
-    plants_onshore = gpd.sjoin(gdp_plants, regions_onshore, how="inner")
-    plants_offshore = gpd.sjoin(gdp_plants, regions_offshore, how="inner")
-    plants = pd.concat([plants_onshore, plants_offshore])
+    gdf_plants = gpd.GeoDataFrame(plants, geometry="geometry")
+    plants_onshore = gpd.sjoin(gdf_plants, regions_onshore, how="inner")
+    plants_offshore = gpd.sjoin(gdf_plants, regions_offshore, how="inner")
     if not plants_offshore.empty:
         logger.warning(f"Offshore plants: {plants_offshore}")
-    plants.drop(columns=["geometry"], inplace=True)
-    plants = plants[~plants.index.duplicated()]
-    return pd.DataFrame(plants)
+    plants_filt = pd.concat([plants_onshore, plants_offshore])
+
+    # Some plants like Diablo Canyon near oceans don't have region due to
+    # imprecise ReEDS Shapes. We filter plants that have no reeds regions,
+    # then search these points again.
+    plants_in_regions = gpd.sjoin(gdf_plants, reeds_shapes, how="inner", predicate="intersects")
+    plants_no_region = gdf_plants[~gdf_plants.index.isin(plants_in_regions.index)]
+    if not plants_no_region.empty:
+        plants_no_region = plants_no_region.to_crs(epsg=3857)
+        plants_nearshore = gpd.sjoin_nearest(
+            plants_no_region,
+            regions_onshore.to_crs(epsg=3857),
+            how="inner",
+            max_distance=2000,
+            distance_col="distance",
+        )
+        plants_nearshore = plants_nearshore.to_crs(epsg=4326)
+        plants_filt = pd.concat([plants_filt, plants_nearshore])
+
+    plants_filt.drop(columns=["geometry"], inplace=True)
+    plants_filt = plants_filt[~plants_filt.index.duplicated()]
+
+    plants_filt[plants_filt.index.str.contains("Diablo")]
+    gdf_plants[gdf_plants.index.str.contains("Diablo")]
+    return pd.DataFrame(plants_filt)
 
 
 def attach_renewable_capacities_to_atlite(
@@ -765,6 +787,7 @@ def main(snakemake):
 
     regions_onshore = gpd.read_file(snakemake.input.regions_onshore)
     regions_offshore = gpd.read_file(snakemake.input.regions_offshore)
+    reeds_shapes = gpd.read_file(snakemake.input.reeds_shapes)
 
     Nyears = n.snapshot_weightings.loc[n.investment_periods[0]].objective.sum() / 8760.0
 
@@ -787,6 +810,7 @@ def main(snakemake):
         plants,
         regions_onshore,
         regions_offshore,
+        reeds_shapes,
     )
     plants = match_plant_to_bus(n, plants)
 
