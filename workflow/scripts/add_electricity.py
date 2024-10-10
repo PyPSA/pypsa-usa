@@ -321,6 +321,7 @@ def filter_plants_by_region(
             max_distance=2000,
             distance_col="distance",
         )
+        plants_nearshore = plants_nearshore.to_crs(epsg=4326)
         plants_filt = pd.concat([plants_filt, plants_nearshore])
 
     plants_filt.drop(columns=["geometry"], inplace=True)
