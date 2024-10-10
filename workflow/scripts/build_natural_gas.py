@@ -75,7 +75,6 @@ import yaml
 
 # for converting everthing into MWh_th
 MWH_2_MMCF = constants.NG_MWH_2_MMCF
-MMCF_2_MWH = 1 / MWH_2_MMCF
 KJ_2_MWH = (1 / 1000) * (1 / 3600)
 
 ###
@@ -968,12 +967,16 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
             unit="MWh_th",
             bus=to_from.index + " gas export",
             carrier="gas export",
-            e_nom_extendable=True,
             capital_cost=0,
-            e_nom=0,
+            marginal_cost=0,
             e_cyclic=False,
             e_cyclic_per_period=False,
-            marginal_cost=0,
+            e_nom=0,
+            e_nom_extendable=True,
+            e_nom_min=0,
+            e_nom_max=np.inf,
+            e_min_pu=0,
+            e_max_pu=1,
         )
 
         n.madd(
@@ -983,52 +986,17 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
             suffix=" gas import",
             bus=from_to.index + " gas import",
             carrier="gas import",
-            e_nom_extendable=True,
             capital_cost=0,
-            e_nom=0,
+            marginal_cost=0,
             e_cyclic=False,
             e_cyclic_per_period=False,
-            marginal_cost=0,
+            e_nom=0,
+            e_nom_extendable=True,
+            e_nom_min=0,
+            e_nom_max=np.inf,
+            e_min_pu=-1,
+            e_max_pu=0,
         )
-
-
-class TradeGasPipelineEnergy(GasData):
-    """
-    Creator of gas energy limits.
-    """
-
-    def __init__(self, year: int, interconnect: str, direction: str, api: str) -> None:
-        self.api = api
-        self.dir = direction
-        super().__init__(year, interconnect)
-
-    def read_data(self) -> pd.DataFrame:
-        assert self.dir in ("imports", "exports")
-        return eia.Trade("gas", self.dir, self.year, self.api).get_data()
-
-    def format_data(self, n: pypsa.Network) -> None:
-        """
-        Adds international import/export limits.
-        """
-        df = self.data.copy()
-        df["value"] = df.value.astype("float")
-        return (
-            df.drop(columns=["series-description", "units"])
-            .reset_index()
-            .groupby(["period", "state"])
-            .sum()
-            .reset_index()
-        )
-
-    def build_infrastructure(self, n: Network) -> None:
-        pass
-
-    def filter_on_sate(
-        self,
-        n: pypsa.Network,
-        df: pd.DataFrame,
-    ) -> pd.DataFrame:
-        pass
 
 
 class PipelineLinepack(GasData):
@@ -1179,7 +1147,7 @@ def build_natural_gas(
 
     cyclic_storage = options.get("cyclic_storage", True)
     # force_imports_exports = options.get("cyclic_storage", True)
-    standing_loss = options.get("cyclic_storage", True)
+    standing_loss = options.get("standing_loss", 0)
 
     # add state level natural gas processing facilities
 
@@ -1215,11 +1183,6 @@ def build_natural_gas(
         domestic=False,
     )
     pipelines_international.build_infrastructure(n)
-
-    # import_energy_constraints = TradeGasPipelineEnergy(year, interconnect, "imports", api)
-    # import_energy_constraints.build_infrastructure(n)
-    # export_energyconstraints = TradeGasPipelineEnergy(year, interconnect, "exports", api)
-    # export_energyconstraints.build_infrastructure(n)
 
     # add pipeline linepack
 
