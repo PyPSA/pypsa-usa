@@ -88,6 +88,7 @@ import warnings
 from functools import reduce
 
 import geopandas as gpd
+import linopy
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -234,7 +235,6 @@ def distribute_clusters(n, n_clusters, focus_weights=None, solver_name="cbc"):
         expr=sum((m.n[i] - L.loc[i] * n_clusters) ** 2 for i in L.index),
         sense=po.minimize,
     )
-
     opt = po.SolverFactory(solver_name)
     if not opt.has_capability("quadratic_objective"):
         logger.warning(
@@ -493,7 +493,8 @@ def convert_to_transport(clustering, itl_fn, itl_cost_fn, topological_boundaries
         p_nom_extendable=False,
         carrier="DC",
     )
-
+    # clustering.network.add("Carrier", "DC", co2_emissions=0)
+    clustering.network.add("Carrier", "AC_trans", co2_emissions=0)
     logger.info(f"Replaced Lines with Links for zonal model configuration.")
 
     # Remove any disconnected buses
@@ -703,3 +704,5 @@ if __name__ == "__main__":
         getattr(clustering, attr).to_csv(snakemake.output[attr])
 
     cluster_regions((clustering.busmap,), snakemake.input, snakemake.output)
+    n.consistency_check()
+    logger.info(f"Saved clustered network to {snakemake.output.network}")

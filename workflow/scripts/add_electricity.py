@@ -49,6 +49,7 @@ from _helpers import (
     export_network_for_gis_mapping,
     test_network_datatype_consistency,
     update_p_nom_max,
+    weighted_avg,
 )
 from sklearn.neighbors import BallTree
 
@@ -101,21 +102,6 @@ def sanitize_carriers(n, config):
         missing_i = list(colors.index[colors.isna()])
         logger.warning(f"tech_colors for carriers {missing_i} not defined in config.")
     n.carriers["color"] = n.carriers.color.where(n.carriers.color != "", colors)
-
-
-def add_co2_emissions(n, costs, carriers):
-    """
-    Add CO2 emissions to the network's carriers attribute.
-    """
-    suptechs = n.carriers.loc[carriers].index.str.split("-").str[0]
-    n.carriers.loc[carriers, "co2_emissions"] = costs.co2_emissions[suptechs].values
-    if any("CCS" in carrier for carrier in carriers):
-        ccs_factor = (
-            1
-            - pd.Series(carriers, index=carriers).str.split("-").str[1].str.replace("CCS", "").fillna(0).astype(int)
-            / 100
-        )
-        n.carriers.loc[ccs_factor.index, "co2_emissions"] *= ccs_factor
 
 
 def add_missing_carriers(n, carriers):
@@ -340,6 +326,11 @@ def attach_renewable_capacities_to_atlite(
         generators_tech = n.generators[n.generators.carrier == tech].copy()
         generators_tech["sub_assignment"] = generators_tech.bus.map(n.buses.sub_id)
         plants_filt["sub_assignment"] = plants_filt.bus_assignment.map(n.buses.sub_id)
+
+        build_year_avg = plants_filt.groupby(["sub_assignment"])[plants_filt.columns].apply(
+            lambda x: pd.Series({field: weighted_avg(x, field, "p_nom") for field in ["build_year"]}),
+        )
+
         caps_per_bus = (
             plants_filt[["sub_assignment", "p_nom"]].groupby("sub_assignment").sum().p_nom
         )  # namplate capacity per sub_id
@@ -361,6 +352,9 @@ def attach_renewable_capacities_to_atlite(
         n.generators.loc[mapped_values.index, "p_nom"] = mapped_values
         n.generators.loc[mapped_values.index, "p_nom_min"] = mapped_values
 
+        mapped_values = generators_tech.sub_assignment.map(build_year_avg.build_year).dropna()
+        n.generators.loc[mapped_values.index, "build_year"] = mapped_values.astype(int)
+
 
 def attach_conventional_generators(
     n: pypsa.Network,
@@ -380,7 +374,6 @@ def attach_conventional_generators(
         if carrier not in renewable_carriers
     ]
     add_missing_carriers(n, carriers)
-    add_co2_emissions(n, costs, carriers)
 
     plants = (
         plants.query("carrier in @carriers")
@@ -429,7 +422,7 @@ def attach_conventional_generators(
         marginal_cost=plants.marginal_cost,
         capital_cost=plants.annualized_capex_fom,
         build_year=plants.build_year.astype(int).fillna(0),
-        lifetime=plants.carrier.map(costs.cost_recovery_period_years),
+        lifetime=plants.carrier.map(costs.lifetime),
         committable=unit_commitment,
         **committable_attrs,
     )
@@ -454,7 +447,6 @@ def attach_wind_and_solar(
     input_profiles: str,
     carriers: list[str],
     extendable_carriers: dict[str, list[str]],
-    line_length_factor=1,
 ):
     """
     Attached Atlite Calculated wind and solar capacity factor profiles to the
@@ -469,27 +461,6 @@ def attach_wind_and_solar(
             if ds.indexes["bus"].empty:
                 continue
 
-            # supcar = car.split("-", 2)[0]
-            # if supcar == "offwind" or supcar == "offwind_floating":
-            #     # if supcar == "offwind_floating":
-            #     #     supcar = "offwind"
-            #     # underwater_fraction = ds["underwater_fraction"].to_pandas()
-            #     # 30 km of cable already assumed in capex
-            #     # connection_cost = (
-            #     #     costs.at[supcar, "annualized_connection_capex_per_mw_km"] * (line_length_factor * ds["average_distance"].to_pandas() - 30)
-            #     # )
-            #     capital_cost =
-            #         costs.at[supcar, "annualized_capex_per_mw"]
-            #         # + connection_cost
-
-            #     # logger.info(
-            #     #     "Added connection cost of {:0.0f}-{:0.0f} USD/MW/a to {}".format(
-            #     #         connection_cost.min(),
-            #     #         connection_cost.max(),
-            #     #         supcar,
-            #     #     ),
-            #     # )
-            # else:
             capital_cost = costs.at[car, "annualized_capex_fom"]
 
             bus2sub = (
@@ -528,22 +499,6 @@ def attach_wind_and_solar(
             )
             bus_profiles = broadcast_investment_horizons_index(n, bus_profiles)
 
-            # if supcar == "offwind":
-            #     capital_cost = capital_cost.to_frame().reset_index()
-            #     capital_cost.bus = capital_cost.bus.astype(int)
-            #     capital_cost = (
-            #         pd.merge(
-            #             capital_cost,
-            #             n.buses.sub_id.reset_index(),
-            #             left_on="bus",
-            #             right_on="sub_id",
-            #             how="left",
-            #         )
-            #         .rename(columns={0: "capital_cost"})
-            #         .set_index("Bus")
-            #         .capital_cost
-            #     )
-
             logger.info(f"Adding {car} capacity-factor profiles to the network.")
 
             n.madd(
@@ -557,15 +512,16 @@ def attach_wind_and_solar(
                 weight=weight_bus,
                 marginal_cost=costs.at[car, "marginal_cost"],
                 capital_cost=capital_cost,
-                efficiency=costs.at[car, "efficiency"],
+                efficiency=1,
+                lifetime=costs.at[car, "lifetime"],
                 p_max_pu=bus_profiles,
             )
 
 
 def attach_battery_storage(
     n: pypsa.Network,
+    costs: pd.DataFrame,
     plants: pd.DataFrame,
-    extendable_carriers,
 ):
     """
     Attaches Existing Battery Energy Storage Systems To the Network.
@@ -580,17 +536,19 @@ def attach_battery_storage(
     )
 
     plants_filt = plants_filt.dropna(subset=["energy_storage_capacity_mwh"])
-    n.madd(
+    n.madd(  # Adds storage units which can retire economically or at their lifetime
         "StorageUnit",
         plants_filt.index,
         carrier="battery",
         bus=plants_filt.bus_assignment,
         p_nom=plants_filt.p_nom,
-        p_nom_min=plants_filt.p_nom,
-        p_nom_extendable=False,
+        p_nom_max=plants_filt.p_nom,
+        p_nom_min=0,
+        p_nom_extendable=True,
+        capital_cost=costs.at["4hr_battery_storage", "opex_fixed_per_kw"] * 1e3,
         max_hours=plants_filt.energy_storage_capacity_mwh / plants_filt.p_nom,
         build_year=plants_filt.build_year,
-        lifetime=30,  # replace with actual lifetime
+        lifetime=costs.at["4hr_battery_storage", "lifetime"],
         efficiency_store=0.9**0.5,
         efficiency_dispatch=0.9**0.5,
         cyclic_state_of_charge=True,
@@ -810,9 +768,9 @@ def main(snakemake):
 
     Nyears = n.snapshot_weightings.loc[n.investment_periods[0]].objective.sum() / 8760.0
 
+    ### TODO COSTS TO REMOVE ###
     costs = pd.read_csv(snakemake.input.tech_costs)
     costs = costs.pivot(index="pypsa-name", columns="parameter", values="value")
-
     update_transmission_costs(n, costs, params.length_factor)
 
     renewable_carriers = set(params.renewable_carriers)
@@ -858,8 +816,8 @@ def main(snakemake):
     )
     attach_battery_storage(
         n,
+        costs,
         plants,
-        extendable_carriers,
     )
 
     attach_wind_and_solar(
@@ -868,7 +826,6 @@ def main(snakemake):
         snakemake.input,
         renewable_carriers,
         extendable_carriers,
-        params.length_factor,
     )
     renewable_carriers = list(
         set(snakemake.config["electricity"]["renewable_carriers"]).intersection(

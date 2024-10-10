@@ -88,7 +88,7 @@ rule build_bus_regions:
         "logs/build_bus_regions/{interconnect}.log",
     threads: 1
     resources:
-        mem_mb=1000,
+        mem_mb=3000,
     script:
         "../scripts/build_bus_regions.py"
 
@@ -785,7 +785,7 @@ rule build_powerplants:
     output:
         powerplants=RESOURCES + "powerplants.csv",
     log:
-        "logs/build_powerplants",
+        "logs/build_powerplants/build_powerplants.log",
     resources:
         mem_mb=30000,
     script:
