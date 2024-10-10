@@ -597,6 +597,7 @@ rule add_electricity:
         regions_onshore=RESOURCES + "{interconnect}/Geospatial/regions_onshore.geojson",
         regions_offshore=RESOURCES
         + "{interconnect}/Geospatial/regions_offshore.geojson",
+        reeds_shapes=RESOURCES + "{interconnect}/Geospatial/reeds_shapes.geojson",
         powerplants=RESOURCES + "powerplants.csv",
         plants_eia="repo_data/plants/plants_merged.csv",
         plants_breakthrough=DATA + "breakthrough_network/base_grid/plant.csv",
