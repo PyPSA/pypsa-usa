@@ -962,17 +962,35 @@ def add_sector_co2_constraints(n, config):
 
 def add_ng_import_export_limits(n, config):
 
-    def _format_production_data(
+    def _format_link_name(s: str) -> str:
+        states = s.split("-")
+        return f"{states[0]} {states[1]} gas"
+
+    def _format_domestic_data(
         prod: pd.DataFrame,
         link_suffix: Optional[str] = None,
     ) -> pd.DataFrame:
 
-        def format_link_name(s: str) -> str:
-            states = s.split("-")
-            return f"{states[0]} {states[1]} gas"
+        df = prod.copy()
+        df["link"] = df.state.map(_format_link_name)
+        if link_suffix:
+            df["link"] = df.link + link_suffix
+
+        # convert mmcf to MWh
+        df["value"] = df["value"] * 1000 / NG_MWH_2_MMCF
+
+        return df[["link", "value"]].rename(columns={"value": "rhs"}).set_index("link")
+
+    def _format_international_data(
+        prod: pd.DataFrame,
+        link_suffix: Optional[str] = None,
+    ) -> pd.DataFrame:
 
         df = prod.copy()
-        df["link"] = df.state.map(format_link_name)
+        df = df[["value", "state"]].groupby("state", as_index=False).sum()
+        df = df[~(df.state == "USA")].copy()
+
+        df["link"] = df.state.map(_format_link_name)
         if link_suffix:
             df["link"] = df.link + link_suffix
 
@@ -1019,13 +1037,25 @@ def add_ng_import_export_limits(n, config):
     api = config["api"]["eia"]
     year = pd.to_datetime(config["snapshots"]["start"]).year
 
+    # add domestic limits
+
     imports = Trade("gas", False, "imports", year, api).get_data()
-    imports = _format_production_data(imports, " import")
+    imports = _format_domestic_data(imports, " import")
     exports = Trade("gas", False, "exports", year, api).get_data()
-    exports = _format_production_data(exports, " export")
+    exports = _format_domestic_data(exports, " export")
 
     add_import_limits(n, imports)
     add_export_limits(n, exports)
+
+    # add international limits
+
+    # imports = Trade("gas", True, "imports", year, api).get_data()
+    # imports = _format_international_data(imports, " import")
+    # exports = Trade("gas", True, "exports", year, api).get_data()
+    # exports = _format_international_data(exports, " export")
+
+    # add_import_limits(n, imports)
+    # add_export_limits(n, exports)
 
 
 def extra_functionality(n, snapshots):

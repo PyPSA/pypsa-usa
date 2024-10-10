@@ -1309,6 +1309,25 @@ class InternationalGasTrade(DataExtractor):
         "exports": "ENP",
     }
 
+    # hard codes where gas can enter/exit the states
+    # if multiple POEs exist, the larger pipeline is used as the POE
+    # https://atlas.eia.gov/datasets/eia::border-crossings-natural-gas/explore?location=48.411182%2C-90.296487%2C5.24
+    points_of_entry = {
+        "AZ": "MX",  # Arizona - Mexico
+        "CA": "MX",  # California - Mexico
+        "ID": "BC",  # Idaho - BC
+        "ME": "NB",  # Maine - New Brunswick
+        "MI": "ON",  # Michigan - Ontario
+        "MN": "MB",  # Minnesota - Manitoba
+        "MT": "SK",  # Montana - Saskatchewan
+        "ND": "SK",  # North Dakota - Saskatchewan
+        "NH": "QC",  # New Hampshire - Quebec
+        "NY": "ON",  # New York - Ontario
+        "TX": "MX",  # Texas - Mexico
+        "VT": "QC",  # Vermont - Mexico
+        "WA": "BC",  # Washington - BC
+    }
+
     def __init__(self, direction: str, year: int, api_key: str) -> None:
         self.direction = direction
         if self.direction not in list(self.direction_codes):
@@ -1327,7 +1346,7 @@ class InternationalGasTrade(DataExtractor):
 
     def format_data(self, df: pd.DataFrame) -> pd.DataFrame:
         df["period"] = self._format_period(df.period).copy()
-        df["state"] = df["series-description"].map(self.extract_state)
+        df["state"] = df["series-description"].map(self.extract_state).map(self.add_state_connection)
 
         df = (
             df[["series-description", "value", "units", "state", "period"]]
@@ -1351,14 +1370,23 @@ class InternationalGasTrade(DataExtractor):
         except IndexError:  # country level
             return description.split(" Natural Gas Pipeline")[0]
 
+    def add_state_connection(self, state: str) -> str:
+        """
+        Adds international connection to state name.
+        """
+        if state == "U.S.":
+            return "USA"
+        intl_state = self.points_of_entry[state]
+        connections = sorted([state, intl_state])
+        return "-".join(connections)
+
 
 class DomesticGasTrade(DataExtractor):
     """
     Gets imports/exports by state.
 
     Return format of data is a two state code giving from-to values (for
-    example, "CA-OR" will represent reciepts of California exporting gas
-    to oregon)
+    example, "CA-OR" will represent from California to Oregon
     """
 
     direction_codes = {
@@ -1698,7 +1726,7 @@ if __name__ == "__main__":
     api = yaml_data["api"]["eia"]
     # print(FuelCosts("coal", 2020, api, industry="power").get_data(pivot=True))
     # print(FuelCosts("heating_oil", 2020, api).get_data(pivot=False))
-    print(Trade("gas", False, "exports", 2020, api).get_data())
+    print(Trade("gas", True, "exports", 2020, api).get_data(pivot=False))
     # print(Emissions("transport", 2019, api).get_data(pivot=True))
     # print(Storage("gas", "total", 2019, api).get_data(pivot=True))
     # print(EnergyDemand("residential", 2030, api).get_data(pivot=False))
