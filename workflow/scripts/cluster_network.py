@@ -562,12 +562,14 @@ def convert_to_transport(
         itl_agg = pd.concat([itl_agg, itls_to_virtual])
         itl_agg_costs = None if itl_agg_costs_fn is None else pd.read_csv(itl_agg_costs_fn)
         add_itls(buses, itl_agg, itl_agg_costs, expansion=False)
+        itls = pd.concat([itls_filt, itl_agg])
+    else:
+        itls = itls_filt
 
     clustering.network.add("Carrier", "AC_trans", co2_emissions=0)
     logger.info(f"Replaced Lines with Links for zonal model configuration.")
 
     # Remove any disconnected buses
-    itls = pd.concat([itls_filt, itl_agg])
     unique_buses = buses.loc[itls.r].index.union(buses.loc[itls.rr].index).unique()
     disconnected_buses = clustering.network.buses.index[~clustering.network.buses.index.isin(unique_buses)]
     if len(disconnected_buses) > 0:
