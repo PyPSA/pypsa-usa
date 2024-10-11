@@ -508,6 +508,7 @@ class GasProcessing(GasData):
             unit="MWh_th",
             country=df.index,
             interconnect=self.interconnect,
+            STATE=df.index,
         )
 
         n.madd(
@@ -1181,7 +1182,6 @@ def build_natural_gas(
         options = {}
 
     cyclic_storage = options.get("cyclic_storage", True)
-    # force_imports_exports = options.get("cyclic_storage", True)
     standing_loss = options.get("standing_loss", 0)
 
     # add state level natural gas processing facilities

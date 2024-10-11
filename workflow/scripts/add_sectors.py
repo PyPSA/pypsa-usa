@@ -18,7 +18,7 @@ from typing import Any, Optional
 
 from _helpers import configure_logging, get_snapshots, load_costs
 from add_electricity import sanitize_carriers
-from build_co2_tracking import build_co2_tracking
+from build_emission_tracking import build_ch4_tracking, build_co2_tracking
 from build_heat import build_heat
 from build_natural_gas import StateGeometry, build_natural_gas
 from build_stock_data import (
@@ -398,6 +398,14 @@ if __name__ == "__main__":
         pipeline_shape_path=snakemake.input.pipeline_shape,
         options=ng_options,
     )
+
+    # add methane tracking - if leakage rate is included
+    # this must happen after natural gas system is built
+    methane_options = snakemake.params.sector["methane"]
+    leakage_rate = methane_options.get("leakage_rate", 0)
+    if leakage_rate > 0.000001:
+        gwp = methane_options.get("gwp", 1)
+        build_ch4_tracking(n, gwp, leakage_rate)
 
     pop_layout_path = snakemake.input.clustered_pop_layout
     cop_ashp_path = snakemake.input.cop_air_total
