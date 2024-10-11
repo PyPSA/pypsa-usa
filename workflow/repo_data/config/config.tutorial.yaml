@@ -21,10 +21,16 @@ scenario:
 # docs :
 model_topology:
   transmission_network: 'tamu' # [reeds, tamu]
+  topological_boundaries: 'county' # [county, reeds_zone]
+  interface_transmission_limits: false
   include: # mixed zone types not supported
-    # reeds_zone: ['p63']
-    # reeds_state: ['CO']
-    # reeds_ba: ['ERCO']
+    # reeds_zone: []
+    # reeds_state: []
+    # reeds_ba: []
+  aggregate: # [reeds_zone, trans_reg]
+    # trans_grp: []
+    # reeds_zone: []
+
 
 # docs :
 enable:

@@ -130,11 +130,6 @@ lines:
     500.: "Al/St 560/50 4-bundle 750.0"
     765.: "Al/St 560/50 4-bundle 750.0"
 
-model_topology:
-  interface_transmission_limits: false
-  topological_boundaries: 'reeds_zone' # [reeds_zone]
-
-
 # docs :
 offshore_shape:
   use: eez #options are ca_osw, eez

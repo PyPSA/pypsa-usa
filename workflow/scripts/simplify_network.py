@@ -166,6 +166,7 @@ def aggregate_to_substations(
             "reeds_ba",
             "nerc_reg",
             "trans_reg",
+            "trans_grp",
             "reeds_state",
         ]
     else:
