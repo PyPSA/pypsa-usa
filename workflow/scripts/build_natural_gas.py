@@ -497,18 +497,53 @@ class GasProcessing(GasData):
         p_nom_mult = 1 if capacity_mult >= 1 else capacity_mult
         p_nom_max_mult = capacity_mult
 
+        if "gas production" not in n.carriers.index:
+            n.add("Carrier", "gas production", color="#d35050", nice_name="Gas Production")
+
         n.madd(
-            "Generator",
+            "Bus",
             names=df.index,
             suffix=" gas production",
-            bus=df.bus,
-            carrier="gas",
+            carrier="gas production",
+            unit="MWh_th",
+            country=df.index,
+            interconnect=self.interconnect,
+        )
+
+        n.madd(
+            "Link",
+            names=df.index,
+            suffix=" gas production",
+            carrier="gas production",
+            unit="MW",
+            bus0=df.index + " gas production",
+            bus1=df.index + " gas",
+            efficiency=1,
             p_nom_extendable=p_nom_extendable,
             capital_cost=0.01,  # to update
             marginal_costs=0.35,  # https://www.eia.gov/analysis/studies/drilling/pdf/upstream.pdf
             p_nom=df.p_nom * p_nom_mult,
             p_nom_min=0,
             p_nom_max=df.p_nom * p_nom_max_mult,
+        )
+
+        n.madd(
+            "Store",
+            names=df.index,
+            unit="MWh_th",
+            suffix=" gas production",
+            bus=df.index + " gas production",
+            carrier="gas import",
+            capital_cost=0,
+            marginal_cost=0,
+            e_cyclic=False,
+            e_cyclic_per_period=False,
+            e_nom=0,
+            e_nom_extendable=True,
+            e_nom_min=0,
+            e_nom_max=np.inf,
+            e_min_pu=-1,
+            e_max_pu=0,
         )
 
 
