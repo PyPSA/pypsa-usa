@@ -1,88 +1,3 @@
-"""
-Creates networks clustered to ``{cluster}`` number of zones with aggregated
-buses, generators and transmission corridors.
-
-**Relevant Settings**
-
-.. code:: yaml
-
-    clustering:
-      cluster_network:
-      aggregation_strategies:
-
-    focus_weights:
-
-    solving:
-        solver:
-            name:
-
-    lines:
-        length_factor:
-
-.. seealso::
-    Documentation of the configuration file ``config/config.yaml`` at
-    :ref:`renewable_cf`, :ref:`solving_cf`, :ref:`lines_cf`
-
-**Inputs**
-
-- ``resources/regions_onshore_elec_s{simpl}.geojson``: confer :ref:`simplify`
-- ``resources/regions_offshore_elec_s{simpl}.geojson``: confer :ref:`simplify`
-- ``resources/busmap_elec_s{simpl}.csv``: confer :ref:`simplify`
-- ``networks/elec_s{simpl}.nc``: confer :ref:`simplify`
-- ``data/custom_busmap_elec_s{simpl}_{clusters}.csv``: optional input
-
-**Outputs**
-
-- ``resources/regions_onshore_elec_s{simpl}_{clusters}.geojson``:
-- ``resources/regions_offshore_elec_s{simpl}_{clusters}.geojson``:
-- ``resources/busmap_elec_s{simpl}_{clusters}.csv``: Mapping of buses from ``networks/elec_s{simpl}.nc`` to ``networks/elec_s{simpl}_{clusters}.nc``;
-- ``resources/linemap_elec_s{simpl}_{clusters}.csv``: Mapping of lines from ``networks/elec_s{simpl}.nc`` to ``networks/elec_s{simpl}_{clusters}.nc``;
-- ``networks/elec_s{simpl}_{clusters}.nc``:
-
-**Description**
-
-.. note::
-
-    **Why is clustering used both in** ``simplify_network`` **and** ``cluster_network`` **?**
-
-        Consider for example a network ``networks/elec_s100_50.nc`` in which
-        ``simplify_network`` clusters the network to 100 buses and in a second
-        step ``cluster_network``` reduces it down to 50 buses.
-
-        In preliminary tests, it turns out, that the principal effect of
-        changing spatial resolution is actually only partially due to the
-        transmission network. It is more important to differentiate between
-        wind generators with higher capacity factors from those with lower
-        capacity factors, i.e. to have a higher spatial resolution in the
-        renewable generation than in the number of buses.
-
-        The two-step clustering allows to study this effect by looking at
-        networks like ``networks/elec_s100_50m.nc``. Note the additional
-        ``m`` in the ``{cluster}`` wildcard. So in the example network
-        there are still up to 100 different wind generators.
-
-        In combination these two features allow you to study the spatial
-        resolution of the transmission network separately from the
-        spatial resolution of renewable generators.
-
-    **Is it possible to run the model without the** ``simplify_network`` **rule?**
-
-        No, the network clustering methods in the PyPSA module
-        `pypsa.clustering.spatial <https://github.com/PyPSA/PyPSA/blob/master/pypsa/clustering/spatial.py>`_
-        do not work reliably with multiple voltage levels and transformers.
-
-.. tip::
-    The rule :mod:`cluster_networks` runs
-    for all ``scenario`` s in the configuration file
-    the rule :mod:`cluster_network`.
-"""
-
-# SPDX-FileCopyrightText: : 2017-2023 The PyPSA-Eur Authors
-#
-# SPDX-License-Identifier: MIT
-# coding: utf-8
-# ADAPTED FROM PyPSA-Eur for PyPSA-USA
-
 import logging
 import warnings
 from functools import reduce
@@ -404,7 +319,11 @@ def clustering_for_n_clusters(
 
 def add_itls(buses, itls, itl_cost, expansion=True):
     """
-    Adds ITL limits.
+    Adds ITL limits to the network.
+
+    Adds bi-directional links for all ITLS which are non-expandable.
+    Adds a second link that is expandable with equal expansion in each
+    direction.
     """
     if itl_cost is not None:
         itl_cost["interface"] = itl_cost.r + "||" + itl_cost.rr
@@ -416,6 +335,9 @@ def add_itls(buses, itls, itl_cost, expansion=True):
             on="interface",
             how="left",
         )
+    else:
+        itls["length_miles"] = 0
+        itls["USD2023perMWyr"] = 0
 
     itls["p_min_pu_Rev"] = (-1 * (itls.mw_r0 / itls.mw_f0)).fillna(0)
 
@@ -560,7 +482,7 @@ def convert_to_transport(
         ].values
 
         itl_agg = pd.concat([itl_agg, itls_to_virtual])
-        itl_agg_costs = None if itl_agg_costs_fn is None else pd.read_csv(itl_agg_costs_fn)
+        itl_agg_costs = None if itl_agg_costs_fn is None else pd.concat([itl_cost, pd.read_csv(itl_agg_costs_fn)])
         add_itls(buses, itl_agg, itl_agg_costs, expansion=False)
         itls = pd.concat([itls_filt, itl_agg])
     else:

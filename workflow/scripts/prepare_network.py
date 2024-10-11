@@ -138,25 +138,26 @@ def set_line_s_max_pu(n, s_max_pu=0.7):
     logger.info(f"N-1 security margin of lines set to {s_max_pu}")
 
 
-def set_transmission_limit(n, ll_type, factor, costs, Nyears=1):
-    links_dc_b = n.links.carrier == "DC" if not n.links.empty else pd.Series()
+def set_transmission_limit(n, ll_type, factor):
+    dc_links = n.links.carrier == "DC" if not n.links.empty else pd.Series()
     ac_links = n.links.carrier == "AC_trans" if not n.links.empty else pd.Series()
-    n.links.loc[ac_links, "carrier"] = "AC"
+    n.links.loc[ac_links, "carrier"] = "AC"  # rename AC_trans carrier to AC
 
     lines_s_nom = n.lines.s_nom
     col = "capital_cost" if ll_type == "c" else "length"
     ref = (
         lines_s_nom @ n.lines[col]
-        + n.links.loc[links_dc_b, "p_nom"] @ n.links.loc[links_dc_b, col]
+        + n.links.loc[dc_links, "p_nom"] @ n.links.loc[dc_links, col]
         + n.links.loc[ac_links, "p_nom"] @ n.links.loc[ac_links, col]
     )
 
     if factor == "opt" or float(factor) > 1.0:
+        # if opt allows expansion set lines/links to extendable
         n.lines["s_nom_min"] = lines_s_nom
         n.lines["s_nom_extendable"] = True
 
-        n.links.loc[links_dc_b, "p_nom_min"] = n.links.loc[links_dc_b, "p_nom"]
-        n.links.loc[links_dc_b, "p_nom_extendable"] = True
+        n.links.loc[dc_links, "p_nom_min"] = n.links.loc[dc_links, "p_nom"]
+        n.links.loc[dc_links, "p_nom_extendable"] = True
 
     if factor != "opt":
         con_type = "expansion_cost" if ll_type == "c" else "volume_expansion"
@@ -370,7 +371,7 @@ if __name__ == "__main__":
         )
 
     ll_type, factor = snakemake.wildcards.ll[0], snakemake.wildcards.ll[1:]
-    set_transmission_limit(n, ll_type, factor, costs, Nyears)
+    set_transmission_limit(n, ll_type, factor)
 
     set_line_nom_max(
         n,
