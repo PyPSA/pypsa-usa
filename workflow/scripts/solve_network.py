@@ -846,7 +846,10 @@ def add_sector_co2_constraints(n, config):
         sns = n.snapshots
         snapshot = sns[sns.get_level_values("period") == year][-1]
 
-        stores = n.stores[(n.stores.index.str.startswith(state)) & (n.stores.index.str.endswith("-co2"))].index
+        stores = n.stores[
+            (n.stores.index.str.startswith(state))
+            & ((n.stores.index.str.endswith("-co2")) | (n.stores.index.str.endswith("-ch4")))
+        ].index
 
         lhs = n.model["Store-e"].loc[snapshot, stores].sum()
 
@@ -863,7 +866,10 @@ def add_sector_co2_constraints(n, config):
         sns = n.snapshots
         snapshot = sns[sns.get_level_values("period") == year][-1]
 
-        stores = n.stores[(n.stores.index.str.startswith(state)) & (n.stores.index.str.endswith(f"{sector}-co2"))].index
+        stores = n.stores[
+            (n.stores.index.str.startswith(state))
+            & ((n.stores.index.str.endswith(f"{sector}-co2")) | (n.stores.index.str.endswith(f"{sector}-ch4")))
+        ].index
 
         lhs = n.model["Store-e"].loc[snapshot, stores].sum()
 
@@ -880,7 +886,7 @@ def add_sector_co2_constraints(n, config):
         sns = n.snapshots
         snapshot = sns[sns.get_level_values("period") == year][-1]
 
-        stores = n.stores[n.stores.index.str.endswith("-co2")].index
+        stores = n.stores[((n.stores.index.str.endswith("-co2")) | (n.stores.index.str.endswith("-ch4")))].index
 
         lhs = n.model["Store-e"].loc[snapshot, stores].sum()
 
@@ -897,7 +903,9 @@ def add_sector_co2_constraints(n, config):
         sns = n.snapshots
         snapshot = sns[sns.get_level_values("period") == year][-1]
 
-        stores = n.stores[n.stores.index.str.endswith(f"{sector}-co2")].index
+        stores = n.stores[
+            (n.stores.index.str.endswith(f"{sector}-co2")) | (n.stores.index.str.endswith(f"{sector}-ch4"))
+        ].index
 
         lhs = n.model["Store-e"].loc[snapshot, stores].sum()
 
