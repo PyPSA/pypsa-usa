@@ -357,7 +357,7 @@ def add_itls(buses, itls, itl_cost, expansion=True):
         length=0 if itl_cost is None else itls_fwd.length_miles.values,
         capital_cost=0 if itl_cost is None else itls_fwd.USD2023perMWyr.values,
         p_nom_extendable=False,
-        carrier="AC_trans",
+        carrier="AC",
     )
 
     clustering.network.madd(
@@ -373,7 +373,7 @@ def add_itls(buses, itls, itl_cost, expansion=True):
         length=0 if itl_cost is None else itls_rev.length_miles.values,
         capital_cost=0 if itl_cost is None else itls_rev.USD2023perMWyr.values,
         p_nom_extendable=False,
-        carrier="AC_trans",
+        carrier="AC",
     )
 
     if not expansion:
@@ -393,7 +393,7 @@ def add_itls(buses, itls, itl_cost, expansion=True):
         length=0 if itl_cost is None else itls.length_miles.values,
         capital_cost=0 if itl_cost is None else itls.USD2023perMWyr.values,
         p_nom_extendable=False,
-        carrier="DC",
+        carrier="AC_exp",
     )
 
 
@@ -489,7 +489,7 @@ def convert_to_transport(
     else:
         itls = itls_filt
 
-    clustering.network.add("Carrier", "AC_trans", co2_emissions=0)
+    clustering.network.add("Carrier", "AC_exp", co2_emissions=0)
     logger.info(f"Replaced Lines with Links for zonal model configuration.")
 
     # Remove any disconnected buses
