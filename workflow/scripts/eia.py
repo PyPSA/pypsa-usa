@@ -77,6 +77,25 @@ AEO_SCENARIOS = {
     "low_lng": "lng_lp",  # Low LNG Price
 }
 
+# hard codes where gas can enter/exit the states
+# if multiple POEs exist, the larger pipeline is used as the POE
+# https://atlas.eia.gov/datasets/eia::border-crossings-natural-gas/explore?location=48.411182%2C-90.296487%2C5.24
+POINTS_OF_ENTRY = {
+    "AZ": "MX",  # Arizona - Mexico
+    "CA": "MX",  # California - Mexico
+    "ID": "BC",  # Idaho - BC
+    "ME": "NB",  # Maine - New Brunswick
+    "MI": "ON",  # Michigan - Ontario
+    "MN": "MB",  # Minnesota - Manitoba
+    "MT": "SK",  # Montana - Saskatchewan
+    "ND": "SK",  # North Dakota - Saskatchewan
+    "NH": "QC",  # New Hampshire - Quebec
+    "NY": "ON",  # New York - Ontario
+    "TX": "MX",  # Texas - Mexico
+    "VT": "QC",  # Vermont - Mexico
+    "WA": "BC",  # Washington - BC
+}
+
 
 # exceptions
 class InputException(Exception):
@@ -1309,24 +1328,7 @@ class InternationalGasTrade(DataExtractor):
         "exports": "ENP",
     }
 
-    # hard codes where gas can enter/exit the states
-    # if multiple POEs exist, the larger pipeline is used as the POE
-    # https://atlas.eia.gov/datasets/eia::border-crossings-natural-gas/explore?location=48.411182%2C-90.296487%2C5.24
-    points_of_entry = {
-        "AZ": "MX",  # Arizona - Mexico
-        "CA": "MX",  # California - Mexico
-        "ID": "BC",  # Idaho - BC
-        "ME": "NB",  # Maine - New Brunswick
-        "MI": "ON",  # Michigan - Ontario
-        "MN": "MB",  # Minnesota - Manitoba
-        "MT": "SK",  # Montana - Saskatchewan
-        "ND": "SK",  # North Dakota - Saskatchewan
-        "NH": "QC",  # New Hampshire - Quebec
-        "NY": "ON",  # New York - Ontario
-        "TX": "MX",  # Texas - Mexico
-        "VT": "QC",  # Vermont - Mexico
-        "WA": "BC",  # Washington - BC
-    }
+    points_of_entry = POINTS_OF_ENTRY
 
     def __init__(self, direction: str, year: int, api_key: str) -> None:
         self.direction = direction
@@ -1726,7 +1728,7 @@ if __name__ == "__main__":
     api = yaml_data["api"]["eia"]
     # print(FuelCosts("coal", 2020, api, industry="power").get_data(pivot=True))
     # print(FuelCosts("heating_oil", 2020, api).get_data(pivot=False))
-    print(Trade("gas", True, "exports", 2020, api).get_data(pivot=False))
+    print(Trade("gas", True, "exports", 2020, api).get_data(pivot=True).fillna(0).sum())
     # print(Emissions("transport", 2019, api).get_data(pivot=True))
     # print(Storage("gas", "total", 2019, api).get_data(pivot=True))
     # print(EnergyDemand("residential", 2030, api).get_data(pivot=False))

@@ -81,7 +81,9 @@ def add_land_use_constraint_perfect(n):
     grouper = [n.generators.carrier, n.generators.bus]
     ext_i = n.generators.p_nom_extendable & ~n.generators.index.str.contains("existing")
     # get technical limit per node
-    p_nom_max = n.generators[ext_i].groupby(grouper).sum().p_nom_max / len(n.investment_periods)
+    p_nom_max = n.generators[ext_i].groupby(grouper).sum().p_nom_max / len(
+        n.investment_periods,
+    )
 
     # drop carriers without tech limit
     p_nom_max = p_nom_max[~p_nom_max.isin([np.inf, np.nan])]
@@ -1013,6 +1015,8 @@ def add_ng_import_export_limits(n, config):
         Sets gas import limit over each year.
         """
 
+        weights = n.snapshot_weightings.objective
+
         links = n.links[n.links.carrier.str.endswith("gas import")].index.to_list()
 
         for year in n.investment_periods:
@@ -1020,9 +1024,9 @@ def add_ng_import_export_limits(n, config):
                 try:
                     rhs = imports.at[link, "rhs"]
                 except KeyError:
-                    logger.warning(f"Can not set gas import limit for {link}")
+                    # logger.warning(f"Can not set gas import limit for {link}")
                     continue
-                lhs = n.model["Link-p"].sel(snapshot=year, Link=link).sum()
+                lhs = n.model["Link-p"].mul(weights).sel(snapshot=year, Link=link).sum()
 
                 n.model.add_constraints(lhs <= rhs, name=f"ng_limit-{year}-{link}")
 
@@ -1030,6 +1034,9 @@ def add_ng_import_export_limits(n, config):
         """
         Sets maximum export limit over the year.
         """
+
+        weights = n.snapshot_weightings.objective
+
         links = n.links[n.links.carrier.str.endswith("gas export")].index.to_list()
 
         for year in n.investment_periods:
@@ -1037,9 +1044,9 @@ def add_ng_import_export_limits(n, config):
                 try:
                     rhs = exports.at[link, "rhs"]
                 except KeyError:
-                    logger.warning(f"Can not set gas import limit for {link}")
+                    # logger.warning(f"Can not set gas import limit for {link}")
                     continue
-                lhs = n.model["Link-p"].sel(snapshot=year, Link=link).sum()
+                lhs = n.model["Link-p"].mul(weights).sel(snapshot=year, Link=link).sum()
 
                 n.model.add_constraints(lhs >= rhs, name=f"ng_limit-{year}-{link}")
 
@@ -1053,18 +1060,18 @@ def add_ng_import_export_limits(n, config):
     exports = Trade("gas", False, "exports", year, api).get_data()
     exports = _format_domestic_data(exports, " export")
 
-    add_import_limits(n, imports)
+    # add_import_limits(n, imports)
     add_export_limits(n, exports)
 
     # add international limits
 
-    # imports = Trade("gas", True, "imports", year, api).get_data()
-    # imports = _format_international_data(imports, " import")
-    # exports = Trade("gas", True, "exports", year, api).get_data()
-    # exports = _format_international_data(exports, " export")
+    imports = Trade("gas", True, "imports", year, api).get_data()
+    imports = _format_international_data(imports, " import")
+    exports = Trade("gas", True, "exports", year, api).get_data()
+    exports = _format_international_data(exports, " export")
 
     # add_import_limits(n, imports)
-    # add_export_limits(n, exports)
+    add_export_limits(n, exports)
 
 
 def extra_functionality(n, snapshots):
@@ -1099,7 +1106,8 @@ def extra_functionality(n, snapshots):
     if "sector" in opts:
         sector_co2_limits = config["sector"]["co2"].get("policy", {})
         if sector_co2_limits:
-            add_sector_co2_constraints(n, config)
+            # add_sector_co2_constraints(n, config)
+            pass
         if config["sector"]["natural_gas"].get("force_imports_exports", False):
             add_ng_import_export_limits(n, config)
 
