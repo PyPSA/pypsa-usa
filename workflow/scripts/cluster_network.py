@@ -444,20 +444,21 @@ def convert_to_transport(
         virtual_buses["x"] = 0.3 * agg_x + 0.7 * existing_x
         virtual_buses["y"] = 0.3 * agg_y + 0.7 * existing_y
 
-        clustering.network.madd(
-            "Bus",
-            virtual_buses[topology_aggregation_key],
-            country=virtual_buses[topology_aggregation_key],
-            reeds_zone="na" if topology_aggregation_key == "trans_grp" else virtual_buses["reeds_zone"],
-            reeds_ba="na" if topology_aggregation_key == "trans_grp" else virtual_buses["reeds_ba"],
-            interconnect=virtual_buses["interconnect"],
-            nerc_reg=virtual_buses["nerc_reg"],
-            trans_reg=virtual_buses["trans_reg"],
-            trans_grp=virtual_buses["trans_grp"],
-            reeds_state=virtual_buses["reeds_state"],
-            x=virtual_buses.x,
-            y=virtual_buses.y,
-        )
+        if not virtual_buses.empty:
+            clustering.network.madd(
+                "Bus",
+                virtual_buses[topology_aggregation_key],
+                country=virtual_buses[topology_aggregation_key],
+                reeds_zone="na" if topology_aggregation_key == "trans_grp" else virtual_buses["reeds_zone"],
+                reeds_ba="na" if topology_aggregation_key == "trans_grp" else virtual_buses["reeds_ba"],
+                interconnect=virtual_buses["interconnect"],
+                nerc_reg=virtual_buses["nerc_reg"],
+                trans_reg=virtual_buses["trans_reg"],
+                trans_grp=virtual_buses["trans_grp"],
+                reeds_state=virtual_buses["reeds_state"],
+                x=virtual_buses.x,
+                y=virtual_buses.y,
+            )
         itl_agg = itl_agg[
             itl_agg.r.isin(clustering.network.buses["country"])
             & itl_agg.rr.isin(clustering.network.buses["country"])
