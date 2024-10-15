@@ -414,7 +414,6 @@ def attach_conventional_generators(
         .astype(float)
         .fillna(0)
     )
-
     committable_fields = ["start_up_cost", "min_down_time", "min_up_time", "p_min_pu"]
     for attr in committable_fields:
         default = pypsa.components.component_attrs["Generator"].default[attr]
@@ -832,12 +831,16 @@ def main(snakemake):
         conventional_carriers,
         n.snapshots,
     )
-    apply_must_run_ratings(
-        n,
-        plants,
-        conventional_carriers,
-        n.snapshots,
-    )
+
+    if params.conventional["unit_commitment"]:
+        # TODO (@ktehranchi): In the future the plants that are must-run should not be clustered and instead retire according to lifetime
+        apply_must_run_ratings(
+            n,
+            plants,
+            conventional_carriers,
+            n.snapshots,
+        )
+
     attach_battery_storage(
         n,
         costs,
