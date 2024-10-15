@@ -521,9 +521,9 @@ def add_regional_co2limit(n, sns, config):
     regional_co2_lims = regional_co2_lims[regional_co2_lims.planning_horizon.isin(snakemake.params.planning_horizons)]
     weightings = n.snapshot_weightings.loc[n.snapshots]
 
-    if n._multi_invest:
-        period_weighting = n.investment_period_weightings.years[sns.unique("period")]
-        weightings = weightings.mul(period_weighting, level=0, axis=0)
+    # if n._multi_invest:
+    #     period_weighting = n.investment_period_weightings.years[sns.unique("period")]
+    #     weightings = weightings.mul(period_weighting, level=0, axis=0)
 
     for idx, emmission_lim in regional_co2_lims.iterrows():
         region_list = [region.strip() for region in emmission_lim.regions.split(",")]
