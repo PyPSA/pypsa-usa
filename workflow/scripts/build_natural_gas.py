@@ -534,7 +534,7 @@ class GasProcessing(GasData):
             unit="MWh_th",
             suffix=" gas production",
             bus=df.index + " gas production",
-            carrier="gas import",
+            carrier="gas production",
             capital_cost=0,
             marginal_cost=0,
             e_cyclic=False,

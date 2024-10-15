@@ -11,29 +11,39 @@ import pypsa
 CODE_2_STATE = {v: k for k, v in constants.STATE_2_CODE.items()}
 
 
-def _rename_columns(df: pd.DataFrame) -> pd.DataFrame:
+def _rename_columns(n: pypsa.Network, df: pd.DataFrame) -> pd.DataFrame:
     """
-    Renames columns to States.
+    Renames columns to carrier nicenames.
     """
-    return df.rename(
-        columns={x: CODE_2_STATE[x.split(" ")[0]] if x.split(" ")[0] in CODE_2_STATE else x for x in df.columns},
-    )
+    return df.rename(columns=n.carriers.nice_name)
 
 
 def get_gas_demand(
     n: pypsa.Network,
-    carriers: list[str] = ["CCGT", "OCGT"],
-) -> pd.DataFrame:
+) -> dict[str, pd.DataFrame]:
     """
     Get energy sources attached to gas buses.
 
     This in input energy required (ie. not applying efficiency losses)
     """
 
-    links = n.links[n.links.carrier.isin(carriers)]
-    links_t = n.links_t.p0[links.index]
-    links_t = links_t.T.groupby(n.links.carrier).sum().T
-    return _rename_columns(links_t)
+    data = {}
+
+    buses = n.buses[n.buses.index.str.endswith(" gas")].index
+    for bus in buses:
+        links = n.links[
+            (n.links.bus0 == bus)
+            & ~(n.links.index.str.endswith("import"))
+            & ~(n.links.index.str.endswith("export"))
+            & ~(n.links.index.str.endswith("storage"))
+            & ~(n.links.index.str.endswith("linepack"))
+        ]
+        links_t = n.links_t.p0[links.index]
+        links_t = links_t.T.groupby(n.links.carrier).sum().T
+        links_t = links_t.rename(columns=n.carriers.nice_name)
+        state = bus.split(" gas")[0]
+        data[state] = links_t
+    return data
 
 
 def get_imports_exports(n: pypsa.Network, international: bool = True) -> pd.DataFrame:
@@ -83,16 +93,16 @@ def get_imports_exports(n: pypsa.Network, international: bool = True) -> pd.Data
     return pd.concat([imports_t, exports_t], axis=1)
 
 
-def get_gas_processing(n: pypsa.Network) -> pd.DataFrame:
+def get_gas_processing(n: pypsa.Network) -> dict[str, pd.DataFrame]:
     """
     Gets timeseries gas processing.
     """
-    processing = n.generators[n.generators.carrier == "gas"]
-    processing = n.generators_t.p[processing.index]
+    processing = n.links[n.links.carrier == "gas production"]
+    processing = n.links_t.p1[processing.index]
     return _rename_columns(processing)
 
 
-def get_linepack(n: pypsa.Network) -> pd.DataFrame:
+def get_linepack(n: pypsa.Network) -> dict[str, pd.DataFrame]:
     """
     Gets linepack data.
     """
@@ -101,7 +111,7 @@ def get_linepack(n: pypsa.Network) -> pd.DataFrame:
     return _rename_columns(stores)
 
 
-def get_underground_storage(n: pypsa.Network) -> pd.DataFrame:
+def get_underground_storage(n: pypsa.Network) -> dict[str, pd.DataFrame]:
     """
     Gets underground storage data.
     """
