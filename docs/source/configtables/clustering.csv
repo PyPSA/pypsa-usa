@@ -9,4 +9,4 @@ feature,str," {'solar+onwind-time', 'solar+onwind-cap', 'solar-time', 'solar-cap
 aggregation_strategies:,,,
 table --> {key},str,"{'mean','max','min',etc}","Specifiy the method of aggregating fields within the generators, buses tables. "
 focus_weights:,,,
-region_name',float,,Specify the proportion of nodes to be attributed to a given zone in the form (California: 0.5) for half of all nodes to be located in California
+region_name',float,,Specify the proportion of nodes to be attributed to a given zone in the form (California: 0.5) for half of all nodes to be located in California. Only used with TAMU Network
