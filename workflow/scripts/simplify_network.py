@@ -62,7 +62,7 @@ def convert_to_voltage_level(n, new_voltage):
 
     # Update network lines
     df.type = "Al/St 240/40 2-bundle 220.0"
-    n.buses["v_nom"] = voltage_level
+    n.buses["v_nom"] = new_voltage
     n.lines = df
     return n
 
@@ -215,7 +215,6 @@ if __name__ == "__main__":
     params = snakemake.params
     solver_name = snakemake.config["solving"]["solver"]["name"]
 
-    voltage_level = snakemake.config["electricity"]["voltage_simplified"]
     topological_boundaries = snakemake.params.topological_boundaries
 
     n = pypsa.Network(snakemake.input.network)
@@ -225,7 +224,7 @@ if __name__ == "__main__":
         inplace=True,
     )  # temp added these columns and need to drop for workflow
 
-    n = convert_to_voltage_level(n, voltage_level)
+    n = convert_to_voltage_level(n, 230)
     n, trafo_map = remove_transformers(n)
 
     substations = pd.read_csv(snakemake.input.sub, index_col=0)

@@ -455,7 +455,6 @@ def plot_hourly_emissions(n: pypsa.Network, save: str, **wildcards) -> None:
     """
 
     # get data
-
     emissions = get_tech_emissions_timeseries(n).mul(1e-6)  # T -> MT
     zeros = emissions.columns[(np.abs(emissions) < 1e-7).all()]
     emissions = emissions.drop(columns=zeros)
@@ -464,12 +463,13 @@ def plot_hourly_emissions(n: pypsa.Network, save: str, **wildcards) -> None:
     color_palette = get_color_palette(n)
 
     fig, ax = plt.subplots(figsize=(14, 4))
-    emissions.plot.area(
-        ax=ax,
-        alpha=0.7,
-        legend="reverse",
-        color=color_palette,
-    )
+    if not emissions.empty:
+        emissions.plot.area(
+            ax=ax,
+            alpha=0.7,
+            legend="reverse",
+            color=color_palette,
+        )
 
     ax.legend(bbox_to_anchor=(1, 1), loc="upper left")
     ax.set_title(create_title("Technology Emissions", **wildcards))
@@ -496,13 +496,13 @@ def plot_accumulated_emissions_tech(n: pypsa.Network, save: str, **wildcards) ->
     color_palette = get_color_palette(n)
 
     fig, ax = plt.subplots(figsize=(14, 4))
-
-    emissions.plot.area(
-        ax=ax,
-        alpha=0.7,
-        legend="reverse",
-        color=color_palette,
-    )
+    if not emissions.empty:
+        emissions.plot.area(
+            ax=ax,
+            alpha=0.7,
+            legend="reverse",
+            color=color_palette,
+        )
 
     ax.legend(bbox_to_anchor=(1, 1), loc="upper left")
     ax.set_title(create_title("Technology Accumulated Emissions", **wildcards))
