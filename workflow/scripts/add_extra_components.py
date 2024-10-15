@@ -22,7 +22,6 @@ def add_co2_emissions(n, costs, carriers):
     Add CO2 emissions to the network's carriers attribute.
     """
     suptechs = n.carriers.loc[carriers].index.str.split("-").str[0]
-
     missing_carriers = set(suptechs) - set(costs.index)
     if missing_carriers:
         logger.warning(f"CO2 emissions for carriers {missing_carriers} not defined in cost data.")
@@ -35,12 +34,13 @@ def add_co2_emissions(n, costs, carriers):
     )  # TODO: FIX THIS ISSUE IN BUILD_COST_DATA- missing co2_emissions for some VRE carriers
 
     if any("CCS" in carrier for carrier in carriers):
-        ccs_factor = (
-            1
-            - pd.Series(carriers, index=carriers).str.split("-").str[1].str.replace("CCS", "").fillna(0).astype(int)
-            / 100
-        )
-        n.carriers.loc[ccs_factor.index, "co2_emissions"] *= ccs_factor
+        ccs_carriers = [carrier for carrier in carriers if "CCS" in carrier]
+        for ccs_carrier in ccs_carriers:
+            base_carrier = ccs_carrier.split("-")[0]
+            base_emissions = n.carriers.loc[base_carrier, "co2_emissions"]
+            ccs_level = int(ccs_carrier.split("-")[1].replace("CCS", ""))
+            ccs_emissions = (1 - ccs_level / 100) * base_emissions
+            n.carriers.loc[ccs_carrier, "co2_emissions"] = ccs_emissions
 
 
 def add_nice_carrier_names(n, config):
