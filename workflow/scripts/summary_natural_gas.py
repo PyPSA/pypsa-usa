@@ -46,9 +46,9 @@ def get_gas_demand(
     return data
 
 
-def get_imports_exports(n: pypsa.Network, international: bool = True) -> pd.DataFrame:
+def get_imports_exports(n: pypsa.Network, international: bool = True) -> dict[str, dict[str, pd.DataFrame]]:
     """
-    Gets gas flow into and out of the interconnect.
+    Gets gas flow into and out of the state.
     """
 
     regex = ".{2}(?:MX|AB|BC|MB|NB|NL|NT|NS|NU|ON|PE|QC|SK|YT)"
@@ -84,13 +84,27 @@ def get_imports_exports(n: pypsa.Network, international: bool = True) -> pd.Data
         imports = get_domestic(imports)
         exports = get_domestic(exports)
 
-    imports_t = n.stores_t.e[imports.index].sum(axis=1)
-    exports_t = n.stores_t.e[exports.index].sum(axis=1)
+    imports_t = n.stores_t.e[imports.index]
+    exports_t = n.stores_t.e[exports.index]
 
-    imports_t.name = "Imports"
-    exports_t.name = "Exports"
+    imports_t = imports_t.mul(-1)  # set to positive
 
-    return pd.concat([imports_t, exports_t], axis=1)
+    state_gas_buses = n.buses[n.buses.index.str.endswith(" gas")].index.to_list()
+    states = [x.split(" gas")[0] for x in state_gas_buses]
+
+    data = {}
+
+    for state in states:
+
+        data[state] = {}
+
+        import_cols = [x for x in imports_t.columns if f"{state} " in x]
+        data[state]["imports"] = imports_t[import_cols]
+
+        export_cols = [x for x in exports_t.columns if f"{state} " in x]
+        data[state]["exports"] = exports_t[export_cols]
+
+    return data
 
 
 def get_gas_processing(n: pypsa.Network) -> dict[str, pd.DataFrame]:
@@ -98,8 +112,15 @@ def get_gas_processing(n: pypsa.Network) -> dict[str, pd.DataFrame]:
     Gets timeseries gas processing.
     """
     processing = n.links[n.links.carrier == "gas production"]
-    processing = n.links_t.p1[processing.index]
-    return _rename_columns(processing)
+    processing = n.links_t.p1[processing.index].mul(-1)
+
+    data = {}
+
+    for col in processing.columns:
+        state = col.split(" gas")[0]
+        data[state] = processing[col].to_frame()
+
+    return data
 
 
 def get_linepack(n: pypsa.Network) -> dict[str, pd.DataFrame]:
@@ -108,7 +129,14 @@ def get_linepack(n: pypsa.Network) -> dict[str, pd.DataFrame]:
     """
     stores = n.stores[n.stores.carrier == "gas pipeline"]
     stores = n.stores_t.e[stores.index]
-    return _rename_columns(stores)
+
+    data = {}
+
+    for col in stores.columns:
+        state = col.split(" linepack")[0]
+        data[state] = stores[col].to_frame()
+
+    return data
 
 
 def get_underground_storage(n: pypsa.Network) -> dict[str, pd.DataFrame]:
@@ -117,4 +145,11 @@ def get_underground_storage(n: pypsa.Network) -> dict[str, pd.DataFrame]:
     """
     stores = n.stores[n.stores.carrier == "gas storage"]
     stores = n.stores_t.e[stores.index]
-    return _rename_columns(stores)
+
+    data = {}
+
+    for col in stores.columns:
+        state = col.split(" gas storage")[0]
+        data[state] = stores[col].to_frame()
+
+    return data

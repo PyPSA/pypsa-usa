@@ -1,8 +1,8 @@
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import constants
 import matplotlib.pyplot as plt
@@ -32,7 +32,7 @@ class PlottingData:
     plotter: callable
     nice_name: Optional[str] = None
     unit: Optional[str] = None
-    converter: Optional[float] = None
+    converter: Optional[float] = 1.0
 
 
 def _group_data(df: pd.DataFrame) -> pd.DataFrame:
@@ -46,6 +46,38 @@ def _sum_state_data(data: dict[str, pd.DataFrame]) -> pd.DataFrame:
 
     dfs = [y for _, y in data.items()]
     return pd.concat(dfs, axis=1)
+
+
+def _sum_state_trade_data(
+    data: dict[dict[str, pd.DataFrame]],
+) -> dict[str, pd.DataFrame]:
+    """
+    Sums state data together.
+    """
+
+    import_data = {}
+    export_data = {}
+
+    for state, trade_data in data.items():
+        import_data[state] = trade_data["imports"]
+        export_data[state] = trade_data["exports"]
+
+    import_data = _sum_state_data(import_data)
+    export_data = _sum_state_data(export_data)
+
+    return {"imports": import_data, "exports": export_data}
+
+
+def _is_trade_data(data: dict[str, Any]) -> bool:
+    """
+    Trade data has nested dictionaries.
+
+    Other data does not
+    """
+    for value in data.values():
+        if isinstance(value, dict):
+            return True
+    return False
 
 
 def plot_gas(
@@ -82,14 +114,65 @@ def plot_gas(
             ylabel=f"({units})",
         )
 
-    return (fig, axs)
+    return fig, axs
 
 
-def plot_gas_trade(data: pd.DataFrame) -> tuple[plt.Figure, plt.Axes]:
+def plot_gas_trade(
+    data: dict[str, pd.DataFrame],  # str is 'imports' or 'exports'
+    title: str,
+    units: str,
+    **kwargs,
+) -> tuple[plt.Figure, plt.Axes]:
     """
     General gas trade plotting function.
     """
-    pass
+
+    # periods will be the same for imports or exports
+    periods = data["imports"].index.get_level_values("period").unique()
+
+    n_rows = len(periods)
+
+    fig, axs = plt.subplots(n_rows, 2)
+
+    for i, period in enumerate(periods):
+
+        # plot imports
+
+        imports = data["imports"].copy()
+
+        import_period_data = imports[imports.index.get_level_values("period") == period].droplevel(
+            "period",
+        )
+
+        ax = axs[i, 1] if n_rows > 1 else axs[1]
+
+        import_period_data.plot(
+            kind="line",
+            ax=ax,
+            title=title,
+            xlabel="",
+            ylabel=f"({units})",
+        )
+
+        # plot exports
+
+        exports = data["exports"].copy()
+
+        export_period_data = exports[exports.index.get_level_values("period") == period].droplevel(
+            "period",
+        )
+
+        ax = axs[i, 1] if n_rows > 1 else axs[1]
+
+        export_period_data.plot(
+            kind="line",
+            ax=ax,
+            title=title,
+            xlabel="",
+            ylabel=f"({units})",
+        )
+
+    return fig, axs
 
 
 PLOTTING_META = [
@@ -198,11 +281,23 @@ if __name__ == "__main__":
         for state in states:
 
             if state == "system":
-                state_data = _sum_state_data(data)
+                if _is_trade_data(data):
+                    state_data = _sum_state_trade_data(data)
+                else:
+                    state_data = _sum_state_data(data)
             else:
                 state_data = data[state]
 
-            state_data = _group_data(state_data).mul(meta.converter)  # convert units
+            if isinstance(state_data, pd.DataFrame):
+                state_data = _group_data(state_data).mul(meta.converter)
+            # trade data tracked a little different
+            else:
+                state_data["imports"] = _group_data(state_data["imports"]).mul(
+                    meta.converter,
+                )
+                state_data["exports"] = _group_data(state_data["exports"]).mul(
+                    meta.converter,
+                )
 
             title = f"{state} {meta.nice_name}"
             units = meta.unit
