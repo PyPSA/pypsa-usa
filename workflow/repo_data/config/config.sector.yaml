@@ -3,7 +3,7 @@ sector:
     sequestration_potential: 0
     policy: "config/policy_constraints/sector_co2_limits.csv"
   natural_gas:
-    force_imports_exports: true 
+    force_exports: true 
     cyclic_storage: true
     standing_loss: 0
   methane:
