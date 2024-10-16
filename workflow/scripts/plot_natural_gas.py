@@ -132,7 +132,7 @@ def plot_gas_trade(
 
     n_rows = len(periods)
 
-    fig, axs = plt.subplots(n_rows, 2)
+    fig, axs = plt.subplots(n_rows, 2, sharey=True)
 
     for i, period in enumerate(periods):
 
@@ -144,14 +144,14 @@ def plot_gas_trade(
             "period",
         )
 
-        ax = axs[i, 1] if n_rows > 1 else axs[1]
+        ax = axs[i, 0] if n_rows > 1 else axs[0]
 
         import_period_data.plot(
             kind="line",
             ax=ax,
-            title=title,
             xlabel="",
             ylabel=f"({units})",
+            title="Imports",
         )
 
         # plot exports
@@ -167,10 +167,12 @@ def plot_gas_trade(
         export_period_data.plot(
             kind="line",
             ax=ax,
-            title=title,
             xlabel="",
             ylabel=f"({units})",
+            title="Exports",
         )
+
+    fig.suptitle(title)
 
     return fig, axs
 
@@ -221,7 +223,7 @@ PLOTTING_META = [
         "nice_name": "Natural Gas Traded Internationally",
         "unit": "MMCF",
         "converter": MWH_2_MMCF,
-        "getter": partial(get_imports_exports, international=False),
+        "getter": partial(get_imports_exports, international=True),
         "plotter": plot_gas_trade,
     },
 ]
@@ -260,7 +262,7 @@ if __name__ == "__main__":
     expected_figures = {}
     for output_file in output_files:
         p = Path(output_file)
-        root_path = list(p.parts[1:-3])  # path up to the 'system/natural_gas/%s.png'
+        root_path = list(p.parts[:-3])  # path up to the 'system/natural_gas/%s.png'
         figure_name = list(p.parts[-2:])  # path of 'natural_gas/%s.png'
         result = p.stem  # ie. 'demand'
         state_paths = {}
@@ -302,9 +304,10 @@ if __name__ == "__main__":
             title = f"{state} {meta.nice_name}"
             units = meta.unit
 
-            fig, axs = meta.plotter(state_data, title=title, units=units)
+            fig, _ = meta.plotter(state_data, title=title, units=units)
             save_path = expected_figures[meta.name][state]
             fig.tight_layout()
             if not save_path.parent.exists():
                 save_path.parent.mkdir(parents=True, exist_ok=True)
             fig.savefig(str(save_path))
+            plt.close(fig)

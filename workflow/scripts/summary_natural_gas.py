@@ -46,7 +46,10 @@ def get_gas_demand(
     return data
 
 
-def get_imports_exports(n: pypsa.Network, international: bool = True) -> dict[str, dict[str, pd.DataFrame]]:
+def get_imports_exports(
+    n: pypsa.Network,
+    international: bool = True,
+) -> dict[str, dict[str, pd.DataFrame]]:
     """
     Gets gas flow into and out of the state.
     """
@@ -84,10 +87,8 @@ def get_imports_exports(n: pypsa.Network, international: bool = True) -> dict[st
         imports = get_domestic(imports)
         exports = get_domestic(exports)
 
-    imports_t = n.stores_t.e[imports.index]
-    exports_t = n.stores_t.e[exports.index]
-
-    imports_t = imports_t.mul(-1)  # set to positive
+    imports_t = n.links_t.p0[imports.index]
+    exports_t = n.links_t.p0[exports.index]
 
     state_gas_buses = n.buses[n.buses.index.str.endswith(" gas")].index.to_list()
     states = [x.split(" gas")[0] for x in state_gas_buses]
