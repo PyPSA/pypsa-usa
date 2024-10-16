@@ -509,8 +509,9 @@ if __name__ == "__main__":
 
         snakemake = mock_snakemake(
             "add_extra_components",
-            interconnect="texas",
-            clusters=10,
+            interconnect="western",
+            simpl=12,
+            clusters=6,
         )
     configure_logging(snakemake)
 
@@ -578,7 +579,7 @@ if __name__ == "__main__":
     apply_ptc(n, snakemake.config["costs"]["ptc_modifier"])
     apply_max_annual_growth_rate(n, snakemake.config["costs"]["max_growth"])
     add_nice_carrier_names(n, snakemake.config)
-    add_co2_emissions(n, costs_dict[n.investment_periods[0]], n.carriers.index)
+    # add_co2_emissions(n, costs_dict[n.investment_periods[0]], n.carriers.index)
     # n.generators.to_csv("generators_ec.csv")
     n.consistency_check()
     n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))
