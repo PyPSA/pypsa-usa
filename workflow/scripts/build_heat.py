@@ -75,15 +75,6 @@ def build_heat(
             gas_costs = costs.at["gas", "fuel_cost"]
             heating_oil_costs = costs.at["oil", "fuel_cost"]
 
-        # NOTE: Cooling MUST come first, as HPs attach to cooling buses
-        add_service_cooling(
-            n=n,
-            sector=sector,
-            pop_layout=pop_layout,
-            costs=costs,
-            split_urban_rural=split_urban_rural,
-            technologies=technologies,
-        )
         add_service_heat(
             n=n,
             sector=sector,
@@ -96,6 +87,14 @@ def build_heat(
             gshp_cop=gshp_cop,
             marginal_gas=gas_costs,
             marginal_oil=heating_oil_costs,
+        )
+        add_service_cooling(
+            n=n,
+            sector=sector,
+            pop_layout=pop_layout,
+            costs=costs,
+            split_urban_rural=split_urban_rural,
+            technologies=technologies,
         )
 
         assert not n.links_t.p_set.isna().any().any()
@@ -493,6 +492,8 @@ def add_service_cooling(
     for heat_system in heat_systems:
         if technologies.get("air_con", True):
             add_air_cons(n, sector, heat_system, costs)
+        if technologies.get("heat_pump", True):
+            add_service_heat_pumps_cooling(n, sector, heat_system, "cool")
 
 
 def add_air_cons(
@@ -540,6 +541,64 @@ def add_air_cons(
         capital_cost=capex,
         p_nom_extendable=True,
         lifetime=lifetime,
+    )
+
+
+def add_service_heat_pumps_cooling(
+    n: pypsa.Network,
+    sector: str,
+    heat_system: str,
+    heat_carrier: str,
+) -> None:
+    """
+    Adds heat pumps to the system for cooling. These heat pumps copy attributes
+    from the heating sector. Custom constraints are added to enforce capacity
+    and operational limits to capture heating/cooling behaviour.
+
+    n: pypsa.Network
+    sector: str
+        ("com" or "res")
+    heat_system: str
+        ("rural" or "urban")
+    """
+
+    assert sector in ("com", "res")
+    assert heat_system in ("urban", "rural", "total")
+    assert heat_carrier in ["cool"]
+
+    # get list of existing heat based hps
+    carriers = [f"{sector}-{heat_system}-ashp", f"{sector}-{heat_system}-gshp"]
+    heat_links = n.links[n.links.carrier.isin(carriers) & ~(n.links.carrier.index.str.endswith("existing"))]
+
+    cool_links = heat_links.copy()
+    cool_links_cop = n.links_t["efficiency"][cool_links.index]
+
+    index_mapper = {x: x + "-cooling" for x in cool_links.index}
+
+    cool_links = cool_links.rename(index=index_mapper)
+    cool_links_cop = cool_links_cop.rename(columns=index_mapper)
+
+    cool_links["bus1"] = cool_links["bus0"].map(lambda x: x.split(f" {sector}")[0])  # node code
+    cool_links["bus1"] = cool_links["bus1"] + f" {sector}-{heat_system}-{heat_carrier}"
+
+    carrier_name = f"{sector}-{heat_system}-{heat_carrier}"
+    cool_links["carrier"] = carrier_name
+
+    cool_links["capex"] = 0  # capacity is constrained to match heating hps
+
+    cool_links = cool_links[["bus0", "bus1", "carrier", "capex", "lifetime"]]
+
+    # use suffix to retain COP profiles
+    n.madd(
+        "Link",
+        cool_links.index,
+        bus0=cool_links.bus0,
+        bus1=cool_links.bus1,
+        carrier=cool_links.carrier,
+        efficiency=cool_links_cop,
+        capital_cost=cool_links.capex,
+        p_nom_extendable=True,
+        lifetime=cool_links.lifetime,
     )
 
 
