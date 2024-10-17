@@ -1003,6 +1003,69 @@ def add_sector_co2_constraints(n, config):
                         apply_sector_state_limit(n, year, state, sector, value)
 
 
+def add_cooling_heat_pump_constraints(n, config):
+    """
+    Adds constraints to the cooling heat pumps.
+
+    These constraints allow HPs to be used to meet both heating and cooling
+    demand within a single timeslice while respecting capacity limits.
+    Since we are aggregating (and not modelling individual units)
+    this should be fine.
+
+    Two seperate constraints are added:
+    - Constrains the cooling HP capacity to equal the heating HP capacity. Since the
+    cooling hps do not have a capital cost, this will not effect objective cost
+    - Constrains the total generation of Heating and Cooling HPs at each time slice
+    to be less than or equal to the max generation of the heating HP. Note, that both
+    the cooling and heating HPs have the same COP
+    """
+
+    def add_hp_capacity_constraint(n, hp_type):
+
+        assert hp_type in ("ashp", "gshp")
+
+        heating_hps = n.links[n.links.index.str.endswith(hp_type)].index
+        if heating_hps.empty:
+            return
+        cooling_hps = n.links[n.links.index.str.endswith(f"{hp_type}-cooling")].index
+
+        assert len(heating_hps) == len(cooling_hps)
+
+        lhs = n.model["Link-p_nom"].loc[heating_hps] - n.model["Link-p_nom"].loc[cooling_hps]
+        rhs = 0
+
+        n.model.add_constraints(lhs == rhs, name=f"Link-{hp_type}_capacity")
+
+    def add_hp_generation_constraint(n, hp_type):
+
+        heating_hps = n.links[n.links.index.str.endswith(hp_type)].index
+        if heating_hps.empty:
+            return
+        cooling_hps = n.links[n.links.index.str.endswith(f"{hp_type}-cooling")].index
+
+        heating_hp_p = n.model["Link-p"].loc[:, heating_hps]
+        cooling_hp_p = n.model["Link-p"].loc[:, cooling_hps]
+
+        heating_hps_cop = n.links_t["efficiency"][heating_hps]
+        cooling_hps_cop = n.links_t["efficiency"][cooling_hps]
+
+        heating_hps_gen = heating_hp_p.mul(heating_hps_cop)
+        cooling_hps_gen = cooling_hp_p.mul(cooling_hps_cop)
+
+        lhs = heating_hps_gen + cooling_hps_gen
+
+        heating_hp_p_nom = n.model["Link-p_nom"].loc[heating_hps]
+        max_gen = heating_hp_p_nom.mul(heating_hps_cop)
+
+        rhs = max_gen
+
+        n.model.add_constraints(lhs <= rhs, name=f"Link-{hp_type}_generation")
+
+    for hp_type in ("ashp", "gshp"):
+        add_hp_capacity_constraint(n, hp_type)
+        add_hp_generation_constraint(n, hp_type)
+
+
 def extra_functionality(n, snapshots):
     """
     Collects supplementary constraints which will be passed to
@@ -1033,6 +1096,7 @@ def extra_functionality(n, snapshots):
     if interface_limits:
         add_interface_limits(n, snapshots, config)
     if "sector" in opts:
+        add_cooling_heat_pump_constraints(n, config)
         sector_co2_limits = config["sector"]["co2"].get("policy", {})
         if sector_co2_limits:
             add_sector_co2_constraints(n, config)
@@ -1102,14 +1166,14 @@ if __name__ == "__main__":
 
         snakemake = mock_snakemake(
             "solve_network",
-            simpl="",
-            opts="REM-48SEG",
-            clusters="10",
-            ll="v1.00",
+            simpl="12",
+            opts="48SEG",
+            clusters="6",
+            ll="v1.0",
             sector_opts="",
-            sector="E",
-            planning_horizons="[2030, 2050]",
-            interconnect="texas",
+            sector="E-G",
+            planning_horizons="2030",
+            interconnect="western",
         )
     configure_logging(snakemake)
     update_config_from_wildcards(snakemake.config, snakemake.wildcards)
