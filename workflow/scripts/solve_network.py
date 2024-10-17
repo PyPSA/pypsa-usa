@@ -528,10 +528,11 @@ def add_regional_co2limit(n, sns, config):
     )
     logger.info("Adding regional Co2 Limits.")
     regional_co2_lims = regional_co2_lims[regional_co2_lims.planning_horizon.isin(snakemake.params.planning_horizons)]
-
     weightings = n.snapshot_weightings.loc[n.snapshots]
-    # period_weightings = n.investment_period_weightings.years
-    # weightings = weightings.mul(period_weightings, level=0, axis=0)
+
+    # if n._multi_invest:
+    #     period_weighting = n.investment_period_weightings.years[sns.unique("period")]
+    #     weightings = weightings.mul(period_weighting, level=0, axis=0)
 
     for idx, emmission_lim in regional_co2_lims.iterrows():
         region_list = [region.strip() for region in emmission_lim.regions.split(",")]
@@ -547,13 +548,11 @@ def add_regional_co2limit(n, sns, config):
         emissions = n.carriers.co2_emissions.fillna(0)[lambda ds: ds != 0]
         region_gens = n.generators[n.generators.bus.isin(region_buses.index)]
         region_gens_em = region_gens.query("carrier in @emissions.index")
-        region_storage = n.storage_units[n.storage_units.bus.isin(region_buses.index)]
 
         if region_buses.empty or region_gens_em.empty:
             continue
 
         region_co2lim = emmission_lim.limit
-        EF_imports = emmission_lim.import_emissions_factor  # MT CO₂e/MWh_elec
         planning_horizon = emmission_lim.planning_horizon
 
         efficiency = get_as_dense(
@@ -568,27 +567,47 @@ def add_regional_co2limit(n, sns, config):
         # Emitting Gens
         p_em = n.model["Generator-p"].loc[:, region_gens_em.index].sel(period=planning_horizon)
         lhs = (p_em * em_pu).sum()
+        rhs = region_co2lim
 
-        # All Gens
-        p = n.model["Generator-p"].loc[:, region_gens.index].sel(period=planning_horizon)
-        lhs -= (p * EF_imports).sum()
+        # if EF_imports > 0.0:
+        #     region_storage = n.storage_units[n.storage_units.bus.isin(region_buses.index)]
+        #     EF_imports = emmission_lim.import_emissions_factor  # MT CO₂e/MWh_elec
+        #     # All Gens
+        #     p = (
+        #         n.model["Generator-p"]
+        #         .loc[:, region_gens.index]
+        #         .sel(period=planning_horizon)
+        #         .mul(weightings.generators.loc[planning_horizon])
+        #     )
+        #     imports_gen_weightings = pd.DataFrame(columns=region_gens.index, index=n.snapshots, data=1)
+        #     weighted_imports_p = (
+        #         (imports_gen_weightings * EF_imports).multiply(weightings.generators, axis=0).loc[planning_horizon]
+        #     )
+        #     lhs -= (p * weighted_imports_p).sum()
 
-        if not region_storage.empty:
-            p_store_discharge = (
-                n.model["StorageUnit-p_dispatch"].loc[:, region_storage.index].sel(period=planning_horizon)
-            )
-            lhs -= (p_store_discharge * EF_imports).sum()
+        #     if not region_storage.empty:
+        #         p_store_discharge = (
+        #             n.model["StorageUnit-p_dispatch"].loc[:, region_storage.index].sel(period=planning_horizon)
+        #         )
+        #         imports_storage_weightings = pd.DataFrame(columns=region_storage.index, index=n.snapshots, data=1)
+        #         weighted_imports_p = (
+        #             (imports_storage_weightings * EF_imports)
+        #             .multiply(weightings.generators, axis=0)
+        #             .loc[planning_horizon]
+        #         )
+        #         lhs -= (p_store_discharge * weighted_imports_p).sum()
 
-        region_demand = (
-            n.loads_t.p_set.loc[
-                planning_horizon,
-                n.loads.bus.isin(region_buses.index),
-            ]
-            .sum()
-            .sum()
-        )
+        #     region_demand = (
+        #         n.loads_t.p_set.loc[
+        #             planning_horizon,
+        #             n.loads.bus.isin(region_buses.index),
+        #         ]
+        #         .sum()
+        #         .sum()
+        #     )
 
-        rhs = region_co2lim - (region_demand * EF_imports)
+        #     rhs -= region_demand * EF_imports
+
         n.model.add_constraints(
             lhs <= rhs,
             name=f"GlobalConstraint-{emmission_lim.name}_{planning_horizon}co2_limit",

@@ -1,5 +1,4 @@
-# PyPSA-USA Default Configuration File
-
+# PyPSA-USA Default Configuration File for developing and testing county transmission network from Reeds
 run:
   name: "Default" # use this to keep track of runs with different settings
   disable_progressbar: false # set to true to disable the progressbar
@@ -9,27 +8,27 @@ run:
 
 # docs :
 scenario:
-  interconnect: [texas] #"usa|texas|western|eastern"
-  clusters: [10]
-  simpl: [20]
-  opts: [RPS-REM-500SEG]
+  interconnect: [western] #"usa|texas|western|eastern"
+  clusters: [4m]
+  simpl: [75]
+  opts: [REM-3h]
   ll: [v1.0]
   scope: "total" # "urban", "rural", or "total"
   sector: "" # G
-  planning_horizons: [2030, 2040, 2050]
+  planning_horizons: [2030, 2040, 2050]    #(2018-2023, 2030, 2040, 2050)
 
-# docs :
 model_topology:
   transmission_network: 'reeds' # [reeds, tamu]
-  topological_boundaries: 'county' # [county, reeds_zone]
+  topological_boundaries: 'reeds_zone' # [county, reeds_zone]
   interface_transmission_limits: false
   include: # mixed zone types not supported
-    # reeds_zone: ['p62']
-    # reeds_state: ['CO']
-    # reeds_ba: ['ERCO']
-  aggregate: # [reeds_zone, trans_reg]
+    # reeds_zone: []
+    # reeds_state: ['CA']
+    # reeds_ba: []
+  aggregate: # eligible keys: [reeds_zone, trans_reg]
     # trans_grp: []
     # reeds_zone: []
+
 
 # docs :
 enable:
@@ -40,17 +39,10 @@ snapshots:
   end: "2020-01-01"
   inclusive: "left"
 
-
 # docs :
 electricity:
   conventional_carriers: [nuclear, oil, OCGT, CCGT, coal, geothermal, biomass, waste] # Choose the conventional plant types to include in network
-  renewable_carriers: [onwind, solar, hydro] # Choose the renewable plant types to include in network
-  voltage_simplified: 230 #Voltage level to simplify network to in rule "simplify network"
-  co2limit: 1.4728e+9 # 0.8 * 1.841e+9
-  co2limit_enable: false # For sector coupled studies
-  co2base: 226.86e+6 #base_from_2020 Locations of the 250 MMmt of CO2 emissions from the WECC 2021.
-  gaslimit: false # global gas usage limit of X MWh_th
-  gaslimit_enable: false # For sector coupled studies
+  renewable_carriers: [onwind, offwind_floating, solar, hydro] # Choose the renewable plant types to include in network
   retirement: economic # "economic" or "technical"
   SAFE_reservemargin: 0.14
   regional_Co2_limits: 'config/policy_constraints/regional_Co2_limits.csv'
@@ -70,7 +62,7 @@ electricity:
     H2: 168
 
   extendable_carriers:
-    Generator: [solar, onwind, OCGT, CCGT, coal, nuclear, coal-95CCS, CCGT-95CCS, SMR] #include CCGT-CCS
+    Generator: [solar, onwind, offwind_floating, OCGT, CCGT, CCGT-95CCS, coal, nuclear] #include CCGT-CCS
     StorageUnit: [4hr_battery_storage, 8hr_battery_storage] # [Xhr-battery-storage (2-10 hours)]
     Store: []
     Link: [] 
@@ -85,7 +77,8 @@ electricity:
 # docs :
 conventional:
   unit_commitment: false
-  dynamic_fuel_price: 
+  dynamic_fuel_price:
+    enable: false
     pudl: true
     wholesale: true
 
@@ -93,14 +86,15 @@ conventional:
 lines:
   s_max_pu: 0.7
   s_nom_max: .inf
-  max_extension: 2000 #MW
+  max_extension: 20000 #MW
   length_factor: 1.25
+
 
 # docs :
 links:
   p_max_pu: 1.0
   p_nom_max: .inf
-  max_extension: 2000 #MW
+  max_extension: 20000 #MW
 
 # docs :
 costs:
@@ -110,7 +104,6 @@ costs:
   aeo:
     scenario: "reference" # reference, high, low
   social_discount_rate: 0.02
-  version: v0.6.0
   ng_fuel_year: 2019 # year of the natural gas price from CAISO [2019- 2023]
   emission_prices: # in currency per tonne emission, only used with the option Ep
     enable: false
@@ -138,10 +131,34 @@ costs:
     12hr_PHS: 0.3
   max_growth:
     base:
-      SMR: 1000
     rate:
-      SMR: 1.15
-      nuclear: 1.15
+
+# docs :
+sector:
+  co2_sequestration_potential: 0
+  natural_gas:
+    allow_imports_exports: true # false to be implemented
+    cyclic_storage: false
+  heating:
+    heat_pump_sink_T: 55.
+  demand:
+    profile:
+      residential: eulp # efs, eulp
+      commercial: eulp # efs, eulp
+      transport: efs # efs
+      industry: efs # efs
+    scale:
+      residential: aeo # efs, aeo
+      commercial: aeo # efs, aeo
+      transport: aeo # efs, aeo
+      industry: aeo # efs, aeo
+    disaggregation: 
+      residential: pop # pop
+      commercial: pop # pop
+      transport: pop # pop
+      industry: pop # pop
+    scenarios:
+      aeo: reference
 
 # docs :
 clustering:
@@ -214,9 +231,11 @@ solving:
       threads: 8
       method: 2 # barrier
       crossover: 0
-      BarConvTol: 1.e-4
+      BarHomogeneous: 1     # Use homogeneous barrier if standard does not converge
+      BarConvTol: 1.e-5
       OptimalityTol: 1.e-4
       FeasibilityTol: 1.e-3
+      ScaleFlag: 1
       Seed: 123
       AggFill: 0
       PreDual: 0
