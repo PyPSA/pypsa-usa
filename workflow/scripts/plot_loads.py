@@ -228,10 +228,7 @@ def time_slider(snapshots: pd.DatetimeIndex) -> html.Div:
                 max=max_day,
                 step=None,
                 value=min_day,
-                marks={
-                    x: str(x) if (x % interval == 0) else ""
-                    for x in range(min_day, max_day, 1)
-                },
+                marks={x: str(x) if (x % interval == 0) else "" for x in range(min_day, max_day, 1)},
             ),
         ],
     )

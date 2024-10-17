@@ -16,7 +16,7 @@ You can find more information on each configuration setting on the [configuratio
 
 To run the workflow, `cd` into the `workflow` directory and run the `snakemake` from your terminal with your selection of config file:
 
-```bash
+```console
 snakemake -j1 --configfile config/config.default.yaml
 ```
 
@@ -30,7 +30,7 @@ Next, identify the name of the configuration file you would like to run by editi
 
 To run, open a terminal within a login node of your cluster and run the script included in the `workflow` directory:
 
-```bash
+```console
 bash run_slurm.sh
 ```
 
@@ -45,7 +45,7 @@ Result plots and images are automatically built in the `workflow/results` folder
 
 To force the execution of a portion of the workflow up to a given rule, cd to the `workflow` directory and run:
 
-```bash
+```console
 snakemake -j4 -R build_shapes  --until build_base_network
 ```
 where `build_shapes` is forced to run, and `build_base_network` is the last rule you would like to run.

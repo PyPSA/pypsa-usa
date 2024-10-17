@@ -14,10 +14,11 @@ import pypsa
 
 logger = logging.getLogger(__name__)
 import sys
-from typing import Optional
+from typing import Any, Optional
 
 from _helpers import configure_logging, get_snapshots, load_costs
-from build_co2_tracking import build_co2_tracking
+from add_electricity import sanitize_carriers
+from build_emission_tracking import build_ch4_tracking, build_co2_tracking
 from build_heat import build_heat
 from build_natural_gas import StateGeometry, build_natural_gas
 from build_stock_data import (
@@ -60,7 +61,7 @@ def assign_bus_2_state(
     states_projected = states.to_crs("EPSG:3857")
     gdf = gpd.sjoin_nearest(buses_projected, states_projected, how="left")
 
-    n.buses["STATE"] = n.buses.index.map(gdf.index_right)
+    n.buses["STATE"] = n.buses.index.map(gdf.STUSPS)
 
     if state_2_state_name:
         n.buses["STATE_NAME"] = n.buses.STATE.map(state_2_state_name)
@@ -229,10 +230,8 @@ def convert_generators_2_links(
         ramp_limit_down=plants.ramp_limit_down,
         efficiency=plants.efficiency,
         efficiency2=co2_intensity,
-        marginal_cost=plants.marginal_cost
-        * plants.efficiency,  # fuel costs rated at delievered
-        capital_cost=plants.capital_cost
-        * plants.efficiency,  # links rated on input capacity
+        marginal_cost=plants.marginal_cost * plants.efficiency,  # fuel costs rated at delievered
+        capital_cost=plants.capital_cost * plants.efficiency,  # links rated on input capacity
         lifetime=plants.lifetime,
     )
 
@@ -330,10 +329,10 @@ if __name__ == "__main__":
         snakemake = mock_snakemake(
             "add_sectors",
             interconnect="western",
-            # simpl="",
-            clusters="100",
+            simpl="12",
+            clusters="6",
             ll="v1.0",
-            opts="500SEG",
+            opts="48SEG",
             sector="E-G",
         )
     configure_logging(snakemake)
@@ -352,17 +351,9 @@ if __name__ == "__main__":
     # map states to each clustered bus
 
     if snakemake.wildcards.interconnect == "usa":
-        states_2_map = [
-            x
-            for x, y in STATES_INTERCONNECT_MAPPER.items()
-            if y in ("western", "eastern", "texas")
-        ]
+        states_2_map = [x for x, y in STATES_INTERCONNECT_MAPPER.items() if y in ("western", "eastern", "texas")]
     else:
-        states_2_map = [
-            x
-            for x, y in STATES_INTERCONNECT_MAPPER.items()
-            if y == snakemake.wildcards.interconnect
-        ]
+        states_2_map = [x for x, y in STATES_INTERCONNECT_MAPPER.items() if y == snakemake.wildcards.interconnect]
 
     assign_bus_2_state(n, snakemake.input.county, states_2_map, CODE_2_STATE)
 
@@ -394,6 +385,8 @@ if __name__ == "__main__":
         co2_intensity = get_pwr_co2_intensity(carrier, costs)
         convert_generators_2_links(n, carrier, f" gas", co2_intensity)
 
+    ng_options = snakemake.params.sector["natural_gas"]
+
     # add natural gas infrastructure and data
     build_natural_gas(
         n=n,
@@ -403,7 +396,16 @@ if __name__ == "__main__":
         county_path=snakemake.input.county,
         pipelines_path=snakemake.input.pipeline_capacity,
         pipeline_shape_path=snakemake.input.pipeline_shape,
+        options=ng_options,
     )
+
+    # add methane tracking - if leakage rate is included
+    # this must happen after natural gas system is built
+    methane_options = snakemake.params.sector["methane"]
+    leakage_rate = methane_options.get("leakage_rate", 0)
+    if leakage_rate > 0.000001:
+        gwp = methane_options.get("gwp", 1)
+        build_ch4_tracking(n, gwp, leakage_rate)
 
     pop_layout_path = snakemake.input.clustered_pop_layout
     cop_ashp_path = snakemake.input.cop_air_total
@@ -415,16 +417,32 @@ if __name__ == "__main__":
     dynamic_cost_year = sns.year.min()
 
     # add heating and cooling
-    build_heat(
-        n=n,
-        costs=costs,
-        pop_layout_path=pop_layout_path,
-        cop_ashp_path=cop_ashp_path,
-        cop_gshp_path=cop_gshp_path,
-        dynamic_pricing=True,
-        eia=eia_api,
-        year=dynamic_cost_year,
+    split_res_com = snakemake.params.sector["service_sector"].get(
+        "split_res_com",
+        False,
     )
+    heat_sectors = ["res", "com", "ind"] if split_res_com else ["srv", "ind"]
+    for heat_sector in heat_sectors:
+        if heat_sector == "srv":
+            raise NotImplementedError
+        elif heat_sector in ["res", "com"]:
+            options = snakemake.params.sector["service_sector"]
+        elif heat_sector == "ind":
+            options = snakemake.params.sector["industrial_sector"]
+        else:
+            logger.warning(f"No config options found for {heat_sector}")
+            options = {}
+        build_heat(
+            n=n,
+            costs=costs,
+            sector=heat_sector,
+            pop_layout_path=pop_layout_path,
+            cop_ashp_path=cop_ashp_path,
+            cop_gshp_path=cop_gshp_path,
+            options=options,
+            eia=eia_api,
+            year=dynamic_cost_year,
+        )
 
     # add transportation
     ev_policy = pd.read_csv(snakemake.input.ev_policy, index_col=0)
@@ -483,5 +501,8 @@ if __name__ == "__main__":
             ratios.index = ratios.index.map(STATE_2_CODE)
             ratios = ratios.dropna()  # na is USA
             add_service_brownfield(n, "com", fuel, growth_multiplier, ratios, costs)
+
+    # Needed as loads may be split off to urban/rural
+    sanitize_carriers(n, snakemake.config)
 
     n.export_to_netcdf(snakemake.output.network)

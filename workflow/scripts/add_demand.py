@@ -113,9 +113,7 @@ if __name__ == "__main__":
                 carrier = f"{sector_mapper[sector]}-{carrier_mapper[end_use]}-{vehicle_mapper[subsector]}"
                 suffix = f"-{carrier}"
 
-                log_statement = (
-                    f"{sector} {subsector} {end_use} demand added to network"
-                )
+                log_statement = f"{sector} {subsector} {end_use} demand added to network"
 
             else:
                 raise NotImplementedError

@@ -70,12 +70,28 @@ copy of the code under your account on the repository service.
     ~/repositories/pypsa-usa $
     ```
 
-### 3. Implement your changes
+### 3. Install developer dependencies
+
+If you plan on contributing to the respository, please install these packages into your activated mamba environment
+
+```console
+python -m pip install -e ".[dev]"
+```
+
+### 4. Install pre-commit hooks:
+
+Pre-commit hooks will format your code to match the styles used in PyPSA-USA.
+
+```console
+pre-commit install
+```
+
+### 5. Implement your changes
 
 - Create a new branch with a name in the form of `issue-###` where `###` is
 the auto assigned issue number from GitHub.
 
-    ```bash
+    ```console
     ~/repositories/pypsa-usa $ git checkout -b issue-###
     ```
 
@@ -87,7 +103,7 @@ to new functions, modules and classes.
 
 - When you’re done editing:
 
-    ```bash
+    ```console
     ~/repositories/pypsa-usa $ git add <MODIFIED FILES>
     ~/repositories/pypsa-usa $ git commit -m 'descripitve commit message'
     ~/repositories/pypsa-usa $ git push
@@ -95,11 +111,11 @@ to new functions, modules and classes.
 
    to record your changes in [git](https://git-scm.com).
 
-### 4. Submit a Pull Request to the **`develop`** branch
+### 6. Submit a Pull Request to the **`develop`** branch
 
 - If everything works fine, push your local branch to your fork with:
 
-    ```bash
+    ```console
     git push -u origin my-feature
     ```
 
@@ -108,7 +124,7 @@ to new functions, modules and classes.
 
 - Communicate on the github Pull Request page to reconcile any changes to be made!
 
-## Documentation Improvements
+## Updating Documentation
 
 You can help improve PyPSA-USA docs by making them more readable and
 coherent, or by adding missing information and correcting mistakes.
@@ -121,22 +137,15 @@ code contribution. We use Markdown language with
 [MyST](https://myst-parser.readthedocs.io/en/latest/syntax/syntax.html)
 extensions
 
-When working on documentation changes, first install the required dependencies
-in your environment
+When working on documentation changes, ensure you have completed the developer installation instructions. Then compile the documentation on your local machine:
 
-```bash
-~/pypsa-usa $ pip install sphinx sphinx-book-theme myst-parser
-```
-
-Then compile the documentation on your local machine
-
-```bash
-~/pypsa-usa $ cd docs && make html && cd ..
+```console
+cd docs && make html && cd ..
 ```
 
 And use Python's built-in web server for a preview in your web browser
 (`http://localhost:8000`)
 
-```bash
-~/pypsa-usa $ python3 -m http.server --directory 'docs/build/html'
+```console
+python3 -m http.server --directory 'docs/build/html'
 ```

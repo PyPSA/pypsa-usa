@@ -1,11 +1,21 @@
+import logging
 import re
 
 import duckdb
 import numpy as np
 import pandas as pd
+from _helpers import configure_logging, weighted_avg
+
+logger = logging.getLogger(__name__)
 
 
 def load_pudl_data(pudl_fn: str, start_date: str, end_date: str):
+    """
+    Queries the PUDL database for plant data.
+
+    Date parameters are used to filter years of heat-rate and fuel cost
+    data.
+    """
     duckdb.connect(database=":memory:", read_only=False)
 
     duckdb.query("INSTALL sqlite;")
@@ -17,11 +27,6 @@ def load_pudl_data(pudl_fn: str, start_date: str, end_date: str):
     )
 
     eia_data_operable = duckdb.query(
-        # the pudl data is organised into a row per plant_id_eia, generator_id, and report_date
-        # usually we want to get the most recent data for each plant_id_eia, generator_id
-        # but sometimes the most recent data has null values, so we need to fill in with older data
-        # this is why many of the columns are aggregated with array_agg and FILTER so we can get the most recent non-null value
-        # TODO: reconsider pulling PuDL report date according to snapshot year, to match historic operational_status_code
         """
         WITH monthly_generators AS (
             SELECT
@@ -110,9 +115,10 @@ def load_pudl_data(pudl_fn: str, start_date: str, end_date: str):
 
 
 def set_non_conus(eia_data_operable):
-    eia_data_operable.loc[eia_data_operable.state.isin(["AK", "HI"]), "nerc_region"] = (
-        "non-conus"
-    )
+    """
+    Set NERC region and balancing authority code for non-CONUS plants.
+    """
+    eia_data_operable.loc[eia_data_operable.state.isin(["AK", "HI"]), "nerc_region"] = "non-conus"
     eia_data_operable.loc[
         eia_data_operable.state.isin(["AK", "HI"]),
         "balancing_authority_code",
@@ -129,12 +135,8 @@ def set_derates(plants):
         plants.ads_maxcapmw.fillna(np.inf),
     )
 
-    plants["summer_derate"] = 1 - (
-        (plants.p_nom - plants.derate_summer_capacity) / plants.p_nom
-    )
-    plants["winter_derate"] = 1 - (
-        (plants.p_nom - plants.derate_winter_capacity) / plants.p_nom
-    )
+    plants["summer_derate"] = 1 - ((plants.p_nom - plants.derate_summer_capacity) / plants.p_nom)
+    plants["winter_derate"] = 1 - ((plants.p_nom - plants.derate_winter_capacity) / plants.p_nom)
     plants.summer_derate = plants.summer_derate.clip(
         upper=1,
     ).clip(lower=0)
@@ -393,7 +395,10 @@ eia_primemover_map.set_index("Prime Mover", inplace=True)
 
 
 def set_tech_fuels_primer_movers(eia_data_operable):
-    # Map technologies, fuels, and prime movers
+    """
+    Maps technologies, fuels, and prime movers from EIA data to PyPSA carrier
+    names.
+    """
     maps = {
         "carrier": (
             eia_data_operable["technology_description"],
@@ -421,15 +426,13 @@ def standardize_col_names(columns, prefix="", suffix=""):
     Standardize column names by removing spaces, converting to lowercase,
     removing parentheses, and adding prefix and suffix.
     """
-    return [
-        prefix
-        + col.lower().replace(" ", "_").replace("(", "").replace(")", "")
-        + suffix
-        for col in columns
-    ]
+    return [prefix + col.lower().replace(" ", "_").replace("(", "").replace(")", "") + suffix for col in columns]
 
 
 def merge_ads_data(eia_data_operable):
+    """
+    Merges WECC ADS Data into the prepared EIA Data.
+    """
     ADS_PATH = snakemake.input.wecc_ads
     ads_thermal = pd.read_csv(
         ADS_PATH + "/Thermal_General_Info.csv",
@@ -510,11 +513,7 @@ def merge_ads_data(eia_data_operable):
     ads.columns
 
     ads_thermal_ioc["generator_name_alt"] = (
-        ads_thermal_ioc["generatorname"]
-        .str.replace(" ", "")
-        .str.lower()
-        .str.replace("_", "")
-        .str.replace("-", "")
+        ads_thermal_ioc["generatorname"].str.replace(" ", "").str.lower().str.replace("_", "").str.replace("-", "")
     )
     ads_thermal_ioc["generator_key"] = ads_thermal_ioc["generator_name_alt"].map(
         ads_name_key_dict,
@@ -613,20 +612,12 @@ def impute_missing_plant_data(
     data_fields: list[str],
 ) -> pd.DataFrame:
     """
-    Imputes missing data in the plants dataframe based on the average values of
-    the data dataframe.
+    Imputes missing data for the`data_fields` in the plants dataframe based on
+    the average values of the  `aggregation_fields`.
     """
-
-    # Function to calculate weighted average
-    def weighted_avg(df, values, weights):
-        valid = df[values].notna()
-        if valid.sum() == 0:
-            return np.nan  # Return NaN if no valid entries
-        return np.average(df[values][valid], weights=df[weights][valid])
-
     # Calculate the weighted averages excluding NaNs
     weighted_averages = (
-        plants.groupby(aggregation_fields)
+        plants.groupby(aggregation_fields)[plants.columns]
         .apply(
             lambda x: pd.Series(
                 {field: weighted_avg(x, field, "p_nom") for field in data_fields},
@@ -660,8 +651,7 @@ def impute_missing_plant_data(
     plants_merged = plants_merged.drop(
         columns=[f"{field}_weighted" for field in data_fields],
     )
-    plants_merged.set_index("generator_name", inplace=True)
-    return plants_merged
+    return plants_merged.set_index("generator_name")
 
 
 def set_parameters(plants: pd.DataFrame):
@@ -669,17 +659,13 @@ def set_parameters(plants: pd.DataFrame):
     Sets generator naming schemes, updates parameter names, and imputes missing
     data.
     """
-    plants = plants[
-        plants.nerc_region.isin(["WECC", "TRE", "MRO", "SERC", "RFC", "NPCC"])
-    ]
-
-    plants.rename(
+    plants = plants[plants.nerc_region.isin(["WECC", "TRE", "MRO", "SERC", "RFC", "NPCC"])]
+    plants = plants.rename(
         {
             "fuel_cost_per_mwh_source": "fuel_cost_source",
             "unit_heat_rate_mmbtu_per_mwh_source": "heat_rate_source",
         },
         axis=1,
-        inplace=True,
     )
 
     plants["generator_name"] = (
@@ -689,12 +675,20 @@ def set_parameters(plants: pd.DataFrame):
         + "_"
         + plants.generator_id.astype(str)
     )
-    plants.set_index("generator_name", inplace=True)
+    plants = plants.set_index("generator_name")
     plants["p_nom"] = plants.pop("capacity_mw")
     plants["build_year"] = plants.pop("generator_operating_date").dt.year
     plants["heat_rate"] = plants.pop("unit_heat_rate_mmbtu_per_mwh")
     plants["vom"] = plants.pop("ads_vom_cost")
     plants["fuel_cost"] = plants.pop("fuel_cost_per_mwh")
+
+    zero_mc_fuel_types = ["solar", "wind", "hydro", "geothermal", "battery"]
+    plants.loc[plants.fuel_type.isin(zero_mc_fuel_types), "fuel_cost"] = 0
+    plants = impute_missing_plant_data(
+        plants,
+        ["nerc_region", "prime_mover_code", "fuel_type"],
+        ["fuel_cost"],
+    )
     plants = impute_missing_plant_data(
         plants,
         ["nerc_region", "technology_description"],
@@ -702,28 +696,24 @@ def set_parameters(plants: pd.DataFrame):
     )
     plants = impute_missing_plant_data(
         plants,
-        ["technology_description"],
+        ["nerc_region", "fuel_type"],
         ["fuel_cost"],
     )
+    plants = impute_missing_plant_data(plants, ["fuel_type"], ["fuel_cost"])
+    plants = impute_missing_plant_data(plants, ["prime_mover_code"], ["fuel_cost"])
+    plants.loc[plants.carrier.isin(["nuclear"]), "fuel_cost"] = 10.497
 
     # Unit Commitment Parameters
-    plants["start_up_cost"] = (
-        plants.pop("ads_startup_cost_fixed$")
-        + plants.ads_startfuelmmbtu * plants.fuel_cost
-    )
+    plants["start_up_cost"] = plants.pop("ads_startup_cost_fixed$") + plants.ads_startfuelmmbtu * plants.fuel_cost
     plants["min_down_time"] = plants.pop("ads_minimumdowntimehr")
     plants["min_up_time"] = plants.pop("ads_minimumuptimehr")
 
     # Ramp Limit Parameters
-    plants["ramp_limit_up"] = (
-        plants.pop("ads_rampup_ratemw/minute") / plants.p_nom * 60
-    ).clip(
+    plants["ramp_limit_up"] = (plants.pop("ads_rampup_ratemw/minute") / plants.p_nom * 60).clip(
         lower=0,
         upper=1,
     )  # MW/min to p.u./hour
-    plants["ramp_limit_down"] = (
-        plants.pop("ads_rampdn_ratemw/minute") / plants.p_nom * 60
-    ).clip(
+    plants["ramp_limit_down"] = (plants.pop("ads_rampdn_ratemw/minute") / plants.p_nom * 60).clip(
         lower=0,
         upper=1,
     )  # MW/min to p.u./hour
@@ -738,10 +728,21 @@ def set_parameters(plants: pd.DataFrame):
         "vom",
     ]
     plants = impute_missing_plant_data(plants, ["technology_description"], data_fields)
+    plants = impute_missing_plant_data(plants, ["prime_mover_code"], data_fields)
+    plants = impute_missing_plant_data(plants, ["carrier"], data_fields)
 
     # replace heat-rate above theoretical minimum with nan
     plants.loc[plants.heat_rate < 3.412, "heat_rate"] = np.nan
+    plants.loc[
+        plants.fuel_type.isin(["solar", "wind", "hydro", "battery"]),
+        "heat_rate",
+    ] = 3.412
 
+    plants = impute_missing_plant_data(
+        plants,
+        ["nerc_region", "prime_mover_code", "fuel_type"],
+        ["heat_rate"],
+    )
     plants = impute_missing_plant_data(
         plants,
         ["nerc_region", "technology_description"],
@@ -749,21 +750,36 @@ def set_parameters(plants: pd.DataFrame):
     )
     plants = impute_missing_plant_data(
         plants,
+        ["nerc_region", "prime_mover_code"],
+        ["heat_rate"],
+    )
+    plants = impute_missing_plant_data(plants, ["prime_mover_code"], ["heat_rate"])
+    plants = impute_missing_plant_data(
+        plants,
         ["technology_description"],
         ["heat_rate"],
     )
+    plants = impute_missing_plant_data(plants, ["carrier"], ["heat_rate"])
 
-    plants["marginal_cost"] = (
-        plants.vom + plants.fuel_cost
-    )  # (MMBTu/MW) * (USD/MMBTu) = USD/MW
-    plants["efficiency"] = 1 / (
-        plants["heat_rate"] / 3.412
-    )  # MMBTu/MWh to MWh_electric/MWh_thermal
+    plants["marginal_cost"] = plants.vom + plants.fuel_cost  # (MMBTu/MW) * (USD/MMBTu) = USD/MW
+    plants["efficiency"] = 1 / (plants["heat_rate"] / 3.412)  # MMBTu/MWh to MWh_electric/MWh_thermal
 
     set_derates(plants)
 
     plants[f"heat_rate_source"] = plants[f"heat_rate_source"].fillna("NA")
     plants[f"fuel_cost_source"] = plants[f"fuel_cost_source"].fillna("NA")
+
+    # Check for missing heat rate data
+    if plants["heat_rate"].isna().sum() > 0:
+        logger.warning(
+            "Missing {} heat rate records.".format(plants["heat_rate"].isna().sum()),
+        )
+
+    # Check for missing fuel cost data
+    if plants["fuel_cost"].isna().sum() > 0:
+        logger.warning(
+            "Missing {} fuel cost records.".format(plants["fuel_cost"].isna().sum()),
+        )
     return plants.reset_index()
 
 
@@ -778,11 +794,9 @@ def filter_outliers_iqr_grouped(df, group_column, value_column):
         IQR = Q3 - Q1
         lower_bound = Q1 - 1.5 * IQR
         upper_bound = Q3 + 1.5 * IQR
-        return group[
-            (group[value_column] >= lower_bound) & (group[value_column] <= upper_bound)
-        ]
+        return group[(group[value_column] >= lower_bound) & (group[value_column] <= upper_bound)]
 
-    return df.groupby(group_column).apply(filter_outliers).reset_index(drop=True)
+    return df.groupby(group_column)[df.columns].apply(filter_outliers).reset_index(drop=True)
 
 
 def filter_outliers_zscore(temporal_data, target_field_name):
@@ -790,11 +804,7 @@ def filter_outliers_zscore(temporal_data, target_field_name):
     Filter outliers using Z-score.
     """
     # Calculate mean and standard deviation for each generator
-    stats = (
-        temporal_data.groupby(["generator_name"])[target_field_name]
-        .agg(["mean", "std"])
-        .reset_index()
-    )
+    stats = temporal_data.groupby(["generator_name"])[target_field_name].agg(["mean", "std"]).reset_index()
     stats["mean"] = stats["mean"].replace(np.inf, np.nan)
     stats.dropna(inplace=True)
 
@@ -807,14 +817,12 @@ def filter_outliers_zscore(temporal_data, target_field_name):
     )
 
     # Calculate the Z-score for each month's entry
-    temporal_stats["z_score"] = (
-        temporal_stats[target_field_name] - temporal_stats["mean"]
-    ) / temporal_stats["std"]
+    temporal_stats["z_score"] = (temporal_stats[target_field_name] - temporal_stats["mean"]) / temporal_stats["std"]
 
     # Filter out the outliers using Z-score
     threshold = 3
     filtered_temporal = temporal_stats[np.abs(temporal_stats["z_score"]) <= threshold]
-    filtered_temporal.drop(columns=["mean", "std", "z_score"], inplace=True)
+    filtered_temporal = filtered_temporal.drop(columns=["mean", "std", "z_score"])
     return filtered_temporal
 
 
@@ -843,9 +851,7 @@ def merge_fc_hr_data(
 
     # Apply temporal average heat rates to plants dataframe
     temporal_average = (
-        filtered_temporal.groupby(["plant_id_eia", "generator_id"])[target_field_name]
-        .mean()
-        .reset_index()
+        filtered_temporal.groupby(["plant_id_eia", "generator_id"])[target_field_name].mean().reset_index()
     )
 
     if target_field_name in plants.columns:
@@ -864,12 +870,8 @@ def merge_fc_hr_data(
 
 def apply_cems_heat_rates(plants, crosswalk_fn, cems_fn):
     # Apply CEMS calculated heat rates
-    cems_hr = pd.read_excel(cems_fn)[
-        ["Facility ID", "Unit ID", "Heat Input (mmBtu/MWh)"]
-    ]
-    crosswalk = pd.read_csv(crosswalk_fn)[
-        ["CAMD_PLANT_ID", "CAMD_UNIT_ID", "EIA_PLANT_ID", "EIA_GENERATOR_ID"]
-    ]
+    cems_hr = pd.read_excel(cems_fn)[["Facility ID", "Unit ID", "Heat Input (mmBtu/MWh)"]]
+    crosswalk = pd.read_csv(crosswalk_fn)[["CAMD_PLANT_ID", "CAMD_UNIT_ID", "EIA_PLANT_ID", "EIA_GENERATOR_ID"]]
     cems_hr = pd.merge(
         cems_hr,
         crosswalk,
@@ -920,7 +922,7 @@ if __name__ == "__main__":
         rootpath = ".."
     else:
         rootpath = "."
-
+    configure_logging(snakemake)
     start_date = "2019-01-01"
     end_date = "2020-01-01"
     eia_data_operable, heat_rates = load_pudl_data(
@@ -952,9 +954,11 @@ if __name__ == "__main__":
 
     # temp throwing out plants without
     missing_locations = plants[plants.longitude.isna() | plants.latitude.isna()]
-    print("Tossing out plants without locations:", missing_locations.shape[0])
+    logger.warning(
+        f"Tossing out plants without locations: {missing_locations.shape[0]}",
+    )
     # plants[plants.index.isin(missing_locations.index)].to_csv('missing_gps_pudl.csv')
     plants = plants[~plants.index.isin(missing_locations.index)]
     # print(plants)
-
+    logger.info(f"Exporting Powerplants, with {plants.shape[0]} entries.")
     plants.to_csv(snakemake.output.powerplants, index=False)

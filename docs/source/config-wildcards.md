@@ -48,27 +48,20 @@ The `{ll}` wildcard specifies what limits on
 line expansion are set for the optimisation model.
 It is handled in the rule :mod:`prepare_network`.
 
-The wildcard, in general, consists of two parts:
+We reccomend using the line volume limit for constraining
+transission expansion. Use ``lv`` (for setting a limit on line volume)
 
-    1. The first part can be
-       ``v`` (for setting a limit on line volume) or
-       ``c`` (for setting a limit on line cost)
+After ``lv`` you can specify two type of limits:
 
-    2. The second part can be
        ``opt`` or a float bigger than one (e.g. 1.25).
 
        (a) If ``opt`` is chosen line expansion is optimised
-           according to its capital cost
-           (where the choice ``v`` only considers overhead costs for HVDC transmission lines, while
-           ``c`` uses more accurate costs distinguishing between
-           overhead and underwater sections and including inverter pairs).
+           according to its capital cost.
 
        (b) ``v1.25`` will limit the total volume of line expansion
            to 25 % of currently installed capacities weighted by
            individual line lengths; investment costs are neglected.
 
-       (c) ``c1.25`` will allow to build a transmission network that
-           costs no more than 25 % more than the current system.
 
 (opts)=
 ## The `{opts}` wildcard
@@ -76,7 +69,7 @@ The wildcard, in general, consists of two parts:
 The `{opts}` wildcard is used for electricity-only studies. It triggers
 optional constraints, which are activated in either :mod:`prepare_network` or
 the :mod:`solve_network` step. It may hold multiple triggers separated by `-`,
-i.e. `Co2L-3H` contains the `Co2L` trigger and the `3H` switch.
+i.e. `REM-3H` contains the `REM` regional emissions limit trigger and the `3H` switch.
 
 The REM, SAFER, RPS can be defined using either the reeds zone name 'p##"
 the state code (eg, TX, CA, MT), pypsa-usa interconnect name (western, eastern, texas, usa),

@@ -144,8 +144,8 @@ def plot_county_data(
 
     sm = plt.cm.ScalarMappable(norm=plt.Normalize(vmin=vmin, vmax=vmax), cmap=cmap)
     sm._A = []  # Empty array for the data range
-    cbaxes = fig.add_axes([0.15, 0.25, 0.01, 0.4])
-    cbar = fig.colorbar(sm, cax=cbaxes)
+    # cbaxes = fig.add_axes([0.15, 0.25, 0.01, 0.4])
+    # cbar = fig.colorbar(sm, cax=cbaxes)
 
     if save:
         fig.savefig(save)
@@ -245,9 +245,7 @@ if __name__ == "__main__":
     if save_path:
 
         plotting_data = counties.copy()
-        plotting_data["density_person_per_km2"] = (
-            plotting_data.population / counties.ALAND * 1000000
-        )
+        plotting_data["density_person_per_km2"] = plotting_data.population / counties.ALAND * 1000000
         columns = {
             "Geographic Area Name": "name",
             "NAMELSAD": "county",

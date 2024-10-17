@@ -10,19 +10,43 @@ import numpy as np
 import pandas as pd
 import pypsa
 from _helpers import calculate_annuity, configure_logging
-from add_electricity import add_co2_emissions, add_missing_carriers
+from add_electricity import add_missing_carriers
 
 idx = pd.IndexSlice
 
 logger = logging.getLogger(__name__)
 
 
+def add_co2_emissions(n, costs, carriers):
+    """
+    Add CO2 emissions to the network's carriers attribute.
+    """
+    suptechs = n.carriers.loc[carriers].index.str.split("-").str[0]
+    missing_carriers = set(suptechs) - set(costs.index)
+    if missing_carriers:
+        logger.warning(f"CO2 emissions for carriers {missing_carriers} not defined in cost data.")
+        suptechs = suptechs.difference(missing_carriers)
+    n.carriers.loc[suptechs, "co2_emissions"] = costs.co2_emissions[suptechs].values
+
+    n.carriers.fillna(
+        {"co2_emissions": 0},
+        inplace=True,
+    )  # TODO: FIX THIS ISSUE IN BUILD_COST_DATA- missing co2_emissions for some VRE carriers
+
+    if any("CCS" in carrier for carrier in carriers):
+        ccs_carriers = [carrier for carrier in carriers if "CCS" in carrier]
+        for ccs_carrier in ccs_carriers:
+            base_carrier = ccs_carrier.split("-")[0]
+            base_emissions = n.carriers.loc[base_carrier, "co2_emissions"]
+            ccs_level = int(ccs_carrier.split("-")[1].replace("CCS", ""))
+            ccs_emissions = (1 - ccs_level / 100) * base_emissions
+            n.carriers.loc[ccs_carrier, "co2_emissions"] = ccs_emissions
+
+
 def add_nice_carrier_names(n, config):
     carrier_i = n.carriers.index
     nice_names = (
-        pd.Series(config["plotting"]["nice_names"])
-        .reindex(carrier_i)
-        .fillna(carrier_i.to_series().str.title())
+        pd.Series(config["plotting"]["nice_names"]).reindex(carrier_i).fillna(carrier_i.to_series().str.title())
     )
     n.carriers["nice_name"] = nice_names
     colors = pd.Series(config["plotting"]["tech_colors"]).reindex(carrier_i)
@@ -52,7 +76,7 @@ def attach_storageunits(n, costs, elec_opts, investment_year):
             carrier=carrier,
             p_nom_extendable=True,
             capital_cost=costs.at[carrier, "annualized_capex_fom"],
-            marginal_cost=costs.at[carrier, "marginal_cost"],
+            marginal_cost=0,  # costs.at[carrier, "marginal_cost"], # TODO: FIX THIS ISSUE IN BUILD_COST_DATA
             efficiency_store=costs.at[carrier, "efficiency"] ** roundtrip_correction,
             efficiency_dispatch=costs.at[carrier, "efficiency"] ** roundtrip_correction,
             max_hours=max_hours,
@@ -62,7 +86,7 @@ def attach_storageunits(n, costs, elec_opts, investment_year):
         )
 
 
-def attach_phs_storageunits(n: pypsa.Network, elec_opts):
+def attach_phs_storageunits(n: pypsa.Network, elec_opts, costs: pd.DataFrame):
     carriers = elec_opts["extendable_carriers"]["StorageUnit"]
     carriers = [k for k in carriers if "PHS" in k]
 
@@ -102,25 +126,21 @@ def attach_phs_storageunits(n: pypsa.Network, elec_opts):
             psh_resources,
             how="inner",
         ).reset_index(drop=True)
+
+        if region_onshore_psh.empty:
+            continue
+
         region_onshore_psh_grp = (
-            region_onshore_psh.groupby(["name", "cost_kw_round"])["potential_mw"]
-            .agg("sum")
-            .reset_index()
+            region_onshore_psh.groupby(["name", "cost_kw_round"])["potential_mw"].agg("sum").reset_index()
         )
 
-        region_onshore_psh_grp["class"] = (
-            region_onshore_psh_grp.groupby(["name"]).cumcount() + 1
-        )
+        region_onshore_psh_grp["class"] = region_onshore_psh_grp.groupby(["name"]).cumcount() + 1
         region_onshore_psh_grp["class"] = "c" + region_onshore_psh_grp["class"].astype(
             str,
         )
         region_onshore_psh_grp["tech"] = carrier
-        region_onshore_psh_grp["carrier"] = region_onshore_psh_grp[
-            ["tech", "class"]
-        ].agg("_".join, axis=1)
-        region_onshore_psh_grp["Generator"] = (
-            region_onshore_psh_grp["name"] + " " + region_onshore_psh_grp["carrier"]
-        )
+        region_onshore_psh_grp["carrier"] = region_onshore_psh_grp[["tech", "class"]].agg("_".join, axis=1)
+        region_onshore_psh_grp["Generator"] = region_onshore_psh_grp["name"] + " " + region_onshore_psh_grp["carrier"]
         region_onshore_psh_grp = region_onshore_psh_grp.set_index("Generator")
 
         # Updated annualize capital cost based on real location
@@ -143,11 +163,15 @@ def attach_phs_storageunits(n: pypsa.Network, elec_opts):
         efficiency_store = 0.894427191  # 0.894427191^2 = 0.8
         efficiency_dispatch = 0.894427191  # 0.894427191^2 = 0.8
 
+        costs.at["PHS", "efficiency"] = efficiency_store
+        costs.at["PHS", "co2_emissions"] = 0
+        add_missing_carriers(n, ["PHS"])
+        add_co2_emissions(n, costs, ["PHS"])
         n.madd(
             "StorageUnit",
             region_onshore_psh_grp.index,
             bus=region_onshore_psh_grp.name,
-            carrier=region_onshore_psh_grp.tech,
+            carrier="PHS",  # region_onshore_psh_grp.tech,
             p_nom_max=region_onshore_psh_grp.potential_mw,
             p_nom_extendable=True,
             capital_cost=region_onshore_psh_grp.capital_cost,
@@ -208,8 +232,7 @@ def attach_stores(n, costs, elec_opts, investment_year):
             p_nom_extendable=True,
             efficiency=costs.at["fuel cell", "efficiency"],
             # NB: fixed cost is per MWel
-            capital_cost=costs.at["fuel cell", "capital_cost"]
-            * costs.at["fuel cell", "efficiency"],
+            capital_cost=costs.at["fuel cell", "capital_cost"] * costs.at["fuel cell", "efficiency"],
             marginal_cost=costs.at["fuel cell", "marginal_cost"],
             build_year=investment_year,
             lifetime=costs.at["fuel cell", "lifetime"],
@@ -217,53 +240,11 @@ def attach_stores(n, costs, elec_opts, investment_year):
         )
 
 
-def attach_hydrogen_pipelines(n, costs, elec_opts, investment_year):
-    ext_carriers = elec_opts["extendable_carriers"]
-    as_stores = ext_carriers.get("Store", [])
-
-    if "H2 pipeline" not in ext_carriers.get("Link", []):
-        return
-
-    assert "H2" in as_stores, (
-        "Attaching hydrogen pipelines requires hydrogen "
-        "storage to be modelled as Store-Link-Bus combination. See "
-        "`config.yaml` at `electricity: extendable_carriers: Store:`."
-    )
-
-    # determine bus pairs
-    attrs = ["bus0", "bus1", "length"]
-    candidates = pd.concat(
-        [n.lines[attrs], n.links.query('carrier=="DC"')[attrs]],
-    ).reset_index(drop=True)
-
-    # remove bus pair duplicates regardless of order of bus0 and bus1
-    h2_links = candidates[
-        ~pd.DataFrame(np.sort(candidates[["bus0", "bus1"]])).duplicated()
-    ]
-    h2_links.index = h2_links.apply(lambda c: f"H2 pipeline {c.bus0}-{c.bus1}", axis=1)
-
-    # add pipelines
-    n.madd(
-        "Link",
-        h2_links.index,
-        bus0=h2_links.bus0.values + " H2",
-        bus1=h2_links.bus1.values + " H2",
-        p_min_pu=-1,
-        p_nom_extendable=True,
-        length=h2_links.length.values,
-        capital_cost=costs.at["H2 pipeline", "capital_cost"] * h2_links.length,
-        efficiency=costs.at["H2 pipeline", "efficiency"],
-        carrier="H2 pipeline",
-        build_year=investment_year,
-        lifetime=costs.at["H2 pipeline", "lifetime"],
-        suffix=f" {investment_year}",
-    )
-
-
-def add_economic_retirement(
+def split_retirement_gens(
     n: pypsa.Network,
     costs: pd.DataFrame,
     gens: list[str] = None,
+    economic: bool = True,
 ):
     """
     Seperates extendable conventional generators into existing and new
@@ -283,32 +264,24 @@ def add_economic_retirement(
         List of generators to apply economic retirment to. If none provided, it is
         applied to all extendable generators
     """
-    retirement_mask = n.generators["p_nom_extendable"] & (
-        n.generators["carrier"].isin(gens) if gens else True
-    )
+    retirement_mask = n.generators["p_nom_extendable"] & (n.generators["carrier"].isin(gens) if gens else True)
     retirement_gens = n.generators[retirement_mask]
     if retirement_gens.empty:
         return
 
-    # divide by 100 b/c FOM expressed as percentage of CAPEX
+    # Change capex to fixed OM cost for retiring generators
     n.generators["capital_cost"] = n.generators.apply(
         lambda row: (
             row["capital_cost"]
             if not row.name in (retirement_gens.index)
-            else row["capital_cost"]
-            * costs.at[row["carrier"], "opex_variable_per_mwh"]
-            / 100
+            else costs.at[row["carrier"], "opex_fixed_per_kw"] * 1e3
         ),
         axis=1,
     )
 
-    # rename retiring generators to include "existing" suffix
+    # Rename retiring generators to include "existing" suffix
     n.generators.index = n.generators.apply(
-        lambda row: (
-            row.name
-            if not row.name in (retirement_gens.index)
-            else row.name + " existing"
-        ),
+        lambda row: (row.name if not row.name in (retirement_gens.index) else row.name + " existing"),
         axis=1,
     )
 
@@ -324,7 +297,11 @@ def add_economic_retirement(
         n.generators["p_nom_min"],
     )
 
-    n.madd(
+    n.generators.loc[retirement_mask.values, "p_nom_extendable"] = (
+        economic  # if economic retirement is true enable extendable
+    )
+
+    n.madd(  # Adding Expanding generators for the first investment period
         "Generator",
         retirement_gens.index,
         carrier=retirement_gens.carrier,
@@ -339,7 +316,7 @@ def add_economic_retirement(
         marginal_cost=retirement_gens.marginal_cost,
         capital_cost=retirement_gens.capital_cost,
         build_year=n.investment_periods[0],
-        lifetime=retirement_gens.lifetime,
+        lifetime=retirement_gens.carrier.map(costs.lifetime).fillna(np.inf),
         p_min_pu=retirement_gens.p_min_pu,
         p_max_pu=retirement_gens.p_max_pu,
     )
@@ -371,10 +348,15 @@ def attach_multihorizon_generators(
     investment_year: int,
 ):
     """
-    Adds multiple investment options for a given set of extendable carriers.
+    Adds multiple investment options for generators types that were already
+    existing in the network. Function used for all carriers, renewable and
+    conventional.
 
     Specifically this function does the following:
-    1. ....
+    1. Adds new generators for the given investment year, according that year's costs.
+        if this is the first investment period we use the existing generator's p_nom and p_nom_min
+    2. Adds time dependent factors for the new generators
+
 
     Arguments:
     n: pypsa.Network,
@@ -418,9 +400,7 @@ def attach_multihorizon_generators(
         marginal_cost_t,
     )
 
-    p_max_pu_t = n.generators_t["p_max_pu"][
-        [x for x in gens.index if x in n.generators_t["p_max_pu"].columns]
-    ]
+    p_max_pu_t = n.generators_t["p_max_pu"][[x for x in gens.index if x in n.generators_t["p_max_pu"].columns]]
     p_max_pu_t = p_max_pu_t.rename(
         columns={x: f"{x} {investment_year}" for x in p_max_pu_t.columns},
     )
@@ -429,7 +409,8 @@ def attach_multihorizon_generators(
 
 def attach_newCarrier_generators(n, costs, carriers, investment_year):
     """
-    Adds new carriers to the network.
+    Attaches generators for carriers which did not previously exist in the
+    network.
 
     Specifically this function does the following:
     1. Adds new carriers to the network
@@ -462,7 +443,7 @@ def attach_newCarrier_generators(n, costs, carriers, investment_year):
             marginal_cost=costs.at[carrier, "marginal_cost"],
             efficiency=costs.at[carrier, "efficiency"],
             build_year=investment_year,
-            lifetime=costs.at[carrier, "cost_recovery_period_years"],
+            lifetime=costs.at[carrier, "lifetime"],
         )
 
 
@@ -517,13 +498,9 @@ def apply_max_annual_growth_rate(n, max_growth):
     years = n.investment_period_weightings.index.diff()
     years = years.dropna().values.mean()
     for carrier in max_annual_growth_rate.keys():
-        ann_growth_rate = max_annual_growth_rate[carrier]
-        growth_factor = ann_growth_rate**years
         p_nom = n.generators.p_nom.loc[n.generators.carrier == carrier].sum()
         n.carriers.loc[carrier, "max_growth"] = growth_base.get(carrier) or p_nom
-        n.carriers.loc[carrier, "max_relative_growth"] = (
-            max_annual_growth_rate[carrier] ** years
-        )
+        n.carriers.loc[carrier, "max_relative_growth"] = max_annual_growth_rate[carrier] ** years
 
 
 if __name__ == "__main__":
@@ -532,8 +509,9 @@ if __name__ == "__main__":
 
         snakemake = mock_snakemake(
             "add_extra_components",
-            interconnect="texas",
-            clusters=10,
+            interconnect="western",
+            simpl=12,
+            clusters=6,
         )
     configure_logging(snakemake)
 
@@ -551,47 +529,58 @@ if __name__ == "__main__":
         for i in range(len(n.investment_periods))
     }
 
-    if snakemake.params.retirement == "economic":
-        economic_retirement_gens = elec_config.get("conventional_carriers", None)
-        add_economic_retirement(
-            n,
-            costs_dict[n.investment_periods[0]],
-            economic_retirement_gens,
-        )
-
     new_carriers = list(
         set(elec_config["extendable_carriers"].get("Generator", []))
         - set(elec_config["conventional_carriers"])
         - set(elec_config["renewable_carriers"]),
     )
 
-    gens = n.generators[
+    if any("PHS" in s for s in elec_config["extendable_carriers"]["StorageUnit"]):
+        attach_phs_storageunits(n, elec_config, costs_dict[n.investment_periods[0]])
+
+    if snakemake.params.retirement == "economic":
+        economic_retirement_gens = set(elec_config.get("conventional_carriers", None))
+        split_retirement_gens(
+            n,
+            costs_dict[n.investment_periods[0]],
+            economic_retirement_gens,
+            economic=True,
+        )
+
+    split_retirement_gens(
+        n,
+        costs_dict[n.investment_periods[0]],
+        set(elec_config.get("renewable_carriers", None)),
+        economic=False,
+    )
+
+    multi_horizon_gens = n.generators[
         n.generators["p_nom_extendable"]
         & n.generators["carrier"].isin(elec_config["extendable_carriers"]["Generator"])
         & ~n.generators.index.str.contains("existing")
     ]
 
-    if any("PHS" in s for s in elec_config["extendable_carriers"]["StorageUnit"]):
-        attach_phs_storageunits(n, elec_config)
-
     for investment_year in n.investment_periods:
         costs = costs_dict[investment_year]
         attach_storageunits(n, costs, elec_config, investment_year)
         # attach_stores(n, costs, elec_config, investment_year)
-        # attach_hydrogen_pipelines(n, costs, elec_config, investment_year)
-        attach_multihorizon_generators(n, costs, gens, investment_year)
+        attach_multihorizon_generators(n, costs, multi_horizon_gens, investment_year)
         attach_newCarrier_generators(n, costs, new_carriers, investment_year)
 
-    if not gens.empty and not len(n.investment_periods) == 1:
+    if not multi_horizon_gens.empty and not len(n.investment_periods) == 1:
+        # Remove duplicate generators from first investment period,
+        # created by attach_multihorizon_generators
         n.mremove(
             "Generator",
-            gens.index,
-        )  # Remove duplicate generators from first investment period
+            multi_horizon_gens.index,
+        )
 
     apply_itc(n, snakemake.config["costs"]["itc_modifier"])
     apply_ptc(n, snakemake.config["costs"]["ptc_modifier"])
     apply_max_annual_growth_rate(n, snakemake.config["costs"]["max_growth"])
     add_nice_carrier_names(n, snakemake.config)
-
+    add_co2_emissions(n, costs_dict[n.investment_periods[0]], n.carriers.index)
+    # n.generators.to_csv("generators_ec.csv")
+    n.consistency_check()
     n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))
     n.export_to_netcdf(snakemake.output[0])

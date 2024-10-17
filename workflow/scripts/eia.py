@@ -77,6 +77,25 @@ AEO_SCENARIOS = {
     "low_lng": "lng_lp",  # Low LNG Price
 }
 
+# hard codes where gas can enter/exit the states
+# if multiple POEs exist, the larger pipeline is used as the POE
+# https://atlas.eia.gov/datasets/eia::border-crossings-natural-gas/explore?location=48.411182%2C-90.296487%2C5.24
+POINTS_OF_ENTRY = {
+    "AZ": "MX",  # Arizona - Mexico
+    "CA": "MX",  # California - Mexico
+    "ID": "BC",  # Idaho - BC
+    "ME": "NB",  # Maine - New Brunswick
+    "MI": "ON",  # Michigan - Ontario
+    "MN": "MB",  # Minnesota - Manitoba
+    "MT": "SK",  # Montana - Saskatchewan
+    "ND": "SK",  # North Dakota - Saskatchewan
+    "NH": "QC",  # New Hampshire - Quebec
+    "NY": "ON",  # New York - Ontario
+    "TX": "MX",  # Texas - Mexico
+    "VT": "QC",  # Vermont - Mexico
+    "WA": "BC",  # Washington - BC
+}
+
 
 # exceptions
 class InputException(Exception):
@@ -85,9 +104,7 @@ class InputException(Exception):
     """
 
     def __init__(self, propery, valid_options, recived_option) -> None:
-        self.message = (
-            f" {propery} must be in {valid_options}; recieved {recived_option}"
-        )
+        self.message = f" {propery} must be in {valid_options}; recieved {recived_option}"
 
     def __str__(self):
         return self.message
@@ -137,9 +154,7 @@ class FuelCosts(EiaData):
         self.fuel = fuel
         self.year = year
         self.api = api
-        self.industry = (
-            industry  # (power|residential|commercial|industrial|imports|exports)
-        )
+        self.industry = industry  # (power|residential|commercial|industrial|imports|exports)
         self.grade = grade  # (total|regular|premium|midgrade|diesel)
 
     def data_creator(self) -> pd.DataFrame:
@@ -167,15 +182,28 @@ class FuelCosts(EiaData):
 # concrete creator
 class Trade(EiaData):
 
-    def __init__(self, fuel: str, direction: str, year: int, api: str) -> None:
+    def __init__(
+        self,
+        fuel: str,
+        international: bool,
+        direction: str,
+        year: int,
+        api: str,
+    ) -> None:
         self.fuel = fuel
+        self.international = international
         self.direction = direction  # (imports|exports)
         self.year = year
         self.api = api
 
     def data_creator(self) -> pd.DataFrame:
         if self.fuel == "gas":
-            return GasTrade(self.direction, self.year, self.api)
+            if self.international:
+                # gives monthly values
+                return InternationalGasTrade(self.direction, self.year, self.api)
+            else:
+                # gives annual values
+                return DomesticGasTrade(self.direction, self.year, self.api)
         else:
             raise InputException(
                 propery="Energy Trade",
@@ -626,9 +654,7 @@ class CoalCosts(DataExtractor):
 
         # sometimes prices come in the format of xx.xx.xx, so drop everything after the second "."
         df["price"] = df.price.map(
-            lambda x: (
-                float(x) if len(x.split(".")) < 2 else float(".".join(x.split(".")[:2]))
-            ),
+            lambda x: (float(x) if len(x.split(".")) < 2 else float(".".join(x.split(".")[:2]))),
         )
 
         # get data at a per quarter level
@@ -646,9 +672,7 @@ class CoalCosts(DataExtractor):
             .mean()
             .reset_index()
         )
-        df = df[
-            df.year.astype(int) == self.year
-        ].copy()  # api is bringing in an extra quarter
+        df = df[df.year.astype(int) == self.year].copy()  # api is bringing in an extra quarter
 
         # Expand data to be at a per month level
         dfs = []
@@ -658,9 +682,7 @@ class CoalCosts(DataExtractor):
             freq="MS",
         )
         for date in dates:
-            quarter = (
-                math.floor((date.month - 1) / 3) + 1
-            )  # months 1-3 are Q1, months 4-6 are Q2 ...
+            quarter = math.floor((date.month - 1) / 3) + 1  # months 1-3 are Q1, months 4-6 are Q2 ...
             df_month = df[df.quarter == f"Q{quarter}"].copy()
             df_month["period"] = date
             dfs.append(df_month)
@@ -748,9 +770,7 @@ class LpgCosts(DataExtractor):
 
     def format_data(self, df: pd.DataFrame) -> pd.DataFrame:
 
-        data = df[
-            ["period", "area-name", "series-description", "value", "units"]
-        ].copy()
+        data = df[["period", "area-name", "series-description", "value", "units"]].copy()
 
         data["state"] = data["area-name"].map(self.padd_2_state)
         data = data.explode("state")
@@ -1229,16 +1249,13 @@ class HistoricalProjectedTransportFuelUse(DataExtractor):
             for x in ("NA", "dfo", "elc", "e85", "hdg", "mgs", "ng", "prop")
         ],
         "rail_passenger": [  # commuter rail
-            f"&facets[seriesId][]=cnsm_NA_trn_crail_{x}_NA_NA_trlbtu"
-            for x in ("NA", "dsl", "lng", "cng", "elc")
+            f"&facets[seriesId][]=cnsm_NA_trn_crail_{x}_NA_NA_trlbtu" for x in ("NA", "dsl", "lng", "cng", "elc")
         ],
         "boat_shipping": [
-            f"&facets[seriesId][]=cnsm_NA_trn_dmt_{x}_NA_NA_trlbtu"
-            for x in ("NA", "cng", "dfo", "lng", "rfo")
+            f"&facets[seriesId][]=cnsm_NA_trn_dmt_{x}_NA_NA_trlbtu" for x in ("NA", "cng", "dfo", "lng", "rfo")
         ],
         "rail_shipping": [
-            f"&facets[seriesId][]=cnsm_NA_trn_frail_{x}_NA_NA_trlbtu"
-            for x in ("NA", "cng", "dfo", "lng", "rfo")
+            f"&facets[seriesId][]=cnsm_NA_trn_frail_{x}_NA_NA_trlbtu" for x in ("NA", "cng", "dfo", "lng", "rfo")
         ],
         "air": [
             f"&facets[seriesId][]=cnsm_NA_trn_air_{x}_NA_NA_trlbtu"
@@ -1301,7 +1318,7 @@ class HistoricalProjectedTransportFuelUse(DataExtractor):
         return self._assign_dtypes(df)
 
 
-class GasTrade(DataExtractor):
+class InternationalGasTrade(DataExtractor):
     """
     Gets imports/exports by point of entry.
     """
@@ -1311,11 +1328,13 @@ class GasTrade(DataExtractor):
         "exports": "ENP",
     }
 
+    points_of_entry = POINTS_OF_ENTRY
+
     def __init__(self, direction: str, year: int, api_key: str) -> None:
         self.direction = direction
         if self.direction not in list(self.direction_codes):
             raise InputException(
-                propery="Natural Gas Imports and Exports",
+                propery="Natural Gas International Imports and Exports",
                 valid_options=list(self.direction_codes),
                 recived_option=direction,
             )
@@ -1329,7 +1348,83 @@ class GasTrade(DataExtractor):
 
     def format_data(self, df: pd.DataFrame) -> pd.DataFrame:
         df["period"] = self._format_period(df.period).copy()
-        df["state"] = df["series-description"].map(self.extract_state)
+        df["state"] = df["series-description"].map(self.extract_state).map(self.add_state_connection)
+
+        df = (
+            df[["series-description", "value", "units", "state", "period"]]
+            .sort_values(["state", "period"])
+            .set_index("period")
+        )
+
+        return self._assign_dtypes(df)
+
+    @staticmethod
+    def extract_state(description: str) -> str:
+        """
+        Extracts state from series descripion.
+
+        Input will be in one of the following forms
+        - "Massena, NY Natural Gas Pipeline Imports From Canada"
+        - "U.S. Natural Gas Pipeline Imports From Mexico"
+        """
+        try:  # state level
+            return description.split(",")[1].split(" ")[1]
+        except IndexError:  # country level
+            return description.split(" Natural Gas Pipeline")[0]
+
+    def add_state_connection(self, state: str) -> str:
+        """
+        Adds international connection to state name.
+        """
+        if state == "U.S.":
+            return "USA"
+        intl_state = self.points_of_entry[state]
+        connections = sorted([state, intl_state])
+        return "-".join(connections)
+
+
+class DomesticGasTrade(DataExtractor):
+    """
+    Gets imports/exports by state.
+
+    Return format of data is a two state code giving from-to values (for
+    example, "CA-OR" will represent from California to Oregon
+    """
+
+    direction_codes = {
+        "imports": "MIR",
+        "exports": "MID",
+    }
+
+    def __init__(self, direction: str, year: int, api_key: str) -> None:
+        self.direction = direction
+        if self.direction not in list(self.direction_codes):
+            raise InputException(
+                propery="Natural Gas Domestic Imports and Exports",
+                valid_options=list(self.direction_codes),
+                recived_option=direction,
+            )
+        super().__init__(year, api_key)
+
+    def build_url(self) -> str:
+        base_url = f"natural-gas/move/ist/data/"
+        facets = f"frequency=annual&data[0]=value&facets[process][]={self.direction_codes[self.direction]}&start={self.year-1}&end={self.year}&sort[0][column]=period&sort[0][direction]=desc&offset=0&length=5000"
+        return f"{API_BASE}{base_url}?api_key={self.api_key}&{facets}"
+
+    def format_data(self, df: pd.DataFrame) -> pd.DataFrame:
+
+        df["period"] = pd.to_datetime(df.period).map(lambda x: x.year)
+
+        # drop Federal Offshore--Gulf of Mexico Natural Gas Interstate Receipts
+        df = df[~(df.duoarea.str.startswith("R3FM-") | df.duoarea.str.endswith("-R3FM"))].copy()
+
+        # drop net movement values
+        df = df[~df.duoarea.str.endswith("-Z0S")].copy()
+
+        df["from"] = df["duoarea"].map(lambda x: x.split("-")[0][1:])
+        df["to"] = df["duoarea"].map(lambda x: x.split("-")[1][1:])
+
+        df["state"] = df["from"] + "-" + df["to"]
 
         df = (
             df[["series-description", "value", "units", "state", "period"]]
@@ -1386,9 +1481,7 @@ class GasStorage(DataExtractor):
 
         df = df[~(df["area-name"] == "NA")].copy()
         df["period"] = self._format_period(df.period)
-        df["state"] = (
-            df["series-description"].map(self.extract_state).map(self.map_state_names)
-        )
+        df["state"] = df["series-description"].map(self.extract_state).map(self.map_state_names)
 
         df = (
             df[["series-description", "value", "units", "state", "period"]]
@@ -1442,9 +1535,7 @@ class GasProduction(DataExtractor):
 
         df = df[~(df["area-name"] == "NA")].copy()
         df["period"] = self._format_period(df.period)
-        df["state"] = (
-            df["series-description"].map(self.extract_state).map(self.map_state_names)
-        )
+        df["state"] = df["series-description"].map(self.extract_state).map(self.map_state_names)
 
         df = (
             df[["series-description", "value", "units", "state", "period"]]
@@ -1626,9 +1717,7 @@ class ElectricPowerOperationalData(DataExtractor):
                 "generation": "value",
             },
         )
-        df = df[
-            ["state", "stateName", "fueltypeid", "series-description", "value", "units"]
-        ].sort_values(["state"])
+        df = df[["state", "stateName", "fueltypeid", "series-description", "value", "units"]].sort_values(["state"])
 
         return self._assign_dtypes(df)
 
@@ -1638,7 +1727,8 @@ if __name__ == "__main__":
         yaml_data = yaml.safe_load(file)
     api = yaml_data["api"]["eia"]
     # print(FuelCosts("coal", 2020, api, industry="power").get_data(pivot=True))
-    print(FuelCosts("heating_oil", 2020, api).get_data(pivot=False))
+    # print(FuelCosts("heating_oil", 2020, api).get_data(pivot=False))
+    print(Trade("gas", True, "exports", 2020, api).get_data(pivot=True).fillna(0).sum())
     # print(Emissions("transport", 2019, api).get_data(pivot=True))
     # print(Storage("gas", "total", 2019, api).get_data(pivot=True))
     # print(EnergyDemand("residential", 2030, api).get_data(pivot=False))

@@ -75,7 +75,6 @@ wildcard_constraints:
     clusters="[0-9]+m?|all",
     ll="(v|c)([0-9\.]+|opt|all)|all",
     opts="[-+a-zA-Z0-9\.]*",
-    scope="urban|rural|total",
     sector="([EG]-)*[EG]",
 
 
@@ -83,7 +82,6 @@ wildcard_constraints:
 
 
 # Merge subworkflow configs and main config
-configfile: "config/config.default.yaml"
 configfile: "config/config.cluster.yaml"
 configfile: "config/config.common.yaml"
 configfile: "config/config.plotting.yaml"
@@ -177,7 +175,7 @@ def sector_figures(wildcards):
         figs.append(
             expand(
                 RESULTS
-                + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/gas/{figure}",
+                + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/system/natural_gas/{figure}.png",
                 **config["scenario"],
                 figure=FIGURES_SECTOR_NATURAL_GAS,
             )

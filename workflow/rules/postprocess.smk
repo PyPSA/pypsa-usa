@@ -10,14 +10,14 @@ rule plot_network_maps:
             + "regions_onshore_s{simpl}_{clusters}.geojson"
             if config["custom_files"].get("activate", False)
             else RESOURCES
-            + "{interconnect}/regions_onshore_s{simpl}_{clusters}.geojson"
+            + "{interconnect}/Geospatial/regions_onshore_s{simpl}_{clusters}.geojson"
         ),
         regions_offshore=(
             config["custom_files"]["files_path"]
             + "regions_offshore_s{simpl}_{clusters}.geojson"
             if config["custom_files"].get("activate", False)
             else RESOURCES
-            + "{interconnect}/regions_offshore_s{simpl}_{clusters}.geojson"
+            + "{interconnect}/Geospatial/regions_offshore_s{simpl}_{clusters}.geojson"
         ),
     params:
         electricity=config["electricity"],
@@ -34,7 +34,7 @@ rule plot_network_maps:
         "logs/plot_figures/{interconnect}_{simpl}_{clusters}_l{ll}_{opts}_{sector}.log",
     threads: 1
     resources:
-        mem_mb=5000,
+        mem_mb=7000,
     script:
         "../scripts/plot_network_maps.py"
 
@@ -48,14 +48,14 @@ rule plot_statistics:
             + "regions_onshore_s_{clusters}.geojson"
             if config["custom_files"].get("activate", False)
             else RESOURCES
-            + "{interconnect}/regions_onshore_s{simpl}_{clusters}.geojson"
+            + "{interconnect}/Geospatial/regions_onshore_s{simpl}_{clusters}.geojson"
         ),
         regions_offshore=(
             config["custom_files"]["files_path"]
             + "regions_offshore_s_{clusters}.geojson"
             if config["custom_files"].get("activate", False)
             else RESOURCES
-            + "{interconnect}/regions_offshore_s{simpl}_{clusters}.geojson"
+            + "{interconnect}/Geospatial/regions_offshore_s{simpl}_{clusters}.geojson"
         ),
     params:
         electricity=config["electricity"],

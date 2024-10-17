@@ -92,9 +92,7 @@ def get_investment_weighting(time_weighting, r=0.01):
     end = time_weighting.cumsum()
     start = time_weighting.cumsum().shift().fillna(0)
     return pd.concat([start, end], axis=1).apply(
-        lambda x: sum(
-            get_social_discount(t, r) for t in range(int(x.iloc[0]), int(x.iloc[1]))
-        ),
+        lambda x: sum(get_social_discount(t, r) for t in range(int(x.iloc[0]), int(x.iloc[1]))),
         axis=1,
     )
 
@@ -125,10 +123,9 @@ def add_gaslimit(n, gaslimit, Nyears=1.0):
 def add_emission_prices(n, emission_prices={"co2": 0.0}, exclude_co2=False):
     if exclude_co2:
         emission_prices.pop("co2")
-    ep = (
-        pd.Series(emission_prices).rename(lambda x: x + "_emissions")
-        * n.carriers.filter(like="_emissions")
-    ).sum(axis=1)
+    ep = (pd.Series(emission_prices).rename(lambda x: x + "_emissions") * n.carriers.filter(like="_emissions")).sum(
+        axis=1,
+    )
     gen_ep = n.generators.carrier.map(ep) / n.generators.efficiency
     n.generators["marginal_cost"] += gen_ep
     n.generators_t["marginal_cost"] += gen_ep[n.generators_t["marginal_cost"].columns]
@@ -141,26 +138,42 @@ def set_line_s_max_pu(n, s_max_pu=0.7):
     logger.info(f"N-1 security margin of lines set to {s_max_pu}")
 
 
-def set_transmission_limit(n, ll_type, factor, costs, Nyears=1):
-    links_dc_b = n.links.carrier == "DC" if not n.links.empty else pd.Series()
-    ac_links = n.links.carrier == "AC_trans" if not n.links.empty else pd.Series()
-    n.links.loc[ac_links, "carrier"] = "AC"
+def set_transmission_limit(n, ll_type, factor):
+    """
+    Set transmission limits according to ll wildcard.
+
+    For transport models we track expandable AC links via their carrier
+    initially, then re-name them to AC. We don't set expandability
+    earlier in the model to avoid rebuilding the network multiple times
+    from earlier stages when testing sensitivities to the transmission
+    limits wildcards.
+    """
+    logger.info(f"Setting transmission limit for {ll_type} to {factor}")
+
+    dc_links = n.links.carrier == "DC" if not n.links.empty else pd.Series()
+    ac_links_exp = n.links.carrier == "AC_exp" if not n.links.empty else pd.Series()
+    ac_links_existing = n.links.carrier == "AC" if not n.links.empty else pd.Series()
+
+    n.links.loc[ac_links_exp, "carrier"] = "AC"  # rename AC_exp carrier to AC
 
     lines_s_nom = n.lines.s_nom
     col = "capital_cost" if ll_type == "c" else "length"
     ref = (
         lines_s_nom @ n.lines[col]
-        + n.links.loc[links_dc_b, "p_nom"] @ n.links.loc[links_dc_b, col]
-        + n.links.loc[ac_links, "p_nom"] @ n.links.loc[ac_links, col]
+        + n.links.loc[dc_links, "p_nom"] @ n.links.loc[dc_links, col]
+        + n.links.loc[ac_links_existing, "p_nom"] @ n.links.loc[ac_links_existing, col]
     )
 
     if factor == "opt" or float(factor) > 1.0:
+        # if opt allows expansion set respective lines/links to extendable
         n.lines["s_nom_min"] = lines_s_nom
         n.lines["s_nom_extendable"] = True
 
-        n.links.loc[links_dc_b, "p_nom_min"] = n.links.loc[links_dc_b, "p_nom"]
-        n.links.loc[links_dc_b, "p_nom_extendable"] = True
+        n.links.loc[dc_links, "p_nom_min"] = n.links.loc[dc_links, "p_nom"]
+        n.links.loc[dc_links, "p_nom_extendable"] = True
 
+        n.links.loc[ac_links_exp, "p_nom_min"] = n.links.loc[ac_links_exp, "p_nom"]
+        n.links.loc[ac_links_exp, "p_nom_extendable"] = True
     if factor != "opt":
         con_type = "expansion_cost" if ll_type == "c" else "volume_expansion"
         rhs = float(factor) * ref
@@ -283,12 +296,8 @@ def apply_time_segmentation(n, segments, solver_name="cbc"):
 
 def enforce_autarky(n, only_crossborder=False):
     if only_crossborder:
-        lines_rm = n.lines.loc[
-            n.lines.bus0.map(n.buses.country) != n.lines.bus1.map(n.buses.country)
-        ].index
-        links_rm = n.links.loc[
-            n.links.bus0.map(n.buses.country) != n.links.bus1.map(n.buses.country)
-        ].index
+        lines_rm = n.lines.loc[n.lines.bus0.map(n.buses.country) != n.lines.bus1.map(n.buses.country)].index
+        links_rm = n.links.loc[n.links.bus0.map(n.buses.country) != n.links.bus1.map(n.buses.country)].index
     else:
         lines_rm = n.lines.index
         links_rm = n.links.loc[n.links.carrier == "DC"].index
@@ -338,9 +347,7 @@ if __name__ == "__main__":
     costs = costs.pivot(index="pypsa-name", columns="parameter", values="value")
     # Set Investment Period Year Weightings
     # 'fillna(1)' needed if only one period
-    inv_per_time_weight = (
-        n.investment_periods.to_series().diff().shift(-1).ffill().fillna(1)
-    )
+    inv_per_time_weight = n.investment_periods.to_series().diff().shift(-1).ffill().fillna(1)
     n.investment_period_weightings["years"] = inv_per_time_weight
     # set Investment Period Objective weightings
     social_discountrate = snakemake.params.costs["social_discount_rate"]
@@ -379,7 +386,7 @@ if __name__ == "__main__":
         )
 
     ll_type, factor = snakemake.wildcards.ll[0], snakemake.wildcards.ll[1:]
-    set_transmission_limit(n, ll_type, factor, costs, Nyears)
+    set_transmission_limit(n, ll_type, factor)
 
     set_line_nom_max(
         n,

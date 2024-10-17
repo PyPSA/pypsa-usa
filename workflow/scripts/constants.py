@@ -25,7 +25,6 @@ EUR_2_USD = 1.07  # taken on 12-12-2023
 # (1036 BTU / CF) * (0.293 Wh / 1 BTU) * (1 MWh / 1,000,000 Wh) * (1,000,000 CF / 1 MMCF) = 303.5 MWh / MMCF
 
 NG_MWH_2_MMCF = 303.5  # MWh / MMCF
-NG_MCF_2_MWH = 0.3035  # TODO get rid of this and just use single constant
 
 # $/MMBtu * (1 MMBtu / 0.293 MWh) = $/MWh_thermal
 NG_Dol_MMBTU_2_MWH = 3.4129
@@ -33,9 +32,7 @@ NG_Dol_MMBTU_2_MWH = 3.4129
 LBS_TON = 2000  # lbs/ short ton
 COAL_BTU_LB = 9396  # BTU/lb - EIA US AVERAGE TODO: differentiate between coal types
 MMBTU_MWHthemal = 3.4129  # MMBTU to MWh_thermal
-COAL_dol_ton_2_MWHthermal = (
-    LBS_TON**-1 * COAL_BTU_LB * 1000**-1 * MMBTU_MWHthemal
-)  # $/ton * ton/BTU * BTU/MWh_thermal
+COAL_dol_ton_2_MWHthermal = LBS_TON**-1 * COAL_BTU_LB * 1000**-1 * MMBTU_MWHthemal  # $/ton * ton/BTU * BTU/MWh_thermal
 
 # (TBTU) (1e6 MMBTU / TBTU) (MWh / MMBTU)
 TBTU_2_MWH = 1e6 * (1 / MMBTU_MWHthemal)
@@ -857,31 +854,31 @@ ATB_TECH_MAPPER = {
         "display_name": "Utility-Scale Battery Storage - 2Hr",
         "technology": "Utility-Scale Battery Storage",
         "techdetail": "2Hr Battery Storage",
-        "crp": 30,
+        "crp": 20,
     },
     "4hr_battery_storage": {
         "display_name": "Utility-Scale Battery Storage - 4Hr",
         "technology": "Utility-Scale Battery Storage",
         "techdetail": "4Hr Battery Storage",
-        "crp": 30,
+        "crp": 20,
     },
     "6hr_battery_storage": {
         "display_name": "Utility-Scale Battery Storage - 6Hr",
         "technology": "Utility-Scale Battery Storage",
         "techdetail": "6Hr Battery Storage",
-        "crp": 30,
+        "crp": 20,
     },
     "8hr_battery_storage": {
         "display_name": "Utility-Scale Battery Storage - 8Hr",
         "technology": "Utility-Scale Battery Storage",
         "techdetail": "8Hr Battery Storage",
-        "crp": 30,
+        "crp": 20,
     },
     "10hr_battery_storage": {
         "display_name": "Utility-Scale Battery Storage - 10Hr",
         "technology": "Utility-Scale Battery Storage",
         "techdetail": "10Hr Battery Storage",
-        "crp": 30,
+        "crp": 20,
     },
     "Pumped-Storage-Hydro-bicharger": {
         "display_name": "Pumped Storage Hydropower - National Class 1",

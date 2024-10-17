@@ -35,6 +35,35 @@ EMISSIONS_DATA = [
     },  # AEO 2023
 ]
 
+LIFETIME_DATA = [
+    {"pypsa-name": "coal", "parameter": "lifetime", "value": 70},
+    {"pypsa-name": "oil", "parameter": "lifetime", "value": 55},  # using gas CT
+    {"pypsa-name": "geothermal", "parameter": "lifetime", "value": 70},  # Confirm with Jabs / NREL. 30 is way too small
+    {"pypsa-name": "waste", "parameter": "lifetime", "value": 55},  # using gas CT
+    {"pypsa-name": "CCGT", "parameter": "lifetime", "value": 55},
+    {"pypsa-name": "OCGT", "parameter": "lifetime", "value": 55},
+    {"pypsa-name": "CCGT-95CCS", "parameter": "lifetime", "value": 55},
+    {"pypsa-name": "CCGT-97CCS", "parameter": "lifetime", "value": 55},
+    {"pypsa-name": "coal-95CCS", "parameter": "lifetime", "value": 70},
+    {"pypsa-name": "coal-99CCS", "parameter": "lifetime", "value": 70},
+    {"pypsa-name": "SMR", "parameter": "lifetime", "value": 40},
+    {"pypsa-name": "nuclear", "parameter": "lifetime", "value": 60},
+    {"pypsa-name": "biomass", "parameter": "lifetime", "value": 30},
+    {"pypsa-name": "offwind_floating", "parameter": "lifetime", "value": 30},
+    {"pypsa-name": "offwind", "parameter": "lifetime", "value": 30},
+    {"pypsa-name": "onwind", "parameter": "lifetime", "value": 30},
+    {"pypsa-name": "solar", "parameter": "lifetime", "value": 30},
+    {
+        "pypsa-name": "2hr_battery_storage",
+        "parameter": "lifetime",
+        "value": 20,
+    },  # inquired with NREL on why they have CRP of 20 but lifetime of 15
+    {"pypsa-name": "4hr_battery_storage", "parameter": "lifetime", "value": 20},
+    {"pypsa-name": "6hr_battery_storage", "parameter": "lifetime", "value": 20},
+    {"pypsa-name": "8hr_battery_storage", "parameter": "lifetime", "value": 20},
+    {"pypsa-name": "10hr_battery_storage", "parameter": "lifetime", "value": 20},
+]  # https://github.com/NREL/ReEDS-2.0/blob/e65ed5ed4ffff973071839481309f77d12d802cd/inputs/plant_characteristics/maxage.csv#L4
+
 
 def create_duckdb_instance(pudl_fn: str):
     duckdb.connect(database=":memory:", read_only=False)
@@ -211,7 +240,11 @@ if __name__ == "__main__":
     aeo_params = costs.get("aeo")
 
     tech_year = snakemake.wildcards.year
-    years = range(2021, 2051)
+    if int(tech_year) < 2024:
+        logger.warning(
+            "Minimum cost year supported is 2024, using 2024 expansion costs.",
+        )
+    years = range(2024, 2051)
     tech_year = min(years, key=lambda x: abs(x - int(tech_year)))
 
     emissions_data = EMISSIONS_DATA
@@ -229,22 +262,31 @@ if __name__ == "__main__":
 
     # Group by pypsa-name and filter for correct cost recovery period
     pudl_atb = (
-        pudl_atb.groupby("pypsa-name")
+        pudl_atb.groupby("pypsa-name")[pudl_atb.columns]
         .apply(
-            lambda x: x[
-                x["cost_recovery_period_years"]
-                == const.ATB_TECH_MAPPER[x.name].get("crp", 30)
-            ],
+            lambda x: x[x["cost_recovery_period_years"] == const.ATB_TECH_MAPPER[x.name].get("crp", 30)],
         )
         .reset_index(drop=True)
     )
 
     # Filter for the correct year, scenario, and model case
-    pudl_atb = pudl_atb[pudl_atb.projection_year == tech_year]
+    pudl_atb_filt = pudl_atb[pudl_atb.projection_year == tech_year]
+    if tech_year < 2030:
+        logger.warning(
+            "Using 2030 ATB data for offwind_floating; earlier data not available.",
+        )
+        pudl_atb_offwind_floating = pudl_atb[
+            (pudl_atb["pypsa-name"] == "offwind_floating") & (pudl_atb.projection_year == 2030)
+        ]
+        pudl_atb = pd.concat(
+            [pudl_atb_filt, pudl_atb_offwind_floating],
+            ignore_index=True,
+        )
+    else:
+        pudl_atb = pudl_atb_filt
+
     pudl_atb = pudl_atb[pudl_atb.scenario_atb == atb_params.get("scenario", "Moderate")]
-    pudl_atb = pudl_atb[
-        pudl_atb.model_case_nrelatb == atb_params.get("model_case", "Market")
-    ]
+    pudl_atb = pudl_atb[pudl_atb.model_case_nrelatb == atb_params.get("model_case", "Market")]
 
     pudl_premelt = pudl_atb.copy()
     # Pivot Data
@@ -326,7 +368,12 @@ if __name__ == "__main__":
         {"pypsa-name": "HVDC inverter pair", "parameter": "wacc_real", "value": 0.044},
     ]
     pudl_atb = pd.concat(
-        [pudl_atb, pd.DataFrame(emissions_data), pd.DataFrame(transmission_data)],
+        [
+            pudl_atb,
+            pd.DataFrame(emissions_data),
+            pd.DataFrame(transmission_data),
+            pd.DataFrame(LIFETIME_DATA),
+        ],
         ignore_index=True,
     )
     pudl_atb.drop_duplicates(
@@ -399,19 +446,18 @@ if __name__ == "__main__":
     ).reset_index()
 
     pivot_atb["efficiency"] = 3.412 / pivot_atb["heat_rate_mmbtu_per_mwh"]
-    pivot_atb["fuel_cost"] = (
-        pivot_atb["fuel_cost_real_per_mwhth"] / pivot_atb["efficiency"]
-    )
-    pivot_atb["marginal_cost"] = (
-        pivot_atb["opex_variable_per_mwh"] + pivot_atb["fuel_cost"]
-    )
+    pivot_atb["fuel_cost"] = pivot_atb["fuel_cost_real_per_mwhth"] / pivot_atb["efficiency"]
+    pivot_atb["marginal_cost"] = pivot_atb["opex_variable_per_mwh"] + pivot_atb["fuel_cost"]
 
     # Impute storage WACC from Utility Scale Solar. TODO: Revisit this assumption
     for x in [2, 4, 6, 8, 10]:
         pivot_atb.loc[
             pivot_atb["pypsa-name"] == f"{x}hr_battery_storage",
             "wacc_real",
-        ] = pivot_atb.loc[pivot_atb["pypsa-name"] == "solar", "wacc_real"].values[0]
+        ] = pivot_atb.loc[
+            pivot_atb["pypsa-name"] == "solar",
+            "wacc_real",
+        ].values[0]
         pivot_atb.loc[
             pivot_atb["pypsa-name"] == f"{x}hr_battery_storage",
             "efficiency",
@@ -440,9 +486,7 @@ if __name__ == "__main__":
     # Calculate grid interrconnection costs per MW-KM
     # All land-based resources assume 1 mile of spur line
     # All offshore resources assume 30 km of subsea cable
-    pivot_atb["capex_grid_connection_per_kw_km"] = (
-        pivot_atb["capex_grid_connection_per_kw"] / 1.609
-    )
+    pivot_atb["capex_grid_connection_per_kw_km"] = pivot_atb["capex_grid_connection_per_kw"] / 1.609
     pivot_atb.loc[
         pivot_atb["pypsa-name"].str.contains("offshore"),
         "capex_grid_connection_per_kw_km",
@@ -460,9 +504,7 @@ if __name__ == "__main__":
         # change to nyears
     )
 
-    pivot_atb["annualized_capex_fom"] = pivot_atb["annualized_capex_per_mw"] + (
-        pivot_atb["opex_fixed_per_kw"] * 1e3
-    )
+    pivot_atb["annualized_capex_fom"] = pivot_atb["annualized_capex_per_mw"] + (pivot_atb["opex_fixed_per_kw"] * 1e3)
     pudl_atb = pivot_atb.melt(
         id_vars=["pypsa-name"],
         value_vars=pivot_atb.columns.difference(["pypsa-name"]),
@@ -474,7 +516,6 @@ if __name__ == "__main__":
     pudl_atb.to_csv(snakemake.output.tech_costs, index=False)
 
     # sector costs
-
     sector_costs = get_sector_costs(
         snakemake.input.efs_tech_costs,
         snakemake.input.efs_icev_costs,

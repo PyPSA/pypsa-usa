@@ -1,5 +1,4 @@
-# PyPSA-USA Default Configuration File
-
+# PyPSA-USA Default Configuration File for developing and testing county transmission network from Reeds
 run:
   name: "Tutorial" # use this to keep track of runs with different settings
   disable_progressbar: false # set to true to disable the progressbar
@@ -9,14 +8,27 @@ run:
 
 # docs :
 scenario:
-  interconnect: [texas] #"usa|texas|western|eastern"
-  clusters: [10]
-  simpl: [500]
-  opts: [RPS-REM-400SEG]
+  interconnect: [western] #"usa|texas|western|eastern"
+  clusters: [4m]
+  simpl: [75]
+  opts: [REM-3h]
   ll: [v1.0]
   scope: "total" # "urban", "rural", or "total"
   sector: "" # G
-  planning_horizons: [2030, 2050]    #(2018-2023, 2030, 2040, 2050)
+  planning_horizons: [2050]    #(2018-2023, 2030, 2040, 2050)
+
+model_topology:
+  transmission_network: 'reeds' # [reeds, tamu]
+  topological_boundaries: 'reeds_zone' # [county, reeds_zone]
+  interface_transmission_limits: false
+  include: # mixed zone types not supported
+    # reeds_zone: []
+    reeds_state: ['CA']
+    # reeds_ba: []
+  aggregate: # eligible keys: [reeds_zone, trans_reg]
+    # trans_grp: []
+    # reeds_zone: []
+
 
 # docs :
 enable:
@@ -24,19 +36,13 @@ enable:
 
 snapshots:
   start: "2019-01-01"
-  end: "2019-02-01"
+  end: "2020-01-01"
   inclusive: "left"
 
 # docs :
 electricity:
   conventional_carriers: [nuclear, oil, OCGT, CCGT, coal, geothermal, biomass, waste] # Choose the conventional plant types to include in network
-  renewable_carriers: [onwind, offwind, offwind_floating, solar, hydro] # Choose the renewable plant types to include in network
-  voltage_simplified: 230 #Voltage level to simplify network to in rule "simplify network"
-  co2limit: 1.4728e+9 # 0.8 * 1.841e+9
-  co2limit_enable: false # For sector coupled studies
-  co2base: 226.86e+6 #base_from_2020 Locations of the 250 MMmt of CO2 emissions from the WECC 2021.
-  gaslimit: false # global gas usage limit of X MWh_th
-  gaslimit_enable: false # For sector coupled studies
+  renewable_carriers: [onwind, offwind_floating, solar, hydro] # Choose the renewable plant types to include in network
   retirement: economic # "economic" or "technical"
   SAFE_reservemargin: 0.14
   regional_Co2_limits: 'config/policy_constraints/regional_Co2_limits.csv'
@@ -56,8 +62,8 @@ electricity:
     H2: 168
 
   extendable_carriers:
-    Generator: [solar, onwind, offwind, offwind_floating, OCGT, CCGT, coal, nuclear, coal-95CCS, CCGT-95CCS, SMR] #include CCGT-CCS
-    StorageUnit: [4hr_battery_storage, 8hr_battery_storage, 8hr_PHS, 10hr_PHS, 12hr_PHS] # [Xhr-battery-storage (2-10 hours)]
+    Generator: [solar, onwind, offwind_floating, OCGT, CCGT, CCGT-95CCS, coal, nuclear] #include CCGT-CCS
+    StorageUnit: [4hr_battery_storage, 8hr_battery_storage] # [Xhr-battery-storage (2-10 hours)]
     Store: []
     Link: [] 
 
@@ -71,7 +77,8 @@ electricity:
 # docs :
 conventional:
   unit_commitment: false
-  dynamic_fuel_price: 
+  dynamic_fuel_price:
+    enable: false
     pudl: true
     wholesale: true
 
@@ -79,16 +86,15 @@ conventional:
 lines:
   s_max_pu: 0.7
   s_nom_max: .inf
-  max_extension: 2000 #MW
+  max_extension: 20000 #MW
   length_factor: 1.25
-  interface_transmission_limits: false
-  transport_model: false
+
 
 # docs :
 links:
   p_max_pu: 1.0
   p_nom_max: .inf
-  max_extension: 2000 #MW
+  max_extension: 20000 #MW
 
 # docs :
 costs:
@@ -115,9 +121,11 @@ costs:
     SMR: 0.3
     nuclear: 0.3
     hydro: 0.3
+    2hr_battery_storage: 0.3
     4hr_battery_storage: 0.3
     6hr_battery_storage: 0.3
     8hr_battery_storage: 0.3
+    10hr_battery_storage: 0.3
     8hr_PHS: 0.3
     10hr_PHS: 0.3
     12hr_PHS: 0.3
@@ -165,7 +173,6 @@ clustering:
   cluster_network:
     algorithm: kmeans # choose from: [hac, kmeans]
     feature: solar+onwind-time
-    aggregation_zones: 'reeds_zone' # [balancing_area, state, reeds_zone]
     exclude_carriers: []
     consider_efficiency_classes: false
   aggregation_strategies:
@@ -228,9 +235,11 @@ solving:
       threads: 8
       method: 2 # barrier
       crossover: 0
-      BarConvTol: 1.e-4
+      BarHomogeneous: 1     # Use homogeneous barrier if standard does not converge
+      BarConvTol: 1.e-5
       OptimalityTol: 1.e-4
       FeasibilityTol: 1.e-3
+      ScaleFlag: 1
       Seed: 123
       AggFill: 0
       PreDual: 0

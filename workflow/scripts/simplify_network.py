@@ -5,14 +5,13 @@ Aggregates network to substations and simplifies to a single voltage level.
 
 
 import logging
-import os
 from functools import reduce
 
 import geopandas as gpd
 import numpy as np
 import pandas as pd
 import pypsa
-from _helpers import configure_logging, export_network_for_gis_mapping, update_p_nom_max
+from _helpers import configure_logging, update_p_nom_max
 from cluster_network import cluster_regions, clustering_for_n_clusters
 from pypsa.clustering.spatial import get_clustering_from_busmap
 
@@ -62,10 +61,8 @@ def convert_to_voltage_level(n, new_voltage):
     )
 
     # Update network lines
-    (linetype,) = n.lines.loc[n.lines.v_nom == voltage_level, "type"].unique()
-    df.type = linetype
-
-    n.buses["v_nom"] = voltage_level
+    df.type = "Al/St 240/40 2-bundle 220.0"
+    n.buses["v_nom"] = new_voltage
     n.lines = df
     return n
 
@@ -94,7 +91,7 @@ def aggregate_to_substations(
     network: pypsa.Network,
     substations,
     busmap,
-    aggregation_zones: str,
+    topological_boundaries: str,
     aggregation_strategies=dict(),
 ):
     """
@@ -106,9 +103,7 @@ def aggregate_to_substations(
 
     logger.info("Aggregating buses to substation level...")
 
-    line_strategies = aggregation_strategies.get("lines", dict())
     generator_strategies = aggregation_strategies.get("generators", dict())
-    one_port_strategies = aggregation_strategies.get("one_ports", dict())
 
     clustering = get_clustering_from_busmap(
         network,
@@ -129,6 +124,7 @@ def aggregate_to_substations(
             "interconnect",
             "state",
             "country",
+            "county",
             "balancing_area",
             "reeds_zone",
             "reeds_ba",
@@ -140,16 +136,15 @@ def aggregate_to_substations(
     substations.sub_id = substations.sub_id.astype(int).astype(str)
     substations.index = substations.sub_id
 
-    if aggregation_zones == "balancing_area":
-        zone = substations.balancing_area
-    elif aggregation_zones == "country":
-        zone = substations.country
-    elif aggregation_zones == "state":
-        zone = substations.state
-    elif aggregation_zones == "reeds_zone":
-        zone = substations.reeds_zone
-    else:
-        ValueError("zonal_aggregation must be either balancing_area, country or state")
+    match topological_boundaries:
+        case "county":
+            zone = substations.county
+        case "reeds_zone":
+            zone = substations.reeds_zone
+        case _:
+            raise ValueError(
+                "zonal_aggregation must be either balancing_area, country, or state",
+            )
 
     network_s = clustering.network
 
@@ -157,12 +152,11 @@ def aggregate_to_substations(
     network_s.buses["x"] = substations.x
     network_s.buses["y"] = substations.y
     network_s.buses["substation_lv"] = True
-    network_s.buses["country"] = (
-        zone  # country field used bc pypsa-eur aggregates based on country boundary
-    )
+    network_s.buses["country"] = zone  # country field used bc pypsa algo aggregates based on country field
+
     network_s.lines["type"] = np.nan
 
-    if aggregation_zones != "reeds_zone":
+    if topological_boundaries != "reeds_zone" and topological_boundaries != "county":
         cols2drop = [
             "balancing_area",
             "state",
@@ -172,6 +166,7 @@ def aggregate_to_substations(
             "reeds_ba",
             "nerc_reg",
             "trans_reg",
+            "trans_grp",
             "reeds_state",
         ]
     else:
@@ -220,10 +215,7 @@ if __name__ == "__main__":
     params = snakemake.params
     solver_name = snakemake.config["solving"]["solver"]["name"]
 
-    voltage_level = snakemake.config["electricity"]["voltage_simplified"]
-    aggregation_zones = snakemake.config["clustering"]["cluster_network"][
-        "aggregation_zones"
-    ]
+    topological_boundaries = snakemake.params.topological_boundaries
 
     n = pypsa.Network(snakemake.input.network)
 
@@ -232,7 +224,7 @@ if __name__ == "__main__":
         inplace=True,
     )  # temp added these columns and need to drop for workflow
 
-    n = convert_to_voltage_level(n, voltage_level)
+    n = convert_to_voltage_level(n, 230)
     n, trafo_map = remove_transformers(n)
 
     substations = pd.read_csv(snakemake.input.sub, index_col=0)
@@ -252,9 +244,13 @@ if __name__ == "__main__":
         n,
         substations,
         busmap_to_sub.sub_id,
-        aggregation_zones,
+        topological_boundaries,
         params.aggregation_strategies,
     )
+
+    if topological_boundaries == "reeds_zone":
+        n.buses.drop(columns=["county"], inplace=True)
+
     if snakemake.wildcards.simpl:
         n.set_investment_periods(periods=snakemake.params.planning_horizons)
 

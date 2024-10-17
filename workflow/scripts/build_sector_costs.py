@@ -262,9 +262,7 @@ class EfsBevTransportationData(EfsSectorData):
     def get_capex(self):
         df = self.data.copy()
         df = df[
-            (df.Sector == "Transportation")
-            & (df["EFS Case"] == self.efs_case)
-            & (df.Metric == "Capital Cost")
+            (df.Sector == "Transportation") & (df["EFS Case"] == self.efs_case) & (df.Metric == "Capital Cost")
         ].copy()
         source = "NREL EFS at https://data.nrel.gov/submissions/78"
         description = "Supplemented with NREL ATB"
@@ -276,9 +274,7 @@ class EfsBevTransportationData(EfsSectorData):
     def get_lifetime(self):
         df = self.data.copy()
         df = df[
-            (df.Sector == "Transportation")
-            & (df["EFS Case"] == self.efs_case)
-            & (df.Metric == "Capital Cost")
+            (df.Sector == "Transportation") & (df["EFS Case"] == self.efs_case) & (df.Metric == "Capital Cost")
         ].copy()
         df["Metric"] = "lifetime"
         df["Value"] = self.lifetime
@@ -292,9 +288,7 @@ class EfsBevTransportationData(EfsSectorData):
         """
         df = self.data.copy()
         df = df[
-            (df.Sector == "Transportation")
-            & (df["EFS Case"] == self.efs_case)
-            & (df.Metric == "Main Efficiency")
+            (df.Sector == "Transportation") & (df["EFS Case"] == self.efs_case) & (df.Metric == "Main Efficiency")
         ].copy()
         source = "NREL EFS at https://data.nrel.gov/submissions/78"
         df["Metric"] = "efficiency"
@@ -556,11 +550,7 @@ class EfsBuildingData(EfsSectorData):
 
     def get_efficiency(self):
         df = self.data.copy()
-        df = df[
-            (df.Sector == "Buildings")
-            & (df["EFS Case"] == self.efs_case)
-            & (df.Metric == "Efficiency")
-        ].copy()
+        df = df[(df.Sector == "Buildings") & (df["EFS Case"] == self.efs_case) & (df.Metric == "Efficiency")].copy()
         source = "NREL EFS at https://data.nrel.gov/submissions/78"
         df["Metric"] = "efficiency"
         df["Units"] = "per unit"
@@ -678,9 +668,7 @@ class EiaBuildingData:
     def get_capex(self, sector: Optional[str] = None):
         sector = self._check_sector(sector)
         if sector:
-            slicer = (self.data.technology.str.startswith(sector)) & (
-                self.data.parameter == "investment"
-            )
+            slicer = (self.data.technology.str.startswith(sector)) & (self.data.parameter == "investment")
         else:
             slicer = self.data.parameter == "investment"
         df = self.data[slicer]
@@ -689,9 +677,7 @@ class EiaBuildingData:
     def get_lifetime(self, sector: Optional[str] = None):
         sector = self._check_sector(sector)
         if sector:
-            slicer = (self.data.technology.str.startswith(sector)) & (
-                self.data.parameter == "lifetime"
-            )
+            slicer = (self.data.technology.str.startswith(sector)) & (self.data.parameter == "lifetime")
         else:
             slicer = self.data.parameter == "lifetime"
         return self.data[slicer][self.columns]
@@ -699,9 +685,7 @@ class EiaBuildingData:
     def get_efficiency(self, sector: Optional[str] = None):
         sector = self._check_sector(sector)
         if sector:
-            slicer = (self.data.technology.str.startswith(sector)) & (
-                self.data.parameter == "efficiency"
-            )
+            slicer = (self.data.technology.str.startswith(sector)) & (self.data.parameter == "efficiency")
         else:
             slicer = self.data.parameter == "efficiency"
         return self.data[slicer][self.columns]
@@ -709,9 +693,7 @@ class EiaBuildingData:
     def get_fixed_costs(self, sector: Optional[str] = None):
         sector = self._check_sector(sector)
         if sector:
-            slicer = (self.data.technology.str.startswith(sector)) & (
-                self.data.parameter == "FOM"
-            )
+            slicer = (self.data.technology.str.startswith(sector)) & (self.data.parameter == "FOM")
         else:
             slicer = self.data.parameter == "FOM"
         return self.data[slicer][self.columns]

@@ -28,12 +28,7 @@ if __name__ == "__main__":
     time = pd.date_range(freq="h", **snakemake.params.snapshots)
     cutout = atlite.Cutout(snakemake.input.cutout).sel(time=time)
 
-    clustered_regions = (
-        gpd.read_file(snakemake.input.regions_onshore)
-        .set_index("name")
-        .buffer(0)
-        .squeeze()
-    )
+    clustered_regions = gpd.read_file(snakemake.input.regions_onshore).set_index("name").buffer(0).squeeze()
 
     I = cutout.indicatormatrix(clustered_regions)
 

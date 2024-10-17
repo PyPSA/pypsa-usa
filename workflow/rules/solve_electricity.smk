@@ -9,7 +9,7 @@ rule solve_network:
         co2_sequestration_potential=config["sector"].get(
             "co2_sequestration_potential", 200
         ),
-        replace_lines_with_links=config_provider("lines", "transport_model"),
+        transmission_network=config_provider("model_topology", "transmission_network"),
     input:
         network=RESOURCES
         + "{interconnect}/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc",

@@ -1,44 +1,4 @@
 # BY PyPSA-USA Authors
-"""
-**Relevant Settings**
-
-.. code:: yaml
-
-    interconnect:
-    offshore_shape:
-    aggregation_zones:
-    countries:
-
-
-**Inputs**
-
-- ``data/breakthrough_network/base_grid/{interconnect}/bus.csv``
-- ``data/breakthrough_network/base_grid/{interconnect}/branch.csv``
-- ``data/breakthrough_network/base_grid/{interconnect}/dcline.csv``
-- ``data/breakthrough_network/base_grid/{interconnect}/bus2sub.csv``
-- ``data/breakthrough_network/base_grid/{interconnect}/sub.csv``
-- ``resources/country_shapes.geojson``: confer :ref:`shapes`
-- ``resources/offshore_shapes.geojson``: confer :ref:`shapes`
-- ``resources/{interconnect}/state_boundaries.geojson``: confer :ref:`shapes`
-
-
-**Outputs**
-
-- ``networks/base.nc``:
-- ``data/breakthrough_network/base_grid/{interconnect}/bus2sub.csv``
-- ``data/breakthrough_network/base_grid/{interconnect}/sub.csv``
-- ``resources/{interconnect}/elec_base_network.nc``
-
-
-**Description**
-
-Reads in Breakthrough Energy/TAMU transmission dataset, and converts it into PyPSA compatible components. A base netowork file (`*.nc`) is written out. Included in this network are:
-    - Geolocated buses
-    - Geoloactated AC and DC transmission lines + links
-    - Transformers
-"""
-
-
 import logging
 from typing import Optional
 
@@ -106,9 +66,7 @@ def add_buses_from_file(
         LAF_state=buses.LAF_state,
     )
 
-    n.buses.loc[n.buses.sub_id.astype(int) >= 41012, "substation_off"] = (
-        True  # mark offshore buses
-    )
+    n.buses.loc[n.buses.sub_id.astype(int) >= 41012, "substation_off"] = True  # mark offshore buses
     return n
 
 
@@ -131,14 +89,9 @@ def add_branches_from_file(n: pypsa.Network, fn_branches: str) -> pypsa.Network:
             tech_branches.index,
             bus0=tech_branches.from_bus_id,
             bus1=tech_branches.to_bus_id,
-            r=tech_branches.r
-            * (n.buses.loc[tech_branches.from_bus_id]["v_nom"].values ** 2)
-            / 100,
-            x=tech_branches.x
-            * (n.buses.loc[tech_branches.from_bus_id]["v_nom"].values ** 2)
-            / 100,
-            b=tech_branches.b
-            / (n.buses.loc[tech_branches.from_bus_id]["v_nom"].values ** 2),
+            r=tech_branches.r * (n.buses.loc[tech_branches.from_bus_id]["v_nom"].values ** 2) / 100,
+            x=tech_branches.x * (n.buses.loc[tech_branches.from_bus_id]["v_nom"].values ** 2) / 100,
+            b=tech_branches.b / (n.buses.loc[tech_branches.from_bus_id]["v_nom"].values ** 2),
             s_nom=tech_branches.rateA,
             v_nom=tech_branches.from_bus_id.map(n.buses.v_nom),
             interconnect=tech_branches.interconnect,
@@ -339,15 +292,13 @@ def assign_texas_poi(n: pypsa.Network) -> pypsa.Network:
 
 def identify_osw_poi(n: pypsa.Network) -> pypsa.Network:
     "Identify offshore wind points of interconnections in the base network."
-    offshore_lines = n.lines.loc[
-        n.lines.bus0.isin(n.buses.loc[n.buses.substation_off].index)
-    ]
+    offshore_lines = n.lines.loc[n.lines.bus0.isin(n.buses.loc[n.buses.substation_off].index)]
     poi_bus_ids = offshore_lines.bus1.unique()
     poi_sub_ids = n.buses.loc[poi_bus_ids, "sub_id"].unique()
     n.buses.loc[n.buses.index.isin(poi_bus_ids), "poi_bus"] = True
     n.buses.loc[n.buses.sub_id.isin(poi_sub_ids), "poi_sub"] = True
-    n.buses.poi_bus = n.buses.poi_bus.fillna(False)
-    n.buses.poi_sub = n.buses.poi_sub.fillna(False)
+    n.buses.poi_bus = n.buses.poi_bus.astype(bool).fillna(False)
+    n.buses.poi_sub = n.buses.poi_sub.astype(bool).fillna(False)
     return n
 
 
@@ -370,9 +321,7 @@ def match_missing_buses(buses_to_match_to, missing_buses):
         missing_buses[["x", "y"]].values,  # The input array for the query
         k=1,  # The number of nearest neighbors
     )
-    missing_buses["bus_assignment"] = (
-        buses_to_match_to.reset_index().iloc[missing_buses.id_nearest].Bus.values
-    )
+    missing_buses["bus_assignment"] = buses_to_match_to.reset_index().iloc[missing_buses.id_nearest].Bus.values
     missing_buses.drop(columns=["id_nearest"], inplace=True)
     return missing_buses
 
@@ -398,24 +347,12 @@ def build_offshore_transmission_configuration(n: pypsa.Network) -> pypsa.Network
     n.buses.loc[offshore_buses.index, "balancing_area"] = n.buses.loc[
         offshore_buses.bus_assignment
     ].balancing_area.values
-    n.buses.loc[offshore_buses.index, "state"] = n.buses.loc[
-        offshore_buses.bus_assignment
-    ].state.values
-    n.buses.loc[offshore_buses.index, "country"] = n.buses.loc[
-        offshore_buses.bus_assignment
-    ].country.values
-    n.buses.loc[offshore_buses.index, "interconnect"] = n.buses.loc[
-        offshore_buses.bus_assignment
-    ].interconnect.values
-    n.buses.loc[offshore_buses.index, "reeds_zone"] = n.buses.loc[
-        offshore_buses.bus_assignment
-    ].reeds_zone.values
-    n.buses.loc[offshore_buses.index, "reeds_ba"] = n.buses.loc[
-        offshore_buses.bus_assignment
-    ].reeds_ba.values
-    n.buses.loc[offshore_buses.index, "county"] = n.buses.loc[
-        offshore_buses.bus_assignment
-    ].county.values
+    n.buses.loc[offshore_buses.index, "state"] = n.buses.loc[offshore_buses.bus_assignment].state.values
+    n.buses.loc[offshore_buses.index, "country"] = n.buses.loc[offshore_buses.bus_assignment].country.values
+    n.buses.loc[offshore_buses.index, "interconnect"] = n.buses.loc[offshore_buses.bus_assignment].interconnect.values
+    n.buses.loc[offshore_buses.index, "reeds_zone"] = n.buses.loc[offshore_buses.bus_assignment].reeds_zone.values
+    n.buses.loc[offshore_buses.index, "reeds_ba"] = n.buses.loc[offshore_buses.bus_assignment].reeds_ba.values
+    n.buses.loc[offshore_buses.index, "county"] = n.buses.loc[offshore_buses.bus_assignment].county.values
 
     # add onshore poi buses @230kV
     n.madd(
@@ -455,8 +392,7 @@ def build_offshore_transmission_configuration(n: pypsa.Network) -> pypsa.Network
     # add offshore transmission transformers
     n.madd(
         "Transformer",
-        "OSW_poi_stepup_"
-        + osw_offsub_bus_ids,  # name transformer after offshore substation
+        "OSW_poi_stepup_" + osw_offsub_bus_ids,  # name transformer after offshore substation
         bus0="OSW_POI_" + osw_offsub_bus_ids,
         bus1=offshore_buses.bus_assignment.astype(str).values,
         s_nom=0.01,
@@ -489,11 +425,7 @@ def assign_missing_state_regions(gdf_bus: gpd.GeoDataFrame):
     value.
     """
     buses = gdf_bus.copy()
-    buses = (
-        buses.reset_index()
-        .rename(columns={"bus_id": "Bus", "lon": "x", "lat": "y"})
-        .set_index("Bus")
-    )
+    buses = buses.reset_index().rename(columns={"bus_id": "Bus", "lon": "x", "lat": "y"}).set_index("Bus")
 
     missing = buses.loc[buses.full_state.isna()]
     if missing.empty:
@@ -508,16 +440,8 @@ def assign_missing_state_regions(gdf_bus: gpd.GeoDataFrame):
 
     missing.full_state = buses.loc[missing.bus_assignment.values].full_state.values
 
-    buses = (
-        buses.reset_index()
-        .rename(columns={"Bus": "bus_id", "x": "lon", "y": "lat"})
-        .set_index("bus_id")
-    )
-    missing = (
-        missing.reset_index()
-        .rename(columns={"Bus": "bus_id", "x": "lon", "y": "lat"})
-        .set_index("bus_id")
-    )
+    buses = buses.reset_index().rename(columns={"Bus": "bus_id", "x": "lon", "y": "lat"}).set_index("bus_id")
+    missing = missing.reset_index().rename(columns={"Bus": "bus_id", "x": "lon", "y": "lat"}).set_index("bus_id")
 
     # reassigning values to original dataframe
     gdf_bus.loc[missing.index, "full_state"] = missing.full_state
@@ -575,7 +499,25 @@ def assign_reeds_memberships(n: pypsa.Network, fn_reeds_memberships: str):
     reeds_memberships = pd.read_csv(fn_reeds_memberships, index_col=0)
     n.buses["nerc_reg"] = n.buses.reeds_zone.map(reeds_memberships.nercr)
     n.buses["trans_reg"] = n.buses.reeds_zone.map(reeds_memberships.transreg)
+    n.buses["trans_grp"] = n.buses.reeds_zone.map(reeds_memberships.transgrp)
     n.buses["reeds_state"] = n.buses.reeds_zone.map(reeds_memberships.st)
+
+    # Groupby county, and assign the most common reeds_zone, reeds_ba, reeds_state, nerc
+    # This is a fix for the few counties that are split between unaligned county GIS and Reeds Zone Shapes.
+    n.buses["reeds_zone"] = n.buses.groupby("county")["reeds_zone"].transform(lambda x: x.mode()[0])
+    n.buses["reeds_ba"] = n.buses.groupby("county")["reeds_ba"].transform(lambda x: x.mode()[0])
+    n.buses["reeds_state"] = n.buses.groupby("county")["reeds_state"].transform(lambda x: x.mode()[0])
+    n.buses["nerc_reg"] = n.buses.groupby("county")["nerc_reg"].transform(lambda x: x.mode()[0])
+    n.buses["trans_reg"] = n.buses.groupby("county")["trans_reg"].transform(lambda x: x.mode()[0])
+    n.buses["trans_grp"] = n.buses.groupby("county")["trans_grp"].transform(lambda x: x.mode()[0])
+
+    # # Assert that each county must have the same reeds_ba, reeds_zone, reeds_state, nerc_reg, and trans_reg
+    # assert n.buses.groupby("county")["reeds_ba"].nunique().eq(1).all()
+    # assert n.buses.groupby("county")["reeds_zone"].nunique().eq(1).all()
+    # assert n.buses.groupby("county")["reeds_state"].nunique().eq(1).all()
+    # assert n.buses.groupby("county")["nerc_reg"].nunique().eq(1).all()
+    # assert n.buses.groupby("county")["trans_reg"].nunique().eq(1).all()
+    # assert n.buses.groupby("county")["trans_grp"].nunique().eq(1).all()
 
 
 def modify_breakthrough_substations(buslocs: pd.DataFrame):
@@ -589,6 +531,14 @@ def modify_breakthrough_substations(buslocs: pd.DataFrame):
         39731: {"lon": -106.3232, "lat": 31.7093},
         35116: {"lon": -122.462, "lat": 48.982},
         37707: {"lon": -115.4550, "lat": 32.6866},
+        35976: {"lon": -120.8735, "lat": 39.4691},
+        39211: {"lon": -104.6295, "lat": 39.3372},
+        38886: {"lon": -106.5569, "lat": 31.8004},
+        39574: {"lon": -115.0836, "lat": 42.8692},
+        39547: {"lon": -113.4500, "lat": 42.6942},
+        38928: {"lon": -108.0648, "lat": 39.0692},
+        39570: {"lon": -114.3526, "lat": 42.6286},
+        39571: {"lon": -114.0353, "lat": 42.5435},
     }
     for i in sub_fixes.keys():
         buslocs.loc[buslocs.sub_id == i, "lon"] = sub_fixes[i]["lon"]
@@ -609,12 +559,8 @@ def modify_breakthrough_lines(n: pypsa.Network, interconnect: str):
 
         for i in line_fixes.keys():
             n.lines.loc[n.lines.index == i, "v_nom"] = line_fixes[i]["v_nom"]
-            n.buses.loc[n.lines.loc[n.lines.index == i].bus0, "v_nom"] = line_fixes[i][
-                "v_nom"
-            ]
-            n.buses.loc[n.lines.loc[n.lines.index == i].bus1, "v_nom"] = line_fixes[i][
-                "v_nom"
-            ]
+            n.buses.loc[n.lines.loc[n.lines.index == i].bus0, "v_nom"] = line_fixes[i]["v_nom"]
+            n.buses.loc[n.lines.loc[n.lines.index == i].bus1, "v_nom"] = line_fixes[i]["v_nom"]
 
         # Removing Unccesary Lines in Humboldt, adding new missing one.
         line_removals = ["89634", "89668", "90528"]
@@ -630,9 +576,7 @@ def modify_breakthrough_lines(n: pypsa.Network, interconnect: str):
         )
         n.lines.loc[line_params.name, "v_nom"] = line_params.v_nom
         n.lines.loc[line_params.name, "interconnect"] = line_params.interconnect
-        n.lines.loc[line_params.name, "underwater_fraction"] = (
-            line_params.underwater_fraction
-        )
+        n.lines.loc[line_params.name, "underwater_fraction"] = line_params.underwater_fraction
 
     return n
 
@@ -654,6 +598,7 @@ def main(snakemake):
     n = pypsa.Network()
     n.name = "PyPSA-USA"
 
+    model_topology = snakemake.params.model_topology
     interconnect = snakemake.wildcards.interconnect
     # interconnect in raw data given with an uppercase first letter
     if interconnect != "usa":
@@ -671,11 +616,7 @@ def main(snakemake):
     gdf_bus = assign_bus_location(df_bus, buslocs)
 
     # test dropping duplicate bus ids earlier
-    gdf_bus = (
-        gdf_bus.reset_index()
-        .drop_duplicates(subset="bus_id", keep="first")
-        .set_index("bus_id")
-    )
+    gdf_bus = gdf_bus.reset_index().drop_duplicates(subset="bus_id", keep="first").set_index("bus_id")
 
     # balancing authority shape
     ba_region_shapes = gpd.read_file(snakemake.input["onshore_shapes"])
@@ -684,7 +625,6 @@ def main(snakemake):
         pd.concat([ba_region_shapes, offshore_shapes], ignore_index=True),
     )
     ba_shape = ba_shape.rename(columns={"name": "balancing_area"})
-
     # Load country, state, county, and REeDs shapes
     state_shape = gpd.read_file(snakemake.input["state_shapes"])
     state_shape = state_shape.rename(columns={"name": "state"})
@@ -714,11 +654,7 @@ def main(snakemake):
     gdf_bus.drop(columns=["full_state"], inplace=True)
 
     # Removing few duplicated shapes where GIS shapes were overlapping. TODO Fix GIS shapes
-    gdf_bus = (
-        gdf_bus.reset_index()
-        .drop_duplicates(subset="bus_id", keep="first")
-        .set_index("bus_id")
-    )
+    gdf_bus = gdf_bus.reset_index().drop_duplicates(subset="bus_id", keep="first").set_index("bus_id")
 
     # add buses, transformers, lines and links
     n = add_buses_from_file(n, gdf_bus, interconnect=interconnect)
@@ -751,20 +687,39 @@ def main(snakemake):
     assign_missing_states_countries(n)
     assign_reeds_memberships(n, snakemake.input.reeds_memberships)
 
-    p_max_pu = 1  # snakemake.params["links"].get("p_max_pu", 1.0)
+    p_max_pu = 1
     n.links["p_max_pu"] = p_max_pu
     n.links["p_min_pu"] = -p_max_pu
+
+    # Filter Network to Only Specified Regions
+    if model_topology is not None:
+        for region_type in model_topology:
+            rm_buses = n.buses.loc[~(n.buses[f"{region_type}"].isin(model_topology[region_type]))]
+            rm_lines = n.lines.loc[(n.lines.bus0.isin(rm_buses.index)) | (n.lines.bus1.isin(rm_buses.index))]
+            rm_transformers = n.transformers.loc[
+                (n.transformers.bus0.isin(rm_buses.index)) | (n.transformers.bus1.isin(rm_buses.index))
+            ]
+            rm_links = n.links.loc[(n.links.bus0.isin(rm_buses.index)) | (n.links.bus1.isin(rm_buses.index))]
+            n.mremove("Line", rm_lines.index.tolist())
+            n.mremove("Transformer", rm_transformers.index.tolist())
+            n.mremove("Link", rm_links.index.tolist())
+            n.mremove("Bus", rm_buses.index.tolist())
+            logger.info(
+                f"Filtered network to {model_topology[region_type]}. Removed {len(rm_buses)} buses, {len(n.buses)} remaining.",
+            )
+            assert (
+                len(n.buses) > 0
+            ), "No buses remaining in network. Check your model_topology: inclusion:, you may be filtering the wrong zones for the selected interconnect"
 
     # Tests
     logger.info(test_network_datatype_consistency(n))
 
+    col_list = ["poi_bus", "poi_sub", "poi"]
+    n.buses.drop(columns=[col for col in col_list if col in n.buses], inplace=True)
+
     if (
         len(
-            n.buses.loc[
-                n.buses.balancing_area.isna()
-                | n.buses.state.isna()
-                | n.buses.country.isna()
-            ],
+            n.buses.loc[n.buses.balancing_area.isna() | n.buses.state.isna() | n.buses.country.isna()],
         )
         > 0
     ):
@@ -773,11 +728,19 @@ def main(snakemake):
         )
 
     # export bus2sub interconnect data
-    logger.info(f"Exporting bus2sub and sub data for {interconnect}")
-
     bus2sub = n.buses[
-        ["sub_id", "interconnect", "balancing_area", "x", "y", "state", "country"]
+        [
+            "sub_id",
+            "interconnect",
+            "balancing_area",
+            "x",
+            "y",
+            "state",
+            "country",
+            "county",
+        ]
     ]
+
     bus2sub.to_csv(snakemake.output.bus2sub)
     subs = (
         n.buses[["sub_id", "x", "y", "interconnect"]]
@@ -825,6 +788,6 @@ if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
 
-        snakemake = mock_snakemake("build_base_network", interconnect="western")
+        snakemake = mock_snakemake("build_base_network", interconnect="texas")
     configure_logging(snakemake)
     main(snakemake)

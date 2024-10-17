@@ -8,6 +8,7 @@ import re
 from functools import partial
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import requests
 import yaml
@@ -170,9 +171,7 @@ def load_network_for_plots(fn, tech_costs, config, combine_hydro_ps=True):
     n.loads["carrier"] = n.loads.bus.map(n.buses.carrier) + " load"
     n.stores["carrier"] = n.stores.bus.map(n.buses.carrier)
 
-    n.links["carrier"] = (
-        n.links.bus0.map(n.buses.carrier) + "-" + n.links.bus1.map(n.buses.carrier)
-    )
+    n.links["carrier"] = n.links.bus0.map(n.buses.carrier) + "-" + n.links.bus1.map(n.buses.carrier)
     n.lines["carrier"] = "AC line"
     n.transformers["carrier"] = "AC transformer"
 
@@ -194,6 +193,18 @@ def load_network_for_plots(fn, tech_costs, config, combine_hydro_ps=True):
     update_transmission_costs(n, costs)
 
     return n
+
+
+def is_transport_model(transmission_network):
+    match transmission_network:
+        case "reeds":
+            return True
+        case "tamu":
+            return False
+        case _:
+            return ValueError(
+                "transmission network not specified correctly. Check config",
+            )
 
 
 def update_p_nom_max(n):
@@ -230,9 +241,7 @@ def aggregate_p(n):
 def aggregate_e_nom(n):
     return pd.concat(
         [
-            (n.storage_units["p_nom_opt"] * n.storage_units["max_hours"])
-            .groupby(n.storage_units["carrier"])
-            .sum(),
+            (n.storage_units["p_nom_opt"] * n.storage_units["max_hours"]).groupby(n.storage_units["carrier"]).sum(),
             n.stores["e_nom_opt"].groupby(n.stores.carrier).sum(),
         ],
     )
@@ -242,18 +251,11 @@ def aggregate_p_curtailed(n):
     return pd.concat(
         [
             (
-                (
-                    n.generators_t.p_max_pu.sum().multiply(n.generators.p_nom_opt)
-                    - n.generators_t.p.sum()
-                )
+                (n.generators_t.p_max_pu.sum().multiply(n.generators.p_nom_opt) - n.generators_t.p.sum())
                 .groupby(n.generators.carrier)
                 .sum()
             ),
-            (
-                (n.storage_units_t.inflow.sum() - n.storage_units_t.p.sum())
-                .groupby(n.storage_units.carrier)
-                .sum()
-            ),
+            ((n.storage_units_t.inflow.sum() - n.storage_units_t.p.sum()).groupby(n.storage_units.carrier).sum()),
         ],
     )
 
@@ -278,16 +280,12 @@ def aggregate_costs(n, flatten=False, opts=None, existing_only=False):
             continue
         if not existing_only:
             p_nom += "_opt"
-        costs[(c.list_name, "capital")] = (
-            (c.df[p_nom] * c.df.capital_cost).groupby(c.df.carrier).sum()
-        )
+        costs[(c.list_name, "capital")] = (c.df[p_nom] * c.df.capital_cost).groupby(c.df.carrier).sum()
         if p_attr is not None:
             p = c.pnl[p_attr].sum()
             if c.name == "StorageUnit":
                 p = p.loc[p > 0]
-            costs[(c.list_name, "marginal")] = (
-                (p * c.df.marginal_cost).groupby(c.df.carrier).sum()
-            )
+            costs[(c.list_name, "marginal")] = (p * c.df.marginal_cost).groupby(c.df.carrier).sum()
     costs = pd.concat(costs)
 
     if flatten:
@@ -474,9 +472,7 @@ def local_to_utc(group):
 
     timezone_str = STATE_2_TIMEZONE[group.name]
     timezone = pytz.timezone(timezone_str)
-    time_shift = (
-        -1 * group.iloc[0].tz_localize(timezone).utcoffset().total_seconds() / 3600
-    )
+    time_shift = -1 * group.iloc[0].tz_localize(timezone).utcoffset().total_seconds() / 3600
     utc = group + pd.Timedelta(hours=time_shift)
     return utc
 
@@ -615,9 +611,7 @@ def update_config_from_wildcards(config, w, inplace=True):
         if co2l_enable:
             config["electricity"]["co2limit_enable"] = True
             if co2l_value is not None:
-                config["electricity"]["co2limit"] = (
-                    co2l_value * config["electricity"]["co2base"]
-                )
+                config["electricity"]["co2limit"] = co2l_value * config["electricity"]["co2base"]
 
         gasl_enable, gasl_value = find_opt(opts, "CH4L")
         if gasl_enable:
@@ -718,9 +712,7 @@ def update_config_from_wildcards(config, w, inplace=True):
         if dg_enable:
             config["sector"]["electricity_distribution_grid"] = True
             if dg_factor is not None:
-                config["sector"][
-                    "electricity_distribution_grid_cost_factor"
-                ] = dg_factor
+                config["sector"]["electricity_distribution_grid_cost_factor"] = dg_factor
 
         if "biomasstransport" in opts:
             config["sector"]["biomass_transport"] = True
@@ -888,3 +880,14 @@ def get_snapshots(
         time = time[~((time.month == 2) & (time.day == 29))]
 
     return time
+
+
+def weighted_avg(df, values, weights):
+    """
+    Return the weighted average of a DataFrame column(s) `values` with weights
+    `weights`.
+    """
+    valid = df[values].notna()
+    if valid.sum() == 0:
+        return np.nan  # Return NaN if no valid entries
+    return np.average(df[values][valid], weights=df[weights][valid])

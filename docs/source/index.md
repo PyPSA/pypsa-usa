@@ -67,8 +67,9 @@ data-transportation
 :maxdepth: 1
 :hidden:
 
-config-wildcards
+config-spatial
 config-configuration
+config-wildcards
 config-sectors
 ```
 

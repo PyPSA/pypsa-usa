@@ -70,11 +70,7 @@ def filter_small_polygons_gpd(
     """
     # Explode the MultiPolygons into individual Polygons
     original_crs = geo_series.crs
-    exploded = (
-        geo_series.to_crs(MEASUREMENT_CRS)
-        .explode(index_parts=True)
-        .reset_index(drop=True)
-    )
+    exploded = geo_series.to_crs(MEASUREMENT_CRS).explode(index_parts=True).reset_index(drop=True)
 
     # Filter based on area
     filtered = exploded[exploded.area >= min_area]
@@ -206,7 +202,7 @@ def _dissolve_eez(
         geometry=shape.explode(index_parts=False).geometry,
     ).set_crs(MEASUREMENT_CRS)
     buffered_interconnect = interconnect.to_crs(MEASUREMENT_CRS).buffer(max_buffer)
-    union_buffered_interconnect = buffered_interconnect.unary_union
+    union_buffered_interconnect = buffered_interconnect.union_all()
     filtered_shapes = shape_split[shape_split.intersects(union_buffered_interconnect)]
     shape_split = filtered_shapes.to_crs(GPS_CRS)
     return shape_split
@@ -229,9 +225,7 @@ def trim_states_to_interconnect(
         )
         texas_geometry = gdf_states.loc[gdf_states.name == "Texas", "geometry"]
         texas_geometry = filter_small_polygons_gpd(texas_geometry, 1e8)
-        gdf_states.loc[gdf_states.name == "Texas", "geometry"] = (
-            texas_geometry.geometry.values
-        )
+        gdf_states.loc[gdf_states.name == "Texas", "geometry"] = texas_geometry.geometry.values
     elif interconnect == "eastern":
         gdf_nerc_f = gdf_nerc[gdf_nerc.OBJECTID.isin([1, 3, 6, 7])]
         gdf_states = gpd.overlay(
@@ -320,7 +314,7 @@ def main(snakemake):
 
     # Save NERC Interconnection shapes
     interconnect_regions = gpd.GeoDataFrame(
-        [[gdf_states.unary_union, "NERC_Interconnect"]],
+        [[gdf_states.union_all(), "NERC_Interconnect"]],
         columns=["geometry", "name"],
     )
     interconnect_regions = interconnect_regions.set_crs(GPS_CRS)
@@ -380,6 +374,7 @@ def main(snakemake):
     # read county shapes
     # takes ~10min to trim shap to interconnect, so skipping
     gdf_counties = load_counties_shape(snakemake.input.county_shapes)
+    gdf_counties["GEOID"] = "p" + gdf_counties["GEOID"]
     gdf_counties.to_file(snakemake.output.county_shapes)
 
     # Load and build offshore shapes
@@ -399,16 +394,16 @@ def main(snakemake):
     buffer_distance_max = snakemake.params.offwind_params["max_shore_distance"]
 
     buffered_na = gdf_na.to_crs(MEASUREMENT_CRS).buffer(buffer_distance_min)
-    offshore = offshore.to_crs(MEASUREMENT_CRS).difference(buffered_na.unary_union)
+    offshore = offshore.to_crs(MEASUREMENT_CRS).difference(buffered_na.union_all())
     buffered_states = state_boundaries.to_crs(MEASUREMENT_CRS).buffer(
         buffer_distance_min,
     )
-    offshore = offshore.to_crs(MEASUREMENT_CRS).difference(buffered_states.unary_union)
+    offshore = offshore.to_crs(MEASUREMENT_CRS).difference(buffered_states.union_all())
     buffer_states_max = state_boundaries.to_crs(MEASUREMENT_CRS).buffer(
         buffer_distance_max,
     )
     offshore = offshore.to_crs(MEASUREMENT_CRS).intersection(
-        buffer_states_max.unary_union,
+        buffer_states_max.union_all(),
     )
 
     offshore = offshore[~offshore.is_empty]  # remove empty polygons

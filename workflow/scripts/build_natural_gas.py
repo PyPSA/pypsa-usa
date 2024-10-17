@@ -63,7 +63,7 @@ from pypsa.components import Network
 logger = logging.getLogger(__name__)
 from abc import ABC, abstractmethod
 from math import pi
-from typing import Dict, List, Union
+from typing import Any, Optional
 
 import eia
 import numpy as np
@@ -75,7 +75,6 @@ import yaml
 
 # for converting everthing into MWh_th
 MWH_2_MMCF = constants.NG_MWH_2_MMCF
-MMCF_2_MWH = 1 / MWH_2_MMCF
 KJ_2_MWH = (1 / 1000) * (1 / 3600)
 
 ###
@@ -162,9 +161,7 @@ class GasData(ABC):
     state_2_interconnect = constants.STATES_INTERCONNECT_MAPPER
     state_2_name = {v: k for k, v in constants.STATE_2_CODE.items()}
     name_2_state = constants.STATE_2_CODE
-    states_2_remove = [
-        x for x, y in constants.STATES_INTERCONNECT_MAPPER.items() if not y
-    ]
+    states_2_remove = [x for x, y in constants.STATES_INTERCONNECT_MAPPER.items() if not y]
 
     def __init__(self, year: int, interconnect: str) -> None:
         self.year = year
@@ -180,11 +177,11 @@ class GasData(ABC):
         return self._data
 
     @abstractmethod
-    def read_data(self) -> Union[pd.DataFrame, gpd.GeoDataFrame]:
+    def read_data(self) -> pd.DataFrame | gpd.GeoDataFrame:
         pass
 
     @abstractmethod
-    def format_data(self, data: Union[pd.DataFrame, gpd.GeoDataFrame]) -> pd.DataFrame:
+    def format_data(self, data: pd.DataFrame | gpd.GeoDataFrame) -> pd.DataFrame:
         pass
 
     def _get_data(self) -> pd.DataFrame:
@@ -228,6 +225,19 @@ class GasData(ABC):
                 )
             return df.drop(columns="interconnect")
 
+    @abstractmethod
+    def filter_on_sate(
+        self,
+        n: pypsa.Network,
+        df: pd.DataFrame,
+        **kwargs,
+    ) -> pd.DataFrame:
+        """
+        Called before adding infrastructure to check if only modelling a subset
+        of interconnect.
+        """
+        pass
+
 
 class GasBuses(GasData):
     """
@@ -252,9 +262,32 @@ class GasBuses(GasData):
         data["name"] = data.STATE.map(self.state_2_name)
         return self.filter_on_interconnect(data)
 
+    def filter_on_sate(
+        self,
+        n: pypsa.Network,
+        df: pd.DataFrame,
+    ) -> pd.DataFrame:
+        states_in_model = n.buses[
+            ~n.buses.carrier.isin(
+                ["gas storage", "gas export", "gas import", "gas pipeline"],
+            )
+        ].STATE.unique()
+
+        if "STATE" not in df.columns:
+            logger.debug(
+                "Natual gas data not filtered due to incorrect data formatting",
+            )
+            return df
+
+        df = df[df.STATE.isin(states_in_model)].copy()
+
+        return df
+
     def build_infrastructure(self, n: Network) -> None:
 
-        states = self.data.copy().set_index("STATE")
+        df = self.filter_on_sate(n, self.data)
+
+        states = df.set_index("STATE")
 
         n.madd(
             "Bus",
@@ -317,9 +350,30 @@ class GasStorage(GasData):
         )
         return self.filter_on_interconnect(df, ["U.S."])
 
+    def filter_on_sate(
+        self,
+        n: pypsa.Network,
+        df: pd.DataFrame,
+    ) -> pd.DataFrame:
+        states_in_model = n.buses[
+            ~n.buses.carrier.isin(
+                ["gas storage", "gas export", "gas import", "gas pipeline"],
+            )
+        ].STATE.unique()
+
+        if "STATE" not in df.columns:
+            logger.debug(
+                "Natual gas data not filtered due to incorrect data formatting",
+            )
+            return df
+
+        df = df[df.STATE.isin(states_in_model)].copy()
+
+        return df
+
     def build_infrastructure(self, n: pypsa.Network, **kwargs):
 
-        df = self.data.copy()
+        df = self.filter_on_sate(n, self.data)
         df.index = df.STATE
         df["state_name"] = df.index.map(self.state_2_name)
 
@@ -411,9 +465,30 @@ class GasProcessing(GasData):
         )
         return self.filter_on_interconnect(df, ["U.S."])
 
+    def filter_on_sate(
+        self,
+        n: pypsa.Network,
+        df: pd.DataFrame,
+    ) -> pd.DataFrame:
+        states_in_model = n.buses[
+            ~n.buses.carrier.isin(
+                ["gas storage", "gas export", "gas import", "gas pipeline"],
+            )
+        ].STATE.unique()
+
+        if "STATE" not in df.columns:
+            logger.debug(
+                "Natual gas data not filtered due to incorrect data formatting",
+            )
+            return df
+
+        df = df[df.STATE.isin(states_in_model)].copy()
+
+        return df
+
     def build_infrastructure(self, n: pypsa.Network, **kwargs):
 
-        df = self.data.copy()
+        df = self.filter_on_sate(n, self.data)
         df = df.set_index("STATE")
         df["bus"] = df.index + " gas"
 
@@ -422,18 +497,54 @@ class GasProcessing(GasData):
         p_nom_mult = 1 if capacity_mult >= 1 else capacity_mult
         p_nom_max_mult = capacity_mult
 
+        if "gas production" not in n.carriers.index:
+            n.add("Carrier", "gas production", color="#d35050", nice_name="Gas Production")
+
         n.madd(
-            "Generator",
+            "Bus",
             names=df.index,
             suffix=" gas production",
-            bus=df.bus,
-            carrier="gas",
+            carrier="gas production",
+            unit="MWh_th",
+            country=df.index,
+            interconnect=self.interconnect,
+            STATE=df.index,
+        )
+
+        n.madd(
+            "Link",
+            names=df.index,
+            suffix=" gas production",
+            carrier="gas production",
+            unit="MW",
+            bus0=df.index + " gas production",
+            bus1=df.index + " gas",
+            efficiency=1,
             p_nom_extendable=p_nom_extendable,
             capital_cost=0.01,  # to update
             marginal_costs=0.35,  # https://www.eia.gov/analysis/studies/drilling/pdf/upstream.pdf
             p_nom=df.p_nom * p_nom_mult,
             p_nom_min=0,
             p_nom_max=df.p_nom * p_nom_max_mult,
+        )
+
+        n.madd(
+            "Store",
+            names=df.index,
+            unit="MWh_th",
+            suffix=" gas production",
+            bus=df.index + " gas production",
+            carrier="gas production",
+            capital_cost=0,
+            marginal_cost=0,
+            e_cyclic=False,
+            e_cyclic_per_period=False,
+            e_nom=0,
+            e_nom_extendable=True,
+            e_nom_min=0,
+            e_nom_max=np.inf,
+            e_min_pu=-1,
+            e_max_pu=0,
         )
 
 
@@ -451,13 +562,40 @@ class _GasPipelineCapacity(GasData):
             index_col=0,
         )
 
+    def get_states_in_model(self, n: pypsa.Network) -> list[str]:
+        return n.buses[
+            ~n.buses.carrier.isin(
+                ["gas storage", "gas export", "gas import", "gas pipeline"],
+            )
+        ].STATE.unique()
+
+    def filter_on_sate(
+        self,
+        n: pypsa.Network,
+        df: pd.DataFrame,
+        in_spatial_scope: bool,
+    ) -> pd.DataFrame:
+
+        states_in_model = self.get_states_in_model(n)
+
+        if ("STATE_TO" and "STATE_FROM") not in df.columns:
+            logger.debug(
+                "Natual gas data not filtered due to incorrect data formatting",
+            )
+            return df
+
+        if in_spatial_scope:
+            df = df[(df.STATE_TO.isin(states_in_model)) & (df.STATE_FROM.isin(states_in_model))].copy()
+        else:
+            df = df[(df.STATE_TO.isin(states_in_model)) | (df.STATE_FROM.isin(states_in_model))].copy()
+
+        return df[~(df.STATE_TO == df.STATE_FROM)].copy()
+
     def format_data(self, data: pd.DataFrame) -> pd.DataFrame:
         df = data.copy()
         df.columns = df.columns.str.strip()
         df = df[df.index == int(self.year)]
-        df["Capacity (mmcfd)"] = (
-            df["Capacity (mmcfd)"] * MWH_2_MMCF / 24
-        )  # divide by 24 to get hourly
+        df["Capacity (mmcfd)"] = df["Capacity (mmcfd)"] * MWH_2_MMCF / 24  # divide by 24 to get hourly
         df = df.rename(
             columns={
                 "State From": "STATE_NAME_FROM",
@@ -545,10 +683,7 @@ class InterconnectGasPipelineCapacity(_GasPipelineCapacity):
         df = df[~df.apply(lambda x: x.STATE_TO == x.STATE_FROM, axis=1)].copy()
 
         if self.interconnect != "usa":
-            df = df[
-                (df.INTERCONNECT_TO == self.interconnect)
-                & (df.INTERCONNECT_FROM == self.interconnect)
-            ]
+            df = df[(df.INTERCONNECT_TO == self.interconnect) & (df.INTERCONNECT_FROM == self.interconnect)]
             if df.empty:
                 logger.error(
                     f"Empty natural gas domestic pipelines for interconnect {self.interconnect}",
@@ -565,7 +700,12 @@ class InterconnectGasPipelineCapacity(_GasPipelineCapacity):
 
     def build_infrastructure(self, n: pypsa.Network) -> None:
 
-        df = self.data.copy()
+        df = self.filter_on_sate(n, self.data, in_spatial_scope=True)
+
+        if df.empty:
+            # happens for single state models
+            logger.info("No gas pipelines added within interconnect")
+            return
 
         if "gas pipeline" not in n.carriers.index:
             n.add("Carrier", "gas pipeline", color="#d35050", nice_name="Gas Pipeline")
@@ -617,44 +757,24 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
         Gets all pipelines within the usa that connect to the interconnect.
         """
 
+        # get rid of international connections
+        df = df[~((df.INTERCONNECT_TO.isin(["canada", "mexico"])) | (df.INTERCONNECT_FROM.isin(["canada", "mexico"])))]
+
         if self.interconnect == "usa":
-            # no domestic connections
-            return pd.DataFrame(columns=df.columns)
+            return df
         else:
-            # get rid of international connections
-            df = df[
-                ~(
-                    (df.INTERCONNECT_TO.isin(["canada", "mexico"]))
-                    | (df.INTERCONNECT_FROM.isin(["canada", "mexico"]))
-                )
-            ]
-            # get rid of pipelines within the interconnect
-            return df[
-                (
-                    df["INTERCONNECT_TO"].eq(self.interconnect)
-                    | df["INTERCONNECT_FROM"].eq(self.interconnect)
-                )
-                & ~(
-                    df["INTERCONNECT_TO"].eq(self.interconnect)
-                    & df["INTERCONNECT_FROM"].eq(self.interconnect)
-                )
-            ]
+            # get rid of pipelines that exist only in other interconnects
+            return df[df["INTERCONNECT_TO"].eq(self.interconnect) | df["INTERCONNECT_FROM"].eq(self.interconnect)]
 
     def _get_international_pipeline_connections(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         Gets all international pipeline connections.
         """
-        df = df[
-            (df.INTERCONNECT_TO.isin(["canada", "mexico"]))
-            | (df.INTERCONNECT_FROM.isin(["canada", "mexico"]))
-        ]
+        df = df[(df.INTERCONNECT_TO.isin(["canada", "mexico"])) | (df.INTERCONNECT_FROM.isin(["canada", "mexico"]))]
         if self.interconnect == "usa":
             return df
         else:
-            return df[
-                (df.INTERCONNECT_TO == self.interconnect)
-                | (df.INTERCONNECT_FROM == self.interconnect)
-            ]
+            return df[(df.INTERCONNECT_TO == self.interconnect) | (df.INTERCONNECT_FROM == self.interconnect)]
 
     def _get_international_costs(
         self,
@@ -742,9 +862,7 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
         state_2_code = df.set_index("STATE_NAME_TO")["STATE_TO"].to_dict()
         state_2_code.update(df.set_index("STATE_NAME_FROM")["STATE_FROM"].to_dict())
 
-        state_2_interconnect = df.set_index("STATE_NAME_TO")[
-            "INTERCONNECT_TO"
-        ].to_dict()
+        state_2_interconnect = df.set_index("STATE_NAME_TO")["INTERCONNECT_TO"].to_dict()
         state_2_interconnect.update(
             df.set_index("STATE_NAME_FROM")["INTERCONNECT_FROM"].to_dict(),
         )
@@ -787,16 +905,14 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
             - "WA BC gas import"
         """
 
-        df = self.data.copy()
+        df = self.filter_on_sate(n, self.data, in_spatial_scope=False)
 
         df = self._add_zero_capacity_connections(df)
 
-        if self.interconnect != "usa":
-            to_from = df[df.INTERCONNECT_TO == self.interconnect].copy()  # exports
-            from_to = df[df.INTERCONNECT_FROM == self.interconnect].copy()  # imports
-        else:
-            to_from = df[~df.INTERCONNECT_TO.isin(["canada", "mexico"])].copy()
-            from_to = df[~df.INTERCONNECT_FROM.isin(["canada", "mexico"])].copy()
+        states_in_model = self.get_states_in_model(n)
+
+        to_from = df[df.STATE_TO.isin(states_in_model)].copy()  # exports
+        from_to = df[df.STATE_FROM.isin(states_in_model)].copy()  # imports
 
         to_from["NAME"] = to_from.STATE_TO + " " + to_from.STATE_FROM
         from_to["NAME"] = from_to.STATE_FROM + " " + from_to.STATE_TO
@@ -887,12 +1003,16 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
             unit="MWh_th",
             bus=to_from.index + " gas export",
             carrier="gas export",
-            e_nom_extendable=True,
             capital_cost=0,
-            e_nom=0,
+            marginal_cost=0,
             e_cyclic=False,
             e_cyclic_per_period=False,
-            marginal_cost=0,
+            e_nom=0,
+            e_nom_extendable=True,
+            e_nom_min=0,
+            e_nom_max=np.inf,
+            e_min_pu=0,
+            e_max_pu=1,
         )
 
         n.madd(
@@ -902,45 +1022,17 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
             suffix=" gas import",
             bus=from_to.index + " gas import",
             carrier="gas import",
-            e_nom_extendable=True,
             capital_cost=0,
-            e_nom=0,
+            marginal_cost=0,
             e_cyclic=False,
             e_cyclic_per_period=False,
-            marginal_cost=0,
+            e_nom=0,
+            e_nom_extendable=True,
+            e_nom_min=0,
+            e_nom_max=np.inf,
+            e_min_pu=-1,
+            e_max_pu=0,
         )
-
-
-class TradeGasPipelineEnergy(GasData):
-    """
-    Creator of gas energy limits.
-    """
-
-    def __init__(self, year: int, interconnect: str, direction: str, api: str) -> None:
-        self.api = api
-        self.dir = direction
-        super().__init__(year, interconnect)
-
-    def read_data(self) -> pd.DataFrame:
-        assert self.dir in ("imports", "exports")
-        return eia.Trade("gas", self.dir, self.year, self.api).get_data()
-
-    def format_data(self, n: pypsa.Network) -> None:
-        """
-        Adds international import/export limits.
-        """
-        df = self.data.copy()
-        df["value"] = df.value.astype("float")
-        return (
-            df.drop(columns=["series-description", "units"])
-            .reset_index()
-            .groupby(["period", "state"])
-            .sum()
-            .reset_index()
-        )
-
-    def build_infrastructure(self, n: Network) -> None:
-        pass
 
 
 class PipelineLinepack(GasData):
@@ -964,6 +1056,28 @@ class PipelineLinepack(GasData):
         """https://atlas.eia.gov/apps/3652f0f1860d45beb0fed27dc8a6fc8d/explore"""
         return gpd.read_file(self.pipeline_geojson)
 
+    def filter_on_sate(
+        self,
+        n: pypsa.Network,
+        df: pd.DataFrame,
+    ) -> pd.DataFrame:
+
+        states_in_model = n.buses[
+            ~n.buses.carrier.isin(
+                ["gas storage", "gas export", "gas import", "gas pipeline"],
+            )
+        ].STATE.unique()
+
+        if "STATE" not in df.columns:
+            logger.debug(
+                "Natual gas data not filtered due to incorrect data formatting",
+            )
+            return df
+
+        df = df[df.STATE.isin(states_in_model)].copy()
+
+        return df
+
     def format_data(self, data: gpd.GeoDataFrame) -> pd.DataFrame:
         gdf = data.copy()
         states = self.states.copy()
@@ -975,9 +1089,7 @@ class PipelineLinepack(GasData):
             predicate="within",
         ).reset_index()
         length_in_state = (
-            length_in_state[
-                ["STATE_NAME", "STATE", "TYPEPIPE", "Shape_Leng", "Shape__Length"]
-            ]
+            length_in_state[["STATE_NAME", "STATE", "TYPEPIPE", "Shape_Leng", "Shape__Length"]]
             .rename(columns={"Shape_Leng": "LENGTH_DEG", "Shape__Length": "LENGTH_M"})
             .groupby(by=["STATE_NAME", "STATE", "TYPEPIPE"])
             .sum()
@@ -992,9 +1104,7 @@ class PipelineLinepack(GasData):
         volumne_in_state["RADIUS"] = volumne_in_state.TYPEPIPE.map(
             lambda x: interstate_radius if x == "Interstate" else intrastate_radius,
         )
-        volumne_in_state["VOLUME_M3"] = (
-            volumne_in_state.LENGTH_M * pi * volumne_in_state.RADIUS**2
-        )
+        volumne_in_state["VOLUME_M3"] = volumne_in_state.LENGTH_M * pi * volumne_in_state.RADIUS**2
         volumne_in_state = volumne_in_state[["STATE_NAME", "STATE", "VOLUME_M3"]]
         volumne_in_state = volumne_in_state.groupby(by=["STATE_NAME", "STATE"]).sum()
 
@@ -1005,29 +1115,26 @@ class PipelineLinepack(GasData):
         energy_in_state = volumne_in_state.copy()
         energy_in_state["MAX_ENERGY_kJ"] = energy_in_state.VOLUME_M3 * max_pressure
         energy_in_state["MIN_ENERGY_kJ"] = energy_in_state.VOLUME_M3 * min_pressure
-        energy_in_state["NOMINAL_ENERGY_kJ"] = (
-            energy_in_state.MAX_ENERGY_kJ + energy_in_state.MIN_ENERGY_kJ
-        ) / 2
+        energy_in_state["NOMINAL_ENERGY_kJ"] = (energy_in_state.MAX_ENERGY_kJ + energy_in_state.MIN_ENERGY_kJ) / 2
 
         final = energy_in_state.copy()
         final["MAX_ENERGY_MWh"] = final.MAX_ENERGY_kJ * KJ_2_MWH
         final["MIN_ENERGY_MWh"] = final.MIN_ENERGY_kJ * KJ_2_MWH
         final["NOMINAL_ENERGY_MWh"] = final.NOMINAL_ENERGY_kJ * KJ_2_MWH
 
-        final = final[
-            ["MAX_ENERGY_MWh", "MIN_ENERGY_MWh", "NOMINAL_ENERGY_MWh"]
-        ].reset_index()
+        final = final[["MAX_ENERGY_MWh", "MIN_ENERGY_MWh", "NOMINAL_ENERGY_MWh"]].reset_index()
         return self.filter_on_interconnect(final)
 
     def build_infrastructure(self, n: pypsa.Network, **kwargs) -> None:
 
-        df = self.data.copy()
+        df = self.filter_on_sate(n, self.data)
         df = df.set_index("STATE")
 
         if "gas pipeline" not in n.carriers.index:
             n.add("Carrier", "gas pipeline", color="#d35050", nice_name="Gas Pipeline")
 
         cyclic_storage = kwargs.get("cyclic_storage", True)
+        standing_loss = kwargs.get("standing_loss", 0)
 
         n.madd(
             "Store",
@@ -1049,40 +1156,9 @@ class PipelineLinepack(GasData):
             p_set=0,
             marginal_cost=0,
             capital_cost=1,
-            standing_loss=0,
+            standing_loss=standing_loss,
             lifetime=np.inf,
         )
-
-
-class ImportExportLimits(GasData):
-    """
-    Adds constraints for import export limits.
-    """
-
-    def __init__(self, year: int, interconnect: str, api: str) -> None:
-        self.api = api
-        super().__init__(year, interconnect)
-
-    def read_data(self) -> pd.DataFrame:
-        imports = eia.Trade("gas", "imports", self.year, self.api).get_data()
-        exports = eia.Trade("gas", "exports", self.year, self.api).get_data()
-        return pd.concat([imports, exports])
-
-    def format_data(self, data: pd.DataFrame) -> pd.DataFrame:
-        df = (
-            data.reset_index()
-            .drop(columns=["series-description"])
-            .groupby(["period", "units", "state"])
-            .sum()
-            .reset_index()
-            .rename(columns={"state": "STATE"})
-            .copy()
-        )
-        # may need to add ["U.S."] to states to remove here
-        return self.filter_on_interconnect(df)
-
-    def build_infrastructure(self, n: pypsa.Network) -> None:
-        pass
 
 
 ###
@@ -1098,10 +1174,15 @@ def build_natural_gas(
     county_path: str = "../data/counties/cb_2020_us_county_500k.shp",
     pipelines_path: str = "../data/natural_gas/EIA-StatetoStateCapacity_Jan2023.xlsx",
     pipeline_shape_path: str = "../data/natural_gas/pipelines.geojson",
+    options: Optional[dict[str, Any]] = None,
     **kwargs,
 ) -> None:
 
-    cyclic_storage = kwargs.get("cyclic_storage", True)
+    if not options:
+        options = {}
+
+    cyclic_storage = options.get("cyclic_storage", True)
+    standing_loss = options.get("standing_loss", 0)
 
     # add state level natural gas processing facilities
 
@@ -1138,20 +1219,18 @@ def build_natural_gas(
     )
     pipelines_international.build_infrastructure(n)
 
-    # import_energy_constraints = TradeGasPipelineEnergy(year, interconnect, "imports", api)
-    # import_energy_constraints.build_infrastructure(n)
-    # export_energyconstraints = TradeGasPipelineEnergy(year, interconnect, "exports", api)
-    # export_energyconstraints.build_infrastructure(n)
-
     # add pipeline linepack
 
     linepack = PipelineLinepack(year, interconnect, county_path, pipeline_shape_path)
-    linepack.build_infrastructure(n, cyclic_storage=cyclic_storage)
+    linepack.build_infrastructure(
+        n,
+        cyclic_storage=cyclic_storage,
+        standing_loss=standing_loss,
+    )
 
 
 if __name__ == "__main__":
-
-    n = pypsa.Network("../resources/Default/western/elec_s_100_ec_lv1.0_500SEG.nc")
+    n = pypsa.Network("../resources/Default/western/elec_s12_c6_ec_lv1.0_48SEG.nc")
     year = 2019
     with open("./../config/config.api.yaml") as file:
         yaml_data = yaml.safe_load(file)
