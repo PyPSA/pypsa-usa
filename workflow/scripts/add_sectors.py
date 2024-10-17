@@ -311,6 +311,8 @@ def get_pwr_co2_intensity(carrier: str, costs: pd.DataFrame) -> float:
     different names in translation to a sector study.
     """
 
+    # the ccs case are a hack solution
+
     match carrier:
         case "gas":
             return 0
@@ -318,6 +320,14 @@ def get_pwr_co2_intensity(carrier: str, costs: pd.DataFrame) -> float:
             return costs.at["gas", "co2_emissions"]
         case "lpg":
             return costs.at["oil", "co2_emissions"]
+        case "CCGT-95CCS" | "CCGT-97CCS":
+            base = costs.at["gas", "co2_emissions"]
+            ccs_level = int(carrier.split("-")[1].replace("CCS", ""))
+            return (1 - ccs_level / 100) * base
+        case "coal-95CCS" | "coal-99CCS":
+            base = costs.at["gas", "co2_emissions"]
+            ccs_level = int(carrier.split("-")[1].replace("CCS", ""))
+            return (1 - ccs_level / 100) * base
         case _:
             return costs.at[carrier, "co2_emissions"]
 
@@ -378,12 +388,18 @@ if __name__ == "__main__":
     for carrier in ("oil", "coal", "gas"):
         add_supply = False if carrier == "gas" else True  # gas added in build_ng()
         add_sector_foundation(n, carrier, add_supply, costs, center_points)
-        co2_intensity = get_pwr_co2_intensity(carrier, costs)
-        convert_generators_2_links(n, carrier, f" {carrier}", co2_intensity)
 
-    for carrier in ("OCGT", "CCGT"):
+    for carrier in ("OCGT", "CCGT", "CCGT-95CCS", "CCGT-97CCS"):
         co2_intensity = get_pwr_co2_intensity(carrier, costs)
         convert_generators_2_links(n, carrier, f" gas", co2_intensity)
+
+    for carrier in ("coal", "coal-95CCS", "coal-99CCS"):
+        co2_intensity = get_pwr_co2_intensity(carrier, costs)
+        convert_generators_2_links(n, carrier, f" coal", co2_intensity)
+
+    for carrier in ["oil"]:
+        co2_intensity = get_pwr_co2_intensity(carrier, costs)
+        convert_generators_2_links(n, carrier, f" oil", co2_intensity)
 
     ng_options = snakemake.params.sector["natural_gas"]
 
@@ -403,7 +419,7 @@ if __name__ == "__main__":
     # this must happen after natural gas system is built
     methane_options = snakemake.params.sector["methane"]
     leakage_rate = methane_options.get("leakage_rate", 0)
-    if leakage_rate > 0.000001:
+    if leakage_rate > 0.00001:
         gwp = methane_options.get("gwp", 1)
         build_ch4_tracking(n, gwp, leakage_rate)
 
@@ -457,22 +473,15 @@ if __name__ == "__main__":
 
     # check for end-use brownfield requirements
 
-    if any(
-        [
-            snakemake.params.sector["service_sector"]["brownfield"],
-            snakemake.params.sector["transport_sector"]["brownfield"],
-            snakemake.params.sector["industrial_sector"]["brownfield"],
-        ],
-    ):
-        if all(n.investment_periods > 2023):
-            # this is quite crude assumption and should get updated
-            # assume a 0.5% energy growth per year
-            # https://www.eia.gov/todayinenergy/detail.php?id=56040
-            base_year = 2023
-            growth_multiplier = 1 - (min(n.investment_periods) - 2023) * (0.005)
-        else:
-            base_year = min(n.investment_periods)
-            growth_multiplier = 1
+    if all(n.investment_periods > 2023):
+        # this is quite crude assumption and should get updated
+        # assume a 0.5% energy growth per year
+        # https://www.eia.gov/todayinenergy/detail.php?id=56040
+        base_year = 2023
+        growth_multiplier = 1 - (min(n.investment_periods) - 2023) * (0.005)
+    else:
+        base_year = min(n.investment_periods)
+        growth_multiplier = 1
 
     if snakemake.params.sector["transport_sector"]["brownfield"]:
         ratios = get_transport_stock(snakemake.params.api["eia"], base_year)
