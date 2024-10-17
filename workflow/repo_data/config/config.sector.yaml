@@ -3,11 +3,12 @@ sector:
     sequestration_potential: 0
     policy: "config/policy_constraints/sector_co2_limits.csv"
   natural_gas:
-    allow_imports_exports: true # false to be implemented
-    cyclic_storage: false
+    force_exports: true 
+    cyclic_storage: true
+    standing_loss: 0
   methane:
-    leakage_rate: 2 # percent # to be implemented 
-    gwp: 18 # to be implemented 
+    leakage_rate: 0.02 # per unit 
+    gwp: 18 
   heating:
     heat_pump_sink_T: 55.
   service_sector:

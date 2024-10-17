@@ -27,6 +27,7 @@ Additionally, some extra constraints specified in :mod:`solve_network` are added
 """
 import logging
 import re
+from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -39,6 +40,8 @@ from _helpers import (
     update_config_from_wildcards,
     update_config_with_sector_opts,
 )
+from constants import NG_MWH_2_MMCF
+from eia import Trade
 from pypsa.descriptors import get_switchable_as_dense as get_as_dense
 
 logger = logging.getLogger(__name__)
@@ -78,7 +81,9 @@ def add_land_use_constraint_perfect(n):
     grouper = [n.generators.carrier, n.generators.bus]
     ext_i = n.generators.p_nom_extendable & ~n.generators.index.str.contains("existing")
     # get technical limit per node
-    p_nom_max = n.generators[ext_i].groupby(grouper).sum().p_nom_max / len(n.investment_periods)
+    p_nom_max = n.generators[ext_i].groupby(grouper).sum().p_nom_max / len(
+        n.investment_periods,
+    )
 
     # drop carriers without tech limit
     p_nom_max = p_nom_max[~p_nom_max.isin([np.inf, np.nan])]
@@ -482,7 +487,9 @@ def add_interface_limits(n, sns, config):
             ) - n.model["Line-s"].loc[
                 :,
                 interface_lines_b0.index,
-            ].sum(dims="Line")
+            ].sum(
+                dims="Line",
+            )
         else:
             line_flows = 0.0
         lhs = line_flows
@@ -497,7 +504,9 @@ def add_interface_limits(n, sns, config):
             ) - n.model["Link-p"].loc[
                 :,
                 interface_links_b0.index,
-            ].sum(dims="Link")
+            ].sum(
+                dims="Link",
+            )
             lhs += link_flows
 
         rhs_pos = interface.MW_f0 * -1
@@ -804,55 +813,6 @@ def add_battery_constraints(n):
     n.model.add_constraints(lhs == 0, name="Link-charger_ratio")
 
 
-def add_chp_constraints(n):
-    electric = (
-        n.links.index.str.contains("urban central")
-        & n.links.index.str.contains("CHP")
-        & n.links.index.str.contains("electric")
-    )
-    heat = (
-        n.links.index.str.contains("urban central")
-        & n.links.index.str.contains("CHP")
-        & n.links.index.str.contains("heat")
-    )
-
-    electric_ext = n.links[electric].query("p_nom_extendable").index
-    heat_ext = n.links[heat].query("p_nom_extendable").index
-
-    electric_fix = n.links[electric].query("~p_nom_extendable").index
-    heat_fix = n.links[heat].query("~p_nom_extendable").index
-
-    p = n.model["Link-p"]  # dimension: [time, link]
-
-    # output ratio between heat and electricity and top_iso_fuel_line for extendable
-    if not electric_ext.empty:
-        p_nom = n.model["Link-p_nom"]
-
-        lhs = (
-            p_nom.loc[electric_ext] * (n.links.p_nom_ratio * n.links.efficiency)[electric_ext].values
-            - p_nom.loc[heat_ext] * n.links.efficiency[heat_ext].values
-        )
-        n.model.add_constraints(lhs == 0, name="chplink-fix_p_nom_ratio")
-
-        rename = {"Link-ext": "Link"}
-        lhs = p.loc[:, electric_ext] + p.loc[:, heat_ext] - p_nom.rename(rename).loc[electric_ext]
-        n.model.add_constraints(lhs <= 0, name="chplink-top_iso_fuel_line_ext")
-
-    # top_iso_fuel_line for fixed
-    if not electric_fix.empty:
-        lhs = p.loc[:, electric_fix] + p.loc[:, heat_fix]
-        rhs = n.links.p_nom[electric_fix]
-        n.model.add_constraints(lhs <= rhs, name="chplink-top_iso_fuel_line_fix")
-
-    # back-pressure
-    if not electric.empty:
-        lhs = (
-            p.loc[:, heat] * (n.links.efficiency[heat] * n.links.c_b[electric].values)
-            - p.loc[:, electric] * n.links.efficiency[electric]
-        )
-        n.model.add_constraints(lhs <= rhs, name="chplink-backpressure")
-
-
 def add_pipe_retrofit_constraint(n):
     """
     Add constraint for retrofitting existing CH4 pipelines to H2 pipelines.
@@ -889,7 +849,10 @@ def add_sector_co2_constraints(n, config):
         sns = n.snapshots
         snapshot = sns[sns.get_level_values("period") == year][-1]
 
-        stores = n.stores[(n.stores.index.str.startswith(state)) & (n.stores.index.str.endswith("-co2"))].index
+        stores = n.stores[
+            (n.stores.index.str.startswith(state))
+            & ((n.stores.index.str.endswith("-co2")) | (n.stores.index.str.endswith("-ch4")))
+        ].index
 
         lhs = n.model["Store-e"].loc[snapshot, stores].sum()
 
@@ -906,7 +869,10 @@ def add_sector_co2_constraints(n, config):
         sns = n.snapshots
         snapshot = sns[sns.get_level_values("period") == year][-1]
 
-        stores = n.stores[(n.stores.index.str.startswith(state)) & (n.stores.index.str.endswith(f"{sector}-co2"))].index
+        stores = n.stores[
+            (n.stores.index.str.startswith(state))
+            & ((n.stores.index.str.endswith(f"{sector}-co2")) | (n.stores.index.str.endswith(f"{sector}-ch4")))
+        ].index
 
         lhs = n.model["Store-e"].loc[snapshot, stores].sum()
 
@@ -923,7 +889,7 @@ def add_sector_co2_constraints(n, config):
         sns = n.snapshots
         snapshot = sns[sns.get_level_values("period") == year][-1]
 
-        stores = n.stores[n.stores.index.str.endswith("-co2")].index
+        stores = n.stores[((n.stores.index.str.endswith("-co2")) | (n.stores.index.str.endswith("-ch4")))].index
 
         lhs = n.model["Store-e"].loc[snapshot, stores].sum()
 
@@ -940,7 +906,9 @@ def add_sector_co2_constraints(n, config):
         sns = n.snapshots
         snapshot = sns[sns.get_level_values("period") == year][-1]
 
-        stores = n.stores[n.stores.index.str.endswith(f"{sector}-co2")].index
+        stores = n.stores[
+            (n.stores.index.str.endswith(f"{sector}-co2")) | (n.stores.index.str.endswith(f"{sector}-ch4"))
+        ].index
 
         lhs = n.model["Store-e"].loc[snapshot, stores].sum()
 
@@ -1003,6 +971,109 @@ def add_sector_co2_constraints(n, config):
                         apply_sector_state_limit(n, year, state, sector, value)
 
 
+def add_ng_import_export_limits(n, config):
+
+    def _format_link_name(s: str) -> str:
+        states = s.split("-")
+        return f"{states[0]} {states[1]} gas"
+
+    def _format_domestic_data(
+        prod: pd.DataFrame,
+        link_suffix: Optional[str] = None,
+    ) -> pd.DataFrame:
+
+        df = prod.copy()
+        df["link"] = df.state.map(_format_link_name)
+        if link_suffix:
+            df["link"] = df.link + link_suffix
+
+        # convert mmcf to MWh
+        df["value"] = df["value"] * 1000 / NG_MWH_2_MMCF
+
+        return df[["link", "value"]].rename(columns={"value": "rhs"}).set_index("link")
+
+    def _format_international_data(
+        prod: pd.DataFrame,
+        link_suffix: Optional[str] = None,
+    ) -> pd.DataFrame:
+
+        df = prod.copy()
+        df = df[["value", "state"]].groupby("state", as_index=False).sum()
+        df = df[~(df.state == "USA")].copy()
+
+        df["link"] = df.state.map(_format_link_name)
+        if link_suffix:
+            df["link"] = df.link + link_suffix
+
+        # convert mmcf to MWh
+        df["value"] = df["value"] * 1000 / NG_MWH_2_MMCF
+
+        return df[["link", "value"]].rename(columns={"value": "rhs"}).set_index("link")
+
+    def add_import_limits(n, imports):
+        """
+        Sets gas import limit over each year.
+        """
+
+        weights = n.snapshot_weightings.objective
+
+        links = n.links[n.links.carrier.str.endswith("gas import")].index.to_list()
+
+        for year in n.investment_periods:
+            for link in links:
+                try:
+                    rhs = imports.at[link, "rhs"]
+                except KeyError:
+                    # logger.warning(f"Can not set gas import limit for {link}")
+                    continue
+                lhs = n.model["Link-p"].mul(weights).sel(snapshot=year, Link=link).sum()
+
+                n.model.add_constraints(lhs <= rhs, name=f"ng_limit-{year}-{link}")
+
+    def add_export_limits(n, exports):
+        """
+        Sets maximum export limit over the year.
+        """
+
+        weights = n.snapshot_weightings.objective
+
+        links = n.links[n.links.carrier.str.endswith("gas export")].index.to_list()
+
+        for year in n.investment_periods:
+            for link in links:
+                try:
+                    rhs = exports.at[link, "rhs"]
+                except KeyError:
+                    # logger.warning(f"Can not set gas import limit for {link}")
+                    continue
+                lhs = n.model["Link-p"].mul(weights).sel(snapshot=year, Link=link).sum()
+
+                n.model.add_constraints(lhs >= rhs, name=f"ng_limit-{year}-{link}")
+
+    api = config["api"]["eia"]
+    year = pd.to_datetime(config["snapshots"]["start"]).year
+
+    # add domestic limits
+
+    imports = Trade("gas", False, "imports", year, api).get_data()
+    imports = _format_domestic_data(imports, " import")
+    exports = Trade("gas", False, "exports", year, api).get_data()
+    exports = _format_domestic_data(exports, " export")
+
+    # add_import_limits(n, imports)
+    add_export_limits(n, exports)
+
+    # add international limits
+
+    imports = Trade("gas", True, "imports", year, api).get_data()
+    imports = _format_international_data(imports, " import")
+    exports = Trade("gas", True, "exports", year, api).get_data()
+    exports = _format_international_data(exports, " export")
+
+    # add_import_limits(n, imports)
+    add_export_limits(n, exports)
+
+
 def extra_functionality(n, snapshots):
     """
     Collects supplementary constraints which will be passed to
@@ -1035,7 +1106,10 @@ def extra_functionality(n, snapshots):
     if "sector" in opts:
         sector_co2_limits = config["sector"]["co2"].get("policy", {})
         if sector_co2_limits:
-            add_sector_co2_constraints(n, config)
+            # add_sector_co2_constraints(n, config)
+            pass
+        if config["sector"]["natural_gas"].get("force_imports_exports", False):
+            add_ng_import_export_limits(n, config)
 
     for o in opts:
         if "EQ" in o:
@@ -1102,14 +1176,14 @@ if __name__ == "__main__":
 
         snakemake = mock_snakemake(
             "solve_network",
-            simpl="",
-            opts="REM-48SEG",
-            clusters="10",
-            ll="v1.00",
+            simpl="12",
+            opts="48SEG",
+            clusters="6",
+            ll="v1.0",
             sector_opts="",
-            sector="E",
-            planning_horizons="[2030, 2050]",
-            interconnect="texas",
+            sector="E-G",
+            planning_horizons="2030",
+            interconnect="western",
         )
     configure_logging(snakemake)
     update_config_from_wildcards(snakemake.config, snakemake.wildcards)

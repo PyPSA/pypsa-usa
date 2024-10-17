@@ -1538,12 +1538,15 @@ if __name__ == "__main__":
 
         snakemake = mock_snakemake(
             "plot_sector_capacity",
-            interconnect="western",
-            clusters=100,
+            simpl="12",
+            opts="48SEG",
+            clusters="6",
             ll="v1.0",
-            opts="500SEG",
+            sector_opts="",
             sector="E-G",
-            state="TX",
+            planning_horizons="2030",
+            interconnect="western",
+            state="CA",
         )
     configure_logging(snakemake)
 
