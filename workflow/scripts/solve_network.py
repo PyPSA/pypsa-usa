@@ -78,7 +78,9 @@ def add_land_use_constraint_perfect(n):
     grouper = [n.generators.carrier, n.generators.bus]
     ext_i = n.generators.p_nom_extendable & ~n.generators.index.str.contains("existing")
     # get technical limit per node
-    p_nom_max = n.generators[ext_i].groupby(grouper).sum().p_nom_max / len(n.investment_periods)
+    p_nom_max = n.generators[ext_i].groupby(grouper).sum().p_nom_max / len(
+        n.investment_periods,
+    )
 
     # drop carriers without tech limit
     p_nom_max = p_nom_max[~p_nom_max.isin([np.inf, np.nan])]
@@ -482,7 +484,9 @@ def add_interface_limits(n, sns, config):
             ) - n.model["Line-s"].loc[
                 :,
                 interface_lines_b0.index,
-            ].sum(dims="Line")
+            ].sum(
+                dims="Line",
+            )
         else:
             line_flows = 0.0
         lhs = line_flows
@@ -497,7 +501,9 @@ def add_interface_limits(n, sns, config):
             ) - n.model["Link-p"].loc[
                 :,
                 interface_links_b0.index,
-            ].sum(dims="Link")
+            ].sum(
+                dims="Link",
+            )
             lhs += link_flows
 
         rhs_pos = interface.MW_f0 * -1
@@ -1034,7 +1040,7 @@ def add_cooling_heat_pump_constraints(n, config):
         lhs = n.model["Link-p_nom"].loc[heating_hps] - n.model["Link-p_nom"].loc[cooling_hps]
         rhs = 0
 
-        n.model.add_constraints(lhs == rhs, name=f"Link-{hp_type}_capacity")
+        n.model.add_constraints(lhs == rhs, name=f"Link-{hp_type}_cooling_capacity")
 
     def add_hp_generation_constraint(n, hp_type):
 
@@ -1059,11 +1065,49 @@ def add_cooling_heat_pump_constraints(n, config):
 
         rhs = max_gen
 
-        n.model.add_constraints(lhs <= rhs, name=f"Link-{hp_type}_generation")
+        n.model.add_constraints(lhs <= rhs, name=f"Link-{hp_type}_cooling_generation")
 
     for hp_type in ("ashp", "gshp"):
         add_hp_capacity_constraint(n, hp_type)
         add_hp_generation_constraint(n, hp_type)
+
+
+def add_gshp_capacity_constraint(n, config):
+    """
+    Constrains gshp capacity based on population and ashp installations.
+
+    This constraint should be added if rural/urban sectors are combined into
+    a single total area. In this case, we need to constrain how much gshp capacity
+    can be added to the system.
+
+    For example:
+    - If ratio is 0.75 urban and 0.25 rural
+    - We want to enforce that at max, only 0.33 unit of GSHP can be installed for every unit of ASHP
+    - The constraint is: [ASHP - (urban / rural) * GSHP >= 0]
+    - ie. for every unit of GSHP, we need to install 3 units of ASHP
+    """
+
+    pop = pd.read_csv(snakemake.input.pop_layout)
+    pop["urban_rural_fraction"] = (pop.urban_fraction / pop.rural_fraction).round(2)
+    fraction = pop.set_index("name")["urban_rural_fraction"].to_dict()
+
+    ashp = n.links[n.links.index.str.endswith("ashp")].copy()
+    gshp = n.links[n.links.index.str.endswith("gshp")].copy()
+    if gshp.empty:
+        return
+
+    assert len(ashp) == len(gshp)
+
+    gshp["urban_rural_fraction"] = gshp.bus0.map(fraction)
+
+    ashp_capacity = n.model["Link-p_nom"].loc[ashp.index]
+    gshp_capacity = n.model["Link-p_nom"].loc[gshp.index]
+    gshp_multiplier = gshp["urban_rural_fraction"]
+
+    lhs = ashp_capacity - gshp_capacity.mul(gshp_multiplier.values)
+    rhs = 0
+
+    n.model.add_constraints(lhs >= rhs, name=f"Link-gshp_capacity_ratio")
 
 
 def extra_functionality(n, snapshots):
@@ -1097,6 +1141,7 @@ def extra_functionality(n, snapshots):
         add_interface_limits(n, snapshots, config)
     if "sector" in opts:
         add_cooling_heat_pump_constraints(n, config)
+        add_gshp_capacity_constraint(n, config)
         sector_co2_limits = config["sector"]["co2"].get("policy", {})
         if sector_co2_limits:
             add_sector_co2_constraints(n, config)
