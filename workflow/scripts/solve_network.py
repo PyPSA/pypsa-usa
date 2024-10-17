@@ -1141,7 +1141,8 @@ def extra_functionality(n, snapshots):
         add_interface_limits(n, snapshots, config)
     if "sector" in opts:
         add_cooling_heat_pump_constraints(n, config)
-        add_gshp_capacity_constraint(n, config)
+        if config["sector"]["service_sector"].get("split_urban_rural", False):
+            add_gshp_capacity_constraint(n, config)
         sector_co2_limits = config["sector"]["co2"].get("policy", {})
         if sector_co2_limits:
             add_sector_co2_constraints(n, config)
