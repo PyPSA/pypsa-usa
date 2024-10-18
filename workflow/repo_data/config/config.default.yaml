@@ -9,7 +9,7 @@ run:
 # docs :
 scenario:
   interconnect: [western] #"usa|texas|western|eastern"
-  clusters: [4m]
+  clusters: [33]
   simpl: [75]
   opts: [REM-3h]
   ll: [v1.0]
@@ -129,9 +129,7 @@ costs:
     8hr_PHS: 0.3
     10hr_PHS: 0.3
     12hr_PHS: 0.3
-  max_growth:
-    base:
-    rate:
+  max_growth: # {carrier: {base:, rate:}}
 
 # docs :
 sector:

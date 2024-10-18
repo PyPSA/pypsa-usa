@@ -129,12 +129,7 @@ costs:
     8hr_PHS: 0.3
     10hr_PHS: 0.3
     12hr_PHS: 0.3
-  max_growth:
-    base:
-      SMR: 1000
-    rate:
-      SMR: 1.15
-      nuclear: 1.15
+  max_growth:  # {carrier: {base:, rate:}}
 
 
 # docs :

@@ -485,22 +485,30 @@ def apply_ptc(n, ptc_modifier):
 
 def apply_max_annual_growth_rate(n, max_growth):
     """
-    Applies maximum annual growth rate to all extendable components in the
-    network.
+    Applies maximum annual growth rate to components specified in the
+    configuration file.
 
     Arguments:
     n: pypsa.Network,
-    max_annual_growth_rate: dict,
-        Dict of maximum annual growth rate for each carrier
+    max_growth: dict,
+        Dict of maximum annual growth rate and base for each carrier.
+        Format: #{carrier_name: {base: , rate: }}
     """
-    max_annual_growth_rate = max_growth["rate"]
-    growth_base = max_growth["base"]
-    years = n.investment_period_weightings.index.diff()
-    years = years.dropna().values.mean()
-    for carrier in max_annual_growth_rate.keys():
+    if max_growth is None or len(n.investment_periods) <= 1:
+        return
+
+    years = n.investment_period_weightings.index.to_series().diff().dropna().mean()
+
+    for carrier, growth_params in max_growth.items():
+        base = growth_params.get("base", None)
+        rate = growth_params.get("rate", None)
+
+        if base is None and rate is None:
+            continue
+
         p_nom = n.generators.p_nom.loc[n.generators.carrier == carrier].sum()
-        n.carriers.loc[carrier, "max_growth"] = growth_base.get(carrier) or p_nom
-        n.carriers.loc[carrier, "max_relative_growth"] = max_annual_growth_rate[carrier] ** years
+        n.carriers.loc[carrier, "max_growth"] = base or p_nom
+        n.carriers.loc[carrier, "max_relative_growth"] = rate**years
 
 
 if __name__ == "__main__":
