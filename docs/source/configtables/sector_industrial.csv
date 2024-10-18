@@ -1,0 +1,8 @@
+,Unit,Values,Description
+industrial_sector ,,,Options when implementing the industrial sector
+-- brownfield,--,"bool {true, false}",Include brownfield end-use capacity.
+-- dynamic_costs,--,"bool {true, false}","Apply sector specific time varrying natural gas, oil, and coal costs. "
+-- technologies,,,Energy conversion technologies to model.
+-- -- gas_furnace,,"bool {true, false}",Include natural gas furnaces
+-- -- coal_furnace,,"bool {true, false}",Include coal boilers
+-- -- heat_pump,,"bool {true, false}",Include heat pumps

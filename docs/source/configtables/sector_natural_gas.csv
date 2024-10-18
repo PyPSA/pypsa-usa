@@ -1,0 +1,9 @@
+,Unit,Values,Description
+natural_gas,,,Options when implementing natural gas networks
+-- force_exports,--,"bool {true, false}",Force imports/export limits to states/provinces outside of the model scope. Values are based on historic data aligned to weather year.
+-- cyclic_storage,--,"bool {true, false}",Apply cyclic storage constraints on linepack and underground storage
+-- standing_loss,per_unit,"float {0 <=, >= 1}","Leakage rate from pipelines. These leaks do NOT account towards emissions, just enforces gas production to replinish losses with cyclic constraints. "
+,,,
+methane,,,Options of methane emission accounting attached to natural gas networks
+-- leakage_rate,per_unit,"float {0 <=, >= 1}",Total leakage rate of natural gas in the system (upstream and downstream). Applied to gas processing facilities.
+-- gwp,--,float,Global warming potential of methane. GWP of 1 represents same carbon intensity as burned natural gas.

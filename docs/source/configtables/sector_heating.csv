@@ -1,0 +1,4 @@
+,Unit,Values,Description
+heating,,,Options when implementing heating network
+-- heat_pump_sink_T,C,float,The temperature heat sink used in heat pumps based on DTU / large area radiators. The value is conservatively high to cover hot water and space heating in poorly-insulated buildings
+-- equations,--,str,Set of COP equations to use. (Not implemented)
