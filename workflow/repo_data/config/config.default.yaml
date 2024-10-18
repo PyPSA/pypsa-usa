@@ -9,7 +9,7 @@ run:
 # docs :
 scenario:
   interconnect: [western] #"usa|texas|western|eastern"
-  clusters: [4m]
+  clusters: [33]
   simpl: [75]
   opts: [REM-3h]
   ll: [v1.0]
