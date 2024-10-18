@@ -129,9 +129,7 @@ costs:
     8hr_PHS: 0.3
     10hr_PHS: 0.3
     12hr_PHS: 0.3
-  max_growth:
-    base:
-    rate:
+  max_growth: # {carrier: {base:, rate:}}
 
 # docs :
 sector:
