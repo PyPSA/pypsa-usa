@@ -146,13 +146,14 @@ def plot_gas_trade(
 
         ax = axs[i, 0] if n_rows > 1 else axs[0]
 
-        import_period_data.plot(
-            kind="line",
-            ax=ax,
-            xlabel="",
-            ylabel=f"({units})",
-            title="Imports",
-        )
+        if not import_period_data.empty:
+            import_period_data.plot(
+                kind="line",
+                ax=ax,
+                xlabel="",
+                ylabel=f"({units})",
+                title="Imports",
+            )
 
         # plot exports
 
@@ -164,13 +165,14 @@ def plot_gas_trade(
 
         ax = axs[i, 1] if n_rows > 1 else axs[1]
 
-        export_period_data.plot(
-            kind="line",
-            ax=ax,
-            xlabel="",
-            ylabel=f"({units})",
-            title="Exports",
-        )
+        if not export_period_data.empty:
+            export_period_data.plot(
+                kind="line",
+                ax=ax,
+                xlabel="",
+                ylabel=f"({units})",
+                title="Exports",
+            )
 
     fig.suptitle(title)
 
@@ -235,9 +237,9 @@ if __name__ == "__main__":
 
         snakemake = mock_snakemake(
             "plot_natural_gas",
-            simpl="12",
+            simpl="33",
             opts="48SEG",
-            clusters="6",
+            clusters="11m",
             ll="v1.0",
             sector_opts="",
             sector="E-G",
@@ -288,7 +290,11 @@ if __name__ == "__main__":
                 else:
                     state_data = _sum_state_data(data)
             else:
-                state_data = data[state]
+                try:
+                    state_data = data[state]
+                except KeyError:
+                    logger.info(f"No {meta.nice_name} data for {state}")
+                    continue
 
             if isinstance(state_data, pd.DataFrame):
                 state_data = _group_data(state_data).mul(meta.converter)
