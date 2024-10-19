@@ -37,6 +37,7 @@ extensions = [
     #'rinoh.frontend.sphinx',
     "sphinx.ext.imgconverter",  # for SVG conversion
 ]
+myst_enable_extensions = ["html_image", "colon_fence"]
 myst_heading_anchors = 3
 
 templates_path = ["_templates"]
