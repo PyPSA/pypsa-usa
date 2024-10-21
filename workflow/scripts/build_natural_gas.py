@@ -348,6 +348,10 @@ class GasStorage(GasData):
                 "state": "STATE",
             },
         )
+        # REVIST THIS
+        # start storage a 2/3 full
+        df["e_initial"] = df.MIN_CAPACITY_MWH + (df.MAX_CAPACITY_MWH - df.MIN_CAPACITY_MWH).div(1.5)
+
         return self.filter_on_interconnect(df, ["U.S."])
 
     def filter_on_sate(
@@ -401,7 +405,8 @@ class GasStorage(GasData):
             e_nom=df.MAX_CAPACITY_MWH,
             e_cyclic=cyclic_storage,
             e_min_pu=df.MIN_CAPACITY_MWH / df.MAX_CAPACITY_MWH,
-            e_initial=df.MAX_CAPACITY_MWH - df.MIN_CAPACITY_MWH,  # same as working
+            # e_initial=df.MAX_CAPACITY_MWH - df.MIN_CAPACITY_MWH,
+            e_initial=df.e_initial,
             marginal_cost=0,  # to update
         )
 
@@ -498,7 +503,12 @@ class GasProcessing(GasData):
         p_nom_max_mult = capacity_mult
 
         if "gas production" not in n.carriers.index:
-            n.add("Carrier", "gas production", color="#d35050", nice_name="Gas Production")
+            n.add(
+                "Carrier",
+                "gas production",
+                color="#d35050",
+                nice_name="Gas Production",
+            )
 
         n.madd(
             "Bus",

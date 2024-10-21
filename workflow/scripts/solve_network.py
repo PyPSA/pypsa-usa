@@ -1074,22 +1074,22 @@ def add_ng_import_export_limits(n, config):
 
     # add domestic limits
 
-    imports = Trade("gas", False, "imports", year, api).get_data()
+    imports = Trade("gas", False, "exports", year, api).get_data()
     imports = _format_domestic_data(imports, " import")
-    exports = Trade("gas", False, "exports", year, api).get_data()
+    exports = Trade("gas", False, "imports", year, api).get_data()
     exports = _format_domestic_data(exports, " export")
 
-    # add_import_limits(n, imports)
+    add_import_limits(n, imports)
     add_export_limits(n, exports)
 
     # add international limits
 
-    imports = Trade("gas", True, "imports", year, api).get_data()
+    imports = Trade("gas", True, "exports", year, api).get_data()
     imports = _format_international_data(imports, " import")
-    exports = Trade("gas", True, "exports", year, api).get_data()
+    exports = Trade("gas", True, "imports", year, api).get_data()
     exports = _format_international_data(exports, " export")
 
-    # add_import_limits(n, imports)
+    add_import_limits(n, imports)
     add_export_limits(n, exports)
 
 
@@ -1123,11 +1123,9 @@ def extra_functionality(n, snapshots):
     if interface_limits:
         add_interface_limits(n, snapshots, config)
     if "sector" in opts:
-        sector_co2_limits = config["sector"]["co2"].get("policy", {})
-        if sector_co2_limits:
-            # add_sector_co2_constraints(n, config)
-            pass
-        if config["sector"]["natural_gas"].get("force_imports_exports", False):
+        if config["sector"]["co2"].get("policy", {}):
+            add_sector_co2_constraints(n, config)
+        if config["sector"]["natural_gas"].get("force_exports", False):
             add_ng_import_export_limits(n, config)
 
     for o in opts:
@@ -1184,6 +1182,7 @@ def solve_network(n, config, solving, opts="", **kwargs):
             f"Solving status '{status}' with termination condition '{condition}'",
         )
     if "infeasible" in condition:
+        n.model.print_infeasibilities()
         raise RuntimeError("Solving status 'infeasible'")
 
     return n
@@ -1195,9 +1194,9 @@ if __name__ == "__main__":
 
         snakemake = mock_snakemake(
             "solve_network",
-            simpl="12",
+            simpl="33",
             opts="48SEG",
-            clusters="6",
+            clusters="11m",
             ll="v1.0",
             sector_opts="",
             sector="E-G",
