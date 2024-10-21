@@ -18,7 +18,7 @@ This section will give details on how natural gas is modelled within PyPSA-USA.
 
 The natural gas network is represented at a state level, as [EIA Natural Gas](https://www.eia.gov/naturalgas/) data is often reported at state levels. The gas network is overlaid on the electrical sector, not changing the clustering done upstream in the workflow. Central state-level gas buses are created to facilitate the transportation and consumption of gas. Natural gas generators (for example combined-cycle and open-cycle gas turbines) retain all technical and economic paramters, but are changed to connect to the state level bus.
 
-Consider the two state model shown below. State X has 3 clustered regions and 2 natural gas generators, while state Y has 2 clustered regions and 2 natural gas generators. Each clustered node may have other generators, loads, and connections, not shown here for simplicity. [Figure 1](spatial-before) shows how the electrical sector will create the network. [Figure 2](spatial-after) shows how the natural gas modifies the network. The other components (such as pipelines and gas processing) are described in the [next section](#sector-representation).
+Consider the two state model shown below. State X has 3 clustered regions and 2 natural gas generators, while state Y has 2 clustered regions and 2 natural gas generators. Each clustered node may have other generators, loads, and connections, not shown here for simplicity. [Figure 1](spatial-before) shows how the electrical sector will create the network. [Figure 2](spatial-after) shows how the natural gas modifies the network. The other components (such as pipelines and gas processing) are described in the [next section](#pypsa-representation).
 
 
 :::{figure-md} spatial-before
@@ -33,7 +33,7 @@ Electrical Network Spatial Representation
 Electrical and Gas Networks Spatial Representation
 :::
 
-### Sector Representation
+### PyPSA Representation
 
 The natural gas network includes the following components. All components attach a the central state level natural gas bus. The following [figure](gas-components) shows how the different components connect.
 
@@ -45,7 +45,7 @@ The natural gas network includes the following components. All components attach
 ```
 
 :::{figure-md} gas-components
-<img src="./_static/natural_gas/sectror-representation.png" width="800px">
+<img src="./_static/natural_gas/pypsa-representation.png" width="800px">
 
 Natural Gas Network Components
 :::

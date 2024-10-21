@@ -4,6 +4,10 @@
 To run sector coupled studies, the `sector` wildcard must be assigned to `G`. After doing so,
 the following configuration options are exposed to the user.
 
+```{note}
+Only single-period studies are currently supported when running sector studies.
+```
+
 ## Carbon Limits
 ```{eval-rst}
 .. literalinclude:: ../../workflow/repo_data/config/config.sector.yaml

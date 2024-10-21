@@ -1,0 +1,25 @@
+Sector,Technology,Metric,Source
+Residential,Furnaces,Capital Costs | Efficiency | Lifetime,`EIA Buildings Sector Appliance and Equipment Costs and Efficiencies <https://www.eia.gov/analysis/studies/buildings/equipcosts/>`_
+,Water Heaters,Capital Costs | Efficiency | Lifetime,`EIA Buildings Sector Appliance and Equipment Costs and Efficiencies <https://www.eia.gov/analysis/studies/buildings/equipcosts/>`_
+,Air Conditioners,Capital Costs | Efficiency | Lifetime,`EIA Buildings Sector Appliance and Equipment Costs and Efficiencies <https://www.eia.gov/analysis/studies/buildings/equipcosts/>`_
+,Heat Pump,Capital Costs | Lifetime,`EIA Buildings Sector Appliance and Equipment Costs and Efficiencies <https://www.eia.gov/analysis/studies/buildings/equipcosts/>`_
+,Batteries,Capital Costs,`NREL Annual Technology Baseline <https://atb.nrel.gov/>`_
+Commercial,Furnaces,Capital Costs | Efficiency | Lifetime,`EIA Buildings Sector Appliance and Equipment Costs and Efficiencies <https://www.eia.gov/analysis/studies/buildings/equipcosts/>`_
+,Water Heaters,Capital Costs | Efficiency | Lifetime,`EIA Buildings Sector Appliance and Equipment Costs and Efficiencies <https://www.eia.gov/analysis/studies/buildings/equipcosts/>`_
+,Air Conditioners,Capital Costs | Efficiency | Lifetime,`EIA Buildings Sector Appliance and Equipment Costs and Efficiencies <https://www.eia.gov/analysis/studies/buildings/equipcosts/>`_
+,Heat Pump,Capital Costs | Lifetime,`EIA Buildings Sector Appliance and Equipment Costs and Efficiencies <https://www.eia.gov/analysis/studies/buildings/equipcosts/>`_
+,Batteries,Capital Costs | Efficiency | Lifetime,`NREL Annual Technology Baseline <https://atb.nrel.gov/>`_
+Residential,Heat Pump,Efficiency,Time dependent COP calculated
+Commercial,Heat Pump,Efficiency,Time dependent COP calculated
+Residential,Natural Gas,Fuel Cost,`EIA Residential Natural Gas Prices by State <https://www.eia.gov/dnav/ng/ng_pri_sum_a_epg0_prs_dmcf_m.htm>`_
+,Heating Oil,Fuel Cost,`EIA Residenital Heating Oil Gas Prices by State <https://www.eia.gov/dnav/pet/pet_pri_wfr_dcus_nus_m.htm>`_
+Commercial,Natural Gas,Fuel Cost,`EIA Commercial Natural Gas Prices by State <https://www.eia.gov/dnav/ng/ng_pri_sum_a_EPG0_PCS_DMcf_m.htm>`_
+,Heating Oil,Fuel Cost,`EIA Residenital Heating Oil Gas Prices by State <https://www.eia.gov/dnav/pet/pet_pri_wfr_dcus_nus_m.htm>`_
+Residential,Furnaces,Existing Stock,`EIA Residential Energy Consumption Survey <https://www.eia.gov/consumption/residential/>`_
+,Water Heaters,Existing Stock,`EIA Residential Energy Consumption Survey <https://www.eia.gov/consumption/residential/>`_
+,Air Conditioners,Existing Stock,`EIA Residential Energy Consumption Survey <https://www.eia.gov/consumption/residential/>`_
+,Heat Pumps,Existing Stock,`EIA Residential Energy Consumption Survey <https://www.eia.gov/consumption/residential/>`_
+Commercial,Furnaces,Existing Stock,`EIA Commercial Energy Consumption Survey <https://www.eia.gov/consumption/commercial/>`_
+,Water Heaters,Existing Stock,`EIA Commercial Energy Consumption Survey <https://www.eia.gov/consumption/commercial/>`_
+,Air Conditioners,Existing Stock,`EIA Commercial Energy Consumption Survey <https://www.eia.gov/consumption/commercial/>`_
+,Heat Pumps,Existing Stock,`EIA Commercial Energy Consumption Survey <https://www.eia.gov/consumption/commercial/>`_
