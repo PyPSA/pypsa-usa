@@ -1,6 +1,6 @@
 (data-industrial)=
 # Industrial Sector
 
-```{warning}
-Documentation under development for industrial sector!
+```{note}
+Documentation under development for industrial sector! See [sector config options](./config-sectors.md) for overview of functionality.
 ```
