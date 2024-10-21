@@ -1,0 +1,4 @@
+,Unit,Values,Description
+co2,,,Options on carbon dioxide tracking for sector studies
+-- sequestration_potential,MtCO2/a,float,CO2 sequestration potential. (Not Implemented)
+-- policy,,str,"Path to emmison limit policy. Note, policy overrides the power sector emission policy configuration"

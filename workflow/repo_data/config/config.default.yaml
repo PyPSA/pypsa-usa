@@ -13,7 +13,6 @@ scenario:
   simpl: [75]
   opts: [REM-3h]
   ll: [v1.0]
-  scope: "total" # "urban", "rural", or "total"
   sector: "" # G
   planning_horizons: [2030, 2040, 2050]    #(2018-2023, 2030, 2040, 2050)
 
