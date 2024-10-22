@@ -1318,14 +1318,81 @@ class HistoricalProjectedTransportFuelUse(DataExtractor):
         return self._assign_dtypes(df)
 
 
+# class InternationalGasTrade(DataExtractor):
+#     """
+#     Gets imports/exports by point of entry.
+#     """
+
+#     direction_codes = {
+#         "imports": "IRP",
+#         "exports": "ENP",
+#     }
+
+#     points_of_entry = POINTS_OF_ENTRY
+
+#     def __init__(self, direction: str, year: int, api_key: str) -> None:
+#         self.direction = direction
+#         if self.direction not in list(self.direction_codes):
+#             raise InputException(
+#                 propery="Natural Gas International Imports and Exports",
+#                 valid_options=list(self.direction_codes),
+#                 recived_option=direction,
+#             )
+#         super().__init__(year, api_key)
+
+#     def build_url(self) -> str:
+#         poe = "poe1" if self.direction == "imports" else "poe2"
+#         base_url = f"natural-gas/move/{poe}/data/"
+#         facets = f"frequency=monthly&data[0]=value&facets[process][]={self.direction_codes[self.direction]}&start={self.year}-01&end={self.year+1}-01&sort[0][column]=period&sort[0][direction]=desc&offset=0&length=5000"
+#         return f"{API_BASE}{base_url}?api_key={self.api_key}&{facets}"
+
+#     def format_data(self, df: pd.DataFrame) -> pd.DataFrame:
+#         df["period"] = self._format_period(df.period).copy()
+#         df["state"] = df["series-description"].map(self.extract_state).map(self.add_state_connection)
+
+#         df = (
+#             df[["series-description", "value", "units", "state", "period"]]
+#             .sort_values(["state", "period"])
+#             .set_index("period")
+#         )
+
+#         return self._assign_dtypes(df)
+
+#     @staticmethod
+#     def extract_state(description: str) -> str:
+#         """
+#         Extracts state from series descripion.
+
+#         Input will be in one of the following forms
+#         - "Massena, NY Natural Gas Pipeline Imports From Canada"
+#         - "U.S. Natural Gas Pipeline Imports From Mexico"
+#         """
+#         try:  # state level
+#             return description.split(",")[1].split(" ")[1]
+#         except IndexError:  # country level
+#             return description.split(" Natural Gas Pipeline")[0]
+
+#     def add_state_connection(self, state: str) -> str:
+#         """
+#         Adds international connection to state name.
+#         """
+#         if state == "U.S.":
+#             return "USA"
+#         intl_state = self.points_of_entry[state]
+#         connections = sorted([state, intl_state])
+#         return "-".join(connections)
+
+
 class InternationalGasTrade(DataExtractor):
     """
     Gets imports/exports by point of entry.
+
+    This filters for ONLY canada and mexico imports/exports
     """
 
     direction_codes = {
-        "imports": "IRP",
-        "exports": "ENP",
+        "imports": "IMI",
+        "exports": "EEI",
     }
 
     points_of_entry = POINTS_OF_ENTRY
@@ -1341,14 +1408,25 @@ class InternationalGasTrade(DataExtractor):
         super().__init__(year, api_key)
 
     def build_url(self) -> str:
-        poe = "poe1" if self.direction == "imports" else "poe2"
-        base_url = f"natural-gas/move/{poe}/data/"
-        facets = f"frequency=monthly&data[0]=value&facets[process][]={self.direction_codes[self.direction]}&start={self.year}-01&end={self.year+1}-01&sort[0][column]=period&sort[0][direction]=desc&offset=0&length=5000"
+        base_url = f"natural-gas/move/ist/data/"
+        facets = f"frequency=annual&data[0]=value&facets[process][]={self.direction_codes[self.direction]}&start={self.year-1}&end={self.year}&sort[0][column]=period&sort[0][direction]=desc&offset=0&length=5000"
         return f"{API_BASE}{base_url}?api_key={self.api_key}&{facets}"
 
     def format_data(self, df: pd.DataFrame) -> pd.DataFrame:
-        df["period"] = self._format_period(df.period).copy()
-        df["state"] = df["series-description"].map(self.extract_state).map(self.add_state_connection)
+
+        df["period"] = pd.to_datetime(df.period).map(lambda x: x.year)
+
+        # extract only canada and mexico trade
+        # note, this will still include states extracting
+        df = df[(df.duoarea.str.endswith("-NCA")) | (df.duoarea.str.endswith("-NMX"))].copy()
+
+        df["from"] = df.duoarea.map(lambda x: x.split("-")[0][1:])  # two letter state
+        df["to"] = df["from"].map(self.points_of_entry)
+
+        # drop lng to international locations
+        df = df.dropna().copy()
+
+        df["state"] = df["from"] + "-" + df["to"]
 
         df = (
             df[["series-description", "value", "units", "state", "period"]]
@@ -1371,16 +1449,6 @@ class InternationalGasTrade(DataExtractor):
             return description.split(",")[1].split(" ")[1]
         except IndexError:  # country level
             return description.split(" Natural Gas Pipeline")[0]
-
-    def add_state_connection(self, state: str) -> str:
-        """
-        Adds international connection to state name.
-        """
-        if state == "U.S.":
-            return "USA"
-        intl_state = self.points_of_entry[state]
-        connections = sorted([state, intl_state])
-        return "-".join(connections)
 
 
 class DomesticGasTrade(DataExtractor):
@@ -1728,7 +1796,7 @@ if __name__ == "__main__":
     api = yaml_data["api"]["eia"]
     # print(FuelCosts("coal", 2020, api, industry="power").get_data(pivot=True))
     # print(FuelCosts("heating_oil", 2020, api).get_data(pivot=False))
-    print(Trade("gas", True, "exports", 2020, api).get_data(pivot=True).fillna(0).sum())
+    print(Trade("gas", True, "imports", 2020, api).get_data(pivot=True).fillna(0).sum())
     # print(Emissions("transport", 2019, api).get_data(pivot=True))
     # print(Storage("gas", "total", 2019, api).get_data(pivot=True))
     # print(EnergyDemand("residential", 2030, api).get_data(pivot=False))
