@@ -3,8 +3,10 @@ Plots Sector Coupling Statistics.
 """
 
 import logging
+from dataclasses import dataclass
 from math import ceil
-from typing import Callable, Optional
+from pathlib import Path
+from typing import Any, Callable, Optional
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -365,7 +367,7 @@ def plot_sector_emissions(
 
     investment_period = n.investment_periods[0]
 
-    sectors = ("res", "com", "ind", "trn", "pwr")
+    sectors = ("res", "com", "ind", "trn", "pwr", "ch4")
 
     data = []
 
@@ -1522,6 +1524,10 @@ FN_ARGS = {
             "offwind_floating",
             "solar",
             "hydro",
+            "CCGT-95CCS",
+            "CCGT-97CCS",
+            "coal-95CCS",
+            "coal-99CCS",
         ],
     },
     # production
@@ -1532,19 +1538,49 @@ FN_ARGS = {
     "load_timeseries_transport": {"sector": "trn"},
 }
 
+
+@dataclass
+class PlottingData:
+    name: str  # snakemake name
+    fn: callable
+    nice_name: Optional[str] = None
+    kwargs: Optional[dict] = None
+    resample: Optional[str] = None
+    resample_func: Optional[callable] = None
+    plot_by_month: Optional[bool] = False
+
+
+EMISSIONS_PLOTS = [
+    {
+        "name": "emissions_by_sector",
+        "fn": plot_sector_emissions,
+        "nice_name": "Emissions by Sector",
+    },
+    {
+        "name": "emissions_by_state",
+        "fn": plot_state_emissions,
+        "nice_name": "Emissions by State",
+    },
+]
+
+
+def _initialize_metadata(data: dict[str, Any]) -> list[PlottingData]:
+    return [PlottingData(**x) for x in data]
+
+
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
 
         snakemake = mock_snakemake(
-            "plot_sector_capacity",
-            simpl="12",
-            opts="48SEG",
-            clusters="6",
+            "plot_sector_emissions",
+            simpl="33",
+            opts="2190SEG",
+            clusters="4m",
             ll="v1.0",
             sector_opts="",
             sector="E-G",
-            planning_horizons="2030",
+            planning_horizons="2019",
             interconnect="western",
             state="CA",
         )
@@ -1558,39 +1594,67 @@ if __name__ == "__main__":
     wildcards = snakemake.wildcards
 
     params = snakemake.params
+    result = params["result"]
     eia_api = params.get("eia_api", None)
 
-    try:
-        state = wildcards.state
-    # AttributeError: 'Wildcards' object has no attribute 'state'
-    # appears for system only plots
-    except AttributeError:
-        state = "system"
+    states = n.buses[n.buses.reeds_state != ""].reeds_state.unique().tolist()
+    states.insert(0, "system")
 
-    for f, f_path in snakemake.output.items():
+    if result == "emissions":
+        plotting_data = _initialize_metadata(EMISSIONS_PLOTS)
+    else:
+        raise NotImplementedError
 
-        try:
-            fn = FIGURE_FUNCTION[f]
-        except KeyError as ex:
-            logger.error(f"Must provide a function for plot {f}!")
-            print(ex)
+    for plot_data in plotting_data:
 
-        try:
-            title = FIGURE_NICE_NAME[f]
-        except KeyError:
-            title = f
+        fn = plot_data.fn
+        title = plot_data.nice_name if plot_data.nice_name else plot_data.name
 
-        try:
-            fn_inputs = FN_ARGS[f]
-        except KeyError:
-            fn_inputs = {}
+        # plot at system level
 
+        f_path = snakemake.output[plot_data.name]
+        fn_kwargs = {"state": "system"}
         if eia_api:
-            fn_inputs["eia_api"] = eia_api
+            fn_kwargs["eia_api"] = eia_api
 
-        if state == "system":
-            fn_inputs["state"] = None
-        else:
-            fn_inputs["state"] = state
+        save_fig(fn, n, f_path, title, wildcards, **fn_kwargs)
 
-        save_fig(fn, n, f_path, title, wildcards, **fn_inputs)
+        # plot each state
+
+        for state in states:
+            fn_kwargs = {"state": state}
+            f_path_state = Path(f_path.replace("/system/", f"/{state}/"))
+            if not f_path_state.parent.exists():
+                f_path_state.mkdir(parents=True)
+            save_fig(fn, n, f_path_state, title, wildcards, **fn_kwargs)
+
+        if not plot_data.plot_by_month:
+            continue
+
+    # for f, f_path in snakemake.output.items():
+
+    #     try:
+    #         fn = FIGURE_FUNCTION[f]
+    #     except KeyError as ex:
+    #         logger.error(f"Must provide a function for plot {f}!")
+    #         print(ex)
+
+    #     try:
+    #         title = FIGURE_NICE_NAME[f]
+    #     except KeyError:
+    #         title = f
+
+    #     try:
+    #         fn_inputs = FN_ARGS[f]
+    #     except KeyError:
+    #         fn_inputs = {}
+
+    #     if eia_api:
+    #         fn_inputs["eia_api"] = eia_api
+
+    #     if state == "system":
+    #         fn_inputs["state"] = None
+    #     else:
+    #         fn_inputs["state"] = state
+
+    #     save_fig(fn, n, f_path, title, wildcards, **fn_inputs)
