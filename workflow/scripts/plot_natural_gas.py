@@ -1,14 +1,15 @@
 import logging
+import sys
 from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
 from typing import Any, Optional
 
-import constants
 import matplotlib.pyplot as plt
 import pandas as pd
 import pypsa
 from _helpers import configure_logging
+from constants import NG_MWH_2_MMCF, Month
 from summary_natural_gas import (
     get_gas_demand,
     get_gas_processing,
@@ -20,9 +21,10 @@ from summary_natural_gas import (
 logger = logging.getLogger(__name__)
 
 
-MWH_2_MMCF = constants.NG_MWH_2_MMCF
+MWH_2_MMCF = NG_MWH_2_MMCF
 
-FIG_HEIGHT = 500
+FIG_HEIGHT = 5
+FIG_WIDTH = 14
 
 
 @dataclass
@@ -33,6 +35,20 @@ class PlottingData:
     nice_name: Optional[str] = None
     unit: Optional[str] = None
     converter: Optional[float] = 1.0
+    resample: Optional[str] = None  # "D", "W", "12h" for example
+    resample_func: Optional[callable] = None  # pd.Series.sum for example
+    plot_by_month: Optional[bool] = False  # not resampled
+
+
+def _get_month_name(month: Month) -> str:
+    return month.name.capitalize()
+
+
+def _resample_data(df: pd.DataFrame, freq: str, agg_func: callable) -> pd.DataFrame:
+    """
+    Helper for resampling data based on input function.
+    """
+    return df.groupby("period").resample(freq, level="timestep").apply(agg_func)
 
 
 def _group_data(df: pd.DataFrame) -> pd.DataFrame:
@@ -96,7 +112,7 @@ def plot_gas(
 
     n_rows = len(periods)
 
-    fig, axs = plt.subplots(n_rows, 1)
+    fig, axs = plt.subplots(n_rows, 1, figsize=(FIG_WIDTH, FIG_HEIGHT * n_rows))
 
     for i, period in enumerate(periods):
         period_data = df[df.index.get_level_values("period") == period].droplevel(
@@ -132,7 +148,7 @@ def plot_gas_trade(
 
     n_rows = len(periods)
 
-    fig, axs = plt.subplots(n_rows, 2, sharey=True)
+    fig, axs = plt.subplots(n_rows, 2, sharey=True, figsize=(FIG_WIDTH, FIG_HEIGHT * n_rows))
 
     for i, period in enumerate(periods):
 
@@ -187,6 +203,9 @@ PLOTTING_META = [
         "converter": MWH_2_MMCF,
         "getter": get_gas_demand,
         "plotter": plot_gas,
+        "resample": "D",
+        "resample_func": pd.Series.mean,
+        "plot_by_month": True,
     },
     {
         "name": "processing",
@@ -195,6 +214,9 @@ PLOTTING_META = [
         "converter": MWH_2_MMCF,
         "getter": get_gas_processing,
         "plotter": plot_gas,
+        "resample": "W",
+        "resample_func": pd.Series.sum,
+        "plot_by_month": True,
     },
     {
         "name": "linepack",
@@ -203,6 +225,9 @@ PLOTTING_META = [
         "converter": MWH_2_MMCF,
         "getter": get_linepack,
         "plotter": plot_gas,
+        "resample": "W",
+        "resample_func": pd.Series.sum,
+        "plot_by_month": True,
     },
     {
         "name": "storage",
@@ -211,6 +236,9 @@ PLOTTING_META = [
         "converter": MWH_2_MMCF,
         "getter": get_underground_storage,
         "plotter": plot_gas,
+        "resample": "W",
+        "resample_func": pd.Series.sum,
+        "plot_by_month": True,
     },
     {
         "name": "domestic_trade",
@@ -219,6 +247,9 @@ PLOTTING_META = [
         "converter": MWH_2_MMCF,
         "getter": partial(get_imports_exports, international=False),
         "plotter": plot_gas_trade,
+        "resample": "W",
+        "resample_func": pd.Series.mean,
+        "plot_by_month": True,
     },
     {
         "name": "international_trade",
@@ -227,6 +258,9 @@ PLOTTING_META = [
         "converter": MWH_2_MMCF,
         "getter": partial(get_imports_exports, international=True),
         "plotter": plot_gas_trade,
+        "resample": "W",
+        "resample_func": pd.Series.mean,
+        "plot_by_month": True,
     },
 ]
 
@@ -238,12 +272,12 @@ if __name__ == "__main__":
         snakemake = mock_snakemake(
             "plot_natural_gas",
             simpl="33",
-            opts="48SEG",
-            clusters="11m",
+            opts="2190SEG",
+            clusters="4m",
             ll="v1.0",
             sector_opts="",
             sector="E-G",
-            planning_horizons="2030",
+            planning_horizons="2019",
             interconnect="western",
         )
     configure_logging(snakemake)
@@ -307,13 +341,51 @@ if __name__ == "__main__":
                     meta.converter,
                 )
 
-            title = f"{state} {meta.nice_name}"
+            if meta.resample:
+                title = f"{state} {meta.nice_name} resampled to {meta.resample}"
+                if isinstance(state_data, pd.DataFrame):
+                    state_data_resampled = _resample_data(state_data, meta.resample, meta.resample_func)
+                elif isinstance(state_data, dict):
+                    state_data_resampled = {}
+                    for k, v in state_data.items():
+                        state_data_resampled[k] = _resample_data(v, meta.resample, meta.resample_func)
+            else:
+                title = f"{state} {meta.nice_name}"
+                state_data_resampled = state_data
+
             units = meta.unit
 
-            fig, _ = meta.plotter(state_data, title=title, units=units)
-            save_path = expected_figures[meta.name][state]
+            fig, _ = meta.plotter(state_data_resampled, title=title, units=units)
             fig.tight_layout()
+
+            save_path = expected_figures[meta.name][state]
             if not save_path.parent.exists():
                 save_path.parent.mkdir(parents=True, exist_ok=True)
             fig.savefig(str(save_path))
             plt.close(fig)
+
+            if not meta.plot_by_month:
+                continue
+
+            months = {month.value: _get_month_name(month) for month in Month}
+
+            for month_i, month_name in months.items():
+
+                if isinstance(state_data, pd.DataFrame):
+                    state_data_month = state_data[state_data.index.get_level_values("timestep").month == month_i]
+                if isinstance(state_data, dict):
+                    state_data_month = {}
+                    for k, v in state_data.items():
+                        state_data_month[k] = v[v.index.get_level_values("timestep").month == month_i]
+
+                title = f"{state} {meta.nice_name} {month_name}"
+
+                fig, _ = meta.plotter(state_data_month, title=title, units=units)
+                fig.tight_layout()
+
+                # this is ugly, but just create subdir of name and index by month
+                save_path = Path(expected_figures[meta.name][state].parent, meta.name, f"{month_name}.png")
+                if not save_path.parent.exists():
+                    save_path.parent.mkdir(parents=True, exist_ok=True)
+                fig.savefig(str(save_path))
+                plt.close(fig)
