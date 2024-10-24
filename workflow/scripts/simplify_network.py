@@ -292,5 +292,4 @@ if __name__ == "__main__":
 
     update_p_nom_max(n)
 
-    # n.export_to_netcdf(snakemake.output[0])
-    pickle.dump(n, open(snakemake.output[0], "wb"))
+    n.export_to_netcdf(snakemake.output[0])

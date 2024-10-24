@@ -561,8 +561,7 @@ if __name__ == "__main__":
     params = snakemake.params
     solver_name = snakemake.config["solving"]["solver"]["name"]
 
-    # n = pypsa.Network(snakemake.input.network)
-    n = pickle.load(open(snakemake.input.network, "rb"))
+    n = pypsa.Network(snakemake.input.network)
 
     n.set_investment_periods(
         periods=snakemake.params.planning_horizons,

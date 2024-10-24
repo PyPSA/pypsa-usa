@@ -635,7 +635,7 @@ rule simplify_network:
         regions_offshore=RESOURCES
         + "{interconnect}/Geospatial/regions_offshore.geojson",
     output:
-        network=RESOURCES + "{interconnect}/elec_s{simpl}.pkl",
+        network=RESOURCES + "{interconnect}/elec_s{simpl}.nc",
         regions_onshore=RESOURCES
         + "{interconnect}/Geospatial/regions_onshore_s{simpl}.geojson",
         regions_offshore=RESOURCES
@@ -667,7 +667,7 @@ rule cluster_network:
         ),
         topology_aggregation=config_provider("model_topology", "aggregate"),
     input:
-        network=RESOURCES + "{interconnect}/elec_s{simpl}.pkl",
+        network=RESOURCES + "{interconnect}/elec_s{simpl}.nc",
         regions_onshore=RESOURCES
         + "{interconnect}/Geospatial/regions_onshore_s{simpl}.geojson",
         regions_offshore=RESOURCES
