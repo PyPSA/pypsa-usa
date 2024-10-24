@@ -605,7 +605,7 @@ rule add_electricity:
         bus2sub=RESOURCES + "{interconnect}/bus2sub.csv",
         pudl_fuel_costs=RESOURCES + "{interconnect}/pudl_fuel_costs.csv",
     output:
-        RESOURCES + "{interconnect}/elec_base_network_l_pp.nc",
+        RESOURCES + "{interconnect}/elec_base_network_l_pp.pkl",
     log:
         LOGS + "{interconnect}/add_electricity.log",
     benchmark:
@@ -630,12 +630,12 @@ rule simplify_network:
     input:
         bus2sub=RESOURCES + "{interconnect}/bus2sub.csv",
         sub=RESOURCES + "{interconnect}/sub.csv",
-        network=RESOURCES + "{interconnect}/elec_base_network_l_pp.nc",
+        network=RESOURCES + "{interconnect}/elec_base_network_l_pp.pkl",
         regions_onshore=RESOURCES + "{interconnect}/Geospatial/regions_onshore.geojson",
         regions_offshore=RESOURCES
         + "{interconnect}/Geospatial/regions_offshore.geojson",
     output:
-        network=RESOURCES + "{interconnect}/elec_s{simpl}.nc",
+        network=RESOURCES + "{interconnect}/elec_s{simpl}.pkl",
         regions_onshore=RESOURCES
         + "{interconnect}/Geospatial/regions_onshore_s{simpl}.geojson",
         regions_offshore=RESOURCES
@@ -667,7 +667,7 @@ rule cluster_network:
         ),
         topology_aggregation=config_provider("model_topology", "aggregate"),
     input:
-        network=RESOURCES + "{interconnect}/elec_s{simpl}.nc",
+        network=RESOURCES + "{interconnect}/elec_s{simpl}.pkl",
         regions_onshore=RESOURCES
         + "{interconnect}/Geospatial/regions_onshore_s{simpl}.geojson",
         regions_offshore=RESOURCES

@@ -7,6 +7,7 @@ Aggregates network to substations and simplifies to a single voltage level.
 import logging
 from functools import reduce
 
+import dill as pickle
 import geopandas as gpd
 import numpy as np
 import pandas as pd
@@ -217,7 +218,8 @@ if __name__ == "__main__":
 
     topological_boundaries = snakemake.params.topological_boundaries
 
-    n = pypsa.Network(snakemake.input.network)
+    # n = pypsa.Network(snakemake.input.network)
+    n = pickle.load(open(snakemake.input.network, "rb"))
 
     n.generators.drop(
         columns=["ba_eia", "ba_ads"],
@@ -290,4 +292,5 @@ if __name__ == "__main__":
 
     update_p_nom_max(n)
 
-    n.export_to_netcdf(snakemake.output[0])
+    # n.export_to_netcdf(snakemake.output[0])
+    pickle.dump(n, open(snakemake.output[0], "wb"))

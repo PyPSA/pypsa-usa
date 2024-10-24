@@ -2,6 +2,7 @@ import logging
 import warnings
 from functools import reduce
 
+import dill as pickle
 import geopandas as gpd
 import linopy
 import matplotlib.pyplot as plt
@@ -560,7 +561,9 @@ if __name__ == "__main__":
     params = snakemake.params
     solver_name = snakemake.config["solving"]["solver"]["name"]
 
-    n = pypsa.Network(snakemake.input.network)
+    # n = pypsa.Network(snakemake.input.network)
+    n = pickle.load(open(snakemake.input.network, "rb"))
+
     n.set_investment_periods(
         periods=snakemake.params.planning_horizons,
     )
@@ -717,6 +720,7 @@ if __name__ == "__main__":
     )
 
     clustering.network.export_to_netcdf(snakemake.output.network)
+
     for attr in (
         "busmap",
         "linemap",

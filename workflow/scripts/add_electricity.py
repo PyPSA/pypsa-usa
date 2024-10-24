@@ -39,6 +39,7 @@ import logging
 import os
 
 import constants as const
+import dill as pickle
 import geopandas as gpd
 import numpy as np
 import pandas as pd
@@ -949,7 +950,8 @@ def main(snakemake):
     sanitize_carriers(n, snakemake.config)
     n.meta = snakemake.config
 
-    n.export_to_netcdf(snakemake.output[0])
+    # n.export_to_netcdf(snakemake.output[0])
+    pickle.dump(n, open(snakemake.output[0], "wb"))
 
     logger.info(test_network_datatype_consistency(n))
 
