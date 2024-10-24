@@ -69,6 +69,7 @@ rule plot_sector_emissions:
         network=RESULTS
         + "{interconnect}/networks/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc",
     params:
+        result="emissions",
         plotting=config["plotting"],
     output:
         **{
@@ -91,16 +92,18 @@ rule plot_sector_production:
         network=RESULTS
         + "{interconnect}/networks/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc",
     params:
+        result="production",
         plotting=config["plotting"],
+        root_dir=RESULTS
+        + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/",
     output:
-        **{
-            fig: RESULTS
-            + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/{state}/production/%s.png"
-            % fig
-            for fig in FIGURES_SECTOR_PRODUCTION
-        },
+        expand(
+            "{{interconnect}}/figures/s{{simpl}}_c{{clusters}}/l{{ll}}_{{opts}}_{{sector}}/system/production/{sec}/{fig}.png",
+            sec=["res", "com", "ind", "trn", "pwr"],
+            fig=FIGURES_SECTOR_PRODUCTION,
+        ),
     log:
-        "logs/plot_figures/{interconnect}_s{simpl}_c{clusters}_l{ll}_{opts}_{sector}_{state}_production.log",
+        "logs/plot_figures/{interconnect}_s{simpl}_c{clusters}_l{ll}_{opts}_{sector}_production.log",
     threads: 1
     resources:
         mem_mb=5000,

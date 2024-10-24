@@ -14,7 +14,7 @@ import pypsa
 import seaborn as sns
 from _helpers import configure_logging, mock_snakemake
 from add_electricity import sanitize_carriers
-from constants import STATE_2_CODE
+from constants import STATE_2_CODE, Month
 from plot_statistics import create_title
 from summary_sector import (  # get_load_name_per_sector,
     get_brownfield_capacity_per_state,
@@ -53,6 +53,24 @@ SECTOR_MAPPER = {
 
 FIG_WIDTH = 14
 FIG_HEIGHT = 6
+
+SECTORS = {
+    "res": "Residential",
+    "com": "Commercial",
+    "trn": "Transport",
+    "ind": "Industrial",
+    "pwr": "Power",
+}
+
+# figure save format
+EXT = "png"
+
+# class Sectors(StrEnum):
+#     RES = "Residential"
+#     COM = "Commercial"
+#     IND = "Industrial"
+#     TRN = "Transport"
+#     PWR = "Power"
 
 ###
 # HELPERS
@@ -199,6 +217,10 @@ def plot_hp_cop(n: pypsa.Network, state: Optional[str] = None, **kwargs) -> tupl
         df = cops[[x for x in cops if x.endswith(hp)]]
         avg = df.mean(axis=1)
 
+        # Ignoring `palette` because no `hue` variable has been assigned.
+        if df.empty:
+            continue
+
         palette = sns.color_palette(["lightgray"], df.shape[1])
 
         try:
@@ -224,43 +246,50 @@ def plot_hp_cop(n: pypsa.Network, state: Optional[str] = None, **kwargs) -> tupl
 
 def plot_sector_production_timeseries(
     n: pypsa.Network,
-    sharey: bool = False,
+    sector: str,
     state: Optional[str] = None,
     nice_name: Optional[bool] = True,
     remove_sns_weights: bool = True,
+    resample: Optional[str] = None,
+    resample_fn: Optional[callable] = None,
     **kwargs,
 ) -> tuple:
     """
     Plots timeseries production as area chart.
     """
 
-    investment_period = n.investment_periods[0]
+    y_label = kwargs.get("ylabel", "MWh")
 
-    sectors = get_sectors(n)
+    assert sector in ("res", "com", "ind", "pwr", "trn")
 
-    nrows = len(sectors)
+    investment_periods = n.investment_periods
+
+    nrows = ceil(len(investment_periods) / 2)
 
     fig, axs = plt.subplots(
         ncols=1,
         nrows=nrows,
         figsize=(FIG_WIDTH, FIG_HEIGHT * nrows),
-        sharey=sharey,
     )
 
     colors = get_plotting_colors(n, nice_name=nice_name)
 
-    for i, sector in enumerate(sectors):
+    df_all = get_sector_production_timeseries_by_carrier(
+        n,
+        sector=sector,
+        state=state,
+        resample=resample,
+        resample_fn=resample_fn,
+        remove_sns_weights=remove_sns_weights,
+    )
 
-        y_label = "kVMT" if sector == "trn" else "MW"
+    for row, period in enumerate(investment_periods):
 
-        df = get_sector_production_timeseries(n, sector, state=state)
+        df = df_all.loc[period]
 
-        if remove_sns_weights:
-            df = df.div(n.snapshot_weightings.generators, axis=0)
-
-        df = df.loc[investment_period].T
-        df.index = df.index.map(n.links.carrier)
-        df = df.groupby(level=0).sum().T
+        if df.empty:
+            logger.warning(f"No data to plot for {state}")
+            continue
 
         if nice_name:
             df = df.rename(columns=n.carriers.nice_name.to_dict())
@@ -269,29 +298,28 @@ def plot_sector_production_timeseries(
 
             if nrows > 1:
 
-                df.plot(kind="area", ax=axs[i], color=colors)
-                axs[i].set_xlabel("")
-                axs[i].set_ylabel(y_label)
-                axs[i].set_title(f"{SECTOR_MAPPER[sector]} Production")
-                axs[i].tick_params(axis="x", labelrotation=45)
+                df.plot(kind="area", ax=axs[row], color=colors)
+                axs[row].set_xlabel("")
+                axs[row].set_ylabel(y_label)
+                # axs[row].set_title(f"{SECTOR_MAPPER[sector]}")
+                axs[row].tick_params(axis="x", labelrotation=45)
 
             else:
 
-                df.plot(kind="bar", ax=axs, color=colors)
+                df.plot(kind="area", ax=axs, color=colors)
                 axs.set_xlabel("")
                 axs.set_ylabel(y_label)
-                axs.set_title(f"{SECTOR_MAPPER[sector]} Production")
-                axs.tick_params(axis="x", labelrotation=45)
+                # axs.set_title(f"{SECTOR_MAPPER[sector]}")
 
         except TypeError:  # no numeric data to plot
-            logger.warning(f"No data to plot for {state}")
+            logger.warning(f"No data to plot for {state} (plot_sector_production_timeseries)")
 
     return fig, axs
 
 
 def plot_sector_production(
     n: pypsa.Network,
-    sharey: bool = True,
+    sector: str,
     state: Optional[str] = None,
     nice_name: Optional[bool] = True,
     **kwargs,
@@ -300,32 +328,26 @@ def plot_sector_production(
     Plots model period production as bar chart.
     """
 
-    investment_period = n.investment_periods[0]
+    y_label = kwargs.get("ylabel", "MWh")
 
-    sectors = get_sectors(n)
+    assert sector in ("res", "com", "ind", "pwr", "trn")
 
-    nrows = ceil(len(sectors) / 2)
+    investment_periods = n.investment_periods
+
+    nrows = ceil(len(investment_periods) / 2)
 
     fig, axs = plt.subplots(
-        ncols=2,
+        ncols=1,
         nrows=nrows,
         figsize=(FIG_WIDTH, FIG_HEIGHT * nrows),
-        sharey=False,  # transport not in vmt
     )
 
-    row = 0
-    col = 0
+    df_all = get_sector_production_timeseries_by_carrier(n, sector=sector, state=state)
 
-    for i, sector in enumerate(sectors):
+    for row, period in enumerate(investment_periods):
 
-        row = i // 2
-        col = i % 2
+        df = df_all.loc[period].sum(axis=0)
 
-        y_label = "kVMT" if sector == "trn" else "MWh"
-
-        df = get_sector_production_timeseries_by_carrier(n, sector, state=state).loc[investment_period].sum()
-
-        # issue with texas in western interconnect
         if df.empty:
             logger.warning(f"No data to plot for {state}")
             continue
@@ -337,21 +359,21 @@ def plot_sector_production(
 
             if nrows > 1:
 
-                df.plot.bar(ax=axs[row, col])
-                axs[row, col].set_xlabel("")
-                axs[row, col].set_ylabel(y_label)
-                axs[row, col].set_title(f"{SECTOR_MAPPER[sector]}")
-                axs[row, col].tick_params(axis="x", labelrotation=45)
+                df.plot.bar(ax=axs[row])
+                axs[row].set_xlabel("")
+                axs[row].set_ylabel(y_label)
+                axs[row].set_title(f"{SECTOR_MAPPER[sector]}")
+                axs[row].tick_params(axis="x", labelrotation=45)
 
             else:
 
-                df.plot.bar(ax=axs[i])
-                axs[i].set_xlabel("")
-                axs[i].set_ylabel(y_label)
-                axs[i].set_title(f"{SECTOR_MAPPER[sector]}")
+                df.plot.bar(ax=axs)
+                axs.set_xlabel("")
+                axs.set_ylabel(y_label)
+                axs.set_title(f"{SECTOR_MAPPER[sector]}")
 
         except TypeError:  # no numeric data to plot
-            logger.warning(f"No data to plot for {state}")
+            logger.warning(f"No data to plot for {state} (plot_sector_production)")
 
     return fig, axs
 
@@ -721,7 +743,7 @@ def plot_sector_load_factor_timeseries(
 
 def plot_sector_load_factor_boxplot(
     n: pypsa.Network,
-    sharey: bool = True,
+    sector: str,
     state: Optional[str] = None,
     nice_name: Optional[bool] = True,
     **kwargs,
@@ -730,28 +752,23 @@ def plot_sector_load_factor_boxplot(
     Plots boxplot of load factors.
     """
 
-    investment_period = n.investment_periods[0]
+    assert sector in ("res", "com", "ind")
 
-    sectors = get_sectors(n)
+    investment_periods = n.investment_periods
 
-    nrows = ceil(len(sectors) / 2)
+    nrows = ceil(len(investment_periods) / 2)
 
     fig, axs = plt.subplots(
-        ncols=2,
+        ncols=1,
         nrows=nrows,
         figsize=(FIG_WIDTH, FIG_HEIGHT * nrows),
-        sharey=sharey,
     )
 
-    row = 0
-    col = 0
+    df_all = get_load_factor_timeseries(n, sector, state=state)
 
-    for i, sector in enumerate(sectors):
+    for row, period in enumerate(investment_periods):
 
-        row = i // 2
-        col = i % 2
-
-        df = get_load_factor_timeseries(n, sector, state=state).loc[investment_period]
+        df = df_all.loc[period]
 
         if nice_name:
             cols = df.columns
@@ -763,19 +780,19 @@ def plot_sector_load_factor_boxplot(
 
             if nrows > 1:
 
-                sns.boxplot(df, ax=axs[row, col])
-                axs[row, col].set_xlabel("")
-                axs[row, col].set_ylabel("Load Factor (%)")
-                axs[row, col].set_title(f"{sector}")
-                axs[row, col].tick_params(axis="x", labelrotation=45)
+                sns.boxplot(df, ax=axs[row])
+                axs[row].set_xlabel("")
+                axs[row].set_ylabel("Load Factor (%)")
+                # axs[row].set_title(f"{SECTORS[sector]} Load Factor for {period}")
+                axs[row].tick_params(axis="x", labelrotation=45)
 
             else:
 
-                sns.boxplot(df, ax=axs[i])
-                axs[i].set_xlabel("")
-                axs[i].set_ylabel("Load Factor (%)")
-                axs[i].set_title(f"{sector}")
-                axs[i].tick_params(axis="x", labelrotation=45)
+                sns.boxplot(df, ax=axs)
+                axs.set_xlabel("")
+                axs.set_ylabel("Load Factor (%)")
+                # axs.set_title(f"{SECTORS[sector]} Load Factor for {period}")
+                axs.tick_params(axis="x", labelrotation=45)
 
         except TypeError:  # no numeric data to plot
             logger.warning(f"No data to plot for {state}")
@@ -1298,16 +1315,19 @@ def plot_transportation_by_mode_validation(
     return fig, axs
 
 
-def plot_system_consumption_by_state(
+def plot_consumption(
     n: pypsa.Network,
+    sector: str,
+    state: Optional[str] = None,
+    nice_name: Optional[bool] = True,
     **kwargs,
 ) -> tuple:
 
-    states = [x for x in n.buses.STATE.unique() if x]
+    assert sector in ("res", "com", "ind", "trn")
 
-    sectors = ("res", "com", "ind", "trn")
+    investment_periods = n.investment_periods
 
-    nrows = len(sectors)
+    nrows = len(investment_periods)
 
     fig, axs = plt.subplots(
         ncols=1,
@@ -1317,32 +1337,32 @@ def plot_system_consumption_by_state(
 
     y_label = "Energy (MWh)"
 
-    for i, sector in enumerate(sectors):
+    df_all = get_end_use_consumption(n, sector, state)
 
-        dfs = []
+    for row, period in enumerate(investment_periods):
 
-        for state in states:
-            dfs.append(
-                get_end_use_consumption(n, sector, state).sum(axis=0).to_frame(name=state).T,
-            )
+        df = df_all.loc[period]
 
-        df = pd.concat(dfs)
+        if nice_name:
+            df = df.rename(columns=n.carriers.nice_name.to_dict())
+
+        df = df.sum(axis=0).to_frame()
 
         try:
 
             if nrows > 1:
 
-                df.plot(kind="bar", ax=axs[i])
-                axs[i].set_xlabel("")
-                axs[i].set_ylabel(y_label)
-                axs[i].set_title(f"{sector} Production")
+                df.plot(kind="bar", ax=axs[row], legend=False)
+                axs[row].set_xlabel("")
+                axs[row].set_ylabel(y_label)
+                axs[row].tick_params(axis="x", labelrotation=45)
 
             else:
 
                 df.plot(kind="bar", ax=axs)
                 axs.set_xlabel("")
                 axs.set_ylabel(y_label)
-                axs.set_title(f"{sector} Production")
+                axs.tick_params(axis="x", labelrotation=45)
 
         except TypeError:  # no numeric data to plot
             logger.warning(f"No data to plot for {state}")
@@ -1421,7 +1441,7 @@ def save_fig(
     n: pypsa.Network,
     save: str,
     title: str,
-    wildcards: dict[str, any] = {},
+    wildcards: dict[str, Any] = None,
     **kwargs,
 ) -> None:
     """
@@ -1429,6 +1449,9 @@ def save_fig(
     """
 
     fig, _ = fn(n, **kwargs)
+
+    if not wildcards:
+        wildcards = {}
 
     fig_title = create_title(title, **wildcards)
 
@@ -1452,22 +1475,12 @@ FIGURE_FUNCTION = {
     "load_timeseries_industrial": plot_sector_load_timeseries,
     "load_timeseries_transport": plot_sector_load_timeseries,
     "load_barplot": plot_sector_load_bar,
-    # production
-    "load_factor_boxplot": plot_sector_load_factor_boxplot,
-    "hp_cop": plot_hp_cop,
-    "production_time_series": plot_sector_production_timeseries,
-    "production_total": plot_sector_production,
     # capacity
     "end_use_capacity_per_carrier": plot_capacity_by_carrier,
     "end_use_capacity_per_node_absolute": plot_capacity_per_node,
     "end_use_capacity_per_node_percentage": plot_capacity_per_node,
     "end_use_capacity_state_brownfield": plot_capacity_brownfield,
     "power_capacity_per_carrier": plot_power_capacity,
-    # emissions
-    "emissions_by_sector": plot_sector_emissions,
-    "emissions_by_state": plot_state_emissions,
-    # system
-    "system_consumption": plot_system_consumption_by_state,
     # validation
     "emissions_by_sector_validation": plot_sector_emissions_validation,
     "emissions_by_state_validation": plot_state_emissions_validation,
@@ -1484,20 +1497,11 @@ FIGURE_NICE_NAME = {
     "load_timeseries_industrial": "",
     "load_timeseries_transport": "",
     "load_barplot": "Load per Sector per Fuel",
-    # production
-    "load_factor_boxplot": "Load Factor",
-    "hp_cop": "Heat Pump Coefficient of Performance",
-    "production_time_series": "End Use Technology Production",
-    "production_total": "End Use Technology Production",
-    "system_consumption": "End Use Consumption by Sector",
     # capacity
     "end_use_capacity_per_carrier": "Capacity by Carrier",
     "end_use_capacity_per_node_absolute": "Capacity Per Node",
     "end_use_capacity_per_node_percentage": "Capacity Per Node",
     "end_use_capacity_state_brownfield": "Brownfield Capacity Per State",
-    # emissions
-    "emissions_by_sector": "",
-    "emissions_by_state": "",
     # validation
     "emissions_by_sector_validation": "",
     "emissions_by_state_validation": "",
@@ -1543,10 +1547,9 @@ FN_ARGS = {
 class PlottingData:
     name: str  # snakemake name
     fn: callable
+    sector: Optional[str] = None  # None = 'system'
+    fn_kwargs: Optional[dict[str, Any]] = None
     nice_name: Optional[str] = None
-    kwargs: Optional[dict] = None
-    resample: Optional[str] = None
-    resample_func: Optional[callable] = None
     plot_by_month: Optional[bool] = False
 
 
@@ -1563,6 +1566,110 @@ EMISSIONS_PLOTS = [
     },
 ]
 
+PRODUCTION_PLOTS = [
+    {
+        "name": "load_factor_boxplot",
+        "fn": plot_sector_load_factor_boxplot,
+        "nice_name": "Residential Load Factor",
+        "sector": "res",
+        "fn_kwargs": {},
+    },
+    {
+        "name": "load_factor_boxplot",
+        "fn": plot_sector_load_factor_boxplot,
+        "nice_name": "Commercial Load Factor",
+        "sector": "com",
+        "fn_kwargs": {},
+    },
+    {
+        "name": "load_factor_boxplot",
+        "fn": plot_sector_load_factor_boxplot,
+        "nice_name": "Industrial Load Factor",
+        "sector": "ind",
+        "fn_kwargs": {},
+    },
+    {
+        "name": "hp_cop",
+        "fn": plot_hp_cop,
+        "nice_name": "Heat Pump Coefficient of Performance",
+    },
+    {
+        "name": "production_time_series",
+        "fn": plot_sector_production_timeseries,
+        "nice_name": "Residential End Use Production",
+        "plot_by_month": True,
+        "sector": "res",
+        "fn_kwargs": {
+            "resample": "D",
+            "resample_fn": pd.Series.sum,
+        },
+    },
+    {
+        "name": "production_time_series",
+        "fn": plot_sector_production_timeseries,
+        "nice_name": "Comemrcial End Use Production",
+        "plot_by_month": True,
+        "sector": "com",
+        "fn_kwargs": {
+            "resample": "D",
+            "resample_fn": pd.Series.sum,
+        },
+    },
+    {
+        "name": "production_time_series",
+        "fn": plot_sector_production_timeseries,
+        "nice_name": "Industrial End Use Production",
+        "plot_by_month": True,
+        "sector": "ind",
+        "fn_kwargs": {
+            "resample": "D",
+            "resample_fn": pd.Series.sum,
+        },
+    },
+    {
+        "name": "production_total",
+        "fn": plot_sector_production,
+        "nice_name": "Residential End Use Technology Production",
+        "sector": "res",
+    },
+    {
+        "name": "production_total",
+        "fn": plot_sector_production,
+        "nice_name": "Commercial End Use Technology Production",
+        "sector": "com",
+    },
+    {
+        "name": "production_total",
+        "fn": plot_sector_production,
+        "nice_name": "Industrial End Use Technology Production",
+        "sector": "ind",
+    },
+    {
+        "name": "system_consumption",
+        "fn": plot_consumption,
+        "nice_name": "Residenital Consumption",
+        "sector": "res",
+    },
+    {
+        "name": "system_consumption",
+        "fn": plot_consumption,
+        "nice_name": "Commercial Consumption",
+        "sector": "com",
+    },
+    {
+        "name": "system_consumption",
+        "fn": plot_consumption,
+        "nice_name": "Industrial Consumption",
+        "sector": "ind",
+    },
+    {
+        "name": "system_consumption",
+        "fn": plot_consumption,
+        "nice_name": "Transportation Consumption",
+        "sector": "trn",
+    },
+]
+
 
 def _initialize_metadata(data: dict[str, Any]) -> list[PlottingData]:
     return [PlottingData(**x) for x in data]
@@ -1573,7 +1680,7 @@ if __name__ == "__main__":
         from _helpers import mock_snakemake
 
         snakemake = mock_snakemake(
-            "plot_sector_emissions",
+            "plot_sector_production",
             simpl="33",
             opts="2190SEG",
             clusters="4m",
@@ -1584,6 +1691,9 @@ if __name__ == "__main__":
             interconnect="western",
             state="CA",
         )
+        rootpath = ".."
+    else:
+        rootpath = "."
     configure_logging(snakemake)
 
     # extract shared plotting files
@@ -1593,15 +1703,18 @@ if __name__ == "__main__":
 
     wildcards = snakemake.wildcards
 
+    results_dir = Path(rootpath, snakemake.params.root_dir)
+
     params = snakemake.params
     result = params["result"]
     eia_api = params.get("eia_api", None)
 
     states = n.buses[n.buses.reeds_state != ""].reeds_state.unique().tolist()
-    states.insert(0, "system")
 
     if result == "emissions":
         plotting_data = _initialize_metadata(EMISSIONS_PLOTS)
+    if result == "production":
+        plotting_data = _initialize_metadata(PRODUCTION_PLOTS)
     else:
         raise NotImplementedError
 
@@ -1611,22 +1724,43 @@ if __name__ == "__main__":
         title = plot_data.nice_name if plot_data.nice_name else plot_data.name
 
         # plot at system level
+        if plot_data.sector:
+            f_path = Path(results_dir, "system", result, plot_data.sector, f"{plot_data.name}.{EXT}")
+        else:
+            f_path = Path(results_dir, "system", result, f"{plot_data.name}.{EXT}")
 
-        f_path = snakemake.output[plot_data.name]
-        fn_kwargs = {"state": "system"}
-        if eia_api:
-            fn_kwargs["eia_api"] = eia_api
+        if not f_path.parent.exists():
+            f_path.parent.mkdir(parents=True)
 
-        save_fig(fn, n, f_path, title, wildcards, **fn_kwargs)
+        if plot_data.fn_kwargs:
+            fn_kwargs = plot_data.fn_kwargs
+        else:
+            fn_kwargs = {}
+        fn_kwargs["state"] = None  # system level
+        fn_kwargs["eia_api"] = eia_api
+
+        if plot_data.sector:
+            fn_kwargs["sector"] = plot_data.sector
+        else:
+            fn_kwargs["sector"] = None
+
+        save_fig(fn, n, str(f_path), title, wildcards, **fn_kwargs)
 
         # plot each state
 
         for state in states:
-            fn_kwargs = {"state": state}
-            f_path_state = Path(f_path.replace("/system/", f"/{state}/"))
-            if not f_path_state.parent.exists():
-                f_path_state.mkdir(parents=True)
-            save_fig(fn, n, f_path_state, title, wildcards, **fn_kwargs)
+
+            fn_kwargs["state"] = state
+
+            if plot_data.sector:
+                f_path = Path(results_dir, state, result, plot_data.sector, f"{plot_data.name}.{EXT}")
+            else:
+                f_path = Path(results_dir, state, result, f"{plot_data.name}.{EXT}")
+
+            if not f_path.parent.exists():
+                f_path.parent.mkdir(parents=True)
+
+            save_fig(fn, n, str(f_path), title, wildcards, **fn_kwargs)
 
         if not plot_data.plot_by_month:
             continue
