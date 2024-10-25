@@ -17,7 +17,6 @@ from add_electricity import sanitize_carriers
 from constants import STATE_2_CODE, Month
 from plot_statistics import create_title
 from summary_sector import (  # get_load_name_per_sector,
-    get_brownfield_capacity_per_state,
     get_capacity_per_node,
     get_emission_timeseries_by_sector,
     get_end_use_consumption,
@@ -29,7 +28,6 @@ from summary_sector import (  # get_load_name_per_sector,
     get_hp_cop,
     get_load_factor_timeseries,
     get_load_per_sector_per_fuel,
-    get_power_capacity_per_carrier,
     get_sector_production_timeseries,
     get_sector_production_timeseries_by_carrier,
     get_transport_consumption_by_mode,
@@ -117,83 +115,6 @@ def get_sectors(n: pypsa.Network) -> list[str]:
 ###
 # PLOTTERS
 ###
-
-
-# def plot_load_per_sector(
-#     n: pypsa.Network,
-#     sector: str,
-#     sharey: bool = True,
-#     log: bool = True,
-#     **kwargs,
-# ) -> tuple:
-#     """
-#     Load per bus per sector per fuel.
-#     """
-
-#     fuels = get_load_name_per_sector(sector)
-#     investment_period = n.investment_periods[0]
-
-#     nrows = ceil(len(fuels) / 2)
-
-#     fig, axs = plt.subplots(
-#         ncols=2,
-#         nrows=nrows,
-#         figsize=(14, 5 * nrows),
-#         sharey=sharey,
-#     )
-
-#     ylabel = "VMT" if sector == "trn" else "MW"
-
-#     row = 0
-#     col = 0
-
-#     for i, fuel in enumerate(fuels):
-
-#         row = i // 2
-#         col = i % 2
-
-#         df = get_load_per_sector_per_fuel(n, sector, fuel, investment_period)
-#         avg = df.mean(axis=1)
-
-#         palette = sns.color_palette(["lightgray"], df.shape[1])
-
-#         if nrows > 1:
-
-#             sns.lineplot(
-#                 df,
-#                 color="lightgray",
-#                 legend=False,
-#                 palette=palette,
-#                 ax=axs[row, col],
-#             )
-#             sns.lineplot(avg, ax=axs[row, col])
-
-#             axs[row, col].set_xlabel("")
-#             axs[row, col].set_ylabel(ylabel)
-#             axs[row, col].set_title(f"{fuel} load")
-
-#             if log:
-#                 axs[row, col].set(yscale="log")
-
-#         else:
-
-#             sns.lineplot(
-#                 df,
-#                 color="lightgray",
-#                 legend=False,
-#                 palette=palette,
-#                 ax=axs[i],
-#             )
-#             sns.lineplot(avg, ax=axs[i])
-
-#             axs[i].set_xlabel("")
-#             axs[i].set_ylabel(ylabel)
-#             axs[i].set_title(f"{fuel} load")
-
-#             if log:
-#                 axs[i].set(yscale="log")
-
-#     return fig, axs
 
 
 def plot_hp_cop(n: pypsa.Network, state: Optional[str] = None, **kwargs) -> tuple:
@@ -461,7 +382,7 @@ def plot_state_emissions(
 
 def plot_capacity_by_carrier(
     n: pypsa.Network,
-    sharey: bool = True,
+    sector: str,
     state: Optional[str] = None,
     nice_name: Optional[bool] = True,
     **kwargs,
@@ -470,21 +391,22 @@ def plot_capacity_by_carrier(
     Bar plot of capacity by carrier.
     """
 
-    sectors = get_sectors(n)
+    investment_periods = n.investment_periods
 
-    nrows = len(sectors)
+    nrows = len(investment_periods)
 
     fig, axs = plt.subplots(
         ncols=1,
         nrows=nrows,
         figsize=(FIG_WIDTH, FIG_HEIGHT * nrows),
-        sharey=sharey,
     )
 
-    for i, sector in enumerate(sectors):
+    df_all = get_capacity_per_node(n, sector=sector, state=state)
+    df_all = df_all.reset_index()[["carrier", "p_nom_opt"]]
 
-        df = get_capacity_per_node(n, sector, group_existing=True, state=state)
-        df = df.reset_index()[["carrier", "p_nom_opt"]]
+    for row, _ in enumerate(investment_periods):
+
+        df = df_all.copy()
 
         if df.empty:
             logger.warning(f"No data to plot for {state} sector {sector}")
@@ -499,11 +421,11 @@ def plot_capacity_by_carrier(
 
             if nrows > 1:
 
-                df.plot(kind="bar", stacked=False, ax=axs[i])
-                axs[i].set_xlabel("")
-                axs[i].set_ylabel("Capacity (MW)")
-                axs[i].set_title(f"{sector} Capacity")
-                axs[i].tick_params(axis="x", labelrotation=45)
+                df.plot(kind="bar", stacked=False, ax=axs[row])
+                axs[row].set_xlabel("")
+                axs[row].set_ylabel("Capacity (MW)")
+                axs[row].set_title(f"{sector} Capacity")
+                axs[row].tick_params(axis="x", labelrotation=45)
 
             else:
 
@@ -549,7 +471,7 @@ def plot_capacity_per_node(
 
     for i, sector in enumerate(sectors):
 
-        df = get_capacity_per_node(n, sector, group_existing=True, state=state)
+        df = get_capacity_per_node(n, sector=sector, state=state)
         df = df.reset_index()[["node", "carrier", data_col]]
 
         if nice_name:
@@ -581,7 +503,7 @@ def plot_capacity_per_node(
 
 def plot_capacity_brownfield(
     n: pypsa.Network,
-    sharey: bool = True,
+    sector: str,
     state: Optional[str] = None,
     nice_name: Optional[bool] = True,
     **kwargs,
@@ -590,34 +512,37 @@ def plot_capacity_brownfield(
     Plots old and new capacity at a state level by carrier.
     """
 
-    sectors = get_sectors(n)
+    investment_periods = n.investment_periods
 
-    nrows = len(sectors)
+    nrows = len(investment_periods)
 
     fig, axs = plt.subplots(
         ncols=1,
         nrows=nrows,
         figsize=(FIG_WIDTH, FIG_HEIGHT * nrows),
-        sharey=sharey,
     )
 
     y_label = "Capacity (MW)"
 
-    for i, sector in enumerate(sectors):
+    for row, _ in enumerate(investment_periods):
 
-        df = get_brownfield_capacity_per_state(n, sector, state=state)
+        df = get_capacity_per_node(n, sector, state)
 
         if nice_name:
-            df.index = df.index.map(n.carriers.nice_name)
+            nn = n.carriers.nice_name.to_dict()
+            df.index = df.index.map(lambda x: (x[0], nn[x[1]]))
+
+        df = df.droplevel("node")
+        df = df.reset_index()[["carrier", "existing", "new"]].groupby("carrier").sum()
 
         try:
 
             if nrows > 1:
 
-                df.plot(kind="bar", ax=axs[i])
-                axs[i].set_xlabel("")
-                axs[i].set_ylabel(y_label)
-                axs[i].set_title(f"{sector} Capacity")
+                df.plot(kind="bar", ax=axs[row])
+                axs[row].set_xlabel("")
+                axs[row].set_ylabel(y_label)
+                axs[row].set_title(f"{sector} Capacity")
 
             else:
 
@@ -632,58 +557,58 @@ def plot_capacity_brownfield(
     return fig, axs
 
 
-def plot_power_capacity(
-    n: pypsa.Network,
-    carriers: list[str],
-    sharey: bool = True,
-    state: Optional[str] = None,
-    nice_name: Optional[bool] = True,
-    **kwargs,
-) -> tuple:
-    """
-    Plots capacity of generators in the power sector.
-    """
+# def plot_power_capacity(
+#     n: pypsa.Network,
+#     carriers: list[str],
+#     sharey: bool = True,
+#     state: Optional[str] = None,
+#     nice_name: Optional[bool] = True,
+#     **kwargs,
+# ) -> tuple:
+#     """
+#     Plots capacity of generators in the power sector.
+#     """
 
-    sector = "pwr"
+#     sector = "pwr"
 
-    nrows = 1
+#     nrows = 1
 
-    fig, axs = plt.subplots(
-        ncols=1,
-        nrows=nrows,
-        figsize=(FIG_WIDTH, FIG_HEIGHT * nrows),
-        sharey=sharey,
-    )
+#     fig, axs = plt.subplots(
+#         ncols=1,
+#         nrows=nrows,
+#         figsize=(FIG_WIDTH, FIG_HEIGHT * nrows),
+#         sharey=sharey,
+#     )
 
-    df = get_power_capacity_per_carrier(
-        n,
-        carriers,
-        group_existing=True,
-        state=state,
-    )
-    df = df.reset_index()[["carrier", "p_nom_opt"]]
+#     df = get_power_capacity_per_carrier(
+#         n,
+#         carriers,
+#         group_existing=True,
+#         state=state,
+#     )
+#     df = df.reset_index()[["carrier", "p_nom_opt"]]
 
-    if df.empty:
-        logger.warning(f"No data to plot for {state} sector pwr")
-        return fig, axs
+#     if df.empty:
+#         logger.warning(f"No data to plot for {state} sector pwr")
+#         return fig, axs
 
-    if nice_name:
-        df["carrier"] = df.carrier.map(n.carriers.nice_name)
+#     if nice_name:
+#         df["carrier"] = df.carrier.map(n.carriers.nice_name)
 
-    df = df.groupby("carrier").sum()
+#     df = df.groupby("carrier").sum()
 
-    try:
+#     try:
 
-        df.plot(kind="bar", stacked=False, ax=axs)
-        axs.set_xlabel("")
-        axs.set_ylabel("Capacity (MW)")
-        axs.set_title(f"{SECTOR_MAPPER[sector]} Capacity")
-        axs.tick_params(axis="x", labelrotation=45)
+#         df.plot(kind="bar", stacked=False, ax=axs)
+#         axs.set_xlabel("")
+#         axs.set_ylabel("Capacity (MW)")
+#         axs.set_title(f"{SECTOR_MAPPER[sector]} Capacity")
+#         axs.tick_params(axis="x", labelrotation=45)
 
-    except TypeError:  # no numeric data to plot
-        logger.warning(f"No data to plot for {state}")
+#     except TypeError:  # no numeric data to plot
+#         logger.warning(f"No data to plot for {state}")
 
-    return fig, axs
+#     return fig, axs
 
 
 def plot_sector_load_factor_timeseries(
@@ -1468,79 +1393,39 @@ def save_fig(
 # PUBLIC INTERFACE
 ###
 
-FIGURE_FUNCTION = {
-    # load
-    "load_timeseries_residential": plot_sector_load_timeseries,
-    "load_timeseries_commercial": plot_sector_load_timeseries,
-    "load_timeseries_industrial": plot_sector_load_timeseries,
-    "load_timeseries_transport": plot_sector_load_timeseries,
-    "load_barplot": plot_sector_load_bar,
-    # capacity
-    "end_use_capacity_per_carrier": plot_capacity_by_carrier,
-    "end_use_capacity_per_node_absolute": plot_capacity_per_node,
-    "end_use_capacity_per_node_percentage": plot_capacity_per_node,
-    "end_use_capacity_state_brownfield": plot_capacity_brownfield,
-    "power_capacity_per_carrier": plot_power_capacity,
-    # validation
-    "emissions_by_sector_validation": plot_sector_emissions_validation,
-    "emissions_by_state_validation": plot_state_emissions_validation,
-    "generation_by_state_validation": plot_sector_consumption_validation,
-    "transportation_by_mode_validation": plot_transportation_by_mode_validation,
-    "system_consumption_validation": plot_system_consumption_validation_by_state,
-    "system_emission_validation_state": plot_system_emissions_validation_by_state,
-}
+# "end_use_capacity_per_node_absolute": plot_capacity_per_node,
+# "end_use_capacity_per_node_percentage": plot_capacity_per_node,
 
-FIGURE_NICE_NAME = {
-    # load
-    "load_timeseries_residential": "",
-    "load_timeseries_commercial": "",
-    "load_timeseries_industrial": "",
-    "load_timeseries_transport": "",
-    "load_barplot": "Load per Sector per Fuel",
-    # capacity
-    "end_use_capacity_per_carrier": "Capacity by Carrier",
-    "end_use_capacity_per_node_absolute": "Capacity Per Node",
-    "end_use_capacity_per_node_percentage": "Capacity Per Node",
-    "end_use_capacity_state_brownfield": "Brownfield Capacity Per State",
-    # validation
-    "emissions_by_sector_validation": "",
-    "emissions_by_state_validation": "",
-    "generation_by_state_validation": "",
-    "transportation_by_mode_validation": "",
-    "system_consumption_validation": "",
-    "system_emission_validation_state": "",
-}
+# "end_use_capacity_per_node_absolute": "Capacity Per Node",
+# "end_use_capacity_per_node_percentage": "Capacity Per Node",
 
-FN_ARGS = {
-    # capacity
-    "end_use_capacity_per_node_absolute": {"percentage": False},
-    "power_capacity_per_carrier": {  # TODO: Pull these from the config file
-        "carriers": [
-            "nuclear",
-            "oil",
-            "OCGT",
-            "CCGT",
-            "coal",
-            "geothermal",
-            "biomass",
-            "onwind",
-            "offwind",
-            "offwind_floating",
-            "solar",
-            "hydro",
-            "CCGT-95CCS",
-            "CCGT-97CCS",
-            "coal-95CCS",
-            "coal-99CCS",
-        ],
-    },
-    # production
-    # loads
-    "load_timeseries_residential": {"sector": "res"},
-    "load_timeseries_commercial": {"sector": "com"},
-    "load_timeseries_industrial": {"sector": "ind"},
-    "load_timeseries_transport": {"sector": "trn"},
-}
+# FIGURE_FUNCTION = {
+#     # load
+#     "load_timeseries_residential": plot_sector_load_timeseries,
+#     "load_timeseries_commercial": plot_sector_load_timeseries,
+#     "load_timeseries_industrial": plot_sector_load_timeseries,
+#     "load_timeseries_transport": plot_sector_load_timeseries,
+#     "load_barplot": plot_sector_load_bar,
+#     # validation
+#     "emissions_by_sector_validation": plot_sector_emissions_validation,
+#     "emissions_by_state_validation": plot_state_emissions_validation,
+#     "generation_by_state_validation": plot_sector_consumption_validation,
+#     "transportation_by_mode_validation": plot_transportation_by_mode_validation,
+#     "system_consumption_validation": plot_system_consumption_validation_by_state,
+#     "system_emission_validation_state": plot_system_emissions_validation_by_state,
+# }
+
+
+# FN_ARGS = {
+#     # capacity
+#     "end_use_capacity_per_node_absolute": {"percentage": False},
+#     # production
+#     # loads
+#     "load_timeseries_residential": {"sector": "res"},
+#     "load_timeseries_commercial": {"sector": "com"},
+#     "load_timeseries_industrial": {"sector": "ind"},
+#     "load_timeseries_transport": {"sector": "trn"},
+# }
 
 
 @dataclass
@@ -1670,6 +1555,69 @@ PRODUCTION_PLOTS = [
     },
 ]
 
+CAPACITY_PLOTS = [
+    # {
+    #     "name": "end_use_capacity_per_carrier",
+    #     "fn": plot_capacity_by_carrier,
+    #     "nice_name": "Residenital Capacity",
+    #     "sector": "res",
+    # },
+    # {
+    #     "name": "end_use_capacity_per_carrier",
+    #     "fn": plot_capacity_by_carrier,
+    #     "nice_name": "Commercial Capacity",
+    #     "sector": "com",
+    # },
+    # {
+    #     "name": "end_use_capacity_per_carrier",
+    #     "fn": plot_capacity_by_carrier,
+    #     "nice_name": "Industrial Capacity",
+    #     "sector": "ind",
+    # },
+    # {
+    #     "name": "end_use_capacity_per_carrier",
+    #     "fn": plot_capacity_by_carrier,
+    #     "nice_name": "Transportation Capacity",
+    #     "sector": "trn",
+    # },
+    # {
+    #     "name": "end_use_capacity_per_carrier",
+    #     "fn": plot_capacity_by_carrier,
+    #     "nice_name": "Power Capacity",
+    #     "sector": "pwr",
+    # },
+    # {
+    #     "name": "end_use_capacity_state_brownfield",
+    #     "fn": plot_capacity_brownfield,
+    #     "nice_name": "Residenital Brownfield Capacity",
+    #     "sector": "res",
+    # },
+    # {
+    #     "name": "end_use_capacity_state_brownfield",
+    #     "fn": plot_capacity_brownfield,
+    #     "nice_name": "Commercial Brownfield Capacity",
+    #     "sector": "com",
+    # },
+    # {
+    #     "name": "end_use_capacity_state_brownfield",
+    #     "fn": plot_capacity_brownfield,
+    #     "nice_name": "Industrial Browfield Capacity",
+    #     "sector": "ind",
+    # },
+    # {
+    #     "name": "end_use_capacity_state_brownfield",
+    #     "fn": plot_capacity_brownfield,
+    #     "nice_name": "Transportation Brownfield Capacity",
+    #     "sector": "trn",
+    # },
+    # {
+    #     "name": "end_use_capacity_state_brownfield",
+    #     "fn": plot_capacity_brownfield,
+    #     "nice_name": "Power Brownfield Capacity",
+    #     "sector": "pwr",
+    # },
+]
+
 
 def _initialize_metadata(data: dict[str, Any]) -> list[PlottingData]:
     return [PlottingData(**x) for x in data]
@@ -1680,7 +1628,7 @@ if __name__ == "__main__":
         from _helpers import mock_snakemake
 
         snakemake = mock_snakemake(
-            "plot_sector_production",
+            "plot_sector_capacity",
             simpl="33",
             opts="2190SEG",
             clusters="4m",
@@ -1713,8 +1661,10 @@ if __name__ == "__main__":
 
     if result == "emissions":
         plotting_data = _initialize_metadata(EMISSIONS_PLOTS)
-    if result == "production":
+    elif result == "production":
         plotting_data = _initialize_metadata(PRODUCTION_PLOTS)
+    elif result == "capacity":
+        plotting_data = _initialize_metadata(CAPACITY_PLOTS)
     else:
         raise NotImplementedError
 

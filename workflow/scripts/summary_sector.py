@@ -29,6 +29,26 @@ logger = logging.getLogger(__name__)
 #         case _:
 #             raise NotImplementedError
 
+# todo - pull this from config
+PWR_CARRIERS = [
+    "nuclear",
+    "oil",
+    "OCGT",
+    "CCGT",
+    "coal",
+    "geothermal",
+    "biomass",
+    "onwind",
+    "offwind",
+    "offwind_floating",
+    "solar",
+    "hydro",
+    "CCGT-95CCS",
+    "CCGT-97CCS",
+    "coal-95CCS",
+    "coal-99CCS",
+]
+
 
 def _get_buses_in_state(n: pypsa.Network, state: str) -> list[str]:
     """
@@ -74,14 +94,14 @@ def _filter_link_on_sector(n: pypsa.Network, sector: str) -> pd.DataFrame:
     Filters network links to exclude dummy links.
     """
     match sector:
-        case "res" | "res-urban" | "res-rural" | "com" | "com-urban" | "com-rural":
+        case "res" | "res-urban" | "res-rural" | "res-total" | "com" | "com-urban" | "com-rural" | "com-total":
             return n.links[
                 (n.links.carrier.str.startswith(sector))
                 & ~(n.links.carrier.str.endswith("-store"))
                 & ~(n.links.carrier.str.contains("-water"))  # hot water heaters
-            ]
+            ].copy()
         case "ind":
-            return n.links[(n.links.carrier.str.startswith(sector)) & ~(n.links.carrier.str.endswith("-store"))]
+            return n.links[(n.links.carrier.str.startswith(sector)) & ~(n.links.carrier.str.endswith("-store"))].copy()
         case "trn":
             return n.links[
                 (n.links.carrier.str.startswith(sector))
@@ -89,17 +109,29 @@ def _filter_link_on_sector(n: pypsa.Network, sector: str) -> pd.DataFrame:
                 & ~(n.links.carrier.str.endswith("-boat"))
                 & ~(n.links.carrier.str.endswith("-rail"))
                 & ~(n.links.carrier.str.endswith("-air"))
-            ]
+            ].copy()
+        case "pwr":
+            pwr_carriers = PWR_CARRIERS
+            return n.links[n.links.carrier.isin(pwr_carriers)].copy()
         case _:
             raise NotImplementedError
 
 
-def _filter_link_on_carrier(n: pypsa.Network, carriers: list[str]) -> pd.DataFrame:
-    return n.links[n.links.carrier.isin(carriers)]
+def _filter_gens_on_sector(n: pypsa.Network, sector: str) -> pd.DataFrame:
+    match sector:
+        case "pwr":
+            pwr_carriers = PWR_CARRIERS
+            return n.generators[n.generators.carrier.isin(pwr_carriers)].copy()
+        case _:
+            raise NotImplementedError
 
 
-def _filter_gens_on_carrier(n: pypsa.Network, carriers: list[str]) -> pd.DataFrame:
-    return n.generators[n.generators.carrier.isin(carriers)]
+def _resample_data(df: pd.DataFrame, freq: str, agg_fn: callable) -> pd.DataFrame:
+    if not callable(agg_fn):
+        f"Must provide resampling function in the form of 'pd.Series.sum'"
+        return df
+    else:
+        return df.groupby("period").resample(freq, level="timestep").apply(agg_fn)
 
 
 ###
@@ -131,13 +163,14 @@ def get_hp_cop(n: pypsa.Network, state: Optional[str] = None) -> pd.DataFrame:
     return ashp.join(gshp)
 
 
-def get_capacity_per_link_per_node(
+def _get_opt_capacity_per_node(
     n: pypsa.Network,
     sector: str,
     include_elec: bool = False,
-    group_existing: bool = True,
     state: Optional[str] = None,
 ) -> pd.Series:
+
+    assert not sector in ("trn", "pwr")
 
     df = _filter_link_on_sector(n, sector)
 
@@ -150,6 +183,32 @@ def get_capacity_per_link_per_node(
 
     df = df[["carrier", "p_nom_opt"]]
     df["node"] = df.index.map(lambda x: x.split(f" {sector}-")[0])
+    df["node"] = df.node.map(lambda x: x.split(" existing")[0])
+
+    return df.reset_index(drop=True).groupby(["node", "carrier"]).sum().squeeze()
+
+
+def _get_opt_pwr_capacity_per_node(
+    n: pypsa.Network,
+    group_existing: bool = True,
+    state: Optional[str] = None,
+    **kwargs,
+) -> pd.Series:
+
+    links = _filter_link_on_sector(n, "pwr")
+    gens = _filter_gens_on_sector(n, "pwr")
+
+    if state:
+        link_names = _get_links_in_state(n, state)
+        links = links[links.index.isin(link_names)].copy()
+        gen_names = _get_gens_in_state(n, state)
+        gens = gens[gens.index.isin(gen_names)].copy()
+
+    gens["node"] = gens["bus"]
+    links["node"] = links["bus1"]
+
+    cols = ["carrier", "p_nom_opt", "node"]
+    df = pd.concat([links[cols], gens[cols]])
 
     if group_existing:
         df["node"] = df.node.map(lambda x: x.split(" existing")[0])
@@ -157,13 +216,12 @@ def get_capacity_per_link_per_node(
     return df.reset_index(drop=True).groupby(["node", "carrier"]).sum().squeeze()
 
 
-def get_total_capacity_per_node(
+def _get_total_capacity_per_node(
     n: pypsa.Network,
     sector: str,
     include_elec: bool = False,
-    group_existing: bool = True,
     state: Optional[str] = None,
-) -> pd.Series:
+) -> pd.DataFrame:
 
     df = _filter_link_on_sector(n, sector)
 
@@ -174,109 +232,156 @@ def get_total_capacity_per_node(
         links = _get_links_in_state(n, state)
         df = df[df.index.isin(links)]
 
-    df = df[["p_nom_opt"]]
-    df["node"] = df.index.map(lambda x: x.split(f" {sector}-")[0])
+    df["node"] = df.bus1.map(n.buses.country)
+    df = df[["p_nom_opt", "node"]]
 
-    if group_existing:
-        df["node"] = df.node.map(lambda x: x.split(" existing")[0])
+    return df.reset_index(drop=True).groupby(["node"]).sum()
+
+
+def _get_total_pwr_capacity_per_node(
+    n: pypsa.Network,
+    state: Optional[str] = None,
+    **kwargs,
+) -> pd.DataFrame:
+
+    links = _filter_link_on_sector(n, "pwr")
+    gens = _filter_gens_on_sector(n, "pwr")
+
+    if state:
+        link_names = _get_links_in_state(n, state)
+        links = links[links.index.isin(link_names)].copy()
+        gen_names = _get_gens_in_state(n, state)
+        gens = gens[gens.index.isin(gen_names)].copy()
+
+    gens["node"] = gens["bus"]
+    links["node"] = links["bus1"]
+
+    cols = ["p_nom_opt", "node"]
+    df = pd.concat([links[cols], gens[cols]])
 
     return df.reset_index(drop=True).groupby(["node"]).sum().squeeze()
+
+
+def _get_brownfield_pwr_capacity_per_node(
+    n: pypsa.Network,
+    sector: str,
+    include_elec: bool = False,
+    state: Optional[str] = None,
+    **kwargs,
+) -> pd.DataFrame:
+
+    links = _filter_link_on_sector(n, "pwr")
+    gens = _filter_gens_on_sector(n, "pwr")
+
+    if state:
+        link_names = _get_links_in_state(n, state)
+        links = links[links.index.isin(link_names)].copy()
+        gen_names = _get_gens_in_state(n, state)
+        gens = gens[gens.index.isin(gen_names)].copy()
+
+    gens["node"] = gens.bus.map(n.buses.country)
+    links["node"] = links.bus1.map(n.buses.country)
+
+    cols = ["p_nom_opt", "node", "carrier"]
+    df = pd.concat([links[cols], gens[cols]])
+
+    df["existing"] = df.index.map(lambda x: True if "existing" in x else False)
+
+    df = df[["node", "carrier", "p_nom_opt", "existing"]]
+
+    df = df.groupby(["node", "carrier", "existing"], as_index=False).sum()
+
+    old = (
+        df[df.existing == True]
+        .set_index(["node", "carrier"])
+        .drop(columns="existing")
+        .rename(columns={"p_nom_opt": "existing"})
+    )
+    new = (
+        df[df.existing == False]
+        .set_index(["node", "carrier"])
+        .drop(columns="existing")
+        .rename(columns={"p_nom_opt": "new"})
+    )
+
+    return old.join(new, how="outer").fillna(0)
+
+
+def _get_brownfield_capacity_per_node(
+    n: pypsa.Network,
+    sector: str,
+    include_elec: bool = False,
+    state: Optional[str] = None,
+    **kwargs,
+) -> pd.DataFrame:
+
+    df = _filter_link_on_sector(n, sector)
+
+    if not include_elec:
+        df = df[~df.carrier.str.endswith("elec-infra")].copy()
+
+    if state:
+        links = _get_links_in_state(n, state)
+        df = df[df.index.isin(links)]
+
+    df["node"] = df.bus1.map(n.buses.country)
+
+    df["existing"] = df.index.map(lambda x: True if "existing" in x else False)
+
+    df = df[["node", "carrier", "p_nom_opt", "existing"]]
+
+    df = df.groupby(["node", "carrier", "existing"], as_index=False).sum()
+
+    old = (
+        df[df.existing == True]
+        .set_index(["node", "carrier"])
+        .drop(columns="existing")
+        .rename(columns={"p_nom_opt": "existing"})
+    )
+    new = (
+        df[df.existing == False]
+        .set_index(["node", "carrier"])
+        .drop(columns="existing")
+        .rename(columns={"p_nom_opt": "new"})
+    )
+
+    return old.join(new, how="outer").fillna(0)
 
 
 def get_capacity_per_node(
     n: pypsa.Network,
     sector: str,
-    include_elec: bool = False,
-    group_existing: bool = True,
     state: Optional[str] = None,
     **kwargs,
 ) -> pd.DataFrame:
-    total = get_total_capacity_per_node(n, sector, include_elec, group_existing, state)
-    df = get_capacity_per_link_per_node(
-        n,
-        sector,
-        include_elec,
-        group_existing,
-        state,
-    ).to_frame()
+
+    if sector == "pwr":
+        total = _get_total_pwr_capacity_per_node(n, sector=sector, state=state).squeeze()
+        opt = _get_opt_pwr_capacity_per_node(n, sector=sector, state=state).to_frame()
+        brwn = _get_brownfield_pwr_capacity_per_node(n, sector=sector, state=state)
+    elif sector == "trn":
+        total = _get_total_capacity_per_node(n, sector=sector, state=state)
+        opt = _get_opt_capacity_per_node(n, sector=sector, state=state).to_frame()
+        brwn = _get_brownfield_capacity_per_node(n, sector=sector, state=state)
+    else:
+        total = _get_total_capacity_per_node(n, sector=sector, state=state).squeeze()
+        opt = _get_opt_capacity_per_node(n, sector=sector, state=state).to_frame()
+        brwn = _get_brownfield_capacity_per_node(n, sector=sector, state=state)
+
+    df = brwn.join(opt, how="outer").fillna(0)
+
     df["total"] = df.index.get_level_values("node").map(total)
     df["percentage"] = (df.p_nom_opt / df.total).round(4) * 100
     return df
 
 
-def get_power_capacity_per_carrier(
-    n: pypsa.Network,
-    carriers: str | list[str],
-    group_existing: bool = True,
-    state: Optional[str] = None,
-    **kwargs,
-) -> pd.DataFrame:
-
-    if isinstance(carriers, str):
-        carriers = [carriers]
-
-    links = _filter_link_on_carrier(n, carriers)
-    gens = _filter_gens_on_carrier(n, carriers)
-
-    if state:
-        link_names = _get_links_in_state(n, state)
-        links = links[links.index.isin(link_names)]
-        gen_names = _get_gens_in_state(n, state)
-        gens = gens[gens.index.isin(gen_names)]
-
-    gens["node"] = gens["bus"]
-    links["node"] = links["bus1"]
-
-    cols = ["carrier", "p_nom_opt", "node"]
-
-    df = pd.concat([links[cols], gens[cols]])
-
-    return df.reset_index(drop=True).groupby(["node", "carrier"]).sum().squeeze()
-
-
-def get_brownfield_capacity_per_state(
-    n: pypsa.Network,
-    sector: str,
-    state: Optional[str] = None,
-    **kwargs,
-) -> pd.DataFrame:
-
-    assert sector in (
-        "res",
-        "com",
-        "ind",
-        "trn",
-        "res-rural",
-        "res-urban",
-        "com-rural",
-        "com-urban",
-    )
-
-    df = get_capacity_per_node(n, sector, group_existing=False, state=state)
-
-    data = []
-
-    for carrier in df.index.get_level_values("carrier").unique():
-        temp = df[df.index.get_level_values("carrier") == carrier].droplevel("carrier")
-        temp["existing"] = temp.index.map(lambda x: True if "existing" in x else False)
-
-        data.append(
-            [
-                carrier,
-                temp[temp.existing == True].p_nom_opt.sum(),
-                temp[temp.existing == False].p_nom_opt.sum(),
-            ],
-        )
-
-    capacity = pd.DataFrame(data, columns=["carrier", "Existing", "New Build"])
-
-    return capacity.set_index("carrier")
-
-
 def get_sector_production_timeseries(
     n: pypsa.Network,
     sector: str,
+    remove_sns_weights: bool = False,
     state: Optional[str] = None,
+    resample: Optional[str] = None,
+    resample_fn: Optional[callable] = None,
 ) -> pd.DataFrame:
     """
     Gets timeseries production to meet sectoral demand.
@@ -288,25 +393,42 @@ def get_sector_production_timeseries(
     """
 
     links = _filter_link_on_sector(n, sector).index.to_list()
-    df = n.links_t.p1[links].mul(-1).mul(n.snapshot_weightings.generators, axis=0)
+
+    if remove_sns_weights:
+        df = n.links_t.p1[links].mul(-1)  # just for plotting purposes
+    else:
+        df = n.links_t.p1[links].mul(-1).mul(n.snapshot_weightings.generators, axis=0)
 
     if state:
         links = _get_links_in_state(n, state)
-        return df[[x for x in df.columns if x in links]]
-    else:
+        df = df[[x for x in df.columns if x in links]]
+
+    if not (resample or resample_fn):
         return df
+    else:
+        return _resample_data(df, resample, resample_fn)
 
 
 def get_sector_production_timeseries_by_carrier(
     n: pypsa.Network,
     sector: str,
+    remove_sns_weights: bool = False,
     state: Optional[str] = None,
+    resample: Optional[str] = None,
+    resample_fn: Optional[callable] = None,
 ) -> pd.DataFrame:
     """
     Gets timeseries production by carrier.
     """
 
-    df = get_sector_production_timeseries(n, sector, state=state).T
+    df = get_sector_production_timeseries(
+        n,
+        sector,
+        state=state,
+        resample=resample,
+        resample_fn=resample_fn,
+        remove_sns_weights=remove_sns_weights,
+    ).T
     df.index = df.index.map(n.links.carrier)
     return df.groupby(level=0).sum().T
 
@@ -368,9 +490,12 @@ def get_emission_timeseries_by_sector(
     Cummulative emissions by sector in MT.
     """
     if sector:
-        stores_in_sector = [x for x in n.stores.index if f"{sector}-co2" in x]
+        if sector == "ch4":
+            stores_in_sector = [x for x in n.stores.index if f"gas-ch4" in x]
+        else:
+            stores_in_sector = [x for x in n.stores.index if f"{sector}-co2" in x]
     else:
-        stores_in_sector = [x for x in n.stores.index if f"-co2" in x]
+        stores_in_sector = [x for x in n.stores.index if x.endswith("-co2") or x.endswith("-ch4")]
     emissions = n.stores_t.e[stores_in_sector].mul(1e-6)
 
     if state:
