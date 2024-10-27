@@ -1733,8 +1733,6 @@ class WriteStrategy(ABC):
         Filters on snapshots, sector, and fuel.
         """
 
-        n = self.n  # noqa
-
         if isinstance(sns, pd.DatetimeIndex):
             filtered = self._filter_on_snapshots(df, sns)
             df = filtered.reset_index()
@@ -2272,7 +2270,7 @@ class AeoVmtScaler(DemandScaler):
         """
         Returns single year value at a time.
         """
-        return TransportationDemand(vehicle=sector, year=year, api=self.api).get_data()
+        return TransportationDemand(vehicle=sector, year=year, api=self.api).get_data(pivot=True).values[0][0]
 
     def get_future_values(
         self,
@@ -2441,6 +2439,18 @@ def get_demand_params(
 
 
 ###
+# helpers
+###
+
+
+def _get_closest_efs_year(efs_years, investment_period):
+    filtered_values = [y for y in efs_years if y <= investment_period]
+    if not filtered_values:
+        return None
+    return max(filtered_values)
+
+
+###
 # main entry point
 ###
 
@@ -2465,10 +2475,15 @@ if __name__ == "__main__":
         #     vehicle="rail-passenger",
         # )
         snakemake = mock_snakemake(
-            "build_sector_demand",
+            "build_transport_road_demand",
             interconnect="western",
-            end_use="industry",
+            end_use="transport",
         )
+        # snakemake = mock_snakemake(
+        #     "build_sector_demand",
+        #     interconnect="western",
+        #     end_use="industry",
+        # )
     configure_logging(snakemake)
 
     n = pypsa.Network(snakemake.input.network)
@@ -2541,7 +2556,11 @@ if __name__ == "__main__":
     elif demand_profile == "transport_efs_aeo":  # road vehicle transport
         efs_file = demand_files[0]
         vmt_ratios_file = demand_files[1]
-        sns = n.snapshots.get_level_values(1)
+        efs_years = (2018, 2020, 2024, 2030, 2040, 2050)
+        replacement_year = _get_closest_efs_year(efs_years, profile_year)
+        sns = n.snapshots.get_level_values(1).map(
+            lambda x: x.replace(year=replacement_year),
+        )
         reader = ReadTransportEfsAeo(
             vmt_ratios_file,
             efs_path=efs_file,
