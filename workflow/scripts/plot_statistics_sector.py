@@ -233,7 +233,9 @@ def plot_sector_production_timeseries(
                 # axs.set_title(f"{SECTOR_MAPPER[sector]}")
 
         except TypeError:  # no numeric data to plot
-            logger.warning(f"No data to plot for {state} (plot_sector_production_timeseries)")
+            logger.warning(
+                f"No data to plot for {state} (plot_sector_production_timeseries)",
+            )
 
     return fig, axs
 
@@ -1556,66 +1558,66 @@ PRODUCTION_PLOTS = [
 ]
 
 CAPACITY_PLOTS = [
-    # {
-    #     "name": "end_use_capacity_per_carrier",
-    #     "fn": plot_capacity_by_carrier,
-    #     "nice_name": "Residenital Capacity",
-    #     "sector": "res",
-    # },
-    # {
-    #     "name": "end_use_capacity_per_carrier",
-    #     "fn": plot_capacity_by_carrier,
-    #     "nice_name": "Commercial Capacity",
-    #     "sector": "com",
-    # },
-    # {
-    #     "name": "end_use_capacity_per_carrier",
-    #     "fn": plot_capacity_by_carrier,
-    #     "nice_name": "Industrial Capacity",
-    #     "sector": "ind",
-    # },
-    # {
-    #     "name": "end_use_capacity_per_carrier",
-    #     "fn": plot_capacity_by_carrier,
-    #     "nice_name": "Transportation Capacity",
-    #     "sector": "trn",
-    # },
-    # {
-    #     "name": "end_use_capacity_per_carrier",
-    #     "fn": plot_capacity_by_carrier,
-    #     "nice_name": "Power Capacity",
-    #     "sector": "pwr",
-    # },
-    # {
-    #     "name": "end_use_capacity_state_brownfield",
-    #     "fn": plot_capacity_brownfield,
-    #     "nice_name": "Residenital Brownfield Capacity",
-    #     "sector": "res",
-    # },
-    # {
-    #     "name": "end_use_capacity_state_brownfield",
-    #     "fn": plot_capacity_brownfield,
-    #     "nice_name": "Commercial Brownfield Capacity",
-    #     "sector": "com",
-    # },
-    # {
-    #     "name": "end_use_capacity_state_brownfield",
-    #     "fn": plot_capacity_brownfield,
-    #     "nice_name": "Industrial Browfield Capacity",
-    #     "sector": "ind",
-    # },
-    # {
-    #     "name": "end_use_capacity_state_brownfield",
-    #     "fn": plot_capacity_brownfield,
-    #     "nice_name": "Transportation Brownfield Capacity",
-    #     "sector": "trn",
-    # },
-    # {
-    #     "name": "end_use_capacity_state_brownfield",
-    #     "fn": plot_capacity_brownfield,
-    #     "nice_name": "Power Brownfield Capacity",
-    #     "sector": "pwr",
-    # },
+    {
+        "name": "end_use_capacity_per_carrier",
+        "fn": plot_capacity_by_carrier,
+        "nice_name": "Residenital Capacity",
+        "sector": "res",
+    },
+    {
+        "name": "end_use_capacity_per_carrier",
+        "fn": plot_capacity_by_carrier,
+        "nice_name": "Commercial Capacity",
+        "sector": "com",
+    },
+    {
+        "name": "end_use_capacity_per_carrier",
+        "fn": plot_capacity_by_carrier,
+        "nice_name": "Industrial Capacity",
+        "sector": "ind",
+    },
+    {
+        "name": "end_use_capacity_per_carrier",
+        "fn": plot_capacity_by_carrier,
+        "nice_name": "Transportation Capacity",
+        "sector": "trn",
+    },
+    {
+        "name": "end_use_capacity_per_carrier",
+        "fn": plot_capacity_by_carrier,
+        "nice_name": "Power Capacity",
+        "sector": "pwr",
+    },
+    {
+        "name": "end_use_capacity_state_brownfield",
+        "fn": plot_capacity_brownfield,
+        "nice_name": "Residenital Brownfield Capacity",
+        "sector": "res",
+    },
+    {
+        "name": "end_use_capacity_state_brownfield",
+        "fn": plot_capacity_brownfield,
+        "nice_name": "Commercial Brownfield Capacity",
+        "sector": "com",
+    },
+    {
+        "name": "end_use_capacity_state_brownfield",
+        "fn": plot_capacity_brownfield,
+        "nice_name": "Industrial Browfield Capacity",
+        "sector": "ind",
+    },
+    {
+        "name": "end_use_capacity_state_brownfield",
+        "fn": plot_capacity_brownfield,
+        "nice_name": "Transportation Brownfield Capacity",
+        "sector": "trn",
+    },
+    {
+        "name": "end_use_capacity_state_brownfield",
+        "fn": plot_capacity_brownfield,
+        "nice_name": "Power Brownfield Capacity",
+        "sector": "pwr",
+    },
 ]
 
 
@@ -1675,7 +1677,13 @@ if __name__ == "__main__":
 
         # plot at system level
         if plot_data.sector:
-            f_path = Path(results_dir, "system", result, plot_data.sector, f"{plot_data.name}.{EXT}")
+            f_path = Path(
+                results_dir,
+                "system",
+                result,
+                plot_data.sector,
+                f"{plot_data.name}.{EXT}",
+            )
         else:
             f_path = Path(results_dir, "system", result, f"{plot_data.name}.{EXT}")
 
@@ -1703,7 +1711,13 @@ if __name__ == "__main__":
             fn_kwargs["state"] = state
 
             if plot_data.sector:
-                f_path = Path(results_dir, state, result, plot_data.sector, f"{plot_data.name}.{EXT}")
+                f_path = Path(
+                    results_dir,
+                    state,
+                    result,
+                    plot_data.sector,
+                    f"{plot_data.name}.{EXT}",
+                )
             else:
                 f_path = Path(results_dir, state, result, f"{plot_data.name}.{EXT}")
 
@@ -1714,31 +1728,3 @@ if __name__ == "__main__":
 
         if not plot_data.plot_by_month:
             continue
-
-    # for f, f_path in snakemake.output.items():
-
-    #     try:
-    #         fn = FIGURE_FUNCTION[f]
-    #     except KeyError as ex:
-    #         logger.error(f"Must provide a function for plot {f}!")
-    #         print(ex)
-
-    #     try:
-    #         title = FIGURE_NICE_NAME[f]
-    #     except KeyError:
-    #         title = f
-
-    #     try:
-    #         fn_inputs = FN_ARGS[f]
-    #     except KeyError:
-    #         fn_inputs = {}
-
-    #     if eia_api:
-    #         fn_inputs["eia_api"] = eia_api
-
-    #     if state == "system":
-    #         fn_inputs["state"] = None
-    #     else:
-    #         fn_inputs["state"] = state
-
-    #     save_fig(fn, n, f_path, title, wildcards, **fn_inputs)

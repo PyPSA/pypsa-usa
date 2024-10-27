@@ -356,13 +356,17 @@ def get_capacity_per_node(
 ) -> pd.DataFrame:
 
     if sector == "pwr":
-        total = _get_total_pwr_capacity_per_node(n, sector=sector, state=state).squeeze()
+        total = _get_total_pwr_capacity_per_node(
+            n,
+            sector=sector,
+            state=state,
+        ).squeeze()
         opt = _get_opt_pwr_capacity_per_node(n, sector=sector, state=state).to_frame()
         brwn = _get_brownfield_pwr_capacity_per_node(n, sector=sector, state=state)
     elif sector == "trn":
-        total = _get_total_capacity_per_node(n, sector=sector, state=state)
-        opt = _get_opt_capacity_per_node(n, sector=sector, state=state).to_frame()
-        brwn = _get_brownfield_capacity_per_node(n, sector=sector, state=state)
+        total = _get_total_capacity_per_node(n, sector="res", state=state).squeeze()
+        opt = _get_opt_capacity_per_node(n, sector="res", state=state).to_frame()
+        brwn = _get_brownfield_capacity_per_node(n, sector="res", state=state)
     else:
         total = _get_total_capacity_per_node(n, sector=sector, state=state).squeeze()
         opt = _get_opt_capacity_per_node(n, sector=sector, state=state).to_frame()
