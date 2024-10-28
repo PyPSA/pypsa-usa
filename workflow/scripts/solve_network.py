@@ -964,7 +964,9 @@ def add_sector_co2_constraints(n, config):
             years = [x for x in df_state.year.unique() if x in n.investment_periods]
 
             if not years:
-                logger.warning(f"No co2 policies applied for {sector} in {year}")
+                logger.warning(
+                    f"No co2 policies applied for {sector} due to no defined years",
+                )
                 continue
 
             for year in years:
