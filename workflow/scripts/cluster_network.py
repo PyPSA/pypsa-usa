@@ -500,26 +500,10 @@ def convert_to_transport(
     # Remove any disconnected buses
     unique_buses = buses.loc[itls.r].index.union(buses.loc[itls.rr].index).unique()
     disconnected_buses = clustering.network.buses.index[~clustering.network.buses.index.isin(unique_buses)]
+
     if len(disconnected_buses) > 0:
         logger.warning(
-            f"Removed {len(disconnected_buses)} sub-network buses from the network.",
-        )
-        clustering.network.mremove("Bus", disconnected_buses)
-        clustering.network.mremove(
-            "Generator",
-            clustering.network.generators.query("bus in @disconnected_buses").index,
-        )
-        clustering.network.mremove(
-            "StorageUnit",
-            clustering.network.storage_units.query("bus in @disconnected_buses").index,
-        )
-        clustering.network.mremove(
-            "Store",
-            clustering.network.stores.query("bus in @disconnected_buses").index,
-        )
-        clustering.network.mremove(
-            "Load",
-            clustering.network.loads.query("bus in @disconnected_buses").index,
+            f"Network configuration contains {len(disconnected_buses)} disconnected buses. ",
         )
     return clustering
 
@@ -574,16 +558,24 @@ if __name__ == "__main__":
     exclude_carriers = params.cluster_network["exclude_carriers"]
     aggregate_carriers = set(n.generators.carrier) - set(exclude_carriers)
     conventional_carriers = set(params.conventional_carriers)
+    non_aggregated_carriers = {}
     if snakemake.wildcards.clusters.endswith("m"):
         n_clusters = int(snakemake.wildcards.clusters[:-1])
         aggregate_carriers = set(params.conventional_carriers) & aggregate_carriers
+        non_aggregated_carriers = set(n.generators.carrier) - aggregate_carriers
     elif snakemake.wildcards.clusters.endswith("c"):
         n_clusters = int(snakemake.wildcards.clusters[:-1])
         aggregate_carriers = aggregate_carriers - conventional_carriers
+        non_aggregated_carriers = set(n.generators.carrier) - aggregate_carriers
     elif snakemake.wildcards.clusters == "all":
         n_clusters = len(n.buses)
     else:
         n_clusters = int(snakemake.wildcards.clusters)
+
+    n.generators.loc[n.generators.carrier.isin(non_aggregated_carriers), "land_region"] = n.generators.loc[
+        n.generators.carrier.isin(non_aggregated_carriers),
+        "bus",
+    ]
 
     if params.cluster_network.get("consider_efficiency_classes", False):
         carriers = []

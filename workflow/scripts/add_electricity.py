@@ -273,8 +273,6 @@ def match_plant_to_bus(n, plants):
     # from: https://stackoverflow.com/questions/58893719/find-nearest-point-in-other-dataframe-with-a-lot-of-data
     # Create a BallTree
     tree = BallTree(buses[["x", "y"]].values, leaf_size=2)
-    # Query the BallTree on each feature from 'appart' to find the distance
-    # to the nearest 'pharma' and its id
     plants_matched["distance_nearest"], plants_matched["id_nearest"] = tree.query(
         plants_matched[["longitude", "latitude"]].values,  # The input array for the query
         k=1,  # The number of nearest neighbors

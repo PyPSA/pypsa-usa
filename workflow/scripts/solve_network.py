@@ -48,6 +48,23 @@ logger = logging.getLogger(__name__)
 pypsa.pf.logger.setLevel(logging.WARNING)
 
 
+def add_land_use_constraints(n):
+    model = n.model
+    generators = n.generators.query("p_nom_extendable & land_region != '' ").rename_axis(index="Generator-ext")
+    p_nom = n.model["Generator-p_nom"].loc[generators.index]
+
+    grouper = pd.concat([generators.carrier, generators.land_region], axis=1)
+    lhs = p_nom.groupby(grouper).sum()
+
+    # p_nom_max = generators.groupby(['carrier','land_region'])['p_nom_max'].max()
+    maximum = xr.DataArray(generators.groupby(["carrier", "land_region"])["p_nom_max"].max()).rename(dim_0="group")
+    index = maximum.indexes["group"].intersection(lhs.indexes["group"])
+
+    if not index.empty:
+        logger.info("Adding land-use constraints")
+        model.add_constraints(lhs.sel(group=index) <= maximum.loc[index], name="land_use_constraint")
+
+
 def add_land_use_constraint_perfect(n):
     """
     Add global constraints for tech capacity limit.
@@ -179,8 +196,8 @@ def prepare_network(
         n.set_snapshots(n.snapshots[:nhours])
         n.snapshot_weightings[:] = 8760.0 / nhours
 
-    if foresight == "perfect":
-        n = add_land_use_constraint_perfect(n)
+    # if foresight == "perfect":
+    #     n = add_land_use_constraint_perfect(n)
 
     if n.stores.carrier.eq("co2 stored").any():
         limit = co2_sequestration_potential
@@ -1135,6 +1152,7 @@ def extra_functionality(n, snapshots):
             add_EQ_constraints(n, o)
     add_battery_constraints(n)
     add_pipe_retrofit_constraint(n)
+    add_land_use_constraints(n)
 
 
 def solve_network(n, config, solving, opts="", **kwargs):
@@ -1184,6 +1202,7 @@ def solve_network(n, config, solving, opts="", **kwargs):
             f"Solving status '{status}' with termination condition '{condition}'",
         )
     if "infeasible" in condition:
+        n.model.print_infeasibilities()
         raise RuntimeError("Solving status 'infeasible'")
 
     return n

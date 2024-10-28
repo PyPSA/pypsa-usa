@@ -788,7 +788,7 @@ rule build_powerplants:
     output:
         powerplants=RESOURCES + "powerplants.csv",
     log:
-        "logs/build_powerplants",
+        "logs/build_powerplants/build_powerplants.log",
     resources:
         mem_mb=30000,
     script:
