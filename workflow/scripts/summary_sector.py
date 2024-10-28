@@ -264,8 +264,6 @@ def _get_total_pwr_capacity_per_node(
 
 def _get_brownfield_pwr_capacity_per_node(
     n: pypsa.Network,
-    sector: str,
-    include_elec: bool = False,
     state: Optional[str] = None,
     **kwargs,
 ) -> pd.DataFrame:
@@ -282,29 +280,16 @@ def _get_brownfield_pwr_capacity_per_node(
     gens["node"] = gens.bus.map(n.buses.country)
     links["node"] = links.bus1.map(n.buses.country)
 
-    cols = ["p_nom_opt", "node", "carrier"]
+    cols = ["p_nom", "p_nom_opt", "node", "carrier"]
     df = pd.concat([links[cols], gens[cols]])
 
-    df["existing"] = df.index.map(lambda x: True if "existing" in x else False)
+    df = df.groupby(["node", "carrier"]).sum()
+    df["new"] = df.p_nom_opt - df.p_nom
+    df["new"] = df.new.map(lambda x: x if x >= 0 else 0)
 
-    df = df[["node", "carrier", "p_nom_opt", "existing"]]
+    df["existing"] = df.p_nom
 
-    df = df.groupby(["node", "carrier", "existing"], as_index=False).sum()
-
-    old = (
-        df[df.existing == True]
-        .set_index(["node", "carrier"])
-        .drop(columns="existing")
-        .rename(columns={"p_nom_opt": "existing"})
-    )
-    new = (
-        df[df.existing == False]
-        .set_index(["node", "carrier"])
-        .drop(columns="existing")
-        .rename(columns={"p_nom_opt": "new"})
-    )
-
-    return old.join(new, how="outer").fillna(0)
+    return df[["existing", "new"]]
 
 
 def _get_brownfield_capacity_per_node(
@@ -326,26 +311,15 @@ def _get_brownfield_capacity_per_node(
 
     df["node"] = df.bus1.map(n.buses.country)
 
-    df["existing"] = df.index.map(lambda x: True if "existing" in x else False)
+    df = df[["p_nom", "p_nom_opt", "node", "carrier"]]
 
-    df = df[["node", "carrier", "p_nom_opt", "existing"]]
+    df = df.groupby(["node", "carrier"]).sum()
+    df["new"] = df.p_nom_opt - df.p_nom
+    df["new"] = df.new.map(lambda x: x if x >= 0 else 0)
 
-    df = df.groupby(["node", "carrier", "existing"], as_index=False).sum()
+    df["existing"] = df.p_nom
 
-    old = (
-        df[df.existing == True]
-        .set_index(["node", "carrier"])
-        .drop(columns="existing")
-        .rename(columns={"p_nom_opt": "existing"})
-    )
-    new = (
-        df[df.existing == False]
-        .set_index(["node", "carrier"])
-        .drop(columns="existing")
-        .rename(columns={"p_nom_opt": "new"})
-    )
-
-    return old.join(new, how="outer").fillna(0)
+    return df[["existing", "new"]]
 
 
 def get_capacity_per_node(
@@ -413,6 +387,46 @@ def get_sector_production_timeseries(
         return _resample_data(df, resample, resample_fn)
 
 
+def get_power_production_timeseries(
+    n: pypsa.Network,
+    remove_sns_weights: bool = False,
+    state: Optional[str] = None,
+    resample: Optional[str] = None,
+    resample_fn: Optional[callable] = None,
+) -> pd.DataFrame:
+    """
+    Gets power timeseries production to meet sectoral demand.
+
+    Rememeber units! Transport will be in units of kVMT or similar.
+
+    Note: can not use statistics module as multi-output links for co2 tracking
+    > n.statistics.supply("Link", nice_names=False, aggregate_time=False).T
+    """
+
+    links = _filter_link_on_sector(n, "pwr").index.to_list()
+    gens = _filter_gens_on_sector(n, "pwr").index.to_list()
+
+    if remove_sns_weights:
+        df_links = n.links_t.p1[links].mul(-1)  # just for plotting purposes
+        df_gens = n.generators_t.p[gens]
+    else:
+        df_links = n.links_t.p1[links].mul(-1).mul(n.snapshot_weightings.generators, axis=0)
+        df_gens = n.links_t.p1[gens].mul(n.snapshot_weightings.generators, axis=0)
+
+    if state:
+        links = _get_links_in_state(n, state)
+        gens = _get_gens_in_state(n, state)
+        df_links = df_links[[x for x in df_links.columns if x in links]]
+        df_gens = df_gens[[x for x in df_gens.columns if x in gens]]
+
+    df = df_links.join(df_gens)
+
+    if not (resample or resample_fn):
+        return df
+    else:
+        return _resample_data(df, resample, resample_fn)
+
+
 def get_sector_production_timeseries_by_carrier(
     n: pypsa.Network,
     sector: str,
@@ -425,15 +439,27 @@ def get_sector_production_timeseries_by_carrier(
     Gets timeseries production by carrier.
     """
 
-    df = get_sector_production_timeseries(
-        n,
-        sector,
-        state=state,
-        resample=resample,
-        resample_fn=resample_fn,
-        remove_sns_weights=remove_sns_weights,
-    ).T
-    df.index = df.index.map(n.links.carrier)
+    if sector == "pwr":
+        df = get_power_production_timeseries(
+            n,
+            state=state,
+            resample=resample,
+            resample_fn=resample_fn,
+            remove_sns_weights=remove_sns_weights,
+        )
+        df = df.T
+        df.index = df.index.map(pd.concat([n.links.carrier, n.generators.carrier]))
+    else:
+        df = get_sector_production_timeseries(
+            n,
+            sector,
+            state=state,
+            resample=resample,
+            resample_fn=resample_fn,
+            remove_sns_weights=remove_sns_weights,
+        )
+        df = df.T
+        df.index = df.index.map(n.links.carrier)
     return df.groupby(level=0).sum().T
 
 

@@ -559,60 +559,6 @@ def plot_capacity_brownfield(
     return fig, axs
 
 
-# def plot_power_capacity(
-#     n: pypsa.Network,
-#     carriers: list[str],
-#     sharey: bool = True,
-#     state: Optional[str] = None,
-#     nice_name: Optional[bool] = True,
-#     **kwargs,
-# ) -> tuple:
-#     """
-#     Plots capacity of generators in the power sector.
-#     """
-
-#     sector = "pwr"
-
-#     nrows = 1
-
-#     fig, axs = plt.subplots(
-#         ncols=1,
-#         nrows=nrows,
-#         figsize=(FIG_WIDTH, FIG_HEIGHT * nrows),
-#         sharey=sharey,
-#     )
-
-#     df = get_power_capacity_per_carrier(
-#         n,
-#         carriers,
-#         group_existing=True,
-#         state=state,
-#     )
-#     df = df.reset_index()[["carrier", "p_nom_opt"]]
-
-#     if df.empty:
-#         logger.warning(f"No data to plot for {state} sector pwr")
-#         return fig, axs
-
-#     if nice_name:
-#         df["carrier"] = df.carrier.map(n.carriers.nice_name)
-
-#     df = df.groupby("carrier").sum()
-
-#     try:
-
-#         df.plot(kind="bar", stacked=False, ax=axs)
-#         axs.set_xlabel("")
-#         axs.set_ylabel("Capacity (MW)")
-#         axs.set_title(f"{SECTOR_MAPPER[sector]} Capacity")
-#         axs.tick_params(axis="x", labelrotation=45)
-
-#     except TypeError:  # no numeric data to plot
-#         logger.warning(f"No data to plot for {state}")
-
-#     return fig, axs
-
-
 def plot_sector_load_factor_timeseries(
     n: pypsa.Network,
     sharey: bool = True,
@@ -1514,6 +1460,17 @@ PRODUCTION_PLOTS = [
         },
     },
     {
+        "name": "production_time_series",
+        "fn": plot_sector_production_timeseries,
+        "nice_name": "Power End Use Production",
+        "plot_by_month": True,
+        "sector": "pwr",
+        "fn_kwargs": {
+            "resample": "D",
+            "resample_fn": pd.Series.sum,
+        },
+    },
+    {
         "name": "production_total",
         "fn": plot_sector_production,
         "nice_name": "Residential End Use Technology Production",
@@ -1630,16 +1587,15 @@ if __name__ == "__main__":
         from _helpers import mock_snakemake
 
         snakemake = mock_snakemake(
-            "plot_sector_capacity",
+            "plot_sector_production",
             simpl="33",
             opts="2190SEG",
             clusters="4m",
             ll="v1.0",
             sector_opts="",
             sector="E-G",
-            planning_horizons="2019",
+            planning_horizons="2020",
             interconnect="western",
-            state="CA",
         )
         rootpath = ".."
     else:
