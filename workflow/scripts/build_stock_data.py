@@ -711,22 +711,22 @@ def add_transport_brownfield(
                 costs_name = "Light Duty Cars ICEV"
                 ratio_name = "light_duty"
                 # efficiency = 25.9  # mpg
-                efficiency = 5  # mpg
+                efficiency = 20  # mpg
             case "med":
                 costs_name = "Medium Duty Trucks ICEV"
                 ratio_name = "med_duty"
                 # efficiency = 16.35  # mpg
-                efficiency = 3  # mpg
+                efficiency = 15  # mpg
             case "hvy":
                 costs_name = "Heavy Duty Trucks ICEV"
                 ratio_name = "heavy_duty"
                 # efficiency = 5.44  # mpg
-                efficiency = 1  # mpg
+                efficiency = 5  # mpg
             case "bus":
                 costs_name = "Buses ICEV"
                 ratio_name = "bus"
                 # efficiency = 3.67  # mpg
-                efficiency = 0.75  # mpg
+                efficiency = 3  # mpg
             case _:
                 raise NotImplementedError
 

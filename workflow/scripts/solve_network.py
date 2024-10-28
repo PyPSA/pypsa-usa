@@ -1125,8 +1125,7 @@ def extra_functionality(n, snapshots):
     if "sector" in opts:
         sector_co2_limits = config["sector"]["co2"].get("policy", {})
         if sector_co2_limits:
-            # add_sector_co2_constraints(n, config)
-            pass
+            add_sector_co2_constraints(n, config)
         if config["sector"]["natural_gas"].get("force_imports_exports", False):
             add_ng_import_export_limits(n, config)
 
