@@ -695,6 +695,9 @@ if __name__ == "__main__":
             update_transmission_costs(clustering.network, costs)
 
     update_p_nom_max(clustering.network)
+    clustering.network.generators.land_region = clustering.network.generators.land_region.fillna(
+        clustering.network.generators.bus,
+    )
 
     if params.cluster_network.get("consider_efficiency_classes"):
         labels = [f" {label} efficiency" for label in ["low", "medium", "high"]]
