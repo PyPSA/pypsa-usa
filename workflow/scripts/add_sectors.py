@@ -339,10 +339,10 @@ if __name__ == "__main__":
         snakemake = mock_snakemake(
             "add_sectors",
             interconnect="western",
-            simpl="12",
-            clusters="6",
+            simpl="33",
+            clusters="4m",
             ll="v1.0",
-            opts="48SEG",
+            opts="2190SEG",
             sector="E-G",
         )
     configure_logging(snakemake)

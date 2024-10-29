@@ -38,6 +38,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 import constants as const
+import constants_sector as sc
 import duckdb
 import geopandas as gpd
 import numpy as np
@@ -45,6 +46,7 @@ import pandas as pd
 import pypsa
 import xarray as xr
 from _helpers import configure_logging
+from constants_sector import FIPS_2_STATE, NAICS, VMT_UNIT_CONVERSION
 from eia import EnergyDemand, TransportationDemand
 
 logger = logging.getLogger(__name__)
@@ -52,21 +54,7 @@ logger = logging.getLogger(__name__)
 STATE_2_CODE = const.STATE_2_CODE
 CODE_2_STATE = {value: key for key, value in STATE_2_CODE.items()}
 STATE_TIMEZONE = const.STATE_2_TIMEZONE
-
-FIPS_2_STATE = const.FIPS_2_STATE
-NAICS = const.NAICS
 TBTU_2_MWH = const.TBTU_2_MWH
-
-# bus conversion:
-# - (pg 4) https://www.apta.com/wp-content/uploads/APTA-2022-Public-Transportation-Fact-Book.pdf
-# - (141.5 / 999.5) = 0.14157
-
-VMT_UNIT_CONVERSION = {
-    "light_duty": 1,  # VMT
-    "med_duty": 1,  # VMT
-    "heavy_duty": 1,  # VMT
-    "bus": 0.14157,  # PMT -> VMT
-}
 
 
 class Context:
