@@ -15,7 +15,7 @@ import pypsa
 import seaborn as sns
 from _helpers import configure_logging, mock_snakemake
 from add_electricity import sanitize_carriers
-from constants import STATE_2_CODE
+from constants import STATE_2_CODE, Month
 from constants_sector import (
     AirTransport,
     AirTransportUnits,
@@ -70,6 +70,10 @@ EXT = "png"
 ###
 # HELPERS
 ###
+
+
+def _get_month_name(month: Month) -> str:
+    return month.name.capitalize()
 
 
 def percent_difference(col_1: pd.Series, col_2: pd.Series) -> pd.Series:
@@ -170,6 +174,7 @@ def plot_sector_production_timeseries(
     remove_sns_weights: bool = True,
     resample: Optional[str] = None,
     resample_fn: Optional[callable] = None,
+    month: Optional[int] = None,
     **kwargs,
 ) -> tuple:
     """
@@ -204,6 +209,9 @@ def plot_sector_production_timeseries(
     for row, period in enumerate(investment_periods):
 
         df = df_all.loc[period]
+
+        if month:
+            df = df[df.index.get_level_values("timestep").month == month_i]
 
         if df.empty:
             logger.warning(f"No data to plot for {state}")
@@ -248,6 +256,7 @@ def plot_transportation_production_timeseries(
     remove_sns_weights: bool = True,
     resample: Optional[str] = None,
     resample_fn: Optional[callable] = None,
+    month: Optional[int] = None,
     **kwargs,
 ) -> tuple:
     """
@@ -294,6 +303,9 @@ def plot_transportation_production_timeseries(
     for row, period in enumerate(investment_periods):
 
         df_veh_period = df_veh.loc[period]
+
+        if month:
+            df_veh_period = df_veh_period[df_veh_period.index.get_level_values("timestep").month == month_i].copy()
 
         for i, unit in enumerate(diff_units):
 
@@ -1952,12 +1964,13 @@ if __name__ == "__main__":
     else:
         raise NotImplementedError
 
+    # plot at system level
+
     for plot_data in plotting_data:
 
         fn = plot_data.fn
         title = plot_data.nice_name if plot_data.nice_name else plot_data.name
 
-        # plot at system level
         if plot_data.sector:
             f_path = Path(
                 results_dir,
@@ -1986,9 +1999,63 @@ if __name__ == "__main__":
 
         save_fig(fn, n, str(f_path), title, wildcards, **fn_kwargs)
 
-        # plot each state
+        if not plot_data.plot_by_month:
+            continue
+
+        by_month_kwargs = fn_kwargs.copy()
+
+        by_month_kwargs["resample"] = None
+        by_month_kwargs["resample_fn"] = None
+
+        months = {month.value: _get_month_name(month) for month in Month}
+
+        for month_i, month_name in months.items():
+
+            if plot_data.sector:
+                f_path = Path(
+                    results_dir,
+                    "system",
+                    result,
+                    plot_data.sector,
+                    plot_data.name,
+                    f"{month_name}.{EXT}",
+                )
+            else:
+                f_path = Path(
+                    results_dir,
+                    "system",
+                    result,
+                    plot_data.name,
+                    f"{month_name}.{EXT}",
+                )
+
+            if not f_path.parent.exists():
+                f_path.parent.mkdir(parents=True)
+
+            by_month_kwargs["month"] = month_i
+
+            save_fig(fn, n, str(f_path), title, wildcards, **by_month_kwargs)
+
+    # plot each state
+
+    for plot_data in plotting_data:
+
+        fn = plot_data.fn
+        title = plot_data.nice_name if plot_data.nice_name else plot_data.name
 
         for state in states:
+
+            if plot_data.fn_kwargs:
+                fn_kwargs = plot_data.fn_kwargs
+            else:
+                fn_kwargs = {}
+            fn_kwargs["state"] = None  # system level
+            fn_kwargs["eia_api"] = eia_api
+
+            if plot_data.sector:
+                fn_kwargs["sector"] = plot_data.sector
+            else:
+                fn_kwargs["sector"] = None
 
             fn_kwargs["state"] = state
 
@@ -2010,3 +2077,37 @@ if __name__ == "__main__":
 
         if not plot_data.plot_by_month:
             continue
+
+        by_month_kwargs = fn_kwargs.copy()
+
+        by_month_kwargs["resample"] = None
+        by_month_kwargs["resample_fn"] = None
+
+        months = {month.value: _get_month_name(month) for month in Month}
+
+        for month_i, month_name in months.items():
+
+            if plot_data.sector:
+                f_path = Path(
+                    results_dir,
+                    state,
+                    result,
+                    plot_data.sector,
+                    plot_data.name,
+                    f"{month_name}.{EXT}",
+                )
+            else:
+                f_path = Path(
+                    results_dir,
+                    state,
+                    result,
+                    plot_data.name,
+                    f"{month_name}.{EXT}",
+                )
+
+            if not f_path.parent.exists():
+                f_path.parent.mkdir(parents=True)
+
+            by_month_kwargs["month"] = month_i
+
+            save_fig(fn, n, str(f_path), title, wildcards, **by_month_kwargs)
