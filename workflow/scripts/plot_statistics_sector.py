@@ -178,7 +178,7 @@ def plot_sector_production_timeseries(
 
     y_label = kwargs.get("ylabel", "MWh")
 
-    assert sector in ("res", "com", "ind", "pwr", "trn")
+    assert sector in ("res", "com", "ind", "pwr")
 
     investment_periods = n.investment_periods
 
@@ -233,6 +233,98 @@ def plot_sector_production_timeseries(
             logger.warning(
                 f"No data to plot for {state} (plot_sector_production_timeseries)",
             )
+
+    return fig, axs
+
+
+def plot_transportation_production_timeseries(
+    n: pypsa.Network,
+    sector: str,
+    vehicle: str,  # veh, air, rail, ect.. .
+    modes: Enum,  # AirTransport, RoadTransport, ect..
+    units: Enum,
+    state: Optional[str] = None,
+    nice_name: Optional[bool] = True,
+    remove_sns_weights: bool = True,
+    resample: Optional[str] = None,
+    resample_fn: Optional[callable] = None,
+    **kwargs,
+) -> tuple:
+    """
+    Plots timeseries production as area chart.
+    """
+
+    assert sector == "trn"
+
+    def _filter_vehicle_type(df: pd.DataFrame, vehicle: str) -> pd.DataFrame:
+        cols = [x for x in df.columns if x.split("-")[-2] == vehicle]
+        return df[cols].copy()
+
+    assert sector == "trn"
+
+    diff_units = {x.value for x in units}
+
+    investment_periods = n.investment_periods
+
+    # one unit type per plot
+    nrows = len(investment_periods) * len(diff_units)
+
+    fig, axs = plt.subplots(
+        ncols=1,
+        nrows=nrows,
+        figsize=(FIG_WIDTH, FIG_HEIGHT * nrows),
+    )
+
+    colors = get_plotting_colors(n, nice_name=nice_name)
+
+    df_all = get_sector_production_timeseries_by_carrier(
+        n,
+        sector=sector,
+        state=state,
+        resample=resample,
+        resample_fn=resample_fn,
+        remove_sns_weights=remove_sns_weights,
+    )
+    df_veh = _filter_vehicle_type(df_all, vehicle)
+
+    if df_veh.empty:
+        logger.warning(f"No data to plot for {state} sector {sector}")
+        return fig, axs
+
+    for row, period in enumerate(investment_periods):
+
+        df_veh_period = df_veh.loc[period]
+
+        for i, unit in enumerate(diff_units):
+
+            all_modes = [x.name for x in modes]
+            modes_per_unit = [modes[x].value for x in all_modes if units[x].value == unit]
+
+            df = df_veh_period[[x for x in df_veh_period.columns if x.split("-")[-1] in modes_per_unit]]
+
+            if nice_name:
+                df = df.rename(columns=n.carriers.nice_name.to_dict())
+
+            try:
+
+                if nrows > 1:
+
+                    df.plot(kind="area", ax=axs[row + i], color=colors)
+                    axs[row + i].set_xlabel("")
+                    axs[row + i].set_ylabel(f"{unit}")
+                    axs[row + i].tick_params(axis="x", labelrotation=45)
+
+                else:
+
+                    df.plot(kind="area", ax=axs, color=colors)
+                    axs.set_xlabel("")
+                    axs.set_ylabel(f"{unit}")
+                    axs.tick_params(axis="x", labelrotation=45)
+
+            except TypeError:  # no numeric data to plot
+                logger.warning(
+                    f"No data to plot for {state} (plot_sector_production_timeseries)",
+                )
 
     return fig, axs
 
@@ -1642,6 +1734,20 @@ PRODUCTION_PLOTS = [
         },
     },
     {
+        "name": "production_time_series",
+        "fn": plot_transportation_production_timeseries,
+        "nice_name": "Road Vehicle End Use Production",
+        "plot_by_month": True,
+        "sector": "trn",
+        "fn_kwargs": {
+            "resample": "D",
+            "resample_fn": pd.Series.sum,
+            "vehicle": Transport.ROAD.value,
+            "modes": RoadTransport,
+            "units": RoadTransportUnits,
+        },
+    },
+    {
         "name": "production_total",
         "fn": plot_sector_production,
         "nice_name": "Residential End Use Technology Production",
@@ -1807,7 +1913,7 @@ if __name__ == "__main__":
         from _helpers import mock_snakemake
 
         snakemake = mock_snakemake(
-            "plot_sector_capacity",
+            "plot_sector_production",
             simpl="33",
             opts="2190SEG",
             clusters="4m",
