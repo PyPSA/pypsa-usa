@@ -18,6 +18,7 @@ import pypsa
 import yaml
 from build_heat import combined_heat
 from constants import STATE_2_CODE, STATES_CENSUS_DIVISION_MAPPER
+from constants_sector import RoadTransport, SecCarriers, SecNames, Transport
 from eia import TransportationFuelUse
 
 logger = logging.getLogger(__name__)
@@ -588,7 +589,7 @@ def _get_brownfield_template_df(
     | ... | ...                   | ...    | ...            | ...   | ...       |
     """
 
-    assert fuel in ("cool", "elec", "heat", "lpg", "space-heat", "water-heat")
+    assert fuel in [x.value for x in SecCarriers]
 
     if subsector:
         loads = n.loads[
@@ -607,9 +608,9 @@ def _get_brownfield_template_df(
     return df[["bus1", "name", "suffix", "state", "p_max"]]
 
 
-def add_transport_brownfield(
+def add_road_transport_brownfield(
     n: pypsa.Network,
-    vehicle: str,
+    vehicle_mode: str,  # lgt, hvy, ect..
     growth_multiplier: float,
     ratios: pd.DataFrame,
     costs: pd.DataFrame,
@@ -621,29 +622,29 @@ def add_transport_brownfield(
     def add_brownfield_ev(
         n: pypsa.Network,
         df: pd.DataFrame,
-        vehicle: str,
+        vehicle_mode: str,  # lgt, hvy, bus, ect..
         ratios: pd.DataFrame,
         costs: pd.DataFrame,
     ) -> None:
 
-        match vehicle:
-            case "lgt":
+        match vehicle_mode:
+            case RoadTransport.LIGHT.value:
                 costs_name = "Light Duty Cars BEV 300"
                 ratio_name = "light_duty"
-            case "med":
+            case RoadTransport.MEDIUM.value:
                 costs_name = "Medium Duty Trucks BEV"
                 ratio_name = "med_duty"
-            case "hvy":
+            case RoadTransport.HEAVY.value:
                 costs_name = "Heavy Duty Trucks BEV"
                 ratio_name = "heavy_duty"
-            case "bus":
+            case RoadTransport.BUS.value:
                 costs_name = "Buses BEV"
                 ratio_name = "bus"
             case _:
                 raise NotImplementedError
 
         # dont bother adding in extra for less than 0.5% market share
-        if ratios.at["electricity", ratio_name] < 0.5:
+        if ratios.at["electricity", ratio_name] < 0.1:
             logger.info(f"No Brownfield for {costs_name}")
             return
 
@@ -652,8 +653,8 @@ def add_transport_brownfield(
         efficiency = costs.at[costs_name, "efficiency"] / 1000
         lifetime = costs.at[costs_name, "lifetime"]
 
-        df["bus0"] = df.name + " trn-elec-veh"
-        df["carrier"] = f"trn-elec-{vehicle}"
+        df["bus0"] = df.name + f" {sector}-elec-{veh_type}"
+        df["carrier"] = f"{sector}-elec-{veh_type}-{vehicle_mode}"
 
         df["ratio"] = ratios.at["electricity", ratio_name]
         df["p_nom"] = df.p_max.mul(df.ratio).div(100)  # div to convert from %
@@ -696,7 +697,7 @@ def add_transport_brownfield(
     def add_brownfield_lpg(
         n: pypsa.Network,
         df: pd.DataFrame,
-        vehicle: str,
+        vehicle_mode: str,  # lgt, hvy, bus, ect..
         ratios: pd.DataFrame,
         costs: pd.DataFrame,
     ) -> None:
@@ -706,23 +707,23 @@ def add_transport_brownfield(
         # https://data.nrel.gov/submissions/93
         # https://www.nrel.gov/docs/fy18osti/70485.pdf
 
-        match vehicle:
-            case "lgt":
+        match vehicle_mode:
+            case RoadTransport.LIGHT.value:
                 costs_name = "Light Duty Cars ICEV"
                 ratio_name = "light_duty"
                 # efficiency = 25.9  # mpg
                 efficiency = 20  # mpg
-            case "med":
+            case RoadTransport.MEDIUM.value:
                 costs_name = "Medium Duty Trucks ICEV"
                 ratio_name = "med_duty"
                 # efficiency = 16.35  # mpg
                 efficiency = 15  # mpg
-            case "hvy":
+            case RoadTransport.HEAVY.value:
                 costs_name = "Heavy Duty Trucks ICEV"
                 ratio_name = "heavy_duty"
                 # efficiency = 5.44  # mpg
                 efficiency = 5  # mpg
-            case "bus":
+            case RoadTransport.BUS.value:
                 costs_name = "Buses ICEV"
                 ratio_name = "bus"
                 # efficiency = 3.67  # mpg
@@ -743,8 +744,8 @@ def add_transport_brownfield(
         efficiency *= (1 / wh_per_gallon) * 1000000 / 1000
         lifetime = costs.at[costs_name, "lifetime"]
 
-        df["bus0"] = df.name + " trn-lpg-veh"
-        df["carrier"] = f"trn-lpg-{vehicle}"
+        df["bus0"] = df.name + f" {sector}-lpg-{veh_type}"
+        df["carrier"] = f"{sector}-lpg-{veh_type}-{vehicle_mode}"
 
         df["ratio"] = ratios.at["lpg", ratio_name]
         df["p_nom"] = df.p_max.mul(df.ratio).div(100)  # div to convert from %
@@ -795,15 +796,20 @@ def add_transport_brownfield(
                 marginal_cost=mc,
             )
 
+    sector = SecNames.TRANSPORT.value
+    veh_type = Transport.ROAD.value
+
+    veh_name = f"{veh_type}-{vehicle_mode}"
+
     # ev brownfield
-    df = _get_brownfield_template_df(n, "elec", "trn", vehicle)
+    df = _get_brownfield_template_df(n, fuel="elec", sector=sector, subsector=veh_name)
     df["p_nom"] = df.p_max.mul(growth_multiplier)
-    add_brownfield_ev(n, df, vehicle, ratios, costs)
+    add_brownfield_ev(n, df, vehicle_mode, ratios, costs)
 
     # lpg brownfield
-    df = _get_brownfield_template_df(n, "lpg", "trn", vehicle)
+    df = _get_brownfield_template_df(n, fuel="lpg", sector=sector, subsector=veh_name)
     df["p_nom"] = df.p_max.mul(growth_multiplier)
-    add_brownfield_lpg(n, df, vehicle, ratios, costs)
+    add_brownfield_lpg(n, df, vehicle_mode, ratios, costs)
 
 
 def add_service_brownfield(

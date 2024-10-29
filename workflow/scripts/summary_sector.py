@@ -7,6 +7,7 @@ from typing import Optional
 
 import pandas as pd
 import pypsa
+from constants_sector import Transport
 from eia import Emissions, Seds, TransportationDemand
 
 logger = logging.getLogger(__name__)
@@ -103,13 +104,11 @@ def _filter_link_on_sector(n: pypsa.Network, sector: str) -> pd.DataFrame:
         case "ind":
             return n.links[(n.links.carrier.str.startswith(sector)) & ~(n.links.carrier.str.endswith("-store"))].copy()
         case "trn":
-            return n.links[
-                (n.links.carrier.str.startswith(sector))
-                & ~(n.links.carrier.str.endswith("-veh"))
-                & ~(n.links.carrier.str.endswith("-boat"))
-                & ~(n.links.carrier.str.endswith("-rail"))
-                & ~(n.links.carrier.str.endswith("-air"))
-            ].copy()
+            trn = n.links[(n.links.carrier.str.startswith(sector))].copy()
+            # remove aggregators
+            for trn_type in Transport:
+                trn = trn[~trn.carrier.str.endswith(f"-{trn_type.value}")].copy()
+            return trn
         case "pwr":
             pwr_carriers = PWR_CARRIERS
             return n.links[n.links.carrier.isin(pwr_carriers)].copy()
@@ -170,7 +169,7 @@ def _get_opt_capacity_per_node(
     state: Optional[str] = None,
 ) -> pd.Series:
 
-    assert not sector in ("trn", "pwr")
+    assert not sector in ["pwr"]
 
     df = _filter_link_on_sector(n, sector)
 
@@ -222,6 +221,8 @@ def _get_total_capacity_per_node(
     include_elec: bool = False,
     state: Optional[str] = None,
 ) -> pd.DataFrame:
+
+    assert not sector in ["pwr"]
 
     df = _filter_link_on_sector(n, sector)
 
@@ -300,9 +301,11 @@ def _get_brownfield_capacity_per_node(
     **kwargs,
 ) -> pd.DataFrame:
 
+    assert not sector in ["pwr"]
+
     df = _filter_link_on_sector(n, sector)
 
-    if not include_elec:
+    if (not include_elec) and (not sector == "trn"):
         df = df[~df.carrier.str.endswith("elec-infra")].copy()
 
     if state:
@@ -338,9 +341,9 @@ def get_capacity_per_node(
         opt = _get_opt_pwr_capacity_per_node(n, sector=sector, state=state).to_frame()
         brwn = _get_brownfield_pwr_capacity_per_node(n, sector=sector, state=state)
     elif sector == "trn":
-        total = _get_total_capacity_per_node(n, sector="res", state=state).squeeze()
-        opt = _get_opt_capacity_per_node(n, sector="res", state=state).to_frame()
-        brwn = _get_brownfield_capacity_per_node(n, sector="res", state=state)
+        total = _get_total_capacity_per_node(n, sector=sector, state=state).squeeze()
+        opt = _get_opt_capacity_per_node(n, sector=sector, state=state).to_frame()
+        brwn = _get_brownfield_capacity_per_node(n, sector=sector, state=state)
     else:
         total = _get_total_capacity_per_node(n, sector=sector, state=state).squeeze()
         opt = _get_opt_capacity_per_node(n, sector=sector, state=state).to_frame()

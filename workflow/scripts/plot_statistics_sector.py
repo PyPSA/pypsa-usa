@@ -4,6 +4,7 @@ Plots Sector Coupling Statistics.
 
 import logging
 from dataclasses import dataclass
+from enum import Enum
 from math import ceil
 from pathlib import Path
 from typing import Any, Callable, Optional
@@ -14,7 +15,18 @@ import pypsa
 import seaborn as sns
 from _helpers import configure_logging, mock_snakemake
 from add_electricity import sanitize_carriers
-from constants import STATE_2_CODE, Month
+from constants import STATE_2_CODE
+from constants_sector import (
+    AirTransport,
+    AirTransportUnits,
+    BoatTransport,
+    BoatTransportUnits,
+    RailTransport,
+    RailTransportUnits,
+    RoadTransport,
+    RoadTransportUnits,
+    Transport,
+)
 from plot_statistics import create_title
 from summary_sector import (  # get_load_name_per_sector,
     get_capacity_per_node,
@@ -52,23 +64,8 @@ SECTOR_MAPPER = {
 FIG_WIDTH = 14
 FIG_HEIGHT = 6
 
-SECTORS = {
-    "res": "Residential",
-    "com": "Commercial",
-    "trn": "Transport",
-    "ind": "Industrial",
-    "pwr": "Power",
-}
-
 # figure save format
 EXT = "png"
-
-# class Sectors(StrEnum):
-#     RES = "Residential"
-#     COM = "Commercial"
-#     IND = "Industrial"
-#     TRN = "Transport"
-#     PWR = "Power"
 
 ###
 # HELPERS
@@ -443,6 +440,92 @@ def plot_capacity_by_carrier(
     return fig, axs
 
 
+def plot_transportation_capacity_by_carrier(
+    n: pypsa.Network,
+    sector: str,
+    vehicle: str,  # veh, air, rail, ect.. .
+    modes: Enum,  # AirTransport, RoadTransport, ect..
+    units: Enum,
+    state: Optional[str] = None,
+    nice_name: Optional[bool] = True,
+    **kwargs,
+) -> tuple:
+    """
+    Bar plot of capacity by carrier.
+    """
+
+    def _filter_vehicle_type(df: pd.DataFrame, vehicle: str) -> pd.DataFrame:
+        df["vehicle"] = df.index.get_level_values("carrier").map(
+            lambda x: x.split("-")[-2],
+        )
+        df = df[df.vehicle == vehicle].copy()
+        return df.drop(columns="vehicle")
+
+    assert sector == "trn"
+
+    df_all = get_capacity_per_node(n, sector=sector, state=state)
+    df_veh = _filter_vehicle_type(df_all, vehicle)
+    df_veh = df_veh.reset_index()[["carrier", "p_nom_opt"]]
+
+    diff_units = {x.value for x in units}
+
+    investment_periods = n.investment_periods
+
+    # one unit type per plot
+    nrows = len(investment_periods) * len(diff_units)
+
+    fig, axs = plt.subplots(
+        ncols=1,
+        nrows=nrows,
+        figsize=(FIG_WIDTH, FIG_HEIGHT * nrows),
+    )
+
+    for row, _ in enumerate(investment_periods):
+
+        df = df_veh.copy()
+
+        if df.empty:
+            logger.warning(f"No data to plot for {state} sector {sector}")
+            continue
+
+        df["mode"] = df.carrier.map(lambda x: x.split("-")[-1])
+
+        for i, unit in enumerate(diff_units):
+
+            all_modes = [x.name for x in modes]
+            modes_per_unit = [modes[x].value for x in all_modes if units[x].value == unit]
+
+            df_mode = df[df["mode"].isin(modes_per_unit)].copy().drop(columns="mode")
+
+            if nice_name:
+                df_mode["carrier"] = df_mode.carrier.map(n.carriers.nice_name)
+
+            df_mode = df_mode.groupby("carrier").sum()
+
+            try:
+
+                if nrows > 1:
+
+                    df_mode.plot(kind="bar", stacked=False, ax=axs[row + i])
+                    axs[row + i].set_xlabel("")
+                    axs[row + i].set_ylabel(f"Capacity ({unit})")
+                    axs[row + i].set_title(f"{sector} {vehicle} Capacity")
+                    axs[row + i].tick_params(axis="x", labelrotation=45)
+
+                else:
+
+                    df_mode.plot(kind="bar", stacked=False, ax=axs)
+                    axs.set_xlabel("")
+                    axs.set_ylabel(f"Capacity ({unit})")
+                    axs.set_title(f"{sector} {vehicle} Capacity")
+                    axs.tick_params(axis="x", labelrotation=45)
+
+            except TypeError:  # no numeric data to plot
+                logger.warning(f"No data to plot for {state}")
+
+    return fig, axs
+
+
 def plot_capacity_per_node(
     n: pypsa.Network,
     sharey: bool = True,
@@ -545,6 +628,7 @@ def plot_capacity_brownfield(
                 axs[row].set_xlabel("")
                 axs[row].set_ylabel(y_label)
                 axs[row].set_title(f"{sector} Capacity")
+                axs.tick_params(axis="x", labelrotation=45)
 
             else:
 
@@ -552,9 +636,96 @@ def plot_capacity_brownfield(
                 axs.set_xlabel("")
                 axs.set_ylabel(y_label)
                 axs.set_title(f"{sector} Capacity")
+                axs.tick_params(axis="x", labelrotation=45)
 
         except TypeError:  # no numeric data to plot
             logger.warning(f"No data to plot for {state}")
+
+    return fig, axs
+
+
+def plot_transportation_capacity_brownfield(
+    n: pypsa.Network,
+    sector: str,
+    vehicle: str,  # veh, air, rail, ect.. .
+    modes: Enum,  # AirTransport, RoadTransport, ect..
+    units: Enum,
+    state: Optional[str] = None,
+    nice_name: Optional[bool] = True,
+    **kwargs,
+) -> tuple:
+    """
+    Plots old and new capacity at a state level by carrier.
+    """
+
+    def _filter_vehicle_type(df: pd.DataFrame, vehicle: str) -> pd.DataFrame:
+        df["vehicle"] = df.index.get_level_values("carrier").map(
+            lambda x: x.split("-")[-2],
+        )
+        df = df[df.vehicle == vehicle].copy()
+        return df.drop(columns="vehicle")
+
+    assert sector == "trn"
+
+    df_all = get_capacity_per_node(n, sector=sector, state=state)
+    df_veh = _filter_vehicle_type(df_all, vehicle)
+    df_veh = df_veh.reset_index()[["carrier", "existing", "new"]]
+
+    diff_units = {x.value for x in units}
+
+    investment_periods = n.investment_periods
+
+    # one unit type per plot
+    nrows = len(investment_periods) * len(diff_units)
+
+    fig, axs = plt.subplots(
+        ncols=1,
+        nrows=nrows,
+        figsize=(FIG_WIDTH, FIG_HEIGHT * nrows),
+    )
+
+    for row, _ in enumerate(investment_periods):
+
+        df = df_veh.copy()
+
+        if df.empty:
+            logger.warning(f"No data to plot for {state} sector {sector}")
+            continue
+
+        df["mode"] = df.carrier.map(lambda x: x.split("-")[-1])
+
+        for i, unit in enumerate(diff_units):
+
+            all_modes = [x.name for x in modes]
+            modes_per_unit = [modes[x].value for x in all_modes if units[x].value == unit]
+
+            df_mode = df[df["mode"].isin(modes_per_unit)].copy().drop(columns="mode")
+
+            if nice_name:
+                df_mode["carrier"] = df_mode.carrier.map(n.carriers.nice_name)
+
+            df_mode = df_mode.groupby("carrier").sum()
+
+            try:
+
+                if nrows > 1:
+
+                    df_mode.plot(kind="bar", stacked=False, ax=axs[row + i])
+                    axs[row + i].set_xlabel("")
+                    axs[row + i].set_ylabel(f"Capacity ({unit})")
+                    axs[row + i].set_title(f"{sector} {vehicle} Capacity")
+                    axs[row + i].tick_params(axis="x", labelrotation=45)
+
+                else:
+
+                    df_mode.plot(kind="bar", stacked=False, ax=axs)
+                    axs.set_xlabel("")
+                    axs.set_ylabel(f"Capacity ({unit})")
+                    axs.set_title(f"{sector} {vehicle} Capacity")
+                    axs.tick_params(axis="x", labelrotation=45)
+
+            except TypeError:  # no numeric data to plot
+                logger.warning(f"No data to plot for {state}")
 
     return fig, axs
 
@@ -1534,10 +1705,48 @@ CAPACITY_PLOTS = [
         "sector": "ind",
     },
     {
-        "name": "end_use_capacity_per_carrier",
-        "fn": plot_capacity_by_carrier,
+        "name": "air_end_use_capacity_per_carrier",
+        "fn": plot_transportation_capacity_by_carrier,
         "nice_name": "Transportation Capacity",
         "sector": "trn",
+        "fn_kwargs": {
+            "vehicle": Transport.AIR.value,
+            "modes": AirTransport,
+            "units": AirTransportUnits,
+        },
+    },
+    {
+        "name": "boat_end_use_capacity_per_carrier",
+        "fn": plot_transportation_capacity_by_carrier,
+        "nice_name": "Transportation Capacity",
+        "sector": "trn",
+        "fn_kwargs": {
+            "vehicle": Transport.BOAT.value,
+            "modes": BoatTransport,
+            "units": BoatTransportUnits,
+        },
+    },
+    {
+        "name": "rail_end_use_capacity_per_carrier",
+        "fn": plot_transportation_capacity_by_carrier,
+        "nice_name": "Transportation Capacity",
+        "sector": "trn",
+        "fn_kwargs": {
+            "vehicle": Transport.RAIL.value,
+            "modes": RailTransport,
+            "units": RailTransportUnits,
+        },
+    },
+    {
+        "name": "road_end_use_capacity_per_carrier",
+        "fn": plot_transportation_capacity_by_carrier,
+        "nice_name": "Transportation Capacity",
+        "sector": "trn",
+        "fn_kwargs": {
+            "vehicle": Transport.ROAD.value,
+            "modes": RoadTransport,
+            "units": RoadTransportUnits,
+        },
     },
     {
         "name": "end_use_capacity_per_carrier",
@@ -1575,6 +1784,17 @@ CAPACITY_PLOTS = [
         "nice_name": "Power Brownfield Capacity",
         "sector": "pwr",
     },
+    {
+        "name": "road_brownfield_end_use_capacity_per_carrier",
+        "fn": plot_transportation_capacity_brownfield,
+        "nice_name": "Transportation Brownfield Capacity",
+        "sector": "trn",
+        "fn_kwargs": {
+            "vehicle": Transport.ROAD.value,
+            "modes": RoadTransport,
+            "units": RoadTransportUnits,
+        },
+    },
 ]
 
 
@@ -1587,7 +1807,7 @@ if __name__ == "__main__":
         from _helpers import mock_snakemake
 
         snakemake = mock_snakemake(
-            "plot_sector_production",
+            "plot_sector_capacity",
             simpl="33",
             opts="2190SEG",
             clusters="4m",

@@ -474,7 +474,7 @@ def apply_exogenous_ev_policy(n: pypsa.Network, policy: pd.DataFrame) -> None:
         "bus": RoadTransport.BUS.value,
     }
 
-    abrev = Transport.ROAD
+    abrev = Transport.ROAD.value
 
     adjusted_loads = []
 

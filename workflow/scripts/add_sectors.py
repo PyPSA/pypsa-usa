@@ -22,14 +22,15 @@ from build_emission_tracking import build_ch4_tracking, build_co2_tracking
 from build_heat import build_heat
 from build_natural_gas import StateGeometry, build_natural_gas
 from build_stock_data import (
+    add_road_transport_brownfield,
     add_service_brownfield,
-    add_transport_brownfield,
     get_commercial_stock,
     get_residential_stock,
     get_transport_stock,
 )
 from build_transportation import apply_exogenous_ev_policy, build_transportation
 from constants import STATE_2_CODE, STATES_INTERCONNECT_MAPPER
+from constants_sector import RoadTransport, Transport
 from shapely.geometry import Point
 
 CODE_2_STATE = {v: k for k, v in STATE_2_CODE.items()}
@@ -485,8 +486,14 @@ if __name__ == "__main__":
 
     if snakemake.params.sector["transport_sector"]["brownfield"]:
         ratios = get_transport_stock(snakemake.params.api["eia"], base_year)
-        for vehicle in ("lgt", "med", "hvy", "bus"):
-            add_transport_brownfield(n, vehicle, growth_multiplier, ratios, costs)
+        for vehicle in RoadTransport:
+            add_road_transport_brownfield(
+                n,
+                vehicle.value,
+                growth_multiplier,
+                ratios,
+                costs,
+            )
 
     if snakemake.params.sector["service_sector"]["brownfield"]:
 

@@ -45,8 +45,19 @@ class RoadTransport(Enum):
     BUS = "bus"
 
 
+class RoadTransportUnits(Enum):
+    LIGHT = "kVMT"
+    MEDIUM = "kVMT"
+    HEAVY = "kVMT"
+    BUS = "kVMT"
+
+
 class AirTransport(Enum):
     PASSENGER = "psg"
+
+
+class AirTransportUnits(Enum):
+    PASSENGER = "kSeatMiles"
 
 
 class RailTransport(Enum):
@@ -54,8 +65,17 @@ class RailTransport(Enum):
     SHIPPING = "ship"
 
 
+class RailTransportUnits(Enum):
+    PASSENGER = "kPassengerMiles"
+    SHIPPING = "kTonMiles"
+
+
 class BoatTransport(Enum):
     SHIPPING = "ship"
+
+
+class BoatTransportUnits(Enum):
+    SHIPPING = "kTonMiles"
 
 
 # bus conversion:
