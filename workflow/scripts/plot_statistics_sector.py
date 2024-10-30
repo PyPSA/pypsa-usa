@@ -76,13 +76,6 @@ def _get_month_name(month: Month) -> str:
     return month.name.capitalize()
 
 
-def percent_difference(col_1: pd.Series, col_2: pd.Series) -> pd.Series:
-    """
-    Calculates percent difference between two columns of numbers.
-    """
-    return abs(col_1 - col_2).div((col_1 + col_2).div(2)).mul(100)
-
-
 def is_urban_rural_split(n: pypsa.Network) -> bool:
     """
     Checks for urban/rural split based on com/res load names.
@@ -1582,7 +1575,6 @@ if __name__ == "__main__":
                 fn_kwargs = plot_data.fn_kwargs
             else:
                 fn_kwargs = {}
-            fn_kwargs["state"] = None  # system level
             fn_kwargs["eia_api"] = eia_api
 
             if plot_data.sector:
