@@ -414,7 +414,6 @@ def attach_conventional_generators(
         .astype(float)
         .fillna(0)
     )
-
     committable_fields = ["start_up_cost", "min_down_time", "min_up_time", "p_min_pu"]
     for attr in committable_fields:
         default = pypsa.components.component_attrs["Generator"].default[attr]
@@ -832,12 +831,16 @@ def main(snakemake):
         conventional_carriers,
         n.snapshots,
     )
-    apply_must_run_ratings(
-        n,
-        plants,
-        conventional_carriers,
-        n.snapshots,
-    )
+
+    if params.conventional["unit_commitment"]:
+        # TODO (@ktehranchi): In the future the plants that are must-run should not be clustered and instead retire according to lifetime
+        apply_must_run_ratings(
+            n,
+            plants,
+            conventional_carriers,
+            n.snapshots,
+        )
+
     attach_battery_storage(
         n,
         costs,
@@ -882,53 +885,55 @@ def main(snakemake):
         df_multiplier = clean_locational_multiplier(df_multiplier)
         update_capital_costs(n, carrier, costs, df_multiplier, Nyears)
 
-    if params.conventional["dynamic_fuel_price"]["wholesale"]:
-        assert params.eia_api, f"Must provide EIA API key for dynamic fuel pricing"
+    if params.conventional["dynamic_fuel_price"].get("enable", False):
+        logger.info("Applying dynamic fuel pricing to conventional generators")
+        if params.conventional["dynamic_fuel_price"]["wholesale"]:
+            assert params.eia_api, f"Must provide EIA API key for dynamic fuel pricing"
 
-        dynamic_fuel_prices = {
-            "OCGT": {
-                "state": "state_ng_fuel_prices",
-                "balancing_area": "ba_ng_fuel_prices",  # name of file in snakefile
-            },
-            "CCGT": {
-                "state": "state_ng_fuel_prices",
-                "balancing_area": "ba_ng_fuel_prices",
-            },
-            "coal": {"state": "state_coal_fuel_prices"},
-        }
+            dynamic_fuel_prices = {
+                "OCGT": {
+                    "state": "state_ng_fuel_prices",
+                    "balancing_area": "ba_ng_fuel_prices",  # name of file in snakefile
+                },
+                "CCGT": {
+                    "state": "state_ng_fuel_prices",
+                    "balancing_area": "ba_ng_fuel_prices",
+                },
+                "coal": {"state": "state_coal_fuel_prices"},
+            }
 
-        # NOTE: Must go from most to least coarse data (ie. state then ba) to apply the
-        # data correctly!
-        for carrier, prices in dynamic_fuel_prices.items():
-            for area in ("state", "reeds_zone", "balancing_area"):
-                # check if data is supplied for the area
-                try:
-                    datafile = prices[area]
-                except KeyError:
-                    continue
-                # if data should exist, try to read it in
-                try:
-                    df = pd.read_csv(snakemake.input[datafile], index_col="snapshot")
-                    if df.empty:
-                        logger.warning(f"No data provided for {datafile}")
+            # NOTE: Must go from most to least coarse data (ie. state then ba) to apply the
+            # data correctly!
+            for carrier, prices in dynamic_fuel_prices.items():
+                for area in ("state", "reeds_zone", "balancing_area"):
+                    # check if data is supplied for the area
+                    try:
+                        datafile = prices[area]
+                    except KeyError:
                         continue
-                except KeyError:
-                    logger.warning(f"Can not find dynamic price file {datafile}")
-                    continue
+                    # if data should exist, try to read it in
+                    try:
+                        df = pd.read_csv(snakemake.input[datafile], index_col="snapshot")
+                        if df.empty:
+                            logger.warning(f"No data provided for {datafile}")
+                            continue
+                    except KeyError:
+                        logger.warning(f"Can not find dynamic price file {datafile}")
+                        continue
 
-                vom = costs.at[carrier, "opex_variable_per_mwh"]
+                    vom = costs.at[carrier, "opex_variable_per_mwh"]
 
-                apply_dynamic_pricing(
-                    n=n,
-                    carrier=carrier,
-                    geography=area,
-                    df=df,
-                    vom=vom,
-                )
-                logger.info(f"Applied dynamic price data for {carrier} from {datafile}")
+                    apply_dynamic_pricing(
+                        n=n,
+                        carrier=carrier,
+                        geography=area,
+                        df=df,
+                        vom=vom,
+                    )
+                    logger.info(f"Applied dynamic price data for {carrier} from {datafile}")
 
-    if params.conventional["dynamic_fuel_price"]["pudl"]:
-        n = apply_pudl_fuel_costs(n, plants, costs)
+        if params.conventional["dynamic_fuel_price"]["pudl"]:
+            n = apply_pudl_fuel_costs(n, plants, costs)
 
     # fix p_nom_min for extendable generators
     # The "- 0.001" is just to avoid numerical issues

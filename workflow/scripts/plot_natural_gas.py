@@ -1,8 +1,12 @@
+import logging
+from dataclasses import dataclass, field
+from functools import partial
 from pathlib import Path
+from typing import Any, Optional
 
 import constants
+import matplotlib.pyplot as plt
 import pandas as pd
-import plotly.express as px
 import pypsa
 from _helpers import configure_logging
 from summary_natural_gas import (
@@ -13,151 +17,216 @@ from summary_natural_gas import (
     get_underground_storage,
 )
 
+logger = logging.getLogger(__name__)
+
+
 MWH_2_MMCF = constants.NG_MWH_2_MMCF
 
 FIG_HEIGHT = 500
 
 
-def figures_to_html(figs, filename):
+@dataclass
+class PlottingData:
+    name: str
+    getter: callable
+    plotter: callable
+    nice_name: Optional[str] = None
+    unit: Optional[str] = None
+    converter: Optional[float] = 1.0
+
+
+def _group_data(df: pd.DataFrame) -> pd.DataFrame:
+    return df.T.groupby(level=0).sum().T
+
+
+def _sum_state_data(data: dict[str, pd.DataFrame]) -> pd.DataFrame:
     """
-    Gets around subplots with plotly express issue.
-
-    https://stackoverflow.com/a/58336718
+    Sums state data together.
     """
-    with open(filename, "w") as html:
-        html.write("<html><head></head><body>" + "\n")
-        for fig in figs:
-            inner_html = fig.to_html().split("<body>")[1].split("</body>")[0]
-            html.write(inner_html)
-        html.write("</body></html>" + "\n")
+
+    dfs = [y for _, y in data.items()]
+    return pd.concat(dfs, axis=1)
 
 
-def make_plot_per_feature(df: pd.DataFrame, **kwargs) -> list[px.line]:
+def _sum_state_trade_data(
+    data: dict[dict[str, pd.DataFrame]],
+) -> dict[str, pd.DataFrame]:
+    """
+    Sums state data together.
+    """
 
-    title = kwargs.get("title", "")
-    label = kwargs.get("label", {})
+    import_data = {}
+    export_data = {}
 
-    figs = []
+    for state, trade_data in data.items():
+        import_data[state] = trade_data["imports"]
+        export_data[state] = trade_data["exports"]
 
-    for period, investment_period in enumerate(df.index.get_level_values(0).unique()):
-        _title = title if period == 0 else ""
-        figs.append(
-            px.line(
-                df[df.index.get_level_values("period") == investment_period].droplevel(
-                    0,
-                ),
-                title=_title,
-                labels=label,
-                height=FIG_HEIGHT,
-            ),
-        )
+    import_data = _sum_state_data(import_data)
+    export_data = _sum_state_data(export_data)
 
-    return figs
+    return {"imports": import_data, "exports": export_data}
 
 
-def make_plot_per_period(
-    data: dict[str, pd.DataFrame],
-    investment_period: int,
+def _is_trade_data(data: dict[str, Any]) -> bool:
+    """
+    Trade data has nested dictionaries.
+
+    Other data does not
+    """
+    for value in data.values():
+        if isinstance(value, dict):
+            return True
+    return False
+
+
+def plot_gas(
+    data: pd.DataFrame,
+    title: str,
+    units: str,
     **kwargs,
-) -> list[px.line]:
-
-    figs = []
-    titles = kwargs.get("titles", {})
-    labels = kwargs.get("labels", {})
-
-    for feature, df in data.items():
-        figs.append(
-            px.line(
-                df[df.index.get_level_values("period") == investment_period].droplevel(
-                    0,
-                ),
-                title=titles[feature],
-                labels=labels[feature],
-                height=FIG_HEIGHT,
-            ),
-        )
-
-    return figs
-
-
-def main(n: pypsa.Network, write_files: dict[str, str]):
+) -> tuple[plt.Figure, plt.Axes]:
     """
-    Creates interactive plots of key natural gas attributes.
+    General gas plotting function.
     """
 
-    data = {
-        "demand": get_gas_demand(n) / MWH_2_MMCF,
-        "processing": get_gas_processing(n) / MWH_2_MMCF,
-        "linepack": get_linepack(n) / MWH_2_MMCF,
-        "storage": get_underground_storage(n) / MWH_2_MMCF,
-        "domestic_trade": get_imports_exports(n, international=False) / MWH_2_MMCF,
-        "international_trade": get_imports_exports(n, international=True) / MWH_2_MMCF,
-    }
+    df = data.copy()
 
-    titles = {
-        "demand": "Gas Demand",
-        "processing": "Gas Processing Capacity",
-        "linepack": "Gas Line Pack",
-        "storage": "Gas Underground Storage",
-        "domestic_trade": "Gas Trade Domestic",
-        "international_trade": "Gas Trade International",
-    }
+    periods = data.index.get_level_values("period").unique()
 
-    labels = {
-        "demand": {"timestep": "", "value": "Demand (MMCF)", "carrier": "Source"},
-        "processing": {
-            "timestep": "",
-            "value": "Processing Capacity (MMCF)",
-            "Generator": "State",
-        },
-        "linepack": {
-            "timestep": "",
-            "value": "Linepack Capacity (MMCF)",
-            "Store": "State",
-        },
-        "storage": {
-            "timestep": "",
-            "value": "Storage Capacity (MMCF)",
-            "Store": "State",
-        },
-        "domestic_trade": {
-            "timestep": "",
-            "value": "Volume (MMCF)",
-            "variable": "Direction",
-        },
-        "international_trade": {
-            "timestep": "",
-            "value": "Volume (MMCF)",
-            "variable": "Direction",
-        },
-    }
+    n_rows = len(periods)
 
-    for feature, save_path in write_files.items():
+    fig, axs = plt.subplots(n_rows, 1)
 
-        df = data[feature]
-        title = titles[feature]
-        label = labels[feature]
-
-        figs = make_plot_per_feature(df, title=title, labels=label)
-
-        figures_to_html(figs, save_path)
-
-    # not tracked by snakemake cause accessing investment year in config is awk
-    save_dir = Path(next(iter(write_files.values()))).parent
-
-    for investment_period in n.investment_periods:
-
-        figs = make_plot_per_period(
-            data,
-            investment_period,
-            titles=titles,
-            labels=labels,
+    for i, period in enumerate(periods):
+        period_data = df[df.index.get_level_values("period") == period].droplevel(
+            "period",
+        )
+        if n_rows > 1:
+            ax = axs[i]
+        else:
+            ax = axs
+        period_data.plot(
+            kind="line",
+            ax=ax,
+            title=title,
+            xlabel="",
+            ylabel=f"({units})",
         )
 
-        save_file = Path(save_dir, f"natural_gas_{investment_period}.html")
+    return fig, axs
 
-        figures_to_html(figs, str(save_file))
 
+def plot_gas_trade(
+    data: dict[str, pd.DataFrame],  # str is 'imports' or 'exports'
+    title: str,
+    units: str,
+    **kwargs,
+) -> tuple[plt.Figure, plt.Axes]:
+    """
+    General gas trade plotting function.
+    """
+
+    # periods will be the same for imports or exports
+    periods = data["imports"].index.get_level_values("period").unique()
+
+    n_rows = len(periods)
+
+    fig, axs = plt.subplots(n_rows, 2, sharey=True)
+
+    for i, period in enumerate(periods):
+
+        # plot imports
+
+        imports = data["imports"].copy()
+
+        import_period_data = imports[imports.index.get_level_values("period") == period].droplevel(
+            "period",
+        )
+
+        ax = axs[i, 0] if n_rows > 1 else axs[0]
+
+        import_period_data.plot(
+            kind="line",
+            ax=ax,
+            xlabel="",
+            ylabel=f"({units})",
+            title="Imports",
+        )
+
+        # plot exports
+
+        exports = data["exports"].copy()
+
+        export_period_data = exports[exports.index.get_level_values("period") == period].droplevel(
+            "period",
+        )
+
+        ax = axs[i, 1] if n_rows > 1 else axs[1]
+
+        export_period_data.plot(
+            kind="line",
+            ax=ax,
+            xlabel="",
+            ylabel=f"({units})",
+            title="Exports",
+        )
+
+    fig.suptitle(title)
+
+    return fig, axs
+
+
+PLOTTING_META = [
+    {
+        "name": "demand",
+        "nice_name": "Natural Gas Demand",
+        "unit": "MMCF",
+        "converter": MWH_2_MMCF,
+        "getter": get_gas_demand,
+        "plotter": plot_gas,
+    },
+    {
+        "name": "processing",
+        "nice_name": "Natural Gas Processed",
+        "unit": "MMCF",
+        "converter": MWH_2_MMCF,
+        "getter": get_gas_processing,
+        "plotter": plot_gas,
+    },
+    {
+        "name": "linepack",
+        "nice_name": "Natural Gas in Linepack",
+        "unit": "MMCF",
+        "converter": MWH_2_MMCF,
+        "getter": get_linepack,
+        "plotter": plot_gas,
+    },
+    {
+        "name": "storage",
+        "nice_name": "Natural Gas in Underground Storage",
+        "unit": "MMCF",
+        "converter": MWH_2_MMCF,
+        "getter": get_underground_storage,
+        "plotter": plot_gas,
+    },
+    {
+        "name": "domestic_trade",
+        "nice_name": "Natural Gas Traded Domestically",
+        "unit": "MMCF",
+        "converter": MWH_2_MMCF,
+        "getter": partial(get_imports_exports, international=False),
+        "plotter": plot_gas_trade,
+    },
+    {
+        "name": "international_trade",
+        "nice_name": "Natural Gas Traded Internationally",
+        "unit": "MMCF",
+        "converter": MWH_2_MMCF,
+        "getter": partial(get_imports_exports, international=True),
+        "plotter": plot_gas_trade,
+    },
+]
 
 if __name__ == "__main__":
 
@@ -166,11 +235,14 @@ if __name__ == "__main__":
 
         snakemake = mock_snakemake(
             "plot_natural_gas",
-            interconnect="texas",
-            clusters=20,
+            simpl="12",
+            opts="48SEG",
+            clusters="6",
             ll="v1.0",
-            opts="500SEG",
+            sector_opts="",
             sector="E-G",
+            planning_horizons="2030",
+            interconnect="western",
         )
     configure_logging(snakemake)
 
@@ -178,10 +250,64 @@ if __name__ == "__main__":
 
     output_files = snakemake.output
 
-    # {feature: save_file}
-    # ie. {"demand": results/gas/natural_gas_demand.html}
-    figures = {x.split("natural_gas_")[1].split(".")[0]: y for x, y in output_files.items()}
+    states = n.buses[n.buses.reeds_state != ""].reeds_state.unique().tolist()
+    states += ["system"]
 
-    assert figures, "No natural gas figures to create"
+    plotting_metadata = [PlottingData(**x) for x in PLOTTING_META]
 
-    main(n, figures)
+    # hack to only read in the network once, but get images to all states independently
+    # ie. "interconnect}/figures/s{{simpl}}_c{{clusters}}/l{{ll}}_{{opts}}_{{sector}}/system/natural_gas/%s.png"
+
+    # {result_name: {state: save_path.png}}
+    expected_figures = {}
+    for output_file in output_files:
+        p = Path(output_file)
+        root_path = list(p.parts[:-3])  # path up to the 'system/natural_gas/%s.png'
+        figure_name = list(p.parts[-2:])  # path of 'natural_gas/%s.png'
+        result = p.stem  # ie. 'demand'
+        state_paths = {}
+        for state in states:
+            full_path = root_path + [state] + figure_name
+            full_path = Path("/".join(full_path))
+            state_paths[state] = full_path
+        expected_figures[result] = state_paths
+
+    for meta in plotting_metadata:
+
+        if meta.name not in expected_figures:
+            logger.warning(f"Not expecting {meta.name} natural gas chart")
+            continue
+
+        data = meta.getter(n)
+
+        for state in states:
+
+            if state == "system":
+                if _is_trade_data(data):
+                    state_data = _sum_state_trade_data(data)
+                else:
+                    state_data = _sum_state_data(data)
+            else:
+                state_data = data[state]
+
+            if isinstance(state_data, pd.DataFrame):
+                state_data = _group_data(state_data).mul(meta.converter)
+            # trade data tracked a little different
+            else:
+                state_data["imports"] = _group_data(state_data["imports"]).mul(
+                    meta.converter,
+                )
+                state_data["exports"] = _group_data(state_data["exports"]).mul(
+                    meta.converter,
+                )
+
+            title = f"{state} {meta.nice_name}"
+            units = meta.unit
+
+            fig, _ = meta.plotter(state_data, title=title, units=units)
+            save_path = expected_figures[meta.name][state]
+            fig.tight_layout()
+            if not save_path.parent.exists():
+                save_path.parent.mkdir(parents=True, exist_ok=True)
+            fig.savefig(str(save_path))
+            plt.close(fig)

@@ -107,6 +107,7 @@ plotting:
     "gas pipeline": "#f69d09"
     "gas export": "#d02f2f"
     "gas import": "#ae3dc2"
+    "gas production": "#d35050"
 
     trn-veh: "#0a0100"
     trn-elec-veh: "#0a0100"
@@ -271,6 +272,7 @@ plotting:
     "gas pipeline": "Natural Gas Pipeline"
     "gas export": "Natural Gas Export"
     "gas import": "Natural Gas Import"
+    "gas production": "Natural Gas Production"
 
     trn-veh: "Vehicles"
     trn-elec-veh: "Electric Vehicles"

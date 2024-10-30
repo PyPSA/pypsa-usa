@@ -533,7 +533,6 @@ def plot_renewable_potential(
     """
     Plots wind and solar resource potential by node.
     """
-    # breakpoint()
     # get data
     renew = n.generators[
         (n.generators.p_nom_max != np.inf)

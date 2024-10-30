@@ -29,12 +29,12 @@ FIGURES_SECTOR_VALIDATE = [
     "transportation_by_mode_validation",
 ]
 FIGURES_SECTOR_NATURAL_GAS = [
-    "natural_gas_demand.html",
-    "natural_gas_processing.html",
-    "natural_gas_linepack.html",
-    "natural_gas_storage.html",
-    "natural_gas_domestic_trade.html",
-    "natural_gas_international_trade.html",
+    "demand",
+    "processing",
+    "linepack",
+    "storage",
+    "domestic_trade",
+    "international_trade",
 ]
 
 # system figures
@@ -54,7 +54,7 @@ rule plot_natural_gas:
     output:
         **{
             fig: RESULTS
-            + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/gas/%s"
+            + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/system/natural_gas/%s.png"
             % fig
             for fig in FIGURES_SECTOR_NATURAL_GAS
         },

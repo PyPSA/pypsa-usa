@@ -27,6 +27,7 @@ Additionally, some extra constraints specified in :mod:`solve_network` are added
 """
 import logging
 import re
+from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -39,6 +40,8 @@ from _helpers import (
     update_config_from_wildcards,
     update_config_with_sector_opts,
 )
+from constants import NG_MWH_2_MMCF
+from eia import Trade
 from pypsa.descriptors import get_switchable_as_dense as get_as_dense
 
 logger = logging.getLogger(__name__)
@@ -525,10 +528,11 @@ def add_regional_co2limit(n, sns, config):
     )
     logger.info("Adding regional Co2 Limits.")
     regional_co2_lims = regional_co2_lims[regional_co2_lims.planning_horizon.isin(snakemake.params.planning_horizons)]
-
     weightings = n.snapshot_weightings.loc[n.snapshots]
-    # period_weightings = n.investment_period_weightings.years
-    # weightings = weightings.mul(period_weightings, level=0, axis=0)
+
+    # if n._multi_invest:
+    #     period_weighting = n.investment_period_weightings.years[sns.unique("period")]
+    #     weightings = weightings.mul(period_weighting, level=0, axis=0)
 
     for idx, emmission_lim in regional_co2_lims.iterrows():
         region_list = [region.strip() for region in emmission_lim.regions.split(",")]
@@ -544,13 +548,11 @@ def add_regional_co2limit(n, sns, config):
         emissions = n.carriers.co2_emissions.fillna(0)[lambda ds: ds != 0]
         region_gens = n.generators[n.generators.bus.isin(region_buses.index)]
         region_gens_em = region_gens.query("carrier in @emissions.index")
-        region_storage = n.storage_units[n.storage_units.bus.isin(region_buses.index)]
 
         if region_buses.empty or region_gens_em.empty:
             continue
 
         region_co2lim = emmission_lim.limit
-        EF_imports = emmission_lim.import_emissions_factor  # MT CO₂e/MWh_elec
         planning_horizon = emmission_lim.planning_horizon
 
         efficiency = get_as_dense(
@@ -565,27 +567,47 @@ def add_regional_co2limit(n, sns, config):
         # Emitting Gens
         p_em = n.model["Generator-p"].loc[:, region_gens_em.index].sel(period=planning_horizon)
         lhs = (p_em * em_pu).sum()
+        rhs = region_co2lim
 
-        # All Gens
-        p = n.model["Generator-p"].loc[:, region_gens.index].sel(period=planning_horizon)
-        lhs -= (p * EF_imports).sum()
+        # if EF_imports > 0.0:
+        #     region_storage = n.storage_units[n.storage_units.bus.isin(region_buses.index)]
+        #     EF_imports = emmission_lim.import_emissions_factor  # MT CO₂e/MWh_elec
+        #     # All Gens
+        #     p = (
+        #         n.model["Generator-p"]
+        #         .loc[:, region_gens.index]
+        #         .sel(period=planning_horizon)
+        #         .mul(weightings.generators.loc[planning_horizon])
+        #     )
+        #     imports_gen_weightings = pd.DataFrame(columns=region_gens.index, index=n.snapshots, data=1)
+        #     weighted_imports_p = (
+        #         (imports_gen_weightings * EF_imports).multiply(weightings.generators, axis=0).loc[planning_horizon]
+        #     )
+        #     lhs -= (p * weighted_imports_p).sum()
 
-        if not region_storage.empty:
-            p_store_discharge = (
-                n.model["StorageUnit-p_dispatch"].loc[:, region_storage.index].sel(period=planning_horizon)
-            )
-            lhs -= (p_store_discharge * EF_imports).sum()
+        #     if not region_storage.empty:
+        #         p_store_discharge = (
+        #             n.model["StorageUnit-p_dispatch"].loc[:, region_storage.index].sel(period=planning_horizon)
+        #         )
+        #         imports_storage_weightings = pd.DataFrame(columns=region_storage.index, index=n.snapshots, data=1)
+        #         weighted_imports_p = (
+        #             (imports_storage_weightings * EF_imports)
+        #             .multiply(weightings.generators, axis=0)
+        #             .loc[planning_horizon]
+        #         )
+        #         lhs -= (p_store_discharge * weighted_imports_p).sum()
 
-        region_demand = (
-            n.loads_t.p_set.loc[
-                planning_horizon,
-                n.loads.bus.isin(region_buses.index),
-            ]
-            .sum()
-            .sum()
-        )
+        #     region_demand = (
+        #         n.loads_t.p_set.loc[
+        #             planning_horizon,
+        #             n.loads.bus.isin(region_buses.index),
+        #         ]
+        #         .sum()
+        #         .sum()
+        #     )
 
-        rhs = region_co2lim - (region_demand * EF_imports)
+        #     rhs -= region_demand * EF_imports
+
         n.model.add_constraints(
             lhs <= rhs,
             name=f"GlobalConstraint-{emmission_lim.name}_{planning_horizon}co2_limit",
@@ -810,55 +832,6 @@ def add_battery_constraints(n):
     n.model.add_constraints(lhs == 0, name="Link-charger_ratio")
 
 
-def add_chp_constraints(n):
-    electric = (
-        n.links.index.str.contains("urban central")
-        & n.links.index.str.contains("CHP")
-        & n.links.index.str.contains("electric")
-    )
-    heat = (
-        n.links.index.str.contains("urban central")
-        & n.links.index.str.contains("CHP")
-        & n.links.index.str.contains("heat")
-    )
-
-    electric_ext = n.links[electric].query("p_nom_extendable").index
-    heat_ext = n.links[heat].query("p_nom_extendable").index
-
-    electric_fix = n.links[electric].query("~p_nom_extendable").index
-    heat_fix = n.links[heat].query("~p_nom_extendable").index
-
-    p = n.model["Link-p"]  # dimension: [time, link]
-
-    # output ratio between heat and electricity and top_iso_fuel_line for extendable
-    if not electric_ext.empty:
-        p_nom = n.model["Link-p_nom"]
-
-        lhs = (
-            p_nom.loc[electric_ext] * (n.links.p_nom_ratio * n.links.efficiency)[electric_ext].values
-            - p_nom.loc[heat_ext] * n.links.efficiency[heat_ext].values
-        )
-        n.model.add_constraints(lhs == 0, name="chplink-fix_p_nom_ratio")
-
-        rename = {"Link-ext": "Link"}
-        lhs = p.loc[:, electric_ext] + p.loc[:, heat_ext] - p_nom.rename(rename).loc[electric_ext]
-        n.model.add_constraints(lhs <= 0, name="chplink-top_iso_fuel_line_ext")
-
-    # top_iso_fuel_line for fixed
-    if not electric_fix.empty:
-        lhs = p.loc[:, electric_fix] + p.loc[:, heat_fix]
-        rhs = n.links.p_nom[electric_fix]
-        n.model.add_constraints(lhs <= rhs, name="chplink-top_iso_fuel_line_fix")
-
-    # back-pressure
-    if not electric.empty:
-        lhs = (
-            p.loc[:, heat] * (n.links.efficiency[heat] * n.links.c_b[electric].values)
-            - p.loc[:, electric] * n.links.efficiency[electric]
-        )
-        n.model.add_constraints(lhs <= rhs, name="chplink-backpressure")
-
-
 def add_pipe_retrofit_constraint(n):
     """
     Add constraint for retrofitting existing CH4 pipelines to H2 pipelines.
@@ -895,7 +868,10 @@ def add_sector_co2_constraints(n, config):
         sns = n.snapshots
         snapshot = sns[sns.get_level_values("period") == year][-1]
 
-        stores = n.stores[(n.stores.index.str.startswith(state)) & (n.stores.index.str.endswith("-co2"))].index
+        stores = n.stores[
+            (n.stores.index.str.startswith(state))
+            & ((n.stores.index.str.endswith("-co2")) | (n.stores.index.str.endswith("-ch4")))
+        ].index
 
         lhs = n.model["Store-e"].loc[snapshot, stores].sum()
 
@@ -912,7 +888,10 @@ def add_sector_co2_constraints(n, config):
         sns = n.snapshots
         snapshot = sns[sns.get_level_values("period") == year][-1]
 
-        stores = n.stores[(n.stores.index.str.startswith(state)) & (n.stores.index.str.endswith(f"{sector}-co2"))].index
+        stores = n.stores[
+            (n.stores.index.str.startswith(state))
+            & ((n.stores.index.str.endswith(f"{sector}-co2")) | (n.stores.index.str.endswith(f"{sector}-ch4")))
+        ].index
 
         lhs = n.model["Store-e"].loc[snapshot, stores].sum()
 
@@ -929,7 +908,7 @@ def add_sector_co2_constraints(n, config):
         sns = n.snapshots
         snapshot = sns[sns.get_level_values("period") == year][-1]
 
-        stores = n.stores[n.stores.index.str.endswith("-co2")].index
+        stores = n.stores[((n.stores.index.str.endswith("-co2")) | (n.stores.index.str.endswith("-ch4")))].index
 
         lhs = n.model["Store-e"].loc[snapshot, stores].sum()
 
@@ -946,7 +925,9 @@ def add_sector_co2_constraints(n, config):
         sns = n.snapshots
         snapshot = sns[sns.get_level_values("period") == year][-1]
 
-        stores = n.stores[n.stores.index.str.endswith(f"{sector}-co2")].index
+        stores = n.stores[
+            (n.stores.index.str.endswith(f"{sector}-co2")) | (n.stores.index.str.endswith(f"{sector}-ch4"))
+        ].index
 
         lhs = n.model["Store-e"].loc[snapshot, stores].sum()
 
@@ -1110,6 +1091,109 @@ def add_gshp_capacity_constraint(n, config):
     n.model.add_constraints(lhs >= rhs, name=f"Link-gshp_capacity_ratio")
 
 
+def add_ng_import_export_limits(n, config):
+
+    def _format_link_name(s: str) -> str:
+        states = s.split("-")
+        return f"{states[0]} {states[1]} gas"
+
+    def _format_domestic_data(
+        prod: pd.DataFrame,
+        link_suffix: Optional[str] = None,
+    ) -> pd.DataFrame:
+
+        df = prod.copy()
+        df["link"] = df.state.map(_format_link_name)
+        if link_suffix:
+            df["link"] = df.link + link_suffix
+
+        # convert mmcf to MWh
+        df["value"] = df["value"] * 1000 / NG_MWH_2_MMCF
+
+        return df[["link", "value"]].rename(columns={"value": "rhs"}).set_index("link")
+
+    def _format_international_data(
+        prod: pd.DataFrame,
+        link_suffix: Optional[str] = None,
+    ) -> pd.DataFrame:
+
+        df = prod.copy()
+        df = df[["value", "state"]].groupby("state", as_index=False).sum()
+        df = df[~(df.state == "USA")].copy()
+
+        df["link"] = df.state.map(_format_link_name)
+        if link_suffix:
+            df["link"] = df.link + link_suffix
+
+        # convert mmcf to MWh
+        df["value"] = df["value"] * 1000 / NG_MWH_2_MMCF
+
+        return df[["link", "value"]].rename(columns={"value": "rhs"}).set_index("link")
+
+    def add_import_limits(n, imports):
+        """
+        Sets gas import limit over each year.
+        """
+
+        weights = n.snapshot_weightings.objective
+
+        links = n.links[n.links.carrier.str.endswith("gas import")].index.to_list()
+
+        for year in n.investment_periods:
+            for link in links:
+                try:
+                    rhs = imports.at[link, "rhs"]
+                except KeyError:
+                    # logger.warning(f"Can not set gas import limit for {link}")
+                    continue
+                lhs = n.model["Link-p"].mul(weights).sel(snapshot=year, Link=link).sum()
+
+                n.model.add_constraints(lhs <= rhs, name=f"ng_limit-{year}-{link}")
+
+    def add_export_limits(n, exports):
+        """
+        Sets maximum export limit over the year.
+        """
+
+        weights = n.snapshot_weightings.objective
+
+        links = n.links[n.links.carrier.str.endswith("gas export")].index.to_list()
+
+        for year in n.investment_periods:
+            for link in links:
+                try:
+                    rhs = exports.at[link, "rhs"]
+                except KeyError:
+                    # logger.warning(f"Can not set gas import limit for {link}")
+                    continue
+                lhs = n.model["Link-p"].mul(weights).sel(snapshot=year, Link=link).sum()
+
+                n.model.add_constraints(lhs >= rhs, name=f"ng_limit-{year}-{link}")
+
+    api = config["api"]["eia"]
+    year = pd.to_datetime(config["snapshots"]["start"]).year
+
+    # add domestic limits
+
+    imports = Trade("gas", False, "imports", year, api).get_data()
+    imports = _format_domestic_data(imports, " import")
+    exports = Trade("gas", False, "exports", year, api).get_data()
+    exports = _format_domestic_data(exports, " export")
+
+    # add_import_limits(n, imports)
+    add_export_limits(n, exports)
+
+    # add international limits
+
+    imports = Trade("gas", True, "imports", year, api).get_data()
+    imports = _format_international_data(imports, " import")
+    exports = Trade("gas", True, "exports", year, api).get_data()
+    exports = _format_international_data(exports, " export")
+
+    # add_import_limits(n, imports)
+    add_export_limits(n, exports)
+
+
 def extra_functionality(n, snapshots):
     """
     Collects supplementary constraints which will be passed to
@@ -1146,6 +1230,8 @@ def extra_functionality(n, snapshots):
         sector_co2_limits = config["sector"]["co2"].get("policy", {})
         if sector_co2_limits:
             add_sector_co2_constraints(n, config)
+        if config["sector"]["natural_gas"].get("force_imports_exports", False):
+            add_ng_import_export_limits(n, config)
 
     for o in opts:
         if "EQ" in o:

@@ -2,7 +2,7 @@ exclude: "LICENSE*|repo_data/"
 
 repos:
 - repo: https://github.com/pre-commit/pre-commit-hooks
-  rev: v4.6.0
+  rev: v5.0.0
   hooks:
   - id: trailing-whitespace
   - id: end-of-file-fixer
@@ -29,7 +29,7 @@ repos:
   - id: add-trailing-comma
 
 - repo: https://github.com/asottile/pyupgrade
-  rev: v3.17.0
+  rev: v3.18.0
   hooks:
   - id: pyupgrade
     args: [--py39-plus]
@@ -58,7 +58,7 @@ repos:
   - id: blackdoc
 
 - repo: https://github.com/psf/black-pre-commit-mirror
-  rev: 24.8.0
+  rev: 24.10.0
   hooks:
   - id: black
     language_version: python3.11

@@ -130,6 +130,18 @@ lines:
     500.: "Al/St 560/50 4-bundle 750.0"
     765.: "Al/St 560/50 4-bundle 750.0"
 
+ 
+lines:
+  types: #Temp values, replaced.
+    115.: "Al/St 240/40 2-bundle 220.0"
+    138.: "Al/St 240/40 2-bundle 220.0"
+    161.: "Al/St 240/40 2-bundle 220.0"
+    230.: "Al/St 240/40 2-bundle 220.0"
+    345.: "Al/St 240/40 4-bundle 380.0"
+    500.: "Al/St 560/50 4-bundle 750.0"
+    765.: "Al/St 560/50 4-bundle 750.0"
+ 
+
 # docs :
 offshore_shape:
   use: eez #options are ca_osw, eez
