@@ -208,13 +208,35 @@ def _get_dynamic_marginal_costs(
     match fuel:
         case "gas":
             assert sector in ("res", "com", "ind", "pwr")
-            raw = (
-                FuelCosts(fuel, year, eia, industry=sector_mapper[sector]).get_data(
+            if year < 2024:  # get actual monthly values
+                raw = FuelCosts(
+                    fuel,
+                    year,
+                    eia,
+                    industry=sector_mapper[sector],
+                ).get_data(
                     pivot=True,
                 )
-                * 1000
-                / NG_MWH_2_MMCF
-            )  # $/MCF -> $/MWh
+                raw = raw * 1000 / NG_MWH_2_MMCF  # $/MCF -> $/MWh
+            else:  # scale monthly values according to AEO
+                act = FuelCosts(
+                    fuel,
+                    2023,
+                    eia,
+                    industry=sector_mapper[sector],
+                ).get_data(
+                    pivot=True,
+                )
+                proj = FuelCosts(fuel, year, eia, industry=sector_mapper[sector]).get_data(
+                    pivot=True,
+                )
+
+                actual_year_mean = act.mean().at["U.S."]
+                proj_year_mean = proj.at[year, "U.S."]
+                scaler = proj_year_mean / actual_year_mean
+
+                raw = act * scaler * 1000 / NG_MWH_2_MMCF  # $/MCF -> $/MWh
+
         case "coal":
             raw = (
                 FuelCosts(fuel, year, eia, industry="power").get_data(pivot=True) * COAL_dol_ton_2_MWHthermal

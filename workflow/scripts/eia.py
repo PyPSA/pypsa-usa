@@ -1852,7 +1852,7 @@ if __name__ == "__main__":
         yaml_data = yaml.safe_load(file)
     api = yaml_data["api"]["eia"]
     print(
-        FuelCosts("gas", 2019, api, industry="power").get_data(pivot=True).mean().at["U.S."],
+        FuelCosts("gas", 2030, api, industry="power").get_data(pivot=True).at[2030, "U.S."],
     )
     # print(FuelCosts("heating_oil", 2020, api).get_data(pivot=False))
     # print(Trade("gas", True, "imports", 2020, api).get_data(pivot=True).fillna(0).sum())
