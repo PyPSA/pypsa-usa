@@ -67,7 +67,7 @@ def load_pudl_data(pudl_fn: str, start_date: str, end_date: str):
         LEFT JOIN monthly_generators ON out_eia__yearly_generators.plant_id_eia = monthly_generators.plant_id_eia AND out_eia__yearly_generators.generator_id = monthly_generators.generator_id
         WHERE
             out_eia__yearly_generators.operational_status = 'existing'
-            AND out_eia__yearly_generators.operational_status_code IN ('OP', 'SB', 'SC')
+            AND out_eia__yearly_generators.operational_status_code IN ('OP')
             AND out_eia__yearly_generators.report_date >= '2023-01-01'
         GROUP BY out_eia__yearly_generators.plant_id_eia, out_eia__yearly_generators.generator_id
     """,
