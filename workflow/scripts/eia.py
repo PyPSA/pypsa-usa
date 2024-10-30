@@ -150,17 +150,28 @@ class FuelCosts(EiaData):
         api: str,
         industry: Optional[str] = None,
         grade: Optional[str] = None,
+        scenario: Optional[str] = None,
     ) -> None:
         self.fuel = fuel
         self.year = year
         self.api = api
         self.industry = industry  # (power|residential|commercial|industrial|imports|exports)
         self.grade = grade  # (total|regular|premium|midgrade|diesel)
+        self.scenario = scenario
 
     def data_creator(self) -> pd.DataFrame:
         if self.fuel == "gas":
             assert self.industry
-            return GasCosts(self.industry, self.year, self.api)
+            if self.year < 2024:
+                return GasCosts(self.industry, self.year, self.api)
+            else:
+                if self.industry in ("imports", "exports"):
+                    logger.warning(
+                        f"Projected {self.industry} prices not availble. Returning 2023 data.",
+                    )
+                    return GasCosts(self.industry, 2023, self.api)
+                aeo = "reference" if not self.scenario else self.scenario
+                return ProjectedGasCosts(self.industry, self.year, aeo, self.api)
         elif self.fuel == "coal":
             assert self.industry
             return CoalCosts(self.industry, self.year, self.api)
@@ -1383,6 +1394,52 @@ class HistoricalProjectedTransportFuelUse(DataExtractor):
 #         return "-".join(connections)
 
 
+class ProjectedGasCosts(DataExtractor):
+    """
+    Extracts projected energy demand at a national level from AEO 2023.
+    """
+
+    # https://www.eia.gov/outlooks/aeo/assumptions/case_descriptions.php
+    scenario_codes = AEO_SCENARIOS
+
+    industry_codes = {
+        "residential": "prce_NA_resd_NA_ng_NA_usa_y13dlrpmcf",
+        "commercial": "prce_NA_comm_NA_ng_NA_usa_y13dlrpmcf",
+        "industry": "prce_NA_idal_NA_ng_NA_usa_y13dlrpmcf",
+        "power": "prce_NA_elep_NA_ng_NA_usa_y13dlrpmcf",
+    }
+
+    def __init__(self, industry: str, year: int, scenario: str, api: str):
+        super().__init__(year, api)
+        self.scenario = scenario
+        self.industry = industry
+        if scenario not in self.scenario_codes.keys():
+            raise InputException(
+                propery="Projected Natural Gas Costs Scenario",
+                valid_options=list(self.scenario_codes),
+                recived_option=scenario,
+            )
+        if industry not in self.industry_codes.keys():
+            raise InputException(
+                propery="Projected Natural Gas Costs Industry",
+                valid_options=list(self.industry_codes),
+                recived_option=industry,
+            )
+
+    def build_url(self) -> str:
+        base_url = "aeo/2023/data/"
+        facets = f"frequency=annual&data[0]=value&facets[scenario][]={self.scenario_codes[self.scenario]}&facets[seriesId][]={self.industry_codes[self.industry]}&start=2024&end={self.year}&sort[0][column]=period&sort[0][direction]=desc&offset=0&length=5000"
+        return f"{API_BASE}{base_url}?api_key={self.api_key}&{facets}"
+
+    def format_data(self, df: pd.DataFrame) -> pd.DataFrame:
+        df.index = pd.to_datetime(df.period)
+        df.index = df.index.year
+        df = df.rename(columns={"seriesName": "series-description", "unit": "units"})
+        df["state"] = "U.S."
+        df = df[["series-description", "value", "units", "state"]].sort_index()
+        return self._assign_dtypes(df)
+
+
 class InternationalGasTrade(DataExtractor):
     """
     Gets imports/exports by point of entry.
@@ -1794,9 +1851,11 @@ if __name__ == "__main__":
     with open("./../config/config.api.yaml") as file:
         yaml_data = yaml.safe_load(file)
     api = yaml_data["api"]["eia"]
-    # print(FuelCosts("coal", 2020, api, industry="power").get_data(pivot=True))
+    print(
+        FuelCosts("gas", 2019, api, industry="power").get_data(pivot=True).mean().at["U.S."],
+    )
     # print(FuelCosts("heating_oil", 2020, api).get_data(pivot=False))
-    print(Trade("gas", True, "imports", 2020, api).get_data(pivot=True).fillna(0).sum())
+    # print(Trade("gas", True, "imports", 2020, api).get_data(pivot=True).fillna(0).sum())
     # print(Emissions("transport", 2019, api).get_data(pivot=True))
     # print(Storage("gas", "total", 2019, api).get_data(pivot=True))
     # print(EnergyDemand("residential", 2030, api).get_data(pivot=False))
