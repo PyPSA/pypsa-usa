@@ -992,6 +992,107 @@ def add_sector_co2_constraints(n, config):
                         apply_sector_state_limit(n, year, state, sector, value)
 
 
+def add_cooling_heat_pump_constraints(n, config):
+    """
+    Adds constraints to the cooling heat pumps.
+
+    These constraints allow HPs to be used to meet both heating and cooling
+    demand within a single timeslice while respecting capacity limits.
+    Since we are aggregating (and not modelling individual units)
+    this should be fine.
+
+    Two seperate constraints are added:
+    - Constrains the cooling HP capacity to equal the heating HP capacity. Since the
+    cooling hps do not have a capital cost, this will not effect objective cost
+    - Constrains the total generation of Heating and Cooling HPs at each time slice
+    to be less than or equal to the max generation of the heating HP. Note, that both
+    the cooling and heating HPs have the same COP
+    """
+
+    def add_hp_capacity_constraint(n, hp_type):
+
+        assert hp_type in ("ashp", "gshp")
+
+        heating_hps = n.links[n.links.index.str.endswith(hp_type)].index
+        if heating_hps.empty:
+            return
+        cooling_hps = n.links[n.links.index.str.endswith(f"{hp_type}-cooling")].index
+
+        assert len(heating_hps) == len(cooling_hps)
+
+        lhs = n.model["Link-p_nom"].loc[heating_hps] - n.model["Link-p_nom"].loc[cooling_hps]
+        rhs = 0
+
+        n.model.add_constraints(lhs == rhs, name=f"Link-{hp_type}_cooling_capacity")
+
+    def add_hp_generation_constraint(n, hp_type):
+
+        heating_hps = n.links[n.links.index.str.endswith(hp_type)].index
+        if heating_hps.empty:
+            return
+        cooling_hps = n.links[n.links.index.str.endswith(f"{hp_type}-cooling")].index
+
+        heating_hp_p = n.model["Link-p"].loc[:, heating_hps]
+        cooling_hp_p = n.model["Link-p"].loc[:, cooling_hps]
+
+        heating_hps_cop = n.links_t["efficiency"][heating_hps]
+        cooling_hps_cop = n.links_t["efficiency"][cooling_hps]
+
+        heating_hps_gen = heating_hp_p.mul(heating_hps_cop)
+        cooling_hps_gen = cooling_hp_p.mul(cooling_hps_cop)
+
+        lhs = heating_hps_gen + cooling_hps_gen
+
+        heating_hp_p_nom = n.model["Link-p_nom"].loc[heating_hps]
+        max_gen = heating_hp_p_nom.mul(heating_hps_cop)
+
+        rhs = max_gen
+
+        n.model.add_constraints(lhs <= rhs, name=f"Link-{hp_type}_cooling_generation")
+
+    for hp_type in ("ashp", "gshp"):
+        add_hp_capacity_constraint(n, hp_type)
+        add_hp_generation_constraint(n, hp_type)
+
+
+def add_gshp_capacity_constraint(n, config):
+    """
+    Constrains gshp capacity based on population and ashp installations.
+
+    This constraint should be added if rural/urban sectors are combined into
+    a single total area. In this case, we need to constrain how much gshp capacity
+    can be added to the system.
+
+    For example:
+    - If ratio is 0.75 urban and 0.25 rural
+    - We want to enforce that at max, only 0.33 unit of GSHP can be installed for every unit of ASHP
+    - The constraint is: [ASHP - (urban / rural) * GSHP >= 0]
+    - ie. for every unit of GSHP, we need to install 3 units of ASHP
+    """
+
+    pop = pd.read_csv(snakemake.input.pop_layout)
+    pop["urban_rural_fraction"] = (pop.urban_fraction / pop.rural_fraction).round(2)
+    fraction = pop.set_index("name")["urban_rural_fraction"].to_dict()
+
+    ashp = n.links[n.links.index.str.endswith("ashp")].copy()
+    gshp = n.links[n.links.index.str.endswith("gshp")].copy()
+    if gshp.empty:
+        return
+
+    assert len(ashp) == len(gshp)
+
+    gshp["urban_rural_fraction"] = gshp.bus0.map(fraction)
+
+    ashp_capacity = n.model["Link-p_nom"].loc[ashp.index]
+    gshp_capacity = n.model["Link-p_nom"].loc[gshp.index]
+    gshp_multiplier = gshp["urban_rural_fraction"]
+
+    lhs = ashp_capacity - gshp_capacity.mul(gshp_multiplier.values)
+    rhs = 0
+
+    n.model.add_constraints(lhs >= rhs, name=f"Link-gshp_capacity_ratio")
+
+
 def add_ng_import_export_limits(n, config):
 
     def _format_link_name(s: str) -> str:
@@ -1125,6 +1226,9 @@ def extra_functionality(n, snapshots):
     if interface_limits:
         add_interface_limits(n, snapshots, config)
     if "sector" in opts:
+        add_cooling_heat_pump_constraints(n, config)
+        if config["sector"]["service_sector"].get("split_urban_rural", False):
+            add_gshp_capacity_constraint(n, config)
         if config["sector"]["co2"].get("policy", {}):
             add_sector_co2_constraints(n, config)
         if config["sector"]["natural_gas"].get("force_exports", False):
