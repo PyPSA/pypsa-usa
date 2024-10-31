@@ -23,10 +23,10 @@ FIGURES_SECTOR_LOADS = [
     "load_barplot"
 ]
 FIGURES_SECTOR_VALIDATE = [
-    "emissions_by_sector_validation",
-    "emissions_by_state_validation",
-    "generation_by_state_validation",
-    "transportation_by_mode_validation",
+    "emissions_by_sector",
+    # "emissions_by_state_validation",
+    # "generation_by_state_validation",
+    # "transportation_by_mode_validation",
 ]
 FIGURES_SECTOR_NATURAL_GAS = [
     "demand",
@@ -158,24 +158,28 @@ rule plot_sector_capacity:
 #         mem_mb=5000,
 #     script:
 #         "../scripts/plot_statistics_sector.py"
-# rule plot_sector_validate:
-#     input:
-#         network=RESULTS
-#         + "{interconnect}/networks/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc",
-#     params:
-#         plotting=config["plotting"],
-#         eia_api=config["api"]["eia"],
-#     output:
-#         **{
-#             fig: RESULTS
-#             + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/{state}/validate/%s.png"
-#             % fig
-#             for fig in FIGURES_SECTOR_VALIDATE
-#         },
-#     log:
-#         "logs/plot_figures/{interconnect}_s{simpl}_c{clusters}_l{ll}_{opts}_{sector}_{state}_validate.log",
-#     threads: 1
-#     resources:
-#         mem_mb=5000,
-#     script:
-#         "../scripts/plot_statistics_sector.py"
+
+
+rule plot_sector_validation:
+    input:
+        network=RESULTS
+        + "{interconnect}/networks/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc",
+    params:
+        plotting=config["plotting"],
+        eia_api=config["api"]["eia"],
+        root_dir=RESULTS
+        + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/",
+    output:
+        expand(
+            RESULTS
+            + "{{interconnect}}/figures/s{{simpl}}_c{{clusters}}/l{{ll}}_{{opts}}_{{sector}}/system/validation/{fig}.png",
+            sec=["res"],
+            fig=FIGURES_SECTOR_VALIDATE,
+        ),
+    log:
+        "logs/plot_figures/{interconnect}_s{simpl}_c{clusters}_l{ll}_{opts}_{sector}_validate.log",
+    threads: 1
+    resources:
+        mem_mb=5000,
+    script:
+        "../scripts/plot_statistics_sector.py"

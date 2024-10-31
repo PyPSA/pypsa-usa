@@ -8,7 +8,7 @@ from typing import Optional
 import pandas as pd
 import pypsa
 from constants_sector import Transport
-from eia import Emissions, Seds, TransportationDemand
+from eia import ElectricPowerData, Emissions, Seds, TransportationDemand
 
 logger = logging.getLogger(__name__)
 
@@ -414,7 +414,7 @@ def get_power_production_timeseries(
         df_gens = n.generators_t.p[gens]
     else:
         df_links = n.links_t.p1[links].mul(-1).mul(n.snapshot_weightings.generators, axis=0)
-        df_gens = n.links_t.p1[gens].mul(n.snapshot_weightings.generators, axis=0)
+        df_gens = n.generators_t.p[gens].mul(n.snapshot_weightings.generators, axis=0)
 
     if state:
         links = _get_links_in_state(n, state)
@@ -582,10 +582,38 @@ def get_historical_end_use_consumption(
         )
 
     df = pd.concat(dfs)
+    df = df[df.index.isin(sectors)].copy()
     df.index.name = "sector"
 
     # convert billion BTU to MWH
     return df.mul(293.07)
+
+
+def get_historical_power_production(year: int, api: str) -> pd.DataFrame:
+
+    fuel_mapper = {
+        "BIO": "biomass",
+        "COW": "coal",
+        "GEO": "geothermal",
+        "HYC": "hydro",
+        "NG": "gas",
+        "NUC": "nuclear",
+        "OTH": "other",
+        "PET": "oil",
+        "SUN": "solar",
+        # "WNS": "offwind",
+        # "WNT": "onwind",
+        "WND": "wind",
+    }
+
+    df = ElectricPowerData("electric_power", year, api).get_data()
+    df = df[df.fueltypeid.isin(fuel_mapper)]
+    df["value"] = df.value.mul(1000)  # thousand mwh to mwh
+    df = df.reset_index()
+
+    df = df.pivot(index="state", columns="fueltypeid", values="value").fillna(0)
+    df = df.where(df >= 0, 0)
+    return df.rename(columns=fuel_mapper)
 
 
 def get_end_use_consumption(

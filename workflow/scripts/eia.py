@@ -445,12 +445,14 @@ class Seds(EiaData):
 
 
 class ElectricPowerData(EiaData):
-    def __init__(self, year: int, api_key: str) -> None:
+
+    def __init__(self, sector: str, year: int, api_key: str) -> None:
+        self.sector = sector
         self.year = year
         self.api_key = api_key
 
     def data_creator(self):
-        return ElectricPowerOperationalData(self.year, self.api_key)
+        return ElectricPowerOperationalData(self.sector, self.year, self.api_key)
 
 
 # product
@@ -1815,20 +1817,41 @@ class ElectricPowerOperationalData(DataExtractor):
     """
 
     sector_codes = {
-        "all_sectors": [98],
+        "electric_utility": 1,
+        "ipp_non_chp": 2,
+        "ipp_chp": 3,
+        "commercial_non_chp": 4,
+        "commercial_chp": 5,
+        "industry_non_chp": 6,
+        "industry_chp": 7,
+        "residential": 8,
+        "electric_non_chp": 90,
+        "ipp": 94,
+        "coal": 95,
+        "commercial": 96,
+        "industry_total": 97,
+        "electric_power": 98,
+        "all_sectors": 99,
     }
 
-    def __init__(self, year: int, api_key: str) -> None:
+    def __init__(self, sector: str, year: int, api_key: str) -> None:
         super().__init__(year, api_key)
-        if self.year > 2021:
+        self.sector = sector
+        if self.year > 2023:
             logger.warning(
-                f"Electric power operational data only available until {2021}",
+                f"Electric power operational data only available until {2023}",
             )
-            self.year = 2021
+            self.year = 2023
+        if self.sector not in list(self.sector_codes):
+            raise InputException(
+                propery="Electric Power Operational Data",
+                valid_options=list(self.sector_codes),
+                recived_option=sector,
+            )
 
     def build_url(self) -> str:
         base_url = "electricity/electric-power-operational-data/data/"
-        facets = f"frequency=annual&data[0]=generation&facets[sectorid][]={self.sector_codes['all_sectors'][0]}&start={self.year-1}&end={self.year+1}&sort[0][column]=period&sort[0][direction]=desc&offset=0&length=5000"
+        facets = f"frequency=annual&data[0]=generation&facets[sectorid][]={self.sector_codes[self.sector]}&start={self.year-1}&end={self.year}&sort[0][column]=period&sort[0][direction]=desc&offset=0&length=5000"
         return f"{API_BASE}{base_url}?api_key={self.api_key}&{facets}"
 
     def format_data(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -1842,7 +1865,12 @@ class ElectricPowerOperationalData(DataExtractor):
                 "generation": "value",
             },
         )
+        df = df.set_index("period")
         df = df[["state", "stateName", "fueltypeid", "series-description", "value", "units"]].sort_values(["state"])
+
+        df = df[(df.state.str.len() < 3) & (df.state != "90")]
+
+        df["state"] = df.state.map(lambda x: "U.S." if x == "US" else x)
 
         return self._assign_dtypes(df)
 
@@ -1852,7 +1880,11 @@ if __name__ == "__main__":
         yaml_data = yaml.safe_load(file)
     api = yaml_data["api"]["eia"]
     print(
-        FuelCosts("gas", 2030, api, industry="power").get_data(pivot=True).at[2030, "U.S."],
+        ElectricPowerData(
+            "electric_power",
+            2020,
+            api,
+        ).get_data(pivot=False),
     )
     # print(FuelCosts("heating_oil", 2020, api).get_data(pivot=False))
     # print(Trade("gas", True, "imports", 2020, api).get_data(pivot=True).fillna(0).sum())

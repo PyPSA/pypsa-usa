@@ -16,24 +16,15 @@ import seaborn as sns
 from _helpers import configure_logging, mock_snakemake
 from add_electricity import sanitize_carriers
 from constants import STATE_2_CODE, Month
-from constants_sector import (
-    AirTransport,
-    AirTransportUnits,
-    BoatTransport,
-    BoatTransportUnits,
-    RailTransport,
-    RailTransportUnits,
-    RoadTransport,
-    RoadTransportUnits,
-    Transport,
-)
 from plot_statistics import create_title
 from summary_sector import (
     get_emission_timeseries_by_sector,
     get_end_use_consumption,
     get_historical_emissions,
     get_historical_end_use_consumption,
+    get_historical_power_production,
     get_historical_transport_consumption_by_mode,
+    get_power_production_timeseries,
     get_transport_consumption_by_mode,
 )
 
@@ -288,6 +279,63 @@ def plot_sector_consumption_validation(
     return fig, axs
 
 
+def _get_annual_generation(n: pypsa.Network, year: int, state) -> pd.DataFrame:
+    """
+    Only for comparing agaist EIA data.
+    """
+    df = get_power_production_timeseries(n, False, state)
+    df = df.T
+    df.index = df.index.map(pd.concat([n.links.carrier, n.generators.carrier]))
+    # collapse CCS techs into a single tech
+    df = df.rename(index={x: x.split("-9")[0] for x in df.index})
+    df = df.rename(index={"OCGT": "gas", "CCGT": "gas"})  # only one historical gas
+    df = df.rename(
+        index={"onwind": "wind", "offwind_floating": "wind", "offwind_fixed": "wind"},
+    )
+    df = df.groupby(level=0).sum().T
+    return df.loc[year].sum().to_frame(name="modelled")
+
+
+def plot_power_generation_validation(
+    n: pypsa.Network,
+    eia_api: str,
+    state: Optional[str] = None,
+    **kwargs,
+) -> tuple:
+
+    investment_period = n.investment_periods[0]
+
+    modelled = _get_annual_generation(n, investment_period, state)
+
+    historical = get_historical_power_production(
+        investment_period,
+        eia_api,
+    )
+    if not state:
+        historical = historical.loc["U.S."].to_frame("actual")
+    else:
+        historical = historical.loc[state].to_frame("actual")
+
+    df = historical.join(modelled, how="outer").fillna(0)
+
+    fig, axs = plt.subplots(
+        ncols=1,
+        nrows=1,
+        figsize=(FIG_WIDTH, FIG_HEIGHT),
+    )
+
+    try:
+        df.plot.bar(ax=axs)
+        axs.set_xlabel("")
+        axs.set_ylabel("MWh")
+        axs.set_title("Electric Power Production")
+        axs.tick_params(axis="x", labelrotation=45)
+    except TypeError:  # no numeric data to plot
+        logger.warning(f"No data to plot for {state}")
+
+    return fig, axs
+
+
 def plot_transportation_by_mode_validation(
     n: pypsa.Network,
     eia_api: str,
@@ -473,6 +521,12 @@ class PlottingData:
 
 VALIDATION_PLOTS = [
     {
+        "name": "power_generation",
+        "fn": plot_power_generation_validation,
+        "nice_name": "Power Generation by State",
+        "system_only": False,
+    },
+    {
         "name": "emissions_by_sector_validation",
         "fn": plot_sector_emissions_validation,
         "nice_name": "Emissions by Sector",
@@ -484,12 +538,12 @@ VALIDATION_PLOTS = [
         "nice_name": "Emissions by State",
         "system_only": True,
     },
-    # {
-    #     "name": "generation_by_state_validation",
-    #     "fn": plot_sector_consumption_validation,
-    #     "nice_name": "Residenital Energy Generation",
-    #     "sector": "res",
-    # },
+    {
+        "name": "generation_by_state_validation",
+        "fn": plot_sector_consumption_validation,
+        "nice_name": "Energy Consumption",
+        "system_only": False,
+    },
     # {
     #     "name": "transportation_by_mode_validation",
     #     "fn": plot_transportation_by_mode_validation,
