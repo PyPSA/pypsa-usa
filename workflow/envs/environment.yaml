@@ -64,3 +64,4 @@ dependencies:
   - highspy
   - duckdb==0.10.0
   - flake8
+  - dill

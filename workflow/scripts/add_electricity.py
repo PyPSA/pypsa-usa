@@ -39,6 +39,7 @@ import logging
 import os
 
 import constants as const
+import dill as pickle
 import geopandas as gpd
 import numpy as np
 import pandas as pd
@@ -272,8 +273,6 @@ def match_plant_to_bus(n, plants):
     # from: https://stackoverflow.com/questions/58893719/find-nearest-point-in-other-dataframe-with-a-lot-of-data
     # Create a BallTree
     tree = BallTree(buses[["x", "y"]].values, leaf_size=2)
-    # Query the BallTree on each feature from 'appart' to find the distance
-    # to the nearest 'pharma' and its id
     plants_matched["distance_nearest"], plants_matched["id_nearest"] = tree.query(
         plants_matched[["longitude", "latitude"]].values,  # The input array for the query
         k=1,  # The number of nearest neighbors
@@ -832,7 +831,7 @@ def main(snakemake):
         n.snapshots,
     )
 
-    if params.conventional["unit_commitment"]:
+    if params.conventional["must_run"]:
         # TODO (@ktehranchi): In the future the plants that are must-run should not be clustered and instead retire according to lifetime
         apply_must_run_ratings(
             n,
@@ -949,7 +948,8 @@ def main(snakemake):
     sanitize_carriers(n, snakemake.config)
     n.meta = snakemake.config
 
-    n.export_to_netcdf(snakemake.output[0])
+    # n.export_to_netcdf(snakemake.output[0])
+    pickle.dump(n, open(snakemake.output[0], "wb"))
 
     logger.info(test_network_datatype_consistency(n))
 

@@ -301,7 +301,9 @@ def split_retirement_gens(
         economic  # if economic retirement is true enable extendable
     )
 
-    n.madd(  # Adding Expanding generators for the first investment period
+    # Adding Expanding generators for the first investment period
+    # There are generators that exist today and could expand in the first time horizon
+    n.madd(
         "Generator",
         retirement_gens.index,
         carrier=retirement_gens.carrier,
@@ -319,6 +321,7 @@ def split_retirement_gens(
         lifetime=retirement_gens.carrier.map(costs.lifetime).fillna(np.inf),
         p_min_pu=retirement_gens.p_min_pu,
         p_max_pu=retirement_gens.p_max_pu,
+        land_region=retirement_gens.land_region,
     )
 
     # time dependent factors added after as not all generators are time dependent
@@ -387,6 +390,7 @@ def attach_multihorizon_generators(
         capital_cost=gens.carrier.map(costs.annualized_capex_fom),
         build_year=investment_year,
         lifetime=gens.carrier.map(costs.cost_recovery_period_years),
+        land_region=gens.land_region,
     )
 
     # time dependent factors added after as not all generators are time dependent
@@ -555,6 +559,7 @@ if __name__ == "__main__":
             economic=True,
         )
 
+    # Split renewable generators from the first investement period
     split_retirement_gens(
         n,
         costs_dict[n.investment_periods[0]],

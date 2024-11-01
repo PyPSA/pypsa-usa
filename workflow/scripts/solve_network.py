@@ -48,84 +48,35 @@ logger = logging.getLogger(__name__)
 pypsa.pf.logger.setLevel(logging.WARNING)
 
 
-def add_land_use_constraint_perfect(n):
+def add_land_use_constraints(n):
     """
-    Add global constraints for tech capacity limit.
+    Adds constraint for land-use based on information from the generators
+    table.
+
+    Constraint is defined by land-use per carrier and land_region. The
+    definition of land_region enables sub-bus level land-use
+    constraints.
     """
-    logger.info("Add land-use constraint for perfect foresight")
+    model = n.model
+    generators = n.generators.query("p_nom_extendable & land_region != '' ").rename_axis(index="Generator-ext")
 
-    def compress_series(s):
-        def process_group(group):
-            if group.nunique() == 1:
-                return pd.Series(group.iloc[0], index=[None])
-            else:
-                return group
+    if generators.empty:
+        return
+    
+    p_nom = n.model["Generator-p_nom"].loc[generators.index]
 
-        return s.groupby(level=[0, 1]).apply(process_group)
+    grouper = pd.concat([generators.carrier, generators.land_region], axis=1)
+    lhs = p_nom.groupby(grouper).sum()
 
-    def new_index_name(t):
-        # Convert all elements to string and filter out None values
-        parts = [str(x) for x in t if x is not None]
-        # Join with space, but use a dash for the last item if not None
-        return " ".join(parts[:2]) + (f"-{parts[-1]}" if len(parts) > 2 else "")
+    maximum = generators.groupby(["carrier", "land_region"])["p_nom_max"].max()
+    maximum = maximum[np.isfinite(maximum)]
 
-    def check_p_min_p_max(p_nom_max):
-        p_nom_min = n.generators[ext_i].groupby(grouper).sum().p_nom_min
-        p_nom_min = p_nom_min.reindex(p_nom_max.index)
-        check = p_nom_min.groupby(level=[0, 1]).sum() > p_nom_max.groupby(level=[0, 1]).min()
-        if check.sum():
-            logger.warning(
-                f"summed p_min_pu values at node larger than technical potential {check[check].index}",
-            )
+    rhs = xr.DataArray(maximum).rename(dim_0="group")
+    index = rhs.indexes["group"].intersection(lhs.indexes["group"])
 
-    grouper = [n.generators.carrier, n.generators.bus]
-    ext_i = n.generators.p_nom_extendable & ~n.generators.index.str.contains("existing")
-    # get technical limit per node
-    p_nom_max = n.generators[ext_i].groupby(grouper).sum().p_nom_max / len(
-        n.investment_periods,
-    )
-
-    # drop carriers without tech limit
-    p_nom_max = p_nom_max[~p_nom_max.isin([np.inf, np.nan])]
-    # carrier
-    carriers = p_nom_max.index.get_level_values(0).unique()
-    gen_i = n.generators[(n.generators.carrier.isin(carriers)) & (ext_i)].index
-    n.generators.loc[gen_i, "p_nom_min"] = 0
-    # check minimum capacities
-    check_p_min_p_max(p_nom_max)
-
-    df = p_nom_max.reset_index()
-    df["name"] = df.apply(lambda row: f"nom_max_{row['carrier']}", axis=1)
-
-    for name in df.name.unique():
-        df_carrier = df[df.name == name]
-        bus = df_carrier.bus
-        n.buses.loc[bus, name] = df_carrier.p_nom_max.values
-    return n
-
-
-def add_co2_sequestration_limit(n, limit=200):
-    """
-    Add a global constraint on the amount of Mt CO2 that can be sequestered.
-    """
-    n.carriers.loc["co2 stored", "co2_absorptions"] = -1
-    n.carriers.co2_absorptions = n.carriers.co2_absorptions.fillna(0)
-
-    limit = limit * 1e6
-    for o in opts:
-        if "seq" not in o:
-            continue
-        limit = float(o[o.find("seq") + 3 :]) * 1e6
-        break
-
-    n.add(
-        "GlobalConstraint",
-        "co2_sequestration_limit",
-        sense="<=",
-        constant=limit,
-        type="primary_energy",
-        carrier_attribute="co2_absorptions",
-    )
+    if not index.empty:
+        logger.info("Adding land-use constraints")
+        model.add_constraints(lhs.sel(group=index) <= rhs.loc[index], name="land_use_constraint")
 
 
 def prepare_network(
@@ -134,7 +85,6 @@ def prepare_network(
     config=None,
     foresight=None,
     planning_horizons=None,
-    co2_sequestration_potential=None,
 ):
     if "clip_p_max_pu" in solve_opts:
         for df in (
@@ -178,13 +128,6 @@ def prepare_network(
         nhours = solve_opts["nhours"]
         n.set_snapshots(n.snapshots[:nhours])
         n.snapshot_weightings[:] = 8760.0 / nhours
-
-    if foresight == "perfect":
-        n = add_land_use_constraint_perfect(n)
-
-    if n.stores.carrier.eq("co2 stored").any():
-        limit = co2_sequestration_potential
-        add_co2_sequestration_limit(n, limit=limit)
 
     return n
 
@@ -1238,6 +1181,7 @@ def extra_functionality(n, snapshots):
             add_EQ_constraints(n, o)
     add_battery_constraints(n)
     add_pipe_retrofit_constraint(n)
+    add_land_use_constraints(n)
 
 
 def solve_network(n, config, solving, opts="", **kwargs):
@@ -1287,6 +1231,7 @@ def solve_network(n, config, solving, opts="", **kwargs):
             f"Solving status '{status}' with termination condition '{condition}'",
         )
     if "infeasible" in condition:
+        n.model.print_infeasibilities()
         raise RuntimeError("Solving status 'infeasible'")
 
     return n
@@ -1337,7 +1282,6 @@ if __name__ == "__main__":
         config=snakemake.config,
         foresight=snakemake.params.foresight,
         planning_horizons=snakemake.params.planning_horizons,
-        co2_sequestration_potential=snakemake.params["co2_sequestration_potential"],
     )
 
     n = solve_network(
