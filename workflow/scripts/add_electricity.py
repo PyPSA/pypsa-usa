@@ -265,22 +265,56 @@ def load_powerplants(
 
 
 def match_plant_to_bus(n, plants):
+    """
+    Matches each plant to it's corresponding bus in the network enfocing a
+    match to the correct State.
+
+    # Efficient matching taken from #
+    https://stackoverflow.com/questions/58893719/find-nearest-point-in-other-dataframe-with-a-lot-of-data
+    """
     plants_matched = plants.copy()
     plants_matched["bus_assignment"] = None
 
     buses = n.buses.copy()
     buses["geometry"] = gpd.points_from_xy(buses["x"], buses["y"])
-    # from: https://stackoverflow.com/questions/58893719/find-nearest-point-in-other-dataframe-with-a-lot-of-data
-    # Create a BallTree
-    tree = BallTree(buses[["x", "y"]].values, leaf_size=2)
-    plants_matched["distance_nearest"], plants_matched["id_nearest"] = tree.query(
-        plants_matched[["longitude", "latitude"]].values,  # The input array for the query
-        k=1,  # The number of nearest neighbors
-    )
-    plants_matched.bus_assignment = buses.reset_index().iloc[plants_matched.id_nearest].Bus.values
-    plants_matched.drop(columns=["id_nearest"], inplace=True)
+
+    # Iterate through each bus state to limit the search space for each bus group
+    for state in buses["reeds_state"].unique():
+        # Subset buses and plants by state
+        buses_in_state = buses[buses["reeds_state"] == state]
+        plants_in_state = plants_matched[plants_matched["state"] == state]
+
+        # If no plants are available for this bus state, skip it
+        if plants_in_state.empty:
+            continue
+
+        # Create a BallTree for the buses in the current state
+        tree = BallTree(buses_in_state[["x", "y"]].values, leaf_size=2)
+
+        # Find nearest bus for each plant in the same state
+        distances, indices = tree.query(
+            plants_in_state[["longitude", "latitude"]].values,
+            k=1,  # Only need the closest bus in the same state
+        )
+
+        # Map the nearest bus information back to the plants dataframe
+        plants_matched.loc[plants_in_state.index, "bus_assignment"] = (
+            buses_in_state.reset_index().iloc[indices.flatten()]["Bus"].values
+        )
+        plants_matched.loc[plants_in_state.index, "distance_nearest"] = distances.flatten()
 
     return plants_matched
+
+    # # Create a BallTree
+    # tree = BallTree(buses[["x", "y"]].values, leaf_size=2)
+    # plants_matched["distance_nearest"], plants_matched["id_nearest"] = tree.query(
+    #     plants_matched[["longitude", "latitude"]].values,  # The input array for the query
+    #     k=1,  # The number of nearest neighbors
+    # )
+    # plants_matched.bus_assignment = buses.reset_index().iloc[plants_matched.id_nearest].Bus.values
+    # plants_matched.drop(columns=["id_nearest"], inplace=True)
+
+    # return plants_matched
 
 
 def filter_plants_by_region(
