@@ -59,6 +59,10 @@ def add_land_use_constraints(n):
     """
     model = n.model
     generators = n.generators.query("p_nom_extendable & land_region != '' ").rename_axis(index="Generator-ext")
+
+    if generators.empty:
+        return
+    
     p_nom = n.model["Generator-p_nom"].loc[generators.index]
 
     grouper = pd.concat([generators.carrier, generators.land_region], axis=1)

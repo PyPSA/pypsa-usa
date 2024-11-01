@@ -831,7 +831,7 @@ def main(snakemake):
         n.snapshots,
     )
 
-    if params.conventional["unit_commitment"]:
+    if params.conventional["must_run"]:
         # TODO (@ktehranchi): In the future the plants that are must-run should not be clustered and instead retire according to lifetime
         apply_must_run_ratings(
             n,

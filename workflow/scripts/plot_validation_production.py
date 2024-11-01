@@ -617,7 +617,8 @@ def plot_state_emissions_historical_bar(
     final["value"] = final.value.astype("float")
 
     # final = final[~final["state"].str.contains("Texas")]
-
+    final.to_csv(save.replace(".pdf", ".csv"))
+    
     fig, ax = plt.subplots(figsize=(8, 8))
     sns.barplot(
         data=final,
