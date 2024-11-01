@@ -345,6 +345,7 @@ def add_itls(buses, itls, itl_cost, expansion=True):
         itls["USD2023perMWyr"] = 0
 
     itls["p_min_pu_Rev"] = (-1 * (itls.mw_r0 / itls.mw_f0)).fillna(0)
+    itls['efficiency'] = 1- ((itls.length_miles/100) * 0.01)
 
     # lines to add in reverse if forward direction is zero
     itls_rev = itls[itls.mw_f0 == 0].copy()
@@ -362,6 +363,7 @@ def add_itls(buses, itls, itl_cost, expansion=True):
         length=0 if itl_cost is None else itls_fwd.length_miles.values,
         capital_cost=0 if itl_cost is None else itls_fwd.USD2023perMWyr.values,
         p_nom_extendable=False,
+        efficiency= 1 if itl_cost is None else itls_fwd.efficiency.values,
         carrier="AC",
     )
 
@@ -378,6 +380,7 @@ def add_itls(buses, itls, itl_cost, expansion=True):
         length=0 if itl_cost is None else itls_rev.length_miles.values,
         capital_cost=0 if itl_cost is None else itls_rev.USD2023perMWyr.values,
         p_nom_extendable=False,
+        efficiency= 1 if itl_cost is None else itls_rev.efficiency.values,
         carrier="AC",
     )
 
@@ -398,6 +401,7 @@ def add_itls(buses, itls, itl_cost, expansion=True):
         length=0 if itl_cost is None else itls.length_miles.values,
         capital_cost=0 if itl_cost is None else itls.USD2023perMWyr.values,
         p_nom_extendable=False,
+        efficiency= 1 if itl_cost is None else itls.efficiency.values,
         carrier="AC_exp",
     )
 
