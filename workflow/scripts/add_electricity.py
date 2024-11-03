@@ -264,6 +264,23 @@ def load_powerplants(
     return plants
 
 
+def match_nearest_bus(plants_subset, buses_subset):
+    """Assign the nearest bus to each plant in the given subsets."""
+    if plants_subset.empty or buses_subset.empty:
+        return plants_subset
+
+    # Create a BallTree for the given subset of buses
+    tree = BallTree(buses_subset[["x", "y"]].values, leaf_size=2)
+    
+    # Find nearest bus for each plant in the subset
+    distances, indices = tree.query(plants_subset[["longitude", "latitude"]].values, k=1)
+    
+    # Map the nearest bus information back to the plants subset
+    plants_subset["bus_assignment"] = buses_subset.reset_index().iloc[indices.flatten()]["Bus"].values
+    plants_subset["distance_nearest"] = distances.flatten()
+    
+    return plants_subset
+
 def match_plant_to_bus(n, plants):
     """
     Matches each plant to it's corresponding bus in the network enfocing a
@@ -274,47 +291,26 @@ def match_plant_to_bus(n, plants):
     """
     plants_matched = plants.copy()
     plants_matched["bus_assignment"] = None
-
+    plants_matched["distance_nearest"] = None
+    
+    # Get a copy of buses and create a geometry column with GPS coordinates
     buses = n.buses.copy()
     buses["geometry"] = gpd.points_from_xy(buses["x"], buses["y"])
 
-    # Iterate through each bus state to limit the search space for each bus group
-    for state in buses["reeds_state"].unique():
-        # Subset buses and plants by state
-        buses_in_state = buses[buses["reeds_state"] == state]
-        plants_in_state = plants_matched[plants_matched["state"] == state]
+    # First pass: Assign each plant to the nearest bus in the same state
+    for state in buses["state"].unique():
+        buses_in_state = buses[buses["state"] == state]
+        plants_in_state = plants_matched[(plants_matched["state"] == state) & (plants_matched["bus_assignment"].isnull())]
+        
+        # Update plants_matched with the nearest bus within the same state
+        plants_matched.update(match_nearest_bus(plants_in_state, buses_in_state))
 
-        # If no plants are available for this bus state, skip it
-        if plants_in_state.empty:
-            continue
-
-        # Create a BallTree for the buses in the current state
-        tree = BallTree(buses_in_state[["x", "y"]].values, leaf_size=2)
-
-        # Find nearest bus for each plant in the same state
-        distances, indices = tree.query(
-            plants_in_state[["longitude", "latitude"]].values,
-            k=1,  # Only need the closest bus in the same state
-        )
-
-        # Map the nearest bus information back to the plants dataframe
-        plants_matched.loc[plants_in_state.index, "bus_assignment"] = (
-            buses_in_state.reset_index().iloc[indices.flatten()]["Bus"].values
-        )
-        plants_matched.loc[plants_in_state.index, "distance_nearest"] = distances.flatten()
+    # Second pass: Assign any remaining unmatched plants to the nearest bus regardless of state
+    unmatched_plants = plants_matched[plants_matched["bus_assignment"].isnull()]
+    if not unmatched_plants.empty:
+        plants_matched.update(match_nearest_bus(unmatched_plants, buses))
 
     return plants_matched
-
-    # # Create a BallTree
-    # tree = BallTree(buses[["x", "y"]].values, leaf_size=2)
-    # plants_matched["distance_nearest"], plants_matched["id_nearest"] = tree.query(
-    #     plants_matched[["longitude", "latitude"]].values,  # The input array for the query
-    #     k=1,  # The number of nearest neighbors
-    # )
-    # plants_matched.bus_assignment = buses.reset_index().iloc[plants_matched.id_nearest].Bus.values
-    # plants_matched.drop(columns=["id_nearest"], inplace=True)
-
-    # return plants_matched
 
 
 def filter_plants_by_region(
@@ -788,6 +784,8 @@ def apply_pudl_fuel_costs(
         if gen not in plants.index:
             continue
         carrier = plants.loc[gen, "carrier"]
+        if carrier not in costs.index:
+            continue
         vom.loc[gen, "VOM"] = costs.at[carrier, "opex_variable_per_mwh"]
 
     # Apply the VOM to the fuel costs
@@ -807,7 +805,7 @@ def apply_pudl_fuel_costs(
     n.generators_t["marginal_cost"] = n.generators_t["marginal_cost"].join(
         pudl_fuel_costs,
     )
-    # Why are there so few of the pudl fuel costs columns?
+    logger.info(f"Applied PuDL fuel costs to {len(pudl_fuel_costs.columns)} generators.")
     return n
 
 
