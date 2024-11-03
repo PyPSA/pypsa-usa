@@ -1016,7 +1016,7 @@ def add_cooling_heat_pump_constraints(n, config):
         heating_hps = n.links[n.links.index.str.endswith(hp_type)].index
         if heating_hps.empty:
             return
-        cooling_hps = n.links[n.links.index.str.endswith(f"{hp_type}-cooling")].index
+        cooling_hps = n.links[n.links.index.str.endswith(f"{hp_type}-cool")].index
 
         assert len(heating_hps) == len(cooling_hps)
 
@@ -1196,6 +1196,34 @@ def add_ng_import_export_limits(n, config):
     add_export_limits(n, exports)
 
 
+def add_water_heater_constraints(n, config):
+    """
+    Adds constraint so energy to meet water demand must flow through store.
+    """
+
+    links = n.links[(n.links.index.str.contains("-water-")) & (n.links.index.str.contains("-discharger"))]
+
+    link_names = links.index
+    store_names = [x.replace("-discharger", "") for x in links.index]
+
+    for period in n.investment_periods:
+
+        e_previous = n.model["Store-e"].loc[period, store_names]
+        e_previous = e_previous.roll(timestep=1)
+        # e_previous = e_previous.shift(timestep=1).bfill(
+        #     "timestep"
+        # )  # first snapshot does not respect constraint
+        e_previous = e_previous.mul(n.snapshot_weightings.stores.loc[period])
+
+        p_current = n.model["Link-p"].loc[period, link_names]
+        p_current = p_current.mul(n.snapshot_weightings.objective.loc[period])
+
+        lhs = e_previous - p_current
+        rhs = 0
+
+        n.model.add_constraints(lhs >= rhs, name=f"water_heater-{period}")
+
+
 def extra_functionality(n, snapshots):
     """
     Collects supplementary constraints which will be passed to
@@ -1227,12 +1255,15 @@ def extra_functionality(n, snapshots):
         add_interface_limits(n, snapshots, config)
     if "sector" in opts:
         add_cooling_heat_pump_constraints(n, config)
-        if config["sector"]["service_sector"].get("split_urban_rural", False):
+        if not config["sector"]["service_sector"].get("split_urban_rural", False):
             add_gshp_capacity_constraint(n, config)
         if config["sector"]["co2"].get("policy", {}):
             add_sector_co2_constraints(n, config)
         if config["sector"]["natural_gas"].get("force_exports", False):
             add_ng_import_export_limits(n, config)
+        water_config = config["sector"]["service_sector"].get("water_heating", {})
+        if not water_config.get("simple_storage", True):
+            add_water_heater_constraints(n, config)
 
     for o in opts:
         if "EQ" in o:
@@ -1301,12 +1332,12 @@ if __name__ == "__main__":
         snakemake = mock_snakemake(
             "solve_network",
             simpl="33",
-            opts="48SEG",
-            clusters="11m",
+            opts="2190SEG",
+            clusters="4m",
             ll="v1.0",
             sector_opts="",
             sector="E-G",
-            planning_horizons="2030",
+            planning_horizons="2020",
             interconnect="western",
         )
     configure_logging(snakemake)
@@ -1332,6 +1363,13 @@ if __name__ == "__main__":
     np.random.seed(solve_opts.get("seed", 123))
 
     n = pypsa.Network(snakemake.input.network)
+
+    # lks = n.links[n.links.carrier.str.endswith("-gas-furnace")].index
+    # n.links.loc[lks, "capital_cost"] = 0
+
+    n.links.loc["CA gas production", "p_nom_extendable"] = True
+    n.links.loc["CA gas production", "p_nom_max"] = np.inf
+    n.links.loc["CA gas production", "capital_cost"] = 1
 
     n = prepare_network(
         n,

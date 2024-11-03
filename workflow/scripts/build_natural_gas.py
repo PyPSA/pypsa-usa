@@ -532,7 +532,7 @@ class GasProcessing(GasData):
             efficiency=1,
             p_nom_extendable=p_nom_extendable,
             capital_cost=0.01,  # to update
-            marginal_costs=0.35,  # https://www.eia.gov/analysis/studies/drilling/pdf/upstream.pdf
+            marginal_cost=0.35,  # https://www.eia.gov/analysis/studies/drilling/pdf/upstream.pdf
             p_nom=df.p_nom * p_nom_mult,
             p_nom_min=0,
             p_nom_max=df.p_nom * p_nom_max_mult,
@@ -1171,6 +1171,16 @@ class PipelineLinepack(GasData):
         )
 
 
+def _remove_marginal_costs(n: pypsa.Network):
+    """
+    Removes marginal costs of CCGT and OCGT plants.
+    """
+
+    links = n.links[n.links.carrier.str.contains("CCGT") | n.links.carrier.str.contains("OCGT")].index
+
+    n.links.loc[links, "marginal_cost"] = 0
+
+
 ###
 # MAIN FUNCTION TO EXECUTE
 ###
@@ -1237,6 +1247,8 @@ def build_natural_gas(
         cyclic_storage=cyclic_storage,
         standing_loss=standing_loss,
     )
+
+    _remove_marginal_costs(n)
 
 
 if __name__ == "__main__":

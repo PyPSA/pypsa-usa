@@ -14,7 +14,7 @@ import pypsa
 
 logger = logging.getLogger(__name__)
 import sys
-from typing import Any, Optional
+from typing import Optional
 
 from _helpers import configure_logging, get_snapshots, load_costs
 from add_electricity import sanitize_carriers
@@ -30,7 +30,7 @@ from build_stock_data import (
 )
 from build_transportation import apply_exogenous_ev_policy, build_transportation
 from constants import STATE_2_CODE, STATES_INTERCONNECT_MAPPER
-from constants_sector import RoadTransport, Transport
+from constants_sector import RoadTransport
 from shapely.geometry import Point
 
 CODE_2_STATE = {v: k for k, v in STATE_2_CODE.items()}
@@ -333,6 +333,8 @@ def get_pwr_co2_intensity(carrier: str, costs: pd.DataFrame) -> float:
             return costs.at[carrier, "co2_emissions"]
 
 
+print("y")
+
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
@@ -500,7 +502,7 @@ if __name__ == "__main__":
         res_stock_dir = snakemake.input.residential_stock
         com_stock_dir = snakemake.input.commercial_stock
 
-        if snakemake.params.sector["service_sector"]["split_space_water_heating"]:
+        if snakemake.params.sector["service_sector"]["water_heating"]["split_space_water"]:
             fuels = ["space_heating", "water_heating", "cooling"]
         else:
             fuels = ["heating", "cooling"]
