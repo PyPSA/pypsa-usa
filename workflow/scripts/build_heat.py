@@ -58,13 +58,13 @@ def build_heat(
         water_heating_config = options.get("water_heating", {})
 
         if dynamic_costs:
-            gas_costs = _get_dynamic_marginal_costs(
-                n,
-                "gas",
-                eia,
-                year,
-                sector=sector,
-            )
+            # gas_costs = _get_dynamic_marginal_costs(
+            #     n,
+            #     "gas",
+            #     eia,
+            #     year,
+            #     sector=sector,
+            # )
             heating_oil_costs = _get_dynamic_marginal_costs(
                 n,
                 "heating_oil",
@@ -72,7 +72,7 @@ def build_heat(
                 year,
             )
         else:
-            gas_costs = costs.at["gas", "fuel_cost"]
+            # gas_costs = costs.at["gas", "fuel_cost"]
             heating_oil_costs = costs.at["oil", "fuel_cost"]
 
         # gas costs are endogenous!
@@ -470,6 +470,7 @@ def add_service_heat(
         if split_space_water:
 
             simple_storage = water_heating_config.get("simple_storage", False)
+            n_hours = water_heating_config.get("n_hours", None)
 
             elec_extendable = True if include_elec_water_furnace else False
             gas_extendable = True if include_gas_water_furnace else False
@@ -484,6 +485,7 @@ def add_service_heat(
                 standing_loss=standing_loss_water_heat,
                 extendable=elec_extendable,
                 simple_storage=simple_storage,
+                n_hours=n_hours,
             )
             add_service_water_store(
                 n=n,
@@ -495,6 +497,7 @@ def add_service_heat(
                 standing_loss=standing_loss_water_heat,
                 extendable=gas_extendable,
                 simple_storage=simple_storage,
+                n_hours=n_hours,
             )
             add_service_water_store(
                 n=n,
@@ -506,6 +509,7 @@ def add_service_heat(
                 standing_loss=standing_loss_water_heat,
                 extendable=lpg_extendable,
                 simple_storage=simple_storage,
+                n_hours=n_hours,
             )
 
 
@@ -1027,6 +1031,7 @@ def add_service_water_store(
     standing_loss: Optional[float] = None,
     extendable: Optional[bool] = True,
     simple_storage: Optional[bool] = True,
+    n_hours: Optional[int | float] = None,
 ) -> None:
     """
     Adds end-use water heat storage system.
@@ -1102,6 +1107,16 @@ def add_service_water_store(
     if not standing_loss:
         standing_loss = 0
 
+    if simple_storage:
+        if not n_hours:
+            logger.info("Setting water storage capacity costs to 2 hours")
+            n_hours = 2
+        link_capex = costs.at[cost_name, "capital_cost"] / n_hours
+        store_capex = 0
+    else:
+        link_capex = 0
+        store_capex = costs.at[cost_name, "capital_cost"]
+
     buses = df.copy().set_index("bus1")
     n.madd(
         "Bus",
@@ -1120,7 +1135,7 @@ def add_service_water_store(
             suffix=f"-{fuel}-heater-charger",
             bus0=df.bus0,
             bus1=df.bus1,
-            efficiency=costs.at[cost_name, "efficiency"],
+            efficiency=1,
             carrier=df.carrier,
             p_nom_extendable=extendable,
             capital_cost=0,
@@ -1135,7 +1150,7 @@ def add_service_water_store(
             bus0=df.bus0,
             bus1=df.bus1,
             bus2=df.bus3,
-            efficiency=costs.at[cost_name, "efficiency"],
+            efficiency=1,
             efficiency2=efficiency2,
             carrier=df.carrier,
             p_nom_extendable=extendable,
@@ -1151,10 +1166,10 @@ def add_service_water_store(
         suffix=f"-{fuel}-heater-discharger",
         bus0=df.bus1,
         bus1=df.bus2,
-        efficiency=1,
+        efficiency=costs.at[cost_name, "efficiency"],
         carrier=df.carrier,
         p_nom_extendable=extendable,
-        capital_cost=costs.at[cost_name, "capital_cost"] / 4,  # 4 hours
+        capital_cost=link_capex,
     )
 
     # limitless water store.
@@ -1167,8 +1182,8 @@ def add_service_water_store(
         e_nom_extendable=extendable,
         carrier=df.carrier,
         standing_loss=standing_loss,
-        # capital_cost=costs.at[cost_name, "investment"],
-        capital_cost=0,
+        efficiency=1,
+        capital_cost=store_capex,
         lifetime=costs.at[cost_name, "lifetime"],
     )
 

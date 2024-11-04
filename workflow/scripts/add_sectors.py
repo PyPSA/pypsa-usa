@@ -333,8 +333,6 @@ def get_pwr_co2_intensity(carrier: str, costs: pd.DataFrame) -> float:
             return costs.at[carrier, "co2_emissions"]
 
 
-print("y")
-
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
