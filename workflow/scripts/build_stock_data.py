@@ -64,7 +64,7 @@ class Recs:
     file_mapper = {
         "aircon_stock": "State Air Conditioning",
         "space_heat_stock": "State Space Heating",
-        # "water_heat": "State Water Heating",
+        "water_heat": "State Water Heating",
         "space_heat_fuel": "State Space Heating Fuels",
         "water_heat_fuel": "State Water Heating Fuels",
     }
@@ -819,6 +819,7 @@ def add_service_brownfield(
     growth_multiplier: float,
     ratios: pd.DataFrame,
     costs: pd.DataFrame,
+    simple_storage: Optional[bool] = None,  # for water heating only
 ) -> None:
     """
     Adds existing stock to res/com sector.
@@ -826,11 +827,13 @@ def add_service_brownfield(
 
     def add_brownfield_gas_furnace(
         n: pypsa.Network,
-        df: pd.DataFrame,
+        template: pd.DataFrame,
         sector: str,
         ratios: pd.DataFrame,
         costs: pd.DataFrame,
     ) -> None:
+
+        df = template.copy()
 
         # existing efficiency values taken from:
         # https://www.eia.gov/analysis/studies/buildings/equipcosts/pdf/full.pdf
@@ -878,7 +881,7 @@ def add_service_brownfield(
                 name_mapper = furnaces["bus1"].str.replace("-heat", "-gas-furnace").to_dict()
                 mc = mc.rename(columns={v: k for k, v in name_mapper.items()})
             else:
-                mc = marginal_cost
+                mc = 0
                 assert isinstance(mc, (float, int))
 
             n.madd(
@@ -898,13 +901,15 @@ def add_service_brownfield(
                 marginal_cost=mc,
             )
 
-    def add_brownfield_oil(
+    def add_brownfield_oil_furnace(
         n: pypsa.Network,
-        df: pd.DataFrame,
+        template: pd.DataFrame,
         sector: str,
         ratios: pd.DataFrame,
         costs: pd.DataFrame,
     ) -> None:
+
+        df = template.copy()
 
         # existing efficiency values taken from:
         # https://www.eia.gov/analysis/studies/buildings/equipcosts/pdf/full.pdf
@@ -975,11 +980,13 @@ def add_service_brownfield(
 
     def add_brownfield_elec_furnace(
         n: pypsa.Network,
-        df: pd.DataFrame,
+        template: pd.DataFrame,
         sector: str,
         ratios: pd.DataFrame,
         costs: pd.DataFrame,
     ) -> None:
+
+        df = template.copy()
 
         # existing efficiency values taken from:
         # https://www.eia.gov/analysis/studies/buildings/equipcosts/pdf/full.pdf
@@ -1098,6 +1105,177 @@ def add_service_brownfield(
                 build_year=build_year,
             )
 
+    def add_brownfield_water_heater_simple_storage(
+        n: pypsa.Network,
+        template: pd.DataFrame,
+        fuel: str,
+        sector: str,
+        ratios: pd.DataFrame,
+        costs: pd.DataFrame,
+    ) -> None:
+
+        # existing efficiency values taken from:
+        # https://www.eia.gov/analysis/studies/buildings/equipcosts/pdf/full.pdf
+
+        match fuel:
+            case "elec":
+                if sector == "res":
+                    cost_name = "Residential Electric-Resistance Storage Water Heaters"
+                elif sector == "com":
+                    cost_name = "Commercial Electric Resistance Storage Water Heaters"
+                ratio_map = ratios.electricity
+            case "gas":
+                if sector == "res":
+                    cost_name = "Residential Gas-Fired Storage Water Heaters"
+                elif sector == "com":
+                    cost_name = "Commercial Gas-Fired Storage Water Heaters"
+                ratio_map = ratios.gas
+            case "lpg":
+                if sector == "res":
+                    cost_name = "Residential Oil-Fired Storage Water Heaters"
+                elif sector == "com":
+                    cost_name = "Commercial Oil-Fired Storage Water Heaters"
+                ratio_map = ratios.lpg
+            case _:
+                raise NotImplementedError
+
+        df = template.copy()
+
+        # will give approximate installed capacity percentage by year
+        if sector == "res":
+            installed_capacity = RECS_BUILD_YEARS
+        elif sector == "com":
+            installed_capacity = CECS_BUILD_YEARS
+
+        lifetime = costs.at[cost_name, "lifetime"]
+        efficiency = costs.at[cost_name, "efficiency"]
+
+        df["bus0"] = df.bus1 + f"-{fuel}-heater"
+        df["bus1"] = df.bus1 + "-heat"
+        df["carrier"] = df.suffix + f"-{fuel}"
+        df["ratio"] = df.state.map(ratio_map)
+        df["p_nom"] = df.p_max.mul(df.ratio).div(100)  # div to convert from %
+
+        marginal_cost_names = [f"{x}-discharger" for x in df.bus0.to_list()]
+        marginal_cost = _get_marginal_cost(n, marginal_cost_names)
+
+        start_year = n.investment_periods[0]
+
+        for build_year, percent in installed_capacity.items():
+
+            if _already_retired(build_year, lifetime, start_year):
+                continue
+
+            heater = df.copy()
+
+            heater["name"] = heater.name + f" existing_{build_year} " + heater.carrier + "-heater"
+            heater["p_nom"] = heater.p_nom.mul(percent).div(100).round(2)
+            heater = heater.set_index("name")
+
+            if isinstance(marginal_cost, pd.DataFrame):
+                mc = marginal_cost.copy()
+                name_mapper = heater["bus1"].str.replace("-heat", "-water-gas-heater").to_dict()
+                mc = mc.rename(columns={v: k for k, v in name_mapper.items()})
+            else:
+                mc = 0
+                assert isinstance(mc, (float, int))
+
+            n.madd(
+                "Link",
+                heater.index,
+                bus0=heater.bus0,
+                bus1=heater.bus1,
+                carrier=heater.carrier,
+                efficiency=efficiency,
+                capital_cost=0,
+                p_nom_extendable=False,
+                p_nom=heater.p_nom,
+                lifetime=lifetime,
+                build_year=build_year,
+                marginal_cost=mc,
+            )
+
+    def add_brownfield_water_heater(
+        n: pypsa.Network,
+        template: pd.DataFrame,
+        fuel: str,
+        sector: str,
+        ratios: pd.DataFrame,
+        costs: pd.DataFrame,
+    ) -> None:
+
+        # existing efficiency values taken from:
+        # https://www.eia.gov/analysis/studies/buildings/equipcosts/pdf/full.pdf
+
+        match fuel:
+            case "elec":
+                if sector == "res":
+                    cost_name = "Residential Electric-Resistance Storage Water Heaters"
+                elif sector == "com":
+                    cost_name = "Commercial Electric Resistance Storage Water Heaters"
+                ratio_map = ratios.electricity
+            case "gas":
+                if sector == "res":
+                    cost_name = "Residential Gas-Fired Storage Water Heaters"
+                elif sector == "com":
+                    cost_name = "Commercial Gas-Fired Storage Water Heaters"
+                ratio_map = ratios.gas
+            case "lpg":
+                if sector == "res":
+                    cost_name = "Residential Oil-Fired Storage Water Heaters"
+                elif sector == "com":
+                    cost_name = "Commercial Oil-Fired Storage Water Heaters"
+                ratio_map = ratios.lpg
+            case _:
+                raise NotImplementedError
+
+        df = template.copy()
+
+        # will give approximate installed capacity percentage by year
+        if sector == "res":
+            installed_capacity = RECS_BUILD_YEARS
+        elif sector == "com":
+            installed_capacity = CECS_BUILD_YEARS
+
+        lifetime = costs.at[cost_name, "lifetime"]
+        efficiency = costs.at[cost_name, "efficiency"]
+
+        df["bus"] = df.bus1 + f"-{fuel}-heater"
+        df["carrier"] = df.suffix + f"-{fuel}"
+        df["ratio"] = df.state.map(ratio_map)
+        df["p_nom"] = df.p_max.mul(df.ratio).div(100)  # div to convert from %
+
+        # assume 2 hr storage capacity
+        df["e_nom"] = df.p_nom.div(2)
+
+        start_year = n.investment_periods[0]
+
+        for build_year, percent in installed_capacity.items():
+
+            if _already_retired(build_year, lifetime, start_year):
+                continue
+
+            heater = df.copy()
+
+            heater["name"] = heater.name + f" existing_{build_year} " + heater.carrier + "-heater"
+            heater["p_nom"] = heater.p_nom.mul(percent).div(100).round(2)
+            heater = heater.set_index("name")
+
+            n.madd(
+                "Store",
+                heater.index,
+                bus=heater.bus,
+                carrier=heater.carrier,
+                efficiency=efficiency,
+                capital_cost=0,
+                e_nom_extendable=False,
+                e_nom=heater.e_nom,
+                e_initial=heater.e_nom.div(2),  # half full to start
+                lifetime=lifetime,
+                build_year=build_year,
+                marginal_cost=0,
+            )
+
     assert sector in ("res", "com")
 
     match fuel:
@@ -1117,16 +1295,46 @@ def add_service_brownfield(
 
     if load == "heat":
         add_brownfield_gas_furnace(n, df, sector, ratios, costs)
-        add_brownfield_oil(n, df, sector, ratios, costs)
+        add_brownfield_oil_furnace(n, df, sector, ratios, costs)
         add_brownfield_elec_furnace(n, df, sector, ratios, costs)
     elif load == "cool":
         add_brownfield_aircon(n, df, sector, ratios, costs)
     elif load == "space-heat":
         add_brownfield_gas_furnace(n, df, sector, ratios, costs)
-        add_brownfield_oil(n, df, sector, ratios, costs)
+        add_brownfield_oil_furnace(n, df, sector, ratios, costs)
         add_brownfield_elec_furnace(n, df, sector, ratios, costs)
     elif load == "water-heat":
-        pass
+        df["bus1"] = df.bus1.map(lambda x: x.split("-heat")[0])
+        df["suffix"] = df.suffix.map(lambda x: x.split("-heat")[0])
+        if simple_storage:
+            add_brownfield_water_heater_simple_storage(
+                n,
+                df,
+                "gas",
+                sector,
+                ratios,
+                costs,
+            )
+            add_brownfield_water_heater_simple_storage(
+                n,
+                df,
+                "elec",
+                sector,
+                ratios,
+                costs,
+            )
+            add_brownfield_water_heater_simple_storage(
+                n,
+                df,
+                "lpg",
+                sector,
+                ratios,
+                costs,
+            )
+        else:
+            add_brownfield_water_heater(n, df, "gas", sector, ratios, costs)
+            add_brownfield_water_heater(n, df, "elec", sector, ratios, costs)
+            add_brownfield_water_heater(n, df, "lpg", sector, ratios, costs)
     else:
         raise NotImplementedError
 
