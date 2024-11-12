@@ -232,7 +232,7 @@ def convert_generators_2_links(
         efficiency=plants.efficiency,
         efficiency2=co2_intensity,
         marginal_cost=plants.marginal_cost * plants.efficiency,  # fuel costs rated at delievered
-        capital_cost=plants.capital_cost * plants.efficiency,  # links rated on input capacity
+        capital_cost=plants.capital_cost,  # links rated on input capacity
         lifetime=plants.lifetime,
     )
 
@@ -506,19 +506,42 @@ if __name__ == "__main__":
             fuels = ["heating", "cooling"]
         for fuel in fuels:
 
+            if fuel == "water_heating":
+                simple_storage = snakemake.params.sector["service_sector"]["water_heating"].get("simple_storage", False)
+            else:
+                simple_storage = None
+
             # residential sector
             ratios = get_residential_stock(res_stock_dir, fuel)
             ratios.index = ratios.index.map(STATE_2_CODE)
             ratios = ratios.dropna()  # na is USA
-            add_service_brownfield(n, "res", fuel, growth_multiplier, ratios, costs)
+            add_service_brownfield(
+                n=n,
+                sector="res",
+                fuel=fuel,
+                growth_multiplier=growth_multiplier,
+                ratios=ratios,
+                costs=costs,
+                simple_storage=simple_storage,
+            )
 
             # commercial sector
             ratios = get_commercial_stock(com_stock_dir, fuel)
             ratios.index = ratios.index.map(STATE_2_CODE)
             ratios = ratios.dropna()  # na is USA
-            add_service_brownfield(n, "com", fuel, growth_multiplier, ratios, costs)
+            add_service_brownfield(
+                n=n,
+                sector="com",
+                fuel=fuel,
+                growth_multiplier=growth_multiplier,
+                ratios=ratios,
+                costs=costs,
+                simple_storage=simple_storage,
+            )
 
     # Needed as loads may be split off to urban/rural
     sanitize_carriers(n, snakemake.config)
+
+    print("")
 
     n.export_to_netcdf(snakemake.output.network)
