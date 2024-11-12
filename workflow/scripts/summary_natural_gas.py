@@ -54,28 +54,33 @@ def get_imports_exports(
     Gets gas flow into and out of the state.
     """
 
-    regex = ".{2}(?:MX|AB|BC|MB|NB|NL|NT|NS|NU|ON|PE|QC|SK|YT)"
+    # catches any of the following codes at the start of the string
+    regex = "(?:^|.{2})(?:MX|AB|BC|MB|NB|NL|NT|NS|NU|ON|PE|QC|SK|YT)"
 
     def get_import_export(df: pd.DataFrame, direction: str) -> pd.DataFrame:
         """
         Input data must be stores dataframe.
         """
-        assert direction in ("import", "export")
-        return df[df.carrier == f"gas {direction}"]
+        if direction == "import":
+            return df[(df.carrier == "gas trade") & (df.bus0.str.endswith(" gas trade"))]
+        elif direction == "export":
+            return df[(df.carrier == "gas trade") & (df.bus0.str.endswith(" gas"))]
+        else:
+            raise NotImplementedError
 
     def get_international(df: pd.DataFrame) -> pd.DataFrame:
         """
         Input data must be stores dataframe.
         """
-        return df[df.bus.str.contains(regex)]
+        return df[(df.bus0.str.contains(regex)) | (df.bus1.str.contains(regex))]
 
     def get_domestic(df: pd.DataFrame) -> pd.DataFrame:
         """
         Input data must be stores dataframe.
         """
-        return df[~df.bus.str.contains(regex)]
+        return df[~((df.bus0.str.contains(regex)) | (df.bus1.str.contains(regex)))]
 
-    df = n.stores.copy()
+    df = n.links.copy()
 
     imports = get_import_export(df, "import")
     exports = get_import_export(df, "export")
