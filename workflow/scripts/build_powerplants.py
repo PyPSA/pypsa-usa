@@ -683,13 +683,18 @@ def set_parameters(plants: pd.DataFrame):
     plants["build_year"] = plants.pop("generator_operating_date").dt.year
     plants["heat_rate"] = plants.pop("unit_heat_rate_mmbtu_per_mwh")
     plants["vom"] = plants.pop("ads_vom_cost")
-    plants["fuel_cost"] = plants.pop("fuel_cost_per_mwh")
+    plants["fuel_cost"] = plants.pop("fuel_cost_per_mmbtu")
 
     zero_mc_fuel_types = ["solar", "wind", "hydro", "geothermal", "battery"]
     plants.loc[plants.fuel_type.isin(zero_mc_fuel_types), "fuel_cost"] = 0
     plants = impute_missing_plant_data(
         plants,
-        ["nerc_region", "prime_mover_code", "fuel_type"],
+        ["balancing_authority_code_eia", "fuel_name"],
+        ["fuel_cost"],
+    )
+    plants = impute_missing_plant_data(
+        plants,
+        ["nerc_region", "fuel_name"],
         ["fuel_cost"],
     )
     plants = impute_missing_plant_data(
@@ -697,14 +702,9 @@ def set_parameters(plants: pd.DataFrame):
         ["nerc_region", "technology_description"],
         ["fuel_cost"],
     )
-    plants = impute_missing_plant_data(
-        plants,
-        ["nerc_region", "fuel_type"],
-        ["fuel_cost"],
-    )
-    plants = impute_missing_plant_data(plants, ["fuel_type"], ["fuel_cost"])
+    plants = impute_missing_plant_data(plants, ["fuel_name"], ["fuel_cost"])
     plants = impute_missing_plant_data(plants, ["prime_mover_code"], ["fuel_cost"])
-    plants.loc[plants.carrier.isin(["nuclear"]), "fuel_cost"] = 10.497
+    plants.loc[plants.carrier.isin(["nuclear"]), "fuel_cost"] = 0.7
 
     # Unit Commitment Parameters
     plants["start_up_cost"] = plants.pop("ads_startup_cost_fixed$") + plants.ads_startfuelmmbtu * plants.fuel_cost
@@ -764,7 +764,7 @@ def set_parameters(plants: pd.DataFrame):
     )
     plants = impute_missing_plant_data(plants, ["carrier"], ["heat_rate"])
 
-    plants["marginal_cost"] = plants.vom + plants.fuel_cost  # (MMBTu/MW) * (USD/MMBTu) = USD/MW
+    plants["marginal_cost"] = plants.vom + (plants.fuel_cost * plants.heat_rate)  # (MMBTu/MW) * (USD/MMBTu) = USD/MW
     plants["efficiency"] = 1 / (plants["heat_rate"] / 3.412)  # MMBTu/MWh to MWh_electric/MWh_thermal
 
     set_derates(plants)
@@ -944,6 +944,11 @@ if __name__ == "__main__":
         eia_data_operable,
         heat_rates,
         "fuel_cost_per_mwh",
+    )
+    eia_data_operable = merge_fc_hr_data(
+        eia_data_operable,
+        heat_rates,
+        "fuel_cost_per_mmbtu",
     )
     eia_data_operable = apply_cems_heat_rates(
         eia_data_operable,
