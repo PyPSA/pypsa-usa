@@ -1110,7 +1110,7 @@ def add_ng_import_export_limits(n, config):
             df["link"] = df.link + link_suffix
 
         # convert mmcf to MWh
-        df["value"] = df["value"] * 1000 / NG_MWH_2_MMCF
+        df["value"] = df["value"] * NG_MWH_2_MMCF
 
         return df[["link", "value"]].rename(columns={"value": "rhs"}).set_index("link")
 
@@ -1128,72 +1128,134 @@ def add_ng_import_export_limits(n, config):
             df["link"] = df.link + link_suffix
 
         # convert mmcf to MWh
-        df["value"] = df["value"] * 1000 / NG_MWH_2_MMCF
+        df["value"] = df["value"] * NG_MWH_2_MMCF
 
         return df[["link", "value"]].rename(columns={"value": "rhs"}).set_index("link")
 
-    def add_import_limits(n, imports):
+    def add_import_limits(n, data, constraint, multiplier=None):
         """
         Sets gas import limit over each year.
         """
 
+        assert constraint in ("max", "min")
+
+        if not multiplier:
+            multiplier = 1
+
         weights = n.snapshot_weightings.objective
 
-        links = n.links[n.links.carrier.str.endswith("gas import")].index.to_list()
+        links = n.links[(n.links.carrier == "gas trade") & (n.links.bus0.str.endswith(" gas trade"))].index.to_list()
 
         for year in n.investment_periods:
             for link in links:
                 try:
-                    rhs = imports.at[link, "rhs"]
+                    rhs = data.at[link, "rhs"] * multiplier
                 except KeyError:
                     # logger.warning(f"Can not set gas import limit for {link}")
                     continue
                 lhs = n.model["Link-p"].mul(weights).sel(snapshot=year, Link=link).sum()
 
-                n.model.add_constraints(lhs <= rhs, name=f"ng_limit-{year}-{link}")
+                if constraint == "min":
+                    n.model.add_constraints(
+                        lhs >= rhs,
+                        name=f"ng_limit_import_min-{year}-{link}",
+                    )
+                else:
+                    n.model.add_constraints(
+                        lhs <= rhs,
+                        name=f"ng_limit_import_max-{year}-{link}",
+                    )
 
-    def add_export_limits(n, exports):
+    def add_export_limits(n, data, constraint, multiplier=None):
         """
         Sets maximum export limit over the year.
         """
 
+        assert constraint in ("max", "min")
+
+        if not multiplier:
+            multiplier = 1
+
         weights = n.snapshot_weightings.objective
 
-        links = n.links[n.links.carrier.str.endswith("gas export")].index.to_list()
+        links = n.links[(n.links.carrier == "gas trade") & (n.links.bus0.str.endswith(" gas"))].index.to_list()
 
         for year in n.investment_periods:
             for link in links:
                 try:
-                    rhs = exports.at[link, "rhs"]
+                    rhs = data.at[link, "rhs"] * multiplier
                 except KeyError:
                     # logger.warning(f"Can not set gas import limit for {link}")
                     continue
                 lhs = n.model["Link-p"].mul(weights).sel(snapshot=year, Link=link).sum()
 
-                n.model.add_constraints(lhs >= rhs, name=f"ng_limit-{year}-{link}")
+                if constraint == "min":
+                    n.model.add_constraints(
+                        lhs >= rhs,
+                        name=f"ng_limit_export_min-{year}-{link}",
+                    )
+                else:
+                    n.model.add_constraints(
+                        lhs <= rhs,
+                        name=f"ng_limit_export_max-{year}-{link}",
+                    )
 
     api = config["api"]["eia"]
     year = pd.to_datetime(config["snapshots"]["start"]).year
 
+    # get limits
+
+    import_min = config["sector"]["natural_gas"]["imports"].get("min", 1)
+    import_max = config["sector"]["natural_gas"]["imports"].get("max", 1)
+    export_min = config["sector"]["natural_gas"]["exports"].get("min", 1)
+    export_max = config["sector"]["natural_gas"]["exports"].get("max", 1)
+
+    # to avoid numerical issues, ensure there is a gap between min/max constraints
+    if import_max == "inf":
+        pass
+    elif abs(import_max - import_min) < 0.0001:
+        import_min -= 0.001
+        import_max += 0.001
+        if import_min < 0:
+            import_min = 0
+
+    if export_max == "inf":
+        pass
+    elif abs(export_max - export_min) < 0.0001:
+        export_min -= 0.001
+        export_max += 0.001
+        if export_min < 0:
+            export_min = 0
+
+    # import and export dataframes contain the same information, just in different formats
+    # ie. imports from one S1 -> S2 are the same as exports from S2 -> S1
+    # we use the exports direction to set limits
+
     # add domestic limits
 
-    imports = Trade("gas", False, "exports", year, api).get_data()
-    imports = _format_domestic_data(imports, " import")
-    exports = Trade("gas", False, "imports", year, api).get_data()
-    exports = _format_domestic_data(exports, " export")
+    trade = Trade("gas", False, "exports", year, api).get_data()
+    trade = _format_domestic_data(trade, " trade")
 
-    add_import_limits(n, imports)
-    add_export_limits(n, exports)
+    add_import_limits(n, trade, "min", import_min)
+    add_export_limits(n, trade, "min", export_min)
+
+    if not import_max == "inf":
+        add_import_limits(n, trade, "max", import_max)
+    if not export_max == "inf":
+        add_export_limits(n, trade, "max", export_max)
 
     # add international limits
 
-    imports = Trade("gas", True, "exports", year, api).get_data()
-    imports = _format_international_data(imports, " import")
-    exports = Trade("gas", True, "imports", year, api).get_data()
-    exports = _format_international_data(exports, " export")
+    trade = Trade("gas", True, "exports", year, api).get_data()
+    trade = _format_domestic_data(trade, " trade")
 
-    add_import_limits(n, imports)
-    add_export_limits(n, exports)
+    add_import_limits(n, trade, "min", import_min)
+    add_export_limits(n, trade, "min", export_min)
+
+    if not import_max == "inf":
+        add_import_limits(n, trade, "max", import_max)
+    if not export_max == "inf":
+        add_export_limits(n, trade, "max", export_max)
 
 
 def add_water_heater_constraints(n, config):
@@ -1257,9 +1319,9 @@ def extra_functionality(n, snapshots):
         add_cooling_heat_pump_constraints(n, config)
         if not config["sector"]["service_sector"].get("split_urban_rural", False):
             add_gshp_capacity_constraint(n, config)
-        if config["sector"]["co2"].get("policy", {}):
-            add_sector_co2_constraints(n, config)
-        if config["sector"]["natural_gas"].get("force_exports", False):
+        # if config["sector"]["co2"].get("policy", {}):
+        #     add_sector_co2_constraints(n, config)
+        if config["sector"]["natural_gas"].get("imports", False):
             add_ng_import_export_limits(n, config)
         water_config = config["sector"]["service_sector"].get("water_heating", {})
         if not water_config.get("simple_storage", True):
@@ -1367,9 +1429,12 @@ if __name__ == "__main__":
     # lks = n.links[n.links.carrier.str.endswith("-gas-furnace")].index
     # n.links.loc[lks, "capital_cost"] = 0
 
-    n.links.loc["CA gas production", "p_nom_extendable"] = True
-    n.links.loc["CA gas production", "p_nom_max"] = np.inf
-    n.links.loc["CA gas production", "capital_cost"] = 1
+    # n.links.loc["CA gas production", "p_nom_extendable"] = True
+    # n.links.loc["CA gas production", "p_nom_max"] = np.inf
+    # n.links.loc["CA gas production", "capital_cost"] = 1
+
+    lks = n.links[(n.links.carrier.str.contains("ashp")) & (n.links.carrier.str.startswith("com"))].index.to_list()
+    n.links.loc[lks, "p_nom"] = 1250
 
     n = prepare_network(
         n,
