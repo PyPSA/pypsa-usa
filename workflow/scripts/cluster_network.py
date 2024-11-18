@@ -509,6 +509,25 @@ def convert_to_transport(
         logger.warning(
             f"Network configuration contains {len(disconnected_buses)} disconnected buses. ",
         )
+
+    # Dissolve TX for particular zones according to default reeds configurations
+    clustering.network.links.loc[clustering.network.links.bus0.isin(['p119']) & clustering.network.links.bus1.isin(['p122']), 'p_nom'] = 1e9
+    clustering.network.links.loc[clustering.network.links.bus1.isin(['p119']) & clustering.network.links.bus0.isin(['p122']), 'p_nom'] = 1e9   
+    # Dissolve p124 and p99
+    if "p124" in clustering.network.buses.index and "p99" in clustering.network.buses.index:
+        clustering.network.add(
+            "Link",
+            "p124||p99",
+            bus0="p124",
+            bus1="p99",
+            p_nom=1e9,
+            p_nom_extendable=False,
+            length=0,
+            capital_cost=0,
+            efficiency=1,
+            carrier="AC",
+        )
+
     return clustering
 
 
