@@ -689,6 +689,11 @@ def set_parameters(plants: pd.DataFrame):
     plants.loc[plants.fuel_type.isin(zero_mc_fuel_types), "fuel_cost"] = 0
     plants = impute_missing_plant_data(
         plants,
+        ["state", "fuel_name"],
+        ["fuel_cost"],
+    )
+    plants = impute_missing_plant_data(
+        plants,
         ["balancing_authority_code_eia", "fuel_name"],
         ["fuel_cost"],
     )
@@ -697,11 +702,11 @@ def set_parameters(plants: pd.DataFrame):
         ["nerc_region", "fuel_name"],
         ["fuel_cost"],
     )
-    plants = impute_missing_plant_data(
-        plants,
-        ["nerc_region", "technology_description"],
-        ["fuel_cost"],
-    )
+    # plants = impute_missing_plant_data(
+    #     plants,
+    #     ["nerc_region", "technology_description"],
+    #     ["fuel_cost"],
+    # )
     plants = impute_missing_plant_data(plants, ["fuel_name"], ["fuel_cost"])
     plants = impute_missing_plant_data(plants, ["prime_mover_code"], ["fuel_cost"])
     plants.loc[plants.carrier.isin(["nuclear"]), "fuel_cost"] = 0.7
@@ -743,7 +748,7 @@ def set_parameters(plants: pd.DataFrame):
 
     plants = impute_missing_plant_data(
         plants,
-        ["nerc_region", "prime_mover_code", "fuel_type"],
+        ["nerc_region", "prime_mover_code"],
         ["heat_rate"],
     )
     plants = impute_missing_plant_data(
