@@ -120,9 +120,9 @@ if config["enable"].get("build_cutout", False):
 
     rule build_cutout:
         params:
-            snapshots=config["snapshots"],
-            cutouts=config["atlite"]["cutouts"],
-            interconnects=config["atlite"]["interconnects"],
+            snapshots=config_provider("snapshots"),
+            cutouts=config_provider("atlite", "cutouts"),
+            interconnects=config_provider("atlite", "interconnects"),
         input:
             regions_onshore=RESOURCES
             + "{interconnect}/Geospatial/country_shapes.geojson",
@@ -194,11 +194,16 @@ rule build_renewable_profiles:
             if w.technology in ("onwind", "solar")
             else RESOURCES + "{interconnect}/Geospatial/regions_offshore.geojson"
         ),
-        cutout=lambda w: "cutouts/"
-        + CDIR
-        + "{interconnect}_"
-        + config["renewable"][w.technology]["cutout"]
-        + ".nc",
+        cutout=lambda wildcards: expand(
+            "cutouts/"
+            + CDIR
+            + "{interconnect}_"
+            + config["renewable"][wildcards.technology]["cutout"]
+            + "_{renewable_weather_year}"
+            + ".nc",
+            renewable_weather_year=config["renewable_weather_years"],
+            interconnect=config["scenario"]["interconnect"],
+        ),
     output:
         profile=RESOURCES + "{interconnect}/profile_{technology}.nc",
         availability=RESULTS + "{interconnect}/land_use_availability_{technology}.png",
