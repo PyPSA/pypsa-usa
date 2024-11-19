@@ -7,8 +7,12 @@ from typing import List
 import constants
 import pandas as pd
 import pypsa
+from eia import FuelCosts
 
 CODE_2_STATE = {v: k for k, v in constants.STATE_2_CODE.items()}
+MMBTU_2_MWH = constants.MMBTU_MWHthemal
+MWH_2_MMCF = constants.NG_MWH_2_MMCF
+STATE_2_CODE = constants.STATE_2_CODE
 
 
 def _rename_columns(n: pypsa.Network, df: pd.DataFrame) -> pd.DataFrame:
@@ -175,3 +179,16 @@ def get_ng_price(n: pypsa.Network) -> dict[str, pd.DataFrame]:
         data[state] = buses[col].to_frame()
 
     return data
+
+
+def get_historical_ng_prices(year: int, industry: str, api: str) -> pd.DataFrame:
+    """
+    Gets hourly fuel price per state.
+    """
+    df = FuelCosts("gas", year, api, industry).get_data(pivot=True)
+    idx = pd.date_range(start=df.index.min(), end=(df.index.max() + pd.offsets.MonthEnd(1)).replace(hour=23), freq="h")
+    df = df.reindex(idx).ffill().bfill()
+    # convert $/MCF to $/MWh
+    df = df.mul(1000).div(MWH_2_MMCF).div(MMBTU_2_MWH).round(3)
+    df = df.rename(columns=STATE_2_CODE)
+    return df

@@ -17,6 +17,7 @@ from _helpers import configure_logging, mock_snakemake
 from add_electricity import sanitize_carriers
 from constants import STATE_2_CODE, Month
 from plot_statistics import create_title
+from summary_natural_gas import get_historical_ng_prices, get_ng_price
 from summary_sector import (
     get_emission_timeseries_by_sector,
     get_end_use_consumption,
@@ -336,6 +337,73 @@ def plot_power_generation_validation(
     return fig, axs
 
 
+def plot_ng_price_validation(
+    n: pypsa.Network,
+    eia_api: str,
+    state: Optional[str] = None,
+    **kwargs,
+) -> tuple:
+
+    investment_period = n.investment_periods[0]
+
+    modelled = get_ng_price(n)
+    modelled = {x: y.loc[investment_period] for x, y in modelled.items()}
+
+    historical_power = get_historical_ng_prices(investment_period, "power", eia_api)
+    historical_residential = get_historical_ng_prices(
+        investment_period,
+        "residential",
+        eia_api,
+    )
+    historical_commercial = get_historical_ng_prices(
+        investment_period,
+        "commercial",
+        eia_api,
+    )
+    historical_industrial = get_historical_ng_prices(
+        investment_period,
+        "industrial",
+        eia_api,
+    )
+
+    if not state:
+        historical_power = historical_power["U.S."].to_frame("Power")
+        historical_residential = historical_residential["U.S."].to_frame("Residential")
+        historical_commercial = historical_commercial["U.S."].to_frame("Commercial")
+        historical_industrial = historical_industrial["U.S."].to_frame("Industrial")
+        modelled = pd.concat(list(modelled.values()), axis=1).mean(axis=1).to_frame(name="Modelled")
+    else:
+        historical_power = historical_power[state].to_frame("Power")
+        historical_residential = historical_residential[state].to_frame("Residential")
+        historical_commercial = historical_commercial[state].to_frame("Commercial")
+        historical_industrial = historical_industrial[state].to_frame("Industrial")
+        modelled = modelled[state].mean(axis=1).to_frame(name="Modelled")
+
+    df = (
+        modelled.join(historical_power, how="left")
+        .join(historical_residential, how="left")
+        .join(historical_commercial, how="left")
+        .join(historical_industrial, how="left")
+    )
+
+    fig, axs = plt.subplots(
+        ncols=1,
+        nrows=1,
+        figsize=(FIG_WIDTH, FIG_HEIGHT),
+    )
+
+    try:
+        df.plot.line(ax=axs)
+        axs.set_xlabel("")
+        axs.set_ylabel("$/MMBTU")
+        axs.set_title("Natural Gas Prices")
+        axs.tick_params(axis="x", labelrotation=45)
+    except TypeError:  # no numeric data to plot
+        logger.warning(f"No data to plot for {state}")
+
+    return fig, axs
+
+
 def plot_transportation_by_mode_validation(
     n: pypsa.Network,
     eia_api: str,
@@ -521,6 +589,12 @@ class PlottingData:
 
 VALIDATION_PLOTS = [
     {
+        "name": "natual_gas_price",
+        "fn": plot_ng_price_validation,
+        "nice_name": "Natural Gas by State",
+        "system_only": False,
+    },
+    {
         "name": "power_generation",
         "fn": plot_power_generation_validation,
         "nice_name": "Power Generation by State",
@@ -609,7 +683,7 @@ if __name__ == "__main__":
             ll="v1.0",
             sector_opts="",
             sector="E-G",
-            planning_horizons="2020",
+            planning_horizons="2019",
             interconnect="western",
         )
         rootpath = ".."

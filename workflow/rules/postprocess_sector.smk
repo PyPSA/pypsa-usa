@@ -35,6 +35,7 @@ FIGURES_SECTOR_NATURAL_GAS = [
     "storage",
     "domestic_trade",
     "international_trade",
+    "fuel_price",
 ]
 
 # system figures
@@ -136,28 +137,6 @@ rule plot_sector_capacity:
         mem_mb=5000,
     script:
         "../scripts/plot_statistics_sector.py"
-
-
-# rule plot_sector_loads:
-#     input:
-#         network=RESULTS
-#         + "{interconnect}/networks/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc",
-#     params:
-#         plotting=config["plotting"],
-#     output:
-#         **{
-#             fig: RESULTS
-#             + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/{state}/loads/%s.png"
-#             % fig
-#             for fig in FIGURES_SECTOR_LOADS
-#         },
-#     log:
-#         "logs/plot_figures/{interconnect}_s{simpl}_c{clusters}_l{ll}_{opts}_{sector}_{state}_loads.log",
-#     threads: 1
-#     resources:
-#         mem_mb=5000,
-#     script:
-#         "../scripts/plot_statistics_sector.py"
 
 
 rule plot_sector_validation:
