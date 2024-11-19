@@ -5,7 +5,7 @@ def pop_layout_input(wildcards):
     if wildcards["sector"] != "E":
         return RESOURCES + "{interconnect}/pop_layout_elec_s{simpl}_c{clusters}.csv"
     else:
-        return ""
+        return []
 
 
 rule solve_network:
