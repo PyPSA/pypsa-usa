@@ -33,8 +33,7 @@ def get_gas_demand(
     for bus in buses:
         links = n.links[
             (n.links.bus0 == bus)
-            & ~(n.links.index.str.endswith("import"))
-            & ~(n.links.index.str.endswith("export"))
+            & ~(n.links.index.str.endswith("trade"))
             & ~(n.links.index.str.endswith("storage"))
             & ~(n.links.index.str.endswith("linepack"))
         ]
@@ -157,5 +156,22 @@ def get_underground_storage(n: pypsa.Network) -> dict[str, pd.DataFrame]:
     for col in stores.columns:
         state = col.split(" gas storage")[0]
         data[state] = stores[col].to_frame()
+
+    return data
+
+
+def get_ng_price(n: pypsa.Network) -> dict[str, pd.DataFrame]:
+    """
+    Gets state level natural gas price.
+    """
+
+    buses = n.buses[n.buses.carrier == "gas"]
+    buses = n.buses_t.marginal_price[buses.index]
+
+    data = {}
+
+    for col in buses.columns:
+        state = col.split(" gas")[0]
+        data[state] = buses[col].to_frame()
 
     return data

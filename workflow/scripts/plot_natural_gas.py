@@ -9,12 +9,13 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import pypsa
 from _helpers import configure_logging
-from constants import NG_MWH_2_MMCF, Month
+from constants import NG_MWH_2_MMCF, MMBTU_MWHthemal, Month
 from summary_natural_gas import (
     get_gas_demand,
     get_gas_processing,
     get_imports_exports,
     get_linepack,
+    get_ng_price,
     get_underground_storage,
 )
 
@@ -196,50 +197,61 @@ def plot_gas_trade(
 
 
 PLOTTING_META = [
-    # {
-    #     "name": "demand",
-    #     "nice_name": "Natural Gas Demand",
-    #     "unit": "MMCF",
-    #     "converter": MWH_2_MMCF,
-    #     "getter": get_gas_demand,
-    #     "plotter": plot_gas,
-    #     "resample": "D",
-    #     "resample_func": pd.Series.mean,
-    #     "plot_by_month": True,
-    # },
-    # {
-    #     "name": "processing",
-    #     "nice_name": "Natural Gas Processed",
-    #     "unit": "MMCF",
-    #     "converter": MWH_2_MMCF,
-    #     "getter": get_gas_processing,
-    #     "plotter": plot_gas,
-    #     "resample": "D",
-    #     "resample_func": pd.Series.sum,
-    #     "plot_by_month": True,
-    # },
-    # {
-    #     "name": "linepack",
-    #     "nice_name": "Natural Gas in Linepack",
-    #     "unit": "MMCF",
-    #     "converter": MWH_2_MMCF,
-    #     "getter": get_linepack,
-    #     "plotter": plot_gas,
-    #     "resample": "D",
-    #     "resample_func": pd.Series.sum,
-    #     "plot_by_month": True,
-    # },
-    # {
-    #     "name": "storage",
-    #     "nice_name": "Natural Gas in Underground Storage",
-    #     "unit": "MMCF",
-    #     "converter": MWH_2_MMCF,
-    #     "getter": get_underground_storage,
-    #     "plotter": plot_gas,
-    #     "resample": "D",
-    #     "resample_func": pd.Series.sum,
-    #     "plot_by_month": True,
-    # },
+    {
+        "name": "fuel_price",
+        "nice_name": "State Level Natural Gas Price",
+        "unit": "$/MMBTU",
+        "converter": (1 / MMBTU_MWHthemal),  # $/MWh -> $/MMBTU
+        "getter": get_ng_price,
+        "plotter": plot_gas,
+        "resample": "D",
+        "resample_func": pd.Series.mean,
+        "plot_by_month": False,
+    },
+    {
+        "name": "demand",
+        "nice_name": "Natural Gas Demand",
+        "unit": "MMCF",
+        "converter": MWH_2_MMCF,
+        "getter": get_gas_demand,
+        "plotter": plot_gas,
+        "resample": "D",
+        "resample_func": pd.Series.mean,
+        "plot_by_month": True,
+    },
+    {
+        "name": "processing",
+        "nice_name": "Natural Gas Processed",
+        "unit": "MMCF",
+        "converter": MWH_2_MMCF,
+        "getter": get_gas_processing,
+        "plotter": plot_gas,
+        "resample": "D",
+        "resample_func": pd.Series.sum,
+        "plot_by_month": True,
+    },
+    {
+        "name": "linepack",
+        "nice_name": "Natural Gas in Linepack",
+        "unit": "MMCF",
+        "converter": MWH_2_MMCF,
+        "getter": get_linepack,
+        "plotter": plot_gas,
+        "resample": "D",
+        "resample_func": pd.Series.sum,
+        "plot_by_month": True,
+    },
+    {
+        "name": "storage",
+        "nice_name": "Natural Gas in Underground Storage",
+        "unit": "MMCF",
+        "converter": MWH_2_MMCF,
+        "getter": get_underground_storage,
+        "plotter": plot_gas,
+        "resample": "D",
+        "resample_func": pd.Series.sum,
+        "plot_by_month": True,
+    },
     {
         "name": "domestic_trade",
         "nice_name": "Natural Gas Traded Domestically",
