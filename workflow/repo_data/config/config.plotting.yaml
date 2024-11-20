@@ -105,8 +105,7 @@ plotting:
 
     "gas storage": "#f69d09"
     "gas pipeline": "#f69d09"
-    "gas export": "#d02f2f"
-    "gas import": "#ae3dc2"
+    "gas trade": "ae3dc2"
     "gas production": "#d35050"
 
     trn-veh: "#0a0100"
@@ -274,8 +273,7 @@ plotting:
 
     "gas storage": "Natural Gas Storage"
     "gas pipeline": "Natural Gas Pipeline"
-    "gas export": "Natural Gas Export"
-    "gas import": "Natural Gas Import"
+    "gas trade": "Natural Gas Trading"
     "gas production": "Natural Gas Production"
 
     trn-veh: "Vehicles"
