@@ -1,6 +1,6 @@
 Component,Operational Constraints,PyPSA-Component
-Underground Storage,Min/Max storage levels | Capacity;,Store + Links + Bus
+Underground Storage,Min/Max storage levels | Capacity,Store + Links + Bus
 Pipelines,Capacity,Links
 Linepack,Min/Max storage levels,Store
 Processing,Capacity,Store + Links + Bus
-Import/Exports,Capacity,Store + Links + Bus
+Import/Exports,Capacity | Annual Energy,Store + Links + Bus

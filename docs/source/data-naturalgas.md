@@ -41,7 +41,7 @@ The natural gas network includes the following components. All components attach
 .. csv-table::
    :header-rows: 1
    :widths: 22,22,33
-   :file: datatables/natural_gas.csv
+   :file: datatables/natural_gas_components.csv
 ```
 
 :::{figure-md} gas-components
@@ -63,7 +63,22 @@ Regions outside the model scope include connections to neighbouring states (for 
 | California      | Arizona           | Domestic      |
 | California      | Mexico            | International |
 
-Additionally, the user can choose to enforce boundary conditions on these connections. If applied, annual historical imports and exports to the neighbouring regions are retrieved from the EIA for the modelled weather year. Constraints are added to match the import/export values over the year.
+Additionally, the user can choose to enforce boundary conditions on these connections. If applied, annual historical imports and exports to the neighbouring regions are retrieved from the EIA for the modelled weather year. Minimum and maximum import/export constraints based on this reference value can then be specified through the following configuration file.
+
+Consider the [schematic below](gas-trade), showing how a single state is trading with a neighbouring state outside the models geographic scope. The following table shows how the user can specify import/export limits into and outof each state. Note, the constraints are applied at a state level, but each state must respect the same constraint configuration values.
+
+:::{figure-md} gas-trade
+<img src="./_static/natural_gas/gas-trade.png" width="250px">
+
+Simple Natural Gas Trading with Regions Outside Model Scope
+:::
+
+```{eval-rst}
+.. csv-table::
+   :header-rows: 1
+   :widths: 15,15,30,20,20
+   :file: datatables/natural_gas_trade.csv
+```
 
 ### Capacity Expansion
 
@@ -87,7 +102,7 @@ Listed below are the main datasources and assumptions applied to them to build t
 .. csv-table::
    :header-rows: 1
    :widths: 22,22,33
-   :file: datatables/natural_gas.csv
+   :file: datatables/natural_gas_sources.csv
 ```
 
 ## Validation
