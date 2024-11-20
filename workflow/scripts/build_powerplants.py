@@ -65,7 +65,10 @@ def load_pudl_data(pudl_fn: str, start_date: str, end_date: str):
         LEFT JOIN core_eia860__scd_generators_energy_storage ON out_eia__yearly_generators.plant_id_eia = core_eia860__scd_generators_energy_storage.plant_id_eia AND out_eia__yearly_generators.generator_id = core_eia860__scd_generators_energy_storage.generator_id
         LEFT JOIN core_eia860__scd_plants ON out_eia__yearly_generators.plant_id_eia = core_eia860__scd_plants.plant_id_eia
         LEFT JOIN monthly_generators ON out_eia__yearly_generators.plant_id_eia = monthly_generators.plant_id_eia AND out_eia__yearly_generators.generator_id = monthly_generators.generator_id
-        WHERE out_eia__yearly_generators.operational_status = 'existing' AND out_eia__yearly_generators.operational_status_code = 'OP' AND out_eia__yearly_generators.report_date >= '2023-01-01'
+        WHERE
+            out_eia__yearly_generators.operational_status = 'existing'
+            AND out_eia__yearly_generators.operational_status_code IN ('OP')
+            AND out_eia__yearly_generators.report_date >= '2023-01-01'
         GROUP BY out_eia__yearly_generators.plant_id_eia, out_eia__yearly_generators.generator_id
     """,
     ).to_df()
@@ -680,28 +683,33 @@ def set_parameters(plants: pd.DataFrame):
     plants["build_year"] = plants.pop("generator_operating_date").dt.year
     plants["heat_rate"] = plants.pop("unit_heat_rate_mmbtu_per_mwh")
     plants["vom"] = plants.pop("ads_vom_cost")
-    plants["fuel_cost"] = plants.pop("fuel_cost_per_mwh")
+    plants["fuel_cost"] = plants.pop("fuel_cost_per_mmbtu")
 
     zero_mc_fuel_types = ["solar", "wind", "hydro", "geothermal", "battery"]
     plants.loc[plants.fuel_type.isin(zero_mc_fuel_types), "fuel_cost"] = 0
     plants = impute_missing_plant_data(
         plants,
-        ["nerc_region", "prime_mover_code", "fuel_type"],
+        ["state", "fuel_name"],
         ["fuel_cost"],
     )
     plants = impute_missing_plant_data(
         plants,
-        ["nerc_region", "technology_description"],
+        ["balancing_authority_code_eia", "fuel_name"],
         ["fuel_cost"],
     )
     plants = impute_missing_plant_data(
         plants,
-        ["nerc_region", "fuel_type"],
+        ["nerc_region", "fuel_name"],
         ["fuel_cost"],
     )
-    plants = impute_missing_plant_data(plants, ["fuel_type"], ["fuel_cost"])
+    # plants = impute_missing_plant_data(
+    #     plants,
+    #     ["nerc_region", "technology_description"],
+    #     ["fuel_cost"],
+    # )
+    plants = impute_missing_plant_data(plants, ["fuel_name"], ["fuel_cost"])
     plants = impute_missing_plant_data(plants, ["prime_mover_code"], ["fuel_cost"])
-    plants.loc[plants.carrier.isin(["nuclear"]), "fuel_cost"] = 10.497
+    plants.loc[plants.carrier.isin(["nuclear"]), "fuel_cost"] = 0.7
 
     # Unit Commitment Parameters
     plants["start_up_cost"] = plants.pop("ads_startup_cost_fixed$") + plants.ads_startfuelmmbtu * plants.fuel_cost
@@ -740,7 +748,7 @@ def set_parameters(plants: pd.DataFrame):
 
     plants = impute_missing_plant_data(
         plants,
-        ["nerc_region", "prime_mover_code", "fuel_type"],
+        ["nerc_region", "prime_mover_code"],
         ["heat_rate"],
     )
     plants = impute_missing_plant_data(
@@ -761,7 +769,7 @@ def set_parameters(plants: pd.DataFrame):
     )
     plants = impute_missing_plant_data(plants, ["carrier"], ["heat_rate"])
 
-    plants["marginal_cost"] = plants.vom + plants.fuel_cost  # (MMBTu/MW) * (USD/MMBTu) = USD/MW
+    plants["marginal_cost"] = plants.vom + (plants.fuel_cost * plants.heat_rate)  # (MMBTu/MW) * (USD/MMBTu) = USD/MW
     plants["efficiency"] = 1 / (plants["heat_rate"] / 3.412)  # MMBTu/MWh to MWh_electric/MWh_thermal
 
     set_derates(plants)
@@ -941,6 +949,11 @@ if __name__ == "__main__":
         eia_data_operable,
         heat_rates,
         "fuel_cost_per_mwh",
+    )
+    eia_data_operable = merge_fc_hr_data(
+        eia_data_operable,
+        heat_rates,
+        "fuel_cost_per_mmbtu",
     )
     eia_data_operable = apply_cems_heat_rates(
         eia_data_operable,

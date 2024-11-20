@@ -605,7 +605,7 @@ rule add_electricity:
         bus2sub=RESOURCES + "{interconnect}/bus2sub.csv",
         pudl_fuel_costs=RESOURCES + "{interconnect}/pudl_fuel_costs.csv",
     output:
-        RESOURCES + "{interconnect}/elec_base_network_l_pp.nc",
+        RESOURCES + "{interconnect}/elec_base_network_l_pp.pkl",
     log:
         LOGS + "{interconnect}/add_electricity.log",
     benchmark:
@@ -630,7 +630,7 @@ rule simplify_network:
     input:
         bus2sub=RESOURCES + "{interconnect}/bus2sub.csv",
         sub=RESOURCES + "{interconnect}/sub.csv",
-        network=RESOURCES + "{interconnect}/elec_base_network_l_pp.nc",
+        network=RESOURCES + "{interconnect}/elec_base_network_l_pp.pkl",
         regions_onshore=RESOURCES + "{interconnect}/Geospatial/regions_onshore.geojson",
         regions_offshore=RESOURCES
         + "{interconnect}/Geospatial/regions_offshore.geojson",
@@ -788,7 +788,7 @@ rule build_powerplants:
     output:
         powerplants=RESOURCES + "powerplants.csv",
     log:
-        "logs/build_powerplants",
+        "logs/build_powerplants/build_powerplants.log",
     resources:
         mem_mb=30000,
     script:
