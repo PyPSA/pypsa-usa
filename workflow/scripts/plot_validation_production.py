@@ -477,7 +477,7 @@ def plot_line_loading_map(
     link_loading = n.links_t.p0.abs().mean() / n.links.p_nom / n.links.p_max_pu * 100
     norm = plt.Normalize(vmin=0, vmax=100)
 
-    n.carriers.loc['AC_exp', 'color'] = '#dd2e23'
+    n.carriers.loc["AC_exp", "color"] = "#dd2e23"
     fig, _ = plot_capacity_map(
         n=n,
         bus_values=gen / 5e3,
@@ -552,7 +552,10 @@ def plot_generator_cost_stack(
 
     # Add a legend to the first subplot
     fig.legend(
-        handles=[plt.Rectangle((0, 0), 1, 1, color=colors[carrier], label=carrier) for carrier in df_sorted["carrier"].unique()],
+        handles=[
+            plt.Rectangle((0, 0), 1, 1, color=colors[carrier], label=carrier)
+            for carrier in df_sorted["carrier"].unique()
+        ],
         loc="upper left",
         bbox_to_anchor=(0.12, 0.875),
         title="Carrier",
@@ -625,7 +628,7 @@ def plot_state_emissions_historical_bar(
 
     # final = final[~final["state"].str.contains("Texas")]
     final.to_csv(save.replace(".pdf", ".csv"))
-    
+
     fig, ax = plt.subplots(figsize=(8, 8))
     sns.barplot(
         data=final,
