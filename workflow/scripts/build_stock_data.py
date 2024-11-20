@@ -418,6 +418,7 @@ def _get_marginal_cost(
             return n.links.at[fuel, "marginal_cost"]
         else:
             logger.warning(f"No fuel costs applied for {name}")
+            return 0
 
 
 ###
@@ -664,7 +665,7 @@ def add_road_transport_brownfield(
         periods = int(lifetime // step)
 
         start_year = n.investment_periods[0]
-        start_year = start_year if start_year <= 2023 else 2023
+        start_year = start_year if start_year >= 2023 else 2023
 
         for period in range(1, periods + 1):
 
@@ -757,7 +758,7 @@ def add_road_transport_brownfield(
         periods = int(lifetime // step)
 
         start_year = n.investment_periods[0]
-        start_year = start_year if start_year <= 2023 else 2023
+        # start_year = start_year if start_year >= 2023 else 2023
 
         for period in range(1, periods + 1):
 
@@ -864,6 +865,7 @@ def add_service_brownfield(
         marginal_cost = _get_marginal_cost(n, marginal_cost_names)
 
         start_year = n.investment_periods[0]
+        # start_year if start_year >= 2023 else 2023
 
         for build_year, percent in installed_capacity.items():
 
@@ -873,7 +875,7 @@ def add_service_brownfield(
             furnaces = df.copy()
 
             furnaces["name"] = furnaces.name + f" existing_{build_year} " + furnaces.carrier
-            furnaces["p_nom"] = furnaces.p_nom.mul(percent).div(100).round(2)
+            furnaces["p_nom"] = furnaces.p_nom.mul(percent).div(100).div(efficiency).mul(2).round(2)
             furnaces = furnaces.set_index("name")
 
             if isinstance(marginal_cost, pd.DataFrame):
@@ -940,7 +942,7 @@ def add_service_brownfield(
         marginal_cost = _get_marginal_cost(n, marginal_cost_names)
 
         start_year = n.investment_periods[0]
-        start_year = start_year if start_year <= 2023 else 2023
+        # start_year = start_year if start_year >= 2023 else 2023
 
         for build_year, percent in installed_capacity.items():
 
@@ -950,7 +952,7 @@ def add_service_brownfield(
             furnaces = df.copy()
 
             furnaces["name"] = furnaces.name + f" existing_{build_year} " + furnaces.carrier
-            furnaces["p_nom"] = furnaces.p_nom.mul(percent).div(100).round(2)
+            furnaces["p_nom"] = furnaces.p_nom.mul(percent).div(100).div(efficiency).round(2)
             furnaces = furnaces.set_index("name")
 
             if isinstance(marginal_cost, pd.DataFrame):
@@ -1011,7 +1013,7 @@ def add_service_brownfield(
         df["p_nom"] = df.p_max.mul(df.ratio).div(100)  # div to convert from %
 
         start_year = n.investment_periods[0]
-        start_year = start_year if start_year <= 2023 else 2023
+        # start_year = start_year if start_year >= 2023 else 2023
 
         for build_year, percent in installed_capacity.items():
 
@@ -1076,10 +1078,10 @@ def add_service_brownfield(
         df["carrier"] = df.carrier + "-air-con"
 
         df["ratio"] = df.state.map(ratios.electricity)
-        df["p_nom"] = df.p_max.mul(df.ratio).div(100)  # div to convert from %
+        df["p_nom"] = df.p_max.mul(df.ratio).div(100).div(efficiency).round(2)  # div to convert from %
 
         start_year = n.investment_periods[0]
-        start_year = start_year if start_year <= 2023 else 2023
+        # start_year = start_year if start_year >= 2023 else 2023
 
         for build_year, percent in installed_capacity.items():
 
@@ -1169,7 +1171,7 @@ def add_service_brownfield(
             heater = df.copy()
 
             heater["name"] = heater.name + f" existing_{build_year} " + heater.carrier + "-heater"
-            heater["p_nom"] = heater.p_nom.mul(percent).div(100).round(2)
+            heater["p_nom"] = heater.p_nom.mul(percent).div(100).div(efficiency).round(2)
             heater = heater.set_index("name")
 
             if isinstance(marginal_cost, pd.DataFrame):
@@ -1183,6 +1185,7 @@ def add_service_brownfield(
             n.madd(
                 "Link",
                 heater.index,
+                suffix="-discharger",
                 bus0=heater.bus0,
                 bus1=heater.bus1,
                 carrier=heater.carrier,
