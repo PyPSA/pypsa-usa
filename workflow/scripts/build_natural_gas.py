@@ -522,9 +522,10 @@ class GasProcessing(GasData):
         )
 
         # marginal cost
-        # https://www.eia.gov/analysis/studies/drilling/pdf/upstream.pdf
-        # ($0.35 / MCF) (MCF / 1000CF) (CF/1036 BTU) (BTU / 0.293 Wh) (1e6 Wh / MWh)
-        # ~1.15 $/MWh
+        # https://www.aer.ca/providing-information/data-and-reports/statistical-reports/st98/natural-gas/supply-costs
+        # Table S5.6 with Variable Operating Cost average of ~$63 CAD/ 1000 m3
+        # (63 CAD/ 1000 m3) (1 m3 / 35.5 CF) (1,000,000 CF / MMCF) (1 MMCF / 303.5 MWH) (1 USD / 0.75 CAD)
+        # ~7.5 $/MWh
 
         n.madd(
             "Link",
@@ -537,7 +538,7 @@ class GasProcessing(GasData):
             efficiency=1,
             p_nom_extendable=p_nom_extendable,
             capital_cost=0.01,  # to update
-            marginal_cost=1.15,
+            marginal_cost=7.5,
             p_nom=(df.p_nom * p_nom_mult).round(2),
             p_nom_min=0,
             p_nom_max=df.p_nom * p_nom_max_mult,

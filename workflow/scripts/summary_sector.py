@@ -99,10 +99,12 @@ def _filter_link_on_sector(n: pypsa.Network, sector: str) -> pd.DataFrame:
             return n.links[
                 (n.links.carrier.str.startswith(sector))
                 & ~(n.links.carrier.str.endswith("-store"))
-                & ~(n.links.carrier.str.contains("-water"))  # hot water heaters
+                & ~(n.links.carrier.str.endswith("-charger"))  # hot water heaters
             ].copy()
         case "ind":
-            return n.links[(n.links.carrier.str.startswith(sector)) & ~(n.links.carrier.str.endswith("-store"))].copy()
+            return n.links[
+                (n.links.carrier.str.startswith(sector)) & ~(n.links.carrier.str.endswith("-charger"))
+            ].copy()
         case "trn":
             trn = n.links[(n.links.carrier.str.startswith(sector))].copy()
             # remove aggregators
@@ -173,6 +175,14 @@ def _get_opt_capacity_per_node(
 
     df = _filter_link_on_sector(n, sector)
 
+    # remove the double accounting
+    if sector in ("res", "com"):
+        df = df[
+            ~(df.carrier.str.endswith("-gshp-cool"))
+            & ~(df.index.str.endswith("-ashp-cool"))
+            & ~(df.index.str.endswith("-charger"))
+        ]
+
     if not include_elec:
         df = df[~df.carrier.str.endswith("elec-infra")].copy()
 
@@ -225,6 +235,14 @@ def _get_total_capacity_per_node(
     assert not sector in ["pwr"]
 
     df = _filter_link_on_sector(n, sector)
+
+    # remove the double accounting
+    if sector in ("res", "com"):
+        df = df[
+            ~(df.carrier.str.endswith("-gshp-cool"))
+            & ~(df.index.str.endswith("-ashp-cool"))
+            & ~(df.index.str.endswith("-charger"))
+        ]
 
     if not include_elec:
         df = df[~df.carrier.str.endswith("elec-infra")].copy()
@@ -304,6 +322,14 @@ def _get_brownfield_capacity_per_node(
     assert not sector in ["pwr"]
 
     df = _filter_link_on_sector(n, sector)
+
+    # remove the double accounting
+    if sector in ("res", "com"):
+        df = df[
+            ~(df.carrier.str.endswith("-gshp-cool"))
+            & ~(df.index.str.endswith("-ashp-cool"))
+            & ~(df.index.str.endswith("-charger"))
+        ]
 
     if (not include_elec) and (not sector == "trn"):
         df = df[~df.carrier.str.endswith("elec-infra")].copy()

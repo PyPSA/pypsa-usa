@@ -1013,7 +1013,7 @@ def add_service_heat_stores(
         # suffix="-store",
         bus=therm_store.bus1,
         e_cyclic=True,
-        e_nom_extendable=True,
+        e_nom_extendable=False,
         carrier=therm_store.carrier,
         standing_loss=standing_loss,
         capital_cost=capex,
