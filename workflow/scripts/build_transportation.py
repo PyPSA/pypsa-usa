@@ -24,12 +24,14 @@ from constants_sector import (
 def build_transportation(
     n: pypsa.Network,
     costs: pd.DataFrame,
+    exogenous: bool = False,
     air: bool = True,
     rail: bool = True,
     boat: bool = True,
     dynamic_pricing: bool = False,
     eia: Optional[str] = None,  # for dynamic pricing
     year: Optional[int] = None,  # for dynamic pricing
+    must_run_evs: Optional[bool] = None,  # for endogenous EV investment
 ) -> None:
     """
     Main funtion to interface with.
@@ -55,6 +57,10 @@ def build_transportation(
     for vehicle in road_vehicles:
         add_elec_vehicle(n, road_suffix, vehicle, costs)
         add_lpg_vehicle(n, road_suffix, vehicle, costs, lpg_cost)
+
+    if not exogenous:
+        assert isinstance(must_run_evs, bool)
+        apply_endogenous_road_investments(n, must_run_evs)
 
     if air:
         air_suffix = Transport.AIR.value
@@ -451,6 +457,154 @@ def add_rail(
         p_nom_extendable=True,
         lifetime=lifetime,
     )
+
+
+def _create_endogenous_buses(n: pypsa.Network) -> None:
+    """Creats new bus for grouped endogenous vehicle load"""
+
+    buses = n.buses[
+        n.buses.carrier.str.startswith("trn")
+        & n.buses.carrier.str.contains("veh")
+        & ~n.buses.carrier.str.endswith("veh")
+    ].copy()
+    buses["veh"] = buses.carrier.map(lambda x: x.split("-")[-1])
+    buses["name"] = buses.country + " trn-veh-" + buses.veh
+    buses["carrier"] = "trn-veh-" + buses.veh
+    buses = buses.drop_duplicates(subset="name")
+    buses = buses.set_index("name")
+
+    n.madd(
+        "Bus",
+        buses.index,
+        x=buses.x,
+        y=buses.y,
+        carrier=buses.carrier,
+        STATE=buses.STATE,
+        STATE_NAME=buses.STATE_NAME,
+        unit=buses.unit,
+        interconnect=buses.interconnect,
+        state=buses.state,
+        country=buses.country,
+        reeds_ba=buses.reeds_ba,
+        reeds_state=buses.reeds_state,
+        nerc_reg=buses.nerc_reg,
+        trans_reg=buses.trans_reg,
+    )
+
+
+def _create_endogenous_loads(n: pypsa.Network) -> None:
+    """Creates aggregated vehicle load
+
+    - Removes LPG load
+    - Transfers EV load to central bus
+    """
+
+    loads = n.loads[n.loads.carrier.str.startswith("trn") & n.loads.carrier.str.contains("veh")]
+    to_remove = [x for x in loads.index if "-lpg-" in x]
+    to_shift = [x for x in loads.index if "-elec-" in x]
+    assert (len(to_remove) + len(to_shift)) == len(loads)
+
+    new_name_mapper = {x: x.replace("-elec", "") for x in to_shift}
+    new_names = [x for _, x in new_name_mapper.items()]
+
+    # remove LPG loads
+    n.mremove(
+        "Load",
+        to_remove,
+    )
+
+    # rename elec loads to general loads
+    n.loads_t["p_set"] = n.loads_t["p_set"].rename(columns=new_name_mapper)
+    n.loads = n.loads.rename(index=new_name_mapper)
+
+    # transfer elec load buses to general bus
+    n.loads.loc[new_names, "bus"] = n.loads.loc[new_names, "bus"].map(new_name_mapper)
+    n.loads.loc[new_names, "carrier"] = n.loads.loc[new_names, "carrier"].map(lambda x: x.replace("trn-elec-", "trn-"))
+    n.loads.loc[new_names, "carrier"] = n.loads.loc[new_names, "carrier"].map(lambda x: x.replace("trn-lpg-", "trn-"))
+
+
+def _create_endogenous_links(n: pypsa.Network) -> None:
+    """Creates links for LPG and EV to load bus
+
+    Just involves transfering bus1 from exogenous load bus to endogenous load bus
+    """
+
+    slicer = (
+        n.links.carrier.str.startswith("trn")
+        & n.links.carrier.str.contains("veh")
+        & ~n.links.carrier.str.endswith("veh")
+    )
+    n.links.loc[slicer, "bus1"] = n.links.loc[slicer, "bus1"].map(lambda x: x.replace("trn-elec-", "trn-"))
+    n.links.loc[slicer, "bus1"] = n.links.loc[slicer, "bus1"].map(lambda x: x.replace("trn-lpg-", "trn-"))
+
+
+def _remove_exogenous_buses(n: pypsa.Network) -> None:
+    """Removes buses that are used for exogenous vehicle loads"""
+
+    buses = n.buses[
+        (n.buses.index.str.contains("trn-elec-veh") | n.buses.index.str.contains("trn-lpg-veh"))
+        & ~(n.buses.index.str.endswith("-veh"))
+    ].index.to_list()
+    n.mremove("Bus", buses)
+
+
+def _constrain_charing_rates(n: pypsa.Network, must_run_evs: bool) -> None:
+    """Applies limits to p_min_pu/p_max_pu on links
+
+    must_run_evs:
+        True
+            Both the p_min_pu and p_max_pu of only EVs are set to match the load profile
+        False
+            p_max_pu of both EVs and LPGs are set to match the load profile.
+            p_min_pu is left unchanged (ie. zero)
+    """
+
+    links = n.links[n.links.carrier.str.contains("-veh") & ~n.links.carrier.str.endswith("-veh")]
+    evs = links[links.carrier.str.contains("-elec-")]
+    lpgs = links[links.carrier.str.contains("-lpg-")]
+
+    assert len(evs) + len(lpgs) == len(links)
+
+    p_max_pu_evs = n.loads_t["p_set"][evs.bus1.tolist()]
+
+    if must_run_evs:
+        p_min_pu = n.loads_t["p_set"][evs.bus1.tolist()]
+        p_max_pu = p_max_pu_evs.copy()
+    else:
+        p_min_pu = pd.DataFrame()
+        p_max_pu_lpg = n.loads_t["p_set"][lpgs.bus1.tolist()]
+        p_max_pu = pd.concat([p_max_pu_evs, p_max_pu_lpg], axis=1)
+
+    # normalize to get profiles
+    # add small buffer for computation issues while solving
+    if not p_min_pu.empty:
+        p_min_pu = (p_min_pu - p_min_pu.min()) / (p_min_pu.max() - p_min_pu.min())
+        p_min_pu = p_min_pu.sub(0.01).clip(lower=0).round(2)
+        n.links_t["p_min_pu"] = pd.concat([n.links_t["p_min_pu"], p_min_pu], axis=1)
+
+    p_max_pu = (p_max_pu - p_max_pu.min()) / (p_max_pu.max() - p_max_pu.min())
+    p_max_pu = p_max_pu = p_max_pu.add(0.01).clip(upper=1).round(2)
+    n.links_t["p_max_pu"] = pd.concat([n.links_t["p_max_pu"], p_max_pu], axis=1)
+
+
+def apply_endogenous_road_investments(n: pypsa.Network, must_run_evs: bool = False) -> None:
+    """Merges EV and LPG load into a single load.
+
+    This function will do the following:
+    - Create a new bus that the combined load will apply to
+    - Shift the EV load to the new bus. This load will retain the EV profile and full
+      magnitude, as this represents all vehicle load in the system. The load is renamed.
+    - Remove the LPG load
+    - Create two links. 1) from EV to new bus for aggregate load. 2) from LPG to new
+      bus for aggregate load
+    - Costrain the new EV link to match the vehicle load profile
+      (ie. p_nom_min(ev) = p_nom_max(ev) = p_nom_t(load))
+    """
+    _create_endogenous_buses(n)
+    _create_endogenous_loads(n)
+    _create_endogenous_links(n)
+    _remove_exogenous_buses(n)
+    _constrain_charing_rates(n, must_run_evs)
 
 
 def apply_exogenous_ev_policy(n: pypsa.Network, policy: pd.DataFrame) -> None:
