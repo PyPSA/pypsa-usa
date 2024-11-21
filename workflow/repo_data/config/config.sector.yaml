@@ -3,7 +3,6 @@ sector:
     sequestration_potential: 0
     policy: "config/policy_constraints/sector_co2_limits.csv"
   natural_gas:
-  natural_gas:
     imports:
       min: 0.9
       max: 1.1
