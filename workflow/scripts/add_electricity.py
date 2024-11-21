@@ -271,15 +271,16 @@ def match_nearest_bus(plants_subset, buses_subset):
 
     # Create a BallTree for the given subset of buses
     tree = BallTree(buses_subset[["x", "y"]].values, leaf_size=2)
-    
+
     # Find nearest bus for each plant in the subset
     distances, indices = tree.query(plants_subset[["longitude", "latitude"]].values, k=1)
-    
+
     # Map the nearest bus information back to the plants subset
     plants_subset["bus_assignment"] = buses_subset.reset_index().iloc[indices.flatten()]["Bus"].values
     plants_subset["distance_nearest"] = distances.flatten()
-    
+
     return plants_subset
+
 
 def match_plant_to_bus(n, plants):
     """
@@ -292,7 +293,7 @@ def match_plant_to_bus(n, plants):
     plants_matched = plants.copy()
     plants_matched["bus_assignment"] = None
     plants_matched["distance_nearest"] = None
-    
+
     # Get a copy of buses and create a geometry column with GPS coordinates
     buses = n.buses.copy()
     buses["geometry"] = gpd.points_from_xy(buses["x"], buses["y"])
@@ -300,8 +301,10 @@ def match_plant_to_bus(n, plants):
     # First pass: Assign each plant to the nearest bus in the same state
     for state in buses["state"].unique():
         buses_in_state = buses[buses["state"] == state]
-        plants_in_state = plants_matched[(plants_matched["state"] == state) & (plants_matched["bus_assignment"].isnull())]
-        
+        plants_in_state = plants_matched[
+            (plants_matched["state"] == state) & (plants_matched["bus_assignment"].isnull())
+        ]
+
         # Update plants_matched with the nearest bus within the same state
         plants_matched.update(match_nearest_bus(plants_in_state, buses_in_state))
 

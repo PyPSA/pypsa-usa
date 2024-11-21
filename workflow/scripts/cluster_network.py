@@ -345,7 +345,7 @@ def add_itls(buses, itls, itl_cost, expansion=True):
         itls["USD2023perMWyr"] = 0
 
     itls["p_min_pu_Rev"] = (-1 * (itls.mw_r0 / itls.mw_f0)).fillna(0)
-    itls['efficiency'] = 1- ((itls.length_miles/100) * 0.01)
+    itls["efficiency"] = 1 - ((itls.length_miles / 100) * 0.01)
 
     # lines to add in reverse if forward direction is zero
     itls_rev = itls[itls.mw_f0 == 0].copy()
@@ -363,7 +363,7 @@ def add_itls(buses, itls, itl_cost, expansion=True):
         length=0 if itl_cost is None else itls_fwd.length_miles.values,
         capital_cost=0 if itl_cost is None else itls_fwd.USD2023perMWyr.values,
         p_nom_extendable=False,
-        efficiency= 1 if itl_cost is None else itls_fwd.efficiency.values,
+        efficiency=1 if itl_cost is None else itls_fwd.efficiency.values,
         carrier="AC",
     )
 
@@ -380,7 +380,7 @@ def add_itls(buses, itls, itl_cost, expansion=True):
         length=0 if itl_cost is None else itls_rev.length_miles.values,
         capital_cost=0 if itl_cost is None else itls_rev.USD2023perMWyr.values,
         p_nom_extendable=False,
-        efficiency= 1 if itl_cost is None else itls_rev.efficiency.values,
+        efficiency=1 if itl_cost is None else itls_rev.efficiency.values,
         carrier="AC",
     )
 
@@ -401,7 +401,7 @@ def add_itls(buses, itls, itl_cost, expansion=True):
         length=0 if itl_cost is None else itls.length_miles.values,
         capital_cost=0 if itl_cost is None else itls.USD2023perMWyr.values,
         p_nom_extendable=False,
-        efficiency= 1 if itl_cost is None else itls.efficiency.values,
+        efficiency=1 if itl_cost is None else itls.efficiency.values,
         carrier="AC_exp",
     )
 
@@ -511,8 +511,12 @@ def convert_to_transport(
         )
 
     # Dissolve TX for particular zones according to default reeds configurations
-    clustering.network.links.loc[clustering.network.links.bus0.isin(['p119']) & clustering.network.links.bus1.isin(['p122']), 'p_nom'] = 1e9
-    clustering.network.links.loc[clustering.network.links.bus1.isin(['p119']) & clustering.network.links.bus0.isin(['p122']), 'p_nom'] = 1e9   
+    clustering.network.links.loc[
+        clustering.network.links.bus0.isin(["p119"]) & clustering.network.links.bus1.isin(["p122"]), "p_nom"
+    ] = 1e9
+    clustering.network.links.loc[
+        clustering.network.links.bus1.isin(["p119"]) & clustering.network.links.bus0.isin(["p122"]), "p_nom"
+    ] = 1e9
     # Dissolve p124 and p99
     if "p124" in clustering.network.buses.index and "p99" in clustering.network.buses.index:
         clustering.network.add(

@@ -3,18 +3,27 @@ sector:
     sequestration_potential: 0
     policy: "config/policy_constraints/sector_co2_limits.csv"
   natural_gas:
-    force_exports: true 
+    imports:
+      min: 0.9
+      max: 1.1
+    exports:
+      min: 0.9
+      max: 1.1
     cyclic_storage: true
     standing_loss: 0
   methane:
     leakage_rate: 0.02 # per unit 
-    gwp: 18 
+    gwp: 0 
   heating:
     heat_pump_sink_T: 55.
   service_sector:
     dynamic_costs: True
     split_res_com: True # false to be implemented 
     split_urban_rural: False
+    water_heating: 
+      split_space_water: true
+      simple_storage: true
+      n_hours: 4
     split_space_water_heating: True
     brownfield: True
     gas_connection:
@@ -30,7 +39,7 @@ sector:
       water_heating: 
         elec_water_tank: true 
         gas_water_tank: true
-        oil_water_tank: true
+        oil_water_tank: false
       standing_losses: # per-unit
         space: 0.05
         water: 0.01

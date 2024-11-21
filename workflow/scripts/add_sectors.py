@@ -14,7 +14,7 @@ import pypsa
 
 logger = logging.getLogger(__name__)
 import sys
-from typing import Any, Optional
+from typing import Optional
 
 from _helpers import configure_logging, get_snapshots, load_costs
 from add_electricity import sanitize_carriers
@@ -22,14 +22,15 @@ from build_emission_tracking import build_ch4_tracking, build_co2_tracking
 from build_heat import build_heat
 from build_natural_gas import StateGeometry, build_natural_gas
 from build_stock_data import (
+    add_road_transport_brownfield,
     add_service_brownfield,
-    add_transport_brownfield,
     get_commercial_stock,
     get_residential_stock,
     get_transport_stock,
 )
 from build_transportation import apply_exogenous_ev_policy, build_transportation
 from constants import STATE_2_CODE, STATES_INTERCONNECT_MAPPER
+from constants_sector import RoadTransport
 from shapely.geometry import Point
 
 CODE_2_STATE = {v: k for k, v in STATE_2_CODE.items()}
@@ -231,7 +232,7 @@ def convert_generators_2_links(
         efficiency=plants.efficiency,
         efficiency2=co2_intensity,
         marginal_cost=plants.marginal_cost * plants.efficiency,  # fuel costs rated at delievered
-        capital_cost=plants.capital_cost * plants.efficiency,  # links rated on input capacity
+        capital_cost=plants.capital_cost,  # links rated on input capacity
         lifetime=plants.lifetime,
     )
 
@@ -339,10 +340,10 @@ if __name__ == "__main__":
         snakemake = mock_snakemake(
             "add_sectors",
             interconnect="western",
-            simpl="12",
-            clusters="6",
+            simpl="33",
+            clusters="4m",
             ll="v1.0",
-            opts="48SEG",
+            opts="2190SEG",
             sector="E-G",
         )
     configure_logging(snakemake)
@@ -485,31 +486,58 @@ if __name__ == "__main__":
 
     if snakemake.params.sector["transport_sector"]["brownfield"]:
         ratios = get_transport_stock(snakemake.params.api["eia"], base_year)
-        for vehicle in ("lgt", "med", "hvy", "bus"):
-            add_transport_brownfield(n, vehicle, growth_multiplier, ratios, costs)
+        for vehicle in RoadTransport:
+            add_road_transport_brownfield(
+                n,
+                vehicle.value,
+                growth_multiplier,
+                ratios,
+                costs,
+            )
 
     if snakemake.params.sector["service_sector"]["brownfield"]:
 
         res_stock_dir = snakemake.input.residential_stock
         com_stock_dir = snakemake.input.commercial_stock
 
-        if snakemake.params.sector["service_sector"]["split_space_water_heating"]:
+        if snakemake.params.sector["service_sector"]["water_heating"]["split_space_water"]:
             fuels = ["space_heating", "water_heating", "cooling"]
         else:
             fuels = ["heating", "cooling"]
         for fuel in fuels:
 
+            if fuel == "water_heating":
+                simple_storage = snakemake.params.sector["service_sector"]["water_heating"].get("simple_storage", False)
+            else:
+                simple_storage = None
+
             # residential sector
             ratios = get_residential_stock(res_stock_dir, fuel)
             ratios.index = ratios.index.map(STATE_2_CODE)
             ratios = ratios.dropna()  # na is USA
-            add_service_brownfield(n, "res", fuel, growth_multiplier, ratios, costs)
+            add_service_brownfield(
+                n=n,
+                sector="res",
+                fuel=fuel,
+                growth_multiplier=growth_multiplier,
+                ratios=ratios,
+                costs=costs,
+                simple_storage=simple_storage,
+            )
 
             # commercial sector
             ratios = get_commercial_stock(com_stock_dir, fuel)
             ratios.index = ratios.index.map(STATE_2_CODE)
             ratios = ratios.dropna()  # na is USA
-            add_service_brownfield(n, "com", fuel, growth_multiplier, ratios, costs)
+            add_service_brownfield(
+                n=n,
+                sector="com",
+                fuel=fuel,
+                growth_multiplier=growth_multiplier,
+                ratios=ratios,
+                costs=costs,
+                simple_storage=simple_storage,
+            )
 
     # Needed as loads may be split off to urban/rural
     sanitize_carriers(n, snakemake.config)

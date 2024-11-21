@@ -157,10 +157,10 @@ def build_pudl_fuel_costs(snapshots: pd.DatetimeIndex, start_date: str, end_date
     fuel_cost_temporal["interconnect"] = fuel_cost_temporal["nerc_region"].map(
         const.NERC_REGION_MAPPER,
     )
-    
-    if snakemake.wildcards.interconnect != 'usa':
+
+    if snakemake.wildcards.interconnect != "usa":
         fuel_cost_temporal = fuel_cost_temporal[fuel_cost_temporal["interconnect"] == snakemake.wildcards.interconnect]
-    
+
     fuel_cost_temporal["generator_name"] = (
         fuel_cost_temporal["plant_name_eia"].astype(str)
         + "_"
