@@ -62,7 +62,7 @@ def add_land_use_constraints(n):
 
     if generators.empty:
         return
-    
+
     p_nom = n.model["Generator-p_nom"].loc[generators.index]
 
     grouper = pd.concat([generators.carrier, generators.land_region], axis=1)
