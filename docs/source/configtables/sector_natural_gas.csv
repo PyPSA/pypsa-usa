@@ -1,6 +1,11 @@
 ,Unit,Values,Description
 natural_gas,,,Options when implementing natural gas networks
--- force_exports,--,"bool {true, false}",Force imports/export limits to states/provinces outside of the model scope. Values are based on historic data aligned to weather year.
+-- imports,--,,Limits on imports compared to historical year
+--- min,per_unit,"float {>=0}",Minimum import requirememnt compared to historical year.
+--- max,per_unit,"float {>=0} or 'inf'",Maximum allowable imports compared to historical year.
+-- exports,--,,Limits on exports compared to historical year
+--- min,per_unit,"float {>=0}",Minimum export requirememnt compared to historical year.
+--- max,per_unit,"float {>=0} or 'inf'",Maximum allowable exports compared to historical year.
 -- cyclic_storage,--,"bool {true, false}",Apply cyclic storage constraints on linepack and underground storage
 -- standing_loss,per_unit,"float {0 <=, >= 1}","Leakage rate from pipelines. These leaks do NOT account towards emissions, just enforces gas production to replinish losses with cyclic constraints. "
 ,,,
