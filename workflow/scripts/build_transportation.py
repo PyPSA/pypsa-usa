@@ -563,16 +563,23 @@ def _constrain_charing_rates(n: pypsa.Network, must_run_evs: bool) -> None:
     evs = links[links.carrier.str.contains("-elec-")]
     lpgs = links[links.carrier.str.contains("-lpg-")]
 
+    # these must be done seperatly, as they share bus1 names
+    ev_mapper = evs.reset_index().set_index("bus1")["Link"].to_dict()
+    lpg_mapper = lpgs.reset_index().set_index("bus1")["Link"].to_dict()
+
     assert len(evs) + len(lpgs) == len(links)
 
     p_max_pu_evs = n.loads_t["p_set"][evs.bus1.tolist()]
+    p_max_pu_evs = p_max_pu_evs.rename(columns=ev_mapper)
 
     if must_run_evs:
         p_min_pu = n.loads_t["p_set"][evs.bus1.tolist()]
+        p_min_pu = p_min_pu.rename(columns=ev_mapper)
         p_max_pu = p_max_pu_evs.copy()
     else:
         p_min_pu = pd.DataFrame()
         p_max_pu_lpg = n.loads_t["p_set"][lpgs.bus1.tolist()]
+        p_max_pu_lpg = p_max_pu_lpg.rename(columns=lpg_mapper)
         p_max_pu = pd.concat([p_max_pu_evs, p_max_pu_lpg], axis=1)
 
     # normalize to get profiles
