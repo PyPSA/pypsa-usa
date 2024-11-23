@@ -223,7 +223,10 @@ if __name__ == "__main__":
         client = None
 
     sns = get_snapshots(snakemake.params.snapshots)
-    cutout = atlite.Cutout(snakemake.input.cutout).sel(time=sns)
+    logger.info(f'using cutout "{snakemake.input.cutout}"')
+    cutout = atlite.Cutout(snakemake.input.cutout[0]).sel(
+        time=sns,
+    )  # Patch fix with [0] move expand in snakemake rule to add_elec for multiple cutouts
 
     regions = gpd.read_file(snakemake.input.regions)
 
