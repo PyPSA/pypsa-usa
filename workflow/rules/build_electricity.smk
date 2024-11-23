@@ -169,7 +169,6 @@ rule build_renewable_profiles:
         renewable=config["renewable"],
         snapshots=config["snapshots"],
     input:
-        base_network=RESOURCES + "{interconnect}/elec_base_network.nc",
         corine=ancient(
             DATA
             + "copernicus/PROBAV_LC100_global_v3.0.1_2019-nrt_Discrete-Classification-map_USA_EPSG-4326.tif"
