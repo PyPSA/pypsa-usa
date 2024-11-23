@@ -89,8 +89,7 @@ def filter_components(n, component_type, planning_horizon, carrier_list, region_
         active_components
         & component.carrier.isin(carrier_list)
         & component.bus.isin(region_buses)
-        & component.p_nom_extendable
-        == extendable
+        & (component.p_nom_extendable == extendable)
     ]
 
     return filtered
@@ -198,7 +197,7 @@ def add_technology_capacity_target_constraints(n, config):
     electricity:
         technology_capacity_target: config/policy_constraints/technology_capacity_target.csv
     """
-    tct_data = pd.read_csv(config["electricity"]["agg_p_nom_limits"])
+    tct_data = pd.read_csv(config["electricity"]["technology_capacity_targets"])
     tct_data = tct_data[tct_data.planning_horizon.isin(snakemake.params.planning_horizons)]
 
     if tct_data.empty:
@@ -271,16 +270,42 @@ def add_technology_capacity_target_constraints(n, config):
         lhs = (lhs_g + lhs_s).sum()
         rhs_base = rhs_g_existing + rhs_s_existing
 
-        if not np.isnan(target["max"]):
+        if not np.isnan(target["min"]):
             n.model.add_constraints(
                 lhs >= (target["min"] - rhs_base),
                 name=f"GlobalConstraint-{target.name}_{target.planning_horizon}_min",
+            )
+            logger.debug(
+                "TCT Constraint:\n"
+                "Name: %s\n"
+                "Planning Horizon: %s\n"
+                "Region: %s\n"
+                "Carrier: %s\n"
+                "Min Value: %s",
+                target.name,
+                target.planning_horizon,
+                target.region,
+                target.carrier,
+                (target["min"] - rhs_base),
             )
 
         if not np.isnan(target["max"]):
             n.model.add_constraints(
                 lhs <= (target["max"] - rhs_base),
                 name=f"GlobalConstraint-{target.name}_{target.planning_horizon}_max",
+            )
+            logger.debug(
+                "TCT Constraint:\n"
+                "Name: %s\n"
+                "Planning Horizon: %s\n"
+                "Region: %s\n"
+                "Carrier: %s\n"
+                "Max Value: %s",
+                target.name,
+                target.planning_horizon,
+                target.region,
+                target.carrier,
+                (target["max"] - rhs_base),
             )
 
 
