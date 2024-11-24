@@ -609,12 +609,55 @@ def _get_brownfield_template_df(
     return df[["bus1", "name", "suffix", "state", "p_max"]]
 
 
+def _get_endogenous_transport_brownfield_template_df(
+    n: pypsa.Network,
+) -> None:
+    """
+    Gets a dataframe in the following form.
+
+    |     | bus1               | name   | suffix      | state | p_max     |
+    |-----|--------------------|--------|-------------|-------|-----------|
+    | 0   | p480 0 trn-veh-lgt | p480 0 | trn-veh-lgt | TX    | 90.0544   |
+    | 1   | p600 0 trn-veh-hvy | p600 0 | trn-veh-hvy | TX    | 716.606   |
+    | 2   | p610 0 trn-veh-med | p610 0 | trn-veh-med | TX    | 1999.486  |
+    | ... | ...                | ...    | ...         | ...   | ...       |
+    """
+
+    sector = SecNames.TRANSPORT.value
+    subsector = Transport.ROAD.value
+    vehicles = [x.value for x in RoadTransport]
+
+    elec_name = SecCarriers.ELECTRICITY.value
+    lpg_name = SecCarriers.LPG.value
+
+    carriers = [f"{sector}-{subsector}-{x}" for x in vehicles]
+
+    loads = n.loads[n.loads.carrier.isin(carriers)]
+    template = n.loads_t.p_set[loads.index].max().to_frame(name="p_max")
+
+    # create duplicate to track evs and lpgs
+    evs = template.copy()
+    evs.index = evs.index.str.replace(f"{sector}-", f"{sector}-{elec_name}-")
+    lpgs = template.copy()
+    lpgs.index = lpgs.index.str.replace(f"{sector}-", f"{sector}-{lpg_name}-")
+
+    df = pd.concat([evs, lpgs])
+
+    df["state"] = df.index.map(n.links.bus1).map(n.buses.STATE)
+    df = df.reset_index(names="bus1")
+    df["name"] = df.bus1.map(lambda x: x.split(f" {sector}")[0])
+    df["suffix"] = [bus.split(name)[1].strip() for (bus, name) in df[["bus1", "name"]].values]
+
+    return df[["bus1", "name", "suffix", "state", "p_max"]]
+
+
 def add_road_transport_brownfield(
     n: pypsa.Network,
     vehicle_mode: str,  # lgt, hvy, ect..
     growth_multiplier: float,
     ratios: pd.DataFrame,
     costs: pd.DataFrame,
+    exogenous_transport: bool,
 ) -> None:
     """
     Adds existing stock to transportation sector.
@@ -797,20 +840,40 @@ def add_road_transport_brownfield(
                 marginal_cost=mc,
             )
 
-    sector = SecNames.TRANSPORT.value
-    veh_type = Transport.ROAD.value
+    # different naming conventions for exogenous/endogenous transport investment
 
-    veh_name = f"{veh_type}-{vehicle_mode}"
+    if exogenous_transport:
 
-    # ev brownfield
-    df = _get_brownfield_template_df(n, fuel="elec", sector=sector, subsector=veh_name)
-    df["p_nom"] = df.p_max.mul(growth_multiplier)
-    add_brownfield_ev(n, df, vehicle_mode, ratios, costs)
+        sector = SecNames.TRANSPORT.value
+        veh_type = Transport.ROAD.value
+        veh_name = f"{veh_type}-{vehicle_mode}"
 
-    # lpg brownfield
-    df = _get_brownfield_template_df(n, fuel="lpg", sector=sector, subsector=veh_name)
-    df["p_nom"] = df.p_max.mul(growth_multiplier)
-    add_brownfield_lpg(n, df, vehicle_mode, ratios, costs)
+        # ev brownfield
+        df = _get_brownfield_template_df(
+            n,
+            fuel="elec",
+            sector=sector,
+            subsector=veh_name,
+        )
+        df["p_nom"] = df.p_max.mul(growth_multiplier)
+        add_brownfield_ev(n, df, vehicle_mode, ratios, costs)
+
+        # lpg brownfield
+        df = _get_brownfield_template_df(
+            n,
+            fuel="lpg",
+            sector=sector,
+            subsector=veh_name,
+        )
+        df["p_nom"] = df.p_max.mul(growth_multiplier)
+        add_brownfield_lpg(n, df, vehicle_mode, ratios, costs)
+
+    else:
+
+        df = _get_endogenous_transport_brownfield_template_df(n)
+        df["p_nom"] = df.p_max.mul(growth_multiplier)
+        add_brownfield_ev(n, df, vehicle_mode, ratios, costs)
+        add_brownfield_lpg(n, df, vehicle_mode, ratios, costs)
 
 
 def add_service_brownfield(
@@ -1346,10 +1409,11 @@ def add_service_brownfield(
 
 
 if __name__ == "__main__":
-    print(get_residential_stock("./../repo_data/sectors/residential_stock", "cooling"))
+    # print(get_residential_stock("./../repo_data/sectors/residential_stock", "cooling"))
 
     # with open("./../config/config.api.yaml") as file:
     #     yaml_data = yaml.safe_load(file)
     # api = yaml_data["api"]["eia"]
 
     # print(get_transport_stock(api, 2024))
+    pass
