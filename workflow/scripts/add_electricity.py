@@ -265,7 +265,9 @@ def load_powerplants(
 
 
 def match_nearest_bus(plants_subset, buses_subset):
-    """Assign the nearest bus to each plant in the given subsets."""
+    """
+    Assign the nearest bus to each plant in the given subsets.
+    """
     if plants_subset.empty or buses_subset.empty:
         return plants_subset
 
@@ -866,7 +868,7 @@ def main(snakemake):
         n.snapshots,
     )
 
-    if params.conventional["must_run"]:
+    if params.conventional.get("must_run", False):
         # TODO (@ktehranchi): In the future the plants that are must-run should not be clustered and instead retire according to lifetime
         apply_must_run_ratings(
             n,
