@@ -309,113 +309,125 @@ def add_technology_capacity_target_constraints(n, config):
 
 def add_RPS_constraints(n, config):
     """
-    Add Renewable Portfolio Standards constraint to the network.
+    Add Renewable Portfolio Standards (RPS) constraints to the network.
 
-    Add percent levels of generator production (MWh) per carrier or groups of carriers for individual countries. Each constraint can be designated for a specified planning horizon in multi-period models. Opts and path for portfolio_standards.csv must be defined in config.yaml. Default file is available at config/policy_constraints/portfolio_standards.csv.
+    This function enforces constraints on the percentage of electricity generation
+    from renewable energy sources for specific regions and planning horizons.
+    It reads the necessary data from configuration files and the network.
 
     Parameters
     ----------
     n : pypsa.Network
+        The PyPSA network object.
     config : dict
+        A dictionary containing configuration settings and file paths.
 
-    Example
+    Returns
     -------
-    scenario:
-        opts: [Co2L-RPS-24H]
-    electricity:
-        portfolio_standards: config/policy_constraints/portfolio_standards.csv
+    None
     """
-    portfolio_standards = pd.read_csv(
-        config["electricity"]["portfolio_standards"],
-    )
-    rps_carriers = [
-        "onwind",
-        "offwind",
-        "offwind_floating",
-        "solar",
-        "hydro",
-        "geothermal",
-        "biomass",
-        "EGS",
-    ]
-    ces_carriers = [
-        "onwind",
-        "offwind",
-        "offwind_floating",
-        "solar",
-        "hydro",
-        "geothermal",
-        "EGS",
-        "biomass",
-        "nuclear",
-    ]
-    state_memberships = n.buses.groupby("reeds_state")["reeds_zone"].apply(lambda x: ", ".join(x)).to_dict()
 
-    rps_reeds = pd.read_csv(
+    def process_reeds_data(filepath, carriers, value_col):
+        """
+        Helper function to process RPS or CES REEDS data.
+        """
+        reeds = pd.read_csv(filepath)
+
+        # Handle both wide and long formats
+        if "rps_all" not in reeds.columns:
+            reeds = reeds.melt(id_vars="st", var_name="planning_horizon", value_name=value_col)
+
+        # Standardize column names
+        reeds.rename(columns={"st": "region", "t": "planning_horizon", "rps_all": "pct"}, inplace=True)
+        reeds["carrier"] = [", ".join(carriers)] * len(reeds)
+
+        # Extract and create new rows for `rps_solar` and `rps_wind`
+        additional_rows = []
+        for carrier_col, carrier_name in [("rps_solar", "solar"), ("rps_wind", "onwind, offwind, offwind_floating")]:
+            if carrier_col in reeds.columns:
+                temp = reeds[["region", "planning_horizon", carrier_col]].copy()
+                temp.rename(columns={carrier_col: "pct"}, inplace=True)
+                temp["carrier"] = carrier_name
+                additional_rows.append(temp)
+
+        # Combine original data with additional rows
+        if additional_rows:
+            additional_rows = pd.concat(additional_rows, ignore_index=True)
+            reeds = pd.concat([reeds, additional_rows], ignore_index=True)
+
+        # Ensure the final dataframe has consistent columns
+        reeds = reeds[["region", "planning_horizon", "carrier", "pct"]]
+        reeds = reeds[reeds["pct"] > 0.0]  # Remove any rows with zero or negative percentages
+
+        return reeds
+
+    # Read portfolio standards data
+    portfolio_standards = pd.read_csv(config["electricity"]["portfolio_standards"])
+
+    # Define carriers for RPS and CES
+    rps_carriers = ["onwind", "offwind", "offwind_floating", "solar", "hydro", "geothermal", "biomass", "EGS"]
+    ces_carriers = rps_carriers + ["nuclear", "SMR"]
+
+    # Process RPS and CES REEDS data
+    rps_reeds = process_reeds_data(
         snakemake.input.rps_reeds,
+        rps_carriers,
+        value_col="pct",
     )
-    rps_reeds["region"] = rps_reeds["st"].map(state_memberships)
-    rps_reeds.dropna(subset="region", inplace=True)
-    rps_reeds["carrier"] = [", ".join(rps_carriers)] * len(rps_reeds)
-    rps_reeds.rename(
-        columns={"t": "planning_horizon", "rps_all": "pct", "st": "name"},
-        inplace=True,
-    )
-    rps_reeds.drop(columns=["rps_solar", "rps_wind"], inplace=True)
-
-    ces_reeds = pd.read_csv(
+    ces_reeds = process_reeds_data(
         snakemake.input.ces_reeds,
-    ).melt(id_vars="st", var_name="planning_horizon", value_name="pct")
-    ces_reeds["region"] = ces_reeds["st"].map(state_memberships)
-    ces_reeds.dropna(subset="region", inplace=True)
-    ces_reeds["carrier"] = [", ".join(ces_carriers)] * len(ces_reeds)
-    ces_reeds.rename(columns={"st": "name"}, inplace=True)
+        ces_carriers,
+        value_col="pct",
+    )
 
+    # Concatenate all portfolio standards
     portfolio_standards = pd.concat([portfolio_standards, rps_reeds, ces_reeds])
-    portfolio_standards = portfolio_standards[portfolio_standards.pct > 0.0]
     portfolio_standards = portfolio_standards[
-        portfolio_standards.planning_horizon.isin(snakemake.params.planning_horizons)
+        (portfolio_standards.pct > 0.0)
+        & (portfolio_standards.planning_horizon.isin(snakemake.params.planning_horizons))
+        & (portfolio_standards.region.isin(n.buses.reeds_state.unique()))
     ]
-    portfolio_standards.set_index("name", inplace=True)
 
-    for idx, pct_lim in portfolio_standards.iterrows():
-        region_list = [region_.strip() for region_ in pct_lim.region.split(",")]
+    # Iterate through constraints and add RPS constraints to the model
+    for _, constraint_row in portfolio_standards.iterrows():
+        region_list = [region.strip() for region in constraint_row.region.split(",")]
         region_buses = get_region_buses(n, region_list)
 
         if region_buses.empty:
             continue
 
-        carriers = [carrier_.strip() for carrier_ in pct_lim.carrier.split(",")]
+        carriers = [carrier.strip() for carrier in constraint_row.carrier.split(",")]
 
-        # generators
+        # Filter region generators
         region_gens = n.generators[n.generators.bus.isin(region_buses.index)]
         region_gens_eligible = region_gens[region_gens.carrier.isin(carriers)]
 
-        if not region_gens.empty:
+        if not region_gens_eligible.empty:
+            # Eligible generation
             p_eligible = n.model["Generator-p"].sel(
-                period=pct_lim.planning_horizon,
+                period=constraint_row.planning_horizon,
                 Generator=region_gens_eligible.index,
             )
             lhs = p_eligible.sum()
 
+            # Region demand
             region_demand = (
                 n.loads_t.p_set.loc[
-                    pct_lim.planning_horizon,
+                    constraint_row.planning_horizon,
                     n.loads.bus.isin(region_buses.index),
                 ]
                 .sum()
                 .sum()
             )
 
-            rhs = pct_lim.pct * region_demand
+            rhs = constraint_row.pct * region_demand
 
+            # Add constraint
             n.model.add_constraints(
                 lhs >= rhs,
-                name=f"GlobalConstraint-{pct_lim.name}_{pct_lim.planning_horizon}_rps_limit",
+                name=f"GlobalConstraint-{constraint_row.name}_{constraint_row.planning_horizon}_rps_limit",
             )
-            logger.info(
-                f"Adding RPS {pct_lim.name}_{pct_lim.planning_horizon} for {pct_lim.planning_horizon}.",
-            )
+            logger.info(f"Added RPS {constraint_row.name} for {constraint_row.planning_horizon}.")
 
 
 def add_EQ_constraints(n, o, scaling=1e-1):
