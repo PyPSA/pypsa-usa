@@ -611,6 +611,7 @@ def _get_brownfield_template_df(
 
 def _get_endogenous_transport_brownfield_template_df(
     n: pypsa.Network,
+    fuel: str,
 ) -> None:
     """
     Gets a dataframe in the following form.
@@ -627,15 +628,17 @@ def _get_endogenous_transport_brownfield_template_df(
     subsector = Transport.ROAD.value
     vehicles = [x.value for x in RoadTransport]
 
-    elec_name = SecCarriers.ELECTRICITY.value
-    lpg_name = SecCarriers.LPG.value
-
     carriers = [f"{sector}-{subsector}-{x}" for x in vehicles]
 
     loads = n.loads[n.loads.carrier.isin(carriers)]
     template = n.loads_t.p_set[loads.index].max().to_frame(name="p_max")
 
     # create duplicate to track evs and lpgs
+    df = template.copy()
+    df["bus1"] = df.index
+    df["state"] = df.index.map(n.buses.STATE)
+    df["suffix"] = [bus.split(name)[1].strip() for (bus, name) in df[["bus1", "name"]].values]
+
     evs = template.copy()
     evs.index = evs.index.str.replace(f"{sector}-", f"{sector}-{elec_name}-")
     lpgs = template.copy()
@@ -646,7 +649,6 @@ def _get_endogenous_transport_brownfield_template_df(
     df["state"] = df.index.map(n.links.bus1).map(n.buses.STATE)
     df = df.reset_index(names="bus1")
     df["name"] = df.bus1.map(lambda x: x.split(f" {sector}")[0])
-    df["suffix"] = [bus.split(name)[1].strip() for (bus, name) in df[["bus1", "name"]].values]
 
     return df[["bus1", "name", "suffix", "state", "p_max"]]
 
@@ -842,16 +844,20 @@ def add_road_transport_brownfield(
 
     # different naming conventions for exogenous/endogenous transport investment
 
+    sector = SecNames.TRANSPORT.value
+    veh_type = Transport.ROAD.value
+
+    elec_fuel = SecCarriers.ELECTRICITY.value
+    lpg_fuel = SecCarriers.LPG.value
+
     if exogenous_transport:
 
-        sector = SecNames.TRANSPORT.value
-        veh_type = Transport.ROAD.value
         veh_name = f"{veh_type}-{vehicle_mode}"
 
         # ev brownfield
         df = _get_brownfield_template_df(
             n,
-            fuel="elec",
+            fuel=elec_fuel,
             sector=sector,
             subsector=veh_name,
         )
@@ -861,7 +867,7 @@ def add_road_transport_brownfield(
         # lpg brownfield
         df = _get_brownfield_template_df(
             n,
-            fuel="lpg",
+            fuel=lpg_fuel,
             sector=sector,
             subsector=veh_name,
         )
@@ -870,9 +876,14 @@ def add_road_transport_brownfield(
 
     else:
 
-        df = _get_endogenous_transport_brownfield_template_df(n)
+        # elec brownfield
+        df = _get_endogenous_transport_brownfield_template_df(n, fuel=elec_fuel)
         df["p_nom"] = df.p_max.mul(growth_multiplier)
         add_brownfield_ev(n, df, vehicle_mode, ratios, costs)
+
+        # lpg brownfield
+        df = _get_endogenous_transport_brownfield_template_df(n, fuel=lpg_fuel)
+        df["p_nom"] = df.p_max.mul(growth_multiplier)
         add_brownfield_lpg(n, df, vehicle_mode, ratios, costs)
 
 
