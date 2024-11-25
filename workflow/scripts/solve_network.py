@@ -1235,7 +1235,7 @@ def extra_functionality(n, snapshots):
         add_SAFE_constraints(n, config)
     if "SAFER" in opts and n.generators.p_nom_extendable.any():
         add_SAFER_constraints(n, config)
-    if "CCL" in opts and n.generators.p_nom_extendable.any():
+    if "TCT" in opts and n.generators.p_nom_extendable.any():
         add_technology_capacity_target_constraints(n, config)
     reserve = config["electricity"].get("operational_reserve", {})
     if reserve.get("activate"):
