@@ -34,6 +34,8 @@ model_topology:
 enable:
   build_cutout: false
 
+renewable_weather_years: [2019]
+
 snapshots:
   start: "2019-01-01"
   end: "2020-01-01"
@@ -77,6 +79,7 @@ electricity:
 # docs :
 conventional:
   unit_commitment: false
+  must_run: false
   dynamic_fuel_price:
     enable: false
     pudl: true
