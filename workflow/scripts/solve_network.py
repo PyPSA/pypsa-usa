@@ -1,6 +1,3 @@
-# SPDX-FileCopyrightText: : 2017-2023 The PyPSA-Eur Authors
-#
-# SPDX-License-Identifier: MIT
 """
 Solves optimal operation and capacity for a network with the option to
 iteratively optimize while updating line reactances.
@@ -25,6 +22,7 @@ Additionally, some extra constraints specified in :mod:`solve_network` are added
     the workflow for all scenarios in the configuration file (``scenario:``)
     based on the rule :mod:`solve_network`.
 """
+
 import logging
 import re
 from typing import Optional
