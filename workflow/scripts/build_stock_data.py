@@ -613,7 +613,7 @@ def _get_endogenous_transport_brownfield_template_df(
     n: pypsa.Network,
     fuel: str,
     veh_mode: Optional[str] = None,
-) -> None:
+) -> pd.DataFrame:
     """
     Gets a dataframe in the following form.
 
@@ -635,6 +635,10 @@ def _get_endogenous_transport_brownfield_template_df(
     carriers = [f"{sector}-{subsector}-{x}" for x in vehicles]
 
     loads = n.loads[n.loads.carrier.isin(carriers)]
+
+    if loads.empty:
+        return pd.DataFrame(columns=["bus1", "name", "suffix", "state", "p_max"])
+
     df = n.loads_t.p_set[loads.index].max().to_frame(name="p_max")
 
     df["bus1"] = df.index
@@ -769,6 +773,9 @@ def add_road_transport_brownfield(
                 efficiency = 3  # mpg
             case _:
                 raise NotImplementedError
+
+        if df.empty:
+            return
 
         # dont bother adding in extra for less than 0.5% market share
         if ratios.at["lpg", ratio_name] < 0.5:
