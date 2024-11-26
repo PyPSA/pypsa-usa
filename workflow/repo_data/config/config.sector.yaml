@@ -49,8 +49,10 @@ sector:
   transport_sector:
     brownfield: True # false to be implemented
     dynamic_costs: True # false to be implemented 
-    exogenous: True # false to be implemented 
-    ev_policy: "config/policy_constraints/ev_policy.csv"
+    investment:
+      exogenous: False 
+      ev_policy: "config/policy_constraints/ev_policy.csv"
+      must_run_evs: True
     modes: # false to be implemented 
       vehicle: true
       rail: true
