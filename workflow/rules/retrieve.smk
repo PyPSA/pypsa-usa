@@ -27,7 +27,7 @@ pypsa_usa_datafiles = [
 def define_zenodo_databundles():
     return {
         "USATestSystem": "https://zenodo.org/record/4538590/files/USATestSystem.zip",
-        "pypsa_usa_data": "https://zenodo.org/records/11359263/files/pypsa_usa_data.zip",
+        "pypsa_usa_data": "https://zenodo.org/records/14219029/files/pypsa_usa_data.zip",
     }
 
 
@@ -197,13 +197,13 @@ if not config["enable"].get("build_cutout", False):
     rule retrieve_cutout:
         input:
             HTTP.remote(
-                "zenodo.org/records/10067222/files/{interconnect}_{cutout}.nc",
+                "zenodo.org/records/14219029/files/usa_{cutout}.nc",
                 static=True,
             ),
         output:
-            "cutouts/" + CDIR + "{interconnect}_{cutout}.nc",
+            "cutouts/" + CDIR + "usa_{cutout}.nc",
         log:
-            "logs/" + CDIR + "retrieve_cutout_{interconnect}_{cutout}.log",
+            "logs/" + CDIR + "retrieve_cutout_usa_{cutout}.log",
         resources:
             mem_mb=5000,
         retries: 2

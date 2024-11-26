@@ -45,7 +45,7 @@ import numpy as np
 import pandas as pd
 import pypsa
 import xarray as xr
-from _helpers import configure_logging
+from _helpers import configure_logging, get_multiindex_snapshots
 from constants_sector import FIPS_2_STATE, NAICS, VMT_UNIT_CONVERSION
 from eia import EnergyDemand, TransportationDemand
 
@@ -2475,6 +2475,13 @@ if __name__ == "__main__":
     configure_logging(snakemake)
 
     n = pypsa.Network(snakemake.input.network)
+
+    # add snapshots
+    sns_config = snakemake.params.snapshots
+    planning_horizons = snakemake.params.planning_horizons
+
+    n.snapshots = get_multiindex_snapshots(sns_config, planning_horizons)
+    n.set_investment_periods(periods=planning_horizons)
 
     # extract user demand configuration parameters
 

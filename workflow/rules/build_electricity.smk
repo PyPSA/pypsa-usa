@@ -34,8 +34,6 @@ rule build_shapes:
 rule build_base_network:
     params:
         build_offshore_network=config["offshore_network"],
-        snapshots=config["snapshots"],
-        planning_horizons=config["scenario"]["planning_horizons"],
         model_topology=config["model_topology"]["include"],
     input:
         buses=DATA + "breakthrough_network/base_grid/bus.csv",
@@ -196,12 +194,11 @@ rule build_renewable_profiles:
         cutout=lambda wildcards: expand(
             "cutouts/"
             + CDIR
-            + "{interconnect}_"
+            + "usa_"
             + config["renewable"][wildcards.technology]["cutout"]
             + "_{renewable_weather_year}"
             + ".nc",
             renewable_weather_year=config["renewable_weather_years"],
-            interconnect=config["scenario"]["interconnect"],
         ),
     output:
         profile=RESOURCES + "{interconnect}/profile_{technology}.nc",
@@ -337,6 +334,8 @@ rule build_electrical_demand:
         demand_params=config["electricity"]["demand"],
         eia_api=config["api"]["eia"],
         profile_year=pd.to_datetime(config["snapshots"]["start"]).year,
+        planning_horizons=config["scenario"]["planning_horizons"],
+        snapshots=config["snapshots"],
     input:
         network=RESOURCES + "{interconnect}/elec_base_network.nc",
         demand_files=demand_raw_data,
@@ -361,6 +360,7 @@ rule build_sector_demand:
         planning_horizons=config["scenario"]["planning_horizons"],
         profile_year=pd.to_datetime(config["snapshots"]["start"]).year,
         eia_api=config["api"]["eia"],
+        snapshots=config["snapshots"],
     input:
         network=RESOURCES + "{interconnect}/elec_base_network.nc",
         demand_files=demand_raw_data,
@@ -505,6 +505,7 @@ rule add_demand:
     params:
         sectors=config["scenario"]["sector"],
         planning_horizons=config["scenario"]["planning_horizons"],
+        snapshots=config["snapshots"],
     input:
         network=RESOURCES + "{interconnect}/elec_base_network.nc",
         demand=demand_to_add,
