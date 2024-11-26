@@ -13,7 +13,6 @@ scenario:
   simpl: [75]
   opts: [REM-3h]
   ll: [v1.0]
-  scope: "total" # "urban", "rural", or "total"
   sector: "" # G
   planning_horizons: [2030, 2040, 2050]    #(2018-2023, 2030, 2040, 2050)
 
@@ -133,33 +132,6 @@ costs:
     10hr_PHS: 0.3
     12hr_PHS: 0.3
   max_growth: # {carrier: {base:, rate:}}
-
-# docs :
-sector:
-  co2_sequestration_potential: 0
-  natural_gas:
-    allow_imports_exports: true # false to be implemented
-    cyclic_storage: false
-  heating:
-    heat_pump_sink_T: 55.
-  demand:
-    profile:
-      residential: eulp # efs, eulp
-      commercial: eulp # efs, eulp
-      transport: efs # efs
-      industry: efs # efs
-    scale:
-      residential: aeo # efs, aeo
-      commercial: aeo # efs, aeo
-      transport: aeo # efs, aeo
-      industry: aeo # efs, aeo
-    disaggregation: 
-      residential: pop # pop
-      commercial: pop # pop
-      transport: pop # pop
-      industry: pop # pop
-    scenarios:
-      aeo: reference
 
 # docs :
 clustering:

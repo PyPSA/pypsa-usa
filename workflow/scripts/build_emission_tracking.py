@@ -176,4 +176,4 @@ def _build_ch4_links(n, states: list[str], gwp: float, leakage_rate: float):
     # append the connection to methane stores
 
     n.links.loc[links, "bus2"] = n.links.loc[links,].bus1 + "-ch4"  # 'CA gas-ch4'
-    n.links.loc[links, "efficency2"] = emissions
+    n.links.loc[links, "efficiency2"] = emissions

@@ -2,6 +2,8 @@
 Module for holding global constant values.
 """
 
+from enum import Enum
+
 import pandas as pd
 
 ###########################################
@@ -180,12 +182,6 @@ ADS_FUEL_MAPPER = {
     "Biomass Waste": "Biomass",
     "LFG": "Waste",
 }
-
-###########################
-# Constants for EIA mapping
-###########################
-
-# renaming moved to pre-processing
 
 
 ###############################
@@ -580,150 +576,6 @@ REEDS_NERC_INTERCONNECT_MAPPER = {
     "ERCOT": "texas",
 }
 
-# Simplified dictionary to map states to their primary time zones.
-# Note: This does not account for states with multiple time zones or specific exceptions.
-STATE_2_TIMEZONE = {
-    "AL": "US/Central",
-    "AK": "US/Alaska",
-    "AZ": "US/Mountain",
-    "AR": "US/Central",
-    "CA": "US/Pacific",
-    "CO": "US/Mountain",
-    "CT": "US/Eastern",
-    "DE": "US/Eastern",
-    "FL": "US/Eastern",
-    "GA": "US/Eastern",
-    "HI": "Pacific/Honolulu",
-    "ID": "US/Mountain",
-    "IL": "US/Central",
-    "IN": "US/Eastern",
-    "IA": "US/Central",
-    "KS": "US/Central",
-    "KY": "US/Eastern",
-    "LA": "US/Central",
-    "ME": "US/Eastern",
-    "MD": "US/Eastern",
-    "MA": "US/Eastern",
-    "MI": "US/Eastern",
-    "MN": "US/Central",
-    "MS": "US/Central",
-    "MO": "US/Central",
-    "MT": "US/Mountain",
-    "NE": "US/Central",
-    "NV": "US/Pacific",
-    "NH": "US/Eastern",
-    "NJ": "US/Eastern",
-    "NM": "US/Mountain",
-    "NY": "US/Eastern",
-    "NC": "US/Eastern",
-    "ND": "US/Central",
-    "OH": "US/Eastern",
-    "OK": "US/Central",
-    "OR": "US/Pacific",
-    "PA": "US/Eastern",
-    "RI": "US/Eastern",
-    "SC": "US/Eastern",
-    "SD": "US/Central",
-    "TN": "US/Central",
-    "TX": "US/Central",
-    "UT": "US/Mountain",
-    "VT": "US/Eastern",
-    "VA": "US/Eastern",
-    "WA": "US/Pacific",
-    "WV": "US/Eastern",
-    "WI": "US/Central",
-    "WY": "US/Mountain",
-}
-
-################################
-# Constants for Industry Sector Loads
-################################
-
-# https://transition.fcc.gov/oet/info/maps/census/fips/fips.txt
-FIPS_2_STATE = {
-    "01": "ALABAMA",
-    "02": "ALASKA",
-    "04": "ARIZONA",
-    "05": "ARKANSAS",
-    "06": "CALIFORNIA",
-    "08": "COLORADO",
-    "09": "CONNECTICUT",
-    "10": "DELAWARE",
-    "11": "DISTRICT OF COLUMBIA",
-    "12": "FLORIDA",
-    "13": "GEORGIA",
-    "15": "HAWAII",
-    "16": "IDAHO",
-    "17": "ILLINOIS",
-    "18": "INDIANA",
-    "19": "IOWA",
-    "20": "KANSAS",
-    "21": "KENTUCKY",
-    "22": "LOUISIANA",
-    "23": "MAINE",
-    "24": "MARYLAND",
-    "25": "MASSACHUSETTS",
-    "26": "MICHIGAN",
-    "27": "MINNESOTA",
-    "28": "MISSISSIPPI",
-    "29": "MISSOURI",
-    "30": "MONTANA",
-    "31": "NEBRASKA",
-    "32": "NEVADA",
-    "33": "NEW HAMPSHIRE",
-    "34": "NEW JERSEY",
-    "35": "NEW MEXICO",
-    "36": "NEW YORK",
-    "37": "NORTH CAROLINA",
-    "38": "NORTH DAKOTA",
-    "39": "OHIO",
-    "40": "OKLAHOMA",
-    "41": "OREGON",
-    "42": "PENNSYLVANIA",
-    "44": "RHODE ISLAND",
-    "45": "SOUTH CAROLINA",
-    "46": "SOUTH DAKOTA",
-    "47": "TENNESSEE",
-    "48": "TEXAS",
-    "49": "UTAH",
-    "50": "VERMONT",
-    "51": "VIRGINIA",
-    "53": "WASHINGTON",
-    "54": "WEST VIRGINIA",
-    "55": "WISCONSIN",
-    "56": "WYOMING",
-}
-
-# only grouped to level 2
-# https://www23.statcan.gc.ca/imdb/p3VD.pl?Function=getVD&TVD=1181553
-# https://github.com/NREL/Industry-Energy-Tool/tree/master/data_foundation/
-NAICS = {
-    11: "Agriculture, forestry, fishing and hunting Agriculture, forestry, fishing and hunting",
-    21: "Mining, quarrying, and oil and gas extraction Mining, quarrying, and oil and gas extraction",
-    22: "Utilities",
-    23: "Construction",
-    31: "Manufacturing",
-    32: "Manufacturing",
-    33: "Manufacturing",
-    41: "Wholesale trade",
-    44: "Retail trade",
-    45: "Retail trade",
-    48: "Transportation and warehousing",
-    49: "Transportation and warehousing",
-    51: "Information and cultural industries",
-    52: "Finance and insurance",
-    53: "Real estate and rental and leasing",
-    54: "Professional, scientific and technical services",
-    55: "Management of companies and enterprises",
-    56: "Administrative and support, waste management and remediation services",
-    61: "Educational services",
-    62: "Health care and social assistance",
-    71: "Arts, entertainment and recreation",
-    72: "Accommodation and food services",
-    81: "Other services (except public administration)",
-    91: "Public administration",
-}
-
 ################################
 # Constants for Breakthrough mapping
 ################################
@@ -1008,3 +860,77 @@ EIA_FUEL_MAPPER_2 = {
     "Wind": "onwind",
     "Wood and Wood Derived Fuels": "biomass",
 }
+
+#####################
+# Constants for dates
+#####################
+
+# Simplified dictionary to map states to their primary time zones.
+# Note: This does not account for states with multiple time zones or specific exceptions.
+STATE_2_TIMEZONE = {
+    "AL": "US/Central",
+    "AK": "US/Alaska",
+    "AZ": "US/Mountain",
+    "AR": "US/Central",
+    "CA": "US/Pacific",
+    "CO": "US/Mountain",
+    "CT": "US/Eastern",
+    "DE": "US/Eastern",
+    "FL": "US/Eastern",
+    "GA": "US/Eastern",
+    "HI": "Pacific/Honolulu",
+    "ID": "US/Mountain",
+    "IL": "US/Central",
+    "IN": "US/Eastern",
+    "IA": "US/Central",
+    "KS": "US/Central",
+    "KY": "US/Eastern",
+    "LA": "US/Central",
+    "ME": "US/Eastern",
+    "MD": "US/Eastern",
+    "MA": "US/Eastern",
+    "MI": "US/Eastern",
+    "MN": "US/Central",
+    "MS": "US/Central",
+    "MO": "US/Central",
+    "MT": "US/Mountain",
+    "NE": "US/Central",
+    "NV": "US/Pacific",
+    "NH": "US/Eastern",
+    "NJ": "US/Eastern",
+    "NM": "US/Mountain",
+    "NY": "US/Eastern",
+    "NC": "US/Eastern",
+    "ND": "US/Central",
+    "OH": "US/Eastern",
+    "OK": "US/Central",
+    "OR": "US/Pacific",
+    "PA": "US/Eastern",
+    "RI": "US/Eastern",
+    "SC": "US/Eastern",
+    "SD": "US/Central",
+    "TN": "US/Central",
+    "TX": "US/Central",
+    "UT": "US/Mountain",
+    "VT": "US/Eastern",
+    "VA": "US/Eastern",
+    "WA": "US/Pacific",
+    "WV": "US/Eastern",
+    "WI": "US/Central",
+    "WY": "US/Mountain",
+}
+
+
+class Month(Enum):
+    JANUARY = 1
+    FEBRUARY = 2
+    MARCH = 3
+    APRIL = 4
+    MAY = 5
+    JUNE = 6
+    JULY = 7
+    AUGUST = 8
+    SEPTEMBER = 9
+    OCTOBER = 10
+    NOVEMBER = 11
+    DECEMBER = 12
