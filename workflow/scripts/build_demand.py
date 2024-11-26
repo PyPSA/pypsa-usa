@@ -45,7 +45,6 @@ import numpy as np
 import pandas as pd
 import pypsa
 import xarray as xr
-
 from _helpers import configure_logging, get_multiindex_snapshots
 from constants_sector import FIPS_2_STATE, NAICS, VMT_UNIT_CONVERSION
 from eia import EnergyDemand, TransportationDemand
