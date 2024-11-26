@@ -1370,16 +1370,6 @@ if __name__ == "__main__":
 
     n = pypsa.Network(snakemake.input.network)
 
-    # lks = n.links[n.links.carrier.str.endswith("-gas-furnace")].index
-    # n.links.loc[lks, "capital_cost"] = 0
-
-    # n.links.loc["CA gas production", "p_nom_extendable"] = True
-    # n.links.loc["CA gas production", "p_nom_max"] = np.inf
-    # n.links.loc["CA gas production", "capital_cost"] = 1
-
-    lks = n.links[(n.links.carrier.str.contains("ashp")) & (n.links.carrier.str.startswith("com"))].index.to_list()
-    n.links.loc[lks, "p_nom"] = 1250
-
     n = prepare_network(
         n,
         solve_opts,

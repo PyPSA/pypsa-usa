@@ -504,6 +504,7 @@ if __name__ == "__main__":
                 growth_multiplier,
                 ratios,
                 costs,
+                exogenous_transport,
             )
 
     if snakemake.params.sector["service_sector"]["brownfield"]:

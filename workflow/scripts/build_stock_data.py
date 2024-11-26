@@ -700,7 +700,7 @@ def add_road_transport_brownfield(
         df["carrier"] = f"{sector}-{elec_fuel}-{veh_type}-{vehicle_mode}"
 
         df["ratio"] = ratios.at["electricity", ratio_name]
-        df["p_nom"] = df.p_max.mul(df.ratio).div(100)  # div to convert from %
+        df["p_nom"] = df.p_max.mul(df.ratio).div(100).div(efficiency).round(2)  # div to convert from %
 
         # roll back vehicle stock in 5 year segments
         step = 5  # years
@@ -794,7 +794,7 @@ def add_road_transport_brownfield(
         df["carrier"] = f"{sector}-{lpg_fuel}-{veh_type}-{vehicle_mode}"
 
         df["ratio"] = ratios.at["lpg", ratio_name]
-        df["p_nom"] = df.p_max.mul(df.ratio).div(100)  # div to convert from %
+        df["p_nom"] = df.p_max.mul(df.ratio).div(100).div(efficiency).round(2)  # div to convert from %
 
         marginal_cost = _get_marginal_cost(n, df.bus1.to_list())
 
@@ -933,7 +933,7 @@ def add_service_brownfield(
         df["carrier"] = df.carrier + "-gas-furnace"
 
         df["ratio"] = df.state.map(ratios.gas)
-        df["p_nom"] = df.p_max.mul(df.ratio).div(100)  # div to convert from %
+        df["p_nom"] = df.p_max.mul(df.ratio).div(100).div(efficiency).round(2)  # div to convert from %
 
         marginal_cost_names = [x.replace("heat", "gas-furnace") for x in df.bus1.to_list()]
         marginal_cost = _get_marginal_cost(n, marginal_cost_names)
@@ -949,7 +949,7 @@ def add_service_brownfield(
             furnaces = df.copy()
 
             furnaces["name"] = furnaces.name + f" existing_{build_year} " + furnaces.carrier
-            furnaces["p_nom"] = furnaces.p_nom.mul(percent).div(100).div(efficiency).mul(2).round(2)
+            furnaces["p_nom"] = furnaces.p_nom.mul(percent).div(100).round(2)
             furnaces = furnaces.set_index("name")
 
             if isinstance(marginal_cost, pd.DataFrame):
@@ -1010,7 +1010,7 @@ def add_service_brownfield(
         df["carrier"] = df.carrier + "-lpg-furnace"
 
         df["ratio"] = df.state.map(ratios.lpg)
-        df["p_nom"] = df.p_max.mul(df.ratio).div(100)  # div to convert from %
+        df["p_nom"] = df.p_max.mul(df.ratio).div(100).div(efficiency)  # div to convert from %
 
         marginal_cost_names = [x.replace("heat", "lpg-furnace") for x in df.bus1.to_list()]
         marginal_cost = _get_marginal_cost(n, marginal_cost_names)
@@ -1026,7 +1026,7 @@ def add_service_brownfield(
             furnaces = df.copy()
 
             furnaces["name"] = furnaces.name + f" existing_{build_year} " + furnaces.carrier
-            furnaces["p_nom"] = furnaces.p_nom.mul(percent).div(100).div(efficiency).round(2)
+            furnaces["p_nom"] = furnaces.p_nom.mul(percent).div(100).round(2)
             furnaces = furnaces.set_index("name")
 
             if isinstance(marginal_cost, pd.DataFrame):
@@ -1084,7 +1084,7 @@ def add_service_brownfield(
         df["carrier"] = df.carrier + "-elec-furnace"
 
         df["ratio"] = df.state.map(ratios.electricity)
-        df["p_nom"] = df.p_max.mul(df.ratio).div(100)  # div to convert from %
+        df["p_nom"] = df.p_max.mul(df.ratio).div(100).div(efficiency)  # div to convert from %
 
         start_year = n.investment_periods[0]
         # start_year = start_year if start_year >= 2023 else 2023
