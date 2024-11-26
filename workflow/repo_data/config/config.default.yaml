@@ -34,6 +34,8 @@ model_topology:
 enable:
   build_cutout: false
 
+renewable_weather_years: [2019]
+
 snapshots:
   start: "2019-01-01"
   end: "2020-01-01"
@@ -46,7 +48,7 @@ electricity:
   retirement: economic # "economic" or "technical"
   SAFE_reservemargin: 0.14
   regional_Co2_limits: 'config/policy_constraints/regional_Co2_limits.csv'
-  agg_p_nom_limits: 'config/policy_constraints/agg_p_nom_minmax.csv'
+  technology_capacity_targets: 'config/policy_constraints/technology_capacity_targets.csv'
   portfolio_standards: 'config/policy_constraints/portfolio_standards.csv'
   SAFE_regional_reservemargins: 'config/policy_constraints/SAFE_regional_prm.csv'
   transmission_interface_limits: 'config/policy_constraints/transmission_interface_limits.csv'
@@ -77,6 +79,7 @@ electricity:
 # docs :
 conventional:
   unit_commitment: false
+  must_run: false
   dynamic_fuel_price:
     enable: false
     pudl: true

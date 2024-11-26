@@ -1,9 +1,8 @@
 foresight:  'perfect'
-
 # docs :
 renewable:
   onwind:
-    cutout: era5_2019
+    cutout: era5
     resource:
       method: wind
       turbine: Vestas_V112_3MW
@@ -21,7 +20,7 @@ renewable:
     clip_p_max_pu: 1.e-2
     extendable: true
   offwind:
-    cutout: era5_2019
+    cutout: era5
     resource:
       method: wind
       turbine: NREL_ReferenceTurbine_2020ATB_5.5MW
@@ -39,7 +38,7 @@ renewable:
     clip_p_max_pu: 1.e-2
     extendable: true
   offwind_floating:
-    cutout: era5_2019
+    cutout: era5
     resource:
       method: wind
       turbine: NREL_ReferenceTurbine_2020ATB_15MW_offshore
@@ -58,7 +57,7 @@ renewable:
     clip_p_max_pu: 1.e-2
     extendable: true
   solar:
-    cutout: era5_2019
+    cutout: era5
     resource:
       method: pv
       panel: CSi
@@ -73,7 +72,7 @@ renewable:
     clip_p_max_pu: 1.e-2
     extendable: true
   hydro:
-    cutout: era5_2019
+    cutout: era5
     carriers: [ror, PHS, hydro]
     PHS_max_hours: 6
     resource:
@@ -119,16 +118,6 @@ atlite:
       y: [23, 50]
       dx: 0.3
       dy: 0.3
-
-lines:
-  types: # All temporary values, need to be updated
-    115.: "Al/St 240/40 2-bundle 220.0"
-    138.: "Al/St 240/40 2-bundle 220.0"
-    161.: "Al/St 240/40 2-bundle 220.0"
-    230.: "Al/St 240/40 2-bundle 220.0"
-    345.: "Al/St 240/40 4-bundle 380.0"
-    500.: "Al/St 560/50 4-bundle 750.0"
-    765.: "Al/St 560/50 4-bundle 750.0"
 
  
 lines:

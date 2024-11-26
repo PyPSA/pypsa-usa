@@ -35,7 +35,6 @@ def configure_logging(snakemake, skip_handlers=False):
     skip_handlers : True | False (default)
         Do (not) skip the default handlers created for redirecting output to STDERR and file.
     """
-
     import logging
 
     kwargs = snakemake.config.get("logging", dict()).copy()
@@ -671,8 +670,8 @@ def update_config_from_wildcards(config, w, inplace=True):
         if "A" in opts:
             config["sector"]["agriculture"] = True
 
-        if "CCL" in opts:
-            config["solving"]["constraints"]["CCL"] = True
+        if "TCT" in opts:
+            config["solving"]["constraints"]["TCT"] = True
 
         eq_value = get_opt(opts, r"^EQ+\d*\.?\d+(c|)")
         for o in opts:
