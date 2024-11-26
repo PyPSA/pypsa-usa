@@ -194,12 +194,11 @@ rule build_renewable_profiles:
         cutout=lambda wildcards: expand(
             "cutouts/"
             + CDIR
-            + "{interconnect}_"
+            + "usa_"
             + config["renewable"][wildcards.technology]["cutout"]
             + "_{renewable_weather_year}"
             + ".nc",
             renewable_weather_year=config["renewable_weather_years"],
-            interconnect=config["scenario"]["interconnect"],
         ),
     output:
         profile=RESOURCES + "{interconnect}/profile_{technology}.nc",
