@@ -36,13 +36,8 @@ from cartopy import crs as ccrs
 from pypsa.plot import add_legend_circles, add_legend_lines, add_legend_patches
 
 logger = logging.getLogger(__name__)
-import cartopy.crs as ccrs
-import geopandas as gpd
-import matplotlib.pyplot as plt
-import pandas as pd
 from _helpers import configure_logging
 from add_electricity import sanitize_carriers
-from matplotlib.lines import Line2D
 from summary import (
     get_capacity_base,
     get_capacity_brownfield,
@@ -58,7 +53,6 @@ def get_color_palette(n: pypsa.Network) -> pd.Series:
     """
     Returns colors based on nice name.
     """
-
     colors = (n.carriers.reset_index().set_index("nice_name")).color
 
     # additional = {
@@ -144,7 +138,6 @@ def remove_sector_buses(df: pd.DataFrame) -> pd.DataFrame:
     """
     Removes buses for sector coupling.
     """
-
     num_levels = df.index.nlevels
 
     if num_levels > 1:
@@ -237,7 +230,6 @@ def plot_capacity_map(
     """
     Generic network plotting function for capacity pie charts at each node.
     """
-
     fig, ax = plt.subplots(
         figsize=(10, 10),
         subplot_kw={"projection": ccrs.EqualEarth(n.buses.x.mean())},
@@ -297,7 +289,7 @@ def plot_capacity_map(
         legend_kw={"bbox_to_anchor": (1, 0), **legend_kwargs, "loc": "lower left"},
     )
     if not title:
-        ax.set_title(f"Capacity (MW)", fontsize=TITLE_SIZE, pad=20)
+        ax.set_title("Capacity (MW)", fontsize=TITLE_SIZE, pad=20)
     else:
         ax.set_title(title, fontsize=TITLE_SIZE, pad=20)
     fig.tight_layout()
@@ -315,7 +307,6 @@ def plot_demand_map(
     """
     Plots map of network nodal demand.
     """
-
     # get data
 
     bus_values = get_demand_base(n).mul(1e-3)
@@ -383,7 +374,7 @@ def plot_demand_map(
         legend_kw={"bbox_to_anchor": (1, 0), **legend_kwargs, "loc": "lower left"},
     )
     if not title:
-        ax.set_title(f"Total Annual Demand (MW)", fontsize=TITLE_SIZE, pad=20)
+        ax.set_title("Total Annual Demand (MW)", fontsize=TITLE_SIZE, pad=20)
     else:
         ax.set_title(title, fontsize=TITLE_SIZE, pad=20)
     fig.tight_layout()
@@ -401,7 +392,6 @@ def plot_base_capacity_map(
     """
     Plots map of base network capacities.
     """
-
     # get data
 
     bus_values = get_capacity_base(n)
@@ -442,7 +432,6 @@ def plot_opt_capacity_map(
     """
     Plots map of optimal network capacities.
     """
-
     # get data
     # capacity = n.statistics()[['Optimal Capacity']]
     # capacity = capacity[capacity.index.get_level_values(0).isin(['Generator', 'StorageUnit'])]
@@ -454,7 +443,7 @@ def plot_opt_capacity_map(
     line_values = n.lines.s_nom_opt
 
     # plot data
-    title = create_title(f"Optimal Network Capacities", **wildcards)
+    title = create_title("Optimal Network Capacities", **wildcards)
     interconnect = wildcards.get("interconnect", None)
     bus_scale = get_bus_scale(interconnect) if interconnect else 1
     line_scale = get_line_scale(interconnect) if interconnect else 1
@@ -483,7 +472,6 @@ def plot_new_capacity_map(
     """
     Plots map of new capacity.
     """
-
     # get data
     # expanded_capacity = n.statistics.expanded_capacity()
     # expanded_capacity = expanded_capacity[expanded_capacity.index.get_level_values(0).isin(['Generator', 'StorageUnit'])]

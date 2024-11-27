@@ -17,21 +17,14 @@ from constants import (
     EIA_FUEL_MAPPER_2,
     STATE_2_CODE,
 )
-from eia import ElectricPowerData, Emissions
+from eia import Emissions
 from plot_network_maps import (
     create_title,
     get_bus_scale,
     get_line_scale,
     plot_capacity_map,
 )
-from plot_statistics import (
-    plot_capacity_factor_heatmap,
-    plot_curtailment_heatmap,
-    plot_fuel_costs,
-    plot_generator_data_panel,
-    plot_region_lmps,
-    plot_regional_emissions_bar,
-)
+from plot_statistics import plot_fuel_costs, plot_generator_data_panel, plot_region_lmps
 from summary import get_node_emissions_timeseries
 
 sns.set_theme("paper", style="whitegrid")
@@ -575,7 +568,6 @@ def plot_state_emissions_historical_bar(
     """
     Compares regional annual emissions to the year.
     """
-
     year = snapshots[0].year
 
     sectors = wildcards["sector"].split("-")
@@ -655,7 +647,6 @@ def plot_ba_emissions_historical_bar(
     """
     Compares regional annual emissions to the year.
     """
-
     # year = snapshots[0].year
 
     # sectors = wildcards["sector"].split("-")

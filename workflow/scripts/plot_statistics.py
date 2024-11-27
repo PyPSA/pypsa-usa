@@ -29,11 +29,8 @@ Emission charts for:
 """
 
 import logging
-import os
-import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Dict
 
 import geopandas as gpd
 import matplotlib.pyplot as plt
@@ -43,19 +40,10 @@ import pypsa
 import seaborn as sns
 
 logger = logging.getLogger(__name__)
-import cartopy.crs as ccrs
-import geopandas as gpd
-import matplotlib.pyplot as plt
-import pandas as pd
-import plotly.express as px
-import plotly.graph_objects as go
 from _helpers import configure_logging
 from add_electricity import sanitize_carriers
-from add_extra_components import add_nice_carrier_names
-from matplotlib.lines import Line2D
 from plot_network_maps import get_color_palette
 from summary import (
-    get_capital_costs,
     get_demand_timeseries,
     get_energy_timeseries,
     get_fuel_costs,
@@ -182,7 +170,6 @@ def plot_capacity_additions_bar(
     """
     Plots base capacity vs optimal capacity as a bar chart.
     """
-
     existing_capacity = n.generators.groupby("carrier").p_nom.sum().round(0)
     existing_capacity = existing_capacity.to_frame(name="Existing Capacity")
     storage_units = n.storage_units.groupby("carrier").p_nom.sum().round(0)
@@ -199,8 +186,6 @@ def plot_capacity_additions_bar(
     optimal_capacity.set_index("carrier", inplace=True)
     optimal_capacity.insert(0, "Existing", existing_capacity["Existing Capacity"])
     optimal_capacity = optimal_capacity.fillna(0)
-    # color_palette = get_color_palette(n)
-    # color_mapper = [color_palette[carrier] for carrier in optimal_capacity.index]
 
     stats = {"": optimal_capacity}
     variable = "Optimal Capacity"
@@ -244,7 +229,6 @@ def plot_global_constraint_shadow_prices(
     """
     Plots shadow prices on global constraints.
     """
-
     shadow_prices = n.global_constraints.mu.round(3).reset_index()
 
     # plot data
@@ -388,7 +372,6 @@ def plot_production_area(
     Will plot an image for the entire time horizon, in addition to
     seperate monthly generation curves
     """
-
     # get data
 
     energy_mix = get_energy_timeseries(n).mul(1e-3)  # MW -> GW
@@ -453,7 +436,6 @@ def plot_hourly_emissions(n: pypsa.Network, save: str, **wildcards) -> None:
     """
     Plots snapshot emissions by technology.
     """
-
     # get data
     emissions = get_tech_emissions_timeseries(n).mul(1e-6)  # T -> MT
     zeros = emissions.columns[(np.abs(emissions) < 1e-7).all()]
@@ -484,7 +466,6 @@ def plot_accumulated_emissions_tech(n: pypsa.Network, save: str, **wildcards) ->
     """
     Creates area plot of accumulated emissions by technology.
     """
-
     # get data
 
     emissions = get_tech_emissions_timeseries(n).cumsum().mul(1e-6)  # T -> MT
@@ -517,7 +498,6 @@ def plot_accumulated_emissions(n: pypsa.Network, save: str, **wildcards) -> None
     """
     Plots accumulated emissions.
     """
-
     # get data
 
     emissions = get_tech_emissions_timeseries(n).mul(1e-6).sum(axis=1)  # T -> MT
