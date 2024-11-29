@@ -37,13 +37,7 @@ FIGURES_SECTOR_NATURAL_GAS = [
     "international_trade",
     "fuel_price",
 ]
-
-# system figures
-FIGURES_SYSTEM_PRODUCTION = ["system_consumption"]
-FIGURES_SYSTEM_VALIDATION = [
-    # "system_consumption_validation",
-    "system_emission_validation_state"
-]
+FIGURES_SECTOR_SANKEY = ["energy"]
 
 
 rule plot_natural_gas:
@@ -137,6 +131,28 @@ rule plot_sector_capacity:
         mem_mb=5000,
     script:
         "../scripts/plot_statistics_sector.py"
+
+
+rule plot_sankey_energy:
+    input:
+        network=RESULTS
+        + "{interconnect}/networks/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc",
+    params:
+        root_dir=RESULTS
+        + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/",
+    output:
+        expand(
+            RESULTS
+            + "{{interconnect}}/figures/s{{simpl}}_c{{clusters}}/l{{ll}}_{{opts}}_{{sector}}/system/sankey/{fig}.png",
+            fig=FIGURES_SECTOR_SANKEY,
+        ),
+    log:
+        "logs/plot_figures/{interconnect}_s{simpl}_c{clusters}_l{ll}_{opts}_{sector}_sankey.log",
+    threads: 1
+    resources:
+        mem_mb=5000,
+    script:
+        "../scripts/plot_sankey_energy.py"
 
 
 rule plot_sector_validation:

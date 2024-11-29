@@ -5,13 +5,18 @@ Used to compare results agasint Lawrence Berkly Energy Flow charts here:
 https://flowcharts.llnl.gov/commodities/energy
 """
 
+from pathlib import Path
+from typing import Optional
+
 import pandas as pd
+import plotly
 import plotly.graph_objects as go
 import pypsa
 from _helpers import configure_logging, mock_snakemake
-from constants import TBTU_2_MWH
+from constants import ATB_TECH_MAPPER, TBTU_2_MWH
+from constants_sector import TransportEfficiency
 from pypsa.descriptors import get_switchable_as_dense
-from pypsa.statistics import StatisticsAccessor
+from summary_sector import _get_gens_in_state, _get_links_in_state
 
 # These are node colors! Energy Services and Rejected Energy links do not
 # follow node color assignment and are corrected in code
@@ -34,241 +39,507 @@ COLORS = {
     "Energy Services": "rgba(97,97,97,1)",
 }
 
+# default (x, y) positions of nodes
+# matches start postions of LLNL sankey
+# 0 or 1 cause formatting issues.
+POSITIONS = {
+    "Solar": (0.01, 0.01),
+    "Nuclear": (0.01, 0.1),
+    "Hydro": (0.01, 0.2),
+    "Wind": (0.01, 0.3),
+    "Geothermal": (0.01, 0.4),
+    "Natural Gas": (0.01, 0.5),
+    "Coal": (0.01, 0.75),
+    "Biomass": (0.01, 0.85),
+    "Petroleum": (0.01, 0.99),
+    "Electricity Generation": (0.33, 0.01),
+    "Residential": (0.66, 0.4),
+    "Commercial": (0.66, 0.6),
+    "Industrial": (0.66, 0.8),
+    "Transportation": (0.66, 0.99),
+    "Rejected Energy": (0.99, 0.33),
+    "Energy Services": (0.99, 0.66),
+}
+
 SANKEY_CODE_MAPPER = {name: num for num, name in enumerate(COLORS)}
 
 NAME_MAPPER = {
     "Solar": "Solar",
+    "solar": "Solar",
     "Reservoir & Dam": "Hydro",
+    "hydro": "Hydro",
     "Fixed Bottom Offshore Wind": "Wind",
     "Floating Offshore Wind": "Wind",
+    "offwind_floating": "Wind",
     "Onshore Wind": "Wind",
+    "onwind": "Wind",
     "Biomass": "Biomass",
+    "biomass": "Biomass",
     "Combined-Cycle Gas": "Natural Gas",
+    "CCGT": "Natural Gas",
     "Nuclear": "Nuclear",
+    "nuclear": "Nuclear",
     "Open-Cycle Gas": "Natural Gas",
+    "OCGT": "Natural Gas",
     "gas": "Natural Gas",
     "Geothermal": "Geothermal",
+    "geothermal": "Geothermal",
     "Coal": "Coal",
     "coal": "Coal",
     "Oil": "Petroleum",
+    "oil": "Petroleum",
     "com": "Commercial",
     "res": "Residential",
     "trn": "Transportation",
     "ind": "Industrial",
 }
 
-# when accounting energy delievered/rejected to end-use sector, we just
-# count energy in and energy out. We do not want to count energy lost for
-# end-use cross sector links (like air conditioners or heat pumps)
-END_USE_TECH_EXCLUSIONS = {"air-con", "heat-pump"}
-
 ###
 # POWER GENERATION SECTOR
 ###
 
 
-def _get_generator_primary_energy(n: pypsa.Network) -> pd.DataFrame:
-    """
-    Gets primary energy use from all generators as a positive number.
-    """
-    weightings = n.snapshot_weightings
+def _get_consumption_generators(
+    n: pypsa.Network,
+    period: int,
+    state: Optional[str] = None,
+) -> pd.DataFrame:
+
+    if state:
+        generators = _get_gens_in_state(n, state)
+    else:
+        generators = n.generators.index.to_list()
+
+    weights = n.snapshot_weightings.objective
     eff = get_switchable_as_dense(n, "Generator", "efficiency")
-    p = n.generators_t.p.div(eff).mul(weightings.generators, axis=0)
-    p = p.reset_index().drop(columns=["timestep"]).groupby(by="period").sum().T
-    p["carrier"] = p.index.map(n.generators.carrier).map(n.carriers.nice_name)
-    p["bus_carrier"] = p.index.map(n.generators.bus).map(n.buses.carrier)
-    p["Component"] = "Generator"
-    return p.reset_index(drop=True).groupby(["Component", "carrier", "bus_carrier"]).sum()
+
+    df = n.generators_t["p"].div(eff).loc[period][generators].rename(columns=n.generators.carrier)
+    df = df.T.groupby(level=0).sum().T
+    df = df.mul(weights, axis=0).sum().to_frame(name="value").reset_index(names="source")
+
+    return df
 
 
-def get_AC_generator_primary(n: pypsa.Network, investment_period: int) -> pd.DataFrame:
-    """
-    Gets AC primary energy use.
-    """
-    df = _get_generator_primary_energy(n).droplevel("Component")[[investment_period]]
-    df = df.reset_index()
-    df = df[df.bus_carrier == "AC"].rename(columns={"carrier": "source", investment_period: "value"}).copy()
+def _get_rejected_generators(
+    n: pypsa.Network,
+    period: int,
+    state: Optional[str] = None,
+) -> pd.DataFrame:
+
+    if state:
+        generators = _get_gens_in_state(n, state)
+    else:
+        generators = n.generators.index.to_list()
+
+    weights = n.snapshot_weightings.objective
+    eff = get_switchable_as_dense(n, "Generator", "efficiency")
+
+    consumption = n.generators_t["p"].div(eff).loc[period][generators].rename(columns=n.generators.carrier)
+    production = n.generators_t["p"].loc[period][generators].rename(columns=n.generators.carrier)
+
+    df = consumption - production
+    df = df.T.groupby(level=0).sum().T
+    df = df.mul(weights, axis=0).sum().to_frame(name="value").reset_index(names="source")
+
+    return df
+
+
+def _get_consumption_links(
+    n: pypsa.Network,
+    period: int,
+    state: Optional[str] = None,
+) -> pd.DataFrame:
+    if state:
+        links = _get_links_in_state(n, state)
+    else:
+        links = n.links.index.to_list()
+
+    weights = n.snapshot_weightings.objective
+    df = n.links_t["p0"].loc[period][links].rename(columns=n.links.carrier)
+    df = df.T.groupby(level=0).sum().T
+    df = df.mul(weights, axis=0).sum().to_frame(name="value").reset_index(names="source")
+    return df
+
+
+def _get_rejected_links(
+    n: pypsa.Network,
+    period: int,
+    state: Optional[str] = None,
+) -> pd.DataFrame:
+
+    if state:
+        links = _get_links_in_state(n, state)
+    else:
+        links = n.links.index.to_list()
+
+    weights = n.snapshot_weightings.objective
+    df = n.links_t["p0"].loc[period].add(n.links_t["p1"].loc[period])
+    df = df[links].rename(columns=n.links.carrier)
+    df = df.T.groupby(level=0).sum().T
+    df = df.mul(weights, axis=0).sum().to_frame(name="value").reset_index(names="source")
+    return df
+
+
+def _remove_ccs(s: str) -> str:
+    if s.endswith("CCS"):
+        return s.split("-")[0]
+    else:
+        return s
+
+
+def get_electricity_consumption(
+    n: pypsa.Network,
+    carriers: list[str],
+    period: int,
+    state: Optional[str] = None,
+) -> pd.DataFrame:
+    df = pd.concat(
+        [
+            _get_consumption_generators(n, period, state),
+            _get_consumption_links(n, period, state),
+        ],
+    )
+    df = df[df.source.isin(carriers)]
+    df["source"] = df.source.map(_remove_ccs)
+    df = df.groupby(["source"], as_index=False).sum()
     df["target"] = "Electricity Generation"
     return df[["source", "target", "value"]]
 
 
-def _get_generator_losses(n: pypsa.Network, investment_period: int) -> pd.DataFrame:
-    """
-    Gets Rejected Energy Values for generators.
-    """
-    used = StatisticsAccessor(n).energy_balance("Generator")[[investment_period]]
-    total = _get_generator_primary_energy(n).droplevel("Component")[[investment_period]]
-    return total - used
-
-
-def get_AC_generator_rejected(n: pypsa.Network, investment_period: int) -> pd.DataFrame:
-    """
-    Gets AC Rejected Energy Values for generators.
-    """
-    df = _get_generator_losses(n, investment_period)
-    df = df.reset_index()
-    df = (
-        df[df.bus_carrier == "AC"]
-        .rename(columns={investment_period: "value"})
-        .drop(columns=["carrier", "bus_carrier"])
-        .copy()
+def get_electricity_rejected(
+    n: pypsa.Network,
+    carriers: list[str],
+    period: int,
+    state: Optional[str] = None,
+) -> pd.DataFrame:
+    df = pd.concat(
+        [
+            _get_rejected_generators(n, period, state),
+            _get_rejected_links(n, period, state),
+        ],
     )
-    df["target"] = "Rejected Energy"
+    df = df[df.source.isin(carriers)]
+    df = df.drop(columns="source").sum().to_frame(name="value").reset_index(drop=True)
     df["source"] = "Electricity Generation"
-    df = df.groupby(["target", "source"], as_index=False).sum()
+    df["target"] = "Rejected Energy"
     return df[["source", "target", "value"]]
 
 
-def get_AC_link_primary(n: pypsa.Network, investment_period: int) -> pd.DataFrame:
-    """
-    Gets AC links primary energy usage.
-    """
-    df = StatisticsAccessor(n).energy_balance("Link")[[investment_period]]
-    df = df.reset_index()
-    df = (
-        df[(df.bus_carrier == "AC") & (df[investment_period] >= 0)]
-        .rename(columns={"carrier": "source", investment_period: "value"})
-        .copy()
-    )
-    df["target"] = "Electricity Generation"
-    return df[["source", "target", "value"]]
-
-
-def get_AC_link_rejected(n: pypsa.Network, investment_period: int) -> pd.DataFrame:
-    """
-    Gets AC energy rejected from links.
-
-    This is rejected energy from the power sector, not the end-use!
-    """
-
-    def ac_links(n: pypsa.Network, investment_period: int) -> list[str]:
-        df = StatisticsAccessor(n).energy_balance("Link")[[investment_period]]
-        df = df.reset_index()
-        df_carriers = df[(df.bus_carrier == "AC") & (df[investment_period] >= 0)]
-        return df_carriers.carrier.to_list()
-
-    df = StatisticsAccessor(n).energy_balance("Link")[[investment_period]]
-    df = df.reset_index()
-    carriers = ac_links(n, investment_period)
-    df = df[df.carrier.isin(carriers)]
-
-    primary = df[~(df.bus_carrier == "AC")].drop(columns=["bus_carrier"]).set_index("carrier")
-    used = df[df.bus_carrier == "AC"].drop(columns=["bus_carrier"]).set_index("carrier")
-    rejected = primary.mul(-1) - used  # -1 because links remove energy from bus0
-
-    rejected = rejected.reset_index().rename(columns={investment_period: "value"})
-    rejected["target"] = "Rejected Energy"
-    rejected["source"] = "Electricity Generation"
-    rejected = rejected.groupby(["target", "source"], as_index=False).sum()
-    return rejected[["source", "target", "value"]]
-
-
 ###
-# END-USE ENERGY TRACKING
+# SECTORS
 ###
 
 
-def get_end_use_delievered(n: pypsa.Network, investment_period: int) -> pd.DataFrame:
-    """
-    Gets delievered energy to end use sectors from end use sectors.
-    """
-
-    dfs = []
-
-    for end_use in ("res", "com", "ind", "trn"):
-        dfs.append(_get_end_use_delievered_per_sector(n, investment_period, end_use))
-
-    return pd.concat(dfs)
-
-
-def _get_end_use_delievered_per_sector(
+def _get_sector_consumption(
     n: pypsa.Network,
-    investment_period: int,
     sector: str,
-) -> pd.DataFrame:
-    """
-    Gets energy delievered to an end use sector.
+    fuel: str,
+    period: int,
+    state: Optional[str] = None,
+) -> float:
 
-    This will track, for example, the amount of natural gas required to
-    power the industrial sector. Or the amount of electricity needed for
-    transportation sector. This is delievered energy (used + rejected =
-    delievered)
-    """
+    if fuel == "elec":
+        fuel = "AC"
 
-    def assign_source(s: str) -> str:
-        if (s == "dist") or (s == "evs"):
-            return "Electricity Generation"
+    if state:
+        links_in_state = _get_links_in_state(n, state)
+    else:
+        links_in_state = n.links.index.to_list()
+
+    weights = n.snapshot_weightings.objective
+
+    buses = n.buses[n.buses.carrier == fuel].index.to_list()
+    links = n.links.loc[links_in_state].copy()
+
+    df = links[links.carrier.str.startswith(f"{sector}-") & links.bus0.isin(buses)]
+
+    df = n.links_t["p0"][df.index].mul(weights, axis=0).loc[period]
+
+    return df.sum().sum()
+
+
+def _get_service_supply(
+    n: pypsa.Network,
+    sector: str,
+    period: int,
+    state: Optional[str] = None,
+) -> float:
+
+    if state:
+        links_in_state = _get_links_in_state(n, state)
+    else:
+        links_in_state = n.links.index.to_list()
+
+    buses = n.loads[n.loads.carrier.str.startswith(f"{sector}-")].index
+    links = n.links[(n.links.index.isin(links_in_state)) & (n.links.bus1.isin(buses))]
+
+    links = links[
+        ~links.index.str.endswith("space-heat-charger")
+        & ~links.index.str.endswith("space-heat-discharger")
+        & ~links.index.str.endswith("space-cool-charger")
+        & ~links.index.str.endswith("space-cool-discharger")
+        & ~links.index.str.endswith("water-heat-charger")
+    ]
+
+    weights = n.snapshot_weightings.objective
+
+    supplied = n.links_t["p1"].loc[period][links.index].mul(weights, axis=0).mul(-1)
+
+    return supplied.sum().sum()
+
+
+def _get_service_rejected(
+    n: pypsa.Network,
+    sector: str,
+    period: int,
+    state: Optional[str] = None,
+) -> float:
+
+    if state:
+        links_in_state = _get_links_in_state(n, state)
+    else:
+        links_in_state = n.links.index.to_list()
+
+    links = n.links[n.links.index.isin(links_in_state) & n.links.carrier.str.startswith(f"{sector}-")]
+
+    eff = get_switchable_as_dense(n, "Link", "efficiency")
+    supply = n.links_t["p1"].mul(-1)
+
+    # rejected will be less than 0 for COP > 1
+    rejected = supply.div(eff) - supply
+    rejected = rejected.where(rejected >= 0, 0)
+
+    weights = n.snapshot_weightings.objective
+
+    rejected = rejected.loc[period][links.index].mul(weights, axis=0)
+
+    return rejected.sum().sum()
+
+
+def _get_industry_supply(
+    n: pypsa.Network,
+    period: int,
+    state: Optional[str] = None,
+) -> float:
+
+    if state:
+        links_in_state = _get_links_in_state(n, state)
+    else:
+        links_in_state = n.links.index.to_list()
+
+    buses = n.loads[n.loads.carrier.str.startswith("ind-")].index
+    links = n.links[(n.links.index.isin(links_in_state)) & (n.links.bus1.isin(buses))]
+
+    weights = n.snapshot_weightings.objective
+
+    supplied = n.links_t["p1"].loc[period][links.index].mul(weights, axis=0).mul(-1)
+
+    return supplied.sum().sum()
+
+
+def _get_industry_rejected(
+    n: pypsa.Network,
+    period: int,
+    state: Optional[str] = None,
+) -> float:
+
+    if state:
+        links_in_state = _get_links_in_state(n, state)
+    else:
+        links_in_state = n.links.index.to_list()
+
+    links = n.links[n.links.index.isin(links_in_state) & n.links.carrier.str.startswith("ind-")]
+
+    eff = get_switchable_as_dense(n, "Link", "efficiency")
+    supply = n.links_t["p1"].mul(-1)
+
+    # rejected will be less than 0 for COP > 1
+    rejected = supply.div(eff) - supply
+    rejected = rejected.where(rejected >= 0, 0)
+
+    weights = n.snapshot_weightings.objective
+
+    rejected = rejected.loc[period][links.index].mul(weights, axis=0)
+
+    return rejected.sum().sum()
+
+
+def _get_transport_supply(
+    n: pypsa.Network,
+    period: int,
+    state: Optional[str] = None,
+) -> float:
+
+    if state:
+        links_in_state = _get_links_in_state(n, state)
+    else:
+        links_in_state = n.links.index.to_list()
+
+    # get load aggregation buses only
+    buses = n.buses[n.buses.carrier.isin(["AC", "oil"])].index
+    links = n.links[
+        (n.links.index.isin(links_in_state)) & (n.links.bus0.isin(buses)) & (n.links.carrier.str.startswith("trn-"))
+    ].index
+
+    weights = n.snapshot_weightings.objective
+
+    # p0 and p1 will give same value as efficiency is applied further down
+    supply = n.links_t["p1"].loc[period][links].mul(weights, axis=0).mul(-1)
+
+    # apply approximate efficiencies
+    eff = supply.copy()
+    for col in eff.columns:
+        if "elec" in col:
+            eff[col] = TransportEfficiency.ELEC.value
+        elif "lpg" in col:
+            eff[col] = TransportEfficiency.LPG.value
         else:
-            return s
+            raise ValueError
 
-    exclusion = END_USE_TECH_EXCLUSIONS
-
-    df = StatisticsAccessor(n).energy_balance("Link")[[investment_period]]
-    df = df.reset_index()
-    df = df[df.bus_carrier.map(lambda x: True if f"{sector}-" in x else False)]
-    df = df[~(df.carrier.isin(exclusion))]
-    df["carrier"] = df.carrier.map(lambda x: x.split("-")[0])
-    df["source"] = df.carrier.map(assign_source)
-    df["target"] = sector
-    df = df.rename(columns={investment_period: "value"})
-    return df[["source", "target", "value"]]
+    return supply.mul(eff).sum().sum()
 
 
-def get_end_use_rejected(n: pypsa.Network, investment_period: int) -> pd.DataFrame:
-    """
-    Gets delievered energy to end use sectors from end use sectors.
-    """
-
-    dfs = []
-
-    for end_use in ("res", "com", "ind", "trn"):
-        dfs.append(_get_end_use_rejected_per_sector(n, investment_period, end_use))
-
-    return pd.concat(dfs)
-
-
-def _get_end_use_rejected_per_sector(
+def _get_transport_rejected(
     n: pypsa.Network,
-    investment_period: int,
-    sector: str,
+    period: int,
+    state: Optional[str] = None,
+) -> float:
+
+    if state:
+        links_in_state = _get_links_in_state(n, state)
+    else:
+        links_in_state = n.links.index.to_list()
+
+    # get load aggregation buses only
+    buses = n.buses[n.buses.carrier.isin(["AC", "oil"])].index
+    links = n.links[
+        (n.links.index.isin(links_in_state)) & (n.links.bus0.isin(buses)) & (n.links.carrier.str.startswith("trn-"))
+    ].index
+
+    weights = n.snapshot_weightings.objective
+
+    # p0 and p1 will give same value as efficiency is applied further down
+    supply = n.links_t["p1"].loc[period][links].mul(weights, axis=0).mul(-1)
+
+    # apply approximate efficiencies
+    eff = supply.copy()
+    for col in eff.columns:
+        if "elec" in col:
+            eff[col] = TransportEfficiency.ELEC.value
+        elif "lpg" in col:
+            eff[col] = TransportEfficiency.LPG.value
+        else:
+            raise ValueError
+
+    rejected = supply - supply.mul(eff)
+
+    return rejected.sum().sum()
+
+
+def get_energy_flow_res(
+    n: pypsa.Network,
+    period: int,
+    state: Optional[str] = None,
 ) -> pd.DataFrame:
-    """
-    Gets energy rejected from an end-use sector.
-    """
 
-    delievered = _get_end_use_delievered_per_sector(
-        n,
-        investment_period,
-        sector,
-    ).value.sum()
-    used = get_energy_services(n, investment_period).set_index("source").at[sector, "value"]
-    rejected = delievered - used
-    assert rejected >= 0
+    elec_consumption = _get_sector_consumption(n, "res", "elec", period, state)
+    lpg_consumption = _get_sector_consumption(n, "res", "oil", period, state)
+    gas_consumption = _get_sector_consumption(n, "res", "gas", period, state)
 
-    return pd.DataFrame(
-        pd.DataFrame(
-            data=[[sector, "Rejected Energy", rejected]],
-            columns=["source", "target", "value"],
-        ),
+    supply = _get_service_supply(n, "res", period, state)
+    rejected = _get_service_rejected(n, "res", period, state)
+
+    df = pd.DataFrame(
+        [
+            ["Electricity Generation", "Residential", elec_consumption],
+            ["Natural Gas", "Residential", gas_consumption],
+            ["Petroleum", "Residential", lpg_consumption],
+            ["Residential", "Energy Services", supply],
+            ["Residential", "Rejected Energy", rejected],
+        ],
+        columns=["source", "target", "value"],
     )
 
+    return df
 
-def get_energy_services(n: pypsa.Network, investment_period: int) -> pd.DataFrame:
-    """
-    Gets used end-use to energy_servives.
-    """
-    df = StatisticsAccessor(n).energy_balance("Load")[[investment_period]]
-    df = df.mul(-1)  # load is negative on the system
-    df = df.reset_index()
-    df["source"] = df.bus_carrier.map(lambda x: x.split("-")[0])
-    df["target"] = "Energy Services"
-    df = (
-        df.drop(columns=["carrier", "bus_carrier"])
-        .groupby(["source", "target"], as_index=False)
-        .sum()
-        .rename(columns={investment_period: "value"})
+
+def get_energy_flow_com(
+    n: pypsa.Network,
+    period: int,
+    state: Optional[str] = None,
+) -> pd.DataFrame:
+
+    elec_consumption = _get_sector_consumption(n, "com", "elec", period, state)
+    lpg_consumption = _get_sector_consumption(n, "com", "oil", period, state)
+    gas_consumption = _get_sector_consumption(n, "com", "gas", period, state)
+
+    supply = _get_service_supply(n, "com", period, state)
+    rejected = _get_service_rejected(n, "com", period, state)
+
+    df = pd.DataFrame(
+        [
+            ["Electricity Generation", "Commercial", elec_consumption],
+            ["Natural Gas", "Commercial", gas_consumption],
+            ["Petroleum", "Commercial", lpg_consumption],
+            ["Commercial", "Energy Services", supply],
+            ["Commercial", "Rejected Energy", rejected],
+        ],
+        columns=["source", "target", "value"],
     )
-    return df[["source", "target", "value"]]
+
+    return df
+
+
+def get_energy_flow_ind(
+    n: pypsa.Network,
+    period: int,
+    state: Optional[str] = None,
+) -> pd.DataFrame:
+
+    elec_consumption = _get_sector_consumption(n, "ind", "elec", period, state)
+    coal_consumption = _get_sector_consumption(n, "ind", "coal", period, state)
+    gas_consumption = _get_sector_consumption(n, "ind", "gas", period, state)
+
+    supply = _get_industry_supply(n, period, state)
+    rejected = _get_industry_rejected(n, period, state)
+
+    df = pd.DataFrame(
+        [
+            ["Electricity Generation", "Industrial", elec_consumption],
+            ["Natural Gas", "Industrial", gas_consumption],
+            ["Coal", "Industrial", coal_consumption],
+            ["Industrial", "Energy Services", supply],
+            ["Industrial", "Rejected Energy", rejected],
+        ],
+        columns=["source", "target", "value"],
+    )
+
+    return df
+
+
+def get_energy_flow_trn(
+    n: pypsa.Network,
+    period: int,
+    state: Optional[str] = None,
+) -> pd.DataFrame:
+
+    elec_consumption = _get_sector_consumption(n, "trn", "elec", period, state)
+    oil_consumption = _get_sector_consumption(n, "trn", "oil", period, state)
+
+    supply = _get_transport_supply(n, period, state)
+    rejected = _get_transport_rejected(n, period, state)
+
+    df = pd.DataFrame(
+        [
+            ["Electricity Generation", "Transportation", elec_consumption],
+            ["Petroleum", "Transportation", oil_consumption],
+            ["Transportation", "Energy Services", supply],
+            ["Transportation", "Rejected Energy", rejected],
+        ],
+        columns=["source", "target", "value"],
+    )
+
+    return df
 
 
 ###
@@ -276,46 +547,51 @@ def get_energy_services(n: pypsa.Network, investment_period: int) -> pd.DataFram
 ###
 
 
-def map_sankey_name(name: str):
-    try:
-        return NAME_MAPPER[name]
-    except KeyError:
-        return name
-
-
-def get_sankey_dataframe(n: pypsa.Network, investment_period: int) -> pd.DataFrame:
+def get_sankey_dataframe(
+    n: pypsa.Network,
+    investment_period: int,
+    pwr_carriers: list[str],
+    state: Optional[str] = None,
+) -> pd.DataFrame:
     dfs = [
-        get_AC_generator_primary(n, investment_period),
-        get_AC_generator_rejected(n, investment_period),
-        get_AC_link_primary(n, investment_period),
-        get_AC_link_rejected(n, investment_period),
-        get_end_use_delievered(n, investment_period),
-        get_end_use_rejected(n, investment_period),
-        get_energy_services(n, investment_period),
+        get_electricity_consumption(n, pwr_carriers, investment_period, state),
+        get_electricity_rejected(n, pwr_carriers, investment_period, state),
+        get_energy_flow_res(n, investment_period, state),
+        get_energy_flow_com(n, investment_period, state),
+        get_energy_flow_ind(n, investment_period, state),
+        get_energy_flow_trn(n, investment_period, state),
     ]
-    df = pd.concat(dfs).groupby(["source", "target"], as_index=False).sum()
-    df["source"] = df.source.map(map_sankey_name)
-    df["target"] = df.target.map(map_sankey_name)
+    df = pd.concat(dfs)
     return df.groupby(["source", "target"], as_index=False).sum()[["source", "target", "value"]]
 
 
-def format_sankey_data(data: pd.DataFrame) -> pd.DataFrame:
+def format_sankey_data(
+    data: pd.DataFrame,
+    color_mapper: dict[str, str],
+    name_mapper: dict[str, str],
+) -> pd.DataFrame:
+
+    def map_sankey_name(name: str):
+        try:
+            return name_mapper[name]
+        except KeyError:
+            return name
 
     def assign_link_color(row: pd.Series) -> str:
         if row.target == "Rejected Energy":
-            return COLORS["Rejected Energy"]
+            return color_mapper["Rejected Energy"]
         elif row.target == "Energy Services":
-            return COLORS["Energy Services"]
+            return color_mapper["Energy Services"]
         else:
-            return COLORS[row.source]
+            return color_mapper[row.source]
 
     df = data.copy()
-    df["value"] = df.value.mul(1 / TBTU_2_MWH).div(1000)  # MWH -> quads
-    df["node_color"] = df.source.map(COLORS)
+    df["source"] = df.source.map(map_sankey_name)
+    df["target"] = df.target.map(map_sankey_name)
+    df["value"] = df.value.mul(1 / TBTU_2_MWH)  # MWH -> TBTU
+    df["node_color"] = df.source.map(color_mapper)
     df["link_color"] = df.apply(assign_link_color, axis=1)
     df["link_color"] = df.link_color.str.replace(",1)", ",0.5)")
-    df["source"] = df.source.map(SANKEY_CODE_MAPPER)
-    df["target"] = df.target.map(SANKEY_CODE_MAPPER)
     return df
 
 
@@ -329,35 +605,64 @@ if __name__ == "__main__":
         from _helpers import mock_snakemake
 
         snakemake = mock_snakemake(
-            "plot_energy_sankey",
-            interconnect="texas",
-            clusters=20,
+            "plot_sankey_energy",
+            simpl="11",
+            opts="3h",
+            clusters="4m",
             ll="v1.0",
-            opts="500SEG",
+            sector_opts="",
             sector="E-G",
+            planning_horizons="2018",
+            interconnect="western",
         )
+        rootpath = ".."
+    else:
+        rootpath = "."
+
     configure_logging(snakemake)
+
+    results_dir = Path(rootpath, snakemake.params.root_dir)
 
     n = pypsa.Network(snakemake.input.network)
 
     output_file = snakemake.output
 
-    for investment_period in n.investment_periods:
+    states = n.buses.reeds_state.unique()
+    states = [x for x in states if x]  # remove ""
 
-        df = get_sankey_dataframe(n, investment_period)
-        df = format_sankey_data(df)
+    power_carriers = ATB_TECH_MAPPER.keys()
+
+    X = {node: POSITIONS[node][0] for node in SANKEY_CODE_MAPPER}
+    Y = {node: POSITIONS[node][1] for node in SANKEY_CODE_MAPPER}
+
+    assert len(n.investment_periods) == 1
+    investment_period = n.investment_periods[0]
+
+    # plot state level
+
+    for state in states:
+
+        df = get_sankey_dataframe(
+            n=n,
+            pwr_carriers=power_carriers,
+            investment_period=investment_period,
+            state=state,
+        )
+        df = format_sankey_data(df, COLORS, NAME_MAPPER)
 
         fig = go.Figure(
             data=[
                 go.Sankey(
                     valueformat=".0f",
-                    valuesuffix="Quads",
+                    valuesuffix="TBTU",
                     node=dict(
                         pad=15,
                         thickness=15,
                         line=dict(color="black", width=0.5),
-                        label=list(SANKEY_CODE_MAPPER.keys()),
-                        color=[COLORS[x] for x in SANKEY_CODE_MAPPER.keys()],
+                        label=list(SANKEY_CODE_MAPPER),
+                        color=[COLORS[x] for x in SANKEY_CODE_MAPPER],
+                        x=[X[x] for x in SANKEY_CODE_MAPPER],
+                        y=[Y[x] for x in SANKEY_CODE_MAPPER],
                     ),
                     link=dict(
                         source=df.source.to_list(),
@@ -371,7 +676,61 @@ if __name__ == "__main__":
         )
 
         fig.update_layout(
-            title_text=f"USA Energy Consumption in {investment_period}: 1000 Quads",
+            title_text=f"{state} Energy Flow in {investment_period} (TBTU)",
             font_size=10,
+            font_color="black",
+            font_family="Arial",
         )
-        fig.show()
+
+        fig_name = Path(results_dir, state, "sankey", "energy.html")
+        if not fig_name.parent.exists():
+            fig_name.parent.mkdir(parents=True)
+
+        plotly.offline.plot(fig, filename=fig_name)
+
+    # plot system level
+
+    df = get_sankey_dataframe(
+        n=n,
+        pwr_carriers=power_carriers,
+        investment_period=investment_period,
+    )
+    df = format_sankey_data(df, COLORS, NAME_MAPPER)
+
+    fig = go.Figure(
+        data=[
+            go.Sankey(
+                valueformat=".0f",
+                valuesuffix="TBTU",
+                node=dict(
+                    pad=15,
+                    thickness=15,
+                    line=dict(color="black", width=0.5),
+                    label=list(SANKEY_CODE_MAPPER),
+                    color=[COLORS[x] for x in SANKEY_CODE_MAPPER],
+                    x=[X[x] for x in SANKEY_CODE_MAPPER],
+                    y=[Y[x] for x in SANKEY_CODE_MAPPER],
+                ),
+                link=dict(
+                    source=df.source.to_list(),
+                    target=df.target.to_list(),
+                    value=df.value.to_list(),
+                    # label =  sankey_data.label.to_list(),
+                    color=df.link_color.to_list(),
+                ),
+            ),
+        ],
+    )
+
+    fig.update_layout(
+        title_text=f"System Energy Flow in {investment_period} (TBTU)",
+        font_size=12,
+        font_color="black",
+        font_family="Arial",
+    )
+
+    fig_name = Path(results_dir, "system", "sankey", "energy.html")
+    if not fig_name.parent.exists():
+        fig_name.parent.mkdir(parents=True)
+
+    plotly.offline.plot(fig, filename=fig_name)
