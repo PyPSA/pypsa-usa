@@ -52,7 +52,7 @@ POSITIONS = {
     "Coal": (0.01, 0.75),
     "Biomass": (0.01, 0.85),
     "Petroleum": (0.01, 0.99),
-    "Electricity Generation": (0.33, 0.01),
+    "Electricity Generation": (0.5, 0.01),
     "Residential": (0.66, 0.4),
     "Commercial": (0.66, 0.6),
     "Industrial": (0.66, 0.8),
@@ -569,6 +569,7 @@ def format_sankey_data(
     data: pd.DataFrame,
     color_mapper: dict[str, str],
     name_mapper: dict[str, str],
+    sankey_codes: dict[str, int],
 ) -> pd.DataFrame:
 
     def map_sankey_name(name: str):
@@ -586,12 +587,23 @@ def format_sankey_data(
             return color_mapper[row.source]
 
     df = data.copy()
+
+    # standarize name and group together
     df["source"] = df.source.map(map_sankey_name)
     df["target"] = df.target.map(map_sankey_name)
-    df["value"] = df.value.mul(1 / TBTU_2_MWH)  # MWH -> TBTU
+    df = df.groupby(["source", "target"], as_index=False).sum()
+
+    # assign colors
     df["node_color"] = df.source.map(color_mapper)
     df["link_color"] = df.apply(assign_link_color, axis=1)
     df["link_color"] = df.link_color.str.replace(",1)", ",0.5)")
+
+    # map names to node numbers
+    df["source"] = df.source.map(sankey_codes)
+    df["target"] = df.target.map(sankey_codes)
+
+    # convert units
+    df["value"] = df.value.mul(1 / TBTU_2_MWH)  # MWH -> TBTU
     return df
 
 
@@ -648,21 +660,22 @@ if __name__ == "__main__":
             investment_period=investment_period,
             state=state,
         )
-        df = format_sankey_data(df, COLORS, NAME_MAPPER)
+        df = format_sankey_data(df, COLORS, NAME_MAPPER, SANKEY_CODE_MAPPER)
 
         fig = go.Figure(
             data=[
                 go.Sankey(
+                    arrangement="snap",
                     valueformat=".0f",
                     valuesuffix="TBTU",
                     node=dict(
-                        pad=15,
+                        pad=10,
                         thickness=15,
                         line=dict(color="black", width=0.5),
                         label=list(SANKEY_CODE_MAPPER),
                         color=[COLORS[x] for x in SANKEY_CODE_MAPPER],
-                        x=[X[x] for x in SANKEY_CODE_MAPPER],
-                        y=[Y[x] for x in SANKEY_CODE_MAPPER],
+                        # x=[X[x] for x in SANKEY_CODE_MAPPER],
+                        # y=[Y[x] for x in SANKEY_CODE_MAPPER],
                     ),
                     link=dict(
                         source=df.source.to_list(),
@@ -677,16 +690,20 @@ if __name__ == "__main__":
 
         fig.update_layout(
             title_text=f"{state} Energy Flow in {investment_period} (TBTU)",
-            font_size=10,
+            font_size=24,
             font_color="black",
             font_family="Arial",
+            # width=1500,
+            # height=750,
         )
 
-        fig_name = Path(results_dir, state, "sankey", "energy.html")
-        if not fig_name.parent.exists():
-            fig_name.parent.mkdir(parents=True)
+        fig_name_html = Path(results_dir, state, "sankey", "energy.html")
+        fig_name_png = Path(results_dir, state, "sankey", "energy.png")
+        if not fig_name_html.parent.exists():
+            fig_name_html.parent.mkdir(parents=True)
 
-        plotly.offline.plot(fig, filename=fig_name)
+        fig.write_html(str(fig_name_html))
+        fig.write_image(str(fig_name_png))
 
     # plot system level
 
@@ -695,21 +712,22 @@ if __name__ == "__main__":
         pwr_carriers=power_carriers,
         investment_period=investment_period,
     )
-    df = format_sankey_data(df, COLORS, NAME_MAPPER)
+    df = format_sankey_data(df, COLORS, NAME_MAPPER, SANKEY_CODE_MAPPER)
 
     fig = go.Figure(
         data=[
             go.Sankey(
+                arrangement="snap",
                 valueformat=".0f",
                 valuesuffix="TBTU",
                 node=dict(
-                    pad=15,
+                    pad=10,
                     thickness=15,
                     line=dict(color="black", width=0.5),
                     label=list(SANKEY_CODE_MAPPER),
                     color=[COLORS[x] for x in SANKEY_CODE_MAPPER],
-                    x=[X[x] for x in SANKEY_CODE_MAPPER],
-                    y=[Y[x] for x in SANKEY_CODE_MAPPER],
+                    # x=[X[x] for x in SANKEY_CODE_MAPPER],
+                    # y=[Y[x] for x in SANKEY_CODE_MAPPER],
                 ),
                 link=dict(
                     source=df.source.to_list(),
@@ -724,13 +742,17 @@ if __name__ == "__main__":
 
     fig.update_layout(
         title_text=f"System Energy Flow in {investment_period} (TBTU)",
-        font_size=12,
+        font_size=24,
         font_color="black",
         font_family="Arial",
+        # width=1500,
+        # height=750,
     )
 
-    fig_name = Path(results_dir, "system", "sankey", "energy.html")
-    if not fig_name.parent.exists():
-        fig_name.parent.mkdir(parents=True)
+    fig_name_html = Path(results_dir, "system", "sankey", "energy.html")
+    fig_name_png = Path(results_dir, "system", "sankey", "energy.png")
+    if not fig_name_html.parent.exists():
+        fig_name_html.parent.mkdir(parents=True)
 
-    plotly.offline.plot(fig, filename=fig_name)
+    fig.write_html(str(fig_name_html))
+    fig.write_image(str(fig_name_png))
