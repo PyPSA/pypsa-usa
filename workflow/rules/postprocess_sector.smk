@@ -141,18 +141,34 @@ rule plot_sankey_energy:
         root_dir=RESULTS
         + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/",
     output:
-        expand(
-            RESULTS
-            + "{{interconnect}}/figures/s{{simpl}}_c{{clusters}}/l{{ll}}_{{opts}}_{{sector}}/system/sankey/{fig}.png",
-            fig=FIGURES_SECTOR_SANKEY,
-        ),
+        RESULTS
+        + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/system/sankey/energy.png",
     log:
-        "logs/plot_figures/{interconnect}_s{simpl}_c{clusters}_l{ll}_{opts}_{sector}_sankey.log",
+        "logs/plot_figures/{interconnect}_s{simpl}_c{clusters}_l{ll}_{opts}_{sector}_energy_sankey.log",
     threads: 1
     resources:
         mem_mb=5000,
     script:
         "../scripts/plot_sankey_energy.py"
+
+
+rule plot_sankey_carbon:
+    input:
+        network=RESULTS
+        + "{interconnect}/networks/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc",
+    params:
+        root_dir=RESULTS
+        + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/",
+    output:
+        RESULTS
+        + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/system/sankey/carbon.png",
+    log:
+        "logs/plot_figures/{interconnect}_s{simpl}_c{clusters}_l{ll}_{opts}_{sector}_energy_sankey.log",
+    threads: 1
+    resources:
+        mem_mb=5000,
+    script:
+        "../scripts/plot_sankey_carbon.py"
 
 
 rule plot_sector_validation:
