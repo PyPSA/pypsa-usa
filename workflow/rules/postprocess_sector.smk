@@ -37,7 +37,7 @@ FIGURES_SECTOR_NATURAL_GAS = [
     "international_trade",
     "fuel_price",
 ]
-FIGURES_SECTOR_SANKEY = ["energy"]
+FIGURES_SECTOR_SANKEY = ["energy", "carbon"]
 
 
 rule plot_natural_gas:
