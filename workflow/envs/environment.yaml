@@ -36,6 +36,7 @@ dependencies:
 - pyomo==6.6.1
 - graphviz
 - cyipopt
+- python-kaleido # exporting plotly images
 
 # Keep in conda environment when calling ipython
 - ipython==8.16.1
