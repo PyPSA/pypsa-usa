@@ -1024,6 +1024,10 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
         template = self._assign_link_buses(n, template)
         template = self._assign_stores(template)
 
+        # remove any conections within geographic scope
+        if self.domestic:
+            template = template[~(template.STATE_TO.isin(n.buses.STATE) & template.STATE_FROM.isin(n.buses.STATE))]
+
         store_imports = template[template.store == "import"].copy()
         store_exports = template[template.store == "export"].copy()
 
