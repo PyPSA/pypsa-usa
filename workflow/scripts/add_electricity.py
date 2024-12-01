@@ -48,7 +48,6 @@ import xarray as xr
 from _helpers import (
     configure_logging,
     export_network_for_gis_mapping,
-    test_network_datatype_consistency,
     update_p_nom_max,
     weighted_avg,
 )
@@ -987,8 +986,6 @@ def main(snakemake):
 
     # n.export_to_netcdf(snakemake.output[0])
     pickle.dump(n, open(snakemake.output[0], "wb"))
-
-    logger.info(test_network_datatype_consistency(n))
 
 
 if __name__ == "__main__":

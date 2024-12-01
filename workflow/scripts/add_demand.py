@@ -10,7 +10,12 @@ from pathlib import Path
 
 import pandas as pd
 import pypsa
-from _helpers import configure_logging, mock_snakemake
+from _helpers import (
+    configure_logging,
+    get_multiindex_snapshots,
+    get_snapshots,
+    mock_snakemake,
+)
 from constants_sector import (
     AirTransport,
     BoatTransport,
@@ -66,6 +71,13 @@ if __name__ == "__main__":
     n = pypsa.Network(snakemake.input.network)
 
     sectors = snakemake.params.sectors
+
+    # add snapshots
+    sns_config = snakemake.params.snapshots
+    planning_horizons = snakemake.params.planning_horizons
+
+    n.snapshots = get_multiindex_snapshots(sns_config, planning_horizons)
+    n.set_investment_periods(periods=planning_horizons)
 
     if isinstance(demand_files, str):
         demand_files = [demand_files]
