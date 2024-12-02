@@ -295,8 +295,8 @@ def plot_regional_capacity_additions_bar(
     gens_reg = gens.map(n.generators.bus.map(n.buses.nerc_reg)).to_series()
     su = df.loc["StorageUnit"].index.get_level_values(0)
     su_reg = su.map(n.storage_units.bus.map(n.buses.nerc_reg)).to_series()
-
     nerc_reg = pd.concat([gens_reg, su_reg])
+
     df.set_index(nerc_reg, append=True, inplace=True)
     df = df.droplevel([0, 1, 2])
     df.reset_index(inplace=True)
@@ -366,6 +366,90 @@ def plot_regional_capacity_additions_bar(
     # Add a legend
     handles, labels = [], []
     for i, carrier in enumerate(df_combined.reset_index().Carrier.unique()):
+        handle = plt.Rectangle((0, 0), 1, 1, color=palette[carrier])
+        handles.append(handle)
+        labels.append(f"{carrier}")
+    fig.legend(handles, labels, title="Carrier", loc="lower center", ncol=columns)
+
+    # Adjust layout
+    plt.tight_layout(rect=[0, 0.3, 1, 1])
+    plt.subplots_adjust(wspace=0.4)
+
+    fig.savefig(save)
+    plt.close()
+
+
+def plot_regional_production_bar(
+    n: pypsa.Network,
+    save: str,
+) -> None:
+    """
+    Plot production evolution by nerc region in stacked bar plot
+    """
+    groupers = n.statistics.groupers
+    df = n.statistics(groupby=groupers.get_name_bus_and_carrier).round(3)
+    df = df.loc[["Generator", "StorageUnit"]]
+
+    # Add nerc_region data
+    gens = df.loc["Generator"].index.get_level_values(0)
+    gens_reg = gens.map(n.generators.bus.map(n.buses.nerc_reg)).to_series()
+    su = df.loc["StorageUnit"].index.get_level_values(0)
+    su_reg = su.map(n.storage_units.bus.map(n.buses.nerc_reg)).to_series()
+    nerc_reg = pd.concat([gens_reg, su_reg])
+
+    df.set_index(nerc_reg, append=True, inplace=True)
+    df = df.droplevel([0, 1, 2])
+    df.reset_index(inplace=True)
+    df.rename(columns={"level_0": "carrier", "level_1": "region"}, inplace=True)
+    df.set_index(["region", "carrier"], inplace=True)
+
+    df_supply = df["Supply"]
+    df_supply = df_supply.groupby(df_supply.index).sum()
+    # fix indexing
+    df_supply = df_supply.reset_index()
+    df_supply[["Region", "Carrier"]] = pd.DataFrame(
+        df_supply["index"].tolist(),
+        index=df_supply.index,
+    )
+    df_supply = df_supply.drop(columns="index")
+    df_supply.set_index(["Region", "Carrier"], inplace=True)
+    df_supply = df_supply / 1e3  # Convert to GW
+
+    palette = n.carriers.set_index("nice_name").color.to_dict()
+    regions = df_supply.index.get_level_values(0).unique()
+
+    # Determine grid layout for subplots
+    num_regions = len(regions)
+    columns = min(5, num_regions)  # Limit to 5 columns
+    rows = math.ceil(num_regions / columns)
+
+    # Set up the figure and axes
+    fig, axes = plt.subplots(rows, columns, figsize=(columns * 2.5, rows * 5), sharex=True, sharey=True)
+    axes = axes.flatten()  # Flatten the axes array
+
+    # Plot each region
+    for i, region in enumerate(regions):
+        region_data = df_supply.loc[region]
+        region_data.T.plot(
+            kind="bar",
+            stacked=True,
+            ax=axes[i],
+            color=[palette.get(carrier) for carrier in region_data.index.get_level_values(0)],
+            legend=False,
+        )
+
+        axes[i].axhline(0, color="black", linewidth=0.8)  # Add a line at y=0
+        axes[i].set_title(region)
+        axes[i].set_ylabel("Capacity (GW)")
+        axes[i].set_xlabel("Planning Horizon")
+
+    # Remove unused axes if any
+    for j in range(i + 1, len(axes)):
+        fig.delaxes(axes[j])
+
+    # Add a legend
+    handles, labels = [], []
+    for i, carrier in enumerate(df_supply.reset_index().Carrier.unique()):
         handle = plt.Rectangle((0, 0), 1, 1, color=palette[carrier])
         handles.append(handle)
         labels.append(f"{carrier}")
@@ -876,6 +960,10 @@ if __name__ == "__main__":
     plot_regional_capacity_additions_bar(
         n,
         snakemake.output["bar_regional_capacity_additions.pdf"],
+    )
+    plot_regional_production_bar(
+        n,
+        snakemake.output["bar_regional_production.pdf"],
     )
     plot_regional_emissions_bar(
         n,
