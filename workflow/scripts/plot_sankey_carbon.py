@@ -9,14 +9,11 @@ from pathlib import Path
 from typing import Optional
 
 import pandas as pd
-import plotly
 import plotly.graph_objects as go
 import pypsa
 from _helpers import configure_logging, mock_snakemake
 from constants import TBTU_2_MWH
-from constants_sector import TransportEfficiency
-from pypsa.descriptors import get_switchable_as_dense
-from summary_sector import _get_gens_in_state, _get_links_in_state
+from summary_sector import _get_links_in_state
 
 # These are node colors! Energy Services and Rejected Energy links do not
 # follow node color assignment and are corrected in code
@@ -192,10 +189,10 @@ def format_sankey_data(
             return name
 
     def assign_link_color(row: pd.Series) -> str:
-        if row.target == "Rejected Energy":
-            return color_mapper["Rejected Energy"]
-        elif row.target == "Energy Services":
-            return color_mapper["Energy Services"]
+        if row.source == "Electricity Generation":
+            return color_mapper["Electricity Generation"]
+        elif row.target == "CO2e Emissions":
+            return color_mapper["CO2e Emissions"]
         else:
             return color_mapper[row.source]
 
@@ -231,9 +228,9 @@ if __name__ == "__main__":
 
         snakemake = mock_snakemake(
             "plot_sankey_energy",
-            simpl="11",
+            simpl="70",
             opts="3h",
-            clusters="4m",
+            clusters="29m",
             ll="v1.0",
             sector_opts="",
             sector="E-G",
@@ -275,6 +272,7 @@ if __name__ == "__main__":
         fig = go.Figure(
             data=[
                 go.Sankey(
+                    arrangement="snap",
                     valueformat=".0f",
                     valuesuffix="MT",
                     node=dict(
@@ -323,6 +321,7 @@ if __name__ == "__main__":
     fig = go.Figure(
         data=[
             go.Sankey(
+                arrangement="snap",
                 valueformat=".0f",
                 valuesuffix="MT",
                 node=dict(

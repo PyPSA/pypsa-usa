@@ -27,7 +27,7 @@ COLORS = {
     "Wind": "rgba(146,10,146,1)",
     "Geothermal": "rgba(146,90,10,1)",
     "Natural Gas": "rgba(68,172,245,1)",
-    "Coal": "rgba(105,105,105,1)",
+    "Coal": "rgba(30,30,30,1)",
     "Biomass": "rgba(145,239,145,1)",
     "Petroleum": "rgba(0,96,0,1)",
     "Electricity Generation": "rgba(231,155,52,1)",
@@ -35,8 +35,8 @@ COLORS = {
     "Commercial": "rgba(255,188,200,1)",
     "Industrial": "rgba(255,188,200,1)",
     "Transportation": "rgba(255,188,200,1)",
-    "Rejected Energy": "rgba(186,186,186,1)",
-    "Energy Services": "rgba(97,97,97,1)",
+    "Rejected Energy": "rgba(150,150,150,1)",
+    "Energy Services": "rgba(250,210,250,1)",
 }
 
 # default (x, y) positions of nodes
@@ -618,9 +618,9 @@ if __name__ == "__main__":
 
         snakemake = mock_snakemake(
             "plot_sankey_energy",
-            simpl="11",
+            simpl="70",
             opts="3h",
-            clusters="4m",
+            clusters="29m",
             ll="v1.0",
             sector_opts="",
             sector="E-G",
