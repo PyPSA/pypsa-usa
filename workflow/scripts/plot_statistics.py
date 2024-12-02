@@ -29,6 +29,7 @@ Emission charts for:
 """
 
 import logging
+import math
 from datetime import datetime
 from pathlib import Path
 
@@ -250,81 +251,130 @@ def plot_global_constraint_shadow_prices(
     plt.close()
 
 
+def get_currently_installed_capacity(n: pypsa.Network) -> pd.DataFrame:
+    """
+    Returns a DataFrame with the currently installed capacity for each carrier and nerc region.
+    """
+    n.generators["nerc_reg"] = n.generators.bus.map(n.buses.nerc_reg)
+    existing_capacity = n.generators.groupby(["nerc_reg", "carrier"]).p_nom.sum().round(0)
+    existing_capacity = existing_capacity.to_frame(name="Existing")
+    n.storage_units["nerc_reg"] = n.storage_units.bus.map(n.buses.nerc_reg)
+    storage_units = n.storage_units.groupby(["nerc_reg", "carrier"]).p_nom.sum().round(0)
+    storage_units = storage_units.to_frame(name="Existing")
+    existing_capacity = pd.concat([existing_capacity, storage_units])
+
+    # Groupby regions and carriers, then fix indexing
+    existing_capacity = existing_capacity.groupby(existing_capacity.index).sum()
+    existing_capacity = existing_capacity.reset_index()
+    existing_capacity[["Region", "Carrier"]] = pd.DataFrame(
+        existing_capacity["index"].tolist(),
+        index=existing_capacity.index,
+    )
+    existing_capacity = existing_capacity.drop(columns="index")
+    existing_capacity.set_index(["Region", "Carrier"], inplace=True)
+
+    nn_carriers = existing_capacity.index.get_level_values(1).map(n.carriers.nice_name)
+    existing_capacity = existing_capacity.droplevel(1)
+    existing_capacity.set_index(nn_carriers, append=True, inplace=True)
+    return existing_capacity
+
+
 def plot_regional_capacity_additions_bar(
     n: pypsa.Network,
     save: str,
-    **wildcards,
 ) -> None:
     """
-    PLOT OF CAPACITY ADDITIONS BY STATE AND CARRIER (STACKED BAR PLOT)
+    Plot Capacity evolution by nerc region in stacked bar plot
     """
-    exp_gens = n.generators.p_nom_opt - n.generators.p_nom
-    exp_storage = n.storage_units.p_nom_opt - n.storage_units.p_nom
+    groupers = n.statistics.groupers
+    df = n.statistics(groupby=groupers.get_name_bus_and_carrier).round(3)
+    df = df.loc[["Generator", "StorageUnit"]]
 
-    expanded_capacity = pd.concat([exp_gens, exp_storage])
-    expanded_capacity = expanded_capacity.to_frame(name="mw")
-    mapper = pd.concat(
-        [
-            n.generators.bus.map(n.buses.nerc_reg),
-            n.storage_units.bus.map(n.buses.nerc_reg),
-        ],
+    # Add nerc_region data
+    gens = df.loc["Generator"].index.get_level_values(0)
+    gens_reg = gens.map(n.generators.bus.map(n.buses.nerc_reg)).to_series()
+    su = df.loc["StorageUnit"].index.get_level_values(0)
+    su_reg = su.map(n.storage_units.bus.map(n.buses.nerc_reg)).to_series()
+
+    nerc_reg = pd.concat([gens_reg, su_reg])
+    df.set_index(nerc_reg, append=True, inplace=True)
+    df = df.droplevel([0, 1, 2])
+    df.reset_index(inplace=True)
+    df.rename(columns={"level_0": "carrier", "level_1": "region"}, inplace=True)
+    df.set_index(["region", "carrier"], inplace=True)
+
+    df_optimal_capacity = df["Optimal Capacity"]
+    df_optimal_capacity = df_optimal_capacity.groupby(df_optimal_capacity.index).sum()
+    # fix indexing
+    df_optimal_capacity = df_optimal_capacity.reset_index()
+    df_optimal_capacity[["Region", "Carrier"]] = pd.DataFrame(
+        df_optimal_capacity["index"].tolist(),
+        index=df_optimal_capacity.index,
     )
-    expanded_capacity["region"] = expanded_capacity.index.map(mapper)
-    carrier_mapper = pd.concat([n.generators.carrier, n.storage_units.carrier])
-    expanded_capacity["carrier"] = expanded_capacity.index.map(carrier_mapper)
+    df_optimal_capacity = df_optimal_capacity.drop(columns="index")
+    df_optimal_capacity.set_index(["Region", "Carrier"], inplace=True)
 
-    palette = n.carriers.color.to_dict()
+    # Add column for existing capacities
+    existing_cap = get_currently_installed_capacity(n)
+    df_optimal_capacity.loc[existing_cap.index, "Existing"] = existing_cap
 
-    expanded_capacity["positive"] = expanded_capacity["mw"] > 0
-    df_sorted = expanded_capacity.sort_values(by=["region", "carrier"])
-    # Correcting the bottoms for positive and negative values
-    bottoms_pos = df_sorted[df_sorted["positive"]].groupby("region")["mw"].cumsum() - df_sorted["mw"]
-    bottoms_neg = df_sorted[~df_sorted["positive"]].groupby("region")["mw"].cumsum() - df_sorted["mw"]
+    # reorder columns to put existing first and any other columns after
+    df_optimal_capacity = df_optimal_capacity[
+        ["Existing"] + [col for col in df_optimal_capacity.columns if col != "Existing"]
+    ]
 
-    # Re-initialize plot to address the legend and gap issues
-    fig, ax = plt.subplots(figsize=(10, 6))
+    # Calculate retirements (includes economic and lifetime retirements)
+    df_retirements = df_optimal_capacity.diff(axis=1).clip(upper=0)
+    df_retirements = df_retirements[(df_retirements < -0.001).any(axis=1)]
+    df_retirements.fillna(0, inplace=True)
 
-    # Plot each carrier, adjusting handling for legend and correcting negative stacking
-    for i, carrier in enumerate(df_sorted["carrier"].unique()):
-        # Filter by carrier
-        df_carrier = df_sorted[df_sorted["carrier"] == carrier]
+    df_combined = pd.concat([df_optimal_capacity, df_retirements])
+    df_combined = df_combined / 1e3  # Convert to GW
 
-        # Separate positive and negative
-        df_pos = df_carrier[df_carrier["positive"]]
-        df_neg = df_carrier[~df_carrier["positive"]]
+    palette = n.carriers.set_index("nice_name").color.to_dict()
+    regions = df_combined.index.get_level_values(0).unique()
 
-        # Plot positives
-        ax.barh(
-            df_pos["region"],
-            df_pos["mw"],
-            left=bottoms_pos[df_pos.index],
-            color=palette[carrier],
-            edgecolor=None,
+    # Determine grid layout for subplots
+    num_regions = len(regions)
+    columns = min(5, num_regions)  # Limit to 5 columns
+    rows = math.ceil(num_regions / columns)
+
+    # Set up the figure and axes
+    fig, axes = plt.subplots(rows, columns, figsize=(columns * 2.5, rows * 5), sharex=True, sharey=True)
+    axes = axes.flatten()  # Flatten the axes array
+
+    # Plot each region
+    for i, region in enumerate(regions):
+        region_data = df_combined.loc[region]
+        region_data.T.plot(
+            kind="bar",
+            stacked=True,
+            ax=axes[i],
+            color=[palette.get(carrier) for carrier in region_data.index.get_level_values(0)],
+            legend=False,
         )
 
-        # Plot negatives
-        ax.barh(
-            df_neg["region"],
-            df_neg["mw"],
-            left=bottoms_neg[df_neg.index],
-            color=palette[carrier],
-            edgecolor=None,
-        )
+        axes[i].axhline(0, color="black", linewidth=0.8)  # Add a line at y=0
+        axes[i].set_title(region)
+        axes[i].set_ylabel("Capacity (GW)")
+        axes[i].set_xlabel("Planning Horizon")
 
-    # Adjust legend to include all carriers
+    # Remove unused axes if any
+    for j in range(i + 1, len(axes)):
+        fig.delaxes(axes[j])
+
+    # Add a legend
     handles, labels = [], []
-    for i, carrier in enumerate(df_sorted["carrier"].unique()):
+    for i, carrier in enumerate(df_combined.reset_index().Carrier.unique()):
         handle = plt.Rectangle((0, 0), 1, 1, color=palette[carrier])
         handles.append(handle)
         labels.append(f"{carrier}")
+    fig.legend(handles, labels, title="Carrier", loc="lower center", ncol=columns)
 
-    ax.legend(handles, labels, title="Carrier")
+    # Adjust layout
+    plt.tight_layout(rect=[0, 0.3, 1, 1])
+    plt.subplots_adjust(wspace=0.4)
 
-    ax.set_title("Adjusted MW by Region and Carrier with Negative Values")
-    ax.set_xlabel("MW")
-    ax.set_ylabel("Region")
-
-    fig.tight_layout()
     fig.savefig(save)
     plt.close()
 
@@ -524,64 +574,11 @@ def plot_accumulated_emissions(n: pypsa.Network, save: str, **wildcards) -> None
     plt.close()
 
 
-def plot_curtailment_heatmap(n: pypsa.Network, save: str, **wildcards) -> None:
-    curtailment = n.statistics.curtailment()
-    curtailment = curtailment[curtailment.index.get_level_values(0).isin(["StorageUnit", "Generator"])].droplevel(0)
-    curtailment = curtailment[curtailment.sum(1) > 0.001].T
-    curtailment.index = pd.to_datetime(curtailment.index).tz_localize("utc").tz_convert("America/Los_Angeles")
-    curtailment["month"] = curtailment.index.month
-    curtailment["hour"] = curtailment.index.hour
-    curtailment_group = curtailment.groupby(["month", "hour"]).mean()
-
-    df_long = pd.melt(
-        curtailment_group.reset_index(),
-        id_vars=["month", "hour"],
-        var_name="carrier",
-        value_name="MW",
-    )
-    df_long
-
-    carriers = df_long["carrier"].unique()
-    num_carriers = len(carriers)
-
-    rows = num_carriers // 3 + (num_carriers % 3 > 0)
-    cols = min(num_carriers, 3)
-
-    # Plotting with dynamic subplot creation based on the number of groups, with wrapping
-    fig, axes = plt.subplots(rows, cols, figsize=(3 * cols, 3 * rows))
-    axes = axes.flatten()  # Flatten the axes array for easy iteration
-
-    for i, carrier in enumerate(carriers):
-        pivot_table = (
-            df_long[df_long.carrier == carrier]
-            .pivot(index="month", columns="hour", values="MW")
-            .astype(float)
-            .fillna(0)
-        )
-
-        sns.heatmap(pivot_table, ax=axes[i], cmap="viridis")
-        axes[i].set_title(carrier)
-
-    # Hide any unused axes if the number of groups is not a multiple of 3
-    for j in range(i + 1, rows * cols):
-        axes[j].set_visible(False)
-
-    plt.suptitle(create_title("Heatmap of Curtailment by by Carrier", **wildcards))
-
-    plt.tight_layout()
-    plt.savefig(save)
-    plt.close()
-
-
 def plot_capacity_factor_heatmap(n: pypsa.Network, save: str, **wildcards) -> None:
     """
     HEATMAP OF RENEWABLE CAPACITY FACTORS BY CARRIER.
     """
-    df_long = n.generators_t.p_max_pu.loc[n.investment_periods[0]].melt(
-        var_name="bus",
-        value_name="p_max_pu",
-        ignore_index=False,
-    )
+    df_long = n.generators_t.p.loc[n.investment_periods[0]].melt(var_name="bus", value_name="p", ignore_index=False)
     df_long["region"] = df_long["bus"].map(n.generators.bus.map(n.buses.country))
     df_long["carrier"] = df_long["bus"].map(n.generators.carrier)
     df_long["hour"] = df_long.index.hour
@@ -589,33 +586,26 @@ def plot_capacity_factor_heatmap(n: pypsa.Network, save: str, **wildcards) -> No
     df_long.drop(columns="bus", inplace=True)
     df_long = df_long.drop(columns="region").groupby(["carrier", "month", "hour"]).mean().reset_index()
 
-    unique_groups = df_long["carrier"].unique()
-    num_groups = len(unique_groups)
+    # Get unique months for separate panels
+    unique_months = df_long["month"].unique()
 
-    rows = num_groups // 4 + (num_groups % 4 > 0)
-    cols = min(num_groups, 4)
+    # Prepare figure and axes
+    fig, axs = plt.subplots(len(unique_months), 1, figsize=(12, len(unique_months) * 4), sharex=True)
 
-    # Plotting with dynamic subplot creation based on the number of groups, with wrapping
-    fig, axes = plt.subplots(rows, cols, figsize=(4 * cols, 4 * rows))
-    axes = axes.flatten()  # Flatten the axes array for easy iteration
+    # Iterate over each month to create a panel
+    for idx, month in enumerate(sorted(unique_months)):
+        month_data = df_long[df_long["month"] == month]
+        pivot_data = month_data.pivot(index="hour", columns="carrier", values="p")
 
-    for i, carrier in enumerate(unique_groups):
-        pivot_table = (
-            df_long[df_long.carrier == carrier]
-            .pivot(index="month", columns="hour", values="p_max_pu")
-            .astype(float)
-            .fillna(0)
-        )
-        sns.heatmap(pivot_table, ax=axes[i], cmap="viridis")
-        axes[i].set_title(carrier)
-
-    # Hide any unused axes if the number of groups is not a multiple of 3
-    for j in range(i + 1, rows * cols):
-        axes[j].set_visible(False)
+        ax = axs[idx] if len(unique_months) > 1 else axs
+        pivot_data.plot.area(ax=ax, title=f"Month: {month}", alpha=0.7)
+        ax.set_ylabel("Mean Power (p)")
+        ax.set_xlabel("Hour of the Day")
+        ax.legend(title="Carrier", bbox_to_anchor=(1.05, 1), loc="upper left")
 
     plt.suptitle("Heatmap of Renewable Capacity Factors by by Carrier")
-
     plt.tight_layout()
+
     plt.savefig(save)
     plt.close()
 
@@ -859,10 +849,12 @@ if __name__ == "__main__":
     )
     carriers = list(set(carriers))  # remove any duplicates
 
-    # plotting theme
-    # sns.set_theme("paper", style="darkgrid")
-    n.statistics().round(2).to_csv(snakemake.output.statistics)
-    n.generators.to_csv(snakemake.output.statistics[:-15] + "/generators.csv")
+    # Export Statistics Tables
+    groupers = n.statistics.groupers
+    n.statistics(groupby=groupers.get_name_bus_and_carrier).round(3).to_csv(snakemake.output.statistics_dissaggregated)
+    n.statistics().round(2).to_csv(snakemake.output.statistics_summary)
+    n.generators.to_csv(snakemake.output.generators)
+
     # Bar Plots
     plot_capacity_additions_bar(
         n,
@@ -884,7 +876,6 @@ if __name__ == "__main__":
     plot_regional_capacity_additions_bar(
         n,
         snakemake.output["bar_regional_capacity_additions.pdf"],
-        **snakemake.wildcards,
     )
     plot_regional_emissions_bar(
         n,
@@ -914,16 +905,6 @@ if __name__ == "__main__":
         snakemake.output["emissions_accumulated.pdf"],
         **snakemake.wildcards,
     )
-    # plot_curtailment_heatmap(
-    #     n,
-    #     snakemake.output["curtailment_heatmap.pdf"],
-    #     **snakemake.wildcards,
-    # )
-    # plot_capacity_factor_heatmap(
-    #     n,
-    #     snakemake.output["capfac_heatmap.pdf"],
-    #     **snakemake.wildcards,
-    # )
     plot_fuel_costs(
         n,
         snakemake.output["fuel_costs.pdf"],
