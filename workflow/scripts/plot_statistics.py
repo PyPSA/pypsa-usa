@@ -279,112 +279,16 @@ def get_currently_installed_capacity(n: pypsa.Network) -> pd.DataFrame:
     return existing_capacity
 
 
-def plot_regional_capacity_additions_bar(
-    n: pypsa.Network,
-    save: str,
-) -> None:
+def get_statistics(n, column_name):
     """
-    Plot Capacity evolution by nerc region in stacked bar plot
-    """
-    groupers = n.statistics.groupers
-    df = n.statistics(groupby=groupers.get_name_bus_and_carrier).round(3)
-    df = df.loc[["Generator", "StorageUnit"]]
+    Prepare the statistics data for plotting by extracting and grouping by region and carrier.
 
-    # Add nerc_region data
-    gens = df.loc["Generator"].index.get_level_values(0)
-    gens_reg = gens.map(n.generators.bus.map(n.buses.nerc_reg)).to_series()
-    su = df.loc["StorageUnit"].index.get_level_values(0)
-    su_reg = su.map(n.storage_units.bus.map(n.buses.nerc_reg)).to_series()
-    nerc_reg = pd.concat([gens_reg, su_reg])
+    Parameters:
+    - n: pypsa.Network
+    - column_name: str, the name of the column to extract from statistics (e.g., 'Optimal Capacity', 'Supply')
 
-    df.set_index(nerc_reg, append=True, inplace=True)
-    df = df.droplevel([0, 1, 2])
-    df.reset_index(inplace=True)
-    df.rename(columns={"level_0": "carrier", "level_1": "region"}, inplace=True)
-    df.set_index(["region", "carrier"], inplace=True)
-
-    df_optimal_capacity = df["Optimal Capacity"]
-    df_optimal_capacity = df_optimal_capacity.groupby(df_optimal_capacity.index).sum()
-    # fix indexing
-    df_optimal_capacity = df_optimal_capacity.reset_index()
-    df_optimal_capacity[["Region", "Carrier"]] = pd.DataFrame(
-        df_optimal_capacity["index"].tolist(),
-        index=df_optimal_capacity.index,
-    )
-    df_optimal_capacity = df_optimal_capacity.drop(columns="index")
-    df_optimal_capacity.set_index(["Region", "Carrier"], inplace=True)
-
-    # Add column for existing capacities
-    existing_cap = get_currently_installed_capacity(n)
-    df_optimal_capacity.loc[existing_cap.index, "Existing"] = existing_cap
-
-    # reorder columns to put existing first and any other columns after
-    df_optimal_capacity = df_optimal_capacity[
-        ["Existing"] + [col for col in df_optimal_capacity.columns if col != "Existing"]
-    ]
-
-    # Calculate retirements (includes economic and lifetime retirements)
-    df_retirements = df_optimal_capacity.diff(axis=1).clip(upper=0)
-    df_retirements = df_retirements[(df_retirements < -0.001).any(axis=1)]
-    df_retirements.fillna(0, inplace=True)
-
-    df_combined = pd.concat([df_optimal_capacity, df_retirements])
-    df_combined = df_combined / 1e3  # Convert to GW
-
-    palette = n.carriers.set_index("nice_name").color.to_dict()
-    regions = df_combined.index.get_level_values(0).unique()
-
-    # Determine grid layout for subplots
-    num_regions = len(regions)
-    columns = min(5, num_regions)  # Limit to 5 columns
-    rows = math.ceil(num_regions / columns)
-
-    # Set up the figure and axes
-    fig, axes = plt.subplots(rows, columns, figsize=(columns * 2.5, rows * 5), sharex=True, sharey=True)
-    axes = axes.flatten()  # Flatten the axes array
-
-    # Plot each region
-    for i, region in enumerate(regions):
-        region_data = df_combined.loc[region]
-        region_data.T.plot(
-            kind="bar",
-            stacked=True,
-            ax=axes[i],
-            color=[palette.get(carrier) for carrier in region_data.index.get_level_values(0)],
-            legend=False,
-        )
-
-        axes[i].axhline(0, color="black", linewidth=0.8)  # Add a line at y=0
-        axes[i].set_title(region)
-        axes[i].set_ylabel("Capacity (GW)")
-        axes[i].set_xlabel("Planning Horizon")
-
-    # Remove unused axes if any
-    for j in range(i + 1, len(axes)):
-        fig.delaxes(axes[j])
-
-    # Add a legend
-    handles, labels = [], []
-    for i, carrier in enumerate(df_combined.reset_index().Carrier.unique()):
-        handle = plt.Rectangle((0, 0), 1, 1, color=palette[carrier])
-        handles.append(handle)
-        labels.append(f"{carrier}")
-    fig.legend(handles, labels, title="Carrier", loc="lower center", ncol=columns)
-
-    # Adjust layout
-    plt.tight_layout(rect=[0, 0.3, 1, 1])
-    plt.subplots_adjust(wspace=0.4)
-
-    fig.savefig(save)
-    plt.close()
-
-
-def plot_regional_production_bar(
-    n: pypsa.Network,
-    save: str,
-) -> None:
-    """
-    Plot production evolution by nerc region in stacked bar plot
+    Returns:
+    - pd.DataFrame: Prepared and grouped data
     """
     groupers = n.statistics.groupers
     df = n.statistics(groupby=groupers.get_name_bus_and_carrier).round(3)
@@ -403,20 +307,44 @@ def plot_regional_production_bar(
     df.rename(columns={"level_0": "carrier", "level_1": "region"}, inplace=True)
     df.set_index(["region", "carrier"], inplace=True)
 
-    df_supply = df["Supply"]
-    df_supply = df_supply.groupby(df_supply.index).sum()
-    # fix indexing
-    df_supply = df_supply.reset_index()
-    df_supply[["Region", "Carrier"]] = pd.DataFrame(
-        df_supply["index"].tolist(),
-        index=df_supply.index,
+    df_selected = df[column_name]
+    df_selected = df_selected.groupby(df_selected.index).sum()
+    df_selected = df_selected.reset_index()
+    df_selected[["Region", "Carrier"]] = pd.DataFrame(
+        df_selected["index"].tolist(),
+        index=df_selected.index,
     )
-    df_supply = df_supply.drop(columns="index")
-    df_supply.set_index(["Region", "Carrier"], inplace=True)
-    df_supply = df_supply / 1e3  # Convert to GW
+    df_selected = df_selected.drop(columns="index")
+    df_selected.set_index(["Region", "Carrier"], inplace=True)
+
+    return df_selected
+
+
+def plot_bar(data, n, save, title, ylabel, is_capacity=False):
+    """
+    Plot the data in a bar chart with subplots by region and carrier.
+
+    Parameters:
+    - data: pd.DataFrame, data to plot
+    - n: pypsa.Network
+    - save: str, file path to save the plot
+    - title: str, plot title
+    - ylabel: str, y-axis label
+    - is_capacity: bool, whether to add extra processing for capacities
+    """
+    if is_capacity:
+        existing_cap = get_currently_installed_capacity(n)
+        data.loc[existing_cap.index, "Existing"] = existing_cap
+        data = data[["Existing"] + [col for col in data.columns if col != "Existing"]]
+        retirements = data.diff(axis=1).clip(upper=0)
+        retirements = retirements[(retirements < -0.001).any(axis=1)]
+        retirements.fillna(0, inplace=True)
+        data = pd.concat([data, retirements])
+
+    data = data / 1e3  # Convert to GW
 
     palette = n.carriers.set_index("nice_name").color.to_dict()
-    regions = df_supply.index.get_level_values(0).unique()
+    regions = data.index.get_level_values(0).unique()
 
     # Determine grid layout for subplots
     num_regions = len(regions)
@@ -425,11 +353,10 @@ def plot_regional_production_bar(
 
     # Set up the figure and axes
     fig, axes = plt.subplots(rows, columns, figsize=(columns * 2.5, rows * 5), sharex=True, sharey=True)
-    axes = axes.flatten()  # Flatten the axes array
+    axes = axes.flatten()
 
-    # Plot each region
     for i, region in enumerate(regions):
-        region_data = df_supply.loc[region]
+        region_data = data.loc[region]
         region_data.T.plot(
             kind="bar",
             stacked=True,
@@ -437,30 +364,42 @@ def plot_regional_production_bar(
             color=[palette.get(carrier) for carrier in region_data.index.get_level_values(0)],
             legend=False,
         )
-
-        axes[i].axhline(0, color="black", linewidth=0.8)  # Add a line at y=0
+        axes[i].axhline(0, color="black", linewidth=0.8)
         axes[i].set_title(region)
-        axes[i].set_ylabel("Capacity (GW)")
+        axes[i].set_ylabel(ylabel)
         axes[i].set_xlabel("Planning Horizon")
 
-    # Remove unused axes if any
     for j in range(i + 1, len(axes)):
         fig.delaxes(axes[j])
 
-    # Add a legend
     handles, labels = [], []
-    for i, carrier in enumerate(df_supply.reset_index().Carrier.unique()):
+    for carrier in data.reset_index().Carrier.unique():
         handle = plt.Rectangle((0, 0), 1, 1, color=palette[carrier])
         handles.append(handle)
         labels.append(f"{carrier}")
     fig.legend(handles, labels, title="Carrier", loc="lower center", ncol=columns)
 
-    # Adjust layout
     plt.tight_layout(rect=[0, 0.3, 1, 1])
     plt.subplots_adjust(wspace=0.4)
-
+    fig.suptitle(title)
     fig.savefig(save)
     plt.close()
+
+
+def plot_regional_capacity_additions_bar(n, save):
+    """
+    Plot capacity evolution by NERC region in a stacked bar plot.
+    """
+    data = get_statistics(n, "Optimal Capacity")
+    plot_bar(data, n, save, "", "Capacity (GW)", is_capacity=True)
+
+
+def plot_regional_production_bar(n, save):
+    """
+    Plot production evolution by NERC region in a stacked bar plot.
+    """
+    data = get_statistics(n, "Supply")
+    plot_bar(data, n, save, "", "Production (GWh)")
 
 
 def plot_regional_emissions_bar(
@@ -469,22 +408,44 @@ def plot_regional_emissions_bar(
     **wildcards,
 ) -> None:
     """
-    PLOT OF CO2 EMISSIONS BY REGION.
+    PLOT OF CO2 EMISSIONS BY NERC REGION AND INVESTMENT PERIOD.
     """
-    regional_emisssions = get_node_emissions_timeseries(n).T.groupby(n.buses.country).sum().T.sum() / 1e6
-
-    plt.figure(figsize=(10, 10))
-    sns.barplot(
-        x=regional_emisssions.values,
-        y=regional_emisssions.index,
-        palette="viridis",
-        hue=regional_emisssions.index,
-        legend=False,
+    regional_emisssions_ts = get_node_emissions_timeseries(n).T.groupby(n.buses.nerc_reg).sum().T / 1e6
+    regional_emissions = (
+        regional_emisssions_ts.groupby(regional_emisssions_ts.index.get_level_values(0)).sum().round(3).T
     )
 
+    # Determine grid layout for subplots
+    regions = regional_emissions.index.get_level_values(0).unique()
+    num_regions = len(regions)
+    columns = min(5, num_regions)  # Limit to 5 columns
+    rows = math.ceil(num_regions / columns)
+
+    # Set up the figure and axes
+    fig, axes = plt.subplots(rows, columns, figsize=(columns * 2.5, rows * 5), sharex=True, sharey=True)
+    axes = axes.flatten()
+
+    for i, region in enumerate(regions):
+        region_data = regional_emissions.loc[region]
+        region_data.T.plot(
+            kind="bar",
+            stacked=True,
+            ax=axes[i],
+            legend=False,
+        )
+        axes[i].axhline(0, color="black", linewidth=0.8)
+        axes[i].set_title(region)
+        axes[i].set_ylabel("ylabel")
+        axes[i].set_xlabel("Planning Horizon")
+
+    for j in range(i + 1, len(axes)):
+        fig.delaxes(axes[j])
+
+    plt.tight_layout(rect=[0, 0.3, 1, 1])
+    plt.subplots_adjust(wspace=0.4)
+
     plt.xlabel("CO2 Emissions [MMtCO2]")
-    plt.ylabel("")
-    plt.title(create_title("CO2 Emissions by Region", **wildcards))
+    plt.ylabel("MMtCO2")
 
     plt.tight_layout()
     plt.savefig(save)
