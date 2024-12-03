@@ -367,7 +367,7 @@ def plot_bar(data, n, save, title, ylabel, is_capacity=False):
         axes[i].axhline(0, color="black", linewidth=0.8)
         axes[i].set_title(region)
         axes[i].set_ylabel(ylabel)
-        axes[i].set_xlabel("Planning Horizon")
+        axes[i].set_xlabel("")
 
     for j in range(i + 1, len(axes)):
         fig.delaxes(axes[j])
@@ -405,7 +405,6 @@ def plot_regional_production_bar(n, save):
 def plot_regional_emissions_bar(
     n: pypsa.Network,
     save: str,
-    **wildcards,
 ) -> None:
     """
     PLOT OF CO2 EMISSIONS BY NERC REGION AND INVESTMENT PERIOD.
@@ -435,11 +434,44 @@ def plot_regional_emissions_bar(
         )
         axes[i].axhline(0, color="black", linewidth=0.8)
         axes[i].set_title(region)
-        axes[i].set_ylabel("ylabel")
-        axes[i].set_xlabel("Planning Horizon")
+        axes[i].set_ylabel("MMtCo2")
+        axes[i].set_xlabel("")
 
     for j in range(i + 1, len(axes)):
         fig.delaxes(axes[j])
+
+    plt.tight_layout(rect=[0, 0.3, 1, 1])
+    plt.subplots_adjust(wspace=0.4)
+
+    plt.xlabel("")
+    plt.ylabel("MMtCO2")
+
+    plt.tight_layout()
+    plt.savefig(save)
+    plt.close()
+
+
+def plot_emissions_bar(
+    n: pypsa.Network,
+    save: str,
+) -> None:
+    """
+    PLOT OF CO2 EMISSIONS BY INVESTMENT PERIOD.
+    """
+    emisssions_ts = get_node_emissions_timeseries(n).T.sum().T / 1e6
+    emissions = emisssions_ts.groupby(emisssions_ts.index.get_level_values(0)).sum().round(3).T
+
+    # Set up the figure and axes
+    fig, ax = plt.subplots(figsize=(7, 4))
+    emissions.T.plot(
+        kind="bar",
+        stacked=True,
+        ax=ax,
+        legend=False,
+    )
+    ax.axhline(0, color="black", linewidth=0.8)
+    ax.set_ylabel("MMtCo2")
+    ax.set_xlabel("")
 
     plt.tight_layout(rect=[0, 0.3, 1, 1])
     plt.subplots_adjust(wspace=0.4)
@@ -899,6 +931,7 @@ if __name__ == "__main__":
     n.statistics(groupby=groupers.get_name_bus_and_carrier).round(3).to_csv(snakemake.output.statistics_dissaggregated)
     n.statistics().round(2).to_csv(snakemake.output.statistics_summary)
     n.generators.to_csv(snakemake.output.generators)
+    n.storage_units.to_csv(snakemake.output.storage_units)
 
     # Bar Plots
     plot_capacity_additions_bar(
@@ -929,7 +962,10 @@ if __name__ == "__main__":
     plot_regional_emissions_bar(
         n,
         snakemake.output["bar_regional_emissions.pdf"],
-        **snakemake.wildcards,
+    )
+    plot_emissions_bar(
+        n,
+        snakemake.output["bar_emissions.pdf"],
     )
 
     # Time Series Plots

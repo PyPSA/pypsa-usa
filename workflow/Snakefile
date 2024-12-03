@@ -27,6 +27,7 @@ FIGURES_EMISSIONS = [
     "emissions_accumulated.pdf",
     "emissions_accumulated_tech.pdf",
     "bar_regional_emissions.pdf",
+    "bar_emissions.pdf",
 ]
 
 FIGURES_PRODUCTION = [

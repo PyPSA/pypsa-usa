@@ -86,6 +86,8 @@ rule plot_statistics:
         + "{interconnect}/figures/s{simpl}_cluster_{clusters}/l{ll}_{opts}_{sector}/statistics/statistics_dissaggregated.csv",
         generators=RESULTS
         + "{interconnect}/figures/s{simpl}_cluster_{clusters}/l{ll}_{opts}_{sector}/statistics/generators.csv",
+        storage_units=RESULTS
+        + "{interconnect}/figures/s{simpl}_cluster_{clusters}/l{ll}_{opts}_{sector}/statistics/storage_units.csv",
     log:
         "logs/plot_figures/{interconnect}_{simpl}_{clusters}_l{ll}_{opts}_{sector}.log",
     threads: 1
