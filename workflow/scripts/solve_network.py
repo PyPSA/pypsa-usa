@@ -107,7 +107,6 @@ def add_land_use_constraints(n):
 
     if generators.empty:
         return
-
     p_nom = n.model["Generator-p_nom"].loc[generators.index]
 
     grouper = pd.concat([generators.carrier, generators.land_region], axis=1)
@@ -630,44 +629,42 @@ def add_regional_co2limit(n, sns, config):
         lhs = (p_em * em_pu).sum()
         rhs = region_co2lim
 
+        # EF_imports = emmission_lim.get('import_emissions_factor')  # MT CO₂e/MWh_elec
         # if EF_imports > 0.0:
-        #     region_storage = n.storage_units[n.storage_units.bus.isin(region_buses.index)]
-        #     EF_imports = emmission_lim.import_emissions_factor  # MT CO₂e/MWh_elec
-        #     # All Gens
-        #     p = (
+        #     # emissions imported = EF_imports * imports
+        #     # imports = Internal Demand - Internal Production
+        #     # Emissions imported = EF_imports * Internal Demand - EF_imports * Internal Production
+
+        #     # Full Constraint:
+        #     # Emissions Produced + Emissions Imported <= Emissions Limit
+        #     # Emissions Produced  - EF_imports * Internal Production  <= Emissions Limit - (EF_imports * Internal Demand)
+
+        #     # Internal Production
+        #     p_internal = (
         #         n.model["Generator-p"]
         #         .loc[:, region_gens.index]
         #         .sel(period=planning_horizon)
         #         .mul(weightings.generators.loc[planning_horizon])
         #     )
-        #     imports_gen_weightings = pd.DataFrame(columns=region_gens.index, index=n.snapshots, data=1)
-        #     weighted_imports_p = (
-        #         (imports_gen_weightings * EF_imports).multiply(weightings.generators, axis=0).loc[planning_horizon]
-        #     )
-        #     lhs -= (p * weighted_imports_p).sum()
+        #     lhs -= (p_internal * EF_imports).sum()
 
+        #     region_storage = n.storage_units[n.storage_units.bus.isin(region_buses.index)]
         #     if not region_storage.empty:
         #         p_store_discharge = (
-        #             n.model["StorageUnit-p_dispatch"].loc[:, region_storage.index].sel(period=planning_horizon)
+        #             n.model["StorageUnit-p_dispatch"]
+        #             .loc[:, region_storage.index]
+        #             .sel(period=planning_horizon)
+        #             .mul(weightings.stores.loc[planning_horizon])
         #         )
-        #         imports_storage_weightings = pd.DataFrame(columns=region_storage.index, index=n.snapshots, data=1)
-        #         weighted_imports_p = (
-        #             (imports_storage_weightings * EF_imports)
-        #             .multiply(weightings.generators, axis=0)
-        #             .loc[planning_horizon]
-        #         )
-        #         lhs -= (p_store_discharge * weighted_imports_p).sum()
+        #         lhs -= (p_store_discharge * EF_imports).sum()
 
+        #     # Internal Demand
+        #     breakpoint()
+        #     region_loads = n.loads[n.loads.bus.isin(region_buses.index)]
         #     region_demand = (
-        #         n.loads_t.p_set.loc[
-        #             planning_horizon,
-        #             n.loads.bus.isin(region_buses.index),
-        #         ]
-        #         .sum()
-        #         .sum()
+        #         n.loads_t.p_set.loc[planning_horizon,region_loads.index].sum().sum()
         #     )
-
-        #     rhs -= region_demand * EF_imports
+        #     rhs -= (region_demand * EF_imports)
 
         n.model.add_constraints(
             lhs <= rhs,
