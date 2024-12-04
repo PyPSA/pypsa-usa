@@ -392,6 +392,7 @@ rule build_transport_road_demand:
         planning_horizons=config["scenario"]["planning_horizons"],
         profile_year=pd.to_datetime(config["snapshots"]["start"]).year,
         eia_api=config["api"]["eia"],
+        snapshots=config["snapshots"],
     input:
         network=RESOURCES + "{interconnect}/elec_base_network.nc",
         demand_files=demand_raw_data,
@@ -427,6 +428,7 @@ rule build_transport_other_demand:
     params:
         planning_horizons=config["scenario"]["planning_horizons"],
         eia_api=config["api"]["eia"],
+        snapshots=config["snapshots"],
     input:
         network=RESOURCES + "{interconnect}/elec_base_network.nc",
         demand_files=demand_raw_data,
@@ -793,7 +795,7 @@ rule build_powerplants:
     output:
         powerplants=RESOURCES + "powerplants.csv",
     log:
-        "logs/build_powerplants/build_powerplants.log",
+        "logs/build_powerplants",
     resources:
         mem_mb=30000,
     script:

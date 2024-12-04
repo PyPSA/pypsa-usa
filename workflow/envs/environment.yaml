@@ -65,3 +65,4 @@ dependencies:
   - duckdb==0.10.0
   - flake8
   - dill
+  - kaleido
