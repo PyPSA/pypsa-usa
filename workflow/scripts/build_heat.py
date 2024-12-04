@@ -1282,7 +1282,8 @@ def add_industrial_furnace(
     sector = "ind"
 
     capex = costs.at["direct firing gas", "capital_cost"].round(1)
-    efficiency = costs.at["direct firing gas", "efficiency"].round(1)
+    # efficiency = costs.at["direct firing gas", "efficiency"].round(1)
+    efficiency = 0.75
     lifetime = costs.at["direct firing gas", "lifetime"]
 
     carrier_name = f"{sector}-heat"
@@ -1341,7 +1342,7 @@ def add_industrial_boiler(
 
     # capex approximated based on NG to incorporate fixed costs
     capex = costs.at["direct firing gas", "capital_cost"].round(1) * 2.5
-    efficiency = 0.90
+    efficiency = 0.60
     lifetime = 25
 
     carrier_name = f"{sector}-heat"
