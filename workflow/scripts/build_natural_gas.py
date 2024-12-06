@@ -627,6 +627,9 @@ class _GasPipelineCapacity(GasData):
             trade = self._get_capacity_based_on_trade_flows()
             df = self._merge_capacity_trade_data(df, trade)
 
+        # slight buffer for when building constraints
+        df["CAPACITY_MW"] = np.ceil(df["CAPACITY_MW"].mul(1.02))
+
         return self.extract_pipelines(df)
 
     def _get_capacity_based_on_trade_flows(self) -> pd.DataFrame:
