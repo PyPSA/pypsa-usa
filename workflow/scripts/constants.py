@@ -738,6 +738,10 @@ ATB_TECH_MAPPER = {
         "techdetail": "NatlClass1",
         "crp": 100,
     },
+    "EGS": {
+        "display_name": "Geothermal - Hydro / Flash",
+        "crp": 30,
+    },
     "8hr_PHS": {  # Costs replaced with location specific data in workflow
         "display_name": "Pumped Storage Hydropower - National Class 1",
         "technology": "PumpedStorageHydro",

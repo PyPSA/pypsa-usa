@@ -53,6 +53,7 @@ from _helpers import (
     weighted_avg,
 )
 from sklearn.neighbors import BallTree
+from _helpers import load_costs, calculate_annuity
 
 idx = pd.IndexSlice
 
@@ -271,16 +272,15 @@ def match_nearest_bus(plants_subset, buses_subset):
 
     # Create a BallTree for the given subset of buses
     tree = BallTree(buses_subset[["x", "y"]].values, leaf_size=2)
-
+    
     # Find nearest bus for each plant in the subset
     distances, indices = tree.query(plants_subset[["longitude", "latitude"]].values, k=1)
-
+    
     # Map the nearest bus information back to the plants subset
     plants_subset["bus_assignment"] = buses_subset.reset_index().iloc[indices.flatten()]["Bus"].values
     plants_subset["distance_nearest"] = distances.flatten()
-
+    
     return plants_subset
-
 
 def match_plant_to_bus(n, plants):
     """
@@ -293,7 +293,7 @@ def match_plant_to_bus(n, plants):
     plants_matched = plants.copy()
     plants_matched["bus_assignment"] = None
     plants_matched["distance_nearest"] = None
-
+    
     # Get a copy of buses and create a geometry column with GPS coordinates
     buses = n.buses.copy()
     buses["geometry"] = gpd.points_from_xy(buses["x"], buses["y"])
@@ -301,10 +301,8 @@ def match_plant_to_bus(n, plants):
     # First pass: Assign each plant to the nearest bus in the same state
     for state in buses["state"].unique():
         buses_in_state = buses[buses["state"] == state]
-        plants_in_state = plants_matched[
-            (plants_matched["state"] == state) & (plants_matched["bus_assignment"].isnull())
-        ]
-
+        plants_in_state = plants_matched[(plants_matched["state"] == state) & (plants_matched["bus_assignment"].isnull())]
+        
         # Update plants_matched with the nearest bus within the same state
         plants_matched.update(match_nearest_bus(plants_in_state, buses_in_state))
 
@@ -507,7 +505,7 @@ def attach_wind_and_solar(
     """
     add_missing_carriers(n, carriers)
     for car in carriers:
-        if car == "hydro":
+        if car in ["hydro", "EGS"]:
             continue
 
         with xr.open_dataset(getattr(input_profiles, "profile_" + car)) as ds:
@@ -570,6 +568,114 @@ def attach_wind_and_solar(
                 p_max_pu=bus_profiles,
             )
 
+
+def attach_egs(
+    n: pypsa.Network,
+    costs: pd.DataFrame,
+    input_profiles: str,
+    carriers: list[str],
+    extendable_carriers: dict[str, list[str]],
+    line_length_factor=1,
+):
+    """
+    Attached STM Calculated wind and solar capacity factor profiles to the
+    network.
+    """
+    car = "EGS"
+    if car not in carriers:
+        return
+
+    add_missing_carriers(n, carriers)
+
+    lifetime = 25  # Following EGS supply curves by Aljubran et al. (2024)
+    discount_rate = 0.07 #load_costs(snakemake.input.tech_costs).loc["geothermal", "wacc_real"]
+    drilling_cost = snakemake.config["renewable"]["EGS"]["drilling_cost"]
+
+    with xr.open_dataset(
+        getattr(input_profiles, "specs_egs")
+    ) as ds_specs, xr.open_dataset(
+        getattr(input_profiles, "profile_egs")
+    ) as ds_profile:
+
+        bus2sub = (
+            pd.read_csv(input_profiles.bus2sub, dtype=str)
+            .drop("interconnect", axis=1)
+            .rename(columns={"Bus": "bus_id"})
+        )
+
+        # IGNORE: Remove dropna(). Rather, apply dropna when creating the original dataset
+        df_specs = pd.merge(
+            ds_specs.to_dataframe().reset_index().dropna(),
+            bus2sub,
+            on="sub_id",
+            how="left",
+        )
+        df_specs["bus_id"] = df_specs["bus_id"].astype(str)
+
+        # bus_id must be in index for pypsa to read it
+        df_specs.set_index("bus_id", inplace=True)
+
+        # columns must be renamed to refer to the right quantities for pypsa to read it correctly
+        logger.info(f"Using {drilling_cost} EGS drilling costs.")
+        df_specs = df_specs.rename(
+            columns={
+                "advanced_capex_usd_kw" if drilling_cost == "advanced" else "capex_usd_kw": "capital_cost",
+                "avail_capacity_mw": "p_nom_max",
+                "fixed_om": "fixed_om",
+            },
+        )
+
+        # TODO: come up with proper values for these params
+
+        df_specs["capital_cost"] = 1000 * (
+            df_specs["capital_cost"] * calculate_annuity(lifetime, discount_rate) 
+            + df_specs["fixed_om"]
+         ) # convert and annualize USD/kW to USD/MW-year
+        df_specs["efficiency"] = 1.0
+
+        # TODO: review what qualities need to be included. Currently limited for speedup.
+        qualities = [1]  # df_specs.Quality.unique()
+
+        for q in qualities:
+            suffix = " " + car  # + f" Q{q}"
+            df_q = df_specs[df_specs["Quality"] == q]
+
+            bus_list = df_q.index.values
+            capital_cost = df_q["capital_cost"]
+            p_nom_max_bus = df_q["p_nom_max"]
+            efficiency = df_q["efficiency"]  # for now.
+
+            # IGNORE: Remove dropna(). Rather, apply dropna when creating the original dataset
+            df_q_profile = pd.merge(
+                ds_profile.sel(Quality=q).to_dataframe().dropna().reset_index(),
+                bus2sub,
+                on="sub_id",
+                how="left",
+            )
+            bus_profiles = pd.pivot_table(
+                df_q_profile,
+                columns="bus_id",
+                index=["year", "Date"],
+                values="capacity_factor",
+            )
+
+            logger.info(
+                f"Adding EGS (Resource Quality-{q}) capacity-factor profiles to the network."
+            )
+
+            n.madd(
+                "Generator",
+                bus_list,
+                suffix,
+                bus=bus_list,
+                carrier=car,
+                p_nom_extendable=car in extendable_carriers["Generator"],
+                p_nom_max=p_nom_max_bus,
+                # weight=weight_bus,
+                capital_cost=capital_cost,
+                efficiency=efficiency,
+                p_max_pu=bus_profiles,
+            )
 
 def attach_battery_storage(
     n: pypsa.Network,
@@ -846,6 +952,15 @@ def main(snakemake):
         reeds_shapes,
     )
     plants = match_plant_to_bus(n, plants)
+
+    attach_egs(
+        n,
+        costs,
+        snakemake.input,
+        renewable_carriers,
+        extendable_carriers,
+        params.length_factor,
+    )
 
     attach_conventional_generators(
         n,

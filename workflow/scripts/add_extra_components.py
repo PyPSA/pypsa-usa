@@ -410,6 +410,92 @@ def attach_multihorizon_generators(
     )
     n.generators_t["p_max_pu"] = n.generators_t["p_max_pu"].join(p_max_pu_t)
 
+def attach_multihorizon_egs(
+    n: pypsa.Network,
+    costs: pd.DataFrame,
+    costs_dict: dict,
+    gens: pd.DataFrame,
+    investment_year: int,
+):
+    """
+    Adds multiple investment options for EGS.
+    Arguments:
+    n: pypsa.Network,
+    costs: pd.DataFrame,
+        dataframe with costs of investment year
+    costs_dict: dict,
+        Dict of costs for each investment period
+    carriers: List[str]
+        List of carriers to add multiple investment options for
+    """
+    if gens.empty or len(n.investment_periods) == 1:
+        return
+
+    lifetime = 25  # Following EGS supply curves by Aljubran et al. (2024)
+    base_year = n.investment_periods[0]
+    learning_ratio = (
+        costs.loc["EGS", "capex_per_kw"] / costs_dict[base_year].loc["EGS", "capex_per_kw"]
+    )
+    capital_cost = learning_ratio * gens["capital_cost"]
+
+    n.madd(
+        "Generator",
+        gens.index,
+        suffix=f" {investment_year}",
+        carrier=gens.carrier,
+        bus=gens.bus,
+        p_nom_min=0,
+        p_nom=0,
+        p_nom_max=gens.p_nom_max,
+        p_nom_extendable=True,
+        ramp_limit_up=gens.ramp_limit_up,
+        ramp_limit_down=gens.ramp_limit_down,
+        efficiency=gens.efficiency,
+        marginal_cost=gens.marginal_cost,
+        p_min_pu=gens.p_min_pu,
+        p_max_pu=gens.p_max_pu,
+        capital_cost=capital_cost,
+        build_year=investment_year,
+        lifetime=lifetime,
+    )
+
+    # time dependent factors added after
+    marginal_cost_t = n.generators_t["marginal_cost"][
+        [x for x in gens.index if x in n.generators_t.marginal_cost.columns]
+    ]
+    marginal_cost_t = marginal_cost_t.rename(
+        columns={x: f"{x} {investment_year}" for x in marginal_cost_t.columns},
+    )
+    n.generators_t["marginal_cost"] = n.generators_t["marginal_cost"].join(
+        marginal_cost_t,
+    )
+
+    p_max_pu_t = n.generators_t["p_max_pu"][
+        [x for x in gens.index if x in n.generators_t["p_max_pu"].columns]
+    ]
+
+    p_max_pu_t = p_max_pu_t.rename(
+        columns={x: f"{x} {investment_year}" for x in p_max_pu_t.columns},
+    )
+
+    n.generators_t["p_max_pu"] = n.generators_t["p_max_pu"].join(p_max_pu_t)
+
+    # shift over time to capture decline
+    investment_year_idx = np.where(n.investment_periods == investment_year)[0][0]
+    cars = list(
+        n.generators_t["p_max_pu"]
+        .filter(like="EGS")
+        .filter(like=str(investment_year))
+        .columns
+    )
+    n.generators_t["p_max_pu"].loc[n.investment_periods[investment_year_idx:], cars] = (
+        n.generators_t["p_max_pu"]
+        .loc[
+            n.investment_periods[: len(n.investment_periods) - investment_year_idx],
+            cars,
+        ]
+        .values
+    )
 
 def attach_newCarrier_generators(n, costs, carriers, investment_year):
     """
@@ -573,12 +659,27 @@ if __name__ == "__main__":
         & ~n.generators.index.str.contains("existing")
     ]
 
+    multi_horizon_gens = multi_horizon_gens[
+        multi_horizon_gens["carrier"].isin(
+            [
+                car
+                for car in elec_config["extendable_carriers"]["Generator"]
+                if "EGS" not in car
+            ]
+        )
+    ]
+    
+    egs_gens = n.generators[n.generators["p_nom_extendable"] == True]
+    egs_gens = egs_gens.loc[egs_gens["carrier"].str.contains("EGS")]
+
     for investment_year in n.investment_periods:
         costs = costs_dict[investment_year]
         attach_storageunits(n, costs, elec_config, investment_year)
         # attach_stores(n, costs, elec_config, investment_year)
         attach_multihorizon_generators(n, costs, multi_horizon_gens, investment_year)
+        attach_multihorizon_egs(n, costs, costs_dict, egs_gens, investment_year)
         attach_newCarrier_generators(n, costs, new_carriers, investment_year)
+
 
     if not multi_horizon_gens.empty and not len(n.investment_periods) == 1:
         # Remove duplicate generators from first investment period,

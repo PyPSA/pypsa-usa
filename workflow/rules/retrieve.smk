@@ -45,6 +45,8 @@ rule retrieve_zenodo_databundles:
             DATA + "breakthrough_network/base_grid/{file}", file=breakthrough_datafiles
         ),
         expand(DATA + "{file}", file=pypsa_usa_datafiles),
+    resources:
+        mem_mb=5000,
     log:
         "logs/retrieve/retrieve_databundles.log",
     script:
@@ -65,6 +67,8 @@ rule retrieve_nrel_efs_data:
         efs_databundle,
     output:
         DATA + "nrel_efs/EFSLoadProfile_{efs_case}_{efs_speed}.csv",
+    resources:
+        mem_mb=5000,
     log:
         "logs/retrieve/retrieve_efs_{efs_case}_{efs_speed}.log",
     script:
@@ -236,6 +240,23 @@ rule retrieve_pudl:
     log:
         LOGS + "retrieve_pudl.log",
     resources:
-        mem_mb=1000,
+        mem_mb=5000,
     script:
         "../scripts/retrieve_pudl.py"
+
+if "EGS" in config["electricity"]["extendable_carriers"]["Generator"]:
+    
+    rule retrieve_egs:
+        params:
+            dispatch=config["renewable"]["EGS"]["dispatch"],
+            subdir=RESOURCES + "{interconnect}",
+        output:
+            # directory(RESOURCES + "{interconnect}/EGS"),
+            RESOURCES + "{interconnect}/specs_EGS.nc",
+            RESOURCES + "{interconnect}/profile_EGS.nc",
+        resources:
+            mem_mb=5000,
+        log:
+            LOGS + "retrieve_EGS_{interconnect}.log",
+        script:
+            "../scripts/retrieve_egs.py"

@@ -26,7 +26,7 @@ rule build_shapes:
         "logs/build_shapes/{interconnect}.log",
     threads: 1
     resources:
-        mem_mb=2000,
+        mem_mb=5000,
     script:
         "../scripts/build_shapes.py"
 
@@ -59,7 +59,7 @@ rule build_base_network:
         "logs/create_network/{interconnect}.log",
     threads: 1
     resources:
-        mem_mb=1000,
+        mem_mb=5000,
     script:
         "../scripts/build_base_network.py"
 
@@ -109,7 +109,7 @@ rule build_cost_data:
         LOGS + "costs_{year}.log",
     threads: 1
     resources:
-        mem_mb=1000,
+        mem_mb=5000,
     script:
         "../scripts/build_cost_data.py"
 
@@ -136,7 +136,7 @@ if config["enable"].get("build_cutout", False):
             "benchmarks/" + CDIR + "build_cutout_{interconnect}_{cutout}"
         threads: ATLITE_NPROCESSES
         resources:
-            mem_mb=ATLITE_NPROCESSES * 1000,
+            mem_mb=ATLITE_NPROCESSES * 5000,
         script:
             "../scripts/build_cutout.py"
 
@@ -207,10 +207,11 @@ rule build_renewable_profiles:
     benchmark:
         BENCHMARKS + "{interconnect}/build_renewable_profiles_{technology}"
     threads: ATLITE_NPROCESSES
+    retries: 3
     resources:
         mem_mb=ATLITE_NPROCESSES * 5000,
     wildcard_constraints:
-        technology="(?!hydro).*",  # Any technology other than hydro
+        technology="(?!hydro|EGS).*",  # Any technology other than hydro
     script:
         "../scripts/build_renewable_profiles.py"
 
@@ -604,6 +605,8 @@ rule add_electricity:
         hydro_breakthrough=DATA + "breakthrough_network/base_grid/hydro.csv",
         bus2sub=RESOURCES + "{interconnect}/bus2sub.csv",
         pudl_fuel_costs=RESOURCES + "{interconnect}/pudl_fuel_costs.csv",
+        specs_egs=RESOURCES + "{interconnect}/specs_EGS.nc" if "EGS" in config["electricity"]["extendable_carriers"]["Generator"] else [],
+        profile_egs=RESOURCES + "{interconnect}/profile_EGS.nc" if "EGS" in config["electricity"]["extendable_carriers"]["Generator"] else [],
     output:
         RESOURCES + "{interconnect}/elec_base_network_l_pp.pkl",
     log:
