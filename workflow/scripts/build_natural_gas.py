@@ -234,7 +234,7 @@ class GasBuses(GasData):
             ~n.buses.carrier.isin(
                 ["gas storage", "gas trade", "gas pipeline"],
             )
-        ].STATE.unique()
+        ].reeds_state.unique()
 
         if "STATE" not in df.columns:
             logger.debug(
@@ -326,7 +326,7 @@ class GasStorage(GasData):
             ~n.buses.carrier.isin(
                 ["gas storage", "gas trade", "gas pipeline"],
             )
-        ].STATE.unique()
+        ].reeds_state.unique()
 
         if "STATE" not in df.columns:
             logger.debug(
@@ -442,7 +442,7 @@ class GasProcessing(GasData):
             ~n.buses.carrier.isin(
                 ["gas storage", "gas trade", "gas pipeline"],
             )
-        ].STATE.unique()
+        ].reeds_state.unique()
 
         if "STATE" not in df.columns:
             logger.debug(
@@ -553,7 +553,7 @@ class _GasPipelineCapacity(GasData):
             ~n.buses.carrier.isin(
                 ["gas storage", "gas trade", "gas pipeline"],
             )
-        ].STATE.unique()
+        ].reeds_state.unique()
 
     def filter_on_sate(
         self,
@@ -644,8 +644,8 @@ class _GasPipelineCapacity(GasData):
                 eia.Trade("gas", True, "exports", self.year, self.api).get_data(),
             ],
         )
-        df["STATE_TO"] = df.state.map(lambda x: x.split("-")[0])
-        df["STATE_FROM"] = df.state.map(lambda x: x.split("-")[1])
+        df["STATE_FROM"] = df.state.map(lambda x: x.split("-")[0])
+        df["STATE_TO"] = df.state.map(lambda x: x.split("-")[1])
         df["CAPACITY_MW"] = df.value.mul(MWH_2_MMCF).div(365).div(24)  # MMCF/year -> MW
         df = df.reset_index(drop=True).drop(
             columns=["series-description", "value", "units", "state"],
@@ -1056,7 +1056,9 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
 
         # remove any conections within geographic scope
         if self.domestic:
-            template = template[~(template.STATE_TO.isin(n.buses.STATE) & template.STATE_FROM.isin(n.buses.STATE))]
+            template = template[
+                ~(template.STATE_TO.isin(n.buses.reeds_state) & template.STATE_FROM.isin(n.buses.reeds_state))
+            ]
 
         store_imports = template[template.store == "import"].copy()
         store_exports = template[template.store == "export"].copy()
@@ -1168,7 +1170,7 @@ class PipelineLinepack(GasData):
             ~n.buses.carrier.isin(
                 ["gas storage", "gas trade", "gas pipeline"],
             )
-        ].STATE.unique()
+        ].reeds_state.unique()
 
         if "STATE" not in df.columns:
             logger.debug(
@@ -1284,7 +1286,7 @@ def build_natural_gas(
     api: str,
     interconnect: str = "western",
     county_path: str = "../data/counties/cb_2020_us_county_500k.shp",
-    pipelines_path: str = "../data/natural_gas/EIA-StatetoStateCapacity_Jan2023.xlsx",
+    pipelines_path: str = "../data/natural_gas/EIA-StatetoStateCapacity_Feb2024.xlsx",
     pipeline_shape_path: str = "../data/natural_gas/pipelines.geojson",
     options: Optional[dict[str, Any]] = None,
     **kwargs,
@@ -1308,7 +1310,7 @@ def build_natural_gas(
 
     # add interconnect pipelines
 
-    pipelines = InterconnectGasPipelineCapacity(year, interconnect, pipelines_path)
+    pipelines = InterconnectGasPipelineCapacity(year, interconnect, pipelines_path, api)
     pipelines.build_infrastructure(n)
 
     # add pipelines for imports/exports
@@ -1344,7 +1346,7 @@ def build_natural_gas(
 
 
 if __name__ == "__main__":
-    n = pypsa.Network("../resources/Poster/western/elec_s70_c29m_ec_lv1.0_3h.nc")
+    n = pypsa.Network("../resources/Washington/western/elec_s10_c4m_ec_lv1.0_3h.nc")
     year = 2018
     with open("./../config/config.api.yaml") as file:
         yaml_data = yaml.safe_load(file)
@@ -1353,9 +1355,9 @@ if __name__ == "__main__":
     pipelines = InterconnectGasPipelineCapacity(
         year,
         "western",
-        "../data/natural_gas/EIA-StatetoStateCapacity_Jan2023.xlsx",
+        "../data/natural_gas/EIA-StatetoStateCapacity_Feb2024.xlsx",
         api,
     )
-    pipelines.build_infrastructure(n)
+    # pipelines.build_infrastructure(n)
 
-    # build_natural_gas(n=n, year=year, api=api)
+    build_natural_gas(n=n, year=year, api=api)
