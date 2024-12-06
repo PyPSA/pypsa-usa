@@ -677,13 +677,13 @@ if __name__ == "__main__":
 
         snakemake = mock_snakemake(
             "plot_sector_validation",
-            simpl="33",
-            opts="2190SEG",
+            simpl="11",
+            opts="3h",
             clusters="4m",
             ll="v1.0",
             sector_opts="",
             sector="E-G",
-            planning_horizons="2019",
+            planning_horizons="2018",
             interconnect="western",
         )
         rootpath = ".."

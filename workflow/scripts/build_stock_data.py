@@ -609,12 +609,54 @@ def _get_brownfield_template_df(
     return df[["bus1", "name", "suffix", "state", "p_max"]]
 
 
+def _get_endogenous_transport_brownfield_template_df(
+    n: pypsa.Network,
+    fuel: str,
+    veh_mode: Optional[str] = None,
+) -> pd.DataFrame:
+    """
+    Gets a dataframe in the following form.
+
+    |     | bus1               | name   | suffix      | state | p_max     |
+    |-----|--------------------|--------|-------------|-------|-----------|
+    | 0   | p480 0 trn-veh-lgt | p480 0 | trn-veh-lgt | TX    | 90.0544   |
+    | 1   | p600 0 trn-veh-hvy | p600 0 | trn-veh-hvy | TX    | 716.606   |
+    | 2   | p610 0 trn-veh-med | p610 0 | trn-veh-med | TX    | 1999.486  |
+    | ... | ...                | ...    | ...         | ...   | ...       |
+    """
+
+    sector = SecNames.TRANSPORT.value
+    subsector = Transport.ROAD.value
+    if veh_mode:
+        vehicles = [veh_mode]
+    else:
+        vehicles = [x.value for x in RoadTransport]
+
+    carriers = [f"{sector}-{subsector}-{x}" for x in vehicles]
+
+    loads = n.loads[n.loads.carrier.isin(carriers)]
+
+    if loads.empty:
+        return pd.DataFrame(columns=["bus1", "name", "suffix", "state", "p_max"])
+
+    df = n.loads_t.p_set[loads.index].max().to_frame(name="p_max")
+
+    df["bus1"] = df.index
+    df["state"] = df.index.map(n.buses.STATE)
+    df["name"] = df.bus1.map(lambda x: x.split(f" {sector}")[0])
+    df["suffix"] = [bus.split(name)[1].strip() for (bus, name) in df[["bus1", "name"]].values]
+    df["suffix"] = df.suffix.str.replace(f"{sector}-", f"{sector}-{fuel}-")
+
+    return df.reset_index(drop=True)[["bus1", "name", "suffix", "state", "p_max"]]
+
+
 def add_road_transport_brownfield(
     n: pypsa.Network,
     vehicle_mode: str,  # lgt, hvy, ect..
     growth_multiplier: float,
     ratios: pd.DataFrame,
     costs: pd.DataFrame,
+    exogenous_transport: bool,
 ) -> None:
     """
     Adds existing stock to transportation sector.
@@ -654,11 +696,11 @@ def add_road_transport_brownfield(
         efficiency = costs.at[costs_name, "efficiency"] / 1000
         lifetime = costs.at[costs_name, "lifetime"]
 
-        df["bus0"] = df.name + f" {sector}-elec-{veh_type}"
-        df["carrier"] = f"{sector}-elec-{veh_type}-{vehicle_mode}"
+        df["bus0"] = df.name + f" {sector}-{elec_fuel}-{veh_type}"
+        df["carrier"] = f"{sector}-{elec_fuel}-{veh_type}-{vehicle_mode}"
 
         df["ratio"] = ratios.at["electricity", ratio_name]
-        df["p_nom"] = df.p_max.mul(df.ratio).div(100)  # div to convert from %
+        df["p_nom"] = df.p_max.mul(df.ratio).div(100).div(efficiency).round(2)  # div to convert from %
 
         # roll back vehicle stock in 5 year segments
         step = 5  # years
@@ -732,6 +774,9 @@ def add_road_transport_brownfield(
             case _:
                 raise NotImplementedError
 
+        if df.empty:
+            return
+
         # dont bother adding in extra for less than 0.5% market share
         if ratios.at["lpg", ratio_name] < 0.5:
             logger.info(f"No Brownfield for {costs_name}")
@@ -745,11 +790,11 @@ def add_road_transport_brownfield(
         efficiency *= (1 / wh_per_gallon) * 1000000 / 1000
         lifetime = costs.at[costs_name, "lifetime"]
 
-        df["bus0"] = df.name + f" {sector}-lpg-{veh_type}"
-        df["carrier"] = f"{sector}-lpg-{veh_type}-{vehicle_mode}"
+        df["bus0"] = df.name + f" {sector}-{lpg_fuel}-{veh_type}"
+        df["carrier"] = f"{sector}-{lpg_fuel}-{veh_type}-{vehicle_mode}"
 
         df["ratio"] = ratios.at["lpg", ratio_name]
-        df["p_nom"] = df.p_max.mul(df.ratio).div(100)  # div to convert from %
+        df["p_nom"] = df.p_max.mul(df.ratio).div(100).div(efficiency).round(2)  # div to convert from %
 
         marginal_cost = _get_marginal_cost(n, df.bus1.to_list())
 
@@ -797,20 +842,49 @@ def add_road_transport_brownfield(
                 marginal_cost=mc,
             )
 
+    # different naming conventions for exogenous/endogenous transport investment
+
     sector = SecNames.TRANSPORT.value
     veh_type = Transport.ROAD.value
 
-    veh_name = f"{veh_type}-{vehicle_mode}"
+    elec_fuel = SecCarriers.ELECTRICITY.value
+    lpg_fuel = SecCarriers.LPG.value
 
-    # ev brownfield
-    df = _get_brownfield_template_df(n, fuel="elec", sector=sector, subsector=veh_name)
-    df["p_nom"] = df.p_max.mul(growth_multiplier)
-    add_brownfield_ev(n, df, vehicle_mode, ratios, costs)
+    if exogenous_transport:
 
-    # lpg brownfield
-    df = _get_brownfield_template_df(n, fuel="lpg", sector=sector, subsector=veh_name)
-    df["p_nom"] = df.p_max.mul(growth_multiplier)
-    add_brownfield_lpg(n, df, vehicle_mode, ratios, costs)
+        veh_name = f"{veh_type}-{vehicle_mode}"
+
+        # ev brownfield
+        df = _get_brownfield_template_df(
+            n,
+            fuel=elec_fuel,
+            sector=sector,
+            subsector=veh_name,
+        )
+        df["p_nom"] = df.p_max.mul(growth_multiplier)
+        add_brownfield_ev(n, df, vehicle_mode, ratios, costs)
+
+        # lpg brownfield
+        df = _get_brownfield_template_df(
+            n,
+            fuel=lpg_fuel,
+            sector=sector,
+            subsector=veh_name,
+        )
+        df["p_nom"] = df.p_max.mul(growth_multiplier)
+        add_brownfield_lpg(n, df, vehicle_mode, ratios, costs)
+
+    else:
+
+        # elec brownfield
+        df = _get_endogenous_transport_brownfield_template_df(n, fuel=elec_fuel, veh_mode=vehicle_mode)
+        df["p_nom"] = df.p_max.mul(growth_multiplier)
+        add_brownfield_ev(n, df, vehicle_mode, ratios, costs)
+
+        # lpg brownfield
+        df = _get_endogenous_transport_brownfield_template_df(n, fuel=lpg_fuel, veh_mode=vehicle_mode)
+        df["p_nom"] = df.p_max.mul(growth_multiplier)
+        add_brownfield_lpg(n, df, vehicle_mode, ratios, costs)
 
 
 def add_service_brownfield(
@@ -859,7 +933,7 @@ def add_service_brownfield(
         df["carrier"] = df.carrier + "-gas-furnace"
 
         df["ratio"] = df.state.map(ratios.gas)
-        df["p_nom"] = df.p_max.mul(df.ratio).div(100)  # div to convert from %
+        df["p_nom"] = df.p_max.mul(df.ratio).div(100).div(efficiency).round(2)  # div to convert from %
 
         marginal_cost_names = [x.replace("heat", "gas-furnace") for x in df.bus1.to_list()]
         marginal_cost = _get_marginal_cost(n, marginal_cost_names)
@@ -875,7 +949,7 @@ def add_service_brownfield(
             furnaces = df.copy()
 
             furnaces["name"] = furnaces.name + f" existing_{build_year} " + furnaces.carrier
-            furnaces["p_nom"] = furnaces.p_nom.mul(percent).div(100).div(efficiency).mul(2).round(2)
+            furnaces["p_nom"] = furnaces.p_nom.mul(percent).div(100).round(2)
             furnaces = furnaces.set_index("name")
 
             if isinstance(marginal_cost, pd.DataFrame):
@@ -936,7 +1010,7 @@ def add_service_brownfield(
         df["carrier"] = df.carrier + "-lpg-furnace"
 
         df["ratio"] = df.state.map(ratios.lpg)
-        df["p_nom"] = df.p_max.mul(df.ratio).div(100)  # div to convert from %
+        df["p_nom"] = df.p_max.mul(df.ratio).div(100).div(efficiency)  # div to convert from %
 
         marginal_cost_names = [x.replace("heat", "lpg-furnace") for x in df.bus1.to_list()]
         marginal_cost = _get_marginal_cost(n, marginal_cost_names)
@@ -952,7 +1026,7 @@ def add_service_brownfield(
             furnaces = df.copy()
 
             furnaces["name"] = furnaces.name + f" existing_{build_year} " + furnaces.carrier
-            furnaces["p_nom"] = furnaces.p_nom.mul(percent).div(100).div(efficiency).round(2)
+            furnaces["p_nom"] = furnaces.p_nom.mul(percent).div(100).round(2)
             furnaces = furnaces.set_index("name")
 
             if isinstance(marginal_cost, pd.DataFrame):
@@ -1010,7 +1084,7 @@ def add_service_brownfield(
         df["carrier"] = df.carrier + "-elec-furnace"
 
         df["ratio"] = df.state.map(ratios.electricity)
-        df["p_nom"] = df.p_max.mul(df.ratio).div(100)  # div to convert from %
+        df["p_nom"] = df.p_max.mul(df.ratio).div(100).div(efficiency)  # div to convert from %
 
         start_year = n.investment_periods[0]
         # start_year = start_year if start_year >= 2023 else 2023
@@ -1346,10 +1420,11 @@ def add_service_brownfield(
 
 
 if __name__ == "__main__":
-    print(get_residential_stock("./../repo_data/sectors/residential_stock", "cooling"))
+    # print(get_residential_stock("./../repo_data/sectors/residential_stock", "cooling"))
 
     # with open("./../config/config.api.yaml") as file:
     #     yaml_data = yaml.safe_load(file)
     # api = yaml_data["api"]["eia"]
 
     # print(get_transport_stock(api, 2024))
+    pass

@@ -178,7 +178,7 @@ def _get_opt_capacity_per_node(
     # remove the double accounting
     if sector in ("res", "com"):
         df = df[
-            ~(df.carrier.str.endswith("-gshp-cool"))
+            ~(df.index.str.endswith("-gshp-cool"))
             & ~(df.index.str.endswith("-ashp-cool"))
             & ~(df.index.str.endswith("-charger"))
         ]
@@ -239,7 +239,7 @@ def _get_total_capacity_per_node(
     # remove the double accounting
     if sector in ("res", "com"):
         df = df[
-            ~(df.carrier.str.endswith("-gshp-cool"))
+            ~(df.index.str.endswith("-gshp-cool"))
             & ~(df.index.str.endswith("-ashp-cool"))
             & ~(df.index.str.endswith("-charger"))
         ]
@@ -326,7 +326,7 @@ def _get_brownfield_capacity_per_node(
     # remove the double accounting
     if sector in ("res", "com"):
         df = df[
-            ~(df.carrier.str.endswith("-gshp-cool"))
+            ~(df.index.str.endswith("-gshp-cool"))
             & ~(df.index.str.endswith("-ashp-cool"))
             & ~(df.index.str.endswith("-charger"))
         ]
@@ -633,7 +633,7 @@ def get_historical_power_production(year: int, api: str) -> pd.DataFrame:
     }
 
     df = ElectricPowerData("electric_power", year, api).get_data()
-    df = df[df.fueltypeid.isin(fuel_mapper)]
+    df = df[df.fueltypeid.isin(fuel_mapper)].copy()
     df["value"] = df.value.mul(1000)  # thousand mwh to mwh
     df = df.reset_index()
 

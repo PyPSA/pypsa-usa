@@ -34,8 +34,6 @@ rule build_shapes:
 rule build_base_network:
     params:
         build_offshore_network=config["offshore_network"],
-        snapshots=config["snapshots"],
-        planning_horizons=config["scenario"]["planning_horizons"],
         model_topology=config["model_topology"]["include"],
     input:
         buses=DATA + "breakthrough_network/base_grid/bus.csv",
@@ -120,9 +118,9 @@ if config["enable"].get("build_cutout", False):
 
     rule build_cutout:
         params:
-            snapshots=config["snapshots"],
-            cutouts=config["atlite"]["cutouts"],
-            interconnects=config["atlite"]["interconnects"],
+            snapshots=config_provider("snapshots"),
+            cutouts=config_provider("atlite", "cutouts"),
+            interconnects=config_provider("atlite", "interconnects"),
         input:
             regions_onshore=RESOURCES
             + "{interconnect}/Geospatial/country_shapes.geojson",
@@ -169,7 +167,6 @@ rule build_renewable_profiles:
         renewable=config["renewable"],
         snapshots=config["snapshots"],
     input:
-        base_network=RESOURCES + "{interconnect}/elec_base_network.nc",
         corine=ancient(
             DATA
             + "copernicus/PROBAV_LC100_global_v3.0.1_2019-nrt_Discrete-Classification-map_USA_EPSG-4326.tif"
@@ -194,11 +191,15 @@ rule build_renewable_profiles:
             if w.technology in ("onwind", "solar")
             else RESOURCES + "{interconnect}/Geospatial/regions_offshore.geojson"
         ),
-        cutout=lambda w: "cutouts/"
-        + CDIR
-        + "{interconnect}_"
-        + config["renewable"][w.technology]["cutout"]
-        + ".nc",
+        cutout=lambda wildcards: expand(
+            "cutouts/"
+            + CDIR
+            + "usa_"
+            + config["renewable"][wildcards.technology]["cutout"]
+            + "_{renewable_weather_year}"
+            + ".nc",
+            renewable_weather_year=config["renewable_weather_years"],
+        ),
     output:
         profile=RESOURCES + "{interconnect}/profile_{technology}.nc",
         availability=RESULTS + "{interconnect}/land_use_availability_{technology}.png",
@@ -334,6 +335,8 @@ rule build_electrical_demand:
         demand_params=config["electricity"]["demand"],
         eia_api=config["api"]["eia"],
         profile_year=pd.to_datetime(config["snapshots"]["start"]).year,
+        planning_horizons=config["scenario"]["planning_horizons"],
+        snapshots=config["snapshots"],
     input:
         network=RESOURCES + "{interconnect}/elec_base_network.nc",
         demand_files=demand_raw_data,
@@ -358,6 +361,7 @@ rule build_sector_demand:
         planning_horizons=config["scenario"]["planning_horizons"],
         profile_year=pd.to_datetime(config["snapshots"]["start"]).year,
         eia_api=config["api"]["eia"],
+        snapshots=config["snapshots"],
     input:
         network=RESOURCES + "{interconnect}/elec_base_network.nc",
         demand_files=demand_raw_data,
@@ -389,6 +393,7 @@ rule build_transport_road_demand:
         planning_horizons=config["scenario"]["planning_horizons"],
         profile_year=pd.to_datetime(config["snapshots"]["start"]).year,
         eia_api=config["api"]["eia"],
+        snapshots=config["snapshots"],
     input:
         network=RESOURCES + "{interconnect}/elec_base_network.nc",
         demand_files=demand_raw_data,
@@ -424,6 +429,7 @@ rule build_transport_other_demand:
     params:
         planning_horizons=config["scenario"]["planning_horizons"],
         eia_api=config["api"]["eia"],
+        snapshots=config["snapshots"],
     input:
         network=RESOURCES + "{interconnect}/elec_base_network.nc",
         demand_files=demand_raw_data,
@@ -502,6 +508,7 @@ rule add_demand:
     params:
         sectors=config["scenario"]["sector"],
         planning_horizons=config["scenario"]["planning_horizons"],
+        snapshots=config["snapshots"],
     input:
         network=RESOURCES + "{interconnect}/elec_base_network.nc",
         demand=demand_to_add,
@@ -791,7 +798,7 @@ rule build_powerplants:
     output:
         powerplants=RESOURCES + "powerplants.csv",
     log:
-        "logs/build_powerplants/build_powerplants.log",
+        "logs/build_powerplants",
     resources:
         mem_mb=30000,
     script:

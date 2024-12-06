@@ -48,7 +48,6 @@ import xarray as xr
 from _helpers import (
     configure_logging,
     export_network_for_gis_mapping,
-    test_network_datatype_consistency,
     update_p_nom_max,
     weighted_avg,
 )
@@ -266,7 +265,9 @@ def load_powerplants(
 
 
 def match_nearest_bus(plants_subset, buses_subset):
-    """Assign the nearest bus to each plant in the given subsets."""
+    """
+    Assign the nearest bus to each plant in the given subsets.
+    """
     if plants_subset.empty or buses_subset.empty:
         return plants_subset
 
@@ -981,7 +982,7 @@ def main(snakemake):
         n.snapshots,
     )
 
-    if params.conventional["must_run"]:
+    if params.conventional.get("must_run", False):
         # TODO (@ktehranchi): In the future the plants that are must-run should not be clustered and instead retire according to lifetime
         apply_must_run_ratings(
             n,
@@ -1100,8 +1101,6 @@ def main(snakemake):
 
     # n.export_to_netcdf(snakemake.output[0])
     pickle.dump(n, open(snakemake.output[0], "wb"))
-
-    logger.info(test_network_datatype_consistency(n))
 
 
 if __name__ == "__main__":

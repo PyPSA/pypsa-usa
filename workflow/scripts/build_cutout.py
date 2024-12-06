@@ -91,6 +91,7 @@ import atlite
 import geopandas as gpd
 import pandas as pd
 from _helpers import configure_logging, get_snapshots
+from pandas import Timestamp
 
 logger = logging.getLogger(__name__)
 
@@ -106,9 +107,11 @@ if __name__ == "__main__":
     configure_logging(snakemake)
 
     # data set and temporal patameters
-    cutout_params = snakemake.params.cutouts[snakemake.wildcards.cutout]
-    snapshots = get_snapshots(snakemake.params.snapshots)
-    time = [snapshots[0], snapshots[-1]]
+    module, year = snakemake.wildcards.cutout.split("_")
+    cutout_params = {"module": module}
+
+    # Construct the time range based on the year
+    time = [Timestamp(f"{year}-01-01 00:00:00"), Timestamp(f"{year}-12-31 23:00:00")]
     cutout_params["time"] = slice(*cutout_params.get("time", time))
 
     # geographical extent parameters

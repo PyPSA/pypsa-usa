@@ -28,7 +28,11 @@ from build_stock_data import (
     get_residential_stock,
     get_transport_stock,
 )
-from build_transportation import apply_exogenous_ev_policy, build_transportation
+from build_transportation import (
+    apply_endogenous_road_investments,
+    apply_exogenous_ev_policy,
+    build_transportation,
+)
 from constants import STATE_2_CODE, STATES_INTERCONNECT_MAPPER
 from constants_sector import RoadTransport
 from shapely.geometry import Point
@@ -340,10 +344,10 @@ if __name__ == "__main__":
         snakemake = mock_snakemake(
             "add_sectors",
             interconnect="western",
-            simpl="33",
+            simpl="11",
             clusters="4m",
             ll="v1.0",
-            opts="2190SEG",
+            opts="3h",
             sector="E-G",
         )
     configure_logging(snakemake)
@@ -462,11 +466,18 @@ if __name__ == "__main__":
         )
 
     # add transportation
-    ev_policy = pd.read_csv(snakemake.input.ev_policy, index_col=0)
-    apply_exogenous_ev_policy(n, ev_policy)
+    exogenous_transport = snakemake.params.sector["transport_sector"]["investment"].get("exogenous", False)
+    if exogenous_transport:
+        ev_policy = pd.read_csv(snakemake.input.ev_policy, index_col=0)
+        apply_exogenous_ev_policy(n, ev_policy)
+        must_run_evs = None
+    else:
+        must_run_evs = snakemake.params.sector["transport_sector"]["investment"].get("must_run_evs", True)
     build_transportation(
         n=n,
         costs=costs,
+        exogenous=exogenous_transport,
+        must_run_evs=must_run_evs,
         dynamic_pricing=True,
         eia=eia_api,
         year=dynamic_cost_year,
@@ -493,6 +504,7 @@ if __name__ == "__main__":
                 growth_multiplier,
                 ratios,
                 costs,
+                exogenous_transport,
             )
 
     if snakemake.params.sector["service_sector"]["brownfield"]:

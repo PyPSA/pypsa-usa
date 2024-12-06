@@ -78,6 +78,37 @@ class BoatTransportUnits(Enum):
     SHIPPING = "kTonMiles"
 
 
+"""
+These numbers are giving odd results :(
+"""
+# class TransportMwhConversion(Enum):
+#     """Converts demand units into MWh approximates.
+
+#     Used in Sankey diagrams
+
+#     https://en.wikipedia.org/wiki/Energy_efficiency_in_transport
+#     """
+#     VEH_LGT_EV = 0.25 # (25 kWh / 100 miles) (10 100miles / 1 kmiles) (1 MWh / 1000kwh)
+#     VEH_MED_EV = 0.40 # (400 Wh / 1 miles) (1000 miles / 1 kmiles) (1 kWh / 1000wh) (1 MWh / 1000kwh)
+#     VEH_HVY_EV = 1.7 # (1.7 kWh / 1 miles) (1000 miles / 1 kmiles) (1 MWh / 1000kwh)
+#     VEH_BUS_EV = 1.7 # (1.7 kWh / 1 miles) (1000 miles / 1 kmiles) (1 MWh / 1000kwh)
+#     VEH_LGT_LPG = 0.915 # 1 / [(40 mpg) (1 kMiles / 1000 miles) (gal / 0.0366 MWh)]
+#     VEH_MED_LPG = 1.464 # 1 / [(25 mpg) (1 kMiles / 1000 miles) (gal / 0.0366 MWh)]
+#     VEH_HVY_LPG = 4.575 # 1 / [(8 mpg) (1 kMiles / 1000 miles) (gal / 0.0366 MWh)]
+#     VEH_BUS_LPG = 4.575 # 1 / [(8 mpg) (1 kMiles / 1000 miles) (gal / 0.0366 MWh)]
+#     AIR_PSG = 0.402 # 1 / [(91 psg-miles / gal) (1 k psg-miles / 1000 psg-miles) (gal / 0.0366 MWh)]
+#     BOAT_SHIP = 0.033 # (74 kJ / ton-km) (1km / 0.621miles) (1000 miles / 1 kmiles) (kWh / 3600sec) (1 MWh / 1000 kWh)
+#     RAIL_PSG =  0.078 # 1 / [(468 psg-miles / gal) (1 k psg-miles / 1000 psg-miles) (gal / 0.0366 MWh)]
+#     RAIL_SHIP = 0.077 # kTon-Miles 1 / [(473 miles-ton / gallon) (1 kMiles / 1000 miles) (gal / 0.0366 MWh)]
+
+
+class TransportEfficiency(Enum):
+    """Approximate MWh/MWh efficiencies"""
+
+    LPG = 0.20  # LLNL estimates 21 combined
+    ELEC = 0.75
+
+
 # bus conversion:
 # - (pg 4) https://www.apta.com/wp-content/uploads/APTA-2022-Public-Transportation-Fact-Book.pdf
 # - (141.5 / 999.5) = 0.14157
