@@ -46,13 +46,14 @@ import pandas as pd
 import pypsa
 import xarray as xr
 from _helpers import (
+    calculate_annuity,
     configure_logging,
     export_network_for_gis_mapping,
+    load_costs,
     update_p_nom_max,
     weighted_avg,
 )
 from sklearn.neighbors import BallTree
-from _helpers import load_costs, calculate_annuity
 
 idx = pd.IndexSlice
 
@@ -273,15 +274,16 @@ def match_nearest_bus(plants_subset, buses_subset):
 
     # Create a BallTree for the given subset of buses
     tree = BallTree(buses_subset[["x", "y"]].values, leaf_size=2)
-    
+
     # Find nearest bus for each plant in the subset
     distances, indices = tree.query(plants_subset[["longitude", "latitude"]].values, k=1)
-    
+
     # Map the nearest bus information back to the plants subset
     plants_subset["bus_assignment"] = buses_subset.reset_index().iloc[indices.flatten()]["Bus"].values
     plants_subset["distance_nearest"] = distances.flatten()
-    
+
     return plants_subset
+
 
 def match_plant_to_bus(n, plants):
     """
@@ -294,7 +296,7 @@ def match_plant_to_bus(n, plants):
     plants_matched = plants.copy()
     plants_matched["bus_assignment"] = None
     plants_matched["distance_nearest"] = None
-    
+
     # Get a copy of buses and create a geometry column with GPS coordinates
     buses = n.buses.copy()
     buses["geometry"] = gpd.points_from_xy(buses["x"], buses["y"])
@@ -302,8 +304,10 @@ def match_plant_to_bus(n, plants):
     # First pass: Assign each plant to the nearest bus in the same state
     for state in buses["state"].unique():
         buses_in_state = buses[buses["state"] == state]
-        plants_in_state = plants_matched[(plants_matched["state"] == state) & (plants_matched["bus_assignment"].isnull())]
-        
+        plants_in_state = plants_matched[
+            (plants_matched["state"] == state) & (plants_matched["bus_assignment"].isnull())
+        ]
+
         # Update plants_matched with the nearest bus within the same state
         plants_matched.update(match_nearest_bus(plants_in_state, buses_in_state))
 
@@ -589,13 +593,13 @@ def attach_egs(
     add_missing_carriers(n, carriers)
 
     lifetime = 25  # Following EGS supply curves by Aljubran et al. (2024)
-    discount_rate = 0.07 #load_costs(snakemake.input.tech_costs).loc["geothermal", "wacc_real"]
+    discount_rate = 0.07  # load_costs(snakemake.input.tech_costs).loc["geothermal", "wacc_real"]
     drilling_cost = snakemake.config["renewable"]["EGS"]["drilling_cost"]
 
     with xr.open_dataset(
-        getattr(input_profiles, "specs_egs")
+        getattr(input_profiles, "specs_egs"),
     ) as ds_specs, xr.open_dataset(
-        getattr(input_profiles, "profile_egs")
+        getattr(input_profiles, "profile_egs"),
     ) as ds_profile:
 
         bus2sub = (
@@ -629,9 +633,8 @@ def attach_egs(
         # TODO: come up with proper values for these params
 
         df_specs["capital_cost"] = 1000 * (
-            df_specs["capital_cost"] * calculate_annuity(lifetime, discount_rate) 
-            + df_specs["fixed_om"]
-         ) # convert and annualize USD/kW to USD/MW-year
+            df_specs["capital_cost"] * calculate_annuity(lifetime, discount_rate) + df_specs["fixed_om"]
+        )  # convert and annualize USD/kW to USD/MW-year
         df_specs["efficiency"] = 1.0
 
         # TODO: review what qualities need to be included. Currently limited for speedup.
@@ -661,7 +664,7 @@ def attach_egs(
             )
 
             logger.info(
-                f"Adding EGS (Resource Quality-{q}) capacity-factor profiles to the network."
+                f"Adding EGS (Resource Quality-{q}) capacity-factor profiles to the network.",
             )
 
             n.madd(
@@ -677,6 +680,7 @@ def attach_egs(
                 efficiency=efficiency,
                 p_max_pu=bus_profiles,
             )
+
 
 def attach_battery_storage(
     n: pypsa.Network,

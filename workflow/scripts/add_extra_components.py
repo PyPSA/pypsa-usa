@@ -410,6 +410,7 @@ def attach_multihorizon_generators(
     )
     n.generators_t["p_max_pu"] = n.generators_t["p_max_pu"].join(p_max_pu_t)
 
+
 def attach_multihorizon_egs(
     n: pypsa.Network,
     costs: pd.DataFrame,
@@ -433,9 +434,7 @@ def attach_multihorizon_egs(
 
     lifetime = 25  # Following EGS supply curves by Aljubran et al. (2024)
     base_year = n.investment_periods[0]
-    learning_ratio = (
-        costs.loc["EGS", "capex_per_kw"] / costs_dict[base_year].loc["EGS", "capex_per_kw"]
-    )
+    learning_ratio = costs.loc["EGS", "capex_per_kw"] / costs_dict[base_year].loc["EGS", "capex_per_kw"]
     capital_cost = learning_ratio * gens["capital_cost"]
 
     n.madd(
@@ -470,9 +469,7 @@ def attach_multihorizon_egs(
         marginal_cost_t,
     )
 
-    p_max_pu_t = n.generators_t["p_max_pu"][
-        [x for x in gens.index if x in n.generators_t["p_max_pu"].columns]
-    ]
+    p_max_pu_t = n.generators_t["p_max_pu"][[x for x in gens.index if x in n.generators_t["p_max_pu"].columns]]
 
     p_max_pu_t = p_max_pu_t.rename(
         columns={x: f"{x} {investment_year}" for x in p_max_pu_t.columns},
@@ -483,10 +480,7 @@ def attach_multihorizon_egs(
     # shift over time to capture decline
     investment_year_idx = np.where(n.investment_periods == investment_year)[0][0]
     cars = list(
-        n.generators_t["p_max_pu"]
-        .filter(like="EGS")
-        .filter(like=str(investment_year))
-        .columns
+        n.generators_t["p_max_pu"].filter(like="EGS").filter(like=str(investment_year)).columns,
     )
     n.generators_t["p_max_pu"].loc[n.investment_periods[investment_year_idx:], cars] = (
         n.generators_t["p_max_pu"]
@@ -496,6 +490,7 @@ def attach_multihorizon_egs(
         ]
         .values
     )
+
 
 def attach_newCarrier_generators(n, costs, carriers, investment_year):
     """
@@ -661,14 +656,10 @@ if __name__ == "__main__":
 
     multi_horizon_gens = multi_horizon_gens[
         multi_horizon_gens["carrier"].isin(
-            [
-                car
-                for car in elec_config["extendable_carriers"]["Generator"]
-                if "EGS" not in car
-            ]
+            [car for car in elec_config["extendable_carriers"]["Generator"] if "EGS" not in car],
         )
     ]
-    
+
     egs_gens = n.generators[n.generators["p_nom_extendable"] == True]
     egs_gens = egs_gens.loc[egs_gens["carrier"].str.contains("EGS")]
 
@@ -679,7 +670,6 @@ if __name__ == "__main__":
         attach_multihorizon_generators(n, costs, multi_horizon_gens, investment_year)
         attach_multihorizon_egs(n, costs, costs_dict, egs_gens, investment_year)
         attach_newCarrier_generators(n, costs, new_carriers, investment_year)
-
 
     if not multi_horizon_gens.empty and not len(n.investment_periods) == 1:
         # Remove duplicate generators from first investment period,

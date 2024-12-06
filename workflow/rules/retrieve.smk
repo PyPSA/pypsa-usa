@@ -244,8 +244,9 @@ rule retrieve_pudl:
     script:
         "../scripts/retrieve_pudl.py"
 
+
 if "EGS" in config["electricity"]["extendable_carriers"]["Generator"]:
-    
+
     rule retrieve_egs:
         params:
             dispatch=config["renewable"]["EGS"]["dispatch"],

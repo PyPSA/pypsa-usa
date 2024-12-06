@@ -612,8 +612,16 @@ rule add_electricity:
         hydro_breakthrough=DATA + "breakthrough_network/base_grid/hydro.csv",
         bus2sub=RESOURCES + "{interconnect}/bus2sub.csv",
         pudl_fuel_costs=RESOURCES + "{interconnect}/pudl_fuel_costs.csv",
-        specs_egs=RESOURCES + "{interconnect}/specs_EGS.nc" if "EGS" in config["electricity"]["extendable_carriers"]["Generator"] else [],
-        profile_egs=RESOURCES + "{interconnect}/profile_EGS.nc" if "EGS" in config["electricity"]["extendable_carriers"]["Generator"] else [],
+        specs_egs=(
+            RESOURCES + "{interconnect}/specs_EGS.nc"
+            if "EGS" in config["electricity"]["extendable_carriers"]["Generator"]
+            else []
+        ),
+        profile_egs=(
+            RESOURCES + "{interconnect}/profile_EGS.nc"
+            if "EGS" in config["electricity"]["extendable_carriers"]["Generator"]
+            else []
+        ),
     output:
         RESOURCES + "{interconnect}/elec_base_network_l_pp.pkl",
     log:
