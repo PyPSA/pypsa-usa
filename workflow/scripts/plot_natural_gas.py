@@ -49,7 +49,10 @@ def _resample_data(df: pd.DataFrame, freq: str, agg_func: callable) -> pd.DataFr
     """
     Helper for resampling data based on input function.
     """
-    return df.groupby("period").resample(freq, level="timestep").apply(agg_func)
+    if df.empty:
+        return df
+    else:
+        return df.groupby("period").resample(freq, level="timestep").apply(agg_func)
 
 
 def _group_data(df: pd.DataFrame) -> pd.DataFrame:
@@ -60,6 +63,8 @@ def _sum_state_data(data: dict[str, pd.DataFrame]) -> pd.DataFrame:
     """
     Sums state data together.
     """
+    if not data:
+        return pd.DataFrame()
 
     dfs = [y for _, y in data.items()]
     return pd.concat(dfs, axis=1)
@@ -108,6 +113,9 @@ def plot_gas(
     """
 
     df = data.copy()
+
+    if df.empty:
+        return plt.subplots(1, 1, figsize=(FIG_WIDTH, FIG_HEIGHT))
 
     periods = data.index.get_level_values("period").unique()
 
@@ -283,13 +291,13 @@ if __name__ == "__main__":
 
         snakemake = mock_snakemake(
             "plot_natural_gas",
-            simpl="33",
-            opts="2190SEG",
+            simpl="10",
+            opts="3h",
             clusters="4m",
             ll="v1.0",
             sector_opts="",
             sector="E-G",
-            planning_horizons="2019",
+            planning_horizons="2018",
             interconnect="western",
         )
     configure_logging(snakemake)
@@ -384,8 +392,11 @@ if __name__ == "__main__":
             for month_i, month_name in months.items():
 
                 if isinstance(state_data, pd.DataFrame):
-                    state_data_month = state_data[state_data.index.get_level_values("timestep").month == month_i]
-                if isinstance(state_data, dict):
+                    if not state_data.empty:
+                        state_data_month = state_data[state_data.index.get_level_values("timestep").month == month_i]
+                    else:
+                        state_data_month = state_data
+                elif isinstance(state_data, dict):
                     state_data_month = {}
                     for k, v in state_data.items():
                         state_data_month[k] = v[v.index.get_level_values("timestep").month == month_i]
