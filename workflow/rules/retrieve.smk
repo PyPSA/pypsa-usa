@@ -33,7 +33,7 @@ def define_zenodo_databundles():
 
 def define_sector_databundles():
     return {
-        "pypsa_usa_sec": "https://zenodo.org/records/11358880/files/pypsa_usa_sector_data.zip"
+        "pypsa_usa_sec": "https://zenodo.org/records/14291626/files/pypsa_usa_sector_data.zip"
     }
 
 
@@ -78,6 +78,7 @@ sector_datafiles = [
     # natural gas
     "natural_gas/EIA-757.csv",
     "natural_gas/EIA-StatetoStateCapacity_Jan2023.xlsx",
+    "natural_gas/EIA-StatetoStateCapacity_Feb2024.xlsx",
     "natural_gas/pipelines.geojson",
     # industrial demand
     "industry_load/2014_update_20170910-0116.csv",
