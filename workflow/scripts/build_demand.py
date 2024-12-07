@@ -1,29 +1,5 @@
 """
 Builds the demand data for the PyPSA network.
-
-**Relevant Settings**
-
-.. code:: yaml
-
-    snapshots:
-        start:
-        end:
-        inclusive:
-
-    scenario:
-    interconnect:
-    planning_horizons:
-
-
-**Inputs**
-
-    - base_network:
-    - eia: (GridEmissions data file)
-    - efs: (NREL EFS Load Forecasts)
-
-**Outputs**
-
-    - demand: Path to the demand CSV file.
 """
 
 # snakemake is not liking this futures import. Removing type hints in context class
@@ -38,7 +14,6 @@ from pathlib import Path
 from typing import Any, Optional
 
 import constants as const
-import constants_sector as sc
 import duckdb
 import geopandas as gpd
 import numpy as np
@@ -613,6 +588,7 @@ class ReadEulp(ReadStrategy):
         return data
 
     def _format_data(self, data: dict[str, pd.DataFrame]) -> pd.DataFrame:
+        df = self._apply_timeshift(data)
         df = self._collapse_data(data)
         df["fuel"] = df.fuel.map(
             {
@@ -640,6 +616,35 @@ class ReadEulp(ReadStrategy):
     @staticmethod
     def _extract_state(filepath: str) -> str:
         return Path(filepath).stem
+
+    @staticmethod
+    def _apply_timeshift(data: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
+        """Raw EULP given in EST. Shift data by in local state time."""
+
+        data_shifted = {}
+
+        for state, df in data.items():
+
+            year = df.index[0].year
+
+            timezone = STATE_TIMEZONE[state]
+            if timezone == "US/Eastern":
+                shift = 0
+            elif timezone == "US/Central":
+                shift = 1
+            elif timezone == "US/Mountain":
+                shift = 2
+            elif timezone == "US/Pacific":
+                shift = 3
+            else:
+                logger.warning(f"Not time shifting EULP for timezone {timezone}")
+
+            shifted_index = pd.DatetimeIndex(df.index) - pd.DateOffset(hours=shift)
+            shifted_index = shifted_index.map(lambda x: x.replace(year=year))
+
+            data_shifted[state] = df.reindex(shifted_index).sort_index()
+
+        return data_shifted
 
     @staticmethod
     def _collapse_data(data: dict[str, pd.DataFrame]) -> pd.DataFrame:
@@ -2446,11 +2451,6 @@ if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
 
-        snakemake = mock_snakemake(
-            "build_electrical_demand",
-            interconnect="usa",
-            end_use="power",
-        )
         # snakemake = mock_snakemake(
         #     "build_electrical_demand",
         #     interconnect="texas",
@@ -2462,16 +2462,16 @@ if __name__ == "__main__":
         #     end_use="transport",
         #     vehicle="rail-passenger",
         # )
-        snakemake = mock_snakemake(
-            "build_transport_road_demand",
-            interconnect="western",
-            end_use="transport",
-        )
         # snakemake = mock_snakemake(
-        #     "build_sector_demand",
+        #     "build_transport_road_demand",
         #     interconnect="western",
-        #     end_use="industry",
+        #     end_use="transport",
         # )
+        snakemake = mock_snakemake(
+            "build_sector_demand",
+            interconnect="western",
+            end_use="residential",
+        )
     configure_logging(snakemake)
 
     n = pypsa.Network(snakemake.input.network)
@@ -2646,34 +2646,27 @@ if __name__ == "__main__":
             file_mapper = {"electricity": "elec", "lpg": "lpg"}
             for fuel in ("electricity", "lpg"):
                 for vehicle_type in ("light_duty", "med_duty", "heavy_duty", "bus"):
-                    formatted_demand[fuel][vehicle_type].round(4).to_csv(
+                    formatted_demand[fuel][vehicle_type].round(4).to_pickle(
                         snakemake.output[f"{file_mapper[fuel]}_{vehicle_type}"],
-                        index=True,
                     )
         else:  # "boat_shipping", "air", "rail_passenger", "rail_shipping"
-            formatted_demand["lpg"][vehicle.replace("-", "_")].round(4).to_csv(
+            formatted_demand["lpg"][vehicle.replace("-", "_")].round(4).to_pickle(
                 snakemake.output[0],
-                index=True,
             )
 
     else:
-        formatted_demand["electricity"].round(4).to_csv(
+        formatted_demand["electricity"].round(4).to_pickle(
             snakemake.output.elec_demand,
-            index=True,
         )
-        formatted_demand["heat"].round(4).to_csv(
+        formatted_demand["heat"].round(4).to_pickle(
             snakemake.output.heat_demand,
-            index=True,
         )
-        formatted_demand["space_heat"].round(4).to_csv(
+        formatted_demand["space_heat"].round(4).to_pickle(
             snakemake.output.space_heat_demand,
-            index=True,
         )
-        formatted_demand["water_heat"].round(4).to_csv(
+        formatted_demand["water_heat"].round(4).to_pickle(
             snakemake.output.water_heat_demand,
-            index=True,
         )
-        formatted_demand["cool"].round(4).to_csv(
+        formatted_demand["cool"].round(4).to_pickle(
             snakemake.output.cool_demand,
-            index=True,
         )

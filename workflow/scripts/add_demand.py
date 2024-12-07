@@ -98,7 +98,7 @@ if __name__ == "__main__":
         for demand_file in demand_files:
 
             parsed_name = Path(demand_file).name.split("_")
-            parsed_name[-1] = parsed_name[-1].split(".csv")[0]
+            parsed_name[-1] = parsed_name[-1].split(".pkl")[0]
 
             if len(parsed_name) == 2:
 
@@ -130,7 +130,7 @@ if __name__ == "__main__":
 
             suffix = f"-{carrier}"
 
-            df = pd.read_csv(demand_file, index_col=0)
+            df = pd.read_pickle(demand_file)
             attach_demand(n, df, carrier, suffix)
             logger.info(log_statement)
 
