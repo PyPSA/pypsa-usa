@@ -2646,34 +2646,27 @@ if __name__ == "__main__":
             file_mapper = {"electricity": "elec", "lpg": "lpg"}
             for fuel in ("electricity", "lpg"):
                 for vehicle_type in ("light_duty", "med_duty", "heavy_duty", "bus"):
-                    formatted_demand[fuel][vehicle_type].round(4).to_csv(
+                    formatted_demand[fuel][vehicle_type].round(4).to_pickle(
                         snakemake.output[f"{file_mapper[fuel]}_{vehicle_type}"],
-                        index=True,
                     )
         else:  # "boat_shipping", "air", "rail_passenger", "rail_shipping"
-            formatted_demand["lpg"][vehicle.replace("-", "_")].round(4).to_csv(
+            formatted_demand["lpg"][vehicle.replace("-", "_")].round(4).to_pickle(
                 snakemake.output[0],
-                index=True,
             )
 
     else:
-        formatted_demand["electricity"].round(4).to_csv(
+        formatted_demand["electricity"].round(4).to_pickle(
             snakemake.output.elec_demand,
-            index=True,
         )
-        formatted_demand["heat"].round(4).to_csv(
+        formatted_demand["heat"].round(4).to_pickle(
             snakemake.output.heat_demand,
-            index=True,
         )
-        formatted_demand["space_heat"].round(4).to_csv(
+        formatted_demand["space_heat"].round(4).to_pickle(
             snakemake.output.space_heat_demand,
-            index=True,
         )
-        formatted_demand["water_heat"].round(4).to_csv(
+        formatted_demand["water_heat"].round(4).to_pickle(
             snakemake.output.water_heat_demand,
-            index=True,
         )
-        formatted_demand["cool"].round(4).to_csv(
+        formatted_demand["cool"].round(4).to_pickle(
             snakemake.output.cool_demand,
-            index=True,
         )
