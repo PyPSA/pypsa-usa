@@ -65,7 +65,7 @@ Regions outside the model scope include connections to neighbouring states (for 
 
 Additionally, the user can choose to enforce boundary conditions on these connections. If applied, annual historical imports and exports to the neighbouring regions are retrieved from the EIA for the modelled weather year. Minimum and maximum import/export constraints based on this reference value can then be specified through the following configuration file.
 
-Consider the [schematic below](gas-trade), showing how a single state is trading with a neighbouring state outside the models geographic scope. The following table shows how the user can specify import/export limits into and outof each state. Note, the constraints are applied at a state level, but each state must respect the same constraint configuration values.
+Consider the [schematic below](gas-trade), showing how a single state is trading with a neighbouring state outside the models geographic scope. **Assume that the historical year imports and exports are 10000 MMCF in both directions.** The following table shows how the user can specify import/export limits into and out of each state. Note, the constraints are applied at a state level, but each state must respect the same constraint configuration values.
 
 :::{figure-md} gas-trade
 <img src="./_static/natural_gas/gas-trade.png" width="250px">

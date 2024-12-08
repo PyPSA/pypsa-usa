@@ -183,7 +183,7 @@ Information on how heat pumps are modelled within PyPSA-USA [here](#heat-pumps)
 
 ## Data Sources
 
-Listed below are the main datasources applied technoliges within the service sector.
+Listed below are the main datasources applied within the service sector.
 
 ```{eval-rst}
 .. csv-table::
