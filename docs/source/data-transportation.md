@@ -154,3 +154,20 @@ Annual Energy Outlook domestic marine shipping travel indicator projections, wit
 
 
 [^1]: EFS does give vehicel sales shares in Figure 4.1 [here](https://www.nrel.gov/docs/fy18osti/71500.pdf). However, these values are sales shares, not stock shares, and report at national levels, rather than state.
+
+## Data Sources
+
+Listed below are the main datasources used in the transportation sector.
+
+```{eval-rst}
+.. csv-table::
+   :header-rows: 1
+   :widths: 22,22,22
+   :file: datatables/transport_sector_data.csv
+```
+
+## Validation
+
+```{note}
+Sector coupling studies are all under active development. More info to come!
+```
