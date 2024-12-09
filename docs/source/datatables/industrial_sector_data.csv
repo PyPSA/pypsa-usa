@@ -1,0 +1,5 @@
+Technology,Metric,Source
+Furnaces,Capital Costs | Efficiency | Lifetime,`Danish Energy Agency <https://ens.dk/en/our-services/technology-catalogues/technology-data-industrial-process-heat>`_
+Coal Boilers,Capital Costs | Efficiency | Lifetime,`Danish Energy Agency <https://ens.dk/en/our-services/technology-catalogues/technology-data-industrial-process-heat>`_
+Heat Pumps,Capital Costs | Efficiency | Lifetime,`Danish Energy Agency <https://ens.dk/en/our-services/technology-catalogues/technology-data-industrial-process-heat>`_
+Heat Pump,Efficiency,Time dependent COP calculated

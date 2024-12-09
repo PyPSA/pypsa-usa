@@ -192,10 +192,6 @@ Listed below are the main datasources applied within the service sector.
    :file: datatables/service_sector_data.csv
 ```
 
-```{caution}
-Service level battery implementation is under development.
-```
-
 ## Validation
 
 ```{note}
