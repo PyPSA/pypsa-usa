@@ -1,0 +1,5 @@
+Technology,Abbreviation,Required Configuration
+Electrical Distribution,elec-dist,Always on
+Gas Furnace,gas-furnace,Heat Load
+Coal Boiler,coal-boiler,Heat Load
+Heat Pump,heat-pump,Heat Load
