@@ -433,9 +433,12 @@ def attach_newCarrier_generators(n, costs, carriers, investment_year):
 
     add_missing_carriers(n, carriers)
     add_co2_emissions(n, costs, carriers)
-
+    min_years = snakemake.config["costs"].get("min_year")
     buses_i = n.buses.index
     for carrier in carriers:
+        if min_years and min_years.get(carrier, np.inf) > investment_year:
+            continue
+
         n.madd(
             "Generator",
             buses_i,

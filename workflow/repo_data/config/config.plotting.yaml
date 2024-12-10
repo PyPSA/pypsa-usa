@@ -6,12 +6,6 @@ plotting:
   energy_min: -10000.
   energy_threshold: 50.
 
-  # vre_techs: ["onwind","offwind_floating", "offwind-ac", "offwind-dc", "solar", "ror"]
-  # conv_techs: ["OCGT", "CCGT", "Nuclear", "Coal"]
-  # storage_techs: ["hydro+PHS", "battery", "H2"]
-  # load_carriers: ["AC load"]
-  # AC_carriers: ["AC line", "AC transformer"]
-  # link_carriers: ["DC line", "Converter AC-DC"]
   tech_colors:
     "onwind": "#235ebc"
     "wind": "#235ebc"
@@ -90,6 +84,8 @@ plotting:
     "8hr_PHS_charger": "#069686"
     "10hr_PHS_charger": "#058a79"
     "12hr_PHS_charger": "#047d6c"  
+    "hydrogen-ct": "#ea048a"
+
 
     # sector studies only 
 
@@ -258,6 +254,7 @@ plotting:
     lines: "Transmission Lines"
     ror: "Run of River"
     Load: "Load Shed"
+    hydrogen-ct: "Hydrogen Combustion Turbine"
 
     # sector studies only 
 
