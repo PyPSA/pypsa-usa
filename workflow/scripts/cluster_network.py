@@ -683,6 +683,8 @@ if __name__ == "__main__":
                     n.buses.loc[agg_busmap.index, "reeds_ba"] = "na"
                     n.buses.loc[agg_busmap.index, "reeds_state"] = "na"
                     n.buses.loc[agg_busmap.index, "county"] = "na"
+                if key == "reeds_zone":
+                    n.buses.loc[agg_busmap.index, "county"] = "na"
                 itl_agg_fn = snakemake.input[f"itl_{key}"]
                 itl_agg_costs_fn = snakemake.input.get(f"itl_costs_{key}", None)
 
