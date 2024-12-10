@@ -84,7 +84,7 @@ plotting:
     "8hr_PHS_charger": "#069686"
     "10hr_PHS_charger": "#058a79"
     "12hr_PHS_charger": "#047d6c"  
-    "hydrogen-ct": "#ea048a"
+    "hydrogen_ct": "#ea048a"
 
 
     # sector studies only 
@@ -254,7 +254,7 @@ plotting:
     lines: "Transmission Lines"
     ror: "Run of River"
     Load: "Load Shed"
-    hydrogen-ct: "Hydrogen Combustion Turbine"
+    hydrogen_ct: "Hydrogen Combustion Turbine"
 
     # sector studies only 
 
