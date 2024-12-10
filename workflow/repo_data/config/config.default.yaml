@@ -131,6 +131,8 @@ costs:
     8hr_PHS: 0.3
     10hr_PHS: 0.3
     12hr_PHS: 0.3
+  min_year: # {carrier: year}
+    hydrogen_ct: 2040
   max_growth: # {carrier: {base:, rate:}}
 
 # docs :
