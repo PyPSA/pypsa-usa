@@ -89,7 +89,8 @@ plotting:
     "12hr_PHS_discharger": "#047d6c"
     "8hr_PHS_charger": "#069686"
     "10hr_PHS_charger": "#058a79"
-    "12hr_PHS_charger": "#047d6c"  
+    "12hr_PHS_charger": "#047d6c"
+    "EGS": "#d18372"
 
     # sector studies only 
 
@@ -258,6 +259,7 @@ plotting:
     lines: "Transmission Lines"
     ror: "Run of River"
     Load: "Load Shed"
+    EGS: "Enhanced Geothermal"
 
     # sector studies only 
 
