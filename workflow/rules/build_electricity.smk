@@ -613,12 +613,12 @@ rule add_electricity:
         bus2sub=RESOURCES + "{interconnect}/bus2sub.csv",
         pudl_fuel_costs=RESOURCES + "{interconnect}/pudl_fuel_costs.csv",
         specs_egs=(
-            RESOURCES + "{interconnect}/specs_EGS.nc"
+            DATA + "EGS/{interconnect}/specs_EGS.nc"
             if "EGS" in config["electricity"]["extendable_carriers"]["Generator"]
             else []
         ),
         profile_egs=(
-            RESOURCES + "{interconnect}/profile_EGS.nc"
+            DATA + "EGS/{interconnect}/profile_EGS.nc"
             if "EGS" in config["electricity"]["extendable_carriers"]["Generator"]
             else []
         ),

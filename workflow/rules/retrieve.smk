@@ -250,11 +250,10 @@ if "EGS" in config["electricity"]["extendable_carriers"]["Generator"]:
     rule retrieve_egs:
         params:
             dispatch=config["renewable"]["EGS"]["dispatch"],
-            subdir=RESOURCES + "{interconnect}",
+            subdir=DATA + "EGS/{interconnect}",
         output:
-            # directory(RESOURCES + "{interconnect}/EGS"),
-            RESOURCES + "{interconnect}/specs_EGS.nc",
-            RESOURCES + "{interconnect}/profile_EGS.nc",
+            DATA + "EGS/{interconnect}/specs_EGS.nc",
+            DATA + "EGS/{interconnect}/profile_EGS.nc",
         resources:
             mem_mb=5000,
         log:
