@@ -243,12 +243,13 @@ def attach_stores(n, costs, elec_opts, investment_year):
 def split_retirement_gens(
     n: pypsa.Network,
     costs: pd.DataFrame,
-    gens: list[str] = None,
+    carriers: list[str] = None,
     economic: bool = True,
 ):
     """
     Seperates extendable conventional generators into existing and new
-    generators to support economic retirement.
+    generators to support economic or technical retirement.
+
 
     Specifically this function does the following:
     1. Creates duplicate generators for any that are tagged as extendable. For
@@ -260,11 +261,18 @@ def split_retirement_gens(
     Arguments:
     n: pypsa.Network,
     costs: pd.DataFrame,
-    gens: List[str]
-        List of generators to apply economic retirment to. If none provided, it is
-        applied to all extendable generators
+    carriers: List[str]
+        List of generator carriers to apply economic retirment to.
+    economic: bool
+        If True, enable economic retirement, else only allow lifetime
+        retirement for the new generators
     """
-    retirement_mask = n.generators["p_nom_extendable"] & (n.generators["carrier"].isin(gens) if gens else True)
+    retirement_mask = (
+        n.generators["p_nom_extendable"]
+        & (n.generators["carrier"].isin(carriers) if carriers else True)
+        & n.generators.p_nom
+        > 0
+    )
     retirement_gens = n.generators[retirement_mask]
     if retirement_gens.empty:
         return

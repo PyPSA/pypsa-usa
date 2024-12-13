@@ -591,7 +591,7 @@ def attach_egs(
         return
 
     add_missing_carriers(n, carriers)
-    lifetime = 25  # Following EGS supply curves by Aljubran et al. (2024)
+    capital_recovery_period = 25  # Following EGS supply curves by Aljubran et al. (2024)
     discount_rate = 0.07  # load_costs(snakemake.input.tech_costs).loc["geothermal", "wacc_real"]
     drilling_cost = snakemake.config["renewable"]["EGS"]["drilling_cost"]
 
@@ -632,7 +632,7 @@ def attach_egs(
         # TODO: come up with proper values for these params
 
         df_specs["capital_cost"] = 1000 * (
-            df_specs["capital_cost"] * calculate_annuity(lifetime, discount_rate) + df_specs["fixed_om"]
+            df_specs["capital_cost"] * calculate_annuity(capital_recovery_period, discount_rate) + df_specs["fixed_om"]
         )  # convert and annualize USD/kW to USD/MW-year
         df_specs["efficiency"] = 1.0
 
@@ -676,7 +676,6 @@ def attach_egs(
                 carrier=car,
                 p_nom_extendable=car in extendable_carriers["Generator"],
                 p_nom_max=p_nom_max_bus,
-                # weight=weight_bus,
                 capital_cost=capital_cost,
                 efficiency=efficiency,
                 p_max_pu=bus_profiles,
