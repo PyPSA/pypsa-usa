@@ -22,9 +22,11 @@ from build_emission_tracking import build_ch4_tracking, build_co2_tracking
 from build_heat import build_heat
 from build_natural_gas import StateGeometry, build_natural_gas
 from build_stock_data import (
+    add_industrial_brownfield,
     add_road_transport_brownfield,
     add_service_brownfield,
     get_commercial_stock,
+    get_industrial_stock,
     get_residential_stock,
     get_transport_stock,
 )
@@ -344,8 +346,8 @@ if __name__ == "__main__":
         snakemake = mock_snakemake(
             "add_sectors",
             interconnect="western",
-            simpl="11",
-            clusters="4m",
+            simpl="70",
+            clusters="29m",
             ll="v1.0",
             opts="3h",
             sector="E-G",
@@ -549,6 +551,24 @@ if __name__ == "__main__":
                 ratios=ratios,
                 costs=costs,
                 simple_storage=simple_storage,
+            )
+
+    if snakemake.params.sector["industry_sector"]["brownfield"]:
+
+        mecs_file = snakemake.input.mecs_file
+        ratios = get_industrial_stock(mecs_file)
+
+        fuels = ["heating"]
+
+        for fuel in fuels:
+
+            ratio = ratios[fuel]
+            add_industrial_brownfield(
+                n=n,
+                fuel=fuel,
+                growth_multiplier=growth_multiplier,
+                ratios=ratio,
+                costs=costs,
             )
 
     # Needed as loads may be split off to urban/rural
