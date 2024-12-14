@@ -35,6 +35,7 @@ def sector_input_files(wildcards):
             ],
             "residential_stock": "repo_data/sectors/residential_stock",
             "commercial_stock": "repo_data/sectors/commercial_stock",
+            "industrial_stock": "repo_data/sectors/industrial_stock/Table5_6.xlsx",
         }
         input_files.update(ng_files)
 

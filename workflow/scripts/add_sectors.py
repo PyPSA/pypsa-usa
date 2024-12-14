@@ -553,16 +553,16 @@ if __name__ == "__main__":
                 simple_storage=simple_storage,
             )
 
-    if snakemake.params.sector["industry_sector"]["brownfield"]:
+    if snakemake.params.sector["industrial_sector"]["brownfield"]:
 
-        mecs_file = snakemake.input.mecs_file
+        mecs_file = snakemake.input.industrial_stock
         ratios = get_industrial_stock(mecs_file)
 
-        fuels = ["heating"]
+        fuels = ["heat"]
 
         for fuel in fuels:
 
-            ratio = ratios[fuel]
+            ratio = ratios.loc[fuel]
             add_industrial_brownfield(
                 n=n,
                 fuel=fuel,

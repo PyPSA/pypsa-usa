@@ -33,6 +33,7 @@ CECS_BUILD_YEARS = {
     2009: 15.6,
     2000: 50.0,  # assumed from replacement from 2000 data
 }
+
 """
 Hardcoded appliance build years from residenital energy consumption survey
 https://www.eia.gov/consumption/residential/data/2020/hc/pdf/HC%206.1.pdf
@@ -45,6 +46,17 @@ RECS_BUILD_YEARS = {
     2010: 18.0,
     2005: 11.9,
     2000: 19.1,
+}
+
+"""
+No data on build years is found. So roll back builds in 5 year segments
+"""
+MECS_BUILD_YEARS = {
+    # year_built: percent of stock
+    2022: 25,
+    2017: 25,
+    2012: 25,
+    2007: 25,
 }
 
 
@@ -643,7 +655,7 @@ def get_industrial_stock(xlsx: str) -> pd.DataFrame:
         df["region"] = df.region.map(lambda x: x.split(" ")[0].lower()).map(
             census_2_state,
         )
-        return df.explode("region").rename(columns={"region": "state"}).set_index(["load", "region"])
+        return df.explode("region").rename(columns={"region": "state"}).set_index(["load", "state"])
 
     mecs = _get_data(xlsx)
     mecs = _format_raw_data(mecs)
@@ -1537,31 +1549,25 @@ def add_industrial_brownfield(
 
         df = template.copy()
 
-        # existing efficiency values taken from:
-        # https://www.eia.gov/analysis/studies/buildings/equipcosts/pdf/full.pdf
-
         # will give approximate installed capacity percentage by year
-        installed_capacity = RECS_BUILD_YEARS
-        lifetime = costs.at["Residential Oil-Fired Furnaces", "lifetime"]
-        efficiency = 0.83
+        installed_capacity = MECS_BUILD_YEARS
+        lifetime = costs.at["direct firing gas", "lifetime"]
+        efficiency = 0.75
 
-        efficiency2 = costs.at["oil", "co2_emissions"]
+        efficiency2 = costs.at["gas", "co2_emissions"]
 
-        df["bus0"] = df.state + " oil"
+        df["bus0"] = df.state + " gas"
         df["bus2"] = df.state + f" {sector}-co2"
 
-        # remove 'heat' or 'cool' ect.. from suffix
-        df["carrier"] = df.suffix.map(lambda x: "-".join(x.split("-")[:-1]))
-        df["carrier"] = df.carrier + "-lpg-furnace"
+        df["carrier"] = f"{sector}-gas-furnace"
 
-        df["ratio"] = df.state.map(ratios.lpg)
+        df["ratio"] = df.state.map(ratios.gas)
         df["p_nom"] = df.p_max.mul(df.ratio).div(100).div(efficiency)  # div to convert from %
 
-        marginal_cost_names = [x.replace("heat", "lpg-furnace") for x in df.bus1.to_list()]
+        marginal_cost_names = [x.replace("heat", "gas-furnace") for x in df.bus1.to_list()]
         marginal_cost = _get_marginal_cost(n, marginal_cost_names)
 
         start_year = n.investment_periods[0]
-        # start_year = start_year if start_year >= 2023 else 2023
 
         for build_year, percent in installed_capacity.items():
 
@@ -1576,7 +1582,7 @@ def add_industrial_brownfield(
 
             if isinstance(marginal_cost, pd.DataFrame):
                 mc = marginal_cost.copy()
-                name_mapper = furnaces["bus1"].str.replace("-heat", "-lpg-furnace").to_dict()
+                name_mapper = furnaces["bus1"].str.replace("-heat", "-gas-furnace").to_dict()
                 mc = mc.rename(columns={v: k for k, v in name_mapper.items()})
             else:
                 mc = marginal_cost
@@ -1605,72 +1611,7 @@ def add_industrial_brownfield(
         ratios: pd.DataFrame,
         costs: pd.DataFrame,
     ) -> None:
-
-        sector = SecNames.INDUSTRY.value
-
-        df = template.copy()
-
-        # existing efficiency values taken from:
-        # https://www.eia.gov/analysis/studies/buildings/equipcosts/pdf/full.pdf
-
-        # will give approximate installed capacity percentage by year
-        installed_capacity = RECS_BUILD_YEARS
-        lifetime = costs.at["Residential Oil-Fired Furnaces", "lifetime"]
-        efficiency = 0.83
-
-        efficiency2 = costs.at["oil", "co2_emissions"]
-
-        df["bus0"] = df.state + " oil"
-        df["bus2"] = df.state + f" {sector}-co2"
-
-        # remove 'heat' or 'cool' ect.. from suffix
-        df["carrier"] = df.suffix.map(lambda x: "-".join(x.split("-")[:-1]))
-        df["carrier"] = df.carrier + "-lpg-furnace"
-
-        df["ratio"] = df.state.map(ratios.lpg)
-        df["p_nom"] = df.p_max.mul(df.ratio).div(100).div(efficiency)  # div to convert from %
-
-        marginal_cost_names = [x.replace("heat", "lpg-furnace") for x in df.bus1.to_list()]
-        marginal_cost = _get_marginal_cost(n, marginal_cost_names)
-
-        start_year = n.investment_periods[0]
-        # start_year = start_year if start_year >= 2023 else 2023
-
-        for build_year, percent in installed_capacity.items():
-
-            if _already_retired(build_year, lifetime, start_year):
-                continue
-
-            furnaces = df.copy()
-
-            furnaces["name"] = furnaces.name + f" existing_{build_year} " + furnaces.carrier
-            furnaces["p_nom"] = furnaces.p_nom.mul(percent).div(100).round(2)
-            furnaces = furnaces.set_index("name")
-
-            if isinstance(marginal_cost, pd.DataFrame):
-                mc = marginal_cost.copy()
-                name_mapper = furnaces["bus1"].str.replace("-heat", "-lpg-furnace").to_dict()
-                mc = mc.rename(columns={v: k for k, v in name_mapper.items()})
-            else:
-                mc = marginal_cost
-                assert isinstance(mc, (float, int))
-
-            n.madd(
-                "Link",
-                furnaces.index,
-                bus0=furnaces.bus0,
-                bus1=furnaces.bus1,
-                bus2=furnaces.bus2,
-                carrier=furnaces.carrier,
-                efficiency=efficiency,
-                efficiency2=efficiency2,
-                capital_cost=0,
-                p_nom_extendable=False,
-                p_nom=furnaces.p_nom,
-                lifetime=lifetime,
-                build_year=build_year,
-                marginal_cost=mc,
-            )
+        pass
 
     def add_brownfield_coal_furnace(
         n: pypsa.Network,
@@ -1683,31 +1624,25 @@ def add_industrial_brownfield(
 
         df = template.copy()
 
-        # existing efficiency values taken from:
-        # https://www.eia.gov/analysis/studies/buildings/equipcosts/pdf/full.pdf
-
         # will give approximate installed capacity percentage by year
-        installed_capacity = RECS_BUILD_YEARS
-        lifetime = costs.at["Residential Oil-Fired Furnaces", "lifetime"]
-        efficiency = 0.83
+        installed_capacity = MECS_BUILD_YEARS
+        lifetime = costs.at["central coal CHP", "lifetime"]
+        efficiency = costs.at["central coal CHP", "efficiency"]
 
-        efficiency2 = costs.at["oil", "co2_emissions"]
+        efficiency2 = costs.at["coal", "co2_emissions"]
 
-        df["bus0"] = df.state + " oil"
+        df["bus0"] = df.state + " coal"
         df["bus2"] = df.state + f" {sector}-co2"
 
-        # remove 'heat' or 'cool' ect.. from suffix
-        df["carrier"] = df.suffix.map(lambda x: "-".join(x.split("-")[:-1]))
-        df["carrier"] = df.carrier + "-lpg-furnace"
+        df["carrier"] = f"{sector}-coal-furnace"
 
-        df["ratio"] = df.state.map(ratios.lpg)
+        df["ratio"] = df.state.map(ratios.coal)
         df["p_nom"] = df.p_max.mul(df.ratio).div(100).div(efficiency)  # div to convert from %
 
-        marginal_cost_names = [x.replace("heat", "lpg-furnace") for x in df.bus1.to_list()]
+        marginal_cost_names = [x.replace("heat", "coal-furnace") for x in df.bus1.to_list()]
         marginal_cost = _get_marginal_cost(n, marginal_cost_names)
 
         start_year = n.investment_periods[0]
-        # start_year = start_year if start_year >= 2023 else 2023
 
         for build_year, percent in installed_capacity.items():
 
@@ -1722,7 +1657,7 @@ def add_industrial_brownfield(
 
             if isinstance(marginal_cost, pd.DataFrame):
                 mc = marginal_cost.copy()
-                name_mapper = furnaces["bus1"].str.replace("-heat", "-lpg-furnace").to_dict()
+                name_mapper = furnaces["bus1"].str.replace("-heat", "-coal-furnace").to_dict()
                 mc = mc.rename(columns={v: k for k, v in name_mapper.items()})
             else:
                 mc = marginal_cost
@@ -1746,7 +1681,7 @@ def add_industrial_brownfield(
             )
 
     match fuel:
-        case "heating":
+        case "heat":
             load = SecCarriers.HEATING.value
         case _:
             raise NotImplementedError
@@ -1756,7 +1691,7 @@ def add_industrial_brownfield(
 
     if load == "heat":
         add_brownfield_gas_furnace(n, df, ratios, costs)
-        add_brownfield_oil_furnace(n, df, ratios, costs)
+        # add_brownfield_oil_furnace(n, df, ratios, costs)
         add_brownfield_coal_furnace(n, df, ratios, costs)
 
 

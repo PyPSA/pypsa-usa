@@ -339,7 +339,7 @@ def add_industrial_heat(
     **kwargs,
 ) -> None:
 
-    assert sector == SecNames.INDUSTRY
+    assert sector == SecNames.INDUSTRY.value
 
     add_industrial_gas_furnace(n, costs, marginal_gas)
     add_industrial_coal_furnace(n, costs, marginal_coal)
@@ -1280,7 +1280,7 @@ def add_industrial_gas_furnace(
     marginal_cost: Optional[pd.DataFrame | float] = None,
 ) -> None:
 
-    sector = SecNames.INDUSTRY
+    sector = SecNames.INDUSTRY.value
 
     capex = costs.at["direct firing gas", "capital_cost"].round(1)
     # efficiency = costs.at["direct firing gas", "efficiency"].round(1)
