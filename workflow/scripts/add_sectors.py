@@ -347,7 +347,7 @@ if __name__ == "__main__":
             "add_sectors",
             interconnect="western",
             simpl="70",
-            clusters="29m",
+            clusters="4m",
             ll="v1.0",
             opts="3h",
             sector="E-G",

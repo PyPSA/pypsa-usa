@@ -1284,7 +1284,7 @@ def add_industrial_gas_furnace(
 
     capex = costs.at["direct firing gas", "capital_cost"].round(1)
     # efficiency = costs.at["direct firing gas", "efficiency"].round(1)
-    efficiency = 0.85  # source says effiency is 1 by default - thats wrong lol.
+    efficiency = 0.95  # source defaults to 100%
     lifetime = costs.at["direct firing gas", "lifetime"]
 
     carrier_name = f"{sector}-heat"
@@ -1342,9 +1342,10 @@ def add_industrial_coal_furnace(
     # same source as tech-data, but its just not in latest version
 
     # capex approximated based on NG to incorporate fixed costs
-    capex = costs.at["central coal CHP", "capital_cost"].round(1)
-    efficiency = costs.at["central coal CHP", "efficiency"].round(1)
-    lifetime = capex = costs.at["central coal CHP", "lifetime"].round(1)
+    capex = costs.at["direct firing coal", "capital_cost"].round(1)
+    # efficiency = costs.at["direct firing coal", "efficiency"].round(1)
+    efficiency = 0.95  # source defaults to 100%
+    lifetime = capex = costs.at["direct firing coal", "lifetime"].round(1)
 
     carrier_name = f"{sector}-heat"
 

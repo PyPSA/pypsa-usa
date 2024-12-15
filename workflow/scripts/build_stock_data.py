@@ -1552,7 +1552,7 @@ def add_industrial_brownfield(
         # will give approximate installed capacity percentage by year
         installed_capacity = MECS_BUILD_YEARS
         lifetime = costs.at["direct firing gas", "lifetime"]
-        efficiency = 0.75
+        efficiency = 0.95
 
         efficiency2 = costs.at["gas", "co2_emissions"]
 
@@ -1626,8 +1626,9 @@ def add_industrial_brownfield(
 
         # will give approximate installed capacity percentage by year
         installed_capacity = MECS_BUILD_YEARS
-        lifetime = costs.at["central coal CHP", "lifetime"]
-        efficiency = costs.at["central coal CHP", "efficiency"]
+        lifetime = costs.at["direct firing coal", "lifetime"]
+        # efficiency = costs.at["direct firing coal", "efficiency"]
+        efficiency = 0.95
 
         efficiency2 = costs.at["coal", "co2_emissions"]
 
