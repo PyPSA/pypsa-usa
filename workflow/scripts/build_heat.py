@@ -10,6 +10,7 @@ import pandas as pd
 import pypsa
 import xarray as xr
 from constants import NG_MWH_2_MMCF, STATE_2_CODE, COAL_dol_ton_2_MWHthermal
+from constants_sector import SecCarriers, SecNames
 from eia import FuelCosts
 
 logger = logging.getLogger(__name__)
@@ -102,7 +103,7 @@ def build_heat(
 
         assert not n.links_t.p_set.isna().any().any()
 
-    elif sector == "ind":
+    elif sector == SecNames.INDUSTRY.value:
 
         if dynamic_costs:
             gas_costs = _get_dynamic_marginal_costs(
@@ -338,10 +339,10 @@ def add_industrial_heat(
     **kwargs,
 ) -> None:
 
-    assert sector == "ind"
+    assert sector == SecNames.INDUSTRY.value
 
-    add_industrial_furnace(n, costs, marginal_gas)
-    add_industrial_boiler(n, costs, marginal_coal)
+    add_industrial_gas_furnace(n, costs, marginal_gas)
+    add_industrial_coal_furnace(n, costs, marginal_coal)
     add_indusrial_heat_pump(n, costs)
 
 
@@ -1273,17 +1274,17 @@ def add_service_heat_pumps(
     )
 
 
-def add_industrial_furnace(
+def add_industrial_gas_furnace(
     n: pypsa.Network,
     costs: pd.DataFrame,
     marginal_cost: Optional[pd.DataFrame | float] = None,
 ) -> None:
 
-    sector = "ind"
+    sector = SecNames.INDUSTRY.value
 
     capex = costs.at["direct firing gas", "capital_cost"].round(1)
     # efficiency = costs.at["direct firing gas", "efficiency"].round(1)
-    efficiency = 0.75
+    efficiency = 0.95  # source defaults to 100%
     lifetime = costs.at["direct firing gas", "lifetime"]
 
     carrier_name = f"{sector}-heat"
@@ -1296,7 +1297,7 @@ def add_industrial_furnace(
     furnaces["bus0"] = furnaces.index.map(lambda x: x.split(f" {sector}-heat")[0]).map(
         n.buses.STATE,
     )
-    furnaces["bus2"] = furnaces.bus0 + " ind-co2"
+    furnaces["bus2"] = furnaces.bus0 + f" {sector}-co2"
     furnaces["bus0"] = furnaces.bus0 + " gas"
     furnaces["bus1"] = furnaces.index
     furnaces["carrier"] = f"{sector}-gas-furnace"
@@ -1328,42 +1329,43 @@ def add_industrial_furnace(
     )
 
 
-def add_industrial_boiler(
+def add_industrial_coal_furnace(
     n: pypsa.Network,
     costs: pd.DataFrame,
     marginal_cost: Optional[pd.DataFrame | float] = None,
 ) -> None:
 
-    sector = "ind"
+    sector = SecNames.INDUSTRY.value
 
     # performance charasteristics taken from (Table 311.1a)
     # https://ens.dk/en/our-services/technology-catalogues/technology-data-industrial-process-heat
     # same source as tech-data, but its just not in latest version
 
     # capex approximated based on NG to incorporate fixed costs
-    capex = costs.at["direct firing gas", "capital_cost"].round(1) * 2.5
-    efficiency = 0.60
-    lifetime = 25
+    capex = costs.at["direct firing coal", "capital_cost"].round(1)
+    # efficiency = costs.at["direct firing coal", "efficiency"].round(1)
+    efficiency = 0.95  # source defaults to 100%
+    lifetime = capex = costs.at["direct firing coal", "lifetime"].round(1)
 
     carrier_name = f"{sector}-heat"
 
     loads = n.loads[(n.loads.carrier == carrier_name)]
 
-    boiler = pd.DataFrame(index=loads.bus)
-    boiler["state"] = boiler.index.map(n.buses.STATE)
-    boiler["bus0"] = boiler.index.map(lambda x: x.split(f" {sector}-heat")[0]).map(
+    furnace = pd.DataFrame(index=loads.bus)
+    furnace["state"] = furnace.index.map(n.buses.STATE)
+    furnace["bus0"] = furnace.index.map(lambda x: x.split(f" {sector}-heat")[0]).map(
         n.buses.STATE,
     )
-    boiler["bus2"] = boiler.bus0 + " ind-co2"
-    boiler["bus0"] = boiler.bus0 + " coal"
-    boiler["bus1"] = boiler.index
-    boiler["carrier"] = f"{sector}-coal-boiler"
-    boiler.index = boiler.index.map(lambda x: x.split("-heat")[0])
-    boiler["efficiency2"] = costs.at["coal", "co2_emissions"]
+    furnace["bus2"] = furnace.bus0 + " ind-co2"
+    furnace["bus0"] = furnace.bus0 + " coal"
+    furnace["bus1"] = furnace.index
+    furnace["carrier"] = f"{sector}-coal-furnace"
+    furnace.index = furnace.index.map(lambda x: x.split("-heat")[0])
+    furnace["efficiency2"] = costs.at["coal", "co2_emissions"]
 
     if isinstance(marginal_cost, pd.DataFrame):
-        assert "state" in boiler.columns
-        mc = get_link_marginal_costs(n, boiler, marginal_cost)
+        assert "state" in furnace.columns
+        mc = get_link_marginal_costs(n, furnace, marginal_cost)
     elif isinstance(marginal_cost, (int, float)):
         mc = marginal_cost
     else:
@@ -1371,14 +1373,14 @@ def add_industrial_boiler(
 
     n.madd(
         "Link",
-        boiler.index,
-        suffix="-coal-boiler",  # 'ind' included in index already
-        bus0=boiler.bus0,
-        bus1=boiler.bus1,
-        bus2=boiler.bus2,
-        carrier=boiler.carrier,
+        furnace.index,
+        suffix="-coal-furnace",  # 'ind' included in index already
+        bus0=furnace.bus0,
+        bus1=furnace.bus1,
+        bus2=furnace.bus2,
+        carrier=furnace.carrier,
         efficiency=efficiency,
-        efficiency2=boiler.efficiency2,
+        efficiency2=furnace.efficiency2,
         capital_cost=capex,
         p_nom_extendable=True,
         lifetime=lifetime,
@@ -1391,7 +1393,7 @@ def add_indusrial_heat_pump(
     costs: pd.DataFrame,
 ) -> None:
 
-    sector = "ind"
+    sector = SecNames.INDUSTRY.value
 
     capex = costs.at["industrial heat pump high temperature", "capital_cost"].round(1)
     efficiency = costs.at["industrial heat pump high temperature", "efficiency"].round(

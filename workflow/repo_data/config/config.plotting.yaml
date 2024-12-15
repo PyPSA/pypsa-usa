@@ -89,15 +89,15 @@ plotting:
 
     # sector studies only 
 
-    "res-elec": "#f9d002"
-    "res-heat": "#E79CA2"
-    "res-cool": "#9CE7E2"
-    "com-elec": "#f9d002"
-    "com-heat": "#E79CA2"
-    "com-cool": "#9CE7E2"
-    "ind-elec": "#f9d002"
-    "ind-heat": "#E79CA2"
-    "trn-elec": "#f9d002"
+    res-elec: "#f9d002"
+    res-heat: "#E79CA2"
+    res-cool: "#9CE7E2"
+    com-elec: "#f9d002"
+    com-heat: "#E79CA2"
+    com-cool: "#9CE7E2"
+    ind-elec: "#f9d002"
+    ind-heat: "#E79CA2"
+    trn-elec: "#f9d002"
 
     "gas storage": "#f69d09"
     "gas pipeline": "#f69d09"
@@ -105,6 +105,11 @@ plotting:
     "gas production": "#d35050"
 
     trn-veh: "#0a0100"
+    trn-veh-lgt: "#0a0100"
+    trn-veh-med: "#0a0100"
+    trn-veh-hvy: "#0a0100"
+    trn-veh-bus: "#0a0100"
+
     trn-elec-veh: "#0a0100"
     trn-elec-veh-lgt: "#2BAAD4"
     trn-elec-veh-med: "#2FD085"
@@ -235,7 +240,7 @@ plotting:
     res-elec-infra: "#9CD926"
     com-elec-infra: "#9CD926"
 
-    ind-coal-boiler: "#EC13B4"
+    ind-coal-furnace: "#EC13B4"
     ind-heat-pump: "#E83E17"
     ind-gas-furnace: "#E0AE1F"
     ind-elec-infra: "#9CD926"
@@ -274,6 +279,11 @@ plotting:
     "gas production": "Natural Gas Production"
 
     trn-veh: "Vehicles"
+    trn-veh-lgt: "Light-Duty Vehicles"
+    trn-veh-med: "Medium-Duty Vehicles"
+    trn-veh-hvy: "Heavy-Duty Vehicles"
+    trn-veh-bus: "Buses"
+
     trn-elec-veh: "Electric Vehicles"
     trn-elec-veh-lgt: "Light Duty EV"
     trn-elec-veh-med: "Medium Duty EV"
@@ -402,7 +412,7 @@ plotting:
     res-elec-infra: "Electric Distribution"
     com-elec-infra: "Electric Distribution"
 
-    ind-coal-boiler: "Coal Boiler"
+    ind-coal-furnace: "Coal furnace"
     ind-heat-pump: "Heat Pump"
     ind-gas-furnace: "Gas Furnace"
     ind-elec-infra: "Electric Distribution"
