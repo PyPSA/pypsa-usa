@@ -536,12 +536,14 @@ def add_service_cooling(
         heat_systems = ["total"]
         _format_total_load(n, sector, "cool")
 
-    # add heat pumps
+    # add cooling technologies
     for heat_system in heat_systems:
         if technologies.get("air_con", True):
             add_air_cons(n, sector, heat_system, costs)
         if technologies.get("heat_pump", True):
             add_service_heat_pumps_cooling(n, sector, heat_system, "cool")
+
+        add_service_cool_stores(n, sector, heat_system, "cool")
 
 
 def add_air_cons(
@@ -647,6 +649,93 @@ def add_service_heat_pumps_cooling(
         capital_cost=cool_links.capex,
         p_nom_extendable=True,
         lifetime=cool_links.lifetime,
+    )
+
+
+def add_service_cool_stores(
+    n: pypsa.Network,
+    sector: str,
+    heat_system: str,
+    heat_carrier: str,
+    standing_loss: Optional[float] = None,
+) -> None:
+    """
+    Adds end-use thermal storage to the system.
+
+    Will add a heat-store-bus. Two uni-directional links to connect the heat-
+    store-bus to the heat-bus. A store to connect to the heat-store-bus.
+
+    Parameters are average of all storage technologies.
+
+    n: pypsa.Network
+    sector: str
+        ("com" or "res")
+    heat_system: str
+        ("rural" or "urban")
+    costs: pd.DataFrame
+    """
+
+    assert heat_system in ("urban", "rural", "total")
+    assert heat_carrier in ["cool"]
+
+    capex = 0
+    efficiency = 1
+    lifetime = np.inf
+
+    carrier_name = f"{sector}-{heat_system}-{heat_carrier}"
+
+    # must be run after rural/urban load split
+    buses = n.buses[n.buses.carrier == carrier_name]
+
+    therm_store = pd.DataFrame(index=buses.index)
+    therm_store["bus0"] = therm_store.index
+    therm_store["bus1"] = therm_store.index + "-store"
+    therm_store["x"] = therm_store.index.map(n.buses.x)
+    therm_store["y"] = therm_store.index.map(n.buses.y)
+    therm_store["carrier"] = f"{sector}-{heat_system}-{heat_carrier}"
+
+    n.madd(
+        "Bus",
+        therm_store.index,
+        suffix="-store",
+        x=therm_store.x,
+        y=therm_store.y,
+        carrier=therm_store.carrier,
+        unit="MWh",
+    )
+
+    n.madd(
+        "Link",
+        therm_store.index,
+        suffix="-charger",
+        bus0=therm_store.bus0,
+        bus1=therm_store.bus1,
+        efficiency=efficiency,
+        carrier=therm_store.carrier,
+        p_nom_extendable=True,
+    )
+
+    n.madd(
+        "Link",
+        therm_store.index,
+        suffix="-discharger",
+        bus0=therm_store.bus1,
+        bus1=therm_store.bus0,
+        efficiency=efficiency,
+        carrier=therm_store.carrier,
+        p_nom_extendable=True,
+    )
+
+    n.madd(
+        "Store",
+        therm_store.index,
+        bus=therm_store.bus1,
+        e_cyclic=True,
+        e_nom_extendable=True,
+        carrier=therm_store.carrier,
+        standing_loss=standing_loss,
+        capital_cost=capex,
+        lifetime=lifetime,
     )
 
 
@@ -926,6 +1015,9 @@ def add_service_heat_stores(
     assert heat_system in ("urban", "rural", "total")
     assert heat_carrier in ("heat", "space-heat")
 
+    # changed stores to be demand response where metrics are exogenously defined
+
+    """
     match sector:
         case "res" | "Res" | "residential" | "Residential":
             costs_names = [
@@ -963,6 +1055,11 @@ def add_service_heat_stores(
         capex = 0
         efficiency = 1
         lifetime = np.inf
+    """
+
+    capex = 0
+    efficiency = 1
+    lifetime = np.inf
 
     carrier_name = f"{sector}-{heat_system}-{heat_carrier}"
 
@@ -1003,7 +1100,7 @@ def add_service_heat_stores(
         suffix="-discharger",
         bus0=therm_store.bus1,
         bus1=therm_store.bus0,
-        efficiency=1,  # efficiency in first link is round trip
+        efficiency=efficiency,
         carrier=therm_store.carrier,
         p_nom_extendable=True,
     )
@@ -1011,10 +1108,9 @@ def add_service_heat_stores(
     n.madd(
         "Store",
         therm_store.index,
-        # suffix="-store",
         bus=therm_store.bus1,
         e_cyclic=True,
-        e_nom_extendable=False,
+        e_nom_extendable=True,
         carrier=therm_store.carrier,
         standing_loss=standing_loss,
         capital_cost=capex,

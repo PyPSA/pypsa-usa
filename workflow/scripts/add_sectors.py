@@ -18,6 +18,7 @@ from typing import Optional
 
 from _helpers import configure_logging, get_snapshots, load_costs
 from add_electricity import sanitize_carriers
+from build_electricity_sector import build_electricty
 from build_emission_tracking import build_ch4_tracking, build_co2_tracking
 from build_heat import build_heat
 from build_natural_gas import StateGeometry, build_natural_gas
@@ -30,11 +31,7 @@ from build_stock_data import (
     get_residential_stock,
     get_transport_stock,
 )
-from build_transportation import (
-    apply_endogenous_road_investments,
-    apply_exogenous_ev_policy,
-    build_transportation,
-)
+from build_transportation import apply_exogenous_ev_policy, build_transportation
 from constants import STATE_2_CODE, STATES_INTERCONNECT_MAPPER
 from constants_sector import RoadTransport
 from shapely.geometry import Point
@@ -280,36 +277,6 @@ def split_loads_by_carrier(n: pypsa.Network):
     n.loads["bus"] = n.loads.index
 
 
-def build_electricity_infra(n: pypsa.Network):
-    """
-    Adds links to connect electricity nodes.
-
-    For example, will build the link between "p480 0" and "p480 0 res-
-    elec"
-    """
-
-    df = n.loads[n.loads.index.str.endswith("-elec")].copy()
-
-    df["bus0"] = df.apply(lambda row: row.bus.split(f" {row.carrier}")[0], axis=1)
-    df["bus1"] = df.bus
-    df["sector"] = df.carrier.map(lambda x: x.split("-")[0])
-    df.index = df["bus0"] + " " + df["sector"]
-    df["carrier"] = df["sector"] + "-elec-infra"
-
-    n.madd(
-        "Link",
-        df.index,
-        suffix="-elec-infra",
-        bus0=df.bus0,
-        bus1=df.bus1,
-        carrier=df.carrier,
-        efficiency=1,
-        capital_cost=0,
-        p_nom_extendable=True,
-        lifetime=np.inf,
-    )
-
-
 def get_pwr_co2_intensity(carrier: str, costs: pd.DataFrame) -> float:
     """
     Gets co2 intensity to apply to pwr links.
@@ -434,8 +401,11 @@ if __name__ == "__main__":
     cop_ashp_path = snakemake.input.cop_air_total
     cop_gshp_path = snakemake.input.cop_soil_total
 
+    # demand response options the all sectors/carriers
+    demand_response_options = snakemake.params.sector["demand_response"]
+
     # add electricity infrastructure
-    build_electricity_infra(n=n)
+    build_electricty(n=n)
 
     dynamic_cost_year = sns.year.min()
 
