@@ -48,9 +48,10 @@ def build_heat(
         options = {}
 
     dynamic_costs = options.get("dynamic_costs", False)
-
     if dynamic_costs:
         assert eia and year, "Must supply EIA API and costs year for dynamic fuel costs"
+
+    demand_response = options.get("demand_response", {})
 
     if sector in ("res", "com", "srv"):
 
@@ -91,6 +92,7 @@ def build_heat(
             marginal_gas=gas_costs,
             marginal_oil=heating_oil_costs,
             water_heating_config=water_heating_config,
+            demand_response=demand_response,
         )
         add_service_cooling(
             n=n,
@@ -99,6 +101,7 @@ def build_heat(
             costs=costs,
             split_urban_rural=split_urban_rural,
             technologies=technologies,
+            demand_response=demand_response,
         )
 
         assert not n.links_t.p_set.isna().any().any()
@@ -358,6 +361,7 @@ def add_service_heat(
     marginal_gas: Optional[pd.DataFrame | float] = None,
     marginal_oil: Optional[pd.DataFrame | float] = None,
     water_heating_config: Optional[dict[str, Any]] = None,
+    demand_response: Optional[dict[str, Any]] = None,
 ):
     """
     Adds heating links for residential and commercial sectors.
@@ -458,13 +462,19 @@ def add_service_heat(
                 marginal_oil,
             )
 
+        if not demand_response:
+            dr_shift = 0
+        else:
+            dr_shift = demand_response.get("shift", 0)
+
         add_service_heat_stores(
-            n,
-            sector,
-            heat_system,
-            heat_carrier,
-            costs,
-            standing_loss_space_heat,
+            n=n,
+            sector=sector,
+            heat_system=heat_system,
+            heat_carrier=heat_carrier,
+            costs=costs,
+            standing_loss=standing_loss_space_heat,
+            dr_shift=dr_shift,
         )
 
         # check if water heat is needed
@@ -521,6 +531,7 @@ def add_service_cooling(
     costs: pd.DataFrame,
     split_urban_rural: Optional[bool] = True,
     technologies: Optional[dict[str, bool]] = None,
+    demand_response: Optional[dict[str, Any]] = None,
     **kwargs,
 ):
 
@@ -536,6 +547,11 @@ def add_service_cooling(
         heat_systems = ["total"]
         _format_total_load(n, sector, "cool")
 
+    if not demand_response:
+        dr_shift = 0
+    else:
+        dr_shift = demand_response.get("shift", 0)
+
     # add cooling technologies
     for heat_system in heat_systems:
         if technologies.get("air_con", True):
@@ -543,7 +559,7 @@ def add_service_cooling(
         if technologies.get("heat_pump", True):
             add_service_heat_pumps_cooling(n, sector, heat_system, "cool")
 
-        add_service_cool_stores(n, sector, heat_system, "cool")
+        add_service_heat_stores(n, sector, heat_system, "cool", dr_shift)
 
 
 def add_air_cons(
@@ -649,93 +665,6 @@ def add_service_heat_pumps_cooling(
         capital_cost=cool_links.capex,
         p_nom_extendable=True,
         lifetime=cool_links.lifetime,
-    )
-
-
-def add_service_cool_stores(
-    n: pypsa.Network,
-    sector: str,
-    heat_system: str,
-    heat_carrier: str,
-    standing_loss: Optional[float] = None,
-) -> None:
-    """
-    Adds end-use thermal storage to the system.
-
-    Will add a heat-store-bus. Two uni-directional links to connect the heat-
-    store-bus to the heat-bus. A store to connect to the heat-store-bus.
-
-    Parameters are average of all storage technologies.
-
-    n: pypsa.Network
-    sector: str
-        ("com" or "res")
-    heat_system: str
-        ("rural" or "urban")
-    costs: pd.DataFrame
-    """
-
-    assert heat_system in ("urban", "rural", "total")
-    assert heat_carrier in ["cool"]
-
-    capex = 0
-    efficiency = 1
-    lifetime = np.inf
-
-    carrier_name = f"{sector}-{heat_system}-{heat_carrier}"
-
-    # must be run after rural/urban load split
-    buses = n.buses[n.buses.carrier == carrier_name]
-
-    therm_store = pd.DataFrame(index=buses.index)
-    therm_store["bus0"] = therm_store.index
-    therm_store["bus1"] = therm_store.index + "-store"
-    therm_store["x"] = therm_store.index.map(n.buses.x)
-    therm_store["y"] = therm_store.index.map(n.buses.y)
-    therm_store["carrier"] = f"{sector}-{heat_system}-{heat_carrier}"
-
-    n.madd(
-        "Bus",
-        therm_store.index,
-        suffix="-store",
-        x=therm_store.x,
-        y=therm_store.y,
-        carrier=therm_store.carrier,
-        unit="MWh",
-    )
-
-    n.madd(
-        "Link",
-        therm_store.index,
-        suffix="-charger",
-        bus0=therm_store.bus0,
-        bus1=therm_store.bus1,
-        efficiency=efficiency,
-        carrier=therm_store.carrier,
-        p_nom_extendable=True,
-    )
-
-    n.madd(
-        "Link",
-        therm_store.index,
-        suffix="-discharger",
-        bus0=therm_store.bus1,
-        bus1=therm_store.bus0,
-        efficiency=efficiency,
-        carrier=therm_store.carrier,
-        p_nom_extendable=True,
-    )
-
-    n.madd(
-        "Store",
-        therm_store.index,
-        bus=therm_store.bus1,
-        e_cyclic=True,
-        e_nom_extendable=True,
-        carrier=therm_store.carrier,
-        standing_loss=standing_loss,
-        capital_cost=capex,
-        lifetime=lifetime,
     )
 
 
@@ -993,6 +922,7 @@ def add_service_heat_stores(
     heat_carrier: str,
     costs: pd.DataFrame,
     standing_loss: Optional[float] = None,
+    dr_shift: Optional[int | float] = None,
 ) -> None:
     """
     Adds end-use thermal storage to the system.
@@ -1013,7 +943,7 @@ def add_service_heat_stores(
     """
 
     assert heat_system in ("urban", "rural", "total")
-    assert heat_carrier in ("heat", "space-heat")
+    assert heat_carrier in ("heat", "space-heat", "cool")
 
     # changed stores to be demand response where metrics are exogenously defined
 
@@ -1073,6 +1003,21 @@ def add_service_heat_stores(
     therm_store["y"] = therm_store.index.map(n.buses.y)
     therm_store["carrier"] = f"{sector}-{heat_system}-{heat_carrier}"
 
+    therm_store["p_nom"] = n.loads_t["p_set"][therm_store.index].max().round(2)
+
+    if not dr_shift:
+        dr_shift = 0
+
+    # apply shiftable load via p_max_pu
+    # first calc the raw max shiftable load per timestep
+    # normalize agaist the max load value
+    # ie. if shiftable load is 10%
+    #   p_max_mu.max() will return a vector of all '0.10' values
+
+    p_max_pu = (
+        n.loads_t["p_set"][therm_store.index].mul(dr_shift).div(n.loads_t["p_set"][therm_store.index].max()).round(4)
+    )
+
     n.madd(
         "Bus",
         therm_store.index,
@@ -1083,6 +1028,7 @@ def add_service_heat_stores(
         unit="MWh",
     )
 
+    # by default, no demand response
     n.madd(
         "Link",
         therm_store.index,
@@ -1091,7 +1037,9 @@ def add_service_heat_stores(
         bus1=therm_store.bus1,
         efficiency=efficiency,
         carrier=therm_store.carrier,
-        p_nom_extendable=True,
+        p_nom_extendable=False,
+        p_nom=therm_store.p_nom,
+        p_max_pu=p_max_pu,
     )
 
     n.madd(

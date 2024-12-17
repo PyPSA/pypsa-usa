@@ -401,11 +401,28 @@ if __name__ == "__main__":
     cop_ashp_path = snakemake.input.cop_air_total
     cop_gshp_path = snakemake.input.cop_soil_total
 
-    # demand response options the all sectors/carriers
-    demand_response_options = snakemake.params.sector["demand_response"]
+    # demand response options are partly applied at model building
+    dr_config = {}
+    dr_config["res"] = snakemake.params.sector["service_sector"].get(
+        "demand_response",
+        {},
+    )
+    dr_config["com"] = snakemake.params.sector["service_sector"].get(
+        "demand_response",
+        {},
+    )
+    dr_config["ind"] = snakemake.params.sector["industrial_sector"].get(
+        "demand_response",
+        {},
+    )
+    dr_config["trn"] = snakemake.params.sector["transport_sector"].get(
+        "demand_response",
+        {},
+    )
 
     # add electricity infrastructure
-    build_electricty(n=n)
+    for sector in ["res", "com", "ind"]:
+        build_electricty(n=n, sector=sector, demand_response=dr_config[sector])
 
     dynamic_cost_year = sns.year.min()
 
