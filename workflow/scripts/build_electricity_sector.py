@@ -104,10 +104,8 @@ def add_electricity_stores(
         bus1=df.index + "-store",
         efficiency=1,
         carrier=df.carrier,
-        p_nom_extendable=False,
+        p_nom_extendable=True,
         capital_cost=0,
-        p_nom=df.p_nom,
-        p_max_pu=p_max_pu,
     )
 
     n.madd(
@@ -119,7 +117,9 @@ def add_electricity_stores(
         efficiency=1,
         carrier=df.carrier,
         p_nom_extendable=True,
-        capital_cost=0,
+        p_nom_extendable=False,
+        p_nom=df.p_nom,
+        p_max_pu=p_max_pu,
     )
 
     n.madd(

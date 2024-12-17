@@ -1037,9 +1037,8 @@ def add_service_heat_stores(
         bus1=therm_store.bus1,
         efficiency=efficiency,
         carrier=therm_store.carrier,
-        p_nom_extendable=False,
-        p_nom=therm_store.p_nom,
-        p_max_pu=p_max_pu,
+        p_nom_extendable=True,
+        capital_cost=0,
     )
 
     n.madd(
@@ -1050,7 +1049,9 @@ def add_service_heat_stores(
         bus1=therm_store.bus0,
         efficiency=efficiency,
         carrier=therm_store.carrier,
-        p_nom_extendable=True,
+        p_nom_extendable=False,
+        p_nom=therm_store.p_nom,
+        p_max_pu=p_max_pu,
     )
 
     n.madd(
