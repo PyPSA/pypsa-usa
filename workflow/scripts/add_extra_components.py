@@ -444,7 +444,6 @@ def attach_multihorizon_egs(
     base_year = n.investment_periods[0]
     learning_ratio = costs.loc["EGS", "capex_per_kw"] / costs_dict[base_year].loc["EGS", "capex_per_kw"]
     capital_cost = learning_ratio * gens["capital_cost"]
-
     n.madd(
         "Generator",
         gens.index,

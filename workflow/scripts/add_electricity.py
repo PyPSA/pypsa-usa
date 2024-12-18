@@ -589,7 +589,6 @@ def attach_egs(
     car = "EGS"
     if car not in carriers:
         return
-
     add_missing_carriers(n, carriers)
     capital_recovery_period = 25  # Following EGS supply curves by Aljubran et al. (2024)
     discount_rate = 0.07  # load_costs(snakemake.input.tech_costs).loc["geothermal", "wacc_real"]
