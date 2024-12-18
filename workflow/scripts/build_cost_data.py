@@ -513,6 +513,11 @@ if __name__ == "__main__":
     )
     pudl_atb = pudl_atb.reset_index(drop=True)
     pudl_atb["value"] = pudl_atb["value"].round(3)
+
+    egs_costs = pd.read_csv(snakemake.input.egs_costs)
+    egs_costs = egs_costs.query("investment_horizon == @tech_year").drop(columns="investment_horizon")
+    pudl_atb = pd.concat([pudl_atb, egs_costs], ignore_index=True)
+
     pudl_atb.to_csv(snakemake.output.tech_costs, index=False)
 
     # sector costs

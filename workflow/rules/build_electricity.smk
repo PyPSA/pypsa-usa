@@ -99,6 +99,7 @@ rule build_cost_data:
         efs_tech_costs="repo_data/costs/EFS_Technology_Data.xlsx",
         efs_icev_costs="repo_data/costs/efs_icev_costs.csv",
         eia_tech_costs="repo_data/costs/eia_tech_costs.csv",
+        egs_costs="repo_data/costs/egs_costs.csv",
         additional_costs="repo_data/costs/additional_costs.csv",
     output:
         tech_costs=RESOURCES + "costs/costs_{year}.csv",
