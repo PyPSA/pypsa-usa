@@ -408,7 +408,6 @@ def attach_renewable_capacities_to_atlite(
         mapped_values = generators_tech.sub_assignment.map(caps_per_bus).dropna()
         n.generators.loc[mapped_values.index, "p_nom"] = mapped_values
         n.generators.loc[mapped_values.index, "p_nom_min"] = mapped_values
-
         mapped_values = generators_tech.sub_assignment.map(build_year_avg.build_year).dropna()
         n.generators.loc[mapped_values.index, "build_year"] = mapped_values.astype(int)
 
@@ -569,6 +568,7 @@ def attach_wind_and_solar(
                 marginal_cost=costs.at[car, "marginal_cost"],
                 capital_cost=capital_cost,
                 efficiency=1,
+                build_year=n.investment_periods[0],
                 lifetime=costs.at[car, "lifetime"],
                 p_max_pu=bus_profiles,
             )
@@ -678,6 +678,8 @@ def attach_egs(
                 capital_cost=capital_cost,
                 efficiency=efficiency,
                 p_max_pu=bus_profiles,
+                build_year=n.investment_periods[0],
+                lifetime=capital_recovery_period,
             )
 
 
@@ -874,6 +876,8 @@ def attach_breakthrough_renewable_plants(
             p_nom_extendable=False,
             carrier=tech,
             weight=1.0,
+            build_year=n.investment_periods[0],
+            lifetime=np.inf,
         )
     return n
 

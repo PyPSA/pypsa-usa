@@ -649,7 +649,6 @@ if __name__ == "__main__":
             economic_retirement_gens,
             economic=True,
         )
-
     # Split renewable generators from the first investement period
     split_retirement_gens(
         n,
