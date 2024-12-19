@@ -46,8 +46,10 @@ import pandas as pd
 import pypsa
 import xarray as xr
 from _helpers import (
+    calculate_annuity,
     configure_logging,
     export_network_for_gis_mapping,
+    load_costs,
     update_p_nom_max,
     weighted_avg,
 )
@@ -508,7 +510,7 @@ def attach_wind_and_solar(
     """
     add_missing_carriers(n, carriers)
     for car in carriers:
-        if car == "hydro":
+        if car in ["hydro", "EGS"]:
             continue
 
         with xr.open_dataset(getattr(input_profiles, "profile_" + car)) as ds:
@@ -568,6 +570,113 @@ def attach_wind_and_solar(
                 capital_cost=capital_cost,
                 efficiency=1,
                 lifetime=costs.at[car, "lifetime"],
+                p_max_pu=bus_profiles,
+            )
+
+
+def attach_egs(
+    n: pypsa.Network,
+    costs: pd.DataFrame,
+    input_profiles: str,
+    carriers: list[str],
+    extendable_carriers: dict[str, list[str]],
+    line_length_factor=1,
+):
+    """
+    Attached STM Calculated wind and solar capacity factor profiles to the
+    network.
+    """
+    car = "EGS"
+    if car not in carriers:
+        return
+    add_missing_carriers(n, carriers)
+    capital_recovery_period = 25  # Following EGS supply curves by Aljubran et al. (2024)
+    discount_rate = 0.07  # load_costs(snakemake.input.tech_costs).loc["geothermal", "wacc_real"]
+    drilling_cost = snakemake.config["renewable"]["EGS"]["drilling_cost"]
+
+    with xr.open_dataset(
+        getattr(input_profiles, "specs_egs"),
+    ) as ds_specs, xr.open_dataset(
+        getattr(input_profiles, "profile_egs"),
+    ) as ds_profile:
+
+        bus2sub = (
+            pd.read_csv(input_profiles.bus2sub, dtype=str)
+            .drop("interconnect", axis=1)
+            .rename(columns={"Bus": "bus_id"})
+        )
+
+        # IGNORE: Remove dropna(). Rather, apply dropna when creating the original dataset
+        df_specs = pd.merge(
+            ds_specs.to_dataframe().reset_index().dropna(),
+            bus2sub,
+            on="sub_id",
+            how="left",
+        )
+        df_specs["bus_id"] = df_specs["bus_id"].astype(str)
+
+        # bus_id must be in index for pypsa to read it
+        df_specs.set_index("bus_id", inplace=True)
+
+        # columns must be renamed to refer to the right quantities for pypsa to read it correctly
+        logger.info(f"Using {drilling_cost} EGS drilling costs.")
+        df_specs = df_specs.rename(
+            columns={
+                "advanced_capex_usd_kw" if drilling_cost == "advanced" else "capex_usd_kw": "capital_cost",
+                "avail_capacity_mw": "p_nom_max",
+                "fixed_om": "fixed_om",
+            },
+        )
+
+        # TODO: come up with proper values for these params
+
+        df_specs["capital_cost"] = 1000 * (
+            df_specs["capital_cost"] * calculate_annuity(capital_recovery_period, discount_rate) + df_specs["fixed_om"]
+        )  # convert and annualize USD/kW to USD/MW-year
+        df_specs["efficiency"] = 1.0
+
+        df_specs = df_specs.loc[~(df_specs.index == "nan")]
+
+        # TODO: review what qualities need to be included. Currently limited for speedup.
+        qualities = [1]  # df_specs.Quality.unique()
+
+        for q in qualities:
+            suffix = " " + car  # + f" Q{q}"
+            df_q = df_specs[df_specs["Quality"] == q]
+
+            bus_list = df_q.index.values
+            capital_cost = df_q["capital_cost"]
+            p_nom_max_bus = df_q["p_nom_max"]
+            efficiency = df_q["efficiency"]  # for now.
+
+            # IGNORE: Remove dropna(). Rather, apply dropna when creating the original dataset
+            df_q_profile = pd.merge(
+                ds_profile.sel(Quality=q).to_dataframe().dropna().reset_index(),
+                bus2sub,
+                on="sub_id",
+                how="left",
+            )
+            bus_profiles = pd.pivot_table(
+                df_q_profile,
+                columns="bus_id",
+                index=["year", "Date"],
+                values="capacity_factor",
+            )
+
+            logger.info(
+                f"Adding EGS (Resource Quality-{q}) capacity-factor profiles to the network.",
+            )
+
+            n.madd(
+                "Generator",
+                bus_list,
+                suffix,
+                bus=bus_list,
+                carrier=car,
+                p_nom_extendable=car in extendable_carriers["Generator"],
+                p_nom_max=p_nom_max_bus,
+                capital_cost=capital_cost,
+                efficiency=efficiency,
                 p_max_pu=bus_profiles,
             )
 
@@ -847,6 +956,15 @@ def main(snakemake):
         reeds_shapes,
     )
     plants = match_plant_to_bus(n, plants)
+
+    attach_egs(
+        n,
+        costs,
+        snakemake.input,
+        renewable_carriers,
+        extendable_carriers,
+        params.length_factor,
+    )
 
     attach_conventional_generators(
         n,
