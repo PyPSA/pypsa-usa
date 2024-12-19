@@ -361,7 +361,6 @@ def add_service_heat(
     marginal_gas: Optional[pd.DataFrame | float] = None,
     marginal_oil: Optional[pd.DataFrame | float] = None,
     water_heating_config: Optional[dict[str, Any]] = None,
-    demand_response: Optional[dict[str, Any]] = None,
 ):
     """
     Adds heating links for residential and commercial sectors.
@@ -462,11 +461,6 @@ def add_service_heat(
                 marginal_oil,
             )
 
-        if not demand_response:
-            dr_shift = 0
-        else:
-            dr_shift = demand_response.get("shift", 0)
-
         add_service_heat_stores(
             n=n,
             sector=sector,
@@ -474,7 +468,6 @@ def add_service_heat(
             heat_carrier=heat_carrier,
             costs=costs,
             standing_loss=standing_loss_space_heat,
-            dr_shift=dr_shift,
         )
 
         # check if water heat is needed
@@ -922,7 +915,6 @@ def add_service_heat_stores(
     heat_carrier: str,
     costs: pd.DataFrame,
     standing_loss: Optional[float] = None,
-    dr_shift: Optional[int | float] = None,
 ) -> None:
     """
     Adds end-use thermal storage to the system.
@@ -1003,21 +995,6 @@ def add_service_heat_stores(
     therm_store["y"] = therm_store.index.map(n.buses.y)
     therm_store["carrier"] = f"{sector}-{heat_system}-{heat_carrier}"
 
-    therm_store["p_nom"] = n.loads_t["p_set"][therm_store.index].max().round(2)
-
-    if not dr_shift:
-        dr_shift = 0
-
-    # apply shiftable load via p_max_pu
-    # first calc the raw max shiftable load per timestep
-    # normalize agaist the max load value
-    # ie. if shiftable load is 10%
-    #   p_max_mu.max() will return a vector of all '0.10' values
-
-    p_max_pu = (
-        n.loads_t["p_set"][therm_store.index].mul(dr_shift).div(n.loads_t["p_set"][therm_store.index].max()).round(4)
-    )
-
     n.madd(
         "Bus",
         therm_store.index,
@@ -1028,7 +1005,6 @@ def add_service_heat_stores(
         unit="MWh",
     )
 
-    # by default, no demand response
     n.madd(
         "Link",
         therm_store.index,
@@ -1037,8 +1013,8 @@ def add_service_heat_stores(
         bus1=therm_store.bus1,
         efficiency=efficiency,
         carrier=therm_store.carrier,
-        p_nom_extendable=True,
-        capital_cost=0,
+        p_nom_extendable=False,
+        p_nom=np.inf,
     )
 
     n.madd(
@@ -1050,8 +1026,7 @@ def add_service_heat_stores(
         efficiency=efficiency,
         carrier=therm_store.carrier,
         p_nom_extendable=False,
-        p_nom=therm_store.p_nom,
-        p_max_pu=p_max_pu,
+        p_nom=np.inf,
     )
 
     n.madd(
