@@ -1,8 +1,6 @@
 """
 Module for adding the gas sector.
 
-**Description**
-
 This module will add a state level copperplate natural gas network to the model.
 Specifically, it will do the following
 
@@ -13,51 +11,14 @@ Specifically, it will do the following
 - Creates capacity constrained pipelines to states neighbouring the interconnect
 - Creates capacity and energy constrained import/exports to international connections
 - Adds import/export historical natural gas prices
-
-
-**Relevant Settings**
-
-.. code:: yaml
-
-    sector:
-      natural_gas:
-        allow_imports_exports: true # only true implemented
-        cyclic_storage: false
-
-**Inputs**
-
-- n: pypsa.Network:
-    - Network to add the natural gas network to. Note, the electrical network represntation should be done by this point.
-
-- year: int,
-    - Year to extract natural gas data for. Must be between ``2009`` and ``2022``
-
-- api: str,
-    - EIA API key. Get from https://www.eia.gov/opendata/register.php
-
-- interconnect: str = "western",
-    - Name of interconnect. Must be in ("eastern", "western", "texas", "usa")
-
-- county_path: str
-    - ``data/counties/cb_2020_us_county_500k.shp``: County shapes in the USA
-
-- pipelines_path: str
-    - ``EIA-StatetoStateCapacity_Jan2023.xlsx`` : State to state pipeline capacity from EIA
-
-- pipeline_shape_path: str:
-    - ``pipelines.geojson`` at a National level
-
-**Outputs**
-
-- `pypsa.Network`
 """
 
 import logging
 
-import constants
 import geopandas as gpd
 import pandas as pd
 import pypsa
+from constants import NG_MWH_2_MMCF, STATE_2_CODE, STATES_INTERCONNECT_MAPPER
 from pypsa.components import Network
 
 logger = logging.getLogger(__name__)
@@ -74,8 +35,10 @@ import yaml
 ###
 
 # for converting everthing into MWh_th
-MWH_2_MMCF = constants.NG_MWH_2_MMCF
+MWH_2_MMCF = NG_MWH_2_MMCF
 KJ_2_MWH = (1 / 1000) * (1 / 3600)
+
+CODE_2_STATE = {v: k for k, v in STATE_2_CODE.items()}
 
 ###
 # Geolocation of Assets class
@@ -158,10 +121,10 @@ class GasData(ABC):
     Main class to interface with data.
     """
 
-    state_2_interconnect = constants.STATES_INTERCONNECT_MAPPER
-    state_2_name = {v: k for k, v in constants.STATE_2_CODE.items()}
-    name_2_state = constants.STATE_2_CODE
-    states_2_remove = [x for x, y in constants.STATES_INTERCONNECT_MAPPER.items() if not y]
+    state_2_interconnect = STATES_INTERCONNECT_MAPPER
+    state_2_name = CODE_2_STATE
+    name_2_state = STATE_2_CODE
+    states_2_remove = [x for x, y in STATES_INTERCONNECT_MAPPER.items() if not y]
 
     def __init__(self, year: int, interconnect: str) -> None:
         self.year = year
@@ -271,7 +234,7 @@ class GasBuses(GasData):
             ~n.buses.carrier.isin(
                 ["gas storage", "gas trade", "gas pipeline"],
             )
-        ].STATE.unique()
+        ].reeds_state.unique()
 
         if "STATE" not in df.columns:
             logger.debug(
@@ -363,7 +326,7 @@ class GasStorage(GasData):
             ~n.buses.carrier.isin(
                 ["gas storage", "gas trade", "gas pipeline"],
             )
-        ].STATE.unique()
+        ].reeds_state.unique()
 
         if "STATE" not in df.columns:
             logger.debug(
@@ -479,7 +442,7 @@ class GasProcessing(GasData):
             ~n.buses.carrier.isin(
                 ["gas storage", "gas trade", "gas pipeline"],
             )
-        ].STATE.unique()
+        ].reeds_state.unique()
 
         if "STATE" not in df.columns:
             logger.debug(
@@ -566,8 +529,15 @@ class GasProcessing(GasData):
 
 class _GasPipelineCapacity(GasData):
 
-    def __init__(self, year: int, interconnect: str, xlsx: str) -> None:
+    def __init__(
+        self,
+        year: int,
+        interconnect: str,
+        xlsx: str,
+        api: Optional[str] = None,
+    ) -> None:
         self.xlsx = xlsx
+        self.api = api
         super().__init__(year, interconnect)
 
     def read_data(self) -> pd.DataFrame:
@@ -583,7 +553,7 @@ class _GasPipelineCapacity(GasData):
             ~n.buses.carrier.isin(
                 ["gas storage", "gas trade", "gas pipeline"],
             )
-        ].STATE.unique()
+        ].reeds_state.unique()
 
     def filter_on_sate(
         self,
@@ -652,7 +622,62 @@ class _GasPipelineCapacity(GasData):
         ]
 
         df = self.assign_pipeline_interconnects(df)
+
+        if self.api:
+            trade = self._get_capacity_based_on_trade_flows()
+            df = self._merge_capacity_trade_data(df, trade)
+
+        # slight buffer for when building constraints
+        df["CAPACITY_MW"] = np.ceil(df["CAPACITY_MW"].mul(1.02))
+
         return self.extract_pipelines(df)
+
+    def _get_capacity_based_on_trade_flows(self) -> pd.DataFrame:
+        """Check that trade flows do not exceed design capacity
+
+        See Issue #487
+        https://github.com/PyPSA/pypsa-usa/issues/487
+        """
+        df = pd.concat(
+            [
+                eia.Trade("gas", False, "exports", self.year, self.api).get_data(),
+                eia.Trade("gas", True, "exports", self.year, self.api).get_data(),
+            ],
+        )
+        df["STATE_FROM"] = df.state.map(lambda x: x.split("-")[0])
+        df["STATE_TO"] = df.state.map(lambda x: x.split("-")[1])
+        df["CAPACITY_MW"] = df.value.mul(MWH_2_MMCF).div(365).div(24)  # MMCF/year -> MW
+        df = df.reset_index(drop=True).drop(
+            columns=["series-description", "value", "units", "state"],
+        )
+        df["STATE_NAME_TO"] = df.STATE_TO.map(self.state_2_name)
+        df["STATE_NAME_FROM"] = df.STATE_FROM.map(self.state_2_name)
+        df["INTERCONNECT_TO"] = df.STATE_TO.map(self.state_2_interconnect)
+        df["INTERCONNECT_FROM"] = df.STATE_FROM.map(self.state_2_interconnect)
+
+        return df
+
+    def _merge_capacity_trade_data(
+        self,
+        capacity: pd.DataFrame,
+        trade: pd.DataFrame,
+    ) -> pd.DataFrame:
+
+        df = pd.concat([capacity, trade])
+        df = df.sort_values(by="CAPACITY_MW", ascending=False)
+        df = df.drop_duplicates(
+            subset=[
+                "STATE_NAME_TO",
+                "STATE_NAME_FROM",
+                "STATE_TO",
+                "STATE_FROM",
+                "INTERCONNECT_TO",
+                "INTERCONNECT_FROM",
+            ],
+            keep="first",
+        )
+
+        return df.sort_values("STATE_NAME_TO")
 
     @abstractmethod
     def build_infrastructure(self, n: pypsa.Network) -> None:
@@ -688,8 +713,14 @@ class InterconnectGasPipelineCapacity(_GasPipelineCapacity):
     Pipeline capacity within the interconnect.
     """
 
-    def __init__(self, year: int, interconnect: str, xlsx: str) -> None:
-        super().__init__(year, interconnect, xlsx)
+    def __init__(
+        self,
+        year: int,
+        interconnect: str,
+        xlsx: str,
+        api: Optional[str] = None,
+    ) -> None:
+        super().__init__(year, interconnect, xlsx, api)
 
     def extract_pipelines(self, data: pd.DataFrame) -> pd.DataFrame:
 
@@ -757,8 +788,7 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
         domestic: bool = True,
     ) -> None:
         self.domestic = domestic
-        self.api = api
-        super().__init__(year, interconnect, xlsx)
+        super().__init__(year, interconnect, xlsx, api)
 
     def extract_pipelines(self, data: pd.DataFrame) -> pd.DataFrame:
 
@@ -1026,7 +1056,9 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
 
         # remove any conections within geographic scope
         if self.domestic:
-            template = template[~(template.STATE_TO.isin(n.buses.STATE) & template.STATE_FROM.isin(n.buses.STATE))]
+            template = template[
+                ~(template.STATE_TO.isin(n.buses.reeds_state) & template.STATE_FROM.isin(n.buses.reeds_state))
+            ]
 
         store_imports = template[template.store == "import"].copy()
         store_exports = template[template.store == "export"].copy()
@@ -1138,7 +1170,7 @@ class PipelineLinepack(GasData):
             ~n.buses.carrier.isin(
                 ["gas storage", "gas trade", "gas pipeline"],
             )
-        ].STATE.unique()
+        ].reeds_state.unique()
 
         if "STATE" not in df.columns:
             logger.debug(
@@ -1254,7 +1286,7 @@ def build_natural_gas(
     api: str,
     interconnect: str = "western",
     county_path: str = "../data/counties/cb_2020_us_county_500k.shp",
-    pipelines_path: str = "../data/natural_gas/EIA-StatetoStateCapacity_Jan2023.xlsx",
+    pipelines_path: str = "../data/natural_gas/EIA-StatetoStateCapacity_Feb2024.xlsx",
     pipeline_shape_path: str = "../data/natural_gas/pipelines.geojson",
     options: Optional[dict[str, Any]] = None,
     **kwargs,
@@ -1278,7 +1310,7 @@ def build_natural_gas(
 
     # add interconnect pipelines
 
-    pipelines = InterconnectGasPipelineCapacity(year, interconnect, pipelines_path)
+    pipelines = InterconnectGasPipelineCapacity(year, interconnect, pipelines_path, api)
     pipelines.build_infrastructure(n)
 
     # add pipelines for imports/exports
@@ -1314,9 +1346,18 @@ def build_natural_gas(
 
 
 if __name__ == "__main__":
-    n = pypsa.Network("../resources/Default/western/elec_s12_c6_ec_lv1.0_48SEG.nc")
-    year = 2019
+    n = pypsa.Network("../resources/Washington/western/elec_s10_c4m_ec_lv1.0_3h.nc")
+    year = 2018
     with open("./../config/config.api.yaml") as file:
         yaml_data = yaml.safe_load(file)
     api = yaml_data["api"]["eia"]
+
+    pipelines = InterconnectGasPipelineCapacity(
+        year,
+        "western",
+        "../data/natural_gas/EIA-StatetoStateCapacity_Feb2024.xlsx",
+        api,
+    )
+    # pipelines.build_infrastructure(n)
+
     build_natural_gas(n=n, year=year, api=api)

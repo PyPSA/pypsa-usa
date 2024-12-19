@@ -15,9 +15,8 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 import pypsa
-import yaml
 from build_heat import combined_heat
-from constants import STATE_2_CODE, STATES_CENSUS_DIVISION_MAPPER
+from constants import STATE_2_CODE, STATES_CENSUS_DIVISION_MAPPER, STATES_CENSUS_MAPPER
 from constants_sector import RoadTransport, SecCarriers, SecNames, Transport
 from eia import TransportationFuelUse
 
@@ -34,6 +33,7 @@ CECS_BUILD_YEARS = {
     2009: 15.6,
     2000: 50.0,  # assumed from replacement from 2000 data
 }
+
 """
 Hardcoded appliance build years from residenital energy consumption survey
 https://www.eia.gov/consumption/residential/data/2020/hc/pdf/HC%206.1.pdf
@@ -46,6 +46,17 @@ RECS_BUILD_YEARS = {
     2010: 18.0,
     2005: 11.9,
     2000: 19.1,
+}
+
+"""
+No data on build years is found. So roll back builds in 5 year segments
+"""
+MECS_BUILD_YEARS = {
+    # year_built: percent of stock
+    2022: 25,
+    2017: 25,
+    2012: 25,
+    2007: 25,
 }
 
 
@@ -553,6 +564,103 @@ def get_transport_stock(api: str, year: int) -> pd.DataFrame:
     )
 
     return df.loc[["electricity", "lpg", "gas"]]
+
+
+def get_industrial_stock(xlsx: str) -> pd.DataFrame:
+
+    def _get_census_to_state(data: dict[str, str]) -> dict[str, list[str]]:
+        mapper = {}
+        for state, census in data.items():
+            if not census:
+                continue
+            try:
+                mapper[census] = mapper[census] + [state]
+            except KeyError:
+                mapper[census] = [state]
+        mapper["total"] = ["U.S."]
+        return mapper
+
+    def _get_data(xlsx: str) -> pd.DataFrame:
+
+        cols_renamed = {
+            "Code(a)": "NAICS",
+            "Electricity(a)": "electricity",
+            "Fuel Oil": "lpg",
+            "Diesel Fuel(b)": "lpg",
+            "Gas(c)": "gas",
+            "natural gasoline)(d)": "lpg",
+            "Coke and Breeze)": "coal",
+            "Other(e)": "other",
+            "End Use": "load",
+        }
+
+        return (
+            pd.read_excel(xlsx, sheet_name="Table 5.6", header=11)
+            .rename(columns=cols_renamed)
+            .dropna(axis=0, how="all")
+        )
+
+    def _format_raw_data(df: pd.DataFrame) -> pd.DataFrame:
+
+        slicer = [
+            "TOTAL FUEL CONSUMPTION",
+            "Indirect Uses-Boiler Fuel",
+            "Direct Uses-Total Process",
+            "Direct Uses-Total Nonprocess",
+            "End Use Not Reported",
+        ]
+
+        end_use_mapper = {
+            "Conventional Boiler Use": "heat",
+            "CHP and/or Cogeneration Process": "heat",
+            "Process Heating": "heat",
+            "Process Cooling and Refrigeration": "cool",
+            "Machine Drive": "electricity",
+            "Electro-Chemical Processes": "electricity",
+            "Other Process Use": "other",
+            "Facility HVAC (f)": "electricity",
+            "Facility Lighting": "electricity",
+            "Other Facility Support": "other",
+            "Onsite Transportation": "other",
+            "Conventional Electricity Generation": "other",  # note this!
+            "Other Nonprocess Use": "other",
+        }
+
+        df["region"] = df[df.Total.apply(lambda x: len(str(x)) > 7)].Total
+        df["region"] = df.region.ffill()
+        df = df.dropna(subset="load").drop(columns=["Total", "other"])
+        df = df[~df["load"].isin(slicer)]
+        df["load"] = df["load"].str.strip()
+        df["load"] = df["load"].map(end_use_mapper)
+        df = (
+            df.set_index(["load", "region"], drop=True)
+            .replace({"*": "0", "Q": "0", "W": "0", "--": "0", "D": "0"})
+            .astype(float)
+            .reset_index()
+        )
+        df = df.groupby(["load", "region"]).sum().T.groupby(level=0).sum().T
+        return df
+
+    def _convert_to_percentage(df: pd.DataFrame) -> pd.DataFrame:
+        df["total"] = df["coal"] + df["electricity"] + df["gas"] + df["lpg"]
+        df["coal"] = df["coal"].div(df["total"]).mul(100)
+        df["electricity"] = df["electricity"].div(df["total"]).mul(100)
+        df["gas"] = df["gas"].div(df["total"]).mul(100)
+        df["lpg"] = df["lpg"].div(df["total"]).mul(100)
+        return df[["electricity", "gas", "lpg", "coal"]].round(2)
+
+    def _explode_to_states(df: pd.DataFrame) -> pd.DataFrame:
+        census_2_state = _get_census_to_state(STATES_CENSUS_MAPPER)
+        df = df.reset_index()
+        df["region"] = df.region.map(lambda x: x.split(" ")[0].lower()).map(
+            census_2_state,
+        )
+        return df.explode("region").rename(columns={"region": "state"}).set_index(["load", "state"])
+
+    mecs = _get_data(xlsx)
+    mecs = _format_raw_data(mecs)
+    mecs = _convert_to_percentage(mecs)
+    return _explode_to_states(mecs)
 
 
 ###
@@ -1417,6 +1525,175 @@ def add_service_brownfield(
 
     # need to add in logic to pull eff profile from new builds
     # add_brownfield_heat_pump(n, df, sector, ratios, costs)
+
+
+def add_industrial_brownfield(
+    n: pypsa.Network,
+    fuel: str,
+    growth_multiplier: float,
+    ratios: pd.DataFrame,
+    costs: pd.DataFrame,
+) -> None:
+    """
+    Adds existing stock to industrial sector.
+    """
+
+    def add_brownfield_gas_furnace(
+        n: pypsa.Network,
+        template: pd.DataFrame,
+        ratios: pd.DataFrame,
+        costs: pd.DataFrame,
+    ) -> None:
+
+        sector = SecNames.INDUSTRY.value
+
+        df = template.copy()
+
+        # will give approximate installed capacity percentage by year
+        installed_capacity = MECS_BUILD_YEARS
+        lifetime = costs.at["direct firing gas", "lifetime"]
+        efficiency = 0.95
+
+        efficiency2 = costs.at["gas", "co2_emissions"]
+
+        df["bus0"] = df.state + " gas"
+        df["bus2"] = df.state + f" {sector}-co2"
+
+        df["carrier"] = f"{sector}-gas-furnace"
+
+        df["ratio"] = df.state.map(ratios.gas)
+        df["p_nom"] = df.p_max.mul(df.ratio).div(100).div(efficiency)  # div to convert from %
+
+        marginal_cost_names = [x.replace("heat", "gas-furnace") for x in df.bus1.to_list()]
+        marginal_cost = _get_marginal_cost(n, marginal_cost_names)
+
+        start_year = n.investment_periods[0]
+
+        for build_year, percent in installed_capacity.items():
+
+            if _already_retired(build_year, lifetime, start_year):
+                continue
+
+            furnaces = df.copy()
+
+            furnaces["name"] = furnaces.name + f" existing_{build_year} " + furnaces.carrier
+            furnaces["p_nom"] = furnaces.p_nom.mul(percent).div(100).round(2)
+            furnaces = furnaces.set_index("name")
+
+            if isinstance(marginal_cost, pd.DataFrame):
+                mc = marginal_cost.copy()
+                name_mapper = furnaces["bus1"].str.replace("-heat", "-gas-furnace").to_dict()
+                mc = mc.rename(columns={v: k for k, v in name_mapper.items()})
+            else:
+                mc = marginal_cost
+                assert isinstance(mc, (float, int))
+
+            n.madd(
+                "Link",
+                furnaces.index,
+                bus0=furnaces.bus0,
+                bus1=furnaces.bus1,
+                bus2=furnaces.bus2,
+                carrier=furnaces.carrier,
+                efficiency=efficiency,
+                efficiency2=efficiency2,
+                capital_cost=0,
+                p_nom_extendable=False,
+                p_nom=furnaces.p_nom,
+                lifetime=lifetime,
+                build_year=build_year,
+                marginal_cost=mc,
+            )
+
+    def add_brownfield_oil_furnace(
+        n: pypsa.Network,
+        template: pd.DataFrame,
+        ratios: pd.DataFrame,
+        costs: pd.DataFrame,
+    ) -> None:
+        pass
+
+    def add_brownfield_coal_furnace(
+        n: pypsa.Network,
+        template: pd.DataFrame,
+        ratios: pd.DataFrame,
+        costs: pd.DataFrame,
+    ) -> None:
+
+        sector = SecNames.INDUSTRY.value
+
+        df = template.copy()
+
+        # will give approximate installed capacity percentage by year
+        installed_capacity = MECS_BUILD_YEARS
+        lifetime = costs.at["direct firing coal", "lifetime"]
+        # efficiency = costs.at["direct firing coal", "efficiency"]
+        efficiency = 0.95
+
+        efficiency2 = costs.at["coal", "co2_emissions"]
+
+        df["bus0"] = df.state + " coal"
+        df["bus2"] = df.state + f" {sector}-co2"
+
+        df["carrier"] = f"{sector}-coal-furnace"
+
+        df["ratio"] = df.state.map(ratios.coal)
+        df["p_nom"] = df.p_max.mul(df.ratio).div(100).div(efficiency)  # div to convert from %
+
+        marginal_cost_names = [x.replace("heat", "coal-furnace") for x in df.bus1.to_list()]
+        marginal_cost = _get_marginal_cost(n, marginal_cost_names)
+
+        start_year = n.investment_periods[0]
+
+        for build_year, percent in installed_capacity.items():
+
+            if _already_retired(build_year, lifetime, start_year):
+                continue
+
+            furnaces = df.copy()
+
+            furnaces["name"] = furnaces.name + f" existing_{build_year} " + furnaces.carrier
+            furnaces["p_nom"] = furnaces.p_nom.mul(percent).div(100).round(2)
+            furnaces = furnaces.set_index("name")
+
+            if isinstance(marginal_cost, pd.DataFrame):
+                mc = marginal_cost.copy()
+                name_mapper = furnaces["bus1"].str.replace("-heat", "-coal-furnace").to_dict()
+                mc = mc.rename(columns={v: k for k, v in name_mapper.items()})
+            else:
+                mc = marginal_cost
+                assert isinstance(mc, (float, int))
+
+            n.madd(
+                "Link",
+                furnaces.index,
+                bus0=furnaces.bus0,
+                bus1=furnaces.bus1,
+                bus2=furnaces.bus2,
+                carrier=furnaces.carrier,
+                efficiency=efficiency,
+                efficiency2=efficiency2,
+                capital_cost=0,
+                p_nom_extendable=False,
+                p_nom=furnaces.p_nom,
+                lifetime=lifetime,
+                build_year=build_year,
+                marginal_cost=mc,
+            )
+
+    match fuel:
+        case "heat":
+            load = SecCarriers.HEATING.value
+        case _:
+            raise NotImplementedError
+
+    df = _get_brownfield_template_df(n, load, SecNames.INDUSTRY.value)
+    df["p_nom"] = df.p_max.mul(growth_multiplier)
+
+    if load == "heat":
+        add_brownfield_gas_furnace(n, df, ratios, costs)
+        # add_brownfield_oil_furnace(n, df, ratios, costs)
+        add_brownfield_coal_furnace(n, df, ratios, costs)
 
 
 if __name__ == "__main__":

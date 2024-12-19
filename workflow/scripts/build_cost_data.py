@@ -445,6 +445,20 @@ if __name__ == "__main__":
         values="value",
     ).reset_index()
 
+    # Create Hydrogen Combustion Turbine from OCGT using assumptions per ReEDS
+    # https://nrel.github.io/ReEDS-2.0/model_documentation.html#hydrogen
+    hydrogen_ct = pivot_atb[pivot_atb["pypsa-name"] == "OCGT"].copy()
+    hydrogen_ct["pypsa-name"] = "hydrogen_ct"
+    hydrogen_ct["capex_overnight_per_kw"] *= 1.2
+    hydrogen_ct["capex_per_kw"] = (
+        (hydrogen_ct["capex_overnight_per_kw"] + hydrogen_ct["capex_grid_connection_per_kw"])
+        * hydrogen_ct["capex_construction_finance_factor"]
+        / 100
+    )
+    hydrogen_ct["fuel_cost_real_per_mwhth"] = 20 * 3.412  # 20 USD/MMBtu * 3.412 MMBtu/MWh_th
+    hydrogen_ct["co2_emissions"] = 0
+    pivot_atb = pd.concat([pivot_atb, hydrogen_ct], ignore_index=True)
+
     pivot_atb["efficiency"] = 3.412 / pivot_atb["heat_rate_mmbtu_per_mwh"]
     pivot_atb["fuel_cost"] = pivot_atb["fuel_cost_real_per_mwhth"] / pivot_atb["efficiency"]
     pivot_atb["marginal_cost"] = pivot_atb["opex_variable_per_mwh"] + pivot_atb["fuel_cost"]
