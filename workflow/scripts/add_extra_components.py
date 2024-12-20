@@ -530,11 +530,18 @@ def attach_multihorizon_new_generators(n, costs, carriers, investment_year):
     min_years = snakemake.config["costs"].get("min_year")
     buses_i = n.buses.index
     for carrier in carriers:
+        p_max_pu_t = None
         if min_years and min_years.get(carrier, np.inf) > investment_year:
             continue
 
-        existing_gens = n.generators[n.generators.carrier == carrier]
+        existing_gens = n.generators[
+            ((n.generators.carrier == carrier) & ~n.generators.index.str.contains("existing"))
+        ].copy()
+
         if not existing_gens.empty:
+            p_max_pu_t = n.get_switchable_as_dense("Generator", "p_max_pu")
+            p_max_pu_t = (p_max_pu_t[[x for x in existing_gens.index if x in p_max_pu_t.columns]]).mean().mean()
+
             n.mremove("Generator", existing_gens.index)
             logger.info(f"Removed {existing_gens.shape[0]} existing generators for {carrier}, to re-add as new carrier")
 
@@ -550,6 +557,9 @@ def attach_multihorizon_new_generators(n, costs, carriers, investment_year):
             efficiency=costs.at[carrier, "efficiency"],
             build_year=investment_year,
             lifetime=costs.at[carrier, "lifetime"],
+            p_max_pu=p_max_pu_t if p_max_pu_t is not None else 1,
+            ramp_limit_up=existing_gens.ramp_limit_up.mean() or 1,
+            ramp_limit_down=existing_gens.ramp_limit_down.mean() or 1,
         )
 
 
