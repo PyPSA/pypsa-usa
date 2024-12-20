@@ -702,23 +702,6 @@ def plot_generator_data_panel(
         n.generators.p_nom_extendable & ~n.generators.index.str.contains("existing"),
         :,
     ]
-    df_capex_retire = n.generators.loc[
-        n.generators.index.str.contains("existing")
-        & ~n.generators.carrier.isin(
-            [
-                "solar",
-                "onwind",
-                "offwind",
-                "offwind_floating",
-                "geothermal",
-                "oil",
-                "hydro",
-                "nuclear",
-                "load",
-            ],
-        ),
-        :,
-    ]
 
     df_storage_units = n.storage_units.loc[n.storage_units.p_nom_extendable, :].copy()
     df_storage_units.loc[:, "efficiency"] = df_storage_units.efficiency_dispatch
@@ -743,7 +726,6 @@ def plot_generator_data_panel(
     )
     sns.barplot(data=df_capex_expand, x="carrier", y="capital_cost", ax=axes[0, 1])
     sns.boxplot(data=df_efficiency, x="carrier", y="efficiency", ax=axes[1, 0])
-    sns.barplot(data=df_capex_retire, x="carrier", y="capital_cost", ax=axes[1, 1])
 
     # Create line plot of declining capital costs
     sns.lineplot(
@@ -754,10 +736,26 @@ def plot_generator_data_panel(
         ax=axes[2, 0],
     )
 
-    sns.barplot(
-        data=n.generators.groupby("carrier").sum().reset_index(),
-        y="p_nom",
-        x="carrier",
+    cf_profiles = n.get_switchable_as_dense("Generator", "p_max_pu")
+    fuel_costs = n.generators.marginal_cost * cf_profiles.sum()
+    n.generators["lcoe"] = (n.generators.capital_cost + fuel_costs) / cf_profiles.sum()
+    n.generators["cf"] = cf_profiles.mean()
+    lcoe_plot_df = n.generators.loc[
+        n.generators.p_nom_extendable & ~n.generators.index.str.contains("existing"),
+        :,
+    ]
+
+    sns.boxplot(
+        data=n.generators,
+        x="cf",
+        y="carrier",
+        ax=axes[1, 1],
+    )
+
+    sns.boxplot(
+        data=lcoe_plot_df,
+        x="lcoe",
+        y="carrier",
         ax=axes[2, 1],
     )
 
@@ -765,9 +763,9 @@ def plot_generator_data_panel(
     axes[0, 0].set_title("Generator Marginal Costs")
     axes[0, 1].set_title("Extendable Capital Costs")
     axes[1, 0].set_title("Plant Efficiency")
-    axes[1, 1].set_title("Fixed O&M Costs of Retiring Units")
+    axes[1, 1].set_title("Capacity Factors by Carrier")
     axes[2, 0].set_title("Expansion Capital Costs by Carrier")
-    axes[2, 1].set_title("Existing Capacity by Carrier")
+    axes[2, 1].set_title("LCOE by Carrier")
 
     # Set labels for each subplot
     axes[0, 0].set_xlabel("")
@@ -777,16 +775,16 @@ def plot_generator_data_panel(
     axes[0, 1].set_ylabel("$ / MW-yr")
     axes[1, 0].set_xlabel("")
     axes[1, 0].set_ylabel("MWh_primary / MWh_elec")
-    axes[1, 1].set_xlabel("")
-    axes[1, 1].set_ylabel("$ / MW-yr")
+    axes[1, 1].set_xlabel("p.u.")
+    axes[1, 1].set_ylabel("")
     axes[2, 0].set_xlabel("Year")
     axes[2, 0].set_ylabel("$ / MW-yr")
-    axes[2, 1].set_xlabel("")
-    axes[2, 1].set_ylabel("MW")
+    axes[2, 1].set_xlabel("$ / MWh")
+    axes[2, 1].set_ylabel("")
 
     # Rotate x-axis labels for each subplot
     for ax in axes.flat:
-        ax.tick_params(axis="x", rotation=35)
+        ax.tick_params(axis="x", rotation=25)
 
     # Lay legend out horizontally
     axes[0, 0].legend(
@@ -935,6 +933,13 @@ if __name__ == "__main__":
     n.generators.to_csv(snakemake.output.generators)
     n.storage_units.to_csv(snakemake.output.storage_units)
 
+    # Panel Plots
+    plot_generator_data_panel(
+        n,
+        snakemake.output["generator_data_panel.pdf"],
+        **snakemake.wildcards,
+    )
+
     # Bar Plots
     plot_capacity_additions_bar(
         n,
@@ -995,13 +1000,6 @@ if __name__ == "__main__":
     plot_fuel_costs(
         n,
         snakemake.output["fuel_costs.pdf"],
-        **snakemake.wildcards,
-    )
-
-    # Panel Plots
-    plot_generator_data_panel(
-        n,
-        snakemake.output["generator_data_panel.pdf"],
         **snakemake.wildcards,
     )
 
