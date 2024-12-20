@@ -310,7 +310,8 @@ def split_retirement_gens(
     )
 
     # Adding Expanding generators for the first investment period
-    # There are generators that exist today and could expand in the first time horizon
+    # There are generators that exist today and could expand
+    # in the first time horizon
     n.madd(
         "Generator",
         retirement_gens.index,
@@ -352,7 +353,7 @@ def split_retirement_gens(
     n.generators_t["p_max_pu"] = n.generators_t["p_max_pu"].join(p_max_pu_t)
 
 
-def attach_multihorizon_generators(
+def attach_multihorizon_existing_generators(
     n: pypsa.Network,
     costs: dict,
     gens: pd.DataFrame,
@@ -361,7 +362,8 @@ def attach_multihorizon_generators(
     """
     Adds multiple investment options for generators types that were already
     existing in the network. Function used for all carriers, renewable and
-    conventional.
+    conventional. Generators are added only to the nodes where they already exist
+    because their cost information is spatially resolved.
 
     Specifically this function does the following:
     1. Adds new generators for the given investment year, according that year's costs.
@@ -499,10 +501,14 @@ def attach_multihorizon_egs(
     )
 
 
-def attach_newCarrier_generators(n, costs, carriers, investment_year):
+def attach_multihorizon_new_generators(n, costs, carriers, investment_year):
     """
     Attaches generators for carriers which did not previously exist in the
-    network.
+    network (CCS, H2, SMR, etc). These generators do not have spatially resolved
+    costs, so they are added to all buses in the network.
+
+    Unlike CT's and CCGT's we include nuclear in this function, since we assume
+    they can be built anywhere in the network.
 
     Specifically this function does the following:
     1. Adds new carriers to the network
@@ -526,6 +532,11 @@ def attach_newCarrier_generators(n, costs, carriers, investment_year):
     for carrier in carriers:
         if min_years and min_years.get(carrier, np.inf) > investment_year:
             continue
+
+        existing_gens = n.generators[n.generators.carrier == carrier]
+        if not existing_gens.empty:
+            n.mremove("Generator", existing_gens.index)
+            logger.info(f"Removed {existing_gens.shape[0]} existing generators for {carrier}, to re-add as new carrier")
 
         n.madd(
             "Generator",
@@ -632,12 +643,6 @@ if __name__ == "__main__":
         for i in range(len(n.investment_periods))
     }
 
-    new_carriers = list(
-        set(elec_config["extendable_carriers"].get("Generator", []))
-        - set(elec_config["conventional_carriers"])
-        - set(elec_config["renewable_carriers"]),
-    )
-
     if any("PHS" in s for s in elec_config["extendable_carriers"]["StorageUnit"]):
         attach_phs_storageunits(n, elec_config, costs_dict[n.investment_periods[0]])
 
@@ -649,7 +654,7 @@ if __name__ == "__main__":
             economic_retirement_gens,
             economic=True,
         )
-    # Split renewable generators from the first investement period
+    # Split renewable generators from the first investement period to support lifetime retirement
     split_retirement_gens(
         n,
         costs_dict[n.investment_periods[0]],
@@ -672,13 +677,23 @@ if __name__ == "__main__":
     egs_gens = n.generators[n.generators["p_nom_extendable"] == True]
     egs_gens = egs_gens.loc[egs_gens["carrier"].str.contains("EGS")]
 
+    all_carriers = (
+        set(elec_config["extendable_carriers"].get("Generator", []))
+        | set(elec_config["conventional_carriers"])
+        | set(elec_config["renewable_carriers"])
+    )
+    new_carriers = list(
+        all_carriers - set(n.generators.carrier.unique())
+        | set(["nuclear"] if "nuclear" in elec_config["extendable_carriers"].get("Generator", []) else []),
+    )
+
     for investment_year in n.investment_periods:
         costs = costs_dict[investment_year]
         attach_storageunits(n, costs, elec_config, investment_year)
-        # attach_stores(n, costs, elec_config, investment_year)
-        attach_multihorizon_generators(n, costs, multi_horizon_gens, investment_year)
+        attach_multihorizon_existing_generators(n, costs, multi_horizon_gens, investment_year)
         attach_multihorizon_egs(n, costs, costs_dict, egs_gens, investment_year)
-        attach_newCarrier_generators(n, costs, new_carriers, investment_year)
+        attach_multihorizon_new_generators(n, costs, new_carriers, investment_year)
+        # attach_stores(n, costs, elec_config, investment_year)
 
     if not multi_horizon_gens.empty and not len(n.investment_periods) == 1:
         # Remove duplicate generators from first investment period,
