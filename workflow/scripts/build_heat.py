@@ -927,48 +927,6 @@ def add_service_heat_stores(
     assert heat_system in ("urban", "rural", "total")
     assert heat_carrier in ("heat", "space-heat", "cool")
 
-    # changed stores to be demand response where metrics are exogenously defined
-
-    """
-    match sector:
-        case "res" | "Res" | "residential" | "Residential":
-            costs_names = [
-                "Residential Gas-Fired Storage Water Heaters",
-                "Residential Electric-Resistance Storage Water Heaters",
-            ]
-        case "com" | "Com" | "commercial" | "Commercial":
-            costs_names = [
-                "Commercial Electric Resistance Storage Water Heaters",
-                "Commercial Gas-Fired Storage Water Heaters",
-            ]
-        case _:
-            raise NotImplementedError
-
-    if not standing_loss:
-        standing_loss = 0
-
-    if heat_carrier == "heat":
-
-        capex = round(
-            sum([costs.at[x, "capital_cost"] for x in costs_names]) / len(costs_names),
-            1,
-        )
-        efficiency = round(
-            sum([costs.at[x, "efficiency"] for x in costs_names]) / len(costs_names),
-            1,
-        )
-        lifetime = round(
-            sum([costs.at[x, "lifetime"] for x in costs_names]) / len(costs_names),
-            1,
-        )
-
-    elif heat_carrier == "space-heat":
-
-        capex = 0
-        efficiency = 1
-        lifetime = np.inf
-    """
-
     capex = 0
     efficiency = 1
     lifetime = np.inf
@@ -1024,9 +982,11 @@ def add_service_heat_stores(
         therm_store.index,
         bus=therm_store.bus1,
         e_cyclic=True,
-        e_nom_extendable=True,
+        e_nom_extendable=False,
+        e_nom=np.inf,
         carrier=therm_store.carrier,
-        standing_loss=standing_loss,
+        # standing_loss=standing_loss,
+        standing_loss=0,
         capital_cost=capex,
         lifetime=lifetime,
     )

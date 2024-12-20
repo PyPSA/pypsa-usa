@@ -25,6 +25,7 @@ Additionally, some extra constraints specified in :mod:`solve_network` are added
 
 import logging
 import re
+from datetime import timedelta
 from math import ceil
 from typing import Optional
 
@@ -1129,30 +1130,12 @@ def add_ng_import_export_limits(n, config):
         states = s.split("-")
         return f"{states[0]} {states[1]} gas"
 
-    def _format_domestic_data(
+    def _format_data(
         prod: pd.DataFrame,
         link_suffix: Optional[str] = None,
     ) -> pd.DataFrame:
 
         df = prod.copy()
-        df["link"] = df.state.map(_format_link_name)
-        if link_suffix:
-            df["link"] = df.link + link_suffix
-
-        # convert mmcf to MWh
-        df["value"] = df["value"] * NG_MWH_2_MMCF
-
-        return df[["link", "value"]].rename(columns={"value": "rhs"}).set_index("link")
-
-    def _format_international_data(
-        prod: pd.DataFrame,
-        link_suffix: Optional[str] = None,
-    ) -> pd.DataFrame:
-
-        df = prod.copy()
-        df = df[["value", "state"]].groupby("state", as_index=False).sum()
-        df = df[~(df.state == "USA")].copy()
-
         df["link"] = df.state.map(_format_link_name)
         if link_suffix:
             df["link"] = df.link + link_suffix
@@ -1264,7 +1247,7 @@ def add_ng_import_export_limits(n, config):
     # add domestic limits
 
     trade = Trade("gas", False, "exports", year, api).get_data()
-    trade = _format_domestic_data(trade, " trade")
+    trade = _format_data(trade, " trade")
 
     add_import_limits(n, trade, "min", import_min)
     add_export_limits(n, trade, "min", export_min)
@@ -1277,7 +1260,7 @@ def add_ng_import_export_limits(n, config):
     # add international limits
 
     trade = Trade("gas", True, "exports", year, api).get_data()
-    trade = _format_domestic_data(trade, " trade")
+    trade = _format_data(trade, " trade")
 
     add_import_limits(n, trade, "min", import_min)
     add_export_limits(n, trade, "min", export_min)
@@ -1300,11 +1283,9 @@ def add_water_heater_constraints(n, config):
 
     for period in n.investment_periods:
 
+        # first snapshot does not respect constraint
         e_previous = n.model["Store-e"].loc[period, store_names]
         e_previous = e_previous.roll(timestep=1)
-        # e_previous = e_previous.shift(timestep=1).bfill(
-        #     "timestep"
-        # )  # first snapshot does not respect constraint
         e_previous = e_previous.mul(n.snapshot_weightings.stores.loc[period])
 
         p_current = n.model["Link-p"].loc[period, link_names]
@@ -1326,15 +1307,21 @@ def add_demand_response_constraints(n, config):
     def add_capacity_constraint(
         n: pypsa.Network,
         sector: str,
-        dr_shift: float,
+        shift: float,  # as a percentage
         period: int,
     ):
-        """Adds limit on deferable load"""
+        """Adds limit on deferable load
+
+        No need to multiply out snapshot weights here
+        """
 
         # this is clunky having to filter out water-heat :(
         loads = n.loads[n.loads.carrier.str.contains(f"{sector}-") & ~n.loads.carrier.str.contains("water-heat")]
 
-        deferrable_loads = n.loads_t["p_set"][loads.index].mul(dr_shift / 100).round(2)
+        if loads.empty:
+            return
+
+        deferrable_loads = n.loads_t["p_set"][loads.index].mul(shift / 100).round(2)
         deferrable_links = [f"{x}-discharger" for x in loads.index]
 
         lhs = n.model["Link-p"].loc[period, deferrable_links]
@@ -1345,16 +1332,87 @@ def add_demand_response_constraints(n, config):
     def add_balancing_constraint(
         n: pypsa.Network,
         sector: str,
-        dr_balance: float,
+        balance: float,
         direction: str,
         period: int,
     ):
-        """Adds limit over when loads must be balanced"""
+        """Adds limit over when loads must be balanced
 
-        df = n.loads[n.loads.carrier.str.endswith(f"-{sector}")]
-        return df
+        No need to multiply out snapshot weights here, as charging and discharging are balanced over the same snapshots
+        """
 
-    sectors = ["res", "com", "trn", "ind"]
+        # this is clunky having to filter out water-heat :(
+        loads = n.loads[n.loads.carrier.str.contains(f"{sector}-") & ~n.loads.carrier.str.contains("water-heat")].copy()
+
+        if loads.empty:
+            return
+
+        charging_links = [f"{x}-charger" for x in loads.index]
+        discharging_links = [f"{x}-discharger" for x in loads.index]
+
+        sns_period = n.snapshots[n.snapshots.get_level_values(0) == period].get_level_values(1)
+
+        for sns in sns_period:
+            if direction == "forward":
+                sns_balancing = pd.date_range(
+                    sns,
+                    sns + timedelta(hours=balance),
+                    freq="h",
+                )
+            elif direction == "backward":
+                sns_balancing = pd.date_range(
+                    sns - timedelta(hours=balance),
+                    sns,
+                    freq="h",
+                )
+            elif direction == "both":
+                sns_balancing = pd.date_range(
+                    sns - timedelta(hours=balance),
+                    sns + timedelta(hours=balance),
+                    freq="h",
+                )
+
+            # filter for snapshots that are actually modelled after tsa
+            dr_sns = n.snapshots[n.snapshots.get_level_values(1).isin(sns_balancing)]
+            if len(dr_sns) < 2:
+                logger.info(f"No demand response modelled for {sns}")
+                continue
+
+            lhs_charging = n.model["Link-p"].loc[dr_sns, charging_links]
+            lhs_discharging = n.model["Link-p"].loc[dr_sns, discharging_links]
+            lhs = lhs_charging.sum("snapshot") - lhs_discharging.sum("snapshot")
+
+            rhs = 0.01  # tolerance on the constraing
+
+            sns_name = str(sns).replace(" ", "-")
+            n.model.add_constraints(
+                lhs <= rhs,
+                name=f"demand_response_energy-{sns_name}-{sector}-{period}",
+            )
+
+    def add_price_constraint(
+        n: pypsa.Network,
+        sector: str,
+        price: float,
+    ):
+        """Applies marginal cost to demand response storage units
+
+        Note; this doesnt actually add new constraints. Just modifies the
+        network store components directly.
+        """
+
+        # this is clunky having to filter out water-heat :(
+        loads = n.loads[n.loads.carrier.str.contains(f"{sector}-") & ~n.loads.carrier.str.contains("water-heat")]
+
+        if loads.empty:
+            return
+
+        carriers = loads.carrier.unique()
+        dr_stores = n.stores[n.stores.carrier.isin(carriers)]
+
+        n.stores.loc[dr_stores.index, "marginal_cost_storage"] = price
+
+    sectors = ["res", "com", "ind", "trn"]
 
     for sector in sectors:
 
@@ -1371,31 +1429,44 @@ def add_demand_response_constraints(n, config):
             logger.info(f"No Demand Response Constraints Applied for {sector}")
             continue
 
-        balance = dr_config.get("balance", 0)
         shift = dr_config.get("shift", 0)
-        direction = dr_config.get("direction", "both")
+        method = dr_config.get("method", "price")
 
         if dr_config.get("shift", 0) <= 0.01:
             logger.info(f"No Demand Response Constraints Applied for {sector}")
             continue
 
-        if balance < 1:
-            logger.info(f"No Demand Response Constraints Applied for {sector}")
-            continue
-
-        # round up to nearest hour
-        if direction == "both":
-            balance = int(ceil(balance / 2) * 2)
-        else:
-            assert (
-                balance in ("forward", "backward"),
-                f"Demand response direction must be one of 'forward', 'backward', 'both'. Recieved {balance}",
-            )
-
+        # max allowable shiftable load
         for period in n.investment_periods:
-
             add_capacity_constraint(n, sector, shift, period)
-            add_balancing_constraint(n, sector, balance, period)
+
+        if method == "price":
+
+            mc = dr_config.get("marginal_cost", 0)
+            if mc == 0:
+                logger.warning(
+                    f"No cost applied for demand response in {sector} sector",
+                )
+
+            add_price_constraint(n, sector, mc)
+
+        elif method == "time":
+
+            balance = dr_config.get("balance", 0)
+            direction = dr_config.get("direction", "both")
+
+            if balance < 1:
+                logger.info(f"No Demand Response Constraints Applied for {sector}")
+                continue
+
+            # round up to nearest hour
+            if direction == "both":
+                balance = int(ceil(balance / 2) * 2)
+            else:
+                assert balance in ["forward", "backward"]
+
+            for period in n.investment_periods:
+                add_balancing_constraint(n, sector, balance, direction, period)
 
 
 def extra_functionality(n, snapshots):
