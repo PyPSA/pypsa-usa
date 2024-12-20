@@ -51,8 +51,6 @@ def build_heat(
     if dynamic_costs:
         assert eia and year, "Must supply EIA API and costs year for dynamic fuel costs"
 
-    demand_response = options.get("demand_response", {})
-
     if sector in ("res", "com", "srv"):
 
         split_urban_rural = options.get("split_urban_rural", False)
@@ -92,7 +90,6 @@ def build_heat(
             marginal_gas=gas_costs,
             marginal_oil=heating_oil_costs,
             water_heating_config=water_heating_config,
-            demand_response=demand_response,
         )
         add_service_cooling(
             n=n,
@@ -101,7 +98,6 @@ def build_heat(
             costs=costs,
             split_urban_rural=split_urban_rural,
             technologies=technologies,
-            demand_response=demand_response,
         )
 
         assert not n.links_t.p_set.isna().any().any()
@@ -524,7 +520,6 @@ def add_service_cooling(
     costs: pd.DataFrame,
     split_urban_rural: Optional[bool] = True,
     technologies: Optional[dict[str, bool]] = None,
-    demand_response: Optional[dict[str, Any]] = None,
     **kwargs,
 ):
 
@@ -540,11 +535,6 @@ def add_service_cooling(
         heat_systems = ["total"]
         _format_total_load(n, sector, "cool")
 
-    if not demand_response:
-        dr_shift = 0
-    else:
-        dr_shift = demand_response.get("shift", 0)
-
     # add cooling technologies
     for heat_system in heat_systems:
         if technologies.get("air_con", True):
@@ -552,7 +542,7 @@ def add_service_cooling(
         if technologies.get("heat_pump", True):
             add_service_heat_pumps_cooling(n, sector, heat_system, "cool")
 
-        add_service_heat_stores(n, sector, heat_system, "cool", dr_shift)
+        add_service_heat_stores(n, sector, heat_system, "cool", costs)
 
 
 def add_air_cons(

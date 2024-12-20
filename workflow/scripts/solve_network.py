@@ -25,6 +25,7 @@ Additionally, some extra constraints specified in :mod:`solve_network` are added
 
 import logging
 import re
+from math import ceil
 from typing import Optional
 
 import numpy as np
@@ -1315,6 +1316,88 @@ def add_water_heater_constraints(n, config):
         n.model.add_constraints(lhs >= rhs, name=f"water_heater-{period}")
 
 
+def add_demand_response_constraints(n, config):
+    """
+    Adds demand response equations
+
+    Applies the p_nom_max here, as easier to iterate over different configs
+    """
+
+    def add_capacity_constraint(
+        n: pypsa.Network,
+        sector: str,
+        dr_shift: float,
+        period: int,
+    ):
+        """Adds limit on deferable load"""
+
+        # this is clunky having to filter out water-heat :(
+        loads = n.loads[n.loads.carrier.str.contains(f"{sector}-") & ~n.loads.carrier.str.contains("water-heat")]
+
+        deferrable_loads = n.loads_t["p_set"][loads.index].mul(dr_shift / 100).round(2)
+        deferrable_links = [f"{x}-discharger" for x in loads.index]
+
+        lhs = n.model["Link-p"].loc[period, deferrable_links]
+        rhs = deferrable_loads.loc[period]
+
+        n.model.add_constraints(lhs <= rhs, name=f"demand_response_capacity-{sector}-{period}")
+
+    def add_balancing_constraint(
+        n: pypsa.Network,
+        sector: str,
+        dr_balance: float,
+        direction: str,
+        period: int,
+    ):
+        """Adds limit over when loads must be balanced"""
+
+        df = n.loads[n.loads.carrier.str.endswith(f"-{sector}")]
+        return df
+
+    sectors = ["res", "com", "trn", "ind"]
+
+    for sector in sectors:
+
+        if sector == "res" or "com":
+            dr_config = config["sector"]["service_sector"].get("demand_response", {})
+        elif sector == "trn":
+            dr_config = config["sector"]["transport_sector"].get("demand_response", {})
+        elif sector == "ind":
+            dr_config = config["sector"]["industrial_sector"].get("demand_response", {})
+        else:
+            raise ValueError
+
+        if not dr_config:
+            logger.info(f"No Demand Response Constraints Applied for {sector}")
+            continue
+
+        balance = dr_config.get("balance", 0)
+        shift = dr_config.get("shift", 0)
+        direction = dr_config.get("direction", "both")
+
+        if dr_config.get("shift", 0) <= 0.01:
+            logger.info(f"No Demand Response Constraints Applied for {sector}")
+            continue
+
+        if balance < 1:
+            logger.info(f"No Demand Response Constraints Applied for {sector}")
+            continue
+
+        # round up to nearest hour
+        if direction == "both":
+            balance = int(ceil(balance / 2) * 2)
+        else:
+            assert (
+                balance in ("forward", "backward"),
+                f"Demand response direction must be one of 'forward', 'backward', 'both'. Recieved {balance}",
+            )
+
+        for period in n.investment_periods:
+
+            add_capacity_constraint(n, sector, shift, period)
+            add_balancing_constraint(n, sector, balance, period)
+
+
 def extra_functionality(n, snapshots):
     """
     Collects supplementary constraints which will be passed to
@@ -1355,6 +1438,7 @@ def extra_functionality(n, snapshots):
         water_config = config["sector"]["service_sector"].get("water_heating", {})
         if not water_config.get("simple_storage", True):
             add_water_heater_constraints(n, config)
+        add_demand_response_constraints(n, config)
 
     for o in opts:
         if "EQ" in o:
@@ -1422,14 +1506,13 @@ if __name__ == "__main__":
 
         snakemake = mock_snakemake(
             "solve_network",
-            simpl="33",
-            opts="2190SEG",
+            interconnect="western",
+            simpl="70",
             clusters="4m",
             ll="v1.0",
-            sector_opts="",
+            opts="3h",
             sector="E-G",
-            planning_horizons="2020",
-            interconnect="western",
+            planning_horizons="2019",
         )
     configure_logging(snakemake)
     update_config_from_wildcards(snakemake.config, snakemake.wildcards)
