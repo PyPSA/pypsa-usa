@@ -121,6 +121,59 @@ def add_ev_infrastructure(
         lifetime=np.inf,
     )
 
+    # following is for demand response
+    # p_nom set to zero
+    # demand response config will override this setting
+
+    n.madd(
+        "Bus",
+        nodes.index,
+        suffix=f" trn-elec-{vehicle}-store",
+        x=nodes.x,
+        y=nodes.y,
+        country=nodes.country,
+        state=nodes.STATE,
+        carrier=f"trn-elec-{vehicle}",
+        unit="MWh",
+    )
+
+    n.madd(
+        "Link",
+        nodes.index,
+        suffix=f" trn-elec-{vehicle}-charger",
+        bus0=nodes.index + f" trn-elec-{vehicle}",
+        bus1=nodes.index + f" trn-elec-{vehicle}-store",
+        efficiency=1,
+        carrier=f"trn-elec-{vehicle}",
+        p_nom_extendable=False,
+        p_nom=0,
+    )
+
+    n.madd(
+        "Link",
+        nodes.index,
+        suffix=f"-discharger",
+        bus0=nodes.index + f" trn-elec-{vehicle}-store",
+        bus1=nodes.index + f" trn-elec-{vehicle}",
+        efficiency=1,
+        carrier=f"trn-elec-{vehicle}",
+        p_nom_extendable=False,
+        p_nom=0,
+    )
+
+    n.madd(
+        "Store",
+        nodes.index,
+        bus=nodes.index + f" trn-elec-{vehicle}",
+        e_cyclic=True,
+        e_nom_extendable=False,
+        e_nom=np.inf,
+        carrier=f"trn-elec-{vehicle}",
+        standing_loss=0,
+        capital_cost=0,
+        lifetime=np.inf,
+    )
+
 
 def add_lpg_infrastructure(
     n: pypsa.Network,

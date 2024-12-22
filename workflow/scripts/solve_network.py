@@ -1304,6 +1304,24 @@ def add_demand_response_constraints(n, config):
     Applies the p_nom_max here, as easier to iterate over different configs
     """
 
+    def enable_demand_response(
+        n: pypsa.Network,
+        sector: str,
+    ):
+        """Turns on templated demand response components"""
+
+        # this is clunky having to filter out water-heat :(
+        loads = n.loads[n.loads.carrier.str.contains(f"{sector}-") & ~n.loads.carrier.str.contains("water-heat")]
+
+        if loads.empty:
+            return
+
+        charging_links = [f"{x}-charger" for x in loads.index]
+        discharging_links = [f"{x}-discharger" for x in loads.index]
+        dr_links = charging_links + discharging_links
+
+        n.links.loc[dr_links, "p_nom"] = np.inf
+
     def add_capacity_constraint(
         n: pypsa.Network,
         sector: str,
@@ -1378,6 +1396,8 @@ def add_demand_response_constraints(n, config):
                 logger.info(f"No demand response modelled for {sns}")
                 continue
 
+            # todo - need to include losses
+
             lhs_charging = n.model["Link-p"].loc[dr_sns, charging_links]
             lhs_discharging = n.model["Link-p"].loc[dr_sns, discharging_links]
             lhs = lhs_charging.sum("snapshot") - lhs_discharging.sum("snapshot")
@@ -1412,6 +1432,8 @@ def add_demand_response_constraints(n, config):
 
         n.stores.loc[dr_stores.index, "marginal_cost_storage"] = price
 
+    # demand response addition starts here
+
     sectors = ["res", "com", "ind", "trn"]
 
     for sector in sectors:
@@ -1426,28 +1448,28 @@ def add_demand_response_constraints(n, config):
             raise ValueError
 
         if not dr_config:
-            logger.info(f"No Demand Response Constraints Applied for {sector}")
+            logger.info(f"Demand response not enabled for {sector}")
             continue
 
         shift = dr_config.get("shift", 0)
         method = dr_config.get("method", "price")
 
-        if dr_config.get("shift", 0) <= 0.01:
-            logger.info(f"No Demand Response Constraints Applied for {sector}")
+        if shift == "inf":
+            enable_demand_response(n, sector)
+        elif shift >= 0.01:  # for tolerance
+            enable_demand_response(n, sector)
+            for period in n.investment_periods:
+                add_capacity_constraint(n, sector, shift, period)
+        else:
+            logger.info(f"Demand response not enabled for {sector}")
             continue
 
-        # max allowable shiftable load
-        for period in n.investment_periods:
-            add_capacity_constraint(n, sector, shift, period)
-
         if method == "price":
-
             mc = dr_config.get("marginal_cost", 0)
             if mc == 0:
                 logger.warning(
                     f"No cost applied for demand response in {sector} sector",
                 )
-
             add_price_constraint(n, sector, mc)
 
         elif method == "time":

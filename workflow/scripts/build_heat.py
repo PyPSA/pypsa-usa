@@ -953,6 +953,9 @@ def add_service_heat_stores(
         unit="MWh",
     )
 
+    # p_nom set to zero
+    # demand response config will override this setting
+
     n.madd(
         "Link",
         therm_store.index,
@@ -962,7 +965,7 @@ def add_service_heat_stores(
         efficiency=efficiency,
         carrier=therm_store.carrier,
         p_nom_extendable=False,
-        p_nom=np.inf,
+        p_nom=0,
     )
 
     n.madd(
@@ -974,7 +977,7 @@ def add_service_heat_stores(
         efficiency=efficiency,
         carrier=therm_store.carrier,
         p_nom_extendable=False,
-        p_nom=np.inf,
+        p_nom=0,
     )
 
     n.madd(
@@ -985,8 +988,7 @@ def add_service_heat_stores(
         e_nom_extendable=False,
         e_nom=np.inf,
         carrier=therm_store.carrier,
-        # standing_loss=standing_loss,
-        standing_loss=0,
+        standing_loss=standing_loss,
         capital_cost=capex,
         lifetime=lifetime,
     )

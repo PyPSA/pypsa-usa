@@ -73,6 +73,9 @@ def add_electricity_stores(
         unit="MWh",
     )
 
+    # p_nom set to zero
+    # demand response config will override this setting
+
     n.madd(
         "Link",
         df.index,
@@ -82,7 +85,7 @@ def add_electricity_stores(
         efficiency=1,
         carrier=df.carrier,
         p_nom_extendable=False,
-        p_nom=np.inf,
+        p_nom=0,
     )
 
     n.madd(
@@ -94,7 +97,7 @@ def add_electricity_stores(
         efficiency=1,
         carrier=df.carrier,
         p_nom_extendable=False,
-        p_nom=np.inf,
+        p_nom=0,
     )
 
     n.madd(
