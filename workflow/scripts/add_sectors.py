@@ -401,17 +401,31 @@ if __name__ == "__main__":
     cop_ashp_path = snakemake.input.cop_air_total
     cop_gshp_path = snakemake.input.cop_soil_total
 
-    # add electricity infrastructure
-    for sector in ["res", "com", "ind"]:
-        build_electricty(n=n, sector=sector)
-
-    dynamic_cost_year = sns.year.min()
-
-    # add heating and cooling
     split_res_com = snakemake.params.sector["service_sector"].get(
         "split_res_com",
         False,
     )
+
+    # add electricity infrastructure
+    # transport added seperatly to account for different mode demands
+    elec_sectors = ["res", "com", "ind"] if split_res_com else ["srv", "ind"]
+    for elec_sector in elec_sectors:
+        if elec_sector in ["res", "com"]:
+            options = snakemake.params.sector["service_sector"]
+            split_urban_rural = options.get("split_urban_rural", False)
+            if split_urban_rural:
+                suffixes = ["-urban", "-rural"]
+            else:
+                suffixes = ["-total"]
+        else:
+            suffixes = [""]
+
+        for suffix in suffixes:
+            build_electricty(n=n, sector=elec_sector, suffix=suffix)
+
+    dynamic_cost_year = sns.year.min()
+
+    # add heating and cooling
     heat_sectors = ["res", "com", "ind"] if split_res_com else ["srv", "ind"]
     for heat_sector in heat_sectors:
         if heat_sector == "srv":
