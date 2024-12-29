@@ -152,7 +152,7 @@ def add_ev_infrastructure(
     n.madd(
         "Link",
         nodes.index,
-        suffix=f"-discharger",
+        suffix=f" trn-elec-{vehicle}-discharger",
         bus0=nodes.index + f" trn-elec-{vehicle}-store",
         bus1=nodes.index + f" trn-elec-{vehicle}",
         efficiency=1,
@@ -594,9 +594,10 @@ def _create_endogenous_links(n: pypsa.Network) -> None:
 def _remove_exogenous_buses(n: pypsa.Network) -> None:
     """Removes buses that are used for exogenous vehicle loads"""
 
+    # this is super awkward filtering :(
     buses = n.buses[
         (n.buses.index.str.contains("trn-elec-veh") | n.buses.index.str.contains("trn-lpg-veh"))
-        & ~(n.buses.index.str.endswith("-veh"))
+        & ~(n.buses.index.str.endswith("-veh") | n.buses.index.str.endswith("-veh-store"))
     ].index.to_list()
     n.mremove("Bus", buses)
 
