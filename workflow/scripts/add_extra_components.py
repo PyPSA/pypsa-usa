@@ -531,19 +531,19 @@ def attach_multihorizon_new_generators(n, costs, carriers, investment_year):
     buses_i = n.buses.index
     for carrier in carriers:
         p_max_pu_t = None
-        if min_years and min_years.get(carrier, np.inf) > investment_year:
+        if min_years and min_years.get(carrier, 0) > investment_year:
             continue
-
         existing_gens = n.generators[
-            ((n.generators.carrier == carrier) & ~n.generators.index.str.contains("existing"))
+            (
+                (n.generators.carrier == carrier)
+                & ~n.generators.index.str.contains("existing")
+                & (n.generators.build_year <= n.investment_periods[0])
+            )
         ].copy()
 
         if not existing_gens.empty:
             p_max_pu_t = n.get_switchable_as_dense("Generator", "p_max_pu")
             p_max_pu_t = (p_max_pu_t[[x for x in existing_gens.index if x in p_max_pu_t.columns]]).mean().mean()
-
-            n.mremove("Generator", existing_gens.index)
-            logger.info(f"Removed {existing_gens.shape[0]} existing generators for {carrier}, to re-add as new carrier")
 
         n.madd(
             "Generator",
@@ -642,8 +642,6 @@ if __name__ == "__main__":
     n = pypsa.Network(snakemake.input.network)
     elec_config = snakemake.config["electricity"]
 
-    Nyears = n.snapshot_weightings.loc[n.investment_periods[0]].objective.sum() / 8760.0
-
     costs_dict = {
         n.investment_periods[i]: pd.read_csv(snakemake.input.tech_costs[i]).pivot(
             index="pypsa-name",
@@ -708,10 +706,7 @@ if __name__ == "__main__":
     if not multi_horizon_gens.empty and not len(n.investment_periods) == 1:
         # Remove duplicate generators from first investment period,
         # created by attach_multihorizon_generators
-        n.mremove(
-            "Generator",
-            multi_horizon_gens.index,
-        )
+        n.mremove("Generator", multi_horizon_gens.index)
 
     apply_itc(n, snakemake.config["costs"]["itc_modifier"])
     apply_ptc(n, snakemake.config["costs"]["ptc_modifier"])
