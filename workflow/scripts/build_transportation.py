@@ -62,6 +62,9 @@ def build_transportation(
         assert isinstance(must_run_evs, bool)
         apply_endogenous_road_investments(n, must_run_evs)
 
+    # demand response must happen after exogenous/endogenous split
+    add_transport_dr(n, exogenous)
+
     if air:
         air_suffix = Transport.AIR.value
         add_lpg_infrastructure(n, air_suffix, costs)
@@ -121,59 +124,6 @@ def add_ev_infrastructure(
         lifetime=np.inf,
     )
 
-    # following is for demand response
-    # p_nom set to zero
-    # demand response config will override this setting
-
-    n.madd(
-        "Bus",
-        nodes.index,
-        suffix=f" trn-elec-{vehicle}-store",
-        x=nodes.x,
-        y=nodes.y,
-        country=nodes.country,
-        state=nodes.STATE,
-        carrier=f"trn-elec-{vehicle}",
-        unit="MWh",
-    )
-
-    n.madd(
-        "Link",
-        nodes.index,
-        suffix=f" trn-elec-{vehicle}-charger",
-        bus0=nodes.index + f" trn-elec-{vehicle}",
-        bus1=nodes.index + f" trn-elec-{vehicle}-store",
-        efficiency=1,
-        carrier=f"trn-elec-{vehicle}",
-        p_nom_extendable=False,
-        p_nom=0,
-    )
-
-    n.madd(
-        "Link",
-        nodes.index,
-        suffix=f" trn-elec-{vehicle}-discharger",
-        bus0=nodes.index + f" trn-elec-{vehicle}-store",
-        bus1=nodes.index + f" trn-elec-{vehicle}",
-        efficiency=1,
-        carrier=f"trn-elec-{vehicle}",
-        p_nom_extendable=False,
-        p_nom=0,
-    )
-
-    n.madd(
-        "Store",
-        nodes.index,
-        bus=nodes.index + f" trn-elec-{vehicle}",
-        e_cyclic=True,
-        e_nom_extendable=False,
-        e_nom=np.inf,
-        carrier=f"trn-elec-{vehicle}",
-        standing_loss=0,
-        capital_cost=0,
-        lifetime=np.inf,
-    )
-
 
 def add_lpg_infrastructure(
     n: pypsa.Network,
@@ -219,6 +169,78 @@ def add_lpg_infrastructure(
         efficiency2=efficiency2,
         capital_cost=0,
         p_nom_extendable=True,
+        lifetime=np.inf,
+    )
+
+
+def add_transport_dr(n: pypsa.Network, exogenous: bool) -> None:
+    """Attachs DR infrastructure at load location"""
+
+    if exogenous:
+        loads = n.loads[n.loads.carrier.str.contains("trn-elec-veh")]
+    else:
+        loads = n.loads[n.loads.carrier.str.contains("trn-veh")]
+
+    # p_nom set to zero
+    # demand response config will override this setting
+
+    df = pd.DataFrame(index=loads.bus)
+    df["bus"] = df.index
+    df["carrier"] = df.index.map(lambda x: x.split(" ")[1])
+    df["x"] = df.index.map(n.buses.x)
+    df["y"] = df.index.map(n.buses.y)
+    df["country"] = df.index.map(n.buses.y)
+    df["STATE"] = df.index.map(n.buses.y)
+
+    n.madd(
+        "Bus",
+        df.index,
+        suffix=f" -store",
+        x=df.x,
+        y=df.y,
+        country=df.country,
+        state=df.STATE,
+        carrier=df.carrier,
+    )
+
+    # for cost based dr we need to track deffered loads in MWh. However, at the
+    # load, units will be in 'kVMT' or similar. Charging and discharging
+    # links convert to/from MWh
+
+    n.madd(
+        "Link",
+        df.index,
+        suffix=f" -charger",
+        bus0=df.index,
+        bus1=df.index + f" -store",
+        efficiency=1,
+        carrier=df.index,
+        p_nom_extendable=False,
+        p_nom=0,
+    )
+
+    n.madd(
+        "Link",
+        df.index,
+        suffix=f" -discharger",
+        bus0=df.index + f" -store",
+        bus1=df.index,
+        efficiency=1,
+        carrier=df.carrier,
+        p_nom_extendable=False,
+        p_nom=0,
+    )
+
+    n.madd(
+        "Store",
+        df.index,
+        bus=df.index + f" -store",
+        e_cyclic=True,
+        e_nom_extendable=False,
+        e_nom=np.inf,
+        carrier=df.carrier,
+        standing_loss=0,
+        capital_cost=0,
         lifetime=np.inf,
     )
 
