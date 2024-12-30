@@ -45,6 +45,9 @@ def build_transportation(
         else:
             add_lpg_infrastructure(n, road_suffix, costs)  # attaches at state level
 
+    # demand response must happen after exogenous/endogenous split
+    add_transport_dr(n, road_suffix)
+
     if dynamic_pricing:
         assert eia
         assert year
@@ -61,9 +64,6 @@ def build_transportation(
     if not exogenous:
         assert isinstance(must_run_evs, bool)
         apply_endogenous_road_investments(n, must_run_evs)
-
-    # demand response must happen after exogenous/endogenous split
-    add_transport_dr(n, exogenous)
 
     if air:
         air_suffix = Transport.AIR.value
@@ -173,29 +173,15 @@ def add_lpg_infrastructure(
     )
 
 
-def add_transport_dr(n: pypsa.Network, exogenous: bool) -> None:
+def add_transport_dr(n: pypsa.Network, vehicle: str) -> None:
     """Attachs DR infrastructure at load location"""
 
-    if exogenous:
-        loads = n.loads[n.loads.carrier.str.contains("trn-elec-veh")]
-    else:
-        loads = n.loads[n.loads.carrier.str.contains("trn-veh")]
-
-    # p_nom set to zero
-    # demand response config will override this setting
-
-    df = pd.DataFrame(index=loads.bus)
-    df["bus"] = df.index
-    df["carrier"] = df.index.map(lambda x: x.split(" ")[1])
-    df["x"] = df.index.map(n.buses.x)
-    df["y"] = df.index.map(n.buses.y)
-    df["country"] = df.index.map(n.buses.y)
-    df["STATE"] = df.index.map(n.buses.y)
+    df = n.buses[n.buses.carrier == f"trn-elec-{vehicle}"]
 
     n.madd(
         "Bus",
         df.index,
-        suffix=f" -store",
+        suffix=f"-store",
         x=df.x,
         y=df.y,
         country=df.country,
@@ -203,16 +189,12 @@ def add_transport_dr(n: pypsa.Network, exogenous: bool) -> None:
         carrier=df.carrier,
     )
 
-    # for cost based dr we need to track deffered loads in MWh. However, at the
-    # load, units will be in 'kVMT' or similar. Charging and discharging
-    # links convert to/from MWh
-
     n.madd(
         "Link",
         df.index,
-        suffix=f" -charger",
+        suffix=f"-charger",
         bus0=df.index,
-        bus1=df.index + f" -store",
+        bus1=df.index + f"-store",
         efficiency=1,
         carrier=df.index,
         p_nom_extendable=False,
@@ -222,8 +204,8 @@ def add_transport_dr(n: pypsa.Network, exogenous: bool) -> None:
     n.madd(
         "Link",
         df.index,
-        suffix=f" -discharger",
-        bus0=df.index + f" -store",
+        suffix=f"-discharger",
+        bus0=df.index + f"-store",
         bus1=df.index,
         efficiency=1,
         carrier=df.carrier,
@@ -234,7 +216,7 @@ def add_transport_dr(n: pypsa.Network, exogenous: bool) -> None:
     n.madd(
         "Store",
         df.index,
-        bus=df.index + f" -store",
+        bus=df.index + f"-store",
         e_cyclic=True,
         e_nom_extendable=False,
         e_nom=np.inf,
