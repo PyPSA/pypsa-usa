@@ -184,7 +184,7 @@ def _get_opt_capacity_per_node(
         ]
 
     if not include_elec:
-        df = df[~df.carrier.str.endswith("elec-infra")].copy()
+        df = df[~df.carrier.str.endswith("elec")].copy()
 
     if state:
         links = _get_links_in_state(n, state)
@@ -245,7 +245,7 @@ def _get_total_capacity_per_node(
         ]
 
     if not include_elec:
-        df = df[~df.carrier.str.endswith("elec-infra")].copy()
+        df = df[~df.carrier.str.endswith("elec")].copy()
 
     if state:
         links = _get_links_in_state(n, state)
@@ -332,7 +332,7 @@ def _get_brownfield_capacity_per_node(
         ]
 
     if (not include_elec) and (not sector == "trn"):
-        df = df[~df.carrier.str.endswith("elec-infra")].copy()
+        df = df[~df.carrier.str.endswith("elec")].copy()
 
     if state:
         links = _get_links_in_state(n, state)
@@ -536,7 +536,7 @@ def get_load_factor_timeseries(
     if include_elec:
         return lf
     else:
-        return lf[[x for x in lf.columns if not x.endswith("-infra")]]
+        return lf[[x for x in lf.columns if not x.endswith("-elec")]]
 
 
 def get_emission_timeseries_by_sector(

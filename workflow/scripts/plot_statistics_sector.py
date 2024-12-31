@@ -1451,8 +1451,8 @@ if __name__ == "__main__":
         from _helpers import mock_snakemake
 
         snakemake = mock_snakemake(
-            "plot_sector_capacity",
-            simpl="11",
+            "plot_sector_production",
+            simpl="70",
             opts="3h",
             clusters="4m",
             ll="v1.0",

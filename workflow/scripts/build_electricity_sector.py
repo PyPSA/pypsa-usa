@@ -44,11 +44,11 @@ def add_electricity_infrastructure(n: pypsa.Network, sector: str, suffix: Option
     elec = SecCarriers.ELECTRICITY.value
 
     if suffix:
-        suffix = f"{suffix}-{elec}"
+        suffix = f"-{suffix}-{elec}"
     else:
-        suffix = f"{elec}"
+        suffix = f"-{elec}"
 
-    df = n.loads[n.loads.index.str.endswith(f"{sector}-{suffix}")].copy()
+    df = n.loads[n.loads.index.str.endswith(f"{sector}{suffix}")].copy()
 
     df["bus0"] = df.apply(lambda row: row.bus.split(f" {row.carrier}")[0], axis=1)
     df["bus1"] = df.bus
