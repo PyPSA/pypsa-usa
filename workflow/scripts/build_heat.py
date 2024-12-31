@@ -343,6 +343,7 @@ def add_industrial_heat(
     add_industrial_gas_furnace(n, costs, marginal_gas)
     add_industrial_coal_furnace(n, costs, marginal_coal)
     add_indusrial_heat_pump(n, costs)
+    add_industrial_heat_stores(n)
 
 
 def add_service_heat(
@@ -1394,5 +1395,80 @@ def add_indusrial_heat_pump(
         efficiency=efficiency,
         capital_cost=capex,
         p_nom_extendable=True,
+        lifetime=lifetime,
+    )
+
+
+def add_industrial_heat_stores(
+    n: pypsa.Network,
+    standing_loss: Optional[float] = None,
+) -> None:
+    """
+    Adds end-use thermal storage to the system.
+    """
+
+    capex = 0
+    efficiency = 1
+    lifetime = np.inf
+
+    carrier_name = f"ind-heat"
+
+    # must be run after rural/urban load split
+    buses = n.buses[n.buses.carrier == carrier_name]
+
+    df = pd.DataFrame(index=buses.index)
+    df["bus0"] = df.index
+    df["bus1"] = df.index + "-store"
+    df["x"] = df.index.map(n.buses.x)
+    df["y"] = df.index.map(n.buses.y)
+    df["carrier"] = carrier_name
+
+    n.madd(
+        "Bus",
+        df.index,
+        suffix="-store",
+        x=df.x,
+        y=df.y,
+        carrier=df.carrier,
+        unit="MWh",
+    )
+
+    # p_nom set to zero
+    # demand response config will override this setting
+
+    n.madd(
+        "Link",
+        df.index,
+        suffix="-charger",
+        bus0=df.bus0,
+        bus1=df.bus1,
+        efficiency=efficiency,
+        carrier=df.carrier,
+        p_nom_extendable=False,
+        p_nom=0,
+    )
+
+    n.madd(
+        "Link",
+        df.index,
+        suffix="-discharger",
+        bus0=df.bus1,
+        bus1=df.bus0,
+        efficiency=efficiency,
+        carrier=df.carrier,
+        p_nom_extendable=False,
+        p_nom=0,
+    )
+
+    n.madd(
+        "Store",
+        df.index,
+        bus=df.bus1,
+        e_cyclic=True,
+        e_nom_extendable=False,
+        e_nom=np.inf,
+        carrier=df.carrier,
+        standing_loss=standing_loss,
+        capital_cost=capex,
         lifetime=lifetime,
     )

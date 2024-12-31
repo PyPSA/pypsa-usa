@@ -17,20 +17,23 @@ def build_electricty(
     """Adds electricity sector infrastructre data"""
 
     if sector in ("res", "com", "srv"):
-        pop_layout = pd.read_csv(pop_layout_path).set_index("name")
         if split_urban_rural:
+            pop_layout = pd.read_csv(pop_layout_path).set_index("name")
             _split_urban_rural_load(n, sector, pop_layout)
+            for system in ["urban", "rural"]:
+                add_electricity_infrastructure(n, sector, system)
         else:
             _format_total_load(n, sector)
+            add_electricity_infrastructure(n, sector, "total")
     elif sector == "ind":
         add_electricity_infrastructure(n, sector)
     else:
         raise ValueError
 
-    add_electricity_stores(n, sector)
+    add_electricity_dr(n, sector)
 
 
-def add_electricity_infrastructure(n: pypsa.Network, sector: str):
+def add_electricity_infrastructure(n: pypsa.Network, sector: str, suffix: Optional[str] = None):
     """
     Adds links to connect electricity nodes.
 
@@ -40,7 +43,12 @@ def add_electricity_infrastructure(n: pypsa.Network, sector: str):
 
     elec = SecCarriers.ELECTRICITY.value
 
-    df = n.loads[n.loads.index.str.endswith(f"{sector}-{elec}")].copy()
+    if suffix:
+        suffix = f"{suffix}-{elec}"
+    else:
+        suffix = f"{elec}"
+
+    df = n.loads[n.loads.index.str.endswith(f"{sector}-{suffix}")].copy()
 
     df["bus0"] = df.apply(lambda row: row.bus.split(f" {row.carrier}")[0], axis=1)
     df["bus1"] = df.bus
@@ -51,7 +59,7 @@ def add_electricity_infrastructure(n: pypsa.Network, sector: str):
     n.madd(
         "Link",
         df.index,
-        suffix=f"-{elec}",
+        suffix=suffix,
         bus0=df.bus0,
         bus1=df.bus1,
         carrier=df.carrier,
@@ -62,7 +70,7 @@ def add_electricity_infrastructure(n: pypsa.Network, sector: str):
     )
 
 
-def add_electricity_stores(
+def add_electricity_dr(
     n: pypsa.Network,
     sector: str,
 ) -> None:

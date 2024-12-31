@@ -413,15 +413,14 @@ if __name__ == "__main__":
         if elec_sector in ["res", "com"]:
             options = snakemake.params.sector["service_sector"]
             split_urban_rural = options.get("split_urban_rural", False)
-            if split_urban_rural:
-                suffixes = ["-urban", "-rural"]
-            else:
-                suffixes = ["-total"]
+            build_electricty(
+                n=n,
+                sector=elec_sector,
+                split_urban_rural=split_urban_rural,
+                pop_layout_path=pop_layout_path,
+            )
         else:
-            suffixes = [""]
-
-        for suffix in suffixes:
-            build_electricty(n=n, sector=elec_sector, suffix=suffix)
+            build_electricty(n=n, sector=elec_sector)
 
     dynamic_cost_year = sns.year.min()
 

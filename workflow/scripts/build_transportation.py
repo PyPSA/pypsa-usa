@@ -196,7 +196,7 @@ def add_transport_dr(n: pypsa.Network, vehicle: str) -> None:
         bus0=df.index,
         bus1=df.index + f"-store",
         efficiency=1,
-        carrier=df.index,
+        carrier=df.carrier,
         p_nom_extendable=False,
         p_nom=0,
     )
@@ -216,7 +216,7 @@ def add_transport_dr(n: pypsa.Network, vehicle: str) -> None:
     n.madd(
         "Store",
         df.index,
-        bus=df.index + f"-store",
+        bus=df.index,
         e_cyclic=True,
         e_nom_extendable=False,
         e_nom=np.inf,
