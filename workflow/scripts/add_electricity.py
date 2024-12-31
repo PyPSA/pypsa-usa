@@ -587,7 +587,7 @@ def attach_egs(
     network.
     """
     car = "EGS"
-    if car not in carriers:
+    if (car not in carriers) and (car not in extendable_carriers["Generator"]):
         return
     add_missing_carriers(n, carriers)
     capital_recovery_period = 25  # Following EGS supply curves by Aljubran et al. (2024)
