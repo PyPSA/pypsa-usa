@@ -1304,20 +1304,31 @@ def add_demand_response_constraints(n, config):
     Applies the p_nom_max here, as easier to iterate over different configs
     """
 
+    def _filter_on_sector(n: pypsa.Network, sector: str) -> list[str]:
+        """Gets names of loads that have dr links/stores"""
+
+        if sector != "trn":
+            # this is clunky having to filter out water-heat :(
+            return n.loads[
+                n.loads.carrier.str.contains(f"{sector}-") & ~n.loads.carrier.str.contains("water-heat")
+            ].index.to_list()
+        else:
+            # transport dr attached at aggregation load
+            return n.stores[n.stores.carrier == "trn-elec-veh"].bus.to_list()
+
     def enable_demand_response(
         n: pypsa.Network,
         sector: str,
     ):
         """Turns on templated demand response components"""
 
-        # this is clunky having to filter out water-heat :(
-        loads = n.loads[n.loads.carrier.str.contains(f"{sector}-") & ~n.loads.carrier.str.contains("water-heat")]
+        names = _filter_on_sector(n, sector)
 
-        if loads.empty:
+        if not names:
             return
 
-        charging_links = [f"{x}-charger" for x in loads.index]
-        discharging_links = [f"{x}-discharger" for x in loads.index]
+        charging_links = [f"{x}-charger" for x in names]
+        discharging_links = [f"{x}-discharger" for x in names]
         dr_links = charging_links + discharging_links
 
         n.links.loc[dr_links, "p_nom"] = np.inf
@@ -1333,19 +1344,45 @@ def add_demand_response_constraints(n, config):
         No need to multiply out snapshot weights here
         """
 
-        # this is clunky having to filter out water-heat :(
-        loads = n.loads[n.loads.carrier.str.contains(f"{sector}-") & ~n.loads.carrier.str.contains("water-heat")]
+        names = _filter_on_sector(n, sector)
 
-        if loads.empty:
+        if not names:
             return
 
-        deferrable_loads = n.loads_t["p_set"][loads.index].mul(shift / 100).round(2)
-        deferrable_links = [f"{x}-discharger" for x in loads.index]
+        if sector != "trn":
 
-        lhs = n.model["Link-p"].loc[period, deferrable_links]
-        rhs = deferrable_loads.loc[period]
+            deferrable_loads = n.loads_t["p_set"][names].mul(shift / 100).round(2)
+            deferrable_links = [f"{x}-discharger" for x in names]
+            lhs = n.model["Link-p"].loc[period, deferrable_links]
+            rhs = deferrable_loads.loc[period]
 
-        n.model.add_constraints(lhs <= rhs, name=f"demand_response_capacity-{sector}-{period}")
+            n.model.add_constraints(
+                lhs <= rhs,
+                name=f"demand_response_capacity-{sector}-{period}",
+            )
+
+        # transport dr is at the aggregation bus
+        # sum all outgoing capacity and apply the capacity limit to that
+        # ie. a seperate constraint is added for each node
+        # there may be a more efficient way to do this
+        else:
+
+            for name in names:
+                deferrable_link = f"{name}-discharger"
+                deferrable_loads = n.links[
+                    (n.links.bus0 == name) & ~(n.links.bus1.index.str.endswith("-charger"))
+                ].index
+
+                dr_contribution = n.model["Link-p"].loc[period, deferrable_link]
+                total_loads = n.model["Link-p"].loc[period, deferrable_loads].sum("Link")
+
+                lhs = total_loads.mul(shift / 100) - dr_contribution
+                rhs = 0
+
+                # extract out the ReEDS region from 'name'
+                constraint_name = f"demand_response_capacity-{sector}-{name.split(' ')[0]}-{period}"
+
+                n.model.add_constraints(lhs >= rhs, name=constraint_name)
 
     def add_balancing_constraint(
         n: pypsa.Network,
@@ -1359,14 +1396,17 @@ def add_demand_response_constraints(n, config):
         No need to multiply out snapshot weights here, as charging and discharging are balanced over the same snapshots
         """
 
-        # this is clunky having to filter out water-heat :(
-        loads = n.loads[n.loads.carrier.str.contains(f"{sector}-") & ~n.loads.carrier.str.contains("water-heat")].copy()
-
-        if loads.empty:
+        if sector == "trn":
+            logger.warning("DR balancing not setup for Transport!")
             return
 
-        charging_links = [f"{x}-charger" for x in loads.index]
-        discharging_links = [f"{x}-discharger" for x in loads.index]
+        names = _filter_on_sector(n, sector)
+
+        if not names:
+            return
+
+        charging_links = [f"{x}-charger" for x in names]
+        discharging_links = [f"{x}-discharger" for x in names]
 
         sns_period = n.snapshots[n.snapshots.get_level_values(0) == period].get_level_values(1)
 
@@ -1421,13 +1461,12 @@ def add_demand_response_constraints(n, config):
         network store components directly.
         """
 
-        # this is clunky having to filter out water-heat :(
-        loads = n.loads[n.loads.carrier.str.contains(f"{sector}-") & ~n.loads.carrier.str.contains("water-heat")]
+        names = _filter_on_sector(n, sector)
 
-        if loads.empty:
+        if not names:
             return
 
-        carriers = loads.carrier.unique()
+        carriers = n.loads[n.loads.index.isin(names)].carrier.unique()
         dr_stores = n.stores[n.stores.carrier.isin(carriers)]
 
         n.stores.loc[dr_stores.index, "marginal_cost_storage"] = price
@@ -1438,7 +1477,7 @@ def add_demand_response_constraints(n, config):
 
     for sector in sectors:
 
-        if sector == "res" or "com":
+        if sector in ["res", "com"]:
             dr_config = config["sector"]["service_sector"].get("demand_response", {})
         elif sector == "trn":
             dr_config = config["sector"]["transport_sector"].get("demand_response", {})
@@ -1524,8 +1563,8 @@ def extra_functionality(n, snapshots):
         add_cooling_heat_pump_constraints(n, config)
         if not config["sector"]["service_sector"].get("split_urban_rural", False):
             add_gshp_capacity_constraint(n, config)
-        # if config["sector"]["co2"].get("policy", {}):
-        #     add_sector_co2_constraints(n, config)
+        if config["sector"]["co2"].get("policy", {}):
+            add_sector_co2_constraints(n, config)
         if config["sector"]["natural_gas"].get("imports", False):
             add_ng_import_export_limits(n, config)
         water_config = config["sector"]["service_sector"].get("water_heating", {})
