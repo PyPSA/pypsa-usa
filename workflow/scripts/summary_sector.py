@@ -725,6 +725,46 @@ def get_end_use_load_timeseries(
     return df.T
 
 
+def get_storage_level_timeseries(
+    n: pypsa.Network,
+    sector: str,
+    remove_sns_weights: bool = True,
+    state: Optional[str] = None,
+    **kwargs,
+) -> pd.DataFrame:
+
+    stores = n.stores[n.stores.carrier.str.startswith(sector)]
+
+    if state:
+        stores_in_state = _get_stores_in_state(n, state)
+        stores = stores[stores.index.isin(stores_in_state)]
+
+    df = n.stores_t.e[stores.index]
+    if not remove_sns_weights:
+        df = df.mul(n.snapshot_weightings["objective"], axis=0)
+    return df
+
+
+def get_storage_level_timeseries_carrier(
+    n: pypsa.Network,
+    sector: str,
+    remove_sns_weights: bool = True,
+    state: Optional[str] = None,
+    resample: Optional[str] = None,
+    resample_fn: Optional[callable] = None,
+    **kwargs,
+) -> pd.DataFrame:
+
+    df = get_storage_level_timeseries(n, sector, remove_sns_weights, state)
+    df = df.rename(columns=n.stores.carrier)
+    df = df.T.groupby(level=0).sum().T
+
+    if not (resample or resample_fn):
+        return df
+    else:
+        return _resample_data(df, resample, resample_fn)
+
+
 def get_end_use_load_timeseries_carrier(
     n: pypsa.Network,
     sector: str,

@@ -34,14 +34,12 @@ from summary_sector import (  # get_load_name_per_sector,
     get_end_use_consumption,
     get_end_use_load_timeseries,
     get_end_use_load_timeseries_carrier,
-    get_historical_emissions,
-    get_historical_end_use_consumption,
-    get_historical_transport_consumption_by_mode,
     get_hp_cop,
     get_load_factor_timeseries,
     get_load_per_sector_per_fuel,
     get_sector_production_timeseries,
     get_sector_production_timeseries_by_carrier,
+    get_storage_level_timeseries_carrier,
     get_transport_consumption_by_mode,
 )
 
@@ -50,15 +48,16 @@ logger = logging.getLogger(__name__)
 
 SECTOR_MAPPER = {
     "res": "residential",
+    "res-total": "residential",
     "res-rural": "residential-rural",
     "res-urban": "residential-urban",
     "com": "commercial",
+    "com-total": "commercial",
     "com-rural": "commercial-rural",
     "com-urban": "commercial-urban",
     "pwr": "power",
     "ind": "industrial",
     "trn": "transport",
-    "pwr": "Power",
 }
 
 FIG_WIDTH = 14
@@ -1057,6 +1056,76 @@ def plot_sector_load_bar(
     return fig, axs
 
 
+def plot_sector_dr_timeseries(
+    n: pypsa.Network,
+    sector: str,
+    state: Optional[str] = None,
+    nice_name: Optional[bool] = True,
+    resample: Optional[str] = None,
+    resample_fn: Optional[callable] = None,
+    month: Optional[int] = None,
+    **kwargs,
+) -> tuple:
+
+    e = get_storage_level_timeseries_carrier(
+        n,
+        sector,
+        True,
+        state,
+        resample,
+        resample_fn,
+    )
+    e = e[[x for x in e if "-water-" not in x]]
+
+    y_label = kwargs.get("ylabel", "MWh")
+
+    investment_periods = n.investment_periods
+
+    nrows = ceil(len(investment_periods) / 2)
+
+    fig, axs = plt.subplots(
+        ncols=1,
+        nrows=nrows,
+        figsize=(FIG_WIDTH, FIG_HEIGHT * nrows),
+    )
+
+    for row, period in enumerate(investment_periods):
+
+        df = e.loc[period]
+
+        if month:
+            df = df[df.index.get_level_values("timestep").month == month_i]
+
+        if df.empty:
+            logger.warning(f"No data to plot for {state}")
+            continue
+
+        if nice_name:
+            df = df.rename(columns=n.carriers.nice_name.to_dict())
+
+        try:
+
+            if nrows > 1:
+
+                df.plot.line(ax=axs[row])
+                axs[row].set_xlabel("")
+                axs[row].set_ylabel(y_label)
+                axs[row].set_title(f"{SECTOR_MAPPER[sector]}")
+                axs[row].tick_params(axis="x", labelrotation=45)
+
+            else:
+
+                df.plot.line(ax=axs)
+                axs.set_xlabel("")
+                axs.set_ylabel(y_label)
+                axs.set_title(f"{SECTOR_MAPPER[sector]}")
+
+        except TypeError:  # no numeric data to plot
+            logger.warning(f"No data to plot for {state} (plot_sector_production)")
+
+    return fig, axs
+
+
 def plot_consumption(
     n: pypsa.Network,
     sector: str,
@@ -1283,6 +1352,50 @@ PRODUCTION_PLOTS = [
             "vehicle": Transport.ROAD.value,
             "modes": RoadTransport,
             "units": RoadTransportUnits,
+        },
+    },
+    {
+        "name": "production_demand_response",
+        "fn": plot_sector_dr_timeseries,
+        "nice_name": "Residential Demand Response",
+        "sector": "res",
+        "plot_by_month": True,
+        "fn_kwargs": {
+            "resample": "D",
+            "resample_fn": pd.Series.mean,
+        },
+    },
+    {
+        "name": "production_demand_response",
+        "fn": plot_sector_dr_timeseries,
+        "nice_name": "Residential Demand Response",
+        "sector": "com",
+        "plot_by_month": True,
+        "fn_kwargs": {
+            "resample": "D",
+            "resample_fn": pd.Series.mean,
+        },
+    },
+    {
+        "name": "production_demand_response",
+        "fn": plot_sector_dr_timeseries,
+        "nice_name": "Residential Demand Response",
+        "sector": "ind",
+        "plot_by_month": True,
+        "fn_kwargs": {
+            "resample": "D",
+            "resample_fn": pd.Series.mean,
+        },
+    },
+    {
+        "name": "production_demand_response",
+        "fn": plot_sector_dr_timeseries,
+        "nice_name": "Residential Demand Response",
+        "sector": "trn",
+        "plot_by_month": True,
+        "fn_kwargs": {
+            "resample": "D",
+            "resample_fn": pd.Series.mean,
         },
     },
     {
