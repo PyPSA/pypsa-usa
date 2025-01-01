@@ -63,6 +63,7 @@ import pandas as pd
 import pypsa
 from _helpers import (
     configure_logging,
+    is_transport_model,
     set_scenario_config,
     update_config_from_wildcards,
 )
@@ -133,9 +134,10 @@ def add_emission_prices(n, emission_prices={"co2": 0.0}, exclude_co2=False):
     n.storage_units["marginal_cost"] += su_ep
 
 
-def set_line_s_max_pu(n, s_max_pu=0.7):
-    n.lines["s_max_pu"] = s_max_pu
-    logger.info(f"N-1 security margin of lines set to {s_max_pu}")
+def set_line_s_max_pu(n, transport_model, s_max_pu=0.7):
+    if not transport_model:
+        logger.info(f"N-1 security margin of lines set to {s_max_pu}")
+        n.lines["s_max_pu"] = s_max_pu
 
 
 def set_transmission_limit(n, ll_type, factor):
@@ -163,9 +165,11 @@ def set_transmission_limit(n, ll_type, factor):
         + n.links.loc[dc_links, "p_nom"] @ n.links.loc[dc_links, col]
         + n.links.loc[ac_links_existing, "p_nom"] @ n.links.loc[ac_links_existing, col]
     )
+    ref_dc = n.links.loc[dc_links, "p_nom"] @ n.links.loc[dc_links, col]
 
     if factor == "opt" or float(factor) > 1.0:
         # if opt allows expansion set respective lines/links to extendable
+        # all links prior to this point have extendable set to false
         n.lines["s_nom_min"] = lines_s_nom
         n.lines["s_nom_extendable"] = True
 
@@ -176,7 +180,14 @@ def set_transmission_limit(n, ll_type, factor):
         n.links.loc[ac_links_exp, "p_nom_extendable"] = True
     if factor != "opt":
         con_type = "expansion_cost" if ll_type == "c" else "volume_expansion"
-        rhs = float(factor) * ref
+        if transport_model:
+            # Transport models have links split to existing and non-existing
+            # The global constraint applies to the p_nom_opt of extendable capacity
+            # thus we must only include the 'new' transmission capacity as reference
+            rhs = ((float(factor) - 1.0) * ref) + ref_dc
+        else:
+            rhs = float(factor) * ref
+
         n.add(
             "GlobalConstraint",
             f"l{ll_type}_limit",
@@ -343,6 +354,8 @@ if __name__ == "__main__":
     configure_logging(snakemake)
     set_scenario_config(snakemake)
     update_config_from_wildcards(snakemake.config, snakemake.wildcards)
+    params = snakemake.params
+    transport_model = is_transport_model(params.transmission_network)
 
     n = pypsa.Network(snakemake.input[0])
     Nyears = n.snapshot_weightings.loc[n.investment_periods[0]].objective.sum() / 8760.0
@@ -353,17 +366,17 @@ if __name__ == "__main__":
     inv_per_time_weight = n.investment_periods.to_series().diff().shift(-1).ffill().fillna(1)
     n.investment_period_weightings["years"] = inv_per_time_weight
     # set Investment Period Objective weightings
-    social_discountrate = snakemake.params.costs["social_discount_rate"]
+    social_discountrate = params.costs["social_discount_rate"]
     objective_w = get_investment_weighting(
         n.investment_period_weightings["years"],
         social_discountrate,
     )
     n.investment_period_weightings["objective"] = objective_w
 
-    set_line_s_max_pu(n, snakemake.params.lines["s_max_pu"])
+    set_line_s_max_pu(n, transport_model, params.lines["s_max_pu"])
 
     # temporal averaging
-    time_resolution = snakemake.params.time_resolution
+    time_resolution = params.time_resolution
     is_string = isinstance(time_resolution, str)
     if is_string and time_resolution.lower().endswith("h"):
         n = average_every_nhours(n, time_resolution)
@@ -375,17 +388,17 @@ if __name__ == "__main__":
         segments = int(time_resolution.lower().replace("seg", ""))
         n = apply_time_segmentation(n, segments, solver_name)
 
-    if snakemake.params.co2limit_enable:
-        add_co2limit(n, snakemake.params.co2limit, Nyears)
+    if params.co2limit_enable:
+        add_co2limit(n, params.co2limit, Nyears)
 
-    if snakemake.params.gaslimit_enable:
-        add_gaslimit(n, snakemake.params.gaslimit, Nyears)
+    if params.gaslimit_enable:
+        add_gaslimit(n, params.gaslimit, Nyears)
 
-    emission_prices = snakemake.params.costs["emission_prices"]
+    emission_prices = params.costs["emission_prices"]
     if emission_prices["enable"]:
         add_emission_prices(
             n,
-            dict(co2=snakemake.params.costs["emission_prices"]["co2"]),
+            dict(co2=params.costs["emission_prices"]["co2"]),
         )
 
     ll_type, factor = snakemake.wildcards.ll[0], snakemake.wildcards.ll[1:]
@@ -393,10 +406,10 @@ if __name__ == "__main__":
 
     set_line_nom_max(
         n,
-        s_nom_max_set=snakemake.params.lines.get("s_nom_max", np.inf),
-        p_nom_max_set=snakemake.params.links.get("p_nom_max", np.inf),
-        s_nom_max_ext=snakemake.params.lines.get("max_extension", np.inf),
-        p_nom_max_ext=snakemake.params.links.get("max_extension", np.inf),
+        s_nom_max_set=params.lines.get("s_nom_max", np.inf),
+        p_nom_max_set=params.links.get("p_nom_max", np.inf),
+        s_nom_max_ext=params.lines.get("max_extension", np.inf),
+        p_nom_max_ext=params.links.get("max_extension", np.inf),
     )
 
     n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))
