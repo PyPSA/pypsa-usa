@@ -391,7 +391,7 @@ def plot_regional_capacity_additions_bar(n, save):
     Plot capacity evolution by NERC region in a stacked bar plot.
     """
     data = get_statistics(n, "Optimal Capacity")
-    data.to_csv(f"{Path(save).parent}/bar_regional_capacity.csv")
+    data.to_csv(f"{Path(save).parent.parent}/statistics/bar_regional_capacity.csv")
     plot_bar(data, n, save, "", "Capacity (GW)", is_capacity=True)
 
 
@@ -400,7 +400,7 @@ def plot_regional_production_bar(n, save):
     Plot production evolution by NERC region in a stacked bar plot.
     """
     data = get_statistics(n, "Supply")
-    data.to_csv(f"{Path(save).parent}/bar_regional_production.csv")
+    data.to_csv(f"{Path(save).parent.parent}/statistics/bar_regional_production.csv")
     plot_bar(data, n, save, "", "Production (GWh)")
 
 
@@ -932,6 +932,7 @@ if __name__ == "__main__":
     n.statistics().round(2).to_csv(snakemake.output.statistics_summary)
     n.generators.to_csv(snakemake.output.generators)
     n.storage_units.to_csv(snakemake.output.storage_units)
+    n.links.to_csv(snakemake.output.links)
 
     # Panel Plots
     plot_generator_data_panel(

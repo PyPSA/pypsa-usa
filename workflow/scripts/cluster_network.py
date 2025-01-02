@@ -55,8 +55,8 @@ def weighting_for_country(n, x):
     b_i = x.index
     g = normed(gen.reindex(b_i, fill_value=0))
     l = normed(load.reindex(b_i, fill_value=0))
-
     w = g + l
+
     return (w * (100.0 / w.max())).clip(lower=1.0).astype(int)
 
 
@@ -234,6 +234,26 @@ def busmap_for_n_clusters(
         focus_weights=focus_weights,
         solver_name=solver_name,
     )
+
+    # Potentiall remove buses and lines from these corner case counties from network
+    nc_set = set(n_clusters.index.get_level_values(0).unique())
+    bus_set = set(n.buses.country.unique())
+    countries_remove = list(bus_set - nc_set)
+    buses_remove = n.buses[n.buses.country.isin(countries_remove)]
+    if not buses_remove.empty:
+        logger.warning(f"Reconciling TAMU and ReEDS Topologies. \n Removing buses: {buses_remove.index}")
+        for c in n.one_port_components:
+            component = n.df(c)
+            rm = component[component.bus.isin(buses_remove.index)]
+            logger.warning(f"Removing {rm.shape} component {c}")
+            n.mremove(c, rm.index)
+        for c in ["Line", "Link"]:
+            component = n.df(c)
+            rm = component[component.bus0.isin(buses_remove.index) | component.bus1.isin(buses_remove.index)]
+            logger.warning(f"Removing {rm.shape} component {c}")
+            n.mremove(c, rm.index)
+        n.mremove("Bus", buses_remove.index)
+        n.determine_network_topology()
 
     def busmap_for_country(x):
         prefix = x.name[0] + x.name[1] + " "

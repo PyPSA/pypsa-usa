@@ -761,6 +761,7 @@ rule prepare_network:
         co2limit_enable=config_provider("electricity", "co2limit_enable", default=False),
         gaslimit=config_provider("electricity", "gaslimit"),
         gaslimit_enable=config_provider("electricity", "gaslimit_enable", default=False),
+        transmission_network=config_provider("model_topology", "transmission_network"),
         max_hours=config_provider("electricity", "max_hours"),
         costs=config_provider("costs"),
         autarky=config_provider("electricity", "autarky"),
