@@ -685,13 +685,8 @@ if __name__ == "__main__":
     egs_gens = n.generators[n.generators["p_nom_extendable"] == True]
     egs_gens = egs_gens.loc[egs_gens["carrier"].str.contains("EGS")]
 
-    all_carriers = (
-        set(elec_config["extendable_carriers"].get("Generator", []))
-        | set(elec_config["conventional_carriers"])
-        | set(elec_config["renewable_carriers"])
-    )
     new_carriers = list(
-        all_carriers - set(n.generators.carrier.unique())
+        set(elec_config["extendable_carriers"].get("Generator", [])) - set(n.generators.carrier.unique())
         | set(["nuclear"] if "nuclear" in elec_config["extendable_carriers"].get("Generator", []) else []),
     )
 
