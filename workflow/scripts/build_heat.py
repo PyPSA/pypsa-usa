@@ -27,7 +27,7 @@ def build_heat(
     cop_gshp_path: str,
     eia: Optional[str] = None,  # for dynamic pricing
     year: Optional[int] = None,  # for dynamic pricing
-    options: Optional[dict[str, str | bool | float]] = None,
+    options: Optional[dict[str, str | bool | int | float]] = None,
     **kwargs,
 ) -> None:
     """
@@ -50,6 +50,8 @@ def build_heat(
     dynamic_costs = options.get("dynamic_costs", False)
     if dynamic_costs:
         assert eia and year, "Must supply EIA API and costs year for dynamic fuel costs"
+
+    dr_config = options.get("demand_response", {})
 
     if sector in ("res", "com", "srv"):
 
@@ -90,6 +92,7 @@ def build_heat(
             marginal_gas=gas_costs,
             marginal_oil=heating_oil_costs,
             water_heating_config=water_heating_config,
+            dr_config=dr_config,
         )
         add_service_cooling(
             n=n,
@@ -98,6 +101,7 @@ def build_heat(
             costs=costs,
             split_urban_rural=split_urban_rural,
             technologies=technologies,
+            dr_config=dr_config,
         )
 
         assert not n.links_t.p_set.isna().any().any()
@@ -126,6 +130,7 @@ def build_heat(
             costs,
             marginal_gas=gas_costs,
             marginal_coal=coal_costs,
+            dr_config=dr_config,
         )
 
 
@@ -335,6 +340,7 @@ def add_industrial_heat(
     costs: pd.DataFrame,
     marginal_gas: Optional[pd.DataFrame | float] = None,
     marginal_coal: Optional[pd.DataFrame | float] = None,
+    dr_config: Optional[dict[str, Any]] = None,
     **kwargs,
 ) -> None:
 
@@ -343,7 +349,9 @@ def add_industrial_heat(
     add_industrial_gas_furnace(n, costs, marginal_gas)
     add_industrial_coal_furnace(n, costs, marginal_coal)
     add_indusrial_heat_pump(n, costs)
-    add_industrial_heat_stores(n)
+
+    if dr_config:
+        add_industrial_dr(n, dr_config)
 
 
 def add_service_heat(
@@ -358,6 +366,7 @@ def add_service_heat(
     marginal_gas: Optional[pd.DataFrame | float] = None,
     marginal_oil: Optional[pd.DataFrame | float] = None,
     water_heating_config: Optional[dict[str, Any]] = None,
+    dr_config: Optional[dict[str, Any]] = None,
 ):
     """
     Adds heating links for residential and commercial sectors.
@@ -458,14 +467,15 @@ def add_service_heat(
                 marginal_oil,
             )
 
-        add_service_heat_stores(
-            n=n,
-            sector=sector,
-            heat_system=heat_system,
-            heat_carrier=heat_carrier,
-            costs=costs,
-            standing_loss=standing_loss_space_heat,
-        )
+        if dr_config:
+            add_service_heat_dr(
+                n=n,
+                sector=sector,
+                heat_system=heat_system,
+                heat_carrier=heat_carrier,
+                dr_config=dr_config,
+                standing_loss=standing_loss_space_heat,
+            )
 
         # check if water heat is needed
         if split_space_water:
@@ -521,6 +531,7 @@ def add_service_cooling(
     costs: pd.DataFrame,
     split_urban_rural: Optional[bool] = True,
     technologies: Optional[dict[str, bool]] = None,
+    dr_config: Optional[dict[str, Any]] = None,
     **kwargs,
 ):
 
@@ -543,7 +554,8 @@ def add_service_cooling(
         if technologies.get("heat_pump", True):
             add_service_heat_pumps_cooling(n, sector, heat_system, "cool")
 
-        add_service_heat_stores(n, sector, heat_system, "cool", costs)
+        if dr_config:
+            add_service_heat_dr(n, sector, heat_system, "cool", costs)
 
 
 def add_air_cons(
@@ -899,12 +911,12 @@ def add_service_furnace(
         )
 
 
-def add_service_heat_stores(
+def add_service_heat_dr(
     n: pypsa.Network,
     sector: str,
     heat_system: str,
     heat_carrier: str,
-    costs: pd.DataFrame,
+    dr_config: dict[str, Any],
     standing_loss: Optional[float] = None,
 ) -> None:
     """
@@ -922,14 +934,25 @@ def add_service_heat_stores(
         ("rural" or "urban")
     heat_carrier: str
         ("heat" or "space-heat")
-    costs: pd.DataFrame
     """
 
     assert heat_system in ("urban", "rural", "total")
     assert heat_carrier in ("heat", "space-heat", "cool")
 
+    shift = dr_config.get("shift", 0)
+    method = dr_config.get("method", "price")
+    marginal_cost_storage = dr_config.get("marginal_cost", 0)
+
+    if shift == 0:
+        logger.info(f"DR not applied to {sector} as allowable sift is {shift}")
+        return
+
+    if method != "price":
+        if marginal_cost_storage != 0:
+            logger.warning(f"Ignoring DR price of {marginal_cost_storage} for {sector}")
+        marginal_cost_storage = 0
+
     capex = 0
-    efficiency = 1
     lifetime = np.inf
 
     carrier_name = f"{sector}-{heat_system}-{heat_carrier}"
@@ -943,6 +966,8 @@ def add_service_heat_stores(
     therm_store["x"] = therm_store.index.map(n.buses.x)
     therm_store["y"] = therm_store.index.map(n.buses.y)
     therm_store["carrier"] = f"{sector}-{heat_system}-{heat_carrier}"
+    therm_store["STATE"] = therm_store.index.map(n.buses.STATE)
+    therm_store["STATE_NAME"] = therm_store.index.map(n.buses.STATE_NAME)
 
     n.madd(
         "Bus",
@@ -952,10 +977,9 @@ def add_service_heat_stores(
         y=therm_store.y,
         carrier=therm_store.carrier,
         unit="MWh",
+        STATE=therm_store.STATE,
+        STATE_NAME=therm_store.STATE_NAME,
     )
-
-    # p_nom set to zero
-    # demand response config will override this setting
 
     n.madd(
         "Link",
@@ -963,10 +987,10 @@ def add_service_heat_stores(
         suffix="-charger",
         bus0=therm_store.bus0,
         bus1=therm_store.bus1,
-        efficiency=efficiency,
+        efficiency=1,
         carrier=therm_store.carrier,
         p_nom_extendable=False,
-        p_nom=0,
+        p_nom=np.inf,
     )
 
     n.madd(
@@ -975,10 +999,10 @@ def add_service_heat_stores(
         suffix="-discharger",
         bus0=therm_store.bus1,
         bus1=therm_store.bus0,
-        efficiency=efficiency,
+        efficiency=1,
         carrier=therm_store.carrier,
         p_nom_extendable=False,
-        p_nom=0,
+        p_nom=np.inf,
     )
 
     n.madd(
@@ -986,12 +1010,15 @@ def add_service_heat_stores(
         therm_store.index,
         bus=therm_store.bus1,
         e_cyclic=True,
+        e_initial=0,
         e_nom_extendable=False,
         e_nom=np.inf,
         carrier=therm_store.carrier,
         standing_loss=standing_loss,
         capital_cost=capex,
         lifetime=lifetime,
+        efficiency=1,
+        marginal_cost_storage=marginal_cost_storage,
     )
 
 
@@ -1399,16 +1426,29 @@ def add_indusrial_heat_pump(
     )
 
 
-def add_industrial_heat_stores(
+def add_industrial_dr(
     n: pypsa.Network,
+    dr_config: dict[str, Any],
     standing_loss: Optional[float] = None,
 ) -> None:
     """
     Adds end-use thermal storage to the system.
     """
 
+    shift = dr_config.get("shift", 0)
+    method = dr_config.get("method", "price")
+    marginal_cost_storage = dr_config.get("marginal_cost", 0)
+
+    if shift == 0:
+        logger.info(f"DR not applied to industrial as allowable sift is {shift}")
+        return
+
+    if method != "price":
+        if marginal_cost_storage != 0:
+            logger.warning(f"Ignoring DR price of {marginal_cost_storage} for industrial")
+        marginal_cost_storage = 0
+
     capex = 0
-    efficiency = 1
     lifetime = np.inf
 
     carrier_name = f"ind-heat"
@@ -1433,19 +1473,16 @@ def add_industrial_heat_stores(
         unit="MWh",
     )
 
-    # p_nom set to zero
-    # demand response config will override this setting
-
     n.madd(
         "Link",
         df.index,
         suffix="-charger",
         bus0=df.bus0,
         bus1=df.bus1,
-        efficiency=efficiency,
+        efficiency=1,
         carrier=df.carrier,
         p_nom_extendable=False,
-        p_nom=0,
+        p_nom=np.inf,
     )
 
     n.madd(
@@ -1454,10 +1491,10 @@ def add_industrial_heat_stores(
         suffix="-discharger",
         bus0=df.bus1,
         bus1=df.bus0,
-        efficiency=efficiency,
+        efficiency=1,
         carrier=df.carrier,
         p_nom_extendable=False,
-        p_nom=0,
+        p_nom=np.inf,
     )
 
     n.madd(
@@ -1471,4 +1508,5 @@ def add_industrial_heat_stores(
         standing_loss=standing_loss,
         capital_cost=capex,
         lifetime=lifetime,
+        marginal_cost_storage=marginal_cost_storage,
     )

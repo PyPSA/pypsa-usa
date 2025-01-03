@@ -412,15 +412,15 @@ if __name__ == "__main__":
     for elec_sector in elec_sectors:
         if elec_sector in ["res", "com"]:
             options = snakemake.params.sector["service_sector"]
-            split_urban_rural = options.get("split_urban_rural", False)
             build_electricty(
                 n=n,
                 sector=elec_sector,
-                split_urban_rural=split_urban_rural,
                 pop_layout_path=pop_layout_path,
+                options=options,
             )
         else:
-            build_electricty(n=n, sector=elec_sector)
+            options = snakemake.params.sector["industrial_sector"]
+            build_electricty(n=n, sector=elec_sector, options=options)
 
     dynamic_cost_year = sns.year.min()
 
@@ -436,6 +436,7 @@ if __name__ == "__main__":
         else:
             logger.warning(f"No config options found for {heat_sector}")
             options = {}
+
         build_heat(
             n=n,
             costs=costs,
@@ -449,13 +450,15 @@ if __name__ == "__main__":
         )
 
     # add transportation
-    exogenous_transport = snakemake.params.sector["transport_sector"]["investment"].get("exogenous", False)
+    trn_options = options = snakemake.params.sector["transport_sector"]
+    exogenous_transport = trn_options["investment"].get("exogenous", False)
     if exogenous_transport:
         ev_policy = pd.read_csv(snakemake.input.ev_policy, index_col=0)
         apply_exogenous_ev_policy(n, ev_policy)
         must_run_evs = None
     else:
-        must_run_evs = snakemake.params.sector["transport_sector"]["investment"].get("must_run_evs", True)
+        must_run_evs = trn_options["investment"].get("must_run_evs", True)
+    dr_config = trn_options.get("demand_response", {})
     build_transportation(
         n=n,
         costs=costs,
@@ -464,6 +467,7 @@ if __name__ == "__main__":
         dynamic_pricing=True,
         eia=eia_api,
         year=dynamic_cost_year,
+        dr_config=dr_config,
     )
 
     # check for end-use brownfield requirements
@@ -554,5 +558,7 @@ if __name__ == "__main__":
 
     # Needed as loads may be split off to urban/rural
     sanitize_carriers(n, snakemake.config)
+
+    # print("")
 
     n.export_to_netcdf(snakemake.output.network)

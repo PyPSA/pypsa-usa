@@ -1,36 +1,47 @@
 """Functions for building electricity infrastructure in sector studies"""
 
-from typing import Optional
+import logging
+from typing import Any, Optional
 
 import numpy as np
 import pandas as pd
 import pypsa
 from constants_sector import SecCarriers
 
+logger = logging.getLogger(__name__)
+
 
 def build_electricty(
     n: pypsa.Network,
     sector: str,
-    split_urban_rural: Optional[bool] = None,
     pop_layout_path: Optional[pd.DataFrame] = None,
+    options: Optional[dict[str, Any]] = None,
 ) -> None:
     """Adds electricity sector infrastructre data"""
 
     if sector in ("res", "com", "srv"):
+
+        split_urban_rural = options.get("split_urban_rural", False)
+
         if split_urban_rural:
             pop_layout = pd.read_csv(pop_layout_path).set_index("name")
             _split_urban_rural_load(n, sector, pop_layout)
             for system in ["urban", "rural"]:
                 add_electricity_infrastructure(n, sector, system)
+
         else:
             _format_total_load(n, sector)
             add_electricity_infrastructure(n, sector, "total")
+
     elif sector == "ind":
         add_electricity_infrastructure(n, sector)
+
     else:
         raise ValueError
 
-    add_electricity_dr(n, sector)
+    dr_config = options.get("demand_response", {})
+    if dr_config:
+        add_electricity_dr(n, sector, dr_config)
 
 
 def add_electricity_infrastructure(n: pypsa.Network, sector: str, suffix: Optional[str] = None):
@@ -73,16 +84,32 @@ def add_electricity_infrastructure(n: pypsa.Network, sector: str, suffix: Option
 def add_electricity_dr(
     n: pypsa.Network,
     sector: str,
+    dr_config: dict[str, Any],
 ) -> None:
     """
     Adds stores to the network to use for demand response.
     """
+
+    shift = dr_config.get("shift", 0)
+    method = dr_config.get("method", "price")
+    marginal_cost_storage = dr_config.get("marginal_cost", 0)
+
+    if shift == 0:
+        logger.info(f"DR not applied to {sector} as allowable sift is {shift}")
+        return
+
+    if method != "price":
+        if marginal_cost_storage != 0:
+            logger.warning(f"Ignoring DR price of {marginal_cost_storage} for {sector}")
+        marginal_cost_storage = 0
 
     elec = SecCarriers.ELECTRICITY.value
 
     df = n.loads[n.loads.index.str.endswith(f"-{elec}") & n.loads.index.str.contains(f"{sector}-")].copy()
     df["x"] = df.bus.map(n.buses.x)
     df["y"] = df.bus.map(n.buses.y)
+    df["STATE"] = df.bus.map(n.buses.STATE)
+    df["STATE_NAME"] = df.bus.map(n.buses.STATE_NAME)
     df["carrier"] = df["carrier"]
     df = df.set_index("bus")
 
@@ -94,10 +121,9 @@ def add_electricity_dr(
         y=df.y,
         carrier=df.carrier,
         unit="MWh",
+        STATE=df.STATE,
+        STATE_NAME=df.STATE_NAME,
     )
-
-    # p_nom set to zero
-    # demand response config will override this setting
 
     n.madd(
         "Link",
@@ -108,7 +134,7 @@ def add_electricity_dr(
         efficiency=1,
         carrier=df.carrier,
         p_nom_extendable=False,
-        p_nom=0,
+        p_nom=np.inf,
     )
 
     n.madd(
@@ -120,7 +146,7 @@ def add_electricity_dr(
         efficiency=1,
         carrier=df.carrier,
         p_nom_extendable=False,
-        p_nom=0,
+        p_nom=np.inf,
     )
 
     n.madd(
@@ -128,12 +154,15 @@ def add_electricity_dr(
         df.index,
         bus=df.index + "-store",
         e_cyclic=True,
+        e_initial=0,
         e_nom_extendable=False,
         e_nom=np.inf,
         carrier=df.carrier,
         standing_loss=0,
         capital_cost=0,
         lifetime=np.inf,
+        efficiency=1,
+        marginal_cost_storage=marginal_cost_storage,
     )
 
 

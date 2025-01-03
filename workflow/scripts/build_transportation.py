@@ -3,7 +3,7 @@ Module for building transportation infrastructure.
 """
 
 import logging
-from typing import Optional
+from typing import Any, Optional
 
 import numpy as np
 import pandas as pd
@@ -32,6 +32,7 @@ def build_transportation(
     eia: Optional[str] = None,  # for dynamic pricing
     year: Optional[int] = None,  # for dynamic pricing
     must_run_evs: Optional[bool] = None,  # for endogenous EV investment
+    dr_config: Optional[dict[str, Any]] = None,
 ) -> None:
     """
     Main funtion to interface with.
@@ -46,7 +47,8 @@ def build_transportation(
             add_lpg_infrastructure(n, road_suffix, costs)  # attaches at state level
 
     # demand response must happen after exogenous/endogenous split
-    add_transport_dr(n, road_suffix)
+    if dr_config:
+        add_transport_dr(n, road_suffix, dr_config)
 
     if dynamic_pricing:
         assert eia
@@ -107,7 +109,8 @@ def add_ev_infrastructure(
         x=nodes.x,
         y=nodes.y,
         country=nodes.country,
-        state=nodes.STATE,
+        STATE=nodes.STATE,
+        STATE_NAME=nodes.STATE_NAME,
         carrier=f"trn-elec-{vehicle}",
     )
 
@@ -143,7 +146,7 @@ def add_lpg_infrastructure(
         x=nodes.x,
         y=nodes.y,
         country=nodes.country,
-        state=nodes.state,
+        state=nodes.STATE,
         carrier=f"trn-lpg-{vehicle}",
     )
 
@@ -173,8 +176,23 @@ def add_lpg_infrastructure(
     )
 
 
-def add_transport_dr(n: pypsa.Network, vehicle: str) -> None:
+def add_transport_dr(n: pypsa.Network, vehicle: str, dr_config: dict[str, Any]) -> None:
     """Attachs DR infrastructure at load location"""
+
+    shift = dr_config.get("shift", 0)
+    method = dr_config.get("method", "price")
+    marginal_cost_storage = dr_config.get("marginal_cost", 0)
+
+    if shift == 0:
+        logger.info(f"DR not applied to {vehicle} as allowable sift is {shift}")
+        return
+
+    if method != "price":
+        if marginal_cost_storage != 0:
+            logger.warning(
+                f"Ignoring DR price of {marginal_cost_storage} for {vehicle}",
+            )
+        marginal_cost_storage = 0
 
     df = n.buses[n.buses.carrier == f"trn-elec-{vehicle}"]
 
@@ -185,8 +203,9 @@ def add_transport_dr(n: pypsa.Network, vehicle: str) -> None:
         x=df.x,
         y=df.y,
         country=df.country,
-        state=df.STATE,
         carrier=df.carrier,
+        STATE=df.STATE,
+        STATE_NAME=df.STATE_NAME,
     )
 
     n.madd(
@@ -198,7 +217,7 @@ def add_transport_dr(n: pypsa.Network, vehicle: str) -> None:
         efficiency=1,
         carrier=df.carrier,
         p_nom_extendable=False,
-        p_nom=0,
+        p_nom=np.inf,
     )
 
     n.madd(
@@ -210,7 +229,7 @@ def add_transport_dr(n: pypsa.Network, vehicle: str) -> None:
         efficiency=1,
         carrier=df.carrier,
         p_nom_extendable=False,
-        p_nom=0,
+        p_nom=np.inf,
     )
 
     n.madd(
@@ -218,12 +237,14 @@ def add_transport_dr(n: pypsa.Network, vehicle: str) -> None:
         df.index,
         bus=df.index,
         e_cyclic=True,
+        e_initial=0,
         e_nom_extendable=False,
         e_nom=np.inf,
         carrier=df.carrier,
         standing_loss=0,
         capital_cost=0,
         lifetime=np.inf,
+        marginal_cost_storage=marginal_cost_storage,
     )
 
 
