@@ -353,7 +353,12 @@ def plot_bar(data, n, save, title, ylabel, is_capacity=False):
 
     # Set up the figure and axes
     fig, axes = plt.subplots(rows, columns, figsize=(columns * 2.5, rows * 5), sharex=True, sharey=True)
-    axes = axes.flatten()
+
+    # Ensure axes is a flattened array for consistent indexing
+    if num_regions == 1:
+        axes = [axes]  # Wrap single Axes object in a list
+    else:
+        axes = axes.flatten()
 
     for i, region in enumerate(regions):
         region_data = data.loc[region]
@@ -369,9 +374,12 @@ def plot_bar(data, n, save, title, ylabel, is_capacity=False):
         axes[i].set_ylabel(ylabel)
         axes[i].set_xlabel("")
 
-    for j in range(i + 1, len(axes)):
-        fig.delaxes(axes[j])
+    # Remove unused subplots
+    if num_regions > 1:
+        for j in range(i + 1, len(axes)):
+            fig.delaxes(axes[j])
 
+    # Create legend
     handles, labels = [], []
     for carrier in data.reset_index().Carrier.unique():
         handle = plt.Rectangle((0, 0), 1, 1, color=palette[carrier])
@@ -424,7 +432,12 @@ def plot_regional_emissions_bar(
 
     # Set up the figure and axes
     fig, axes = plt.subplots(rows, columns, figsize=(columns * 2.5, rows * 5), sharex=True, sharey=True)
-    axes = axes.flatten()
+
+    # Ensure axes is a flattened array for consistent indexing
+    if num_regions == 1:
+        axes = [axes]  # Wrap single Axes object in a list
+    else:
+        axes = axes.flatten()
 
     for i, region in enumerate(regions):
         region_data = regional_emissions.loc[region]
