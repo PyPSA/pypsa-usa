@@ -1,3 +1,4 @@
+(spatial)=
 # Spatial Configuration
 
 ## Configuring Spatial Scope
