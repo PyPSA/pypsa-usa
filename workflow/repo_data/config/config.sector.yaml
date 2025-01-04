@@ -46,6 +46,12 @@ sector:
     loads: # to be implemented 
       heating: true
       cooling: true
+    demand_response: 
+      shift: 0
+      method: price
+      marginal_cost: 1
+      balance: 12
+      direction: both
   transport_sector:
     brownfield: True # false to be implemented
     dynamic_costs: True # false to be implemented 
@@ -58,6 +64,12 @@ sector:
       rail: true
       air: true
       boat: true
+    demand_response: 
+      shift: 0
+      method: price
+      marginal_cost: 1
+      balance: 12
+      direction: both
   industrial_sector: 
     brownfield: True # false to be implemented
     dynamic_costs: True # false to be implemented 
@@ -65,3 +77,9 @@ sector:
       gas_furnace: true
       coal_furnace: true
       heat_pump: true
+    demand_response: 
+      shift: 0
+      method: price
+      marginal_cost: 1
+      balance: 12
+      direction: both
