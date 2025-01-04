@@ -1097,7 +1097,7 @@ def plot_sector_dr_timeseries(
             df = df[df.index.get_level_values("timestep").month == month_i]
 
         if df.empty:
-            logger.warning(f"No data to plot for {state}")
+            logger.warning(f"No Demand Response data to plot for {state}")
             continue
 
         if nice_name:
@@ -1121,7 +1121,7 @@ def plot_sector_dr_timeseries(
                 axs.set_title(f"{SECTOR_MAPPER[sector]}")
 
         except TypeError:  # no numeric data to plot
-            logger.warning(f"No data to plot for {state} (plot_sector_production)")
+            logger.warning(f"No data to plot for {state} (plot_sector_dr_timeseries)")
 
     return fig, axs
 
@@ -1359,43 +1359,43 @@ PRODUCTION_PLOTS = [
         "fn": plot_sector_dr_timeseries,
         "nice_name": "Residential Demand Response",
         "sector": "res",
-        "plot_by_month": True,
+        # "plot_by_month": True,
         "fn_kwargs": {
-            "resample": "D",
-            "resample_fn": pd.Series.mean,
+            # "resample": "D",
+            # "resample_fn": pd.Series.mean,
         },
     },
     {
         "name": "production_demand_response",
         "fn": plot_sector_dr_timeseries,
-        "nice_name": "Residential Demand Response",
+        "nice_name": "Commercial Demand Response",
         "sector": "com",
-        "plot_by_month": True,
+        # "plot_by_month": True,
         "fn_kwargs": {
-            "resample": "D",
-            "resample_fn": pd.Series.mean,
+            # "resample": "D",
+            # "resample_fn": pd.Series.mean,
         },
     },
     {
         "name": "production_demand_response",
         "fn": plot_sector_dr_timeseries,
-        "nice_name": "Residential Demand Response",
+        "nice_name": "Industrial Demand Response",
         "sector": "ind",
-        "plot_by_month": True,
+        # "plot_by_month": True,
         "fn_kwargs": {
-            "resample": "D",
-            "resample_fn": pd.Series.mean,
+            # "resample": "D",
+            # "resample_fn": pd.Series.mean,
         },
     },
     {
         "name": "production_demand_response",
         "fn": plot_sector_dr_timeseries,
-        "nice_name": "Residential Demand Response",
+        "nice_name": "Transportation Demand Response",
         "sector": "trn",
-        "plot_by_month": True,
+        # "plot_by_month": True,
         "fn_kwargs": {
-            "resample": "D",
-            "resample_fn": pd.Series.mean,
+            # "resample": "D",
+            # "resample_fn": pd.Series.mean,
         },
     },
     {
