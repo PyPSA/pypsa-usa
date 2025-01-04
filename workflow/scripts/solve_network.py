@@ -1316,23 +1316,6 @@ def add_demand_response_constraints(n, config):
             # transport dr attached at aggregation load
             return n.stores[n.stores.carrier == "trn-elec-veh"].bus.to_list()
 
-    def enable_demand_response(
-        n: pypsa.Network,
-        sector: str,
-    ):
-        """Turns on templated demand response components"""
-
-        names = _filter_on_sector(n, sector)
-
-        if not names:
-            return
-
-        charging_links = [f"{x}-charger" for x in names]
-        discharging_links = [f"{x}-discharger" for x in names]
-        dr_links = charging_links + discharging_links
-
-        n.links.loc[dr_links, "p_nom"] = np.inf
-
     def add_capacity_constraint(
         n: pypsa.Network,
         sector: str,
@@ -1364,7 +1347,7 @@ def add_demand_response_constraints(n, config):
         # transport dr is at the aggregation bus
         # sum all outgoing capacity and apply the capacity limit to that
         # ie. a seperate constraint is added for each node
-        # there may be a more efficient way to do this
+        # todo: there is probably a more efficient way to do this
         else:
 
             for name in names:
@@ -1450,27 +1433,6 @@ def add_demand_response_constraints(n, config):
                 name=f"demand_response_energy-{sns_name}-{sector}-{period}",
             )
 
-    def add_price_constraint(
-        n: pypsa.Network,
-        sector: str,
-        price: float,
-    ):
-        """Applies marginal cost to demand response storage units
-
-        Note; this doesnt actually add new constraints. Just modifies the
-        network store components directly.
-        """
-
-        names = _filter_on_sector(n, sector)
-
-        if not names:
-            return
-
-        carriers = n.loads[n.loads.index.isin(names)].carrier.unique()
-        dr_stores = n.stores[n.stores.carrier.isin(carriers)]
-
-        n.stores.loc[dr_stores.index, "marginal_cost_storage"] = price
-
     # demand response addition starts here
 
     sectors = ["res", "com", "ind", "trn"]
@@ -1493,23 +1455,21 @@ def add_demand_response_constraints(n, config):
         shift = dr_config.get("shift", 0)
         method = dr_config.get("method", "price")
 
+        # capacity constraint
+
         if shift == "inf":
-            enable_demand_response(n, sector)
+            pass
         elif shift >= 0.01:  # for tolerance
-            enable_demand_response(n, sector)
             for period in n.investment_periods:
                 add_capacity_constraint(n, sector, shift, period)
         else:
-            logger.info(f"Demand response not enabled for {sector}")
-            continue
+            logger.info(f"Unknown arguement of {shift} for {sector} DR")
+            raise ValueError(shift)
+
+        # balancing constraints
 
         if method == "price":
-            mc = dr_config.get("marginal_cost", 0)
-            if mc == 0:
-                logger.warning(
-                    f"No cost applied for demand response in {sector} sector",
-                )
-            add_price_constraint(n, sector, mc)
+            pass
 
         elif method == "time":
 
@@ -1669,6 +1629,15 @@ if __name__ == "__main__":
     np.random.seed(solve_opts.get("seed", 123))
 
     n = pypsa.Network(snakemake.input.network)
+
+    # links = n.links[
+    #     n.links.carrier.str.startswith(sector)
+    #     & ~n.links.carrier.str.contains("water")
+    #     & n.links.index.str.endswith("-discharger")
+    # ].index
+
+    # n.links.loc[links, "p_nom"] = 0.20
+    # n.links.loc[links, "p_min_pu"] = 0.80
 
     n = prepare_network(
         n,
