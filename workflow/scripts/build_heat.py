@@ -351,7 +351,7 @@ def add_industrial_heat(
     add_indusrial_heat_pump(n, costs)
 
     if dr_config:
-        add_industrial_dr(n, dr_config)
+        add_heat_dr(n, sector, dr_config)
 
 
 def add_service_heat(
@@ -468,7 +468,7 @@ def add_service_heat(
             )
 
         if dr_config:
-            add_service_heat_dr(
+            add_heat_dr(
                 n=n,
                 sector=sector,
                 heat_system=heat_system,
@@ -555,7 +555,13 @@ def add_service_cooling(
             add_service_heat_pumps_cooling(n, sector, heat_system, "cool")
 
         if dr_config:
-            add_service_heat_dr(n, sector, heat_system, "cool", dr_config)
+            add_heat_dr(
+                n=n,
+                sector=sector,
+                heat_system=heat_system,
+                heat_carrier="cool",
+                dr_config=dr_config,
+            )
 
 
 def add_air_cons(
@@ -911,114 +917,148 @@ def add_service_furnace(
         )
 
 
-def add_service_heat_dr(
+def add_heat_dr(
     n: pypsa.Network,
     sector: str,
-    heat_system: str,
-    heat_carrier: str,
     dr_config: dict[str, Any],
+    heat_system: Optional[str],
+    heat_carrier: Optional[str],
     standing_loss: Optional[float] = None,
 ) -> None:
     """
-    Adds end-use thermal storage to the system.
-
-    Will add a heat-store-bus. Two uni-directional links to connect the heat-
-    store-bus to the heat-bus. A store to connect to the heat-store-bus.
-
-    Parameters are average of all storage technologies.
+    Adds end-use thermal demand response.
 
     n: pypsa.Network
     sector: str
-        ("com" or "res")
-    heat_system: str
+    heat_system: Optional[str],
+        only if 'com' or 'res' sectors
         ("rural" or "urban")
-    heat_carrier: str
+    heat_carrier: Optional[str],
+        only if 'com' or 'res' sectors
         ("heat" or "space-heat")
     """
 
-    assert heat_system in ("urban", "rural", "total")
-    assert heat_carrier in ("heat", "space-heat", "cool")
-
     shift = dr_config.get("shift", 0)
-    method = dr_config.get("method", "price")
     marginal_cost_storage = dr_config.get("marginal_cost", 0)
 
     if shift == 0:
         logger.info(f"DR not applied to {sector} as allowable sift is {shift}")
         return
 
-    if method != "price":
-        if marginal_cost_storage != 0:
-            logger.warning(f"Ignoring DR price of {marginal_cost_storage} for {sector}")
-        marginal_cost_storage = 0
+    if marginal_cost_storage == 0:
+        logger.warning(f"No cost applied to demand response for {sector}")
 
-    capex = 0
-    lifetime = np.inf
+    if sector in ["res", "com"]:
 
-    carrier_name = f"{sector}-{heat_system}-{heat_carrier}"
+        assert heat_system in ("urban", "rural", "total")
+        assert heat_carrier in ("heat", "space-heat", "cool")
+
+        carrier_name = f"{sector}-{heat_system}-{heat_carrier}"
+
+    elif sector == "ind":
+        carrier_name = f"ind-heat"
+
+    else:
+        raise ValueError(f"{sector} not valid dr option")
 
     # must be run after rural/urban load split
     buses = n.buses[n.buses.carrier == carrier_name]
 
-    therm_store = pd.DataFrame(index=buses.index)
-    therm_store["bus0"] = therm_store.index
-    therm_store["bus1"] = therm_store.index + "-store"
-    therm_store["x"] = therm_store.index.map(n.buses.x)
-    therm_store["y"] = therm_store.index.map(n.buses.y)
-    therm_store["carrier"] = f"{sector}-{heat_system}-{heat_carrier}"
-    therm_store["STATE"] = therm_store.index.map(n.buses.STATE)
-    therm_store["STATE_NAME"] = therm_store.index.map(n.buses.STATE_NAME)
+    df = pd.DataFrame(index=buses.index)
+    df["x"] = df.index.map(n.buses.x)
+    df["y"] = df.index.map(n.buses.y)
+    df["carrier"] = carrier_name
+    df["STATE"] = df.index.map(n.buses.STATE)
+    df["STATE_NAME"] = df.index.map(n.buses.STATE_NAME)
+
+    # two buses for forward and backwards load shifting
 
     n.madd(
         "Bus",
-        therm_store.index,
-        suffix="-store",
-        x=therm_store.x,
-        y=therm_store.y,
-        carrier=therm_store.carrier,
+        df.index,
+        suffix="-fwd-dr",
+        x=df.x,
+        y=df.y,
+        carrier=df.carrier,
         unit="MWh",
-        STATE=therm_store.STATE,
-        STATE_NAME=therm_store.STATE_NAME,
+        STATE=df.STATE,
+        STATE_NAME=df.STATE_NAME,
+    )
+
+    n.madd(
+        "Bus",
+        df.index,
+        suffix="-bck-dr",
+        x=df.x,
+        y=df.y,
+        carrier=df.carrier,
+        unit="MWh",
+        STATE=df.STATE,
+        STATE_NAME=df.STATE_NAME,
+    )
+
+    # lossless bidirectional links for ease of capacity constraints
+    # links go from dr to main bus so p will be positive
+
+    n.madd(
+        "Link",
+        df.index,
+        suffix="-fwd-dr",
+        bus0=df.index + "-fwd-dr",
+        bus1=df.index,
+        efficiency=1,
+        carrier=df.carrier,
+        p_nom_extendable=False,
+        p_nom=np.inf,
+        p_max_pu=1,
+        p_min_pu=-1,
     )
 
     n.madd(
         "Link",
-        therm_store.index,
-        suffix="-charger",
-        bus0=therm_store.bus0,
-        bus1=therm_store.bus1,
+        df.index,
+        suffix="-bck-dr",
+        bus0=df.index + "-bck-dr",
+        bus1=df.index,
         efficiency=1,
-        carrier=therm_store.carrier,
+        carrier=df.carrier,
         p_nom_extendable=False,
         p_nom=np.inf,
+        p_max_pu=1,
+        p_min_pu=-1,
     )
 
+    # backward stores have positive marginal cost storage and postive e
+    # forward stores have negative marginal cost storage and negative e
+
     n.madd(
-        "Link",
-        therm_store.index,
-        suffix="-discharger",
-        bus0=therm_store.bus1,
-        bus1=therm_store.bus0,
-        efficiency=1,
-        carrier=therm_store.carrier,
-        p_nom_extendable=False,
-        p_nom=np.inf,
+        "Store",
+        df.index,
+        suffix="-bck-dr",
+        bus=df.index + "-bck-dr",
+        e_cyclic=True,
+        e_nom_extendable=False,
+        e_nom=np.inf,
+        e_min_pu=0,
+        e_max_pu=1,
+        carrier=df.carrier,
+        standing_loss=standing_loss,
+        marginal_cost_storage=marginal_cost_storage,
     )
 
     n.madd(
         "Store",
-        therm_store.index,
-        bus=therm_store.bus1,
+        df.index,
+        suffix="-fwd-dr",
+        bus=df.index + "-fwd-dr",
         e_cyclic=True,
-        e_initial=0,
         e_nom_extendable=False,
         e_nom=np.inf,
-        carrier=therm_store.carrier,
+        e_min_pu=-1,
+        e_max_pu=0,
+        carrier=df.carrier,
         standing_loss=standing_loss,
-        capital_cost=capex,
-        lifetime=lifetime,
-        efficiency=1,
-        marginal_cost_storage=marginal_cost_storage,
+        marginal_cost_storage=marginal_cost_storage * (-1),
     )
 
 
@@ -1423,90 +1463,4 @@ def add_indusrial_heat_pump(
         capital_cost=capex,
         p_nom_extendable=True,
         lifetime=lifetime,
-    )
-
-
-def add_industrial_dr(
-    n: pypsa.Network,
-    dr_config: dict[str, Any],
-    standing_loss: Optional[float] = None,
-) -> None:
-    """
-    Adds end-use thermal storage to the system.
-    """
-
-    shift = dr_config.get("shift", 0)
-    method = dr_config.get("method", "price")
-    marginal_cost_storage = dr_config.get("marginal_cost", 0)
-
-    if shift == 0:
-        logger.info(f"DR not applied to industrial as allowable sift is {shift}")
-        return
-
-    if method != "price":
-        if marginal_cost_storage != 0:
-            logger.warning(f"Ignoring DR price of {marginal_cost_storage} for industrial")
-        marginal_cost_storage = 0
-
-    capex = 0
-    lifetime = np.inf
-
-    carrier_name = f"ind-heat"
-
-    # must be run after rural/urban load split
-    buses = n.buses[n.buses.carrier == carrier_name]
-
-    df = pd.DataFrame(index=buses.index)
-    df["bus0"] = df.index
-    df["bus1"] = df.index + "-store"
-    df["x"] = df.index.map(n.buses.x)
-    df["y"] = df.index.map(n.buses.y)
-    df["carrier"] = carrier_name
-
-    n.madd(
-        "Bus",
-        df.index,
-        suffix="-store",
-        x=df.x,
-        y=df.y,
-        carrier=df.carrier,
-        unit="MWh",
-    )
-
-    n.madd(
-        "Link",
-        df.index,
-        suffix="-charger",
-        bus0=df.bus0,
-        bus1=df.bus1,
-        efficiency=1,
-        carrier=df.carrier,
-        p_nom_extendable=False,
-        p_nom=np.inf,
-    )
-
-    n.madd(
-        "Link",
-        df.index,
-        suffix="-discharger",
-        bus0=df.bus1,
-        bus1=df.bus0,
-        efficiency=1,
-        carrier=df.carrier,
-        p_nom_extendable=False,
-        p_nom=np.inf,
-    )
-
-    n.madd(
-        "Store",
-        df.index,
-        bus=df.bus1,
-        e_cyclic=True,
-        e_nom_extendable=False,
-        e_nom=np.inf,
-        carrier=df.carrier,
-        standing_loss=standing_loss,
-        capital_cost=capex,
-        lifetime=lifetime,
-        marginal_cost_storage=marginal_cost_storage,
     )
