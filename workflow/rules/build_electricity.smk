@@ -26,7 +26,7 @@ rule build_shapes:
         "logs/build_shapes/{interconnect}.log",
     threads: 1
     resources:
-        mem_mb=2000,
+        mem_mb=5000,
     script:
         "../scripts/build_shapes.py"
 
@@ -57,7 +57,7 @@ rule build_base_network:
         "logs/create_network/{interconnect}.log",
     threads: 1
     resources:
-        mem_mb=1000,
+        mem_mb=5000,
     script:
         "../scripts/build_base_network.py"
 
@@ -99,6 +99,7 @@ rule build_cost_data:
         efs_tech_costs="repo_data/costs/EFS_Technology_Data.xlsx",
         efs_icev_costs="repo_data/costs/efs_icev_costs.csv",
         eia_tech_costs="repo_data/costs/eia_tech_costs.csv",
+        egs_costs="repo_data/costs/egs_costs.csv",
         additional_costs="repo_data/costs/additional_costs.csv",
     output:
         tech_costs=RESOURCES + "costs/costs_{year}.csv",
@@ -107,7 +108,7 @@ rule build_cost_data:
         LOGS + "costs_{year}.log",
     threads: 1
     resources:
-        mem_mb=1000,
+        mem_mb=5000,
     script:
         "../scripts/build_cost_data.py"
 
@@ -134,7 +135,7 @@ if config["enable"].get("build_cutout", False):
             "benchmarks/" + CDIR + "build_cutout_{interconnect}_{cutout}"
         threads: ATLITE_NPROCESSES
         resources:
-            mem_mb=ATLITE_NPROCESSES * 1000,
+            mem_mb=ATLITE_NPROCESSES * 5000,
         script:
             "../scripts/build_cutout.py"
 
@@ -208,10 +209,11 @@ rule build_renewable_profiles:
     benchmark:
         BENCHMARKS + "{interconnect}/build_renewable_profiles_{technology}"
     threads: ATLITE_NPROCESSES
+    retries: 3
     resources:
         mem_mb=ATLITE_NPROCESSES * 5000,
     wildcard_constraints:
-        technology="(?!hydro).*",  # Any technology other than hydro
+        technology="(?!hydro|EGS).*",  # Any technology other than hydro
     script:
         "../scripts/build_renewable_profiles.py"
 
@@ -607,6 +609,16 @@ rule add_electricity:
         hydro_breakthrough=DATA + "breakthrough_network/base_grid/hydro.csv",
         bus2sub=RESOURCES + "{interconnect}/bus2sub.csv",
         pudl_fuel_costs=RESOURCES + "{interconnect}/pudl_fuel_costs.csv",
+        specs_egs=(
+            DATA + "EGS/{interconnect}/specs_EGS.nc"
+            if "EGS" in config["electricity"]["extendable_carriers"]["Generator"]
+            else []
+        ),
+        profile_egs=(
+            DATA + "EGS/{interconnect}/profile_EGS.nc"
+            if "EGS" in config["electricity"]["extendable_carriers"]["Generator"]
+            else []
+        ),
     output:
         RESOURCES + "{interconnect}/elec_base_network_l_pp.pkl",
     log:
@@ -749,6 +761,7 @@ rule prepare_network:
         co2limit_enable=config_provider("electricity", "co2limit_enable", default=False),
         gaslimit=config_provider("electricity", "gaslimit"),
         gaslimit_enable=config_provider("electricity", "gaslimit_enable", default=False),
+        transmission_network=config_provider("model_topology", "transmission_network"),
         max_hours=config_provider("electricity", "max_hours"),
         costs=config_provider("costs"),
         autarky=config_provider("electricity", "autarky"),
@@ -791,7 +804,7 @@ rule build_powerplants:
     output:
         powerplants=RESOURCES + "powerplants.csv",
     log:
-        "logs/build_powerplants",
+        "logs/build_powerplants.log",
     resources:
         mem_mb=30000,
     script:
