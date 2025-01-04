@@ -555,7 +555,7 @@ def add_service_cooling(
             add_service_heat_pumps_cooling(n, sector, heat_system, "cool")
 
         if dr_config:
-            add_service_heat_dr(n, sector, heat_system, "cool", costs)
+            add_service_heat_dr(n, sector, heat_system, "cool", dr_config)
 
 
 def add_air_cons(
