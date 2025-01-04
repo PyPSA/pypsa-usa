@@ -91,17 +91,14 @@ def add_electricity_dr(
     """
 
     shift = dr_config.get("shift", 0)
-    method = dr_config.get("method", "price")
     marginal_cost_storage = dr_config.get("marginal_cost", 0)
 
     if shift == 0:
         logger.info(f"DR not applied to {sector} as allowable sift is {shift}")
         return
 
-    if method != "price":
-        if marginal_cost_storage != 0:
-            logger.warning(f"Ignoring DR price of {marginal_cost_storage} for {sector}")
-        marginal_cost_storage = 0
+    if marginal_cost_storage == 0:
+        logger.warning(f"No cost applied to demand response for {sector}")
 
     elec = SecCarriers.ELECTRICITY.value
 

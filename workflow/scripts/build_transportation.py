@@ -180,71 +180,103 @@ def add_transport_dr(n: pypsa.Network, vehicle: str, dr_config: dict[str, Any]) 
     """Attachs DR infrastructure at load location"""
 
     shift = dr_config.get("shift", 0)
-    method = dr_config.get("method", "price")
     marginal_cost_storage = dr_config.get("marginal_cost", 0)
 
     if shift == 0:
         logger.info(f"DR not applied to {vehicle} as allowable sift is {shift}")
         return
 
-    if method != "price":
-        if marginal_cost_storage != 0:
-            logger.warning(
-                f"Ignoring DR price of {marginal_cost_storage} for {vehicle}",
-            )
-        marginal_cost_storage = 0
+    if marginal_cost_storage == 0:
+        logger.warning(f"No cost applied to demand response for {vehicle}")
 
     df = n.buses[n.buses.carrier == f"trn-elec-{vehicle}"]
+
+    # two buses for forward and backwards load shifting
 
     n.madd(
         "Bus",
         df.index,
-        suffix=f"-store",
+        suffix="-fwd-dr",
         x=df.x,
         y=df.y,
-        country=df.country,
         carrier=df.carrier,
+        unit="MWh",
         STATE=df.STATE,
         STATE_NAME=df.STATE_NAME,
     )
 
     n.madd(
-        "Link",
+        "Bus",
         df.index,
-        suffix=f"-charger",
-        bus0=df.index,
-        bus1=df.index + f"-store",
-        efficiency=1,
+        suffix="-bck-dr",
+        x=df.x,
+        y=df.y,
         carrier=df.carrier,
-        p_nom_extendable=False,
-        p_nom=np.inf,
+        unit="MWh",
+        STATE=df.STATE,
+        STATE_NAME=df.STATE_NAME,
     )
+
+    # lossless bidirectional links for ease of capacity constraints
+    # links go from dr to main bus so p will be positive
 
     n.madd(
         "Link",
         df.index,
-        suffix=f"-discharger",
-        bus0=df.index + f"-store",
+        suffix="-fwd-dr",
+        bus0=df.index + "-fwd-dr",
         bus1=df.index,
         efficiency=1,
         carrier=df.carrier,
         p_nom_extendable=False,
         p_nom=np.inf,
+        p_max_pu=1,
+        p_min_pu=-1,
+    )
+
+    n.madd(
+        "Link",
+        df.index,
+        suffix="-bck-dr",
+        bus0=df.index + "-bck-dr",
+        bus1=df.index,
+        efficiency=1,
+        carrier=df.carrier,
+        p_nom_extendable=False,
+        p_nom=np.inf,
+        p_max_pu=1,
+        p_min_pu=-1,
+    )
+
+    # backward stores have positive marginal cost storage and postive e
+    # forward stores have negative marginal cost storage and negative e
+
+    n.madd(
+        "Store",
+        df.index,
+        suffix="-bck-dr",
+        bus=df.index + "-bck-dr",
+        e_cyclic=True,
+        e_nom_extendable=False,
+        e_nom=np.inf,
+        e_min_pu=0,
+        e_max_pu=1,
+        carrier=df.carrier,
+        marginal_cost_storage=marginal_cost_storage,
     )
 
     n.madd(
         "Store",
         df.index,
-        bus=df.index,
+        suffix="-fwd-dr",
+        bus=df.index + "-fwd-dr",
         e_cyclic=True,
-        e_initial=0,
         e_nom_extendable=False,
         e_nom=np.inf,
+        e_min_pu=-1,
+        e_max_pu=0,
         carrier=df.carrier,
-        standing_loss=0,
-        capital_cost=0,
-        lifetime=np.inf,
-        marginal_cost_storage=marginal_cost_storage,
+        marginal_cost_storage=marginal_cost_storage * (-1),
     )
 
 
