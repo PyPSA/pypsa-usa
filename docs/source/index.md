@@ -56,6 +56,7 @@ data-generators
 data-renewables
 data-costs
 data-policies
+data-sectors
 data-naturalgas
 data-services
 data-industrial
