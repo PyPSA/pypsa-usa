@@ -46,10 +46,6 @@ def build_transportation(
         else:
             add_lpg_infrastructure(n, road_suffix, costs)  # attaches at state level
 
-    # demand response must happen after exogenous/endogenous split
-    if dr_config:
-        add_transport_dr(n, road_suffix, dr_config)
-
     if dynamic_pricing:
         assert eia
         assert year
@@ -66,6 +62,10 @@ def build_transportation(
     if not exogenous:
         assert isinstance(must_run_evs, bool)
         apply_endogenous_road_investments(n, must_run_evs)
+
+    # demand response must happen after exogenous/endogenous split
+    if dr_config:
+        add_transport_dr(n, road_suffix, dr_config)
 
     if air:
         air_suffix = Transport.AIR.value

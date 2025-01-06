@@ -921,8 +921,8 @@ def add_heat_dr(
     n: pypsa.Network,
     sector: str,
     dr_config: dict[str, Any],
-    heat_system: Optional[str],
-    heat_carrier: Optional[str],
+    heat_system: Optional[str] = None,
+    heat_carrier: Optional[str] = None,
     standing_loss: Optional[float] = None,
 ) -> None:
     """
