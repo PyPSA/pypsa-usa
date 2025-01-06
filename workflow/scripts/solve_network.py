@@ -25,7 +25,6 @@ Additionally, some extra constraints specified in :mod:`solve_network` are added
 
 import logging
 import re
-from datetime import timedelta
 from math import ceil
 from typing import Optional
 
@@ -1322,44 +1321,33 @@ def add_demand_response_constraints(n, config):
     Applies the p_nom_max here, as easier to iterate over different configs
     """
 
-    def _filter_on_sector(n: pypsa.Network, sector: str) -> list[str]:
-        """Gets names of loads that have dr links/stores"""
-
-        if sector != "trn":
-            # this is clunky having to filter out water-heat :(
-            return n.loads[
-                n.loads.carrier.str.contains(f"{sector}-") & ~n.loads.carrier.str.contains("water-heat")
-            ].index.to_list()
-        else:
-            # transport dr attached at aggregation load
-            return n.stores[n.stores.carrier == "trn-elec-veh"].bus.to_list()
-
     def add_capacity_constraint(
         n: pypsa.Network,
         sector: str,
         shift: float,  # as a percentage
-        period: int,
     ):
         """Adds limit on deferable load
 
         No need to multiply out snapshot weights here
         """
 
-        names = _filter_on_sector(n, sector)
+        dr_links = n.links[n.links.index.str.endswith("-dr") & n.links.carrier.str.startswith(f"{sector}-")]
 
-        if not names:
+        if dr_links.empty:
             return
 
         if sector != "trn":
 
-            deferrable_loads = n.loads_t["p_set"][names].mul(shift / 100).round(2)
-            deferrable_links = [f"{x}-discharger" for x in names]
-            lhs = n.model["Link-p"].loc[period, deferrable_links]
-            rhs = deferrable_loads.loc[period]
+            deferrable_fwd_links = dr_links[dr_links.index.str.endswith("-fwd-dr")].index
+            deferrable_bck_links = dr_links[dr_links.index.str.endswith("-bck-dr")].index
+            deferrable_loads = dr_links.bus1.unique().tolist()  # name of loads is same as bus name
+
+            lhs = n.model["Link-p"].loc[:, deferrable_fwd_links] + n.model["Link-p"].loc[:, deferrable_bck_links]
+            rhs = n.loads_t["p_set"][deferrable_loads].mul(shift / 100).round(2)
 
             n.model.add_constraints(
                 lhs <= rhs,
-                name=f"demand_response_capacity-{sector}-{period}",
+                name=f"demand_response_capacity-{sector}",
             )
 
         # transport dr is at the aggregation bus
@@ -1368,88 +1356,29 @@ def add_demand_response_constraints(n, config):
         # todo: there is probably a more efficient way to do this
         else:
 
-            for name in names:
-                deferrable_link = f"{name}-discharger"
-                deferrable_loads = n.links[
-                    (n.links.bus0 == name) & ~(n.links.bus1.index.str.endswith("-charger"))
+            for agg_bus in dr_links.bus1.unique():  # bus1 is aggregation bus
+
+                deferrable_fwd_links = n.links[
+                    (n.links.bus1 == agg_bus) & (n.links.index.str.endswith("-fwd-dr"))
+                ].index
+                deferrable_bck_links = n.links[
+                    (n.links.bus1 == agg_bus) & (n.links.index.str.endswith("-fwd-dr"))
                 ].index
 
-                dr_contribution = n.model["Link-p"].loc[period, deferrable_link]
-                total_loads = n.model["Link-p"].loc[period, deferrable_loads].sum("Link")
+                deferrable_loads = n.links[(n.links.bus0 == agg_bus) & ~(n.links.index.str.endswith("-dr"))].index
+
+                dr_contribution = (
+                    n.model["Link-p"].loc[:, deferrable_fwd_links] + n.model["Link-p"].loc[:, deferrable_bck_links]
+                )
+                total_loads = n.model["Link-p"].loc[:, deferrable_loads].sum("Link")
 
                 lhs = total_loads.mul(shift / 100) - dr_contribution
                 rhs = 0
 
                 # extract out the ReEDS region from 'name'
-                constraint_name = f"demand_response_capacity-{sector}-{name.split(' ')[0]}-{period}"
+                constraint_name = f"demand_response_capacity-{sector}-{agg_bus.split(' ')[0]}"
 
                 n.model.add_constraints(lhs >= rhs, name=constraint_name)
-
-    def add_balancing_constraint(
-        n: pypsa.Network,
-        sector: str,
-        balance: float,
-        direction: str,
-        period: int,
-    ):
-        """Adds limit over when loads must be balanced
-
-        No need to multiply out snapshot weights here, as charging and discharging are balanced over the same snapshots
-        """
-
-        if sector == "trn":
-            logger.warning("DR balancing not setup for Transport!")
-            return
-
-        names = _filter_on_sector(n, sector)
-
-        if not names:
-            return
-
-        charging_links = [f"{x}-charger" for x in names]
-        discharging_links = [f"{x}-discharger" for x in names]
-
-        sns_period = n.snapshots[n.snapshots.get_level_values(0) == period].get_level_values(1)
-
-        for sns in sns_period:
-            if direction == "forward":
-                sns_balancing = pd.date_range(
-                    sns,
-                    sns + timedelta(hours=balance),
-                    freq="h",
-                )
-            elif direction == "backward":
-                sns_balancing = pd.date_range(
-                    sns - timedelta(hours=balance),
-                    sns,
-                    freq="h",
-                )
-            elif direction == "both":
-                sns_balancing = pd.date_range(
-                    sns - timedelta(hours=balance),
-                    sns + timedelta(hours=balance),
-                    freq="h",
-                )
-
-            # filter for snapshots that are actually modelled after tsa
-            dr_sns = n.snapshots[n.snapshots.get_level_values(1).isin(sns_balancing)]
-            if len(dr_sns) < 2:
-                logger.info(f"No demand response modelled for {sns}")
-                continue
-
-            # todo - need to include losses
-
-            lhs_charging = n.model["Link-p"].loc[dr_sns, charging_links]
-            lhs_discharging = n.model["Link-p"].loc[dr_sns, discharging_links]
-            lhs = lhs_charging.sum("snapshot") - lhs_discharging.sum("snapshot")
-
-            rhs = 0.01  # tolerance on the constraing
-
-            sns_name = str(sns).replace(" ", "-")
-            n.model.add_constraints(
-                lhs <= rhs,
-                name=f"demand_response_energy-{sns_name}-{sector}-{period}",
-            )
 
     # demand response addition starts here
 
@@ -1471,41 +1400,16 @@ def add_demand_response_constraints(n, config):
             continue
 
         shift = dr_config.get("shift", 0)
-        method = dr_config.get("method", "price")
 
         # capacity constraint
 
         if shift == "inf":
             pass
-        elif shift >= 0.01:  # for tolerance
-            for period in n.investment_periods:
-                add_capacity_constraint(n, sector, shift, period)
+        elif shift >= 0.001:  # for tolerance
+            add_capacity_constraint(n, sector, shift)
         else:
             logger.info(f"Unknown arguement of {shift} for {sector} DR")
             raise ValueError(shift)
-
-        # balancing constraints
-
-        if method == "price":
-            pass
-
-        elif method == "time":
-
-            balance = dr_config.get("balance", 0)
-            direction = dr_config.get("direction", "both")
-
-            if balance < 1:
-                logger.info(f"No Demand Response Constraints Applied for {sector}")
-                continue
-
-            # round up to nearest hour
-            if direction == "both":
-                balance = int(ceil(balance / 2) * 2)
-            else:
-                assert balance in ["forward", "backward"]
-
-            for period in n.investment_periods:
-                add_balancing_constraint(n, sector, balance, direction, period)
 
 
 def extra_functionality(n, snapshots):
@@ -1647,15 +1551,6 @@ if __name__ == "__main__":
     np.random.seed(solve_opts.get("seed", 123))
 
     n = pypsa.Network(snakemake.input.network)
-
-    # links = n.links[
-    #     n.links.carrier.str.startswith(sector)
-    #     & ~n.links.carrier.str.contains("water")
-    #     & n.links.index.str.endswith("-discharger")
-    # ].index
-
-    # n.links.loc[links, "p_nom"] = 0.20
-    # n.links.loc[links, "p_min_pu"] = 0.80
 
     n = prepare_network(
         n,
