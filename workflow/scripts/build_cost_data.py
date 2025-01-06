@@ -223,6 +223,9 @@ def get_sector_costs(
 
     final = pd.concat([df, capex])
     final["value"] = final.value.round(4)
+
+    final = final.rename(columns={"technology": "pypsa-name"})
+
     return final
 
 
