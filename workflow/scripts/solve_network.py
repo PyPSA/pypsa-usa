@@ -1331,18 +1331,18 @@ def add_demand_response_constraints(n, config):
         No need to multiply out snapshot weights here
         """
 
-        dr_links = n.links[n.links.index.str.endswith("-dr") & n.links.carrier.str.startswith(f"{sector}-")]
+        dr_links = n.links[n.links.carrier.str.endswith("-dr") & n.links.carrier.str.startswith(f"{sector}-")]
 
         if dr_links.empty:
             return
 
         if sector != "trn":
 
-            deferrable_fwd_links = dr_links[dr_links.index.str.endswith("-fwd-dr")].index
-            deferrable_bck_links = dr_links[dr_links.index.str.endswith("-bck-dr")].index
-            deferrable_loads = dr_links.bus1.unique().tolist()  # name of loads is same as bus name
+            deferrable_links = dr_links[dr_links.index.str.endswith("-dr-discharger")]
 
-            lhs = n.model["Link-p"].loc[:, deferrable_fwd_links] + n.model["Link-p"].loc[:, deferrable_bck_links]
+            deferrable_loads = deferrable_links.bus1.unique().tolist()
+
+            lhs = n.model["Link-p"].loc[:, deferrable_links.index].groupby(deferrable_links.bus1).sum()
             rhs = n.loads_t["p_set"][deferrable_loads].mul(shift / 100).round(2)
 
             n.model.add_constraints(
@@ -1352,33 +1352,21 @@ def add_demand_response_constraints(n, config):
 
         # transport dr is at the aggregation bus
         # sum all outgoing capacity and apply the capacity limit to that
-        # ie. a seperate constraint is added for each node
-        # todo: there is probably a more efficient way to do this
         else:
 
-            for agg_bus in dr_links.bus1.unique():  # bus1 is aggregation bus
+            inflow_links = dr_links[dr_links.index.str.endswith("-dr-discharger")]
+            inflow = n.model["Link-p"].loc[:, inflow_links.index].groupby(inflow_links.bus1).sum()
 
-                deferrable_fwd_links = n.links[
-                    (n.links.bus1 == agg_bus) & (n.links.index.str.endswith("-fwd-dr"))
-                ].index
-                deferrable_bck_links = n.links[
-                    (n.links.bus1 == agg_bus) & (n.links.index.str.endswith("-fwd-dr"))
-                ].index
+            outflow_links = n.links[n.links.bus0.isin(inflow_links.bus1) & ~n.links.carrier.str.endswith("-dr")]
+            outflow = n.model["Link-p"].loc[:, outflow_links.index].groupby(outflow_links.bus0).sum()
 
-                deferrable_loads = n.links[(n.links.bus0 == agg_bus) & ~(n.links.index.str.endswith("-dr"))].index
+            lhs = outflow.mul(shift / 100) - inflow
+            rhs = 0
 
-                dr_contribution = (
-                    n.model["Link-p"].loc[:, deferrable_fwd_links] + n.model["Link-p"].loc[:, deferrable_bck_links]
-                )
-                total_loads = n.model["Link-p"].loc[:, deferrable_loads].sum("Link")
-
-                lhs = total_loads.mul(shift / 100) - dr_contribution
-                rhs = 0
-
-                # extract out the ReEDS region from 'name'
-                constraint_name = f"demand_response_capacity-{sector}-{agg_bus.split(' ')[0]}"
-
-                n.model.add_constraints(lhs >= rhs, name=constraint_name)
+            n.model.add_constraints(
+                lhs >= rhs,
+                name=f"demand_response_capacity-trn",
+            )
 
     # demand response addition starts here
 
