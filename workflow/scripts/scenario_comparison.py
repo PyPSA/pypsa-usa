@@ -137,7 +137,7 @@ def scenario_comparison(
     fig, axes = plt.subplots(
         nrows=len(planning_horizons),
         ncols=1,
-        figsize=(8, 4.2 * len(planning_horizons)),
+        figsize=(8, 3 * len(planning_horizons)),
         sharex=True,
     )
     if variable_units in ["GW", "GWh"]:
@@ -215,6 +215,7 @@ def scenario_comparison(
         )
         plt.ylabel("∆ Capacity[%]")
         plt.savefig(figures_path / f"{variable}_pct_comparison.png", dpi=300, bbox_inches="tight")
+        combined_df.to_csv(figures_path / f"{variable}_pct_comparison.csv")
 
 
 def plot_cost_comparison(stats, n, variable, variable_units, title, figures_path, reference_scenario=None):
@@ -279,7 +280,7 @@ if __name__ == "__main__":
     # Example variable and title
     variable = "Optimal Capacity"
     variable_units = "GW"
-    title = "Capacity Evolution Comparison"
+    title = "Capacity Comparison"
 
     # Generate plots
     scenario_comparison(
@@ -295,10 +296,26 @@ if __name__ == "__main__":
     # Example variable and title
     variable = "Supply"
     variable_units = "%"
-    title = "Supply Evolution Comparison"
+    title = "Supply Comparison"
 
     # Generate plots
     scenario_comparison(processed_data, variable, variable_units, carriers, title, figures_path, as_pct=True)
+
+    # Example variable and title
+    variable = "Capital Expenditure"
+    variable_units = "$B"
+    title = "CAPEX Comparison"
+
+    # Generate plots
+    scenario_comparison(processed_data, variable, variable_units, carriers, title, figures_path, as_pct=False)
+
+    # Example variable and title
+    variable = "Operational Expenditure"
+    variable_units = "$B"
+    title = "OPEX Comparison"
+
+    # Generate plots
+    scenario_comparison(processed_data, variable, variable_units, carriers, title, figures_path, as_pct=False)
 
     # Example variable and title
     variable = "System Costs"

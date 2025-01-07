@@ -50,6 +50,7 @@ def get_region_buses(n, region_list):
     return n.buses[
         (
             n.buses.country.isin(region_list)
+            | n.buses.reeds_zone.isin(region_list)
             | n.buses.reeds_state.isin(region_list)
             | n.buses.interconnect.str.lower().isin(region_list)
             | n.buses.nerc_reg.isin(region_list)
