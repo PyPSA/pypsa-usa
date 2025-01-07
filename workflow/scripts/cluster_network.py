@@ -511,7 +511,7 @@ def convert_to_transport(
 
         itl_agg = pd.concat([itl_agg, itls_to_virtual])
         itl_agg_costs = None if itl_agg_costs_fn is None else pd.concat([itl_cost, pd.read_csv(itl_agg_costs_fn)])
-        add_itls(buses, itl_agg, itl_agg_costs, expansion=False)
+        add_itls(buses, itl_agg, itl_agg_costs, expansion=True)
         itls = pd.concat([itls_filt, itl_agg])
     else:
         itls = itls_filt
