@@ -120,7 +120,18 @@ def process_data(data, alias_dict=None, new_order=None):
 
 
 # Plot comparison
-def scenario_comparison(stats, variable, variable_units, carriers, title, figures_path, include_link=False):
+def scenario_comparison(
+    stats,
+    variable,
+    variable_units,
+    carriers,
+    title,
+    figures_path,
+    include_link=False,
+    as_pct=False,
+    reference_scenario=None,
+):
+    combined_df = pd.DataFrame(columns=["Scenario", "horizon", "nice_name", "statistics"], index=[])
     colors = carriers["color"]
     planning_horizons = stats[next(iter(stats.keys()))]["statistics"][variable].columns
     fig, axes = plt.subplots(
@@ -129,6 +140,12 @@ def scenario_comparison(stats, variable, variable_units, carriers, title, figure
         figsize=(8, 4.2 * len(planning_horizons)),
         sharex=True,
     )
+    if variable_units in ["GW", "GWh"]:
+        factor_units = 1e3
+    elif variable_units in ["%"]:
+        factor_units = 1
+    else:
+        factor_units = 1e9
 
     if len(planning_horizons) == 1:
         axes = [axes]
@@ -145,10 +162,17 @@ def scenario_comparison(stats, variable, variable_units, carriers, title, figure
                 df = df.loc[df.index.get_level_values(0).isin(["Generator", "StorageUnit"]), variable]
             df.index = df.index.get_level_values(1)
             df = df.reindex(carriers.index).dropna()
+            if as_pct:
+                df = ((df / df.sum()) * 100).round(2)
             for i, tech in enumerate(df.index.unique()):
-                values = df.loc[tech, horizon] / (1e3 if variable_units in ["GW", "GWh"] else 1e9)
+                values = df.loc[tech, horizon] / factor_units
                 ax.barh(y_positions[j], values, left=bottoms[j], color=colors[tech], label=tech if j == 0 else "")
                 bottoms[j] += values
+
+            df[["Scenario", "horizon"]] = scenario, horizon
+            df = df.reset_index()
+            df.rename(columns={horizon: "statistics"}, inplace=True)
+            combined_df = pd.concat([combined_df, df[["Scenario", "nice_name", "statistics", "horizon"]]])
 
         ax.text(1.01, 0.5, f"{horizon}", transform=ax.transAxes, va="center", rotation="vertical")
         ax.set_yticks(y_positions)
@@ -170,7 +194,27 @@ def scenario_comparison(stats, variable, variable_units, carriers, title, figure
     fig.suptitle(title, fontsize=12, fontweight="bold")
     plt.tight_layout()
     plt.savefig(figures_path / f"{variable}_comparison.png", dpi=300, bbox_inches="tight")
-    return fig, axes
+
+    if reference_scenario:
+        combined_df = combined_df.set_index("Scenario")
+        combined_df = combined_df.query("horizon == @horizon").drop(columns="horizon")  # only plot last horizon
+        ref = combined_df.loc[reference_scenario].set_index("nice_name")
+        combined_df = combined_df.reset_index().set_index("nice_name")
+        for scenario in combined_df.index.unique():
+            combined_df.loc[scenario, "statistics"] = (
+                (combined_df.loc[scenario, "statistics"] - ref.loc[scenario, "statistics"]) / ref.sum().values * 100
+            )
+        combined_df = combined_df.reset_index().set_index("Scenario")
+        stacked_data = combined_df.reset_index().pivot(index="Scenario", columns="nice_name", values="statistics")
+        stacked_data.plot(
+            kind="bar",
+            stacked=True,
+            figsize=(10, 7),
+            color=[colors[tech] for tech in stacked_data.columns],
+            legend=False,
+        )
+        plt.ylabel("∆ Capacity[%]")
+        plt.savefig(figures_path / f"{variable}_pct_comparison.png", dpi=300, bbox_inches="tight")
 
 
 def plot_cost_comparison(stats, n, variable, variable_units, title, figures_path, reference_scenario=None):
@@ -203,7 +247,7 @@ def plot_cost_comparison(stats, n, variable, variable_units, title, figures_path
         ref = combined_df.loc[reference_scenario]
         pct_df = (combined_df - ref) / combined_df * 100
         pct_df.plot(kind="bar", y="statistics", title="Total System Costs", legend=False)
-        plt.ylabel(" Reduction in Annualized System Costs [%]")
+        plt.ylabel("∆ Annualized System Costs [%]")
         plt.savefig(figures_path / f"{variable}_pct_comparison.png", dpi=300, bbox_inches="tight")
 
 
@@ -238,15 +282,23 @@ if __name__ == "__main__":
     title = "Capacity Evolution Comparison"
 
     # Generate plots
-    scenario_comparison(processed_data, variable, variable_units, carriers, title, figures_path)
+    scenario_comparison(
+        processed_data,
+        variable,
+        variable_units,
+        carriers,
+        title,
+        figures_path,
+        reference_scenario=reference_scenario,
+    )
 
     # Example variable and title
     variable = "Supply"
-    variable_units = "GWh"
+    variable_units = "%"
     title = "Supply Evolution Comparison"
 
     # Generate plots
-    scenario_comparison(processed_data, variable, variable_units, carriers, title, figures_path)
+    scenario_comparison(processed_data, variable, variable_units, carriers, title, figures_path, as_pct=True)
 
     # Example variable and title
     variable = "System Costs"
