@@ -190,6 +190,7 @@ def add_transport_dr(n: pypsa.Network, vehicle: str, dr_config: dict[str, Any]) 
         logger.warning(f"No cost applied to demand response for {vehicle}")
 
     df = n.buses[n.buses.carrier == f"trn-elec-{vehicle}"]
+    df["carrier"] = df.carrier + "-dr"
 
     # two buses for forward and backwards load shifting
 
@@ -217,35 +218,50 @@ def add_transport_dr(n: pypsa.Network, vehicle: str, dr_config: dict[str, Any]) 
         STATE_NAME=df.STATE_NAME,
     )
 
-    # lossless bidirectional links for ease of capacity constraints
-    # links go from dr to main bus so p will be positive
+    # seperate charging/discharging links to follow conventions
 
     n.madd(
         "Link",
         df.index,
-        suffix="-fwd-dr",
-        bus0=df.index + "-fwd-dr",
-        bus1=df.index,
-        efficiency=1,
+        suffix="-fwd-dr-charger",
+        bus0=df.index,
+        bus1=df.index + "-fwd-dr",
         carrier=df.carrier,
         p_nom_extendable=False,
         p_nom=np.inf,
-        p_max_pu=1,
-        p_min_pu=-1,
     )
 
     n.madd(
         "Link",
         df.index,
-        suffix="-bck-dr",
-        bus0=df.index + "-bck-dr",
+        suffix="-fwd-dr-discharger",
+        bus0=df.index + "-fwd-dr",
         bus1=df.index,
-        efficiency=1,
         carrier=df.carrier,
         p_nom_extendable=False,
         p_nom=np.inf,
-        p_max_pu=1,
-        p_min_pu=-1,
+    )
+
+    n.madd(
+        "Link",
+        df.index,
+        suffix="-bck-dr-charger",
+        bus0=df.index,
+        bus1=df.index + "-bck-dr",
+        carrier=df.carrier,
+        p_nom_extendable=False,
+        p_nom=np.inf,
+    )
+
+    n.madd(
+        "Link",
+        df.index,
+        suffix="-bck-dr-discharger",
+        bus0=df.index + "-bck-dr",
+        bus1=df.index,
+        carrier=df.carrier,
+        p_nom_extendable=False,
+        p_nom=np.inf,
     )
 
     # backward stores have positive marginal cost storage and postive e

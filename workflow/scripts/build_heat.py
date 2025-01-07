@@ -967,7 +967,7 @@ def add_heat_dr(
     df = pd.DataFrame(index=buses.index)
     df["x"] = df.index.map(n.buses.x)
     df["y"] = df.index.map(n.buses.y)
-    df["carrier"] = carrier_name
+    df["carrier"] = carrier_name + "-dr"
     df["STATE"] = df.index.map(n.buses.STATE)
     df["STATE_NAME"] = df.index.map(n.buses.STATE_NAME)
 
@@ -997,35 +997,50 @@ def add_heat_dr(
         STATE_NAME=df.STATE_NAME,
     )
 
-    # lossless bidirectional links for ease of capacity constraints
-    # links go from dr to main bus so p will be positive
+    # seperate charging/discharging links to follow conventions
 
     n.madd(
         "Link",
         df.index,
-        suffix="-fwd-dr",
-        bus0=df.index + "-fwd-dr",
-        bus1=df.index,
-        efficiency=1,
+        suffix="-fwd-dr-charger",
+        bus0=df.index,
+        bus1=df.index + "-fwd-dr",
         carrier=df.carrier,
         p_nom_extendable=False,
         p_nom=np.inf,
-        p_max_pu=1,
-        p_min_pu=-1,
     )
 
     n.madd(
         "Link",
         df.index,
-        suffix="-bck-dr",
-        bus0=df.index + "-bck-dr",
+        suffix="-fwd-dr-discharger",
+        bus0=df.index + "-fwd-dr",
         bus1=df.index,
-        efficiency=1,
         carrier=df.carrier,
         p_nom_extendable=False,
         p_nom=np.inf,
-        p_max_pu=1,
-        p_min_pu=-1,
+    )
+
+    n.madd(
+        "Link",
+        df.index,
+        suffix="-bck-dr-charger",
+        bus0=df.index,
+        bus1=df.index + "-bck-dr",
+        carrier=df.carrier,
+        p_nom_extendable=False,
+        p_nom=np.inf,
+    )
+
+    n.madd(
+        "Link",
+        df.index,
+        suffix="-bck-dr-discharger",
+        bus0=df.index + "-bck-dr",
+        bus1=df.index,
+        carrier=df.carrier,
+        p_nom_extendable=False,
+        p_nom=np.inf,
     )
 
     # backward stores have positive marginal cost storage and postive e
