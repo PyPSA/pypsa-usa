@@ -48,7 +48,11 @@ sector:
       cooling: true
     demand_response: 
       shift: 0
-      marginal_cost: 10
+      marginal_cost:
+        electricity: 5
+        space-heat: 5
+        cool: 5
+        heat: 5
   transport_sector:
     brownfield: True # false to be implemented
     dynamic_costs: True # false to be implemented 
@@ -73,4 +77,6 @@ sector:
       heat_pump: true
     demand_response: 
       shift: 0
-      marginal_cost: 10
+      marginal_cost:
+        electricity: 5
+        heat: 5
