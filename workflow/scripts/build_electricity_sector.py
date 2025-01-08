@@ -93,12 +93,20 @@ def add_electricity_dr(
     shift = dr_config.get("shift", 0)
     marginal_cost_storage = dr_config.get("marginal_cost", 0)
 
+    if isinstance(marginal_cost_storage, dict):
+        try:
+            mc = marginal_cost_storage["electricity"]
+        except KeyError:
+            mc = 0
+    else:
+        mc = marginal_cost_storage
+
+    if mc == 0:
+        logger.warning(f"No cost applied to demand response for {sector}")
+
     if shift == 0:
         logger.info(f"DR not applied to {sector} as allowable sift is {shift}")
         return
-
-    if marginal_cost_storage == 0:
-        logger.warning(f"No cost applied to demand response for {sector}")
 
     elec = SecCarriers.ELECTRICITY.value
 
@@ -196,7 +204,7 @@ def add_electricity_dr(
         e_min_pu=0,
         e_max_pu=1,
         carrier=df.carrier,
-        marginal_cost_storage=marginal_cost_storage,
+        marginal_cost_storage=mc,
     )
 
     n.madd(
@@ -210,7 +218,7 @@ def add_electricity_dr(
         e_min_pu=-1,
         e_max_pu=0,
         carrier=df.carrier,
-        marginal_cost_storage=marginal_cost_storage * (-1),
+        marginal_cost_storage=mc * (-1),
     )
 
 

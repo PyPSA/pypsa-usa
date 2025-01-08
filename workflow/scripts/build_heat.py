@@ -927,15 +927,6 @@ def add_heat_dr(
 ) -> None:
     """
     Adds end-use thermal demand response.
-
-    n: pypsa.Network
-    sector: str
-    heat_system: Optional[str],
-        only if 'com' or 'res' sectors
-        ("rural" or "urban")
-    heat_carrier: Optional[str],
-        only if 'com' or 'res' sectors
-        ("heat" or "space-heat")
     """
 
     shift = dr_config.get("shift", 0)
@@ -953,13 +944,33 @@ def add_heat_dr(
         assert heat_system in ("urban", "rural", "total")
         assert heat_carrier in ("heat", "space-heat", "cool")
 
+        if isinstance(marginal_cost_storage, dict):
+            try:
+                mc = marginal_cost_storage[heat_carrier]
+            except KeyError:
+                mc = 0
+        else:
+            mc = marginal_cost_storage
+
         carrier_name = f"{sector}-{heat_system}-{heat_carrier}"
 
     elif sector == "ind":
+
         carrier_name = f"ind-heat"
+
+        if isinstance(marginal_cost_storage, dict):
+            try:
+                mc = marginal_cost_storage["heat"]
+            except KeyError:
+                mc = 0
+        else:
+            mc = marginal_cost_storage
 
     else:
         raise ValueError(f"{sector} not valid dr option")
+
+    if mc == 0:
+        logger.warning(f"No cost applied to demand response for {sector}")
 
     # must be run after rural/urban load split
     buses = n.buses[n.buses.carrier == carrier_name]
@@ -1058,7 +1069,7 @@ def add_heat_dr(
         e_max_pu=1,
         carrier=df.carrier,
         standing_loss=standing_loss,
-        marginal_cost_storage=marginal_cost_storage,
+        marginal_cost_storage=mc,
     )
 
     n.madd(
@@ -1073,7 +1084,7 @@ def add_heat_dr(
         e_max_pu=0,
         carrier=df.carrier,
         standing_loss=standing_loss,
-        marginal_cost_storage=marginal_cost_storage * (-1),
+        marginal_cost_storage=mc * (-1),
     )
 
 
