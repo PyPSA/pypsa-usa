@@ -202,7 +202,7 @@ if not config["enable"].get("build_cutout", False):
     rule retrieve_cutout:
         input:
             HTTP.remote(
-                "zenodo.org/records/14219029/files/usa_{cutout}.nc",
+                "zenodo.org/records/14611937/files/usa_{cutout}.nc",
                 static=True,
             ),
         output:
