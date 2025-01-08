@@ -25,3 +25,6 @@ service_sector,,,Options when implementing the service sector (Residential and C
 -- loads,,,Loads to include. Electricity is always modelled.
 -- -- heating,--,"bool {true, false}",Include heating loads.
 -- -- cooling,--,"bool {true, false}",Include cooling loads. Heating must be included to also include cooling
+-- demnand_response,,,Demand response options for the service sector.
+-- -- shift,percentage,"float {0 <=, >= 100} or 'inf'",Allowable load to be shifted per snapshot. Set to 0 to turn off demand response. Set to 'inf' to not enforce capacity limits.
+-- -- marginal_cost,$/MWh,float {0 <=},Cost to store one unit of energy for one hour.

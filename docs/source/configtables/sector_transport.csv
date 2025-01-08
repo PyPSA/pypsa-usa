@@ -9,3 +9,6 @@ transport_sector ,,,Options when implementing the transport sector
 -- -- rail,,"bool {true, false}",Include passenger and freight rail
 -- -- air,,"bool {true, false}",Include passenger air travel
 -- -- boat,,"bool {true, false}",Include domestic marine shipping.
+-- demnand_response,,,Demand response options for the service sector.
+-- -- shift,percentage,"float {0 <=, >= 100} or 'inf'",Allowable load to be shifted per snapshot. Set to 0 to turn off demand response. Set to 'inf' to not enforce capacity limits.
+-- -- marginal_cost,$/MWh,float {0 <=},Cost to store one unit of energy for one hour.
