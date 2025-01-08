@@ -83,9 +83,9 @@ plotting:
     "12hr_PHS_discharger": "#047d6c"
     "8hr_PHS_charger": "#069686"
     "10hr_PHS_charger": "#058a79"
-    "12hr_PHS_charger": "#047d6c"
-    "EGS": "#d18372"
+    "12hr_PHS_charger": "#047d6c"  
     "hydrogen_ct": "#ea048a"
+
 
     # sector studies only 
 
@@ -265,6 +265,44 @@ plotting:
     ind-gas-furnace: "#E0AE1F"
     ind-elec-infra: "#9CD926"
 
+    res-total-elec-dr: "#45ba75"
+    res-urban-elec-dr: "#45ba75"
+    res-rural-elec-dr: "#45ba75"
+    res-total-heat-dr: "#BA458A"
+    res-urban-heat-dr: "#BA458A"
+    res-rural-heat-dr: "#BA458A"
+    res-total-space-heat-dr: "#A55A80"
+    res-urban-space-heat-dr: "#A55A80"
+    res-rural-space-heat-dr: "#A55A80"
+    res-total-water-heat-dr: "#A844BB"
+    res-urban-water-heat-dr: "#A844BB"
+    res-rural-water-heat-dr: "#A844BB"
+    res-total-cool-dr: "#4692B9"
+    res-urban-cool-dr: "#4692B9"
+    res-rural-cool-dr: "#4692B9"
+
+    com-total-elec-dr: "#45ba75"
+    com-urban-elec-dr: "#45ba75"
+    com-rural-elec-dr: "#45ba75"
+    com-total-heat-dr: "#BA458A"
+    com-urban-heat-dr: "#BA458A"
+    com-rural-heat-dr: "#BA458A"
+    com-total-space-heat-dr: "#A55A80"
+    com-urban-space-heat-dr: "#A55A80"
+    com-rural-space-heat-dr: "#A55A80"
+    com-total-water-heat-dr: "#A844BB"
+    com-urban-water-heat-dr: "#A844BB"
+    com-rural-water-heat-dr: "#A844BB"
+    com-total-cool-dr: "#4692B9"
+    com-urban-cool-dr: "#4692B9"
+    com-rural-cool-dr: "#4692B9"
+
+    ind-elec-dr: "#45ba75"
+    ind-heat-dr: "#BA458A"
+
+    trn-elec-dr: "#45ba75"
+    trn-elec-veh-dr: "#45ba75"
+
   nice_names:
     OCGT: "Open-Cycle Gas"
     CCGT: "Combined-Cycle Gas"
@@ -279,7 +317,6 @@ plotting:
     lines: "Transmission Lines"
     ror: "Run of River"
     Load: "Load Shed"
-    EGS: "Enhanced Geothermal"
     hydrogen_ct: "Hydrogen Combustion Turbine"
 
     # sector studies only 
@@ -457,3 +494,41 @@ plotting:
     ind-heat-pump: "Heat Pump"
     ind-gas-furnace: "Gas Furnace"
     ind-elec-infra: "Electric Distribution"
+
+    res-total-elec-dr: Electric Demand Response 
+    res-urban-elec-dr: Urban Electric Demand Response 
+    res-rural-elec-dr: Rural Electric Demand Response 
+    res-total-heat-dr: Heating Demand Response 
+    res-urban-heat-dr: Urban Heating Demand Response 
+    res-rural-heat-dr: Rural Heating Demand Response 
+    res-total-space-heat-dr: Space Heating Demand Response 
+    res-urban-space-heat-dr: Urban Space Heating Demand Response 
+    res-rural-space-heat-dr: Rural Space Heating Demand Response 
+    res-total-water-heat-dr: Water Heating Demand Response 
+    res-urban-water-heat-dr: Urban Water Heating Demand Response 
+    res-rural-water-heat-dr: Rural Water Heating Demand Response 
+    res-total-cool-dr: Cooling Demand Response 
+    res-urban-cool-dr: Urban Cooling Demand Response 
+    res-rural-cool-dr: Rural Cooling Demand Response 
+
+    com-total-elec-dr: Electric Demand Response 
+    com-urban-elec-dr: Urban Electric Demand Response 
+    com-rural-elec-dr: Rural Electric Demand Response 
+    com-total-heat-dr: Heating Demand Response 
+    com-urban-heat-dr: Urban Heating Demand Response 
+    com-rural-heat-dr: Rural Heating Demand Response 
+    com-total-space-heat-dr: Space Heating Demand Response 
+    com-urban-space-heat-dr: Urban Space Heating Demand Response 
+    com-rural-space-heat-dr: Rural Space Heating Demand Response 
+    com-total-water-heat-dr: Water Heating Demand Response 
+    com-urban-water-heat-dr: Urban Water Heating Demand Response 
+    com-rural-water-heat-dr: Rural Water Heating Demand Response 
+    com-total-cool-dr: Cooling Demand Response 
+    com-urban-cool-dr: Urban Cooling Demand Response 
+    com-rural-cool-dr: Rural Cooling Demand Response 
+
+    ind-elec-dr: Electric Demand Response 
+    ind-heat-dr: Heating Demand Response 
+
+    trn-elec-dr: Electric Demand Response 
+    trn-elec-veh-dr: Electric Demand Response 

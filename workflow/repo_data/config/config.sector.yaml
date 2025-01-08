@@ -48,10 +48,7 @@ sector:
       cooling: true
     demand_response: 
       shift: 0
-      method: price
-      marginal_cost: 1
-      balance: 12
-      direction: both
+      marginal_cost: 10
   transport_sector:
     brownfield: True # false to be implemented
     dynamic_costs: True # false to be implemented 
@@ -66,10 +63,7 @@ sector:
       boat: true
     demand_response: 
       shift: 0
-      method: price
-      marginal_cost: 1
-      balance: 12
-      direction: both
+      marginal_cost: 10
   industrial_sector: 
     brownfield: True # false to be implemented
     dynamic_costs: True # false to be implemented 
@@ -79,7 +73,4 @@ sector:
       heat_pump: true
     demand_response: 
       shift: 0
-      method: price
-      marginal_cost: 1
-      balance: 12
-      direction: both
+      marginal_cost: 10
