@@ -25,7 +25,6 @@ Additionally, some extra constraints specified in :mod:`solve_network` are added
 
 import logging
 import re
-from math import ceil
 from typing import Optional
 
 import numpy as np
@@ -1343,12 +1342,15 @@ def add_demand_response_constraints(n, config):
             deferrable_loads = deferrable_links.bus1.unique().tolist()
 
             lhs = n.model["Link-p"].loc[:, deferrable_links.index].groupby(deferrable_links.bus1).sum()
-            rhs = n.loads_t["p_set"][deferrable_loads].mul(shift / 100).round(2)
+            rhs = n.loads_t["p_set"][deferrable_loads].mul(shift).div(100).round(2)  # div cause percentage input
+            rhs.columns.name = "bus1"
 
-            n.model.add_constraints(
-                lhs <= rhs,
-                name=f"demand_response_capacity-{sector}",
-            )
+            # force rhs to be same order as lhs
+            # idk why but coordinates were not aligning and this gets around that
+            bus_order = lhs.vars.bus1.data
+            rhs = rhs[bus_order]
+
+            n.model.add_constraints(lhs <= rhs, name=f"demand_response_capacity-{sector}")
 
         # transport dr is at the aggregation bus
         # sum all outgoing capacity and apply the capacity limit to that
@@ -1383,11 +1385,11 @@ def add_demand_response_constraints(n, config):
         else:
             raise ValueError
 
-        if not dr_config:
+        shift = dr_config.get("shift", 0)
+
+        if not dr_config or shift < 0.001:
             logger.info(f"Demand response not enabled for {sector}")
             continue
-
-        shift = dr_config.get("shift", 0)
 
         # capacity constraint
 
@@ -1505,6 +1507,8 @@ def solve_network(n, config, solving, opts="", **kwargs):
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
+
+        print("")
 
         snakemake = mock_snakemake(
             "solve_network",
