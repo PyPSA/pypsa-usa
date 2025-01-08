@@ -1358,11 +1358,13 @@ def add_demand_response_constraints(n, config):
 
             inflow_links = dr_links[dr_links.index.str.endswith("-dr-discharger")]
             inflow = n.model["Link-p"].loc[:, inflow_links.index].groupby(inflow_links.bus1).sum()
+            inflow = inflow.rename({"bus1": "Bus"})  # align coordinate names
 
             outflow_links = n.links[n.links.bus0.isin(inflow_links.bus1) & ~n.links.carrier.str.endswith("-dr")]
             outflow = n.model["Link-p"].loc[:, outflow_links.index].groupby(outflow_links.bus0).sum()
+            outflow = outflow.rename({"bus0": "Bus"})  # align coordinate names
 
-            lhs = outflow.mul(shift / 100) - inflow
+            lhs = outflow.mul(shift).div(100) - inflow
             rhs = 0
 
             n.model.add_constraints(
