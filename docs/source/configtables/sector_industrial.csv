@@ -6,3 +6,6 @@ industrial_sector ,,,Options when implementing the industrial sector
 -- -- gas_furnace,,"bool {true, false}",Include natural gas furnaces
 -- -- coal_furnace,,"bool {true, false}",Include coal boilers
 -- -- heat_pump,,"bool {true, false}",Include heat pumps
+-- demnand_response,,,Demand response options for the service sector.
+-- -- shift,percentage,"float {0 <=, >= 100} or 'inf'",Allowable load to be shifted per snapshot. Set to 0 to turn off demand response. Set to 'inf' to not enforce capacity limits.
+-- -- marginal_cost,$/MWh,float {0 <=},Cost to store one unit of energy for one hour.
