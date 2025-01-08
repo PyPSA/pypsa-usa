@@ -1,43 +1,5 @@
 """
 Builds mapping between cutout grid cells and population (total, urban, rural).
-
-**Relevant Settings**
-
-.. code:: yaml
-
-    scope:
-
-**Inputs**
-
-- ``data/counties/cb_2020_us_county_500k.shp``: County shapes in the USA
-- ``data/population/DECENNIALDHC2020.P1-Data.csv``: Population per county in the USA,
-
-    .. image:: _static/pop_layout/population.png
-        :scale: 33 %
-
-- ``data/urbanization/DECENNIALDHC2020.H2-Data.csv``: Urbanization rate per county in the USA
-
-    .. image:: _static/pop_layout/urban.png
-        :scale: 33 %
-
-- ``cutouts/" + CDIR + "{interconnect}_{cutout}.nc``: : confer :ref:cutout
-
-**Outputs**
-
-- ``resources/pop_layout_total.nc``: total population by grid cell
-
-    .. image:: _static/pop_layout/pop_layout_total.png
-        :scale: 80 %
-
-- ``resources/pop_layout_urban.nc``: urban population by grid cell
-
-    .. image:: _static/pop_layout/pop_layout_urban.png
-        :scale: 80 %
-
-- ``resources/pop_layout_rural.nc``: rural population by grid cell
-
-    .. image:: _static/pop_layout/pop_layout_rural.png
-        :scale: 80 %
 """
 
 import logging
@@ -175,7 +137,7 @@ if __name__ == "__main__":
         snakemake = mock_snakemake(
             "build_population_layouts",
             interconnect="western",
-            cutout="era5_2019",
+            cutout="era5_2018",
         )
         # for plotting
         save_path = Path("..", "..", "docs", "source", "_static", "pop_layout")
@@ -184,7 +146,8 @@ if __name__ == "__main__":
 
     configure_logging(snakemake)
 
-    cutout = atlite.Cutout(snakemake.input.cutout)
+    assert len(snakemake.input.cutout) == 1
+    cutout = atlite.Cutout(snakemake.input.cutout[0])
 
     grid_cells = cutout.grid.geometry
 
