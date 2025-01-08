@@ -184,7 +184,7 @@ def _get_opt_capacity_per_node(
         ]
 
     if not include_elec:
-        df = df[~df.carrier.str.endswith("elec-infra")].copy()
+        df = df[~df.carrier.str.endswith("elec")].copy()
 
     if state:
         links = _get_links_in_state(n, state)
@@ -245,7 +245,7 @@ def _get_total_capacity_per_node(
         ]
 
     if not include_elec:
-        df = df[~df.carrier.str.endswith("elec-infra")].copy()
+        df = df[~df.carrier.str.endswith("elec")].copy()
 
     if state:
         links = _get_links_in_state(n, state)
@@ -332,7 +332,7 @@ def _get_brownfield_capacity_per_node(
         ]
 
     if (not include_elec) and (not sector == "trn"):
-        df = df[~df.carrier.str.endswith("elec-infra")].copy()
+        df = df[~df.carrier.str.endswith("elec")].copy()
 
     if state:
         links = _get_links_in_state(n, state)
@@ -536,7 +536,7 @@ def get_load_factor_timeseries(
     if include_elec:
         return lf
     else:
-        return lf[[x for x in lf.columns if not x.endswith("-infra")]]
+        return lf[[x for x in lf.columns if not x.endswith("-elec")]]
 
 
 def get_emission_timeseries_by_sector(
@@ -723,6 +723,46 @@ def get_end_use_load_timeseries(
     if sns_weight:
         df = df.mul(n.snapshot_weightings["objective"], axis=0)
     return df.T
+
+
+def get_storage_level_timeseries(
+    n: pypsa.Network,
+    sector: str,
+    remove_sns_weights: bool = True,
+    state: Optional[str] = None,
+    **kwargs,
+) -> pd.DataFrame:
+
+    stores = n.stores[n.stores.carrier.str.startswith(sector)]
+
+    if state:
+        stores_in_state = _get_stores_in_state(n, state)
+        stores = stores[stores.index.isin(stores_in_state)]
+
+    df = n.stores_t.e[stores.index]
+    if not remove_sns_weights:
+        df = df.mul(n.snapshot_weightings["objective"], axis=0)
+    return df
+
+
+def get_storage_level_timeseries_carrier(
+    n: pypsa.Network,
+    sector: str,
+    remove_sns_weights: bool = True,
+    state: Optional[str] = None,
+    resample: Optional[str] = None,
+    resample_fn: Optional[callable] = None,
+    **kwargs,
+) -> pd.DataFrame:
+
+    df = get_storage_level_timeseries(n, sector, remove_sns_weights, state)
+    df = df.rename(columns=n.stores.carrier)
+    df = df.T.groupby(level=0).sum().T
+
+    if not (resample or resample_fn):
+        return df
+    else:
+        return _resample_data(df, resample, resample_fn)
 
 
 def get_end_use_load_timeseries_carrier(

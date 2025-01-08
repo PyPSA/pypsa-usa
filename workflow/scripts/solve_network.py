@@ -1146,30 +1146,12 @@ def add_ng_import_export_limits(n, config):
         states = s.split("-")
         return f"{states[0]} {states[1]} gas"
 
-    def _format_domestic_data(
+    def _format_data(
         prod: pd.DataFrame,
         link_suffix: Optional[str] = None,
     ) -> pd.DataFrame:
 
         df = prod.copy()
-        df["link"] = df.state.map(_format_link_name)
-        if link_suffix:
-            df["link"] = df.link + link_suffix
-
-        # convert mmcf to MWh
-        df["value"] = df["value"] * NG_MWH_2_MMCF
-
-        return df[["link", "value"]].rename(columns={"value": "rhs"}).set_index("link")
-
-    def _format_international_data(
-        prod: pd.DataFrame,
-        link_suffix: Optional[str] = None,
-    ) -> pd.DataFrame:
-
-        df = prod.copy()
-        df = df[["value", "state"]].groupby("state", as_index=False).sum()
-        df = df[~(df.state == "USA")].copy()
-
         df["link"] = df.state.map(_format_link_name)
         if link_suffix:
             df["link"] = df.link + link_suffix
@@ -1281,7 +1263,7 @@ def add_ng_import_export_limits(n, config):
     # add domestic limits
 
     trade = Trade("gas", False, "exports", year, api).get_data()
-    trade = _format_domestic_data(trade, " trade")
+    trade = _format_data(trade, " trade")
 
     add_import_limits(n, trade, "min", import_min)
     add_export_limits(n, trade, "min", export_min)
@@ -1294,7 +1276,7 @@ def add_ng_import_export_limits(n, config):
     # add international limits
 
     trade = Trade("gas", True, "exports", year, api).get_data()
-    trade = _format_domestic_data(trade, " trade")
+    trade = _format_data(trade, " trade")
 
     add_import_limits(n, trade, "min", import_min)
     add_export_limits(n, trade, "min", export_min)
@@ -1317,11 +1299,9 @@ def add_water_heater_constraints(n, config):
 
     for period in n.investment_periods:
 
+        # first snapshot does not respect constraint
         e_previous = n.model["Store-e"].loc[period, store_names]
         e_previous = e_previous.roll(timestep=1)
-        # e_previous = e_previous.shift(timestep=1).bfill(
-        #     "timestep"
-        # )  # first snapshot does not respect constraint
         e_previous = e_previous.mul(n.snapshot_weightings.stores.loc[period])
 
         p_current = n.model["Link-p"].loc[period, link_names]
@@ -1331,6 +1311,97 @@ def add_water_heater_constraints(n, config):
         rhs = 0
 
         n.model.add_constraints(lhs >= rhs, name=f"water_heater-{period}")
+
+
+def add_demand_response_constraints(n, config):
+    """
+    Adds demand response equations
+
+    Applies the p_nom_max here, as easier to iterate over different configs
+    """
+
+    def add_capacity_constraint(
+        n: pypsa.Network,
+        sector: str,
+        shift: float,  # as a percentage
+    ):
+        """Adds limit on deferable load
+
+        No need to multiply out snapshot weights here
+        """
+
+        dr_links = n.links[n.links.carrier.str.endswith("-dr") & n.links.carrier.str.startswith(f"{sector}-")]
+
+        if dr_links.empty:
+            return
+
+        if sector != "trn":
+
+            deferrable_links = dr_links[dr_links.index.str.endswith("-dr-discharger")]
+
+            deferrable_loads = deferrable_links.bus1.unique().tolist()
+
+            lhs = n.model["Link-p"].loc[:, deferrable_links.index].groupby(deferrable_links.bus1).sum()
+            rhs = n.loads_t["p_set"][deferrable_loads].mul(shift).div(100).round(2)  # div cause percentage input
+            rhs.columns.name = "bus1"
+
+            # force rhs to be same order as lhs
+            # idk why but coordinates were not aligning and this gets around that
+            bus_order = lhs.vars.bus1.data
+            rhs = rhs[bus_order]
+
+            n.model.add_constraints(lhs <= rhs, name=f"demand_response_capacity-{sector}")
+
+        # transport dr is at the aggregation bus
+        # sum all outgoing capacity and apply the capacity limit to that
+        else:
+
+            inflow_links = dr_links[dr_links.index.str.endswith("-dr-discharger")]
+            inflow = n.model["Link-p"].loc[:, inflow_links.index].groupby(inflow_links.bus1).sum()
+            inflow = inflow.rename({"bus1": "Bus"})  # align coordinate names
+
+            outflow_links = n.links[n.links.bus0.isin(inflow_links.bus1) & ~n.links.carrier.str.endswith("-dr")]
+            outflow = n.model["Link-p"].loc[:, outflow_links.index].groupby(outflow_links.bus0).sum()
+            outflow = outflow.rename({"bus0": "Bus"})  # align coordinate names
+
+            lhs = outflow.mul(shift).div(100) - inflow
+            rhs = 0
+
+            n.model.add_constraints(
+                lhs >= rhs,
+                name=f"demand_response_capacity-trn",
+            )
+
+    # demand response addition starts here
+
+    sectors = ["res", "com", "ind", "trn"]
+
+    for sector in sectors:
+
+        if sector in ["res", "com"]:
+            dr_config = config["sector"]["service_sector"].get("demand_response", {})
+        elif sector == "trn":
+            dr_config = config["sector"]["transport_sector"].get("demand_response", {})
+        elif sector == "ind":
+            dr_config = config["sector"]["industrial_sector"].get("demand_response", {})
+        else:
+            raise ValueError
+
+        shift = dr_config.get("shift", 0)
+
+        if not dr_config or shift < 0.001:
+            logger.info(f"Demand response not enabled for {sector}")
+            continue
+
+        # capacity constraint
+
+        if shift == "inf":
+            pass
+        elif shift >= 0.001:  # for tolerance
+            add_capacity_constraint(n, sector, shift)
+        else:
+            logger.info(f"Unknown arguement of {shift} for {sector} DR")
+            raise ValueError(shift)
 
 
 def extra_functionality(n, snapshots):
@@ -1366,13 +1437,14 @@ def extra_functionality(n, snapshots):
         add_cooling_heat_pump_constraints(n, config)
         if not config["sector"]["service_sector"].get("split_urban_rural", False):
             add_gshp_capacity_constraint(n, config)
-        # if config["sector"]["co2"].get("policy", {}):
-        #     add_sector_co2_constraints(n, config)
+        if config["sector"]["co2"].get("policy", {}):
+            add_sector_co2_constraints(n, config)
         if config["sector"]["natural_gas"].get("imports", False):
             add_ng_import_export_limits(n, config)
         water_config = config["sector"]["service_sector"].get("water_heating", {})
         if not water_config.get("simple_storage", True):
             add_water_heater_constraints(n, config)
+        add_demand_response_constraints(n, config)
 
     for o in opts:
         if "EQ" in o:
@@ -1438,16 +1510,17 @@ if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
 
+        print("")
+
         snakemake = mock_snakemake(
             "solve_network",
-            simpl="33",
-            opts="2190SEG",
+            interconnect="western",
+            simpl="70",
             clusters="4m",
             ll="v1.0",
-            sector_opts="",
+            opts="3h",
             sector="E-G",
-            planning_horizons="2020",
-            interconnect="western",
+            planning_horizons="2019",
         )
     configure_logging(snakemake)
     update_config_from_wildcards(snakemake.config, snakemake.wildcards)

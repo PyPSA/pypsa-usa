@@ -3,7 +3,7 @@ Module for building transportation infrastructure.
 """
 
 import logging
-from typing import Optional
+from typing import Any, Optional
 
 import numpy as np
 import pandas as pd
@@ -32,6 +32,7 @@ def build_transportation(
     eia: Optional[str] = None,  # for dynamic pricing
     year: Optional[int] = None,  # for dynamic pricing
     must_run_evs: Optional[bool] = None,  # for endogenous EV investment
+    dr_config: Optional[dict[str, Any]] = None,
 ) -> None:
     """
     Main funtion to interface with.
@@ -61,6 +62,10 @@ def build_transportation(
     if not exogenous:
         assert isinstance(must_run_evs, bool)
         apply_endogenous_road_investments(n, must_run_evs)
+
+    # demand response must happen after exogenous/endogenous split
+    if dr_config:
+        add_transport_dr(n, road_suffix, dr_config)
 
     if air:
         air_suffix = Transport.AIR.value
@@ -104,7 +109,8 @@ def add_ev_infrastructure(
         x=nodes.x,
         y=nodes.y,
         country=nodes.country,
-        state=nodes.STATE,
+        STATE=nodes.STATE,
+        STATE_NAME=nodes.STATE_NAME,
         carrier=f"trn-elec-{vehicle}",
     )
 
@@ -140,7 +146,7 @@ def add_lpg_infrastructure(
         x=nodes.x,
         y=nodes.y,
         country=nodes.country,
-        state=nodes.state,
+        state=nodes.STATE,
         carrier=f"trn-lpg-{vehicle}",
     )
 
@@ -167,6 +173,126 @@ def add_lpg_infrastructure(
         capital_cost=0,
         p_nom_extendable=True,
         lifetime=np.inf,
+    )
+
+
+def add_transport_dr(n: pypsa.Network, vehicle: str, dr_config: dict[str, Any]) -> None:
+    """Attachs DR infrastructure at load location"""
+
+    shift = dr_config.get("shift", 0)
+    marginal_cost_storage = dr_config.get("marginal_cost", 0)
+
+    if shift == 0:
+        logger.info(f"DR not applied to {vehicle} as allowable sift is {shift}")
+        return
+
+    if marginal_cost_storage == 0:
+        logger.warning(f"No cost applied to demand response for {vehicle}")
+
+    df = n.buses[n.buses.carrier == f"trn-elec-{vehicle}"]
+    df["carrier"] = df.carrier + "-dr"
+
+    # two buses for forward and backwards load shifting
+
+    n.madd(
+        "Bus",
+        df.index,
+        suffix="-fwd-dr",
+        x=df.x,
+        y=df.y,
+        carrier=df.carrier,
+        unit="MWh",
+        STATE=df.STATE,
+        STATE_NAME=df.STATE_NAME,
+    )
+
+    n.madd(
+        "Bus",
+        df.index,
+        suffix="-bck-dr",
+        x=df.x,
+        y=df.y,
+        carrier=df.carrier,
+        unit="MWh",
+        STATE=df.STATE,
+        STATE_NAME=df.STATE_NAME,
+    )
+
+    # seperate charging/discharging links to follow conventions
+
+    n.madd(
+        "Link",
+        df.index,
+        suffix="-fwd-dr-charger",
+        bus0=df.index,
+        bus1=df.index + "-fwd-dr",
+        carrier=df.carrier,
+        p_nom_extendable=False,
+        p_nom=np.inf,
+    )
+
+    n.madd(
+        "Link",
+        df.index,
+        suffix="-fwd-dr-discharger",
+        bus0=df.index + "-fwd-dr",
+        bus1=df.index,
+        carrier=df.carrier,
+        p_nom_extendable=False,
+        p_nom=np.inf,
+    )
+
+    n.madd(
+        "Link",
+        df.index,
+        suffix="-bck-dr-charger",
+        bus0=df.index,
+        bus1=df.index + "-bck-dr",
+        carrier=df.carrier,
+        p_nom_extendable=False,
+        p_nom=np.inf,
+    )
+
+    n.madd(
+        "Link",
+        df.index,
+        suffix="-bck-dr-discharger",
+        bus0=df.index + "-bck-dr",
+        bus1=df.index,
+        carrier=df.carrier,
+        p_nom_extendable=False,
+        p_nom=np.inf,
+    )
+
+    # backward stores have positive marginal cost storage and postive e
+    # forward stores have negative marginal cost storage and negative e
+
+    n.madd(
+        "Store",
+        df.index,
+        suffix="-bck-dr",
+        bus=df.index + "-bck-dr",
+        e_cyclic=True,
+        e_nom_extendable=False,
+        e_nom=np.inf,
+        e_min_pu=0,
+        e_max_pu=1,
+        carrier=df.carrier,
+        marginal_cost_storage=marginal_cost_storage,
+    )
+
+    n.madd(
+        "Store",
+        df.index,
+        suffix="-fwd-dr",
+        bus=df.index + "-fwd-dr",
+        e_cyclic=True,
+        e_nom_extendable=False,
+        e_nom=np.inf,
+        e_min_pu=-1,
+        e_max_pu=0,
+        carrier=df.carrier,
+        marginal_cost_storage=marginal_cost_storage * (-1),
     )
 
 
@@ -541,9 +667,10 @@ def _create_endogenous_links(n: pypsa.Network) -> None:
 def _remove_exogenous_buses(n: pypsa.Network) -> None:
     """Removes buses that are used for exogenous vehicle loads"""
 
+    # this is super awkward filtering :(
     buses = n.buses[
         (n.buses.index.str.contains("trn-elec-veh") | n.buses.index.str.contains("trn-lpg-veh"))
-        & ~(n.buses.index.str.endswith("-veh"))
+        & ~(n.buses.index.str.endswith("-veh") | n.buses.index.str.endswith("-veh-store"))
     ].index.to_list()
     n.mremove("Bus", buses)
 

@@ -18,6 +18,7 @@ from typing import Optional
 
 from _helpers import configure_logging, get_snapshots, load_costs
 from add_electricity import sanitize_carriers
+from build_electricity_sector import build_electricty
 from build_emission_tracking import build_ch4_tracking, build_co2_tracking
 from build_heat import build_heat
 from build_natural_gas import StateGeometry, build_natural_gas
@@ -30,11 +31,7 @@ from build_stock_data import (
     get_residential_stock,
     get_transport_stock,
 )
-from build_transportation import (
-    apply_endogenous_road_investments,
-    apply_exogenous_ev_policy,
-    build_transportation,
-)
+from build_transportation import apply_exogenous_ev_policy, build_transportation
 from constants import STATE_2_CODE, STATES_INTERCONNECT_MAPPER
 from constants_sector import RoadTransport
 from shapely.geometry import Point
@@ -280,36 +277,6 @@ def split_loads_by_carrier(n: pypsa.Network):
     n.loads["bus"] = n.loads.index
 
 
-def build_electricity_infra(n: pypsa.Network):
-    """
-    Adds links to connect electricity nodes.
-
-    For example, will build the link between "p480 0" and "p480 0 res-
-    elec"
-    """
-
-    df = n.loads[n.loads.index.str.endswith("-elec")].copy()
-
-    df["bus0"] = df.apply(lambda row: row.bus.split(f" {row.carrier}")[0], axis=1)
-    df["bus1"] = df.bus
-    df["sector"] = df.carrier.map(lambda x: x.split("-")[0])
-    df.index = df["bus0"] + " " + df["sector"]
-    df["carrier"] = df["sector"] + "-elec-infra"
-
-    n.madd(
-        "Link",
-        df.index,
-        suffix="-elec-infra",
-        bus0=df.bus0,
-        bus1=df.bus1,
-        carrier=df.carrier,
-        efficiency=1,
-        capital_cost=0,
-        p_nom_extendable=True,
-        lifetime=np.inf,
-    )
-
-
 def get_pwr_co2_intensity(carrier: str, costs: pd.DataFrame) -> float:
     """
     Gets co2 intensity to apply to pwr links.
@@ -434,16 +401,30 @@ if __name__ == "__main__":
     cop_ashp_path = snakemake.input.cop_air_total
     cop_gshp_path = snakemake.input.cop_soil_total
 
-    # add electricity infrastructure
-    build_electricity_infra(n=n)
-
-    dynamic_cost_year = sns.year.min()
-
-    # add heating and cooling
     split_res_com = snakemake.params.sector["service_sector"].get(
         "split_res_com",
         False,
     )
+
+    # add electricity infrastructure
+    # transport added seperatly to account for different mode demands
+    elec_sectors = ["res", "com", "ind"] if split_res_com else ["srv", "ind"]
+    for elec_sector in elec_sectors:
+        if elec_sector in ["res", "com"]:
+            options = snakemake.params.sector["service_sector"]
+            build_electricty(
+                n=n,
+                sector=elec_sector,
+                pop_layout_path=pop_layout_path,
+                options=options,
+            )
+        else:
+            options = snakemake.params.sector["industrial_sector"]
+            build_electricty(n=n, sector=elec_sector, options=options)
+
+    dynamic_cost_year = sns.year.min()
+
+    # add heating and cooling
     heat_sectors = ["res", "com", "ind"] if split_res_com else ["srv", "ind"]
     for heat_sector in heat_sectors:
         if heat_sector == "srv":
@@ -455,6 +436,7 @@ if __name__ == "__main__":
         else:
             logger.warning(f"No config options found for {heat_sector}")
             options = {}
+
         build_heat(
             n=n,
             costs=costs,
@@ -468,13 +450,15 @@ if __name__ == "__main__":
         )
 
     # add transportation
-    exogenous_transport = snakemake.params.sector["transport_sector"]["investment"].get("exogenous", False)
+    trn_options = options = snakemake.params.sector["transport_sector"]
+    exogenous_transport = trn_options["investment"].get("exogenous", False)
     if exogenous_transport:
         ev_policy = pd.read_csv(snakemake.input.ev_policy, index_col=0)
         apply_exogenous_ev_policy(n, ev_policy)
         must_run_evs = None
     else:
-        must_run_evs = snakemake.params.sector["transport_sector"]["investment"].get("must_run_evs", True)
+        must_run_evs = trn_options["investment"].get("must_run_evs", True)
+    dr_config = trn_options.get("demand_response", {})
     build_transportation(
         n=n,
         costs=costs,
@@ -483,6 +467,7 @@ if __name__ == "__main__":
         dynamic_pricing=True,
         eia=eia_api,
         year=dynamic_cost_year,
+        dr_config=dr_config,
     )
 
     # check for end-use brownfield requirements
