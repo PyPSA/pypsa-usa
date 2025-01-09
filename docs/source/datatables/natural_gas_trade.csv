@@ -1,0 +1,19 @@
+Configuration Option,Configuration Value ,Description,Constraint ,Applied to
+``import.min``,0,No import requirement,Σ(p) >= 0,S2 S1 gas trade
+,0.5,Import at least half of historical year value ,Σ(p) >= 5000,S2 S1 gas trade
+,1,Import at least historical year value ,Σ(p) >= 10000,S2 S1 gas trade
+,2,Import at least double the historical year value ,Σ(p) >= 20000,S2 S1 gas trade
+``import.max``,0,No imports allowed,Σ(p) <= 0,S2 S1 gas trade
+,0.5,Import up to half of historical year value ,Σ(p) <= 5000,S2 S1 gas trade
+,1,Import up to the historical year value ,Σ(p) <= 10000,S2 S1 gas trade
+,2,Import up to double the historical year value ,Σ(p) <= 20000,S2 S1 gas trade
+,inf,Unlimited Imports ,No constraint added,S2 S1 gas trade
+``export.min``,0,No exports requirement,Σ(p) >= 0,S1 S2 gas trade
+,0.5,Export at least half of historical year value ,Σ(p) >= 5000,S1 S2 gas trade
+,1,Export at least the historical year value ,Σ(p) >= 10000,S1 S2 gas trade
+,2,Export at least double the historical year value ,Σ(p) >= 20000,S1 S2 gas trade
+``export.max``,0,No exports allowed,Σ(p) <= 0,S1 S2 gas trade
+,0.5,Export up to half of historical year value ,Σ(p) <= 5000,S1 S2 gas trade
+,1,Export up to the historical year value ,Σ(p) <= 10000,S1 S2 gas trade
+,2,Export up to double the historical year value ,Σ(p) <= 20000,S1 S2 gas trade
+,inf,Unlimited Export ,No constraint added,S1 S2 gas trade

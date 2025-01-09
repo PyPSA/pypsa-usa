@@ -1,0 +1,30 @@
+,Unit,Values,Description
+service_sector,,,Options when implementing the service sector (Residential and Commercial)
+-- dynamic_costs,--,"bool {true, false}",Apply sector specific time varrying natural gas and heating fuel oil costs.
+-- split_res_com,--,"bool {true, false}","Model the residential and commercial network seperatly, or aggregate into a single service sector. (Only False implemented)"
+-- split_urban_rural,--,"bool {true, false}","Model the urban and rural areas seperatly within each sector, or aggregate into a single region. If aggregated, constraints on GSHP capacity are implemented based on population. "
+-- split_space_water_heating,--,"bool {true, false}","Model space heat and water heat seperatly, or aggregate together. If aggregated, only space-heat technologyies are represented. "
+-- brownfield,--,"bool {true, false}",Include brownfield end-use capacity
+-- gas_connection,,,"Option on amount of area connected to the gas network. 1 represnets 100% of buildings connected, 0 represents 0% connected. "
+-- -- urban,per_unit,"float {0 <=, >= 1}",Urban population connected to gas network.
+-- -- rural,per_unit,"float {0 <=, >= 1}",Rural population connected to gas network.
+-- technologies,,,Energy conversion technologies to model.
+-- -- space_heating,,,Space heating technologies to model
+-- -- -- elec_furnace,--,"bool {true, false}",Include electric furnace heaters
+-- -- -- gas_furnace,--,"bool {true, false}",Include natural gas furnces
+-- -- -- oil_furnace,--,"bool {true, false}",Include heating oil furnaces
+-- -- -- heat_pump,--,"bool {true, false}","Include heat pumps. Both ASHPs and GSHPs are iuncluded. ASHP are used in urban areas, while GSHP are used in rural areas. "
+-- -- -- air_con,--,"bool {true, false}",Include air conditiners if modelling cooling load
+-- -- water_heating,,,Water heating technologies to model
+-- -- -- elec_water_tank,--,"bool {true, false}",Include electric hot water storage tanks
+-- -- -- gas_water_tank,--,"bool {true, false}",Include natural gas hot water storage tanks
+-- -- -- oil_water_tank,--,"bool {true, false}",Include heating oil hot water storage tanks
+-- -- standing_losses,,,Standing losses to apply to space and water storages
+-- -- -- space,per_unit,"float {0 <=, >= 1}",Hourly loss of space heat stores
+-- -- -- water,per_unit,"float {0 <=, >= 1}",Hourly loss of water heat stores
+-- loads,,,Loads to include. Electricity is always modelled.
+-- -- heating,--,"bool {true, false}",Include heating loads.
+-- -- cooling,--,"bool {true, false}",Include cooling loads. Heating must be included to also include cooling
+-- demnand_response,,,Demand response options for the service sector.
+-- -- shift,percentage,"float {0 <=, >= 100} or 'inf'",Allowable load to be shifted per snapshot. Set to 0 to turn off demand response. Set to 'inf' to not enforce capacity limits.
+-- -- marginal_cost,$/MWh,float {0 <=},Cost to store one unit of energy for one hour.

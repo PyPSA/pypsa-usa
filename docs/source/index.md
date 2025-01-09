@@ -55,6 +55,7 @@ data-demand
 data-generators
 data-costs
 data-policies
+data-sectors
 data-naturalgas
 data-services
 data-industrial

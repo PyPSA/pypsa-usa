@@ -1,0 +1,23 @@
+Technology,Metric,Source
+Light-Duty Vehicles,Capital Costs | Efficiency,`NREL Electrification Futures Study <https://www.nrel.gov/docs/fy18osti/70485.pdf>`_
+,Lifetime,`NREL Annual Technology Baseline <https://atb.nrel.gov/transportation/2022/definitions>`_
+,Demand,`NREL Electrification Futures Study <https://www.nrel.gov/docs/fy18osti/70485.pdf>`_ and `EIA Annual Energy Outlook <https://www.eia.gov/outlooks/aeo/>`_
+,Existing Stock,`EIA Annual Energy Outlook <https://www.eia.gov/outlooks/aeo/>`_
+Medium-Duty Vehicles,Capital Costs | Efficiency,`NREL Electrification Futures Study <https://www.nrel.gov/docs/fy18osti/70485.pdf>`_
+,Lifetime,`NREL Annual Technology Baseline <https://atb.nrel.gov/transportation/2022/definitions>`_
+,Demand,`NREL Electrification Futures Study <https://www.nrel.gov/docs/fy18osti/70485.pdf>`_ and `EIA Annual Energy Outlook <https://www.eia.gov/outlooks/aeo/>`_
+,Existing Stock,`EIA Annual Energy Outlook <https://www.eia.gov/outlooks/aeo/>`_
+Heavy-Duty Vehicles,Capital Costs | Efficiency,`NREL Electrification Futures Study <https://www.nrel.gov/docs/fy18osti/70485.pdf>`_
+,Lifetime,`NREL Annual Technology Baseline <https://atb.nrel.gov/transportation/2022/definitions>`_
+,Demand,`NREL Electrification Futures Study <https://www.nrel.gov/docs/fy18osti/70485.pdf>`_ and `EIA Annual Energy Outlook <https://www.eia.gov/outlooks/aeo/>`_
+,Existing Stock,`EIA Annual Energy Outlook <https://www.eia.gov/outlooks/aeo/>`_
+Buses,Capital Costs | Efficiency,`NREL Electrification Futures Study <https://www.nrel.gov/docs/fy18osti/70485.pdf>`_
+,Lifetime,`NREL Annual Technology Baseline <https://atb.nrel.gov/transportation/2022/definitions>`_
+,Demand,`NREL Electrification Futures Study <https://www.nrel.gov/docs/fy18osti/70485.pdf>`_ and `EIA Annual Energy Outlook <https://www.eia.gov/outlooks/aeo/>`_
+,Existing Stock,`EIA Annual Energy Outlook <https://www.eia.gov/outlooks/aeo/>`_
+Rail,Efficiency,`EIA Annual Energy Outlook <https://www.eia.gov/outlooks/aeo/>`_
+,Demand,`EIA Annual Energy Outlook <https://www.eia.gov/outlooks/aeo/>`_
+Aircrafts,Efficiency,`EIA Annual Energy Outlook <https://www.eia.gov/outlooks/aeo/>`_
+,Demand,`EIA Annual Energy Outlook <https://www.eia.gov/outlooks/aeo/>`_
+Boats,Efficiency,`EIA Annual Energy Outlook <https://www.eia.gov/outlooks/aeo/>`_
+,Demand,`EIA Annual Energy Outlook <https://www.eia.gov/outlooks/aeo/>`_

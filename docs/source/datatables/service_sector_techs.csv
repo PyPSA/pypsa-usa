@@ -1,0 +1,12 @@
+Technology,Abbreviation,Required Configuration
+Electrical Distribution,elec-dist,Always on
+Air Conditioner,air-con,Heat Load / Space Heat Load + Cooling Load
+Oil Furnace,lpg-furnace,Heat Load / Space Heat Load
+Gas Furnace,gas-furnace,Heat Load / Space Heat Load
+Electric Furnace,elec-furnace,Heat Load / Space Heat Load
+Heat Store,heat-store,Heat Load / Space Heat Load
+Air Source Heat Pump,ashp,Heat Load / Space Heat Load
+Ground Source Heat Pump,gshp,Heat Load / Space Heat Load
+Oil Water Heater,lpg-heater,Space Heat Load + Water Heat Load
+Gas Water Heater,gas-heater,Space Heat Load + Water Heat Load
+Electric Water Heater,elec-heater,Space Heat Load + Water Heat Load
