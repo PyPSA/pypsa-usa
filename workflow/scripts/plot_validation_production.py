@@ -17,21 +17,14 @@ from constants import (
     EIA_FUEL_MAPPER_2,
     STATE_2_CODE,
 )
-from eia import ElectricPowerData, Emissions
+from eia import Emissions
 from plot_network_maps import (
     create_title,
     get_bus_scale,
     get_line_scale,
     plot_capacity_map,
 )
-from plot_statistics import (
-    plot_capacity_factor_heatmap,
-    plot_curtailment_heatmap,
-    plot_fuel_costs,
-    plot_generator_data_panel,
-    plot_region_lmps,
-    plot_regional_emissions_bar,
-)
+from plot_statistics import plot_fuel_costs, plot_generator_data_panel, plot_region_lmps
 from summary import get_node_emissions_timeseries
 
 sns.set_theme("paper", style="whitegrid")
@@ -477,6 +470,7 @@ def plot_line_loading_map(
     link_loading = n.links_t.p0.abs().mean() / n.links.p_nom / n.links.p_max_pu * 100
     norm = plt.Normalize(vmin=0, vmax=100)
 
+    n.carriers.loc["AC_exp", "color"] = "#dd2e23"
     fig, _ = plot_capacity_map(
         n=n,
         bus_values=gen / 5e3,
@@ -493,13 +487,6 @@ def plot_line_loading_map(
         title=title,
     )
 
-    # plt.colorbar(
-    #     plt.cm.ScalarMappable(cmap="plasma", norm=norm),
-    #     label="Relative line loading [%]",
-    #     shrink=0.6,
-    #     ax=_,
-    # )
-
     fig.savefig(save, dpi=DPI)
 
 
@@ -514,42 +501,59 @@ def plot_generator_cost_stack(
     marginal_costs = pd.DataFrame(marginal_costs)
     marginal_costs["p_nom"] = marginal_costs.index.map(n.generators.p_nom)
     marginal_costs["carrier"] = marginal_costs.index.map(n.generators.carrier)
+    marginal_costs["bus"] = marginal_costs.index.map(n.generators.bus)
+    marginal_costs["nerc_reg"] = marginal_costs["bus"].map(n.buses.nerc_reg)
     df = marginal_costs[marginal_costs.index.map(n.generators.carrier) != "load"]
 
     # Sort by marginal cost
     df_sorted = df.sort_values(by="marginal_cost")
 
-    # Generate plot
-    fig, ax = plt.subplots()
-
-    # Variables for plotting
-    cumulative_capacity = np.cumsum(df_sorted["p_nom"]) - df_sorted["p_nom"]
-    marginal_costs = df_sorted["marginal_cost"]
-    capacities = df_sorted["p_nom"]
+    # Get unique NERC regions
+    unique_regions = df_sorted["nerc_reg"].unique()
+    fig, axs = plt.subplots(len(unique_regions), 1, figsize=(10, 5 * len(unique_regions)), constrained_layout=True)
 
     colors = n.carriers.color.to_dict()
-    # Create stack plot
-    for i in range(len(df_sorted)):
-        ax.barh(
-            y=0,
-            width=capacities.iloc[i],
-            left=cumulative_capacity.iloc[i],
-            height=marginal_costs.iloc[i],
-            align="edge",
-            linewidth=0,
-            color=colors[df_sorted["carrier"].iloc[i]],
-        )
 
+    for idx, region in enumerate(unique_regions):
+        # Filter data for the current region
+        region_df = df_sorted[df_sorted["nerc_reg"] == region]
+
+        # Variables for plotting
+        cumulative_capacity = np.cumsum(region_df["p_nom"]) - region_df["p_nom"]
+        marginal_costs = region_df["marginal_cost"]
+        capacities = region_df["p_nom"]
+
+        # Select the appropriate subplot for this region
+        ax = axs[idx] if len(unique_regions) > 1 else axs
+
+        # Create stack plot for the current region
+        for i in range(len(region_df)):
+            ax.barh(
+                y=0,
+                width=capacities.iloc[i],
+                left=cumulative_capacity.iloc[i],
+                height=marginal_costs.iloc[i],
+                align="edge",
+                linewidth=0,
+                color=colors[region_df["carrier"].iloc[i]],
+            )
+
+        # Set labels and title for the current subplot
+        ax.set_xlabel("Capacity [MW]")
+        ax.set_ylabel("Marginal Cost [USD/MWh]")
+        ax.set_title(f"Average Generator Merit Order Curve for {region}")
+
+    # Add a legend to the first subplot
     fig.legend(
-        handles=[plt.Rectangle((0, 0), 1, 1, color=colors[carrier], label=carrier) for carrier in colors],
+        handles=[
+            plt.Rectangle((0, 0), 1, 1, color=colors[carrier], label=carrier)
+            for carrier in df_sorted["carrier"].unique()
+        ],
         loc="upper left",
         bbox_to_anchor=(0.12, 0.875),
         title="Carrier",
     )
 
-    ax.set_xlabel("Capacity [MW]")
-    ax.set_ylabel("Marginal Cost [USD/MWh]")
-    ax.set_title(create_title("Average Generator Merit Order Curve", **wildcards))
     fig.savefig(save, dpi=DPI)
 
 
@@ -564,7 +568,6 @@ def plot_state_emissions_historical_bar(
     """
     Compares regional annual emissions to the year.
     """
-
     year = snapshots[0].year
 
     sectors = wildcards["sector"].split("-")
@@ -616,6 +619,7 @@ def plot_state_emissions_historical_bar(
     final["value"] = final.value.astype("float")
 
     # final = final[~final["state"].str.contains("Texas")]
+    final.to_csv(save.replace(".pdf", ".csv"))
 
     fig, ax = plt.subplots(figsize=(8, 8))
     sns.barplot(
@@ -643,7 +647,6 @@ def plot_ba_emissions_historical_bar(
     """
     Compares regional annual emissions to the year.
     """
-
     # year = snapshots[0].year
 
     # sectors = wildcards["sector"].split("-")

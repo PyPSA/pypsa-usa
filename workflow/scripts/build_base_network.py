@@ -7,7 +7,7 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 import pypsa
-from _helpers import configure_logging, get_snapshots, test_network_datatype_consistency
+from _helpers import configure_logging
 from build_shapes import load_na_shapes
 from geopandas.tools import sjoin
 from shapely.geometry import Point, Polygon
@@ -546,53 +546,6 @@ def modify_breakthrough_substations(buslocs: pd.DataFrame):
     return buslocs
 
 
-def modify_breakthrough_lines(n: pypsa.Network, interconnect: str):
-    if interconnect == "Western" or interconnect == "usa":
-        line_fixes = {
-            "91027": {"v_nom": 115},
-            "90511": {"v_nom": 115},
-            "90530": {"v_nom": 115},
-            "90528": {"v_nom": 115},
-            "90529": {"v_nom": 115},
-            "89704": {"v_nom": 115},
-        }
-
-        for i in line_fixes.keys():
-            n.lines.loc[n.lines.index == i, "v_nom"] = line_fixes[i]["v_nom"]
-            n.buses.loc[n.lines.loc[n.lines.index == i].bus0, "v_nom"] = line_fixes[i]["v_nom"]
-            n.buses.loc[n.lines.loc[n.lines.index == i].bus1, "v_nom"] = line_fixes[i]["v_nom"]
-
-        # Removing Unccesary Lines in Humboldt, adding new missing one.
-        line_removals = ["89634", "89668", "90528"]
-        n.mremove("Line", line_removals)
-        line_params = n.lines.loc["90501"].copy()
-        line_params.name = line_removals[0]
-        line_params.bus0 = "2020004"
-        line_params.bus1 = "2020532"
-        n.add(
-            "Line",
-            line_params.name,
-            **line_params.drop(["v_nom", "interconnect", "underwater_fraction"]),
-        )
-        n.lines.loc[line_params.name, "v_nom"] = line_params.v_nom
-        n.lines.loc[line_params.name, "interconnect"] = line_params.interconnect
-        n.lines.loc[line_params.name, "underwater_fraction"] = line_params.underwater_fraction
-
-    return n
-
-
-def get_multiindex_snapshots(
-    sns_config: dict[str, str],
-    invest_periods: list[int],
-) -> pd.MultiIndex:
-    sns = pd.DatetimeIndex([])
-    for year in invest_periods:
-        sns = sns.append(
-            get_snapshots(sns_config).map(lambda x: x.replace(year=year)),
-        )
-    return pd.MultiIndex.from_arrays([sns.year, sns])
-
-
 def main(snakemake):
     # create network
     n = pypsa.Network()
@@ -660,7 +613,6 @@ def main(snakemake):
     n = add_buses_from_file(n, gdf_bus, interconnect=interconnect)
     n = add_branches_from_file(n, snakemake.input["lines"])
     n = add_dclines_from_file(n, snakemake.input["links"])
-    # n = modify_breakthrough_substations(n, interconnect)
 
     # identify offshore points of interconnection, and remove unncess components from BE network
     n = identify_osw_poi(n)
@@ -676,9 +628,6 @@ def main(snakemake):
         )
         n = add_offshore_buses(n, offshore_buses)
         n = build_offshore_transmission_configuration(n)
-
-    # Modify network lines to fix errors in breakthrough data
-    n = modify_breakthrough_lines(n, interconnect)
 
     # Assign Lines Types and Missing Region Memberships
     add_custom_line_type(n)
@@ -710,9 +659,6 @@ def main(snakemake):
             assert (
                 len(n.buses) > 0
             ), "No buses remaining in network. Check your model_topology: inclusion:, you may be filtering the wrong zones for the selected interconnect"
-
-    # Tests
-    logger.info(test_network_datatype_consistency(n))
 
     col_list = ["poi_bus", "poi_sub", "poi"]
     n.buses.drop(columns=[col for col in col_list if col in n.buses], inplace=True)
@@ -771,13 +717,6 @@ def main(snakemake):
         + ")"
     )
     lines_gis.to_csv(snakemake.output.lines_gis)
-
-    # add snapshots
-    sns_config = snakemake.params.snapshots
-    planning_horizons = snakemake.params.planning_horizons
-
-    n.snapshots = get_multiindex_snapshots(sns_config, planning_horizons)
-    n.set_investment_periods(periods=planning_horizons)
 
     # export network
     n.export_to_netcdf(snakemake.output.network)

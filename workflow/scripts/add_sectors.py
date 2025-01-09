@@ -14,22 +14,26 @@ import pypsa
 
 logger = logging.getLogger(__name__)
 import sys
-from typing import Any, Optional
+from typing import Optional
 
 from _helpers import configure_logging, get_snapshots, load_costs
 from add_electricity import sanitize_carriers
+from build_electricity_sector import build_electricty
 from build_emission_tracking import build_ch4_tracking, build_co2_tracking
 from build_heat import build_heat
 from build_natural_gas import StateGeometry, build_natural_gas
 from build_stock_data import (
+    add_industrial_brownfield,
+    add_road_transport_brownfield,
     add_service_brownfield,
-    add_transport_brownfield,
     get_commercial_stock,
+    get_industrial_stock,
     get_residential_stock,
     get_transport_stock,
 )
 from build_transportation import apply_exogenous_ev_policy, build_transportation
 from constants import STATE_2_CODE, STATES_INTERCONNECT_MAPPER
+from constants_sector import RoadTransport
 from shapely.geometry import Point
 
 CODE_2_STATE = {v: k for k, v in STATE_2_CODE.items()}
@@ -231,7 +235,7 @@ def convert_generators_2_links(
         efficiency=plants.efficiency,
         efficiency2=co2_intensity,
         marginal_cost=plants.marginal_cost * plants.efficiency,  # fuel costs rated at delievered
-        capital_cost=plants.capital_cost * plants.efficiency,  # links rated on input capacity
+        capital_cost=plants.capital_cost,  # links rated on input capacity
         lifetime=plants.lifetime,
     )
 
@@ -273,36 +277,6 @@ def split_loads_by_carrier(n: pypsa.Network):
     n.loads["bus"] = n.loads.index
 
 
-def build_electricity_infra(n: pypsa.Network):
-    """
-    Adds links to connect electricity nodes.
-
-    For example, will build the link between "p480 0" and "p480 0 res-
-    elec"
-    """
-
-    df = n.loads[n.loads.index.str.endswith("-elec")].copy()
-
-    df["bus0"] = df.apply(lambda row: row.bus.split(f" {row.carrier}")[0], axis=1)
-    df["bus1"] = df.bus
-    df["sector"] = df.carrier.map(lambda x: x.split("-")[0])
-    df.index = df["bus0"] + " " + df["sector"]
-    df["carrier"] = df["sector"] + "-elec-infra"
-
-    n.madd(
-        "Link",
-        df.index,
-        suffix="-elec-infra",
-        bus0=df.bus0,
-        bus1=df.bus1,
-        carrier=df.carrier,
-        efficiency=1,
-        capital_cost=0,
-        p_nom_extendable=True,
-        lifetime=np.inf,
-    )
-
-
 def get_pwr_co2_intensity(carrier: str, costs: pd.DataFrame) -> float:
     """
     Gets co2 intensity to apply to pwr links.
@@ -311,6 +285,8 @@ def get_pwr_co2_intensity(carrier: str, costs: pd.DataFrame) -> float:
     different names in translation to a sector study.
     """
 
+    # the ccs case are a hack solution
+
     match carrier:
         case "gas":
             return 0
@@ -318,6 +294,14 @@ def get_pwr_co2_intensity(carrier: str, costs: pd.DataFrame) -> float:
             return costs.at["gas", "co2_emissions"]
         case "lpg":
             return costs.at["oil", "co2_emissions"]
+        case "CCGT-95CCS" | "CCGT-97CCS":
+            base = costs.at["gas", "co2_emissions"]
+            ccs_level = int(carrier.split("-")[1].replace("CCS", ""))
+            return (1 - ccs_level / 100) * base
+        case "coal-95CCS" | "coal-99CCS":
+            base = costs.at["gas", "co2_emissions"]
+            ccs_level = int(carrier.split("-")[1].replace("CCS", ""))
+            return (1 - ccs_level / 100) * base
         case _:
             return costs.at[carrier, "co2_emissions"]
 
@@ -329,10 +313,10 @@ if __name__ == "__main__":
         snakemake = mock_snakemake(
             "add_sectors",
             interconnect="western",
-            simpl="12",
-            clusters="6",
+            simpl="70",
+            clusters="4m",
             ll="v1.0",
-            opts="48SEG",
+            opts="3h",
             sector="E-G",
         )
     configure_logging(snakemake)
@@ -378,12 +362,18 @@ if __name__ == "__main__":
     for carrier in ("oil", "coal", "gas"):
         add_supply = False if carrier == "gas" else True  # gas added in build_ng()
         add_sector_foundation(n, carrier, add_supply, costs, center_points)
-        co2_intensity = get_pwr_co2_intensity(carrier, costs)
-        convert_generators_2_links(n, carrier, f" {carrier}", co2_intensity)
 
-    for carrier in ("OCGT", "CCGT"):
+    for carrier in ("OCGT", "CCGT", "CCGT-95CCS", "CCGT-97CCS"):
         co2_intensity = get_pwr_co2_intensity(carrier, costs)
         convert_generators_2_links(n, carrier, f" gas", co2_intensity)
+
+    for carrier in ("coal", "coal-95CCS", "coal-99CCS"):
+        co2_intensity = get_pwr_co2_intensity(carrier, costs)
+        convert_generators_2_links(n, carrier, f" coal", co2_intensity)
+
+    for carrier in ["oil"]:
+        co2_intensity = get_pwr_co2_intensity(carrier, costs)
+        convert_generators_2_links(n, carrier, f" oil", co2_intensity)
 
     ng_options = snakemake.params.sector["natural_gas"]
 
@@ -403,7 +393,7 @@ if __name__ == "__main__":
     # this must happen after natural gas system is built
     methane_options = snakemake.params.sector["methane"]
     leakage_rate = methane_options.get("leakage_rate", 0)
-    if leakage_rate > 0.000001:
+    if leakage_rate > 0.00001:
         gwp = methane_options.get("gwp", 1)
         build_ch4_tracking(n, gwp, leakage_rate)
 
@@ -411,16 +401,30 @@ if __name__ == "__main__":
     cop_ashp_path = snakemake.input.cop_air_total
     cop_gshp_path = snakemake.input.cop_soil_total
 
-    # add electricity infrastructure
-    build_electricity_infra(n=n)
-
-    dynamic_cost_year = sns.year.min()
-
-    # add heating and cooling
     split_res_com = snakemake.params.sector["service_sector"].get(
         "split_res_com",
         False,
     )
+
+    # add electricity infrastructure
+    # transport added seperatly to account for different mode demands
+    elec_sectors = ["res", "com", "ind"] if split_res_com else ["srv", "ind"]
+    for elec_sector in elec_sectors:
+        if elec_sector in ["res", "com"]:
+            options = snakemake.params.sector["service_sector"]
+            build_electricty(
+                n=n,
+                sector=elec_sector,
+                pop_layout_path=pop_layout_path,
+                options=options,
+            )
+        else:
+            options = snakemake.params.sector["industrial_sector"]
+            build_electricty(n=n, sector=elec_sector, options=options)
+
+    dynamic_cost_year = sns.year.min()
+
+    # add heating and cooling
     heat_sectors = ["res", "com", "ind"] if split_res_com else ["srv", "ind"]
     for heat_sector in heat_sectors:
         if heat_sector == "srv":
@@ -432,6 +436,7 @@ if __name__ == "__main__":
         else:
             logger.warning(f"No config options found for {heat_sector}")
             options = {}
+
         build_heat(
             n=n,
             costs=costs,
@@ -445,62 +450,111 @@ if __name__ == "__main__":
         )
 
     # add transportation
-    ev_policy = pd.read_csv(snakemake.input.ev_policy, index_col=0)
-    apply_exogenous_ev_policy(n, ev_policy)
+    trn_options = options = snakemake.params.sector["transport_sector"]
+    exogenous_transport = trn_options["investment"].get("exogenous", False)
+    if exogenous_transport:
+        ev_policy = pd.read_csv(snakemake.input.ev_policy, index_col=0)
+        apply_exogenous_ev_policy(n, ev_policy)
+        must_run_evs = None
+    else:
+        must_run_evs = trn_options["investment"].get("must_run_evs", True)
+    dr_config = trn_options.get("demand_response", {})
     build_transportation(
         n=n,
         costs=costs,
+        exogenous=exogenous_transport,
+        must_run_evs=must_run_evs,
         dynamic_pricing=True,
         eia=eia_api,
         year=dynamic_cost_year,
+        dr_config=dr_config,
     )
 
     # check for end-use brownfield requirements
 
-    if any(
-        [
-            snakemake.params.sector["service_sector"]["brownfield"],
-            snakemake.params.sector["transport_sector"]["brownfield"],
-            snakemake.params.sector["industrial_sector"]["brownfield"],
-        ],
-    ):
-        if all(n.investment_periods > 2023):
-            # this is quite crude assumption and should get updated
-            # assume a 0.5% energy growth per year
-            # https://www.eia.gov/todayinenergy/detail.php?id=56040
-            base_year = 2023
-            growth_multiplier = 1 - (min(n.investment_periods) - 2023) * (0.005)
-        else:
-            base_year = min(n.investment_periods)
-            growth_multiplier = 1
+    if all(n.investment_periods > 2023):
+        # this is quite crude assumption and should get updated
+        # assume a 0.5% energy growth per year
+        # https://www.eia.gov/todayinenergy/detail.php?id=56040
+        base_year = 2023
+        growth_multiplier = 1 - (min(n.investment_periods) - 2023) * (0.005)
+    else:
+        base_year = min(n.investment_periods)
+        growth_multiplier = 1
 
     if snakemake.params.sector["transport_sector"]["brownfield"]:
         ratios = get_transport_stock(snakemake.params.api["eia"], base_year)
-        for vehicle in ("lgt", "med", "hvy", "bus"):
-            add_transport_brownfield(n, vehicle, growth_multiplier, ratios, costs)
+        for vehicle in RoadTransport:
+            add_road_transport_brownfield(
+                n,
+                vehicle.value,
+                growth_multiplier,
+                ratios,
+                costs,
+                exogenous_transport,
+            )
 
     if snakemake.params.sector["service_sector"]["brownfield"]:
 
         res_stock_dir = snakemake.input.residential_stock
         com_stock_dir = snakemake.input.commercial_stock
 
-        if snakemake.params.sector["service_sector"]["split_space_water_heating"]:
+        if snakemake.params.sector["service_sector"]["water_heating"]["split_space_water"]:
             fuels = ["space_heating", "water_heating", "cooling"]
         else:
             fuels = ["heating", "cooling"]
         for fuel in fuels:
 
+            if fuel == "water_heating":
+                simple_storage = snakemake.params.sector["service_sector"]["water_heating"].get("simple_storage", False)
+            else:
+                simple_storage = None
+
             # residential sector
             ratios = get_residential_stock(res_stock_dir, fuel)
             ratios.index = ratios.index.map(STATE_2_CODE)
             ratios = ratios.dropna()  # na is USA
-            add_service_brownfield(n, "res", fuel, growth_multiplier, ratios, costs)
+            add_service_brownfield(
+                n=n,
+                sector="res",
+                fuel=fuel,
+                growth_multiplier=growth_multiplier,
+                ratios=ratios,
+                costs=costs,
+                simple_storage=simple_storage,
+            )
 
             # commercial sector
             ratios = get_commercial_stock(com_stock_dir, fuel)
             ratios.index = ratios.index.map(STATE_2_CODE)
             ratios = ratios.dropna()  # na is USA
-            add_service_brownfield(n, "com", fuel, growth_multiplier, ratios, costs)
+            add_service_brownfield(
+                n=n,
+                sector="com",
+                fuel=fuel,
+                growth_multiplier=growth_multiplier,
+                ratios=ratios,
+                costs=costs,
+                simple_storage=simple_storage,
+            )
+
+    if snakemake.params.sector["industrial_sector"]["brownfield"]:
+
+        mecs_file = snakemake.input.industrial_stock
+        ratios = get_industrial_stock(mecs_file)
+
+        fuels = ["heat"]
+
+        for fuel in fuels:
+
+            ratio = ratios.loc[fuel]
+            add_industrial_brownfield(
+                n=n,
+                fuel=fuel,
+                growth_multiplier=growth_multiplier,
+                ratios=ratio,
+                costs=costs,
+            )
 
     # Needed as loads may be split off to urban/rural
     sanitize_carriers(n, snakemake.config)

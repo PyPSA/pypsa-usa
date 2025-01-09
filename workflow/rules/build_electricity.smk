@@ -26,7 +26,7 @@ rule build_shapes:
         "logs/build_shapes/{interconnect}.log",
     threads: 1
     resources:
-        mem_mb=2000,
+        mem_mb=5000,
     script:
         "../scripts/build_shapes.py"
 
@@ -34,8 +34,6 @@ rule build_shapes:
 rule build_base_network:
     params:
         build_offshore_network=config["offshore_network"],
-        snapshots=config["snapshots"],
-        planning_horizons=config["scenario"]["planning_horizons"],
         model_topology=config["model_topology"]["include"],
     input:
         buses=DATA + "breakthrough_network/base_grid/bus.csv",
@@ -59,7 +57,7 @@ rule build_base_network:
         "logs/create_network/{interconnect}.log",
     threads: 1
     resources:
-        mem_mb=1000,
+        mem_mb=5000,
     script:
         "../scripts/build_base_network.py"
 
@@ -101,6 +99,7 @@ rule build_cost_data:
         efs_tech_costs="repo_data/costs/EFS_Technology_Data.xlsx",
         efs_icev_costs="repo_data/costs/efs_icev_costs.csv",
         eia_tech_costs="repo_data/costs/eia_tech_costs.csv",
+        egs_costs="repo_data/costs/egs_costs.csv",
         additional_costs="repo_data/costs/additional_costs.csv",
     output:
         tech_costs=RESOURCES + "costs/costs_{year}.csv",
@@ -109,7 +108,7 @@ rule build_cost_data:
         LOGS + "costs_{year}.log",
     threads: 1
     resources:
-        mem_mb=1000,
+        mem_mb=5000,
     script:
         "../scripts/build_cost_data.py"
 
@@ -120,9 +119,9 @@ if config["enable"].get("build_cutout", False):
 
     rule build_cutout:
         params:
-            snapshots=config["snapshots"],
-            cutouts=config["atlite"]["cutouts"],
-            interconnects=config["atlite"]["interconnects"],
+            snapshots=config_provider("snapshots"),
+            cutouts=config_provider("atlite", "cutouts"),
+            interconnects=config_provider("atlite", "interconnects"),
         input:
             regions_onshore=RESOURCES
             + "{interconnect}/Geospatial/country_shapes.geojson",
@@ -136,7 +135,7 @@ if config["enable"].get("build_cutout", False):
             "benchmarks/" + CDIR + "build_cutout_{interconnect}_{cutout}"
         threads: ATLITE_NPROCESSES
         resources:
-            mem_mb=ATLITE_NPROCESSES * 1000,
+            mem_mb=ATLITE_NPROCESSES * 5000,
         script:
             "../scripts/build_cutout.py"
 
@@ -169,7 +168,6 @@ rule build_renewable_profiles:
         renewable=config["renewable"],
         snapshots=config["snapshots"],
     input:
-        base_network=RESOURCES + "{interconnect}/elec_base_network.nc",
         corine=ancient(
             DATA
             + "copernicus/PROBAV_LC100_global_v3.0.1_2019-nrt_Discrete-Classification-map_USA_EPSG-4326.tif"
@@ -194,11 +192,15 @@ rule build_renewable_profiles:
             if w.technology in ("onwind", "solar")
             else RESOURCES + "{interconnect}/Geospatial/regions_offshore.geojson"
         ),
-        cutout=lambda w: "cutouts/"
-        + CDIR
-        + "{interconnect}_"
-        + config["renewable"][w.technology]["cutout"]
-        + ".nc",
+        cutout=lambda wildcards: expand(
+            "cutouts/"
+            + CDIR
+            + "usa_"
+            + config["renewable"][wildcards.technology]["cutout"]
+            + "_{renewable_weather_year}"
+            + ".nc",
+            renewable_weather_year=config["renewable_weather_years"],
+        ),
     output:
         profile=RESOURCES + "{interconnect}/profile_{technology}.nc",
         availability=RESULTS + "{interconnect}/land_use_availability_{technology}.png",
@@ -207,10 +209,11 @@ rule build_renewable_profiles:
     benchmark:
         BENCHMARKS + "{interconnect}/build_renewable_profiles_{technology}"
     threads: ATLITE_NPROCESSES
+    retries: 3
     resources:
         mem_mb=ATLITE_NPROCESSES * 5000,
     wildcard_constraints:
-        technology="(?!hydro).*",  # Any technology other than hydro
+        technology="(?!hydro|EGS).*",  # Any technology other than hydro
     script:
         "../scripts/build_renewable_profiles.py"
 
@@ -333,6 +336,8 @@ rule build_electrical_demand:
         demand_params=config["electricity"]["demand"],
         eia_api=config["api"]["eia"],
         profile_year=pd.to_datetime(config["snapshots"]["start"]).year,
+        planning_horizons=config["scenario"]["planning_horizons"],
+        snapshots=config["snapshots"],
     input:
         network=RESOURCES + "{interconnect}/elec_base_network.nc",
         demand_files=demand_raw_data,
@@ -357,19 +362,20 @@ rule build_sector_demand:
         planning_horizons=config["scenario"]["planning_horizons"],
         profile_year=pd.to_datetime(config["snapshots"]["start"]).year,
         eia_api=config["api"]["eia"],
+        snapshots=config["snapshots"],
     input:
         network=RESOURCES + "{interconnect}/elec_base_network.nc",
         demand_files=demand_raw_data,
         dissagregate_files=demand_dissagregate_data,
         demand_scaling_file=demand_scaling_data,
     output:
-        elec_demand=RESOURCES + "{interconnect}/demand/{end_use}_electricity.csv",
-        heat_demand=RESOURCES + "{interconnect}/demand/{end_use}_heating.csv",
+        elec_demand=RESOURCES + "{interconnect}/demand/{end_use}_electricity.pkl",
+        heat_demand=RESOURCES + "{interconnect}/demand/{end_use}_heating.pkl",
         space_heat_demand=RESOURCES
-        + "{interconnect}/demand/{end_use}_space-heating.csv",
+        + "{interconnect}/demand/{end_use}_space-heating.pkl",
         water_heat_demand=RESOURCES
-        + "{interconnect}/demand/{end_use}_water-heating.csv",
-        cool_demand=RESOURCES + "{interconnect}/demand/{end_use}_cooling.csv",
+        + "{interconnect}/demand/{end_use}_water-heating.pkl",
+        cool_demand=RESOURCES + "{interconnect}/demand/{end_use}_cooling.pkl",
     log:
         LOGS + "{interconnect}/demand/{end_use}_build_demand.log",
     benchmark:
@@ -388,6 +394,7 @@ rule build_transport_road_demand:
         planning_horizons=config["scenario"]["planning_horizons"],
         profile_year=pd.to_datetime(config["snapshots"]["start"]).year,
         eia_api=config["api"]["eia"],
+        snapshots=config["snapshots"],
     input:
         network=RESOURCES + "{interconnect}/elec_base_network.nc",
         demand_files=demand_raw_data,
@@ -395,16 +402,16 @@ rule build_transport_road_demand:
         demand_scaling_file=demand_scaling_data,
     output:
         elec_light_duty=RESOURCES
-        + "{interconnect}/demand/{end_use}_light-duty_electricity.csv",
+        + "{interconnect}/demand/{end_use}_light-duty_electricity.pkl",
         elec_med_duty=RESOURCES
-        + "{interconnect}/demand/{end_use}_med-duty_electricity.csv",
+        + "{interconnect}/demand/{end_use}_med-duty_electricity.pkl",
         elec_heavy_duty=RESOURCES
-        + "{interconnect}/demand/{end_use}_heavy-duty_electricity.csv",
-        elec_bus=RESOURCES + "{interconnect}/demand/{end_use}_bus_electricity.csv",
-        lpg_light_duty=RESOURCES + "{interconnect}/demand/{end_use}_light-duty_lpg.csv",
-        lpg_med_duty=RESOURCES + "{interconnect}/demand/{end_use}_med-duty_lpg.csv",
-        lpg_heavy_duty=RESOURCES + "{interconnect}/demand/{end_use}_heavy-duty_lpg.csv",
-        lpg_bus=RESOURCES + "{interconnect}/demand/{end_use}_bus_lpg.csv",
+        + "{interconnect}/demand/{end_use}_heavy-duty_electricity.pkl",
+        elec_bus=RESOURCES + "{interconnect}/demand/{end_use}_bus_electricity.pkl",
+        lpg_light_duty=RESOURCES + "{interconnect}/demand/{end_use}_light-duty_lpg.pkl",
+        lpg_med_duty=RESOURCES + "{interconnect}/demand/{end_use}_med-duty_lpg.pkl",
+        lpg_heavy_duty=RESOURCES + "{interconnect}/demand/{end_use}_heavy-duty_lpg.pkl",
+        lpg_bus=RESOURCES + "{interconnect}/demand/{end_use}_bus_lpg.pkl",
     log:
         LOGS + "{interconnect}/demand/{end_use}_build_demand.log",
     benchmark:
@@ -423,12 +430,13 @@ rule build_transport_other_demand:
     params:
         planning_horizons=config["scenario"]["planning_horizons"],
         eia_api=config["api"]["eia"],
+        snapshots=config["snapshots"],
     input:
         network=RESOURCES + "{interconnect}/elec_base_network.nc",
         demand_files=demand_raw_data,
         dissagregate_files=demand_dissagregate_data,
     output:
-        RESOURCES + "{interconnect}/demand/{end_use}_{vehicle}_lpg.csv",
+        RESOURCES + "{interconnect}/demand/{end_use}_{vehicle}_lpg.pkl",
     log:
         LOGS + "{interconnect}/demand/{end_use}_{vehicle}_build_demand.log",
     benchmark:
@@ -444,9 +452,7 @@ def demand_to_add(wildcards):
 
     if config["scenario"]["sector"] == "E":
         return RESOURCES + "{interconnect}/demand/power_electricity.csv"
-
     else:
-
         # service demand
         services = ["residential", "commercial"]
         if config["sector"]["service_sector"]["split_space_water_heating"]:
@@ -454,18 +460,16 @@ def demand_to_add(wildcards):
         else:
             fuels = ["electricity", "cooling", "heating"]
         service_demands = [
-            RESOURCES + "{interconnect}/demand/" + service + "_" + fuel + ".csv"
+            RESOURCES + "{interconnect}/demand/" + service + "_" + fuel + ".pkl"
             for service in services
             for fuel in fuels
         ]
-
         # industrial demand
         fuels = ["electricity", "heating"]
         industrial_demands = [
-            RESOURCES + "{interconnect}/demand/industry_" + fuel + ".csv"
+            RESOURCES + "{interconnect}/demand/industry_" + fuel + ".pkl"
             for fuel in fuels
         ]
-
         # road transport demands
         vehicles = ["light-duty", "med-duty", "heavy-duty", "bus"]
         fuels = ["lpg", "electricity"]
@@ -475,7 +479,7 @@ def demand_to_add(wildcards):
             + vehicle
             + "_"
             + fuel
-            + ".csv"
+            + ".pkl"
             for vehicle in vehicles
             for fuel in fuels
         ]
@@ -489,7 +493,7 @@ def demand_to_add(wildcards):
             + vehicle
             + "_"
             + fuel
-            + ".csv"
+            + ".pkl"
             for vehicle in vehicles
             for fuel in fuels
         ]
@@ -501,6 +505,7 @@ rule add_demand:
     params:
         sectors=config["scenario"]["sector"],
         planning_horizons=config["scenario"]["planning_horizons"],
+        snapshots=config["snapshots"],
     input:
         network=RESOURCES + "{interconnect}/elec_base_network.nc",
         demand=demand_to_add,
@@ -604,8 +609,18 @@ rule add_electricity:
         hydro_breakthrough=DATA + "breakthrough_network/base_grid/hydro.csv",
         bus2sub=RESOURCES + "{interconnect}/bus2sub.csv",
         pudl_fuel_costs=RESOURCES + "{interconnect}/pudl_fuel_costs.csv",
+        specs_egs=(
+            DATA + "EGS/{interconnect}/specs_EGS.nc"
+            if "EGS" in config["electricity"]["extendable_carriers"]["Generator"]
+            else []
+        ),
+        profile_egs=(
+            DATA + "EGS/{interconnect}/profile_EGS.nc"
+            if "EGS" in config["electricity"]["extendable_carriers"]["Generator"]
+            else []
+        ),
     output:
-        RESOURCES + "{interconnect}/elec_base_network_l_pp.nc",
+        RESOURCES + "{interconnect}/elec_base_network_l_pp.pkl",
     log:
         LOGS + "{interconnect}/add_electricity.log",
     benchmark:
@@ -630,7 +645,7 @@ rule simplify_network:
     input:
         bus2sub=RESOURCES + "{interconnect}/bus2sub.csv",
         sub=RESOURCES + "{interconnect}/sub.csv",
-        network=RESOURCES + "{interconnect}/elec_base_network_l_pp.nc",
+        network=RESOURCES + "{interconnect}/elec_base_network_l_pp.pkl",
         regions_onshore=RESOURCES + "{interconnect}/Geospatial/regions_onshore.geojson",
         regions_offshore=RESOURCES
         + "{interconnect}/Geospatial/regions_offshore.geojson",
@@ -746,6 +761,7 @@ rule prepare_network:
         co2limit_enable=config_provider("electricity", "co2limit_enable", default=False),
         gaslimit=config_provider("electricity", "gaslimit"),
         gaslimit_enable=config_provider("electricity", "gaslimit_enable", default=False),
+        transmission_network=config_provider("model_topology", "transmission_network"),
         max_hours=config_provider("electricity", "max_hours"),
         costs=config_provider("costs"),
         autarky=config_provider("electricity", "autarky"),
@@ -788,7 +804,7 @@ rule build_powerplants:
     output:
         powerplants=RESOURCES + "powerplants.csv",
     log:
-        "logs/build_powerplants",
+        "logs/build_powerplants.log",
     resources:
         mem_mb=30000,
     script:

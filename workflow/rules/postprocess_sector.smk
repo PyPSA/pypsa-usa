@@ -4,16 +4,16 @@
 FIGURES_SECTOR_EMISSIONS = ["emissions_by_sector", "emissions_by_state"]
 FIGURES_SECTOR_PRODUCTION = [
     "load_factor_boxplot",
-    "hp_cop",
+    "../hp_cop",  # same for all sectors
     "production_time_series",
     "production_total",
 ]
 FIGURES_SECTOR_CAPACITY = [
     "end_use_capacity_per_carrier",
-    "end_use_capacity_per_node_absolute",
-    "end_use_capacity_per_node_percentage",
-    "end_use_capacity_state_brownfield",
-    "power_capacity_per_carrier",
+    # "end_use_capacity_per_node_absolute",
+    # "end_use_capacity_per_node_percentage",
+    # "end_use_capacity_state_brownfield",
+    # "power_capacity_per_carrier",
 ]
 FIGURES_SECTOR_LOADS = [
     # "load_timeseries_residential",
@@ -23,10 +23,10 @@ FIGURES_SECTOR_LOADS = [
     "load_barplot"
 ]
 FIGURES_SECTOR_VALIDATE = [
-    "emissions_by_sector_validation",
-    "emissions_by_state_validation",
-    "generation_by_state_validation",
-    "transportation_by_mode_validation",
+    "emissions_by_sector",
+    # "emissions_by_state_validation",
+    # "generation_by_state_validation",
+    # "transportation_by_mode_validation",
 ]
 FIGURES_SECTOR_NATURAL_GAS = [
     "demand",
@@ -35,14 +35,9 @@ FIGURES_SECTOR_NATURAL_GAS = [
     "storage",
     "domestic_trade",
     "international_trade",
+    "fuel_price",
 ]
-
-# system figures
-FIGURES_SYSTEM_PRODUCTION = ["system_consumption"]
-FIGURES_SYSTEM_VALIDATION = [
-    # "system_consumption_validation",
-    "system_emission_validation_state"
-]
+FIGURES_SECTOR_SANKEY = ["energy", "carbon"]
 
 
 rule plot_natural_gas:
@@ -69,16 +64,18 @@ rule plot_sector_emissions:
         network=RESULTS
         + "{interconnect}/networks/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc",
     params:
+        result="emissions",
         plotting=config["plotting"],
+        root_dir=RESULTS
+        + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/",
     output:
-        **{
-            fig: RESULTS
-            + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/{state}/emissions/%s.png"
-            % fig
-            for fig in FIGURES_SECTOR_EMISSIONS
-        },
+        expand(
+            RESULTS
+            + "{{interconnect}}/figures/s{{simpl}}_c{{clusters}}/l{{ll}}_{{opts}}_{{sector}}/system/emissions/{fig}.png",
+            fig=FIGURES_SECTOR_EMISSIONS,
+        ),
     log:
-        "logs/plot_figures/{interconnect}_s{simpl}_c{clusters}_l{ll}_{opts}_{sector}_{state}_emissions.log",
+        "logs/plot_figures/{interconnect}_s{simpl}_c{clusters}_l{ll}_{opts}_{sector}_emissions.log",
     threads: 1
     resources:
         mem_mb=5000,
@@ -91,16 +88,19 @@ rule plot_sector_production:
         network=RESULTS
         + "{interconnect}/networks/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc",
     params:
+        result="production",
         plotting=config["plotting"],
+        root_dir=RESULTS
+        + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/",
     output:
-        **{
-            fig: RESULTS
-            + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/{state}/production/%s.png"
-            % fig
-            for fig in FIGURES_SECTOR_PRODUCTION
-        },
+        expand(
+            RESULTS
+            + "{{interconnect}}/figures/s{{simpl}}_c{{clusters}}/l{{ll}}_{{opts}}_{{sector}}/system/production/{sec}/{fig}.png",
+            sec=["res"],
+            fig=FIGURES_SECTOR_PRODUCTION,
+        ),
     log:
-        "logs/plot_figures/{interconnect}_s{simpl}_c{clusters}_l{ll}_{opts}_{sector}_{state}_production.log",
+        "logs/plot_figures/{interconnect}_s{simpl}_c{clusters}_l{ll}_{opts}_{sector}_production.log",
     threads: 1
     resources:
         mem_mb=5000,
@@ -113,16 +113,19 @@ rule plot_sector_capacity:
         network=RESULTS
         + "{interconnect}/networks/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc",
     params:
+        result="capacity",
         plotting=config["plotting"],
+        root_dir=RESULTS
+        + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/",
     output:
-        **{
-            fig: RESULTS
-            + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/{state}/capacity/%s.png"
-            % fig
-            for fig in FIGURES_SECTOR_CAPACITY
-        },
+        expand(
+            RESULTS
+            + "{{interconnect}}/figures/s{{simpl}}_c{{clusters}}/l{{ll}}_{{opts}}_{{sector}}/system/capacity/{sec}/{fig}.png",
+            sec=["res"],
+            fig=FIGURES_SECTOR_CAPACITY,
+        ),
     log:
-        "logs/plot_figures/{interconnect}_s{simpl}_c{clusters}_l{ll}_{opts}_{sector}_{state}_capacity.log",
+        "logs/plot_figures/{interconnect}_s{simpl}_c{clusters}_l{ll}_{opts}_{sector}_capacity.log",
     threads: 1
     resources:
         mem_mb=5000,
@@ -130,89 +133,62 @@ rule plot_sector_capacity:
         "../scripts/plot_statistics_sector.py"
 
 
-rule plot_sector_loads:
+rule plot_sankey_energy:
     input:
         network=RESULTS
         + "{interconnect}/networks/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc",
     params:
-        plotting=config["plotting"],
+        root_dir=RESULTS
+        + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/",
     output:
-        **{
-            fig: RESULTS
-            + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/{state}/loads/%s.png"
-            % fig
-            for fig in FIGURES_SECTOR_LOADS
-        },
+        RESULTS
+        + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/system/sankey/energy.png",
     log:
-        "logs/plot_figures/{interconnect}_s{simpl}_c{clusters}_l{ll}_{opts}_{sector}_{state}_loads.log",
+        "logs/plot_figures/{interconnect}_s{simpl}_c{clusters}_l{ll}_{opts}_{sector}_energy_sankey.log",
     threads: 1
     resources:
         mem_mb=5000,
     script:
-        "../scripts/plot_statistics_sector.py"
+        "../scripts/plot_sankey_energy.py"
 
 
-rule plot_sector_validate:
+rule plot_sankey_carbon:
     input:
         network=RESULTS
         + "{interconnect}/networks/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc",
     params:
-        plotting=config["plotting"],
-        eia_api=config["api"]["eia"],
+        root_dir=RESULTS
+        + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/",
     output:
-        **{
-            fig: RESULTS
-            + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/{state}/validate/%s.png"
-            % fig
-            for fig in FIGURES_SECTOR_VALIDATE
-        },
+        RESULTS
+        + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/system/sankey/carbon.png",
     log:
-        "logs/plot_figures/{interconnect}_s{simpl}_c{clusters}_l{ll}_{opts}_{sector}_{state}_validate.log",
+        "logs/plot_figures/{interconnect}_s{simpl}_c{clusters}_l{ll}_{opts}_{sector}_energy_sankey.log",
     threads: 1
     resources:
         mem_mb=5000,
     script:
-        "../scripts/plot_statistics_sector.py"
+        "../scripts/plot_sankey_carbon.py"
 
 
-rule plot_system_production:
-    input:
-        network=RESULTS
-        + "{interconnect}/networks/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc",
-    params:
-        plotting=config["plotting"],
-    output:
-        **{
-            fig: RESULTS
-            + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/system/production/%s.png"
-            % fig
-            for fig in FIGURES_SYSTEM_PRODUCTION
-        },
-    log:
-        "logs/plot_figures/{interconnect}_s{simpl}_c{clusters}_l{ll}_{opts}_{sector}_system_additional_production.log",
-    threads: 1
-    resources:
-        mem_mb=5000,
-    script:
-        "../scripts/plot_statistics_sector.py"
-
-
-rule plot_system_validate:
+rule plot_sector_validation:
     input:
         network=RESULTS
         + "{interconnect}/networks/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc",
     params:
         plotting=config["plotting"],
         eia_api=config["api"]["eia"],
+        root_dir=RESULTS
+        + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/",
     output:
-        **{
-            fig: RESULTS
-            + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/system/validate/%s.png"
-            % fig
-            for fig in FIGURES_SYSTEM_VALIDATION
-        },
+        expand(
+            RESULTS
+            + "{{interconnect}}/figures/s{{simpl}}_c{{clusters}}/l{{ll}}_{{opts}}_{{sector}}/system/validation/{fig}.png",
+            sec=["res"],
+            fig=FIGURES_SECTOR_VALIDATE,
+        ),
     log:
-        "logs/plot_figures/{interconnect}_s{simpl}_c{clusters}_l{ll}_{opts}_{sector}_system_additional_validate.log",
+        "logs/plot_figures/{interconnect}_s{simpl}_c{clusters}_l{ll}_{opts}_{sector}_validate.log",
     threads: 1
     resources:
         mem_mb=5000,

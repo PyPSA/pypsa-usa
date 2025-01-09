@@ -10,9 +10,35 @@ from pathlib import Path
 
 import pandas as pd
 import pypsa
-from _helpers import configure_logging, mock_snakemake
+from _helpers import (
+    configure_logging,
+    get_multiindex_snapshots,
+    get_snapshots,
+    mock_snakemake,
+)
+from constants_sector import (
+    AirTransport,
+    BoatTransport,
+    RailTransport,
+    RoadTransport,
+    SecCarriers,
+    SecNames,
+    Transport,
+)
 
 logger = logging.getLogger(__name__)
+
+# TODO: replace with just constants through naming in build demand
+VEHICLE_MAPPER = {
+    "bus": f"{Transport.ROAD.value}-{RoadTransport.BUS.value}",
+    "heavy_duty": f"{Transport.ROAD.value}-{RoadTransport.HEAVY.value}",
+    "light_duty": f"{Transport.ROAD.value}-{RoadTransport.LIGHT.value}",
+    "med_duty": f"{Transport.ROAD.value}-{RoadTransport.MEDIUM.value}",
+    "air": f"{Transport.AIR.value}-{AirTransport.PASSENGER.value}",
+    "rail_shipping": f"{Transport.RAIL.value}-{RailTransport.SHIPPING.value}",
+    "rail_passenger": f"{Transport.RAIL.value}-{RailTransport.PASSENGER.value}",
+    "boat_shipping": f"{Transport.BOAT.value}-{BoatTransport.SHIPPING.value}",
+}
 
 
 def attach_demand(n: pypsa.Network, df: pd.DataFrame, carrier: str, suffix: str):
@@ -46,35 +72,15 @@ if __name__ == "__main__":
 
     sectors = snakemake.params.sectors
 
+    # add snapshots
+    sns_config = snakemake.params.snapshots
+    planning_horizons = snakemake.params.planning_horizons
+
+    n.snapshots = get_multiindex_snapshots(sns_config, planning_horizons)
+    n.set_investment_periods(periods=planning_horizons)
+
     if isinstance(demand_files, str):
         demand_files = [demand_files]
-
-    sector_mapper = {
-        "residential": "res",
-        "commercial": "com",
-        "industry": "ind",
-        "transport": "trn",
-    }
-
-    carrier_mapper = {
-        "electricity": "elec",
-        "heating": "heat",
-        "cooling": "cool",
-        "lpg": "lpg",
-        "space-heating": "space-heat",
-        "water-heating": "water-heat",
-    }
-
-    vehicle_mapper = {
-        "bus": "bus",
-        "heavy-duty": "hvy",
-        "light-duty": "lgt",
-        "med-duty": "med",
-        "air": "air-psg",
-        "rail-shipping": "rail-ship",
-        "rail-passenger": "rail-psg",
-        "boat-shipping": "boat-ship",
-    }
 
     if sectors == "E" or sectors == "":  # electricity only
 
@@ -92,33 +98,39 @@ if __name__ == "__main__":
         for demand_file in demand_files:
 
             parsed_name = Path(demand_file).name.split("_")
-            parsed_name[-1] = parsed_name[-1].split(".csv")[0]
+            parsed_name[-1] = parsed_name[-1].split(".pkl")[0]
 
             if len(parsed_name) == 2:
 
-                sector = parsed_name[0]
-                end_use = parsed_name[1]
+                sector = parsed_name[0].upper()
+                end_use = parsed_name[1].upper().replace("-", "_")
 
-                carrier = f"{sector_mapper[sector]}-{carrier_mapper[end_use]}"
-                suffix = f"-{carrier}"
+                sec_name = SecNames[sector].value
+                sec_car = SecCarriers[end_use].value
+
+                carrier = f"{sec_name}-{sec_car}"
 
                 log_statement = f"{sector} {end_use} demand added to network"
 
             elif len(parsed_name) == 3:
 
-                sector = parsed_name[0]
-                subsector = parsed_name[1]
-                end_use = parsed_name[2]
+                sector = parsed_name[0].upper()
+                subsector = parsed_name[1].replace("-", "_")
+                end_use = parsed_name[2].upper()  # lpg | elec
 
-                carrier = f"{sector_mapper[sector]}-{carrier_mapper[end_use]}-{vehicle_mapper[subsector]}"
-                suffix = f"-{carrier}"
+                sec_name = SecNames[sector].value
+                sec_car = SecCarriers[end_use].value
+
+                carrier = f"{sec_name}-{sec_car}-{VEHICLE_MAPPER[subsector]}"
 
                 log_statement = f"{sector} {subsector} {end_use} demand added to network"
 
             else:
                 raise NotImplementedError
 
-            df = pd.read_csv(demand_file, index_col=0)
+            suffix = f"-{carrier}"
+
+            df = pd.read_pickle(demand_file)
             attach_demand(n, df, carrier, suffix)
             logger.info(log_statement)
 

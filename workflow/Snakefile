@@ -27,6 +27,7 @@ FIGURES_EMISSIONS = [
     "emissions_accumulated.pdf",
     "emissions_accumulated_tech.pdf",
     "bar_regional_emissions.pdf",
+    "bar_emissions.pdf",
 ]
 
 FIGURES_PRODUCTION = [
@@ -37,10 +38,9 @@ FIGURES_SYSTEM = [
     "production_bar.pdf",
     "capacity_additions_bar.pdf",
     "bar_regional_capacity_additions.pdf",
+    "bar_regional_production.pdf",
     "global_constraint_shadow_prices.pdf",
     "generator_data_panel.pdf",
-    # "curtailment_heatmap.pdf",
-    # "capfac_heatmap.pdf",
     "fuel_costs.pdf",
     "region_lmps.pdf",
 ]
@@ -48,10 +48,8 @@ FIGURES_SYSTEM = [
 FIGURES_VALIDATE = [
     "daily_stacked_comparison.pdf",
     "carrier_production_bar.pdf",
-    # "val_bar_regional_emissions.pdf",
     "val_bar_state_emissions.pdf",
     "val_generator_data_panel.pdf",
-    # "val_heatmap_capacity_factor.pdf",
     "val_box_region_lmps.pdf",
     "val_map_load_shedding.pdf",
     "val_generator_stack.pdf",
@@ -72,7 +70,7 @@ localrules:
 wildcard_constraints:
     interconnect="usa|texas|western|eastern",
     simpl="[a-zA-Z0-9]*|all",
-    clusters="[0-9]+m?|all",
+    clusters="[0-9]+m?+c?|all",
     ll="(v|c)([0-9\.]+|opt|all)|all",
     opts="[-+a-zA-Z0-9\.]*",
     sector="([EG]-)*[EG]",
@@ -87,6 +85,9 @@ configfile: "config/config.common.yaml"
 configfile: "config/config.plotting.yaml"
 configfile: "config/config.api.yaml"
 configfile: "config/config.sector.yaml"
+
+
+# configfile: "config/config.default.yaml"
 
 
 run = config.get("run", {})
@@ -169,8 +170,6 @@ def sector_figures(wildcards):
 
     figs = []
 
-    states = INTERCONNECT_2_STATE[config["scenario"]["interconnect"][0]]
-
     if "G" in config["scenario"]["sector"].split("-"):
         figs.append(
             expand(
@@ -178,15 +177,6 @@ def sector_figures(wildcards):
                 + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/system/natural_gas/{figure}.png",
                 **config["scenario"],
                 figure=FIGURES_SECTOR_NATURAL_GAS,
-            )
-        )
-        figs.append(
-            expand(
-                RESULTS
-                + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/{s}/emissions/{figure}.png",
-                **config["scenario"],
-                figure=FIGURES_SECTOR_EMISSIONS,
-                s=states,
             )
         )
         figs.append(
@@ -200,16 +190,7 @@ def sector_figures(wildcards):
         figs.append(
             expand(
                 RESULTS
-                + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/{s}/production/{figure}.png",
-                **config["scenario"],
-                figure=FIGURES_SECTOR_PRODUCTION,
-                s=states,
-            )
-        )
-        figs.append(
-            expand(
-                RESULTS
-                + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/system/production/{figure}.png",
+                + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/system/production/res/{figure}.png",
                 **config["scenario"],
                 figure=FIGURES_SECTOR_PRODUCTION,
             )
@@ -217,16 +198,7 @@ def sector_figures(wildcards):
         figs.append(
             expand(
                 RESULTS
-                + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/{s}/capacity/{figure}.png",
-                **config["scenario"],
-                figure=FIGURES_SECTOR_CAPACITY,
-                s=states,
-            )
-        )
-        figs.append(
-            expand(
-                RESULTS
-                + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/system/capacity/{figure}.png",
+                + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/system/capacity/res/{figure}.png",
                 **config["scenario"],
                 figure=FIGURES_SECTOR_CAPACITY,
             )
@@ -234,55 +206,19 @@ def sector_figures(wildcards):
         figs.append(
             expand(
                 RESULTS
-                + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/{s}/loads/{figure}.png",
+                + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/system/sankey/{figure}.png",
                 **config["scenario"],
-                figure=FIGURES_SECTOR_LOADS,
-                s=states,
+                figure=FIGURES_SECTOR_SANKEY,
             )
         )
-        figs.append(
-            expand(
-                RESULTS
-                + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/system/loads/{figure}.png",
-                **config["scenario"],
-                figure=FIGURES_SECTOR_LOADS,
-            )
-        )
-        """
-        figs.append(
-            expand(
-                RESULTS
-                + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/{s}/validate/{figure}.png",
-                **config["scenario"],
-                figure=FIGURES_SECTOR_VALIDATE,
-                s=states,
-            )
-        )
-        figs.append(
-            expand(
-                RESULTS
-                + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/system/validate/{figure}.png",
-                **config["scenario"],
-                figure=FIGURES_SECTOR_VALIDATE,
-            )
-        )
-        figs.append(
-            expand(
-                RESULTS
-                + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/system/validate/{figure}.png",
-                **config["scenario"],
-                figure=FIGURES_SYSTEM_VALIDATION,
-            )
-        )
-        """
-        figs.append(
-            expand(
-                RESULTS
-                + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/system/production/{figure}.png",
-                **config["scenario"],
-                figure=FIGURES_SYSTEM_PRODUCTION,
-            )
-        )
+        # figs.append(
+        #     expand(
+        #         RESULTS
+        #         + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/system/validate/{figure}.png",
+        #         **config["scenario"],
+        #         figure=FIGURES_SECTOR_VALIDATE,
+        #     )
+        # )
         return list(chain(*figs))
     return figs
 

@@ -3,7 +3,6 @@ import warnings
 from functools import reduce
 
 import geopandas as gpd
-import linopy
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -56,8 +55,8 @@ def weighting_for_country(n, x):
     b_i = x.index
     g = normed(gen.reindex(b_i, fill_value=0))
     l = normed(load.reindex(b_i, fill_value=0))
-
     w = g + l
+
     return (w * (100.0 / w.max())).clip(lower=1.0).astype(int)
 
 
@@ -236,6 +235,26 @@ def busmap_for_n_clusters(
         solver_name=solver_name,
     )
 
+    # Potentiall remove buses and lines from these corner case counties from network
+    nc_set = set(n_clusters.index.get_level_values(0).unique())
+    bus_set = set(n.buses.country.unique())
+    countries_remove = list(bus_set - nc_set)
+    buses_remove = n.buses[n.buses.country.isin(countries_remove)]
+    if not buses_remove.empty:
+        logger.warning(f"Reconciling TAMU and ReEDS Topologies. \n Removing buses: {buses_remove.index}")
+        for c in n.one_port_components:
+            component = n.df(c)
+            rm = component[component.bus.isin(buses_remove.index)]
+            logger.warning(f"Removing {rm.shape} component {c}")
+            n.mremove(c, rm.index)
+        for c in ["Line", "Link"]:
+            component = n.df(c)
+            rm = component[component.bus0.isin(buses_remove.index) | component.bus1.isin(buses_remove.index)]
+            logger.warning(f"Removing {rm.shape} component {c}")
+            n.mremove(c, rm.index)
+        n.mremove("Bus", buses_remove.index)
+        n.determine_network_topology()
+
     def busmap_for_country(x):
         prefix = x.name[0] + x.name[1] + " "
         logger.debug(f"Determining busmap for country {prefix[:-1]}")
@@ -344,6 +363,7 @@ def add_itls(buses, itls, itl_cost, expansion=True):
         itls["USD2023perMWyr"] = 0
 
     itls["p_min_pu_Rev"] = (-1 * (itls.mw_r0 / itls.mw_f0)).fillna(0)
+    itls["efficiency"] = 1 - ((itls.length_miles / 100) * 0.01)
 
     # lines to add in reverse if forward direction is zero
     itls_rev = itls[itls.mw_f0 == 0].copy()
@@ -361,6 +381,7 @@ def add_itls(buses, itls, itl_cost, expansion=True):
         length=0 if itl_cost is None else itls_fwd.length_miles.values,
         capital_cost=0 if itl_cost is None else itls_fwd.USD2023perMWyr.values,
         p_nom_extendable=False,
+        efficiency=1 if itl_cost is None else itls_fwd.efficiency.values,
         carrier="AC",
     )
 
@@ -377,6 +398,7 @@ def add_itls(buses, itls, itl_cost, expansion=True):
         length=0 if itl_cost is None else itls_rev.length_miles.values,
         capital_cost=0 if itl_cost is None else itls_rev.USD2023perMWyr.values,
         p_nom_extendable=False,
+        efficiency=1 if itl_cost is None else itls_rev.efficiency.values,
         carrier="AC",
     )
 
@@ -397,6 +419,7 @@ def add_itls(buses, itls, itl_cost, expansion=True):
         length=0 if itl_cost is None else itls.length_miles.values,
         capital_cost=0 if itl_cost is None else itls.USD2023perMWyr.values,
         p_nom_extendable=False,
+        efficiency=1 if itl_cost is None else itls.efficiency.values,
         carrier="AC_exp",
     )
 
@@ -494,32 +517,41 @@ def convert_to_transport(
         itls = itls_filt
 
     clustering.network.add("Carrier", "AC_exp", co2_emissions=0)
-    logger.info(f"Replaced Lines with Links for zonal model configuration.")
+    logger.info("Replaced Lines with Links for zonal model configuration.")
 
     # Remove any disconnected buses
     unique_buses = buses.loc[itls.r].index.union(buses.loc[itls.rr].index).unique()
     disconnected_buses = clustering.network.buses.index[~clustering.network.buses.index.isin(unique_buses)]
+
     if len(disconnected_buses) > 0:
         logger.warning(
-            f"Removed {len(disconnected_buses)} sub-network buses from the network.",
+            f"Network configuration contains {len(disconnected_buses)} disconnected buses. ",
         )
-        clustering.network.mremove("Bus", disconnected_buses)
-        clustering.network.mremove(
-            "Generator",
-            clustering.network.generators.query("bus in @disconnected_buses").index,
+
+    # Dissolve TX for particular zones according to default reeds configurations
+    clustering.network.links.loc[
+        clustering.network.links.bus0.isin(["p119"]) & clustering.network.links.bus1.isin(["p122"]),
+        "p_nom",
+    ] = 1e9
+    clustering.network.links.loc[
+        clustering.network.links.bus1.isin(["p119"]) & clustering.network.links.bus0.isin(["p122"]),
+        "p_nom",
+    ] = 1e9
+    # Dissolve p124 and p99
+    if "p124" in clustering.network.buses.index and "p99" in clustering.network.buses.index:
+        clustering.network.add(
+            "Link",
+            "p124||p99",
+            bus0="p124",
+            bus1="p99",
+            p_nom=1e9,
+            p_nom_extendable=False,
+            length=0,
+            capital_cost=0,
+            efficiency=1,
+            carrier="AC",
         )
-        clustering.network.mremove(
-            "StorageUnit",
-            clustering.network.storage_units.query("bus in @disconnected_buses").index,
-        )
-        clustering.network.mremove(
-            "Store",
-            clustering.network.stores.query("bus in @disconnected_buses").index,
-        )
-        clustering.network.mremove(
-            "Load",
-            clustering.network.loads.query("bus in @disconnected_buses").index,
-        )
+
     return clustering
 
 
@@ -561,6 +593,7 @@ if __name__ == "__main__":
     solver_name = snakemake.config["solving"]["solver"]["name"]
 
     n = pypsa.Network(snakemake.input.network)
+
     n.set_investment_periods(
         periods=snakemake.params.planning_horizons,
     )
@@ -572,16 +605,24 @@ if __name__ == "__main__":
     exclude_carriers = params.cluster_network["exclude_carriers"]
     aggregate_carriers = set(n.generators.carrier) - set(exclude_carriers)
     conventional_carriers = set(params.conventional_carriers)
+    non_aggregated_carriers = {}
     if snakemake.wildcards.clusters.endswith("m"):
         n_clusters = int(snakemake.wildcards.clusters[:-1])
         aggregate_carriers = set(params.conventional_carriers) & aggregate_carriers
+        non_aggregated_carriers = set(n.generators.carrier) - aggregate_carriers
     elif snakemake.wildcards.clusters.endswith("c"):
         n_clusters = int(snakemake.wildcards.clusters[:-1])
         aggregate_carriers = aggregate_carriers - conventional_carriers
+        non_aggregated_carriers = set(n.generators.carrier) - aggregate_carriers
     elif snakemake.wildcards.clusters == "all":
         n_clusters = len(n.buses)
     else:
         n_clusters = int(snakemake.wildcards.clusters)
+
+    n.generators.loc[n.generators.carrier.isin(non_aggregated_carriers), "land_region"] = n.generators.loc[
+        n.generators.carrier.isin(non_aggregated_carriers),
+        "bus",
+    ]
 
     if params.cluster_network.get("consider_efficiency_classes", False):
         carriers = []
@@ -604,7 +645,7 @@ if __name__ == "__main__":
                 )
         aggregate_carriers = carriers
 
-    if n_clusters == len(n.buses):
+    if (n_clusters == len(n.buses)) and not transport_model:
         # Fast-path if no clustering is necessary
         busmap = n.buses.index.to_series()
         linemap = n.lines.index.to_series()
@@ -614,8 +655,6 @@ if __name__ == "__main__":
             linemap,
         )
     else:
-        Nyears = n.snapshot_weightings.loc[n.investment_periods[0]].objective.sum() / 8760.0
-
         costs = pd.read_csv(snakemake.input.tech_costs)
         costs = costs.pivot(index="pypsa-name", columns="parameter", values="value")
         hvac_overhead_cost = costs.at["HVAC overhead", "annualized_capex_per_mw_km"]
@@ -639,30 +678,37 @@ if __name__ == "__main__":
             )
             match topological_boundaries:
                 case "reeds_zone":
-                    custom_busmap = n.buses.reeds_zone
+                    custom_busmap = n.buses.reeds_zone.copy()
                     itl_fn = snakemake.input.itl_reeds_zone
                     itl_cost_fn = snakemake.input.itl_costs_reeds_zone
                 case "county":
-                    custom_busmap = n.buses.county
+                    custom_busmap = n.buses.county.copy()
                     itl_fn = snakemake.input.itl_county
                     itl_cost_fn = snakemake.input.itl_costs_county
                 case _:
                     raise ValueError(f"Unknown aggregation zone {topological_boundaries}")
 
             if topology_aggregation:
-                for key, value in topology_aggregation.items():
-                    agg_busmap = n.buses[key][n.buses[key].isin(value)]
-                    logger.info(f"Aggregating {agg_busmap.unique()} {key} zones.")
-                    custom_busmap.update(agg_busmap)
-                    n.buses.loc[agg_busmap.index, "country"] = agg_busmap
-                    if key == "trans_grp":
-                        n.buses.loc[agg_busmap.index, "reeds_zone"] = "na"
-                        n.buses.loc[agg_busmap.index, "reeds_ba"] = "na"
-                        n.buses.loc[agg_busmap.index, "reeds_state"] = "na"
-                    itl_agg_fn = snakemake.input[f"itl_{key}"]
-                    itl_agg_costs_fn = snakemake.input.get(f"itl_costs_{key}", None)
+                assert isinstance(topology_aggregation, dict), "topology_aggregation must be a dictionary."
+                assert len(topology_aggregation) == 1, "topology_aggregation must contain exactly one key."
 
-            logger.info(f"Using Transport Model.")
+                # Extract the single key and value
+                key, value = next(iter(topology_aggregation.items()))
+                agg_busmap = n.buses[key][n.buses[key].isin(value)]
+                logger.info(f"Aggregating {agg_busmap.unique()} {key} zones.")
+                custom_busmap.update(agg_busmap.copy())
+                n.buses.loc[agg_busmap.index, "country"] = agg_busmap
+                if key == "trans_grp":
+                    n.buses.loc[agg_busmap.index, "reeds_zone"] = "na"
+                    n.buses.loc[agg_busmap.index, "reeds_ba"] = "na"
+                    n.buses.loc[agg_busmap.index, "reeds_state"] = "na"
+                    n.buses.loc[agg_busmap.index, "county"] = "na"
+                if key == "reeds_zone":
+                    n.buses.loc[agg_busmap.index, "county"] = "na"
+                itl_agg_fn = snakemake.input[f"itl_{key}"]
+                itl_agg_costs_fn = snakemake.input.get(f"itl_costs_{key}", None)
+
+            logger.info("Using Transport Model.")
             nodes_req = custom_busmap.unique()
 
             assert n_clusters == len(
@@ -701,6 +747,9 @@ if __name__ == "__main__":
             update_transmission_costs(clustering.network, costs)
 
     update_p_nom_max(clustering.network)
+    clustering.network.generators.land_region = clustering.network.generators.land_region.fillna(
+        clustering.network.generators.bus,
+    )
 
     if params.cluster_network.get("consider_efficiency_classes"):
         labels = [f" {label} efficiency" for label in ["low", "medium", "high"]]
@@ -717,6 +766,7 @@ if __name__ == "__main__":
     )
 
     clustering.network.export_to_netcdf(snakemake.output.network)
+
     for attr in (
         "busmap",
         "linemap",

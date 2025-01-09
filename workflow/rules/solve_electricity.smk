@@ -1,6 +1,13 @@
 # Rules to Optimize/Solve Network
 
 
+def pop_layout_input(wildcards):
+    if wildcards["sector"] != "E":
+        return RESOURCES + "{interconnect}/pop_layout_elec_s{simpl}_c{clusters}.csv"
+    else:
+        return []
+
+
 rule solve_network:
     params:
         solving=config_provider("solving"),
@@ -17,6 +24,7 @@ rule solve_network:
         safer_reeds="config/policy_constraints/reeds/prm_annual.csv",
         rps_reeds="config/policy_constraints/reeds/rps_fraction.csv",
         ces_reeds="config/policy_constraints/reeds/ces_fraction.csv",
+        pop_layout=pop_layout_input,
     output:
         network=RESULTS
         + "{interconnect}/networks/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc",

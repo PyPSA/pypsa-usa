@@ -27,13 +27,13 @@ pypsa_usa_datafiles = [
 def define_zenodo_databundles():
     return {
         "USATestSystem": "https://zenodo.org/record/4538590/files/USATestSystem.zip",
-        "pypsa_usa_data": "https://zenodo.org/records/11359263/files/pypsa_usa_data.zip",
+        "pypsa_usa_data": "https://zenodo.org/records/14219029/files/pypsa_usa_data.zip",
     }
 
 
 def define_sector_databundles():
     return {
-        "pypsa_usa_sec": "https://zenodo.org/records/11358880/files/pypsa_usa_sector_data.zip"
+        "pypsa_usa_sec": "https://zenodo.org/records/14291626/files/pypsa_usa_sector_data.zip"
     }
 
 
@@ -45,6 +45,8 @@ rule retrieve_zenodo_databundles:
             DATA + "breakthrough_network/base_grid/{file}", file=breakthrough_datafiles
         ),
         expand(DATA + "{file}", file=pypsa_usa_datafiles),
+    resources:
+        mem_mb=5000,
     log:
         "logs/retrieve/retrieve_databundles.log",
     script:
@@ -65,6 +67,8 @@ rule retrieve_nrel_efs_data:
         efs_databundle,
     output:
         DATA + "nrel_efs/EFSLoadProfile_{efs_case}_{efs_speed}.csv",
+    resources:
+        mem_mb=5000,
     log:
         "logs/retrieve/retrieve_efs_{efs_case}_{efs_speed}.log",
     script:
@@ -78,6 +82,7 @@ sector_datafiles = [
     # natural gas
     "natural_gas/EIA-757.csv",
     "natural_gas/EIA-StatetoStateCapacity_Jan2023.xlsx",
+    "natural_gas/EIA-StatetoStateCapacity_Feb2024.xlsx",
     "natural_gas/pipelines.geojson",
     # industrial demand
     "industry_load/2014_update_20170910-0116.csv",
@@ -197,13 +202,13 @@ if not config["enable"].get("build_cutout", False):
     rule retrieve_cutout:
         input:
             HTTP.remote(
-                "zenodo.org/records/10067222/files/{interconnect}_{cutout}.nc",
+                "zenodo.org/records/14611937/files/usa_{cutout}.nc",
                 static=True,
             ),
         output:
-            "cutouts/" + CDIR + "{interconnect}_{cutout}.nc",
+            "cutouts/" + CDIR + "usa_{cutout}.nc",
         log:
-            "logs/" + CDIR + "retrieve_cutout_{interconnect}_{cutout}.log",
+            "logs/" + CDIR + "retrieve_cutout_usa_{cutout}.log",
         resources:
             mem_mb=5000,
         retries: 2
@@ -236,6 +241,23 @@ rule retrieve_pudl:
     log:
         LOGS + "retrieve_pudl.log",
     resources:
-        mem_mb=1000,
+        mem_mb=5000,
     script:
         "../scripts/retrieve_pudl.py"
+
+
+if "EGS" in config["electricity"]["extendable_carriers"]["Generator"]:
+
+    rule retrieve_egs:
+        params:
+            dispatch=config["renewable"]["EGS"]["dispatch"],
+            subdir=DATA + "EGS/{interconnect}",
+        output:
+            DATA + "EGS/{interconnect}/specs_EGS.nc",
+            DATA + "EGS/{interconnect}/profile_EGS.nc",
+        resources:
+            mem_mb=5000,
+        log:
+            LOGS + "retrieve_EGS_{interconnect}.log",
+        script:
+            "../scripts/retrieve_egs.py"

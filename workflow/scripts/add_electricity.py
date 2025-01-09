@@ -39,15 +39,17 @@ import logging
 import os
 
 import constants as const
+import dill as pickle
 import geopandas as gpd
 import numpy as np
 import pandas as pd
 import pypsa
 import xarray as xr
 from _helpers import (
+    calculate_annuity,
     configure_logging,
     export_network_for_gis_mapping,
-    test_network_datatype_consistency,
+    load_costs,
     update_p_nom_max,
     weighted_avg,
 )
@@ -263,23 +265,56 @@ def load_powerplants(
     return plants
 
 
+def match_nearest_bus(plants_subset, buses_subset):
+    """
+    Assign the nearest bus to each plant in the given subsets.
+    """
+    if plants_subset.empty or buses_subset.empty:
+        return plants_subset
+
+    # Create a BallTree for the given subset of buses
+    tree = BallTree(buses_subset[["x", "y"]].values, leaf_size=2)
+
+    # Find nearest bus for each plant in the subset
+    distances, indices = tree.query(plants_subset[["longitude", "latitude"]].values, k=1)
+
+    # Map the nearest bus information back to the plants subset
+    plants_subset["bus_assignment"] = buses_subset.reset_index().iloc[indices.flatten()]["Bus"].values
+    plants_subset["distance_nearest"] = distances.flatten()
+
+    return plants_subset
+
+
 def match_plant_to_bus(n, plants):
+    """
+    Matches each plant to it's corresponding bus in the network enfocing a
+    match to the correct State.
+
+    # Efficient matching taken from #
+    https://stackoverflow.com/questions/58893719/find-nearest-point-in-other-dataframe-with-a-lot-of-data
+    """
     plants_matched = plants.copy()
     plants_matched["bus_assignment"] = None
+    plants_matched["distance_nearest"] = None
 
+    # Get a copy of buses and create a geometry column with GPS coordinates
     buses = n.buses.copy()
     buses["geometry"] = gpd.points_from_xy(buses["x"], buses["y"])
-    # from: https://stackoverflow.com/questions/58893719/find-nearest-point-in-other-dataframe-with-a-lot-of-data
-    # Create a BallTree
-    tree = BallTree(buses[["x", "y"]].values, leaf_size=2)
-    # Query the BallTree on each feature from 'appart' to find the distance
-    # to the nearest 'pharma' and its id
-    plants_matched["distance_nearest"], plants_matched["id_nearest"] = tree.query(
-        plants_matched[["longitude", "latitude"]].values,  # The input array for the query
-        k=1,  # The number of nearest neighbors
-    )
-    plants_matched.bus_assignment = buses.reset_index().iloc[plants_matched.id_nearest].Bus.values
-    plants_matched.drop(columns=["id_nearest"], inplace=True)
+
+    # First pass: Assign each plant to the nearest bus in the same state
+    for state in buses["state"].unique():
+        buses_in_state = buses[buses["state"] == state]
+        plants_in_state = plants_matched[
+            (plants_matched["state"] == state) & (plants_matched["bus_assignment"].isnull())
+        ]
+
+        # Update plants_matched with the nearest bus within the same state
+        plants_matched.update(match_nearest_bus(plants_in_state, buses_in_state))
+
+    # Second pass: Assign any remaining unmatched plants to the nearest bus regardless of state
+    unmatched_plants = plants_matched[plants_matched["bus_assignment"].isnull()]
+    if not unmatched_plants.empty:
+        plants_matched.update(match_nearest_bus(unmatched_plants, buses))
 
     return plants_matched
 
@@ -373,7 +408,6 @@ def attach_renewable_capacities_to_atlite(
         mapped_values = generators_tech.sub_assignment.map(caps_per_bus).dropna()
         n.generators.loc[mapped_values.index, "p_nom"] = mapped_values
         n.generators.loc[mapped_values.index, "p_nom_min"] = mapped_values
-
         mapped_values = generators_tech.sub_assignment.map(build_year_avg.build_year).dropna()
         n.generators.loc[mapped_values.index, "build_year"] = mapped_values.astype(int)
 
@@ -475,7 +509,7 @@ def attach_wind_and_solar(
     """
     add_missing_carriers(n, carriers)
     for car in carriers:
-        if car == "hydro":
+        if car in ["hydro", "EGS"]:
             continue
 
         with xr.open_dataset(getattr(input_profiles, "profile_" + car)) as ds:
@@ -534,8 +568,118 @@ def attach_wind_and_solar(
                 marginal_cost=costs.at[car, "marginal_cost"],
                 capital_cost=capital_cost,
                 efficiency=1,
+                build_year=n.investment_periods[0],
                 lifetime=costs.at[car, "lifetime"],
                 p_max_pu=bus_profiles,
+            )
+
+
+def attach_egs(
+    n: pypsa.Network,
+    costs: pd.DataFrame,
+    input_profiles: str,
+    carriers: list[str],
+    extendable_carriers: dict[str, list[str]],
+    line_length_factor=1,
+):
+    """
+    Attached STM Calculated wind and solar capacity factor profiles to the
+    network.
+    """
+    car = "EGS"
+    if (car not in carriers) and (car not in extendable_carriers["Generator"]):
+        return
+    add_missing_carriers(n, carriers)
+    capital_recovery_period = 25  # Following EGS supply curves by Aljubran et al. (2024)
+    discount_rate = 0.07  # load_costs(snakemake.input.tech_costs).loc["geothermal", "wacc_real"]
+    drilling_cost = snakemake.config["renewable"]["EGS"]["drilling_cost"]
+
+    with xr.open_dataset(
+        getattr(input_profiles, "specs_egs"),
+    ) as ds_specs, xr.open_dataset(
+        getattr(input_profiles, "profile_egs"),
+    ) as ds_profile:
+
+        bus2sub = (
+            pd.read_csv(input_profiles.bus2sub, dtype=str)
+            .drop("interconnect", axis=1)
+            .rename(columns={"Bus": "bus_id"})
+        )
+
+        # IGNORE: Remove dropna(). Rather, apply dropna when creating the original dataset
+        df_specs = pd.merge(
+            ds_specs.to_dataframe().reset_index().dropna(),
+            bus2sub,
+            on="sub_id",
+            how="left",
+        )
+        df_specs["bus_id"] = df_specs["bus_id"].astype(str)
+
+        # bus_id must be in index for pypsa to read it
+        df_specs.set_index("bus_id", inplace=True)
+
+        # columns must be renamed to refer to the right quantities for pypsa to read it correctly
+        logger.info(f"Using {drilling_cost} EGS drilling costs.")
+        df_specs = df_specs.rename(
+            columns={
+                "advanced_capex_usd_kw" if drilling_cost == "advanced" else "capex_usd_kw": "capital_cost",
+                "avail_capacity_mw": "p_nom_max",
+                "fixed_om": "fixed_om",
+            },
+        )
+
+        # TODO: come up with proper values for these params
+
+        df_specs["capital_cost"] = 1000 * (
+            df_specs["capital_cost"] * calculate_annuity(capital_recovery_period, discount_rate) + df_specs["fixed_om"]
+        )  # convert and annualize USD/kW to USD/MW-year
+        df_specs["efficiency"] = 1.0
+
+        df_specs = df_specs.loc[~(df_specs.index == "nan")]
+
+        # TODO: review what qualities need to be included. Currently limited for speedup.
+        qualities = [1]  # df_specs.Quality.unique()
+
+        for q in qualities:
+            suffix = " " + car  # + f" Q{q}"
+            df_q = df_specs[df_specs["Quality"] == q]
+
+            bus_list = df_q.index.values
+            capital_cost = df_q["capital_cost"]
+            p_nom_max_bus = df_q["p_nom_max"]
+            efficiency = df_q["efficiency"]  # for now.
+
+            # IGNORE: Remove dropna(). Rather, apply dropna when creating the original dataset
+            df_q_profile = pd.merge(
+                ds_profile.sel(Quality=q).to_dataframe().dropna().reset_index(),
+                bus2sub,
+                on="sub_id",
+                how="left",
+            )
+            bus_profiles = pd.pivot_table(
+                df_q_profile,
+                columns="bus_id",
+                index=["year", "Date"],
+                values="capacity_factor",
+            )
+
+            logger.info(
+                f"Adding EGS (Resource Quality-{q}) capacity-factor profiles to the network.",
+            )
+
+            n.madd(
+                "Generator",
+                bus_list,
+                suffix,
+                bus=bus_list,
+                carrier=car,
+                p_nom_extendable=car in extendable_carriers["Generator"],
+                p_nom_max=p_nom_max_bus,
+                capital_cost=capital_cost,
+                efficiency=efficiency,
+                p_max_pu=bus_profiles,
+                build_year=n.investment_periods[0],
+                lifetime=capital_recovery_period,
             )
 
 
@@ -732,6 +876,8 @@ def attach_breakthrough_renewable_plants(
             p_nom_extendable=False,
             carrier=tech,
             weight=1.0,
+            build_year=n.investment_periods[0],
+            lifetime=np.inf,
         )
     return n
 
@@ -755,6 +901,8 @@ def apply_pudl_fuel_costs(
         if gen not in plants.index:
             continue
         carrier = plants.loc[gen, "carrier"]
+        if carrier not in costs.index:
+            continue
         vom.loc[gen, "VOM"] = costs.at[carrier, "opex_variable_per_mwh"]
 
     # Apply the VOM to the fuel costs
@@ -774,7 +922,7 @@ def apply_pudl_fuel_costs(
     n.generators_t["marginal_cost"] = n.generators_t["marginal_cost"].join(
         pudl_fuel_costs,
     )
-    # Why are there so few of the pudl fuel costs columns?
+    logger.info(f"Applied PuDL fuel costs to {len(pudl_fuel_costs.columns)} generators.")
     return n
 
 
@@ -813,6 +961,15 @@ def main(snakemake):
     )
     plants = match_plant_to_bus(n, plants)
 
+    attach_egs(
+        n,
+        costs,
+        snakemake.input,
+        renewable_carriers,
+        extendable_carriers,
+        params.length_factor,
+    )
+
     attach_conventional_generators(
         n,
         costs,
@@ -832,7 +989,7 @@ def main(snakemake):
         n.snapshots,
     )
 
-    if params.conventional["unit_commitment"]:
+    if params.conventional.get("must_run", False):
         # TODO (@ktehranchi): In the future the plants that are must-run should not be clustered and instead retire according to lifetime
         apply_must_run_ratings(
             n,
@@ -949,9 +1106,8 @@ def main(snakemake):
     sanitize_carriers(n, snakemake.config)
     n.meta = snakemake.config
 
-    n.export_to_netcdf(snakemake.output[0])
-
-    logger.info(test_network_datatype_consistency(n))
+    # n.export_to_netcdf(snakemake.output[0])
+    pickle.dump(n, open(snakemake.output[0], "wb"))
 
 
 if __name__ == "__main__":

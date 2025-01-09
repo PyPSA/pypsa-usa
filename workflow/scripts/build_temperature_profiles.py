@@ -26,7 +26,9 @@ if __name__ == "__main__":
     client = Client(cluster, asynchronous=True)
 
     time = pd.date_range(freq="h", **snakemake.params.snapshots)
-    cutout = atlite.Cutout(snakemake.input.cutout).sel(time=time)
+
+    assert len(snakemake.input.cutout) == 1
+    cutout = atlite.Cutout(snakemake.input.cutout[0]).sel(time=time)
 
     clustered_regions = gpd.read_file(snakemake.input.regions_onshore).set_index("name").buffer(0).squeeze()
 

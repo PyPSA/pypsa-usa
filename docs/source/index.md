@@ -53,7 +53,6 @@ about-usage
 data-transmission
 data-demand
 data-generators
-data-renewables
 data-costs
 data-policies
 data-sectors

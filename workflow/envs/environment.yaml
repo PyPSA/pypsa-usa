@@ -8,7 +8,7 @@ dependencies:
 - pip
 
 - pypsa==0.30.2
-- atlite==0.2.14
+- atlite==0.3.0
 - linopy==0.3.14
 
 # Dependencies of the workflow itself
@@ -64,3 +64,5 @@ dependencies:
   - highspy
   - duckdb==0.10.0
   - flake8
+  - dill
+  - kaleido

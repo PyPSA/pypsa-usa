@@ -13,7 +13,7 @@ def sector_input_files(wildcards):
         ng_files = {
             "county": DATA + "counties/cb_2020_us_county_500k.shp",
             "pipeline_capacity": DATA
-            + "natural_gas/EIA-StatetoStateCapacity_Jan2023.xlsx",
+            + "natural_gas/EIA-StatetoStateCapacity_Feb2024.xlsx",
             "pipeline_shape": DATA + "natural_gas/pipelines.geojson",
             "eia_757": DATA + "natural_gas/EIA-757.csv",
             "cop_soil_total": RESOURCES
@@ -30,9 +30,12 @@ def sector_input_files(wildcards):
             + "{interconnect}/cop_air_urban_elec_s{simpl}_c{clusters}.nc",
             "clustered_pop_layout": RESOURCES
             + "{interconnect}/pop_layout_elec_s{simpl}_c{clusters}.csv",
-            "ev_policy": config["sector"]["transport_sector"]["ev_policy"],
+            "ev_policy": config["sector"]["transport_sector"]["investment"][
+                "ev_policy"
+            ],
             "residential_stock": "repo_data/sectors/residential_stock",
             "commercial_stock": "repo_data/sectors/commercial_stock",
+            "industrial_stock": "repo_data/sectors/industrial_stock/Table5_6.xlsx",
         }
         input_files.update(ng_files)
 
@@ -69,11 +72,10 @@ rule build_population_layouts:
         county_shapes=DATA + "counties/cb_2020_us_county_500k.shp",
         urban_percent=DATA + "urbanization/DECENNIALDHC2020.H2-Data.csv",
         population=DATA + "population/DECENNIALDHC2020.P1-Data.csv",
-        cutout="cutouts/"
-        + CDIR
-        + "{interconnect}_"
-        + config["atlite"]["default_cutout"]
-        + ".nc",
+        cutout=lambda wildcards: expand(
+            "cutouts/" + CDIR + "usa_era5_" + "{renewable_weather_year}" + ".nc",
+            renewable_weather_year=config["renewable_weather_years"],
+        ),
     output:
         pop_layout_total=RESOURCES + "{interconnect}/pop_layout_total.nc",
         pop_layout_urban=RESOURCES + "{interconnect}/pop_layout_urban.nc",
@@ -100,11 +102,10 @@ rule build_temperature_profiles:
         pop_layout=RESOURCES + "{interconnect}/pop_layout_{scope}.nc",
         regions_onshore=RESOURCES
         + "{interconnect}/Geospatial/regions_onshore_s{simpl}_{clusters}.geojson",
-        cutout="cutouts/"
-        + CDIR
-        + "{interconnect}_"
-        + config["atlite"]["default_cutout"]
-        + ".nc",
+        cutout=lambda wildcards: expand(
+            "cutouts/" + CDIR + "usa_era5_" + "{renewable_weather_year}" + ".nc",
+            renewable_weather_year=config["renewable_weather_years"],
+        ),
     output:
         temp_soil=RESOURCES
         + "{interconnect}/temp_soil_{scope}_elec_s{simpl}_c{clusters}.nc",
@@ -127,32 +128,6 @@ rule build_temperature_profiles:
         "../scripts/build_temperature_profiles.py"
 
 
-rule build_simplified_population_layouts:
-    input:
-        pop_layout_total=RESOURCES + "{interconnect}/pop_layout_total.nc",
-        pop_layout_urban=RESOURCES + "{interconnect}/pop_layout_urban.nc",
-        pop_layout_rural=RESOURCES + "{interconnect}/pop_layout_rural.nc",
-        regions_onshore=RESOURCES
-        + "{interconnect}/Geospatial/regions_onshore_s{simpl}.geojson",
-        cutout="cutouts/"
-        + CDIR
-        + "{interconnect}_"
-        + config["atlite"]["default_cutout"]
-        + ".nc",
-    output:
-        clustered_pop_layout=RESOURCES + "{interconnect}/pop_layout_elec_s.csv",
-    resources:
-        mem_mb=10000,
-    log:
-        LOGS + "{interconnect}/build_simplified_population_layouts",
-    benchmark:
-        BENCHMARKS + "{interconnect}/build_simplified_population_layouts/s"
-    conda:
-        "../envs/environment.yaml"
-    script:
-        "../scripts/build_clustered_population_layouts.py"
-
-
 rule build_clustered_population_layouts:
     input:
         pop_layout_total=RESOURCES + "{interconnect}/pop_layout_total.nc",
@@ -160,11 +135,10 @@ rule build_clustered_population_layouts:
         pop_layout_rural=RESOURCES + "{interconnect}/pop_layout_rural.nc",
         regions_onshore=RESOURCES
         + "{interconnect}/Geospatial/regions_onshore_s{simpl}_{clusters}.geojson",
-        cutout="cutouts/"
-        + CDIR
-        + "{interconnect}_"
-        + config["atlite"]["default_cutout"]
-        + ".nc",
+        cutout=lambda wildcards: expand(
+            "cutouts/" + CDIR + "usa_era5_" + "{renewable_weather_year}" + ".nc",
+            renewable_weather_year=config["renewable_weather_years"],
+        ),
     output:
         clustered_pop_layout=RESOURCES
         + "{interconnect}/pop_layout_elec_s{simpl}_c{clusters}.csv",
@@ -172,7 +146,7 @@ rule build_clustered_population_layouts:
         LOGS
         + "{interconnect}/build_clustered_population_layouts_{simpl}_{clusters}.log",
     resources:
-        mem_mb=10000,
+        mem_mb=50000,
     benchmark:
         (
             BENCHMARKS

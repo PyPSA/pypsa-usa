@@ -33,6 +33,11 @@ While representative of the US electricity system, the TAMU network is synthetic
 ![TAMU_clustered](./_static/networks/TAMU_Clustered_500.png)
 
 
+
+```{info}
+See the [Spatial Configuration](./config-spatial.md) page for information on how to choose between networks.
+```
+
 (transmission-data)=
 ### Data
 ```{eval-rst}
