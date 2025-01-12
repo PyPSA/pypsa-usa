@@ -65,7 +65,7 @@ Capacity constraints limit how much energy can be delievered through demand resp
     &\ \hspace{1cm} s_{n,t} = \text{Allowable shiftable load per unit of } d_{n,t} \\
     &\ \hspace{1cm} dr_{n,t} = \text{Discharge of demand response at time } t \text{ and bus } n \\
     &\ s.t. \\
-    &\ \hspace{1cm} d_{n,t} \times s_{n,t} \leq dr_{n,t} \hspace{0.5cm} \forall_{\text{n,t}}\\
+    &\ \hspace{1cm} d_{n,t} \times s_{n,t} \geq dr_{n,t} \hspace{0.5cm} \forall_{\text{n,t}}\\
 \end{align*}
 
 This is not applied directly to the `Link` object via the `p_nom` paprameter to be consistent with the transport sector. Within the transport sector, demand response is applied to the aggregation bus due to endogenous investment options. Therefore, knowing how much electrical load to be shifted at each timestep is not possible before solving. For the transport sector, the following constraint is added. See the [transportation section](./data-transportation.md) schematics for details on where demand reponse is applied.

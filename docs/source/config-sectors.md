@@ -60,6 +60,23 @@ Only single-period studies are currently supported when running sector studies.
    :file: configtables/sector_service.csv
 ```
 
+```{info}
+If running demand response at a per-carrier level, put each carrier as a key. For example:
+```yaml
+demand_response:
+    by_carrier: True
+    space-heat:
+      shift: 20
+      marginal_cost: 16
+    elec:
+      shift: 30
+      marginal_cost: 25
+    cool:
+      shift: 10
+      marginal_cost: 30
+```
+```
+
 ## Transport Sector
 ```{eval-rst}
 .. literalinclude:: ../../workflow/repo_data/config/config.sector.yaml
@@ -83,4 +100,18 @@ Only single-period studies are currently supported when running sector studies.
    :header-rows: 1
    :widths: 22,7,22,33
    :file: configtables/sector_industrial.csv
+```
+
+```{info}
+If running demand response at a per-carrier level, put each carrier as a key. For example:
+```yaml
+demand_response:
+    by_carrier: True
+    elec:
+      shift: 30
+      marginal_cost: 25
+    heat:
+      shift: 10
+      marginal_cost: 30
+```
 ```
