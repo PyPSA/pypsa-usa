@@ -1389,14 +1389,17 @@ def add_demand_response_constraints(n, config):
 
         shift = cfg.get("shift", 0)
 
-        if shift < 0.001:
-            logger.info(f"Demand response not enabled for {sector}")
-            return
-
-        if shift == "inf":
-            pass
-        elif shift >= 0.001:  # for tolerance
-            add_capacity_constraint(n, sector, shift, carrier)
+        if isinstance(shift, str):
+            if shift == "inf":
+                pass
+            else:
+                logger.info(f"Unknown arguement of {shift} for {sector} DR")
+                raise ValueError(shift)
+        elif isinstance(shift, (int, float)):
+            if shift < 0.001:
+                logger.info(f"Demand response not enabled for {sector}")
+            else:
+                add_capacity_constraint(n, sector, shift, carrier)
         else:
             logger.info(f"Unknown arguement of {shift} for {sector} DR")
             raise ValueError(shift)
