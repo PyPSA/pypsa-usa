@@ -929,50 +929,46 @@ def add_heat_dr(
     Adds end-use thermal demand response.
     """
 
-    shift = dr_config.get("shift", 0)
-    marginal_cost_storage = dr_config.get("marginal_cost", 0)
+    by_carrier = dr_config.get("by_carrier", False)
 
-    if shift == 0:
-        logger.info(f"DR not applied to {sector} as allowable sift is {shift}")
-        return
-
-    if marginal_cost_storage == 0:
-        logger.warning(f"No cost applied to demand response for {sector}")
+    # check if dr is applied at a per-carrier level
 
     if sector in ["res", "com"]:
 
         assert heat_system in ("urban", "rural", "total")
         assert heat_carrier in ("heat", "space-heat", "cool")
 
-        if isinstance(marginal_cost_storage, dict):
-            try:
-                mc = marginal_cost_storage[heat_carrier]
-            except KeyError:
-                mc = 0
-        else:
-            mc = marginal_cost_storage
-
         carrier_name = f"{sector}-{heat_system}-{heat_carrier}"
+
+        if by_carrier:
+            dr_config = dr_config.get(heat_carrier, {})
 
     elif sector == "ind":
 
         carrier_name = f"ind-heat"
 
-        if isinstance(marginal_cost_storage, dict):
-            try:
-                mc = marginal_cost_storage["heat"]
-            except KeyError:
-                mc = 0
-        else:
-            mc = marginal_cost_storage
+        if by_carrier:
+            dr_config = dr_config.get("heat", {})
 
     else:
         raise ValueError(f"{sector} not valid dr option")
 
-    if mc == 0:
+    # check if demand response is applied
+
+    shift = dr_config.get("shift", 0)
+    if shift == 0:
+        logger.info(f"DR not applied to {sector} as allowable sift is {shift}")
+        return
+
+    # assign marginal cost value
+
+    marginal_cost_storage = dr_config.get("marginal_cost", 0)
+    if marginal_cost_storage == 0:
         logger.warning(f"No cost applied to demand response for {sector}")
 
-    # must be run after rural/urban load split
+    # get components to add
+    # MUST BE RUN AFTER URBAN/RURAL SPLIT
+
     buses = n.buses[n.buses.carrier == carrier_name]
 
     df = pd.DataFrame(index=buses.index)
@@ -1069,7 +1065,7 @@ def add_heat_dr(
         e_max_pu=1,
         carrier=df.carrier,
         standing_loss=standing_loss,
-        marginal_cost_storage=mc,
+        marginal_cost_storage=marginal_cost_storage,
     )
 
     n.madd(
@@ -1084,7 +1080,7 @@ def add_heat_dr(
         e_max_pu=0,
         carrier=df.carrier,
         standing_loss=standing_loss,
-        marginal_cost_storage=mc * (-1),
+        marginal_cost_storage=marginal_cost_storage * (-1),
     )
 
 

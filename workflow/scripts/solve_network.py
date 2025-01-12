@@ -25,7 +25,7 @@ Additionally, some extra constraints specified in :mod:`solve_network` are added
 
 import logging
 import re
-from typing import Optional
+from typing import Any, Optional
 
 import numpy as np
 import pandas as pd
@@ -1324,13 +1324,19 @@ def add_demand_response_constraints(n, config):
         n: pypsa.Network,
         sector: str,
         shift: float,  # as a percentage
+        carrier: Optional[str] = None,
     ):
         """Adds limit on deferable load
 
         No need to multiply out snapshot weights here
         """
 
-        dr_links = n.links[n.links.carrier.str.endswith("-dr") & n.links.carrier.str.startswith(f"{sector}-")]
+        dr_links = n.links[n.links.carrier.str.endswith("-dr") & n.links.carrier.str.startswith(f"{sector}-")].copy()
+        constraint_name = f"demand_response_capacity-{sector}"
+
+        if carrier:
+            dr_links = dr_links[dr_links.carrier.str.contains(f"-{carrier}-")].copy()
+            constraint_name = f"demand_response_capacity-{sector}-{carrier}"
 
         if dr_links.empty:
             return
@@ -1350,7 +1356,7 @@ def add_demand_response_constraints(n, config):
             bus_order = lhs.vars.bus1.data
             rhs = rhs[bus_order]
 
-            n.model.add_constraints(lhs <= rhs, name=f"demand_response_capacity-{sector}")
+            n.model.add_constraints(lhs <= rhs, name=constraint_name)
 
         # transport dr is at the aggregation bus
         # sum all outgoing capacity and apply the capacity limit to that
@@ -1369,8 +1375,31 @@ def add_demand_response_constraints(n, config):
 
             n.model.add_constraints(
                 lhs >= rhs,
-                name=f"demand_response_capacity-trn",
+                name=constraint_name,
             )
+
+    # helper to manage capacity constraint between non-carrier and carrier
+
+    def _apply_constraint(
+        n: pypsa.Network,
+        sector: str,
+        cfg: dict[str, Any],
+        carrier: Optional[str] = None,
+    ):
+
+        shift = cfg.get("shift", 0)
+
+        if shift < 0.001:
+            logger.info(f"Demand response not enabled for {sector}")
+            return
+
+        if shift == "inf":
+            pass
+        elif shift >= 0.001:  # for tolerance
+            add_capacity_constraint(n, sector, shift, carrier)
+        else:
+            logger.info(f"Unknown arguement of {shift} for {sector} DR")
+            raise ValueError(shift)
 
     # demand response addition starts here
 
@@ -1387,21 +1416,19 @@ def add_demand_response_constraints(n, config):
         else:
             raise ValueError
 
-        shift = dr_config.get("shift", 0)
-
-        if not dr_config or shift < 0.001:
-            logger.info(f"Demand response not enabled for {sector}")
+        if not dr_config:
             continue
 
-        # capacity constraint
+        by_carrier = dr_config.get("by_carrier", False)
 
-        if shift == "inf":
-            pass
-        elif shift >= 0.001:  # for tolerance
-            add_capacity_constraint(n, sector, shift)
+        if by_carrier:
+            for carrier, carrier_config in dr_config.items():
+                # hacky check to make sure only carriers get passed in
+                # the actual constraint should check this as well
+                if carrier in ("elec", "heat", "space-heat", "water-heat", "cool"):
+                    _apply_constraint(n, sector, carrier_config, carrier)
         else:
-            logger.info(f"Unknown arguement of {shift} for {sector} DR")
-            raise ValueError(shift)
+            _apply_constraint(n, sector, dr_config)
 
 
 def extra_functionality(n, snapshots):
@@ -1518,7 +1545,7 @@ if __name__ == "__main__":
             simpl="70",
             clusters="4m",
             ll="v1.0",
-            opts="3h",
+            opts="3h-TCT",
             sector="E-G",
             planning_horizons="2019",
         )
