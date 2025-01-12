@@ -1389,7 +1389,7 @@ def add_demand_response_constraints(n, config):
 
         shift = cfg.get("shift", 0)
 
-        if not shift < 0.001:
+        if shift < 0.001:
             logger.info(f"Demand response not enabled for {sector}")
             return
 
@@ -1545,7 +1545,7 @@ if __name__ == "__main__":
             simpl="70",
             clusters="4m",
             ll="v1.0",
-            opts="3h",
+            opts="3h-TCT",
             sector="E-G",
             planning_horizons="2019",
         )
