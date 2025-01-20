@@ -281,6 +281,7 @@ if __name__ == "__main__":
             algorithm=params.simplify_network["algorithm"],
             feature=params.simplify_network["feature"],
             aggregation_strategies=params.aggregation_strategies,
+            weighting_strategy=params.simplify_network.get("weighting_strategy", None),
         )
         n = clustering.network
 

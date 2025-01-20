@@ -813,7 +813,7 @@ def clean_bus_data(n: pypsa.Network):
     Drops data from the network that are no longer needed in workflow.
     """
     col_list = [
-        "Pd",
+        # "Pd",
         "load_dissag",
         "LAF",
         "LAF_state",
