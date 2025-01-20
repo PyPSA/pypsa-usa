@@ -50,6 +50,7 @@ def get_region_buses(n, region_list):
     return n.buses[
         (
             n.buses.country.isin(region_list)
+            | n.buses.reeds_zone.isin(region_list)
             | n.buses.reeds_state.isin(region_list)
             | n.buses.interconnect.str.lower().isin(region_list)
             | n.buses.nerc_reg.isin(region_list)
@@ -183,7 +184,7 @@ def prepare_network(
 
 def add_technology_capacity_target_constraints(n, config):
     """
-    Add Technology Capacaity Target (TCT) constraint to the network.
+    Add Technology Capacity Target (TCT) constraint to the network.
 
     Add minimum or maximum levels of generator nominal capacity per carrier for individual regions. Each constraint can be designated for a specified planning horizon in multi-period models. Opts and path for technology_capacity_targets.csv must be defined in config.yaml. Default file is available at config/policy_constraints/technology_capacity_targets.csv.
 
@@ -281,8 +282,13 @@ def add_technology_capacity_target_constraints(n, config):
 
         if target["max"] == "existing":
             target["max"] = lhs_extendable
+        else:
+            target["max"] = float(target["max"])
+
         if target["min"] == "existing":
             target["min"] = lhs_extendable
+        else:
+            target["min"] = float(target["min"])
 
         if not np.isnan(target["min"]):
 

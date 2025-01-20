@@ -35,7 +35,9 @@ def normed(x):
     return (x / x.sum()).fillna(0.0)
 
 
-def weighting_for_country(n, x):
+def weighting_for_region(n, x, weighting_strategy=None):
+    """Calculate the weighting for internal nodes within a given region."""
+
     conv_carriers = {"nuclear", "OCGT", "CCGT", "PHS", "hydro", "coal", "biomass"}
     generators = n.generators
     generators["carrier_base"] = generators.carrier.str.split().str[0]
@@ -56,6 +58,9 @@ def weighting_for_country(n, x):
     g = normed(gen.reindex(b_i, fill_value=0))
     l = normed(load.reindex(b_i, fill_value=0))
     w = g + l
+
+    if weighting_strategy == "population":
+        w = normed(n.buses.loc[x.index].Pd)
 
     return (w * (100.0 / w.max())).clip(lower=1.0).astype(int)
 
@@ -100,24 +105,20 @@ def get_feature_for_hac(n, buses_i=None, feature=None):
     return feature_data
 
 
-def distribute_clusters(n, n_clusters, focus_weights=None, solver_name="cbc"):
+def distribute_clusters(n, n_clusters, focus_weights=None, solver_name="cbc", weighting_strategy=None):
     """
-    Determine the number of clusters per country.
+    Determine the number of clusters per region.
     """
-    L = (
-        n.loads_t.p_set.mean()
-        .groupby(n.loads.bus)
-        .sum()
-        .groupby([n.buses.country, n.buses.sub_network])
-        .sum()
-        .pipe(normed)
-    )
+    if weighting_strategy == "population":
+        bus_distribution_factor = n.buses.Pd
+    else:
+        bus_distribution_factor = n.loads_t.p_set.mean().groupby(n.loads.bus).sum()
+    factors = bus_distribution_factor.groupby([n.buses.country, n.buses.sub_network]).sum().pipe(normed)
 
-    N = n.buses.groupby(["country", "sub_network"]).size()
-
+    n_subnetwork_nodes = n.buses.groupby(["country", "sub_network"]).size()
     assert (
-        n_clusters >= len(N) and n_clusters <= N.sum()
-    ), f"Number of clusters must be {len(N)} <= n_clusters <= {N.sum()} for this selection of countries."
+        n_clusters >= len(n_subnetwork_nodes) and n_clusters <= n_subnetwork_nodes.sum()
+    ), f"Number of clusters must be {len(n_subnetwork_nodes)} <= n_clusters <= {n_subnetwork_nodes.sum()} for this selection of countries."
 
     if focus_weights is not None:
         total_focus = sum(list(focus_weights.values()))
@@ -125,28 +126,28 @@ def distribute_clusters(n, n_clusters, focus_weights=None, solver_name="cbc"):
         assert total_focus <= 1.0, "The sum of focus weights must be less than or equal to 1."
 
         for country, weight in focus_weights.items():
-            L[country] = weight / len(L[country])
+            factors[country] = weight / len(factors[country])
 
-        remainder = [c not in focus_weights.keys() for c in L.index.get_level_values("country")]
-        L[remainder] = L.loc[remainder].pipe(normed) * (1 - total_focus)
+        remainder = [c not in focus_weights.keys() for c in factors.index.get_level_values("country")]
+        factors[remainder] = factors.loc[remainder].pipe(normed) * (1 - total_focus)
 
         logger.warning("Using custom focus weights for determining number of clusters.")
 
     assert np.isclose(
-        L.sum(),
+        factors.sum(),
         1.0,
         rtol=1e-3,
-    ), f"Country weights L must sum up to 1.0 when distributing clusters. Is {L.sum()}."
+    ), f"Country weights L must sum up to 1.0 when distributing clusters. Is {factors.sum()}."
 
     m = po.ConcreteModel()
 
     def n_bounds(model, *n_id):
-        return (1, N[n_id])
+        return (1, n_subnetwork_nodes[n_id])
 
-    m.n = po.Var(list(L.index), bounds=n_bounds, domain=po.Integers)
+    m.n = po.Var(list(factors.index), bounds=n_bounds, domain=po.Integers)
     m.tot = po.Constraint(expr=(po.summation(m.n) == n_clusters))
     m.objective = po.Objective(
-        expr=sum((m.n[i] - L.loc[i] * n_clusters) ** 2 for i in L.index),
+        expr=sum((m.n[i] - factors.loc[i] * n_clusters) ** 2 for i in factors.index),
         sense=po.minimize,
     )
 
@@ -163,7 +164,7 @@ def distribute_clusters(n, n_clusters, focus_weights=None, solver_name="cbc"):
     results = opt.solve(m)
     assert results["Solver"][0]["Status"] == "ok", f"Solver returned non-optimally: {results}"
 
-    return pd.Series(m.n.get_values(), index=L.index).round().astype(int)
+    return pd.Series(m.n.get_values(), index=factors.index).round().astype(int)
 
 
 def busmap_for_n_clusters(
@@ -173,6 +174,7 @@ def busmap_for_n_clusters(
     focus_weights=None,
     algorithm="kmeans",
     feature=None,
+    weighting_strategy=None,
     **algorithm_kwds,
 ):
     if algorithm == "kmeans":
@@ -232,10 +234,10 @@ def busmap_for_n_clusters(
         n,
         n_clusters,
         focus_weights=focus_weights,
+        weighting_strategy=weighting_strategy,
         solver_name=solver_name,
     )
-
-    # Potentiall remove buses and lines from these corner case counties from network
+    # Remove buses and lines that are not part of the clustering to reconcile TAMU and ReEDS Topologies
     nc_set = set(n_clusters.index.get_level_values(0).unique())
     bus_set = set(n.buses.country.unique())
     countries_remove = list(bus_set - nc_set)
@@ -260,8 +262,7 @@ def busmap_for_n_clusters(
         logger.debug(f"Determining busmap for country {prefix[:-1]}")
         if len(x) == 1:
             return pd.Series(prefix + "0", index=x.index)
-        weight = weighting_for_country(n, x)
-
+        weight = weighting_for_region(n, x, weighting_strategy)
         if algorithm == "kmeans":
             return prefix + busmap_by_kmeans(
                 n,
@@ -307,6 +308,7 @@ def clustering_for_n_clusters(
     algorithm="hac",
     feature=None,
     focus_weights=None,
+    weighting_strategy=None,
 ):
     if not isinstance(custom_busmap, pd.Series):
         busmap = busmap_for_n_clusters(
@@ -316,14 +318,16 @@ def clustering_for_n_clusters(
             focus_weights,
             algorithm,
             feature,
+            weighting_strategy,
         )
+        # plot_busmap(n, busmap, 'busmap.png')
     else:
         busmap = custom_busmap
 
     line_strategies = aggregation_strategies.get("lines", dict())
     generator_strategies = aggregation_strategies.get("generators", dict())
     one_port_strategies = aggregation_strategies.get("one_ports", dict())
-
+    bus_strategies = {"Pd": "sum"}
     clustering = get_clustering_from_busmap(
         n,
         busmap,
@@ -333,6 +337,7 @@ def clustering_for_n_clusters(
         line_length_factor=line_length_factor,
         line_strategies=line_strategies,
         generator_strategies=generator_strategies,
+        bus_strategies=bus_strategies,
         one_port_strategies=one_port_strategies,
         scale_link_capital_costs=False,
     )
@@ -511,7 +516,7 @@ def convert_to_transport(
 
         itl_agg = pd.concat([itl_agg, itls_to_virtual])
         itl_agg_costs = None if itl_agg_costs_fn is None else pd.concat([itl_cost, pd.read_csv(itl_agg_costs_fn)])
-        add_itls(buses, itl_agg, itl_agg_costs, expansion=False)
+        add_itls(buses, itl_agg, itl_agg_costs, expansion=True)
         itls = pd.concat([itls_filt, itl_agg])
     else:
         itls = itls_filt
@@ -556,6 +561,7 @@ def convert_to_transport(
 
 
 def cluster_regions(busmaps, input=None, output=None):
+    """Create new geojson files for the clustered regions."""
     busmap = reduce(lambda x, y: x.map(y), busmaps[1:], busmaps[0])
 
     for which in ("regions_onshore", "regions_offshore"):
@@ -567,8 +573,7 @@ def cluster_regions(busmaps, input=None, output=None):
         regions_c.to_file(getattr(output, which))
 
 
-def plot_busmap_for_n_clusters(n, n_clusters, fn=None):
-    busmap = busmap_for_n_clusters(n, n_clusters)
+def plot_busmap(n, busmap, fn=None):
     cs = busmap.unique()
     cr = sns.color_palette("hls", len(cs))
     n.plot(bus_colors=busmap.map(dict(zip(cs, cr))))
@@ -729,6 +734,7 @@ if __name__ == "__main__":
             params.cluster_network["algorithm"],
             params.cluster_network["feature"],
             params.focus_weights,
+            weighting_strategy=params.cluster_network.get("weighting_strategy", None),
         )
 
         if transport_model:

@@ -138,10 +138,12 @@ costs:
 # docs :
 clustering:
   simplify_network:
+    weighting_strategy: demand-capacity # choose from: [population, demand-capacity]
     to_substations: false # network is simplified to nodes with positive or negative power injection (i.e. substations or offwind connections)
     algorithm: kmeans # choose from: [hac, kmeans]
     feature: solar+onwind-time # only for hac. choose from: [solar+onwind-time, solar+onwind-cap, solar-time, solar-cap, solar+offwind-cap] etc.
   cluster_network:
+    weighting_strategy: demand-capacity # choose from: [population, demand-capacity]
     algorithm: kmeans # choose from: [hac, kmeans]
     feature: solar+onwind-time
     exclude_carriers: []
