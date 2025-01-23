@@ -455,69 +455,49 @@ def convert_to_transport(
     add_itls(buses, itls_filt, itl_cost)
 
     if itl_agg_fn:
+        # Aggregating the ITLs to lower resolution
         topology_aggregation_key = list(topology_aggregation.keys())[0]
-        itl_agg = pd.read_csv(itl_agg_fn)
-        itl_agg.columns = itl_agg.columns.str.lower()
-        itl_agg = itl_agg.rename(columns={"transgrp": "r", "transgrpp": "rr"})
-        itl_agg = itl_agg[
-            itl_agg.r.isin(clustering.network.buses["country"]) | itl_agg.rr.isin(clustering.network.buses["country"])
+        itl_lower_res = pd.read_csv(itl_agg_fn)
+        itl_lower_res.columns = itl_lower_res.columns.str.lower()
+        itl_lower_res = itl_lower_res.rename(columns={"transgrp": "r", "transgrpp": "rr"})
+
+        itl_lower_res = itl_lower_res[  # Filter low-res ITLs to only include those that have an end in the network
+            itl_lower_res.r.isin(buses["country"]) | itl_lower_res.rr.isin(buses["country"])
         ]
         aggregated_buses = agg_busmap.rename(index=lambda x: x.strip(" 0"))
         non_agg_buses = buses[~buses.index.isin(agg_busmap.values)]
         non_agg_buses = non_agg_buses[
-            non_agg_buses[topology_aggregation_key].isin(itl_agg.r)
-            | non_agg_buses[topology_aggregation_key].isin(itl_agg.rr)
-        ]
-        virtual_buses = non_agg_buses.groupby(topology_aggregation_key)[non_agg_buses.columns].min()
-        existing_x = non_agg_buses.groupby(topology_aggregation_key).x.mean()
-        existing_y = non_agg_buses.groupby(topology_aggregation_key).y.mean()
-        agg_x = buses.loc[agg_busmap.unique()].x.mean()
-        agg_y = buses.loc[agg_busmap.unique()].y.mean()
-        virtual_buses["x"] = 0.3 * agg_x + 0.7 * existing_x
-        virtual_buses["y"] = 0.3 * agg_y + 0.7 * existing_y
-
-        if not virtual_buses.empty:
-            clustering.network.madd(
-                "Bus",
-                virtual_buses[topology_aggregation_key],
-                country=virtual_buses[topology_aggregation_key],
-                reeds_zone="na" if topology_aggregation_key == "trans_grp" else virtual_buses["reeds_zone"],
-                reeds_ba="na" if topology_aggregation_key == "trans_grp" else virtual_buses["reeds_ba"],
-                interconnect=virtual_buses["interconnect"],
-                nerc_reg=virtual_buses["nerc_reg"],
-                trans_reg=virtual_buses["trans_reg"],
-                trans_grp=virtual_buses["trans_grp"],
-                reeds_state=virtual_buses["reeds_state"],
-                x=virtual_buses.x,
-                y=virtual_buses.y,
-            )
-        itl_agg = itl_agg[
-            itl_agg.r.isin(clustering.network.buses["country"])
-            & itl_agg.rr.isin(clustering.network.buses["country"])
-            & (itl_agg.r.isin(agg_busmap.values) | itl_agg.rr.isin(agg_busmap.values))
+            non_agg_buses[topology_aggregation_key].isin(itl_lower_res.r)
+            | non_agg_buses[topology_aggregation_key].isin(itl_lower_res.rr)
         ]
 
-        buses = clustering.network.buses.copy()
+        itl_lower_res = itl_lower_res[  # Filter low-res ITLs to only include those that have both ends in the network
+            itl_lower_res.r.isin(buses["country"])
+            & itl_lower_res.rr.isin(buses["country"])
+            & (itl_lower_res.r.isin(agg_busmap.values) | itl_lower_res.rr.isin(agg_busmap.values))
+        ]
+
         # itls from county to respective virtual bus
-        itls_to_virtual = itls[
+        itls_between = itls[  # Remove ITLs internal to the aggregated buses
             (itls.r.isin(aggregated_buses.index) | itls.rr.isin(aggregated_buses.index))
             & ~(itls.r.isin(aggregated_buses.index) & itls.rr.isin(aggregated_buses.index))
         ]
-        itls_to_virtual = itls_to_virtual[itls_to_virtual.r.isin(buses.index) | itls_to_virtual.rr.isin(buses.index)]
-        # Update the itls virtual such that the existing bus : virtual bus
-        itls_to_virtual.loc[itls_to_virtual.r.isin(non_agg_buses.index), "rr"] = non_agg_buses.loc[
-            itls_to_virtual.r[itls_to_virtual.r.isin(non_agg_buses.index)],
-            topology_aggregation_key,
-        ].values
-        itls_to_virtual.loc[itls_to_virtual.rr.isin(non_agg_buses.index), "r"] = non_agg_buses.loc[
-            itls_to_virtual.rr[itls_to_virtual.rr.isin(non_agg_buses.index)],
-            topology_aggregation_key,
-        ].values
+        itls_between = itls_between[  # Keep only ITLS which have end in network buses
+            itls_between.r.isin(buses.index) | itls_between.rr.isin(buses.index)
+        ]
 
-        itl_agg = pd.concat([itl_agg, itls_to_virtual])
+        # Instead replace the itl aggregated bus with the new agg_bus
+        itls_between.loc[itls_between.r.isin(aggregated_buses.index), "r"] = itls_between.r.map(
+            aggregated_buses,
+        ).dropna()
+        itls_between.loc[itls_between.rr.isin(aggregated_buses.index), "rr"] = itls_between.rr.map(
+            aggregated_buses,
+        ).dropna()
+
+        itl_lower_res = pd.concat([itl_lower_res, itls_between])
         itl_agg_costs = None if itl_agg_costs_fn is None else pd.concat([itl_cost, pd.read_csv(itl_agg_costs_fn)])
-        add_itls(buses, itl_agg, itl_agg_costs, expansion=True)
-        itls = pd.concat([itls_filt, itl_agg])
+        add_itls(buses, itl_lower_res, itl_agg_costs, expansion=True)
+        itls = pd.concat([itls_filt, itl_lower_res])
     else:
         itls = itls_filt
 
@@ -531,30 +511,6 @@ def convert_to_transport(
     if len(disconnected_buses) > 0:
         logger.warning(
             f"Network configuration contains {len(disconnected_buses)} disconnected buses. ",
-        )
-
-    # Dissolve TX for particular zones according to default reeds configurations
-    clustering.network.links.loc[
-        clustering.network.links.bus0.isin(["p119"]) & clustering.network.links.bus1.isin(["p122"]),
-        "p_nom",
-    ] = 1e9
-    clustering.network.links.loc[
-        clustering.network.links.bus1.isin(["p119"]) & clustering.network.links.bus0.isin(["p122"]),
-        "p_nom",
-    ] = 1e9
-    # Dissolve p124 and p99
-    if "p124" in clustering.network.buses.index and "p99" in clustering.network.buses.index:
-        clustering.network.add(
-            "Link",
-            "p124||p99",
-            bus0="p124",
-            bus1="p99",
-            p_nom=1e9,
-            p_nom_extendable=False,
-            length=0,
-            capital_cost=0,
-            efficiency=1,
-            carrier="AC",
         )
 
     return clustering
