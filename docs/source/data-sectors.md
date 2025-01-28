@@ -5,7 +5,7 @@ Full energy system models can be run through PyPSA-USA. This page gives an overv
 
 ## Overview
 
-Sector coupled models are built ontop of the power sector representation. This means all assumptions[^1], including spatial and temporal options, implemented to bild the electricity sector are shared in sector coupled studies.
+Sector coupled models are built ontop of the power sector representation. This means all assumptions, including spatial and temporal options, implemented to bild the electricity sector are shared in sector coupled studies[^1].
 
 When running sector coupled studies, four end use sectors are added to the system. These include residential, commercial, industrial, and transportation. Each of these sectors will always have electrical loads. Then, based on user configuration options, heating, cooling, or fossil fuel loads may be added to the system. Moreover, the natural gas network is added to track imports/exports, storage levels, methane leaks, and endogenously solve for natural gas cost.
 
@@ -65,10 +65,12 @@ Capacity constraints limit how much energy can be delievered through demand resp
     &\ \hspace{1cm} s_{n,t} = \text{Allowable shiftable load per unit of } d_{n,t} \\
     &\ \hspace{1cm} dr_{n,t} = \text{Discharge of demand response at time } t \text{ and bus } n \\
     &\ s.t. \\
-    &\ \hspace{1cm} d_{n,t} \times s_{n,t} \leq dr_{n,t} \hspace{0.5cm} \forall_{\text{n,t}}\\
+    &\ \hspace{1cm} d_{n,t} \times s_{n,t} \geq dr_{n,t} \hspace{0.5cm} \forall_{\text{n,t}}\\
 \end{align*}
 
-This is not applied directly to the `Link` object via the `p_nom` paprameter to be consistent with the transport sector. Within the transport sector, demand response is applied to the aggregation bus due to endogenous investment options. Therefore, knowing how much electrical load to be shifted at each timestep is not possible before solving. For the transport sector, the following constraint is added. See the [transportation section](./data-transportation.md) schematics for details on where demand reponse is applied.
+#### Trasport Demand Response Capacity Constraint
+
+Within the transport sector, demand response is applied to the aggregation bus due to endogenous investment options. This is because it is not possible to know how much electrical load can be shifted before solving. For the transport sector, the following constraint is added. See the [transportation section](./data-transportation.md) schematics for details on where demand reponse is applied.
 
 \begin{align*}
     &\ \text{let:} \\
@@ -81,6 +83,17 @@ This is not applied directly to the `Link` object via the `p_nom` paprameter to 
     &\ s.t. \\
     &\ \hspace{1cm}  \sum_{v}(p_{n,t,v}) \times s_{n,t} - dr_{n,t} \geq 0 \hspace{0.5cm} \forall_{\text{n,t}}\\
 \end{align*}
+
+(workflow-sector)=
+## Workflow
+
+The diagram below illustrates the workflow of PyPSA-USA Sector. Many rules overlap with the electricity sector workflow; however, several additional rules are also present.
+
+:::{figure-md} workflow
+<img src="./_static/dag_sector.jpg" width="700px">
+
+Snakemake DAG for sector coupled studies
+:::
 
 ## Further Information
 
