@@ -165,7 +165,7 @@ def prepare_network(
             p_nom=1e9,  # kW
         )
 
-    if solve_opts.get("noisy_costs"):
+    if solve_opts.get("noisy_costs"):  ##random noise to costs of generators
         for t in n.iterate_components():
             if "marginal_cost" in t.df:
                 t.df["marginal_cost"] += 1e-2 + 2e-3 * (np.random.random(len(t.df)) - 0.5)
@@ -341,7 +341,7 @@ def add_RPS_constraints(n, config):
 
     Returns
     -------
-    None
+
     """
 
     def process_reeds_data(filepath, carriers, value_col):
@@ -1456,9 +1456,16 @@ def extra_functionality(n, snapshots):
 def solve_network(n, config, solving, opts="", **kwargs):
     set_of_options = solving["solver"]["options"]
     cf_solving = solving["options"]
+    foresight_opts = snakemake.params.scenario[
+        "foresight"
+    ]  # LF_edit #pulling from the foresight addition into the config file, similar formatting to solve_opts
 
-    if len(n.investment_periods) > 1:
+    if (
+        len(n.investment_periods) > 1 and foresight_opts == "perfect"
+    ):  # LF_edit #new myopic or perfect foresight addition, if statement to pick which
         kwargs["multi_investment_periods"] = config["foresight"] == "perfect"
+    elif len(n.investment_periods) > 1 and foresight_opts == "myopic":
+        kwargs["multi_investment_periods"] = config["foresight"] == "myopic"
 
     kwargs["solver_options"] = solving["solver_options"][set_of_options] if set_of_options else {}
     kwargs["solver_name"] = solving["solver"]["name"]
@@ -1553,17 +1560,32 @@ if __name__ == "__main__":
         foresight=snakemake.params.foresight,
         planning_horizons=snakemake.params.planning_horizons,
     )
+    if config["foresight"] == "myopic":  # LF_edit
+        for (
+            horizon
+        ) in (
+            snakemake.params.planning_horizons
+        ):  # LF_edit #loop through the planning horizions, rather than running through them all
 
-    n = solve_network(
-        n,
-        config=snakemake.config,
-        solving=snakemake.params.solving,
-        opts=opts,
-        log_fn=snakemake.log.solver,
-    )
-    n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))
-    n.export_to_netcdf(snakemake.output[0])
-
+            n = solve_network(
+                n,
+                config=snakemake.config,
+                solving=snakemake.params.solving,
+                opts=opts,
+                log_fn=snakemake.log.solver,
+            )
+            n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))
+            n.export_to_netcdf(snakemake.output[0])
+    elif config["foresight"] == "perfect":  # LF_edit
+        n = solve_network(
+            n,
+            config=snakemake.config,
+            solving=snakemake.params.solving,
+            opts=opts,
+            log_fn=snakemake.log.solver,
+        )
+        n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))
+        n.export_to_netcdf(snakemake.output[0])
     with open(snakemake.output.config, "w") as file:
         yaml.dump(
             n.meta,
