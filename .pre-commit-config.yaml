@@ -18,7 +18,7 @@ repos:
     args: [--autofix, --indent, "2", --preserve-quotes]
 
 - repo: https://github.com/pycqa/isort
-  rev: 5.13.2
+  rev: 6.0.0
   hooks:
   - id: isort
     name: isort (python)
@@ -29,7 +29,7 @@ repos:
   - id: add-trailing-comma
 
 - repo: https://github.com/asottile/pyupgrade
-  rev: v3.19.0
+  rev: v3.19.1
   hooks:
   - id: pyupgrade
     args: [--py39-plus]
@@ -58,7 +58,7 @@ repos:
   - id: blackdoc
 
 - repo: https://github.com/psf/black-pre-commit-mirror
-  rev: 24.10.0
+  rev: 25.1.0
   hooks:
   - id: black
     language_version: python3.11
