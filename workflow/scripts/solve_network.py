@@ -1456,16 +1456,20 @@ def extra_functionality(n, snapshots):
 def solve_network(n, config, solving, opts="", **kwargs):
     set_of_options = solving["solver"]["options"]
     cf_solving = solving["options"]
-    foresight_opts = snakemake.params.scenario[
-        "foresight"
-    ]  # LF_edit #pulling from the foresight addition into the config file, similar formatting to solve_opts
-
+    foresight = (
+        snakemake.params.foresight
+    )  # LF_edit #pulling from the foresight addition into the config file, similar formatting to solve_opts
+    logger.info(
+        f"Pulling foresight option {foresight} from the scenario config file",
+    )  # logger statements to ensure expected outcomes
     if (
-        len(n.investment_periods) > 1 and foresight_opts == "perfect"
+        len(n.investment_periods) > 1 and foresight == "perfect"
     ):  # LF_edit #new myopic or perfect foresight addition, if statement to pick which
         kwargs["multi_investment_periods"] = config["foresight"] == "perfect"
-    elif len(n.investment_periods) > 1 and foresight_opts == "myopic":
+        logger.info(f"Using perfect foresight")  # logger statements to ensure expected outcomes
+    elif len(n.investment_periods) > 1 and foresight == "myopic":
         kwargs["multi_investment_periods"] = config["foresight"] == "myopic"
+        logger.info(f"Using myopic foresight")  # logger statements to ensure expected outcomes
 
     kwargs["solver_options"] = solving["solver_options"][set_of_options] if set_of_options else {}
     kwargs["solver_name"] = solving["solver"]["name"]
@@ -1560,7 +1564,7 @@ if __name__ == "__main__":
         foresight=snakemake.params.foresight,
         planning_horizons=snakemake.params.planning_horizons,
     )
-    if config["foresight"] == "myopic":  # LF_edit
+    if snakemake.params.foresight == "myopic":  # LF_edit
         for (
             horizon
         ) in (
@@ -1576,7 +1580,8 @@ if __name__ == "__main__":
             )
             n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))
             n.export_to_netcdf(snakemake.output[0])
-    elif config["foresight"] == "perfect":  # LF_edit
+            logger.info(f"Finished solving for {horizon}")  # LF_edit #logger statement to ensure expected outcomes
+    elif snakemake.params.foresight == "perfect":  # LF_edit
         n = solve_network(
             n,
             config=snakemake.config,
