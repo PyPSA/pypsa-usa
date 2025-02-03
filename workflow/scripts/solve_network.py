@@ -25,6 +25,7 @@ Additionally, some extra constraints specified in :mod:`solve_network` are added
 
 import logging
 import re
+from math import ceil, floor
 from typing import Any, Optional
 
 import numpy as np
@@ -59,7 +60,14 @@ def get_region_buses(n, region_list):
     ]
 
 
-def filter_components(n, component_type, planning_horizon, carrier_list, region_buses, extendable):
+def filter_components(
+    n: pypsa.Network,
+    component_type: str,
+    planning_horizon: str | int,
+    carrier_list: list[str],
+    region_buses: pd.Index,
+    extendable: bool,
+):
     """
     Filter components based on common criteria.
 
@@ -207,13 +215,13 @@ def add_technology_capacity_target_constraints(n, config):
     if tct_data.empty:
         return
 
-    for idx, target in tct_data.iterrows():
+    for _, target in tct_data.iterrows():
         planning_horizon = target.planning_horizon
         region_list = [region_.strip() for region_ in target.region.split(",")]
         carrier_list = [carrier_.strip() for carrier_ in target.carrier.split(",")]
         region_buses = get_region_buses(n, region_list)
 
-        lhs_gens = filter_components(
+        lhs_gens_ext = filter_components(
             n=n,
             component_type="Generator",
             planning_horizon=planning_horizon,
@@ -221,17 +229,16 @@ def add_technology_capacity_target_constraints(n, config):
             region_buses=region_buses.index,
             extendable=True,
         )
+        lhs_gens_existing = filter_components(
+            n=n,
+            component_type="Generator",
+            planning_horizon=planning_horizon,
+            carrier_list=carrier_list,
+            region_buses=region_buses.index,
+            extendable=False,
+        )
 
-        # rhs_g_non_extendable = filter_components(
-        #     n=n,
-        #     component_type="Generator",
-        #     planning_horizon=planning_horizon,
-        #     carrier_list=carrier_list,
-        #     region_buses=region_buses.index,
-        #     extendable=False,
-        # ).p_nom.sum()
-
-        lhs_storage = filter_components(
+        lhs_storage_ext = filter_components(
             n=n,
             component_type="StorageUnit",
             planning_horizon=planning_horizon,
@@ -239,32 +246,37 @@ def add_technology_capacity_target_constraints(n, config):
             region_buses=region_buses.index,
             extendable=True,
         )
+        lhs_storage_existing = filter_components(
+            n=n,
+            component_type="StorageUnit",
+            planning_horizon=planning_horizon,
+            carrier_list=carrier_list,
+            region_buses=region_buses.index,
+            extendable=False,
+        )
 
-        # rhs_s_non_extendable = filter_components(
-        #     n=n,
-        #     component_type="StorageUnit",
-        #     planning_horizon=planning_horizon,
-        #     carrier_list=carrier_list,
-        #     region_buses=region_buses.index,
-        #     extendable=False,
-        # ).p_nom.sum()
-
-        if region_buses.empty or (lhs_gens.empty and lhs_storage.empty):
+        if region_buses.empty or (lhs_gens_ext.empty and lhs_storage_ext.empty):
             continue
 
-        if not lhs_gens.empty:
-            grouper_g = pd.concat([lhs_gens.bus.map(n.buses.country), lhs_gens.carrier], axis=1).rename_axis(
+        if not lhs_gens_ext.empty:
+            grouper_g = pd.concat(
+                [lhs_gens_ext.bus.map(n.buses.country), lhs_gens_ext.carrier],
+                axis=1,
+            ).rename_axis(
                 "Generator-ext",
             )
-            lhs_g = p_nom.loc[lhs_gens.index].groupby(grouper_g).sum().rename(bus="country")
+            lhs_g = p_nom.loc[lhs_gens_ext.index].groupby(grouper_g).sum().rename(bus="country")
         else:
             lhs_g = None
 
-        if not lhs_storage.empty:
-            grouper_s = pd.concat([lhs_storage.bus.map(n.buses.country), lhs_storage.carrier], axis=1).rename_axis(
+        if not lhs_storage_ext.empty:
+            grouper_s = pd.concat(
+                [lhs_storage_ext.bus.map(n.buses.country), lhs_storage_ext.carrier],
+                axis=1,
+            ).rename_axis(
                 "StorageUnit-ext",
             )
-            lhs_s = n.model["StorageUnit-p_nom"].loc[lhs_storage.index].groupby(grouper_s).sum()
+            lhs_s = n.model["StorageUnit-p_nom"].loc[lhs_storage_ext.index].groupby(grouper_s).sum()
         else:
             lhs_s = None
 
@@ -277,56 +289,52 @@ def add_technology_capacity_target_constraints(n, config):
         else:
             lhs = (lhs_g + lhs_s).sum()
 
-        lhs_extendable = lhs_gens.p_nom.sum() + lhs_storage.p_nom.sum()
-        # rhs_non_extendable = rhs_g_non_extendable + rhs_s_non_extendable
+        lhs_existing = lhs_gens_existing.p_nom.sum() + lhs_storage_existing.p_nom.sum()
 
         if target["max"] == "existing":
-            target["max"] = lhs_extendable
+            target["max"] = ceil(lhs_existing)
         else:
             target["max"] = float(target["max"])
 
         if target["min"] == "existing":
-            target["min"] = lhs_extendable
+            target["min"] = floor(lhs_existing)
         else:
             target["min"] = float(target["min"])
 
         if not np.isnan(target["min"]):
 
+            rhs = target["min"] - floor(lhs_existing)
+
             n.model.add_constraints(
-                lhs >= (target["min"]),
-                name=f"GlobalConstraint-{target.name}_{target.planning_horizon}_min",
+                lhs >= rhs,
+                name=f"{target.name}_{target.planning_horizon}_min",
             )
+
             logger.info(
                 "Adding TCT Constraint:\n"
-                "Name: %s\n"
-                "Planning Horizon: %s\n"
-                "Region: %s\n"
-                "Carrier: %s\n"
-                "Min Value: %s",
-                target.name,
-                target.planning_horizon,
-                target.region,
-                target.carrier,
-                (target["min"]),
+                f"Name: {target.name}\n"
+                f"Planning Horizon: {target.planning_horizon}\n"
+                f"Region: {target.region}\n"
+                f"Carrier: {target.carrier}\n"
+                f"Min Value: {target['min']}",
             )
 
         if not np.isnan(target["max"]):
+
+            rhs = target["max"] - floor(lhs_existing)
+
             n.model.add_constraints(
-                lhs <= (target["max"]),
-                name=f"GlobalConstraint-{target.name}_{target.planning_horizon}_max",
+                lhs <= rhs,
+                name=f"{target.name}_{target.planning_horizon}_max",
             )
+
             logger.info(
                 "Adding TCT Constraint:\n"
-                "Name: %s\n"
-                "Planning Horizon: %s\n"
-                "Region: %s\n"
-                "Carrier: %s\n"
-                "Max Value: %s",
-                target.name,
-                target.planning_horizon,
-                target.region,
-                target.carrier,
-                (target["max"]),
+                f"Name: {target.name}\n"
+                f"Planning Horizon: {target.planning_horizon}\n"
+                f"Region: {target.region}\n"
+                f"Carrier: {target.carrier}\n"
+                f"Max Value: {target['max']}",
             )
 
 
@@ -1546,17 +1554,15 @@ if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
 
-        print("")
-
         snakemake = mock_snakemake(
             "solve_network",
             interconnect="western",
             simpl="70",
             clusters="4m",
             ll="v1.0",
-            opts="3h-TCT",
+            opts="1h-TCT",
             sector="E-G",
-            planning_horizons="2019",
+            planning_horizons="2030",
         )
     configure_logging(snakemake)
     update_config_from_wildcards(snakemake.config, snakemake.wildcards)
