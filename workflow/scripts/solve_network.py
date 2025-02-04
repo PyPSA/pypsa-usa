@@ -1404,6 +1404,21 @@ def add_demand_response_constraints(n, config):
             raise ValueError(shift)
 
 
+# def add_myopic_build(n, config):
+#     """
+#     Adds initial p_nom, constraining it to the p_nom_opt from the previous planning horizon
+
+#     Parameters
+#     ----------
+#         n : pypsa.Network
+#         config : dict
+#     """
+
+#     if snakemake.params.foresight == "myopic": # LF_edit based on add_brownfield.py in pypsa-eur
+#         logger.info(f"testing myopic")
+#         for i, period in enumerate(n.investment_periods):
+
+
 def extra_functionality(n, snapshots):
     """
     Collects supplementary constraints which will be passed to
@@ -1490,6 +1505,13 @@ def solve_network(n, config, solving, opts="", **kwargs):
     # add to network for extra_functionality
     n.config = config
     n.opts = opts
+    # breakpoint()
+    # for i, planning_horizon in enumerate(n.investment_periods):
+    # planning_horizons = snakemake.params.planning_horizons
+    planning_horizon = 2030
+    sns_horizon = n.snapshots[n.snapshots.get_level_values(0) == planning_horizon]
+    # add sns_horizon to kwargs
+    kwargs["snapshots"] = sns_horizon
 
     if rolling_horizon:
         kwargs["horizon"] = cf_solving.get("horizon", 365)
@@ -1513,6 +1535,26 @@ def solve_network(n, config, solving, opts="", **kwargs):
     if "infeasible" in condition:
         # n.model.print_infeasibilities()
         raise RuntimeError("Solving status 'infeasible'")
+    # i = 1
+    if foresight == "myopic":  # LF_edit
+        # if i == 0:
+        #     continue
+        logger.info(f"Preparing brownfield for {planning_horizon}")
+        for c in n.iterate_components(["Generator", "StorageUnit", "Link"]):
+            logger.info(f"Preparing brownfield for the component {c.name}")
+            attr = "e" if c.name == "Store" else "p"
+            # remove anything that has a build year + lifetime that is less than the current period ## UNCLEAR IF NEEDED< MAY ALREADY DO THIS AUTOMATICALLY
+            # for c_idx in c.df.index[c.df.build_year + c.df.lifetime <= period]:
+            #     n.remove(c.name, c_idx)
+            # copy over asset sizing from previous period
+            # breakpoint()
+            c.df[f"{attr}_nom"] = c.df[f"{attr}_nom_opt"]
+            c.df[f"{attr}_nom_extendable"] = False
+            for c_idx in c.df.index:  # [c.df.build_year + c.df.lifetime <= planning_horizon]:
+                n.add(c.name, c_idx, **c.df[c_idx])
+            logger.info(n.consistency_check())
+            print("after change", n.global_constraints)
+            # break
 
     return n
 
@@ -1564,33 +1606,16 @@ if __name__ == "__main__":
         foresight=snakemake.params.foresight,
         planning_horizons=snakemake.params.planning_horizons,
     )
-    if snakemake.params.foresight == "myopic":  # LF_edit
-        for (
-            horizon
-        ) in (
-            snakemake.params.planning_horizons
-        ):  # LF_edit #loop through the planning horizions, rather than running through them all
 
-            n = solve_network(
-                n,
-                config=snakemake.config,
-                solving=snakemake.params.solving,
-                opts=opts,
-                log_fn=snakemake.log.solver,
-            )
-            n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))
-            n.export_to_netcdf(snakemake.output[0])
-            logger.info(f"Finished solving for {horizon}")  # LF_edit #logger statement to ensure expected outcomes
-    elif snakemake.params.foresight == "perfect":  # LF_edit
-        n = solve_network(
-            n,
-            config=snakemake.config,
-            solving=snakemake.params.solving,
-            opts=opts,
-            log_fn=snakemake.log.solver,
-        )
-        n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))
-        n.export_to_netcdf(snakemake.output[0])
+    n = solve_network(
+        n,
+        config=snakemake.config,
+        solving=snakemake.params.solving,
+        opts=opts,
+        log_fn=snakemake.log.solver,
+    )
+    n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))
+    n.export_to_netcdf(snakemake.output[0])
     with open(snakemake.output.config, "w") as file:
         yaml.dump(
             n.meta,
