@@ -25,7 +25,6 @@ Additionally, some extra constraints specified in :mod:`solve_network` are added
 
 import logging
 import re
-from math import ceil, floor
 from typing import Any, Optional
 
 import numpy as np
@@ -290,18 +289,18 @@ def add_technology_capacity_target_constraints(n, config):
         lhs_existing = lhs_gens_existing.p_nom.sum() + lhs_storage_existing.p_nom.sum()
 
         if target["max"] == "existing":
-            target["max"] = ceil(lhs_existing)
+            target["max"] = round(lhs_existing, 2) + 0.01
         else:
             target["max"] = float(target["max"])
 
         if target["min"] == "existing":
-            target["min"] = floor(lhs_existing)
+            target["min"] = round(lhs_existing, 2) - 0.01
         else:
             target["min"] = float(target["min"])
 
         if not np.isnan(target["min"]):
 
-            rhs = target["min"] - floor(lhs_existing)
+            rhs = target["min"] - round(lhs_existing, 2)
 
             n.model.add_constraints(
                 lhs >= rhs,
@@ -319,7 +318,11 @@ def add_technology_capacity_target_constraints(n, config):
 
         if not np.isnan(target["max"]):
 
-            rhs = target["max"] - floor(lhs_existing)
+            assert (
+                target["max"] >= lhs_existing
+            ), f"{target['max']} for {target['carrier']} must be at least {lhs_existing}"
+
+            rhs = target["max"] - round(lhs_existing, 2)
 
             n.model.add_constraints(
                 lhs <= rhs,
