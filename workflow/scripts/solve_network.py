@@ -313,14 +313,15 @@ def add_technology_capacity_target_constraints(n, config):
                 f"Planning Horizon: {target.planning_horizon}\n"
                 f"Region: {target.region}\n"
                 f"Carrier: {target.carrier}\n"
-                f"Min Value: {target['min']}",
+                f"Min Value: {target['min']}\n",
+                f"Min Value Adj: {rhs}",
             )
 
         if not np.isnan(target["max"]):
 
             assert (
                 target["max"] >= lhs_existing
-            ), f"{target['max']} for {target['carrier']} must be at least {lhs_existing}"
+            ), f"TCT constraint of {target['max']} MW for {target['carrier']} must be at least {lhs_existing}"
 
             rhs = target["max"] - round(lhs_existing, 2)
 
@@ -335,7 +336,8 @@ def add_technology_capacity_target_constraints(n, config):
                 f"Planning Horizon: {target.planning_horizon}\n"
                 f"Region: {target.region}\n"
                 f"Carrier: {target.carrier}\n"
-                f"Max Value: {target['max']}",
+                f"Max Value: {target['max']}\n",
+                f"Max Value Adj: {rhs}",
             )
 
 
