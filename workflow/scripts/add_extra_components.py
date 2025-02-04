@@ -693,7 +693,7 @@ def add_demand_response(
         suffix="-fwd-dr-charger",
         bus0=df.index,
         bus1=df.index + "-fwd-dr",
-        carrier=df.carrier,
+        carrier="demand_response",
         p_nom_extendable=False,
         p_nom=np.inf,
     )
@@ -704,7 +704,7 @@ def add_demand_response(
         suffix="-fwd-dr-discharger",
         bus0=df.index + "-fwd-dr",
         bus1=df.index,
-        carrier=df.carrier,
+        carrier="demand_response",
         p_nom_extendable=False,
         p_nom=np.inf,
     )
@@ -715,7 +715,7 @@ def add_demand_response(
         suffix="-bck-dr-charger",
         bus0=df.index,
         bus1=df.index + "-bck-dr",
-        carrier=df.carrier,
+        carrier="demand_response",
         p_nom_extendable=False,
         p_nom=np.inf,
     )
@@ -726,7 +726,7 @@ def add_demand_response(
         suffix="-bck-dr-discharger",
         bus0=df.index + "-bck-dr",
         bus1=df.index,
-        carrier=df.carrier,
+        carrier="demand_response",
         p_nom_extendable=False,
         p_nom=np.inf,
     )
@@ -744,7 +744,7 @@ def add_demand_response(
         e_nom=np.inf,
         e_min_pu=0,
         e_max_pu=1,
-        carrier=df.carrier,
+        carrier="demand_response",
         marginal_cost_storage=marginal_cost_storage,
     )
 
@@ -758,7 +758,7 @@ def add_demand_response(
         e_nom=np.inf,
         e_min_pu=-1,
         e_max_pu=0,
-        carrier=df.carrier,
+        carrier="demand_response",
         marginal_cost_storage=marginal_cost_storage * (-1),
     )
 

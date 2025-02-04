@@ -222,13 +222,17 @@ def create_optimized_by_carrier(n, order, region_buses=None):
         # Pos = exports from region 0
         # Neg = imports to region 0
         interface_lines_b0 = n.lines[(n.lines.bus0.isin(region_buses) & ~n.lines.bus1.isin(region_buses))]
-        interface_links_b0 = n.links[(n.links.bus0.isin(region_buses) & ~n.links.bus1.isin(region_buses))]
+        interface_links_b0 = n.links[
+            (n.links.bus0.isin(region_buses) & ~n.links.bus1.isin(region_buses)) & n.links.carrier == "AC"
+        ]
 
         # bus1 branch flow (pos if branch is withdrawing from region 1)
         # Pos = imports to region 0
         # Neg = exports from region 0
         interface_lines_b1 = n.lines[(n.lines.bus1.isin(region_buses) & ~n.lines.bus0.isin(region_buses))]
-        interface_links_b1 = n.links[(n.links.bus1.isin(region_buses) & ~n.links.bus0.isin(region_buses))]
+        interface_links_b1 = n.links[
+            (n.links.bus1.isin(region_buses) & ~n.links.bus0.isin(region_buses)) & n.links.carrier == "AC"
+        ]
 
         # imports positive, exports negative
         flows = n.lines_t.p1.loc[:, interface_lines_b0.index].sum(axis=1)
@@ -436,12 +440,13 @@ def plot_load_shedding_map(
     interconnect = wildcards.get("interconnect", None)
     bus_scale = get_bus_scale(interconnect) if interconnect else 1
     line_scale = get_line_scale(interconnect) if interconnect else 1
+    link_values = n.links[n.links.carrier == "AC"].p_nom.replace(to_replace={pd.NA: 0})
 
     fig, _ = plot_capacity_map(
         n=n,
         bus_values=bus_values,
         line_values=line_values,
-        link_values=n.links.p_nom.replace(to_replace={pd.NA: 0}),
+        link_values=link_values,
         regions=regions,
         line_scale=line_scale,
         bus_scale=bus_scale,
@@ -470,12 +475,14 @@ def plot_line_loading_map(
     link_loading = n.links_t.p0.abs().mean() / n.links.p_nom / n.links.p_max_pu * 100
     norm = plt.Normalize(vmin=0, vmax=100)
 
+    link_values = n.links[n.links.carrier == "AC"].p_nom.replace(to_replace={pd.NA: 0})
+
     n.carriers.loc["AC_exp", "color"] = "#dd2e23"
     fig, _ = plot_capacity_map(
         n=n,
         bus_values=gen / 5e3,
         line_values=line_values,
-        link_values=n.links.p_nom.replace(to_replace={pd.NA: 0}),
+        link_values=link_values,
         regions=regions,
         flow="mean",
         line_scale=line_scale,

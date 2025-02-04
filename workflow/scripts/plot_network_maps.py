@@ -311,7 +311,7 @@ def plot_demand_map(
 
     bus_values = get_demand_base(n).mul(1e-3)
     line_values = n.lines.s_nom
-    link_values = n.links.p_nom.replace(to_replace={pd.NA: 0})
+    link_values = n.links[n.links.carrier == "AC"].p_nom.replace(to_replace={pd.NA: 0})
 
     # plot data
     title = create_title("Network Demand", **wildcards)
@@ -399,7 +399,7 @@ def plot_base_capacity_map(
     bus_values = remove_sector_buses(bus_values).groupby(by=["bus", "carrier"]).sum()
 
     line_values = n.lines.s_nom
-    # link_values = n.links.p_nom.replace(0, None)
+    link_values = n.links[n.links.carrier == "AC"].p_nom.replace(to_replace={pd.NA: 0})
 
     # plot data
 
@@ -412,7 +412,7 @@ def plot_base_capacity_map(
         n=n,
         bus_values=bus_values,
         line_values=line_values,
-        link_values=n.links.p_nom.replace(to_replace={pd.NA: 0}),
+        link_values=link_values,
         regions=regions,
         line_scale=line_scale,
         bus_scale=bus_scale,
@@ -441,6 +441,9 @@ def plot_opt_capacity_map(
     bus_values = bus_values[bus_values.index.get_level_values("carrier").isin(carriers)]
     bus_values = remove_sector_buses(bus_values).reset_index().groupby(by=["bus", "carrier"]).sum().squeeze()
     line_values = n.lines.s_nom_opt
+    link_values = n.links[n.links.carrier == "AC"].p_nom_opt.replace(
+        to_replace={pd.NA: 0},
+    )
 
     # plot data
     title = create_title("Optimal Network Capacities", **wildcards)
@@ -452,7 +455,7 @@ def plot_opt_capacity_map(
         n=n,
         bus_values=bus_values,
         line_values=line_values,
-        link_values=n.links.p_nom_opt.replace(to_replace={pd.NA: 0}),
+        link_values=link_values,
         regions=regions,
         line_scale=line_scale,
         bus_scale=bus_scale,
@@ -488,8 +491,8 @@ def plot_new_capacity_map(
     line_snom_opt = n.lines.s_nom_opt
     line_values = line_snom_opt - line_snom
 
-    link_pnom = n.links.p_nom
-    link_pnom_opt = n.links.p_nom_opt
+    link_pnom = n.links[n.links.carrier == "AC"].p_nom
+    link_pnom_opt = n.links[n.links.carrier == "AC"].p_nom_opt
     link_values = link_pnom_opt - link_pnom
 
     # plot data
@@ -611,10 +614,11 @@ if __name__ == "__main__":
 
         snakemake = mock_snakemake(
             "plot_network_maps",
-            interconnect="texas",
-            clusters=7,
-            ll="v1.00",
-            opts="REM-400SEG",
+            interconnect="western",
+            clusters="4m",
+            simpl="70",
+            ll="v1.0",
+            opts="1h-TCT",
             sector="E",
         )
     configure_logging(snakemake)
