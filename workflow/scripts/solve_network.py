@@ -1548,8 +1548,10 @@ def solve_network(n, config, solving, opts="", **kwargs):
 
             for c in n.iterate_components(["Generator", "StorageUnit", "Link"]):
                 nm = c.name
-                c_lim = c.df.loc[c.df["build_year"] == planning_horizon]
+                # limit our components that we remove/modify to those prior to this time horizon
+                c_lim = c.df.loc[c.df["build_year"] < planning_horizon]
                 logger.info(f"Preparing brownfield for the component {nm}")
+                # attribute selection for naming convention
                 attr = "e" if nm == "Store" else "p"
                 # copy over asset sizing from previous period
                 c_lim[f"{attr}_nom"] = c_lim[f"{attr}_nom_opt"]
@@ -1557,7 +1559,6 @@ def solve_network(n, config, solving, opts="", **kwargs):
                 df = c_lim.copy()
                 print(n.generators.p_nom_opt - n.generators.p_nom)
 
-                # breakpoint()
                 for c_idx in c_lim.index:  # [c.df.build_year + c.df.lifetime <= planning_horizon]:
                     n.remove(nm, c_idx)  ####NEED TO LIMIT THE C TO THOSE IN THE TIME FRAME#######
                 n.import_components_from_dataframe(df, nm)
