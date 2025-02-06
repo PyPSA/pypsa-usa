@@ -633,6 +633,8 @@ def add_demand_response(
 ) -> None:
     """Add price based demand response to network."""
 
+    n.add("Carrier", "demand_response", color="#dd2e23", nice_name="Demand Response")
+
     shift = dr_config.get("shift", 0)
     if shift == 0:
         logger.info(f"DR not applied as allowable sift is {shift}")
