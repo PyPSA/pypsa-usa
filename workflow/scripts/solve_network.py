@@ -615,8 +615,10 @@ def add_regional_co2limit(n, sns, config):
         config["electricity"]["regional_Co2_limits"],
         index_col=[0],
     )
+
     logger.info("Adding regional Co2 Limits.")
-    regional_co2_lims = regional_co2_lims[regional_co2_lims.planning_horizon.isin(snakemake.params.planning_horizons)]
+    # Filter the regional_co2_lims DataFrame based on the planning horizons present in the snapshots
+    regional_co2_lims = regional_co2_lims[regional_co2_lims.planning_horizon.isin(sns.get_level_values(0))]
     weightings = n.snapshot_weightings.loc[n.snapshots]
 
     for idx, emmission_lim in regional_co2_lims.iterrows():
@@ -1505,56 +1507,70 @@ def solve_network(n, config, solving, opts="", **kwargs):
     # add to network for extra_functionality
     n.config = config
     n.opts = opts
-    # breakpoint()
-    # for i, planning_horizon in enumerate(n.investment_periods):
-    # planning_horizons = snakemake.params.planning_horizons
-    planning_horizon = 2030
-    sns_horizon = n.snapshots[n.snapshots.get_level_values(0) == planning_horizon]
-    # add sns_horizon to kwargs
-    kwargs["snapshots"] = sns_horizon
 
-    if rolling_horizon:
-        kwargs["horizon"] = cf_solving.get("horizon", 365)
-        kwargs["overlap"] = cf_solving.get("overlap", 0)
-        n.optimize.optimize_with_rolling_horizon(**kwargs)
-        status, condition = "", ""
-    elif skip_iterations:
-        status, condition = n.optimize(**kwargs)
-    else:
-        kwargs["track_iterations"] = (cf_solving.get("track_iterations", False),)
-        kwargs["min_iterations"] = (cf_solving.get("min_iterations", 4),)
-        kwargs["max_iterations"] = (cf_solving.get("max_iterations", 6),)
-        status, condition = n.optimize.optimize_transmission_expansion_iteratively(
-            **kwargs,
-        )
+    for i, planning_horizon in enumerate(n.investment_periods):
+        # planning_horizons = snakemake.params.planning_horizons
+        sns_horizon = n.snapshots[n.snapshots.get_level_values(0) == planning_horizon]
+        # add sns_horizon to kwargs
+        kwargs["snapshots"] = sns_horizon
 
-    if status != "ok" and not rolling_horizon:
-        logger.warning(
-            f"Solving status '{status}' with termination condition '{condition}'",
-        )
-    if "infeasible" in condition:
-        # n.model.print_infeasibilities()
-        raise RuntimeError("Solving status 'infeasible'")
-    # i = 1
-    if foresight == "myopic":  # LF_edit
-        # if i == 0:
-        #     continue
-        logger.info(f"Preparing brownfield for {planning_horizon}")
-        for c in n.iterate_components(["Generator", "StorageUnit", "Link"]):
-            logger.info(f"Preparing brownfield for the component {c.name}")
-            attr = "e" if c.name == "Store" else "p"
-            # remove anything that has a build year + lifetime that is less than the current period ## UNCLEAR IF NEEDED< MAY ALREADY DO THIS AUTOMATICALLY
-            # for c_idx in c.df.index[c.df.build_year + c.df.lifetime <= period]:
-            #     n.remove(c.name, c_idx)
-            # copy over asset sizing from previous period
-            # breakpoint()
-            c.df[f"{attr}_nom"] = c.df[f"{attr}_nom_opt"]
-            c.df[f"{attr}_nom_extendable"] = False
-            for c_idx in c.df.index:  # [c.df.build_year + c.df.lifetime <= planning_horizon]:
-                n.add(c.name, c_idx, **c.df[c_idx])
-            logger.info(n.consistency_check())
-            print("after change", n.global_constraints)
-            # break
+        # electric transmission grid set optimised capacities of previous as minimum
+        n.lines.s_nom_min = n.lines.s_nom_opt
+        dc_i = n.links[n.links.carrier == "DC"].index
+        n.links.loc[dc_i, "p_nom_min"] = n.links.loc[dc_i, "p_nom_opt"]
+
+        if rolling_horizon:
+            kwargs["horizon"] = cf_solving.get("horizon", 365)
+            kwargs["overlap"] = cf_solving.get("overlap", 0)
+            n.optimize.optimize_with_rolling_horizon(**kwargs)
+            status, condition = "", ""
+        elif skip_iterations:
+            status, condition = n.optimize(**kwargs)
+        else:
+            kwargs["track_iterations"] = (cf_solving.get("track_iterations", False),)
+            kwargs["min_iterations"] = (cf_solving.get("min_iterations", 4),)
+            kwargs["max_iterations"] = (cf_solving.get("max_iterations", 6),)
+            status, condition = n.optimize.optimize_transmission_expansion_iteratively(
+                **kwargs,
+            )
+
+        if status != "ok" and not rolling_horizon:
+            logger.warning(
+                f"Solving status '{status}' with termination condition '{condition}'",
+            )
+        if "infeasible" in condition:
+            # n.model.print_infeasibilities()
+            raise RuntimeError("Solving status 'infeasible'")
+        if foresight == "myopic":  # LF_edit
+            if i == 0:
+                continue
+            logger.info(f"Preparing brownfield for {planning_horizon}")
+
+            for c in n.iterate_components(["Generator", "StorageUnit", "Link"]):
+                nm = c.name
+                c_lim = c.df.loc[c.df["build_year"] == planning_horizon]
+                logger.info(f"Preparing brownfield for the component {nm}")
+                attr = "e" if nm == "Store" else "p"
+                # copy over asset sizing from previous period
+                c_lim[f"{attr}_nom"] = c_lim[f"{attr}_nom_opt"]
+                c_lim[f"{attr}_nom_extendable"] = False
+                df = c_lim.copy()
+                print(n.generators.p_nom_opt - n.generators.p_nom)
+
+                # breakpoint()
+                for c_idx in c_lim.index:  # [c.df.build_year + c.df.lifetime <= planning_horizon]:
+                    n.remove(nm, c_idx)  ####NEED TO LIMIT THE C TO THOSE IN THE TIME FRAME#######
+                n.import_components_from_dataframe(df, nm)
+                logger.info(n.consistency_check())
+
+                # copy time-dependent
+                selection = n.component_attrs[nm].type.str.contains(
+                    "series",
+                ) & n.component_attrs[
+                    nm
+                ].status.str.contains("Input")
+                for tattr in n.component_attrs[nm].index[selection]:
+                    n.import_series_from_dataframe(c.pnl[tattr], nm, tattr)
 
     return n
 
