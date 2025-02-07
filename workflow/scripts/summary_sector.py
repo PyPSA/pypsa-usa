@@ -752,11 +752,16 @@ def get_storage_level_timeseries_carrier(
     state: Optional[str] = None,
     resample: Optional[str] = None,
     resample_fn: Optional[callable] = None,
+    make_positive: Optional[bool] = False,
     **kwargs,
 ) -> pd.DataFrame:
 
     df = get_storage_level_timeseries(n, sector, remove_sns_weights, state)
     df = df.rename(columns=n.stores.carrier)
+
+    if make_positive:
+        df = df.abs()
+
     df = df.T.groupby(level=0).sum().T
 
     if not (resample or resample_fn):
