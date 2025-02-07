@@ -906,7 +906,7 @@ def add_battery_constraints(n):
     n.model.add_constraints(lhs == 0, name="Link-charger_ratio")
 
 
-def add_demand_response_constraint(n, config):
+def add_demand_response_constraint(n, config, sector_study):
     """Add demand response capacity constraint."""
 
     def add_capacity_constraint(
@@ -931,10 +931,10 @@ def add_demand_response_constraint(n, config):
 
         # force rhs to be same order as lhs
         # idk why but coordinates were not aligning and this gets around that
-        bus_order = [lhs.vars.bus1.data]
-        rhs = rhs[bus_order]
+        bus_order = lhs.vars.bus1.data
+        rhs = rhs[bus_order.tolist()]
 
-        n.model.add_constraints(lhs <= rhs, name="demand_response_capacity")
+        n.model.add_constraints(lhs <= rhs.T, name="demand_response_capacity")
 
     def add_sector_capacity_constraint(
         n: pypsa.Network,
@@ -948,25 +948,29 @@ def add_demand_response_constraint(n, config):
             logger.info("No demand response links identified.")
             return
 
-        deferrable_links = dr_links[dr_links.index.str.endswith("-discharger")]
-        deferrable_loads = n.loads[n.loads.bus.isin(deferrable_links.bus1)]
+        inflow_links = dr_links[dr_links.index.str.endswith("-discharger")]
+        inflow = n.model["Link-p"].loc[:, inflow_links.index].groupby(inflow_links.bus1).sum()
+        inflow = inflow.rename({"bus1": "Bus"})  # align coordinate names
 
-        lhs = n.model["Link-p"].loc[:, deferrable_links.index].groupby(deferrable_links.bus1).sum()
-        rhs = n.loads_t["p_set"][deferrable_loads.index].mul(shift).round(2)
-        rhs.columns.name = "bus1"
+        outflow_links = n.links[n.links.bus0.isin(inflow_links.bus1) & ~n.links.carrier.str.endswith("-dr")]
+        outflow = n.model["Link-p"].loc[:, outflow_links.index].groupby(outflow_links.bus0).sum()
+        outflow = outflow.rename({"bus0": "Bus"})  # align coordinate names
 
-        # force rhs to be same order as lhs
-        # idk why but coordinates were not aligning and this gets around that
-        bus_order = [lhs.vars.bus1.data]
-        rhs = rhs[bus_order]
+        lhs = outflow.mul(shift) - inflow
+        rhs = 0
 
-        n.model.add_constraints(lhs <= rhs, name="demand_response_capacity")
+        n.model.add_constraints(
+            lhs >= rhs,
+            name="demand_response_capacity",
+        )
 
     dr_config = config["electricity"].get("demand_response", {})
 
     shift = dr_config.get("shift", 0)
 
-    if "sector" in config:
+    # seperate, as the electrical constraint can directly apply to the load,
+    # while the sector constraint has to apply to the power flows out of the bus
+    if sector_study:
         fn = add_sector_capacity_constraint
     else:
         fn = add_capacity_constraint
@@ -1402,7 +1406,7 @@ def add_water_heater_constraints(n, config):
 
 def add_sector_demand_response_constraints(n, config):
     """
-    Add demand response equations for sector coupling.
+    Add demand response equations for sector coupling at a sector level.
 
     These constraints are applied at the sector/carrier level. They are
     fundamentally the same as the power sector constraints, tho.
@@ -1543,8 +1547,8 @@ def extra_functionality(n, snapshots):
         add_SAFE_constraints(n, config)
     if "SAFER" in opts and n.generators.p_nom_extendable.any():
         add_SAFER_constraints(n, config)
-    # if "TCT" in opts and n.generators.p_nom_extendable.any():
-    #     add_technology_capacity_target_constraints(n, config)
+    if "TCT" in opts and n.generators.p_nom_extendable.any():
+        add_technology_capacity_target_constraints(n, config)
     reserve = config["electricity"].get("operational_reserve", {})
     if reserve.get("activate"):
         add_operational_reserve_margin(n, snapshots, config)
@@ -1553,7 +1557,8 @@ def extra_functionality(n, snapshots):
         add_interface_limits(n, snapshots, config)
     dr_config = config["electricity"].get("demand_response", {})
     if dr_config:
-        add_demand_response_constraint(n, config)
+        sector = True if "sector" in opts else False
+        add_demand_response_constraint(n, config, sector)
     if "sector" in opts:
         add_cooling_heat_pump_constraints(n, config)
         if not config["sector"]["service_sector"].get("split_urban_rural", False):
