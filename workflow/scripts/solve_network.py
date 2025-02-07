@@ -906,6 +906,87 @@ def add_battery_constraints(n):
     n.model.add_constraints(lhs == 0, name="Link-charger_ratio")
 
 
+def add_demand_response_constraint(n, config):
+    """Add demand response capacity constraint."""
+
+    def add_capacity_constraint(
+        n: pypsa.Network,
+        shift: float,  # per_unit
+    ):
+        """Add limit on deferable load. No need for snapshot weights."""
+
+        dr_links = n.links[n.links.carrier == "demand_response"].copy()
+
+        if dr_links.empty:
+            logger.info("No demand response links identified.")
+            return
+
+        deferrable_links = dr_links[dr_links.index.str.endswith("-discharger")]
+        deferrable_loads = n.loads[n.loads.bus.isin(deferrable_links.bus1)]
+
+        lhs = n.model["Link-p"].loc[:, deferrable_links.index].groupby(deferrable_links.bus1).sum()
+        rhs = n.loads_t["p_set"][deferrable_loads.index].mul(shift).round(2)
+        rhs.columns.name = "bus1"
+        rhs = rhs.rename(columns={x: x.strip(" AC") for x in rhs})
+
+        # force rhs to be same order as lhs
+        # idk why but coordinates were not aligning and this gets around that
+        bus_order = [lhs.vars.bus1.data]
+        rhs = rhs[bus_order]
+
+        n.model.add_constraints(lhs <= rhs, name="demand_response_capacity")
+
+    def add_sector_capacity_constraint(
+        n: pypsa.Network,
+        shift: float,  # per_unit
+    ):
+        """Add limit on deferable load. No need for snapshot weights."""
+
+        dr_links = n.links[n.links.carrier == "demand_response"].copy()
+
+        if dr_links.empty:
+            logger.info("No demand response links identified.")
+            return
+
+        deferrable_links = dr_links[dr_links.index.str.endswith("-discharger")]
+        deferrable_loads = n.loads[n.loads.bus.isin(deferrable_links.bus1)]
+
+        lhs = n.model["Link-p"].loc[:, deferrable_links.index].groupby(deferrable_links.bus1).sum()
+        rhs = n.loads_t["p_set"][deferrable_loads.index].mul(shift).round(2)
+        rhs.columns.name = "bus1"
+
+        # force rhs to be same order as lhs
+        # idk why but coordinates were not aligning and this gets around that
+        bus_order = [lhs.vars.bus1.data]
+        rhs = rhs[bus_order]
+
+        n.model.add_constraints(lhs <= rhs, name="demand_response_capacity")
+
+    dr_config = config["electricity"].get("demand_response", {})
+
+    shift = dr_config.get("shift", 0)
+
+    if "sector" in config:
+        fn = add_sector_capacity_constraint
+    else:
+        fn = add_capacity_constraint
+
+    if isinstance(shift, str):
+        if shift == "inf":
+            pass
+        else:
+            logger.error(f"Unknown arguement of {shift} for DR")
+            raise ValueError(shift)
+    elif isinstance(shift, int | float):
+        if shift < 0.001:
+            logger.info("Demand response not enabled")
+        else:
+            fn(n, shift)
+    else:
+        logger.error(f"Unknown arguement of {shift} for DR")
+        raise ValueError(shift)
+
+
 def add_sector_co2_constraints(n, config):
     """
     Adds sector co2 constraints.
@@ -1319,11 +1400,12 @@ def add_water_heater_constraints(n, config):
         n.model.add_constraints(lhs >= rhs, name=f"water_heater-{period}")
 
 
-def add_demand_response_constraints(n, config):
+def add_sector_demand_response_constraints(n, config):
     """
-    Adds demand response equations
+    Add demand response equations for sector coupling.
 
-    Applies the p_nom_max here, as easier to iterate over different configs
+    These constraints are applied at the sector/carrier level. They are
+    fundamentally the same as the power sector constraints, tho.
     """
 
     def add_capacity_constraint(
@@ -1461,14 +1543,17 @@ def extra_functionality(n, snapshots):
         add_SAFE_constraints(n, config)
     if "SAFER" in opts and n.generators.p_nom_extendable.any():
         add_SAFER_constraints(n, config)
-    if "TCT" in opts and n.generators.p_nom_extendable.any():
-        add_technology_capacity_target_constraints(n, config)
+    # if "TCT" in opts and n.generators.p_nom_extendable.any():
+    #     add_technology_capacity_target_constraints(n, config)
     reserve = config["electricity"].get("operational_reserve", {})
     if reserve.get("activate"):
         add_operational_reserve_margin(n, snapshots, config)
     interface_limits = config["lines"].get("interface_transmission_limits", {})
     if interface_limits:
         add_interface_limits(n, snapshots, config)
+    dr_config = config["electricity"].get("demand_response", {})
+    if dr_config:
+        add_demand_response_constraint(n, config)
     if "sector" in opts:
         add_cooling_heat_pump_constraints(n, config)
         if not config["sector"]["service_sector"].get("split_urban_rural", False):
@@ -1480,7 +1565,7 @@ def extra_functionality(n, snapshots):
         water_config = config["sector"]["service_sector"].get("water_heating", {})
         if not water_config.get("simple_storage", True):
             add_water_heater_constraints(n, config)
-        add_demand_response_constraints(n, config)
+        add_sector_demand_response_constraints(n, config)
 
     for o in opts:
         if "EQ" in o:
@@ -1554,9 +1639,9 @@ if __name__ == "__main__":
             simpl="70",
             clusters="4m",
             ll="v1.0",
-            opts="3h-TCT",
-            sector="E-G",
-            planning_horizons="2019",
+            opts="1h-TCT",
+            sector="E",
+            planning_horizons="2030",
         )
     configure_logging(snakemake)
     update_config_from_wildcards(snakemake.config, snakemake.wildcards)
