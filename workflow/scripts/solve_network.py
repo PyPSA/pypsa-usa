@@ -193,7 +193,10 @@ def add_technology_capacity_target_constraints(n, config):
     """
     Add Technology Capacity Target (TCT) constraint to the network.
 
-    Add minimum or maximum levels of generator nominal capacity per carrier for individual regions. Each constraint can be designated for a specified planning horizon in multi-period models. Opts and path for technology_capacity_targets.csv must be defined in config.yaml. Default file is available at config/policy_constraints/technology_capacity_targets.csv.
+    Add minimum or maximum levels of generator nominal capacity per carrier for individual regions.
+    Each constraint can be designated for a specified planning horizon in multi-period models.
+    Opts and path for technology_capacity_targets.csv must be defined in config.yaml.
+    Default file is available at config/policy_constraints/technology_capacity_targets.csv.
 
     Parameters
     ----------
@@ -304,7 +307,7 @@ def add_technology_capacity_target_constraints(n, config):
 
             n.model.add_constraints(
                 lhs >= rhs,
-                name=f"{target.name}_{target.planning_horizon}_min",
+                name=f"GlobalConstraint-{target.name}_{target.planning_horizon}_min",
             )
 
             logger.info(
@@ -327,7 +330,7 @@ def add_technology_capacity_target_constraints(n, config):
 
             n.model.add_constraints(
                 lhs <= rhs,
-                name=f"{target.name}_{target.planning_horizon}_max",
+                name=f"GlobalConstraint-{target.name}_{target.planning_horizon}_max",
             )
 
             logger.info(
