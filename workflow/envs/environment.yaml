@@ -52,17 +52,13 @@ dependencies:
 
 # TODO: check these dependencies
 - tqdm==4.66.1
-- pytz==2023.3.post1
 - country_converter==1.0.0
-- tabula-py==2.7.0
-- fs==2.4.11
 
 - pip:
-  - vresutils==0.3.1
   - tsam>=1.1.0
   - gurobipy==11.0.3
   - highspy
   - duckdb==0.10.0
   - flake8
   - dill
-  - kaleido
+  - kaleido # for plotly export
