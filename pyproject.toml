@@ -46,7 +46,7 @@ dev = [
 myproj = "workflow/scripts"
 
 [tool.ruff]
-line-length = 110
+line-length = 120
 target-version = "py311"
 exclude = [
     ".eggs",
@@ -80,7 +80,9 @@ select = [
     "UP",  # pyupgrade
     "D",   # pydocstyle
     "C90", # Complex code
+    "I",   # isort (import sorting)
 ]
+
 # Allow unused variables when underscore-prefixed.
 dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
 extend-ignore = ['D105', 'D107', 'D205', 'D415']
