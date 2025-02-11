@@ -901,8 +901,6 @@ def main(snakemake):
     regions_offshore = gpd.read_file(snakemake.input.regions_offshore)
     reeds_shapes = gpd.read_file(snakemake.input.reeds_shapes)
 
-    num_years = n.snapshot_weightings.loc[n.investment_periods[0]].objective.sum() / 8760.0
-
     costs = pd.read_csv(snakemake.input.tech_costs)
     costs = costs.pivot(index="pypsa-name", columns="parameter", values="value")
     update_transmission_costs(n, costs, params.length_factor)
@@ -1005,7 +1003,7 @@ def main(snakemake):
         multiplier_file = snakemake.input[f"gen_cost_mult_{multiplier_data}"]
         df_multiplier = pd.read_csv(multiplier_file)
         df_multiplier = clean_locational_multiplier(df_multiplier)
-        update_capital_costs(n, carrier, costs, df_multiplier, num_years)
+        update_capital_costs(n, carrier, costs, df_multiplier)
 
     if params.conventional["dynamic_fuel_price"].get("enable", False):
         logger.info("Applying dynamic fuel pricing to conventional generators")
