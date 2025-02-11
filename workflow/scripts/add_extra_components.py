@@ -678,8 +678,7 @@ if __name__ == "__main__":
             [car for car in elec_config["extendable_carriers"]["Generator"] if "EGS" not in car],
         )
     ]
-
-    egs_gens = n.generators[n.generators["p_nom_extendable"] is True]
+    egs_gens = n.generators[n.generators["p_nom_extendable"]]
     egs_gens = egs_gens.loc[egs_gens["carrier"].str.contains("EGS")]
 
     new_carriers = list(

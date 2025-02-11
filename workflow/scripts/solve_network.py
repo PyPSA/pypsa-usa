@@ -722,7 +722,6 @@ def add_regional_co2limit(n, sns, config):
         #         lhs -= (p_store_discharge * EF_imports).sum()
 
         #     # Internal Demand
-        #     breakpoint()
         #     region_loads = n.loads[n.loads.bus.isin(region_buses.index)]
         #     region_demand = (
         #         n.loads_t.p_set.loc[planning_horizon,region_loads.index].sum().sum()
