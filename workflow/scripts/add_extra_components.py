@@ -849,7 +849,7 @@ if __name__ == "__main__":
     add_nice_carrier_names(n, snakemake.config)
     add_co2_emissions(n, costs_dict[n.investment_periods[0]], n.carriers.index)
 
-    dr_config = snakemake.config["electricity"].get("demand_response", {})
+    dr_config = snakemake.params.demand_response
     if dr_config:
         add_demand_response(n, dr_config)
 

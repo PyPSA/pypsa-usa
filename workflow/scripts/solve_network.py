@@ -322,7 +322,7 @@ def add_technology_capacity_target_constraints(n, config):
                 f"Planning Horizon: {target.planning_horizon}\n"
                 f"Region: {target.region}\n"
                 f"Carrier: {target.carrier}\n"
-                f"Min Value: {target['min']}\n",
+                f"Min Value: {target['min']}\n"
                 f"Min Value Adj: {rhs}",
             )
 
@@ -344,7 +344,7 @@ def add_technology_capacity_target_constraints(n, config):
                 f"Planning Horizon: {target.planning_horizon}\n"
                 f"Region: {target.region}\n"
                 f"Carrier: {target.carrier}\n"
-                f"Max Value: {target['max']}\n",
+                f"Max Value: {target['max']}\n"
                 f"Max Value Adj: {rhs}",
             )
 
