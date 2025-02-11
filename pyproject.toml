@@ -44,6 +44,7 @@ dependencies = [
     "openpyxl==3.1.2",
     "pandas==2.2.2",
     "plotly==5.17.0",
+    "pre-commit>=4.1.0",
     "progressbar2==4.3.2",
     "pulp==2.7.0",
     "pyarrow==16.1.0",
