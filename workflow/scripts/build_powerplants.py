@@ -1,3 +1,5 @@
+"""Assimilates data on existing generator and storage resources from PUDL, CEMS, ADS, and other sources."""
+
 import logging
 import re
 
@@ -118,9 +120,7 @@ def load_pudl_data(pudl_fn: str, start_date: str, end_date: str):
 
 
 def set_non_conus(eia_data_operable):
-    """
-    Set NERC region and balancing authority code for non-CONUS plants.
-    """
+    """Set NERC region and balancing authority code for non-CONUS plants."""
     eia_data_operable.loc[eia_data_operable.state.isin(["AK", "HI"]), "nerc_region"] = "non-conus"
     eia_data_operable.loc[
         eia_data_operable.state.isin(["AK", "HI"]),
@@ -211,7 +211,7 @@ eia_tech_map = pd.DataFrame(
         ],
     },
 )
-eia_tech_map.set_index("Technology", inplace=True)
+eia_tech_map = eia_tech_map.set_index("Technology")
 eia_fuel_map = pd.DataFrame(
     {
         "Energy Source 1": [
@@ -339,7 +339,7 @@ eia_fuel_map = pd.DataFrame(
         ],
     },
 )
-eia_fuel_map.set_index("Energy Source 1", inplace=True)
+eia_fuel_map = eia_fuel_map.set_index("Energy Source 1")
 eia_primemover_map = pd.DataFrame(
     {
         "Prime Mover": [
@@ -394,7 +394,7 @@ eia_primemover_map = pd.DataFrame(
         ],
     },
 )
-eia_primemover_map.set_index("Prime Mover", inplace=True)
+eia_primemover_map = eia_primemover_map.set_index("Prime Mover")
 
 
 def set_tech_fuels_primer_movers(eia_data_operable):
@@ -433,12 +433,10 @@ def standardize_col_names(columns, prefix="", suffix=""):
 
 
 def merge_ads_data(eia_data_operable):
-    """
-    Merges WECC ADS Data into the prepared EIA Data.
-    """
-    ADS_PATH = snakemake.input.wecc_ads
+    """Merges WECC ADS Data into the prepared EIA Data."""
+    path_ads = snakemake.input.wecc_ads
     ads_thermal = pd.read_csv(
-        ADS_PATH + "/Thermal_General_Info.csv",
+        path_ads + "/Thermal_General_Info.csv",
         skiprows=1,
     )  # encoding='unicode_escape')
     ads_thermal = ads_thermal[
@@ -460,7 +458,7 @@ def merge_ads_data(eia_data_operable):
     ads_thermal.columns = standardize_col_names(ads_thermal.columns)
 
     ads_ioc = pd.read_csv(
-        ADS_PATH + "/Thermal_IOCurve_Info.csv",
+        path_ads + "/Thermal_IOCurve_Info.csv",
         skiprows=1,
     ).rename(columns={"Generator Name": "GeneratorName"})
     ads_ioc = ads_ioc[
@@ -478,7 +476,7 @@ def merge_ads_data(eia_data_operable):
 
     # loading ads to match ads_name with generator key in order to link with ads thermal file
     ads = pd.read_csv(
-        ADS_PATH + "/GeneratorList.csv",
+        path_ads + "/GeneratorList.csv",
         skiprows=2,
         encoding="unicode_escape",
     )
@@ -492,7 +490,7 @@ def merge_ads_data(eia_data_operable):
     ads["SubType"] = ads["SubType"].apply(
         lambda x: re.sub(r"[^a-zA-Z0-9]", "", x).lower(),
     )
-    ads.rename(
+    ads = ads.rename(
         {
             "Name": "ads_name",
             "Long Name": "ads_long_name",
@@ -502,9 +500,8 @@ def merge_ads_data(eia_data_operable):
             "Area Name": "balancing_area",
         },
         axis=1,
-        inplace=True,
     )
-    ads.rename(str.lower, axis="columns", inplace=True)
+    ads = ads.rename(str.lower, axis="columns")
     ads["long id"] = ads["long id"].astype(str)
     ads = ads.loc[
         :,
@@ -522,7 +519,8 @@ def merge_ads_data(eia_data_operable):
         ads_name_key_dict,
     )
 
-    # Identify Generators not in ads generator list that are in the IOC curve. This could potentially be matched with manual work.
+    # Identify Generators not in ads generator list that are in the IOC curve.
+    # This could potentially be matched with manual work.
     ads_thermal_ioc[ads_thermal_ioc.generator_key.isna()]
 
     # Merge ads thermal_IOC data with ads generator data
@@ -552,12 +550,12 @@ def merge_ads_data(eia_data_operable):
         eia_ads_mapper.columns,
         prefix="mapper_",
     )
-    eia_ads_mapper.dropna(subset=["mapper_plant_id_eia"], inplace=True)
+    eia_ads_mapper = eia_ads_mapper.dropna(subset=["mapper_plant_id_eia"])
     eia_ads_mapper.mapper_plant_id_eia = eia_ads_mapper.mapper_plant_id_eia.astype(int)
     eia_ads_mapper.mapper_ads_name = eia_ads_mapper.mapper_ads_name.astype(str)
     eia_ads_mapper.mapper_generatorkey = eia_ads_mapper.mapper_generatorkey.astype(int)
 
-    ads_complete.dropna(subset=["ads_generator_key"], inplace=True)
+    ads_complete = ads_complete.dropna(subset=["ads_generator_key"])
     ads_complete.ads_generator_key = ads_complete.ads_generator_key.astype(int)
     eia_ads_mapper.mapper_generatorkey = eia_ads_mapper.mapper_generatorkey.astype(int)
 
@@ -577,8 +575,8 @@ def merge_ads_data(eia_data_operable):
         right_on=["mapper_plant_id_eia", "mapper_generator_id_ads"],
         how="left",
     )
-    eia_ads_merged.drop(columns=eia_ads_mapper.columns, inplace=True)
-    eia_ads_merged.drop(
+    eia_ads_merged = eia_ads_merged.drop(columns=eia_ads_mapper.columns)
+    eia_ads_merged = eia_ads_merged.drop(
         columns=[
             "ads_generator_name_alt",
             "ads_generator_key",
@@ -599,7 +597,6 @@ def merge_ads_data(eia_data_operable):
             "ads_commission_date",
             "ads_servicestatus",
         ],
-        inplace=True,
     )
     eia_ads_merged = eia_ads_merged.drop_duplicates(
         subset=["plant_id_eia", "generator_id"],
@@ -774,8 +771,8 @@ def set_parameters(plants: pd.DataFrame):
 
     set_derates(plants)
 
-    plants[f"heat_rate_source"] = plants[f"heat_rate_source"].fillna("NA")
-    plants[f"fuel_cost_source"] = plants[f"fuel_cost_source"].fillna("NA")
+    plants["heat_rate_source"] = plants["heat_rate_source"].fillna("NA")
+    plants["fuel_cost_source"] = plants["fuel_cost_source"].fillna("NA")
 
     # Check for missing heat rate data
     if plants["heat_rate"].isna().sum() > 0:
@@ -792,29 +789,25 @@ def set_parameters(plants: pd.DataFrame):
 
 
 def filter_outliers_iqr_grouped(df, group_column, value_column):
-    """
-    Filter outliers using IQR for each generator group.
-    """
+    """Filter outliers using IQR for each generator group."""
 
     def filter_outliers(group):
-        Q1 = group[value_column].quantile(0.25)
-        Q3 = group[value_column].quantile(0.75)
-        IQR = Q3 - Q1
-        lower_bound = Q1 - 1.5 * IQR
-        upper_bound = Q3 + 1.5 * IQR
+        q1 = group[value_column].quantile(0.25)
+        q3 = group[value_column].quantile(0.75)
+        iqr = q3 - q1
+        lower_bound = q1 - 1.5 * iqr
+        upper_bound = q3 + 1.5 * iqr
         return group[(group[value_column] >= lower_bound) & (group[value_column] <= upper_bound)]
 
     return df.groupby(group_column)[df.columns].apply(filter_outliers).reset_index(drop=True)
 
 
 def filter_outliers_zscore(temporal_data, target_field_name):
-    """
-    Filter outliers using Z-score.
-    """
+    """Filter outliers using Z-score."""
     # Calculate mean and standard deviation for each generator
     stats = temporal_data.groupby(["generator_name"])[target_field_name].agg(["mean", "std"]).reset_index()
     stats["mean"] = stats["mean"].replace(np.inf, np.nan)
-    stats.dropna(inplace=True)
+    stats = stats.dropna()
 
     # Merge mean and std back to the original dataframe
     temporal_stats = temporal_data.merge(
@@ -863,7 +856,7 @@ def merge_fc_hr_data(
     )
 
     if target_field_name in plants.columns:
-        plants.drop(columns=[target_field_name], inplace=True)
+        plants = plants.drop(columns=[target_field_name])
 
     temporal_average[f"{target_field_name}_source"] = "pudl_reciepts"
 
@@ -896,7 +889,7 @@ def apply_cems_heat_rates(plants, crosswalk_fn, cems_fn):
         how="right",
     )
 
-    plants.rename(columns={"Heat Input (mmBtu/MWh)": "heat_rate_"}, inplace=True)
+    plants = plants.rename(columns={"Heat Input (mmBtu/MWh)": "heat_rate_"})
     plants.heat_rate_ = plants.heat_rate_.fillna(
         plants.unit_heat_rate_mmbtu_per_mwh,
     )  # First take CEMS, then use PUDL
@@ -907,7 +900,7 @@ def apply_cems_heat_rates(plants, crosswalk_fn, cems_fn):
     )
     plants.unit_heat_rate_mmbtu_per_mwh_source = plants.pop("hr_source_cems")
 
-    plants.drop(
+    plants = plants.drop(
         columns=[
             "Facility ID",
             "Unit ID",
@@ -916,7 +909,6 @@ def apply_cems_heat_rates(plants, crosswalk_fn, cems_fn):
             "EIA_PLANT_ID",
             "EIA_GENERATOR_ID",
         ],
-        inplace=True,
     )
 
     return plants

@@ -1,10 +1,13 @@
-# Configuration file for the Sphinx documentation builder.
-#
+"""Configuration file for the Sphinx documentation builder."""
+
 # For the full list of built-in configuration values, see the documentation:
 # https://www.sphinx-doc.org/en/master/usage/configuration.html
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
+
+import os
+import sys
 
 project = "pypsa-usa"
 copyright = "2024, Kamran Tehranchi, Trevor Barnes"
@@ -13,8 +16,6 @@ author = "Kamran Tehranchi, Trevor Barnes"
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 
-import os
-import sys
 
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
@@ -22,8 +23,8 @@ import sys
 sys.path.insert(0, os.path.abspath("../../workflow/scripts"))
 
 extensions = [
-    #'sphinx.ext.autodoc',
-    #'sphinx.ext.autosummary',
+    # 'sphinx.ext.autodoc',
+    # 'sphinx.ext.autosummary',
     "myst_parser",
     # "sphinx.ext.autosectionlabel",
     "sphinx.ext.intersphinx",
@@ -32,9 +33,9 @@ extensions = [
     "sphinx.ext.napoleon",
     "sphinx.ext.graphviz",
     # "sphinxcontrib.bibtex",
-    #'sphinx.ext.pngmath',
-    #'sphinxcontrib.tikz',
-    #'rinoh.frontend.sphinx',
+    # 'sphinx.ext.pngmath',
+    # 'sphinxcontrib.tikz',
+    # 'rinoh.frontend.sphinx',
     "sphinx.ext.imgconverter",  # for SVG conversion
 ]
 myst_enable_extensions = ["html_image", "colon_fence", "amsmath"]

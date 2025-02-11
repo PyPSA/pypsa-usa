@@ -1,9 +1,6 @@
-"""
-Adds extra extendable components to the clustered and simplified network.
-"""
+"""Adds extra extendable components to the clustered and simplified network."""
 
 import logging
-from typing import List
 
 import geopandas as gpd
 import numpy as np
@@ -18,19 +15,18 @@ logger = logging.getLogger(__name__)
 
 
 def add_co2_emissions(n, costs, carriers):
-    """
-    Add CO2 emissions to the network's carriers attribute.
-    """
+    """Add CO2 emissions to the network's carriers attribute."""
     suptechs = n.carriers.loc[carriers].index.str.split("-").str[0]
     missing_carriers = set(suptechs) - set(costs.index)
     if missing_carriers:
-        logger.warning(f"CO2 emissions for carriers {missing_carriers} not defined in cost data.")
+        logger.warning(
+            f"CO2 emissions for carriers {missing_carriers} not defined in cost data.",
+        )
         suptechs = suptechs.difference(missing_carriers)
     n.carriers.loc[suptechs, "co2_emissions"] = costs.co2_emissions[suptechs].values
 
-    n.carriers.fillna(
+    n.carriers = n.carriers.fillna(
         {"co2_emissions": 0},
-        inplace=True,
     )  # TODO: FIX THIS ISSUE IN BUILD_COST_DATA- missing co2_emissions for some VRE carriers
 
     if any("CCS" in carrier for carrier in carriers):
@@ -243,7 +239,7 @@ def attach_stores(n, costs, elec_opts, investment_year):
 def split_retirement_gens(
     n: pypsa.Network,
     costs: pd.DataFrame,
-    carriers: list[str] = None,
+    carriers: list[str] | None = None,
     economic: bool = True,
 ):
     """
@@ -281,7 +277,7 @@ def split_retirement_gens(
     n.generators["capital_cost"] = n.generators.apply(
         lambda row: (
             row["capital_cost"]
-            if not row.name in (retirement_gens.index)
+            if row.name not in (retirement_gens.index)
             else costs.at[row["carrier"], "opex_fixed_per_kw"] * 1e3
         ),
         axis=1,
@@ -289,7 +285,7 @@ def split_retirement_gens(
 
     # Rename retiring generators to include "existing" suffix
     n.generators.index = n.generators.apply(
-        lambda row: (row.name if not row.name in (retirement_gens.index) else row.name + " existing"),
+        lambda row: (row.name if row.name not in (retirement_gens.index) else row.name + " existing"),
         axis=1,
     )
 
@@ -305,9 +301,10 @@ def split_retirement_gens(
         n.generators["p_nom_min"],
     )
 
-    n.generators.loc[retirement_mask.values, "p_nom_extendable"] = (
-        economic  # if economic retirement is true enable extendable
-    )
+    n.generators.loc[
+        retirement_mask.values,
+        "p_nom_extendable",
+    ] = economic  # if economic retirement is true enable extendable
 
     # Adding Expanding generators for the first investment period
     # There are generators that exist today and could expand
@@ -437,7 +434,7 @@ def attach_multihorizon_egs(
     costs_dict: dict,
         Dict of costs for each investment period
     carriers: List[str]
-        List of carriers to add multiple investment options for
+        List of carriers to add multiple investment options for.
     """
     if gens.empty or len(n.investment_periods) == 1:
         return
@@ -632,7 +629,6 @@ def add_demand_response(
     dr_config: dict[str, str | float],
 ) -> None:
     """Add price based demand response to network."""
-
     n.add("Carrier", "demand_response", color="#dd2e23", nice_name="Demand Response")
 
     shift = dr_config.get("shift", 0)
@@ -820,18 +816,25 @@ if __name__ == "__main__":
         )
     ]
 
-    egs_gens = n.generators[n.generators["p_nom_extendable"] == True]
+    egs_gens = n.generators[n.generators["p_nom_extendable"] is True]
     egs_gens = egs_gens.loc[egs_gens["carrier"].str.contains("EGS")]
 
     new_carriers = list(
         set(elec_config["extendable_carriers"].get("Generator", [])) - set(n.generators.carrier.unique())
-        | set(["nuclear"] if "nuclear" in elec_config["extendable_carriers"].get("Generator", []) else []),
+        | set(
+            ["nuclear"] if "nuclear" in elec_config["extendable_carriers"].get("Generator", []) else [],
+        ),
     )
 
     for investment_year in n.investment_periods:
         costs = costs_dict[investment_year]
         attach_storageunits(n, costs, elec_config, investment_year)
-        attach_multihorizon_existing_generators(n, costs, multi_horizon_gens, investment_year)
+        attach_multihorizon_existing_generators(
+            n,
+            costs,
+            multi_horizon_gens,
+            investment_year,
+        )
         attach_multihorizon_egs(n, costs, costs_dict, egs_gens, investment_year)
         attach_multihorizon_new_generators(n, costs, new_carriers, investment_year)
         # attach_stores(n, costs, elec_config, investment_year)

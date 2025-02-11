@@ -17,19 +17,13 @@ repos:
   - id: pretty-format-yaml
     args: [--autofix, --indent, "2", --preserve-quotes]
 
-- repo: https://github.com/pycqa/isort
-  rev: 5.13.2
-  hooks:
-  - id: isort
-    name: isort (python)
-
 - repo: https://github.com/asottile/add-trailing-comma
   rev: v3.1.0
   hooks:
   - id: add-trailing-comma
 
 - repo: https://github.com/asottile/pyupgrade
-  rev: v3.19.0
+  rev: v3.19.1
   hooks:
   - id: pyupgrade
     args: [--py39-plus]
@@ -45,31 +39,15 @@ repos:
   hooks:
   - id: snakefmt
 
-# - repo: https://github.com/PyCQA/docformatter
-#   rev: v1.7.5
-#   hooks:
-#   - id: docformatter
-#     args: ["--in-place", "--make-summary-multi-line", "--pre-summary-newline"]
-
-
 - repo: https://github.com/keewis/blackdoc
   rev: v0.3.9
   hooks:
   - id: blackdoc
 
-- repo: https://github.com/psf/black-pre-commit-mirror
-  rev: 24.10.0
+- repo: https://github.com/astral-sh/ruff-pre-commit
+  rev: v0.1.4  # Check for the latest version
   hooks:
-  - id: black
-    language_version: python3.11
-    args: ["--line-length", "120"]
-  - id: black-jupyter
-    language_version: python3.11
-    args: ["--line-length", "120"]
-
-
-- repo: https://github.com/pycqa/flake8
-  rev: 7.1.1
-  hooks:
-  - id: flake8
-    args: [--select=F841]    # F841 is the error code for unused variables
+  - id: ruff
+    args: ["--config=pyproject.toml", "--fix"]
+  - id: ruff-format
+    args: ["--config=pyproject.toml"]

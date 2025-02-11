@@ -140,29 +140,6 @@ if config["enable"].get("build_cutout", False):
             "../scripts/build_cutout.py"
 
 
-rule build_hydro_profile:
-    params:
-        hydro=config_provider("renewable", "hydro"),
-        snapshots=config_provider("snapshots"),
-    input:
-        reeds_shapes=RESOURCES + "{interconnect}/Geospatial/reeds_shapes.geojson",
-        cutout=lambda w: f"cutouts/"
-        + CDIR
-        + "{interconnect}_"
-        + config_provider("renewable", "hydro", "cutout")(w)
-        + ".nc",
-    output:
-        profile=RESOURCES + "{interconnect}/profile_hydro.nc",
-    log:
-        LOGS + "{interconnect}/build_hydro_profile.log",
-    resources:
-        mem_mb=5000,
-    conda:
-        "../envs/environment.yaml"
-    script:
-        "../scripts/build_hydro_profile.py"
-
-
 rule build_renewable_profiles:
     params:
         renewable=config["renewable"],
