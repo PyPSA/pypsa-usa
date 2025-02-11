@@ -1,24 +1,18 @@
-"""
-Module for summarizing natural gas results.
-"""
-
-from typing import List
+"""Module for summarizing natural gas results."""
 
 import constants
 import pandas as pd
 import pypsa
 from eia import FuelCosts
 
-CODE_2_STATE = {v: k for k, v in constants.STATE_2_CODE.items()}
+CODE_2_STATE = constants.CODE_2_STATE
 MMBTU_2_MWH = constants.MMBTU_MWHthemal
 MWH_2_MMCF = constants.NG_MWH_2_MMCF
 STATE_2_CODE = constants.STATE_2_CODE
 
 
 def _rename_columns(n: pypsa.Network, df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Renames columns to carrier nicenames.
-    """
+    """Renames columns to carrier nicenames."""
     return df.rename(columns=n.carriers.nice_name)
 
 
@@ -30,7 +24,6 @@ def get_gas_demand(
 
     This in input energy required (ie. not applying efficiency losses)
     """
-
     data = {}
 
     buses = n.buses[n.buses.index.str.endswith(" gas")].index
@@ -53,17 +46,12 @@ def get_imports_exports(
     n: pypsa.Network,
     international: bool = True,
 ) -> dict[str, dict[str, pd.DataFrame]]:
-    """
-    Gets gas flow into and out of the state.
-    """
-
+    """Gets gas flow into and out of the state."""
     # catches any of the following codes at the start of the string
     regex = "(?:^|.{2})(?:MX|AB|BC|MB|NB|NL|NT|NS|NU|ON|PE|QC|SK|YT)"
 
     def get_import_export(df: pd.DataFrame, direction: str) -> pd.DataFrame:
-        """
-        Input data must be stores dataframe.
-        """
+        """Input data must be stores dataframe."""
         if direction == "import":
             return df[(df.carrier == "gas trade") & (df.bus0.str.endswith(" gas trade"))]
         elif direction == "export":
@@ -72,15 +60,11 @@ def get_imports_exports(
             raise NotImplementedError
 
     def get_international(df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Input data must be stores dataframe.
-        """
+        """Input data must be stores dataframe."""
         return df[(df.bus0.str.contains(regex)) | (df.bus1.str.contains(regex))]
 
     def get_domestic(df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Input data must be stores dataframe.
-        """
+        """Input data must be stores dataframe."""
         return df[~((df.bus0.str.contains(regex)) | (df.bus1.str.contains(regex)))]
 
     df = n.links.copy()
@@ -104,7 +88,6 @@ def get_imports_exports(
     data = {}
 
     for state in states:
-
         data[state] = {}
 
         import_cols = [x for x in imports_t.columns if f"{state} " in x]
@@ -117,9 +100,7 @@ def get_imports_exports(
 
 
 def get_gas_processing(n: pypsa.Network) -> dict[str, pd.DataFrame]:
-    """
-    Gets timeseries gas processing.
-    """
+    """Gets timeseries gas processing."""
     processing = n.links[n.links.carrier == "gas production"]
     processing = n.links_t.p1[processing.index].mul(-1)
 
@@ -133,9 +114,7 @@ def get_gas_processing(n: pypsa.Network) -> dict[str, pd.DataFrame]:
 
 
 def get_linepack(n: pypsa.Network) -> dict[str, pd.DataFrame]:
-    """
-    Gets linepack data.
-    """
+    """Gets linepack data."""
     stores = n.stores[n.stores.carrier == "gas pipeline"]
     stores = n.stores_t.e[stores.index]
 
@@ -149,9 +128,7 @@ def get_linepack(n: pypsa.Network) -> dict[str, pd.DataFrame]:
 
 
 def get_underground_storage(n: pypsa.Network) -> dict[str, pd.DataFrame]:
-    """
-    Gets underground storage data.
-    """
+    """Gets underground storage data."""
     stores = n.stores[n.stores.carrier == "gas storage"]
     stores = n.stores_t.e[stores.index]
 
@@ -165,10 +142,7 @@ def get_underground_storage(n: pypsa.Network) -> dict[str, pd.DataFrame]:
 
 
 def get_ng_price(n: pypsa.Network) -> dict[str, pd.DataFrame]:
-    """
-    Gets state level natural gas price.
-    """
-
+    """Gets state level natural gas price."""
     buses = n.buses[n.buses.carrier == "gas"]
     buses = n.buses_t.marginal_price[buses.index]
 
@@ -182,11 +156,13 @@ def get_ng_price(n: pypsa.Network) -> dict[str, pd.DataFrame]:
 
 
 def get_historical_ng_prices(year: int, industry: str, api: str) -> pd.DataFrame:
-    """
-    Gets hourly fuel price per state.
-    """
+    """Gets hourly fuel price per state."""
     df = FuelCosts("gas", year, api, industry).get_data(pivot=True)
-    idx = pd.date_range(start=df.index.min(), end=(df.index.max() + pd.offsets.MonthEnd(1)).replace(hour=23), freq="h")
+    idx = pd.date_range(
+        start=df.index.min(),
+        end=(df.index.max() + pd.offsets.MonthEnd(1)).replace(hour=23),
+        freq="h",
+    )
     df = df.reindex(idx).ffill().bfill()
     # convert $/MCF to $/MWh
     df = df.mul(1000).div(MWH_2_MMCF).div(MMBTU_2_MWH).round(3)

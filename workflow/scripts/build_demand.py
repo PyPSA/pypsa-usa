@@ -1,6 +1,6 @@
-"""
-Builds the demand data for the PyPSA network.
-"""
+# ruff: noqa: RUF012, D101, D102, F811
+
+"""Builds the demand data for the PyPSA network."""
 
 # snakemake is not liking this futures import. Removing type hints in context class
 # from __future__ import annotations
@@ -11,7 +11,7 @@ import sqlite3
 import sys
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import constants as const
 import duckdb
@@ -27,67 +27,49 @@ from eia import EnergyDemand, TransportationDemand
 logger = logging.getLogger(__name__)
 
 STATE_2_CODE = const.STATE_2_CODE
-CODE_2_STATE = {value: key for key, value in STATE_2_CODE.items()}
+CODE_2_STATE = const.CODE_2_STATE
 STATE_TIMEZONE = const.STATE_2_TIMEZONE
 TBTU_2_MWH = const.TBTU_2_MWH
 
 
 class Context:
-    """
-    The Context defines the interface of interest to clients.
-    """
+    """The Context defines the interface of interest to clients."""
 
     def __init__(self, read_strategy, write_strategy) -> None:
-        """
-        (read_strategy: ReadStrategy, write_strategy: WriteStrategy)
-        """
+        """(read_strategy: ReadStrategy, write_strategy: WriteStrategy)."""
         self._read_strategy = read_strategy
         self._write_strategy = write_strategy
 
     @property
     def read_strategy(self):  # returns ReadStrategy:
-        """
-        The Context maintains a reference to the Strategy objects.
-        """
+        """The Context maintains a reference to the Strategy objects."""
         return self._read_strategy
 
     @read_strategy.setter
     def strategy(self, strategy) -> None:  # arg is ReadStrategy
-        """
-        Usually, the Context allows replacing a Strategy object at runtime.
-        """
+        """Usually, the Context allows replacing a Strategy object at runtime."""
         self._read_strategy = strategy
 
     @property
     def write_strategy(self):  # returns WriteStrategy:
-        """
-        The Context maintains a reference to the Strategy objects.
-        """
+        """The Context maintains a reference to the Strategy objects."""
         return self._write_strategy
 
     @write_strategy.setter
     def strategy(self, strategy) -> None:  # arg is WriteStrategy
-        """
-        Usually, the Context allows replacing a Strategy object at runtime.
-        """
+        """Usually, the Context allows replacing a Strategy object at runtime."""
         self._write_strategy = strategy
 
     def _read(self) -> pd.DataFrame:
-        """
-        Delegate reading to the strategy.
-        """
+        """Delegate reading to the strategy."""
         return self._read_strategy.read_demand()
 
     def _write(self, demand: pd.DataFrame, zone: str, **kwargs) -> pd.DataFrame:
-        """
-        Delegate writing to the strategy.
-        """
+        """Delegate writing to the strategy."""
         return self._write_strategy.dissagregate_demand(demand, zone, **kwargs)
 
     def prepare_demand(self, **kwargs) -> pd.DataFrame:
-        """
-        Read in and dissagregate demand.
-        """
+        """Read in and dissagregate demand."""
         demand = self._read()
         return self._write(demand, self._read_strategy.zone, **kwargs)
 
@@ -97,10 +79,7 @@ class Context:
         fuels: str | list[str],
         **kwargs,
     ) -> dict[str, pd.DataFrame]:
-        """
-        Returns demand by end-use energy carrier.
-        """
-
+        """Returns demand by end-use energy carrier."""
         if isinstance(fuels, str):
             fuels = [fuels]
 
@@ -132,7 +111,6 @@ class Context:
         > result["electricity"]["light-duty"]
         > result["lpg"]["heavy-duty"]
         """
-
         if isinstance(fuels, str):
             fuels = [fuels]
 
@@ -167,7 +145,7 @@ class ReadStrategy(ABC):
     of some algorithm.
     """
 
-    def __init__(self, filepath: Optional[str | list[str]] = None) -> None:
+    def __init__(self, filepath: str | list[str] | None = None) -> None:
         self.filepath = filepath
 
     @property
@@ -176,16 +154,11 @@ class ReadStrategy(ABC):
 
     @abstractmethod
     def _read_data(self, **kwargs) -> Any:
-        """
-        Reads raw data into any arbitraty data structure.
-        """
+        """Reads raw data into any arbitraty data structure."""
         pass
 
     def read_demand(self) -> pd.DataFrame:
-        """
-        Public interface to extract data.
-        """
-
+        """Public interface to extract data."""
         data = self._read_data()
         df = self._format_data(data)
         self._check_index(df)
@@ -217,9 +190,7 @@ class ReadStrategy(ABC):
         pass
 
     def _check_index(self, df: pd.DataFrame) -> None:
-        """
-        Enforces dimension labels.
-        """
+        """Enforces dimension labels."""
         assert all(x in ["snapshot", "sector", "subsector", "fuel"] for x in df.index.names)
 
         assert all(
@@ -234,9 +205,7 @@ class ReadStrategy(ABC):
 
     @staticmethod
     def _format_snapshot_index(df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Makes index into datetime.
-        """
+        """Makes index into datetime."""
         if df.index.nlevels > 1:
             if "snapshot" not in df.index.names:
                 logger.warning("Can not format snapshot index level")
@@ -254,9 +223,7 @@ class ReadStrategy(ABC):
 
 
 class ReadEia(ReadStrategy):
-    """
-    Reads data from GridEmissions.
-    """
+    """Reads data from GridEmissions."""
 
     def __init__(self, filepath: str | None = None) -> None:
         super().__init__(filepath)
@@ -267,10 +234,7 @@ class ReadEia(ReadStrategy):
         return self._zone
 
     def _read_data(self) -> pd.DataFrame:
-        """
-        Reads raw data.
-        """
-
+        """Reads raw data."""
         if not self.filepath:
             logger.error("Must provide filepath for EIA data")
             sys.exit()
@@ -279,9 +243,7 @@ class ReadEia(ReadStrategy):
         return pd.read_csv(self.filepath, engine="pyarrow", index_col="timestamp")
 
     def _format_data(self, data: pd.DataFrame) -> pd.DataFrame:
-        """
-        Formats raw data.
-        """
+        """Formats raw data."""
         df = data.copy().fillna(0)
         df = self._correct_balancing_areas(df)
         df = self._format_snapshot_index(df)
@@ -293,9 +255,7 @@ class ReadEia(ReadStrategy):
 
     @staticmethod
     def _correct_balancing_areas(df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Combine EIA Demand Data to Match GIS Shapes.
-        """
+        """Combine EIA Demand Data to Match GIS Shapes."""
         df["Arizona"] = df.pop("SRP") + df.pop("AZPS") + df.pop("TEPC")
         df["Carolina"] = df.pop("CPLE") + df.pop("CPLW") + df.pop("DUK") + df.pop("SC") + df.pop("SCEG") + df.pop("YAD")
         df["Florida"] = (
@@ -315,9 +275,7 @@ class ReadEia(ReadStrategy):
 
 
 class ReadFERC714(ReadStrategy):
-    """
-    Reads data from PuDLs FERC 714 based State historical Demand.
-    """
+    """Reads data from PuDLs FERC 714 based State historical Demand."""
 
     def __init__(self, filepath: str | None = None) -> None:
         super().__init__(filepath)
@@ -328,10 +286,7 @@ class ReadFERC714(ReadStrategy):
         return self._zone
 
     def _read_data(self) -> pd.DataFrame:
-        """
-        Reads raw data.
-        """
-
+        """Reads raw data."""
         if not self.filepath:
             logger.error("Must provide filepath for FERC714 data")
             sys.exit()
@@ -340,9 +295,7 @@ class ReadFERC714(ReadStrategy):
         return pd.read_parquet(self.filepath[0], dtype_backend="pyarrow")
 
     def _read_census_data(self) -> pd.DataFrame:
-        """
-        Reads in census data for population weighting.
-        """
+        """Reads in census data for population weighting."""
         duckdb.connect(database=":memory:", read_only=False)
 
         duckdb.query("INSTALL sqlite;")
@@ -371,9 +324,7 @@ class ReadFERC714(ReadStrategy):
         return states
 
     def _format_data(self, data: pd.DataFrame) -> pd.DataFrame:
-        """
-        Formats raw data.
-        """
+        """Formats raw data."""
         states = self._read_census_data()
 
         df = data.copy()
@@ -401,9 +352,7 @@ class ReadFERC714(ReadStrategy):
 
 
 class ReadEfs(ReadStrategy):
-    """
-    Reads in electrifications future study demand.
-    """
+    """Reads in electrifications future study demand."""
 
     def __init__(self, filepath: str | None = None) -> None:
         super().__init__(filepath)
@@ -414,7 +363,6 @@ class ReadEfs(ReadStrategy):
         return self._zone
 
     def _read_data(self) -> pd.DataFrame:
-
         if not self.filepath:
             logger.error("Must provide filepath for EFS data")
             sys.exit()
@@ -423,10 +371,7 @@ class ReadEfs(ReadStrategy):
         return pd.read_csv(self.filepath, engine="pyarrow").round(3)
 
     def _format_data(self, data: pd.DataFrame) -> pd.DataFrame:
-        """
-        Formats raw data.
-        """
-
+        """Formats raw data."""
         df = data.copy()
         df = self._build_snapshots(df)
         df = self._format_snapshot_index(df).reset_index()
@@ -452,24 +397,17 @@ class ReadEfs(ReadStrategy):
         return df
 
     def _build_snapshots(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Builds snapshots based on UTC time.
-        """
-
+        """Builds snapshots based on UTC time."""
         df = self._apply_timezones(df)
         df = self._build_datetime(df)
         return df.set_index("time").sort_index()
 
     @staticmethod
     def _apply_timezones(df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Changes local time to relative time from UTC.
-        """
+        """Changes local time to relative time from UTC."""
 
         def apply_timezone_shift(timezone: str) -> int:
-            """
-            All shifts realitive to UTC time.
-            """
+            """All shifts realitive to UTC time."""
             if timezone == "US/Pacific":
                 return 8
             elif timezone == "US/Mountain":
@@ -496,9 +434,7 @@ class ReadEfs(ReadStrategy):
 
     @staticmethod
     def _build_datetime(df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Builds snapshot from EFS data.
-        """
+        """Builds snapshot from EFS data."""
         # minus 1 cause indexing starts at 1
         df["hoy"] = pd.to_timedelta(df.UtcHourID - 1, unit="h")
         # assign everything 2018 (non-leap year) then correct just the year
@@ -521,8 +457,8 @@ class ReadEfs(ReadStrategy):
 
         Yearly values are linearlly interpolated between EFS planning years
 
-        Returns:
-
+        Returns
+        -------
         |      | State 1 | State 2 | ... | State n |
         |----- |---------|---------|-----|---------|
         | 2018 |  ###    |   ###   |     |   ###   |
@@ -534,7 +470,6 @@ class ReadEfs(ReadStrategy):
         | 2049 |  ###    |   ###   |     |   ###   |
         | 2050 |  ###    |   ###   |     |   ###   |
         """
-
         # extract efs provided data
         efs_years = self._read_data()[["Year", "State", "LoadMW"]]
         efs_years = efs_years.groupby(["Year", "State"]).sum().reset_index()
@@ -556,9 +491,7 @@ class ReadEfs(ReadStrategy):
 
 
 class ReadEulp(ReadStrategy):
-    """
-    Reads in End Use Load Profile data.
-    """
+    """Reads in End Use Load Profile data."""
 
     def __init__(self, filepath: str | list[str], stock: str) -> None:
         super().__init__(filepath)
@@ -620,11 +553,9 @@ class ReadEulp(ReadStrategy):
     @staticmethod
     def _apply_timeshift(data: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
         """Raw EULP given in EST. Shift data by in local state time."""
-
         data_shifted = {}
 
         for state, df in data.items():
-
             year = df.index[0].year
 
             timezone = STATE_TIMEZONE[state]
@@ -722,9 +653,9 @@ class ReadCliu(ReadStrategy):
     def __init__(
         self,
         filepath: str | list[str],
-        epri_filepath: Optional[str] = None,
-        mecs_filepath: Optional[str] = None,
-        fips_filepath: Optional[str] = None,
+        epri_filepath: str | None = None,
+        mecs_filepath: str | None = None,
+        fips_filepath: str | None = None,
     ) -> None:
         super().__init__(filepath)
         self._epri_filepath = epri_filepath
@@ -737,9 +668,7 @@ class ReadCliu(ReadStrategy):
         return self._zone
 
     def _read_data(self) -> Any:
-        """
-        Unzipped 'County_industry_energy_use.gz' csv file.
-        """
+        """Unzipped 'County_industry_energy_use.gz' csv file."""
         df = pd.read_csv(
             self.filepath,
             dtype={
@@ -777,9 +706,7 @@ class ReadCliu(ReadStrategy):
         return self._apply_profiles(annual_demand, profiles)
 
     def get_demand_profiles(self, add_lpg: bool = True):
-        """
-        Public method to extract EPRI data.
-        """
+        """Public method to extract EPRI data."""
         if not self._epri_filepath:
             logger.warning("No EPRI profiles provided")
             return
@@ -803,34 +730,25 @@ class ReadCliu(ReadStrategy):
         """
 
         def profile_2_xarray(df: pd.DataFrame) -> xr.Dataset:
-            """
-            Converts EPRI profiles to dataset.
-            """
+            """Converts EPRI profiles to dataset."""
             assert all(x in ("snapshot", "state") for x in df.index.names)
             assert all(x in ("electricity", "cool", "heat", "lpg") for x in df.columns)
             return xr.Dataset.from_dataframe(df)
 
         def annual_demand_2_xarray(df: pd.DataFrame) -> xr.Dataset:
-            """
-            Converts CLIU profiles to dataset.
-            """
+            """Converts CLIU profiles to dataset."""
             assert all(x in ("state", "sector", "subsector", "end_use", "county") for x in df.index.names)
             assert all(x in ("electricity", "cool", "heat", "lpg") for x in df.columns)
             return xr.Dataset.from_dataframe(df)
 
         def remove_counties(df: pd.DataFrame) -> pd.DataFrame:
-            """
-            Removes counties to reduce data.
-            """
+            """Removes counties to reduce data."""
             indices = df.index.names
             df.index = df.index.droplevel("county")
             return df.reset_index().groupby([x for x in indices if x != "county"]).sum()
 
         def check_variables(ds: xr.Dataset) -> xr.Dataset:
-            """
-            Confirms all data variables are present.
-            """
-
+            """Confirms all data variables are present."""
             assert "electricity" in ds.data_vars
 
             for fuel in ("heat", "cool", "lpg"):
@@ -840,7 +758,7 @@ class ReadCliu(ReadStrategy):
 
             return ds
 
-        annual_demand = remove_counties(annual_demand)  # todo: retain county data
+        annual_demand = remove_counties(annual_demand)  # TODO: retain county data
         annual_demand = annual_demand_2_xarray(annual_demand)
         profiles = profile_2_xarray(profiles)
 
@@ -850,7 +768,7 @@ class ReadCliu(ReadStrategy):
         demand = profiles * annual_demand
         dims = [x for x in demand.sizes]
 
-        # todo: add county arregation
+        # TODO: add county arregation
         if "county" in dims:
             indices = dims.remove("state")
             columns = "county"
@@ -895,9 +813,7 @@ class ReadCliu(ReadStrategy):
 
     @staticmethod
     def _group_by_fuels(data: pd.DataFrame) -> pd.DataFrame:
-        """
-        Groups in electricity, heat, cool, and lpg.
-        """
+        """Groups in electricity, heat, cool, and lpg."""
         df = data.copy()
         df["electricity"] = df["Net_electricity"] + df["Other"].div(3)
         df["heat"] = df["Coal"] + df["Coke_and_breeze"] + df["Natural_gas"] + df["Other"].div(3)
@@ -1017,9 +933,7 @@ class ReadCliu(ReadStrategy):
 
     @staticmethod
     def _add_lpg_epri(df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Adds an LPG column of data as an average.
-        """
+        """Adds an LPG column of data as an average."""
         df["lpg"] = df.mean(axis=1)
         return df
 
@@ -1030,7 +944,6 @@ class ReadCliu(ReadStrategy):
         Adapted from:
         https://github.com/NREL/Industry-Energy-Tool/blob/master/data_foundation/data_comparison/compare_mecs.py
         """
-
         cols_renamed = {
             "Code(a)": "NAICS",
             "Electricity(b)": "Net_electricity",
@@ -1062,14 +975,10 @@ class ReadCliu(ReadStrategy):
         mecs: pd.DataFrame,
         fips: pd.DataFrame,
     ) -> pd.DataFrame:
-        """
-        Scales CLIU data by MECS data.
-        """
+        """Scales CLIU data by MECS data."""
 
         def assign_mecs_regions(cliu: pd.DataFrame, fips: pd.DataFrame) -> pd.DataFrame:
-            """
-            Adds a mecs column to the cliu df with associated fips region.
-            """
+            """Adds a mecs column to the cliu df with associated fips region."""
             df = cliu.copy()
             df["Region"] = df.index.get_level_values("state").map(
                 fips.set_index("state")["mecs"].to_dict(),
@@ -1092,9 +1001,7 @@ class ReadCliu(ReadStrategy):
             return df.reset_index(drop=True).groupby("Region").sum()
 
         def get_mecs_totals(mecs: pd.DataFrame) -> pd.DataFrame:
-            """
-            Gets regional energy totals for the year per fuel from MECS.
-            """
+            """Gets regional energy totals for the year per fuel from MECS."""
             df = mecs.copy()
             df = df.reset_index().drop(columns=["NAICS"])
             df["Region"] = df.Region.map(lambda x: x.split(" ")[0])
@@ -1102,9 +1009,7 @@ class ReadCliu(ReadStrategy):
             return df.groupby("Region").sum()
 
         def get_scaling_factors(df1: pd.DataFrame, df2: pd.DataFrame) -> pd.DataFrame:
-            """
-            Gets factor to multiply df1 by to become df2.
-            """
+            """Gets factor to multiply df1 by to become df2."""
             assert all([x in df2.columns for x in df1.columns])
             assert all([x in df2.index for x in df1.index.unique()])
             return df2.div(df1)
@@ -1126,10 +1031,7 @@ class ReadCliu(ReadStrategy):
         return scale_industrial_demand(cliu, scaling_factors)
 
     def _read_fips_data(self) -> pd.DataFrame:
-        """
-        Reads FIPS data.
-        """
-
+        """Reads FIPS data."""
         return (
             pd.read_csv(self._fips_filepath)
             .drop(columns=["FIPS_County", "FIPS State"])
@@ -1171,9 +1073,7 @@ class ReadTransportEfsAeo(ReadStrategy):
     efs_years = [2018, 2020, 2022, 2024, 2030, 2040, 2050]
 
     def __init__(self, filepath: str, api: str, efs_path: str) -> None:
-        """
-        Filepath is state level breakdown of VMT by vehicle type.
-        """
+        """Filepath is state level breakdown of VMT by vehicle type."""
         super().__init__(filepath)
         self._zone = "state"
         # self.units = "VMT"
@@ -1190,9 +1090,7 @@ class ReadTransportEfsAeo(ReadStrategy):
 
     @staticmethod
     def _assign_vehicle_type(vehicle: str) -> str:
-        """
-        Coordinates vehicle names.
-        """
+        """Coordinates vehicle names."""
         match vehicle:
             case v if v.startswith(("light_duty", "light-duty vehicles", "Light-Duty")):
                 return "light_duty"
@@ -1225,7 +1123,6 @@ class ReadTransportEfsAeo(ReadStrategy):
         | ...                 | ...        | ...     |
         | other               | Texas      | 1.5     |
         """
-
         df = pd.read_csv(self.filepath, index_col=0, header=0)
 
         # check as these are user defined
@@ -1251,7 +1148,6 @@ class ReadTransportEfsAeo(ReadStrategy):
         the year will equal **ONE THOUSAND** Its scaled from 1 to 1000
         just to avoid numerical issues.
         """
-
         efs = ReadEfs(self.efs_path).read_demand()
         transport = efs[efs.index.get_level_values("sector") == "transport"].droplevel(
             ["sector", "fuel"],
@@ -1293,10 +1189,7 @@ class ReadTransportEfsAeo(ReadStrategy):
         return totals.reindex_like(df).ffill()
 
     def _read_demand_aeo(self) -> pd.DataFrame:
-        """
-        Gets yearly national level VMT data.
-        """
-
+        """Gets yearly national level VMT data."""
         demand = []
         for vehicle in ("light_duty", "med_duty", "heavy_duty", "bus"):
             demand.append(TransportationDemand(vehicle, 2050, self.api).get_data())
@@ -1323,11 +1216,10 @@ class ReadTransportEfsAeo(ReadStrategy):
         """
         Merges national VMT data (self.aeo_demand), proportions of VMT
         travelled per state (data), and electric charging profiles
-        (self.efs_profile)
+        (self.efs_profile).
 
         This is one ugly function. holy.
         """
-
         aeo = self.aeo_demand.drop(columns="units")
         aeo = xr.DataArray.from_series(aeo.squeeze())
 
@@ -1458,9 +1350,7 @@ class ReadTransportAeo(ReadStrategy):
 
     @staticmethod
     def _assign_vehicle_type(vehicle: str) -> str:
-        """
-        Coordinates vehicle names.
-        """
+        """Coordinates vehicle names."""
         match vehicle:
             case v if v.startswith(("Air", "air")):
                 return "air"
@@ -1489,7 +1379,6 @@ class ReadTransportAeo(ReadStrategy):
         | ...                 | ...        | ...     |
         | other               | Texas      | 1.5     |
         """
-
         df = pd.read_csv(self.filepath, index_col=0, header=0)
 
         # check as these are user defined
@@ -1507,10 +1396,7 @@ class ReadTransportAeo(ReadStrategy):
         return df
 
     def _read_demand_aeo(self) -> pd.DataFrame:
-        """
-        Gets yearly national level demand.
-        """
-
+        """Gets yearly national level demand."""
         demand = []
         demand.append(TransportationDemand(self.vehicle, 2050, self.api).get_data())
         for year in self.years:
@@ -1543,7 +1429,6 @@ class ReadTransportAeo(ReadStrategy):
         Merges national VMT data (self.aeo_demand) and proportions of demand
         travelled per state (data) to ceate uniform demand profiles.
         """
-
         demand_by_state = data.copy()  # given as a percentage
         demand_national = self.aeo_demand.drop(columns="units")
 
@@ -1553,7 +1438,7 @@ class ReadTransportAeo(ReadStrategy):
             df = pd.DataFrame(
                 index=pd.date_range(
                     f"{year}-01-01",
-                    f"{year+1}-01-01",
+                    f"{year + 1}-01-01",
                     freq="h",
                     inclusive="left",
                 ),
@@ -1583,9 +1468,7 @@ class ReadTransportAeo(ReadStrategy):
 
 
 class WriteStrategy(ABC):
-    """
-    Disaggregates demand based on a specified method.
-    """
+    """Disaggregates demand based on a specified method."""
 
     def __init__(self, n: pypsa.Network) -> None:
         self.n = n
@@ -1593,7 +1476,7 @@ class WriteStrategy(ABC):
     @abstractmethod
     def _get_load_allocation_factor(
         self,
-        df: Optional[pd.Series] = None,
+        df: pd.Series | None = None,
         **kwargs,
     ) -> pd.Series:
         """
@@ -1642,7 +1525,6 @@ class WriteStrategy(ABC):
         | ...                 |           |           |     |    ###    |
         | 2019-12-31 23:00:00 |    ###    |    ###    |     |    ###    |
         """
-
         # 'state' is states based on power regions
         # 'full_state' is actual geographic boundaries
         assert zone in ("ba", "state", "reeds")
@@ -1667,9 +1549,7 @@ class WriteStrategy(ABC):
         return self._disaggregate_demand_to_buses(demand, zone_data)
 
     def _get_load_dissagregation_zones(self, zone: str) -> pd.Series:
-        """
-        Map each bus to the load dissagregation zone (states, ba, ...)
-        """
+        """Map each bus to the load dissagregation zone (states, ba, ...)."""
         if zone == "ba":
             return self._get_balanceing_area_zones()
         elif zone == "state":
@@ -1681,9 +1561,7 @@ class WriteStrategy(ABC):
 
     @staticmethod
     def _check_datastructure(df: pd.DataFrame) -> None:
-        """
-        Confirms formatting of input datastructure.
-        """
+        """Confirms formatting of input datastructure."""
         assert all(x in ["snapshot", "sector", "subsector", "fuel"] for x in df.index.names)
         assert not df.empty
 
@@ -1692,9 +1570,7 @@ class WriteStrategy(ABC):
         df: pd.DataFrame,
         sns: pd.DatetimeIndex,
     ) -> pd.DataFrame:
-        """
-        Filters demand on network snapshots.
-        """
+        """Filters demand on network snapshots."""
         filtered = df[df.index.get_level_values("snapshot").isin(sns)].copy()
         filtered = filtered[~filtered.index.duplicated(keep="last")]  # issue-272
         return filtered
@@ -1722,10 +1598,7 @@ class WriteStrategy(ABC):
         fuels: str | list[str] | None = None,
         sns: pd.DatetimeIndex | None = None,
     ) -> pd.DataFrame:
-        """
-        Filters on snapshots, sector, and fuel.
-        """
-
+        """Filters on snapshots, sector, and fuel."""
         if isinstance(sns, pd.DatetimeIndex):
             filtered = self._filter_on_snapshots(df, sns)
             df = filtered.reset_index()
@@ -1752,10 +1625,7 @@ class WriteStrategy(ABC):
         demand: pd.DataFrame,
         laf: pd.DataFrame,
     ) -> pd.DataFrame:
-        """
-        Zone power demand is disaggregated to buses proportional to laf.
-        """
-
+        """Zone power demand is disaggregated to buses proportional to laf."""
         all_load = []
 
         for load_zone in laf.zone.unique():
@@ -1802,17 +1672,13 @@ class WriteStrategy(ABC):
         return n.buses.reeds_zone
 
     def _make_empty_demand(self, columns: list[str]) -> pd.DataFrame:
-        """
-        Make a demand dataframe with zeros.
-        """
+        """Make a demand dataframe with zeros."""
         n = self.n
         return pd.DataFrame(columns=columns, index=n.snapshots.get_level_values(1)).infer_objects().fillna(0)
 
 
 class WritePopulation(WriteStrategy):
-    """
-    Based on Population Density from Breakthrough Energy.
-    """
+    """Based on Population Density from Breakthrough Energy."""
 
     def __init__(self, n: pypsa.Network) -> None:
         super().__init__(n)
@@ -1823,9 +1689,7 @@ class WritePopulation(WriteStrategy):
         zone: str,
         **kwargs,
     ) -> pd.Series:
-        """
-        Pulls weighting from 'build_base_network'.
-        """
+        """Pulls weighting from 'build_base_network'."""
         logger.info("Setting load allocation factors based on BE population density")
         n = self.n
         if zone == "state":
@@ -1894,9 +1758,7 @@ class WriteIndustrial(WriteStrategy):
 
     @staticmethod
     def _read_data(filepath: str) -> pd.DataFrame:
-        """
-        Unzipped 'County_industry_energy_use.gz' csv file.
-        """
+        """Unzipped 'County_industry_energy_use.gz' csv file."""
         df = pd.read_csv(
             filepath,
             dtype={
@@ -1962,10 +1824,7 @@ class WriteIndustrial(WriteStrategy):
         county: str | int,
         buses: list[str],
     ) -> pd.Series:
-        """
-        Evenly distributes laf to buses within a county.
-        """
-
+        """Evenly distributes laf to buses within a county."""
         county_laf = df.at[county, "laf"]
         num_buses = len(buses)
         bus_laf = county_laf / num_buses
@@ -1994,9 +1853,9 @@ class DemandFormatter:
     def __init__(
         self,
         n: pypsa.Network,
-        scaling_method: Optional[str] = None,
-        filepath: Optional[str] = None,
-        api: Optional[str] = None,
+        scaling_method: str | None = None,
+        filepath: str | None = None,
+        api: str | None = None,
     ):
         self.n = n
         self.sns = n.snapshots
@@ -2011,10 +1870,7 @@ class DemandFormatter:
             self.scaler = None
 
     def format_demand(self, df: pd.DataFrame, sector: str, **kwargs) -> pd.DataFrame:
-        """
-        Public method to format demand ready to be ingested into the model.
-        """
-
+        """Public method to format demand ready to be ingested into the model."""
         if self.need_scaling(df):
             assert isinstance(self.scaler, DemandScaler)
 
@@ -2046,9 +1902,7 @@ class DemandFormatter:
         return demand
 
     def need_scaling(self, df: pd.DataFrame) -> bool:
-        """
-        Checks if any demand needs to be scaled.
-        """
+        """Checks if any demand needs to be scaled."""
         if len(df.index) != len(self.sns):
             return True
         return False
@@ -2071,7 +1925,6 @@ class DemandFormatter:
 
 
 class DemandScaler(ABC):
-
     def __init__(self):
         self.projection = self.get_projections()
 
@@ -2080,10 +1933,7 @@ class DemandScaler(ABC):
         pass
 
     def get_growth(self, start_year: int, end_year: int, sector: str) -> float:
-        """
-        Returns decimal change between two years.
-        """
-
+        """Returns decimal change between two years."""
         min_year = self.projection.index.min()
         max_year = self.projection.index.max()
 
@@ -2106,9 +1956,7 @@ class DemandScaler(ABC):
         end_year: int,
         sector: str,
     ) -> pd.DataFrame:
-        """
-        Scales data.
-        """
+        """Scales data."""
         growth = self.get_growth(start_year, end_year, sector)
         new = df.mul(growth)
         return self.reindex(new, end_year)
@@ -2136,14 +1984,12 @@ class DemandScaler(ABC):
         | ...                 |    ...    |    ...    |     |    ...    |
         | 2030-02-28 23:00:00 |    ccc    |    fff    |     |    iii    |
         """
-
         new = df.copy()
         new.index = new.index.map(lambda x: x.replace(year=year))
         return new
 
 
 class AeoElectricityScaler(DemandScaler):
-
     def __init__(self, pudl: str, scenario: str = "reference"):
         self.pudl = pudl
         self.scenario = scenario
@@ -2163,7 +2009,6 @@ class AeoElectricityScaler(DemandScaler):
         | 2049 |  ###  |  ###  |
         | 2050 |  ###  |  ###  |
         """
-
         con = sqlite3.connect(self.pudl)
         df = pd.read_sql_query(
             f"""
@@ -2193,7 +2038,6 @@ class AeoElectricityScaler(DemandScaler):
 
 
 class AeoEnergyScaler(DemandScaler):
-
     def __init__(self, api: str, scenario: str = "reference"):
         self.api = api
         self.scenario = scenario
@@ -2201,9 +2045,7 @@ class AeoEnergyScaler(DemandScaler):
         super().__init__()
 
     def get_sector_data(self, years: list[int], sector: str) -> pd.DataFrame:
-        """
-        Function to piece togehter historical and projected values.
-        """
+        """Function to piece togehter historical and projected values."""
         start_year = min(years)
         end_year = max(years)
 
@@ -2233,7 +2075,6 @@ class AeoEnergyScaler(DemandScaler):
         | 2049 |     ###     |     ###     |     ###     |     ###    |  ###  |
         | 2050 |     ###     |     ###     |     ###     |     ###    |  ###  |
         """
-
         years = range(2017, 2051)
 
         # sectors = ("residential", "commercial", "industry", "transport")
@@ -2252,7 +2093,6 @@ class AeoEnergyScaler(DemandScaler):
 
 
 class AeoVmtScaler(DemandScaler):
-
     def __init__(self, api: str, scenario: str = "reference"):
         self.api = api
         self.scenario = scenario
@@ -2260,9 +2100,7 @@ class AeoVmtScaler(DemandScaler):
         super().__init__()
 
     def get_historical_value(self, year: int, sector: str) -> float:
-        """
-        Returns single year value at a time.
-        """
+        """Returns single year value at a time."""
         return TransportationDemand(vehicle=sector, year=year, api=self.api).get_data(pivot=True).values[0][0]
 
     def get_future_values(
@@ -2270,9 +2108,7 @@ class AeoVmtScaler(DemandScaler):
         year: int,
         sector: str,
     ) -> pd.DataFrame:
-        """
-        Returns all values from 2024 onwards.
-        """
+        """Returns all values from 2024 onwards."""
         return TransportationDemand(
             vehicle=sector,
             year=year,
@@ -2294,7 +2130,6 @@ class AeoVmtScaler(DemandScaler):
         | 2049 |     ###    |    ###    |     ###     | ###  |  ###  |
         | 2050 |     ###    |    ###    |     ###     | ###  |  ###  |
         """
-
         years = range(2017, 2051)
 
         vehicles = ("light_duty", "med_duty", "heavy_duty", "bus")
@@ -2324,7 +2159,6 @@ class AeoVmtScaler(DemandScaler):
 
 
 class EfsElectricityScalar(DemandScaler):
-
     def __init__(self, filepath: str):
         self.efs = filepath
         self.region = "united_states"
@@ -2347,6 +2181,7 @@ class EfsElectricityScalar(DemandScaler):
         )
 
     def interpolate(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Function interpolates between provided demand data years."""
         efs_years = df.index
         new_years = range(min(efs_years), max(efs_years) + 1)
         df = df.reindex(new_years)
@@ -2384,13 +2219,10 @@ class EfsElectricityScalar(DemandScaler):
 
 def get_demand_params(
     end_use: str,
-    demand_params: Optional[dict[str, str]] = None,
+    demand_params: dict[str, str] | None = None,
     **kwargs,
 ) -> tuple:
-    """
-    Gets hard coded demand options.
-    """
-
+    """Gets hard coded demand options."""
     match end_use:
         case "power":  # electricity only study
             demand_profile = demand_params["profile"]

@@ -1,6 +1,4 @@
-"""
-Build time series for air and soil temperatures per clustered model region.
-"""
+"""Build time series for air and soil temperatures per clustered model region."""
 
 import atlite
 import geopandas as gpd
@@ -32,12 +30,12 @@ if __name__ == "__main__":
 
     clustered_regions = gpd.read_file(snakemake.input.regions_onshore).set_index("name").buffer(0).squeeze()
 
-    I = cutout.indicatormatrix(clustered_regions)
+    indicator_matrix = cutout.indicatormatrix(clustered_regions)
 
     pop_layout = xr.open_dataarray(snakemake.input.pop_layout)
 
     stacked_pop = pop_layout.stack(spatial=("y", "x"))
-    M = I.T.dot(np.diag(I.dot(stacked_pop)))
+    M = indicator_matrix.T.dot(np.diag(indicator_matrix.dot(stacked_pop)))
 
     nonzero_sum = M.sum(axis=0, keepdims=True)
     nonzero_sum[nonzero_sum == 0.0] = 1.0
