@@ -82,9 +82,3 @@ license
 changelog
 contributing
 ```
-
-```{toctree}
-:hidden:
-rules-retrieving-data
-config-co2-base
-```
