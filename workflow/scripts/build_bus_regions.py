@@ -1,6 +1,6 @@
 # By PyPSA-USA Authors
 """
-**Description**
+**Description**.
 
 Creates Voronoi shapes for each bus representing both onshore and offshore regions.
 
@@ -23,7 +23,6 @@ Creates Voronoi shapes for each bus representing both onshore and offshore regio
 - ``resources/regions_offshore.geojson``
 """
 
-
 import logging
 
 import geopandas as gpd
@@ -39,16 +38,17 @@ def voronoi_partition_pts(points, outline):
     """
     Compute the polygons of a voronoi partition of `points` within the
     polygon `outline`. Taken from
-    https://github.com/FRESNA/vresutils/blob/master/vresutils/graph.py
+    https://github.com/FRESNA/vresutils/blob/master/vresutils/graph.py.
+
     Attributes
     ----------
     points : Nx2 - ndarray[dtype=float]
     outline : Polygon
+
     Returns
     -------
     polygons : N - ndarray[dtype=Polygon|MultiPolygon]
     """
-
     points = np.asarray(points)
 
     if len(points) == 1:
@@ -195,7 +195,8 @@ def main(snakemake):
                 "country": shape_name,
             },
         )
-        offshore_regions_c = offshore_regions_c.loc[offshore_regions_c.area > 1e-2]  # remove extremely small regions
+        # remove extremely small regions
+        offshore_regions_c = offshore_regions_c.loc[offshore_regions_c.area > 1e-2]
         offshore_regions.append(offshore_regions_c)
     # Exporting
     if offshore_regions:

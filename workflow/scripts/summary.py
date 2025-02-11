@@ -21,10 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 def get_primary_energy_use(n: pypsa.Network) -> pd.DataFrame:
-    """
-    Gets timeseries primary energy use by bus and carrier.
-    """
-
+    """Gets timeseries primary energy use by bus and carrier."""
     link_energy_use = (
         StatisticsAccessor(n)
         .withdrawal(
@@ -53,14 +50,13 @@ def get_primary_energy_use(n: pypsa.Network) -> pd.DataFrame:
     return (
         pd.concat([gen_energy_use, link_energy_use])
         # .reset_index() commenting this out seems to fix issue in multi-horizon indexing
-        .groupby(["bus", "carrier"]).sum()
+        .groupby(["bus", "carrier"])
+        .sum()
     )
 
 
 def get_energy_total(n: pypsa.Network):
-    """
-    Gets energy production totals.
-    """
+    """Gets energy production totals."""
 
     def _get_energy_one_port(n: pypsa.Network, c: str) -> pd.DataFrame:
         return (
@@ -97,9 +93,7 @@ def get_energy_total(n: pypsa.Network):
 
 
 def get_energy_timeseries(n: pypsa.Network) -> pd.DataFrame:
-    """
-    Gets timeseries energy production.
-    """
+    """Gets timeseries energy production."""
 
     def _get_energy_one_port(n: pypsa.Network, c: str) -> pd.DataFrame:
         return (
@@ -151,9 +145,7 @@ def get_energy_timeseries(n: pypsa.Network) -> pd.DataFrame:
 
 
 def get_demand_timeseries(n: pypsa.Network) -> pd.DataFrame:
-    """
-    Gets timeseries energy demand.
-    """
+    """Gets timeseries energy demand."""
     return pd.DataFrame(n.loads_t.p.sum(1)).rename(columns={0: "Demand"})
 
 
@@ -185,9 +177,11 @@ def get_capacity_base(n: pypsa.Network) -> pd.DataFrame:
         if c.name in ("Generator", "StorageUnit"):
             totals.append((c.df.p_nom).groupby(by=[c.df.bus, c.df.carrier]).sum())
         elif c.name == "Link":
-            totals.append(
-                (c.df.p_nom).groupby(by=[c.df.bus0, c.df.carrier]).sum().rename_axis(index={"bus0": "bus"}),
-            ),
+            (
+                totals.append(
+                    (c.df.p_nom).groupby(by=[c.df.bus0, c.df.carrier]).sum().rename_axis(index={"bus0": "bus"}),
+                ),
+            )
             totals.append(
                 (c.df.p_nom).groupby(by=[c.df.bus1, c.df.carrier]).sum().rename_axis(index={"bus1": "bus"}),
             )
@@ -229,8 +223,9 @@ def get_capacity_brownfield(
 
     totals = []
     if retirement_method == "technical":
-        if c.name in ("Generator", "StorageUnit", "Link"):
-            totals.append(_technical_retirement(c))
+        for c in n.iterate_components(n.one_port_components | n.branch_components):
+            if c.name in ("Generator", "StorageUnit", "Link"):
+                totals.append(_technical_retirement(c))
         return pd.concat(totals)
     elif retirement_method == "economic":
         for c in n.iterate_components(n.one_port_components | n.branch_components):
@@ -250,6 +245,7 @@ def get_capacity_brownfield(
 
 
 def get_capital_costs(n: pypsa.Network) -> pd.DataFrame:
+    """Returns statistics capex - installed_capex."""
     return n.statistics.capex() - n.statistics.installed_capex()
 
 
@@ -283,7 +279,6 @@ def get_fuel_costs(n: pypsa.Network) -> pd.DataFrame:
 
     Units are $/MWh
     """
-
     # approximates for 2030
     fixed_voms = {
         "coal": 8.18,
@@ -323,19 +318,14 @@ def get_fuel_costs(n: pypsa.Network) -> pd.DataFrame:
 
 
 def get_node_carrier_emissions_timeseries(n: pypsa.Network) -> pd.DataFrame:
-    """
-    Gets timeseries emissions by bus and carrier.
-    """
+    """Gets timeseries emissions by bus and carrier."""
     energy = get_primary_energy_use(n)
     co2 = n.carriers[["nice_name", "co2_emissions"]].reset_index().set_index("nice_name")[["co2_emissions"]].squeeze()
     return energy.mul(co2, level="carrier", axis=0)
 
 
 def get_node_emissions_timeseries(n: pypsa.Network) -> pd.DataFrame:
-    """
-    Gets timeseries emissions per node.
-    """
-
+    """Gets timeseries emissions per node."""
     return (
         get_node_carrier_emissions_timeseries(n)
         .droplevel("carrier")
@@ -347,10 +337,7 @@ def get_node_emissions_timeseries(n: pypsa.Network) -> pd.DataFrame:
 
 
 def get_tech_emissions_timeseries(n: pypsa.Network) -> pd.DataFrame:
-    """
-    Gets timeseries emissions per technology.
-    """
-
+    """Gets timeseries emissions per technology."""
     return (
         get_node_carrier_emissions_timeseries(n)
         .droplevel("bus")

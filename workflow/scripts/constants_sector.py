@@ -1,6 +1,5 @@
-"""
-Constants specific for sector coupling.
-"""
+# ruff: noqa: D100, D101
+"""Constants specific for sector coupling."""
 
 from enum import Enum
 
@@ -103,7 +102,7 @@ These numbers are giving odd results :(
 
 
 class TransportEfficiency(Enum):
-    """Approximate MWh/MWh efficiencies"""
+    """Approximate MWh/MWh efficiencies."""
 
     LPG = 0.20  # LLNL estimates 21 combined
     ELEC = 0.75

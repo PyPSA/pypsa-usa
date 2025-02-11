@@ -1,3 +1,5 @@
+"""Cluster_network aggregates the outputs of simplify_network, and transforms the network to a zonal power balance model if specified in the configuration."""
+
 import logging
 import warnings
 from functools import reduce
@@ -16,7 +18,7 @@ from _helpers import (
     update_p_nom_max,
 )
 from add_electricity import update_transmission_costs
-from constants import *
+from constants import REEDS_NERC_INTERCONNECT_MAPPER
 from pypsa.clustering.spatial import (
     busmap_by_greedy_modularity,
     busmap_by_hac,
@@ -37,7 +39,6 @@ def normed(x):
 
 def weighting_for_region(n, x, weighting_strategy=None):
     """Calculate the weighting for internal nodes within a given region."""
-
     conv_carriers = {"nuclear", "OCGT", "CCGT", "PHS", "hydro", "coal", "biomass"}
     generators = n.generators
     generators["carrier_base"] = generators.carrier.str.split().str[0]
@@ -55,14 +56,14 @@ def weighting_for_region(n, x, weighting_strategy=None):
     load = n.loads_t.p_set.mean().groupby(n.loads.bus).sum()
 
     b_i = x.index
-    g = normed(gen.reindex(b_i, fill_value=0))
-    l = normed(load.reindex(b_i, fill_value=0))
-    w = g + l
+    gen_weight = normed(gen.reindex(b_i, fill_value=0))
+    load_weight = normed(load.reindex(b_i, fill_value=0))
+    weighting = gen_weight + load_weight
 
     if weighting_strategy == "population":
-        w = normed(n.buses.loc[x.index].Pd)
+        weighting = normed(n.buses.loc[x.index].Pd)
 
-    return (w * (100.0 / w.max())).clip(lower=1.0).astype(int)
+    return (weighting * (100.0 / weighting.max())).clip(lower=1.0).astype(int)
 
 
 def get_feature_for_hac(n, buses_i=None, feature=None):
@@ -105,10 +106,14 @@ def get_feature_for_hac(n, buses_i=None, feature=None):
     return feature_data
 
 
-def distribute_clusters(n, n_clusters, focus_weights=None, solver_name="cbc", weighting_strategy=None):
-    """
-    Determine the number of clusters per region.
-    """
+def distribute_clusters(
+    n,
+    n_clusters,
+    focus_weights=None,
+    solver_name="cbc",
+    weighting_strategy=None,
+):
+    """Determine the number of clusters per region."""
     if weighting_strategy == "population":
         bus_distribution_factor = n.buses.Pd
     else:
@@ -203,12 +208,10 @@ def busmap_for_n_clusters(
 
                 neighbor_bus = n.lines.query(
                     "bus0 == @disconnected_bus or bus1 == @disconnected_bus",
-                ).iloc[
-                    0
-                ][["bus0", "bus1"]]
-                new_country = list(
-                    set(n.buses.loc[neighbor_bus].country) - {country},
-                )[0]
+                ).iloc[0][["bus0", "bus1"]]
+                new_country = next(
+                    iter(set(n.buses.loc[neighbor_bus].country) - {country}),
+                )
 
                 logger.info(
                     f"overwriting country `{country}` of bus `{disconnected_bus}` "
@@ -224,8 +227,7 @@ def busmap_for_n_clusters(
 
     if (algorithm != "hac") and (feature is not None):
         logger.warning(
-            f"Keyword argument feature is only valid for algorithm `hac`. "
-            f"Given feature `{feature}` will be ignored.",
+            f"Keyword argument feature is only valid for algorithm `hac`. Given feature `{feature}` will be ignored.",
         )
 
     n.determine_network_topology()
@@ -243,7 +245,9 @@ def busmap_for_n_clusters(
     countries_remove = list(bus_set - nc_set)
     buses_remove = n.buses[n.buses.country.isin(countries_remove)]
     if not buses_remove.empty:
-        logger.warning(f"Reconciling TAMU and ReEDS Topologies. \n Removing buses: {buses_remove.index}")
+        logger.warning(
+            f"Reconciling TAMU and ReEDS Topologies. \n Removing buses: {buses_remove.index}",
+        )
         for c in n.one_port_components:
             component = n.df(c)
             rm = component[component.bus.isin(buses_remove.index)]
@@ -456,10 +460,12 @@ def convert_to_transport(
 
     if itl_agg_fn:
         # Aggregating the ITLs to lower resolution
-        topology_aggregation_key = list(topology_aggregation.keys())[0]
+        topology_aggregation_key = next(iter(topology_aggregation.keys()))
         itl_lower_res = pd.read_csv(itl_agg_fn)
         itl_lower_res.columns = itl_lower_res.columns.str.lower()
-        itl_lower_res = itl_lower_res.rename(columns={"transgrp": "r", "transgrpp": "rr"})
+        itl_lower_res = itl_lower_res.rename(
+            columns={"transgrp": "r", "transgrpp": "rr"},
+        )
 
         itl_lower_res = itl_lower_res[  # Filter low-res ITLs to only include those that have an end in the network
             itl_lower_res.r.isin(buses["country"]) | itl_lower_res.rr.isin(buses["country"])
@@ -580,7 +586,10 @@ if __name__ == "__main__":
     else:
         n_clusters = int(snakemake.wildcards.clusters)
 
-    n.generators.loc[n.generators.carrier.isin(non_aggregated_carriers), "land_region"] = n.generators.loc[
+    n.generators.loc[
+        n.generators.carrier.isin(non_aggregated_carriers),
+        "land_region",
+    ] = n.generators.loc[
         n.generators.carrier.isin(non_aggregated_carriers),
         "bus",
     ]
@@ -647,10 +656,15 @@ if __name__ == "__main__":
                     itl_fn = snakemake.input.itl_county
                     itl_cost_fn = snakemake.input.itl_costs_county
                 case _:
-                    raise ValueError(f"Unknown aggregation zone {topological_boundaries}")
+                    raise ValueError(
+                        f"Unknown aggregation zone {topological_boundaries}",
+                    )
 
             if topology_aggregation:
-                assert isinstance(topology_aggregation, dict), "topology_aggregation must be a dictionary."
+                assert isinstance(
+                    topology_aggregation,
+                    dict,
+                ), "topology_aggregation must be a dictionary."
                 assert len(topology_aggregation) == 1, "topology_aggregation must contain exactly one key."
 
                 # Extract the single key and value
@@ -677,7 +691,7 @@ if __name__ == "__main__":
             ), f"Number of clusters must be {len(nodes_req)} for current configuration."
 
             n.buses.interconnect = n.buses.nerc_reg.map(REEDS_NERC_INTERCONNECT_MAPPER)
-            n.lines.drop(columns=["interconnect"], inplace=True)
+            n.lines = n.lines.drop(columns=["interconnect"])
 
         clustering = clustering_for_n_clusters(
             n,

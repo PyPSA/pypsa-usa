@@ -1,3 +1,5 @@
+# ruff: noqa: RUF012, D101, D102
+
 """
 Builds costs data from EFS studies.
 
@@ -6,10 +8,8 @@ https://data.nrel.gov/submissions/78
 """
 
 from abc import ABC, abstractmethod
-from typing import Optional
 
 import pandas as pd
-import xarray as xr
 from constants import TBTU_2_MWH, MMBTU_MWHthemal
 
 # Vehicle life assumptions for getting $/VMT capital cost
@@ -76,9 +76,7 @@ COLUMN_ORDER = [
 
 
 def assign_vehicle_type(name: str) -> str:
-    """
-    Must match class level VMT assumptions.
-    """
+    """Must match class level VMT assumptions."""
     if name.startswith("Light Duty Cars"):
         return "light_duty_cars"
     elif name.startswith("Light Duty Trucks"):
@@ -139,9 +137,7 @@ class EfsTechnologyData:
             raise NotImplementedError
 
     def get_data(self, sector: str) -> pd.DataFrame:
-        """
-        Collects all data for the sector.
-        """
+        """Collects all data for the sector."""
         return pd.concat(
             [
                 self.get_capex(sector),
@@ -165,9 +161,7 @@ class EfsTechnologyData:
 
 
 class EfsSectorData(ABC):
-    """
-    Class to collect EFS building and electric transportation data.
-    """
+    """Class to collect EFS building and electric transportation data."""
 
     columns = COLUMN_ORDER
 
@@ -213,8 +207,8 @@ class EfsSectorData(ABC):
     def _format_data_structure(
         self,
         df: pd.DataFrame,
-        source: Optional[str] = "",
-        description: Optional[str] = "",
+        source: str | None = "",
+        description: str | None = "",
     ) -> pd.DataFrame:
         data = df.copy()
         data["technology"] = data.Subsector + " " + data.Technology
@@ -223,9 +217,7 @@ class EfsSectorData(ABC):
         return self._format_columns(data)[self.columns]
 
     def expand_data(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Performs lienar interpolations to fill in values for all years.
-        """
+        """Performs lienar interpolations to fill in values for all years."""
         data = df.copy()
         years = range(data.year.min(), data.year.max() + 1)
         ds = df.set_index(
@@ -242,9 +234,7 @@ class EfsSectorData(ABC):
 
 
 class EfsBevTransportationData(EfsSectorData):
-    """
-    Only contains BEV and PHBEV.
-    """
+    """Only contains BEV and PHBEV."""
 
     # Assumptions from https://www.nrel.gov/docs/fy18osti/70485.pdf
     wh_per_gallon = 33700  # footnote 24
@@ -283,9 +273,7 @@ class EfsBevTransportationData(EfsSectorData):
         return self.expand_data(df)
 
     def get_efficiency(self):
-        """
-        Only pulls main efficiency.
-        """
+        """Only pulls main efficiency."""
         df = self.data.copy()
         df = df[
             (df.Sector == "Transportation") & (df["EFS Case"] == self.efs_case) & (df.Metric == "Main Efficiency")
@@ -311,9 +299,7 @@ class EfsBevTransportationData(EfsSectorData):
         return df
 
     def _correct_capex_units(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Coverts per unit into per VMT.
-        """
+        """Coverts per unit into per VMT."""
         corrected = df.copy()
         corrected["miles"] = corrected.technology.map(assign_vehicle_type)
         corrected["miles"] = corrected.miles.map(self.lifetime_miles)
@@ -322,18 +308,14 @@ class EfsBevTransportationData(EfsSectorData):
         return corrected.drop(columns=["miles"])
 
     def _correct_efficiency_units(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Coverts MPGe into per Miles/MWh.
-        """
+        """Coverts MPGe into per Miles/MWh."""
         corrected = df.copy()
         corrected["value"] = corrected.value.mul(1 / self.wh_per_gallon).mul(1e6)
         corrected["unit"] = "miles/MWh"
         return corrected
 
     def _calculate_fom(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Converts $/mile costs to %/year.
-        """
+        """Converts $/mile costs to %/year."""
         corrected = df.copy()
         corrected["value"] = corrected.technology.map(assign_vehicle_type)
         corrected["value"] = corrected.value.map(self.fixed_cost)
@@ -464,9 +446,7 @@ class EfsIceTransportationData:
         return df[self.columns]
 
     def _correct_capex_units(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Coverts per unit into per VMT.
-        """
+        """Coverts per unit into per VMT."""
         corrected = df.copy()
         corrected["miles"] = corrected.technology.map(assign_vehicle_type)
         corrected["miles"] = corrected.miles.map(self.lifetime_miles)
@@ -475,9 +455,7 @@ class EfsIceTransportationData:
         return corrected.drop(columns=["miles"])
 
     def _correct_fom_units(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Converts $/mile costs to %/year.
-        """
+        """Converts $/mile costs to %/year."""
         corrected = df.copy()
         corrected["fixed"] = corrected.technology.map(assign_vehicle_type)
         corrected["fixed"] = corrected.fixed.map(self.fixed_cost)
@@ -486,9 +464,7 @@ class EfsIceTransportationData:
         return corrected.drop(columns=["capex", "fixed"])
 
     def _correct_efficiency_units(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Coverts MPGe into per Miles/MWh.
-        """
+        """Coverts MPGe into per Miles/MWh."""
         corrected = df.copy()
         corrected["value"] = corrected.value.mul(1 / self.wh_per_gallon).mul(1e6)
         corrected["unit"] = "miles/MWh"
@@ -496,7 +472,6 @@ class EfsIceTransportationData:
 
 
 class EfsBuildingData(EfsSectorData):
-
     mmbtu_2_mwh = MMBTU_MWHthemal
 
     # Assumptions from https://atb.nrel.gov/transportation/2022/definitions
@@ -563,9 +538,7 @@ class EfsBuildingData(EfsSectorData):
         return self._correct_fom_units(df)
 
     def assign_tech_types(self, name: str) -> float:
-        """
-        Must match class level VMT assumptions.
-        """
+        """Must match class level VMT assumptions."""
         if name.endswith("Air Source Heat Pump"):
             return "ashp"
         elif name.endswith("Heat Pump Water Heater"):
@@ -575,18 +548,14 @@ class EfsBuildingData(EfsSectorData):
             return 0
 
     def _correct_capex_units(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Coverts $/kBtu to $/MWh.
-        """
+        """Coverts $/kBtu to $/MWh."""
         corrected = df.copy()
         corrected["value"] = corrected.value.mul(1000).mul(self.mmbtu_2_mwh)
         corrected["unit"] = "$/Mwh"
         return corrected
 
     def _correct_fom_units(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Converts $/kBtu costs to %/year.
-        """
+        """Converts $/kBtu costs to %/year."""
         corrected = df.copy()
         corrected["tech_type"] = corrected.technology.map(self.assign_tech_types)
         corrected["fom"] = corrected.tech_type.map(self.fixed_cost)  # $ /kBTU
@@ -654,7 +623,7 @@ class EiaBuildingData:
         df2.unit = df2.unit.str.replace("/kBtu/hr", "/MW")
         return df2
 
-    def get_data(self, sector: Optional[str] = None) -> pd.DataFrame:
+    def get_data(self, sector: str | None = None) -> pd.DataFrame:
         sector = self._check_sector(sector)
         return pd.concat(
             [
@@ -665,7 +634,7 @@ class EiaBuildingData:
             ],
         )
 
-    def get_capex(self, sector: Optional[str] = None):
+    def get_capex(self, sector: str | None = None):
         sector = self._check_sector(sector)
         if sector:
             slicer = (self.data.technology.str.startswith(sector)) & (self.data.parameter == "investment")
@@ -674,7 +643,7 @@ class EiaBuildingData:
         df = self.data[slicer]
         return self._correct_investment_units(df)[self.columns]
 
-    def get_lifetime(self, sector: Optional[str] = None):
+    def get_lifetime(self, sector: str | None = None):
         sector = self._check_sector(sector)
         if sector:
             slicer = (self.data.technology.str.startswith(sector)) & (self.data.parameter == "lifetime")
@@ -682,7 +651,7 @@ class EiaBuildingData:
             slicer = self.data.parameter == "lifetime"
         return self.data[slicer][self.columns]
 
-    def get_efficiency(self, sector: Optional[str] = None):
+    def get_efficiency(self, sector: str | None = None):
         sector = self._check_sector(sector)
         if sector:
             slicer = (self.data.technology.str.startswith(sector)) & (self.data.parameter == "efficiency")
@@ -690,7 +659,7 @@ class EiaBuildingData:
             slicer = self.data.parameter == "efficiency"
         return self.data[slicer][self.columns]
 
-    def get_fixed_costs(self, sector: Optional[str] = None):
+    def get_fixed_costs(self, sector: str | None = None):
         sector = self._check_sector(sector)
         if sector:
             slicer = (self.data.technology.str.startswith(sector)) & (self.data.parameter == "FOM")

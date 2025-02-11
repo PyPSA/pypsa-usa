@@ -1,3 +1,4 @@
+# ruff: noqa: N816, N803
 """
 Build coefficient of performance (COP) time series for air- or ground-sourced
 heat pumps.
