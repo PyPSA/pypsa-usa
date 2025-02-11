@@ -714,6 +714,7 @@ rule add_extra_components:
         + "{interconnect}/Geospatial/regions_onshore_s{simpl}_{clusters}.geojson",
     params:
         retirement=config["electricity"].get("retirement", "technical"),
+        demand_response=config["electricity"].get("demand_response", {}),
     output:
         RESOURCES + "{interconnect}/elec_s{simpl}_c{clusters}_ec.nc",
     log:

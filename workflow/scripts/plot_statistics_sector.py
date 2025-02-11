@@ -968,13 +968,19 @@ def plot_sector_dr_timeseries(
     month: int | None = None,
     **kwargs,
 ) -> tuple:
+    if sector == "pwr":
+        sec = "demand_response"  # hack to use same function
+    else:
+        sec = sector
+
     e = get_storage_level_timeseries_carrier(
-        n,
-        sector,
-        True,
-        state,
-        resample,
-        resample_fn,
+        n=n,
+        sector=sec,
+        remove_sns_weights=True,
+        state=state,
+        resample=resample,
+        resample_fn=resample_fn,
+        make_positive=True,
     )
     e = e[[x for x in e if "-water-" not in x]]
 
@@ -997,7 +1003,7 @@ def plot_sector_dr_timeseries(
             df = df[df.index.get_level_values("timestep").month == month_i]
 
         if df.empty:
-            logger.warning(f"No Demand Response data to plot for {state}")
+            # logger.warning(f"No Demand Response data to plot for {state}")
             continue
 
         if nice_name:
@@ -1247,6 +1253,17 @@ PRODUCTION_PLOTS = [
         "name": "production_demand_response",
         "fn": plot_sector_dr_timeseries,
         "nice_name": "Residential Demand Response",
+        "sector": "pwr",
+        "plot_by_month": False,
+        "fn_kwargs": {
+            # "resample": "D",
+            # "resample_fn": pd.Series.mean,
+        },
+    },
+    {
+        "name": "production_demand_response",
+        "fn": plot_sector_dr_timeseries,
+        "nice_name": "Residential Demand Response",
         "sector": "res",
         # "plot_by_month": True,
         "fn_kwargs": {
@@ -1453,12 +1470,11 @@ if __name__ == "__main__":
         snakemake = mock_snakemake(
             "plot_sector_production",
             simpl="70",
-            opts="3h",
+            opts="3h-TCT",
             clusters="4m",
             ll="v1.0",
-            sector_opts="",
             sector="E-G",
-            planning_horizons="2018",
+            planning_horizons="2030",
             interconnect="western",
         )
         rootpath = ".."

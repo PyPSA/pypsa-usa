@@ -4,10 +4,10 @@ renewable_carriers,--,"Any subset of {solar, onwind, offwind-ac, offwind-dc, hyd
 retirement, --,One of ``economic`` or ``technical``,"Sets the retirement method for converntional generators. If ``technical`` all generators ``p_nom_min`` are set to ``p_nom`` to prevent selling off of the asset. Retirements are then tracked in post-proccessing. If ``economic`` existing plants have their ``p_nom_min`` set as ``0``,  ``p_nom_max`` set to ``p_nom``,  and capital costs set to fixed costs. Generators with ``p_nom`` are then added to handle capacity expansion."""
 ,,,
 operational_reserve:,,,Settings for reserve requirements following `GenX <https://genxproject.github.io/GenX.jl/stable/Model_Reference/core/#Operational-Reserves>`_
-#NAME?,bool,true or false,Whether to take operational reserve requirements into account during optimisation
-#NAME?,--,float,share of total load
-#NAME?,--,float,share of total renewable supply
-#NAME?,MW,float,fixed reserve capacity
+activate,bool,true or false,Whether to take operational reserve requirements into account during optimisation
+epsilon_load,--,float,share of total load
+epsilon_vres,--,float,share of total renewable supply
+contingency,MW,float,fixed reserve capacity
 ,,,
 max_hours:,,,
 battery,h,float,Maximum state of charge capacity of the battery in terms of hours at full output capacity ``p_nom``. Cf. `PyPSA documentation <https://pypsa.readthedocs.io/en/latest/components.html#storage-unit>`_.
@@ -19,13 +19,15 @@ Store,--,Any subset of {``battery``},Adds extendable storage units (battery and/
 Links,--,Any subset of {},Adds extendable linksat every connection where there are lines or HVDC links without capacity limits and with zero initial capacity. Hydrogen pipelines require hydrogen storage to be modelled as ``Store``.
 ,,,
 demand:,,,
-#NAME?,--,"One of {``efs``, ``eia``}",Datasource for electrical load data. ``EFS`` pulls future state level electrical demand data. ``EIA`` pulls historical balancing level electrical demand dataa.
-#NAME?,--,"One of {``efs``, ``aeo``}, or a float",(UNDER DEVELOPMENT) Used to scale the demand profile data. ``AEO`` will scale according to demand projections from the Annual Energy Outlook. ``EFS`` will scale according to growth rates from the Electrification Futures Study. Or can sclae according to a user defined value.
-#NAME?,--,One of {``pop``},Method to dissagreagate load data. ``pop`` will dissagregate based on population from Breakthrough Energy.
+profile,--,"One of {``efs``, ``eia``}",Datasource for electrical load data. ``EFS`` pulls future state level electrical demand data. ``EIA`` pulls historical balancing level electrical demand dataa.
 scenario:,,,
-#NAME?,--,"One of {``reference``, ``medium``, ``high``}",(UNDER DEVELOPMENT) Extracts EFS data according to level of adoption
-#NAME?,--,"One of {``slow``, ``moderate``, ``fast``}",(UNDER DEVELOPMENT) Extracts EFS data according to speed of electrification
-#NAME?,--,One of the AEO scenarios `here <https://www.eia.gov/outlooks/aeo/data/browser/>`_,(UNDER DEVELOPMENT) Scales future demand according to the AEO scenario
+-efs_case,--,"One of {``reference``, ``medium``, ``high``}",(UNDER DEVELOPMENT) Extracts EFS data according to level of adoption
+-efs_speed,--,"One of {``slow``, ``moderate``, ``fast``}",(UNDER DEVELOPMENT) Extracts EFS data according to speed of electrification
+-aeo,--,One of the AEO scenarios `here <https://www.eia.gov/outlooks/aeo/data/browser/>`_,(UNDER DEVELOPMENT) Scales future demand according to the AEO scenario
+,,,
+demand_response:,,,Settings to activate and configure demand response
+-shift,per_unit,"float {0 <=, >= 1} or 'inf'",Allowable load to be shifted per snapshot. Set to 0 to turn off demand response. Set to 'inf' to not enforce capacity limits.
+-marginal_cost,$/MWh,float {0 <=},Cost to store one unit of energy for one hour
 ,,,
 autarky,,,
 #NAME?,bool,``true`` or ``false``,Require each node to be autarkic by removing all lines and links.
