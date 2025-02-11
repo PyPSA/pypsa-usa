@@ -5,8 +5,8 @@ from itertools import chain
 
 rule build_shapes:
     params:
-        source_offshore_shapes=config["offshore_shape"],
-        offwind_params=config["renewable"]["offwind"],
+        source_offshore_shapes=config_provider("offshore_shape"),
+        offwind_params=config_provider("renewable", "offwind"),
     input:
         zone=DATA + "breakthrough_network/base_grid/zone.csv",
         nerc_shapes="repo_data/geospatial/NERC_Regions/NERC_Regions_Subregions.shp",
@@ -33,8 +33,8 @@ rule build_shapes:
 
 rule build_base_network:
     params:
-        build_offshore_network=config["offshore_network"],
-        model_topology=config["model_topology"]["include"],
+        build_offshore_network=config_provider("offshore_network"),
+        model_topology=config_provider("model_topology", "include"),
     input:
         buses=DATA + "breakthrough_network/base_grid/bus.csv",
         lines=DATA + "breakthrough_network/base_grid/branch.csv",
@@ -67,7 +67,7 @@ rule build_bus_regions:
         topological_boundaries=config_provider(
             "model_topology", "topological_boundaries"
         ),
-        focus_weights=config["focus_weights"],
+        focus_weights=config_provider("focus_weights"),
     input:
         country_shapes=RESOURCES + "{interconnect}/Geospatial/country_shapes.geojson",
         county_shapes=RESOURCES + "{interconnect}/Geospatial/county_shapes.geojson",
@@ -142,8 +142,8 @@ if config["enable"].get("build_cutout", False):
 
 rule build_renewable_profiles:
     params:
-        renewable=config["renewable"],
-        snapshots=config["snapshots"],
+        renewable=config_provider("renewable"),
+        snapshots=config_provider("snapshots"),
     input:
         corine=ancient(
             DATA
@@ -336,10 +336,10 @@ rule build_sector_demand:
     wildcard_constraints:
         end_use="residential|commercial|industry",
     params:
-        planning_horizons=config["scenario"]["planning_horizons"],
+        planning_horizons=config_provider("scenario", "planning_horizons"),
         profile_year=pd.to_datetime(config["snapshots"]["start"]).year,
-        eia_api=config["api"]["eia"],
-        snapshots=config["snapshots"],
+        eia_api=config_provider("api", "eia"),
+        snapshots=config_provider("snapshots"),
     input:
         network=RESOURCES + "{interconnect}/elec_base_network.nc",
         demand_files=demand_raw_data,
@@ -368,10 +368,10 @@ rule build_transport_road_demand:
     wildcard_constraints:
         end_use="transport",
     params:
-        planning_horizons=config["scenario"]["planning_horizons"],
+        planning_horizons=config_provider("scenario", "planning_horizons"),
         profile_year=pd.to_datetime(config["snapshots"]["start"]).year,
-        eia_api=config["api"]["eia"],
-        snapshots=config["snapshots"],
+        eia_api=config_provider("api", "eia"),
+        snapshots=config_provider("snapshots"),
     input:
         network=RESOURCES + "{interconnect}/elec_base_network.nc",
         demand_files=demand_raw_data,
@@ -405,9 +405,9 @@ rule build_transport_other_demand:
         end_use="transport",
         vehicle="boat-shipping|air|rail-shipping|rail-passenger",
     params:
-        planning_horizons=config["scenario"]["planning_horizons"],
-        eia_api=config["api"]["eia"],
-        snapshots=config["snapshots"],
+        planning_horizons=config_provider("scenario", "planning_horizons"),
+        eia_api=config_provider("api", "eia"),
+        snapshots=config_provider("snapshots"),
     input:
         network=RESOURCES + "{interconnect}/elec_base_network.nc",
         demand_files=demand_raw_data,
@@ -481,8 +481,8 @@ def demand_to_add(wildcards):
 rule add_demand:
     params:
         sectors=config["scenario"]["sector"],
-        planning_horizons=config["scenario"]["planning_horizons"],
-        snapshots=config["snapshots"],
+        planning_horizons=config_provider("scenario", "planning_horizons"),
+        snapshots=config_provider("snapshots"),
     input:
         network=RESOURCES + "{interconnect}/elec_base_network.nc",
         demand=demand_to_add,
@@ -542,11 +542,28 @@ def dynamic_fuel_price_files(wildcards):
         return {}
 
 
+rule build_powerplants:
+    input:
+        pudl=DATA + "pudl/pudl.sqlite",
+        wecc_ads="repo_data/WECC_ADS_public",
+        eia_ads_generator_mapping="repo_data/WECC_ADS_public/eia_ads_generator_mapping_updated.csv",
+        fuel_costs="repo_data/plants/fuelCost22.csv",
+        cems="repo_data/plants/cems_heat_rates.xlsx",
+        epa_crosswalk="repo_data/plants/epa_eia_crosswalk.csv",
+    output:
+        powerplants=RESOURCES + "powerplants.csv",
+    log:
+        "logs/build_powerplants.log",
+    resources:
+        mem_mb=30000,
+    script:
+        "../scripts/build_powerplants.py"
+
+
 rule add_electricity:
     params:
         length_factor=config["lines"]["length_factor"],
         renewable=config["renewable"],
-        max_hours=config["electricity"]["max_hours"],
         renewable_carriers=config["electricity"]["renewable_carriers"],
         extendable_carriers=config["electricity"]["extendable_carriers"],
         conventional_carriers=config["electricity"]["conventional_carriers"],
@@ -603,7 +620,7 @@ rule add_electricity:
         BENCHMARKS + "{interconnect}/add_electricity"
     threads: 1
     resources:
-        mem_mb=interconnect_mem_a,
+        mem_mb=lambda wildcards, input, attempt: (input.size // 100000) * attempt * 2,
     script:
         "../scripts/add_electricity.py"
 
@@ -635,7 +652,7 @@ rule simplify_network:
         "logs/simplify_network/{interconnect}/elec_s{simpl}.log",
     threads: 1
     resources:
-        mem_mb=interconnect_mem_s,
+        mem_mb=lambda wildcards, input, attempt: (input.size // 100000) * attempt * 10,
     script:
         "../scripts/simplify_network.py"
 
@@ -648,7 +665,6 @@ rule cluster_network:
         aggregation_strategies=config_provider("clustering", "aggregation_strategies"),
         custom_busmap=config_provider("enable", "custom_busmap", default=False),
         focus_weights=config_provider("focus_weights", default=False),
-        max_hours=config_provider("electricity", "max_hours"),
         length_factor=config_provider("lines", "length_factor"),
         costs=config_provider("costs"),
         planning_horizons=config_provider("scenario", "planning_horizons"),
@@ -689,7 +705,7 @@ rule cluster_network:
         "benchmarks/cluster_network/{interconnect}/elec_s{simpl}_c{clusters}"
     threads: 1
     resources:
-        mem_mb=interconnect_mem_c,
+        mem_mb=lambda wildcards, input, attempt: (input.size // 200000) * attempt * 2,
     script:
         "../scripts/cluster_network.py"
 
@@ -719,7 +735,7 @@ rule add_extra_components:
         "logs/add_extra_components/{interconnect}/elec_s{simpl}_c{clusters}_ec.log",
     threads: 1
     resources:
-        mem_mb=interconnect_mem_prepare,
+        mem_mb=lambda wildcards, input, attempt: (input.size // 100000) * attempt * 2,
     group:
         "prepare"
     script:
@@ -738,7 +754,6 @@ rule prepare_network:
         gaslimit=config_provider("electricity", "gaslimit"),
         gaslimit_enable=config_provider("electricity", "gaslimit_enable", default=False),
         transmission_network=config_provider("model_topology", "transmission_network"),
-        max_hours=config_provider("electricity", "max_hours"),
         costs=config_provider("costs"),
         autarky=config_provider("electricity", "autarky"),
     input:
@@ -760,28 +775,10 @@ rule prepare_network:
         solver="logs/prepare_network/{interconnect}/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}.log",
     threads: 1
     resources:
-        mem_mb=interconnect_mem_prepare,
+        mem_mb=lambda wildcards, input, attempt: (input.size // 100000) * attempt * 2,
     group:
         "prepare"
     log:
         "logs/prepare_network",
     script:
         "../scripts/prepare_network.py"
-
-
-rule build_powerplants:
-    input:
-        pudl=DATA + "pudl/pudl.sqlite",
-        wecc_ads="repo_data/WECC_ADS_public",
-        eia_ads_generator_mapping="repo_data/WECC_ADS_public/eia_ads_generator_mapping_updated.csv",
-        fuel_costs="repo_data/plants/fuelCost22.csv",
-        cems="repo_data/plants/cems_heat_rates.xlsx",
-        epa_crosswalk="repo_data/plants/epa_eia_crosswalk.csv",
-    output:
-        powerplants=RESOURCES + "powerplants.csv",
-    log:
-        "logs/build_powerplants.log",
-    resources:
-        mem_mb=30000,
-    script:
-        "../scripts/build_powerplants.py"

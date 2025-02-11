@@ -8,10 +8,6 @@ operational_reserve:,,,Settings for reserve requirements following `GenX <https:
 #NAME?,--,float,share of total load
 #NAME?,--,float,share of total renewable supply
 #NAME?,MW,float,fixed reserve capacity
-,,,
-max_hours:,,,
-battery,h,float,Maximum state of charge capacity of the battery in terms of hours at full output capacity ``p_nom``. Cf. `PyPSA documentation <https://pypsa.readthedocs.io/en/latest/components.html#storage-unit>`_.
-,,,
 extendable_carriers:,,,
 Generator,--,Any extendable carrier,"Defines existing or non-existing conventional and renewable power plants to be extendable during the optimization. Conventional generators can only be built/expanded where already existent today. If a listed conventional carrier is not included in the ``conventional_carriers`` list, the lower limit of the capacity expansion is set to 0."
 Storage Unit,--,Any subset of {``battery``},Adds extendable storage units (battery and/or hydrogen) at every node/bus after clustering without capacity limits and with zero initial capacity.

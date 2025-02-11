@@ -146,9 +146,6 @@ def add_land_use_constraints(n):
 def prepare_network(
     n,
     solve_opts=None,
-    config=None,
-    foresight=None,
-    planning_horizons=None,
 ):
     if "clip_p_max_pu" in solve_opts:
         for df in (
@@ -923,26 +920,6 @@ def add_operational_reserve_margin(n, sns, config):
     n.model.add_constraints(lhs <= rhs, name="Generator-p-reserve-upper")
 
 
-def add_battery_constraints(n):
-    """
-    Add constraint ensuring that charger = discharger, i.e.
-    1 * charger_size - efficiency * discharger_size = 0.
-    """
-    if not n.links.p_nom_extendable.any():
-        return
-
-    discharger_bool = n.links.index.str.contains("battery discharger")
-    charger_bool = n.links.index.str.contains("battery charger")
-
-    dischargers_ext = n.links[discharger_bool].query("p_nom_extendable").index
-    chargers_ext = n.links[charger_bool].query("p_nom_extendable").index
-
-    eff = n.links.efficiency[dischargers_ext].values
-    lhs = n.model["Link-p_nom"].loc[chargers_ext] - n.model["Link-p_nom"].loc[dischargers_ext] * eff
-
-    n.model.add_constraints(lhs == 0, name="Link-charger_ratio")
-
-
 def add_sector_co2_constraints(n, config):
     """
     Adds sector co2 constraints.
@@ -1493,7 +1470,6 @@ def extra_functionality(n, snapshots):
     for o in opts:
         if "EQ" in o:
             add_EQ_constraints(n, o)
-    add_battery_constraints(n)
     add_land_use_constraints(n)
 
 
@@ -1591,9 +1567,6 @@ if __name__ == "__main__":
     n = prepare_network(
         n,
         solve_opts,
-        config=snakemake.config,
-        foresight=snakemake.params.foresight,
-        planning_horizons=snakemake.params.planning_horizons,
     )
 
     n = solve_network(
