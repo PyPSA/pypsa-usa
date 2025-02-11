@@ -1,7 +1,4 @@
-# ruff: noqa: RUF012, D101, D102
-
-"""
-Module for adding the gas sector.
+"""Module for adding the gas sector.
 
 This module will add a state level copperplate natural gas network to the model.
 Specifically, it will do the following
@@ -26,7 +23,7 @@ import numpy as np
 import pandas as pd
 import pypsa
 import yaml
-from constants import CODE_2_STATE, NG_MWH_2_MMCF, STATE_2_CODE, STATES_INTERCONNECT_MAPPER
+from constants import CODE_2_STATE, EMPTY_STATES, NG_MWH_2_MMCF, STATE_2_CODE, STATES_INTERCONNECT_MAPPER
 from pypsa.components import Network
 
 logger = logging.getLogger(__name__)
@@ -103,12 +100,12 @@ class StateGeometry:
 
 
 class GasData(ABC):
-    """Main class to interface with data."""
+    """Interface with any gas data."""
 
     state_2_interconnect = STATES_INTERCONNECT_MAPPER
     state_2_name = CODE_2_STATE
     name_2_state = STATE_2_CODE
-    states_2_remove = [x for x, y in STATES_INTERCONNECT_MAPPER.items() if not y]
+    states_2_remove = EMPTY_STATES
 
     def __init__(self, year: int, interconnect: str) -> None:
         self.year = year
@@ -121,14 +118,17 @@ class GasData(ABC):
 
     @property
     def data(self) -> pd.DataFrame:
+        """Get formatted data."""
         return self._data
 
     @abstractmethod
     def read_data(self) -> pd.DataFrame | gpd.GeoDataFrame:
+        """Read in data."""
         pass
 
     @abstractmethod
     def format_data(self, data: pd.DataFrame | gpd.GeoDataFrame) -> pd.DataFrame:
+        """Format dataset."""
         pass
 
     def _get_data(self) -> pd.DataFrame:
@@ -137,6 +137,7 @@ class GasData(ABC):
 
     @abstractmethod
     def build_infrastructure(self, n: pypsa.Network) -> None:
+        """Add pypsa components to network."""
         pass
 
     def filter_on_interconnect(
@@ -199,9 +200,11 @@ class GasBuses(GasData):
         )  # year locked for location mapping
 
     def read_data(self) -> gpd.GeoDataFrame:
+        """Read in state centerpoints."""
         return pd.DataFrame(self.states.state_center_points)
 
     def format_data(self, data: gpd.GeoDataFrame) -> pd.DataFrame:
+        """Format bus data."""
         data = pd.DataFrame(data)
         data["name"] = data.STATE.map(self.state_2_name)
         return self.filter_on_interconnect(data)
@@ -211,6 +214,7 @@ class GasBuses(GasData):
         n: pypsa.Network,
         df: pd.DataFrame,
     ) -> pd.DataFrame:
+        """Filter formatted data to only include states in geographic scope."""
         states_in_model = n.buses[
             ~n.buses.carrier.isin(
                 ["gas storage", "gas trade", "gas pipeline"],
@@ -228,6 +232,7 @@ class GasBuses(GasData):
         return df
 
     def build_infrastructure(self, n: Network) -> None:
+        """Add pypsa components to network."""
         df = self.filter_on_sate(n, self.data)
 
         states = df.set_index("STATE")
@@ -255,6 +260,7 @@ class GasStorage(GasData):
         super().__init__(year, interconnect)
 
     def read_data(self):
+        """Read in data from EIA API."""
         base = eia.Storage("gas", "base", self.year, self.api).get_data()
         base["storage_type"] = "base_capacity"
         total = eia.Storage("gas", "total", self.year, self.api).get_data()
@@ -267,6 +273,7 @@ class GasStorage(GasData):
         return final
 
     def format_data(self, data: pd.DataFrame):
+        """Format storage data."""
         df = data.copy()
         df["value"] = df.value * MWH_2_MMCF
         df = (
@@ -300,6 +307,7 @@ class GasStorage(GasData):
         n: pypsa.Network,
         df: pd.DataFrame,
     ) -> pd.DataFrame:
+        """Filter formatted data to only include states in geographic scope."""
         states_in_model = n.buses[
             ~n.buses.carrier.isin(
                 ["gas storage", "gas trade", "gas pipeline"],
@@ -317,6 +325,7 @@ class GasStorage(GasData):
         return df
 
     def build_infrastructure(self, n: pypsa.Network, **kwargs):
+        """Add pypsa components to network."""
         df = self.filter_on_sate(n, self.data)
         df.index = df.STATE
         df["state_name"] = df.index.map(self.state_2_name)
@@ -390,9 +399,11 @@ class GasProcessing(GasData):
         super().__init__(year=year, interconnect=interconnect)
 
     def read_data(self) -> pd.DataFrame:
+        """Read in data from EIA API."""
         return eia.Production("gas", "market", self.year, self.api).get_data()
 
     def format_data(self, data: pd.DataFrame):
+        """Format processing capacity data."""
         df = data.copy()
 
         df["value"] = (
@@ -413,6 +424,7 @@ class GasProcessing(GasData):
         n: pypsa.Network,
         df: pd.DataFrame,
     ) -> pd.DataFrame:
+        """Filter formatted data to only include states in geographic scope."""
         states_in_model = n.buses[
             ~n.buses.carrier.isin(
                 ["gas storage", "gas trade", "gas pipeline"],
@@ -430,6 +442,7 @@ class GasProcessing(GasData):
         return df
 
     def build_infrastructure(self, n: pypsa.Network, **kwargs):
+        """Add pypsa components to network."""
         df = self.filter_on_sate(n, self.data)
         df = df.set_index("STATE")
         df["bus"] = df.index + " gas"
@@ -514,6 +527,7 @@ class _GasPipelineCapacity(GasData):
         super().__init__(year, interconnect)
 
     def read_data(self) -> pd.DataFrame:
+        """Read in excel dataset."""
         return pd.read_excel(
             self.xlsx,
             sheet_name="Pipeline State2State Capacity",
@@ -550,6 +564,7 @@ class _GasPipelineCapacity(GasData):
         return df[~(df.STATE_TO == df.STATE_FROM)].copy()
 
     def format_data(self, data: pd.DataFrame) -> pd.DataFrame:
+        """Format pipeline data."""
         df = data.copy()
         df.columns = df.columns.str.strip()
         df = df[df.index == int(self.year)]
@@ -689,6 +704,7 @@ class InterconnectGasPipelineCapacity(_GasPipelineCapacity):
         super().__init__(year, interconnect, xlsx, api)
 
     def extract_pipelines(self, data: pd.DataFrame) -> pd.DataFrame:
+        """Get piplines within the geographic scope."""
         df = data.copy()
         # for some reason drop duplicates is not wokring here and I cant figure out why :(
         # df = df.drop_duplicates(subset=["STATE_TO", "STATE_FROM"], keep=False).copy()
@@ -711,6 +727,7 @@ class InterconnectGasPipelineCapacity(_GasPipelineCapacity):
         return df.reset_index(drop=True)
 
     def build_infrastructure(self, n: pypsa.Network) -> None:
+        """Add pypsa components to network."""
         df = self.filter_on_sate(n, self.data, in_spatial_scope=True)
 
         if df.empty:
@@ -753,6 +770,7 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
         super().__init__(year, interconnect, xlsx, api)
 
     def extract_pipelines(self, data: pd.DataFrame) -> pd.DataFrame:
+        """Get pipelines within geographic scope."""
         df = data.copy()
         if self.domestic:
             return self._get_domestic_pipeline_connections(df)
@@ -1100,7 +1118,10 @@ class PipelineLinepack(GasData):
         super().__init__(year, interconnect)
 
     def read_data(self) -> gpd.GeoDataFrame:
-        """https://atlas.eia.gov/apps/3652f0f1860d45beb0fed27dc8a6fc8d/explore."""
+        """Read in geojson pipe locations.
+
+        https://atlas.eia.gov/apps/3652f0f1860d45beb0fed27dc8a6fc8d/explore.
+        """
         return gpd.read_file(self.pipeline_geojson)
 
     def filter_on_sate(
@@ -1108,6 +1129,7 @@ class PipelineLinepack(GasData):
         n: pypsa.Network,
         df: pd.DataFrame,
     ) -> pd.DataFrame:
+        """Filter formatted data to only include states in geographic scope."""
         states_in_model = n.buses[
             ~n.buses.carrier.isin(
                 ["gas storage", "gas trade", "gas pipeline"],
@@ -1125,6 +1147,7 @@ class PipelineLinepack(GasData):
         return df
 
     def format_data(self, data: gpd.GeoDataFrame) -> pd.DataFrame:
+        """Format linepack data."""
         gdf = data.copy()
         states = self.states.copy()
 
@@ -1172,6 +1195,7 @@ class PipelineLinepack(GasData):
         return self.filter_on_interconnect(final)
 
     def build_infrastructure(self, n: pypsa.Network, **kwargs) -> None:
+        """Add pypsa components to network."""
         df = self.filter_on_sate(n, self.data)
         df = df.set_index("STATE")
 
