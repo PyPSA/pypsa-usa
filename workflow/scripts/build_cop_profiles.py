@@ -1,4 +1,3 @@
-# ruff: noqa: N816, N803
 """
 Build coefficient of performance (COP) time series for air- or ground-sourced
 heat pumps.
@@ -19,13 +18,13 @@ import xarray as xr
 
 
 def coefficient_of_performance(
-    delta_T: xr.DataArray,
+    delta_t: xr.DataArray,
     source: str = "air",
 ) -> xr.DataArray:
     if source == "air":
-        return 6.81 - 0.121 * delta_T + 0.000630 * delta_T**2
+        return 6.81 - 0.121 * delta_t + 0.000630 * delta_t**2
     elif source == "soil":
-        return 8.77 - 0.150 * delta_T + 0.000734 * delta_T**2
+        return 8.77 - 0.150 * delta_t + 0.000734 * delta_t**2
     else:
         raise NotImplementedError("'source' must be one of  ['air', 'soil']")
 
@@ -42,10 +41,10 @@ if __name__ == "__main__":
 
     for area in ["total", "urban", "rural"]:
         for source in ["air", "soil"]:
-            source_T = xr.open_dataarray(snakemake.input[f"temp_{source}_{area}"])
+            source_t = xr.open_dataarray(snakemake.input[f"temp_{source}_{area}"])
 
-            delta_T = snakemake.params.heat_pump_sink_T - source_T
+            delta_t = snakemake.params.heat_pump_sink_T - source_t
 
-            cop = coefficient_of_performance(delta_T, source)
+            cop = coefficient_of_performance(delta_t, source)
 
             cop.to_netcdf(snakemake.output[f"cop_{source}_{area}"])
