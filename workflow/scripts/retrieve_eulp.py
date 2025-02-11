@@ -1,5 +1,3 @@
-# ruff: noqa: RUF012
-
 """
 Module to download end use load profiles (eulp) for comstock and restock data.
 
@@ -13,6 +11,7 @@ Notes
 
 import logging
 from pathlib import Path
+from typing import ClassVar
 
 import requests
 from _helpers import configure_logging
@@ -26,7 +25,7 @@ class OediDownload:
 
     root = "https://oedi-data-lake.s3.amazonaws.com/nrel-pds-building-stock/end-use-load-profiles-for-us-building-stock/2024"
 
-    res_files = [
+    res_files: ClassVar[list[str]] = [
         "mobile_home",
         "multi-family_with_2_-_4_units",
         "multi-family_with_5plus_units",
@@ -34,7 +33,7 @@ class OediDownload:
         "single-family_detached",
     ]
 
-    com_files = [
+    com_files: ClassVar[list[str]] = [
         "fullservicerestaurant",
         "hospital",
         "largehotel",

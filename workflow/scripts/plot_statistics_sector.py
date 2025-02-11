@@ -1,4 +1,3 @@
-# ruff: noqa: D101, D102
 """Plots Sector Coupling Statistics."""
 
 import logging
@@ -1143,6 +1142,8 @@ def save_fig(
 
 @dataclass
 class PlottingData:
+    """Describe data to plot."""
+
     name: str  # snakemake name
     fn: callable
     sector: str | None = None  # None = 'system'
