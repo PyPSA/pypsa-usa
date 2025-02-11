@@ -1,21 +1,17 @@
-"""
-Builds mapping between cutout grid cells and population (total, urban, rural).
-"""
+"""Builds mapping between cutout grid cells and population (total, urban, rural)."""
 
 import logging
-
-logger = logging.getLogger(__name__)
-
 from pathlib import Path
 
 import atlite
 import constants
 import geopandas as gpd
 import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
 import xarray as xr
 from _helpers import configure_logging, mock_snakemake
+
+logger = logging.getLogger(__name__)
 
 
 def load_urban_ratio(df: pd.DataFrame) -> pd.DataFrame:
@@ -73,9 +69,9 @@ def load_population(df: pd.DataFrame) -> pd.DataFrame:
 def plot_county_data(
     gdf: gpd.GeoDataFrame,
     col: str,
-    title: str = None,
-    description: str = None,
-    save: str = None,
+    title: str | None = None,
+    description: str | None = None,
+    save: str | None = None,
 ):
     """
     Plots heat map of geodataframe.
@@ -83,7 +79,6 @@ def plot_county_data(
     Adapted from
     https://www.relataly.com/visualize-covid-19-data-on-a-geographic-heat-maps/291/
     """
-
     # for legend range
     vmin = gdf[col].min()
     vmax = gdf[col].max()
@@ -113,11 +108,8 @@ def plot_county_data(
         fig.savefig(save)
 
 
-def plot_grid_data(da: xr.DataArray, title: str = None, save: str = None):
-    """
-    Plots gridded population layout.
-    """
-
+def plot_grid_data(da: xr.DataArray, title: str | None = None, save: str | None = None):
+    """Plots gridded population layout."""
     fig, ax = plt.subplots(figsize=(5, 4))
     da.plot(ax=ax, cbar_kwargs={"label": "population"})
     ax.set_xlabel("longitude")
@@ -132,8 +124,6 @@ def plot_grid_data(da: xr.DataArray, title: str = None, save: str = None):
 
 if __name__ == "__main__":
     if "snakemake" not in globals():
-        from _helpers import mock_snakemake
-
         snakemake = mock_snakemake(
             "build_population_layouts",
             interconnect="western",
@@ -177,12 +167,15 @@ if __name__ == "__main__":
     counties = counties.join(pop)
 
     # Indicator matrix counties -> grid cells
-    I = atlite.cutout.compute_indicatormatrix(counties.geometry, grid_cells)
+    indicator_matrix = atlite.cutout.compute_indicatormatrix(
+        counties.geometry,
+        grid_cells,
+    )
 
     # population in each grid cell
-    cell_pop = pd.Series(I.dot(counties["population"]))
-    cell_rural_pop = pd.Series(I.dot(counties["rural_population"]))
-    cell_urban_pop = pd.Series(I.dot(counties["urban_population"]))
+    cell_pop = pd.Series(indicator_matrix.dot(counties["population"]))
+    cell_rural_pop = pd.Series(indicator_matrix.dot(counties["rural_population"]))
+    cell_urban_pop = pd.Series(indicator_matrix.dot(counties["urban_population"]))
 
     # save total, rural, urban population
     pops = {
@@ -206,7 +199,6 @@ if __name__ == "__main__":
 
     # plot data
     if save_path:
-
         plotting_data = counties.copy()
         plotting_data["density_person_per_km2"] = plotting_data.population / counties.ALAND * 1000000
         columns = {

@@ -1,3 +1,5 @@
+# ruff: noqa: RUF012, D101, D102
+
 """
 Holds data processing class for NREL End Use Load Profiles.
 
@@ -5,9 +7,6 @@ Holds data processing class for NREL End Use Load Profiles.
 
 See `retrieve_eulp` rule for the data extraction
 """
-
-import logging
-from typing import Optional
 
 import pandas as pd
 
@@ -149,8 +148,8 @@ class Eulp:
 
     def __init__(
         self,
-        filepath: Optional[str] = None,
-        df: Optional[pd.DataFrame] = None,
+        filepath: str | None = None,
+        df: pd.DataFrame | None = None,
     ) -> None:
         if filepath:
             df = self._read_data(filepath)
@@ -171,7 +170,7 @@ class Eulp:
             )
         else:
             raise TypeError(
-                f"missing 1 required positional argument: 'filepath' or 'df'",
+                "missing 1 required positional argument: 'filepath' or 'df'",
             )
 
     def __add__(self, other):
@@ -217,9 +216,7 @@ class Eulp:
 
     @staticmethod
     def _resample_data(df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Locked to resampling at 1hr.
-        """
+        """Locked to resampling at 1hr."""
         if not isinstance(df.index, pd.DatetimeIndex):
             df.index = pd.to_datetime(df.index)
         df.index = df.index.map(lambda x: x.replace(year=2018))
@@ -228,7 +225,6 @@ class Eulp:
         return resampled.sort_index()
 
     def _aggregate_data(self, df: pd.DataFrame) -> pd.DataFrame:
-
         def aggregate_sector(df: pd.DataFrame, columns: list[str]) -> pd.Series:
             sector_columns = [x for x in columns if x in df.columns.to_list()]
             return df[sector_columns].sum(axis=1)
@@ -250,16 +246,15 @@ class Eulp:
 
     def plot(
         self,
-        sectors: Optional[list[str] | str] = [
+        sectors: list[str] | str | None = [
             "electricity",
             "heating",
             "cooling",
             "space_heating",
             "water_heating",
         ],
-        resample: Optional[str] = None,
+        resample: str | None = None,
     ):
-
         if isinstance(sectors, str):
             sectors = [sectors]
 
@@ -275,9 +270,7 @@ class Eulp:
 
 
 class EulpTotals:
-    """
-    End use by fuel.
-    """
+    """End use by fuel."""
 
     _elec_group = ["out.electricity.total.energy_consumption.kwh"]
 
@@ -289,8 +282,8 @@ class EulpTotals:
 
     def __init__(
         self,
-        filepath: Optional[str] = None,
-        df: Optional[pd.DataFrame] = None,
+        filepath: str | None = None,
+        df: pd.DataFrame | None = None,
     ) -> None:
         if filepath:
             df = self._read_data(filepath)
@@ -301,7 +294,7 @@ class EulpTotals:
             assert (self.data.columns == ["electricity", "gas", "oil", "propane"]).all()
         else:
             raise TypeError(
-                f"missing 1 required positional argument: 'filepath' or 'df'",
+                "missing 1 required positional argument: 'filepath' or 'df'",
             )
 
     def __add__(self, other):
@@ -343,9 +336,7 @@ class EulpTotals:
 
     @staticmethod
     def _resample_data(df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Locked to resampling at 1hr.
-        """
+        """Locked to resampling at 1hr."""
         if not isinstance(df.index, pd.DatetimeIndex):
             df.index = pd.to_datetime(df.index)
         df.index = df.index.map(lambda x: x.replace(year=2018))
@@ -354,7 +345,6 @@ class EulpTotals:
         return resampled.sort_index()
 
     def _aggregate_data(self, df: pd.DataFrame) -> pd.DataFrame:
-
         def aggregate_sector(df: pd.DataFrame, columns: list[str]) -> pd.Series:
             sector_columns = [x for x in columns if x in df.columns.to_list()]
             return df[sector_columns].sum(axis=1)
@@ -375,9 +365,8 @@ class EulpTotals:
 
     def plot(
         self,
-        sectors: Optional[list[str] | str] = ["electricity", "gas", "oil", "propane"],
+        sectors: list[str] | str | None = ["electricity", "gas", "oil", "propane"],
     ):
-
         if isinstance(sectors, str):
             sectors = [sectors]
 

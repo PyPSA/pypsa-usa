@@ -48,6 +48,6 @@ repos:
   rev: v0.1.4  # Check for the latest version
   hooks:
   - id: ruff
-    args: ["check", "--config=pyproject.toml"]
+    args: ["--config=pyproject.toml", "--fix"]
   - id: ruff-format
     args: ["--config=pyproject.toml"]

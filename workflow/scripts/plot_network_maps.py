@@ -32,12 +32,10 @@ import numpy as np
 import pandas as pd
 import pypsa
 import seaborn as sns
-from cartopy import crs as ccrs
-from pypsa.plot import add_legend_circles, add_legend_lines, add_legend_patches
-
-logger = logging.getLogger(__name__)
 from _helpers import configure_logging
 from add_electricity import sanitize_carriers
+from cartopy import crs as ccrs
+from pypsa.plot import add_legend_circles, add_legend_lines, add_legend_patches
 from summary import (
     get_capacity_base,
     get_capacity_brownfield,
@@ -45,14 +43,14 @@ from summary import (
     get_node_emissions_timeseries,
 )
 
+logger = logging.getLogger(__name__)
+
 # Global Plotting Settings
 TITLE_SIZE = 16
 
 
 def get_color_palette(n: pypsa.Network) -> pd.Series:
-    """
-    Returns colors based on nice name.
-    """
+    """Returns colors based on nice name."""
     colors = (n.carriers.reset_index().set_index("nice_name")).color
 
     # additional = {
@@ -89,9 +87,7 @@ def get_color_palette(n: pypsa.Network) -> pd.Series:
 
 
 def get_bus_scale(interconnect: str) -> float:
-    """
-    Scales lines based on interconnect size.
-    """
+    """Scales lines based on interconnect size."""
     if interconnect != "usa":
         return 1e5
     else:
@@ -99,9 +95,7 @@ def get_bus_scale(interconnect: str) -> float:
 
 
 def get_line_scale(interconnect: str) -> float:
-    """
-    Scales lines based on interconnect size.
-    """
+    """Scales lines based on interconnect size."""
     if interconnect != "usa":
         return 2e3
     else:
@@ -135,9 +129,7 @@ def create_title(title: str, **wildcards) -> str:
 
 
 def remove_sector_buses(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Removes buses for sector coupling.
-    """
+    """Removes buses for sector coupling."""
     num_levels = df.index.nlevels
 
     if num_levels > 1:
@@ -160,7 +152,6 @@ def plot_emissions_map(
     save: str,
     **wildcards,
 ) -> None:
-
     # get data
 
     emissions = (
@@ -227,9 +218,7 @@ def plot_capacity_map(
     line_cmap="viridis",
     line_norm=None,
 ) -> tuple[plt.figure, plt.axes]:
-    """
-    Generic network plotting function for capacity pie charts at each node.
-    """
+    """Generic network plotting function for capacity pie charts at each node."""
     fig, ax = plt.subplots(
         figsize=(10, 10),
         subplot_kw={"projection": ccrs.EqualEarth(n.buses.x.mean())},
@@ -304,9 +293,7 @@ def plot_demand_map(
     save: str,
     **wildcards,
 ) -> None:
-    """
-    Plots map of network nodal demand.
-    """
+    """Plots map of network nodal demand."""
     # get data
 
     bus_values = get_demand_base(n).mul(1e-3)
@@ -389,9 +376,7 @@ def plot_base_capacity_map(
     save: str,
     **wildcards,
 ) -> None:
-    """
-    Plots map of base network capacities.
-    """
+    """Plots map of base network capacities."""
     # get data
 
     bus_values = get_capacity_base(n)
@@ -429,9 +414,7 @@ def plot_opt_capacity_map(
     save: str,
     **wildcards,
 ) -> None:
-    """
-    Plots map of optimal network capacities.
-    """
+    """Plots map of optimal network capacities."""
     # get data
     # capacity = n.statistics()[['Optimal Capacity']]
     # capacity = capacity[capacity.index.get_level_values(0).isin(['Generator', 'StorageUnit'])]
@@ -469,14 +452,7 @@ def plot_new_capacity_map(
     save: str,
     **wildcards,
 ) -> None:
-    """
-    Plots map of new capacity.
-    """
-    # get data
-    # expanded_capacity = n.statistics.expanded_capacity()
-    # expanded_capacity = expanded_capacity[expanded_capacity.index.get_level_values(0).isin(['Generator', 'StorageUnit'])]
-    # expanded_capacity.index = expanded_capacity.index.droplevel(0)
-
+    """Plots map of new capacity."""
     bus_pnom = get_capacity_base(n)
     bus_pnom_opt = get_capacity_brownfield(n)
 
@@ -518,9 +494,7 @@ def plot_renewable_potential(
     save: str,
     **wildcards,
 ) -> None:
-    """
-    Plots wind and solar resource potential by node.
-    """
+    """Plots wind and solar resource potential by node."""
     # get data
     renew = n.generators[
         (n.generators.p_nom_max != np.inf)
@@ -533,10 +507,6 @@ def plot_renewable_potential(
     ]
 
     bus_values = renew.groupby(["bus", "carrier"]).p_nom_max.sum()
-
-    # bus_pnom_opt = get_capacity_brownfield(n)
-    # bus_pnom_opt = bus_pnom_opt.loc[bus_values.index]
-    # print((bus_values - bus_pnom_opt)/bus_values)
 
     # do not show lines or links
     line_values = pd.Series(0, index=n.lines.s_nom.index)

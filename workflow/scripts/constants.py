@@ -1,10 +1,6 @@
-"""
-Module for holding global constant values.
-"""
+"""Module for holding global constant values."""
 
 from enum import Enum
-
-import pandas as pd
 
 ###########################################
 # Constants for GIS Coordinate Reference Systems
@@ -162,7 +158,7 @@ ADS_FUEL_MAPPER = {
     "Water": "Hydro",
     "Bio": "Biomass",
     "Wind": "Wind",
-    "WH": "Waste",  ##TODO: #33 add waste into cost data
+    "WH": "Waste",  # TODO: #33 add waste into cost data
     "Geo": "Geothermal",
     "Uranium": "Nuclear",
     "Petroleum Coke": "Oil",
@@ -563,6 +559,8 @@ STATE_2_CODE = {
     "Mexico": "MX",
 }
 
+CODE_2_STATE = {value: key for key, value in STATE_2_CODE.items()}
+
 REEDS_NERC_INTERCONNECT_MAPPER = {
     "WECC_CA": "western",
     "WECC_NWPP": "western",
@@ -926,6 +924,8 @@ STATE_2_TIMEZONE = {
 
 
 class Month(Enum):
+    """Enums for Month of Year."""
+
     JANUARY = 1
     FEBRUARY = 2
     MARCH = 3

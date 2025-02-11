@@ -1,3 +1,5 @@
+"""Plotting script for electricity sector validation studies."""
+
 import logging
 from collections import OrderedDict
 from pathlib import Path
@@ -8,14 +10,12 @@ import numpy as np
 import pandas as pd
 import pypsa
 import seaborn as sns
-
-logger = logging.getLogger(__name__)
 from _helpers import configure_logging, get_snapshots
 from constants import (
+    CODE_2_STATE,
     EIA_930_REGION_MAPPER,
     EIA_BA_2_REGION,
     EIA_FUEL_MAPPER_2,
-    STATE_2_CODE,
 )
 from eia import Emissions
 from plot_network_maps import (
@@ -26,6 +26,8 @@ from plot_network_maps import (
 )
 from plot_statistics import plot_fuel_costs, plot_generator_data_panel, plot_region_lmps
 from summary import get_node_emissions_timeseries
+
+logger = logging.getLogger(__name__)
 
 sns.set_theme("paper", style="whitegrid")
 
@@ -65,48 +67,6 @@ def get_regions(n):
     return regions
 
 
-def get_state_generation_mix(n: pypsa.Network, var="p"):
-    storage_devices = n.storage_units.copy()
-    storage_devices["state"] = storage_devices.bus.map(n.buses.reeds_state)
-    storage_devices["state_carrier"] = storage_devices["state"] + "_" + storage_devices["carrier"]
-    # Group by state and carrier
-    storage = n.storage_units_t[var].clip(lower=0).copy()
-    storage = storage.T.groupby(storage_devices["state_carrier"]).sum().T
-    storage.index = storage.index.droplevel(1)
-    storage = storage.groupby("period").sum().T.mul(1e-3)  # convert to GW
-
-    gens = n.generators.copy()
-    gens["state"] = gens.bus.map(n.buses.reeds_state)
-    gens["state_carrier"] = gens["state"] + "_" + gens["carrier"]
-    # Group by state and carrier
-    generation = n.generators_t[var].copy()
-    generation = generation.T.groupby(gens["state_carrier"]).sum().T
-    generation.index = generation.index.droplevel(1)
-    generation = generation.groupby("period").sum().T
-    generation = generation / 1e3  # convert to GWh
-
-    production = pd.concat([generation, storage], axis=0)
-    production = production.reset_index()
-    production.columns = ["state_carrier", "generation"]
-    production["state"] = production["state_carrier"].str.split("_").str[0]
-    production["carrier"] = production["state_carrier"].str.split("_").str[1:].str.join("_")
-    production_pivot = production.pivot(
-        index="state",
-        columns="carrier",
-        values="generation",
-    )
-    if "load" in production_pivot.columns:
-        production_pivot.load = production_pivot.load.mul(1e-3)
-    return production_pivot
-
-
-def get_state_loads(n: pypsa.Network):
-    loads = n.loads_t.p
-    n.loads["state"] = n.loads.bus.map(n.buses.reeds_state)
-    loads = loads.T.groupby(n.loads.state).sum().T
-    loads = loads / 1e3  # convert to GW
-
-
 def add_missing_carriers(df1, df2):
     # Create new columns for historic for missing carriers in optimized
     for carrier in df1.columns:
@@ -126,9 +86,7 @@ def plot_timeseries_comparison(
     title="Electricity Production by Carrier",
     **wildcards,
 ):
-    """
-    plots a stacked plot for seasonal production for snapshots: January 2 - December 30 (inclusive)
-    """
+    """Plots a stacked plot for seasonal production for snapshots: January 2 - December 30 (inclusive)."""
     historic, optimized = add_missing_carriers(historic, optimized)
 
     kwargs = dict(color=colors, ylabel="Production [GW]", xlabel="", linewidth=0)
@@ -174,10 +132,10 @@ def plot_timeseries_comparison(
         top=max(upper_lim, diff_lim_upper),
     )
 
-    h, l = axes[0].get_legend_handles_labels()
+    h, label_ = axes[0].get_legend_handles_labels()
     fig.legend(
         h[::-1],
-        l[::-1],
+        label_[::-1],
         loc="lower right",
         bbox_to_anchor=(1, 0),
         ncol=1,
@@ -210,9 +168,7 @@ def plot_bar_carrier_production(
 
 
 def create_optimized_by_carrier(n, order, region_buses=None):
-    """
-    Create a DataFrame from the model output/optimized.
-    """
+    """Create a DataFrame from the model output/optimized."""
     if region_buses is not None:
         gen_p = n.generators_t["p"].loc[
             :,
@@ -327,9 +283,7 @@ def plot_regional_comparisons(
     order=None,
     **wildcards,
 ):
-    """
-    Plot regional comparison of results.
-    """
+    """Plot regional comparison of results."""
     Path.mkdir(
         Path(snakemake.output[0]).parents[0] / "regional_timeseries",
         exist_ok=True,
@@ -337,7 +291,6 @@ def plot_regional_comparisons(
     buses = n.buses.copy()
 
     if snakemake.config["model_topology"]["topological_boundaries"] == "reeds_zone":
-
         regions = n.buses.reeds_ba.unique()
         regions = list(OrderedDict.fromkeys(regions))
         buses["region"] = buses.reeds_ba
@@ -418,13 +371,13 @@ def plot_load_shedding_map(
     regions: gpd.GeoDataFrame,
     **wildcards,
 ):
-
     load_curtailment = n.generators_t.p.filter(regex="^(.*load).*$")
     load_curtailment_sum = load_curtailment.sum() / 1e3  # convert to MW
 
-    # split the generator name into a multi index where the first level is the bus and the second level is the carrier name
+    # split the generator name into a multi index where the first level is the
+    # bus and the second level is the carrier name
     multi_index = load_curtailment_sum.index.str.rsplit(" ", n=1, expand=True)
-    multi_index.rename({0: "bus", 1: "carrier"}, inplace=True)
+    multi_index = multi_index.rename({0: "bus", 1: "carrier"})
     load_curtailment_sum.index = multi_index
     bus_values = load_curtailment_sum
 
@@ -510,7 +463,12 @@ def plot_generator_cost_stack(
 
     # Get unique NERC regions
     unique_regions = df_sorted["nerc_reg"].unique()
-    fig, axs = plt.subplots(len(unique_regions), 1, figsize=(10, 5 * len(unique_regions)), constrained_layout=True)
+    fig, axs = plt.subplots(
+        len(unique_regions),
+        1,
+        figsize=(10, 5 * len(unique_regions)),
+        constrained_layout=True,
+    )
 
     colors = n.carriers.color.to_dict()
 
@@ -565,9 +523,7 @@ def plot_state_emissions_historical_bar(
     eia_api: str,
     **wildcards,
 ) -> None:
-    """
-    Compares regional annual emissions to the year.
-    """
+    """Compares regional annual emissions to the year."""
     year = snapshots[0].year
 
     sectors = wildcards["sector"].split("-")
@@ -606,11 +562,10 @@ def plot_state_emissions_historical_bar(
     region_mapper = n.buses[["country", "reeds_state"]].drop_duplicates().set_index("country")["reeds_state"].to_dict()
     optimized["region"] = optimized.index.map(region_mapper)
     optimized = optimized.groupby("region").sum()
-    CODE_2_STATE = {v: k for k, v in STATE_2_CODE.items()}
     optimized.index = optimized.index.map(CODE_2_STATE)
     optimized.index.name = "state"
 
-    optimized.sort_index(inplace=True)
+    optimized = optimized.sort_index()
 
     historical = historical.loc[optimized.index]
     final = optimized.join(historical).reset_index()
@@ -644,9 +599,7 @@ def plot_ba_emissions_historical_bar(
     eia_api: str,
     **wildcards,
 ) -> None:
-    """
-    Compares regional annual emissions to the year.
-    """
+    """Compares regional annual emissions to the year."""
     # year = snapshots[0].year
 
     # sectors = wildcards["sector"].split("-")
@@ -660,9 +613,7 @@ def plot_ba_emissions_historical_bar(
             None,
             region,
             emissions=True,
-        ).sum(
-            axis=0,
-        )["Net Generation"]
+        ).sum(axis=0)["Net Generation"]
         region_em = region_em.sum() / 1e9
         historical.loc[region] = region_em
     historical.name = "Historical"
@@ -676,9 +627,8 @@ def plot_ba_emissions_historical_bar(
     if snakemake.config["model_topology"]["topological_boundaries"] == "balancing_area":
         optimized.loc["CISO"] = optimized.loc[["CISO-PGAE", "CISO-SCE", "CISO-SDGE", "CISO-VEA"]].sum()
 
-        optimized.drop(
+        optimized = optimized.drop(
             index=["CISO-PGAE", "CISO-SCE", "CISO-SDGE", "CISO-VEA"],
-            inplace=True,
         )
     elif snakemake.config["model_topology"]["topological_boundaries"] == "reeds_zone":
         region_mapper = n.buses[["country", "reeds_ba"]].drop_duplicates().set_index("country")["reeds_ba"].to_dict()
@@ -687,7 +637,7 @@ def plot_ba_emissions_historical_bar(
         optimized = optimized.groupby("region").sum()
         optimized.index.name = "country"
 
-    optimized.sort_index(inplace=True)
+    optimized = optimized.sort_index()
 
     historical = historical.loc[optimized.index]
     final = optimized.join(historical).reset_index()
@@ -734,13 +684,6 @@ def get_state_generation_mix(n: pypsa.Network, var="p"):
     return generation_pivot
 
 
-def get_state_loads(n: pypsa.Network):
-    loads = n.loads_t.p
-    n.loads["state"] = n.loads.bus.map(n.buses.reeds_state)
-    loads = loads.T.groupby(n.loads.state).sum().T
-    loads = loads / 1e3  # convert to GW
-
-
 def plot_state_generation_mix(
     n: pypsa.Network,
     snapshots: pd.date_range,
@@ -749,9 +692,7 @@ def plot_state_generation_mix(
     save_carrier: str,
     **wildcards,
 ):
-    """
-    Creates a stacked bar chart for each state's generation mix.
-    """
+    """Creates a stacked bar chart for each state's generation mix."""
     year = snapshots[0].year
 
     optimized = get_state_generation_mix(n)
@@ -761,13 +702,12 @@ def plot_state_generation_mix(
     historical_gen = historical_gen[historical_gen.YEAR == year]
     historical_gen = historical_gen[historical_gen["TYPE OF PRODUCER"] == "Total Electric Power Industry"]
     historical_gen = historical_gen[historical_gen["ENERGY SOURCE"] != "Total"]
-    historical_gen.drop(columns=["YEAR", "TYPE OF PRODUCER"], inplace=True)
-    historical_gen.rename(
+    historical_gen = historical_gen.drop(columns=["YEAR", "TYPE OF PRODUCER"])
+    historical_gen = historical_gen.rename(
         columns={
             "ENERGY SOURCE": "carrier",
             "GENERATION (Megawatthours)": "Historical",
         },
-        inplace=True,
     )
     historical_gen["carrier"] = historical_gen.carrier.map(EIA_FUEL_MAPPER_2)
     historical_gen.carrier = historical_gen.carrier.str.lower()
@@ -824,9 +764,7 @@ def plot_state_generation_capacities(
     save: str,
     **wildcards,
 ):
-    """
-    Creates a stacked bar chart for each state's generation mix.
-    """
+    """Creates a stacked bar chart for each state's generation mix."""
     n.generators["state"] = n.generators.bus.map(n.buses.reeds_state)
     n.generators["state_carrier"] = n.generators["state"] + "_" + n.generators["carrier"]
 
@@ -842,7 +780,7 @@ def plot_state_generation_capacities(
         columns="carrier",
         values="capacity",
     )
-    generation_pivot.drop(columns=["load"], inplace=True)
+    generation_pivot = generation_pivot.drop(columns=["load"])
 
     # Create Stacked Bar Plot for each State's Generation Mix
     colors = n.carriers.color.to_dict()
@@ -861,8 +799,8 @@ def plot_lmp_distribution_comparison(
     **wildcards,
 ):
     lmps = n.buses_t.marginal_price.copy()
-    ISOs = ["CISO", "MISO", "ERCO", "ISNE", "NYIS", "PJM", "SWPP"]
-    iso_buses = n.buses[n.buses.reeds_ba.isin(ISOs)]
+    iso_list = ["CISO", "MISO", "ERCO", "ISNE", "NYIS", "PJM", "SWPP"]
+    iso_buses = n.buses[n.buses.reeds_ba.isin(iso_list)]
     lmps_iso = lmps.loc[:, iso_buses.index]
     lmps_iso.index = lmps_iso.index.get_level_values(1)
 
@@ -918,7 +856,7 @@ def main(snakemake):
     ge_all = ge_all.loc[ge_all.period.isin(snapshots), :]
     ge_all = ge_all.rename(columns=lambda x: x[2:] if x.startswith("E_") else x)
 
-    ge_all.set_index("period", inplace=True)
+    ge_all = ge_all.set_index("period")
     ge_all.columns = pd.MultiIndex.from_tuples(
         ge_all.columns.str.split("_", expand=True).tolist(),
     )
@@ -944,7 +882,7 @@ def main(snakemake):
     ge_co2.period = pd.to_datetime(ge_co2.period)
     ge_co2 = ge_co2.loc[ge_co2.period.isin(snapshots), :]
     ge_co2 = ge_co2.rename(columns=lambda x: x[4:] if x.startswith("CO2_") else x)
-    ge_co2.set_index("period", inplace=True)
+    ge_co2 = ge_co2.set_index("period")
     ge_co2.columns = pd.MultiIndex.from_tuples(
         ge_co2.columns.str.split("_", expand=True).tolist(),
     )

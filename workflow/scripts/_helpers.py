@@ -35,8 +35,6 @@ def configure_logging(snakemake, skip_handlers=False):
     skip_handlers : True | False (default)
         Do (not) skip the default handlers created for redirecting output to STDERR and file.
     """
-    import logging
-
     kwargs = snakemake.config.get("logging", dict()).copy()
     kwargs.setdefault("level", "INFO")
 
@@ -64,8 +62,6 @@ def configure_logging(snakemake, skip_handlers=False):
 
 
 def setup_custom_logger(name):
-    import logging
-
     formatter = logging.Formatter(
         fmt="%(asctime)s - %(levelname)s - %(module)s - %(message)s",
     )
@@ -97,7 +93,9 @@ def load_network(import_name=None, custom_components=None):
             override_components:
                 ShadowPrice:
                     component: ["shadow_prices","Shadow price for a global constraint.",np.nan]
-                    attributes:
+
+    Attributes
+    ----------
                     name: ["string","n/a","n/a","Unique name","Input (required)"]
                     value: ["float","n/a",0.,"shadow value","Output"]
 
@@ -187,8 +185,8 @@ def load_network_for_plots(fn, tech_costs, config, combine_hydro_ps=True):
     # bus_carrier = n.storage_units.bus.map(n.buses.carrier)
     # n.storage_units.loc[bus_carrier == "heat","carrier"] = "water tanks"
 
-    Nyears = n.snapshot_weightings.loc[n.investment_periods[0]].objective.sum() / 8760.0
-    costs = load_costs(tech_costs, config["costs"], config["electricity"], Nyears)
+    num_years = n.snapshot_weightings.loc[n.investment_periods[0]].objective.sum() / 8760.0
+    costs = load_costs(tech_costs, config["costs"], config["electricity"], num_years)
     update_transmission_costs(n, costs)
 
     return n
@@ -260,7 +258,6 @@ def aggregate_p_curtailed(n):
 
 
 def aggregate_costs(n, flatten=False, opts=None, existing_only=False):
-
     components = dict(
         Link=("p_nom", "p0"),
         Generator=("p_nom", "p"),
@@ -307,8 +304,8 @@ def progress_retrieve(url, file):
 
     pbar = ProgressBar(0, 100)
 
-    def dlProgress(count, blockSize, totalSize):
-        pbar.update(int(count * blockSize * 100 / totalSize))
+    def dlProgress(count, block_size, total_size):
+        pbar.update(int(count * block_size * 100 / total_size))
 
     urllib.request.urlretrieve(url, file, reporthook=dlProgress)
 
@@ -331,10 +328,6 @@ def get_aggregation_strategies(aggregation_strategies):
 
 
 def export_network_for_gis_mapping(n, output_path):
-    import os
-
-    import pandas as pd
-
     # Creating GIS Table for Mapping Lines in QGIS
     lines_gis = n.lines.copy()
     lines_gis["latitude1"] = n.buses.loc[lines_gis.bus0].y.values
@@ -363,7 +356,7 @@ def export_network_for_gis_mapping(n, output_path):
 
 def mock_snakemake(rulename, **wildcards):
     """
-    This function is expected to be executed from the 'scripts'-directory of '
+    Function is expected to be executed from the 'scripts'-directory of '
     the snakemake project. It returns a snakemake.script.Snakemake object,
     based on the Snakefile.
 
@@ -507,12 +500,13 @@ def set_scenario_config(snakemake):
 
 
 def update_config_with_sector_opts(config, sector_opts):
+    from packaging.version import parse
     from snakemake.utils import update_config
 
     for o in sector_opts.split("-"):
         if o.startswith("CF+"):
-            l = o.split("+")[1:]
-            update_config(config, parse(l))
+            l_ = o.split("+")[1:]
+            update_config(config, parse(l_))
 
 
 def get_opt(opts, expr, flags=None):
@@ -531,9 +525,7 @@ def get_opt(opts, expr, flags=None):
 
 
 def find_opt(opts, expr):
-    """
-    Return if available the float after the expression.
-    """
+    """Return if available the float after the expression."""
     for o in opts:
         if expr in o:
             m = re.findall(r"m?\d+(?:[\.p]\d+)?", o)
@@ -545,9 +537,8 @@ def find_opt(opts, expr):
 
 
 def update_config_from_wildcards(config, w, inplace=True):
-    """
-    Parses configuration settings from wildcards and updates the config.
-    """
+    """Parses configuration settings from wildcards and updates the config."""
+    from packaging.version import parse
 
     if not inplace:
         config = copy.deepcopy(config)
@@ -733,17 +724,17 @@ def get_scenarios(run):
 def get_rdir(run):
     scenario_config = run.get("scenarios", {})
     if run["name"] and scenario_config.get("enable"):
-        RDIR = "{run}/"
+        rdir = "{run}/"
     elif run["name"]:
-        RDIR = run["name"] + "/"
+        rdir = run["name"] + "/"
     else:
-        RDIR = ""
+        rdir = ""
 
     prefix = run.get("prefix", "")
     if prefix:
-        RDIR = f"{prefix}/{RDIR}"
+        rdir = f"{prefix}/{rdir}"
 
-    return RDIR
+    return rdir
 
 
 def get_run_path(fn, dir, rdir, shared_resources):
@@ -825,7 +816,6 @@ def get_snapshots(
 
     Taken from PyPSA-Eur implementation
     """
-
     time = pd.date_range(freq=freq, **snapshots, **kwargs)
     if drop_leap_day and time.is_leap_year.any():
         time = time[~((time.month == 2) & (time.day == 29))]

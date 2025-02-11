@@ -1,8 +1,5 @@
 # BY PyPSA-USA Authors
-"""
-Aggregates network to substations and simplifies to a single voltage level.
-"""
-
+"""Aggregates network to substations and simplifies to a single voltage level."""
 
 import logging
 from functools import reduce
@@ -30,7 +27,7 @@ def convert_to_per_unit(df):
     df["susceptance_pu"] = df["b"] / df["base_susceptance"]
 
     # Dropping intermediate columns (optional)
-    df.drop(["base_impedance", "base_susceptance"], axis=1, inplace=True)
+    df = df.drop(["base_impedance", "base_susceptance"], axis=1)
 
     return df
 
@@ -39,7 +36,8 @@ def convert_to_voltage_level(n, new_voltage):
     """
     Converts network.lines parameters to a given voltage.
 
-    Parameters:
+    Parameters
+    ----------
     n (pypsa.Network): Network
     new_voltage (float): New voltage level
     """
@@ -55,10 +53,9 @@ def convert_to_voltage_level(n, new_voltage):
     df.v_nom = new_voltage
 
     # Dropping intermediate column
-    df.drop(
+    df = df.drop(
         ["new_base_impedance", "resistance_pu", "reactance_pu", "susceptance_pu"],
         axis=1,
-        inplace=True,
     )
 
     # Update network lines
@@ -101,7 +98,6 @@ def aggregate_to_substations(
     First step in clusterings, if use_ba_zones is True, then the network
     retains balancing Authority zones in clustering.
     """
-
     logger.info("Aggregating buses to substation level...")
 
     generator_strategies = aggregation_strategies.get("generators", dict())
@@ -173,9 +169,8 @@ def aggregate_to_substations(
     else:
         cols2drop = ["balancing_area", "substation_off", "sub_id", "state"]
 
-    network_s.buses.drop(
+    network_s.buses = network_s.buses.drop(
         columns=cols2drop,
-        inplace=True,
     )
     return network_s, clustering.busmap
 
@@ -221,9 +216,8 @@ if __name__ == "__main__":
     # n = pypsa.Network(snakemake.input.network)
     n = pickle.load(open(snakemake.input.network, "rb"))
 
-    n.generators.drop(
+    n.generators = n.generators.drop(
         columns=["ba_eia", "ba_ads"],
-        inplace=True,
     )  # temp added these columns and need to drop for workflow
 
     n = convert_to_voltage_level(n, 230)
@@ -238,7 +232,8 @@ if __name__ == "__main__":
     busmaps = [trafo_map, busmap_to_sub.sub_id]
     busmaps = reduce(lambda x, y: x.map(y), busmaps[1:], busmaps[0])
 
-    # TODO: WHEN WE REPLACE NETWORK WITH NEW NETWORK WE SHOULD CALACULATE LINE LENGTHS BASED ON THE actual GIS line files.
+    # TODO: WHEN WE REPLACE NETWORK WITH NEW NETWORK WE SHOULD CALACULATE LINE
+    # LENGTHS BASED ON THE actual GIS line files.
     n = assign_line_lengths(n, 1.25)
     n.links["underwater_fraction"] = 0  # TODO: CALULATE UNDERWATER FRACTIONS.
 
@@ -251,7 +246,7 @@ if __name__ == "__main__":
     )
 
     if topological_boundaries == "reeds_zone":
-        n.buses.drop(columns=["county"], inplace=True)
+        n.buses = n.buses.drop(columns=["county"])
 
     if snakemake.wildcards.simpl:
         n.set_investment_periods(periods=snakemake.params.planning_horizons)
