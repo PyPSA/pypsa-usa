@@ -1,4 +1,3 @@
-# ruff: noqa: D100, D101
 """Constants specific for sector coupling."""
 
 from enum import Enum
@@ -9,6 +8,8 @@ from enum import Enum
 
 
 class SecNames(Enum):
+    """Three letter sector names."""
+
     RESIDENTIAL = "res"
     COMMERCIAL = "com"
     INDUSTRY = "ind"
@@ -17,6 +18,8 @@ class SecNames(Enum):
 
 
 class SecCarriers(Enum):
+    """Sector carrier names."""
+
     ELECTRICITY = "elec"
     HEATING = "heat"
     COOLING = "cool"
@@ -31,6 +34,8 @@ class SecCarriers(Enum):
 
 
 class Transport(Enum):
+    """Transport mode names."""
+
     ROAD = "veh"
     AIR = "air"
     BOAT = "boat"
@@ -38,6 +43,8 @@ class Transport(Enum):
 
 
 class RoadTransport(Enum):
+    """Road transport mode names."""
+
     LIGHT = "lgt"
     MEDIUM = "med"
     HEAVY = "hvy"
@@ -45,6 +52,8 @@ class RoadTransport(Enum):
 
 
 class RoadTransportUnits(Enum):
+    """Road transport mode units."""
+
     LIGHT = "kVMT"
     MEDIUM = "kVMT"
     HEAVY = "kVMT"
@@ -52,28 +61,40 @@ class RoadTransportUnits(Enum):
 
 
 class AirTransport(Enum):
+    """Air transport mode names."""
+
     PASSENGER = "psg"
 
 
 class AirTransportUnits(Enum):
+    """Air transport mode units."""
+
     PASSENGER = "kSeatMiles"
 
 
 class RailTransport(Enum):
+    """Rail transport mode names."""
+
     PASSENGER = "psg"
     SHIPPING = "ship"
 
 
 class RailTransportUnits(Enum):
+    """Rail transport mode units."""
+
     PASSENGER = "kPassengerMiles"
     SHIPPING = "kTonMiles"
 
 
 class BoatTransport(Enum):
+    """Boat transport mode names."""
+
     SHIPPING = "ship"
 
 
 class BoatTransportUnits(Enum):
+    """Boat transport mode units."""
+
     SHIPPING = "kTonMiles"
 
 
