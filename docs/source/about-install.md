@@ -27,7 +27,21 @@ templates into the `workflow/config` folder.
 bash init_pypsa_usa.sh
 ```
 
-## Step 3: Create Mamba Environment
+## Step 3: Set-up Environment (mamba or UV)
+
+### `uv` installation
+
+UV is a new python package managment tool from the creators of mamba. It replaces mamba, conda, and pip commands for one package and virtual environment managment tool. Instructions for installing [uv](https://docs.astral.sh/uv/getting-started/installation/).
+
+with UV installed, you can create and sync a new environment with:
+
+```console
+uv venv
+source .venv/bin/activate
+uv pip sync pyproject.toml
+```
+
+### `mamba` Installation
 
 PyPSA-USA uses conda/mamba to manage project dependencies. You can download and install mamba following the [instructions](https://mamba.readthedocs.io/en/latest/mamba-installation.html). Follow links for mambaforge installation. There are two ways to install mamba, the first (recommended) method will start with a fresh install, meaning if you have previously installed conda environments, you will need to recreate these conda envs. If you already have conda installed and do not wish to install mamba, you can follow the same set of instructions replacing any `mamba` with `conda`
 
@@ -39,6 +53,9 @@ mamba activate pypsa-usa
 ```
 
 You also have the option to use miniconda. Download [Miniconda](https://docs.conda.io/en/latest/miniconda.html) following their [instructions](https://docs.conda.io/en/latest/miniconda.html).
+
+
+
 
 ```{seealso}
 If you are planning to develop PyPSA-USA, please see our [contribution guidelines](./contributing.md#code-contributions) for installing additional dependencies
