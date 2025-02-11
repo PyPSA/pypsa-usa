@@ -73,7 +73,7 @@ exclude = [
 select = [
     "E",   # pycodestyle
     "TD",  # flake-8 todos
-    "PD",  # pandas vet
+    #"PD",  # pandas vet
     "RUF", # Ruff rules
     "N",   # pep8
     "F",   # pyflakes
@@ -82,10 +82,32 @@ select = [
     "C90", # Complex code
     "I",   # isort (import sorting)
 ]
+mccabe.max-complexity = 10
 
 # Allow unused variables when underscore-prefixed.
 dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
-extend-ignore = ['D105', 'D107', 'D205', 'D415']
+extend-ignore = [
+    "D105",  # Ignore: Missing docstring in magic methods (__init__, __str__, etc.).
+    "D107",  # Ignore: Missing docstring in __init__ method.
+    "D205",  # Ignore: 1st line of docstring should be separated from the summary with a blank line.
+    "D415",  # Ignore: First line of a docstring should end with a period, question mark, or exclamation mark.
+    "D401",  # Ignore: First line of a docstring should be in imperative mood (e.g., "Get" instead of "Gets").
+    "D419",  # Ignore: Empty docstrings should not be allowed.
+    "D103",  # Ignore: Missing docstring in a public function.
+    "TD002", # Ignore: TODO comments should have an author name (e.g., "# TODO (John): Fix this").
+    "TD003", # Ignore: TODO comments should have a specific issue/task reference.
+    "PD010", # Ignore: `df.isna().sum()` should be replaced with `df.isnull().sum()` (allows both styles).
+    "PD901", # Ignore: Avoid using `df` as a variable name for Pandas DataFrames (allows using `df`).
+    "C901",  # Prevents Ruff from auto-fixing overly complex functions.
+    "N802",  # Function naming lower case
+    "E501"
+]
+
+unfixable = [
+
+    "E741",  # Prevents Ruff from fixing ambiguous variable names (e.g., `l`, `O`, `I` which look like numbers).
+]
+
 pydocstyle.convention = "numpy"
 
 [tool.ruff.format]
