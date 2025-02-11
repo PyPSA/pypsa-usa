@@ -9,10 +9,10 @@ rule build_shapes:
         offwind_params=config["renewable"]["offwind"],
     input:
         zone=DATA + "breakthrough_network/base_grid/zone.csv",
-        nerc_shapes="repo_data/NERC_Regions/NERC_Regions_Subregions.shp",
-        reeds_shapes="repo_data/Reeds_Shapes/rb_and_ba_areas.shp",
-        onshore_shapes="repo_data/BA_shapes_new/Modified_BE_BA_Shapes.shp",
-        offshore_shapes_ca_osw="repo_data/BOEM_CA_OSW_GIS/CA_OSW_BOEM_CallAreas.shp",
+        nerc_shapes="repo_data/geospatial/NERC_Regions/NERC_Regions_Subregions.shp",
+        reeds_shapes="repo_data/geospatial/Reeds_Shapes/rb_and_ba_areas.shp",
+        onshore_shapes="repo_data/geospatial/BA_shapes_new/Modified_BE_BA_Shapes.shp",
+        offshore_shapes_ca_osw="repo_data/geospatial/BOEM_CA_OSW_GIS/CA_OSW_BOEM_CallAreas.shp",
         offshore_shapes_eez=DATA + "eez/conus_eez.shp",
         county_shapes=DATA + "counties/cb_2020_us_county_500k.shp",
     output:
@@ -161,9 +161,9 @@ rule build_renewable_profiles:
         ),
         country_shapes=RESOURCES + "{interconnect}/Geospatial/country_shapes.geojson",
         offshore_shapes=RESOURCES + "{interconnect}/Geospatial/offshore_shapes.geojson",
-        cec_onwind="repo_data/CEC_Wind_BaseScreen_epsg3310.tif",
-        cec_solar="repo_data/CEC_Solar_BaseScreen_epsg3310.tif",
-        boem_osw="repo_data/boem_osw_planning_areas.tif",
+        cec_onwind="repo_data/geospatial/CEC_GIS/CEC_Wind_BaseScreen_epsg3310.tif",
+        cec_solar="repo_data/geospatial/CEC_GIS/CEC_Solar_BaseScreen_epsg3310.tif",
+        boem_osw="repo_data/geospatial/boem_osw_planning_areas.tif",
         regions=lambda w: (
             RESOURCES + "{interconnect}/Geospatial/regions_onshore.geojson"
             if w.technology in ("onwind", "solar")
@@ -581,7 +581,6 @@ rule add_electricity:
         + "{interconnect}/Geospatial/regions_offshore.geojson",
         reeds_shapes=RESOURCES + "{interconnect}/Geospatial/reeds_shapes.geojson",
         powerplants=RESOURCES + "powerplants.csv",
-        plants_eia="repo_data/plants/plants_merged.csv",
         plants_breakthrough=DATA + "breakthrough_network/base_grid/plant.csv",
         hydro_breakthrough=DATA + "breakthrough_network/base_grid/hydro.csv",
         bus2sub=RESOURCES + "{interconnect}/bus2sub.csv",
