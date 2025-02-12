@@ -1,5 +1,3 @@
-# ruff: noqa: RUF012, D101, D102, F811
-
 """Builds the demand data for the PyPSA network."""
 
 # snakemake is not liking this futures import. Removing type hints in context class
@@ -11,7 +9,7 @@ import sqlite3
 import sys
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 import constants as const
 import duckdb
@@ -56,7 +54,7 @@ class Context:
         return self._write_strategy
 
     @write_strategy.setter
-    def strategy(self, strategy) -> None:  # arg is WriteStrategy
+    def strategy(self, strategy) -> None:  # arg is WriteStrategy  # noqa: F811
         """Usually, the Context allows replacing a Strategy object at runtime."""
         self._write_strategy = strategy
 
@@ -149,7 +147,7 @@ class ReadStrategy(ABC):
         self.filepath = filepath
 
     @property
-    def units():
+    def units():  # noqa: D102
         return "MW"
 
     @abstractmethod
@@ -230,7 +228,7 @@ class ReadEia(ReadStrategy):
         self._zone = "ba"
 
     @property
-    def zone(self):
+    def zone(self):  # noqa: D102
         return self._zone
 
     def _read_data(self) -> pd.DataFrame:
@@ -282,7 +280,7 @@ class ReadFERC714(ReadStrategy):
         self._zone = "state"
 
     @property
-    def zone(self):
+    def zone(self):  # noqa: D102
         return self._zone
 
     def _read_data(self) -> pd.DataFrame:
@@ -359,7 +357,7 @@ class ReadEfs(ReadStrategy):
         self._zone = "state"
 
     @property
-    def zone(self):
+    def zone(self):  # noqa: D102
         return self._zone
 
     def _read_data(self) -> pd.DataFrame:
@@ -500,11 +498,12 @@ class ReadEulp(ReadStrategy):
         self._zone = "state"
 
     @property
-    def zone(self):
+    def zone(self):  # noqa: D102
         return self._zone
 
     @property
     def stock(self):
+        """Data is from ResStock or ComStock."""
         if self._stock == "res":
             return "residential"
         elif self._stock == "com":
@@ -619,7 +618,7 @@ class ReadCliu(ReadStrategy):
     # MAIN -> MRO
     # MAPP -> SPP and some MRO
     # WSCC -> WECC (but left seperate here)
-    EPRI_NERC_2_STATE = {
+    EPRI_NERC_2_STATE: ClassVar[dict[str, list[str]]] = {
         "ECAR": ["IL", "IN", "KY", "MI", "OH", "WI", "WV"],
         "ERCOT": ["TX"],
         "MAAC": ["MD"],
@@ -636,12 +635,12 @@ class ReadCliu(ReadStrategy):
     }
 
     # https://www.epri.com/research/products/000000003002018167
-    EPRI_SEASON_2_MONTH = {
+    EPRI_SEASON_2_MONTH: ClassVar[dict[str, list[int]]] = {
         "Peak": [5, 6, 7, 8, 9],  # may -> sept
         "OffPeak": [1, 2, 3, 4, 10, 11, 12],  # oct -> april
     }
 
-    EPRI_ENDUSE = {
+    EPRI_ENDUSE: ClassVar[dict[str, str]] = {
         "HVAC": "electricity",
         "Lighting": "electricity",
         "MachineDrives": "electricity",
@@ -664,7 +663,7 @@ class ReadCliu(ReadStrategy):
         self._zone = "state"
 
     @property
-    def zone(self):
+    def zone(self):  # noqa: D102
         return self._zone
 
     def _read_data(self) -> Any:
@@ -1070,7 +1069,7 @@ class ReadTransportEfsAeo(ReadStrategy):
     """
 
     # TODO: extract this out directly from EFS
-    efs_years = [2018, 2020, 2022, 2024, 2030, 2040, 2050]
+    efs_years: ClassVar[list[int]] = [2018, 2020, 2022, 2024, 2030, 2040, 2050]
 
     def __init__(self, filepath: str, api: str, efs_path: str) -> None:
         """Filepath is state level breakdown of VMT by vehicle type."""
@@ -1085,7 +1084,7 @@ class ReadTransportEfsAeo(ReadStrategy):
         self.efs_profile = self._read_efs_data()
 
     @property
-    def zone(self):
+    def zone(self):  # noqa: D102
         return self._zone
 
     @staticmethod
@@ -1313,13 +1312,13 @@ class ReadTransportAeo(ReadStrategy):
     """
 
     # scales units so demand magnitudes are consistent
-    unit_scaler = {
+    unit_scaler: ClassVar[dict[str, int | float]] = {
         "air": 1000000,
         "boat_shipping": 1000000,
         "rail_shipping": 1000000,
         "rail_passenger": 1000000,
     }
-    unit_scaler_name = {
+    unit_scaler_name: ClassVar[dict[str, list[str]]] = {
         "air": ["billion", "thousand"],
         "boat_shipping": ["billion", "thousand"],
         "rail_shipping": ["billion", "thousand"],
@@ -1345,7 +1344,7 @@ class ReadTransportAeo(ReadStrategy):
         self.aeo_demand = self._read_demand_aeo()
 
     @property
-    def zone(self):
+    def zone(self):  # noqa: D102
         return self._zone
 
     @staticmethod
@@ -1908,6 +1907,7 @@ class DemandFormatter:
         return False
 
     def assign_scaler(self):  # type DemandScaler
+        """Assign logic to scale demand with."""
         if self.scaling_method == "aeo_energy":
             assert self.api, "Must provide eia api key"
             return AeoEnergyScaler(self.api)
@@ -1925,11 +1925,14 @@ class DemandFormatter:
 
 
 class DemandScaler(ABC):
+    """Allow the scaling of input data bases on different energy projections."""
+
     def __init__(self):
         self.projection = self.get_projections()
 
     @abstractmethod
     def get_projections(self) -> pd.DataFrame:
+        """Get implementation specific energy projections."""
         pass
 
     def get_growth(self, start_year: int, end_year: int, sector: str) -> float:
@@ -1990,6 +1993,8 @@ class DemandScaler(ABC):
 
 
 class AeoElectricityScaler(DemandScaler):
+    """Scales against EIA Annual Energy Outlook electricity projections."""
+
     def __init__(self, pudl: str, scenario: str = "reference"):
         self.pudl = pudl
         self.scenario = scenario
@@ -2038,6 +2043,8 @@ class AeoElectricityScaler(DemandScaler):
 
 
 class AeoEnergyScaler(DemandScaler):
+    """Scales against EIA Annual Energy Outlook energy projections."""
+
     def __init__(self, api: str, scenario: str = "reference"):
         self.api = api
         self.scenario = scenario
@@ -2093,6 +2100,8 @@ class AeoEnergyScaler(DemandScaler):
 
 
 class AeoVmtScaler(DemandScaler):
+    """Scales against EIA Annual Energy Outlook vehicle mile traveled projections."""
+
     def __init__(self, api: str, scenario: str = "reference"):
         self.api = api
         self.scenario = scenario
@@ -2159,12 +2168,15 @@ class AeoVmtScaler(DemandScaler):
 
 
 class EfsElectricityScalar(DemandScaler):
+    """Scales against NREL Electrification Futures Study electricity projections."""
+
     def __init__(self, filepath: str):
         self.efs = filepath
         self.region = "united_states"
         super().__init__()
 
     def read(self) -> pd.DataFrame:
+        """Read in raw EFS data."""
         df = pd.read_csv(self.efs, engine="pyarrow")
         return (
             df.drop(
