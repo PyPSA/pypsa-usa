@@ -1,4 +1,3 @@
-# ruff: noqa: RUF012, D101, D102, N818, D400
 """
 Extracts EIA data.
 
@@ -39,6 +38,7 @@ period
 import logging
 import math
 from abc import ABC, abstractmethod
+from typing import ClassVar
 
 import constants
 import numpy as np
@@ -99,7 +99,7 @@ POINTS_OF_ENTRY = {
 
 
 # exceptions
-class InputException(Exception):
+class InputPropertyError(Exception):
     """Class for exceptions."""
 
     def __init__(self, propery, valid_options, recived_option) -> None:
@@ -119,6 +119,7 @@ class EiaData(ABC):
         pass
 
     def get_data(self, pivot: bool = False) -> pd.DataFrame:
+        """Get formated data."""
         product = self.data_creator()
         df = product.retrieve_data()
         df = product.format_data(df)
@@ -127,16 +128,20 @@ class EiaData(ABC):
         return df
 
     def get_api_call(self) -> pd.DataFrame:
+        """Get API URL."""
         product = self.data_creator()
         return product.build_url()
 
     def get_raw_data(self) -> pd.DataFrame:
+        """Get unformatted data from API."""
         product = self.data_creator()
         return product.retrieve_data()
 
 
 # concrete creator
 class FuelCosts(EiaData):
+    """Primary fuel cost data."""
+
     def __init__(
         self,
         fuel: str,
@@ -154,30 +159,31 @@ class FuelCosts(EiaData):
         self.scenario = scenario
 
     def data_creator(self) -> pd.DataFrame:
+        """Initializes data extractor."""
         if self.fuel == "gas":
             assert self.industry
             if self.year < 2024:
-                return GasCosts(self.industry, self.year, self.api)
+                return _GasCosts(self.industry, self.year, self.api)
             else:
                 if self.industry in ("imports", "exports"):
                     logger.warning(
                         f"Projected {self.industry} prices not availble. Returning 2023 data.",
                     )
-                    return GasCosts(self.industry, 2023, self.api)
+                    return _GasCosts(self.industry, 2023, self.api)
                 aeo = "reference" if not self.scenario else self.scenario
-                return ProjectedGasCosts(self.industry, self.year, aeo, self.api)
+                return _ProjectedGasCosts(self.industry, self.year, aeo, self.api)
         elif self.fuel == "coal":
             assert self.industry
-            return CoalCosts(self.industry, self.year, self.api)
+            return _CoalCosts(self.industry, self.year, self.api)
         elif self.fuel == "lpg":
             assert self.grade
-            return LpgCosts(self.grade, self.year, self.api)
+            return _LpgCosts(self.grade, self.year, self.api)
         elif self.fuel == "heating_oil":
-            return HeatingFuelCosts("fuel_oil", self.year, self.api)
+            return _HeatingFuelCosts("fuel_oil", self.year, self.api)
         elif self.fuel == "propane":
-            return HeatingFuelCosts("propane", self.year, self.api)
+            return _HeatingFuelCosts("propane", self.year, self.api)
         else:
-            raise InputException(
+            raise InputPropertyError(
                 propery="Fuel Costs",
                 valid_options=["gas", "coal", "lpg", "heating_oil", "propane"],
                 recived_option=self.fuel,
@@ -186,6 +192,8 @@ class FuelCosts(EiaData):
 
 # concrete creator
 class Trade(EiaData):
+    """Natural gas trade data."""
+
     def __init__(
         self,
         fuel: str,
@@ -201,15 +209,16 @@ class Trade(EiaData):
         self.api = api
 
     def data_creator(self) -> pd.DataFrame:
+        """Initializes data extractor."""
         if self.fuel == "gas":
             if self.international:
                 # gives monthly values
-                return InternationalGasTrade(self.direction, self.year, self.api)
+                return _InternationalGasTrade(self.direction, self.year, self.api)
             else:
                 # gives annual values
-                return DomesticGasTrade(self.direction, self.year, self.api)
+                return _DomesticGasTrade(self.direction, self.year, self.api)
         else:
-            raise InputException(
+            raise InputPropertyError(
                 propery="Energy Trade",
                 valid_options=["gas"],
                 recived_option=self.fuel,
@@ -218,6 +227,8 @@ class Trade(EiaData):
 
 # concrete creator
 class Production(EiaData):
+    """Primary energy production data."""
+
     def __init__(self, fuel: str, production: str, year: int, api: str) -> None:
         self.fuel = fuel  # (gas)
         self.production = production  # (marketed|gross)
@@ -225,10 +236,11 @@ class Production(EiaData):
         self.api = api
 
     def data_creator(self) -> pd.DataFrame:
+        """Initializes data extractor."""
         if self.fuel == "gas":
-            return GasProduction(self.production, self.year, self.api)
+            return _GasProduction(self.production, self.year, self.api)
         else:
-            raise InputException(
+            raise InputPropertyError(
                 property="Production",
                 valid_options=["gas"],
                 recieved_option=self.fuel,
@@ -258,15 +270,16 @@ class EnergyDemand(EiaData):
         self.scenario = scenario  # only for AEO scenario
 
     def data_creator(self) -> pd.DataFrame:
+        """Initializes data extractor."""
         if self.year < 2024:
             if self.scenario:
                 logger.warning("Can not apply AEO scenario to historical demand")
-            return HistoricalSectorEnergyDemand(self.sector, self.year, self.api)
+            return _HistoricalSectorEnergyDemand(self.sector, self.year, self.api)
         elif self.year >= 2024:
             aeo = "reference" if not self.scenario else self.scenario
-            return ProjectedSectorEnergyDemand(self.sector, self.year, aeo, self.api)
+            return _ProjectedSectorEnergyDemand(self.sector, self.year, aeo, self.api)
         else:
-            raise InputException(
+            raise InputPropertyError(
                 propery="EnergyDemand",
                 valid_options="year",
                 recived_option=self.year,
@@ -297,46 +310,47 @@ class TransportationDemand(EiaData):
         self.scenario = scenario
 
     def data_creator(self) -> pd.DataFrame:
+        """Initializes data extractor."""
         if self.units == "travel":
             if self.year < 2024:
-                return HistoricalTransportTravelDemand(
+                return _HistoricalTransportTravelDemand(
                     self.vehicle,
                     self.year,
                     self.api,
                 )
             elif self.year >= 2024:
                 aeo = "reference" if not self.scenario else self.scenario
-                return ProjectedTransportTravelDemand(
+                return _ProjectedTransportTravelDemand(
                     self.vehicle,
                     self.year,
                     aeo,
                     self.api,
                 )
             else:
-                raise InputException(
+                raise InputPropertyError(
                     propery="TransportationTravelDemand",
                     valid_options=range(2017, 2051),
                     recived_option=self.year,
                 )
         elif self.units == "btu":
             if self.year < 2024:
-                return HistoricalTransportBtuDemand(self.vehicle, self.year, self.api)
+                return _HistoricalTransportBtuDemand(self.vehicle, self.year, self.api)
             elif self.year >= 2024:
                 aeo = "reference" if not self.scenario else self.scenario
-                return ProjectedTransportBtuDemand(
+                return _ProjectedTransportBtuDemand(
                     self.vehicle,
                     self.year,
                     aeo,
                     self.api,
                 )
             else:
-                raise InputException(
+                raise InputPropertyError(
                     propery="TransportationBtuDemand",
                     valid_options=range(2017, 2051),
                     recived_option=self.year,
                 )
         else:
-            raise InputException(
+            raise InputPropertyError(
                 propery="TransportationDemand",
                 valid_options=("travel", "btu"),
                 recived_option=self.units,
@@ -366,15 +380,16 @@ class TransportationFuelUse(EiaData):
         self.aeo = "reference" if not self.scenario else self.scenario
 
     def data_creator(self) -> pd.DataFrame:
+        """Initializes data extractor."""
         if self.year > 2016:
-            return HistoricalProjectedTransportFuelUse(
+            return _HistoricalProjectedTransportFuelUse(
                 self.vehicle,
                 self.year,
                 self.aeo,
                 self.api,
             )
         else:
-            raise InputException(
+            raise InputPropertyError(
                 propery="TransportationFuelUse",
                 valid_options=range(2017, 2051),
                 recived_option=self.year,
@@ -383,6 +398,8 @@ class TransportationFuelUse(EiaData):
 
 # concrete creator
 class Storage(EiaData):
+    """Primary energy storage data."""
+
     def __init__(self, fuel: str, storage: str, year: int, api: str) -> None:
         self.fuel = fuel
         self.storage = storage  # (base|working|total|withdraw)
@@ -390,10 +407,11 @@ class Storage(EiaData):
         self.api = api
 
     def data_creator(self) -> pd.DataFrame:
+        """Initializes data extractor."""
         if self.fuel == "gas":
-            return GasStorage(self.storage, self.year, self.api)
+            return _GasStorage(self.storage, self.year, self.api)
         else:
-            raise InputException(
+            raise InputPropertyError(
                 propery="Storage",
                 valid_options=["gas"],
                 recived_option=self.fuel,
@@ -402,6 +420,8 @@ class Storage(EiaData):
 
 # concrete creator
 class Emissions(EiaData):
+    """State level emissions data."""
+
     def __init__(
         self,
         sector: str,
@@ -415,11 +435,12 @@ class Emissions(EiaData):
         self.fuel = "all" if not fuel else fuel  # (coal|oil|gas|all)
 
     def data_creator(self):
-        return StateEmissions(self.sector, self.fuel, self.year, self.api)
+        """Initializes data extractor."""
+        return _StateEmissions(self.sector, self.fuel, self.year, self.api)
 
 
 class Seds(EiaData):
-    """State Energy Demand System."""
+    """State level energy demand."""
 
     def __init__(self, metric: str, sector: str, year: int, api: str) -> None:
         self.metric = metric  # (consumption)
@@ -428,10 +449,11 @@ class Seds(EiaData):
         self.api = api
 
     def data_creator(self):
+        """Initializes data extractor."""
         if self.metric == "consumption":
-            return SedsConsumption(self.sector, self.year, self.api)
+            return _SedsConsumption(self.sector, self.year, self.api)
         else:
-            raise InputException(
+            raise InputPropertyError(
                 propery="SEDS",
                 valid_options=["consumption"],
                 recived_option=self.metric,
@@ -439,13 +461,16 @@ class Seds(EiaData):
 
 
 class ElectricPowerData(EiaData):
+    """Power system operational data."""
+
     def __init__(self, sector: str, year: int, api_key: str) -> None:
         self.sector = sector
         self.year = year
         self.api_key = api_key
 
     def data_creator(self):
-        return ElectricPowerOperationalData(self.sector, self.year, self.api_key)
+        """Initializes data extractor."""
+        return _ElectricPowerOperationalData(self.sector, self.year, self.api_key)
 
 
 # product
@@ -475,6 +500,7 @@ class DataExtractor(ABC):
         pass
 
     def retrieve_data(self) -> pd.DataFrame:
+        """Retrieves and converts API data into dataframe."""
         url = self.build_url()
         data = self._request_eia_data(url)
         return pd.DataFrame.from_dict(data["response"]["data"])
@@ -553,8 +579,8 @@ class DataExtractor(ABC):
 
 
 # concrete product
-class GasCosts(DataExtractor):
-    industry_codes = {
+class _GasCosts(DataExtractor):
+    industry_codes: ClassVar[dict[str, str]] = {
         "power": "PEU",
         "residential": "PRS",
         "commercial": "PCS",
@@ -566,7 +592,7 @@ class GasCosts(DataExtractor):
     def __init__(self, industry: str, year: int, api_key: str) -> None:
         self.industry = industry
         if industry not in self.industry_codes.keys():
-            raise InputException(
+            raise InputPropertyError(
                 propery="Gas Costs",
                 valid_options=list(self.industry_codes),
                 recived_option=industry,
@@ -616,15 +642,15 @@ class GasCosts(DataExtractor):
 
 
 # concrete product
-class CoalCosts(DataExtractor):
-    industry_codes = {
+class _CoalCosts(DataExtractor):
+    industry_codes: ClassVar[dict[str, str]] = {
         "power": "PEU",
     }
 
     def __init__(self, industry: str, year: int, api_key: str) -> None:
         self.industry = industry
         if industry != "power":
-            raise InputException(
+            raise InputPropertyError(
                 propery="Coal Costs",
                 valid_options=list(self.industry_codes),
                 recived_option=industry,
@@ -702,14 +728,10 @@ class CoalCosts(DataExtractor):
         return self._assign_dtypes(final)
 
 
-class LpgCosts(DataExtractor):
-    """
-    The cost is motor gasoline!
+class _LpgCosts(DataExtractor):
+    """The cost is motor gasoline. Not heating fuel."""
 
-    Not heating fuel!
-    """
-
-    grade_codes = {
+    grade_codes: ClassVar[dict[str, str]] = {
         "total": "EPM0",
         "regular": "EPMR",
         "premium": "EPMP",
@@ -718,7 +740,7 @@ class LpgCosts(DataExtractor):
     }
 
     # https://en.wikipedia.org/wiki/Petroleum_Administration_for_Defense_Districts
-    padd_2_state = {
+    padd_2_state: ClassVar[dict[str, str]] = {
         "PADD 1A": ["CT", "ME", "MA", "NH", "RI", "VT"],
         "PADD 1B": ["DE", "DC", "MD", "NJ", "NY", "PA"],
         "PADD 1C": ["FL", "GA", "NC", "SC", "VA", "WV"],
@@ -747,7 +769,7 @@ class LpgCosts(DataExtractor):
     def __init__(self, grade: str, year: int, api_key: str) -> None:
         self.grade = grade
         if grade not in self.grade_codes:
-            raise InputException(
+            raise InputPropertyError(
                 propery="Lpg Costs",
                 valid_options=list(self.grade_codes),
                 recived_option=grade,
@@ -772,15 +794,15 @@ class LpgCosts(DataExtractor):
         return self._assign_dtypes(final)
 
 
-class HeatingFuelCosts(DataExtractor):
-    """Note, only returns data from October to March!"""
+class _HeatingFuelCosts(DataExtractor):
+    """Note, only returns data from October to March."""
 
-    heating_fuel_codes = {"fuel_oil": "No 2 Fuel Oil", "propane": "Propane"}
+    heating_fuel_codes: ClassVar[dict[str, str]] = {"fuel_oil": "No 2 Fuel Oil", "propane": "Propane"}
 
     def __init__(self, heating_fuel: str, year: int, api_key: str) -> None:
         self.heating_fuel = heating_fuel
         if heating_fuel not in self.heating_fuel_codes:
-            raise InputException(
+            raise InputPropertyError(
                 propery="Heating Fuel Costs",
                 valid_options=list(self.heating_fuel_codes),
                 recived_option=heating_fuel,
@@ -836,7 +858,7 @@ class HeatingFuelCosts(DataExtractor):
 #     def __init__(self, sector: str, year: int, api: str) -> None:
 #         self.sector = sector
 #         if sector not in self.sector_codes.keys():
-#             raise InputException(
+#             raise InputPropertyError(
 #                 propery="Historical Energy Demand",
 #                 valid_options=list(self.sector_codes),
 #                 recived_option=sector,
@@ -858,7 +880,7 @@ class HeatingFuelCosts(DataExtractor):
 #         return self._assign_dtypes(df)
 
 
-class HistoricalSectorEnergyDemand(DataExtractor):
+class _HistoricalSectorEnergyDemand(DataExtractor):
     """
     Extracts historical energy demand at a yearly national level.
 
@@ -867,7 +889,7 @@ class HistoricalSectorEnergyDemand(DataExtractor):
     - https://www.eia.gov/outlooks/aeo/pdf/AEO2023_Release_Presentation.pdf (pg 17)
     """
 
-    sector_codes = {
+    sector_codes: ClassVar[dict[str, str]] = {
         "residential": "TNR",
         "commercial": "TNC",
         "industry": "TNI",
@@ -878,7 +900,7 @@ class HistoricalSectorEnergyDemand(DataExtractor):
     def __init__(self, sector: str, year: int, api: str) -> None:
         self.sector = sector
         if sector not in self.sector_codes.keys():
-            raise InputException(
+            raise InputPropertyError(
                 propery="Historical Energy Demand",
                 valid_options=list(self.sector_codes),
                 recived_option=sector,
@@ -906,7 +928,7 @@ class HistoricalSectorEnergyDemand(DataExtractor):
         return self._assign_dtypes(df)
 
 
-class ProjectedSectorEnergyDemand(DataExtractor):
+class _ProjectedSectorEnergyDemand(DataExtractor):
     """Extracts projected energy demand at a national level from AEO 2023."""
 
     # https://www.eia.gov/outlooks/aeo/assumptions/case_descriptions.php
@@ -914,7 +936,7 @@ class ProjectedSectorEnergyDemand(DataExtractor):
 
     # note, these are all "total energy use by end use - total gross end use consumption"
     # https://www.eia.gov/totalenergy/data/flow-graphs/electricity.php
-    sector_codes = {
+    sector_codes: ClassVar[dict[str, str]] = {
         "residential": "cnsm_enu_resd_NA_dele_NA_NA_qbtu",
         "commercial": "cnsm_enu_comm_NA_dele_NA_NA_qbtu",
         "industry": "cnsm_enu_idal_NA_dele_NA_NA_qbtu",
@@ -926,13 +948,13 @@ class ProjectedSectorEnergyDemand(DataExtractor):
         self.scenario = scenario
         self.sector = sector
         if scenario not in self.scenario_codes.keys():
-            raise InputException(
+            raise InputPropertyError(
                 propery="Projected Energy Demand Scenario",
                 valid_options=list(self.scenario_codes),
                 recived_option=scenario,
             )
         if sector not in self.sector_codes.keys():
-            raise InputException(
+            raise InputPropertyError(
                 propery="Projected Energy Demand Sector",
                 valid_options=list(self.sector_codes),
                 recived_option=sector,
@@ -952,14 +974,14 @@ class ProjectedSectorEnergyDemand(DataExtractor):
         return self._assign_dtypes(df)
 
 
-class HistoricalTransportTravelDemand(DataExtractor):
+class _HistoricalTransportTravelDemand(DataExtractor):
     """Gets Transport demand in units of travel."""
 
     # https://www.eia.gov/outlooks/aeo/assumptions/case_descriptions.php
     scenario_codes = AEO_SCENARIOS
 
     # units will be different umong these!
-    vehicle_codes = {
+    vehicle_codes: ClassVar[dict[str, str]] = {
         "light_duty": "kei_trv_trn_NA_ldv_NA_NA_blnvehmls",
         "med_duty": "kei_trv_trn_NA_cml_NA_NA_blnvehmls",
         "heavy_duty": "kei_trv_trn_NA_fght_NA_NA_blnvehmls",
@@ -973,7 +995,7 @@ class HistoricalTransportTravelDemand(DataExtractor):
     def __init__(self, vehicle: str, year: int, api: str) -> None:
         self.vehicle = vehicle
         if vehicle not in self.vehicle_codes.keys():
-            raise InputException(
+            raise InputPropertyError(
                 propery="Historical Transport Travel Demand",
                 valid_options=list(self.vehicle_codes),
                 recived_option=vehicle,
@@ -1018,14 +1040,14 @@ class HistoricalTransportTravelDemand(DataExtractor):
         return self._assign_dtypes(df)
 
 
-class ProjectedTransportTravelDemand(DataExtractor):
+class _ProjectedTransportTravelDemand(DataExtractor):
     """Gets Transport demand in units of travel."""
 
     # https://www.eia.gov/outlooks/aeo/assumptions/case_descriptions.php
     scenario_codes = AEO_SCENARIOS
 
     # units will be different umong these!
-    vehicle_codes = {
+    vehicle_codes: ClassVar[dict[str, str]] = {
         "light_duty": "kei_trv_trn_NA_ldv_NA_NA_blnvehmls",
         "med_duty": "kei_trv_trn_NA_cml_NA_NA_blnvehmls",
         "heavy_duty": "kei_trv_trn_NA_fght_NA_NA_blnvehmls",
@@ -1040,13 +1062,13 @@ class ProjectedTransportTravelDemand(DataExtractor):
         self.vehicle = vehicle
         self.scenario = scenario
         if scenario not in self.scenario_codes.keys():
-            raise InputException(
+            raise InputPropertyError(
                 propery="Projected Transport Travel Demand Scenario",
                 valid_options=list(self.scenario_codes),
                 recived_option=scenario,
             )
         if vehicle not in self.vehicle_codes.keys():
-            raise InputException(
+            raise InputPropertyError(
                 propery="Projected Transport Travel Demand",
                 valid_options=list(self.vehicle_codes),
                 recived_option=vehicle,
@@ -1072,11 +1094,11 @@ class ProjectedTransportTravelDemand(DataExtractor):
         return self._assign_dtypes(df)
 
 
-class HistoricalTransportBtuDemand(DataExtractor):
+class _HistoricalTransportBtuDemand(DataExtractor):
     """Gets Transport demand in units of btu."""
 
     # units will be different umong these!
-    vehicle_codes = {
+    vehicle_codes: ClassVar[dict[str, str]] = {
         "light_duty": "cnsm_NA_trn_ldv_use_NA_NA_qbtu",
         "med_duty": "cnsm_NA_trn_cml_use_NA_NA_qbtu",
         "heavy_duty": "cnsm_NA_trn_fght_use_NA_NA_qbtu",
@@ -1095,7 +1117,7 @@ class HistoricalTransportBtuDemand(DataExtractor):
     def __init__(self, vehicle: str, year: int, api: str) -> None:
         self.vehicle = vehicle
         if vehicle not in self.vehicle_codes.keys():
-            raise InputException(
+            raise InputPropertyError(
                 propery="Historical BTU Transport Demand",
                 valid_options=list(self.vehicle_codes),
                 recived_option=vehicle,
@@ -1140,14 +1162,14 @@ class HistoricalTransportBtuDemand(DataExtractor):
         return self._assign_dtypes(df)
 
 
-class ProjectedTransportBtuDemand(DataExtractor):
+class _ProjectedTransportBtuDemand(DataExtractor):
     """Gets Transport demand in units of quads."""
 
     # https://www.eia.gov/outlooks/aeo/assumptions/case_descriptions.php
     scenario_codes = AEO_SCENARIOS
 
     # units will be different umong these!
-    vehicle_codes = {
+    vehicle_codes: ClassVar[dict[str, str]] = {
         "light_duty": "cnsm_NA_trn_ldv_use_NA_NA_qbtu",
         "med_duty": "cnsm_NA_trn_cml_use_NA_NA_qbtu",
         "heavy_duty": "cnsm_NA_trn_fght_use_NA_NA_qbtu",
@@ -1167,13 +1189,13 @@ class ProjectedTransportBtuDemand(DataExtractor):
         self.vehicle = vehicle
         self.scenario = scenario
         if scenario not in self.scenario_codes.keys():
-            raise InputException(
+            raise InputPropertyError(
                 propery="Projected Transport BTU Demand Scenario",
                 valid_options=list(self.scenario_codes),
                 recived_option=scenario,
             )
         if vehicle not in self.vehicle_codes.keys():
-            raise InputException(
+            raise InputPropertyError(
                 propery="Projected Transport BTU Demand",
                 valid_options=list(self.vehicle_codes),
                 recived_option=vehicle,
@@ -1199,14 +1221,14 @@ class ProjectedTransportBtuDemand(DataExtractor):
         return self._assign_dtypes(df)
 
 
-class HistoricalProjectedTransportFuelUse(DataExtractor):
+class _HistoricalProjectedTransportFuelUse(DataExtractor):
     """Gets Transport Energy Use by fuel."""
 
     # https://www.eia.gov/outlooks/aeo/assumptions/case_descriptions.php
     scenario_codes = AEO_SCENARIOS
 
     # units will be different umong these!
-    vehicle_codes = {
+    vehicle_codes: ClassVar[dict[str, list[str]]] = {
         "light_duty": [
             f"&facets[seriesId][]=cnsm_NA_trn_ldty_{x}_NA_NA_trlbtu"
             for x in ("NA", "dfo", "elc", "eth", "hdg", "mgs", "ng", "prop")
@@ -1242,13 +1264,13 @@ class HistoricalProjectedTransportFuelUse(DataExtractor):
         self.vehicle = vehicle
         self.scenario = scenario
         if vehicle not in self.vehicle_codes.keys():
-            raise InputException(
+            raise InputPropertyError(
                 propery="Transport Energy Use by Fuel",
                 valid_options=list(self.vehicle_codes),
                 recived_option=vehicle,
             )
         if scenario not in self.scenario_codes.keys():
-            raise InputException(
+            raise InputPropertyError(
                 propery="Transport Energy Use by Fuel",
                 valid_options=list(self.scenario_codes),
                 recived_option=scenario,
@@ -1308,7 +1330,7 @@ class HistoricalProjectedTransportFuelUse(DataExtractor):
 #     def __init__(self, direction: str, year: int, api_key: str) -> None:
 #         self.direction = direction
 #         if self.direction not in list(self.direction_codes):
-#             raise InputException(
+#             raise InputPropertyError(
 #                 propery="Natural Gas International Imports and Exports",
 #                 valid_options=list(self.direction_codes),
 #                 recived_option=direction,
@@ -1358,13 +1380,13 @@ class HistoricalProjectedTransportFuelUse(DataExtractor):
 #         return "-".join(connections)
 
 
-class ProjectedGasCosts(DataExtractor):
+class _ProjectedGasCosts(DataExtractor):
     """Extracts projected energy demand at a national level from AEO 2023."""
 
     # https://www.eia.gov/outlooks/aeo/assumptions/case_descriptions.php
     scenario_codes = AEO_SCENARIOS
 
-    industry_codes = {
+    industry_codes: ClassVar[dict[str, str]] = {
         "residential": "prce_NA_resd_NA_ng_NA_usa_y13dlrpmcf",
         "commercial": "prce_NA_comm_NA_ng_NA_usa_y13dlrpmcf",
         "industry": "prce_NA_idal_NA_ng_NA_usa_y13dlrpmcf",
@@ -1376,13 +1398,13 @@ class ProjectedGasCosts(DataExtractor):
         self.scenario = scenario
         self.industry = industry
         if scenario not in self.scenario_codes.keys():
-            raise InputException(
+            raise InputPropertyError(
                 propery="Projected Natural Gas Costs Scenario",
                 valid_options=list(self.scenario_codes),
                 recived_option=scenario,
             )
         if industry not in self.industry_codes.keys():
-            raise InputException(
+            raise InputPropertyError(
                 propery="Projected Natural Gas Costs Industry",
                 valid_options=list(self.industry_codes),
                 recived_option=industry,
@@ -1402,14 +1424,14 @@ class ProjectedGasCosts(DataExtractor):
         return self._assign_dtypes(df)
 
 
-class InternationalGasTrade(DataExtractor):
+class _InternationalGasTrade(DataExtractor):
     """
     Gets imports/exports by point of entry.
 
     This filters for ONLY canada and mexico imports/exports
     """
 
-    direction_codes = {
+    direction_codes: ClassVar[dict[str, str]] = {
         "imports": "IMI",
         "exports": "EEI",
     }
@@ -1419,7 +1441,7 @@ class InternationalGasTrade(DataExtractor):
     def __init__(self, direction: str, year: int, api_key: str) -> None:
         self.direction = direction
         if self.direction not in list(self.direction_codes):
-            raise InputException(
+            raise InputPropertyError(
                 propery="Natural Gas International Imports and Exports",
                 valid_options=list(self.direction_codes),
                 recived_option=direction,
@@ -1469,7 +1491,7 @@ class InternationalGasTrade(DataExtractor):
             return description.split(" Natural Gas Pipeline")[0]
 
 
-class DomesticGasTrade(DataExtractor):
+class _DomesticGasTrade(DataExtractor):
     """
     Gets imports/exports by state.
 
@@ -1477,7 +1499,7 @@ class DomesticGasTrade(DataExtractor):
     example, "CA-OR" will represent from California to Oregon
     """
 
-    direction_codes = {
+    direction_codes: ClassVar[dict[str, str]] = {
         "imports": "MIR",
         "exports": "MID",
     }
@@ -1485,7 +1507,7 @@ class DomesticGasTrade(DataExtractor):
     def __init__(self, direction: str, year: int, api_key: str) -> None:
         self.direction = direction
         if self.direction not in list(self.direction_codes):
-            raise InputException(
+            raise InputPropertyError(
                 propery="Natural Gas Domestic Imports and Exports",
                 valid_options=list(self.direction_codes),
                 recived_option=direction,
@@ -1534,11 +1556,11 @@ class DomesticGasTrade(DataExtractor):
             return description.split(" Natural Gas Pipeline")[0]
 
 
-class GasStorage(DataExtractor):
+class _GasStorage(DataExtractor):
     """Underground storage facilites for natural gas."""
 
     # https://www.eia.gov/naturalgas/storage/basics/
-    storage_codes = {
+    storage_codes: ClassVar[dict[str, str]] = {
         "base": "SAB",
         "working": "SAO",
         "total": "SAT",
@@ -1548,7 +1570,7 @@ class GasStorage(DataExtractor):
     def __init__(self, storage: str, year: int, api_key: str) -> None:
         self.storage = storage
         if self.storage not in list(self.storage_codes):
-            raise InputException(
+            raise InputPropertyError(
                 propery="Natural Gas Underground Storage",
                 valid_options=list(self.storage_codes),
                 recived_option=storage,
@@ -1584,10 +1606,10 @@ class GasStorage(DataExtractor):
         return "U.S." if state == "U.S. Total" else STATE_CODES[state]
 
 
-class GasProduction(DataExtractor):
+class _GasProduction(DataExtractor):
     """Dry natural gas production."""
 
-    production_codes = {
+    production_codes: ClassVar[dict[str, str]] = {
         "market": "VGM",
         "gross": "FGW",  # gross withdrawls
     }
@@ -1595,7 +1617,7 @@ class GasProduction(DataExtractor):
     def __init__(self, production: str, year: int, api_key: str) -> None:
         self.production = production
         if self.production not in list(self.production_codes):
-            raise InputException(
+            raise InputPropertyError(
                 propery="Natural Gas Production",
                 valid_options=list(self.production_codes),
                 recived_option=production,
@@ -1637,10 +1659,10 @@ class GasProduction(DataExtractor):
         return "U.S." if state == "U.S." else STATE_CODES[state]
 
 
-class StateEmissions(DataExtractor):
+class _StateEmissions(DataExtractor):
     """State Level CO2 Emissions."""
 
-    sector_codes = {
+    sector_codes: ClassVar[dict[str, str]] = {
         "commercial": "CC",
         "power": "EC",
         "industrial": "IC",
@@ -1649,7 +1671,7 @@ class StateEmissions(DataExtractor):
         "total": "TT",
     }
 
-    fuel_codes = {
+    fuel_codes: ClassVar[dict[str, str]] = {
         "coal": "CO",
         "gas": "NG",
         "oil": "PE",
@@ -1660,13 +1682,13 @@ class StateEmissions(DataExtractor):
         self.sector = sector
         self.fuel = fuel
         if self.sector not in list(self.sector_codes):
-            raise InputException(
+            raise InputPropertyError(
                 propery="State Level Emissions",
                 valid_options=list(self.sector_codes),
                 recived_option=sector,
             )
         if self.fuel not in list(self.fuel_codes):
-            raise InputException(
+            raise InputPropertyError(
                 propery="State Level Emissions",
                 valid_options=list(self.fuel_codes),
                 recived_option=fuel,
@@ -1704,10 +1726,10 @@ class StateEmissions(DataExtractor):
         return self._assign_dtypes(df)
 
 
-class SedsConsumption(DataExtractor):
+class _SedsConsumption(DataExtractor):
     """State Level End-Use Consumption."""
 
-    sector_codes = {
+    sector_codes: ClassVar[dict[str, str]] = {
         "commercial": "TNCCB",
         "industrial": "TNICB",
         "residential": "TNRCB",
@@ -1718,7 +1740,7 @@ class SedsConsumption(DataExtractor):
     def __init__(self, sector: str, year: int, api_key: str) -> None:
         self.sector = sector
         if self.sector not in list(self.sector_codes):
-            raise InputException(
+            raise InputPropertyError(
                 propery="State Level Consumption",
                 valid_options=list(self.sector_codes),
                 recived_option=sector,
@@ -1751,10 +1773,10 @@ class SedsConsumption(DataExtractor):
         return self._assign_dtypes(df)
 
 
-class ElectricPowerOperationalData(DataExtractor):
+class _ElectricPowerOperationalData(DataExtractor):
     """Electric Power Operational Data."""
 
-    sector_codes = {
+    sector_codes: ClassVar[dict[str, int]] = {
         "electric_utility": 1,
         "ipp_non_chp": 2,
         "ipp_chp": 3,
@@ -1781,7 +1803,7 @@ class ElectricPowerOperationalData(DataExtractor):
             )
             self.year = 2023
         if self.sector not in list(self.sector_codes):
-            raise InputException(
+            raise InputPropertyError(
                 propery="Electric Power Operational Data",
                 valid_options=list(self.sector_codes),
                 recived_option=sector,
