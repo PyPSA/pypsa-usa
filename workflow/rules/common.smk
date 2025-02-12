@@ -105,67 +105,6 @@ def memory(w):
         val = int(factor * (15000 + 195 * int(w.clusters)))
     return int(val * len(config_provider("scenario", "planning_horizons")(w)))
 
-
-def interconnect_mem(w):
-    mem = 50000
-    if w.interconnect == "usa":
-        return int(mem * 1.5)
-    elif w.interconnect == "eastern":
-        return int(mem * 1.5)
-    elif w.interconnect == "western":
-        return int(mem)
-    elif w.interconnect == "texas":
-        return int(mem * 1)
-
-
-def interconnect_mem_a(w):
-    mem = 30000 * len(config_provider("scenario", "planning_horizons")(w))
-    if w.interconnect == "usa":
-        return int(mem * 4)
-    elif w.interconnect == "eastern":
-        return int(mem * 3)
-    elif w.interconnect == "western":
-        return int(mem * 2)
-    elif w.interconnect == "texas":
-        return int(mem * 0.5)
-
-
-def interconnect_mem_s(w):
-    mem = 30000 * len(config_provider("scenario", "planning_horizons")(w))
-    if w.interconnect == "usa":
-        return int(mem * 4)
-    elif w.interconnect == "eastern":
-        return int(mem * 3)
-    elif w.interconnect == "western":
-        return int(mem * 2)
-    elif w.interconnect == "texas":
-        return int(mem * 0.5)
-
-
-def interconnect_mem_c(w):
-    mem = 1000 * len(config_provider("scenario", "planning_horizons")(w))
-    if w.interconnect == "usa":
-        return int(mem * 4)
-    elif w.interconnect == "eastern":
-        return int(mem * 3)
-    elif w.interconnect == "western":
-        return int(mem * 2)
-    elif w.interconnect == "texas":
-        return int(mem * 0.75)
-
-
-def interconnect_mem_prepare(w):
-    mem = 5000 * len(config_provider("scenario", "planning_horizons")(w))
-    if w.interconnect == "usa":
-        return int(mem * 4)
-    elif w.interconnect == "eastern":
-        return int(mem * 3)
-    elif w.interconnect == "western":
-        return int(mem * 2)
-    elif w.interconnect == "texas":
-        return int(mem * 0.75)
-
-
 def input_custom_extra_functionality(w):
     path = config_provider(
         "solving", "options", "custom_extra_functionality", default=False

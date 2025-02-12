@@ -188,7 +188,7 @@ rule build_renewable_profiles:
     threads: ATLITE_NPROCESSES
     retries: 3
     resources:
-        mem_mb=ATLITE_NPROCESSES * 5000,
+        mem_mb=lambda wildcards, input, attempt: (ATLITE_NPROCESSES * input.size // 3500000) * attempt * 1.5,
     wildcard_constraints:
         technology="(?!hydro|EGS).*",  # Any technology other than hydro
     script:
@@ -327,7 +327,7 @@ rule build_electrical_demand:
         BENCHMARKS + "{interconnect}/{end_use}_build_demand"
     threads: 2
     resources:
-        mem_mb=interconnect_mem,
+        mem_mb=lambda wildcards, input, attempt: (input.size // 70000) * attempt * 2,
     script:
         "../scripts/build_demand.py"
 
@@ -359,7 +359,7 @@ rule build_sector_demand:
         BENCHMARKS + "{interconnect}/demand/{end_use}_build_demand"
     threads: 2
     resources:
-        mem_mb=interconnect_mem,
+        mem_mb=lambda wildcards, input, attempt: (input.size // 70000) * attempt * 2,
     script:
         "../scripts/build_demand.py"
 
@@ -395,7 +395,7 @@ rule build_transport_road_demand:
         BENCHMARKS + "{interconnect}/demand/{end_use}_build_demand"
     threads: 2
     resources:
-        mem_mb=interconnect_mem,
+        mem_mb=lambda wildcards, input, attempt: (input.size // 70000) * attempt * 2,
     script:
         "../scripts/build_demand.py"
 
@@ -420,7 +420,7 @@ rule build_transport_other_demand:
         BENCHMARKS + "{interconnect}/demand/{end_use}_{vehicle}_build_demand"
     threads: 2
     resources:
-        mem_mb=interconnect_mem,
+        mem_mb=lambda wildcards, input, attempt: (input.size // 70000) * attempt * 2,
     script:
         "../scripts/build_demand.py"
 
@@ -493,7 +493,7 @@ rule add_demand:
     benchmark:
         BENCHMARKS + "{interconnect}/add_demand"
     resources:
-        mem_mb=interconnect_mem,
+        mem_mb=lambda wildcards, input, attempt: (input.size // 70000) * attempt * 2,
     script:
         "../scripts/add_demand.py"
 
@@ -620,7 +620,7 @@ rule add_electricity:
         BENCHMARKS + "{interconnect}/add_electricity"
     threads: 1
     resources:
-        mem_mb=lambda wildcards, input, attempt: (input.size // 100000) * attempt * 2,
+        mem_mb=lambda wildcards, input, attempt: (input.size // 400000) * attempt * 2,
     script:
         "../scripts/add_electricity.py"
 
@@ -652,7 +652,7 @@ rule simplify_network:
         "logs/simplify_network/{interconnect}/elec_s{simpl}.log",
     threads: 1
     resources:
-        mem_mb=lambda wildcards, input, attempt: (input.size // 100000) * attempt * 10,
+        mem_mb=lambda wildcards, input, attempt: (input.size // 100000) * attempt * 1.5,
     script:
         "../scripts/simplify_network.py"
 
@@ -705,7 +705,7 @@ rule cluster_network:
         "benchmarks/cluster_network/{interconnect}/elec_s{simpl}_c{clusters}"
     threads: 1
     resources:
-        mem_mb=lambda wildcards, input, attempt: (input.size // 200000) * attempt * 2,
+        mem_mb=lambda wildcards, input, attempt: (input.size // 100000) * attempt * 2,
     script:
         "../scripts/cluster_network.py"
 
