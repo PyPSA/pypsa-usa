@@ -319,7 +319,7 @@ def add_technology_capacity_target_constraints(n, config):
                 f"Planning Horizon: {target.planning_horizon}\n"
                 f"Region: {target.region}\n"
                 f"Carrier: {target.carrier}\n"
-                f"Min Value: {target['min']}\n",
+                f"Min Value: {target['min']}\n"
                 f"Min Value Adj: {rhs}",
             )
 
@@ -341,7 +341,7 @@ def add_technology_capacity_target_constraints(n, config):
                 f"Planning Horizon: {target.planning_horizon}\n"
                 f"Region: {target.region}\n"
                 f"Carrier: {target.carrier}\n"
-                f"Max Value: {target['max']}\n",
+                f"Max Value: {target['max']}\n"
                 f"Max Value Adj: {rhs}",
             )
 
@@ -920,6 +920,89 @@ def add_operational_reserve_margin(n, sns, config):
     n.model.add_constraints(lhs <= rhs, name="Generator-p-reserve-upper")
 
 
+def add_demand_response_constraint(n, config, sector_study):
+    """Add demand response capacity constraint."""
+
+    def add_capacity_constraint(
+        n: pypsa.Network,
+        shift: float,  # per_unit
+    ):
+        """Add limit on deferable load. No need for snapshot weights."""
+        dr_links = n.links[n.links.carrier == "demand_response"].copy()
+
+        if dr_links.empty:
+            logger.info("No demand response links identified.")
+            return
+
+        deferrable_links = dr_links[dr_links.index.str.endswith("-discharger")]
+        deferrable_loads = n.loads[n.loads.bus.isin(deferrable_links.bus1)]
+
+        lhs = n.model["Link-p"].loc[:, deferrable_links.index].groupby(deferrable_links.bus1).sum()
+        rhs = n.loads_t["p_set"][deferrable_loads.index].mul(shift).round(2)
+        rhs.columns.name = "bus1"
+        rhs = rhs.rename(columns={x: x.strip(" AC") for x in rhs})
+
+        # force rhs to be same order as lhs
+        # idk why but coordinates were not aligning and this gets around that
+        bus_order = lhs.vars.bus1.data
+        rhs = rhs[bus_order.tolist()]
+
+        n.model.add_constraints(lhs <= rhs.T, name="demand_response_capacity")
+
+    def add_sector_capacity_constraint(
+        n: pypsa.Network,
+        shift: float,  # per_unit
+    ):
+        """Add limit on deferable load. No need for snapshot weights."""
+        dr_links = n.links[n.links.carrier == "demand_response"].copy()
+
+        if dr_links.empty:
+            logger.info("No demand response links identified.")
+            return
+
+        inflow_links = dr_links[dr_links.index.str.endswith("-discharger")]
+        inflow = n.model["Link-p"].loc[:, inflow_links.index].groupby(inflow_links.bus1).sum()
+        inflow = inflow.rename({"bus1": "Bus"})  # align coordinate names
+
+        outflow_links = n.links[n.links.bus0.isin(inflow_links.bus1) & ~n.links.carrier.str.endswith("-dr")]
+        outflow = n.model["Link-p"].loc[:, outflow_links.index].groupby(outflow_links.bus0).sum()
+        outflow = outflow.rename({"bus0": "Bus"})  # align coordinate names
+
+        lhs = outflow.mul(shift) - inflow
+        rhs = 0
+
+        n.model.add_constraints(
+            lhs >= rhs,
+            name="demand_response_capacity",
+        )
+
+    dr_config = config["electricity"].get("demand_response", {})
+
+    shift = dr_config.get("shift", 0)
+
+    # seperate, as the electrical constraint can directly apply to the load,
+    # while the sector constraint has to apply to the power flows out of the bus
+    if sector_study:
+        fn = add_sector_capacity_constraint
+    else:
+        fn = add_capacity_constraint
+
+    if isinstance(shift, str):
+        if shift == "inf":
+            pass
+        else:
+            logger.error(f"Unknown arguement of {shift} for DR")
+            raise ValueError(shift)
+    elif isinstance(shift, int | float):
+        if shift < 0.001:
+            logger.info("Demand response not enabled")
+        else:
+            fn(n, shift)
+    else:
+        logger.error(f"Unknown arguement of {shift} for DR")
+        raise ValueError(shift)
+
+
 def add_sector_co2_constraints(n, config):
     """
     Adds sector co2 constraints.
@@ -1309,11 +1392,12 @@ def add_water_heater_constraints(n, config):
         n.model.add_constraints(lhs >= rhs, name=f"water_heater-{period}")
 
 
-def add_demand_response_constraints(n, config):
+def add_sector_demand_response_constraints(n, config):
     """
-    Adds demand response equations.
+    Add demand response equations for individual sectors.
 
-    Applies the p_nom_max here, as easier to iterate over different configs
+    These constraints are applied at the sector/carrier level. They are
+    fundamentally the same as the power sector constraints, tho.
     """
 
     def add_capacity_constraint(
@@ -1454,6 +1538,10 @@ def extra_functionality(n, snapshots):
     interface_limits = config["lines"].get("interface_transmission_limits", {})
     if interface_limits:
         add_interface_limits(n, snapshots, config)
+    dr_config = config["electricity"].get("demand_response", {})
+    if dr_config:
+        sector = True if "sector" in opts else False
+        add_demand_response_constraint(n, config, sector)
     if "sector" in opts:
         add_cooling_heat_pump_constraints(n, config)
         if not config["sector"]["service_sector"].get("split_urban_rural", False):
@@ -1465,7 +1553,7 @@ def extra_functionality(n, snapshots):
         water_config = config["sector"]["service_sector"].get("water_heating", {})
         if not water_config.get("simple_storage", True):
             add_water_heater_constraints(n, config)
-        add_demand_response_constraints(n, config)
+        add_sector_demand_response_constraints(n, config)
 
     for o in opts:
         if "EQ" in o:

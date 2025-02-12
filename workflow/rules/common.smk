@@ -105,6 +105,7 @@ def memory(w):
         val = int(factor * (15000 + 195 * int(w.clusters)))
     return int(val * len(config_provider("scenario", "planning_horizons")(w)))
 
+
 def input_custom_extra_functionality(w):
     path = config_provider(
         "solving", "options", "custom_extra_functionality", default=False

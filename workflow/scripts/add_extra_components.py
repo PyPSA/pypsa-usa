@@ -624,6 +624,143 @@ def apply_max_annual_growth_rate(n, max_growth):
         n.carriers.loc[carrier, "max_relative_growth"] = rate**years
 
 
+def add_demand_response(
+    n: pypsa.Network,
+    dr_config: dict[str, str | float],
+) -> None:
+    """Add price based demand response to network."""
+    n.add("Carrier", "demand_response", color="#dd2e23", nice_name="Demand Response")
+
+    shift = dr_config.get("shift", 0)
+    if shift == 0:
+        logger.info(f"DR not applied as allowable sift is {shift}")
+        return
+
+    marginal_cost_storage = dr_config.get("marginal_cost", 0)
+    if marginal_cost_storage == 0:
+        logger.warning("No cost applied to demand response")
+
+    # attach dr at all load locations
+
+    buses = n.loads.bus
+    df = n.buses[n.buses.index.isin(buses)].copy()
+
+    # two storageunits for forward and backwards load shifting
+
+    n.madd(
+        "Bus",
+        names=df.index,
+        suffix="-fwd-dr",
+        x=df.x,
+        y=df.y,
+        carrier="demand_response",
+        unit="MWh",
+        country=df.country,
+        reeds_zone=df.reeds_zone,
+        reeds_ba=df.reeds_ba,
+        interconnect=df.interconnect,
+        trans_reg=df.trans_reg,
+        trans_grp=df.trans_grp,
+        reeds_state=df.reeds_state,
+        substation_lv=df.substation_lv,
+    )
+
+    n.madd(
+        "Bus",
+        names=df.index,
+        suffix="-bck-dr",
+        x=df.x,
+        y=df.y,
+        carrier="demand_response",
+        unit="MWh",
+        country=df.country,
+        reeds_zone=df.reeds_zone,
+        reeds_ba=df.reeds_ba,
+        interconnect=df.interconnect,
+        trans_reg=df.trans_reg,
+        trans_grp=df.trans_grp,
+        reeds_state=df.reeds_state,
+        substation_lv=df.substation_lv,
+    )
+
+    # seperate charging/discharging links for easier constraint generation
+
+    n.madd(
+        "Link",
+        names=df.index,
+        suffix="-fwd-dr-charger",
+        bus0=df.index,
+        bus1=df.index + "-fwd-dr",
+        carrier="demand_response",
+        p_nom_extendable=False,
+        p_nom=np.inf,
+    )
+
+    n.madd(
+        "Link",
+        names=df.index,
+        suffix="-fwd-dr-discharger",
+        bus0=df.index + "-fwd-dr",
+        bus1=df.index,
+        carrier="demand_response",
+        p_nom_extendable=False,
+        p_nom=np.inf,
+    )
+
+    n.madd(
+        "Link",
+        names=df.index,
+        suffix="-bck-dr-charger",
+        bus0=df.index,
+        bus1=df.index + "-bck-dr",
+        carrier="demand_response",
+        p_nom_extendable=False,
+        p_nom=np.inf,
+    )
+
+    n.madd(
+        "Link",
+        names=df.index,
+        suffix="-bck-dr-discharger",
+        bus0=df.index + "-bck-dr",
+        bus1=df.index,
+        carrier="demand_response",
+        p_nom_extendable=False,
+        p_nom=np.inf,
+    )
+
+    # backward stores have positive marginal cost storage and postive e
+    # forward stores have negative marginal cost storage and negative e
+
+    n.madd(
+        "Store",
+        names=df.index,
+        suffix="-bck-dr",
+        bus=df.index + "-bck-dr",
+        e_cyclic=True,
+        e_nom_extendable=False,
+        e_nom=np.inf,
+        e_min_pu=0,
+        e_max_pu=1,
+        carrier="demand_response",
+        marginal_cost_storage=marginal_cost_storage,
+    )
+
+    n.madd(
+        "Store",
+        names=df.index,
+        suffix="-fwd-dr",
+        bus=df.index + "-fwd-dr",
+        e_cyclic=True,
+        e_nom_extendable=False,
+        e_nom=np.inf,
+        e_min_pu=-1,
+        e_max_pu=0,
+        carrier="demand_response",
+        marginal_cost_storage=marginal_cost_storage * (-1),
+    )
+
+
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
@@ -631,8 +768,8 @@ if __name__ == "__main__":
         snakemake = mock_snakemake(
             "add_extra_components",
             interconnect="western",
-            simpl=12,
-            clusters=6,
+            simpl="70",
+            clusters="4m",
         )
     configure_logging(snakemake)
 
@@ -711,7 +848,11 @@ if __name__ == "__main__":
     apply_max_annual_growth_rate(n, snakemake.config["costs"]["max_growth"])
     add_nice_carrier_names(n, snakemake.config)
     add_co2_emissions(n, costs_dict[n.investment_periods[0]], n.carriers.index)
-    # n.generators.to_csv("generators_ec.csv")
+
+    dr_config = snakemake.params.demand_response
+    if dr_config:
+        add_demand_response(n, dr_config)
+
     n.consistency_check()
     n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))
     n.export_to_netcdf(snakemake.output[0])

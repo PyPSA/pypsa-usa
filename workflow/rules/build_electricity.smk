@@ -188,7 +188,11 @@ rule build_renewable_profiles:
     threads: ATLITE_NPROCESSES
     retries: 3
     resources:
-        mem_mb=lambda wildcards, input, attempt: (ATLITE_NPROCESSES * input.size // 3500000) * attempt * 1.5,
+        mem_mb=lambda wildcards, input, attempt: (
+            ATLITE_NPROCESSES * input.size // 3500000
+        )
+        * attempt
+        * 1.5,
     wildcard_constraints:
         technology="(?!hydro|EGS).*",  # Any technology other than hydro
     script:
@@ -729,6 +733,7 @@ rule add_extra_components:
         + "{interconnect}/Geospatial/regions_onshore_s{simpl}_{clusters}.geojson",
     params:
         retirement=config["electricity"].get("retirement", "technical"),
+        demand_response=config["electricity"].get("demand_response", {}),
     output:
         RESOURCES + "{interconnect}/elec_s{simpl}_c{clusters}_ec.nc",
     log:
