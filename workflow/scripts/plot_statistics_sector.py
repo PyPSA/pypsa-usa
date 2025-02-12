@@ -6,7 +6,9 @@ from dataclasses import dataclass
 from enum import Enum
 from math import ceil
 from pathlib import Path
-from typing import Any
+
+# Optional used as 'arg: callable | None = None' gives TypeError with py3.11
+from typing import Any, Optional
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -152,7 +154,7 @@ def plot_sector_production_timeseries(
     nice_name: bool | None = True,
     remove_sns_weights: bool = True,
     resample: str | None = None,
-    resample_fn: callable | None = None,
+    resample_fn: Optional[callable] = None,  # noqa: UP007
     month: int | None = None,
     **kwargs,
 ) -> tuple:
@@ -227,7 +229,7 @@ def plot_transportation_production_timeseries(
     nice_name: bool | None = True,
     remove_sns_weights: bool = True,
     resample: str | None = None,
-    resample_fn: callable | None = None,
+    resample_fn: Optional[callable] = None,  # noqa: UP007
     month: int | None = None,
     **kwargs,
 ) -> tuple:
@@ -963,7 +965,7 @@ def plot_sector_dr_timeseries(
     state: str | None = None,
     nice_name: bool | None = True,
     resample: str | None = None,
-    resample_fn: callable | None = None,
+    resample_fn: Optional[callable] = None,  # noqa: UP007
     month: int | None = None,
     **kwargs,
 ) -> tuple:

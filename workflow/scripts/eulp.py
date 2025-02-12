@@ -8,8 +8,8 @@ See `retrieve_eulp` rule for the data extraction
 
 from typing import ClassVar
 
-import matplotlib as mpl
 import pandas as pd
+from matplotlib.axes import Axes
 
 
 class Eulp:
@@ -255,7 +255,7 @@ class Eulp:
             "water_heating",
         ],
         resample: str | None = None,
-    ) -> mpl.axes.Axes:
+    ) -> Axes:
         """Plot load profiles."""
         if isinstance(sectors, str):
             sectors = [sectors]
@@ -369,7 +369,7 @@ class EulpTotals:
     def plot(
         self,
         sectors: list[str] | str | None = ["electricity", "gas", "oil", "propane"],
-    ) -> mpl.axes.Axes:
+    ) -> Axes:
         """Plot load profiles."""
         if isinstance(sectors, str):
             sectors = [sectors]
