@@ -188,7 +188,11 @@ rule build_renewable_profiles:
     threads: ATLITE_NPROCESSES
     retries: 3
     resources:
-        mem_mb=lambda wildcards, input, attempt: (ATLITE_NPROCESSES * input.size // 3500000) * attempt * 1.5,
+        mem_mb=lambda wildcards, input, attempt: (
+            ATLITE_NPROCESSES * input.size // 3500000
+        )
+        * attempt
+        * 1.5,
     wildcard_constraints:
         technology="(?!hydro|EGS).*",  # Any technology other than hydro
     script:
