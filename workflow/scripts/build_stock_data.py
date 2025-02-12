@@ -1,4 +1,3 @@
-# ruff: noqa: D100, D101, RUF012
 """Builds End-Use initial stock data."""
 
 # to supress warning in water heat xlsx
@@ -6,6 +5,7 @@
 import logging
 import warnings
 from pathlib import Path
+from typing import ClassVar
 
 import numpy as np
 import pandas as pd
@@ -68,7 +68,7 @@ class Recs:
     - Highlights for water heating in U.S. homes by state, 2020
     """
 
-    file_mapper = {
+    FILE_MAPPER: ClassVar[dict[str, str]] = {
         "aircon_stock": "State Air Conditioning",
         "space_heat_stock": "State Space Heating",
         "water_heat": "State Water Heating",
@@ -76,7 +76,7 @@ class Recs:
         "water_heat_fuel": "State Water Heating Fuels",
     }
 
-    column_mapper = {
+    COLUMN_MAPPER: ClassVar[dict[str, str]] = {
         "aircon_stock": {
             "Unnamed: 1": "total_stock",
             "Uses air-conditioning equipment": "ac_stock",
@@ -141,7 +141,7 @@ class Recs:
 
     def _read(self, stock: str) -> pd.DataFrame:
         """Reads in the data."""
-        f = Path(self.dir, f"{self.file_mapper[stock]}.xlsx")
+        f = Path(self.dir, f"{self.FILE_MAPPER[stock]}.xlsx")
 
         df = (
             pd.read_excel(
@@ -151,7 +151,7 @@ class Recs:
                 index_col=0,
                 skipfooter=2,
             )
-            .rename(columns=self.column_mapper[stock], index={"All homes": "USA"})
+            .rename(columns=self.COLUMN_MAPPER[stock], index={"All homes": "USA"})
             .dropna()
             .astype(str)  # avoids downcasting object dtype error
             .replace("Q", np.nan)  # > 50% RSE or n < 10
@@ -198,27 +198,27 @@ class Cecs:
 
     # Percentages from Page 7 from Table C7 at
     # https://www.eia.gov/consumption/commercial/data/2018/index.php?view=consumption#major
-    usa_avg_space_heating = {
+    USA_AVG_SPACE_HEATING: ClassVar[dict:float] = {
         "Electricity": 0.313,  # 1856 / 5918
         "Natural gas": 0.396,  # 2344 / 5918
         "Fuel oil": 0.038,  # 222 / 5918
         "District heat": 0.013,  # 78 / 5918
         "Propane": 0.057,  # 338 / 5918
     }
-    usa_avg_water_heating = {
+    USA_AVG_WATER_HEATING: ClassVar[dict:float] = {
         "Electricity": 0.471,  # 2785 / 5918
         "Natural gas": 0.319,  # 1885 / 5918
         "Fuel oil": 0.012,  # 72 / 5918
         "District heat": 0.006,  # 38 / 5918
         "Propane": 0.025,  # 145 / 5918
     }
-    usa_avg_cooling = {
+    USA_AVG_COOLING: ClassVar[dict:float] = {
         "Electricity": 0.775,  # 4584 / 5918
         "Natural gas": 0.0,  # 4 / 5918
         "District chilled": 0.01,  # 55 / 5918
     }
 
-    census_name_map = {
+    CENSUS_NAME_MAP: ClassVar[dict:float] = {
         "NewEngland": "new_england",
         "Middle Atlantic": "mid_atlantic",
         "EastNorthCentral": "east_north_central",
@@ -265,7 +265,7 @@ class Cecs:
                 .astype(float)
             )
             df = df.rename(columns={x: x.replace("\n", "") for x in df.columns}).rename(
-                columns=self.census_name_map,
+                columns=self.CENSUS_NAME_MAP,
             )
             dfs.append(df)
 
@@ -331,11 +331,11 @@ class Cecs:
         """Fills missing values with USA average."""
         match fuel:
             case "space_heat_fuel":
-                fill_values = self.usa_avg_space_heating
+                fill_values = self.USA_AVG_SPACE_HEATING
             case "water_heat_fuel":
-                fill_values = self.usa_avg_water_heating
+                fill_values = self.USA_AVG_WATER_HEATING
             case "aircon_fuel":
-                fill_values = self.usa_avg_cooling
+                fill_values = self.USA_AVG_COOLING
             case _:
                 raise NotImplementedError
 

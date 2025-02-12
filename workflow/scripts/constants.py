@@ -361,6 +361,7 @@ STATES_INTERCONNECT_MAPPER = {
     "YT": "canada",
     "MX": "mexico",
 }
+EMPTY_STATES = [x for x, y in STATES_INTERCONNECT_MAPPER.items() if not y]
 
 STATES_CENSUS_MAPPER = {
     "AL": "south",

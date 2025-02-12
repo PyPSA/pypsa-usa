@@ -1,5 +1,3 @@
-# ruff: noqa: RUF012, D101, D102
-
 """
 Holds data processing class for NREL End Use Load Profiles.
 
@@ -8,7 +6,10 @@ Holds data processing class for NREL End Use Load Profiles.
 See `retrieve_eulp` rule for the data extraction
 """
 
+from typing import ClassVar
+
 import pandas as pd
+from matplotlib.axes import Axes
 
 
 class Eulp:
@@ -23,7 +24,7 @@ class Eulp:
     - water_heat -> end use water heating
     """
 
-    _elec_group = [
+    _elec_group: ClassVar[list[str]] = [
         # residential
         "out.electricity.ceiling_fan.energy_consumption.kwh",
         "out.electricity.clothes_dryer.energy_consumption.kwh",
@@ -55,7 +56,7 @@ class Eulp:
         "out.electricity.water_systems.energy_consumption.kwh",
     ]
 
-    _heat_group = [
+    _heat_group: ClassVar[list[str]] = [
         # residential
         "out.electricity.heating.energy_consumption.kwh",
         "out.electricity.heating_fans_pumps.energy_consumption.kwh",
@@ -91,7 +92,7 @@ class Eulp:
         "out.electricity.heating.energy_consumption.kwh",
     ]
 
-    _space_heat_group = [
+    _space_heat_group: ClassVar[list[str]] = [
         # residential
         "out.electricity.heating.energy_consumption.kwh",
         "out.electricity.heating_fans_pumps.energy_consumption.kwh",
@@ -120,7 +121,7 @@ class Eulp:
         "out.electricity.heating.energy_consumption.kwh",
     ]
 
-    _water_heat_group = [
+    _water_heat_group: ClassVar[list[str]] = [
         # residential
         "out.electricity.hot_water.energy_consumption.kwh",
         "out.electricity.pool_heater.energy_consumption.kwh",
@@ -135,7 +136,7 @@ class Eulp:
         "out.other_fuel.water_systems.energy_consumption.kwh",
     ]
 
-    _cool_group = [
+    _cool_group: ClassVar[list[str]] = [
         # residential
         "out.electricity.cooling.energy_consumption.kwh",
         "out.electricity.cooling_fans_pumps.energy_consumption.kwh",
@@ -189,23 +190,23 @@ class Eulp:
         return f"\n{self.data.head(3)}\n\n from {self.data.index[0]} to {self.data.index[-1]}"
 
     @property
-    def electric(self):
+    def electric(self):  # noqa: D102
         return self.data["electricity"]
 
     @property
-    def heating(self):
+    def heating(self):  # noqa: D102
         return self.data["heating"]
 
     @property
-    def space_heating(self):
+    def space_heating(self):  # noqa: D102
         return self.data["space_heating"]
 
     @property
-    def water_heating(self):
+    def water_heating(self):  # noqa: D102
         return self.data["water_heating"]
 
     @property
-    def cooling(self):
+    def cooling(self):  # noqa: D102
         return self.data["cooling"]
 
     @staticmethod
@@ -254,7 +255,8 @@ class Eulp:
             "water_heating",
         ],
         resample: str | None = None,
-    ):
+    ) -> Axes:
+        """Plot load profiles."""
         if isinstance(sectors, str):
             sectors = [sectors]
 
@@ -266,19 +268,20 @@ class Eulp:
         return df.plot(xlabel="", ylabel="MW")
 
     def to_csv(self, path_or_buf: str, **kwargs):
+        """Save load data as a csv."""
         self.data.to_csv(path_or_buf=path_or_buf, **kwargs)
 
 
 class EulpTotals:
     """End use by fuel."""
 
-    _elec_group = ["out.electricity.total.energy_consumption.kwh"]
+    _elec_group: ClassVar[list[str]] = ["out.electricity.total.energy_consumption.kwh"]
 
-    _ng_group = ["out.natural_gas.total.energy_consumption.kwh"]
+    _ng_group: ClassVar[list[str]] = ["out.natural_gas.total.energy_consumption.kwh"]
 
-    _oil_group = ["out.fuel_oil.total.energy_consumption.kwh"]
+    _oil_group: ClassVar[list[str]] = ["out.fuel_oil.total.energy_consumption.kwh"]
 
-    _propane_group = ["out.propane.total.energy_consumption.kwh"]
+    _propane_group: ClassVar[list[str]] = ["out.propane.total.energy_consumption.kwh"]
 
     def __init__(
         self,
@@ -313,19 +316,19 @@ class EulpTotals:
         return f"\n{self.data.head(3)}\n\n from {self.data.index[0]} to {self.data.index[-1]}"
 
     @property
-    def electric(self):
+    def electric(self):  # noqa: D102
         return self.data["electricity"]
 
     @property
-    def gas(self):
+    def gas(self):  # noqa: D102
         return self.data["gas"]
 
     @property
-    def oil(self):
+    def oil(self):  # noqa: D102
         return self.data["oil"]
 
     @property
-    def propane(self):
+    def propane(self):  # noqa: D102
         return self.data["propane"]
 
     @staticmethod
@@ -366,7 +369,8 @@ class EulpTotals:
     def plot(
         self,
         sectors: list[str] | str | None = ["electricity", "gas", "oil", "propane"],
-    ):
+    ) -> Axes:
+        """Plot load profiles."""
         if isinstance(sectors, str):
             sectors = [sectors]
 
@@ -375,6 +379,7 @@ class EulpTotals:
         return df.plot(xlabel="", ylabel="MWh")
 
     def to_csv(self, path_or_buf: str, **kwargs):
+        """Save load data as a csv."""
         self.data.to_csv(path_or_buf=path_or_buf, **kwargs)
 
 
