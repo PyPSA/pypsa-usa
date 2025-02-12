@@ -1,4 +1,3 @@
-# ruff: noqa: D100, D101
 """Plots sector validation plots."""
 
 import logging
@@ -547,6 +546,8 @@ def plot_system_consumption_validation_by_state(
 
 @dataclass
 class PlottingData:
+    """Describe data to plot."""
+
     name: str  # snakemake name
     fn: callable
     system_only: bool
