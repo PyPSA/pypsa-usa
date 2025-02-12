@@ -71,6 +71,10 @@ electricity:
       efs_speed: moderate # slow, moderate, rapid
       aeo: reference
 
+  demand_response:
+    shift: 0
+    marginal_cost: 999999
+
 # docs :
 conventional:
   unit_commitment: false
