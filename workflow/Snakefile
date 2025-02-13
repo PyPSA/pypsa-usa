@@ -206,7 +206,7 @@ def sector_figures(wildcards):
         figs.append(
             expand(
                 RESULTS
-                + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/system/sankey/{figure}.png",
+                + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/system/sankey/{figure}.html",
                 **config["scenario"],
                 figure=FIGURES_SECTOR_SANKEY,
             )
