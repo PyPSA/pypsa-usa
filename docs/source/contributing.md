@@ -79,7 +79,7 @@ If you plan on contributing to the respository, please install developer depende
 Run the following command from the activated `pypsa-usa` conda environment.
 
 ```console
-uv sync
+uv pip install -r pyproject.toml --extra dev
 ```
 
 #### 3b. Using conda/mamba
