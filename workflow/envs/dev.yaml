@@ -1,0 +1,19 @@
+name: pypsa-usa-dev
+channels:
+- conda-forge
+
+dependencies:
+- python==3.11.9
+- pip
+
+- pip:
+  - bump2version
+  - pudb
+  - mypy~=1.11.0
+  - pre-commit
+  - ruff~=0.5.2
+  - types-PyYAML
+  - sphinx-autobuild
+  - sphinx
+  - sphinx-book-theme
+  - myst-parser
