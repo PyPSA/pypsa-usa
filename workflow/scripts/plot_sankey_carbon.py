@@ -300,7 +300,7 @@ if __name__ == "__main__":
             fig_name_html.parent.mkdir(parents=True)
 
         fig.write_html(str(fig_name_html))
-        fig.write_image(str(fig_name_png))
+        # fig.write_image(str(fig_name_png))
 
     # plot system level
 
@@ -349,4 +349,4 @@ if __name__ == "__main__":
         fig_name_html.parent.mkdir(parents=True)
 
     fig.write_html(str(fig_name_html))
-    fig.write_image(str(fig_name_png))
+    # fig.write_image(str(fig_name_png))
