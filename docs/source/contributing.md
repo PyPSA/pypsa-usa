@@ -74,7 +74,7 @@ copy of the code under your account on the repository service.
 
 If you plan on contributing to the respository, please install developer dependencies.
 
-#### 3a. If using UV
+#### 3a. Using UV
 
 Run the following command from the activated `pypsa-usa` conda environment.
 
@@ -82,12 +82,12 @@ Run the following command from the activated `pypsa-usa` conda environment.
 uv sync
 ```
 
-#### 3b. If using conda/mamba
+#### 3b. Using conda/mamba
 
 Run the following command from the activated `pypsa-usa` conda environment.
 
 ```console
-conda env update --name my_env --file environment.yaml
+conda env update --name pypsa-usa --file workflow/envs/dev.yaml --prune
 ```
 
 ### 4. Install pre-commit hooks:

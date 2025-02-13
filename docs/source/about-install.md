@@ -47,7 +47,7 @@ source .venv/bin/activate
 ```
 
 ```{warning}
-If you are migrating from `mamba`/`conda`, you may need to install system level dependencies that conda has previously handeled. These include, `HDF5` and `GDAL>=3.1` libraries, and if running sector studies, .
+If you are migrating from `mamba`/`conda`, you may need to install system level dependencies that conda has previously handeled. These include, `HDF5` and `GDAL>=3.1` libraries.
 ```
 
 ### Step 3b: `mamba` Installation
