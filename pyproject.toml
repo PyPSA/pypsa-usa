@@ -68,7 +68,7 @@ Documentation = "https://pypsa-usa.readthedocs.io/en/latest/"
 Issues = "https://github.com/PyPSA/pypsa-usa/issues"
 Source = "https://github.com/PyPSA/pypsa-usa"
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
     "bump2version",
     "ipython",
