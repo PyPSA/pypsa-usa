@@ -21,6 +21,7 @@ classifiers = [
 ]
 license = {file = "LICENSE.md"}
 readme = "README.md"
+requires-python = ">=3.11, <3.12.0"
 dependencies = [
     "atlite==0.3.0",
     "cartopy==0.23.0",
@@ -35,7 +36,6 @@ dependencies = [
     "graphviz>=0.20.3",
     "gurobipy==11.0.3",
     "highspy>=1.9.0",
-    "kaleido==0.4.0rc5",
     "linopy==0.3.14",
     "matplotlib==3.8.0",
     "netcdf4==1.6.4",

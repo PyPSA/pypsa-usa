@@ -72,10 +72,22 @@ copy of the code under your account on the repository service.
 
 ### 3. Install developer dependencies
 
-If you plan on contributing to the respository, please install these packages into your activated mamba environment
+If you plan on contributing to the respository, please install developer dependencies.
+
+#### 3a. If using UV
+
+Run the following command from the activated `pypsa-usa` conda environment.
 
 ```console
-python -m pip install -e ".[dev]"
+uv sync
+```
+
+#### 3b. If using conda/mamba
+
+Run the following command from the activated `pypsa-usa` conda environment.
+
+```console
+conda env update --name my_env --file environment.yaml
 ```
 
 ### 4. Install pre-commit hooks:
