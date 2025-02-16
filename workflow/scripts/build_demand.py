@@ -100,7 +100,6 @@ class Context:
         """
         Returns demand by end-use energy carrier.
         """
-
         if isinstance(fuels, str):
             fuels = [fuels]
 
@@ -132,7 +131,6 @@ class Context:
         > result["electricity"]["light-duty"]
         > result["lpg"]["heavy-duty"]
         """
-
         if isinstance(fuels, str):
             fuels = [fuels]
 
@@ -185,7 +183,6 @@ class ReadStrategy(ABC):
         """
         Public interface to extract data.
         """
-
         data = self._read_data()
         df = self._format_data(data)
         self._check_index(df)
@@ -270,7 +267,6 @@ class ReadEia(ReadStrategy):
         """
         Reads raw data.
         """
-
         if not self.filepath:
             logger.error("Must provide filepath for EIA data")
             sys.exit()
@@ -331,7 +327,6 @@ class ReadFERC714(ReadStrategy):
         """
         Reads raw data.
         """
-
         if not self.filepath:
             logger.error("Must provide filepath for FERC714 data")
             sys.exit()
@@ -414,7 +409,6 @@ class ReadEfs(ReadStrategy):
         return self._zone
 
     def _read_data(self) -> pd.DataFrame:
-
         if not self.filepath:
             logger.error("Must provide filepath for EFS data")
             sys.exit()
@@ -426,7 +420,6 @@ class ReadEfs(ReadStrategy):
         """
         Formats raw data.
         """
-
         df = data.copy()
         df = self._build_snapshots(df)
         df = self._format_snapshot_index(df).reset_index()
@@ -455,7 +448,6 @@ class ReadEfs(ReadStrategy):
         """
         Builds snapshots based on UTC time.
         """
-
         df = self._apply_timezones(df)
         df = self._build_datetime(df)
         return df.set_index("time").sort_index()
@@ -521,8 +513,8 @@ class ReadEfs(ReadStrategy):
 
         Yearly values are linearlly interpolated between EFS planning years
 
-        Returns:
-
+        Returns
+        -------
         |      | State 1 | State 2 | ... | State n |
         |----- |---------|---------|-----|---------|
         | 2018 |  ###    |   ###   |     |   ###   |
@@ -534,7 +526,6 @@ class ReadEfs(ReadStrategy):
         | 2049 |  ###    |   ###   |     |   ###   |
         | 2050 |  ###    |   ###   |     |   ###   |
         """
-
         # extract efs provided data
         efs_years = self._read_data()[["Year", "State", "LoadMW"]]
         efs_years = efs_years.groupby(["Year", "State"]).sum().reset_index()
@@ -620,11 +611,9 @@ class ReadEulp(ReadStrategy):
     @staticmethod
     def _apply_timeshift(data: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
         """Raw EULP given in EST. Shift data by in local state time."""
-
         data_shifted = {}
 
         for state, df in data.items():
-
             year = df.index[0].year
 
             timezone = STATE_TIMEZONE[state]
@@ -830,7 +819,6 @@ class ReadCliu(ReadStrategy):
             """
             Confirms all data variables are present.
             """
-
             assert "electricity" in ds.data_vars
 
             for fuel in ("heat", "cool", "lpg"):
@@ -840,7 +828,7 @@ class ReadCliu(ReadStrategy):
 
             return ds
 
-        annual_demand = remove_counties(annual_demand)  # todo: retain county data
+        annual_demand = remove_counties(annual_demand)  # TODO: retain county data
         annual_demand = annual_demand_2_xarray(annual_demand)
         profiles = profile_2_xarray(profiles)
 
@@ -850,7 +838,7 @@ class ReadCliu(ReadStrategy):
         demand = profiles * annual_demand
         dims = [x for x in demand.sizes]
 
-        # todo: add county arregation
+        # TODO: add county arregation
         if "county" in dims:
             indices = dims.remove("state")
             columns = "county"
@@ -1030,7 +1018,6 @@ class ReadCliu(ReadStrategy):
         Adapted from:
         https://github.com/NREL/Industry-Energy-Tool/blob/master/data_foundation/data_comparison/compare_mecs.py
         """
-
         cols_renamed = {
             "Code(a)": "NAICS",
             "Electricity(b)": "Net_electricity",
@@ -1129,7 +1116,6 @@ class ReadCliu(ReadStrategy):
         """
         Reads FIPS data.
         """
-
         return (
             pd.read_csv(self._fips_filepath)
             .drop(columns=["FIPS_County", "FIPS State"])
@@ -1225,7 +1211,6 @@ class ReadTransportEfsAeo(ReadStrategy):
         | ...                 | ...        | ...     |
         | other               | Texas      | 1.5     |
         """
-
         df = pd.read_csv(self.filepath, index_col=0, header=0)
 
         # check as these are user defined
@@ -1251,7 +1236,6 @@ class ReadTransportEfsAeo(ReadStrategy):
         the year will equal **ONE THOUSAND** Its scaled from 1 to 1000
         just to avoid numerical issues.
         """
-
         efs = ReadEfs(self.efs_path).read_demand()
         transport = efs[efs.index.get_level_values("sector") == "transport"].droplevel(
             ["sector", "fuel"],
@@ -1296,7 +1280,6 @@ class ReadTransportEfsAeo(ReadStrategy):
         """
         Gets yearly national level VMT data.
         """
-
         demand = []
         for vehicle in ("light_duty", "med_duty", "heavy_duty", "bus"):
             demand.append(TransportationDemand(vehicle, 2050, self.api).get_data())
@@ -1327,7 +1310,6 @@ class ReadTransportEfsAeo(ReadStrategy):
 
         This is one ugly function. holy.
         """
-
         aeo = self.aeo_demand.drop(columns="units")
         aeo = xr.DataArray.from_series(aeo.squeeze())
 
@@ -1489,7 +1471,6 @@ class ReadTransportAeo(ReadStrategy):
         | ...                 | ...        | ...     |
         | other               | Texas      | 1.5     |
         """
-
         df = pd.read_csv(self.filepath, index_col=0, header=0)
 
         # check as these are user defined
@@ -1510,7 +1491,6 @@ class ReadTransportAeo(ReadStrategy):
         """
         Gets yearly national level demand.
         """
-
         demand = []
         demand.append(TransportationDemand(self.vehicle, 2050, self.api).get_data())
         for year in self.years:
@@ -1543,7 +1523,6 @@ class ReadTransportAeo(ReadStrategy):
         Merges national VMT data (self.aeo_demand) and proportions of demand
         travelled per state (data) to ceate uniform demand profiles.
         """
-
         demand_by_state = data.copy()  # given as a percentage
         demand_national = self.aeo_demand.drop(columns="units")
 
@@ -1642,7 +1621,6 @@ class WriteStrategy(ABC):
         | ...                 |           |           |     |    ###    |
         | 2019-12-31 23:00:00 |    ###    |    ###    |     |    ###    |
         """
-
         # 'state' is states based on power regions
         # 'full_state' is actual geographic boundaries
         assert zone in ("ba", "state", "reeds")
@@ -1725,7 +1703,6 @@ class WriteStrategy(ABC):
         """
         Filters on snapshots, sector, and fuel.
         """
-
         if isinstance(sns, pd.DatetimeIndex):
             filtered = self._filter_on_snapshots(df, sns)
             df = filtered.reset_index()
@@ -1755,7 +1732,6 @@ class WriteStrategy(ABC):
         """
         Zone power demand is disaggregated to buses proportional to laf.
         """
-
         all_load = []
 
         for load_zone in laf.zone.unique():
@@ -1965,7 +1941,6 @@ class WriteIndustrial(WriteStrategy):
         """
         Evenly distributes laf to buses within a county.
         """
-
         county_laf = df.at[county, "laf"]
         num_buses = len(buses)
         bus_laf = county_laf / num_buses
@@ -2014,7 +1989,6 @@ class DemandFormatter:
         """
         Public method to format demand ready to be ingested into the model.
         """
-
         if self.need_scaling(df):
             assert isinstance(self.scaler, DemandScaler)
 
@@ -2071,7 +2045,6 @@ class DemandFormatter:
 
 
 class DemandScaler(ABC):
-
     def __init__(self):
         self.projection = self.get_projections()
 
@@ -2083,7 +2056,6 @@ class DemandScaler(ABC):
         """
         Returns decimal change between two years.
         """
-
         min_year = self.projection.index.min()
         max_year = self.projection.index.max()
 
@@ -2136,14 +2108,12 @@ class DemandScaler(ABC):
         | ...                 |    ...    |    ...    |     |    ...    |
         | 2030-02-28 23:00:00 |    ccc    |    fff    |     |    iii    |
         """
-
         new = df.copy()
         new.index = new.index.map(lambda x: x.replace(year=year))
         return new
 
 
 class AeoElectricityScaler(DemandScaler):
-
     def __init__(self, pudl: str, scenario: str = "reference"):
         self.pudl = pudl
         self.scenario = scenario
@@ -2163,7 +2133,6 @@ class AeoElectricityScaler(DemandScaler):
         | 2049 |  ###  |  ###  |
         | 2050 |  ###  |  ###  |
         """
-
         con = sqlite3.connect(self.pudl)
         df = pd.read_sql_query(
             f"""
@@ -2193,7 +2162,6 @@ class AeoElectricityScaler(DemandScaler):
 
 
 class AeoEnergyScaler(DemandScaler):
-
     def __init__(self, api: str, scenario: str = "reference"):
         self.api = api
         self.scenario = scenario
@@ -2233,7 +2201,6 @@ class AeoEnergyScaler(DemandScaler):
         | 2049 |     ###     |     ###     |     ###     |     ###    |  ###  |
         | 2050 |     ###     |     ###     |     ###     |     ###    |  ###  |
         """
-
         years = range(2017, 2051)
 
         # sectors = ("residential", "commercial", "industry", "transport")
@@ -2252,7 +2219,6 @@ class AeoEnergyScaler(DemandScaler):
 
 
 class AeoVmtScaler(DemandScaler):
-
     def __init__(self, api: str, scenario: str = "reference"):
         self.api = api
         self.scenario = scenario
@@ -2294,7 +2260,6 @@ class AeoVmtScaler(DemandScaler):
         | 2049 |     ###    |    ###    |     ###     | ###  |  ###  |
         | 2050 |     ###    |    ###    |     ###     | ###  |  ###  |
         """
-
         years = range(2017, 2051)
 
         vehicles = ("light_duty", "med_duty", "heavy_duty", "bus")
@@ -2324,7 +2289,6 @@ class AeoVmtScaler(DemandScaler):
 
 
 class EfsElectricityScalar(DemandScaler):
-
     def __init__(self, filepath: str):
         self.efs = filepath
         self.region = "united_states"
@@ -2390,7 +2354,6 @@ def get_demand_params(
     """
     Gets hard coded demand options.
     """
-
     match end_use:
         case "power":  # electricity only study
             demand_profile = demand_params["profile"]

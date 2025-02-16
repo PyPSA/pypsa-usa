@@ -18,9 +18,7 @@ def build_electricty(
     options: Optional[dict[str, Any]] = None,
 ) -> None:
     """Adds electricity sector infrastructre data"""
-
     if sector in ("res", "com", "srv"):
-
         split_urban_rural = options.get("split_urban_rural", False)
 
         if split_urban_rural:
@@ -51,7 +49,6 @@ def add_electricity_infrastructure(n: pypsa.Network, sector: str, suffix: Option
     For example, will build the link between "p480 0" and "p480 0 ind-
     elec"
     """
-
     elec = SecCarriers.ELECTRICITY.value
 
     if suffix:
@@ -89,7 +86,6 @@ def add_electricity_dr(
     """
     Adds stores to the network to use for demand response.
     """
-
     shift = dr_config.get("shift", 0)
     marginal_cost_storage = dr_config.get("marginal_cost", 0)
 
@@ -236,7 +232,6 @@ def _split_urban_rural_load(
     "p600 0 com-urban-elec" and "p600 0 com-rural-elec" at the same
     location as "p600 0").
     """
-
     assert sector in ("com", "res")
 
     fuel = SecCarriers.ELECTRICITY.value
@@ -244,7 +239,6 @@ def _split_urban_rural_load(
     load_names = n.loads[n.loads.carrier == f"{sector}-{fuel}"].index.to_list()
 
     for system in ("urban", "rural"):
-
         # add buses to connect the new loads to
         new_buses = pd.DataFrame(index=load_names)
         new_buses.index = new_buses.index.map(n.loads.bus)
@@ -302,7 +296,6 @@ def _format_total_load(
     """
     Formats load with 'total' prefix to match urban/rural split.
     """
-
     assert sector in ("com", "res", "srv")
 
     fuel = SecCarriers.ELECTRICITY.value

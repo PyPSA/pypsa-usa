@@ -9,7 +9,6 @@ from pathlib import Path
 from typing import Optional
 
 import pandas as pd
-import plotly
 import plotly.graph_objects as go
 import pypsa
 from _helpers import configure_logging, mock_snakemake
@@ -104,7 +103,6 @@ def _get_consumption_generators(
     period: int,
     state: Optional[str] = None,
 ) -> pd.DataFrame:
-
     if state:
         generators = _get_gens_in_state(n, state)
     else:
@@ -125,7 +123,6 @@ def _get_rejected_generators(
     period: int,
     state: Optional[str] = None,
 ) -> pd.DataFrame:
-
     if state:
         generators = _get_gens_in_state(n, state)
     else:
@@ -166,7 +163,6 @@ def _get_rejected_links(
     period: int,
     state: Optional[str] = None,
 ) -> pd.DataFrame:
-
     if state:
         links = _get_links_in_state(n, state)
     else:
@@ -237,7 +233,6 @@ def _get_sector_consumption(
     period: int,
     state: Optional[str] = None,
 ) -> float:
-
     if fuel == "elec":
         fuel = "AC"
 
@@ -264,7 +259,6 @@ def _get_service_supply(
     period: int,
     state: Optional[str] = None,
 ) -> float:
-
     if state:
         links_in_state = _get_links_in_state(n, state)
     else:
@@ -294,7 +288,6 @@ def _get_service_rejected(
     period: int,
     state: Optional[str] = None,
 ) -> float:
-
     if state:
         links_in_state = _get_links_in_state(n, state)
     else:
@@ -321,7 +314,6 @@ def _get_industry_supply(
     period: int,
     state: Optional[str] = None,
 ) -> float:
-
     if state:
         links_in_state = _get_links_in_state(n, state)
     else:
@@ -342,7 +334,6 @@ def _get_industry_rejected(
     period: int,
     state: Optional[str] = None,
 ) -> float:
-
     if state:
         links_in_state = _get_links_in_state(n, state)
     else:
@@ -369,7 +360,6 @@ def _get_transport_supply(
     period: int,
     state: Optional[str] = None,
 ) -> float:
-
     if state:
         links_in_state = _get_links_in_state(n, state)
     else:
@@ -404,7 +394,6 @@ def _get_transport_rejected(
     period: int,
     state: Optional[str] = None,
 ) -> float:
-
     if state:
         links_in_state = _get_links_in_state(n, state)
     else:
@@ -441,7 +430,6 @@ def get_energy_flow_res(
     period: int,
     state: Optional[str] = None,
 ) -> pd.DataFrame:
-
     elec_consumption = _get_sector_consumption(n, "res", "elec", period, state)
     lpg_consumption = _get_sector_consumption(n, "res", "oil", period, state)
     gas_consumption = _get_sector_consumption(n, "res", "gas", period, state)
@@ -468,7 +456,6 @@ def get_energy_flow_com(
     period: int,
     state: Optional[str] = None,
 ) -> pd.DataFrame:
-
     elec_consumption = _get_sector_consumption(n, "com", "elec", period, state)
     lpg_consumption = _get_sector_consumption(n, "com", "oil", period, state)
     gas_consumption = _get_sector_consumption(n, "com", "gas", period, state)
@@ -495,7 +482,6 @@ def get_energy_flow_ind(
     period: int,
     state: Optional[str] = None,
 ) -> pd.DataFrame:
-
     elec_consumption = _get_sector_consumption(n, "ind", "elec", period, state)
     coal_consumption = _get_sector_consumption(n, "ind", "coal", period, state)
     gas_consumption = _get_sector_consumption(n, "ind", "gas", period, state)
@@ -522,7 +508,6 @@ def get_energy_flow_trn(
     period: int,
     state: Optional[str] = None,
 ) -> pd.DataFrame:
-
     elec_consumption = _get_sector_consumption(n, "trn", "elec", period, state)
     oil_consumption = _get_sector_consumption(n, "trn", "oil", period, state)
 
@@ -571,7 +556,6 @@ def format_sankey_data(
     name_mapper: dict[str, str],
     sankey_codes: dict[str, int],
 ) -> pd.DataFrame:
-
     def map_sankey_name(name: str):
         try:
             return name_mapper[name]
@@ -612,7 +596,6 @@ def format_sankey_data(
 ###
 
 if __name__ == "__main__":
-
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
 
@@ -653,7 +636,6 @@ if __name__ == "__main__":
     # plot state level
 
     for state in states:
-
         df = get_sankey_dataframe(
             n=n,
             pwr_carriers=power_carriers,

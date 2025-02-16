@@ -1,16 +1,13 @@
 # BY PyPSA-USA Authors
 import logging
-from typing import Optional
 
-import constants as const
 import geopandas as gpd
 import numpy as np
 import pandas as pd
 import pypsa
 from _helpers import configure_logging
 from build_shapes import load_na_shapes
-from geopandas.tools import sjoin
-from shapely.geometry import Point, Polygon
+from shapely.geometry import Polygon
 from sklearn.neighbors import BallTree
 
 
@@ -71,7 +68,6 @@ def add_buses_from_file(
 
 
 def add_branches_from_file(n: pypsa.Network, fn_branches: str) -> pypsa.Network:
-
     branches = pd.read_csv(
         fn_branches,
         dtype={"from_bus_id": str, "to_bus_id": str},
@@ -114,7 +110,6 @@ def assign_line_types(n: pypsa.Network):
 
 
 def add_dclines_from_file(n: pypsa.Network, fn_dclines: str) -> pypsa.Network:
-
     dclines = pd.read_csv(
         fn_dclines,
         dtype={"from_bus_id": str, "to_bus_id": str},
@@ -372,7 +367,7 @@ def build_offshore_transmission_configuration(n: pypsa.Network) -> pypsa.Network
     )
 
     # add offshore wind export cables
-    logger.info(f"Adding offshore wind export lines to the network.")
+    logger.info("Adding offshore wind export lines to the network.")
     n.madd(
         "Line",
         "OSW_export_" + osw_offsub_bus_ids,  # name line after offshore substation

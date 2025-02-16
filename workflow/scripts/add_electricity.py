@@ -49,7 +49,6 @@ from _helpers import (
     calculate_annuity,
     configure_logging,
     export_network_for_gis_mapping,
-    load_costs,
     update_p_nom_max,
     weighted_avg,
 )
@@ -86,7 +85,6 @@ def sanitize_carriers(n, config):
     --------
     Raises a warning if any carrier's "tech_colors" are not defined in the config dictionary.
     """
-
     for c in n.iterate_components():
         if "carrier" in c.df:
             add_missing_carriers(n, c.df.carrier)
@@ -134,7 +132,6 @@ def update_capital_costs(
     """
     Applies regional multipliers to capital cost data.
     """
-
     # map generators to states
     bus_state_mapper = n.buses.to_dict()["state"]
     gen = n.generators[n.generators.carrier == carrier].copy()
@@ -184,7 +181,6 @@ def apply_dynamic_pricing(
     vom: float = 0
         Additional flat $/MWh cost to add onto the fuel costs
     """
-
     assert geography in n.buses.columns
 
     gens = n.generators.copy()
@@ -599,7 +595,6 @@ def attach_egs(
     ) as ds_specs, xr.open_dataset(
         getattr(input_profiles, "profile_egs"),
     ) as ds_profile:
-
         bus2sub = (
             pd.read_csv(input_profiles.bus2sub, dtype=str)
             .drop("interconnect", axis=1)
@@ -828,7 +823,6 @@ def attach_breakthrough_renewable_plants(
     extendable_carriers,
     costs,
 ):
-
     add_missing_carriers(n, renewable_carriers)
 
     plants = pd.read_csv(fn_plants, dtype={"bus_id": str}, index_col=0).query(
@@ -887,7 +881,6 @@ def apply_pudl_fuel_costs(
     plants,
     costs,
 ):
-
     # Apply PuDL Fuel Costs for plants where listed
     pudl_fuel_costs = pd.read_csv(snakemake.input["pudl_fuel_costs"], index_col=0)
 
@@ -1045,7 +1038,7 @@ def main(snakemake):
     if params.conventional["dynamic_fuel_price"].get("enable", False):
         logger.info("Applying dynamic fuel pricing to conventional generators")
         if params.conventional["dynamic_fuel_price"]["wholesale"]:
-            assert params.eia_api, f"Must provide EIA API key for dynamic fuel pricing"
+            assert params.eia_api, "Must provide EIA API key for dynamic fuel pricing"
 
             dynamic_fuel_prices = {
                 "OCGT": {

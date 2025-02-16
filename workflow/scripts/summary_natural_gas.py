@@ -2,7 +2,6 @@
 Module for summarizing natural gas results.
 """
 
-from typing import List
 
 import constants
 import pandas as pd
@@ -30,7 +29,6 @@ def get_gas_demand(
 
     This in input energy required (ie. not applying efficiency losses)
     """
-
     data = {}
 
     buses = n.buses[n.buses.index.str.endswith(" gas")].index
@@ -56,7 +54,6 @@ def get_imports_exports(
     """
     Gets gas flow into and out of the state.
     """
-
     # catches any of the following codes at the start of the string
     regex = "(?:^|.{2})(?:MX|AB|BC|MB|NB|NL|NT|NS|NU|ON|PE|QC|SK|YT)"
 
@@ -104,7 +101,6 @@ def get_imports_exports(
     data = {}
 
     for state in states:
-
         data[state] = {}
 
         import_cols = [x for x in imports_t.columns if f"{state} " in x]
@@ -168,7 +164,6 @@ def get_ng_price(n: pypsa.Network) -> dict[str, pd.DataFrame]:
     """
     Gets state level natural gas price.
     """
-
     buses = n.buses[n.buses.carrier == "gas"]
     buses = n.buses_t.marginal_price[buses.index]
 

@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 #         case _:
 #             raise NotImplementedError
 
-# todo - pull this from config
+# TODO - pull this from config
 PWR_CARRIERS = [
     "nuclear",
     "oil",
@@ -129,7 +129,7 @@ def _filter_gens_on_sector(n: pypsa.Network, sector: str) -> pd.DataFrame:
 
 def _resample_data(df: pd.DataFrame, freq: str, agg_fn: callable) -> pd.DataFrame:
     if not callable(agg_fn):
-        f"Must provide resampling function in the form of 'pd.Series.sum'"
+        "Must provide resampling function in the form of 'pd.Series.sum'"
         return df
     else:
         return df.groupby("period").resample(freq, level="timestep").apply(agg_fn)
@@ -170,8 +170,7 @@ def _get_opt_capacity_per_node(
     include_elec: bool = False,
     state: Optional[str] = None,
 ) -> pd.Series:
-
-    assert not sector in ["pwr"]
+    assert sector not in ["pwr"]
 
     df = _filter_link_on_sector(n, sector)
 
@@ -203,7 +202,6 @@ def _get_opt_pwr_capacity_per_node(
     state: Optional[str] = None,
     **kwargs,
 ) -> pd.Series:
-
     links = _filter_link_on_sector(n, "pwr")
     gens = _filter_gens_on_sector(n, "pwr")
 
@@ -231,8 +229,7 @@ def _get_total_capacity_per_node(
     include_elec: bool = False,
     state: Optional[str] = None,
 ) -> pd.DataFrame:
-
-    assert not sector in ["pwr"]
+    assert sector not in ["pwr"]
 
     df = _filter_link_on_sector(n, sector)
 
@@ -262,7 +259,6 @@ def _get_total_pwr_capacity_per_node(
     state: Optional[str] = None,
     **kwargs,
 ) -> pd.DataFrame:
-
     links = _filter_link_on_sector(n, "pwr")
     gens = _filter_gens_on_sector(n, "pwr")
 
@@ -286,7 +282,6 @@ def _get_brownfield_pwr_capacity_per_node(
     state: Optional[str] = None,
     **kwargs,
 ) -> pd.DataFrame:
-
     links = _filter_link_on_sector(n, "pwr")
     gens = _filter_gens_on_sector(n, "pwr")
 
@@ -318,8 +313,7 @@ def _get_brownfield_capacity_per_node(
     state: Optional[str] = None,
     **kwargs,
 ) -> pd.DataFrame:
-
-    assert not sector in ["pwr"]
+    assert sector not in ["pwr"]
 
     df = _filter_link_on_sector(n, sector)
 
@@ -357,7 +351,6 @@ def get_capacity_per_node(
     state: Optional[str] = None,
     **kwargs,
 ) -> pd.DataFrame:
-
     if sector == "pwr":
         total = _get_total_pwr_capacity_per_node(
             n,
@@ -398,7 +391,6 @@ def get_sector_production_timeseries(
     Note: can not use statistics module as multi-output links for co2 tracking
     > n.statistics.supply("Link", nice_names=False, aggregate_time=False).T
     """
-
     links = _filter_link_on_sector(n, sector).index.to_list()
 
     if remove_sns_weights:
@@ -431,7 +423,6 @@ def get_power_production_timeseries(
     Note: can not use statistics module as multi-output links for co2 tracking
     > n.statistics.supply("Link", nice_names=False, aggregate_time=False).T
     """
-
     links = _filter_link_on_sector(n, "pwr").index.to_list()
     gens = _filter_gens_on_sector(n, "pwr").index.to_list()
 
@@ -467,7 +458,6 @@ def get_sector_production_timeseries_by_carrier(
     """
     Gets timeseries production by carrier.
     """
-
     if sector == "pwr":
         df = get_power_production_timeseries(
             n,
@@ -520,7 +510,6 @@ def get_load_factor_timeseries(
     include_elec: bool = False,
     state: Optional[str] = None,
 ) -> pd.DataFrame:
-
     max_prod = get_sector_max_production_timeseries(n, sector, state=state)
     act_prod = get_sector_production_timeseries(n, sector, state=state)
 
@@ -550,7 +539,7 @@ def get_emission_timeseries_by_sector(
     """
     if sector:
         if sector == "ch4":
-            stores_in_sector = [x for x in n.stores.index if f"gas-ch4" in x]
+            stores_in_sector = [x for x in n.stores.index if "gas-ch4" in x]
         else:
             stores_in_sector = [x for x in n.stores.index if f"{sector}-co2" in x]
     else:
@@ -572,7 +561,6 @@ def get_historical_emissions(
     """
     Emissions by state/sector in units of million metric tons.
     """
-
     dfs = []
 
     if isinstance(sectors, str):
@@ -596,7 +584,6 @@ def get_historical_end_use_consumption(
     """
     End-Use consumption by state/sector in units of MWh.
     """
-
     dfs = []
 
     if isinstance(sectors, str):
@@ -616,7 +603,6 @@ def get_historical_end_use_consumption(
 
 
 def get_historical_power_production(year: int, api: str) -> pd.DataFrame:
-
     fuel_mapper = {
         "BIO": "biomass",
         "COW": "coal",
@@ -710,7 +696,6 @@ def get_end_use_load_timeseries(
 
     - Residential, Commercial, Industrial are in untis of MWh
     """
-
     assert sector in ("res", "com", "ind")
 
     loads = n.loads[n.loads.carrier.str.startswith(sector)]
@@ -732,7 +717,6 @@ def get_storage_level_timeseries(
     state: Optional[str] = None,
     **kwargs,
 ) -> pd.DataFrame:
-
     stores = n.stores[n.stores.carrier.str.startswith(sector)]
 
     if state:
@@ -754,7 +738,6 @@ def get_storage_level_timeseries_carrier(
     resample_fn: Optional[callable] = None,
     **kwargs,
 ) -> pd.DataFrame:
-
     df = get_storage_level_timeseries(n, sector, remove_sns_weights, state)
     df = df.rename(columns=n.stores.carrier)
     df = df.T.groupby(level=0).sum().T
@@ -776,7 +759,6 @@ def get_end_use_load_timeseries_carrier(
 
     - Residential, Commercial, Industrial are in untis of MWh
     """
-
     df = get_end_use_load_timeseries(n, sector, sns_weight).T
     if state:
         buses = _get_loads_in_state(n, state)
@@ -801,7 +783,6 @@ def get_historical_transport_consumption_by_mode(api: str) -> pd.DataFrame:
     """
     Will return data in units of MWh.
     """
-
     vehicles = [
         "light_duty",
         "med_duty",

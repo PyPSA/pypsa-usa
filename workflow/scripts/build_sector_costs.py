@@ -9,7 +9,6 @@ from abc import ABC, abstractmethod
 from typing import Optional
 
 import pandas as pd
-import xarray as xr
 from constants import TBTU_2_MWH, MMBTU_MWHthemal
 
 # Vehicle life assumptions for getting $/VMT capital cost
@@ -496,7 +495,6 @@ class EfsIceTransportationData:
 
 
 class EfsBuildingData(EfsSectorData):
-
     mmbtu_2_mwh = MMBTU_MWHthemal
 
     # Assumptions from https://atb.nrel.gov/transportation/2022/definitions

@@ -1,7 +1,8 @@
 """
 Module to download end use load profiles (eulp) for comstock and restock data.
 
-Notes:
+Notes
+-----
     - Downloaded at state level
     - Multisector 15-min load profiles for a year (ie. lots of data)
     - Locked to 2018 Amy Weather data
@@ -10,10 +11,8 @@ Notes:
 
 import logging
 from pathlib import Path
-from typing import List, Optional
+from typing import Optional
 
-import constants
-import pandas as pd
 import requests
 from _helpers import configure_logging
 
@@ -63,7 +62,6 @@ class OediDownload:
         """
         Gets html of folder.
         """
-
         if self.stock == "res":
             data_folder = f"resstock_amy2018_release_{self.release}"
         elif self.stock == "com":
@@ -77,7 +75,6 @@ class OediDownload:
         buildings: str | list[str],
         upgrade: int = 0,
     ) -> list[str]:
-
         folder = self._get_html_folder(state)
 
         if isinstance(buildings, str):
@@ -92,7 +89,6 @@ class OediDownload:
         return htmls
 
     def _request_data(self, url: str, save: str) -> dict[str, dict | str]:
-
         response = requests.get(url)
         if response.status_code == 200:
             logger.info(f"Writing {save}")
@@ -118,7 +114,6 @@ class OediDownload:
         """
         Public method to interface with.
         """
-
         if not directory:
             directory = f"{state}"
         else:
@@ -141,7 +136,6 @@ class OediDownload:
 
 
 if __name__ == "__main__":
-
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
 

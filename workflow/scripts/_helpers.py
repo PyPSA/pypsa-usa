@@ -3,7 +3,6 @@
 
 import copy
 import hashlib
-import logging
 import re
 from functools import partial
 from pathlib import Path
@@ -97,7 +96,9 @@ def load_network(import_name=None, custom_components=None):
             override_components:
                 ShadowPrice:
                     component: ["shadow_prices","Shadow price for a global constraint.",np.nan]
-                    attributes:
+
+    Attributes
+    ----------
                     name: ["string","n/a","n/a","Unique name","Input (required)"]
                     value: ["float","n/a",0.,"shadow value","Output"]
 
@@ -260,7 +261,6 @@ def aggregate_p_curtailed(n):
 
 
 def aggregate_costs(n, flatten=False, opts=None, existing_only=False):
-
     components = dict(
         Link=("p_nom", "p0"),
         Generator=("p_nom", "p"),
@@ -331,10 +331,6 @@ def get_aggregation_strategies(aggregation_strategies):
 
 
 def export_network_for_gis_mapping(n, output_path):
-    import os
-
-    import pandas as pd
-
     # Creating GIS Table for Mapping Lines in QGIS
     lines_gis = n.lines.copy()
     lines_gis["latitude1"] = n.buses.loc[lines_gis.bus0].y.values
@@ -559,7 +555,6 @@ def update_config_from_wildcards(config, w, inplace=True):
     """
     Parses configuration settings from wildcards and updates the config.
     """
-
     if not inplace:
         config = copy.deepcopy(config)
 
@@ -836,7 +831,6 @@ def get_snapshots(
 
     Taken from PyPSA-Eur implementation
     """
-
     time = pd.date_range(freq=freq, **snapshots, **kwargs)
     if drop_leap_day and time.is_leap_year.any():
         time = time[~((time.month == 2) & (time.day == 29))]

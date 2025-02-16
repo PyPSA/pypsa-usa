@@ -1,6 +1,5 @@
 import logging
-import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 from typing import Any, Optional
@@ -76,7 +75,6 @@ def _sum_state_trade_data(
     """
     Sums state data together.
     """
-
     import_data = {}
     export_data = {}
 
@@ -111,7 +109,6 @@ def plot_gas(
     """
     General gas plotting function.
     """
-
     df = data.copy()
 
     if df.empty:
@@ -151,7 +148,6 @@ def plot_gas_trade(
     """
     General gas trade plotting function.
     """
-
     # periods will be the same for imports or exports
     periods = data["imports"].index.get_level_values("period").unique()
 
@@ -160,7 +156,6 @@ def plot_gas_trade(
     fig, axs = plt.subplots(n_rows, 2, sharey=True, figsize=(FIG_WIDTH, FIG_HEIGHT * n_rows))
 
     for i, period in enumerate(periods):
-
         # plot imports
 
         imports = data["imports"].copy()
@@ -285,7 +280,6 @@ PLOTTING_META = [
 ]
 
 if __name__ == "__main__":
-
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
 
@@ -329,7 +323,6 @@ if __name__ == "__main__":
         expected_figures[result] = state_paths
 
     for meta in plotting_metadata:
-
         if meta.name not in expected_figures:
             logger.warning(f"Not expecting {meta.name} natural gas chart")
             continue
@@ -337,7 +330,6 @@ if __name__ == "__main__":
         data = meta.getter(n)
 
         for state in states:
-
             if state == "system":
                 if _is_trade_data(data):
                     state_data = _sum_state_trade_data(data)
@@ -390,7 +382,6 @@ if __name__ == "__main__":
             months = {month.value: _get_month_name(month) for month in Month}
 
             for month_i, month_name in months.items():
-
                 if isinstance(state_data, pd.DataFrame):
                     if not state_data.empty:
                         state_data_month = state_data[state_data.index.get_level_values("timestep").month == month_i]

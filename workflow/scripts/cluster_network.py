@@ -201,9 +201,7 @@ def busmap_for_n_clusters(
 
                 neighbor_bus = n.lines.query(
                     "bus0 == @disconnected_bus or bus1 == @disconnected_bus",
-                ).iloc[
-                    0
-                ][["bus0", "bus1"]]
+                ).iloc[0][["bus0", "bus1"]]
                 new_country = list(
                     set(n.buses.loc[neighbor_bus].country) - {country},
                 )[0]

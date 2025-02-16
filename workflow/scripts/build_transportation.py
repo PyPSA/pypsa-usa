@@ -37,7 +37,6 @@ def build_transportation(
     """
     Main funtion to interface with.
     """
-
     road_suffix = Transport.ROAD.value
 
     for fuel in ("elec", "lpg"):
@@ -99,7 +98,6 @@ def add_ev_infrastructure(
     """
     Adds bus that all EVs attach to at a node level.
     """
-
     nodes = n.buses[n.buses.carrier == "AC"]
 
     n.madd(
@@ -136,7 +134,6 @@ def add_lpg_infrastructure(
     """
     Adds lpg connections for vehicle type.
     """
-
     nodes = n.buses[n.buses.carrier == "AC"]
 
     n.madd(
@@ -178,7 +175,6 @@ def add_lpg_infrastructure(
 
 def add_transport_dr(n: pypsa.Network, vehicle: str, dr_config: dict[str, Any]) -> None:
     """Attachs DR infrastructure at load location"""
-
     shift = dr_config.get("shift", 0)
     marginal_cost_storage = dr_config.get("marginal_cost", 0)
 
@@ -320,7 +316,6 @@ def add_elec_vehicle(
     - Light Duty Trucks PHEV 50
     - Medium Duty Trucks BEV
     """
-
     match mode:
         case RoadTransport.LIGHT.value:
             costs_name = "Light Duty Cars BEV 300"
@@ -384,7 +379,6 @@ def add_lpg_vehicle(
     - Heavy Duty Trucks ICEV
     - Buses ICEV
     """
-
     match mode:
         case RoadTransport.LIGHT.value:
             costs_name = "Light Duty Cars ICEV"
@@ -455,7 +449,6 @@ def add_air(
     NOTE: COSTS ARE CURRENTLY HARD CODED IN FROM 2030. Look at travel indicators here:
     - https://www.eia.gov/outlooks/aeo/data/browser/
     """
-
     # Assumptions from https://www.nrel.gov/docs/fy18osti/70485.pdf
     wh_per_gallon = 33700  # footnote 24
 
@@ -468,7 +461,7 @@ def add_air(
     loads = n.loads[(n.loads.carrier.str.contains("trn-")) & (n.loads.carrier.str.contains(f"{vehicle}-{mode}"))]
 
     vehicles = pd.DataFrame(index=loads.bus)
-    vehicles.index = vehicles.index.map(lambda x: x.split(f" trn-")[0])
+    vehicles.index = vehicles.index.map(lambda x: x.split(" trn-")[0])
     vehicles["bus0"] = vehicles.index + f" trn-lpg-{vehicle}"
     vehicles["bus1"] = vehicles.index + f" trn-lpg-{vehicle}-{mode}"
     vehicles["carrier"] = f"trn-lpg-{vehicle}-{mode}"
@@ -499,7 +492,6 @@ def add_boat(
     NOTE: COSTS ARE CURRENTLY HARD CODED IN FROM 2030. Look at travel indicators here:
     - https://www.eia.gov/outlooks/aeo/data/browser/
     """
-
     # efficiency = costs.at[costs_name, "efficiency"] / 1000
     # base efficiency is 5 ton miles per thousand Btu
     # 1 kBTU / 0.000293 MWh
@@ -510,7 +502,7 @@ def add_boat(
     loads = n.loads[(n.loads.carrier.str.contains("trn-")) & (n.loads.carrier.str.contains(f"{vehicle}-{mode}"))]
 
     vehicles = pd.DataFrame(index=loads.bus)
-    vehicles.index = vehicles.index.map(lambda x: x.split(f" trn-")[0])
+    vehicles.index = vehicles.index.map(lambda x: x.split(" trn-")[0])
     vehicles["bus0"] = vehicles.index + f" trn-lpg-{vehicle}"
     vehicles["bus1"] = vehicles.index + f" trn-lpg-{vehicle}-{mode}"
     vehicles["carrier"] = f"trn-lpg-{vehicle}-{mode}"
@@ -541,7 +533,6 @@ def add_rail(
     NOTE: COSTS ARE CURRENTLY HARD CODED IN FROM 2030. Look at travel indicators here:
     - https://www.eia.gov/outlooks/aeo/data/browser/
     """
-
     match mode:
         case RailTransport.SHIPPING.value:
             # efficiency = costs.at[costs_name, "efficiency"] / 1000
@@ -566,7 +557,7 @@ def add_rail(
     loads = n.loads[(n.loads.carrier.str.contains("trn-")) & (n.loads.carrier.str.contains(f"{vehicle}-{mode}"))]
 
     vehicles = pd.DataFrame(index=loads.bus)
-    vehicles.index = vehicles.index.map(lambda x: x.split(f" trn-")[0])
+    vehicles.index = vehicles.index.map(lambda x: x.split(" trn-")[0])
     vehicles["bus0"] = vehicles.index + f" trn-lpg-{vehicle}"
     vehicles["bus1"] = vehicles.index + f" trn-lpg-{vehicle}-{mode}"
     vehicles["carrier"] = f"trn-lpg-{vehicle}-{mode}"
@@ -587,7 +578,6 @@ def add_rail(
 
 def _create_endogenous_buses(n: pypsa.Network) -> None:
     """Creats new bus for grouped endogenous vehicle load"""
-
     buses = n.buses[
         n.buses.carrier.str.startswith("trn")
         & n.buses.carrier.str.contains("veh")
@@ -624,7 +614,6 @@ def _create_endogenous_loads(n: pypsa.Network) -> None:
     - Removes LPG load
     - Transfers EV load to central bus
     """
-
     loads = n.loads[n.loads.carrier.str.startswith("trn") & n.loads.carrier.str.contains("veh")]
     to_remove = [x for x in loads.index if "-lpg-" in x]
     to_shift = [x for x in loads.index if "-elec-" in x]
@@ -654,7 +643,6 @@ def _create_endogenous_links(n: pypsa.Network) -> None:
 
     Just involves transfering bus1 from exogenous load bus to endogenous load bus
     """
-
     slicer = (
         n.links.carrier.str.startswith("trn")
         & n.links.carrier.str.contains("veh")
@@ -666,7 +654,6 @@ def _create_endogenous_links(n: pypsa.Network) -> None:
 
 def _remove_exogenous_buses(n: pypsa.Network) -> None:
     """Removes buses that are used for exogenous vehicle loads"""
-
     # this is super awkward filtering :(
     buses = n.buses[
         (n.buses.index.str.contains("trn-elec-veh") | n.buses.index.str.contains("trn-lpg-veh"))
@@ -685,7 +672,6 @@ def _constrain_charing_rates(n: pypsa.Network, must_run_evs: bool) -> None:
             p_max_pu of both EVs and LPGs are set to match the load profile.
             p_min_pu is left unchanged (ie. zero)
     """
-
     links = n.links[n.links.carrier.str.contains("-veh") & ~n.links.carrier.str.endswith("-veh")]
     evs = links[links.carrier.str.contains("-elec-")]
     lpgs = links[links.carrier.str.contains("-lpg-")]
@@ -754,7 +740,6 @@ def apply_exogenous_ev_policy(n: pypsa.Network, policy: pd.DataFrame) -> None:
     - Figure 6.3 at https://www.nrel.gov/docs/fy18osti/71500.pdf
     - Sheet 6.3 at https://data.nrel.gov/submissions/90
     """
-
     vehicle_mapper = {
         "light_duty": RoadTransport.LIGHT.value,
         "med_duty": RoadTransport.MEDIUM.value,
@@ -770,7 +755,6 @@ def apply_exogenous_ev_policy(n: pypsa.Network, policy: pd.DataFrame) -> None:
         for period in n.investment_periods:
             ev_share = policy.at[period, vehicle]
             for fuel in ("elec", "lpg"):
-
                 # adjust load value
                 load_names = [x for x in n.loads.index if x.endswith(f"trn-{fuel}-{abrev}-{vehicle_mapper[vehicle]}")]
                 df = n.loads_t.p_set.loc[period,][load_names]

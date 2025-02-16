@@ -50,7 +50,6 @@ def assign_bus_2_state(
 
     The shapefile must be the counties shapefile
     """
-
     buses = n.buses[["x", "y"]].copy()
     buses["geometry"] = buses.apply(lambda x: Point(x.x, x.y), axis=1)
     buses = gpd.GeoDataFrame(buses, crs="EPSG:4269")
@@ -85,7 +84,6 @@ def add_sector_foundation(
     only the bus is created and no energy supply will be added to the
     state level bus.
     """
-
     match carrier:
         case "gas":
             carrier_kwargs = {"color": "#d35050", "nice_name": "Natural Gas"}
@@ -151,7 +149,6 @@ def add_sector_foundation(
     )
 
     if add_supply:
-
         n.madd(
             "Store",
             names=points.index,
@@ -190,7 +187,6 @@ def convert_generators_2_links(
     bus0_suffix: str,
         suffix to attach link to
     """
-
     plants = n.generators[n.generators.carrier == carrier].copy()
 
     if plants.empty:
@@ -257,7 +253,6 @@ def split_loads_by_carrier(n: pypsa.Network):
     Note: This will break the flow of energy in the model! You must add a
     new link between the new bus and old bus if you want to retain the flow
     """
-
     for bus in n.buses.index.unique():
         df = n.loads[n.loads.bus == bus][["bus", "carrier"]]
 
@@ -284,7 +279,6 @@ def get_pwr_co2_intensity(carrier: str, costs: pd.DataFrame) -> float:
     Spereate function, as there is some odd logic to account for
     different names in translation to a sector study.
     """
-
     # the ccs case are a hack solution
 
     match carrier:
@@ -365,15 +359,15 @@ if __name__ == "__main__":
 
     for carrier in ("OCGT", "CCGT", "CCGT-95CCS", "CCGT-97CCS"):
         co2_intensity = get_pwr_co2_intensity(carrier, costs)
-        convert_generators_2_links(n, carrier, f" gas", co2_intensity)
+        convert_generators_2_links(n, carrier, " gas", co2_intensity)
 
     for carrier in ("coal", "coal-95CCS", "coal-99CCS"):
         co2_intensity = get_pwr_co2_intensity(carrier, costs)
-        convert_generators_2_links(n, carrier, f" coal", co2_intensity)
+        convert_generators_2_links(n, carrier, " coal", co2_intensity)
 
     for carrier in ["oil"]:
         co2_intensity = get_pwr_co2_intensity(carrier, costs)
-        convert_generators_2_links(n, carrier, f" oil", co2_intensity)
+        convert_generators_2_links(n, carrier, " oil", co2_intensity)
 
     ng_options = snakemake.params.sector["natural_gas"]
 
@@ -495,7 +489,6 @@ if __name__ == "__main__":
             )
 
     if snakemake.params.sector["service_sector"]["brownfield"]:
-
         res_stock_dir = snakemake.input.residential_stock
         com_stock_dir = snakemake.input.commercial_stock
 
@@ -504,7 +497,6 @@ if __name__ == "__main__":
         else:
             fuels = ["heating", "cooling"]
         for fuel in fuels:
-
             if fuel == "water_heating":
                 simple_storage = snakemake.params.sector["service_sector"]["water_heating"].get("simple_storage", False)
             else:
@@ -539,14 +531,12 @@ if __name__ == "__main__":
             )
 
     if snakemake.params.sector["industrial_sector"]["brownfield"]:
-
         mecs_file = snakemake.input.industrial_stock
         ratios = get_industrial_stock(mecs_file)
 
         fuels = ["heat"]
 
         for fuel in fuels:
-
             ratio = ratios.loc[fuel]
             add_industrial_brownfield(
                 n=n,

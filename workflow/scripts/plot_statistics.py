@@ -283,11 +283,13 @@ def get_statistics(n, column_name):
     """
     Prepare the statistics data for plotting by extracting and grouping by region and carrier.
 
-    Parameters:
+    Parameters
+    ----------
     - n: pypsa.Network
     - column_name: str, the name of the column to extract from statistics (e.g., 'Optimal Capacity', 'Supply')
 
-    Returns:
+    Returns
+    -------
     - pd.DataFrame: Prepared and grouped data
     """
     groupers = n.statistics.groupers
@@ -324,7 +326,8 @@ def plot_bar(data, n, save, title, ylabel, is_capacity=False):
     """
     Plot the data in a bar chart with subplots by region and carrier.
 
-    Parameters:
+    Parameters
+    ----------
     - data: pd.DataFrame, data to plot
     - n: pypsa.Network
     - save: str, file path to save the plot
@@ -697,7 +700,6 @@ def plot_generator_data_panel(
     save: str,
     **wildcards,
 ):
-
     df_capex_expand = n.generators.loc[
         n.generators.p_nom_extendable & ~n.generators.index.str.contains("existing"),
         :,
@@ -847,7 +849,6 @@ def plot_fuel_costs(
     save: str,
     **wildcards,
 ) -> None:
-
     fuel_costs = get_fuel_costs(n)
 
     fuels = set(fuel_costs.index.get_level_values("carrier"))
@@ -867,9 +868,9 @@ def plot_fuel_costs(
         legend=True,
         palette=color_palette,
     )
-    axs[0].set_title("Daily Average Fuel Costs [$/MWh]"),
-    axs[0].set_xlabel(""),
-    axs[0].set_ylabel("$/MWh"),
+    (axs[0].set_title("Daily Average Fuel Costs [$/MWh]"),)
+    (axs[0].set_xlabel(""),)
+    (axs[0].set_ylabel("$/MWh"),)
 
     # plot bus fuel prices for each fuel
     for i, fuel in enumerate(fuels):
@@ -882,9 +883,9 @@ def plot_fuel_costs(
             dashes=False,
             ax=axs[i + 1],
         )
-        axs[i + 1].set_title(f"Daily Average {nice_name} Fuel Costs per Bus [$/MWh]"),
-        axs[i + 1].set_xlabel(""),
-        axs[i + 1].set_ylabel("$/MWh"),
+        (axs[i + 1].set_title(f"Daily Average {nice_name} Fuel Costs per Bus [$/MWh]"),)
+        (axs[i + 1].set_xlabel(""),)
+        (axs[i + 1].set_ylabel("$/MWh"),)
 
     fig.savefig(save)
     plt.close()

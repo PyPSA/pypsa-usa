@@ -67,8 +67,6 @@ from _helpers import (
     set_scenario_config,
     update_config_from_wildcards,
 )
-from add_electricity import update_transmission_costs
-from pypsa.descriptors import expand_series
 
 idx = pd.IndexSlice
 

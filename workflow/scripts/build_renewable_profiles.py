@@ -163,7 +163,6 @@ import atlite
 import geopandas as gpd
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
 import xarray as xr
 from _helpers import configure_logging, get_snapshots
 from dask.distributed import Client
@@ -276,7 +275,7 @@ if __name__ == "__main__":
 
     if params.get("boem_screen", 0):
         excluder.add_raster(
-            snakemake.input[f"boem_osw"],
+            snakemake.input["boem_osw"],
             invert=True,
             nodata=0,
             allow_no_overlap=True,

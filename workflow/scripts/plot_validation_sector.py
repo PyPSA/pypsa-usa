@@ -3,19 +3,17 @@ Plots sector validation plots.
 """
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
-from enum import Enum
-from math import ceil
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Any, Optional
 
 import matplotlib.pyplot as plt
 import pandas as pd
 import pypsa
-import seaborn as sns
 from _helpers import configure_logging, mock_snakemake
 from add_electricity import sanitize_carriers
-from constants import STATE_2_CODE, Month
+from constants import STATE_2_CODE
 from plot_statistics import create_title
 from summary_natural_gas import get_historical_ng_prices, get_ng_price
 from summary_sector import (
@@ -69,7 +67,6 @@ def plot_sector_emissions_validation(
     """
     Plots state by state sector emission comparison.
     """
-
     investment_period = n.investment_periods[0]
 
     historical = get_historical_emissions(
@@ -98,7 +95,7 @@ def plot_sector_emissions_validation(
     historical = historical.T
 
     for sector in modelled.columns:
-        if not sector in historical.columns:
+        if sector not in historical.columns:
             historical[sector] = 0
     assert set(historical.columns) == set(modelled.columns)
 
@@ -106,23 +103,20 @@ def plot_sector_emissions_validation(
     historical = historical.T
 
     if state:  # plot at state level
-
         historical = historical[state].to_frame("Actual")
         modelled = modelled[state].to_frame("Modelled")
 
     else:  # plot at system level
-
         historical = historical[modelled.columns].sum(axis=1).to_frame("Actual")
         modelled = modelled.sum(axis=1).to_frame("Modelled")
 
     df = historical.join(modelled)
 
     try:
-
         df.plot.bar(ax=axs, stacked=False)
         axs.set_xlabel("")
         axs.set_ylabel("Emissions (MT)")
-        axs.set_title(f"Emissions by Sector")
+        axs.set_title("Emissions by Sector")
         axs.tick_params(axis="x", labelrotation=0)
 
     except TypeError:  # no numeric data to plot
@@ -140,7 +134,6 @@ def plot_state_emissions_validation(
     """
     Plots total state emission comparison.
     """
-
     investment_period = n.investment_periods[0]
 
     historical = get_historical_emissions(
@@ -195,7 +188,6 @@ def plot_system_emissions_validation_by_state(
     """
     Plots all states modelled and historcal.
     """
-
     investment_period = n.investment_periods[0]
 
     historical = get_historical_emissions(
@@ -239,7 +231,6 @@ def plot_sector_consumption_validation(
     """
     Plots sector energy consumption comparison.
     """
-
     investment_period = n.investment_periods[0]
 
     historical = get_historical_end_use_consumption(
@@ -303,7 +294,6 @@ def plot_power_generation_validation(
     state: Optional[str] = None,
     **kwargs,
 ) -> tuple:
-
     investment_period = n.investment_periods[0]
 
     modelled = _get_annual_generation(n, investment_period, state)
@@ -343,7 +333,6 @@ def plot_ng_price_validation(
     state: Optional[str] = None,
     **kwargs,
 ) -> tuple:
-
     investment_period = n.investment_periods[0]
 
     modelled = get_ng_price(n)
@@ -410,7 +399,6 @@ def plot_transportation_by_mode_validation(
     state: Optional[str] = None,
     **kwargs,
 ) -> tuple:
-
     # to pull in from snakemake inputs
     transport_ratios = {
         "Alabama": 2.05,
@@ -504,10 +492,9 @@ def plot_transportation_by_mode_validation(
     data = data.join(modelled.to_frame(name="modelled")).fillna(0)
 
     try:
-
         data.plot.bar(ax=axs)
         axs.set_xlabel("")
-        axs.set_ylabel(f"Energy Consumption by Transport Mode (MWh)")
+        axs.set_ylabel("Energy Consumption by Transport Mode (MWh)")
         axs.tick_params(axis="x", labelrotation=45)
 
     except TypeError:  # no numeric data to plot
@@ -521,7 +508,6 @@ def plot_system_consumption_validation_by_state(
     eia_api: str,
     **kwargs,
 ) -> tuple:
-
     states = [x for x in n.buses.STATE.unique() if x]  # remove non-classified buses
 
     sectors = ("res", "com", "ind", "trn")
@@ -537,7 +523,6 @@ def plot_system_consumption_validation_by_state(
     y_label = "Energy (MWh)"
 
     for i, sector in enumerate(sectors):
-
         historical = get_historical_end_use_consumption(
             SECTOR_MAPPER[sector],
             2020,
@@ -556,16 +541,13 @@ def plot_system_consumption_validation_by_state(
         )
 
         try:
-
             if nrows > 1:
-
                 df.plot(kind="bar", ax=axs[i])
                 axs[i].set_xlabel("")
                 axs[i].set_ylabel(y_label)
                 axs[i].set_title(f"{sector} Production")
 
             else:
-
                 df.plot(kind="bar", ax=axs)
                 axs.set_xlabel("")
                 axs.set_ylabel(y_label)
@@ -654,7 +636,6 @@ def save_fig(
     """
     Saves the result figure.
     """
-
     fig, _ = fn(n, **kwargs)
 
     if not wildcards:
@@ -708,7 +689,6 @@ if __name__ == "__main__":
     plotting_data = _initialize_metadata(VALIDATION_PLOTS)
 
     for plot_data in plotting_data:
-
         fn = plot_data.fn
         title = plot_data.nice_name if plot_data.nice_name else plot_data.name
 
@@ -749,7 +729,6 @@ if __name__ == "__main__":
             continue
 
         for state in states:
-
             if plot_data.fn_kwargs:
                 fn_kwargs = plot_data.fn_kwargs
             else:

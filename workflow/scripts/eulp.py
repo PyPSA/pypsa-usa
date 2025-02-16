@@ -6,7 +6,6 @@ Holds data processing class for NREL End Use Load Profiles.
 See `retrieve_eulp` rule for the data extraction
 """
 
-import logging
 from typing import Optional
 
 import pandas as pd
@@ -171,7 +170,7 @@ class Eulp:
             )
         else:
             raise TypeError(
-                f"missing 1 required positional argument: 'filepath' or 'df'",
+                "missing 1 required positional argument: 'filepath' or 'df'",
             )
 
     def __add__(self, other):
@@ -228,7 +227,6 @@ class Eulp:
         return resampled.sort_index()
 
     def _aggregate_data(self, df: pd.DataFrame) -> pd.DataFrame:
-
         def aggregate_sector(df: pd.DataFrame, columns: list[str]) -> pd.Series:
             sector_columns = [x for x in columns if x in df.columns.to_list()]
             return df[sector_columns].sum(axis=1)
@@ -259,7 +257,6 @@ class Eulp:
         ],
         resample: Optional[str] = None,
     ):
-
         if isinstance(sectors, str):
             sectors = [sectors]
 
@@ -301,7 +298,7 @@ class EulpTotals:
             assert (self.data.columns == ["electricity", "gas", "oil", "propane"]).all()
         else:
             raise TypeError(
-                f"missing 1 required positional argument: 'filepath' or 'df'",
+                "missing 1 required positional argument: 'filepath' or 'df'",
             )
 
     def __add__(self, other):
@@ -354,7 +351,6 @@ class EulpTotals:
         return resampled.sort_index()
 
     def _aggregate_data(self, df: pd.DataFrame) -> pd.DataFrame:
-
         def aggregate_sector(df: pd.DataFrame, columns: list[str]) -> pd.Series:
             sector_columns = [x for x in columns if x in df.columns.to_list()]
             return df[sector_columns].sum(axis=1)
@@ -377,7 +373,6 @@ class EulpTotals:
         self,
         sectors: Optional[list[str] | str] = ["electricity", "gas", "oil", "propane"],
     ):
-
         if isinstance(sectors, str):
             sectors = [sectors]
 

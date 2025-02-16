@@ -40,15 +40,16 @@ def voronoi_partition_pts(points, outline):
     Compute the polygons of a voronoi partition of `points` within the
     polygon `outline`. Taken from
     https://github.com/FRESNA/vresutils/blob/master/vresutils/graph.py
+
     Attributes
     ----------
     points : Nx2 - ndarray[dtype=float]
     outline : Polygon
+
     Returns
     -------
     polygons : N - ndarray[dtype=Polygon|MultiPolygon]
     """
-
     points = np.asarray(points)
 
     if len(points) == 1:

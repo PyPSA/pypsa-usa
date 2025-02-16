@@ -62,7 +62,8 @@ def filter_components(n, component_type, planning_horizon, carrier_list, region_
     """
     Filter components based on common criteria.
 
-    Parameters:
+    Parameters
+    ----------
     - n: pypsa.Network
         The PyPSA network object.
     - component_type: str
@@ -76,7 +77,8 @@ def filter_components(n, component_type, planning_horizon, carrier_list, region_
     - extendable: bool, optional
         If specified, filters by extendable or non-extendable assets.
 
-    Returns:
+    Returns
+    -------
     - pd.DataFrame
         Filtered assets.
     """
@@ -285,7 +287,6 @@ def add_technology_capacity_target_constraints(n, config):
             target["min"] = lhs_extendable
 
         if not np.isnan(target["min"]):
-
             n.model.add_constraints(
                 lhs >= (target["min"]),
                 name=f"GlobalConstraint-{target.name}_{target.planning_horizon}_min",
@@ -610,7 +611,6 @@ def add_regional_co2limit(n, sns, config):
     """
     Adding regional regional CO2 Limits Specified in the config.yaml.
     """
-
     regional_co2_lims = pd.read_csv(
         config["electricity"]["regional_Co2_limits"],
         index_col=[0],
@@ -911,7 +911,6 @@ def add_sector_co2_constraints(n, config):
     """
 
     def apply_total_state_limit(n, year, state, value):
-
         sns = n.snapshots
         snapshot = sns[sns.get_level_values("period") == year][-1]
 
@@ -931,7 +930,6 @@ def add_sector_co2_constraints(n, config):
         )
 
     def apply_sector_state_limit(n, year, state, sector, value):
-
         sns = n.snapshots
         snapshot = sns[sns.get_level_values("period") == year][-1]
 
@@ -951,7 +949,6 @@ def add_sector_co2_constraints(n, config):
         )
 
     def apply_total_national_limit(n, year, value):
-
         sns = n.snapshots
         snapshot = sns[sns.get_level_values("period") == year][-1]
 
@@ -968,7 +965,6 @@ def add_sector_co2_constraints(n, config):
         )
 
     def apply_sector_national_limit(n, year, sector, value):
-
         sns = n.snapshots
         snapshot = sns[sns.get_level_values("period") == year][-1]
 
@@ -1001,12 +997,10 @@ def add_sector_co2_constraints(n, config):
     sectors = df.sector.unique()
 
     for sector in sectors:
-
         df_sector = df[df.sector == sector]
         states = df_sector.state.unique()
 
         for state in states:
-
             df_state = df_sector[df_sector.state == state]
             years = [x for x in df_state.year.unique() if x in n.investment_periods]
 
@@ -1017,7 +1011,6 @@ def add_sector_co2_constraints(n, config):
                 continue
 
             for year in years:
-
                 df_limit = df_state[df_state.year == year].reset_index(drop=True)
                 assert df_limit.shape[0] == 1
 
@@ -1025,14 +1018,12 @@ def add_sector_co2_constraints(n, config):
                 value = df_limit.loc[0, "co2_limit_mmt"] * 1e6
 
                 if state.upper() == "USA":
-
                     if sector == "all":
                         apply_total_national_limit(n, year, value)
                     else:
                         apply_sector_national_limit(n, year, sector, value)
 
                 else:
-
                     if sector == "all":
                         apply_total_state_limit(n, year, state, value)
                     else:
@@ -1057,7 +1048,6 @@ def add_cooling_heat_pump_constraints(n, config):
     """
 
     def add_hp_capacity_constraint(n, hp_type):
-
         assert hp_type in ("ashp", "gshp")
 
         heating_hps = n.links[n.links.index.str.endswith(hp_type)].index
@@ -1073,7 +1063,6 @@ def add_cooling_heat_pump_constraints(n, config):
         n.model.add_constraints(lhs == rhs, name=f"Link-{hp_type}_cooling_capacity")
 
     def add_hp_generation_constraint(n, hp_type):
-
         heating_hps = n.links[n.links.index.str.endswith(hp_type)].index
         if heating_hps.empty:
             return
@@ -1116,7 +1105,6 @@ def add_gshp_capacity_constraint(n, config):
     - The constraint is: [ASHP - (urban / rural) * GSHP >= 0]
     - ie. for every unit of GSHP, we need to install 3 units of ASHP
     """
-
     pop = pd.read_csv(snakemake.input.pop_layout)
     pop["urban_rural_fraction"] = (pop.urban_fraction / pop.rural_fraction).round(2)
     fraction = pop.set_index("name")["urban_rural_fraction"].to_dict()
@@ -1137,11 +1125,10 @@ def add_gshp_capacity_constraint(n, config):
     lhs = ashp_capacity - gshp_capacity.mul(gshp_multiplier.values)
     rhs = 0
 
-    n.model.add_constraints(lhs >= rhs, name=f"Link-gshp_capacity_ratio")
+    n.model.add_constraints(lhs >= rhs, name="Link-gshp_capacity_ratio")
 
 
 def add_ng_import_export_limits(n, config):
-
     def _format_link_name(s: str) -> str:
         states = s.split("-")
         return f"{states[0]} {states[1]} gas"
@@ -1150,7 +1137,6 @@ def add_ng_import_export_limits(n, config):
         prod: pd.DataFrame,
         link_suffix: Optional[str] = None,
     ) -> pd.DataFrame:
-
         df = prod.copy()
         df["link"] = df.state.map(_format_link_name)
         if link_suffix:
@@ -1165,7 +1151,6 @@ def add_ng_import_export_limits(n, config):
         """
         Sets gas import limit over each year.
         """
-
         assert constraint in ("max", "min")
 
         if not multiplier:
@@ -1199,7 +1184,6 @@ def add_ng_import_export_limits(n, config):
         """
         Sets maximum export limit over the year.
         """
-
         assert constraint in ("max", "min")
 
         if not multiplier:
@@ -1291,14 +1275,12 @@ def add_water_heater_constraints(n, config):
     """
     Adds constraint so energy to meet water demand must flow through store.
     """
-
     links = n.links[(n.links.index.str.contains("-water-")) & (n.links.index.str.contains("-discharger"))]
 
     link_names = links.index
     store_names = [x.replace("-discharger", "") for x in links.index]
 
     for period in n.investment_periods:
-
         # first snapshot does not respect constraint
         e_previous = n.model["Store-e"].loc[period, store_names]
         e_previous = e_previous.roll(timestep=1)
@@ -1329,14 +1311,12 @@ def add_demand_response_constraints(n, config):
 
         No need to multiply out snapshot weights here
         """
-
         dr_links = n.links[n.links.carrier.str.endswith("-dr") & n.links.carrier.str.startswith(f"{sector}-")]
 
         if dr_links.empty:
             return
 
         if sector != "trn":
-
             deferrable_links = dr_links[dr_links.index.str.endswith("-dr-discharger")]
 
             deferrable_loads = deferrable_links.bus1.unique().tolist()
@@ -1355,7 +1335,6 @@ def add_demand_response_constraints(n, config):
         # transport dr is at the aggregation bus
         # sum all outgoing capacity and apply the capacity limit to that
         else:
-
             inflow_links = dr_links[dr_links.index.str.endswith("-dr-discharger")]
             inflow = n.model["Link-p"].loc[:, inflow_links.index].groupby(inflow_links.bus1).sum()
             inflow = inflow.rename({"bus1": "Bus"})  # align coordinate names
@@ -1369,7 +1348,7 @@ def add_demand_response_constraints(n, config):
 
             n.model.add_constraints(
                 lhs >= rhs,
-                name=f"demand_response_capacity-trn",
+                name="demand_response_capacity-trn",
             )
 
     # demand response addition starts here
@@ -1377,7 +1356,6 @@ def add_demand_response_constraints(n, config):
     sectors = ["res", "com", "ind", "trn"]
 
     for sector in sectors:
-
         if sector in ["res", "com"]:
             dr_config = config["sector"]["service_sector"].get("demand_response", {})
         elif sector == "trn":
