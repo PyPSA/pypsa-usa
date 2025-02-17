@@ -420,7 +420,7 @@ class EfsIceTransportationData:
         return self._expand_data(df)[self.columns]
 
     def _get_lifetime(self):
-        df = self.get_capex()
+        df = self._get_capex()
         df["parameter"] = "lifetime"
         df["value"] = self.lifetime
         df["unit"] = "years"
@@ -439,7 +439,7 @@ class EfsIceTransportationData:
     #     return self._correct_fom_units(df)
 
     def _get_fixed_costs(self):
-        df = self.get_capex()
+        df = self._get_capex()
         df["parameter"] = "FOM"
         df["unit"] = "%/year"
         df["value"] = df.technology.map(assign_vehicle_type)
