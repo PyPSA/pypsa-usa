@@ -261,3 +261,18 @@ if "EGS" in config["electricity"]["extendable_carriers"]["Generator"]:
             LOGS + "retrieve_EGS_{interconnect}.log",
         script:
             "../scripts/retrieve_egs.py"
+
+
+rule retrieve_eia_demand:
+    wildcard_constraints:
+        source="energy|transport|electricity",
+    params:
+        api=config["api"]["eia"],
+    output:
+        DATA + "eia/demand/{scenario}/{source}.csv",
+    resources:
+        mem_mb=5000,
+    log:
+        LOGS + "retrieve_eia_demand_{scenario}_{source}.log",
+    script:
+        "../retrieve_eia_demand.py"
