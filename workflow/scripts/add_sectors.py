@@ -234,8 +234,10 @@ def convert_generators_2_links(
     for param, df in pnl.items():
         n.links_t[param] = n.links_t[param].join(df, how="inner")
 
-    # remove generators
     n.mremove("Generator", plants.index)
+
+    # existing links will give a 'nan in efficiency2' warning
+    n.links["efficiency2"] = n.links.efficiency2.fillna(0)
 
 
 def split_loads_by_carrier(n: pypsa.Network):
@@ -303,8 +305,8 @@ if __name__ == "__main__":
         snakemake = mock_snakemake(
             "add_sectors",
             interconnect="western",
-            simpl="70",
-            clusters="4m",
+            simpl="132",
+            clusters="33m",
             ll="v1.0",
             opts="3h",
             sector="E-G",
