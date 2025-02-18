@@ -42,9 +42,9 @@ def download_repository(url, rootpath, repository):
             else:
                 cmd = ["unzip", tarball_fn, "-d", to_fn]
             subprocess.run(cmd, check=True)
-        else:
-            with zipfile.ZipFile(tarball_fn, "r") as zip_ref:
-                zip_ref.extractall(to_fn)
+    else:
+        with zipfile.ZipFile(tarball_fn, "r") as zip_ref:
+            zip_ref.extractall(to_fn)
     logger.info(f"{repository} Databundle available in {to_fn}")
 
 
