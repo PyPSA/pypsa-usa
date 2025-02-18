@@ -644,6 +644,10 @@ def plot_capacity_brownfield(
     for row, _ in enumerate(investment_periods):
         df = get_capacity_per_node(n, sector, state)
 
+        if df.empty:
+            logger.warning(f"No data to plot for {state}")
+            return fig, axs
+
         if nice_name:
             nn = n.carriers.nice_name.to_dict()
             df.index = df.index.map(lambda x: (x[0], nn[x[1]]))
@@ -1052,6 +1056,10 @@ def plot_consumption(
     y_label = "Energy (MWh)"
 
     df_all = get_end_use_consumption(n, sector, state)
+
+    if df_all.empty:
+        logger.warning(f"No data to plot for {state}")
+        return fig, axs
 
     for row, period in enumerate(investment_periods):
         df = df_all.loc[period]
@@ -1472,12 +1480,12 @@ if __name__ == "__main__":
     if "snakemake" not in globals():
         snakemake = mock_snakemake(
             "plot_sector_production",
-            simpl="70",
-            opts="3h-TCT",
-            clusters="4m",
+            simpl="132",
+            opts="3h",
+            clusters="33m",
             ll="v1.0",
             sector="E-G",
-            planning_horizons="2030",
+            planning_horizons="2018",
             interconnect="western",
         )
         rootpath = ".."
