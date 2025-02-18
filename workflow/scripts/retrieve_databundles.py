@@ -31,7 +31,7 @@ def download_repository(url, rootpath, repository):
 
     logger.info(f"Extracting {repository} databundle.")
     if repository == "EFS":
-        if platform.system() == "Windows": # For Windows OS, use zipfile-deflate64
+        if platform.system() == "Windows":  # For Windows OS, use zipfile-deflate64
             with zipfile_deflate64.ZipFile(tarball_fn, "r") as zip_ref:
                 zip_ref.extractall(to_fn)
         else:
