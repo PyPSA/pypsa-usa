@@ -1354,18 +1354,16 @@ class ReadTransportAeo(ReadStrategy):
     @staticmethod
     def _assign_vehicle_type(vehicle: str) -> str:
         """Coordinates vehicle names."""
-        match vehicle:
-            case v if v.startswith(("Air", "air")):
-                return "air"
-            case "Domestic Shipping":
-                return "boat_shipping"
-            case "Rail":
-                return "rail_shipping"
-            case "Passenger Rail":
-                return "rail_passenger"
-            case _:
-                # logger.warning(f"Can not match {v}")
-                return v
+        if vehicle.startswith(("Air", "air")):
+            return "air"
+        elif vehicle == "Domestic Shipping":
+            return "boat_shipping"
+        elif vehicle == "Rail":
+            return "rail_shipping"
+        elif vehicle == "Passenger Rail":
+            return "rail_passenger"
+        else:
+            return vehicle
 
     def _read_data(self) -> pd.DataFrame:
         """
@@ -1956,23 +1954,26 @@ def get_demand_params(
                 f"No scaling method available for {demand_profile} profile. Setting to 'aeo_electricity'",
             )
     elif end_use in ("residential", "commercial"):
+        cache_eia = kwargs.get("cache_eia", False)
         demand_profile = "eulp"
         demand_disaggregation = "pop"
-        scaling_method = "aeo_energy"
+        scaling_method = "aeo_energy" if cache_eia else "aeo_energy_api"
     elif end_use == "industry":
+        cache_eia = kwargs.get("cache_eia", False)
         demand_profile = "cliu"
         demand_disaggregation = "cliu"
-        scaling_method = "aeo_energy"
+        scaling_method = "aeo_energy" if cache_eia else "aeo_energy_api"
     elif end_use == "transport":
+        cache_eia = kwargs.get("cache_eia", False)
         vehicle = kwargs.get("vehicle", None)
         if not vehicle:  # road transport
             demand_profile = "transport_efs_aeo"
             demand_disaggregation = "pop"
-            scaling_method = "aeo_energy"
+            scaling_method = "aeo_energy" if cache_eia else "aeo_vmt_api"
         elif vehicle.startswith(("air", "rail", "boat")):
             demand_profile = "transport_aeo"
             demand_disaggregation = "pop"
-            scaling_method = None  # will extract data for any year
+            scaling_method = "aeo_energy" if cache_eia else "aeo_vmt_api"
         else:
             raise NotImplementedError
     else:
@@ -2039,6 +2040,11 @@ if __name__ == "__main__":
     end_use = snakemake.wildcards.end_use
     eia_api = snakemake.params.eia_api
 
+    try:
+        cache_eia = snakemake.params.cache_eia
+    except KeyError:
+        cache_eia = None
+
     vehicle = snakemake.wildcards.get("vehicle", None)
 
     planning_horizons = n.investment_periods.to_list()
@@ -2048,6 +2054,7 @@ if __name__ == "__main__":
         end_use,
         demand_params,
         vehicle=vehicle,
+        cache_eia=cache_eia,
     )
 
     # set reading and writitng strategies

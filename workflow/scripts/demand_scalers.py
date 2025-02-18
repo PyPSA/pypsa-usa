@@ -185,6 +185,11 @@ class EfsElectricityScalar(DemandScaler):
         return df
 
 
+"""
+Only used if caching is turned on.
+"""
+
+
 class AeoScaler(DemandScaler):
     """Scales according to AEO data previously extracted."""
 
@@ -198,8 +203,7 @@ class AeoScaler(DemandScaler):
 
 
 """
-Deprecated in favour of processing data beforehand to avoid connection errors
-keep until next release for testing purposes
+Also used for caching purposes!
 """
 
 

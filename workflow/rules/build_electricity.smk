@@ -354,6 +354,7 @@ rule build_sector_demand:
         profile_year=pd.to_datetime(config["snapshots"]["start"]).year,
         eia_api=config_provider("api", "eia"),
         snapshots=config_provider("snapshots"),
+        cache_eia=config_provider("api", "cache"),
     input:
         network=RESOURCES + "{interconnect}/elec_base_network.nc",
         demand_files=demand_raw_data,
@@ -386,6 +387,7 @@ rule build_transport_road_demand:
         profile_year=pd.to_datetime(config["snapshots"]["start"]).year,
         eia_api=config_provider("api", "eia"),
         snapshots=config_provider("snapshots"),
+        cache_eia=config_provider("api", "cache"),
     input:
         network=RESOURCES + "{interconnect}/elec_base_network.nc",
         demand_files=demand_raw_data,
@@ -422,6 +424,7 @@ rule build_transport_other_demand:
         planning_horizons=config_provider("scenario", "planning_horizons"),
         eia_api=config_provider("api", "eia"),
         snapshots=config_provider("snapshots"),
+        cache_eia=config_provider("api", "cache"),
     input:
         network=RESOURCES + "{interconnect}/elec_base_network.nc",
         demand_files=demand_raw_data,
