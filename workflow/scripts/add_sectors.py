@@ -234,10 +234,9 @@ def convert_generators_2_links(
     for param, df in pnl.items():
         n.links_t[param] = n.links_t[param].join(df, how="inner")
 
-    # remove generators
     n.mremove("Generator", plants.index)
 
-    # correct any efficiency2's from nan to 0
+    # existing links will give a 'nan in efficiency2' warning
     n.links["efficiency2"] = n.links.efficiency2.fillna(0)
 
 
