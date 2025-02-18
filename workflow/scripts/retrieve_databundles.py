@@ -31,16 +31,11 @@ def download_repository(url, rootpath, repository):
 
     logger.info(f"Extracting {repository} databundle.")
     if repository == "EFS":
-        try:
-            # For Windows OS, use zipfile-deflate64
+        if platform.system() == "Windows": # For Windows OS, use zipfile-deflate64
             with zipfile_deflate64.ZipFile(tarball_fn, "r") as zip_ref:
                 zip_ref.extractall(to_fn)
-        except Exception:
-            # Fallback to system commands
-            if platform.system() == "Windows":
-                cmd = ["tar", "-xf", tarball_fn, "-C", to_fn]
-            else:
-                cmd = ["unzip", tarball_fn, "-d", to_fn]
+        else:
+            cmd = ["unzip", tarball_fn, "-d", to_fn]
             subprocess.run(cmd, check=True)
     else:
         with zipfile.ZipFile(tarball_fn, "r") as zip_ref:
