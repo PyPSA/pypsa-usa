@@ -1968,7 +1968,7 @@ def get_demand_params(
         if not vehicle:  # road transport
             demand_profile = "transport_efs_aeo"
             demand_disaggregation = "pop"
-            scaling_method = "aeo_vmt"
+            scaling_method = "aeo_energy"
         elif vehicle.startswith(("air", "rail", "boat")):
             demand_profile = "transport_aeo"
             demand_disaggregation = "pop"

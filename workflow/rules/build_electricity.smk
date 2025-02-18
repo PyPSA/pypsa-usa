@@ -302,10 +302,20 @@ def demand_scaling_data(wildcards):
             "efs_speed"
         ].capitalize()
         return DATA + f"nrel_efs/EFSLoadProfile_{efs_case}_{efs_speed}.csv"
-    elif profile == "eia":
-        return DATA + "pudl/pudl.sqlite"
     elif profile == "ferc":
         return DATA + "pudl/pudl.sqlite"
+    elif profile == "eia":
+        if end_use == "power":
+            return DATA + "pudl/pudl.sqlite"
+        elif config["api"].get("cache", True):
+            aeo_scenario = config["electricity"]["demand"].get("eia", "reference")
+            if end_use == "transport":
+                # non-road transport will get this as well, but doesnt really matter
+                return DATA + f"eia/demand/{aeo_scenario}/transport.csv"
+            else:
+                return DATA + f"eia/demand/{aeo_scenario}/energy.csv"
+        else:
+            return ""  # use eia api
     else:
         return ""
 
@@ -362,8 +372,8 @@ rule build_sector_demand:
     benchmark:
         BENCHMARKS + "{interconnect}/demand/{end_use}_build_demand"
     threads: 2
-    resources:
-        mem_mb=lambda wildcards, input, attempt: (input.size // 70000) * attempt * 2,
+    # resources:
+    #     mem_mb=lambda wildcards, input, attempt: (input.size // 70000) * attempt * 2,
     script:
         "../scripts/build_demand.py"
 
