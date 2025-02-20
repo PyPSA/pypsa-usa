@@ -53,6 +53,7 @@ def get_region_buses(n, region_list):
             | n.buses.reeds_state.isin(region_list)
             | n.buses.interconnect.str.lower().isin(region_list)
             | n.buses.nerc_reg.isin(region_list)
+            # | n.buses.reeds_state.isin(region_list)
             | (1 if "all" in region_list else 0)
         )
     ]
@@ -617,10 +618,11 @@ def add_regional_co2limit(n, sns, config):
     )
 
     logger.info("Adding regional Co2 Limits.")
+
     # Filter the regional_co2_lims DataFrame based on the planning horizons present in the snapshots
     regional_co2_lims = regional_co2_lims[regional_co2_lims.planning_horizon.isin(sns.get_level_values(0))]
     weightings = n.snapshot_weightings.loc[n.snapshots]
-
+    # breakpoint()
     for idx, emmission_lim in regional_co2_lims.iterrows():
         region_list = [region.strip() for region in emmission_lim.regions.split(",")]
         region_buses = get_region_buses(n, region_list)
@@ -1406,21 +1408,6 @@ def add_demand_response_constraints(n, config):
             raise ValueError(shift)
 
 
-# def add_myopic_build(n, config):
-#     """
-#     Adds initial p_nom, constraining it to the p_nom_opt from the previous planning horizon
-
-#     Parameters
-#     ----------
-#         n : pypsa.Network
-#         config : dict
-#     """
-
-#     if snakemake.params.foresight == "myopic": # LF_edit based on add_brownfield.py in pypsa-eur
-#         logger.info(f"testing myopic")
-#         for i, period in enumerate(n.investment_periods):
-
-
 def extra_functionality(n, snapshots):
     """
     Collects supplementary constraints which will be passed to
@@ -1514,11 +1501,6 @@ def solve_network(n, config, solving, opts="", **kwargs):
         # add sns_horizon to kwargs
         kwargs["snapshots"] = sns_horizon
 
-        # electric transmission grid set optimised capacities of previous as minimum
-        n.lines.s_nom_min = n.lines.s_nom_opt
-        dc_i = n.links[n.links.carrier == "DC"].index
-        n.links.loc[dc_i, "p_nom_min"] = n.links.loc[dc_i, "p_nom_opt"]
-
         if rolling_horizon:
             kwargs["horizon"] = cf_solving.get("horizon", 365)
             kwargs["overlap"] = cf_solving.get("overlap", 0)
@@ -1541,26 +1523,37 @@ def solve_network(n, config, solving, opts="", **kwargs):
         if "infeasible" in condition:
             # n.model.print_infeasibilities()
             raise RuntimeError("Solving status 'infeasible'")
-        if foresight == "myopic":  # LF_edit
-            if i == 0:
-                continue
-            logger.info(f"Preparing brownfield for {planning_horizon}")
 
-            for c in n.iterate_components(["Generator", "StorageUnit", "Link"]):
+        # breakpoint()
+        if foresight == "myopic":  # LF_edit
+            if i == len(n.investment_periods) - 1:
+                logger.info(f"Final time horizon {planning_horizon}")
+                continue
+            logger.info(f"Preparing brownfield from {planning_horizon}")
+
+            # electric transmission grid set optimised capacities of previous as minimum
+            n.lines.s_nom_min = n.lines.s_nom_opt  # for lines
+            dc_i = n.links[n.links.carrier == "DC"].index
+            n.links.loc[dc_i, "p_nom_min"] = n.links.loc[dc_i, "p_nom_opt"]  # for links
+
+            for c in n.iterate_components(["Link", "Generator", "StorageUnit"]):
                 nm = c.name
+                # breakpoint()
                 # limit our components that we remove/modify to those prior to this time horizon
-                c_lim = c.df.loc[c.df["build_year"] < planning_horizon]
+                c_lim = c.df.loc[(c.df["build_year"] > 0) | (c.df["build_year"] < planning_horizon)]
                 logger.info(f"Preparing brownfield for the component {nm}")
                 # attribute selection for naming convention
-                attr = "e" if nm == "Store" else "p"
+                attr = "p"
                 # copy over asset sizing from previous period
                 c_lim[f"{attr}_nom"] = c_lim[f"{attr}_nom_opt"]
                 c_lim[f"{attr}_nom_extendable"] = False
                 df = c_lim.copy()
-                print(n.generators.p_nom_opt - n.generators.p_nom)
+                # if i > 0:
+                #     breakpoint()
 
-                for c_idx in c_lim.index:  # [c.df.build_year + c.df.lifetime <= planning_horizon]:
-                    n.remove(nm, c_idx)  ####NEED TO LIMIT THE C TO THOSE IN THE TIME FRAME#######
+                # breakpoint()
+                for c_idx in c_lim.index:
+                    n.remove(nm, c_idx)
                 n.import_components_from_dataframe(df, nm)
                 logger.info(n.consistency_check())
 
@@ -1573,6 +1566,7 @@ def solve_network(n, config, solving, opts="", **kwargs):
                 for tattr in n.component_attrs[nm].index[selection]:
                     n.import_series_from_dataframe(c.pnl[tattr], nm, tattr)
 
+        # breakpoint()
     return n
 
 
