@@ -23,6 +23,7 @@ Additionally, some extra constraints specified in :mod:`solve_network` are added
     based on the rule :mod:`solve_network`.
 """
 
+import copy
 import logging
 import re
 from typing import Optional
@@ -622,7 +623,7 @@ def add_regional_co2limit(n, sns, config):
     # Filter the regional_co2_lims DataFrame based on the planning horizons present in the snapshots
     regional_co2_lims = regional_co2_lims[regional_co2_lims.planning_horizon.isin(sns.get_level_values(0))]
     weightings = n.snapshot_weightings.loc[n.snapshots]
-    # breakpoint()
+
     for idx, emmission_lim in regional_co2_lims.iterrows():
         region_list = [region.strip() for region in emmission_lim.regions.split(",")]
         region_buses = get_region_buses(n, region_list)
@@ -1524,7 +1525,6 @@ def solve_network(n, config, solving, opts="", **kwargs):
             # n.model.print_infeasibilities()
             raise RuntimeError("Solving status 'infeasible'")
 
-        # breakpoint()
         if foresight == "myopic":  # LF_edit
             if i == len(n.investment_periods) - 1:
                 logger.info(f"Final time horizon {planning_horizon}")
@@ -1538,9 +1538,9 @@ def solve_network(n, config, solving, opts="", **kwargs):
 
             for c in n.iterate_components(["Link", "Generator", "StorageUnit"]):
                 nm = c.name
-                # breakpoint()
+
                 # limit our components that we remove/modify to those prior to this time horizon
-                c_lim = c.df.loc[(c.df["build_year"] > 0) | (c.df["build_year"] < planning_horizon)]
+                c_lim = c.df.loc[(c.df["build_year"] >= 0) & (c.df["build_year"] < planning_horizon)]
                 logger.info(f"Preparing brownfield for the component {nm}")
                 # attribute selection for naming convention
                 attr = "p"
@@ -1548,25 +1548,25 @@ def solve_network(n, config, solving, opts="", **kwargs):
                 c_lim[f"{attr}_nom"] = c_lim[f"{attr}_nom_opt"]
                 c_lim[f"{attr}_nom_extendable"] = False
                 df = c_lim.copy()
-                # if i > 0:
-                #     breakpoint()
+                time_df = copy.deepcopy(c.pnl)
 
-                # breakpoint()
                 for c_idx in c_lim.index:
                     n.remove(nm, c_idx)
-                n.import_components_from_dataframe(df, nm)
+
+                n.add(nm, df.index, **df)
                 logger.info(n.consistency_check())
 
                 # copy time-dependent
                 selection = n.component_attrs[nm].type.str.contains(
                     "series",
-                ) & n.component_attrs[
-                    nm
-                ].status.str.contains("Input")
-                for tattr in n.component_attrs[nm].index[selection]:
-                    n.import_series_from_dataframe(c.pnl[tattr], nm, tattr)
+                )
+                # ) & n.component_attrs[
+                #     nm
+                # ].status.str.contains("Input")
 
-        # breakpoint()
+                for tattr in n.component_attrs[nm].index[selection]:
+                    n.import_series_from_dataframe(time_df[tattr], nm, tattr)
+
     return n
 
 
