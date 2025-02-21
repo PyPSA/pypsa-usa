@@ -54,7 +54,6 @@ def get_region_buses(n, region_list):
             | n.buses.reeds_state.isin(region_list)
             | n.buses.interconnect.str.lower().isin(region_list)
             | n.buses.nerc_reg.isin(region_list)
-            # | n.buses.reeds_state.isin(region_list)
             | (1 if "all" in region_list else 0)
         )
     ]
