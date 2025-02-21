@@ -1463,13 +1463,13 @@ def solve_network(n, config, solving, opts="", **kwargs):
     cf_solving = solving["options"]
     foresight = (
         snakemake.params.foresight
-    )  # LF_edit #pulling from the foresight addition into the config file, similar formatting to solve_opts
+    )  # pulling from the foresight addition into the config file, similar formatting to solve_opts
     logger.info(
         f"Pulling foresight option {foresight} from the scenario config file",
     )  # logger statements to ensure expected outcomes
     if (
         len(n.investment_periods) > 1 and foresight == "perfect"
-    ):  # LF_edit #new myopic or perfect foresight addition, if statement to pick which
+    ):  # new myopic or perfect foresight addition, if statement to pick which
         kwargs["multi_investment_periods"] = config["foresight"] == "perfect"
         logger.info(f"Using perfect foresight")  # logger statements to ensure expected outcomes
     elif len(n.investment_periods) > 1 and foresight == "myopic":
@@ -1525,7 +1525,7 @@ def solve_network(n, config, solving, opts="", **kwargs):
             # n.model.print_infeasibilities()
             raise RuntimeError("Solving status 'infeasible'")
 
-        if foresight == "myopic":  # LF_edit
+        if foresight == "myopic":
             if i == len(n.investment_periods) - 1:
                 logger.info(f"Final time horizon {planning_horizon}")
                 continue
@@ -1536,18 +1536,18 @@ def solve_network(n, config, solving, opts="", **kwargs):
             dc_i = n.links[n.links.carrier == "DC"].index
             n.links.loc[dc_i, "p_nom_min"] = n.links.loc[dc_i, "p_nom_opt"]  # for links
 
-            for c in n.iterate_components(["Link", "Generator", "StorageUnit"]):
+            for c in n.iterate_components(["Generator", "Link", "StorageUnit"]):
                 nm = c.name
 
                 # limit our components that we remove/modify to those prior to this time horizon
-                c_lim = c.df.loc[(c.df["build_year"] >= 0) & (c.df["build_year"] < planning_horizon)]
+                c_lim = c.df.loc[(c.df["build_year"] >= 0) & (c.df["build_year"] <= planning_horizon)]
                 logger.info(f"Preparing brownfield for the component {nm}")
                 # attribute selection for naming convention
                 attr = "p"
                 # copy over asset sizing from previous period
                 c_lim[f"{attr}_nom"] = c_lim[f"{attr}_nom_opt"]
                 c_lim[f"{attr}_nom_extendable"] = False
-                df = c_lim.copy()
+                df = copy.deepcopy(c_lim)
                 time_df = copy.deepcopy(c.pnl)
 
                 for c_idx in c_lim.index:
