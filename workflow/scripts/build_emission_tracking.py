@@ -4,7 +4,7 @@ Module for building state and sector level co2 tracking.
 
 import itertools
 import logging
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -15,12 +15,11 @@ logger = logging.getLogger(__name__)
 
 def build_co2_tracking(
     n: pypsa.Network,
-    config: Optional[dict[str, Any]] = None,
+    config: dict[str, Any] | None = None,
 ) -> None:
     """
     Main funtion to interface with.
     """
-
     states = n.buses.STATE.unique()
 
     sectors = ["pwr", "trn", "res", "com", "ind"]
@@ -39,14 +38,13 @@ def build_ch4_tracking(
     n: pypsa.Network,
     gwp: float,
     leakage_rate: float,
-    config: Optional[dict[str, Any]] = None,
+    config: dict[str, Any] | None = None,
 ) -> None:
     """
     Builds CH4 tracking.
 
     Natural gas network must already be constructed
     """
-
     states = [x for x in n.buses.STATE.dropna().unique() if x != np.nan]
 
     if not config:
@@ -77,7 +75,6 @@ def _build_co2_bus(n: pypsa.Network, states: list[str], sectors: list[str]):
     """
     Builds state level co2 bus per sector.
     """
-
     df = pd.DataFrame(itertools.product(states, sectors), columns=["state", "sector"])
     df.index = df.state + " " + df.sector
 
@@ -88,7 +85,6 @@ def _build_co2_store(n: pypsa.Network, states: list[str], sectors: list[str]):
     """
     Builds state level co2 stores per sector.
     """
-
     df = pd.DataFrame(itertools.product(states, sectors), columns=["state", "sector"])
     df.index = df.state + " " + df.sector
 
@@ -127,7 +123,6 @@ def _build_ch4_bus(n: pypsa.Network, states: list[str]):
     """
     Builds state level co2 bus per sector.
     """
-
     df = pd.DataFrame(states, columns=["state"])
     df.index = df.state
 
@@ -138,7 +133,6 @@ def _build_ch4_store(n: pypsa.Network, states: list[str]):
     """
     Builds state level co2 stores per sector.
     """
-
     df = pd.DataFrame(states, columns=["state"])
     df.index = df.state
 
@@ -164,7 +158,6 @@ def _build_ch4_links(n, states: list[str], gwp: float, leakage_rate: float):
     """
     Modifies existing gas production links.
     """
-
     # first extract out exising gas production links
 
     gas_production = [f"{x} gas production" for x in states]

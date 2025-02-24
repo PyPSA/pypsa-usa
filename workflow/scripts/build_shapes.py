@@ -39,14 +39,10 @@ The `build_shapes` rule builds the GIS shape files for the balancing authorities
     #     :scale: 33 %
 """
 
-
 import logging
-from typing import List
 
-import cartopy.crs as ccrs
 import cartopy.io.shapereader as shpreader
 import geopandas as gpd
-import matplotlib.pyplot as plt
 import pandas as pd
 from _helpers import configure_logging, mock_snakemake
 from constants import *
@@ -61,11 +57,13 @@ def filter_small_polygons_gpd(
     Filters out polygons within each MultiPolygon in a GeoSeries that are
     smaller than a specified area.
 
-    Parameters:
+    Parameters
+    ----------
     geo_series (gpd.GeoSeries): A GeoSeries containing MultiPolygon geometries.
     min_area (float): The minimum area threshold.
 
-    Returns:
+    Returns
+    -------
     gpd.GeoSeries: A GeoSeries with MultiPolygons filtered based on the area criterion.
     """
     # Explode the MultiPolygons into individual Polygons
@@ -127,7 +125,6 @@ def filter_shapes(
     """
     Filters breakthrough energy zone data by interconnect region.
     """
-
     if interconnect not in ("western", "texas", "eastern", "usa"):
         logger.warning(f"Interconnector of {interconnect} is not valid")
 

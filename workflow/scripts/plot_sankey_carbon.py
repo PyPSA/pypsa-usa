@@ -6,7 +6,6 @@ https://flowcharts.llnl.gov/commodities/energy
 """
 
 from pathlib import Path
-from typing import Optional
 
 import pandas as pd
 import plotly.graph_objects as go
@@ -81,7 +80,6 @@ NAME_MAPPER = {
 
 
 def get_pwr_flows(n: pypsa.Network, investment_period: int, state: str) -> pd.DataFrame:
-
     if state:
         links_in_state = _get_links_in_state(n, state)
     else:
@@ -124,7 +122,6 @@ def get_sector_flows(
     investment_period: int,
     state: str,
 ) -> pd.DataFrame:
-
     weights = n.snapshot_weightings.objective
 
     if state:
@@ -162,7 +159,7 @@ def get_sector_flows(
 def get_sankey_dataframe(
     n: pypsa.Network,
     investment_period: int,
-    state: Optional[str] = None,
+    state: str | None = None,
 ) -> pd.DataFrame:
     dfs = [
         get_pwr_flows(n, investment_period, state),
@@ -181,7 +178,6 @@ def format_sankey_data(
     name_mapper: dict[str, str],
     sankey_codes: dict[str, int],
 ) -> pd.DataFrame:
-
     def map_sankey_name(name: str):
         try:
             return name_mapper[name]
@@ -222,7 +218,6 @@ def format_sankey_data(
 ###
 
 if __name__ == "__main__":
-
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
 
@@ -261,7 +256,6 @@ if __name__ == "__main__":
     # plot state level
 
     for state in states:
-
         df = get_sankey_dataframe(
             n=n,
             investment_period=investment_period,

@@ -3,7 +3,6 @@ Combines all time independent cost data sources into a standard format.
 """
 
 import logging
-from typing import Any, Optional
 
 import constants as const
 import duckdb
@@ -78,7 +77,7 @@ def create_duckdb_instance(pudl_fn: str):
 
 
 def load_pudl_atb_data():
-    query = f"""
+    query = """
     WITH finance_cte AS (
         SELECT
         wacc_real,
@@ -105,7 +104,7 @@ def load_pudl_atb_data():
 
 
 def load_pudl_aeo_data():
-    query = f"""
+    query = """
     SELECT *
     FROM core_eiaaeo__yearly_projected_fuel_cost_in_electric_sector_by_type aeo
     WHERE aeo.report_year = 2023
@@ -134,7 +133,7 @@ def get_sector_costs(
     efs_icev_costs: str,
     eia_tech_costs,
     year: int,
-    additional_costs_csv: Optional[str] = None,
+    additional_costs_csv: str | None = None,
 ) -> pd.DataFrame:
     """
     Gets end-use tech costs for sector coupling studies.
@@ -169,7 +168,6 @@ def get_sector_costs(
         """
         Calcualtes capex based on annuity payments.
         """
-
         capex = df.copy().set_index(["technology", "parameter"])
         capex = capex.value.unstack().fillna(0)
 
@@ -507,9 +505,7 @@ if __name__ == "__main__":
     pivot_atb.loc[
         pivot_atb["pypsa-name"].str.contains("offshore"),
         "capex_grid_connection_per_kw_km",
-    ] = (
-        pivot_atb["capex_grid_connection_per_kw"] / 30
-    )
+    ] = pivot_atb["capex_grid_connection_per_kw"] / 30
 
     pivot_atb["annualized_connection_capex_per_mw_km"] = (
         calculate_annuity(

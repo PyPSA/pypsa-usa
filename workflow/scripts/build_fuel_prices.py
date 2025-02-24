@@ -22,14 +22,10 @@ Build_fuel_prices.py is a script that prepares data for dynamic fuel prices to b
 """
 
 import logging
-import sys
 from pathlib import Path
-from typing import List
 
 import constants as const
-import duckdb
 import eia
-import numpy as np
 import pandas as pd
 from _helpers import configure_logging, get_snapshots, mock_snakemake
 from build_powerplants import (
@@ -50,7 +46,6 @@ def make_hourly(df: pd.DataFrame) -> pd.DataFrame:
     """
     Makes the index hourly.
     """
-
     start = df.index.min()
     end = (
         pd.to_datetime(start).to_period("Y").to_timestamp("Y").to_period("Y").to_timestamp("Y")
@@ -117,7 +112,6 @@ def get_caiso_ng_power_prices(
     filepath: str,
     **kwargs,
 ) -> pd.DataFrame:
-
     # pypsa-usa name: caiso name
     ba_mapper = {
         "CISO-PGAE": "CISO",

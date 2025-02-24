@@ -4,8 +4,6 @@ Module for holding global constant values.
 
 from enum import Enum
 
-import pandas as pd
-
 ###########################################
 # Constants for GIS Coordinate Reference Systems
 ###########################################

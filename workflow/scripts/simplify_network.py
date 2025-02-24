@@ -3,7 +3,6 @@
 Aggregates network to substations and simplifies to a single voltage level.
 """
 
-
 import logging
 from functools import reduce
 
@@ -39,7 +38,8 @@ def convert_to_voltage_level(n, new_voltage):
     """
     Converts network.lines parameters to a given voltage.
 
-    Parameters:
+    Parameters
+    ----------
     n (pypsa.Network): Network
     new_voltage (float): New voltage level
     """
@@ -101,7 +101,6 @@ def aggregate_to_substations(
     First step in clusterings, if use_ba_zones is True, then the network
     retains balancing Authority zones in clustering.
     """
-
     logger.info("Aggregating buses to substation level...")
 
     generator_strategies = aggregation_strategies.get("generators", dict())
