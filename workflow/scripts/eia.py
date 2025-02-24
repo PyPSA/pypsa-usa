@@ -527,12 +527,12 @@ class DataExtractor(ABC):
         session = requests.Session()
         retries = Retry(
             total=3,
-            backoff_factor=0.1,
+            backoff_factor=0.5,
             status_forcelist=[500, 502, 503, 504],
         )
         session.mount("https://", HTTPAdapter(max_retries=retries))
 
-        response = session.get(url, timeout=30)
+        response = session.get(url, timeout=60)
         if response.status_code == 200:
             return response.json()  # Assumes the response is in JSON format
         else:
