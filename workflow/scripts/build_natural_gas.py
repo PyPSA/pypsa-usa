@@ -24,7 +24,7 @@ from pypsa.components import Network
 logger = logging.getLogger(__name__)
 from abc import ABC, abstractmethod
 from math import pi
-from typing import Any, Optional
+from typing import Any
 
 import eia
 import numpy as np
@@ -163,7 +163,6 @@ class GasData(ABC):
         """
         Name of states must be in column called 'STATE'.
         """
-
         states_2_remove = self.states_2_remove
         if additional_removals:
             states_2_remove += additional_removals
@@ -247,7 +246,6 @@ class GasBuses(GasData):
         return df
 
     def build_infrastructure(self, n: Network) -> None:
-
         df = self.filter_on_sate(n, self.data)
 
         states = df.set_index("STATE")
@@ -339,7 +337,6 @@ class GasStorage(GasData):
         return df
 
     def build_infrastructure(self, n: pypsa.Network, **kwargs):
-
         df = self.filter_on_sate(n, self.data)
         df.index = df.STATE
         df["state_name"] = df.index.map(self.state_2_name)
@@ -455,7 +452,6 @@ class GasProcessing(GasData):
         return df
 
     def build_infrastructure(self, n: pypsa.Network, **kwargs):
-
         df = self.filter_on_sate(n, self.data)
         df = df.set_index("STATE")
         df["bus"] = df.index + " gas"
@@ -528,13 +524,12 @@ class GasProcessing(GasData):
 
 
 class _GasPipelineCapacity(GasData):
-
     def __init__(
         self,
         year: int,
         interconnect: str,
         xlsx: str,
-        api: Optional[str] = None,
+        api: str | None = None,
     ) -> None:
         self.xlsx = xlsx
         self.api = api
@@ -561,7 +556,6 @@ class _GasPipelineCapacity(GasData):
         df: pd.DataFrame,
         in_spatial_scope: bool,
     ) -> pd.DataFrame:
-
         states_in_model = self.get_states_in_model(n)
 
         if ("STATE_TO" and "STATE_FROM") not in df.columns:
@@ -662,7 +656,6 @@ class _GasPipelineCapacity(GasData):
         capacity: pd.DataFrame,
         trade: pd.DataFrame,
     ) -> pd.DataFrame:
-
         df = pd.concat([capacity, trade])
         df = df.sort_values(by="CAPACITY_MW", ascending=False)
         df = df.drop_duplicates(
@@ -696,7 +689,6 @@ class _GasPipelineCapacity(GasData):
         """
         Adds interconnect labels to the pipelines.
         """
-
         df["STATE_TO"] = df.STATE_NAME_TO.map(self.name_2_state)
         df["STATE_FROM"] = df.STATE_NAME_FROM.map(self.name_2_state)
 
@@ -718,12 +710,11 @@ class InterconnectGasPipelineCapacity(_GasPipelineCapacity):
         year: int,
         interconnect: str,
         xlsx: str,
-        api: Optional[str] = None,
+        api: str | None = None,
     ) -> None:
         super().__init__(year, interconnect, xlsx, api)
 
     def extract_pipelines(self, data: pd.DataFrame) -> pd.DataFrame:
-
         df = data.copy()
         # for some reason drop duplicates is not wokring here and I cant figure out why :(
         # df = df.drop_duplicates(subset=["STATE_TO", "STATE_FROM"], keep=False).copy()
@@ -746,7 +737,6 @@ class InterconnectGasPipelineCapacity(_GasPipelineCapacity):
         return df.reset_index(drop=True)
 
     def build_infrastructure(self, n: pypsa.Network) -> None:
-
         df = self.filter_on_sate(n, self.data, in_spatial_scope=True)
 
         if df.empty:
@@ -791,7 +781,6 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
         super().__init__(year, interconnect, xlsx, api)
 
     def extract_pipelines(self, data: pd.DataFrame) -> pd.DataFrame:
-
         df = data.copy()
         if self.domestic:
             return self._get_domestic_pipeline_connections(df)
@@ -802,7 +791,6 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
         """
         Gets all pipelines within the usa that connect to the interconnect.
         """
-
         # get rid of international connections
         df = df[~((df.INTERCONNECT_TO.isin(["canada", "mexico"])) | (df.INTERCONNECT_FROM.isin(["canada", "mexico"])))]
 
@@ -833,7 +821,6 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
         interpolation_method can be one of:
         - linear, zero
         """
-
         assert direction in ("imports", "exports")
 
         # fuel costs/profits at a national level
@@ -940,7 +927,6 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
         """
         Gets time varrying import/export costs.
         """
-
         df = connections.copy()
 
         states_in_model = self.get_states_in_model(n)
@@ -964,7 +950,6 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
 
         Country is always in model spatial scope.
         """
-
         df = template.copy()
         states_in_model = self.get_states_in_model(n)
 
@@ -1013,7 +998,6 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
         imports) If bus0 is a state gas bus, energy will flow out of the
         model (ie. exports)
         """
-
         df = template.copy()
 
         df["store"] = df.bus0.map(
@@ -1041,7 +1025,6 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
             - "WA BC gas trade"
             - "BC WA gas trade"
         """
-
         df = self.filter_on_sate(n, self.data, in_spatial_scope=False)
 
         df = self._add_zero_capacity_connections(df)
@@ -1165,7 +1148,6 @@ class PipelineLinepack(GasData):
         n: pypsa.Network,
         df: pd.DataFrame,
     ) -> pd.DataFrame:
-
         states_in_model = n.buses[
             ~n.buses.carrier.isin(
                 ["gas storage", "gas trade", "gas pipeline"],
@@ -1230,7 +1212,6 @@ class PipelineLinepack(GasData):
         return self.filter_on_interconnect(final)
 
     def build_infrastructure(self, n: pypsa.Network, **kwargs) -> None:
-
         df = self.filter_on_sate(n, self.data)
         df = df.set_index("STATE")
 
@@ -1269,7 +1250,6 @@ def _remove_marginal_costs(n: pypsa.Network):
     """
     Removes marginal costs of CCGT and OCGT plants.
     """
-
     links = n.links[n.links.carrier.str.contains("CCGT") | n.links.carrier.str.contains("OCGT")].index
 
     n.links.loc[links, "marginal_cost"] = 0
@@ -1288,10 +1268,9 @@ def build_natural_gas(
     county_path: str = "../data/counties/cb_2020_us_county_500k.shp",
     pipelines_path: str = "../data/natural_gas/EIA-StatetoStateCapacity_Feb2024.xlsx",
     pipeline_shape_path: str = "../data/natural_gas/pipelines.geojson",
-    options: Optional[dict[str, Any]] = None,
+    options: dict[str, Any] | None = None,
     **kwargs,
 ) -> None:
-
     if not options:
         options = {}
 

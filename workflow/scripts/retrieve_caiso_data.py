@@ -31,7 +31,6 @@ from datetime import datetime, timedelta
 
 import pandas as pd
 import requests
-import seaborn as sns
 
 
 def download_oasis_report(
@@ -53,7 +52,8 @@ def download_oasis_report(
     - node: Specific fuel region ID or 'ALL' for all regions.
     - resultformat: Format of the result ('6' for CSV, '5' for XML).
 
-    Returns:
+    Returns
+    -------
     - None. Downloads the file to the current directory.
     """
     base_url = "http://oasis.caiso.com/oasisapi/SingleZip"
@@ -147,7 +147,8 @@ def get_files_starting_with(folder_path, prefix):
     - folder_path: Path to the folder.
     - prefix: The string that the file names should start with.
 
-    Returns:
+    Returns
+    -------
     - A list of file names that start with the specified prefix.
     """
     file_names = []
@@ -199,7 +200,6 @@ def reduce_select_pricing_nodes(combined_data_merged):
 
 
 def main(snakemake):
-
     fuel_year = snakemake.params.fuel_year
 
     file_names = step_download_oasis_reports(

@@ -4,12 +4,9 @@ Retrieves PUDL data.
 
 import logging
 import zipfile
-import zlib
 from pathlib import Path
 
-import requests
 from _helpers import mock_snakemake, progress_retrieve
-from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +37,7 @@ if __name__ == "__main__":
             zip_ref.extractall(Path(save_pudl).parent)
 
     # Get PUDL FERC Form 714 Parquet
-    parquet = f"https://zenodo.org/records/11292273/files/out_ferc714__hourly_estimated_state_demand.parquet?download=1"
+    parquet = "https://zenodo.org/records/11292273/files/out_ferc714__hourly_estimated_state_demand.parquet?download=1"
 
     save_ferc = snakemake.output.pudl_ferc714
 

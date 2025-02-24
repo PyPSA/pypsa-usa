@@ -13,7 +13,6 @@ import pypsa
 from _helpers import (
     configure_logging,
     get_multiindex_snapshots,
-    get_snapshots,
     mock_snakemake,
 )
 from constants_sector import (
@@ -83,7 +82,6 @@ if __name__ == "__main__":
         demand_files = [demand_files]
 
     if sectors == "E" or sectors == "":  # electricity only
-
         assert len(demand_files) == 1
 
         suffix = ""
@@ -91,17 +89,14 @@ if __name__ == "__main__":
 
         df = pd.read_csv(demand_files[0], index_col=0)
         attach_demand(n, df, carrier, suffix)
-        logger.info(f"Electricity demand added to network")
+        logger.info("Electricity demand added to network")
 
     else:  # sector files
-
         for demand_file in demand_files:
-
             parsed_name = Path(demand_file).name.split("_")
             parsed_name[-1] = parsed_name[-1].split(".pkl")[0]
 
             if len(parsed_name) == 2:
-
                 sector = parsed_name[0].upper()
                 end_use = parsed_name[1].upper().replace("-", "_")
 
@@ -113,7 +108,6 @@ if __name__ == "__main__":
                 log_statement = f"{sector} {end_use} demand added to network"
 
             elif len(parsed_name) == 3:
-
                 sector = parsed_name[0].upper()
                 subsector = parsed_name[1].replace("-", "_")
                 end_use = parsed_name[2].upper()  # lpg | elec

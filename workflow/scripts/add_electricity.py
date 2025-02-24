@@ -34,7 +34,6 @@ Extendable generators are assigned a maximum capacity based on land-use constrai
 - ``networks/elec_base_network_l_pp.nc``
 """
 
-
 import logging
 import os
 
@@ -49,7 +48,6 @@ from _helpers import (
     calculate_annuity,
     configure_logging,
     export_network_for_gis_mapping,
-    load_costs,
     update_p_nom_max,
     weighted_avg,
 )
@@ -86,7 +84,6 @@ def sanitize_carriers(n, config):
     --------
     Raises a warning if any carrier's "tech_colors" are not defined in the config dictionary.
     """
-
     for c in n.iterate_components():
         if "carrier" in c.df:
             add_missing_carriers(n, c.df.carrier)
@@ -134,7 +131,6 @@ def update_capital_costs(
     """
     Applies regional multipliers to capital cost data.
     """
-
     # map generators to states
     bus_state_mapper = n.buses.to_dict()["state"]
     gen = n.generators[n.generators.carrier == carrier].copy()
@@ -184,7 +180,6 @@ def apply_dynamic_pricing(
     vom: float = 0
         Additional flat $/MWh cost to add onto the fuel costs
     """
-
     assert geography in n.buses.columns
 
     gens = n.generators.copy()
@@ -399,11 +394,11 @@ def attach_renewable_capacities_to_atlite(
             # missing_plants.to_csv(f"missing_{tech}_plants.csv",)
 
             logger.info(
-                f"There are {np.round(missing_capacity/1000,4)} GW of {tech} plants that are not in the network. See git issue #16.",
+                f"There are {np.round(missing_capacity / 1000, 4)} GW of {tech} plants that are not in the network. See git issue #16.",
             )
 
         logger.info(
-            f"{np.round(caps_per_bus.sum()/1000,2)} GW of {tech} capacity added.",
+            f"{np.round(caps_per_bus.sum() / 1000, 2)} GW of {tech} capacity added.",
         )
         mapped_values = generators_tech.sub_assignment.map(caps_per_bus).dropna()
         n.generators.loc[mapped_values.index, "p_nom"] = mapped_values
@@ -594,12 +589,14 @@ def attach_egs(
     discount_rate = 0.07  # load_costs(snakemake.input.tech_costs).loc["geothermal", "wacc_real"]
     drilling_cost = snakemake.config["renewable"]["EGS"]["drilling_cost"]
 
-    with xr.open_dataset(
-        getattr(input_profiles, "specs_egs"),
-    ) as ds_specs, xr.open_dataset(
-        getattr(input_profiles, "profile_egs"),
-    ) as ds_profile:
-
+    with (
+        xr.open_dataset(
+            getattr(input_profiles, "specs_egs"),
+        ) as ds_specs,
+        xr.open_dataset(
+            getattr(input_profiles, "profile_egs"),
+        ) as ds_profile,
+    ):
         bus2sub = (
             pd.read_csv(input_profiles.bus2sub, dtype=str)
             .drop("interconnect", axis=1)
@@ -697,7 +694,7 @@ def attach_battery_storage(
     plants_filt = plants_filt.dropna(subset=["energy_storage_capacity_mwh"])
 
     logger.info(
-        f"Added Batteries as Storage Units to the network.\n{np.round(plants_filt.p_nom.sum()/1000,2)} GW Power Capacity \n{np.round(plants_filt.energy_storage_capacity_mwh.sum()/1000, 2)} GWh Energy Capacity",
+        f"Added Batteries as Storage Units to the network.\n{np.round(plants_filt.p_nom.sum() / 1000, 2)} GW Power Capacity \n{np.round(plants_filt.energy_storage_capacity_mwh.sum() / 1000, 2)} GWh Energy Capacity",
     )
 
     plants_filt = plants_filt.dropna(subset=["energy_storage_capacity_mwh"])
@@ -751,7 +748,7 @@ def apply_seasonal_capacity_derates(
     conventional_carriers: list,
     sns: pd.DatetimeIndex,
 ):
-    "Applies conventional rerate factor p_max_pu based on the seasonal capacity derates defined in eia860"
+    """Applies conventional rerate factor p_max_pu based on the seasonal capacity derates defined in eia860"""
     sns_dt = sns.get_level_values(1)
     summer_sns = sns_dt[sns_dt.month.isin([6, 7, 8])]
     winter_sns = sns_dt[~sns_dt.month.isin([6, 7, 8])]
@@ -828,7 +825,6 @@ def attach_breakthrough_renewable_plants(
     extendable_carriers,
     costs,
 ):
-
     add_missing_carriers(n, renewable_carriers)
 
     plants = pd.read_csv(fn_plants, dtype={"bus_id": str}, index_col=0).query(
@@ -887,7 +883,6 @@ def apply_pudl_fuel_costs(
     plants,
     costs,
 ):
-
     # Apply PuDL Fuel Costs for plants where listed
     pudl_fuel_costs = pd.read_csv(snakemake.input["pudl_fuel_costs"], index_col=0)
 
@@ -1045,7 +1040,7 @@ def main(snakemake):
     if params.conventional["dynamic_fuel_price"].get("enable", False):
         logger.info("Applying dynamic fuel pricing to conventional generators")
         if params.conventional["dynamic_fuel_price"]["wholesale"]:
-            assert params.eia_api, f"Must provide EIA API key for dynamic fuel pricing"
+            assert params.eia_api, "Must provide EIA API key for dynamic fuel pricing"
 
             dynamic_fuel_prices = {
                 "OCGT": {

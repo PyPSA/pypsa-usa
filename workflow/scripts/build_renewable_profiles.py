@@ -154,7 +154,6 @@ node (`p_nom_max`): `simple` and `conservative`:
   reached.
 """
 
-
 import functools
 import logging
 import time
@@ -163,7 +162,6 @@ import atlite
 import geopandas as gpd
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
 import xarray as xr
 from _helpers import configure_logging, get_snapshots
 from dask.distributed import Client
@@ -231,8 +229,7 @@ if __name__ == "__main__":
     regions = gpd.read_file(snakemake.input.regions)
 
     assert "x" in regions.columns and "y" in regions.columns, (
-        f"List of regions in {snakemake.input.regions} is empty, please "
-        "disable the corresponding renewable technology"
+        f"List of regions in {snakemake.input.regions} is empty, please disable the corresponding renewable technology"
     )
     # do not pull up, set_index does not work if geo dataframe is empty
     regions = regions.set_index("name").rename_axis("bus")
@@ -276,7 +273,7 @@ if __name__ == "__main__":
 
     if params.get("boem_screen", 0):
         excluder.add_raster(
-            snakemake.input[f"boem_osw"],
+            snakemake.input["boem_osw"],
             invert=True,
             nodata=0,
             allow_no_overlap=True,
@@ -363,7 +360,7 @@ if __name__ == "__main__":
         p_nom_max = capacities / max_cap_factor
     else:
         raise AssertionError(
-            'Config key `potential` should be one of "simple" ' f'(default) or "conservative", not "{p_nom_max_meth}"',
+            f'Config key `potential` should be one of "simple" (default) or "conservative", not "{p_nom_max_meth}"',
         )
 
     logger.info("Calculate average distances.")
