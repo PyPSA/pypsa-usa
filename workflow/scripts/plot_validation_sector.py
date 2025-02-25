@@ -96,8 +96,12 @@ def plot_sector_emissions_validation(
     historical = historical.T
 
     if state:  # plot at state level
-        historical = historical[state].to_frame("Actual")
-        modelled = modelled[state].to_frame("Modelled")
+        try:
+            historical = historical[state].to_frame("Actual")
+            modelled = modelled[state].to_frame("Modelled")
+        except KeyError:  # for example TX in western interconnect
+            logger.warning(f"No emission data to plot for {state}")
+            return fig, axs
 
     else:  # plot at system level
         historical = historical[modelled.columns].sum(axis=1).to_frame("Actual")
@@ -351,7 +355,10 @@ def plot_ng_price_validation(
         historical_residential = historical_residential[state].to_frame("Residential")
         historical_commercial = historical_commercial[state].to_frame("Commercial")
         historical_industrial = historical_industrial[state].to_frame("Industrial")
-        modelled = modelled[state].mean(axis=1).to_frame(name="Modelled")
+        try:  # for example, texas in western
+            modelled = modelled[state].mean(axis=1).to_frame(name="Modelled")
+        except KeyError:
+            modelled = pd.DataFrame(index=historical_power.index)
 
     df = (
         modelled.join(historical_power, how="left")
@@ -641,9 +648,9 @@ if __name__ == "__main__":
     if "snakemake" not in globals():
         snakemake = mock_snakemake(
             "plot_sector_validation",
-            simpl="11",
-            opts="3h",
-            clusters="4m",
+            simpl="132",
+            opts="4h",
+            clusters="33m",
             ll="v1.0",
             sector_opts="",
             sector="E-G",
