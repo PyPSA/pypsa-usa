@@ -224,11 +224,13 @@ def plot_sector_consumption_validation(
     """Plots sector energy consumption comparison."""
     investment_period = n.investment_periods[0]
 
-    historical = get_historical_end_use_consumption(
+    historical_all_states = get_historical_end_use_consumption(
         ["residential", "commercial", "industrial", "transport"],
         investment_period,
         eia_api,
     )
+
+    historical = historical_all_states[[x for x in historical_all_states.columns if x in n.buses.reeds_state.values]]
 
     data = []
 
@@ -287,14 +289,16 @@ def plot_power_generation_validation(
 
     modelled = _get_annual_generation(n, investment_period, state)
 
-    historical = get_historical_power_production(
+    historical_all_states = get_historical_power_production(
         investment_period,
         eia_api,
     )
+
     if not state:
-        historical = historical.loc["U.S."].to_frame("actual")
+        historical = historical_all_states.loc[[x for x in n.buses.reeds_state.unique() if x]].sum().to_frame("actual")
+        # historical = historical.loc["U.S."].to_frame("actual")
     else:
-        historical = historical.loc[state].to_frame("actual")
+        historical = historical_all_states.loc[state].to_frame("actual")
 
     df = historical.join(modelled, how="outer").fillna(0)
 
