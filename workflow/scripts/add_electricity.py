@@ -683,8 +683,8 @@ def attach_battery_storage(
         max_hours=plants_filt.energy_storage_capacity_mwh / plants_filt.p_nom,
         build_year=plants_filt.build_year,
         lifetime=costs.at["4hr_battery_storage", "lifetime"],
-        efficiency_store=0.9**0.5,
-        efficiency_dispatch=0.9**0.5,
+        efficiency_store=0.85**0.5,
+        efficiency_dispatch=0.85**0.5,
         cyclic_state_of_charge=True,
     )
 
