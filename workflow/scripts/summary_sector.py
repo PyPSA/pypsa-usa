@@ -91,7 +91,7 @@ def _filter_link_on_sector(n: pypsa.Network, sector: str) -> pd.DataFrame:
         return n.links[(n.links.carrier.str.startswith(sector)) & ~(n.links.carrier.str.endswith("-charger"))].copy()
     elif sector == "trn":
         return n.links[
-            n.links.carrier.str.startswith("trn-") & ~n.links.bus0.map(n.buses.carrier).isin(["AC", "oil"])
+            n.links.carrier.str.startswith("trn-") & ~n.links.bus0.map(n.buses.carrier).isin(["AC", "lpg"])
         ].copy()
     elif sector == "pwr":
         pwr_carriers = PWR_CARRIERS
@@ -628,7 +628,7 @@ def get_end_use_consumption(
         state: str | None = None,
     ) -> pd.DataFrame:
         """Takes load from p0 link as loads are in kVMT or similar."""
-        loads = n.links[n.links.carrier.str.startswith("trn-") & ~n.links.bus0.map(n.buses.carrier).isin(["AC", "oil"])]
+        loads = n.links[n.links.carrier.str.startswith("trn-") & ~n.links.bus0.map(n.buses.carrier).isin(["AC", "lpg"])]
         if state:
             load_ = _get_links_in_state(n, state)
             loads = loads[loads.index.isin(load_)]
