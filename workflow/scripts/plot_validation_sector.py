@@ -237,11 +237,11 @@ def plot_sector_consumption_validation(
     for sector in ("res", "com", "ind", "trn"):
         modelled = get_end_use_consumption(n, sector, state).loc[investment_period].sum().sum()
         if state:
-            data.append([sector, modelled, historical.at[SECTOR_MAPPER[sector], state]])
+            data.append([sector, historical.at[SECTOR_MAPPER[sector], modelled, state]])
         else:
-            data.append([sector, modelled, historical.loc[SECTOR_MAPPER[sector]].sum()])
+            data.append([sector, historical.loc[SECTOR_MAPPER[sector], modelled].sum()])
 
-    df = pd.DataFrame(data, columns=["sector", "Modelled", "Actual"]).set_index(
+    df = pd.DataFrame(data, columns=["sector", "Actual", "Modelled"]).set_index(
         "sector",
     )
     df.index = df.index.map(SECTOR_MAPPER)
@@ -276,7 +276,7 @@ def _get_annual_generation(n: pypsa.Network, year: int, state) -> pd.DataFrame:
         index={"onwind": "wind", "offwind_floating": "wind", "offwind_fixed": "wind"},
     )
     df = df.groupby(level=0).sum().T
-    return df.loc[year].sum().to_frame(name="modelled")
+    return df.loc[year].sum().to_frame(name="Modelled")
 
 
 def plot_power_generation_validation(
@@ -295,10 +295,10 @@ def plot_power_generation_validation(
     )
 
     if not state:
-        historical = historical_all_states.loc[[x for x in n.buses.reeds_state.unique() if x]].sum().to_frame("actual")
+        historical = historical_all_states.loc[[x for x in n.buses.reeds_state.unique() if x]].sum().to_frame("Actual")
         # historical = historical.loc["U.S."].to_frame("actual")
     else:
-        historical = historical_all_states.loc[state].to_frame("actual")
+        historical = historical_all_states.loc[state].to_frame("Actual")
 
     df = historical.join(modelled, how="outer").fillna(0)
 
