@@ -102,13 +102,13 @@ def build_heat(
 
     elif sector == SecNames.INDUSTRY.value:
         if dynamic_costs:
-            gas_costs = _get_dynamic_marginal_costs(
-                n,
-                "gas",
-                eia,
-                year,
-                sector=sector,
-            )
+            # gas_costs = _get_dynamic_marginal_costs(
+            #     n,
+            #     "gas",
+            #     eia,
+            #     year,
+            #     sector=sector,
+            # )
             coal_costs = _get_dynamic_marginal_costs(n, "coal", eia, year)
         else:
             gas_costs = costs.at["gas", "fuel_cost"]
@@ -204,48 +204,37 @@ def _get_dynamic_marginal_costs(
 
     assert fuel in ("gas", "lpg", "coal", "heating_oil")
 
-    match fuel:
-        case "gas":
-            assert sector in ("res", "com", "ind", "pwr")
-            if year < 2024:  # get actual monthly values
-                raw = FuelCosts(
-                    fuel,
-                    year,
-                    eia,
-                    industry=sector_mapper[sector],
-                ).get_data(
-                    pivot=True,
-                )
-                raw = raw * 1000 / NG_MWH_2_MMCF  # $/MCF -> $/MWh
-            else:  # scale monthly values according to AEO
-                act = FuelCosts(
-                    fuel,
-                    2023,
-                    eia,
-                    industry=sector_mapper[sector],
-                ).get_data(
-                    pivot=True,
-                )
-                proj = FuelCosts(
-                    fuel,
-                    year,
-                    eia,
-                    industry=sector_mapper[sector],
-                ).get_data(
-                    pivot=True,
-                )
+    if fuel == "gas":
+        assert sector in ("res", "com", "ind", "pwr")
+        if year < 2024:  # get actual monthly values
+            raw = FuelCosts(fuel, year, eia, industry=sector_mapper[sector]).get_data(pivot=True)
+            raw = raw * 1000 / NG_MWH_2_MMCF  # $/MCF -> $/MWh
+        else:  # scale monthly values according to AEO
+            act = FuelCosts(fuel, 2023, eia, industry=sector_mapper[sector]).get_data(pivot=True)
+            proj = FuelCosts(fuel, year, eia, industry=sector_mapper[sector]).get_data(pivot=True)
 
-                actual_year_mean = act.mean().at["U.S."]
-                proj_year_mean = proj.at[year, "U.S."]
-                scaler = proj_year_mean / actual_year_mean
+            actual_year_mean = act.mean().at["U.S."]
+            proj_year_mean = proj.at[year, "U.S."]
+            scaler = proj_year_mean / actual_year_mean
 
-                raw = act * scaler * 1000 / NG_MWH_2_MMCF  # $/MCF -> $/MWh
-
-        case "coal":
+            raw = act * scaler * 1000 / NG_MWH_2_MMCF  # $/MCF -> $/MWh
+    elif fuel == "coal":
+        # no industry = industrial, so use industry = power
+        if year < 2024:  # get actual monthly values
             raw = (
                 FuelCosts(fuel, year, eia, industry="power").get_data(pivot=True) * COAL_dol_ton_2_MWHthermal
             )  # $/Ton -> $/MWh
-        case "lpg":
+        else:
+            act = FuelCosts(fuel, 2023, eia, industry="power").get_data(pivot=True)
+            proj = FuelCosts(fuel, year, eia, industry="power").get_data(pivot=True)
+
+            actual_year_mean = act.mean().at["U.S."]
+            proj_year_mean = proj.at[year, "U.S."]
+            scaler = proj_year_mean / actual_year_mean
+
+            raw = act * scaler * COAL_dol_ton_2_MWHthermal
+    elif fuel == "lpg":
+        if year < 2024:
             # https://afdc.energy.gov/fuels/properties
             btu_per_gallon = 112000
             wh_per_btu = 0.29307
@@ -255,7 +244,18 @@ def _get_dynamic_marginal_costs(
                 * (1 / wh_per_btu)
                 * (1000000)
             )  # $/gal -> $/MWh
-        case "heating_oil":
+        else:
+            act = FuelCosts(fuel, 2023, eia, grade="total").get_data(pivot=True)
+            proj = FuelCosts(fuel, year, eia, grade="total").get_data(pivot=True)
+
+            actual_year_mean = act.mean().at["U.S."]
+            proj_year_mean = proj.at[year, "U.S."]
+            scaler = proj_year_mean / actual_year_mean
+
+            # $/gal -> $/MWh
+            raw = act * scaler * (1 / btu_per_gallon) * (1 / wh_per_btu) * (1000000)
+    elif fuel == "heating_oil":
+        if year < 2024:
             # https://www.eia.gov/energyexplained/units-and-calculators/british-thermal-units.php
             btu_per_gallon = 138500
             wh_per_btu = 0.29307
@@ -265,8 +265,18 @@ def _get_dynamic_marginal_costs(
                 * (1 / wh_per_btu)
                 * (1000000)
             )  # $/gal -> $/MWh
-        case _:
-            raise NotImplementedError
+        else:
+            act = FuelCosts("heating_oil", 2023, eia).get_data(pivot=True)
+            proj = FuelCosts("heating_oil", year, eia).get_data(pivot=True)
+
+            actual_year_mean = act.mean().at["U.S."]
+            proj_year_mean = proj.at[year, "U.S."]
+            scaler = proj_year_mean / actual_year_mean
+
+            # $/gal -> $/MWh
+            raw = act * scaler * (1 / btu_per_gallon) * (1 / wh_per_btu) * (1000000)
+    else:
+        raise KeyError(f"{fuel} not recognized for dynamic fuel costs.")
 
     # may have to convert full state name to abbreviated state name
     # should probably change the EIA module to be consistent on what it returns...
