@@ -601,8 +601,8 @@ VALIDATION_PLOTS = [
     # {
     #     "name": "transportation_by_mode_validation",
     #     "fn": plot_transportation_by_mode_validation,
-    #     "nice_name": "Residenital Capacity",
-    #     "sector": "res",
+    #     "nice_name": "Transportation by Mode",
+    #     "system_only": False,
     # },
     # {
     #     "name": "system_consumption_validation",
