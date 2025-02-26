@@ -237,9 +237,9 @@ def plot_sector_consumption_validation(
     for sector in ("res", "com", "ind", "trn"):
         modelled = get_end_use_consumption(n, sector, state).loc[investment_period].sum().sum()
         if state:
-            data.append([sector, historical.at[SECTOR_MAPPER[sector], modelled, state]])
+            data.append([sector, historical.at[SECTOR_MAPPER[sector], state], modelled])
         else:
-            data.append([sector, historical.loc[SECTOR_MAPPER[sector], modelled].sum()])
+            data.append([sector, historical.loc[SECTOR_MAPPER[sector]].sum(), modelled])
 
     df = pd.DataFrame(data, columns=["sector", "Actual", "Modelled"]).set_index(
         "sector",
