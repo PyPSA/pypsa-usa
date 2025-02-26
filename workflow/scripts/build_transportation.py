@@ -6,7 +6,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 import pypsa
-from build_heat import _get_dynamic_marginal_costs, get_link_marginal_costs
+from build_heat import get_link_marginal_costs
 from constants_sector import (
     AirTransport,
     BoatTransport,
@@ -25,28 +25,17 @@ def build_transportation(
     air: bool = True,
     rail: bool = True,
     boat: bool = True,
-    dynamic_pricing: bool = False,
-    eia: str | None = None,  # for dynamic pricing
-    year: int | None = None,  # for dynamic pricing
     must_run_evs: bool | None = None,  # for endogenous EV investment
     dr_config: dict[str, Any] | None = None,
 ) -> None:
     """Main funtion to interface with."""
     road_suffix = Transport.ROAD.value
 
-    for fuel in ("elec", "lpg"):
-        if fuel == "elec":
-            add_ev_infrastructure(n, road_suffix)  # attaches at node level
-        else:
-            add_lpg_infrastructure(n, road_suffix, costs)  # attaches at state level
+    add_ev_infrastructure(n, road_suffix)  # attaches at node level
+    add_lpg_infrastructure(n, road_suffix, costs)  # attaches at state level
 
-    if dynamic_pricing:
-        assert eia
-        assert year
-        lpg_cost = _get_dynamic_marginal_costs(n, "lpg", eia, year)
-    else:
-        logger.warning("Marginal lpg cost set to zero :(")
-        lpg_cost = 0  # TODO: No static cost found :(
+    # lpg costs tracked at state level
+    lpg_cost = 0
 
     road_vehicles = [x.value for x in RoadTransport]
     for vehicle in road_vehicles:
@@ -138,7 +127,7 @@ def add_lpg_infrastructure(
         carrier=f"trn-lpg-{vehicle}",
     )
 
-    nodes["bus0"] = nodes.STATE + " oil"
+    nodes["bus0"] = nodes.STATE + " lpg"
 
     if isinstance(costs, pd.DataFrame):
         try:
