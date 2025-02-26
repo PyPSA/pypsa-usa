@@ -12,7 +12,7 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 import pypsa
-from _helpers import configure_logging, get_snapshots, load_costs
+from _helpers import configure_logging, get_dynamic_marginal_costs, get_snapshots, load_costs
 from add_electricity import sanitize_carriers
 from build_electricity_sector import build_electricty
 from build_emission_tracking import build_ch4_tracking, build_co2_tracking
@@ -72,6 +72,7 @@ def add_sector_foundation(
     add_supply: bool = True,
     costs: pd.DataFrame | None = pd.DataFrame(),
     center_points: pd.DataFrame | None = pd.DataFrame(),
+    eia_api: str | None = None,
 ) -> None:
     """
     Adds carrier, state level bus and store for the energy carrier.
@@ -80,18 +81,21 @@ def add_sector_foundation(
     only the bus is created and no energy supply will be added to the
     state level bus.
     """
-    match carrier:
-        case "gas":
-            carrier_kwargs = {"color": "#d35050", "nice_name": "Natural Gas"}
-        case "coal":
-            carrier_kwargs = {"color": "#d35050", "nice_name": "Coal"}
-        case "oil" | "lpg":
-            carrier_kwargs = {"color": "#d35050", "nice_name": "Liquid Petroleum Gas"}
-        case _:
-            carrier_kwargs = {}
+    co2_carrier = "carrier"
+    if carrier == "gas":
+        carrier_kwargs = {"color": "#d35050", "nice_name": "Natural Gas"}
+    elif carrier == "coal":
+        carrier_kwargs = {"color": "#d35050", "nice_name": "Coal"}
+    elif carrier == "oil":  # heating oil
+        carrier_kwargs = {"color": "#d35050", "nice_name": "Heating Oil"}
+    elif carrier == "lpg":
+        carrier_kwargs = {"color": "#d35050", "nice_name": "Liquid Petroleum Gas"}
+        co2_carrier = "oil"
+    else:
+        raise ValueError(f"Unknown carrier of {carrier}")
 
     try:
-        carrier_kwargs["co2_emissions"] = costs.at[carrier, "co2_emissions"]
+        carrier_kwargs["co2_emissions"] = costs.at[co2_carrier, "co2_emissions"]
     except KeyError:
         pass
 
@@ -102,7 +106,7 @@ def add_sector_foundation(
 
     # make state level primary energy carrier buses
 
-    states = n.buses.STATE.dropna().unique()
+    states = n.buses.reeds_state.dropna().unique()
 
     zero_center_points = pd.DataFrame(
         index=states,
@@ -144,6 +148,27 @@ def add_sector_foundation(
         STATE_NAME=points.name,
     )
 
+    if eia_api:
+        year = n.investment_periods[0]
+        eia_carrier = "heating_oil" if carrier == "oil" else carrier
+        dyanmic_cost = get_dynamic_marginal_costs(n, eia_carrier, eia_api, year, "power")
+        dyanmic_cost = dyanmic_cost.set_index([dyanmic_cost.index.year, dyanmic_cost.index])
+
+        if "USA" not in dyanmic_cost.columns:
+            dyanmic_cost["USA"] = dyanmic_cost.mean(axis=1)
+
+        marginal_cost = pd.DataFrame(index=dyanmic_cost.index)
+        for state in n.buses.reeds_state.fillna(False).unique():
+            if not state:
+                continue
+            try:
+                marginal_cost[state] = dyanmic_cost[state]
+            except KeyError:  # use USA average
+                marginal_cost[state] = dyanmic_cost["USA"]
+
+    else:
+        marginal_cost = 0
+
     if add_supply:
         n.madd(
             "Store",
@@ -160,6 +185,7 @@ def add_sector_foundation(
             e_cyclic_per_period=False,
             carrier=carrier,
             unit="MWh_th",
+            marginal_cost=marginal_cost,
         )
 
 
@@ -177,11 +203,8 @@ def convert_generators_2_links(
     Links bus1 are the bus the generator is attached to. Links bus0 are state
     level followed by the suffix (ie. "WA gas" if " gas" is the bus0_suffix)
 
-    n: pypsa.Network,
-    carrier: str,
-        carrier of the generator to convert to a link
-    bus0_suffix: str,
-        suffix to attach link to
+    If eia api is provided, dynamic marginal costs are brought in from the API. This will
+    match the method end-use techs bring in dynamic marginal costs.
     """
     plants = n.generators[n.generators.carrier == carrier].copy()
 
@@ -226,7 +249,8 @@ def convert_generators_2_links(
         ramp_limit_down=plants.ramp_limit_down,
         efficiency=plants.efficiency,
         efficiency2=co2_intensity,
-        marginal_cost=plants.marginal_cost * plants.efficiency,  # fuel costs rated at delievered
+        marginal_cost=0,
+        # marginal_cost = plants.marginal_cost * plants.efficiency, # fuel costs rated at delievered
         capital_cost=plants.capital_cost,  # links rated on input capacity
         lifetime=plants.lifetime,
     )
@@ -308,7 +332,7 @@ if __name__ == "__main__":
             simpl="132",
             clusters="33m",
             ll="v1.0",
-            opts="3h",
+            opts="4h",
             sector="E-G",
         )
     configure_logging(snakemake)
@@ -351,9 +375,11 @@ if __name__ == "__main__":
     center_points = StateGeometry(snakemake.input.county).state_center_points.set_index(
         "STATE",
     )
-    for carrier in ("oil", "coal", "gas"):
+    # oil in this context is heating_oil
+    for carrier in ("oil", "lpg", "coal", "gas"):
         add_supply = False if carrier == "gas" else True  # gas added in build_ng()
-        add_sector_foundation(n, carrier, add_supply, costs, center_points)
+        api = None if carrier == "gas" else eia_api  # ng cost endogenously defined
+        add_sector_foundation(n, carrier, add_supply, costs, center_points, api)
 
     for carrier in ("OCGT", "CCGT", "CCGT-95CCS", "CCGT-97CCS"):
         co2_intensity = get_pwr_co2_intensity(carrier, costs)
@@ -363,6 +389,7 @@ if __name__ == "__main__":
         co2_intensity = get_pwr_co2_intensity(carrier, costs)
         convert_generators_2_links(n, carrier, " coal", co2_intensity)
 
+    # oil in this context is lpg for ppts
     for carrier in ["oil"]:
         co2_intensity = get_pwr_co2_intensity(carrier, costs)
         convert_generators_2_links(n, carrier, " oil", co2_intensity)
@@ -456,9 +483,6 @@ if __name__ == "__main__":
         costs=costs,
         exogenous=exogenous_transport,
         must_run_evs=must_run_evs,
-        dynamic_pricing=True,
-        eia=eia_api,
-        year=dynamic_cost_year,
         dr_config=dr_config,
     )
 
