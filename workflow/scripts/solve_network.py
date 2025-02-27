@@ -1457,23 +1457,40 @@ def extra_functionality(n, snapshots):
     add_land_use_constraints(n)
 
 
+def run_optimize(n, rolling_horizon, skip_iterations, cf_solving, **kwargs):
+    """Initiate the correct type of pypsa.optimize function."""
+    if rolling_horizon:
+        kwargs["horizon"] = cf_solving.get("horizon", 365)
+        kwargs["overlap"] = cf_solving.get("overlap", 0)
+        n.optimize.optimize_with_rolling_horizon(**kwargs)
+        status, condition = "", ""
+    elif skip_iterations:
+        status, condition = n.optimize(**kwargs)
+    else:
+        kwargs["track_iterations"] = (cf_solving.get("track_iterations", False),)
+        kwargs["min_iterations"] = (cf_solving.get("min_iterations", 4),)
+        kwargs["max_iterations"] = (cf_solving.get("max_iterations", 6),)
+        status, condition = n.optimize.optimize_transmission_expansion_iteratively(
+            **kwargs,
+        )
+
+    if status != "ok" and not rolling_horizon:
+        logger.warning(
+            f"Solving status '{status}' with termination condition '{condition}'",
+        )
+    if "infeasible" in condition:
+        # n.model.print_infeasibilities()
+        raise RuntimeError("Solving status 'infeasible'")
+
+
 def solve_network(n, config, solving, opts="", **kwargs):
     set_of_options = solving["solver"]["options"]
     cf_solving = solving["options"]
-    foresight = (
-        snakemake.params.foresight
-    )  # pulling from the foresight addition into the config file, similar formatting to solve_opts
-    logger.info(
-        f"Pulling foresight option {foresight} from the scenario config file",
-    )  # logger statements to ensure expected outcomes
-    if (
-        len(n.investment_periods) > 1 and foresight == "perfect"
-    ):  # new myopic or perfect foresight addition, if statement to pick which
-        kwargs["multi_investment_periods"] = config["foresight"] == "perfect"
-        logger.info(f"Using perfect foresight")  # logger statements to ensure expected outcomes
-    elif len(n.investment_periods) > 1 and foresight == "myopic":
-        kwargs["multi_investment_periods"] = config["foresight"] == "myopic"
-        logger.info(f"Using myopic foresight")  # logger statements to ensure expected outcomes
+
+    foresight = snakemake.params.foresight
+    if len(n.investment_periods) > 1:
+        kwargs["multi_investment_periods"] = config["foresight"] == foresight
+        logger.info(f"Using {foresight} foresight")
 
     kwargs["solver_options"] = solving["solver_options"][set_of_options] if set_of_options else {}
     kwargs["solver_name"] = solving["solver"]["name"]
@@ -1495,76 +1512,62 @@ def solve_network(n, config, solving, opts="", **kwargs):
     n.config = config
     n.opts = opts
 
-    for i, planning_horizon in enumerate(n.investment_periods):
-        # planning_horizons = snakemake.params.planning_horizons
-        sns_horizon = n.snapshots[n.snapshots.get_level_values(0) == planning_horizon]
-        # add sns_horizon to kwargs
-        kwargs["snapshots"] = sns_horizon
+    match foresight:
+        case "perfect":
+            run_optimize(n, rolling_horizon, skip_iterations, cf_solving, **kwargs)
+        case "myopic":
+            for i, planning_horizon in enumerate(n.investment_periods):
+                # planning_horizons = snakemake.params.planning_horizons
+                sns_horizon = n.snapshots[n.snapshots.get_level_values(0) == planning_horizon]
 
-        if rolling_horizon:
-            kwargs["horizon"] = cf_solving.get("horizon", 365)
-            kwargs["overlap"] = cf_solving.get("overlap", 0)
-            n.optimize.optimize_with_rolling_horizon(**kwargs)
-            status, condition = "", ""
-        elif skip_iterations:
-            status, condition = n.optimize(**kwargs)
-        else:
-            kwargs["track_iterations"] = (cf_solving.get("track_iterations", False),)
-            kwargs["min_iterations"] = (cf_solving.get("min_iterations", 4),)
-            kwargs["max_iterations"] = (cf_solving.get("max_iterations", 6),)
-            status, condition = n.optimize.optimize_transmission_expansion_iteratively(
-                **kwargs,
-            )
+                # add sns_horizon to kwarg
+                kwargs["snapshots"] = sns_horizon
 
-        if status != "ok" and not rolling_horizon:
-            logger.warning(
-                f"Solving status '{status}' with termination condition '{condition}'",
-            )
-        if "infeasible" in condition:
-            # n.model.print_infeasibilities()
-            raise RuntimeError("Solving status 'infeasible'")
+                run_optimize(n, rolling_horizon, skip_iterations, cf_solving, **kwargs)
 
-        if foresight == "myopic":
-            if i == len(n.investment_periods) - 1:
-                logger.info(f"Final time horizon {planning_horizon}")
-                continue
-            logger.info(f"Preparing brownfield from {planning_horizon}")
+                if i == len(n.investment_periods) - 1:
+                    logger.info(f"Final time horizon {planning_horizon}")
+                    continue
+                logger.info(f"Preparing brownfield from {planning_horizon}")
 
-            # electric transmission grid set optimised capacities of previous as minimum
-            n.lines.s_nom_min = n.lines.s_nom_opt  # for lines
-            dc_i = n.links[n.links.carrier == "DC"].index
-            n.links.loc[dc_i, "p_nom_min"] = n.links.loc[dc_i, "p_nom_opt"]  # for links
+                # electric transmission grid set optimised capacities of previous as minimum
+                n.lines.s_nom_min = n.lines.s_nom_opt  # for lines
+                dc_i = n.links[n.links.carrier == "DC"].index
+                n.links.loc[dc_i, "p_nom_min"] = n.links.loc[dc_i, "p_nom_opt"]  # for links
 
-            for c in n.iterate_components(["Generator", "Link", "StorageUnit"]):
-                nm = c.name
+                for c in n.iterate_components(["Generator", "Link", "StorageUnit"]):
+                    nm = c.name
+                    # limit our components that we remove/modify to those prior to this time horizon
+                    c_lim = c.df.loc[n.get_active_assets(nm, planning_horizon)]
 
-                # limit our components that we remove/modify to those prior to this time horizon
-                c_lim = c.df.loc[(c.df["build_year"] >= 0) & (c.df["build_year"] <= planning_horizon)]
-                logger.info(f"Preparing brownfield for the component {nm}")
-                # attribute selection for naming convention
-                attr = "p"
-                # copy over asset sizing from previous period
-                c_lim[f"{attr}_nom"] = c_lim[f"{attr}_nom_opt"]
-                c_lim[f"{attr}_nom_extendable"] = False
-                df = copy.deepcopy(c_lim)
-                time_df = copy.deepcopy(c.pnl)
+                    logger.info(f"Preparing brownfield for the component {nm}")
+                    # attribute selection for naming convention
+                    attr = "p"
+                    # copy over asset sizing from previous period
+                    c_lim[f"{attr}_nom"] = c_lim[f"{attr}_nom_opt"]
+                    c_lim[f"{attr}_nom_extendable"] = False
+                    df = copy.deepcopy(c_lim)
+                    time_df = copy.deepcopy(c.pnl)
 
-                for c_idx in c_lim.index:
-                    n.remove(nm, c_idx)
+                    for c_idx in c_lim.index:
+                        n.remove(nm, c_idx)
 
-                n.add(nm, df.index, **df)
-                logger.info(n.consistency_check())
+                    for df_idx in df.index:
+                        n.add(nm, df_idx, **df.loc[df_idx])
+                    logger.info(n.consistency_check())
 
-                # copy time-dependent
-                selection = n.component_attrs[nm].type.str.contains(
-                    "series",
-                )
-                # ) & n.component_attrs[
-                #     nm
-                # ].status.str.contains("Input")
+                    # copy time-dependent
+                    selection = n.component_attrs[nm].type.str.contains(
+                        "series",
+                    )
+                    # ) & n.component_attrs[
+                    #     nm
+                    # ].status.str.contains("Input")
 
-                for tattr in n.component_attrs[nm].index[selection]:
-                    n.import_series_from_dataframe(time_df[tattr], nm, tattr)
+                    for tattr in n.component_attrs[nm].index[selection]:
+                        n.import_series_from_dataframe(time_df[tattr], nm, tattr)
+        case _:
+            raise ValueError(f"Invalid foresight option: '{foresight}'. Must be 'perfect' or 'myopic'.")
 
     return n
 
