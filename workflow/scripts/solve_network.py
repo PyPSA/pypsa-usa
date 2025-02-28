@@ -1488,9 +1488,9 @@ def solve_network(n, config, solving, opts="", **kwargs):
     cf_solving = solving["options"]
 
     foresight = snakemake.params.foresight
-    if len(n.investment_periods) > 1:
-        kwargs["multi_investment_periods"] = config["foresight"] == foresight
-        logger.info(f"Using {foresight} foresight")
+    # if len(n.investment_periods) > 1:
+    kwargs["multi_investment_periods"] = config["foresight"] == foresight
+    logger.info(f"Using {foresight} foresight")
 
     kwargs["solver_options"] = solving["solver_options"][set_of_options] if set_of_options else {}
     kwargs["solver_name"] = solving["solver"]["name"]
@@ -1560,9 +1560,6 @@ def solve_network(n, config, solving, opts="", **kwargs):
                     selection = n.component_attrs[nm].type.str.contains(
                         "series",
                     )
-                    # ) & n.component_attrs[
-                    #     nm
-                    # ].status.str.contains("Input")
 
                     for tattr in n.component_attrs[nm].index[selection]:
                         n.import_series_from_dataframe(time_df[tattr], nm, tattr)
