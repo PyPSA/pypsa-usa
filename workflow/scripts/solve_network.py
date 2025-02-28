@@ -325,7 +325,7 @@ def add_technology_capacity_target_constraints(n, config):
             )
 
 
-def add_RPS_constraints(n, config):
+def add_RPS_constraints(n, sns, config):
     """
     Add Renewable Portfolio Standards (RPS) constraints to the network.
 
@@ -402,7 +402,7 @@ def add_RPS_constraints(n, config):
     portfolio_standards = pd.concat([portfolio_standards, rps_reeds, ces_reeds])
     portfolio_standards = portfolio_standards[
         (portfolio_standards.pct > 0.0)
-        & (portfolio_standards.planning_horizon.isin(snakemake.params.planning_horizons))
+        & (portfolio_standards.planning_horizon.isin(sns.get_level_values(0)))
         & (portfolio_standards.region.isin(n.buses.reeds_state.unique()))
     ]
 
@@ -1420,7 +1420,7 @@ def extra_functionality(n, snapshots):
     opts = n.opts
     config = n.config
     if "RPS" in opts and n.generators.p_nom_extendable.any():
-        add_RPS_constraints(n, config)
+        add_RPS_constraints(n, snapshots, config)
     if "REM" in opts and n.generators.p_nom_extendable.any():
         add_regional_co2limit(n, snapshots, config)
     if "BAU" in opts and n.generators.p_nom_extendable.any():
@@ -1522,6 +1522,7 @@ def solve_network(n, config, solving, opts="", **kwargs):
 
                 # add sns_horizon to kwarg
                 kwargs["snapshots"] = sns_horizon
+
 
                 run_optimize(n, rolling_horizon, skip_iterations, cf_solving, **kwargs)
 
