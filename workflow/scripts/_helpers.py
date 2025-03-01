@@ -12,8 +12,6 @@ import pandas as pd
 import pypsa
 import requests
 import yaml
-from constants import NG_MWH_2_MMCF, STATE_2_CODE, COAL_dol_ton_2_MWHthermal
-from eia import FuelCosts
 from snakemake.utils import update_config
 
 REGION_COLS = ["geometry", "name", "x", "y", "country"]
@@ -105,7 +103,6 @@ def load_network(import_name=None, custom_components=None):
     -------
     pypsa.Network
     """
-    import pypsa
     from pypsa.descriptors import Dict
 
     override_components = None
@@ -846,121 +843,3 @@ def get_multiindex_snapshots(
             get_snapshots(sns_config).map(lambda x: x.replace(year=year)),
         )
     return pd.MultiIndex.from_arrays([sns.year, sns])
-
-
-def get_dynamic_marginal_costs(
-    n: pypsa.Network,
-    fuel: str,
-    eia: str,
-    year: int,
-    sector: str | None = None,
-    **kwargs,
-) -> pd.DataFrame:
-    """Gets end-use fuel costs at a state level."""
-    sector_mapper = {
-        "res": "residential",
-        "com": "commercial",
-        "pwr": "power",
-        "ind": "industrial",
-        "trn": "transport",
-    }
-
-    assert fuel in ("gas", "lpg", "coal", "heating_oil")
-
-    if fuel == "gas":
-        assert sector in ("res", "com", "ind", "pwr")
-        if year < 2024:  # get actual monthly values
-            raw = FuelCosts(fuel, year, eia, industry=sector_mapper[sector]).get_data(pivot=True)
-            raw = raw * 1000 / NG_MWH_2_MMCF  # $/MCF -> $/MWh
-        else:  # scale monthly values according to AEO
-            act = FuelCosts(fuel, 2023, eia, industry=sector_mapper[sector]).get_data(pivot=True)
-            proj = FuelCosts(fuel, year, eia, industry=sector_mapper[sector]).get_data(pivot=True)
-
-            actual_year_mean = act.mean().at["U.S."]
-            proj_year_mean = proj.at[year, "U.S."]
-            scaler = proj_year_mean / actual_year_mean
-
-            raw = act * scaler * 1000 / NG_MWH_2_MMCF  # $/MCF -> $/MWh
-    elif fuel == "coal":
-        # no industry = industrial, so use industry = power
-        if year < 2024:  # get actual monthly values
-            raw = (
-                FuelCosts(fuel, year, eia, industry="power").get_data(pivot=True) * COAL_dol_ton_2_MWHthermal
-            )  # $/Ton -> $/MWh
-        else:
-            act = FuelCosts(fuel, 2023, eia, industry="power").get_data(pivot=True)
-            proj = FuelCosts(fuel, year, eia, industry="power").get_data(pivot=True)
-
-            actual_year_mean = act.mean().at["U.S."]
-            proj_year_mean = proj.at[year, "U.S."]
-            scaler = proj_year_mean / actual_year_mean
-
-            raw = act * scaler * COAL_dol_ton_2_MWHthermal
-    elif fuel == "lpg":
-        if year < 2024:
-            # https://afdc.energy.gov/fuels/properties
-            btu_per_gallon = 112000
-            wh_per_btu = 0.29307
-            raw = (
-                FuelCosts(fuel, year, eia, grade="total").get_data(pivot=True)
-                * (1 / btu_per_gallon)
-                * (1 / wh_per_btu)
-                * (1000000)
-            )  # $/gal -> $/MWh
-        else:
-            act = FuelCosts(fuel, 2023, eia, grade="total").get_data(pivot=True)
-            proj = FuelCosts(fuel, year, eia, grade="total").get_data(pivot=True)
-
-            actual_year_mean = act.mean().at["U.S."]
-            proj_year_mean = proj.at[year, "U.S."]
-            scaler = proj_year_mean / actual_year_mean
-
-            # $/gal -> $/MWh
-            raw = act * scaler * (1 / btu_per_gallon) * (1 / wh_per_btu) * (1000000)
-    elif fuel == "heating_oil":
-        if year < 2024:
-            # https://www.eia.gov/energyexplained/units-and-calculators/british-thermal-units.php
-            btu_per_gallon = 138500
-            wh_per_btu = 0.29307
-            raw = (
-                FuelCosts("heating_oil", year, eia).get_data(pivot=True)
-                * (1 / btu_per_gallon)
-                * (1 / wh_per_btu)
-                * (1000000)
-            )  # $/gal -> $/MWh
-        else:
-            act = FuelCosts("heating_oil", 2023, eia).get_data(pivot=True)
-            proj = FuelCosts("heating_oil", year, eia).get_data(pivot=True)
-
-            actual_year_mean = act.mean().at["U.S."]
-            proj_year_mean = proj.at[year, "U.S."]
-            scaler = proj_year_mean / actual_year_mean
-
-            # $/gal -> $/MWh
-            raw = act * scaler * (1 / btu_per_gallon) * (1 / wh_per_btu) * (1000000)
-    else:
-        raise KeyError(f"{fuel} not recognized for dynamic fuel costs.")
-
-    # may have to convert full state name to abbreviated state name
-    # should probably change the EIA module to be consistent on what it returns...
-    raw = raw.rename(columns=STATE_2_CODE)
-
-    raw.index = pd.DatetimeIndex(raw.index)
-
-    investment_year = n.investment_periods[0]
-
-    hourly_index = pd.date_range(
-        start=f"{year}-01-01",
-        end=f"{year}-12-31 23:00:00",
-        freq="H",
-    )
-
-    # need ffill and bfill as some data is not provided at the resolution or
-    # timeframe required
-    costs_hourly = raw.reindex(hourly_index)
-    costs_hourly = costs_hourly.ffill().bfill()
-    costs_hourly.index = costs_hourly.index.map(
-        lambda x: x.replace(year=investment_year),
-    )
-
-    return costs_hourly[costs_hourly.index.isin(n.snapshots.get_level_values(1))]
