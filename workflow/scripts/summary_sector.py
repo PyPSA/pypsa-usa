@@ -456,7 +456,7 @@ def get_sector_production_timeseries_by_carrier(
         df = df.T
         df.index = df.index.map(n.links.carrier)
     df = df.groupby(level=0).sum().T
-    return df.where((df <= 0) & (df >= -0.00001), 0)
+    return df.mask((df <= 0) & (df >= -0.00001), 0)
 
 
 def get_sector_max_production_timeseries(
