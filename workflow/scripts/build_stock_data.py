@@ -1042,9 +1042,9 @@ def add_service_brownfield(
 
         # remove 'heat' or 'cool' ect.. from suffix
         df["carrier"] = df.suffix.map(lambda x: "-".join(x.split("-")[:-1]))
-        df["carrier"] = df.carrier + "-lpg-furnace"
+        df["carrier"] = df.carrier + "-oil-furnace"
 
-        df["ratio"] = df.state.map(ratios.lpg)
+        df["ratio"] = df.state.map(ratios.lpg)  # in this context lpg == oil
         df["p_nom"] = df.p_max.mul(df.ratio).div(100).div(efficiency)  # div to convert from %
 
         start_year = n.investment_periods[0]

@@ -300,7 +300,6 @@ def add_service_heat(
                 heat_carrier,
                 "gas",
                 costs,
-                marginal_gas,
             )
 
         if include_oil_furnace:
@@ -311,7 +310,6 @@ def add_service_heat(
                 heat_carrier,
                 "oil",
                 costs,
-                marginal_oil,
             )
 
         if dr_config:
@@ -649,7 +647,6 @@ def add_service_furnace(
     heat_carrier: str,
     fuel: str,
     costs: pd.DataFrame,
-    marginal_cost: pd.DataFrame | float | None = None,
 ) -> None:
     """
     Adds direct furnace heating to the system.
@@ -675,6 +672,8 @@ def add_service_furnace(
             costs_name = "Residential Gas-Fired Furnaces"
         elif fuel == "elec":
             costs_name = "Residential Electric Resistance Heaters"
+        else:
+            raise ValueError(f"Unexpected fuel of {fuel}")
     elif sector in ("com", "commercial", "Commercial"):
         if fuel == "oil":
             costs_name = "Commercial Oil-Fired Furnaces"
@@ -682,6 +681,8 @@ def add_service_furnace(
             costs_name = "Commercial Gas-Fired Furnaces"
         elif fuel == "elec":
             costs_name = "Commercial Electric Resistance Heaters"
+        else:
+            raise ValueError(f"Unexpected fuel of {fuel}")
     else:
         raise ValueError(f"Unexpected sector of {sector}")
 

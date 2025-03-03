@@ -652,9 +652,9 @@ if __name__ == "__main__":
     if "snakemake" not in globals():
         snakemake = mock_snakemake(
             "plot_sector_validation",
-            simpl="40",
-            opts="6h",
-            clusters="11m",
+            simpl="132",
+            opts="4h",
+            clusters="33m",
             ll="v1.0",
             sector_opts="",
             sector="E-G",
