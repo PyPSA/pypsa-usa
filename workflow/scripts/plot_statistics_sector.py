@@ -383,8 +383,6 @@ def plot_sector_emissions(
     cols = []
 
     for sector in sectors:
-        if state == "TX":
-            print("t")
         df = get_emission_timeseries_by_sector(n, sector, state=state)
 
         if df.empty:
