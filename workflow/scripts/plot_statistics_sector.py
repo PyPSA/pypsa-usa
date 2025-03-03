@@ -87,9 +87,17 @@ def is_urban_rural_split(n: pypsa.Network) -> bool:
 
 def get_plotting_colors(n: pypsa.Network, nice_name: bool) -> dict[str, str]:
     if nice_name:
-        return n.carriers.set_index("nice_name")["color"].to_dict()
+        colors = n.carriers.set_index("nice_name")["color"]
     else:
-        return n.carriers["color"].to_dict()
+        colors = n.carriers["color"]
+
+    nans = colors[colors.isna()].index.to_list()
+
+    if nans:
+        # logger.warning(f"No color assigned to {nans}. Assigning #000000 (black).")
+        colors = colors.fillna("#000000")
+
+    return colors
 
 
 def get_sectors(n: pypsa.Network) -> list[str]:
@@ -372,8 +380,11 @@ def plot_sector_emissions(
     sectors = ("res", "com", "ind", "trn", "pwr", "ch4")
 
     data = []
+    cols = []
 
     for sector in sectors:
+        if state == "TX":
+            print("t")
         df = get_emission_timeseries_by_sector(n, sector, state=state)
 
         if df.empty:
@@ -383,12 +394,13 @@ def plot_sector_emissions(
         data.append(
             df.loc[investment_period,].iloc[-1].values[0],
         )
+        cols.append(sector)
 
     if not data:
         # empty data to be caught by type error below
-        df = pd.DataFrame(data, columns=sectors)
+        df = pd.DataFrame(data, columns=cols)
     else:
-        df = pd.DataFrame([data], columns=sectors)
+        df = pd.DataFrame([data], columns=cols)
 
     fig, axs = plt.subplots(
         ncols=1,
@@ -1479,13 +1491,13 @@ def _initialize_metadata(data: dict[str, Any]) -> list[PlottingData]:
 if __name__ == "__main__":
     if "snakemake" not in globals():
         snakemake = mock_snakemake(
-            "plot_sector_production",
+            "plot_sector_emissions",
             simpl="132",
-            opts="3h",
+            opts="4h",
             clusters="33m",
             ll="v1.0",
             sector="E-G",
-            planning_horizons="2018",
+            planning_horizons="2030",
             interconnect="western",
         )
         rootpath = ".."

@@ -86,6 +86,8 @@ NAME_MAPPER = {
     "coal": "Coal",
     "Oil": "Petroleum",
     "oil": "Petroleum",
+    "Lpg": "Petroleum",
+    "lpg": "Petroleum",
     "com": "Commercial",
     "res": "Residential",
     "trn": "Transportation",
@@ -365,7 +367,7 @@ def _get_transport_supply(
         links_in_state = n.links.index.to_list()
 
     # get load aggregation buses only
-    buses = n.buses[n.buses.carrier.isin(["AC", "oil"])].index
+    buses = n.buses[n.buses.carrier.isin(["AC", "lpg"])].index
     links = n.links[
         (n.links.index.isin(links_in_state)) & (n.links.bus0.isin(buses)) & (n.links.carrier.str.startswith("trn-"))
     ].index
@@ -399,7 +401,7 @@ def _get_transport_rejected(
         links_in_state = n.links.index.to_list()
 
     # get load aggregation buses only
-    buses = n.buses[n.buses.carrier.isin(["AC", "oil"])].index
+    buses = n.buses[n.buses.carrier.isin(["AC", "lpg"])].index
     links = n.links[
         (n.links.index.isin(links_in_state)) & (n.links.bus0.isin(buses)) & (n.links.carrier.str.startswith("trn-"))
     ].index
