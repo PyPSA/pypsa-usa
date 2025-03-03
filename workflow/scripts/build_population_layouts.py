@@ -12,7 +12,6 @@ import atlite
 import constants
 import geopandas as gpd
 import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
 import xarray as xr
 from _helpers import configure_logging, mock_snakemake
@@ -83,7 +82,6 @@ def plot_county_data(
     Adapted from
     https://www.relataly.com/visualize-covid-19-data-on-a-geographic-heat-maps/291/
     """
-
     # for legend range
     vmin = gdf[col].min()
     vmax = gdf[col].max()
@@ -117,7 +115,6 @@ def plot_grid_data(da: xr.DataArray, title: str = None, save: str = None):
     """
     Plots gridded population layout.
     """
-
     fig, ax = plt.subplots(figsize=(5, 4))
     da.plot(ax=ax, cbar_kwargs={"label": "population"})
     ax.set_xlabel("longitude")
@@ -206,7 +203,6 @@ if __name__ == "__main__":
 
     # plot data
     if save_path:
-
         plotting_data = counties.copy()
         plotting_data["density_person_per_km2"] = plotting_data.population / counties.ALAND * 1000000
         columns = {

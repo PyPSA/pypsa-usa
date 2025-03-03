@@ -6,10 +6,8 @@ https://data.nrel.gov/submissions/78
 """
 
 from abc import ABC, abstractmethod
-from typing import Optional
 
 import pandas as pd
-import xarray as xr
 from constants import TBTU_2_MWH, MMBTU_MWHthemal
 
 # Vehicle life assumptions for getting $/VMT capital cost
@@ -213,8 +211,8 @@ class EfsSectorData(ABC):
     def _format_data_structure(
         self,
         df: pd.DataFrame,
-        source: Optional[str] = "",
-        description: Optional[str] = "",
+        source: str | None = "",
+        description: str | None = "",
     ) -> pd.DataFrame:
         data = df.copy()
         data["technology"] = data.Subsector + " " + data.Technology
@@ -496,7 +494,6 @@ class EfsIceTransportationData:
 
 
 class EfsBuildingData(EfsSectorData):
-
     mmbtu_2_mwh = MMBTU_MWHthemal
 
     # Assumptions from https://atb.nrel.gov/transportation/2022/definitions
@@ -654,7 +651,7 @@ class EiaBuildingData:
         df2.unit = df2.unit.str.replace("/kBtu/hr", "/MW")
         return df2
 
-    def get_data(self, sector: Optional[str] = None) -> pd.DataFrame:
+    def get_data(self, sector: str | None = None) -> pd.DataFrame:
         sector = self._check_sector(sector)
         return pd.concat(
             [
@@ -665,7 +662,7 @@ class EiaBuildingData:
             ],
         )
 
-    def get_capex(self, sector: Optional[str] = None):
+    def get_capex(self, sector: str | None = None):
         sector = self._check_sector(sector)
         if sector:
             slicer = (self.data.technology.str.startswith(sector)) & (self.data.parameter == "investment")
@@ -674,7 +671,7 @@ class EiaBuildingData:
         df = self.data[slicer]
         return self._correct_investment_units(df)[self.columns]
 
-    def get_lifetime(self, sector: Optional[str] = None):
+    def get_lifetime(self, sector: str | None = None):
         sector = self._check_sector(sector)
         if sector:
             slicer = (self.data.technology.str.startswith(sector)) & (self.data.parameter == "lifetime")
@@ -682,7 +679,7 @@ class EiaBuildingData:
             slicer = self.data.parameter == "lifetime"
         return self.data[slicer][self.columns]
 
-    def get_efficiency(self, sector: Optional[str] = None):
+    def get_efficiency(self, sector: str | None = None):
         sector = self._check_sector(sector)
         if sector:
             slicer = (self.data.technology.str.startswith(sector)) & (self.data.parameter == "efficiency")
@@ -690,7 +687,7 @@ class EiaBuildingData:
             slicer = self.data.parameter == "efficiency"
         return self.data[slicer][self.columns]
 
-    def get_fixed_costs(self, sector: Optional[str] = None):
+    def get_fixed_costs(self, sector: str | None = None):
         sector = self._check_sector(sector)
         if sector:
             slicer = (self.data.technology.str.startswith(sector)) & (self.data.parameter == "FOM")

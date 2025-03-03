@@ -774,8 +774,8 @@ def set_parameters(plants: pd.DataFrame):
 
     set_derates(plants)
 
-    plants[f"heat_rate_source"] = plants[f"heat_rate_source"].fillna("NA")
-    plants[f"fuel_cost_source"] = plants[f"fuel_cost_source"].fillna("NA")
+    plants["heat_rate_source"] = plants["heat_rate_source"].fillna("NA")
+    plants["fuel_cost_source"] = plants["fuel_cost_source"].fillna("NA")
 
     # Check for missing heat rate data
     if plants["heat_rate"].isna().sum() > 0:

@@ -1,12 +1,9 @@
-import io
 import logging
-import os
 import platform
 import subprocess
 import zipfile
 from pathlib import Path
 
-import requests
 from _helpers import configure_logging, progress_retrieve
 
 logger = logging.getLogger(__name__)

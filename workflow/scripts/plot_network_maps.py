@@ -160,7 +160,6 @@ def plot_emissions_map(
     save: str,
     **wildcards,
 ) -> None:
-
     # get data
 
     emissions = (

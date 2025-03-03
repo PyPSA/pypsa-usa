@@ -35,8 +35,6 @@ def configure_logging(snakemake, skip_handlers=False):
     skip_handlers : True | False (default)
         Do (not) skip the default handlers created for redirecting output to STDERR and file.
     """
-    import logging
-
     kwargs = snakemake.config.get("logging", dict()).copy()
     kwargs.setdefault("level", "INFO")
 
@@ -64,8 +62,6 @@ def configure_logging(snakemake, skip_handlers=False):
 
 
 def setup_custom_logger(name):
-    import logging
-
     formatter = logging.Formatter(
         fmt="%(asctime)s - %(levelname)s - %(module)s - %(message)s",
     )
@@ -260,7 +256,6 @@ def aggregate_p_curtailed(n):
 
 
 def aggregate_costs(n, flatten=False, opts=None, existing_only=False):
-
     components = dict(
         Link=("p_nom", "p0"),
         Generator=("p_nom", "p"),
@@ -331,10 +326,6 @@ def get_aggregation_strategies(aggregation_strategies):
 
 
 def export_network_for_gis_mapping(n, output_path):
-    import os
-
-    import pandas as pd
-
     # Creating GIS Table for Mapping Lines in QGIS
     lines_gis = n.lines.copy()
     lines_gis["latitude1"] = n.buses.loc[lines_gis.bus0].y.values
@@ -385,9 +376,9 @@ def mock_snakemake(rulename, **wildcards):
     from snakemake.script import Snakemake
 
     script_dir = Path(__file__).parent.resolve()
-    assert (
-        Path.cwd().resolve() == script_dir
-    ), f"mock_snakemake has to be run from the repository scripts directory {script_dir}"
+    assert Path.cwd().resolve() == script_dir, (
+        f"mock_snakemake has to be run from the repository scripts directory {script_dir}"
+    )
     os.chdir(script_dir.parent)
     for p in sm.SNAKEFILE_CHOICES:
         if os.path.exists(p):
@@ -479,9 +470,9 @@ def validate_checksum(file_path, zenodo_url=None, checksum=None):
         for chunk in iter(lambda: f.read(65536), b""):  # 64kb chunks
             hasher.update(chunk)
     calculated_checksum = hasher.hexdigest()
-    assert (
-        calculated_checksum == checksum
-    ), "Checksum is invalid. This may be due to an incomplete download. Delete the file and re-execute the rule."
+    assert calculated_checksum == checksum, (
+        "Checksum is invalid. This may be due to an incomplete download. Delete the file and re-execute the rule."
+    )
 
 
 def get_checksum_from_zenodo(file_url):
@@ -559,7 +550,6 @@ def update_config_from_wildcards(config, w, inplace=True):
     """
     Parses configuration settings from wildcards and updates the config.
     """
-
     if not inplace:
         config = copy.deepcopy(config)
 
@@ -836,7 +826,6 @@ def get_snapshots(
 
     Taken from PyPSA-Eur implementation
     """
-
     time = pd.date_range(freq=freq, **snapshots, **kwargs)
     if drop_leap_day and time.is_leap_year.any():
         time = time[~((time.month == 2) & (time.day == 29))]
