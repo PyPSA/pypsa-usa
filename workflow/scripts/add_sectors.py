@@ -28,12 +28,17 @@ from build_stock_data import (
     get_transport_stock,
 )
 from build_transportation import apply_exogenous_ev_policy, build_transportation
-from constants import CODE_2_STATE, NG_MWH_2_MMCF, STATE_2_CODE, STATES_INTERCONNECT_MAPPER, COAL_dol_ton_2_MWHthermal
+from constants import CODE_2_STATE, NG_MWH_2_MMCF, STATE_2_CODE, STATES_INTERCONNECT_MAPPER
 from constants_sector import RoadTransport
 from eia import FuelCosts
 from shapely.geometry import Point
 
 logger = logging.getLogger(__name__)
+
+# https://www.eia.gov/tools/faqs/faq.php?id=72&t=2
+# 20.1 MMBTU per short ton
+# 0.293 MWh per MMBTU
+COAL_TON_2_MWH = (1 / 20.1) * (1 / 0.293)
 
 
 def assign_bus_2_state(
@@ -226,9 +231,7 @@ def get_dynamic_marginal_costs(
     elif fuel == "coal":
         # no industry = industrial, so use industry = power
         if year < 2024:  # get actual monthly values
-            raw = (
-                FuelCosts(fuel, year, eia, industry="power").get_data(pivot=True) * COAL_dol_ton_2_MWHthermal
-            )  # $/Ton -> $/MWh
+            raw = FuelCosts(fuel, year, eia, industry="power").get_data(pivot=True) * COAL_TON_2_MWH  # $/Ton -> $/MWh
         else:
             act = FuelCosts(fuel, 2023, eia, industry="power").get_data(pivot=True)
             proj = FuelCosts(fuel, year, eia, industry="power").get_data(pivot=True)
@@ -237,21 +240,21 @@ def get_dynamic_marginal_costs(
             proj_year_mean = proj.at[year, "U.S."]
             scaler = proj_year_mean / actual_year_mean
 
-            raw = act * scaler * COAL_dol_ton_2_MWHthermal
+            raw = act * scaler * COAL_TON_2_MWH
     elif fuel == "lpg":
         if year < 2024:
             # https://afdc.energy.gov/fuels/properties
             btu_per_gallon = 112000
             wh_per_btu = 0.29307
             raw = (
-                FuelCosts(fuel, year, eia, grade="total").get_data(pivot=True)
+                FuelCosts(fuel, year, eia, grade="regular").get_data(pivot=True)
                 * (1 / btu_per_gallon)
                 * (1 / wh_per_btu)
                 * (1000000)
             )  # $/gal -> $/MWh
         else:
-            act = FuelCosts(fuel, 2023, eia, grade="total").get_data(pivot=True)
-            proj = FuelCosts(fuel, year, eia, grade="total").get_data(pivot=True)
+            act = FuelCosts(fuel, 2023, eia, grade="regular").get_data(pivot=True)
+            proj = FuelCosts(fuel, year, eia, grade="regular").get_data(pivot=True)
 
             actual_year_mean = act.mean().at["U.S."]
             proj_year_mean = proj.at[year, "U.S."]
