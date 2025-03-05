@@ -11,67 +11,66 @@ from _helpers import configure_logging, weighted_avg
 logger = logging.getLogger(__name__)
 
 
-def load_pudl_data(pudl_fn: str, start_date: str, end_date: str):
+def load_pudl_data(parquet_path: str, start_date: str, end_date: str):
     """
-    Queries the PUDL database for plant data.
+    Queries the parquet files directly for plant data.
 
     Date parameters are used to filter years of heat-rate and fuel cost
     data.
     """
     duckdb.connect(database=":memory:", read_only=False)
 
-    duckdb.query("INSTALL sqlite;")
-    duckdb.query(
-        f"""
-        ATTACH '{pudl_fn}' (TYPE SQLITE);
-        USE pudl;
-        """,
-    )
+    # Install necessary extensions
+    duckdb.query("INSTALL httpfs;")
 
+    # Query for eia_data_operable
     eia_data_operable = duckdb.query(
-        """
+        f"""
         WITH monthly_generators AS (
             SELECT
                 plant_id_eia,
                 generator_id,
-                array_agg(out_eia__monthly_generators.unit_heat_rate_mmbtu_per_mwh ORDER BY out_eia__monthly_generators.report_date DESC) FILTER (WHERE out_eia__monthly_generators.unit_heat_rate_mmbtu_per_mwh IS NOT NULL)[1] AS unit_heat_rate_mmbtu_per_mwh
-            FROM out_eia__monthly_generators
+                array_agg(unit_heat_rate_mmbtu_per_mwh ORDER BY report_date DESC) FILTER (WHERE unit_heat_rate_mmbtu_per_mwh IS NOT NULL)[1] AS unit_heat_rate_mmbtu_per_mwh
+            FROM read_parquet('{parquet_path}/out_eia__monthly_generators.parquet')
             WHERE operational_status = 'existing' AND report_date >= '2023-01-01'
             GROUP BY plant_id_eia, generator_id
         )
         SELECT
-            out_eia__yearly_generators.plant_id_eia,
-            out_eia__yearly_generators.generator_id,
-            array_agg(out_eia__yearly_generators.plant_name_eia ORDER BY out_eia__yearly_generators.report_date DESC) FILTER (WHERE out_eia__yearly_generators.plant_name_eia IS NOT NULL)[1] AS plant_name_eia,
-            array_agg(out_eia__yearly_generators.capacity_mw ORDER BY out_eia__yearly_generators.report_date DESC) FILTER (WHERE out_eia__yearly_generators.capacity_mw IS NOT NULL)[1] AS capacity_mw,
-            array_agg(out_eia__yearly_generators.summer_capacity_mw ORDER BY out_eia__yearly_generators.report_date DESC) FILTER (WHERE out_eia__yearly_generators.summer_capacity_mw IS NOT NULL)[1] AS summer_capacity_mw,
-            array_agg(out_eia__yearly_generators.winter_capacity_mw ORDER BY out_eia__yearly_generators.report_date DESC) FILTER (WHERE out_eia__yearly_generators.winter_capacity_mw IS NOT NULL)[1] AS winter_capacity_mw,
-            array_agg(out_eia__yearly_generators.minimum_load_mw ORDER BY out_eia__yearly_generators.report_date DESC) FILTER (WHERE out_eia__yearly_generators.minimum_load_mw IS NOT NULL)[1] AS minimum_load_mw,
-            array_agg(out_eia__yearly_generators.energy_source_code_1 ORDER BY out_eia__yearly_generators.report_date DESC) FILTER (WHERE out_eia__yearly_generators.energy_source_code_1 IS NOT NULL)[1] AS energy_source_code_1,
-            array_agg(out_eia__yearly_generators.technology_description ORDER BY out_eia__yearly_generators.report_date DESC) FILTER (WHERE out_eia__yearly_generators.technology_description IS NOT NULL)[1] AS technology_description,
-            array_agg(out_eia__yearly_generators.operational_status ORDER BY out_eia__yearly_generators.report_date DESC) FILTER (WHERE out_eia__yearly_generators.operational_status IS NOT NULL)[1] AS operational_status,
-            array_agg(out_eia__yearly_generators.prime_mover_code ORDER BY out_eia__yearly_generators.report_date DESC) FILTER (WHERE out_eia__yearly_generators.prime_mover_code IS NOT NULL)[1] AS prime_mover_code,
-            array_agg(out_eia__yearly_generators.planned_generator_retirement_date ORDER BY out_eia__yearly_generators.report_date DESC) FILTER (WHERE out_eia__yearly_generators.planned_generator_retirement_date IS NOT NULL)[1] AS planned_generator_retirement_date,
-            array_agg(out_eia__yearly_generators.energy_storage_capacity_mwh ORDER BY out_eia__yearly_generators.report_date DESC) FILTER (WHERE out_eia__yearly_generators.energy_storage_capacity_mwh IS NOT NULL)[1] AS energy_storage_capacity_mwh,
-            array_agg(out_eia__yearly_generators.generator_operating_date ORDER BY out_eia__yearly_generators.report_date DESC) FILTER (WHERE out_eia__yearly_generators.generator_operating_date IS NOT NULL)[1] AS generator_operating_date,
-            array_agg(out_eia__yearly_generators.state ORDER BY out_eia__yearly_generators.report_date DESC) FILTER (WHERE out_eia__yearly_generators.state IS NOT NULL)[1] AS state,
-            array_agg(out_eia__yearly_generators.latitude ORDER BY out_eia__yearly_generators.report_date DESC) FILTER (WHERE out_eia__yearly_generators.latitude IS NOT NULL)[1] AS latitude,
-            array_agg(out_eia__yearly_generators.longitude ORDER BY out_eia__yearly_generators.report_date DESC) FILTER (WHERE out_eia__yearly_generators.longitude IS NOT NULL)[1] AS longitude,
-            array_agg(core_eia860__scd_generators_energy_storage.max_charge_rate_mw ORDER BY core_eia860__scd_generators_energy_storage.report_date DESC) FILTER (WHERE core_eia860__scd_generators_energy_storage.max_charge_rate_mw IS NOT NULL)[1] AS max_charge_rate_mw,
-            array_agg(core_eia860__scd_generators_energy_storage.max_discharge_rate_mw ORDER BY core_eia860__scd_generators_energy_storage.report_date DESC) FILTER (WHERE core_eia860__scd_generators_energy_storage.max_discharge_rate_mw IS NOT NULL)[1] AS max_discharge_rate_mw,
-            array_agg(core_eia860__scd_generators_energy_storage.storage_technology_code_1 ORDER BY core_eia860__scd_generators_energy_storage.report_date DESC) FILTER (WHERE core_eia860__scd_generators_energy_storage.storage_technology_code_1 IS NOT NULL)[1] AS storage_technology_code_1,
-            array_agg(core_eia860__scd_plants.nerc_region ORDER BY core_eia860__scd_plants.report_date DESC) FILTER (WHERE core_eia860__scd_plants.nerc_region IS NOT NULL)[1] AS nerc_region,
-            array_agg(core_eia860__scd_plants.balancing_authority_code_eia ORDER BY core_eia860__scd_plants.report_date DESC) FILTER (WHERE core_eia860__scd_plants.balancing_authority_code_eia IS NOT NULL)[1] AS balancing_authority_code_eia,
-            first(monthly_generators.unit_heat_rate_mmbtu_per_mwh) AS unit_heat_rate_mmbtu_per_mwh
-        FROM out_eia__yearly_generators
-        LEFT JOIN core_eia860__scd_generators_energy_storage ON out_eia__yearly_generators.plant_id_eia = core_eia860__scd_generators_energy_storage.plant_id_eia AND out_eia__yearly_generators.generator_id = core_eia860__scd_generators_energy_storage.generator_id
-        LEFT JOIN core_eia860__scd_plants ON out_eia__yearly_generators.plant_id_eia = core_eia860__scd_plants.plant_id_eia
-        LEFT JOIN monthly_generators ON out_eia__yearly_generators.plant_id_eia = monthly_generators.plant_id_eia AND out_eia__yearly_generators.generator_id = monthly_generators.generator_id
+            yg.plant_id_eia,
+            yg.generator_id,
+            array_agg(yg.plant_name_eia ORDER BY yg.report_date DESC) FILTER (WHERE yg.plant_name_eia IS NOT NULL)[1] AS plant_name_eia,
+            array_agg(yg.capacity_mw ORDER BY yg.report_date DESC) FILTER (WHERE yg.capacity_mw IS NOT NULL)[1] AS capacity_mw,
+            array_agg(yg.summer_capacity_mw ORDER BY yg.report_date DESC) FILTER (WHERE yg.summer_capacity_mw IS NOT NULL)[1] AS summer_capacity_mw,
+            array_agg(yg.winter_capacity_mw ORDER BY yg.report_date DESC) FILTER (WHERE yg.winter_capacity_mw IS NOT NULL)[1] AS winter_capacity_mw,
+            array_agg(yg.minimum_load_mw ORDER BY yg.report_date DESC) FILTER (WHERE yg.minimum_load_mw IS NOT NULL)[1] AS minimum_load_mw,
+            array_agg(yg.energy_source_code_1 ORDER BY yg.report_date DESC) FILTER (WHERE yg.energy_source_code_1 IS NOT NULL)[1] AS energy_source_code_1,
+            array_agg(yg.technology_description ORDER BY yg.report_date DESC) FILTER (WHERE yg.technology_description IS NOT NULL)[1] AS technology_description,
+            array_agg(yg.operational_status ORDER BY yg.report_date DESC) FILTER (WHERE yg.operational_status IS NOT NULL)[1] AS operational_status,
+            array_agg(yg.prime_mover_code ORDER BY yg.report_date DESC) FILTER (WHERE yg.prime_mover_code IS NOT NULL)[1] AS prime_mover_code,
+            array_agg(yg.planned_generator_retirement_date ORDER BY yg.report_date DESC) FILTER (WHERE yg.planned_generator_retirement_date IS NOT NULL)[1] AS planned_generator_retirement_date,
+            array_agg(yg.energy_storage_capacity_mwh ORDER BY yg.report_date DESC) FILTER (WHERE yg.energy_storage_capacity_mwh IS NOT NULL)[1] AS energy_storage_capacity_mwh,
+            array_agg(yg.generator_operating_date ORDER BY yg.report_date DESC) FILTER (WHERE yg.generator_operating_date IS NOT NULL)[1] AS generator_operating_date,
+            array_agg(yg.state ORDER BY yg.report_date DESC) FILTER (WHERE yg.state IS NOT NULL)[1] AS state,
+            array_agg(yg.latitude ORDER BY yg.report_date DESC) FILTER (WHERE yg.latitude IS NOT NULL)[1] AS latitude,
+            array_agg(yg.longitude ORDER BY yg.report_date DESC) FILTER (WHERE yg.longitude IS NOT NULL)[1] AS longitude,
+            array_agg(ges.max_charge_rate_mw ORDER BY ges.report_date DESC) FILTER (WHERE ges.max_charge_rate_mw IS NOT NULL)[1] AS max_charge_rate_mw,
+            array_agg(ges.max_discharge_rate_mw ORDER BY ges.report_date DESC) FILTER (WHERE ges.max_discharge_rate_mw IS NOT NULL)[1] AS max_discharge_rate_mw,
+            array_agg(ges.storage_technology_code_1 ORDER BY ges.report_date DESC) FILTER (WHERE ges.storage_technology_code_1 IS NOT NULL)[1] AS storage_technology_code_1,
+            array_agg(p.nerc_region ORDER BY p.report_date DESC) FILTER (WHERE p.nerc_region IS NOT NULL)[1] AS nerc_region,
+            array_agg(p.balancing_authority_code_eia ORDER BY p.report_date DESC) FILTER (WHERE p.balancing_authority_code_eia IS NOT NULL)[1] AS balancing_authority_code_eia,
+            first(mg.unit_heat_rate_mmbtu_per_mwh) AS unit_heat_rate_mmbtu_per_mwh
+        FROM read_parquet('{parquet_path}/out_eia__yearly_generators.parquet') yg
+        LEFT JOIN read_parquet('{parquet_path}/core_eia860__scd_generators_energy_storage.parquet') ges
+            ON yg.plant_id_eia = ges.plant_id_eia AND yg.generator_id = ges.generator_id
+        LEFT JOIN read_parquet('{parquet_path}/core_eia860__scd_plants.parquet') p
+            ON yg.plant_id_eia = p.plant_id_eia
+        LEFT JOIN monthly_generators mg
+            ON yg.plant_id_eia = mg.plant_id_eia AND yg.generator_id = mg.generator_id
         WHERE
-            out_eia__yearly_generators.operational_status = 'existing'
-            AND out_eia__yearly_generators.operational_status_code IN ('OP')
-            AND out_eia__yearly_generators.report_date >= '2023-01-01'
-        GROUP BY out_eia__yearly_generators.plant_id_eia, out_eia__yearly_generators.generator_id
+            yg.operational_status = 'existing'
+            AND yg.operational_status_code IN ('OP')
+            AND yg.report_date >= '2023-01-01'
+        GROUP BY yg.plant_id_eia, yg.generator_id
     """,
     ).to_df()
 
@@ -85,7 +84,7 @@ def load_pudl_data(pudl_fn: str, start_date: str, end_date: str):
                 unit_heat_rate_mmbtu_per_mwh,
                 fuel_cost_per_mwh,
                 fuel_cost_per_mmbtu
-            FROM out_eia__monthly_generators
+            FROM read_parquet('{parquet_path}/out_eia__monthly_generators.parquet')
             WHERE operational_status = 'existing'
             AND report_date BETWEEN '{start_date}' AND '{end_date}'
             AND unit_heat_rate_mmbtu_per_mwh IS NOT NULL
@@ -107,8 +106,10 @@ def load_pudl_data(pudl_fn: str, start_date: str, end_date: str):
             p.nerc_region,
             p.balancing_authority_code_eia
         FROM monthly_generators mg
-        LEFT JOIN out_eia__yearly_generators yg ON mg.plant_id_eia = yg.plant_id_eia AND mg.generator_id = yg.generator_id
-        LEFT JOIN core_eia860__scd_plants p ON mg.plant_id_eia = p.plant_id_eia
+        LEFT JOIN read_parquet('{parquet_path}/out_eia__yearly_generators.parquet') yg
+            ON mg.plant_id_eia = yg.plant_id_eia AND mg.generator_id = yg.generator_id
+        LEFT JOIN read_parquet('{parquet_path}/core_eia860__scd_plants.parquet') p
+            ON mg.plant_id_eia = p.plant_id_eia
         WHERE yg.operational_status = 'existing'
         ORDER BY mg.report_date DESC
         """
@@ -438,7 +439,7 @@ def merge_ads_data(eia_data_operable):
     ads_thermal = pd.read_csv(
         path_ads + "/Thermal_General_Info.csv",
         skiprows=1,
-    )  # encoding='unicode_escape')
+    )
     ads_thermal = ads_thermal[
         [
             "GeneratorName",
@@ -699,14 +700,10 @@ def set_parameters(plants: pd.DataFrame):
         ["nerc_region", "fuel_name"],
         ["fuel_cost"],
     )
-    # plants = impute_missing_plant_data(
-    #     plants,
-    #     ["nerc_region", "technology_description"],
-    #     ["fuel_cost"],
-    # )
+
     plants = impute_missing_plant_data(plants, ["fuel_name"], ["fuel_cost"])
     plants = impute_missing_plant_data(plants, ["prime_mover_code"], ["fuel_cost"])
-    plants.loc[plants.carrier.isin(["nuclear"]), "fuel_cost"] = 0.7
+    plants.loc[plants.carrier.isin(["nuclear"]), "fuel_cost"] = np.float32(0.71)  # 2023 AEO
 
     # Unit Commitment Parameters
     plants["start_up_cost"] = plants.pop("ads_startup_cost_fixed$") + plants.ads_startfuelmmbtu * plants.fuel_cost
@@ -923,14 +920,18 @@ if __name__ == "__main__":
     else:
         rootpath = "."
     configure_logging(snakemake)
-    start_date = "2019-01-01"
-    end_date = "2020-01-01"
+
+    weather_year = snakemake.params.renewable_weather_year[0]
+    # Cap the year at 2023 if it's greater
+    data_year = min(int(weather_year), 2023)
+    start_date = f"{data_year}-01-01"
+    end_date = f"{data_year + 1}-01-01"
+
     eia_data_operable, heat_rates = load_pudl_data(
-        snakemake.input.pudl,
+        snakemake.params.pudl_path,
         start_date,
         end_date,
     )
-    # eia_data_operable.to_csv("eia_data_operable.csv")
 
     eia_data_operable = merge_fc_hr_data(
         eia_data_operable,
@@ -957,13 +958,13 @@ if __name__ == "__main__":
     eia_ads_merged = merge_ads_data(eia_data_operable)
     plants = set_parameters(eia_ads_merged)
 
-    # temp throwing out plants without
+    # Throwing out plants without GPS data
     missing_locations = plants[plants.longitude.isna() | plants.latitude.isna()]
     logger.warning(
         f"Tossing out plants without locations: {missing_locations.shape[0]}",
     )
     # plants[plants.index.isin(missing_locations.index)].to_csv('missing_gps_pudl.csv')
     plants = plants[~plants.index.isin(missing_locations.index)]
-    # print(plants)
+
     logger.info(f"Exporting Powerplants, with {plants.shape[0]} entries.")
     plants.to_csv(snakemake.output.powerplants, index=False)
