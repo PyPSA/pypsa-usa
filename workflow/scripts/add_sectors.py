@@ -223,6 +223,9 @@ def get_dynamic_marginal_costs(
             act = FuelCosts(fuel, 2023, eia, industry=sector_mapper[sector]).get_data(pivot=True)
             proj = FuelCosts(fuel, year, eia, industry=sector_mapper[sector]).get_data(pivot=True)
 
+            if "USA" not in act.columns:
+                act["USA"] = act.mean(axis=1)
+
             actual_year_mean = act.mean().at["U.S."]
             proj_year_mean = proj.at[year, "U.S."]
             scaler = proj_year_mean / actual_year_mean
@@ -236,16 +239,19 @@ def get_dynamic_marginal_costs(
             act = FuelCosts(fuel, 2023, eia, industry="power").get_data(pivot=True)
             proj = FuelCosts(fuel, year, eia, industry="power").get_data(pivot=True)
 
-            actual_year_mean = act.mean().at["U.S."]
-            proj_year_mean = proj.at[year, "U.S."]
+            if "USA" not in act.columns:
+                act["USA"] = act.mean(axis=1)
+
+            actual_year_mean = act.mean().at["USA"]
+            proj_year_mean = proj.at[year, "USA"]
             scaler = proj_year_mean / actual_year_mean
 
             raw = act * scaler * COAL_TON_2_MWH
     elif fuel == "lpg":
+        # https://afdc.energy.gov/fuels/properties
+        btu_per_gallon = 112000
+        wh_per_btu = 0.29307
         if year < 2024:
-            # https://afdc.energy.gov/fuels/properties
-            btu_per_gallon = 112000
-            wh_per_btu = 0.29307
             raw = (
                 FuelCosts(fuel, year, eia, grade="regular").get_data(pivot=True)
                 * (1 / btu_per_gallon)
@@ -256,17 +262,20 @@ def get_dynamic_marginal_costs(
             act = FuelCosts(fuel, 2023, eia, grade="regular").get_data(pivot=True)
             proj = FuelCosts(fuel, year, eia, grade="regular").get_data(pivot=True)
 
-            actual_year_mean = act.mean().at["U.S."]
-            proj_year_mean = proj.at[year, "U.S."]
+            if "USA" not in act.columns:
+                act["USA"] = act.mean(axis=1)
+
+            actual_year_mean = act.mean().at["USA"]
+            proj_year_mean = proj.at[year, "USA"]
             scaler = proj_year_mean / actual_year_mean
 
             # $/gal -> $/MWh
             raw = act * scaler * (1 / btu_per_gallon) * (1 / wh_per_btu) * (1000000)
     elif fuel == "heating_oil":
+        # https://www.eia.gov/energyexplained/units-and-calculators/british-thermal-units.php
+        btu_per_gallon = 138500
+        wh_per_btu = 0.29307
         if year < 2024:
-            # https://www.eia.gov/energyexplained/units-and-calculators/british-thermal-units.php
-            btu_per_gallon = 138500
-            wh_per_btu = 0.29307
             raw = (
                 FuelCosts("heating_oil", year, eia).get_data(pivot=True)
                 * (1 / btu_per_gallon)
@@ -277,8 +286,11 @@ def get_dynamic_marginal_costs(
             act = FuelCosts("heating_oil", 2023, eia).get_data(pivot=True)
             proj = FuelCosts("heating_oil", year, eia).get_data(pivot=True)
 
-            actual_year_mean = act.mean().at["U.S."]
-            proj_year_mean = proj.at[year, "U.S."]
+            if "USA" not in act.columns:
+                act["USA"] = act.mean(axis=1)
+
+            actual_year_mean = act.mean().at["USA"]
+            proj_year_mean = proj.at[year, "USA"]
             scaler = proj_year_mean / actual_year_mean
 
             # $/gal -> $/MWh
@@ -451,10 +463,10 @@ if __name__ == "__main__":
         snakemake = mock_snakemake(
             "add_sectors",
             interconnect="western",
-            simpl="132",
-            clusters="33m",
+            simpl="40",
+            clusters="4m",
             ll="v1.0",
-            opts="4h",
+            opts="12h",
             sector="E-G",
         )
     configure_logging(snakemake)
@@ -514,7 +526,7 @@ if __name__ == "__main__":
     # oil in this context is lpg for ppts
     for carrier in ["oil"]:
         co2_intensity = get_pwr_co2_intensity(carrier, costs)
-        convert_generators_2_links(n, carrier, " oil", co2_intensity)
+        convert_generators_2_links(n, carrier, " lpg", co2_intensity)
 
     ng_options = snakemake.params.sector["natural_gas"]
 
