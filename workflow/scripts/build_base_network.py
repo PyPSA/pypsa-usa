@@ -1,16 +1,13 @@
 # BY PyPSA-USA Authors
 import logging
-from typing import Optional
 
-import constants as const
 import geopandas as gpd
 import numpy as np
 import pandas as pd
 import pypsa
 from _helpers import configure_logging
 from build_shapes import load_na_shapes
-from geopandas.tools import sjoin
-from shapely.geometry import Point, Polygon
+from shapely.geometry import Polygon
 from sklearn.neighbors import BallTree
 
 
@@ -71,7 +68,6 @@ def add_buses_from_file(
 
 
 def add_branches_from_file(n: pypsa.Network, fn_branches: str) -> pypsa.Network:
-
     branches = pd.read_csv(
         fn_branches,
         dtype={"from_bus_id": str, "to_bus_id": str},
@@ -114,7 +110,6 @@ def assign_line_types(n: pypsa.Network):
 
 
 def add_dclines_from_file(n: pypsa.Network, fn_dclines: str) -> pypsa.Network:
-
     dclines = pd.read_csv(
         fn_dclines,
         dtype={"from_bus_id": str, "to_bus_id": str},
@@ -240,7 +235,7 @@ def build_offshore_buses(
     offshore_shapes: gpd.GeoDataFrame,
     offshore_spacing: int,
 ) -> pd.DataFrame:
-    "Build dataframe of offshore buses by creating evenly spaced grid cells inside of the offshore shapes."
+    """Build dataframe of offshore buses by creating evenly spaced grid cells inside of the offshore shapes."""
     offshore_buses = pd.DataFrame()
     offshore_shapes = offshore_shapes.to_crs("EPSG:5070")
     for shape in offshore_shapes.geometry:
@@ -262,7 +257,7 @@ def build_offshore_buses(
 
 
 def add_offshore_buses(n: pypsa.Network, offshore_buses: pd.DataFrame) -> pypsa.Network:
-    "Add offshore buses to network"
+    """Add offshore buses to network"""
     n.madd(
         "Bus",
         offshore_buses.index,
@@ -291,7 +286,7 @@ def assign_texas_poi(n: pypsa.Network) -> pypsa.Network:
 
 
 def identify_osw_poi(n: pypsa.Network) -> pypsa.Network:
-    "Identify offshore wind points of interconnections in the base network."
+    """Identify offshore wind points of interconnections in the base network."""
     offshore_lines = n.lines.loc[n.lines.bus0.isin(n.buses.loc[n.buses.substation_off].index)]
     poi_bus_ids = offshore_lines.bus1.unique()
     poi_sub_ids = n.buses.loc[poi_bus_ids, "sub_id"].unique()
@@ -303,7 +298,7 @@ def identify_osw_poi(n: pypsa.Network) -> pypsa.Network:
 
 
 def match_missing_buses(buses_to_match_to, missing_buses):
-    "Match buses missing region assignment to their nearest bus"
+    """Match buses missing region assignment to their nearest bus"""
     missing_buses = missing_buses.copy()
     missing_buses["bus_assignment"] = None
 
@@ -327,7 +322,7 @@ def match_missing_buses(buses_to_match_to, missing_buses):
 
 
 def build_offshore_transmission_configuration(n: pypsa.Network) -> pypsa.Network:
-    "Builds offshore transmission configurations connecting offshore buses to the POIs onshore."
+    """Builds offshore transmission configurations connecting offshore buses to the POIs onshore."""
     poi_buses = n.buses.loc[n.buses.poi_sub]  # identify the buses at the POI
     highest_voltage_buses = poi_buses.loc[poi_buses.groupby("sub_id")["v_nom"].idxmax()]
     offshore_buses = match_missing_buses(
@@ -372,7 +367,7 @@ def build_offshore_transmission_configuration(n: pypsa.Network) -> pypsa.Network
     )
 
     # add offshore wind export cables
-    logger.info(f"Adding offshore wind export lines to the network.")
+    logger.info("Adding offshore wind export lines to the network.")
     n.madd(
         "Line",
         "OSW_export_" + osw_offsub_bus_ids,  # name line after offshore substation
@@ -656,9 +651,9 @@ def main(snakemake):
             logger.info(
                 f"Filtered network to {model_topology[region_type]}. Removed {len(rm_buses)} buses, {len(n.buses)} remaining.",
             )
-            assert (
-                len(n.buses) > 0
-            ), "No buses remaining in network. Check your model_topology: inclusion:, you may be filtering the wrong zones for the selected interconnect"
+            assert len(n.buses) > 0, (
+                "No buses remaining in network. Check your model_topology: inclusion:, you may be filtering the wrong zones for the selected interconnect"
+            )
 
     col_list = ["poi_bus", "poi_sub", "poi"]
     n.buses.drop(columns=[col for col in col_list if col in n.buses], inplace=True)

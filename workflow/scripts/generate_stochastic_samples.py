@@ -5,7 +5,6 @@ This scripts stochastic samples for power systems models based on the Mean-Rever
 """
 # %% Imports and functions
 
-
 import glob
 import os
 import time
@@ -18,7 +17,7 @@ import xarray as xr
 
 def import_profiles_from_folder(PATH_FILES):
     filelist = []
-    for file in glob.glob(os.path.join(PATH_FILES, f"*.csv")):
+    for file in glob.glob(os.path.join(PATH_FILES, "*.csv")):
         filelist.append(os.path.join(file))
     load_base = pd.read_csv([s for s in filelist if "loads" in s][0], index_col=0)
     solar_base = pd.read_csv([s for s in filelist if "solar" in s][0], index_col=0)
@@ -34,7 +33,8 @@ def import_profiles_from_network(PATH_NETWORK, num_clusters):
         network_path (str): Path to the pypsa network.
         num_clusters (int): Number of clusters to be used in the network.
 
-    Returns:
+    Returns
+    -------
         pandas.DataFrame: Base load profile.
         pandas.DataFrame: Base solar profile.
         pandas.DataFrame: Base wind profile.
@@ -76,7 +76,8 @@ def resample_and_group(base_data, area_mapping):
         base_data (pandas.DataFrame): Input data to be resampled.
         area_mapping (dict): Dictionary mapping column names to area ids.
 
-    Returns:
+    Returns
+    -------
         pandas.DataFrame: Resampled data, grouped by day of year and area id.
     """
     base_area = base_data.groupby(
@@ -97,7 +98,8 @@ def create_allocation(base, mapping):
         base (pandas.DataFrame): Input data to be resampled.
         mapping (pandas.DataFrame): Dictionary mapping column names to area ids.
 
-    Returns:
+    Returns
+    -------
         pandas.DataFrame: Hourly allocation of generation based on the mean of the base data.
     """
     base_ = base.copy().reset_index(drop=True)
@@ -120,7 +122,8 @@ def define_solar_hours(solar_profile, timestamps):
         solar_profile (pandas.DataFrame): Solar generation profile.
         timestamps (pandas.DataFrame): Timestamps for the solar generation profile.
 
-    Returns:
+    Returns
+    -------
         pandas.DataFrame: First and last hour of the day for solar generation.
     """
     first_hour, last_hour, yesterday_last_hour = np.zeros((3, len(solar_profile)))
@@ -150,7 +153,8 @@ def assign_stochastic_mu(df_params, timestamp_reference, column_name="profile_ty
         timestamp_reference (pandas.DataFrame): Dataframe containing the timestamp reference.
         column_name (str): Column name to be used for the merge.
 
-    Returns:
+    Returns
+    -------
         pandas.DataFrame: Dataframe containing the stochastic mu for each hour of the year.
     """
     df_mu_hourly = pd.merge(
@@ -177,7 +181,8 @@ def sampling_warmup(df, thresholds, rng, min_steps=50):
         rng (numpy.random.Generator): Random number generator.
         min_steps (int): Minimum number of steps to be performed.
 
-    Returns:
+    Returns
+    -------
         pandas.DataFrame: Dataframe containing the first sample of the ratio and epsilon.
     """
     winter_params = df.query("season == 1")
@@ -227,7 +232,6 @@ def resample_ratio(
         if np.any(
             np.logical_or(resampled_ratio > thresholds, resampled_ratio < 0),
         ):  # if any values are still out of bounds
-
             in_bounds_mask = np.logical_and(
                 mask_to_resample,
                 np.logical_and(resampled_ratio < thresholds, resampled_ratio > 0),
@@ -436,7 +440,6 @@ for sample_num in range(0, num_samples):
     )
 
     for i in range(1, n_hours):
-
         season_df = parameters_concat[parameters_concat.season == timestamp_reference.iloc[i].season_num]
         p_eps = rng_eps(season_df, rng)
         ratio_samples.iloc[i, :] = (

@@ -127,7 +127,7 @@ def plot_timeseries_comparison(
     **wildcards,
 ):
     """
-    plots a stacked plot for seasonal production for snapshots: January 2 - December 30 (inclusive)
+    Plots a stacked plot for seasonal production for snapshots: January 2 - December 30 (inclusive)
     """
     historic, optimized = add_missing_carriers(historic, optimized)
 
@@ -337,7 +337,6 @@ def plot_regional_comparisons(
     buses = n.buses.copy()
 
     if snakemake.config["model_topology"]["topological_boundaries"] == "reeds_zone":
-
         regions = n.buses.reeds_ba.unique()
         regions = list(OrderedDict.fromkeys(regions))
         buses["region"] = buses.reeds_ba
@@ -418,7 +417,6 @@ def plot_load_shedding_map(
     regions: gpd.GeoDataFrame,
     **wildcards,
 ):
-
     load_curtailment = n.generators_t.p.filter(regex="^(.*load).*$")
     load_curtailment_sum = load_curtailment.sum() / 1e3  # convert to MW
 

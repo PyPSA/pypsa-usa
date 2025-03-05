@@ -24,7 +24,6 @@ def get_primary_energy_use(n: pypsa.Network) -> pd.DataFrame:
     """
     Gets timeseries primary energy use by bus and carrier.
     """
-
     link_energy_use = (
         StatisticsAccessor(n)
         .withdrawal(
@@ -53,7 +52,8 @@ def get_primary_energy_use(n: pypsa.Network) -> pd.DataFrame:
     return (
         pd.concat([gen_energy_use, link_energy_use])
         # .reset_index() commenting this out seems to fix issue in multi-horizon indexing
-        .groupby(["bus", "carrier"]).sum()
+        .groupby(["bus", "carrier"])
+        .sum()
     )
 
 
@@ -185,9 +185,11 @@ def get_capacity_base(n: pypsa.Network) -> pd.DataFrame:
         if c.name in ("Generator", "StorageUnit"):
             totals.append((c.df.p_nom).groupby(by=[c.df.bus, c.df.carrier]).sum())
         elif c.name == "Link":
-            totals.append(
-                (c.df.p_nom).groupby(by=[c.df.bus0, c.df.carrier]).sum().rename_axis(index={"bus0": "bus"}),
-            ),
+            (
+                totals.append(
+                    (c.df.p_nom).groupby(by=[c.df.bus0, c.df.carrier]).sum().rename_axis(index={"bus0": "bus"}),
+                ),
+            )
             totals.append(
                 (c.df.p_nom).groupby(by=[c.df.bus1, c.df.carrier]).sum().rename_axis(index={"bus1": "bus"}),
             )
@@ -283,7 +285,6 @@ def get_fuel_costs(n: pypsa.Network) -> pd.DataFrame:
 
     Units are $/MWh
     """
-
     # approximates for 2030
     fixed_voms = {
         "coal": 8.18,
@@ -335,7 +336,6 @@ def get_node_emissions_timeseries(n: pypsa.Network) -> pd.DataFrame:
     """
     Gets timeseries emissions per node.
     """
-
     return (
         get_node_carrier_emissions_timeseries(n)
         .droplevel("carrier")
@@ -350,7 +350,6 @@ def get_tech_emissions_timeseries(n: pypsa.Network) -> pd.DataFrame:
     """
     Gets timeseries emissions per technology.
     """
-
     return (
         get_node_carrier_emissions_timeseries(n)
         .droplevel("bus")

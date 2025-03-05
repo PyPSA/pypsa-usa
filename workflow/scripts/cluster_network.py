@@ -115,9 +115,9 @@ def distribute_clusters(n, n_clusters, focus_weights=None, solver_name="cbc"):
 
     N = n.buses.groupby(["country", "sub_network"]).size()
 
-    assert (
-        n_clusters >= len(N) and n_clusters <= N.sum()
-    ), f"Number of clusters must be {len(N)} <= n_clusters <= {N.sum()} for this selection of countries."
+    assert n_clusters >= len(N) and n_clusters <= N.sum(), (
+        f"Number of clusters must be {len(N)} <= n_clusters <= {N.sum()} for this selection of countries."
+    )
 
     if focus_weights is not None:
         total_focus = sum(list(focus_weights.values()))
@@ -201,9 +201,7 @@ def busmap_for_n_clusters(
 
                 neighbor_bus = n.lines.query(
                     "bus0 == @disconnected_bus or bus1 == @disconnected_bus",
-                ).iloc[
-                    0
-                ][["bus0", "bus1"]]
+                ).iloc[0][["bus0", "bus1"]]
                 new_country = list(
                     set(n.buses.loc[neighbor_bus].country) - {country},
                 )[0]
@@ -222,8 +220,7 @@ def busmap_for_n_clusters(
 
     if (algorithm != "hac") and (feature is not None):
         logger.warning(
-            f"Keyword argument feature is only valid for algorithm `hac`. "
-            f"Given feature `{feature}` will be ignored.",
+            f"Keyword argument feature is only valid for algorithm `hac`. Given feature `{feature}` will be ignored.",
         )
 
     n.determine_network_topology()

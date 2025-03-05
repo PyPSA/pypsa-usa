@@ -10,13 +10,11 @@ Historical electrical generation, demand, interchange, and emissions data are re
 """
 
 import glob
-import gzip
 import logging
 import os
 import re
 import tarfile
 import warnings
-from io import BytesIO
 from pathlib import Path
 
 import pandas as pd
@@ -103,7 +101,7 @@ if __name__ == "__main__":
 
     grid_emissions_data_url = "https://gridemissions.s3.us-east-2.amazonaws.com/processed.tar.gz"
 
-    PATH_DOWNLOAD = Path(f"data/GridEmissions")
+    PATH_DOWNLOAD = Path("data/GridEmissions")
     PATH_DOWNLOAD.mkdir(parents=True, exist_ok=True)
     download_and_extract(grid_emissions_data_url, PATH_DOWNLOAD)
     df_elec = prepare_historical_data(PATH_DOWNLOAD, suffix="elec")
