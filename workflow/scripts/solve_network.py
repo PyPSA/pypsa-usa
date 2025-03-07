@@ -735,104 +735,200 @@ def add_regional_co2limit(n, sns, config):
         )
 
 
-def add_SAFE_constraints(n, config):
+def add_PRM_constraints(n, config):
     """
-    Add a capacity reserve margin of a certain fraction above the peak demand.
-    Renewable generators and storage do not contribute. Ignores network.
+    Add Planning Reserve Margin (PRM) constraints for regional capacity adequacy.
+
+    This function enforces that each region has sufficient firm capacity to meet
+    peak demand plus a reserve margin. Only firm resources (not variable renewables
+    or storage) contribute to meeting this requirement.
 
     Parameters
     ----------
-        n : pypsa.Network
-        config : dict
-
-    Example
-    -------
-    config.yaml requires to specify opts:
-
-    scenario:
-        opts: [Co2L-SAFE-24H]
-    electricity:
-        SAFE_reservemargin: 0.1
-    Which sets a reserve margin of 10% above the peak demand.
+    n : pypsa.Network
+        The PyPSA network object
+    config : dict
+        Configuration dictionary containing PRM parameters
     """
-    peakdemand = n.loads_t.p_set.sum(axis=1).max()
-    margin = 1.0 + config["electricity"]["SAFE_reservemargin"]
-    reserve_margin = peakdemand * margin
-    ext_gens_i = n.generators.query(
-        "carrier in @conventional_carriers & p_nom_extendable",
-    ).index
-    p_nom = n.model["Generator-p_nom"].loc[ext_gens_i]
-    lhs = p_nom.sum()
-    exist_conv_caps = n.generators.query(
-        "~p_nom_extendable & carrier in @conventional_carriers",
-    ).p_nom.sum()
-    rhs = reserve_margin - exist_conv_caps
-    n.model.add_constraints(lhs >= rhs, name="safe_mintotalcap")
+    # Load regional PRM requirements
+    regional_prm = _get_combined_prm_requirements(n, config)
 
+    # Apply constraints for each region and planning horizon
+    for _, prm in regional_prm.iterrows():
+        # Skip if no valid planning horizon or region
+        if prm.planning_horizon not in n.investment_periods:
+            continue
 
-def add_SAFER_constraints(n, config):
-    """
-    Add a capacity reserve margin of a certain fraction above the peak demand
-    for regions defined in configuration file. Renewable generators and storage
-    do not contribute towards PRM.
-
-    Parameters
-    ----------
-        n : pypsa.Network
-        config : dict
-    """
-    regional_prm = pd.read_csv(
-        config["electricity"]["SAFE_regional_reservemargins"],
-        index_col=[0],
-    )
-
-    reeds_prm = pd.read_csv(
-        snakemake.input.safer_reeds,
-        index_col=[0],
-    )
-    nerc_memberships = n.buses.groupby("nerc_reg")["reeds_zone"].apply(lambda x: ", ".join(x)).to_dict()
-    reeds_prm["region"] = reeds_prm.index.map(nerc_memberships)
-    reeds_prm = reeds_prm.dropna(subset="region")
-    reeds_prm = reeds_prm.drop(
-        columns=["none", "ramp2025_20by50", "ramp2025_25by50", "ramp2025_30by50"],
-    )
-    reeds_prm = reeds_prm.rename(columns={"static": "prm", "t": "planning_horizon"})
-
-    regional_prm = pd.concat([regional_prm, reeds_prm])
-    regional_prm = regional_prm[regional_prm.planning_horizon.isin(snakemake.params.planning_horizons)]
-
-    for idx, prm in regional_prm.iterrows():
         region_list = [region_.strip() for region_ in prm.region.split(",")]
         region_buses = get_region_buses(n, region_list)
 
         if region_buses.empty:
             continue
 
-        peakdemand = (
-            n.loads_t.p_set.loc[
-                prm.planning_horizon,
-                n.loads.bus.isin(region_buses.index),
-            ]
-            .sum(axis=1)
-            .max()
-        )
-        margin = 1.0 + prm.prm
-        planning_reserve = peakdemand * margin
+        # Calculate peak demand and required reserve margin
+        regional_demand = _get_regional_demand(n, prm.planning_horizon, region_buses)
+        peak_demand = regional_demand.max()
+        planning_reserve = peak_demand * (1.0 + prm.prm)
 
-        region_gens = n.generators[n.generators.bus.isin(region_buses.index)]
-        ext_gens_i = region_gens.query(
-            "carrier in @conventional_carriers & p_nom_extendable",
-        ).index
-        p_nom = n.model["Generator-p_nom"].loc[ext_gens_i]
-        lhs = p_nom.sum()
-        exist_conv_caps = region_gens.query(
-            "~p_nom_extendable & carrier in @conventional_carriers",
-        ).p_nom.sum()
-        rhs = planning_reserve - exist_conv_caps
+        # Get capacity contribution from resources
+        lhs_capacity = _calculate_capacity_accredidation(
+            n,
+            prm.planning_horizon,
+            region_buses,
+            peak_demand_hour=regional_demand.idxmax(),
+        )
+
+        # Add the constraint to the model
         n.model.add_constraints(
-            lhs >= rhs,
+            lhs_capacity >= planning_reserve,
             name=f"GlobalConstraint-{prm.name}_{prm.planning_horizon}_PRM",
         )
+
+        logger.info(
+            f"Added PRM constraint for {prm.name} in {prm.planning_horizon}: "
+            f"Peak demand: {peak_demand:.2f} MW, "
+            f"Required capacity: {planning_reserve:.2f} MW",
+        )
+
+
+def _get_combined_prm_requirements(n, config):
+    """
+    Combine PRM requirements from different sources into a single dataframe.
+
+    Parameters
+    ----------
+    n : pypsa.Network
+    config : dict
+
+    Returns
+    -------
+    pd.DataFrame
+        Combined PRM requirements with columns: name, region, prm, planning_horizon
+    """
+    # Load user-defined PRM requirements
+    regional_prm = pd.read_csv(
+        config["electricity"]["SAFE_regional_reservemargins"],
+        index_col=[0],
+    )
+
+    # Process ReEDS PRM data if available
+    try:
+        reeds_prm = pd.read_csv(snakemake.input.safer_reeds, index_col=[0])
+
+        # Map NERC regions to ReEDS zones
+        nerc_memberships = (
+            n.buses.groupby("nerc_reg")["reeds_zone"]
+            .apply(
+                lambda x: ", ".join(x),
+            )
+            .to_dict()
+        )
+
+        reeds_prm["region"] = reeds_prm.index.map(nerc_memberships)
+        reeds_prm = reeds_prm.dropna(subset="region")
+        reeds_prm = reeds_prm.drop(
+            columns=["none", "ramp2025_20by50", "ramp2025_25by50", "ramp2025_30by50"],
+        )
+        reeds_prm = reeds_prm.rename(columns={"static": "prm", "t": "planning_horizon"})
+
+        # Combine both data sources
+        regional_prm = pd.concat([regional_prm, reeds_prm])
+    except (FileNotFoundError, AttributeError):
+        logger.info("ReEDS PRM data not available, using only user-defined PRM values")
+
+    # Filter for relevant planning horizons
+    return regional_prm[regional_prm.planning_horizon.isin(n.investment_periods)]
+
+
+def _get_regional_demand(n, planning_horizon, region_buses):
+    """
+    Calculate hourly demand for a specific region and planning horizon.
+
+    Parameters
+    ----------
+    n : pypsa.Network
+    planning_horizon : int or str
+        Planning horizon year
+    region_buses : pd.DataFrame
+        DataFrame containing buses in the region
+
+    Returns
+    -------
+    pd.Series
+        Hourly demand series for the region
+    """
+    return n.loads_t.p_set.loc[
+        planning_horizon,
+        n.loads.bus.isin(region_buses.index),
+    ].sum(axis=1)
+
+
+#  n.loads_t.p_set.loc[planning_horizon, n.loads.bus.isin(region_buses.index)].sum(axis=1)
+def _calculate_capacity_accredidation(n, planning_horizon, region_buses, peak_demand_hour):
+    """
+    Calculate firm capacity contribution from all resources in a region.
+
+    This function accounts for:
+    1. Extendable resources with appropriate capacity credit
+    2. Non-extendable existing resources
+
+    Parameters
+    ----------
+    n : pypsa.Network
+    planning_horizon : int or str
+    region_buses : pd.DataFrame
+    peak_demand_hour : pd.Timestamp
+        Hour of peak demand used for calculating capacity credits
+
+    Returns
+    -------
+    float or xarray.DataArray
+        Total firm capacity contribution
+    """
+    # Get active generators during this planning period
+    active_gens = n.get_active_assets("Generator", planning_horizon)
+    extendable_gens = n.generators.p_nom_extendable
+    region_gens = n.generators.bus.isin(region_buses.index)
+
+    # Extendable capacity with capacity credit
+    region_active_ext_gens = region_gens & active_gens & extendable_gens
+    region_active_ext_gens = n.generators[region_active_ext_gens]
+
+    if not region_active_ext_gens.empty:
+        ext_p_nom = n.model["Generator-p_nom"].loc[region_active_ext_gens.index]
+        ext_p_max_pu = get_as_dense(
+            n,
+            "Generator",
+            "p_max_pu",
+            inds=region_active_ext_gens.index,
+        ).loc[
+            planning_horizon,
+            peak_demand_hour,
+        ]
+        ext_contribution = ext_p_nom * ext_p_max_pu
+    else:
+        ext_contribution = 0
+
+    # Non-extendable existing capacity
+    region_active_nonext_gens = region_gens & active_gens & ~extendable_gens
+    region_active_nonext_gens = n.generators[region_active_nonext_gens]
+
+    if not region_active_nonext_gens.empty:
+        non_ext_p_max_pu = get_as_dense(
+            n,
+            "Generator",
+            "p_max_pu",
+            inds=region_active_nonext_gens.index,
+        ).loc[
+            planning_horizon,
+            peak_demand_hour,
+        ]
+        non_ext_p_nom = region_active_nonext_gens.p_nom
+        non_ext_contribution = (non_ext_p_nom * non_ext_p_max_pu).sum()
+    else:
+        non_ext_contribution = 0
+
+    return ext_contribution.sum() + non_ext_contribution
 
 
 def add_operational_reserve_margin(n, sns, config):
@@ -1526,10 +1622,8 @@ def extra_functionality(n, snapshots):
         add_regional_co2limit(n, snapshots, config)
     if "BAU" in opts and n.generators.p_nom_extendable.any():
         add_BAU_constraints(n, config)
-    if "SAFE" in opts and n.generators.p_nom_extendable.any():
-        add_SAFE_constraints(n, config)
-    if "SAFER" in opts and n.generators.p_nom_extendable.any():
-        add_SAFER_constraints(n, config)
+    if "PRM" in opts and n.generators.p_nom_extendable.any():
+        add_PRM_constraints(n, config)
     if "TCT" in opts and n.generators.p_nom_extendable.any():
         add_technology_capacity_target_constraints(n, config)
     reserve = config["electricity"].get("operational_reserve", {})
