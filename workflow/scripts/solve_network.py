@@ -735,42 +735,7 @@ def add_regional_co2limit(n, sns, config):
         )
 
 
-def add_SAFE_constraints(n, config):
-    """
-    Add a capacity reserve margin of a certain fraction above the peak demand.
-    Renewable generators and storage do not contribute. Ignores network.
-
-    Parameters
-    ----------
-        n : pypsa.Network
-        config : dict
-
-    Example
-    -------
-    config.yaml requires to specify opts:
-
-    scenario:
-        opts: [Co2L-SAFE-24H]
-    electricity:
-        SAFE_reservemargin: 0.1
-    Which sets a reserve margin of 10% above the peak demand.
-    """
-    peakdemand = n.loads_t.p_set.sum(axis=1).max()
-    margin = 1.0 + config["electricity"]["SAFE_reservemargin"]
-    reserve_margin = peakdemand * margin
-    ext_gens_i = n.generators.query(
-        "carrier in @conventional_carriers & p_nom_extendable",
-    ).index
-    p_nom = n.model["Generator-p_nom"].loc[ext_gens_i]
-    lhs = p_nom.sum()
-    exist_conv_caps = n.generators.query(
-        "~p_nom_extendable & carrier in @conventional_carriers",
-    ).p_nom.sum()
-    rhs = reserve_margin - exist_conv_caps
-    n.model.add_constraints(lhs >= rhs, name="safe_mintotalcap")
-
-
-def add_SAFER_constraints(n, config):
+def add_PRM_constraints(n, config):
     """
     Add Planning Reserve Margin (PRM) constraints for regional capacity adequacy.
 
@@ -1657,10 +1622,8 @@ def extra_functionality(n, snapshots):
         add_regional_co2limit(n, snapshots, config)
     if "BAU" in opts and n.generators.p_nom_extendable.any():
         add_BAU_constraints(n, config)
-    if "SAFE" in opts and n.generators.p_nom_extendable.any():
-        add_SAFE_constraints(n, config)
-    if "SAFER" in opts and n.generators.p_nom_extendable.any():
-        add_SAFER_constraints(n, config)
+    if "PRM" in opts and n.generators.p_nom_extendable.any():
+        add_PRM_constraints(n, config)
     if "TCT" in opts and n.generators.p_nom_extendable.any():
         add_technology_capacity_target_constraints(n, config)
     reserve = config["electricity"].get("operational_reserve", {})
