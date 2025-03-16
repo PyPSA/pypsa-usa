@@ -161,27 +161,38 @@ class FuelCosts(EiaData):
     def data_creator(self) -> pd.DataFrame:
         """Initializes data extractor."""
         if self.fuel == "gas":
-            assert self.industry
             if self.year < 2024:
+                assert self.industry
                 return _GasCosts(self.industry, self.year, self.api)
             else:
-                if self.industry in ("imports", "exports"):
-                    logger.warning(
-                        f"Projected {self.industry} prices not availble. Returning 2023 data.",
-                    )
-                    return _GasCosts(self.industry, 2023, self.api)
                 aeo = "reference" if not self.scenario else self.scenario
-                return _ProjectedGasCosts(self.industry, self.year, aeo, self.api)
+                return _FutureCosts(self.fuel, self.year, aeo, self.api)
         elif self.fuel == "coal":
-            assert self.industry
-            return _CoalCosts(self.industry, self.year, self.api)
+            if self.year < 2024:
+                assert self.industry
+                return _CoalCosts(self.industry, self.year, self.api)
+            else:
+                aeo = "reference" if not self.scenario else self.scenario
+                return _FutureCosts(self.fuel, self.year, aeo, self.api)
         elif self.fuel == "lpg":
-            assert self.grade
-            return _LpgCosts(self.grade, self.year, self.api)
+            if self.year < 2024:
+                assert self.grade
+                return _LpgCosts(self.grade, self.year, self.api)
+            else:
+                aeo = "reference" if not self.scenario else self.scenario
+                return _FutureCosts(self.fuel, self.year, aeo, self.api)
         elif self.fuel == "heating_oil":
-            return _HeatingFuelCosts("fuel_oil", self.year, self.api)
+            if self.year < 2024:
+                return _HeatingFuelCosts("fuel_oil", self.year, self.api)
+            else:
+                aeo = "reference" if not self.scenario else self.scenario
+                return _FutureCosts(self.fuel, self.year, aeo, self.api)
         elif self.fuel == "propane":
-            return _HeatingFuelCosts("propane", self.year, self.api)
+            if self.year < 2024:
+                return _HeatingFuelCosts("propane", self.year, self.api)
+            else:
+                aeo = "reference" if not self.scenario else self.scenario
+                return _FutureCosts(self.fuel, self.year, aeo, self.api)
         else:
             raise InputPropertyError(
                 propery="Fuel Costs",
@@ -1315,111 +1326,51 @@ class _HistoricalProjectedTransportFuelUse(DataExtractor):
         return self._assign_dtypes(df)
 
 
-# class InternationalGasTrade(DataExtractor):
-#     """
-#     Gets imports/exports by point of entry.
-#     """
-
-#     direction_codes = {
-#         "imports": "IRP",
-#         "exports": "ENP",
-#     }
-
-#     points_of_entry = POINTS_OF_ENTRY
-
-#     def __init__(self, direction: str, year: int, api_key: str) -> None:
-#         self.direction = direction
-#         if self.direction not in list(self.direction_codes):
-#             raise InputPropertyError(
-#                 propery="Natural Gas International Imports and Exports",
-#                 valid_options=list(self.direction_codes),
-#                 recived_option=direction,
-#             )
-#         super().__init__(year, api_key)
-
-#     def build_url(self) -> str:
-#         poe = "poe1" if self.direction == "imports" else "poe2"
-#         base_url = f"natural-gas/move/{poe}/data/"
-#         facets = f"frequency=monthly&data[0]=value&facets[process][]={self.direction_codes[self.direction]}&start={self.year}-01&end={self.year+1}-01&sort[0][column]=period&sort[0][direction]=desc&offset=0&length=5000"
-#         return f"{API_BASE}{base_url}?api_key={self.api_key}&{facets}"
-
-#     def format_data(self, df: pd.DataFrame) -> pd.DataFrame:
-#         df["period"] = self._format_period(df.period).copy()
-#         df["state"] = df["series-description"].map(self.extract_state).map(self.add_state_connection)
-
-#         df = (
-#             df[["series-description", "value", "units", "state", "period"]]
-#             .sort_values(["state", "period"])
-#             .set_index("period")
-#         )
-
-#         return self._assign_dtypes(df)
-
-#     @staticmethod
-#     def extract_state(description: str) -> str:
-#         """
-#         Extracts state from series descripion.
-
-#         Input will be in one of the following forms
-#         - "Massena, NY Natural Gas Pipeline Imports From Canada"
-#         - "U.S. Natural Gas Pipeline Imports From Mexico"
-#         """
-#         try:  # state level
-#             return description.split(",")[1].split(" ")[1]
-#         except IndexError:  # country level
-#             return description.split(" Natural Gas Pipeline")[0]
-
-#     def add_state_connection(self, state: str) -> str:
-#         """
-#         Adds international connection to state name.
-#         """
-#         if state == "U.S.":
-#             return "USA"
-#         intl_state = self.points_of_entry[state]
-#         connections = sorted([state, intl_state])
-#         return "-".join(connections)
-
-
-class _ProjectedGasCosts(DataExtractor):
-    """Extracts projected energy demand at a national level from AEO 2023."""
+class _FutureCosts(DataExtractor):
+    """Annual future cost projections."""
 
     # https://www.eia.gov/outlooks/aeo/assumptions/case_descriptions.php
     scenario_codes = AEO_SCENARIOS
 
-    industry_codes: ClassVar[dict[str, str]] = {
-        "residential": "prce_NA_resd_NA_ng_NA_usa_y13dlrpmcf",
-        "commercial": "prce_NA_comm_NA_ng_NA_usa_y13dlrpmcf",
-        "industry": "prce_NA_idal_NA_ng_NA_usa_y13dlrpmcf",
-        "power": "prce_NA_elep_NA_ng_NA_usa_y13dlrpmcf",
+    fuel_code_prefix: str = "prce_real_"
+    fuel_code_suffix: str = "_NA_NA_y13dlrpmmbtu"
+
+    fuel_codes: ClassVar[dict[str, str]] = {
+        "electricity": f"{fuel_code_prefix}ten_NA_elc{fuel_code_suffix}",
+        "gas": f"{fuel_code_prefix}elep_NA_ng{fuel_code_suffix}",  # natural gas
+        "coal": f"{fuel_code_prefix}elep_NA_stc{fuel_code_suffix}",  # steam coal
+        "lpg": f"{fuel_code_prefix}ten_NA_mgs{fuel_code_suffix}",  # motor gasoline
+        "nuclear": f"{fuel_code_prefix}elep_NA_u{fuel_code_suffix}",
+        "heating_oil": f"{fuel_code_prefix}elep_NA_dfo{fuel_code_suffix}",
+        "propane": f"{fuel_code_prefix}ten_NA_prop{fuel_code_suffix}",
     }
 
-    def __init__(self, industry: str, year: int, scenario: str, api: str):
-        super().__init__(year, api)
+    def __init__(self, fuel: str, year: int, scenario: str, api_key: str) -> None:
+        self.fuel = fuel
         self.scenario = scenario
-        self.industry = industry
-        if scenario not in self.scenario_codes.keys():
+        if scenario not in self.scenario_codes:
             raise InputPropertyError(
-                propery="Projected Natural Gas Costs Scenario",
+                propery="AEO Scenario",
                 valid_options=list(self.scenario_codes),
                 recived_option=scenario,
             )
-        if industry not in self.industry_codes.keys():
-            raise InputPropertyError(
-                propery="Projected Natural Gas Costs Industry",
-                valid_options=list(self.industry_codes),
-                recived_option=industry,
-            )
+        super().__init__(year, api_key)
 
     def build_url(self) -> str:
         base_url = "aeo/2023/data/"
-        facets = f"frequency=annual&data[0]=value&facets[scenario][]={self.scenario_codes[self.scenario]}&facets[seriesId][]={self.industry_codes[self.industry]}&start=2024&end={self.year}&sort[0][column]=period&sort[0][direction]=desc&offset=0&length=5000"
+        facets = f"frequency=annual&data[0]=value&facets[scenario][]={self.scenario_codes[self.scenario]}&facets[seriesId][]={self.fuel_codes[self.fuel]}&start=2024&end={self.year}&sort[0][column]=period&sort[0][direction]=desc&offset=0&length=5000"
         return f"{API_BASE}{base_url}?api_key={self.api_key}&{facets}"
 
     def format_data(self, df: pd.DataFrame) -> pd.DataFrame:
         df.index = pd.to_datetime(df.period)
         df.index = df.index.year
-        df = df.rename(columns={"seriesName": "series-description", "unit": "units"})
-        df["state"] = "U.S."
+        df = df.rename(
+            columns={"seriesName": "series-description", "unit": "units"},
+        )
+        df["state"] = "USA"
+        df["series-description"] = df["series-description"].map(
+            lambda x: x.split(" : ")[-1],
+        )
         df = df[["series-description", "value", "units", "state"]].sort_index()
         return self._assign_dtypes(df)
 

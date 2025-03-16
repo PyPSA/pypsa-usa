@@ -68,6 +68,8 @@ NAME_MAPPER = {
     "coal": "Coal",
     "Oil": "Petroleum",
     "oil": "Petroleum",
+    "Lpg": "Petroleum",
+    "lpg": "Petroleum",
     "com": "Commercial",
     "res": "Residential",
     "trn": "Transportation",
