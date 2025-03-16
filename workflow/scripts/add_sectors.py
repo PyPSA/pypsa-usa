@@ -303,6 +303,7 @@ def get_dynamic_marginal_costs(
     raw = raw.rename(columns=STATE_2_CODE)
 
     raw.index = pd.DatetimeIndex(raw.index)
+    raw.index = raw.index.map(lambda x: x.replace(year=year))
 
     investment_year = n.investment_periods[0]
 
@@ -546,9 +547,8 @@ if __name__ == "__main__":
     # this must happen after natural gas system is built
     methane_options = snakemake.params.sector["methane"]
     leakage_rate = methane_options.get("leakage_rate", 0)
-    if leakage_rate > 0.00001:
-        gwp = methane_options.get("gwp", 1)
-        build_ch4_tracking(n, gwp, leakage_rate)
+    gwp = methane_options.get("gwp", 0)
+    build_ch4_tracking(n, gwp, leakage_rate)
 
     pop_layout_path = snakemake.input.clustered_pop_layout
     cop_ashp_path = snakemake.input.cop_air_total
