@@ -1109,77 +1109,48 @@ def add_sector_co2_constraints(n, config):
         config : dict
     """
 
-    def apply_total_state_limit(n, year, state, value):
-        sns = n.snapshots
-        snapshot = sns[sns.get_level_values("period") == year][-1]
+    def apply_state_limit(n: pypsa.Network, year: int, state: str, value: float, sector: str | None = None):
+        if sector:
+            stores = n.stores[
+                (n.stores.index.str.startswith(state))
+                & ((n.stores.index.str.endswith(f"{sector}-co2")) | (n.stores.index.str.endswith(f"{sector}-ch4")))
+            ].index
+            name = f"GlobalConstraint-co2_limit-{year}-{state}-{sector}"
+            log_statement = f"Adding {state} {sector} co2 Limit in {year} of"
+        else:
+            stores = n.stores[
+                (n.stores.index.str.startswith(state))
+                & ((n.stores.index.str.endswith("-co2")) | (n.stores.index.str.endswith("-ch4")))
+            ].index
+            name = f"GlobalConstraint-co2_limit-{year}-{state}"
+            log_statement = f"Adding {state} co2 Limit in {year} of"
 
-        stores = n.stores[
-            (n.stores.index.str.startswith(state))
-            & ((n.stores.index.str.endswith("-co2")) | (n.stores.index.str.endswith("-ch4")))
-        ].index
-
-        lhs = n.model["Store-e"].loc[snapshot, stores].sum()
-
+        lhs = n.model["Store-e"].loc[:, stores].sum(dim="Store")
         rhs = value  # value in T CO2
 
-        n.model.add_constraints(lhs <= rhs, name=f"co2_limit-{year}-{state}")
+        n.model.add_constraints(lhs <= rhs, name=name)
 
-        logger.info(
-            f"Adding {state} co2 Limit in {year} of {rhs * 1e-6} MMT CO2",
-        )
+        logger.info(f"{log_statement} {rhs * 1e-6} MMT CO2")
 
-    def apply_sector_state_limit(n, year, state, sector, value):
-        sns = n.snapshots
-        snapshot = sns[sns.get_level_values("period") == year][-1]
+    def apply_national_limit(n: pypsa.Network, year: int, value: float, sector: str | None = None):
+        """For every snapshot, sum of co2 and ch4 must be less than limit."""
+        if sector:
+            stores = n.stores[
+                ((n.stores.index.str.endswith(f"{sector}-co2")) | (n.stores.index.str.endswith(f"{sector}-ch4")))
+            ].index
+            name = f"GlobalConstraint-co2_limit-{year}-{sector}"
+            log_statement = f"Adding national {sector} co2 Limit in {year} of"
+        else:
+            stores = n.stores[((n.stores.index.str.endswith("-co2")) | (n.stores.index.str.endswith("-ch4")))].index
+            name = f"GlobalConstraint-co2_limit-{year}"
+            log_statement = f"Adding national co2 Limit in {year} of"
 
-        stores = n.stores[
-            (n.stores.index.str.startswith(state))
-            & ((n.stores.index.str.endswith(f"{sector}-co2")) | (n.stores.index.str.endswith(f"{sector}-ch4")))
-        ].index
-
-        lhs = n.model["Store-e"].loc[snapshot, stores].sum()
-
+        lhs = n.model["Store-e"].loc[:, stores].sum(dim="Store")
         rhs = value  # value in T CO2
 
-        n.model.add_constraints(lhs <= rhs, name=f"co2_limit-{year}-{state}-{sector}")
+        n.model.add_constraints(lhs <= rhs, name=name)
 
-        logger.info(
-            f"Adding {state} co2 Limit for {sector} in {year} of {rhs * 1e-6} MMT CO2",
-        )
-
-    def apply_total_national_limit(n, year, value):
-        sns = n.snapshots
-        snapshot = sns[sns.get_level_values("period") == year][-1]
-
-        stores = n.stores[((n.stores.index.str.endswith("-co2")) | (n.stores.index.str.endswith("-ch4")))].index
-
-        lhs = n.model["Store-e"].loc[snapshot, stores].sum()
-
-        rhs = value  # value in T CO2
-
-        n.model.add_constraints(lhs <= rhs, name=f"co2_limit-{year}")
-
-        logger.info(
-            f"Adding national co2 Limit in {year} of {rhs * 1e-6} MMT CO2",
-        )
-
-    def apply_sector_national_limit(n, year, sector, value):
-        sns = n.snapshots
-        snapshot = sns[sns.get_level_values("period") == year][-1]
-
-        stores = n.stores[
-            (n.stores.index.str.endswith(f"{sector}-co2")) | (n.stores.index.str.endswith(f"{sector}-ch4"))
-        ].index
-
-        lhs = n.model["Store-e"].loc[snapshot, stores].sum()
-
-        rhs = value  # value in T CO2
-
-        n.model.add_constraints(lhs <= rhs, name=f"co2_limit-{year}-{sector}")
-
-        logger.info(
-            f"Adding national co2 Limit for {sector} sector in {year} of {rhs * 1e-6} MMT CO2",
-        )
+        logger.info(f"{log_statement} {rhs * 1e-6} MMT CO2")
 
     try:
         f = config["sector"]["co2"]["policy"]
@@ -1216,17 +1187,16 @@ def add_sector_co2_constraints(n, config):
                 # results calcualted in T CO2, policy given in MMT CO2
                 value = df_limit.loc[0, "co2_limit_mmt"] * 1e6
 
-                if state.upper() == "USA":
+                if state.lower() == "all":
                     if sector == "all":
-                        apply_total_national_limit(n, year, value)
+                        apply_national_limit(n, year, value)
                     else:
-                        apply_sector_national_limit(n, year, sector, value)
-
+                        apply_national_limit(n, year, value, sector)
                 else:
                     if sector == "all":
-                        apply_total_state_limit(n, year, state, value)
+                        apply_state_limit(n, year, state, value)
                     else:
-                        apply_sector_state_limit(n, year, state, sector, value)
+                        apply_state_limit(n, year, state, value, sector)
 
 
 def add_cooling_heat_pump_constraints(n, config):
@@ -1715,10 +1685,10 @@ if __name__ == "__main__":
         snakemake = mock_snakemake(
             "solve_network",
             interconnect="western",
-            simpl="70",
-            clusters="4m",
+            simpl="55",
+            clusters="11m",
             ll="v1.0",
-            opts="1h-TCT",
+            opts="6h-TCT",
             sector="E-G",
             planning_horizons="2030",
         )
