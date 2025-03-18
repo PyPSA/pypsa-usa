@@ -98,10 +98,14 @@ def filter_components(
     else:
         active_components = component.index
 
+    # Links will throw the following attribute error, as we must specify bus0
+    # AttributeError: 'DataFrame' object has no attribute 'bus'. Did you mean: 'bus0'?
+    bus_name = "bus0" if component_type.lower() == "link" else "bus"
+
     filtered = component.loc[
         active_components
         & component.carrier.isin(carrier_list)
-        & component.bus.isin(region_buses)
+        & component[bus_name].isin(region_buses)
         & (component.p_nom_extendable == extendable)
     ]
 
@@ -214,7 +218,6 @@ def add_technology_capacity_target_constraints(n, config):
     electricity:
         technology_capacity_target: config/policy_constraints/technology_capacity_target.csv
     """
-    p_nom = n.model["Generator-p_nom"]
     tct_data = pd.read_csv(config["electricity"]["technology_capacity_targets"])
     if tct_data.empty:
         return
@@ -259,7 +262,24 @@ def add_technology_capacity_target_constraints(n, config):
             extendable=False,
         )
 
-        if region_buses.empty or (lhs_gens_ext.empty and lhs_storage_ext.empty):
+        lhs_link_ext = filter_components(
+            n=n,
+            component_type="Link",
+            planning_horizon=planning_horizon,
+            carrier_list=carrier_list,
+            region_buses=region_buses.index,
+            extendable=True,
+        )
+        lhs_link_existing = filter_components(
+            n=n,
+            component_type="Link",
+            planning_horizon=planning_horizon,
+            carrier_list=carrier_list,
+            region_buses=region_buses.index,
+            extendable=False,
+        )
+
+        if region_buses.empty or (lhs_gens_ext.empty and lhs_storage_ext.empty and lhs_link_ext.empty):
             continue
 
         if not lhs_gens_ext.empty:
@@ -269,7 +289,7 @@ def add_technology_capacity_target_constraints(n, config):
             ).rename_axis(
                 "Generator-ext",
             )
-            lhs_g = p_nom.loc[lhs_gens_ext.index].groupby(grouper_g).sum().rename(bus="country")
+            lhs_g = n.model["Generator-p_nom"].loc[lhs_gens_ext.index].groupby(grouper_g).sum().rename(bus="country")
         else:
             lhs_g = None
 
@@ -284,16 +304,27 @@ def add_technology_capacity_target_constraints(n, config):
         else:
             lhs_s = None
 
-        if lhs_g is None and lhs_s is None:
-            continue
-        elif lhs_g is None:
-            lhs = lhs_s.sum()
-        elif lhs_s is None:
-            lhs = lhs_g.sum()
+        if not lhs_link_ext.empty:
+            grouper_l = pd.concat(
+                [lhs_link_ext.bus.map(n.buses.country), lhs_link_ext.carrier],
+                axis=1,
+            ).rename_axis(
+                "Link-ext",
+            )
+            lhs_l = n.model["Link-p_nom"].loc[lhs_link_ext.index].groupby(grouper_l).sum()
         else:
-            lhs = (lhs_g + lhs_s).sum()
+            lhs_l = None
 
-        lhs_existing = lhs_gens_existing.p_nom.sum() + lhs_storage_existing.p_nom.sum()
+        if lhs_g is None and lhs_s is None and lhs_l is None:
+            continue
+        else:
+            gen = lhs_g.sum() if lhs_g else 0
+            lnk = lhs_l.sum() if lhs_l else 0
+            sto = lhs_s.sum() if lhs_s else 0
+
+        lhs = gen + lnk + sto
+
+        lhs_existing = lhs_gens_existing.p_nom.sum() + lhs_storage_existing.p_nom.sum() + lhs_link_existing.p_nom.sum()
 
         if target["max"] == "existing":
             target["max"] = round(lhs_existing, 2) + 0.01
@@ -1109,77 +1140,48 @@ def add_sector_co2_constraints(n, config):
         config : dict
     """
 
-    def apply_total_state_limit(n, year, state, value):
-        sns = n.snapshots
-        snapshot = sns[sns.get_level_values("period") == year][-1]
+    def apply_state_limit(n: pypsa.Network, year: int, state: str, value: float, sector: str | None = None):
+        if sector:
+            stores = n.stores[
+                (n.stores.index.str.startswith(state))
+                & ((n.stores.index.str.endswith(f"{sector}-co2")) | (n.stores.index.str.endswith(f"{sector}-ch4")))
+            ].index
+            name = f"GlobalConstraint-co2_limit-{year}-{state}-{sector}"
+            log_statement = f"Adding {state} {sector} co2 Limit in {year} of"
+        else:
+            stores = n.stores[
+                (n.stores.index.str.startswith(state))
+                & ((n.stores.index.str.endswith("-co2")) | (n.stores.index.str.endswith("-ch4")))
+            ].index
+            name = f"GlobalConstraint-co2_limit-{year}-{state}"
+            log_statement = f"Adding {state} co2 Limit in {year} of"
 
-        stores = n.stores[
-            (n.stores.index.str.startswith(state))
-            & ((n.stores.index.str.endswith("-co2")) | (n.stores.index.str.endswith("-ch4")))
-        ].index
-
-        lhs = n.model["Store-e"].loc[snapshot, stores].sum()
-
+        lhs = n.model["Store-e"].loc[:, stores].sum(dim="Store")
         rhs = value  # value in T CO2
 
-        n.model.add_constraints(lhs <= rhs, name=f"co2_limit-{year}-{state}")
+        n.model.add_constraints(lhs <= rhs, name=name)
 
-        logger.info(
-            f"Adding {state} co2 Limit in {year} of {rhs * 1e-6} MMT CO2",
-        )
+        logger.info(f"{log_statement} {rhs * 1e-6} MMT CO2")
 
-    def apply_sector_state_limit(n, year, state, sector, value):
-        sns = n.snapshots
-        snapshot = sns[sns.get_level_values("period") == year][-1]
+    def apply_national_limit(n: pypsa.Network, year: int, value: float, sector: str | None = None):
+        """For every snapshot, sum of co2 and ch4 must be less than limit."""
+        if sector:
+            stores = n.stores[
+                ((n.stores.index.str.endswith(f"{sector}-co2")) | (n.stores.index.str.endswith(f"{sector}-ch4")))
+            ].index
+            name = f"co2_limit-{year}-{sector}"
+            log_statement = f"Adding national {sector} co2 Limit in {year} of"
+        else:
+            stores = n.stores[((n.stores.index.str.endswith("-co2")) | (n.stores.index.str.endswith("-ch4")))].index
+            name = f"co2_limit-{year}"
+            log_statement = f"Adding national co2 Limit in {year} of"
 
-        stores = n.stores[
-            (n.stores.index.str.startswith(state))
-            & ((n.stores.index.str.endswith(f"{sector}-co2")) | (n.stores.index.str.endswith(f"{sector}-ch4")))
-        ].index
-
-        lhs = n.model["Store-e"].loc[snapshot, stores].sum()
-
+        lhs = n.model["Store-e"].loc[:, stores].sum(dim="Store")
         rhs = value  # value in T CO2
 
-        n.model.add_constraints(lhs <= rhs, name=f"co2_limit-{year}-{state}-{sector}")
+        n.model.add_constraints(lhs <= rhs, name=name)
 
-        logger.info(
-            f"Adding {state} co2 Limit for {sector} in {year} of {rhs * 1e-6} MMT CO2",
-        )
-
-    def apply_total_national_limit(n, year, value):
-        sns = n.snapshots
-        snapshot = sns[sns.get_level_values("period") == year][-1]
-
-        stores = n.stores[((n.stores.index.str.endswith("-co2")) | (n.stores.index.str.endswith("-ch4")))].index
-
-        lhs = n.model["Store-e"].loc[snapshot, stores].sum()
-
-        rhs = value  # value in T CO2
-
-        n.model.add_constraints(lhs <= rhs, name=f"co2_limit-{year}")
-
-        logger.info(
-            f"Adding national co2 Limit in {year} of {rhs * 1e-6} MMT CO2",
-        )
-
-    def apply_sector_national_limit(n, year, sector, value):
-        sns = n.snapshots
-        snapshot = sns[sns.get_level_values("period") == year][-1]
-
-        stores = n.stores[
-            (n.stores.index.str.endswith(f"{sector}-co2")) | (n.stores.index.str.endswith(f"{sector}-ch4"))
-        ].index
-
-        lhs = n.model["Store-e"].loc[snapshot, stores].sum()
-
-        rhs = value  # value in T CO2
-
-        n.model.add_constraints(lhs <= rhs, name=f"co2_limit-{year}-{sector}")
-
-        logger.info(
-            f"Adding national co2 Limit for {sector} sector in {year} of {rhs * 1e-6} MMT CO2",
-        )
+        logger.info(f"{log_statement} {rhs * 1e-6} MMT CO2")
 
     try:
         f = config["sector"]["co2"]["policy"]
@@ -1216,17 +1218,16 @@ def add_sector_co2_constraints(n, config):
                 # results calcualted in T CO2, policy given in MMT CO2
                 value = df_limit.loc[0, "co2_limit_mmt"] * 1e6
 
-                if state.upper() == "USA":
+                if state.lower() == "all":
                     if sector == "all":
-                        apply_total_national_limit(n, year, value)
+                        apply_national_limit(n, year, value)
                     else:
-                        apply_sector_national_limit(n, year, sector, value)
-
+                        apply_national_limit(n, year, value, sector)
                 else:
                     if sector == "all":
-                        apply_total_state_limit(n, year, state, value)
+                        apply_state_limit(n, year, state, value)
                     else:
-                        apply_sector_state_limit(n, year, state, sector, value)
+                        apply_state_limit(n, year, state, value, sector)
 
 
 def add_cooling_heat_pump_constraints(n, config):
@@ -1715,10 +1716,10 @@ if __name__ == "__main__":
         snakemake = mock_snakemake(
             "solve_network",
             interconnect="western",
-            simpl="70",
-            clusters="4m",
+            simpl="55",
+            clusters="11m",
             ll="v1.0",
-            opts="1h-TCT",
+            opts="6h-TCT",
             sector="E-G",
             planning_horizons="2030",
         )
