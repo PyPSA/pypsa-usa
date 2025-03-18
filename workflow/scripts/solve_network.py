@@ -1138,11 +1138,11 @@ def add_sector_co2_constraints(n, config):
             stores = n.stores[
                 ((n.stores.index.str.endswith(f"{sector}-co2")) | (n.stores.index.str.endswith(f"{sector}-ch4")))
             ].index
-            name = f"GlobalConstraint-co2_limit-{year}-{sector}"
+            name = f"co2_limit-{year}-{sector}"
             log_statement = f"Adding national {sector} co2 Limit in {year} of"
         else:
             stores = n.stores[((n.stores.index.str.endswith("-co2")) | (n.stores.index.str.endswith("-ch4")))].index
-            name = f"GlobalConstraint-co2_limit-{year}"
+            name = f"co2_limit-{year}"
             log_statement = f"Adding national co2 Limit in {year} of"
 
         lhs = n.model["Store-e"].loc[:, stores].sum(dim="Store")
