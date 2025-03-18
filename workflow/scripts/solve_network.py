@@ -98,10 +98,14 @@ def filter_components(
     else:
         active_components = component.index
 
+    # Links will throw the following attribute error, as we must specify bus0
+    # AttributeError: 'DataFrame' object has no attribute 'bus'. Did you mean: 'bus0'?
+    bus_name = "bus0" if component_type.lower() == "link" else "bus"
+
     filtered = component.loc[
         active_components
         & component.carrier.isin(carrier_list)
-        & component.bus.isin(region_buses)
+        & component[bus_name].isin(region_buses)
         & (component.p_nom_extendable == extendable)
     ]
 
@@ -214,7 +218,6 @@ def add_technology_capacity_target_constraints(n, config):
     electricity:
         technology_capacity_target: config/policy_constraints/technology_capacity_target.csv
     """
-    p_nom = n.model["Generator-p_nom"]
     tct_data = pd.read_csv(config["electricity"]["technology_capacity_targets"])
     if tct_data.empty:
         return
@@ -259,7 +262,24 @@ def add_technology_capacity_target_constraints(n, config):
             extendable=False,
         )
 
-        if region_buses.empty or (lhs_gens_ext.empty and lhs_storage_ext.empty):
+        lhs_link_ext = filter_components(
+            n=n,
+            component_type="Link",
+            planning_horizon=planning_horizon,
+            carrier_list=carrier_list,
+            region_buses=region_buses.index,
+            extendable=True,
+        )
+        lhs_link_existing = filter_components(
+            n=n,
+            component_type="Link",
+            planning_horizon=planning_horizon,
+            carrier_list=carrier_list,
+            region_buses=region_buses.index,
+            extendable=False,
+        )
+
+        if region_buses.empty or (lhs_gens_ext.empty and lhs_storage_ext.empty and lhs_link_ext.empty):
             continue
 
         if not lhs_gens_ext.empty:
@@ -269,7 +289,7 @@ def add_technology_capacity_target_constraints(n, config):
             ).rename_axis(
                 "Generator-ext",
             )
-            lhs_g = p_nom.loc[lhs_gens_ext.index].groupby(grouper_g).sum().rename(bus="country")
+            lhs_g = n.model["Generator-p_nom"].loc[lhs_gens_ext.index].groupby(grouper_g).sum().rename(bus="country")
         else:
             lhs_g = None
 
@@ -284,16 +304,27 @@ def add_technology_capacity_target_constraints(n, config):
         else:
             lhs_s = None
 
-        if lhs_g is None and lhs_s is None:
-            continue
-        elif lhs_g is None:
-            lhs = lhs_s.sum()
-        elif lhs_s is None:
-            lhs = lhs_g.sum()
+        if not lhs_link_ext.empty:
+            grouper_l = pd.concat(
+                [lhs_link_ext.bus.map(n.buses.country), lhs_link_ext.carrier],
+                axis=1,
+            ).rename_axis(
+                "Link-ext",
+            )
+            lhs_l = n.model["Link-p_nom"].loc[lhs_link_ext.index].groupby(grouper_l).sum()
         else:
-            lhs = (lhs_g + lhs_s).sum()
+            lhs_l = None
 
-        lhs_existing = lhs_gens_existing.p_nom.sum() + lhs_storage_existing.p_nom.sum()
+        if lhs_g is None and lhs_s is None and lhs_l is None:
+            continue
+        else:
+            gen = lhs_g.sum() if lhs_g else 0
+            lnk = lhs_l.sum() if lhs_l else 0
+            sto = lhs_s.sum() if lhs_s else 0
+
+        lhs = gen + lnk + sto
+
+        lhs_existing = lhs_gens_existing.p_nom.sum() + lhs_storage_existing.p_nom.sum() + lhs_link_existing.p_nom.sum()
 
         if target["max"] == "existing":
             target["max"] = round(lhs_existing, 2) + 0.01
