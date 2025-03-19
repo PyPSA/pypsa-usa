@@ -303,9 +303,9 @@ def demand_scaling_data(wildcards):
         ].capitalize()
         return DATA + f"nrel_efs/EFSLoadProfile_{efs_case}_{efs_speed}.csv"
     elif profile == "eia":
-        return config_provider("pudl_path")
+        return []
     elif profile == "ferc":
-        return config_provider("pudl_path")
+        return []
     else:
         return ""
 
@@ -345,6 +345,7 @@ rule build_sector_demand:
         profile_year=pd.to_datetime(config["snapshots"]["start"]).year,
         eia_api=config_provider("api", "eia"),
         snapshots=config_provider("snapshots"),
+        pudl_path=config_provider("pudl_path"),
     input:
         network=RESOURCES + "{interconnect}/elec_base_network.nc",
         demand_files=demand_raw_data,
