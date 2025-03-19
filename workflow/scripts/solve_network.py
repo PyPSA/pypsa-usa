@@ -377,7 +377,7 @@ def add_technology_capacity_target_constraints(n, config):
             )
 
 
-def add_RPS_constraints(n, config):
+def add_RPS_constraints(n, config, sector):
     """
     Add Renewable Portfolio Standards (RPS) constraints to the network.
 
@@ -385,12 +385,18 @@ def add_RPS_constraints(n, config):
     from renewable energy sources for specific regions and planning horizons.
     It reads the necessary data from configuration files and the network.
 
+    The differenct between electrical and sector implementation is:
+    - Electrical applies RPS against exogenously defined demand
+    - Sector applies RPS against endogenously solved power sector generation
+
     Parameters
     ----------
     n : pypsa.Network
         The PyPSA network object.
     config : dict
         A dictionary containing configuration settings and file paths.
+    sector: bool
+        Sector study
 
     Returns
     -------
@@ -492,7 +498,10 @@ def add_RPS_constraints(n, config):
         region_gens = n.generators[n.generators.bus.isin(region_buses.index)]
         region_gens_eligible = region_gens[region_gens.carrier.isin(carriers)]
 
-        if not region_gens_eligible.empty:
+        if region_gens_eligible.empty:
+            return
+
+        elif not sector:
             # Eligible generation
             p_eligible = n.model["Generator-p"].sel(
                 period=constraint_row.planning_horizon,
@@ -512,14 +521,33 @@ def add_RPS_constraints(n, config):
 
             rhs = constraint_row.pct * region_demand
 
-            # Add constraint
-            n.model.add_constraints(
-                lhs >= rhs,
-                name=f"GlobalConstraint-{constraint_row.name}_{constraint_row.planning_horizon}_rps_limit",
+        elif sector:
+            # generator power contributing
+            p_eligible = n.model["Generator-p"].sel(
+                period=constraint_row.planning_horizon,
+                Generator=region_gens_eligible.index,
             )
-            logger.info(
-                f"Added RPS {constraint_row.name} for {constraint_row.planning_horizon}.",
-            )
+            # power level buses
+            pwr_buses = n.buses[(n.buses.carrier == "AC") & (n.buses.index.isin(region_buses.index))]
+            # links delievering power within the region
+            # removes any transmission links
+            pwr_links = n.links[(n.links.bus0.isin(pwr_buses.index)) & ~(n.links.bus1.isin(pwr_buses.index))]
+            region_demand = n.model["Link-p"].sel(period=constraint_row.planning_horizon, Link=pwr_links.index)
+
+            lhs = p_eligible.sum() - (constraint_row.pct * region_demand.sum())
+            rhs = 0
+
+        else:
+            logger.error("Undefined control flow for RPS constraint.")
+
+        # Add constraint
+        n.model.add_constraints(
+            lhs >= rhs,
+            name=f"GlobalConstraint-{constraint_row.name}_{constraint_row.planning_horizon}_rps_limit",
+        )
+        logger.info(
+            f"Added RPS {constraint_row.name} for {constraint_row.planning_horizon}.",
+        )
 
 
 def add_EQ_constraints(n, o, scaling=1e-1):
@@ -1618,7 +1646,8 @@ def extra_functionality(n, snapshots):
     opts = n.opts
     config = n.config
     if "RPS" in opts and n.generators.p_nom_extendable.any():
-        add_RPS_constraints(n, config)
+        sector_rps = True if "sector" in opts else False
+        add_RPS_constraints(n, config, sector_rps)
     if "REM" in opts and n.generators.p_nom_extendable.any():
         add_regional_co2limit(n, snapshots, config)
     if "BAU" in opts and n.generators.p_nom_extendable.any():
