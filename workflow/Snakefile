@@ -70,7 +70,7 @@ localrules:
 wildcard_constraints:
     interconnect="usa|texas|western|eastern",
     simpl="[a-zA-Z0-9]*|all",
-    clusters="[0-9]+m?+c?|all",
+    clusters="[0-9]+m?+a?+c?|all",
     ll="(v|c)([0-9\.]+|opt|all)|all",
     opts="[-+a-zA-Z0-9\.]*",
     sector="([EG]-)*[EG]",

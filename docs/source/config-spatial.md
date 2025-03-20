@@ -31,7 +31,7 @@ scenario:
    simpl: [100]
 ```
 
-This setup results in a model with 10 transmission nodes and 100 distinct resource zones, allowing for more granular modeling of renewable resource distribution while keeping the transmission network simplified.
+This setup, using an `m` after the `clusters` wildcard, results in a model with 10 transmission nodes and 100 distinct renewable resource zones, allowing for more granular modeling of renewable resource distribution while keeping the transmission network simplified. If you use a `c` after the `clusters` wildcard, all conventional resources from the `simpl` step will not be clustered. If you input an `a` after the `clusters` wildcard, all resources will not be clustered beyond the `simpl` level.
 
 ## Configuring Transmission Resolution
 

@@ -1,27 +1,5 @@
 # By PyPSA-USA Authors
-"""
-**Description**.
-
-Creates Voronoi shapes for each bus representing both onshore and offshore regions.
-
-**Relevant Settings**
-
-.. code:: yaml
-
-    interconnect:
-    topological_boundaries:
-
-**Inputs**
-
-- ``resources/country_shapes.geojson``: confer :ref:`shapes`
-- ``resources/offshore_shapes.geojson``: confer :ref:`shapes`
-- ``networks/base.nc``: confer :ref:`base`
-
-**Outputs**
-
-- ``resources/regions_onshore.geojson``
-- ``resources/regions_offshore.geojson``
-"""
+"""Creates Voronoi shapes for each bus representing both onshore and offshore regions."""
 
 import logging
 
@@ -133,7 +111,6 @@ def main(snakemake):
         right_on=n.buses.index,
     ).set_index("sub_id")
     bus2sub_onshore = bus2sub[bus2sub.Bus.isin(onshore_buses.index)]
-    bus2sub_offshore = bus2sub[~bus2sub.Bus.isin(onshore_buses.index)]
 
     logger.info("Building Onshore Regions")
     onshore_regions = []
@@ -177,10 +154,10 @@ def main(snakemake):
     buffered = combined_onshore.buffer(0.9)
     for i in range(len(offshore_shapes)):
         offshore_shape = offshore_shapes.iloc[i]
-        # Trip shape to be within certain distance from onshore_regions
+        # Trim shape to be within certain distance from onshore_regions
         offshore_shape = offshore_shape.intersection(buffered)
         shape_name = offshore_shapes.index[i]
-        offshore_buses = bus2sub_offshore[["x", "y"]]
+        offshore_buses = bus2sub_onshore[["x", "y"]]
         if offshore_buses.empty:
             continue
         offshore_regions_c = gpd.GeoDataFrame(

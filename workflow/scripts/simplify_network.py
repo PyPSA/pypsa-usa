@@ -92,12 +92,6 @@ def aggregate_to_substations(
     topological_boundaries: str,
     aggregation_strategies=dict(),
 ):
-    """
-    Aggregate network to substations.
-
-    First step in clusterings, if use_ba_zones is True, then the network
-    retains balancing Authority zones in clustering.
-    """
     logger.info("Aggregating buses to substation level...")
 
     generator_strategies = aggregation_strategies.get("generators", dict())
@@ -167,11 +161,16 @@ def aggregate_to_substations(
             "reeds_state",
         ]
     else:
-        cols2drop = ["balancing_area", "substation_off", "sub_id", "state"]
+        cols2drop = [
+            "balancing_area",
+            "substation_off",
+            "sub_id",
+            "state",
+        ]
 
-    network_s.buses = network_s.buses.drop(
-        columns=cols2drop,
-    )
+    # Only drop columns that exist in the DataFrame
+    cols2drop = [col for col in cols2drop if col in network_s.buses.columns]
+    network_s.buses = network_s.buses.drop(columns=cols2drop)
     return network_s, clustering.busmap
 
 
@@ -228,14 +227,13 @@ if __name__ == "__main__":
 
     # new busmap definition
     busmap_to_sub = n.buses.sub_id.astype(int).astype(str).to_frame()
-
     busmaps = [trafo_map, busmap_to_sub.sub_id]
     busmaps = reduce(lambda x, y: x.map(y), busmaps[1:], busmaps[0])
 
-    # TODO: WHEN WE REPLACE NETWORK WITH NEW NETWORK WE SHOULD CALACULATE LINE
-    # LENGTHS BASED ON THE actual GIS line files.
-    n = assign_line_lengths(n, 1.25)
-    n.links["underwater_fraction"] = 0  # TODO: CALULATE UNDERWATER FRACTIONS.
+    n = assign_line_lengths(n, 1.25)  # Eventually replace with GIS analysis.
+    n.links["underwater_fraction"] = 0
+
+    n.buses.drop(columns=["substation_off"], inplace=True)
 
     n, busmap = aggregate_to_substations(
         n,
