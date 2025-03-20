@@ -35,6 +35,7 @@ import seaborn as sns
 from _helpers import configure_logging
 from add_electricity import sanitize_carriers
 from cartopy import crs as ccrs
+from plot_statistics import create_title
 from pypsa.plot import add_legend_circles, add_legend_lines, add_legend_patches
 from summary import (
     get_capacity_base,
@@ -47,43 +48,6 @@ logger = logging.getLogger(__name__)
 
 # Global Plotting Settings
 TITLE_SIZE = 16
-
-
-def get_color_palette(n: pypsa.Network) -> pd.Series:
-    """Returns colors based on nice name."""
-    colors = (n.carriers.reset_index().set_index("nice_name")).color
-
-    # additional = {
-    #     "Battery Charge": n.carriers.loc["battery"].color,
-    #     "Battery Discharge": n.carriers.loc["battery"].color,
-    #     "battery_discharger": n.carriers.loc["battery"].color,
-    #     "battery_charger": n.carriers.loc["battery"].color,
-    #     "4hr_battery_storage_discharger": n.carriers.loc["4hr_battery_storage"].color,
-    #     "4hr_battery_storage_charger": n.carriers.loc["4hr_battery_storage"].color,
-    #     "8hr_PHS_charger": n.carriers.loc["8hr_PHS"].color,
-    #     "8hr_PHS_discharger": n.carriers.loc["8hr_PHS"].color,
-    #     "10hr_PHS_charger": n.carriers.loc["10hr_PHS"].color,
-    #     "10hr_PHS_discharger": n.carriers.loc["10hr_PHS"].color,
-    #     "co2": "k",
-    # }
-
-    # Initialize the additional dictionary
-    additional = {
-        "co2": "k",
-    }
-
-    # Loop through the carriers DataFrame
-    for index, row in n.carriers.iterrows():
-        if "battery" in index or "PHS" in index:
-            color = row.color
-            additional.update(
-                {
-                    f"{index}_charger": color,
-                    f"{index}_discharger": color,
-                },
-            )
-
-    return pd.concat([colors, pd.Series(additional)]).to_dict()
 
 
 def get_bus_scale(interconnect: str) -> float:
@@ -100,32 +64,6 @@ def get_line_scale(interconnect: str) -> float:
         return 2e3
     else:
         return 3e3
-
-
-def create_title(title: str, **wildcards) -> str:
-    """
-    Standardizes wildcard writing in titles.
-
-    Arguments:
-        title: str
-            Title of chart to plot
-        **wildcards
-            any wildcards to add to title
-    """
-    w = []
-    for wildcard, value in wildcards.items():
-        if wildcard == "interconnect":
-            w.append(f"interconnect = {value}")
-        elif wildcard == "clusters":
-            w.append(f"#clusters = {value}")
-        elif wildcard == "ll":
-            w.append(f"ll = {value}")
-        elif wildcard == "opts":
-            w.append(f"opts = {value}")
-        elif wildcard == "sector":
-            w.append(f"sectors = {value}")
-    wildcards_joined = " | ".join(w)
-    return f"{title} \n ({wildcards_joined})"
 
 
 def remove_sector_buses(df: pd.DataFrame) -> pd.DataFrame:
@@ -415,11 +353,6 @@ def plot_opt_capacity_map(
     **wildcards,
 ) -> None:
     """Plots map of optimal network capacities."""
-    # get data
-    # capacity = n.statistics()[['Optimal Capacity']]
-    # capacity = capacity[capacity.index.get_level_values(0).isin(['Generator', 'StorageUnit'])]
-    # capacity.index = capacity.index.droplevel(0)
-
     bus_values = get_capacity_brownfield(n)
     bus_values = bus_values[bus_values.index.get_level_values("carrier").isin(carriers)]
     bus_values = remove_sector_buses(bus_values).reset_index().groupby(by=["bus", "carrier"]).sum().squeeze()
@@ -460,7 +393,9 @@ def plot_new_capacity_map(
     bus_pnom_opt = get_capacity_brownfield(n)
 
     bus_values = bus_pnom_opt - bus_pnom
-    bus_values = bus_values[(bus_values > 0) & (bus_values.index.get_level_values(1).isin(carriers))]
+    bus_values[bus_values < 0] = 0
+    bus_values = bus_values[bus_values.index.get_level_values(1).isin(carriers)]
+
     bus_values = remove_sector_buses(bus_values).reset_index().groupby(by=["bus", "carrier"]).sum().squeeze()
 
     line_snom = n.lines.s_nom
@@ -547,37 +482,6 @@ def plot_renewable_potential(
     plt.close()
 
 
-def plot_lmp_map(network: pypsa.Network, save: str, **wildcards):
-    fig, ax = plt.subplots(
-        subplot_kw={"projection": ccrs.PlateCarree()},
-        figsize=(8, 8),
-    )
-
-    lmps = n.buses_t.marginal_price.mean()
-
-    plt.hexbin(
-        network.buses.x,
-        network.buses.y,
-        gridsize=40,
-        C=lmps,
-        cmap=plt.cm.bwr,
-        zorder=3,
-    )
-    network.plot(ax=ax, line_widths=pd.Series(0.5, network.lines.index), bus_sizes=0)
-
-    cb = plt.colorbar(
-        location="bottom",
-        pad=0.01,
-    )  # Adjust the pad value to move the color bar closer
-    cb.set_label("LMP ($/MWh)")
-    plt.title(create_title("Locational Marginal Price [$/MWh]", **wildcards))
-    plt.tight_layout(
-        rect=[0, 0, 1, 0.95],
-    )  # Adjust the rect values to make the layout tighter
-    plt.savefig(save)
-    plt.close()
-
-
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
@@ -657,4 +561,3 @@ if __name__ == "__main__":
         snakemake.output["renewable_potential_map.pdf"],
         **snakemake.wildcards,
     )
-    # plot_lmp_map(n, snakemake.output["lmp_map.pdf"], **snakemake.wildcards)
