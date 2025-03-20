@@ -164,6 +164,7 @@ def prepare_network(
         # intersect between macroeconomic and surveybased willingness to pay
         # http://journal.frontiersin.org/article/10.3389/fenrg.2015.00055/full
         # TODO: retrieve color and nice name from config
+        logger.warning("Adding load shedding generators.")
         n.add("Carrier", "load", color="#dd2e23", nice_name="Load shedding")
         buses_i = n.buses.query("carrier == 'AC'").index
         if not np.isscalar(load_shedding):
@@ -345,13 +346,7 @@ def add_technology_capacity_target_constraints(n, config):
             )
 
             logger.info(
-                "Adding TCT Constraint:\n"
-                f"Name: {target.name}\n"
-                f"Planning Horizon: {target.planning_horizon}\n"
-                f"Region: {target.region}\n"
-                f"Carrier: {target.carrier}\n"
-                f"Min Value: {target['min']}\n"
-                f"Min Value Adj: {rhs}",
+                f"Adding TCT Constraint: Name: {target.name}, Planning Horizon: {target.planning_horizon}, Region: {target.region}, Carrier: {target.carrier}, Min Value: {target['min']}, Min Value Adj: {rhs}",
             )
 
         if not np.isnan(target["max"]):
@@ -367,13 +362,7 @@ def add_technology_capacity_target_constraints(n, config):
             )
 
             logger.info(
-                "Adding TCT Constraint:\n"
-                f"Name: {target.name}\n"
-                f"Planning Horizon: {target.planning_horizon}\n"
-                f"Region: {target.region}\n"
-                f"Carrier: {target.carrier}\n"
-                f"Max Value: {target['max']}\n"
-                f"Max Value Adj: {rhs}",
+                f"Adding TCT Constraint: Name: {target.name}, Planning Horizon: {target.planning_horizon}, Region: {target.region}, Carrier: {target.carrier}, Max Value: {target['max']}, Max Value Adj: {rhs}",
             )
 
 
@@ -802,7 +791,7 @@ def add_PRM_constraints(n, config):
         planning_reserve = peak_demand * (1.0 + prm.prm)
 
         # Get capacity contribution from resources
-        lhs_capacity = _calculate_capacity_accredidation(
+        lhs_capacity, rhs_existing = _calculate_capacity_accredidation(
             n,
             prm.planning_horizon,
             region_buses,
@@ -811,7 +800,7 @@ def add_PRM_constraints(n, config):
 
         # Add the constraint to the model
         n.model.add_constraints(
-            lhs_capacity >= planning_reserve,
+            lhs_capacity >= planning_reserve - rhs_existing,
             name=f"GlobalConstraint-{prm.name}_{prm.planning_horizon}_PRM",
         )
 
@@ -897,7 +886,7 @@ def _get_regional_demand(n, planning_horizon, region_buses):
 #  n.loads_t.p_set.loc[planning_horizon, n.loads.bus.isin(region_buses.index)].sum(axis=1)
 def _calculate_capacity_accredidation(n, planning_horizon, region_buses, peak_demand_hour):
     """
-    Calculate firm capacity contribution from all resources in a region.
+    Calculate capacity contribution from all resources in a region at the peak demand hour.
 
     This function accounts for:
     1. Extendable resources with appropriate capacity credit
@@ -936,7 +925,8 @@ def _calculate_capacity_accredidation(n, planning_horizon, region_buses, peak_de
             planning_horizon,
             peak_demand_hour,
         ]
-        ext_contribution = ext_p_nom * ext_p_max_pu
+
+        ext_contribution = ext_p_nom * ext_p_max_pu.values
     else:
         ext_contribution = 0
 
@@ -959,7 +949,7 @@ def _calculate_capacity_accredidation(n, planning_horizon, region_buses, peak_de
     else:
         non_ext_contribution = 0
 
-    return ext_contribution.sum() + non_ext_contribution
+    return ext_contribution.sum(), non_ext_contribution
 
 
 def add_operational_reserve_margin(n, sns, config):
@@ -1660,8 +1650,7 @@ def solve_network(n, config, solving, opts="", **kwargs):
     set_of_options = solving["solver"]["options"]
     cf_solving = solving["options"]
 
-    if len(n.investment_periods) > 1:
-        kwargs["multi_investment_periods"] = config["foresight"] == "perfect"
+    kwargs["multi_investment_periods"] = config["foresight"] == "perfect"
 
     kwargs["solver_options"] = solving["solver_options"][set_of_options] if set_of_options else {}
     kwargs["solver_name"] = solving["solver"]["name"]
