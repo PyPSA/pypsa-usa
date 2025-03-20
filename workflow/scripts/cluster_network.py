@@ -182,6 +182,22 @@ def busmap_for_n_clusters(
     weighting_strategy=None,
     **algorithm_kwds,
 ):
+    """
+    Create a busmap for the given number of clusters.
+
+    Parameters
+    ----------
+    n : pypsa.Network
+    n_clusters : int
+        The number of clusters in the new network.
+    solver_name : str
+        The name of the solver to use.
+
+    Returns
+    -------
+    pd.Series
+        A series with the busmap for the given number of clusters.
+    """
     if algorithm == "kmeans":
         algorithm_kwds.setdefault("n_init", 1000)
         algorithm_kwds.setdefault("max_iter", 30000)
@@ -232,7 +248,7 @@ def busmap_for_n_clusters(
 
     n.determine_network_topology()
 
-    n_clusters = distribute_clusters(
+    n_clusters_per_region = distribute_clusters(
         n,
         n_clusters,
         focus_weights=focus_weights,
@@ -240,7 +256,7 @@ def busmap_for_n_clusters(
         solver_name=solver_name,
     )
     # Remove buses and lines that are not part of the clustering to reconcile TAMU and ReEDS Topologies
-    nc_set = set(n_clusters.index.get_level_values(0).unique())
+    nc_set = set(n_clusters_per_region.index.get_level_values(0).unique())
     bus_set = set(n.buses.country.unique())
     countries_remove = list(bus_set - nc_set)
     buses_remove = n.buses[n.buses.country.isin(countries_remove)]
@@ -271,21 +287,21 @@ def busmap_for_n_clusters(
             return prefix + busmap_by_kmeans(
                 n,
                 weight,
-                n_clusters[x.name],
+                n_clusters_per_region[x.name],
                 buses_i=x.index,
                 **algorithm_kwds,
             )
         elif algorithm == "hac":
             return prefix + busmap_by_hac(
                 n,
-                n_clusters[x.name],
+                n_clusters_per_region[x.name],
                 buses_i=x.index,
                 feature=feature.loc[x.index],
             )
         elif algorithm == "modularity":
             return prefix + busmap_by_greedy_modularity(
                 n,
-                n_clusters[x.name],
+                n_clusters_per_region[x.name],
                 buses_i=x.index,
             )
         else:
@@ -528,7 +544,23 @@ def cluster_regions(busmaps, input=None, output=None):
 
     for which in ("regions_onshore", "regions_offshore"):
         regions = gpd.read_file(getattr(input, which))
+
+        # Check if name column contains float values before indexing
+        try:
+            # Try to convert to float to see if values are numeric
+            pd.to_numeric(regions["name"], errors="raise")
+            is_float = True
+        except:  # noqa: E722
+            is_float = False
+
+        # Reindex to set name as index
         regions = regions.reindex(columns=["name", "geometry"]).set_index("name")
+
+        # Convert float indices to string representation of integers if needed
+        if is_float:
+            regions.index = regions.index.astype(float).astype(int).astype(str)
+
+        # Dissolve regions according to busmap
         regions_c = regions.dissolve(busmap)
         regions_c.index.name = "name"
         regions_c = regions_c.reset_index()
@@ -570,21 +602,35 @@ if __name__ == "__main__":
     topology_aggregation = params.topology_aggregation
 
     exclude_carriers = params.cluster_network["exclude_carriers"]
-    aggregate_carriers = set(n.generators.carrier) - set(exclude_carriers)
+    all_carriers = set(n.generators.carrier).union(set(n.storage_units.carrier))
+    aggregate_carriers = all_carriers - set(exclude_carriers)
     conventional_carriers = set(params.conventional_carriers)
-    non_aggregated_carriers = {}
-    if snakemake.wildcards.clusters.endswith("m"):
-        n_clusters = int(snakemake.wildcards.clusters[:-1])
-        aggregate_carriers = set(params.conventional_carriers) & aggregate_carriers
-        non_aggregated_carriers = set(n.generators.carrier) - aggregate_carriers
-    elif snakemake.wildcards.clusters.endswith("c"):
-        n_clusters = int(snakemake.wildcards.clusters[:-1])
-        aggregate_carriers = aggregate_carriers - conventional_carriers
-        non_aggregated_carriers = set(n.generators.carrier) - aggregate_carriers
-    elif snakemake.wildcards.clusters == "all":
+
+    # Extract cluster information from wildcards
+    cluster_wc = snakemake.wildcards.get("clusters", None) or snakemake.wildcards.get("clusters_hires", None)
+
+    if cluster_wc == "all":
         n_clusters = len(n.buses)
+        non_aggregated_carriers = set()
+    elif cluster_wc.endswith("m"):
+        # Only aggregate conventional carriers
+        n_clusters = int(cluster_wc[:-1])
+        aggregate_carriers = conventional_carriers & aggregate_carriers
+        non_aggregated_carriers = all_carriers - aggregate_carriers
+    elif cluster_wc.endswith("c"):
+        # Aggregate all except conventional carriers
+        n_clusters = int(cluster_wc[:-1])
+        aggregate_carriers = aggregate_carriers - conventional_carriers
+        non_aggregated_carriers = all_carriers - aggregate_carriers
+    elif cluster_wc.endswith("a"):
+        # Do not aggregate Any carriers
+        n_clusters = int(cluster_wc[:-1])
+        aggregate_carriers = set()
+        non_aggregated_carriers = all_carriers
     else:
-        n_clusters = int(snakemake.wildcards.clusters)
+        # Default case - just interpret as number of clusters
+        n_clusters = int(cluster_wc)
+        non_aggregated_carriers = set()
 
     n.generators.loc[
         n.generators.carrier.isin(non_aggregated_carriers),
