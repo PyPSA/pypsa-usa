@@ -19,7 +19,6 @@ FIGURES_MAPS = [
     "emissions_map.pdf",
     "renewable_potential_map.pdf",
     "demand_map.pdf",
-    # "lmp_map.pdf",
 ]
 
 FIGURES_EMISSIONS = [
@@ -32,17 +31,20 @@ FIGURES_EMISSIONS = [
 
 FIGURES_PRODUCTION = [
     "production_area.pdf",
+    "seasonal_daily_production.pdf",
 ]
 
 FIGURES_SYSTEM = [
-    "production_bar.pdf",
-    "capacity_additions_bar.pdf",
-    "bar_regional_capacity_additions.pdf",
-    "bar_regional_production.pdf",
-    "global_constraint_shadow_prices.pdf",
-    "generator_data_panel.pdf",
+    "bar_regional_capacity_reeds_state.pdf",
+    "bar_regional_capacity_nerc_reg.pdf",
+    "bar_regional_capacity_interconnect.pdf",
+    "bar_regional_capacity_all.pdf",
+    "bar_regional_production_reeds_state.pdf",
+    "bar_regional_production_nerc_reg.pdf",
+    "bar_regional_production_interconnect.pdf",
+    "bar_regional_production_all.pdf",
     "fuel_costs.pdf",
-    "region_lmps.pdf",
+    "lmp_heatmap.pdf",
 ]
 
 FIGURES_VALIDATE = [
