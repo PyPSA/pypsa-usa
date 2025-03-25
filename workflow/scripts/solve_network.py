@@ -1588,12 +1588,10 @@ def solve_network(n, config, solving, opts="", **kwargs):
                     for tattr in n.component_attrs[nm].index[selection]:
                         n.import_series_from_dataframe(time_df[tattr], nm, tattr)
 
-                # roll over the sum of time varying storage state of charge to be the state_of_charge_initial
-                # breakpoint()
+                # roll over the last snapshot of time varying storage state of charge to be the state_of_charge_initial for the next time period
                 n.storage_units.loc[:, "state_of_charge_initial"] = n.storage_units_t.state_of_charge.loc[
                     planning_horizon
-                ].sum()
-                # breakpoint()
+                ].iloc[-1]
 
         case _:
             raise ValueError(f"Invalid foresight option: '{foresight}'. Must be 'perfect' or 'myopic'.")
