@@ -1553,31 +1553,33 @@ def solve_network(n, config, solving, opts="", **kwargs):
                         n.remove(nm, c_idx)
 
                     for df_idx in df.index:
-                        n.add(nm, df_idx, **df.loc[df_idx])
-                        # n.madd(
-                        #     nm,
-                        #     [df_idx],
-                        #     carrier=df.loc[df_idx].carrier,
-                        #     bus=df.loc[df_idx].bus,
-                        #     p_nom_min=df.loc[df_idx].p_nom_min,
-                        #     p_nom=df.loc[df_idx].p_nom,
-                        #     p_nom_max=df.loc[df_idx].p_nom_max,
-                        #     p_nom_extendable=df.loc[df_idx].p_nom_extendable,
-                        #     ramp_limit_up=df.loc[df_idx].ramp_limit_up,
-                        #     ramp_limit_down=df.loc[df_idx].ramp_limit_down,
-                        #     efficiency=df.loc[df_idx].efficiency,
-                        #     marginal_cost=df.loc[df_idx].marginal_cost,
-                        #     capital_cost=df.loc[df_idx].capital_cost,
-                        #     build_year=df.loc[df_idx].build_year,
-                        #     lifetime=df.loc[df_idx].lifetime,
-                        #     heat_rate=df.loc[df_idx].heat_rate,
-                        #     fuel_cost=df.loc[df_idx].fuel_cost,
-                        #     vom_cost=df.loc[df_idx].vom_cost,
-                        #     carrier_base=df.loc[df_idx].carrier_base,
-                        #     p_min_pu=df.loc[df_idx].p_min_pu,
-                        #     p_max_pu=df.loc[df_idx].p_max_pu,
-                        #     land_region=df.loc[df_idx].land_region,
-                        # )
+                        if nm == "Generator":
+                            n.madd(
+                                nm,
+                                [df_idx],
+                                carrier=df.loc[df_idx].carrier,
+                                bus=df.loc[df_idx].bus,
+                                p_nom_min=df.loc[df_idx].p_nom_min,
+                                p_nom=df.loc[df_idx].p_nom,
+                                p_nom_max=df.loc[df_idx].p_nom_max,
+                                p_nom_extendable=df.loc[df_idx].p_nom_extendable,
+                                ramp_limit_up=df.loc[df_idx].ramp_limit_up,
+                                ramp_limit_down=df.loc[df_idx].ramp_limit_down,
+                                efficiency=df.loc[df_idx].efficiency,
+                                marginal_cost=df.loc[df_idx].marginal_cost,
+                                capital_cost=df.loc[df_idx].capital_cost,
+                                build_year=df.loc[df_idx].build_year,
+                                lifetime=df.loc[df_idx].lifetime,
+                                heat_rate=df.loc[df_idx].heat_rate,
+                                fuel_cost=df.loc[df_idx].fuel_cost,
+                                vom_cost=df.loc[df_idx].vom_cost,
+                                carrier_base=df.loc[df_idx].carrier_base,
+                                p_min_pu=df.loc[df_idx].p_min_pu,
+                                p_max_pu=df.loc[df_idx].p_max_pu,
+                                land_region=df.loc[df_idx].land_region,
+                            )
+                        else:
+                            n.add(nm, df_idx, **df.loc[df_idx])
                     logger.info(n.consistency_check())
 
                     # copy time-dependent
