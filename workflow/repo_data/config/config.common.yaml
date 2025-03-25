@@ -1,3 +1,5 @@
+pudl_path: s3://pudl.catalyst.coop/v2025.2.0
+
 foresight:  'perfect'
 # docs :
 renewable:
@@ -138,5 +140,4 @@ offshore_shape:
   use: eez #options are ca_osw, eez
 
 offshore_network:
-  enable: true # set to true to enable offshore network
   bus_spacing: 25000 # km

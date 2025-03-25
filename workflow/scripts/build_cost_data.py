@@ -63,33 +63,31 @@ LIFETIME_DATA = [
 ]  # https://github.com/NREL/ReEDS-2.0/blob/e65ed5ed4ffff973071839481309f77d12d802cd/inputs/plant_characteristics/maxage.csv#L4
 
 
-def create_duckdb_instance(pudl_fn: str):
+def create_duckdb_instance():
+    """Set up DuckDB to read parquet files directly."""
     duckdb.connect(database=":memory:", read_only=False)
-
-    duckdb.query("INSTALL sqlite;")
-    duckdb.query(
-        f"""
-        ATTACH '{pudl_fn}' (TYPE SQLITE);
-        USE pudl;
-        """,
-    )
+    # Install httpfs extension to access remote files if needed
+    duckdb.query("INSTALL httpfs;")
 
 
-def load_pudl_atb_data():
-    query = """
+def load_pudl_atb_data(parquet_path: str):
+    """Loads ATB data directly from parquet files."""
+    create_duckdb_instance()
+
+    query = f"""
     WITH finance_cte AS (
         SELECT
-        wacc_real,
-        technology_description,
-        model_case_nrelatb,
-        scenario_atb,
-        projection_year,
-        cost_recovery_period_years,
-        report_year
-        FROM core_nrelatb__yearly_projected_financial_cases_by_scenario
+            wacc_real,
+            technology_description,
+            model_case_nrelatb,
+            scenario_atb,
+            projection_year,
+            cost_recovery_period_years,
+            report_year
+        FROM read_parquet('{parquet_path}/core_nrelatb__yearly_projected_financial_cases_by_scenario.parquet')
     )
     SELECT *
-    FROM core_nrelatb__yearly_projected_cost_performance atb
+    FROM read_parquet('{parquet_path}/core_nrelatb__yearly_projected_cost_performance.parquet') atb
     LEFT JOIN finance_cte AS finance
         ON atb.technology_description = finance.technology_description
             AND atb.model_case_nrelatb = finance.model_case_nrelatb
@@ -102,10 +100,11 @@ def load_pudl_atb_data():
     return duckdb.query(query).to_df()
 
 
-def load_pudl_aeo_data():
-    query = """
+def load_pudl_aeo_data(parquet_path: str):
+    """Loads AEO data directly from parquet files."""
+    query = f"""
     SELECT *
-    FROM core_eiaaeo__yearly_projected_fuel_cost_in_electric_sector_by_type aeo
+    FROM read_parquet('{parquet_path}/core_eiaaeo__yearly_projected_fuel_cost_in_electric_sector_by_type.parquet') aeo
     WHERE aeo.report_year = 2023
     """
     return duckdb.query(query).to_df()
@@ -245,10 +244,11 @@ if __name__ == "__main__":
 
     emissions_data = EMISSIONS_DATA
 
-    create_duckdb_instance(snakemake.input.pudl)
+    # Path to parquet files
+    parquet_path = snakemake.params.pudl_path
 
     # Import PUDLs ATB data
-    pudl_atb = load_pudl_atb_data()
+    pudl_atb = load_pudl_atb_data(parquet_path)
     pudl_atb["pypsa-name"] = pudl_atb.apply(
         match_technology,
         axis=1,
@@ -378,7 +378,7 @@ if __name__ == "__main__":
     )
 
     # Load AEO Fuel Cost Data
-    aeo = load_pudl_aeo_data()
+    aeo = load_pudl_aeo_data(parquet_path)
     aeo = aeo[aeo.projection_year == tech_year]
     aeo = aeo[aeo.model_case_eiaaeo == aeo_params.get("scenario", "Reference")]
     cols = ["fuel_type_eiaaeo", "fuel_cost_real_per_mmbtu_eiaaeo"]

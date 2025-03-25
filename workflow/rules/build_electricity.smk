@@ -94,8 +94,8 @@ rule build_bus_regions:
 rule build_cost_data:
     params:
         costs=config_provider("costs"),
+        pudl_path=config_provider("pudl_path"),
     input:
-        pudl=DATA + "pudl/pudl.sqlite",
         efs_tech_costs="repo_data/costs/EFS_Technology_Data.xlsx",
         efs_icev_costs="repo_data/costs/efs_icev_costs.csv",
         eia_tech_costs="repo_data/costs/eia_tech_costs.csv",
@@ -303,9 +303,9 @@ def demand_scaling_data(wildcards):
         ].capitalize()
         return DATA + f"nrel_efs/EFSLoadProfile_{efs_case}_{efs_speed}.csv"
     elif profile == "eia":
-        return DATA + "pudl/pudl.sqlite"
+        return []
     elif profile == "ferc":
-        return DATA + "pudl/pudl.sqlite"
+        return []
     else:
         return ""
 
@@ -319,6 +319,7 @@ rule build_electrical_demand:
         profile_year=pd.to_datetime(config["snapshots"]["start"]).year,
         planning_horizons=config["scenario"]["planning_horizons"],
         snapshots=config["snapshots"],
+        pudl_path=config_provider("pudl_path"),
     input:
         network=RESOURCES + "{interconnect}/elec_base_network.nc",
         demand_files=demand_raw_data,
@@ -344,6 +345,7 @@ rule build_sector_demand:
         profile_year=pd.to_datetime(config["snapshots"]["start"]).year,
         eia_api=config_provider("api", "eia"),
         snapshots=config_provider("snapshots"),
+        pudl_path=config_provider("pudl_path"),
     input:
         network=RESOURCES + "{interconnect}/elec_base_network.nc",
         demand_files=demand_raw_data,
@@ -513,9 +515,9 @@ rule build_fuel_prices:
     params:
         snapshots=config["snapshots"],
         api_eia=config["api"]["eia"],
+        pudl_path=config_provider("pudl_path"),
     input:
         gas_balancing_area=ba_gas_dynamic_fuel_price_files,
-        pudl=DATA + "pudl/pudl.sqlite",
     output:
         state_ng_fuel_prices=RESOURCES + "{interconnect}/state_ng_power_prices.csv",
         state_coal_fuel_prices=RESOURCES + "{interconnect}/state_coal_power_prices.csv",
@@ -547,8 +549,10 @@ def dynamic_fuel_price_files(wildcards):
 
 
 rule build_powerplants:
+    params:
+        pudl_path=config_provider("pudl_path"),
+        renewable_weather_year=config_provider("renewable_weather_years"),
     input:
-        pudl=DATA + "pudl/pudl.sqlite",
         wecc_ads="repo_data/WECC_ADS_public",
         eia_ads_generator_mapping="repo_data/WECC_ADS_public/eia_ads_generator_mapping_updated.csv",
         fuel_costs="repo_data/plants/fuelCost22.csv",

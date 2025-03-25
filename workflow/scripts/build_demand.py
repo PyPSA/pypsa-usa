@@ -5,7 +5,6 @@
 
 import calendar
 import logging
-import sqlite3
 import sys
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -293,26 +292,21 @@ class ReadFERC714(ReadStrategy):
         return pd.read_parquet(self.filepath[0], dtype_backend="pyarrow")
 
     def _read_census_data(self) -> pd.DataFrame:
-        """Reads in census data for population weighting."""
+        """Reads in census data for population weighting using parquet."""
         duckdb.connect(database=":memory:", read_only=False)
+        duckdb.query("INSTALL httpfs;")
 
-        duckdb.query("INSTALL sqlite;")
-        duckdb.query(
-            f"""
-            ATTACH '{self.filepath[1]}' (TYPE SQLITE);
-            """,
-        )
+        parquet_path = snakemake.params.pudl_path
 
-        sql = """
+        sql = f"""
         SELECT
         stusps10 as state_abbr,
         geoid10 as state_id_fips,
         name10 as state_name,
         shape as geom
-        FROM
-        censusdp1tract.state_2010census_dp1;
+        FROM read_parquet('{parquet_path}/censusdp1tract.state_2010census_dp1.parquet');
         """
-        # df = duckdb.query(sql).to_df()
+
         states = (
             gpd.read_postgis(sql, duckdb, crs="EPSG:4326")
             .convert_dtypes()
@@ -1912,7 +1906,9 @@ class DemandFormatter:
             assert self.api, "Must provide eia api key"
             return AeoEnergyScaler(self.api)
         elif self.scaling_method == "aeo_electricity":
-            assert self.filepath.endswith(".sqlite"), "Must provide pudl.sqlite file"
+            assert self.filepath.startswith(
+                "s3://pudl.catalyst.coop/",
+            ), "Must provide pudl S3 URL (s3://pudl.catalyst.coop/...)"
             return AeoElectricityScaler(self.filepath)
         elif self.scaling_method == "efs":
             assert self.filepath.endswith(".csv"), "Must provide EFS.csv data"
@@ -1995,15 +1991,15 @@ class DemandScaler(ABC):
 class AeoElectricityScaler(DemandScaler):
     """Scales against EIA Annual Energy Outlook electricity projections."""
 
-    def __init__(self, pudl: str, scenario: str = "reference"):
-        self.pudl = pudl
+    def __init__(self, pudl_path: str, scenario: str = "reference"):
+        self.pudl_path = pudl_path
         self.scenario = scenario
         self.region = "united_states"
         super().__init__()
 
     def get_projections(self) -> pd.DataFrame:
         """
-        Get sector yearly END-USE ELECTRICITY growth rates from AEO.
+        Get sector yearly END-USE ELECTRICITY growth rates from AEO using parquet files.
 
         |      | power | units |
         |----- |-------|-------|
@@ -2014,30 +2010,28 @@ class AeoElectricityScaler(DemandScaler):
         | 2049 |  ###  |  ###  |
         | 2050 |  ###  |  ###  |
         """
-        con = sqlite3.connect(self.pudl)
-        df = pd.read_sql_query(
-            f"""
+        duckdb.connect(database=":memory:", read_only=False)
+        duckdb.query("INSTALL httpfs;")
+
+        query = f"""
         SELECT
-        projection_year,
-        technology_description_eiaaeo,
-        gross_generation_mwh
-        FROM
-        core_eiaaeo__yearly_projected_generation_in_electric_sector_by_technology
-        WHERE
-        electricity_market_module_region_eiaaeo = "{self.region}" AND
-        model_case_eiaaeo = "{self.scenario}"
-        """,
-            con,
-        )
+            projection_year,
+            gross_generation_mwh
+        FROM read_parquet('{self.pudl_path}/core_eiaaeo__yearly_projected_generation_in_electric_sector_by_technology.parquet')
+        WHERE electricity_market_module_region_eiaaeo = '{self.region}'
+        AND model_case_eiaaeo = '{self.scenario}'
+        """
+
+        df = duckdb.query(query).to_df()
 
         df = (
-            df.drop(columns=["technology_description_eiaaeo"])
-            .rename(
+            df.rename(
                 columns={"projection_year": "year", "gross_generation_mwh": "power"},
             )
             .groupby("year")
             .sum()
         )
+
         df["units"] = "mwh"
         return df
 

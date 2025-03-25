@@ -143,7 +143,8 @@ def get_caiso_ng_power_prices(
 ###
 def build_pudl_fuel_costs(snapshots: pd.DatetimeIndex, start_date: str, end_date: str):
     """Build fuel costs based on PUDL EIA 923 Fuel Receipts data."""
-    _, fuel_cost_temporal = load_pudl_data(snakemake.input.pudl, start_date, end_date)
+    pudl_path = snakemake.params.pudl_path
+    _, fuel_cost_temporal = load_pudl_data(pudl_path, start_date, end_date)
     fuel_cost_temporal["interconnect"] = fuel_cost_temporal["nerc_region"].map(
         const.NERC_REGION_MAPPER,
     )

@@ -98,10 +98,14 @@ def filter_components(
     else:
         active_components = component.index
 
+    # Links will throw the following attribute error, as we must specify bus0
+    # AttributeError: 'DataFrame' object has no attribute 'bus'. Did you mean: 'bus0'?
+    bus_name = "bus0" if component_type.lower() == "link" else "bus"
+
     filtered = component.loc[
         active_components
         & component.carrier.isin(carrier_list)
-        & component.bus.isin(region_buses)
+        & component[bus_name].isin(region_buses)
         & (component.p_nom_extendable == extendable)
     ]
 
@@ -160,6 +164,7 @@ def prepare_network(
         # intersect between macroeconomic and surveybased willingness to pay
         # http://journal.frontiersin.org/article/10.3389/fenrg.2015.00055/full
         # TODO: retrieve color and nice name from config
+        logger.warning("Adding load shedding generators.")
         n.add("Carrier", "load", color="#dd2e23", nice_name="Load shedding")
         buses_i = n.buses.query("carrier == 'AC'").index
         if not np.isscalar(load_shedding):
@@ -214,7 +219,6 @@ def add_technology_capacity_target_constraints(n, config):
     electricity:
         technology_capacity_target: config/policy_constraints/technology_capacity_target.csv
     """
-    p_nom = n.model["Generator-p_nom"]
     tct_data = pd.read_csv(config["electricity"]["technology_capacity_targets"])
     if tct_data.empty:
         return
@@ -259,7 +263,24 @@ def add_technology_capacity_target_constraints(n, config):
             extendable=False,
         )
 
-        if region_buses.empty or (lhs_gens_ext.empty and lhs_storage_ext.empty):
+        lhs_link_ext = filter_components(
+            n=n,
+            component_type="Link",
+            planning_horizon=planning_horizon,
+            carrier_list=carrier_list,
+            region_buses=region_buses.index,
+            extendable=True,
+        )
+        lhs_link_existing = filter_components(
+            n=n,
+            component_type="Link",
+            planning_horizon=planning_horizon,
+            carrier_list=carrier_list,
+            region_buses=region_buses.index,
+            extendable=False,
+        )
+
+        if region_buses.empty or (lhs_gens_ext.empty and lhs_storage_ext.empty and lhs_link_ext.empty):
             continue
 
         if not lhs_gens_ext.empty:
@@ -269,7 +290,7 @@ def add_technology_capacity_target_constraints(n, config):
             ).rename_axis(
                 "Generator-ext",
             )
-            lhs_g = p_nom.loc[lhs_gens_ext.index].groupby(grouper_g).sum().rename(bus="country")
+            lhs_g = n.model["Generator-p_nom"].loc[lhs_gens_ext.index].groupby(grouper_g).sum().rename(bus="country")
         else:
             lhs_g = None
 
@@ -284,16 +305,27 @@ def add_technology_capacity_target_constraints(n, config):
         else:
             lhs_s = None
 
-        if lhs_g is None and lhs_s is None:
-            continue
-        elif lhs_g is None:
-            lhs = lhs_s.sum()
-        elif lhs_s is None:
-            lhs = lhs_g.sum()
+        if not lhs_link_ext.empty:
+            grouper_l = pd.concat(
+                [lhs_link_ext.bus.map(n.buses.country), lhs_link_ext.carrier],
+                axis=1,
+            ).rename_axis(
+                "Link-ext",
+            )
+            lhs_l = n.model["Link-p_nom"].loc[lhs_link_ext.index].groupby(grouper_l).sum()
         else:
-            lhs = (lhs_g + lhs_s).sum()
+            lhs_l = None
 
-        lhs_existing = lhs_gens_existing.p_nom.sum() + lhs_storage_existing.p_nom.sum()
+        if lhs_g is None and lhs_s is None and lhs_l is None:
+            continue
+        else:
+            gen = lhs_g.sum() if lhs_g else 0
+            lnk = lhs_l.sum() if lhs_l else 0
+            sto = lhs_s.sum() if lhs_s else 0
+
+        lhs = gen + lnk + sto
+
+        lhs_existing = lhs_gens_existing.p_nom.sum() + lhs_storage_existing.p_nom.sum() + lhs_link_existing.p_nom.sum()
 
         if target["max"] == "existing":
             target["max"] = round(lhs_existing, 2) + 0.01
@@ -314,13 +346,7 @@ def add_technology_capacity_target_constraints(n, config):
             )
 
             logger.info(
-                "Adding TCT Constraint:\n"
-                f"Name: {target.name}\n"
-                f"Planning Horizon: {target.planning_horizon}\n"
-                f"Region: {target.region}\n"
-                f"Carrier: {target.carrier}\n"
-                f"Min Value: {target['min']}\n"
-                f"Min Value Adj: {rhs}",
+                f"Adding TCT Constraint: Name: {target.name}, Planning Horizon: {target.planning_horizon}, Region: {target.region}, Carrier: {target.carrier}, Min Value: {target['min']}, Min Value Adj: {rhs}",
             )
 
         if not np.isnan(target["max"]):
@@ -336,13 +362,7 @@ def add_technology_capacity_target_constraints(n, config):
             )
 
             logger.info(
-                "Adding TCT Constraint:\n"
-                f"Name: {target.name}\n"
-                f"Planning Horizon: {target.planning_horizon}\n"
-                f"Region: {target.region}\n"
-                f"Carrier: {target.carrier}\n"
-                f"Max Value: {target['max']}\n"
-                f"Max Value Adj: {rhs}",
+                f"Adding TCT Constraint: Name: {target.name}, Planning Horizon: {target.planning_horizon}, Region: {target.region}, Carrier: {target.carrier}, Max Value: {target['max']}, Max Value Adj: {rhs}",
             )
 
 
@@ -735,104 +755,201 @@ def add_regional_co2limit(n, sns, config):
         )
 
 
-def add_SAFE_constraints(n, config):
+def add_PRM_constraints(n, config):
     """
-    Add a capacity reserve margin of a certain fraction above the peak demand.
-    Renewable generators and storage do not contribute. Ignores network.
+    Add Planning Reserve Margin (PRM) constraints for regional capacity adequacy.
+
+    This function enforces that each region has sufficient firm capacity to meet
+    peak demand plus a reserve margin. Only firm resources (not variable renewables
+    or storage) contribute to meeting this requirement.
 
     Parameters
     ----------
-        n : pypsa.Network
-        config : dict
-
-    Example
-    -------
-    config.yaml requires to specify opts:
-
-    scenario:
-        opts: [Co2L-SAFE-24H]
-    electricity:
-        SAFE_reservemargin: 0.1
-    Which sets a reserve margin of 10% above the peak demand.
+    n : pypsa.Network
+        The PyPSA network object
+    config : dict
+        Configuration dictionary containing PRM parameters
     """
-    peakdemand = n.loads_t.p_set.sum(axis=1).max()
-    margin = 1.0 + config["electricity"]["SAFE_reservemargin"]
-    reserve_margin = peakdemand * margin
-    ext_gens_i = n.generators.query(
-        "carrier in @conventional_carriers & p_nom_extendable",
-    ).index
-    p_nom = n.model["Generator-p_nom"].loc[ext_gens_i]
-    lhs = p_nom.sum()
-    exist_conv_caps = n.generators.query(
-        "~p_nom_extendable & carrier in @conventional_carriers",
-    ).p_nom.sum()
-    rhs = reserve_margin - exist_conv_caps
-    n.model.add_constraints(lhs >= rhs, name="safe_mintotalcap")
+    # Load regional PRM requirements
+    regional_prm = _get_combined_prm_requirements(n, config)
 
+    # Apply constraints for each region and planning horizon
+    for _, prm in regional_prm.iterrows():
+        # Skip if no valid planning horizon or region
+        if prm.planning_horizon not in n.investment_periods:
+            continue
 
-def add_SAFER_constraints(n, config):
-    """
-    Add a capacity reserve margin of a certain fraction above the peak demand
-    for regions defined in configuration file. Renewable generators and storage
-    do not contribute towards PRM.
-
-    Parameters
-    ----------
-        n : pypsa.Network
-        config : dict
-    """
-    regional_prm = pd.read_csv(
-        config["electricity"]["SAFE_regional_reservemargins"],
-        index_col=[0],
-    )
-
-    reeds_prm = pd.read_csv(
-        snakemake.input.safer_reeds,
-        index_col=[0],
-    )
-    nerc_memberships = n.buses.groupby("nerc_reg")["reeds_zone"].apply(lambda x: ", ".join(x)).to_dict()
-    reeds_prm["region"] = reeds_prm.index.map(nerc_memberships)
-    reeds_prm = reeds_prm.dropna(subset="region")
-    reeds_prm = reeds_prm.drop(
-        columns=["none", "ramp2025_20by50", "ramp2025_25by50", "ramp2025_30by50"],
-    )
-    reeds_prm = reeds_prm.rename(columns={"static": "prm", "t": "planning_horizon"})
-
-    regional_prm = pd.concat([regional_prm, reeds_prm])
-    regional_prm = regional_prm[regional_prm.planning_horizon.isin(snakemake.params.planning_horizons)]
-
-    for idx, prm in regional_prm.iterrows():
         region_list = [region_.strip() for region_ in prm.region.split(",")]
         region_buses = get_region_buses(n, region_list)
 
         if region_buses.empty:
             continue
 
-        peakdemand = (
-            n.loads_t.p_set.loc[
-                prm.planning_horizon,
-                n.loads.bus.isin(region_buses.index),
-            ]
-            .sum(axis=1)
-            .max()
-        )
-        margin = 1.0 + prm.prm
-        planning_reserve = peakdemand * margin
+        # Calculate peak demand and required reserve margin
+        regional_demand = _get_regional_demand(n, prm.planning_horizon, region_buses)
+        peak_demand = regional_demand.max()
+        planning_reserve = peak_demand * (1.0 + prm.prm)
 
-        region_gens = n.generators[n.generators.bus.isin(region_buses.index)]
-        ext_gens_i = region_gens.query(
-            "carrier in @conventional_carriers & p_nom_extendable",
-        ).index
-        p_nom = n.model["Generator-p_nom"].loc[ext_gens_i]
-        lhs = p_nom.sum()
-        exist_conv_caps = region_gens.query(
-            "~p_nom_extendable & carrier in @conventional_carriers",
-        ).p_nom.sum()
-        rhs = planning_reserve - exist_conv_caps
+        # Get capacity contribution from resources
+        lhs_capacity, rhs_existing = _calculate_capacity_accredidation(
+            n,
+            prm.planning_horizon,
+            region_buses,
+            peak_demand_hour=regional_demand.idxmax(),
+        )
+
+        # Add the constraint to the model
         n.model.add_constraints(
-            lhs >= rhs,
+            lhs_capacity >= planning_reserve - rhs_existing,
             name=f"GlobalConstraint-{prm.name}_{prm.planning_horizon}_PRM",
         )
+
+        logger.info(
+            f"Added PRM constraint for {prm.name} in {prm.planning_horizon}: "
+            f"Peak demand: {peak_demand:.2f} MW, "
+            f"Required capacity: {planning_reserve:.2f} MW",
+        )
+
+
+def _get_combined_prm_requirements(n, config):
+    """
+    Combine PRM requirements from different sources into a single dataframe.
+
+    Parameters
+    ----------
+    n : pypsa.Network
+    config : dict
+
+    Returns
+    -------
+    pd.DataFrame
+        Combined PRM requirements with columns: name, region, prm, planning_horizon
+    """
+    # Load user-defined PRM requirements
+    regional_prm = pd.read_csv(
+        config["electricity"]["SAFE_regional_reservemargins"],
+        index_col=[0],
+    )
+
+    # Process ReEDS PRM data if available
+    try:
+        reeds_prm = pd.read_csv(snakemake.input.safer_reeds, index_col=[0])
+
+        # Map NERC regions to ReEDS zones
+        nerc_memberships = (
+            n.buses.groupby("nerc_reg")["reeds_zone"]
+            .apply(
+                lambda x: ", ".join(x),
+            )
+            .to_dict()
+        )
+
+        reeds_prm["region"] = reeds_prm.index.map(nerc_memberships)
+        reeds_prm = reeds_prm.dropna(subset="region")
+        reeds_prm = reeds_prm.drop(
+            columns=["none", "ramp2025_20by50", "ramp2025_25by50", "ramp2025_30by50"],
+        )
+        reeds_prm = reeds_prm.rename(columns={"static": "prm", "t": "planning_horizon"})
+
+        # Combine both data sources
+        regional_prm = pd.concat([regional_prm, reeds_prm])
+    except (FileNotFoundError, AttributeError):
+        logger.info("ReEDS PRM data not available, using only user-defined PRM values")
+
+    # Filter for relevant planning horizons
+    return regional_prm[regional_prm.planning_horizon.isin(n.investment_periods)]
+
+
+def _get_regional_demand(n, planning_horizon, region_buses):
+    """
+    Calculate hourly demand for a specific region and planning horizon.
+
+    Parameters
+    ----------
+    n : pypsa.Network
+    planning_horizon : int or str
+        Planning horizon year
+    region_buses : pd.DataFrame
+        DataFrame containing buses in the region
+
+    Returns
+    -------
+    pd.Series
+        Hourly demand series for the region
+    """
+    return n.loads_t.p_set.loc[
+        planning_horizon,
+        n.loads.bus.isin(region_buses.index),
+    ].sum(axis=1)
+
+
+#  n.loads_t.p_set.loc[planning_horizon, n.loads.bus.isin(region_buses.index)].sum(axis=1)
+def _calculate_capacity_accredidation(n, planning_horizon, region_buses, peak_demand_hour):
+    """
+    Calculate capacity contribution from all resources in a region at the peak demand hour.
+
+    This function accounts for:
+    1. Extendable resources with appropriate capacity credit
+    2. Non-extendable existing resources
+
+    Parameters
+    ----------
+    n : pypsa.Network
+    planning_horizon : int or str
+    region_buses : pd.DataFrame
+    peak_demand_hour : pd.Timestamp
+        Hour of peak demand used for calculating capacity credits
+
+    Returns
+    -------
+    float or xarray.DataArray
+        Total firm capacity contribution
+    """
+    # Get active generators during this planning period
+    active_gens = n.get_active_assets("Generator", planning_horizon)
+    extendable_gens = n.generators.p_nom_extendable
+    region_gens = n.generators.bus.isin(region_buses.index)
+
+    # Extendable capacity with capacity credit
+    region_active_ext_gens = region_gens & active_gens & extendable_gens
+    region_active_ext_gens = n.generators[region_active_ext_gens]
+
+    if not region_active_ext_gens.empty:
+        ext_p_nom = n.model["Generator-p_nom"].loc[region_active_ext_gens.index]
+        ext_p_max_pu = get_as_dense(
+            n,
+            "Generator",
+            "p_max_pu",
+            inds=region_active_ext_gens.index,
+        ).loc[
+            planning_horizon,
+            peak_demand_hour,
+        ]
+
+        ext_contribution = ext_p_nom * ext_p_max_pu.values
+    else:
+        ext_contribution = 0
+
+    # Non-extendable existing capacity
+    region_active_nonext_gens = region_gens & active_gens & ~extendable_gens
+    region_active_nonext_gens = n.generators[region_active_nonext_gens]
+
+    if not region_active_nonext_gens.empty:
+        non_ext_p_max_pu = get_as_dense(
+            n,
+            "Generator",
+            "p_max_pu",
+            inds=region_active_nonext_gens.index,
+        ).loc[
+            planning_horizon,
+            peak_demand_hour,
+        ]
+        non_ext_p_nom = region_active_nonext_gens.p_nom
+        non_ext_contribution = (non_ext_p_nom * non_ext_p_max_pu).sum()
+    else:
+        non_ext_contribution = 0
+
+    return ext_contribution.sum(), non_ext_contribution
 
 
 def add_operational_reserve_margin(n, sns, config):
@@ -1013,77 +1130,48 @@ def add_sector_co2_constraints(n, config):
         config : dict
     """
 
-    def apply_total_state_limit(n, year, state, value):
-        sns = n.snapshots
-        snapshot = sns[sns.get_level_values("period") == year][-1]
+    def apply_state_limit(n: pypsa.Network, year: int, state: str, value: float, sector: str | None = None):
+        if sector:
+            stores = n.stores[
+                (n.stores.index.str.startswith(state))
+                & ((n.stores.index.str.endswith(f"{sector}-co2")) | (n.stores.index.str.endswith(f"{sector}-ch4")))
+            ].index
+            name = f"GlobalConstraint-co2_limit-{year}-{state}-{sector}"
+            log_statement = f"Adding {state} {sector} co2 Limit in {year} of"
+        else:
+            stores = n.stores[
+                (n.stores.index.str.startswith(state))
+                & ((n.stores.index.str.endswith("-co2")) | (n.stores.index.str.endswith("-ch4")))
+            ].index
+            name = f"GlobalConstraint-co2_limit-{year}-{state}"
+            log_statement = f"Adding {state} co2 Limit in {year} of"
 
-        stores = n.stores[
-            (n.stores.index.str.startswith(state))
-            & ((n.stores.index.str.endswith("-co2")) | (n.stores.index.str.endswith("-ch4")))
-        ].index
-
-        lhs = n.model["Store-e"].loc[snapshot, stores].sum()
-
+        lhs = n.model["Store-e"].loc[:, stores].sum(dim="Store")
         rhs = value  # value in T CO2
 
-        n.model.add_constraints(lhs <= rhs, name=f"co2_limit-{year}-{state}")
+        n.model.add_constraints(lhs <= rhs, name=name)
 
-        logger.info(
-            f"Adding {state} co2 Limit in {year} of {rhs * 1e-6} MMT CO2",
-        )
+        logger.info(f"{log_statement} {rhs * 1e-6} MMT CO2")
 
-    def apply_sector_state_limit(n, year, state, sector, value):
-        sns = n.snapshots
-        snapshot = sns[sns.get_level_values("period") == year][-1]
+    def apply_national_limit(n: pypsa.Network, year: int, value: float, sector: str | None = None):
+        """For every snapshot, sum of co2 and ch4 must be less than limit."""
+        if sector:
+            stores = n.stores[
+                ((n.stores.index.str.endswith(f"{sector}-co2")) | (n.stores.index.str.endswith(f"{sector}-ch4")))
+            ].index
+            name = f"co2_limit-{year}-{sector}"
+            log_statement = f"Adding national {sector} co2 Limit in {year} of"
+        else:
+            stores = n.stores[((n.stores.index.str.endswith("-co2")) | (n.stores.index.str.endswith("-ch4")))].index
+            name = f"co2_limit-{year}"
+            log_statement = f"Adding national co2 Limit in {year} of"
 
-        stores = n.stores[
-            (n.stores.index.str.startswith(state))
-            & ((n.stores.index.str.endswith(f"{sector}-co2")) | (n.stores.index.str.endswith(f"{sector}-ch4")))
-        ].index
-
-        lhs = n.model["Store-e"].loc[snapshot, stores].sum()
-
+        lhs = n.model["Store-e"].loc[:, stores].sum(dim="Store")
         rhs = value  # value in T CO2
 
-        n.model.add_constraints(lhs <= rhs, name=f"co2_limit-{year}-{state}-{sector}")
+        n.model.add_constraints(lhs <= rhs, name=name)
 
-        logger.info(
-            f"Adding {state} co2 Limit for {sector} in {year} of {rhs * 1e-6} MMT CO2",
-        )
-
-    def apply_total_national_limit(n, year, value):
-        sns = n.snapshots
-        snapshot = sns[sns.get_level_values("period") == year][-1]
-
-        stores = n.stores[((n.stores.index.str.endswith("-co2")) | (n.stores.index.str.endswith("-ch4")))].index
-
-        lhs = n.model["Store-e"].loc[snapshot, stores].sum()
-
-        rhs = value  # value in T CO2
-
-        n.model.add_constraints(lhs <= rhs, name=f"co2_limit-{year}")
-
-        logger.info(
-            f"Adding national co2 Limit in {year} of {rhs * 1e-6} MMT CO2",
-        )
-
-    def apply_sector_national_limit(n, year, sector, value):
-        sns = n.snapshots
-        snapshot = sns[sns.get_level_values("period") == year][-1]
-
-        stores = n.stores[
-            (n.stores.index.str.endswith(f"{sector}-co2")) | (n.stores.index.str.endswith(f"{sector}-ch4"))
-        ].index
-
-        lhs = n.model["Store-e"].loc[snapshot, stores].sum()
-
-        rhs = value  # value in T CO2
-
-        n.model.add_constraints(lhs <= rhs, name=f"co2_limit-{year}-{sector}")
-
-        logger.info(
-            f"Adding national co2 Limit for {sector} sector in {year} of {rhs * 1e-6} MMT CO2",
-        )
+        logger.info(f"{log_statement} {rhs * 1e-6} MMT CO2")
 
     try:
         f = config["sector"]["co2"]["policy"]
@@ -1120,17 +1208,16 @@ def add_sector_co2_constraints(n, config):
                 # results calcualted in T CO2, policy given in MMT CO2
                 value = df_limit.loc[0, "co2_limit_mmt"] * 1e6
 
-                if state.upper() == "USA":
+                if state.lower() == "all":
                     if sector == "all":
-                        apply_total_national_limit(n, year, value)
+                        apply_national_limit(n, year, value)
                     else:
-                        apply_sector_national_limit(n, year, sector, value)
-
+                        apply_national_limit(n, year, value, sector)
                 else:
                     if sector == "all":
-                        apply_total_state_limit(n, year, state, value)
+                        apply_state_limit(n, year, state, value)
                     else:
-                        apply_sector_state_limit(n, year, state, sector, value)
+                        apply_state_limit(n, year, state, value, sector)
 
 
 def add_cooling_heat_pump_constraints(n, config):
@@ -1526,10 +1613,8 @@ def extra_functionality(n, snapshots):
         add_regional_co2limit(n, snapshots, config)
     if "BAU" in opts and n.generators.p_nom_extendable.any():
         add_BAU_constraints(n, config)
-    if "SAFE" in opts and n.generators.p_nom_extendable.any():
-        add_SAFE_constraints(n, config)
-    if "SAFER" in opts and n.generators.p_nom_extendable.any():
-        add_SAFER_constraints(n, config)
+    if "PRM" in opts and n.generators.p_nom_extendable.any():
+        add_PRM_constraints(n, config)
     if "TCT" in opts and n.generators.p_nom_extendable.any():
         add_technology_capacity_target_constraints(n, config)
     reserve = config["electricity"].get("operational_reserve", {})
@@ -1565,8 +1650,7 @@ def solve_network(n, config, solving, opts="", **kwargs):
     set_of_options = solving["solver"]["options"]
     cf_solving = solving["options"]
 
-    if len(n.investment_periods) > 1:
-        kwargs["multi_investment_periods"] = config["foresight"] == "perfect"
+    kwargs["multi_investment_periods"] = config["foresight"] == "perfect"
 
     kwargs["solver_options"] = solving["solver_options"][set_of_options] if set_of_options else {}
     kwargs["solver_name"] = solving["solver"]["name"]
@@ -1621,10 +1705,10 @@ if __name__ == "__main__":
         snakemake = mock_snakemake(
             "solve_network",
             interconnect="western",
-            simpl="70",
-            clusters="4m",
+            simpl="55",
+            clusters="11m",
             ll="v1.0",
-            opts="1h-TCT",
+            opts="6h-TCT",
             sector="E-G",
             planning_horizons="2030",
         )
