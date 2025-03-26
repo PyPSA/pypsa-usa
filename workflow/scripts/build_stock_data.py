@@ -809,23 +809,19 @@ def add_road_transport_brownfield(
             case RoadTransport.LIGHT.value:
                 costs_name = "Light Duty Cars ICEV"
                 ratio_name = "light_duty"
-                # efficiency = 25.9  # mpg
-                efficiency = 20  # mpg
+                efficiency = 25.9  # mpg
             case RoadTransport.MEDIUM.value:
                 costs_name = "Medium Duty Trucks ICEV"
                 ratio_name = "med_duty"
-                # efficiency = 16.35  # mpg
-                efficiency = 15  # mpg
+                efficiency = 16.35  # mpg
             case RoadTransport.HEAVY.value:
                 costs_name = "Heavy Duty Trucks ICEV"
                 ratio_name = "heavy_duty"
-                # efficiency = 5.44  # mpg
-                efficiency = 5  # mpg
+                efficiency = 5.44  # mpg
             case RoadTransport.BUS.value:
                 costs_name = "Buses ICEV"
                 ratio_name = "bus"
-                # efficiency = 3.67  # mpg
-                efficiency = 3  # mpg
+                efficiency = 3.67  # mpg
             case _:
                 raise NotImplementedError
 
