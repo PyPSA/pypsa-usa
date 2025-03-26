@@ -35,11 +35,6 @@ from shapely.geometry import Point
 
 logger = logging.getLogger(__name__)
 
-# https://www.eia.gov/tools/faqs/faq.php?id=72&t=2
-# 20.1 MMBTU per short ton
-# 0.293 MWh per MMBTU
-COAL_TON_2_MWH = (1 / 20.1) * (1 / 0.293)
-
 
 def assign_bus_2_state(
     n: pypsa.Network,
@@ -223,33 +218,76 @@ def get_dynamic_marginal_costs(
             act = FuelCosts(fuel, 2023, eia, industry=sector_mapper[sector]).get_data(pivot=True)
             proj = FuelCosts(fuel, year, eia, industry=sector_mapper[sector]).get_data(pivot=True)
 
+            # actual comes in $/MCF, while projected comes in $/MMBTU
+            # https://www.eia.gov/totalenergy/data/browser/index.php?tbl=TA4#/?f=A
+            # 1.036 BTU / MCF
+            act_mmbtu = act / 1.036
+
             if "USA" not in act.columns:
                 act["USA"] = act.mean(axis=1)
+                act_mmbtu["USA"] = act_mmbtu.mean(axis=1)
 
-            actual_year_mean = act.mean().at["U.S."]
-            proj_year_mean = proj.at[year, "U.S."]
+            actual_year_mean = act_mmbtu.mean().at["U.S."]
+            proj_year_mean = proj.at[year, "USA"]
             scaler = proj_year_mean / actual_year_mean
 
             raw = act * scaler * 1000 / NG_MWH_2_MMCF  # $/MCF -> $/MWh
     elif fuel == "coal":
+        # https://www.eia.gov/tools/faqs/faq.php?id=72&t=2
+        # 19.18 MMBTU per short ton
+        mmbtu_per_ston = 19.18
+        wh_per_btu = 0.29307  # same as mwh_per_mmbtu
+
         # no industry = industrial, so use industry = power
         if year < 2024:  # get actual monthly values
-            raw = FuelCosts(fuel, year, eia, industry="power").get_data(pivot=True) * COAL_TON_2_MWH  # $/Ton -> $/MWh
+            raw = FuelCosts(fuel, year, eia, industry="power").get_data(pivot=True)
+            raw *= 1 / mmbtu_per_ston / wh_per_btu  # $/Ton -> $/MWh
         else:
+            # idk why, but there is a weird issue from AEO actual costs (ie 2023) dont
+            # seem to match actual reported value (or maybe more likely I am interpreteing
+            # something wrong). I am taking the profile, then applying the value to the 2024
+            # prices, and scaling from that.
+
             act = FuelCosts(fuel, 2023, eia, industry="power").get_data(pivot=True)
+            proj_2024 = FuelCosts(fuel, 2024, eia, industry="power").get_data(pivot=True)
             proj = FuelCosts(fuel, year, eia, industry="power").get_data(pivot=True)
+
+            act *= 1 / mmbtu_per_ston / wh_per_btu  # $/Ton -> $/MWh
+            proj *= 1 / wh_per_btu  # $/MMBTU -> $/MWh
+            proj_2024 *= 1 / wh_per_btu  # $/MMBTU -> $/MWh
 
             if "USA" not in act.columns:
                 act["USA"] = act.mean(axis=1)
 
-            actual_year_mean = act.mean().at["USA"]
+            present_day_scale = proj_2024.at[2024, "USA"] / act.mean().at["USA"]
+            act_adjusted = act * present_day_scale
+
+            proj_year_mean = proj.at[year, "USA"]
+            scaler = proj_year_mean / act_adjusted.mean().at["USA"]
+
+            raw = act_adjusted * scaler
+
+            """
+            act = FuelCosts(fuel, 2023, eia, industry="power").get_data(pivot=True)
+            proj = FuelCosts(fuel, year, eia, industry="power").get_data(pivot=True)
+
+            # actual comes in $/ton, while projected comes in $/MMBTU
+            proj *= (1 / wh_per_btu) # $/MMBTU -> $/MWh
+            act *= (1 / mmbtu_per_ston / wh_per_btu) # $/Ton -> $/MWh
+
+            if "USA" not in act.columns:
+                act["USA"] = act.mean(axis=1)
+
+            # actual_year_mean = act.mean().at["USA"]
             proj_year_mean = proj.at[year, "USA"]
             scaler = proj_year_mean / actual_year_mean
 
-            raw = act * scaler * COAL_TON_2_MWH
+            raw = act * scaler
+            """
+
     elif fuel == "lpg":
-        # https://afdc.energy.gov/fuels/properties
-        btu_per_gallon = 112000
+        # https://www.eia.gov/energyexplained/units-and-calculators/
+        btu_per_gallon = 120214
         wh_per_btu = 0.29307
         if year < 2024:
             raw = (
@@ -261,6 +299,9 @@ def get_dynamic_marginal_costs(
         else:
             act = FuelCosts(fuel, 2023, eia, grade="regular").get_data(pivot=True)
             proj = FuelCosts(fuel, year, eia, grade="regular").get_data(pivot=True)
+
+            # actual comes in $/gal, while projected comes in $/MMBTU
+            proj *= btu_per_gallon / 1000000
 
             if "USA" not in act.columns:
                 act["USA"] = act.mean(axis=1)
@@ -285,6 +326,9 @@ def get_dynamic_marginal_costs(
         else:
             act = FuelCosts("heating_oil", 2023, eia).get_data(pivot=True)
             proj = FuelCosts("heating_oil", year, eia).get_data(pivot=True)
+
+            # actual comes in $/gal, while projected comes in $/MMBTU
+            proj *= btu_per_gallon / 1000000
 
             if "USA" not in act.columns:
                 act["USA"] = act.mean(axis=1)
@@ -464,10 +508,10 @@ if __name__ == "__main__":
         snakemake = mock_snakemake(
             "add_sectors",
             interconnect="western",
-            simpl="40",
+            simpl="11",
             clusters="4m",
             ll="v1.0",
-            opts="12h",
+            opts="4h",
             sector="E-G",
         )
     configure_logging(snakemake)
