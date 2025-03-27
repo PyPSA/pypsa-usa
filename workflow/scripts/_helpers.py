@@ -1,6 +1,5 @@
 # By PyPSA-USA Authors
 
-
 import copy
 import hashlib
 import logging
@@ -10,6 +9,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pypsa
 import requests
 import yaml
 from snakemake.utils import update_config
@@ -103,7 +103,6 @@ def load_network(import_name=None, custom_components=None):
     -------
     pypsa.Network
     """
-    import pypsa
     from pypsa.descriptors import Dict
 
     override_components = None

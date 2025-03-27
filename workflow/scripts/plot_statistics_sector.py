@@ -87,9 +87,17 @@ def is_urban_rural_split(n: pypsa.Network) -> bool:
 
 def get_plotting_colors(n: pypsa.Network, nice_name: bool) -> dict[str, str]:
     if nice_name:
-        return n.carriers.set_index("nice_name")["color"].to_dict()
+        colors = n.carriers.set_index("nice_name")["color"].drop_duplicates(keep="last")
     else:
-        return n.carriers["color"].to_dict()
+        colors = n.carriers["color"].drop_duplicates(keep="last")
+
+    nans = colors[colors.isna()].index.to_list()
+
+    if nans:
+        # logger.warning(f"No color assigned to {nans}. Assigning #000000 (black).")
+        colors = colors.fillna("#000000")
+
+    return colors.to_dict()
 
 
 def get_sectors(n: pypsa.Network) -> list[str]:
@@ -372,6 +380,7 @@ def plot_sector_emissions(
     sectors = ("res", "com", "ind", "trn", "pwr", "ch4")
 
     data = []
+    cols = []
 
     for sector in sectors:
         df = get_emission_timeseries_by_sector(n, sector, state=state)
@@ -383,12 +392,13 @@ def plot_sector_emissions(
         data.append(
             df.loc[investment_period,].iloc[-1].values[0],
         )
+        cols.append(sector)
 
     if not data:
         # empty data to be caught by type error below
-        df = pd.DataFrame(data, columns=sectors)
+        df = pd.DataFrame(data, columns=cols)
     else:
-        df = pd.DataFrame([data], columns=sectors)
+        df = pd.DataFrame([data], columns=cols)
 
     fig, axs = plt.subplots(
         ncols=1,
@@ -1480,12 +1490,12 @@ if __name__ == "__main__":
     if "snakemake" not in globals():
         snakemake = mock_snakemake(
             "plot_sector_production",
-            simpl="132",
-            opts="3h",
-            clusters="33m",
+            simpl="11",
+            opts="4h",
+            clusters="4m",
             ll="v1.0",
             sector="E-G",
-            planning_horizons="2018",
+            planning_horizons="2030",
             interconnect="western",
         )
         rootpath = ".."

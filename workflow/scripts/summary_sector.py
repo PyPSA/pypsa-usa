@@ -7,7 +7,6 @@ from typing import Optional
 
 import pandas as pd
 import pypsa
-from constants_sector import Transport
 from eia import ElectricPowerData, Emissions, Seds, TransportationDemand
 
 logger = logging.getLogger(__name__)
@@ -82,28 +81,23 @@ def _get_stores_in_state(n: pypsa.Network, state: str) -> list[str]:
 
 def _filter_link_on_sector(n: pypsa.Network, sector: str) -> pd.DataFrame:
     """Filters network links to exclude dummy links."""
-    match sector:
-        case "res" | "res-urban" | "res-rural" | "res-total" | "com" | "com-urban" | "com-rural" | "com-total":
-            return n.links[
-                (n.links.carrier.str.startswith(sector))
-                & ~(n.links.carrier.str.endswith("-store"))
-                & ~(n.links.carrier.str.endswith("-charger"))  # hot water heaters
-            ].copy()
-        case "ind":
-            return n.links[
-                (n.links.carrier.str.startswith(sector)) & ~(n.links.carrier.str.endswith("-charger"))
-            ].copy()
-        case "trn":
-            trn = n.links[(n.links.carrier.str.startswith(sector))].copy()
-            # remove aggregators
-            for trn_type in Transport:
-                trn = trn[~trn.carrier.str.endswith(f"-{trn_type.value}")].copy()
-            return trn
-        case "pwr":
-            pwr_carriers = PWR_CARRIERS
-            return n.links[n.links.carrier.isin(pwr_carriers)].copy()
-        case _:
-            raise NotImplementedError
+    if sector in ("res", "res-urban", "res-rural", "res-total", "com", "com-urban", "com-rural", "com-total"):
+        return n.links[
+            (n.links.carrier.str.startswith(sector))
+            & ~(n.links.carrier.str.endswith("-store"))
+            & ~(n.links.carrier.str.endswith("-charger"))  # hot water heaters
+        ].copy()
+    elif sector == "ind":
+        return n.links[(n.links.carrier.str.startswith(sector)) & ~(n.links.carrier.str.endswith("-charger"))].copy()
+    elif sector == "trn":
+        return n.links[
+            n.links.carrier.str.startswith("trn-") & ~n.links.bus0.map(n.buses.carrier).isin(["AC", "lpg"])
+        ].copy()
+    elif sector == "pwr":
+        pwr_carriers = PWR_CARRIERS
+        return n.links[n.links.carrier.isin(pwr_carriers)].copy()
+    else:
+        raise ValueError(f"Invalid sector of {sector}.")
 
 
 def _filter_gens_on_sector(n: pypsa.Network, sector: str) -> pd.DataFrame:
@@ -461,7 +455,8 @@ def get_sector_production_timeseries_by_carrier(
         )
         df = df.T
         df.index = df.index.map(n.links.carrier)
-    return df.groupby(level=0).sum().T
+    df = df.groupby(level=0).sum().T
+    return df.mask((df <= 0) & (df >= -0.00001), 0)
 
 
 def get_sector_max_production_timeseries(
@@ -611,7 +606,7 @@ def get_end_use_consumption(
     Gets timeseries energy consumption in MWh.
 
     - Will get "p_set" load for "res", "com", "ind"
-    - WIll get "p0" link for "trn"
+    - Will get "p0" link for "trn"
     """
 
     def get_service_consumption(
@@ -634,13 +629,7 @@ def get_end_use_consumption(
         state: str | None = None,
     ) -> pd.DataFrame:
         """Takes load from p0 link as loads are in kVMT or similar."""
-        loads = n.links[
-            (n.links.carrier.str.startswith("trn-"))
-            & ~(n.links.carrier.str.endswith("-veh"))
-            & ~(n.links.carrier == ("trn-air"))
-            & ~(n.links.carrier == ("trn-rail"))
-            & ~(n.links.carrier == ("trn-boat"))
-        ]
+        loads = n.links[n.links.carrier.str.startswith("trn-") & ~n.links.bus0.map(n.buses.carrier).isin(["AC", "lpg"])]
         if state:
             load_ = _get_links_in_state(n, state)
             loads = loads[loads.index.isin(load_)]
@@ -648,13 +637,12 @@ def get_end_use_consumption(
         df.index = df.index.map(lambda x: x.split("trn-")[1])
         return df.groupby(level=0).sum().T
 
-    match sector:
-        case "res" | "com" | "ind":
-            return get_service_consumption(n, sector, state)
-        case "trn":
-            return get_transport_consumption(n, state)
-        case _:
-            raise NotImplementedError
+    if sector in ("res", "com", "ind"):
+        return get_service_consumption(n, sector, state)
+    elif sector == "trn":
+        return get_transport_consumption(n, state)
+    else:
+        raise KeyError(f"Invalide sector of {sector}")
 
 
 def get_end_use_load_timeseries(
