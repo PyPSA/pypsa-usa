@@ -1601,8 +1601,11 @@ def add_ev_generation_constraint(n, config):
 
     Only applied if endogenous investments are tuned on as a mechanism to limit
     growth rate of EVs. The constraint is:
-    - EV_gen / dem <= policy (where policy is a percentage giving max gen)
-    - EV_gen <= dem * policy
+    - (EV_gen * eff) / dem <= policy (where policy is a percentage giving max gen)
+    - EV_gen <= dem * policy / eff
+
+    This is an approximation based on average EV efficiency for that investmenet period. This
+    is needed as EV production will be different than LPG production for the same unit input.
 
     Default limits taken from:
     - (Fig ES2) https://www.nrel.gov/docs/fy18osti/71500.pdf
@@ -1624,8 +1627,9 @@ def add_ev_generation_constraint(n, config):
 
         for investment_period in n.investment_periods:
             ratio = policy.at[investment_period, mode] / 100  # input is percentage
+            eff = n.links.loc[evs].efficiency.mean()
             lhs = n.model["Link-p"].loc[investment_period].sel(Link=evs).sum()
-            rhs = dem.loc[investment_period].sum().sum() * ratio
+            rhs = dem.loc[investment_period].sum().sum() * ratio / eff
 
             n.model.add_constraints(lhs <= rhs, name=f"Link-ev_gen_{mode}_{investment_period}")
 
