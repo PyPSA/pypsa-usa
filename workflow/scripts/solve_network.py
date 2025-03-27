@@ -1596,6 +1596,40 @@ def add_sector_demand_response_constraints(n, config):
             _apply_constraint(n, sector, dr_config)
 
 
+def add_ev_generation_constraint(n, config):
+    """Adds a limit to the maximum generation from EVs per mode and year.
+
+    Only applied if endogenous investments are tuned on as a mechanism to limit
+    growth rate of EVs. The constraint is:
+    - EV_gen / dem <= policy (where policy is a percentage giving max gen)
+    - EV_gen <= dem * policy
+
+    Default limits taken from:
+    - (Fig ES2) https://www.nrel.gov/docs/fy18osti/71500.pdf
+    - (Sheet 6.3 - high case) https://data.nrel.gov/submissions/90
+    """
+    mode_mapper = {
+        "light_duty": "lgt",
+        "med_duty": "med",
+        "heavy_duty": "hvy",
+        "bus": "bus",
+    }
+
+    policy = pd.read_csv(snakemake.input.ev_policy, index_col=0)
+
+    for mode in policy.columns:
+        evs = n.links[n.links.carrier == f"trn-elec-veh-{mode_mapper[mode]}"].index
+        dem_names = n.loads[n.loads.carrier == f"trn-veh-{mode_mapper[mode]}"].index
+        dem = n.loads_t["p_set"][dem_names]
+
+        for investment_period in n.investment_periods:
+            ratio = policy.at[investment_period, mode] / 100  # input is percentage
+            lhs = n.model["Link-p"].loc[investment_period].sel(Link=evs).sum()
+            rhs = dem.loc[investment_period].sum().sum() * ratio
+
+            n.model.add_constraints(lhs <= rhs, name=f"Link-ev_gen_{mode}_{investment_period}")
+
+
 def extra_functionality(n, snapshots):
     """
     Collects supplementary constraints which will be passed to
@@ -1638,6 +1672,9 @@ def extra_functionality(n, snapshots):
         water_config = config["sector"]["service_sector"].get("water_heating", {})
         if not water_config.get("simple_storage", True):
             add_water_heater_constraints(n, config)
+        if config["sector"]["transport_sector"]["investment"]["ev_policy"]:
+            if not config["sector"]["transport_sector"]["investment"]["exogenous"]:
+                add_ev_generation_constraint(n, config)
         add_sector_demand_response_constraints(n, config)
 
     for o in opts:
@@ -1705,10 +1742,10 @@ if __name__ == "__main__":
         snakemake = mock_snakemake(
             "solve_network",
             interconnect="western",
-            simpl="55",
-            clusters="11m",
+            simpl="11",
+            clusters="4m",
             ll="v1.0",
-            opts="6h-TCT",
+            opts="4h",
             sector="E-G",
             planning_horizons="2030",
         )
