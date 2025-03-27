@@ -87,9 +87,9 @@ def is_urban_rural_split(n: pypsa.Network) -> bool:
 
 def get_plotting_colors(n: pypsa.Network, nice_name: bool) -> dict[str, str]:
     if nice_name:
-        colors = n.carriers.set_index("nice_name")["color"]
+        colors = n.carriers.set_index("nice_name")["color"].drop_duplicates(keep="last")
     else:
-        colors = n.carriers["color"]
+        colors = n.carriers["color"].drop_duplicates(keep="last")
 
     nans = colors[colors.isna()].index.to_list()
 
@@ -97,7 +97,7 @@ def get_plotting_colors(n: pypsa.Network, nice_name: bool) -> dict[str, str]:
         # logger.warning(f"No color assigned to {nans}. Assigning #000000 (black).")
         colors = colors.fillna("#000000")
 
-    return colors
+    return colors.to_dict()
 
 
 def get_sectors(n: pypsa.Network) -> list[str]:
@@ -1489,10 +1489,10 @@ def _initialize_metadata(data: dict[str, Any]) -> list[PlottingData]:
 if __name__ == "__main__":
     if "snakemake" not in globals():
         snakemake = mock_snakemake(
-            "plot_sector_emissions",
-            simpl="132",
+            "plot_sector_production",
+            simpl="11",
             opts="4h",
-            clusters="33m",
+            clusters="4m",
             ll="v1.0",
             sector="E-G",
             planning_horizons="2030",
