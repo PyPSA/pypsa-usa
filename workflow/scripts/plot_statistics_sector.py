@@ -87,9 +87,11 @@ def is_urban_rural_split(n: pypsa.Network) -> bool:
 
 def get_plotting_colors(n: pypsa.Network, nice_name: bool) -> dict[str, str]:
     if nice_name:
-        colors = n.carriers.set_index("nice_name")["color"].drop_duplicates(keep="last")
+        colors = n.carriers.set_index("nice_name")["color"]
     else:
-        colors = n.carriers["color"].drop_duplicates(keep="last")
+        colors = n.carriers["color"]
+
+    colors = colors.groupby(colors.index).first()  # remove any duplicates
 
     nans = colors[colors.isna()].index.to_list()
 
