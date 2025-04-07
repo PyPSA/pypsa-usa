@@ -23,11 +23,22 @@ logger = logging.getLogger(__name__)
 Hardcoded build years based on building year constructed starting from 2000
 https://www.eia.gov/consumption/commercial/data/2018/bc/pdf/b6.pdf
 """
+# CECS_BUILD_YEARS = {
+#     # year_built: percent of stock
+#     2018: 9.1, # originally 2018
+#     2009: 15.6, # originally 2009
+#     2010: 50.0,  # originally 2006. Assumed from replacement from 2000 data
+# }
+"""
+The esimated numbers above result in lots of 0 capacity in 2030.
+Instead, assuming 5 year roll backs of capacity
+"""
 CECS_BUILD_YEARS = {
     # year_built: percent of stock
-    2018: 9.1,
-    2009: 15.6,
-    2000: 50.0,  # assumed from replacement from 2000 data
+    2024: 25,
+    2019: 25,
+    2014: 25,
+    2009: 25,
 }
 
 """
@@ -365,7 +376,9 @@ def _already_retired(build_year: int, lifetime: int, year: int) -> bool:
     instead of '<' to follow pypsa convention. See folling link
     https://pypsa.readthedocs.io/en/latest/examples/multi-investment-optimisation.html#Multi-Investment-Optimization
     """
-    if (build_year + lifetime) <= year:
+    if build_year > year:  # running historical studies
+        return True
+    elif (build_year + lifetime) <= year:
         return True
     else:
         return False

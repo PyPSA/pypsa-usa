@@ -1181,9 +1181,17 @@ class PipelineLinepack(GasData):
         max_pressure = 8000  # kPa
         min_pressure = 4000  # kPa
 
+        # Energy content calculated using:
+        # E_total = n * Cv * T = (PV/RT) * Cv * T = (PV/R) * Cv
+        # E = PV * (R/Cv)
+        # R = 8.314 J/(mol.K)
+        # Cv_Methane = 35.7 J/(mol.K)
+
+        r_cv = 8.314 / 35.7
+
         energy_in_state = volumne_in_state.copy()
-        energy_in_state["MAX_ENERGY_kJ"] = energy_in_state.VOLUME_M3 * max_pressure
-        energy_in_state["MIN_ENERGY_kJ"] = energy_in_state.VOLUME_M3 * min_pressure
+        energy_in_state["MAX_ENERGY_kJ"] = energy_in_state.VOLUME_M3 * max_pressure * r_cv
+        energy_in_state["MIN_ENERGY_kJ"] = energy_in_state.VOLUME_M3 * min_pressure * r_cv
         energy_in_state["NOMINAL_ENERGY_kJ"] = (energy_in_state.MAX_ENERGY_kJ + energy_in_state.MIN_ENERGY_kJ) / 2
 
         final = energy_in_state.copy()
