@@ -57,7 +57,7 @@ def build_ch4_tracking(
 
     # supress pypsa warnings
     n.links["bus3"] = n.links.bus3.fillna("")
-    n.links["efficiency3"] = n.links.efficiency3.fillna("")
+    n.links["efficiency3"] = n.links.efficiency3.fillna(0)
 
 
 def _add_co2_carrier(n, config: dict[Any]):
