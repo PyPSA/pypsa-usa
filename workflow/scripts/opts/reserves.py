@@ -276,20 +276,26 @@ def _calculate_capacity_accredidation(n, planning_horizon, region_buses, specifi
     return ext_contribution, non_ext_contribution
 
 
-def _get_combined_prm_requirements(n, config):
+def _get_combined_prm_requirements(n, config=None, snakemake=None, regional_prm_data=None):
     """
     Combine PRM requirements from different sources into a single dataframe.
 
     Parameters
     ----------
     n : pypsa.Network
-    config : dict
+    config : dict, optional
+        If provided, will read PRM requirements from config files
+    regional_prm_data : pd.DataFrame, optional
+        Direct input of PRM requirements with columns: name, region, prm, planning_horizon
 
     Returns
     -------
     pd.DataFrame
         Combined PRM requirements with columns: name, region, prm, planning_horizon
     """
+    if regional_prm_data is not None:
+        return regional_prm_data
+
     # Load user-defined PRM requirements
     regional_prm = pd.read_csv(
         config["electricity"]["SAFE_regional_reservemargins"],
@@ -297,39 +303,34 @@ def _get_combined_prm_requirements(n, config):
     )
 
     # Process ReEDS PRM data if available
-    try:
-        import snakemake
+    reeds_prm = pd.read_csv(snakemake.input.safer_reeds, index_col=[0])
 
-        reeds_prm = pd.read_csv(snakemake.input.safer_reeds, index_col=[0])
-
-        # Map NERC regions to ReEDS zones
-        nerc_memberships = (
-            n.buses.groupby("nerc_reg")["reeds_zone"]
-            .apply(
-                lambda x: ", ".join(x),
-            )
-            .to_dict()
+    # Map NERC regions to ReEDS zones
+    nerc_memberships = (
+        n.buses.groupby("nerc_reg")["reeds_zone"]
+        .apply(
+            lambda x: ", ".join(x),
         )
+        .to_dict()
+    )
 
-        reeds_prm["region"] = reeds_prm.index.map(nerc_memberships)
-        reeds_prm = reeds_prm.dropna(subset="region")
-        reeds_prm = reeds_prm.drop(
-            columns=["none", "ramp2025_20by50", "ramp2025_25by50", "ramp2025_30by50"],
-        )
-        reeds_prm = reeds_prm.rename(columns={"static": "prm", "t": "planning_horizon"})
+    reeds_prm["region"] = reeds_prm.index.map(nerc_memberships)
+    reeds_prm = reeds_prm.dropna(subset="region")
+    reeds_prm = reeds_prm.drop(
+        columns=["none", "ramp2025_20by50", "ramp2025_25by50", "ramp2025_30by50"],
+    )
+    reeds_prm = reeds_prm.rename(columns={"static": "prm", "t": "planning_horizon"})
 
-        # Combine both data sources
-        regional_prm = pd.concat([regional_prm, reeds_prm])
-    except (FileNotFoundError, AttributeError, NameError):
-        logger.info("ReEDS PRM data not available, using only user-defined PRM values")
+    # Combine both data sources
+    regional_prm = pd.concat([regional_prm, reeds_prm])
 
     # Filter for relevant planning horizons
     return regional_prm[regional_prm.planning_horizon.isin(n.investment_periods)]
 
 
-def add_ERM_constraints(n, config):
+def add_ERM_constraints(n, config=None, snakemake=None, regional_prm_data=None):
     """
-    Add Energy Reserve Margin (PRM) constraints for regional capacity adequacy.
+    Add Energy Reserve Margin (ERM) constraints for regional capacity adequacy.
 
     This function enforces that each region has sufficient firm capacity to meet
     peak demand plus a reserve margin. These resources must be "energy-backed" meaning
@@ -340,12 +341,16 @@ def add_ERM_constraints(n, config):
     ----------
     n : pypsa.Network
         The PyPSA network object
-    config : dict
-        Configuration dictionary containing ERM parameters
+    config : dict, optional
+        Configuration dictionary containing ERM parameters. Required if regional_prm_data not provided.
+    snakemake : snakemake object, optional
+    regional_prm_data : pd.DataFrame, optional
+        Direct input of reserve margin requirements with columns: name, region, prm, planning_horizon.
+        If provided, this takes precedence over config file data.
     """
     model = n.model
     # Load regional PRM requirements
-    regional_prm = _get_combined_prm_requirements(n, config)
+    regional_prm = _get_combined_prm_requirements(n, config, snakemake, regional_prm_data)
 
     # Apply constraints for each region and planning horizon
     for _, erm in regional_prm.iterrows():
@@ -359,7 +364,7 @@ def add_ERM_constraints(n, config):
         if region_buses.empty:
             continue
 
-        # # Create model variables to track storage contributions
+        # Create model variables to track storage contributions
         c = "StorageUnit"
         model.add_variables(-np.inf, model.variables["StorageUnit-p_store"].upper, name=f"{c}-p_dispatch_RESERVES")
         model.add_variables(-np.inf, model.variables["StorageUnit-p_store"].upper, name=f"{c}-p_store_RESERVES")
@@ -373,12 +378,10 @@ def add_ERM_constraints(n, config):
         define_operational_constraints_for_extendables(n, n.snapshots, c, "p_store", 0)
         define_operational_constraints_for_non_extendables(n, n.snapshots, c, "p_dispatch", 0)
         define_operational_constraints_for_non_extendables(n, n.snapshots, c, "p_store", 0)
-        # NEED TO ADD UPPER AND LOWER BOUNDS TO SU CONSTRAINT
 
         # Create model variables to track transmission contributions
         model.add_variables(-np.inf, model.variables["Line-s"].upper, name="Line-s_RESERVES")
         define_operational_constraints_for_extendables(n, n.snapshots, "Line", "s", 0)
-        # define_operational_constraints_for_extendables(n, n.snapshots, "Link", "p", 0)
 
         # Calculate peak demand and required reserve margin
         regional_demand = _get_regional_demand(n, erm.planning_horizon, region_buses)
@@ -444,7 +447,7 @@ def add_ERM_constraints(n, config):
         )
 
 
-def add_PRM_constraints(n, config):
+def add_PRM_constraints(n, config=None, regional_prm_data=None):
     """
     Add Planning Reserve Margin (PRM) constraints for regional capacity adequacy.
 
@@ -456,11 +459,14 @@ def add_PRM_constraints(n, config):
     ----------
     n : pypsa.Network
         The PyPSA network object
-    config : dict
-        Configuration dictionary containing PRM parameters
+    config : dict, optional
+        Configuration dictionary containing PRM parameters. Required if regional_prm_data not provided.
+    regional_prm_data : pd.DataFrame, optional
+        Direct input of reserve margin requirements with columns: name, region, prm, planning_horizon.
+        If provided, this takes precedence over config file data.
     """
     # Load regional PRM requirements
-    regional_prm = _get_combined_prm_requirements(n, config)
+    regional_prm = _get_combined_prm_requirements(n, config, regional_prm_data)
 
     # Apply constraints for each region and planning horizon
     for _, prm in regional_prm.iterrows():
