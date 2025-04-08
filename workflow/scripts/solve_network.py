@@ -41,7 +41,12 @@ from opts.content import (
     add_technology_capacity_target_constraints,
 )
 from opts.land import add_land_use_constraints
-from opts.reserves import add_ERM_constraints, add_operational_reserve_margin, add_PRM_constraints
+from opts.reserves import (
+    add_ERM_constraints,
+    add_operational_reserve_margin,
+    add_PRM_constraints,
+    store_ERM_duals,
+)
 from opts.sector import (
     add_cooling_heat_pump_constraints,
     add_demand_response_constraint,
@@ -299,6 +304,10 @@ if __name__ == "__main__":
         opts=opts,
         log_fn=snakemake.log.solver,
     )
+
+    if "ERM" in opts:
+        store_ERM_duals(n)
+
     n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))
     n.export_to_netcdf(snakemake.output[0])
 
