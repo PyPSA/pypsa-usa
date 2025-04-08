@@ -34,7 +34,6 @@ from _helpers import (
     update_config_with_sector_opts,
 )
 from opts.content import (
-    add_BAU_constraints,
     add_EQ_constraints,
     add_regional_co2limit,
     add_RPS_constraints,
@@ -138,9 +137,12 @@ def extra_functionality(n, snapshots):
         "REM": lambda: add_regional_co2limit(n, snapshots, config, global_snakemake)
         if n.generators.p_nom_extendable.any()
         else None,
-        "BAU": lambda: add_BAU_constraints(n, config) if n.generators.p_nom_extendable.any() else None,
-        "PRM": lambda: add_PRM_constraints(n, config) if n.generators.p_nom_extendable.any() else None,
-        "ERM": lambda: add_ERM_constraints(n, config) if n.generators.p_nom_extendable.any() else None,
+        "PRM": lambda: add_PRM_constraints(n, config, global_snakemake)
+        if n.generators.p_nom_extendable.any()
+        else None,
+        "ERM": lambda: add_ERM_constraints(n, config, global_snakemake)
+        if n.generators.p_nom_extendable.any()
+        else None,
         "TCT": lambda: add_technology_capacity_target_constraints(n, config)
         if n.generators.p_nom_extendable.any()
         else None,

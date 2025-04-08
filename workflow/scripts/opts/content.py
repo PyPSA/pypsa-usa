@@ -3,7 +3,6 @@ import re
 
 import numpy as np
 import pandas as pd
-import xarray as xr
 from opts._helpers import filter_components, get_region_buses
 from pypsa.descriptors import get_switchable_as_dense as get_as_dense
 
@@ -451,38 +450,3 @@ def add_EQ_constraints(n, o, scaling=1e-1):
     else:
         lhs = lhs_gen
     n.model.add_constraints(lhs >= rhs, name="equity_min")
-
-
-def add_BAU_constraints(n, config):
-    """
-    Add a per-carrier minimal overall capacity.
-
-    BAU_mincapacities and opts must be adjusted in the config.yaml.
-
-    Parameters
-    ----------
-    n : pypsa.Network
-    config : dict
-
-    Example
-    -------
-    scenario:
-        opts: [Co2L-BAU-24H]
-    electricity:
-        BAU_mincapacities:
-            solar: 0
-            onwind: 0
-            OCGT: 100000
-            offwind-ac: 0
-            offwind-dc: 0
-    Which sets minimum expansion across all nodes e.g. in Europe to 100GW.
-    OCGT bus 1 + OCGT bus 2 + ... > 100000
-    """
-    mincaps = pd.Series(config["electricity"]["BAU_mincapacities"])
-    p_nom = n.model["Generator-p_nom"]
-    ext_i = n.generators.query("p_nom_extendable")
-    ext_carrier_i = xr.DataArray(ext_i.carrier.rename_axis("Generator-ext"))
-    lhs = p_nom.groupby(ext_carrier_i).sum()
-    index = mincaps.index.intersection(lhs.indexes["carrier"])
-    rhs = mincaps[index].rename_axis("carrier")
-    n.model.add_constraints(lhs >= rhs, name="bau_mincaps")
