@@ -652,3 +652,71 @@ def store_erm_data(n):
                 if "ERM_price" not in n.buses:
                     n.buses["ERM_price"] = 0.0  # Initialize as float
                 n.buses.loc[erm_price_series.index, "ERM_price"] = erm_price_series
+
+
+def store_ERM_duals(n):
+    """
+    Store Energy Reserve Margin (ERM) duals if ERM constraints are activated.
+
+    This function checks if the model contains ERM-specific variables and if so,
+    extracts and stores this data in the network object for later analysis.
+    """
+    model = n.model
+    duals = model.dual
+
+    # Check if ERM constraints are activated by looking for the ERM reserve variables
+    if "StorageUnit-p_dispatch_RESERVES" in model.variables:
+        logger.info("Storing ERM data from optimization results")
+
+        # Get the reserve dispatch for storage units
+        if "StorageUnit-p_dispatch_RESERVES" in model.solution:
+            n.storage_units_t["p_dispatch_reserves"] = model.solution["StorageUnit-p_dispatch_RESERVES"].to_pandas()
+
+        # Get the reserve storage for storage units
+        if "StorageUnit-p_store_RESERVES" in model.solution:
+            n.storage_units_t["p_store_reserves"] = model.solution["StorageUnit-p_store_RESERVES"].to_pandas()
+
+        # Get the state of charge for reserve operation
+        if "StorageUnit-state_of_charge_RESERVES" in model.solution:
+            n.storage_units_t["state_of_charge_reserves"] = model.solution[
+                "StorageUnit-state_of_charge_RESERVES"
+            ].to_pandas()
+
+        # Get the line flow reserves
+        if "Line-s_RESERVES" in model.solution:
+            n.lines_t["s_reserves"] = model.solution["Line-s_RESERVES"].to_pandas()
+        # Calculate and store the ERM price (shadow price of the ERM constraint)
+        erm_constraints = [c for c in model.constraints if "ERM_hr" in c]
+        if erm_constraints:
+            # Get the dual values (shadow prices) of ERM constraints
+            # For xarray Dataset, we need to use dictionary-based indexing
+            erm_prices = {}
+            for constraint in erm_constraints:
+                # Extract bus name from constraint name (format: GlobalConstraint-{name}_{horizon}_ERM_hr{hour}_bus{bus})
+                parts = constraint.split("_")
+                bus_part = parts[-1]
+                bus = bus_part.replace("bus", "")
+
+                # Store the dual value
+                try:
+                    dual_value = duals[constraint].item()
+                    if bus not in erm_prices:
+                        erm_prices[bus] = [dual_value]
+                    else:
+                        erm_prices[bus].append(dual_value)
+                except (KeyError, ValueError):
+                    # Skip constraints without dual values
+                    continue
+
+            # Create a Series with bus index - averaging values for each bus
+            if erm_prices:
+                # Calculate average price for each bus
+                for bus in erm_prices:
+                    erm_prices[bus] = sum(erm_prices[bus]) / len(erm_prices[bus])
+
+                erm_price_series = pd.Series(erm_prices)
+
+                # Store in network
+                if "ERM_price" not in n.buses:
+                    n.buses["ERM_price"] = 0.0  # Initialize as float
+                n.buses.loc[erm_price_series.index, "ERM_price"] = erm_price_series
