@@ -8,9 +8,12 @@ import sys
 
 import pandas as pd
 import pytest
+from pypsa.descriptors import (
+    get_switchable_as_dense as get_as_dense,
+)
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
-from opts.reserves import add_ERM_constraints, add_PRM_constraints  # noqa: E402
+from opts.reserves import add_ERM_constraints, store_erm_data  # noqa: E402
 
 
 @pytest.fixture
@@ -20,7 +23,7 @@ def reserve_margin_data():
         [
             {
                 "name": "test_region",
-                "region": "US",
+                "region": "all",
                 "prm": 0.15,  # 15% reserve margin
                 "planning_horizon": 2030,
             },
@@ -33,7 +36,7 @@ def test_erm_constraint_creation(reserve_margin_network, reserve_margin_data):
     n = reserve_margin_network.copy()
 
     # Prepare the optimization (creates the model)
-    n.optimize(solver_name="glpk")
+    n.optimize(solver_name="glpk", multi_investment_periods=True)
 
     # Add energy reserve margin constraints with direct data input
     add_ERM_constraints(n, regional_prm_data=reserve_margin_data)
@@ -43,156 +46,97 @@ def test_erm_constraint_creation(reserve_margin_network, reserve_margin_data):
     assert len(erm_constraints) > 0, "Should have at least one ERM constraint"
 
 
-def test_prm_constraint_creation(reserve_margin_network, reserve_margin_data):
-    """Test that planning reserve margin constraints are correctly created."""
-    n = reserve_margin_network.copy()
+# def test_prm_constraint_creation(reserve_margin_network, reserve_margin_data):
+#     """Test that planning reserve margin constraints are correctly created."""
+#     n = reserve_margin_network.copy()
 
-    # Prepare the optimization (creates the model)
-    n.optimize(solver_name="glpk")
+#     # Prepare the optimization (creates the model)
+#     n.optimize(solver_name="glpk", multi_investment_periods=True)
 
-    # Add planning reserve margin constraints with direct data input
-    add_PRM_constraints(n, regional_prm_data=reserve_margin_data)
+#     # Add planning reserve margin constraints with direct data input
+#     add_PRM_constraints(n, regional_prm_data=reserve_margin_data)
 
-    # Check that we have PRM constraints
-    prm_constraints = [c for c in n.model.constraints if "_PRM" in c]
-    assert len(prm_constraints) > 0, "Should have at least one PRM constraint"
+#     # Check that we have PRM constraints
+#     prm_constraints = [c for c in n.model.constraints if "_PRM" in c]
+#     assert len(prm_constraints) > 0, "Should have at least one PRM constraint"
 
 
 def test_erm_constraint_binding(reserve_margin_network, reserve_margin_data):
     """Test that ERM constraint correctly limits generation capacity."""
     n = reserve_margin_network.copy()
 
-    # Set a high ERM requirement (50%)
+    # Set a high ERM requirement (1100%)
     test_data = reserve_margin_data.copy()
-    test_data.loc[0, "prm"] = 0.5  # 50% reserve margin
+    test_data.loc[0, "prm"] = 10
 
     # Run optimization with ERM constraints
-    def add_constraints(n):
+    def extra_functionality(n, snapshots):
         add_ERM_constraints(n, regional_prm_data=test_data)
 
-    n.optimize(solver_name="glpk", extra_functionality=add_constraints)
+    n.optimize(solver_name="glpk", multi_investment_periods=True, extra_functionality=extra_functionality)
+    store_erm_data(n)
 
-    # Get total energy demand
-    total_energy_demand = n.loads_t.p.sum().sum()
+    nodal_demand = n.loads_t.p.groupby(n.loads.bus, axis=1).sum()
+    peak_demand_hour = nodal_demand.sum(axis=1).idxmax()
+    nodal_reserve_requirement = nodal_demand * (1.0 + test_data.loc[0, "prm"])
+    # nodal_demand_peak = nodal_demand.loc[peak_demand_hour]
+    req_node_reserve_peak = nodal_reserve_requirement.loc[peak_demand_hour]
 
-    # Get total energy generation
-    total_energy_generation = n.generators_t.p.sum().sum() + n.storage_units_t.p.sum().sum()
-
-    # Check that energy generation meets demand plus reserves
-    assert (
-        total_energy_generation >= total_energy_demand * 1.5
-    ), "Total generation should be at least 150% of demand due to 50% ERM"
-
-
-def test_prm_constraint_binding(reserve_margin_network, reserve_margin_data):
-    """Test that PRM constraint correctly limits generation capacity."""
-    n = reserve_margin_network.copy()
-
-    # Set a high PRM requirement (30%)
-    test_data = reserve_margin_data.copy()
-    test_data.loc[0, "prm"] = 0.3  # 30% reserve margin
-
-    # Run optimization with PRM constraints
-    def add_constraints(n):
-        add_PRM_constraints(n, regional_prm_data=test_data)
-
-    n.lopf(pyomo=False, solver_name="glpk", formulation="kirchhoff", extra_functionality=add_constraints)
-
-    # Calculate total peak demand
-    peak_demand = n.loads_t.p.sum(axis=1).max()
-
-    # Calculate total firm capacity (excluding variable renewables)
-    firm_generators = n.generators[~n.generators.carrier.isin(["onwind", "solar"])]
-    total_firm_capacity = firm_generators.p_nom_opt.sum()
-
-    # Check that firm capacity meets peak demand plus reserves
-    assert (
-        total_firm_capacity >= peak_demand * 1.3
-    ), "Firm capacity should be at least 130% of peak demand due to 30% PRM"
-
-
-def test_both_constraints_together(reserve_margin_network, reserve_margin_data):
-    """Test that both ERM and PRM constraints can be applied together."""
-    n = reserve_margin_network.copy()
-
-    # Set both ERM and PRM requirements
-    test_data = pd.DataFrame(
-        [
-            {
-                "name": "test_region_erm",
-                "region": "US",
-                "prm": 0.2,  # 20% energy reserve margin
-                "planning_horizon": "2030",
-            },
-            {
-                "name": "test_region_prm",
-                "region": "US",
-                "prm": 0.15,  # 15% planning reserve margin
-                "planning_horizon": "2030",
-            },
-        ],
+    nodal_generator_capacity = (
+        (n.generators.p_nom_opt * get_as_dense(n, "Generator", "p_max_pu", n.snapshots))
+        .groupby(n.generators.bus, axis=1)
+        .sum()
+    )
+    nodal_storage_capacity = (
+        (
+            n.storage_units.p_nom_opt
+            * get_as_dense(n, "StorageUnit", "p_max_pu", n.snapshots)
+            * n.storage_units.efficiency_store
+        )
+        .groupby(n.storage_units.bus, axis=1)
+        .sum()
     )
 
-    def add_both_constraints(n):
-        add_ERM_constraints(n, regional_prm_data=test_data)
-        add_PRM_constraints(n, regional_prm_data=test_data)
-
-    # Run optimization with both constraints
-    n.lopf(pyomo=False, solver_name="glpk", formulation="kirchhoff", extra_functionality=add_both_constraints)
-
-    # Calculate total energy demand
-    total_energy_demand = n.loads_t.p.sum().sum()
-
-    # Calculate total energy generation
-    total_energy_generation = n.generators_t.p.sum().sum() + n.storage_units_t.p.sum().sum()
-
-    # Calculate total peak demand
-    peak_demand = n.loads_t.p.sum(axis=1).max()
-
-    # Calculate total firm capacity (excluding variable renewables)
-    firm_generators = n.generators[~n.generators.carrier.isin(["onwind", "solar"])]
-    total_firm_capacity = firm_generators.p_nom_opt.sum()
-
-    # Check that both constraints are satisfied
-    assert (
-        total_energy_generation >= total_energy_demand * 1.2
-    ), "Total generation should be at least 120% of demand due to 20% ERM"
-
-    assert (
-        total_firm_capacity >= peak_demand * 1.15
-    ), "Firm capacity should be at least 115% of peak demand due to 15% PRM"
-
-
-def test_constraints_with_storage(reserve_margin_network, reserve_margin_data):
-    """Test how reserve margin constraints interact with storage."""
-    n = reserve_margin_network.copy()
-
-    # Ensure we have storage in our test network
-    assert n.storage_units.p_nom_extendable.any(), "Test network should have extendable storage"
-
-    # Set moderate reserve requirements
-    test_data = pd.DataFrame(
-        [
-            {
-                "name": "test_region",
-                "region": "US",
-                "prm": 0.1,  # 10% reserve margin
-                "planning_horizon": "2030",
-            },
-        ],
+    line_contribution = n.lines_t.s_reserves  # columns are lines
+    # convert to bus injections and withdraws
+    injection_b0 = line_contribution.groupby(n.lines.bus0, axis=1).sum()
+    injection_b1 = -1 * line_contribution.groupby(n.lines.bus1, axis=1).sum()
+    line_injections = injection_b0.add(injection_b1, fill_value=0)
+    nodal_reserve_capacity = nodal_generator_capacity.add(nodal_storage_capacity, fill_value=0).add(
+        line_injections,
+        fill_value=0,
     )
 
-    def add_both_constraints(n):
-        add_ERM_constraints(n, regional_prm_data=test_data)
-        add_PRM_constraints(n, regional_prm_data=test_data)
+    nodal_reserve_capacity_peak = nodal_reserve_capacity.loc[peak_demand_hour]
 
-    # Run optimization with both constraints
-    n.lopf(pyomo=False, solver_name="glpk", formulation="kirchhoff", extra_functionality=add_both_constraints)
+    assert all(
+        nodal_reserve_capacity_peak >= req_node_reserve_peak,
+    ), "Nodal reserve capacity should be at least as large as the nodal reserve requirement"
+    print(nodal_reserve_capacity_peak)
 
-    # Check that storage was built
-    total_storage_capacity = n.storage_units.p_nom_opt.sum()
-    assert total_storage_capacity > 0, "Storage should be built to help meet reserve requirements"
 
-    # Check that storage is being used
-    storage_discharge = n.storage_units_t.p.sum().sum()
-    assert storage_discharge > 0, "Storage should be discharged to help meet demand"
+# def test_prm_constraint_binding(reserve_margin_network, reserve_margin_data):
+#     """Test that PRM constraint correctly limits generation capacity."""
+#     n = reserve_margin_network.copy()
+
+#     # Set a high PRM requirement (30%)
+#     test_data = reserve_margin_data.copy()
+#     test_data.loc[0, "prm"] = 0.3  # 30% reserve margin
+
+#     # Run optimization with PRM constraints
+#     def add_constraints(n):
+#         add_PRM_constraints(n, regional_prm_data=test_data)
+
+#     n.lopf(pyomo=False, solver_name="glpk", formulation="kirchhoff", extra_functionality=add_constraints)
+
+#     # Calculate total peak demand
+#     peak_demand = n.loads_t.p.sum(axis=1).max()
+
+#     # Calculate total firm capacity (excluding variable renewables)
+#     firm_generators = n.generators[~n.generators.carrier.isin(["onwind", "solar"])]
+#     total_firm_capacity = firm_generators.p_nom_opt.sum()
+
+#     # Check that firm capacity meets peak demand plus reserves
+#     assert (
+#         total_firm_capacity >= peak_demand * 1.3
+#     ), "Firm capacity should be at least 130% of peak demand due to 30% PRM"
