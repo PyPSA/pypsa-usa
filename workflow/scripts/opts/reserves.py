@@ -399,6 +399,7 @@ def add_ERM_constraints(n, config=None, snakemake=None, regional_prm_data=None):
         hour = peak_demand_hour
         for bus in region_buses.index:
             # Generation Capacity
+            assert n._multi_invest, "Ensure model configured for mutli-investment"
             active_mask = get_activity_mask(n, "Generator", (erm.planning_horizon, hour))
             bus_gens_ext = n.generators[(n.generators.bus == bus) & n.generators.p_nom_extendable & active_mask]
             bus_gens_non_ext = n.generators[(n.generators.bus == bus) & ~n.generators.p_nom_extendable & active_mask]
@@ -600,7 +601,7 @@ def store_erm_data(n):
     """
     model = n.model
     duals = model.dual
-
+    logger.info("Storing ERM data from optimization results")
     # Check if ERM constraints are activated by looking for the ERM reserve variables
     if "StorageUnit-p_dispatch_RESERVES" in model.variables:
         logger.info("Storing ERM data from optimization results")
