@@ -1,17 +1,13 @@
-"""
-Module for building heating and cooling infrastructure.
-"""
+"""Module for building heating and cooling infrastructure."""
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 import pandas as pd
 import pypsa
 import xarray as xr
-from constants import NG_MWH_2_MMCF, STATE_2_CODE, COAL_dol_ton_2_MWHthermal
-from constants_sector import SecCarriers, SecNames
-from eia import FuelCosts
+from constants_sector import SecNames
 
 logger = logging.getLogger(__name__)
 
@@ -25,15 +21,12 @@ def build_heat(
     pop_layout_path: str,
     cop_ashp_path: str,
     cop_gshp_path: str,
-    eia: Optional[str] = None,  # for dynamic pricing
-    year: Optional[int] = None,  # for dynamic pricing
-    options: Optional[dict[str, str | bool | int | float]] = None,
+    eia: str | None = None,  # for dynamic pricing
+    year: int | None = None,  # for dynamic pricing
+    options: dict[str, str | bool | int | float] | None = None,
     **kwargs,
 ) -> None:
-    """
-    Main funtion to interface with.
-    """
-
+    """Main funtion to interface with."""
     sns = n.snapshots
 
     pop_layout = pd.read_csv(pop_layout_path).set_index("name")
@@ -54,28 +47,9 @@ def build_heat(
     dr_config = options.get("demand_response", {})
 
     if sector in ("res", "com", "srv"):
-
         split_urban_rural = options.get("split_urban_rural", False)
         technologies = options.get("technologies")
         water_heating_config = options.get("water_heating", {})
-
-        if dynamic_costs:
-            # gas_costs = _get_dynamic_marginal_costs(
-            #     n,
-            #     "gas",
-            #     eia,
-            #     year,
-            #     sector=sector,
-            # )
-            heating_oil_costs = _get_dynamic_marginal_costs(
-                n,
-                "heating_oil",
-                eia,
-                year,
-            )
-        else:
-            # gas_costs = costs.at["gas", "fuel_cost"]
-            heating_oil_costs = costs.at["oil", "fuel_cost"]
 
         # gas costs are endogenous!
         gas_costs = 0
@@ -90,7 +64,7 @@ def build_heat(
             ashp_cop=ashp_cop,
             gshp_cop=gshp_cop,
             marginal_gas=gas_costs,
-            marginal_oil=heating_oil_costs,
+            # marginal_oil=heating_oil_costs,
             water_heating_config=water_heating_config,
             dr_config=dr_config,
         )
@@ -107,22 +81,11 @@ def build_heat(
         assert not n.links_t.p_set.isna().any().any()
 
     elif sector == SecNames.INDUSTRY.value:
-
-        if dynamic_costs:
-            gas_costs = _get_dynamic_marginal_costs(
-                n,
-                "gas",
-                eia,
-                year,
-                sector=sector,
-            )
-            coal_costs = _get_dynamic_marginal_costs(n, "coal", eia, year)
-        else:
-            gas_costs = costs.at["gas", "fuel_cost"]
-            coal_costs = costs.at["coal", "fuel_cost"]
-
         # gas costs are endogenous!
         gas_costs = 0
+
+        # coal costs tracked at state level store
+        coal_costs = 0
 
         add_industrial_heat(
             n,
@@ -138,11 +101,11 @@ def combined_heat(n: pypsa.Network, sector: str) -> bool:
     """
     Searches loads for combined or split heat loads.
 
-    Returns:
+    Returns
+    -------
         True - If only '-heat' is used in load indexing
         False - If '-water-heat' and '-space-heat' is used in load indexing
     """
-
     assert sector in ("res", "com")
 
     loads = n.loads.index.to_list()
@@ -165,7 +128,6 @@ def reindex_cop(sns: pd.MultiIndex, da: xr.DataArray) -> pd.DataFrame:
     This will allign snapshots to match the planning horizon. This will
     also calcualte the mean COP for each period if tsa has occured
     """
-
     cop = da.to_pandas()
     investment_years = sns.get_level_values(0).unique()
 
@@ -193,120 +155,12 @@ def reindex_cop(sns: pd.MultiIndex, da: xr.DataArray) -> pd.DataFrame:
     return pd.concat(cops).reindex(sns)
 
 
-def _get_dynamic_marginal_costs(
-    n: pypsa.Network,
-    fuel: str,
-    eia: str,
-    year: int,
-    sector: Optional[str] = None,
-    **kwargs,
-) -> pd.DataFrame:
-    """
-    Gets end-use fuel costs at a state level.
-    """
-
-    sector_mapper = {
-        "res": "residential",
-        "com": "commercial",
-        "pwr": "power",
-        "ind": "industrial",
-        "trn": "transport",
-    }
-
-    assert fuel in ("gas", "lpg", "coal", "heating_oil")
-
-    match fuel:
-        case "gas":
-            assert sector in ("res", "com", "ind", "pwr")
-            if year < 2024:  # get actual monthly values
-                raw = FuelCosts(
-                    fuel,
-                    year,
-                    eia,
-                    industry=sector_mapper[sector],
-                ).get_data(
-                    pivot=True,
-                )
-                raw = raw * 1000 / NG_MWH_2_MMCF  # $/MCF -> $/MWh
-            else:  # scale monthly values according to AEO
-                act = FuelCosts(
-                    fuel,
-                    2023,
-                    eia,
-                    industry=sector_mapper[sector],
-                ).get_data(
-                    pivot=True,
-                )
-                proj = FuelCosts(fuel, year, eia, industry=sector_mapper[sector]).get_data(
-                    pivot=True,
-                )
-
-                actual_year_mean = act.mean().at["U.S."]
-                proj_year_mean = proj.at[year, "U.S."]
-                scaler = proj_year_mean / actual_year_mean
-
-                raw = act * scaler * 1000 / NG_MWH_2_MMCF  # $/MCF -> $/MWh
-
-        case "coal":
-            raw = (
-                FuelCosts(fuel, year, eia, industry="power").get_data(pivot=True) * COAL_dol_ton_2_MWHthermal
-            )  # $/Ton -> $/MWh
-        case "lpg":
-            # https://afdc.energy.gov/fuels/properties
-            btu_per_gallon = 112000
-            wh_per_btu = 0.29307
-            raw = (
-                FuelCosts(fuel, year, eia, grade="total").get_data(pivot=True)
-                * (1 / btu_per_gallon)
-                * (1 / wh_per_btu)
-                * (1000000)
-            )  # $/gal -> $/MWh
-        case "heating_oil":
-            # https://www.eia.gov/energyexplained/units-and-calculators/british-thermal-units.php
-            btu_per_gallon = 138500
-            wh_per_btu = 0.29307
-            raw = (
-                FuelCosts("heating_oil", year, eia).get_data(pivot=True)
-                * (1 / btu_per_gallon)
-                * (1 / wh_per_btu)
-                * (1000000)
-            )  # $/gal -> $/MWh
-        case _:
-            raise NotImplementedError
-
-    # may have to convert full state name to abbreviated state name
-    # should probably change the EIA module to be consistent on what it returns...
-    raw = raw.rename(columns=STATE_2_CODE)
-
-    raw.index = pd.DatetimeIndex(raw.index)
-
-    investment_year = n.investment_periods[0]
-
-    hourly_index = pd.date_range(
-        start=f"{year}-01-01",
-        end=f"{year}-12-31 23:00:00",
-        freq="H",
-    )
-
-    # need ffill and bfill as some data is not provided at the resolution or
-    # timeframe required
-    costs_hourly = raw.reindex(hourly_index)
-    costs_hourly = costs_hourly.ffill().bfill()
-    costs_hourly.index = costs_hourly.index.map(
-        lambda x: x.replace(year=investment_year),
-    )
-
-    return costs_hourly[costs_hourly.index.isin(n.snapshots.get_level_values(1))]
-
-
 def get_link_marginal_costs(
     n: pypsa.Network,
     links: pd.DataFrame,
     dynamic_costs: pd.DataFrame,
 ) -> pd.DataFrame:
-    """
-    Gets dynamic marginal costs dataframe to add to the system.
-    """
+    """Gets dynamic marginal costs dataframe to add to the system."""
     assert len(dynamic_costs) == len(n.snapshots.get_level_values(1))
 
     if "USA" not in dynamic_costs.columns:
@@ -338,12 +192,11 @@ def add_industrial_heat(
     n: pypsa.Network,
     sector: str,
     costs: pd.DataFrame,
-    marginal_gas: Optional[pd.DataFrame | float] = None,
-    marginal_coal: Optional[pd.DataFrame | float] = None,
-    dr_config: Optional[dict[str, Any]] = None,
+    marginal_gas: pd.DataFrame | float | None = None,
+    marginal_coal: pd.DataFrame | float | None = None,
+    dr_config: dict[str, Any] | None = None,
     **kwargs,
 ) -> None:
-
     assert sector == SecNames.INDUSTRY.value
 
     add_industrial_gas_furnace(n, costs, marginal_gas)
@@ -360,18 +213,15 @@ def add_service_heat(
     pop_layout: pd.DataFrame,
     costs: pd.DataFrame,
     split_urban_rural: bool,
-    technologies: Optional[dict[str, str | bool | float]] = None,
-    ashp_cop: Optional[pd.DataFrame] = None,
-    gshp_cop: Optional[pd.DataFrame] = None,
-    marginal_gas: Optional[pd.DataFrame | float] = None,
-    marginal_oil: Optional[pd.DataFrame | float] = None,
-    water_heating_config: Optional[dict[str, Any]] = None,
-    dr_config: Optional[dict[str, Any]] = None,
+    technologies: dict[str, str | bool | float] | None = None,
+    ashp_cop: pd.DataFrame | None = None,
+    gshp_cop: pd.DataFrame | None = None,
+    marginal_gas: pd.DataFrame | float | None = None,
+    marginal_oil: pd.DataFrame | float | None = None,
+    water_heating_config: dict[str, Any] | None = None,
+    dr_config: dict[str, Any] | None = None,
 ):
-    """
-    Adds heating links for residential and commercial sectors.
-    """
-
+    """Adds heating links for residential and commercial sectors."""
     assert sector in ("res", "com", "srv")
 
     if not technologies:
@@ -409,9 +259,7 @@ def add_service_heat(
 
     # add heat pumps
     for heat_system in heat_systems:
-
         if (heat_system in ["urban", "total"]) and include_hps:
-
             heat_pump_type = "air"
 
             cop = ashp_cop
@@ -427,7 +275,6 @@ def add_service_heat(
             )
 
         if (heat_system in ["rural", "total"]) and include_hps:
-
             heat_pump_type = "ground"
 
             cop = gshp_cop
@@ -453,7 +300,6 @@ def add_service_heat(
                 heat_carrier,
                 "gas",
                 costs,
-                marginal_gas,
             )
 
         if include_oil_furnace:
@@ -462,9 +308,8 @@ def add_service_heat(
                 sector,
                 heat_system,
                 heat_carrier,
-                "lpg",
+                "oil",
                 costs,
-                marginal_oil,
             )
 
         if dr_config:
@@ -479,13 +324,12 @@ def add_service_heat(
 
         # check if water heat is needed
         if split_space_water:
-
             simple_storage = water_heating_config.get("simple_storage", False)
             n_hours = water_heating_config.get("n_hours", None)
 
             elec_extendable = True if include_elec_water_furnace else False
             gas_extendable = True if include_gas_water_furnace else False
-            lpg_extendable = True if include_oil_water_furnace else False
+            oil_extendable = True if include_oil_water_furnace else False
 
             add_service_water_store(
                 n=n,
@@ -514,11 +358,11 @@ def add_service_heat(
                 n=n,
                 sector=sector,
                 heat_system=heat_system,
-                fuel="lpg",
+                fuel="oil",
                 costs=costs,
                 marginal_cost=marginal_gas,
                 standing_loss=standing_loss_water_heat,
-                extendable=lpg_extendable,
+                extendable=oil_extendable,
                 simple_storage=simple_storage,
                 n_hours=n_hours,
             )
@@ -529,12 +373,11 @@ def add_service_cooling(
     sector: str,
     pop_layout: pd.DataFrame,
     costs: pd.DataFrame,
-    split_urban_rural: Optional[bool] = True,
-    technologies: Optional[dict[str, bool]] = None,
-    dr_config: Optional[dict[str, Any]] = None,
+    split_urban_rural: bool | None = True,
+    technologies: dict[str, bool] | None = None,
+    dr_config: dict[str, Any] | None = None,
     **kwargs,
 ):
-
     assert sector in ("res", "com", "srv")
 
     if not technologies:
@@ -570,10 +413,7 @@ def add_air_cons(
     heat_system: str,
     costs: pd.DataFrame,
 ) -> None:
-    """
-    Adds gas furnaces to the system.
-    """
-
+    """Adds gas furnaces to the system."""
     assert heat_system in ("urban", "rural", "total")
 
     match sector:
@@ -629,7 +469,6 @@ def add_service_heat_pumps_cooling(
     heat_system: str
         ("rural" or "urban")
     """
-
     assert sector in ("com", "res")
     assert heat_system in ("urban", "rural", "total")
     assert heat_carrier in ["cool"]
@@ -646,7 +485,9 @@ def add_service_heat_pumps_cooling(
     cool_links = cool_links.rename(index=index_mapper)
     cool_links_cop = cool_links_cop.rename(columns=index_mapper)
 
-    cool_links["bus1"] = cool_links["bus0"].map(lambda x: x.split(f" {sector}")[0])  # node code
+    cool_links["bus1"] = cool_links["bus0"].map(
+        lambda x: x.split(f" {sector}")[0],
+    )  # node code
     cool_links["bus1"] = cool_links["bus1"] + f" {sector}-{heat_system}-{heat_carrier}"
 
     # carrier_name = f"{sector}-{heat_system}-{heat_carrier}"
@@ -689,14 +530,12 @@ def _split_urban_rural_load(
     than pypsa-eur implementation, as we add all load before clustering;
     we are not adding load here, rather just splitting it up
     """
-
     assert sector in ("com", "res")
     assert fuel in ("heat", "cool", "space-heat", "water-heat")
 
     load_names = n.loads[n.loads.carrier == f"{sector}-{fuel}"].index.to_list()
 
     for system in ("urban", "rural"):
-
         # add buses to connect the new loads to
         new_buses = pd.DataFrame(index=load_names)
         new_buses.index = new_buses.index.map(n.loads.bus)
@@ -749,10 +588,7 @@ def _format_total_load(
     sector: str,
     fuel: str,
 ) -> None:
-    """
-    Formats load with 'total' prefix to match urban/rural split.
-    """
-
+    """Formats load with 'total' prefix to match urban/rural split."""
     assert sector in ("com", "res", "srv")
     assert fuel in ("heat", "cool", "space-heat", "water-heat")
 
@@ -811,7 +647,6 @@ def add_service_furnace(
     heat_carrier: str,
     fuel: str,
     costs: pd.DataFrame,
-    marginal_cost: Optional[pd.DataFrame | float] = None,
 ) -> None:
     """
     Adds direct furnace heating to the system.
@@ -830,23 +665,26 @@ def add_service_furnace(
     assert heat_system in ("urban", "rural", "total")
     assert heat_carrier in ("heat", "space-heat")
 
-    match sector:
-        case "res" | "Res" | "residential" | "Residential":
-            if fuel == "lpg":
-                costs_name = "Residential Oil-Fired Furnaces"
-            elif fuel == "gas":
-                costs_name = "Residential Gas-Fired Furnaces"
-            elif fuel == "elec":
-                costs_name = "Residential Electric Resistance Heaters"
-        case "com" | "Com" | "commercial" | "Commercial":
-            if fuel == "lpg":
-                costs_name = "Commercial Oil-Fired Furnaces"
-            elif fuel == "gas":
-                costs_name = "Commercial Gas-Fired Furnaces"
-            elif fuel == "elec":
-                costs_name = "Commercial Electric Resistance Heaters"
-        case _:
-            raise NotImplementedError
+    if sector in ("res", "residential", "Residential"):
+        if fuel == "oil":
+            costs_name = "Residential Oil-Fired Furnaces"
+        elif fuel == "gas":
+            costs_name = "Residential Gas-Fired Furnaces"
+        elif fuel == "elec":
+            costs_name = "Residential Electric Resistance Heaters"
+        else:
+            raise ValueError(f"Unexpected fuel of {fuel}")
+    elif sector in ("com", "commercial", "Commercial"):
+        if fuel == "oil":
+            costs_name = "Commercial Oil-Fired Furnaces"
+        elif fuel == "gas":
+            costs_name = "Commercial Gas-Fired Furnaces"
+        elif fuel == "elec":
+            costs_name = "Commercial Electric Resistance Heaters"
+        else:
+            raise ValueError(f"Unexpected fuel of {fuel}")
+    else:
+        raise ValueError(f"Unexpected sector of {sector}")
 
     capex = costs.at[costs_name, "capital_cost"].round(1)
     efficiency = costs.at[costs_name, "efficiency"].round(1)
@@ -874,17 +712,8 @@ def add_service_furnace(
             lambda x: x.split(f" {sector}-{heat_system}-{heat_carrier}")[0],
         )
     else:
-        fuel_name = "oil" if fuel == "lpg" else fuel
-        df["bus0"] = df.state + " " + fuel_name
-        df["efficiency2"] = costs.at[fuel_name, "co2_emissions"]
-
-    if isinstance(marginal_cost, pd.DataFrame):
-        assert "state" in df.columns
-        mc = get_link_marginal_costs(n, df, marginal_cost)
-    elif isinstance(marginal_cost, (int, float)):
-        mc = marginal_cost
-    else:
-        mc = 0
+        df["bus0"] = df.state + " " + fuel
+        df["efficiency2"] = costs.at[fuel, "co2_emissions"]
 
     if fuel == "elec":
         n.madd(
@@ -913,7 +742,7 @@ def add_service_furnace(
             capital_cost=capex,
             p_nom_extendable=True,
             lifetime=lifetime,
-            marginal_cost=mc,
+            # marginal_cost=mc,
         )
 
 
@@ -921,58 +750,49 @@ def add_heat_dr(
     n: pypsa.Network,
     sector: str,
     dr_config: dict[str, Any],
-    heat_system: Optional[str] = None,
-    heat_carrier: Optional[str] = None,
-    standing_loss: Optional[float] = None,
+    heat_system: str | None = None,
+    heat_carrier: str | None = None,
+    standing_loss: float | None = None,
 ) -> None:
-    """
-    Adds end-use thermal demand response.
-    """
+    """Adds end-use thermal demand response."""
+    by_carrier = dr_config.get("by_carrier", False)
 
-    shift = dr_config.get("shift", 0)
-    marginal_cost_storage = dr_config.get("marginal_cost", 0)
-
-    if shift == 0:
-        logger.info(f"DR not applied to {sector} as allowable sift is {shift}")
-        return
-
-    if marginal_cost_storage == 0:
-        logger.warning(f"No cost applied to demand response for {sector}")
+    # check if dr is applied at a per-carrier level
 
     if sector in ["res", "com"]:
-
         assert heat_system in ("urban", "rural", "total")
         assert heat_carrier in ("heat", "space-heat", "cool")
 
-        if isinstance(marginal_cost_storage, dict):
-            try:
-                mc = marginal_cost_storage[heat_carrier]
-            except KeyError:
-                mc = 0
-        else:
-            mc = marginal_cost_storage
-
         carrier_name = f"{sector}-{heat_system}-{heat_carrier}"
 
+        if by_carrier:
+            dr_config = dr_config.get(heat_carrier, {})
+
     elif sector == "ind":
+        carrier_name = "ind-heat"
 
-        carrier_name = f"ind-heat"
-
-        if isinstance(marginal_cost_storage, dict):
-            try:
-                mc = marginal_cost_storage["heat"]
-            except KeyError:
-                mc = 0
-        else:
-            mc = marginal_cost_storage
+        if by_carrier:
+            dr_config = dr_config.get("heat", {})
 
     else:
         raise ValueError(f"{sector} not valid dr option")
 
-    if mc == 0:
+    # check if demand response is applied
+
+    shift = dr_config.get("shift", 0)
+    if shift == 0:
+        logger.info(f"DR not applied to {sector} as allowable sift is {shift}")
+        return
+
+    # assign marginal cost value
+
+    marginal_cost_storage = dr_config.get("marginal_cost", 0)
+    if marginal_cost_storage == 0:
         logger.warning(f"No cost applied to demand response for {sector}")
 
-    # must be run after rural/urban load split
+    # get components to add
+    # MUST BE RUN AFTER URBAN/RURAL SPLIT
+
     buses = n.buses[n.buses.carrier == carrier_name]
 
     df = pd.DataFrame(index=buses.index)
@@ -1069,7 +889,7 @@ def add_heat_dr(
         e_max_pu=1,
         carrier=df.carrier,
         standing_loss=standing_loss,
-        marginal_cost_storage=mc,
+        marginal_cost_storage=marginal_cost_storage,
     )
 
     n.madd(
@@ -1084,7 +904,7 @@ def add_heat_dr(
         e_max_pu=0,
         carrier=df.carrier,
         standing_loss=standing_loss,
-        marginal_cost_storage=mc * (-1),
+        marginal_cost_storage=marginal_cost_storage * (-1),
     )
 
 
@@ -1094,11 +914,11 @@ def add_service_water_store(
     heat_system: str,
     fuel: str,
     costs: pd.DataFrame,
-    marginal_cost: Optional[pd.DataFrame | float] = None,
-    standing_loss: Optional[float] = None,
-    extendable: Optional[bool] = True,
-    simple_storage: Optional[bool] = True,
-    n_hours: Optional[int | float] = None,
+    marginal_cost: pd.DataFrame | float | None = None,
+    standing_loss: float | None = None,
+    extendable: bool | None = True,
+    simple_storage: bool | None = True,
+    n_hours: int | float | None = None,
 ) -> None:
     """
     Adds end-use water heat storage system.
@@ -1114,7 +934,6 @@ def add_service_water_store(
         stores. If True, costs are applied to the discharging link based on
         4hr storage capacity.
     """
-
     assert sector in ("res", "com")
     assert heat_system in ("urban", "rural", "total")
 
@@ -1122,24 +941,23 @@ def add_service_water_store(
 
     carrier_name = f"{sector}-{heat_system}-{heat_carrier}"
 
-    match fuel:
-        case "elec":
-            if sector == "res":
-                cost_name = "Residential Electric-Resistance Storage Water Heaters"
-            elif sector == "com":
-                cost_name = "Commercial Electric Resistance Storage Water Heaters"
-        case "gas":
-            if sector == "res":
-                cost_name = "Residential Gas-Fired Storage Water Heaters"
-            elif sector == "com":
-                cost_name = "Commercial Gas-Fired Storage Water Heaters"
-        case "lpg":
-            if sector == "res":
-                cost_name = "Residential Oil-Fired Storage Water Heaters"
-            elif sector == "com":
-                cost_name = "Commercial Oil-Fired Storage Water Heaters"
-        case _:
-            raise NotImplementedError
+    if fuel == "elec":
+        if sector == "res":
+            cost_name = "Residential Electric-Resistance Storage Water Heaters"
+        elif sector == "com":
+            cost_name = "Commercial Electric Resistance Storage Water Heaters"
+    elif fuel == "gas":
+        if sector == "res":
+            cost_name = "Residential Gas-Fired Storage Water Heaters"
+        elif sector == "com":
+            cost_name = "Commercial Gas-Fired Storage Water Heaters"
+    elif fuel == "oil":
+        if sector == "res":
+            cost_name = "Residential Oil-Fired Storage Water Heaters"
+        elif sector == "com":
+            cost_name = "Commercial Oil-Fired Storage Water Heaters"
+    else:
+        raise ValueError(f"Unexpected fuel of {fuel}")
 
     # must be run after rural/urban load split
     buses = n.buses[n.buses.carrier == carrier_name]
@@ -1166,7 +984,7 @@ def add_service_water_store(
     if isinstance(marginal_cost, pd.DataFrame):
         assert "state" in df.columns
         mc = get_link_marginal_costs(n, df, marginal_cost)
-    elif isinstance(marginal_cost, (int, float)):
+    elif isinstance(marginal_cost, int | float):
         mc = marginal_cost
     else:
         mc = 0
@@ -1262,7 +1080,7 @@ def add_service_heat_pumps(
     heat_carrier: str,
     hp_type: str,
     costs: pd.DataFrame,
-    cop: Optional[pd.DataFrame] = None,
+    cop: pd.DataFrame | None = None,
 ) -> None:
     """
     Adds heat pumps to the system.
@@ -1282,7 +1100,6 @@ def add_service_heat_pumps(
     cop: pd.DataFrame
         If not provided, uses eff in costs
     """
-
     hp_type = hp_type.capitalize()
 
     assert sector in ("com", "res")
@@ -1343,14 +1160,12 @@ def add_service_heat_pumps(
 def add_industrial_gas_furnace(
     n: pypsa.Network,
     costs: pd.DataFrame,
-    marginal_cost: Optional[pd.DataFrame | float] = None,
+    marginal_cost: pd.DataFrame | float | None = None,
 ) -> None:
-
     sector = SecNames.INDUSTRY.value
 
     capex = costs.at["direct firing gas", "capital_cost"].round(1)
-    # efficiency = costs.at["direct firing gas", "efficiency"].round(1)
-    efficiency = 0.95  # source defaults to 100%
+    efficiency = costs.at["direct firing gas", "efficiency"].round(1)
     lifetime = costs.at["direct firing gas", "lifetime"]
 
     carrier_name = f"{sector}-heat"
@@ -1373,7 +1188,7 @@ def add_industrial_gas_furnace(
     if isinstance(marginal_cost, pd.DataFrame):
         assert "state" in furnaces.columns
         mc = get_link_marginal_costs(n, furnaces, marginal_cost)
-    elif isinstance(marginal_cost, (int, float)):
+    elif isinstance(marginal_cost, int | float):
         mc = marginal_cost
     else:
         mc = 0
@@ -1381,7 +1196,7 @@ def add_industrial_gas_furnace(
     n.madd(
         "Link",
         furnaces.index,
-        suffix="-gas-furnace",  #'ind' included in index already
+        suffix="-gas-furnace",  # 'ind' included in index already
         bus0=furnaces.bus0,
         bus1=furnaces.bus1,
         bus2=furnaces.bus2,
@@ -1398,9 +1213,8 @@ def add_industrial_gas_furnace(
 def add_industrial_coal_furnace(
     n: pypsa.Network,
     costs: pd.DataFrame,
-    marginal_cost: Optional[pd.DataFrame | float] = None,
+    marginal_cost: pd.DataFrame | float | None = None,
 ) -> None:
-
     sector = SecNames.INDUSTRY.value
 
     # performance charasteristics taken from (Table 311.1a)
@@ -1409,8 +1223,7 @@ def add_industrial_coal_furnace(
 
     # capex approximated based on NG to incorporate fixed costs
     capex = costs.at["direct firing coal", "capital_cost"].round(1)
-    # efficiency = costs.at["direct firing coal", "efficiency"].round(1)
-    efficiency = 0.95  # source defaults to 100%
+    efficiency = costs.at["direct firing coal", "efficiency"].round(1)
     lifetime = capex = costs.at["direct firing coal", "lifetime"].round(1)
 
     carrier_name = f"{sector}-heat"
@@ -1432,7 +1245,7 @@ def add_industrial_coal_furnace(
     if isinstance(marginal_cost, pd.DataFrame):
         assert "state" in furnace.columns
         mc = get_link_marginal_costs(n, furnace, marginal_cost)
-    elif isinstance(marginal_cost, (int, float)):
+    elif isinstance(marginal_cost, int | float):
         mc = marginal_cost
     else:
         mc = 0
@@ -1458,7 +1271,6 @@ def add_indusrial_heat_pump(
     n: pypsa.Network,
     costs: pd.DataFrame,
 ) -> None:
-
     sector = SecNames.INDUSTRY.value
 
     capex = costs.at["industrial heat pump high temperature", "capital_cost"].round(1)

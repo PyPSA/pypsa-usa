@@ -1,5 +1,7 @@
 [![DOI](https://zenodo.org/badge/500892486.svg)](https://zenodo.org/doi/10.5281/zenodo.10815964)
 [![Documentation Status](https://readthedocs.org/projects/pypsa-usa/badge/?version=latest)](https://pypsa-usa.readthedocs.io/en/latest/?badge=latest)
+[![uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json)](https://github.com/astral-sh/uv)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
 # PyPSA-USA: An Open-Source Energy System Optimization Model for the United States
 

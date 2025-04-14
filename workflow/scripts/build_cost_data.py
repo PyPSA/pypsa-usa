@@ -1,9 +1,6 @@
-"""
-Combines all time independent cost data sources into a standard format.
-"""
+"""Combines all time independent cost data sources into a standard format."""
 
 import logging
-from typing import Any, Optional
 
 import constants as const
 import duckdb
@@ -38,7 +35,8 @@ EMISSIONS_DATA = [
 LIFETIME_DATA = [
     {"pypsa-name": "coal", "parameter": "lifetime", "value": 70},
     {"pypsa-name": "oil", "parameter": "lifetime", "value": 55},  # using gas CT
-    {"pypsa-name": "geothermal", "parameter": "lifetime", "value": 70},  # Confirm with Jabs / NREL. 30 is way too small
+    # Confirm with Jabs / NREL. 30 is way too small
+    {"pypsa-name": "geothermal", "parameter": "lifetime", "value": 70},
     {"pypsa-name": "waste", "parameter": "lifetime", "value": 55},  # using gas CT
     {"pypsa-name": "CCGT", "parameter": "lifetime", "value": 55},
     {"pypsa-name": "OCGT", "parameter": "lifetime", "value": 55},
@@ -65,33 +63,31 @@ LIFETIME_DATA = [
 ]  # https://github.com/NREL/ReEDS-2.0/blob/e65ed5ed4ffff973071839481309f77d12d802cd/inputs/plant_characteristics/maxage.csv#L4
 
 
-def create_duckdb_instance(pudl_fn: str):
+def create_duckdb_instance():
+    """Set up DuckDB to read parquet files directly."""
     duckdb.connect(database=":memory:", read_only=False)
-
-    duckdb.query("INSTALL sqlite;")
-    duckdb.query(
-        f"""
-        ATTACH '{pudl_fn}' (TYPE SQLITE);
-        USE pudl;
-        """,
-    )
+    # Install httpfs extension to access remote files if needed
+    duckdb.query("INSTALL httpfs;")
 
 
-def load_pudl_atb_data():
+def load_pudl_atb_data(parquet_path: str):
+    """Loads ATB data directly from parquet files."""
+    create_duckdb_instance()
+
     query = f"""
     WITH finance_cte AS (
         SELECT
-        wacc_real,
-        technology_description,
-        model_case_nrelatb,
-        scenario_atb,
-        projection_year,
-        cost_recovery_period_years,
-        report_year
-        FROM core_nrelatb__yearly_projected_financial_cases_by_scenario
+            wacc_real,
+            technology_description,
+            model_case_nrelatb,
+            scenario_atb,
+            projection_year,
+            cost_recovery_period_years,
+            report_year
+        FROM read_parquet('{parquet_path}/core_nrelatb__yearly_projected_financial_cases_by_scenario.parquet')
     )
     SELECT *
-    FROM core_nrelatb__yearly_projected_cost_performance atb
+    FROM read_parquet('{parquet_path}/core_nrelatb__yearly_projected_cost_performance.parquet') atb
     LEFT JOIN finance_cte AS finance
         ON atb.technology_description = finance.technology_description
             AND atb.model_case_nrelatb = finance.model_case_nrelatb
@@ -104,10 +100,11 @@ def load_pudl_atb_data():
     return duckdb.query(query).to_df()
 
 
-def load_pudl_aeo_data():
+def load_pudl_aeo_data(parquet_path: str):
+    """Loads AEO data directly from parquet files."""
     query = f"""
     SELECT *
-    FROM core_eiaaeo__yearly_projected_fuel_cost_in_electric_sector_by_type aeo
+    FROM read_parquet('{parquet_path}/core_eiaaeo__yearly_projected_fuel_cost_in_electric_sector_by_type.parquet') aeo
     WHERE aeo.report_year = 2023
     """
     return duckdb.query(query).to_df()
@@ -134,11 +131,9 @@ def get_sector_costs(
     efs_icev_costs: str,
     eia_tech_costs,
     year: int,
-    additional_costs_csv: Optional[str] = None,
+    additional_costs_csv: str | None = None,
 ) -> pd.DataFrame:
-    """
-    Gets end-use tech costs for sector coupling studies.
-    """
+    """Gets end-use tech costs for sector coupling studies."""
 
     def correct_units(df: pd.DataFrame) -> pd.DataFrame:
         # USD/gal -> USD/MWh (water storage)
@@ -166,10 +161,7 @@ def get_sector_costs(
         return df[df.year == year].drop(columns="year")
 
     def calculate_capex(df: pd.DataFrame, discount_rate: float) -> pd.DataFrame:
-        """
-        Calcualtes capex based on annuity payments.
-        """
-
+        """Calcualtes capex based on annuity payments."""
         capex = df.copy().set_index(["technology", "parameter"])
         capex = capex.value.unstack().fillna(0)
 
@@ -252,10 +244,11 @@ if __name__ == "__main__":
 
     emissions_data = EMISSIONS_DATA
 
-    create_duckdb_instance(snakemake.input.pudl)
+    # Path to parquet files
+    parquet_path = snakemake.params.pudl_path
 
     # Import PUDLs ATB data
-    pudl_atb = load_pudl_atb_data()
+    pudl_atb = load_pudl_atb_data(parquet_path)
     pudl_atb["pypsa-name"] = pudl_atb.apply(
         match_technology,
         axis=1,
@@ -379,14 +372,13 @@ if __name__ == "__main__":
         ],
         ignore_index=True,
     )
-    pudl_atb.drop_duplicates(
+    pudl_atb = pudl_atb.drop_duplicates(
         subset=["pypsa-name", "parameter"],
         keep="last",
-        inplace=True,
     )
 
     # Load AEO Fuel Cost Data
-    aeo = load_pudl_aeo_data()
+    aeo = load_pudl_aeo_data(parquet_path)
     aeo = aeo[aeo.projection_year == tech_year]
     aeo = aeo[aeo.model_case_eiaaeo == aeo_params.get("scenario", "Reference")]
     cols = ["fuel_type_eiaaeo", "fuel_cost_real_per_mmbtu_eiaaeo"]
@@ -400,7 +392,7 @@ if __name__ == "__main__":
         var_name="parameter",
         value_name="value",
     )
-    aeo.rename(columns={"fuel_type_eiaaeo": "pypsa-name"}, inplace=True)
+    aeo = aeo.rename(columns={"fuel_type_eiaaeo": "pypsa-name"})
 
     addnl_fuels = pd.DataFrame(
         [
@@ -507,9 +499,7 @@ if __name__ == "__main__":
     pivot_atb.loc[
         pivot_atb["pypsa-name"].str.contains("offshore"),
         "capex_grid_connection_per_kw_km",
-    ] = (
-        pivot_atb["capex_grid_connection_per_kw"] / 30
-    )
+    ] = pivot_atb["capex_grid_connection_per_kw"] / 30
 
     pivot_atb["annualized_connection_capex_per_mw_km"] = (
         calculate_annuity(
@@ -532,7 +522,9 @@ if __name__ == "__main__":
     pudl_atb["value"] = pudl_atb["value"].round(3)
 
     egs_costs = pd.read_csv(snakemake.input.egs_costs)
-    egs_costs = egs_costs.query("investment_horizon == @tech_year").drop(columns="investment_horizon")
+    egs_costs = egs_costs.query("investment_horizon == @tech_year").drop(
+        columns="investment_horizon",
+    )
     pudl_atb = pd.concat([pudl_atb, egs_costs], ignore_index=True)
 
     pudl_atb.to_csv(snakemake.output.tech_costs, index=False)

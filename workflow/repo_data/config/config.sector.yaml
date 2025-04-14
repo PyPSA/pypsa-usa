@@ -14,7 +14,8 @@ sector:
     cyclic_storage: true
     standing_loss: 0
   methane:
-    leakage_rate: 0.02 # per unit 
+    upstream_leakage_rate: 0.02 # per unit 
+    downstream_leakage_rate: 0.02 # per unit 
     gwp: 0 
   # docs-heating
   heating:

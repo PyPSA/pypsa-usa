@@ -60,10 +60,6 @@ electricity:
     epsilon_vres: 0.02
     contingency: 4000
 
-  max_hours:
-    battery: 6
-    H2: 168
-
   extendable_carriers:
     Generator: [solar, onwind, offwind_floating, OCGT, CCGT, CCGT-95CCS, coal, nuclear] #include CCGT-CCS
     StorageUnit: [4hr_battery_storage, 8hr_battery_storage] # [Xhr-battery-storage (2-10 hours)]

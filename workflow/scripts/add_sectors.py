@@ -6,16 +6,12 @@ future, it would be good to integrate this logic into snakemake
 """
 
 import logging
+import sys
 
 import geopandas as gpd
 import numpy as np
 import pandas as pd
 import pypsa
-
-logger = logging.getLogger(__name__)
-import sys
-from typing import Optional
-
 from _helpers import configure_logging, get_snapshots, load_costs
 from add_electricity import sanitize_carriers
 from build_electricity_sector import build_electricty
@@ -32,25 +28,25 @@ from build_stock_data import (
     get_transport_stock,
 )
 from build_transportation import apply_exogenous_ev_policy, build_transportation
-from constants import STATE_2_CODE, STATES_INTERCONNECT_MAPPER
+from constants import CODE_2_STATE, NG_MWH_2_MMCF, STATE_2_CODE, STATES_INTERCONNECT_MAPPER
 from constants_sector import RoadTransport
+from eia import FuelCosts
 from shapely.geometry import Point
 
-CODE_2_STATE = {v: k for k, v in STATE_2_CODE.items()}
+logger = logging.getLogger(__name__)
 
 
 def assign_bus_2_state(
     n: pypsa.Network,
     shp: str,
-    states_2_include: list[str] = None,
-    state_2_state_name: dict[str, str] = None,
+    states_2_include: list[str] | None = None,
+    state_2_state_name: dict[str, str] | None = None,
 ) -> None:
     """
     Adds a state column to the network buses dataframe.
 
     The shapefile must be the counties shapefile
     """
-
     buses = n.buses[["x", "y"]].copy()
     buses["geometry"] = buses.apply(lambda x: Point(x.x, x.y), axis=1)
     buses = gpd.GeoDataFrame(buses, crs="EPSG:4269")
@@ -75,8 +71,9 @@ def add_sector_foundation(
     n: pypsa.Network,
     carrier: str,
     add_supply: bool = True,
-    costs: Optional[pd.DataFrame] = pd.DataFrame(),
-    center_points: Optional[pd.DataFrame] = pd.DataFrame(),
+    costs: pd.DataFrame | None = pd.DataFrame(),
+    center_points: pd.DataFrame | None = pd.DataFrame(),
+    eia_api: str | None = None,
 ) -> None:
     """
     Adds carrier, state level bus and store for the energy carrier.
@@ -85,19 +82,21 @@ def add_sector_foundation(
     only the bus is created and no energy supply will be added to the
     state level bus.
     """
-
-    match carrier:
-        case "gas":
-            carrier_kwargs = {"color": "#d35050", "nice_name": "Natural Gas"}
-        case "coal":
-            carrier_kwargs = {"color": "#d35050", "nice_name": "Coal"}
-        case "oil" | "lpg":
-            carrier_kwargs = {"color": "#d35050", "nice_name": "Liquid Petroleum Gas"}
-        case _:
-            carrier_kwargs = {}
+    co2_carrier = "carrier"
+    if carrier == "gas":
+        carrier_kwargs = {"color": "#d35050", "nice_name": "Natural Gas"}
+    elif carrier == "coal":
+        carrier_kwargs = {"color": "#d35050", "nice_name": "Coal"}
+    elif carrier == "oil":  # heating oil
+        carrier_kwargs = {"color": "#d35050", "nice_name": "Heating Oil"}
+    elif carrier == "lpg":
+        carrier_kwargs = {"color": "#d35050", "nice_name": "Liquid Petroleum Gas"}
+        co2_carrier = "oil"
+    else:
+        raise ValueError(f"Unknown carrier of {carrier}")
 
     try:
-        carrier_kwargs["co2_emissions"] = costs.at[carrier, "co2_emissions"]
+        carrier_kwargs["co2_emissions"] = costs.at[co2_carrier, "co2_emissions"]
     except KeyError:
         pass
 
@@ -108,7 +107,7 @@ def add_sector_foundation(
 
     # make state level primary energy carrier buses
 
-    states = n.buses.STATE.dropna().unique()
+    states = n.buses.reeds_state.dropna().unique()
 
     zero_center_points = pd.DataFrame(
         index=states,
@@ -150,8 +149,28 @@ def add_sector_foundation(
         STATE_NAME=points.name,
     )
 
-    if add_supply:
+    if eia_api:
+        year = n.investment_periods[0]
+        eia_carrier = "heating_oil" if carrier == "oil" else carrier
+        dyanmic_cost = get_dynamic_marginal_costs(n, eia_carrier, eia_api, year, "power")
+        dyanmic_cost = dyanmic_cost.set_index([dyanmic_cost.index.year, dyanmic_cost.index])
 
+        if "USA" not in dyanmic_cost.columns:
+            dyanmic_cost["USA"] = dyanmic_cost.mean(axis=1)
+
+        marginal_cost = pd.DataFrame(index=dyanmic_cost.index)
+        for state in n.buses.reeds_state.fillna(False).unique():
+            if not state:
+                continue
+            try:
+                marginal_cost[state] = dyanmic_cost[state]
+            except KeyError:  # use USA average
+                marginal_cost[state] = dyanmic_cost["USA"]
+
+    else:
+        marginal_cost = 0
+
+    if add_supply:
         n.madd(
             "Store",
             names=points.index,
@@ -167,7 +186,186 @@ def add_sector_foundation(
             e_cyclic_per_period=False,
             carrier=carrier,
             unit="MWh_th",
+            marginal_cost=marginal_cost,
         )
+
+
+def get_dynamic_marginal_costs(
+    n: pypsa.Network,
+    fuel: str,
+    eia: str,
+    year: int,
+    sector: str | None = None,
+    **kwargs,
+) -> pd.DataFrame:
+    """Gets end-use fuel costs at a state level."""
+    sector_mapper = {
+        "res": "residential",
+        "com": "commercial",
+        "pwr": "power",
+        "ind": "industrial",
+        "trn": "transport",
+    }
+
+    assert fuel in ("gas", "lpg", "coal", "heating_oil")
+
+    if fuel == "gas":
+        assert sector in ("res", "com", "ind", "pwr")
+        if year < 2024:  # get actual monthly values
+            raw = FuelCosts(fuel, year, eia, industry=sector_mapper[sector]).get_data(pivot=True)
+            raw = raw * 1000 / NG_MWH_2_MMCF  # $/MCF -> $/MWh
+        else:  # scale monthly values according to AEO
+            act = FuelCosts(fuel, 2023, eia, industry=sector_mapper[sector]).get_data(pivot=True)
+            proj = FuelCosts(fuel, year, eia, industry=sector_mapper[sector]).get_data(pivot=True)
+
+            # actual comes in $/MCF, while projected comes in $/MMBTU
+            # https://www.eia.gov/totalenergy/data/browser/index.php?tbl=TA4#/?f=A
+            # 1.036 BTU / MCF
+            act_mmbtu = act / 1.036
+
+            if "USA" not in act.columns:
+                act["USA"] = act.mean(axis=1)
+                act_mmbtu["USA"] = act_mmbtu.mean(axis=1)
+
+            actual_year_mean = act_mmbtu.mean().at["U.S."]
+            proj_year_mean = proj.at[year, "USA"]
+            scaler = proj_year_mean / actual_year_mean
+
+            raw = act * scaler * 1000 / NG_MWH_2_MMCF  # $/MCF -> $/MWh
+    elif fuel == "coal":
+        # https://www.eia.gov/tools/faqs/faq.php?id=72&t=2
+        # 19.18 MMBTU per short ton
+        mmbtu_per_ston = 19.18
+        wh_per_btu = 0.29307  # same as mwh_per_mmbtu
+
+        # no industry = industrial, so use industry = power
+        if year < 2024:  # get actual monthly values
+            raw = FuelCosts(fuel, year, eia, industry="power").get_data(pivot=True)
+            raw *= 1 / mmbtu_per_ston / wh_per_btu  # $/Ton -> $/MWh
+        else:
+            # idk why, but there is a weird issue from AEO actual costs (ie 2023) dont
+            # seem to match actual reported value (or maybe more likely I am interpreteing
+            # something wrong). I am taking the profile, then applying the value to the 2024
+            # prices, and scaling from that.
+
+            act = FuelCosts(fuel, 2023, eia, industry="power").get_data(pivot=True)
+            proj_2024 = FuelCosts(fuel, 2024, eia, industry="power").get_data(pivot=True)
+            proj = FuelCosts(fuel, year, eia, industry="power").get_data(pivot=True)
+
+            act *= 1 / mmbtu_per_ston / wh_per_btu  # $/Ton -> $/MWh
+            proj *= 1 / wh_per_btu  # $/MMBTU -> $/MWh
+            proj_2024 *= 1 / wh_per_btu  # $/MMBTU -> $/MWh
+
+            if "USA" not in act.columns:
+                act["USA"] = act.mean(axis=1)
+
+            present_day_scale = proj_2024.at[2024, "USA"] / act.mean().at["USA"]
+            act_adjusted = act * present_day_scale
+
+            proj_year_mean = proj.at[year, "USA"]
+            scaler = proj_year_mean / act_adjusted.mean().at["USA"]
+
+            raw = act_adjusted * scaler
+
+            """
+            act = FuelCosts(fuel, 2023, eia, industry="power").get_data(pivot=True)
+            proj = FuelCosts(fuel, year, eia, industry="power").get_data(pivot=True)
+
+            # actual comes in $/ton, while projected comes in $/MMBTU
+            proj *= (1 / wh_per_btu) # $/MMBTU -> $/MWh
+            act *= (1 / mmbtu_per_ston / wh_per_btu) # $/Ton -> $/MWh
+
+            if "USA" not in act.columns:
+                act["USA"] = act.mean(axis=1)
+
+            # actual_year_mean = act.mean().at["USA"]
+            proj_year_mean = proj.at[year, "USA"]
+            scaler = proj_year_mean / actual_year_mean
+
+            raw = act * scaler
+            """
+
+    elif fuel == "lpg":
+        # https://www.eia.gov/energyexplained/units-and-calculators/
+        btu_per_gallon = 120214
+        wh_per_btu = 0.29307
+        if year < 2024:
+            raw = (
+                FuelCosts(fuel, year, eia, grade="regular").get_data(pivot=True)
+                * (1 / btu_per_gallon)
+                * (1 / wh_per_btu)
+                * (1000000)
+            )  # $/gal -> $/MWh
+        else:
+            act = FuelCosts(fuel, 2023, eia, grade="regular").get_data(pivot=True)
+            proj = FuelCosts(fuel, year, eia, grade="regular").get_data(pivot=True)
+
+            # actual comes in $/gal, while projected comes in $/MMBTU
+            proj *= btu_per_gallon / 1000000
+
+            if "USA" not in act.columns:
+                act["USA"] = act.mean(axis=1)
+
+            actual_year_mean = act.mean().at["USA"]
+            proj_year_mean = proj.at[year, "USA"]
+            scaler = proj_year_mean / actual_year_mean
+
+            # $/gal -> $/MWh
+            raw = act * scaler * (1 / btu_per_gallon) * (1 / wh_per_btu) * (1000000)
+    elif fuel == "heating_oil":
+        # https://www.eia.gov/energyexplained/units-and-calculators/british-thermal-units.php
+        btu_per_gallon = 138500
+        wh_per_btu = 0.29307
+        if year < 2024:
+            raw = (
+                FuelCosts("heating_oil", year, eia).get_data(pivot=True)
+                * (1 / btu_per_gallon)
+                * (1 / wh_per_btu)
+                * (1000000)
+            )  # $/gal -> $/MWh
+        else:
+            act = FuelCosts("heating_oil", 2023, eia).get_data(pivot=True)
+            proj = FuelCosts("heating_oil", year, eia).get_data(pivot=True)
+
+            # actual comes in $/gal, while projected comes in $/MMBTU
+            proj *= btu_per_gallon / 1000000
+
+            if "USA" not in act.columns:
+                act["USA"] = act.mean(axis=1)
+
+            actual_year_mean = act.mean().at["USA"]
+            proj_year_mean = proj.at[year, "USA"]
+            scaler = proj_year_mean / actual_year_mean
+
+            # $/gal -> $/MWh
+            raw = act * scaler * (1 / btu_per_gallon) * (1 / wh_per_btu) * (1000000)
+    else:
+        raise KeyError(f"{fuel} not recognized for dynamic fuel costs.")
+
+    # may have to convert full state name to abbreviated state name
+    # should probably change the EIA module to be consistent on what it returns...
+    raw = raw.rename(columns=STATE_2_CODE)
+
+    raw.index = pd.DatetimeIndex(raw.index)
+    raw.index = raw.index.map(lambda x: x.replace(year=year))
+
+    investment_year = n.investment_periods[0]
+
+    hourly_index = pd.date_range(
+        start=f"{year}-01-01",
+        end=f"{year}-12-31 23:00:00",
+        freq="H",
+    )
+
+    # need ffill and bfill as some data is not provided at the resolution or
+    # timeframe required
+    costs_hourly = raw.reindex(hourly_index)
+    costs_hourly = costs_hourly.ffill().bfill()
+    costs_hourly.index = costs_hourly.index.map(
+        lambda x: x.replace(year=investment_year),
+    )
+
+    return costs_hourly[costs_hourly.index.isin(n.snapshots.get_level_values(1))]
 
 
 def convert_generators_2_links(
@@ -184,13 +382,9 @@ def convert_generators_2_links(
     Links bus1 are the bus the generator is attached to. Links bus0 are state
     level followed by the suffix (ie. "WA gas" if " gas" is the bus0_suffix)
 
-    n: pypsa.Network,
-    carrier: str,
-        carrier of the generator to convert to a link
-    bus0_suffix: str,
-        suffix to attach link to
+    If eia api is provided, dynamic marginal costs are brought in from the API. This will
+    match the method end-use techs bring in dynamic marginal costs.
     """
-
     plants = n.generators[n.generators.carrier == carrier].copy()
 
     if plants.empty:
@@ -234,7 +428,8 @@ def convert_generators_2_links(
         ramp_limit_down=plants.ramp_limit_down,
         efficiency=plants.efficiency,
         efficiency2=co2_intensity,
-        marginal_cost=plants.marginal_cost * plants.efficiency,  # fuel costs rated at delievered
+        marginal_cost=0,
+        # marginal_cost = plants.marginal_cost * plants.efficiency, # fuel costs rated at delievered
         capital_cost=plants.capital_cost,  # links rated on input capacity
         lifetime=plants.lifetime,
     )
@@ -242,8 +437,10 @@ def convert_generators_2_links(
     for param, df in pnl.items():
         n.links_t[param] = n.links_t[param].join(df, how="inner")
 
-    # remove generators
     n.mremove("Generator", plants.index)
+
+    # existing links will give a 'nan in efficiency2' warning
+    n.links["efficiency2"] = n.links.efficiency2.fillna(0)
 
 
 def split_loads_by_carrier(n: pypsa.Network):
@@ -257,7 +454,6 @@ def split_loads_by_carrier(n: pypsa.Network):
     Note: This will break the flow of energy in the model! You must add a
     new link between the new bus and old bus if you want to retain the flow
     """
-
     for bus in n.buses.index.unique():
         df = n.loads[n.loads.bus == bus][["bus", "carrier"]]
 
@@ -284,7 +480,6 @@ def get_pwr_co2_intensity(carrier: str, costs: pd.DataFrame) -> float:
     Spereate function, as there is some odd logic to account for
     different names in translation to a sector study.
     """
-
     # the ccs case are a hack solution
 
     match carrier:
@@ -313,10 +508,10 @@ if __name__ == "__main__":
         snakemake = mock_snakemake(
             "add_sectors",
             interconnect="western",
-            simpl="70",
+            simpl="11",
             clusters="4m",
             ll="v1.0",
-            opts="3h",
+            opts="4h",
             sector="E-G",
         )
     configure_logging(snakemake)
@@ -359,21 +554,24 @@ if __name__ == "__main__":
     center_points = StateGeometry(snakemake.input.county).state_center_points.set_index(
         "STATE",
     )
-    for carrier in ("oil", "coal", "gas"):
+    # oil in this context is heating_oil
+    for carrier in ("oil", "lpg", "coal", "gas"):
         add_supply = False if carrier == "gas" else True  # gas added in build_ng()
-        add_sector_foundation(n, carrier, add_supply, costs, center_points)
+        api = None if carrier == "gas" else eia_api  # ng cost endogenously defined
+        add_sector_foundation(n, carrier, add_supply, costs, center_points, api)
 
     for carrier in ("OCGT", "CCGT", "CCGT-95CCS", "CCGT-97CCS"):
         co2_intensity = get_pwr_co2_intensity(carrier, costs)
-        convert_generators_2_links(n, carrier, f" gas", co2_intensity)
+        convert_generators_2_links(n, carrier, " gas", co2_intensity)
 
     for carrier in ("coal", "coal-95CCS", "coal-99CCS"):
         co2_intensity = get_pwr_co2_intensity(carrier, costs)
-        convert_generators_2_links(n, carrier, f" coal", co2_intensity)
+        convert_generators_2_links(n, carrier, " coal", co2_intensity)
 
+    # oil in this context is lpg for ppts
     for carrier in ["oil"]:
         co2_intensity = get_pwr_co2_intensity(carrier, costs)
-        convert_generators_2_links(n, carrier, f" oil", co2_intensity)
+        convert_generators_2_links(n, carrier, " lpg", co2_intensity)
 
     ng_options = snakemake.params.sector["natural_gas"]
 
@@ -388,14 +586,6 @@ if __name__ == "__main__":
         pipeline_shape_path=snakemake.input.pipeline_shape,
         options=ng_options,
     )
-
-    # add methane tracking - if leakage rate is included
-    # this must happen after natural gas system is built
-    methane_options = snakemake.params.sector["methane"]
-    leakage_rate = methane_options.get("leakage_rate", 0)
-    if leakage_rate > 0.00001:
-        gwp = methane_options.get("gwp", 1)
-        build_ch4_tracking(n, gwp, leakage_rate)
 
     pop_layout_path = snakemake.input.clustered_pop_layout
     cop_ashp_path = snakemake.input.cop_air_total
@@ -464,9 +654,6 @@ if __name__ == "__main__":
         costs=costs,
         exogenous=exogenous_transport,
         must_run_evs=must_run_evs,
-        dynamic_pricing=True,
-        eia=eia_api,
-        year=dynamic_cost_year,
         dr_config=dr_config,
     )
 
@@ -495,7 +682,6 @@ if __name__ == "__main__":
             )
 
     if snakemake.params.sector["service_sector"]["brownfield"]:
-
         res_stock_dir = snakemake.input.residential_stock
         com_stock_dir = snakemake.input.commercial_stock
 
@@ -504,7 +690,6 @@ if __name__ == "__main__":
         else:
             fuels = ["heating", "cooling"]
         for fuel in fuels:
-
             if fuel == "water_heating":
                 simple_storage = snakemake.params.sector["service_sector"]["water_heating"].get("simple_storage", False)
             else:
@@ -539,14 +724,12 @@ if __name__ == "__main__":
             )
 
     if snakemake.params.sector["industrial_sector"]["brownfield"]:
-
         mecs_file = snakemake.input.industrial_stock
         ratios = get_industrial_stock(mecs_file)
 
         fuels = ["heat"]
 
         for fuel in fuels:
-
             ratio = ratios.loc[fuel]
             add_industrial_brownfield(
                 n=n,
@@ -555,6 +738,14 @@ if __name__ == "__main__":
                 ratios=ratio,
                 costs=costs,
             )
+
+    # add methane tracking - if leakage rate is included
+    # this must happen after all technologies and nat gas is built
+    methane_options = snakemake.params.sector["methane"]
+    upstream_leakage_rate = methane_options.get("upstream_leakage_rate", 0)
+    downstream_leakage_rate = methane_options.get("downstream_leakage_rate", 0)
+    gwp = methane_options.get("gwp", 0)
+    build_ch4_tracking(n, gwp, upstream_leakage_rate, downstream_leakage_rate)
 
     # Needed as loads may be split off to urban/rural
     sanitize_carriers(n, snakemake.config)

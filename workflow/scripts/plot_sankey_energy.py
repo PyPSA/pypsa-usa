@@ -6,10 +6,8 @@ https://flowcharts.llnl.gov/commodities/energy
 """
 
 from pathlib import Path
-from typing import Optional
 
 import pandas as pd
-import plotly
 import plotly.graph_objects as go
 import pypsa
 from _helpers import configure_logging, mock_snakemake
@@ -88,6 +86,8 @@ NAME_MAPPER = {
     "coal": "Coal",
     "Oil": "Petroleum",
     "oil": "Petroleum",
+    "Lpg": "Petroleum",
+    "lpg": "Petroleum",
     "com": "Commercial",
     "res": "Residential",
     "trn": "Transportation",
@@ -102,9 +102,8 @@ NAME_MAPPER = {
 def _get_consumption_generators(
     n: pypsa.Network,
     period: int,
-    state: Optional[str] = None,
+    state: str | None = None,
 ) -> pd.DataFrame:
-
     if state:
         generators = _get_gens_in_state(n, state)
     else:
@@ -123,9 +122,8 @@ def _get_consumption_generators(
 def _get_rejected_generators(
     n: pypsa.Network,
     period: int,
-    state: Optional[str] = None,
+    state: str | None = None,
 ) -> pd.DataFrame:
-
     if state:
         generators = _get_gens_in_state(n, state)
     else:
@@ -147,7 +145,7 @@ def _get_rejected_generators(
 def _get_consumption_links(
     n: pypsa.Network,
     period: int,
-    state: Optional[str] = None,
+    state: str | None = None,
 ) -> pd.DataFrame:
     if state:
         links = _get_links_in_state(n, state)
@@ -164,9 +162,8 @@ def _get_consumption_links(
 def _get_rejected_links(
     n: pypsa.Network,
     period: int,
-    state: Optional[str] = None,
+    state: str | None = None,
 ) -> pd.DataFrame:
-
     if state:
         links = _get_links_in_state(n, state)
     else:
@@ -191,7 +188,7 @@ def get_electricity_consumption(
     n: pypsa.Network,
     carriers: list[str],
     period: int,
-    state: Optional[str] = None,
+    state: str | None = None,
 ) -> pd.DataFrame:
     df = pd.concat(
         [
@@ -210,7 +207,7 @@ def get_electricity_rejected(
     n: pypsa.Network,
     carriers: list[str],
     period: int,
-    state: Optional[str] = None,
+    state: str | None = None,
 ) -> pd.DataFrame:
     df = pd.concat(
         [
@@ -235,9 +232,8 @@ def _get_sector_consumption(
     sector: str,
     fuel: str,
     period: int,
-    state: Optional[str] = None,
+    state: str | None = None,
 ) -> float:
-
     if fuel == "elec":
         fuel = "AC"
 
@@ -262,9 +258,8 @@ def _get_service_supply(
     n: pypsa.Network,
     sector: str,
     period: int,
-    state: Optional[str] = None,
+    state: str | None = None,
 ) -> float:
-
     if state:
         links_in_state = _get_links_in_state(n, state)
     else:
@@ -292,9 +287,8 @@ def _get_service_rejected(
     n: pypsa.Network,
     sector: str,
     period: int,
-    state: Optional[str] = None,
+    state: str | None = None,
 ) -> float:
-
     if state:
         links_in_state = _get_links_in_state(n, state)
     else:
@@ -319,9 +313,8 @@ def _get_service_rejected(
 def _get_industry_supply(
     n: pypsa.Network,
     period: int,
-    state: Optional[str] = None,
+    state: str | None = None,
 ) -> float:
-
     if state:
         links_in_state = _get_links_in_state(n, state)
     else:
@@ -340,9 +333,8 @@ def _get_industry_supply(
 def _get_industry_rejected(
     n: pypsa.Network,
     period: int,
-    state: Optional[str] = None,
+    state: str | None = None,
 ) -> float:
-
     if state:
         links_in_state = _get_links_in_state(n, state)
     else:
@@ -367,16 +359,15 @@ def _get_industry_rejected(
 def _get_transport_supply(
     n: pypsa.Network,
     period: int,
-    state: Optional[str] = None,
+    state: str | None = None,
 ) -> float:
-
     if state:
         links_in_state = _get_links_in_state(n, state)
     else:
         links_in_state = n.links.index.to_list()
 
     # get load aggregation buses only
-    buses = n.buses[n.buses.carrier.isin(["AC", "oil"])].index
+    buses = n.buses[n.buses.carrier.isin(["AC", "lpg"])].index
     links = n.links[
         (n.links.index.isin(links_in_state)) & (n.links.bus0.isin(buses)) & (n.links.carrier.str.startswith("trn-"))
     ].index
@@ -402,16 +393,15 @@ def _get_transport_supply(
 def _get_transport_rejected(
     n: pypsa.Network,
     period: int,
-    state: Optional[str] = None,
+    state: str | None = None,
 ) -> float:
-
     if state:
         links_in_state = _get_links_in_state(n, state)
     else:
         links_in_state = n.links.index.to_list()
 
     # get load aggregation buses only
-    buses = n.buses[n.buses.carrier.isin(["AC", "oil"])].index
+    buses = n.buses[n.buses.carrier.isin(["AC", "lpg"])].index
     links = n.links[
         (n.links.index.isin(links_in_state)) & (n.links.bus0.isin(buses)) & (n.links.carrier.str.startswith("trn-"))
     ].index
@@ -439,9 +429,8 @@ def _get_transport_rejected(
 def get_energy_flow_res(
     n: pypsa.Network,
     period: int,
-    state: Optional[str] = None,
+    state: str | None = None,
 ) -> pd.DataFrame:
-
     elec_consumption = _get_sector_consumption(n, "res", "elec", period, state)
     lpg_consumption = _get_sector_consumption(n, "res", "oil", period, state)
     gas_consumption = _get_sector_consumption(n, "res", "gas", period, state)
@@ -466,9 +455,8 @@ def get_energy_flow_res(
 def get_energy_flow_com(
     n: pypsa.Network,
     period: int,
-    state: Optional[str] = None,
+    state: str | None = None,
 ) -> pd.DataFrame:
-
     elec_consumption = _get_sector_consumption(n, "com", "elec", period, state)
     lpg_consumption = _get_sector_consumption(n, "com", "oil", period, state)
     gas_consumption = _get_sector_consumption(n, "com", "gas", period, state)
@@ -493,9 +481,8 @@ def get_energy_flow_com(
 def get_energy_flow_ind(
     n: pypsa.Network,
     period: int,
-    state: Optional[str] = None,
+    state: str | None = None,
 ) -> pd.DataFrame:
-
     elec_consumption = _get_sector_consumption(n, "ind", "elec", period, state)
     coal_consumption = _get_sector_consumption(n, "ind", "coal", period, state)
     gas_consumption = _get_sector_consumption(n, "ind", "gas", period, state)
@@ -520,9 +507,8 @@ def get_energy_flow_ind(
 def get_energy_flow_trn(
     n: pypsa.Network,
     period: int,
-    state: Optional[str] = None,
+    state: str | None = None,
 ) -> pd.DataFrame:
-
     elec_consumption = _get_sector_consumption(n, "trn", "elec", period, state)
     oil_consumption = _get_sector_consumption(n, "trn", "oil", period, state)
 
@@ -551,7 +537,7 @@ def get_sankey_dataframe(
     n: pypsa.Network,
     investment_period: int,
     pwr_carriers: list[str],
-    state: Optional[str] = None,
+    state: str | None = None,
 ) -> pd.DataFrame:
     dfs = [
         get_electricity_consumption(n, pwr_carriers, investment_period, state),
@@ -571,7 +557,6 @@ def format_sankey_data(
     name_mapper: dict[str, str],
     sankey_codes: dict[str, int],
 ) -> pd.DataFrame:
-
     def map_sankey_name(name: str):
         try:
             return name_mapper[name]
@@ -612,10 +597,7 @@ def format_sankey_data(
 ###
 
 if __name__ == "__main__":
-
     if "snakemake" not in globals():
-        from _helpers import mock_snakemake
-
         snakemake = mock_snakemake(
             "plot_sankey_energy",
             simpl="70",
@@ -653,7 +635,6 @@ if __name__ == "__main__":
     # plot state level
 
     for state in states:
-
         df = get_sankey_dataframe(
             n=n,
             pwr_carriers=power_carriers,
@@ -703,7 +684,7 @@ if __name__ == "__main__":
             fig_name_html.parent.mkdir(parents=True)
 
         fig.write_html(str(fig_name_html))
-        fig.write_image(str(fig_name_png))
+        # fig.write_image(str(fig_name_png))
 
     # plot system level
 
@@ -755,4 +736,4 @@ if __name__ == "__main__":
         fig_name_html.parent.mkdir(parents=True)
 
     fig.write_html(str(fig_name_html))
-    fig.write_image(str(fig_name_png))
+    # fig.write_image(str(fig_name_png))

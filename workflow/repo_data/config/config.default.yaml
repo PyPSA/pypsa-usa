@@ -59,10 +59,6 @@ electricity:
     epsilon_vres: 0.02
     contingency: 4000
 
-  max_hours:
-    battery: 6
-    H2: 168
-
   extendable_carriers:
     Generator: [solar, onwind, offwind_floating, OCGT, CCGT, CCGT-95CCS, coal, nuclear, hydrogen_ct] #include CCGT-CCS
     StorageUnit: [4hr_battery_storage, 8hr_battery_storage] # [Xhr-battery-storage (2-10 hours)]
@@ -75,6 +71,10 @@ electricity:
       efs_case: reference # reference, medium, high
       efs_speed: moderate # slow, moderate, rapid
       aeo: reference
+
+  demand_response:
+    shift: 0
+    marginal_cost: 999999
 
 # docs :
 conventional:
@@ -139,10 +139,12 @@ costs:
 # docs :
 clustering:
   simplify_network:
+    weighting_strategy: demand-capacity # choose from: [population, demand-capacity]
     to_substations: false # network is simplified to nodes with positive or negative power injection (i.e. substations or offwind connections)
     algorithm: kmeans # choose from: [hac, kmeans]
     feature: solar+onwind-time # only for hac. choose from: [solar+onwind-time, solar+onwind-cap, solar-time, solar-cap, solar+offwind-cap] etc.
   cluster_network:
+    weighting_strategy: demand-capacity # choose from: [population, demand-capacity]
     algorithm: kmeans # choose from: [hac, kmeans]
     feature: solar+onwind-time
     exclude_carriers: []

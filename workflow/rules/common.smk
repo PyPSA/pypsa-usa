@@ -86,7 +86,7 @@ def solver_threads(w):
 
 
 def memory(w):
-    factor = 10.0
+    factor = 4.0
     for o in w.opts.split("-"):
         m = re.match(r"^(\d+)h$", o, re.IGNORECASE)
         if m is not None:
@@ -98,72 +98,12 @@ def memory(w):
             factor *= int(m.group(1)) / 8760
             break
     if w.clusters.endswith("m") or w.clusters.endswith("c"):
-        val = int(factor * (55000 + 100 * int(w.simpl) + 195 * int(w.clusters[:-1])))
+        val = int(factor * (50000 + 30 * int(w.simpl) + 195 * int(w.clusters[:-1])))
     elif w.clusters == "all":
         val = int(factor * (18000 + 180 * 4000))
     else:
         val = int(factor * (15000 + 195 * int(w.clusters)))
     return int(val * len(config_provider("scenario", "planning_horizons")(w)))
-
-
-def interconnect_mem(w):
-    mem = 50000
-    if w.interconnect == "usa":
-        return int(mem * 1.5)
-    elif w.interconnect == "eastern":
-        return int(mem * 1.5)
-    elif w.interconnect == "western":
-        return int(mem)
-    elif w.interconnect == "texas":
-        return int(mem * 1)
-
-
-def interconnect_mem_a(w):
-    mem = 30000 * len(config_provider("scenario", "planning_horizons")(w))
-    if w.interconnect == "usa":
-        return int(mem * 4)
-    elif w.interconnect == "eastern":
-        return int(mem * 3)
-    elif w.interconnect == "western":
-        return int(mem * 2)
-    elif w.interconnect == "texas":
-        return int(mem * 0.5)
-
-
-def interconnect_mem_s(w):
-    mem = 30000 * len(config_provider("scenario", "planning_horizons")(w))
-    if w.interconnect == "usa":
-        return int(mem * 4)
-    elif w.interconnect == "eastern":
-        return int(mem * 3)
-    elif w.interconnect == "western":
-        return int(mem * 2)
-    elif w.interconnect == "texas":
-        return int(mem * 0.5)
-
-
-def interconnect_mem_c(w):
-    mem = 10000 * len(config_provider("scenario", "planning_horizons")(w))
-    if w.interconnect == "usa":
-        return int(mem * 4)
-    elif w.interconnect == "eastern":
-        return int(mem * 3)
-    elif w.interconnect == "western":
-        return int(mem * 2)
-    elif w.interconnect == "texas":
-        return int(mem * 0.75)
-
-
-def interconnect_mem_prepare(w):
-    mem = 5000 * len(config_provider("scenario", "planning_horizons")(w))
-    if w.interconnect == "usa":
-        return int(mem * 4)
-    elif w.interconnect == "eastern":
-        return int(mem * 3)
-    elif w.interconnect == "western":
-        return int(mem * 2)
-    elif w.interconnect == "texas":
-        return int(mem * 0.75)
 
 
 def input_custom_extra_functionality(w):

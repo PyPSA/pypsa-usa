@@ -1,6 +1,6 @@
 # By PyPSA-USA Authors
 """
-**Description**
+**Description**.
 
 Build_fuel_prices.py is a script that prepares data for dynamic fuel prices to be used in the `add_electricity` module. Data is input from `retrieve_caiso_data` and `retrieve_eia_data` to create a combined dataframe with all dynamic fuel prices available. The prices are modified to be on an hourly basis to match the network snapshots, and converted to $/MWh_thermal. The output is a CSV file containing the hourly fuel prices for each Balancing Authority and State.
 
@@ -22,14 +22,10 @@ Build_fuel_prices.py is a script that prepares data for dynamic fuel prices to b
 """
 
 import logging
-import sys
 from pathlib import Path
-from typing import List
 
 import constants as const
-import duckdb
 import eia
-import numpy as np
 import pandas as pd
 from _helpers import configure_logging, get_snapshots, mock_snakemake
 from build_powerplants import (
@@ -47,10 +43,7 @@ logger = logging.getLogger(__name__)
 
 
 def make_hourly(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Makes the index hourly.
-    """
-
+    """Makes the index hourly."""
     start = df.index.min()
     end = (
         pd.to_datetime(start).to_period("Y").to_timestamp("Y").to_period("Y").to_timestamp("Y")
@@ -117,7 +110,6 @@ def get_caiso_ng_power_prices(
     filepath: str,
     **kwargs,
 ) -> pd.DataFrame:
-
     # pypsa-usa name: caiso name
     ba_mapper = {
         "CISO-PGAE": "CISO",
@@ -150,10 +142,9 @@ def get_caiso_ng_power_prices(
 # Build PuDL EIA 923 Fuel Recipts based fuel costs
 ###
 def build_pudl_fuel_costs(snapshots: pd.DatetimeIndex, start_date: str, end_date: str):
-    """
-    Build fuel costs based on PUDL EIA 923 Fuel Receipts data.
-    """
-    _, fuel_cost_temporal = load_pudl_data(snakemake.input.pudl, start_date, end_date)
+    """Build fuel costs based on PUDL EIA 923 Fuel Receipts data."""
+    pudl_path = snakemake.params.pudl_path
+    _, fuel_cost_temporal = load_pudl_data(pudl_path, start_date, end_date)
     fuel_cost_temporal["interconnect"] = fuel_cost_temporal["nerc_region"].map(
         const.NERC_REGION_MAPPER,
     )
@@ -190,8 +181,6 @@ def build_pudl_fuel_costs(snapshots: pd.DatetimeIndex, start_date: str, end_date
 
 if __name__ == "__main__":
     if "snakemake" not in globals():
-        from _helpers import mock_snakemake
-
         snakemake = mock_snakemake("build_fuel_prices", interconnect="texas")
     configure_logging(snakemake)
 

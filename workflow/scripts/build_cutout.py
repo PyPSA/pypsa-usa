@@ -90,7 +90,7 @@ import logging
 import atlite
 import geopandas as gpd
 import pandas as pd
-from _helpers import configure_logging, get_snapshots
+from _helpers import configure_logging
 from pandas import Timestamp
 
 logger = logging.getLogger(__name__)
@@ -129,7 +129,7 @@ if __name__ == "__main__":
             )
             * 2
         )
-        interconnect_params["bounds"] = regions.total_bounds + [-d, -d, d, d]
+        interconnect_params["bounds"] = [*regions.total_bounds, -d, -d, d, d]
     elif {"x", "y"}.issubset(interconnect_params):
         interconnect_params["x"] = slice(*interconnect_params["x"])
         interconnect_params["y"] = slice(*interconnect_params["y"])
