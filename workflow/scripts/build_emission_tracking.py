@@ -33,8 +33,9 @@ def build_co2_tracking(
 def build_ch4_tracking(
     n: pypsa.Network,
     gwp: float,
-    leakage_rate: float,
-    config: dict[str, Any] | None = None,
+    upstream_leakage_rate: float,
+    downstream_leakage_rate: float,
+    plotting_config: dict[str, Any] | None = None,
 ) -> None:
     """
     Builds CH4 tracking.
@@ -43,15 +44,20 @@ def build_ch4_tracking(
     """
     states = [x for x in n.buses.STATE.dropna().unique() if x != np.nan]
 
-    if not config:
-        config = {}
+    if not plotting_config:
+        plotting_config = {}
 
     if "ch4" not in n.carriers:
-        _add_ch4_carrier(n, config)
+        _add_ch4_carrier(n, plotting_config)
 
     _build_ch4_bus(n, states)
     _build_ch4_store(n, states)
-    _build_ch4_links(n, states, gwp, leakage_rate)
+    _build_ch4_upstream(n, gwp, upstream_leakage_rate)
+    _build_ch4_downstream(n, gwp, downstream_leakage_rate)
+
+    # supress pypsa warnings
+    n.links["bus3"] = n.links.bus3.fillna("")
+    n.links["efficiency3"] = n.links.efficiency3.fillna(0)
 
 
 def _add_co2_carrier(n, config: dict[Any]):
@@ -142,17 +148,41 @@ def _build_ch4_store(n: pypsa.Network, states: list[str]):
     )
 
 
-def _build_ch4_links(n, states: list[str], gwp: float, leakage_rate: float):
+def _build_ch4_upstream(n, gwp: float, leakage_rate: float):
     """Modifies existing gas production links."""
     # first extract out exising gas production links
-
-    gas_production = [f"{x} gas production" for x in states]
-    links = n.links[n.links.index.isin(gas_production)].index
+    links = n.links[n.links.carrier == "gas production"].index
 
     # calculate co2e value per unit injected to the ng system
     emissions = gwp * leakage_rate
 
     # append the connection to methane stores
 
-    n.links.loc[links, "bus2"] = n.links.loc[links,].bus1 + "-ch4"  # 'CA gas-ch4'
-    n.links.loc[links, "efficiency2"] = emissions
+    if "bus3" in n.links.columns:
+        assert all(n.links.loc[links].bus3.isna())
+    if "efficiency3" in n.links.columns:
+        assert all(n.links.loc[links].efficiency3.isna())
+
+    n.links.loc[links, "bus3"] = n.links.loc[links,].bus1 + "-ch4"  # 'CA gas-ch4'
+    n.links.loc[links, "efficiency3"] = emissions
+
+
+def _build_ch4_downstream(n, gwp: float, leakage_rate: float):
+    """Modifies existing gas consuming links."""
+    # want all gas links that originate at the state and are not trade or storage related
+
+    gas_buses = n.buses[n.buses.carrier == "gas"]
+    gas_users = n.links[(n.links.bus0.isin(gas_buses.index)) & ~(n.links.carrier.isin(["gas storage", "gas trade"]))]
+
+    links = gas_users.index
+
+    # calculate co2e value per unit injected to the ng system
+    emissions = gwp * leakage_rate
+
+    # append the connection to methane stores
+
+    assert all(n.links.loc[links].bus3.isna())
+    assert all(n.links.loc[links].efficiency3.isna())
+
+    n.links.loc[links, "bus3"] = n.links.loc[links,].bus0 + "-ch4"  # 'CA gas-ch4'
+    n.links.loc[links, "efficiency3"] = emissions
