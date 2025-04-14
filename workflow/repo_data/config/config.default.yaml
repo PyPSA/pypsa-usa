@@ -15,6 +15,7 @@ scenario:
   ll: [v1.0]
   sector: "" # G
   planning_horizons: [2030, 2040, 2050]    #(2018-2023, 2030, 2040, 2050)
+foresight:  'perfect' # myopic, perfect
 
 model_topology:
   transmission_network: 'reeds' # [reeds, tamu]

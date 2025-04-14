@@ -587,13 +587,6 @@ if __name__ == "__main__":
         options=ng_options,
     )
 
-    # add methane tracking - if leakage rate is included
-    # this must happen after natural gas system is built
-    methane_options = snakemake.params.sector["methane"]
-    leakage_rate = methane_options.get("leakage_rate", 0)
-    gwp = methane_options.get("gwp", 0)
-    build_ch4_tracking(n, gwp, leakage_rate)
-
     pop_layout_path = snakemake.input.clustered_pop_layout
     cop_ashp_path = snakemake.input.cop_air_total
     cop_gshp_path = snakemake.input.cop_soil_total
@@ -745,6 +738,14 @@ if __name__ == "__main__":
                 ratios=ratio,
                 costs=costs,
             )
+
+    # add methane tracking - if leakage rate is included
+    # this must happen after all technologies and nat gas is built
+    methane_options = snakemake.params.sector["methane"]
+    upstream_leakage_rate = methane_options.get("upstream_leakage_rate", 0)
+    downstream_leakage_rate = methane_options.get("downstream_leakage_rate", 0)
+    gwp = methane_options.get("gwp", 0)
+    build_ch4_tracking(n, gwp, upstream_leakage_rate, downstream_leakage_rate)
 
     # Needed as loads may be split off to urban/rural
     sanitize_carriers(n, snakemake.config)

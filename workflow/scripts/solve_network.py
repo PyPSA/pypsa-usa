@@ -23,6 +23,7 @@ Additionally, some extra constraints specified in :mod:`solve_network` are added
     based on the rule :mod:`solve_network`.
 """
 
+import copy
 import logging
 
 import numpy as np
@@ -96,7 +97,7 @@ def prepare_network(n, solve_opts=None):
             p_nom=1e9,  # kW
         )
 
-    if solve_opts.get("noisy_costs"):
+    if solve_opts.get("noisy_costs"):  ##random noise to costs of generators
         for t in n.iterate_components():
             if "marginal_cost" in t.df:
                 t.df["marginal_cost"] += 1e-2 + 2e-3 * (np.random.random(len(t.df)) - 0.5)
@@ -131,7 +132,7 @@ def extra_functionality(n, snapshots):
     # Define constraint application functions in a registry
     # Each function should take network and necessary parameters
     constraint_registry = {
-        "RPS": lambda: add_RPS_constraints(n, config, sector_enabled, global_snakemake)
+        "RPS": lambda: add_RPS_constraints(n, snapshots, config, sector_enabled, global_snakemake)
         if n.generators.p_nom_extendable.any()
         else None,
         "REM": lambda: add_regional_co2limit(n, snapshots, config, global_snakemake)
@@ -203,10 +204,37 @@ def apply_sector_constraints(n, config, global_snakemake):
     add_sector_demand_response_constraints(n, config)
 
 
+def run_optimize(n, rolling_horizon, skip_iterations, cf_solving, **kwargs):
+    """Initiate the correct type of pypsa.optimize function."""
+    if rolling_horizon:
+        kwargs["horizon"] = cf_solving.get("horizon", 365)
+        kwargs["overlap"] = cf_solving.get("overlap", 0)
+        n.optimize.optimize_with_rolling_horizon(**kwargs)
+        status, condition = "", ""
+    elif skip_iterations:
+        status, condition = n.optimize(**kwargs)
+    else:
+        kwargs["track_iterations"] = (cf_solving.get("track_iterations", False),)
+        kwargs["min_iterations"] = (cf_solving.get("min_iterations", 4),)
+        kwargs["max_iterations"] = (cf_solving.get("max_iterations", 6),)
+        status, condition = n.optimize.optimize_transmission_expansion_iteratively(
+            **kwargs,
+        )
+
+    if status != "ok" and not rolling_horizon:
+        logger.warning(
+            f"Solving status '{status}' with termination condition '{condition}'",
+        )
+    if "infeasible" in condition:
+        # n.model.print_infeasibilities()
+        raise RuntimeError("Solving status 'infeasible'")
+
+
 def solve_network(n, config, solving, opts="", **kwargs):
     set_of_options = solving["solver"]["options"]
     cf_solving = solving["options"]
 
+    foresight = snakemake.params.foresight
     if "sector" not in opts:
         kwargs["multi_investment_periods"] = config["foresight"] == "perfect"
 
@@ -230,28 +258,91 @@ def solve_network(n, config, solving, opts="", **kwargs):
     n.config = config
     n.opts = opts
 
-    if rolling_horizon:
-        kwargs["horizon"] = cf_solving.get("horizon", 365)
-        kwargs["overlap"] = cf_solving.get("overlap", 0)
-        n.optimize.optimize_with_rolling_horizon(**kwargs)
-        status, condition = "", ""
-    elif skip_iterations:
-        status, condition = n.optimize(**kwargs)
-    else:
-        kwargs["track_iterations"] = (cf_solving.get("track_iterations", False),)
-        kwargs["min_iterations"] = (cf_solving.get("min_iterations", 4),)
-        kwargs["max_iterations"] = (cf_solving.get("max_iterations", 6),)
-        status, condition = n.optimize.optimize_transmission_expansion_iteratively(
-            **kwargs,
-        )
+    match foresight:
+        case "perfect":
+            run_optimize(n, rolling_horizon, skip_iterations, cf_solving, **kwargs)
+        case "myopic":
+            for i, planning_horizon in enumerate(n.investment_periods):
+                # planning_horizons = snakemake.params.planning_horizons
+                sns_horizon = n.snapshots[n.snapshots.get_level_values(0) == planning_horizon]
 
-    if status != "ok" and not rolling_horizon:
-        logger.warning(
-            f"Solving status '{status}' with termination condition '{condition}'",
-        )
-    if "infeasible" in condition:
-        # n.model.print_infeasibilities()
-        raise RuntimeError("Solving status 'infeasible'")
+                # add sns_horizon to kwarg
+                kwargs["snapshots"] = sns_horizon
+
+                run_optimize(n, rolling_horizon, skip_iterations, cf_solving, **kwargs)
+
+                if i == len(n.investment_periods) - 1:
+                    logger.info(f"Final time horizon {planning_horizon}")
+                    continue
+                logger.info(f"Preparing brownfield from {planning_horizon}")
+
+                # electric transmission grid set optimised capacities of previous as minimum
+                n.lines.s_nom_min = n.lines.s_nom_opt  # for lines
+                dc_i = n.links[n.links.carrier == "DC"].index
+                n.links.loc[dc_i, "p_nom_min"] = n.links.loc[dc_i, "p_nom_opt"]  # for links
+
+                for c in n.iterate_components(["Generator", "Link", "StorageUnit"]):
+                    nm = c.name
+                    # limit our components that we remove/modify to those prior to this time horizon
+                    c_lim = c.df.loc[n.get_active_assets(nm, planning_horizon)]
+
+                    logger.info(f"Preparing brownfield for the component {nm}")
+                    # attribute selection for naming convention
+                    attr = "p"
+                    # copy over asset sizing from previous period
+                    c_lim[f"{attr}_nom"] = c_lim[f"{attr}_nom_opt"]
+                    c_lim[f"{attr}_nom_extendable"] = False
+                    df = copy.deepcopy(c_lim)
+                    time_df = copy.deepcopy(c.pnl)
+
+                    for c_idx in c_lim.index:
+                        n.remove(nm, c_idx)
+
+                    for df_idx in df.index:
+                        if nm == "Generator":
+                            n.madd(
+                                nm,
+                                [df_idx],
+                                carrier=df.loc[df_idx].carrier,
+                                bus=df.loc[df_idx].bus,
+                                p_nom_min=df.loc[df_idx].p_nom_min,
+                                p_nom=df.loc[df_idx].p_nom,
+                                p_nom_max=df.loc[df_idx].p_nom_max,
+                                p_nom_extendable=df.loc[df_idx].p_nom_extendable,
+                                ramp_limit_up=df.loc[df_idx].ramp_limit_up,
+                                ramp_limit_down=df.loc[df_idx].ramp_limit_down,
+                                efficiency=df.loc[df_idx].efficiency,
+                                marginal_cost=df.loc[df_idx].marginal_cost,
+                                capital_cost=df.loc[df_idx].capital_cost,
+                                build_year=df.loc[df_idx].build_year,
+                                lifetime=df.loc[df_idx].lifetime,
+                                heat_rate=df.loc[df_idx].heat_rate,
+                                fuel_cost=df.loc[df_idx].fuel_cost,
+                                vom_cost=df.loc[df_idx].vom_cost,
+                                carrier_base=df.loc[df_idx].carrier_base,
+                                p_min_pu=df.loc[df_idx].p_min_pu,
+                                p_max_pu=df.loc[df_idx].p_max_pu,
+                                land_region=df.loc[df_idx].land_region,
+                            )
+                        else:
+                            n.add(nm, df_idx, **df.loc[df_idx])
+                    logger.info(n.consistency_check())
+
+                    # copy time-dependent
+                    selection = n.component_attrs[nm].type.str.contains(
+                        "series",
+                    )
+
+                    for tattr in n.component_attrs[nm].index[selection]:
+                        n.import_series_from_dataframe(time_df[tattr], nm, tattr)
+
+                # roll over the last snapshot of time varying storage state of charge to be the state_of_charge_initial for the next time period
+                n.storage_units.loc[:, "state_of_charge_initial"] = n.storage_units_t.state_of_charge.loc[
+                    planning_horizon
+                ].iloc[-1]
+
+        case _:
+            raise ValueError(f"Invalid foresight option: '{foresight}'. Must be 'perfect' or 'myopic'.")
 
     return n
 
@@ -312,7 +403,6 @@ if __name__ == "__main__":
 
     n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))
     n.export_to_netcdf(snakemake.output[0])
-
     with open(snakemake.output.config, "w") as file:
         yaml.dump(
             n.meta,
