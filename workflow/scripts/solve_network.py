@@ -1743,8 +1743,7 @@ def solve_network(n, config, solving, opts="", **kwargs):
     cf_solving = solving["options"]
 
     foresight = snakemake.params.foresight
-    if "sector" not in opts:
-        kwargs["multi_investment_periods"] = config["foresight"] == "perfect"
+    kwargs["multi_investment_periods"] = config["foresight"] == "perfect"
 
     kwargs["solver_options"] = solving["solver_options"][set_of_options] if set_of_options else {}
     kwargs["solver_name"] = solving["solver"]["name"]
