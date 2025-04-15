@@ -357,6 +357,8 @@ class GasStorage(GasData):
             # e_initial=df.MAX_CAPACITY_MWH - df.MIN_CAPACITY_MWH,
             e_initial=df.e_initial,
             marginal_cost=0,  # to update
+            lifetime=np.inf,
+            build_year=n.investment_periods[0],
         )
 
         # must do two links, rather than a bidirectional one, to constrain charge limits
@@ -374,6 +376,8 @@ class GasStorage(GasData):
             p_max_pu=1,
             p_nom_extendable=False,
             marginal_cost=0,
+            lifetime=np.inf,
+            build_year=n.investment_periods[0],
         )
 
         n.madd(
@@ -388,6 +392,8 @@ class GasStorage(GasData):
             p_max_pu=1,
             p_nom_extendable=False,
             marginal_cost=0,
+            lifetime=np.inf,
+            build_year=n.investment_periods[0],
         )
 
 
@@ -492,6 +498,8 @@ class GasProcessing(GasData):
             p_nom=(df.p_nom * p_nom_mult).round(2),
             p_nom_min=0,
             p_nom_max=df.p_nom * p_nom_max_mult,
+            lifetime=np.inf,  # UPDATE ONCE GAS EXPANSION ALLOWED
+            build_year=n.investment_periods[0],
         )
 
         n.madd(
@@ -511,6 +519,8 @@ class GasProcessing(GasData):
             e_nom_max=np.inf,
             e_min_pu=-1,
             e_max_pu=0,
+            lifetime=np.inf,
+            build_year=n.investment_periods[0],
         )
 
 
@@ -752,6 +762,8 @@ class InterconnectGasPipelineCapacity(_GasPipelineCapacity):
             p_min_pu=0,
             p_max_pu=1,
             p_nom_extendable=False,
+            lifetime=np.inf,
+            build_year=n.investment_periods[0],
         )
 
 
@@ -1061,6 +1073,8 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
             p_nom_extendable=False,
             efficiency=1,  # must be 1 for proper cost accounting
             marginal_cost=marginal_cost,
+            lifetime=np.inf,
+            build_year=n.investment_periods[0],
         )
 
         n.madd(
@@ -1080,6 +1094,8 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
             e_nom_max=np.inf,
             e_min_pu=0,
             e_max_pu=1,
+            lifetime=np.inf,
+            build_year=n.investment_periods[0],
         )
 
         n.madd(
@@ -1099,6 +1115,8 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
             e_nom_max=np.inf,
             e_min_pu=-1,  # minus 1 for energy addition!
             e_max_pu=0,
+            lifetime=np.inf,
+            build_year=n.investment_periods[0],
         )
 
 
@@ -1235,6 +1253,7 @@ class PipelineLinepack(GasData):
             capital_cost=1,
             standing_loss=standing_loss,
             lifetime=np.inf,
+            build_year=n.investment_periods[0],
         )
 
 

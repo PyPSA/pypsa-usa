@@ -187,6 +187,8 @@ def add_sector_foundation(
             carrier=carrier,
             unit="MWh_th",
             marginal_cost=marginal_cost,
+            lifetime=np.inf,
+            build_year=n.investment_periods[0],
         )
 
 
@@ -432,6 +434,7 @@ def convert_generators_2_links(
         # marginal_cost = plants.marginal_cost * plants.efficiency, # fuel costs rated at delievered
         capital_cost=plants.capital_cost,  # links rated on input capacity
         lifetime=plants.lifetime,
+        build_year=plants.build_year,
     )
 
     for param, df in pnl.items():

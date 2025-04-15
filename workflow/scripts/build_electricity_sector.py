@@ -79,6 +79,7 @@ def add_electricity_infrastructure(
         capital_cost=0,
         p_nom_extendable=True,
         lifetime=np.inf,
+        build_year=n.investment_periods[0],
     )
 
 
@@ -153,6 +154,8 @@ def add_electricity_dr(
         carrier=df.carrier,
         p_nom_extendable=False,
         p_nom=np.inf,
+        lifetime=np.inf,
+        build_year=n.investment_periods[0],
     )
 
     n.madd(
@@ -164,6 +167,8 @@ def add_electricity_dr(
         carrier=df.carrier,
         p_nom_extendable=False,
         p_nom=np.inf,
+        lifetime=np.inf,
+        build_year=n.investment_periods[0],
     )
 
     n.madd(
@@ -175,6 +180,8 @@ def add_electricity_dr(
         carrier=df.carrier,
         p_nom_extendable=False,
         p_nom=np.inf,
+        lifetime=np.inf,
+        build_year=n.investment_periods[0],
     )
 
     n.madd(
@@ -186,6 +193,8 @@ def add_electricity_dr(
         carrier=df.carrier,
         p_nom_extendable=False,
         p_nom=np.inf,
+        lifetime=np.inf,
+        build_year=n.investment_periods[0],
     )
 
     # backward stores have positive marginal cost storage and postive e
@@ -203,6 +212,8 @@ def add_electricity_dr(
         e_max_pu=1,
         carrier=df.carrier,
         marginal_cost_storage=marginal_cost_storage,
+        lifetime=np.inf,
+        build_year=n.investment_periods[0],
     )
 
     n.madd(
@@ -217,6 +228,8 @@ def add_electricity_dr(
         e_max_pu=0,
         carrier=df.carrier,
         marginal_cost_storage=marginal_cost_storage * (-1),
+        lifetime=np.inf,
+        build_year=n.investment_periods[0],
     )
 
 

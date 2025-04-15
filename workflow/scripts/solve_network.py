@@ -387,10 +387,6 @@ def add_RPS_constraints(n, sns, config, sector):
         A dictionary containing configuration settings and file paths.
     sector: bool
         Sector study
-
-    Returns
-    -------
-
     """
 
     def process_reeds_data(filepath, carriers, value_col):
@@ -1747,8 +1743,7 @@ def solve_network(n, config, solving, opts="", **kwargs):
     cf_solving = solving["options"]
 
     foresight = snakemake.params.foresight
-    if "sector" not in opts:
-        kwargs["multi_investment_periods"] = config["foresight"] == "perfect"
+    kwargs["multi_investment_periods"] = config["foresight"] == "perfect"
 
     kwargs["solver_options"] = solving["solver_options"][set_of_options] if set_of_options else {}
     kwargs["solver_name"] = solving["solver"]["name"]
@@ -1866,7 +1861,7 @@ if __name__ == "__main__":
         snakemake = mock_snakemake(
             "solve_network",
             interconnect="western",
-            simpl="11",
+            simpl="12",
             clusters="4m",
             ll="v1.0",
             opts="4h",

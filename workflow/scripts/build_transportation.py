@@ -105,6 +105,7 @@ def add_ev_infrastructure(
         capital_cost=0,
         p_nom_extendable=True,
         lifetime=np.inf,
+        build_year=n.investment_periods[0],
     )
 
 
@@ -150,6 +151,7 @@ def add_lpg_infrastructure(
         capital_cost=0,
         p_nom_extendable=True,
         lifetime=np.inf,
+        build_year=n.investment_periods[0],
     )
 
 
@@ -167,6 +169,9 @@ def add_transport_dr(n: pypsa.Network, vehicle: str, dr_config: dict[str, Any]) 
 
     df = n.buses[n.buses.carrier == f"trn-elec-{vehicle}"]
     df["carrier"] = df.carrier + "-dr"
+
+    lifetime = np.inf
+    build_year = n.investment_periods[0]
 
     # two buses for forward and backwards load shifting
 
@@ -205,6 +210,8 @@ def add_transport_dr(n: pypsa.Network, vehicle: str, dr_config: dict[str, Any]) 
         carrier=df.carrier,
         p_nom_extendable=False,
         p_nom=np.inf,
+        lifetime=lifetime,
+        build_year=build_year,
     )
 
     n.madd(
@@ -216,6 +223,8 @@ def add_transport_dr(n: pypsa.Network, vehicle: str, dr_config: dict[str, Any]) 
         carrier=df.carrier,
         p_nom_extendable=False,
         p_nom=np.inf,
+        lifetime=lifetime,
+        build_year=build_year,
     )
 
     n.madd(
@@ -227,6 +236,8 @@ def add_transport_dr(n: pypsa.Network, vehicle: str, dr_config: dict[str, Any]) 
         carrier=df.carrier,
         p_nom_extendable=False,
         p_nom=np.inf,
+        lifetime=lifetime,
+        build_year=build_year,
     )
 
     n.madd(
@@ -238,6 +249,8 @@ def add_transport_dr(n: pypsa.Network, vehicle: str, dr_config: dict[str, Any]) 
         carrier=df.carrier,
         p_nom_extendable=False,
         p_nom=np.inf,
+        lifetime=lifetime,
+        build_year=build_year,
     )
 
     # backward stores have positive marginal cost storage and postive e
@@ -255,6 +268,8 @@ def add_transport_dr(n: pypsa.Network, vehicle: str, dr_config: dict[str, Any]) 
         e_max_pu=1,
         carrier=df.carrier,
         marginal_cost_storage=marginal_cost_storage,
+        lifetime=lifetime,
+        build_year=build_year,
     )
 
     n.madd(
@@ -269,6 +284,8 @@ def add_transport_dr(n: pypsa.Network, vehicle: str, dr_config: dict[str, Any]) 
         e_max_pu=0,
         carrier=df.carrier,
         marginal_cost_storage=marginal_cost_storage * (-1),
+        lifetime=lifetime,
+        build_year=build_year,
     )
 
 
@@ -314,6 +331,7 @@ def add_elec_vehicle(
     capex = costs.at[costs_name, "capital_cost"] * 1000
     efficiency = costs.at[costs_name, "efficiency"] / 1000
     lifetime = costs.at[costs_name, "lifetime"]
+    build_year = n.investment_periods[0]
 
     carrier_name = f"trn-elec-{vehicle}-{mode}"
 
@@ -338,6 +356,7 @@ def add_elec_vehicle(
         capital_cost=capex,
         p_nom_extendable=True,
         lifetime=lifetime,
+        build_year=build_year,
         marginal_cost=0,
     )
 
@@ -378,6 +397,7 @@ def add_lpg_vehicle(
     capex = costs.at[costs_name, "capital_cost"] * 1000
     efficiency = costs.at[costs_name, "efficiency"] / 1000
     lifetime = costs.at[costs_name, "lifetime"]
+    build_year = n.investment_periods[0]
 
     carrier_name = f"trn-lpg-{vehicle}-{mode}"
 
@@ -413,6 +433,7 @@ def add_lpg_vehicle(
         capital_cost=capex,
         p_nom_extendable=True,
         lifetime=lifetime,
+        build_year=build_year,
         marginal_cost=mc,
     )
 
@@ -437,6 +458,7 @@ def add_air(
     #  (seat miles / gallon) * ( 1 gal / 33700 wh) * (1k seat mile / 1000 seat miles) * (1000 * 1000 Wh / MWh)
     efficiency = 76.5 / wh_per_gallon / 1000 * 1000 * 1000
     lifetime = 25
+    build_year = n.investment_periods[0]
 
     loads = n.loads[(n.loads.carrier.str.contains("trn-")) & (n.loads.carrier.str.contains(f"{vehicle}-{mode}"))]
 
@@ -457,6 +479,7 @@ def add_air(
         capital_cost=capex,
         p_nom_extendable=True,
         lifetime=lifetime,
+        build_year=build_year,
     )
 
 
@@ -478,6 +501,7 @@ def add_boat(
     efficiency = 5 / 0.000293 / 1000
     lifetime = 25
     capex = 1
+    build_year = n.investment_periods[0]
 
     loads = n.loads[(n.loads.carrier.str.contains("trn-")) & (n.loads.carrier.str.contains(f"{vehicle}-{mode}"))]
 
@@ -498,6 +522,7 @@ def add_boat(
         capital_cost=capex,
         p_nom_extendable=True,
         lifetime=lifetime,
+        build_year=build_year,
     )
 
 
@@ -521,6 +546,7 @@ def add_rail(
             efficiency = 3.4 / 0.000293 / 1000
             lifetime = 25
             capex = 1
+            build_year = n.investment_periods[0]
         case RailTransport.PASSENGER.value:
             # efficiency = costs.at[costs_name, "efficiency"] / 1000
             # base efficiency is 1506 BTU / Passenger Mile
@@ -528,11 +554,13 @@ def add_rail(
             efficiency = 1506 / 3.412e6 * 1000  # MWh / k passenger miles
             lifetime = 25
             capex = 1
+            build_year = n.investment_periods[0]
         case _:
             logger.warning(f"No cost params set for {mode}")
             efficiency = 1
             lifetime = 1
-            capex = 0
+            capex = 1
+            build_year = n.investment_periods[0]
 
     loads = n.loads[(n.loads.carrier.str.contains("trn-")) & (n.loads.carrier.str.contains(f"{vehicle}-{mode}"))]
 
@@ -553,6 +581,7 @@ def add_rail(
         capital_cost=capex,
         p_nom_extendable=True,
         lifetime=lifetime,
+        build_year=build_year,
     )
 
 

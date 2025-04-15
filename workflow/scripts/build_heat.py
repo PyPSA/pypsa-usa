@@ -427,6 +427,7 @@ def add_air_cons(
     capex = costs.at[costs_name, "capital_cost"].round(1)
     efficiency = costs.at[costs_name, "efficiency"].round(1)
     lifetime = costs.at[costs_name, "lifetime"]
+    build_year = n.investment_periods[0]
 
     carrier_name = f"{sector}-{heat_system}-cool"
 
@@ -449,6 +450,7 @@ def add_air_cons(
         capital_cost=capex,
         p_nom_extendable=True,
         lifetime=lifetime,
+        build_year=build_year,
     )
 
 
@@ -497,6 +499,8 @@ def add_service_heat_pumps_cooling(
 
     cool_links = cool_links[["bus0", "bus1", "carrier", "capex", "lifetime"]]
 
+    build_year = n.investment_periods[0]
+
     # use suffix to retain COP profiles
     n.madd(
         "Link",
@@ -508,6 +512,7 @@ def add_service_heat_pumps_cooling(
         capital_cost=cool_links.capex,
         p_nom_extendable=True,
         lifetime=cool_links.lifetime,
+        build_year=build_year,
     )
 
 
@@ -689,6 +694,7 @@ def add_service_furnace(
     capex = costs.at[costs_name, "capital_cost"].round(1)
     efficiency = costs.at[costs_name, "efficiency"].round(1)
     lifetime = costs.at[costs_name, "lifetime"]
+    build_year = n.investment_periods[0]
 
     carrier_name = f"{sector}-{heat_system}-{heat_carrier}"
 
@@ -727,6 +733,7 @@ def add_service_furnace(
             capital_cost=capex,
             p_nom_extendable=True,
             lifetime=lifetime,
+            build_year=build_year,
         )
     else:
         n.madd(
@@ -742,6 +749,7 @@ def add_service_furnace(
             capital_cost=capex,
             p_nom_extendable=True,
             lifetime=lifetime,
+            build_year=build_year,
             # marginal_cost=mc,
         )
 
@@ -802,6 +810,9 @@ def add_heat_dr(
     df["STATE"] = df.index.map(n.buses.STATE)
     df["STATE_NAME"] = df.index.map(n.buses.STATE_NAME)
 
+    lifetime = np.inf
+    build_year = n.investment_periods[0]
+
     # two buses for forward and backwards load shifting
 
     n.madd(
@@ -839,6 +850,8 @@ def add_heat_dr(
         carrier=df.carrier,
         p_nom_extendable=False,
         p_nom=np.inf,
+        lifetime=lifetime,
+        build_year=build_year,
     )
 
     n.madd(
@@ -850,6 +863,8 @@ def add_heat_dr(
         carrier=df.carrier,
         p_nom_extendable=False,
         p_nom=np.inf,
+        lifetime=lifetime,
+        build_year=build_year,
     )
 
     n.madd(
@@ -861,6 +876,8 @@ def add_heat_dr(
         carrier=df.carrier,
         p_nom_extendable=False,
         p_nom=np.inf,
+        lifetime=lifetime,
+        build_year=build_year,
     )
 
     n.madd(
@@ -872,6 +889,8 @@ def add_heat_dr(
         carrier=df.carrier,
         p_nom_extendable=False,
         p_nom=np.inf,
+        lifetime=lifetime,
+        build_year=build_year,
     )
 
     # backward stores have positive marginal cost storage and postive e
@@ -890,6 +909,8 @@ def add_heat_dr(
         carrier=df.carrier,
         standing_loss=standing_loss,
         marginal_cost_storage=marginal_cost_storage,
+        lifetime=lifetime,
+        build_year=build_year,
     )
 
     n.madd(
@@ -905,6 +926,8 @@ def add_heat_dr(
         carrier=df.carrier,
         standing_loss=standing_loss,
         marginal_cost_storage=marginal_cost_storage * (-1),
+        lifetime=lifetime,
+        build_year=build_year,
     )
 
 
@@ -1002,6 +1025,9 @@ def add_service_water_store(
         link_capex = 0
         store_capex = costs.at[cost_name, "capital_cost"]
 
+    lifetime = (costs.at[cost_name, "lifetime"],)
+    build_year = n.investment_periods[0]
+
     buses = df.copy().set_index("bus1")
     n.madd(
         "Bus",
@@ -1025,7 +1051,8 @@ def add_service_water_store(
             p_nom_extendable=extendable,
             capital_cost=0,
             marginal_cost=mc,
-            lifetime=costs.at[cost_name, "lifetime"],
+            lifetime=lifetime,
+            build_year=build_year,
         )
     else:  # emission tracking
         n.madd(
@@ -1041,7 +1068,8 @@ def add_service_water_store(
             p_nom_extendable=extendable,
             capital_cost=0,
             marginal_cost=mc,
-            lifetime=costs.at[cost_name, "lifetime"],
+            lifetime=lifetime,
+            build_year=build_year,
         )
 
     # limitless one directional link from water store to water demand
@@ -1055,6 +1083,8 @@ def add_service_water_store(
         carrier=df.carrier,
         p_nom_extendable=extendable,
         capital_cost=link_capex,
+        lifetime=lifetime,
+        build_year=build_year,
     )
 
     # limitless water store.
@@ -1069,7 +1099,8 @@ def add_service_water_store(
         standing_loss=standing_loss,
         efficiency=1,
         capital_cost=store_capex,
-        lifetime=costs.at[cost_name, "lifetime"],
+        lifetime=lifetime,
+        build_year=build_year,
     )
 
 
@@ -1136,6 +1167,7 @@ def add_service_heat_pumps(
 
     capex = costs.at[costs_name, "capital_cost"].round(1)
     lifetime = costs.at[costs_name, "lifetime"]
+    build_year = n.investment_periods[0]
 
     if heat_carrier == "space-heat":
         suffix = f" {sector}-{heat_system}-space-{hp_abrev}"
@@ -1154,6 +1186,7 @@ def add_service_heat_pumps(
         capital_cost=capex,
         p_nom_extendable=True,
         lifetime=lifetime,
+        build_year=build_year,
     )
 
 
@@ -1167,6 +1200,7 @@ def add_industrial_gas_furnace(
     capex = costs.at["direct firing gas", "capital_cost"].round(1)
     efficiency = costs.at["direct firing gas", "efficiency"].round(1)
     lifetime = costs.at["direct firing gas", "lifetime"]
+    build_year = n.investment_periods[0]
 
     carrier_name = f"{sector}-heat"
 
@@ -1205,8 +1239,9 @@ def add_industrial_gas_furnace(
         efficiency2=furnaces.efficiency2,
         capital_cost=capex,
         p_nom_extendable=True,
-        lifetime=lifetime,
         marginal_cost=mc,
+        lifetime=lifetime,
+        build_year=build_year,
     )
 
 
@@ -1225,6 +1260,7 @@ def add_industrial_coal_furnace(
     capex = costs.at["direct firing coal", "capital_cost"].round(1)
     efficiency = costs.at["direct firing coal", "efficiency"].round(1)
     lifetime = capex = costs.at["direct firing coal", "lifetime"].round(1)
+    build_year = n.investment_periods[0]
 
     carrier_name = f"{sector}-heat"
 
@@ -1262,8 +1298,9 @@ def add_industrial_coal_furnace(
         efficiency2=furnace.efficiency2,
         capital_cost=capex,
         p_nom_extendable=True,
-        lifetime=lifetime,
         marginal_cost=mc,
+        lifetime=lifetime,
+        build_year=build_year,
     )
 
 
@@ -1278,6 +1315,7 @@ def add_indusrial_heat_pump(
         1,
     )
     lifetime = costs.at["industrial heat pump high temperature", "lifetime"].round(1)
+    build_year = n.investment_periods[0]
 
     carrier_name = f"{sector}-heat"
 
@@ -1301,4 +1339,5 @@ def add_indusrial_heat_pump(
         capital_cost=capex,
         p_nom_extendable=True,
         lifetime=lifetime,
+        build_year=build_year,
     )
