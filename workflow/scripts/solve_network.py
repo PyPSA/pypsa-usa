@@ -351,9 +351,9 @@ def add_technology_capacity_target_constraints(n, config):
             )
 
         if not np.isnan(target["max"]):
-            assert (
-                target["max"] >= lhs_existing
-            ), f"TCT constraint of {target['max']} MW for {target['carrier']} must be at least {lhs_existing}"
+            assert target["max"] >= lhs_existing, (
+                f"TCT constraint of {target['max']} MW for {target['carrier']} must be at least {lhs_existing}"
+            )
 
             rhs = target["max"] - round(lhs_existing, 2)
 
