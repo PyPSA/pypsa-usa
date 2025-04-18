@@ -570,9 +570,9 @@ def main(snakemake):
             logger.info(
                 f"Filtered network to {model_topology[region_type]}. Removed {len(rm_buses)} buses, {len(n.buses)} remaining.",
             )
-            assert (
-                len(n.buses) > 0
-            ), "No buses remaining in network. Check your model_topology: inclusion:, you may be filtering the wrong zones for the selected interconnect"
+            assert len(n.buses) > 0, (
+                "No buses remaining in network. Check your model_topology: inclusion:, you may be filtering the wrong zones for the selected interconnect"
+            )
 
     col_list = ["poi_bus", "poi_sub", "poi"]
     n.buses = n.buses.drop(columns=[col for col in col_list if col in n.buses])
