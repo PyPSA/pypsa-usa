@@ -229,10 +229,14 @@ def _get_regional_demand(n, planning_horizon, region_buses):
     pd.Series
         Hourly demand series for the region
     """
-    return n.loads_t.p_set.loc[
-        planning_horizon,
-        n.loads.bus.isin(region_buses.index),
-    ].sum(axis=1)
+    return (
+        n.loads_t.p_set.loc[
+            planning_horizon,
+            n.loads.bus.isin(region_buses.index),
+        ]
+        .groupby(n.loads.bus, axis=1)
+        .sum()
+    )
 
 
 def _calculate_capacity_accredidation(n, planning_horizon, region_buses, specific_hour=None):
@@ -383,11 +387,6 @@ def add_ERM_constraints(n, config=None, snakemake=None, regional_prm_data=None):
         model.add_variables(-np.inf, model.variables["Line-s"].upper, name="Line-s_RESERVES")
         define_operational_constraints_for_extendables(n, n.snapshots, "Line", "s", 0)
 
-        # Calculate peak demand and required reserve margin
-        regional_demand = _get_regional_demand(n, erm.planning_horizon, region_buses)
-        peak_demand_hour = regional_demand.idxmax()
-        planning_reserve = regional_demand * (1.0 + erm.prm)
-
         # Get capacity contribution from resources
         lhs_capacity, rhs_existing = _calculate_capacity_accredidation(
             n,
@@ -395,8 +394,13 @@ def add_ERM_constraints(n, config=None, snakemake=None, regional_prm_data=None):
             region_buses,
         )
 
-        # Add the nodal balance constraints to the model
+        # Calculate peak demand and required reserve margin for a bus
+        regional_demand = _get_regional_demand(n, erm.planning_horizon, region_buses)
+        planning_reserve = regional_demand * (1.0 + erm.prm)
+        peak_demand_hour = regional_demand.sum(axis=1).idxmax()
         hour = peak_demand_hour
+
+        # Add the nodal balance constraints to the model
         for bus in region_buses.index:
             # Generation Capacity
             assert n._multi_invest, "Ensure model configured for mutli-investment"
@@ -410,19 +414,21 @@ def add_ERM_constraints(n, config=None, snakemake=None, regional_prm_data=None):
 
             # Storage Capacity
             bus_storage = n.storage_units[(n.storage_units.bus == bus)]
-            bus_storage_capacity_charge = (
+            bus_storage_capacity_discharge = (
                 model["StorageUnit-p_dispatch_RESERVES"]
                 .sel(snapshot=(erm.planning_horizon, hour))
                 .loc[bus_storage.index]
+                .mul(bus_storage.efficiency_dispatch)
                 .sum()
             )
             bus_storage_capacity_store = (
                 model["StorageUnit-p_store_RESERVES"]
                 .sel(snapshot=(erm.planning_horizon, hour))
                 .loc[bus_storage.index]
+                .mul(bus_storage.efficiency_store)
                 .sum()
             )
-            bus_storage_capacity = bus_storage_capacity_charge + bus_storage_capacity_store
+            bus_storage_capacity = bus_storage_capacity_discharge - bus_storage_capacity_store
 
             # Line Contributions
             bus_lines_b0 = n.lines[(n.lines.bus0 == bus)]
@@ -433,14 +439,12 @@ def add_ERM_constraints(n, config=None, snakemake=None, regional_prm_data=None):
             bus_lines_b1 = (
                 model["Line-s_RESERVES"].sel(snapshot=(erm.planning_horizon, hour)).loc[bus_lines_b1.index].sum()
             )
-            bus_lhs_capacity += bus_lines_b0 - bus_lines_b1
-
-            # Include slack in the constraint
-            lhs = bus_lhs_capacity + bus_storage_capacity + bus_lines_b0 - bus_lines_b1
-            rhs = planning_reserve.loc[hour] - bus_rhs_capacity
+            bus_line_capacity_flow = bus_lines_b1 - bus_lines_b0  # positive for injection, negative for withdrawal
+            lhs = bus_lhs_capacity + bus_storage_capacity + bus_line_capacity_flow
+            rhs = planning_reserve.loc[hour, bus] - bus_rhs_capacity
 
             model.add_constraints(
-                lhs >= rhs,
+                lhs >= rhs.round(0),
                 name=f"GlobalConstraint-{erm.name}_{erm.planning_horizon}_ERM_hr{hour}_bus{bus}",
             )
         logger.info(
@@ -482,7 +486,7 @@ def add_PRM_constraints(n, config=None, regional_prm_data=None):
             continue
 
         # Calculate peak demand and required reserve margin
-        regional_demand = _get_regional_demand(n, prm.planning_horizon, region_buses)
+        regional_demand = _get_regional_demand(n, prm.planning_horizon, region_buses).sum(axis=1)
         peak_demand = regional_demand.max()
         planning_reserve = peak_demand * (1.0 + prm.prm)
 
