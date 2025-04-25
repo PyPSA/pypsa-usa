@@ -237,6 +237,7 @@ def base_network():
         x=0.1,
         r=0.01,
         s_nom=500,
+        s_nom_min=500,
         capital_cost=300,
         s_nom_extendable=True,
     )
@@ -250,8 +251,22 @@ def base_network():
         x=0.2,
         r=0.02,
         s_nom=300,
+        s_nom_min=300,
         s_nom_extendable=True,
         capital_cost=300,
+    )
+
+    # Add links
+    n.add(
+        "Link",
+        "link1",
+        bus0="z1",
+        bus1="z3",
+        carrier="AC",
+        p_nom=100,
+        p_nom_min=100,
+        p_nom_extendable=True,
+        capital_cost=250,
     )
 
     # Define Carriers

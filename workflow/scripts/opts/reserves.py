@@ -387,6 +387,10 @@ def add_ERM_constraints(n, config=None, snakemake=None, regional_prm_data=None):
         model.add_variables(-np.inf, model.variables["Line-s"].upper, name="Line-s_RESERVES")
         define_operational_constraints_for_extendables(n, n.snapshots, "Line", "s", 0)
 
+        if not n.links.empty:
+            model.add_variables(-np.inf, model.variables["Link-p"].upper, name="Link-p_RESERVES")
+            define_operational_constraints_for_extendables(n, n.snapshots, "Link", "p", 0)
+
         # Get capacity contribution from resources
         lhs_capacity, rhs_existing = _calculate_capacity_accredidation(
             n,
@@ -397,56 +401,72 @@ def add_ERM_constraints(n, config=None, snakemake=None, regional_prm_data=None):
         # Calculate peak demand and required reserve margin for a bus
         regional_demand = _get_regional_demand(n, erm.planning_horizon, region_buses)
         planning_reserve = regional_demand * (1.0 + erm.prm)
-        peak_demand_hour = regional_demand.sum(axis=1).idxmax()
-        hour = peak_demand_hour
+        # peak_demand_hour = regional_demand.sum(axis=1).idxmax()
+        # hour = peak_demand_hour
 
-        # Add the nodal balance constraints to the model
-        for bus in region_buses.index:
-            # Generation Capacity
-            assert n._multi_invest, "Ensure model configured for mutli-investment"
-            active_mask = get_activity_mask(n, "Generator", (erm.planning_horizon, hour))
-            bus_gens_ext = n.generators[(n.generators.bus == bus) & n.generators.p_nom_extendable & active_mask]
-            bus_gens_non_ext = n.generators[(n.generators.bus == bus) & ~n.generators.p_nom_extendable & active_mask]
-            bus_lhs_capacity = lhs_capacity.sel(timestep=hour).loc[bus_gens_ext.index]
-            bus_rhs_capacity = rhs_existing.loc[hour, bus_gens_non_ext.index]
-            bus_lhs_capacity = bus_lhs_capacity.sum()
-            bus_rhs_capacity = bus_rhs_capacity.sum()
+        for hour in planning_reserve.index:
+            # Add the nodal balance constraints to the model
+            for bus in region_buses.index:
+                # Generation Contributions
+                assert n._multi_invest, "Ensure model configured for mutli-investment"
+                active_mask = get_activity_mask(n, "Generator", (erm.planning_horizon, hour))
+                bus_gens_ext = n.generators[(n.generators.bus == bus) & n.generators.p_nom_extendable & active_mask]
+                bus_gens_non_ext = n.generators[
+                    (n.generators.bus == bus) & ~n.generators.p_nom_extendable & active_mask
+                ]
+                bus_lhs_capacity = lhs_capacity.sel(timestep=hour).loc[bus_gens_ext.index]
+                bus_rhs_capacity = rhs_existing.loc[hour, bus_gens_non_ext.index]
+                bus_lhs_capacity = bus_lhs_capacity.sum()
+                bus_rhs_capacity = bus_rhs_capacity.sum()
 
-            # Storage Capacity
-            bus_storage = n.storage_units[(n.storage_units.bus == bus)]
-            bus_storage_capacity_discharge = (
-                model["StorageUnit-p_dispatch_RESERVES"]
-                .sel(snapshot=(erm.planning_horizon, hour))
-                .loc[bus_storage.index]
-                .mul(bus_storage.efficiency_dispatch)
-                .sum()
-            )
-            bus_storage_capacity_store = (
-                model["StorageUnit-p_store_RESERVES"]
-                .sel(snapshot=(erm.planning_horizon, hour))
-                .loc[bus_storage.index]
-                .mul(bus_storage.efficiency_store)
-                .sum()
-            )
-            bus_storage_capacity = bus_storage_capacity_discharge - bus_storage_capacity_store
+                # Storage Contributions
+                bus_storage = n.storage_units[(n.storage_units.bus == bus)]
+                bus_storage_capacity_discharge = (
+                    model["StorageUnit-p_dispatch_RESERVES"]
+                    .sel(snapshot=(erm.planning_horizon, hour))
+                    .loc[bus_storage.index]
+                    .mul(bus_storage.efficiency_dispatch)
+                    .sum()
+                )
+                bus_storage_capacity_store = (
+                    model["StorageUnit-p_store_RESERVES"]
+                    .sel(snapshot=(erm.planning_horizon, hour))
+                    .loc[bus_storage.index]
+                    .mul(bus_storage.efficiency_store)
+                    .sum()
+                )
+                bus_storage_capacity = bus_storage_capacity_discharge - bus_storage_capacity_store
 
-            # Line Contributions
-            bus_lines_b0 = n.lines[(n.lines.bus0 == bus)]
-            bus_lines_b1 = n.lines[(n.lines.bus1 == bus)]
-            bus_lines_b0 = (
-                model["Line-s_RESERVES"].sel(snapshot=(erm.planning_horizon, hour)).loc[bus_lines_b0.index].sum()
-            )
-            bus_lines_b1 = (
-                model["Line-s_RESERVES"].sel(snapshot=(erm.planning_horizon, hour)).loc[bus_lines_b1.index].sum()
-            )
-            bus_line_capacity_flow = bus_lines_b1 - bus_lines_b0  # positive for injection, negative for withdrawal
-            lhs = bus_lhs_capacity + bus_storage_capacity + bus_line_capacity_flow
-            rhs = planning_reserve.loc[hour, bus] - bus_rhs_capacity
+                # Line Contributions
+                bus_lines_b0 = n.lines[(n.lines.bus0 == bus)]
+                bus_lines_b1 = n.lines[(n.lines.bus1 == bus)]
+                bus_lines_b0 = (
+                    model["Line-s_RESERVES"].sel(snapshot=(erm.planning_horizon, hour)).loc[bus_lines_b0.index].sum()
+                )
+                bus_lines_b1 = (
+                    model["Line-s_RESERVES"].sel(snapshot=(erm.planning_horizon, hour)).loc[bus_lines_b1.index].sum()
+                )
+                bus_line_capacity_flow = bus_lines_b1 - bus_lines_b0  # positive for injection, negative for withdrawal
 
-            model.add_constraints(
-                lhs >= rhs.round(0),
-                name=f"GlobalConstraint-{erm.name}_{erm.planning_horizon}_ERM_hr{hour}_bus{bus}",
-            )
+                # Link Contributions
+                bus_links_b0 = n.links[(n.links.bus0 == bus)]
+                bus_links_b1 = n.links[(n.links.bus1 == bus)]
+                bus_link_capacity_flow_b0 = (
+                    model["Link-p_RESERVES"].sel(snapshot=(erm.planning_horizon, hour)).loc[bus_links_b0.index].sum()
+                )
+                bus_link_capacity_flow_b1 = (
+                    model["Link-p_RESERVES"].sel(snapshot=(erm.planning_horizon, hour)).loc[bus_links_b1.index].sum()
+                )
+                bus_link_capacity_flow = bus_link_capacity_flow_b1 - bus_link_capacity_flow_b0
+
+                # Total Contributions
+                lhs = bus_lhs_capacity + bus_storage_capacity + bus_line_capacity_flow + bus_link_capacity_flow
+                rhs = planning_reserve.loc[hour, bus] - bus_rhs_capacity
+
+                model.add_constraints(
+                    lhs >= rhs,
+                    name=f"GlobalConstraint-{erm.name}_{erm.planning_horizon}_ERM_hr{hour}_bus{bus}",
+                )
         logger.info(
             f"Added ERM constraint for {erm.name} in {erm.planning_horizon}: ",
         )
@@ -596,7 +616,7 @@ def add_operational_reserve_margin(n, sns, config):
     n.model.add_constraints(lhs <= rhs, name="Generator-p-reserve-upper")
 
 
-def store_erm_data(n):
+def store_ERM_duals(n):
     """
     Store Energy Reserve Margin (ERM) data if ERM constraints are activated.
 
@@ -628,74 +648,9 @@ def store_erm_data(n):
         if "Line-s_RESERVES" in model.solution:
             n.lines_t["s_reserves"] = model.solution["Line-s_RESERVES"].to_pandas()
 
-        # Calculate and store the ERM price (shadow price of the ERM constraint)
-        erm_constraints = [c for c in model.constraints if "ERM_hr" in c]
-        if erm_constraints:
-            # Get the dual values (shadow prices) of ERM constraints
-            # For xarray Dataset, we need to use dictionary-based indexing
-            erm_prices = {}
-            for constraint in erm_constraints:
-                # Extract bus name from constraint name (format: GlobalConstraint-{name}_{horizon}_ERM_hr{hour}_bus{bus})
-                parts = constraint.split("_")
-                bus_part = parts[-1]
-                bus = bus_part.replace("bus", "")
+        if "Link-p_RESERVES" in model.solution:
+            n.links_t["p_reserves"] = model.solution["Link-p_RESERVES"].to_pandas()
 
-                # Store the dual value
-                try:
-                    dual_value = duals[constraint].item()
-                    if bus not in erm_prices:
-                        erm_prices[bus] = [dual_value]
-                    else:
-                        erm_prices[bus].append(dual_value)
-                except (KeyError, ValueError):
-                    # Skip constraints without dual values
-                    continue
-
-            # Create a Series with bus index - averaging values for each bus
-            if erm_prices:
-                # Calculate average price for each bus
-                for bus in erm_prices:
-                    erm_prices[bus] = sum(erm_prices[bus]) / len(erm_prices[bus])
-
-                erm_price_series = pd.Series(erm_prices)
-
-                # Store in network
-                if "ERM_price" not in n.buses:
-                    n.buses["ERM_price"] = 0.0  # Initialize as float
-                n.buses.loc[erm_price_series.index, "ERM_price"] = erm_price_series
-
-
-def store_ERM_duals(n):
-    """
-    Store Energy Reserve Margin (ERM) duals if ERM constraints are activated.
-
-    This function checks if the model contains ERM-specific variables and if so,
-    extracts and stores this data in the network object for later analysis.
-    """
-    model = n.model
-    duals = model.dual
-
-    # Check if ERM constraints are activated by looking for the ERM reserve variables
-    if "StorageUnit-p_dispatch_RESERVES" in model.variables:
-        logger.info("Storing ERM data from optimization results")
-
-        # Get the reserve dispatch for storage units
-        if "StorageUnit-p_dispatch_RESERVES" in model.solution:
-            n.storage_units_t["p_dispatch_reserves"] = model.solution["StorageUnit-p_dispatch_RESERVES"].to_pandas()
-
-        # Get the reserve storage for storage units
-        if "StorageUnit-p_store_RESERVES" in model.solution:
-            n.storage_units_t["p_store_reserves"] = model.solution["StorageUnit-p_store_RESERVES"].to_pandas()
-
-        # Get the state of charge for reserve operation
-        if "StorageUnit-state_of_charge_RESERVES" in model.solution:
-            n.storage_units_t["state_of_charge_reserves"] = model.solution[
-                "StorageUnit-state_of_charge_RESERVES"
-            ].to_pandas()
-
-        # Get the line flow reserves
-        if "Line-s_RESERVES" in model.solution:
-            n.lines_t["s_reserves"] = model.solution["Line-s_RESERVES"].to_pandas()
         # Calculate and store the ERM price (shadow price of the ERM constraint)
         erm_constraints = [c for c in model.constraints if "ERM_hr" in c]
         if erm_constraints:
