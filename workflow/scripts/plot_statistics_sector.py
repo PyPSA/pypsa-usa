@@ -1,6 +1,4 @@
-"""
-Plots Sector Coupling Statistics.
-"""
+"""Plots Sector Coupling Statistics."""
 
 import logging
 from collections.abc import Callable
@@ -8,7 +6,9 @@ from dataclasses import dataclass
 from enum import Enum
 from math import ceil
 from pathlib import Path
-from typing import Any
+
+# Optional used as 'arg: callable | None = None' gives TypeError with py3.11
+from typing import Any, Optional
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -74,9 +74,7 @@ def _get_month_name(month: Month) -> str:
 
 
 def is_urban_rural_split(n: pypsa.Network) -> bool:
-    """
-    Checks for urban/rural split based on com/res load names.
-    """
+    """Checks for urban/rural split based on com/res load names."""
     com_res_load = n.loads[(n.loads.index.str.contains("res-")) | (n.loads.index.str.contains("com-"))].index.to_list()
 
     rural_urban_loads = ["res-urban-", "res-rural-", "com-urban-", "com-rural-"]
@@ -89,9 +87,19 @@ def is_urban_rural_split(n: pypsa.Network) -> bool:
 
 def get_plotting_colors(n: pypsa.Network, nice_name: bool) -> dict[str, str]:
     if nice_name:
-        return n.carriers.set_index("nice_name")["color"].to_dict()
+        colors = n.carriers.set_index("nice_name")["color"]
     else:
-        return n.carriers["color"].to_dict()
+        colors = n.carriers["color"]
+
+    colors = colors.groupby(colors.index).first()  # remove any duplicates
+
+    nans = colors[colors.isna()].index.to_list()
+
+    if nans:
+        # logger.warning(f"No color assigned to {nans}. Assigning #000000 (black).")
+        colors = colors.fillna("#000000")
+
+    return colors.to_dict()
 
 
 def get_sectors(n: pypsa.Network) -> list[str]:
@@ -107,9 +115,7 @@ def get_sectors(n: pypsa.Network) -> list[str]:
 
 
 def plot_hp_cop(n: pypsa.Network, state: str | None = None, **kwargs) -> tuple:
-    """
-    Plots gshp and ashp cops.
-    """
+    """Plots gshp and ashp cops."""
     investment_period = n.investment_periods[0]
 
     cops = get_hp_cop(n, state).loc[investment_period]
@@ -158,13 +164,11 @@ def plot_sector_production_timeseries(
     nice_name: bool | None = True,
     remove_sns_weights: bool = True,
     resample: str | None = None,
-    resample_fn: callable | None = None,
+    resample_fn: Optional[callable] = None,  # noqa: UP007
     month: int | None = None,
     **kwargs,
 ) -> tuple:
-    """
-    Plots timeseries production as area chart.
-    """
+    """Plots timeseries production as area chart."""
     y_label = kwargs.get("ylabel", "MWh")
 
     assert sector in ("res", "com", "ind", "pwr")
@@ -235,13 +239,11 @@ def plot_transportation_production_timeseries(
     nice_name: bool | None = True,
     remove_sns_weights: bool = True,
     resample: str | None = None,
-    resample_fn: callable | None = None,
+    resample_fn: Optional[callable] = None,  # noqa: UP007
     month: int | None = None,
     **kwargs,
 ) -> tuple:
-    """
-    Plots timeseries production as area chart.
-    """
+    """Plots timeseries production as area chart."""
     assert sector == "trn"
 
     def _filter_vehicle_type(df: pd.DataFrame, vehicle: str) -> pd.DataFrame:
@@ -322,9 +324,7 @@ def plot_sector_production(
     nice_name: bool | None = True,
     **kwargs,
 ) -> tuple:
-    """
-    Plots model period production as bar chart.
-    """
+    """Plots model period production as bar chart."""
     y_label = kwargs.get("ylabel", "MWh")
 
     assert sector in ("res", "com", "ind", "pwr", "trn")
@@ -376,14 +376,13 @@ def plot_sector_emissions(
     state: str | None = None,
     **kwargws,
 ) -> tuple:
-    """
-    Plots model period emissions by sector.
-    """
+    """Plots model period emissions by sector."""
     investment_period = n.investment_periods[0]
 
     sectors = ("res", "com", "ind", "trn", "pwr", "ch4")
 
     data = []
+    cols = []
 
     for sector in sectors:
         df = get_emission_timeseries_by_sector(n, sector, state=state)
@@ -395,12 +394,13 @@ def plot_sector_emissions(
         data.append(
             df.loc[investment_period,].iloc[-1].values[0],
         )
+        cols.append(sector)
 
     if not data:
         # empty data to be caught by type error below
-        df = pd.DataFrame(data, columns=sectors)
+        df = pd.DataFrame(data, columns=cols)
     else:
-        df = pd.DataFrame([data], columns=sectors)
+        df = pd.DataFrame([data], columns=cols)
 
     fig, axs = plt.subplots(
         ncols=1,
@@ -424,9 +424,7 @@ def plot_state_emissions(
     state: str | None = None,
     **kwargws,
 ) -> tuple:
-    """
-    Plots stacked bar plot of state level emissions.
-    """
+    """Plots stacked bar plot of state level emissions."""
     investment_period = n.investment_periods[0]
 
     fig, axs = plt.subplots(
@@ -456,9 +454,7 @@ def plot_capacity_by_carrier(
     nice_name: bool | None = True,
     **kwargs,
 ) -> tuple:
-    """
-    Bar plot of capacity by carrier.
-    """
+    """Bar plot of capacity by carrier."""
     investment_periods = n.investment_periods
 
     nrows = len(investment_periods)
@@ -515,9 +511,7 @@ def plot_transportation_capacity_by_carrier(
     nice_name: bool | None = True,
     **kwargs,
 ) -> tuple:
-    """
-    Bar plot of capacity by carrier.
-    """
+    """Bar plot of capacity by carrier."""
 
     def _filter_vehicle_type(df: pd.DataFrame, vehicle: str) -> pd.DataFrame:
         df["vehicle"] = df.index.get_level_values("carrier").map(
@@ -594,9 +588,7 @@ def plot_capacity_per_node(
     nice_name: bool | None = True,
     **kwargs,
 ) -> tuple:
-    """
-    Plots capacity percentage per node.
-    """
+    """Plots capacity percentage per node."""
     sectors = get_sectors(n)
 
     nrows = len(sectors)
@@ -648,9 +640,7 @@ def plot_capacity_brownfield(
     nice_name: bool | None = True,
     **kwargs,
 ) -> tuple:
-    """
-    Plots old and new capacity at a state level by carrier.
-    """
+    """Plots old and new capacity at a state level by carrier."""
     investment_periods = n.investment_periods
 
     nrows = len(investment_periods)
@@ -665,6 +655,10 @@ def plot_capacity_brownfield(
 
     for row, _ in enumerate(investment_periods):
         df = get_capacity_per_node(n, sector, state)
+
+        if df.empty:
+            logger.warning(f"No data to plot for {state}")
+            return fig, axs
 
         if nice_name:
             nn = n.carriers.nice_name.to_dict()
@@ -704,9 +698,7 @@ def plot_transportation_capacity_brownfield(
     nice_name: bool | None = True,
     **kwargs,
 ) -> tuple:
-    """
-    Plots old and new capacity at a state level by carrier.
-    """
+    """Plots old and new capacity at a state level by carrier."""
 
     def _filter_vehicle_type(df: pd.DataFrame, vehicle: str) -> pd.DataFrame:
         df["vehicle"] = df.index.get_level_values("carrier").map(
@@ -781,9 +773,7 @@ def plot_sector_load_factor_timeseries(
     state: str | None = None,
     **kwargs,
 ) -> tuple:
-    """
-    Plots timeseries of load factor resampled to days.
-    """
+    """Plots timeseries of load factor resampled to days."""
     investment_period = n.investment_periods[0]
 
     sectors = ("res", "com", "ind")
@@ -832,9 +822,7 @@ def plot_sector_load_factor_boxplot(
     nice_name: bool | None = True,
     **kwargs,
 ) -> tuple:
-    """
-    Plots boxplot of load factors.
-    """
+    """Plots boxplot of load factors."""
     assert sector in ("res", "com", "ind")
 
     investment_periods = n.investment_periods
@@ -905,17 +893,17 @@ def plot_sector_load_timeseries(
     )
 
     for i, load in enumerate(loads):
-        l = df[load]
+        load_ = df[load]
 
         # sns.lineplot(l, ax=axs[i], legend=False)
 
-        avg = l.mean(axis=1)
+        avg = load_.mean(axis=1)
 
         # palette = sns.color_palette(["lightgray"])
 
         try:
             sns.lineplot(
-                l,
+                load_,
                 color="lightgray",
                 legend=False,
                 # palette=palette,
@@ -993,17 +981,23 @@ def plot_sector_dr_timeseries(
     state: str | None = None,
     nice_name: bool | None = True,
     resample: str | None = None,
-    resample_fn: callable | None = None,
+    resample_fn: Optional[callable] = None,  # noqa: UP007
     month: int | None = None,
     **kwargs,
 ) -> tuple:
+    if sector == "pwr":
+        sec = "demand_response"  # hack to use same function
+    else:
+        sec = sector
+
     e = get_storage_level_timeseries_carrier(
-        n,
-        sector,
-        True,
-        state,
-        resample,
-        resample_fn,
+        n=n,
+        sector=sec,
+        remove_sns_weights=True,
+        state=state,
+        resample=resample,
+        resample_fn=resample_fn,
+        make_positive=True,
     )
     e = e[[x for x in e if "-water-" not in x]]
 
@@ -1026,7 +1020,7 @@ def plot_sector_dr_timeseries(
             df = df[df.index.get_level_values("timestep").month == month_i]
 
         if df.empty:
-            logger.warning(f"No Demand Response data to plot for {state}")
+            # logger.warning(f"No Demand Response data to plot for {state}")
             continue
 
         if nice_name:
@@ -1075,6 +1069,10 @@ def plot_consumption(
 
     df_all = get_end_use_consumption(n, sector, state)
 
+    if df_all.empty:
+        logger.warning(f"No data to plot for {state}")
+        return fig, axs
+
     for row, period in enumerate(investment_periods):
         df = df_all.loc[period]
 
@@ -1112,12 +1110,10 @@ def save_fig(
     n: pypsa.Network,
     save: str,
     title: str,
-    wildcards: dict[str, Any] = None,
+    wildcards: dict[str, Any] | None = None,
     **kwargs,
 ) -> None:
-    """
-    Saves the result figure.
-    """
+    """Saves the result figure."""
     fig, _ = fn(n, **kwargs)
 
     if not wildcards:
@@ -1168,6 +1164,8 @@ def save_fig(
 
 @dataclass
 class PlottingData:
+    """Describe data to plot."""
+
     name: str  # snakemake name
     fn: callable
     sector: str | None = None  # None = 'system'
@@ -1272,6 +1270,17 @@ PRODUCTION_PLOTS = [
             "vehicle": Transport.ROAD.value,
             "modes": RoadTransport,
             "units": RoadTransportUnits,
+        },
+    },
+    {
+        "name": "production_demand_response",
+        "fn": plot_sector_dr_timeseries,
+        "nice_name": "Residential Demand Response",
+        "sector": "pwr",
+        "plot_by_month": False,
+        "fn_kwargs": {
+            # "resample": "D",
+            # "resample_fn": pd.Series.mean,
         },
     },
     {
@@ -1481,17 +1490,14 @@ def _initialize_metadata(data: dict[str, Any]) -> list[PlottingData]:
 
 if __name__ == "__main__":
     if "snakemake" not in globals():
-        from _helpers import mock_snakemake
-
         snakemake = mock_snakemake(
             "plot_sector_production",
-            simpl="70",
-            opts="3h",
+            simpl="11",
+            opts="4h",
             clusters="4m",
             ll="v1.0",
-            sector_opts="",
             sector="E-G",
-            planning_horizons="2018",
+            planning_horizons="2030",
             interconnect="western",
         )
         rootpath = ".."

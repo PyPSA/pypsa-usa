@@ -1,6 +1,4 @@
-"""
-Adds extra extendable components to the clustered and simplified network.
-"""
+"""Adds extra extendable components to the clustered and simplified network."""
 
 import logging
 
@@ -17,19 +15,18 @@ logger = logging.getLogger(__name__)
 
 
 def add_co2_emissions(n, costs, carriers):
-    """
-    Add CO2 emissions to the network's carriers attribute.
-    """
+    """Add CO2 emissions to the network's carriers attribute."""
     suptechs = n.carriers.loc[carriers].index.str.split("-").str[0]
     missing_carriers = set(suptechs) - set(costs.index)
     if missing_carriers:
-        logger.warning(f"CO2 emissions for carriers {missing_carriers} not defined in cost data.")
+        logger.warning(
+            f"CO2 emissions for carriers {missing_carriers} not defined in cost data.",
+        )
         suptechs = suptechs.difference(missing_carriers)
     n.carriers.loc[suptechs, "co2_emissions"] = costs.co2_emissions[suptechs].values
 
-    n.carriers.fillna(
+    n.carriers = n.carriers.fillna(
         {"co2_emissions": 0},
-        inplace=True,
     )  # TODO: FIX THIS ISSUE IN BUILD_COST_DATA- missing co2_emissions for some VRE carriers
 
     if any("CCS" in carrier for carrier in carriers):
@@ -242,7 +239,7 @@ def attach_stores(n, costs, elec_opts, investment_year):
 def split_retirement_gens(
     n: pypsa.Network,
     costs: pd.DataFrame,
-    carriers: list[str] = None,
+    carriers: list[str] | None = None,
     economic: bool = True,
 ):
     """
@@ -304,9 +301,10 @@ def split_retirement_gens(
         n.generators["p_nom_min"],
     )
 
-    n.generators.loc[retirement_mask.values, "p_nom_extendable"] = (
-        economic  # if economic retirement is true enable extendable
-    )
+    n.generators.loc[
+        retirement_mask.values,
+        "p_nom_extendable",
+    ] = economic  # if economic retirement is true enable extendable
 
     # Adding Expanding generators for the first investment period
     # There are generators that exist today and could expand
@@ -436,7 +434,7 @@ def attach_multihorizon_egs(
     costs_dict: dict,
         Dict of costs for each investment period
     carriers: List[str]
-        List of carriers to add multiple investment options for
+        List of carriers to add multiple investment options for.
     """
     if gens.empty or len(n.investment_periods) == 1:
         return
@@ -626,6 +624,143 @@ def apply_max_annual_growth_rate(n, max_growth):
         n.carriers.loc[carrier, "max_relative_growth"] = rate**years
 
 
+def add_demand_response(
+    n: pypsa.Network,
+    dr_config: dict[str, str | float],
+) -> None:
+    """Add price based demand response to network."""
+    n.add("Carrier", "demand_response", color="#dd2e23", nice_name="Demand Response")
+
+    shift = dr_config.get("shift", 0)
+    if shift == 0:
+        logger.info(f"DR not applied as allowable sift is {shift}")
+        return
+
+    marginal_cost_storage = dr_config.get("marginal_cost", 0)
+    if marginal_cost_storage == 0:
+        logger.warning("No cost applied to demand response")
+
+    # attach dr at all load locations
+
+    buses = n.loads.bus
+    df = n.buses[n.buses.index.isin(buses)].copy()
+
+    # two storageunits for forward and backwards load shifting
+
+    n.madd(
+        "Bus",
+        names=df.index,
+        suffix="-fwd-dr",
+        x=df.x,
+        y=df.y,
+        carrier="demand_response",
+        unit="MWh",
+        country=df.country,
+        reeds_zone=df.reeds_zone,
+        reeds_ba=df.reeds_ba,
+        interconnect=df.interconnect,
+        trans_reg=df.trans_reg,
+        trans_grp=df.trans_grp,
+        reeds_state=df.reeds_state,
+        substation_lv=df.substation_lv,
+    )
+
+    n.madd(
+        "Bus",
+        names=df.index,
+        suffix="-bck-dr",
+        x=df.x,
+        y=df.y,
+        carrier="demand_response",
+        unit="MWh",
+        country=df.country,
+        reeds_zone=df.reeds_zone,
+        reeds_ba=df.reeds_ba,
+        interconnect=df.interconnect,
+        trans_reg=df.trans_reg,
+        trans_grp=df.trans_grp,
+        reeds_state=df.reeds_state,
+        substation_lv=df.substation_lv,
+    )
+
+    # seperate charging/discharging links for easier constraint generation
+
+    n.madd(
+        "Link",
+        names=df.index,
+        suffix="-fwd-dr-charger",
+        bus0=df.index,
+        bus1=df.index + "-fwd-dr",
+        carrier="demand_response",
+        p_nom_extendable=False,
+        p_nom=np.inf,
+    )
+
+    n.madd(
+        "Link",
+        names=df.index,
+        suffix="-fwd-dr-discharger",
+        bus0=df.index + "-fwd-dr",
+        bus1=df.index,
+        carrier="demand_response",
+        p_nom_extendable=False,
+        p_nom=np.inf,
+    )
+
+    n.madd(
+        "Link",
+        names=df.index,
+        suffix="-bck-dr-charger",
+        bus0=df.index,
+        bus1=df.index + "-bck-dr",
+        carrier="demand_response",
+        p_nom_extendable=False,
+        p_nom=np.inf,
+    )
+
+    n.madd(
+        "Link",
+        names=df.index,
+        suffix="-bck-dr-discharger",
+        bus0=df.index + "-bck-dr",
+        bus1=df.index,
+        carrier="demand_response",
+        p_nom_extendable=False,
+        p_nom=np.inf,
+    )
+
+    # backward stores have positive marginal cost storage and postive e
+    # forward stores have negative marginal cost storage and negative e
+
+    n.madd(
+        "Store",
+        names=df.index,
+        suffix="-bck-dr",
+        bus=df.index + "-bck-dr",
+        e_cyclic=True,
+        e_nom_extendable=False,
+        e_nom=np.inf,
+        e_min_pu=0,
+        e_max_pu=1,
+        carrier="demand_response",
+        marginal_cost_storage=marginal_cost_storage,
+    )
+
+    n.madd(
+        "Store",
+        names=df.index,
+        suffix="-fwd-dr",
+        bus=df.index + "-fwd-dr",
+        e_cyclic=True,
+        e_nom_extendable=False,
+        e_nom=np.inf,
+        e_min_pu=-1,
+        e_max_pu=0,
+        carrier="demand_response",
+        marginal_cost_storage=marginal_cost_storage * (-1),
+    )
+
+
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
@@ -633,8 +768,8 @@ if __name__ == "__main__":
         snakemake = mock_snakemake(
             "add_extra_components",
             interconnect="western",
-            simpl=12,
-            clusters=6,
+            simpl="70",
+            clusters="4m",
         )
     configure_logging(snakemake)
 
@@ -680,19 +815,25 @@ if __name__ == "__main__":
             [car for car in elec_config["extendable_carriers"]["Generator"] if "EGS" not in car],
         )
     ]
-
-    egs_gens = n.generators[n.generators["p_nom_extendable"] == True]
+    egs_gens = n.generators[n.generators["p_nom_extendable"]]
     egs_gens = egs_gens.loc[egs_gens["carrier"].str.contains("EGS")]
 
     new_carriers = list(
         set(elec_config["extendable_carriers"].get("Generator", [])) - set(n.generators.carrier.unique())
-        | set(["nuclear"] if "nuclear" in elec_config["extendable_carriers"].get("Generator", []) else []),
+        | set(
+            ["nuclear"] if "nuclear" in elec_config["extendable_carriers"].get("Generator", []) else [],
+        ),
     )
 
     for investment_year in n.investment_periods:
         costs = costs_dict[investment_year]
         attach_storageunits(n, costs, elec_config, investment_year)
-        attach_multihorizon_existing_generators(n, costs, multi_horizon_gens, investment_year)
+        attach_multihorizon_existing_generators(
+            n,
+            costs,
+            multi_horizon_gens,
+            investment_year,
+        )
         attach_multihorizon_egs(n, costs, costs_dict, egs_gens, investment_year)
         attach_multihorizon_new_generators(n, costs, new_carriers, investment_year)
         # attach_stores(n, costs, elec_config, investment_year)
@@ -707,7 +848,11 @@ if __name__ == "__main__":
     apply_max_annual_growth_rate(n, snakemake.config["costs"]["max_growth"])
     add_nice_carrier_names(n, snakemake.config)
     add_co2_emissions(n, costs_dict[n.investment_periods[0]], n.carriers.index)
-    # n.generators.to_csv("generators_ec.csv")
+
+    dr_config = snakemake.params.demand_response
+    if dr_config:
+        add_demand_response(n, dr_config)
+
     n.consistency_check()
     n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))
     n.export_to_netcdf(snakemake.output[0])

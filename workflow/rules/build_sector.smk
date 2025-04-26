@@ -46,7 +46,6 @@ rule add_sectors:
     params:
         electricity=config["electricity"],
         costs=config["costs"],
-        max_hours=config["electricity"]["max_hours"],
         plotting=config["plotting"],
         snapshots=config["snapshots"],
         api=config["api"],

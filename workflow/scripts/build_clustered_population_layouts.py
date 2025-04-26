@@ -23,12 +23,12 @@ if __name__ == "__main__":
 
     clustered_regions = gpd.read_file(snakemake.input.regions_onshore).set_index("name").buffer(0).squeeze()
 
-    I = cutout.indicatormatrix(clustered_regions)
+    indicator_matrix = cutout.indicatormatrix(clustered_regions)
 
     pop = {}
     for item in ["total", "urban", "rural"]:
         pop_layout = xr.open_dataarray(snakemake.input[f"pop_layout_{item}"])
-        pop[item] = I.dot(pop_layout.stack(spatial=("y", "x")))
+        pop[item] = indicator_matrix.dot(pop_layout.stack(spatial=("y", "x")))
 
     pop = pd.DataFrame(pop, index=clustered_regions.index)
 

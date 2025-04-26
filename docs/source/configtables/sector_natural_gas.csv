@@ -10,5 +10,6 @@ natural_gas,,,Options when implementing natural gas networks
 -- standing_loss,per_unit,"float {0 <=, >= 1}","Leakage rate from pipelines. These leaks do NOT account towards emissions, just enforces gas production to replinish losses with cyclic constraints. "
 ,,,
 methane,,,Options of methane emission accounting attached to natural gas networks
--- leakage_rate,per_unit,"float {0 <=, >= 1}",Total leakage rate of natural gas in the system (upstream and downstream). Applied to gas processing facilities.
+-- upstream_leakage_rate,per_unit,"float {0 <=, >= 1}",Upstream per_unit leakage rate of natural gas. Applied to gas processing facilities.
+-- downstream_leakage_rate,per_unit,"float {0 <=, >= 1}",Downstream per_unit leakage rate of natural gas. Applied to all end-use technologies that use natural gas.
 -- gwp,--,float,Global warming potential of methane. GWP of 1 represents same carbon intensity as burned natural gas.

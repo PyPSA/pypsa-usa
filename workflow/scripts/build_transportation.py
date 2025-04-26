@@ -1,6 +1,4 @@
-"""
-Module for building transportation infrastructure.
-"""
+"""Module for building transportation infrastructure."""
 
 import logging
 from typing import Any
@@ -8,10 +6,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 import pypsa
-from build_heat import _get_dynamic_marginal_costs, get_link_marginal_costs
-
-logger = logging.getLogger(__name__)
-
+from build_heat import get_link_marginal_costs
 from constants_sector import (
     AirTransport,
     BoatTransport,
@@ -19,6 +14,8 @@ from constants_sector import (
     RoadTransport,
     Transport,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def build_transportation(
@@ -28,30 +25,17 @@ def build_transportation(
     air: bool = True,
     rail: bool = True,
     boat: bool = True,
-    dynamic_pricing: bool = False,
-    eia: str | None = None,  # for dynamic pricing
-    year: int | None = None,  # for dynamic pricing
     must_run_evs: bool | None = None,  # for endogenous EV investment
     dr_config: dict[str, Any] | None = None,
 ) -> None:
-    """
-    Main funtion to interface with.
-    """
+    """Main funtion to interface with."""
     road_suffix = Transport.ROAD.value
 
-    for fuel in ("elec", "lpg"):
-        if fuel == "elec":
-            add_ev_infrastructure(n, road_suffix)  # attaches at node level
-        else:
-            add_lpg_infrastructure(n, road_suffix, costs)  # attaches at state level
+    add_ev_infrastructure(n, road_suffix)  # attaches at node level
+    add_lpg_infrastructure(n, road_suffix, costs)  # attaches at state level
 
-    if dynamic_pricing:
-        assert eia
-        assert year
-        lpg_cost = _get_dynamic_marginal_costs(n, "lpg", eia, year)
-    else:
-        logger.warning("Marginal lpg cost set to zero :(")
-        lpg_cost = 0  # TODO: No static cost found :(
+    # lpg costs tracked at state level
+    lpg_cost = 0
 
     road_vehicles = [x.value for x in RoadTransport]
     for vehicle in road_vehicles:
@@ -95,9 +79,7 @@ def add_ev_infrastructure(
     n: pypsa.Network,
     vehicle: str,
 ) -> None:
-    """
-    Adds bus that all EVs attach to at a node level.
-    """
+    """Adds bus that all EVs attach to at a node level."""
     nodes = n.buses[n.buses.carrier == "AC"]
 
     n.madd(
@@ -123,6 +105,7 @@ def add_ev_infrastructure(
         capital_cost=0,
         p_nom_extendable=True,
         lifetime=np.inf,
+        build_year=n.investment_periods[0],
     )
 
 
@@ -131,9 +114,7 @@ def add_lpg_infrastructure(
     vehicle: str,
     costs: pd.DataFrame | None = None,
 ) -> None:
-    """
-    Adds lpg connections for vehicle type.
-    """
+    """Adds lpg connections for vehicle type."""
     nodes = n.buses[n.buses.carrier == "AC"]
 
     n.madd(
@@ -147,7 +128,7 @@ def add_lpg_infrastructure(
         carrier=f"trn-lpg-{vehicle}",
     )
 
-    nodes["bus0"] = nodes.STATE + " oil"
+    nodes["bus0"] = nodes.STATE + " lpg"
 
     if isinstance(costs, pd.DataFrame):
         try:
@@ -170,11 +151,12 @@ def add_lpg_infrastructure(
         capital_cost=0,
         p_nom_extendable=True,
         lifetime=np.inf,
+        build_year=n.investment_periods[0],
     )
 
 
 def add_transport_dr(n: pypsa.Network, vehicle: str, dr_config: dict[str, Any]) -> None:
-    """Attachs DR infrastructure at load location"""
+    """Attachs DR infrastructure at load location."""
     shift = dr_config.get("shift", 0)
     marginal_cost_storage = dr_config.get("marginal_cost", 0)
 
@@ -187,6 +169,9 @@ def add_transport_dr(n: pypsa.Network, vehicle: str, dr_config: dict[str, Any]) 
 
     df = n.buses[n.buses.carrier == f"trn-elec-{vehicle}"]
     df["carrier"] = df.carrier + "-dr"
+
+    lifetime = np.inf
+    build_year = n.investment_periods[0]
 
     # two buses for forward and backwards load shifting
 
@@ -225,6 +210,8 @@ def add_transport_dr(n: pypsa.Network, vehicle: str, dr_config: dict[str, Any]) 
         carrier=df.carrier,
         p_nom_extendable=False,
         p_nom=np.inf,
+        lifetime=lifetime,
+        build_year=build_year,
     )
 
     n.madd(
@@ -236,6 +223,8 @@ def add_transport_dr(n: pypsa.Network, vehicle: str, dr_config: dict[str, Any]) 
         carrier=df.carrier,
         p_nom_extendable=False,
         p_nom=np.inf,
+        lifetime=lifetime,
+        build_year=build_year,
     )
 
     n.madd(
@@ -247,6 +236,8 @@ def add_transport_dr(n: pypsa.Network, vehicle: str, dr_config: dict[str, Any]) 
         carrier=df.carrier,
         p_nom_extendable=False,
         p_nom=np.inf,
+        lifetime=lifetime,
+        build_year=build_year,
     )
 
     n.madd(
@@ -258,6 +249,8 @@ def add_transport_dr(n: pypsa.Network, vehicle: str, dr_config: dict[str, Any]) 
         carrier=df.carrier,
         p_nom_extendable=False,
         p_nom=np.inf,
+        lifetime=lifetime,
+        build_year=build_year,
     )
 
     # backward stores have positive marginal cost storage and postive e
@@ -275,6 +268,8 @@ def add_transport_dr(n: pypsa.Network, vehicle: str, dr_config: dict[str, Any]) 
         e_max_pu=1,
         carrier=df.carrier,
         marginal_cost_storage=marginal_cost_storage,
+        lifetime=lifetime,
+        build_year=build_year,
     )
 
     n.madd(
@@ -289,6 +284,8 @@ def add_transport_dr(n: pypsa.Network, vehicle: str, dr_config: dict[str, Any]) 
         e_max_pu=0,
         carrier=df.carrier,
         marginal_cost_storage=marginal_cost_storage * (-1),
+        lifetime=lifetime,
+        build_year=build_year,
     )
 
 
@@ -334,6 +331,7 @@ def add_elec_vehicle(
     capex = costs.at[costs_name, "capital_cost"] * 1000
     efficiency = costs.at[costs_name, "efficiency"] / 1000
     lifetime = costs.at[costs_name, "lifetime"]
+    build_year = n.investment_periods[0]
 
     carrier_name = f"trn-elec-{vehicle}-{mode}"
 
@@ -358,6 +356,7 @@ def add_elec_vehicle(
         capital_cost=capex,
         p_nom_extendable=True,
         lifetime=lifetime,
+        build_year=build_year,
         marginal_cost=0,
     )
 
@@ -398,6 +397,7 @@ def add_lpg_vehicle(
     capex = costs.at[costs_name, "capital_cost"] * 1000
     efficiency = costs.at[costs_name, "efficiency"] / 1000
     lifetime = costs.at[costs_name, "lifetime"]
+    build_year = n.investment_periods[0]
 
     carrier_name = f"trn-lpg-{vehicle}-{mode}"
 
@@ -415,7 +415,7 @@ def add_lpg_vehicle(
     if isinstance(marginal_cost, pd.DataFrame):
         assert "state" in vehicles.columns
         mc = get_link_marginal_costs(n, vehicles, marginal_cost)
-    elif isinstance(marginal_cost, (int, float)):
+    elif isinstance(marginal_cost, int | float):
         mc = marginal_cost
     elif isinstance(marginal_cost, None):
         mc = 0
@@ -433,6 +433,7 @@ def add_lpg_vehicle(
         capital_cost=capex,
         p_nom_extendable=True,
         lifetime=lifetime,
+        build_year=build_year,
         marginal_cost=mc,
     )
 
@@ -457,6 +458,7 @@ def add_air(
     #  (seat miles / gallon) * ( 1 gal / 33700 wh) * (1k seat mile / 1000 seat miles) * (1000 * 1000 Wh / MWh)
     efficiency = 76.5 / wh_per_gallon / 1000 * 1000 * 1000
     lifetime = 25
+    build_year = n.investment_periods[0]
 
     loads = n.loads[(n.loads.carrier.str.contains("trn-")) & (n.loads.carrier.str.contains(f"{vehicle}-{mode}"))]
 
@@ -477,6 +479,7 @@ def add_air(
         capital_cost=capex,
         p_nom_extendable=True,
         lifetime=lifetime,
+        build_year=build_year,
     )
 
 
@@ -498,6 +501,7 @@ def add_boat(
     efficiency = 5 / 0.000293 / 1000
     lifetime = 25
     capex = 1
+    build_year = n.investment_periods[0]
 
     loads = n.loads[(n.loads.carrier.str.contains("trn-")) & (n.loads.carrier.str.contains(f"{vehicle}-{mode}"))]
 
@@ -518,6 +522,7 @@ def add_boat(
         capital_cost=capex,
         p_nom_extendable=True,
         lifetime=lifetime,
+        build_year=build_year,
     )
 
 
@@ -541,6 +546,7 @@ def add_rail(
             efficiency = 3.4 / 0.000293 / 1000
             lifetime = 25
             capex = 1
+            build_year = n.investment_periods[0]
         case RailTransport.PASSENGER.value:
             # efficiency = costs.at[costs_name, "efficiency"] / 1000
             # base efficiency is 1506 BTU / Passenger Mile
@@ -548,11 +554,13 @@ def add_rail(
             efficiency = 1506 / 3.412e6 * 1000  # MWh / k passenger miles
             lifetime = 25
             capex = 1
+            build_year = n.investment_periods[0]
         case _:
             logger.warning(f"No cost params set for {mode}")
             efficiency = 1
             lifetime = 1
-            capex = 0
+            capex = 1
+            build_year = n.investment_periods[0]
 
     loads = n.loads[(n.loads.carrier.str.contains("trn-")) & (n.loads.carrier.str.contains(f"{vehicle}-{mode}"))]
 
@@ -573,11 +581,12 @@ def add_rail(
         capital_cost=capex,
         p_nom_extendable=True,
         lifetime=lifetime,
+        build_year=build_year,
     )
 
 
 def _create_endogenous_buses(n: pypsa.Network) -> None:
-    """Creats new bus for grouped endogenous vehicle load"""
+    """Creats new bus for grouped endogenous vehicle load."""
     buses = n.buses[
         n.buses.carrier.str.startswith("trn")
         & n.buses.carrier.str.contains("veh")
@@ -609,7 +618,7 @@ def _create_endogenous_buses(n: pypsa.Network) -> None:
 
 
 def _create_endogenous_loads(n: pypsa.Network) -> None:
-    """Creates aggregated vehicle load
+    """Creates aggregated vehicle load.
 
     - Removes LPG load
     - Transfers EV load to central bus
@@ -634,12 +643,16 @@ def _create_endogenous_loads(n: pypsa.Network) -> None:
 
     # transfer elec load buses to general bus
     n.loads.loc[new_names, "bus"] = n.loads.loc[new_names, "bus"].map(new_name_mapper)
-    n.loads.loc[new_names, "carrier"] = n.loads.loc[new_names, "carrier"].map(lambda x: x.replace("trn-elec-", "trn-"))
-    n.loads.loc[new_names, "carrier"] = n.loads.loc[new_names, "carrier"].map(lambda x: x.replace("trn-lpg-", "trn-"))
+    n.loads.loc[new_names, "carrier"] = n.loads.loc[new_names, "carrier"].map(
+        lambda x: x.replace("trn-elec-", "trn-"),
+    )
+    n.loads.loc[new_names, "carrier"] = n.loads.loc[new_names, "carrier"].map(
+        lambda x: x.replace("trn-lpg-", "trn-"),
+    )
 
 
 def _create_endogenous_links(n: pypsa.Network) -> None:
-    """Creates links for LPG and EV to load bus
+    """Creates links for LPG and EV to load bus.
 
     Just involves transfering bus1 from exogenous load bus to endogenous load bus
     """
@@ -648,12 +661,16 @@ def _create_endogenous_links(n: pypsa.Network) -> None:
         & n.links.carrier.str.contains("veh")
         & ~n.links.carrier.str.endswith("veh")
     )
-    n.links.loc[slicer, "bus1"] = n.links.loc[slicer, "bus1"].map(lambda x: x.replace("trn-elec-", "trn-"))
-    n.links.loc[slicer, "bus1"] = n.links.loc[slicer, "bus1"].map(lambda x: x.replace("trn-lpg-", "trn-"))
+    n.links.loc[slicer, "bus1"] = n.links.loc[slicer, "bus1"].map(
+        lambda x: x.replace("trn-elec-", "trn-"),
+    )
+    n.links.loc[slicer, "bus1"] = n.links.loc[slicer, "bus1"].map(
+        lambda x: x.replace("trn-lpg-", "trn-"),
+    )
 
 
 def _remove_exogenous_buses(n: pypsa.Network) -> None:
-    """Removes buses that are used for exogenous vehicle loads"""
+    """Removes buses that are used for exogenous vehicle loads."""
     # this is super awkward filtering :(
     buses = n.buses[
         (n.buses.index.str.contains("trn-elec-veh") | n.buses.index.str.contains("trn-lpg-veh"))
@@ -663,7 +680,7 @@ def _remove_exogenous_buses(n: pypsa.Network) -> None:
 
 
 def _constrain_charing_rates(n: pypsa.Network, must_run_evs: bool) -> None:
-    """Applies limits to p_min_pu/p_max_pu on links
+    """Applies limits to p_min_pu/p_max_pu on links.
 
     must_run_evs:
         True
@@ -707,7 +724,10 @@ def _constrain_charing_rates(n: pypsa.Network, must_run_evs: bool) -> None:
     n.links_t["p_max_pu"] = pd.concat([n.links_t["p_max_pu"], p_max_pu], axis=1)
 
 
-def apply_endogenous_road_investments(n: pypsa.Network, must_run_evs: bool = False) -> None:
+def apply_endogenous_road_investments(
+    n: pypsa.Network,
+    must_run_evs: bool = False,
+) -> None:
     """Merges EV and LPG load into a single load.
 
     This function will do the following:

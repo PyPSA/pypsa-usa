@@ -1,3 +1,5 @@
+"""Set up for custom logging."""
+
 import logging
 
 

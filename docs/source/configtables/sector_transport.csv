@@ -2,8 +2,8 @@
 transport_sector ,,,Options when implementing the transport sector
 -- brownfield,--,"bool {true, false}",Include brownfield end-use capacity for all modelled modes of operation.
 -- dynamic_costs,--,"bool {true, false}",Apply sector specific time varrying gasoline costs
--- exogenous,--,"bool {true, false}",Apply exogenous electrification standards. (Only True implemented)
--- ev_policy,--,str,Path to exogenous electrificion standards configuration file. Only needed if 'exogenous' is True
+-- exogenous,--,"bool {true, false}",Apply exogenous electrification standards.
+-- ev_policy,--,str,Path to exogenous electrificion standards configuration file.
 -- modes,,,Modes of transportation to include. (Only True implemented)
 -- -- vehicle,,"bool {true, false}","Include light-duty, medium-duty, heavy-duty, and bus road transportation. "
 -- -- rail,,"bool {true, false}",Include passenger and freight rail

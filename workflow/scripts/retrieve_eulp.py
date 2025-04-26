@@ -11,23 +11,21 @@ Notes
 
 import logging
 from pathlib import Path
+from typing import ClassVar
 
 import requests
 from _helpers import configure_logging
+from eulp import Eulp
 
 logger = logging.getLogger(__name__)
 
-from eulp import Eulp
-
 
 class OediDownload:
-    """
-    Downlaods Oedi restock or comstock data at a state level.
-    """
+    """Downlaods Oedi restock or comstock data at a state level."""
 
     root = "https://oedi-data-lake.s3.amazonaws.com/nrel-pds-building-stock/end-use-load-profiles-for-us-building-stock/2024"
 
-    res_files = [
+    res_files: ClassVar[list[str]] = [
         "mobile_home",
         "multi-family_with_2_-_4_units",
         "multi-family_with_5plus_units",
@@ -35,7 +33,7 @@ class OediDownload:
         "single-family_detached",
     ]
 
-    com_files = [
+    com_files: ClassVar[list[str]] = [
         "fullservicerestaurant",
         "hospital",
         "largehotel",
@@ -58,9 +56,7 @@ class OediDownload:
         self.release = 2 if self.stock == "res" else 1
 
     def _get_html_folder(self, state: str, upgrade: int | None = 0) -> str:
-        """
-        Gets html of folder.
-        """
+        """Gets html of folder."""
         if self.stock == "res":
             data_folder = f"resstock_amy2018_release_{self.release}"
         elif self.stock == "com":
@@ -110,9 +106,7 @@ class OediDownload:
         buildings: str | list[str] | None = None,
         directory: str | None = None,
     ) -> None:
-        """
-        Public method to interface with.
-        """
+        """Public method to interface with."""
         if not directory:
             directory = f"{state}"
         else:

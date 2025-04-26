@@ -16,11 +16,16 @@ You can find more information on each configuration setting on the [configuratio
 
 To run the workflow, `cd` into the `workflow` directory and run the `snakemake` from your terminal with your selection of config file:
 
+UV:
 ```console
-snakemake -j1 --configfile config/config.default.yaml
+uv run snakemake -j1 --configfile config/config.default.yaml --scheduler-ilp-solver GUROBI_CMD
 ```
 
-where 1 indicates the number of cores used.
+mamba:
+```console
+mamba activate pypsa-usa
+snakemake -j1 --configfile config/config.default.yaml
+```
 
 ## Running on HPC Cluster
 

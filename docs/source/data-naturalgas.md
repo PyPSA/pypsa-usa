@@ -86,12 +86,12 @@ PyPSA-USA does not currently support natural gas pipeline expansion and retrofit
 
 ### Methane Tracking
 
-Leaks in the natural gas system are often categorized into upstream and downstream leaks. Upstream leaks inclde leaks from production and processing. Downstream leaks include leaks from transportation, falaring, and incomplete fuel combustion. PyPSA-USA groups upstream and downstream leaks together and applies a leakage rate as a percentage of natural gas injected into the system. Moreover, a global warming potential is applied to the leaked gas the represent the intensity of methane compared to carbon dioxide over different time-frames. The follow [figure](methane-tracking) graphically shows how methane is accounted in PyPSA-USA.
+Leaks in the natural gas system are often categorized into upstream and downstream leaks. Upstream leaks inclde leaks from production and processing. Downstream leaks include leaks from transportation, falaring, and incomplete fuel combustion. PyPSA-USA allows users to specify both upstream and downstream leakage rates as a percentage of natural gas usage. Moreover, a global warming potential is applied to the leaked gas the represent the intensity of methane compared to carbon dioxide over different time-frames. The follow [figure](methane-tracking) graphically shows how methane is accounted in PyPSA-USA.
 
 :::{figure-md} methane-tracking
 <img src="./_static/natural_gas/methane.png" width="600px">
 
-Methane Tracking in PyPSA-USA
+Upstream Methane Tracking in PyPSA-USA
 :::
 
 ## Data Sources

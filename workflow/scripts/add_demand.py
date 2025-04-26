@@ -10,11 +10,7 @@ from pathlib import Path
 
 import pandas as pd
 import pypsa
-from _helpers import (
-    configure_logging,
-    get_multiindex_snapshots,
-    mock_snakemake,
-)
+from _helpers import configure_logging, get_multiindex_snapshots, mock_snakemake
 from constants_sector import (
     AirTransport,
     BoatTransport,

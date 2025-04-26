@@ -68,6 +68,8 @@ NAME_MAPPER = {
     "coal": "Coal",
     "Oil": "Petroleum",
     "oil": "Petroleum",
+    "Lpg": "Petroleum",
+    "lpg": "Petroleum",
     "com": "Commercial",
     "res": "Residential",
     "trn": "Transportation",
@@ -219,8 +221,6 @@ def format_sankey_data(
 
 if __name__ == "__main__":
     if "snakemake" not in globals():
-        from _helpers import mock_snakemake
-
         snakemake = mock_snakemake(
             "plot_sankey_energy",
             simpl="70",
@@ -302,7 +302,7 @@ if __name__ == "__main__":
             fig_name_html.parent.mkdir(parents=True)
 
         fig.write_html(str(fig_name_html))
-        fig.write_image(str(fig_name_png))
+        # fig.write_image(str(fig_name_png))
 
     # plot system level
 
@@ -351,4 +351,4 @@ if __name__ == "__main__":
         fig_name_html.parent.mkdir(parents=True)
 
     fig.write_html(str(fig_name_html))
-    fig.write_image(str(fig_name_png))
+    # fig.write_image(str(fig_name_png))

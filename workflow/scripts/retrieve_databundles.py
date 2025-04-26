@@ -1,3 +1,5 @@
+"""Script retrieves data from various zenodo repositories specified by the snakemake rule. Used by multiple snakemake rules."""
+
 import logging
 import platform
 import subprocess

@@ -1,8 +1,3 @@
-# SPDX-FileCopyrightText: : 2017-2024 The PyPSA-Eur Authors
-#
-# SPDX-License-Identifier: MIT
-
-# coding: utf-8
 """
 Prepare PyPSA network for solving according to :ref:`opts` and :ref:`ll`, such
 as.
@@ -14,46 +9,6 @@ as.
 - specifying an expansion limit on the **volume** of transmission expansion, and
 - reducing the **temporal** resolution by averaging over multiple hours
   or segmenting time series into chunks of varying lengths using ``tsam``.
-
-Relevant Settings
------------------
-
-.. code:: yaml
-
-    costs:
-        year:
-        version:
-        fill_values:
-        emission_prices:
-        marginal_cost:
-        capital_cost:
-
-    electricity:
-        co2limit:
-        max_hours:
-
-.. seealso::
-    Documentation of the configuration file ``config/config.yaml`` at
-    :ref:`costs_cf`, :ref:`electricity_cf`
-
-Inputs
-------
-
-- ``resources/costs.csv``: The database of cost assumptions for all included technologies for specific years from various sources; e.g. discount rate, lifetime, investment (CAPEX), fixed operation and maintenance (FOM), variable operation and maintenance (VOM), fuel costs, efficiency, carbon-dioxide intensity.
-- ``networks/elec_s{simpl}_{clusters}.nc``: confer :ref:`cluster`
-
-Outputs
--------
-
-- ``networks/elec_s{simpl}_{clusters}_ec_l{ll}_{opts}.nc``: Complete PyPSA network that will be handed to the ``solve_network`` rule.
-
-Description
------------
-
-.. tip::
-    The rule :mod:`prepare_elec_networks` runs
-    for all ``scenario`` s in the configuration file
-    the rule :mod:`prepare_network`.
 """
 
 import logging
@@ -96,17 +51,17 @@ def get_investment_weighting(time_weighting, r=0.01):
     )
 
 
-def add_co2limit(n, co2limit, Nyears=1.0):
+def add_co2limit(n, co2limit, num_years=1.0):
     n.add(
         "GlobalConstraint",
         "CO2Limit",
         carrier_attribute="co2_emissions",
         sense="<=",
-        constant=co2limit * Nyears,
+        constant=co2limit * num_years,
     )
 
 
-def add_gaslimit(n, gaslimit, Nyears=1.0):
+def add_gaslimit(n, gaslimit, num_years=1.0):
     sel = n.carriers.index.intersection(["OCGT", "CCGT", "CHP"])
     n.carriers.loc[sel, "gas_usage"] = 1.0
 
@@ -115,7 +70,7 @@ def add_gaslimit(n, gaslimit, Nyears=1.0):
         "GasLimit",
         carrier_attribute="gas_usage",
         sense="<=",
-        constant=gaslimit * Nyears,
+        constant=gaslimit * num_years,
     )
 
 
@@ -231,9 +186,7 @@ def average_every_nhours(n, offset):
 
 
 def is_leap_year(year: int) -> bool:
-    """
-    Check if a given year is a leap year.
-    """
+    """Check if a given year is a leap year."""
     if (year % 4 == 0 and year % 100 != 0) or (year % 400 == 0):
         return True
     else:
@@ -356,7 +309,7 @@ if __name__ == "__main__":
     transport_model = is_transport_model(params.transmission_network)
 
     n = pypsa.Network(snakemake.input[0])
-    Nyears = n.snapshot_weightings.loc[n.investment_periods[0]].objective.sum() / 8760.0
+    num_years = n.snapshot_weightings.loc[n.investment_periods[0]].objective.sum() / 8760.0
     costs = pd.read_csv(snakemake.input.tech_costs)
     costs = costs.pivot(index="pypsa-name", columns="parameter", values="value")
     # Set Investment Period Year Weightings
@@ -387,10 +340,10 @@ if __name__ == "__main__":
         n = apply_time_segmentation(n, segments, solver_name)
 
     if params.co2limit_enable:
-        add_co2limit(n, params.co2limit, Nyears)
+        add_co2limit(n, params.co2limit, num_years)
 
     if params.gaslimit_enable:
-        add_gaslimit(n, params.gaslimit, Nyears)
+        add_gaslimit(n, params.gaslimit, num_years)
 
     emission_prices = params.costs["emission_prices"]
     if emission_prices["enable"]:

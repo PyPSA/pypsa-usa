@@ -1,3 +1,5 @@
+"""Retreives data for Enhanced Geothermal supply curves and capacity factor profiles."""
+
 import logging
 import zipfile
 from pathlib import Path

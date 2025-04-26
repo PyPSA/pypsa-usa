@@ -1,6 +1,4 @@
-"""
-Plots sector validation plots.
-"""
+"""Plots sector validation plots."""
 
 import logging
 from collections.abc import Callable
@@ -40,7 +38,6 @@ SECTOR_MAPPER = {
     "pwr": "power",
     "ind": "industrial",
     "trn": "transport",
-    "pwr": "power",
     "ch4": "methane",
 }
 
@@ -52,9 +49,7 @@ EXT = "png"
 
 
 def percent_difference(col_1: pd.Series, col_2: pd.Series) -> pd.Series:
-    """
-    Calculates percent difference between two columns of numbers.
-    """
+    """Calculates percent difference between two columns of numbers."""
     return abs(col_1 - col_2).div((col_1 + col_2).div(2)).mul(100)
 
 
@@ -64,9 +59,7 @@ def plot_sector_emissions_validation(
     state: str | None = None,
     **kwargs,
 ) -> tuple:
-    """
-    Plots state by state sector emission comparison.
-    """
+    """Plots state by state sector emission comparison."""
     investment_period = n.investment_periods[0]
 
     historical = get_historical_emissions(
@@ -103,8 +96,12 @@ def plot_sector_emissions_validation(
     historical = historical.T
 
     if state:  # plot at state level
-        historical = historical[state].to_frame("Actual")
-        modelled = modelled[state].to_frame("Modelled")
+        try:
+            historical = historical[state].to_frame("Actual")
+            modelled = modelled[state].to_frame("Modelled")
+        except KeyError:  # for example TX in western interconnect
+            logger.warning(f"No emission data to plot for {state}")
+            return fig, axs
 
     else:  # plot at system level
         historical = historical[modelled.columns].sum(axis=1).to_frame("Actual")
@@ -131,9 +128,7 @@ def plot_state_emissions_validation(
     state: str | None = None,
     **kwargs,
 ) -> tuple:
-    """
-    Plots total state emission comparison.
-    """
+    """Plots total state emission comparison."""
     investment_period = n.investment_periods[0]
 
     historical = get_historical_emissions(
@@ -185,9 +180,7 @@ def plot_system_emissions_validation_by_state(
     eia_api: str,
     **kwargs,
 ) -> tuple:
-    """
-    Plots all states modelled and historcal.
-    """
+    """Plots all states modelled and historcal."""
     investment_period = n.investment_periods[0]
 
     historical = get_historical_emissions(
@@ -228,27 +221,27 @@ def plot_sector_consumption_validation(
     state: str | None = None,
     **kwargs,
 ) -> tuple:
-    """
-    Plots sector energy consumption comparison.
-    """
+    """Plots sector energy consumption comparison."""
     investment_period = n.investment_periods[0]
 
-    historical = get_historical_end_use_consumption(
+    historical_all_states = get_historical_end_use_consumption(
         ["residential", "commercial", "industrial", "transport"],
         investment_period,
         eia_api,
     )
+
+    historical = historical_all_states[[x for x in historical_all_states.columns if x in n.buses.reeds_state.values]]
 
     data = []
 
     for sector in ("res", "com", "ind", "trn"):
         modelled = get_end_use_consumption(n, sector, state).loc[investment_period].sum().sum()
         if state:
-            data.append([sector, modelled, historical.at[SECTOR_MAPPER[sector], state]])
+            data.append([sector, historical.at[SECTOR_MAPPER[sector], state], modelled])
         else:
-            data.append([sector, modelled, historical.loc[SECTOR_MAPPER[sector]].sum()])
+            data.append([sector, historical.loc[SECTOR_MAPPER[sector]].sum(), modelled])
 
-    df = pd.DataFrame(data, columns=["sector", "Modelled", "Actual"]).set_index(
+    df = pd.DataFrame(data, columns=["sector", "Actual", "Modelled"]).set_index(
         "sector",
     )
     df.index = df.index.map(SECTOR_MAPPER)
@@ -272,9 +265,7 @@ def plot_sector_consumption_validation(
 
 
 def _get_annual_generation(n: pypsa.Network, year: int, state) -> pd.DataFrame:
-    """
-    Only for comparing agaist EIA data.
-    """
+    """Only for comparing agaist EIA data."""
     df = get_power_production_timeseries(n, False, state)
     df = df.T
     df.index = df.index.map(pd.concat([n.links.carrier, n.generators.carrier]))
@@ -285,7 +276,7 @@ def _get_annual_generation(n: pypsa.Network, year: int, state) -> pd.DataFrame:
         index={"onwind": "wind", "offwind_floating": "wind", "offwind_fixed": "wind"},
     )
     df = df.groupby(level=0).sum().T
-    return df.loc[year].sum().to_frame(name="modelled")
+    return df.loc[year].sum().to_frame(name="Modelled")
 
 
 def plot_power_generation_validation(
@@ -298,14 +289,16 @@ def plot_power_generation_validation(
 
     modelled = _get_annual_generation(n, investment_period, state)
 
-    historical = get_historical_power_production(
+    historical_all_states = get_historical_power_production(
         investment_period,
         eia_api,
     )
+
     if not state:
-        historical = historical.loc["U.S."].to_frame("actual")
+        historical = historical_all_states.loc[[x for x in n.buses.reeds_state.unique() if x]].sum().to_frame("Actual")
+        # historical = historical.loc["U.S."].to_frame("actual")
     else:
-        historical = historical.loc[state].to_frame("actual")
+        historical = historical_all_states.loc[state].to_frame("Actual")
 
     df = historical.join(modelled, how="outer").fillna(0)
 
@@ -366,7 +359,10 @@ def plot_ng_price_validation(
         historical_residential = historical_residential[state].to_frame("Residential")
         historical_commercial = historical_commercial[state].to_frame("Commercial")
         historical_industrial = historical_industrial[state].to_frame("Industrial")
-        modelled = modelled[state].mean(axis=1).to_frame(name="Modelled")
+        try:  # for example, texas in western
+            modelled = modelled[state].mean(axis=1).to_frame(name="Modelled")
+        except KeyError:
+            modelled = pd.DataFrame(index=historical_power.index)
 
     df = (
         modelled.join(historical_power, how="left")
@@ -561,6 +557,8 @@ def plot_system_consumption_validation_by_state(
 
 @dataclass
 class PlottingData:
+    """Describe data to plot."""
+
     name: str  # snakemake name
     fn: callable
     system_only: bool
@@ -603,8 +601,8 @@ VALIDATION_PLOTS = [
     # {
     #     "name": "transportation_by_mode_validation",
     #     "fn": plot_transportation_by_mode_validation,
-    #     "nice_name": "Residenital Capacity",
-    #     "sector": "res",
+    #     "nice_name": "Transportation by Mode",
+    #     "system_only": False,
     # },
     # {
     #     "name": "system_consumption_validation",
@@ -630,12 +628,10 @@ def save_fig(
     n: pypsa.Network,
     save: str,
     title: str,
-    wildcards: dict[str, Any] = None,
+    wildcards: dict[str, Any] | None = None,
     **kwargs,
 ) -> None:
-    """
-    Saves the result figure.
-    """
+    """Saves the result figure."""
     fig, _ = fn(n, **kwargs)
 
     if not wildcards:
@@ -654,13 +650,11 @@ def save_fig(
 
 if __name__ == "__main__":
     if "snakemake" not in globals():
-        from _helpers import mock_snakemake
-
         snakemake = mock_snakemake(
             "plot_sector_validation",
-            simpl="11",
-            opts="3h",
-            clusters="4m",
+            simpl="132",
+            opts="4h",
+            clusters="33m",
             ll="v1.0",
             sector_opts="",
             sector="E-G",

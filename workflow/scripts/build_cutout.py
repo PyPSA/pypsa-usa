@@ -129,7 +129,7 @@ if __name__ == "__main__":
             )
             * 2
         )
-        interconnect_params["bounds"] = regions.total_bounds + [-d, -d, d, d]
+        interconnect_params["bounds"] = [*regions.total_bounds, -d, -d, d, d]
     elif {"x", "y"}.issubset(interconnect_params):
         interconnect_params["x"] = slice(*interconnect_params["x"])
         interconnect_params["y"] = slice(*interconnect_params["y"])

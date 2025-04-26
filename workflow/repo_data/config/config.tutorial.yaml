@@ -16,6 +16,7 @@ scenario:
   scope: "total" # "urban", "rural", or "total"
   sector: "" # G
   planning_horizons: [2050]    #(2018-2023, 2030, 2040, 2050)
+foresight:  'perfect' # myopic, perfect
 
 model_topology:
   transmission_network: 'reeds' # [reeds, tamu]
@@ -58,10 +59,6 @@ electricity:
     epsilon_load: 0.02
     epsilon_vres: 0.02
     contingency: 4000
-
-  max_hours:
-    battery: 6
-    H2: 168
 
   extendable_carriers:
     Generator: [solar, onwind, offwind_floating, OCGT, CCGT, CCGT-95CCS, coal, nuclear] #include CCGT-CCS

@@ -86,6 +86,8 @@ NAME_MAPPER = {
     "coal": "Coal",
     "Oil": "Petroleum",
     "oil": "Petroleum",
+    "Lpg": "Petroleum",
+    "lpg": "Petroleum",
     "com": "Commercial",
     "res": "Residential",
     "trn": "Transportation",
@@ -365,7 +367,7 @@ def _get_transport_supply(
         links_in_state = n.links.index.to_list()
 
     # get load aggregation buses only
-    buses = n.buses[n.buses.carrier.isin(["AC", "oil"])].index
+    buses = n.buses[n.buses.carrier.isin(["AC", "lpg"])].index
     links = n.links[
         (n.links.index.isin(links_in_state)) & (n.links.bus0.isin(buses)) & (n.links.carrier.str.startswith("trn-"))
     ].index
@@ -399,7 +401,7 @@ def _get_transport_rejected(
         links_in_state = n.links.index.to_list()
 
     # get load aggregation buses only
-    buses = n.buses[n.buses.carrier.isin(["AC", "oil"])].index
+    buses = n.buses[n.buses.carrier.isin(["AC", "lpg"])].index
     links = n.links[
         (n.links.index.isin(links_in_state)) & (n.links.bus0.isin(buses)) & (n.links.carrier.str.startswith("trn-"))
     ].index
@@ -596,8 +598,6 @@ def format_sankey_data(
 
 if __name__ == "__main__":
     if "snakemake" not in globals():
-        from _helpers import mock_snakemake
-
         snakemake = mock_snakemake(
             "plot_sankey_energy",
             simpl="70",
@@ -684,7 +684,7 @@ if __name__ == "__main__":
             fig_name_html.parent.mkdir(parents=True)
 
         fig.write_html(str(fig_name_html))
-        fig.write_image(str(fig_name_png))
+        # fig.write_image(str(fig_name_png))
 
     # plot system level
 
@@ -736,4 +736,4 @@ if __name__ == "__main__":
         fig_name_html.parent.mkdir(parents=True)
 
     fig.write_html(str(fig_name_html))
-    fig.write_image(str(fig_name_png))
+    # fig.write_image(str(fig_name_png))

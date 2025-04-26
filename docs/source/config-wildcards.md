@@ -75,6 +75,10 @@ The REM, SAFER, RPS can be defined using either the reeds zone name 'p##"
 the state code (eg, TX, CA, MT), pypsa-usa interconnect name (western, eastern, texas, usa),
 or nerc region name.
 
+```{warning}
+TCT Targets can only be used with renewable generators and utility scale batteries in sector studies.
+```
+
 There are currently:
 
 ```{eval-rst}
@@ -84,13 +88,8 @@ There are currently:
    :file: configtables/opts.csv
 ```
 
-
 (sector)=
 ## The `{sector}` wildcard
-
-```{warning}
-Sector coupling studies are all under active development
-```
 
 The `{sector}` wildcard is used to specify what sectors to include. If `None`
 is provided, an electrical only study is completed.
@@ -100,15 +99,6 @@ is provided, an electrical only study is completed.
 | Electricity | E    | Electrical sector. Will always be run.         | Runs        |
 | Natural Gas | G    | All sectors added                              | Development |
 
-(scope)=
-## The `{scope}` wildcard
-
-```{warning}
-Sector coupling studies are all under active development
-```
-
-Takes values `residential`, `urban`, `total`. Used in sector coupling studies to define
-population breakdown.
 
 (cutout_wc)=
 ## The `{cutout}` wildcard

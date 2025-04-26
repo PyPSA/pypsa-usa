@@ -79,9 +79,7 @@ def download_oasis_report(
 
 
 def generate_monthly_intervals(year):
-    """
-    Generate monthly start and end datetime strings for a given year.
-    """
+    """Generate monthly start and end datetime strings for a given year."""
     intervals = []
     for month in range(1, 13):
         start_date = datetime(year, month, 1)
@@ -125,9 +123,7 @@ def step_download_oasis_reports(
 
 
 def combine_reports(file_names, year):
-    """
-    Combine all reports into a single DataFrame.
-    """
+    """Combine all reports into a single DataFrame."""
     all_data_frames = []
     for file in file_names:
         file = file.replace(":", "_")
@@ -135,7 +131,7 @@ def combine_reports(file_names, year):
         all_data_frames.append(df)
 
     combined_data = pd.concat(all_data_frames, ignore_index=True)
-    combined_data.sort_values(by="INTERVALSTARTTIME_GMT", inplace=True)
+    combined_data = combined_data.sort_values(by="INTERVALSTARTTIME_GMT")
     return combined_data
 
 
@@ -159,9 +155,7 @@ def get_files_starting_with(folder_path, prefix):
 
 
 def merge_fuel_regions_data(combined_data, year):
-    """
-    Merge the fuel regions with the combined data.
-    """
+    """Merge the fuel regions with the combined data."""
     df = pd.read_excel(snakemake.input.fuel_regions, sheet_name="GPI_Fuel_Region")
     df = df[["Fuel Region", "Balancing Authority"]]
     df["Fuel Region"] = df["Fuel Region"].str.strip(" ")
@@ -173,9 +167,8 @@ def merge_fuel_regions_data(combined_data, year):
         right_on="Fuel Region",
         how="left",
     )
-    combined_data_merged.drop(
+    combined_data_merged = combined_data_merged.drop(
         columns=["Fuel Region", "FUEL_REGION_ID_XML"],
-        inplace=True,
     )
     return combined_data_merged
 
@@ -219,4 +212,9 @@ def main(snakemake):
 
 
 if __name__ == "__main__":
+    if "snakemake" not in globals():
+        from _helpers import mock_snakemake
+
+        snakemake = mock_snakemake("retrieve_caiso_data")
+
     main(snakemake)
