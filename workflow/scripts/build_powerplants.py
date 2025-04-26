@@ -11,14 +11,20 @@ from _helpers import configure_logging, weighted_avg
 logger = logging.getLogger(__name__)
 
 
-def initialize_duckdb():
+def load_pudl_data(parquet_path: str, start_date: str, end_date: str):
+    """
+    Queries the parquet files directly for plant data.
+
+    Date parameters are used to filter years of heat-rate and fuel cost
+    data.
+    """
     duckdb.connect(database=":memory:", read_only=False)
+
+    # Install necessary extensions
     duckdb.query("INSTALL httpfs;")
 
-
-def load_eia_operable_data(parquet_path: str):
-    """Queries the parquet files directly for operable plant data."""
-    return duckdb.query(
+    # Query for eia_data_operable
+    eia_data_operable = duckdb.query(
         f"""
         WITH monthly_generators AS (
             SELECT
@@ -26,7 +32,7 @@ def load_eia_operable_data(parquet_path: str):
                 generator_id,
                 array_agg(unit_heat_rate_mmbtu_per_mwh ORDER BY report_date DESC) FILTER (WHERE unit_heat_rate_mmbtu_per_mwh IS NOT NULL)[1] AS unit_heat_rate_mmbtu_per_mwh
             FROM read_parquet('{parquet_path}/out_eia__monthly_generators.parquet')
-            WHERE report_date >= '2023-01-01'
+            WHERE operational_status = 'existing' AND report_date >= '2023-01-01'
             GROUP BY plant_id_eia, generator_id
         )
         SELECT
@@ -52,10 +58,6 @@ def load_eia_operable_data(parquet_path: str):
             array_agg(ges.storage_technology_code_1 ORDER BY ges.report_date DESC) FILTER (WHERE ges.storage_technology_code_1 IS NOT NULL)[1] AS storage_technology_code_1,
             array_agg(p.nerc_region ORDER BY p.report_date DESC) FILTER (WHERE p.nerc_region IS NOT NULL)[1] AS nerc_region,
             array_agg(p.balancing_authority_code_eia ORDER BY p.report_date DESC) FILTER (WHERE p.balancing_authority_code_eia IS NOT NULL)[1] AS balancing_authority_code_eia,
-            array_agg(yg.current_planned_generator_operating_date ORDER BY yg.report_date DESC) FILTER (WHERE yg.current_planned_generator_operating_date IS NOT NULL)[1] AS current_planned_generator_operating_date,
-            array_agg(yg.operational_status_code ORDER BY yg.report_date DESC) FILTER (WHERE yg.operational_status_code IS NOT NULL)[1] AS operational_status_code,
-            array_agg(yg.generator_retirement_date ORDER BY yg.report_date DESC) FILTER (WHERE yg.generator_retirement_date IS NOT NULL)[1] AS generator_retirement_date,
-            array_agg(yg.fuel_type_code_pudl ORDER BY yg.report_date DESC) FILTER (WHERE yg.fuel_type_code_pudl IS NOT NULL)[1] AS fuel_type_code_pudl,
             first(mg.unit_heat_rate_mmbtu_per_mwh) AS unit_heat_rate_mmbtu_per_mwh
         FROM read_parquet('{parquet_path}/out_eia__yearly_generators.parquet') yg
         LEFT JOIN read_parquet('{parquet_path}/core_eia860__scd_generators_energy_storage.parquet') ges
@@ -65,54 +67,57 @@ def load_eia_operable_data(parquet_path: str):
         LEFT JOIN monthly_generators mg
             ON yg.plant_id_eia = mg.plant_id_eia AND yg.generator_id = mg.generator_id
         WHERE
-            yg.operational_status_code IN ('RE','OP', 'SC', 'SB', 'CO' ,'U', 'V', 'TS', 'T')
+            yg.operational_status = 'existing'
+            AND yg.operational_status_code IN ('OP')
             AND yg.report_date >= '2023-01-01'
         GROUP BY yg.plant_id_eia, yg.generator_id
     """,
     ).to_df()
 
-
-def load_heat_rates_data(parquet_path: str, start_date: str, end_date: str):
-    """Queries the parquet files for heat rate and fuel cost data within the specified date range."""
-    query = f"""
-    WITH monthly_generators AS (
+    def get_heat_rates(start_date, end_date):
+        query = f"""
+        WITH monthly_generators AS (
+            SELECT
+                plant_id_eia,
+                generator_id,
+                report_date,
+                unit_heat_rate_mmbtu_per_mwh,
+                fuel_cost_per_mwh,
+                fuel_cost_per_mmbtu
+            FROM read_parquet('{parquet_path}/out_eia__monthly_generators.parquet')
+            WHERE operational_status = 'existing'
+            AND report_date BETWEEN '{start_date}' AND '{end_date}'
+            AND unit_heat_rate_mmbtu_per_mwh IS NOT NULL
+        )
         SELECT
-            plant_id_eia,
-            generator_id,
-            report_date,
-            unit_heat_rate_mmbtu_per_mwh,
-            fuel_cost_per_mwh,
-            fuel_cost_per_mmbtu
-        FROM read_parquet('{parquet_path}/out_eia__monthly_generators.parquet')
-        WHERE operational_status = 'existing'
-        AND report_date BETWEEN '{start_date}' AND '{end_date}'
-        AND unit_heat_rate_mmbtu_per_mwh IS NOT NULL
-    )
-    SELECT
-        mg.plant_id_eia,
-        mg.generator_id,
-        mg.report_date,
-        mg.unit_heat_rate_mmbtu_per_mwh,
-        mg.fuel_cost_per_mwh,
-        mg.fuel_cost_per_mmbtu,
-        yg.plant_name_eia,
-        yg.capacity_mw,
-        yg.energy_source_code_1,
-        yg.technology_description,
-        yg.operational_status,
-        yg.prime_mover_code,
-        yg.state,
-        p.nerc_region,
-        p.balancing_authority_code_eia
-    FROM monthly_generators mg
-    LEFT JOIN read_parquet('{parquet_path}/out_eia__yearly_generators.parquet') yg
-        ON mg.plant_id_eia = yg.plant_id_eia AND mg.generator_id = yg.generator_id
-    LEFT JOIN read_parquet('{parquet_path}/core_eia860__scd_plants.parquet') p
-        ON mg.plant_id_eia = p.plant_id_eia
-    WHERE yg.operational_status = 'existing'
-    ORDER BY mg.report_date DESC
-    """
-    return duckdb.query(query).to_df()
+            mg.plant_id_eia,
+            mg.generator_id,
+            mg.report_date,
+            mg.unit_heat_rate_mmbtu_per_mwh,
+            mg.fuel_cost_per_mwh,
+            mg.fuel_cost_per_mmbtu,
+            yg.plant_name_eia,
+            yg.capacity_mw,
+            yg.energy_source_code_1,
+            yg.technology_description,
+            yg.operational_status,
+            yg.prime_mover_code,
+            yg.state,
+            p.nerc_region,
+            p.balancing_authority_code_eia
+        FROM monthly_generators mg
+        LEFT JOIN read_parquet('{parquet_path}/out_eia__yearly_generators.parquet') yg
+            ON mg.plant_id_eia = yg.plant_id_eia AND mg.generator_id = yg.generator_id
+        LEFT JOIN read_parquet('{parquet_path}/core_eia860__scd_plants.parquet') p
+            ON mg.plant_id_eia = p.plant_id_eia
+        WHERE yg.operational_status = 'existing'
+        ORDER BY mg.report_date DESC
+        """
+        return duckdb.query(query).to_df()
+
+    heat_rates = get_heat_rates(start_date, end_date)
+
+    return eia_data_operable, heat_rates
 
 
 def set_non_conus(eia_data_operable):
@@ -777,13 +782,6 @@ def set_parameters(plants: pd.DataFrame):
         logger.warning(
             "Missing {} fuel cost records.".format(plants["fuel_cost"].isna().sum()),
         )
-
-    # Remove all column names that start with "ads_" except ads_mustrun
-    plants = plants.loc[:, ~plants.columns.str.startswith("ads_") | (plants.columns == "ads_mustrun")]
-
-    # Round all numeric columns to 4 decimal places
-    plants = plants.round(4)
-
     return plants.reset_index()
 
 
@@ -929,9 +927,11 @@ if __name__ == "__main__":
     start_date = f"{data_year}-01-01"
     end_date = f"{data_year + 1}-01-01"
 
-    initialize_duckdb()
-    eia_data_operable = load_eia_operable_data(snakemake.params.pudl_path)
-    heat_rates = load_heat_rates_data(snakemake.params.pudl_path, start_date, end_date)
+    eia_data_operable, heat_rates = load_pudl_data(
+        snakemake.params.pudl_path,
+        start_date,
+        end_date,
+    )
 
     eia_data_operable = merge_fc_hr_data(
         eia_data_operable,
@@ -967,10 +967,4 @@ if __name__ == "__main__":
     plants = plants[~plants.index.isin(missing_locations.index)]
 
     logger.info(f"Exporting Powerplants, with {plants.shape[0]} entries.")
-
-    # Sort columns alphabetically for consistent diffing
-    plants = plants.reindex(sorted(plants.columns), axis=1)
-    # Sort rows by generator_name for consistent diffing
-    plants = plants.sort_values("generator_name")
-
     plants.to_csv(snakemake.output.powerplants, index=False)
