@@ -6,6 +6,7 @@ This module contains tests for the reserve margin constraints in PyPSA-USA.
 import os
 import sys
 
+import numpy as np
 import pandas as pd
 import pytest
 from pypsa.descriptors import (
@@ -17,26 +18,62 @@ from opts.reserves import add_ERM_constraints, store_ERM_duals  # noqa: E402
 
 
 @pytest.fixture
-def reserve_margin_data():
-    """Create test data for reserve margin constraints."""
-    return pd.DataFrame(
-        [
-            {
-                "name": "test_region",
-                "region": "all",
-                "prm": 0.15,  # 15% reserve margin
-                "planning_horizon": 2030,
-            },
-        ],
+def erm_config():
+    """Create a config dictionary with ERM settings."""
+    return {
+        "electricity": {
+            "SAFE_regional_reservemargins": os.path.join(os.path.dirname(__file__), "fixtures/test_prm.csv"),
+        },
+    }
+
+
+@pytest.fixture
+def erm_multi_region_config():
+    """Create a config dictionary with ERM settings for multiple regions and different reserve margins."""
+    return {
+        "electricity": {
+            "SAFE_regional_reservemargins": os.path.join(os.path.dirname(__file__), "fixtures/multi_region_prm.csv"),
+        },
+    }
+
+
+@pytest.fixture
+def reserve_margin_network(base_network):
+    """
+    Adapt base network for ERM and PRM constraint testing.
+
+    Extends the base network with parameters relevant to reserve margin testing.
+    """
+    n = base_network.copy()
+
+    # Create a higher peak in load profile for reserve margin testing
+    # Make load profile peaky with peak at hour 11 for region 1 and hour 18 for region 2
+    load_profile_region1 = pd.Series(
+        np.concatenate([np.linspace(800, 1200, 12), np.linspace(1200, 800, 12)]),
+        index=n.snapshots,
     )
 
+    load_profile_region2 = pd.Series(
+        np.concatenate([np.linspace(500, 700, 18), np.linspace(700, 500, 6)]),
+        index=n.snapshots,
+    )
 
-def test_erm_constraint_binding(reserve_margin_network, reserve_margin_data):
+    # Update load profiles
+    n.loads_t.p_set.loc[:, "load1"] = load_profile_region1
+    n.loads_t.p_set.loc[:, "load2"] = load_profile_region1 * 0.75
+    n.loads_t.p_set.loc[:, "load3"] = load_profile_region2
+
+    return n
+
+
+def test_erm_constraint_binding(reserve_margin_network, erm_config):
     """Test that ERM constraint correctly limits generation capacity."""
     n = reserve_margin_network.copy()
 
+    # Read the PRM data from the CSV file
+    test_data = pd.read_csv(erm_config["electricity"]["SAFE_regional_reservemargins"])
+
     # Set a high ERM requirement (1100%)
-    test_data = reserve_margin_data.copy()
     test_data.loc[0, "prm"] = 10
 
     # Run optimization with ERM constraints

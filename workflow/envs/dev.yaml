@@ -17,3 +17,4 @@ dependencies:
   - sphinx
   - sphinx-book-theme
   - myst-parser
+  - pytest

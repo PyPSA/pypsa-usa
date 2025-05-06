@@ -8,60 +8,13 @@ These tests validate the functionality of key components in PyPSA-USA, ensuring 
 
 1. **Energy Reserve Margin (ERM) and Planning Reserve Margin (PRM)** tests in `test_reserves.py`
 2. **Land Use Constraints** tests in `test_land.py`
-3. **Policy Constraints** tests in `test_content.py` (RPS and TCT)
-
-## Test Cases
-
-### Energy Reserve and Planning Reserve Margins (test_reserves.py)
-
-- Tests for basic functionality of ERM constraints
-  - Variables creation
-  - Peak hour constraint application
-  - Data storage
-  - Storage contribution to ERM
-  - Transmission line contribution to ERM
-
-- Tests for ERM constraints across multiple regions
-  - Constraint application in multiple regions
-  - Interconnection contribution to ERM
-
-- Tests for basic functionality of PRM constraints
-  - Constraint creation
-  - Capacity sizing according to PRM requirements
-
-- Tests for combining ERM and PRM constraints
-
-### Land Use Constraints (test_land.py)
-
-- Tests for land use constraint creation and functionality
-  - Constraint creation
-  - Limiting capacity expansion
-  - Multiple carriers in the same region
-  - Edge cases (empty land_region, infinite p_nom_max)
-  - Models without extendable generators
-  - Full optimization workflow
-
-### Policy Constraints (test_content.py)
-
-- Tests for Renewable Portfolio Standards (RPS)
-  - Constraint creation
-  - Effect on generation mix
-  - Multi-region targets
-
-- Tests for Technology Capacity Targets (TCT)
-  - Constraint creation
-  - Minimum target enforcement
-  - Maximum target enforcement
-  - "Existing" value handling
+3. **Policy Constraints** tests in `test_policy.py` (RPS and TCT)
 
 ## Running the Tests
 
 To run all tests:
 
 ```bash
-# Using the run_tests.py script
-./run_tests.py
-
 # Directly using pytest
 pytest -v
 ```
@@ -72,7 +25,7 @@ To run specific test files:
 # Run a specific test file
 pytest test_reserves.py -v
 pytest test_land.py -v
-pytest test_content.py -v
+pytest test_policy.py -v
 ```
 
 To run specific test functions:
@@ -91,11 +44,6 @@ pytest -v -k "storage"
 - **pytest**: The tests use pytest as the testing framework
 - **GLPK**: The tests use the GLPK solver by default
 
-Install the required packages:
-
-```bash
-pip install pytest
-```
 
 ## Test Data
 
