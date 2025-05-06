@@ -123,6 +123,18 @@ to new functions, modules and classes.
 
    to record your changes in [git](https://git-scm.com).
 
+
+### 5a. Run Tests
+
+Before submitting your changes, make sure to run the test suite to ensure your modifications haven't introduced any bugs. To run all tests:
+
+```bash
+# Directly using pytest
+pytest -v
+```
+
+
+
 ### 6. Submit a Pull Request to the **`develop`** branch
 
 - If everything works fine, push your local branch to your fork with:

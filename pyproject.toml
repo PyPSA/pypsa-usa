@@ -81,6 +81,7 @@ dev = [
     "sphinx",
     "sphinx-book-theme",
     "myst-parser",
+    "pytest",
 ]
 
 [tool.setuptools.package-dir]
@@ -146,3 +147,8 @@ quote-style = "double"
 indent-style = "space"
 skip-magic-trailing-comma = false
 line-ending = "auto"
+
+[tool.pytest.ini_options]
+testpaths = [
+    "workflow/scripts/test"
+]
