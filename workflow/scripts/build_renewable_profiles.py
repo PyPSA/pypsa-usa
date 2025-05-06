@@ -78,9 +78,9 @@ if __name__ == "__main__":
 
     regions = gpd.read_file(snakemake.input.regions)
 
-    assert (
-        "x" in regions.columns and "y" in regions.columns
-    ), f"List of regions in {snakemake.input.regions} is empty, please disable the corresponding renewable technology"
+    assert "x" in regions.columns and "y" in regions.columns, (
+        f"List of regions in {snakemake.input.regions} is empty, please disable the corresponding renewable technology"
+    )
     # do not pull up, set_index does not work if geo dataframe is empty
     regions = regions.set_index("name").rename_axis("bus")
     buses = regions.index
