@@ -4,6 +4,7 @@ Energy Reserve Margin (ERM) and Planning Reserve Margin (PRM) constraints for Py
 This module contains functions for implementing capacity adequacy constraints,
 including energy reserve margins (ERM) and planning reserve margins (PRM).
 """
+
 import logging
 
 import linopy

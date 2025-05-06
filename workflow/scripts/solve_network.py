@@ -113,7 +113,7 @@ def prepare_network(n, solve_opts=None):
 
     return n
 
-  
+
 def extra_functionality(n, snapshots):
     """
     Collects supplementary constraints which will be passed to

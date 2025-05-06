@@ -3,6 +3,7 @@ Test the reserves constraints functionality.
 
 This module contains tests for the reserve margin constraints in PyPSA-USA.
 """
+
 import os
 import sys
 
@@ -14,7 +15,7 @@ from pypsa.descriptors import (
 )
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
-from opts.reserves import add_ERM_constraints, store_ERM_duals  # noqa: E402
+from opts.reserves import add_ERM_constraints, store_ERM_duals
 
 
 @pytest.fixture

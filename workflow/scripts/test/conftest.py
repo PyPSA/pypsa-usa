@@ -4,6 +4,7 @@ Common fixtures for PyPSA-USA tests.
 This module contains shared fixtures used across multiple test files.
 These fixtures provide reusable test data and network configurations.
 """
+
 import os
 import sys
 
@@ -13,7 +14,7 @@ import pypsa
 import pytest
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
-from _helpers import get_multiindex_snapshots  # noqa: E402
+from _helpers import get_multiindex_snapshots
 
 
 @pytest.fixture
