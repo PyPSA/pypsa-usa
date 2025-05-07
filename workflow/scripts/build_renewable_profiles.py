@@ -70,7 +70,7 @@ if __name__ == "__main__":
     else:
         client = None
 
-    sns = get_snapshots(snakemake.params.snapshots)
+    sns = get_snapshots(snakemake.params.snapshots[snakemake.wildcards.renewable_weather_years])
     logger.info(f'using cutout "{snakemake.input.cutout}"')
     cutout = atlite.Cutout(snakemake.input.cutout[0]).sel(
         time=sns,
