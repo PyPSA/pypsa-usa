@@ -87,7 +87,7 @@ configfile: "config/config.api.yaml"
 configfile: "config/config.sector.yaml"
 
 
-# configfile: "config/config.default.yaml"
+configfile: "config/config.default.yaml"
 
 
 run = config.get("run", {})
