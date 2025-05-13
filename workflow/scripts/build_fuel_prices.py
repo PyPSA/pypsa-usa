@@ -186,7 +186,7 @@ if __name__ == "__main__":
 
     eia_api = snakemake.params.api_eia
 
-    snapshots = get_snapshots(snakemake.params.snapshots['2019']) # patch fix for way snapshots are defined for multiple profiles
+    snapshots = get_snapshots(snakemake.params.snapshots[str(snakemake.config["renewable_weather_years"][0])]) # patch fix for way snapshots are defined for multiple profiles
 
     function_mapper = {
         "caiso_ng_power_prices": get_caiso_ng_power_prices,
