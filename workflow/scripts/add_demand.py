@@ -73,7 +73,7 @@ if __name__ == "__main__":
     sectors = snakemake.params.sectors
 
     # add snapshots
-    sns_config = snakemake.params.snapshots['2019']
+    sns_config = snakemake.params.snapshots[str(snakemake.config["renewable_weather_years"][0])]
     planning_horizons = snakemake.params.planning_horizons
 
     n.snapshots = get_multiindex_snapshots(sns_config, planning_horizons)

@@ -2477,7 +2477,7 @@ if __name__ == "__main__":
     n = pypsa.Network(snakemake.input.network)
 
     # add snapshots
-    sns_config = snakemake.params.snapshots['2019'] # patch fix for way snapshots are defined for multiple profiles
+    sns_config = snakemake.params.snapshots[str(snakemake.config["renewable_weather_years"][0])] # patch fix for way snapshots are defined for multiple profiles
     planning_horizons = snakemake.params.planning_horizons
 
     n.snapshots = get_multiindex_snapshots(sns_config, planning_horizons)
