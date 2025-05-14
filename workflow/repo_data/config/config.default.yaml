@@ -92,12 +92,14 @@ lines:
   max_extension: 20000 #MW
   length_factor: 1.25
 
-
 # docs :
 links:
   p_max_pu: 1.0
   p_nom_max: .inf
   max_extension: 20000 #MW
+
+# docs :
+co2_storage: false
 
 # docs :
 costs:
