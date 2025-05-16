@@ -15,7 +15,7 @@ import pypsa
 from _helpers import configure_logging, get_snapshots, load_costs
 from add_electricity import sanitize_carriers
 from build_electricity_sector import build_electricty
-from build_emission_tracking import build_ch4_tracking, build_co2_tracking
+from build_emission_tracking import build_ch4_tracking, build_co2_tracking, build_co2_storage
 from build_heat import build_heat
 from build_natural_gas import StateGeometry, build_natural_gas
 from build_stock_data import (
@@ -415,12 +415,30 @@ def convert_generators_2_links(
             if cols:
                 pnl[param] = df[cols]
 
+    n.mremove("Generator", plants.index)
+
+    # rename link name and carrier and remove storage cost from capital cost
+    if snakemake.config["co2_storage"] is True:
+        idx = plants.index.str.contains('CCS')
+        plants.index = plants.index.str.replace("CCS", "CC", regex = True)
+        plants.loc[idx, "carrier"] = plants.carrier.str.replace("CCS", "CC", regex = True)
+        plants.loc[idx, "capital_cost"] *= 0.9   # remove storage cost from capital cost as storing CO2 is done underground (TODO: replace with concrete storage cost)
+        bus4 = []
+        for i in range(len(idx)):
+            if idx[i]:
+                bus4.append("%s co2 capture" % plants.iloc[i].name.split(" ")[0])
+            else:
+                bus4.append(None)
+    else:
+        bus4 = None
+
     n.madd(
         "Link",
         names=plants.index,
         bus0=plants.STATE + bus0_suffix,
         bus1=plants.bus,
         bus2=plants.STATE + " pwr-co2",
+        bus4=bus4,
         carrier=plants.carrier,
         p_nom_min=plants.p_nom_min / plants.efficiency,
         p_nom=plants.p_nom / plants.efficiency,  # links rated on input capacity
@@ -439,8 +457,6 @@ def convert_generators_2_links(
 
     for param, df in pnl.items():
         n.links_t[param] = n.links_t[param].join(df, how="inner")
-
-    n.mremove("Generator", plants.index)
 
     # existing links will give a 'nan in efficiency2' warning
     n.links["efficiency2"] = n.links.efficiency2.fillna(0)
@@ -480,7 +496,7 @@ def get_pwr_co2_intensity(carrier: str, costs: pd.DataFrame) -> float:
     """
     Gets co2 intensity to apply to pwr links.
 
-    Spereate function, as there is some odd logic to account for
+    Separate function, as there is some odd logic to account for
     different names in translation to a sector study.
     """
     # the ccs case are a hack solution
@@ -549,6 +565,11 @@ if __name__ == "__main__":
 
     # add sector specific emission tracking
     build_co2_tracking(n)
+
+    # add node level CO2 (underground) storage
+    if snakemake.config["co2_storage"] is True:
+        logger.info("Building node level CO2 (underground) storage")
+        build_co2_storage(n, snakemake.input.co2_storage)
 
     # break out loads into sector specific buses
     split_loads_by_carrier(n)
