@@ -454,6 +454,7 @@ def modify_breakthrough_substations(buslocs: pd.DataFrame):
         38928: {"lon": -108.0648, "lat": 39.0692},
         39570: {"lon": -114.3526, "lat": 42.6286},
         39571: {"lon": -114.0353, "lat": 42.5435},
+        39381: {"lon": -103.2492, "lat": 44.1358},
     }
     for i in sub_fixes.keys():
         buslocs.loc[buslocs.sub_id == i, "lon"] = sub_fixes[i]["lon"]

@@ -1906,10 +1906,7 @@ class DemandFormatter:
             assert self.api, "Must provide eia api key"
             return AeoEnergyScaler(self.api)
         elif self.scaling_method == "aeo_electricity":
-            assert self.filepath.startswith(
-                "s3://pudl.catalyst.coop/",
-            ), "Must provide pudl S3 URL (s3://pudl.catalyst.coop/...)"
-            return AeoElectricityScaler(self.filepath)
+            return AeoElectricityScaler(snakemake.params.pudl_path)
         elif self.scaling_method == "efs":
             assert self.filepath.endswith(".csv"), "Must provide EFS.csv data"
             return EfsElectricityScalar(self.filepath)
