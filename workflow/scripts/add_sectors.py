@@ -566,7 +566,7 @@ if __name__ == "__main__":
     # add sector specific emission tracking
     build_co2_tracking(n)
 
-    # add node level CO2 (underground) storage
+    # build node level CO2 (underground) storage
     if snakemake.config["co2_storage"] is True:
         logger.info("Building node level CO2 (underground) storage")
         build_co2_storage(n, snakemake.input.co2_storage)

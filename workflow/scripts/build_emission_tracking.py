@@ -33,20 +33,21 @@ def build_co2_tracking(
 def build_co2_storage(n: pypsa.Network, co2_storage_csv: str):
     """Builds node level CO2 (underground) storage."""
 
+    # get node level CO2 storage potential and cost
     co2_storage = pd.read_csv(co2_storage_csv).set_index("node")
 
-    buses = n.buses.query("carrier == 'AC'").index
-
+    # add node level bus to represent CO2 captured by different processes
     n.madd("Bus",
-        buses,
+        co2_storage.index,
         suffix = " co2 capture",
         carrier = "co2",
     )
 
+    # add node level store to represent CO2 (underground) storage
     n.madd("Store",
-        buses,
+        co2_storage.index,
         suffix = " co2 storage",
-        bus = buses + " co2 capture",
+        bus = co2_storage.index + " co2 capture",
         e_nom_extendable = True,
         e_nom_max = co2_storage["potential [MtCO2]"] * 1e6,
         marginal_cost = co2_storage["cost [USD/tCO2]"],
