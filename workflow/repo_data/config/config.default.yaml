@@ -99,7 +99,12 @@ links:
   max_extension: 20000 #MW
 
 # docs :
-co2_storage: false
+co2:
+  storage: false
+  network:
+    enable: false
+    cost: 50000   # in USD per mile of CO2 pipeline
+    lifetime: 50   # in years
 
 # docs :
 costs:
