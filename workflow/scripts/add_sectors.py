@@ -15,7 +15,7 @@ import pypsa
 from _helpers import configure_logging, get_snapshots, load_costs
 from add_electricity import sanitize_carriers
 from build_electricity_sector import build_electricty
-from build_emission_tracking import build_ch4_tracking, build_co2_tracking, build_co2_storage
+from build_emission_tracking import build_ch4_tracking, build_co2_tracking, build_co2_storage, build_co2_network
 from build_heat import build_heat
 from build_natural_gas import StateGeometry, build_natural_gas
 from build_stock_data import (
@@ -418,7 +418,7 @@ def convert_generators_2_links(
     n.mremove("Generator", plants.index)
 
     # rename link name and carrier and remove storage cost from capital cost
-    if snakemake.config["co2_storage"] is True:
+    if snakemake.config["co2"]["storage"] is True:
         idx = plants.index.str.contains('CCS')
         plants.index = plants.index.str.replace("CCS", "CC", regex = True)
         plants.loc[idx, "carrier"] = plants.carrier.str.replace("CCS", "CC", regex = True)
@@ -567,9 +567,14 @@ if __name__ == "__main__":
     build_co2_tracking(n)
 
     # build node level CO2 (underground) storage
-    if snakemake.config["co2_storage"] is True:
+    if snakemake.config["co2"]["storage"] is True:
         logger.info("Building node level CO2 (underground) storage")
         build_co2_storage(n, snakemake.input.co2_storage)
+
+        # build CO2 (transportation) network
+        if snakemake.config["co2"]["network"]["enable"] is True:
+            logger.info("Building CO2 (transportation) network")
+            build_co2_network(n, snakemake.config["co2"]["network"]["cost"], snakemake.config["co2"]["network"]["lifetime"])
 
     # break out loads into sector specific buses
     split_loads_by_carrier(n)
