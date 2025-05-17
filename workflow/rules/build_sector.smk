@@ -39,7 +39,7 @@ def sector_input_files(wildcards):
         }
         input_files.update(ng_files)
 
-    if config["co2_storage"] is True:
+    if config["co2"]["storage"] is True:
         input_files.update({"co2_storage": RESOURCES + "{interconnect}/co2_storage_s{simpl}_{clusters}.csv"})
 
     return input_files
