@@ -55,7 +55,7 @@ def build_co2_storage(n: pypsa.Network, co2_storage_csv: str):
     )
 
 
-def build_co2_network(n: pypsa.Network, capital_cost: int, lifetime: int):
+def build_co2_network(n: pypsa.Network, capital_cost: int, marginal_cost: int, lifetime: int):
     """Builds CO2 (transportation) network."""
 
     # get electricity links
@@ -71,6 +71,7 @@ def build_co2_network(n: pypsa.Network, capital_cost: int, lifetime: int):
         p_nom_extendable = True,
         length = links.length.values,
         capital_cost = capital_cost * links.length.values,
+        marginal_cost = marginal_cost,
         carrier = "co2",
         lifetime = lifetime,
     )
