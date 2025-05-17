@@ -574,7 +574,7 @@ if __name__ == "__main__":
         # build CO2 (transportation) network
         if snakemake.config["co2"]["network"]["enable"] is True:
             logger.info("Building CO2 (transportation) network")
-            build_co2_network(n, snakemake.config["co2"]["network"]["cost"], snakemake.config["co2"]["network"]["lifetime"])
+            build_co2_network(n, snakemake.config["co2"]["network"]["capital_cost"], snakemake.config["co2"]["network"]["marginal_cost"], snakemake.config["co2"]["network"]["lifetime"])
 
     # break out loads into sector specific buses
     split_loads_by_carrier(n)
