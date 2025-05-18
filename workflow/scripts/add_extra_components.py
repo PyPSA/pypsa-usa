@@ -761,6 +761,29 @@ def add_demand_response(
     )
 
 
+def add_dac(n: pypsa.Network, capital_cost: float, electricity_input: float, heat_input: float, lifetime: int):
+    """Adds node level DAC capabilities."""
+
+    # get nodes
+    nodes = n.links.query("carrier == 'AC'").index
+
+    # add links to represent DAC in all CO2 emitting sectors
+    for sector in ("pwr", "trn", "res", "com", "ind"):
+        n.madd("Link",
+            nodes,
+            suffix = " %s-dac" % sector,
+            bus0 = nodes + " %s-co2" % sector,
+            bus1 = nodes + " co2 capture",
+            bus2 = nodes + " co2 capture",
+            bus3 = nodes + " ind-heat",
+            p_nom_extendable = True,
+            capital_cost = capital_cost,
+            marginal_cost = marginal_cost,
+            carrier = "co2",
+            lifetime = lifetime,
+        )
+
+
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
@@ -852,6 +875,14 @@ if __name__ == "__main__":
     dr_config = snakemake.params.demand_response
     if dr_config:
         add_demand_response(n, dr_config)
+
+    # add node level DAC capabilities
+    if snakemake.config["dac"]["enable"] is True:
+        if snakemake.config["co2"]["storage"] is True:
+            logger.info("Adding node level DAC capabilities")
+            add_dac(n, snakemake.config["dac"]["capital_cost"], snakemake.config["dac"]["electricity_input"], snakemake.config["dac"]["heat_input"], snakemake.config["dac"]["lifetime"])
+        else:
+            logger.warning("Not adding node level DAC capabilities given that CO2 (underground) storage is not enabled")
 
     n.consistency_check()
     n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))
