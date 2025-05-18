@@ -108,6 +108,14 @@ co2:
     lifetime: 40   # in years (average lifetime based on NETL estimation, which ranges between 30 and 50 years)
 
 # docs :
+dac:
+  enable: false
+  capital_cost: 1000
+  electricity_input: 10
+  heat_input: 10
+  lifetime: 20   # in years
+
+# docs :
 costs:
   atb:
     model_case: "Market" # Market, R&D
