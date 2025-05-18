@@ -14,8 +14,9 @@ import pandas as pd
 import pypsa
 from _helpers import configure_logging, get_snapshots, load_costs
 from add_electricity import sanitize_carriers
+from add_extra_components import add_co2_storage, add_co2_network, add_dac
 from build_electricity_sector import build_electricty
-from build_emission_tracking import build_ch4_tracking, build_co2_tracking, build_co2_storage, build_co2_network
+from build_emission_tracking import build_ch4_tracking, build_co2_tracking
 from build_heat import build_heat
 from build_natural_gas import StateGeometry, build_natural_gas
 from build_stock_data import (
@@ -566,15 +567,26 @@ if __name__ == "__main__":
     # add sector specific emission tracking
     build_co2_tracking(n)
 
-    # build node level CO2 (underground) storage
+    # add node level CO2 (underground) storage
     if snakemake.config["co2"]["storage"] is True:
-        logger.info("Building node level CO2 (underground) storage")
-        build_co2_storage(n, snakemake.input.co2_storage)
+        logger.info("Adding node level CO2 (underground) storage")
+        add_co2_storage(n, snakemake.input.co2_storage)
 
-        # build CO2 (transportation) network
-        if snakemake.config["co2"]["network"]["enable"] is True:
-            logger.info("Building CO2 (transportation) network")
-            build_co2_network(n, snakemake.config["co2"]["network"]["capital_cost"], snakemake.config["co2"]["network"]["marginal_cost"], snakemake.config["co2"]["network"]["lifetime"])
+    # add CO2 (transportation) network
+    if snakemake.config["co2"]["network"]["enable"] is True:
+        if snakemake.config["co2"]["storage"] is True:
+            logger.info("Adding CO2 (transportation) network")
+            add_co2_network(n, snakemake.config["co2"]["network"]["capital_cost"], snakemake.config["co2"]["network"]["marginal_cost"], snakemake.config["co2"]["network"]["lifetime"])
+        else:
+            logger.warning("Not adding CO2 (transportation) network given that CO2 (underground) storage is not enabled")
+
+    # add node level DAC capabilities
+    if snakemake.config["dac"]["enable"] is True:
+        if snakemake.config["co2"]["storage"] is True:
+            logger.info("Adding node level DAC capabilities")
+            add_dac(n, snakemake.config["dac"]["capital_cost"], snakemake.config["dac"]["electricity_input"], snakemake.config["dac"]["heat_input"], snakemake.config["dac"]["lifetime"])
+        else:
+            logger.warning("Not adding node level DAC capabilities given that CO2 (underground) storage is not enabled")
 
     # break out loads into sector specific buses
     split_loads_by_carrier(n)

@@ -30,53 +30,6 @@ def build_co2_tracking(
     _build_co2_store(n, states, sectors)
 
 
-def build_co2_storage(n: pypsa.Network, co2_storage_csv: str):
-    """Builds node level CO2 (underground) storage."""
-
-    # get node level CO2 storage potential and cost
-    co2_storage = pd.read_csv(co2_storage_csv).set_index("node")
-
-    # add node level bus to represent CO2 captured by different processes
-    n.madd("Bus",
-        co2_storage.index,
-        suffix = " co2 capture",
-        carrier = "co2",
-    )
-
-    # add node level store to represent CO2 (underground) storage
-    n.madd("Store",
-        co2_storage.index,
-        suffix = " co2 storage",
-        bus = co2_storage.index + " co2 capture",
-        e_nom_extendable = True,
-        e_nom_max = co2_storage["potential [MtCO2]"] * 1e6,
-        marginal_cost = co2_storage["cost [USD/tCO2]"],
-        carrier = "co2",
-    )
-
-
-def build_co2_network(n: pypsa.Network, capital_cost: int, marginal_cost: int, lifetime: int):
-    """Builds CO2 (transportation) network."""
-
-    # get electricity links
-    links = n.links.query("carrier == 'AC' and not Link.str.endswith('exp')")
-
-    # add links to represent CO2 (transportation) network based on electricity links layout
-    n.madd("Link",
-        links.index,
-        suffix = " co2 transport",
-        bus0 = links["bus0"] + " co2 capture",
-        bus1 = links["bus1"] + " co2 capture",
-        p_min_pu = -1,
-        p_nom_extendable = True,
-        length = links.length.values,
-        capital_cost = capital_cost * links.length.values,
-        marginal_cost = marginal_cost,
-        carrier = "co2",
-        lifetime = lifetime,
-    )
-
-
 def build_ch4_tracking(
     n: pypsa.Network,
     gwp: float,

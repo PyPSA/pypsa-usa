@@ -761,24 +761,68 @@ def add_demand_response(
     )
 
 
+def add_co2_storage(n: pypsa.Network, co2_storage_csv: str):
+    """Adds node level CO2 (underground) storage."""
+
+    # get node level CO2 (underground) storage potential and cost
+    co2_storage = pd.read_csv(co2_storage_csv).set_index("node")
+
+    # add bus to represent node level CO2 captured by different processes
+    n.madd("Bus",
+        co2_storage.index,
+        suffix = " co2 capture",
+        carrier = "co2",
+    )
+
+    # add store to represent node level CO2 (underground) storage
+    n.madd("Store",
+        co2_storage.index,
+        suffix = " co2 storage",
+        bus = co2_storage.index + " co2 capture",
+        e_nom_extendable = True,
+        e_nom_max = co2_storage["potential [MtCO2]"] * 1e6,
+        marginal_cost = co2_storage["cost [USD/tCO2]"],
+        carrier = "co2",
+    )
+
+
+def add_co2_network(n: pypsa.Network, capital_cost: int, marginal_cost: int, lifetime: int):
+    """Adds CO2 (transportation) network."""
+
+    # get electricity links
+    links = n.links.query("carrier == 'AC' and not Link.str.endswith('exp')")
+
+    # add links to represent CO2 (transportation) network based on electricity links layout
+    n.madd("Link",
+        links.index,
+        suffix = " co2 transport",
+        bus0 = links["bus0"] + " co2 capture",
+        bus1 = links["bus1"] + " co2 capture",
+        p_min_pu = -1,
+        p_nom_extendable = True,
+        length = links.length.values,
+        capital_cost = capital_cost * links.length.values,
+        marginal_cost = marginal_cost,
+        carrier = "co2",
+        lifetime = lifetime,
+    )
+
+
 def add_dac(n: pypsa.Network, capital_cost: float, electricity_input: float, heat_input: float, lifetime: int):
     """Adds node level DAC capabilities."""
 
-    # get nodes
-    nodes = n.links.query("carrier == 'AC'").index
+    # get electricity buses
+    buses = n.buses.query("carrier == 'AC'").index
 
-    # add links to represent DAC in all CO2 emitting sectors
+    # add links to represent node level DAC capabilities for all CO2 emitting sectors
     for sector in ("pwr", "trn", "res", "com", "ind"):
         n.madd("Link",
-            nodes,
+            buses,
             suffix = " %s-dac" % sector,
-            bus0 = nodes + " %s-co2" % sector,
-            bus1 = nodes + " co2 capture",
-            bus2 = nodes + " co2 capture",
-            bus3 = nodes + " ind-heat",
+            bus0 = buses + " %s-co2" % sector,
+            bus1 = buses + " co2 capture",
             p_nom_extendable = True,
             capital_cost = capital_cost,
-            marginal_cost = marginal_cost,
             carrier = "co2",
             lifetime = lifetime,
         )
@@ -875,14 +919,6 @@ if __name__ == "__main__":
     dr_config = snakemake.params.demand_response
     if dr_config:
         add_demand_response(n, dr_config)
-
-    # add node level DAC capabilities
-    if snakemake.config["dac"]["enable"] is True:
-        if snakemake.config["co2"]["storage"] is True:
-            logger.info("Adding node level DAC capabilities")
-            add_dac(n, snakemake.config["dac"]["capital_cost"], snakemake.config["dac"]["electricity_input"], snakemake.config["dac"]["heat_input"], snakemake.config["dac"]["lifetime"])
-        else:
-            logger.warning("Not adding node level DAC capabilities given that CO2 (underground) storage is not enabled")
 
     n.consistency_check()
     n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))
