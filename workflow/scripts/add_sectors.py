@@ -580,14 +580,6 @@ if __name__ == "__main__":
         else:
             logger.warning("Not adding CO2 (transportation) network given that CO2 (underground) storage is not enabled")
 
-    # add node level DAC capabilities
-    if snakemake.config["dac"]["enable"] is True:
-        if snakemake.config["co2"]["storage"] is True:
-            logger.info("Adding node level DAC capabilities")
-            add_dac(n, snakemake.config["dac"]["capital_cost"], snakemake.config["dac"]["electricity_input"], snakemake.config["dac"]["heat_input"], snakemake.config["dac"]["lifetime"])
-        else:
-            logger.warning("Not adding node level DAC capabilities given that CO2 (underground) storage is not enabled")
-
     # break out loads into sector specific buses
     split_loads_by_carrier(n)
 
@@ -613,6 +605,14 @@ if __name__ == "__main__":
     for carrier in ["oil"]:
         co2_intensity = get_pwr_co2_intensity(carrier, costs)
         convert_generators_2_links(n, carrier, " lpg", co2_intensity)
+
+    # add node level DAC capabilities
+    if snakemake.config["dac"]["enable"] is True:
+        if snakemake.config["co2"]["storage"] is True:
+            logger.info("Adding node level DAC capabilities")
+            add_dac(n, snakemake.config["dac"]["capital_cost"], snakemake.config["dac"]["electricity_input"], snakemake.config["dac"]["heat_input"], snakemake.config["dac"]["lifetime"])
+        else:
+            logger.warning("Not adding node level DAC capabilities given that CO2 (underground) storage is not enabled")
 
     ng_options = snakemake.params.sector["natural_gas"]
 

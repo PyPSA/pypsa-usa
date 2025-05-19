@@ -764,17 +764,17 @@ def add_demand_response(
 def add_co2_storage(n: pypsa.Network, co2_storage_csv: str):
     """Adds node level CO2 (underground) storage."""
 
-    # get node level CO2 (underground) storage potential and cost
+    # get node level CO2 (underground) storage potential and cost from CSV file
     co2_storage = pd.read_csv(co2_storage_csv).set_index("node")
 
-    # add bus to represent node level CO2 captured by different processes
+    # add buses to represent node level CO2 captured by different processes
     n.madd("Bus",
         co2_storage.index,
         suffix = " co2 capture",
         carrier = "co2",
     )
 
-    # add store to represent node level CO2 (underground) storage
+    # add stores to represent node level CO2 (underground) storage
     n.madd("Store",
         co2_storage.index,
         suffix = " co2 storage",
@@ -811,21 +811,33 @@ def add_co2_network(n: pypsa.Network, capital_cost: int, marginal_cost: int, lif
 def add_dac(n: pypsa.Network, capital_cost: float, electricity_input: float, heat_input: float, lifetime: int):
     """Adds node level DAC capabilities."""
 
+    # get links that emit CO2 for all sectors
+    links = n.links.query("bus2.str.endswith('-co2')")
+
+    # add node level buses to represent emitted CO2 and redirect links that emit CO2 to this bus
+    for idx in links.index:
+        bus = "%s co2 emit" % idx.split(" ")[0]
+        if bus not in n.buses.index:
+            n.madd("Bus",
+                [bus],
+                carrier = "co2",
+            )
+        links.loc[idx, "bus2"] = bus
+
     # get electricity buses
     buses = n.buses.query("carrier == 'AC'").index
 
-    # add links to represent node level DAC capabilities for all CO2 emitting sectors
-    for sector in ("pwr", "trn", "res", "com", "ind"):
-        n.madd("Link",
-            buses,
-            suffix = " %s-dac" % sector,
-            bus0 = buses + " %s-co2" % sector,
-            bus1 = buses + " co2 capture",
-            p_nom_extendable = True,
-            capital_cost = capital_cost,
-            carrier = "co2",
-            lifetime = lifetime,
-        )
+    # add links to represent node level DAC capabilities
+    n.madd("Link",
+        buses,
+        suffix = " dac",
+        bus0 = buses + " co2 emit",
+        bus1 = buses + " co2 capture",
+        p_nom_extendable = True,
+        capital_cost = capital_cost,
+        carrier = "co2",
+        lifetime = lifetime,
+    )
 
 
 if __name__ == "__main__":
