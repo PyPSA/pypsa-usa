@@ -560,7 +560,7 @@ def attach_multihorizon_new_generators(n, costs, carriers, investment_year):
         )
 
 
-def apply_itc(n, itc_modifier):
+def apply_itc(n, itc_modifier, monitization_cost=0.1):
     """
     Applies investment tax credit to all extendable components in the network.
 
@@ -571,13 +571,13 @@ def apply_itc(n, itc_modifier):
     """
     for carrier in itc_modifier.keys():
         carrier_mask = n.generators["carrier"] == carrier
-        n.generators.loc[carrier_mask, "capital_cost"] *= 1 - itc_modifier[carrier]
+        n.generators.loc[carrier_mask, "capital_cost"] *= 1 - ((1 - monitization_cost) * itc_modifier[carrier])
 
         carrier_mask = n.storage_units["carrier"] == carrier
-        n.storage_units.loc[carrier_mask, "capital_cost"] *= 1 - itc_modifier[carrier]
+        n.storage_units.loc[carrier_mask, "capital_cost"] *= 1 - ((1 - monitization_cost) * itc_modifier[carrier])
 
 
-def apply_ptc(n, ptc_modifier):
+def apply_ptc(n, ptc_modifier, costs):
     """
     Applies production tax credit to all extendable components in the network.
 
@@ -586,14 +586,23 @@ def apply_ptc(n, ptc_modifier):
     ptc_modifier: dict,
         Dict of PTC modifiers for each carrier
     """
+
+    def discount_ptc(ptc, r, financial_lifetime, credit_lifetime=10, monitization_cost_pct=0.1):
+        eff_ptc = (1 - monitization_cost_pct) * ptc
+        pv = eff_ptc * (1 - (1 + r) ** (-1 * credit_lifetime)) / r
+        crf = (r * (1 + r) ** financial_lifetime) / ((1 + r) ** financial_lifetime - 1)
+        return round(pv * crf, 2)
+
     for carrier in ptc_modifier.keys():
-        carrier_mask = n.generators["carrier"] == carrier
-        mc = n.get_switchable_as_dense("Generator", "marginal_cost").loc[
-            :,
-            carrier_mask,
-        ]
-        n.generators_t.marginal_cost.loc[:, carrier_mask] = mc - ptc_modifier[carrier]
-        n.generators.loc[carrier_mask, "marginal_cost"] -= ptc_modifier[carrier]
+        ptc = ptc_modifier[carrier]
+        discounted_ptc = discount_ptc(ptc, costs.at[carrier, "wacc_real"], costs.at[carrier, "lifetime"])
+        mask = (n.generators["carrier"] == carrier) & n.generators.p_nom_extendable
+        for build_year in n.investment_periods:
+            mask_by = (n.generators.build_year == build_year) & mask
+            mc = n.get_switchable_as_dense("Generator", "marginal_cost").loc[:, mask_by]
+            mc.loc[build_year:, :] -= discounted_ptc
+            n.generators_t.marginal_cost.loc[:, mask_by] = mc
+            n.generators.loc[mask_by, "marginal_cost"] -= discounted_ptc
 
 
 def apply_max_annual_growth_rate(n, max_growth):
@@ -844,7 +853,7 @@ if __name__ == "__main__":
         n.mremove("Generator", multi_horizon_gens.index)
 
     apply_itc(n, snakemake.config["costs"]["itc_modifier"])
-    apply_ptc(n, snakemake.config["costs"]["ptc_modifier"])
+    apply_ptc(n, snakemake.config["costs"]["ptc_modifier"], costs)
     apply_max_annual_growth_rate(n, snakemake.config["costs"]["max_growth"])
     add_nice_carrier_names(n, snakemake.config)
     add_co2_emissions(n, costs_dict[n.investment_periods[0]], n.carriers.index)
