@@ -53,7 +53,6 @@ from opts.sector import (
 )
 
 from workflow.scripts.opts.policy import (
-    add_EQ_constraints,
     add_regional_co2limit,
     add_RPS_constraints,
     add_technology_capacity_target_constraints,
@@ -133,10 +132,10 @@ def extra_functionality(n, snapshots):
     # Define constraint application functions in a registry
     # Each function should take network and necessary parameters
     constraint_registry = {
-        "RPS": lambda: add_RPS_constraints(n, snapshots, config, sector_enabled, global_snakemake)
+        "RPS": lambda: add_RPS_constraints(n, config, sector_enabled, global_snakemake)
         if n.generators.p_nom_extendable.any()
         else None,
-        "REM": lambda: add_regional_co2limit(n, snapshots, config, global_snakemake)
+        "REM": lambda: add_regional_co2limit(n, config, global_snakemake)
         if n.generators.p_nom_extendable.any()
         else None,
         "PRM": lambda: add_PRM_constraints(n, config, global_snakemake)
@@ -148,7 +147,6 @@ def extra_functionality(n, snapshots):
         "TCT": lambda: add_technology_capacity_target_constraints(n, config)
         if n.generators.p_nom_extendable.any()
         else None,
-        "EQ": lambda: add_EQ_constraints(n, config),
     }
 
     # Apply constraints based on options

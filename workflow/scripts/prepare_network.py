@@ -259,17 +259,6 @@ def apply_time_segmentation(n, segments, solver_name="cbc"):
     return n
 
 
-def enforce_autarky(n, only_crossborder=False):
-    if only_crossborder:
-        lines_rm = n.lines.loc[n.lines.bus0.map(n.buses.country) != n.lines.bus1.map(n.buses.country)].index
-        links_rm = n.links.loc[n.links.bus0.map(n.buses.country) != n.links.bus1.map(n.buses.country)].index
-    else:
-        lines_rm = n.lines.index
-        links_rm = n.links.loc[n.links.carrier == "DC"].index
-    n.mremove("Line", lines_rm)
-    n.mremove("Link", links_rm)
-
-
 def set_line_nom_max(
     n,
     s_nom_max_set=np.inf,
