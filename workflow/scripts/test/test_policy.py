@@ -42,7 +42,7 @@ def policy_network(base_network):
         p_nom=300,
         p_nom_extendable=True,
         carrier="nuclear",
-        capital_cost=3000,
+        capital_cost=2500,
         marginal_cost=5,
         p_max_pu=pd.Series(1.0, index=n.snapshots),
         p_nom_max=1500,
@@ -77,6 +77,19 @@ def policy_network(base_network):
 def clustered_policy_network(policy_network):
     """Create a time-clustered version of the policy network."""
     return average_every_nhours(policy_network, "3h")
+
+
+@pytest.fixture
+def co2_config():
+    """Create a config dictionary for regional CO2 limit constraints."""
+    return {
+        "electricity": {
+            "regional_Co2_limits": os.path.join(os.path.dirname(__file__), "fixtures/regional_co2_limits.csv"),
+        },
+        "scenario": {
+            "planning_horizons": ["2030"],
+        },
+    }
 
 
 @pytest.fixture
@@ -122,19 +135,6 @@ def tct_config():
                 os.path.dirname(__file__),
                 "fixtures/technology_capacity_targets.csv",
             ),
-        },
-    }
-
-
-@pytest.fixture
-def co2_config():
-    """Create a config dictionary for regional CO2 limit constraints."""
-    return {
-        "electricity": {
-            "regional_Co2_limits": os.path.join(os.path.dirname(__file__), "fixtures/regional_co2_limits.csv"),
-        },
-        "scenario": {
-            "planning_horizons": ["2030"],
         },
     }
 
@@ -303,3 +303,74 @@ def test_add_rps_constraints_clustered(clustered_policy_network, rps_config):
         assert eligible_generation >= (row.pct * region_demand) - epsilon, (
             f"RPS requirement of {row.pct * 100}% not met for region {row.region} in clustered network"
         )
+
+
+def test_add_technology_capacity_target_constraints(policy_network, tct_config):
+    """Test that technology capacity target constraints are correctly added to the network."""
+    from opts.policy import add_technology_capacity_target_constraints
+
+    n = policy_network
+    config = tct_config
+
+    # Add TCT constraints
+    def extra_functionality(n, _):
+        add_technology_capacity_target_constraints(n, config)
+
+    n.optimize(solver_name="glpk", multi_investment_periods=True, extra_functionality=extra_functionality)
+
+    # Check that constraints were added
+    assert any("min" in c for c in n.model.constraints), "No TCT minimum constraints were added"
+    assert any("max" in c for c in n.model.constraints), "No TCT maximum constraints were added"
+
+    # Get the technology capacity targets from config file
+    tct_data = pd.read_csv(config["electricity"]["technology_capacity_targets"])
+
+    # Check that capacity targets are met
+    for _, target in tct_data.iterrows():
+        region_list = [region.strip() for region in target.region.split(",")]
+        region_buses = get_region_buses(n, region_list)
+
+        if region_buses.empty:
+            continue
+
+        carriers = [carrier.strip() for carrier in target.carrier.split(",")]
+
+        # Get total capacity (existing + new) for the target technology
+        total_capacity = 0
+
+        # Check generators
+        gens = n.generators[(n.generators.bus.isin(region_buses.index)) & (n.generators.carrier.isin(carriers))]
+        total_capacity += gens.p_nom_opt.sum()
+
+        # Check storage units
+        storage = n.storage_units[
+            (n.storage_units.bus.isin(region_buses.index)) & (n.storage_units.carrier.isin(carriers))
+        ]
+        total_capacity += storage.p_nom_opt.sum()
+
+        # Check links
+        links = n.links[(n.links.bus0.isin(region_buses.index)) & (n.links.carrier.isin(carriers))]
+        total_capacity += links.p_nom_opt.sum()
+
+        # Get min and max targets, handling NaN values
+        min_target = float(target["min"]) if not pd.isna(target["min"]) else None
+        max_target = float(target["max"]) if not pd.isna(target["max"]) else None
+
+        logger.info(
+            f"TCT Check: Region: {target.region}, Carrier: {carriers}, "
+            f"Total Capacity: {total_capacity:.2f} MW, "
+            f"Min Target: {min_target}, "
+            f"Max Target: {max_target}",
+        )
+
+        # Check minimum capacity if specified
+        if min_target is not None:
+            assert total_capacity >= min_target, (
+                f"Minimum capacity target of {min_target} MW not met for {target['carrier']} in {target['region']}"
+            )
+
+        # Check maximum capacity if specified
+        if max_target is not None:
+            assert total_capacity <= max_target, (
+                f"Maximum capacity target of {max_target} MW exceeded for {target['carrier']} in {target['region']}"
+            )
