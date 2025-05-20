@@ -344,7 +344,7 @@ def add_RPS_constraints(n, config, sector, snakemake=None):
         # Add constraint
         n.model.add_constraints(
             lhs >= rhs,
-            name=f"GlobalConstraint-{constraint_row.name}_{constraint_row.planning_horizon}_rps_limit",
+            name=f"GlobalConstraint-{constraint_row.region}_{constraint_row.carrier}_{constraint_row.planning_horizon}_rps_limit",
         )
         logger.info(
             f"Added RPS {constraint_row.name} for {constraint_row.planning_horizon}.",

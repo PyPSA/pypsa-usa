@@ -6,6 +6,7 @@ including Technology Capacity Targets (TCT), Renewable Portfolio Standards (RPS)
 and Regional CO2 Limits.
 """
 
+import logging
 import os
 import sys
 
@@ -17,6 +18,8 @@ sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 from opts._helpers import get_region_buses
 from prepare_network import average_every_nhours
 from summary import get_node_emissions_timeseries
+
+logger = logging.getLogger(__name__)
 
 # Fixtures
 
@@ -101,7 +104,7 @@ def rps_config():
                 "obj",
                 (object,),
                 {
-                    "planning_horizons": ["2030"],
+                    "planning_horizons": [2030],
                 },
             )
 
@@ -194,3 +197,109 @@ def test_add_regional_co2limit_clustered(clustered_policy_network, co2_config):
         region_buses = get_region_buses(n, region_list)
         constraint_emissions = emissions.loc[:, region_buses.index].sum().sum()
         assert constraint_emissions <= limit + epsilon, f"Emissions in region {row.name} exceed limit of {limit}"
+
+
+def test_add_rps_constraints(policy_network, rps_config):
+    """Test that RPS constraints are correctly added to the network."""
+    from opts.policy import add_RPS_constraints
+
+    n = policy_network
+    config, snakemake = rps_config
+
+    # Add RPS constraints
+    def extra_functionality(n, _):
+        add_RPS_constraints(n, config, sector=False, snakemake=snakemake)
+
+    n.optimize(solver_name="glpk", multi_investment_periods=True, extra_functionality=extra_functionality)
+
+    # Check that constraints were added
+    assert any("rps_limit" in c for c in n.model.constraints), "No RPS limit constraints were added"
+
+    # Get the portfolio standards from config file
+    portfolio_standards = pd.read_csv(config["electricity"]["portfolio_standards"])
+
+    # Check that renewable generation meets RPS requirements
+    for _, row in portfolio_standards.iterrows():
+        region_list = [region.strip() for region in row.region.split(",")]
+        region_buses = get_region_buses(n, region_list)
+
+        if region_buses.empty:
+            continue
+
+        carriers = [carrier.strip() for carrier in row.carrier.split(",")]
+        region_gens = n.generators[n.generators.bus.isin(region_buses.index)]
+        region_gens_eligible = region_gens[region_gens.carrier.isin(carriers)]
+
+        if region_gens_eligible.empty:
+            continue
+
+        # Calculate total generation from eligible sources
+        eligible_generation = n.generators_t.p[region_gens_eligible.index].sum().sum()
+
+        # Calculate total demand in the region
+        region_demand = n.loads_t.p_set.loc[:, n.loads.bus.isin(region_buses.index)].sum().sum()
+        logger.info(
+            f"RPS Check: Region: {row.region}, Carriers: {carriers}, "
+            f"Eligible Generation: {eligible_generation:.2f} MW, "
+            f"Total Demand: {region_demand:.2f} MW, "
+            f"Required %: {row.pct * 100:.1f}%, "
+            f"Actual %: {(eligible_generation / region_demand) * 100:.1f}%",
+        )
+        # Check if RPS requirement is met with small epsilon for rounding errors
+        epsilon = 1e-3
+        assert eligible_generation >= (row.pct * region_demand) - epsilon, (
+            f"RPS requirement of {row.pct * 100}% not met for region {row.region}"
+        )
+
+
+def test_add_rps_constraints_clustered(clustered_policy_network, rps_config):
+    """Test that RPS constraints are correctly added to a time-clustered network."""
+    from opts.policy import add_RPS_constraints
+
+    n = clustered_policy_network
+    config, snakemake = rps_config
+
+    # Add RPS constraints
+    def extra_functionality(n, _):
+        add_RPS_constraints(n, config, sector=False, snakemake=snakemake)
+
+    n.optimize(solver_name="glpk", multi_investment_periods=True, extra_functionality=extra_functionality)
+
+    # Check that constraints were added
+    assert any("rps_limit" in c for c in n.model.constraints), "No RPS limit constraints were added"
+
+    # Get the portfolio standards from config file
+    portfolio_standards = pd.read_csv(config["electricity"]["portfolio_standards"])
+
+    # Check that renewable generation meets RPS requirements
+    for _, row in portfolio_standards.iterrows():
+        region_list = [region.strip() for region in row.region.split(",")]
+        region_buses = get_region_buses(n, region_list)
+
+        if region_buses.empty:
+            continue
+
+        carriers = [carrier.strip() for carrier in row.carrier.split(",")]
+        region_gens = n.generators[n.generators.bus.isin(region_buses.index)]
+        region_gens_eligible = region_gens[region_gens.carrier.isin(carriers)]
+
+        if region_gens_eligible.empty:
+            continue
+
+        # Calculate total generation from eligible sources
+        eligible_generation = n.generators_t.p[region_gens_eligible.index].sum().sum()
+
+        # Calculate total demand in the region
+        region_demand = n.loads_t.p_set.loc[:, n.loads.bus.isin(region_buses.index)].sum().sum()
+        logger.info(
+            f"RPS Check (Clustered): Region: {row.region}, Carriers: {carriers}, "
+            f"Eligible Generation: {eligible_generation:.2f} MW, "
+            f"Total Demand: {region_demand:.2f} MW, "
+            f"Required %: {row.pct * 100:.1f}%, "
+            f"Actual %: {(eligible_generation / region_demand) * 100:.1f}%",
+        )
+        # Check if RPS requirement is met with small epsilon for rounding errors
+        epsilon = 1e-3
+        assert eligible_generation >= (row.pct * region_demand) - epsilon, (
+            f"RPS requirement of {row.pct * 100}% not met for region {row.region} in clustered network"
+        )
