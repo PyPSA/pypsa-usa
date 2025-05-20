@@ -780,10 +780,20 @@ def add_co2_storage(n: pypsa.Network, co2_storage_csv: str):
         suffix = " co2 storage",
         bus = co2_storage.index + " co2 capture",
         e_nom_extendable = True,
-        e_nom_max = co2_storage["potential [MtCO2]"] * 1e6,
+        e_nom_max = co2_storage["potential [MtCO2]"] * 1e6,   # in tCO2
         marginal_cost = co2_storage["cost [USD/tCO2]"],
         carrier = "co2",
     )
+
+    # update CCS links to point to CO2 capture bus, remove storage cost from their capital cost and replace substring "CCS" with just "CC" in their names and carriers
+    links = n.links.index.str.contains("CCS")
+    if True in links:
+        indexes = n.links.loc[links].index
+        bus4 = ["%s co2 capture" % index.split(" ")[0] for index in indexes]
+        n.links.loc[links, "bus4"] = np.array(bus4)
+        n.links.loc[links, "capital_cost"] *= 0.9   # remove storage cost from capital cost as storing CO2 is done underground (TODO: replace with concrete storage cost)
+        n.links.loc[links, "carrier"] = n.links.loc[links].carrier.str.replace("CCS", "CC", regex = True)
+        n.links.index = n.links.index.str.replace("CCS", "CC", regex = True)
 
 
 def add_co2_network(n: pypsa.Network, capital_cost: int, marginal_cost: int, lifetime: int):
@@ -815,14 +825,18 @@ def add_dac(n: pypsa.Network, capital_cost: float, electricity_input: float, hea
     links = n.links.query("bus2.str.endswith('-co2')")
 
     # add node level buses to represent emitted CO2 and redirect links that emit CO2 to this bus
-    for idx in links.index:
-        bus = "%s co2 emit" % idx.split(" ")[0]
+    for index in links.index:
+        bus = "%s co2 emit" % index.split(" ")[0]
         if bus not in n.buses.index:
             n.madd("Bus",
                 [bus],
                 carrier = "co2",
             )
-        links.loc[idx, "bus2"] = bus
+        links.loc[index, "bus2"] = bus
+
+    # redirect links that point to CO2 capture buses to point to CO2 emit buses instead
+    links = n.links.bus4.str.endswith(" co2 capture").fillna(False)
+    n.links.loc[links, "bus4"] = n.links.loc[links].bus4.str.replace(" co2 capture", " co2 emit", regex = True)
 
     # get electricity buses
     buses = n.buses.query("carrier == 'AC'").index

@@ -416,30 +416,12 @@ def convert_generators_2_links(
             if cols:
                 pnl[param] = df[cols]
 
-    n.mremove("Generator", plants.index)
-
-    # rename link name and carrier and remove storage cost from capital cost
-    if snakemake.config["co2"]["storage"] is True:
-        idx = plants.index.str.contains('CCS')
-        plants.index = plants.index.str.replace("CCS", "CC", regex = True)
-        plants.loc[idx, "carrier"] = plants.carrier.str.replace("CCS", "CC", regex = True)
-        plants.loc[idx, "capital_cost"] *= 0.9   # remove storage cost from capital cost as storing CO2 is done underground (TODO: replace with concrete storage cost)
-        bus4 = []
-        for i in range(len(idx)):
-            if idx[i]:
-                bus4.append("%s co2 capture" % plants.iloc[i].name.split(" ")[0])
-            else:
-                bus4.append(None)
-    else:
-        bus4 = None
-
     n.madd(
         "Link",
         names=plants.index,
         bus0=plants.STATE + bus0_suffix,
         bus1=plants.bus,
         bus2=plants.STATE + " pwr-co2",
-        bus4=bus4,
         carrier=plants.carrier,
         p_nom_min=plants.p_nom_min / plants.efficiency,
         p_nom=plants.p_nom / plants.efficiency,  # links rated on input capacity
@@ -458,6 +440,8 @@ def convert_generators_2_links(
 
     for param, df in pnl.items():
         n.links_t[param] = n.links_t[param].join(df, how="inner")
+
+    n.mremove("Generator", plants.index)
 
     # existing links will give a 'nan in efficiency2' warning
     n.links["efficiency2"] = n.links.efficiency2.fillna(0)
@@ -567,19 +551,6 @@ if __name__ == "__main__":
     # add sector specific emission tracking
     build_co2_tracking(n)
 
-    # add node level CO2 (underground) storage
-    if snakemake.config["co2"]["storage"] is True:
-        logger.info("Adding node level CO2 (underground) storage")
-        add_co2_storage(n, snakemake.input.co2_storage)
-
-    # add CO2 (transportation) network
-    if snakemake.config["co2"]["network"]["enable"] is True:
-        if snakemake.config["co2"]["storage"] is True:
-            logger.info("Adding CO2 (transportation) network")
-            add_co2_network(n, snakemake.config["co2"]["network"]["capital_cost"], snakemake.config["co2"]["network"]["marginal_cost"], snakemake.config["co2"]["network"]["lifetime"])
-        else:
-            logger.warning("Not adding CO2 (transportation) network given that CO2 (underground) storage is not enabled")
-
     # break out loads into sector specific buses
     split_loads_by_carrier(n)
 
@@ -605,6 +576,19 @@ if __name__ == "__main__":
     for carrier in ["oil"]:
         co2_intensity = get_pwr_co2_intensity(carrier, costs)
         convert_generators_2_links(n, carrier, " lpg", co2_intensity)
+
+    # add node level CO2 (underground) storage
+    if snakemake.config["co2"]["storage"] is True:
+        logger.info("Adding node level CO2 (underground) storage")
+        add_co2_storage(n, snakemake.input.co2_storage)
+
+    # add CO2 (transportation) network
+    if snakemake.config["co2"]["network"]["enable"] is True:
+        if snakemake.config["co2"]["storage"] is True:
+            logger.info("Adding CO2 (transportation) network")
+            add_co2_network(n, snakemake.config["co2"]["network"]["capital_cost"], snakemake.config["co2"]["network"]["marginal_cost"], snakemake.config["co2"]["network"]["lifetime"])
+        else:
+            logger.warning("Not adding CO2 (transportation) network given that CO2 (underground) storage is not enabled")
 
     # add node level DAC capabilities
     if snakemake.config["dac"]["enable"] is True:
