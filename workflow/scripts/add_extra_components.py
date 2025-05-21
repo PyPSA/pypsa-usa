@@ -797,11 +797,15 @@ def add_co2_storage(n: pypsa.Network, co2_storage_csv: str):
         n.links.index = n.links.index.str.replace("CCS", "CC", regex = True)
 
 
-def add_co2_network(n: pypsa.Network, capital_cost: int, marginal_cost: int, lifetime: int):
+def add_co2_network(n: pypsa.Network, capital_cost: float, marginal_cost: float, lifetime: int, discount_rate: float):
     """Adds CO2 (transportation) network."""
 
     # get electricity links
     links = n.links.query("carrier == 'AC' and not Link.str.endswith('exp')")
+    
+    # calculate annualized capital cost
+    number_years = n.snapshot_weightings.generators.sum() / 8760
+    cost = capital_cost * calculate_annuity(lifetime, discount_rate) * number_years
 
     # add links to represent CO2 (transportation) network based on electricity links layout
     n.madd("Link",
@@ -812,14 +816,14 @@ def add_co2_network(n: pypsa.Network, capital_cost: int, marginal_cost: int, lif
         p_min_pu = -1,
         p_nom_extendable = True,
         length = links.length.values,
-        capital_cost = capital_cost * links.length.values,
+        capital_cost = cost * links.length.values,
         marginal_cost = marginal_cost,
         carrier = "co2",
         lifetime = lifetime,
     )
 
 
-def add_dac(n: pypsa.Network, capital_cost: float, electricity_input: float, lifetime: int):
+def add_dac(n: pypsa.Network, capital_cost: float, electricity_input: float, lifetime: int, discount_rate: float):
     """Adds node level DAC capabilities."""
 
     # get links that emit CO2 for all sectors
@@ -848,6 +852,10 @@ def add_dac(n: pypsa.Network, capital_cost: float, electricity_input: float, lif
 
     # get electricity buses
     buses = n.buses.query("carrier == 'AC'").index
+    
+    # calculate annualized capital cost
+    number_years = n.snapshot_weightings.generators.sum() / 8760
+    cost = capital_cost * calculate_annuity(lifetime, discount_rate) * number_years
 
     # add links to represent node level DAC capabilities
     n.madd("Link",
@@ -857,7 +865,7 @@ def add_dac(n: pypsa.Network, capital_cost: float, electricity_input: float, lif
         bus1 = buses + " co2 capture",
         bus2 = buses,
         p_nom_extendable = True,
-        capital_cost = capital_cost,
+        capital_cost = cost,
         efficiency2 = -1,   # TODO: replace with concrete electricity consumption value to capture one tonne of CO2
         carrier = "co2",
         lifetime = lifetime,
