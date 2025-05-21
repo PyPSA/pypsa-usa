@@ -2447,7 +2447,7 @@ if __name__ == "__main__":
 
     # scale demand and align snapshots. this is outside the main read/write
     # strategy as extra arguments are required to fill in data
-    if (scaling_method == "aeo_electricity") and (end_use == "power"):
+    if scaling_method == "aeo_electricity":
         demand_scale_file = snakemake.params.pudl_path
     else:
         demand_scale_file = snakemake.input.get("demand_scaling_file", None)
