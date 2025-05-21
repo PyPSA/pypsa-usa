@@ -1,5 +1,4 @@
 import logging  # noqa: D100
-import re
 
 import numpy as np
 import pandas as pd
@@ -345,21 +344,21 @@ def add_RPS_constraints(n, config, sector, snakemake=None):
         # Add constraint
         n.model.add_constraints(
             lhs >= rhs,
-            name=f"GlobalConstraint-{constraint_row.name}_{constraint_row.planning_horizon}_rps_limit",
+            name=f"GlobalConstraint-{constraint_row.region}_{constraint_row.carrier}_{constraint_row.planning_horizon}_rps_limit",
         )
         logger.info(
             f"Added RPS {constraint_row.name} for {constraint_row.planning_horizon}.",
         )
 
 
-def add_regional_co2limit(n, sns, config, snakemake=None):
+def add_regional_co2limit(n, config):
     """Adding regional regional CO2 Limits Specified in the config.yaml."""
     regional_co2_lims = pd.read_csv(
         config["electricity"]["regional_Co2_limits"],
         index_col=[0],
     )
     logger.info("Adding regional Co2 Limits.")
-    regional_co2_lims = regional_co2_lims[regional_co2_lims.planning_horizon.isin(snakemake.params.planning_horizons)]
+    regional_co2_lims = regional_co2_lims[regional_co2_lims.planning_horizon.isin(n.investment_periods)]
     weightings = n.snapshot_weightings.loc[n.snapshots]
 
     for idx, emmission_lim in regional_co2_lims.iterrows():
@@ -398,55 +397,3 @@ def add_regional_co2limit(n, sns, config, snakemake=None):
         logger.info(
             f"Adding regional Co2 Limit for {emmission_lim.name} in {planning_horizon}",
         )
-
-
-def add_EQ_constraints(n, o, scaling=1e-1):
-    """
-    Add equity constraints to the network.
-
-    Currently this is only implemented for the electricity sector only.
-
-    Opts must be specified in the config.yaml.
-
-    Parameters
-    ----------
-    n : pypsa.Network
-    o : str
-
-    Example
-    -------
-    scenario:
-        opts: [Co2L-EQ0.7-24H]
-
-    Require each country or node to on average produce a minimal share
-    of its total electricity consumption itself. Example: EQ0.7c demands each country
-    to produce on average at least 70% of its consumption; EQ0.7 demands
-    each node to produce on average at least 70% of its consumption.
-    """
-    # TODO: Generalize to cover myopic and other sectors?
-    float_regex = r"[0-9]*\.?[0-9]+"
-    level = float(re.findall(float_regex, o)[0])
-    if o[-1] == "c":
-        ggrouper = n.generators.bus.map(n.buses.country)
-        lgrouper = n.loads.bus.map(n.buses.country)
-        sgrouper = n.storage_units.bus.map(n.buses.country)
-    else:
-        ggrouper = n.generators.bus
-        lgrouper = n.loads.bus
-        sgrouper = n.storage_units.bus
-    load = n.snapshot_weightings.generators @ n.loads_t.p_set.groupby(lgrouper, axis=1).sum()
-    inflow = n.snapshot_weightings.stores @ n.storage_units_t.inflow.groupby(sgrouper, axis=1).sum()
-    inflow = inflow.reindex(load.index).fillna(0.0)
-    rhs = scaling * (level * load - inflow)
-    p = n.model["Generator-p"]
-    lhs_gen = (p * (n.snapshot_weightings.generators * scaling)).groupby(ggrouper.to_xarray()).sum().sum("snapshot")
-    # TODO: double check that this is really needed, why do have to subtract the spillage
-    if not n.storage_units_t.inflow.empty:
-        spillage = n.model["StorageUnit-spill"]
-        lhs_spill = (
-            (spillage * (-n.snapshot_weightings.stores * scaling)).groupby(sgrouper.to_xarray()).sum().sum("snapshot")
-        )
-        lhs = lhs_gen + lhs_spill
-    else:
-        lhs = lhs_gen
-    n.model.add_constraints(lhs >= rhs, name="equity_min")

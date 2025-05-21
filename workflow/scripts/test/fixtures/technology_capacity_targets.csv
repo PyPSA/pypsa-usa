@@ -1,4 +1,4 @@
 name,region,carrier,planning_horizon,min,max
 wind_west_min,west,onwind,2030,300,
-wind_west_max,west,onwind,2030,,500
-battery_west_min,west,battery,2030,100,
+battery_west_max,west,battery,2030,,100
+gas_west_max,west,gas,2030,,499
