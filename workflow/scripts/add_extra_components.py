@@ -791,6 +791,7 @@ def add_co2_storage(n: pypsa.Network, co2_storage_csv: str):
         indexes = n.links.loc[links].index
         bus4 = ["%s co2 capture" % index.split(" ")[0] for index in indexes]
         n.links.loc[links, "bus4"] = np.array(bus4)
+        n.links.loc[links, "efficiency4"] = [0.87] * len(indexes)   # TODO: replace with concrete value of how much CO2 is captured when producing one unit in bus1
         n.links.loc[links, "capital_cost"] *= 0.9   # remove storage cost from capital cost as storing CO2 is done underground (TODO: replace with concrete storage cost)
         n.links.loc[links, "carrier"] = n.links.loc[links].carrier.str.replace("CCS", "CC", regex = True)
         n.links.index = n.links.index.str.replace("CCS", "CC", regex = True)
@@ -818,7 +819,7 @@ def add_co2_network(n: pypsa.Network, capital_cost: int, marginal_cost: int, lif
     )
 
 
-def add_dac(n: pypsa.Network, capital_cost: float, electricity_input: float, heat_input: float, lifetime: int):
+def add_dac(n: pypsa.Network, capital_cost: float, electricity_input: float, lifetime: int):
     """Adds node level DAC capabilities."""
 
     # get links that emit CO2 for all sectors
@@ -826,17 +827,24 @@ def add_dac(n: pypsa.Network, capital_cost: float, electricity_input: float, hea
 
     # add node level buses to represent emitted CO2 and redirect links that emit CO2 to this bus
     for index in links.index:
-        bus = "%s co2 emit" % index.split(" ")[0]
+        node = index.split(" ")[0]
+        bus = "%s co2 emit" % node
         if bus not in n.buses.index:
             n.madd("Bus",
                 [bus],
                 carrier = "co2",
             )
-        links.loc[index, "bus2"] = bus
-
-    # redirect links that point to CO2 capture buses to point to CO2 emit buses instead
-    links = n.links.bus4.str.endswith(" co2 capture").fillna(False)
-    n.links.loc[links, "bus4"] = n.links.loc[links].bus4.str.replace(" co2 capture", " co2 emit", regex = True)
+        bus2 = links.loc[index]["bus2"]
+        link = "%s %s" % (node, "".join(bus2.split(" ")[1:]))
+        if link not in n.links.index:
+            n.madd("Link",
+                [link],
+                bus0 = bus,
+                bus1 = bus2,
+                p_nom_extendable = True,   # TODO: check if this is necessary
+                carrier = "co2",
+            )
+        n.links.loc[index, "bus2"] = bus
 
     # get electricity buses
     buses = n.buses.query("carrier == 'AC'").index
@@ -847,8 +855,10 @@ def add_dac(n: pypsa.Network, capital_cost: float, electricity_input: float, hea
         suffix = " dac",
         bus0 = buses + " co2 emit",
         bus1 = buses + " co2 capture",
+        bus2 = buses,
         p_nom_extendable = True,
         capital_cost = capital_cost,
+        efficiency2 = -1,   # TODO: replace with concrete electricity consumption value to capture one tonne of CO2
         carrier = "co2",
         lifetime = lifetime,
     )

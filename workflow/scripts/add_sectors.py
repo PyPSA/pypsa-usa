@@ -594,7 +594,7 @@ if __name__ == "__main__":
     if snakemake.config["dac"]["enable"] is True:
         if snakemake.config["co2"]["storage"] is True:
             logger.info("Adding node level DAC capabilities")
-            add_dac(n, snakemake.config["dac"]["capital_cost"], snakemake.config["dac"]["electricity_input"], snakemake.config["dac"]["heat_input"], snakemake.config["dac"]["lifetime"])
+            add_dac(n, snakemake.config["dac"]["capital_cost"], snakemake.config["dac"]["electricity_input"], snakemake.config["dac"]["lifetime"])
         else:
             logger.warning("Not adding node level DAC capabilities given that CO2 (underground) storage is not enabled")
 
