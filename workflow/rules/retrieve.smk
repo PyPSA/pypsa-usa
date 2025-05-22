@@ -117,6 +117,7 @@ rule retrieve_gridemissions_data:
     log:
         "logs/retrieve/retrieve_gridemissions_data.log",
     resources:
+        walltime= "00:40:00",
         mem_mb=5000,
     script:
         "../scripts/retrieve_gridemissions_data.py"

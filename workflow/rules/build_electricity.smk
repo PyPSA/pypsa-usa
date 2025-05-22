@@ -193,7 +193,7 @@ rule build_renewable_profiles:
     threads: ATLITE_NPROCESSES
     resources:
         mem_mb=lambda wildcards, input, attempt: (
-            ATLITE_NPROCESSES * input.size // 3500000
+            ATLITE_NPROCESSES * input.size // 2000000
         )
         * attempt
         * 1.5,
