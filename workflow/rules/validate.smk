@@ -34,8 +34,6 @@ rule solve_network_validation:
     resources:
         mem_mb=memory,
         walltime=config["solving"].get("walltime", "12:00:00"),
-    conda:
-        "../envs/environment.yaml"
     script:
         "../scripts/solve_network.py"
 

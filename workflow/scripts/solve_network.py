@@ -35,6 +35,11 @@ from _helpers import (
     update_config_with_sector_opts,
 )
 from opts.land import add_land_use_constraints
+from opts.policy import (
+    add_regional_co2limit,
+    add_RPS_constraints,
+    add_technology_capacity_target_constraints,
+)
 from opts.reserves import (
     add_ERM_constraints,
     add_operational_reserve_margin,
@@ -50,12 +55,6 @@ from opts.sector import (
     add_sector_co2_constraints,
     add_sector_demand_response_constraints,
     add_water_heater_constraints,
-)
-
-from workflow.scripts.opts.policy import (
-    add_regional_co2limit,
-    add_RPS_constraints,
-    add_technology_capacity_target_constraints,
 )
 
 logger_gurobi = logging.getLogger("gurobipy")

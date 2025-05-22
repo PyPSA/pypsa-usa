@@ -191,7 +191,6 @@ rule build_renewable_profiles:
     benchmark:
         BENCHMARKS + "{interconnect}/build_renewable_profiles_{technology}"
     threads: ATLITE_NPROCESSES
-    retries: 3
     resources:
         mem_mb=lambda wildcards, input, attempt: (
             ATLITE_NPROCESSES * input.size // 3500000
@@ -311,9 +310,9 @@ def demand_scaling_data(wildcards):
         ].capitalize()
         return DATA + f"nrel_efs/EFSLoadProfile_{efs_case}_{efs_speed}.csv"
     elif profile == "eia":
-        return config_provider("pudl_path")
+        return []
     elif profile == "ferc":
-        return config_provider("pudl_path")
+        return []
     else:
         return ""
 
