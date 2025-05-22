@@ -785,16 +785,44 @@ def add_co2_storage(n: pypsa.Network, co2_storage_csv: str):
         carrier = "co2",
     )
 
-    # update CCS links to point to CO2 capture bus, remove storage cost from their capital cost and replace substring "CCS" with just "CC" in their names and carriers
-    links = n.links.index.str.contains("CCS")
-    if True in links:
-        indexes = n.links.loc[links].index
-        bus4 = ["%s co2 capture" % index.split(" ")[0] for index in indexes]
-        n.links.loc[links, "bus4"] = np.array(bus4)
-        n.links.loc[links, "efficiency4"] = [0.87] * len(indexes)   # TODO: replace with concrete value of how much CO2 is captured when producing one unit in bus1
-        n.links.loc[links, "capital_cost"] *= 0.9   # remove storage cost from capital cost as storing CO2 is done underground (TODO: replace with concrete storage cost)
-        n.links.loc[links, "carrier"] = n.links.loc[links].carrier.str.replace("CCS", "CC", regex = True)
-        n.links.index = n.links.index.str.replace("CCS", "CC", regex = True)
+    if snakemake.config["scenario"]["sector"] == "":
+        # lorem ipsum
+        generators = n.generators.index.str.contains("CCS")
+        if True in generators:
+            indexes = n.generators.loc[generators].index            
+            
+            #bus4 = ["%s co2 capture" % index.split(" ")[0] for index in indexes]
+            #n.generators.loc[generators, "bus4"] = np.array(bus4)
+            #n.generators.loc[generators, "efficiency4"] = [0.87] * len(indexes)   # TODO: replace with concrete value of how much CO2 is captured when producing one unit in bus1
+            n.generators.loc[generators, "capital_cost"] *= 0.9   # remove storage cost from capital cost as storing CO2 is done underground (TODO: replace with concrete storage cost)
+            n.generators.loc[generators, "carrier"] = n.generators.loc[generators].carrier.str.replace("CCS", "CC", regex = True)
+            n.generators.index = n.generators.index.str.replace("CCS", "CC", regex = True)
+
+            n.madd("Bus",
+                n.generators.loc[generators].index,
+                carrier = n.generators.loc[generators].carrier,
+            )
+
+            n.madd("Link",
+                n.generators.loc[generators].index,
+                bus0 = n.generators.loc[generators].index,
+                carrier = n.generators.loc[generators].carrier,
+            )
+
+
+            # TODO: create             
+            
+    else:
+        # update CCS links to point to CO2 capture bus, remove storage cost from their capital cost and replace substring "CCS" with just "CC" in their names and carriers
+        links = n.links.index.str.contains("CCS")
+        if True in links:
+            indexes = n.links.loc[links].index
+            bus4 = ["%s co2 capture" % index.split(" ")[0] for index in indexes]
+            n.links.loc[links, "bus4"] = np.array(bus4)
+            n.links.loc[links, "efficiency4"] = [0.87] * len(indexes)   # TODO: replace with concrete value of how much CO2 is captured when producing one unit in bus1
+            n.links.loc[links, "capital_cost"] *= 0.9   # remove storage cost from capital cost as storing CO2 is done underground (TODO: replace with concrete storage cost)
+            n.links.loc[links, "carrier"] = n.links.loc[links].carrier.str.replace("CCS", "CC", regex = True)
+            n.links.index = n.links.index.str.replace("CCS", "CC", regex = True)
 
 
 def add_co2_network(n: pypsa.Network, capital_cost: float, marginal_cost: float, lifetime: int, discount_rate: float):
@@ -802,7 +830,7 @@ def add_co2_network(n: pypsa.Network, capital_cost: float, marginal_cost: float,
 
     # get electricity links
     links = n.links.query("carrier == 'AC' and not Link.str.endswith('exp')")
-    
+
     # calculate annualized capital cost
     number_years = n.snapshot_weightings.generators.sum() / 8760
     cost = capital_cost * calculate_annuity(lifetime, discount_rate) * number_years
@@ -852,7 +880,7 @@ def add_dac(n: pypsa.Network, capital_cost: float, electricity_input: float, lif
 
     # get electricity buses
     buses = n.buses.query("carrier == 'AC'").index
-    
+
     # calculate annualized capital cost
     number_years = n.snapshot_weightings.generators.sum() / 8760
     cost = capital_cost * calculate_annuity(lifetime, discount_rate) * number_years
@@ -963,6 +991,27 @@ if __name__ == "__main__":
     dr_config = snakemake.params.demand_response
     if dr_config:
         add_demand_response(n, dr_config)
+
+    # add node level CO2 (underground) storage
+    if snakemake.config["co2"]["storage"] is True:
+        logger.info("Adding node level CO2 (underground) storage")
+        add_co2_storage(n, snakemake.input.co2_storage)
+
+    # add CO2 (transportation) network
+    if snakemake.config["co2"]["network"]["enable"] is True:
+        if snakemake.config["co2"]["storage"] is True:
+            logger.info("Adding CO2 (transportation) network")
+            add_co2_network(n, snakemake.config["co2"]["network"]["capital_cost"], snakemake.config["co2"]["network"]["marginal_cost"], snakemake.config["co2"]["network"]["lifetime"], snakemake.config["co2"]["network"]["discount_rate"])
+        else:
+            logger.warning("Not adding CO2 (transportation) network given that CO2 (underground) storage is not enabled")
+
+    # add node level DAC capabilities
+    if snakemake.config["dac"]["enable"] is True:
+        if snakemake.config["co2"]["storage"] is True:
+            logger.info("Adding node level DAC capabilities")
+            add_dac(n, snakemake.config["dac"]["capital_cost"], snakemake.config["dac"]["electricity_input"], snakemake.config["dac"]["lifetime"], snakemake.config["dac"]["discount_rate"])
+        else:
+            logger.warning("Not adding node level DAC capabilities given that CO2 (underground) storage is not enabled")
 
     n.consistency_check()
     n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))

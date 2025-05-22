@@ -733,6 +733,7 @@ rule add_extra_components:
         ),
         regions_onshore=RESOURCES
         + "{interconnect}/Geospatial/regions_onshore_s{simpl}_{clusters}.geojson",
+        co2_storage = (RESOURCES + "{interconnect}/co2_storage_s{simpl}_{clusters}.csv" if config["scenario"]["sector"] == "" else None),
     params:
         retirement=config["electricity"].get("retirement", "technical"),
         demand_response=config["electricity"].get("demand_response", {}),
