@@ -52,7 +52,7 @@ from opts.sector import (
     add_water_heater_constraints,
 )
 
-from workflow.scripts.opts.policy import (
+from opts.policy import (
     add_regional_co2limit,
     add_RPS_constraints,
     add_technology_capacity_target_constraints,
