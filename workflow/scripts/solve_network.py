@@ -27,7 +27,6 @@ import copy
 import logging
 
 import numpy as np
-import pandas as pd
 import pypsa
 import yaml
 from _helpers import (
@@ -348,26 +347,6 @@ def solve_network(n, config, solving, opts="", **kwargs):
     return n
 
 
-def _assign_duals_globalconstraint_fix(n: pypsa.Network):
-    """
-    Assigns duals to global constraints.
-
-    This is a hacky fix where for a single pnl global constraint, names for duals are not
-    written correctly for io operation. This is not an issue if multiple pnl global
-    constraints are present.
-
-    See the following issues for more details:
-    - https://github.com/PyPSA/PyPSA/issues/850
-    - https://github.com/PyPSA/pypsa-usa/issues/604
-    """
-    if not n.pnl("GlobalConstraint"):
-        return
-    for constraint_name, constraint_duals in n.pnl("GlobalConstraint").items():
-        pnl = constraint_duals
-        if isinstance(pnl, pd.Series):
-            n.pnl("GlobalConstraint")[constraint_name] = pnl.to_frame(name="mu")
-
-
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
@@ -375,10 +354,10 @@ if __name__ == "__main__":
         snakemake = mock_snakemake(
             "solve_network",
             interconnect="western",
-            simpl="12",
+            simpl="75",
             clusters="4m",
             ll="v1.0",
-            opts="4h",
+            opts="12h",
             sector="E-G",
             planning_horizons="2030",
         )
@@ -423,7 +402,6 @@ if __name__ == "__main__":
         store_ERM_duals(n)
 
     n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))
-    _assign_duals_globalconstraint_fix(n)
     n.export_to_netcdf(snakemake.output[0])
     with open(snakemake.output.config, "w") as file:
         yaml.dump(
@@ -433,4 +411,3 @@ if __name__ == "__main__":
             allow_unicode=True,
             sort_keys=False,
         )
-    print("done")

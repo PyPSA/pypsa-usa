@@ -109,20 +109,26 @@ def add_sector_co2_constraints(n, config):
                 & ((n.stores.index.str.endswith(f"{sector}-co2")) | (n.stores.index.str.endswith(f"{sector}-ch4")))
             ].index
             name = f"GlobalConstraint-co2_limit-{year}-{state}-{sector}"
-            log_statement = f"Adding {state} {sector} co2 Limit in {year} of"
+            if stores.empty:
+                log_statement = f"No co2 stores found for {state} {year} {sector}"
+            else:
+                log_statement = f"Adding {state} {sector} co2 Limit in {year} of"
         else:
             stores = n.stores[
                 (n.stores.index.str.startswith(state))
                 & ((n.stores.index.str.endswith("-co2")) | (n.stores.index.str.endswith("-ch4")))
             ].index
             name = f"GlobalConstraint-co2_limit-{year}-{state}"
-            log_statement = f"Adding {state} co2 Limit in {year} of"
+            if stores.empty:
+                log_statement = f"No co2 stores found for {state} {year}"
+            else:
+                log_statement = f"Adding {state} co2 Limit in {year} of"
 
         if stores.empty:
-            logger.warning(f"No co2 stores found for {state} {year} {sector}")
+            logger.warning(log_statement)
             return
 
-        lhs = n.model["Store-e"].loc[:, stores].sum(dim="Store")
+        lhs = n.model["Store-e"].loc[:, stores].sel(snapshot=n.snapshots[-1]).sum(dim="Store")
         rhs = value  # value in T CO2
 
         n.model.add_constraints(lhs <= rhs, name=name)
@@ -146,7 +152,7 @@ def add_sector_co2_constraints(n, config):
             logger.warning(f"No co2 stores found for USA {year} {sector}")
             return
 
-        lhs = n.model["Store-e"].loc[:, stores].sum(dim="Store")
+        lhs = n.model["Store-e"].loc[:, stores].sel(snapshot=n.snapshots[-1]).sum(dim="Store")
         rhs = value  # value in T CO2
 
         n.model.add_constraints(lhs <= rhs, name=name)
