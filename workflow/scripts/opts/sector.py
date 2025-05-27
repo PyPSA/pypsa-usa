@@ -118,6 +118,10 @@ def add_sector_co2_constraints(n, config):
             name = f"GlobalConstraint-co2_limit-{year}-{state}"
             log_statement = f"Adding {state} co2 Limit in {year} of"
 
+        if stores.empty:
+            logger.warning(f"No co2 stores found for {state} {year} {sector}")
+            return
+
         lhs = n.model["Store-e"].loc[:, stores].sum(dim="Store")
         rhs = value  # value in T CO2
 
@@ -137,6 +141,10 @@ def add_sector_co2_constraints(n, config):
             stores = n.stores[((n.stores.index.str.endswith("-co2")) | (n.stores.index.str.endswith("-ch4")))].index
             name = f"co2_limit-{year}"
             log_statement = f"Adding national co2 Limit in {year} of"
+
+        if stores.empty:
+            logger.warning(f"No co2 stores found for USA {year} {sector}")
+            return
 
         lhs = n.model["Store-e"].loc[:, stores].sum(dim="Store")
         rhs = value  # value in T CO2
