@@ -575,6 +575,46 @@ REEDS_NERC_INTERCONNECT_MAPPER = {
     "ERCOT": "texas",
 }
 
+
+# Establish REC trading zones
+# If CA is in the WECC, its trading zone is the WECC, otherwise the trading zone is given by this dictionary
+REC_TRADING_ZONE_MAPPER = {
+    "CA": "WREGIS",
+    "AZ": "WREGIS",
+    "NM": "WREGIS",
+    "UT": "WREGIS",
+    "CO": "WREGIS",
+    "NV": "WREGIS",
+    "ID": "WREGIS",
+    "WY": "WREGIS",
+    "MT": "WREGIS",
+    "ND": "MRETS",
+    "SD": "MRETS",
+    "MN": "MRETS",
+    "IA": "MRETS",
+    "WI": "MRETS",
+    "MI": "NAR",
+    "KS": "NAR",
+    "IL": "MRETS",
+    "IN": "MRETS",
+    "OH": "MRETS",
+    "KY": "PJM",
+    "VA": "PJM",
+    "WV": "PJM",
+    "MD": "PJM",
+    "DE": "PJM",
+    "NJ": "PJM",
+    "PA": "PJM",
+    "NY": "NYISO",
+    "CT": "ISO-NE",
+    "RI": "ISO-NE",
+    "MA": "ISO-NE",
+    "NH": "ISO-NE",
+    "ME": "ISO-NE",
+    "VT": "ISO-NE",
+    "TX": "ERCOT",
+}
+
 ################################
 # Constants for Breakthrough mapping
 ################################
