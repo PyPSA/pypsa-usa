@@ -1170,7 +1170,7 @@ def add_sector_co2_constraints(n, config):
             name = f"GlobalConstraint-co2_limit-{year}-{state}"
             log_statement = f"Adding {state} co2 Limit in {year} of"
 
-        lhs = n.model["Store-e"].loc[:, stores].sum(dim="Store")
+        lhs = n.model["Store-e"].loc[:, stores].sel(snapshot=n.snapshots[-1]).sum(dim="Store")
         rhs = value  # value in T CO2
 
         n.model.add_constraints(lhs <= rhs, name=name)
@@ -1190,7 +1190,7 @@ def add_sector_co2_constraints(n, config):
             name = f"co2_limit-{year}"
             log_statement = f"Adding national co2 Limit in {year} of"
 
-        lhs = n.model["Store-e"].loc[:, stores].sum(dim="Store")
+        lhs = n.model["Store-e"].loc[:, stores].sel(snapshot=n.snapshots[-1]).sum(dim="Store")
         rhs = value  # value in T CO2
 
         n.model.add_constraints(lhs <= rhs, name=name)
