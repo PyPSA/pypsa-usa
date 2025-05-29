@@ -9,6 +9,7 @@ import pandas as pd
 import pypsa
 from _helpers import configure_logging
 from build_shapes import load_na_shapes
+from constants import REC_TRADING_ZONE_MAPPER
 from shapely.geometry import Polygon
 from sklearn.neighbors import BallTree
 
@@ -550,6 +551,7 @@ def main(snakemake):
     assign_line_length(n)
     assign_missing_regions(n)
     assign_reeds_memberships(n, snakemake.input.reeds_memberships)
+    n.buses["rec_trading_zone"] = n.buses.reeds_state.map(REC_TRADING_ZONE_MAPPER).fillna(n.buses.reeds_state)
 
     p_max_pu = 1
     n.links["p_max_pu"] = p_max_pu
