@@ -2,7 +2,7 @@ import logging  # noqa: D100
 
 import numpy as np
 import pandas as pd
-from opts._helpers import filter_components, get_region_buses
+from opts._helpers import ceil_precision, filter_components, floor_precision, get_region_buses
 from pypsa.descriptors import get_switchable_as_dense as get_as_dense
 
 logger = logging.getLogger(__name__)
@@ -138,17 +138,17 @@ def add_technology_capacity_target_constraints(n, config):
         lhs_existing = lhs_gens_existing.p_nom.sum() + lhs_storage_existing.p_nom.sum() + lhs_link_existing.p_nom.sum()
 
         if target["max"] == "existing":
-            target["max"] = round(lhs_existing, 2) + 0.01
+            target["max"] = ceil_precision(lhs_existing, 2)
         else:
             target["max"] = float(target["max"])
 
         if target["min"] == "existing":
-            target["min"] = round(lhs_existing, 2) - 0.01
+            target["min"] = floor_precision(lhs_existing, 2)
         else:
             target["min"] = float(target["min"])
 
         if not np.isnan(target["min"]):
-            rhs = target["min"] - round(lhs_existing, 2)
+            rhs = floor_precision(target["min"] - lhs_existing, 2)
 
             n.model.add_constraints(
                 lhs >= rhs,
@@ -164,7 +164,7 @@ def add_technology_capacity_target_constraints(n, config):
                 f"TCT constraint of {target['max']} MW for {target['carrier']} must be at least {lhs_existing}"
             )
 
-            rhs = target["max"] - round(lhs_existing, 2)
+            rhs = ceil_precision(target["max"] - lhs_existing, 2)
 
             n.model.add_constraints(
                 lhs <= rhs,
@@ -222,22 +222,22 @@ def add_RPS_constraints(n, config, sector, snakemake=None):
         )
         reeds["carrier"] = [", ".join(carriers)] * len(reeds)
 
-        # Extract and create new rows for `rps_solar` and `rps_wind`
-        additional_rows = []
-        for carrier_col, carrier_name in [
-            ("rps_solar", "solar"),
-            ("rps_wind", "onwind, offwind, offwind_floating"),
-        ]:
-            if carrier_col in reeds.columns:
-                temp = reeds[["region", "planning_horizon", carrier_col]].copy()
-                temp = temp.rename(columns={carrier_col: "pct"})
-                temp["carrier"] = carrier_name
-                additional_rows.append(temp)
+        # # Extract and create new rows for `rps_solar` and `rps_wind`
+        # additional_rows = []
+        # for carrier_col, carrier_name in [
+        #     ("rps_solar", "solar"),
+        #     ("rps_wind", "onwind, offwind, offwind_floating"),
+        # ]:
+        #     if carrier_col in reeds.columns:
+        #         temp = reeds[["region", "planning_horizon", carrier_col]].copy()
+        #         temp = temp.rename(columns={carrier_col: "pct"})
+        #         temp["carrier"] = carrier_name
+        #         additional_rows.append(temp)
 
-        # Combine original data with additional rows
-        if additional_rows:
-            additional_rows = pd.concat(additional_rows, ignore_index=True)
-            reeds = pd.concat([reeds, additional_rows], ignore_index=True)
+        # # Combine original data with additional rows
+        # if additional_rows:
+        #     additional_rows = pd.concat(additional_rows, ignore_index=True)
+        #     reeds = pd.concat([reeds, additional_rows], ignore_index=True)
 
         # Ensure the final dataframe has consistent columns
         reeds = reeds[["region", "planning_horizon", "carrier", "pct"]]
@@ -259,7 +259,7 @@ def add_RPS_constraints(n, config, sector, snakemake=None):
         "biomass",
         "EGS",
     ]
-    ces_carriers = [*rps_carriers, "nuclear", "SMR"]
+    ces_carriers = [*rps_carriers, "nuclear", "SMR", "hydrogen_ct", "CCGT-95CCS", "CCGT-99CCS", "Coal-95CCS"]
 
     # Process RPS and CES REEDS data
     rps_reeds = process_reeds_data(
@@ -275,6 +275,7 @@ def add_RPS_constraints(n, config, sector, snakemake=None):
 
     # Concatenate all portfolio standards
     portfolio_standards = pd.concat([portfolio_standards, rps_reeds, ces_reeds])
+
     portfolio_standards = portfolio_standards[
         (portfolio_standards.pct > 0.0)
         & (
@@ -285,7 +286,9 @@ def add_RPS_constraints(n, config, sector, snakemake=None):
         & (portfolio_standards.region.isin(n.buses.reeds_state.unique()))
     ]
 
-    # Iterate through constraints and add RPS constraints to the model
+    mapper = n.buses.groupby("reeds_state")["rec_trading_zone"].first().to_dict()
+    portfolio_standards["rec_trading_zone"] = portfolio_standards.region.map(mapper).fillna(portfolio_standards.region)
+
     for _, constraint_row in portfolio_standards.iterrows():
         region_list = [region.strip() for region in constraint_row.region.split(",")]
         region_buses = get_region_buses(n, region_list)
@@ -293,7 +296,33 @@ def add_RPS_constraints(n, config, sector, snakemake=None):
         if region_buses.empty:
             continue
 
-        carriers = [carrier.strip() for carrier in constraint_row.carrier.split(",")]
+        region_demand = (
+            n.loads_t.p_set.loc[constraint_row.planning_horizon]
+            .loc[:, n.loads.bus.isin(region_buses.index)]
+            .sum()
+            .sum()
+        )
+        region_rps_rhs = int(constraint_row.pct * region_demand)
+        portfolio_standards.loc[constraint_row.name, "rps_rhs"] = region_rps_rhs
+
+        if sector:
+            # power level buses
+            pwr_buses = n.buses[(n.buses.carrier == "AC") & (n.buses.index.isin(region_buses.index))]
+            # links delievering power within the region
+            # removes any transmission links
+            pwr_links = n.links[(n.links.bus0.isin(pwr_buses.index)) & ~(n.links.bus1.isin(pwr_buses.index))]
+            region_demand_sector = (
+                n.model["Link-p"].sel(period=constraint_row.planning_horizon, Link=pwr_links.index).sum()
+            )
+            region_rps_rhs_sector = int(constraint_row.pct * region_demand_sector)
+            portfolio_standards.loc[constraint_row.name, "rps_rhs_sector"] = region_rps_rhs_sector
+
+    # Iterate through constraints and add RPS constraints to the model
+    for (rec_trading_zone, planning_horizon, policy_carriers), zone_constraints in portfolio_standards.groupby(
+        ["rec_trading_zone", "planning_horizon", "carrier"],
+    ):
+        region_buses = get_region_buses(n, zone_constraints.region.unique())
+        carriers = [carrier.strip() for carrier in policy_carriers.split(",")]
 
         # Filter region generators
         region_gens = n.generators[n.generators.bus.isin(region_buses.index)]
@@ -305,49 +334,34 @@ def add_RPS_constraints(n, config, sector, snakemake=None):
         elif not sector:
             # Eligible generation
             p_eligible = n.model["Generator-p"].sel(
-                period=constraint_row.planning_horizon,
+                period=planning_horizon,
                 Generator=region_gens_eligible.index,
             )
-            lhs = p_eligible.sum()
-
-            # Region demand
-            region_demand = (
-                n.loads_t.p_set.loc[
-                    constraint_row.planning_horizon,
-                    n.loads.bus.isin(region_buses.index),
-                ]
-                .sum()
-                .sum()
-            )
-
-            rhs = constraint_row.pct * region_demand
+            renewable_gen = zone_constraints.rps_rhs.sum()
+            lhs = p_eligible.sum() - renewable_gen
+            rhs = 0
 
         elif sector:
             # generator power contributing
             p_eligible = n.model["Generator-p"].sel(
-                period=constraint_row.planning_horizon,
+                period=planning_horizon,
                 Generator=region_gens_eligible.index,
             )
-            # power level buses
-            pwr_buses = n.buses[(n.buses.carrier == "AC") & (n.buses.index.isin(region_buses.index))]
-            # links delievering power within the region
-            # removes any transmission links
-            pwr_links = n.links[(n.links.bus0.isin(pwr_buses.index)) & ~(n.links.bus1.isin(pwr_buses.index))]
-            region_demand = n.model["Link-p"].sel(period=constraint_row.planning_horizon, Link=pwr_links.index)
-
-            lhs = p_eligible.sum() - (constraint_row.pct * region_demand.sum())
+            renewable_gen = zone_constraints.rps_rhs_sector.sum()
+            lhs = p_eligible.sum() - renewable_gen
             rhs = 0
 
         else:
             logger.error("Undefined control flow for RPS constraint.")
 
-        # Add constraint
         n.model.add_constraints(
             lhs >= rhs,
-            name=f"GlobalConstraint-{constraint_row.region}_{constraint_row.carrier}_{constraint_row.planning_horizon}_rps_limit",
+            name=f"GlobalConstraint-{rec_trading_zone}_{planning_horizon}_rps_limit",
         )
+
         logger.info(
-            f"Added RPS {constraint_row.name} for {constraint_row.planning_horizon}.",
+            f"Added RPS constraint '{rec_trading_zone}' for {planning_horizon} "
+            f"requiring {renewable_gen:.1f} of {policy_carriers} generation ",
         )
 
 
