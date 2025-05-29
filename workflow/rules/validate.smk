@@ -32,7 +32,7 @@ rule solve_network_validation:
         )
     threads: solver_threads
     resources:
-        walltime= config_provider("walltime","solve_network_validation"),
+        walltime=config_provider("walltime", "solve_network_validation"),
         mem_mb=lambda wildcards, input, attempt: (input.size // 100000) * 80,
     script:
         "../scripts/solve_network.py"
