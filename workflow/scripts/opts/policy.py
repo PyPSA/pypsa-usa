@@ -2,7 +2,7 @@ import logging  # noqa: D100
 
 import numpy as np
 import pandas as pd
-from opts._helpers import filter_components, get_region_buses
+from opts._helpers import filter_components, get_region_buses, ceil_precision, floor_precision
 from pypsa.descriptors import get_switchable_as_dense as get_as_dense
 
 logger = logging.getLogger(__name__)
@@ -138,17 +138,17 @@ def add_technology_capacity_target_constraints(n, config):
         lhs_existing = lhs_gens_existing.p_nom.sum() + lhs_storage_existing.p_nom.sum() + lhs_link_existing.p_nom.sum()
 
         if target["max"] == "existing":
-            target["max"] = round(lhs_existing, 2) + 0.01
+            target["max"] = ceil_precision(lhs_existing, 2) 
         else:
             target["max"] = float(target["max"])
 
         if target["min"] == "existing":
-            target["min"] = round(lhs_existing, 2) - 0.01
+            target["min"] = floor_precision(lhs_existing, 2)
         else:
             target["min"] = float(target["min"])
 
         if not np.isnan(target["min"]):
-            rhs = target["min"] - round(lhs_existing, 2)
+            rhs = floor_precision(target["min"] - lhs_existing, 2)
 
             n.model.add_constraints(
                 lhs >= rhs,
@@ -164,7 +164,7 @@ def add_technology_capacity_target_constraints(n, config):
                 f"TCT constraint of {target['max']} MW for {target['carrier']} must be at least {lhs_existing}"
             )
 
-            rhs = target["max"] - round(lhs_existing, 2)
+            rhs = ceil_precision(target["max"] - lhs_existing, 2)
 
             n.model.add_constraints(
                 lhs <= rhs,

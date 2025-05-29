@@ -1,6 +1,7 @@
 import logging
 
 import pandas as pd
+import numpy as np
 import pypsa
 
 logger = logging.getLogger(__name__)
@@ -88,3 +89,10 @@ def filter_components(
         ]
 
     return filtered
+
+
+def ceil_precision(a, precision=0):
+    return np.true_divide(np.ceil(a * 10**precision), 10**precision)
+
+def floor_precision(a, precision=0):
+    return np.true_divide(np.floor(a * 10**precision), 10**precision)

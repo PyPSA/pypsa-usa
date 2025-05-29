@@ -135,7 +135,7 @@ def extra_functionality(n, snapshots):
         "RPS": lambda: add_RPS_constraints(n, config, sector_enabled, global_snakemake)
         if n.generators.p_nom_extendable.any()
         else None,
-        "REM": lambda: add_regional_co2limit(n, config, global_snakemake)
+        "REM": lambda: add_regional_co2limit(n, config)
         if n.generators.p_nom_extendable.any()
         else None,
         "PRM": lambda: add_PRM_constraints(n, config, global_snakemake)

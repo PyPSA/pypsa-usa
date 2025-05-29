@@ -211,6 +211,7 @@ if not config["enable"].get("build_cutout", False):
         log:
             "logs/" + CDIR + "retrieve_cutout_usa_{cutout}.log",
         resources:
+            walltime= "00:50:00",
             mem_mb=5000,
         retries: 2
         run:
@@ -229,6 +230,7 @@ rule retrieve_caiso_data:
     shadow:
         "minimal"
     resources:
+        walltime= "00:10:00",
         mem_mb=2000,
     script:
         "../scripts/retrieve_caiso_data.py"
@@ -241,6 +243,7 @@ rule retrieve_pudl:
     log:
         LOGS + "retrieve_pudl.log",
     resources:
+        walltime= "00:30:00",
         mem_mb=5000,
     script:
         "../scripts/retrieve_pudl.py"
@@ -256,6 +259,7 @@ if "EGS" in config["electricity"]["extendable_carriers"]["Generator"]:
             DATA + "EGS/{interconnect}/specs_EGS.nc",
             DATA + "EGS/{interconnect}/profile_EGS.nc",
         resources:
+            walltime= "00:30:00",
             mem_mb=5000,
         log:
             LOGS + "retrieve_EGS_{interconnect}.log",
