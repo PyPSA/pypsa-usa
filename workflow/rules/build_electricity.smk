@@ -557,7 +557,7 @@ rule build_powerplants:
         cems="repo_data/plants/cems_heat_rates.xlsx",
         epa_crosswalk="repo_data/plants/epa_eia_crosswalk.csv",
     output:
-        powerplants=RESOURCES + "powerplants.csv",
+        powerplants="resources/powerplants.csv",
     log:
         "logs/build_powerplants.log",
     resources:
@@ -603,7 +603,7 @@ rule add_electricity:
         regions_offshore=RESOURCES
         + "{interconnect}/Geospatial/regions_offshore.geojson",
         reeds_shapes=RESOURCES + "{interconnect}/Geospatial/reeds_shapes.geojson",
-        powerplants=RESOURCES + "powerplants.csv",
+        powerplants="resources/powerplants.csv",
         plants_breakthrough=DATA + "breakthrough_network/base_grid/plant.csv",
         hydro_breakthrough=DATA + "breakthrough_network/base_grid/hydro.csv",
         bus2sub=RESOURCES + "{interconnect}/bus2sub.csv",
