@@ -786,6 +786,9 @@ def trim_network(n, trim_topology):
     """
     retain_zones = trim_topology["zone"]
     internal_buses = get_region_buses(n, retain_zones)
+    if internal_buses.empty:
+        logger.warning("No internal buses found, skipping trim_network")
+        return None
 
     # Get all lines and links connected to internal buses
     retain_lines = n.lines[n.lines.bus0.isin(internal_buses.index) | n.lines.bus1.isin(internal_buses.index)]
@@ -824,7 +827,7 @@ def trim_network(n, trim_topology):
     # Get OCGT generators and calculate average marginal cost
     ocgt_gens = n.generators[n.generators.carrier == "OCGT"]
     avg_marginal_cost = get_as_dense(n, "Generator", "marginal_cost").loc[:, ocgt_gens.index].mean().mean()
-    n.add("Carrier", "imports", co2_emissions=0.427, nice_name="imports", color="#32a852")
+    n.add("Carrier", "imports", co2_emissions=0.427, nice_name="imports")
 
     # remove existing oneport components at bus
     for c in n.one_port_components:
@@ -843,14 +846,23 @@ def trim_network(n, trim_topology):
             f"import_{bus_name}",
             bus=bus,
             carrier="imports",
-            p_nom=1e5,
+            p_nom=1e4,
             p_nom_extendable=False,
             marginal_cost=avg_marginal_cost,
-            efficiency=ocgt_gens.efficiency.mean(),
+            efficiency=1,
+            build_year=n.investment_periods[0],
+            lifetime=100,
         )
 
-        # Set all links and lines connected to the bus as non-extendable
+        # Change location names of external buses, append imports to the ['reeds_state', 'reeds_zone', 'reeds_ba', 'interconnect', 'trans_reg', 'trans_grp']
+        n.buses.loc[bus, "reeds_state"] = f"imports_{n.buses.loc[bus, 'reeds_state']}"
+        n.buses.loc[bus, "reeds_zone"] = f"imports_{n.buses.loc[bus, 'reeds_zone']}"
+        n.buses.loc[bus, "reeds_ba"] = f"imports_{n.buses.loc[bus, 'reeds_ba']}"
+        n.buses.loc[bus, "interconnect"] = f"imports_{n.buses.loc[bus, 'interconnect']}"
+        n.buses.loc[bus, "trans_reg"] = f"imports_{n.buses.loc[bus, 'trans_reg']}"
+        n.buses.loc[bus, "trans_grp"] = f"imports_{n.buses.loc[bus, 'trans_grp']}"
 
+        # Set all links and lines connected to the bus as non-extendable
         for c in ["Line", "Link"]:
             attr_name = "p_nom_extendable" if c == "Link" else "s_nom_extendable"
             component = n.df(c)
