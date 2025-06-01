@@ -8,6 +8,8 @@ import pandas as pd
 import pypsa
 from _helpers import calculate_annuity, configure_logging
 from add_electricity import add_missing_carriers
+from opts._helpers import get_region_buses
+from pypsa.descriptors import get_switchable_as_dense as get_as_dense
 
 idx = pd.IndexSlice
 
@@ -770,6 +772,116 @@ def add_demand_response(
     )
 
 
+def trim_network(n, trim_topology):
+    """
+    Trim_network splits the network into two parts:
+        - The internal network, which is the network within the specified zones.
+        - The external network, which is the network outside the specified zones.
+
+    The internal network is retained and unchanged. While the external network components are removed. The external buses which are directly connected to the internal network are aggregated to the `nerc_reg` value of their buses.
+    The only generators kept are the OCGTs at the external buses, which are set to non-extendable.
+
+    The external OCGT generators are set to the carrier name `imports` and retain the same emissions intensity.
+
+    """
+    retain_zones = trim_topology["zone"]
+    internal_buses = get_region_buses(n, retain_zones)
+    if internal_buses.empty:
+        logger.warning("No internal buses found, skipping trim_network")
+        return None
+
+    # Get all lines and links connected to internal buses
+    retain_lines = n.lines[n.lines.bus0.isin(internal_buses.index) | n.lines.bus1.isin(internal_buses.index)]
+    retain_links = n.links[n.links.bus0.isin(internal_buses.index) | n.links.bus1.isin(internal_buses.index)]
+
+    # Find buses to remove (those not connected to internal network)
+    buses_to_remove = n.buses[
+        ~n.buses.index.isin(retain_lines.bus0)
+        & ~n.buses.index.isin(retain_lines.bus1)
+        & ~n.buses.index.isin(retain_links.bus0)
+        & ~n.buses.index.isin(retain_links.bus1)
+    ]
+
+    # Find external buses to keep (connected to internal network but not internal)
+    external_buses_to_keep = n.buses.loc[
+        ~n.buses.index.isin(buses_to_remove.index) & ~n.buses.index.isin(internal_buses.index)
+    ]
+
+    # Remove components at buses that are being removed
+    for c in n.one_port_components:
+        component = n.df(c)
+        rm = component[component.bus.isin(buses_to_remove.index)]
+        if not rm.empty:
+            n.mremove(c, rm.index)
+
+    # Remove lines and links at buses being removed
+    for c in ["Line", "Link"]:
+        component = n.df(c)
+        rm = component[~component.bus0.isin(internal_buses.index) & ~component.bus1.isin(internal_buses.index)]
+        if not rm.empty:
+            n.mremove(c, rm.index)
+
+    # Remove the buses
+    n.mremove("Bus", buses_to_remove.index)
+
+    # Get OCGT generators and calculate average marginal cost
+    ocgt_gens = n.generators[n.generators.carrier == "OCGT"]
+    avg_marginal_cost = get_as_dense(n, "Generator", "marginal_cost").loc[:, ocgt_gens.index].mean().mean()
+    n.add("Carrier", "imports", co2_emissions=0.428, nice_name="imports")
+
+    # remove existing oneport components at bus
+    for c in n.one_port_components:
+        component = n.df(c)
+        rm = component[component.bus.isin(external_buses_to_keep.index)]
+        if not rm.empty:
+            logger.info(f"Removing {c} at external buses {external_buses_to_keep.index} with components {rm.index}")
+            n.mremove(c, rm.index)
+
+    # Handle external buses and their generators
+    for bus in external_buses_to_keep.index:
+        # Create new import generator
+        bus_name = n.buses.loc[bus].name
+        n.add(
+            "Generator",
+            f"import_{bus_name}",
+            bus=bus,
+            carrier="imports",
+            p_nom=1e4,
+            p_nom_extendable=False,
+            marginal_cost=avg_marginal_cost,
+            efficiency=1,
+            build_year=n.investment_periods[0],
+            lifetime=100,
+        )
+
+        # Change location names of external buses, append imports to the ['reeds_state', 'reeds_zone', 'reeds_ba', 'interconnect', 'trans_reg', 'trans_grp']
+        n.buses.loc[bus, "reeds_state"] = f"imports_{n.buses.loc[bus, 'reeds_state']}"
+        n.buses.loc[bus, "reeds_zone"] = f"imports_{n.buses.loc[bus, 'reeds_zone']}"
+        n.buses.loc[bus, "reeds_ba"] = f"imports_{n.buses.loc[bus, 'reeds_ba']}"
+        n.buses.loc[bus, "interconnect"] = f"imports_{n.buses.loc[bus, 'interconnect']}"
+        n.buses.loc[bus, "trans_reg"] = f"imports_{n.buses.loc[bus, 'trans_reg']}"
+        n.buses.loc[bus, "trans_grp"] = f"imports_{n.buses.loc[bus, 'trans_grp']}"
+
+        # Set all links and lines connected to the bus as non-extendable
+        for c in ["Line", "Link"]:
+            attr_name = "p_nom_extendable" if c == "Link" else "s_nom_extendable"
+            component = n.df(c)
+            mask = (component.bus0 == bus) | (component.bus1 == bus)
+            if mask.any():
+                component.loc[mask, attr_name] = False
+                n.df(c).update(component)
+
+        # Remove the links which have "exp" in the name and are connected to the external buses
+        links_to_remove = n.links[
+            n.links.index.str.contains("exp")
+            & (n.links.bus0.isin(external_buses_to_keep.index) | n.links.bus1.isin(external_buses_to_keep.index))
+        ]
+        n.mremove("Link", links_to_remove.index)
+
+    # Update network topology
+    n.determine_network_topology()
+
+
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
@@ -861,6 +973,9 @@ if __name__ == "__main__":
     dr_config = snakemake.params.demand_response
     if dr_config:
         add_demand_response(n, dr_config)
+
+    if snakemake.params.trim_network:
+        trim_network(n, snakemake.params.trim_network)
 
     n.consistency_check()
     n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))

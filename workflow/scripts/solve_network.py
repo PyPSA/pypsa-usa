@@ -27,6 +27,7 @@ import copy
 import logging
 
 import numpy as np
+import pandas as pd
 import pypsa
 import yaml
 from _helpers import (
@@ -106,7 +107,16 @@ def prepare_network(n, solve_opts=None):
 
     if solve_opts.get("nhours"):
         nhours = solve_opts["nhours"]
-        n.set_snapshots(n.snapshots[:nhours])
+        # Get first nhours for each level of the multi-index
+        first_nhours = pd.MultiIndex.from_tuples(
+            [
+                snap
+                for year in n.snapshots.get_level_values(0).unique()
+                for snap in n.snapshots[n.snapshots.get_level_values(0) == year][:nhours]
+            ],
+            names=n.snapshots.names,
+        )
+        n.set_snapshots(first_nhours)
         n.snapshot_weightings[:] = 8760.0 / nhours
 
     return n
