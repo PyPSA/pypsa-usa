@@ -2,7 +2,13 @@ import logging  # noqa: D100
 
 import numpy as np
 import pandas as pd
-from opts._helpers import ceil_precision, filter_components, floor_precision, get_region_buses
+from opts._helpers import (
+    ceil_precision,
+    filter_components,
+    floor_precision,
+    get_model_horizon,
+    get_region_buses,
+)
 from pypsa.descriptors import get_switchable_as_dense as get_as_dense
 
 logger = logging.getLogger(__name__)
@@ -33,8 +39,13 @@ def add_technology_capacity_target_constraints(n, config):
     if tct_data.empty:
         return
 
+    model_horizon = get_model_horizon(n.model)
+
     for _, target in tct_data.iterrows():
         planning_horizon = target.planning_horizon
+        if planning_horizon != "all" and int(planning_horizon) > max(model_horizon):
+            continue
+
         region_list = [region_.strip() for region_ in target.region.split(",")]
         carrier_list = [carrier_.strip() for carrier_ in target.carrier.split(",")]
         region_buses = get_region_buses(n, region_list)
@@ -222,28 +233,14 @@ def add_RPS_constraints(n, config, sector, snakemake=None):
         )
         reeds["carrier"] = [", ".join(carriers)] * len(reeds)
 
-        # # Extract and create new rows for `rps_solar` and `rps_wind`
-        # additional_rows = []
-        # for carrier_col, carrier_name in [
-        #     ("rps_solar", "solar"),
-        #     ("rps_wind", "onwind, offwind, offwind_floating"),
-        # ]:
-        #     if carrier_col in reeds.columns:
-        #         temp = reeds[["region", "planning_horizon", carrier_col]].copy()
-        #         temp = temp.rename(columns={carrier_col: "pct"})
-        #         temp["carrier"] = carrier_name
-        #         additional_rows.append(temp)
-
-        # # Combine original data with additional rows
-        # if additional_rows:
-        #     additional_rows = pd.concat(additional_rows, ignore_index=True)
-        #     reeds = pd.concat([reeds, additional_rows], ignore_index=True)
-
         # Ensure the final dataframe has consistent columns
         reeds = reeds[["region", "planning_horizon", "carrier", "pct"]]
         reeds = reeds[reeds["pct"] > 0.0]  # Remove any rows with zero or negative percentages
 
         return reeds
+
+    # Get model horizon
+    model_horizon = get_model_horizon(n.model)
 
     # Read portfolio standards data
     portfolio_standards = pd.read_csv(config["electricity"]["portfolio_standards"])
@@ -292,7 +289,6 @@ def add_RPS_constraints(n, config, sector, snakemake=None):
     for _, constraint_row in portfolio_standards.iterrows():
         region_list = [region.strip() for region in constraint_row.region.split(",")]
         region_buses = get_region_buses(n, region_list)
-
         if region_buses.empty:
             continue
 
@@ -321,6 +317,8 @@ def add_RPS_constraints(n, config, sector, snakemake=None):
     for (rec_trading_zone, planning_horizon, policy_carriers), zone_constraints in portfolio_standards.groupby(
         ["rec_trading_zone", "planning_horizon", "carrier"],
     ):
+        if planning_horizon not in model_horizon:
+            continue
         region_buses = get_region_buses(n, zone_constraints.region.unique())
         carriers = [carrier.strip() for carrier in policy_carriers.split(",")]
 
@@ -361,17 +359,18 @@ def add_RPS_constraints(n, config, sector, snakemake=None):
 
         logger.info(
             f"Added RPS constraint '{rec_trading_zone}' for {planning_horizon} "
-            f"requiring {renewable_gen:.1f} of {policy_carriers} generation ",
+            f"requiring {renewable_gen / 1e6:.1f} TWh of {policy_carriers} generation ",
         )
 
 
 def add_regional_co2limit(n, config):
     """Adding regional regional CO2 Limits Specified in the config.yaml."""
+    model_horizon = get_model_horizon(n.model)
     regional_co2_lims = pd.read_csv(
         config["electricity"]["regional_Co2_limits"],
         index_col=[0],
     )
-    logger.info("Adding regional Co2 Limits.")
+
     regional_co2_lims = regional_co2_lims[regional_co2_lims.planning_horizon.isin(n.investment_periods)]
     weightings = n.snapshot_weightings.loc[n.snapshots]
 
@@ -388,6 +387,8 @@ def add_regional_co2limit(n, config):
 
         region_co2lim = emmission_lim.limit
         planning_horizon = emmission_lim.planning_horizon
+        if planning_horizon not in model_horizon:
+            continue
 
         efficiency = get_as_dense(
             n,

@@ -1,5 +1,6 @@
 import logging
 
+import linopy
 import numpy as np
 import pandas as pd
 import pypsa
@@ -97,3 +98,7 @@ def ceil_precision(a, precision=0):
 
 def floor_precision(a, precision=0):
     return np.true_divide(np.floor(a * 10**precision), 10**precision)
+
+
+def get_model_horizon(model: linopy.Model) -> list[int]:
+    return model.variables.indexes["snapshot"].get_level_values(0).unique()

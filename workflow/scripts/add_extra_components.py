@@ -827,7 +827,7 @@ def trim_network(n, trim_topology):
     # Get OCGT generators and calculate average marginal cost
     ocgt_gens = n.generators[n.generators.carrier == "OCGT"]
     avg_marginal_cost = get_as_dense(n, "Generator", "marginal_cost").loc[:, ocgt_gens.index].mean().mean()
-    n.add("Carrier", "imports", co2_emissions=0.427, nice_name="imports")
+    n.add("Carrier", "imports", co2_emissions=0.428, nice_name="imports")
 
     # remove existing oneport components at bus
     for c in n.one_port_components:
