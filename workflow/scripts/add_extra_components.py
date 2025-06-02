@@ -8,6 +8,7 @@ import pandas as pd
 import pypsa
 from _helpers import calculate_annuity, configure_logging
 from add_electricity import add_missing_carriers
+#from shapely.geometry import Point
 
 idx = pd.IndexSlice
 
@@ -801,24 +802,68 @@ def add_co2_storage(n: pypsa.Network, co2_storage_csv: str, sector: bool):
         generators = n.generators.index.str.contains("CCS")
         if True in generators:
             indexes = n.generators.loc[generators].index
-
-            #bus4 = ["%s co2 capture" % index.split(" ")[0] for index in indexes]
-            #n.generators.loc[generators, "bus4"] = np.array(bus4)
-            #n.generators.loc[generators, "efficiency4"] = [0.87] * len(indexes)   # TODO: replace with concrete value of how much CO2 is captured when producing one unit in bus1
             n.generators.loc[generators, "capital_cost"] *= 0.9   # remove storage cost from capital cost as storing CO2 is done underground (TODO: replace with concrete storage cost)
             n.generators.loc[generators, "carrier"] = n.generators.loc[generators].carrier.str.replace("CCS", "CC", regex = True)
+
+            # (1)   ok
             n.generators.index = n.generators.index.str.replace("CCS", "CC", regex = True)
 
+            # (2)   ok
             n.madd("Bus",
                 n.generators.loc[generators].index,
                 carrier = n.generators.loc[generators].carrier,
             )
 
+            # (4)   ok
+            indexes = n.generators.loc[generators].index
+            bus2 = ["%s co2 emit" % index.split(" ")[0] for index in indexes]
+            bus3 = ["%s co2 capture" % index.split(" ")[0] for index in indexes]
+            n.madd("Bus",
+                bus2,
+                carrier = "co2",
+            )
+            n.madd("Store",
+                bus2,
+                bus = bus2,
+                e_nom_extendable = True,   # TODO: limit store based on the node's CO2 emissions limit
+                e_min_pu = -1,
+                carrier = "co2",
+            )
             n.madd("Link",
                 n.generators.loc[generators].index,
                 bus0 = n.generators.loc[generators].index,
+                bus1 = n.generators.loc[generators]["bus"],
+                bus2 = bus2,
+                bus3 = bus3,
+                # TODO: specify efficiencies
                 carrier = n.generators.loc[generators].carrier,
             )
+
+            # (3)   ok
+            n.generators.loc[generators, "bus"] = n.generators.loc[generators].index
+
+
+            # add buses to represent state level (air) atmosphere
+            #buses = n.buses[["x", "y"]].copy()
+            #buses["geometry"] = buses.apply(lambda x: Point(x.x, x.y), axis=1)
+            #buses = gpd.GeoDataFrame(buses, crs="EPSG:4269")
+            #states = gpd.GeoDataFrame(gpd.read_file(snakemake.input.county_shapes).dissolve("STUSPS")["geometry"])
+
+            # project to avoid CRS warning from geopandas
+            #buses_projected = buses.to_crs("EPSG:3857")
+            #states_projected = states.to_crs("EPSG:3857")
+            #gdf = gpd.sjoin_nearest(buses_projected, states_projected, how = "left")
+            #statesX = n.buses.index.map(gdf.STUSPS)
+            #n.madd("Bus",
+            #    statesX.unique(),
+            #    suffix = " atmosphere",
+            #    carrier = "co2",
+            #)
+            ##print(statesX)
+
+        #print(8/0)
+
+
 
 
 def add_co2_network(n: pypsa.Network, capital_cost: float, marginal_cost: float, lifetime: int, discount_rate: float):
@@ -988,7 +1033,7 @@ if __name__ == "__main__":
     if dr_config:
         add_demand_response(n, dr_config)
 
-    if snakemake.config["scenario"]["sector"] == "":
+    if snakemake.config["scenario"]["sector"] == "E":
         # add node level CO2 (underground) storage
         if snakemake.config["co2"]["storage"] is True:
             logger.info("Adding node level CO2 (underground) storage")
