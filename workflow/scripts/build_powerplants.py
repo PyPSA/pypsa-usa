@@ -967,4 +967,10 @@ if __name__ == "__main__":
     plants = plants[~plants.index.isin(missing_locations.index)]
 
     logger.info(f"Exporting Powerplants, with {plants.shape[0]} entries.")
+
+    # Sort columns alphabetically for consistent diffing
+    plants = plants.reindex(sorted(plants.columns), axis=1)
+    # Sort rows by generator_name for consistent diffing
+    plants = plants.sort_values("generator_name")
+
     plants.to_csv(snakemake.output.powerplants, index=False)
