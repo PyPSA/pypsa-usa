@@ -53,7 +53,7 @@ FIGURES_VALIDATE = [
     "val_box_region_lmps.pdf",
     "val_map_load_shedding.pdf",
     "val_generator_stack.pdf",
-    "val_map_line_loading.pdf",
+    # "val_map_line_loading.pdf",
     "val_state_generation_deviation.pdf",
     "val_heatmap_state_generation_carrier.pdf",
     "val_cap_state_generation.pdf",

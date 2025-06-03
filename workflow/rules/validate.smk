@@ -33,7 +33,7 @@ rule solve_network_validation:
     threads: solver_threads
     resources:
         walltime=config_provider("walltime", "solve_network_validation"),
-        mem_mb=lambda wildcards, input, attempt: (input.size // 100000) * 80,
+        mem_mb=lambda wildcards, input, attempt: (input.size // 100000) * 90,
     script:
         "../scripts/solve_network.py"
 
@@ -66,6 +66,7 @@ rule plot_validation_figures:
         "logs/plot_figures/validation_{interconnect}_{simpl}_{clusters}_l{ll}_{opts}_{sector}.log",
     threads: 1
     resources:
+        walltime="00:30:00",
         mem_mb=5000,
     script:
         "../scripts/plot_validation_production.py"

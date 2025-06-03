@@ -35,6 +35,7 @@ rule plot_network_maps:
     threads: 1
     resources:
         mem_mb=7000,
+        walltime="00:30:00",
     script:
         "../scripts/plot_network_maps.py"
 
@@ -95,5 +96,6 @@ rule plot_statistics:
     threads: 1
     resources:
         mem_mb=5000,
+        walltime="00:30:00",
     script:
         "../scripts/plot_statistics.py"
