@@ -214,9 +214,30 @@ def load_powerplants(
     plants = pd.read_csv(
         plants_fn,
     )
-    # Filter out non-conus plants and plants that are not built by first investment period.
     plants = plants.set_index("generator_name")
+
+    # Convert current_planned_generator_operating_date to datetime
+    plants["current_planned_generator_operating_date"] = pd.to_datetime(
+        plants["current_planned_generator_operating_date"],
+    )
+    plants.loc[:, "generator_retirement_date"] = pd.to_datetime(plants["generator_retirement_date"])
+
+    # if operational_status is proposed replace build_year with year of current_planned_generator_operating_date
+    plants.loc[plants.operational_status == "proposed", "build_year"] = plants.loc[
+        plants.operational_status == "proposed",
+        "current_planned_generator_operating_date",
+    ].dt.year
+
+    # If operational_status is existing or proposed, replace generator_retirement_date with 1/1/2100
+    plants.loc[plants.operational_status.isin(["existing", "proposed"]), "generator_retirement_date"] = pd.to_datetime(
+        "2100-01-01",
+    )
+
+    # Filter out plants that are not built by first investment period and retired before the first investment period.
     plants = plants[plants.build_year <= investment_periods[0]]
+    plants = plants[plants.generator_retirement_date.dt.year > investment_periods[0]]
+
+    # Filter out non-conus plants
     plants = plants[plants.nerc_region != "non-conus"]
     if (interconnect is not None) & (interconnect != "usa"):
         plants["interconnection"] = plants["nerc_region"].map(const.NERC_REGION_MAPPER)

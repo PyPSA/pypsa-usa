@@ -26,7 +26,7 @@ def load_eia_operable_data(parquet_path: str):
                 generator_id,
                 array_agg(unit_heat_rate_mmbtu_per_mwh ORDER BY report_date DESC) FILTER (WHERE unit_heat_rate_mmbtu_per_mwh IS NOT NULL)[1] AS unit_heat_rate_mmbtu_per_mwh
             FROM read_parquet('{parquet_path}/out_eia__monthly_generators.parquet')
-            WHERE operational_status = 'existing' AND report_date >= '2023-01-01'
+            WHERE report_date >= '2023-01-01'
             GROUP BY plant_id_eia, generator_id
         )
         SELECT
@@ -54,6 +54,8 @@ def load_eia_operable_data(parquet_path: str):
             array_agg(p.balancing_authority_code_eia ORDER BY p.report_date DESC) FILTER (WHERE p.balancing_authority_code_eia IS NOT NULL)[1] AS balancing_authority_code_eia,
             array_agg(yg.current_planned_generator_operating_date ORDER BY yg.report_date DESC) FILTER (WHERE yg.current_planned_generator_operating_date IS NOT NULL)[1] AS current_planned_generator_operating_date,
             array_agg(yg.operational_status_code ORDER BY yg.report_date DESC) FILTER (WHERE yg.operational_status_code IS NOT NULL)[1] AS operational_status_code,
+            array_agg(yg.generator_retirement_date ORDER BY yg.report_date DESC) FILTER (WHERE yg.generator_retirement_date IS NOT NULL)[1] AS generator_retirement_date,
+            array_agg(yg.fuel_type_code_pudl ORDER BY yg.report_date DESC) FILTER (WHERE yg.fuel_type_code_pudl IS NOT NULL)[1] AS fuel_type_code_pudl,
             first(mg.unit_heat_rate_mmbtu_per_mwh) AS unit_heat_rate_mmbtu_per_mwh
         FROM read_parquet('{parquet_path}/out_eia__yearly_generators.parquet') yg
         LEFT JOIN read_parquet('{parquet_path}/core_eia860__scd_generators_energy_storage.parquet') ges
@@ -63,8 +65,7 @@ def load_eia_operable_data(parquet_path: str):
         LEFT JOIN monthly_generators mg
             ON yg.plant_id_eia = mg.plant_id_eia AND yg.generator_id = mg.generator_id
         WHERE
-            yg.operational_status = 'existing'
-            AND yg.operational_status_code IN ('OP')
+            yg.operational_status_code IN ('RE','OP', 'SC', 'SB', 'CO' ,'U', 'V', 'TS', 'T')
             AND yg.report_date >= '2023-01-01'
         GROUP BY yg.plant_id_eia, yg.generator_id
     """,
