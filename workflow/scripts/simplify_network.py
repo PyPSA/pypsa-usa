@@ -216,7 +216,7 @@ if __name__ == "__main__":
     n = pickle.load(open(snakemake.input.network, "rb"))
 
     n.generators = n.generators.drop(
-        columns=["ba_eia", "ba_ads"],
+        columns=["ba_eia"],
     )  # temp added these columns and need to drop for workflow
 
     n = convert_to_voltage_level(n, 230)

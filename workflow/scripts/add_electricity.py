@@ -216,11 +216,14 @@ def load_powerplants(
     )
     plants = plants.set_index("generator_name")
 
-    # Convert current_planned_generator_operating_date to datetime
+    # Convert date columns to datetime
     plants["current_planned_generator_operating_date"] = pd.to_datetime(
         plants["current_planned_generator_operating_date"],
     )
-    plants.loc[:, "generator_retirement_date"] = pd.to_datetime(plants["generator_retirement_date"])
+
+    plants["generator_retirement_date"] = pd.to_datetime(
+        plants["generator_retirement_date"],
+    )
 
     # if operational_status is proposed replace build_year with year of current_planned_generator_operating_date
     plants.loc[plants.operational_status == "proposed", "build_year"] = plants.loc[
@@ -229,9 +232,11 @@ def load_powerplants(
     ].dt.year
 
     # If operational_status is existing or proposed, replace generator_retirement_date with 1/1/2100
-    plants.loc[plants.operational_status.isin(["existing", "proposed"]), "generator_retirement_date"] = pd.to_datetime(
-        "2100-01-01",
-    )
+    retirement_date = pd.to_datetime("2100-01-01")
+    plants.loc[plants.operational_status.isin(["existing", "proposed"]), "generator_retirement_date"] = retirement_date
+
+    # Handle NaT values
+    plants.loc[plants.generator_retirement_date.isna(), "generator_retirement_date"] = pd.to_datetime("1900-01-01")
 
     # Filter out plants that are not built by first investment period and retired before the first investment period.
     plants = plants[plants.build_year <= investment_periods[0]]
@@ -479,7 +484,6 @@ def attach_conventional_generators(
     n.generators.loc[plants.index, "fuel_cost"] = plants.fuel_cost
     n.generators.loc[plants.index, "heat_rate"] = plants.heat_rate_mmbtu_per_mwh
     n.generators.loc[plants.index, "ba_eia"] = plants.balancing_authority_code
-    n.generators.loc[plants.index, "ba_ads"] = plants.ads_balancing_area
 
 
 def normed(s):
