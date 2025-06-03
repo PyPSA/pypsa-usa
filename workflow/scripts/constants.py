@@ -576,11 +576,11 @@ REEDS_NERC_INTERCONNECT_MAPPER = {
 }
 
 
-# Establish REC trading zones
-# If CA is in the WECC, its trading zone is the WECC, otherwise the trading zone is given by this dictionary
 REC_TRADING_ZONE_MAPPER = {
     "CA": "WREGIS",
+    "OR": "WREGIS",
     "AZ": "WREGIS",
+    "WA": "WREGIS",
     "NM": "WREGIS",
     "UT": "WREGIS",
     "CO": "WREGIS",
@@ -593,28 +593,29 @@ REC_TRADING_ZONE_MAPPER = {
     "MN": "MRETS",
     "IA": "MRETS",
     "WI": "MRETS",
-    "MI": "NAR",
+    "MI": "MIRECS",
+    "MO": "NAR",
     "KS": "NAR",
     "IL": "MRETS",
     "IN": "MRETS",
     "OH": "MRETS",
-    "KY": "PJM",
-    "VA": "PJM",
-    "WV": "PJM",
-    "MD": "PJM",
-    "DE": "PJM",
-    "NJ": "PJM",
-    "PA": "PJM",
-    "NY": "NYISO",
-    "CT": "ISO-NE",
-    "RI": "ISO-NE",
-    "MA": "ISO-NE",
-    "NH": "ISO-NE",
-    "ME": "ISO-NE",
-    "VT": "ISO-NE",
+    "KY": "PJM-GATS",
+    "VA": "PJM-GATS",
+    "WV": "PJM-GATS",
+    "MD": "PJM-GATS",
+    "DE": "PJM-GATS",
+    "NJ": "PJM-GATS",
+    "PA": "PJM-GATS",
+    "NY": "NYGATS",
+    "CT": "NEPOOL",
+    "RI": "NEPOOL",
+    "MA": "NEPOOL",
+    "NH": "NEPOOL",
+    "ME": "NEPOOL",
+    "VT": "NEPOOL",
+    "NC": "NC-RETS",
     "TX": "ERCOT",
 }
-
 ################################
 # Constants for Breakthrough mapping
 ################################

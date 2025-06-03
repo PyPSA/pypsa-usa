@@ -195,7 +195,6 @@ rule build_renewable_profiles:
         mem_mb=lambda wildcards, input, attempt: (
             ATLITE_NPROCESSES * input.size // 2000000
         )
-        * attempt
         * 1.5,
         walltime=config_provider(
             "walltime", "build_renewable_profiles", default="02:30:00"
@@ -574,7 +573,7 @@ rule build_powerplants:
         cems="repo_data/plants/cems_heat_rates.xlsx",
         epa_crosswalk="repo_data/plants/epa_eia_crosswalk.csv",
     output:
-        powerplants=RESOURCES + "powerplants.csv",
+        powerplants="resources/powerplants.csv",
     log:
         "logs/build_powerplants.log",
     resources:
@@ -621,7 +620,7 @@ rule add_electricity:
         regions_offshore=RESOURCES
         + "{interconnect}/Geospatial/regions_offshore.geojson",
         reeds_shapes=RESOURCES + "{interconnect}/Geospatial/reeds_shapes.geojson",
-        powerplants=RESOURCES + "powerplants.csv",
+        powerplants="resources/powerplants.csv",
         plants_breakthrough=DATA + "breakthrough_network/base_grid/plant.csv",
         hydro_breakthrough=DATA + "breakthrough_network/base_grid/hydro.csv",
         bus2sub=RESOURCES + "{interconnect}/bus2sub.csv",
@@ -757,6 +756,7 @@ rule add_extra_components:
     params:
         retirement=config["electricity"].get("retirement", "technical"),
         demand_response=config["electricity"].get("demand_response", {}),
+        trim_network=config_provider("model_topology", "trim", default=False),
     output:
         RESOURCES + "{interconnect}/elec_s{simpl}_c{clusters}_ec.nc",
     log:
