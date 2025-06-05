@@ -362,10 +362,10 @@ if __name__ == "__main__":
         snakemake = mock_snakemake(
             "solve_network",
             interconnect="western",
-            simpl="12",
+            simpl="75",
             clusters="4m",
             ll="v1.0",
-            opts="4h",
+            opts="12h",
             sector="E-G",
             planning_horizons="2030",
         )
