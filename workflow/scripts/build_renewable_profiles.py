@@ -45,9 +45,10 @@ def get_buses(profile):
     buses = [int(x) for x in profile['bus'].values]
     return buses
 
-def load_WUS_data(planning_horizon: int, base_path: str = "T:/WRFDownscaled/ec-earth3_r1i1p1f1_ssp370_bc/Annual_Solar_Wind") -> xr.Dataset:
+def load_WUS_data(planning_horizon: int) -> xr.Dataset:
     #Loads WUS data for given planning horizon#
     logger.info(f"Loading WUS data for planning horizon {planning_horizon}...")
+    base_path = snakemake.config['cf_path']
     file_path = Path(base_path) / f"Solar_Wind_CFs_{planning_horizon}.nc"
     
     if not file_path.exists():
