@@ -199,8 +199,8 @@ def get_buses(profile):
 
 def load_WUS_data(planning_horizon: int) -> xr.Dataset:
     #Loads WUS data for given planning horizon#
-    logger.info(f"Loading WUS data for planning horizon {planning_horizon}...")
     base_path = snakemake.config['cf_path']
+    logger.info(f"Loading WUS data for planning horizon {planning_horizon} from {base_path}...")
     file_path = Path(base_path) / f"Solar_Wind_CFs_{planning_horizon}.nc"
     
     if not file_path.exists():
@@ -239,6 +239,8 @@ def return_wus_col(tech):
     if tech == "solar":
         return "Solar"
     if tech == "onwind":
+        return "Wind"
+    if tech == "offwind_floating":
         return "Wind"
 
 def generate_wus_profile(

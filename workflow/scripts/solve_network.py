@@ -1553,8 +1553,9 @@ def solve_network(n, config, solving, opts="", **kwargs):
                     for c_idx in c_lim.index:
                         n.remove(nm, c_idx)
 
-                    for df_idx in df.index:
-                        n.add(nm, df_idx, **df.loc[df_idx])
+                    n.madd(nm,df.index,**df)
+                    #for df_idx in df.index:
+                    #    n.add(nm, df_idx, **df.loc[df_idx])
                     logger.info(n.consistency_check())
 
                     # copy time-dependent
