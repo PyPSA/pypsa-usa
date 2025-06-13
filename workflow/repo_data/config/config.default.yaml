@@ -116,7 +116,6 @@ dac:
   lifetime: 20   # in years
   discount_rate: 0.07   # in percentage
 
-
 # docs :
 costs:
   atb:

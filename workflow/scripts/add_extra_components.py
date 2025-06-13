@@ -8,7 +8,6 @@ import pandas as pd
 import pypsa
 from _helpers import calculate_annuity, configure_logging
 from add_electricity import add_missing_carriers
-#from shapely.geometry import Point
 
 idx = pd.IndexSlice
 
@@ -786,6 +785,14 @@ def add_co2_storage(n: pypsa.Network, co2_storage_csv: str, sector: bool):
         carrier = "co2",
     )
 
+    # add carrier to represent CC only (i.e. without S)
+    carriers = n.carriers.query("Carrier.str.endswith('CCS')")
+    n.madd("Carrier",
+        carriers.index.str.replace("CCS", "CC", regex = True),
+        color = carriers["color"],
+        nice_name = carriers["nice_name"].str.replace("Ccs", "Cc", regex = True),
+    )
+
     if sector is True:
         # update CCS links to point to CO2 capture bus, remove storage cost from their capital cost and replace substring "CCS" with just "CC" in their names and carriers
         links = n.links.index.str.contains("CCS")
@@ -835,7 +842,10 @@ def add_co2_storage(n: pypsa.Network, co2_storage_csv: str, sector: bool):
                 bus1 = n.generators.loc[generators]["bus"],
                 bus2 = bus2,
                 bus3 = bus3,
-                # TODO: specify efficiencies
+                # TODO: specify concrete efficiencies
+                efficiency = 1,
+                efficiency2 = 1,
+                efficiency3 = 1,
                 carrier = n.generators.loc[generators].carrier,
             )
 
@@ -843,34 +853,13 @@ def add_co2_storage(n: pypsa.Network, co2_storage_csv: str, sector: bool):
             n.generators.loc[generators, "bus"] = n.generators.loc[generators].index
 
 
-            # add buses to represent state level (air) atmosphere
-            #buses = n.buses[["x", "y"]].copy()
-            #buses["geometry"] = buses.apply(lambda x: Point(x.x, x.y), axis=1)
-            #buses = gpd.GeoDataFrame(buses, crs="EPSG:4269")
-            #states = gpd.GeoDataFrame(gpd.read_file(snakemake.input.county_shapes).dissolve("STUSPS")["geometry"])
-
-            # project to avoid CRS warning from geopandas
-            #buses_projected = buses.to_crs("EPSG:3857")
-            #states_projected = states.to_crs("EPSG:3857")
-            #gdf = gpd.sjoin_nearest(buses_projected, states_projected, how = "left")
-            #statesX = n.buses.index.map(gdf.STUSPS)
-            #n.madd("Bus",
-            #    statesX.unique(),
-            #    suffix = " atmosphere",
-            #    carrier = "co2",
-            #)
-            ##print(statesX)
-
-        #print(8/0)
-
-
-
-
 def add_co2_network(n: pypsa.Network, capital_cost: float, marginal_cost: float, lifetime: int, discount_rate: float):
     """Adds CO2 (transportation) network."""
 
     # get electricity links
     links = n.links.query("carrier == 'AC' and not Link.str.endswith('exp')")
+
+    # TODO: get electricity lines too
 
     # calculate annualized capital cost
     number_years = n.snapshot_weightings.generators.sum() / 8760
@@ -882,6 +871,7 @@ def add_co2_network(n: pypsa.Network, capital_cost: float, marginal_cost: float,
         suffix = " co2 transport",
         bus0 = links["bus0"] + " co2 capture",
         bus1 = links["bus1"] + " co2 capture",
+        efficiency = 1,
         p_min_pu = -1,
         p_nom_extendable = True,
         length = links.length.values,
@@ -892,35 +882,64 @@ def add_co2_network(n: pypsa.Network, capital_cost: float, marginal_cost: float,
     )
 
 
-def add_dac(n: pypsa.Network, capital_cost: float, electricity_input: float, lifetime: int, discount_rate: float):
+def add_dac(n: pypsa.Network, capital_cost: float, electricity_input: float, lifetime: int, discount_rate: float, sector: bool):
     """Adds node level DAC capabilities."""
 
     # get links that emit CO2 for all sectors
     links = n.links.query("bus2.str.endswith('-co2')")
 
-    # add node level buses to represent emitted CO2 and redirect links that emit CO2 to this bus
-    for index in links.index:
-        node = index.split(" ")[0]
-        bus = "%s co2 emit" % node
-        if bus not in n.buses.index:
-            n.madd("Bus",
-                [bus],
-                carrier = "co2",
-            )
-        bus2 = links.loc[index]["bus2"]
-        link = "%s %s" % (node, "".join(bus2.split(" ")[1:]))
-        if link not in n.links.index:
-            n.madd("Link",
-                [link],
-                bus0 = bus,
-                bus1 = bus2,
-                p_nom_extendable = True,   # TODO: check if this is necessary
-                carrier = "co2",
-            )
-        n.links.loc[index, "bus2"] = bus
+    # generate node level buses to represent emitted, captured and accounted CO2 and links to represent DAC in function of whether network is based on sectors or not
+    seen = set()
+    buses_co2_emit = []
+    buses_co2_capture = []
+    buses_ac = []
+    buses_co2_account = []
+    links_dac = []
+    if sector is True:
+        for index in links.index:
+            bus2 = links.loc[index]["bus2"]   # e.g. "CA pwr-co2"
+            node = index.split(" ")[0]
+            node_sector = bus2.split(" ")[1].split("-")[0]
+            key = "%s %s" % (node, node_sector)
+            if key not in seen:
+                buses_co2_emit.append("%s co2 emit" % key)
+                buses_co2_capture.append("%s co2 capture" % node)
+                buses_ac.append(node)
+                buses_co2_account.append(bus2)
+                links_dac.append("%s dac" % key)
+                seen.add(key)
+    else:
+        for index in links.index:
+            node = index.split(" ")[0]
+            if node not in seen:
+                buses_co2_emit.append("%s co2 emit" % node)
+                buses_co2_capture.append("%s co2 capture" % node)
+                buses_ac.append(node)
+                links_dac.append("%s dac" % node)               
+                seen.add(node)
 
-    # get electricity buses
-    buses = n.buses.query("carrier == 'AC'").index
+    # add node level buses to represent emitted CO2
+    n.madd("Bus",
+        buses_co2_emit,
+        carrier = "co2",
+    )
+    
+    # add links from node level buses that emit CO2 to state level buses tracking CO2 emissions
+    if sector is True:
+        n.madd("Link",
+            buses_co2_emit,
+            bus0 = buses_co2_emit,
+            bus1 = buses_co2_account,
+            efficiency = 1,
+            p_nom_extendable = True,   # TODO: check if this is necessary
+            carrier = "co2",
+        )
+
+    # redirect links that emit CO2 to node level buses that emit CO2
+    if sector is True:
+        n.links.loc[links.index, "bus2"] = links.index.str.split(" ").str[0] + " " + links.loc[links.index]["bus2"].str.split(" ").str[1].str.split("-").str[0] + " co2 emit"   # e.g. "p1 trn co2 limit"
+    else:
+        n.links.loc[links.index, "bus2"] = buses_co2_emit   # e.g. "p1 co2 emit"
 
     # calculate annualized capital cost
     number_years = n.snapshot_weightings.generators.sum() / 8760
@@ -928,14 +947,14 @@ def add_dac(n: pypsa.Network, capital_cost: float, electricity_input: float, lif
 
     # add links to represent node level DAC capabilities
     n.madd("Link",
-        buses,
-        suffix = " dac",
-        bus0 = buses + " co2 emit",
-        bus1 = buses + " co2 capture",
-        bus2 = buses,
+        links_dac,
+        bus0 = buses_co2_emit,
+        bus1 = buses_co2_capture,
+        bus2 = buses_ac,
+        efficiency = 1,
+        efficiency2 = -1,   # TODO: replace with concrete electricity consumption value to capture one tonne of CO2
         p_nom_extendable = True,
         capital_cost = cost,
-        efficiency2 = -1,   # TODO: replace with concrete electricity consumption value to capture one tonne of CO2
         carrier = "co2",
         lifetime = lifetime,
     )
@@ -1051,7 +1070,7 @@ if __name__ == "__main__":
         if snakemake.config["dac"]["enable"] is True:
             if snakemake.config["co2"]["storage"] is True:
                 logger.info("Adding node level DAC capabilities")
-                add_dac(n, snakemake.config["dac"]["capital_cost"], snakemake.config["dac"]["electricity_input"], snakemake.config["dac"]["lifetime"], snakemake.config["dac"]["discount_rate"])
+                add_dac(n, snakemake.config["dac"]["capital_cost"], snakemake.config["dac"]["electricity_input"], snakemake.config["dac"]["lifetime"], snakemake.config["dac"]["discount_rate"], False)
             else:
                 logger.warning("Not adding node level DAC capabilities given that CO2 (underground) storage is not enabled")
 
