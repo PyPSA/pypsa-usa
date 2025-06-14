@@ -787,11 +787,12 @@ def add_co2_storage(n: pypsa.Network, co2_storage_csv: str, sector: bool):
 
     # add carrier to represent CC only (i.e. without S)
     carriers = n.carriers.query("Carrier.str.endswith('CCS')")
-    n.madd("Carrier",
-        carriers.index.str.replace("CCS", "CC", regex = True),
-        color = carriers["color"],
-        nice_name = carriers["nice_name"].str.replace("Ccs", "Cc", regex = True),
-    )
+    if carriers.empty == False:
+        n.madd("Carrier",
+            carriers.index.str.replace("CCS", "CC", regex = True),
+            color = carriers["color"],
+            nice_name = carriers["nice_name"].str.replace("Ccs", "Cc", regex = True),
+        )
 
     if sector is True:
         # update CCS links to point to CO2 capture bus, remove storage cost from their capital cost and replace substring "CCS" with just "CC" in their names and carriers
@@ -805,43 +806,53 @@ def add_co2_storage(n: pypsa.Network, co2_storage_csv: str, sector: bool):
             n.links.loc[links, "carrier"] = n.links.loc[links].carrier.str.replace("CCS", "CC", regex = True)
             n.links.index = n.links.index.str.replace("CCS", "CC", regex = True)
     else:
-        # lorem ipsum
         generators = n.generators.index.str.contains("CCS")
         if True in generators:
-            indexes = n.generators.loc[generators].index
-            n.generators.loc[generators, "capital_cost"] *= 0.9   # remove storage cost from capital cost as storing CO2 is done underground (TODO: replace with concrete storage cost)
-            n.generators.loc[generators, "carrier"] = n.generators.loc[generators].carrier.str.replace("CCS", "CC", regex = True)
 
-            # (1)   ok
+            # reduce CCS generators' capital cost (given that they do not require technology to store CO2 anymore)
+            n.generators.loc[generators, "capital_cost"] *= 0.9   # TODO: replace with concrete storage cost
+
+            # replace "CCS" with "CC" in CCS generators' indexes/carriers description
+            n.generators.loc[generators, "carrier"] = n.generators.loc[generators].carrier.str.replace("CCS", "CC", regex = True)
             n.generators.index = n.generators.index.str.replace("CCS", "CC", regex = True)
 
-            # (2)   ok
+            # add buses to represent node level electricity CC generator
+            indexes = n.generators.loc[generators].index
             n.madd("Bus",
-                n.generators.loc[generators].index,
+                indexes,
                 carrier = n.generators.loc[generators].carrier,
             )
 
-            # (4)   ok
-            indexes = n.generators.loc[generators].index
-            bus2 = ["%s co2 emit" % index.split(" ")[0] for index in indexes]
-            bus3 = ["%s co2 capture" % index.split(" ")[0] for index in indexes]
+            # add carrier to represent CO2
+            n.madd("Carrier",
+                ["co2"],
+                color = snakemake.config["plotting"]["tech_colors"]["co2"],
+                nice_name = snakemake.config["plotting"]["nice_names"]["co2"],
+            )
+
+            # add buses to represent node level emitted CO2 by different processes
+            buses_co2_emit = ["%s co2 emit" % index.split(" ")[0] for index in indexes]
             n.madd("Bus",
-                bus2,
+                buses_co2_emit,
                 carrier = "co2",
             )
+
+            # add stores to represent node level emitted CO2 emissions into the (air) atmosphere
             n.madd("Store",
-                bus2,
-                bus = bus2,
+                buses_co2_emit,
+                bus = buses_co2_emit,
                 e_nom_extendable = True,   # TODO: limit store based on the node's CO2 emissions limit
                 e_min_pu = -1,
                 carrier = "co2",
             )
+
+            # lorem ipsum
             n.madd("Link",
-                n.generators.loc[generators].index,
-                bus0 = n.generators.loc[generators].index,
+                indexes,
+                bus0 = indexes,
                 bus1 = n.generators.loc[generators]["bus"],
-                bus2 = bus2,
-                bus3 = bus3,
+                bus2 = buses_co2_emit,
+                bus3 = co2_storage.index + " co2 capture",
                 # TODO: specify concrete efficiencies
                 efficiency = 1,
                 efficiency2 = 1,
@@ -849,8 +860,8 @@ def add_co2_storage(n: pypsa.Network, co2_storage_csv: str, sector: bool):
                 carrier = n.generators.loc[generators].carrier,
             )
 
-            # (3)   ok
-            n.generators.loc[generators, "bus"] = n.generators.loc[generators].index
+            # attach CC generators to new buses (that represent node level electricity CC generator)
+            n.generators.loc[generators, "bus"] = indexes
 
 
 def add_co2_network(n: pypsa.Network, capital_cost: float, marginal_cost: float, lifetime: int, discount_rate: float):
@@ -885,17 +896,18 @@ def add_co2_network(n: pypsa.Network, capital_cost: float, marginal_cost: float,
 def add_dac(n: pypsa.Network, capital_cost: float, electricity_input: float, lifetime: int, discount_rate: float, sector: bool):
     """Adds node level DAC capabilities."""
 
-    # get links that emit CO2 for all sectors
-    links = n.links.query("bus2.str.endswith('-co2')")
-
     # generate node level buses to represent emitted, captured and accounted CO2 and links to represent DAC in function of whether network is based on sectors or not
-    seen = set()
-    buses_co2_emit = []
-    buses_co2_capture = []
-    buses_ac = []
-    buses_co2_account = []
-    links_dac = []
     if sector is True:
+
+        # get links that emit CO2 for all sectors
+        links = n.links.query("bus2.str.endswith('-co2')")
+
+        seen = set()
+        buses_co2_emit = []
+        buses_co2_capture = []
+        buses_ac = []
+        buses_co2_account = []
+        links_dac = []
         for index in links.index:
             bus2 = links.loc[index]["bus2"]   # e.g. "CA pwr-co2"
             node = index.split(" ")[0]
@@ -908,24 +920,14 @@ def add_dac(n: pypsa.Network, capital_cost: float, electricity_input: float, lif
                 buses_co2_account.append(bus2)
                 links_dac.append("%s dac" % key)
                 seen.add(key)
-    else:
-        for index in links.index:
-            node = index.split(" ")[0]
-            if node not in seen:
-                buses_co2_emit.append("%s co2 emit" % node)
-                buses_co2_capture.append("%s co2 capture" % node)
-                buses_ac.append(node)
-                links_dac.append("%s dac" % node)               
-                seen.add(node)
 
-    # add node level buses to represent emitted CO2
-    n.madd("Bus",
-        buses_co2_emit,
-        carrier = "co2",
-    )
-    
-    # add links from node level buses that emit CO2 to state level buses tracking CO2 emissions
-    if sector is True:
+        # add node level buses to represent emitted CO2
+        n.madd("Bus",
+            buses_co2_emit,
+            carrier = "co2",
+        )
+
+        # add links from node level buses that emit CO2 to state level buses tracking CO2 emissions
         n.madd("Link",
             buses_co2_emit,
             bus0 = buses_co2_emit,
@@ -935,15 +937,39 @@ def add_dac(n: pypsa.Network, capital_cost: float, electricity_input: float, lif
             carrier = "co2",
         )
 
-    # redirect links that emit CO2 to node level buses that emit CO2
-    if sector is True:
+        # redirect links that emit CO2 to node level buses that emit CO2
         n.links.loc[links.index, "bus2"] = links.index.str.split(" ").str[0] + " " + links.loc[links.index]["bus2"].str.split(" ").str[1].str.split("-").str[0] + " co2 emit"   # e.g. "p1 trn co2 limit"
+
     else:
-        n.links.loc[links.index, "bus2"] = buses_co2_emit   # e.g. "p1 co2 emit"
+        buses_co2_capture = n.buses.query("Bus.str.endswith(' co2 capture')").index
+
+        buses_co2_emit = ["%s co2 emit" % index.split(" ")[0] for index in buses_co2_capture]        
+        # add node level buses to represent emitted CO2
+        n.madd("Bus",
+            buses_co2_emit,
+            carrier = "co2",
+        )
+        
+        buses_ac = [index.split(" ")[0] for index in buses_co2_capture]
+        links_dac = ["%s dac" % index.split(" ")[0] for index in buses_co2_capture]
+
 
     # calculate annualized capital cost
     number_years = n.snapshot_weightings.generators.sum() / 8760
     cost = capital_cost * calculate_annuity(lifetime, discount_rate) * number_years
+
+    print("links_dac:")
+    print(links_dac)
+    print("")
+    print("buses_co2_emit:")
+    print(buses_co2_emit)
+    print("")    
+    print("buses_co2_capture:")
+    print(buses_co2_capture)
+    print("")
+    print("buses_ac:")
+    print(buses_ac)
+    print("")
 
     # add links to represent node level DAC capabilities
     n.madd("Link",
@@ -958,6 +984,7 @@ def add_dac(n: pypsa.Network, capital_cost: float, electricity_input: float, lif
         carrier = "co2",
         lifetime = lifetime,
     )
+    #print(99/0)
 
 
 if __name__ == "__main__":
