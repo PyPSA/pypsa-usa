@@ -831,7 +831,14 @@ def add_co2_storage(n: pypsa.Network, co2_storage_csv: str, sector: bool):
             )
 
             # add buses to represent node level emitted CO2 by different processes
-            buses_co2_emit = ["%s co2 emit" % index.split(" ")[0] for index in indexes]
+            granularity = snakemake.config["dac"]["granularity"]
+            if granularity == "nation":
+                buses_co2_emit = ["atmosphere"]
+            elif granularity == "state":
+                # TODO: implement logic            
+                pass
+            else:   # node
+                buses_co2_emit = ["%s co2 emit" % index.split(" ")[0] for index in indexes]
             n.madd("Bus",
                 buses_co2_emit,
                 carrier = "co2",
@@ -841,7 +848,7 @@ def add_co2_storage(n: pypsa.Network, co2_storage_csv: str, sector: bool):
             n.madd("Store",
                 buses_co2_emit,
                 bus = buses_co2_emit,
-                e_nom_extendable = True,   # TODO: limit store based on the node's CO2 emissions limit
+                e_nom_extendable = True,
                 e_min_pu = -1,
                 carrier = "co2",
             )
@@ -860,7 +867,7 @@ def add_co2_storage(n: pypsa.Network, co2_storage_csv: str, sector: bool):
                 carrier = n.generators.loc[generators].carrier,
             )
 
-            # attach CC generators to new buses (that represent node level electricity CC generator)
+            # (re-)attach CC generators to new buses (that represent node level electricity CC generator)
             n.generators.loc[generators, "bus"] = indexes
 
 
@@ -942,15 +949,15 @@ def add_dac(n: pypsa.Network, capital_cost: float, electricity_input: float, lif
         n.links.loc[links.index, "bus2"] = links.index.str.split(" ").str[0] + " " + links.loc[links.index]["bus2"].str.split(" ").str[1].str.split("-").str[0] + " co2 emit"   # e.g. "p1 trn co2 limit"
 
     else:
+        granularity = snakemake.config["dac"]["granularity"]
+        if granularity == "nation":
+            buses_co2_emit = ["atmosphere"]
+        elif granularity == "state":
+            # TODO: implement logic            
+            pass
+        else:   # node
+            buses_co2_emit = n.buses.query("Bus.str.endswith(' co2 emit')").index        
         buses_co2_capture = n.buses.query("Bus.str.endswith(' co2 capture')").index
-
-        buses_co2_emit = ["%s co2 emit" % index.split(" ")[0] for index in buses_co2_capture]        
-        # add node level buses to represent emitted CO2
-        n.madd("Bus",
-            buses_co2_emit,
-            carrier = "co2",
-        )
-        
         buses_ac = [index.split(" ")[0] for index in buses_co2_capture]
         links_dac = ["%s dac" % index.split(" ")[0] for index in buses_co2_capture]
 
