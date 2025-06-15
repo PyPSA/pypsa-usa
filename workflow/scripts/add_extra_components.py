@@ -867,26 +867,27 @@ def add_co2_storage(n: pypsa.Network, co2_storage_csv: str, sector: bool):
 def add_co2_network(n: pypsa.Network, capital_cost: float, marginal_cost: float, lifetime: int, discount_rate: float):
     """Adds CO2 (transportation) network."""
 
-    # get electricity links
-    links = n.links.query("carrier == 'AC' and not Link.str.endswith('exp')")
-
-    # TODO: get electricity lines too
+    # get electricity connections
+    if snakemake.config["model_topology"]["transmission_network"] == "reeds":
+        connections = n.links.query("carrier == 'AC' and not Link.str.endswith('exp')")   # ReEDS
+    else:
+        connections = n.lines   # TAMU
 
     # calculate annualized capital cost
     number_years = n.snapshot_weightings.generators.sum() / 8760
     cost = capital_cost * calculate_annuity(lifetime, discount_rate) * number_years
 
-    # add links to represent CO2 (transportation) network based on electricity links layout
+    # add links to represent CO2 (transportation) network based on electricity connections layout
     n.madd("Link",
-        links.index,
+        connections.index,
         suffix = " co2 transport",
-        bus0 = links["bus0"] + " co2 capture",
-        bus1 = links["bus1"] + " co2 capture",
+        bus0 = connections["bus0"] + " co2 capture",
+        bus1 = connections["bus1"] + " co2 capture",
         efficiency = 1,
         p_min_pu = -1,
         p_nom_extendable = True,
-        length = links.length.values,
-        capital_cost = cost * links.length.values,
+        length = connections["length"].values,
+        capital_cost = cost * connections["length"].values,
         marginal_cost = marginal_cost,
         carrier = "co2",
         lifetime = lifetime,
