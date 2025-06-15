@@ -832,13 +832,20 @@ def add_co2_storage(n: pypsa.Network, co2_storage_csv: str, sector: bool):
 
             # add buses to represent node level emitted CO2 by different processes
             granularity = snakemake.config["dac"]["granularity"]
+            transmission_network = snakemake.config["model_topology"]["transmission_network"]
             if granularity == "nation":
                 buses_co2_emit = ["atmosphere"]
             elif granularity == "state":
-                # TODO: implement logic            
-                pass
+                # TODO: implement logic for states
+                if transmission_network == "reeds":
+                    buses_co2_emit = ["%s co2 emit" % index.split(" ")[0] for index in indexes]
+                else:   # TAMU
+                    buses_co2_emit = ["%s co2 emit" % " ".join(index.split(" ")[:2]) for index in indexes]
             else:   # node
-                buses_co2_emit = ["%s co2 emit" % index.split(" ")[0] for index in indexes]
+                if transmission_network == "reeds":
+                    buses_co2_emit = ["%s co2 emit" % index.split(" ")[0] for index in indexes]
+                else:   # TAMU
+                    buses_co2_emit = ["%s co2 emit" % " ".join(index.split(" ")[:2]) for index in indexes]
             n.madd("Bus",
                 buses_co2_emit,
                 carrier = "co2",
@@ -876,9 +883,9 @@ def add_co2_network(n: pypsa.Network, capital_cost: float, marginal_cost: float,
 
     # get electricity connections
     if snakemake.config["model_topology"]["transmission_network"] == "reeds":
-        connections = n.links.query("carrier == 'AC' and not Link.str.endswith('exp')")   # ReEDS
-    else:
-        connections = n.lines   # TAMU
+        connections = n.links.query("carrier == 'AC' and not Link.str.endswith('exp')")
+    else:   # TAMU
+        connections = n.lines
 
     # calculate annualized capital cost
     number_years = n.snapshot_weightings.generators.sum() / 8760
@@ -949,18 +956,13 @@ def add_dac(n: pypsa.Network, capital_cost: float, electricity_input: float, lif
         n.links.loc[links.index, "bus2"] = links.index.str.split(" ").str[0] + " " + links.loc[links.index]["bus2"].str.split(" ").str[1].str.split("-").str[0] + " co2 emit"   # e.g. "p1 trn co2 limit"
 
     else:
-        granularity = snakemake.config["dac"]["granularity"]
-        if granularity == "nation":
+        if snakemake.config["dac"]["granularity"] == "nation":
             buses_co2_emit = ["atmosphere"]
-        elif granularity == "state":
-            # TODO: implement logic            
-            pass
-        else:   # node
+        else:   # state or node
             buses_co2_emit = n.buses.query("Bus.str.endswith(' co2 emit')").index        
         buses_co2_capture = n.buses.query("Bus.str.endswith(' co2 capture')").index
-        buses_ac = [index.split(" ")[0] for index in buses_co2_capture]
-        links_dac = ["%s dac" % index.split(" ")[0] for index in buses_co2_capture]
-
+        buses_ac = buses_co2_capture.str.replace(" co2 capture", "")
+        links_dac = buses_co2_capture.str.replace(" co2 capture", " dac")
 
     # calculate annualized capital cost
     number_years = n.snapshot_weightings.generators.sum() / 8760
