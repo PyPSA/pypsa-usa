@@ -8,6 +8,7 @@ import pandas as pd
 import pypsa
 from _helpers import calculate_annuity, configure_logging
 from add_electricity import add_missing_carriers
+from shapely.geometry import Point
 
 idx = pd.IndexSlice
 
@@ -832,29 +833,51 @@ def add_co2_storage(n: pypsa.Network, co2_storage_csv: str, sector: bool):
 
             # add buses to represent node level emitted CO2 by different processes
             granularity = snakemake.config["dac"]["granularity"]
-            transmission_network = snakemake.config["model_topology"]["transmission_network"]
             if granularity == "nation":
-                buses_co2_emit = ["atmosphere"]
-            elif granularity == "state":
-                # TODO: implement logic for states
-                if transmission_network == "reeds":
-                    buses_co2_emit = ["%s co2 emit" % index.split(" ")[0] for index in indexes]
+                buses_atmosphereA = ["atmosphere"]
+                buses_atmosphereB = buses_atmosphereA
+            else:
+                if snakemake.config["model_topology"]["transmission_network"] == "reeds":
+                    elements = 1
                 else:   # TAMU
-                    buses_co2_emit = ["%s co2 emit" % " ".join(index.split(" ")[:2]) for index in indexes]
-            else:   # node
-                if transmission_network == "reeds":
-                    buses_co2_emit = ["%s co2 emit" % index.split(" ")[0] for index in indexes]
-                else:   # TAMU
-                    buses_co2_emit = ["%s co2 emit" % " ".join(index.split(" ")[:2]) for index in indexes]
+                    elements = 2
+                if granularity == "state":
+                    buses = n.buses[["x", "y"]].copy()
+                    buses["geometry"] = buses.apply(lambda x: Point(x.x, x.y), axis = 1)
+                    buses = gpd.GeoDataFrame(buses, crs = "EPSG:4269")
+                    states = gpd.GeoDataFrame(gpd.read_file(snakemake.input.county_shapes).dissolve("STUSPS")["geometry"])
+                    buses_projected = buses.to_crs("EPSG:3857")
+                    states_projected = states.to_crs("EPSG:3857")
+                    gdf = gpd.sjoin_nearest(buses_projected, states_projected, how = "left")
+
+                    xxx = gdf.query("x != 0 and y != 0")["STUSPS"]                
+                    print("xxx:", xxx)
+
+                    buses_atmosphereA = xxx.unique() + " atmosphere"
+                    buses_atmosphereB = ["%s atmosphere" % xxx.loc[" ".join(index.split(" ")[:elements])] for index in indexes]
+
+                    #for index in indexes:
+                    #    node = " ".join(index.split(" ")[:elements])
+                    #    print("index:", index, " *** node:", node)
+                    #    buses_atmosphereB.append("%s atmosphere" % xxx.loc[node])
+
+                    print(list(buses_atmosphereA))
+                    print(buses_atmosphereB)
+                    #print(7/0)
+                else:   # node
+                    buses_atmosphereA = ["%s atmosphere" % " ".join(index.split(" ")[:elements]) for index in indexes]
+                    buses_atmosphereB = buses_atmosphereA
+
+            # add buses to represent emitted CO2 emissions into the (air) atmosphere
             n.madd("Bus",
-                buses_co2_emit,
+                buses_atmosphereA,
                 carrier = "co2",
             )
 
-            # add stores to represent node level emitted CO2 emissions into the (air) atmosphere
+            # add stores to represent emitted CO2 emissions into the (air) atmosphere
             n.madd("Store",
-                buses_co2_emit,
-                bus = buses_co2_emit,
+                buses_atmosphereA,
+                bus = buses_atmosphereA,
                 e_nom_extendable = True,
                 e_min_pu = -1,
                 carrier = "co2",
@@ -865,7 +888,7 @@ def add_co2_storage(n: pypsa.Network, co2_storage_csv: str, sector: bool):
                 indexes,
                 bus0 = indexes,
                 bus1 = n.generators.loc[generators]["bus"],
-                bus2 = buses_co2_emit,
+                bus2 = buses_atmosphereB,
                 bus3 = co2_storage.index + " co2 capture",
                 # TODO: specify concrete efficiencies
                 efficiency = 1,
@@ -918,7 +941,7 @@ def add_dac(n: pypsa.Network, capital_cost: float, electricity_input: float, lif
         links = n.links.query("bus2.str.endswith('-co2')")
 
         seen = set()
-        buses_co2_emit = []
+        buses_atmosphere = []
         buses_co2_capture = []
         buses_ac = []
         buses_co2_account = []
@@ -929,7 +952,7 @@ def add_dac(n: pypsa.Network, capital_cost: float, electricity_input: float, lif
             node_sector = bus2.split(" ")[1].split("-")[0]
             key = "%s %s" % (node, node_sector)
             if key not in seen:
-                buses_co2_emit.append("%s co2 emit" % key)
+                buses_atmosphere.append("%s atmosphere" % key)
                 buses_co2_capture.append("%s co2 capture" % node)
                 buses_ac.append(node)
                 buses_co2_account.append(bus2)
@@ -938,14 +961,14 @@ def add_dac(n: pypsa.Network, capital_cost: float, electricity_input: float, lif
 
         # add node level buses to represent emitted CO2
         n.madd("Bus",
-            buses_co2_emit,
+            buses_atmosphere,
             carrier = "co2",
         )
 
         # add links from node level buses that emit CO2 to state level buses tracking CO2 emissions
         n.madd("Link",
-            buses_co2_emit,
-            bus0 = buses_co2_emit,
+            buses_atmosphere,
+            bus0 = buses_atmosphere,
             bus1 = buses_co2_account,
             efficiency = 1,
             p_nom_extendable = True,   # TODO: check if this is necessary
@@ -953,13 +976,10 @@ def add_dac(n: pypsa.Network, capital_cost: float, electricity_input: float, lif
         )
 
         # redirect links that emit CO2 to node level buses that emit CO2
-        n.links.loc[links.index, "bus2"] = links.index.str.split(" ").str[0] + " " + links.loc[links.index]["bus2"].str.split(" ").str[1].str.split("-").str[0] + " co2 emit"   # e.g. "p1 trn co2 limit"
+        n.links.loc[links.index, "bus2"] = links.index.str.split(" ").str[0] + " " + links.loc[links.index]["bus2"].str.split(" ").str[1].str.split("-").str[0] + " atmosphere"   # e.g. "p1 trn co2 limit"
 
     else:
-        if snakemake.config["dac"]["granularity"] == "nation":
-            buses_co2_emit = ["atmosphere"]
-        else:   # state or node
-            buses_co2_emit = n.buses.query("Bus.str.endswith(' co2 emit')").index        
+        buses_atmosphere = n.links.query("bus2.str.endswith('atmosphere')")["bus2"].values
         buses_co2_capture = n.buses.query("Bus.str.endswith(' co2 capture')").index
         buses_ac = buses_co2_capture.str.replace(" co2 capture", "")
         links_dac = buses_co2_capture.str.replace(" co2 capture", " dac")
@@ -971,8 +991,8 @@ def add_dac(n: pypsa.Network, capital_cost: float, electricity_input: float, lif
     print("links_dac:")
     print(links_dac)
     print("")
-    print("buses_co2_emit:")
-    print(buses_co2_emit)
+    print("buses_atmosphere:")
+    print(buses_atmosphere)
     print("")    
     print("buses_co2_capture:")
     print(buses_co2_capture)
@@ -984,7 +1004,7 @@ def add_dac(n: pypsa.Network, capital_cost: float, electricity_input: float, lif
     # add links to represent node level DAC capabilities
     n.madd("Link",
         links_dac,
-        bus0 = buses_co2_emit,
+        bus0 = buses_atmosphere,
         bus1 = buses_co2_capture,
         bus2 = buses_ac,
         efficiency = 1,
@@ -994,7 +1014,6 @@ def add_dac(n: pypsa.Network, capital_cost: float, electricity_input: float, lif
         carrier = "co2",
         lifetime = lifetime,
     )
-    #print(99/0)
 
 
 if __name__ == "__main__":
