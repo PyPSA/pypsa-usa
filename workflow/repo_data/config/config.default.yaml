@@ -112,8 +112,8 @@ co2:
 dac:
   enable: false   # [false, true]
   granularity: "nation"   # ["node", "state", "nation"]
-  capital_cost: 1000
-  electricity_input: 10
+  capital_cost: 6000000   # in USD (cost based on Danish Energy Agency estimation to capture one tonne of CO2 per hour) 
+  electricity_input: 2.5   # in MWh (average consumption based on https://doi.org/10.1557/s43581-024-00091-5, which ranges between 2 to 3 MWh to capture one tonne of CO2)
   lifetime: 20   # in years
   discount_rate: 0.07   # in percentage
 

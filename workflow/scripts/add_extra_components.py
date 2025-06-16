@@ -796,21 +796,28 @@ def add_co2_storage(n: pypsa.Network, co2_storage_csv: str, sector: bool):
         )
 
     if sector is True:
-        # update CCS links to point to CO2 capture bus, remove storage cost from their capital cost and replace substring "CCS" with just "CC" in their names and carriers
+
         links = n.links.index.str.contains("CCS")
         if True in links:
+            # add bus4 to CCS links to point to their respective CO2 capture bus
             indexes = n.links.loc[links].index
             bus4 = ["%s co2 capture" % index.split(" ")[0] for index in indexes]
             n.links.loc[links, "bus4"] = np.array(bus4)
             n.links.loc[links, "efficiency4"] = [0.87] * len(indexes)   # TODO: replace with concrete value of how much CO2 is captured when producing one unit in bus1
-            n.links.loc[links, "capital_cost"] *= 0.9   # remove storage cost from capital cost as storing CO2 is done underground (TODO: replace with concrete storage cost)
+
+            # remove storage cost from CCS links' capital cost (given that they do not require technology to store CO2 anymore as this is done underground)
+            n.links.loc[links, "capital_cost"] *= 0.9   # TODO: replace with concrete storage cost
+
+            # replace substring "CCS" with just "CC" in CCS links' names and carriers
             n.links.loc[links, "carrier"] = n.links.loc[links].carrier.str.replace("CCS", "CC", regex = True)
             n.links.index = n.links.index.str.replace("CCS", "CC", regex = True)
-    else:
+
+    else:   # sector-less
+
         generators = n.generators.index.str.contains("CCS")
         if True in generators:
 
-            # reduce CCS generators' capital cost (given that they do not require technology to store CO2 anymore)
+            # remove storage cost from CCS generators' capital cost (given that they do not require technology to store CO2 anymore as this is done underground)
             n.generators.loc[generators, "capital_cost"] *= 0.9   # TODO: replace with concrete storage cost
 
             # replace "CCS" with "CC" in CCS generators' indexes/carriers description
@@ -978,7 +985,8 @@ def add_dac(n: pypsa.Network, capital_cost: float, electricity_input: float, lif
         # redirect links that emit CO2 to node level buses that emit CO2
         n.links.loc[links.index, "bus2"] = links.index.str.split(" ").str[0] + " " + links.loc[links.index]["bus2"].str.split(" ").str[1].str.split("-").str[0] + " atmosphere"   # e.g. "p1 trn co2 limit"
 
-    else:
+    else:   # sector-less
+
         buses_atmosphere = n.links.query("bus2.str.endswith('atmosphere')")["bus2"].values
         buses_co2_capture = n.buses.query("Bus.str.endswith(' co2 capture')").index
         buses_ac = buses_co2_capture.str.replace(" co2 capture", "")
@@ -1007,8 +1015,8 @@ def add_dac(n: pypsa.Network, capital_cost: float, electricity_input: float, lif
         bus0 = buses_atmosphere,
         bus1 = buses_co2_capture,
         bus2 = buses_ac,
-        efficiency = 1,
-        efficiency2 = -1,   # TODO: replace with concrete electricity consumption value to capture one tonne of CO2
+        efficiency = 1,   # in tCO2
+        efficiency2 = -electricity_input,   # in MWh (for each tCO2)
         p_nom_extendable = True,
         capital_cost = cost,
         carrier = "co2",
