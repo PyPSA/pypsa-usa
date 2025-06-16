@@ -734,7 +734,7 @@ rule add_extra_components:
         regions_onshore=RESOURCES
         + "{interconnect}/Geospatial/regions_onshore_s{simpl}_{clusters}.geojson",
         co2_storage = RESOURCES + "{interconnect}/co2_storage_s{simpl}_{clusters}.csv" if config["scenario"]["sector"] == "" and config["co2"]["storage"] is True else [],
-        #county_shapes = DATA + "counties/cb_2020_us_county_500k.shp",
+        county_shapes = DATA + "counties/cb_2020_us_county_500k.shp",
     params:
         retirement=config["electricity"].get("retirement", "technical"),
         demand_response=config["electricity"].get("demand_response", {}),
