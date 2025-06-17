@@ -19,7 +19,7 @@ foresight:  'perfect' # myopic, perfect
 
 model_topology:
   transmission_network: 'reeds' # [reeds, tamu]
-  topological_boundaries: 'reeds_zone' # [county, reeds_zone]
+  topological_boundaries: 'reeds_zone' # [county, reeds_zone, state]
   interface_transmission_limits: false
   include: # mixed zone types not supported
     # reeds_zone: []

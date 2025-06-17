@@ -18,7 +18,7 @@ from _helpers import (
     update_p_nom_max,
 )
 from add_electricity import update_transmission_costs
-from constants import REEDS_NERC_INTERCONNECT_MAPPER
+from constants import REEDS_NERC_INTERCONNECT_MAPPER, STATES_INTERCONNECT_MAPPER
 from pypsa.clustering.spatial import (
     busmap_by_greedy_modularity,
     busmap_by_hac,
@@ -468,10 +468,15 @@ def convert_to_transport(
     itls = pd.read_csv(itl_fn)
     itl_cost = pd.read_csv(itl_cost_fn)
     itls.columns = itls.columns.str.lower()
-    itls_filt = itls[
-        itls.r.isin(clustering.network.buses[f"{topological_boundaries}"])
-        & itls.rr.isin(clustering.network.buses[f"{topological_boundaries}"])
-    ]
+    if topological_boundaries == "state":  # use reeds_state - abbreviations
+        itls_filt = itls[
+            itls.r.isin(clustering.network.buses["reeds_state"]) & itls.rr.isin(clustering.network.buses["reeds_state"])
+        ]
+    else:
+        itls_filt = itls[
+            itls.r.isin(clustering.network.buses[f"{topological_boundaries}"])
+            & itls.rr.isin(clustering.network.buses[f"{topological_boundaries}"])
+        ]
     add_itls(buses, itls_filt, itl_cost)
 
     if itl_agg_fn:
@@ -693,6 +698,10 @@ if __name__ == "__main__":
                 f"Aggregating to transport model with {topological_boundaries} zones.",
             )
             match topological_boundaries:
+                case "state":
+                    custom_busmap = n.buses.reeds_state.copy()
+                    itl_fn = snakemake.input.itl_state
+                    itl_cost_fn = snakemake.input.itl_costs_state
                 case "reeds_zone":
                     custom_busmap = n.buses.reeds_zone.copy()
                     itl_fn = snakemake.input.itl_reeds_zone
@@ -726,6 +735,8 @@ if __name__ == "__main__":
                     n.buses.loc[agg_busmap.index, "county"] = "na"
                 if key == "reeds_zone":
                     n.buses.loc[agg_busmap.index, "county"] = "na"
+                if key == "reeds_state":
+                    n.buses.loc[agg_busmap.index, "county"] = "na"
                 itl_agg_fn = snakemake.input[f"itl_{key}"]
                 itl_agg_costs_fn = snakemake.input.get(f"itl_costs_{key}", None)
 
@@ -736,8 +747,14 @@ if __name__ == "__main__":
                 nodes_req,
             ), f"Number of clusters must be {len(nodes_req)} for current configuration."
 
-            n.buses.interconnect = n.buses.nerc_reg.map(REEDS_NERC_INTERCONNECT_MAPPER)
+            if topological_boundaries != "state":  # nerc_reg was droped in the "state" case
+                n.buses.interconnect = n.buses.nerc_reg.map(REEDS_NERC_INTERCONNECT_MAPPER)
             n.lines = n.lines.drop(columns=["interconnect"])
+
+        if (
+            topological_boundaries == "state"
+        ):  # Some states span multiple interconnects and will affect clustering_for_n_clusters
+            n.buses = n.buses.drop(columns=["interconnect"])
 
         clustering = clustering_for_n_clusters(
             n,
@@ -752,6 +769,12 @@ if __name__ == "__main__":
             params.focus_weights,
             weighting_strategy=params.cluster_network.get("weighting_strategy", None),
         )
+
+        # add interconnect information back to clustered network
+        if topological_boundaries == "state":
+            clustering.network.buses["interconnect"] = clustering.network.buses["reeds_state"].map(
+                STATES_INTERCONNECT_MAPPER,
+            )
 
         if transport_model:
             # Use Reeds Data

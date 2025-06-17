@@ -45,7 +45,7 @@ repos:
   - id: blackdoc
 
 - repo: https://github.com/astral-sh/ruff-pre-commit
-  rev: v0.11.5  # Check for the latest version
+  rev: v0.11.10  # Check for the latest version
   hooks:
   - id: ruff
     args: ["--config=pyproject.toml", "--fix"]

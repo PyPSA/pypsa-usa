@@ -86,15 +86,18 @@ def main(snakemake):
 
     gpd_counties = gpd.read_file(snakemake.input.county_shapes).set_index("GEOID")
     gpd_reeds = gpd.read_file(snakemake.input.reeds_shapes).set_index("name")
+    gpd_states = gpd.read_file(snakemake.input.state_shapes).set_index("name")
 
     match topological_boundaries:
         case "county":
             agg_region_shapes = gpd_counties.geometry
         case "reeds_zone":
             agg_region_shapes = gpd_reeds.geometry
+        case "state":
+            agg_region_shapes = gpd_states.geometry
         case _:
             raise ValueError(
-                "Valid values for `model_topology: zonal_aggregation:` are `reeds_zone` or `county`",
+                "Valid values for `model_topology: topological_boundaries:` are `reeds_zone`, `county`, or `state`",
             )
 
     gpd_offshore_shapes = gpd.read_file(snakemake.input.offshore_shapes)

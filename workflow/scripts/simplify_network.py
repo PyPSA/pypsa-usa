@@ -119,6 +119,7 @@ def aggregate_to_substations(
             "balancing_area",
             "reeds_zone",
             "reeds_ba",
+            "reeds_state",
             "x",
             "y",
         ]
@@ -132,6 +133,8 @@ def aggregate_to_substations(
             zone = substations.county
         case "reeds_zone":
             zone = substations.reeds_zone
+        case "state":
+            zone = substations.reeds_state
         case _:
             raise ValueError(
                 "zonal_aggregation must be either balancing_area, country, or state",
@@ -147,7 +150,27 @@ def aggregate_to_substations(
 
     network_s.lines["type"] = np.nan
 
-    if topological_boundaries != "reeds_zone" and topological_boundaries != "county":
+    if topological_boundaries == "reeds_zone" or topological_boundaries == "county":
+        cols2drop = [
+            "balancing_area",
+            "substation_off",
+            "sub_id",
+            "state",
+        ]
+    elif topological_boundaries == "state":
+        cols2drop = [
+            "balancing_area",
+            "substation_off",
+            "sub_id",
+            "county",
+            "reeds_zone",
+            "reeds_ba",
+            "nerc_reg",
+            "trans_reg",
+            "trans_grp",
+            "state",
+        ]
+    else:
         cols2drop = [
             "balancing_area",
             "state",
@@ -159,13 +182,6 @@ def aggregate_to_substations(
             "trans_reg",
             "trans_grp",
             "reeds_state",
-        ]
-    else:
-        cols2drop = [
-            "balancing_area",
-            "substation_off",
-            "sub_id",
-            "state",
         ]
 
     # Only drop columns that exist in the DataFrame
@@ -243,7 +259,7 @@ if __name__ == "__main__":
         params.aggregation_strategies,
     )
 
-    if topological_boundaries == "reeds_zone":
+    if topological_boundaries in ["reeds_zone", "state"] and "county" in n.buses.columns:
         n.buses = n.buses.drop(columns=["county"])
 
     if snakemake.wildcards.simpl:
