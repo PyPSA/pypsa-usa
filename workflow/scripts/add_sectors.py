@@ -757,7 +757,7 @@ if __name__ == "__main__":
     # add node level CO2 (underground) storage
     if snakemake.config["co2"]["storage"] is True:
         logger.info("Adding node level CO2 (underground) storage")
-        add_co2_storage(n, snakemake.config, snakemake.input.co2_storage, True)
+        add_co2_storage(n, snakemake.config, snakemake.input.co2_storage, costs, True)
 
     # add CO2 (transportation) network
     if snakemake.config["co2"]["network"]["enable"] is True:
