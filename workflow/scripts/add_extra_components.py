@@ -825,7 +825,7 @@ def add_co2_storage(n: pypsa.Network, config: dict, co2_storage_csv: str, costs:
                 else:
                     logger.warning("Assuming a CO2 intensity equal to 1 given that link '%s' is not powered by gas or coal" % index)
                     efficiency = 1 / link_efficiency * 1
-                cc_level = int(index.split("-")[1].split("CCS")[0]) / 100   # e.g. extract CC level from index - e.g. index "p1 CCGT-95CCS_2030" returns 0.95
+                cc_level = int(index.split("-")[1].split("CCS")[0]) / 100   # extract CC level from index (e.g. index "p1 CCGT-95CCS_2030" returns 0.95)
                 efficiency2.append(efficiency * (1 - cc_level) / cc_level)
                 efficiency4.append(efficiency)
             n.links.loc[links, "efficiency2"] = efficiency2
@@ -873,7 +873,7 @@ def add_co2_storage(n: pypsa.Network, config: dict, co2_storage_csv: str, costs:
                     states_gdf = gpd.GeoDataFrame(gpd.read_file(snakemake.input.county_shapes).dissolve("STUSPS")["geometry"])
                     buses_projected = buses_gdf.to_crs("EPSG:3857")
                     states_projected = states_gdf.to_crs("EPSG:3857")                    
-                    states = gpd.sjoin_nearest(buses_projected, states_projected, how = "left").query("x != 0 and y != 0")["STUSPS"]   # TODO: remove the query and have it when making a copy of the buses above (this way it will faster to make the join operation)
+                    states = gpd.sjoin_nearest(buses_projected, states_projected, how = "left").query("x != 0 and y != 0")["STUSPS"]   # TODO: remove the query and have it when making a copy of the buses above (this way it will be faster to make the join operation)
                     buses_atmosphere_unique = states.unique() + " atmosphere"
                     buses_atmosphere = ["%s atmosphere" % states.loc[" ".join(index.split(" ")[:elements])] for index in indexes]
                 else:   # node
@@ -907,7 +907,7 @@ def add_co2_storage(n: pypsa.Network, config: dict, co2_storage_csv: str, costs:
                 else:
                     logger.warning("Assuming a CO2 intensity equal to 1 given that generator '%s' is not powered by gas or coal" % index)
                     efficiency = 1 / generator_efficiency * 1
-                cc_level = int(index.split("-")[1].split("CCS")[0]) / 100   # e.g. extract CC level from index - e.g. index "p1 CCGT-95CCS_2030" returns 0.95
+                cc_level = int(index.split("-")[1].split("CCS")[0]) / 100   # extract CC level from index (e.g. index "p1 CCGT-95CCS_2030" returns 0.95)
                 efficiency2.append(efficiency)
                 efficiency3.append(efficiency * (1 - cc_level) / cc_level)
 
