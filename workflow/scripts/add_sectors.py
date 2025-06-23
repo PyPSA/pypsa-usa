@@ -766,7 +766,7 @@ if __name__ == "__main__":
             add_co2_network(n, snakemake.config)
         else:
             logger.warning(
-                "Not adding CO2 (transportation) network given that CO2 (underground) storage is not enabled"
+                "Not adding CO2 (transportation) network given that CO2 (underground) storage is not enabled",
             )
 
     # add node level DAC capabilities

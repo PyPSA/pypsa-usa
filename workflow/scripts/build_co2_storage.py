@@ -53,7 +53,7 @@ def build_co2_storage(regions_onshore_geojson, co2_storage_geojson, output_csv, 
                 logger.info("Node '%s' has no CO2 storage potential" % node_name)
             else:
                 logger.info(
-                    f"Node '{node_name}' has an aggregated CO2 storage potential of {co2_storage_potential:0.1f} MtCO2 with an average cost of {co2_storage_cost_average:0.2f} USD/tCO2"
+                    f"Node '{node_name}' has an aggregated CO2 storage potential of {co2_storage_potential:0.1f} MtCO2 with an average cost of {co2_storage_cost_average:0.2f} USD/tCO2",
                 )
         data_frame.loc[len(data_frame)] = [node_name, co2_storage_potential, co2_storage_cost_average]
 
@@ -68,7 +68,10 @@ if __name__ == "__main__":
     # build and save CO2 storage potentials and costs
     if "snakemake" in globals():
         build_co2_storage(
-            snakemake.input["regions_onshore"], snakemake.input["co2_storage"], snakemake.output["co2_storage"], logger
+            snakemake.input["regions_onshore"],
+            snakemake.input["co2_storage"],
+            snakemake.output["co2_storage"],
+            logger,
         )
     else:
         logger = logging.getLogger(__name__)
