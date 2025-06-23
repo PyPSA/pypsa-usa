@@ -946,7 +946,8 @@ def add_co2_storage(n: pypsa.Network, config: dict, co2_storage_csv: str, costs:
                     efficiency = 1 / link_efficiency * coal_co2_intensity
                 else:
                     logger.warning(
-                        "Assuming a CO2 intensity equal to 1 given that link '%s' is not powered by gas or coal" % index
+                        "Assuming a CO2 intensity equal to 1 given that link '%s' is not powered by gas or coal"
+                        % index,
                     )
                     efficiency = 1 / link_efficiency * 1
                 cc_level = (
@@ -976,7 +977,9 @@ def add_co2_storage(n: pypsa.Network, config: dict, co2_storage_csv: str, costs:
 
             # replace "CCS" with "CC" in generators' indexes/carriers description
             n.generators.loc[generators, "carrier"] = n.generators.loc[generators].carrier.str.replace(
-                "CCS", "CC", regex=True
+                "CCS",
+                "CC",
+                regex=True,
             )
             n.generators.index = n.generators.index.str.replace("CCS", "CC", regex=True)
 
@@ -1003,14 +1006,16 @@ def add_co2_storage(n: pypsa.Network, config: dict, co2_storage_csv: str, costs:
                     buses["geometry"] = buses.apply(lambda x: Point(x.x, x.y), axis=1)
                     buses_gdf = gpd.GeoDataFrame(buses, crs="EPSG:4269")
                     states_gdf = gpd.GeoDataFrame(
-                        gpd.read_file(snakemake.input.county_shapes).dissolve("STUSPS")["geometry"]
+                        gpd.read_file(snakemake.input.county_shapes).dissolve("STUSPS")["geometry"],
                     )
                     buses_projected = buses_gdf.to_crs("EPSG:3857")
                     states_projected = states_gdf.to_crs("EPSG:3857")
                     states = gpd.sjoin_nearest(
-                        buses_projected, states_projected, how="left"
+                        buses_projected,
+                        states_projected,
+                        how="left",
                     ).query(
-                        "x != 0 and y != 0"
+                        "x != 0 and y != 0",
                     )[
                         "STUSPS"
                     ]  # TODO: remove the query and have it when making a copy of the buses above (this way it will be faster to make the join operation)
@@ -1053,7 +1058,7 @@ def add_co2_storage(n: pypsa.Network, config: dict, co2_storage_csv: str, costs:
                 else:
                     logger.warning(
                         "Assuming a CO2 intensity equal to 1 given that generator '%s' is not powered by gas or coal"
-                        % index
+                        % index,
                     )
                     efficiency = 1 / generator_efficiency * 1
                 cc_level = (
@@ -1335,7 +1340,7 @@ if __name__ == "__main__":
                 add_co2_network(n, snakemake.config)
             else:
                 logger.warning(
-                    "Not adding CO2 (transportation) network given that CO2 (underground) storage is not enabled"
+                    "Not adding CO2 (transportation) network given that CO2 (underground) storage is not enabled",
                 )
 
         # add node level DAC capabilities
@@ -1345,7 +1350,7 @@ if __name__ == "__main__":
                 add_dac(n, snakemake.config, False)
             else:
                 logger.warning(
-                    "Not adding node level DAC capabilities given that CO2 (underground) storage is not enabled"
+                    "Not adding node level DAC capabilities given that CO2 (underground) storage is not enabled",
                 )
 
     n.consistency_check()
