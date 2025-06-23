@@ -951,7 +951,7 @@ def add_co2_storage(n: pypsa.Network, config: dict, co2_storage_csv: str, costs:
                     )
                     efficiency = 1 / link_efficiency * 1
                 cc_level = (
-                    int(index.split("-")[1].split("CCS")[0]) / 100
+                    int(index.split("-")[1].split("CC")[0]) / 100
                 )  # extract CC level from index (e.g. index "p1 CCGT-95CCS_2030" returns 0.95)
                 efficiency2.append(efficiency * (1 - cc_level) / cc_level)
                 efficiency4.append(efficiency)
@@ -1062,7 +1062,7 @@ def add_co2_storage(n: pypsa.Network, config: dict, co2_storage_csv: str, costs:
                     )
                     efficiency = 1 / generator_efficiency * 1
                 cc_level = (
-                    int(index.split("-")[1].split("CCS")[0]) / 100
+                    int(index.split("-")[1].split("CC")[0]) / 100
                 )  # extract CC level from index (e.g. index "p1 CCGT-95CCS_2030" returns 0.95)
                 efficiency2.append(efficiency)
                 efficiency3.append(efficiency * (1 - cc_level) / cc_level)
