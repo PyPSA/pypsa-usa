@@ -14,7 +14,7 @@ import pandas as pd
 import pypsa
 from _helpers import configure_logging, get_snapshots, load_costs
 from add_electricity import sanitize_carriers
-from add_extra_components import add_co2_storage, add_co2_network, add_dac
+from add_extra_components import add_co2_network, add_co2_storage, add_dac
 from build_electricity_sector import build_electricty
 from build_emission_tracking import build_ch4_tracking, build_co2_tracking
 from build_heat import build_heat
@@ -766,7 +766,7 @@ if __name__ == "__main__":
             add_co2_network(n, snakemake.config)
         else:
             logger.warning(
-                "Not adding CO2 (transportation) network given that CO2 (underground) storage is not enabled"
+                "Not adding CO2 (transportation) network given that CO2 (underground) storage is not enabled",
             )
 
     # add node level DAC capabilities
