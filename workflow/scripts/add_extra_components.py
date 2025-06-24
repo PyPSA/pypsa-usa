@@ -1142,62 +1142,59 @@ def add_dac(n: pypsa.Network, config: dict, sector: bool):
         # get links that emit CO2 for all sectors
         links = n.links.query("bus2.str.endswith('-co2')")
 
-        # lorem ipsum
-        exists = set()
+        # set buses and links needed to create DAC links properly afterwards
+        exists_atmosphere = set()
+        exists_dac = set()
         buses_atmosphere = []
+        buses_atmosphere_all = []
+        buses_atmosphere_unique = []
         buses_co2_account = []
         links_dac = []
         for index in links.index:
-            bus2 = links.loc[index]["bus2"]  # e.g. "CA pwr-co2"
-            node = " ".join(index.split(" ")[:elements])  # e.g. "p9" if ReEDS or "p100 0" if TAMU
-            state = bus2.split(" ")[0]  # e.g. "CA"
-            node_sector = bus2.split(" ")[1].split("-")[0]  # "pwr"
-
+            bus2 = links.loc[index]["bus2"]  # e.g. "CA pwr-co2"   # ok
+            node = " ".join(index.split(" ")[:elements])  # e.g. "p9" if ReEDS or "p100 0" if TAMU   # ok
+            state = bus2.split(" ")[0]  # e.g. "CA"   # ok
+            state_sector = bus2.split(" ")[1].split("-")[0]  # e.g. "pwr"   # ok
             if granularity == "node":
-                atmosphere = f"{node} {node_sector} atmosphere"
+                atmosphere = f"{node} {state_sector} atmosphere"   # ok
             else:  # state
-                atmosphere = f"{state} {node_sector} atmosphere"
-
-            if atmosphere not in exists:
+                atmosphere = f"{state} {state_sector} atmosphere"   # ok
+            buses_atmosphere_all.append(atmosphere)
+            if atmosphere not in exists_atmosphere:
+                buses_atmosphere_unique.append(atmosphere)   # ok (1)
+                buses_co2_account.append(bus2)   # ok (2)
+                exists_atmosphere.add(atmosphere)
+            dac = f"{node} {state_sector} dac"
+            if dac not in exists_dac:
                 buses_atmosphere.append(atmosphere)
-                buses_co2_account.append(bus2)
-                exists.add(atmosphere)
+                buses_co2_capture.append(f"{node} co2 capture")
+                buses_ac.append(node)
+                links_dac.append(dac)   # ok (4)
+                exists_dac.add(dac)
 
-            links_dac.append(f"{node} {node_sector} dac")
-
-        # add node or state level buses on a per sector basis to represent (air) atmosphere where CO2 emissions are sent to
+        # add node or state level buses to represent (air) atmosphere where CO2 emissions are sent to (on a per sector basis)   # ok (1)
         n.madd(
             "Bus",
-            buses_atmosphere,
+            buses_atmosphere_unique,
             carrier="co2",
         )
 
-        # print("*****")
-        # print("buses_atmosphere:", buses_atmosphere)
-        # print("buses_co2_account:", buses_co2_account)
-        # print("*****")
-        # print(7/0)
-
-        # add links from node level buses that emit CO2 to state level buses tracking CO2 emissions
+        # add links from node or state level buses that represent (air) atmosphere to state level buses tracking CO2 emissions (on a per sector basis)   # ok (2)
         n.madd(
             "Link",
-            buses_atmosphere,
-            bus0=buses_atmosphere,
+            buses_atmosphere_unique,
+            bus0=buses_atmosphere_unique,
             bus1=buses_co2_account,
             efficiency=1,
             p_nom_extendable=True,  # TODO: check if this is necessary
             carrier="co2",
         )
 
-        # redirect links that emit CO2 to node or state level buses that represent (air) atmosphere   # e.g. "p1 trn co2 limit"
-        n.links.loc[links.index, "bus2"] = buses_atmosphere
-
-        # set buses and links with relevant information to create DAC links properly afterwards
-        buses_co2_capture = n.buses.query("Bus.str.endswith(' co2 capture')").index
-        buses_ac = buses_co2_capture.str.replace(" co2 capture", "")
+        # redirect links that emit CO2 to node or state level buses that represent (air) atmosphere   # e.g. "p1 trn atmosphere"   # ok (3)
+        n.links.loc[links.index, "bus2"] = buses_atmosphere_all
 
     else:  # sector-less
-        # set buses and links with relevant information to create DAC links properly afterwards
+        # set buses and links needed to create DAC links properly afterwards
         buses_atmosphere = n.links.query("bus2.str.endswith('atmosphere')")["bus2"].values
         buses_co2_capture = n.buses.query("Bus.str.endswith(' co2 capture')").index
         buses_ac = buses_co2_capture.str.replace(" co2 capture", "")
