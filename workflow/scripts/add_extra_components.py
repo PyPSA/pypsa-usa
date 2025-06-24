@@ -955,6 +955,8 @@ def add_co2_storage(n: pypsa.Network, config: dict, co2_storage_csv: str, costs:
                 )  # extract CC level from index (e.g. index "p1 CCGT-95CCS_2030" returns 0.95)
                 efficiency2.append(efficiency * (1 - cc_level) / cc_level)
                 efficiency4.append(efficiency)
+
+            # set links' bus2 and bus4 efficiencies 
             n.links.loc[links, "efficiency2"] = efficiency2
             n.links.loc[links, "efficiency4"] = efficiency4
 
@@ -1123,6 +1125,12 @@ def add_dac(n: pypsa.Network, config: dict, sector: bool):
     """Adds node level DAC capabilities."""
     # generate node level buses to represent emitted, captured and accounted CO2 and links to represent DAC in function of whether network is based on sectors or not
     if sector is True:
+        # get DAC granularity/scope
+        granularity = config["dac"]["granularity"]
+        if granularity == "nation":
+            granularity = "node"
+            logger.warning("Nation level DAC capabilities is not applicable for a network based on sectors - defaulting to node level instead")
+
         # set number of elements based on electricity transmission network type
         if config["model_topology"]["transmission_network"] == "reeds":
             elements = 1
@@ -1133,13 +1141,8 @@ def add_dac(n: pypsa.Network, config: dict, sector: bool):
         links = n.links.query("bus2.str.endswith('-co2')")
 
         # lorem ipsum
-        existing_states = set()
-        existing_dac = set()
+        exists = set()
         buses_atmosphere = []
-        buses_atmosphere_unique = []
-        buses_atmosphereXXX = []
-        buses_co2_capture = []
-        buses_ac = []
         buses_co2_account = []
         links_dac = []
         for index in links.index:
@@ -1147,62 +1150,53 @@ def add_dac(n: pypsa.Network, config: dict, sector: bool):
             node = " ".join(index.split(" ")[:elements])  # e.g. "p9" if ReEDS or "p100 0" if TAMU
             state = bus2.split(" ")[0]  # e.g. "CA"
             node_sector = bus2.split(" ")[1].split("-")[0]  # "pwr"
-            buses_atmosphereXXX.append("%s atmosphere" % state)
 
-            # if state not in existing_states:
-            #    buses_atmosphere_unique.append("%s atmosphere" % state)
-            #    buses_co2_account.append(bus2)
-            #    existing_states.add(state)
+            if granularity == "node":
+                atmosphere = "%s %s atmosphere" % (node, node_sector)
+            else:   # state
+                atmosphere = "%s %s atmosphere" % (state, node_sector)
 
-            # if node not in existing_dac:
-            #    buses_ac.append(node)
-            #    links_dac.append("%s dac" % node)
-            #    buses_co2_capture.append("%s capture" % node)
-            #    existing_dac.add(node)
-            #    buses_atmosphere.append("%s atmosphere" % state)
-
-            key = (node, node_sector)
-            if key not in existing_states:
-                buses_atmosphere_unique.append(f"{node} {node_sector} atmosphere")
+            if atmosphere not in exists:
+                buses_atmosphere.append(atmosphere)
                 buses_co2_account.append(bus2)
-                existing_states.add(key)
+                exists.add(atmosphere)
 
-            if key not in existing_dac:
-                buses_ac.append(node)
-                links_dac.append(f"{node} {node_sector} dac")
-                # buses_co2_capture.append("%s capture" % node)
-                buses_atmosphere.append(f"{node} {node_sector} atmosphere")
-                existing_dac.add(key)
+            links_dac.append("%s %s dac" % (node, node_sector))
 
-        ###################
-        buses_co2_capture = n.buses.query("Bus.str.endswith(' co2 capture')").index
-        buses_ac = buses_co2_capture.str.replace(" co2 capture", "")
-        links_dac = [buses_atmosphere_unique.str.replace(" atmosphere", " dac")]
-        ####################
-
-        # add state level buses to represent (air) atmosphere where CO2 emissions are sent to
+        # add node or state level buses on a per sector basis to represent (air) atmosphere where CO2 emissions are sent to
         n.madd(
             "Bus",
-            buses_atmosphere_unique,
+            buses_atmosphere,
             carrier="co2",
         )
+        
+        #print("*****")
+        #print("buses_atmosphere:", buses_atmosphere)
+        #print("buses_co2_account:", buses_co2_account)
+        #print("*****")
+        #print(7/0)
 
         # add links from node level buses that emit CO2 to state level buses tracking CO2 emissions
         n.madd(
             "Link",
-            buses_atmosphere_unique,
-            bus0=buses_atmosphere_unique,
+            buses_atmosphere,
+            bus0=buses_atmosphere,
             bus1=buses_co2_account,
             efficiency=1,
             p_nom_extendable=True,  # TODO: check if this is necessary
             carrier="co2",
         )
 
-        # redirect links that emit CO2 to node level buses that emit CO2
-        # n.links.loc[links.index, "bus2"] = links.index.str.split(" ").str[0] + " " + links.loc[links.index]["bus2"].str.split(" ").str[1].str.split("-").str[0] + " atmosphere"   # e.g. "p1 trn co2 limit"
-        n.links.loc[links.index, "bus2"] = buses_atmosphereXXX
+        # redirect links that emit CO2 to node or state level buses that represent (air) atmosphere   # e.g. "p1 trn co2 limit"
+        n.links.loc[links.index, "bus2"] = buses_atmosphere
+
+        # set buses and links with relevant information to create DAC links properly afterwards
+        buses_co2_capture = n.buses.query("Bus.str.endswith(' co2 capture')").index
+        buses_ac = buses_co2_capture.str.replace(" co2 capture", "")
 
     else:  # sector-less
+
+        # set buses and links with relevant information to create DAC links properly afterwards
         buses_atmosphere = n.links.query("bus2.str.endswith('atmosphere')")["bus2"].values
         buses_co2_capture = n.buses.query("Bus.str.endswith(' co2 capture')").index
         buses_ac = buses_co2_capture.str.replace(" co2 capture", "")
