@@ -1130,7 +1130,7 @@ def add_dac(n: pypsa.Network, config: dict, sector: bool):
         if granularity == "nation":
             granularity = "node"
             logger.warning(
-                "Nation level DAC capabilities is not applicable for a network based on sectors - defaulting to node level instead"
+                "Nation level DAC capabilities is not applicable for a network based on sectors - defaulting to node level instead",
             )
 
         # set number of elements based on electricity transmission network type
@@ -1156,20 +1156,20 @@ def add_dac(n: pypsa.Network, config: dict, sector: bool):
             state = bus2.split(" ")[0]  # e.g. "CA"   # ok
             state_sector = bus2.split(" ")[1].split("-")[0]  # e.g. "pwr"   # ok
             if granularity == "node":
-                atmosphere = f"{node} {state_sector} atmosphere"   # ok
+                atmosphere = f"{node} {state_sector} atmosphere"  # ok
             else:  # state
-                atmosphere = f"{state} {state_sector} atmosphere"   # ok
+                atmosphere = f"{state} {state_sector} atmosphere"  # ok
             buses_atmosphere_all.append(atmosphere)
             if atmosphere not in exists_atmosphere:
-                buses_atmosphere_unique.append(atmosphere)   # ok (1)
-                buses_co2_account.append(bus2)   # ok (2)
+                buses_atmosphere_unique.append(atmosphere)  # ok (1)
+                buses_co2_account.append(bus2)  # ok (2)
                 exists_atmosphere.add(atmosphere)
             dac = f"{node} {state_sector} dac"
             if dac not in exists_dac:
                 buses_atmosphere.append(atmosphere)
                 buses_co2_capture.append(f"{node} co2 capture")
                 buses_ac.append(node)
-                links_dac.append(dac)   # ok (4)
+                links_dac.append(dac)  # ok (4)
                 exists_dac.add(dac)
 
         # add node or state level buses to represent (air) atmosphere where CO2 emissions are sent to (on a per sector basis)   # ok (1)
