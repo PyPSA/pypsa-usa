@@ -956,7 +956,7 @@ def add_co2_storage(n: pypsa.Network, config: dict, co2_storage_csv: str, costs:
                 efficiency2.append(efficiency * (1 - cc_level) / cc_level)
                 efficiency4.append(efficiency)
 
-            # set links' bus2 and bus4 efficiencies 
+            # set links' bus2 and bus4 efficiencies
             n.links.loc[links, "efficiency2"] = efficiency2
             n.links.loc[links, "efficiency4"] = efficiency4
 
@@ -1129,7 +1129,9 @@ def add_dac(n: pypsa.Network, config: dict, sector: bool):
         granularity = config["dac"]["granularity"]
         if granularity == "nation":
             granularity = "node"
-            logger.warning("Nation level DAC capabilities is not applicable for a network based on sectors - defaulting to node level instead")
+            logger.warning(
+                "Nation level DAC capabilities is not applicable for a network based on sectors - defaulting to node level instead"
+            )
 
         # set number of elements based on electricity transmission network type
         if config["model_topology"]["transmission_network"] == "reeds":
@@ -1152,16 +1154,16 @@ def add_dac(n: pypsa.Network, config: dict, sector: bool):
             node_sector = bus2.split(" ")[1].split("-")[0]  # "pwr"
 
             if granularity == "node":
-                atmosphere = "%s %s atmosphere" % (node, node_sector)
-            else:   # state
-                atmosphere = "%s %s atmosphere" % (state, node_sector)
+                atmosphere = f"{node} {node_sector} atmosphere"
+            else:  # state
+                atmosphere = f"{state} {node_sector} atmosphere"
 
             if atmosphere not in exists:
                 buses_atmosphere.append(atmosphere)
                 buses_co2_account.append(bus2)
                 exists.add(atmosphere)
 
-            links_dac.append("%s %s dac" % (node, node_sector))
+            links_dac.append(f"{node} {node_sector} dac")
 
         # add node or state level buses on a per sector basis to represent (air) atmosphere where CO2 emissions are sent to
         n.madd(
@@ -1169,12 +1171,12 @@ def add_dac(n: pypsa.Network, config: dict, sector: bool):
             buses_atmosphere,
             carrier="co2",
         )
-        
-        #print("*****")
-        #print("buses_atmosphere:", buses_atmosphere)
-        #print("buses_co2_account:", buses_co2_account)
-        #print("*****")
-        #print(7/0)
+
+        # print("*****")
+        # print("buses_atmosphere:", buses_atmosphere)
+        # print("buses_co2_account:", buses_co2_account)
+        # print("*****")
+        # print(7/0)
 
         # add links from node level buses that emit CO2 to state level buses tracking CO2 emissions
         n.madd(
@@ -1195,7 +1197,6 @@ def add_dac(n: pypsa.Network, config: dict, sector: bool):
         buses_ac = buses_co2_capture.str.replace(" co2 capture", "")
 
     else:  # sector-less
-
         # set buses and links with relevant information to create DAC links properly afterwards
         buses_atmosphere = n.links.query("bus2.str.endswith('atmosphere')")["bus2"].values
         buses_co2_capture = n.buses.query("Bus.str.endswith(' co2 capture')").index
