@@ -1,9 +1,11 @@
 ﻿,Unit,Value,Description
 simplify_network:,,,
+weighting_strategy,str,"{population, demand-capacity}","When building multiple networks, Use 'population' if you want to ensure the clusters are assigned constant names."
 to_substations,bool,"{true, false}",Implementation curerntly overrides to true. Network is simplified to substation nodes with positive or negative power injection.
 algorithm,str,{'kmeans'},
 feature,str," {'solar+onwind-time', 'solar+onwind-cap', 'solar-time', 'solar-cap', 'solar+offwind-cap'}",For HAC clustering.
 cluster_network:,,,
+weighting_strategy,str,"{population, demand-capacity}","When building multiple networks, Use 'population' if you want to ensure the clusters are assigned constant names."
 algorithm,str,{'kmeans'},
 feature,str," {'solar+onwind-time', 'solar+onwind-cap', 'solar-time', 'solar-cap', 'solar+offwind-cap'}",For HAC clustering.
 aggregation_strategies:,,,

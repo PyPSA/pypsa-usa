@@ -1,8 +1,11 @@
+"""Plotting for natural gas networks."""
+
 import logging
-import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
+
+# Optional used as 'arg: callable | None = None' gives TypeError with py3.11
 from typing import Any, Optional
 
 import matplotlib.pyplot as plt
@@ -30,15 +33,17 @@ FIG_WIDTH = 14
 
 @dataclass
 class PlottingData:
+    """Class for ploting sector network data."""
+
     name: str
     getter: callable
     plotter: callable
-    nice_name: Optional[str] = None
-    unit: Optional[str] = None
-    converter: Optional[float] = 1.0
-    resample: Optional[str] = None  # "D", "W", "12h" for example
-    resample_func: Optional[callable] = None  # pd.Series.sum for example
-    plot_by_month: Optional[bool] = False  # not resampled
+    nice_name: str | None = None
+    unit: str | None = None
+    converter: float | None = 1.0
+    resample: str | None = None  # "D", "W", "12h" for example
+    resample_func: Optional[callable] = None  # pd.Series.sum for example  # noqa: UP007
+    plot_by_month: bool | None = False  # not resampled
 
 
 def _get_month_name(month: Month) -> str:
@@ -46,9 +51,7 @@ def _get_month_name(month: Month) -> str:
 
 
 def _resample_data(df: pd.DataFrame, freq: str, agg_func: callable) -> pd.DataFrame:
-    """
-    Helper for resampling data based on input function.
-    """
+    """Helper for resampling data based on input function."""
     if df.empty:
         return df
     else:
@@ -60,9 +63,7 @@ def _group_data(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _sum_state_data(data: dict[str, pd.DataFrame]) -> pd.DataFrame:
-    """
-    Sums state data together.
-    """
+    """Sums state data together."""
     if not data:
         return pd.DataFrame()
 
@@ -73,10 +74,7 @@ def _sum_state_data(data: dict[str, pd.DataFrame]) -> pd.DataFrame:
 def _sum_state_trade_data(
     data: dict[dict[str, pd.DataFrame]],
 ) -> dict[str, pd.DataFrame]:
-    """
-    Sums state data together.
-    """
-
+    """Sums state data together."""
     import_data = {}
     export_data = {}
 
@@ -108,10 +106,7 @@ def plot_gas(
     units: str,
     **kwargs,
 ) -> tuple[plt.Figure, plt.Axes]:
-    """
-    General gas plotting function.
-    """
-
+    """General gas plotting function."""
     df = data.copy()
 
     if df.empty:
@@ -148,19 +143,20 @@ def plot_gas_trade(
     units: str,
     **kwargs,
 ) -> tuple[plt.Figure, plt.Axes]:
-    """
-    General gas trade plotting function.
-    """
-
+    """General gas trade plotting function."""
     # periods will be the same for imports or exports
     periods = data["imports"].index.get_level_values("period").unique()
 
     n_rows = len(periods)
 
-    fig, axs = plt.subplots(n_rows, 2, sharey=True, figsize=(FIG_WIDTH, FIG_HEIGHT * n_rows))
+    fig, axs = plt.subplots(
+        n_rows,
+        2,
+        sharey=True,
+        figsize=(FIG_WIDTH, FIG_HEIGHT * n_rows),
+    )
 
     for i, period in enumerate(periods):
-
         # plot imports
 
         imports = data["imports"].copy()
@@ -285,7 +281,6 @@ PLOTTING_META = [
 ]
 
 if __name__ == "__main__":
-
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
 
@@ -312,7 +307,8 @@ if __name__ == "__main__":
     plotting_metadata = [PlottingData(**x) for x in PLOTTING_META]
 
     # hack to only read in the network once, but get images to all states independently
-    # ie. "interconnect}/figures/s{{simpl}}_c{{clusters}}/l{{ll}}_{{opts}}_{{sector}}/system/natural_gas/%s.png"
+    # ie.
+    # "interconnect}/figures/s{{simpl}}_c{{clusters}}/l{{ll}}_{{opts}}_{{sector}}/system/natural_gas/%s.png"
 
     # {result_name: {state: save_path.png}}
     expected_figures = {}
@@ -323,13 +319,12 @@ if __name__ == "__main__":
         result = p.stem  # ie. 'demand'
         state_paths = {}
         for state in states:
-            full_path = root_path + [state] + figure_name
+            full_path = [*root_path, state, *figure_name]
             full_path = Path("/".join(full_path))
             state_paths[state] = full_path
         expected_figures[result] = state_paths
 
     for meta in plotting_metadata:
-
         if meta.name not in expected_figures:
             logger.warning(f"Not expecting {meta.name} natural gas chart")
             continue
@@ -337,7 +332,6 @@ if __name__ == "__main__":
         data = meta.getter(n)
 
         for state in states:
-
             if state == "system":
                 if _is_trade_data(data):
                     state_data = _sum_state_trade_data(data)
@@ -364,11 +358,19 @@ if __name__ == "__main__":
             if meta.resample:
                 title = f"{state} {meta.nice_name} resampled to {meta.resample}"
                 if isinstance(state_data, pd.DataFrame):
-                    state_data_resampled = _resample_data(state_data, meta.resample, meta.resample_func)
+                    state_data_resampled = _resample_data(
+                        state_data,
+                        meta.resample,
+                        meta.resample_func,
+                    )
                 elif isinstance(state_data, dict):
                     state_data_resampled = {}
                     for k, v in state_data.items():
-                        state_data_resampled[k] = _resample_data(v, meta.resample, meta.resample_func)
+                        state_data_resampled[k] = _resample_data(
+                            v,
+                            meta.resample,
+                            meta.resample_func,
+                        )
             else:
                 title = f"{state} {meta.nice_name}"
                 state_data_resampled = state_data
@@ -390,7 +392,6 @@ if __name__ == "__main__":
             months = {month.value: _get_month_name(month) for month in Month}
 
             for month_i, month_name in months.items():
-
                 if isinstance(state_data, pd.DataFrame):
                     if not state_data.empty:
                         state_data_month = state_data[state_data.index.get_level_values("timestep").month == month_i]
@@ -407,7 +408,11 @@ if __name__ == "__main__":
                 fig.tight_layout()
 
                 # this is ugly, but just create subdir of name and index by month
-                save_path = Path(expected_figures[meta.name][state].parent, meta.name, f"{month_name}.png")
+                save_path = Path(
+                    expected_figures[meta.name][state].parent,
+                    meta.name,
+                    f"{month_name}.png",
+                )
                 if not save_path.parent.exists():
                     save_path.parent.mkdir(parents=True, exist_ok=True)
                 fig.savefig(str(save_path))

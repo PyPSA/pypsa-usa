@@ -1,5 +1,4 @@
-"""
-Module for adding the gas sector.
+"""Module for adding the gas sector.
 
 This module will add a state level copperplate natural gas network to the model.
 Specifically, it will do the following
@@ -14,21 +13,21 @@ Specifically, it will do the following
 """
 
 import logging
+from abc import ABC, abstractmethod
+from math import pi
+from typing import Any
 
+import eia
 import geopandas as gpd
+import numpy as np
 import pandas as pd
 import pypsa
-from constants import NG_MWH_2_MMCF, STATE_2_CODE, STATES_INTERCONNECT_MAPPER
+import yaml
+from constants import CODE_2_STATE, EMPTY_STATES, NG_MWH_2_MMCF, STATE_2_CODE, STATES_INTERCONNECT_MAPPER
 from pypsa.components import Network
 
 logger = logging.getLogger(__name__)
-from abc import ABC, abstractmethod
-from math import pi
-from typing import Any, Optional
 
-import eia
-import numpy as np
-import yaml
 
 ###
 # Constants
@@ -38,38 +37,28 @@ import yaml
 MWH_2_MMCF = NG_MWH_2_MMCF
 KJ_2_MWH = (1 / 1000) * (1 / 3600)
 
-CODE_2_STATE = {v: k for k, v in STATE_2_CODE.items()}
-
 ###
 # Geolocation of Assets class
 ###
 
 
 class StateGeometry:
-    """
-    Holds state boundry data.
-    """
+    """Holds state boundry data."""
 
     def __init__(self, shapefile: str) -> None:
-        """
-        Counties shapefile.
-        """
+        """Counties shapefile."""
         self._counties = gpd.read_file(shapefile)
         self._state_center_points = None
         self._states = None
 
     @property
     def counties(self) -> gpd.GeoDataFrame:
-        """
-        Spatially resolved counties.
-        """
+        """Spatially resolved counties."""
         return self._counties
 
     @property
     def states(self) -> gpd.GeoDataFrame:
-        """
-        Spatially resolved states.
-        """
+        """Spatially resolved states."""
         if self._states:
             return self._states
         else:
@@ -78,9 +67,7 @@ class StateGeometry:
 
     @property
     def state_center_points(self) -> gpd.GeoDataFrame:
-        """
-        Center points of Sates.
-        """
+        """Center points of Sates."""
         if self._state_center_points:
             return self._state_center_points
         else:
@@ -90,9 +77,7 @@ class StateGeometry:
             return self._state_center_points
 
     def _get_state_boundaries(self) -> gpd.GeoDataFrame:
-        """
-        Gets admin boundaries of state.
-        """
+        """Gets admin boundaries of state."""
         return (
             self._counties.dissolve("STATE_NAME")
             .rename(columns={"STUSPS": "STATE"})
@@ -100,9 +85,7 @@ class StateGeometry:
         )
 
     def _get_state_center_points(self) -> gpd.GeoDataFrame:
-        """
-        Gets centerpoints of states using county shapefile.
-        """
+        """Gets centerpoints of states using county shapefile."""
         gdf = self._states.copy().rename(columns={"geometry": "shape"})
         gdf["geometry"] = gdf["shape"].map(lambda x: x.centroid)
         gdf[["x", "y"]] = gdf["geometry"].apply(
@@ -117,14 +100,12 @@ class StateGeometry:
 
 
 class GasData(ABC):
-    """
-    Main class to interface with data.
-    """
+    """Interface with any gas data."""
 
     state_2_interconnect = STATES_INTERCONNECT_MAPPER
     state_2_name = CODE_2_STATE
     name_2_state = STATE_2_CODE
-    states_2_remove = [x for x, y in STATES_INTERCONNECT_MAPPER.items() if not y]
+    states_2_remove = EMPTY_STATES
 
     def __init__(self, year: int, interconnect: str) -> None:
         self.year = year
@@ -137,14 +118,17 @@ class GasData(ABC):
 
     @property
     def data(self) -> pd.DataFrame:
+        """Get formatted data."""
         return self._data
 
     @abstractmethod
     def read_data(self) -> pd.DataFrame | gpd.GeoDataFrame:
+        """Read in data."""
         pass
 
     @abstractmethod
     def format_data(self, data: pd.DataFrame | gpd.GeoDataFrame) -> pd.DataFrame:
+        """Format dataset."""
         pass
 
     def _get_data(self) -> pd.DataFrame:
@@ -153,17 +137,15 @@ class GasData(ABC):
 
     @abstractmethod
     def build_infrastructure(self, n: pypsa.Network) -> None:
+        """Add pypsa components to network."""
         pass
 
     def filter_on_interconnect(
         self,
         df: pd.DataFrame,
-        additional_removals: list[str] = None,
+        additional_removals: list[str] | None = None,
     ) -> pd.DataFrame:
-        """
-        Name of states must be in column called 'STATE'.
-        """
-
+        """Name of states must be in column called 'STATE'."""
         states_2_remove = self.states_2_remove
         if additional_removals:
             states_2_remove += additional_removals
@@ -218,9 +200,11 @@ class GasBuses(GasData):
         )  # year locked for location mapping
 
     def read_data(self) -> gpd.GeoDataFrame:
+        """Read in state centerpoints."""
         return pd.DataFrame(self.states.state_center_points)
 
     def format_data(self, data: gpd.GeoDataFrame) -> pd.DataFrame:
+        """Format bus data."""
         data = pd.DataFrame(data)
         data["name"] = data.STATE.map(self.state_2_name)
         return self.filter_on_interconnect(data)
@@ -230,6 +214,7 @@ class GasBuses(GasData):
         n: pypsa.Network,
         df: pd.DataFrame,
     ) -> pd.DataFrame:
+        """Filter formatted data to only include states in geographic scope."""
         states_in_model = n.buses[
             ~n.buses.carrier.isin(
                 ["gas storage", "gas trade", "gas pipeline"],
@@ -247,7 +232,7 @@ class GasBuses(GasData):
         return df
 
     def build_infrastructure(self, n: Network) -> None:
-
+        """Add pypsa components to network."""
         df = self.filter_on_sate(n, self.data)
 
         states = df.set_index("STATE")
@@ -268,15 +253,14 @@ class GasBuses(GasData):
 
 
 class GasStorage(GasData):
-    """
-    Creator for underground storage.
-    """
+    """Creator for underground storage."""
 
     def __init__(self, year: int, interconnect: str, api: str) -> None:
         self.api = api
         super().__init__(year, interconnect)
 
     def read_data(self):
+        """Read in data from EIA API."""
         base = eia.Storage("gas", "base", self.year, self.api).get_data()
         base["storage_type"] = "base_capacity"
         total = eia.Storage("gas", "total", self.year, self.api).get_data()
@@ -289,6 +273,7 @@ class GasStorage(GasData):
         return final
 
     def format_data(self, data: pd.DataFrame):
+        """Format storage data."""
         df = data.copy()
         df["value"] = df.value * MWH_2_MMCF
         df = (
@@ -322,6 +307,7 @@ class GasStorage(GasData):
         n: pypsa.Network,
         df: pd.DataFrame,
     ) -> pd.DataFrame:
+        """Filter formatted data to only include states in geographic scope."""
         states_in_model = n.buses[
             ~n.buses.carrier.isin(
                 ["gas storage", "gas trade", "gas pipeline"],
@@ -339,7 +325,7 @@ class GasStorage(GasData):
         return df
 
     def build_infrastructure(self, n: pypsa.Network, **kwargs):
-
+        """Add pypsa components to network."""
         df = self.filter_on_sate(n, self.data)
         df.index = df.STATE
         df["state_name"] = df.index.map(self.state_2_name)
@@ -371,6 +357,8 @@ class GasStorage(GasData):
             # e_initial=df.MAX_CAPACITY_MWH - df.MIN_CAPACITY_MWH,
             e_initial=df.e_initial,
             marginal_cost=0,  # to update
+            lifetime=np.inf,
+            build_year=n.investment_periods[0],
         )
 
         # must do two links, rather than a bidirectional one, to constrain charge limits
@@ -388,6 +376,8 @@ class GasStorage(GasData):
             p_max_pu=1,
             p_nom_extendable=False,
             marginal_cost=0,
+            lifetime=np.inf,
+            build_year=n.investment_periods[0],
         )
 
         n.madd(
@@ -402,22 +392,24 @@ class GasStorage(GasData):
             p_max_pu=1,
             p_nom_extendable=False,
             marginal_cost=0,
+            lifetime=np.inf,
+            build_year=n.investment_periods[0],
         )
 
 
 class GasProcessing(GasData):
-    """
-    Creator for processing capacity.
-    """
+    """Creator for processing capacity."""
 
     def __init__(self, year: int, interconnect: str, api: str) -> None:
         self.api = api
         super().__init__(year=year, interconnect=interconnect)
 
     def read_data(self) -> pd.DataFrame:
+        """Read in data from EIA API."""
         return eia.Production("gas", "market", self.year, self.api).get_data()
 
     def format_data(self, data: pd.DataFrame):
+        """Format processing capacity data."""
         df = data.copy()
 
         df["value"] = (
@@ -438,6 +430,7 @@ class GasProcessing(GasData):
         n: pypsa.Network,
         df: pd.DataFrame,
     ) -> pd.DataFrame:
+        """Filter formatted data to only include states in geographic scope."""
         states_in_model = n.buses[
             ~n.buses.carrier.isin(
                 ["gas storage", "gas trade", "gas pipeline"],
@@ -455,7 +448,7 @@ class GasProcessing(GasData):
         return df
 
     def build_infrastructure(self, n: pypsa.Network, **kwargs):
-
+        """Add pypsa components to network."""
         df = self.filter_on_sate(n, self.data)
         df = df.set_index("STATE")
         df["bus"] = df.index + " gas"
@@ -505,6 +498,8 @@ class GasProcessing(GasData):
             p_nom=(df.p_nom * p_nom_mult).round(2),
             p_nom_min=0,
             p_nom_max=df.p_nom * p_nom_max_mult,
+            lifetime=np.inf,  # UPDATE ONCE GAS EXPANSION ALLOWED
+            build_year=n.investment_periods[0],
         )
 
         n.madd(
@@ -524,23 +519,25 @@ class GasProcessing(GasData):
             e_nom_max=np.inf,
             e_min_pu=-1,
             e_max_pu=0,
+            lifetime=np.inf,
+            build_year=n.investment_periods[0],
         )
 
 
 class _GasPipelineCapacity(GasData):
-
     def __init__(
         self,
         year: int,
         interconnect: str,
         xlsx: str,
-        api: Optional[str] = None,
+        api: str | None = None,
     ) -> None:
         self.xlsx = xlsx
         self.api = api
         super().__init__(year, interconnect)
 
     def read_data(self) -> pd.DataFrame:
+        """Read in excel dataset."""
         return pd.read_excel(
             self.xlsx,
             sheet_name="Pipeline State2State Capacity",
@@ -561,7 +558,6 @@ class _GasPipelineCapacity(GasData):
         df: pd.DataFrame,
         in_spatial_scope: bool,
     ) -> pd.DataFrame:
-
         states_in_model = self.get_states_in_model(n)
 
         if ("STATE_TO" and "STATE_FROM") not in df.columns:
@@ -578,6 +574,7 @@ class _GasPipelineCapacity(GasData):
         return df[~(df.STATE_TO == df.STATE_FROM)].copy()
 
     def format_data(self, data: pd.DataFrame) -> pd.DataFrame:
+        """Format pipeline data."""
         df = data.copy()
         df.columns = df.columns.str.strip()
         df = df[df.index == int(self.year)]
@@ -633,7 +630,7 @@ class _GasPipelineCapacity(GasData):
         return self.extract_pipelines(df)
 
     def _get_capacity_based_on_trade_flows(self) -> pd.DataFrame:
-        """Check that trade flows do not exceed design capacity
+        """Check that trade flows do not exceed design capacity.
 
         See Issue #487
         https://github.com/PyPSA/pypsa-usa/issues/487
@@ -662,7 +659,6 @@ class _GasPipelineCapacity(GasData):
         capacity: pd.DataFrame,
         trade: pd.DataFrame,
     ) -> pd.DataFrame:
-
         df = pd.concat([capacity, trade])
         df = df.sort_values(by="CAPACITY_MW", ascending=False)
         df = df.drop_duplicates(
@@ -693,10 +689,7 @@ class _GasPipelineCapacity(GasData):
         pass
 
     def assign_pipeline_interconnects(self, df: pd.DataFrame):
-        """
-        Adds interconnect labels to the pipelines.
-        """
-
+        """Adds interconnect labels to the pipelines."""
         df["STATE_TO"] = df.STATE_NAME_TO.map(self.name_2_state)
         df["STATE_FROM"] = df.STATE_NAME_FROM.map(self.name_2_state)
 
@@ -709,21 +702,19 @@ class _GasPipelineCapacity(GasData):
 
 
 class InterconnectGasPipelineCapacity(_GasPipelineCapacity):
-    """
-    Pipeline capacity within the interconnect.
-    """
+    """Pipeline capacity within the interconnect."""
 
     def __init__(
         self,
         year: int,
         interconnect: str,
         xlsx: str,
-        api: Optional[str] = None,
+        api: str | None = None,
     ) -> None:
         super().__init__(year, interconnect, xlsx, api)
 
     def extract_pipelines(self, data: pd.DataFrame) -> pd.DataFrame:
-
+        """Get piplines within the geographic scope."""
         df = data.copy()
         # for some reason drop duplicates is not wokring here and I cant figure out why :(
         # df = df.drop_duplicates(subset=["STATE_TO", "STATE_FROM"], keep=False).copy()
@@ -746,7 +737,7 @@ class InterconnectGasPipelineCapacity(_GasPipelineCapacity):
         return df.reset_index(drop=True)
 
     def build_infrastructure(self, n: pypsa.Network) -> None:
-
+        """Add pypsa components to network."""
         df = self.filter_on_sate(n, self.data, in_spatial_scope=True)
 
         if df.empty:
@@ -771,13 +762,13 @@ class InterconnectGasPipelineCapacity(_GasPipelineCapacity):
             p_min_pu=0,
             p_max_pu=1,
             p_nom_extendable=False,
+            lifetime=np.inf,
+            build_year=n.investment_periods[0],
         )
 
 
 class TradeGasPipelineCapacity(_GasPipelineCapacity):
-    """
-    Pipeline capcity connecting to the interconnect.
-    """
+    """Pipeline capcity connecting to the interconnect."""
 
     def __init__(
         self,
@@ -791,7 +782,7 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
         super().__init__(year, interconnect, xlsx, api)
 
     def extract_pipelines(self, data: pd.DataFrame) -> pd.DataFrame:
-
+        """Get pipelines within geographic scope."""
         df = data.copy()
         if self.domestic:
             return self._get_domestic_pipeline_connections(df)
@@ -799,10 +790,7 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
             return self._get_international_pipeline_connections(df)
 
     def _get_domestic_pipeline_connections(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Gets all pipelines within the usa that connect to the interconnect.
-        """
-
+        """Gets all pipelines within the usa that connect to the interconnect."""
         # get rid of international connections
         df = df[~((df.INTERCONNECT_TO.isin(["canada", "mexico"])) | (df.INTERCONNECT_FROM.isin(["canada", "mexico"])))]
 
@@ -813,9 +801,7 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
             return df[df["INTERCONNECT_TO"].eq(self.interconnect) | df["INTERCONNECT_FROM"].eq(self.interconnect)]
 
     def _get_international_pipeline_connections(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Gets all international pipeline connections.
-        """
+        """Gets all international pipeline connections."""
         df = df[(df.INTERCONNECT_TO.isin(["canada", "mexico"])) | (df.INTERCONNECT_FROM.isin(["canada", "mexico"]))]
         if self.interconnect == "usa":
             return df
@@ -833,7 +819,6 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
         interpolation_method can be one of:
         - linear, zero
         """
-
         assert direction in ("imports", "exports")
 
         # fuel costs/profits at a national level
@@ -846,9 +831,7 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
         return costs.resample("1h").asfreq().interpolate(method=interpoloation_method)
 
     def _expand_costs(self, n: pypsa.Network, costs: pd.DataFrame) -> pd.DataFrame:
-        """
-        Expands import/export costs over snapshots and investment periods.
-        """
+        """Expands import/export costs over snapshots and investment periods."""
         expanded_costs = []
         for invesetment_period in n.investment_periods:
             # reindex to match any tsa
@@ -937,10 +920,7 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
         connections: pd.DataFrame,
         imports: bool,
     ) -> pd.DataFrame:
-        """
-        Gets time varrying import/export costs.
-        """
-
+        """Gets time varrying import/export costs."""
         df = connections.copy()
 
         states_in_model = self.get_states_in_model(n)
@@ -964,7 +944,6 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
 
         Country is always in model spatial scope.
         """
-
         df = template.copy()
         states_in_model = self.get_states_in_model(n)
 
@@ -981,9 +960,7 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
         n: pypsa.Network,
         template: pd.DataFrame,
     ) -> pd.DataFrame:
-        """
-        Assigns bus names for links.
-        """
+        """Assigns bus names for links."""
 
         def assign_bus0_name(row) -> str:
             if row["STATE_FROM"] in states_in_model:
@@ -1013,7 +990,6 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
         imports) If bus0 is a state gas bus, energy will flow out of the
         model (ie. exports)
         """
-
         df = template.copy()
 
         df["store"] = df.bus0.map(
@@ -1041,7 +1017,6 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
             - "WA BC gas trade"
             - "BC WA gas trade"
         """
-
         df = self.filter_on_sate(n, self.data, in_spatial_scope=False)
 
         df = self._add_zero_capacity_connections(df)
@@ -1098,6 +1073,8 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
             p_nom_extendable=False,
             efficiency=1,  # must be 1 for proper cost accounting
             marginal_cost=marginal_cost,
+            lifetime=np.inf,
+            build_year=n.investment_periods[0],
         )
 
         n.madd(
@@ -1117,6 +1094,8 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
             e_nom_max=np.inf,
             e_min_pu=0,
             e_max_pu=1,
+            lifetime=np.inf,
+            build_year=n.investment_periods[0],
         )
 
         n.madd(
@@ -1136,13 +1115,13 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
             e_nom_max=np.inf,
             e_min_pu=-1,  # minus 1 for energy addition!
             e_max_pu=0,
+            lifetime=np.inf,
+            build_year=n.investment_periods[0],
         )
 
 
 class PipelineLinepack(GasData):
-    """
-    Creator for linepack infrastructure.
-    """
+    """Creator for linepack infrastructure."""
 
     def __init__(
         self,
@@ -1157,7 +1136,10 @@ class PipelineLinepack(GasData):
         super().__init__(year, interconnect)
 
     def read_data(self) -> gpd.GeoDataFrame:
-        """https://atlas.eia.gov/apps/3652f0f1860d45beb0fed27dc8a6fc8d/explore"""
+        """Read in geojson pipe locations.
+
+        https://atlas.eia.gov/apps/3652f0f1860d45beb0fed27dc8a6fc8d/explore.
+        """
         return gpd.read_file(self.pipeline_geojson)
 
     def filter_on_sate(
@@ -1165,7 +1147,7 @@ class PipelineLinepack(GasData):
         n: pypsa.Network,
         df: pd.DataFrame,
     ) -> pd.DataFrame:
-
+        """Filter formatted data to only include states in geographic scope."""
         states_in_model = n.buses[
             ~n.buses.carrier.isin(
                 ["gas storage", "gas trade", "gas pipeline"],
@@ -1183,6 +1165,7 @@ class PipelineLinepack(GasData):
         return df
 
     def format_data(self, data: gpd.GeoDataFrame) -> pd.DataFrame:
+        """Format linepack data."""
         gdf = data.copy()
         states = self.states.copy()
 
@@ -1216,9 +1199,17 @@ class PipelineLinepack(GasData):
         max_pressure = 8000  # kPa
         min_pressure = 4000  # kPa
 
+        # Energy content calculated using:
+        # E_total = n * Cv * T = (PV/RT) * Cv * T = (PV/R) * Cv
+        # E = PV * (R/Cv)
+        # R = 8.314 J/(mol.K)
+        # Cv_Methane = 35.7 J/(mol.K)
+
+        r_cv = 8.314 / 35.7
+
         energy_in_state = volumne_in_state.copy()
-        energy_in_state["MAX_ENERGY_kJ"] = energy_in_state.VOLUME_M3 * max_pressure
-        energy_in_state["MIN_ENERGY_kJ"] = energy_in_state.VOLUME_M3 * min_pressure
+        energy_in_state["MAX_ENERGY_kJ"] = energy_in_state.VOLUME_M3 * max_pressure * r_cv
+        energy_in_state["MIN_ENERGY_kJ"] = energy_in_state.VOLUME_M3 * min_pressure * r_cv
         energy_in_state["NOMINAL_ENERGY_kJ"] = (energy_in_state.MAX_ENERGY_kJ + energy_in_state.MIN_ENERGY_kJ) / 2
 
         final = energy_in_state.copy()
@@ -1230,7 +1221,7 @@ class PipelineLinepack(GasData):
         return self.filter_on_interconnect(final)
 
     def build_infrastructure(self, n: pypsa.Network, **kwargs) -> None:
-
+        """Add pypsa components to network."""
         df = self.filter_on_sate(n, self.data)
         df = df.set_index("STATE")
 
@@ -1262,14 +1253,12 @@ class PipelineLinepack(GasData):
             capital_cost=1,
             standing_loss=standing_loss,
             lifetime=np.inf,
+            build_year=n.investment_periods[0],
         )
 
 
 def _remove_marginal_costs(n: pypsa.Network):
-    """
-    Removes marginal costs of CCGT and OCGT plants.
-    """
-
+    """Removes marginal costs of CCGT and OCGT plants."""
     links = n.links[n.links.carrier.str.contains("CCGT") | n.links.carrier.str.contains("OCGT")].index
 
     n.links.loc[links, "marginal_cost"] = 0
@@ -1288,10 +1277,9 @@ def build_natural_gas(
     county_path: str = "../data/counties/cb_2020_us_county_500k.shp",
     pipelines_path: str = "../data/natural_gas/EIA-StatetoStateCapacity_Feb2024.xlsx",
     pipeline_shape_path: str = "../data/natural_gas/pipelines.geojson",
-    options: Optional[dict[str, Any]] = None,
+    options: dict[str, Any] | None = None,
     **kwargs,
 ) -> None:
-
     if not options:
         options = {}
 

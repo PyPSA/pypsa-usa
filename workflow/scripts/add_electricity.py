@@ -1,39 +1,9 @@
 # PyPSA USA Authors
 """
-**Description**
+Adds existing conventional generators, renewable generators, and storage devices to the network.
 
-This module integrates data produced by `build_renewable_profiles` and `build_cost_data`, `build_fuel_prices`, and `add_demand` to create a network model that includes generators and their associated costs. The module attaches generators and storage units to the network created by `add_demand`. Each generator is assigned regional capital costs, and regional and daily or monthly marginal costs.
-
-Extendable generators are assigned a maximum capacity based on land-use constraints defined in `build_renewable_profiles`.
-
-**Relevant Settings**
-
-.. code:: yaml
-
-    snapshots:
-        start:
-        end:
-        inclusive:
-
-    electricity:
-
-.. seealso::
-    Documentation of the configuration file `config/config.yaml` at :ref:`costs_cf`,
-    :ref:`electricity_cf`, :ref:`renewable_cf`, :ref:`lines_cf`
-
-**Inputs**
-
-- ``resources/costs.csv``: The database of cost assumptions for all included technologies for specific years from various sources; e.g. discount rate, lifetime, investment (CAPEX), fixed operation and maintenance (FOM), variable operation and maintenance (VOM), fuel costs, efficiency, carbon-dioxide intensity.
-- ``resources/regions_onshore.geojson``: confer :ref:`busregions`
-- ``resources/profile_{}.nc``: all technologies in ``config["renewables"].keys()``, confer :ref:`renewableprofiles`.
-- ``networks/elec_base_network.nc``: confer :ref:`base`
-- ``resources/ng_fuel_prices.csv``: Natural gas fuel prices by state and BA.
-
-**Outputs**
-
-- ``networks/elec_base_network_l_pp.nc``
+This script will add all generator unit availabilities (capacity-factors) to the network, for all investment horizons.
 """
-
 
 import logging
 import os
@@ -49,7 +19,6 @@ from _helpers import (
     calculate_annuity,
     configure_logging,
     export_network_for_gis_mapping,
-    load_costs,
     update_p_nom_max,
     weighted_avg,
 )
@@ -86,7 +55,6 @@ def sanitize_carriers(n, config):
     --------
     Raises a warning if any carrier's "tech_colors" are not defined in the config dictionary.
     """
-
     for c in n.iterate_components():
         if "carrier" in c.df:
             add_missing_carriers(n, c.df.carrier)
@@ -107,18 +75,14 @@ def sanitize_carriers(n, config):
 
 
 def add_missing_carriers(n, carriers):
-    """
-    Function to add missing carriers to the network without raising errors.
-    """
+    """Function to add missing carriers to the network without raising errors."""
     missing_carriers = set(carriers) - set(n.carriers.index)
     if len(missing_carriers) > 0:
         n.madd("Carrier", missing_carriers)
 
 
 def clean_locational_multiplier(df: pd.DataFrame):
-    """
-    Updates format of locational multiplier data.
-    """
+    """Updates format of locational multiplier data."""
     df = df.fillna(1)
     df = df[["State", "Location Variation"]]
     return df.groupby("State").mean()
@@ -129,12 +93,8 @@ def update_capital_costs(
     carrier: str,
     costs: pd.DataFrame,
     multiplier: pd.DataFrame,
-    Nyears: float = 1.0,
 ):
-    """
-    Applies regional multipliers to capital cost data.
-    """
-
+    """Applies regional multipliers to capital cost data."""
     # map generators to states
     bus_state_mapper = n.buses.to_dict()["state"]
     gen = n.generators[n.generators.carrier == carrier].copy()
@@ -184,7 +144,6 @@ def apply_dynamic_pricing(
     vom: float = 0
         Additional flat $/MWh cost to add onto the fuel costs
     """
-
     assert geography in n.buses.columns
 
     gens = n.generators.copy()
@@ -250,13 +209,13 @@ def update_transmission_costs(n, costs, length_factor=1.0):
 def load_powerplants(
     plants_fn,
     investment_periods: list[int],
-    interconnect: str = None,
+    interconnect: str | None = None,
 ) -> pd.DataFrame:
     plants = pd.read_csv(
         plants_fn,
     )
     # Filter out non-conus plants and plants that are not built by first investment period.
-    plants.set_index("generator_name", inplace=True)
+    plants = plants.set_index("generator_name")
     plants = plants[plants.build_year <= investment_periods[0]]
     plants = plants[plants.nerc_region != "non-conus"]
     if (interconnect is not None) & (interconnect != "usa"):
@@ -266,9 +225,7 @@ def load_powerplants(
 
 
 def match_nearest_bus(plants_subset, buses_subset):
-    """
-    Assign the nearest bus to each plant in the given subsets.
-    """
+    """Assign the nearest bus to each plant in the given subsets."""
     if plants_subset.empty or buses_subset.empty:
         return plants_subset
 
@@ -276,7 +233,10 @@ def match_nearest_bus(plants_subset, buses_subset):
     tree = BallTree(buses_subset[["x", "y"]].values, leaf_size=2)
 
     # Find nearest bus for each plant in the subset
-    distances, indices = tree.query(plants_subset[["longitude", "latitude"]].values, k=1)
+    distances, indices = tree.query(
+        plants_subset[["longitude", "latitude"]].values,
+        k=1,
+    )
 
     # Map the nearest bus information back to the plants subset
     plants_subset["bus_assignment"] = buses_subset.reset_index().iloc[indices.flatten()]["Bus"].values
@@ -345,7 +305,12 @@ def filter_plants_by_region(
     # Some plants like Diablo Canyon near oceans don't have region due to
     # imprecise ReEDS Shapes. We filter plants that have no reeds regions,
     # then search these points again.
-    plants_in_regions = gpd.sjoin(gdf_plants, reeds_shapes, how="inner", predicate="intersects")
+    plants_in_regions = gpd.sjoin(
+        gdf_plants,
+        reeds_shapes,
+        how="inner",
+        predicate="intersects",
+    )
     plants_no_region = gdf_plants[~gdf_plants.index.isin(plants_in_regions.index)]
     if not plants_no_region.empty:
         plants_no_region = plants_no_region.to_crs(epsg=3857)
@@ -359,7 +324,7 @@ def filter_plants_by_region(
         plants_nearshore = plants_nearshore.to_crs(epsg=4326)
         plants_filt = pd.concat([plants_filt, plants_nearshore])
 
-    plants_filt.drop(columns=["geometry"], inplace=True)
+    plants_filt = plants_filt.drop(columns=["geometry"])
     plants_filt = plants_filt[~plants_filt.index.duplicated()]
 
     plants_filt[plants_filt.index.str.contains("Diablo")]
@@ -385,7 +350,9 @@ def attach_renewable_capacities_to_atlite(
         plants_filt["sub_assignment"] = plants_filt.bus_assignment.map(n.buses.sub_id)
 
         build_year_avg = plants_filt.groupby(["sub_assignment"])[plants_filt.columns].apply(
-            lambda x: pd.Series({field: weighted_avg(x, field, "p_nom") for field in ["build_year"]}),
+            lambda x: pd.Series(
+                {field: weighted_avg(x, field, "p_nom") for field in ["build_year"]},
+            ),
         )
 
         caps_per_bus = (
@@ -399,16 +366,18 @@ def attach_renewable_capacities_to_atlite(
             # missing_plants.to_csv(f"missing_{tech}_plants.csv",)
 
             logger.info(
-                f"There are {np.round(missing_capacity/1000,4)} GW of {tech} plants that are not in the network. See git issue #16.",
+                f"There are {np.round(missing_capacity / 1000, 4)} GW of {tech} plants that are not in the network. See git issue #16.",
             )
 
         logger.info(
-            f"{np.round(caps_per_bus.sum()/1000,2)} GW of {tech} capacity added.",
+            f"{np.round(caps_per_bus.sum() / 1000, 2)} GW of {tech} capacity added.",
         )
         mapped_values = generators_tech.sub_assignment.map(caps_per_bus).dropna()
         n.generators.loc[mapped_values.index, "p_nom"] = mapped_values
         n.generators.loc[mapped_values.index, "p_nom_min"] = mapped_values
-        mapped_values = generators_tech.sub_assignment.map(build_year_avg.build_year).dropna()
+        mapped_values = generators_tech.sub_assignment.map(
+            build_year_avg.build_year,
+        ).dropna()
         n.generators.loc[mapped_values.index, "build_year"] = mapped_values.astype(int)
 
 
@@ -620,12 +589,14 @@ def attach_egs(
     discount_rate = 0.07  # load_costs(snakemake.input.tech_costs).loc["geothermal", "wacc_real"]
     drilling_cost = snakemake.config["renewable"]["EGS"]["drilling_cost"]
 
-    with xr.open_dataset(
-        getattr(input_profiles, "specs_egs"),
-    ) as ds_specs, xr.open_dataset(
-        getattr(input_profiles, "profile_egs"),
-    ) as ds_profile:
-
+    with (
+        xr.open_dataset(
+            getattr(input_profiles, "specs_egs"),
+        ) as ds_specs,
+        xr.open_dataset(
+            getattr(input_profiles, "profile_egs"),
+        ) as ds_profile,
+    ):
         bus2sub = (
             pd.read_csv(input_profiles.bus2sub, dtype=str)
             .drop("interconnect", axis=1)
@@ -642,13 +613,13 @@ def attach_egs(
         df_specs["bus_id"] = df_specs["bus_id"].astype(str)
 
         # bus_id must be in index for pypsa to read it
-        df_specs.set_index("bus_id", inplace=True)
+        df_specs = df_specs.set_index("bus_id")
 
         # columns must be renamed to refer to the right quantities for pypsa to read it correctly
         logger.info(f"Using {drilling_cost} EGS drilling costs.")
         df_specs = df_specs.rename(
             columns={
-                "advanced_capex_usd_kw" if drilling_cost == "advanced" else "capex_usd_kw": "capital_cost",
+                ("advanced_capex_usd_kw" if drilling_cost == "advanced" else "capex_usd_kw"): "capital_cost",
                 "avail_capacity_mw": "p_nom_max",
                 "fixed_om": "fixed_om",
             },
@@ -714,16 +685,14 @@ def attach_battery_storage(
     costs: pd.DataFrame,
     plants: pd.DataFrame,
 ):
-    """
-    Attaches Existing Battery Energy Storage Systems To the Network.
-    """
+    """Attaches Existing Battery Energy Storage Systems To the Network."""
     plants_filt = plants.query("carrier == 'battery' ")
     plants_filt.index = plants_filt.index.astype(str) + "_" + plants_filt.generator_id.astype(str)
     plants_filt.loc[:, "energy_storage_capacity_mwh"] = plants_filt.energy_storage_capacity_mwh.astype(float)
     plants_filt = plants_filt.dropna(subset=["energy_storage_capacity_mwh"])
 
     logger.info(
-        f"Added Batteries as Storage Units to the network.\n{np.round(plants_filt.p_nom.sum()/1000,2)} GW Power Capacity \n{np.round(plants_filt.energy_storage_capacity_mwh.sum()/1000, 2)} GWh Energy Capacity",
+        f"Added Batteries as Storage Units to the network.\n{np.round(plants_filt.p_nom.sum() / 1000, 2)} GW Power Capacity \n{np.round(plants_filt.energy_storage_capacity_mwh.sum() / 1000, 2)} GWh Energy Capacity",
     )
 
     plants_filt = plants_filt.dropna(subset=["energy_storage_capacity_mwh"])
@@ -735,13 +704,13 @@ def attach_battery_storage(
         p_nom=plants_filt.p_nom,
         p_nom_max=plants_filt.p_nom,
         p_nom_min=0,
-        p_nom_extendable=True,
+        p_nom_extendable=False,  # Only Allow lifetime retirments for existing BESS
         capital_cost=costs.at["4hr_battery_storage", "opex_fixed_per_kw"] * 1e3,
         max_hours=plants_filt.energy_storage_capacity_mwh / plants_filt.p_nom,
         build_year=plants_filt.build_year,
         lifetime=costs.at["4hr_battery_storage", "lifetime"],
-        efficiency_store=0.9**0.5,
-        efficiency_dispatch=0.9**0.5,
+        efficiency_store=0.85**0.5,
+        efficiency_dispatch=0.85**0.5,
         cyclic_state_of_charge=True,
     )
 
@@ -777,7 +746,7 @@ def apply_seasonal_capacity_derates(
     conventional_carriers: list,
     sns: pd.DatetimeIndex,
 ):
-    "Applies conventional rerate factor p_max_pu based on the seasonal capacity derates defined in eia860"
+    """Applies conventional rerate factor p_max_pu based on the seasonal capacity derates defined in eia860."""
     sns_dt = sns.get_level_values(1)
     summer_sns = sns_dt[sns_dt.month.isin([6, 7, 8])]
     winter_sns = sns_dt[~sns_dt.month.isin([6, 7, 8])]
@@ -811,9 +780,7 @@ def apply_must_run_ratings(
     conventional_carriers: list,
     sns: pd.DatetimeIndex,
 ):
-    """
-    Applies Minimum Loading Capacities only to WECC ADS designated Plants.
-    """
+    """Applies Minimum Loading Capacities only to WECC ADS designated Plants."""
     conv_plants = plants.query("carrier in @conventional_carriers").copy()
     conv_plants.index = "C" + conv_plants.index
 
@@ -835,16 +802,14 @@ def apply_must_run_ratings(
 
 
 def clean_bus_data(n: pypsa.Network):
-    """
-    Drops data from the network that are no longer needed in workflow.
-    """
+    """Drops data from the network that are no longer needed in workflow."""
     col_list = [
-        "Pd",
+        # "Pd",
         "load_dissag",
         "LAF",
         "LAF_state",
     ]
-    n.buses.drop(columns=[col for col in col_list if col in n.buses], inplace=True)
+    n.buses = n.buses.drop(columns=[col for col in col_list if col in n.buses])
 
 
 def attach_breakthrough_renewable_plants(
@@ -854,13 +819,12 @@ def attach_breakthrough_renewable_plants(
     extendable_carriers,
     costs,
 ):
-
     add_missing_carriers(n, renewable_carriers)
 
     plants = pd.read_csv(fn_plants, dtype={"bus_id": str}, index_col=0).query(
         "bus_id in @n.buses.index",
     )
-    plants.replace(["wind_offshore"], ["offwind"], inplace=True)
+    plants = plants.replace(["wind_offshore"], ["offwind"])
 
     for tech in renewable_carriers:
         assert tech == "hydro"
@@ -913,7 +877,6 @@ def apply_pudl_fuel_costs(
     plants,
     costs,
 ):
-
     # Apply PuDL Fuel Costs for plants where listed
     pudl_fuel_costs = pd.read_csv(snakemake.input["pudl_fuel_costs"], index_col=0)
 
@@ -948,7 +911,9 @@ def apply_pudl_fuel_costs(
     n.generators_t["marginal_cost"] = n.generators_t["marginal_cost"].join(
         pudl_fuel_costs,
     )
-    logger.info(f"Applied PuDL fuel costs to {len(pudl_fuel_costs.columns)} generators.")
+    logger.info(
+        f"Applied PuDL fuel costs to {len(pudl_fuel_costs.columns)} generators.",
+    )
     return n
 
 
@@ -962,9 +927,6 @@ def main(snakemake):
     regions_offshore = gpd.read_file(snakemake.input.regions_offshore)
     reeds_shapes = gpd.read_file(snakemake.input.reeds_shapes)
 
-    Nyears = n.snapshot_weightings.loc[n.investment_periods[0]].objective.sum() / 8760.0
-
-    ### TODO COSTS TO REMOVE ###
     costs = pd.read_csv(snakemake.input.tech_costs)
     costs = costs.pivot(index="pypsa-name", columns="parameter", values="value")
     update_transmission_costs(n, costs, params.length_factor)
@@ -1016,7 +978,8 @@ def main(snakemake):
     )
 
     if params.conventional.get("must_run", False):
-        # TODO (@ktehranchi): In the future the plants that are must-run should not be clustered and instead retire according to lifetime
+        # TODO (@ktehranchi): In the future the plants that are must-run should
+        # not be clustered and instead retire according to lifetime
         apply_must_run_ratings(
             n,
             plants,
@@ -1067,12 +1030,12 @@ def main(snakemake):
         multiplier_file = snakemake.input[f"gen_cost_mult_{multiplier_data}"]
         df_multiplier = pd.read_csv(multiplier_file)
         df_multiplier = clean_locational_multiplier(df_multiplier)
-        update_capital_costs(n, carrier, costs, df_multiplier, Nyears)
+        update_capital_costs(n, carrier, costs, df_multiplier)
 
     if params.conventional["dynamic_fuel_price"].get("enable", False):
         logger.info("Applying dynamic fuel pricing to conventional generators")
         if params.conventional["dynamic_fuel_price"]["wholesale"]:
-            assert params.eia_api, f"Must provide EIA API key for dynamic fuel pricing"
+            assert params.eia_api, "Must provide EIA API key for dynamic fuel pricing"
 
             dynamic_fuel_prices = {
                 "OCGT": {
@@ -1097,7 +1060,10 @@ def main(snakemake):
                         continue
                     # if data should exist, try to read it in
                     try:
-                        df = pd.read_csv(snakemake.input[datafile], index_col="snapshot")
+                        df = pd.read_csv(
+                            snakemake.input[datafile],
+                            index_col="snapshot",
+                        )
                         if df.empty:
                             logger.warning(f"No data provided for {datafile}")
                             continue
@@ -1114,7 +1080,9 @@ def main(snakemake):
                         df=df,
                         vom=vom,
                     )
-                    logger.info(f"Applied dynamic price data for {carrier} from {datafile}")
+                    logger.info(
+                        f"Applied dynamic price data for {carrier} from {datafile}",
+                    )
 
         if params.conventional["dynamic_fuel_price"]["pudl"]:
             n = apply_pudl_fuel_costs(n, plants, costs)

@@ -1,13 +1,12 @@
-import io
+"""Script retrieves data from various zenodo repositories specified by the snakemake rule. Used by multiple snakemake rules."""
+
 import logging
-import os
 import platform
 import subprocess
 import zipfile
 import zipfile_deflate64
 from pathlib import Path
 
-import requests
 from _helpers import configure_logging, progress_retrieve
 
 logger = logging.getLogger(__name__)

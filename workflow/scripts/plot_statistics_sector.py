@@ -1,13 +1,14 @@
-"""
-Plots Sector Coupling Statistics.
-"""
+"""Plots Sector Coupling Statistics."""
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
 from math import ceil
 from pathlib import Path
-from typing import Any, Callable, Optional
+
+# Optional used as 'arg: callable | None = None' gives TypeError with py3.11
+from typing import Any, Optional
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -15,7 +16,7 @@ import pypsa
 import seaborn as sns
 from _helpers import configure_logging, mock_snakemake
 from add_electricity import sanitize_carriers
-from constants import STATE_2_CODE, Month
+from constants import Month
 from constants_sector import (
     AirTransport,
     AirTransportUnits,
@@ -36,11 +37,8 @@ from summary_sector import (  # get_load_name_per_sector,
     get_end_use_load_timeseries_carrier,
     get_hp_cop,
     get_load_factor_timeseries,
-    get_load_per_sector_per_fuel,
-    get_sector_production_timeseries,
     get_sector_production_timeseries_by_carrier,
     get_storage_level_timeseries_carrier,
-    get_transport_consumption_by_mode,
 )
 
 logger = logging.getLogger(__name__)
@@ -76,10 +74,7 @@ def _get_month_name(month: Month) -> str:
 
 
 def is_urban_rural_split(n: pypsa.Network) -> bool:
-    """
-    Checks for urban/rural split based on com/res load names.
-    """
-
+    """Checks for urban/rural split based on com/res load names."""
     com_res_load = n.loads[(n.loads.index.str.contains("res-")) | (n.loads.index.str.contains("com-"))].index.to_list()
 
     rural_urban_loads = ["res-urban-", "res-rural-", "com-urban-", "com-rural-"]
@@ -91,11 +86,20 @@ def is_urban_rural_split(n: pypsa.Network) -> bool:
 
 
 def get_plotting_colors(n: pypsa.Network, nice_name: bool) -> dict[str, str]:
-
     if nice_name:
-        return n.carriers.set_index("nice_name")["color"].to_dict()
+        colors = n.carriers.set_index("nice_name")["color"]
     else:
-        return n.carriers["color"].to_dict()
+        colors = n.carriers["color"]
+
+    colors = colors.groupby(colors.index).first()  # remove any duplicates
+
+    nans = colors[colors.isna()].index.to_list()
+
+    if nans:
+        # logger.warning(f"No color assigned to {nans}. Assigning #000000 (black).")
+        colors = colors.fillna("#000000")
+
+    return colors.to_dict()
 
 
 def get_sectors(n: pypsa.Network) -> list[str]:
@@ -110,11 +114,8 @@ def get_sectors(n: pypsa.Network) -> list[str]:
 ###
 
 
-def plot_hp_cop(n: pypsa.Network, state: Optional[str] = None, **kwargs) -> tuple:
-    """
-    Plots gshp and ashp cops.
-    """
-
+def plot_hp_cop(n: pypsa.Network, state: str | None = None, **kwargs) -> tuple:
+    """Plots gshp and ashp cops."""
     investment_period = n.investment_periods[0]
 
     cops = get_hp_cop(n, state).loc[investment_period]
@@ -127,7 +128,6 @@ def plot_hp_cop(n: pypsa.Network, state: Optional[str] = None, **kwargs) -> tupl
     )
 
     for i, hp in enumerate(["ashp", "gshp"]):
-
         df = cops[[x for x in cops if x.endswith(hp)]]
         avg = df.mean(axis=1)
 
@@ -138,7 +138,6 @@ def plot_hp_cop(n: pypsa.Network, state: Optional[str] = None, **kwargs) -> tupl
         palette = sns.color_palette(["lightgray"], df.shape[1])
 
         try:
-
             sns.lineplot(
                 df,
                 color="lightgray",
@@ -161,18 +160,15 @@ def plot_hp_cop(n: pypsa.Network, state: Optional[str] = None, **kwargs) -> tupl
 def plot_sector_production_timeseries(
     n: pypsa.Network,
     sector: str,
-    state: Optional[str] = None,
-    nice_name: Optional[bool] = True,
+    state: str | None = None,
+    nice_name: bool | None = True,
     remove_sns_weights: bool = True,
-    resample: Optional[str] = None,
-    resample_fn: Optional[callable] = None,
-    month: Optional[int] = None,
+    resample: str | None = None,
+    resample_fn: Optional[callable] = None,  # noqa: UP007
+    month: int | None = None,
     **kwargs,
 ) -> tuple:
-    """
-    Plots timeseries production as area chart.
-    """
-
+    """Plots timeseries production as area chart."""
     y_label = kwargs.get("ylabel", "MWh")
 
     assert sector in ("res", "com", "ind", "pwr")
@@ -199,7 +195,6 @@ def plot_sector_production_timeseries(
     )
 
     for row, period in enumerate(investment_periods):
-
         df = df_all.loc[period]
 
         if month:
@@ -213,9 +208,7 @@ def plot_sector_production_timeseries(
             df = df.rename(columns=n.carriers.nice_name.to_dict())
 
         try:
-
             if nrows > 1:
-
                 df.plot(kind="area", ax=axs[row], color=colors)
                 axs[row].set_xlabel("")
                 axs[row].set_ylabel(y_label)
@@ -223,7 +216,6 @@ def plot_sector_production_timeseries(
                 axs[row].tick_params(axis="x", labelrotation=45)
 
             else:
-
                 df.plot(kind="area", ax=axs, color=colors)
                 axs.set_xlabel("")
                 axs.set_ylabel(y_label)
@@ -243,18 +235,15 @@ def plot_transportation_production_timeseries(
     vehicle: str,  # veh, air, rail, ect.. .
     modes: Enum,  # AirTransport, RoadTransport, ect..
     units: Enum,
-    state: Optional[str] = None,
-    nice_name: Optional[bool] = True,
+    state: str | None = None,
+    nice_name: bool | None = True,
     remove_sns_weights: bool = True,
-    resample: Optional[str] = None,
-    resample_fn: Optional[callable] = None,
-    month: Optional[int] = None,
+    resample: str | None = None,
+    resample_fn: Optional[callable] = None,  # noqa: UP007
+    month: int | None = None,
     **kwargs,
 ) -> tuple:
-    """
-    Plots timeseries production as area chart.
-    """
-
+    """Plots timeseries production as area chart."""
     assert sector == "trn"
 
     def _filter_vehicle_type(df: pd.DataFrame, vehicle: str) -> pd.DataFrame:
@@ -293,14 +282,12 @@ def plot_transportation_production_timeseries(
         return fig, axs
 
     for row, period in enumerate(investment_periods):
-
         df_veh_period = df_veh.loc[period]
 
         if month:
             df_veh_period = df_veh_period[df_veh_period.index.get_level_values("timestep").month == month_i].copy()
 
         for i, unit in enumerate(diff_units):
-
             all_modes = [x.name for x in modes]
             modes_per_unit = [modes[x].value for x in all_modes if units[x].value == unit]
 
@@ -310,16 +297,13 @@ def plot_transportation_production_timeseries(
                 df = df.rename(columns=n.carriers.nice_name.to_dict())
 
             try:
-
                 if nrows > 1:
-
                     df.plot(kind="area", ax=axs[row + i], color=colors)
                     axs[row + i].set_xlabel("")
                     axs[row + i].set_ylabel(f"{unit}")
                     axs[row + i].tick_params(axis="x", labelrotation=45)
 
                 else:
-
                     df.plot(kind="area", ax=axs, color=colors)
                     axs.set_xlabel("")
                     axs.set_ylabel(f"{unit}")
@@ -336,14 +320,11 @@ def plot_transportation_production_timeseries(
 def plot_sector_production(
     n: pypsa.Network,
     sector: str,
-    state: Optional[str] = None,
-    nice_name: Optional[bool] = True,
+    state: str | None = None,
+    nice_name: bool | None = True,
     **kwargs,
 ) -> tuple:
-    """
-    Plots model period production as bar chart.
-    """
-
+    """Plots model period production as bar chart."""
     y_label = kwargs.get("ylabel", "MWh")
 
     assert sector in ("res", "com", "ind", "pwr", "trn")
@@ -361,7 +342,6 @@ def plot_sector_production(
     df_all = get_sector_production_timeseries_by_carrier(n, sector=sector, state=state)
 
     for row, period in enumerate(investment_periods):
-
         df = df_all.loc[period].sum(axis=0)
 
         if df.empty:
@@ -372,9 +352,7 @@ def plot_sector_production(
             df.index = df.index.map(n.carriers.nice_name)
 
         try:
-
             if nrows > 1:
-
                 df.plot.bar(ax=axs[row])
                 axs[row].set_xlabel("")
                 axs[row].set_ylabel(y_label)
@@ -382,7 +360,6 @@ def plot_sector_production(
                 axs[row].tick_params(axis="x", labelrotation=45)
 
             else:
-
                 df.plot.bar(ax=axs)
                 axs.set_xlabel("")
                 axs.set_ylabel(y_label)
@@ -396,21 +373,18 @@ def plot_sector_production(
 
 def plot_sector_emissions(
     n: pypsa.Network,
-    state: Optional[str] = None,
+    state: str | None = None,
     **kwargws,
 ) -> tuple:
-    """
-    Plots model period emissions by sector.
-    """
-
+    """Plots model period emissions by sector."""
     investment_period = n.investment_periods[0]
 
     sectors = ("res", "com", "ind", "trn", "pwr", "ch4")
 
     data = []
+    cols = []
 
     for sector in sectors:
-
         df = get_emission_timeseries_by_sector(n, sector, state=state)
 
         if df.empty:
@@ -420,12 +394,13 @@ def plot_sector_emissions(
         data.append(
             df.loc[investment_period,].iloc[-1].values[0],
         )
+        cols.append(sector)
 
     if not data:
         # empty data to be caught by type error below
-        df = pd.DataFrame(data, columns=sectors)
+        df = pd.DataFrame(data, columns=cols)
     else:
-        df = pd.DataFrame([data], columns=sectors)
+        df = pd.DataFrame([data], columns=cols)
 
     fig, axs = plt.subplots(
         ncols=1,
@@ -446,13 +421,10 @@ def plot_sector_emissions(
 
 def plot_state_emissions(
     n: pypsa.Network,
-    state: Optional[str] = None,
+    state: str | None = None,
     **kwargws,
 ) -> tuple:
-    """
-    Plots stacked bar plot of state level emissions.
-    """
-
+    """Plots stacked bar plot of state level emissions."""
     investment_period = n.investment_periods[0]
 
     fig, axs = plt.subplots(
@@ -478,14 +450,11 @@ def plot_state_emissions(
 def plot_capacity_by_carrier(
     n: pypsa.Network,
     sector: str,
-    state: Optional[str] = None,
-    nice_name: Optional[bool] = True,
+    state: str | None = None,
+    nice_name: bool | None = True,
     **kwargs,
 ) -> tuple:
-    """
-    Bar plot of capacity by carrier.
-    """
-
+    """Bar plot of capacity by carrier."""
     investment_periods = n.investment_periods
 
     nrows = len(investment_periods)
@@ -500,7 +469,6 @@ def plot_capacity_by_carrier(
     df_all = df_all.reset_index()[["carrier", "p_nom_opt"]]
 
     for row, _ in enumerate(investment_periods):
-
         df = df_all.copy()
 
         if df.empty:
@@ -513,9 +481,7 @@ def plot_capacity_by_carrier(
         df = df.groupby("carrier").sum()
 
         try:
-
             if nrows > 1:
-
                 df.plot(kind="bar", stacked=False, ax=axs[row])
                 axs[row].set_xlabel("")
                 axs[row].set_ylabel("Capacity (MW)")
@@ -523,7 +489,6 @@ def plot_capacity_by_carrier(
                 axs[row].tick_params(axis="x", labelrotation=45)
 
             else:
-
                 df.plot(kind="bar", stacked=False, ax=axs)
                 axs.set_xlabel("")
                 axs.set_ylabel("Capacity (MW)")
@@ -542,13 +507,11 @@ def plot_transportation_capacity_by_carrier(
     vehicle: str,  # veh, air, rail, ect.. .
     modes: Enum,  # AirTransport, RoadTransport, ect..
     units: Enum,
-    state: Optional[str] = None,
-    nice_name: Optional[bool] = True,
+    state: str | None = None,
+    nice_name: bool | None = True,
     **kwargs,
 ) -> tuple:
-    """
-    Bar plot of capacity by carrier.
-    """
+    """Bar plot of capacity by carrier."""
 
     def _filter_vehicle_type(df: pd.DataFrame, vehicle: str) -> pd.DataFrame:
         df["vehicle"] = df.index.get_level_values("carrier").map(
@@ -577,7 +540,6 @@ def plot_transportation_capacity_by_carrier(
     )
 
     for row, _ in enumerate(investment_periods):
-
         df = df_veh.copy()
 
         if df.empty:
@@ -587,7 +549,6 @@ def plot_transportation_capacity_by_carrier(
         df["mode"] = df.carrier.map(lambda x: x.split("-")[-1])
 
         for i, unit in enumerate(diff_units):
-
             all_modes = [x.name for x in modes]
             modes_per_unit = [modes[x].value for x in all_modes if units[x].value == unit]
 
@@ -599,9 +560,7 @@ def plot_transportation_capacity_by_carrier(
             df_mode = df_mode.groupby("carrier").sum()
 
             try:
-
                 if nrows > 1:
-
                     df_mode.plot(kind="bar", stacked=False, ax=axs[row + i])
                     axs[row + i].set_xlabel("")
                     axs[row + i].set_ylabel(f"Capacity ({unit})")
@@ -609,7 +568,6 @@ def plot_transportation_capacity_by_carrier(
                     axs[row + i].tick_params(axis="x", labelrotation=45)
 
                 else:
-
                     df_mode.plot(kind="bar", stacked=False, ax=axs)
                     axs.set_xlabel("")
                     axs.set_ylabel(f"Capacity ({unit})")
@@ -626,14 +584,11 @@ def plot_capacity_per_node(
     n: pypsa.Network,
     sharey: bool = True,
     percentage: bool = True,
-    state: Optional[str] = None,
-    nice_name: Optional[bool] = True,
+    state: str | None = None,
+    nice_name: bool | None = True,
     **kwargs,
 ) -> tuple:
-    """
-    Plots capacity percentage per node.
-    """
-
+    """Plots capacity percentage per node."""
     sectors = get_sectors(n)
 
     nrows = len(sectors)
@@ -651,7 +606,6 @@ def plot_capacity_per_node(
     colors = get_plotting_colors(n, nice_name)
 
     for i, sector in enumerate(sectors):
-
         df = get_capacity_per_node(n, sector=sector, state=state)
         df = df.reset_index()[["node", "carrier", data_col]]
 
@@ -661,16 +615,13 @@ def plot_capacity_per_node(
         df = df.pivot(columns="carrier", index="node", values=data_col)
 
         try:
-
             if nrows > 1:
-
                 df.plot(kind="bar", stacked=True, ax=axs[i], color=colors)
                 axs[i].set_xlabel("")
                 axs[i].set_ylabel(y_label)
                 axs[i].set_title(f"{sector} Capacity")
 
             else:
-
                 df.plot(kind="bar", stacked=True, ax=axs, color=colors)
                 axs.set_xlabel("")
                 axs.set_ylabel(y_label)
@@ -685,14 +636,11 @@ def plot_capacity_per_node(
 def plot_capacity_brownfield(
     n: pypsa.Network,
     sector: str,
-    state: Optional[str] = None,
-    nice_name: Optional[bool] = True,
+    state: str | None = None,
+    nice_name: bool | None = True,
     **kwargs,
 ) -> tuple:
-    """
-    Plots old and new capacity at a state level by carrier.
-    """
-
+    """Plots old and new capacity at a state level by carrier."""
     investment_periods = n.investment_periods
 
     nrows = len(investment_periods)
@@ -706,8 +654,11 @@ def plot_capacity_brownfield(
     y_label = "Capacity (MW)"
 
     for row, _ in enumerate(investment_periods):
-
         df = get_capacity_per_node(n, sector, state)
+
+        if df.empty:
+            logger.warning(f"No data to plot for {state}")
+            return fig, axs
 
         if nice_name:
             nn = n.carriers.nice_name.to_dict()
@@ -717,9 +668,7 @@ def plot_capacity_brownfield(
         df = df.reset_index()[["carrier", "existing", "new"]].groupby("carrier").sum()
 
         try:
-
             if nrows > 1:
-
                 df.plot(kind="bar", ax=axs[row])
                 axs[row].set_xlabel("")
                 axs[row].set_ylabel(y_label)
@@ -727,7 +676,6 @@ def plot_capacity_brownfield(
                 axs.tick_params(axis="x", labelrotation=45)
 
             else:
-
                 df.plot(kind="bar", ax=axs)
                 axs.set_xlabel("")
                 axs.set_ylabel(y_label)
@@ -746,13 +694,11 @@ def plot_transportation_capacity_brownfield(
     vehicle: str,  # veh, air, rail, ect.. .
     modes: Enum,  # AirTransport, RoadTransport, ect..
     units: Enum,
-    state: Optional[str] = None,
-    nice_name: Optional[bool] = True,
+    state: str | None = None,
+    nice_name: bool | None = True,
     **kwargs,
 ) -> tuple:
-    """
-    Plots old and new capacity at a state level by carrier.
-    """
+    """Plots old and new capacity at a state level by carrier."""
 
     def _filter_vehicle_type(df: pd.DataFrame, vehicle: str) -> pd.DataFrame:
         df["vehicle"] = df.index.get_level_values("carrier").map(
@@ -781,7 +727,6 @@ def plot_transportation_capacity_brownfield(
     )
 
     for row, _ in enumerate(investment_periods):
-
         df = df_veh.copy()
 
         if df.empty:
@@ -791,7 +736,6 @@ def plot_transportation_capacity_brownfield(
         df["mode"] = df.carrier.map(lambda x: x.split("-")[-1])
 
         for i, unit in enumerate(diff_units):
-
             all_modes = [x.name for x in modes]
             modes_per_unit = [modes[x].value for x in all_modes if units[x].value == unit]
 
@@ -803,9 +747,7 @@ def plot_transportation_capacity_brownfield(
             df_mode = df_mode.groupby("carrier").sum()
 
             try:
-
                 if nrows > 1:
-
                     df_mode.plot(kind="bar", stacked=False, ax=axs[row + i])
                     axs[row + i].set_xlabel("")
                     axs[row + i].set_ylabel(f"Capacity ({unit})")
@@ -813,7 +755,6 @@ def plot_transportation_capacity_brownfield(
                     axs[row + i].tick_params(axis="x", labelrotation=45)
 
                 else:
-
                     df_mode.plot(kind="bar", stacked=False, ax=axs)
                     axs.set_xlabel("")
                     axs.set_ylabel(f"Capacity ({unit})")
@@ -829,13 +770,10 @@ def plot_transportation_capacity_brownfield(
 def plot_sector_load_factor_timeseries(
     n: pypsa.Network,
     sharey: bool = True,
-    state: Optional[str] = None,
+    state: str | None = None,
     **kwargs,
 ) -> tuple:
-    """
-    Plots timeseries of load factor resampled to days.
-    """
-
+    """Plots timeseries of load factor resampled to days."""
     investment_period = n.investment_periods[0]
 
     sectors = ("res", "com", "ind")
@@ -853,23 +791,19 @@ def plot_sector_load_factor_timeseries(
     col = 0
 
     for i, sector in enumerate(sectors):
-
         row = i // 2
         col = i % 2
 
         df = get_load_factor_timeseries(n, sector, state=state).loc[investment_period].resample("d").mean().dropna()
 
         try:
-
             if nrows > 1:
-
                 df.plot(ax=axs[row, col])
                 axs[row, col].set_xlabel("")
                 axs[row, col].set_ylabel("Load Factor (%)")
                 axs[row, col].set_title(f"{sector}")
 
             else:
-
                 df.plot(ax=axs[i])
                 axs[i].set_xlabel("")
                 axs[i].set_ylabel("Load Factor (%)")
@@ -884,14 +818,11 @@ def plot_sector_load_factor_timeseries(
 def plot_sector_load_factor_boxplot(
     n: pypsa.Network,
     sector: str,
-    state: Optional[str] = None,
-    nice_name: Optional[bool] = True,
+    state: str | None = None,
+    nice_name: bool | None = True,
     **kwargs,
 ) -> tuple:
-    """
-    Plots boxplot of load factors.
-    """
-
+    """Plots boxplot of load factors."""
     assert sector in ("res", "com", "ind")
 
     investment_periods = n.investment_periods
@@ -907,7 +838,6 @@ def plot_sector_load_factor_boxplot(
     df_all = get_load_factor_timeseries(n, sector, state=state)
 
     for row, period in enumerate(investment_periods):
-
         df = df_all.loc[period]
 
         if nice_name:
@@ -917,9 +847,7 @@ def plot_sector_load_factor_boxplot(
             )
 
         try:
-
             if nrows > 1:
-
                 sns.boxplot(df, ax=axs[row])
                 axs[row].set_xlabel("")
                 axs[row].set_ylabel("Load Factor (%)")
@@ -927,7 +855,6 @@ def plot_sector_load_factor_boxplot(
                 axs[row].tick_params(axis="x", labelrotation=45)
 
             else:
-
                 sns.boxplot(df, ax=axs)
                 axs.set_xlabel("")
                 axs.set_ylabel("Load Factor (%)")
@@ -944,10 +871,9 @@ def plot_sector_load_timeseries(
     n: pypsa.Network,
     sector: str,
     sharey: bool = False,
-    state: Optional[str] = None,
+    state: str | None = None,
     **kwargs,
 ) -> tuple:
-
     investment_period = n.investment_periods[0]
 
     df = get_end_use_load_timeseries(n, sector, sns_weight=False, state=state).loc[investment_period].T
@@ -967,19 +893,17 @@ def plot_sector_load_timeseries(
     )
 
     for i, load in enumerate(loads):
-
-        l = df[load]
+        load_ = df[load]
 
         # sns.lineplot(l, ax=axs[i], legend=False)
 
-        avg = l.mean(axis=1)
+        avg = load_.mean(axis=1)
 
         # palette = sns.color_palette(["lightgray"])
 
         try:
-
             sns.lineplot(
-                l,
+                load_,
                 color="lightgray",
                 legend=False,
                 # palette=palette,
@@ -1000,10 +924,9 @@ def plot_sector_load_timeseries(
 
 def plot_sector_load_bar(
     n: pypsa.Network,
-    state: Optional[str] = None,
+    state: str | None = None,
     **kwargs,
 ) -> tuple:
-
     investment_period = n.investment_periods[0]
 
     sectors = ("res", "com", "ind")
@@ -1022,7 +945,6 @@ def plot_sector_load_bar(
     title = state if state else "System"
 
     for i, sector in enumerate(sectors):
-
         row = i // 2
         col = i % 2
 
@@ -1033,20 +955,17 @@ def plot_sector_load_bar(
             continue
 
         try:
-
             if nrows > 1:
-
                 df.T.plot.bar(ax=axs[row, col])
                 axs[row, col].set_xlabel("")
-                axs[row, col].set_ylabel(f"Load (MWh)")
+                axs[row, col].set_ylabel("Load (MWh)")
                 axs[row, col].set_title(f"{title} {SECTOR_MAPPER[sector]}")
                 axs[row, col].tick_params(axis="x", labelrotation=0)
 
             else:
-
                 df.T.plot.bar(ax=axs[i])
                 axs[i].set_xlabel("")
-                axs[i].set_ylabel(f"Load (MWh)")
+                axs[i].set_ylabel("Load (MWh)")
                 axs[i].set_title(f"{title} {SECTOR_MAPPER[sector]}")
                 axs[i].tick_params(axis="x", labelrotation=0)
 
@@ -1059,21 +978,26 @@ def plot_sector_load_bar(
 def plot_sector_dr_timeseries(
     n: pypsa.Network,
     sector: str,
-    state: Optional[str] = None,
-    nice_name: Optional[bool] = True,
-    resample: Optional[str] = None,
-    resample_fn: Optional[callable] = None,
-    month: Optional[int] = None,
+    state: str | None = None,
+    nice_name: bool | None = True,
+    resample: str | None = None,
+    resample_fn: Optional[callable] = None,  # noqa: UP007
+    month: int | None = None,
     **kwargs,
 ) -> tuple:
+    if sector == "pwr":
+        sec = "demand_response"  # hack to use same function
+    else:
+        sec = sector
 
     e = get_storage_level_timeseries_carrier(
-        n,
-        sector,
-        True,
-        state,
-        resample,
-        resample_fn,
+        n=n,
+        sector=sec,
+        remove_sns_weights=True,
+        state=state,
+        resample=resample,
+        resample_fn=resample_fn,
+        make_positive=True,
     )
     e = e[[x for x in e if "-water-" not in x]]
 
@@ -1090,23 +1014,20 @@ def plot_sector_dr_timeseries(
     )
 
     for row, period in enumerate(investment_periods):
-
         df = e.loc[period]
 
         if month:
             df = df[df.index.get_level_values("timestep").month == month_i]
 
         if df.empty:
-            logger.warning(f"No Demand Response data to plot for {state}")
+            # logger.warning(f"No Demand Response data to plot for {state}")
             continue
 
         if nice_name:
             df = df.rename(columns=n.carriers.nice_name.to_dict())
 
         try:
-
             if nrows > 1:
-
                 df.plot.line(ax=axs[row])
                 axs[row].set_xlabel("")
                 axs[row].set_ylabel(y_label)
@@ -1114,7 +1035,6 @@ def plot_sector_dr_timeseries(
                 axs[row].tick_params(axis="x", labelrotation=45)
 
             else:
-
                 df.plot.line(ax=axs)
                 axs.set_xlabel("")
                 axs.set_ylabel(y_label)
@@ -1129,11 +1049,10 @@ def plot_sector_dr_timeseries(
 def plot_consumption(
     n: pypsa.Network,
     sector: str,
-    state: Optional[str] = None,
-    nice_name: Optional[bool] = True,
+    state: str | None = None,
+    nice_name: bool | None = True,
     **kwargs,
 ) -> tuple:
-
     assert sector in ("res", "com", "ind", "trn")
 
     investment_periods = n.investment_periods
@@ -1150,8 +1069,11 @@ def plot_consumption(
 
     df_all = get_end_use_consumption(n, sector, state)
 
-    for row, period in enumerate(investment_periods):
+    if df_all.empty:
+        logger.warning(f"No data to plot for {state}")
+        return fig, axs
 
+    for row, period in enumerate(investment_periods):
         df = df_all.loc[period]
 
         if nice_name:
@@ -1160,16 +1082,13 @@ def plot_consumption(
         df = df.sum(axis=0).to_frame()
 
         try:
-
             if nrows > 1:
-
                 df.plot(kind="bar", ax=axs[row], legend=False)
                 axs[row].set_xlabel("")
                 axs[row].set_ylabel(y_label)
                 axs[row].tick_params(axis="x", labelrotation=45)
 
             else:
-
                 df.plot(kind="bar", ax=axs)
                 axs.set_xlabel("")
                 axs.set_ylabel(y_label)
@@ -1191,13 +1110,10 @@ def save_fig(
     n: pypsa.Network,
     save: str,
     title: str,
-    wildcards: dict[str, Any] = None,
+    wildcards: dict[str, Any] | None = None,
     **kwargs,
 ) -> None:
-    """
-    Saves the result figure.
-    """
-
+    """Saves the result figure."""
     fig, _ = fn(n, **kwargs)
 
     if not wildcards:
@@ -1248,12 +1164,14 @@ def save_fig(
 
 @dataclass
 class PlottingData:
+    """Describe data to plot."""
+
     name: str  # snakemake name
     fn: callable
-    sector: Optional[str] = None  # None = 'system'
-    fn_kwargs: Optional[dict[str, Any]] = None
-    nice_name: Optional[str] = None
-    plot_by_month: Optional[bool] = False
+    sector: str | None = None  # None = 'system'
+    fn_kwargs: dict[str, Any] | None = None
+    nice_name: str | None = None
+    plot_by_month: bool | None = False
 
 
 EMISSIONS_PLOTS = [
@@ -1352,6 +1270,17 @@ PRODUCTION_PLOTS = [
             "vehicle": Transport.ROAD.value,
             "modes": RoadTransport,
             "units": RoadTransportUnits,
+        },
+    },
+    {
+        "name": "production_demand_response",
+        "fn": plot_sector_dr_timeseries,
+        "nice_name": "Residential Demand Response",
+        "sector": "pwr",
+        "plot_by_month": False,
+        "fn_kwargs": {
+            # "resample": "D",
+            # "resample_fn": pd.Series.mean,
         },
     },
     {
@@ -1561,17 +1490,14 @@ def _initialize_metadata(data: dict[str, Any]) -> list[PlottingData]:
 
 if __name__ == "__main__":
     if "snakemake" not in globals():
-        from _helpers import mock_snakemake
-
         snakemake = mock_snakemake(
             "plot_sector_production",
-            simpl="70",
-            opts="3h",
+            simpl="11",
+            opts="4h",
             clusters="4m",
             ll="v1.0",
-            sector_opts="",
             sector="E-G",
-            planning_horizons="2018",
+            planning_horizons="2030",
             interconnect="western",
         )
         rootpath = ".."
@@ -1606,7 +1532,6 @@ if __name__ == "__main__":
     # plot at system level
 
     for plot_data in plotting_data:
-
         fn = plot_data.fn
         title = plot_data.nice_name if plot_data.nice_name else plot_data.name
 
@@ -1649,7 +1574,6 @@ if __name__ == "__main__":
         months = {month.value: _get_month_name(month) for month in Month}
 
         for month_i, month_name in months.items():
-
             if plot_data.sector:
                 f_path = Path(
                     results_dir,
@@ -1678,12 +1602,10 @@ if __name__ == "__main__":
     # plot each state
 
     for plot_data in plotting_data:
-
         fn = plot_data.fn
         title = plot_data.nice_name if plot_data.nice_name else plot_data.name
 
         for state in states:
-
             if plot_data.fn_kwargs:
                 fn_kwargs = plot_data.fn_kwargs
             else:
@@ -1724,7 +1646,6 @@ if __name__ == "__main__":
         months = {month.value: _get_month_name(month) for month in Month}
 
         for month_i, month_name in months.items():
-
             if plot_data.sector:
                 f_path = Path(
                     results_dir,

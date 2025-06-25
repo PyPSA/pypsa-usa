@@ -1,5 +1,5 @@
 """
-**Description**
+**Description**.
 
 Historical electrical generation, demand, interchange, and emissions data are retrieved from the `GridEmissions <https://gridemissions.jdechalendar.su.domains/#/code>`_. Data is downloaded at hourly temporal resolution and at a spatial resolution of balancing authority region.
 
@@ -10,13 +10,11 @@ Historical electrical generation, demand, interchange, and emissions data are re
 """
 
 import glob
-import gzip
 import logging
 import os
 import re
 import tarfile
 import warnings
-from io import BytesIO
 from pathlib import Path
 
 import pandas as pd
@@ -59,20 +57,20 @@ def download_and_extract(url, extract_path):
     print(f"File extracted to {extract_path}")
 
 
-def prepare_historical_data(PATH_DOWNLOAD: str, suffix: str = "elec") -> None:
+def prepare_historical_data(path_download: str, suffix: str = "elec") -> None:
     """
     Combines and filters Data Files from GridEmissions files.
 
     Returns single dataframe of all demand data.
     """
-    file_paths = glob.glob(f"{PATH_DOWNLOAD}/processed/*_{suffix}.csv")
+    file_paths = glob.glob(f"{path_download}/processed/*_{suffix}.csv")
     dfs = []
     for file_path in file_paths:
         df = pd.read_csv(file_path)
         dfs.append(df)
     df = pd.concat(dfs)
     df["period"] = pd.to_datetime(df["period"])
-    df.sort_values(by="period", inplace=True)
+    df = df.sort_values(by="period")
     return df
 
 
@@ -103,7 +101,7 @@ if __name__ == "__main__":
 
     grid_emissions_data_url = "https://gridemissions.s3.us-east-2.amazonaws.com/processed.tar.gz"
 
-    PATH_DOWNLOAD = Path(f"data/GridEmissions")
+    PATH_DOWNLOAD = Path("data/GridEmissions")
     PATH_DOWNLOAD.mkdir(parents=True, exist_ok=True)
     download_and_extract(grid_emissions_data_url, PATH_DOWNLOAD)
     df_elec = prepare_historical_data(PATH_DOWNLOAD, suffix="elec")

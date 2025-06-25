@@ -1,0 +1,656 @@
+<?xml version="1.0" encoding="UTF-8"?><MD_Metadata xmlns:gts="http://www.isotc211.org/2005/gts" xmlns:gco="http://www.isotc211.org/2005/gco" xmlns:xalan="http://xml.apache.org/xalan" xmlns:srv="http://www.isotc211.org/2005/srv" xmlns:gmx="http://www.isotc211.org/2005/gmx" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:gml="http://www.opengis.net/gml" xmlns="http://www.isotc211.org/2005/gmd">
+    <fileIdentifier>
+        <gco:CharacterString>6b2af23c67f04f4cb01d88c61aaf558a</gco:CharacterString>
+    </fileIdentifier>
+    <characterSet>
+        <MD_CharacterSetCode codeList="http://www.isotc211.org/2005/resources/Codelist/gmxCodelists.xml#MD_CharacterSetCode" codeListValue="utf8" codeSpace="ISOTC211/19115">utf8</MD_CharacterSetCode>
+    </characterSet>
+    <hierarchyLevel>
+        <MD_ScopeCode codeList="http://www.isotc211.org/2005/resources/Codelist/gmxCodelists.xml#MD_ScopeCode" codeListValue="dataset" codeSpace="ISOTC211/19115">dataset</MD_ScopeCode>
+    </hierarchyLevel>
+    <hierarchyLevelName>
+        <gco:CharacterString>dataset</gco:CharacterString>
+    </hierarchyLevelName>
+    <contact>
+        <CI_ResponsibleParty>
+            <role>
+                <CI_RoleCode codeList="http://www.isotc211.org/2005/resources/Codelist/gmxCodelists.xml#CI_RoleCode" codeListValue="pointOfContact" codeSpace="ISOTC211/19115">pointOfContact</CI_RoleCode>
+            </role>
+        </CI_ResponsibleParty>
+    </contact>
+    <dateStamp>
+        <gco:Date>2022-12-10</gco:Date>
+    </dateStamp>
+    <metadataStandardName>
+        <gco:CharacterString>ISO 19139 Geographic Information - Metadata - Implementation Specification</gco:CharacterString>
+    </metadataStandardName>
+    <metadataStandardVersion>
+        <gco:CharacterString>2007</gco:CharacterString>
+    </metadataStandardVersion>
+    <identificationInfo>
+        <MD_DataIdentification>
+            <citation>
+                <CI_Citation>
+                    <title>
+                        <gco:CharacterString>NERC Regions</gco:CharacterString>
+                    </title>
+                    <date gco:nilReason="missing"/>
+                </CI_Citation>
+            </citation>
+            <abstract>
+                <gco:CharacterString>This feature class/shapefile represents North American Electric Reliability Corporation (NERC) Regions and Subregions. NERC is an international regulatory authority that works to improve the reliability of the bulk power system in North America. NERC works with many different regional entities to improve the coordination and supply of electricity. This data set of vector layer of polygons represents the boundaries of the regional and subregional entities associated with NERC. The following updates have been made since the previous release: 6 features removed, geometry and attribution updated using best available sources.</gco:CharacterString>
+            </abstract>
+            <purpose>
+                <gco:CharacterString>This feature class/shapefile is for the Homeland Infrastructure Foundation Level Database (HIFLD) https://gii.dhs.gov/HIFLD as well as the Energy modelling and simulation community.</gco:CharacterString>
+            </purpose>
+            <credit>
+                <gco:CharacterString>Oak Ridge National Laboratory (ORNL), Los Alamos National Laboratory (LANL), Idaho National Laboratory (INL), National Geospatial-Intelligence Agency (NGA) Homeland Security Infrastructure Program (HSIP) Team</gco:CharacterString>
+            </credit>
+            <descriptiveKeywords>
+                <MD_Keywords>
+                    <keyword>
+                        <gco:CharacterString>homeland security</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>homeland defense</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>emergency response</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>name</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>address</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>electricity</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>generation</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>megawatts</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>power</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>NERC Subregions</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>NERC Regions</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>energy infrastructure</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>address</gco:CharacterString>
+                    </keyword>
+                </MD_Keywords>
+            </descriptiveKeywords>
+            <descriptiveKeywords>
+                <MD_Keywords>
+                    <keyword>
+                        <gco:CharacterString>homeland security</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>homeland defense</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>emergency response</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>name</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>address</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>electricity</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>generation</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>megawatts</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>power</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>NERC Subregions</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>NERC Regions</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>energy infrastructure</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>address</gco:CharacterString>
+                    </keyword>
+                </MD_Keywords>
+            </descriptiveKeywords>
+            <descriptiveKeywords>
+                <MD_Keywords>
+                    <keyword>
+                        <gco:CharacterString>homeland security</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>homeland defense</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>emergency response</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>name</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>address</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>electricity</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>generation</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>megawatts</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>power</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>NERC Subregions</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>NERC Regions</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>energy infrastructure</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>address</gco:CharacterString>
+                    </keyword>
+                </MD_Keywords>
+            </descriptiveKeywords>
+            <descriptiveKeywords>
+                <MD_Keywords>
+                    <keyword>
+                        <gco:CharacterString>homeland security</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>homeland defense</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>emergency response</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>name</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>address</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>electricity</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>generation</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>megawatts</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>power</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>NERC Subregions</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>NERC Regions</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>energy infrastructure</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>address</gco:CharacterString>
+                    </keyword>
+                </MD_Keywords>
+            </descriptiveKeywords>
+            <descriptiveKeywords>
+                <MD_Keywords>
+                    <keyword>
+                        <gco:CharacterString>homeland security</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>homeland defense</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>emergency response</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>name</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>address</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>electricity</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>generation</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>megawatts</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>power</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>NERC Subregions</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>NERC Regions</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>energy infrastructure</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>address</gco:CharacterString>
+                    </keyword>
+                </MD_Keywords>
+            </descriptiveKeywords>
+            <descriptiveKeywords>
+                <MD_Keywords>
+                    <keyword>
+                        <gco:CharacterString>homeland security</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>homeland defense</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>emergency response</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>name</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>address</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>electricity</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>generation</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>megawatts</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>power</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>NERC Subregions</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>NERC Regions</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>energy infrastructure</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>address</gco:CharacterString>
+                    </keyword>
+                </MD_Keywords>
+            </descriptiveKeywords>
+            <descriptiveKeywords>
+                <MD_Keywords>
+                    <keyword>
+                        <gco:CharacterString>homeland security</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>homeland defense</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>emergency response</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>name</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>address</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>electricity</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>generation</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>megawatts</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>power</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>NERC Subregions</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>NERC Regions</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>energy infrastructure</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>address</gco:CharacterString>
+                    </keyword>
+                </MD_Keywords>
+            </descriptiveKeywords>
+            <descriptiveKeywords>
+                <MD_Keywords>
+                    <keyword>
+                        <gco:CharacterString>homeland security</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>homeland defense</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>emergency response</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>name</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>address</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>electricity</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>generation</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>megawatts</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>power</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>NERC Subregions</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>NERC Regions</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>energy infrastructure</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>address</gco:CharacterString>
+                    </keyword>
+                </MD_Keywords>
+            </descriptiveKeywords>
+            <descriptiveKeywords>
+                <MD_Keywords>
+                    <keyword>
+                        <gco:CharacterString>homeland security</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>homeland defense</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>emergency response</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>name</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>address</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>electricity</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>generation</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>megawatts</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>power</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>NERC Subregions</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>NERC Regions</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>energy infrastructure</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>address</gco:CharacterString>
+                    </keyword>
+                </MD_Keywords>
+            </descriptiveKeywords>
+            <descriptiveKeywords>
+                <MD_Keywords>
+                    <keyword>
+                        <gco:CharacterString>homeland security</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>homeland defense</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>emergency response</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>name</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>address</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>electricity</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>generation</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>megawatts</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>power</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>NERC Subregions</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>NERC Regions</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>energy infrastructure</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>address</gco:CharacterString>
+                    </keyword>
+                </MD_Keywords>
+            </descriptiveKeywords>
+            <descriptiveKeywords>
+                <MD_Keywords>
+                    <keyword>
+                        <gco:CharacterString>homeland security</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>homeland defense</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>emergency response</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>name</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>address</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>electricity</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>generation</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>megawatts</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>power</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>NERC Subregions</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>NERC Regions</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>energy infrastructure</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>address</gco:CharacterString>
+                    </keyword>
+                </MD_Keywords>
+            </descriptiveKeywords>
+            <descriptiveKeywords>
+                <MD_Keywords>
+                    <keyword>
+                        <gco:CharacterString>homeland security</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>homeland defense</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>emergency response</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>name</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>address</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>electricity</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>generation</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>megawatts</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>power</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>NERC Subregions</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>NERC Regions</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>energy infrastructure</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>address</gco:CharacterString>
+                    </keyword>
+                </MD_Keywords>
+            </descriptiveKeywords>
+            <descriptiveKeywords>
+                <MD_Keywords>
+                    <keyword>
+                        <gco:CharacterString>homeland security</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>homeland defense</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>emergency response</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>name</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>address</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>electricity</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>generation</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>megawatts</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>power</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>NERC Subregions</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>NERC Regions</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>energy infrastructure</gco:CharacterString>
+                    </keyword>
+                    <keyword>
+                        <gco:CharacterString>address</gco:CharacterString>
+                    </keyword>
+                </MD_Keywords>
+            </descriptiveKeywords>
+            <resourceConstraints>
+                <MD_Constraints>
+                    <useLimitation>
+                        <gco:CharacterString>None (Public Use). Users are advised to read the data set's metadata thoroughly to understand appropriate use and data limitations.</gco:CharacterString>
+                    </useLimitation>
+                </MD_Constraints>
+            </resourceConstraints>
+            <resourceConstraints>
+                <MD_LegalConstraints>
+                    <accessConstraints>
+                        <MD_RestrictionCode codeList="http://www.isotc211.org/2005/resources/Codelist/gmxCodelists.xml#MD_RestrictionCode" codeListValue="otherRestrictions" codeSpace="ISOTC211/19115">otherRestrictions</MD_RestrictionCode>
+                    </accessConstraints>
+                    <otherConstraints>
+                        <gco:CharacterString>Other Constraints</gco:CharacterString>
+                    </otherConstraints>
+                </MD_LegalConstraints>
+            </resourceConstraints>
+            <resourceConstraints>
+                <MD_LegalConstraints>
+                    <useConstraints>
+                        <MD_RestrictionCode codeList="http://www.isotc211.org/2005/resources/Codelist/gmxCodelists.xml#MD_RestrictionCode" codeListValue="otherRestrictions" codeSpace="ISOTC211/19115">otherRestrictions</MD_RestrictionCode>
+                    </useConstraints>
+                    <otherConstraints>
+                        <gco:CharacterString>Other Constraints</gco:CharacterString>
+                    </otherConstraints>
+                </MD_LegalConstraints>
+            </resourceConstraints>
+            <language gco:nilReason="missing"/>
+            <characterSet>
+                <MD_CharacterSetCode codeList="http://www.isotc211.org/2005/resources/Codelist/gmxCodelists.xml#MD_CharacterSetCode" codeListValue="utf8" codeSpace="ISOTC211/19115">utf8</MD_CharacterSetCode>
+            </characterSet>
+        </MD_DataIdentification>
+    </identificationInfo>
+    <distributionInfo>
+        <MD_Distribution>
+            <transferOptions>
+                <MD_DigitalTransferOptions>
+                    <onLine>
+                        <CI_OnlineResource>
+                            <linkage>
+                                <URL>https://services1.arcgis.com/Hp6G80Pky0om7QvQ/arcgis/rest/services/NERC_Regions/FeatureServer</URL>
+                            </linkage>
+                        </CI_OnlineResource>
+                    </onLine>
+                </MD_DigitalTransferOptions>
+            </transferOptions>
+        </MD_Distribution>
+    </distributionInfo>
+</MD_Metadata>

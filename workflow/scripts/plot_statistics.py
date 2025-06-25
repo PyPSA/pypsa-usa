@@ -39,8 +39,6 @@ import numpy as np
 import pandas as pd
 import pypsa
 import seaborn as sns
-
-logger = logging.getLogger(__name__)
 from _helpers import configure_logging
 from add_electricity import sanitize_carriers
 from plot_network_maps import get_color_palette
@@ -52,6 +50,8 @@ from summary import (
     get_node_emissions_timeseries,
     get_tech_emissions_timeseries,
 )
+
+logger = logging.getLogger(__name__)
 
 # Global Plotting Settings
 TITLE_SIZE = 16
@@ -93,7 +93,7 @@ def stacked_bar_horizons(
     colors_ = carriers["color"]
     carriers_legend = carriers  # to track which carriers have non-zero values
     # Create subplots
-    planning_horizons = stats[list(stats.keys())[0]].columns
+    planning_horizons = stats[next(iter(stats.keys()))].columns
     fig, axes = plt.subplots(
         nrows=len(planning_horizons),
         ncols=1,
@@ -168,9 +168,7 @@ def plot_capacity_additions_bar(
     save: str,
     **wildcards,
 ) -> None:
-    """
-    Plots base capacity vs optimal capacity as a bar chart.
-    """
+    """Plots base capacity vs optimal capacity as a bar chart."""
     existing_capacity = n.generators.groupby("carrier").p_nom.sum().round(0)
     existing_capacity = existing_capacity.to_frame(name="Existing Capacity")
     storage_units = n.storage_units.groupby("carrier").p_nom.sum().round(0)
@@ -181,10 +179,10 @@ def plot_capacity_additions_bar(
     optimal_capacity = n.statistics.optimal_capacity()
     optimal_capacity = optimal_capacity[optimal_capacity.index.get_level_values(0).isin(["Generator", "StorageUnit"])]
     optimal_capacity.index = optimal_capacity.index.droplevel(0)
-    optimal_capacity.reset_index(inplace=True)
-    optimal_capacity.rename(columns={"index": "carrier"}, inplace=True)
+    optimal_capacity = optimal_capacity.reset_index()
+    optimal_capacity = optimal_capacity.rename(columns={"index": "carrier"})
 
-    optimal_capacity.set_index("carrier", inplace=True)
+    optimal_capacity = optimal_capacity.set_index("carrier")
     optimal_capacity.insert(0, "Existing", existing_capacity["Existing Capacity"])
     optimal_capacity = optimal_capacity.fillna(0)
 
@@ -202,9 +200,7 @@ def plot_production_bar(
     save: str,
     **wildcards,
 ) -> None:
-    """
-    Plot diaptch per carrier.
-    """
+    """Plot diaptch per carrier."""
     energy_mix = n.statistics.supply().round(0)
     energy_mix = energy_mix[
         energy_mix.index.get_level_values("component").isin(
@@ -227,9 +223,7 @@ def plot_global_constraint_shadow_prices(
     save: str,
     **wildcards,
 ) -> None:
-    """
-    Plots shadow prices on global constraints.
-    """
+    """Plots shadow prices on global constraints."""
     shadow_prices = n.global_constraints.mu.round(3).reset_index()
 
     # plot data
@@ -252,9 +246,7 @@ def plot_global_constraint_shadow_prices(
 
 
 def get_currently_installed_capacity(n: pypsa.Network) -> pd.DataFrame:
-    """
-    Returns a DataFrame with the currently installed capacity for each carrier and nerc region.
-    """
+    """Returns a DataFrame with the currently installed capacity for each carrier and nerc region."""
     n.generators["nerc_reg"] = n.generators.bus.map(n.buses.nerc_reg)
     existing_capacity = n.generators.groupby(["nerc_reg", "carrier"]).p_nom.sum().round(0)
     existing_capacity = existing_capacity.to_frame(name="Existing")
@@ -271,11 +263,11 @@ def get_currently_installed_capacity(n: pypsa.Network) -> pd.DataFrame:
         index=existing_capacity.index,
     )
     existing_capacity = existing_capacity.drop(columns="index")
-    existing_capacity.set_index(["Region", "Carrier"], inplace=True)
+    existing_capacity = existing_capacity.set_index(["Region", "Carrier"])
 
     nn_carriers = existing_capacity.index.get_level_values(1).map(n.carriers.nice_name)
     existing_capacity = existing_capacity.droplevel(1)
-    existing_capacity.set_index(nn_carriers, append=True, inplace=True)
+    existing_capacity = existing_capacity.set_index(nn_carriers, append=True)
     return existing_capacity
 
 
@@ -283,11 +275,13 @@ def get_statistics(n, column_name):
     """
     Prepare the statistics data for plotting by extracting and grouping by region and carrier.
 
-    Parameters:
+    Parameters
+    ----------
     - n: pypsa.Network
     - column_name: str, the name of the column to extract from statistics (e.g., 'Optimal Capacity', 'Supply')
 
-    Returns:
+    Returns
+    -------
     - pd.DataFrame: Prepared and grouped data
     """
     groupers = n.statistics.groupers
@@ -301,11 +295,11 @@ def get_statistics(n, column_name):
     su_reg = su.map(n.storage_units.bus.map(n.buses.nerc_reg)).to_series()
     nerc_reg = pd.concat([gens_reg, su_reg])
 
-    df.set_index(nerc_reg, append=True, inplace=True)
+    df = df.set_index(nerc_reg, append=True)
     df = df.droplevel([0, 1, 2])
-    df.reset_index(inplace=True)
-    df.rename(columns={"level_0": "carrier", "level_1": "region"}, inplace=True)
-    df.set_index(["region", "carrier"], inplace=True)
+    df = df.reset_index()
+    df = df.rename(columns={"level_0": "carrier", "level_1": "region"})
+    df = df.set_index(["region", "carrier"])
 
     df_selected = df[column_name]
     df_selected = df_selected.groupby(df_selected.index).sum()
@@ -315,7 +309,7 @@ def get_statistics(n, column_name):
         index=df_selected.index,
     )
     df_selected = df_selected.drop(columns="index")
-    df_selected.set_index(["Region", "Carrier"], inplace=True)
+    df_selected = df_selected.set_index(["Region", "Carrier"])
 
     return df_selected
 
@@ -324,7 +318,8 @@ def plot_bar(data, n, save, title, ylabel, is_capacity=False):
     """
     Plot the data in a bar chart with subplots by region and carrier.
 
-    Parameters:
+    Parameters
+    ----------
     - data: pd.DataFrame, data to plot
     - n: pypsa.Network
     - save: str, file path to save the plot
@@ -338,7 +333,7 @@ def plot_bar(data, n, save, title, ylabel, is_capacity=False):
         data = data[["Existing"] + [col for col in data.columns if col != "Existing"]]
         retirements = data.diff(axis=1).clip(upper=0)
         retirements = retirements[(retirements < -0.001).any(axis=1)]
-        retirements.fillna(0, inplace=True)
+        retirements = retirements.fillna(0)
         data = pd.concat([data, retirements])
 
     data = data / 1e3  # Convert to GW
@@ -352,8 +347,19 @@ def plot_bar(data, n, save, title, ylabel, is_capacity=False):
     rows = math.ceil(num_regions / columns)
 
     # Set up the figure and axes
-    fig, axes = plt.subplots(rows, columns, figsize=(columns * 2.5, rows * 5), sharex=True, sharey=True)
-    axes = axes.flatten()
+    fig, axes = plt.subplots(
+        rows,
+        columns,
+        figsize=(columns * 2.5, rows * 5),
+        sharex=True,
+        sharey=True,
+    )
+
+    # Ensure axes is a flattened array for consistent indexing
+    if num_regions == 1:
+        axes = [axes]  # Wrap single Axes object in a list
+    else:
+        axes = axes.flatten()
 
     for i, region in enumerate(regions):
         region_data = data.loc[region]
@@ -369,9 +375,12 @@ def plot_bar(data, n, save, title, ylabel, is_capacity=False):
         axes[i].set_ylabel(ylabel)
         axes[i].set_xlabel("")
 
-    for j in range(i + 1, len(axes)):
-        fig.delaxes(axes[j])
+    # Remove unused subplots
+    if num_regions > 1:
+        for j in range(i + 1, len(axes)):
+            fig.delaxes(axes[j])
 
+    # Create legend
     handles, labels = [], []
     for carrier in data.reset_index().Carrier.unique():
         handle = plt.Rectangle((0, 0), 1, 1, color=palette[carrier])
@@ -387,18 +396,14 @@ def plot_bar(data, n, save, title, ylabel, is_capacity=False):
 
 
 def plot_regional_capacity_additions_bar(n, save):
-    """
-    Plot capacity evolution by NERC region in a stacked bar plot.
-    """
+    """Plot capacity evolution by NERC region in a stacked bar plot."""
     data = get_statistics(n, "Optimal Capacity")
     data.to_csv(f"{Path(save).parent.parent}/statistics/bar_regional_capacity.csv")
     plot_bar(data, n, save, "", "Capacity (GW)", is_capacity=True)
 
 
 def plot_regional_production_bar(n, save):
-    """
-    Plot production evolution by NERC region in a stacked bar plot.
-    """
+    """Plot production evolution by NERC region in a stacked bar plot."""
     data = get_statistics(n, "Supply")
     data.to_csv(f"{Path(save).parent.parent}/statistics/bar_regional_production.csv")
     plot_bar(data, n, save, "", "Production (GWh)")
@@ -408,9 +413,7 @@ def plot_regional_emissions_bar(
     n: pypsa.Network,
     save: str,
 ) -> None:
-    """
-    PLOT OF CO2 EMISSIONS BY NERC REGION AND INVESTMENT PERIOD.
-    """
+    """PLOT OF CO2 EMISSIONS BY NERC REGION AND INVESTMENT PERIOD."""
     regional_emisssions_ts = get_node_emissions_timeseries(n).T.groupby(n.buses.nerc_reg).sum().T / 1e6
     regional_emissions = (
         regional_emisssions_ts.groupby(regional_emisssions_ts.index.get_level_values(0)).sum().round(3).T
@@ -423,8 +426,19 @@ def plot_regional_emissions_bar(
     rows = math.ceil(num_regions / columns)
 
     # Set up the figure and axes
-    fig, axes = plt.subplots(rows, columns, figsize=(columns * 2.5, rows * 5), sharex=True, sharey=True)
-    axes = axes.flatten()
+    fig, axes = plt.subplots(
+        rows,
+        columns,
+        figsize=(columns * 2.5, rows * 5),
+        sharex=True,
+        sharey=True,
+    )
+
+    # Ensure axes is a flattened array for consistent indexing
+    if num_regions == 1:
+        axes = [axes]  # Wrap single Axes object in a list
+    else:
+        axes = axes.flatten()
 
     for i, region in enumerate(regions):
         region_data = regional_emissions.loc[region]
@@ -457,9 +471,7 @@ def plot_emissions_bar(
     n: pypsa.Network,
     save: str,
 ) -> None:
-    """
-    PLOT OF CO2 EMISSIONS BY INVESTMENT PERIOD.
-    """
+    """PLOT OF CO2 EMISSIONS BY INVESTMENT PERIOD."""
     emisssions_ts = get_node_emissions_timeseries(n).T.sum().T / 1e6
     emissions = emisssions_ts.groupby(emisssions_ts.index.get_level_values(0)).sum().round(3).T
 
@@ -523,7 +535,7 @@ def plot_production_area(
     num_periods = len(n.investment_periods)
     base_plot_size = 4
 
-    for month in ["all"] + months.to_list():
+    for month in ["all", *months.to_list()]:
         figsize = (14, (base_plot_size * num_periods))
         fig, axs = plt.subplots(figsize=figsize, ncols=1, nrows=num_periods)
         if not isinstance(axs, np.ndarray):  # only one horizon
@@ -562,9 +574,7 @@ def plot_production_area(
 
 
 def plot_hourly_emissions(n: pypsa.Network, save: str, **wildcards) -> None:
-    """
-    Plots snapshot emissions by technology.
-    """
+    """Plots snapshot emissions by technology."""
     # get data
     emissions = get_tech_emissions_timeseries(n).mul(1e-6)  # T -> MT
     zeros = emissions.columns[(np.abs(emissions) < 1e-7).all()]
@@ -592,9 +602,7 @@ def plot_hourly_emissions(n: pypsa.Network, save: str, **wildcards) -> None:
 
 
 def plot_accumulated_emissions_tech(n: pypsa.Network, save: str, **wildcards) -> None:
-    """
-    Creates area plot of accumulated emissions by technology.
-    """
+    """Creates area plot of accumulated emissions by technology."""
     # get data
 
     emissions = get_tech_emissions_timeseries(n).cumsum().mul(1e-6)  # T -> MT
@@ -624,9 +632,7 @@ def plot_accumulated_emissions_tech(n: pypsa.Network, save: str, **wildcards) ->
 
 
 def plot_accumulated_emissions(n: pypsa.Network, save: str, **wildcards) -> None:
-    """
-    Plots accumulated emissions.
-    """
+    """Plots accumulated emissions."""
     # get data
 
     emissions = get_tech_emissions_timeseries(n).mul(1e-6).sum(axis=1)  # T -> MT
@@ -654,22 +660,29 @@ def plot_accumulated_emissions(n: pypsa.Network, save: str, **wildcards) -> None
 
 
 def plot_capacity_factor_heatmap(n: pypsa.Network, save: str, **wildcards) -> None:
-    """
-    HEATMAP OF RENEWABLE CAPACITY FACTORS BY CARRIER.
-    """
-    df_long = n.generators_t.p.loc[n.investment_periods[0]].melt(var_name="bus", value_name="p", ignore_index=False)
+    """HEATMAP OF RENEWABLE CAPACITY FACTORS BY CARRIER."""
+    df_long = n.generators_t.p.loc[n.investment_periods[0]].melt(
+        var_name="bus",
+        value_name="p",
+        ignore_index=False,
+    )
     df_long["region"] = df_long["bus"].map(n.generators.bus.map(n.buses.country))
     df_long["carrier"] = df_long["bus"].map(n.generators.carrier)
     df_long["hour"] = df_long.index.hour
     df_long["month"] = df_long.index.month
-    df_long.drop(columns="bus", inplace=True)
+    df_long = df_long.drop(columns="bus")
     df_long = df_long.drop(columns="region").groupby(["carrier", "month", "hour"]).mean().reset_index()
 
     # Get unique months for separate panels
     unique_months = df_long["month"].unique()
 
     # Prepare figure and axes
-    fig, axs = plt.subplots(len(unique_months), 1, figsize=(12, len(unique_months) * 4), sharex=True)
+    fig, axs = plt.subplots(
+        len(unique_months),
+        1,
+        figsize=(12, len(unique_months) * 4),
+        sharex=True,
+    )
 
     # Iterate over each month to create a panel
     for idx, month in enumerate(sorted(unique_months)):
@@ -697,7 +710,6 @@ def plot_generator_data_panel(
     save: str,
     **wildcards,
 ):
-
     df_capex_expand = n.generators.loc[
         n.generators.p_nom_extendable & ~n.generators.index.str.contains("existing"),
         :,
@@ -805,9 +817,7 @@ def plot_region_lmps(
     save: str,
     **wildcards,
 ) -> None:
-    """
-    Plots a box plot of LMPs for each region.
-    """
+    """Plots a box plot of LMPs for each region."""
     df_lmp = n.buses_t.marginal_price
     df_long = pd.melt(
         df_lmp.reset_index(),
@@ -817,7 +827,7 @@ def plot_region_lmps(
     )
     df_long["season"] = df_long["timestep"].dt.quarter
     df_long["hour"] = df_long["timestep"].dt.hour
-    df_long.drop(columns="timestep", inplace=True)
+    df_long = df_long.drop(columns="timestep")
     df_long["region"] = df_long.bus.map(n.buses.country)
 
     plt.figure(figsize=(10, 10))
@@ -839,7 +849,7 @@ def plot_region_lmps(
     plt.close()
 
 
-#### Fuel costs
+# Fuel costs
 
 
 def plot_fuel_costs(
@@ -847,7 +857,6 @@ def plot_fuel_costs(
     save: str,
     **wildcards,
 ) -> None:
-
     fuel_costs = get_fuel_costs(n)
 
     fuels = set(fuel_costs.index.get_level_values("carrier"))
@@ -867,9 +876,9 @@ def plot_fuel_costs(
         legend=True,
         palette=color_palette,
     )
-    axs[0].set_title("Daily Average Fuel Costs [$/MWh]"),
-    axs[0].set_xlabel(""),
-    axs[0].set_ylabel("$/MWh"),
+    (axs[0].set_title("Daily Average Fuel Costs [$/MWh]"),)
+    (axs[0].set_xlabel(""),)
+    (axs[0].set_ylabel("$/MWh"),)
 
     # plot bus fuel prices for each fuel
     for i, fuel in enumerate(fuels):
@@ -882,9 +891,9 @@ def plot_fuel_costs(
             dashes=False,
             ax=axs[i + 1],
         )
-        axs[i + 1].set_title(f"Daily Average {nice_name} Fuel Costs per Bus [$/MWh]"),
-        axs[i + 1].set_xlabel(""),
-        axs[i + 1].set_ylabel("$/MWh"),
+        (axs[i + 1].set_title(f"Daily Average {nice_name} Fuel Costs per Bus [$/MWh]"),)
+        (axs[i + 1].set_xlabel(""),)
+        (axs[i + 1].set_ylabel("$/MWh"),)
 
     fig.savefig(save)
     plt.close()
@@ -928,7 +937,9 @@ if __name__ == "__main__":
 
     # Export Statistics Tables
     groupers = n.statistics.groupers
-    n.statistics(groupby=groupers.get_name_bus_and_carrier).round(3).to_csv(snakemake.output.statistics_dissaggregated)
+    n.statistics(groupby=groupers.get_name_bus_and_carrier).round(3).to_csv(
+        snakemake.output.statistics_dissaggregated,
+    )
     n.statistics().round(2).to_csv(snakemake.output.statistics_summary)
     n.generators.to_csv(snakemake.output.generators)
     n.storage_units.to_csv(snakemake.output.storage_units)

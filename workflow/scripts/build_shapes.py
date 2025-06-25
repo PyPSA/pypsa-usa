@@ -1,55 +1,12 @@
-# BY PyPSA-USA Authors
-"""
-**Description**
-
-The `build_shapes` rule builds the GIS shape files for the balancing authorities and offshore regions. The regions are only built for the {interconnect} wildcard. Because balancing authorities often overlap- we modify the GIS dataset developed by  [Breakthrough Energy Sciences](https://breakthrough-energy.github.io/docs/).
-
-**Relevant Settings**
-
-.. code:: yaml
-
-    interconnect:
-
-**Inputs**
-
-- ``breakthrough_network/base_grid/zone.csv``: confer :ref:`base`
-- ``repo_data/BA_shapes_new/Modified_BE_BA_Shapes.shp``: confer :ref:`base`
-- ``repo_data/BOEM_CA_OSW_GIS/CA_OSW_BOEM_CallAreas.shp``: confer :ref:`base`
-
-**Outputs**
-
-- ``resources/country_shapes.geojson``:
-
-    # .. image:: ../img/regions_onshore.png
-    #     :scale: 33 %
-
-- ``resources/onshore_shapes.geojson``:
-
-    # .. image:: ../img/regions_offshore.png
-    #     :scale: 33 %
-
-- ``resources/offshore_shapes.geojson``:
-
-    # .. image:: ../img/regions_offshore.png
-    #     :scale: 33 %
-
-- ``resources/state_boundaries.geojson``:
-
-    # .. image:: ../img/regions_offshore.png
-    #     :scale: 33 %
-"""
-
+"""The `build_shapes` rule builds the GIS shape files for the balancing authorities and offshore regions. The regions are only built for the {interconnect} wildcard."""
 
 import logging
-from typing import List
 
-import cartopy.crs as ccrs
 import cartopy.io.shapereader as shpreader
 import geopandas as gpd
-import matplotlib.pyplot as plt
 import pandas as pd
 from _helpers import configure_logging, mock_snakemake
-from constants import *
+from constants import GPS_CRS, MEASUREMENT_CRS
 from shapely.geometry import MultiPolygon
 
 
@@ -61,11 +18,13 @@ def filter_small_polygons_gpd(
     Filters out polygons within each MultiPolygon in a GeoSeries that are
     smaller than a specified area.
 
-    Parameters:
+    Parameters
+    ----------
     geo_series (gpd.GeoSeries): A GeoSeries containing MultiPolygon geometries.
     min_area (float): The minimum area threshold.
 
-    Returns:
+    Returns
+    -------
     gpd.GeoSeries: A GeoSeries with MultiPolygons filtered based on the area criterion.
     """
     # Explode the MultiPolygons into individual Polygons
@@ -88,9 +47,7 @@ def load_na_shapes(
     state_shape: str = "admin_1_states_provinces_lakes",
     countries: list = ["US"],
 ) -> gpd.GeoDataFrame:
-    """
-    Creates geodataframe of north america.
-    """
+    """Creates geodataframe of north america."""
     shpfilename = shpreader.natural_earth(
         resolution="10m",
         category="cultural",
@@ -122,12 +79,9 @@ def filter_shapes(
     data: gpd.GeoDataFrame,
     zones: pd.DataFrame,
     interconnect: str = "western",
-    add_regions: list = None,
+    add_regions: list | None = None,
 ) -> gpd.GeoDataFrame:
-    """
-    Filters breakthrough energy zone data by interconnect region.
-    """
-
+    """Filters breakthrough energy zone data by interconnect region."""
     if interconnect not in ("western", "texas", "eastern", "usa"):
         logger.warning(f"Interconnector of {interconnect} is not valid")
 
@@ -140,9 +94,7 @@ def filter_shapes(
 
 
 def load_ba_shape(ba_file: str) -> gpd.GeoDataFrame:
-    """
-    Loads balancing authority into a geodataframe.
-    """
+    """Loads balancing authority into a geodataframe."""
     gdf = gpd.read_file(ba_file)
     gdf = gdf.rename(columns={"BA": "name"})
     return gdf.to_crs(4326)
@@ -165,9 +117,7 @@ def combine_offshore_shapes(
     interconnect: gpd.GeoDataFrame,
     buffer,
 ) -> gpd.GeoDataFrame:
-    """
-    Conbines offshore shapes.
-    """
+    """Conbines offshore shapes."""
     if source == "ca_osw":
         offshore = _dissolve_boem(shape)
     elif source == "eez":
@@ -179,11 +129,9 @@ def combine_offshore_shapes(
 
 
 def _dissolve_boem(shape: gpd.GeoDataFrame):
-    """
-    Dissolves offshore shapes from boem.
-    """
+    """Dissolves offshore shapes from boem."""
     shape_split = shape.dissolve().explode(index_parts=False)
-    shape_split.rename(columns={"Lease_Name": "name"}, inplace=True)
+    shape_split = shape_split.rename(columns={"Lease_Name": "name"})
     shape_split.name = ["Morro_Bay", "Humboldt"]
     return shape_split
 
@@ -213,9 +161,7 @@ def trim_states_to_interconnect(
     gdf_nerc: gpd.GeoDataFrame,
     interconnect: str,
 ):
-    """
-    Trims states to only include portions of states in NERC Interconnect.
-    """
+    """Trims states to only include portions of states in NERC Interconnect."""
     if interconnect == "western":
         gdf_nerc_f = gdf_nerc[gdf_nerc.OBJECTID.isin([3, 8, 9])]
         gdf_states = gpd.overlay(
@@ -240,7 +186,7 @@ def trim_shape_to_interconnect(
     gdf: gpd.GeoDataFrame,
     interconnect_regions: gpd.GeoDataFrame,
     interconnect: str,
-    exclusion_dict: dict = None,
+    exclusion_dict: dict | None = None,
 ):
     """
     Trim Shapes to only portions inside NERC/State Region to ensure renewables
@@ -421,8 +367,6 @@ def main(snakemake):
 if __name__ == "__main__":
     logger = logging.getLogger(__name__)
     if "snakemake" not in globals():
-        from _helpers import mock_snakemake
-
         snakemake = mock_snakemake("build_shapes", interconnect="eastern")
     configure_logging(snakemake)
     main(snakemake)
