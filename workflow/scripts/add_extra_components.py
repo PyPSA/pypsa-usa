@@ -1004,7 +1004,7 @@ def add_co2_storage(n: pypsa.Network, config: dict, co2_storage_csv: str, costs:
                 else:  # TAMU
                     elements = 2
                 if granularity == "state":
-                    buses = n.buses[["x", "y"]].copy()
+                    buses = n.buses[["x", "y"]].query("x != 0 and y != 0").copy()
                     buses["geometry"] = buses.apply(lambda x: Point(x.x, x.y), axis=1)
                     buses_gdf = gpd.GeoDataFrame(buses, crs="EPSG:4269")
                     states_gdf = gpd.GeoDataFrame(
@@ -1012,15 +1012,7 @@ def add_co2_storage(n: pypsa.Network, config: dict, co2_storage_csv: str, costs:
                     )
                     buses_projected = buses_gdf.to_crs("EPSG:3857")
                     states_projected = states_gdf.to_crs("EPSG:3857")
-                    states = gpd.sjoin_nearest(
-                        buses_projected,
-                        states_projected,
-                        how="left",
-                    ).query(
-                        "x != 0 and y != 0",
-                    )[
-                        "STUSPS"
-                    ]  # TODO: remove the query and have it when making a copy of the buses above (this way it will be faster to make the join operation)
+                    states = gpd.sjoin_nearest(buses_projected, states_projected, how="left")["STUSPS"]
                     buses_atmosphere_unique = states.unique() + " atmosphere"
                     buses_atmosphere = [
                         "%s atmosphere" % states.loc[" ".join(index.split(" ")[:elements])] for index in indexes
@@ -1142,13 +1134,15 @@ def add_dac(n: pypsa.Network, config: dict, sector: bool):
         # get links that emit CO2 for all sectors
         links = n.links.query("bus2.str.endswith('-co2')")
 
-        # set buses and links needed to create DAC links properly afterwards
+        # set buses needed to create DAC links properly afterwards
         exists_atmosphere = set()
         exists_dac = set()
         buses_atmosphere = []
         buses_atmosphere_all = []
         buses_atmosphere_unique = []
+        buses_co2_capture = []
         buses_co2_account = []
+        buses_ac = []
         links_dac = []
         for index in links.index:
             bus2 = links.loc[index]["bus2"]  # e.g. "CA pwr-co2"   # ok
@@ -1194,7 +1188,7 @@ def add_dac(n: pypsa.Network, config: dict, sector: bool):
         n.links.loc[links.index, "bus2"] = buses_atmosphere_all
 
     else:  # sector-less
-        # set buses and links needed to create DAC links properly afterwards
+        # set buses needed to create DAC links properly afterwards
         buses_atmosphere = n.links.query("bus2.str.endswith('atmosphere')")["bus2"].values
         buses_co2_capture = n.buses.query("Bus.str.endswith(' co2 capture')").index
         buses_ac = buses_co2_capture.str.replace(" co2 capture", "")
