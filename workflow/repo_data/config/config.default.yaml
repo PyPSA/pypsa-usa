@@ -111,7 +111,7 @@ co2:
 # docs :
 dac:
   enable: false   # [false, true]
-  granularity: "node"   # ["node", "state", "nation"] (note: "nation" is not applicable for a network based on sectors - it will default to "node" in this case)
+  granularity: "node"   # ["node", "state", "nation"] (note: "nation" is not applicable for a network based on sectors - it defaults to "node" in this case)
   capital_cost: 6000000   # in USD (cost based on Danish Energy Agency estimation to capture one tonne of CO2 per hour)   # TODO: check this and adapt it to the USA context
   electricity_input: 2.5   # in MWh (average consumption based on https://doi.org/10.1557/s43581-024-00091-5, which ranges between 2 to 3 MWh to capture one tonne of CO2 using electricity only - no heat)
   lifetime: 20   # in years

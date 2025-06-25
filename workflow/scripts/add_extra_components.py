@@ -1061,7 +1061,7 @@ def add_co2_storage(n: pypsa.Network, config: dict, co2_storage_csv: str, costs:
                 efficiency2.append(efficiency)
                 efficiency3.append(efficiency * (1 - cc_level) / cc_level)
 
-            # add links to represent the sending of electricity (in MW) to the electricity bus (e.g. "p9" if ReEDS or "p100 0" if TAMU) as well as sending emitted CO2 (by the generator) to both the atmosphere bus and the co2 capture bus
+            # add links to represent sending electricity (in MW) to the electricity bus (e.g. "p9" if ReEDS or "p100 0" if TAMU) as well as sending emitted CO2 (by the generator) to both the atmosphere bus and the co2 capture bus
             n.madd(
                 "Link",
                 indexes,
@@ -1072,6 +1072,8 @@ def add_co2_storage(n: pypsa.Network, config: dict, co2_storage_csv: str, costs:
                 efficiency=1,
                 efficiency2=efficiency2,
                 efficiency3=efficiency3,
+                capital_cost=0,
+                marginal_cost=0,
                 carrier=n.generators.loc[generators].carrier,
             )
 
@@ -1180,7 +1182,9 @@ def add_dac(n: pypsa.Network, config: dict, sector: bool):
             bus0=buses_atmosphere_unique,
             bus1=buses_co2_account,
             efficiency=1,
-            p_nom_extendable=True,  # TODO: check if this is necessary
+            p_nom_extendable=True,
+            capital_cost=0,
+            marginal_cost=0,
             carrier="co2",
         )
 
@@ -1213,6 +1217,7 @@ def add_dac(n: pypsa.Network, config: dict, sector: bool):
         efficiency2=-config["dac"]["electricity_input"],  # in MWh (for each tCO2)
         p_nom_extendable=True,
         capital_cost=cost,
+        marginal_cost=0,
         carrier="co2",
         lifetime=config["dac"]["lifetime"],
     )
