@@ -10,6 +10,7 @@ import time
 
 import atlite
 import geopandas as gpd
+import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 import xarray as xr

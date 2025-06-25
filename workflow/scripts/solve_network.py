@@ -367,11 +367,7 @@ def add_technology_capacity_target_constraints(n, config):
             )
 
 
-<<<<<<< HEAD
-def add_RPS_constraints(n, sns, config):
-=======
 def add_RPS_constraints(n, sns, config, sector):
->>>>>>> upstream-b/master
     """
     Add Renewable Portfolio Standards (RPS) constraints to the network.
 
@@ -389,15 +385,12 @@ def add_RPS_constraints(n, sns, config, sector):
         The PyPSA network object.
     config : dict
         A dictionary containing configuration settings and file paths.
-<<<<<<< HEAD
 
     Returns
     -------
 
-=======
     sector: bool
         Sector study
->>>>>>> upstream-b/master
     """
 
     def process_reeds_data(filepath, carriers, value_col):
@@ -1681,12 +1674,9 @@ def extra_functionality(n, snapshots):
     opts = n.opts
     config = n.config
     if "RPS" in opts and n.generators.p_nom_extendable.any():
-<<<<<<< HEAD
         add_RPS_constraints(n, snapshots, config)
-=======
         sector_rps = True if "sector" in opts else False
         add_RPS_constraints(n, snapshots, config, sector_rps)
->>>>>>> upstream-b/master
     if "REM" in opts and n.generators.p_nom_extendable.any():
         add_regional_co2limit(n, snapshots, config)
     if "BAU" in opts and n.generators.p_nom_extendable.any():
@@ -1758,13 +1748,10 @@ def solve_network(n, config, solving, opts="", **kwargs):
     cf_solving = solving["options"]
 
     foresight = snakemake.params.foresight
-<<<<<<< HEAD
     # if len(n.investment_periods) > 1:
     kwargs["multi_investment_periods"] = config["foresight"] == foresight
     logger.info(f"Using {foresight} foresight")
-=======
     kwargs["multi_investment_periods"] = config["foresight"] == "perfect"
->>>>>>> upstream-b/master
 
     kwargs["solver_options"] = solving["solver_options"][set_of_options] if set_of_options else {}
     kwargs["solver_name"] = solving["solver"]["name"]
@@ -1797,10 +1784,6 @@ def solve_network(n, config, solving, opts="", **kwargs):
                 # add sns_horizon to kwarg
                 kwargs["snapshots"] = sns_horizon
 
-<<<<<<< HEAD
-
-=======
->>>>>>> upstream-b/master
                 run_optimize(n, rolling_horizon, skip_iterations, cf_solving, **kwargs)
 
                 if i == len(n.investment_periods) - 1:
@@ -1830,11 +1813,9 @@ def solve_network(n, config, solving, opts="", **kwargs):
                     for c_idx in c_lim.index:
                         n.remove(nm, c_idx)
 
-<<<<<<< HEAD
                     n.madd(nm,df.index,**df)
                     #for df_idx in df.index:
                     #    n.add(nm, df_idx, **df.loc[df_idx])
-=======
                     for df_idx in df.index:
                         if nm == "Generator":
                             n.madd(
@@ -1863,7 +1844,6 @@ def solve_network(n, config, solving, opts="", **kwargs):
                             )
                         else:
                             n.add(nm, df_idx, **df.loc[df_idx])
->>>>>>> upstream-b/master
                     logger.info(n.consistency_check())
 
                     # copy time-dependent
@@ -1873,15 +1853,12 @@ def solve_network(n, config, solving, opts="", **kwargs):
 
                     for tattr in n.component_attrs[nm].index[selection]:
                         n.import_series_from_dataframe(time_df[tattr], nm, tattr)
-<<<<<<< HEAD
-=======
 
                 # roll over the last snapshot of time varying storage state of charge to be the state_of_charge_initial for the next time period
                 n.storage_units.loc[:, "state_of_charge_initial"] = n.storage_units_t.state_of_charge.loc[
                     planning_horizon
                 ].iloc[-1]
 
->>>>>>> upstream-b/master
         case _:
             raise ValueError(f"Invalid foresight option: '{foresight}'. Must be 'perfect' or 'myopic'.")
 
