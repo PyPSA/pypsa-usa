@@ -178,6 +178,25 @@ See [here](./config-co2-base.md) for information on interconnect level base emis
    :file: configtables/load.csv
 ``` -->
 
+(co2_cf)=
+## `co2`
+
+The `co2` section specifies whether the model may use underground storage to sequester captured CO2 or not. In case underground storage is specified, each node (belonging to the network) has a specific storage potential and a cost associated with it. The storage potential (in tonnes) is calculated by aggregating all the underlying storage potentials of the U.S. counties encompassed in the node's geographical area. Counties that are only partially covered by the node's geographical area have their potential fractionated accordingly. The storage cost (in $/tonne) is calculated by weighting the potential with the cost for each county encompassed. The dataset containing information about underground CO2 storage potentials and costs at a county level (and used in PyPSA-USA) was provided by Edna Calzado at The University of Texas (Austin), which was derived from the Roads to Removal project (https://roads2removal.org).
+
+In addition, the section specifies whether the model may transport captured CO2 between nodes or not. In case transportation is specified, a network of CO2 pipelines is built based on the electricity grid layout to determine where to build pipelines to connect nodes.
+
+```{eval-rst}
+.. literalinclude:: ../../workflow/repo_data/config/config.default.yaml
+   :language: yaml
+   :start-at: co2:
+   :end-before: # docs
+
+.. csv-table::
+   :header-rows: 1
+   :widths: 22,7,22,33
+   :file: configtables/co2.csv
+```
+
 (costs_cf)=
 ## `costs`
 
