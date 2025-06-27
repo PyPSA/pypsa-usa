@@ -1,6 +1,6 @@
 ,Unit,Values,Description
 storage,bool,true or false,"Specifies whether the model may use underground storage to sequester captured CO2 or not."
-network,--,,"Specifies whether the model may transport captured CO2 between nodes or not. In case transportation is specified, a network of CO2 pipelines is built based on costs, the discount rate, as well as the lifetime stipulated in this subsection."
+network,--,,"Specifies whether the model may transport captured CO2 between nodes or not. In case transportation is specified, a network of CO2 pipelines is built based on the costs, discount rate, as well as the lifetime stipulated in this subsection."
 -- enable,bool,true or false,"Enable (``true``) or disable (``false``) the capability to transport captured CO2 between nodes."
 -- capital_cost,int,$/mile,"Capital cost of building one mile long CO2 pipeline."
 -- marginal_cost,int,$/t,"Marginal cost of transporting one tonne of captured CO2."
