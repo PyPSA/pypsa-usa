@@ -200,15 +200,23 @@ In addition, the section specifies whether the model may transport captured CO2 
 (dac_cf)=
 ## `dac`
 
-The `dac` section specifies whether the model should use Direct Air Capture (DAC) or not to capture emitted CO2. DAC may operate under different granularities (or scopes) and depending on whether the model is based on sectors or not.
+The `dac` section specifies whether the model should use Direct Air Capture (DAC) or not to capture emitted CO2. DAC may operate under different granularities (or scopes) and whether the model is based on sectors or not.
 
 For a sector-less model:
 
    - When `granularity` is set to `node`, each node (composing the network) has a specific "air atmosphere" into which all the processes belonging to the node emit CO2. For each node, DAC is built to capture CO2 from its "air atmosphere".
 
-   - When `granularity` is set to `state`, each U.S. state (represented in the network) has a specific "air atmosphere" into which all the processes of the nodes belonging to the state emit CO2. For each state, DAC is built to capture CO2 from its "air atmosphere".
+   - When `granularity` is set to `state`, each U.S. state (represented in the network) has a specific "air atmosphere" into which all the processes of the nodes belonging to the state emit CO2. For each node, DAC is built to capture CO2 from the state "air atmosphere" it belongs to.
 
-   - When `granularity` is set to `nation`, the model only has one "air atmosphere" where all the processes of all nodes emit CO2 into. Only one DAC is built to capture CO2 from this unique "air atmosphere".
+   - When `granularity` is set to `nation`, the model only has one single "air atmosphere" into which all the processes of all the nodes emit CO2. For each node, DAC is built to capture CO2 from this "air atmosphere".
+
+For a sector-based model:
+
+   - When `granularity` is set to `node`, each sector/node pair has a specific "air atmosphere" into which all the processes belonging to the sector/node pair emit CO2. For each sector/node pair, DAC is built to capture CO2 from its "air atmosphere".
+
+   - When `granularity` is set to `state`, each sector/U.S. state pair has a specific "air atmosphere" into which all the processes of the nodes belonging to the state emit CO2. For each sector/node pair, DAC is built to capture CO2 from the sector/state pair's "air atmosphere" it belongs to.
+
+   - Given that a `granularity` set to `nation` does not make sense in a sector-based model, it defaults to `node` in this case.
 
 ```{eval-rst}
 .. literalinclude:: ../../workflow/repo_data/config/config.default.yaml

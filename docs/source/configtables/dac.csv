@@ -1,0 +1,7 @@
+,Unit,Values,Description
+enable,bool,true or false,"Specifies whether the model may use Direct Air Capture (DAC) to capture emitted CO2 or not. In case DAC is specified, it is built based on the costs, discount rate, as well as the lifetime stipulated in this section."
+-- granularity,str,"node", "state" or "nation","Specifies the granularity (scope) of DAC."
+-- capital_cost,int,$/tCO2/h,"Capital cost of DAC to capture one tonne of CO2 per hour."
+-- electricity_input,float,MWh,"Amount of electricity needed for DAC to capture one tonne of emitted CO2."
+-- lifetime,int,year,"Lifetime of DAC."
+-- discount_rate,float,%,"Discount rate of the capital cost of DAC."
