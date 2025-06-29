@@ -403,7 +403,7 @@ def add_regional_co2limit(n, config):
         p_em = n.model["Generator-p"].loc[:, region_gens_em.index].sel(period=planning_horizon)
 
         # CO2 Atmospheric Emissions
-        if any(n.carriers.index.isin(["co2"])):More actions
+        if any(n.carriers.index.isin(["co2"])):
             co2_atm = n.stores.loc[["atmosphere" in name for name in n.stores.index]]
             last_timestep = n.snapshots.get_level_values(1)[-1]
             end_co2_atm_storage = (
