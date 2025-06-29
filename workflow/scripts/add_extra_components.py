@@ -10,6 +10,7 @@ from _helpers import calculate_annuity, configure_logging
 from add_electricity import add_missing_carriers
 from opts._helpers import get_region_buses
 from pypsa.descriptors import get_switchable_as_dense as get_as_dense
+from shapely.geometry import Point
 
 idx = pd.IndexSlice
 
@@ -917,7 +918,7 @@ def add_co2_storage(n: pypsa.Network, config: dict, co2_storage_csv: str, costs:
 
     # add carrier to represent CC only (i.e. without S)
     carriers = n.carriers.query("Carrier.str.endswith('CCS')")
-    if carriers.empty == False:
+    if carriers.empty is False:
         n.madd(
             "Carrier",
             carriers.index.str.replace("CCS", "CC", regex=True),
@@ -946,8 +947,7 @@ def add_co2_storage(n: pypsa.Network, config: dict, co2_storage_csv: str, costs:
                     efficiency = 1 / link_efficiency * coal_co2_intensity
                 else:
                     logger.warning(
-                        "Assuming a CO2 intensity equal to 1 given that link '%s' is not powered by gas or coal"
-                        % index,
+                        f"Assuming a CO2 intensity equal to 1 given that link '{index}' is not powered by gas or coal",
                     )
                     efficiency = 1 / link_efficiency * 1
                 cc_level = (
@@ -1015,11 +1015,11 @@ def add_co2_storage(n: pypsa.Network, config: dict, co2_storage_csv: str, costs:
                     states = gpd.sjoin_nearest(buses_projected, states_projected, how="left")["STUSPS"]
                     buses_atmosphere_unique = states.unique() + " atmosphere"
                     buses_atmosphere = [
-                        "%s atmosphere" % states.loc[" ".join(index.split(" ")[:elements])] for index in indexes
+                        "{} atmosphere".format(states.loc[" ".join(index.split(" ")[:elements])]) for index in indexes
                     ]
                 else:  # node
                     buses_atmosphere_unique = [
-                        "%s atmosphere" % " ".join(index.split(" ")[:elements]) for index in indexes
+                        "{} atmosphere".format(" ".join(index.split(" ")[:elements])) for index in indexes
                     ]
                     buses_atmosphere = buses_atmosphere_unique
 
@@ -1051,8 +1051,7 @@ def add_co2_storage(n: pypsa.Network, config: dict, co2_storage_csv: str, costs:
                     efficiency = 1 / generator_efficiency * coal_co2_intensity
                 else:
                     logger.warning(
-                        "Assuming a CO2 intensity equal to 1 given that generator '%s' is not powered by gas or coal"
-                        % index,
+                        f"Assuming a CO2 intensity equal to 1 given that generator '{index}' is not powered by gas or coal",
                     )
                     efficiency = 1 / generator_efficiency * 1
                 cc_level = (
@@ -1072,6 +1071,7 @@ def add_co2_storage(n: pypsa.Network, config: dict, co2_storage_csv: str, costs:
                 efficiency=1,
                 efficiency2=efficiency2,
                 efficiency3=efficiency3,
+                p_nom_extendable=True,
                 capital_cost=0,
                 marginal_cost=0,
                 carrier=n.generators.loc[generators].carrier,
@@ -1147,35 +1147,35 @@ def add_dac(n: pypsa.Network, config: dict, sector: bool):
         buses_ac = []
         links_dac = []
         for index in links.index:
-            bus2 = links.loc[index]["bus2"]  # e.g. "CA pwr-co2"   # ok
-            node = " ".join(index.split(" ")[:elements])  # e.g. "p9" if ReEDS or "p100 0" if TAMU   # ok
-            state = bus2.split(" ")[0]  # e.g. "CA"   # ok
-            state_sector = bus2.split(" ")[1].split("-")[0]  # e.g. "pwr"   # ok
+            bus2 = links.loc[index]["bus2"]  # e.g. "CA pwr-co2"
+            node = " ".join(index.split(" ")[:elements])  # e.g. "p9" if ReEDS or "p100 0" if TAMU
+            state = bus2.split(" ")[0]  # e.g. "CA"
+            state_sector = bus2.split(" ")[1].split("-")[0]  # e.g. "pwr"
             if granularity == "node":
-                atmosphere = f"{node} {state_sector} atmosphere"  # ok
+                atmosphere = f"{node} {state_sector} atmosphere"
             else:  # state
-                atmosphere = f"{state} {state_sector} atmosphere"  # ok
+                atmosphere = f"{state} {state_sector} atmosphere"
             buses_atmosphere_all.append(atmosphere)
             if atmosphere not in exists_atmosphere:
-                buses_atmosphere_unique.append(atmosphere)  # ok (1)
-                buses_co2_account.append(bus2)  # ok (2)
+                buses_atmosphere_unique.append(atmosphere)
+                buses_co2_account.append(bus2)
                 exists_atmosphere.add(atmosphere)
             dac = f"{node} {state_sector} dac"
             if dac not in exists_dac:
                 buses_atmosphere.append(atmosphere)
                 buses_co2_capture.append(f"{node} co2 capture")
                 buses_ac.append(node)
-                links_dac.append(dac)  # ok (4)
+                links_dac.append(dac)
                 exists_dac.add(dac)
 
-        # add node or state level buses to represent (air) atmosphere where CO2 emissions are sent to (on a per sector basis)   # ok (1)
+        # add node or state level buses to represent (air) atmosphere where CO2 emissions are sent to (on a per sector basis)
         n.madd(
             "Bus",
             buses_atmosphere_unique,
             carrier="co2",
         )
 
-        # add links from node or state level buses that represent (air) atmosphere to state level buses tracking CO2 emissions (on a per sector basis)   # ok (2)
+        # add links from node or state level buses that represent (air) atmosphere to state level buses tracking CO2 emissions (on a per sector basis)
         n.madd(
             "Link",
             buses_atmosphere_unique,
@@ -1188,7 +1188,7 @@ def add_dac(n: pypsa.Network, config: dict, sector: bool):
             carrier="co2",
         )
 
-        # redirect links that emit CO2 to node or state level buses that represent (air) atmosphere   # e.g. "p1 trn atmosphere"   # ok (3)
+        # redirect links that emit CO2 to node or state level buses that represent (air) atmosphere   # e.g. "p1 trn atmosphere"
         n.links.loc[links.index, "bus2"] = buses_atmosphere_all
 
     else:  # sector-less
