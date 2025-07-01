@@ -12,18 +12,18 @@ repos:
     args: ['--maxkb=10000']
 
 - repo: https://github.com/macisamuele/language-formatters-pre-commit-hooks
-  rev: v2.14.0
+  rev: v2.15.0
   hooks:
   - id: pretty-format-yaml
     args: [--autofix, --indent, "2", --preserve-quotes]
 
 - repo: https://github.com/asottile/add-trailing-comma
-  rev: v3.1.0
+  rev: v3.2.0
   hooks:
   - id: add-trailing-comma
 
 - repo: https://github.com/asottile/pyupgrade
-  rev: v3.19.1
+  rev: v3.20.0
   hooks:
   - id: pyupgrade
     args: [--py39-plus]
@@ -40,12 +40,12 @@ repos:
   - id: snakefmt
 
 - repo: https://github.com/keewis/blackdoc
-  rev: v0.3.9
+  rev: v0.4.1
   hooks:
   - id: blackdoc
 
 - repo: https://github.com/astral-sh/ruff-pre-commit
-  rev: v0.11.10  # Check for the latest version
+  rev: v0.12.1  # Check for the latest version
   hooks:
   - id: ruff
     args: ["--config=pyproject.toml", "--fix"]
