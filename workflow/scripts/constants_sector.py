@@ -28,6 +28,33 @@ class SecCarriers(Enum):
     WATER_HEATING = "water-heat"
 
 
+######################
+# Constants for Demand
+######################
+
+
+class DemandFuels(Enum):
+    """Demand fuels."""
+
+    # residential, commercial, industry
+    ELECTRICITY = "electricity"
+    LPG = "lpg"
+    SPACE_HEATING = "space_heat"
+    SPACE_COOLING = "cool"
+    WATER_HEATING = "water_heat"
+    HEATING = "heat"
+
+    # transport
+    LIGHT = "light_duty"
+    MEDIUM = "med_duty"
+    HEAVY = "heavy_duty"
+    BUS = "bus"
+    AIR_PSG = "air"
+    BOAT_SHIP = "boat_ship"
+    RAIL_PSG = "rail_psg"
+    RAIL_SHIP = "rail_ship"
+
+
 ##############################
 # Constants for Transportation
 ##############################
