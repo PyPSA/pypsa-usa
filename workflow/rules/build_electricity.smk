@@ -335,9 +335,9 @@ rule build_electrical_demand:
         "../scripts/build_demand.py"
 
 
-rule build_sector_demand:
+rule build_service_demand:
     wildcard_constraints:
-        end_use="residential|commercial|industry",
+        end_use="residential|commercial",
     params:
         planning_horizons=config_provider("scenario", "planning_horizons"),
         profile_year=pd.to_datetime(config["snapshots"]["start"]).year,
@@ -350,13 +350,38 @@ rule build_sector_demand:
         dissagregate_files=demand_dissagregate_data,
         demand_scaling_file=demand_scaling_data,
     output:
-        elec_demand=RESOURCES + "{interconnect}/demand/{end_use}_electricity.pkl",
-        heat_demand=RESOURCES + "{interconnect}/demand/{end_use}_heating.pkl",
-        space_heat_demand=RESOURCES
-        + "{interconnect}/demand/{end_use}_space-heating.pkl",
-        water_heat_demand=RESOURCES
-        + "{interconnect}/demand/{end_use}_water-heating.pkl",
-        cool_demand=RESOURCES + "{interconnect}/demand/{end_use}_cooling.pkl",
+        electricity=RESOURCES + "{interconnect}/demand/{end_use}_electricity.pkl",
+        space_heat=RESOURCES + "{interconnect}/demand/{end_use}_space-heating.pkl",
+        water_heat=RESOURCES + "{interconnect}/demand/{end_use}_water-heating.pkl",
+        cool=RESOURCES + "{interconnect}/demand/{end_use}_cooling.pkl",
+    log:
+        LOGS + "{interconnect}/demand/{end_use}_build_demand.log",
+    benchmark:
+        BENCHMARKS + "{interconnect}/demand/{end_use}_build_demand"
+    threads: 2
+    resources:
+        mem_mb=lambda wildcards, input, attempt: (input.size // 70000) * attempt * 2,
+    script:
+        "../scripts/build_demand.py"
+
+
+rule build_industry_demand:
+    wildcard_constraints:
+        end_use="industry",
+    params:
+        planning_horizons=config_provider("scenario", "planning_horizons"),
+        profile_year=pd.to_datetime(config["snapshots"]["start"]).year,
+        eia_api=config_provider("api", "eia"),
+        snapshots=config_provider("snapshots"),
+        pudl_path=config_provider("pudl_path"),
+    input:
+        network=RESOURCES + "{interconnect}/elec_base_network.nc",
+        demand_files=demand_raw_data,
+        dissagregate_files=demand_dissagregate_data,
+        demand_scaling_file=demand_scaling_data,
+    output:
+        electricity=RESOURCES + "{interconnect}/demand/{end_use}_electricity.pkl",
+        heat=RESOURCES + "{interconnect}/demand/{end_use}_heating.pkl",
     log:
         LOGS + "{interconnect}/demand/{end_use}_build_demand.log",
     benchmark:
@@ -382,17 +407,10 @@ rule build_transport_road_demand:
         dissagregate_files=demand_dissagregate_data,
         demand_scaling_file=demand_scaling_data,
     output:
-        elec_light_duty=RESOURCES
-        + "{interconnect}/demand/{end_use}_light-duty_electricity.pkl",
-        elec_med_duty=RESOURCES
-        + "{interconnect}/demand/{end_use}_med-duty_electricity.pkl",
-        elec_heavy_duty=RESOURCES
-        + "{interconnect}/demand/{end_use}_heavy-duty_electricity.pkl",
-        elec_bus=RESOURCES + "{interconnect}/demand/{end_use}_bus_electricity.pkl",
-        lpg_light_duty=RESOURCES + "{interconnect}/demand/{end_use}_light-duty_lpg.pkl",
-        lpg_med_duty=RESOURCES + "{interconnect}/demand/{end_use}_med-duty_lpg.pkl",
-        lpg_heavy_duty=RESOURCES + "{interconnect}/demand/{end_use}_heavy-duty_lpg.pkl",
-        lpg_bus=RESOURCES + "{interconnect}/demand/{end_use}_bus_lpg.pkl",
+        light_duty=RESOURCES + "{interconnect}/demand/{end_use}_light-duty.pkl",
+        med_duty=RESOURCES + "{interconnect}/demand/{end_use}_med-duty.pkl",
+        heavy_duty=RESOURCES + "{interconnect}/demand/{end_use}_heavy-duty.pkl",
+        bus=RESOURCES + "{interconnect}/demand/{end_use}_bus.pkl",
     log:
         LOGS + "{interconnect}/demand/{end_use}_build_demand.log",
     benchmark:
