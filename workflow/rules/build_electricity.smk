@@ -435,7 +435,7 @@ rule build_transport_other_demand:
         demand_files=demand_raw_data,
         dissagregate_files=demand_dissagregate_data,
     output:
-        RESOURCES + "{interconnect}/demand/{end_use}_{vehicle}_lpg.pkl",
+        RESOURCES + "{interconnect}/demand/{end_use}_{vehicle}.pkl",
     log:
         LOGS + "{interconnect}/demand/{end_use}_{vehicle}_build_demand.log",
     benchmark:

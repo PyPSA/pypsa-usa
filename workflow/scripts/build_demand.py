@@ -1406,8 +1406,8 @@ class ReadTransportAeo(ReadStrategy):
             )
             df.index.name = "snapshot"
             df["sector"] = "transport"
-            df["subsector"] = self.vehicle
-            df["fuel"] = "lpg"
+            df["subsector"] = "all"
+            df["fuel"] = self.vehicle
 
             df = df.set_index([df.index, "sector", "subsector", "fuel"])
 
@@ -2249,8 +2249,11 @@ def _get_closest_efs_year(efs_years, investment_period):
     return max(filtered_values)
 
 
-def _get_sector_fuels(end_use: str) -> list[str]:
-    """Get sector fuels."""
+def _get_sector_fuels(end_use: str, vehicle: str | None = None) -> list[str]:
+    """Get sector fuels.
+
+    The trasportation makes this pretty ugly. But works for the time being.
+    """
     demand = DemandFuels
     match end_use:
         case "residential":
@@ -2260,7 +2263,20 @@ def _get_sector_fuels(end_use: str) -> list[str]:
         case "industry":
             fuels = [demand.ELECTRICITY, demand.HEATING]
         case "transport":
-            fuels = [demand.LIGHT, demand.MEDIUM, demand.HEAVY, demand.BUS]
+            if not vehicle:
+                fuels = [demand.LIGHT, demand.MEDIUM, demand.HEAVY, demand.BUS]
+            else:  # non-road transport generated one at a time
+                match vehicle:
+                    case "air":
+                        fuels = [demand.AIR_PSG]
+                    case "boat-shipping":
+                        fuels = [demand.BOAT_SHIP]
+                    case "rail-passenger":
+                        fuels = [demand.RAIL_PSG]
+                    case "rail-shipping":
+                        fuels = [demand.RAIL_SHIP]
+                    case _:
+                        raise NotImplementedError
         case _:
             raise NotImplementedError
     return [x.value for x in fuels]
@@ -2279,17 +2295,17 @@ if __name__ == "__main__":
         #     interconnect="texas",
         #     end_use="power",
         # )
-        # snakemake = mock_snakemake(
-        #     "build_transport_other_demand",
-        #     interconnect="texas",
-        #     end_use="transport",
-        #     vehicle="rail-passenger",
-        # )
         snakemake = mock_snakemake(
-            "build_transport_road_demand",
+            "build_transport_other_demand",
             interconnect="western",
             end_use="transport",
+            vehicle="rail-passenger",
         )
+        # snakemake = mock_snakemake(
+        #     "build_transport_road_demand",
+        #     interconnect="western",
+        #     end_use="transport",
+        # )
         # snakemake = mock_snakemake(
         #     "build_sector_demand",
         #     interconnect="western",
@@ -2420,7 +2436,7 @@ if __name__ == "__main__":
         demand = demand_converter.prepare_demand(sns=sns)  # pd.DataFrame
         demands = {"electricity": demand}
     else:
-        fuels = _get_sector_fuels(end_use)
+        fuels = _get_sector_fuels(end_use, vehicle)
         demands = demand_converter.prepare_multiple_demands(
             end_use,  # residential, commercial, industry, transport
             fuels,
@@ -2458,6 +2474,13 @@ if __name__ == "__main__":
         )
     else:
         for fuel in fuels:
+            try:
+                out_f = snakemake.output[fuel]
+            except KeyError as e:  # non-road transport is not indexed by fuel
+                if len(snakemake.output) == 1:
+                    out_f = snakemake.output[0]
+                else:
+                    raise KeyError(e)
             formatted_demand[fuel].round(4).to_pickle(
-                snakemake.output[fuel],
+                out_f,
             )
