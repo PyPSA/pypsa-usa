@@ -12,28 +12,12 @@ import pandas as pd
 import pypsa
 from _helpers import configure_logging, get_multiindex_snapshots, mock_snakemake
 from constants_sector import (
-    AirTransport,
-    BoatTransport,
-    RailTransport,
-    RoadTransport,
+    TRANSPORT_FUELS,
     SecCarriers,
     SecNames,
-    Transport,
 )
 
 logger = logging.getLogger(__name__)
-
-# TODO: replace with just constants through naming in build demand
-VEHICLE_MAPPER = {
-    "bus": f"{Transport.ROAD.value}-{RoadTransport.BUS.value}",
-    "heavy_duty": f"{Transport.ROAD.value}-{RoadTransport.HEAVY.value}",
-    "light_duty": f"{Transport.ROAD.value}-{RoadTransport.LIGHT.value}",
-    "med_duty": f"{Transport.ROAD.value}-{RoadTransport.MEDIUM.value}",
-    "air": f"{Transport.AIR.value}-{AirTransport.PASSENGER.value}",
-    "rail_shipping": f"{Transport.RAIL.value}-{RailTransport.SHIPPING.value}",
-    "rail_passenger": f"{Transport.RAIL.value}-{RailTransport.PASSENGER.value}",
-    "boat_shipping": f"{Transport.BOAT.value}-{BoatTransport.SHIPPING.value}",
-}
 
 
 def attach_demand(n: pypsa.Network, df: pd.DataFrame, carrier: str, suffix: str):
@@ -99,21 +83,12 @@ if __name__ == "__main__":
                 sec_name = SecNames[sector].value
                 sec_car = SecCarriers[end_use].value
 
-                carrier = f"{sec_name}-{sec_car}"
+                if sector == "transport":
+                    carrier = f"{sec_name}-{sec_car}-{TRANSPORT_FUELS[end_use]}"
+                else:
+                    carrier = f"{sec_name}-{sec_car}"
 
                 log_statement = f"{sector} {end_use} demand added to network"
-
-            elif len(parsed_name) == 3:
-                sector = parsed_name[0].upper()
-                subsector = parsed_name[1].replace("-", "_")
-                end_use = parsed_name[2].upper()  # lpg | elec
-
-                sec_name = SecNames[sector].value
-                sec_car = SecCarriers[end_use].value
-
-                carrier = f"{sec_name}-{sec_car}-{VEHICLE_MAPPER[subsector]}"
-
-                log_statement = f"{sector} {subsector} {end_use} demand added to network"
 
             else:
                 raise NotImplementedError
