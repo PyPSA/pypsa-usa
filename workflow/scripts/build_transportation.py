@@ -456,12 +456,12 @@ def add_air(
     lifetime = 25
     build_year = n.investment_periods[0]
 
-    loads = n.loads[(n.loads.carrier.str.contains("trn-")) & (n.loads.carrier.str.contains(f"{vehicle}-{mode}"))]
+    loads = n.loads[(n.loads.carrier.str.startswith("trn-")) & (n.loads.carrier.str.endswith(f"{vehicle}-{mode}"))]
 
     vehicles = pd.DataFrame(index=loads.bus)
     vehicles.index = vehicles.index.map(lambda x: x.split(" trn-")[0])
     vehicles["bus0"] = vehicles.index + f" trn-lpg-{vehicle}"
-    vehicles["bus1"] = vehicles.index + f" trn-lpg-{vehicle}-{mode}"
+    vehicles["bus1"] = vehicles.index + f" trn-{vehicle}-{mode}"
     vehicles["carrier"] = f"trn-lpg-{vehicle}-{mode}"
 
     n.madd(
@@ -499,12 +499,12 @@ def add_boat(
     capex = 1
     build_year = n.investment_periods[0]
 
-    loads = n.loads[(n.loads.carrier.str.contains("trn-")) & (n.loads.carrier.str.contains(f"{vehicle}-{mode}"))]
+    loads = n.loads[(n.loads.carrier.str.startswith("trn-")) & (n.loads.carrier.str.endswith(f"{vehicle}-{mode}"))]
 
     vehicles = pd.DataFrame(index=loads.bus)
     vehicles.index = vehicles.index.map(lambda x: x.split(" trn-")[0])
     vehicles["bus0"] = vehicles.index + f" trn-lpg-{vehicle}"
-    vehicles["bus1"] = vehicles.index + f" trn-lpg-{vehicle}-{mode}"
+    vehicles["bus1"] = vehicles.index + f" trn-{vehicle}-{mode}"
     vehicles["carrier"] = f"trn-lpg-{vehicle}-{mode}"
 
     n.madd(
@@ -558,12 +558,12 @@ def add_rail(
             capex = 1
             build_year = n.investment_periods[0]
 
-    loads = n.loads[(n.loads.carrier.str.contains("trn-")) & (n.loads.carrier.str.contains(f"{vehicle}-{mode}"))]
+    loads = n.loads[(n.loads.carrier.str.startswith("trn-")) & (n.loads.carrier.str.endswith(f"{vehicle}-{mode}"))]
 
     vehicles = pd.DataFrame(index=loads.bus)
     vehicles.index = vehicles.index.map(lambda x: x.split(" trn-")[0])
     vehicles["bus0"] = vehicles.index + f" trn-lpg-{vehicle}"
-    vehicles["bus1"] = vehicles.index + f" trn-lpg-{vehicle}-{mode}"
+    vehicles["bus1"] = vehicles.index + f" trn-{vehicle}-{mode}"
     vehicles["carrier"] = f"trn-lpg-{vehicle}-{mode}"
 
     n.madd(
@@ -624,49 +624,3 @@ def constrain_charing_rates(n: pypsa.Network, must_run_evs: bool) -> None:
     p_max_pu = (p_max_pu - p_max_pu.min()) / (p_max_pu.max() - p_max_pu.min())
     p_max_pu = p_max_pu = p_max_pu.add(0.01).clip(upper=1).round(2)
     n.links_t["p_max_pu"] = pd.concat([n.links_t["p_max_pu"], p_max_pu], axis=1)
-
-
-def apply_exogenous_ev_policy(n: pypsa.Network, policy: pd.DataFrame) -> None:
-    """
-    If transport investment is exogenous, applies policy to control loads.
-
-    At this point, all road-vehicle loads are represented as if the entire load is
-    met through that fuel type (ie. if there is elec and lpg load, there will
-    be 2x the amount of load in the system). This function will adjust the
-    amount of load attributed to each fuel.
-
-    The EFS ev policies come from:
-    - Figure 6.3 at https://www.nrel.gov/docs/fy18osti/71500.pdf
-    - Sheet 6.3 at https://data.nrel.gov/submissions/90
-    """
-    vehicle_mapper = {
-        "light_duty": RoadTransport.LIGHT.value,
-        "med_duty": RoadTransport.MEDIUM.value,
-        "heavy_duty": RoadTransport.HEAVY.value,
-        "bus": RoadTransport.BUS.value,
-    }
-
-    abrev = Transport.ROAD.value
-
-    adjusted_loads = []
-
-    for vehicle in policy.columns:  # name of vehicle type
-        for period in n.investment_periods:
-            ev_share = policy.at[period, vehicle]
-            for fuel in ("elec", "lpg"):
-                # adjust load value
-                load_names = [x for x in n.loads.index if x.endswith(f"trn-{fuel}-{abrev}-{vehicle_mapper[vehicle]}")]
-                df = n.loads_t.p_set.loc[period,][load_names]
-                multiplier = ev_share if fuel == "elec" else (100 - ev_share)
-                df *= multiplier / 100  # divide by 100 to get rid of percent
-
-                # reapply period index level
-                df["period"] = period
-                df = df.set_index(["period", df.index])  # df.index is snapshots
-
-                adjusted_loads.append(df)
-
-    adjusted = pd.concat(adjusted_loads, axis=1)
-
-    adjusted_loads = adjusted.columns
-    n.loads_t.p_set[adjusted_loads] = adjusted[adjusted_loads]
