@@ -471,30 +471,16 @@ def demand_to_add(wildcards):
         ]
         # road transport demands
         vehicles = ["light-duty", "med-duty", "heavy-duty", "bus"]
-        fuels = ["lpg", "electricity"]
         road_demand = [
-            RESOURCES
-            + "{interconnect}/demand/transport_"
-            + vehicle
-            + "_"
-            + fuel
-            + ".pkl"
+            RESOURCES + "{interconnect}/demand/transport_" + vehicle + ".pkl"
             for vehicle in vehicles
-            for fuel in fuels
         ]
 
         # other transport demands
         vehicles = ["boat-shipping", "rail-shipping", "rail-passenger", "air"]
-        fuels = ["lpg"]
         non_road_demand = [
-            RESOURCES
-            + "{interconnect}/demand/transport_"
-            + vehicle
-            + "_"
-            + fuel
-            + ".pkl"
+            RESOURCES + "{interconnect}/demand/transport_" + vehicle + ".pkl"
             for vehicle in vehicles
-            for fuel in fuels
         ]
 
         return chain(service_demands, industrial_demands, road_demand, non_road_demand)

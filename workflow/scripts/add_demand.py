@@ -81,12 +81,12 @@ if __name__ == "__main__":
                 end_use = parsed_name[1].upper().replace("-", "_")
 
                 sec_name = SecNames[sector].value
-                sec_car = SecCarriers[end_use].value
-
-                if sector == "transport":
-                    carrier = f"{sec_name}-{sec_car}-{TRANSPORT_FUELS[end_use]}"
+                if sector.lower() == "transport":  # hack for now to get names to work
+                    sec_car = TRANSPORT_FUELS[end_use.lower()]
                 else:
-                    carrier = f"{sec_name}-{sec_car}"
+                    sec_car = SecCarriers[end_use].value
+
+                carrier = f"{sec_name}-{sec_car}"
 
                 log_statement = f"{sector} {end_use} demand added to network"
 

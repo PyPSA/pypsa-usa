@@ -2299,7 +2299,7 @@ if __name__ == "__main__":
             "build_transport_other_demand",
             interconnect="western",
             end_use="transport",
-            vehicle="rail-passenger",
+            vehicle="boat-shipping",
         )
         # snakemake = mock_snakemake(
         #     "build_transport_road_demand",
@@ -2476,7 +2476,7 @@ if __name__ == "__main__":
         for fuel in fuels:
             try:
                 out_f = snakemake.output[fuel]
-            except KeyError as e:  # non-road transport is not indexed by fuel
+            except AttributeError as e:  # non-road transport is not indexed by fuel
                 if len(snakemake.output) == 1:
                     out_f = snakemake.output[0]
                 else:

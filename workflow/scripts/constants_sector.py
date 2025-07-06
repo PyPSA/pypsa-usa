@@ -50,7 +50,7 @@ class DemandFuels(Enum):
     HEAVY = "heavy_duty"
     BUS = "bus"
     AIR_PSG = "air"
-    BOAT_SHIP = "boat_ship"
+    BOAT_SHIP = "boat_shipping"
     RAIL_PSG = "rail_passenger"
     RAIL_SHIP = "rail_shipping"
 
@@ -127,14 +127,14 @@ class BoatTransportUnits(Enum):
 
 # TODO: this is a hack to get the transport fuels into the demand file
 TRANSPORT_FUELS = {
-    DemandFuels.LIGHT: f"{Transport.ROAD.value}-{RoadTransport.LIGHT.value}",
-    DemandFuels.MEDIUM: f"{Transport.ROAD.value}-{RoadTransport.MEDIUM.value}",
-    DemandFuels.HEAVY: f"{Transport.ROAD.value}-{RoadTransport.HEAVY.value}",
-    DemandFuels.BUS: f"{Transport.ROAD.value}-{RoadTransport.BUS.value}",
-    DemandFuels.AIR_PSG: f"{Transport.AIR.value}-{AirTransport.PASSENGER.value}",
-    DemandFuels.BOAT_SHIP: f"{Transport.BOAT.value}-{BoatTransport.SHIPPING.value}",
-    DemandFuels.RAIL_PSG: f"{Transport.RAIL.value}-{RailTransport.PASSENGER.value}",
-    DemandFuels.RAIL_SHIP: f"{Transport.RAIL.value}-{RailTransport.SHIPPING.value}",
+    DemandFuels.LIGHT.value: f"{Transport.ROAD.value}-{RoadTransport.LIGHT.value}",
+    DemandFuels.MEDIUM.value: f"{Transport.ROAD.value}-{RoadTransport.MEDIUM.value}",
+    DemandFuels.HEAVY.value: f"{Transport.ROAD.value}-{RoadTransport.HEAVY.value}",
+    DemandFuels.BUS.value: f"{Transport.ROAD.value}-{RoadTransport.BUS.value}",
+    DemandFuels.AIR_PSG.value: f"{Transport.AIR.value}-{AirTransport.PASSENGER.value}",
+    DemandFuels.BOAT_SHIP.value: f"{Transport.BOAT.value}-{BoatTransport.SHIPPING.value}",
+    DemandFuels.RAIL_PSG.value: f"{Transport.RAIL.value}-{RailTransport.PASSENGER.value}",
+    DemandFuels.RAIL_SHIP.value: f"{Transport.RAIL.value}-{RailTransport.SHIPPING.value}",
 }
 
 """
