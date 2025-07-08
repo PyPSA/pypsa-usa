@@ -61,29 +61,7 @@ Notably, travel indicators are in units of vehicle-miles travelled (or similar);
 
 ### Capacity Expansion
 
-Two capacity expansion options exist for road transportation in PyPSA-USA. Users can either set state-level electrification mandates, or users can allow the model to perfom investment decisions endogenously.
-
-```{note}
-Mode shifting studies are not currently supported (ie. Switching light-duty demand to bus demand)
-```
-
-#### Exogenous Investment
-
-Users can explicitly tell PyPSA-USA how much of the vehicle load by mode is met by electricity and petrol. This is useful in cicumstances where research questions involve evaluating specific vehicle mandates.
-
-When running in exogenous investment mode, the total demand by vehicle type is split into two categories; electricity and petrol. Electricity load follows the profiles described above. Petrol loads are flat and distributed evenly over the year. A schematic of the exogenous transport investment decisions is given in the figure below.
-
-:::{figure-md} exogenous-load
-<img src="./_static/transport/exogenous.png" width="800px">
-
-Schematic of how exogenous road transport investment is setup in PyPSA-USA
-:::
-
-#### Endogenous Investment
-
-Alternatively, users can allow PyPSA-USA to make road transport investment decisions. This is useful when research questions involve evaluating the impacts of one vehicle type against another.
-
-When running in endogenous investment mode, the total demand by vehicle type is grouped into a single load. Both electrical and petrol vehicle capacity can be invested in to meet the total load. A schematic of the endogenous transport investment decisions is given in the figure below.
+All road transportation investment decisions are endogenous in PyPSA-USA. The total demand by vehicle type is grouped into a single load. Both electrical and petrol vehicle capacity can be invested in to meet the total load. A schematic of the endogenous transport investment decisions is given in the figure below.
 
 :::{figure-md} endogenous-load
 <img src="./_static/transport/endogenous.png" width="800px">
@@ -91,9 +69,17 @@ When running in endogenous investment mode, the total demand by vehicle type is 
 Schematic of how endogenous road transport investment is setup in PyPSA-USA
 :::
 
+Often, endogenous investemnt decisions in the transportation sector will result in EVs depolyed at an unrealistic timelines. This is primarly due to their lower lifetime costs. To account for this, users can set state-level maximum electrification limits per vehicle class. The default values for electrification rates are taken from the NREL Electrifcation Futures Study.
+
+```{note}
+Mode shifting studies are not currently supported (ie. Switching light-duty demand to bus demand)
+```
+
+#### EV Operational Constraints
+
 A challenge with endogenous investment decisions is modifying the electrical load to account for a greater share of EVs in the system. Load is exogenous to the system, meaning it must be defined by the user. However, if more EVs are invested in, then the magnitude of the electrical load profile should grow. To account for this, two configuration options are exposed to the user.
 
-With endogenous road transport, users can set EVs to must-run. In this configuration, the total load per vehicle type profile is set to match the EV load profile. The EV links minimum and maximum operating limits are set to match the load profile. The petrol links are free to operate as little or as much as they like. This setup forces EVs to always be run, and petrol vehicles to fill in remaining load. A schematic of this is shown in the figure below.
+Users can set EVs to *must-run*. In this configuration, the total load per vehicle type profile is set to match the EV load profile. The EV links minimum and maximum operating limits are set to match the load profile. The petrol links are free to operate as little or as much as they like. This setup forces EVs to always be run, and petrol vehicles to fill in remaining load. A schematic of this is shown in the figure below.
 
 :::{figure-md} must-run-ev
 <img src="./_static/transport/must-run-ev.png" width="800px">
@@ -101,8 +87,7 @@ With endogenous road transport, users can set EVs to must-run. In this configura
 Schematic of *Must-Run EV* configuration for endogenous road transport investments
 :::
 
-Alternatively, with endogenous road transport users can set EVs and petrol vehicles to operate as little or as much as they like.
-In this configuration, the total load per vehicle type profile is set to match the EV load profile (same as must-run). The EV and petrol maximum generation matches that of the load profile, and both have a no lower generation requirement. In this setup, EVs and petrols are free to contribute as much or as little to the demand as they like; ie. petrol cars can act as a "peaking" resource. A schematic of this is shown in the figure below.
+Alternatively, users can set EVs and petrol vehicles to operate as little or as much as they like. In this configuration, the total load per vehicle type profile is set to match the EV load profile (same as must-run). The EV and petrol maximum generation matches that of the load profile, and both have a no lower generation requirement. In this setup, EVs and petrols are free to contribute as much or as little to the demand as they like; ie. petrol cars can act as a "peaking" resource. A schematic of this is shown in the figure below.
 
 :::{figure-md} vehicle-choice
 <img src="./_static/transport/vehicle-choice.png" width="800px">

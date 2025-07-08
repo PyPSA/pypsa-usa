@@ -28,6 +28,33 @@ class SecCarriers(Enum):
     WATER_HEATING = "water-heat"
 
 
+######################
+# Constants for Demand
+######################
+
+
+class DemandFuels(Enum):
+    """Demand fuels."""
+
+    # residential, commercial, industry
+    ELECTRICITY = "electricity"
+    LPG = "lpg"
+    SPACE_HEATING = "space_heat"
+    SPACE_COOLING = "cool"
+    WATER_HEATING = "water_heat"
+    HEATING = "heat"
+
+    # transport
+    LIGHT = "light_duty"
+    MEDIUM = "med_duty"
+    HEAVY = "heavy_duty"
+    BUS = "bus"
+    AIR_PSG = "air"
+    BOAT_SHIP = "boat_shipping"
+    RAIL_PSG = "rail_passenger"
+    RAIL_SHIP = "rail_shipping"
+
+
 ##############################
 # Constants for Transportation
 ##############################
@@ -97,6 +124,18 @@ class BoatTransportUnits(Enum):
 
     SHIPPING = "kTonMiles"
 
+
+# TODO: this is a hack to get the transport fuels into the demand file
+TRANSPORT_FUELS = {
+    DemandFuels.LIGHT.value: f"{Transport.ROAD.value}-{RoadTransport.LIGHT.value}",
+    DemandFuels.MEDIUM.value: f"{Transport.ROAD.value}-{RoadTransport.MEDIUM.value}",
+    DemandFuels.HEAVY.value: f"{Transport.ROAD.value}-{RoadTransport.HEAVY.value}",
+    DemandFuels.BUS.value: f"{Transport.ROAD.value}-{RoadTransport.BUS.value}",
+    DemandFuels.AIR_PSG.value: f"{Transport.AIR.value}-{AirTransport.PASSENGER.value}",
+    DemandFuels.BOAT_SHIP.value: f"{Transport.BOAT.value}-{BoatTransport.SHIPPING.value}",
+    DemandFuels.RAIL_PSG.value: f"{Transport.RAIL.value}-{RailTransport.PASSENGER.value}",
+    DemandFuels.RAIL_SHIP.value: f"{Transport.RAIL.value}-{RailTransport.SHIPPING.value}",
+}
 
 """
 These numbers are giving odd results :(

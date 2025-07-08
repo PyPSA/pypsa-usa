@@ -30,9 +30,7 @@ def sector_input_files(wildcards):
             + "{interconnect}/cop_air_urban_elec_s{simpl}_c{clusters}.nc",
             "clustered_pop_layout": RESOURCES
             + "{interconnect}/pop_layout_elec_s{simpl}_c{clusters}.csv",
-            "ev_policy": config["sector"]["transport_sector"]["investment"][
-                "ev_policy"
-            ],
+            "ev_policy": config["sector"]["transport_sector"]["ev_policy"],
             "residential_stock": "repo_data/sectors/residential_stock",
             "commercial_stock": "repo_data/sectors/commercial_stock",
             "industrial_stock": "repo_data/sectors/industrial_stock/Table5_6.xlsx",

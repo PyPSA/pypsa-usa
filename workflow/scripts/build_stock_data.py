@@ -683,7 +683,7 @@ def _get_brownfield_template_df(
     return df[["bus1", "name", "suffix", "state", "p_max"]]
 
 
-def _get_endogenous_transport_brownfield_template_df(
+def _get_transport_brownfield_template_df(
     n: pypsa.Network,
     fuel: str,
     veh_mode: str | None = None,
@@ -729,7 +729,6 @@ def add_road_transport_brownfield(
     growth_multiplier: float,
     ratios: pd.DataFrame,
     costs: pd.DataFrame,
-    exogenous_transport: bool,
 ) -> None:
     """Adds existing stock to transportation sector."""
 
@@ -904,47 +903,23 @@ def add_road_transport_brownfield(
     elec_fuel = SecCarriers.ELECTRICITY.value
     lpg_fuel = SecCarriers.LPG.value
 
-    if exogenous_transport:
-        veh_name = f"{veh_type}-{vehicle_mode}"
+    # elec brownfield
+    df = _get_transport_brownfield_template_df(
+        n,
+        fuel=elec_fuel,
+        veh_mode=vehicle_mode,
+    )
+    df["p_nom"] = df.p_max.mul(growth_multiplier)
+    add_brownfield_ev(n, df, vehicle_mode, ratios, costs)
 
-        # ev brownfield
-        df = _get_brownfield_template_df(
-            n,
-            fuel=elec_fuel,
-            sector=sector,
-            subsector=veh_name,
-        )
-        df["p_nom"] = df.p_max.mul(growth_multiplier)
-        add_brownfield_ev(n, df, vehicle_mode, ratios, costs)
-
-        # lpg brownfield
-        df = _get_brownfield_template_df(
-            n,
-            fuel=lpg_fuel,
-            sector=sector,
-            subsector=veh_name,
-        )
-        df["p_nom"] = df.p_max.mul(growth_multiplier)
-        add_brownfield_lpg(n, df, vehicle_mode, ratios, costs)
-
-    else:
-        # elec brownfield
-        df = _get_endogenous_transport_brownfield_template_df(
-            n,
-            fuel=elec_fuel,
-            veh_mode=vehicle_mode,
-        )
-        df["p_nom"] = df.p_max.mul(growth_multiplier)
-        add_brownfield_ev(n, df, vehicle_mode, ratios, costs)
-
-        # lpg brownfield
-        df = _get_endogenous_transport_brownfield_template_df(
-            n,
-            fuel=lpg_fuel,
-            veh_mode=vehicle_mode,
-        )
-        df["p_nom"] = df.p_max.mul(growth_multiplier)
-        add_brownfield_lpg(n, df, vehicle_mode, ratios, costs)
+    # lpg brownfield
+    df = _get_transport_brownfield_template_df(
+        n,
+        fuel=lpg_fuel,
+        veh_mode=vehicle_mode,
+    )
+    df["p_nom"] = df.p_max.mul(growth_multiplier)
+    add_brownfield_lpg(n, df, vehicle_mode, ratios, costs)
 
 
 def add_service_brownfield(

@@ -18,7 +18,7 @@ import pandas as pd
 import pypsa
 import xarray as xr
 from _helpers import configure_logging, get_multiindex_snapshots
-from constants_sector import FIPS_2_STATE, NAICS, VMT_UNIT_CONVERSION
+from constants_sector import FIPS_2_STATE, NAICS, VMT_UNIT_CONVERSION, DemandFuels
 from eia import EnergyDemand, TransportationDemand
 
 logger = logging.getLogger(__name__)
@@ -94,42 +94,6 @@ class Context:
 
         return data
 
-    def prepare_demand_by_subsector(
-        self,
-        sector: str,
-        fuels: str | list[str],
-        **kwargs,
-    ) -> dict[str, dict[str, pd.DataFrame]]:
-        """
-        Returns demand by end-use energy carrier and subsector.
-
-        For example:
-        > result = context.prepare_demand_by_subsector("transport", ["electricity", "lpg"])
-        > result["electricity"]["light-duty"]
-        > result["lpg"]["heavy-duty"]
-        """
-        if isinstance(fuels, str):
-            fuels = [fuels]
-
-        demand = self._read()
-        demand_sector = demand[demand.index.get_level_values("sector") == sector]
-        subsectors = demand_sector.index.get_level_values("subsector").unique()
-
-        data = {}
-        for fuel in fuels:
-            data[fuel] = {}
-            for subsector in subsectors:
-                data[fuel][subsector] = self._write(
-                    demand,
-                    self._read_strategy.zone,
-                    sector=sector,
-                    subsector=subsector,
-                    fuel=fuel,
-                    **kwargs,
-                )
-
-        return data
-
 
 ###
 # READ STRATEGIES
@@ -195,10 +159,8 @@ class ReadStrategy(ABC):
             for x in df.index.get_level_values("sector").unique()
         )
 
-        assert all(
-            x in ["all", "electricity", "heat", "cool", "lpg", "space_heat", "water_heat"]
-            for x in df.index.get_level_values("fuel").unique()
-        )
+        valid_fuels = [x.value for x in DemandFuels]
+        assert all(x in valid_fuels for x in df.index.get_level_values("fuel").unique())
 
     @staticmethod
     def _format_snapshot_index(df: pd.DataFrame) -> pd.DataFrame:
@@ -1040,14 +1002,13 @@ class ReadCliu(ReadStrategy):
 
 
 class ReadTransportEfsAeo(ReadStrategy):
-    """
-    Calculates 100% VMT road demand for both electricity and lpg.
+    """EFS and AEO data for transportation.
 
     This will take EFS charging profiles and apply state level VMT
     statistics to calculate 100% electrified profiles.
 
-    Honestly, this is kinda an awkward implementation. But is works, so
-    it is what it is at this point.
+    Operational requirements to meet this load curve from both LPG and EVs are
+    applied in 'add_sectors.py' via 'build_transportation.py'
 
     - filepath: str
         path to a user defined file that has breakdown of state level VMT by
@@ -1133,6 +1094,34 @@ class ReadTransportEfsAeo(ReadStrategy):
 
         return df
 
+    @staticmethod
+    def _uniform_if_empty(df: pd.DataFrame) -> pd.DataFrame:
+        """Uniform distribution if all values are 0 per year.
+
+        Checks at a per year and per vehicle class level.
+        """
+        years = df.index.get_level_values("snapshot").year.unique()
+        vehicles = df.index.get_level_values("subsector").unique()
+        dfs = []
+        for year in years:
+            yearly_dfs = []
+            for vehicle in vehicles:
+                temp = df[
+                    (df.index.get_level_values("snapshot").year == year)
+                    & (df.index.get_level_values("subsector") == vehicle)
+                ].copy()
+                for state in temp.columns:
+                    if temp[state].sum() < 0.999:
+                        temp[state] = round(1 / len(temp), 8)
+                yearly_dfs.append(temp)
+            yearly_df = pd.concat(yearly_dfs)
+            dfs.append(yearly_df)
+
+        adjusted = pd.concat(dfs)
+        assert df.shape == adjusted.shape  # no data should be lost
+
+        return adjusted.reindex_like(df)
+
     def _read_efs_data(self):
         """
         Extracts profile data.
@@ -1166,6 +1155,9 @@ class ReadTransportEfsAeo(ReadStrategy):
         transport = transport.set_index([transport.index, "subsector"]).reorder_levels(
             index_order,
         )
+
+        # if a vehicle does not have a charging profile, swap to uniform distribution
+        transport = self._uniform_if_empty(transport)
 
         return transport
 
@@ -1205,24 +1197,22 @@ class ReadTransportEfsAeo(ReadStrategy):
 
         return vmt_demand
 
-    def _format_data(self, data: pd.DataFrame) -> pd.DataFrame:
+    def _format_data(self, vmt_per_state: pd.DataFrame) -> pd.DataFrame:
         """
         Merges national VMT data (self.aeo_demand), proportions of VMT
-        travelled per state (data), and electric charging profiles
+        travelled per state (vmt_per_state), and electric charging profiles
         (self.efs_profile).
-
-        This is one ugly function. holy.
         """
         aeo = self.aeo_demand.drop(columns="units")
         aeo = xr.DataArray.from_series(aeo.squeeze())
 
-        ds = xr.Dataset.from_dataframe(data)  # (vehicle, state)
+        ds = xr.Dataset.from_dataframe(vmt_per_state)  # (vehicle, state)
         ds = ds.sel(vehicle=aeo.vehicle.values)
 
         ds["yearly_demand"] = aeo  # (vehicle, year)
         ds["yearly_demand_per_state"] = ds.percent * ds.yearly_demand * (1 / 100)  # (vehicle, year, state)
 
-        efs = (
+        efs_profile = (
             self.efs_profile.reset_index()
             .melt(
                 id_vars=["snapshot", "subsector"],
@@ -1231,16 +1221,11 @@ class ReadTransportEfsAeo(ReadStrategy):
             )
             .rename(columns={"subsector": "vehicle"})
             .set_index(["snapshot", "vehicle", "state"])
+            .squeeze()
         )
-        elec_profile = efs.squeeze()
-        lpg_profile = elec_profile.copy()
-        lpg_profile[:] = 1 / 8760  # uniform profile assumption
 
-        ds["elec_profile"] = xr.DataArray.from_series(
-            elec_profile,
-        )  # (snapshot, vehicle, state)
-        ds["lpg_profile"] = xr.DataArray.from_series(
-            lpg_profile,
+        ds["profile"] = xr.DataArray.from_series(
+            efs_profile,
         )  # (snapshot, vehicle, state)
 
         # I think there is probably a more efficienct way to do this, I just couldnt figure out
@@ -1248,41 +1233,24 @@ class ReadTransportEfsAeo(ReadStrategy):
         # (ie. not having snapshots in 2018 indexed over years other than 2018)
         dfs = []
         for year in self.efs_years:
-            elec_demand = ds.yearly_demand_per_state.sel(
+            demand = ds.yearly_demand_per_state.sel(
                 year=year,
-            ) * ds.elec_profile.sel(
+            ) * ds.profile.sel(
                 snapshot=f"{year}",
             )
-            elec_demand = pd.DataFrame(
-                elec_demand.dropna(dim="state").to_series(),
+            demand = pd.DataFrame(
+                demand.dropna(dim="state").to_series(),
                 columns=["value"],
             ).reset_index()
-            elec_demand = elec_demand.rename(columns={"vehicle": "subsector"})
-            elec_demand["sector"] = "transport"
-            elec_demand["fuel"] = "electricity"
-            elec_demand = elec_demand.pivot(
+            demand = demand.rename(columns={"vehicle": "fuel"})
+            demand["sector"] = "transport"
+            demand["subsector"] = "all"
+            demand = demand.pivot(
                 columns="state",
                 index=["snapshot", "sector", "subsector", "fuel"],
                 values="value",
             )
-
-            lpg_demand = ds.yearly_demand_per_state.sel(year=year) * ds.lpg_profile.sel(
-                snapshot=f"{year}",
-            )
-            lpg_demand = pd.DataFrame(
-                lpg_demand.dropna(dim="state").to_series(),
-                columns=["value"],
-            ).reset_index()
-            lpg_demand = lpg_demand.rename(columns={"vehicle": "subsector"})
-            lpg_demand["sector"] = "transport"
-            lpg_demand["fuel"] = "lpg"
-            lpg_demand = lpg_demand.pivot(
-                columns="state",
-                index=["snapshot", "sector", "subsector", "fuel"],
-                values="value",
-            )
-
-            dfs.extend([elec_demand, lpg_demand])
+            dfs.append(demand)
 
         return pd.concat(dfs)
 
@@ -1438,8 +1406,8 @@ class ReadTransportAeo(ReadStrategy):
             )
             df.index.name = "snapshot"
             df["sector"] = "transport"
-            df["subsector"] = self.vehicle
-            df["fuel"] = "lpg"
+            df["subsector"] = "all"
+            df["fuel"] = self.vehicle
 
             df = df.set_index([df.index, "sector", "subsector", "fuel"])
 
@@ -1623,6 +1591,7 @@ class WriteStrategy(ABC):
 
         for load_zone in laf.zone.unique():
             load = laf[laf.zone == load_zone]
+            load = load[~(load.laf < 0.000001)].copy()  # drop any buses that have zero load
             load_per_bus = pd.DataFrame(
                 data=([demand[load_zone]] * len(load.index)),
                 index=load.index,
@@ -2280,6 +2249,39 @@ def _get_closest_efs_year(efs_years, investment_period):
     return max(filtered_values)
 
 
+def _get_sector_fuels(end_use: str, vehicle: str | None = None) -> list[str]:
+    """Get sector fuels.
+
+    The trasportation makes this pretty ugly. But works for the time being.
+    """
+    demand = DemandFuels
+    match end_use:
+        case "residential":
+            fuels = [demand.ELECTRICITY, demand.SPACE_HEATING, demand.SPACE_COOLING, demand.WATER_HEATING]
+        case "commercial":
+            fuels = [demand.ELECTRICITY, demand.SPACE_HEATING, demand.SPACE_COOLING, demand.WATER_HEATING]
+        case "industry":
+            fuels = [demand.ELECTRICITY, demand.HEATING]
+        case "transport":
+            if not vehicle:
+                fuels = [demand.LIGHT, demand.MEDIUM, demand.HEAVY, demand.BUS]
+            else:  # non-road transport generated one at a time
+                match vehicle:
+                    case "air":
+                        fuels = [demand.AIR_PSG]
+                    case "boat-shipping":
+                        fuels = [demand.BOAT_SHIP]
+                    case "rail-passenger":
+                        fuels = [demand.RAIL_PSG]
+                    case "rail-shipping":
+                        fuels = [demand.RAIL_SHIP]
+                    case _:
+                        raise NotImplementedError
+        case _:
+            raise NotImplementedError
+    return [x.value for x in fuels]
+
+
 ###
 # main entry point
 ###
@@ -2293,17 +2295,17 @@ if __name__ == "__main__":
         #     interconnect="texas",
         #     end_use="power",
         # )
-        # snakemake = mock_snakemake(
-        #     "build_transport_other_demand",
-        #     interconnect="texas",
-        #     end_use="transport",
-        #     vehicle="rail-passenger",
-        # )
         snakemake = mock_snakemake(
-            "build_transport_road_demand",
+            "build_transport_other_demand",
             interconnect="western",
             end_use="transport",
+            vehicle="boat-shipping",
         )
+        # snakemake = mock_snakemake(
+        #     "build_transport_road_demand",
+        #     interconnect="western",
+        #     end_use="transport",
+        # )
         # snakemake = mock_snakemake(
         #     "build_sector_demand",
         #     interconnect="western",
@@ -2433,16 +2435,8 @@ if __name__ == "__main__":
     if end_use == "power":  # only one demand for electricity only studies
         demand = demand_converter.prepare_demand(sns=sns)  # pd.DataFrame
         demands = {"electricity": demand}
-    elif end_use == "transport":
-        # only road transport has specific electrical profiles
-        fuels = ("electricity", "lpg") if not vehicle else ("lpg")
-        demands = demand_converter.prepare_demand_by_subsector(
-            end_use,
-            fuels,
-            sns=sns,
-        )  # dict[str, dict[str, pd.DataFrame]]
     else:
-        fuels = ("electricity", "heat", "cool", "space_heat", "water_heat")
+        fuels = _get_sector_fuels(end_use, vehicle)
         demands = demand_converter.prepare_multiple_demands(
             end_use,  # residential, commercial, industry, transport
             fuels,
@@ -2464,16 +2458,10 @@ if __name__ == "__main__":
     )
 
     formatted_demand = {}
-    # transport is by subsector
-    if end_use == "transport":
-        for fuel, _ in demands.items():
-            formatted_demand[fuel] = {}
-            for vehicle_type, demand in demands[fuel].items():
-                vmt_conversion = VMT_UNIT_CONVERSION.get(vehicle_type, 1)
-                formatted_demand[fuel][vehicle_type] = demand_formatter.format_demand(
-                    demand,
-                    vehicle_type,
-                ).mul(vmt_conversion)
+    if end_use == "transport":  # transport fuel is actually vehicle types
+        for fuel, demand in demands.items():
+            vmt_conversion = VMT_UNIT_CONVERSION.get(fuel, 1)  # for buses
+            formatted_demand[fuel] = demand_formatter.format_demand(demand, fuel).mul(vmt_conversion)
     else:
         for fuel, demand in demands.items():
             formatted_demand[fuel] = demand_formatter.format_demand(demand, end_use)
@@ -2484,33 +2472,15 @@ if __name__ == "__main__":
             snakemake.output.elec_demand,
             index=True,
         )
-    # transport demand is by subsector
-    elif end_use == "transport":
-        if not vehicle:  # road transport
-            file_mapper = {"electricity": "elec", "lpg": "lpg"}
-            for fuel in ("electricity", "lpg"):
-                for vehicle_type in ("light_duty", "med_duty", "heavy_duty", "bus"):
-                    formatted_demand[fuel][vehicle_type].round(4).to_pickle(
-                        snakemake.output[f"{file_mapper[fuel]}_{vehicle_type}"],
-                    )
-        else:  # "boat_shipping", "air", "rail_passenger", "rail_shipping"
-            formatted_demand["lpg"][vehicle.replace("-", "_")].round(4).to_pickle(
-                snakemake.output[0],
-            )
-
     else:
-        formatted_demand["electricity"].round(4).to_pickle(
-            snakemake.output.elec_demand,
-        )
-        formatted_demand["heat"].round(4).to_pickle(
-            snakemake.output.heat_demand,
-        )
-        formatted_demand["space_heat"].round(4).to_pickle(
-            snakemake.output.space_heat_demand,
-        )
-        formatted_demand["water_heat"].round(4).to_pickle(
-            snakemake.output.water_heat_demand,
-        )
-        formatted_demand["cool"].round(4).to_pickle(
-            snakemake.output.cool_demand,
-        )
+        for fuel in fuels:
+            try:
+                out_f = snakemake.output[fuel]
+            except AttributeError as e:  # non-road transport is not indexed by fuel
+                if len(snakemake.output) == 1:
+                    out_f = snakemake.output[0]
+                else:
+                    raise KeyError(e)
+            formatted_demand[fuel].round(4).to_pickle(
+                out_f,
+            )

@@ -585,8 +585,7 @@ def add_sector_demand_response_constraints(n, config):
 def add_ev_generation_constraint(n, config, snakemake):
     """Adds a limit to the maximum generation from EVs per mode and year.
 
-    Only applied if endogenous investments are tuned on as a mechanism to limit
-    growth rate of EVs. The constraint is:
+    The constraint is:
     - (EV_gen * eff) / dem <= policy (where policy is a percentage giving max gen)
     - EV_gen <= dem * policy / eff
 
