@@ -745,6 +745,4 @@ if __name__ == "__main__":
     # Needed as loads may be split off to urban/rural
     sanitize_carriers(n, snakemake.config)
 
-    print("y")
-
     n.export_to_netcdf(snakemake.output.network)

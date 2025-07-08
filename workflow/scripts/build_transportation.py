@@ -618,9 +618,11 @@ def constrain_charing_rates(n: pypsa.Network, must_run_evs: bool) -> None:
     # add small buffer for computation issues while solving
     if not p_min_pu.empty:
         p_min_pu = (p_min_pu - p_min_pu.min()) / (p_min_pu.max() - p_min_pu.min())
+        p_min_pu = p_min_pu.fillna(0)  # if uniform profile, p_min_pu will be nan
         p_min_pu = p_min_pu.sub(0.01).clip(lower=0).round(2)
         n.links_t["p_min_pu"] = pd.concat([n.links_t["p_min_pu"], p_min_pu], axis=1)
 
     p_max_pu = (p_max_pu - p_max_pu.min()) / (p_max_pu.max() - p_max_pu.min())
+    p_max_pu = p_max_pu.fillna(1)  # if uniform profile, p_max_pu will be nan
     p_max_pu = p_max_pu = p_max_pu.add(0.01).clip(upper=1).round(2)
     n.links_t["p_max_pu"] = pd.concat([n.links_t["p_max_pu"], p_max_pu], axis=1)
