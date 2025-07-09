@@ -511,10 +511,10 @@ if __name__ == "__main__":
         snakemake = mock_snakemake(
             "add_sectors",
             interconnect="western",
-            simpl="12",
-            clusters="4m",
+            simpl="100",
+            clusters="33m",
             ll="v1.0",
-            opts="REM-12h",
+            opts="4h",
             sector="E-G",
         )
     configure_logging(snakemake)
