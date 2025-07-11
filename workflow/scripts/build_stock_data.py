@@ -776,9 +776,9 @@ def add_road_transport_brownfield(
         periods = int(lifetime // step)
 
         start_year = n.investment_periods[0]
-        start_year = start_year if start_year >= 2023 else 2023
+        start_year = start_year if start_year <= 2025 else 2025
 
-        for period in range(1, periods + 1):
+        for period in range(0, periods):
             build_year = start_year - period * step
             percent = step / lifetime  # given as a ratio
 
@@ -866,9 +866,9 @@ def add_road_transport_brownfield(
         periods = int(lifetime // step)
 
         start_year = n.investment_periods[0]
-        # start_year = start_year if start_year >= 2023 else 2023
+        start_year = start_year if start_year <= 2025 else 2025
 
-        for period in range(1, periods + 1):
+        for period in range(0, periods):
             build_year = start_year - period * step
             percent = step / lifetime  # given as a ratio
 
@@ -895,6 +895,28 @@ def add_road_transport_brownfield(
                 build_year=build_year,
             )
 
+    def add_charging_profiles(n: pypsa.Network) -> None:
+        """Add charging profiles to the network.
+
+        The existing stock has the same charing profile as the future stock.
+        """
+        trn = n.links[n.links.carrier.str.startswith("trn")]
+        trn_existing = trn[trn.index.str.contains("existing_")]
+
+        for vehicle in trn_existing.index:
+            # vehicle will have the form 'p10 existing_2008 trn-elec-veh-lgt'
+            ref_vehicle_split = vehicle.split(" ")
+            ref_vehicle = ref_vehicle_split[0] + " " + ref_vehicle_split[2]
+
+            # can run into infeasabilities for validation runs with the electrification policy
+            # if ref_vehicle in n.links_t["p_min_pu"]:
+            #     p_min_pu = n.links_t["p_min_pu"][ref_vehicle]
+            #     n.links_t["p_min_pu"][vehicle] = p_min_pu
+
+            if ref_vehicle in n.links_t["p_max_pu"]:
+                p_max_pu = n.links_t["p_max_pu"][ref_vehicle]
+                n.links_t["p_max_pu"][vehicle] = p_max_pu
+
     # different naming conventions for exogenous/endogenous transport investment
 
     sector = SecNames.TRANSPORT.value
@@ -911,6 +933,9 @@ def add_road_transport_brownfield(
     )
     df["p_nom"] = df.p_max.mul(growth_multiplier)
     add_brownfield_ev(n, df, vehicle_mode, ratios, costs)
+
+    # charging profiles of existing stock match the future stock
+    add_charging_profiles(n)
 
     # lpg brownfield
     df = _get_transport_brownfield_template_df(
@@ -968,7 +993,7 @@ def add_service_brownfield(
         df["p_nom"] = df.p_max.mul(df.ratio).div(100).div(efficiency).round(2)  # div to convert from %
 
         start_year = n.investment_periods[0]
-        # start_year if start_year >= 2023 else 2023
+        start_year = start_year if start_year <= 2025 else 2025
 
         for build_year, percent in installed_capacity.items():
             if _already_retired(build_year, lifetime, start_year):
@@ -1032,7 +1057,7 @@ def add_service_brownfield(
         df["p_nom"] = df.p_max.mul(df.ratio).div(100).div(efficiency)  # div to convert from %
 
         start_year = n.investment_periods[0]
-        # start_year = start_year if start_year >= 2023 else 2023
+        start_year = start_year if start_year <= 2025 else 2025
 
         for build_year, percent in installed_capacity.items():
             if _already_retired(build_year, lifetime, start_year):
@@ -1092,7 +1117,7 @@ def add_service_brownfield(
         df["p_nom"] = df.p_max.mul(df.ratio).div(100).div(efficiency)  # div to convert from %
 
         start_year = n.investment_periods[0]
-        # start_year = start_year if start_year >= 2023 else 2023
+        start_year = start_year if start_year <= 2025 else 2025
 
         for build_year, percent in installed_capacity.items():
             if _already_retired(build_year, lifetime, start_year):
@@ -1157,7 +1182,7 @@ def add_service_brownfield(
         df["p_nom"] = df.p_max.mul(df.ratio).div(100).div(efficiency).round(2)  # div to convert from %
 
         start_year = n.investment_periods[0]
-        # start_year = start_year if start_year >= 2023 else 2023
+        start_year = start_year if start_year <= 2025 else 2025
 
         for build_year, percent in installed_capacity.items():
             if _already_retired(build_year, lifetime, start_year):
