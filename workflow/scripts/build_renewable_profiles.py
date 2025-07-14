@@ -80,6 +80,23 @@ def get_WUS_snapshot_subset(wus_cfs: xr.Dataset, snapshots: pd.DatetimeIndex) ->
     subset = wus[[(m, d, t) in mdt_set for m, d, t in zip(wus.month, wus.day, wus.time)]]
     return subset
 
+def get_correct_year(
+    wus_data_horizon: xr.Dataset,
+    wus_data_prev: xr.Dataset,
+    year: int
+    ) -> xr.Dataset:
+    # dealing with the fact that the WUS data starts on 09-01-year
+    logger.info(f"Extracting and combining data for {year}")
+
+    start_date = str(year) + '-01-01'
+    end_date = str(year) + '-12-31'
+
+    begin = wus_data_prev.sel(Times=slice(start_date,None))
+    end = wus_data_horizon.sel(Times=slice(None,end_date))
+    combined = xr.concat([begin,end],dim='Times')
+
+    return combined 
+
 def capitalize(s):
     return s[0].upper() + s[1:]
 
@@ -401,7 +418,10 @@ if __name__ == "__main__":
         index = snakemake.config['renewable_weather_years'].index(int(snakemake.wildcards.renewable_weather_years))
         wus_year = snakemake.config['scenario']['planning_horizons'][index]
 
-        wus_data = load_WUS_data(wus_year)
+        wus_data_horizon = load_WUS_data(wus_year)
+        wus_data_prev = load_WUS_data(int(wus_year)-1)
+        wus_data = get_correct_year(wus_data_horizon,wus_data_prev,wus_year)
+
         wus_profile = generate_wus_profile(ds,wus_data,buses,bus_coords,snakemake.wildcards.technology,sns)
 
         logger.info("Capacity factor substitution complete.")
