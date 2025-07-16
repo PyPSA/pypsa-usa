@@ -33,7 +33,6 @@ import yaml
 from _helpers import (
     configure_logging,
     update_config_from_wildcards,
-    update_config_with_sector_opts,
 )
 from opts.land import add_land_use_constraints
 from opts.policy import (
@@ -176,37 +175,32 @@ def extra_functionality(n, snapshots):
 
     # Apply sector-specific constraints if sector is enabled
     if sector_enabled:
-        apply_sector_constraints(n, config, global_snakemake)
+        # Heat pump constraints
+        add_cooling_heat_pump_constraints(n, config)
 
+        # Apply GSHP capacity constraint if urban/rural not split
+        if not config["sector"]["service_sector"].get("split_urban_rural", False):
+            add_gshp_capacity_constraint(n, config, global_snakemake)
 
-def apply_sector_constraints(n, config, global_snakemake):
-    """Apply all sector-specific constraints to the network."""
-    # Heat pump constraints
-    add_cooling_heat_pump_constraints(n, config)
+        # CO2 constraints for sectors
+        if "REMsec" in opts:
+            add_sector_co2_constraints(n, config)
 
-    # Apply GSHP capacity constraint if urban/rural not split
-    if not config["sector"]["service_sector"].get("split_urban_rural", False):
-        add_gshp_capacity_constraint(n, config, global_snakemake)
+        # Natural gas import/export constraints
+        if config["sector"]["natural_gas"].get("imports", False):
+            add_ng_import_export_limits(n, config)
 
-    # CO2 constraints for sectors
-    if config["sector"]["co2"].get("policy", {}):
-        add_sector_co2_constraints(n, config)
+        # Water heater constraints
+        water_config = config["sector"]["service_sector"].get("water_heating", {})
+        if not water_config.get("simple_storage", True):
+            add_water_heater_constraints(n, config)
 
-    # Natural gas import/export constraints
-    if config["sector"]["natural_gas"].get("imports", False):
-        add_ng_import_export_limits(n, config)
+        # EV generation constraints
+        if config["sector"]["transport_sector"].get("ev_policy", {}):
+            add_ev_generation_constraint(n, config, global_snakemake)
 
-    # Water heater constraints
-    water_config = config["sector"]["service_sector"].get("water_heating", {})
-    if not water_config.get("simple_storage", True):
-        add_water_heater_constraints(n, config)
-
-    # EV generation constraints
-    if config["sector"]["transport_sector"]["ev_policy"]:
-        add_ev_generation_constraint(n, config, global_snakemake)
-
-    # Sector demand response constraints
-    add_sector_demand_response_constraints(n, config)
+        # Sector demand response constraints
+        add_sector_demand_response_constraints(n, config)
 
 
 def run_optimize(n, rolling_horizon, skip_iterations, cf_solving, **kwargs):
@@ -361,31 +355,23 @@ if __name__ == "__main__":
         snakemake = mock_snakemake(
             "solve_network",
             interconnect="western",
-            simpl="75",
+            simpl="12",
             clusters="4m",
             ll="v1.0",
-            opts="12h",
+            opts="4h",
             sector="E-G",
-            planning_horizons="2030",
+            planning_horizons="2018",
         )
     configure_logging(snakemake)
     update_config_from_wildcards(snakemake.config, snakemake.wildcards)
-    if "sector_opts" in snakemake.wildcards.keys():
-        update_config_with_sector_opts(
-            snakemake.config,
-            snakemake.wildcards.sector_opts,
-        )
 
     opts = snakemake.wildcards.opts
-    if "sector_opts" in snakemake.wildcards.keys():
-        opts += "-" + snakemake.wildcards.sector_opts
     opts = [o for o in opts.split("-") if o != ""]
     solve_opts = snakemake.params.solving["options"]
 
     # sector specific co2 options
     if snakemake.wildcards.sector != "E":
-        # sector co2 limits applied via config file, not through Co2L
-        opts = [x for x in opts if not x.startswith("Co2L")]
+        opts = ["REMsec" if x == "REM" else x for x in opts]
         opts.append("sector")
 
     np.random.seed(solve_opts.get("seed", 123))
