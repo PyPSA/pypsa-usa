@@ -814,26 +814,31 @@ def add_road_transport_brownfield(
     ) -> None:
         # existing stock efficiencies taken from 2016 EFS Technology data
         # This is consistent with where future efficiencies are taken from
+        # Historical uses lowest EIA 2017 case where available
         # https://data.nrel.gov/submissions/93
         # https://www.nrel.gov/docs/fy18osti/70485.pdf
+
+        ## Efficiencies of existing stock are quite sensitive!
 
         match vehicle_mode:
             case RoadTransport.LIGHT.value:
                 costs_name = "Light Duty Cars ICEV"
                 ratio_name = "light_duty"
-                efficiency = 25.9  # mpg
+                efficiency = 37.78  # mpg (Table 6)
+                # efficiency = 29.2  # mpg (AEO Table 42)
             case RoadTransport.MEDIUM.value:
                 costs_name = "Medium Duty Trucks ICEV"
                 ratio_name = "med_duty"
-                efficiency = 16.35  # mpg
+                efficiency = 25.16  # mpg (Table 7)
+                # efficiency = 22.8  # mpg (AEO Table 42)
             case RoadTransport.HEAVY.value:
                 costs_name = "Heavy Duty Trucks ICEV"
                 ratio_name = "heavy_duty"
-                efficiency = 5.44  # mpg
+                efficiency = 5.67  # mpg (Table 10)
             case RoadTransport.BUS.value:
                 costs_name = "Buses ICEV"
                 ratio_name = "bus"
-                efficiency = 3.67  # mpg
+                efficiency = 3.92  # mpg (Table 12)
             case _:
                 raise NotImplementedError
 
