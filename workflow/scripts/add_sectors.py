@@ -27,7 +27,7 @@ from build_stock_data import (
     get_residential_stock,
     get_transport_stock,
 )
-from build_transportation import apply_exogenous_ev_policy, build_transportation
+from build_transportation import build_transportation
 from constants import CODE_2_STATE, NG_MWH_2_MMCF, STATE_2_CODE, STATES_INTERCONNECT_MAPPER
 from constants_sector import RoadTransport
 from eia import FuelCosts
@@ -511,8 +511,8 @@ if __name__ == "__main__":
         snakemake = mock_snakemake(
             "add_sectors",
             interconnect="western",
-            simpl="11",
-            clusters="4m",
+            simpl="100",
+            clusters="33m",
             ll="v1.0",
             opts="4h",
             sector="E-G",
@@ -643,19 +643,12 @@ if __name__ == "__main__":
         )
 
     # add transportation
-    trn_options = options = snakemake.params.sector["transport_sector"]
-    exogenous_transport = trn_options["investment"].get("exogenous", False)
-    if exogenous_transport:
-        ev_policy = pd.read_csv(snakemake.input.ev_policy, index_col=0)
-        apply_exogenous_ev_policy(n, ev_policy)
-        must_run_evs = None
-    else:
-        must_run_evs = trn_options["investment"].get("must_run_evs", True)
+    trn_options = snakemake.params.sector["transport_sector"]
+    must_run_evs = trn_options.get("must_run_evs", True)
     dr_config = trn_options.get("demand_response", {})
     build_transportation(
         n=n,
         costs=costs,
-        exogenous=exogenous_transport,
         must_run_evs=must_run_evs,
         dr_config=dr_config,
     )
@@ -681,7 +674,6 @@ if __name__ == "__main__":
                 growth_multiplier,
                 ratios,
                 costs,
-                exogenous_transport,
             )
 
     if snakemake.params.sector["service_sector"]["brownfield"]:

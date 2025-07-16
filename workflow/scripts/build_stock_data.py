@@ -683,7 +683,7 @@ def _get_brownfield_template_df(
     return df[["bus1", "name", "suffix", "state", "p_max"]]
 
 
-def _get_endogenous_transport_brownfield_template_df(
+def _get_transport_brownfield_template_df(
     n: pypsa.Network,
     fuel: str,
     veh_mode: str | None = None,
@@ -729,7 +729,6 @@ def add_road_transport_brownfield(
     growth_multiplier: float,
     ratios: pd.DataFrame,
     costs: pd.DataFrame,
-    exogenous_transport: bool,
 ) -> None:
     """Adds existing stock to transportation sector."""
 
@@ -777,9 +776,9 @@ def add_road_transport_brownfield(
         periods = int(lifetime // step)
 
         start_year = n.investment_periods[0]
-        start_year = start_year if start_year >= 2023 else 2023
+        start_year = start_year if start_year <= 2025 else 2025
 
-        for period in range(1, periods + 1):
+        for period in range(0, periods):
             build_year = start_year - period * step
             percent = step / lifetime  # given as a ratio
 
@@ -815,26 +814,31 @@ def add_road_transport_brownfield(
     ) -> None:
         # existing stock efficiencies taken from 2016 EFS Technology data
         # This is consistent with where future efficiencies are taken from
+        # Historical uses lowest EIA 2017 case where available
         # https://data.nrel.gov/submissions/93
         # https://www.nrel.gov/docs/fy18osti/70485.pdf
+
+        ## Efficiencies of existing stock are quite sensitive! ##
 
         match vehicle_mode:
             case RoadTransport.LIGHT.value:
                 costs_name = "Light Duty Cars ICEV"
                 ratio_name = "light_duty"
-                efficiency = 25.9  # mpg
+                efficiency = 37.78  # mpg (Table 6)
+                # efficiency = 29.2  # mpg (AEO Table 42)
             case RoadTransport.MEDIUM.value:
                 costs_name = "Medium Duty Trucks ICEV"
                 ratio_name = "med_duty"
-                efficiency = 16.35  # mpg
+                efficiency = 25.16  # mpg (Table 7)
+                # efficiency = 22.8  # mpg (AEO Table 42)
             case RoadTransport.HEAVY.value:
                 costs_name = "Heavy Duty Trucks ICEV"
                 ratio_name = "heavy_duty"
-                efficiency = 5.44  # mpg
+                efficiency = 5.67  # mpg (Table 10)
             case RoadTransport.BUS.value:
                 costs_name = "Buses ICEV"
                 ratio_name = "bus"
-                efficiency = 3.67  # mpg
+                efficiency = 3.92  # mpg (Table 12)
             case _:
                 raise NotImplementedError
 
@@ -867,9 +871,9 @@ def add_road_transport_brownfield(
         periods = int(lifetime // step)
 
         start_year = n.investment_periods[0]
-        # start_year = start_year if start_year >= 2023 else 2023
+        start_year = start_year if start_year <= 2025 else 2025
 
-        for period in range(1, periods + 1):
+        for period in range(0, periods):
             build_year = start_year - period * step
             percent = step / lifetime  # given as a ratio
 
@@ -896,6 +900,28 @@ def add_road_transport_brownfield(
                 build_year=build_year,
             )
 
+    def add_charging_profiles(n: pypsa.Network) -> None:
+        """Add charging profiles to the network.
+
+        The existing stock has the same charing profile as the future stock.
+        """
+        trn = n.links[n.links.carrier.str.startswith("trn")]
+        trn_existing = trn[trn.index.str.contains("existing_")]
+
+        for vehicle in trn_existing.index:
+            # vehicle will have the form 'p10 existing_2008 trn-elec-veh-lgt'
+            ref_vehicle_split = vehicle.split(" ")
+            ref_vehicle = ref_vehicle_split[0] + " " + ref_vehicle_split[2]
+
+            # can run into infeasabilities for validation runs with the electrification policy
+            # if ref_vehicle in n.links_t["p_min_pu"]:
+            #     p_min_pu = n.links_t["p_min_pu"][ref_vehicle]
+            #     n.links_t["p_min_pu"][vehicle] = p_min_pu
+
+            if ref_vehicle in n.links_t["p_max_pu"]:
+                p_max_pu = n.links_t["p_max_pu"][ref_vehicle]
+                n.links_t["p_max_pu"][vehicle] = p_max_pu
+
     # different naming conventions for exogenous/endogenous transport investment
 
     sector = SecNames.TRANSPORT.value
@@ -904,47 +930,26 @@ def add_road_transport_brownfield(
     elec_fuel = SecCarriers.ELECTRICITY.value
     lpg_fuel = SecCarriers.LPG.value
 
-    if exogenous_transport:
-        veh_name = f"{veh_type}-{vehicle_mode}"
+    # elec brownfield
+    df = _get_transport_brownfield_template_df(
+        n,
+        fuel=elec_fuel,
+        veh_mode=vehicle_mode,
+    )
+    df["p_nom"] = df.p_max.mul(growth_multiplier)
+    add_brownfield_ev(n, df, vehicle_mode, ratios, costs)
 
-        # ev brownfield
-        df = _get_brownfield_template_df(
-            n,
-            fuel=elec_fuel,
-            sector=sector,
-            subsector=veh_name,
-        )
-        df["p_nom"] = df.p_max.mul(growth_multiplier)
-        add_brownfield_ev(n, df, vehicle_mode, ratios, costs)
+    # charging profiles of existing stock match the future stock
+    add_charging_profiles(n)
 
-        # lpg brownfield
-        df = _get_brownfield_template_df(
-            n,
-            fuel=lpg_fuel,
-            sector=sector,
-            subsector=veh_name,
-        )
-        df["p_nom"] = df.p_max.mul(growth_multiplier)
-        add_brownfield_lpg(n, df, vehicle_mode, ratios, costs)
-
-    else:
-        # elec brownfield
-        df = _get_endogenous_transport_brownfield_template_df(
-            n,
-            fuel=elec_fuel,
-            veh_mode=vehicle_mode,
-        )
-        df["p_nom"] = df.p_max.mul(growth_multiplier)
-        add_brownfield_ev(n, df, vehicle_mode, ratios, costs)
-
-        # lpg brownfield
-        df = _get_endogenous_transport_brownfield_template_df(
-            n,
-            fuel=lpg_fuel,
-            veh_mode=vehicle_mode,
-        )
-        df["p_nom"] = df.p_max.mul(growth_multiplier)
-        add_brownfield_lpg(n, df, vehicle_mode, ratios, costs)
+    # lpg brownfield
+    df = _get_transport_brownfield_template_df(
+        n,
+        fuel=lpg_fuel,
+        veh_mode=vehicle_mode,
+    )
+    df["p_nom"] = df.p_max.mul(growth_multiplier)
+    add_brownfield_lpg(n, df, vehicle_mode, ratios, costs)
 
 
 def add_service_brownfield(
@@ -993,7 +998,7 @@ def add_service_brownfield(
         df["p_nom"] = df.p_max.mul(df.ratio).div(100).div(efficiency).round(2)  # div to convert from %
 
         start_year = n.investment_periods[0]
-        # start_year if start_year >= 2023 else 2023
+        start_year = start_year if start_year <= 2025 else 2025
 
         for build_year, percent in installed_capacity.items():
             if _already_retired(build_year, lifetime, start_year):
@@ -1057,7 +1062,7 @@ def add_service_brownfield(
         df["p_nom"] = df.p_max.mul(df.ratio).div(100).div(efficiency)  # div to convert from %
 
         start_year = n.investment_periods[0]
-        # start_year = start_year if start_year >= 2023 else 2023
+        start_year = start_year if start_year <= 2025 else 2025
 
         for build_year, percent in installed_capacity.items():
             if _already_retired(build_year, lifetime, start_year):
@@ -1117,7 +1122,7 @@ def add_service_brownfield(
         df["p_nom"] = df.p_max.mul(df.ratio).div(100).div(efficiency)  # div to convert from %
 
         start_year = n.investment_periods[0]
-        # start_year = start_year if start_year >= 2023 else 2023
+        start_year = start_year if start_year <= 2025 else 2025
 
         for build_year, percent in installed_capacity.items():
             if _already_retired(build_year, lifetime, start_year):
@@ -1182,7 +1187,7 @@ def add_service_brownfield(
         df["p_nom"] = df.p_max.mul(df.ratio).div(100).div(efficiency).round(2)  # div to convert from %
 
         start_year = n.investment_periods[0]
-        # start_year = start_year if start_year >= 2023 else 2023
+        start_year = start_year if start_year <= 2025 else 2025
 
         for build_year, percent in installed_capacity.items():
             if _already_retired(build_year, lifetime, start_year):
