@@ -275,6 +275,15 @@ def plot_transportation_production_timeseries(
         resample_fn=resample_fn,
         remove_sns_weights=remove_sns_weights,
     )
+
+    # This is cause of non-use issues with exisiting stock
+    small_negative_cols = df_all.columns[((df_all < 0) & (df_all > -0.0001)).any()]
+    large_negative_cols = df_all.columns[(df_all < -0.0001).any()]
+    if len(small_negative_cols) > 0 and len(large_negative_cols) == 0:
+        for col in small_negative_cols:
+            logger.warning(f"Negative values found in column '{col}', setting to zero")
+        df_all = df_all.clip(lower=0)
+
     df_veh = _filter_vehicle_type(df_all, vehicle)
 
     if df_veh.empty:
@@ -1492,12 +1501,12 @@ if __name__ == "__main__":
     if "snakemake" not in globals():
         snakemake = mock_snakemake(
             "plot_sector_production",
-            simpl="11",
+            simpl="12",
             opts="4h",
             clusters="4m",
             ll="v1.0",
             sector="E-G",
-            planning_horizons="2030",
+            planning_horizons="2018",
             interconnect="western",
         )
         rootpath = ".."

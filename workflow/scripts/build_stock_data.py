@@ -818,7 +818,7 @@ def add_road_transport_brownfield(
         # https://data.nrel.gov/submissions/93
         # https://www.nrel.gov/docs/fy18osti/70485.pdf
 
-        ## Efficiencies of existing stock are quite sensitive!
+        ## Efficiencies of existing stock are quite sensitive! ##
 
         match vehicle_mode:
             case RoadTransport.LIGHT.value:
