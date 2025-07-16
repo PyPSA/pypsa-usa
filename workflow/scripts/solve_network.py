@@ -196,9 +196,8 @@ def extra_functionality(n, snapshots):
             add_water_heater_constraints(n, config)
 
         # EV generation constraints
-        if config["sector"]["transport_sector"]["investment"]["ev_policy"]:
-            if not config["sector"]["transport_sector"]["investment"]["exogenous"]:
-                add_ev_generation_constraint(n, config, global_snakemake)
+        if config["sector"]["transport_sector"].get("ev_policy", {}):
+            add_ev_generation_constraint(n, config, global_snakemake)
 
         # Sector demand response constraints
         add_sector_demand_response_constraints(n, config)
