@@ -8,7 +8,7 @@ from math import ceil
 from pathlib import Path
 
 # Optional used as 'arg: callable | None = None' gives TypeError with py3.11
-from typing import Any, Optional
+from typing import Any
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -164,7 +164,7 @@ def plot_sector_production_timeseries(
     nice_name: bool | None = True,
     remove_sns_weights: bool = True,
     resample: str | None = None,
-    resample_fn: Optional[callable] = None,  # noqa: UP007
+    resample_fn: callable | None = None,
     month: int | None = None,
     **kwargs,
 ) -> tuple:
@@ -239,7 +239,7 @@ def plot_transportation_production_timeseries(
     nice_name: bool | None = True,
     remove_sns_weights: bool = True,
     resample: str | None = None,
-    resample_fn: Optional[callable] = None,  # noqa: UP007
+    resample_fn: callable | None = None,
     month: int | None = None,
     **kwargs,
 ) -> tuple:
@@ -990,7 +990,7 @@ def plot_sector_dr_timeseries(
     state: str | None = None,
     nice_name: bool | None = True,
     resample: str | None = None,
-    resample_fn: Optional[callable] = None,  # noqa: UP007
+    resample_fn: callable | None = None,
     month: int | None = None,
     **kwargs,
 ) -> tuple:
@@ -1500,13 +1500,13 @@ def _initialize_metadata(data: dict[str, Any]) -> list[PlottingData]:
 if __name__ == "__main__":
     if "snakemake" not in globals():
         snakemake = mock_snakemake(
-            "plot_sector_production",
-            simpl="12",
-            opts="4h",
-            clusters="4m",
+            "plot_sector_capacity",
+            simpl="30",
+            opts="12h-REM",
+            clusters="9m",
             ll="v1.0",
             sector="E-G",
-            planning_horizons="2018",
+            planning_horizons="2030",
             interconnect="western",
         )
         rootpath = ".."
