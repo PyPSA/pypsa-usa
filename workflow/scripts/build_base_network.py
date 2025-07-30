@@ -181,6 +181,15 @@ def assign_line_length(n: pypsa.Network):
     n.lines["length"] = distances
 
 
+def assign_link_length(n: pypsa.Network):
+    """Assigns link length to each link (DC transmission line) in the network using Haversine distance."""
+    bus_df = n.buses[["x", "y"]]
+    bus0 = bus_df.loc[n.links.bus0].values
+    bus1 = bus_df.loc[n.links.bus1].values
+    distances = haversine_np(bus0[:, 0], bus0[:, 1], bus1[:, 0], bus1[:, 1])
+    n.links["length"] = distances
+
+
 def create_grid(polygon, cell_size):
     """
     Creates a grid of square cells over a given polygon and returns the centers
@@ -549,6 +558,7 @@ def main(snakemake):
     add_custom_line_type(n)
     assign_line_types(n)
     assign_line_length(n)
+    assign_link_length(n)
     assign_missing_regions(n)
     assign_reeds_memberships(n, snakemake.input.reeds_memberships)
     n.buses["rec_trading_zone"] = n.buses.reeds_state.map(REC_TRADING_ZONE_MAPPER).fillna(n.buses.reeds_state)
