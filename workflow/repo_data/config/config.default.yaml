@@ -103,17 +103,17 @@ co2:
   storage: false   # [false, true]
   network:
     enable: false   # [false, true]
-    capital_cost: 2736000   # in USD/12-inch diameter/mile (cost based on EPA estimation, which assumes a 12-inch diameter and a cost of $228000 per inch for each mile of CO2 pipeline built)
-    marginal_cost: 4   # in USD/tCO2 (average cost based on NETL estimation, which ranges between $2 and $6 to transport one tonne of captured CO2)
-    lifetime: 40   # in years (average lifetime based on NETL estimation, which ranges between 30 and 50 years)
+    capital_cost: 2736000   # in USD/12-inch diameter/mile
+    marginal_cost: 4   # in USD/tCO2
+    lifetime: 40   # in years
     discount_rate: 0.07   # in percentage
 
 # docs :
 dac:
   enable: false   # [false, true]
   granularity: "node"   # ["node", "state", "nation"] (note: "nation" is not applicable for a network based on sectors - it defaults to "node" in this case)
-  capital_cost: 6000000   # in USD/tCO2/h (cost based on Danish Energy Agency estimation to capture one tonne of CO2 per hour)   # TODO: check this and adapt it to the USA context
-  electricity_input: 2.5   # in MWh/tCO2 (average consumption based on https://doi.org/10.1557/s43581-024-00091-5, which ranges between 2 to 3 MWh to capture one tonne of CO2 using electricity only - no heat)
+  capital_cost: 6000000   # in USD/tCO2/h
+  electricity_input: 2.5   # in MWh/tCO2
   lifetime: 20   # in years
   discount_rate: 0.07   # in percentage
 
