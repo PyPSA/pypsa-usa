@@ -888,6 +888,14 @@ def add_co2_storage(n: pypsa.Network, config: dict, co2_storage_csv: str, costs:
     # get node level CO2 (underground) storage potential and cost from CSV file
     co2_storage = pd.read_csv(co2_storage_csv).set_index("node")
 
+    # add carrier to represent CO2
+    n.madd(
+        "Carrier",
+        ["co2"],
+        color=config["plotting"]["tech_colors"]["co2"],
+        nice_name=config["plotting"]["nice_names"]["co2"],
+    )
+
     # add buses to represent node level CO2 captured by different processes
     n.madd(
         "Bus",
@@ -906,14 +914,6 @@ def add_co2_storage(n: pypsa.Network, config: dict, co2_storage_csv: str, costs:
         e_nom_max=co2_storage["potential [MtCO2]"] * 1e6,  # in tCO2
         marginal_cost=co2_storage["cost [USD/tCO2]"],
         carrier="co2",
-    )
-
-    # add carrier to represent CO2
-    n.madd(
-        "Carrier",
-        ["co2"],
-        color=config["plotting"]["tech_colors"]["co2"],
-        nice_name=config["plotting"]["nice_names"]["co2"],
     )
 
     # add carrier to represent CC only (i.e. without S)
