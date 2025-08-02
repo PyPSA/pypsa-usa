@@ -14,7 +14,7 @@ import pandas as pd
 import pypsa
 from _helpers import configure_logging, get_snapshots, load_costs
 from add_electricity import sanitize_carriers
-from add_extra_components import add_co2_network, add_co2_storage, add_dac
+from add_extra_components import add_co2_storage, add_co2_network, add_dac
 from build_electricity_sector import build_electricty
 from build_emission_tracking import build_ch4_tracking, build_co2_tracking
 from build_heat import build_heat
@@ -755,23 +755,23 @@ if __name__ == "__main__":
     sanitize_carriers(n, snakemake.config)
 
     # add node level CO2 (underground) storage
-    if snakemake.config["co2"]["storage"] is True:
+    if snakemake.config["co2"]["storage"]:
         logger.info("Adding node level CO2 (underground) storage")
         add_co2_storage(n, snakemake.config, snakemake.input.co2_storage, costs, True)
 
     # add CO2 (transportation) network
-    if snakemake.config["co2"]["network"]["enable"] is True:
-        if snakemake.config["co2"]["storage"] is True:
+    if snakemake.config["co2"]["network"]["enable"]:
+        if snakemake.config["co2"]["storage"]:
             logger.info("Adding CO2 (transportation) network")
             add_co2_network(n, snakemake.config)
         else:
             logger.warning(
-                "Not adding CO2 (transportation) network given that CO2 (underground) storage is not enabled",
+                "Not adding CO2 (transportation) network given that CO2 (underground) storage is not enabled"
             )
 
     # add node level DAC capabilities
-    if snakemake.config["dac"]["enable"] is True:
-        if snakemake.config["co2"]["storage"] is True:
+    if snakemake.config["dac"]["enable"]:
+        if snakemake.config["co2"]["storage"]:
             logger.info("Adding node level DAC capabilities")
             add_dac(n, snakemake.config, True)
         else:
