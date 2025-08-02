@@ -1200,7 +1200,7 @@ def add_dac(n: pypsa.Network, config: dict, sector: bool):
 
     # add carrier to represent DAC
     n.madd(
-	"Carrier",
+        "Carrier",
         ["dac"],
         color=config["plotting"]["tech_colors"]["dac"],
         nice_name=config["plotting"]["nice_names"]["dac"],
