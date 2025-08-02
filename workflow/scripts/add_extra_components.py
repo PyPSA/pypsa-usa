@@ -1198,6 +1198,14 @@ def add_dac(n: pypsa.Network, config: dict, sector: bool):
         buses_ac = buses_co2_capture.str.replace(" co2 capture", "")
         links_dac = buses_co2_capture.str.replace(" co2 capture", " dac")
 
+    # add carrier to represent DAC
+    n.madd(
+	"Carrier",
+        ["dac"],
+        color=config["plotting"]["tech_colors"]["dac"],
+        nice_name=config["plotting"]["nice_names"]["dac"],
+    )
+
     # calculate annualized capital cost
     number_years = n.snapshot_weightings.generators.sum() / 8760
     cost = (
@@ -1218,7 +1226,7 @@ def add_dac(n: pypsa.Network, config: dict, sector: bool):
         p_nom_extendable=True,
         capital_cost=cost,
         marginal_cost=0,
-        carrier="co2",
+        carrier="dac",
         lifetime=config["dac"]["lifetime"],
     )
 

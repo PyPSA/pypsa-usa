@@ -89,6 +89,7 @@ plotting:
     "12hr_PHS_charger": "#047d6c"  
     "hydrogen_ct": "#ea048a"
     "demand_response": "#8c03fc"
+    "dac": "#4c004c"
 
     # sector studies only 
 
@@ -324,6 +325,7 @@ plotting:
     Load: "Load Shed"
     hydrogen_ct: "Hydrogen Combustion Turbine"
     demand_response: "Demand Response"
+    dac: "Direct Air Capture"
 
     # sector studies only 
 
