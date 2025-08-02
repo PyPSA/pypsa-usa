@@ -918,7 +918,7 @@ def add_co2_storage(n: pypsa.Network, config: dict, co2_storage_csv: str, costs:
 
     # add carrier to represent CC only (i.e. without S)
     carriers = n.carriers.query("Carrier.str.endswith('CCS')")
-    if carriers.empty is False:
+    if not carriers.empty:
         n.madd(
             "Carrier",
             carriers.index.str.replace("CCS", "CC", regex=True),
