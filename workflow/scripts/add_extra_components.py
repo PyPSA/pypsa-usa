@@ -930,7 +930,7 @@ def add_co2_storage(n: pypsa.Network, config: dict, co2_storage_csv: str, costs:
     gas_co2_intensity = costs.loc["gas"]["co2_emissions"]
     coal_co2_intensity = costs.loc["coal"]["co2_emissions"]
 
-    if sector is True:
+    if sector:
         links = n.links.index.str.contains("CCS")
         if True in links:  # found links equipped with CCS
             # specify links' bus4 to point to their respective CO2 capture buses
@@ -1118,7 +1118,7 @@ def add_co2_network(n: pypsa.Network, config: dict):
 def add_dac(n: pypsa.Network, config: dict, sector: bool):
     """Adds node level DAC capabilities."""
     # generate node level buses to represent emitted, captured and accounted CO2 and links to represent DAC in function of whether network is based on sectors or not
-    if sector is True:
+    if sector:
         # get DAC granularity/scope
         granularity = config["dac"]["granularity"]
         if granularity == "nation":
@@ -1328,13 +1328,13 @@ if __name__ == "__main__":
 
     if snakemake.config["scenario"]["sector"] == "E":
         # add node level CO2 (underground) storage
-        if snakemake.config["co2"]["storage"] is True:
+        if snakemake.config["co2"]["storage"]:
             logger.info("Adding node level CO2 (underground) storage")
             add_co2_storage(n, snakemake.config, snakemake.input.co2_storage, costs, False)
 
         # add CO2 (transportation) network
-        if snakemake.config["co2"]["network"]["enable"] is True:
-            if snakemake.config["co2"]["storage"] is True:
+        if snakemake.config["co2"]["network"]["enable"]:
+            if snakemake.config["co2"]["storage"]:
                 logger.info("Adding CO2 (transportation) network")
                 add_co2_network(n, snakemake.config)
             else:
@@ -1343,8 +1343,8 @@ if __name__ == "__main__":
                 )
 
         # add node level DAC capabilities
-        if snakemake.config["dac"]["enable"] is True:
-            if snakemake.config["co2"]["storage"] is True:
+        if snakemake.config["dac"]["enable"]:
+            if snakemake.config["co2"]["storage"]:
                 logger.info("Adding node level DAC capabilities")
                 add_dac(n, snakemake.config, False)
             else:
