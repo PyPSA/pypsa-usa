@@ -34,8 +34,8 @@ from _helpers import (
     configure_logging,
     update_config_from_wildcards,
 )
-from opts.land import add_land_use_constraints
 from opts.bidirectional_link import add_bidirectional_link_constraints
+from opts.land import add_land_use_constraints
 from opts.policy import (
     add_regional_co2limit,
     add_RPS_constraints,
