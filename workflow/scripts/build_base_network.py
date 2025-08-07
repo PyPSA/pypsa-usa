@@ -578,10 +578,6 @@ def main(snakemake):
     assign_reeds_memberships(n, snakemake.input.reeds_memberships)
     n.buses["rec_trading_zone"] = n.buses.reeds_state.map(REC_TRADING_ZONE_MAPPER).fillna(n.buses.reeds_state)
 
-    p_max_pu = 1
-    n.links["p_max_pu"] = p_max_pu
-    n.links["p_min_pu"] = -p_max_pu
-
     # Filter Network to Only Specified Regions
     if model_topology is not None:
         for region_type in model_topology:
