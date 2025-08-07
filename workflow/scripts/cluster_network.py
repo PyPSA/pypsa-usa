@@ -403,7 +403,9 @@ def add_itls(buses, itls, itl_cost, expansion=True):
         p_max_pu=1.0,
         p_min_pu=0.0,
         length=0 if itl_cost is None else itls.length_miles.values * 1.6093,  # mile to km
-        capital_cost=0 if itl_cost is None else itls.USD2023perMWyr.values / 2, # divide by 2 to avoid accounting for the capital cost repeatedly
+        capital_cost=0
+        if itl_cost is None
+        else itls.USD2023perMWyr.values / 2,  # divide by 2 to avoid accounting for the capital cost repeatedly
         p_nom_extendable=False,
         efficiency=1 if itl_cost is None else itls.efficiency.values,
         carrier="AC",
@@ -420,7 +422,9 @@ def add_itls(buses, itls, itl_cost, expansion=True):
         p_max_pu=1.0,
         p_min_pu=0.0,
         length=0 if itl_cost is None else itls.length_miles.values * 1.6093,  # mile to km
-        capital_cost=0 if itl_cost is None else itls.USD2023perMWyr.values / 2, # divide by 2 to avoid accounting for the capital cost repeatedly
+        capital_cost=0
+        if itl_cost is None
+        else itls.USD2023perMWyr.values / 2,  # divide by 2 to avoid accounting for the capital cost repeatedly
         p_nom_extendable=False,
         efficiency=1 if itl_cost is None else itls.efficiency.values,
         carrier="AC",
