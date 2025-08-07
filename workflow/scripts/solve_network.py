@@ -34,6 +34,7 @@ from _helpers import (
     configure_logging,
     update_config_from_wildcards,
 )
+from opts.bidirectional_link import add_bidirectional_link_constraints
 from opts.land import add_land_use_constraints
 from opts.policy import (
     add_regional_co2limit,
@@ -162,6 +163,9 @@ def extra_functionality(n, snapshots):
 
     # Always apply land use constraints
     add_land_use_constraints(n)
+
+    # Always apply bidirectional link constraints
+    add_bidirectional_link_constraints(n)
 
     # Apply operational reserve if configured
     reserve = config["electricity"].get("operational_reserve", {})

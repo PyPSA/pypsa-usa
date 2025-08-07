@@ -106,10 +106,7 @@ def set_transmission_limit(n, ll_type, factor):
     logger.info(f"Setting transmission limit for {ll_type} to {factor}")
 
     dc_links = n.links.carrier == "DC" if not n.links.empty else pd.Series()
-    ac_links_exp = n.links.carrier == "AC_exp" if not n.links.empty else pd.Series()
     ac_links_existing = n.links.carrier == "AC" if not n.links.empty else pd.Series()
-
-    n.links.loc[ac_links_exp, "carrier"] = "AC"  # rename AC_exp carrier to AC
 
     lines_s_nom = n.lines.s_nom
     col = "capital_cost" if ll_type == "c" else "length"
@@ -129,8 +126,8 @@ def set_transmission_limit(n, ll_type, factor):
         n.links.loc[dc_links, "p_nom_min"] = n.links.loc[dc_links, "p_nom"]
         n.links.loc[dc_links, "p_nom_extendable"] = True
 
-        n.links.loc[ac_links_exp, "p_nom_min"] = n.links.loc[ac_links_exp, "p_nom"]
-        n.links.loc[ac_links_exp, "p_nom_extendable"] = True
+        n.links.loc[ac_links_existing, "p_nom_min"] = n.links.loc[ac_links_existing, "p_nom"]
+        n.links.loc[ac_links_existing, "p_nom_extendable"] = True
     if factor != "opt":
         con_type = "expansion_cost" if ll_type == "c" else "volume_expansion"
         if transport_model:

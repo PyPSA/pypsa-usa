@@ -35,6 +35,7 @@ rule build_base_network:
     params:
         build_offshore_network=config_provider("offshore_network"),
         model_topology=config_provider("model_topology", "include"),
+        length_factor=config["lines"]["length_factor"],
     input:
         buses=DATA + "breakthrough_network/base_grid/bus.csv",
         lines=DATA + "breakthrough_network/base_grid/branch.csv",
