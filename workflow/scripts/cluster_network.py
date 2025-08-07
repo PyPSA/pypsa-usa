@@ -389,9 +389,9 @@ def add_itls(buses, itls, itl_cost, expansion=True):
         itls["length_miles"] = 0
         itls["USD2023perMWyr"] = 0
 
-    itls["p_min_pu_Rev"] = (-1 * (itls.mw_r0 / itls.mw_f0)).fillna(0)
     itls["efficiency"] = 1 - ((itls.length_miles / 100) * 0.01)
 
+    # The fwd and rev links will be made extendable in prepare_network, so no need to add AC_exp
     clustering.network.madd(
         "Link",
         names=itls.interface,  # itl name
@@ -403,7 +403,7 @@ def add_itls(buses, itls, itl_cost, expansion=True):
         p_max_pu=1.0,
         p_min_pu=0.0,
         length=0 if itl_cost is None else itls.length_miles.values * 1.6093,  # mile to km
-        capital_cost=0 if itl_cost is None else itls.USD2023perMWyr.values,
+        capital_cost=0 if itl_cost is None else itls.USD2023perMWyr.values / 2, # divide by 2 to avoid accounting for the capital cost repeatedly
         p_nom_extendable=False,
         efficiency=1 if itl_cost is None else itls.efficiency.values,
         carrier="AC",
@@ -420,48 +420,10 @@ def add_itls(buses, itls, itl_cost, expansion=True):
         p_max_pu=1.0,
         p_min_pu=0.0,
         length=0 if itl_cost is None else itls.length_miles.values * 1.6093,  # mile to km
-        capital_cost=0 if itl_cost is None else itls.USD2023perMWyr.values,
+        capital_cost=0 if itl_cost is None else itls.USD2023perMWyr.values / 2, # divide by 2 to avoid accounting for the capital cost repeatedly
         p_nom_extendable=False,
         efficiency=1 if itl_cost is None else itls.efficiency.values,
         carrier="AC",
-    )
-
-    if not expansion:
-        return
-
-    # for tracking expansion of Zonal Links
-    clustering.network.madd(
-        "Link",
-        names=itls.interface,  # itl name
-        suffix="exp_fwd",
-        bus0=buses.loc[itls.r].index,
-        bus1=buses.loc[itls.rr].index,
-        p_nom=0,
-        p_nom_min=0,
-        p_max_pu=1,
-        p_min_pu=0,
-        length=0 if itl_cost is None else itls.length_miles.values * 1.6093,  # mile to km
-        capital_cost=0 if itl_cost is None else itls.USD2023perMWyr.values,
-        p_nom_extendable=False,
-        efficiency=1 if itl_cost is None else itls.efficiency.values,
-        carrier="AC_exp",
-    )
-
-    clustering.network.madd(
-        "Link",
-        names=itls.interface,  # itl name
-        suffix="exp_rev",
-        bus0=buses.loc[itls.rr].index,
-        bus1=buses.loc[itls.r].index,
-        p_nom=0,
-        p_nom_min=0,
-        p_max_pu=1,
-        p_min_pu=0,
-        length=0 if itl_cost is None else itls.length_miles.values * 1.6093,  # mile to km
-        capital_cost=0 if itl_cost is None else itls.USD2023perMWyr.values,
-        p_nom_extendable=False,
-        efficiency=1 if itl_cost is None else itls.efficiency.values,
-        carrier="AC_exp",
     )
 
 
