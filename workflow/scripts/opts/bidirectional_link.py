@@ -50,8 +50,8 @@ def add_bidirectional_link_constraints(n):
         if incomplete_pairs:
             logger.info(f"Found {len(incomplete_pairs)} incomplete pairs:")
             for base_name, pair in incomplete_pairs.items():
-                direction = list(pair.keys())[0]
-                link_name = list(pair.values())[0]
+                direction = next(iter(pair.keys()))
+                link_name = next(iter(pair.values()))
                 logger.info(f"  {base_name}: only {direction} link ({link_name})")
         return
 
