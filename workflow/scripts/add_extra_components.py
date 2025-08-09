@@ -8,6 +8,7 @@ import pandas as pd
 import pypsa
 from _helpers import calculate_annuity, configure_logging
 from add_electricity import add_missing_carriers
+from eia import FuelCosts
 from opts._helpers import get_region_buses
 from pypsa.descriptors import get_switchable_as_dense as get_as_dense
 
@@ -882,6 +883,187 @@ def trim_network(n, trim_topology):
     n.determine_network_topology()
 
 
+def load_fuel_costs(eia_api: str, year: int) -> pd.DataFrame:
+    """Loads fuel costs from EIA."""
+    return FuelCosts(fuel="electricity", year=year, api=eia_api).get_data()
+
+
+def format_fuel_costs(n: pypsa.Network, fuel_costs: pd.DataFrame) -> pd.DataFrame:
+    """Formats fuel costs for BA mappings."""
+    df = fuel_costs.copy()
+    data = []
+
+    buses = n.buses.copy()
+
+    region_mapping = buses.set_index("country")["reeds_state"].to_dict()
+    for region, state in region_mapping.items():
+        for period in df.index.unique():
+            temp = df[(df.index == period) & (df.state == state)]
+            value = temp.value.mean()
+            data.append([period, region, value, "usd/mwh"])
+    return pd.DataFrame(data, columns=["period", "zone", "value", "units"]).set_index("period")
+
+
+def format_flowgates(n: pypsa.Network, flowgates: pd.DataFrame) -> pd.DataFrame:
+    """Formats flowgates for zone mappings."""
+    zones_in_model = n.buses.reeds_zone.unique()
+    df = flowgates.copy()
+
+    # only keep flowgates that connect inside to outside model scope
+    df = df[df.r.isin(zones_in_model) ^ df.rr.isin(zones_in_model)]
+
+    # reformat to sinlge value column for easier addition to network
+    data = []
+    for _, row in df.iterrows():
+        if row.MW_f0 > 0:
+            data.append([row.r, row.rr, row.MW_f0])
+        if row.MW_r0 > 0:
+            data.append([row.rr, row.r, row.MW_r0])
+
+    return pd.DataFrame(data, columns=["r", "rr", "value"])
+
+
+def add_elec_imports_exports(
+    n: pypsa.Network,
+    flowgates: pd.DataFrame,
+    fuel_costs: pd.DataFrame | None = None,
+    co2_emissions: float = 0,
+):
+    """Add electricity imports and exports to the network.
+
+    These are capacity constrianed links to/from states outside the model spatial scope.
+    """
+
+    def _get_regions_2_add(n: pypsa.Network, flowgates: pd.DataFrame) -> list[str]:
+        """Gets regions to add import and export buses to."""
+        unique_regions = set(flowgates.r.unique()) | set(flowgates.rr.unique())
+        return [x for x in unique_regions if x not in n.buses.reeds_zone.unique()]
+
+    def _add_import_export_carriers(n: pypsa.Network, co2_emissions: float = 0) -> None:
+        """Adds import and export carriers to the network."""
+        n.add("Carrier", "imports", co2_emissions=co2_emissions, nice_name="Imports")
+        n.add("Carrier", "exports", co2_emissions=0, nice_name="Exports")
+
+    def _add_import_export_buses(n: pypsa.Network, regions_2_add: list[str]) -> None:
+        """Adds import and export buses to the network."""
+        n.madd(
+            "Bus",
+            regions_2_add,
+            suffix="_imports",
+            carrier="imports",
+            country=regions_2_add,
+        )
+        n.madd(
+            "Bus",
+            regions_2_add,
+            suffix="_exports",
+            carrier="exports",
+            country=regions_2_add,
+        )
+
+    def _add_import_export_stores(n: pypsa.Network, regions_2_add: list[str]) -> None:
+        """Adds import and export stores to the network."""
+        n.madd(
+            "Store",
+            regions_2_add,
+            bus=[f"{x}_imports" for x in regions_2_add],
+            suffix="_imports",
+            carrier="imports",
+            e_nom_extendable=True,
+            marginal_cost=0,
+            e_nom=0,
+            e_nom_max=np.inf,
+            e_min=0,
+            e_min_pu=-1,
+            e_max_pu=0,
+        )
+        n.madd(
+            "Store",
+            regions_2_add,
+            bus=[f"{x}_exports" for x in regions_2_add],
+            suffix="_exports",
+            carrier="exports",
+            e_nom_extendable=True,
+            marginal_cost=0,
+            e_nom=0,
+            e_nom_max=np.inf,
+            e_min=0,
+            e_min_pu=0,
+            e_max_pu=1,
+        )
+
+    def _build_cost_timeseries(n: pypsa.Network, costs: pd.DataFrame, zone: str) -> pd.Series:
+        """Builds a cost timeseries for a given state."""
+        timesteps = n.snapshots.get_level_values("timestep")
+        years = n.investment_periods
+        cost_by_zone = costs[costs.zone == zone].drop(columns=["zone", "units"])
+        dfs = []
+        for year in years:
+            df = cost_by_zone.copy()
+            df.index = pd.to_datetime(df.index).map(lambda x: x.replace(year=year))
+            df = df.resample("h").ffill().reindex(timesteps).ffill()
+            df["year"] = year
+            df = df.set_index(["year", df.index])  # df.index is timestep
+            dfs.append(df)
+        df = pd.concat(dfs)
+        return df.reindex(n.snapshots)
+
+    def _add_import_export_links(
+        n: pypsa.Network,
+        flowgates: pd.DataFrame,
+        fuel_costs: pd.DataFrame | None = None,
+    ) -> None:
+        """Adds import and export links to the network."""
+        costs = {}
+        zones_in_model = n.buses.reeds_zone.unique()
+
+        if not isinstance(fuel_costs, pd.DataFrame):
+            fuel_costs = pd.DataFrame(index=n.snapshots.index, columns=n.buses.reeds_zone.unique())
+
+        for _, row in flowgates.iterrows():
+            zone_inside = row.r if row.r in zones_in_model else row.rr
+            zone_outside = row.r if row.r not in zones_in_model else row.rr
+            if zone_outside not in costs and not fuel_costs.empty:  # extremely crude cashing :|
+                costs[zone_inside] = _build_cost_timeseries(n, fuel_costs, zone_inside)
+            marginal_cost = costs[zone_inside]
+
+            capacity = row.value
+
+            if row.r == zone_inside:  # export link (ie. from inside to outside)
+                name = f"{zone_inside}_{zone_outside}_imports"
+                bus0 = f"{zone_outside}_imports"
+                bus1 = zone_inside
+                carrier = "imports"
+            else:
+                name = f"{zone_inside}_{zone_outside}_exports"
+                bus0 = zone_inside
+                bus1 = f"{zone_outside}_exports"
+                carrier = "exports"
+                if isinstance(marginal_cost, pd.Series):
+                    marginal_cost = marginal_cost.mul(-1)  # constraint will limit exports
+
+            mc = marginal_cost.value if isinstance(marginal_cost, pd.Series) else 0
+
+            n.add(
+                "Link",
+                name,
+                bus0=bus0,
+                bus1=bus1,
+                carrier=carrier,
+                p_nom_extendable=False,
+                p_min_pu=0,
+                p_max_pu=1,
+                marginal_cost=mc,
+                p_nom=capacity,
+            )
+
+    regions_2_add = _get_regions_2_add(n, flowgates)
+    _add_import_export_carriers(n, co2_emissions)
+    _add_import_export_buses(n, regions_2_add)
+    _add_import_export_stores(n, regions_2_add)
+    _add_import_export_links(n, flowgates, fuel_costs)
+
+
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
@@ -889,7 +1071,7 @@ if __name__ == "__main__":
         snakemake = mock_snakemake(
             "add_extra_components",
             interconnect="western",
-            simpl="70",
+            simpl="12",
             clusters="4m",
         )
     configure_logging(snakemake)
@@ -974,8 +1156,31 @@ if __name__ == "__main__":
     if dr_config:
         add_demand_response(n, dr_config)
 
+    assert not (snakemake.params.trim_network and snakemake.params.imports_exports["enable"]), (
+        "trim_network and imports_exports cannot be used together"
+    )
+
     if snakemake.params.trim_network:
         trim_network(n, snakemake.params.trim_network)
+
+    if snakemake.params.imports_exports["enable"]:
+        co2_emissions = snakemake.params.imports_exports["import_co2_emissions"]
+        pudl_path = snakemake.params.pudl_path
+        weather_year = snakemake.params.weather_year
+        if isinstance(weather_year, list):
+            year = weather_year[0]
+
+        # flowgates to limit the capacity of the imports and exports
+        flowgates = pd.read_csv(snakemake.input.flowgates)
+        flowgates = format_flowgates(n, flowgates)
+
+        if snakemake.params.imports_exports["import_export_costs"]:
+            fuel_costs = load_fuel_costs(snakemake.params.eia_api, year)
+            fuel_costs = format_fuel_costs(n, fuel_costs)
+        else:
+            fuel_costs = None
+
+        add_elec_imports_exports(n, flowgates, fuel_costs, co2_emissions)
 
     n.consistency_check()
     n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))
