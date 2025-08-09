@@ -937,8 +937,8 @@ def add_co2_storage(n: pypsa.Network, config: dict, co2_storage_csv: str, costs:
             n.links.loc[links, "bus4"] = co2_storage.index + " co2 capture"
 
             # calculate efficiencies
-            efficiency2 = []
-            efficiency4 = []
+            efficiency2 = []   # to node or state atmosphere bus (e.g. "p9 pwr atmosphere", "CA pwr atmosphere")
+            efficiency4 = []   # to node co2 capture bus (e.g. "p9 co2 capture")
             for index in n.links.loc[links].index:
                 link_efficiency = n.links.loc[index]["efficiency"]
                 if "CCGT" in index:
@@ -1041,8 +1041,8 @@ def add_co2_storage(n: pypsa.Network, config: dict, co2_storage_csv: str, costs:
             )
 
             # calculate efficiencies
-            efficiency2 = []
-            efficiency3 = []
+            efficiency2 = []   # to node or state atmosphere bus (e.g. "p9 atmosphere", "CA atmosphere")
+            efficiency3 = []   # to node co2 capture bus (e.g. "p9 co2 capture")
             for index in indexes:
                 generator_efficiency = n.generators.loc[index]["efficiency"]
                 if "CCGT" in index:
