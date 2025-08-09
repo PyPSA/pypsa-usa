@@ -106,7 +106,7 @@ co2:
     capital_cost: 2736000   # in USD/12-inch diameter/mile
     marginal_cost: 4   # in USD/tCO2
     lifetime: 40   # in years
-    discount_rate: 0.07   # in percentage
+    discount_rate: 0.07
 
 # docs :
 dac:
@@ -115,7 +115,7 @@ dac:
   capital_cost: 6000000   # in USD/tCO2/h
   electricity_input: 2.5   # in MWh/tCO2
   lifetime: 20   # in years
-  discount_rate: 0.07   # in percentage
+  discount_rate: 0.07
 
 # docs :
 costs:
