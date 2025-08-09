@@ -1,0 +1,7 @@
+,Unit,Values,Description
+enable,bool,true or false,"Specifies whether the model may use Direct Air Capture (DAC) to capture emitted CO2 or not. In case DAC is specified, it is built based on the costs, discount rate, as well as the lifetime stipulated in this section."
+granularity,str,"'node', 'state' or 'nation'","Specifies the granularity (scope) of DAC. The default value is ``node``."
+capital_cost,int,$/tCO2/h,"Capital cost of DAC to capture one tonne of CO2 per hour. The default value is ``6000000``, which is based on the Danish Energy Agency (DEA) estimation."
+electricity_input,float,MWh/tCO2,"Amount of electricity needed for DAC to capture one tonne of emitted CO2. The default value is ``2.5``, which is the average energy in MWh needed to capture one tonne of CO2 using electricity only (no heat) based on https://doi.org/10.1557/s43581-024-00091-5 estimation."
+lifetime,int,year,"Lifetime of DAC. The default value is ``20``."
+discount_rate,float,%,"Discount rate of the capital cost of DAC. The default value is ``0.07``."

@@ -92,12 +92,30 @@ lines:
   max_extension: 20000 #MW
   length_factor: 1.25
 
-
 # docs :
 links:
   p_max_pu: 1.0
   p_nom_max: .inf
   max_extension: 20000 #MW
+
+# docs :
+co2:
+  storage: false   # [false, true]
+  network:
+    enable: false   # [false, true]
+    capital_cost: 2736000   # in USD/12-inch diameter/mile
+    marginal_cost: 4   # in USD/tCO2
+    lifetime: 40   # in years
+    discount_rate: 0.07
+
+# docs :
+dac:
+  enable: false   # [false, true]
+  granularity: "node"   # ["node", "state", "nation"] (note: "nation" is not applicable for a network based on sectors - it defaults to "node" in this case)
+  capital_cost: 6000000   # in USD/tCO2/h
+  electricity_input: 2.5   # in MWh/tCO2
+  lifetime: 20   # in years
+  discount_rate: 0.07
 
 # docs :
 costs:
