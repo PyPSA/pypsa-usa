@@ -739,17 +739,23 @@ rule add_extra_components:
         ),
         regions_onshore=RESOURCES
         + "{interconnect}/Geospatial/regions_onshore_s{simpl}_{clusters}.geojson",
+        flowgates="repo_data/ReEDS_Constraints/transmission/transmission_capacity_init_AC_ba_NARIS2024.csv",
     params:
         retirement=config["electricity"].get("retirement", "technical"),
         demand_response=config["electricity"].get("demand_response", {}),
         trim_network=config_provider("model_topology", "trim", default=False),
+        imports=config_provider("electricity", "imports", default=False),
+        exports=config_provider("electricity", "imports", default=False),
+        pudl_path=config_provider("pudl_path"),
+        weather_year=config_provider("renewable_weather_years"),
+        eia_api=config_provider("api", "eia"),
     output:
         RESOURCES + "{interconnect}/elec_s{simpl}_c{clusters}_ec.nc",
     log:
         "logs/add_extra_components/{interconnect}/elec_s{simpl}_c{clusters}_ec.log",
     threads: 1
-    resources:
-        mem_mb=lambda wildcards, input, attempt: (input.size // 100000) * attempt * 2,
+    # resources:
+    #     mem_mb=lambda wildcards, input, attempt: (input.size // 100000) * attempt * 2,
     group:
         "prepare"
     script:
