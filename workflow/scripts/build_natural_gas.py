@@ -830,6 +830,23 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
 
         return costs.resample("1h").asfreq().interpolate(method=interpoloation_method)
 
+    def _get_domestic_costs(self, interpolation_method: str = "zero") -> pd.DataFrame:
+        """
+        Gets timeseries of domestic costs in $/MWh.
+
+        interpolation_method can be one of:
+        - linear, zero
+        """
+        # fuel costs/profits at a national level
+        costs = eia.FuelCosts("gas", self.year, self.api, industry="citygate").get_data()
+        costs = costs[costs.state == "U.S."].copy()
+
+        # fuel costs come in MCF, so first convert to MMCF
+        costs = costs[["value"]].astype("float")
+        costs = costs / 1000 * MWH_2_MMCF
+
+        return costs.resample("1h").asfreq().interpolate(method=interpolation_method)
+
     def _expand_costs(self, n: pypsa.Network, costs: pd.DataFrame) -> pd.DataFrame:
         """Expands import/export costs over snapshots and investment periods."""
         expanded_costs = []
@@ -914,7 +931,7 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
 
         return pd.concat([df, zero_df])
 
-    def _get_marginal_costs(
+    def _get_marginal_costs_international(
         self,
         n: pypsa.Network,
         connections: pd.DataFrame,
@@ -931,6 +948,30 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
         else:
             # multiple by -1 cause exporting makes money
             costs = self._get_international_costs("exports").mul(-1)
+            df = df[df.STATE_FROM.isin(states_in_model)]
+
+        for link in df.index:
+            costs[link] = costs["value"]
+
+        return costs.drop(columns=["value"])
+
+    def _get_marginal_costs_domestic(
+        self,
+        n: pypsa.Network,
+        connections: pd.DataFrame,
+        imports: bool,
+    ) -> pd.DataFrame:
+        """Gets time varrying import/export costs."""
+        df = connections.copy()
+
+        states_in_model = self.get_states_in_model(n)
+
+        if imports:
+            costs = self._get_domestic_costs()
+            df = df[df.STATE_TO.isin(states_in_model)]
+        else:
+            # multiple by -1 cause exporting makes money
+            costs = self._get_domestic_costs().mul(-1)
             df = df[df.STATE_FROM.isin(states_in_model)]
 
         for link in df.index:
@@ -1034,17 +1075,21 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
             template = template[
                 ~(template.STATE_TO.isin(n.buses.reeds_state) & template.STATE_FROM.isin(n.buses.reeds_state))
             ]
+            template = template.dropna(subset=["INTERCONNECT_TO", "INTERCONNECT_FROM"])  # states like hawaii and alaska
 
         store_imports = template[template.store == "import"].copy()
         store_exports = template[template.store == "export"].copy()
 
-        if not self.domestic:
-            import_costs = self._get_marginal_costs(n, template, True)
-            export_costs = self._get_marginal_costs(n, template, False)
-            marginal_cost = pd.concat([import_costs, export_costs], axis=1)
-            marginal_cost = self._expand_costs(n, marginal_cost)
+        # remove any conections within geographic scope
+        if self.domestic:
+            import_costs = self._get_marginal_costs_domestic(n, template, True)
+            export_costs = self._get_marginal_costs_domestic(n, template, False)
         else:
-            marginal_cost = 0
+            import_costs = self._get_marginal_costs_international(n, template, True)
+            export_costs = self._get_marginal_costs_international(n, template, False)
+
+        marginal_cost = pd.concat([import_costs, export_costs], axis=1)
+        marginal_cost = self._expand_costs(n, marginal_cost)
 
         if "gas trade" not in n.carriers.index:
             n.add("Carrier", "gas trade", color="#d35050", nice_name="Gas Trade")

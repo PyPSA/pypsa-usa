@@ -598,6 +598,7 @@ class _GasCosts(DataExtractor):
         "industrial": "PIN",
         "imports": "PRP",
         "exports": "PNP",
+        "citygate": "PG1",
     }
 
     def __init__(self, industry: str, year: int, api_key: str) -> None:
