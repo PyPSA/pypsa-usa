@@ -932,7 +932,7 @@ def add_co2_storage(n: pypsa.Network, config: dict, co2_storage_csv: str, costs:
 
     if sector:
         links = n.links.index.str.contains("CCS")
-        if True in links:  # found links equipped with CCS
+        if links.any():  # found links equipped with CCS
             # specify links' bus4 to point to their respective CO2 capture buses
             n.links.loc[links, "bus4"] = co2_storage.index + " co2 capture"
 
@@ -971,7 +971,7 @@ def add_co2_storage(n: pypsa.Network, config: dict, co2_storage_csv: str, costs:
 
     else:  # sector-less
         generators = n.generators.index.str.contains("CCS")
-        if True in generators:  # found generators equipped with CCS
+        if generators.any():  # found generators equipped with CCS
             # remove storage cost from generators' capital cost (given that they do not require technology to store CO2 anymore as this is done underground)
             n.generators.loc[generators, "capital_cost"] *= (
                 0.95  # TODO: replace with a concrete storage cost (reducing 5% capital cost for the time being)
