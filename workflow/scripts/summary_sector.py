@@ -3,8 +3,6 @@
 import logging
 
 # Optional used as 'arg: callable | None = None' gives TypeError with py3.11
-from typing import Optional
-
 import pandas as pd
 import pypsa
 from eia import ElectricPowerData, Emissions, Seds, TransportationDemand
@@ -252,7 +250,7 @@ def _get_total_pwr_capacity_per_node(
     cols = ["p_nom_opt", "node"]
     df = pd.concat([links[cols], gens[cols]])
 
-    return df.reset_index(drop=True).groupby(["node"]).sum().squeeze()
+    return df.reset_index(drop=True).groupby(["node"]).sum()
 
 
 def _get_brownfield_pwr_capacity_per_node(
@@ -334,17 +332,22 @@ def get_capacity_per_node(
             n,
             sector=sector,
             state=state,
-        ).squeeze()
+        )
         opt = _get_opt_pwr_capacity_per_node(n, sector=sector, state=state).to_frame()
         brwn = _get_brownfield_pwr_capacity_per_node(n, sector=sector, state=state)
     elif sector == "trn":
-        total = _get_total_capacity_per_node(n, sector=sector, state=state).squeeze()
+        total = _get_total_capacity_per_node(n, sector=sector, state=state)
         opt = _get_opt_capacity_per_node(n, sector=sector, state=state).to_frame()
         brwn = _get_brownfield_capacity_per_node(n, sector=sector, state=state)
     else:
-        total = _get_total_capacity_per_node(n, sector=sector, state=state).squeeze()
+        total = _get_total_capacity_per_node(n, sector=sector, state=state)
         opt = _get_opt_capacity_per_node(n, sector=sector, state=state).to_frame()
         brwn = _get_brownfield_capacity_per_node(n, sector=sector, state=state)
+
+    if len(total) > 1:
+        total = total.squeeze()
+    else:
+        total = total.squeeze(axis=1)
 
     df = brwn.join(opt, how="outer").fillna(0)
 
@@ -359,7 +362,7 @@ def get_sector_production_timeseries(
     remove_sns_weights: bool = False,
     state: str | None = None,
     resample: str | None = None,
-    resample_fn: Optional[callable] = None,  # noqa: UP007
+    resample_fn: callable | None = None,
 ) -> pd.DataFrame:
     """
     Gets timeseries production to meet sectoral demand.
@@ -391,7 +394,7 @@ def get_power_production_timeseries(
     remove_sns_weights: bool = False,
     state: str | None = None,
     resample: str | None = None,
-    resample_fn: Optional[callable] = None,  # noqa: UP007
+    resample_fn: callable | None = None,
 ) -> pd.DataFrame:
     """
     Gets power timeseries production to meet sectoral demand.
@@ -431,7 +434,7 @@ def get_sector_production_timeseries_by_carrier(
     remove_sns_weights: bool = False,
     state: str | None = None,
     resample: str | None = None,
-    resample_fn: Optional[callable] = None,  # noqa: UP007
+    resample_fn: callable | None = None,
 ) -> pd.DataFrame:
     """Gets timeseries production by carrier."""
     if sector == "pwr":
@@ -695,7 +698,7 @@ def get_storage_level_timeseries_carrier(
     remove_sns_weights: bool = True,
     state: str | None = None,
     resample: str | None = None,
-    resample_fn: Optional[callable] = None,  # noqa: UP007
+    resample_fn: callable | None = None,
     make_positive: bool | None = False,
     **kwargs,
 ) -> pd.DataFrame:
