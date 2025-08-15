@@ -338,7 +338,7 @@ rule build_electrical_demand:
         BENCHMARKS + "{interconnect}/{end_use}_build_demand"
     threads: 2
     resources:
-        mem_mb=lambda wildcards, input, attempt: (input.size // 4000) * attempt * 2,
+        mem_mb=lambda wildcards, input, attempt: (input.size // 100000) * attempt * 2,
         walltime=config_provider(
             "walltime", "build_electrical_demand", default="00:50:00"
         ),

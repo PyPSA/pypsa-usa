@@ -394,6 +394,7 @@ def plot_load_shedding_map(
     bus_scale = get_bus_scale(interconnect) if interconnect else 1
     line_scale = get_line_scale(interconnect) if interconnect else 1
     link_values = n.links[n.links.carrier == "AC"].p_nom.replace(to_replace={pd.NA: 0})
+    n.carriers.loc["AC_exp", "color"] = "#267d39"  # set color for AC_exp carrier
 
     fig, _ = plot_capacity_map(
         n=n,
@@ -430,7 +431,7 @@ def plot_line_loading_map(
 
     link_values = n.links[n.links.carrier == "AC"].p_nom.replace(to_replace={pd.NA: 0})
 
-    n.carriers.loc["AC_exp", "color"] = "#dd2e23"
+    n.carriers.loc["AC_exp", "color"] = "#d02317"
     fig, _ = plot_capacity_map(
         n=n,
         bus_values=gen / 5e3,
@@ -787,7 +788,9 @@ def plot_state_generation_capacities(
         columns="carrier",
         values="capacity",
     )
-    generation_pivot = generation_pivot.drop(columns=["load"])
+    # generation_pivot = generation_pivot.drop(columns=["load"])
+    if "load" in generation_pivot.columns:
+            generation_pivot = generation_pivot.drop(columns=["load"])
 
     # Create Stacked Bar Plot for each State's Generation Mix
     colors = n.carriers.color.to_dict()
@@ -942,12 +945,12 @@ def main(snakemake):
         **snakemake.wildcards,
     )
 
-    plot_line_loading_map(
-        n,
-        snakemake.output["val_map_line_loading.pdf"],
-        onshore_regions,
-        **snakemake.wildcards,
-    )
+    # plot_line_loading_map(
+    #     n,
+    #     snakemake.output["val_map_line_loading.pdf"],
+    #     onshore_regions,
+    #     **snakemake.wildcards,
+    # )
 
     plot_state_generation_capacities(
         n,

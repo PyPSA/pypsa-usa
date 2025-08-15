@@ -321,7 +321,7 @@ if __name__ == "__main__":
         {
             "pypsa-name": "HVAC overhead",
             "parameter": "capex_per_mw_km",
-            "value": 2481.43,
+            "value": 1541,
         },
         {
             "pypsa-name": "HVAC overhead",
