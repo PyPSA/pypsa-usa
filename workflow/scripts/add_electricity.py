@@ -270,13 +270,12 @@ def match_nearest_bus(plants_subset, buses_subset):
 
     return plants_subset
 
-
 def match_plant_to_bus(n, plants):
     """
     Matches each plant to it's corresponding bus in the network enfocing a
     match to the correct State.
 
-    # Efficient matching taken from #
+    Efficient matching taken from:
     https://stackoverflow.com/questions/58893719/find-nearest-point-in-other-dataframe-with-a-lot-of-data
     """
     plants_matched = plants.copy()
@@ -287,15 +286,15 @@ def match_plant_to_bus(n, plants):
     buses = n.buses.copy()
     buses["geometry"] = gpd.points_from_xy(buses["x"], buses["y"])
 
-    # First pass: Assign each plant to the nearest bus in the same state
-    for state in buses["state"].unique():
-        buses_in_state = buses[buses["state"] == state]
-        plants_in_state = plants_matched[
-            (plants_matched["state"] == state) & (plants_matched["bus_assignment"].isnull())
+    # First pass: Assign each plant to the nearest bus in the same reeds zone
+    for zone_id in buses["reeds_zone"].unique():
+        buses_in_zone = buses[buses["reeds_zone"] == zone_id]
+        plants_in_zone = plants_matched[
+            (plants_matched["country"] == zone_id) & (plants_matched["bus_assignment"].isnull())
         ]
 
         # Update plants_matched with the nearest bus within the same state
-        plants_matched.update(match_nearest_bus(plants_in_state, buses_in_state))
+        plants_matched.update(match_nearest_bus(plants_in_zone, buses_in_zone))
 
     # Second pass: Assign any remaining unmatched plants to the nearest bus regardless of state
     unmatched_plants = plants_matched[plants_matched["bus_assignment"].isnull()]

@@ -395,7 +395,7 @@ def plot_load_shedding_map(
     line_scale = get_line_scale(interconnect) if interconnect else 1
     link_values = n.links[n.links.carrier == "AC"].p_nom.replace(to_replace={pd.NA: 0})
     n.carriers.loc["AC_exp", "color"] = "#267d39"  # set color for AC_exp carrier
-    breakpoint()
+
     fig, _ = plot_capacity_map(
         n=n,
         bus_values=bus_values,
