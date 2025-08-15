@@ -790,7 +790,7 @@ def plot_state_generation_capacities(
     )
     # generation_pivot = generation_pivot.drop(columns=["load"])
     if "load" in generation_pivot.columns:
-            generation_pivot = generation_pivot.drop(columns=["load"])
+        generation_pivot = generation_pivot.drop(columns=["load"])
 
     # Create Stacked Bar Plot for each State's Generation Mix
     colors = n.carriers.color.to_dict()
