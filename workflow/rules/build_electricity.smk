@@ -549,7 +549,7 @@ rule build_fuel_prices:
     retries: 3
     resources:
         mem_mb=30000,
-        walltime=config_provider("walltime", "add_demand", default="00:20:00"),
+        walltime=config_provider("walltime", "build_fuel_prices", default="00:20:00"),
     script:
         "../scripts/build_fuel_prices.py"
 

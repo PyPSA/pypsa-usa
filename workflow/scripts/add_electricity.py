@@ -294,10 +294,10 @@ def match_plant_to_bus(n, plants):
             (plants_matched["country"] == zone_id) & (plants_matched["bus_assignment"].isnull())
         ]
 
-        # Update plants_matched with the nearest bus within the same state
+        # Update plants_matched with the nearest bus within the same REEDS zone
         plants_matched.update(match_nearest_bus(plants_in_zone, buses_in_zone))
 
-    # Second pass: Assign any remaining unmatched plants to the nearest bus regardless of state
+    # Second pass: Assign any remaining unmatched plants to the nearest bus regardless of REEDS zone
     unmatched_plants = plants_matched[plants_matched["bus_assignment"].isnull()]
     if not unmatched_plants.empty:
         plants_matched.update(match_nearest_bus(unmatched_plants, buses))
