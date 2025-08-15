@@ -147,15 +147,19 @@ plotting:
     trn-lpg-veh-bus: "#2C2CD3"
 
     trn-rail: "#0a0100"
+    trn-rail-psg: "#0a0100"
+    trn-rail-ship: "#0a0100"
     trn-lpg-rail: "#0a0100"
     trn-lpg-rail-psg: "#9F9160"
     trn-lpg-rail-ship: "#606E9F"
 
     trn-air: "#0a0100"
+    trn-air-psg: "#0a0100"
     trn-lpg-air: "#0a0100"
     trn-lpg-air-psg: "#A45B75"
 
     trn-boat: "#0a0100"
+    trn-boat-ship: "#0a0100"
     trn-lpg-boat: "#0a0100"
     trn-lpg-boat-ship: "#5BA48A"
 
@@ -382,15 +386,19 @@ plotting:
     trn-lpg-veh-bus: "Gas Bus"
 
     trn-rail: "Rail"
+    trn-rail-psg: "Passenger Rail"
+    trn-rail-ship: "Shipping Rail"
     trn-lpg-rail: "Rail Oil"
-    trn-lpg-rail-psg: "Passenger Rail Gas"
-    trn-lpg-rail-ship: "Shipping Rail Gas"
+    trn-lpg-rail-psg: "Passenger Rail Oil"
+    trn-lpg-rail-ship: "Shipping Rail Oil"
 
     trn-air: "Airplane"
+    trn-air-psg: "Passenger Airplane"
     trn-lpg-air: "Airplane Gas"
     trn-lpg-air-psg: "Passenger Air Gas"
 
-    trn-boat: "Marine Shipping Gas"
+    trn-boat: "Marine Shipping"
+    trn-boat-ship: "Marine Shipping"
     trn-lpg-boat: "Domestic Marine Shipping Gas"
     trn-lpg-boat-ship: "Domestic Marine Shipping Gas"
 

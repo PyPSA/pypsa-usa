@@ -27,6 +27,22 @@ mamba activate pypsa-usa
 snakemake -j1 --configfile config/config.default.yaml
 ```
 
+### Generate Data Model
+
+To generate the data model only, specify the rule `data_model` in the `snakemake` call. The `data_model` rule generates the network file that is passed into the `solve_network` rule. This network will **not** include any additional policy constraints and only includes input data (ie. the network is not solved). The network is available in the `resources/` folder.
+
+UV:
+```console
+uv run snakemake data_model -j1 --configfile config/config.default.yaml --scheduler-ilp-solver GUROBI_CMD
+```
+
+mamba:
+```console
+mamba activate pypsa-usa
+snakemake data_model -j1 --configfile config/config.default.yaml
+```
+
+
 ## Running on HPC Cluster
 
 If you are running the workflow on an High-Performance Compute (HPC) cluster, you will first need to update the configuration settings in `config.cluster.yaml`. Update the account, partition, email, and chdir fields to match the information of your institutions cluster.

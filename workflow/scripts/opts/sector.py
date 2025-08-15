@@ -109,16 +109,26 @@ def add_sector_co2_constraints(n, config):
                 & ((n.stores.index.str.endswith(f"{sector}-co2")) | (n.stores.index.str.endswith(f"{sector}-ch4")))
             ].index
             name = f"GlobalConstraint-co2_limit-{year}-{state}-{sector}"
-            log_statement = f"Adding {state} {sector} co2 Limit in {year} of"
+            if stores.empty:
+                log_statement = f"No co2 stores found for {state} {year} {sector}"
+            else:
+                log_statement = f"Adding {state} {sector} co2 Limit in {year} of"
         else:
             stores = n.stores[
                 (n.stores.index.str.startswith(state))
                 & ((n.stores.index.str.endswith("-co2")) | (n.stores.index.str.endswith("-ch4")))
             ].index
             name = f"GlobalConstraint-co2_limit-{year}-{state}"
-            log_statement = f"Adding {state} co2 Limit in {year} of"
+            if stores.empty:
+                log_statement = f"No co2 stores found for {state} {year}"
+            else:
+                log_statement = f"Adding {state} co2 Limit in {year} of"
 
-        lhs = n.model["Store-e"].loc[:, stores].sum(dim="Store")
+        if stores.empty:
+            logger.warning(log_statement)
+            return
+
+        lhs = n.model["Store-e"].loc[:, stores].sel(snapshot=n.snapshots[-1]).sum(dim="Store")
         rhs = value  # value in T CO2
 
         n.model.add_constraints(lhs <= rhs, name=name)
@@ -138,7 +148,11 @@ def add_sector_co2_constraints(n, config):
             name = f"co2_limit-{year}"
             log_statement = f"Adding national co2 Limit in {year} of"
 
-        lhs = n.model["Store-e"].loc[:, stores].sum(dim="Store")
+        if stores.empty:
+            logger.warning(f"No co2 stores found for USA {year} {sector}")
+            return
+
+        lhs = n.model["Store-e"].loc[:, stores].sel(snapshot=n.snapshots[-1]).sum(dim="Store")
         rhs = value  # value in T CO2
 
         n.model.add_constraints(lhs <= rhs, name=name)
@@ -571,8 +585,7 @@ def add_sector_demand_response_constraints(n, config):
 def add_ev_generation_constraint(n, config, snakemake):
     """Adds a limit to the maximum generation from EVs per mode and year.
 
-    Only applied if endogenous investments are tuned on as a mechanism to limit
-    growth rate of EVs. The constraint is:
+    The constraint is:
     - (EV_gen * eff) / dem <= policy (where policy is a percentage giving max gen)
     - EV_gen <= dem * policy / eff
 

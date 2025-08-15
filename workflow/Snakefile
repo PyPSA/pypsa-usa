@@ -211,14 +211,6 @@ def sector_figures(wildcards):
                 figure=FIGURES_SECTOR_SANKEY,
             )
         )
-        # figs.append(
-        #     expand(
-        #         RESULTS
-        #         + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/system/validate/{figure}.png",
-        #         **config["scenario"],
-        #         figure=FIGURES_SECTOR_VALIDATE,
-        #     )
-        # )
         return list(chain(*figs))
     return figs
 
@@ -241,6 +233,15 @@ rule all:
         sector_figures,
         validation_figures,
         #"repo_data/dag.jpg",
+
+
+rule data_model:
+    input:
+        expand(
+            RESOURCES
+            + "{interconnect}/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc",
+            **config["scenario"],
+        ),
 
 
 # Create DAG with-
