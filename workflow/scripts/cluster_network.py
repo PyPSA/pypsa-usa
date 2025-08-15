@@ -511,7 +511,29 @@ def convert_to_transport(
         itls = itls_filt
 
     clustering.network.add("Carrier", "AC_exp", co2_emissions=0)
-    logger.info("Replaced Lines with Links for zonal model configuration.")
+
+    # If bus 'p19' is in the network, add a link from it to 'p20'
+    # reeds dataset is missing link to and from this zone
+    if (
+        topological_boundaries == "reeds_zone"
+        and "p19" in clustering.network.buses.reeds_zone.unique()
+        and "p20" in clustering.network.buses.reeds_zone.unique()
+    ):
+        buses_p19 = clustering.network.buses[clustering.network.buses.reeds_zone == "p19"]
+        buses_p20 = clustering.network.buses[clustering.network.buses.reeds_zone == "p20"]
+        existing_links = clustering.network.links[clustering.network.links.bus0.isin(buses_p19.index)]
+        if existing_links.empty:
+            clustering.network.madd(
+                "Link",
+                names=["p19_to_p20"],
+                bus0=buses_p19.iloc[0].name,
+                bus1=buses_p20.iloc[0].name,
+                p_nom=300,
+                length=0,
+                p_min_pu=-1,
+                p_nom_extendable=False,
+                carrier="AC",
+            )
 
     # Remove any disconnected buses
     unique_buses = buses.loc[itls.r].index.union(buses.loc[itls.rr].index).unique()
@@ -522,6 +544,7 @@ def convert_to_transport(
             f"Network configuration contains {len(disconnected_buses)} disconnected buses. ",
         )
 
+    logger.info("Replaced Lines with Links for zonal model configuration.")
     return clustering
 
 
