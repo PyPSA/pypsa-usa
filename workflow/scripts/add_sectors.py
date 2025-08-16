@@ -771,10 +771,11 @@ if __name__ == "__main__":
 
     # add node level DAC capabilities
     if snakemake.config["dac"]["enable"]:
+        raise ValueError("DAC is not supported for Sector Studies. See https://github.com/PyPSA/pypsa-usa/issues/652")
         if snakemake.config["co2"]["storage"]:
-            logger.info("Adding node level DAC capabilities")
+            logger.info("Adding DAC capabilities")
             add_dac(n, snakemake.config, True)
         else:
-            logger.warning("Not adding node level DAC capabilities given that CO2 (underground) storage is not enabled")
+            logger.warning("Not adding DAC capabilities given that CO2 (underground) storage is not enabled")
 
     n.export_to_netcdf(snakemake.output.network)
