@@ -1345,11 +1345,11 @@ if __name__ == "__main__":
         # add node level DAC capabilities
         if snakemake.config["dac"]["enable"]:
             if snakemake.config["co2"]["storage"]:
-                logger.info("Adding node level DAC capabilities")
+                logger.info("Adding DAC capabilities")
                 add_dac(n, snakemake.config, False)
             else:
                 logger.warning(
-                    "Not adding node level DAC capabilities given that CO2 (underground) storage is not enabled",
+                    "Not adding DAC capabilities given that CO2 (underground) storage is not enabled",
                 )
 
     n.consistency_check()
