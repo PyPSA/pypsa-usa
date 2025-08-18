@@ -904,7 +904,7 @@ def format_fuel_costs(n: pypsa.Network, fuel_costs: pd.DataFrame) -> pd.DataFram
     return pd.DataFrame(data, columns=["period", "zone", "value", "units"]).set_index("period")
 
 
-def format_flowgates(n: pypsa.Network, flowgates: pd.DataFrame) -> pd.DataFrame:
+def format_flowgates_for_imports_exports(n: pypsa.Network, flowgates: pd.DataFrame) -> pd.DataFrame:
     """Formats flowgates for zone mappings."""
     zones_in_model = n.buses.reeds_zone.unique()
     df = flowgates.copy()
@@ -960,6 +960,10 @@ def add_elec_imports_exports(
             carrier = "exports"
         else:
             raise ValueError(f"direction must be either imports or exports; received: {direction}")
+
+        # cant add in the reeds_state, reeds_zone, reeds_ba, interconnect, trans_reg, trans_grp
+        # because this information has already been filtered out of the network
+
         n.madd(
             "Bus",
             regions_2_add,
@@ -1211,7 +1215,10 @@ if __name__ == "__main__":
 
         # flowgates to limit the capacity
         flowgates = pd.read_csv(snakemake.input.flowgates)
-        flowgates = format_flowgates(n, flowgates)
+        flowgates = format_flowgates_for_imports_exports(n, flowgates)
+
+        if not imports_config.get("capacity_limit", True):
+            flowgates["value"] = np.inf
 
         import_costs = imports_config.get("costs", False)
 
@@ -1238,7 +1245,7 @@ if __name__ == "__main__":
         # flowgates to limit the capacity
         if flowgates.empty:
             flowgates = pd.read_csv(snakemake.input.flowgates)
-            flowgates = format_flowgates(n, flowgates)
+            flowgates = format_flowgates_for_imports_exports(n, flowgates)
 
         import_costs = imports_config.get("costs", False)
 

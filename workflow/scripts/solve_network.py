@@ -34,6 +34,7 @@ from _helpers import (
     configure_logging,
     update_config_from_wildcards,
 )
+from opts.interchange import add_interchange_constraints
 from opts.land import add_land_use_constraints
 from opts.policy import (
     add_regional_co2limit,
@@ -172,6 +173,16 @@ def extra_functionality(n, snapshots):
     dr_config = config["electricity"].get("demand_response", {})
     if dr_config:
         add_demand_response_constraint(n, config, sector_enabled)
+
+    # Apply interchange constraints if configured
+    if config["electricity"].get("imports", {}).get("enable", False):
+        if config["electricity"].get("imports", {}).get("volume_limit", False):
+            add_interchange_constraints(n, config, "imports")
+
+    # Apply interchange constraints if configured
+    if config["electricity"].get("exports", {}).get("enable", False):
+        if config["electricity"].get("exports", {}).get("volume_limit", False):
+            add_interchange_constraints(n, config, "exports")
 
     # Apply sector-specific constraints if sector is enabled
     if sector_enabled:
@@ -358,9 +369,9 @@ if __name__ == "__main__":
             simpl="12",
             clusters="4m",
             ll="v1.0",
-            opts="4h",
-            sector="E-G",
-            planning_horizons="2018",
+            opts="4h-REM",
+            sector="E",
+            planning_horizons="2030",
         )
     configure_logging(snakemake)
     update_config_from_wildcards(snakemake.config, snakemake.wildcards)
