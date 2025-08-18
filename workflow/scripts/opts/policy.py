@@ -401,7 +401,15 @@ def add_regional_co2limit(n, config):
 
         # Emitting Gens
         p_em = n.model["Generator-p"].loc[:, region_gens_em.index].sel(period=planning_horizon)
-        lhs = (p_em * em_pu).sum()
+
+        # CO2 Atmospheric Emissions
+        if any(n.carriers.index.isin(["co2"])):
+            co2_atm = n.stores.loc[["atmosphere" in name for name in n.stores.index]]
+            last_timestep = n.snapshots.get_level_values(1)[-1]
+            end_co2_atm_storage = (
+                n.model["Store-e"].loc[:, co2_atm.index].sel(period=planning_horizon).sel(timestep=last_timestep)
+            ).sum()
+        lhs = (p_em * em_pu).sum() + end_co2_atm_storage
         rhs = region_co2lim
 
         n.model.add_constraints(
@@ -410,5 +418,5 @@ def add_regional_co2limit(n, config):
         )
 
         logger.info(
-            f"Adding regional Co2 Limit for {emmission_lim.name} in {planning_horizon}",
+            f"Adding regional Co2 Limit for {emmission_lim.name} in {planning_horizon} with limit {rhs}",
         )
