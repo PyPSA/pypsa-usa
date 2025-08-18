@@ -18,7 +18,7 @@ from _helpers import (
     update_p_nom_max,
 )
 from add_electricity import update_transmission_costs
-from constants import REEDS_NERC_INTERCONNECT_MAPPER
+from constants import REEDS_NERC_INTERCONNECT_MAPPER, STATES_INTERCONNECT_MAPPER
 from pypsa.clustering.spatial import (
     busmap_by_greedy_modularity,
     busmap_by_hac,
@@ -377,7 +377,9 @@ def add_itls(buses, itls, itl_cost, expansion=True):
         itl_cost["interface"] = itl_cost.r + "||" + itl_cost.rr
         itl_cost = itl_cost[itl_cost.interface.isin(itls.interface)]
         itl_cost["USD2023perMW"] = itl_cost["USD2004perMW"] * (314.54 / 188.9)
-        itl_cost["USD2023perMWyr"] = calculate_annuity(60, 0.025) * itl_cost["USD2023perMW"]
+        itl_cost["USD2023perMWyr"] = (
+            calculate_annuity(60, 0.044) * itl_cost["USD2023perMW"]
+        )  # wacc_real = 0.044 according to build_cost_data.py
         itls = itls.merge(
             itl_cost[["interface", "length_miles", "USD2023perMWyr"]],
             on="interface",
@@ -387,65 +389,45 @@ def add_itls(buses, itls, itl_cost, expansion=True):
         itls["length_miles"] = 0
         itls["USD2023perMWyr"] = 0
 
-    itls["p_min_pu_Rev"] = (-1 * (itls.mw_r0 / itls.mw_f0)).fillna(0)
     itls["efficiency"] = 1 - ((itls.length_miles / 100) * 0.01)
 
-    # lines to add in reverse if forward direction is zero
-    itls_rev = itls[itls.mw_f0 == 0].copy()
-    itls_fwd = itls[itls.mw_f0 != 0]
-
-    clustering.network.madd(
-        "Link",
-        names=itls_fwd.interface,  # itl name
-        bus0=buses.loc[itls_fwd.r].index,
-        bus1=buses.loc[itls_fwd.rr].index,
-        p_nom=itls_fwd.mw_f0.values,
-        p_nom_min=itls_fwd.mw_f0.values,
-        p_max_pu=1.0,
-        p_min_pu=itls_fwd.p_min_pu_Rev.values,
-        length=0 if itl_cost is None else itls_fwd.length_miles.values,
-        capital_cost=0 if itl_cost is None else itls_fwd.USD2023perMWyr.values,
-        p_nom_extendable=False,
-        efficiency=1 if itl_cost is None else itls_fwd.efficiency.values,
-        carrier="AC",
-    )
-
-    clustering.network.madd(
-        "Link",
-        names=itls_rev.interface,  # itl name
-        suffix="rev",
-        bus0=buses.loc[itls_rev.r].index,
-        bus1=buses.loc[itls_rev.rr].index,
-        p_nom=itls_rev.mw_r0.values,
-        p_nom_min=itls_rev.mw_r0.values,
-        p_max_pu=0,
-        p_min_pu=-1,
-        length=0 if itl_cost is None else itls_rev.length_miles.values,
-        capital_cost=0 if itl_cost is None else itls_rev.USD2023perMWyr.values,
-        p_nom_extendable=False,
-        efficiency=1 if itl_cost is None else itls_rev.efficiency.values,
-        carrier="AC",
-    )
-
-    if not expansion:
-        return
-
-    # for tracking expansion of Zonal Links
+    # The fwd and rev links will be made extendable in prepare_network, so no need to add AC_exp
     clustering.network.madd(
         "Link",
         names=itls.interface,  # itl name
-        suffix="exp",
+        suffix="_fwd",
         bus0=buses.loc[itls.r].index,
         bus1=buses.loc[itls.rr].index,
-        p_nom=0,
-        p_nom_min=0,
-        p_max_pu=1,
-        p_min_pu=-1,
-        length=0 if itl_cost is None else itls.length_miles.values,
-        capital_cost=0 if itl_cost is None else itls.USD2023perMWyr.values,
+        p_nom=itls.mw_f0.values,
+        p_nom_min=itls.mw_f0.values,
+        p_max_pu=1.0,
+        p_min_pu=0.0,
+        length=0 if itl_cost is None else itls.length_miles.values * 1.6093,  # mile to km
+        capital_cost=0
+        if itl_cost is None
+        else itls.USD2023perMWyr.values / 2,  # divide by 2 to avoid accounting for the capital cost repeatedly
         p_nom_extendable=False,
         efficiency=1 if itl_cost is None else itls.efficiency.values,
-        carrier="AC_exp",
+        carrier="AC",
+    )
+
+    clustering.network.madd(
+        "Link",
+        names=itls.interface,  # itl name
+        suffix="_rev",
+        bus0=buses.loc[itls.rr].index,
+        bus1=buses.loc[itls.r].index,
+        p_nom=itls.mw_r0.values,
+        p_nom_min=itls.mw_r0.values,
+        p_max_pu=1.0,
+        p_min_pu=0.0,
+        length=0 if itl_cost is None else itls.length_miles.values * 1.6093,  # mile to km
+        capital_cost=0
+        if itl_cost is None
+        else itls.USD2023perMWyr.values / 2,  # divide by 2 to avoid accounting for the capital cost repeatedly
+        p_nom_extendable=False,
+        efficiency=1 if itl_cost is None else itls.efficiency.values,
+        carrier="AC",
     )
 
 
@@ -468,10 +450,15 @@ def convert_to_transport(
     itls = pd.read_csv(itl_fn)
     itl_cost = pd.read_csv(itl_cost_fn)
     itls.columns = itls.columns.str.lower()
-    itls_filt = itls[
-        itls.r.isin(clustering.network.buses[f"{topological_boundaries}"])
-        & itls.rr.isin(clustering.network.buses[f"{topological_boundaries}"])
-    ]
+    if topological_boundaries == "state":  # use reeds_state - abbreviations
+        itls_filt = itls[
+            itls.r.isin(clustering.network.buses["reeds_state"]) & itls.rr.isin(clustering.network.buses["reeds_state"])
+        ]
+    else:
+        itls_filt = itls[
+            itls.r.isin(clustering.network.buses[f"{topological_boundaries}"])
+            & itls.rr.isin(clustering.network.buses[f"{topological_boundaries}"])
+        ]
     add_itls(buses, itls_filt, itl_cost)
 
     if itl_agg_fn:
@@ -524,7 +511,29 @@ def convert_to_transport(
         itls = itls_filt
 
     clustering.network.add("Carrier", "AC_exp", co2_emissions=0)
-    logger.info("Replaced Lines with Links for zonal model configuration.")
+
+    # If bus 'p19' is in the network, add a link from it to 'p20'
+    # reeds dataset is missing link to and from this zone
+    if (
+        topological_boundaries == "reeds_zone"
+        and "p19" in clustering.network.buses.reeds_zone.unique()
+        and "p20" in clustering.network.buses.reeds_zone.unique()
+    ):
+        buses_p19 = clustering.network.buses[clustering.network.buses.reeds_zone == "p19"]
+        buses_p20 = clustering.network.buses[clustering.network.buses.reeds_zone == "p20"]
+        existing_links = clustering.network.links[clustering.network.links.bus0.isin(buses_p19.index)]
+        if existing_links.empty:
+            clustering.network.madd(
+                "Link",
+                names=["p19_to_p20"],
+                bus0=buses_p19.iloc[0].name,
+                bus1=buses_p20.iloc[0].name,
+                p_nom=300,
+                length=0,
+                p_min_pu=-1,
+                p_nom_extendable=False,
+                carrier="AC",
+            )
 
     # Remove any disconnected buses
     unique_buses = buses.loc[itls.r].index.union(buses.loc[itls.rr].index).unique()
@@ -535,6 +544,7 @@ def convert_to_transport(
             f"Network configuration contains {len(disconnected_buses)} disconnected buses. ",
         )
 
+    logger.info("Replaced Lines with Links for zonal model configuration.")
     return clustering
 
 
@@ -693,6 +703,10 @@ if __name__ == "__main__":
                 f"Aggregating to transport model with {topological_boundaries} zones.",
             )
             match topological_boundaries:
+                case "state":
+                    custom_busmap = n.buses.reeds_state.copy()
+                    itl_fn = snakemake.input.itl_state
+                    itl_cost_fn = snakemake.input.itl_costs_state
                 case "reeds_zone":
                     custom_busmap = n.buses.reeds_zone.copy()
                     itl_fn = snakemake.input.itl_reeds_zone
@@ -726,6 +740,8 @@ if __name__ == "__main__":
                     n.buses.loc[agg_busmap.index, "county"] = "na"
                 if key == "reeds_zone":
                     n.buses.loc[agg_busmap.index, "county"] = "na"
+                if key == "reeds_state":
+                    n.buses.loc[agg_busmap.index, "county"] = "na"
                 itl_agg_fn = snakemake.input[f"itl_{key}"]
                 itl_agg_costs_fn = snakemake.input.get(f"itl_costs_{key}", None)
 
@@ -736,8 +752,14 @@ if __name__ == "__main__":
                 nodes_req,
             ), f"Number of clusters must be {len(nodes_req)} for current configuration."
 
-            n.buses.interconnect = n.buses.nerc_reg.map(REEDS_NERC_INTERCONNECT_MAPPER)
+            if topological_boundaries != "state":  # nerc_reg was droped in the "state" case
+                n.buses.interconnect = n.buses.nerc_reg.map(REEDS_NERC_INTERCONNECT_MAPPER)
             n.lines = n.lines.drop(columns=["interconnect"])
+
+        if (
+            topological_boundaries == "state"
+        ):  # Some states span multiple interconnects and will affect clustering_for_n_clusters
+            n.buses = n.buses.drop(columns=["interconnect"])
 
         clustering = clustering_for_n_clusters(
             n,
@@ -752,6 +774,12 @@ if __name__ == "__main__":
             params.focus_weights,
             weighting_strategy=params.cluster_network.get("weighting_strategy", None),
         )
+
+        # add interconnect information back to clustered network
+        if topological_boundaries == "state":
+            clustering.network.buses["interconnect"] = clustering.network.buses["reeds_state"].map(
+                STATES_INTERCONNECT_MAPPER,
+            )
 
         if transport_model:
             # Use Reeds Data

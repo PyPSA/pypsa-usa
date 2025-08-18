@@ -26,6 +26,7 @@ rule build_shapes:
         "logs/build_shapes/{interconnect}.log",
     threads: 1
     resources:
+        walltime=config_provider("walltime", "build_shapes", default="00:30:00"),
         mem_mb=5000,
     script:
         "../scripts/build_shapes.py"
@@ -35,6 +36,7 @@ rule build_base_network:
     params:
         build_offshore_network=config_provider("offshore_network"),
         model_topology=config_provider("model_topology", "include"),
+        length_factor=config["lines"]["length_factor"],
     input:
         buses=DATA + "breakthrough_network/base_grid/bus.csv",
         lines=DATA + "breakthrough_network/base_grid/branch.csv",
@@ -58,6 +60,7 @@ rule build_base_network:
     threads: 1
     resources:
         mem_mb=5000,
+        walltime=config_provider("walltime", "build_base_network", default="00:30:00"),
     script:
         "../scripts/build_base_network.py"
 
@@ -87,6 +90,7 @@ rule build_bus_regions:
     threads: 1
     resources:
         mem_mb=3000,
+        walltime=config_provider("walltime", "build_bus_regions", default="00:30:00"),
     script:
         "../scripts/build_bus_regions.py"
 
@@ -109,6 +113,7 @@ rule build_cost_data:
     threads: 1
     resources:
         mem_mb=5000,
+        walltime=config_provider("walltime", "build_cost_data", default="00:30:00"),
     script:
         "../scripts/build_cost_data.py"
 
@@ -136,6 +141,7 @@ if config["enable"].get("build_cutout", False):
         threads: ATLITE_NPROCESSES
         resources:
             mem_mb=ATLITE_NPROCESSES * 5000,
+            walltime=config_provider("walltime", "build_cutout", default="10:30:00"),
         script:
             "../scripts/build_cutout.py"
 
@@ -186,13 +192,14 @@ rule build_renewable_profiles:
     benchmark:
         BENCHMARKS + "{interconnect}/build_renewable_profiles_{technology}"
     threads: ATLITE_NPROCESSES
-    retries: 3
     resources:
         mem_mb=lambda wildcards, input, attempt: (
-            ATLITE_NPROCESSES * input.size // 3500000
+            ATLITE_NPROCESSES * input.size // 2000000
         )
-        * attempt
         * 1.5,
+        walltime=config_provider(
+            "walltime", "build_renewable_profiles", default="02:30:00"
+        ),
     wildcard_constraints:
         technology="(?!hydro|EGS).*",  # Any technology other than hydro
     script:
@@ -332,14 +339,46 @@ rule build_electrical_demand:
         BENCHMARKS + "{interconnect}/{end_use}_build_demand"
     threads: 2
     resources:
+        mem_mb=lambda wildcards, input, attempt: (input.size // 100000) * attempt * 2,
+        walltime=config_provider(
+            "walltime", "build_electrical_demand", default="00:50:00"
+        ),
+    script:
+        "../scripts/build_demand.py"
+
+
+rule build_service_demand:
+    wildcard_constraints:
+        end_use="residential|commercial",
+    params:
+        planning_horizons=config_provider("scenario", "planning_horizons"),
+        profile_year=pd.to_datetime(config["snapshots"]["start"]).year,
+        eia_api=config_provider("api", "eia"),
+        snapshots=config_provider("snapshots"),
+    input:
+        network=RESOURCES + "{interconnect}/elec_base_network.nc",
+        demand_files=demand_raw_data,
+        dissagregate_files=demand_dissagregate_data,
+        demand_scaling_file=demand_scaling_data,
+    output:
+        electricity=RESOURCES + "{interconnect}/demand/{end_use}_electricity.pkl",
+        space_heat=RESOURCES + "{interconnect}/demand/{end_use}_space-heating.pkl",
+        water_heat=RESOURCES + "{interconnect}/demand/{end_use}_water-heating.pkl",
+        cool=RESOURCES + "{interconnect}/demand/{end_use}_cooling.pkl",
+    log:
+        LOGS + "{interconnect}/demand/{end_use}_build_demand.log",
+    benchmark:
+        BENCHMARKS + "{interconnect}/demand/{end_use}_build_demand"
+    threads: 2
+    resources:
         mem_mb=lambda wildcards, input, attempt: (input.size // 70000) * attempt * 2,
     script:
         "../scripts/build_demand.py"
 
 
-rule build_sector_demand:
+rule build_industry_demand:
     wildcard_constraints:
-        end_use="residential|commercial|industry",
+        end_use="industry",
     params:
         planning_horizons=config_provider("scenario", "planning_horizons"),
         profile_year=pd.to_datetime(config["snapshots"]["start"]).year,
@@ -352,13 +391,8 @@ rule build_sector_demand:
         dissagregate_files=demand_dissagregate_data,
         demand_scaling_file=demand_scaling_data,
     output:
-        elec_demand=RESOURCES + "{interconnect}/demand/{end_use}_electricity.pkl",
-        heat_demand=RESOURCES + "{interconnect}/demand/{end_use}_heating.pkl",
-        space_heat_demand=RESOURCES
-        + "{interconnect}/demand/{end_use}_space-heating.pkl",
-        water_heat_demand=RESOURCES
-        + "{interconnect}/demand/{end_use}_water-heating.pkl",
-        cool_demand=RESOURCES + "{interconnect}/demand/{end_use}_cooling.pkl",
+        electricity=RESOURCES + "{interconnect}/demand/{end_use}_electricity.pkl",
+        heat=RESOURCES + "{interconnect}/demand/{end_use}_heating.pkl",
     log:
         LOGS + "{interconnect}/demand/{end_use}_build_demand.log",
     benchmark:
@@ -366,6 +400,7 @@ rule build_sector_demand:
     threads: 2
     resources:
         mem_mb=lambda wildcards, input, attempt: (input.size // 70000) * attempt * 2,
+        walltime=config_provider("walltime", "build_sector_demand", default="00:50:00"),
     script:
         "../scripts/build_demand.py"
 
@@ -384,17 +419,10 @@ rule build_transport_road_demand:
         dissagregate_files=demand_dissagregate_data,
         demand_scaling_file=demand_scaling_data,
     output:
-        elec_light_duty=RESOURCES
-        + "{interconnect}/demand/{end_use}_light-duty_electricity.pkl",
-        elec_med_duty=RESOURCES
-        + "{interconnect}/demand/{end_use}_med-duty_electricity.pkl",
-        elec_heavy_duty=RESOURCES
-        + "{interconnect}/demand/{end_use}_heavy-duty_electricity.pkl",
-        elec_bus=RESOURCES + "{interconnect}/demand/{end_use}_bus_electricity.pkl",
-        lpg_light_duty=RESOURCES + "{interconnect}/demand/{end_use}_light-duty_lpg.pkl",
-        lpg_med_duty=RESOURCES + "{interconnect}/demand/{end_use}_med-duty_lpg.pkl",
-        lpg_heavy_duty=RESOURCES + "{interconnect}/demand/{end_use}_heavy-duty_lpg.pkl",
-        lpg_bus=RESOURCES + "{interconnect}/demand/{end_use}_bus_lpg.pkl",
+        light_duty=RESOURCES + "{interconnect}/demand/{end_use}_light-duty.pkl",
+        med_duty=RESOURCES + "{interconnect}/demand/{end_use}_med-duty.pkl",
+        heavy_duty=RESOURCES + "{interconnect}/demand/{end_use}_heavy-duty.pkl",
+        bus=RESOURCES + "{interconnect}/demand/{end_use}_bus.pkl",
     log:
         LOGS + "{interconnect}/demand/{end_use}_build_demand.log",
     benchmark:
@@ -402,6 +430,9 @@ rule build_transport_road_demand:
     threads: 2
     resources:
         mem_mb=lambda wildcards, input, attempt: (input.size // 70000) * attempt * 2,
+        walltime=config_provider(
+            "walltime", "build_transport_road_demand", default="00:50:00"
+        ),
     script:
         "../scripts/build_demand.py"
 
@@ -419,7 +450,7 @@ rule build_transport_other_demand:
         demand_files=demand_raw_data,
         dissagregate_files=demand_dissagregate_data,
     output:
-        RESOURCES + "{interconnect}/demand/{end_use}_{vehicle}_lpg.pkl",
+        RESOURCES + "{interconnect}/demand/{end_use}_{vehicle}.pkl",
     log:
         LOGS + "{interconnect}/demand/{end_use}_{vehicle}_build_demand.log",
     benchmark:
@@ -455,30 +486,16 @@ def demand_to_add(wildcards):
         ]
         # road transport demands
         vehicles = ["light-duty", "med-duty", "heavy-duty", "bus"]
-        fuels = ["lpg", "electricity"]
         road_demand = [
-            RESOURCES
-            + "{interconnect}/demand/transport_"
-            + vehicle
-            + "_"
-            + fuel
-            + ".pkl"
+            RESOURCES + "{interconnect}/demand/transport_" + vehicle + ".pkl"
             for vehicle in vehicles
-            for fuel in fuels
         ]
 
         # other transport demands
         vehicles = ["boat-shipping", "rail-shipping", "rail-passenger", "air"]
-        fuels = ["lpg"]
         non_road_demand = [
-            RESOURCES
-            + "{interconnect}/demand/transport_"
-            + vehicle
-            + "_"
-            + fuel
-            + ".pkl"
+            RESOURCES + "{interconnect}/demand/transport_" + vehicle + ".pkl"
             for vehicle in vehicles
-            for fuel in fuels
         ]
 
         return chain(service_demands, industrial_demands, road_demand, non_road_demand)
@@ -500,6 +517,7 @@ rule add_demand:
         BENCHMARKS + "{interconnect}/add_demand"
     resources:
         mem_mb=lambda wildcards, input, attempt: (input.size // 70000) * attempt * 2,
+        walltime=config_provider("walltime", "add_demand", default="00:50:00"),
     script:
         "../scripts/add_demand.py"
 
@@ -531,6 +549,7 @@ rule build_fuel_prices:
     retries: 3
     resources:
         mem_mb=30000,
+        walltime=config_provider("walltime", "build_fuel_prices", default="00:20:00"),
     script:
         "../scripts/build_fuel_prices.py"
 
@@ -559,11 +578,12 @@ rule build_powerplants:
         cems="repo_data/plants/cems_heat_rates.xlsx",
         epa_crosswalk="repo_data/plants/epa_eia_crosswalk.csv",
     output:
-        powerplants=RESOURCES + "powerplants.csv",
+        powerplants="resources/powerplants.csv",
     log:
         "logs/build_powerplants.log",
     resources:
         mem_mb=30000,
+        walltime=config_provider("walltime", "build_powerplants", default="00:30:00"),
     script:
         "../scripts/build_powerplants.py"
 
@@ -605,7 +625,7 @@ rule add_electricity:
         regions_offshore=RESOURCES
         + "{interconnect}/Geospatial/regions_offshore.geojson",
         reeds_shapes=RESOURCES + "{interconnect}/Geospatial/reeds_shapes.geojson",
-        powerplants=RESOURCES + "powerplants.csv",
+        powerplants="resources/powerplants.csv",
         plants_breakthrough=DATA + "breakthrough_network/base_grid/plant.csv",
         hydro_breakthrough=DATA + "breakthrough_network/base_grid/hydro.csv",
         bus2sub=RESOURCES + "{interconnect}/bus2sub.csv",
@@ -629,6 +649,7 @@ rule add_electricity:
     threads: 1
     resources:
         mem_mb=lambda wildcards, input, attempt: (input.size // 400000) * attempt * 2,
+        walltime=config_provider("walltime", "add_electricity", default="01:00:00"),
     script:
         "../scripts/add_electricity.py"
 
@@ -660,7 +681,8 @@ rule simplify_network:
         "logs/simplify_network/{interconnect}/elec_s{simpl}.log",
     threads: 1
     resources:
-        mem_mb=lambda wildcards, input, attempt: (input.size // 100000) * attempt * 1.5,
+        mem_mb=lambda wildcards, input, attempt: (input.size // 150000) * attempt * 1.5,
+        walltime=config_provider("walltime", "simplify_network", default="01:00:00"),
     script:
         "../scripts/simplify_network.py"
 
@@ -699,6 +721,8 @@ rule cluster_network:
         itl_trans_grp="repo_data/ReEDS_Constraints/transmission/transmission_capacity_init_AC_transgrp_NARIS2024.csv",
         itl_costs_reeds_zone="repo_data/ReEDS_Constraints/transmission/transmission_distance_cost_500kVdc_ba.csv",
         itl_costs_county="repo_data/ReEDS_Constraints/transmission/transmission_distance_cost_500kVac_county.csv",
+        itl_state="repo_data/ReEDS_Constraints/transmission/transmission_capacity_init_AC_state_NARIS2024.csv",
+        itl_costs_state="repo_data/ReEDS_Constraints/transmission/transmission_distance_cost_500kVdc_state.csv",
     output:
         network=RESOURCES + "{interconnect}/elec_s{simpl}_c{clusters}.nc",
         regions_onshore=RESOURCES
@@ -713,6 +737,7 @@ rule cluster_network:
         "benchmarks/cluster_network/{interconnect}/elec_s{simpl}_c{clusters}"
     threads: 1
     resources:
+        walltime=config_provider("walltime", "cluster_network", default="01:30:00"),
         mem_mb=lambda wildcards, input, attempt: (input.size // 100000) * attempt * 2,
     script:
         "../scripts/cluster_network.py"
@@ -735,9 +760,16 @@ rule add_extra_components:
         ),
         regions_onshore=RESOURCES
         + "{interconnect}/Geospatial/regions_onshore_s{simpl}_{clusters}.geojson",
+        co2_storage=(
+            RESOURCES + "{interconnect}/co2_storage_s{simpl}_{clusters}.csv"
+            if config["scenario"]["sector"] == "" and config["co2"]["storage"] is True
+            else []
+        ),
+        county_shapes=DATA + "counties/cb_2020_us_county_500k.shp",
     params:
         retirement=config["electricity"].get("retirement", "technical"),
         demand_response=config["electricity"].get("demand_response", {}),
+        trim_network=config_provider("model_topology", "trim", default=False),
     output:
         RESOURCES + "{interconnect}/elec_s{simpl}_c{clusters}_ec.nc",
     log:
@@ -745,6 +777,7 @@ rule add_extra_components:
     threads: 1
     resources:
         mem_mb=lambda wildcards, input, attempt: (input.size // 100000) * attempt * 2,
+        walltime=config_provider("walltime", "add_extra_components", default="00:30:00"),
     group:
         "prepare"
     script:
@@ -784,6 +817,7 @@ rule prepare_network:
         solver="logs/prepare_network/{interconnect}/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}.log",
     threads: 1
     resources:
+        walltime=config_provider("walltime", "prepare_network", default="00:30:00"),
         mem_mb=lambda wildcards, input, attempt: (input.size // 100000) * attempt * 2,
     group:
         "prepare"

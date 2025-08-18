@@ -7,14 +7,14 @@ labels: ["bug"]
 body:
 
 - type: checkboxes
+  id: checks
   attributes:
-    label: Checklist
-    description: Code and environment checks
+    label: Version Checks (indicate both or one)
     options:
-    - label: I am using the current [`master`](https://github.com/PyPSA/pypsa-usa/tree/master) branch
-      required: true
-    - label: I am running on an up-to-date [`pypsa-usa` environment](https://github.com/PyPSA/pypsa-usa/blob/master/workflow/envs/environment.yaml). Update via `conda env update -f envs/environment.yaml`
-      required: true
+    - label: |
+        This bug exists on the [master branch](https://github.com/PyPSA/pypsa-usa/tree/master) of PyPSA-USA.
+    - label: |
+        This bug exists on the [develop branch](https://github.com/PyPSA/pypsa-usa/tree/develop) of PyPSA-USA.
 
 - type: textarea
   attributes:
@@ -31,13 +31,6 @@ body:
       1. Running this command...
       2. With this config.yaml file data...
       3. I get an error in this rule...
-  validations:
-    required: false
-
-- type: textarea
-  attributes:
-    label: Expected Behavior
-    description: A concise description of what you expected to happen.
   validations:
     required: false
 

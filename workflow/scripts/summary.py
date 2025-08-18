@@ -1,5 +1,5 @@
 """
-Calcualtes summary files.
+Calculates summary files.
 
 Adapted from PyPSA-Eur summary statistics reporting script
  - https://github.com/PyPSA/pypsa-eur/blob/master/scripts/make_summary.py
@@ -118,6 +118,8 @@ def get_energy_timeseries(n: pypsa.Network) -> pd.DataFrame:
             if port == "0":  # only track flow in one direction
                 continue
             totals = c.pnl["p" + port]  # .multiply(n.snapshot_weightings.generators,axis=0,)
+            if totals.empty:
+                continue
             # remove values where bus is missing (bug in nomopyomo)
             no_bus = c.df.index[c.df["bus" + port] == ""]
             totals.loc[no_bus] = float(
@@ -321,7 +323,7 @@ def get_node_carrier_emissions_timeseries(n: pypsa.Network) -> pd.DataFrame:
     """Gets timeseries emissions by bus and carrier."""
     energy = get_primary_energy_use(n)
     co2 = n.carriers[["nice_name", "co2_emissions"]].reset_index().set_index("nice_name")[["co2_emissions"]].squeeze()
-    return energy.mul(co2, level="carrier", axis=0)
+    return energy.T.mul(n.snapshot_weightings.objective, axis=0).T.mul(co2, level="carrier", axis=0)
 
 
 def get_node_emissions_timeseries(n: pypsa.Network) -> pd.DataFrame:

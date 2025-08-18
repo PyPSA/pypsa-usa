@@ -575,6 +575,47 @@ REEDS_NERC_INTERCONNECT_MAPPER = {
     "ERCOT": "texas",
 }
 
+
+REC_TRADING_ZONE_MAPPER = {
+    "CA": "WREGIS",
+    "OR": "WREGIS",
+    "AZ": "WREGIS",
+    "WA": "WREGIS",
+    "NM": "WREGIS",
+    "UT": "WREGIS",
+    "CO": "WREGIS",
+    "NV": "WREGIS",
+    "ID": "WREGIS",
+    "WY": "WREGIS",
+    "MT": "WREGIS",
+    "ND": "MRETS",
+    "SD": "MRETS",
+    "MN": "MRETS",
+    "IA": "MRETS",
+    "WI": "MRETS",
+    "MI": "MIRECS",
+    "MO": "NAR",
+    "KS": "NAR",
+    "IL": "MRETS",
+    "IN": "MRETS",
+    "OH": "MRETS",
+    "KY": "PJM-GATS",
+    "VA": "PJM-GATS",
+    "WV": "PJM-GATS",
+    "MD": "PJM-GATS",
+    "DE": "PJM-GATS",
+    "NJ": "PJM-GATS",
+    "PA": "PJM-GATS",
+    "NY": "NYGATS",
+    "CT": "NEPOOL",
+    "RI": "NEPOOL",
+    "MA": "NEPOOL",
+    "NH": "NEPOOL",
+    "ME": "NEPOOL",
+    "VT": "NEPOOL",
+    "NC": "NC-RETS",
+    "TX": "ERCOT",
+}
 ################################
 # Constants for Breakthrough mapping
 ################################

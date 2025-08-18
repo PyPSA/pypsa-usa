@@ -9,6 +9,7 @@ import pandas as pd
 import pypsa
 from _helpers import configure_logging
 from build_shapes import load_na_shapes
+from constants import REC_TRADING_ZONE_MAPPER
 from shapely.geometry import Polygon
 from sklearn.neighbors import BallTree
 
@@ -123,8 +124,20 @@ def add_dclines_from_file(n: pypsa.Network, fn_dclines: str) -> pypsa.Network:
     n.madd(
         "Link",
         dclines.index,
+        suffix="_fwd",
         bus0=dclines.from_bus_id,
         bus1=dclines.to_bus_id,
+        p_nom=dclines.Pt,
+        carrier="DC",
+        underwater_fraction=0.0,  # DC line in bay is underwater, but does network have this line?
+    )
+
+    n.madd(
+        "Link",
+        dclines.index,
+        suffix="_rev",
+        bus0=dclines.to_bus_id,
+        bus1=dclines.from_bus_id,
         p_nom=dclines.Pt,
         carrier="DC",
         underwater_fraction=0.0,  # DC line in bay is underwater, but does network have this line?
@@ -178,6 +191,17 @@ def assign_line_length(n: pypsa.Network):
     bus1 = bus_df.loc[n.lines.bus1].values
     distances = haversine_np(bus0[:, 0], bus0[:, 1], bus1[:, 0], bus1[:, 1])
     n.lines["length"] = distances
+
+
+def assign_link_length_and_efficiency(n: pypsa.Network, length_factor: float):
+    """Assigns link length and efficiency to each link (DC transmission line) in the network using Haversine distance."""
+    bus_df = n.buses[["x", "y"]]
+    bus0 = bus_df.loc[n.links.bus0].values
+    bus1 = bus_df.loc[n.links.bus1].values
+    distances = haversine_np(bus0[:, 0], bus0[:, 1], bus1[:, 0], bus1[:, 1])
+    n.links["length"] = distances
+    # 2% loss for inverters, 3%/1000km loss for DC lines, https://www.nature.com/articles/s41560-025-01752-6#Sec14
+    n.links["efficiency"] = 1 - 0.02 - 0.03 * distances * length_factor / 1000
 
 
 def create_grid(polygon, cell_size):
@@ -454,6 +478,7 @@ def modify_breakthrough_substations(buslocs: pd.DataFrame):
         38928: {"lon": -108.0648, "lat": 39.0692},
         39570: {"lon": -114.3526, "lat": 42.6286},
         39571: {"lon": -114.0353, "lat": 42.5435},
+        39381: {"lon": -103.2492, "lat": 44.1358},
     }
     for i in sub_fixes.keys():
         buslocs.loc[buslocs.sub_id == i, "lon"] = sub_fixes[i]["lon"]
@@ -546,13 +571,12 @@ def main(snakemake):
     # Assign Lines Types and Missing Region Memberships
     add_custom_line_type(n)
     assign_line_types(n)
+    length_factor = snakemake.params.length_factor
     assign_line_length(n)
+    assign_link_length_and_efficiency(n, length_factor)
     assign_missing_regions(n)
     assign_reeds_memberships(n, snakemake.input.reeds_memberships)
-
-    p_max_pu = 1
-    n.links["p_max_pu"] = p_max_pu
-    n.links["p_min_pu"] = -p_max_pu
+    n.buses["rec_trading_zone"] = n.buses.reeds_state.map(REC_TRADING_ZONE_MAPPER).fillna(n.buses.reeds_state)
 
     # Filter Network to Only Specified Regions
     if model_topology is not None:

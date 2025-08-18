@@ -514,7 +514,6 @@ def plot_production_area(
     seperate monthly generation curves
     """
     # get data
-
     energy_mix = get_energy_timeseries(n).mul(1e-3)  # MW -> GW
     demand = get_demand_timeseries(n).mul(1e-3)  # MW -> GW
 
@@ -530,7 +529,6 @@ def plot_production_area(
     energy_mix = energy_mix.rename(columns=n.carriers.nice_name)
 
     color_palette = get_color_palette(n)
-
     months = n.snapshots.get_level_values(1).month.unique()
     num_periods = len(n.investment_periods)
     base_plot_size = 4
@@ -931,7 +929,7 @@ if __name__ == "__main__":
         + snakemake.params.electricity["extendable_carriers"]["StorageUnit"]
         + snakemake.params.electricity["extendable_carriers"]["Store"]
         + snakemake.params.electricity["extendable_carriers"]["Link"]
-        + ["battery_charger", "battery_discharger"]
+        + ["battery_charger", "battery_discharger", "imports"]
     )
     carriers = list(set(carriers))  # remove any duplicates
 
@@ -944,6 +942,8 @@ if __name__ == "__main__":
     n.generators.to_csv(snakemake.output.generators)
     n.storage_units.to_csv(snakemake.output.storage_units)
     n.links.to_csv(snakemake.output.links)
+    n.lines.to_csv(snakemake.output.lines)
+    n.buses.to_csv(snakemake.output.buses)
 
     # Panel Plots
     plot_generator_data_panel(

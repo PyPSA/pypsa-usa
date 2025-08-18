@@ -19,7 +19,7 @@ foresight:  'perfect' # myopic, perfect
 
 model_topology:
   transmission_network: 'reeds' # [reeds, tamu]
-  topological_boundaries: 'reeds_zone' # [county, reeds_zone]
+  topological_boundaries: 'reeds_zone' # [county, reeds_zone, state]
   interface_transmission_limits: false
   include: # mixed zone types not supported
     # reeds_zone: []
@@ -92,12 +92,30 @@ lines:
   max_extension: 20000 #MW
   length_factor: 1.25
 
-
 # docs :
 links:
   p_max_pu: 1.0
   p_nom_max: .inf
   max_extension: 20000 #MW
+
+# docs :
+co2:
+  storage: false   # [false, true]
+  network:
+    enable: false   # [false, true]
+    capital_cost: 2736000   # in USD/12-inch diameter/mile
+    marginal_cost: 4   # in USD/tCO2
+    lifetime: 40   # in years
+    discount_rate: 0.07
+
+# docs :
+dac:
+  enable: false   # [false, true]
+  granularity: "node"   # ["node", "state", "nation"] (note: "nation" is not applicable for a network based on sectors - it defaults to "node" in this case)
+  capital_cost: 6000000   # in USD/tCO2/h
+  electricity_input: 2.5   # in MWh/tCO2
+  lifetime: 20   # in years
+  discount_rate: 0.07
 
 # docs :
 costs:
@@ -252,6 +270,14 @@ solving:
   mem: 30000 #memory in MB; 20 GB enough for 50+B+I+H2; 100 GB for 181+B+I+H2
   walltime: "12:00:00"
 
+walltime:
+  build_renewable_profiles: '04:00:00'
+  build_fuel_prices: '00:20:00'
+  add_demand: '02:00:00'
+  add_electricity: '04:00:00'
+  simplify_network: '05:00:00'
+  cluster_network: '04:00:00'
+  solve_network: '20:00:00'
 
 # docs :
 custom_files:

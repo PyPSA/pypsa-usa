@@ -106,10 +106,7 @@ def set_transmission_limit(n, ll_type, factor):
     logger.info(f"Setting transmission limit for {ll_type} to {factor}")
 
     dc_links = n.links.carrier == "DC" if not n.links.empty else pd.Series()
-    ac_links_exp = n.links.carrier == "AC_exp" if not n.links.empty else pd.Series()
     ac_links_existing = n.links.carrier == "AC" if not n.links.empty else pd.Series()
-
-    n.links.loc[ac_links_exp, "carrier"] = "AC"  # rename AC_exp carrier to AC
 
     lines_s_nom = n.lines.s_nom
     col = "capital_cost" if ll_type == "c" else "length"
@@ -129,8 +126,8 @@ def set_transmission_limit(n, ll_type, factor):
         n.links.loc[dc_links, "p_nom_min"] = n.links.loc[dc_links, "p_nom"]
         n.links.loc[dc_links, "p_nom_extendable"] = True
 
-        n.links.loc[ac_links_exp, "p_nom_min"] = n.links.loc[ac_links_exp, "p_nom"]
-        n.links.loc[ac_links_exp, "p_nom_extendable"] = True
+        n.links.loc[ac_links_existing, "p_nom_min"] = n.links.loc[ac_links_existing, "p_nom"]
+        n.links.loc[ac_links_existing, "p_nom_extendable"] = True
     if factor != "opt":
         con_type = "expansion_cost" if ll_type == "c" else "volume_expansion"
         if transport_model:
@@ -257,17 +254,6 @@ def apply_time_segmentation(n, segments, solver_name="cbc"):
     n.snapshot_weightings = n.snapshot_weightings.mul(sn_weightings, axis=0)
 
     return n
-
-
-def enforce_autarky(n, only_crossborder=False):
-    if only_crossborder:
-        lines_rm = n.lines.loc[n.lines.bus0.map(n.buses.country) != n.lines.bus1.map(n.buses.country)].index
-        links_rm = n.links.loc[n.links.bus0.map(n.buses.country) != n.links.bus1.map(n.buses.country)].index
-    else:
-        lines_rm = n.lines.index
-        links_rm = n.links.loc[n.links.carrier == "DC"].index
-    n.mremove("Line", lines_rm)
-    n.mremove("Link", links_rm)
 
 
 def set_line_nom_max(

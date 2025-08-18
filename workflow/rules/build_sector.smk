@@ -30,14 +30,20 @@ def sector_input_files(wildcards):
             + "{interconnect}/cop_air_urban_elec_s{simpl}_c{clusters}.nc",
             "clustered_pop_layout": RESOURCES
             + "{interconnect}/pop_layout_elec_s{simpl}_c{clusters}.csv",
-            "ev_policy": config["sector"]["transport_sector"]["investment"][
-                "ev_policy"
-            ],
+            "ev_policy": config["sector"]["transport_sector"]["ev_policy"],
             "residential_stock": "repo_data/sectors/residential_stock",
             "commercial_stock": "repo_data/sectors/commercial_stock",
             "industrial_stock": "repo_data/sectors/industrial_stock/Table5_6.xlsx",
         }
         input_files.update(ng_files)
+
+    if config["co2"]["storage"] is True:
+        input_files.update(
+            {
+                "co2_storage": RESOURCES
+                + "{interconnect}/co2_storage_s{simpl}_{clusters}.csv"
+            }
+        )
 
     return input_files
 
@@ -196,3 +202,20 @@ rule build_cop_profiles:
         "../envs/environment.yaml"
     script:
         "../scripts/build_cop_profiles.py"
+
+
+rule build_co2_storage:
+    input:
+        regions_onshore=RESOURCES
+        + "{interconnect}/Geospatial/regions_onshore_s{simpl}_{clusters}.geojson",
+        co2_storage="repo_data/geospatial/co2_storage/co2_storage.geojson",
+    output:
+        co2_storage=RESOURCES + "{interconnect}/co2_storage_s{simpl}_{clusters}.csv",
+    log:
+        LOGS + "{interconnect}/build_co2_storage_s{simpl}_{clusters}.log",
+    resources:
+        mem_mb=5000,
+    conda:
+        "../envs/environment.yaml"
+    script:
+        "../scripts/build_co2_storage.py"

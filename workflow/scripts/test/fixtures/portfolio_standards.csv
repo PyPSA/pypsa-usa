@@ -1,0 +1,3 @@
+name,region,carrier,planning_horizon,pct
+CA_RPS,CA,"solar, onwind",2030,0.9
+TX_RPS,TX,"solar, onwind",2030,0.7

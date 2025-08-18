@@ -214,9 +214,35 @@ def load_powerplants(
     plants = pd.read_csv(
         plants_fn,
     )
-    # Filter out non-conus plants and plants that are not built by first investment period.
     plants = plants.set_index("generator_name")
+
+    # Convert date columns to datetime
+    plants["current_planned_generator_operating_date"] = pd.to_datetime(
+        plants["current_planned_generator_operating_date"],
+    )
+
+    plants["generator_retirement_date"] = pd.to_datetime(
+        plants["generator_retirement_date"],
+    )
+
+    # if operational_status is proposed replace build_year with year of current_planned_generator_operating_date
+    plants.loc[plants.operational_status == "proposed", "build_year"] = plants.loc[
+        plants.operational_status == "proposed",
+        "current_planned_generator_operating_date",
+    ].dt.year
+
+    # If operational_status is existing or proposed, replace generator_retirement_date with 1/1/2100
+    retirement_date = pd.to_datetime("2100-01-01")
+    plants.loc[plants.operational_status.isin(["existing", "proposed"]), "generator_retirement_date"] = retirement_date
+
+    # Handle NaT values
+    plants.loc[plants.generator_retirement_date.isna(), "generator_retirement_date"] = pd.to_datetime("1900-01-01")
+
+    # Filter out plants that are not built by first investment period and retired before the first investment period.
     plants = plants[plants.build_year <= investment_periods[0]]
+    plants = plants[plants.generator_retirement_date.dt.year > investment_periods[0]]
+
+    # Filter out non-conus plants
     plants = plants[plants.nerc_region != "non-conus"]
     if (interconnect is not None) & (interconnect != "usa"):
         plants["interconnection"] = plants["nerc_region"].map(const.NERC_REGION_MAPPER)
@@ -250,7 +276,7 @@ def match_plant_to_bus(n, plants):
     Matches each plant to it's corresponding bus in the network enfocing a
     match to the correct State.
 
-    # Efficient matching taken from #
+    Efficient matching taken from:
     https://stackoverflow.com/questions/58893719/find-nearest-point-in-other-dataframe-with-a-lot-of-data
     """
     plants_matched = plants.copy()
@@ -261,17 +287,17 @@ def match_plant_to_bus(n, plants):
     buses = n.buses.copy()
     buses["geometry"] = gpd.points_from_xy(buses["x"], buses["y"])
 
-    # First pass: Assign each plant to the nearest bus in the same state
-    for state in buses["state"].unique():
-        buses_in_state = buses[buses["state"] == state]
-        plants_in_state = plants_matched[
-            (plants_matched["state"] == state) & (plants_matched["bus_assignment"].isnull())
+    # First pass: Assign each plant to the nearest bus in the same reeds zone
+    for zone_id in buses["reeds_zone"].unique():
+        buses_in_zone = buses[buses["reeds_zone"] == zone_id]
+        plants_in_zone = plants_matched[
+            (plants_matched["country"] == zone_id) & (plants_matched["bus_assignment"].isnull())
         ]
 
-        # Update plants_matched with the nearest bus within the same state
-        plants_matched.update(match_nearest_bus(plants_in_state, buses_in_state))
+        # Update plants_matched with the nearest bus within the same REEDS zone
+        plants_matched.update(match_nearest_bus(plants_in_zone, buses_in_zone))
 
-    # Second pass: Assign any remaining unmatched plants to the nearest bus regardless of state
+    # Second pass: Assign any remaining unmatched plants to the nearest bus regardless of REEDS zone
     unmatched_plants = plants_matched[plants_matched["bus_assignment"].isnull()]
     if not unmatched_plants.empty:
         plants_matched.update(match_nearest_bus(unmatched_plants, buses))
@@ -458,7 +484,6 @@ def attach_conventional_generators(
     n.generators.loc[plants.index, "fuel_cost"] = plants.fuel_cost
     n.generators.loc[plants.index, "heat_rate"] = plants.heat_rate_mmbtu_per_mwh
     n.generators.loc[plants.index, "ba_eia"] = plants.balancing_authority_code
-    n.generators.loc[plants.index, "ba_ads"] = plants.ads_balancing_area
 
 
 def normed(s):

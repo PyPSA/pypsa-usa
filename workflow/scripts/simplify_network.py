@@ -119,6 +119,7 @@ def aggregate_to_substations(
             "balancing_area",
             "reeds_zone",
             "reeds_ba",
+            "reeds_state",
             "x",
             "y",
         ]
@@ -132,6 +133,8 @@ def aggregate_to_substations(
             zone = substations.county
         case "reeds_zone":
             zone = substations.reeds_zone
+        case "state":
+            zone = substations.reeds_state
         case _:
             raise ValueError(
                 "zonal_aggregation must be either balancing_area, country, or state",
@@ -147,7 +150,27 @@ def aggregate_to_substations(
 
     network_s.lines["type"] = np.nan
 
-    if topological_boundaries != "reeds_zone" and topological_boundaries != "county":
+    if topological_boundaries == "reeds_zone" or topological_boundaries == "county":
+        cols2drop = [
+            "balancing_area",
+            "substation_off",
+            "sub_id",
+            "state",
+        ]
+    elif topological_boundaries == "state":
+        cols2drop = [
+            "balancing_area",
+            "substation_off",
+            "sub_id",
+            "county",
+            "reeds_zone",
+            "reeds_ba",
+            "nerc_reg",
+            "trans_reg",
+            "trans_grp",
+            "state",
+        ]
+    else:
         cols2drop = [
             "balancing_area",
             "state",
@@ -159,13 +182,6 @@ def aggregate_to_substations(
             "trans_reg",
             "trans_grp",
             "reeds_state",
-        ]
-    else:
-        cols2drop = [
-            "balancing_area",
-            "substation_off",
-            "sub_id",
-            "state",
         ]
 
     # Only drop columns that exist in the DataFrame
@@ -216,7 +232,7 @@ if __name__ == "__main__":
     n = pickle.load(open(snakemake.input.network, "rb"))
 
     n.generators = n.generators.drop(
-        columns=["ba_eia", "ba_ads"],
+        columns=["ba_eia"],
     )  # temp added these columns and need to drop for workflow
 
     n = convert_to_voltage_level(n, 230)
@@ -243,7 +259,7 @@ if __name__ == "__main__":
         params.aggregation_strategies,
     )
 
-    if topological_boundaries == "reeds_zone":
+    if topological_boundaries in ["reeds_zone", "state"] and "county" in n.buses.columns:
         n.buses = n.buses.drop(columns=["county"])
 
     if snakemake.wildcards.simpl:
@@ -265,6 +281,9 @@ if __name__ == "__main__":
         ]
         for attr in attr:
             n.storage_units_t[attr] = n.storage_units_t[attr].iloc[:, 0:0]
+
+        # Patch for bug where pypsa io clustering will add incorrect build_years for new gens
+        n.generators.build_year += 0.001
 
         clustering = clustering_for_n_clusters(
             n,
