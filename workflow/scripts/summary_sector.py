@@ -3,8 +3,6 @@
 import logging
 
 # Optional used as 'arg: callable | None = None' gives TypeError with py3.11
-from typing import Optional
-
 import pandas as pd
 import pypsa
 from eia import ElectricPowerData, Emissions, Seds, TransportationDemand
@@ -359,7 +357,7 @@ def get_sector_production_timeseries(
     remove_sns_weights: bool = False,
     state: str | None = None,
     resample: str | None = None,
-    resample_fn: Optional[callable] = None,  # noqa: UP007
+    resample_fn: callable | None = None,
 ) -> pd.DataFrame:
     """
     Gets timeseries production to meet sectoral demand.
@@ -391,7 +389,7 @@ def get_power_production_timeseries(
     remove_sns_weights: bool = False,
     state: str | None = None,
     resample: str | None = None,
-    resample_fn: Optional[callable] = None,  # noqa: UP007
+    resample_fn: callable | None = None,
 ) -> pd.DataFrame:
     """
     Gets power timeseries production to meet sectoral demand.
@@ -431,7 +429,7 @@ def get_sector_production_timeseries_by_carrier(
     remove_sns_weights: bool = False,
     state: str | None = None,
     resample: str | None = None,
-    resample_fn: Optional[callable] = None,  # noqa: UP007
+    resample_fn: callable | None = None,
 ) -> pd.DataFrame:
     """Gets timeseries production by carrier."""
     if sector == "pwr":
@@ -695,7 +693,7 @@ def get_storage_level_timeseries_carrier(
     remove_sns_weights: bool = True,
     state: str | None = None,
     resample: str | None = None,
-    resample_fn: Optional[callable] = None,  # noqa: UP007
+    resample_fn: callable | None = None,
     make_positive: bool | None = False,
     **kwargs,
 ) -> pd.DataFrame:

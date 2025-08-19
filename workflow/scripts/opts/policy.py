@@ -409,7 +409,9 @@ def add_regional_co2limit(n, config):
             end_co2_atm_storage = (
                 n.model["Store-e"].loc[:, co2_atm.index].sel(period=planning_horizon).sel(timestep=last_timestep)
             ).sum()
-        lhs = (p_em * em_pu).sum() + end_co2_atm_storage
+            lhs = (p_em * em_pu).sum() + end_co2_atm_storage
+        else:
+            lhs = (p_em * em_pu).sum()
         rhs = region_co2lim
 
         n.model.add_constraints(
