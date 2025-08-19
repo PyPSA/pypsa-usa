@@ -1259,7 +1259,7 @@ def add_industrial_coal_furnace(
     # capex approximated based on NG to incorporate fixed costs
     capex = costs.at["direct firing coal", "capital_cost"].round(1)
     efficiency = costs.at["direct firing coal", "efficiency"].round(1)
-    lifetime = capex = costs.at["direct firing coal", "lifetime"].round(1)
+    lifetime = costs.at["direct firing coal", "lifetime"].round(1)
     build_year = n.investment_periods[0]
 
     carrier_name = f"{sector}-heat"

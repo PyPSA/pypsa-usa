@@ -73,8 +73,11 @@ plotting:
     "trn-elec": "#f9d002"
     "coal-95CCS": "#4b4b4b"
     "coal-99CCS": "#2e2e2e"
+    "coal-95CC": "#4b4b4b"
+    "coal-99CC": "#2e2e2e"
     "SMR": "#ff5733"
     "CCGT-95CCS": "#800000"
+    "CCGT-95CC": "#800000"
     "8hr_PHS": "#069686"
     "10hr_PHS": "#058a79"
     "12hr_PHS": "#047d6c"    
@@ -86,6 +89,7 @@ plotting:
     "12hr_PHS_charger": "#047d6c"  
     "hydrogen_ct": "#ea048a"
     "demand_response": "#8c03fc"
+    "dac": "#4c004c"
 
     # sector studies only 
 
@@ -325,6 +329,7 @@ plotting:
     Load: "Load Shed"
     hydrogen_ct: "Hydrogen Combustion Turbine"
     demand_response: "Demand Response"
+    dac: "Direct Air Capture"
 
     # sector studies only 
 

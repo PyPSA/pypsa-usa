@@ -118,6 +118,8 @@ def get_energy_timeseries(n: pypsa.Network) -> pd.DataFrame:
             if port == "0":  # only track flow in one direction
                 continue
             totals = c.pnl["p" + port]  # .multiply(n.snapshot_weightings.generators,axis=0,)
+            if totals.empty:
+                continue
             # remove values where bus is missing (bug in nomopyomo)
             no_bus = c.df.index[c.df["bus" + port] == ""]
             totals.loc[no_bus] = float(

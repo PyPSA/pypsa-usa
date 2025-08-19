@@ -75,6 +75,10 @@ The REM, SAFER, RPS can be defined using either the reeds zone name 'p##"
 the state code (eg, TX, CA, MT), pypsa-usa interconnect name (western, eastern, texas, usa),
 or nerc region name.
 
+```{warning}
+TCT Targets can only be used with renewable generators and utility scale batteries in sector studies.
+```
+
 There are currently:
 
 ```{eval-rst}

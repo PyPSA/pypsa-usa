@@ -30,12 +30,10 @@ rule solve_network_validation:
             BENCHMARKS
             + "solve_network/{interconnect}/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}"
         )
-    threads: 8
+    threads: solver_threads
     resources:
-        mem_mb=memory,
-        walltime=config["solving"].get("walltime", "12:00:00"),
-    conda:
-        "../envs/environment.yaml"
+        walltime=config_provider("walltime", "solve_network_validation"),
+        mem_mb=lambda wildcards, input, attempt: (input.size // 100000) * 90,
     script:
         "../scripts/solve_network.py"
 
@@ -68,6 +66,7 @@ rule plot_validation_figures:
         "logs/plot_figures/validation_{interconnect}_{simpl}_{clusters}_l{ll}_{opts}_{sector}.log",
     threads: 1
     resources:
+        walltime="00:30:00",
         mem_mb=5000,
     script:
         "../scripts/plot_validation_production.py"

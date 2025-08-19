@@ -621,7 +621,7 @@ class EiaBuildingData:
 
         NOTE: Some storage is still given in gallons!
         """
-        df.loc[df.unit.str.contains("/kBtu/hr"), "value"] *= 1e3
+        df.loc[df.unit.str.contains("/kBtu/hr"), "value"] *= 1e3 * MMBTU_MWHthemal
         df2 = df.copy()  # SettingWithCopyWarning
         df2.unit = df2.unit.str.replace("/kBtu/hr", "/MW")
         return df2

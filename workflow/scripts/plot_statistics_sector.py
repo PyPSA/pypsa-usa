@@ -1506,7 +1506,7 @@ if __name__ == "__main__":
             clusters="4m",
             ll="v1.0",
             sector="E-G",
-            planning_horizons="2018",
+            planning_horizons="2030",
             interconnect="western",
         )
         rootpath = ".."

@@ -377,7 +377,9 @@ def add_itls(buses, itls, itl_cost, expansion=True):
         itl_cost["interface"] = itl_cost.r + "||" + itl_cost.rr
         itl_cost = itl_cost[itl_cost.interface.isin(itls.interface)]
         itl_cost["USD2023perMW"] = itl_cost["USD2004perMW"] * (314.54 / 188.9)
-        itl_cost["USD2023perMWyr"] = calculate_annuity(60, 0.025) * itl_cost["USD2023perMW"]
+        itl_cost["USD2023perMWyr"] = (
+            calculate_annuity(60, 0.044) * itl_cost["USD2023perMW"]
+        )  # wacc_real = 0.044 according to build_cost_data.py
         itls = itls.merge(
             itl_cost[["interface", "length_miles", "USD2023perMWyr"]],
             on="interface",
@@ -387,65 +389,45 @@ def add_itls(buses, itls, itl_cost, expansion=True):
         itls["length_miles"] = 0
         itls["USD2023perMWyr"] = 0
 
-    itls["p_min_pu_Rev"] = (-1 * (itls.mw_r0 / itls.mw_f0)).fillna(0)
     itls["efficiency"] = 1 - ((itls.length_miles / 100) * 0.01)
 
-    # lines to add in reverse if forward direction is zero
-    itls_rev = itls[itls.mw_f0 == 0].copy()
-    itls_fwd = itls[itls.mw_f0 != 0]
-
-    clustering.network.madd(
-        "Link",
-        names=itls_fwd.interface,  # itl name
-        bus0=buses.loc[itls_fwd.r].index,
-        bus1=buses.loc[itls_fwd.rr].index,
-        p_nom=itls_fwd.mw_f0.values,
-        p_nom_min=itls_fwd.mw_f0.values,
-        p_max_pu=1.0,
-        p_min_pu=itls_fwd.p_min_pu_Rev.values,
-        length=0 if itl_cost is None else itls_fwd.length_miles.values,
-        capital_cost=0 if itl_cost is None else itls_fwd.USD2023perMWyr.values,
-        p_nom_extendable=False,
-        efficiency=1 if itl_cost is None else itls_fwd.efficiency.values,
-        carrier="AC",
-    )
-
-    clustering.network.madd(
-        "Link",
-        names=itls_rev.interface,  # itl name
-        suffix="rev",
-        bus0=buses.loc[itls_rev.r].index,
-        bus1=buses.loc[itls_rev.rr].index,
-        p_nom=itls_rev.mw_r0.values,
-        p_nom_min=itls_rev.mw_r0.values,
-        p_max_pu=0,
-        p_min_pu=-1,
-        length=0 if itl_cost is None else itls_rev.length_miles.values,
-        capital_cost=0 if itl_cost is None else itls_rev.USD2023perMWyr.values,
-        p_nom_extendable=False,
-        efficiency=1 if itl_cost is None else itls_rev.efficiency.values,
-        carrier="AC",
-    )
-
-    if not expansion:
-        return
-
-    # for tracking expansion of Zonal Links
+    # The fwd and rev links will be made extendable in prepare_network, so no need to add AC_exp
     clustering.network.madd(
         "Link",
         names=itls.interface,  # itl name
-        suffix="exp",
+        suffix="_fwd",
         bus0=buses.loc[itls.r].index,
         bus1=buses.loc[itls.rr].index,
-        p_nom=0,
-        p_nom_min=0,
-        p_max_pu=1,
-        p_min_pu=-1,
-        length=0 if itl_cost is None else itls.length_miles.values,
-        capital_cost=0 if itl_cost is None else itls.USD2023perMWyr.values,
+        p_nom=itls.mw_f0.values,
+        p_nom_min=itls.mw_f0.values,
+        p_max_pu=1.0,
+        p_min_pu=0.0,
+        length=0 if itl_cost is None else itls.length_miles.values * 1.6093,  # mile to km
+        capital_cost=0
+        if itl_cost is None
+        else itls.USD2023perMWyr.values / 2,  # divide by 2 to avoid accounting for the capital cost repeatedly
         p_nom_extendable=False,
         efficiency=1 if itl_cost is None else itls.efficiency.values,
-        carrier="AC_exp",
+        carrier="AC",
+    )
+
+    clustering.network.madd(
+        "Link",
+        names=itls.interface,  # itl name
+        suffix="_rev",
+        bus0=buses.loc[itls.rr].index,
+        bus1=buses.loc[itls.r].index,
+        p_nom=itls.mw_r0.values,
+        p_nom_min=itls.mw_r0.values,
+        p_max_pu=1.0,
+        p_min_pu=0.0,
+        length=0 if itl_cost is None else itls.length_miles.values * 1.6093,  # mile to km
+        capital_cost=0
+        if itl_cost is None
+        else itls.USD2023perMWyr.values / 2,  # divide by 2 to avoid accounting for the capital cost repeatedly
+        p_nom_extendable=False,
+        efficiency=1 if itl_cost is None else itls.efficiency.values,
+        carrier="AC",
     )
 
 
@@ -529,7 +511,29 @@ def convert_to_transport(
         itls = itls_filt
 
     clustering.network.add("Carrier", "AC_exp", co2_emissions=0)
-    logger.info("Replaced Lines with Links for zonal model configuration.")
+
+    # If bus 'p19' is in the network, add a link from it to 'p20'
+    # reeds dataset is missing link to and from this zone
+    if (
+        topological_boundaries == "reeds_zone"
+        and "p19" in clustering.network.buses.reeds_zone.unique()
+        and "p20" in clustering.network.buses.reeds_zone.unique()
+    ):
+        buses_p19 = clustering.network.buses[clustering.network.buses.reeds_zone == "p19"]
+        buses_p20 = clustering.network.buses[clustering.network.buses.reeds_zone == "p20"]
+        existing_links = clustering.network.links[clustering.network.links.bus0.isin(buses_p19.index)]
+        if existing_links.empty:
+            clustering.network.madd(
+                "Link",
+                names=["p19_to_p20"],
+                bus0=buses_p19.iloc[0].name,
+                bus1=buses_p20.iloc[0].name,
+                p_nom=300,
+                length=0,
+                p_min_pu=-1,
+                p_nom_extendable=False,
+                carrier="AC",
+            )
 
     # Remove any disconnected buses
     unique_buses = buses.loc[itls.r].index.union(buses.loc[itls.rr].index).unique()
@@ -540,6 +544,7 @@ def convert_to_transport(
             f"Network configuration contains {len(disconnected_buses)} disconnected buses. ",
         )
 
+    logger.info("Replaced Lines with Links for zonal model configuration.")
     return clustering
 
 

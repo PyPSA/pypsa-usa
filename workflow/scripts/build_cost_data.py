@@ -321,7 +321,7 @@ if __name__ == "__main__":
         {
             "pypsa-name": "HVAC overhead",
             "parameter": "capex_per_mw_km",
-            "value": 2481.43,
+            "value": 1541,
         },
         {
             "pypsa-name": "HVAC overhead",
@@ -444,7 +444,7 @@ if __name__ == "__main__":
     # https://nrel.github.io/ReEDS-2.0/model_documentation.html#hydrogen
     hydrogen_ct = pivot_atb[pivot_atb["pypsa-name"] == "OCGT"].copy()
     hydrogen_ct["pypsa-name"] = "hydrogen_ct"
-    hydrogen_ct["capex_overnight_per_kw"] *= 1.2
+    hydrogen_ct["capex_overnight_per_kw"] *= 1.03
     hydrogen_ct["capex_per_kw"] = (
         (hydrogen_ct["capex_overnight_per_kw"] + hydrogen_ct["capex_grid_connection_per_kw"])
         * hydrogen_ct["capex_construction_finance_factor"]

@@ -37,6 +37,14 @@ def sector_input_files(wildcards):
         }
         input_files.update(ng_files)
 
+    if config["co2"]["storage"] is True:
+        input_files.update(
+            {
+                "co2_storage": RESOURCES
+                + "{interconnect}/co2_storage_s{simpl}_{clusters}.csv"
+            }
+        )
+
     return input_files
 
 
@@ -194,3 +202,20 @@ rule build_cop_profiles:
         "../envs/environment.yaml"
     script:
         "../scripts/build_cop_profiles.py"
+
+
+rule build_co2_storage:
+    input:
+        regions_onshore=RESOURCES
+        + "{interconnect}/Geospatial/regions_onshore_s{simpl}_{clusters}.geojson",
+        co2_storage="repo_data/geospatial/co2_storage/co2_storage.geojson",
+    output:
+        co2_storage=RESOURCES + "{interconnect}/co2_storage_s{simpl}_{clusters}.csv",
+    log:
+        LOGS + "{interconnect}/build_co2_storage_s{simpl}_{clusters}.log",
+    resources:
+        mem_mb=5000,
+    conda:
+        "../envs/environment.yaml"
+    script:
+        "../scripts/build_co2_storage.py"
