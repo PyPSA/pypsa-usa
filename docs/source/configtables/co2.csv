@@ -1,8 +1,8 @@
 ,Unit,Values,Description
 storage,bool,true or false,"Specifies whether the model may use underground storage to sequester captured CO2 or not. The default value is ``false``."
 network,--,,"Specifies whether the model may transport captured CO2 between nodes or not. In case transportation is specified, a network of CO2 pipelines is built based on the costs, discount rate, as well as the lifetime stipulated in this subsection."
--- enable,bool,true or false,"Enable (``true``) or disable (``false``) the capability to transport captured CO2 between nodes. The default value is ``false``."
--- capital_cost,int,$/mile,"Capital cost of building one mile long CO2 pipeline. The default value is ``2736000``, which assumes a 12-inch diameter and a cost of $228000 per inch for each mile of CO2 pipeline built based on EPA estimation."
--- marginal_cost,int,$/t,"Marginal cost of transporting one tonne of captured CO2. The default value is ``4``, which is the average cost of transporting one tonne of captured CO2 based on NETL estimation."
--- lifetime,int,year,"Lifetime of a CO2 pipeline. The default value is ``40``, which is the average lifetime of a CO2 pipeline based on NETL estimation."
--- discount_rate,float,%,"Discount rate of the capital cost of building a network of CO2 pipelines. The default value is ``0.07``."
+enable,bool,true or false,"Enable (``true``) or disable (``false``) the capability to transport captured CO2 between nodes. The default value is ``false``."
+capital_cost,int,$/mile,"Capital cost of building one mile long CO2 pipeline. The default value is ``2736000``, which assumes a 12-inch diameter and a cost of $228000 per inch for each mile of CO2 pipeline built based on EPA estimation."
+marginal_cost,int,$/t,"Marginal cost of transporting one tonne of captured CO2. The default value is ``4``, which is the average cost of transporting one tonne of captured CO2 based on NETL estimation."
+lifetime,int,year,"Lifetime of a CO2 pipeline. The default value is ``40``, which is the average lifetime of a CO2 pipeline based on NETL estimation."
+discount_rate,float,%,"Discount rate of the capital cost of building a network of CO2 pipelines. The default value is ``0.07``."
