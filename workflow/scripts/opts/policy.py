@@ -410,6 +410,7 @@ def add_regional_co2limit(n, config):
                 n.model["Store-e"].loc[:, co2_atm.index].sel(period=planning_horizon).sel(timestep=last_timestep)
             ).sum()
         else:
+            # Fallback: set to zero when CCTS isn't enabled (i.e., no CO2 carrier in the model)
             end_co2_atm_storage = 0
 
         lhs = (p_em * em_pu).sum() + end_co2_atm_storage
