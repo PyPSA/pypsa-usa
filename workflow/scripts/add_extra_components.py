@@ -884,12 +884,29 @@ def trim_network(n, trim_topology):
     n.determine_network_topology()
 
 
-def load_fuel_costs(eia_api: str, year: int) -> pd.DataFrame:
+def calc_import_export_costs(n: pypsa.Network, carrier: str) -> float:
+    """Calculates the average marginal cost for a given carrier."""
+    gens = n.generators[n.generators.carrier == carrier]
+    component = "Generator"
+    if gens.empty:
+        gens = n.links[n.links.carrier == carrier]
+        component = "Link"
+    if gens.empty:
+        raise ValueError(f"No generators or links found for carrier to calculate imports/exports costs: {carrier}")
+    costs = get_as_dense(n, component, "marginal_cost").loc[:, gens.index].mean().mean()
+    if costs <= 0.01:
+        raise ValueError(
+            f"Average marginal cost for {carrier} is less than or equal to 0.01. Check the fuel costs configuration.",
+        )
+    return costs
+
+
+def load_import_export_costs(eia_api: str, year: int) -> pd.DataFrame:
     """Loads fuel costs from EIA."""
     return FuelCosts(fuel="electricity", year=year, api=eia_api).get_data()
 
 
-def format_fuel_costs(n: pypsa.Network, fuel_costs: pd.DataFrame) -> pd.DataFrame:
+def format_import_export_costs(n: pypsa.Network, fuel_costs: pd.DataFrame) -> pd.DataFrame:
     """Formats fuel costs for BA mappings."""
     df = fuel_costs.copy()
     data = []
@@ -1027,7 +1044,7 @@ def add_elec_imports_exports(
     def _add_import_export_links(
         n: pypsa.Network,
         flowgates: pd.DataFrame,
-        fuel_costs: pd.DataFrame | float,
+        fuel_costs: pd.DataFrame | float | str,
         direction: str,
     ) -> None:
         """Adds import and export links to the network."""
@@ -1553,8 +1570,7 @@ if __name__ == "__main__":
     if snakemake.params.trim_network:
         trim_network(n, trim_network_config)
 
-    flowgates = pd.DataFrame()  # for caching between imports/exports
-
+    # Electricity imports configuration
     if imports_config.get("enable", False):
         co2_emissions = imports_config.get("co2_emissions", 0)
 
@@ -1571,19 +1587,23 @@ if __name__ == "__main__":
 
         import_costs = imports_config.get("costs", False)
 
-        if isinstance(import_costs, float):
+        if isinstance(import_costs, float):  # user defined value
             fuel_costs = import_costs
-        elif isinstance(import_costs, bool):
+        elif isinstance(import_costs, str):  # name of carrier
+            fuel_costs = calc_import_export_costs(n, import_costs)
+        elif isinstance(import_costs, bool):  # wholesale market cost
             if import_costs:
-                fuel_costs = load_fuel_costs(snakemake.params.eia_api, year)
-                fuel_costs = format_fuel_costs(n, fuel_costs)
+                fuel_costs = load_import_export_costs(snakemake.params.eia_api, year)
+                fuel_costs = format_import_export_costs(n, fuel_costs)
             else:
-                fuel_costs = None
+                fuel_costs = 0
+                logger.warning("No imports costs provided, setting to 0. Check the imports configuration.")
         else:
-            raise ValueError(f"imports.costs must be a float or a boolean. Received: {import_costs}")
+            raise ValueError(f"'imports.costs' must be a float, boolean, or string. Received: {import_costs}")
 
         add_elec_imports_exports(n, "imports", flowgates, fuel_costs, co2_emissions)
 
+    # Electricity exports configuration
     if exports_config.get("enable", False):
         co2_emissions = 0
 
@@ -1592,22 +1612,24 @@ if __name__ == "__main__":
             year = weather_year[0]
 
         # flowgates to limit the capacity
-        if flowgates.empty:
-            flowgates = pd.read_csv(snakemake.input.flowgates)
-            flowgates = format_flowgates_for_imports_exports(n, flowgates)
+        flowgates = pd.read_csv(snakemake.input.flowgates)
+        flowgates = format_flowgates_for_imports_exports(n, flowgates)
 
-        import_costs = imports_config.get("costs", False)
+        export_costs = exports_config.get("costs", False)
 
-        if isinstance(import_costs, float):
-            fuel_costs = import_costs
-        elif isinstance(import_costs, bool):
-            if import_costs:
-                fuel_costs = load_fuel_costs(snakemake.params.eia_api, year)
-                fuel_costs = format_fuel_costs(n, fuel_costs)
+        if isinstance(export_costs, float):  # user defined value
+            fuel_costs = export_costs
+        elif isinstance(export_costs, str):  # name of carrier
+            fuel_costs = calc_import_export_costs(n, export_costs)
+        elif isinstance(export_costs, bool):  # wholesale market cost
+            if export_costs:
+                fuel_costs = load_import_export_costs(snakemake.params.eia_api, year)
+                fuel_costs = format_import_export_costs(n, fuel_costs)
             else:
-                fuel_costs = None
+                fuel_costs = 0
+                logger.warning("No exports costs provided, setting to 0. Check the exports configuration.")
         else:
-            raise ValueError(f"imports.costs must be a float or a boolean. Received: {import_costs}")
+            raise ValueError(f"'exports.costs' must be a float, boolean, or string. Received: {export_costs}")
 
         add_elec_imports_exports(n, "exports", flowgates, fuel_costs, co2_emissions)
 
