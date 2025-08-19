@@ -496,6 +496,7 @@ def attach_wind_and_solar(
     input_profiles: str,
     carriers: list[str],
     extendable_carriers: dict[str, list[str]],
+    renewable_weather_years: list[str],
 ):
     """
     Attached Atlite Calculated wind and solar capacity factor profiles to the
@@ -506,66 +507,91 @@ def attach_wind_and_solar(
         if car in ["hydro", "EGS"]:
             continue
 
-        with xr.open_dataset(getattr(input_profiles, "profile_" + car)) as ds:
-            if ds.indexes["bus"].empty:
-                continue
+        planning_horizons = n.investment_periods.to_list()
+        dfs = []
+        for index, year in enumerate(renewable_weather_years): # iterate through profiles by weather year
+            horizon = planning_horizons[index] # this will be used to assign each weather year's profile to the corresponding planning horizon, in order
 
-            capital_cost = costs.at[car, "annualized_capex_fom"]
+            with xr.open_dataset(getattr(input_profiles, "profile_" + car + "_" + str(year))) as ds:
+                if ds.indexes["bus"].empty:
+                    continue
 
-            bus2sub = (
-                pd.read_csv(input_profiles.bus2sub, dtype=str)
-                .drop("interconnect", axis=1)
-                .rename(columns={"Bus": "bus_id"})
-                .drop_duplicates(subset="sub_id")
-            )
-            bus_list = ds.bus.to_dataframe("sub_id").merge(bus2sub).bus_id.astype(str).values
-            p_nom_max_bus = (
-                ds["p_nom_max"]
-                .to_dataframe()
-                .merge(bus2sub[["bus_id", "sub_id"]], left_on="bus", right_on="sub_id")
-                .set_index("bus_id")
-                .p_nom_max
-            )
-            weight_bus = (
-                ds["weight"]
-                .to_dataframe()
-                .merge(bus2sub[["bus_id", "sub_id"]], left_on="bus", right_on="sub_id")
-                .set_index("bus_id")
-                .weight
-            )
-            bus_profiles = (
-                ds["profile"]
-                .transpose("time", "bus")
-                .to_pandas()
-                .T.merge(
-                    bus2sub[["bus_id", "sub_id"]],
-                    left_on="bus",
-                    right_on="sub_id",
+                capital_cost = costs.at[car, "annualized_capex_fom"]
+
+                bus2sub = (
+                    pd.read_csv(input_profiles.bus2sub, dtype=str)
+                    .drop("interconnect", axis=1)
+                    .rename(columns={"Bus": "bus_id"})
+                    .drop_duplicates(subset="sub_id")
                 )
-                .set_index("bus_id")
-                .drop(columns="sub_id")
-                .T
-            )
-            bus_profiles = broadcast_investment_horizons_index(n, bus_profiles)
+                bus_list = ds.bus.to_dataframe("sub_id").merge(bus2sub).bus_id.astype(str).values
+                p_nom_max_bus = (
+                    ds["p_nom_max"]
+                    .to_dataframe()
+                    .merge(bus2sub[["bus_id", "sub_id"]], left_on="bus", right_on="sub_id")
+                    .set_index("bus_id")
+                    .p_nom_max
+                )
+                weight_bus = (
+                    ds["weight"]
+                    .to_dataframe()
+                    .merge(bus2sub[["bus_id", "sub_id"]], left_on="bus", right_on="sub_id")
+                    .set_index("bus_id")
+                    .weight
+                )
+                bus_profile = (
+                    ds["profile"]
+                    .transpose("time", "bus")
+                    .to_pandas()
+                    .T.merge(
+                        bus2sub[["bus_id", "sub_id"]],
+                        left_on="bus",
+                        right_on="sub_id",
+                    )
+                    .set_index("bus_id")
+                    .drop(columns="sub_id")
+                    .T
+                )
 
-            logger.info(f"Adding {car} capacity-factor profiles to the network.")
+                bus_profile.index = pd.to_datetime(bus_profile.index)
+                bus_profile.index = bus_profile.index.map(lambda x: x.replace(year=horizon)) # replace weather year with planning horizon year
+                dfs.append(bus_profile)
+            
+        # this section is based off the "broadcast_investment_horizons_index" function
+        sns = n.snapshots
+        bus_profiles = pd.concat(dfs)
+        bus_profiles = pd.merge(
+            bus_profiles,
+            sns.to_frame().droplevel(0),
+            left_index=True,
+            right_index=True,
+        ).drop(columns=["period", "timestep"])
 
-            n.madd(
-                "Generator",
-                bus_list,
-                " " + car,
-                bus=bus_list,
-                carrier=car,
-                p_nom_extendable=car in extendable_carriers["Generator"],
-                p_nom_max=p_nom_max_bus,
-                weight=weight_bus,
-                marginal_cost=costs.at[car, "marginal_cost"],
-                capital_cost=capital_cost,
-                efficiency=1,
-                build_year=n.investment_periods[0],
-                lifetime=costs.at[car, "lifetime"],
-                p_max_pu=bus_profiles,
-            )
+        profile_len = len(bus_profiles.index)
+        snapshot_len = len(sns)
+
+        logger.info(f"Profile length is {profile_len} and snapshot length is {snapshot_len} - are we good?")
+
+        bus_profiles = broadcast_investment_horizons_index(n, bus_profiles)
+
+        logger.info(f"Adding {car} capacity-factor profiles to the network.")
+
+        n.madd(
+            "Generator",
+            bus_list,
+            " " + car,
+            bus=bus_list,
+            carrier=car,
+            p_nom_extendable=car in extendable_carriers["Generator"],
+            p_nom_max=p_nom_max_bus,
+            weight=weight_bus,
+            marginal_cost=costs.at[car, "marginal_cost"],
+            capital_cost=capital_cost,
+            efficiency=1,
+            build_year=n.investment_periods[0],
+            lifetime=costs.at[car, "lifetime"],
+            p_max_pu=bus_profiles,
+        )
 
 
 def attach_egs(
@@ -998,6 +1024,7 @@ def main(snakemake):
         snakemake.input,
         renewable_carriers,
         extendable_carriers,
+        snakemake.config["renewable_weather_years"], # added to loop through profile by weather year
     )
     renewable_carriers = list(
         set(snakemake.config["electricity"]["renewable_carriers"]).intersection(
