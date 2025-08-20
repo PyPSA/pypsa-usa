@@ -922,9 +922,9 @@ def format_import_export_costs(n: pypsa.Network, fuel_costs: pd.DataFrame) -> pd
     return pd.DataFrame(data, columns=["period", "zone", "value", "units"]).set_index("period")
 
 
-def format_flowgates_for_imports_exports(n: pypsa.Network, flowgates: pd.DataFrame) -> pd.DataFrame:
+def format_flowgates_for_imports_exports(n: pypsa.Network, flowgates: pd.DataFrame, zone_col: str) -> pd.DataFrame:
     """Formats flowgates for zone mappings."""
-    zones_in_model = n.buses.reeds_zone.unique()
+    zones_in_model = n.buses[zone_col].unique()
     df = flowgates.copy()
 
     # only keep flowgates that connect inside to outside model scope
@@ -941,22 +941,35 @@ def format_flowgates_for_imports_exports(n: pypsa.Network, flowgates: pd.DataFra
     return pd.DataFrame(data, columns=["r", "rr", "value"])
 
 
+def convert_flowgates_to_state(flowgates: pd.DataFrame, membership: pd.DataFrame) -> pd.DataFrame:
+    """Converts flowgates to state level."""
+    mbshp = membership.set_index("ba")
+    df = flowgates.copy()
+
+    df["s"] = df.r.map(mbshp["st"])
+    df["ss"] = df.rr.map(mbshp["st"])
+    df = df.drop(columns=["r", "rr"])
+    df = df.rename(columns={"s": "r", "ss": "rr"})
+    return df
+
+
 def add_elec_imports_exports(
     n: pypsa.Network,
     direction: str,
     flowgates: pd.DataFrame,
     fuel_costs: pd.DataFrame | float,
     co2_emissions: float = 0,
+    zone_col: str = "reeds_zone",
 ):
     """Add electricity imports and exports to the network.
 
     These are capacity constrianed links to/from states outside the model spatial scope.
     """
 
-    def _get_regions_2_add(n: pypsa.Network, flowgates: pd.DataFrame) -> list[str]:
+    def _get_regions_2_add(n: pypsa.Network, flowgates: pd.DataFrame, zone_col: str) -> list[str]:
         """Gets regions to add import and export buses to."""
         unique_regions = set(flowgates.r.unique()) | set(flowgates.rr.unique())
-        return [x for x in unique_regions if x not in n.buses.reeds_zone.unique()]
+        return [x for x in unique_regions if x not in n.buses[zone_col].unique()]
 
     def _add_import_export_carriers(n: pypsa.Network, direction: str, co2_emissions: float | None = None) -> None:
         """Adds import and export carriers to the network."""
@@ -1046,10 +1059,11 @@ def add_elec_imports_exports(
         flowgates: pd.DataFrame,
         fuel_costs: pd.DataFrame | float | str,
         direction: str,
+        zone_col: str = "reeds_zone",
     ) -> None:
         """Adds import and export links to the network."""
         costs = {}
-        zones_in_model = n.buses.reeds_zone.dropna().unique()
+        zones_in_model = n.buses[zone_col].dropna().unique()
 
         for _, row in flowgates.iterrows():
             zone_inside = row.r if row.r in zones_in_model else row.rr
@@ -1112,11 +1126,11 @@ def add_elec_imports_exports(
 
     assert direction in ["imports", "exports"], f"direction must be either imports or exports; received: {direction}"
 
-    regions_2_add = _get_regions_2_add(n, flowgates)
+    regions_2_add = _get_regions_2_add(n, flowgates, zone_col)
     _add_import_export_carriers(n, direction, co2_emissions)
     _add_import_export_buses(n, regions_2_add, direction)
     _add_import_export_stores(n, regions_2_add, direction)
-    _add_import_export_links(n, flowgates, fuel_costs, direction)
+    _add_import_export_links(n, flowgates, fuel_costs, direction, zone_col)
 
 
 def add_co2_storage(n: pypsa.Network, config: dict, co2_storage_csv: str, costs: pd.DataFrame, sector: bool):
@@ -1474,8 +1488,8 @@ if __name__ == "__main__":
         snakemake = mock_snakemake(
             "add_extra_components",
             interconnect="western",
-            simpl="12",
-            clusters="4m",
+            simpl="100",
+            clusters="58m",
         )
     configure_logging(snakemake)
 
@@ -1570,20 +1584,35 @@ if __name__ == "__main__":
     if snakemake.params.trim_network:
         trim_network(n, trim_network_config)
 
+    if snakemake.params.transmission_network == "reeds":
+        # flowgates to limit the capacity (removed later if configured capacity limit is inf)
+        flowgates = pd.read_csv(snakemake.input.flowgates)
+        if snakemake.params.topological_boundaries == "state":
+            zone_col = "reeds_state"
+            membership = pd.read_csv(snakemake.input.reeds_memberships)
+            flowgates = convert_flowgates_to_state(flowgates, membership)
+            flowgates = format_flowgates_for_imports_exports(n, flowgates, zone_col)
+            flowgates = flowgates.groupby(["r", "rr"], as_index=False).sum()
+        elif snakemake.params.topological_boundaries == "county":
+            zone_col = "county"
+            flowgates = format_flowgates_for_imports_exports(n, flowgates, zone_col)
+        elif snakemake.params.topological_boundaries == "reeds_zone":
+            zone_col = "reeds_zone"
+            flowgates = format_flowgates_for_imports_exports(n, flowgates, zone_col)
+        else:
+            raise ValueError(f"Invalid topological boundaries: {snakemake.params.topological_boundaries}")
+
     # Electricity imports configuration
-    if imports_config.get("enable", False):
+    if imports_config.get("enable", False) and snakemake.params.transmission_network == "reeds":
         co2_emissions = imports_config.get("co2_emissions", 0)
 
         weather_year = snakemake.params.weather_year
         if isinstance(weather_year, list):
             year = weather_year[0]
 
-        # flowgates to limit the capacity
-        flowgates = pd.read_csv(snakemake.input.flowgates)
-        flowgates = format_flowgates_for_imports_exports(n, flowgates)
-
+        import_flowgates = flowgates.copy()
         if not imports_config.get("capacity_limit", True):
-            flowgates["value"] = np.inf
+            import_flowgates["value"] = np.inf
 
         import_costs = imports_config.get("costs", False)
 
@@ -1601,10 +1630,10 @@ if __name__ == "__main__":
         else:
             raise ValueError(f"'imports.costs' must be a float, boolean, or string. Received: {import_costs}")
 
-        add_elec_imports_exports(n, "imports", flowgates, fuel_costs, co2_emissions)
+        add_elec_imports_exports(n, "imports", import_flowgates, fuel_costs, co2_emissions, zone_col)
 
     # Electricity exports configuration
-    if exports_config.get("enable", False):
+    if exports_config.get("enable", False) and snakemake.params.transmission_network == "reeds":
         co2_emissions = 0
 
         weather_year = snakemake.params.weather_year
@@ -1612,8 +1641,9 @@ if __name__ == "__main__":
             year = weather_year[0]
 
         # flowgates to limit the capacity
-        flowgates = pd.read_csv(snakemake.input.flowgates)
-        flowgates = format_flowgates_for_imports_exports(n, flowgates)
+        export_flowgates = flowgates.copy()
+        if not exports_config.get("capacity_limit", True):
+            export_flowgates["value"] = np.inf
 
         export_costs = exports_config.get("costs", False)
 
@@ -1631,7 +1661,7 @@ if __name__ == "__main__":
         else:
             raise ValueError(f"'exports.costs' must be a float, boolean, or string. Received: {export_costs}")
 
-        add_elec_imports_exports(n, "exports", flowgates, fuel_costs, co2_emissions)
+        add_elec_imports_exports(n, "exports", export_flowgates, fuel_costs, co2_emissions)
 
     if snakemake.config["scenario"]["sector"] == "E":
         # add node level CO2 (underground) storage
