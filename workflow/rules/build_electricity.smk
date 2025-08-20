@@ -772,8 +772,7 @@ rule add_extra_components:
         demand_response=config["electricity"].get("demand_response", {}),
         trim_network=config_provider("model_topology", "trim", default=False),
         imports=config_provider("electricity", "imports", default=False),
-        exports=config_provider("electricity", "imports", default=False),
-        pudl_path=config_provider("pudl_path"),
+        exports=config_provider("electricity", "exports", default=False),
         weather_year=config_provider("renewable_weather_years"),
         eia_api=config_provider("api", "eia"),
     output:
