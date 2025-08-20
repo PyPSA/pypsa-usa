@@ -93,10 +93,6 @@ Specifies the types of generators that are included in the network, which are ex
    :file: configtables/electricity.csv
 ```
 
-```{note}
-See [here](./config-co2-base.md) for information on interconnect level base emission values.
-```
-
 (renewable_cf)=
 ## `renewable`
 
@@ -228,6 +224,7 @@ For a sector-based model:
    :header-rows: 1
    :widths: 22,7,22,33
    :file: configtables/dac.csv
+```
 
 (costs_cf)=
 ## `costs`

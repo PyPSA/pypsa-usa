@@ -110,11 +110,11 @@ co2:
 
 # docs :
 dac:
-  enable: false   # [false, true]
-  granularity: "node"   # ["node", "state", "nation"] (note: "nation" is not applicable for a network based on sectors - it defaults to "node" in this case)
-  capital_cost: 6000000   # in USD/tCO2/h
-  electricity_input: 2.5   # in MWh/tCO2
-  lifetime: 20   # in years
+  enable: false # [false, true]
+  granularity: "node" # ['node', 'state', 'nation'] (note: 'nation' is not applicable for a network based on sectors - it defaults to 'node' in this case)
+  capital_cost: 6000000 # in USD/tCO2/h
+  electricity_input: 2.5 # in MWh/tCO2
+  lifetime: 20 # in years
   discount_rate: 0.07
 
 # docs :

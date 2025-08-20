@@ -803,7 +803,6 @@ rule prepare_network:
         gaslimit_enable=config_provider("electricity", "gaslimit_enable", default=False),
         transmission_network=config_provider("model_topology", "transmission_network"),
         costs=config_provider("costs"),
-        autarky=config_provider("electricity", "autarky"),
     input:
         network=(
             config["custom_files"]["files_path"]
