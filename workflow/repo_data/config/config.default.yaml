@@ -76,6 +76,22 @@ electricity:
     shift: 0
     marginal_cost: 999999
 
+  imports:
+    enable: false 
+    costs: true # true|false|float|carrier
+    co2_emissions: 0.428 
+    capacity_limit: true 
+    volume_limit: inf # 0 > x > 100 | 'inf'
+    balancing_period: month # day|week|month|year
+
+  exports:
+    enable: false 
+    costs: true # true|false|float|carrier
+    capacity_limit: true 
+    volume_limit: inf # 0 > x > 100 | 'inf'
+    balancing_period: month # day|week|month|year
+
+
 # docs :
 conventional:
   unit_commitment: false
@@ -111,7 +127,7 @@ co2:
 # docs :
 dac:
   enable: false   # [false, true]
-  granularity: "node"   # ["node", "state", "nation"] (note: "nation" is not applicable for a network based on sectors - it defaults to "node" in this case)
+  granularity: "node"   # ["node", "state", "nation"]
   capital_cost: 6000000   # in USD/tCO2/h
   electricity_input: 2.5   # in MWh/tCO2
   lifetime: 20   # in years

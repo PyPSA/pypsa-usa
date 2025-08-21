@@ -193,6 +193,12 @@ class FuelCosts(EiaData):
             else:
                 aeo = "reference" if not self.scenario else self.scenario
                 return _FutureCosts(self.fuel, self.year, aeo, self.api)
+        elif self.fuel == "electricity":
+            if self.year < 2024:
+                return _ElectricityCosts(self.year, self.api)
+            else:
+                aeo = "reference" if not self.scenario else self.scenario
+                return _FutureCosts(self.fuel, self.year, aeo, self.api)
         else:
             raise InputPropertyError(
                 propery="Fuel Costs",
@@ -848,6 +854,52 @@ class _HeatingFuelCosts(DataExtractor):
         final = final.set_index("period").drop(columns="duoarea")
 
         return self._assign_dtypes(final)
+
+
+class _ElectricityCosts(DataExtractor):
+    """Historical electrical fuel costs."""
+
+    sector_codes: ClassVar[dict[str, str]] = {
+        "all": "ALL",
+        "res": "RES",
+        "com": "COM",
+        "ind": "IND",
+        "trn": "TRA",
+        "other": "OTH",
+    }
+
+    def __init__(self, year: int, api: str, sector: str = "all") -> None:
+        self.api = api
+        self.sector = sector
+        if sector not in self.sector_codes:
+            raise InputPropertyError(
+                propery="Historical Cost Sector",
+                valid_options=list(self.sector_codes),
+                recived_option=sector,
+            )
+        super().__init__(year, api)
+
+    def build_url(self) -> str:
+        base_url = "electricity/retail-sales/data/"
+        facets = f"frequency=monthly&data[0]=price&facets[sectorid][]={self.sector_codes[self.sector]}&start={self.year}-01&end={self.year}-12&sort[0][column]=period&sort[0][direction]=desc&offset=0&length=5000"
+        return f"{API_BASE}{base_url}?api_key={self.api_key}&{facets}"
+
+    def format_data(self, df: pd.DataFrame) -> pd.DataFrame:
+        df.index = pd.to_datetime(df.period)
+        df = df.rename(
+            columns={
+                "stateid": "state",
+                "snateDescription": "state_name",
+                "sectorName": "series-description",
+                "price": "value",
+                "price-units": "units",
+            },
+        )
+        df["value"] = round(df.value.astype(float) * 10, 3)  # cents / kwh -> $ / mwh
+        df["units"] = "$/mwh"
+        df["state"] = df["state"].replace("US", "U.S.")
+        df = df[["state", "series-description", "value", "units"]].sort_index()
+        return self._assign_dtypes(df)
 
 
 # class HistoricalMonthlySectorEnergyDemand(DataExtractor):

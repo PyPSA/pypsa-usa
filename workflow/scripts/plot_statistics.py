@@ -524,6 +524,16 @@ def plot_production_area(
             energy_mix = energy_mix.drop(columns=carrier)
             carriers_2_plot.append(f"{carrier}" + "_charger")
             carriers_2_plot.append(f"{carrier}" + "_discharger")
+
+    # imports and exports will be reported by both links and stores
+    duplicates = energy_mix.columns[energy_mix.columns.duplicated()]
+    assert all(x in ["imports", "exports"] for x in duplicates)
+    energy_mix = energy_mix.loc[:, ~energy_mix.columns.duplicated(keep="first")].copy()
+
+    # ensure exports are tagged as negative
+    if "exports" in energy_mix.columns:
+        energy_mix["exports"] = energy_mix["exports"].where(energy_mix["exports"] < 0, energy_mix["exports"].mul(-1))
+
     carriers_2_plot = list(set(carriers_2_plot))
     energy_mix = energy_mix[[x for x in carriers_2_plot if x in energy_mix]]
     energy_mix = energy_mix.rename(columns=n.carriers.nice_name)
@@ -903,10 +913,11 @@ if __name__ == "__main__":
 
         snakemake = mock_snakemake(
             "plot_statistics",
-            interconnect="texas",
-            clusters=7,
-            ll="v1.00",
-            opts="REM-400SEG",
+            interconnect="western",
+            clusters="4m",
+            simpl="12",
+            ll="v1.0",
+            opts="REM-3h",
             sector="E",
         )
     configure_logging(snakemake)
@@ -929,7 +940,7 @@ if __name__ == "__main__":
         + snakemake.params.electricity["extendable_carriers"]["StorageUnit"]
         + snakemake.params.electricity["extendable_carriers"]["Store"]
         + snakemake.params.electricity["extendable_carriers"]["Link"]
-        + ["battery_charger", "battery_discharger", "imports"]
+        + ["battery_charger", "battery_discharger", "imports", "exports"]
     )
     carriers = list(set(carriers))  # remove any duplicates
 
@@ -944,6 +955,7 @@ if __name__ == "__main__":
     n.links.to_csv(snakemake.output.links)
     n.lines.to_csv(snakemake.output.lines)
     n.buses.to_csv(snakemake.output.buses)
+    n.stores.to_csv(snakemake.output.stores)
 
     # Panel Plots
     plot_generator_data_panel(

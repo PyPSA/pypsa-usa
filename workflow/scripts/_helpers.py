@@ -559,11 +559,6 @@ def update_config_from_wildcards(config, w, inplace=True):
             if ep_value is not None:
                 config["costs"]["emission_prices"]["co2"] = ep_value
 
-        if "ATK" in opts:
-            config["autarky"]["enable"] = True
-            if "ATKc" in opts:
-                config["autarky"]["by_country"] = True
-
         attr_lookup = {
             "p": "p_nom_max",
             "e": "e_nom_max",
