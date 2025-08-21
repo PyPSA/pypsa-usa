@@ -9,7 +9,7 @@
     1. Southeast: **Unknown source**
 1. *routes_adjacent.csv*: Set of US zones that are adjacent to each other.
 1. *transmission_capacity_future_baseline.csv*: Historically installed (since 2010) and currently planned transmission capacity additions. **Many unknown sources.**
-1. *transmission_capacity_future_{`GSw_TransScen`}.csv*: Available future routes for transmission capacity as specified by `GSw_TransScen`.
+1. *transmission_capacity_future_{GSw_TransScen}.csv*: Available future routes for transmission capacity as specified by `GSw_TransScen`.
 1. *transmission_capacity_init_AC_NARIS2024.csv*: Initial AC transmission capacities between 134 US ReEDS zones. Calculated using the code available at https://github.nrel.gov/pbrown/TSC and nodal network data from https://www.nrel.gov/docs/fy21osti/79224.pdf. The method is described by Brown, P.R. et al 2023, "A general method for estimating zonal transmission interface limits from nodal network data", in prep.
 1. *transmission_capacity_init_AC_REFS2009.csv*: Initial AC transmission capacities between 134 US ReEDS zones. Calculated for https://www.nrel.gov/analysis/re-futures.html.
 1. *transmission_capacity_init_nonAC.csv*: Initial DC transmission capacities between 134 US ReEDS zones. **Many unknown sources.**
@@ -28,7 +28,7 @@
 1. `GSw_TransHurdle`: Intra-US hurdle rate for interzonal flows, measured in $2004/MWh
 1. `GSw_TransHurdleLevel`: Indicate the level of hierarchy.csv between which to apply the hurdle rate specified by `GSw_TransHurdle`. i.e. if set to ‘st’, intra-state flows will have no hurdle rates but inter-state flows will have hurdle rates specified by `GSw_TransHurdle`.
 1. `GSw_TransRestrict`: Indicate the level of hierarchy.csv within which to allow transmission expansion. i.e. if set to ‘st’, no inter-state expansion is allowed.
-1. `GSw_TransScen`: Indicate the inputs/transmission/transmission_capacity_future_{`GSw_TransScen`}.csv file to use, which includes the list of interfaces that can be expanded. Note that the full list of expandable interfaces is indicated by this file plus transmission_capacity_future_default.csv (currently planned additions) plus transmission_capacity_init_AC_NARIS2024.csv (existing AC interfaces, which can be expanded by default) plus transmission_capacity_init_nonAC.csv (existing DC connections, which can be expanded by default). Applies to AC, LCC, and VSC.
+1. `GSw_TransScen`: Indicate the inputs/transmission/transmission_capacity_future_{GSw_TransScen}.csv file to use, which includes the list of interfaces that can be expanded. Note that the full list of expandable interfaces is indicated by this file plus transmission_capacity_future_default.csv (currently planned additions) plus transmission_capacity_init_AC_NARIS2024.csv (existing AC interfaces, which can be expanded by default) plus transmission_capacity_init_nonAC.csv (existing DC connections, which can be expanded by default). Applies to AC, LCC, and VSC.
 1. `GSw_VSC`: Indicate whether to allow VSC expansion. Will only have an effect if paired with a `GSw_TransScen` that includes VSC interfaces.
 1. `GSw_PRM_hierarchy_level`: Level of hierarchy.csv within which to calculate net load, used for capacity credit. Larger levels indicate more planning coordination between regions.
 1. `GSw_PRMTRADE_level`: Level of hierarchy.csv within which to allow PRM trading. By default it’s set to ‘country’, indicating no limits. If set to ‘r’, no PRM trading is allowed.
