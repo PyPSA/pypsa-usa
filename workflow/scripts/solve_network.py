@@ -39,6 +39,7 @@ from opts.land import add_land_use_constraints
 from opts.policy import (
     add_regional_co2limit,
     add_RPS_constraints,
+    add_RPS_constraints_sector,
     add_technology_capacity_target_constraints,
 )
 from opts.reserves import (
@@ -156,6 +157,17 @@ def extra_functionality(n, snapshots):
         else None,
     }
 
+    # Some constraints have different logic for sector networks
+    if sector_enabled:
+        constraint_registry["RPS"] = (
+            lambda: add_RPS_constraints_sector(n, config, global_snakemake)
+            if n.generators.p_nom_extendable.any()
+            else None
+        )
+        constraint_registry["REM"] = (
+            lambda: add_sector_co2_constraints(n, config) if n.generators.p_nom_extendable.any() else None
+        )
+
     # Apply constraints based on options
     for opt in opts:
         if opt in constraint_registry:
@@ -185,10 +197,6 @@ def extra_functionality(n, snapshots):
         # Apply GSHP capacity constraint if urban/rural not split
         if not config["sector"]["service_sector"].get("split_urban_rural", False):
             add_gshp_capacity_constraint(n, config, global_snakemake)
-
-        # CO2 constraints for sectors
-        if "REMsec" in opts:
-            add_sector_co2_constraints(n, config)
 
         # Natural gas import/export constraints
         if config["sector"]["natural_gas"].get("imports", False):
@@ -359,12 +367,12 @@ if __name__ == "__main__":
         snakemake = mock_snakemake(
             "solve_network",
             interconnect="western",
-            simpl="12",
+            simpl="20",
             clusters="4m",
             ll="v1.0",
-            opts="4h",
+            opts="8h-RPS",
             sector="E-G",
-            planning_horizons="2018",
+            planning_horizons="2030",
         )
     configure_logging(snakemake)
     update_config_from_wildcards(snakemake.config, snakemake.wildcards)
@@ -375,7 +383,6 @@ if __name__ == "__main__":
 
     # sector specific co2 options
     if snakemake.wildcards.sector != "E":
-        opts = ["REMsec" if x == "REM" else x for x in opts]
         opts.append("sector")
 
     np.random.seed(solve_opts.get("seed", 123))
