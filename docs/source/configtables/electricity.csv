@@ -28,7 +28,7 @@ demand_response:,,,Settings to activate and configure demand response
 ,,,
 imports:,,,Configure electric imports from regions outside of model scope
 -enable,,``true`` or ``false``,Enable electric imports
--costs,$/MWh,``true`` or ``false`` or ``float`` of ``carrier``,Cost of electric imports from regions outside of model scope. ``False`` will set cost to ``0``. ``True`` will pull in wholesales electric prices. ``float`` will assign a user specified value. ``carrier`` will take average marginal cost of the carrier..
+-costs,$/MWh,``wholesale`` or ``<name of carrier>`` or ``float``,Cost of electric imports from regions outside of model scope. ``Wholesale`` will use in monthly wholesales electric prices. ``float`` will assign a user specified value. ``carrier`` will take average marginal cost of the carrier.
 -co2_emissions,CO2/MWh,``float``,CO2 emissions of electric imports from regions outside of model scope.
 -capacity_limit,,``true`` or ``false``,Enable capacity limit for electric imports from regions outside of model scope
 -volume_limit,percent,"float {0 <=, >= 100} or 'inf'",Volume limit for electric imports from regions outside of model scope (in % of total demand). Set to ``inf`` to not enforce volume limits.
@@ -36,7 +36,7 @@ imports:,,,Configure electric imports from regions outside of model scope
 ,,,
 exports:,,,Configure electric exports to regions outside of model scope
 -enable,,``true`` or ``false``,Enable electric exports
--costs,$/MWh,``true`` or ``false`` or ``float`` of ``carrier``,Cost of electric exports to regions outside of model scope. ``False`` will set cost to ``0``. ``True`` will pull in wholesales electric prices. ``float`` will assign a user specified value. ``carrier`` will take average marginal cost of the carrier..
+-costs,$/MWh,``wholesale`` or ``<name of carrier>`` or ``float``,Cost of electric imports from regions outside of model scope. ``Wholesale`` will use in monthly wholesales electric prices. ``float`` will assign a user specified value. ``carrier`` will take average marginal cost of the carrier.
 -capacity_limit,,``true`` or ``false``,Enable capacity limit for electric exports to regions outside of model scope
 -volume_limit,percent,"float {0 <=, >= 100} or 'inf'",Volume limit for electric exports to regions outside of model scope (in % of total demand). Set to ``inf`` to not enforce volume limits.
 -balancing_period,,``day`` or ``week`` or ``month`` or ``year``,Balancing period for electric exports to regions outside of model scope.

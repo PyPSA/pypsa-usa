@@ -78,7 +78,7 @@ electricity:
 
   imports:
     enable: false 
-    costs: true # true|false|float|carrier
+    costs: wholesale # wholesale|carrier|float
     co2_emissions: 0.428 
     capacity_limit: true 
     volume_limit: inf # 0 > x > 100 | 'inf'
@@ -86,7 +86,7 @@ electricity:
 
   exports:
     enable: false 
-    costs: true # true|false|float|carrier
+    costs: wholesale # wholesale|carrier|float
     capacity_limit: true 
     volume_limit: inf # 0 > x > 100 | 'inf'
     balancing_period: month # day|week|month|year
