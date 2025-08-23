@@ -276,7 +276,7 @@ def add_RPS_constraints(n, config, snakemake=None):
     model_horizon = get_model_horizon(n.model)
 
     # Read portfolio standards data
-    portfolio_standards = pd.read_csv(f"../{config['electricity']['portfolio_standards']}")
+    portfolio_standards = pd.read_csv(config["electricity"]["portfolio_standards"])
 
     # Process RPS and CES REEDS data
     rps_reeds = _process_reeds_data(
