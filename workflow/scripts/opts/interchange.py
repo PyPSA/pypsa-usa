@@ -8,11 +8,14 @@ import pypsa
 logger = logging.getLogger(__name__)
 
 
-def get_import_export_limit(n: pypsa.Network) -> float:
+def get_import_export_limit(n: pypsa.Network, timesteps_in_period: pd.Series) -> float:
     """Get the import or export limit for the network."""
+    timesteps = pd.to_datetime(timesteps_in_period)
     load_names = n.loads[n.loads.carrier == "AC"].index.tolist()
-    loads = n.loads_t["p_set"][load_names].mul(n.snapshot_weightings.objective, axis=0)
-    return loads.sum().sum()
+    weights = n.snapshot_weightings.objective
+    loads_t = n.loads_t["p_set"]
+    loads_t = loads_t[loads_t.index.get_level_values("timestep").isin(timesteps)][load_names].mul(weights, axis=0)
+    return loads_t.sum().sum()
 
 
 def get_periods(n: pypsa.Network) -> pd.Series:
@@ -111,7 +114,7 @@ def add_interchange_constraints(n, config, direction):
                 .sum()
             )
 
-            rhs = round(get_import_export_limit(n) * volume_limit / 100, 2)
+            rhs = round(get_import_export_limit(n, timesteps_in_period) * volume_limit / 100, 2)
 
             n.model.add_constraints(
                 lhs <= rhs,

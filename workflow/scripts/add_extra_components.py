@@ -1071,12 +1071,11 @@ def add_elec_imports_exports(
 
             # extremely crude cashing for generating cost timeseries :|
             if zone_outside not in costs:
-                if isinstance(fuel_costs, float):
+                if isinstance(fuel_costs, float | int):
                     costs[zone_inside] = fuel_costs
                 elif isinstance(fuel_costs, pd.DataFrame):
                     costs[zone_inside] = _build_cost_timeseries(n, fuel_costs, zone_inside)
                 else:
-                    logger.warning("Setting marginal cost for electricity imports/exports to 0")
                     costs[zone_inside] = 0
 
             marginal_cost = costs[zone_inside]
@@ -1488,7 +1487,7 @@ if __name__ == "__main__":
         snakemake = mock_snakemake(
             "add_extra_components",
             interconnect="western",
-            simpl="70",
+            simpl="20",
             clusters="4m",
         )
     configure_logging(snakemake)
@@ -1616,7 +1615,7 @@ if __name__ == "__main__":
 
         import_costs = imports_config.get("costs", False)
 
-        if isinstance(import_costs, float):  # user defined value
+        if isinstance(import_costs, float | int):  # user defined value
             fuel_costs = import_costs
         elif isinstance(import_costs, str):  # name of carrier
             fuel_costs = calc_import_export_costs(n, import_costs)
@@ -1626,7 +1625,6 @@ if __name__ == "__main__":
                 fuel_costs = format_import_export_costs(n, fuel_costs)
             else:
                 fuel_costs = 0
-                logger.warning("No imports costs provided, setting to 0. Check the imports configuration.")
         else:
             raise ValueError(f"'imports.costs' must be a float, boolean, or string. Received: {import_costs}")
 
@@ -1647,17 +1645,19 @@ if __name__ == "__main__":
 
         export_costs = exports_config.get("costs", False)
 
-        if isinstance(export_costs, float):  # user defined value
+        if isinstance(export_costs, float | int):  # user defined value
             fuel_costs = export_costs
+            fuel_costs *= -1  # make money by exporting
         elif isinstance(export_costs, str):  # name of carrier
             fuel_costs = calc_import_export_costs(n, export_costs)
+            fuel_costs *= -1  # make money by exporting
         elif isinstance(export_costs, bool):  # wholesale market cost
             if export_costs:
                 fuel_costs = load_import_export_costs(snakemake.params.eia_api, year)
                 fuel_costs = format_import_export_costs(n, fuel_costs)
+                fuel_costs = fuel_costs.mul(-1)  # make money by exporting
             else:
                 fuel_costs = 0
-                logger.warning("No exports costs provided, setting to 0. Check the exports configuration.")
         else:
             raise ValueError(f"'exports.costs' must be a float, boolean, or string. Received: {export_costs}")
 
