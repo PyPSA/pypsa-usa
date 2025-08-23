@@ -3,7 +3,7 @@ import logging  # noqa: D100
 import numpy as np
 import pandas as pd
 import pypsa
-from _helpers import (
+from opts._helpers import (
     ceil_precision,
     filter_components,
     floor_precision,
@@ -227,8 +227,9 @@ def _process_reeds_data(filepath, carriers, value_col):
 
 def _collapse_portfolio_standards(n: pypsa.Network, planning_horizons: list[int], *args):
     """Collapse portfolio standards into a single row per region, planning horizon, and carrier."""
-    # Concatenate all portfolio standards
-    portfolio_standards = pd.concat([args])
+    expected_columns = ["region", "planning_horizon", "carrier", "pct"]
+    dfs = [df[expected_columns] for df in args]
+    portfolio_standards = pd.concat(dfs)
 
     portfolio_standards = portfolio_standards[
         (portfolio_standards.pct > 0.0)
@@ -275,7 +276,7 @@ def add_RPS_constraints(n, config, snakemake=None):
     model_horizon = get_model_horizon(n.model)
 
     # Read portfolio standards data
-    portfolio_standards = pd.read_csv(config["electricity"]["portfolio_standards"])
+    portfolio_standards = pd.read_csv(f"../{config['electricity']['portfolio_standards']}")
 
     # Process RPS and CES REEDS data
     rps_reeds = _process_reeds_data(
@@ -349,6 +350,27 @@ def add_RPS_constraints(n, config, snakemake=None):
         )
 
 
+def _get_state_generation(n, planning_horizon, state, carriers):
+    """Generation of supply side technologies excluding trade."""
+    state_buses = n.buses[(n.buses.reeds_state == state) & (n.buses.carrier == "AC")]
+    state_gens = n.generators[n.generators.bus.isin(state_buses.index) & n.generators.carrier.isin(carriers)]
+    state_links = n.links[n.links.bus1.isin(state_buses.index) & n.links.carrier.isin(carriers)]
+
+    gens_demand = (
+        n.model["Generator-p"]
+        .sel(
+            period=planning_horizon,
+            Generator=state_gens.index,
+        )
+        .sum()
+    )
+    links_demand = (
+        n.model["Link-p"].sel(period=planning_horizon, Link=state_links.index).mul(state_links.efficiency).sum()
+    )
+
+    return gens_demand + links_demand
+
+
 def add_RPS_constraints_sector(n, config, snakemake=None):
     """Add RPS constraints to the network for sector studies.
 
@@ -388,39 +410,53 @@ def add_RPS_constraints_sector(n, config, snakemake=None):
         ces_reeds,
     )
 
+    # get all genertion carriers
+    all_carriers = list(
+        set(config["electricity"].get("conventional_carriers", []))
+        | set(config["electricity"].get("renewable_carriers", []))
+        | set(config["electricity"].get("extendable_carriers", {}).get("Generator", [])),
+    )
     # Iterate through constraints and add RPS constraints to the model
-    for (rec_trading_zone, planning_horizon, policy_carriers), zone_constraints in portfolio_standards.groupby(
-        ["rec_trading_zone", "planning_horizon", "carrier"],
-    ):
-        if planning_horizon not in model_horizon:
-            continue
-        region_buses = get_region_buses(n, zone_constraints.region.unique())
-        carriers = [carrier.strip() for carrier in policy_carriers.split(",")]
+    for rec_trading_zone in portfolio_standards.rec_trading_zone.unique():
+        rtz = portfolio_standards[portfolio_standards.rec_trading_zone == rec_trading_zone]
 
-        # Filter region generators
-        region_gens = n.generators[n.generators.bus.isin(region_buses.index)]
-        region_gens_eligible = region_gens[region_gens.carrier.isin(carriers)]
+        for planning_horizon in rtz.planning_horizon.unique():
+            # only add constraints for planning horizons in the model horizon
+            if planning_horizon not in model_horizon:
+                continue
 
-        if region_gens_eligible.empty:
-            return
+            rtz_planning_horizon = rtz[rtz.planning_horizon == planning_horizon]
 
-        # generator power contributing
-        p_eligible = n.model["Generator-p"].sel(
-            period=planning_horizon,
-            Generator=region_gens_eligible.index,
-        )
-        renewable_gen = zone_constraints.rps_rhs_sector.sum()
-        lhs = p_eligible.sum() - renewable_gen
-        rhs = 0
+            for policy_carriers in rtz_planning_horizon.carrier.unique():
+                carriers = [x.strip() for x in policy_carriers.split(",")]
 
-        # Add constraint
-        n.model.add_constraints(
-            lhs >= rhs,
-            # name=f"GlobalConstraint-{constraint_row.name}_{constraint_row.planning_horizon}_{policy_name}_limit",
-        )
-        # logger.info(
-        #     f"Added {rec_trading_zone} {policy_name} for {constraint_row.planning_horizon}.",
-        # )
+                policy = rtz_planning_horizon[rtz_planning_horizon.carrier == policy_carriers]
+
+                # total supply side demand in the rec zone scaled by state level rps
+                demands = []  # linopy sums
+                for state, rps in zip(policy.region, policy.pct):
+                    demand = _get_state_generation(n, planning_horizon, state, all_carriers)
+                    demands.append(demand * rps)
+                rps_required_generation = sum(demands)
+
+                # rps eligible generation in the rec zone
+                generations = []  # linopy sums
+                for state in policy.region.unique():
+                    generations.append(_get_state_generation(n, planning_horizon, state, carriers))
+                rps_actual_generation = sum(generations)
+
+                lhs = rps_actual_generation - rps_required_generation
+                rhs = 0
+
+                # add constraint
+                carrier_name = "-".join(carriers)
+                n.model.add_constraints(
+                    lhs >= rhs,
+                    name=f"GlobalConstraint-{rec_trading_zone}_{planning_horizon}_{carrier_name}_limit",
+                )
+                logger.info(
+                    f"Added {rec_trading_zone} for {planning_horizon} for carriers {carrier_name}.",
+                )
 
 
 def add_regional_co2limit(n, config):
