@@ -2,6 +2,7 @@ import logging  # noqa: D100
 
 import numpy as np
 import pandas as pd
+import pypsa
 from opts._helpers import (
     ceil_precision,
     filter_components,
@@ -12,6 +13,18 @@ from opts._helpers import (
 from pypsa.descriptors import get_switchable_as_dense as get_as_dense
 
 logger = logging.getLogger(__name__)
+
+RPS_CARRIERS = [
+    "onwind",
+    "offwind",
+    "offwind_floating",
+    "solar",
+    "hydro",
+    "geothermal",
+    "biomass",
+    "EGS",
+]
+CES_CARRIERS = [*RPS_CARRIERS, "nuclear", "SMR", "hydrogen_ct", "CCGT-95CCS", "CCGT-99CCS", "Coal-95CCS"]
 
 
 def add_technology_capacity_target_constraints(n, config):
@@ -187,7 +200,54 @@ def add_technology_capacity_target_constraints(n, config):
             )
 
 
-def add_RPS_constraints(n, config, sector, snakemake=None):
+def _process_reeds_data(filepath, carriers, value_col):
+    """Helper function to process RPS or CES REEDS data."""
+    reeds = pd.read_csv(filepath)
+
+    # Handle both wide and long formats
+    if "rps_all" not in reeds.columns:
+        reeds = reeds.melt(
+            id_vars="st",
+            var_name="planning_horizon",
+            value_name=value_col,
+        )
+
+    # Standardize column names
+    reeds = reeds.rename(
+        columns={"st": "region", "t": "planning_horizon", "rps_all": "pct"},
+    )
+    reeds["carrier"] = [", ".join(carriers)] * len(reeds)
+
+    # Ensure the final dataframe has consistent columns
+    reeds = reeds[["region", "planning_horizon", "carrier", "pct"]]
+    reeds = reeds[reeds["pct"] > 0.0]  # Remove any rows with zero or negative percentages
+
+    return reeds
+
+
+def _collapse_portfolio_standards(n: pypsa.Network, planning_horizons: list[int], *args):
+    """Collapse portfolio standards into a single row per region, planning horizon, and carrier."""
+    expected_columns = ["region", "planning_horizon", "carrier", "pct"]
+    dfs = [df[expected_columns] for df in args]
+    portfolio_standards = pd.concat(dfs)
+
+    portfolio_standards = portfolio_standards[
+        (portfolio_standards.pct > 0.0)
+        & (
+            portfolio_standards.planning_horizon.isin(
+                planning_horizons,
+            )
+        )
+        & (portfolio_standards.region.isin(n.buses.reeds_state.unique()))
+    ]
+
+    mapper = n.buses.groupby("reeds_state")["rec_trading_zone"].first().to_dict()
+    portfolio_standards["rec_trading_zone"] = portfolio_standards.region.map(mapper).fillna(portfolio_standards.region)
+
+    return portfolio_standards
+
+
+def add_RPS_constraints(n, config, snakemake=None):
     """
     Add Renewable Portfolio Standards (RPS) constraints to the network.
 
@@ -205,8 +265,6 @@ def add_RPS_constraints(n, config, sector, snakemake=None):
         The PyPSA network object.
     config : dict
         A dictionary containing configuration settings and file paths.
-    sector: bool
-        Sector study
     snakemake: object, optional
         Snakemake object containing inputs and parameters
 
@@ -214,77 +272,32 @@ def add_RPS_constraints(n, config, sector, snakemake=None):
     -------
     None
     """
-
-    def process_reeds_data(filepath, carriers, value_col):
-        """Helper function to process RPS or CES REEDS data."""
-        reeds = pd.read_csv(filepath)
-
-        # Handle both wide and long formats
-        if "rps_all" not in reeds.columns:
-            reeds = reeds.melt(
-                id_vars="st",
-                var_name="planning_horizon",
-                value_name=value_col,
-            )
-
-        # Standardize column names
-        reeds = reeds.rename(
-            columns={"st": "region", "t": "planning_horizon", "rps_all": "pct"},
-        )
-        reeds["carrier"] = [", ".join(carriers)] * len(reeds)
-
-        # Ensure the final dataframe has consistent columns
-        reeds = reeds[["region", "planning_horizon", "carrier", "pct"]]
-        reeds = reeds[reeds["pct"] > 0.0]  # Remove any rows with zero or negative percentages
-
-        return reeds
-
     # Get model horizon
     model_horizon = get_model_horizon(n.model)
 
     # Read portfolio standards data
     portfolio_standards = pd.read_csv(config["electricity"]["portfolio_standards"])
 
-    # Define carriers for RPS and CES
-    rps_carriers = [
-        "onwind",
-        "offwind",
-        "offwind_floating",
-        "solar",
-        "hydro",
-        "geothermal",
-        "biomass",
-        "EGS",
-    ]
-    ces_carriers = [*rps_carriers, "nuclear", "SMR", "hydrogen_ct", "CCGT-95CCS", "CCGT-99CCS", "Coal-95CCS"]
-
     # Process RPS and CES REEDS data
-    rps_reeds = process_reeds_data(
+    rps_reeds = _process_reeds_data(
         snakemake.input.rps_reeds,
-        rps_carriers,
+        RPS_CARRIERS,
         value_col="pct",
     )
-    ces_reeds = process_reeds_data(
+    ces_reeds = _process_reeds_data(
         snakemake.input.ces_reeds,
-        ces_carriers,
+        CES_CARRIERS,
         value_col="pct",
     )
 
     # Concatenate all portfolio standards
-    portfolio_standards = pd.concat([portfolio_standards, rps_reeds, ces_reeds])
-
-    portfolio_standards = portfolio_standards[
-        (portfolio_standards.pct > 0.0)
-        & (
-            portfolio_standards.planning_horizon.isin(
-                snakemake.params.planning_horizons,
-            )
-        )
-        & (portfolio_standards.region.isin(n.buses.reeds_state.unique()))
-    ]
-
-    mapper = n.buses.groupby("reeds_state")["rec_trading_zone"].first().to_dict()
-    portfolio_standards["rec_trading_zone"] = portfolio_standards.region.map(mapper).fillna(portfolio_standards.region)
+    portfolio_standards = _collapse_portfolio_standards(
+        n,
+        snakemake.params.planning_horizons,
+        portfolio_standards,
+        rps_reeds,
+        ces_reeds,
+    )
 
     for _, constraint_row in portfolio_standards.iterrows():
         region_list = [region.strip() for region in constraint_row.region.split(",")]
@@ -300,18 +313,6 @@ def add_RPS_constraints(n, config, sector, snakemake=None):
         )
         region_rps_rhs = int(constraint_row.pct * region_demand)
         portfolio_standards.loc[constraint_row.name, "rps_rhs"] = region_rps_rhs
-
-        if sector:
-            # power level buses
-            pwr_buses = n.buses[(n.buses.carrier == "AC") & (n.buses.index.isin(region_buses.index))]
-            # links delievering power within the region
-            # removes any transmission links
-            pwr_links = n.links[(n.links.bus0.isin(pwr_buses.index)) & ~(n.links.bus1.isin(pwr_buses.index))]
-            region_demand_sector = (
-                n.model["Link-p"].sel(period=constraint_row.planning_horizon, Link=pwr_links.index).sum()
-            )
-            region_rps_rhs_sector = int(constraint_row.pct * region_demand_sector)
-            portfolio_standards.loc[constraint_row.name, "rps_rhs_sector"] = region_rps_rhs_sector
 
     # Iterate through constraints and add RPS constraints to the model
     for (rec_trading_zone, planning_horizon, policy_carriers), zone_constraints in portfolio_standards.groupby(
@@ -329,28 +330,14 @@ def add_RPS_constraints(n, config, sector, snakemake=None):
         if region_gens_eligible.empty:
             return
 
-        elif not sector:
-            # Eligible generation
-            p_eligible = n.model["Generator-p"].sel(
-                period=planning_horizon,
-                Generator=region_gens_eligible.index,
-            )
-            renewable_gen = zone_constraints.rps_rhs.sum()
-            lhs = p_eligible.sum() - renewable_gen
-            rhs = 0
-
-        elif sector:
-            # generator power contributing
-            p_eligible = n.model["Generator-p"].sel(
-                period=planning_horizon,
-                Generator=region_gens_eligible.index,
-            )
-            renewable_gen = zone_constraints.rps_rhs_sector.sum()
-            lhs = p_eligible.sum() - renewable_gen
-            rhs = 0
-
-        else:
-            logger.error("Undefined control flow for RPS constraint.")
+        # Eligible generation
+        p_eligible = n.model["Generator-p"].sel(
+            period=planning_horizon,
+            Generator=region_gens_eligible.index,
+        )
+        renewable_gen = zone_constraints.rps_rhs.sum()
+        lhs = p_eligible.sum() - renewable_gen
+        rhs = 0
 
         n.model.add_constraints(
             lhs >= rhs,
@@ -361,6 +348,115 @@ def add_RPS_constraints(n, config, sector, snakemake=None):
             f"Added RPS constraint '{rec_trading_zone}' for {planning_horizon} "
             f"requiring {renewable_gen / 1e6:.1f} TWh of {policy_carriers} generation ",
         )
+
+
+def _get_state_generation(n, planning_horizon, state, carriers):
+    """Generation of supply side technologies excluding trade."""
+    state_buses = n.buses[(n.buses.reeds_state == state) & (n.buses.carrier == "AC")]
+    state_gens = n.generators[n.generators.bus.isin(state_buses.index) & n.generators.carrier.isin(carriers)]
+    state_links = n.links[n.links.bus1.isin(state_buses.index) & n.links.carrier.isin(carriers)]
+
+    gens_demand = (
+        n.model["Generator-p"]
+        .sel(
+            period=planning_horizon,
+            Generator=state_gens.index,
+        )
+        .sum()
+    )
+    links_demand = (
+        n.model["Link-p"].sel(period=planning_horizon, Link=state_links.index).mul(state_links.efficiency).sum()
+    )
+
+    return gens_demand + links_demand
+
+
+def add_RPS_constraints_sector(n, config, snakemake=None):
+    """Add RPS constraints to the network for sector studies.
+
+    This function enforces constraints on the percentage of electricity generation
+    from renewable energy sources for specific regions and planning horizons.
+    It reads the necessary data from configuration files and the network.
+
+    The differenct between electrical and sector implementation is:
+    - Electrical applies RPS against exogenously defined demand
+    - Sector applies RPS against endogenously solved power sector generation as final
+    demand is not exogenously availabele.
+    """
+    # Get model horizon
+    model_horizon = get_model_horizon(n.model)
+
+    # Read portfolio standards data
+    portfolio_standards = pd.read_csv(f"../{config['electricity']['portfolio_standards']}")
+
+    # Process RPS and CES REEDS data
+    rps_reeds = _process_reeds_data(
+        snakemake.input.rps_reeds,
+        RPS_CARRIERS,
+        value_col="pct",
+    )
+    ces_reeds = _process_reeds_data(
+        snakemake.input.ces_reeds,
+        CES_CARRIERS,
+        value_col="pct",
+    )
+
+    # Concatenate all portfolio standards
+    portfolio_standards = _collapse_portfolio_standards(
+        n,
+        snakemake.params.planning_horizons,
+        portfolio_standards,
+        rps_reeds,
+        ces_reeds,
+    )
+
+    # get all genertion carriers
+    all_carriers = list(
+        set(config["electricity"].get("conventional_carriers", []))
+        | set(config["electricity"].get("renewable_carriers", []))
+        | set(config["electricity"].get("extendable_carriers", {}).get("Generator", [])),
+    )
+    # Iterate through constraints and add RPS constraints to the model
+    for rec_trading_zone in portfolio_standards.rec_trading_zone.unique():
+        rtz = portfolio_standards[portfolio_standards.rec_trading_zone == rec_trading_zone]
+
+        for planning_horizon in rtz.planning_horizon.unique():
+            # only add constraints for planning horizons in the model horizon
+            if planning_horizon not in model_horizon:
+                continue
+
+            rtz_planning_horizon = rtz[rtz.planning_horizon == planning_horizon]
+
+            for policy_carriers in rtz_planning_horizon.carrier.unique():
+                carriers = [x.strip() for x in policy_carriers.split(",")]
+
+                policy = rtz_planning_horizon[rtz_planning_horizon.carrier == policy_carriers]
+
+                # total supply side demand in the rec zone scaled by state level rps
+                demands = []  # linopy sums
+                for state, rps in zip(policy.region, policy.pct):
+                    demand = _get_state_generation(n, planning_horizon, state, all_carriers)
+                    demands.append(demand * rps)
+                rps_required_generation = sum(demands)
+
+                # rps eligible generation in the rec zone
+                generations = []  # linopy sums
+                for state in policy.region.unique():
+                    generations.append(_get_state_generation(n, planning_horizon, state, carriers))
+                rps_actual_generation = sum(generations)
+
+                lhs = rps_actual_generation - rps_required_generation
+                rhs = 0
+
+                # add constraint
+                carrier_name = "-".join(carriers)
+                n.model.add_constraints(
+                    lhs >= rhs,
+                    name=f"GlobalConstraint-{rec_trading_zone}_{planning_horizon}_{carrier_name}_limit",
+                )
+                logger.info(
+                    f"Added {rec_trading_zone} for {planning_horizon} for carriers {carrier_name}.",
+                )
 
 
 def add_regional_co2limit(n, config):
