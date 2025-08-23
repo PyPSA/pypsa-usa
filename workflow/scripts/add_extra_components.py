@@ -919,7 +919,8 @@ def format_import_export_costs(n: pypsa.Network, fuel_costs: pd.DataFrame) -> pd
             temp = df[(df.index == period) & (df.state == state)]
             value = temp.value.mean()
             data.append([period, region, value, "usd/mwh"])
-    return pd.DataFrame(data, columns=["period", "zone", "value", "units"]).set_index("period")
+    formatted = pd.DataFrame(data, columns=["period", "zone", "value", "units"]).set_index("period")
+    return formatted[~formatted.value.isna()]  # regions outside of model scope
 
 
 def format_flowgates_for_imports_exports(n: pypsa.Network, flowgates: pd.DataFrame, zone_col: str) -> pd.DataFrame:
@@ -1617,16 +1618,16 @@ if __name__ == "__main__":
 
         if isinstance(import_costs, float | int):  # user defined value
             fuel_costs = import_costs
-        elif isinstance(import_costs, str):  # name of carrier
-            fuel_costs = calc_import_export_costs(n, import_costs)
-        elif isinstance(import_costs, bool):  # wholesale market cost
-            if import_costs:
+        elif isinstance(import_costs, str):  # 'wholesale' or name of carrier
+            if import_costs == "wholesale":
                 fuel_costs = load_import_export_costs(snakemake.params.eia_api, year)
                 fuel_costs = format_import_export_costs(n, fuel_costs)
             else:
-                fuel_costs = 0
+                fuel_costs = calc_import_export_costs(n, import_costs)
         else:
-            raise ValueError(f"'imports.costs' must be a float, boolean, or string. Received: {import_costs}")
+            raise ValueError(
+                f"'imports.costs' must be 'wholesale', name of a carrier, or a float/int. Received: {import_costs}",
+            )
 
         add_elec_imports_exports(n, "imports", import_flowgates, fuel_costs, co2_emissions, zone_col)
 
@@ -1648,18 +1649,18 @@ if __name__ == "__main__":
         if isinstance(export_costs, float | int):  # user defined value
             fuel_costs = export_costs
             fuel_costs *= -1  # make money by exporting
-        elif isinstance(export_costs, str):  # name of carrier
-            fuel_costs = calc_import_export_costs(n, export_costs)
-            fuel_costs *= -1  # make money by exporting
-        elif isinstance(export_costs, bool):  # wholesale market cost
-            if export_costs:
+        elif isinstance(export_costs, str):  # 'wholesale' or name of carrier
+            if export_costs == "wholesale":
                 fuel_costs = load_import_export_costs(snakemake.params.eia_api, year)
                 fuel_costs = format_import_export_costs(n, fuel_costs)
-                fuel_costs = fuel_costs.mul(-1)  # make money by exporting
+                fuel_costs["value"] = fuel_costs.value.mul(-1)  # make money by exporting
             else:
-                fuel_costs = 0
+                fuel_costs = calc_import_export_costs(n, export_costs)
+                fuel_costs *= -1  # make money by exporting
         else:
-            raise ValueError(f"'exports.costs' must be a float, boolean, or string. Received: {export_costs}")
+            raise ValueError(
+                f"'exports.costs' must be 'wholesale', name of a carrier, or a float/int. Received: {export_costs}",
+            )
 
         add_elec_imports_exports(n, "exports", export_flowgates, fuel_costs, co2_emissions)
 
