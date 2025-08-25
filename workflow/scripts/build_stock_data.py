@@ -1112,7 +1112,7 @@ def add_service_brownfield(
             lifetime = costs.at["Commercial Electric Resistance Heaters", "lifetime"]
             efficiency = 1.0
 
-        df["bus0"] = df.name  # central electricity bus
+        df["bus0"] = df.bus1.map(lambda x: "-".join(x.split("-")[0:2]) + f"-{SecCarriers.ELECTRICITY.value}")
 
         # remove 'heat' or 'cool' ect.. from suffix
         df["carrier"] = df.suffix.map(lambda x: "-".join(x.split("-")[:-1]))
@@ -1177,7 +1177,7 @@ def add_service_brownfield(
             lifetime = costs.at["Commercial Rooftop Air Conditioners", "lifetime"]
             efficiency = 3.11  # 10.6 EER converted to COP
 
-        df["bus0"] = df.name  # central electricity bus
+        df["bus0"] = df.bus1.map(lambda x: "-".join(x.split("-")[0:2]) + f"-{SecCarriers.ELECTRICITY.value}")
 
         # remove 'heat' or 'cool' ect.. from suffix
         df["carrier"] = df.suffix.map(lambda x: "-".join(x.split("-")[:-1]))
@@ -1255,7 +1255,7 @@ def add_service_brownfield(
         lifetime = costs.at[cost_name, "lifetime"]
         efficiency = costs.at[cost_name, "efficiency"]
 
-        df["bus0"] = df.bus1 + f"-{fuel}-heater"
+        df["bus0"] = df.bus1.map(lambda x: "-".join(x.split("-")[0:2]) + f"-{SecCarriers.ELECTRICITY.value}")
         df["bus1"] = df.bus1 + "-heat"
         df["carrier"] = df.suffix + f"-{fuel}"
         df["ratio"] = df.state.map(ratio_map)
@@ -1332,7 +1332,7 @@ def add_service_brownfield(
         lifetime = costs.at[cost_name, "lifetime"]
         efficiency = costs.at[cost_name, "efficiency"]
 
-        df["bus"] = df.bus1 + f"-{fuel}-heater"
+        df["bus"] = df.bus1.map(lambda x: "-".join(x.split("-")[0:2]) + f"-{SecCarriers.ELECTRICITY.value}")
         df["carrier"] = df.suffix + f"-{fuel}"
         df["ratio"] = df.state.map(ratio_map)
         df["p_nom"] = df.p_max.mul(df.ratio).div(100)  # div to convert from %
