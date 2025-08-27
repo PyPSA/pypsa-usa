@@ -45,6 +45,7 @@ def build_heat(
         assert eia and year, "Must supply EIA API and costs year for dynamic fuel costs"
 
     dr_config = options.get("demand_response", {})
+    dr_config = dr_config.get(sector, dr_config)
 
     if sector in ("res", "com", "srv"):
         split_urban_rural = options.get("split_urban_rural", False)

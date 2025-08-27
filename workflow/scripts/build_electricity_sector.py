@@ -89,10 +89,10 @@ def add_electricity_dr(
     dr_config: dict[str, Any],
 ) -> None:
     """Adds stores to the network to use for demand response."""
-    by_carrier = dr_config.get("by_carrier", False)
-
     # check if dr is applied at a per-carrier level
+    dr_config = dr_config.get(sector, dr_config)
 
+    by_carrier = dr_config.get("by_carrier", False)
     if by_carrier:
         dr_config = dr_config.get("elec", {})
 
