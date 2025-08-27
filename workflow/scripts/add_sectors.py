@@ -505,6 +505,20 @@ def get_pwr_co2_intensity(carrier: str, costs: pd.DataFrame) -> float:
             return costs.at[carrier, "co2_emissions"]
 
 
+def add_elec_import_emission(n: pypsa.Network):
+    """Adds emission tracking for electricity imports."""
+    emissions = n.carriers.at["imports", "co2_emissions"]
+
+    import_links = n.links[n.links.carrier == "imports"]
+    buses = n.buses[(n.buses.reeds_zone.isin(import_links.bus1)) & (n.buses.carrier == "AC")]
+    bus_to_state = buses.set_index("reeds_zone")["reeds_state"].to_dict()
+
+    for bus, state in bus_to_state.items():
+        import_links_by_node = import_links[import_links.bus1 == bus]
+        n.links.loc[import_links_by_node.index, "efficiency2"] = emissions
+        n.links.loc[import_links_by_node.index, "bus2"] = state + " pwr-co2"
+
+
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
@@ -512,10 +526,10 @@ if __name__ == "__main__":
         snakemake = mock_snakemake(
             "add_sectors",
             interconnect="western",
-            simpl="20",
+            simpl="40",
             clusters="4m",
             ll="v1.0",
-            opts="8h-RPS",
+            opts="1h-REM",
             sector="E-G",
         )
     configure_logging(snakemake)
@@ -769,5 +783,8 @@ if __name__ == "__main__":
             add_dac(n, snakemake.config, True)
         else:
             logger.warning("Not adding DAC capabilities given that CO2 (underground) storage is not enabled")
+
+    # emission tracking for electricity imports
+    add_elec_import_emission(n)
 
     n.export_to_netcdf(snakemake.output.network)
