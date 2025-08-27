@@ -507,7 +507,11 @@ def get_pwr_co2_intensity(carrier: str, costs: pd.DataFrame) -> float:
 
 def add_elec_import_emission(n: pypsa.Network):
     """Adds emission tracking for electricity imports."""
-    emissions = n.carriers.at["imports", "co2_emissions"]
+    try:
+        emissions = n.carriers.at["imports", "co2_emissions"]
+    except KeyError:
+        logger.info("No electrical imports found, skipping emission tracking")
+        return
 
     import_links = n.links[n.links.carrier == "imports"]
     buses = n.buses[(n.buses.reeds_zone.isin(import_links.bus1)) & (n.buses.carrier == "AC")]
