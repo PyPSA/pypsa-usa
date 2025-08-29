@@ -266,6 +266,7 @@ def add_transport_dr(n: pypsa.Network, vehicle: str, dr_config: dict[str, Any]) 
         marginal_cost_storage=marginal_cost_storage,
         lifetime=lifetime,
         build_year=build_year,
+        standing_loss=0,
     )
 
     n.madd(
@@ -282,6 +283,7 @@ def add_transport_dr(n: pypsa.Network, vehicle: str, dr_config: dict[str, Any]) 
         marginal_cost_storage=marginal_cost_storage * (-1),
         lifetime=lifetime,
         build_year=build_year,
+        standing_loss=0,
     )
 
 

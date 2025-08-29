@@ -89,10 +89,10 @@ def add_electricity_dr(
     dr_config: dict[str, Any],
 ) -> None:
     """Adds stores to the network to use for demand response."""
-    by_carrier = dr_config.get("by_carrier", False)
-
     # check if dr is applied at a per-carrier level
+    dr_config = dr_config.get(sector, dr_config)
 
+    by_carrier = dr_config.get("by_carrier", False)
     if by_carrier:
         dr_config = dr_config.get("elec", {})
 
@@ -214,6 +214,7 @@ def add_electricity_dr(
         marginal_cost_storage=marginal_cost_storage,
         lifetime=np.inf,
         build_year=n.investment_periods[0],
+        standing_loss=0,
     )
 
     n.madd(
@@ -230,6 +231,7 @@ def add_electricity_dr(
         marginal_cost_storage=marginal_cost_storage * (-1),
         lifetime=np.inf,
         build_year=n.investment_periods[0],
+        standing_loss=0,
     )
 
 

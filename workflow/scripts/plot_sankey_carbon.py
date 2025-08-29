@@ -26,6 +26,7 @@ COLORS = {
     "Industrial": "rgba(255,188,200,1)",
     "Transportation": "rgba(255,188,200,1)",
     "CO2e Emissions": "rgba(186,186,186,1)",
+    "Imports": "rgba(255,188,200,1)",
     # "Energy Services": "rgba(97,97,97,1)",
 }
 
@@ -39,6 +40,7 @@ POSITIONS = {
     "Industrial": (0.66, 0.8),
     "Transportation": (0.66, 0.99),
     "CO2e Emissions": (0.99, 0.50),
+    "Imports": (0.33, 0.3),
 }
 
 SANKEY_CODE_MAPPER = {name: num for num, name in enumerate(COLORS)}
@@ -74,6 +76,7 @@ NAME_MAPPER = {
     "res": "Residential",
     "trn": "Transportation",
     "ind": "Industrial",
+    "imports": "Imports",
 }
 
 ###

@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 import pypsa
 import xarray as xr
-from constants_sector import SecNames
+from constants_sector import SecCarriers, SecNames
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +45,7 @@ def build_heat(
         assert eia and year, "Must supply EIA API and costs year for dynamic fuel costs"
 
     dr_config = options.get("demand_response", {})
+    dr_config = dr_config.get(sector, dr_config)
 
     if sector in ("res", "com", "srv"):
         split_urban_rural = options.get("split_urban_rural", False)
@@ -434,7 +435,7 @@ def add_air_cons(
     loads = n.loads[(n.loads.carrier == carrier_name) & (n.loads.bus.str.contains(heat_system))]
 
     acs = pd.DataFrame(index=loads.bus)
-    acs["bus0"] = acs.index.map(lambda x: x.split(f" {sector}-{heat_system}-cool")[0])
+    acs["bus0"] = acs.index.map(lambda x: f"{x.split('-cool')[0]}-{SecCarriers.ELECTRICITY.value}")
     acs["bus1"] = acs.index
     acs["carrier"] = f"{sector}-{heat_system}-air-con"
     acs.index = acs.bus0
@@ -714,9 +715,7 @@ def add_service_furnace(
     df["bus2"] = df.index.map(n.buses.STATE) + f" {sector}-co2"
 
     if fuel == "elec":
-        df["bus0"] = df.index.map(
-            lambda x: x.split(f" {sector}-{heat_system}-{heat_carrier}")[0],
-        )
+        df["bus0"] = df.index.map(lambda x: f"{x} {sector}-{heat_system}-{SecCarriers.ELECTRICITY.value}")
     else:
         df["bus0"] = df.state + " " + fuel
         df["efficiency2"] = costs.at[fuel, "co2_emissions"]
@@ -996,9 +995,7 @@ def add_service_water_store(
     df["carrier"] = f"{sector}-{heat_system}-water-{fuel}"
 
     if fuel == "elec":
-        df["bus0"] = df.index.map(
-            lambda x: x.split(f" {sector}-{heat_system}-water")[0],
-        )
+        df["bus0"] = df.index.map(lambda x: f"{x.split('-water')[0]}-{SecCarriers.ELECTRICITY.value}")
     else:
         fuel_name = "oil" if fuel == "lpg" else fuel
         df["bus0"] = df.state + " " + fuel_name
@@ -1154,13 +1151,16 @@ def add_service_heat_pumps(
 
     hps = pd.DataFrame(index=loads.bus)
     hps["bus0"] = hps.index.map(
-        lambda x: x.split(f" {sector}-{heat_system}-{heat_carrier}")[0],
+        lambda x: f"{x.split(f'-{heat_carrier}')[0]}-{SecCarriers.ELECTRICITY.value}",
     )
     hps["bus1"] = hps.index
     hps["carrier"] = f"{sector}-{heat_system}-{hp_abrev}"
     hps.index = hps.bus0  # just node name (ie. p480 0)
 
     if isinstance(cop, pd.DataFrame):
+        cop_per_node = hps.bus0.to_list()
+        cop_mapper = {x.split(" ")[0]: x for x in cop_per_node}
+        cop = cop.rename(columns=cop_mapper)
         efficiency = cop[hps.index.to_list()]
     else:
         efficiency = costs.at[costs_name, "efficiency"].round(1)
@@ -1297,7 +1297,7 @@ def add_industrial_coal_furnace(
         efficiency=efficiency,
         efficiency2=furnace.efficiency2,
         capital_cost=capex,
-        p_nom_extendable=True,
+        p_nom_extendable=False,
         marginal_cost=mc,
         lifetime=lifetime,
         build_year=build_year,
@@ -1323,7 +1323,7 @@ def add_indusrial_heat_pump(
 
     hp = pd.DataFrame(index=loads.bus)
     hp["state"] = hp.index.map(n.buses.STATE)
-    hp["bus0"] = hp.index.map(lambda x: x.split(f" {sector}-heat")[0])
+    hp["bus0"] = hp.index.str.replace("-heat", f"-{SecCarriers.ELECTRICITY.value}")
     hp["bus1"] = hp.index
     hp["carrier"] = f"{sector}-heat-pump"
     hp.index = hp.index.map(lambda x: x.split("-heat")[0])
