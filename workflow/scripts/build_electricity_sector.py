@@ -214,6 +214,7 @@ def add_electricity_dr(
         marginal_cost_storage=marginal_cost_storage,
         lifetime=np.inf,
         build_year=n.investment_periods[0],
+        standing_loss=0,
     )
 
     n.madd(
@@ -230,6 +231,7 @@ def add_electricity_dr(
         marginal_cost_storage=marginal_cost_storage * (-1),
         lifetime=np.inf,
         build_year=n.investment_periods[0],
+        standing_loss=0,
     )
 
 

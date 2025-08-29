@@ -1297,7 +1297,7 @@ def add_industrial_coal_furnace(
         efficiency=efficiency,
         efficiency2=furnace.efficiency2,
         capital_cost=capex,
-        p_nom_extendable=True,
+        p_nom_extendable=False,
         marginal_cost=mc,
         lifetime=lifetime,
         build_year=build_year,
