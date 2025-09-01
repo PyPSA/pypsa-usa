@@ -152,6 +152,9 @@ def _get_opt_capacity_per_node(
 
     df = _filter_link_on_sector(n, sector)
 
+    # remove any demand response
+    df = df[~((df.index.str.contains("-fwd-dr")) | (df.index.str.contains("-bck-dr")))]
+
     # remove the double accounting
     if sector in ("res", "com"):
         df = df[
@@ -206,10 +209,13 @@ def _get_total_capacity_per_node(
     sector: str,
     include_elec: bool = False,
     state: str | None = None,
-) -> pd.DataFrame:
+) -> pd.Series:
     assert sector not in ["pwr"]
 
     df = _filter_link_on_sector(n, sector)
+
+    # remove any demand response
+    df = df[~((df.index.str.contains("-fwd-dr")) | (df.index.str.contains("-bck-dr")))]
 
     # remove the double accounting
     if sector in ("res", "com"):
@@ -229,7 +235,15 @@ def _get_total_capacity_per_node(
     df["node"] = df.bus1.map(n.buses.country)
     df = df[["p_nom_opt", "node"]]
 
-    return df.reset_index(drop=True).groupby(["node"]).sum()
+    df = df.reset_index(drop=True)
+
+    if len(df.node.unique()) > 1:
+        df = df.groupby(["node"]).sum()
+        return df.squeeze()
+    else:
+        df = df.groupby(["node"]).sum()
+        data = {df.index.unique()[0]: df.squeeze()}
+        return pd.Series(data)
 
 
 def _get_total_pwr_capacity_per_node(
@@ -252,7 +266,15 @@ def _get_total_pwr_capacity_per_node(
     cols = ["p_nom_opt", "node"]
     df = pd.concat([links[cols], gens[cols]])
 
-    return df.reset_index(drop=True).groupby(["node"]).sum().squeeze()
+    df = df.reset_index(drop=True)
+
+    if len(df.node.unique()) > 1:
+        df = df.groupby(["node"]).sum()
+        return df.squeeze()
+    else:
+        df = df.groupby(["node"]).sum()
+        data = {df.index.unique()[0]: df.squeeze()}
+        return pd.Series(data)
 
 
 def _get_brownfield_pwr_capacity_per_node(
@@ -295,6 +317,9 @@ def _get_brownfield_capacity_per_node(
 
     df = _filter_link_on_sector(n, sector)
 
+    # remove any demand response
+    df = df[~((df.index.str.contains("-fwd-dr")) | (df.index.str.contains("-bck-dr")))]
+
     # remove the double accounting
     if sector in ("res", "com"):
         df = df[
@@ -334,15 +359,17 @@ def get_capacity_per_node(
             n,
             sector=sector,
             state=state,
-        ).squeeze()
+        )
         opt = _get_opt_pwr_capacity_per_node(n, sector=sector, state=state).to_frame()
         brwn = _get_brownfield_pwr_capacity_per_node(n, sector=sector, state=state)
     elif sector == "trn":
-        total = _get_total_capacity_per_node(n, sector=sector, state=state).squeeze()
+        total = _get_total_capacity_per_node(n, sector=sector, state=state)
         opt = _get_opt_capacity_per_node(n, sector=sector, state=state).to_frame()
         brwn = _get_brownfield_capacity_per_node(n, sector=sector, state=state)
     else:
-        total = _get_total_capacity_per_node(n, sector=sector, state=state).squeeze()
+        if sector == "res" and state == "VT":
+            pass
+        total = _get_total_capacity_per_node(n, sector=sector, state=state)
         opt = _get_opt_capacity_per_node(n, sector=sector, state=state).to_frame()
         brwn = _get_brownfield_capacity_per_node(n, sector=sector, state=state)
 
