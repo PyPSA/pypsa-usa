@@ -17,7 +17,6 @@ from _helpers import configure_logging, get_snapshots
 from dask.distributed import Client
 from pypsa.geo import haversine
 from shapely.geometry import LineString
-from godeeep_helper import load_godeeep_data
 from zenodo_downloader import ZenodoScenarioDownloader
 
 logger = logging.getLogger(__name__)
@@ -205,44 +204,43 @@ if __name__ == "__main__":
     )
     if snakemake.params.renewable.get("dataset", False) == "godeeep":
         logger.info("Loading godeeep renewable data...")
-        renewable_sns = get_snapshots(snakemake.config['renewable_snapshots'])
-        scenario = snakemake.config['renewable_scenarios'][0]
+        renewable_sns = get_snapshots(snakemake.config["renewable_snapshots"])
+        scenario = snakemake.config["renewable_scenarios"][0]
         tech = snakemake.wildcards.technology
-        year = snakemake.config['renewable_scenario_years'][0]
+        year = snakemake.config["renewable_scenario_years"][0]
         ## loading profiles from local downloads
-        #profile = load_godeeep_data(snakemake.config['renewable_scenario_years'][0], snakemake.wildcards.technology, snakemake.config['renewable_scenarios'][0], renewable_sns)
+        # profile = load_godeeep_data(snakemake.config['renewable_scenario_years'][0], snakemake.wildcards.technology, snakemake.config['renewable_scenarios'][0], renewable_sns)
         ## loading profiles in from Zenodo
         downloader = ZenodoScenarioDownloader()
         if tech in ["onwind", "offwind", "offwind_floating"]:
-            tech = 'wind'
-            wind_height = '_100m'
+            tech = "wind"
+            wind_height = "_100m"
             start = ((year - 1980) // 20) * 20 + 1980
             end = start + 19
         elif tech == "solar":
-            wind_height = ''
-            technology = 'solar'
+            wind_height = ""
+            technology = "solar"
             start = ((year - 2020) // 40) * 40 + 2020
             end = start + 39
         else:
             raise ValueError("Invalid technology type. Choose 'onwind', 'offwind', 'offwind_floating' or 'solar'.")
-        
-        if scenario == "historical":
-            year_range = ''
-        else:
-            year_range = f'_{start}_{end}'
 
-        scenario_final = tech + wind_height + f'_{scenario}' + year_range
-        filename = f'{scenario_final}_{tech}_gen_cf_{year}{wind_height}_bus_mean.nc'
+        if scenario == "historical":
+            year_range = ""
+        else:
+            year_range = f"_{start}_{end}"
+
+        scenario_final = tech + wind_height + f"_{scenario}" + year_range
+        filename = f"{scenario_final}_{tech}_gen_cf_{year}{wind_height}_bus_mean.nc"
         filepath = downloader.download_scenario_file(scenario_final, filename)
         profile = xr.open_dataarray(filepath)
 
-        profile = profile.sel(time=renewable_sns) # filtering for appropriate time snapshot
+        profile = profile.sel(time=renewable_sns)  # filtering for appropriate time snapshot
         ## changing bus format from int to float/string to match pypsa
         bus_values = profile.bus.values
         formatted_bus = [f"{float(bus):.1f}" for bus in bus_values]
         profile = profile.assign_coords(bus=formatted_bus)
 
-    
     logger.info(f"Calculating maximal capacity per bus (method '{p_nom_max_meth}')")
     if p_nom_max_meth == "simple":
         p_nom_max = capacity_per_sqkm * availability @ area
@@ -273,7 +271,7 @@ if __name__ == "__main__":
 
     average_distance = xr.DataArray(average_distance, [buses])
     centre_of_mass = xr.DataArray(centre_of_mass, [buses, ("spatial", ["x", "y"])])
-    
+
     ds = xr.merge(
         [
             (correction_factor * profile).rename("profile"),
@@ -302,7 +300,7 @@ if __name__ == "__main__":
             & (ds["p_nom_max"] > params.get("min_p_nom_max", 0.0))
         ),
     )
-    
+
     if "clip_p_max_pu" in params:
         min_p_max_pu = params["clip_p_max_pu"]
         ds["profile"] = ds["profile"].where(ds["profile"] >= min_p_max_pu, 0)
@@ -310,4 +308,3 @@ if __name__ == "__main__":
     ds.to_netcdf(snakemake.output.profile)
     if client is not None:
         client.shutdown()
-
