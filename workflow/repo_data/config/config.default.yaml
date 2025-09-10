@@ -252,6 +252,14 @@ solving:
   mem: 30000 #memory in MB; 20 GB enough for 50+B+I+H2; 100 GB for 181+B+I+H2
   walltime: "12:00:00"
 
+walltime:
+  build_renewable_profiles: '04:00:00'
+  build_fuel_prices: '00:20:00'
+  add_demand: '02:00:00'
+  add_electricity: '04:00:00'
+  simplify_network: '05:00:00'
+  cluster_network: '04:00:00'
+  solve_network: '20:00:00'
 
 # docs :
 custom_files:
