@@ -1,5 +1,8 @@
 pudl_path: s3://pudl.catalyst.coop/v2025.5.0
 
+cf_source: "ERA5" # WUS or ERA5
+cf_path: "T:/WRFDownscaled/taiesm1_r1i1p1f1_ssp370_bc/Annual_Solar_Wind" # set to local folder with capacity factor data (contact mchjones@umich.edu about WUS data)
+
 # docs :
 renewable:
   EGS:

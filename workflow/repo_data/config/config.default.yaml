@@ -34,12 +34,21 @@ model_topology:
 enable:
   build_cutout: false
 
-renewable_weather_years: [2019]
+renewable_weather_years: [2012,2012,2012] # need to be historical
 
 snapshots:
-  start: "2019-01-01"
-  end: "2020-01-01"
-  inclusive: "left"
+  '2019':
+    start: "2019-01-01"
+    end: "2020-01-01"
+    inclusive: "left"
+  '2012':
+    start: "2012-01-01"
+    end: "2013-01-01"
+    inclusive: "left"
+  '2023':
+    start: "2023-01-01"
+    end: "2024-01-01"
+    inclusive: "left"
 
 # docs :
 electricity:
