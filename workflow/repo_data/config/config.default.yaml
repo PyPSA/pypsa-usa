@@ -6,6 +6,9 @@ run:
   shared_cutouts: true # set to true to share the default cutout(s) across runs
   validation: false # set to true to run back-casting plots
 
+renewable:
+  dataset: godeeep #atlite or godeeep
+
 # docs :
 scenario:
   interconnect: [western] #"usa|texas|western|eastern"
