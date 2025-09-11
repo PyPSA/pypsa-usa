@@ -7,7 +7,7 @@ run:
   validation: false # set to true to run back-casting plots
 
 renewable:
-  dataset: godeeep #atlite or godeeep
+  dataset: godeeep # [atlite, godeeep]
 
 # docs :
 scenario:
