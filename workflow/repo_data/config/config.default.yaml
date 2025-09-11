@@ -34,11 +34,19 @@ model_topology:
 enable:
   build_cutout: false
 
+## implement wildcard for this, following interconnect example
 renewable_weather_years: [2019]
-
 snapshots:
   start: "2019-01-01"
-  end: "2020-01-01"
+  end: "2019-12-31"
+  inclusive: "left"
+
+## godeeep inputs for scenarios
+renewable_scenario_years: [2033]
+renewable_scenarios: ["rcp45hotter"] #["historical", "rcp45hotter", "rcp45cooler", "rcp85hotter", "rcp85cooler"]
+renewable_snapshots:
+  start: "2033-01-01" ## change the year to match renewable_scenario_years
+  end: "2033-12-31"
   inclusive: "left"
 
 # docs :
@@ -92,6 +100,7 @@ electricity:
     balancing_period: month # day|week|month|year
 
 
+
 # docs :
 conventional:
   unit_commitment: false
@@ -107,6 +116,7 @@ lines:
   s_nom_max: .inf
   max_extension: 20000 #MW
   length_factor: 1.25
+
 
 # docs :
 links:
