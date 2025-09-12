@@ -49,6 +49,7 @@ def add_technology_capacity_target_constraints(n, config):
         technology_capacity_target: config/policy_constraints/technology_capacity_target.csv
     """
     tct_data = pd.read_csv(config["electricity"]["technology_capacity_targets"])
+    # tct_data = pd.read_csv(f"../{config['electricity']['technology_capacity_targets']}")
     if tct_data.empty:
         return
 
@@ -141,7 +142,7 @@ def add_technology_capacity_target_constraints(n, config):
 
         if not lhs_link_ext.empty:
             grouper_l = pd.concat(
-                [lhs_link_ext.bus.map(n.buses.country), lhs_link_ext.carrier],
+                [lhs_link_ext.bus0.map(n.buses.country), lhs_link_ext.carrier],
                 axis=1,
             ).rename_axis(
                 "Link-ext",

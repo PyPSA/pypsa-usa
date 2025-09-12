@@ -826,7 +826,7 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
 
         # fuel costs come in MCF, so first convert to MMCF
         costs = costs[["value"]].astype("float")
-        costs = costs / 1000 * MWH_2_MMCF
+        costs = costs / (MWH_2_MMCF / 1000)
 
         return costs.resample("1h").asfreq().interpolate(method=interpoloation_method)
 
@@ -843,7 +843,7 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
 
         # fuel costs come in MCF, so first convert to MMCF
         costs = costs[["value"]].astype("float")
-        costs = costs / 1000 * MWH_2_MMCF
+        costs = costs / (MWH_2_MMCF / 1000)
 
         return costs.resample("1h").asfreq().interpolate(method=interpolation_method)
 
