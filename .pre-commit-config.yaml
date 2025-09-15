@@ -35,7 +35,7 @@ repos:
     exclude: examples/solve-on-remote.ipynb
 
 - repo: https://github.com/snakemake/snakefmt
-  rev: v0.11.0
+  rev: v0.11.2
   hooks:
   - id: snakefmt
 
@@ -45,7 +45,7 @@ repos:
   - id: blackdoc
 
 - repo: https://github.com/astral-sh/ruff-pre-commit
-  rev: v0.12.9  # Check for the latest version
+  rev: v0.13.0  # Check for the latest version
   hooks:
   - id: ruff
     args: ["--config=pyproject.toml", "--fix"]
