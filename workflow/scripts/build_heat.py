@@ -1155,11 +1155,17 @@ def add_service_heat_pumps(
     )
     hps["bus1"] = hps.index
     hps["carrier"] = f"{sector}-{heat_system}-{hp_abrev}"
-    hps.index = hps.bus0  # just node name (ie. p480 0)
+    hps.index = hps.index.map(lambda x: x.split(" ")[0])  # just node name (ie. p480 0)
+
+    if heat_carrier == "space-heat":
+        suffix = f"{sector}-{heat_system}-space-{hp_abrev}"
+    else:
+        suffix = f"{sector}-{heat_system}-{hp_abrev}"
+
+    hps.index = hps.index.map(lambda x: f"{x} {suffix}")
 
     if isinstance(cop, pd.DataFrame):
-        cop_per_node = hps.bus0.to_list()
-        cop_mapper = {x.split(" ")[0]: x for x in cop_per_node}
+        cop_mapper = {x: f"{x} {suffix}" for x in cop.columns}
         cop = cop.rename(columns=cop_mapper)
         efficiency = cop[hps.index.to_list()]
     else:
@@ -1169,16 +1175,11 @@ def add_service_heat_pumps(
     lifetime = costs.at[costs_name, "lifetime"]
     build_year = n.investment_periods[0]
 
-    if heat_carrier == "space-heat":
-        suffix = f" {sector}-{heat_system}-space-{hp_abrev}"
-    else:
-        suffix = f" {sector}-{heat_system}-{hp_abrev}"
-
     # use suffix to retain COP profiles
     n.madd(
         "Link",
         hps.index,
-        suffix=suffix,
+        # suffix=suffix,
         bus0=hps.bus0,
         bus1=hps.bus1,
         carrier=hps.carrier,

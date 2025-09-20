@@ -292,7 +292,8 @@ def add_gshp_capacity_constraint(n, config, snakemake):
 
     assert len(ashp) == len(gshp)
 
-    gshp["urban_rural_fraction"] = gshp.bus0.map(fraction)
+    gshp["node"] = gshp.bus0.str.split(" ").str[0]
+    gshp["urban_rural_fraction"] = gshp.node.map(fraction)
 
     ashp_capacity = n.model["Link-p_nom"].loc[ashp.index]
     gshp_capacity = n.model["Link-p_nom"].loc[gshp.index]
