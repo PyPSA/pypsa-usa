@@ -305,7 +305,7 @@ def add_gshp_capacity_constraint(n, config, snakemake):
     n.model.add_constraints(lhs >= rhs, name="Link-gshp_capacity_ratio")
 
 
-def add_ng_import_export_limits(n, config):
+def add_ng_import_export_limits(n, config, gwh=False):
     def _format_link_name(s: str) -> str:
         states = s.split("-")
         return f"{states[0]} {states[1]} gas"
@@ -321,6 +321,8 @@ def add_ng_import_export_limits(n, config):
 
         # convert mmcf to MWh
         df["value"] = df["value"] * NG_MWH_2_MMCF
+        if gwh:
+            df["value"] = df["value"] / 1000
 
         return df[["link", "value"]].rename(columns={"value": "rhs"}).set_index("link")
 
@@ -417,10 +419,12 @@ def add_ng_import_export_limits(n, config):
     # ie. imports from one S1 -> S2 are the same as exports from S2 -> S1
     # we use the exports direction to set limits
 
+    convert_2_gwh = True
+
     # add domestic limits
 
     trade = Trade("gas", False, "exports", year, api).get_data()
-    trade = _format_data(trade, " trade")
+    trade = _format_data(trade, " trade", convert_2_gwh)
 
     add_import_limits(n, trade, "min", import_min)
     add_export_limits(n, trade, "min", export_min)
@@ -433,7 +437,7 @@ def add_ng_import_export_limits(n, config):
     # add international limits
 
     trade = Trade("gas", True, "exports", year, api).get_data()
-    trade = _format_data(trade, " trade")
+    trade = _format_data(trade, " trade", convert_2_gwh)
 
     add_import_limits(n, trade, "min", import_min)
     add_export_limits(n, trade, "min", export_min)
@@ -616,5 +620,9 @@ def add_ev_generation_constraint(n, config, snakemake):
             eff = n.links.loc[evs].efficiency.mean()
             lhs = n.model["Link-p"].loc[investment_period].sel(Link=evs).sum()
             rhs = dem.loc[investment_period].sum().sum() * ratio / eff
+
+            # scale the constraint to help numerically with other constraints
+            rhs = rhs / 1000
+            lhs = lhs.div(1000)
 
             n.model.add_constraints(lhs <= rhs, name=f"Link-ev_gen_{mode}_{investment_period}")
