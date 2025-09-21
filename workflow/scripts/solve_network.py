@@ -193,12 +193,12 @@ def extra_functionality(n, snapshots):
     # Apply interchange constraints if configured
     if config["electricity"].get("imports", {}).get("enable", False):
         if config["electricity"].get("imports", {}).get("volume_limit", False):
-            add_interchange_constraints(n, config, "imports")
+            add_interchange_constraints(n, config, "imports", sector_enabled)
 
     # Apply interchange constraints if configured
     if config["electricity"].get("exports", {}).get("enable", False):
         if config["electricity"].get("exports", {}).get("volume_limit", False):
-            add_interchange_constraints(n, config, "exports")
+            add_interchange_constraints(n, config, "exports", sector_enabled)
 
     # Apply sector-specific constraints if sector is enabled
     if sector_enabled:
@@ -377,11 +377,11 @@ if __name__ == "__main__":
 
         snakemake = mock_snakemake(
             "solve_network",
-            interconnect="western",
-            simpl="20",
-            clusters="4m",
+            interconnect="eastern",
+            simpl="120",
+            clusters="6m",
             ll="v1.0",
-            opts="8h-RPS",
+            opts="1h-TCT",
             sector="E-G",
             planning_horizons="2030",
         )
