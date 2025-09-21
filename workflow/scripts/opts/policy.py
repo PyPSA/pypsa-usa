@@ -2,7 +2,6 @@ import logging  # noqa: D100
 
 import numpy as np
 import pandas as pd
-
 import pypsa
 from opts._helpers import (
     ceil_precision,
@@ -274,7 +273,6 @@ def add_RPS_constraints(n, config, snakemake=None):
     -------
     None
     """
-
     # Get model horizon
     model_horizon = get_model_horizon(n.model)
 
@@ -316,7 +314,6 @@ def add_RPS_constraints(n, config, snakemake=None):
         )
         region_rps_rhs = int(constraint_row.pct * region_demand)
         portfolio_standards.loc[constraint_row.name, "rps_rhs"] = region_rps_rhs
-
 
     # Iterate through constraints and add RPS constraints to the model
     for (rec_trading_zone, planning_horizon, policy_carriers), zone_constraints in portfolio_standards.groupby(

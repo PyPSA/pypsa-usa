@@ -8,7 +8,6 @@ import pandas as pd
 import pypsa
 from _helpers import calculate_annuity, configure_logging
 from add_electricity import add_missing_carriers
-
 from eia import FuelCosts
 from opts._helpers import get_region_buses
 from pypsa.descriptors import get_switchable_as_dense as get_as_dense
@@ -1574,7 +1573,6 @@ if __name__ == "__main__":
     dr_config = snakemake.params.demand_response
     if dr_config:
         add_demand_response(n, dr_config)
-
 
     trim_network_config = snakemake.params.trim_network
     imports_config = snakemake.params.imports
