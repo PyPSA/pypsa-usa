@@ -108,7 +108,7 @@ def add_sector_foundation(
 
     # make state level primary energy carrier buses
 
-    states = n.buses.reeds_state.dropna().unique()
+    states = [x for x in n.buses.reeds_state.dropna().unique() if x]
 
     zero_center_points = pd.DataFrame(
         index=states,
@@ -512,10 +512,10 @@ if __name__ == "__main__":
         snakemake = mock_snakemake(
             "add_sectors",
             interconnect="western",
-            simpl="100",
-            clusters="33m",
+            simpl="20",
+            clusters="4m",
             ll="v1.0",
-            opts="4h",
+            opts="8h-RPS",
             sector="E-G",
         )
     configure_logging(snakemake)

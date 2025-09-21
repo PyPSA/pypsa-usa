@@ -36,6 +36,9 @@ rule build_base_network:
     params:
         build_offshore_network=config_provider("offshore_network"),
         model_topology=config_provider("model_topology", "include"),
+        topological_boundaries=config_provider(
+            "model_topology", "topological_boundaries"
+        ),
         length_factor=config["lines"]["length_factor"],
     input:
         buses=DATA + "breakthrough_network/base_grid/bus.csv",
@@ -743,6 +746,15 @@ rule cluster_network:
         "../scripts/cluster_network.py"
 
 
+def flowgates_for_extra_components(wildcards):
+    if not config["model_topology"]["transmission_network"] == "reeds":
+        return []
+    if config["model_topology"]["topological_boundaries"] == "county":
+        return "repo_data/ReEDS_Constraints/transmission/transmission_capacity_init_AC_county_NARIS2024.csv"
+    else:  # bas and states use the same flowgates
+        return "repo_data/ReEDS_Constraints/transmission/transmission_capacity_init_AC_ba_NARIS2024.csv"
+
+
 rule add_extra_components:
     input:
         **{
@@ -760,6 +772,8 @@ rule add_extra_components:
         ),
         regions_onshore=RESOURCES
         + "{interconnect}/Geospatial/regions_onshore_s{simpl}_{clusters}.geojson",
+        flowgates=flowgates_for_extra_components,
+        reeds_memberships="repo_data/ReEDS_Constraints/membership.csv",
         co2_storage=(
             RESOURCES + "{interconnect}/co2_storage_s{simpl}_{clusters}.csv"
             if config["scenario"]["sector"] == "" and config["co2"]["storage"] is True
@@ -770,6 +784,14 @@ rule add_extra_components:
         retirement=config["electricity"].get("retirement", "technical"),
         demand_response=config["electricity"].get("demand_response", {}),
         trim_network=config_provider("model_topology", "trim", default=False),
+        imports=config_provider("electricity", "imports", default=False),
+        exports=config_provider("electricity", "exports", default=False),
+        weather_year=config_provider("renewable_weather_years"),
+        eia_api=config_provider("api", "eia"),
+        topological_boundaries=config_provider(
+            "model_topology", "topological_boundaries"
+        ),
+        transmission_network=config_provider("model_topology", "transmission_network"),
     output:
         RESOURCES + "{interconnect}/elec_s{simpl}_c{clusters}_ec.nc",
     log:
@@ -797,7 +819,6 @@ rule prepare_network:
         gaslimit_enable=config_provider("electricity", "gaslimit_enable", default=False),
         transmission_network=config_provider("model_topology", "transmission_network"),
         costs=config_provider("costs"),
-        autarky=config_provider("electricity", "autarky"),
     input:
         network=(
             config["custom_files"]["files_path"]

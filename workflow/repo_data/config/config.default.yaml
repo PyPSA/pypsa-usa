@@ -34,11 +34,19 @@ model_topology:
 enable:
   build_cutout: false
 
+## implement wildcard for this, following interconnect example
 renewable_weather_years: [2019]
-
 snapshots:
   start: "2019-01-01"
-  end: "2020-01-01"
+  end: "2019-12-31"
+  inclusive: "left"
+
+## godeeep inputs for scenarios
+renewable_scenario_years: [2033]
+renewable_scenarios: ["rcp45hotter"] #["historical", "rcp45hotter", "rcp45cooler", "rcp85hotter", "rcp85cooler"]
+renewable_snapshots:
+  start: "2033-01-01" ## change the year to match renewable_scenario_years
+  end: "2033-12-31"
   inclusive: "left"
 
 # docs :
@@ -75,6 +83,23 @@ electricity:
   demand_response:
     shift: 0
     marginal_cost: 999999
+
+  imports:
+    enable: false 
+    costs: wholesale # wholesale|carrier|float
+    co2_emissions: 0.428 
+    capacity_limit: true 
+    volume_limit: inf # 0 > x > 100 | 'inf'
+    balancing_period: month # day|week|month|year
+
+  exports:
+    enable: false 
+    costs: wholesale # wholesale|carrier|float
+    capacity_limit: true 
+    volume_limit: inf # 0 > x > 100 | 'inf'
+    balancing_period: month # day|week|month|year
+
+
 
 # docs :
 conventional:

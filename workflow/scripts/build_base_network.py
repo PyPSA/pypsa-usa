@@ -479,6 +479,15 @@ def modify_breakthrough_substations(buslocs: pd.DataFrame):
         39570: {"lon": -114.3526, "lat": 42.6286},
         39571: {"lon": -114.0353, "lat": 42.5435},
         39381: {"lon": -103.2492, "lat": 44.1358},
+        35808: {"lon": -121.122, "lat": 45.565},
+        35823: {"lon": -120.115, "lat": 44.998},
+        35788: {"lon": -116.7949, "lat": 44.9815},
+        39556: {"lon": -116.293, "lat": 46.385},
+        37855: {"lon": -117.247, "lat": 37.276},
+        38930: {"lon": -107.794, "lat": 37.775},
+        38942: {"lon": -107.439, "lat": 37.618},
+        38959: {"lon": -106.725, "lat": 37.713},
+        38983: {"lon": -105.5139, "lat": 39.9123},
     }
     for i in sub_fixes.keys():
         buslocs.loc[buslocs.sub_id == i, "lon"] = sub_fixes[i]["lon"]
@@ -580,6 +589,9 @@ def main(snakemake):
 
     # Filter Network to Only Specified Regions
     if model_topology is not None:
+        assert snakemake.params.topological_boundaries != "state", (
+            "State level filtering does not support regional filtering. See https://github.com/PyPSA/pypsa-usa/issues/662. "
+        )
         for region_type in model_topology:
             rm_buses = n.buses.loc[~(n.buses[f"{region_type}"].isin(model_topology[region_type]))]
             rm_lines = n.lines.loc[(n.lines.bus0.isin(rm_buses.index)) | (n.lines.bus1.isin(rm_buses.index))]

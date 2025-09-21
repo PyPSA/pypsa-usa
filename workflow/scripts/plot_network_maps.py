@@ -224,13 +224,18 @@ def plot_capacity_map(
         subplot_kw={"projection": ccrs.EqualEarth(n.buses.x.mean())},
     )
 
+    carrier_exclusion = ["imports", "exports", "demand_response"]
+
+    bus_colors = n.carriers.color[~n.carriers.color.index.isin(carrier_exclusion)].fillna("#000000")
+    nice_names = n.carriers.nice_name[~n.carriers.nice_name.index.isin(carrier_exclusion)].fillna("Other")
+
     line_width = line_values / line_scale
     link_width = link_values / line_scale
 
     with plt.rc_context({"patch.linewidth": 0.1}):
         n.plot(
             bus_sizes=bus_values / bus_scale,
-            bus_colors=n.carriers.color,
+            bus_colors=bus_colors,
             bus_alpha=0.7,
             line_widths=line_width,
             link_widths=0 if link_width.empty else link_width,
@@ -273,8 +278,8 @@ def plot_capacity_map(
     )
     add_legend_patches(
         ax,
-        n.carriers.color.fillna("#000000"),
-        n.carriers.nice_name,
+        bus_colors,
+        nice_names,
         legend_kw={"bbox_to_anchor": (1, 0), **legend_kwargs, "loc": "lower left"},
     )
     if not title:
