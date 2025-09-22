@@ -305,7 +305,7 @@ def add_gshp_capacity_constraint(n, config, snakemake):
     n.model.add_constraints(lhs >= rhs, name="Link-gshp_capacity_ratio")
 
 
-def add_ng_import_export_limits(n, config):
+def add_ng_import_export_limits(n, config, convert_2_gwh=False):
     def _format_link_name(s: str) -> str:
         states = s.split("-")
         return f"{states[0]} {states[1]} gas"
@@ -313,6 +313,7 @@ def add_ng_import_export_limits(n, config):
     def _format_data(
         prod: pd.DataFrame,
         link_suffix: str | None = None,
+        gwh: bool = False,
     ) -> pd.DataFrame:
         df = prod.copy()
         df["link"] = df.state.map(_format_link_name)
@@ -321,6 +322,8 @@ def add_ng_import_export_limits(n, config):
 
         # convert mmcf to MWh
         df["value"] = df["value"] * NG_MWH_2_MMCF
+        if gwh:
+            df["value"] = df["value"] / 1000
 
         return df[["link", "value"]].rename(columns={"value": "rhs"}).set_index("link")
 
@@ -420,7 +423,7 @@ def add_ng_import_export_limits(n, config):
     # add domestic limits
 
     trade = Trade("gas", False, "exports", year, api).get_data()
-    trade = _format_data(trade, " trade")
+    trade = _format_data(trade, " trade", convert_2_gwh)
 
     add_import_limits(n, trade, "min", import_min)
     add_export_limits(n, trade, "min", export_min)
@@ -433,7 +436,7 @@ def add_ng_import_export_limits(n, config):
     # add international limits
 
     trade = Trade("gas", True, "exports", year, api).get_data()
-    trade = _format_data(trade, " trade")
+    trade = _format_data(trade, " trade", convert_2_gwh)
 
     add_import_limits(n, trade, "min", import_min)
     add_export_limits(n, trade, "min", export_min)

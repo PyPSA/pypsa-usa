@@ -13,6 +13,7 @@ sector:
       max: 1.01
     cyclic_storage: true
     standing_loss: 0
+    marginal_cost_multiplier: 1
   methane:
     upstream_leakage_rate: 0.02 # per unit 
     downstream_leakage_rate: 0.02 # per unit 

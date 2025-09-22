@@ -211,7 +211,7 @@ def extra_functionality(n, snapshots):
 
         # Natural gas import/export constraints
         if config["sector"]["natural_gas"].get("imports", False):
-            add_ng_import_export_limits(n, config)
+            add_ng_import_export_limits(n, config, convert_2_gwh=True)
 
         # Water heater constraints
         water_config = config["sector"]["service_sector"].get("water_heating", {})

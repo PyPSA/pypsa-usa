@@ -1036,10 +1036,12 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
         df["store"] = df.bus0.map(
             lambda x: "import" if x.endswith(" trade") else "export",
         )
+        # to convert from GWh to MWh
+        df["efficiency"] = df.store.map(lambda x: 1000 if x == "import" else 0.001)
 
         return df
 
-    def build_infrastructure(self, n: pypsa.Network) -> None:
+    def build_infrastructure(self, n: pypsa.Network, **kwargs) -> None:
         """
         Builds import and export bus+link+store to connect to.
 
@@ -1091,6 +1093,18 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
         marginal_cost = pd.concat([import_costs, export_costs], axis=1)
         marginal_cost = self._expand_costs(n, marginal_cost)
 
+        marginal_cost_multiplier = kwargs.get("marginal_cost_multiplier", 1)
+        marginal_cost = marginal_cost.mul(marginal_cost_multiplier).round(4)
+
+        # account for capacity restriction on GWh -> MWh
+        # p0 = p1 * efficiency
+        # p0 <= p_nom_max
+        # p_nom should be in units of the leaving unit
+        # import in gwh and export in mwh
+        template["multiplier"] = template.store.map(lambda x: 1000 if x == "import" else 1)
+        template["p_nom"] = template.CAPACITY_MW / template.multiplier
+        marginal_cost = marginal_cost.mul(template.multiplier).round(4)
+
         if "gas trade" not in n.carriers.index:
             n.add("Carrier", "gas trade", color="#d35050", nice_name="Gas Trade")
 
@@ -1099,7 +1113,7 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
             names=template.index,
             suffix=" gas trade",
             carrier="gas trade",
-            unit="MWh",
+            unit="GWh",  # note the unit!
             country=template.COUNTRY,
             interconnect=self.interconnect,
         )
@@ -1109,14 +1123,14 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
             names=template.index,
             suffix=" gas trade",
             carrier="gas trade",
-            unit="MW",
+            unit="",  # Unit may be MW or GW
             bus0=template.bus0,
             bus1=template.bus1,
-            p_nom=template.CAPACITY_MW,
+            p_nom=template.p_nom,
             p_min_pu=0,
             p_max_pu=1,
             p_nom_extendable=False,
-            efficiency=1,  # must be 1 for proper cost accounting
+            efficiency=template.efficiency,  # conversion from GWh <-> MWh
             marginal_cost=marginal_cost,
             lifetime=np.inf,
             build_year=n.investment_periods[0],
@@ -1126,7 +1140,7 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
             "Store",
             names=store_exports.index,
             suffix=" gas trade",
-            unit="MWh",
+            unit="GWh",  # note the unit!
             bus=store_exports.bus1,
             carrier="gas trade",
             capital_cost=0,
@@ -1146,7 +1160,7 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
         n.madd(
             "Store",
             names=store_imports.index,
-            unit="MWh",
+            unit="GWh",  # note the unit!
             suffix=" gas trade",
             bus=store_imports.bus0,
             carrier="gas trade",
@@ -1330,6 +1344,7 @@ def build_natural_gas(
 
     cyclic_storage = options.get("cyclic_storage", True)
     standing_loss = options.get("standing_loss", 0)
+    marginal_cost_multiplier = options.get("marginal_cost_multiplier", 1)
 
     # add state level natural gas processing facilities
 
@@ -1356,7 +1371,7 @@ def build_natural_gas(
         api,
         domestic=True,
     )
-    pipelines_domestic.build_infrastructure(n)
+    pipelines_domestic.build_infrastructure(n, marginal_cost_multiplier=marginal_cost_multiplier)
     pipelines_international = TradeGasPipelineCapacity(
         year,
         interconnect,
@@ -1364,7 +1379,7 @@ def build_natural_gas(
         api,
         domestic=False,
     )
-    pipelines_international.build_infrastructure(n)
+    pipelines_international.build_infrastructure(n, marginal_cost_multiplier=marginal_cost_multiplier)
 
     # add pipeline linepack
 
