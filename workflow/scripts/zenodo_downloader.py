@@ -2,6 +2,7 @@ from pathlib import Path
 
 import requests
 
+
 class ZenodoScenarioDownloader:
     def __init__(self, download_dir="./data"):
         self.download_dir = Path(download_dir)
@@ -40,9 +41,10 @@ class ZenodoScenarioDownloader:
         # Cache for record metadata to avoid repeated API calls
         self._metadata_cache = {}
 
-    # Get metadata for a record
+
     def get_record_metadata(self, record_id):
-        
+        """Get metadata for a record (with caching)."""
+
         if record_id in self._metadata_cache:
             return self._metadata_cache[record_id]
 
@@ -59,13 +61,16 @@ class ZenodoScenarioDownloader:
             print(f"Failed to get metadata for record {record_id}: {e}")
             return None
 
-    # Doownload a specific file from a scenario dataset
     def download_scenario_file(self, scenario_name, filename, force_redownload=False):
- 
-        # Parameters:
-        # - scenario_name: e.g., "solar_historical"
-        # - filename: e.g., "solar_historical_solar_gen_cf_1980_bus_mean.nc"
-        # - force_redownload: If True, redownload even if file exists
+        """
+        Download a specific file from a scenario dataset.
+
+        Parameters
+        ----------
+        - scenario_name: e.g., "solar_historical"
+        - filename: e.g., "solar_historical_solar_gen_cf_1980_bus_mean.nc"
+        - force_redownload: If True, redownload even if file exists
+        """
 
         # pointing file path to workflow/data/zenodo
         (self.download_dir / "zenodo").mkdir(exist_ok=True)  # create the zenodo directory if it doesn't exist
@@ -89,13 +94,16 @@ class ZenodoScenarioDownloader:
 
         return self.download_by_record_id(record_id, filename, force_redownload)
 
-    # Download a file directly using a record ID
     def download_by_record_id(self, record_id, filename, force_redownload=False):
+        """
+        Download a file directly using a record ID.
 
-        # Parameters
-        # - record_id: Zenodo record ID (e.g., 17059209)
-        # - filename: Name of the file to download
-        # - force_redownload: If True, redownload even if file exists
+        Parameters
+        ----------
+        - record_id: Zenodo record ID (e.g., 17059209)
+        - filename: Name of the file to download
+        - force_redownload: If True, redownload even if file exists
+        """
 
         # pointing file path to workflow/data/zenodo
         local_filepath = f"{self.download_dir}/zenodo/{filename}"
@@ -162,8 +170,10 @@ class ZenodoScenarioDownloader:
                 Path(local_filepath).unlink()  # Remove partial file
             return None
 
-    # List all available files in a scenario dataset
+
     def list_available_files(self, scenario_name):
+        """List all available files in a scenario dataset."""
+        
         record_id = self.scenario_records.get(scenario_name)
         if not record_id:
             print(f"No record ID found for scenario: {scenario_name}")
@@ -175,8 +185,10 @@ class ZenodoScenarioDownloader:
 
         return self.list_files_by_record_id(record_id)
 
-    # List all files in a record by record ID
+
     def list_files_by_record_id(self, record_id):
+        """List all files in a record by record ID."""
+
         metadata = self.get_record_metadata(record_id)
         if not metadata:
             return []
@@ -193,8 +205,10 @@ class ZenodoScenarioDownloader:
 
         return files
 
-    # Get list of available scenarios (ones with record IDs)
+
     def get_available_scenarios(self):
+        """Get list of available scenarios (ones with record IDs)."""
+
         available = []
         print("Available scenarios:")
         for scenario, record_id in self.scenario_records.items():
@@ -203,24 +217,32 @@ class ZenodoScenarioDownloader:
                 print(f"  - {scenario} (Record ID: {record_id})")
         return available
 
-### Convenience functions for quick access ###
-# Quick function to download a single file from a scenario
+
 def download_scenario_file(scenario_name, filename, download_dir="./data/zenodo"):
-    # Example:
-    # filepath = download_scenario_file("solar_historical",
-    #                                 "solar_historical_solar_gen_cf_1980_bus_mean.nc")
+    """
+    Quick function to download a single file from a scenario.
+
+    Example:
+    filepath = download_scenario_file("solar_historical",
+                                    "solar_historical_solar_gen_cf_1980_bus_mean.nc")
+    """
+
     downloader = ZenodoScenarioDownloader(download_dir)
     return downloader.download_scenario_file(scenario_name, filename)
 
 
-# Quick function to download a file directly by record ID
 def download_by_record_id(record_id, filename, download_dir="./data/zenodo"):
-    # Example:
-    # filepath = download_by_record_id(17059209, "solar_historical_solar_gen_cf_1980_bus_mean.nc")
+    """
+    Quick function to download a file directly by record ID
+
+    Example:
+    filepath = download_by_record_id(17059209, "solar_historical_solar_gen_cf_1980_bus_mean.nc")
+    """
     downloader = ZenodoScenarioDownloader(download_dir)
     return downloader.download_by_record_id(record_id, filename)
 
-# List all available scenarios
+
 def list_available_scenarios():
+    """List all available scenarios."""
     downloader = ZenodoScenarioDownloader()
     return downloader.get_available_scenarios()
