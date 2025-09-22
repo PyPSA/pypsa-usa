@@ -42,9 +42,7 @@ class ZenodoScenarioDownloader:
         self._metadata_cache = {}
 
     def get_record_metadata(self, record_id):
-        """
-        Get metadata for a record (with caching)
-        """
+        """Get metadata for a record (with caching)."""
         if record_id in self._metadata_cache:
             return self._metadata_cache[record_id]
 
@@ -63,7 +61,7 @@ class ZenodoScenarioDownloader:
 
     def download_scenario_file(self, scenario_name, filename, force_redownload=False):
         """
-        Download a specific file from a scenario dataset
+        Download a specific file from a scenario dataset.
 
         Parameters
         ----------
@@ -95,7 +93,7 @@ class ZenodoScenarioDownloader:
 
     def download_by_record_id(self, record_id, filename, force_redownload=False):
         """
-        Download a file directly using a record ID
+        Download a file directly using a record ID.
 
         Parameters
         ----------
@@ -169,9 +167,7 @@ class ZenodoScenarioDownloader:
             return None
 
     def list_available_files(self, scenario_name):
-        """
-        List all available files in a scenario dataset
-        """
+        """List all available files in a scenario dataset."""
         record_id = self.scenario_records.get(scenario_name)
         if not record_id:
             print(f"No record ID found for scenario: {scenario_name}")
@@ -184,9 +180,7 @@ class ZenodoScenarioDownloader:
         return self.list_files_by_record_id(record_id)
 
     def list_files_by_record_id(self, record_id):
-        """
-        List all files in a record by record ID
-        """
+        """List all files in a record by record ID."""
         metadata = self.get_record_metadata(record_id)
         if not metadata:
             return []
@@ -204,9 +198,7 @@ class ZenodoScenarioDownloader:
         return files
 
     def get_available_scenarios(self):
-        """
-        Get list of available scenarios (ones with record IDs)
-        """
+        """Get list of available scenarios (ones with record IDs)."""
         available = []
         print("Available scenarios:")
         for scenario, record_id in self.scenario_records.items():
@@ -216,10 +208,9 @@ class ZenodoScenarioDownloader:
         return available
 
 
-# Convenience functions
 def download_scenario_file(scenario_name, filename, download_dir="./data/zenodo"):
     """
-    Quick function to download a single file from a scenario
+    Quick function to download a single file from a scenario.
 
     Example:
     filepath = download_scenario_file("solar_historical",
@@ -241,8 +232,6 @@ def download_by_record_id(record_id, filename, download_dir="./data/zenodo"):
 
 
 def list_available_scenarios():
-    """
-    List all available scenarios
-    """
+    """List all available scenarios."""
     downloader = ZenodoScenarioDownloader()
     return downloader.get_available_scenarios()
