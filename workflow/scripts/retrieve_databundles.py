@@ -6,7 +6,11 @@ import subprocess
 import zipfile
 from pathlib import Path
 
-import zipfile_deflate64
+# Make zipfile_deflate64 optional; fall back to system unzip if unavailable
+try:
+    import zipfile_deflate64  # type: ignore[import-not-found]
+except Exception:  # pragma: no cover - best-effort optional import
+    zipfile_deflate64 = None  # type: ignore[assignment]
 from _helpers import configure_logging, progress_retrieve
 
 logger = logging.getLogger(__name__)
@@ -32,15 +36,27 @@ def download_repository(url, rootpath, repository):
     logger.info(f"Extracting {repository} databundle.")
     try:
         if repository == "EFS":
-            try:
-                # First try to use zipfile-deflate64
-                with zipfile_deflate64.ZipFile(tarball_fn, "r") as zip_ref:
-                    zip_ref.extractall(to_fn)
-            except Exception as e:
-                logger.warning(f"Failed to extract using zipfile-deflate64: {e}")
-                logger.info("Falling back to system commands...")
+            if zipfile_deflate64 is not None:
+                try:
+                    # First try to use zipfile-deflate64
+                    with zipfile_deflate64.ZipFile(tarball_fn, "r") as zip_ref:
+                        zip_ref.extractall(to_fn)
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to extract using zipfile-deflate64: {e}",
+                    )
+                    logger.info("Falling back to system commands...")
 
-                # Fallback to system commands
+                    # Fallback to system commands
+                    if platform.system() == "Windows":
+                        cmd = ["tar", "-xf", tarball_fn, "-C", to_fn]
+                    else:
+                        cmd = ["unzip", tarball_fn, "-d", to_fn]
+                    subprocess.run(cmd, check=True)
+            else:
+                logger.info(
+                    "zipfile-deflate64 not available; falling back to system commands...",
+                )
                 if platform.system() == "Windows":
                     cmd = ["tar", "-xf", tarball_fn, "-C", to_fn]
                 else:

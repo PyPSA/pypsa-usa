@@ -189,12 +189,12 @@ rule build_renewable_profiles:
             #renewable_weather_year=config["renewable_weather_years"],
         ),
     output:
-        profile=RESOURCES + "{interconnect}/profile_{technology}_{renewable_weather_years}_{cf_source}.nc",
-        availability=RESULTS + "{interconnect}/land_use_availability_{technology}_{renewable_weather_years}_{cf_source}.png",
+        profile=RESOURCES + "{interconnect}/profile_{technology}_{renewable_weather_years}_{dataset}.nc",
+        availability=RESULTS + "{interconnect}/land_use_availability_{technology}_{renewable_weather_years}_{dataset}.png",
     log:
-        LOGS + "{interconnect}/build_renewable_profile_{technology}_{renewable_weather_years}_{cf_source}.log",
+        LOGS + "{interconnect}/build_renewable_profile_{technology}_{renewable_weather_years}_{dataset}.log",
     benchmark:
-        BENCHMARKS + "{interconnect}/build_renewable_profiles_{technology}_{renewable_weather_years}_{cf_source}",
+        BENCHMARKS + "{interconnect}/build_renewable_profiles_{technology}_{renewable_weather_years}_{dataset}",
     threads: ATLITE_NPROCESSES
     resources:
         mem_mb=lambda wildcards, input, attempt: (
@@ -606,7 +606,7 @@ rule add_electricity:
     input:
         unpack(dynamic_fuel_price_files),
         **{
-            f"profile_{tech}_{renewable_weather_year}": RESOURCES + "{interconnect}" + f"/profile_{tech}_{renewable_weather_year}_{config['cf_source']}" + ".nc"
+            f"profile_{tech}_{renewable_weather_year}": RESOURCES + "{interconnect}" + f"/profile_{tech}_{renewable_weather_year}_{config['renewable']['dataset']}" + ".nc"
             for tech in config["electricity"]["renewable_carriers"]
             for renewable_weather_year in config["renewable_weather_years"]
             if tech != "hydro"

@@ -357,7 +357,7 @@ if __name__ == "__main__":
         return_capacity=True,
         **resource,
     )
-    if snakemake.params.renewable.get("dataset", False) == "godeeep":
+    if snakemake.params.renewable.get("dataset", "") == "godeeep":
         logger.info("Loading godeeep renewable data...")
         renewable_sns = get_snapshots(snakemake.config["renewable_snapshots"])
         scenario = snakemake.config["renewable_scenarios"][0]
@@ -460,8 +460,8 @@ if __name__ == "__main__":
         min_p_max_pu = params["clip_p_max_pu"]
         ds["profile"] = ds["profile"].where(ds["profile"] >= min_p_max_pu, 0)
 
-    # if cf_source is WUS, substitute in WUS capacity factors
-    if snakemake.config["cf_source"] == "WUS":
+    # if renewable dataset is WUS, substitute in WUS capacity factors
+    if snakemake.params.renewable.get("dataset", "") == "WUS":
         logger.info("CF source is set to WUS, beginning capacity factor substitution...")
 
         # get index of renewable weather year, then get that planning horizon

@@ -84,6 +84,11 @@ dev = [
     "pytest",
 ]
 
+# Optional extra for extracting EFS ZIPs with Deflate64
+windows = [
+    "zipfile-deflate64>=0.2.0",
+]
+
 [tool.setuptools.package-dir]
 myproj = "workflow/scripts"
 

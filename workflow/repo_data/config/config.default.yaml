@@ -34,7 +34,6 @@ model_topology:
 enable:
   build_cutout: false
 
-renewable_weather_years: [2012,2012,2012] # need to be historical
 snapshots:
   '2019':
     start: "2019-01-01"
@@ -50,7 +49,8 @@ snapshots:
     inclusive: "left"
 
 
-## godeeep inputs for scenarios
+## Handling Renewable Weather Years
+renewable_weather_years: [2012,2012,2012] # need to be historical
 renewable_scenario_years: [2033]
 renewable_scenarios: ["rcp45hotter"] #["historical", "rcp45hotter", "rcp45cooler", "rcp85hotter", "rcp85cooler"]
 renewable_snapshots:
