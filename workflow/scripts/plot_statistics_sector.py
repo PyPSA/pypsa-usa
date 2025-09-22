@@ -1,14 +1,13 @@
 """Plots Sector Coupling Statistics."""
 
 import logging
-from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
 from math import ceil
 from pathlib import Path
 
 # Optional used as 'arg: callable | None = None' gives TypeError with py3.11
-from typing import Any, Optional
+from typing import Any, Callable, Optional  # noqa: UP035
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -164,7 +163,7 @@ def plot_sector_production_timeseries(
     nice_name: bool | None = True,
     remove_sns_weights: bool = True,
     resample: str | None = None,
-    resample_fn: Optional[callable] = None,  # noqa: UP007
+    resample_fn: Optional[Callable] = None,  # noqa: UP045
     month: int | None = None,
     **kwargs,
 ) -> tuple:
@@ -239,7 +238,7 @@ def plot_transportation_production_timeseries(
     nice_name: bool | None = True,
     remove_sns_weights: bool = True,
     resample: str | None = None,
-    resample_fn: Optional[callable] = None,  # noqa: UP007
+    resample_fn: Optional[Callable] = None,  # noqa: UP045
     month: int | None = None,
     **kwargs,
 ) -> tuple:
@@ -275,6 +274,15 @@ def plot_transportation_production_timeseries(
         resample_fn=resample_fn,
         remove_sns_weights=remove_sns_weights,
     )
+
+    # This is cause of non-use issues with exisiting stock
+    small_negative_cols = df_all.columns[((df_all < 0) & (df_all > -0.0001)).any()]
+    large_negative_cols = df_all.columns[(df_all < -0.0001).any()]
+    if len(small_negative_cols) > 0 and len(large_negative_cols) == 0:
+        for col in small_negative_cols:
+            logger.warning(f"Negative values found in column '{col}', setting to zero")
+        df_all = df_all.clip(lower=0)
+
     df_veh = _filter_vehicle_type(df_all, vehicle)
 
     if df_veh.empty:
@@ -981,7 +989,7 @@ def plot_sector_dr_timeseries(
     state: str | None = None,
     nice_name: bool | None = True,
     resample: str | None = None,
-    resample_fn: Optional[callable] = None,  # noqa: UP007
+    resample_fn: Optional[Callable] = None,  # noqa: UP045
     month: int | None = None,
     **kwargs,
 ) -> tuple:
@@ -1492,7 +1500,7 @@ if __name__ == "__main__":
     if "snakemake" not in globals():
         snakemake = mock_snakemake(
             "plot_sector_production",
-            simpl="11",
+            simpl="12",
             opts="4h",
             clusters="4m",
             ll="v1.0",

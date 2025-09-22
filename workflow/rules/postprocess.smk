@@ -35,6 +35,7 @@ rule plot_network_maps:
     threads: 1
     resources:
         mem_mb=7000,
+        walltime="00:30:00",
     script:
         "../scripts/plot_network_maps.py"
 
@@ -90,10 +91,17 @@ rule plot_statistics:
         + "{interconnect}/figures/s{simpl}_cluster_{clusters}/l{ll}_{opts}_{sector}/statistics/storage_units.csv",
         links=RESULTS
         + "{interconnect}/figures/s{simpl}_cluster_{clusters}/l{ll}_{opts}_{sector}/statistics/links.csv",
+        buses=RESULTS
+        + "{interconnect}/figures/s{simpl}_cluster_{clusters}/l{ll}_{opts}_{sector}/statistics/buses.csv",
+        lines=RESULTS
+        + "{interconnect}/figures/s{simpl}_cluster_{clusters}/l{ll}_{opts}_{sector}/statistics/lines.csv",
+        stores=RESULTS
+        + "{interconnect}/figures/s{simpl}_cluster_{clusters}/l{ll}_{opts}_{sector}/statistics/stores.csv",
     log:
         "logs/plot_figures/{interconnect}_{simpl}_{clusters}_l{ll}_{opts}_{sector}.log",
     threads: 1
     resources:
         mem_mb=5000,
+        walltime="00:30:00",
     script:
         "../scripts/plot_statistics.py"

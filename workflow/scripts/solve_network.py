@@ -33,12 +33,14 @@ import yaml
 from _helpers import (
     configure_logging,
     update_config_from_wildcards,
-    update_config_with_sector_opts,
 )
+from opts.bidirectional_link import add_bidirectional_link_constraints
+from opts.interchange import add_interchange_constraints
 from opts.land import add_land_use_constraints
 from opts.policy import (
     add_regional_co2limit,
     add_RPS_constraints,
+    add_RPS_constraints_sector,
     add_technology_capacity_target_constraints,
 )
 from opts.reserves import (
@@ -141,7 +143,7 @@ def extra_functionality(n, snapshots):
     # Define constraint application functions in a registry
     # Each function should take network and necessary parameters
     constraint_registry = {
-        "RPS": lambda: add_RPS_constraints(n, config, sector_enabled, global_snakemake)
+        "RPS": lambda: add_RPS_constraints(n, config, global_snakemake)
         if n.generators.p_nom_extendable.any()
         else None,
         "REM": lambda: add_regional_co2limit(n, config) if n.generators.p_nom_extendable.any() else None,
@@ -156,6 +158,17 @@ def extra_functionality(n, snapshots):
         else None,
     }
 
+    # Some constraints have different logic for sector networks
+    if sector_enabled:
+        constraint_registry["RPS"] = (
+            lambda: add_RPS_constraints_sector(n, config, global_snakemake)
+            if n.generators.p_nom_extendable.any()
+            else None
+        )
+        constraint_registry["REM"] = (
+            lambda: add_sector_co2_constraints(n, config) if n.generators.p_nom_extendable.any() else None
+        )
+
     # Apply constraints based on options
     for opt in opts:
         if opt in constraint_registry:
@@ -163,6 +176,9 @@ def extra_functionality(n, snapshots):
 
     # Always apply land use constraints
     add_land_use_constraints(n)
+
+    # Always apply bidirectional link constraints
+    add_bidirectional_link_constraints(n)
 
     # Apply operational reserve if configured
     reserve = config["electricity"].get("operational_reserve", {})
@@ -174,40 +190,40 @@ def extra_functionality(n, snapshots):
     if dr_config:
         add_demand_response_constraint(n, config, sector_enabled)
 
+    # Apply interchange constraints if configured
+    if config["electricity"].get("imports", {}).get("enable", False):
+        if config["electricity"].get("imports", {}).get("volume_limit", False):
+            add_interchange_constraints(n, config, "imports")
+
+    # Apply interchange constraints if configured
+    if config["electricity"].get("exports", {}).get("enable", False):
+        if config["electricity"].get("exports", {}).get("volume_limit", False):
+            add_interchange_constraints(n, config, "exports")
+
     # Apply sector-specific constraints if sector is enabled
     if sector_enabled:
-        apply_sector_constraints(n, config, global_snakemake)
+        # Heat pump constraints
+        add_cooling_heat_pump_constraints(n, config)
 
+        # Apply GSHP capacity constraint if urban/rural not split
+        if not config["sector"]["service_sector"].get("split_urban_rural", False):
+            add_gshp_capacity_constraint(n, config, global_snakemake)
 
-def apply_sector_constraints(n, config, global_snakemake):
-    """Apply all sector-specific constraints to the network."""
-    # Heat pump constraints
-    add_cooling_heat_pump_constraints(n, config)
+        # Natural gas import/export constraints
+        if config["sector"]["natural_gas"].get("imports", False):
+            add_ng_import_export_limits(n, config)
 
-    # Apply GSHP capacity constraint if urban/rural not split
-    if not config["sector"]["service_sector"].get("split_urban_rural", False):
-        add_gshp_capacity_constraint(n, config, global_snakemake)
+        # Water heater constraints
+        water_config = config["sector"]["service_sector"].get("water_heating", {})
+        if not water_config.get("simple_storage", True):
+            add_water_heater_constraints(n, config)
 
-    # CO2 constraints for sectors
-    if config["sector"]["co2"].get("policy", {}):
-        add_sector_co2_constraints(n, config)
-
-    # Natural gas import/export constraints
-    if config["sector"]["natural_gas"].get("imports", False):
-        add_ng_import_export_limits(n, config)
-
-    # Water heater constraints
-    water_config = config["sector"]["service_sector"].get("water_heating", {})
-    if not water_config.get("simple_storage", True):
-        add_water_heater_constraints(n, config)
-
-    # EV generation constraints
-    if config["sector"]["transport_sector"]["investment"]["ev_policy"]:
-        if not config["sector"]["transport_sector"]["investment"]["exogenous"]:
+        # EV generation constraints
+        if config["sector"]["transport_sector"].get("ev_policy", {}):
             add_ev_generation_constraint(n, config, global_snakemake)
 
-    # Sector demand response constraints
-    add_sector_demand_response_constraints(n, config)
+        # Sector demand response constraints
+        add_sector_demand_response_constraints(n, config)
 
 
 def run_optimize(n, rolling_horizon, skip_iterations, cf_solving, **kwargs):
@@ -362,31 +378,22 @@ if __name__ == "__main__":
         snakemake = mock_snakemake(
             "solve_network",
             interconnect="western",
-            simpl="75",
+            simpl="20",
             clusters="4m",
             ll="v1.0",
-            opts="12h",
+            opts="8h-RPS",
             sector="E-G",
             planning_horizons="2030",
         )
     configure_logging(snakemake)
     update_config_from_wildcards(snakemake.config, snakemake.wildcards)
-    if "sector_opts" in snakemake.wildcards.keys():
-        update_config_with_sector_opts(
-            snakemake.config,
-            snakemake.wildcards.sector_opts,
-        )
 
     opts = snakemake.wildcards.opts
-    if "sector_opts" in snakemake.wildcards.keys():
-        opts += "-" + snakemake.wildcards.sector_opts
     opts = [o for o in opts.split("-") if o != ""]
     solve_opts = snakemake.params.solving["options"]
 
     # sector specific co2 options
     if snakemake.wildcards.sector != "E":
-        # sector co2 limits applied via config file, not through Co2L
-        opts = [x for x in opts if not x.startswith("Co2L")]
         opts.append("sector")
 
     np.random.seed(solve_opts.get("seed", 123))

@@ -276,7 +276,7 @@ def match_plant_to_bus(n, plants):
     Matches each plant to it's corresponding bus in the network enfocing a
     match to the correct State.
 
-    # Efficient matching taken from #
+    Efficient matching taken from:
     https://stackoverflow.com/questions/58893719/find-nearest-point-in-other-dataframe-with-a-lot-of-data
     """
     plants_matched = plants.copy()
@@ -287,17 +287,17 @@ def match_plant_to_bus(n, plants):
     buses = n.buses.copy()
     buses["geometry"] = gpd.points_from_xy(buses["x"], buses["y"])
 
-    # First pass: Assign each plant to the nearest bus in the same state
-    for state in buses["state"].unique():
-        buses_in_state = buses[buses["state"] == state]
-        plants_in_state = plants_matched[
-            (plants_matched["state"] == state) & (plants_matched["bus_assignment"].isnull())
+    # First pass: Assign each plant to the nearest bus in the same reeds zone
+    for zone_id in buses["reeds_zone"].unique():
+        buses_in_zone = buses[buses["reeds_zone"] == zone_id]
+        plants_in_zone = plants_matched[
+            (plants_matched["country"] == zone_id) & (plants_matched["bus_assignment"].isnull())
         ]
 
-        # Update plants_matched with the nearest bus within the same state
-        plants_matched.update(match_nearest_bus(plants_in_state, buses_in_state))
+        # Update plants_matched with the nearest bus within the same REEDS zone
+        plants_matched.update(match_nearest_bus(plants_in_zone, buses_in_zone))
 
-    # Second pass: Assign any remaining unmatched plants to the nearest bus regardless of state
+    # Second pass: Assign any remaining unmatched plants to the nearest bus regardless of REEDS zone
     unmatched_plants = plants_matched[plants_matched["bus_assignment"].isnull()]
     if not unmatched_plants.empty:
         plants_matched.update(match_nearest_bus(unmatched_plants, buses))
@@ -509,8 +509,10 @@ def attach_wind_and_solar(
 
         planning_horizons = n.investment_periods.to_list()
         dfs = []
-        for index, year in enumerate(renewable_weather_years): # iterate through profiles by weather year
-            horizon = planning_horizons[index] # this will be used to assign each weather year's profile to the corresponding planning horizon, in order
+        for index, year in enumerate(renewable_weather_years):  # iterate through profiles by weather year
+            horizon = planning_horizons[
+                index
+            ]  # this will be used to assign each weather year's profile to the corresponding planning horizon, in order
 
             with xr.open_dataset(getattr(input_profiles, "profile_" + car + "_" + str(year))) as ds:
                 if ds.indexes["bus"].empty:
@@ -554,9 +556,11 @@ def attach_wind_and_solar(
                 )
 
                 bus_profile.index = pd.to_datetime(bus_profile.index)
-                bus_profile.index = bus_profile.index.map(lambda x: x.replace(year=horizon)) # replace weather year with planning horizon year
+                bus_profile.index = bus_profile.index.map(
+                    lambda x: x.replace(year=horizon),
+                )  # replace weather year with planning horizon year
                 dfs.append(bus_profile)
-            
+
         # this section is based off the "broadcast_investment_horizons_index" function
         sns = n.snapshots
         bus_profiles = pd.concat(dfs)
@@ -1024,7 +1028,7 @@ def main(snakemake):
         snakemake.input,
         renewable_carriers,
         extendable_carriers,
-        snakemake.config["renewable_weather_years"], # added to loop through profile by weather year
+        snakemake.config["renewable_weather_years"],  # added to loop through profile by weather year
     )
     renewable_carriers = list(
         set(snakemake.config["electricity"]["renewable_carriers"]).intersection(

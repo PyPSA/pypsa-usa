@@ -4,9 +4,9 @@ import logging
 import platform
 import subprocess
 import zipfile
-import zipfile_deflate64
 from pathlib import Path
 
+import zipfile_deflate64
 from _helpers import configure_logging, progress_retrieve
 
 logger = logging.getLogger(__name__)
@@ -39,19 +39,19 @@ def download_repository(url, rootpath, repository):
             except Exception as e:
                 logger.warning(f"Failed to extract using zipfile-deflate64: {e}")
                 logger.info("Falling back to system commands...")
-               
+
                 # Fallback to system commands
                 if platform.system() == "Windows":
-                   cmd = ["tar", "-xf", tarball_fn, "-C", to_fn]
+                    cmd = ["tar", "-xf", tarball_fn, "-C", to_fn]
                 else:
-                   cmd = ["unzip", tarball_fn, "-d", to_fn]
+                    cmd = ["unzip", tarball_fn, "-d", to_fn]
                 subprocess.run(cmd, check=True)
         else:
             with zipfile.ZipFile(tarball_fn, "r") as zip_ref:
                 zip_ref.extractall(to_fn)
-               
+
         logger.info(f"{repository} Databundle successfully extracted to {to_fn}")
-       
+
     except Exception as e:
         logger.error(f"Failed to extract {repository} databundle: {e}")
         raise

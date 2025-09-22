@@ -61,7 +61,9 @@ plotting:
     "DC-DC": "#8a1caf"
     "DC link": "#8a1caf"
     "DC": "#8a1caf"
-    "Load": "#2ad55f"
+    "Load": "#2ad55f" 
+    "imports": "#4864B7"
+    "exports": "#B79B48"
     "res-elec": "#f9d002"
     "res-heat": "#E79CA2"
     "res-cool": "#9CE7E2"
@@ -73,8 +75,11 @@ plotting:
     "trn-elec": "#f9d002"
     "coal-95CCS": "#4b4b4b"
     "coal-99CCS": "#2e2e2e"
+    "coal-95CC": "#4b4b4b"
+    "coal-99CC": "#2e2e2e"
     "SMR": "#ff5733"
     "CCGT-95CCS": "#800000"
+    "CCGT-95CC": "#800000"
     "8hr_PHS": "#069686"
     "10hr_PHS": "#058a79"
     "12hr_PHS": "#047d6c"    
@@ -86,6 +91,7 @@ plotting:
     "12hr_PHS_charger": "#047d6c"  
     "hydrogen_ct": "#ea048a"
     "demand_response": "#8c03fc"
+    "dac": "#4c004c"
 
     # sector studies only 
 
@@ -147,15 +153,19 @@ plotting:
     trn-lpg-veh-bus: "#2C2CD3"
 
     trn-rail: "#0a0100"
+    trn-rail-psg: "#0a0100"
+    trn-rail-ship: "#0a0100"
     trn-lpg-rail: "#0a0100"
     trn-lpg-rail-psg: "#9F9160"
     trn-lpg-rail-ship: "#606E9F"
 
     trn-air: "#0a0100"
+    trn-air-psg: "#0a0100"
     trn-lpg-air: "#0a0100"
     trn-lpg-air-psg: "#A45B75"
 
     trn-boat: "#0a0100"
+    trn-boat-ship: "#0a0100"
     trn-lpg-boat: "#0a0100"
     trn-lpg-boat-ship: "#5BA48A"
 
@@ -321,6 +331,9 @@ plotting:
     Load: "Load Shed"
     hydrogen_ct: "Hydrogen Combustion Turbine"
     demand_response: "Demand Response"
+    dac: "Direct Air Capture"
+    imports: "Electricity Imports"
+    exports: "Electricity Exports"
 
     # sector studies only 
 
@@ -382,15 +395,19 @@ plotting:
     trn-lpg-veh-bus: "Gas Bus"
 
     trn-rail: "Rail"
+    trn-rail-psg: "Passenger Rail"
+    trn-rail-ship: "Shipping Rail"
     trn-lpg-rail: "Rail Oil"
-    trn-lpg-rail-psg: "Passenger Rail Gas"
-    trn-lpg-rail-ship: "Shipping Rail Gas"
+    trn-lpg-rail-psg: "Passenger Rail Oil"
+    trn-lpg-rail-ship: "Shipping Rail Oil"
 
     trn-air: "Airplane"
+    trn-air-psg: "Passenger Airplane"
     trn-lpg-air: "Airplane Gas"
     trn-lpg-air-psg: "Passenger Air Gas"
 
-    trn-boat: "Marine Shipping Gas"
+    trn-boat: "Marine Shipping"
+    trn-boat-ship: "Marine Shipping"
     trn-lpg-boat: "Domestic Marine Shipping Gas"
     trn-lpg-boat-ship: "Domestic Marine Shipping Gas"
 

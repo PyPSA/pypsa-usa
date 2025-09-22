@@ -7,18 +7,19 @@ use) and the available generation time series (based on weather data).
 import functools
 import logging
 import time
-import pandas as pd
+from pathlib import Path
+
 import atlite
 import geopandas as gpd
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import xarray as xr
 from _helpers import configure_logging, get_snapshots
 from dask.distributed import Client
 from pypsa.geo import haversine
 from shapely.geometry import LineString
-from typing import List, Tuple, Dict, Union, Set
-from pathlib import Path
+from zenodo_downloader import ZenodoScenarioDownloader
 
 logger = logging.getLogger(__name__)
 
@@ -40,65 +41,73 @@ def plot_data(data):
     ax.set_ylabel("Latitude")
     return fig, ax
 
+
 # functions for WUS capacity factors
 def get_buses(profile):
-    buses = [int(x) for x in profile['bus'].values]
+    buses = [int(x) for x in profile["bus"].values]
     return buses
 
+
 def load_WUS_data(planning_horizon: int) -> xr.Dataset:
-    #Loads WUS data for given planning horizon#
-    base_path = snakemake.config['cf_path']
+    # Loads WUS data for given planning horizon#
+    base_path = snakemake.config["cf_path"]
     logger.info(f"Loading WUS data for planning horizon {planning_horizon} from {base_path}...")
     file_path = Path(base_path) / f"Solar_Wind_CFs_{planning_horizon}.nc"
-    
+
     if not file_path.exists():
         raise FileNotFoundError(f"WUS data file not found at: {file_path}")
-        
+
     return xr.open_dataset(file_path)
 
+
 def create_blank_profile(pypsa_profile: xr.Dataset) -> xr.DataArray:
-    #Create a blank xarray DataArray with the same structure as the input profile.
-    cf = pypsa_profile['profile']
+    # Create a blank xarray DataArray with the same structure as the input profile.
+    cf = pypsa_profile["profile"]
     return xr.DataArray(
         data=np.full_like(cf, fill_value=np.nan),
         coords=cf.coords,
         dims=cf.dims,
-        name='empty_profile'
+        name="empty_profile",
     )
 
-def find_closest(lat: float, long: float, wus_latitude: np.ndarray, wus_longitude: np.ndarray) -> List[float]:
-    #For given pypsa bus coordinate, find the closest latitude and longitude point in the WUS dataset.
+
+def find_closest(lat: float, long: float, wus_latitude: np.ndarray, wus_longitude: np.ndarray) -> list[float]:
+    # For given pypsa bus coordinate, find the closest latitude and longitude point in the WUS dataset.
     lat_idx = np.abs(wus_latitude - lat).argmin()
     long_idx = np.abs(wus_longitude - long).argmin()
     return [wus_latitude[lat_idx], wus_longitude[long_idx]]
 
+
 def get_WUS_snapshot_subset(wus_cfs: xr.Dataset, snapshots: pd.DatetimeIndex) -> pd.DatetimeIndex:
-    #Extract a subset of WUS timestamps that match the month-day-time pattern in pypsa snapshots.
+    # Extract a subset of WUS timestamps that match the month-day-time pattern in pypsa snapshots.
     ss = pd.to_datetime(snapshots)
-    wus = pd.to_datetime(wus_cfs['Times'].values)
+    wus = pd.to_datetime(wus_cfs["Times"].values)
     mdt_set = set(zip(ss.month, ss.day, ss.time))
     subset = wus[[(m, d, t) in mdt_set for m, d, t in zip(wus.month, wus.day, wus.time)]]
     return subset
 
+
 def get_correct_year(
     wus_data_horizon: xr.Dataset,
     wus_data_prev: xr.Dataset,
-    year: int
-    ) -> xr.Dataset:
+    year: int,
+) -> xr.Dataset:
     # dealing with the fact that the WUS data starts on 09-01-year
     logger.info(f"Extracting and combining data for {year}")
 
-    start_date = str(year) + '-01-01'
-    end_date = str(year) + '-12-31'
+    start_date = str(year) + "-01-01"
+    end_date = str(year) + "-12-31"
 
-    begin = wus_data_prev.sel(Times=slice(start_date,None))
-    end = wus_data_horizon.sel(Times=slice(None,end_date))
-    combined = xr.concat([begin,end],dim='Times')
+    begin = wus_data_prev.sel(Times=slice(start_date, None))
+    end = wus_data_horizon.sel(Times=slice(None, end_date))
+    combined = xr.concat([begin, end], dim="Times")
 
-    return combined 
+    return combined
+
 
 def capitalize(s):
     return s[0].upper() + s[1:]
+
 
 def return_wus_col(tech):
     if tech == "solar":
@@ -108,56 +117,58 @@ def return_wus_col(tech):
     if tech == "offwind_floating":
         return "Wind"
 
+
 def generate_wus_profile(
     pypsa_profile: xr.Dataset,
     wus_cfs: xr.Dataset,
-    buses, # not sure what type this is
+    buses,  # not sure what type this is
     bus_loc_data: pd.DataFrame,
     technology: str,
-    snapshots: pd.DatetimeIndex
+    snapshots: pd.DatetimeIndex,
 ) -> xr.Dataset:
     """Generate WUS profiles for all buses in a PyPSA profile.
-    
+
     Args:
         pypsa_profile: PyPSA profile dataset
         wus_cfs: WUS capacity factors dataset
         bus_loc_data: DataFrame with bus coordinates
         technology: Technology type (e.g., 'wind', 'solar')
         snapshots: DatetimeIndex of timestamps
-        
-    Returns:
+
+    Returns
+    -------
         Updated profile with WUS capacity factors
     """
     logger.info("Extracting WUS snapshots...")
     wus_snapshots = get_WUS_snapshot_subset(wus_cfs, snapshots)
     wus_subset = wus_cfs.sel(Times=wus_snapshots)
 
-    #logger.info("Determining buses in profile and extracting coordinates...")
-    #profile_buses = get_buses(pypsa_profile)
+    # logger.info("Determining buses in profile and extracting coordinates...")
+    # profile_buses = get_buses(pypsa_profile)
     # Filter bus location data for relevant buses and remove duplicates
-    #busLocProfile = bus_loc_data[bus_loc_data.index.isin(profile_buses)]
-    #busLocProfile = busLocProfile[~busLocProfile.index.duplicated(keep='first')]
-    
+    # busLocProfile = bus_loc_data[bus_loc_data.index.isin(profile_buses)]
+    # busLocProfile = busLocProfile[~busLocProfile.index.duplicated(keep='first')]
+
     logger.info("Creating blank profile...")
     new_profile = create_blank_profile(pypsa_profile)
 
     logger.info("Preparing WUS location data...")
-    wus_latitude = wus_subset['lat'].values
-    wus_longitude = wus_subset['lon'].values
+    wus_latitude = wus_subset["lat"].values
+    wus_longitude = wus_subset["lon"].values
     col = f"{return_wus_col(technology)}_CF"
-    
+
     # Pre-compute set of available coordinates for faster lookups
     available_lats = set(wus_latitude)
     available_longs = set(wus_longitude)
 
     logger.info(f"Iterating through {len(new_profile['bus'].values)} buses and assigning profiles...")
-    
+
     # Process buses in chunks for better performance
-    for i, b in enumerate(new_profile['bus'].values):
+    for i, b in enumerate(new_profile["bus"].values):
         if b not in bus_loc_data.index:
             logger.warning(f"Bus {b} not found in location data, skipping")
             continue
-        
+
         long, lat = bus_coords.loc[b]
 
         # Check if coordinates exist in WUS data, if not find closest
@@ -167,21 +178,22 @@ def generate_wus_profile(
             closest = find_closest(lat, long, wus_latitude, wus_longitude)
 
         # Assign bus profile from WUS at nearest location
-        wus_data = wus_subset[col].sel(lon=closest[1], lat=closest[0], method='nearest')
-        
+        wus_data = wus_subset[col].sel(lon=closest[1], lat=closest[0], method="nearest")
+
         # Verify shape compatibility
         bus_profile = new_profile.loc[dict(bus=str(b))]
         if wus_data.shape != bus_profile.shape:
             logger.error(f"Shape mismatch for bus {b}: WUS data {wus_data.shape} vs profile {bus_profile.shape}")
             continue
-            
+
         new_profile.loc[dict(bus=str(b))] = wus_data.values
 
     logger.info("Finalizing WUS profile...")
     wus_profile = pypsa_profile.copy()
-    wus_profile['profile'] = new_profile
-    
+    wus_profile["profile"] = new_profile
+
     return wus_profile
+
 
 if __name__ == "__main__":
     if "snakemake" not in globals():
@@ -190,7 +202,7 @@ if __name__ == "__main__":
         snakemake = mock_snakemake(
             "build_renewable_profiles",
             technology="solar",
-            interconnect="texas",
+            interconnect="western",
         )
     configure_logging(snakemake)
 
@@ -345,6 +357,44 @@ if __name__ == "__main__":
         return_capacity=True,
         **resource,
     )
+    if snakemake.params.renewable.get("dataset", False) == "godeeep":
+        logger.info("Loading godeeep renewable data...")
+        renewable_sns = get_snapshots(snakemake.config["renewable_snapshots"])
+        scenario = snakemake.config["renewable_scenarios"][0]
+        tech = snakemake.wildcards.technology
+        year = snakemake.config["renewable_scenario_years"][0]
+        ## loading profiles from local downloads
+        # profile = load_godeeep_data(snakemake.config['renewable_scenario_years'][0], snakemake.wildcards.technology, snakemake.config['renewable_scenarios'][0], renewable_sns)
+        ## loading profiles in from Zenodo
+        downloader = ZenodoScenarioDownloader()
+        if tech in ["onwind", "offwind", "offwind_floating"]:
+            tech = "wind"
+            wind_height = "_100m"
+            start = ((year - 1980) // 20) * 20 + 1980
+            end = start + 19
+        elif tech == "solar":
+            wind_height = ""
+            technology = "solar"
+            start = ((year - 2020) // 40) * 40 + 2020
+            end = start + 39
+        else:
+            raise ValueError("Invalid technology type. Choose 'onwind', 'offwind', 'offwind_floating' or 'solar'.")
+
+        if scenario == "historical":
+            year_range = ""
+        else:
+            year_range = f"_{start}_{end}"
+
+        scenario_final = tech + wind_height + f"_{scenario}" + year_range
+        filename = f"{scenario_final}_{tech}_gen_cf_{year}{wind_height}_bus_mean.nc"
+        filepath = downloader.download_scenario_file(scenario_final, filename)
+        profile = xr.open_dataarray(filepath)
+
+        profile = profile.sel(time=renewable_sns)  # filtering for appropriate time snapshot
+        ## changing bus format from int to float/string to match pypsa
+        bus_values = profile.bus.values
+        formatted_bus = [f"{float(bus):.1f}" for bus in bus_values]
+        profile = profile.assign_coords(bus=formatted_bus)
 
     logger.info(f"Calculating maximal capacity per bus (method '{p_nom_max_meth}')")
     if p_nom_max_meth == "simple":
@@ -382,7 +432,7 @@ if __name__ == "__main__":
             (correction_factor * profile).rename("profile"),
             capacities.rename("weight"),
             p_nom_max.rename("p_nom_max"),
-            potential.rename("potential"),
+            # potential.rename("potential"), # commenting out potential for now, not sure if needed but needs 'bus' dimension to join for godeeep dataset
             average_distance.rename("average_distance"),
         ],
     )
@@ -415,14 +465,14 @@ if __name__ == "__main__":
         logger.info("CF source is set to WUS, beginning capacity factor substitution...")
 
         # get index of renewable weather year, then get that planning horizon
-        index = snakemake.config['renewable_weather_years'].index(int(snakemake.wildcards.renewable_weather_years))
-        wus_year = snakemake.config['scenario']['planning_horizons'][index]
+        index = snakemake.config["renewable_weather_years"].index(int(snakemake.wildcards.renewable_weather_years))
+        wus_year = snakemake.config["scenario"]["planning_horizons"][index]
 
         wus_data_horizon = load_WUS_data(wus_year)
-        wus_data_prev = load_WUS_data(int(wus_year)-1)
-        wus_data = get_correct_year(wus_data_horizon,wus_data_prev,wus_year)
+        wus_data_prev = load_WUS_data(int(wus_year) - 1)
+        wus_data = get_correct_year(wus_data_horizon, wus_data_prev, wus_year)
 
-        wus_profile = generate_wus_profile(ds,wus_data,buses,bus_coords,snakemake.wildcards.technology,sns)
+        wus_profile = generate_wus_profile(ds, wus_data, buses, bus_coords, snakemake.wildcards.technology, sns)
 
         logger.info("Capacity factor substitution complete.")
         wus_profile.to_netcdf(snakemake.output.profile)

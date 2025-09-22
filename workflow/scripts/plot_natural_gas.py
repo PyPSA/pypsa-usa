@@ -6,7 +6,7 @@ from functools import partial
 from pathlib import Path
 
 # Optional used as 'arg: callable | None = None' gives TypeError with py3.11
-from typing import Any, Optional
+from typing import Any, Callable, Optional  # noqa: UP035
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -42,7 +42,7 @@ class PlottingData:
     unit: str | None = None
     converter: float | None = 1.0
     resample: str | None = None  # "D", "W", "12h" for example
-    resample_func: Optional[callable] = None  # pd.Series.sum for example  # noqa: UP007
+    resample_func: Optional[Callable] = None  # pd.Series.sum for example  # noqa: UP045
     plot_by_month: bool | None = False  # not resampled
 
 

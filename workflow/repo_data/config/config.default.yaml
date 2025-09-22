@@ -35,7 +35,6 @@ enable:
   build_cutout: false
 
 renewable_weather_years: [2012,2012,2012] # need to be historical
-
 snapshots:
   '2019':
     start: "2019-01-01"
@@ -49,6 +48,15 @@ snapshots:
     start: "2023-01-01"
     end: "2024-01-01"
     inclusive: "left"
+
+
+## godeeep inputs for scenarios
+renewable_scenario_years: [2033]
+renewable_scenarios: ["rcp45hotter"] #["historical", "rcp45hotter", "rcp45cooler", "rcp85hotter", "rcp85cooler"]
+renewable_snapshots:
+  start: "2033-01-01" ## change the year to match renewable_scenario_years
+  end: "2033-12-31"
+  inclusive: "left"
 
 # docs :
 electricity:
@@ -85,6 +93,23 @@ electricity:
     shift: 0
     marginal_cost: 999999
 
+  imports:
+    enable: false 
+    costs: wholesale # wholesale|carrier|float
+    co2_emissions: 0.428 
+    capacity_limit: true 
+    volume_limit: inf # 0 > x > 100 | 'inf'
+    balancing_period: month # day|week|month|year
+
+  exports:
+    enable: false 
+    costs: wholesale # wholesale|carrier|float
+    capacity_limit: true 
+    volume_limit: inf # 0 > x > 100 | 'inf'
+    balancing_period: month # day|week|month|year
+
+
+
 # docs :
 conventional:
   unit_commitment: false
@@ -107,6 +132,25 @@ links:
   p_max_pu: 1.0
   p_nom_max: .inf
   max_extension: 20000 #MW
+
+# docs :
+co2:
+  storage: false   # [false, true]
+  network:
+    enable: false   # [false, true]
+    capital_cost: 2736000   # in USD/12-inch diameter/mile
+    marginal_cost: 4   # in USD/tCO2
+    lifetime: 40   # in years
+    discount_rate: 0.07
+
+# docs :
+dac:
+  enable: false   # [false, true]
+  granularity: "node"   # ["node", "state", "nation"]
+  capital_cost: 6000000   # in USD/tCO2/h
+  electricity_input: 2.5   # in MWh/tCO2
+  lifetime: 20   # in years
+  discount_rate: 0.07
 
 # docs :
 costs:

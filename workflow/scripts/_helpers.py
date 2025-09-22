@@ -498,16 +498,6 @@ def set_scenario_config(snakemake):
         update_config(snakemake.config, scenario_config[snakemake.wildcards.run])
 
 
-def update_config_with_sector_opts(config, sector_opts):
-    from packaging.version import parse
-    from snakemake.utils import update_config
-
-    for o in sector_opts.split("-"):
-        if o.startswith("CF+"):
-            l_ = o.split("+")[1:]
-            update_config(config, parse(l_))
-
-
 def get_opt(opts, expr, flags=None):
     """
     Return the first option matching the regular expression.
@@ -568,11 +558,6 @@ def update_config_from_wildcards(config, w, inplace=True):
             config["costs"]["emission_prices"]["enable"] = True
             if ep_value is not None:
                 config["costs"]["emission_prices"]["co2"] = ep_value
-
-        if "ATK" in opts:
-            config["autarky"]["enable"] = True
-            if "ATKc" in opts:
-                config["autarky"]["by_country"] = True
 
         attr_lookup = {
             "p": "p_nom_max",

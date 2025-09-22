@@ -75,3 +75,4 @@ def test_new_feature(fixture_network, fixture_config):
 
     # Assert expected outcomes
     assert result == expected_value, "Error message if test fails"
+```
