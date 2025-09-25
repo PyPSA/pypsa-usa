@@ -1036,9 +1036,6 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
         df["store"] = df.bus0.map(
             lambda x: "import" if x.endswith(" trade") else "export",
         )
-        # to convert from GWh to MWh
-        df["efficiency"] = df.store.map(lambda x: 1000 if x == "import" else 0.001)
-
         return df
 
     def build_infrastructure(self, n: pypsa.Network, **kwargs) -> None:
@@ -1096,15 +1093,6 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
         marginal_cost_multiplier = kwargs.get("marginal_cost_multiplier", 1)
         marginal_cost = marginal_cost.mul(marginal_cost_multiplier).round(4)
 
-        # account for capacity restriction on GWh -> MWh
-        # p0 = p1 * efficiency
-        # p0 <= p_nom_max
-        # p_nom should be in units of the leaving unit
-        # import in gwh and export in mwh
-        template["multiplier"] = template.store.map(lambda x: 1000 if x == "import" else 1)
-        template["p_nom"] = template.CAPACITY_MW / template.multiplier
-        marginal_cost = marginal_cost.mul(template.multiplier).round(4)
-
         if "gas trade" not in n.carriers.index:
             n.add("Carrier", "gas trade", color="#d35050", nice_name="Gas Trade")
 
@@ -1113,7 +1101,7 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
             names=template.index,
             suffix=" gas trade",
             carrier="gas trade",
-            unit="GWh",  # note the unit!
+            unit="MWh",
             country=template.COUNTRY,
             interconnect=self.interconnect,
         )
@@ -1123,14 +1111,14 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
             names=template.index,
             suffix=" gas trade",
             carrier="gas trade",
-            unit="",  # Unit may be MW or GW
+            unit="MW",
             bus0=template.bus0,
             bus1=template.bus1,
-            p_nom=template.p_nom,
+            p_nom=template.CAPACITY_MW,
             p_min_pu=0,
             p_max_pu=1,
             p_nom_extendable=False,
-            efficiency=template.efficiency,  # conversion from GWh <-> MWh
+            efficiency=1,
             marginal_cost=marginal_cost,
             lifetime=np.inf,
             build_year=n.investment_periods[0],
@@ -1140,7 +1128,7 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
             "Store",
             names=store_exports.index,
             suffix=" gas trade",
-            unit="GWh",  # note the unit!
+            unit="MWh",
             bus=store_exports.bus1,
             carrier="gas trade",
             capital_cost=0,
@@ -1160,7 +1148,7 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
         n.madd(
             "Store",
             names=store_imports.index,
-            unit="GWh",  # note the unit!
+            unit="MWh",
             suffix=" gas trade",
             bus=store_imports.bus0,
             carrier="gas trade",
