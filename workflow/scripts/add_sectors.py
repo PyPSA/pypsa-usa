@@ -177,11 +177,8 @@ def add_sector_foundation(
             names=points.index,
             suffix=f" {carrier}",
             bus=[f"{x} {carrier}" for x in points.index],
-            e_nom=0,
-            e_nom_extendable=True,
-            capital_cost=0,
-            e_nom_min=0,
-            e_nom_max=np.inf,
+            e_nom_extendable=False,
+            e_nom=1e9,
             e_min_pu=-1,
             e_max_pu=0,
             e_cyclic_per_period=False,
@@ -529,11 +526,11 @@ if __name__ == "__main__":
 
         snakemake = mock_snakemake(
             "add_sectors",
-            interconnect="western",
-            simpl="40",
-            clusters="4m",
+            interconnect="eastern",
+            simpl="120",
+            clusters="6m",
             ll="v1.0",
-            opts="1h-REM",
+            opts="1h-TCT",
             sector="E-G",
         )
     configure_logging(snakemake)

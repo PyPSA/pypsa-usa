@@ -1013,13 +1013,15 @@ def add_elec_imports_exports(
                 bus=[f"{x}_imports" for x in regions_2_add],
                 suffix="_imports",
                 carrier="imports",
-                e_nom_extendable=True,
-                marginal_cost=0,
                 e_nom=0,
-                e_nom_max=np.inf,
-                e_min=0,
+                e_nom_extendable=True,
+                capital_cost=0,
+                e_nom_min=0,
+                e_nom_max=1e9,
                 e_min_pu=-1,
                 e_max_pu=0,
+                e_cyclic_per_period=False,
+                marginal_cost=0,
             )
         elif direction == "exports":
             n.madd(
@@ -1031,7 +1033,7 @@ def add_elec_imports_exports(
                 e_nom_extendable=True,
                 marginal_cost=0,
                 e_nom=0,
-                e_nom_max=np.inf,
+                e_nom_max=1e9,
                 e_min=0,
                 e_min_pu=0,
                 e_max_pu=1,

@@ -425,8 +425,8 @@ def add_air_cons(
         case _:
             raise NotImplementedError
 
-    capex = costs.at[costs_name, "capital_cost"].round(1)
-    efficiency = costs.at[costs_name, "efficiency"].round(1)
+    capex = costs.at[costs_name, "capital_cost"].round(3)
+    efficiency = costs.at[costs_name, "efficiency"].round(3)
     lifetime = costs.at[costs_name, "lifetime"]
     build_year = n.investment_periods[0]
 
@@ -692,8 +692,8 @@ def add_service_furnace(
     else:
         raise ValueError(f"Unexpected sector of {sector}")
 
-    capex = costs.at[costs_name, "capital_cost"].round(1)
-    efficiency = costs.at[costs_name, "efficiency"].round(1)
+    capex = costs.at[costs_name, "capital_cost"].round(3)
+    efficiency = costs.at[costs_name, "efficiency"].round(3)
     lifetime = costs.at[costs_name, "lifetime"]
     build_year = n.investment_periods[0]
 
@@ -902,7 +902,7 @@ def add_heat_dr(
         bus=df.index + "-bck-dr",
         e_cyclic=True,
         e_nom_extendable=False,
-        e_nom=np.inf,
+        e_nom=1e9,
         e_min_pu=0,
         e_max_pu=1,
         carrier=df.carrier,
@@ -919,7 +919,7 @@ def add_heat_dr(
         bus=df.index + "-fwd-dr",
         e_cyclic=True,
         e_nom_extendable=False,
-        e_nom=np.inf,
+        e_nom=1e9,
         e_min_pu=-1,
         e_max_pu=0,
         carrier=df.carrier,
@@ -1169,9 +1169,9 @@ def add_service_heat_pumps(
         cop = cop.rename(columns=cop_mapper)
         efficiency = cop[hps.index.to_list()]
     else:
-        efficiency = costs.at[costs_name, "efficiency"].round(1)
+        efficiency = costs.at[costs_name, "efficiency"].round(3)
 
-    capex = costs.at[costs_name, "capital_cost"].round(1)
+    capex = round(costs.at[costs_name, "capital_cost"] * 0.7, 3)
     lifetime = costs.at[costs_name, "lifetime"]
     build_year = n.investment_periods[0]
 
@@ -1198,8 +1198,8 @@ def add_industrial_gas_furnace(
 ) -> None:
     sector = SecNames.INDUSTRY.value
 
-    capex = costs.at["direct firing gas", "capital_cost"].round(1)
-    efficiency = costs.at["direct firing gas", "efficiency"].round(1)
+    capex = costs.at["direct firing gas", "capital_cost"].round(3)
+    efficiency = costs.at["direct firing gas", "efficiency"].round(3)
     lifetime = costs.at["direct firing gas", "lifetime"]
     build_year = n.investment_periods[0]
 
@@ -1258,9 +1258,9 @@ def add_industrial_coal_furnace(
     # same source as tech-data, but its just not in latest version
 
     # capex approximated based on NG to incorporate fixed costs
-    capex = costs.at["direct firing coal", "capital_cost"].round(1)
-    efficiency = costs.at["direct firing coal", "efficiency"].round(1)
-    lifetime = costs.at["direct firing coal", "lifetime"].round(1)
+    capex = costs.at["direct firing coal", "capital_cost"].round(3)
+    efficiency = costs.at["direct firing coal", "efficiency"].round(3)
+    lifetime = costs.at["direct firing coal", "lifetime"].round(3)
     build_year = n.investment_periods[0]
 
     carrier_name = f"{sector}-heat"
@@ -1311,11 +1311,11 @@ def add_indusrial_heat_pump(
 ) -> None:
     sector = SecNames.INDUSTRY.value
 
-    capex = costs.at["industrial heat pump high temperature", "capital_cost"].round(1)
+    capex = costs.at["industrial heat pump high temperature", "capital_cost"].round(3)
     efficiency = costs.at["industrial heat pump high temperature", "efficiency"].round(
-        1,
+        3,
     )
-    lifetime = costs.at["industrial heat pump high temperature", "lifetime"].round(1)
+    lifetime = costs.at["industrial heat pump high temperature", "lifetime"].round(3)
     build_year = n.investment_periods[0]
 
     carrier_name = f"{sector}-heat"
