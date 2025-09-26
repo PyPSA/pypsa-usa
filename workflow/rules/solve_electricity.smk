@@ -51,7 +51,7 @@ rule solve_network:
     threads: solver_threads
     resources:
         walltime=config_provider("walltime", "solve_network"),
-        mem_mb=lambda wildcards, input, attempt: (input.size // 100000) * attempt * 150,
+        # mem_mb=lambda wildcards, input, attempt: (input.size // 100000) * attempt * 150,
     conda:
         "../envs/environment.yaml"
     script:

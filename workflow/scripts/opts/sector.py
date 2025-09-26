@@ -621,10 +621,10 @@ def add_ev_generation_constraint(n, config, snakemake):
 
 
 def add_fossil_generation_constraint(n, config):
-    """Adds a constraint to the maximum generation from fossil fuels per year in industry.
+    """Adds a constraint to the minimum generation from fossil fuels per year in industry.
 
     Since the industrial sector is still under development, we add a constraint to the
-    maximum generation from fossil fuels per year to prevent overinvestment in heat pumps.
+    minimum generation from fossil fuels per year to prevent overinvestment in heat pumps.
 
     This only applies to the heating load.
 
@@ -635,6 +635,7 @@ def add_fossil_generation_constraint(n, config):
     min_generation = ind_config.get("min_fossil_generation", 0)
 
     if min_generation <= 0.1:
+        logger.info(f"No fossil generation constraint applied to industry as min_fossil_generation is {min_generation}")
         return
 
     states = [x for x in n.buses.reeds_state.unique() if x]
