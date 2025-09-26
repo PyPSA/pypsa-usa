@@ -1,9 +1,13 @@
+"""Download scenarios from Zenodo."""
+
 from pathlib import Path
 
 import requests
 
 
 class ZenodoScenarioDownloader:
+    """Download scenarios from Zenodo."""
+
     def __init__(self, download_dir="./data"):
         self.download_dir = Path(download_dir)
         self.download_dir.mkdir(exist_ok=True)
@@ -222,7 +226,7 @@ def download_scenario_file(scenario_name, filename, download_dir="./data/zenodo"
 
 def download_by_record_id(record_id, filename, download_dir="./data/zenodo"):
     """
-    Quick function to download a file directly by record ID
+    Quick function to download a file directly by record ID.
 
     Example:
     filepath = download_by_record_id(17059209, "solar_historical_solar_gen_cf_1980_bus_mean.nc")
