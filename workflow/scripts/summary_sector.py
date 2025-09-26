@@ -348,6 +348,37 @@ def _get_brownfield_capacity_per_node(
     return df[["existing", "new"]]
 
 
+def _get_import_export_timeseries(n: pypsa.Network, state: str | None = None) -> pd.DataFrame:
+    """Get import/export timeseries."""
+    import_links = n.links[n.links.carrier.str.endswith("imports")].copy()
+    export_links = n.links[n.links.carrier.str.endswith("exports")].copy()
+
+    import_links["reeds_state"] = import_links.bus1.map(n.buses.reeds_state)
+    export_links["reeds_state"] = export_links.bus0.map(n.buses.reeds_state)
+
+    if state:
+        import_links["reeds_state"] = import_links.bus1.map(n.buses.reeds_state)
+        export_links["reeds_state"] = export_links.bus0.map(n.buses.reeds_state)
+
+        import_links = import_links[import_links.reeds_state == state]
+        export_links = export_links[export_links.reeds_state == state]
+
+    if import_links.empty:
+        imports = pd.DataFrame(index=n.snapshots, columns=["imports"], dtype=float).fillna(0)
+    else:
+        imports = n.links_t["p0"][import_links.index]
+
+    if export_links.empty:
+        exports = pd.DataFrame(index=n.snapshots, columns=["exports"], dtype=float).fillna(0)
+    else:
+        exports = n.links_t["p0"][export_links.index]
+
+    imports = imports.where(imports >= 0.0001, 0).round(4)
+    exports = exports.where(exports >= 0.0001, 0).round(4)
+
+    return imports.join(exports)
+
+
 def get_capacity_per_node(
     n: pypsa.Network,
     sector: str,
@@ -444,7 +475,9 @@ def get_power_production_timeseries(
         df_links = df_links[[x for x in df_links.columns if x in links]]
         df_gens = df_gens[[x for x in df_gens.columns if x in gens]]
 
-    df = df_links.join(df_gens)
+    import_exports = _get_import_export_timeseries(n, state)
+
+    df = df_links.join(df_gens).join(import_exports)
 
     if not (resample or resample_fn):
         return df
@@ -482,7 +515,19 @@ def get_sector_production_timeseries_by_carrier(
         )
         df = df.T
         df.index = df.index.map(n.links.carrier)
+
     df = df.groupby(level=0).sum().T
+
+    # only plot the net imports
+    if ("imports" in df.columns) and ("exports" in df.columns):
+        df["imports"] = df["imports"] - df["exports"]
+        df["imports"] = df.imports.where(df.imports >= 0.0001, 0).round(4)
+        df = df.drop(columns=["exports"])
+    else:
+        for col in ["imports", "exports"]:
+            if col in df.columns:
+                df = df.drop(columns=[col])
+
     return df.mask((df <= 0) & (df >= -0.00001), 0)
 
 

@@ -1499,9 +1499,9 @@ def _initialize_metadata(data: dict[str, Any]) -> list[PlottingData]:
 if __name__ == "__main__":
     if "snakemake" not in globals():
         snakemake = mock_snakemake(
-            "plot_sector_capacity",
-            simpl="60",
-            opts="1h-REM",
+            "plot_sector_production",
+            simpl="120",
+            opts="1h-TCT",
             clusters="6m",
             ll="v1.0",
             sector="E-G",
