@@ -1080,12 +1080,15 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
         store_exports = template[template.store == "export"].copy()
 
         # remove any conections within geographic scope
+        # export costs are bumped slightly to reduce numerical issues with
+        # imports/exports being the exact same cost
         if self.domestic:
             import_costs = self._get_marginal_costs_domestic(n, template, True)
             export_costs = self._get_marginal_costs_domestic(n, template, False)
         else:
             import_costs = self._get_marginal_costs_international(n, template, True)
             export_costs = self._get_marginal_costs_international(n, template, False)
+        export_costs = export_costs + 0.1  # earn slightly less money
 
         marginal_cost = pd.concat([import_costs, export_costs], axis=1)
         marginal_cost = self._expand_costs(n, marginal_cost)
