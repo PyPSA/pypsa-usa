@@ -762,7 +762,7 @@ def add_road_transport_brownfield(
 
         # 1000s to convert:
         #  miles/MWh -> k-miles/MWh
-        efficiency = costs.at[costs_name, "efficiency"] / 1000
+        efficiency = round(costs.at[costs_name, "efficiency"] / 1000, 4)
         lifetime = costs.at[costs_name, "lifetime"]
 
         df["bus0"] = df.name + f" {sector}-{elec_fuel}-{veh_type}"
@@ -856,6 +856,7 @@ def add_road_transport_brownfield(
 
         # mpg -> miles/wh -> miles/MWh -> k miles / MWH
         efficiency *= (1 / wh_per_gallon) * 1000000 / 1000
+        efficiency = round(efficiency, 4)
         lifetime = costs.at[costs_name, "lifetime"]
 
         df["bus0"] = df.name + f" {sector}-{lpg_fuel}-{veh_type}"
