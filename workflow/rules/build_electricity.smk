@@ -784,8 +784,8 @@ rule add_extra_components:
         retirement=config["electricity"].get("retirement", "technical"),
         demand_response=config["electricity"].get("demand_response", {}),
         trim_network=config_provider("model_topology", "trim", default=False),
-        imports=config_provider("electricity", "imports", default=False),
-        exports=config_provider("electricity", "exports", default=False),
+        imports=config_provider("electricity", "imports", default={}),
+        exports=config_provider("electricity", "exports", default={}),
         weather_year=config_provider("renewable_weather_years"),
         eia_api=config_provider("api", "eia"),
         topological_boundaries=config_provider(
