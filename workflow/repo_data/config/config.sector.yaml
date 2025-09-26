@@ -81,6 +81,7 @@ sector:
       gas_furnace: true
       coal_furnace: true
       heat_pump: true
+    min_fossil_generation: 66 # percent
     demand_response: 
       shift: 0
       marginal_cost:
