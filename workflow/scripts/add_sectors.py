@@ -27,6 +27,7 @@ from build_stock_data import (
     get_industrial_stock,
     get_residential_stock,
     get_transport_stock,
+    scale_existing_stock,
 )
 from build_transportation import build_transportation
 from constants import CODE_2_STATE, NG_MWH_2_MMCF, STATE_2_CODE, STATES_INTERCONNECT_MAPPER
@@ -527,8 +528,8 @@ if __name__ == "__main__":
         snakemake = mock_snakemake(
             "add_sectors",
             interconnect="eastern",
-            simpl="120",
-            clusters="6m",
+            simpl="80",
+            clusters="4m",
             ll="v1.0",
             opts="1h-TCT",
             sector="E-G",
@@ -696,6 +697,8 @@ if __name__ == "__main__":
         res_stock_dir = snakemake.input.residential_stock
         com_stock_dir = snakemake.input.commercial_stock
 
+        scale_exising_stock = snakemake.params.sector["service_sector"].get("scale_exising_stock", True)
+
         if snakemake.params.sector["service_sector"]["water_heating"]["split_space_water"]:
             fuels = ["space_heating", "water_heating", "cooling"]
         else:
@@ -710,6 +713,8 @@ if __name__ == "__main__":
             ratios = get_residential_stock(res_stock_dir, fuel)
             ratios.index = ratios.index.map(STATE_2_CODE)
             ratios = ratios.dropna()  # na is USA
+            if scale_exising_stock:
+                ratios = scale_existing_stock(ratios)
             add_service_brownfield(
                 n=n,
                 sector="res",
@@ -724,6 +729,8 @@ if __name__ == "__main__":
             ratios = get_commercial_stock(com_stock_dir, fuel)
             ratios.index = ratios.index.map(STATE_2_CODE)
             ratios = ratios.dropna()  # na is USA
+            if scale_exising_stock:
+                ratios = scale_existing_stock(ratios)
             add_service_brownfield(
                 n=n,
                 sector="com",
@@ -737,7 +744,8 @@ if __name__ == "__main__":
     if snakemake.params.sector["industrial_sector"]["brownfield"]:
         mecs_file = snakemake.input.industrial_stock
         ratios = get_industrial_stock(mecs_file)
-
+        if scale_exising_stock:
+            ratios = scale_existing_stock(ratios)
         fuels = ["heat"]
 
         for fuel in fuels:

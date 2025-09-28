@@ -49,7 +49,7 @@ def build_heat(
 
     if sector in ("res", "com", "srv"):
         split_urban_rural = options.get("split_urban_rural", False)
-        technologies = options.get("technologies")
+        technologies = options.get("technologies", {})
         water_heating_config = options.get("water_heating", {})
 
         # gas costs are endogenous!
@@ -260,7 +260,7 @@ def add_service_heat(
 
     # add heat pumps
     for heat_system in heat_systems:
-        if (heat_system in ["urban", "total"]) and include_hps:
+        if heat_system in ["urban", "total"]:
             heat_pump_type = "air"
 
             cop = ashp_cop
@@ -273,9 +273,10 @@ def add_service_heat(
                 heat_pump_type,
                 costs,
                 cop,
+                p_nom_extendable=include_hps,
             )
 
-        if (heat_system in ["rural", "total"]) and include_hps:
+        if heat_system in ["rural", "total"]:
             heat_pump_type = "ground"
 
             cop = gshp_cop
@@ -288,30 +289,30 @@ def add_service_heat(
                 heat_pump_type,
                 costs,
                 cop,
+                p_nom_extendable=include_hps,
             )
 
-        if include_elec_furnace:
-            add_service_furnace(n, sector, heat_system, heat_carrier, "elec", costs)
+        add_service_furnace(n, sector, heat_system, heat_carrier, "elec", costs, p_nom_extendable=include_elec_furnace)
 
-        if include_gas_furnace:
-            add_service_furnace(
-                n,
-                sector,
-                heat_system,
-                heat_carrier,
-                "gas",
-                costs,
-            )
+        add_service_furnace(
+            n,
+            sector,
+            heat_system,
+            heat_carrier,
+            "gas",
+            costs,
+            p_nom_extendable=include_gas_furnace,
+        )
 
-        if include_oil_furnace:
-            add_service_furnace(
-                n,
-                sector,
-                heat_system,
-                heat_carrier,
-                "oil",
-                costs,
-            )
+        add_service_furnace(
+            n,
+            sector,
+            heat_system,
+            heat_carrier,
+            "oil",
+            costs,
+            p_nom_extendable=include_oil_furnace,
+        )
 
         if dr_config:
             add_heat_dr(
@@ -391,12 +392,13 @@ def add_service_cooling(
         heat_systems = ["total"]
         _format_total_load(n, sector, "cool")
 
+    air_con_extendable = technologies.get("air_con", True)
+    hp_extendable = technologies.get("heat_pump", True)
+
     # add cooling technologies
     for heat_system in heat_systems:
-        if technologies.get("air_con", True):
-            add_air_cons(n, sector, heat_system, costs)
-        if technologies.get("heat_pump", True):
-            add_service_heat_pumps_cooling(n, sector, heat_system, "cool")
+        add_air_cons(n, sector, heat_system, costs, p_nom_extendable=air_con_extendable)
+        add_service_heat_pumps_cooling(n, sector, heat_system, "cool", p_nom_extendable=hp_extendable)
 
         if dr_config:
             add_heat_dr(
@@ -413,6 +415,7 @@ def add_air_cons(
     sector: str,
     heat_system: str,
     costs: pd.DataFrame,
+    p_nom_extendable: bool = True,
 ) -> None:
     """Adds gas furnaces to the system."""
     assert heat_system in ("urban", "rural", "total")
@@ -449,7 +452,7 @@ def add_air_cons(
         carrier=acs.carrier,
         efficiency=efficiency,
         capital_cost=capex,
-        p_nom_extendable=True,
+        p_nom_extendable=p_nom_extendable,
         lifetime=lifetime,
         build_year=build_year,
     )
@@ -460,6 +463,7 @@ def add_service_heat_pumps_cooling(
     sector: str,
     heat_system: str,
     heat_carrier: str,
+    p_nom_extendable: bool = True,
 ) -> None:
     """
     Adds heat pumps to the system for cooling. These heat pumps copy attributes
@@ -511,7 +515,7 @@ def add_service_heat_pumps_cooling(
         carrier=cool_links.carrier,
         efficiency=cool_links_cop,
         capital_cost=cool_links.capex,
-        p_nom_extendable=True,
+        p_nom_extendable=p_nom_extendable,
         lifetime=cool_links.lifetime,
         build_year=build_year,
     )
@@ -653,6 +657,7 @@ def add_service_furnace(
     heat_carrier: str,
     fuel: str,
     costs: pd.DataFrame,
+    p_nom_extendable: bool = True,
 ) -> None:
     """
     Adds direct furnace heating to the system.
@@ -730,7 +735,7 @@ def add_service_furnace(
             carrier=df.carrier,
             efficiency=efficiency,
             capital_cost=capex,
-            p_nom_extendable=True,
+            p_nom_extendable=p_nom_extendable,
             lifetime=lifetime,
             build_year=build_year,
         )
@@ -746,7 +751,7 @@ def add_service_furnace(
             efficiency=efficiency,
             efficiency2=df.efficiency2,
             capital_cost=capex,
-            p_nom_extendable=True,
+            p_nom_extendable=p_nom_extendable,
             lifetime=lifetime,
             build_year=build_year,
             # marginal_cost=mc,
@@ -1109,6 +1114,7 @@ def add_service_heat_pumps(
     hp_type: str,
     costs: pd.DataFrame,
     cop: pd.DataFrame | None = None,
+    p_nom_extendable: bool = True,
 ) -> None:
     """
     Adds heat pumps to the system.
@@ -1185,7 +1191,7 @@ def add_service_heat_pumps(
         carrier=hps.carrier,
         efficiency=efficiency,
         capital_cost=capex,
-        p_nom_extendable=True,
+        p_nom_extendable=p_nom_extendable,
         lifetime=lifetime,
         build_year=build_year,
     )

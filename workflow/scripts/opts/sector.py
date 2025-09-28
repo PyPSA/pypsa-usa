@@ -613,9 +613,9 @@ def add_ev_generation_constraint(n, config, snakemake):
 
         for investment_period in n.investment_periods:
             ratio = policy.at[investment_period, mode] / 100  # input is percentage
-            eff = n.links.loc[evs].efficiency.mean()
-            lhs = n.model["Link-p"].loc[investment_period].sel(Link=evs).sum()
-            rhs = dem.loc[investment_period].sum().sum() * ratio / eff
+            eff = n.links.loc[evs].efficiency.round(1)
+            lhs = n.model["Link-p"].loc[investment_period].sel(Link=evs).mul(eff).sum()
+            rhs = round(dem.loc[investment_period].sum().sum() * ratio, 2)
 
             n.model.add_constraints(lhs <= rhs, name=f"Link-ev_gen_{mode}_{investment_period}")
 
