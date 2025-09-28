@@ -13,6 +13,7 @@ Specifically, it will do the following
 """
 
 import logging
+import math
 from abc import ABC, abstractmethod
 from math import pi
 from typing import Any
@@ -1336,6 +1337,7 @@ def build_natural_gas(
     cyclic_storage = options.get("cyclic_storage", True)
     standing_loss = options.get("standing_loss", 0)
     marginal_cost_multiplier = options.get("marginal_cost_multiplier", 1)
+    capacity_multiplier = options.get("existing_pipeline_multiplier", 1)
 
     # add state level natural gas processing facilities
 
@@ -1382,6 +1384,11 @@ def build_natural_gas(
     )
 
     _remove_marginal_costs(n)
+
+    if not math.isclose(capacity_multiplier, 1):
+        links = n.links[n.links.carrier.isin(["gas pipeline", "gas trade"])].index
+        p_nom = n.links.loc[links, "p_nom"] * capacity_multiplier
+        n.links.loc[links, "p_nom"] = p_nom
 
 
 if __name__ == "__main__":
