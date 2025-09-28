@@ -5,20 +5,21 @@ service_sector,,,Options when implementing the service sector (Residential and C
 -- split_urban_rural,--,"bool {true, false}","Model the urban and rural areas seperatly within each sector, or aggregate into a single region. If aggregated, constraints on GSHP capacity are implemented based on population. "
 -- split_space_water_heating,--,"bool {true, false}","Model space heat and water heat seperatly, or aggregate together. If aggregated, only space-heat technologyies are represented. "
 -- brownfield,--,"bool {true, false}",Include brownfield end-use capacity
+-- scale_exising_stock,--,"bool {true, false}",Scales exisitng stock to equal capacity. If not the existing stock may not be enough to meet historical load. Needed as existing stock values are survay based..
 -- gas_connection,,,"Option on amount of area connected to the gas network. 1 represnets 100% of buildings connected, 0 represents 0% connected. "
 -- -- urban,per_unit,"float {0 <=, >= 1}",Urban population connected to gas network.
 -- -- rural,per_unit,"float {0 <=, >= 1}",Rural population connected to gas network.
 -- technologies,,,Energy conversion technologies to model.
 -- -- space_heating,,,Space heating technologies to model
--- -- -- elec_furnace,--,"bool {true, false}",Include electric furnace heaters
--- -- -- gas_furnace,--,"bool {true, false}",Include natural gas furnces
--- -- -- oil_furnace,--,"bool {true, false}",Include heating oil furnaces
--- -- -- heat_pump,--,"bool {true, false}","Include heat pumps. Both ASHPs and GSHPs are iuncluded. ASHP are used in urban areas, while GSHP are used in rural areas. "
--- -- -- air_con,--,"bool {true, false}",Include air conditiners if modelling cooling load
+-- -- -- elec_furnace,--,"bool {true, false}",Include electric furnace heaters as extendable
+-- -- -- gas_furnace,--,"bool {true, false}",Include natural gas furnces as extendable
+-- -- -- oil_furnace,--,"bool {true, false}",Include heating oil furnaces as extendable
+-- -- -- heat_pump,--,"bool {true, false}","Include heat pumps as extendable. Both ASHPs and GSHPs are iuncluded. ASHP are used in urban areas, while GSHP are used in rural areas. "
+-- -- -- air_con,--,"bool {true, false}",Include air conditiners as extendable if modelling cooling load
 -- -- water_heating,,,Water heating technologies to model
--- -- -- elec_water_tank,--,"bool {true, false}",Include electric hot water storage tanks
--- -- -- gas_water_tank,--,"bool {true, false}",Include natural gas hot water storage tanks
--- -- -- oil_water_tank,--,"bool {true, false}",Include heating oil hot water storage tanks
+-- -- -- elec_water_tank,--,"bool {true, false}",Include electric hot water storage tanks as extendable
+-- -- -- gas_water_tank,--,"bool {true, false}",Include natural gas hot water storage tanks as extendable
+-- -- -- oil_water_tank,--,"bool {true, false}",Include heating oil hot water storage tanks as extendable
 -- -- standing_losses,,,Standing losses to apply to space and water storages
 -- -- -- space,per_unit,"float {0 <=, >= 1}",Hourly loss of space heat stores
 -- -- -- water,per_unit,"float {0 <=, >= 1}",Hourly loss of water heat stores

@@ -9,6 +9,7 @@ natural_gas,,,Options when implementing natural gas networks
 -- cyclic_storage,--,"bool {true, false}",Apply cyclic storage constraints on linepack and underground storage
 -- standing_loss,per_unit,"float {0 <=, >= 1}","Leakage rate from pipelines. These leaks do NOT account towards emissions, just enforces gas production to replinish losses with cyclic constraints. "
 -- marginal_cost_multiplier,per_unit,"float {>=0}",Multiplier on the marginal cost of importing/exporting natural gas.
+-- existing_pipeline_multiplier,per_unit,"float {>=0}",Multiplier on the existing pipeline capacity. See issue https://github.com/PyPSA/pypsa-usa/issues/487
 ,,,
 methane,,,Options of methane emission accounting attached to natural gas networks
 -- upstream_leakage_rate,per_unit,"float {0 <=, >= 1}",Upstream per_unit leakage rate of natural gas. Applied to gas processing facilities.
