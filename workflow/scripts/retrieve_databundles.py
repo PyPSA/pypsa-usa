@@ -6,11 +6,14 @@ import subprocess
 import zipfile
 from pathlib import Path
 
-import zipfile_deflate64 # For Windows OS, use zipfile-deflate64
+import zipfile_deflate64  # For Windows OS, use zipfile-deflate64
+
 
 def is_wsl():
-    with open('/proc/version', 'r') as f:
-        return 'microsoft' in f.read().lower()
+    with open("/proc/version") as f:
+        return "microsoft" in f.read().lower()
+
+
 from _helpers import configure_logging, progress_retrieve
 
 logger = logging.getLogger(__name__)
