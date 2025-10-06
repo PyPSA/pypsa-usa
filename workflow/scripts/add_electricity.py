@@ -310,6 +310,8 @@ def filter_plants_by_region(
     regions_onshore: gpd.GeoDataFrame,
     regions_offshore: gpd.GeoDataFrame,
     reeds_shapes: gpd.GeoDataFrame,
+    all_reeds_shapes: gpd.GeoDataFrame,
+    reeds_memberships: pd.DataFrame,
 ) -> pd.DataFrame:
     """
     Filters the plants dataframe to remove plants not within the onshore and
@@ -339,22 +341,45 @@ def filter_plants_by_region(
     )
     plants_no_region = gdf_plants[~gdf_plants.index.isin(plants_in_regions.index)]
     if not plants_no_region.empty:
+        # identify the plants for which the interconnection according to the reeds membership is different than the interconnection according to the EIA data. We need to include these plants since these are plants where the reeds shapes are not precise enough to assign a region.
         plants_no_region = plants_no_region.to_crs(epsg=3857)
-        plants_nearshore = gpd.sjoin_nearest(
-            plants_no_region,
-            regions_onshore.to_crs(epsg=3857),
+        plants_no_region_all_shapes = gpd.sjoin(
+            plants_no_region.reset_index(),
+            all_reeds_shapes,
             how="inner",
-            max_distance=2000,
-            distance_col="distance",
+            predicate="intersects",
         )
-        plants_nearshore = plants_nearshore.to_crs(epsg=4326)
-        plants_filt = pd.concat([plants_filt, plants_nearshore])
+        plants_no_region_all_shapes = plants_no_region_all_shapes.to_crs(epsg=4326)
+        reeds_memberships.loc[reeds_memberships.interconnect == "ercot", "interconnect"] = "texas"
+        plants_no_region_all_shapes = plants_no_region_all_shapes.merge(
+            reeds_memberships[["ba", "interconnect"]],
+            left_on="rb",
+            right_on="ba",
+            how="left",
+        )
+        plants_must_add = plants_no_region_all_shapes[
+            plants_no_region_all_shapes.interconnect != plants_no_region_all_shapes.interconnection
+        ]
+        plants_must_add.set_index("generator_name", inplace=True)
+        remaining_plants = plants_no_region_all_shapes[
+            plants_no_region_all_shapes.interconnect == plants_no_region_all_shapes.interconnection
+        ]
+
+        if not remaining_plants.empty:
+            plants_nearshore = gpd.sjoin_nearest(
+                remaining_plants,
+                regions_onshore.to_crs(epsg=3857),
+                how="inner",
+                max_distance=2000,
+                distance_col="distance",
+            )
+            plants_nearshore = plants_nearshore.to_crs(epsg=4326)
+            plants_filt = pd.concat([plants_filt, plants_nearshore, plants_must_add])
+        else:
+            plants_filt = pd.concat([plants_filt, plants_must_add])
 
     plants_filt = plants_filt.drop(columns=["geometry"])
     plants_filt = plants_filt[~plants_filt.index.duplicated()]
-
-    plants_filt[plants_filt.index.str.contains("Diablo")]
-    gdf_plants[gdf_plants.index.str.contains("Diablo")]
     return pd.DataFrame(plants_filt)
 
 
@@ -434,22 +459,24 @@ def attach_conventional_generators(
 
     plants["efficiency"] = plants.efficiency.astype(float).fillna(plants.efficiency_r)
 
-    plants.loc[:, "p_min_pu"] = plants.minimum_load_mw / plants.p_nom
-    plants.loc[:, "p_min_pu"] = (
-        plants.p_min_pu.clip(
-            upper=np.minimum(plants.summer_derate, plants.winter_derate),
-            lower=0,
+    committable_fields = ["start_up_cost", "min_down_time", "min_up_time"]
+    defaults = pypsa.components.component_attrs["Generator"].default
+    if unit_commitment:
+        for attr in committable_fields:
+            plants[attr] = plants[attr].astype(float).fillna(defaults[attr])
+        plants["p_min_pu"] = (
+            (plants.minimum_load_mw / plants.p_nom)
+            .clip(
+                upper=np.minimum(plants.summer_derate, plants.winter_derate),
+                lower=0,
+            )
+            .astype(float)
+            .fillna(0)
+            .mul(0.95)
         )
-        .astype(float)
-        .fillna(0)
-    )
-    committable_fields = ["start_up_cost", "min_down_time", "min_up_time", "p_min_pu"]
-    for attr in committable_fields:
-        default = pypsa.components.component_attrs["Generator"].default[attr]
-        if unit_commitment:
-            plants[attr] = plants[attr].astype(float).fillna(default)
-        else:
-            plants[attr] = default
+    else:
+        for attr in committable_fields:
+            plants[attr] = defaults[attr]
     committable_attrs = {attr: plants[attr] for attr in committable_fields}
 
     # Define generators using modified ppl DataFrame
@@ -925,6 +952,8 @@ def main(snakemake):
     regions_onshore = gpd.read_file(snakemake.input.regions_onshore)
     regions_offshore = gpd.read_file(snakemake.input.regions_offshore)
     reeds_shapes = gpd.read_file(snakemake.input.reeds_shapes)
+    all_reeds_shapes = gpd.read_file(snakemake.input.all_reeds_shapes)
+    reeds_memberships = pd.read_csv(snakemake.input.reeds_memberships)
 
     costs = pd.read_csv(snakemake.input.tech_costs)
     costs = costs.pivot(index="pypsa-name", columns="parameter", values="value")
@@ -945,6 +974,8 @@ def main(snakemake):
         regions_onshore,
         regions_offshore,
         reeds_shapes,
+        all_reeds_shapes,
+        reeds_memberships,
     )
     plants = match_plant_to_bus(n, plants)
 
