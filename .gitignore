@@ -24,6 +24,9 @@ notebooks/
 venv/
 logs/
 
+# user workspace (runtime files)
+user_workspace/
+
 ## Core latex/pdflatex auxiliary files:
 *.aux
 *.lof

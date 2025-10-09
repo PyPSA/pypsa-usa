@@ -84,8 +84,20 @@ dev = [
     "pytest",
 ]
 
-[tool.setuptools.package-dir]
-myproj = "workflow/scripts"
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+pypsa_usa = [
+    "data/repo_data/**/*",
+    "workflow/config/*.yaml",
+    "workflow/rules/*.smk",
+    "workflow/scripts/*.py",
+    "workflow/scripts/opts/*.py",
+    "workflow/scripts/test/*.py",
+    "workflow/scripts/test/fixtures/*.csv",
+    "workflow/Snakefile"
+]
 
 [tool.ruff]
 line-length = 120
@@ -150,5 +162,11 @@ line-ending = "auto"
 
 [tool.pytest.ini_options]
 testpaths = [
-    "workflow/scripts/test"
+    "src/pypsa_usa/workflow/scripts/test"
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.5",
+    "pytest-cov>=7.0.0",
 ]

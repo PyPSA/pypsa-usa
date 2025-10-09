@@ -40,9 +40,11 @@ PyPSA-USA builds on and leverages the work of [PyPSA-EUR](https://pypsa-eur.read
 :maxdepth: 1
 :hidden:
 
+quick-start
 about-introduction
 about-install
 about-usage
+api-reference
 ```
 
 ```{toctree}

@@ -5,9 +5,49 @@
 
 # PyPSA-USA: An Open-Source Energy System Optimization Model for the United States
 
-## See our [readthedocs](https://pypsa-usa.readthedocs.io/en/latest/) for installation and usage instructions.
+PyPSA-USA is an open-source power systems model of the bulk transmission systems in the United States. This workflow draws from the work of [pypsa-eur](https://pypsa-eur.readthedocs.io/en/latest/index.html) to build a highly configurable power systems model that can be used for capacity expansion modeling and production cost simulation.
 
-PyPSA-USA is an open-source power systems model of the bulk transmission systems in the United States. This workflow draws from the work of [pypsa-eur](https://pypsa-eur.readthedocs.io/en/latest/index.html) to build a highly configurable power systems model that can be used for capacity expansion modeling, production cost simulation, and power flow analysis.
+## Quick Start
+
+### Option 1: PyPI Installation (Recommended)
+
+Install PyPSA-USA directly from PyPI:
+
+```bash
+pip install pypsa-usa
+```
+
+Then use the Python API:
+
+```python
+from pypsa_usa.api import run_workflow, set_default_workspace
+ from pathlib import Path
+
+# Set your default workspace (only needed once)
+set_default_workspace("/path/to/my/project/workspace")
+
+# Now you can run workflows without specifying workspace
+success = run_workflow(
+    config="config.default.yaml",
+    targets=["all"],
+    cores=4
+)
+```
+
+### Option 2: Development Installation
+
+For development or advanced usage, clone the repository:
+
+```bash
+git clone https://github.com/PyPSA/pypsa-usa.git
+cd pypsa-usa
+uv venv && source .venv/bin/activate
+uv pip install -e .
+```
+
+## Documentation
+
+See our [readthedocs](https://pypsa-usa.readthedocs.io/en/latest/) for complete installation and usage instructions.
 
 ![pypsa-usa Base Network](https://github.com/PyPSA/pypsa-usa/blob/0fe788397238b14f07857a9748aa86c7781bfa27/docs/source/_static/PyPSA-USA_network.png)
 

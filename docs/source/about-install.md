@@ -1,16 +1,52 @@
 # Installation
 
-## Step 1. Clone GitHub Repository
+PyPSA-USA can be installed in two ways: as a PyPI package for easy use, or from source for development and advanced usage.
+
+## Option 1: PyPI Installation (Recommended)
+
+The easiest way to install PyPSA-USA is through PyPI:
+
+```console
+pip install pypsa-usa
+```
+
+### Quick Start with PyPI Installation
+
+```python
+from pypsa_usa.api import run_workflow
+
+# Run a simple workflow with default settings
+success = run_workflow(cores=4)
+
+# Or with custom configuration
+success = run_workflow(
+    config="my_config.yaml",
+    targets=["all"],
+    cores=4
+)
+```
+
+### System Requirements
+
+- Python 3.8 or higher
+- Solver (HiGHS, Gurobi, CPLEX, etc.)
+- EIA API key
+
+## Option 2: Development Installation
+
+For development, customization, or advanced usage, install from source:
+
+### Step 1. Clone GitHub Repository
 
 Users can clone the repository using HTTPS, SSH, or GitHub CLI. See [GitHub docs](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) for information on the different cloning methods. If you run into issues, follow GitHub troubleshooting suggestions [here](https://docs.github.com/en/repositories/creating-and-managing-repositories/troubleshooting-cloning-errors#https-cloning-errors).
 
-### Using HTTPS
+#### Using HTTPS
 
 ```console
 git clone https://github.com/PyPSA/pypsa-usa.git
 ```
 
-### Using SSH-Key
+#### Using SSH-Key
 
 If it your first time cloning a **repository through ssh**, you will need to set up your git with an ssh-key by following these [directions](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/generating-a-new-ssh-key-and-adding-it-to-the-ssh-agent).
 
@@ -18,7 +54,7 @@ If it your first time cloning a **repository through ssh**, you will need to set
 git clone git@github.com:PyPSA/pypsa-usa.git
 ```
 
-## Step 2. Initialize Configuration files
+### Step 2. Initialize Configuration files
 
 From the command line, run the script `init_pypsa_usa.sh` to copy configuration file
 templates into the `workflow/config` folder.
@@ -27,7 +63,7 @@ templates into the `workflow/config` folder.
 bash init_pypsa_usa.sh
 ```
 
-## Step 3: Set-up Environment (mamba or UV)
+### Step 3: Set-up Environment (mamba or UV)
 
 PyPSA-USA can be managed though either [`UV`](https://github.com/astral-sh/uv) or [`mamba`](https://github.com/mamba-org/mamba). Users only need to install one, not both!
 

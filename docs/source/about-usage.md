@@ -5,14 +5,104 @@
 **If you have not done so, please follow the [installation instructions](https://pypsa-usa.readthedocs.io/en/latest/about-install.html) [github issues](https://github.com/PyPSA/pypsa-usa/issues)**
 ```
 
-## Set Configuration
+PyPSA-USA can be used in two ways: through the Python API (recommended for PyPI installations) or through direct Snakemake calls (for development installations).
+
+## Option 1: Python API (Recommended for PyPI Installation)
+
+The Python API provides a clean interface for running PyPSA-USA workflows programmatically:
+
+```python
+from pypsa_usa.api import run_workflow, set_default_workspace
+from pathlib import Path
+
+# Set your default workspace (only needed once)
+set_default_workspace("/path/to/my/project/workspace")
+
+# Run a complete workflow
+success = run_workflow(
+    config="config.default.yaml",  # Uses bundled default config
+    targets=["all"],
+    cores=4
+)
+
+# Run specific targets
+success = run_workflow(
+    config="my_custom_config.yaml",
+    targets=["data_model", "solve_network"],
+    cores=8
+)
+
+# Override default workspace for specific runs
+success = run_workflow(
+    user_workspace="/home/user/special_project",
+    config="config.default.yaml",
+    targets=["all"],
+    cores=4,
+    dryrun=True
+)
+```
+
+### API Configuration
+
+When using the Python API, you can provide configuration in several ways:
+
+1. **Use bundled default config** (no config file needed):
+   ```python
+   run_workflow(targets=["all"], cores=4)  # Uses default workspace
+   ```
+
+2. **Provide custom config file path**:
+   ```python
+   run_workflow(config="path/to/my_config.yaml", targets=["all"], cores=4)
+   ```
+
+3. **Pass config as dictionary**:
+   ```python
+   config_dict = {
+       "scenario": {"interconnect": "western", "clusters": 30},
+       "run": {"name": "my_run"}
+   }
+   run_workflow(config=config_dict, targets=["all"], cores=4)
+   ```
+
+### Workspace Management
+
+PyPSA-USA provides convenient workspace management to avoid specifying the same path repeatedly:
+
+```python
+from pypsa_usa.api import set_default_workspace, get_default_workspace
+
+# Set your default workspace (only needed once)
+set_default_workspace("/path/to/my/project/workspace")
+
+# Check your current default workspace
+current_workspace = get_default_workspace()
+print(f"Default workspace: {current_workspace}")
+
+# Now you can run workflows without specifying workspace
+success = run_workflow(targets=["all"], cores=4)
+
+# Override default workspace for specific runs
+success = run_workflow(
+    user_workspace="/home/user/special_project",
+    targets=["all"],
+    cores=4
+)
+```
+
+**Configuration Storage**: Your default workspace is stored in `~/.config/pypsa-usa/config.json` following the XDG Base Directory Specification.
+
+## Option 2: Direct Snakemake Usage (Development Installation)
+
+For development installations, you can use Snakemake directly:
+
+### Set Configuration
 
 To start, you'll want to set the proper network configuration for your studies purpose. The default configuration in `config/config.default.yaml` using the `western` interconnect and 30 nodes is a good place to start!
 
 You can find more information on each configuration setting on the [configurations page](https://pypsa-usa.readthedocs.io/en/latest/config-configuration.html).
 
-
-## Run workflow
+### Run workflow
 
 To run the workflow, `cd` into the `workflow` directory and run the `snakemake` from your terminal with your selection of config file:
 
@@ -41,6 +131,38 @@ mamba:
 mamba activate pypsa-usa
 snakemake data_model -j1 --configfile config/config.default.yaml
 ```
+
+## File Organization
+
+### User Workspace
+
+PyPSA-USA creates a `user_workspace/` directory in your current working directory to store:
+
+- **Configuration files**: Your custom config files
+- **Runtime data**: Downloaded data from `retrieve_` rules
+- **Resources**: Built network files and intermediate results
+- **Results**: Final outputs, plots, and analysis results
+- **Logs**: Execution logs and benchmarks
+
+```
+user_workspace/
+├── config/           # Your custom configuration files
+├── data/            # Downloaded data (e.g., EFS load profiles)
+├── resources/       # Built network files and intermediate data
+├── results/         # Final outputs, plots, and analysis
+└── logs/           # Execution logs and benchmarks
+```
+
+### Bundled Data
+
+PyPSA-USA includes essential data files bundled with the package:
+
+- **Geospatial data**: Shape files, transmission lines, bus regions
+- **Cost data**: Technology costs, fuel prices, emissions factors
+- **Policy constraints**: RPS targets, transmission constraints
+- **Default configurations**: Ready-to-use config templates
+
+These files are automatically accessible through the package and don't need to be downloaded separately.
 
 
 ## Running on HPC Cluster
