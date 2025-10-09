@@ -269,3 +269,5 @@ connect.sh
 /workflow/config/config.cluster.yaml
 /workflow/repo_data/dag.png
 !.pre-commit-config.yaml
+.cursorrules
+design_doc_template.md
