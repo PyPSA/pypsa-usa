@@ -79,7 +79,7 @@ def run_tests(test_category=None, test_pattern=None, verbose=True, coverage=Fals
             "--tb=short",
             "--strict-markers",
             "--disable-warnings",
-        ]
+        ],
     )
 
     print(f"Running command: {' '.join(cmd)}")

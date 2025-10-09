@@ -15,7 +15,11 @@ class TestEnvironmentHandling:
     """Test environment variable handling for script execution."""
 
     def test_python_environment_variable_set(
-        self, temp_workspace, sample_config_file, mock_workflow_path, mock_snakemake_success
+        self,
+        temp_workspace,
+        sample_config_file,
+        mock_workflow_path,
+        mock_snakemake_success,
     ):
         """Test that PYTHON environment variable is set correctly."""
         # Store original environment
@@ -52,7 +56,11 @@ class TestEnvironmentHandling:
                 del os.environ["PYTHONPATH"]
 
     def test_pythonpath_environment_variable_set(
-        self, temp_workspace, sample_config_file, mock_workflow_path, mock_snakemake_success
+        self,
+        temp_workspace,
+        sample_config_file,
+        mock_workflow_path,
+        mock_snakemake_success,
     ):
         """Test that PYTHONPATH environment variable is set correctly."""
         # Store original environment
@@ -87,7 +95,11 @@ class TestEnvironmentHandling:
                 del os.environ["PYTHONPATH"]
 
     def test_environment_variables_restored_after_execution(
-        self, temp_workspace, sample_config_file, mock_workflow_path, mock_snakemake_success
+        self,
+        temp_workspace,
+        sample_config_file,
+        mock_workflow_path,
+        mock_snakemake_success,
     ):
         """Test that environment variables are restored after execution."""
         # Set initial environment variables
@@ -121,7 +133,11 @@ class TestEnvironmentHandling:
                 del os.environ["PYTHONPATH"]
 
     def test_environment_variables_restored_when_none_existed(
-        self, temp_workspace, sample_config_file, mock_workflow_path, mock_snakemake_success
+        self,
+        temp_workspace,
+        sample_config_file,
+        mock_workflow_path,
+        mock_snakemake_success,
     ):
         """Test that environment variables are properly cleaned up when none existed originally."""
         # Ensure no environment variables exist initially
@@ -146,7 +162,11 @@ class TestEnvironmentHandling:
         assert "PYTHONPATH" not in os.environ
 
     def test_environment_variables_restored_on_exception(
-        self, temp_workspace, sample_config_file, mock_workflow_path, mock_snakemake_exception
+        self,
+        temp_workspace,
+        sample_config_file,
+        mock_workflow_path,
+        mock_snakemake_exception,
     ):
         """Test that environment variables are restored even when exceptions occur."""
         # Set initial environment variables
@@ -180,7 +200,11 @@ class TestEnvironmentHandling:
                 del os.environ["PYTHONPATH"]
 
     def test_pythonpath_combines_existing_and_new(
-        self, temp_workspace, sample_config_file, mock_workflow_path, mock_snakemake_success
+        self,
+        temp_workspace,
+        sample_config_file,
+        mock_workflow_path,
+        mock_snakemake_success,
     ):
         """Test that PYTHONPATH properly combines existing and new paths."""
         # Set initial PYTHONPATH
@@ -208,7 +232,11 @@ class TestEnvironmentHandling:
                 del os.environ["PYTHONPATH"]
 
     def test_environment_handling_with_uv_managed_python(
-        self, temp_workspace, sample_config_file, mock_workflow_path, mock_snakemake_success
+        self,
+        temp_workspace,
+        sample_config_file,
+        mock_workflow_path,
+        mock_snakemake_success,
     ):
         """Test environment handling when using uv-managed Python."""
         # Simulate uv-managed Python path
@@ -247,7 +275,11 @@ class TestEnvironmentHandling:
                     del os.environ["PYTHONPATH"]
 
     def test_environment_handling_with_system_python(
-        self, temp_workspace, sample_config_file, mock_workflow_path, mock_snakemake_success
+        self,
+        temp_workspace,
+        sample_config_file,
+        mock_workflow_path,
+        mock_snakemake_success,
     ):
         """Test environment handling when using system Python."""
         # Simulate system Python path
@@ -286,7 +318,11 @@ class TestEnvironmentHandling:
                     del os.environ["PYTHONPATH"]
 
     def test_environment_handling_multiple_calls(
-        self, temp_workspace, sample_config_file, mock_workflow_path, mock_snakemake_success
+        self,
+        temp_workspace,
+        sample_config_file,
+        mock_workflow_path,
+        mock_snakemake_success,
     ):
         """Test environment handling with multiple consecutive calls."""
         # Set initial environment
@@ -323,7 +359,11 @@ class TestEnvironmentHandling:
                 del os.environ["PYTHONPATH"]
 
     def test_environment_handling_with_complex_pythonpath(
-        self, temp_workspace, sample_config_file, mock_workflow_path, mock_snakemake_success
+        self,
+        temp_workspace,
+        sample_config_file,
+        mock_workflow_path,
+        mock_snakemake_success,
     ):
         """Test environment handling with complex PYTHONPATH."""
         # Set complex PYTHONPATH

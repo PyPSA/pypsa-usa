@@ -12,7 +12,11 @@ class TestWorkflowUsageScenarios:
     """Test different ways users can run PyPSA-USA workflows."""
 
     def test_basic_usage_with_default_workspace(
-        self, temp_workspace, sample_config_file, mock_workflow_path, mock_snakemake_success
+        self,
+        temp_workspace,
+        sample_config_file,
+        mock_workflow_path,
+        mock_snakemake_success,
     ):
         """Test basic usage pattern: set default workspace, then run workflow."""
         # Set default workspace (typical first-time setup)
@@ -30,7 +34,11 @@ class TestWorkflowUsageScenarios:
         mock_snakemake_success.assert_called_once()
 
     def test_usage_with_explicit_workspace(
-        self, temp_workspace, sample_config_file, mock_workflow_path, mock_snakemake_success
+        self,
+        temp_workspace,
+        sample_config_file,
+        mock_workflow_path,
+        mock_snakemake_success,
     ):
         """Test usage with explicit workspace specification."""
         # Run workflow with explicit workspace (no default needed)
@@ -46,7 +54,11 @@ class TestWorkflowUsageScenarios:
         mock_snakemake_success.assert_called_once()
 
     def test_usage_with_config_dictionary(
-        self, temp_workspace, sample_config_dict, mock_workflow_path, mock_snakemake_success
+        self,
+        temp_workspace,
+        sample_config_dict,
+        mock_workflow_path,
+        mock_snakemake_success,
     ):
         """Test usage with configuration dictionary instead of file."""
         # Run workflow with config dictionary
@@ -82,7 +94,11 @@ class TestWorkflowUsageScenarios:
         mock_snakemake_success.assert_called_once()
 
     def test_usage_with_multiple_targets(
-        self, temp_workspace, sample_config_file, mock_workflow_path, mock_snakemake_success
+        self,
+        temp_workspace,
+        sample_config_file,
+        mock_workflow_path,
+        mock_snakemake_success,
     ):
         """Test usage with multiple targets."""
         # Run workflow with multiple targets
@@ -98,7 +114,11 @@ class TestWorkflowUsageScenarios:
         mock_snakemake_success.assert_called_once()
 
     def test_usage_with_default_targets(
-        self, temp_workspace, sample_config_file, mock_workflow_path, mock_snakemake_success
+        self,
+        temp_workspace,
+        sample_config_file,
+        mock_workflow_path,
+        mock_snakemake_success,
     ):
         """Test usage with default targets (all)."""
         # Run workflow without specifying targets (uses default "all")
@@ -113,7 +133,11 @@ class TestWorkflowUsageScenarios:
         mock_snakemake_success.assert_called_once()
 
     def test_usage_with_different_core_counts(
-        self, temp_workspace, sample_config_file, mock_workflow_path, mock_snakemake_success
+        self,
+        temp_workspace,
+        sample_config_file,
+        mock_workflow_path,
+        mock_snakemake_success,
     ):
         """Test usage with different core counts."""
         # Test with different core counts
@@ -128,7 +152,11 @@ class TestWorkflowUsageScenarios:
             assert success is True
 
     def test_usage_with_force_flags(
-        self, temp_workspace, sample_config_file, mock_workflow_path, mock_snakemake_success
+        self,
+        temp_workspace,
+        sample_config_file,
+        mock_workflow_path,
+        mock_snakemake_success,
     ):
         """Test usage with force flags."""
         # Test with forceall flag
@@ -154,7 +182,11 @@ class TestWorkflowUsageScenarios:
         assert success is True
 
     def test_usage_with_additional_snakemake_kwargs(
-        self, temp_workspace, sample_config_file, mock_workflow_path, mock_snakemake_success
+        self,
+        temp_workspace,
+        sample_config_file,
+        mock_workflow_path,
+        mock_snakemake_success,
     ):
         """Test usage with additional Snakemake keyword arguments."""
         # Run workflow with additional kwargs
@@ -174,7 +206,11 @@ class TestWorkflowUsageScenarios:
         mock_snakemake_success.assert_called_once()
 
     def test_usage_with_dryrun_vs_execution(
-        self, temp_workspace, sample_config_file, mock_workflow_path, mock_snakemake_success
+        self,
+        temp_workspace,
+        sample_config_file,
+        mock_workflow_path,
+        mock_snakemake_success,
     ):
         """Test usage with dryrun vs actual execution."""
         # Test dryrun
@@ -198,7 +234,11 @@ class TestWorkflowUsageScenarios:
         assert success is True
 
     def test_usage_with_string_vs_path_workspace(
-        self, temp_workspace, sample_config_file, mock_workflow_path, mock_snakemake_success
+        self,
+        temp_workspace,
+        sample_config_file,
+        mock_workflow_path,
+        mock_snakemake_success,
     ):
         """Test usage with string vs Path object for workspace."""
         # Test with string workspace
@@ -222,7 +262,11 @@ class TestWorkflowUsageScenarios:
         assert success is True
 
     def test_usage_with_string_vs_path_config(
-        self, temp_workspace, sample_config_file, mock_workflow_path, mock_snakemake_success
+        self,
+        temp_workspace,
+        sample_config_file,
+        mock_workflow_path,
+        mock_snakemake_success,
     ):
         """Test usage with string vs Path object for config."""
         # Test with string config path
@@ -246,7 +290,11 @@ class TestWorkflowUsageScenarios:
         assert success is True
 
     def test_usage_with_expanded_workspace_path(
-        self, temp_workspace, sample_config_file, mock_workflow_path, mock_snakemake_success
+        self,
+        temp_workspace,
+        sample_config_file,
+        mock_workflow_path,
+        mock_snakemake_success,
     ):
         """Test usage with expanded workspace path (e.g., with ~)."""
         # Create a subdirectory to test path expansion
@@ -264,7 +312,11 @@ class TestWorkflowUsageScenarios:
         assert success is True
 
     def test_usage_with_nonexistent_workspace_creation(
-        self, temp_workspace, sample_config_file, mock_workflow_path, mock_snakemake_success
+        self,
+        temp_workspace,
+        sample_config_file,
+        mock_workflow_path,
+        mock_snakemake_success,
     ):
         """Test usage where workspace doesn't exist and gets created."""
         # Use a non-existent workspace path
@@ -325,7 +377,11 @@ class TestWorkflowUsageScenarios:
         mock_snakemake_success.assert_called_once()
 
     def test_usage_with_specific_rule_targets(
-        self, temp_workspace, sample_config_file, mock_workflow_path, mock_snakemake_success
+        self,
+        temp_workspace,
+        sample_config_file,
+        mock_workflow_path,
+        mock_snakemake_success,
     ):
         """Test usage with specific rule targets."""
         # Test with various specific rule targets
@@ -352,7 +408,11 @@ class TestWorkflowUsageScenarios:
             assert success is True
 
     def test_usage_with_mixed_target_types(
-        self, temp_workspace, sample_config_file, mock_workflow_path, mock_snakemake_success
+        self,
+        temp_workspace,
+        sample_config_file,
+        mock_workflow_path,
+        mock_snakemake_success,
     ):
         """Test usage with mixed target types (rules and files)."""
         # Test with mixed targets (rules and potential file targets)
@@ -375,7 +435,12 @@ class TestWorkflowUsageScenarios:
         mock_snakemake_success.assert_called_once()
 
     def test_usage_with_environment_variables_preserved(
-        self, temp_workspace, sample_config_file, mock_workflow_path, mock_snakemake_success, clean_environment
+        self,
+        temp_workspace,
+        sample_config_file,
+        mock_workflow_path,
+        mock_snakemake_success,
+        clean_environment,
     ):
         """Test that environment variables are properly preserved."""
         import os
@@ -400,7 +465,11 @@ class TestWorkflowUsageScenarios:
         assert os.environ.get("PYTHON") == "/usr/bin/python3"
 
     def test_usage_with_concurrent_workflows(
-        self, temp_workspace, sample_config_file, mock_workflow_path, mock_snakemake_success
+        self,
+        temp_workspace,
+        sample_config_file,
+        mock_workflow_path,
+        mock_snakemake_success,
     ):
         """Test usage with multiple concurrent workflow runs."""
         # This tests that the API can handle multiple calls
@@ -420,7 +489,11 @@ class TestWorkflowUsageScenarios:
             assert workspace.exists()
 
     def test_usage_with_error_handling(
-        self, temp_workspace, sample_config_file, mock_workflow_path, mock_snakemake_failure
+        self,
+        temp_workspace,
+        sample_config_file,
+        mock_workflow_path,
+        mock_snakemake_failure,
     ):
         """Test usage with error handling scenarios."""
         # Test with snakemake failure
@@ -435,7 +508,11 @@ class TestWorkflowUsageScenarios:
         assert success is False
 
     def test_usage_with_exception_handling(
-        self, temp_workspace, sample_config_file, mock_workflow_path, mock_snakemake_exception
+        self,
+        temp_workspace,
+        sample_config_file,
+        mock_workflow_path,
+        mock_snakemake_exception,
     ):
         """Test usage with exception handling scenarios."""
         # Test with snakemake exception
