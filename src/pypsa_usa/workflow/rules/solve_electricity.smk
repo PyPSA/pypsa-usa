@@ -2,8 +2,10 @@
 
 import sys
 import os
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from _paths import get_repo_data_path
+
 
 def pop_layout_input(wildcards):
     if wildcards["sector"] != "E":
@@ -31,7 +33,9 @@ rule solve_network:
     input:
         network=RESOURCES
         + "{interconnect}/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc",
-        flowgates=get_repo_data_path("ReEDS_Constraints/transmission/transmission_capacity_init_AC_ba_NARIS2024.csv"),
+        flowgates=get_repo_data_path(
+            "ReEDS_Constraints/transmission/transmission_capacity_init_AC_ba_NARIS2024.csv"
+        ),
         safer_reeds=get_repo_data_path("config/policy_constraints/reeds/prm_annual.csv"),
         rps_reeds=get_repo_data_path("config/policy_constraints/reeds/rps_fraction.csv"),
         ces_reeds=get_repo_data_path("config/policy_constraints/reeds/ces_fraction.csv"),

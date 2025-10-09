@@ -82,8 +82,10 @@ wildcard_constraints:
 # Import path utilities
 import sys
 import os
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
 from _paths import get_config_path
+
 
 # Merge subworkflow configs and main config
 configfile: get_config_path("config.cluster.yaml")

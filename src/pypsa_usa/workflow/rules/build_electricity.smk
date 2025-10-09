@@ -3,6 +3,7 @@
 from itertools import chain
 import sys
 import os
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from _paths import get_repo_data_path
 
@@ -13,10 +14,16 @@ rule build_shapes:
         offwind_params=config_provider("renewable", "offwind"),
     input:
         zone=DATA + "breakthrough_network/base_grid/zone.csv",
-        nerc_shapes=get_repo_data_path("geospatial/NERC_Regions/NERC_Regions_Subregions.shp"),
+        nerc_shapes=get_repo_data_path(
+            "geospatial/NERC_Regions/NERC_Regions_Subregions.shp"
+        ),
         reeds_shapes=get_repo_data_path("geospatial/Reeds_Shapes/rb_and_ba_areas.shp"),
-        onshore_shapes=get_repo_data_path("geospatial/BA_shapes_new/Modified_BE_BA_Shapes.shp"),
-        offshore_shapes_ca_osw=get_repo_data_path("geospatial/BOEM_CA_OSW_GIS/CA_OSW_BOEM_CallAreas.shp"),
+        onshore_shapes=get_repo_data_path(
+            "geospatial/BA_shapes_new/Modified_BE_BA_Shapes.shp"
+        ),
+        offshore_shapes_ca_osw=get_repo_data_path(
+            "geospatial/BOEM_CA_OSW_GIS/CA_OSW_BOEM_CallAreas.shp"
+        ),
         offshore_shapes_eez=DATA + "eez/conus_eez.shp",
         county_shapes=DATA + "counties/cb_2020_us_county_500k.shp",
     output:
@@ -174,8 +181,12 @@ rule build_renewable_profiles:
         ),
         country_shapes=RESOURCES + "{interconnect}/Geospatial/country_shapes.geojson",
         offshore_shapes=RESOURCES + "{interconnect}/Geospatial/offshore_shapes.geojson",
-        cec_onwind=get_repo_data_path("geospatial/CEC_GIS/CEC_Wind_BaseScreen_epsg3310.tif"),
-        cec_solar=get_repo_data_path("geospatial/CEC_GIS/CEC_Solar_BaseScreen_epsg3310.tif"),
+        cec_onwind=get_repo_data_path(
+            "geospatial/CEC_GIS/CEC_Wind_BaseScreen_epsg3310.tif"
+        ),
+        cec_solar=get_repo_data_path(
+            "geospatial/CEC_GIS/CEC_Solar_BaseScreen_epsg3310.tif"
+        ),
         boem_osw=get_repo_data_path("geospatial/boem_osw_planning_areas.tif"),
         regions=lambda w: (
             RESOURCES + "{interconnect}/Geospatial/regions_onshore.geojson"
@@ -580,7 +591,9 @@ rule build_powerplants:
         renewable_weather_year=config_provider("renewable_weather_years"),
     input:
         wecc_ads=get_repo_data_path("WECC_ADS_public"),
-        eia_ads_generator_mapping=get_repo_data_path("WECC_ADS_public/eia_ads_generator_mapping_updated.csv"),
+        eia_ads_generator_mapping=get_repo_data_path(
+            "WECC_ADS_public/eia_ads_generator_mapping_updated.csv"
+        ),
         fuel_costs=get_repo_data_path("plants/fuelCost22.csv"),
         cems=get_repo_data_path("plants/cems_heat_rates.xlsx"),
         epa_crosswalk=get_repo_data_path("plants/epa_eia_crosswalk.csv"),
@@ -621,7 +634,9 @@ rule add_electricity:
             if str(fn).startswith("data/")
         },
         **{
-            f"gen_cost_mult_{Path(x).stem}": get_repo_data_path(f"locational_multipliers/{Path(x).name}")
+            f"gen_cost_mult_{Path(x).stem}": get_repo_data_path(
+                f"locational_multipliers/{Path(x).name}"
+            )
             for x in get_repo_data_path("locational_multipliers").glob("*")
         },
         base_network=RESOURCES + "{interconnect}/elec_base_network_dem.nc",
@@ -723,13 +738,27 @@ rule cluster_network:
         ),
         tech_costs=RESOURCES
         + f"costs/costs_{config['scenario']['planning_horizons'][0]}.csv",
-        itl_reeds_zone=get_repo_data_path("ReEDS_Constraints/transmission/transmission_capacity_init_AC_ba_NARIS2024.csv"),
-        itl_county=get_repo_data_path("ReEDS_Constraints/transmission/transmission_capacity_init_AC_county_NARIS2024.csv"),
-        itl_trans_grp=get_repo_data_path("ReEDS_Constraints/transmission/transmission_capacity_init_AC_transgrp_NARIS2024.csv"),
-        itl_costs_reeds_zone=get_repo_data_path("ReEDS_Constraints/transmission/transmission_distance_cost_500kVdc_ba.csv"),
-        itl_costs_county=get_repo_data_path("ReEDS_Constraints/transmission/transmission_distance_cost_500kVac_county.csv"),
-        itl_state=get_repo_data_path("ReEDS_Constraints/transmission/transmission_capacity_init_AC_state_NARIS2024.csv"),
-        itl_costs_state=get_repo_data_path("ReEDS_Constraints/transmission/transmission_distance_cost_500kVdc_state.csv"),
+        itl_reeds_zone=get_repo_data_path(
+            "ReEDS_Constraints/transmission/transmission_capacity_init_AC_ba_NARIS2024.csv"
+        ),
+        itl_county=get_repo_data_path(
+            "ReEDS_Constraints/transmission/transmission_capacity_init_AC_county_NARIS2024.csv"
+        ),
+        itl_trans_grp=get_repo_data_path(
+            "ReEDS_Constraints/transmission/transmission_capacity_init_AC_transgrp_NARIS2024.csv"
+        ),
+        itl_costs_reeds_zone=get_repo_data_path(
+            "ReEDS_Constraints/transmission/transmission_distance_cost_500kVdc_ba.csv"
+        ),
+        itl_costs_county=get_repo_data_path(
+            "ReEDS_Constraints/transmission/transmission_distance_cost_500kVac_county.csv"
+        ),
+        itl_state=get_repo_data_path(
+            "ReEDS_Constraints/transmission/transmission_capacity_init_AC_state_NARIS2024.csv"
+        ),
+        itl_costs_state=get_repo_data_path(
+            "ReEDS_Constraints/transmission/transmission_distance_cost_500kVdc_state.csv"
+        ),
     output:
         network=RESOURCES + "{interconnect}/elec_s{simpl}_c{clusters}.nc",
         regions_onshore=RESOURCES
@@ -754,15 +783,21 @@ def flowgates_for_extra_components(wildcards):
     if not config["model_topology"]["transmission_network"] == "reeds":
         return []
     if config["model_topology"]["topological_boundaries"] == "county":
-        return get_repo_data_path("ReEDS_Constraints/transmission/transmission_capacity_init_AC_county_NARIS2024.csv")
+        return get_repo_data_path(
+            "ReEDS_Constraints/transmission/transmission_capacity_init_AC_county_NARIS2024.csv"
+        )
     else:  # bas and states use the same flowgates
-        return get_repo_data_path("ReEDS_Constraints/transmission/transmission_capacity_init_AC_ba_NARIS2024.csv")
+        return get_repo_data_path(
+            "ReEDS_Constraints/transmission/transmission_capacity_init_AC_ba_NARIS2024.csv"
+        )
 
 
 rule add_extra_components:
     input:
         **{
-            f"phs_shp_{hour}": get_repo_data_path(f"psh/40-100-dam-height-{hour}hr-no-croplands-no-ephemeral-no-highways.gpkg")
+            f"phs_shp_{hour}": get_repo_data_path(
+                f"psh/40-100-dam-height-{hour}hr-no-croplands-no-ephemeral-no-highways.gpkg"
+            )
             for phs_tech in config["electricity"]["extendable_carriers"]["StorageUnit"]
             if "PHS" in phs_tech
             for hour in phs_tech.split("hr_")

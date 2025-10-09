@@ -33,11 +33,11 @@ def setup_test_environment():
     """Set up test environment for all tests."""
     # Store original working directory
     original_cwd = os.getcwd()
-    
+
     # Change to project root for tests
     os.chdir(project_root)
-    
+
     yield
-    
+
     # Restore original working directory
     os.chdir(original_cwd)

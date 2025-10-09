@@ -205,7 +205,9 @@ def main(snakemake):
 
     combined_data = combine_reports(file_names, fuel_year)
 
-    combined_data_merged = merge_fuel_regions_data(combined_data, year=fuel_year, fuel_regions_path=snakemake.input.fuel_regions)
+    combined_data_merged = merge_fuel_regions_data(
+        combined_data, year=fuel_year, fuel_regions_path=snakemake.input.fuel_regions
+    )
     reduced_fuel_price_data = reduce_select_pricing_nodes(combined_data_merged)
 
     reduced_fuel_price_data.to_csv(snakemake.output.fuel_prices)

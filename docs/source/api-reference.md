@@ -298,7 +298,7 @@ if success:
     # Load and analyze results
     import pypsa
     n = pypsa.Network("user_workspace/results/western/networks/elec_s75_c30_ec_lv1.0_REM-3h_E.nc")
-    
+
     # Create custom plots
     n.plot()
     plt.title("PyPSA-USA Network")
@@ -322,13 +322,13 @@ def run_scenario_analysis(interconnect, clusters):
             "name": f"{interconnect}_{clusters}clusters"
         }
     }
-    
+
     success = run_workflow(
         config=config,
         targets=["all"],
         cores=8
     )
-    
+
     return success
 
 # Run multiple scenarios

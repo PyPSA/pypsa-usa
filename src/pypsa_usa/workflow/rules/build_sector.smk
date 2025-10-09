@@ -2,8 +2,10 @@
 
 import sys
 import os
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from _paths import get_repo_data_path
+
 
 def sector_input_files(wildcards):
     input_files = {
@@ -37,7 +39,9 @@ def sector_input_files(wildcards):
             "ev_policy": config["sector"]["transport_sector"]["ev_policy"],
             "residential_stock": get_repo_data_path("sectors/residential_stock"),
             "commercial_stock": get_repo_data_path("sectors/commercial_stock"),
-            "industrial_stock": get_repo_data_path("sectors/industrial_stock/Table5_6.xlsx"),
+            "industrial_stock": get_repo_data_path(
+                "sectors/industrial_stock/Table5_6.xlsx"
+            ),
         }
         input_files.update(ng_files)
 
