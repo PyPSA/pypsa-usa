@@ -70,7 +70,9 @@ After the workflow completes, you'll find:
 import pypsa
 
 # Load the solved network
-n = pypsa.Network("user_workspace/results/western/networks/elec_s75_c30_ec_lv1.0_REM-3h_E.nc")
+n = pypsa.Network(
+    "user_workspace/results/western/networks/elec_s75_c30_ec_lv1.0_REM-3h_E.nc"
+)
 
 # View network summary
 print(n)
@@ -102,22 +104,16 @@ config = {
     "scenario": {
         "interconnect": "western",
         "clusters": 50,  # More detailed network
-        "simpl": 100,    # Higher simplification
+        "simpl": 100,  # Higher simplification
         "ll": "v1.0",
         "opts": "REM-3h",
-        "sector": "E"
+        "sector": "E",
     },
-    "run": {
-        "name": "my_first_run"
-    }
+    "run": {"name": "my_first_run"},
 }
 
 # Run with custom settings
-success = run_workflow(
-    config=config,
-    targets=["all"],
-    cores=8
-)
+success = run_workflow(config=config, targets=["all"], cores=8)
 ```
 
 This will create a more detailed model with 50 clusters and save results in `user_workspace/results/my_first_run/`.

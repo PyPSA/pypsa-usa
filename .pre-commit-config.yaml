@@ -23,7 +23,7 @@ repos:
   - id: add-trailing-comma
 
 - repo: https://github.com/asottile/pyupgrade
-  rev: v3.20.0
+  rev: v3.21.0
   hooks:
   - id: pyupgrade
     args: [--py39-plus]
@@ -35,17 +35,17 @@ repos:
     exclude: examples/solve-on-remote.ipynb
 
 - repo: https://github.com/snakemake/snakefmt
-  rev: v0.11.0
+  rev: v0.11.2
   hooks:
   - id: snakefmt
 
 - repo: https://github.com/keewis/blackdoc
-  rev: v0.4.1
+  rev: v0.4.3
   hooks:
   - id: blackdoc
 
 - repo: https://github.com/astral-sh/ruff-pre-commit
-  rev: v0.12.9  # Check for the latest version
+  rev: v0.14.0  # Check for the latest version
   hooks:
   - id: ruff
     args: ["--config=pyproject.toml", "--fix"]

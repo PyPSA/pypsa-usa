@@ -1,4 +1,6 @@
 import logging  # noqa: D100
+import os
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -13,6 +15,61 @@ from opts._helpers import (
 from pypsa.descriptors import get_switchable_as_dense as get_as_dense
 
 logger = logging.getLogger(__name__)
+
+
+def resolve_config_path(config_path):
+    """
+    Resolve a configuration file path, looking only in the user workspace.
+
+    Parameters
+    ----------
+    config_path : str
+        The path from the configuration file
+
+    Returns
+    -------
+    str
+        The resolved absolute path to the file
+    """
+    # If the path is absolute, use it as-is
+    if os.path.isabs(config_path):
+        return config_path
+
+    # First try the path as-is (relative to current working directory)
+    if os.path.exists(config_path):
+        return config_path
+
+    # Look for user workspace directory by going up the directory tree
+    current_dir = Path.cwd()
+    user_workspace = None
+
+    # Look for user_workspace directory
+    for parent in current_dir.parents:
+        if (parent / "user_workspace").exists():
+            user_workspace = parent / "user_workspace"
+            break
+
+    # If not found, try direct path from current directory
+    if user_workspace is None:
+        if (current_dir / "user_workspace").exists():
+            user_workspace = current_dir / "user_workspace"
+
+    if user_workspace:
+        # Try relative to user workspace directory
+        workspace_path = user_workspace / config_path
+        if workspace_path.exists():
+            return str(workspace_path)
+
+        # Also try with my_configs prefix (common user workspace structure)
+        # Replace 'config/' with 'my_configs/' in the path
+        if config_path.startswith("config/"):
+            my_configs_path = user_workspace / "my_configs" / config_path[7:]  # Remove 'config/' prefix
+            if my_configs_path.exists():
+                return str(my_configs_path)
+
+    # If we can't find the file, return the original path and let the caller handle the error
+    return config_path
+
 
 RPS_CARRIERS = [
     "onwind",
@@ -48,7 +105,7 @@ def add_technology_capacity_target_constraints(n, config):
     electricity:
         technology_capacity_target: config/policy_constraints/technology_capacity_target.csv
     """
-    tct_data = pd.read_csv(config["electricity"]["technology_capacity_targets"])
+    tct_data = pd.read_csv(resolve_config_path(config["electricity"]["technology_capacity_targets"]))
     if tct_data.empty:
         return
 
@@ -276,7 +333,7 @@ def add_RPS_constraints(n, config, snakemake=None):
     model_horizon = get_model_horizon(n.model)
 
     # Read portfolio standards data
-    portfolio_standards = pd.read_csv(config["electricity"]["portfolio_standards"])
+    portfolio_standards = pd.read_csv(resolve_config_path(config["electricity"]["portfolio_standards"]))
 
     # Process RPS and CES REEDS data
     rps_reeds = _process_reeds_data(
@@ -387,7 +444,7 @@ def add_RPS_constraints_sector(n, config, snakemake=None):
     model_horizon = get_model_horizon(n.model)
 
     # Read portfolio standards data
-    portfolio_standards = pd.read_csv(config["electricity"]["portfolio_standards"])
+    portfolio_standards = pd.read_csv(resolve_config_path(config["electricity"]["portfolio_standards"]))
 
     # Process RPS and CES REEDS data
     rps_reeds = _process_reeds_data(
@@ -462,8 +519,12 @@ def add_RPS_constraints_sector(n, config, snakemake=None):
 def add_regional_co2limit(n, config):
     """Adding regional regional CO2 Limits Specified in the config.yaml."""
     model_horizon = get_model_horizon(n.model)
+
+    # Resolve the path to the regional CO2 limits file
+    co2_limits_path = resolve_config_path(config["electricity"]["regional_Co2_limits"])
+
     regional_co2_lims = pd.read_csv(
-        config["electricity"]["regional_Co2_limits"],
+        co2_limits_path,
         index_col=[0],
     )
 

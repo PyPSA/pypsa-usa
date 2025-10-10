@@ -60,45 +60,25 @@ set_default_workspace("/path/to/my/project/workspace")
 success = run_workflow(cores=4)
 
 # Run specific targets
-success = run_workflow(
-    targets=["data_model", "solve_network"],
-    cores=8
-)
+success = run_workflow(targets=["data_model", "solve_network"], cores=8)
 
 # Use custom configuration file
-success = run_workflow(
-    config="my_config.yaml",
-    targets=["all"],
-    cores=4
-)
+success = run_workflow(config="my_config.yaml", targets=["all"], cores=4)
 
 # Pass configuration as dictionary
 config = {
-    "scenario": {
-        "interconnect": "western",
-        "clusters": 50,
-        "simpl": 100
-    },
-    "run": {
-        "name": "my_analysis"
-    }
+    "scenario": {"interconnect": "western", "clusters": 50, "simpl": 100},
+    "run": {"name": "my_analysis"},
 }
 success = run_workflow(config=config, cores=4)
 
 # Override default workspace for specific runs
 success = run_workflow(
-    user_workspace="/home/user/special_project",
-    targets=["all"],
-    cores=4,
-    dryrun=True
+    user_workspace="/home/user/special_project", targets=["all"], cores=4, dryrun=True
 )
 
 # Force re-execution of all rules
-success = run_workflow(
-    targets=["all"],
-    cores=4,
-    forceall=True
-)
+success = run_workflow(targets=["all"], cores=4, forceall=True)
 ```
 
 ### `set_default_workspace`
@@ -203,14 +183,8 @@ Pass configuration directly as a Python dictionary:
 
 ```python
 config = {
-    "scenario": {
-        "interconnect": "western",
-        "clusters": 50,
-        "simpl": 100
-    },
-    "run": {
-        "name": "my_analysis"
-    }
+    "scenario": {"interconnect": "western", "clusters": 50, "simpl": 100},
+    "run": {"name": "my_analysis"},
 }
 success = run_workflow(config=config, cores=4)
 ```
@@ -240,11 +214,7 @@ The API provides basic error handling and logging:
 from pypsa_usa.api import run_workflow
 
 try:
-    success = run_workflow(
-        config="my_config.yaml",
-        targets=["all"],
-        cores=4
-    )
+    success = run_workflow(config="my_config.yaml", targets=["all"], cores=4)
     if success:
         print("Workflow completed successfully!")
     else:
@@ -266,7 +236,7 @@ success = run_workflow(
     # Additional Snakemake arguments
     keepgoing=True,  # Continue on errors
     latency_wait=60,  # Wait for missing files
-    scheduler="greedy"  # Use greedy scheduler
+    scheduler="greedy",  # Use greedy scheduler
 )
 ```
 
@@ -275,11 +245,7 @@ success = run_workflow(
 By default, PyPSA-USA creates a `user_workspace/` directory in your current working directory. You can specify a custom working directory:
 
 ```python
-success = run_workflow(
-    targets=["all"],
-    cores=4,
-    workdir="/path/to/my/workspace"
-)
+success = run_workflow(targets=["all"], cores=4, workdir="/path/to/my/workspace")
 ```
 
 ## Integration with Other Tools
@@ -297,7 +263,10 @@ success = run_workflow(cores=4)
 if success:
     # Load and analyze results
     import pypsa
-    n = pypsa.Network("user_workspace/results/western/networks/elec_s75_c30_ec_lv1.0_REM-3h_E.nc")
+
+    n = pypsa.Network(
+        "user_workspace/results/western/networks/elec_s75_c30_ec_lv1.0_REM-3h_E.nc"
+    )
 
     # Create custom plots
     n.plot()
@@ -312,31 +281,20 @@ if success:
 from pypsa_usa.api import run_workflow
 import os
 
+
 def run_scenario_analysis(interconnect, clusters):
     config = {
-        "scenario": {
-            "interconnect": interconnect,
-            "clusters": clusters
-        },
-        "run": {
-            "name": f"{interconnect}_{clusters}clusters"
-        }
+        "scenario": {"interconnect": interconnect, "clusters": clusters},
+        "run": {"name": f"{interconnect}_{clusters}clusters"},
     }
 
-    success = run_workflow(
-        config=config,
-        targets=["all"],
-        cores=8
-    )
+    success = run_workflow(config=config, targets=["all"], cores=8)
 
     return success
 
+
 # Run multiple scenarios
-scenarios = [
-    ("western", 30),
-    ("western", 50),
-    ("eastern", 30)
-]
+scenarios = [("western", 30), ("western", 50), ("eastern", 30)]
 
 for interconnect, clusters in scenarios:
     print(f"Running {interconnect} with {clusters} clusters...")

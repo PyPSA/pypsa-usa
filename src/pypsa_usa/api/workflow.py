@@ -134,7 +134,7 @@ def run_workflow(
         ...     user_workspace="/home/user/special_project",
         ...     config="my_config.yaml",
         ...     targets=["results/western/figures/"],
-        ...     cores=8
+        ...     cores=8,
         ... )
     """
     # Resolve workspace path
@@ -253,7 +253,7 @@ def create_user_config(
         >>> config_path = create_user_config(
         ...     "/home/user/pypsa_project",
         ...     "my_project.yaml",
-        ...     template="config.tutorial.yaml"
+        ...     template="config.tutorial.yaml",
         ... )
     """
     import shutil
@@ -326,8 +326,141 @@ def setup_user_workspace(user_workspace: str | Path) -> Path:
     workspace = Path(user_workspace).resolve()
 
     # Create subdirectories
-    subdirs = ["config", "data", "resources", "results", "logs", "benchmarks", "cutouts"]
+    subdirs = ["my_configs", "data", "resources", "results", "logs", "benchmarks", "cutouts"]
     for subdir in subdirs:
         (workspace / subdir).mkdir(parents=True, exist_ok=True)
 
     return workspace
+
+
+def touch(
+    user_workspace: str | Path | None = None,
+    config: str | dict[str, Any] | None = None,
+    targets: list[str] | None = None,
+    cores: int = 1,
+    **snakemake_kwargs,
+) -> bool:
+    """
+    Touch output files in PyPSA-USA workflow without executing rules.
+
+    This function updates the timestamps of output files to mark them as up-to-date
+    without actually running the workflow rules. This is useful for testing or
+    when you want to mark files as current without the computational cost.
+
+    Args:
+        user_workspace: Path to directory where all intermediate files, results,
+                       and logs will be stored. If None, uses the default workspace
+                       from user configuration. This directory will be created if
+                       it doesn't exist. Should be an absolute path for clarity.
+        config: Path to config file or config dictionary
+        targets: List of target files/rules to touch
+        cores: Number of CPU cores to use (for snakemake compatibility)
+        **snakemake_kwargs: Additional arguments passed to snakemake
+
+    Returns
+    -------
+        True if touch operation completed successfully, False otherwise
+
+    Example:
+        >>> from pypsa_usa.api import touch, set_default_workspace
+        >>> from pathlib import Path
+        >>>
+        >>> # Set your default workspace (only needed once)
+        >>> set_default_workspace("/path/to/my/project/workspace")
+        >>>
+        >>> # Touch all targets without running them
+        >>> success = touch(targets=["all"])
+        >>>
+        >>> # Touch specific targets with custom config
+        >>> success = touch(
+        ...     user_workspace="/home/user/special_project",
+        ...     config="my_config.yaml",
+        ...     targets=["results/western/figures/"],
+        ... )
+    """
+    # Resolve workspace path
+    if user_workspace is None:
+        # Try to get default workspace from user config
+        default_workspace = get_default_workspace()
+        if default_workspace is None:
+            raise ValueError(
+                "No user_workspace provided and no default workspace set. "
+                "Please either:\n"
+                "1. Provide user_workspace parameter, or\n"
+                "2. Set a default workspace using set_default_workspace()",
+            )
+        workspace_path = default_workspace
+    else:
+        workspace_path = Path(user_workspace).expanduser().resolve()
+
+    # Ensure workspace directory exists
+    workspace_path.mkdir(parents=True, exist_ok=True)
+
+    # Get workflow path
+    workflow_path = get_workflow_path()
+    snakefile = workflow_path / "Snakefile"
+
+    until = snakemake_kwargs.get("until", None)
+
+    # Set default targets
+    if targets is None:
+        targets = ["all"]
+
+    # Prepare snakemake arguments with touch flag
+    snakemake_args = {
+        "snakefile": str(snakefile),
+        "workdir": str(workspace_path),
+        "cores": cores,
+        "targets": targets,
+        "touch": True,  # This is the key flag for touch functionality
+        **snakemake_kwargs,
+        "until": until,
+    }
+
+    # Handle config
+    if config is not None:
+        if isinstance(config, str):
+            # Config file path
+            config_path = Path(config)
+            if not config_path.is_absolute():
+                config_path = workspace_path / "config" / config
+            snakemake_args["configfiles"] = [str(config_path)]
+        elif isinstance(config, dict):
+            # Config dictionary
+            snakemake_args["config"] = config
+
+    try:
+        # Set environment variables to ensure Snakemake uses the correct Python interpreter
+        # This is important for script execution in rules that don't have conda environments
+        original_python = os.environ.get("PYTHON", None)
+        original_pythonpath = os.environ.get("PYTHONPATH", None)
+
+        # Set the Python interpreter to the current one (which should be from uv environment)
+        os.environ["PYTHON"] = sys.executable
+
+        # Add the current Python path to PYTHONPATH to ensure modules are found
+        current_pythonpath = os.pathsep.join(sys.path)
+        if original_pythonpath:
+            os.environ["PYTHONPATH"] = current_pythonpath + os.pathsep + original_pythonpath
+        else:
+            os.environ["PYTHONPATH"] = current_pythonpath
+
+        try:
+            # Execute touch operation
+            success = snakemake.snakemake(**snakemake_args)
+            return success
+        finally:
+            # Restore original environment variables
+            if original_python is not None:
+                os.environ["PYTHON"] = original_python
+            elif "PYTHON" in os.environ:
+                del os.environ["PYTHON"]
+
+            if original_pythonpath is not None:
+                os.environ["PYTHONPATH"] = original_pythonpath
+            elif "PYTHONPATH" in os.environ:
+                del os.environ["PYTHONPATH"]
+
+    except Exception as e:
+        print(f"Error touching workflow files: {e}")
+        return False

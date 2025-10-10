@@ -19,11 +19,7 @@ from pypsa_usa.api import run_workflow
 success = run_workflow(cores=4)
 
 # Or with custom configuration
-success = run_workflow(
-    config="my_config.yaml",
-    targets=["all"],
-    cores=4
-)
+success = run_workflow(config="my_config.yaml", targets=["all"], cores=4)
 ```
 
 ### System Requirements

@@ -22,14 +22,12 @@ set_default_workspace("/path/to/my/project/workspace")
 success = run_workflow(
     config="config.default.yaml",  # Uses bundled default config
     targets=["all"],
-    cores=4
+    cores=4,
 )
 
 # Run specific targets
 success = run_workflow(
-    config="my_custom_config.yaml",
-    targets=["data_model", "solve_network"],
-    cores=8
+    config="my_custom_config.yaml", targets=["data_model", "solve_network"], cores=8
 )
 
 # Override default workspace for specific runs
@@ -38,7 +36,7 @@ success = run_workflow(
     config="config.default.yaml",
     targets=["all"],
     cores=4,
-    dryrun=True
+    dryrun=True,
 )
 ```
 
@@ -60,7 +58,7 @@ When using the Python API, you can provide configuration in several ways:
    ```python
    config_dict = {
        "scenario": {"interconnect": "western", "clusters": 30},
-       "run": {"name": "my_run"}
+       "run": {"name": "my_run"},
    }
    run_workflow(config=config_dict, targets=["all"], cores=4)
    ```
@@ -84,9 +82,7 @@ success = run_workflow(targets=["all"], cores=4)
 
 # Override default workspace for specific runs
 success = run_workflow(
-    user_workspace="/home/user/special_project",
-    targets=["all"],
-    cores=4
+    user_workspace="/home/user/special_project", targets=["all"], cores=4
 )
 ```
 

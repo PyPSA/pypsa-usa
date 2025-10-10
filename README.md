@@ -21,17 +21,13 @@ Then use the Python API:
 
 ```python
 from pypsa_usa.api import run_workflow, set_default_workspace
- from pathlib import Path
+from pathlib import Path
 
 # Set your default workspace (only needed once)
 set_default_workspace("/path/to/my/project/workspace")
 
 # Now you can run workflows without specifying workspace
-success = run_workflow(
-    config="config.default.yaml",
-    targets=["all"],
-    cores=4
-)
+success = run_workflow(config="config.default.yaml", targets=["all"], cores=4)
 ```
 
 ### Option 2: Development Installation

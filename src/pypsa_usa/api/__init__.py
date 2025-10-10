@@ -1,6 +1,4 @@
-"""
-API module for PyPSA-USA workflow execution.
-"""
+"""API module for PyPSA-USA workflow execution."""
 
 from .workflow import (
     create_user_config,
@@ -11,6 +9,7 @@ from .workflow import (
     run_workflow,
     set_default_workspace,
     setup_user_workspace,
+    touch,
 )
 
 __all__ = [
@@ -22,4 +21,5 @@ __all__ = [
     "run_workflow",
     "set_default_workspace",
     "setup_user_workspace",
+    "touch",
 ]
