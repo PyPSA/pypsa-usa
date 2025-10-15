@@ -14,6 +14,7 @@ sector:
     cyclic_storage: true
     standing_loss: 0
     marginal_cost_multiplier: 1
+    existing_pipeline_multiplier: 1
   methane:
     upstream_leakage_rate: 0.02 # per unit 
     downstream_leakage_rate: 0.02 # per unit 
@@ -32,6 +33,7 @@ sector:
       n_hours: 4
     split_space_water_heating: True
     brownfield: True
+    scale_exising_stock: True
     gas_connection:
       rural: 1 # to be implemented
       urban: 1 # to be implemented

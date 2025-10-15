@@ -85,10 +85,10 @@ def _filter_link_on_sector(n: pypsa.Network, sector: str) -> pd.DataFrame:
         return n.links[
             (n.links.carrier.str.startswith(sector))
             & ~(n.links.carrier.str.endswith("-store"))
-            & ~(n.links.carrier.str.endswith("-charger"))  # hot water heaters
+            & ~(n.links.index.str.endswith("-charger"))  # hot water heaters
         ].copy()
     elif sector == "ind":
-        return n.links[(n.links.carrier.str.startswith(sector)) & ~(n.links.carrier.str.endswith("-charger"))].copy()
+        return n.links[(n.links.carrier.str.startswith(sector)) & ~(n.links.index.str.endswith("-charger"))].copy()
     elif sector == "trn":
         return n.links[
             n.links.carrier.str.startswith("trn-") & ~n.links.bus0.map(n.buses.carrier).isin(["AC", "lpg"])
@@ -438,6 +438,10 @@ def get_sector_production_timeseries(
         links = _get_links_in_state(n, state)
         df = df[[x for x in df.columns if x in links]]
 
+    # remove demand response as thats plotted separately
+    dr_cols = df[[x for x in df.columns if "-dr-" in x]]
+    df = df[[x for x in df.columns if x not in dr_cols]]
+
     if not (resample or resample_fn):
         return df
     else:
@@ -478,6 +482,10 @@ def get_power_production_timeseries(
     import_exports = _get_import_export_timeseries(n, state)
 
     df = df_links.join(df_gens).join(import_exports)
+
+    # remove demand response as thats plotted separately
+    dr_cols = df[[x for x in df.columns if "-dr-" in x]]
+    df = df[[x for x in df.columns if x not in dr_cols]]
 
     if not (resample or resample_fn):
         return df
