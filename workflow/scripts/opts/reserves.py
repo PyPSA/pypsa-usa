@@ -235,8 +235,8 @@ def _get_regional_demand(n, planning_horizon, region_buses):
             planning_horizon,
             n.loads.bus.isin(region_buses.index),
         ]
-        .groupby(n.loads.bus, axis=1)
-        .sum()
+        .T.groupby(n.loads.bus)
+        .T.sum()
     )
 
 
@@ -371,22 +371,24 @@ def add_ERM_constraints(n, config=None, snakemake=None, regional_prm_data=None):
 
         # Create model variables to track storage contributions
         c = "StorageUnit"
-        model.add_variables(-np.inf, model.variables["StorageUnit-p_store"].upper, name=f"{c}-p_dispatch_RESERVES")
-        model.add_variables(-np.inf, model.variables["StorageUnit-p_store"].upper, name=f"{c}-p_store_RESERVES")
-        model.add_variables(
-            -np.inf,
-            model.variables["StorageUnit-state_of_charge"].upper,
-            name=f"{c}-state_of_charge_RESERVES",
-        )
-        define_SU_reserve_constraints(n)
-        define_operational_constraints_for_extendables(n, n.snapshots, c, "p_dispatch", 0)
-        define_operational_constraints_for_extendables(n, n.snapshots, c, "p_store", 0)
-        define_operational_constraints_for_non_extendables(n, n.snapshots, c, "p_dispatch", 0)
-        define_operational_constraints_for_non_extendables(n, n.snapshots, c, "p_store", 0)
+        if not n.storage_units.empty:
+            model.add_variables(-np.inf, model.variables["StorageUnit-p_store"].upper, name=f"{c}-p_dispatch_RESERVES")
+            model.add_variables(-np.inf, model.variables["StorageUnit-p_store"].upper, name=f"{c}-p_store_RESERVES")
+            model.add_variables(
+                -np.inf,
+                model.variables["StorageUnit-state_of_charge"].upper,
+                name=f"{c}-state_of_charge_RESERVES",
+            )
+            define_SU_reserve_constraints(n)
+            define_operational_constraints_for_extendables(n, n.snapshots, c, "p_dispatch", 0)
+            define_operational_constraints_for_extendables(n, n.snapshots, c, "p_store", 0)
+            define_operational_constraints_for_non_extendables(n, n.snapshots, c, "p_dispatch", 0)
+            define_operational_constraints_for_non_extendables(n, n.snapshots, c, "p_store", 0)
 
         # Create model variables to track transmission contributions
-        model.add_variables(-np.inf, model.variables["Line-s"].upper, name="Line-s_RESERVES")
-        define_operational_constraints_for_extendables(n, n.snapshots, "Line", "s", 0)
+        if not n.lines.empty:
+            model.add_variables(-np.inf, model.variables["Line-s"].upper, name="Line-s_RESERVES")
+            define_operational_constraints_for_extendables(n, n.snapshots, "Line", "s", 0)
 
         if not n.links.empty:
             model.add_variables(-np.inf, model.variables["Link-p"].upper, name="Link-p_RESERVES")
@@ -402,8 +404,6 @@ def add_ERM_constraints(n, config=None, snakemake=None, regional_prm_data=None):
         # Calculate peak demand and required reserve margin for a bus
         regional_demand = _get_regional_demand(n, erm.planning_horizon, region_buses)
         planning_reserve = regional_demand * (1.0 + erm.prm)
-        # peak_demand_hour = regional_demand.sum(axis=1).idxmax()
-        # hour = peak_demand_hour
 
         for hour in planning_reserve.index:
             # Add the nodal balance constraints to the model
@@ -439,29 +439,49 @@ def add_ERM_constraints(n, config=None, snakemake=None, regional_prm_data=None):
                 bus_storage_capacity = bus_storage_capacity_discharge - bus_storage_capacity_store
 
                 # Line Contributions
-                bus_lines_b0 = n.lines[(n.lines.bus0 == bus)]
-                bus_lines_b1 = n.lines[(n.lines.bus1 == bus)]
-                bus_lines_b0 = (
-                    model["Line-s_RESERVES"].sel(snapshot=(erm.planning_horizon, hour)).loc[bus_lines_b0.index].sum()
-                )
-                bus_lines_b1 = (
-                    model["Line-s_RESERVES"].sel(snapshot=(erm.planning_horizon, hour)).loc[bus_lines_b1.index].sum()
-                )
-                bus_line_capacity_flow = bus_lines_b1 - bus_lines_b0  # positive for injection, negative for withdrawal
+                if not n.lines.empty:
+                    bus_lines_b0 = n.lines[(n.lines.bus0 == bus)]
+                    bus_lines_b1 = n.lines[(n.lines.bus1 == bus)]
+                    bus_lines_b0 = (
+                        model["Line-s_RESERVES"]
+                        .sel(snapshot=(erm.planning_horizon, hour))
+                        .loc[bus_lines_b0.index]
+                        .sum()
+                    )
+                    bus_lines_b1 = (
+                        model["Line-s_RESERVES"]
+                        .sel(snapshot=(erm.planning_horizon, hour))
+                        .loc[bus_lines_b1.index]
+                        .sum()
+                    )
+                    bus_line_capacity_flow = (
+                        bus_lines_b1 - bus_lines_b0
+                    )  # positive for injection, negative for withdrawal
 
                 # Link Contributions
-                bus_links_b0 = n.links[(n.links.bus0 == bus)]
-                bus_links_b1 = n.links[(n.links.bus1 == bus)]
-                bus_link_capacity_flow_b0 = (
-                    model["Link-p_RESERVES"].sel(snapshot=(erm.planning_horizon, hour)).loc[bus_links_b0.index].sum()
-                )
-                bus_link_capacity_flow_b1 = (
-                    model["Link-p_RESERVES"].sel(snapshot=(erm.planning_horizon, hour)).loc[bus_links_b1.index].sum()
-                )
-                bus_link_capacity_flow = bus_link_capacity_flow_b1 - bus_link_capacity_flow_b0
+                if not n.links.empty:
+                    bus_links_b0 = n.links[(n.links.bus0 == bus)]
+                    bus_links_b1 = n.links[(n.links.bus1 == bus)]
+                    bus_link_capacity_flow_b0 = (
+                        model["Link-p_RESERVES"]
+                        .sel(snapshot=(erm.planning_horizon, hour))
+                        .loc[bus_links_b0.index]
+                        .sum()
+                    )
+                    bus_link_capacity_flow_b1 = (
+                        model["Link-p_RESERVES"]
+                        .sel(snapshot=(erm.planning_horizon, hour))
+                        .loc[bus_links_b1.index]
+                        .sum()
+                    )
+                    bus_link_capacity_flow = bus_link_capacity_flow_b1 - bus_link_capacity_flow_b0
 
                 # Total Contributions
-                lhs = bus_lhs_capacity + bus_storage_capacity + bus_line_capacity_flow + bus_link_capacity_flow
+                lhs = bus_lhs_capacity + bus_storage_capacity
+                if not n.lines.empty:
+                    lhs += bus_line_capacity_flow
+                if not n.links.empty:
+                    lhs += bus_link_capacity_flow
                 rhs = planning_reserve.loc[hour, bus] - bus_rhs_capacity
 
                 model.add_constraints(
