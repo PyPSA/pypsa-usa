@@ -46,7 +46,6 @@ from opts.policy import (
 from opts.reserves import (
     add_ERM_constraints,
     add_operational_reserve_margin,
-    add_PRM_constraints,
     store_ERM_duals,
 )
 from opts.sector import (
@@ -152,9 +151,6 @@ def extra_functionality(n, snapshots):
         if n.generators.p_nom_extendable.any()
         else None,
         "REM": lambda: add_regional_co2limit(n, config) if n.generators.p_nom_extendable.any() else None,
-        "PRM": lambda: add_PRM_constraints(n, config, global_snakemake)
-        if n.generators.p_nom_extendable.any()
-        else None,
         "ERM": lambda: add_ERM_constraints(n, config, global_snakemake)
         if n.generators.p_nom_extendable.any()
         else None,

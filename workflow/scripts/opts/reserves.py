@@ -236,7 +236,8 @@ def _get_regional_demand(n, planning_horizon, region_buses):
             n.loads.bus.isin(region_buses.index),
         ]
         .T.groupby(n.loads.bus)
-        .T.sum()
+        .sum()
+        .T
     )
 
 
@@ -490,65 +491,6 @@ def add_ERM_constraints(n, config=None, snakemake=None, regional_prm_data=None):
                 )
         logger.info(
             f"Added ERM constraint for {erm.name} in {erm.planning_horizon}: ",
-        )
-
-
-def add_PRM_constraints(n, config=None, regional_prm_data=None):
-    """
-    Add Planning Reserve Margin (PRM) constraints for regional capacity adequacy.
-
-    This function enforces that each region has sufficient firm capacity to meet
-    peak demand plus a reserve margin. All generators are credited according to
-    their p_max_pu value at the peak demand hour.
-
-    Parameters
-    ----------
-    n : pypsa.Network
-        The PyPSA network object
-    config : dict, optional
-        Configuration dictionary containing PRM parameters. Required if regional_prm_data not provided.
-    regional_prm_data : pd.DataFrame, optional
-        Direct input of reserve margin requirements with columns: name, region, prm, planning_horizon.
-        If provided, this takes precedence over config file data.
-    """
-    # Load regional PRM requirements
-    regional_prm = _get_combined_prm_requirements(n, config, regional_prm_data)
-
-    # Apply constraints for each region and planning horizon
-    for _, prm in regional_prm.iterrows():
-        # Skip if no valid planning horizon or region
-        if prm.planning_horizon not in n.investment_periods:
-            continue
-
-        region_list = [region_.strip() for region_ in prm.region.split(",")]
-        region_buses = get_region_buses(n, region_list)
-
-        if region_buses.empty:
-            continue
-
-        # Calculate peak demand and required reserve margin
-        regional_demand = _get_regional_demand(n, prm.planning_horizon, region_buses).sum(axis=1)
-        peak_demand = regional_demand.max()
-        planning_reserve = peak_demand * (1.0 + prm.prm)
-
-        # Get capacity contribution from resources
-        lhs_capacity, rhs_existing = _calculate_capacity_accredidation(
-            n,
-            prm.planning_horizon,
-            region_buses,
-            specific_hour=regional_demand.idxmax(),
-        )
-
-        # Add the constraint to the model
-        n.model.add_constraints(
-            lhs_capacity.sum() >= planning_reserve - rhs_existing.sum(),
-            name=f"GlobalConstraint-{prm.name}_{prm.planning_horizon}_PRM",
-        )
-
-        logger.info(
-            f"Added PRM constraint for {prm.name} in {prm.planning_horizon}: "
-            f"Peak demand: {peak_demand:.2f} MW, "
-            f"Required capacity: {planning_reserve:.2f} MW",
         )
 
 
