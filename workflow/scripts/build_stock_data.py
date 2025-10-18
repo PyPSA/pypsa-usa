@@ -368,6 +368,23 @@ class Cecs:
         return self._get_data(fuel, as_percent=False, by_state=by_state, fillna=False)
 
 
+def scale_existing_stock(ratios: pd.DataFrame) -> pd.DataFrame:
+    """Scales existing stock to equal 100%.
+
+    The RECS and CECS ratios of exisiting stock are not garunteed to total 100%. This
+    function scales the ratios to equal 100%.
+
+    This is useful if when running a nearterm brownfield optimization and want to restrict
+    investment to the existing stock.
+    """
+    df = ratios.copy()
+    cols = df.columns
+    df["total"] = df[cols].sum(axis=1).div(100)
+    for col in cols:
+        df[col] = df[col].div(df["total"]).round(1)
+    return df[cols]
+
+
 def _already_retired(build_year: int, lifetime: int, year: int) -> bool:
     """
     Checks if brownfield capacity should already be retired.
@@ -762,7 +779,7 @@ def add_road_transport_brownfield(
 
         # 1000s to convert:
         #  miles/MWh -> k-miles/MWh
-        efficiency = costs.at[costs_name, "efficiency"] / 1000
+        efficiency = round(costs.at[costs_name, "efficiency"] / 1000, 4)
         lifetime = costs.at[costs_name, "lifetime"]
 
         df["bus0"] = df.name + f" {sector}-{elec_fuel}-{veh_type}"
@@ -856,6 +873,7 @@ def add_road_transport_brownfield(
 
         # mpg -> miles/wh -> miles/MWh -> k miles / MWH
         efficiency *= (1 / wh_per_gallon) * 1000000 / 1000
+        efficiency = round(efficiency, 4)
         lifetime = costs.at[costs_name, "lifetime"]
 
         df["bus0"] = df.name + f" {sector}-{lpg_fuel}-{veh_type}"
@@ -1112,7 +1130,7 @@ def add_service_brownfield(
             lifetime = costs.at["Commercial Electric Resistance Heaters", "lifetime"]
             efficiency = 1.0
 
-        df["bus0"] = df.name  # central electricity bus
+        df["bus0"] = df.bus1.map(lambda x: "-".join(x.split("-")[0:2]) + f"-{SecCarriers.ELECTRICITY.value}")
 
         # remove 'heat' or 'cool' ect.. from suffix
         df["carrier"] = df.suffix.map(lambda x: "-".join(x.split("-")[:-1]))
@@ -1177,7 +1195,7 @@ def add_service_brownfield(
             lifetime = costs.at["Commercial Rooftop Air Conditioners", "lifetime"]
             efficiency = 3.11  # 10.6 EER converted to COP
 
-        df["bus0"] = df.name  # central electricity bus
+        df["bus0"] = df.bus1.map(lambda x: "-".join(x.split("-")[0:2]) + f"-{SecCarriers.ELECTRICITY.value}")
 
         # remove 'heat' or 'cool' ect.. from suffix
         df["carrier"] = df.suffix.map(lambda x: "-".join(x.split("-")[:-1]))
@@ -1255,7 +1273,10 @@ def add_service_brownfield(
         lifetime = costs.at[cost_name, "lifetime"]
         efficiency = costs.at[cost_name, "efficiency"]
 
-        df["bus0"] = df.bus1 + f"-{fuel}-heater"
+        if fuel == "elec":
+            df["bus0"] = df.bus1.map(lambda x: "-".join(x.split("-")[0:2]) + f"-{SecCarriers.ELECTRICITY.value}")
+        else:
+            df["bus0"] = df.state + " " + fuel
         df["bus1"] = df.bus1 + "-heat"
         df["carrier"] = df.suffix + f"-{fuel}"
         df["ratio"] = df.state.map(ratio_map)
@@ -1332,7 +1353,7 @@ def add_service_brownfield(
         lifetime = costs.at[cost_name, "lifetime"]
         efficiency = costs.at[cost_name, "efficiency"]
 
-        df["bus"] = df.bus1 + f"-{fuel}-heater"
+        df["bus"] = df.bus1.map(lambda x: "-".join(x.split("-")[0:2]) + f"-{SecCarriers.ELECTRICITY.value}")
         df["carrier"] = df.suffix + f"-{fuel}"
         df["ratio"] = df.state.map(ratio_map)
         df["p_nom"] = df.p_max.mul(df.ratio).div(100)  # div to convert from %

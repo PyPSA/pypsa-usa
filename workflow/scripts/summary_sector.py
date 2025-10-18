@@ -85,10 +85,10 @@ def _filter_link_on_sector(n: pypsa.Network, sector: str) -> pd.DataFrame:
         return n.links[
             (n.links.carrier.str.startswith(sector))
             & ~(n.links.carrier.str.endswith("-store"))
-            & ~(n.links.carrier.str.endswith("-charger"))  # hot water heaters
+            & ~(n.links.index.str.endswith("-charger"))  # hot water heaters
         ].copy()
     elif sector == "ind":
-        return n.links[(n.links.carrier.str.startswith(sector)) & ~(n.links.carrier.str.endswith("-charger"))].copy()
+        return n.links[(n.links.carrier.str.startswith(sector)) & ~(n.links.index.str.endswith("-charger"))].copy()
     elif sector == "trn":
         return n.links[
             n.links.carrier.str.startswith("trn-") & ~n.links.bus0.map(n.buses.carrier).isin(["AC", "lpg"])
@@ -152,6 +152,9 @@ def _get_opt_capacity_per_node(
 
     df = _filter_link_on_sector(n, sector)
 
+    # remove any demand response
+    df = df[~((df.index.str.contains("-fwd-dr")) | (df.index.str.contains("-bck-dr")))]
+
     # remove the double accounting
     if sector in ("res", "com"):
         df = df[
@@ -206,10 +209,13 @@ def _get_total_capacity_per_node(
     sector: str,
     include_elec: bool = False,
     state: str | None = None,
-) -> pd.DataFrame:
+) -> pd.Series:
     assert sector not in ["pwr"]
 
     df = _filter_link_on_sector(n, sector)
+
+    # remove any demand response
+    df = df[~((df.index.str.contains("-fwd-dr")) | (df.index.str.contains("-bck-dr")))]
 
     # remove the double accounting
     if sector in ("res", "com"):
@@ -229,7 +235,15 @@ def _get_total_capacity_per_node(
     df["node"] = df.bus1.map(n.buses.country)
     df = df[["p_nom_opt", "node"]]
 
-    return df.reset_index(drop=True).groupby(["node"]).sum()
+    df = df.reset_index(drop=True)
+
+    if len(df.node.unique()) > 1:
+        df = df.groupby(["node"]).sum()
+        return df.squeeze()
+    else:
+        df = df.groupby(["node"]).sum()
+        data = {df.index.unique()[0]: df.squeeze()}
+        return pd.Series(data)
 
 
 def _get_total_pwr_capacity_per_node(
@@ -252,7 +266,15 @@ def _get_total_pwr_capacity_per_node(
     cols = ["p_nom_opt", "node"]
     df = pd.concat([links[cols], gens[cols]])
 
-    return df.reset_index(drop=True).groupby(["node"]).sum().squeeze()
+    df = df.reset_index(drop=True)
+
+    if len(df.node.unique()) > 1:
+        df = df.groupby(["node"]).sum()
+        return df.squeeze()
+    else:
+        df = df.groupby(["node"]).sum()
+        data = {df.index.unique()[0]: df.squeeze()}
+        return pd.Series(data)
 
 
 def _get_brownfield_pwr_capacity_per_node(
@@ -295,6 +317,9 @@ def _get_brownfield_capacity_per_node(
 
     df = _filter_link_on_sector(n, sector)
 
+    # remove any demand response
+    df = df[~((df.index.str.contains("-fwd-dr")) | (df.index.str.contains("-bck-dr")))]
+
     # remove the double accounting
     if sector in ("res", "com"):
         df = df[
@@ -323,6 +348,37 @@ def _get_brownfield_capacity_per_node(
     return df[["existing", "new"]]
 
 
+def _get_import_export_timeseries(n: pypsa.Network, state: str | None = None) -> pd.DataFrame:
+    """Get import/export timeseries."""
+    import_links = n.links[n.links.carrier.str.endswith("imports")].copy()
+    export_links = n.links[n.links.carrier.str.endswith("exports")].copy()
+
+    import_links["reeds_state"] = import_links.bus1.map(n.buses.reeds_state)
+    export_links["reeds_state"] = export_links.bus0.map(n.buses.reeds_state)
+
+    if state:
+        import_links["reeds_state"] = import_links.bus1.map(n.buses.reeds_state)
+        export_links["reeds_state"] = export_links.bus0.map(n.buses.reeds_state)
+
+        import_links = import_links[import_links.reeds_state == state]
+        export_links = export_links[export_links.reeds_state == state]
+
+    if import_links.empty:
+        imports = pd.DataFrame(index=n.snapshots, columns=["imports"], dtype=float).fillna(0)
+    else:
+        imports = n.links_t["p0"][import_links.index]
+
+    if export_links.empty:
+        exports = pd.DataFrame(index=n.snapshots, columns=["exports"], dtype=float).fillna(0)
+    else:
+        exports = n.links_t["p0"][export_links.index]
+
+    imports = imports.where(imports >= 0.0001, 0).round(4)
+    exports = exports.where(exports >= 0.0001, 0).round(4)
+
+    return imports.join(exports)
+
+
 def get_capacity_per_node(
     n: pypsa.Network,
     sector: str,
@@ -334,15 +390,17 @@ def get_capacity_per_node(
             n,
             sector=sector,
             state=state,
-        ).squeeze()
+        )
         opt = _get_opt_pwr_capacity_per_node(n, sector=sector, state=state).to_frame()
         brwn = _get_brownfield_pwr_capacity_per_node(n, sector=sector, state=state)
     elif sector == "trn":
-        total = _get_total_capacity_per_node(n, sector=sector, state=state).squeeze()
+        total = _get_total_capacity_per_node(n, sector=sector, state=state)
         opt = _get_opt_capacity_per_node(n, sector=sector, state=state).to_frame()
         brwn = _get_brownfield_capacity_per_node(n, sector=sector, state=state)
     else:
-        total = _get_total_capacity_per_node(n, sector=sector, state=state).squeeze()
+        if sector == "res" and state == "VT":
+            pass
+        total = _get_total_capacity_per_node(n, sector=sector, state=state)
         opt = _get_opt_capacity_per_node(n, sector=sector, state=state).to_frame()
         brwn = _get_brownfield_capacity_per_node(n, sector=sector, state=state)
 
@@ -379,6 +437,10 @@ def get_sector_production_timeseries(
     if state:
         links = _get_links_in_state(n, state)
         df = df[[x for x in df.columns if x in links]]
+
+    # remove demand response as thats plotted separately
+    dr_cols = df[[x for x in df.columns if "-dr-" in x]]
+    df = df[[x for x in df.columns if x not in dr_cols]]
 
     if not (resample or resample_fn):
         return df
@@ -417,7 +479,13 @@ def get_power_production_timeseries(
         df_links = df_links[[x for x in df_links.columns if x in links]]
         df_gens = df_gens[[x for x in df_gens.columns if x in gens]]
 
-    df = df_links.join(df_gens)
+    import_exports = _get_import_export_timeseries(n, state)
+
+    df = df_links.join(df_gens).join(import_exports)
+
+    # remove demand response as thats plotted separately
+    dr_cols = df[[x for x in df.columns if "-dr-" in x]]
+    df = df[[x for x in df.columns if x not in dr_cols]]
 
     if not (resample or resample_fn):
         return df
@@ -455,7 +523,19 @@ def get_sector_production_timeseries_by_carrier(
         )
         df = df.T
         df.index = df.index.map(n.links.carrier)
+
     df = df.groupby(level=0).sum().T
+
+    # only plot the net imports
+    if ("imports" in df.columns) and ("exports" in df.columns):
+        df["imports"] = df["imports"] - df["exports"]
+        df["imports"] = df.imports.where(df.imports >= 0.0001, 0).round(4)
+        df = df.drop(columns=["exports"])
+    else:
+        for col in ["imports", "exports"]:
+            if col in df.columns:
+                df = df.drop(columns=[col])
+
     return df.mask((df <= 0) & (df >= -0.00001), 0)
 
 

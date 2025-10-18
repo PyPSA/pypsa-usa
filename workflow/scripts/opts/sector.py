@@ -292,7 +292,8 @@ def add_gshp_capacity_constraint(n, config, snakemake):
 
     assert len(ashp) == len(gshp)
 
-    gshp["urban_rural_fraction"] = gshp.bus0.map(fraction)
+    gshp["node"] = gshp.bus0.str.split(" ").str[0]
+    gshp["urban_rural_fraction"] = gshp.node.map(fraction)
 
     ashp_capacity = n.model["Link-p_nom"].loc[ashp.index]
     gshp_capacity = n.model["Link-p_nom"].loc[gshp.index]
@@ -612,8 +613,50 @@ def add_ev_generation_constraint(n, config, snakemake):
 
         for investment_period in n.investment_periods:
             ratio = policy.at[investment_period, mode] / 100  # input is percentage
-            eff = n.links.loc[evs].efficiency.mean()
-            lhs = n.model["Link-p"].loc[investment_period].sel(Link=evs).sum()
-            rhs = dem.loc[investment_period].sum().sum() * ratio / eff
+            eff = n.links.loc[evs].efficiency.round(1)
+            lhs = n.model["Link-p"].loc[investment_period].sel(Link=evs).mul(eff).sum()
+            rhs = round(dem.loc[investment_period].sum().sum() * ratio, 2)
 
             n.model.add_constraints(lhs <= rhs, name=f"Link-ev_gen_{mode}_{investment_period}")
+
+
+def add_fossil_generation_constraint(n, config):
+    """Adds a constraint to the minimum generation from fossil fuels per year in industry.
+
+    Since the industrial sector is still under development, we add a constraint to the
+    minimum generation from fossil fuels per year to prevent overinvestment in heat pumps.
+
+    This only applies to the heating load.
+
+    Default values taken from:
+    https://www.eia.gov/energyexplained/use-of-energy/industry.php
+    """
+    ind_config = config["sector"].get("industrial_sector", {})
+    min_generation = ind_config.get("min_fossil_generation", 0)
+
+    if min_generation <= 0.1:
+        logger.info(f"No fossil generation constraint applied to industry as min_fossil_generation is {min_generation}")
+        return
+
+    states = [x for x in n.buses.reeds_state.unique() if x]
+    for state in states:
+        buses_in_state = [f"{x} ind-heat" for x in n.buses[n.buses.reeds_state == state].index]
+
+        heat_loads = n.loads[(n.loads.carrier == "ind-heat") & (n.loads.bus.isin(buses_in_state))]
+
+        heat_demand = n.loads_t["p_set"][heat_loads.index].sum().sum().round(1)
+        rhs = heat_demand * min_generation / 100  # divide by 100 to convert from percentage
+
+        fossil_links = n.links[
+            (n.links.carrier.str.startswith("ind"))
+            & ~(n.links.carrier.str.contains("heat-pump"))
+            & (n.links.bus1.str.contains("heat"))
+            & (n.links.bus1.isin(buses_in_state))
+        ].index
+
+        # no time varying efficiency for these fossil links
+        fossil_efficiency = n.links.loc[fossil_links].efficiency
+
+        lhs = n.model["Link-p"].loc[:, fossil_links].mul(fossil_efficiency).sum()
+
+        n.model.add_constraints(lhs >= rhs, name=f"{state}_ind_fossil_generation")

@@ -62,7 +62,7 @@ plotting:
     "DC link": "#8a1caf"
     "DC": "#8a1caf"
     "Load": "#2ad55f" 
-    "imports": "#4864B7"
+    "imports": "#9f2ad5"
     "exports": "#B79B48"
     "res-elec": "#f9d002"
     "res-heat": "#E79CA2"

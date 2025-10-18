@@ -53,6 +53,7 @@ from opts.sector import (
     add_cooling_heat_pump_constraints,
     add_demand_response_constraint,
     add_ev_generation_constraint,
+    add_fossil_generation_constraint,
     add_gshp_capacity_constraint,
     add_ng_import_export_limits,
     add_sector_co2_constraints,
@@ -69,12 +70,18 @@ pypsa.pf.logger.setLevel(logging.WARNING)
 
 def prepare_network(n, solve_opts=None):
     if "clip_p_max_pu" in solve_opts:
-        for df in (
-            n.generators_t.p_max_pu,
-            n.generators_t.p_min_pu,
-            n.storage_units_t.inflow,
-        ):
-            df = df.where(df > solve_opts["clip_p_max_pu"], other=0.0)
+        df = n.generators_t.p_max_pu
+        n.generators_t.p_max_pu = df.where(df > solve_opts["clip_p_max_pu"], other=0.0)
+        df = n.generators_t.p_min_pu
+        n.generators_t.p_min_pu = df.where(df > solve_opts["clip_p_max_pu"], other=0.0)
+
+        df = n.links_t.p_max_pu
+        n.links_t.p_max_pu = df.where(df > solve_opts["clip_p_max_pu"], other=0.0)
+        df = n.links_t.p_min_pu
+        n.links_t.p_min_pu = df.where(df > solve_opts["clip_p_max_pu"], other=0.0)
+
+        df = n.storage_units_t.inflow
+        n.storage_units_t.inflow = df.where(df > solve_opts["clip_p_max_pu"], other=0.0)
 
     load_shedding = solve_opts.get("load_shedding")
     if load_shedding:
@@ -193,12 +200,12 @@ def extra_functionality(n, snapshots):
     # Apply interchange constraints if configured
     if config["electricity"].get("imports", {}).get("enable", False):
         if config["electricity"].get("imports", {}).get("volume_limit", False):
-            add_interchange_constraints(n, config, "imports")
+            add_interchange_constraints(n, config, "imports", sector_enabled)
 
     # Apply interchange constraints if configured
     if config["electricity"].get("exports", {}).get("enable", False):
         if config["electricity"].get("exports", {}).get("volume_limit", False):
-            add_interchange_constraints(n, config, "exports")
+            add_interchange_constraints(n, config, "exports", sector_enabled)
 
     # Apply sector-specific constraints if sector is enabled
     if sector_enabled:
@@ -224,6 +231,9 @@ def extra_functionality(n, snapshots):
 
         # Sector demand response constraints
         add_sector_demand_response_constraints(n, config)
+
+        # Fossil generation constraints
+        add_fossil_generation_constraint(n, config)
 
 
 def run_optimize(n, rolling_horizon, skip_iterations, cf_solving, **kwargs):
@@ -377,11 +387,11 @@ if __name__ == "__main__":
 
         snakemake = mock_snakemake(
             "solve_network",
-            interconnect="western",
-            simpl="20",
-            clusters="4m",
+            interconnect="eastern",
+            simpl="120",
+            clusters="6m",
             ll="v1.0",
-            opts="8h-RPS",
+            opts="1h-TCT",
             sector="E-G",
             planning_horizons="2030",
         )
