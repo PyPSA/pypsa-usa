@@ -460,9 +460,10 @@ def add_ERM_constraints(n, config=None, snakemake=None, regional_prm_data=None):
         if region_buses.empty:
             continue
         logger.info(f"Adding ERM constraint for {erm.name} in {erm.planning_horizon}, with reserve level {erm.prm}")
-        # Create model variables to track storage contributions
+
+        # Create model variables to track storage contributions (only once)
         c = "StorageUnit"
-        if not n.storage_units.empty:
+        if not n.storage_units.empty and f"{c}-p_dispatch_RESERVES" not in model.variables:
             model.add_variables(-np.inf, model.variables["StorageUnit-p_store"].upper, name=f"{c}-p_dispatch_RESERVES")
             model.add_variables(-np.inf, model.variables["StorageUnit-p_store"].upper, name=f"{c}-p_store_RESERVES")
             model.add_variables(
@@ -476,12 +477,12 @@ def add_ERM_constraints(n, config=None, snakemake=None, regional_prm_data=None):
             define_operational_constraints_for_non_extendables(n, n.snapshots, c, "p_dispatch")
             define_operational_constraints_for_non_extendables(n, n.snapshots, c, "p_store")
 
-        # Create model variables to track transmission contributions
-        if not n.lines.empty:
+        # Create model variables to track transmission contributions (only once)
+        if not n.lines.empty and "Line-s_RESERVES" not in model.variables:
             model.add_variables(-np.inf, model.variables["Line-s"].upper, name="Line-s_RESERVES")
             define_operational_constraints_for_extendables(n, n.snapshots, "Line", "s")
 
-        if not n.links.empty:
+        if not n.links.empty and "Link-p_RESERVES" not in model.variables:
             model.add_variables(-np.inf, model.variables["Link-p"].upper, name="Link-p_RESERVES")
             define_operational_constraints_for_extendables(n, n.snapshots, "Link", "p")
 
@@ -585,22 +586,24 @@ def store_ERM_duals(n):
     """
     logger.info("Storing ERM data from optimization results")
     model = n.model
-    erm_constraint = [c for c in model.constraints if "ERM" in c]
+    erm_constraints = [c for c in model.constraints if "ERM" in c]
 
-    if erm_constraint:
-        erm_dual = model.dual[erm_constraint]
+    if erm_constraints:
+        n.buses_t["erm_price"] = pd.DataFrame(index=n.snapshots, columns=n.buses.index)
 
-        # Store mean ERM price as time series for each bus
-        # Automatically detect the ERM global constraint name
-        global_constraint_columns = [col for col in erm_dual.to_dataframe().columns if col.endswith("_ERM")]
-        if not global_constraint_columns:
-            raise ValueError("No ERM global constraint dual found in model results.")
-        erm_col = global_constraint_columns[0]
-        erm_dual_df = (
-            erm_dual.to_dataframe()[erm_col].reset_index().set_index(["period", "timestep"]).pivot(columns="Bus")
-        )
-        erm_dual_df.columns = erm_dual_df.columns.get_level_values(1)
-        n.buses_t["erm_price"] = erm_dual_df
+        for constraint in erm_constraints:
+            erm_dual = model.dual[constraint]
+            # Store mean ERM price as time series for each bus
+            # Automatically detect the ERM global constraint name
+            global_constraint_columns = [col for col in erm_dual.to_dataframe().columns if col.endswith("_ERM")]
+            if not global_constraint_columns:
+                raise ValueError("No ERM global constraint dual found in model results.")
+            erm_col = global_constraint_columns[0]
+            erm_dual_df = (
+                erm_dual.to_dataframe()[erm_col].reset_index().set_index(["period", "timestep"]).pivot(columns="Bus")
+            )
+            erm_dual_df.columns = erm_dual_df.columns.get_level_values(1)
+            n.buses_t["erm_price"].update(erm_dual_df)
 
         if "StorageUnit-p_dispatch_RESERVES" in model.solution:
             n.storage_units_t["p_dispatch_reserves"] = model.solution["StorageUnit-p_dispatch_RESERVES"].to_pandas()
