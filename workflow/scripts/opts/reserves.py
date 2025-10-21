@@ -11,6 +11,7 @@ import linopy
 import numpy as np
 import pandas as pd
 import pypsa
+from opts._helpers import get_region_buses
 from pypsa.descriptors import (
     expand_series,
     get_activity_mask,
@@ -412,7 +413,6 @@ def _define_unified_nodal_balance_constraints(
             exprs.append(expr.groupby(cbuses).sum())
 
     lhs = merge(exprs, join="outer").reindex(Bus=buses)
-
     rhs = planning_reserve
     rhs.index.name = "snapshot"
 
@@ -448,6 +448,73 @@ def _define_unified_nodal_balance_constraints(
         name=f"GlobalConstraint-{erm.name}_ERM",
         mask=mask,
     )
+
+
+def add_ERM_constraints(n, config=None, snakemake=None, regional_prm_data=None):
+    """
+    Add Energy Reserve Margin (ERM) constraints for regional capacity adequacy.
+
+    This function enforces that each region has sufficient firm capacity to meet
+    peak demand plus a reserve margin. These resources must be "energy-backed" meaning
+    resources like storage devices must have the state of charge to meet the reserve
+    to contribute to the ERM.
+
+    Parameters
+    ----------
+    n : pypsa.Network
+        The PyPSA network object
+    config : dict, optional
+        Configuration dictionary containing ERM parameters. Required if regional_prm_data not provided.
+    snakemake : snakemake object, optional
+    regional_prm_data : pd.DataFrame, optional
+        Direct input of reserve margin requirements with columns: name, region, prm, planning_horizon.
+        If provided, this takes precedence over config file data.
+    """
+    model = n.model
+    # Load regional PRM requirements
+    regional_prm = _get_combined_prm_requirements(n, config, snakemake, regional_prm_data)
+
+    # Apply constraints for each region and planning horizon
+    for _, erm in regional_prm.iterrows():
+        # Skip if no valid planning horizon or region
+        if erm.planning_horizon not in n.investment_periods:
+            continue
+
+        region_list = [region_.strip() for region_ in erm.region.split(",")]
+        region_buses = get_region_buses(n, region_list)
+
+        if region_buses.empty:
+            continue
+        logger.info(f"Adding ERM constraint for {erm.name} in {erm.planning_horizon}, with reserve level {erm.prm}")
+        # Create model variables to track storage contributions
+        c = "StorageUnit"
+        if not n.storage_units.empty:
+            model.add_variables(-np.inf, model.variables["StorageUnit-p_store"].upper, name=f"{c}-p_dispatch_RESERVES")
+            model.add_variables(-np.inf, model.variables["StorageUnit-p_store"].upper, name=f"{c}-p_store_RESERVES")
+            model.add_variables(
+                -np.inf,
+                model.variables["StorageUnit-state_of_charge"].upper,
+                name=f"{c}-state_of_charge_RESERVES",
+            )
+            define_SU_reserve_constraints(n)
+            define_operational_constraints_for_extendables(n, n.snapshots, c, "p_dispatch", 0)
+            define_operational_constraints_for_extendables(n, n.snapshots, c, "p_store", 0)
+            define_operational_constraints_for_non_extendables(n, n.snapshots, c, "p_dispatch", 0)
+            define_operational_constraints_for_non_extendables(n, n.snapshots, c, "p_store", 0)
+
+        # Create model variables to track transmission contributions
+        if not n.lines.empty:
+            model.add_variables(-np.inf, model.variables["Line-s"].upper, name="Line-s_RESERVES")
+            define_operational_constraints_for_extendables(n, n.snapshots, "Line", "s", 0)
+
+        if not n.links.empty:
+            model.add_variables(-np.inf, model.variables["Link-p"].upper, name="Link-p_RESERVES")
+            define_operational_constraints_for_extendables(n, n.snapshots, "Link", "p", 0)
+
+        define_erm_nodal_balance_constraints(n, erm, region_buses)
+        logger.info(
+            f"Added ERM constraint for {erm.name} in {erm.planning_horizon}: ",
+        )
 
 
 def add_operational_reserve_margin(n, sns, config):
@@ -543,7 +610,7 @@ def store_ERM_duals(n):
     extracts and stores this data in the network object for later analysis.
     """
     model = n.model
-    duals = model.dual
+    # duals = model.dual
     logger.info("Storing ERM data from optimization results")
     # Check if ERM constraints are activated by looking for the ERM reserve variables
     if "StorageUnit-p_dispatch_RESERVES" in model.variables:
@@ -571,37 +638,69 @@ def store_ERM_duals(n):
             n.links_t["p_reserves"] = model.solution["Link-p_RESERVES"].to_pandas()
 
         # Calculate and store the ERM price (shadow price of the ERM constraint)
-        erm_constraints = [c for c in model.constraints if "ERM_hr" in c]
-        if erm_constraints:
-            # Get the dual values (shadow prices) of ERM constraints
-            # For xarray Dataset, we need to use dictionary-based indexing
-            erm_prices = {}
-            for constraint in erm_constraints:
-                # Extract bus name from constraint name (format: GlobalConstraint-{name}_{horizon}_ERM_hr{hour}_bus{bus})
-                parts = constraint.split("_")
-                bus_part = parts[-1]
-                bus = bus_part.replace("bus", "")
+        # erm_constraints = [c for c in model.constraints if "ERM" in c]
 
-                # Store the dual value
-                try:
-                    dual_value = duals[constraint].item()
-                    if bus not in erm_prices:
-                        erm_prices[bus] = [dual_value]
-                    else:
-                        erm_prices[bus].append(dual_value)
-                except (KeyError, ValueError):
-                    # Skip constraints without dual values
-                    continue
+        # if erm_constraints:
+        #     # Get the dual values (shadow prices) of ERM constraints
+        #     erm_prices = {}
+        #     for constraint in erm_constraints:
+        #         # Extract bus name from constraint name (format: GlobalConstraint-{name}_{horizon}_ERM_hr{hour}_bus{bus})
+        #         parts = constraint.split("_")
+        #         bus_part = parts[-1]
+        #         bus = bus_part.replace("bus", "")
 
-            # Create a Series with bus index - averaging values for each bus
-            if erm_prices:
-                # Calculate average price for each bus
-                for bus in erm_prices:
-                    erm_prices[bus] = sum(erm_prices[bus]) / len(erm_prices[bus])
+        #         # Store the dual value
+        #         try:
+        #             # Instead of .item(), inspect DataArray shape and aggregate accordingly
+        #             try:
+        #                 # Check if dual value is an xarray.DataArray (possibly multi-dimensional)
+        #                 dual_arr = duals[constraint]
+        #                 if hasattr(dual_arr, "mean"):
+        #                     # If DataArray (possibly with shape), get mean value
+        #                     dual_value = float(dual_arr.mean().values)
+        #                 else:
+        #                     # If it's something simpler, try just getting the value
+        #                     dual_value = float(dual_arr)
+        #                 if bus not in erm_prices:
+        #                     erm_prices[bus] = [dual_value]
+        #                 else:
+        #                     erm_prices[bus].append(dual_value)
+        #             except (KeyError, ValueError, AttributeError):
+        #                 # Skip constraints without dual values
+        #                 continue
+        #         except Exception as e:
+        #             logger.error(f"Error storing ERM data: {e}")
+        #             continue
 
-                erm_price_series = pd.Series(erm_prices)
+        #         # Create a Series with bus index - averaging values for each bus
+        #         if erm_prices:
+        #             # Calculate average price for each bus
+        #             for bus in erm_prices:
+        #                 erm_prices[bus] = sum(erm_prices[bus]) / len(erm_prices[bus])
 
-                # Store in network
-                if "ERM_price" not in n.buses:
-                    n.buses["ERM_price"] = 0.0  # Initialize as float
-                n.buses.loc[erm_price_series.index, "ERM_price"] = erm_price_series
+        #             erm_price_series = pd.Series(erm_prices)
+
+        #             # Store in network
+        #             if "ERM_price" not in n.buses:
+        #                 n.buses["ERM_price"] = 0.0  # Initialize as float
+        #             n.buses.loc[erm_price_series.index, "ERM_price"] = erm_price_series
+
+        #             # Also store the average shadow price as a new row in n.global_constraints
+        #             avg_shadow_price = erm_price_series.mean()
+        #             # Construct a new row to append to n.global_constraints DataFrame
+        #             new_row = pd.DataFrame({
+        #                 "type": ["ERM_shadow_price"],
+        #                 "carrier_attribute": [""],
+        #                 "sense": [""],
+        #                 "constant": [""],
+        #                 "mu_upper": [avg_shadow_price],
+        #                 "mu_lower": [""],
+        #                 "attribute": [""],
+        #                 "variant": [""],
+        #                 "value": [""],
+        #             }, index=[f"ERM_shadow_price"])
+        #             # Ensure n.global_constraints exists and is a DataFrame
+        #             if hasattr(n, "global_constraints") and isinstance(n.global_constraints, pd.DataFrame):
+        #                 n.global_constraints = pd.concat([n.global_constraints, new_row], axis=0)
+        #             else:
+        #                 n.global_constraints = new_row
