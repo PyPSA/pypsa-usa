@@ -1592,11 +1592,20 @@ class WriteStrategy(ABC):
         for load_zone in laf.zone.unique():
             load = laf[laf.zone == load_zone]
             load = load[~(load.laf < 0.000001)].copy()  # drop any buses that have zero load
+            if load_zone not in demand:
+                # occurs if laf overlaps with a neighbouring interconnect
+                # to replicate, run only 'AR' and 'Texas' will be a Key Error
+                logger.warning(f"No demand found for {load_zone}")
+                continue
             load_per_bus = pd.DataFrame(
                 data=([demand[load_zone]] * len(load.index)),
                 index=load.index,
             )
             dissag_load = load_per_bus.mul(laf.laf, axis=0).dropna()
+            if dissag_load.empty and load_per_bus.empty:
+                # occurs for empty loads in neighbouring states
+                # to replicate run only 'IL'
+                continue
             assert dissag_load.shape == load_per_bus.shape  # ensure no data is lost
             dissag_load = dissag_load.T  # set snapshot as index
             all_load.append(dissag_load)
@@ -2295,11 +2304,16 @@ if __name__ == "__main__":
         #     interconnect="texas",
         #     end_use="power",
         # )
+        # snakemake = mock_snakemake(
+        #     "build_transport_other_demand",
+        #     interconnect="western",
+        #     end_use="transport",
+        #     vehicle="boat-shipping",
+        # )
         snakemake = mock_snakemake(
-            "build_transport_other_demand",
-            interconnect="western",
-            end_use="transport",
-            vehicle="boat-shipping",
+            "build_service_demand",
+            interconnect="eastern",
+            end_use="residential",
         )
         # snakemake = mock_snakemake(
         #     "build_transport_road_demand",
