@@ -40,7 +40,7 @@ repos:
   - id: snakefmt
 
 - repo: https://github.com/keewis/blackdoc
-  rev: v0.4.1
+  rev: v0.4.4
   hooks:
   - id: blackdoc
 

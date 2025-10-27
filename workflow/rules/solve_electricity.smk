@@ -20,10 +20,8 @@ rule solve_network:
         solving=config_provider("solving"),
         foresight=config_provider("foresight"),
         planning_horizons=config["scenario"]["planning_horizons"],
-        co2_sequestration_potential=config["sector"].get(
-            "co2_sequestration_potential", 200
-        ),
         transmission_network=config_provider("model_topology", "transmission_network"),
+        sector_config=config_provider("sector", default={}),
     input:
         network=RESOURCES
         + "{interconnect}/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc",

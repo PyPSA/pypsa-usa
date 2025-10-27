@@ -1,9 +1,13 @@
+"""Download scenarios from Zenodo."""
+
 from pathlib import Path
 
 import requests
 
 
 class ZenodoScenarioDownloader:
+    """Download scenarios from Zenodo."""
+
     def __init__(self, download_dir="./data"):
         self.download_dir = Path(download_dir)
         self.download_dir.mkdir(exist_ok=True)
