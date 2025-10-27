@@ -13,13 +13,11 @@ import geopandas as gpd
 import matplotlib.pyplot as plt
 import numpy as np
 import xarray as xr
-import pandas as pd
 from _helpers import configure_logging, get_snapshots
 from dask.distributed import Client
 from pypsa.geo import haversine
 from shapely.geometry import LineString
 from zenodo_downloader import ZenodoScenarioDownloader
-from aggregate_godeeep import aggregate_godeeep_to_buses
 
 logger = logging.getLogger(__name__)
 
@@ -87,7 +85,7 @@ if __name__ == "__main__":
     if snakemake.params.renewable.get("dataset", False) == "atlite":
         ### start here
         logger.info("Loading atlite renewable dataset...")
-    
+
         logger.info(f'using cutout "{snakemake.input.cutout}"')
         cutout = atlite.Cutout(snakemake.input.cutout[0]).sel(
             time=sns,
@@ -211,7 +209,7 @@ if __name__ == "__main__":
         )
 
         logger.info(f"Calculating maximal capacity per bus (method '{p_nom_max_meth}')")
-        if p_nom_max_meth == "simple": ## right now the capacities loaded in are "conservative"
+        if p_nom_max_meth == "simple":  ## right now the capacities loaded in are "conservative"
             p_nom_max = capacity_per_sqkm * availability @ area
         elif p_nom_max_meth == "conservative":
             max_cap_factor = capacity_factor.where(availability != 0).max(["x", "y"])
@@ -242,7 +240,6 @@ if __name__ == "__main__":
         centre_of_mass = xr.DataArray(centre_of_mass, [buses, ("spatial", ["x", "y"])])
 
     if snakemake.params.renewable.get("dataset", False) == "godeeep":
-        
         logger.info("Loading godeeep renewable data...")
         renewable_sns = get_snapshots(snakemake.config["renewable_snapshots"])
         scenario = snakemake.config["renewable_scenarios"][0]
@@ -253,7 +250,7 @@ if __name__ == "__main__":
         # Technology configurations for filename construction
         if tech in ["onwind", "offwind", "offwind_floating"]:
             technology = "wind"
-            wind_height = "_100m" ## for now only 100m wind data is available, add functionality for more heights
+            wind_height = "_100m"  ## for now only 100m wind data is available, add functionality for more heights
             start = ((year - 1980) // 20) * 20 + 1980
             end = start + 19
         elif tech == "solar":
@@ -268,13 +265,13 @@ if __name__ == "__main__":
         scenario_final = technology + wind_height + f"_{scenario}" + year_range
         breakpoint()
         filename = f"{technology}_gen_cf_{year}{wind_height}_aggregated.nc"
-        
+
         # Download and load profile from zenodo, or pull from local if already downloaded
         filepath = downloader.download_scenario_file(scenario_final, filename)
         profile = xr.open_dataarray(filepath).load()
 
         # filtering for appropriate time snapshot
-        profile = profile.sel(time=renewable_sns)  
+        profile = profile.sel(time=renewable_sns)
 
         ## load in preprocessed capacity data from Zenodo
         logger.info("Loading preprocessed data from Zenodo...")
@@ -282,17 +279,17 @@ if __name__ == "__main__":
         # Extract variables from the preprocessed ERA5/Atlite dataset
         logger.info(f"Pulling preprocessed data for {tech}")
         preprocessed = xr.open_dataset(downloader.download_scenario_file("capacities", f"profile_{tech}.nc"))
-        capacities = preprocessed['weight'] 
-        p_nom_max = preprocessed['p_nom_max']
-        potential = preprocessed['potential'] # maybe not include this, the bus mapping is complicated
-        average_distance = preprocessed['average_distance']
+        capacities = preprocessed["weight"]
+        p_nom_max = preprocessed["p_nom_max"]
+        potential = preprocessed["potential"]  # maybe not include this, the bus mapping is complicated
+        average_distance = preprocessed["average_distance"]
 
         # Get bus values in interconnect region and format
-        region_buses = buses.values.astype('<U7')
+        region_buses = buses.values.astype("<U7")
 
         # Get godeeep bus values and format
         godeeep_buses = profile.bus.values
-        
+
         # Get preprocessed ERA5/Atlite bus values and format
         atlite_buses = capacities.bus.values
 
@@ -306,14 +303,14 @@ if __name__ == "__main__":
 
         # For potential, need to filter by x and y coordinates actually
         regions_xy = regions.loc[common_buses]
-        regions_x = regions_xy['x'].values.astype('<U7')
-        regions_y = regions_xy['y'].values.astype('<U7')
-        potential = potential.sel(x=regions_x, y=regions_y, method='nearest')
+        regions_x = regions_xy["x"].values.astype("<U7")
+        regions_y = regions_xy["y"].values.astype("<U7")
+        potential = potential.sel(x=regions_x, y=regions_y, method="nearest")
 
         # Filter godeeep profile to only common buses
         logger.info(f"Before filtering Profile shape: {profile.shape}")
         profile = profile.sel(bus=common_buses)
-        
+
         logger.info("Final data shapes:")
         logger.info(f"Profile: {profile.shape}")
         logger.info(f"Capacities: {capacities.shape}")
@@ -328,7 +325,8 @@ if __name__ == "__main__":
             p_nom_max.rename("p_nom_max"),
             potential.rename("potential"),
             average_distance.rename("average_distance"),
-        ], compat='override'
+        ],
+        compat="override",
     )
 
     # Adding 'underwater_fraction' for offshore wind only
@@ -344,7 +342,7 @@ if __name__ == "__main__":
                 underwater_fraction.append(frac)
             ds["underwater_fraction"] = xr.DataArray(underwater_fraction, [buses])
         elif snakemake.params.renewable.get("dataset", False) == "godeeep":
-            ds['underwater_fraction'] = preprocessed['underwater_fraction'].sel(bus=common_buses)
+            ds["underwater_fraction"] = preprocessed["underwater_fraction"].sel(bus=common_buses)
 
     # select only buses with some capacity and minimal capacity factor
     ds = ds.sel(
@@ -361,7 +359,7 @@ if __name__ == "__main__":
     # Apply correction factor only at the very end when writing to disk
     if correction_factor != 1.0:
         logger.info(f"Applying correction factor {correction_factor} to profile...")
-        ds['profile'] = ds['profile'] * correction_factor
+        ds["profile"] = ds["profile"] * correction_factor
 
     ds.to_netcdf(snakemake.output.profile)
     if client is not None:

@@ -65,7 +65,6 @@ class ZenodoScenarioDownloader:
             return None
 
     def download_scenario_file(self, scenario_name, filename, force_redownload=False):
-
         # Function: Download a specific file from a scenario dataset.
         # Parameters:
         # - scenario_name: e.g., "solar_historical"
@@ -95,7 +94,6 @@ class ZenodoScenarioDownloader:
         return self.download_by_record_id(record_id, filename, force_redownload)
 
     def download_by_record_id(self, record_id, filename, force_redownload=False):
-
         # Function: Download a file directly using a record ID.
         # Parameters:
         # - record_id: Zenodo record ID (e.g. 17059209)
