@@ -431,7 +431,7 @@ def convert_generators_2_links(
         efficiency2=co2_intensity,
         marginal_cost=0,
         # marginal_cost = plants.marginal_cost * plants.efficiency, # fuel costs rated at delievered
-        capital_cost=plants.capital_cost,  # links rated on input capacity
+        capital_cost=plants.capital_cost * plants.efficiency,  # links rated on input capacity
         lifetime=plants.lifetime,
         build_year=plants.build_year,
     )
