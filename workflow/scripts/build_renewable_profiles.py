@@ -180,13 +180,6 @@ if __name__ == "__main__":
         duration = time.time() - start
         logger.info(f"Completed landuse availability calculation ({duration:2.2f}s)")
 
-        # fig, ax = plt.subplots()
-        # excluder.plot_shape_availability(regions, ax=ax)
-        fig, ax = plot_data(availability.sum("bus"))
-        ax.set_title(f"Availability of {snakemake.wildcards.technology} Technology")
-        plt.savefig(snakemake.output.availability)
-        plt.close(fig)
-
         area = cutout.grid.to_crs("EPSG: 5070").area / 1e6
         area = xr.DataArray(
             area.values.reshape(cutout.shape),
@@ -263,7 +256,7 @@ if __name__ == "__main__":
 
         year_range = "" if scenario == "historical" else f"_{start}_{end}"
         scenario_final = technology + wind_height + f"_{scenario}" + year_range
-        breakpoint()
+
         filename = f"{technology}_gen_cf_{year}{wind_height}_aggregated.nc"
 
         # Download and load profile from zenodo, or pull from local if already downloaded
