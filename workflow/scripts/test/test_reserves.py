@@ -15,6 +15,7 @@ from pypsa.descriptors import (
 )
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
+from opts._helpers import get_region_buses
 from opts.reserves import add_ERM_constraints, store_ERM_duals
 
 
@@ -114,12 +115,12 @@ def test_erm_constraint_binding(reserve_margin_network, erm_config):
         .T
     )
 
-    line_contribution = n.lines_t.s_reserves
+    line_contribution = n.lines_t["s_RESERVES"]
     injection_b0 = -1 * line_contribution.T.groupby(n.lines.bus0).sum().T
     injection_b1 = line_contribution.T.groupby(n.lines.bus1).sum().T
     line_injections = injection_b0.add(injection_b1, fill_value=0)
 
-    link_contribution = n.links_t.p_reserves
+    link_contribution = n.links_t["p_RESERVES"]
     injection_b0 = -1 * link_contribution.T.groupby(n.links.bus0).sum().T
     injection_b1 = link_contribution.T.groupby(n.links.bus1).sum().T
     link_injections = injection_b0.add(injection_b1, fill_value=0)
@@ -130,9 +131,10 @@ def test_erm_constraint_binding(reserve_margin_network, erm_config):
         .add(link_injections, fill_value=0)
     )
 
-    assert all(
-        nodal_reserve_capacity - nodal_reserve_requirement >= -0.1,
-    ), "Nodal reserve capacity should be at least as large as the nodal reserve requirement"
+    # breakpoint()
+    assert (nodal_reserve_capacity - nodal_reserve_requirement >= -0.1).all().all(), (
+        "Nodal reserve capacity should be at least as large as the nodal reserve requirement"
+    )
 
 
 def test_multiple_non_overlapping_erms(reserve_margin_network, erm_non_overlapping_config):
@@ -160,7 +162,8 @@ def test_multiple_non_overlapping_erms(reserve_margin_network, erm_non_overlappi
     # Check that ERM constraints are satisfied for each region separately
     for _, erm in test_data.iterrows():
         # Get buses for this specific region
-        region_buses = n.buses[n.buses.region == erm.region]
+        region_list = [region_.strip() for region_ in erm.region.split(",")]
+        region_buses = get_region_buses(n, region_list)
 
         if region_buses.empty:
             continue
@@ -234,9 +237,9 @@ def test_multiple_non_overlapping_erms(reserve_margin_network, erm_non_overlappi
         )
 
         # Check that reserve capacity meets requirement for this region
-        assert all(
-            nodal_reserve_capacity - nodal_reserve_requirement >= -0.1,
-        ), f"Regional reserve capacity for {erm.region} should be at least as large as the regional reserve requirement"
+        assert (nodal_reserve_capacity - nodal_reserve_requirement >= -0.1).all().all(), (
+            f"Regional reserve capacity for {erm.region} should be at least as large as the regional reserve requirement"
+        )
 
     # Verify that ERM duals are stored correctly
     assert hasattr(n.buses_t, "erm_price"), "ERM dual prices should be stored in n.buses_t.erm_price"

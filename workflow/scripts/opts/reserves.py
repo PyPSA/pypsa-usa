@@ -453,13 +453,13 @@ def add_ERM_constraints(n, config=None, snakemake=None, regional_prm_data=None):
         # Skip if no valid planning horizon or region
         if erm.planning_horizon not in n.investment_periods:
             continue
-
         region_list = [region_.strip() for region_ in erm.region.split(",")]
         region_buses = get_region_buses(n, region_list)
 
         if region_buses.empty:
             continue
         logger.info(f"Adding ERM constraint for {erm.name} in {erm.planning_horizon}, with reserve level {erm.prm}")
+        erm.prm = 0.5
 
         # Create model variables to track storage contributions (only once)
         c = "StorageUnit"
@@ -596,6 +596,7 @@ def store_ERM_duals(n):
             # Store mean ERM price as time series for each bus
             # Automatically detect the ERM global constraint name
             global_constraint_columns = [col for col in erm_dual.to_dataframe().columns if col.endswith("_ERM")]
+
             if not global_constraint_columns:
                 raise ValueError("No ERM global constraint dual found in model results.")
             erm_col = global_constraint_columns[0]
@@ -605,22 +606,22 @@ def store_ERM_duals(n):
             erm_dual_df.columns = erm_dual_df.columns.get_level_values(1)
             n.buses_t["erm_price"].update(erm_dual_df)
 
-        if "StorageUnit-p_dispatch_RESERVES" in model.solution:
-            n.storage_units_t["p_dispatch_reserves"] = model.solution["StorageUnit-p_dispatch_RESERVES"].to_pandas()
+        # if "StorageUnit-p_dispatch_RESERVES" in model.solution:
+        #     n.storage_units_t["p_dispatch_reserves"] = model.solution["StorageUnit-p_dispatch_RESERVES"].to_pandas()
 
-        # Get the reserve storage for storage units
-        if "StorageUnit-p_store_RESERVES" in model.solution:
-            n.storage_units_t["p_store_reserves"] = model.solution["StorageUnit-p_store_RESERVES"].to_pandas()
+        # # Get the reserve storage for storage units
+        # if "StorageUnit-p_store_RESERVES" in model.solution:
+        #     n.storage_units_t["p_store_reserves"] = model.solution["StorageUnit-p_store_RESERVES"].to_pandas()
 
-        # Get the state of charge for reserve operation
-        if "StorageUnit-state_of_charge_RESERVES" in model.solution:
-            n.storage_units_t["state_of_charge_reserves"] = model.solution[
-                "StorageUnit-state_of_charge_RESERVES"
-            ].to_pandas()
+        # # Get the state of charge for reserve operation
+        # if "StorageUnit-state_of_charge_RESERVES" in model.solution:
+        #     n.storage_units_t["state_of_charge_reserves"] = model.solution[
+        #         "StorageUnit-state_of_charge_RESERVES"
+        #     ].to_pandas()
 
-        # Get the line flow reserves
-        if "Line-s_RESERVES" in model.solution:
-            n.lines_t["s_reserves"] = model.solution["Line-s_RESERVES"].to_pandas()
+        # # Get the line flow reserves
+        # if "Line-s_RESERVES" in model.solution:
+        #     n.lines_t["s_reserves"] = model.solution["Line-s_RESERVES"].to_pandas()
 
-        if "Link-p_RESERVES" in model.solution:
-            n.links_t["p_reserves"] = model.solution["Link-p_RESERVES"].to_pandas()
+        # if "Link-p_RESERVES" in model.solution:
+        #     n.links_t["p_reserves"] = model.solution["Link-p_RESERVES"].to_pandas()
