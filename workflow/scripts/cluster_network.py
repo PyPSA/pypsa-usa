@@ -840,7 +840,7 @@ def calibrate_tamu_transmission_capacity(
                 "capital_cost": new_capital_cost,
                 "interconnect": line_interconnect,
                 "num_parallel": 1,
-            }
+            },
         )
 
         matched_reeds_interfaces.add(interface_key)
