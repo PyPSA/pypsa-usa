@@ -587,13 +587,13 @@ def plot_busmap(n, busmap, fn=None):
 
 
 def calibrate_tamu_transmission_capacity(
-        clustering,
-        reeds_capacity_file,
-        topological_boundaries,
-        s_max_pu,
-        length_factor,
-        costs,
-        use_original_region=False,
+    clustering,
+    reeds_capacity_file,
+    topological_boundaries,
+    s_max_pu,
+    length_factor,
+    costs,
+    use_original_region=False,
 ):
     """
     Apply REEDS transmission capacity data to correct the aggregated TAMU network.
@@ -626,8 +626,8 @@ def calibrate_tamu_transmission_capacity(
 
     # Create mapping from interface to maximum capacity
     # Use the larger value between forward and reverse divided by s_max_pu as new s_nom
-    reeds_data['max_capacity_mw'] = np.maximum(reeds_data['mw_f0'], reeds_data['mw_r0'])
-    reeds_data['new_s_nom'] = reeds_data['max_capacity_mw'] / s_max_pu
+    reeds_data["max_capacity_mw"] = np.maximum(reeds_data["mw_f0"], reeds_data["mw_r0"])
+    reeds_data["new_s_nom"] = reeds_data["max_capacity_mw"] / s_max_pu
 
     # Create bidirectional mapping from region pairs to new s_nom and original data
     reeds_capacity_map = {}
@@ -635,8 +635,8 @@ def calibrate_tamu_transmission_capacity(
     for _, row in reeds_data.iterrows():
         key1 = f"{row['r']}-{row['rr']}"
         key2 = f"{row['rr']}-{row['r']}"
-        reeds_capacity_map[key1] = row['new_s_nom']
-        reeds_capacity_map[key2] = row['new_s_nom']
+        reeds_capacity_map[key1] = row["new_s_nom"]
+        reeds_capacity_map[key2] = row["new_s_nom"]
         reeds_interface_data[key1] = row
         reeds_interface_data[key2] = row
 
@@ -652,22 +652,22 @@ def calibrate_tamu_transmission_capacity(
     region_to_bus = {}
     for bus_id, bus in clustering.network.buses.iterrows():
         if use_original_region:
-            region_field = f'original_{topological_boundaries}'
+            region_field = f"original_{topological_boundaries}"
             if region_field in bus.index:
                 region = bus[region_field]
             else:
-                region = bus.get(topological_boundaries, bus.get('country', ''))
+                region = bus.get(topological_boundaries, bus.get("country", ""))
         else:
             if topological_boundaries == "state":
-                region = bus.get('reeds_state', bus.get('country', ''))
+                region = bus.get("reeds_state", bus.get("country", ""))
             elif topological_boundaries == "reeds_zone":
-                region = bus.get('reeds_zone', bus.get('country', ''))
+                region = bus.get("reeds_zone", bus.get("country", ""))
             elif topological_boundaries == "county":
-                region = bus.get('county', bus.get('country', ''))
+                region = bus.get("county", bus.get("country", ""))
             else:
-                region = bus.get('country', '')
+                region = bus.get("country", "")
 
-        if region and region != 'na':
+        if region and region != "na":
             if region not in region_to_bus:
                 region_to_bus[region] = []
             region_to_bus[region].append(bus_id)
@@ -680,28 +680,28 @@ def calibrate_tamu_transmission_capacity(
 
         # Determine which field to use for region identification
         if use_original_region:
-            region_field = f'original_{topological_boundaries}'
+            region_field = f"original_{topological_boundaries}"
             if region_field in bus0.index and region_field in bus1.index:
                 region0 = bus0[region_field]
                 region1 = bus1[region_field]
             else:
                 logger.warning(f"Original region field '{region_field}' not found, using current region")
-                region0 = bus0.get(topological_boundaries, bus0.get('country', ''))
-                region1 = bus1.get(topological_boundaries, bus1.get('country', ''))
+                region0 = bus0.get(topological_boundaries, bus0.get("country", ""))
+                region1 = bus1.get(topological_boundaries, bus1.get("country", ""))
         else:
             # Use current region assignment based on topological_boundaries
             if topological_boundaries == "state":
-                region0 = bus0.get('reeds_state', bus0.get('country', ''))
-                region1 = bus1.get('reeds_state', bus1.get('country', ''))
+                region0 = bus0.get("reeds_state", bus0.get("country", ""))
+                region1 = bus1.get("reeds_state", bus1.get("country", ""))
             elif topological_boundaries == "reeds_zone":
-                region0 = bus0.get('reeds_zone', bus0.get('country', ''))
-                region1 = bus1.get('reeds_zone', bus1.get('country', ''))
+                region0 = bus0.get("reeds_zone", bus0.get("country", ""))
+                region1 = bus1.get("reeds_zone", bus1.get("country", ""))
             elif topological_boundaries == "county":
-                region0 = bus0.get('county', bus0.get('country', ''))
-                region1 = bus1.get('county', bus1.get('country', ''))
+                region0 = bus0.get("county", bus0.get("country", ""))
+                region1 = bus1.get("county", bus1.get("country", ""))
             else:
-                region0 = bus0.get('country', '')
-                region1 = bus1.get('country', '')
+                region0 = bus0.get("country", "")
+                region1 = bus1.get("country", "")
 
         line_key = f"{region0}-{region1}"
 
@@ -711,25 +711,25 @@ def calibrate_tamu_transmission_capacity(
             matched_reeds_interfaces.add(f"{region1}-{region0}")  # Add reverse direction
 
             # Update line parameters based on REEDS capacity
-            old_s_nom = line['s_nom'] if line['s_nom'] > 0 else 1.0  # Avoid division by zero
+            old_s_nom = line["s_nom"] if line["s_nom"] > 0 else 1.0  # Avoid division by zero
             new_s_nom = reeds_capacity_map[line_key]
             capacity_ratio = new_s_nom / old_s_nom
 
             # Update s_nom
-            clustering.network.lines.loc[line_idx, 's_nom'] = new_s_nom
+            clustering.network.lines.loc[line_idx, "s_nom"] = new_s_nom
 
             # Update electrical parameters based on power system principles
             if capacity_ratio != 1.0:
                 # r (resistance) and x (reactance) are inversely proportional to capacity
                 # (capacity increase through increased conductor cross-section)
-                if line['r'] > 0:
-                    clustering.network.lines.loc[line_idx, 'r'] = line['r'] / capacity_ratio
-                if line['x'] > 0:
-                    clustering.network.lines.loc[line_idx, 'x'] = line['x'] / capacity_ratio
+                if line["r"] > 0:
+                    clustering.network.lines.loc[line_idx, "r"] = line["r"] / capacity_ratio
+                if line["x"] > 0:
+                    clustering.network.lines.loc[line_idx, "x"] = line["x"] / capacity_ratio
 
                 # b (susceptance) and g (conductance) are proportional to capacity
-                clustering.network.lines.loc[line_idx, 'b'] = line['b'] * capacity_ratio
-                clustering.network.lines.loc[line_idx, 'g'] = line['g'] * capacity_ratio
+                clustering.network.lines.loc[line_idx, "b"] = line["b"] * capacity_ratio
+                clustering.network.lines.loc[line_idx, "g"] = line["g"] * capacity_ratio
 
                 lines_updated += 1
         else:
@@ -742,7 +742,7 @@ def calibrate_tamu_transmission_capacity(
 
     logger.info(
         f"REEDS capacity corrections completed: {lines_updated} lines updated with REEDS data, "
-        f"{len(lines_not_in_reeds)} lines removed (not in REEDS data)"
+        f"{len(lines_not_in_reeds)} lines removed (not in REEDS data)",
     )
 
     # Calculate average line parameters per unit length and capacity from existing lines
@@ -750,11 +750,11 @@ def calibrate_tamu_transmission_capacity(
     existing_lines = clustering.network.lines
     # Calculate per-unit parameters: parameter / (length * s_nom)
     # For r and x: Ohm = (Ohm*km*MW) / (km * MW)
-    avg_r_per_length_capacity = (existing_lines['r'] / existing_lines['length'] * existing_lines['s_nom']).mean()
-    avg_x_per_length_capacity = (existing_lines['x'] / existing_lines['length'] * existing_lines['s_nom']).mean()
+    avg_r_per_length_capacity = (existing_lines["r"] / existing_lines["length"] * existing_lines["s_nom"]).mean()
+    avg_x_per_length_capacity = (existing_lines["x"] / existing_lines["length"] * existing_lines["s_nom"]).mean()
     # For b and g: S = (S*MW) / (km * MW)
-    avg_b_per_length_capacity = (existing_lines['b'] * existing_lines['s_nom'] / existing_lines['length']).mean()
-    avg_g_per_length_capacity = (existing_lines['g'] * existing_lines['s_nom'] / existing_lines['length']).mean()
+    avg_b_per_length_capacity = (existing_lines["b"] * existing_lines["s_nom"] / existing_lines["length"]).mean()
+    avg_g_per_length_capacity = (existing_lines["g"] * existing_lines["s_nom"] / existing_lines["length"]).mean()
 
     # Find REEDS interfaces that are not matched by existing TAMU lines
     # Collect all new lines to add in batch
@@ -765,8 +765,8 @@ def calibrate_tamu_transmission_capacity(
         if interface_key in matched_reeds_interfaces:
             continue
 
-        region0 = interface_row['r']
-        region1 = interface_row['rr']
+        region0 = interface_row["r"]
+        region1 = interface_row["rr"]
 
         # Skip if we already processed the reverse direction
         reverse_key = f"{region1}-{region0}"
@@ -788,12 +788,12 @@ def calibrate_tamu_transmission_capacity(
         bus1 = clustering.network.buses.loc[bus1_id]
 
         # Calculate distance using PyPSA's haversine function
-        bus0_coords = pd.DataFrame([[bus0['x'], bus0['y']]], columns=['x', 'y'])
-        bus1_coords = pd.DataFrame([[bus1['x'], bus1['y']]], columns=['x', 'y'])
+        bus0_coords = pd.DataFrame([[bus0["x"], bus0["y"]]], columns=["x", "y"])
+        bus1_coords = pd.DataFrame([[bus1["x"], bus1["y"]]], columns=["x", "y"])
         distance_km = pypsa.geo.haversine_pts(bus0_coords, bus1_coords)[0] * length_factor
 
         # Get capacity from REEDS data
-        new_s_nom = interface_row['new_s_nom']
+        new_s_nom = interface_row["new_s_nom"]
         if new_s_nom == 0:
             continue
 
@@ -810,11 +810,11 @@ def calibrate_tamu_transmission_capacity(
         line_name = f"REEDS_{region0}_{region1}"
 
         # Get v_nom from bus, handle NaN properly
-        v_nom_value = bus0['v_nom'] if pd.notna(bus0['v_nom']) else 230.0
+        v_nom_value = bus0["v_nom"] if pd.notna(bus0["v_nom"]) else 230.0
 
         # Get interconnect, handle NaN properly
-        bus0_interconnect = bus0['interconnect'] if pd.notna(bus0.get('interconnect')) else 'NaN'
-        bus1_interconnect = bus1['interconnect'] if pd.notna(bus1.get('interconnect')) else 'NaN'
+        bus0_interconnect = bus0["interconnect"] if pd.notna(bus0.get("interconnect")) else "NaN"
+        bus1_interconnect = bus1["interconnect"] if pd.notna(bus1.get("interconnect")) else "NaN"
 
         if bus0_interconnect == bus1_interconnect:
             line_interconnect = bus0_interconnect
@@ -822,24 +822,26 @@ def calibrate_tamu_transmission_capacity(
             line_interconnect = "NaN"
 
         # Collect line data
-        new_lines_data.append({
-            'name': line_name,
-            'bus0': bus0_id,
-            'bus1': bus1_id,
-            'v_nom': v_nom_value,
-            'carrier': 'AC',
-            'underwater_fraction': 0.0,
-            's_nom': new_s_nom,
-            's_nom_extendable': False,
-            'length': distance_km,
-            'r': new_r,
-            'x': new_x,
-            'b': new_b,
-            'g': new_g,
-            'capital_cost': new_capital_cost,
-            'interconnect': line_interconnect,
-            'num_parallel': 1,
-        })
+        new_lines_data.append(
+            {
+                "name": line_name,
+                "bus0": bus0_id,
+                "bus1": bus1_id,
+                "v_nom": v_nom_value,
+                "carrier": "AC",
+                "underwater_fraction": 0.0,
+                "s_nom": new_s_nom,
+                "s_nom_extendable": False,
+                "length": distance_km,
+                "r": new_r,
+                "x": new_x,
+                "b": new_b,
+                "g": new_g,
+                "capital_cost": new_capital_cost,
+                "interconnect": line_interconnect,
+                "num_parallel": 1,
+            }
+        )
 
         matched_reeds_interfaces.add(interface_key)
         matched_reeds_interfaces.add(reverse_key)
@@ -849,26 +851,26 @@ def calibrate_tamu_transmission_capacity(
         new_lines_df = pd.DataFrame(new_lines_data)
         clustering.network.madd(
             "Line",
-            names=new_lines_df['name'],
-            bus0=new_lines_df['bus0'].values,
-            bus1=new_lines_df['bus1'].values,
-            v_nom=new_lines_df['v_nom'].values,
-            carrier=new_lines_df['carrier'].values,
-            underwater_fraction=new_lines_df['underwater_fraction'].values,
-            s_nom=new_lines_df['s_nom'].values,
-            s_nom_extendable=new_lines_df['s_nom_extendable'].values,
-            length=new_lines_df['length'].values,
-            r=new_lines_df['r'].values,
-            x=new_lines_df['x'].values,
-            b=new_lines_df['b'].values,
-            g=new_lines_df['g'].values,
-            capital_cost=new_lines_df['capital_cost'].values,
-            interconnect=new_lines_df['interconnect'].values,
-            num_parallel=new_lines_df['num_parallel'].values,
+            names=new_lines_df["name"],
+            bus0=new_lines_df["bus0"].values,
+            bus1=new_lines_df["bus1"].values,
+            v_nom=new_lines_df["v_nom"].values,
+            carrier=new_lines_df["carrier"].values,
+            underwater_fraction=new_lines_df["underwater_fraction"].values,
+            s_nom=new_lines_df["s_nom"].values,
+            s_nom_extendable=new_lines_df["s_nom_extendable"].values,
+            length=new_lines_df["length"].values,
+            r=new_lines_df["r"].values,
+            x=new_lines_df["x"].values,
+            b=new_lines_df["b"].values,
+            g=new_lines_df["g"].values,
+            capital_cost=new_lines_df["capital_cost"].values,
+            interconnect=new_lines_df["interconnect"].values,
+            num_parallel=new_lines_df["num_parallel"].values,
         )
 
     logger.info(
-        f"Added {len(new_lines_data)} missing lines from REEDS data that were not present in TAMU network"
+        f"Added {len(new_lines_data)} missing lines from REEDS data that were not present in TAMU network",
     )
 
 
@@ -1018,7 +1020,7 @@ if __name__ == "__main__":
                 assert len(topology_aggregation) == 1, "topology_aggregation must contain exactly one key."
 
                 # Save original region info before aggregation for later REEDS capacity correction
-                n.buses[f'original_{topological_boundaries}'] = n.buses[topological_boundaries].copy()
+                n.buses[f"original_{topological_boundaries}"] = n.buses[topological_boundaries].copy()
 
                 # Extract the single key and value
                 key, value = next(iter(topology_aggregation.items()))
@@ -1104,16 +1106,16 @@ if __name__ == "__main__":
             case _:
                 raise ValueError(
                     f"Unknown topological_boundaries: {topological_boundaries}. "
-                    f"Valid values are 'state', 'reeds_zone', 'county'"
+                    f"Valid values are 'state', 'reeds_zone', 'county'",
                 )
 
         # Get s_max_pu from config
-        s_max_pu = params.get('s_max_pu', 0.7)  # Default to 0.7 if not specified
+        s_max_pu = params.get("s_max_pu", 0.7)  # Default to 0.7 if not specified
 
         # Check if topology_aggregation was used (original region info saved)
         use_original_region = False
-        if hasattr(clustering.network.buses, 'columns'):
-            use_original_region = f'original_{topological_boundaries}' in clustering.network.buses.columns
+        if hasattr(clustering.network.buses, "columns"):
+            use_original_region = f"original_{topological_boundaries}" in clustering.network.buses.columns
 
         # Apply corrections
         calibrate_tamu_transmission_capacity(
