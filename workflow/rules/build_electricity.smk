@@ -706,6 +706,7 @@ rule cluster_network:
             "model_topology", "topological_boundaries"
         ),
         topology_aggregation=config_provider("model_topology", "aggregate"),
+        s_max_pu=config_provider("lines","s_max_pu",default=0.7),
     input:
         network=RESOURCES + "{interconnect}/elec_s{simpl}.nc",
         regions_onshore=RESOURCES
