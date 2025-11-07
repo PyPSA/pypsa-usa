@@ -105,6 +105,8 @@ def aggregate_to_substations(
         bus_strategies={
             "type": "max",
             "Pd": "sum",
+            "LAF": "sum",
+            "LAF_state": "sum",
         },
         generator_strategies=generator_strategies,
     )
@@ -142,11 +144,16 @@ def aggregate_to_substations(
 
     network_s = clustering.network
 
+    logger.info(f"After aggregation to substations, bus columns: {network_s.buses.columns.tolist()}")
+
     network_s.buses["interconnect"] = substations.interconnect
     network_s.buses["x"] = substations.x
     network_s.buses["y"] = substations.y
     network_s.buses["substation_lv"] = True
     network_s.buses["country"] = zone  # country field used bc pypsa algo aggregates based on country field
+
+    logger.info(f"After setting country column, bus columns: {network_s.buses.columns.tolist()}")
+    logger.info(f"Sample country values: {network_s.buses['country'].head()}")
 
     network_s.lines["type"] = np.nan
 
@@ -155,7 +162,7 @@ def aggregate_to_substations(
             "balancing_area",
             "substation_off",
             "sub_id",
-            "state",
+            # "state",
         ]
     elif topological_boundaries == "state":
         cols2drop = [
@@ -168,12 +175,12 @@ def aggregate_to_substations(
             "nerc_reg",
             "trans_reg",
             "trans_grp",
-            "state",
+            # "state",
         ]
     else:
         cols2drop = [
             "balancing_area",
-            "state",
+            # "state",
             "substation_off",
             "sub_id",
             "reeds_zone",
@@ -186,7 +193,9 @@ def aggregate_to_substations(
 
     # Only drop columns that exist in the DataFrame
     cols2drop = [col for col in cols2drop if col in network_s.buses.columns]
+    logger.info(f"Columns to drop: {cols2drop}")
     network_s.buses = network_s.buses.drop(columns=cols2drop)
+    logger.info(f"After dropping columns, bus columns: {network_s.buses.columns.tolist()}")
     return network_s, clustering.busmap
 
 
@@ -228,12 +237,7 @@ if __name__ == "__main__":
 
     topological_boundaries = snakemake.params.topological_boundaries
 
-    # n = pypsa.Network(snakemake.input.network)
-    n = pickle.load(open(snakemake.input.network, "rb"))
-
-    n.generators = n.generators.drop(
-        columns=["ba_eia"],
-    )  # temp added these columns and need to drop for workflow
+    n = pypsa.Network(snakemake.input.network)
 
     n = convert_to_voltage_level(n, 230)
     n, trafo_map = remove_transformers(n)
@@ -249,7 +253,9 @@ if __name__ == "__main__":
     n = assign_line_lengths(n, 1.25)  # Eventually replace with GIS analysis.
     n.links["underwater_fraction"] = 0
 
-    n.buses.drop(columns=["substation_off"], inplace=True)
+    # Drop substation_off column but keep LAF columns for demand disaggregation
+    cols_to_drop = ["substation_off"]
+    n.buses.drop(columns=[col for col in cols_to_drop if col in n.buses.columns], inplace=True)
 
     n, busmap = aggregate_to_substations(
         n,
@@ -259,31 +265,22 @@ if __name__ == "__main__":
         params.aggregation_strategies,
     )
 
+    logger.info(f"After aggregate_to_substations, bus columns: {n.buses.columns.tolist()}")
+    logger.info(f"'country' in columns: {'country' in n.buses.columns}")
+
     if topological_boundaries in ["reeds_zone", "state"] and "county" in n.buses.columns:
         n.buses = n.buses.drop(columns=["county"])
 
     if snakemake.wildcards.simpl:
-        n.set_investment_periods(periods=snakemake.params.planning_horizons)
+        logger.info(f"Before clustering_for_n_clusters, bus columns: {n.buses.columns.tolist()}")
 
-        n.loads_t.p = n.loads_t.p.iloc[:, 0:0]
-        n.loads_t.q = n.loads_t.q.iloc[:, 0:0]
-        attr = [
-            "p",
-            "q",
-            "state_of_charge",
-            "mu_state_of_charge_set",
-            "mu_energy_balance",
-            "mu_lower",
-            "mu_upper",
-            "spill",
-            "p_dispatch",
-            "p_store",
-        ]
-        for attr in attr:
-            n.storage_units_t[attr] = n.storage_units_t[attr].iloc[:, 0:0]
-
-        # Patch for bug where pypsa io clustering will add incorrect build_years for new gens
-        n.generators.build_year += 0.001
+        # Set up aggregation strategies including bus strategies for LAF columns
+        aggregation_strategies = params.aggregation_strategies.copy()
+        aggregation_strategies["buses"] = {
+            "Pd": "sum",
+            "LAF": "sum",
+            "LAF_state": "sum",
+        }
 
         clustering = clustering_for_n_clusters(
             n,
@@ -292,10 +289,13 @@ if __name__ == "__main__":
             solver_name=solver_name,
             algorithm=params.simplify_network["algorithm"],
             feature=params.simplify_network["feature"],
-            aggregation_strategies=params.aggregation_strategies,
+            aggregation_strategies=aggregation_strategies,
             weighting_strategy=params.simplify_network.get("weighting_strategy", None),
         )
         n = clustering.network
+
+        logger.info(f"After clustering_for_n_clusters, bus columns: {n.buses.columns.tolist()}")
+        logger.info(f"'country' in columns: {'country' in n.buses.columns}")
 
         cluster_regions((clustering.busmap,), snakemake.input, snakemake.output)
     else:
@@ -304,5 +304,8 @@ if __name__ == "__main__":
             regions.to_file(getattr(snakemake.output, which))
 
     update_p_nom_max(n)
+
+    logger.info(f"Before export, bus columns: {n.buses.columns.tolist()}")
+    logger.info(f"'country' in columns: {'country' in n.buses.columns}")
 
     n.export_to_netcdf(snakemake.output[0])

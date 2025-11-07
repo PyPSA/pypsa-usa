@@ -347,7 +347,10 @@ def clustering_for_n_clusters(
     line_strategies = aggregation_strategies.get("lines", dict())
     generator_strategies = aggregation_strategies.get("generators", dict())
     one_port_strategies = aggregation_strategies.get("one_ports", dict())
-    bus_strategies = {"Pd": "sum"}
+    bus_strategies = aggregation_strategies.get("buses", {"Pd": "sum"})
+    # Ensure Pd is always included if not specified
+    if "Pd" not in bus_strategies:
+        bus_strategies["Pd"] = "sum"
     clustering = get_clustering_from_busmap(
         n,
         busmap,

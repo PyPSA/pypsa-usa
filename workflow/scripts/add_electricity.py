@@ -372,8 +372,9 @@ def attach_renewable_capacities_to_atlite(
             continue
 
         generators_tech = n.generators[n.generators.carrier == tech].copy()
-        generators_tech["sub_assignment"] = generators_tech.bus.map(n.buses.sub_id)
-        plants_filt["sub_assignment"] = plants_filt.bus_assignment.map(n.buses.sub_id)
+        # After simplification, buses are indexed by sub_id, so bus IS the sub_id
+        generators_tech["sub_assignment"] = generators_tech.bus
+        plants_filt["sub_assignment"] = plants_filt.bus_assignment
 
         build_year_avg = plants_filt.groupby(["sub_assignment"])[plants_filt.columns].apply(
             lambda x: pd.Series(
@@ -512,40 +513,13 @@ def attach_wind_and_solar(
 
             capital_cost = costs.at[car, "annualized_capex_fom"]
 
-            bus2sub = (
-                pd.read_csv(input_profiles.bus2sub, dtype=str)
-                .drop("interconnect", axis=1)
-                .rename(columns={"Bus": "bus_id"})
-                .drop_duplicates(subset="sub_id")
-            )
-            bus_list = ds.bus.to_dataframe("sub_id").merge(bus2sub).bus_id.astype(str).values
-            p_nom_max_bus = (
-                ds["p_nom_max"]
-                .to_dataframe()
-                .merge(bus2sub[["bus_id", "sub_id"]], left_on="bus", right_on="sub_id")
-                .set_index("bus_id")
-                .p_nom_max
-            )
-            weight_bus = (
-                ds["weight"]
-                .to_dataframe()
-                .merge(bus2sub[["bus_id", "sub_id"]], left_on="bus", right_on="sub_id")
-                .set_index("bus_id")
-                .weight
-            )
-            bus_profiles = (
-                ds["profile"]
-                .transpose("time", "bus")
-                .to_pandas()
-                .T.merge(
-                    bus2sub[["bus_id", "sub_id"]],
-                    left_on="bus",
-                    right_on="sub_id",
-                )
-                .set_index("bus_id")
-                .drop(columns="sub_id")
-                .T
-            )
+            # Renewable profiles are indexed by sub_id
+            # After simplification, network buses are also indexed by sub_id
+            # So we can use the profile bus index (sub_id) directly
+            bus_list = ds.bus.values.astype(str)
+            p_nom_max_bus = ds["p_nom_max"].to_pandas()
+            weight_bus = ds["weight"].to_pandas()
+            bus_profiles = ds["profile"].transpose("time", "bus").to_pandas().T
             bus_profiles = broadcast_investment_horizons_index(n, bus_profiles)
 
             logger.info(f"Adding {car} capacity-factor profiles to the network.")
@@ -596,23 +570,16 @@ def attach_egs(
             getattr(input_profiles, "profile_egs"),
         ) as ds_profile,
     ):
-        bus2sub = (
-            pd.read_csv(input_profiles.bus2sub, dtype=str)
-            .drop("interconnect", axis=1)
-            .rename(columns={"Bus": "bus_id"})
-        )
+        # EGS specs and profiles are indexed by sub_id
+        # After simplification, network buses are also indexed by sub_id
+        # So we can use sub_id directly
 
         # IGNORE: Remove dropna(). Rather, apply dropna when creating the original dataset
-        df_specs = pd.merge(
-            ds_specs.to_dataframe().reset_index().dropna(),
-            bus2sub,
-            on="sub_id",
-            how="left",
-        )
-        df_specs["bus_id"] = df_specs["bus_id"].astype(str)
+        df_specs = ds_specs.to_dataframe().reset_index().dropna()
+        df_specs["sub_id"] = df_specs["sub_id"].astype(str)
 
-        # bus_id must be in index for pypsa to read it
-        df_specs = df_specs.set_index("bus_id")
+        # sub_id must be in index for pypsa to read it (buses are indexed by sub_id after simplification)
+        df_specs = df_specs.set_index("sub_id")
 
         # columns must be renamed to refer to the right quantities for pypsa to read it correctly
         logger.info(f"Using {drilling_cost} EGS drilling costs.")
@@ -646,15 +613,11 @@ def attach_egs(
             efficiency = df_q["efficiency"]  # for now.
 
             # IGNORE: Remove dropna(). Rather, apply dropna when creating the original dataset
-            df_q_profile = pd.merge(
-                ds_profile.sel(Quality=q).to_dataframe().dropna().reset_index(),
-                bus2sub,
-                on="sub_id",
-                how="left",
-            )
+            df_q_profile = ds_profile.sel(Quality=q).to_dataframe().dropna().reset_index()
+            df_q_profile["sub_id"] = df_q_profile["sub_id"].astype(str)
             bus_profiles = pd.pivot_table(
                 df_q_profile,
-                columns="bus_id",
+                columns="sub_id",
                 index=["year", "Date"],
                 values="capacity_factor",
             )
@@ -921,6 +884,12 @@ def main(snakemake):
     interconnection = snakemake.wildcards["interconnect"]
 
     n = pypsa.Network(snakemake.input.base_network)
+
+    logger.info(f"Loaded network from {snakemake.input.base_network}")
+    logger.info(f"Bus columns after loading: {n.buses.columns.tolist()}")
+    logger.info(f"'country' in columns: {'country' in n.buses.columns}")
+    if 'country' in n.buses.columns:
+        logger.info(f"Sample country values: {n.buses['country'].head()}")
 
     regions_onshore = gpd.read_file(snakemake.input.regions_onshore)
     regions_offshore = gpd.read_file(snakemake.input.regions_offshore)

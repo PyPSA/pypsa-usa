@@ -49,6 +49,10 @@ if __name__ == "__main__":
     demand_files = snakemake.input.demand
     n = pypsa.Network(snakemake.input.network)
 
+    logger.info(f"Loaded network from {snakemake.input.network}")
+    logger.info(f"Bus columns after loading: {n.buses.columns.tolist()}")
+    logger.info(f"'country' in columns: {'country' in n.buses.columns}")
+
     sectors = snakemake.params.sectors
 
     # add snapshots
@@ -98,5 +102,8 @@ if __name__ == "__main__":
             df = pd.read_pickle(demand_file)
             attach_demand(n, df, carrier, suffix)
             logger.info(log_statement)
+
+    logger.info(f"Before export, bus columns: {n.buses.columns.tolist()}")
+    logger.info(f"'country' in columns: {'country' in n.buses.columns}")
 
     n.export_to_netcdf(snakemake.output.network)

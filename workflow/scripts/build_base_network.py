@@ -552,7 +552,7 @@ def main(snakemake):
     # if dissagregating based with breakthrough energy on states, the LAF must
     # be calcualted here to capture splitting of states from the interconnect
     group_sums = gdf_bus.groupby("full_state")["Pd"].transform("sum")
-    gdf_bus["LAF_state"] = gdf_bus["Pd"] / group_sums
+    gdf_bus["LAF_state"] = (gdf_bus["Pd"] / group_sums).fillna(0).astype(float)
     gdf_bus = gdf_bus.drop(columns=["full_state"])
 
     # Removing few duplicated shapes where GIS shapes were overlapping. TODO: Fix GIS shapes

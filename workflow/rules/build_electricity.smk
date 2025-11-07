@@ -334,15 +334,15 @@ rule build_electrical_demand:
         snapshots=config["snapshots"],
         pudl_path=config_provider("pudl_path"),
     input:
-        network=RESOURCES + "{interconnect}/elec_base_network.nc",
+        network=RESOURCES + "{interconnect}/elec_s{simpl}.nc",
         demand_files=demand_raw_data,
         demand_scaling_file=demand_scaling_data,
     output:
-        elec_demand=RESOURCES + "{interconnect}/demand/{end_use}_electricity.csv",
+        elec_demand=RESOURCES + "{interconnect}/demand/s{simpl}/{end_use}_electricity.csv",
     log:
-        LOGS + "{interconnect}/{end_use}_build_demand.log",
+        LOGS + "{interconnect}/s{simpl}_{end_use}_build_demand.log",
     benchmark:
-        BENCHMARKS + "{interconnect}/{end_use}_build_demand"
+        BENCHMARKS + "{interconnect}/s{simpl}_{end_use}_build_demand"
     threads: 2
     resources:
         mem_mb=lambda wildcards, input, attempt: (input.size // 100000) * attempt * 2,
@@ -362,19 +362,19 @@ rule build_service_demand:
         eia_api=config_provider("api", "eia"),
         snapshots=config_provider("snapshots"),
     input:
-        network=RESOURCES + "{interconnect}/elec_base_network.nc",
+        network=RESOURCES + "{interconnect}/elec_s{simpl}.nc",
         demand_files=demand_raw_data,
         dissagregate_files=demand_dissagregate_data,
         demand_scaling_file=demand_scaling_data,
     output:
-        electricity=RESOURCES + "{interconnect}/demand/{end_use}_electricity.pkl",
-        space_heat=RESOURCES + "{interconnect}/demand/{end_use}_space-heating.pkl",
-        water_heat=RESOURCES + "{interconnect}/demand/{end_use}_water-heating.pkl",
-        cool=RESOURCES + "{interconnect}/demand/{end_use}_cooling.pkl",
+        electricity=RESOURCES + "{interconnect}/demand/s{simpl}/{end_use}_electricity.pkl",
+        space_heat=RESOURCES + "{interconnect}/demand/s{simpl}/{end_use}_space-heating.pkl",
+        water_heat=RESOURCES + "{interconnect}/demand/s{simpl}/{end_use}_water-heating.pkl",
+        cool=RESOURCES + "{interconnect}/demand/s{simpl}/{end_use}_cooling.pkl",
     log:
-        LOGS + "{interconnect}/demand/{end_use}_build_demand.log",
+        LOGS + "{interconnect}/demand/s{simpl}_{end_use}_build_demand.log",
     benchmark:
-        BENCHMARKS + "{interconnect}/demand/{end_use}_build_demand"
+        BENCHMARKS + "{interconnect}/demand/s{simpl}_{end_use}_build_demand"
     threads: 2
     resources:
         mem_mb=lambda wildcards, input, attempt: (input.size // 70000) * attempt * 2,
@@ -392,17 +392,17 @@ rule build_industry_demand:
         snapshots=config_provider("snapshots"),
         pudl_path=config_provider("pudl_path"),
     input:
-        network=RESOURCES + "{interconnect}/elec_base_network.nc",
+        network=RESOURCES + "{interconnect}/elec_s{simpl}.nc",
         demand_files=demand_raw_data,
         dissagregate_files=demand_dissagregate_data,
         demand_scaling_file=demand_scaling_data,
     output:
-        electricity=RESOURCES + "{interconnect}/demand/{end_use}_electricity.pkl",
-        heat=RESOURCES + "{interconnect}/demand/{end_use}_heating.pkl",
+        electricity=RESOURCES + "{interconnect}/demand/s{simpl}/{end_use}_electricity.pkl",
+        heat=RESOURCES + "{interconnect}/demand/s{simpl}/{end_use}_heating.pkl",
     log:
-        LOGS + "{interconnect}/demand/{end_use}_build_demand.log",
+        LOGS + "{interconnect}/demand/s{simpl}_{end_use}_build_demand.log",
     benchmark:
-        BENCHMARKS + "{interconnect}/demand/{end_use}_build_demand"
+        BENCHMARKS + "{interconnect}/demand/s{simpl}_{end_use}_build_demand"
     threads: 2
     resources:
         mem_mb=lambda wildcards, input, attempt: (input.size // 70000) * attempt * 2,
@@ -420,19 +420,19 @@ rule build_transport_road_demand:
         eia_api=config_provider("api", "eia"),
         snapshots=config_provider("snapshots"),
     input:
-        network=RESOURCES + "{interconnect}/elec_base_network.nc",
+        network=RESOURCES + "{interconnect}/elec_s{simpl}.nc",
         demand_files=demand_raw_data,
         dissagregate_files=demand_dissagregate_data,
         demand_scaling_file=demand_scaling_data,
     output:
-        light_duty=RESOURCES + "{interconnect}/demand/{end_use}_light-duty.pkl",
-        med_duty=RESOURCES + "{interconnect}/demand/{end_use}_med-duty.pkl",
-        heavy_duty=RESOURCES + "{interconnect}/demand/{end_use}_heavy-duty.pkl",
-        bus=RESOURCES + "{interconnect}/demand/{end_use}_bus.pkl",
+        light_duty=RESOURCES + "{interconnect}/demand/s{simpl}/{end_use}_light-duty.pkl",
+        med_duty=RESOURCES + "{interconnect}/demand/s{simpl}/{end_use}_med-duty.pkl",
+        heavy_duty=RESOURCES + "{interconnect}/demand/s{simpl}/{end_use}_heavy-duty.pkl",
+        bus=RESOURCES + "{interconnect}/demand/s{simpl}/{end_use}_bus.pkl",
     log:
-        LOGS + "{interconnect}/demand/{end_use}_build_demand.log",
+        LOGS + "{interconnect}/demand/s{simpl}_{end_use}_build_demand.log",
     benchmark:
-        BENCHMARKS + "{interconnect}/demand/{end_use}_build_demand"
+        BENCHMARKS + "{interconnect}/demand/s{simpl}_{end_use}_build_demand"
     threads: 2
     resources:
         mem_mb=lambda wildcards, input, attempt: (input.size // 70000) * attempt * 2,
@@ -452,15 +452,15 @@ rule build_transport_other_demand:
         eia_api=config_provider("api", "eia"),
         snapshots=config_provider("snapshots"),
     input:
-        network=RESOURCES + "{interconnect}/elec_base_network.nc",
+        network=RESOURCES + "{interconnect}/elec_s{simpl}.nc",
         demand_files=demand_raw_data,
         dissagregate_files=demand_dissagregate_data,
     output:
-        RESOURCES + "{interconnect}/demand/{end_use}_{vehicle}.pkl",
+        RESOURCES + "{interconnect}/demand/s{simpl}/{end_use}_{vehicle}.pkl",
     log:
-        LOGS + "{interconnect}/demand/{end_use}_{vehicle}_build_demand.log",
+        LOGS + "{interconnect}/demand/s{simpl}_{end_use}_{vehicle}_build_demand.log",
     benchmark:
-        BENCHMARKS + "{interconnect}/demand/{end_use}_{vehicle}_build_demand"
+        BENCHMARKS + "{interconnect}/demand/s{simpl}_{end_use}_{vehicle}_build_demand"
     threads: 2
     resources:
         mem_mb=lambda wildcards, input, attempt: (input.size // 70000) * attempt * 2,
@@ -471,7 +471,7 @@ rule build_transport_other_demand:
 def demand_to_add(wildcards):
 
     if config["scenario"]["sector"] == "E":
-        return RESOURCES + "{interconnect}/demand/power_electricity.csv"
+        return RESOURCES + "{interconnect}/demand/s{simpl}/power_electricity.csv"
     else:
         # service demand
         services = ["residential", "commercial"]
@@ -480,27 +480,27 @@ def demand_to_add(wildcards):
         else:
             fuels = ["electricity", "cooling", "heating"]
         service_demands = [
-            RESOURCES + "{interconnect}/demand/" + service + "_" + fuel + ".pkl"
+            RESOURCES + "{interconnect}/demand/s{simpl}/" + service + "_" + fuel + ".pkl"
             for service in services
             for fuel in fuels
         ]
         # industrial demand
         fuels = ["electricity", "heating"]
         industrial_demands = [
-            RESOURCES + "{interconnect}/demand/industry_" + fuel + ".pkl"
+            RESOURCES + "{interconnect}/demand/s{simpl}/industry_" + fuel + ".pkl"
             for fuel in fuels
         ]
         # road transport demands
         vehicles = ["light-duty", "med-duty", "heavy-duty", "bus"]
         road_demand = [
-            RESOURCES + "{interconnect}/demand/transport_" + vehicle + ".pkl"
+            RESOURCES + "{interconnect}/demand/s{simpl}/transport_" + vehicle + ".pkl"
             for vehicle in vehicles
         ]
 
         # other transport demands
         vehicles = ["boat-shipping", "rail-shipping", "rail-passenger", "air"]
         non_road_demand = [
-            RESOURCES + "{interconnect}/demand/transport_" + vehicle + ".pkl"
+            RESOURCES + "{interconnect}/demand/s{simpl}/transport_" + vehicle + ".pkl"
             for vehicle in vehicles
         ]
 
@@ -513,14 +513,14 @@ rule add_demand:
         planning_horizons=config_provider("scenario", "planning_horizons"),
         snapshots=config_provider("snapshots"),
     input:
-        network=RESOURCES + "{interconnect}/elec_base_network.nc",
+        network=RESOURCES + "{interconnect}/elec_s{simpl}.nc",
         demand=demand_to_add,
     output:
-        network=RESOURCES + "{interconnect}/elec_base_network_dem.nc",
+        network=RESOURCES + "{interconnect}/elec_s{simpl}_dem.nc",
     log:
-        LOGS + "{interconnect}/add_demand.log",
+        LOGS + "{interconnect}/elec_s{simpl}_add_demand.log",
     benchmark:
-        BENCHMARKS + "{interconnect}/add_demand"
+        BENCHMARKS + "{interconnect}/elec_s{simpl}_add_demand"
     resources:
         mem_mb=lambda wildcards, input, attempt: (input.size // 70000) * attempt * 2,
         walltime=config_provider("walltime", "add_demand", default="00:50:00"),
@@ -623,13 +623,13 @@ rule add_electricity:
             f"gen_cost_mult_{Path(x).stem}": f"repo_data/locational_multipliers/{Path(x).name}"
             for x in Path("repo_data/locational_multipliers/").glob("*")
         },
-        base_network=RESOURCES + "{interconnect}/elec_base_network_dem.nc",
+        base_network=RESOURCES + "{interconnect}/elec_s{simpl}_dem.nc",
         tech_costs=RESOURCES
         + f"costs/costs_{config['scenario']['planning_horizons'][0]}.csv",
         # attach first horizon costs
-        regions_onshore=RESOURCES + "{interconnect}/Geospatial/regions_onshore.geojson",
+        regions_onshore=RESOURCES + "{interconnect}/Geospatial/regions_onshore_s{simpl}.geojson",
         regions_offshore=RESOURCES
-        + "{interconnect}/Geospatial/regions_offshore.geojson",
+        + "{interconnect}/Geospatial/regions_offshore_s{simpl}.geojson",
         reeds_shapes=RESOURCES + "{interconnect}/Geospatial/reeds_shapes.geojson",
         powerplants="resources/powerplants.csv",
         plants_breakthrough=DATA + "breakthrough_network/base_grid/plant.csv",
@@ -647,11 +647,11 @@ rule add_electricity:
             else []
         ),
     output:
-        RESOURCES + "{interconnect}/elec_base_network_l_pp.pkl",
+        RESOURCES + "{interconnect}/elec_s{simpl}_l_pp.pkl",
     log:
-        LOGS + "{interconnect}/add_electricity.log",
+        LOGS + "{interconnect}/elec_s{simpl}_add_electricity.log",
     benchmark:
-        BENCHMARKS + "{interconnect}/add_electricity"
+        BENCHMARKS + "{interconnect}/elec_s{simpl}_add_electricity"
     threads: 1
     resources:
         mem_mb=lambda wildcards, input, attempt: (input.size // 400000) * attempt * 2,
@@ -673,7 +673,7 @@ rule simplify_network:
     input:
         bus2sub=RESOURCES + "{interconnect}/bus2sub.csv",
         sub=RESOURCES + "{interconnect}/sub.csv",
-        network=RESOURCES + "{interconnect}/elec_base_network_l_pp.pkl",
+        network=RESOURCES + "{interconnect}/elec_base_network.nc",
         regions_onshore=RESOURCES + "{interconnect}/Geospatial/regions_onshore.geojson",
         regions_offshore=RESOURCES
         + "{interconnect}/Geospatial/regions_offshore.geojson",
@@ -710,7 +710,7 @@ rule cluster_network:
         ),
         topology_aggregation=config_provider("model_topology", "aggregate"),
     input:
-        network=RESOURCES + "{interconnect}/elec_s{simpl}.nc",
+        network=RESOURCES + "{interconnect}/elec_s{simpl}_l_pp.pkl",
         regions_onshore=RESOURCES
         + "{interconnect}/Geospatial/regions_onshore_s{simpl}.geojson",
         regions_offshore=RESOURCES
