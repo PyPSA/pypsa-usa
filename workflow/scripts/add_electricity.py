@@ -9,7 +9,6 @@ import logging
 import os
 
 import constants as const
-import dill as pickle
 import geopandas as gpd
 import numpy as np
 import pandas as pd
@@ -286,12 +285,12 @@ def match_plant_to_bus(n, plants):
     # Get a copy of buses and create a geometry column with GPS coordinates
     buses = n.buses.copy()
     buses["geometry"] = gpd.points_from_xy(buses["x"], buses["y"])
-
+    breakpoint()
     # First pass: Assign each plant to the nearest bus in the same reeds zone
     for zone_id in buses["reeds_zone"].unique():
         buses_in_zone = buses[buses["reeds_zone"] == zone_id]
         plants_in_zone = plants_matched[
-            (plants_matched["country"] == zone_id) & (plants_matched["bus_assignment"].isnull())
+            (plants_matched["reeds_zone"] == zone_id) & (plants_matched["bus_assignment"].isnull())
         ]
 
         # Update plants_matched with the nearest bus within the same REEDS zone
@@ -315,6 +314,7 @@ def filter_plants_by_region(
     Filters the plants dataframe to remove plants not within the onshore and
     offshore geometries.
     """
+
     plants = plants.copy()
     plants["geometry"] = gpd.points_from_xy(
         plants.longitude,
@@ -352,9 +352,39 @@ def filter_plants_by_region(
 
     plants_filt = plants_filt.drop(columns=["geometry"])
     plants_filt = plants_filt[~plants_filt.index.duplicated()]
+    breakpoint()
 
-    plants_filt[plants_filt.index.str.contains("Diablo")]
-    gdf_plants[gdf_plants.index.str.contains("Diablo")]
+    # # Add reeds_zone information by spatial join with reeds_shapes
+    # # This is needed for match_plant_to_bus which expects a 'country' column with reeds_zone
+    # plants_filt_gdf = plants_filt.copy()
+    # plants_filt_gdf["geometry"] = gpd.points_from_xy(
+    #     plants_filt_gdf.longitude,
+    #     plants_filt_gdf.latitude,
+    #     crs="EPSG:4326",
+    # )
+    # plants_filt_gdf = gpd.GeoDataFrame(plants_filt_gdf, geometry="geometry")
+    # plants_with_reeds = gpd.sjoin(
+    #     plants_filt_gdf,
+    #     reeds_shapes[["geometry", "name"]],
+    #     how="left",
+    #     predicate="intersects",
+    # )
+
+    # # # If a plant didn't get a reeds_zone from spatial join, use nearest neighbor
+    # # plants_no_reeds = plants_with_reeds[plants_with_reeds["reeds_zone"].isnull()]
+    # # if not plants_no_reeds.empty:
+    # #     plants_no_reeds_nearest = gpd.sjoin_nearest(
+    # #         plants_no_reeds[["geometry"]],
+    # #         reeds_shapes[["geometry", "reeds_zone"]],
+    # #         how="left",
+    # #     )
+    # #     plants_with_reeds.loc[plants_no_reeds.index, "reeds_zone"] = plants_no_reeds_nearest["reeds_zone"]
+
+    # # Assign reeds_zone to 'country' column for match_plant_to_bus
+    # plants_filt = plants_with_reeds.drop(columns=["geometry", "index_right"], errors="ignore")
+    # plants_filt["country"] = plants_filt["reeds_zone"]
+    # plants_filt = plants_filt[~plants_filt.index.duplicated()]
+
     return pd.DataFrame(plants_filt)
 
 
@@ -763,17 +793,6 @@ def apply_must_run_ratings(
     n.generators.loc[must_run.index, "p_min_pu"] = must_run.minimum_load_pu.round(3) * 0.95
 
 
-def clean_bus_data(n: pypsa.Network):
-    """Drops data from the network that are no longer needed in workflow."""
-    col_list = [
-        # "Pd",
-        "load_dissag",
-        "LAF",
-        "LAF_state",
-    ]
-    n.buses = n.buses.drop(columns=[col for col in col_list if col in n.buses])
-
-
 def attach_breakthrough_renewable_plants(
     n,
     fn_plants,
@@ -1064,12 +1083,10 @@ def main(snakemake):
     output_folder = os.path.dirname(snakemake.output[0]) + "/base_network"
     export_network_for_gis_mapping(n, output_folder)
 
-    clean_bus_data(n)
     sanitize_carriers(n, snakemake.config)
     n.meta = snakemake.config
 
-    # n.export_to_netcdf(snakemake.output[0])
-    pickle.dump(n, open(snakemake.output[0], "wb"))
+    n.export_to_netcdf(snakemake.output[0])
 
 
 if __name__ == "__main__":

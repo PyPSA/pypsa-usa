@@ -278,7 +278,7 @@ def busmap_for_n_clusters(
         n.determine_network_topology()
 
     def busmap_for_country(x):
-        prefix = x.name[0] + x.name[1] + " "
+        prefix = x.name[0] + "_" + x.name[1] + " "
         logger.debug(f"Determining busmap for country {prefix[:-1]}")
         if len(x) == 1:
             return pd.Series(prefix + "0", index=x.index)

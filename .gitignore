@@ -1,5 +1,6 @@
 # misc
 .vscode
+.claude/
 dconf
 .snakemake/
 *.ipynb_checkpoints

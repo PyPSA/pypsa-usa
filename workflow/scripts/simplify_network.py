@@ -4,7 +4,6 @@
 import logging
 from functools import reduce
 
-import dill as pickle
 import geopandas as gpd
 import numpy as np
 import pandas as pd
