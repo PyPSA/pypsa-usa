@@ -2351,10 +2351,24 @@ if __name__ == "__main__":
     sns = n.snapshots
 
     if demand_profile == "efs":
-        # guarantee EFS data will have a base year to scale
-        assert min(planning_horizons) in (2018, 2020, 2024, 2030, 2040, 2050)
+        # Find closest available EFS year (rounding down) for base year
+        efs_years = (2018, 2020, 2024, 2030, 2040, 2050)
+        base_year = _get_closest_efs_year(efs_years, min(planning_horizons))
+        if base_year is None:
+            logger.error(
+                f"Planning horizon {min(planning_horizons)} is before earliest EFS year {min(efs_years)}. "
+                "Cannot find base year for EFS data.",
+            )
+            sys.exit()
+        if base_year != min(planning_horizons):
+            logger.warning(
+                f"Planning horizon {min(planning_horizons)} not in EFS years. "
+                f"Using base year {base_year} for EFS data, will scale to planning horizon.",
+            )
         reader = ReadEfs(demand_files)
-        sns = n.snapshots.get_level_values(1)
+        sns = n.snapshots.get_level_values(1).map(
+            lambda x: x.replace(year=base_year),
+        )
 
     elif demand_profile == "eia":
         assert profile_year in range(2018, 2024)
