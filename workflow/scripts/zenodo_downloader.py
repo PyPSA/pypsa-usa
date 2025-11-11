@@ -40,7 +40,7 @@ class ZenodoScenarioDownloader:
             "wind_100m_rcp85cooler_2040_2059": None,
             "wind_100m_rcp85cooler_2060_2079": None,
             "wind_100m_rcp85cooler_2080_2099": None,
-            "capacities": 17373350,
+            "capacities": 17576458,
         }
 
         # Cache for record metadata to avoid repeated API calls

@@ -180,13 +180,6 @@ if __name__ == "__main__":
         duration = time.time() - start
         logger.info(f"Completed landuse availability calculation ({duration:2.2f}s)")
 
-        # fig, ax = plt.subplots()
-        # excluder.plot_shape_availability(regions, ax=ax)
-        fig, ax = plot_data(availability.sum("bus"))
-        ax.set_title(f"Availability of {snakemake.wildcards.technology} Technology")
-        plt.savefig(snakemake.output.availability)
-        plt.close(fig)
-
         area = cutout.grid.to_crs("EPSG: 5070").area / 1e6
         area = xr.DataArray(
             area.values.reshape(cutout.shape),
@@ -244,7 +237,17 @@ if __name__ == "__main__":
         renewable_sns = get_snapshots(snakemake.config["renewable_snapshots"])
         scenario = snakemake.config["renewable_scenarios"][0]
         tech = snakemake.wildcards.technology
-        year = snakemake.config["renewable_scenario_years"][0]
+        
+        # Determine year based on scenario type
+        if scenario == "historical":
+            # For historical: use renewable_weather_years
+            year = snakemake.config["renewable_weather_years"][0]
+            logger.info(f"Using historical year: {year} (from renewable_weather_years)")
+        else:
+            # For future scenarios (rcp45hotter, etc): use planning_horizon
+            year = snakemake.params.planning_horizon
+            logger.info(f"Using future scenario year: {year} (from planning_horizon wildcard)")
+        
         downloader = ZenodoScenarioDownloader()
 
         # Technology configurations for filename construction
@@ -263,11 +266,10 @@ if __name__ == "__main__":
 
         year_range = "" if scenario == "historical" else f"_{start}_{end}"
         scenario_final = technology + wind_height + f"_{scenario}" + year_range
-        breakpoint()
         filename = f"{technology}_gen_cf_{year}{wind_height}_aggregated.nc"
 
         # Download and load profile from zenodo, or pull from local if already downloaded
-        filepath = downloader.download_scenario_file(scenario_final, filename)
+        filepath = downloader.download_scenario_file(scenario_final, scenario, filename)
         profile = xr.open_dataarray(filepath).load()
 
         # filtering for appropriate time snapshot

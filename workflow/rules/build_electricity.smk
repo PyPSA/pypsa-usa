@@ -186,10 +186,9 @@ rule build_renewable_profiles:
             + "_{renewable_weather_year}"
             + ".nc",
             renewable_weather_year=config["renewable_weather_years"],
-        ),
+        ) if config["renewable"]["dataset"] == "atlite" else [],
     output:
         profile=RESOURCES + "{interconnect}/profile_{technology}.nc",
-        availability=RESULTS + "{interconnect}/land_use_availability_{technology}.png",
     log:
         LOGS + "{interconnect}/build_renewable_profile_{technology}.log",
     benchmark:

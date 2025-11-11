@@ -200,7 +200,7 @@ rule retrieve_ship_raster:
         move(input[0], output[0])
 
 
-if not config["enable"].get("build_cutout", False):
+if not config["enable"].get("build_cutout", False) and not config["renewable"]["dataset"] == "godeeep":
 
     rule retrieve_cutout:
         input:
