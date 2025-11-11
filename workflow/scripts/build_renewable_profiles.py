@@ -237,7 +237,7 @@ if __name__ == "__main__":
         renewable_sns = get_snapshots(snakemake.config["renewable_snapshots"])
         scenario = snakemake.config["renewable_scenarios"][0]
         tech = snakemake.wildcards.technology
-        
+
         # Determine year based on scenario type
         if scenario == "historical":
             # For historical: use renewable_weather_years
@@ -247,7 +247,7 @@ if __name__ == "__main__":
             # For future scenarios (rcp45hotter, etc): use planning_horizon
             year = snakemake.params.planning_horizon
             logger.info(f"Using future scenario year: {year} (from planning_horizon wildcard)")
-        
+
         downloader = ZenodoScenarioDownloader()
 
         # Technology configurations for filename construction

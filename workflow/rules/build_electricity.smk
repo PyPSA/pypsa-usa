@@ -178,15 +178,19 @@ rule build_renewable_profiles:
             if w.technology in ("onwind", "solar")
             else RESOURCES + "{interconnect}/Geospatial/regions_offshore.geojson"
         ),
-        cutout=lambda wildcards: expand(
-            "cutouts/"
-            + CDIR
-            + "usa_"
-            + config["renewable"][wildcards.technology]["cutout"]
-            + "_{renewable_weather_year}"
-            + ".nc",
-            renewable_weather_year=config["renewable_weather_years"],
-        ) if config["renewable"]["dataset"] == "atlite" else [],
+        cutout=lambda wildcards: (
+            expand(
+                "cutouts/"
+                + CDIR
+                + "usa_"
+                + config["renewable"][wildcards.technology]["cutout"]
+                + "_{renewable_weather_year}"
+                + ".nc",
+                renewable_weather_year=config["renewable_weather_years"],
+            )
+            if config["renewable"]["dataset"] == "atlite"
+            else []
+        ),
     output:
         profile=RESOURCES + "{interconnect}/profile_{technology}.nc",
     log:
