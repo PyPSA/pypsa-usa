@@ -269,7 +269,7 @@ if __name__ == "__main__":
         filename = f"{technology}_gen_cf_{year}{wind_height}_aggregated.nc"
 
         # Download and load profile from zenodo, or pull from local if already downloaded
-        filepath = downloader.download_scenario_file(scenario_final, scenario, filename)
+        filepath = downloader.download_scenario_file(scenario_final, filename)
         profile = xr.open_dataarray(filepath).load()
 
         # filtering for appropriate time snapshot
