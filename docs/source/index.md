@@ -81,4 +81,5 @@ config-sectors
 license
 changelog
 contributing
+publications
 ```
