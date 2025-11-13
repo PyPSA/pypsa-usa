@@ -79,7 +79,6 @@ config-sectors
 :hidden:
 
 license
-changelog
 contributing
 publications
 ```
