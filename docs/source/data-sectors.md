@@ -85,7 +85,7 @@ Within the transport sector, demand response is applied to the aggregation bus d
 \end{align*}
 
 (workflow-sector)=
-## Workflow
+## Sector Workflow
 
 The diagram below illustrates the workflow of PyPSA-USA Sector. Many rules overlap with the electricity sector workflow; however, several additional rules are also present.
 
