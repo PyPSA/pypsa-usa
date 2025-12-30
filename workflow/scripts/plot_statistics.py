@@ -918,9 +918,7 @@ def plot_renewable_capacity_factors(
     save: str,
     **wildcards,
 ) -> None:
-    """
-    Multi-panel capacity factor analysis for renewable technologies.
-    """
+    """Multi-panel capacity factor analysis for renewable technologies."""
     # Get renewable carriers
     renewable_carriers = ["solar", "onwind", "offwind", "offwind_floating"]
     renewable_gens = n.generators[n.generators.carrier.isin(renewable_carriers)]
@@ -1048,14 +1046,27 @@ def plot_seasonal_generation(
     **wildcards,
 ) -> None:
     """
-    Multi-panel generation analysis showing monthly patterns by technology.
+    Multi-panel generation analysis showing total monthly energy by technology.
     """
     from plot_network_maps import get_color_palette
 
-    # Get energy timeseries
-    energy_mix = get_energy_timeseries(n).mul(1e-3)  # MW -> GW
+    # Get energy timeseries (power in GW)
+    energy_mix = get_energy_timeseries(n).mul(1e-3)  # convert MW to GW
     energy_mix = energy_mix.rename(columns=n.carriers.nice_name)
     energy_positive = energy_mix.clip(lower=0)
+
+    # Get snapshot weighting (hours per snapshot) for energy calculation
+    # Use the first weighting column (typically 'generators' or 'objective')
+    if hasattr(n.snapshot_weightings, 'generators'):
+        hours_per_snapshot = n.snapshot_weightings.generators.iloc[0]
+    elif hasattr(n.snapshot_weightings, 'objective'):
+        hours_per_snapshot = n.snapshot_weightings.objective.iloc[0]
+    else:
+        # Fallback: estimate from snapshot frequency
+        hours_per_snapshot = 1.0
+        if len(n.snapshots) > 1:
+            time_diff = (n.snapshots.get_level_values(1)[1] - n.snapshots.get_level_values(1)[0])
+            hours_per_snapshot = time_diff.total_seconds() / 3600
 
     # Get top technologies by total generation
     total_gen = energy_positive.sum()
@@ -1071,7 +1082,7 @@ def plot_seasonal_generation(
 
     color_palette = get_color_palette(n)
 
-    # Create figure: rows = technologies, cols = [Monthly Pattern, Period Change]
+    # Create figure: rows = technologies, cols = [Monthly Energy, Period Change]
     fig, axs = plt.subplots(
         nrows=num_techs,
         ncols=2,
@@ -1100,29 +1111,34 @@ def plot_seasonal_generation(
                 continue
 
             gen_series = energy_positive.loc[period_sns, tech]
-            monthly_avg = gen_series.groupby(gen_series.index.get_level_values(1).month).mean()
-            monthly_by_period[period] = monthly_avg
+
+            # Calculate total monthly energy: sum of power * hours, converted to TWh
+            monthly_energy = (
+                gen_series.groupby(gen_series.index.get_level_values(1).month).sum()
+                * hours_per_snapshot / 1000  # convert to TWh
+            )
+            monthly_by_period[period] = monthly_energy
 
             if baseline_monthly is None:
-                baseline_monthly = monthly_avg
+                baseline_monthly = monthly_energy
 
-            # Plot monthly pattern - use tech color with different line styles per period
+            # Plot monthly energy - use tech color with different line styles per period
             ax_monthly.plot(
                 range(1, 13),
-                monthly_avg.values,
+                monthly_energy.values,
                 color=tech_color,
                 linestyle=line_styles[period_idx % len(line_styles)],
                 label=str(period),
-                linewidth=2.5 - (period_idx * 0.3),  # Slightly thinner for later periods
+                linewidth=2.5 - (period_idx * 0.3),
                 marker=markers[period_idx % len(markers)],
                 markersize=6,
-                alpha=0.9 - (period_idx * 0.1),  # Slightly more transparent for later periods
+                alpha=0.9 - (period_idx * 0.1),
             )
 
         # Format monthly plot
         ax_monthly.set_xticks(range(1, 13))
         ax_monthly.set_xticklabels(month_names, rotation=45, ha="right", fontsize=8)
-        ax_monthly.set_ylabel("Avg Gen [GW]")
+        ax_monthly.set_ylabel("Energy [TWh]")
         ax_monthly.set_title(f"{tech}", fontsize=11, fontweight="bold")
         ax_monthly.legend(title="Period", loc="upper right", fontsize=8)
         ax_monthly.grid(True, alpha=0.3)
@@ -1133,11 +1149,11 @@ def plot_seasonal_generation(
             x_positions = np.arange(12)
             bar_width = 0.8 / (num_periods - 1) if num_periods > 1 else 0.8
 
-            for period_idx, (period, monthly_avg) in enumerate(monthly_by_period.items()):
+            for period_idx, (period, monthly_energy) in enumerate(monthly_by_period.items()):
                 if period == n.investment_periods[0]:
                     continue  # Skip baseline
 
-                pct_change = ((monthly_avg - baseline_monthly) / baseline_monthly.replace(0, np.nan) * 100).fillna(0)
+                pct_change = ((monthly_energy - baseline_monthly) / baseline_monthly.replace(0, np.nan) * 100).fillna(0)
 
                 offset = (period_idx - 1 - (num_periods - 2) / 2) * bar_width
                 colors = ["#1a7f37" if v >= 0 else "#a3200d" for v in pct_change.values]
@@ -1167,7 +1183,7 @@ def plot_seasonal_generation(
             ax_change.set_yticks([])
 
     fig.suptitle(
-        create_title("Monthly Generation by Technology", **wildcards),
+        create_title("Monthly Energy Production by Technology [TWh]", **wildcards),
         fontsize=TITLE_SIZE,
     )
     fig.tight_layout(rect=[0, 0, 1, 0.96])
