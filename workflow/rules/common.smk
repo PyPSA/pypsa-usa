@@ -142,3 +142,27 @@ def solved_previous_horizon(w):
         + planning_horizon_p
         + ".nc"
     )
+
+def get_renewable_weather_years(wildcards):
+    # Get renewable weather years for a given horizon, with fallback
+    horizon_str = str(wildcards.get("horizon", wildcards.get("planning_horizon", None)))
+    if horizon_str:
+        horizon_years = config.get("renewable_weather_years_by_horizon", {})
+        if horizon_str in horizon_years:
+            return horizon_years[horizon_str]
+    # Fallback to flat list
+    return config.get("renewable_weather_years", [])
+
+def get_renewable_scenario_years(wildcards):
+    # Get renewable scenario years for a given horizon, with fallback 
+    horizon_str = str(wildcards.get("horizon", wildcards.get("planning_horizon", None)))
+    if horizon_str:
+        horizon_years = config.get("renewable_scenario_years_by_horizon", {})
+        if horizon_str in horizon_years:
+            return horizon_years[horizon_str]
+    # Fallback to flat list
+    flat = config.get("renewable_scenario_years")
+    if flat:
+        return flat
+    # Final fallback: mirror planning horizons
+    return config.get("scenario", {}).get("planning_horizons", [])

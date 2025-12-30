@@ -1,9 +1,7 @@
 """Download scenarios from Zenodo."""
 
 from pathlib import Path
-
 import requests
-
 
 class ZenodoScenarioDownloader:
     """Download scenarios from Zenodo."""
@@ -64,7 +62,7 @@ class ZenodoScenarioDownloader:
             print(f"Failed to get metadata for record {record_id}: {e}")
             return None
 
-    def download_scenario_file(self, scenario_name, filename, force_redownload=False):
+    def download_scenario_file(self, scenario_final, scenario, filename, force_redownload=False):
         """
         Download a specific file from a scenario dataset.
 
@@ -77,27 +75,30 @@ class ZenodoScenarioDownloader:
         force_redownload : bool, optional
             If True, re-download the file even if it exists locally. Default is False.
         """
-        # pointing file path to workflow/data/zenodo
-        (self.download_dir / "zenodo").mkdir(exist_ok=True)  # create the zenodo directory if it doesn't exist
-        local_filepath = f"{self.download_dir}/zenodo/{filename}"
+        # pointing file path to workflow/data/zenodo/{scenario_name}
+        if scenario_final == "capacities":
+            local_filepath = f"{self.download_dir}/zenodo/{filename}"
+        else:
+            (self.download_dir / "zenodo"/ scenario).mkdir(exist_ok=True)  # create the zenodo directory if it doesn't exist
+            local_filepath = f"{self.download_dir}/zenodo/{scenario}/{filename}"
 
-        # Check if file already exists
+        # Check if file already exists locally and skip Zenodo
         if Path(local_filepath).exists() and not force_redownload:
-            print(f"File {filename} already exists. Use force_redownload=True to redownload.")
+            print(f"File already exists locally: {local_filepath}. Skipping download. Use force_redownload=True to re-download.")
             return str(local_filepath)
+        # Only check record_id if we need to download
+        else:
+            record_id = self.scenario_records.get(scenario_final)
 
-        # Get the record ID for this scenario
-        record_id = self.scenario_records.get(scenario_name)
+            if not record_id:
+                print(f"No record ID found for scenario: {scenario_final}")
+                print("Available scenarios with record IDs:")
+                for scenario, rec_id in self.scenario_records.items():
+                    if rec_id is not None:
+                        print(f"  - {scenario} (ID: {rec_id})")
+                return None
 
-        if not record_id:
-            print(f"No record ID found for scenario: {scenario_name}")
-            print("Available scenarios with record IDs:")
-            for scenario, rec_id in self.scenario_records.items():
-                if rec_id is not None:
-                    print(f"  - {scenario} (ID: {rec_id})")
-            return None
-
-        return self.download_by_record_id(record_id, filename, force_redownload)
+            return self._download_file(record_id, filename, Path(local_filepath), force_redownload)
 
     def download_by_record_id(self, record_id, filename, force_redownload=False):
         """
@@ -124,6 +125,18 @@ class ZenodoScenarioDownloader:
         if Path(local_filepath).exists() and not force_redownload:
             print(f"File {filename} already exists. Use force_redownload=True to redownload.")
             return str(local_filepath)
+
+        # Only proceed with download if needed
+        return self._download_file(record_id, filename, Path(local_filepath), force_redownload)
+
+    def _download_file(self, record_id, filename, local_filepath, force_redownload=False):
+        """
+        Internal method to download a file from Zenodo.
+        
+        This is only called after confirming the file doesn't exist locally.
+        """
+        # Ensure directory exists
+        local_filepath.parent.mkdir(parents=True, exist_ok=True)
 
         # Get record metadata
         metadata = self.get_record_metadata(record_id)
@@ -224,10 +237,10 @@ class ZenodoScenarioDownloader:
         return available
 
 
-def download_scenario_file(scenario_name, filename, download_dir="./data/zenodo"):
+def download_scenario_file(scenario_final, scenario, filename, download_dir="./data/zenodo"):
     """Quick function to download a single file from a scenario."""
     downloader = ZenodoScenarioDownloader(download_dir)
-    return downloader.download_scenario_file(scenario_name, filename)
+    return downloader.download_scenario_file(scenario_final, scenario, filename)
 
 
 def download_by_record_id(record_id, filename, download_dir="./data/zenodo"):

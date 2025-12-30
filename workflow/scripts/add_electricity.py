@@ -496,76 +496,149 @@ def attach_wind_and_solar(
     input_profiles: str,
     carriers: list[str],
     extendable_carriers: dict[str, list[str]],
+    config: dict,
 ):
-    """
-    Attached Atlite Calculated wind and solar capacity factor profiles to the
-    network.
-    """
     add_missing_carriers(n, carriers)
+    
+    # Check if we're using horizon-specific profiles
+    godeeep_future = (
+        config.get("renewable", {}).get("dataset") == "godeeep" 
+        and config["renewable_scenarios"][0] != "historical"
+    )
+    
     for car in carriers:
         if car in ["hydro", "EGS"]:
             continue
 
-        with xr.open_dataset(getattr(input_profiles, "profile_" + car)) as ds:
-            if ds.indexes["bus"].empty:
-                continue
+        capital_cost = costs.at[car, "annualized_capex_fom"]
+        
+        bus2sub = (
+            pd.read_csv(input_profiles.bus2sub, dtype=str)
+            .drop("interconnect", axis=1)
+            .rename(columns={"Bus": "bus_id"})
+            .drop_duplicates(subset="sub_id")
+        )
+        
+        # For GODEEEP future scenarios, load horizon-specific profiles
+        if godeeep_future:
+            # Load horizon-specific profiles and concatenate
+            logger.info(f"Loading multi-horizon {car} profiles for planning horizons: {n.investment_periods.tolist()}")
+            
+            all_profiles = []
+            p_nom_max_bus = None
+            weight_bus = None
+            bus_list = None
+            
+            for horizon in n.investment_periods:
+                profile_attr = f"profile_{car}_{horizon}"
+                if not hasattr(input_profiles, profile_attr):
+                    raise ValueError(f"Missing profile for {car} at horizon {horizon}")
+                
+                with xr.open_dataset(getattr(input_profiles, profile_attr)) as ds:
+                    if ds.indexes["bus"].empty:
+                        continue
+                    
+                    # Get bus list
+                    if bus_list is None:
+                        bus_list = ds.bus.to_dataframe("sub_id").merge(bus2sub).bus_id.astype(str).values
+                        
+                        # Get p_nom_max and weight
+                        p_nom_max_bus = (
+                            ds["p_nom_max"]
+                            .to_dataframe()
+                            .merge(bus2sub[["bus_id", "sub_id"]], left_on="bus", right_on="sub_id")
+                            .set_index("bus_id")
+                            .p_nom_max
+                        )
+                        weight_bus = (
+                            ds["weight"]
+                            .to_dataframe()
+                            .merge(bus2sub[["bus_id", "sub_id"]], left_on="bus", right_on="sub_id")
+                            .set_index("bus_id")
+                            .weight
+                        )
+                    
+                    # Get profile for this horizon
+                    horizon_profile = (
+                        ds["profile"]
+                        .transpose("time", "bus")
+                        .to_pandas()
+                        .T.merge(
+                            bus2sub[["bus_id", "sub_id"]],
+                            left_on="bus",
+                            right_on="sub_id",
+                        )
+                        .set_index("bus_id")
+                        .drop(columns="sub_id")
+                        .T
+                    )
+                    
+                    # Update timestamps to match the horizon year
+                    horizon_profile.index = horizon_profile.index.map(lambda x: x.replace(year=int(horizon)))
+                    all_profiles.append(horizon_profile)
+            
+            # Concatenate all horizon profiles
+            bus_profiles = pd.concat(all_profiles)
+            
+            # Align with network snapshots (which should already be multi-indexed)
+            bus_profiles = bus_profiles.reindex(n.snapshots.get_level_values(1))
+            bus_profiles.index = n.snapshots
+            
+        else:
+            # Single profile
+            with xr.open_dataset(getattr(input_profiles, "profile_" + car)) as ds:
+                if ds.indexes["bus"].empty:
+                    continue
 
-            capital_cost = costs.at[car, "annualized_capex_fom"]
-
-            bus2sub = (
-                pd.read_csv(input_profiles.bus2sub, dtype=str)
-                .drop("interconnect", axis=1)
-                .rename(columns={"Bus": "bus_id"})
-                .drop_duplicates(subset="sub_id")
-            )
-            bus_list = ds.bus.to_dataframe("sub_id").merge(bus2sub).bus_id.astype(str).values
-            p_nom_max_bus = (
-                ds["p_nom_max"]
-                .to_dataframe()
-                .merge(bus2sub[["bus_id", "sub_id"]], left_on="bus", right_on="sub_id")
-                .set_index("bus_id")
-                .p_nom_max
-            )
-            weight_bus = (
-                ds["weight"]
-                .to_dataframe()
-                .merge(bus2sub[["bus_id", "sub_id"]], left_on="bus", right_on="sub_id")
-                .set_index("bus_id")
-                .weight
-            )
-            bus_profiles = (
-                ds["profile"]
-                .transpose("time", "bus")
-                .to_pandas()
-                .T.merge(
-                    bus2sub[["bus_id", "sub_id"]],
-                    left_on="bus",
-                    right_on="sub_id",
+                bus_list = ds.bus.to_dataframe("sub_id").merge(bus2sub).bus_id.astype(str).values
+                p_nom_max_bus = (
+                    ds["p_nom_max"]
+                    .to_dataframe()
+                    .merge(bus2sub[["bus_id", "sub_id"]], left_on="bus", right_on="sub_id")
+                    .set_index("bus_id")
+                    .p_nom_max
                 )
-                .set_index("bus_id")
-                .drop(columns="sub_id")
-                .T
-            )
-            bus_profiles = broadcast_investment_horizons_index(n, bus_profiles)
+                weight_bus = (
+                    ds["weight"]
+                    .to_dataframe()
+                    .merge(bus2sub[["bus_id", "sub_id"]], left_on="bus", right_on="sub_id")
+                    .set_index("bus_id")
+                    .weight
+                )
+                bus_profiles = (
+                    ds["profile"]
+                    .transpose("time", "bus")
+                    .to_pandas()
+                    .T.merge(
+                        bus2sub[["bus_id", "sub_id"]],
+                        left_on="bus",
+                        right_on="sub_id",
+                    )
+                    .set_index("bus_id")
+                    .drop(columns="sub_id")
+                    .T
+                )
+                # Broadcast single profile across all horizons
+                bus_profiles = broadcast_investment_horizons_index(n, bus_profiles)
 
-            logger.info(f"Adding {car} capacity-factor profiles to the network.")
-
-            n.madd(
-                "Generator",
-                bus_list,
-                " " + car,
-                bus=bus_list,
-                carrier=car,
-                p_nom_extendable=car in extendable_carriers["Generator"],
-                p_nom_max=p_nom_max_bus,
-                weight=weight_bus,
-                marginal_cost=costs.at[car, "marginal_cost"],
-                capital_cost=capital_cost,
-                efficiency=1,
-                build_year=n.investment_periods[0],
-                lifetime=costs.at[car, "lifetime"],
-                p_max_pu=bus_profiles,
-            )
+        logger.info(f"Adding {car} capacity-factor profiles to the network.")
+        
+        n.madd(
+            "Generator",
+            bus_list,
+            " " + car,
+            bus=bus_list,
+            carrier=car,
+            p_nom_extendable=car in extendable_carriers["Generator"],
+            p_nom_max=p_nom_max_bus,
+            weight=weight_bus,
+            marginal_cost=costs.at[car, "marginal_cost"],
+            capital_cost=capital_cost,
+            efficiency=1,
+            build_year=n.investment_periods[0],
+            lifetime=costs.at[car, "lifetime"],
+            p_max_pu=bus_profiles,
+        )
 
 
 def attach_egs(
@@ -998,6 +1071,7 @@ def main(snakemake):
         snakemake.input,
         renewable_carriers,
         extendable_carriers,
+        snakemake.config,
     )
     renewable_carriers = list(
         set(snakemake.config["electricity"]["renewable_carriers"]).intersection(
