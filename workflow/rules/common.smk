@@ -154,7 +154,7 @@ def get_renewable_weather_years(wildcards):
     return config.get("renewable_weather_years", [])
 
 def get_renewable_scenario_years(wildcards):
-    # Get renewable scenario years for a given horizon, with fallback 
+    # Get renewable scenario years for a given horizon, with fallback
     horizon_str = str(wildcards.get("horizon", wildcards.get("planning_horizon", None)))
     if horizon_str:
         horizon_years = config.get("renewable_scenario_years_by_horizon", {})

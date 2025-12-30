@@ -1,7 +1,9 @@
 """Download scenarios from Zenodo."""
 
 from pathlib import Path
+
 import requests
+
 
 class ZenodoScenarioDownloader:
     """Download scenarios from Zenodo."""
@@ -79,12 +81,16 @@ class ZenodoScenarioDownloader:
         if scenario_final == "capacities":
             local_filepath = f"{self.download_dir}/zenodo/{filename}"
         else:
-            (self.download_dir / "zenodo"/ scenario).mkdir(exist_ok=True)  # create the zenodo directory if it doesn't exist
+            (self.download_dir / "zenodo" / scenario).mkdir(
+                exist_ok=True
+            )  # create the zenodo directory if it doesn't exist
             local_filepath = f"{self.download_dir}/zenodo/{scenario}/{filename}"
 
         # Check if file already exists locally and skip Zenodo
         if Path(local_filepath).exists() and not force_redownload:
-            print(f"File already exists locally: {local_filepath}. Skipping download. Use force_redownload=True to re-download.")
+            print(
+                f"File already exists locally: {local_filepath}. Skipping download. Use force_redownload=True to re-download."
+            )
             return str(local_filepath)
         # Only check record_id if we need to download
         else:
@@ -132,7 +138,7 @@ class ZenodoScenarioDownloader:
     def _download_file(self, record_id, filename, local_filepath, force_redownload=False):
         """
         Internal method to download a file from Zenodo.
-        
+
         This is only called after confirming the file doesn't exist locally.
         """
         # Ensure directory exists

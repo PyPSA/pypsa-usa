@@ -150,7 +150,7 @@ if config["enable"].get("build_cutout", False):
 
 # Only use planning_horizon for GoDEEEP future scenarios
 godeeep_planning_horizon = (
-    config.get("renewable", {}).get("dataset") == "godeeep" 
+    config.get("renewable", {}).get("dataset") == "godeeep"
     and config["renewable_scenarios"][0] != "historical"
 )
 

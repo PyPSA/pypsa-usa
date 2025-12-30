@@ -972,13 +972,13 @@ def plot_renewable_capacity_factors(
 
             # Duration curve, sort values descending
             cf_sorted = cf_series.sort_values(ascending=False).reset_index(drop=True)
-            cf_sorted.index = cf_sorted.index / len(cf_sorted) * 100 
+            cf_sorted.index = cf_sorted.index / len(cf_sorted) * 100
 
             ax_duration.plot(
                 cf_sorted.index,
                 cf_sorted.values,
                 color=carrier_color,
-                linestyle=line_styles[period_idx % len(line_styles)], 
+                linestyle=line_styles[period_idx % len(line_styles)],
                 label=str(period),
                 linewidth=2.5 - (period_idx * 0.3),
                 alpha=0.9 - (period_idx * 0.1),
@@ -986,11 +986,13 @@ def plot_renewable_capacity_factors(
 
             # Monthly averages
             cf_monthly = cf_series.groupby(cf_series.index.get_level_values(1).month).mean()
-            monthly_data.append({
-                "period": period,
-                "monthly_cf": cf_monthly,
-                "color": carrier_color,
-            })
+            monthly_data.append(
+                {
+                    "period": period,
+                    "monthly_cf": cf_monthly,
+                    "color": carrier_color,
+                }
+            )
 
         # Format duration curve plot
         ax_duration.set_xlim(0, 100)
@@ -1003,8 +1005,20 @@ def plot_renewable_capacity_factors(
         ax_duration.axhline(y=0.5, color="gray", linestyle="--", alpha=0.5)
 
         # Format monthly plot
-        month_names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
-                       "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+        month_names = [
+            "Jan",
+            "Feb",
+            "Mar",
+            "Apr",
+            "May",
+            "Jun",
+            "Jul",
+            "Aug",
+            "Sep",
+            "Oct",
+            "Nov",
+            "Dec",
+        ]
         x_positions = np.arange(12)
         bar_width = 0.8 / num_periods
         hatch_patterns = ["", "//", "\\\\", "xx", ".."]  # Different patterns for periods
@@ -1057,15 +1071,15 @@ def plot_seasonal_generation(
 
     # Get snapshot weighting (hours per snapshot) for energy calculation
     # Use the first weighting column (typically 'generators' or 'objective')
-    if hasattr(n.snapshot_weightings, 'generators'):
+    if hasattr(n.snapshot_weightings, "generators"):
         hours_per_snapshot = n.snapshot_weightings.generators.iloc[0]
-    elif hasattr(n.snapshot_weightings, 'objective'):
+    elif hasattr(n.snapshot_weightings, "objective"):
         hours_per_snapshot = n.snapshot_weightings.objective.iloc[0]
     else:
         # Fallback: estimate from snapshot frequency
         hours_per_snapshot = 1.0
         if len(n.snapshots) > 1:
-            time_diff = (n.snapshots.get_level_values(1)[1] - n.snapshots.get_level_values(1)[0])
+            time_diff = n.snapshots.get_level_values(1)[1] - n.snapshots.get_level_values(1)[0]
             hours_per_snapshot = time_diff.total_seconds() / 3600
 
     # Get top technologies by total generation
@@ -1093,8 +1107,20 @@ def plot_seasonal_generation(
     # Line styles for different periods (use tech color, vary line style)
     line_styles = ["-", "--", ":", "-."]
     markers = ["o", "s", "^", "D", "v", "<", ">", "p"]
-    month_names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
-                   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    month_names = [
+        "Jan",
+        "Feb",
+        "Mar",
+        "Apr",
+        "May",
+        "Jun",
+        "Jul",
+        "Aug",
+        "Sep",
+        "Oct",
+        "Nov",
+        "Dec",
+    ]
 
     for row, tech in enumerate(top_techs):
         ax_monthly = axs[row, 0]
@@ -1115,7 +1141,8 @@ def plot_seasonal_generation(
             # Calculate total monthly energy: sum of power * hours, converted to TWh
             monthly_energy = (
                 gen_series.groupby(gen_series.index.get_level_values(1).month).sum()
-                * hours_per_snapshot / 1000  # convert to TWh
+                * hours_per_snapshot
+                / 1000  # convert to TWh
             )
             monthly_by_period[period] = monthly_energy
 
@@ -1177,8 +1204,15 @@ def plot_seasonal_generation(
             ax_change.legend(loc="upper right", fontsize=8)
             ax_change.grid(True, axis="y", alpha=0.3)
         else:
-            ax_change.text(0.5, 0.5, "Single period\n(no comparison)",
-                          ha="center", va="center", transform=ax_change.transAxes, fontsize=10)
+            ax_change.text(
+                0.5,
+                0.5,
+                "Single period\n(no comparison)",
+                ha="center",
+                va="center",
+                transform=ax_change.transAxes,
+                fontsize=10,
+            )
             ax_change.set_xticks([])
             ax_change.set_yticks([])
 

@@ -499,49 +499,48 @@ def attach_wind_and_solar(
     config: dict,
 ):
     add_missing_carriers(n, carriers)
-    
+
     # Check if we're using horizon-specific profiles
     godeeep_future = (
-        config.get("renewable", {}).get("dataset") == "godeeep" 
-        and config["renewable_scenarios"][0] != "historical"
+        config.get("renewable", {}).get("dataset") == "godeeep" and config["renewable_scenarios"][0] != "historical"
     )
-    
+
     for car in carriers:
         if car in ["hydro", "EGS"]:
             continue
 
         capital_cost = costs.at[car, "annualized_capex_fom"]
-        
+
         bus2sub = (
             pd.read_csv(input_profiles.bus2sub, dtype=str)
             .drop("interconnect", axis=1)
             .rename(columns={"Bus": "bus_id"})
             .drop_duplicates(subset="sub_id")
         )
-        
+
         # For GODEEEP future scenarios, load horizon-specific profiles
         if godeeep_future:
             # Load horizon-specific profiles and concatenate
             logger.info(f"Loading multi-horizon {car} profiles for planning horizons: {n.investment_periods.tolist()}")
-            
+
             all_profiles = []
             p_nom_max_bus = None
             weight_bus = None
             bus_list = None
-            
+
             for horizon in n.investment_periods:
                 profile_attr = f"profile_{car}_{horizon}"
                 if not hasattr(input_profiles, profile_attr):
                     raise ValueError(f"Missing profile for {car} at horizon {horizon}")
-                
+
                 with xr.open_dataset(getattr(input_profiles, profile_attr)) as ds:
                     if ds.indexes["bus"].empty:
                         continue
-                    
+
                     # Get bus list
                     if bus_list is None:
                         bus_list = ds.bus.to_dataframe("sub_id").merge(bus2sub).bus_id.astype(str).values
-                        
+
                         # Get p_nom_max and weight
                         p_nom_max_bus = (
                             ds["p_nom_max"]
@@ -557,7 +556,7 @@ def attach_wind_and_solar(
                             .set_index("bus_id")
                             .weight
                         )
-                    
+
                     # Get profile for this horizon
                     horizon_profile = (
                         ds["profile"]
@@ -572,18 +571,18 @@ def attach_wind_and_solar(
                         .drop(columns="sub_id")
                         .T
                     )
-                    
+
                     # Update timestamps to match the horizon year
                     horizon_profile.index = horizon_profile.index.map(lambda x: x.replace(year=int(horizon)))
                     all_profiles.append(horizon_profile)
-            
+
             # Concatenate all horizon profiles
             bus_profiles = pd.concat(all_profiles)
-            
+
             # Align with network snapshots (which should already be multi-indexed)
             bus_profiles = bus_profiles.reindex(n.snapshots.get_level_values(1))
             bus_profiles.index = n.snapshots
-            
+
         else:
             # Single profile
             with xr.open_dataset(getattr(input_profiles, "profile_" + car)) as ds:
@@ -622,7 +621,7 @@ def attach_wind_and_solar(
                 bus_profiles = broadcast_investment_horizons_index(n, bus_profiles)
 
         logger.info(f"Adding {car} capacity-factor profiles to the network.")
-        
+
         n.madd(
             "Generator",
             bus_list,

@@ -188,7 +188,7 @@ def plot_emissions_map(
     with plt.rc_context({"patch.linewidth": 0.1}):
         n.plot(
             bus_sizes=emissions / bus_scale,
-            bus_colors="k",  
+            bus_colors="k",
             bus_alpha=0.6,
             line_widths=0,
             link_widths=0,
