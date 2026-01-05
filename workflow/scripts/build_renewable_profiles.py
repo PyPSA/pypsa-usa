@@ -22,6 +22,39 @@ from zenodo_downloader import ZenodoScenarioDownloader
 logger = logging.getLogger(__name__)
 
 
+# Get renewable snapshots for a given year using month/day from config
+def get_renewable_snapshots(config, year):
+    ren_sns_config = config.get("renewable_snapshots", {})
+
+    if "start_month" in ren_sns_config:
+        start_month = ren_sns_config.get("start_month", 1)
+        start_day = ren_sns_config.get("start_day", 1)
+        end_month = ren_sns_config.get("end_month", 12)
+        end_day = ren_sns_config.get("end_day", 31)
+        end_inclusive = ren_sns_config.get("end_inclusive", False)
+
+        snapshots_config = {
+            "start": f"{year}-{start_month:02d}-{start_day:02d}",
+            "end": f"{year}-{end_month:02d}-{end_day:02d}",
+            "inclusive": "both" if end_inclusive else "left",
+        }
+        logger.info(
+            f"Using renewable snapshots for year {year}: "
+            f"{snapshots_config['start']} to {snapshots_config['end']} "
+            f"({'inclusive' if end_inclusive else 'exclusive'} end)",
+        )
+        return get_snapshots(snapshots_config)
+    else:
+        # Old format fallback
+        snapshots_config = {
+            "start": f"{year}-01-01",
+            "end": f"{year + 1}-01-01",
+            "inclusive": "left",
+        }
+        logger.info(f"Using renewable snapshots for full year {year}")
+        return get_snapshots(snapshots_config)
+
+
 def plot_data(data):
     x = data.coords["x"].values  # Longitude
     y = data.coords["y"].values  # Latitude
@@ -234,20 +267,19 @@ if __name__ == "__main__":
 
     if snakemake.params.renewable.get("dataset", False) == "godeeep":
         logger.info("Loading godeeep renewable data...")
-        renewable_sns = get_snapshots(snakemake.config["renewable_snapshots"])
         scenario = snakemake.config["renewable_scenarios"][0]
         tech = snakemake.wildcards.technology
 
         # Determine year based on scenario type
         if scenario == "historical":
-            # For historical: use renewable_weather_years
             year = snakemake.config["renewable_weather_years"][0]
             logger.info(f"Using historical year: {year} (from renewable_weather_years)")
         else:
-            # For future scenarios (rcp45hotter, etc): use planning_horizon
             year = snakemake.params.planning_horizon
             logger.info(f"Using future scenario year: {year} (from planning_horizon wildcard)")
 
+        # Get snapshots with appropriate year
+        renewable_sns = get_renewable_snapshots(snakemake.config, year)
         downloader = ZenodoScenarioDownloader()
 
         # Technology configurations for filename construction
@@ -269,18 +301,18 @@ if __name__ == "__main__":
         filename = f"{technology}_gen_cf_{year}{wind_height}_aggregated.nc"
 
         # Download and load profile from zenodo, or pull from local if already downloaded
-        filepath = downloader.download_scenario_file(scenario_final, filename)
+        filepath = downloader.download_scenario_file(scenario_final, scenario, filename)
         profile = xr.open_dataarray(filepath).load()
 
         # filtering for appropriate time snapshot
         profile = profile.sel(time=renewable_sns)
 
-        ## load in preprocessed capacity data from Zenodo
+        # load in preprocessed capacity data from Zenodo
         logger.info("Loading preprocessed data from Zenodo...")
 
         # Extract variables from the preprocessed ERA5/Atlite dataset
         logger.info(f"Pulling preprocessed data for {tech}")
-        preprocessed = xr.open_dataset(downloader.download_scenario_file("capacities", f"profile_{tech}.nc"))
+        preprocessed = xr.open_dataset(downloader.download_scenario_file("capacities", scenario, f"profile_{tech}.nc"))
         capacities = preprocessed["weight"]
         p_nom_max = preprocessed["p_nom_max"]
         potential = preprocessed["potential"]  # maybe not include this, the bus mapping is complicated

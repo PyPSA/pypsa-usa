@@ -37,20 +37,23 @@ model_topology:
 enable:
   build_cutout: false
 
-## implement wildcard for this, following interconnect example
+## For Atlite (future/historical) and GODEEEP (just historical), configure this
 renewable_weather_years: [2019]
 snapshots:
   start: "2019-01-01"
-  end: "2019-12-31"
+  end: "2020-01-01"
   inclusive: "left"
 
-## godeeep inputs for scenarios
-renewable_scenario_years: [2033]
-renewable_scenarios: ["rcp45hotter"] #["historical", "rcp45hotter", "rcp45cooler", "rcp85hotter", "rcp85cooler"]
+## For GODEEEP inputs for future scenarios, configure this
+renewable_scenarios: ["rcp85cooler"] #["historical", "rcp45hotter", "rcp45cooler", "rcp85hotter", "rcp85cooler"]
+
+# For multiple planning horizons, only specify the month and day - the year will automatically match each planning horizon (e.g., planning_horizons: [2030, 2040, 2050])
 renewable_snapshots:
-  start: "2033-01-01" ## change the year to match renewable_scenario_years
-  end: "2033-12-31"
-  inclusive: "left"
+  start_month: 1
+  start_day: 1
+  end_month: 12
+  end_day: 31
+  end_inclusive: true  # if true, includes the end day; if false, stops before end day
 
 # docs :
 electricity:
