@@ -85,8 +85,8 @@ def main(snakemake):
     bus2sub.index = bus2sub.index.astype(str)
     bus2sub = bus2sub.reset_index().drop_duplicates(subset="sub_id").set_index("sub_id")
 
-    gpd_reeds = gpd.read_file(snakemake.input.reeds_shapes).set_index("name") #reeds BA shapes
-    gpd_counties = gpd.read_file(snakemake.input.county_shapes).set_index("GEOID") #county shapes for the entire US
+    gpd_reeds = gpd.read_file(snakemake.input.reeds_shapes).set_index("name")  # reeds BA shapes
+    gpd_counties = gpd.read_file(snakemake.input.county_shapes).set_index("GEOID")  # county shapes for the entire US
     agg_region_shapes = gpd_counties.geometry
 
     gpd_offshore_shapes = gpd.read_file(snakemake.input.offshore_shapes)
@@ -143,8 +143,7 @@ def main(snakemake):
 
     # Filter all counties to only those whose centroid is within the interconnect's total footprint
     counties_in_interconnect = {
-        c for c in gpd_counties.index
-        if gpd_counties.loc[c, "geometry"].centroid.within(combined_bus_regions)
+        c for c in gpd_counties.index if gpd_counties.loc[c, "geometry"].centroid.within(combined_bus_regions)
     }
 
     # Find which of those counties don't have buses
@@ -153,7 +152,7 @@ def main(snakemake):
 
     logger.info(
         f"Interconnect footprint contains {len(counties_in_interconnect)} counties, "
-        f"{len(counties_with_buses)} have buses, {len(empty_counties)} are empty."
+        f"{len(counties_with_buses)} have buses, {len(empty_counties)} are empty.",
     )
 
     if empty_counties:
@@ -175,13 +174,15 @@ def main(snakemake):
             nearest_sub = sub_locs.iloc[idx[0][0]]
 
             # create entry with nearest bus's sub_id as name, but county's own geometry
-            empty_region_rows.append({
-                "name": nearest_sub["name"],  # assign empty county to nearest bus
-                "x": centroid.x,
-                "y": centroid.y,
-                "geometry": county_geom,  # keep county's own geometry
-                "country": county_id,  # county FIPS
-            })
+            empty_region_rows.append(
+                {
+                    "name": nearest_sub["name"],  # assign empty county to nearest bus
+                    "x": centroid.x,
+                    "y": centroid.y,
+                    "geometry": county_geom,  # keep county's own geometry
+                    "country": county_id,  # county FIPS
+                }
+            )
 
         # create GeoDataFrame and append to regions
         empty_regions = gpd.GeoDataFrame(empty_region_rows, crs=onshore_regions_concat.crs)
@@ -191,7 +192,7 @@ def main(snakemake):
         )
 
         logger.info(f"Added {len(empty_counties)} empty counties assigned to nearest buses.")
-    
+
     onshore_regions_concat.to_file(snakemake.output.regions_onshore)
     combined_onshore = onshore_regions_concat.geometry.union_all()
 
