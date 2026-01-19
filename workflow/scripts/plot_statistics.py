@@ -991,7 +991,7 @@ def plot_renewable_capacity_factors(
                     "period": period,
                     "monthly_cf": cf_monthly,
                     "color": carrier_color,
-                },
+                }
             )
 
         # Format duration curve plot
