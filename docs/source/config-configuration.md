@@ -177,7 +177,9 @@ Specifies the types of generators that are included in the network, which are ex
 (co2_cf)=
 ## `co2`
 
+
 The `co2` section specifies whether the model may use underground storage to sequester captured CO2 or not. In case underground storage is specified, each node (composing the network) has a specific storage potential and a cost associated with it. The storage potential (in tonnes) is calculated by aggregating all the underlying storage potentials of the U.S. counties encompassed in the node's geographical area. Counties that are only partially covered by the node's geographical area have their potential fractionated accordingly. The storage cost (in $/tonne) is calculated by weighting the potential with the cost of each county encompassed. The dataset containing information about underground CO2 storage potentials and costs at a county level (and used in PyPSA-USA) was provided by Edna Calzado at The University of Texas (Austin), which was derived from the Roads to Removal project (https://roads2removal.org). To get an illustration, enabling underground co2 storage for a sector-less network will render its topography similar to <a href = "_static/CCTS/pypsa-usa_sector-less_with_underground_co2_storage.svg" target = "_blank">this</a>, while for a sector-based network will render its topography similar to <a href = "_static/CCTS/pypsa-usa_sector-based_with_underground_co2_storage.svg" target = "_blank">this</a>. As a reference, disabling underground co2 storage (i.e. no CCTS), a sector-less network has a topography similar to <a href = "_static/CCTS/pypsa-usa_sector-less_without_CCTS.svg" target = "_blank">this</a>, while a sector-based network has a topography similar to <a href = "_static/CCTS/pypsa-usa_sector-based_without_CCTS.svg" target = "_blank">this</a>.
+
 
 In addition, the section specifies whether the model may transport captured CO2 between nodes or not. In case transportation is specified, a network of CO2 pipelines is built based on the electricity grid layout represented in PyPSA-USA to determine where/how to build pipelines to connect nodes. To get an illustration, enabling co2 transport for a sector-less network will render its topography similar to <a href = "_static/CCTS/pypsa-usa_sector-less_with_underground_co2_storage_and_co2_transport.svg" target = "_blank">this</a>, while for a sector-based network will render its topography similar to <a href = "_static/CCTS/pypsa-usa_sector-based_with_underground_co2_storage_and_co2_transport.svg" target = "_blank">this</a>.
 
@@ -225,6 +227,7 @@ For a sector-based model:
    :widths: 22,7,22,33
    :file: configtables/dac.csv
 ```
+
 
 (costs_cf)=
 ## `costs`

@@ -627,6 +627,7 @@ if __name__ == "__main__":
         + snakemake.params.electricity["extendable_carriers"]["StorageUnit"]
         + snakemake.params.electricity["extendable_carriers"]["Store"]
         + snakemake.params.electricity["extendable_carriers"]["Link"]
+        + ["imports"]
     )
     carriers = list(set(carriers))  # remove any duplicates
 

@@ -397,7 +397,7 @@ if __name__ == "__main__":
             ll="v1.0",
             opts="1h-TCT",
             sector="E-G",
-            planning_horizons="2030",
+            planning_horizons="2018",
         )
     configure_logging(snakemake)
     update_config_from_wildcards(snakemake.config, snakemake.wildcards)

@@ -1293,7 +1293,7 @@ def add_co2_storage(n: pypsa.Network, config: dict, co2_storage_csv: str, costs:
             )
 
             # calculate efficiencies
-            efficiency2 = []  # to node or state atmosphere bus (e.g. "p9 atmosphere", "CA atmosphere")
+            efficiency2 = []  # to node, state or nation atmosphere bus (e.g. "p9 atmosphere", "CA atmosphere", "atmosphere")
             efficiency3 = []  # to node co2 capture bus (e.g. "p9 co2 capture")
             for index in indexes:
                 generator_efficiency = n.generators.loc[index]["efficiency"]
@@ -1309,8 +1309,9 @@ def add_co2_storage(n: pypsa.Network, config: dict, co2_storage_csv: str, costs:
                 cc_level = (
                     int(index.split("-")[1].split("CC")[0]) / 100
                 )  # extract CC level from index (e.g. index "p1 CCGT-95CCS_2030" returns 0.95)
-                efficiency2.append(efficiency)
-                efficiency3.append(efficiency * (1 - cc_level) / cc_level)
+
+                efficiency2.append(efficiency * (1 - cc_level) / cc_level)
+                efficiency3.append(efficiency)
 
             # add links to represent sending electricity (in MW) to the electricity bus (e.g. "p9" if ReEDS or "p100 0" if TAMU) as well as sending emitted CO2 (by the generator) to both the atmosphere bus and the co2 capture bus
             n.madd(
