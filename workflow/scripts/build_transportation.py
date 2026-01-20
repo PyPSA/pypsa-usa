@@ -146,7 +146,7 @@ def add_lpg_infrastructure(
         efficiency2=efficiency2,
         capital_cost=0,
         p_nom_extendable=True,
-        lifetime=np.inf,
+        lifetime=1e9,
         build_year=n.investment_periods[0],
     )
 
@@ -259,13 +259,14 @@ def add_transport_dr(n: pypsa.Network, vehicle: str, dr_config: dict[str, Any]) 
         bus=df.index + "-bck-dr",
         e_cyclic=True,
         e_nom_extendable=False,
-        e_nom=np.inf,
+        e_nom=1e9,
         e_min_pu=0,
         e_max_pu=1,
         carrier=df.carrier,
         marginal_cost_storage=marginal_cost_storage,
         lifetime=lifetime,
         build_year=build_year,
+        standing_loss=0,
     )
 
     n.madd(
@@ -275,13 +276,14 @@ def add_transport_dr(n: pypsa.Network, vehicle: str, dr_config: dict[str, Any]) 
         bus=df.index + "-fwd-dr",
         e_cyclic=True,
         e_nom_extendable=False,
-        e_nom=np.inf,
+        e_nom=1e9,
         e_min_pu=-1,
         e_max_pu=0,
         carrier=df.carrier,
         marginal_cost_storage=marginal_cost_storage * (-1),
         lifetime=lifetime,
         build_year=build_year,
+        standing_loss=0,
     )
 
 
@@ -325,7 +327,7 @@ def add_elec_vehicle(
     #  $/mile -> $/k-miles
     #  miles/MWh -> k-miles/MWh
     capex = costs.at[costs_name, "capital_cost"] * 1000
-    efficiency = costs.at[costs_name, "efficiency"] / 1000
+    efficiency = round(costs.at[costs_name, "efficiency"] / 1000, 4)
     lifetime = costs.at[costs_name, "lifetime"]
     build_year = n.investment_periods[0]
 
@@ -391,7 +393,7 @@ def add_lpg_vehicle(
     #  miles/MWh -> k-miles/MWh
 
     capex = costs.at[costs_name, "capital_cost"] * 1000
-    efficiency = costs.at[costs_name, "efficiency"] / 1000
+    efficiency = round(costs.at[costs_name, "efficiency"] / 1000, 4)
     lifetime = costs.at[costs_name, "lifetime"]
     build_year = n.investment_periods[0]
 
@@ -452,7 +454,7 @@ def add_air(
     capex = 1
     # efficiency = costs.at[costs_name, "efficiency"] / 1000
     #  (seat miles / gallon) * ( 1 gal / 33700 wh) * (1k seat mile / 1000 seat miles) * (1000 * 1000 Wh / MWh)
-    efficiency = 76.5 / wh_per_gallon / 1000 * 1000 * 1000
+    efficiency = round(76.5 / wh_per_gallon / 1000 * 1000 * 1000, 4)
     lifetime = 25
     build_year = n.investment_periods[0]
 
@@ -494,7 +496,7 @@ def add_boat(
     # efficiency = costs.at[costs_name, "efficiency"] / 1000
     # base efficiency is 5 ton miles per thousand Btu
     # 1 kBTU / 0.000293 MWh
-    efficiency = 5 / 0.000293 / 1000
+    efficiency = round(5 / 0.000293 / 1000, 4)
     lifetime = 25
     capex = 1
     build_year = n.investment_periods[0]
@@ -539,7 +541,7 @@ def add_rail(
             # efficiency = costs.at[costs_name, "efficiency"] / 1000
             # base efficiency is 3.4 ton miles per thousand Btu
             # 1 kBTU / 0.000293 MWh
-            efficiency = 3.4 / 0.000293 / 1000
+            efficiency = round(3.4 / 0.000293 / 1000, 4)
             lifetime = 25
             capex = 1
             build_year = n.investment_periods[0]
@@ -547,7 +549,7 @@ def add_rail(
             # efficiency = costs.at[costs_name, "efficiency"] / 1000
             # base efficiency is 1506 BTU / Passenger Mile
             # https://www.amtrak.com/content/dam/projects/dotcom/english/public/documents/environmental1/Amtrak-Sustainability-Report-FY21.pdf
-            efficiency = 1506 / 3.412e6 * 1000  # MWh / k passenger miles
+            efficiency = round(1506 / 3.412e6 * 1000, 4)  # MWh / k passenger miles
             lifetime = 25
             capex = 1
             build_year = n.investment_periods[0]

@@ -155,6 +155,7 @@ COMSTOCK_FILES = [
 rule retrieve_res_eulp:
     log:
         "logs/retrieve/retrieve_res_eulp/{state}.log",
+    retries: 3
     params:
         stock="res",
         profiles=RESSTOCK_FILES,
@@ -169,6 +170,7 @@ rule retrieve_res_eulp:
 rule retrieve_com_eulp:
     log:
         "logs/retrieve/retrieve_com_eulp/{state}.log",
+    retries: 3
     params:
         stock="com",
         profiles=COMSTOCK_FILES,
@@ -198,7 +200,10 @@ rule retrieve_ship_raster:
         move(input[0], output[0])
 
 
-if not config["enable"].get("build_cutout", False):
+if (
+    not config["enable"].get("build_cutout", False)
+    and not config["renewable"]["dataset"] == "godeeep"
+):
 
     rule retrieve_cutout:
         input:

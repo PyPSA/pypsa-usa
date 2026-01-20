@@ -171,21 +171,11 @@ def plot_emissions_map(
         subplot_kw={"projection": ccrs.EqualEarth(n.buses.x.mean())},
     )
 
-    bus_scale = 1
+    # Use fixed scale - same as get_bus_scale() for capacity maps
+    bus_scale = 1e3  # Emissions in MT - divide to get reasonable circle sizes
+    legend_sizes_mt = [1, 5, 10]  # Legend in MT
 
-    with plt.rc_context({"patch.linewidth": 0.1}):
-        n.plot(
-            bus_sizes=emissions / bus_scale,
-            bus_colors="k",
-            bus_alpha=0.7,
-            line_widths=0,
-            link_widths=0,
-            ax=ax,
-            margin=0.2,
-            color_geomap=None,
-        )
-
-    # onshore regions
+    # First draw regions as background
     regions.plot(
         ax=ax,
         facecolor="whitesmoke",
@@ -194,12 +184,34 @@ def plot_emissions_map(
         transform=ccrs.PlateCarree(),
         linewidth=1.2,
     )
+
+    with plt.rc_context({"patch.linewidth": 0.1}):
+        n.plot(
+            bus_sizes=emissions / bus_scale,
+            bus_colors="k",
+            bus_alpha=0.6,
+            line_widths=0,
+            link_widths=0,
+            ax=ax,
+            margin=0.2,
+            color_geomap=None,
+        )
+
     ax.set_extent(regions.total_bounds[[0, 2, 1, 3]])
+
+    # Add legend for emission circle sizes
+    legend_kwargs = {"loc": "upper left", "frameon": False}
+    add_legend_circles(
+        ax,
+        [s / bus_scale for s in legend_sizes_mt],
+        [f"{s:.0f} MT" for s in legend_sizes_mt],
+        legend_kw={"bbox_to_anchor": (1, 1), "labelspacing": 3, **legend_kwargs},
+        patch_kw={"facecolor": "k", "edgecolor": "black", "alpha": 0.7},
+    )
 
     title = create_title("Emissions (MTonne)", **wildcards)
     ax.set_title(title, fontsize=TITLE_SIZE, pad=20)
-    fig.tight_layout()
-    fig.savefig(save)
+    fig.savefig(save, bbox_inches="tight")
     plt.close()
 
 
@@ -267,13 +279,13 @@ def plot_capacity_map(
     add_legend_circles(
         ax,
         [s / bus_scale for s in bus_sizes],
-        [f"{s / 1000} GW" for s in bus_sizes],
-        legend_kw={"bbox_to_anchor": (1, 1), **legend_kwargs},
+        [f"{s / 1000:.0f} GW" for s in bus_sizes],
+        legend_kw={"bbox_to_anchor": (1, 1), "labelspacing": 3, **legend_kwargs},
     )
     add_legend_lines(
         ax,
         [s / line_scale for s in line_sizes],
-        [f"{s / 1000} GW" for s in line_sizes],
+        [f"{s / 1000:.0f} GW" for s in line_sizes],
         legend_kw={"bbox_to_anchor": (1, 0.8), **legend_kwargs},
     )
     add_legend_patches(
@@ -350,13 +362,13 @@ def plot_demand_map(
     add_legend_circles(
         ax,
         [s / bus_scale for s in bus_sizes],
-        [f"{s / 1000} GW" for s in bus_sizes],
-        legend_kw={"bbox_to_anchor": (1, 1), **legend_kwargs},
+        [f"{s / 1000:.0f} GW" for s in bus_sizes],
+        legend_kw={"bbox_to_anchor": (1, 1), "labelspacing": 3, **legend_kwargs},
     )
     add_legend_lines(
         ax,
         [s / line_scale for s in line_sizes],
-        [f"{s / 1000} GW" for s in line_sizes],
+        [f"{s / 1000:.0f} GW" for s in line_sizes],
         legend_kw={"bbox_to_anchor": (1, 0.8), **legend_kwargs},
     )
     add_legend_patches(

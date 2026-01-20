@@ -31,7 +31,7 @@ extensions = [
     "sphinx.ext.mathjax",
     "sphinx.ext.napoleon",
     "sphinx.ext.graphviz",
-    # "sphinxcontrib.bibtex",
+    "sphinxcontrib.bibtex",
     # 'sphinx.ext.pngmath',
     # 'sphinxcontrib.tikz',
     # 'rinoh.frontend.sphinx',
@@ -43,6 +43,8 @@ myst_heading_anchors = 3
 templates_path = ["_templates"]
 exclude_patterns = []
 
+bibtex_bibfiles = ["publications.bib"]
+bibtex_default_style = "unsrt"
 
 # -- Options for HTML output -------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output

@@ -148,11 +148,18 @@ if config["enable"].get("build_cutout", False):
         script:
             "../scripts/build_cutout.py"
 
+# Only use planning_horizon for GoDEEEP future scenarios
+godeeep_planning_horizon = (
+    config.get("renewable", {}).get("dataset") == "godeeep"
+    and config["renewable_scenarios"][0] != "historical"
+)
 
 rule build_renewable_profiles:
     params:
         renewable=config_provider("renewable"),
         snapshots=config_provider("snapshots"),
+        planning_horizon=lambda w: int(w.planning_horizon) if godeeep_planning_horizon else None,
+        renewable_scenarios=config_provider("renewable_scenarios"),
     input:
         corine=ancient(
             DATA
@@ -178,22 +185,25 @@ rule build_renewable_profiles:
             if w.technology in ("onwind", "solar")
             else RESOURCES + "{interconnect}/Geospatial/regions_offshore.geojson"
         ),
-        cutout=lambda wildcards: expand(
-            "cutouts/"
-            + CDIR
-            + "usa_"
-            + config["renewable"][wildcards.technology]["cutout"]
-            + "_{renewable_weather_year}"
-            + ".nc",
-            renewable_weather_year=config["renewable_weather_years"],
+        cutout=lambda wildcards: (
+            expand(
+                "cutouts/"
+                + CDIR
+                + "usa_"
+                + config["renewable"][wildcards.technology]["cutout"]
+                + "_{renewable_weather_year}"
+                + ".nc",
+                renewable_weather_year=config["renewable_weather_years"],
+            )
+            if config["renewable"]["dataset"] == "atlite"
+            else []
         ),
     output:
-        profile=RESOURCES + "{interconnect}/profile_{technology}.nc",
-        availability=RESULTS + "{interconnect}/land_use_availability_{technology}.png",
+        profile=RESOURCES + "{interconnect}/{planning_horizon}/profile_{technology}.nc" if godeeep_planning_horizon else RESOURCES + "{interconnect}/profile_{technology}.nc",
     log:
-        LOGS + "{interconnect}/build_renewable_profile_{technology}.log",
+        LOGS + "{interconnect}/build_renewable_profile_{technology}_{planning_horizon}.log" if godeeep_planning_horizon else LOGS + "{interconnect}/build_renewable_profile_{technology}.log",
     benchmark:
-        BENCHMARKS + "{interconnect}/build_renewable_profiles_{technology}"
+        BENCHMARKS + "{interconnect}/build_renewable_profiles_{technology}_{planning_horizon}" if godeeep_planning_horizon else BENCHMARKS + "{interconnect}/build_renewable_profiles_{technology}"
     threads: ATLITE_NPROCESSES
     resources:
         mem_mb=lambda wildcards, input, attempt: (
@@ -207,7 +217,6 @@ rule build_renewable_profiles:
         technology="(?!hydro|EGS).*",  # Any technology other than hydro
     script:
         "../scripts/build_renewable_profiles.py"
-
 
 # eastern broken out just to aviod awful formatting issues
 # texas in western due to spillover of interconnect
@@ -605,6 +614,13 @@ rule add_electricity:
     input:
         unpack(dynamic_fuel_price_files),
         **{
+            # For GODEEEP future scenarios: pass all horizon-specific profiles
+            f"profile_{tech}_{horizon}": RESOURCES + f"{{interconnect}}/{horizon}/profile_{tech}.nc"
+            for tech in config["electricity"]["renewable_carriers"]
+            if tech != "hydro"
+            for horizon in config["scenario"]["planning_horizons"]
+        } if godeeep_planning_horizon else {
+            # For historical or AtLite: pass single profile
             f"profile_{tech}": RESOURCES + "{interconnect}" + f"/profile_{tech}.nc"
             for tech in config["electricity"]["renewable_carriers"]
             if tech != "hydro"
@@ -708,6 +724,7 @@ rule cluster_network:
             "model_topology", "topological_boundaries"
         ),
         topology_aggregation=config_provider("model_topology", "aggregate"),
+        s_max_pu=config_provider("lines", "s_max_pu", default=0.7),
     input:
         network=RESOURCES + "{interconnect}/elec_s{simpl}.nc",
         regions_onshore=RESOURCES

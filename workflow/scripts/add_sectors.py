@@ -27,6 +27,7 @@ from build_stock_data import (
     get_industrial_stock,
     get_residential_stock,
     get_transport_stock,
+    scale_existing_stock,
 )
 from build_transportation import build_transportation
 from constants import CODE_2_STATE, NG_MWH_2_MMCF, STATE_2_CODE, STATES_INTERCONNECT_MAPPER
@@ -177,11 +178,8 @@ def add_sector_foundation(
             names=points.index,
             suffix=f" {carrier}",
             bus=[f"{x} {carrier}" for x in points.index],
-            e_nom=0,
-            e_nom_extendable=True,
-            capital_cost=0,
-            e_nom_min=0,
-            e_nom_max=np.inf,
+            e_nom_extendable=False,
+            e_nom=1e9,
             e_min_pu=-1,
             e_max_pu=0,
             e_cyclic_per_period=False,
@@ -433,7 +431,7 @@ def convert_generators_2_links(
         efficiency2=co2_intensity,
         marginal_cost=0,
         # marginal_cost = plants.marginal_cost * plants.efficiency, # fuel costs rated at delievered
-        capital_cost=plants.capital_cost,  # links rated on input capacity
+        capital_cost=plants.capital_cost * plants.efficiency,  # links rated on input capacity
         lifetime=plants.lifetime,
         build_year=plants.build_year,
     )
@@ -505,17 +503,35 @@ def get_pwr_co2_intensity(carrier: str, costs: pd.DataFrame) -> float:
             return costs.at[carrier, "co2_emissions"]
 
 
+def add_elec_import_emission(n: pypsa.Network):
+    """Adds emission tracking for electricity imports."""
+    try:
+        emissions = n.carriers.at["imports", "co2_emissions"]
+    except KeyError:
+        logger.info("No electrical imports found, skipping emission tracking")
+        return
+
+    import_links = n.links[n.links.carrier == "imports"]
+    buses = n.buses[(n.buses.reeds_zone.isin(import_links.bus1)) & (n.buses.carrier == "AC")]
+    bus_to_state = buses.set_index("reeds_zone")["reeds_state"].to_dict()
+
+    for bus, state in bus_to_state.items():
+        import_links_by_node = import_links[import_links.bus1 == bus]
+        n.links.loc[import_links_by_node.index, "efficiency2"] = emissions
+        n.links.loc[import_links_by_node.index, "bus2"] = state + " pwr-co2"
+
+
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
 
         snakemake = mock_snakemake(
             "add_sectors",
-            interconnect="western",
-            simpl="20",
+            interconnect="eastern",
+            simpl="80",
             clusters="4m",
             ll="v1.0",
-            opts="8h-RPS",
+            opts="1h-TCT",
             sector="E-G",
         )
     configure_logging(snakemake)
@@ -681,6 +697,8 @@ if __name__ == "__main__":
         res_stock_dir = snakemake.input.residential_stock
         com_stock_dir = snakemake.input.commercial_stock
 
+        scale_exising_stock = snakemake.params.sector["service_sector"].get("scale_exising_stock", True)
+
         if snakemake.params.sector["service_sector"]["water_heating"]["split_space_water"]:
             fuels = ["space_heating", "water_heating", "cooling"]
         else:
@@ -695,6 +713,8 @@ if __name__ == "__main__":
             ratios = get_residential_stock(res_stock_dir, fuel)
             ratios.index = ratios.index.map(STATE_2_CODE)
             ratios = ratios.dropna()  # na is USA
+            if scale_exising_stock:
+                ratios = scale_existing_stock(ratios)
             add_service_brownfield(
                 n=n,
                 sector="res",
@@ -709,6 +729,8 @@ if __name__ == "__main__":
             ratios = get_commercial_stock(com_stock_dir, fuel)
             ratios.index = ratios.index.map(STATE_2_CODE)
             ratios = ratios.dropna()  # na is USA
+            if scale_exising_stock:
+                ratios = scale_existing_stock(ratios)
             add_service_brownfield(
                 n=n,
                 sector="com",
@@ -722,7 +744,8 @@ if __name__ == "__main__":
     if snakemake.params.sector["industrial_sector"]["brownfield"]:
         mecs_file = snakemake.input.industrial_stock
         ratios = get_industrial_stock(mecs_file)
-
+        if scale_exising_stock:
+            ratios = scale_existing_stock(ratios)
         fuels = ["heat"]
 
         for fuel in fuels:
@@ -769,5 +792,8 @@ if __name__ == "__main__":
             add_dac(n, snakemake.config, True)
         else:
             logger.warning("Not adding DAC capabilities given that CO2 (underground) storage is not enabled")
+
+    # emission tracking for electricity imports
+    add_elec_import_emission(n)
 
     n.export_to_netcdf(snakemake.output.network)

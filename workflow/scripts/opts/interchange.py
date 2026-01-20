@@ -44,7 +44,7 @@ def get_periods(n: pypsa.Network) -> pd.Series:
     return periods
 
 
-def add_interchange_constraints(n, config, direction):
+def add_interchange_constraints(n, config, direction, sector=False):
     """Adds constraints for inter-regional energy flow."""
     assert direction in ["imports", "exports"], f"direction must be either imports or exports; received: {direction}"
 
@@ -114,7 +114,26 @@ def add_interchange_constraints(n, config, direction):
                 .sum()
             )
 
-            rhs = round(get_import_export_limit(n, timesteps_in_period) * volume_limit / 100, 2)
+            if sector:  # account for all load flowing out of node states
+                # note that this is still an approximation as it does not account for heat pumps
+                buses = n.buses[n.buses.carrier == "AC"]
+                demand_links = n.links[
+                    (n.links.bus0.isin(buses.index)) & (n.links.carrier.str.startswith(("res", "com", "ind", "trn")))
+                ].index
+
+                demand = (
+                    n.model["Link-p"]
+                    .mul(weights)
+                    .sel(period=year, Link=demand_links)
+                    .sel(timestep=timesteps_in_period)  # Seperate cause slicing on multi-index is not supported
+                    .sum()
+                )
+
+                lhs = lhs - (round(volume_limit / 100, 2) * demand)
+                rhs = 0
+
+            else:  # can just use raw load values
+                rhs = round(get_import_export_limit(n, timesteps_in_period) * volume_limit / 100, 2)
 
             n.model.add_constraints(
                 lhs <= rhs,
