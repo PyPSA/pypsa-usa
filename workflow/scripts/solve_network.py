@@ -46,7 +46,6 @@ from opts.policy import (
 from opts.reserves import (
     add_ERM_constraints,
     add_operational_reserve_margin,
-    add_PRM_constraints,
     store_ERM_duals,
 )
 from opts.sector import (
@@ -82,7 +81,6 @@ def prepare_network(n, solve_opts=None):
 
         df = n.storage_units_t.inflow
         n.storage_units_t.inflow = df.where(df > solve_opts["clip_p_max_pu"], other=0.0)
-
     load_shedding = solve_opts.get("load_shedding")
     if load_shedding:
         # intersect between macroeconomic and surveybased willingness to pay
@@ -154,9 +152,6 @@ def extra_functionality(n, snapshots):
         if n.generators.p_nom_extendable.any()
         else None,
         "REM": lambda: add_regional_co2limit(n, config) if n.generators.p_nom_extendable.any() else None,
-        "PRM": lambda: add_PRM_constraints(n, config, global_snakemake)
-        if n.generators.p_nom_extendable.any()
-        else None,
         "ERM": lambda: add_ERM_constraints(n, config, global_snakemake)
         if n.generators.p_nom_extendable.any()
         else None,
@@ -348,6 +343,15 @@ def solve_network(n, config, solving, opts="", **kwargs):
         False,
     )
     kwargs["assign_all_duals"] = cf_solving.get("assign_all_duals", False)
+
+    sns_portion = cf_solving.get("snapshot_portion", None)
+    if sns_portion:
+        logger.info(f"Optimizing over snapshots from {sns_portion['start']} to {sns_portion['end']}")
+        sns_portion = pd.date_range(start=sns_portion["start"], end=sns_portion["end"], freq="h")
+        sns = n.snapshots
+        sns_portion = sns[sns.get_level_values(1).isin(sns_portion)]
+        sns_portion.name = "snapshot"
+        kwargs["snapshots"] = sns_portion
 
     rolling_horizon = cf_solving.pop("rolling_horizon", False)
     skip_iterations = cf_solving.pop("skip_iterations", False)

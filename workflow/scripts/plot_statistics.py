@@ -1274,6 +1274,7 @@ if __name__ == "__main__":
     n.lines.to_csv(snakemake.output.lines)
     n.buses.to_csv(snakemake.output.buses)
     n.stores.to_csv(snakemake.output.stores)
+    n.global_constraints.to_csv(snakemake.output.global_constraints)
 
     # Panel Plots
     plot_generator_data_panel(

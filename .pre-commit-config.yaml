@@ -43,6 +43,8 @@ repos:
   rev: v0.4.4
   hooks:
   - id: blackdoc
+    additional_dependencies:
+    - black==23.12.1
 
 - repo: https://github.com/astral-sh/ruff-pre-commit
   rev: v0.12.9  # Check for the latest version

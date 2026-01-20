@@ -3,6 +3,7 @@
 import logging
 import re
 
+import constants as const
 import duckdb
 import numpy as np
 import pandas as pd
@@ -144,253 +145,10 @@ def set_derates(plants):
     ).clip(lower=0)
 
 
-# Assign PyPSA Carrier Names, Fuel Types, and Prime Movers Names
-eia_tech_map = pd.DataFrame(
-    {
-        "Technology": [
-            "Petroleum Liquids",
-            "Onshore Wind Turbine",
-            "Conventional Hydroelectric",
-            "Natural Gas Steam Turbine",
-            "Conventional Steam Coal",
-            "Natural Gas Fired Combined Cycle",
-            "Natural Gas Fired Combustion Turbine",
-            "Nuclear",
-            "Hydroelectric Pumped Storage",
-            "Natural Gas Internal Combustion Engine",
-            "Solar Photovoltaic",
-            "Geothermal",
-            "Landfill Gas",
-            "Batteries",
-            "Wood/Wood Waste Biomass",
-            "Coal Integrated Gasification Combined Cycle",
-            "Other Gases",
-            "Petroleum Coke",
-            "Municipal Solid Waste",
-            "Natural Gas with Compressed Air Storage",
-            "All Other",
-            "Other Waste Biomass",
-            "Solar Thermal without Energy Storage",
-            "Other Natural Gas",
-            "Solar Thermal with Energy Storage",
-            "Flywheels",
-            "Offshore Wind Turbine",
-        ],
-        "tech_type": [
-            "oil",
-            "onwind",
-            "hydro",
-            "OCGT",
-            "coal",
-            "CCGT",
-            "OCGT",
-            "nuclear",
-            "hydro",
-            "OCGT",
-            "solar",
-            "geothermal",
-            "biomass",
-            "battery",
-            "biomass",
-            "coal",
-            "other",
-            "oil",
-            "waste",
-            "other",
-            "other",
-            "biomass",
-            "solar",
-            "other",
-            "solar",
-            "other",
-            "offwind",
-        ],
-    },
-)
-eia_tech_map = eia_tech_map.set_index("Technology")
-eia_fuel_map = pd.DataFrame(
-    {
-        "Energy Source 1": [
-            "ANT",
-            "BIT",
-            "LIG",
-            "SGC",
-            "SUB",
-            "WC",
-            "RC",
-            "DFO",
-            "JF",
-            "KER",
-            "PC",
-            "PG",
-            "RFO",
-            "SGP",
-            "WO",
-            "BFG",
-            "NG",
-            "H2",
-            "OG",
-            "AB",
-            "MSW",
-            "OBS",
-            "WDS",
-            "OBL",
-            "SLW",
-            "BLQ",
-            "WDL",
-            "LFG",
-            "OBG",
-            "SUN",
-            "WND",
-            "GEO",
-            "WAT",
-            "NUC",
-            "PUR",
-            "WH",
-            "TDF",
-            "MWH",
-            "OTH",
-        ],
-        "fuel_type": [
-            "coal",
-            "coal",
-            "coal",
-            "coal",
-            "coal",
-            "coal",
-            "coal",
-            "oil",
-            "oil",
-            "oil",
-            "oil",
-            "oil",
-            "oil",
-            "oil",
-            "oil",
-            "gas",
-            "gas",
-            "gas",
-            "gas",
-            "waste",
-            "waste",
-            "waste",
-            "waste",
-            "biomass",
-            "biomass",
-            "biomass",
-            "biomass",
-            "biomass",
-            "biomass",
-            "solar",
-            "wind",
-            "geothermal",
-            "hydro",
-            "nuclear",
-            "other",
-            "other",
-            "other",
-            "battery",
-            "other",
-        ],
-        "fuel_name": [
-            "Anthracite Coal",
-            "Bituminous Coal",
-            "Lignite Coal",
-            "Coal-Derived Synthesis Gas",
-            "Subbituminous Coal",
-            "Waste/Other Coal",
-            "Refined Coal",
-            "Distillate Fuel Oil",
-            "Jet Fuel",
-            "Kerosene",
-            "Petroleum Coke",
-            "Gaseous Propane",
-            "Residual Fuel Oil",
-            "Synthesis Gas from Petroleum Coke",
-            "Waste/Other Oil",
-            "Blast Furnace Gas",
-            "Natural Gas",
-            "Hydrogen",
-            "Other Gas",
-            "Agricultural By-Products",
-            "Municipal Solid Waste",
-            "Other Biomass Solids",
-            "Wood/Wood Waste Solids",
-            "Other Biomass Liquids",
-            "Sludge Waste",
-            "Black Liquor",
-            "Wood Waste Liquids excluding Black Liquor",
-            "Landfill Gas",
-            "Other Biomass Gas",
-            "Solar",
-            "Wind",
-            "Geothermal",
-            "Water",
-            "Nuclear",
-            "Purchased Steam",
-            "Waste heat not directly attributed to a fuel source (undetermined)",
-            "Tire-derived Fuels",
-            "Energy Storage",
-            "Other",
-        ],
-    },
-)
-eia_fuel_map = eia_fuel_map.set_index("Energy Source 1")
-eia_primemover_map = pd.DataFrame(
-    {
-        "Prime Mover": [
-            "BA",
-            "CE",
-            "CP",
-            "FW",
-            "PS",
-            "ES",
-            "ST",
-            "GT",
-            "IC",
-            "CA",
-            "CT",
-            "CS",
-            "CC",
-            "HA",
-            "HB",
-            "HK",
-            "HY",
-            "BT",
-            "PV",
-            "WT",
-            "WS",
-            "FC",
-            "OT",
-        ],
-        "prime_mover": [
-            "Energy Storage, Battery",
-            "Energy Storage, Compressed Air",
-            "Energy Storage, Concentrated Solar Power",
-            "Energy Storage, Flywheel",
-            "Energy Storage, Reversible Hydraulic Turbine (Pumped Storage)",
-            "Energy Storage, Other",
-            "Steam Turbine, including nuclear, geothermal and solar steam (does NOT include combined cycle)",
-            "Combustion (Gas) Turbine",
-            "Internal Combustion Engine",
-            "Combined Cycle Steam Part",
-            "Combined Cycle Combustion Turbine Part",
-            "Combined Cycle Single Shaft",
-            "Combined Cycle Total Unit (planned undetermined plants)",
-            "Hydrokinetic, Axial Flow Turbine",
-            "Hydrokinetic, Wave Buoy",
-            "Hydrokinetic, Other",
-            "Hydroelectric Turbine",
-            "Turbines Used in a Binary Cycle (including those used for geothermal applications)",
-            "Photovoltaic",
-            "Wind Turbine, Onshore",
-            "Wind Turbine, Offshore",
-            "Fuel Cell",
-            "Other",
-        ],
-    },
-)
-eia_primemover_map = eia_primemover_map.set_index("Prime Mover")
+# Create DataFrames from constants for mapping
+eia_tech_map = pd.DataFrame(const.EIA_TECH_MAP).set_index("Technology")
+eia_fuel_map = pd.DataFrame(const.EIA_FUEL_MAP).set_index("Energy Source 1")
+eia_primemover_map = pd.DataFrame(const.EIA_PRIMEMOVER_MAP).set_index("Prime Mover")
 
 
 def set_tech_fuels_primer_movers(eia_data_operable):
@@ -674,6 +432,7 @@ def set_parameters(plants: pd.DataFrame):
     plants = plants.set_index("generator_name")
     plants["p_nom"] = plants.pop("capacity_mw")
     plants["build_year"] = plants.pop("generator_operating_date").dt.year
+    plants["build_decade"] = plants.build_year.astype(str).str[:3] + "0s"
     plants["heat_rate"] = plants.pop("unit_heat_rate_mmbtu_per_mwh")
     plants["vom"] = plants.pop("ads_vom_cost")
     plants["fuel_cost"] = plants.pop("fuel_cost_per_mmbtu")
@@ -701,9 +460,12 @@ def set_parameters(plants: pd.DataFrame):
     plants.loc[plants.carrier.isin(["nuclear"]), "fuel_cost"] = np.float32(0.71)  # 2023 AEO
 
     # Unit Commitment Parameters
-    plants["start_up_cost"] = plants.pop("ads_startup_cost_fixed$") + plants.ads_startfuelmmbtu * plants.fuel_cost
+    plants["start_fuel_mmbtu"] = plants.pop("ads_startfuelmmbtu")
+    plants["startup_cost_fixed"] = plants.pop("ads_startup_cost_fixed$")
     plants["min_down_time"] = plants.pop("ads_minimumdowntimehr")
     plants["min_up_time"] = plants.pop("ads_minimumuptimehr")
+    plants.loc[plants.fuel_type.isin(["solar", "wind", "hydro", "battery"]), "start_fuel_mmbtu"] = 0
+    plants.loc[plants.fuel_type.isin(["solar", "wind", "hydro", "battery"]), "startup_cost_fixed"] = 0
 
     # Ramp Limit Parameters
     plants["ramp_limit_up"] = (plants.pop("ads_rampup_ratemw/minute") / plants.p_nom * 60).clip(
@@ -715,18 +477,23 @@ def set_parameters(plants: pd.DataFrame):
         upper=1,
     )  # MW/min to p.u./hour
 
-    # Impute missing data based on average values of a given aggregation
+    # Impute parameters for UC and infrastructure characteristics
     data_fields = [
-        "start_up_cost",
+        "startup_cost_fixed",
+        "start_fuel_mmbtu",
         "min_down_time",
         "min_up_time",
         "ramp_limit_up",
         "ramp_limit_down",
         "vom",
     ]
-    plants = impute_missing_plant_data(plants, ["technology_description"], data_fields)
-    plants = impute_missing_plant_data(plants, ["prime_mover_code"], data_fields)
-    plants = impute_missing_plant_data(plants, ["carrier"], data_fields)
+
+    plants = impute_missing_plant_data(plants, ["technology_description", "build_decade"], data_fields)
+    plants = impute_missing_plant_data(plants, ["prime_mover_code", "build_decade"], data_fields)
+    plants = impute_missing_plant_data(plants, ["carrier", "build_decade"], data_fields)
+
+    plants["start_fuel_cost"] = plants.start_fuel_mmbtu * plants.fuel_cost
+    plants["start_up_cost"] = plants.startup_cost_fixed + plants.start_fuel_cost
 
     # replace heat-rate above theoretical minimum with nan
     plants.loc[plants.heat_rate < 3.412, "heat_rate"] = np.nan

@@ -17,6 +17,7 @@ def get_region_buses(n, region_list):
             | n.buses.interconnect.str.lower().isin(region_list)
             | n.buses.nerc_reg.isin(region_list)
             | n.buses.index.isin(region_list)
+            | (n.buses.region.isin(region_list) if "region" in n.buses.columns else False)
             | (1 if "all" in region_list else 0)
         )
     ]
