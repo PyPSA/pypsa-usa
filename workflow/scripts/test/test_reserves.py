@@ -85,8 +85,8 @@ def test_erm_constraint_binding(reserve_margin_network, erm_config):
     # Read the PRM data from the CSV file
     test_data = pd.read_csv(erm_config["electricity"]["SAFE_regional_reservemargins"])
 
-    # Set a high ERM requirement (1100%)
-    test_data.loc[0, "prm"] = 10
+    # Set a high ERM requirement
+    test_data.loc[0, "prm"] = 0.90
 
     # Run optimization with ERM constraints
     def extra_functionality(n, _):
@@ -131,7 +131,6 @@ def test_erm_constraint_binding(reserve_margin_network, erm_config):
         .add(link_injections, fill_value=0)
     )
 
-    # breakpoint()
     assert (nodal_reserve_capacity - nodal_reserve_requirement >= -0.1).all().all(), (
         "Nodal reserve capacity should be at least as large as the nodal reserve requirement"
     )

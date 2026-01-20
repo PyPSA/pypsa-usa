@@ -346,7 +346,7 @@ def define_erm_nodal_balance_constraints(n, erm, region_buses):
         Series containing buses in the region
     """
     # Get capacity contribution from resources
-    _, rhs_existing = _calculate_capacity_accredidation(
+    ext_contribution, rhs_existing = _calculate_capacity_accredidation(
         n,
         erm.planning_horizon,
         region_buses,
@@ -391,6 +391,31 @@ def define_erm_nodal_balance_constraints(n, erm, region_buses):
         if expr.size:
             exprs.append(expr.groupby(cbuses).sum())
 
+    # Add extendable generator contribution to LHS (p_nom * p_max_pu grouped by bus)
+    # Recompute with full snapshot dimension to match other expressions
+    active_gens = n.get_active_assets("Generator", erm.planning_horizon)
+    extendable_gens = n.generators.p_nom_extendable
+    region_gens = n.generators.bus.isin(buses)
+    region_active_ext_gens = n.generators[region_gens & active_gens & extendable_gens]
+
+    if not region_active_ext_gens.empty:
+        # Get p_nom variable and p_max_pu with full snapshot dimension
+        ext_p_nom = m["Generator-p_nom"].loc[region_active_ext_gens.index]
+        ext_p_max_pu = get_as_dense(n, "Generator", "p_max_pu", sns, inds=region_active_ext_gens.index)
+        ext_p_max_pu.columns.name = "Generator-ext"
+
+        # Compute contribution: p_nom * p_max_pu
+        ext_contribution_full = ext_p_nom * ext_p_max_pu
+
+        # Create DataArray with bus mapping using Generator-ext as dimension name
+        gen_buses = DataArray(
+            region_active_ext_gens.bus.values,
+            dims=["Generator-ext"],
+            coords={"Generator-ext": region_active_ext_gens.index.values},
+            name="Bus",
+        )
+        ext_expr = ext_contribution_full.groupby(gen_buses).sum()
+        exprs.append(ext_expr)
     lhs = merge(exprs, join="outer").reindex(Bus=buses)
     rhs = planning_reserve
     rhs.index.name = "snapshot"
@@ -459,21 +484,30 @@ def add_ERM_constraints(n, config=None, snakemake=None, regional_prm_data=None):
         if region_buses.empty:
             continue
         logger.info(f"Adding ERM constraint for {erm.name} in {erm.planning_horizon}, with reserve level {erm.prm}")
-        erm.prm = 0.5
 
         # Create model variables to track storage contributions (only once)
         c = "StorageUnit"
         if not n.storage_units.empty and f"{c}-p_dispatch_RESERVES" not in model.variables:
-            model.add_variables(-np.inf, model.variables["StorageUnit-p_store"].upper, name=f"{c}-p_dispatch_RESERVES")
-            model.add_variables(-np.inf, model.variables["StorageUnit-p_store"].upper, name=f"{c}-p_store_RESERVES")
+            model.add_variables(
+                -np.inf,
+                model.variables["StorageUnit-p_dispatch"].upper,
+                name=f"{c}-p_dispatch_RESERVES",
+            )
+            model.add_variables(
+                -np.inf,
+                model.variables["StorageUnit-p_store"].upper,
+                name=f"{c}-p_store_RESERVES",
+            )
             model.add_variables(
                 -np.inf,
                 model.variables["StorageUnit-state_of_charge"].upper,
                 name=f"{c}-state_of_charge_RESERVES",
             )
             define_SU_reserve_constraints(n)
+            define_operational_constraints_for_extendables(n, n.snapshots, c, "state_of_charge")
             define_operational_constraints_for_extendables(n, n.snapshots, c, "p_dispatch")
             define_operational_constraints_for_extendables(n, n.snapshots, c, "p_store")
+            define_operational_constraints_for_non_extendables(n, n.snapshots, c, "state_of_charge")
             define_operational_constraints_for_non_extendables(n, n.snapshots, c, "p_dispatch")
             define_operational_constraints_for_non_extendables(n, n.snapshots, c, "p_store")
 
