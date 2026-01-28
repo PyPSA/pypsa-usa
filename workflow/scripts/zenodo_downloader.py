@@ -14,7 +14,7 @@ class ZenodoScenarioDownloader:
 
         # Mapping of scenarios to their Zenodo record IDs
         self.scenario_records = {
-            "solar_historical": 17410574,
+            "solar_historical": 18293999,
             "solar_rcp45hotter_2020_2059": None,
             "solar_rcp45hotter_2060_2099": None,
             "solar_rcp45cooler_2020_2059": None,
@@ -23,7 +23,7 @@ class ZenodoScenarioDownloader:
             "solar_rcp85hotter_2060_2099": None,
             "solar_rcp85cooler_2020_2059": None,
             "solar_rcp85cooler_2060_2099": None,
-            "wind_100m_historical": 17429560,
+            "wind_100m_historical": 18331699,
             "wind_100m_rcp45hotter_2020_2039": None,
             "wind_100m_rcp45hotter_2040_2059": None,
             "wind_100m_rcp45hotter_2060_2079": None,

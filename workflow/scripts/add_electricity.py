@@ -366,8 +366,9 @@ def filter_plants_by_region(
         ]
 
         if not remaining_plants.empty:
+            remaining_clean = remaining_plants.drop(columns=["index_right"], errors="ignore")
             plants_nearshore = gpd.sjoin_nearest(
-                remaining_plants,
+                remaining_clean,
                 regions_onshore.to_crs(epsg=3857),
                 how="inner",
                 max_distance=2000,
