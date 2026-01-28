@@ -143,6 +143,7 @@ def solved_previous_horizon(w):
         + ".nc"
     )
 
+
 def get_renewable_weather_years(wildcards):
     # Get renewable weather years for a given horizon, with fallback
     horizon_str = str(wildcards.get("horizon", wildcards.get("planning_horizon", None)))
@@ -152,6 +153,7 @@ def get_renewable_weather_years(wildcards):
             return horizon_years[horizon_str]
     # Fallback to flat list
     return config.get("renewable_weather_years", [])
+
 
 def get_renewable_scenario_years(wildcards):
     # Get renewable scenario years for a given horizon, with fallback

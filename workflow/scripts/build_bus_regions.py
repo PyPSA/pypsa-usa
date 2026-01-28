@@ -181,7 +181,7 @@ def main(snakemake):
                     "y": centroid.y,
                     "geometry": county_geom,  # keep county's own geometry
                     "country": county_id,  # county FIPS
-                }
+                },
             )
 
         # create GeoDataFrame and append to regions
