@@ -231,10 +231,10 @@ def validation_figures(wildcards):
 
 rule all:
     input:
+        #"repo_data/dag.jpg",
         electricity_figures,
         sector_figures,
         validation_figures,
-        #"repo_data/dag.jpg",
 
 
 rule data_model:

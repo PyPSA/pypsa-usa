@@ -476,7 +476,7 @@ def plot_emissions_bar(
     emissions = emisssions_ts.groupby(emisssions_ts.index.get_level_values(0)).sum().round(3).T
 
     # Set up the figure and axes
-    fig, ax = plt.subplots(figsize=(7, 4))
+    _, ax = plt.subplots(figsize=(7, 4))
     emissions.T.plot(
         kind="bar",
         stacked=True,
@@ -690,7 +690,7 @@ def plot_capacity_factor_heatmap(n: pypsa.Network, save: str, **wildcards) -> No
     unique_months = df_long["month"].unique()
 
     # Prepare figure and axes
-    fig, axs = plt.subplots(
+    _, axs = plt.subplots(
         len(unique_months),
         1,
         figsize=(12, len(unique_months) * 4),
@@ -1059,9 +1059,7 @@ def plot_seasonal_generation(
     save: str,
     **wildcards,
 ) -> None:
-    """
-    Multi-panel generation analysis showing total monthly energy by technology.
-    """
+    """Multi-panel generation analysis showing total monthly energy by technology."""
     from plot_network_maps import get_color_palette
 
     # Get energy timeseries (power in GW)

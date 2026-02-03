@@ -353,7 +353,7 @@ def plot_regional_comparisons(
         diff[region] = (optimized_region.sum() - historic_region.sum()) / total_region * 1e2
 
     # Plot Bar Production Differences of Regions
-    fig, ax = plt.subplots(figsize=(10, 6))
+    _, ax = plt.subplots(figsize=(10, 6))
     diff.T.plot(kind="barh", stacked=True, ax=ax, color=colors)
     ax.set_xlabel("Production Deviation [% of Total]")
     ax.set_ylabel("Region")
