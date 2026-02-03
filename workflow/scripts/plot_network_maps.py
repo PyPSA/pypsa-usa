@@ -565,7 +565,7 @@ def plot_renewable_potential(
 
 
 def plot_lmp_map(network: pypsa.Network, save: str, **wildcards):
-    fig, ax = plt.subplots(
+    _, ax = plt.subplots(
         subplot_kw={"projection": ccrs.PlateCarree()},
         figsize=(8, 8),
     )

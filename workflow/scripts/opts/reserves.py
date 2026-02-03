@@ -346,7 +346,7 @@ def define_erm_nodal_balance_constraints(n, erm, region_buses):
         Series containing buses in the region
     """
     # Get capacity contribution from resources
-    ext_contribution, rhs_existing = _calculate_capacity_accredidation(
+    _, rhs_existing = _calculate_capacity_accredidation(
         n,
         erm.planning_horizon,
         region_buses,
