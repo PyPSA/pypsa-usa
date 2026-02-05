@@ -28,9 +28,8 @@ from xarray import DataArray, concat
 logger = logging.getLogger(__name__)
 
 
-def define_SU_reserve_constraints(n):
+def define_SU_reserve_constraints(n, sns):
     """Sets energy balance constraints for storage units."""
-    sns = n.snapshots
     m = n.model
     c = "StorageUnit"
     dim = "snapshot"
@@ -237,150 +236,54 @@ def _get_regional_demand(n, region_buses):
     return rhs
 
 
-def _calculate_capacity_accredidation(n, planning_horizon, region_buses, specific_hour=None):
-    """Calculate capacity accreditation for extendable and non-extendable generators."""
-    # Get active generators during this planning period
-    active_gens = n.get_active_assets("Generator", planning_horizon)
-    extendable_gens = n.generators.p_nom_extendable
-    region_gens = n.generators.bus.isin(region_buses.index)
-
-    # Extendable capacity with capacity credit
-    region_active_ext_gens = region_gens & active_gens & extendable_gens
-    region_active_ext_gens = n.generators[region_active_ext_gens]
-
-    if not region_active_ext_gens.empty:
-        ext_p_nom = n.model["Generator-p_nom"].loc[region_active_ext_gens.index]
-
-        ext_p_max_pu = get_as_dense(n, "Generator", "p_max_pu", inds=region_active_ext_gens.index)
-        ext_p_max_pu = ext_p_max_pu.loc[planning_horizon]
-        ext_p_max_pu.T.index.name = "Generator-ext"
-
-        ext_contribution = ext_p_nom * ext_p_max_pu
-    else:
-        ext_contribution = 0
-
-    # Non-extendable existing capacity which contributes to the reserve margin
-    region_active_nonext_gens = region_gens & active_gens & ~extendable_gens
-    region_active_nonext_gens = n.generators[region_active_nonext_gens]
-
-    if not region_active_nonext_gens.empty:
-        non_ext_p_max_pu = get_as_dense(n, "Generator", "p_max_pu", inds=region_active_nonext_gens.index)
-        non_ext_p_max_pu = non_ext_p_max_pu.loc[planning_horizon]
-
-        non_ext_p_nom = region_active_nonext_gens.p_nom
-        non_ext_contribution = non_ext_p_nom * non_ext_p_max_pu
-    else:
-        non_ext_contribution = 0
-    if specific_hour is not None:
-        ext_contribution = ext_contribution.loc[specific_hour]
-        non_ext_contribution = non_ext_contribution.loc[specific_hour]
-
-    return ext_contribution, non_ext_contribution
-
-
-def _get_combined_prm_requirements(n, config=None, snakemake=None, regional_prm_data=None):
+def define_erm_nodal_balance_constraints(n, snapshots, prm, region_name, region_buses):
     """
-    Combine PRM requirements from different sources into a single dataframe.
+    Define ERM nodal balance constraints for a given region across all investment periods.
+
+    Creates a single constraint per region that spans all snapshots (including all
+    investment periods). Uses activity masking to zero out generator contributions
+    in periods when they are inactive (e.g., retired or not yet built).
 
     Parameters
     ----------
     n : pypsa.Network
-    config : dict, optional
-        If provided, will read PRM requirements from config files
-    regional_prm_data : pd.DataFrame, optional
-        Direct input of PRM requirements with columns: name, region, prm, planning_horizon
-
-    Returns
-    -------
-    pd.DataFrame
-        Combined PRM requirements with columns: name, region, prm, planning_horizon
+    snapshots : pd.Index
+        Snapshots of the constraint.
+    prm : float
+        Planning reserve margin as a fraction (e.g., 0.15 for 15%)
+    region_name : str
+        Name of the region for constraint naming
+    region_buses : pd.DataFrame
+        DataFrame containing buses in the region
     """
-    if regional_prm_data is not None:
-        return regional_prm_data
-
-    # Load user-defined PRM requirements
-    regional_prm = pd.read_csv(
-        config["electricity"]["SAFE_regional_reservemargins"],
-        index_col=[0],
-    )
-
-    # Process ReEDS PRM data if available
-    reeds_prm = pd.read_csv(snakemake.input.safer_reeds, index_col=[0])
-
-    # Map NERC regions to ReEDS zones
-    nerc_memberships = (
-        n.buses.groupby("nerc_reg")["reeds_zone"]
-        .apply(
-            lambda x: ", ".join(x),
-        )
-        .to_dict()
-    )
-
-    reeds_prm["region"] = reeds_prm.index.map(nerc_memberships)
-    reeds_prm = reeds_prm.dropna(subset="region")
-    reeds_prm = reeds_prm.drop(
-        columns=["none", "ramp2025_20by50", "ramp2025_25by50", "ramp2025_30by50"],
-    )
-    reeds_prm = reeds_prm.rename(columns={"static": "prm", "t": "planning_horizon"})
-
-    # Combine both data sources
-    regional_prm = pd.concat([regional_prm, reeds_prm])
-
-    # Filter for relevant planning horizons
-    return regional_prm[regional_prm.planning_horizon.isin(n.investment_periods)]
-
-
-def define_erm_nodal_balance_constraints(n, erm, region_buses):
-    """
-    Define ERM nodal balance constraints for a given region and planning horizon.
-
-    This function refactors the original implementation to leverage PyPSA's
-    define_nodal_balance_constraints function while maintaining ERM-specific
-    functionality for reserve margin calculations.
-
-    Parameters
-    ----------
-    n : pypsa.Network
-    erm : pd.Series
-    region_buses : pd.Series
-        Series containing buses in the region
-    """
-    # Get capacity contribution from resources
-    _, rhs_existing = _calculate_capacity_accredidation(
-        n,
-        erm.planning_horizon,
-        region_buses,
-    )
-
-    # Calculate peak demand and required reserve margin for a bus
-    regional_demand = _get_regional_demand(n, region_buses)
-    planning_reserve = regional_demand * (1.0 + erm.prm)
-
-    buses = region_buses.index
-    sns = n.snapshots
-
+    sns = snapshots
     m = n.model
-    if buses is None:
-        buses = n.buses.index
+    buses = region_buses.index
+
+    # RHS: demand * (1 + prm) over ALL snapshots
+    regional_demand = _get_regional_demand(n, region_buses).loc[sns]
+    planning_reserve = regional_demand * (1.0 + prm)
+
+    # LHS expressions for storage/transmission with activity masking
+    su_activity = DataArray(get_activity_mask(n, "StorageUnit", sns)) if not n.storage_units.empty else None
+    line_activity = DataArray(get_activity_mask(n, "Line", sns)) if not n.lines.empty else None
+    link_activity = DataArray(get_activity_mask(n, "Link", sns)) if not n.links.empty else None
 
     args = [
-        ["StorageUnit", "p_dispatch_RESERVES", "bus", 1],
-        ["StorageUnit", "p_store_RESERVES", "bus", -1],
-        ["Line", "s_RESERVES", "bus0", -1],
-        ["Line", "s_RESERVES", "bus1", 1],
-        ["Link", "p_RESERVES", "bus0", -1],
-        ["Link", "p_RESERVES", "bus1", get_as_dense(n, "Link", "efficiency", sns)],
+        ["StorageUnit", "p_dispatch_RESERVES", "bus", 1, su_activity],
+        ["StorageUnit", "p_store_RESERVES", "bus", -1, su_activity],
+        ["Line", "s_RESERVES", "bus0", -1, line_activity],
+        ["Line", "s_RESERVES", "bus1", 1, line_activity],
+        ["Link", "p_RESERVES", "bus0", -1, link_activity],
+        ["Link", "p_RESERVES", "bus1", get_as_dense(n, "Link", "efficiency", sns), link_activity],
     ]
 
     exprs = []
-    for arg in args:
-        c, attr, column, sign = arg
-
+    for c, attr, column, sign, activity in args:
         if n.df(c).empty:
             continue
 
         if "sign" in n.df(c):
-            # additional sign necessary for branches in reverse direction
             sign = sign * n.df(c).sign
 
         expr = DataArray(sign) * m[f"{c}-{attr}"]
@@ -389,67 +292,73 @@ def define_erm_nodal_balance_constraints(n, erm, region_buses):
         expr = expr.sel({c: cbuses.index})
 
         if expr.size:
+            if activity is not None:
+                expr = expr.where(activity.sel({c: cbuses.index}))
             exprs.append(expr.groupby(cbuses).sum())
 
-    # Add extendable generator contribution to LHS (p_nom * p_max_pu grouped by bus)
-    # Recompute with full snapshot dimension to match other expressions
-    active_gens = n.get_active_assets("Generator", erm.planning_horizon)
-    extendable_gens = n.generators.p_nom_extendable
+    # Extendable generators on LHS: p_nom * p_max_pu * activity_mask
     region_gens = n.generators.bus.isin(buses)
-    region_active_ext_gens = n.generators[region_gens & active_gens & extendable_gens]
+    extendable_gens = n.generators.p_nom_extendable
+    region_ext_gens = n.generators[region_gens & extendable_gens]
 
-    if not region_active_ext_gens.empty:
-        # Get p_nom variable and p_max_pu with full snapshot dimension
-        ext_p_nom = m["Generator-p_nom"].loc[region_active_ext_gens.index]
-        ext_p_max_pu = get_as_dense(n, "Generator", "p_max_pu", sns, inds=region_active_ext_gens.index)
+    if not region_ext_gens.empty:
+        ext_p_nom = m["Generator-p_nom"].loc[region_ext_gens.index]
+        ext_p_max_pu = get_as_dense(n, "Generator", "p_max_pu", sns, inds=region_ext_gens.index)
+
         ext_p_max_pu.columns.name = "Generator-ext"
+        ext_contribution = ext_p_nom * ext_p_max_pu
 
-        # Compute contribution: p_nom * p_max_pu
-        ext_contribution_full = ext_p_nom * ext_p_max_pu
+        # Use .where() to remove terms for inactive periods (sets var labels to -1)
+        # rather than zeroing coefficients, which leaves orphaned variable references
+        activity = get_activity_mask(n, "Generator", sns)[region_ext_gens.index]
+        activity.columns.name = "Generator-ext"
+        ext_contribution = ext_contribution.where(DataArray(activity))
 
-        # Create DataArray with bus mapping using Generator-ext as dimension name
         gen_buses = DataArray(
-            region_active_ext_gens.bus.values,
+            region_ext_gens.bus.values,
             dims=["Generator-ext"],
-            coords={"Generator-ext": region_active_ext_gens.index.values},
+            coords={"Generator-ext": region_ext_gens.index.values},
             name="Bus",
         )
-        ext_expr = ext_contribution_full.groupby(gen_buses).sum()
-        exprs.append(ext_expr)
+        exprs.append(ext_contribution.groupby(gen_buses).sum())
+
     lhs = merge(exprs, join="outer").reindex(Bus=buses)
+
+    # Non-extendable generators on RHS: p_nom * p_max_pu * activity_mask
+    region_nonext_gens = n.generators[region_gens & ~extendable_gens]
+    if not region_nonext_gens.empty:
+        nonext_activity = get_activity_mask(n, "Generator", sns)[region_nonext_gens.index]
+        nonext_p_max_pu = get_as_dense(n, "Generator", "p_max_pu", sns, inds=region_nonext_gens.index)
+        nonext_p_max_pu = nonext_p_max_pu * nonext_activity
+        rhs_existing = region_nonext_gens.p_nom * nonext_p_max_pu
+        rhs_existing.index = sns
+        bus_rhs_capacity = rhs_existing.T.groupby(region_nonext_gens.bus).sum().T
+        bus_rhs_capacity = bus_rhs_capacity.reindex(columns=buses, fill_value=0)
+        planning_reserve = planning_reserve - bus_rhs_capacity
+
     rhs = planning_reserve
     rhs.index.name = "snapshot"
 
-    # # Calculate RHS for each bus (planning reserve minus existing capacity)
-    bus_gens_non_ext = n.generators[
-        (n.generators.bus.isin(buses)) & ~n.generators.p_nom_extendable & get_activity_mask(n, "Generator", sns).all()
-    ]
-    if not bus_gens_non_ext.empty:
-        rhs_existing.index = sns
-        bus_rhs_capacity = rhs_existing.loc[sns, bus_gens_non_ext.index]
-        bus_rhs_capacity = bus_rhs_capacity.T.groupby(bus_gens_non_ext.bus).sum().T.reindex(columns=buses, fill_value=0)
-        rhs = rhs - bus_rhs_capacity
-
+    # Constraint over ALL snapshots
     empty_nodal_balance = (lhs.vars == -1).all("_term")
     rhs = DataArray(rhs)
     if empty_nodal_balance.any():
         if (empty_nodal_balance & (rhs != 0)).any().item():
             raise ValueError("Empty LHS with non-zero RHS in nodal balance constraint.")
-
         mask = ~empty_nodal_balance
     else:
         mask = None
 
     n.model.add_constraints(
         lhs,
-        "=",
+        ">=",
         rhs,
-        name=f"GlobalConstraint-{erm.name}_ERM",
+        name=f"GlobalConstraint-{region_name}_ERM",
         mask=mask,
     )
 
 
-def add_ERM_constraints(n, config=None, snakemake=None, regional_prm_data=None):
+def add_ERM_constraints(n, snapshots, config=None, snakemake=None, regional_prm_data=None):
     """
     Add Energy Reserve Margin (ERM) constraints for regional capacity adequacy.
 
@@ -458,32 +367,38 @@ def add_ERM_constraints(n, config=None, snakemake=None, regional_prm_data=None):
     resources like storage devices must have the state of charge to meet the reserve
     to contribute to the ERM.
 
+    Creates one constraint per region spanning all investment periods, using activity
+    masking to handle generator retirements and build years.
+
     Parameters
     ----------
     n : pypsa.Network
         The PyPSA network object
     config : dict, optional
-        Configuration dictionary containing ERM parameters. Required if regional_prm_data not provided.
+        Configuration dictionary containing electricity.prm dict.
+        Required if regional_prm_data not provided.
     snakemake : snakemake object, optional
-    regional_prm_data : pd.DataFrame, optional
-        Direct input of reserve margin requirements with columns: name, region, prm, planning_horizon.
-        If provided, this takes precedence over config file data.
+        Not used in the new implementation, kept for API compatibility.
+    regional_prm_data : dict, optional
+        Direct input of PRM requirements as dict {region_name: prm_value}.
+        If provided, this takes precedence over config data.
     """
     model = n.model
-    # Load regional PRM requirements
-    regional_prm = _get_combined_prm_requirements(n, config, snakemake, regional_prm_data)
 
-    # Apply constraints for each region and planning horizon
-    for _, erm in regional_prm.iterrows():
-        # Skip if no valid planning horizon or region
-        if erm.planning_horizon not in n.investment_periods:
-            continue
-        region_list = [region_.strip() for region_ in erm.region.split(",")]
+    # Get PRM data: dict {region_name: prm_value}
+    if regional_prm_data is not None:
+        prm_dict = regional_prm_data
+    else:
+        prm_dict = config["electricity"]["prm"]
+
+    for region_name, prm_value in prm_dict.items():
+        region_list = [region_name.strip()]
         region_buses = get_region_buses(n, region_list)
 
         if region_buses.empty:
             continue
-        logger.info(f"Adding ERM constraint for {erm.name} in {erm.planning_horizon}, with reserve level {erm.prm}")
+
+        logger.info(f"Adding ERM constraint for {region_name} with reserve level {prm_value}")
 
         # Create model variables to track storage contributions (only once)
         c = "StorageUnit"
@@ -503,27 +418,27 @@ def add_ERM_constraints(n, config=None, snakemake=None, regional_prm_data=None):
                 model.variables["StorageUnit-state_of_charge"].upper,
                 name=f"{c}-state_of_charge_RESERVES",
             )
-            define_SU_reserve_constraints(n)
-            define_operational_constraints_for_extendables(n, n.snapshots, c, "state_of_charge")
-            define_operational_constraints_for_extendables(n, n.snapshots, c, "p_dispatch")
-            define_operational_constraints_for_extendables(n, n.snapshots, c, "p_store")
-            define_operational_constraints_for_non_extendables(n, n.snapshots, c, "state_of_charge")
-            define_operational_constraints_for_non_extendables(n, n.snapshots, c, "p_dispatch")
-            define_operational_constraints_for_non_extendables(n, n.snapshots, c, "p_store")
+            define_SU_reserve_constraints(n, snapshots)
+            define_operational_constraints_for_extendables(n, snapshots, c, "state_of_charge")
+            define_operational_constraints_for_extendables(n, snapshots, c, "p_dispatch")
+            define_operational_constraints_for_extendables(n, snapshots, c, "p_store")
+            define_operational_constraints_for_non_extendables(n, snapshots, c, "state_of_charge")
+            define_operational_constraints_for_non_extendables(n, snapshots, c, "p_dispatch")
+            define_operational_constraints_for_non_extendables(n, snapshots, c, "p_store")
 
         # Create model variables to track transmission contributions (only once)
         if not n.lines.empty and "Line-s_RESERVES" not in model.variables:
             model.add_variables(-np.inf, model.variables["Line-s"].upper, name="Line-s_RESERVES")
-            define_operational_constraints_for_extendables(n, n.snapshots, "Line", "s")
+            define_operational_constraints_for_extendables(n, snapshots, "Line", "s")
+            define_operational_constraints_for_non_extendables(n, snapshots, "Line", "s")
 
         if not n.links.empty and "Link-p_RESERVES" not in model.variables:
             model.add_variables(-np.inf, model.variables["Link-p"].upper, name="Link-p_RESERVES")
-            define_operational_constraints_for_extendables(n, n.snapshots, "Link", "p")
+            define_operational_constraints_for_extendables(n, snapshots, "Link", "p")
+            define_operational_constraints_for_non_extendables(n, snapshots, "Link", "p")
 
-        define_erm_nodal_balance_constraints(n, erm, region_buses)
-        logger.info(
-            f"Added ERM constraint for {erm.name} in {erm.planning_horizon}: ",
-        )
+        define_erm_nodal_balance_constraints(n, snapshots, prm_value, region_name, region_buses)
+        logger.info(f"Added ERM constraint for {region_name}")
 
 
 def add_operational_reserve_margin(n, sns, config):
