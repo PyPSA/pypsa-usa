@@ -833,6 +833,7 @@ rule add_extra_components:
             "model_topology", "topological_boundaries"
         ),
         transmission_network=config_provider("model_topology", "transmission_network"),
+        ucap=config_provider("ucap", default={}),
     output:
         RESOURCES + "{interconnect}/elec_s{simpl}_c{clusters}_ec.nc",
     log:
