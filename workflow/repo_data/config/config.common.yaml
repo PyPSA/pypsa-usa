@@ -153,3 +153,16 @@ offshore_shape:
 
 offshore_network:
   bus_spacing: 25000 # km
+
+# docs :
+# UCAP (Unforced Capacity) calculation based on Forced Outage Rates (FOR)
+# UCAP = ICAP * (1 - FOR), applied as p_max_pu = 1 - FOR for conventional generators
+ucap:
+  enable: false  # [false, true]
+  forced_outage_rates:  # Forced outage rates in percent
+    coal: 11.061
+    oil: 11.061
+    hydro: 8.127
+    CCGT: 6.107
+    nuclear: 2.207
+    OCGT: 6.259
