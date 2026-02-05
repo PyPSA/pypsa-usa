@@ -357,13 +357,19 @@ def filter_plants_by_region(
             right_on="ba",
             how="left",
         )
-        plants_must_add = plants_no_region_all_shapes[
-            plants_no_region_all_shapes.interconnect != plants_no_region_all_shapes.interconnection
-        ]
+        # Handles non-US wide interconnection cases (western, eastern, texas)
+        if "interconnection" in plants_no_region_all_shapes.columns:
+            plants_must_add = plants_no_region_all_shapes[
+                plants_no_region_all_shapes.interconnect != plants_no_region_all_shapes.interconnection
+            ]
+            remaining_plants = plants_no_region_all_shapes[
+                plants_no_region_all_shapes.interconnect == plants_no_region_all_shapes.interconnection
+            ]
+        # Handles US wide interconnection cases
+        else:
+            plants_must_add = plants_no_region_all_shapes
+            remaining_plants = pd.DataFrame()
         plants_must_add.set_index("generator_name", inplace=True)
-        remaining_plants = plants_no_region_all_shapes[
-            plants_no_region_all_shapes.interconnect == plants_no_region_all_shapes.interconnection
-        ]
 
         if not remaining_plants.empty:
             remaining_clean = remaining_plants.drop(columns=["index_right"], errors="ignore")

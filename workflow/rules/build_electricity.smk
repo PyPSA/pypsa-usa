@@ -225,7 +225,7 @@ rule build_renewable_profiles:
         mem_mb=lambda wildcards, input, attempt: (
             ATLITE_NPROCESSES * input.size // 2000000
         )
-        * 1.5,
+        * 2.5,
         walltime=config_provider(
             "walltime", "build_renewable_profiles", default="02:30:00"
         ),
@@ -880,7 +880,7 @@ rule prepare_network:
     threads: 1
     resources:
         walltime=config_provider("walltime", "prepare_network", default="00:30:00"),
-        mem_mb=lambda wildcards, input, attempt: (input.size // 100000) * attempt * 2,
+        mem_mb=lambda wildcards, input, attempt: (input.size // 100000) * attempt * 6,
     group:
         "prepare"
     log:
