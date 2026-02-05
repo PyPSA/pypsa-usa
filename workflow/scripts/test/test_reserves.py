@@ -24,7 +24,7 @@ from opts.reserves import add_ERM_constraints, store_ERM_duals
 @pytest.fixture
 def reserve_margin_network(base_network):
     """
-    Adapt base network for ERM and PRM constraint testing.
+    Adapt base network for ERM constraint testing.
 
     Extends the base network with parameters relevant to reserve margin testing.
     """
@@ -85,16 +85,16 @@ def test_erm_constraint_binding(reserve_margin_network):
     """Test that ERM constraint correctly limits generation capacity."""
     n = reserve_margin_network.copy()
 
-    prm_value = 0.90
+    erm_value = 0.90
 
     def extra_functionality(n, _):
-        add_ERM_constraints(n, regional_prm_data={"all": prm_value})
+        add_ERM_constraints(n, regional_erm_data={"all": erm_value})
 
     n.optimize(solver_name="glpk", multi_investment_periods=True, extra_functionality=extra_functionality)
     store_ERM_duals(n)
 
     nodal_demand = n.loads_t.p.T.groupby(n.loads.bus).sum().T
-    nodal_reserve_requirement = nodal_demand * (1.0 + prm_value)
+    nodal_reserve_requirement = nodal_demand * (1.0 + erm_value)
 
     nodal_generator_capacity = (
         (n.generators.p_nom_opt * get_as_dense(n, "Generator", "p_max_pu", n.snapshots))
@@ -138,10 +138,10 @@ def test_multiple_non_overlapping_erms(reserve_margin_network):
     """Test that multiple ERM constraints work correctly for non-overlapping regions."""
     n = reserve_margin_network.copy()
 
-    prm_dict = {"NERC1": 0.15, "NERC2": 0.30}
+    erm_dict = {"NERC1": 0.15, "NERC2": 0.30}
 
     def extra_functionality(n, _):
-        add_ERM_constraints(n, regional_prm_data=prm_dict)
+        add_ERM_constraints(n, regional_erm_data=erm_dict)
 
     try:
         n.optimize(solver_name="glpk", multi_investment_periods=True, extra_functionality=extra_functionality)
@@ -155,7 +155,7 @@ def test_multiple_non_overlapping_erms(reserve_margin_network):
     assert len(erm_constraints) >= 2, f"Should have at least 2 ERM constraints, found {len(erm_constraints)}"
 
     # Verify each region has its own ERM constraint
-    for region_name in prm_dict:
+    for region_name in erm_dict:
         constraint_name = f"GlobalConstraint-{region_name}_ERM"
         assert constraint_name in n.model.constraints, f"ERM constraint {constraint_name} should exist"
 
@@ -181,7 +181,7 @@ def test_erm_increases_capacity(reserve_margin_network):
     n_with_erm = reserve_margin_network.copy()
 
     def extra_functionality(n, _):
-        add_ERM_constraints(n, regional_prm_data={"all": 0.14})
+        add_ERM_constraints(n, regional_erm_data={"all": 0.14})
 
     n_with_erm.optimize(
         solver_name="glpk",
@@ -194,7 +194,7 @@ def test_erm_increases_capacity(reserve_margin_network):
     total_capacity_with_erm = total_gen_capacity_with_erm + total_storage_capacity_with_erm
 
     assert total_capacity_with_erm > total_capacity_no_erm, (
-        f"ERM constraint (prm=0.14) should result in more capacity built. "
+        f"ERM constraint (erm=0.14) should result in more capacity built. "
         f"Without ERM: {total_capacity_no_erm:.2f} MW, With ERM: {total_capacity_with_erm:.2f} MW"
     )
 
@@ -243,7 +243,7 @@ def test_erm_increases_capacity_no_expandable_transmission(reserve_margin_networ
     n_with_erm = disable_transmission_expansion(n_with_erm)
 
     def extra_functionality(n, _):
-        add_ERM_constraints(n, regional_prm_data={"all": 0.14})
+        add_ERM_constraints(n, regional_erm_data={"all": 0.14})
 
     n_with_erm.optimize(
         solver_name="glpk",
@@ -256,7 +256,7 @@ def test_erm_increases_capacity_no_expandable_transmission(reserve_margin_networ
     total_capacity_with_erm = total_gen_capacity_with_erm + total_storage_capacity_with_erm
 
     assert total_capacity_with_erm > total_capacity_no_erm, (
-        f"ERM constraint (prm=0.14) should result in more capacity built (no expandable transmission). "
+        f"ERM constraint (erm=0.14) should result in more capacity built (no expandable transmission). "
         f"Without ERM: {total_capacity_no_erm:.2f} MW, With ERM: {total_capacity_with_erm:.2f} MW"
     )
 
@@ -270,10 +270,10 @@ def test_multi_period_erm_optimization(multi_period_reserve_network):
     """Test that multi-period network with ERM solves and creates one constraint (not per period)."""
     n = multi_period_reserve_network.copy()
 
-    prm_dict = {"all": 0.15}
+    erm_dict = {"all": 0.15}
 
     def extra_functionality(n, _):
-        add_ERM_constraints(n, regional_prm_data=prm_dict)
+        add_ERM_constraints(n, regional_erm_data=erm_dict)
 
     n.optimize(solver_name="glpk", multi_investment_periods=True, extra_functionality=extra_functionality)
 
@@ -297,7 +297,7 @@ def test_multi_period_erm_increases_capacity(multi_period_reserve_network):
     n_with_erm = multi_period_reserve_network.copy()
 
     def extra_functionality(n, _):
-        add_ERM_constraints(n, regional_prm_data={"all": 0.15})
+        add_ERM_constraints(n, regional_erm_data={"all": 0.15})
 
     n_with_erm.optimize(
         solver_name="glpk",
@@ -334,7 +334,7 @@ def test_multi_period_erm_activity_masking(multi_period_reserve_network):
 
     # Run optimization with ERM
     def extra_functionality(n, _):
-        add_ERM_constraints(n, regional_prm_data={"all": 0.15})
+        add_ERM_constraints(n, regional_erm_data={"all": 0.15})
 
     n.optimize(solver_name="glpk", multi_investment_periods=True, extra_functionality=extra_functionality)
 
