@@ -153,7 +153,7 @@ def extra_functionality(n, snapshots):
         ),
         "REM": lambda: add_regional_co2limit(n, config) if n.generators.p_nom_extendable.any() else None,
         "ERM": lambda: (
-            add_ERM_constraints(n, config, global_snakemake) if n.generators.p_nom_extendable.any() else None
+            add_ERM_constraints(n, snapshots, config, global_snakemake) if n.generators.p_nom_extendable.any() else None
         ),
         "TCT": lambda: (
             add_technology_capacity_target_constraints(n, config) if n.generators.p_nom_extendable.any() else None
