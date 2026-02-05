@@ -71,7 +71,7 @@ optional constraints, which are activated in either :mod:`prepare_network` or
 the :mod:`solve_network` step. It may hold multiple triggers separated by `-`,
 i.e. `REM-3H` contains the `REM` regional emissions limit trigger and the `3H` switch.
 
-The REM, SAFER, RPS can be defined using either the reeds zone name 'p##"
+The REM, ERM, RPS can be defined using either the reeds zone name 'p##',
 the state code (eg, TX, CA, MT), pypsa-usa interconnect name (western, eastern, texas, usa),
 or nerc region name.
 
@@ -87,6 +87,45 @@ There are currently:
    :widths: 10,20,10,10
    :file: configtables/opts.csv
 ```
+
+### Energy Reserve Margin (ERM) Configuration
+
+The ERM constraint ensures that each region has sufficient firm capacity to meet demand plus a reserve margin at every timestep. Unlike traditional planning reserve margins that only consider peak demand, ERM enforces the constraint across all snapshots.
+
+**Key Features:**
+- Resources must be "energy-backed" - storage devices must have sufficient state of charge to contribute to the reserve
+- Supports multiple non-overlapping regions with different reserve margins
+- Defaults to 15% reserve margin for all regions if not specified
+
+**Configuration:**
+
+To enable ERM, add `ERM` to the `opts` wildcard in your scenario configuration:
+
+```yaml
+scenario:
+  opts: [ERM-3h]  # or [REM-ERM-3h] to combine with other opts
+```
+
+To customize the ERM values per region, add an `erm` section under `electricity` in your config file:
+
+```yaml
+electricity:
+  erm:
+    all: 0.15        # 15% reserve margin for all regions (default)
+    # Or specify per region:
+    # western: 0.15
+    # SPP: 0.12
+    # CISO: 0.17
+```
+
+If no `erm` configuration is provided, a default of `{'all': 0.15}` (15% reserve margin for all regions) is used.
+
+**Valid region identifiers:**
+- `all` - applies to all buses in the network
+- State codes: `TX`, `CA`, `MT`, etc.
+- Interconnect names: `western`, `eastern`, `texas`
+- NERC region names
+- ReEDS zone names: `p1`, `p2`, etc.
 
 (sector)=
 ## The `{sector}` wildcard

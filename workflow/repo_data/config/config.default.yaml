@@ -73,6 +73,9 @@ electricity:
     epsilon_vres: 0.02
     contingency: 4000
 
+  erm:  # Energy Reserve Margin - used when ERM opt is enabled
+    all: 0.15  # 15% reserve margin for all regions (default)
+
   extendable_carriers:
     Generator: [solar, onwind, offwind_floating, OCGT, CCGT, CCGT-95CCS, coal, nuclear, hydrogen_ct] #include CCGT-CCS
     StorageUnit: [4hr_battery_storage, 8hr_battery_storage] # [Xhr-battery-storage (2-10 hours)]

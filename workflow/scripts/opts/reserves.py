@@ -1,8 +1,8 @@
 """
-Energy Reserve Margin (ERM) and Planning Reserve Margin (PRM) constraints for PyPSA-USA.
+Energy Reserve Margin (ERM) constraints for PyPSA-USA.
 
 This module contains functions for implementing capacity adequacy constraints,
-including energy reserve margins (ERM) and planning reserve margins (PRM).
+including energy reserve margins (ERM).
 """
 
 import logging
@@ -236,7 +236,7 @@ def _get_regional_demand(n, region_buses):
     return rhs
 
 
-def define_erm_nodal_balance_constraints(n, snapshots, prm, region_name, region_buses):
+def define_erm_nodal_balance_constraints(n, snapshots, erm, region_name, region_buses):
     """
     Define ERM nodal balance constraints for a given region across all investment periods.
 
@@ -249,8 +249,8 @@ def define_erm_nodal_balance_constraints(n, snapshots, prm, region_name, region_
     n : pypsa.Network
     snapshots : pd.Index
         Snapshots of the constraint.
-    prm : float
-        Planning reserve margin as a fraction (e.g., 0.15 for 15%)
+    erm : float
+        Energy reserve margin as a fraction (e.g., 0.15 for 15%)
     region_name : str
         Name of the region for constraint naming
     region_buses : pd.DataFrame
@@ -260,9 +260,9 @@ def define_erm_nodal_balance_constraints(n, snapshots, prm, region_name, region_
     m = n.model
     buses = region_buses.index
 
-    # RHS: demand * (1 + prm) over ALL snapshots
+    # RHS: demand * (1 + erm) over ALL snapshots
     regional_demand = _get_regional_demand(n, region_buses).loc[sns]
-    planning_reserve = regional_demand * (1.0 + prm)
+    planning_reserve = regional_demand * (1.0 + erm)
 
     # LHS expressions for storage/transmission with activity masking
     su_activity = DataArray(get_activity_mask(n, "StorageUnit", sns)) if not n.storage_units.empty else None
@@ -358,7 +358,7 @@ def define_erm_nodal_balance_constraints(n, snapshots, prm, region_name, region_
     )
 
 
-def add_ERM_constraints(n, snapshots, config=None, snakemake=None, regional_prm_data=None):
+def add_ERM_constraints(n, snapshots, config=None, snakemake=None, regional_erm_data=None):
     """
     Add Energy Reserve Margin (ERM) constraints for regional capacity adequacy.
 
@@ -375,30 +375,36 @@ def add_ERM_constraints(n, snapshots, config=None, snakemake=None, regional_prm_
     n : pypsa.Network
         The PyPSA network object
     config : dict, optional
-        Configuration dictionary containing electricity.prm dict.
-        Required if regional_prm_data not provided.
+        Configuration dictionary containing electricity.erm dict.
+        Required if regional_erm_data not provided.
     snakemake : snakemake object, optional
         Not used in the new implementation, kept for API compatibility.
-    regional_prm_data : dict, optional
-        Direct input of PRM requirements as dict {region_name: prm_value}.
+    regional_erm_data : dict, optional
+        Direct input of ERM requirements as dict {region_name: erm_value}.
         If provided, this takes precedence over config data.
     """
     model = n.model
 
-    # Get PRM data: dict {region_name: prm_value}
-    if regional_prm_data is not None:
-        prm_dict = regional_prm_data
-    else:
-        prm_dict = config["electricity"]["prm"]
+    # Get ERM data: dict {region_name: erm_value}
+    # Default to 15% reserve margin for all regions if not specified
+    default_erm = {"all": 0.15}
 
-    for region_name, prm_value in prm_dict.items():
+    if regional_erm_data is not None:
+        erm_dict = regional_erm_data
+    elif config is not None and config.get("electricity", {}).get("erm"):
+        erm_dict = config["electricity"]["erm"]
+    else:
+        logger.info("No ERM configuration provided. Using default: {'all': 0.15}")
+        erm_dict = default_erm
+
+    for region_name, erm_value in erm_dict.items():
         region_list = [region_name.strip()]
         region_buses = get_region_buses(n, region_list)
 
         if region_buses.empty:
             continue
 
-        logger.info(f"Adding ERM constraint for {region_name} with reserve level {prm_value}")
+        logger.info(f"Adding ERM constraint for {region_name} with reserve level {erm_value}")
 
         # Create model variables to track storage contributions (only once)
         c = "StorageUnit"
@@ -437,7 +443,7 @@ def add_ERM_constraints(n, snapshots, config=None, snakemake=None, regional_prm_
             define_operational_constraints_for_extendables(n, snapshots, "Link", "p")
             define_operational_constraints_for_non_extendables(n, snapshots, "Link", "p")
 
-        define_erm_nodal_balance_constraints(n, snapshots, prm_value, region_name, region_buses)
+        define_erm_nodal_balance_constraints(n, snapshots, erm_value, region_name, region_buses)
         logger.info(f"Added ERM constraint for {region_name}")
 
 
