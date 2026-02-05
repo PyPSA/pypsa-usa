@@ -22,7 +22,7 @@ Whether you’re focusing on **ERCOT, WECC, or the Eastern Interconnection**, Py
 
 You can create and export data models for use in your own optimization models via CSV tables or xarray netCDF formats.
 
-PyPSA-USA also provides an interface for running capacity expansion planning and operational simulation models with the Python for Power System Analysis (pypsa) package. You can run expansion planning exercises which integrate regional and national policy constraints like RPS standards, emissions standards, PRMs, and more.
+PyPSA-USA also provides an interface for running capacity expansion planning and operational simulation models with the Python for Power System Analysis (pypsa) package. You can run expansion planning exercises which integrate regional and national policy constraints like RPS standards, emissions standards, ERMs, and more.
 
 ## Sector Coupling
 

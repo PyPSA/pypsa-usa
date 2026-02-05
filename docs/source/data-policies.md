@@ -11,7 +11,7 @@ PyPSA-USA integrates with the ReEDS capacity expansion model developed by NREL t
 
 PyPSA-USA currently supports several key policy constraints, including:
 
-- **Planning Reserve Margins**: Constrains capacity to meet a reserve margin above peak demand.
+- **Energy Reserve Margins (ERM)**: Constrains capacity to meet a reserve margin above demand at every timestep. Resources must be "energy-backed" meaning storage devices must have sufficient state of charge to contribute.
 - **Clean Energy Standards (CES)**: Mandates the proportion of electricity generation that must come from clean energy sources.
 - **Renewable Portfolio Standards (RPS)**: Requires a specific percentage of electricity generation to come from renewable sources.
 - **Technology Capacity Targets**: Sets specific capacity expansion or retirement goals for certain technologies, such as wind, solar, or nuclear.

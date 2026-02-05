@@ -135,6 +135,19 @@ lines:
  
 
 # docs :
+electricity:
+  prm:
+    MISO: 0.183
+    NPCC_NE: 0.135
+    NPCC_NY: 0.15
+    PJM: 0.146
+    SERC: 0.15
+    SPP: 0.16
+    ERCOT: 0.1375
+    WECC_CA: 0.182
+    WECC_NWPP: 0.1435
+    WECC_SRSG: 0.1155
+
 offshore_shape:
   use: eez #options are ca_osw, eez
 
