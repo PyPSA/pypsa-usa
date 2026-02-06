@@ -13,13 +13,21 @@ logger = logging.getLogger(__name__)
 
 
 def download_egs_repository(interconnect, dispatch, subdir):
-    # Save locations
-    url = f"https://zenodo.org/records/14221666/files/{interconnect}_7km_{dispatch}.zip"
+    # Map interconnects that don't have specific files to use 'usa'
+    interconnect_mapping = {
+        "eastern": "usa",
+        # texas, western, and usa use their own files
+    }
 
-    tarball_fn = Path(f"{rootpath}/EGS_{interconnect}_{dispatch}.zip")
+    interconnect_to_use = interconnect_mapping.get(interconnect, interconnect)
+
+    # Save locations
+    url = f"https://zenodo.org/records/14221666/files/{interconnect_to_use}_7km_{dispatch}.zip"
+
+    tarball_fn = Path(f"{rootpath}/EGS_{interconnect_to_use}_{dispatch}.zip")
     to_fn = Path(f"{rootpath}/{subdir}")
 
-    logger.info(f"Downloading EGS zenodo repository from '{url}'.")
+    logger.info(f"Downloading EGS zenodo repository from '{url}' (mapped from interconnect '{interconnect}').")
     progress_retrieve(url, tarball_fn)
 
     logger.info(f"Extracting {dispatch} EGS databundle.")
