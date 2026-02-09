@@ -288,7 +288,7 @@ def split_retirement_gens(
 
     # Rename retiring generators to include "existing" suffix
     n.generators.index = n.generators.apply(
-        lambda row: (row.name if row.name not in (retirement_gens.index) else row.name + " existing"),
+        lambda row: row.name if row.name not in (retirement_gens.index) else row.name + " existing",
         axis=1,
     )
 
