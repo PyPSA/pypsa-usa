@@ -683,7 +683,7 @@ class _CoalCosts(DataExtractor):
 
         # sometimes prices come in the format of xx.xx.xx, so drop everything after the second "."
         df["price"] = df.price.map(
-            lambda x: (float(x) if len(x.split(".")) < 2 else float(".".join(x.split(".")[:2]))),
+            lambda x: float(x) if len(x.split(".")) < 2 else float(".".join(x.split(".")[:2])),
         )
 
         # get data at a per quarter level
