@@ -9,6 +9,9 @@ epsilon_load,--,float,share of total load
 epsilon_vres,--,float,share of total renewable supply
 contingency,MW,float,fixed reserve capacity
 ,,,
+erm:,,,Energy Reserve Margin settings (used when ERM opt is enabled). Ensures sufficient firm capacity to meet demand plus reserve margin at every timestep.
+<region>,--,float,"Reserve margin as a fraction (e.g., 0.15 for 15%). Use ``all`` for all regions, or specify region codes (state, interconnect, NERC region, or ReEDS zone). Defaults to ``all: 0.15`` if not specified."
+,,,
 extendable_carriers:,,,
 Generator,--,Any extendable carrier,"Defines existing or non-existing conventional and renewable power plants to be extendable during the optimization. Conventional generators can only be built/expanded where already existent today. If a listed conventional carrier is not included in the ``conventional_carriers`` list, the lower limit of the capacity expansion is set to 0."
 Storage Unit,--,Any subset of {``battery``},Adds extendable storage units (battery and/or hydrogen) at every node/bus after clustering without capacity limits and with zero initial capacity.
@@ -26,6 +29,17 @@ demand_response:,,,Settings to activate and configure demand response
 -shift,per_unit,"float {0 <=, >= 1} or 'inf'",Allowable load to be shifted per snapshot. Set to 0 to turn off demand response. Set to 'inf' to not enforce capacity limits.
 -marginal_cost,$/MWh,float {0 <=},Cost to store one unit of energy for one hour
 ,,,
-autarky,,,
-#NAME?,bool,``true`` or ``false``,Require each node to be autarkic by removing all lines and links.
-#NAME?,bool,``true`` or ``false``,Require each region to be autarkic by removing all cross-border lines and links. ``electricity: autarky`` must be enabled.
+imports:,,,Configure electric imports from regions outside of model scope
+-enable,,``true`` or ``false``,Enable electric imports
+-costs,$/MWh,``wholesale`` or ``<name of carrier>`` or ``float``,Cost of electric imports from regions outside of model scope. ``Wholesale`` will use in monthly wholesales electric prices. ``float`` will assign a user specified value. ``carrier`` will take average marginal cost of the carrier.
+-co2_emissions,CO2/MWh,``float``,CO2 emissions of electric imports from regions outside of model scope.
+-capacity_limit,,``true`` or ``false``,Enable capacity limit for electric imports from regions outside of model scope
+-volume_limit,percent,"float {0 <=, >= 100} or 'inf'",Volume limit for electric imports from regions outside of model scope (in % of total demand). Set to ``inf`` to not enforce volume limits.
+-balancing_period,,``day`` or ``week`` or ``month`` or ``year``,Balancing period for electric imports from regions outside of model scope.
+,,,
+exports:,,,Configure electric exports to regions outside of model scope
+-enable,,``true`` or ``false``,Enable electric exports
+-costs,$/MWh,``wholesale`` or ``<name of carrier>`` or ``float``,Cost of electric imports from regions outside of model scope. ``Wholesale`` will use in monthly wholesales electric prices. ``float`` will assign a user specified value. ``carrier`` will take average marginal cost of the carrier.
+-capacity_limit,,``true`` or ``false``,Enable capacity limit for electric exports to regions outside of model scope
+-volume_limit,percent,"float {0 <=, >= 100} or 'inf'",Volume limit for electric exports to regions outside of model scope (in % of total demand). Set to ``inf`` to not enforce volume limits.
+-balancing_period,,``day`` or ``week`` or ``month`` or ``year``,Balancing period for electric exports to regions outside of model scope.

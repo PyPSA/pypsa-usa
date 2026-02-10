@@ -310,6 +310,8 @@ def filter_plants_by_region(
     regions_onshore: gpd.GeoDataFrame,
     regions_offshore: gpd.GeoDataFrame,
     reeds_shapes: gpd.GeoDataFrame,
+    all_reeds_shapes: gpd.GeoDataFrame,
+    reeds_memberships: pd.DataFrame,
 ) -> pd.DataFrame:
     """
     Filters the plants dataframe to remove plants not within the onshore and
@@ -339,22 +341,52 @@ def filter_plants_by_region(
     )
     plants_no_region = gdf_plants[~gdf_plants.index.isin(plants_in_regions.index)]
     if not plants_no_region.empty:
+        # identify the plants for which the interconnection according to the reeds membership is different than the interconnection according to the EIA data. We need to include these plants since these are plants where the reeds shapes are not precise enough to assign a region.
         plants_no_region = plants_no_region.to_crs(epsg=3857)
-        plants_nearshore = gpd.sjoin_nearest(
-            plants_no_region,
-            regions_onshore.to_crs(epsg=3857),
+        plants_no_region_all_shapes = gpd.sjoin(
+            plants_no_region.reset_index(),
+            all_reeds_shapes,
             how="inner",
-            max_distance=2000,
-            distance_col="distance",
+            predicate="intersects",
         )
-        plants_nearshore = plants_nearshore.to_crs(epsg=4326)
-        plants_filt = pd.concat([plants_filt, plants_nearshore])
+        plants_no_region_all_shapes = plants_no_region_all_shapes.to_crs(epsg=4326)
+        reeds_memberships.loc[reeds_memberships.interconnect == "ercot", "interconnect"] = "texas"
+        plants_no_region_all_shapes = plants_no_region_all_shapes.merge(
+            reeds_memberships[["ba", "interconnect"]],
+            left_on="rb",
+            right_on="ba",
+            how="left",
+        )
+        # Handles non-US wide interconnection cases (western, eastern, texas)
+        if "interconnection" in plants_no_region_all_shapes.columns:
+            plants_must_add = plants_no_region_all_shapes[
+                plants_no_region_all_shapes.interconnect != plants_no_region_all_shapes.interconnection
+            ]
+            remaining_plants = plants_no_region_all_shapes[
+                plants_no_region_all_shapes.interconnect == plants_no_region_all_shapes.interconnection
+            ]
+        # Handles US wide interconnection cases
+        else:
+            plants_must_add = plants_no_region_all_shapes
+            remaining_plants = pd.DataFrame()
+        plants_must_add.set_index("generator_name", inplace=True)
+
+        if not remaining_plants.empty:
+            remaining_clean = remaining_plants.drop(columns=["index_right"], errors="ignore")
+            plants_nearshore = gpd.sjoin_nearest(
+                remaining_clean,
+                regions_onshore.to_crs(epsg=3857),
+                how="inner",
+                max_distance=2000,
+                distance_col="distance",
+            )
+            plants_nearshore = plants_nearshore.to_crs(epsg=4326)
+            plants_filt = pd.concat([plants_filt, plants_nearshore, plants_must_add])
+        else:
+            plants_filt = pd.concat([plants_filt, plants_must_add])
 
     plants_filt = plants_filt.drop(columns=["geometry"])
     plants_filt = plants_filt[~plants_filt.index.duplicated()]
-
-    plants_filt[plants_filt.index.str.contains("Diablo")]
-    gdf_plants[gdf_plants.index.str.contains("Diablo")]
     return pd.DataFrame(plants_filt)
 
 
@@ -434,22 +466,24 @@ def attach_conventional_generators(
 
     plants["efficiency"] = plants.efficiency.astype(float).fillna(plants.efficiency_r)
 
-    plants.loc[:, "p_min_pu"] = plants.minimum_load_mw / plants.p_nom
-    plants.loc[:, "p_min_pu"] = (
-        plants.p_min_pu.clip(
-            upper=np.minimum(plants.summer_derate, plants.winter_derate),
-            lower=0,
+    committable_fields = ["start_up_cost", "min_down_time", "min_up_time"]
+    defaults = pypsa.components.component_attrs["Generator"].default
+    if unit_commitment:
+        for attr in committable_fields:
+            plants[attr] = plants[attr].astype(float).fillna(defaults[attr])
+        plants["p_min_pu"] = (
+            (plants.minimum_load_mw / plants.p_nom)
+            .clip(
+                upper=np.minimum(plants.summer_derate, plants.winter_derate),
+                lower=0,
+            )
+            .astype(float)
+            .fillna(0)
+            .mul(0.95)
         )
-        .astype(float)
-        .fillna(0)
-    )
-    committable_fields = ["start_up_cost", "min_down_time", "min_up_time", "p_min_pu"]
-    for attr in committable_fields:
-        default = pypsa.components.component_attrs["Generator"].default[attr]
-        if unit_commitment:
-            plants[attr] = plants[attr].astype(float).fillna(default)
-        else:
-            plants[attr] = default
+    else:
+        for attr in committable_fields:
+            plants[attr] = defaults[attr]
     committable_attrs = {attr: plants[attr] for attr in committable_fields}
 
     # Define generators using modified ppl DataFrame
@@ -496,76 +530,148 @@ def attach_wind_and_solar(
     input_profiles: str,
     carriers: list[str],
     extendable_carriers: dict[str, list[str]],
+    config: dict,
 ):
-    """
-    Attached Atlite Calculated wind and solar capacity factor profiles to the
-    network.
-    """
     add_missing_carriers(n, carriers)
+
+    # Check if we're using horizon-specific profiles
+    godeeep_future = (
+        config.get("renewable", {}).get("dataset") == "godeeep" and config["renewable_scenarios"][0] != "historical"
+    )
+
     for car in carriers:
         if car in ["hydro", "EGS"]:
             continue
 
-        with xr.open_dataset(getattr(input_profiles, "profile_" + car)) as ds:
-            if ds.indexes["bus"].empty:
-                continue
+        capital_cost = costs.at[car, "annualized_capex_fom"]
 
-            capital_cost = costs.at[car, "annualized_capex_fom"]
+        bus2sub = (
+            pd.read_csv(input_profiles.bus2sub, dtype=str)
+            .drop("interconnect", axis=1)
+            .rename(columns={"Bus": "bus_id"})
+            .drop_duplicates(subset="sub_id")
+        )
 
-            bus2sub = (
-                pd.read_csv(input_profiles.bus2sub, dtype=str)
-                .drop("interconnect", axis=1)
-                .rename(columns={"Bus": "bus_id"})
-                .drop_duplicates(subset="sub_id")
-            )
-            bus_list = ds.bus.to_dataframe("sub_id").merge(bus2sub).bus_id.astype(str).values
-            p_nom_max_bus = (
-                ds["p_nom_max"]
-                .to_dataframe()
-                .merge(bus2sub[["bus_id", "sub_id"]], left_on="bus", right_on="sub_id")
-                .set_index("bus_id")
-                .p_nom_max
-            )
-            weight_bus = (
-                ds["weight"]
-                .to_dataframe()
-                .merge(bus2sub[["bus_id", "sub_id"]], left_on="bus", right_on="sub_id")
-                .set_index("bus_id")
-                .weight
-            )
-            bus_profiles = (
-                ds["profile"]
-                .transpose("time", "bus")
-                .to_pandas()
-                .T.merge(
-                    bus2sub[["bus_id", "sub_id"]],
-                    left_on="bus",
-                    right_on="sub_id",
+        # For GODEEEP future scenarios, load horizon-specific profiles
+        if godeeep_future:
+            # Load horizon-specific profiles and concatenate
+            logger.info(f"Loading multi-horizon {car} profiles for planning horizons: {n.investment_periods.tolist()}")
+
+            all_profiles = []
+            p_nom_max_bus = None
+            weight_bus = None
+            bus_list = None
+
+            for horizon in n.investment_periods:
+                profile_attr = f"profile_{car}_{horizon}"
+                if not hasattr(input_profiles, profile_attr):
+                    raise ValueError(f"Missing profile for {car} at horizon {horizon}")
+
+                with xr.open_dataset(getattr(input_profiles, profile_attr)) as ds:
+                    if ds.indexes["bus"].empty:
+                        continue
+
+                    # Get bus list
+                    if bus_list is None:
+                        bus_list = ds.bus.to_dataframe("sub_id").merge(bus2sub).bus_id.astype(str).values
+
+                        # Get p_nom_max and weight
+                        p_nom_max_bus = (
+                            ds["p_nom_max"]
+                            .to_dataframe()
+                            .merge(bus2sub[["bus_id", "sub_id"]], left_on="bus", right_on="sub_id")
+                            .set_index("bus_id")
+                            .p_nom_max
+                        )
+                        weight_bus = (
+                            ds["weight"]
+                            .to_dataframe()
+                            .merge(bus2sub[["bus_id", "sub_id"]], left_on="bus", right_on="sub_id")
+                            .set_index("bus_id")
+                            .weight
+                        )
+
+                    # Get profile for this horizon
+                    horizon_profile = (
+                        ds["profile"]
+                        .transpose("time", "bus")
+                        .to_pandas()
+                        .T.merge(
+                            bus2sub[["bus_id", "sub_id"]],
+                            left_on="bus",
+                            right_on="sub_id",
+                        )
+                        .set_index("bus_id")
+                        .drop(columns="sub_id")
+                        .T
+                    )
+
+                    # Update timestamps to match the horizon year
+                    horizon_profile.index = horizon_profile.index.map(lambda x: x.replace(year=int(horizon)))
+                    all_profiles.append(horizon_profile)
+
+            # Concatenate all horizon profiles
+            bus_profiles = pd.concat(all_profiles)
+
+            # Align with network snapshots (which should already be multi-indexed)
+            bus_profiles = bus_profiles.reindex(n.snapshots.get_level_values(1))
+            bus_profiles.index = n.snapshots
+
+        else:
+            # Single profile
+            with xr.open_dataset(getattr(input_profiles, "profile_" + car)) as ds:
+                if ds.indexes["bus"].empty:
+                    continue
+
+                bus_list = ds.bus.to_dataframe("sub_id").merge(bus2sub).bus_id.astype(str).values
+                p_nom_max_bus = (
+                    ds["p_nom_max"]
+                    .to_dataframe()
+                    .merge(bus2sub[["bus_id", "sub_id"]], left_on="bus", right_on="sub_id")
+                    .set_index("bus_id")
+                    .p_nom_max
                 )
-                .set_index("bus_id")
-                .drop(columns="sub_id")
-                .T
-            )
-            bus_profiles = broadcast_investment_horizons_index(n, bus_profiles)
+                weight_bus = (
+                    ds["weight"]
+                    .to_dataframe()
+                    .merge(bus2sub[["bus_id", "sub_id"]], left_on="bus", right_on="sub_id")
+                    .set_index("bus_id")
+                    .weight
+                )
+                bus_profiles = (
+                    ds["profile"]
+                    .transpose("time", "bus")
+                    .to_pandas()
+                    .T.merge(
+                        bus2sub[["bus_id", "sub_id"]],
+                        left_on="bus",
+                        right_on="sub_id",
+                    )
+                    .set_index("bus_id")
+                    .drop(columns="sub_id")
+                    .T
+                )
+                # Broadcast single profile across all horizons
+                bus_profiles = broadcast_investment_horizons_index(n, bus_profiles)
 
-            logger.info(f"Adding {car} capacity-factor profiles to the network.")
+        logger.info(f"Adding {car} capacity-factor profiles to the network.")
 
-            n.madd(
-                "Generator",
-                bus_list,
-                " " + car,
-                bus=bus_list,
-                carrier=car,
-                p_nom_extendable=car in extendable_carriers["Generator"],
-                p_nom_max=p_nom_max_bus,
-                weight=weight_bus,
-                marginal_cost=costs.at[car, "marginal_cost"],
-                capital_cost=capital_cost,
-                efficiency=1,
-                build_year=n.investment_periods[0],
-                lifetime=costs.at[car, "lifetime"],
-                p_max_pu=bus_profiles,
-            )
+        n.madd(
+            "Generator",
+            bus_list,
+            " " + car,
+            bus=bus_list,
+            carrier=car,
+            p_nom_extendable=car in extendable_carriers["Generator"],
+            p_nom_max=p_nom_max_bus,
+            weight=weight_bus,
+            marginal_cost=costs.at[car, "marginal_cost"],
+            capital_cost=capital_cost,
+            efficiency=1,
+            build_year=n.investment_periods[0],
+            lifetime=costs.at[car, "lifetime"],
+            p_max_pu=bus_profiles,
+        )
 
 
 def attach_egs(
@@ -925,6 +1031,8 @@ def main(snakemake):
     regions_onshore = gpd.read_file(snakemake.input.regions_onshore)
     regions_offshore = gpd.read_file(snakemake.input.regions_offshore)
     reeds_shapes = gpd.read_file(snakemake.input.reeds_shapes)
+    all_reeds_shapes = gpd.read_file(snakemake.input.all_reeds_shapes)
+    reeds_memberships = pd.read_csv(snakemake.input.reeds_memberships)
 
     costs = pd.read_csv(snakemake.input.tech_costs)
     costs = costs.pivot(index="pypsa-name", columns="parameter", values="value")
@@ -945,6 +1053,8 @@ def main(snakemake):
         regions_onshore,
         regions_offshore,
         reeds_shapes,
+        all_reeds_shapes,
+        reeds_memberships,
     )
     plants = match_plant_to_bus(n, plants)
 
@@ -998,6 +1108,7 @@ def main(snakemake):
         snakemake.input,
         renewable_carriers,
         extendable_carriers,
+        snakemake.config,
     )
     renewable_carriers = list(
         set(snakemake.config["electricity"]["renewable_carriers"]).intersection(
@@ -1088,7 +1199,7 @@ def main(snakemake):
     # fix p_nom_min for extendable generators
     # The "- 0.001" is just to avoid numerical issues
     n.generators["p_nom_min"] = n.generators.apply(
-        lambda x: ((x["p_nom"] - 0.001) if (x["p_nom_extendable"] and x["p_nom_min"] == 0) else x["p_nom_min"]),
+        lambda x: (x["p_nom"] - 0.001) if (x["p_nom_extendable"] and x["p_nom_min"] == 0) else x["p_nom_min"],
         axis=1,
     )
 

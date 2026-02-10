@@ -476,7 +476,7 @@ def plot_emissions_bar(
     emissions = emisssions_ts.groupby(emisssions_ts.index.get_level_values(0)).sum().round(3).T
 
     # Set up the figure and axes
-    fig, ax = plt.subplots(figsize=(7, 4))
+    _, ax = plt.subplots(figsize=(7, 4))
     emissions.T.plot(
         kind="bar",
         stacked=True,
@@ -524,6 +524,16 @@ def plot_production_area(
             energy_mix = energy_mix.drop(columns=carrier)
             carriers_2_plot.append(f"{carrier}" + "_charger")
             carriers_2_plot.append(f"{carrier}" + "_discharger")
+
+    # imports and exports will be reported by both links and stores
+    duplicates = energy_mix.columns[energy_mix.columns.duplicated()]
+    assert all(x in ["imports", "exports"] for x in duplicates)
+    energy_mix = energy_mix.loc[:, ~energy_mix.columns.duplicated(keep="first")].copy()
+
+    # ensure exports are tagged as negative
+    if "exports" in energy_mix.columns:
+        energy_mix["exports"] = energy_mix["exports"].where(energy_mix["exports"] < 0, energy_mix["exports"].mul(-1))
+
     carriers_2_plot = list(set(carriers_2_plot))
     energy_mix = energy_mix[[x for x in carriers_2_plot if x in energy_mix]]
     energy_mix = energy_mix.rename(columns=n.carriers.nice_name)
@@ -559,12 +569,17 @@ def plot_production_area(
 
             suffix = "-" + datetime.strptime(str(month), "%m").strftime("%b") if month != "all" else ""
 
-            axs[i].legend(bbox_to_anchor=(1, 1), loc="upper left")
-            # axs[i].set_title(f"Production in {investment_period}")
+            # Remove auto-generated legend from each subplot
+            if axs[i].get_legend():
+                axs[i].get_legend().remove()
+            axs[i].set_title(f"{investment_period}")
             axs[i].set_ylabel("Power [GW]")
             axs[i].set_xlabel("")
 
-        fig.tight_layout(rect=[0, 0, 1, 0.92])
+        # Create single shared legend outside the plot area (centered vertically)
+        handles, labels = axs[0].get_legend_handles_labels()
+        fig.tight_layout(rect=[0, 0, 0.78, 0.95])  # Leave space on right for legend
+        fig.legend(handles, labels, loc="center left", bbox_to_anchor=(0.78, 0.5), frameon=False)
         fig.suptitle(create_title("Production [GW]", **wildcards))
         save = Path(save)
         fig.savefig(save.parent / (save.stem + suffix + save.suffix))
@@ -675,7 +690,7 @@ def plot_capacity_factor_heatmap(n: pypsa.Network, save: str, **wildcards) -> No
     unique_months = df_long["month"].unique()
 
     # Prepare figure and axes
-    fig, axs = plt.subplots(
+    _, axs = plt.subplots(
         len(unique_months),
         1,
         figsize=(12, len(unique_months) * 4),
@@ -897,16 +912,328 @@ def plot_fuel_costs(
     plt.close()
 
 
+#### Climate Analysis Plots ####
+def plot_renewable_capacity_factors(
+    n: pypsa.Network,
+    save: str,
+    **wildcards,
+) -> None:
+    """Multi-panel capacity factor analysis for renewable technologies."""
+    # Get renewable carriers
+    renewable_carriers = ["solar", "onwind", "offwind", "offwind_floating"]
+    renewable_gens = n.generators[n.generators.carrier.isin(renewable_carriers)]
+
+    if renewable_gens.empty:
+        logger.warning("No renewable generators found for capacity factor plot")
+        return
+
+    # Filter to carriers that actually exist
+    carriers_present = [c for c in renewable_carriers if c in renewable_gens.carrier.values]
+
+    if not carriers_present:
+        logger.warning("No renewable carriers found in generators")
+        return
+
+    num_carriers = len(carriers_present)
+    num_periods = len(n.investment_periods)
+
+    # Create figure: rows = carriers, cols = [Duration Curve, Monthly Pattern]
+    fig, axs = plt.subplots(
+        nrows=num_carriers,
+        ncols=2,
+        figsize=(14, 4 * num_carriers),
+        squeeze=False,
+    )
+
+    # Line styles for different periods
+    line_styles = ["-", "--", ":", "-."]
+
+    for row, carrier in enumerate(carriers_present):
+        carrier_gens = renewable_gens[renewable_gens.carrier == carrier].index
+        nice_name = n.carriers.at[carrier, "nice_name"]
+        carrier_color = n.carriers.at[carrier, "color"]  # Use carrier's characteristic color
+
+        ax_duration = axs[row, 0]
+        ax_monthly = axs[row, 1]
+
+        monthly_data = []
+
+        for period_idx, period in enumerate(n.investment_periods):
+            period_sns = n.snapshots[n.snapshots.get_level_values(0) == period]
+            p_max_pu = n.generators_t.p_max_pu.loc[period_sns]
+
+            # Filter to generators that exist
+            valid_gens = [g for g in carrier_gens if g in p_max_pu.columns]
+            if not valid_gens:
+                continue
+
+            # Average capacity factor across all generators of this carrier
+            cf_series = p_max_pu[valid_gens].mean(axis=1)
+
+            # Duration curve, sort values descending
+            cf_sorted = cf_series.sort_values(ascending=False).reset_index(drop=True)
+            cf_sorted.index = cf_sorted.index / len(cf_sorted) * 100
+
+            ax_duration.plot(
+                cf_sorted.index,
+                cf_sorted.values,
+                color=carrier_color,
+                linestyle=line_styles[period_idx % len(line_styles)],
+                label=str(period),
+                linewidth=2.5 - (period_idx * 0.3),
+                alpha=0.9 - (period_idx * 0.1),
+            )
+
+            # Monthly averages
+            cf_monthly = cf_series.groupby(cf_series.index.get_level_values(1).month).mean()
+            monthly_data.append(
+                {
+                    "period": period,
+                    "monthly_cf": cf_monthly,
+                    "color": carrier_color,
+                },
+            )
+
+        # Format duration curve plot
+        ax_duration.set_xlim(0, 100)
+        ax_duration.set_ylim(0, 1)
+        ax_duration.set_xlabel("% of Time")
+        ax_duration.set_ylabel("Capacity Factor")
+        ax_duration.set_title(f"{nice_name} - Duration Curve", fontweight="bold")
+        ax_duration.legend(title="Period", loc="upper right")
+        ax_duration.grid(True, alpha=0.3)
+        ax_duration.axhline(y=0.5, color="gray", linestyle="--", alpha=0.5)
+
+        # Format monthly plot
+        month_names = [
+            "Jan",
+            "Feb",
+            "Mar",
+            "Apr",
+            "May",
+            "Jun",
+            "Jul",
+            "Aug",
+            "Sep",
+            "Oct",
+            "Nov",
+            "Dec",
+        ]
+        x_positions = np.arange(12)
+        bar_width = 0.8 / num_periods
+        hatch_patterns = ["", "//", "\\\\", "xx", ".."]  # Different patterns for periods
+
+        for i, data in enumerate(monthly_data):
+            offset = (i - num_periods / 2 + 0.5) * bar_width
+            ax_monthly.bar(
+                x_positions + offset,
+                data["monthly_cf"].values,
+                bar_width,
+                color=data["color"],
+                label=str(data["period"]),
+                alpha=0.9 - (i * 0.15),  # Slightly lighter for later periods
+                edgecolor="black",
+                linewidth=0.5,
+                hatch=hatch_patterns[i % len(hatch_patterns)],
+            )
+
+        ax_monthly.set_xticks(x_positions)
+        ax_monthly.set_xticklabels(month_names, rotation=45, ha="right")
+        ax_monthly.set_ylim(0, 1)
+        ax_monthly.set_ylabel("Avg Capacity Factor")
+        ax_monthly.set_title(f"{nice_name} - Monthly Pattern", fontweight="bold")
+        ax_monthly.legend(title="Period", loc="upper right")
+        ax_monthly.grid(True, axis="y", alpha=0.3)
+
+    fig.suptitle(
+        create_title("Renewable Capacity Factor Analysis", **wildcards),
+        fontsize=TITLE_SIZE,
+    )
+    fig.tight_layout(rect=[0, 0, 1, 0.96])
+    fig.savefig(save, bbox_inches="tight")
+    plt.close()
+
+
+def plot_seasonal_generation(
+    n: pypsa.Network,
+    save: str,
+    **wildcards,
+) -> None:
+    """Multi-panel generation analysis showing total monthly energy by technology."""
+    from plot_network_maps import get_color_palette
+
+    # Get energy timeseries (power in GW)
+    energy_mix = get_energy_timeseries(n).mul(1e-3)  # convert MW to GW
+    energy_mix = energy_mix.rename(columns=n.carriers.nice_name)
+    energy_positive = energy_mix.clip(lower=0)
+
+    # Get snapshot weighting (hours per snapshot) for energy calculation
+    # Use the first weighting column (typically 'generators' or 'objective')
+    if hasattr(n.snapshot_weightings, "generators"):
+        hours_per_snapshot = n.snapshot_weightings.generators.iloc[0]
+    elif hasattr(n.snapshot_weightings, "objective"):
+        hours_per_snapshot = n.snapshot_weightings.objective.iloc[0]
+    else:
+        # Fallback: estimate from snapshot frequency
+        hours_per_snapshot = 1.0
+        if len(n.snapshots) > 1:
+            time_diff = n.snapshots.get_level_values(1)[1] - n.snapshots.get_level_values(1)[0]
+            hours_per_snapshot = time_diff.total_seconds() / 3600
+
+    # Get top technologies by total generation
+    total_gen = energy_positive.sum()
+    top_techs = total_gen[total_gen > total_gen.sum() * 0.02].sort_values(ascending=False).index.tolist()
+
+    if not top_techs:
+        logger.warning("No significant generation technologies found")
+        return
+
+    num_techs = min(len(top_techs), 8)  # Limit to top 8 technologies
+    top_techs = top_techs[:num_techs]
+    num_periods = len(n.investment_periods)
+
+    color_palette = get_color_palette(n)
+
+    # Create figure: rows = technologies, cols = [Monthly Energy, Period Change]
+    fig, axs = plt.subplots(
+        nrows=num_techs,
+        ncols=2,
+        figsize=(14, 3 * num_techs),
+        squeeze=False,
+    )
+
+    # Line styles for different periods (use tech color, vary line style)
+    line_styles = ["-", "--", ":", "-."]
+    markers = ["o", "s", "^", "D", "v", "<", ">", "p"]
+    month_names = [
+        "Jan",
+        "Feb",
+        "Mar",
+        "Apr",
+        "May",
+        "Jun",
+        "Jul",
+        "Aug",
+        "Sep",
+        "Oct",
+        "Nov",
+        "Dec",
+    ]
+
+    for row, tech in enumerate(top_techs):
+        ax_monthly = axs[row, 0]
+        ax_change = axs[row, 1]
+
+        tech_color = color_palette.get(tech, "gray")
+        monthly_by_period = {}
+        baseline_monthly = None
+
+        for period_idx, period in enumerate(n.investment_periods):
+            period_sns = n.snapshots[n.snapshots.get_level_values(0) == period]
+
+            if tech not in energy_positive.columns:
+                continue
+
+            gen_series = energy_positive.loc[period_sns, tech]
+
+            # Calculate total monthly energy: sum of power * hours, converted to TWh
+            monthly_energy = (
+                gen_series.groupby(gen_series.index.get_level_values(1).month).sum()
+                * hours_per_snapshot
+                / 1000  # convert to TWh
+            )
+            monthly_by_period[period] = monthly_energy
+
+            if baseline_monthly is None:
+                baseline_monthly = monthly_energy
+
+            # Plot monthly energy - use tech color with different line styles per period
+            ax_monthly.plot(
+                range(1, 13),
+                monthly_energy.values,
+                color=tech_color,
+                linestyle=line_styles[period_idx % len(line_styles)],
+                label=str(period),
+                linewidth=2.5 - (period_idx * 0.3),
+                marker=markers[period_idx % len(markers)],
+                markersize=6,
+                alpha=0.9 - (period_idx * 0.1),
+            )
+
+        # Format monthly plot
+        ax_monthly.set_xticks(range(1, 13))
+        ax_monthly.set_xticklabels(month_names, rotation=45, ha="right", fontsize=8)
+        ax_monthly.set_ylabel("Energy [TWh]")
+        ax_monthly.set_title(f"{tech}", fontsize=11, fontweight="bold")
+        ax_monthly.legend(title="Period", loc="upper right", fontsize=8)
+        ax_monthly.grid(True, alpha=0.3)
+        ax_monthly.set_xlim(0.5, 12.5)
+
+        # Plot period-to-period changes (% change from baseline)
+        if baseline_monthly is not None and len(monthly_by_period) > 1:
+            x_positions = np.arange(12)
+            bar_width = 0.8 / (num_periods - 1) if num_periods > 1 else 0.8
+
+            for period_idx, (period, monthly_energy) in enumerate(monthly_by_period.items()):
+                if period == n.investment_periods[0]:
+                    continue  # Skip baseline
+
+                pct_change = ((monthly_energy - baseline_monthly) / baseline_monthly.replace(0, np.nan) * 100).fillna(0)
+
+                offset = (period_idx - 1 - (num_periods - 2) / 2) * bar_width
+                colors = ["#1a7f37" if v >= 0 else "#a3200d" for v in pct_change.values]
+
+                ax_change.bar(
+                    x_positions + offset,
+                    pct_change.values,
+                    bar_width,
+                    color=colors,
+                    alpha=0.7,
+                    edgecolor="white",
+                    linewidth=0.5,
+                    label=f"Δ {n.investment_periods[0]}→{period}",
+                )
+
+            ax_change.axhline(y=0, color="black", linewidth=0.8)
+            ax_change.set_xticks(x_positions)
+            ax_change.set_xticklabels(month_names, rotation=45, ha="right", fontsize=8)
+            ax_change.set_ylabel("% Change")
+            ax_change.set_title(f"Change from {n.investment_periods[0]}", fontsize=10)
+            ax_change.legend(loc="upper right", fontsize=8)
+            ax_change.grid(True, axis="y", alpha=0.3)
+        else:
+            ax_change.text(
+                0.5,
+                0.5,
+                "Single period\n(no comparison)",
+                ha="center",
+                va="center",
+                transform=ax_change.transAxes,
+                fontsize=10,
+            )
+            ax_change.set_xticks([])
+            ax_change.set_yticks([])
+
+    fig.suptitle(
+        create_title("Monthly Energy Production by Technology [TWh]", **wildcards),
+        fontsize=TITLE_SIZE,
+    )
+    fig.tight_layout(rect=[0, 0, 1, 0.96])
+    fig.savefig(save, bbox_inches="tight")
+    plt.close()
+
+
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
 
         snakemake = mock_snakemake(
             "plot_statistics",
-            interconnect="texas",
-            clusters=7,
-            ll="v1.00",
-            opts="REM-400SEG",
+            interconnect="western",
+            clusters="4m",
+            simpl="12",
+            ll="v1.0",
+            opts="REM-3h",
             sector="E",
         )
     configure_logging(snakemake)
@@ -929,7 +1256,7 @@ if __name__ == "__main__":
         + snakemake.params.electricity["extendable_carriers"]["StorageUnit"]
         + snakemake.params.electricity["extendable_carriers"]["Store"]
         + snakemake.params.electricity["extendable_carriers"]["Link"]
-        + ["battery_charger", "battery_discharger", "imports"]
+        + ["battery_charger", "battery_discharger", "imports", "exports"]
     )
     carriers = list(set(carriers))  # remove any duplicates
 
@@ -944,6 +1271,8 @@ if __name__ == "__main__":
     n.links.to_csv(snakemake.output.links)
     n.lines.to_csv(snakemake.output.lines)
     n.buses.to_csv(snakemake.output.buses)
+    n.stores.to_csv(snakemake.output.stores)
+    n.global_constraints.to_csv(snakemake.output.global_constraints)
 
     # Panel Plots
     plot_generator_data_panel(
@@ -1019,5 +1348,17 @@ if __name__ == "__main__":
     plot_region_lmps(
         n,
         snakemake.output["region_lmps.pdf"],
+        **snakemake.wildcards,
+    )
+
+    # Renewable Capacity Factor and Seasonal Generation Plots
+    plot_renewable_capacity_factors(
+        n,
+        snakemake.output["renewable_capacity_factors.pdf"],
+        **snakemake.wildcards,
+    )
+    plot_seasonal_generation(
+        n,
+        snakemake.output["seasonal_generation.pdf"],
         **snakemake.wildcards,
     )

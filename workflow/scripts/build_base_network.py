@@ -550,7 +550,7 @@ def main(snakemake):
     gdf_bus = assign_missing_state_regions(gdf_bus)
 
     # if dissagregating based with breakthrough energy on states, the LAF must
-    # be calcualted here to capture splitting of states from the interconnect
+    # be calculated here to capture splitting of states from the interconnect
     group_sums = gdf_bus.groupby("full_state")["Pd"].transform("sum")
     gdf_bus["LAF_state"] = gdf_bus["Pd"] / group_sums
     gdf_bus = gdf_bus.drop(columns=["full_state"])
@@ -589,6 +589,9 @@ def main(snakemake):
 
     # Filter Network to Only Specified Regions
     if model_topology is not None:
+        assert snakemake.params.topological_boundaries != "state", (
+            "State level filtering does not support regional filtering. See https://github.com/PyPSA/pypsa-usa/issues/662. "
+        )
         for region_type in model_topology:
             rm_buses = n.buses.loc[~(n.buses[f"{region_type}"].isin(model_topology[region_type]))]
             rm_lines = n.lines.loc[(n.lines.bus0.isin(rm_buses.index)) | (n.lines.bus1.isin(rm_buses.index))]

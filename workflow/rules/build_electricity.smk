@@ -36,6 +36,9 @@ rule build_base_network:
     params:
         build_offshore_network=config_provider("offshore_network"),
         model_topology=config_provider("model_topology", "include"),
+        topological_boundaries=config_provider(
+            "model_topology", "topological_boundaries"
+        ),
         length_factor=config["lines"]["length_factor"],
     input:
         buses=DATA + "breakthrough_network/base_grid/bus.csv",
@@ -146,10 +149,21 @@ if config["enable"].get("build_cutout", False):
             "../scripts/build_cutout.py"
 
 
+# Only use planning_horizon for GoDEEEP future scenarios
+godeeep_planning_horizon = (
+    config.get("renewable", {}).get("dataset") == "godeeep"
+    and config["renewable_scenarios"][0] != "historical"
+)
+
+
 rule build_renewable_profiles:
     params:
         renewable=config_provider("renewable"),
         snapshots=config_provider("snapshots"),
+        planning_horizon=lambda w: (
+            int(w.planning_horizon) if godeeep_planning_horizon else None
+        ),
+        renewable_scenarios=config_provider("renewable_scenarios"),
     input:
         corine=ancient(
             DATA
@@ -175,28 +189,43 @@ rule build_renewable_profiles:
             if w.technology in ("onwind", "solar")
             else RESOURCES + "{interconnect}/Geospatial/regions_offshore.geojson"
         ),
-        cutout=lambda wildcards: expand(
-            "cutouts/"
-            + CDIR
-            + "usa_"
-            + config["renewable"][wildcards.technology]["cutout"]
-            + "_{renewable_weather_year}"
-            + ".nc",
-            renewable_weather_year=config["renewable_weather_years"],
+        cutout=lambda wildcards: (
+            expand(
+                "cutouts/"
+                + CDIR
+                + "usa_"
+                + config["renewable"][wildcards.technology]["cutout"]
+                + "_{renewable_weather_year}"
+                + ".nc",
+                renewable_weather_year=config["renewable_weather_years"],
+            )
+            if config["renewable"]["dataset"] == "atlite"
+            else []
         ),
     output:
-        profile=RESOURCES + "{interconnect}/profile_{technology}.nc",
-        availability=RESULTS + "{interconnect}/land_use_availability_{technology}.png",
+        profile=(
+            RESOURCES + "{interconnect}/{planning_horizon}/profile_{technology}.nc"
+            if godeeep_planning_horizon
+            else RESOURCES + "{interconnect}/profile_{technology}.nc"
+        ),
     log:
-        LOGS + "{interconnect}/build_renewable_profile_{technology}.log",
+        LOGS
+        + "{interconnect}/build_renewable_profile_{technology}_{planning_horizon}.log"
+        if godeeep_planning_horizon
+        else LOGS + "{interconnect}/build_renewable_profile_{technology}.log",
     benchmark:
-        BENCHMARKS + "{interconnect}/build_renewable_profiles_{technology}"
+        (
+            BENCHMARKS
+            + "{interconnect}/build_renewable_profiles_{technology}_{planning_horizon}"
+            if godeeep_planning_horizon
+            else BENCHMARKS + "{interconnect}/build_renewable_profiles_{technology}"
+        )
     threads: ATLITE_NPROCESSES
     resources:
         mem_mb=lambda wildcards, input, attempt: (
             ATLITE_NPROCESSES * input.size // 2000000
         )
-        * 1.5,
+        * 2.5,
         walltime=config_provider(
             "walltime", "build_renewable_profiles", default="02:30:00"
         ),
@@ -601,11 +630,23 @@ rule add_electricity:
         eia_api=config["api"]["eia"],
     input:
         unpack(dynamic_fuel_price_files),
-        **{
-            f"profile_{tech}": RESOURCES + "{interconnect}" + f"/profile_{tech}.nc"
-            for tech in config["electricity"]["renewable_carriers"]
-            if tech != "hydro"
-        },
+        **(
+            {
+                # For GODEEEP future scenarios: pass all horizon-specific profiles
+                f"profile_{tech}_{horizon}": RESOURCES
+                + f"{{interconnect}}/{horizon}/profile_{tech}.nc"
+                for tech in config["electricity"]["renewable_carriers"]
+                if tech != "hydro"
+                for horizon in config["scenario"]["planning_horizons"]
+            }
+            if godeeep_planning_horizon
+            else {
+                # For historical or AtLite: pass single profile
+                f"profile_{tech}": RESOURCES + "{interconnect}" + f"/profile_{tech}.nc"
+                for tech in config["electricity"]["renewable_carriers"]
+                if tech != "hydro"
+            }
+        ),
         **{
             f"conventional_{carrier}_{attr}": fn
             for carrier, d in config.get("conventional", {None: {}}).items()
@@ -621,6 +662,8 @@ rule add_electricity:
         tech_costs=RESOURCES
         + f"costs/costs_{config['scenario']['planning_horizons'][0]}.csv",
         # attach first horizon costs
+        all_reeds_shapes="repo_data/geospatial/Reeds_Shapes/rb_and_ba_areas.shp",
+        reeds_memberships="repo_data/ReEDS_Constraints/membership.csv",
         regions_onshore=RESOURCES + "{interconnect}/Geospatial/regions_onshore.geojson",
         regions_offshore=RESOURCES
         + "{interconnect}/Geospatial/regions_offshore.geojson",
@@ -703,6 +746,7 @@ rule cluster_network:
             "model_topology", "topological_boundaries"
         ),
         topology_aggregation=config_provider("model_topology", "aggregate"),
+        s_max_pu=config_provider("lines", "s_max_pu", default=0.7),
     input:
         network=RESOURCES + "{interconnect}/elec_s{simpl}.nc",
         regions_onshore=RESOURCES
@@ -743,6 +787,15 @@ rule cluster_network:
         "../scripts/cluster_network.py"
 
 
+def flowgates_for_extra_components(wildcards):
+    if not config["model_topology"]["transmission_network"] == "reeds":
+        return []
+    if config["model_topology"]["topological_boundaries"] == "county":
+        return "repo_data/ReEDS_Constraints/transmission/transmission_capacity_init_AC_county_NARIS2024.csv"
+    else:  # bas and states use the same flowgates
+        return "repo_data/ReEDS_Constraints/transmission/transmission_capacity_init_AC_ba_NARIS2024.csv"
+
+
 rule add_extra_components:
     input:
         **{
@@ -760,6 +813,8 @@ rule add_extra_components:
         ),
         regions_onshore=RESOURCES
         + "{interconnect}/Geospatial/regions_onshore_s{simpl}_{clusters}.geojson",
+        flowgates=flowgates_for_extra_components,
+        reeds_memberships="repo_data/ReEDS_Constraints/membership.csv",
         co2_storage=(
             RESOURCES + "{interconnect}/co2_storage_s{simpl}_{clusters}.csv"
             if config["scenario"]["sector"] == "" and config["co2"]["storage"] is True
@@ -770,6 +825,14 @@ rule add_extra_components:
         retirement=config["electricity"].get("retirement", "technical"),
         demand_response=config["electricity"].get("demand_response", {}),
         trim_network=config_provider("model_topology", "trim", default=False),
+        imports=config_provider("electricity", "imports", default={}),
+        exports=config_provider("electricity", "exports", default={}),
+        weather_year=config_provider("renewable_weather_years"),
+        eia_api=config_provider("api", "eia"),
+        topological_boundaries=config_provider(
+            "model_topology", "topological_boundaries"
+        ),
+        transmission_network=config_provider("model_topology", "transmission_network"),
     output:
         RESOURCES + "{interconnect}/elec_s{simpl}_c{clusters}_ec.nc",
     log:
@@ -797,7 +860,6 @@ rule prepare_network:
         gaslimit_enable=config_provider("electricity", "gaslimit_enable", default=False),
         transmission_network=config_provider("model_topology", "transmission_network"),
         costs=config_provider("costs"),
-        autarky=config_provider("electricity", "autarky"),
     input:
         network=(
             config["custom_files"]["files_path"]
@@ -818,7 +880,7 @@ rule prepare_network:
     threads: 1
     resources:
         walltime=config_provider("walltime", "prepare_network", default="00:30:00"),
-        mem_mb=lambda wildcards, input, attempt: (input.size // 100000) * attempt * 2,
+        mem_mb=lambda wildcards, input, attempt: (input.size // 100000) * attempt * 6,
     group:
         "prepare"
     log:

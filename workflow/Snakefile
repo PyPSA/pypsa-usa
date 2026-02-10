@@ -43,6 +43,8 @@ FIGURES_SYSTEM = [
     "generator_data_panel.pdf",
     "fuel_costs.pdf",
     "region_lmps.pdf",
+    "renewable_capacity_factors.pdf",
+    "seasonal_generation.pdf",
 ]
 
 FIGURES_VALIDATE = [
@@ -229,10 +231,10 @@ def validation_figures(wildcards):
 
 rule all:
     input:
+        #"repo_data/dag.jpg",
         electricity_figures,
         sector_figures,
         validation_figures,
-        #"repo_data/dag.jpg",
 
 
 rule data_model:

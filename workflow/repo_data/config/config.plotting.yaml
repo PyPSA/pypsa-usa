@@ -61,7 +61,9 @@ plotting:
     "DC-DC": "#8a1caf"
     "DC link": "#8a1caf"
     "DC": "#8a1caf"
-    "Load": "#2ad55f"
+    "Load": "#2ad55f" 
+    "imports": "#9f2ad5"
+    "exports": "#B79B48"
     "res-elec": "#f9d002"
     "res-heat": "#E79CA2"
     "res-cool": "#9CE7E2"
@@ -330,6 +332,8 @@ plotting:
     hydrogen_ct: "Hydrogen Combustion Turbine"
     demand_response: "Demand Response"
     dac: "Direct Air Capture"
+    imports: "Electricity Imports"
+    exports: "Electricity Exports"
 
     # sector studies only 
 

@@ -35,22 +35,24 @@ from _helpers import (
     update_config_from_wildcards,
 )
 from opts.bidirectional_link import add_bidirectional_link_constraints
+from opts.interchange import add_interchange_constraints
 from opts.land import add_land_use_constraints
 from opts.policy import (
     add_regional_co2limit,
     add_RPS_constraints,
+    add_RPS_constraints_sector,
     add_technology_capacity_target_constraints,
 )
 from opts.reserves import (
     add_ERM_constraints,
     add_operational_reserve_margin,
-    add_PRM_constraints,
     store_ERM_duals,
 )
 from opts.sector import (
     add_cooling_heat_pump_constraints,
     add_demand_response_constraint,
     add_ev_generation_constraint,
+    add_fossil_generation_constraint,
     add_gshp_capacity_constraint,
     add_ng_import_export_limits,
     add_sector_co2_constraints,
@@ -67,13 +69,18 @@ pypsa.pf.logger.setLevel(logging.WARNING)
 
 def prepare_network(n, solve_opts=None):
     if "clip_p_max_pu" in solve_opts:
-        for df in (
-            n.generators_t.p_max_pu,
-            n.generators_t.p_min_pu,
-            n.storage_units_t.inflow,
-        ):
-            df = df.where(df > solve_opts["clip_p_max_pu"], other=0.0)
+        df = n.generators_t.p_max_pu
+        n.generators_t.p_max_pu = df.where(df > solve_opts["clip_p_max_pu"], other=0.0)
+        df = n.generators_t.p_min_pu
+        n.generators_t.p_min_pu = df.where(df > solve_opts["clip_p_max_pu"], other=0.0)
 
+        df = n.links_t.p_max_pu
+        n.links_t.p_max_pu = df.where(df > solve_opts["clip_p_max_pu"], other=0.0)
+        df = n.links_t.p_min_pu
+        n.links_t.p_min_pu = df.where(df > solve_opts["clip_p_max_pu"], other=0.0)
+
+        df = n.storage_units_t.inflow
+        n.storage_units_t.inflow = df.where(df > solve_opts["clip_p_max_pu"], other=0.0)
     load_shedding = solve_opts.get("load_shedding")
     if load_shedding:
         # intersect between macroeconomic and surveybased willingness to pay
@@ -141,20 +148,26 @@ def extra_functionality(n, snapshots):
     # Define constraint application functions in a registry
     # Each function should take network and necessary parameters
     constraint_registry = {
-        "RPS": lambda: add_RPS_constraints(n, config, sector_enabled, global_snakemake)
-        if n.generators.p_nom_extendable.any()
-        else None,
+        "RPS": lambda: (
+            add_RPS_constraints(n, config, global_snakemake) if n.generators.p_nom_extendable.any() else None
+        ),
         "REM": lambda: add_regional_co2limit(n, config) if n.generators.p_nom_extendable.any() else None,
-        "PRM": lambda: add_PRM_constraints(n, config, global_snakemake)
-        if n.generators.p_nom_extendable.any()
-        else None,
-        "ERM": lambda: add_ERM_constraints(n, config, global_snakemake)
-        if n.generators.p_nom_extendable.any()
-        else None,
-        "TCT": lambda: add_technology_capacity_target_constraints(n, config)
-        if n.generators.p_nom_extendable.any()
-        else None,
+        "ERM": lambda: (
+            add_ERM_constraints(n, snapshots, config, global_snakemake) if n.generators.p_nom_extendable.any() else None
+        ),
+        "TCT": lambda: (
+            add_technology_capacity_target_constraints(n, config) if n.generators.p_nom_extendable.any() else None
+        ),
     }
+
+    # Some constraints have different logic for sector networks
+    if sector_enabled:
+        constraint_registry["RPS"] = lambda: (
+            add_RPS_constraints_sector(n, config, global_snakemake) if n.generators.p_nom_extendable.any() else None
+        )
+        constraint_registry["REM"] = lambda: (
+            add_sector_co2_constraints(n, config) if n.generators.p_nom_extendable.any() else None
+        )
 
     # Apply constraints based on options
     for opt in opts:
@@ -177,6 +190,16 @@ def extra_functionality(n, snapshots):
     if dr_config:
         add_demand_response_constraint(n, config, sector_enabled)
 
+    # Apply interchange constraints if configured
+    if config["electricity"].get("imports", {}).get("enable", False):
+        if config["electricity"].get("imports", {}).get("volume_limit", False):
+            add_interchange_constraints(n, config, "imports", sector_enabled)
+
+    # Apply interchange constraints if configured
+    if config["electricity"].get("exports", {}).get("enable", False):
+        if config["electricity"].get("exports", {}).get("volume_limit", False):
+            add_interchange_constraints(n, config, "exports", sector_enabled)
+
     # Apply sector-specific constraints if sector is enabled
     if sector_enabled:
         # Heat pump constraints
@@ -185,10 +208,6 @@ def extra_functionality(n, snapshots):
         # Apply GSHP capacity constraint if urban/rural not split
         if not config["sector"]["service_sector"].get("split_urban_rural", False):
             add_gshp_capacity_constraint(n, config, global_snakemake)
-
-        # CO2 constraints for sectors
-        if "REMsec" in opts:
-            add_sector_co2_constraints(n, config)
 
         # Natural gas import/export constraints
         if config["sector"]["natural_gas"].get("imports", False):
@@ -205,6 +224,9 @@ def extra_functionality(n, snapshots):
 
         # Sector demand response constraints
         add_sector_demand_response_constraints(n, config)
+
+        # Fossil generation constraints
+        add_fossil_generation_constraint(n, config)
 
 
 def run_optimize(n, rolling_horizon, skip_iterations, cf_solving, **kwargs):
@@ -320,6 +342,15 @@ def solve_network(n, config, solving, opts="", **kwargs):
     )
     kwargs["assign_all_duals"] = cf_solving.get("assign_all_duals", False)
 
+    sns_portion = cf_solving.get("snapshot_portion", None)
+    if sns_portion:
+        logger.info(f"Optimizing over snapshots from {sns_portion['start']} to {sns_portion['end']}")
+        sns_portion = pd.date_range(start=sns_portion["start"], end=sns_portion["end"], freq="h")
+        sns = n.snapshots
+        sns_portion = sns[sns.get_level_values(1).isin(sns_portion)]
+        sns_portion.name = "snapshot"
+        kwargs["snapshots"] = sns_portion
+
     rolling_horizon = cf_solving.pop("rolling_horizon", False)
     skip_iterations = cf_solving.pop("skip_iterations", False)
     if not n.lines.s_nom_extendable.any():
@@ -358,13 +389,13 @@ if __name__ == "__main__":
 
         snakemake = mock_snakemake(
             "solve_network",
-            interconnect="western",
-            simpl="12",
-            clusters="4m",
+            interconnect="eastern",
+            simpl="120",
+            clusters="6m",
             ll="v1.0",
-            opts="4h",
+            opts="1h-TCT",
             sector="E-G",
-            planning_horizons="2018",
+            planning_horizons="2030",
         )
     configure_logging(snakemake)
     update_config_from_wildcards(snakemake.config, snakemake.wildcards)
@@ -375,7 +406,6 @@ if __name__ == "__main__":
 
     # sector specific co2 options
     if snakemake.wildcards.sector != "E":
-        opts = ["REMsec" if x == "REM" else x for x in opts]
         opts.append("sector")
 
     np.random.seed(solve_opts.get("seed", 123))

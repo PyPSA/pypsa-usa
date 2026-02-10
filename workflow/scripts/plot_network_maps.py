@@ -171,21 +171,11 @@ def plot_emissions_map(
         subplot_kw={"projection": ccrs.EqualEarth(n.buses.x.mean())},
     )
 
-    bus_scale = 1
+    # Use fixed scale - same as get_bus_scale() for capacity maps
+    bus_scale = 1e3  # Emissions in MT - divide to get reasonable circle sizes
+    legend_sizes_mt = [1, 5, 10]  # Legend in MT
 
-    with plt.rc_context({"patch.linewidth": 0.1}):
-        n.plot(
-            bus_sizes=emissions / bus_scale,
-            bus_colors="k",
-            bus_alpha=0.7,
-            line_widths=0,
-            link_widths=0,
-            ax=ax,
-            margin=0.2,
-            color_geomap=None,
-        )
-
-    # onshore regions
+    # First draw regions as background
     regions.plot(
         ax=ax,
         facecolor="whitesmoke",
@@ -194,12 +184,34 @@ def plot_emissions_map(
         transform=ccrs.PlateCarree(),
         linewidth=1.2,
     )
+
+    with plt.rc_context({"patch.linewidth": 0.1}):
+        n.plot(
+            bus_sizes=emissions / bus_scale,
+            bus_colors="k",
+            bus_alpha=0.6,
+            line_widths=0,
+            link_widths=0,
+            ax=ax,
+            margin=0.2,
+            color_geomap=None,
+        )
+
     ax.set_extent(regions.total_bounds[[0, 2, 1, 3]])
+
+    # Add legend for emission circle sizes
+    legend_kwargs = {"loc": "upper left", "frameon": False}
+    add_legend_circles(
+        ax,
+        [s / bus_scale for s in legend_sizes_mt],
+        [f"{s:.0f} MT" for s in legend_sizes_mt],
+        legend_kw={"bbox_to_anchor": (1, 1), "labelspacing": 3, **legend_kwargs},
+        patch_kw={"facecolor": "k", "edgecolor": "black", "alpha": 0.7},
+    )
 
     title = create_title("Emissions (MTonne)", **wildcards)
     ax.set_title(title, fontsize=TITLE_SIZE, pad=20)
-    fig.tight_layout()
-    fig.savefig(save)
+    fig.savefig(save, bbox_inches="tight")
     plt.close()
 
 
@@ -224,13 +236,18 @@ def plot_capacity_map(
         subplot_kw={"projection": ccrs.EqualEarth(n.buses.x.mean())},
     )
 
+    carrier_exclusion = ["imports", "exports", "demand_response"]
+
+    bus_colors = n.carriers.color[~n.carriers.color.index.isin(carrier_exclusion)].fillna("#000000")
+    nice_names = n.carriers.nice_name[~n.carriers.nice_name.index.isin(carrier_exclusion)].fillna("Other")
+
     line_width = line_values / line_scale
     link_width = link_values / line_scale
 
     with plt.rc_context({"patch.linewidth": 0.1}):
         n.plot(
             bus_sizes=bus_values / bus_scale,
-            bus_colors=n.carriers.color,
+            bus_colors=bus_colors,
             bus_alpha=0.7,
             line_widths=line_width,
             link_widths=0 if link_width.empty else link_width,
@@ -262,19 +279,19 @@ def plot_capacity_map(
     add_legend_circles(
         ax,
         [s / bus_scale for s in bus_sizes],
-        [f"{s / 1000} GW" for s in bus_sizes],
-        legend_kw={"bbox_to_anchor": (1, 1), **legend_kwargs},
+        [f"{s / 1000:.0f} GW" for s in bus_sizes],
+        legend_kw={"bbox_to_anchor": (1, 1), "labelspacing": 3, **legend_kwargs},
     )
     add_legend_lines(
         ax,
         [s / line_scale for s in line_sizes],
-        [f"{s / 1000} GW" for s in line_sizes],
+        [f"{s / 1000:.0f} GW" for s in line_sizes],
         legend_kw={"bbox_to_anchor": (1, 0.8), **legend_kwargs},
     )
     add_legend_patches(
         ax,
-        n.carriers.color.fillna("#000000"),
-        n.carriers.nice_name,
+        bus_colors,
+        nice_names,
         legend_kw={"bbox_to_anchor": (1, 0), **legend_kwargs, "loc": "lower left"},
     )
     if not title:
@@ -345,13 +362,13 @@ def plot_demand_map(
     add_legend_circles(
         ax,
         [s / bus_scale for s in bus_sizes],
-        [f"{s / 1000} GW" for s in bus_sizes],
-        legend_kw={"bbox_to_anchor": (1, 1), **legend_kwargs},
+        [f"{s / 1000:.0f} GW" for s in bus_sizes],
+        legend_kw={"bbox_to_anchor": (1, 1), "labelspacing": 3, **legend_kwargs},
     )
     add_legend_lines(
         ax,
         [s / line_scale for s in line_sizes],
-        [f"{s / 1000} GW" for s in line_sizes],
+        [f"{s / 1000:.0f} GW" for s in line_sizes],
         legend_kw={"bbox_to_anchor": (1, 0.8), **legend_kwargs},
     )
     add_legend_patches(
@@ -548,7 +565,7 @@ def plot_renewable_potential(
 
 
 def plot_lmp_map(network: pypsa.Network, save: str, **wildcards):
-    fig, ax = plt.subplots(
+    _, ax = plt.subplots(
         subplot_kw={"projection": ccrs.PlateCarree()},
         figsize=(8, 8),
     )
@@ -610,7 +627,6 @@ if __name__ == "__main__":
         + snakemake.params.electricity["extendable_carriers"]["StorageUnit"]
         + snakemake.params.electricity["extendable_carriers"]["Store"]
         + snakemake.params.electricity["extendable_carriers"]["Link"]
-        + ["imports"]
     )
     carriers = list(set(carriers))  # remove any duplicates
 

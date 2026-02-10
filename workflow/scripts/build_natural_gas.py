@@ -13,6 +13,7 @@ Specifically, it will do the following
 """
 
 import logging
+import math
 from abc import ABC, abstractmethod
 from math import pi
 from typing import Any
@@ -516,7 +517,7 @@ class GasProcessing(GasData):
             e_nom=0,
             e_nom_extendable=True,
             e_nom_min=0,
-            e_nom_max=np.inf,
+            e_nom_max=1e9,
             e_min_pu=-1,
             e_max_pu=0,
             lifetime=np.inf,
@@ -826,7 +827,7 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
 
         # fuel costs come in MCF, so first convert to MMCF
         costs = costs[["value"]].astype("float")
-        costs = costs / 1000 * MWH_2_MMCF
+        costs = costs / (MWH_2_MMCF / 1000)
 
         return costs.resample("1h").asfreq().interpolate(method=interpoloation_method)
 
@@ -843,7 +844,7 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
 
         # fuel costs come in MCF, so first convert to MMCF
         costs = costs[["value"]].astype("float")
-        costs = costs / 1000 * MWH_2_MMCF
+        costs = costs / (MWH_2_MMCF / 1000)
 
         return costs.resample("1h").asfreq().interpolate(method=interpolation_method)
 
@@ -1036,10 +1037,9 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
         df["store"] = df.bus0.map(
             lambda x: "import" if x.endswith(" trade") else "export",
         )
-
         return df
 
-    def build_infrastructure(self, n: pypsa.Network) -> None:
+    def build_infrastructure(self, n: pypsa.Network, **kwargs) -> None:
         """
         Builds import and export bus+link+store to connect to.
 
@@ -1081,15 +1081,21 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
         store_exports = template[template.store == "export"].copy()
 
         # remove any conections within geographic scope
+        # export costs are bumped slightly to reduce numerical issues with
+        # imports/exports being the exact same cost
         if self.domestic:
             import_costs = self._get_marginal_costs_domestic(n, template, True)
             export_costs = self._get_marginal_costs_domestic(n, template, False)
         else:
             import_costs = self._get_marginal_costs_international(n, template, True)
             export_costs = self._get_marginal_costs_international(n, template, False)
+        export_costs = export_costs + 0.1  # earn slightly less money
 
         marginal_cost = pd.concat([import_costs, export_costs], axis=1)
         marginal_cost = self._expand_costs(n, marginal_cost)
+
+        marginal_cost_multiplier = kwargs.get("marginal_cost_multiplier", 1)
+        marginal_cost = marginal_cost.mul(marginal_cost_multiplier).round(4)
 
         if "gas trade" not in n.carriers.index:
             n.add("Carrier", "gas trade", color="#d35050", nice_name="Gas Trade")
@@ -1116,7 +1122,7 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
             p_min_pu=0,
             p_max_pu=1,
             p_nom_extendable=False,
-            efficiency=1,  # must be 1 for proper cost accounting
+            efficiency=1,
             marginal_cost=marginal_cost,
             lifetime=np.inf,
             build_year=n.investment_periods[0],
@@ -1136,7 +1142,7 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
             e_nom=0,
             e_nom_extendable=True,
             e_nom_min=0,
-            e_nom_max=np.inf,
+            e_nom_max=1e9,
             e_min_pu=0,
             e_max_pu=1,
             lifetime=np.inf,
@@ -1157,7 +1163,7 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
             e_nom=0,
             e_nom_extendable=True,
             e_nom_min=0,
-            e_nom_max=np.inf,
+            e_nom_max=1e9,
             e_min_pu=-1,  # minus 1 for energy addition!
             e_max_pu=0,
             lifetime=np.inf,
@@ -1330,6 +1336,8 @@ def build_natural_gas(
 
     cyclic_storage = options.get("cyclic_storage", True)
     standing_loss = options.get("standing_loss", 0)
+    marginal_cost_multiplier = options.get("marginal_cost_multiplier", 1)
+    capacity_multiplier = options.get("existing_pipeline_multiplier", 1)
 
     # add state level natural gas processing facilities
 
@@ -1356,7 +1364,7 @@ def build_natural_gas(
         api,
         domestic=True,
     )
-    pipelines_domestic.build_infrastructure(n)
+    pipelines_domestic.build_infrastructure(n, marginal_cost_multiplier=marginal_cost_multiplier)
     pipelines_international = TradeGasPipelineCapacity(
         year,
         interconnect,
@@ -1364,7 +1372,7 @@ def build_natural_gas(
         api,
         domestic=False,
     )
-    pipelines_international.build_infrastructure(n)
+    pipelines_international.build_infrastructure(n, marginal_cost_multiplier=marginal_cost_multiplier)
 
     # add pipeline linepack
 
@@ -1376,6 +1384,11 @@ def build_natural_gas(
     )
 
     _remove_marginal_costs(n)
+
+    if not math.isclose(capacity_multiplier, 1):
+        links = n.links[n.links.carrier.isin(["gas pipeline", "gas trade"])].index
+        p_nom = n.links.loc[links, "p_nom"] * capacity_multiplier
+        n.links.loc[links, "p_nom"] = p_nom
 
 
 if __name__ == "__main__":

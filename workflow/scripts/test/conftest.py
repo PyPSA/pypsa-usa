@@ -301,3 +301,211 @@ def base_network():
         co2_emissions=0,
     )
     return n
+
+
+@pytest.fixture
+def multi_period_base_network():
+    """
+    Create a test network with two investment periods (2030, 2040).
+
+    Includes a retiring generator (gas_retiring) that is active in 2030 but
+    retires before 2040, for testing activity masking in multi-period ERM.
+    """
+    n = pypsa.Network()
+
+    invest_periods = [2030, 2040]
+    n.snapshots = get_multiindex_snapshots(
+        sns_config={"start": "2030-01-01 00:00", "end": "2030-01-01 23:00", "inclusive": "both"},
+        invest_periods=invest_periods,
+    )
+    n.set_investment_periods(periods=invest_periods)
+
+    # Add buses
+    n.add("Bus", "z1", x=0, y=0, carrier="AC")
+    n.add("Bus", "z2", x=1, y=1, carrier="AC")
+    n.add("Bus", "z3", x=2, y=2, carrier="AC")
+
+    n.buses.loc[n.buses.index, "country"] = "US"
+    n.buses.loc[n.buses.index, "interconnect"] = "west"
+    n.buses.loc["z1", "region"] = "west"
+    n.buses.loc["z2", "region"] = "east"
+    n.buses.loc["z3", "region"] = "east"
+    n.buses.loc["z1", "nerc_reg"] = "NERC1"
+    n.buses.loc["z2", "nerc_reg"] = "NERC2"
+    n.buses.loc["z3", "nerc_reg"] = "NERC2"
+    n.buses.loc["z1", "reeds_state"] = "CA"
+    n.buses.loc["z2", "reeds_state"] = "TX"
+    n.buses.loc["z3", "reeds_state"] = "TX"
+    n.buses.loc["z1", "reeds_zone"] = "CA_Z1"
+    n.buses.loc["z2", "reeds_zone"] = "TX_Z1"
+    n.buses.loc["z3", "reeds_zone"] = "TX_Z1"
+
+    # Wind generators (extendable, active in both periods)
+    n.add(
+        "Generator",
+        "wind1",
+        bus="z1",
+        p_nom=0,
+        p_nom_extendable=True,
+        carrier="onwind",
+        capital_cost=1000,
+        marginal_cost=0.1,
+        p_max_pu=pd.Series(0.8, index=n.snapshots),
+        p_nom_max=500,
+        build_year=2030,
+        lifetime=30,
+    )
+    n.add(
+        "Generator",
+        "wind2",
+        bus="z2",
+        p_nom=0,
+        p_nom_extendable=True,
+        carrier="onwind",
+        capital_cost=1100,
+        marginal_cost=0.12,
+        p_max_pu=pd.Series(0.75, index=n.snapshots),
+        p_nom_max=400,
+        build_year=2030,
+        lifetime=30,
+    )
+
+    # Solar generators (extendable, active in both periods)
+    solar_profile = pd.Series(
+        np.tile(
+            np.concatenate([np.zeros(8), np.linspace(0, 1, 8), np.linspace(1, 0, 8)]),
+            len(invest_periods),
+        ),
+        index=n.snapshots,
+    )
+    n.add(
+        "Generator",
+        "solar1",
+        bus="z1",
+        p_nom=0,
+        p_nom_extendable=True,
+        carrier="solar",
+        capital_cost=800,
+        marginal_cost=0.05,
+        p_max_pu=solar_profile,
+        p_nom_max=1000,
+        build_year=2030,
+        lifetime=30,
+    )
+
+    # Gas generator (non-extendable, active in both periods)
+    n.add(
+        "Generator",
+        "gas1",
+        bus="z1",
+        p_nom=200,
+        p_nom_extendable=False,
+        carrier="gas",
+        capital_cost=500,
+        marginal_cost=20,
+        p_max_pu=pd.Series(1.0, index=n.snapshots),
+        build_year=2025,
+        lifetime=30,
+    )
+
+    # Retiring gas generator: active in 2030 but retires before 2040
+    # build_year=2025, lifetime=10 -> retires in 2035
+    n.add(
+        "Generator",
+        "gas_retiring",
+        bus="z1",
+        p_nom=150,
+        p_nom_extendable=False,
+        carrier="gas",
+        capital_cost=500,
+        marginal_cost=25,
+        p_max_pu=pd.Series(1.0, index=n.snapshots),
+        build_year=2025,
+        lifetime=10,
+    )
+
+    # Gas generator (extendable)
+    n.add(
+        "Generator",
+        "gas2",
+        bus="z3",
+        p_nom=0,
+        p_nom_extendable=True,
+        carrier="gas",
+        capital_cost=450,
+        marginal_cost=18,
+        p_max_pu=pd.Series(1.0, index=n.snapshots),
+        p_nom_max=10000,
+        build_year=2030,
+        lifetime=30,
+    )
+
+    # Storage
+    n.add(
+        "StorageUnit",
+        "battery1",
+        bus="z1",
+        p_nom=0,
+        p_nom_extendable=True,
+        carrier="battery",
+        capital_cost=300,
+        marginal_cost=2,
+        efficiency_store=0.85,
+        efficiency_dispatch=0.85,
+        standing_loss=0.01,
+        max_hours=4,
+        build_year=2030,
+        lifetime=30,
+    )
+
+    # Loads
+    n.add("Load", "load1", bus="z1", p_set=pd.Series(300, index=n.snapshots))
+    n.add("Load", "load2", bus="z2", carrier="AC", p_set=pd.Series(200, index=n.snapshots))
+    n.add("Load", "load3", bus="z3", carrier="AC", p_set=pd.Series(300, index=n.snapshots))
+
+    # Lines
+    n.add(
+        "Line",
+        "line1",
+        bus0="z1",
+        bus1="z2",
+        carrier="AC",
+        x=0.1,
+        r=0.01,
+        s_nom=500,
+        s_nom_min=500,
+        capital_cost=300,
+        s_nom_extendable=True,
+    )
+    n.add(
+        "Line",
+        "line2",
+        bus0="z2",
+        bus1="z3",
+        carrier="AC",
+        x=0.2,
+        r=0.02,
+        s_nom=300,
+        s_nom_min=300,
+        capital_cost=300,
+        s_nom_extendable=True,
+    )
+
+    # Link
+    n.add(
+        "Link",
+        "link1",
+        bus0="z1",
+        bus1="z3",
+        carrier="AC",
+        p_nom=100,
+        p_nom_min=100,
+        p_nom_extendable=True,
+        capital_cost=250,
+    )
+
+    # Carriers
+    for carrier, co2 in [("nuclear", 0), ("onwind", 0), ("solar", 0), ("gas", 10), ("battery", 0), ("AC", 0)]:
+        n.add("Carrier", carrier, co2_emissions=co2)
+
+    return n

@@ -6,6 +6,9 @@ run:
   shared_cutouts: true # set to true to share the default cutout(s) across runs
   validation: false # set to true to run back-casting plots
 
+renewable:
+  dataset: godeeep # [atlite, godeeep]
+
 # docs :
 scenario:
   interconnect: [western] #"usa|texas|western|eastern"
@@ -34,12 +37,23 @@ model_topology:
 enable:
   build_cutout: false
 
+## For Atlite (future/historical) and GODEEEP (just historical), configure this
 renewable_weather_years: [2019]
-
 snapshots:
   start: "2019-01-01"
   end: "2020-01-01"
   inclusive: "left"
+
+## For GODEEEP inputs for future scenarios, configure this
+renewable_scenarios: ["rcp85cooler"] #["historical", "rcp45hotter", "rcp45cooler", "rcp85hotter", "rcp85cooler"]
+
+# For multiple planning horizons, only specify the month and day - the year will automatically match each planning horizon (e.g., planning_horizons: [2030, 2040, 2050])
+renewable_snapshots:
+  start_month: 1
+  start_day: 1
+  end_month: 12
+  end_day: 31
+  end_inclusive: true  # if true, includes the end day; if false, stops before end day
 
 # docs :
 electricity:
@@ -59,6 +73,9 @@ electricity:
     epsilon_vres: 0.02
     contingency: 4000
 
+  erm:  # Energy Reserve Margin - used when ERM opt is enabled
+    all: 0.15  # 15% reserve margin for all regions (default)
+
   extendable_carriers:
     Generator: [solar, onwind, offwind_floating, OCGT, CCGT, CCGT-95CCS, coal, nuclear, hydrogen_ct] #include CCGT-CCS
     StorageUnit: [4hr_battery_storage, 8hr_battery_storage] # [Xhr-battery-storage (2-10 hours)]
@@ -76,6 +93,23 @@ electricity:
     shift: 0
     marginal_cost: 999999
 
+  imports:
+    enable: false 
+    costs: wholesale # wholesale|carrier|float
+    co2_emissions: 0.428 
+    capacity_limit: true 
+    volume_limit: inf # 0 > x > 100 | 'inf'
+    balancing_period: month # day|week|month|year
+
+  exports:
+    enable: false 
+    costs: wholesale # wholesale|carrier|float
+    capacity_limit: true 
+    volume_limit: inf # 0 > x > 100 | 'inf'
+    balancing_period: month # day|week|month|year
+
+
+
 # docs :
 conventional:
   unit_commitment: false
@@ -91,6 +125,7 @@ lines:
   s_nom_max: .inf
   max_extension: 20000 #MW
   length_factor: 1.25
+
 
 # docs :
 links:
@@ -111,7 +146,7 @@ co2:
 # docs :
 dac:
   enable: false   # [false, true]
-  granularity: "node"   # ["node", "state", "nation"] (note: "nation" is not applicable for a network based on sectors - it defaults to "node" in this case)
+  granularity: "node"   # ["node", "state", "nation"]
   capital_cost: 6000000   # in USD/tCO2/h
   electricity_input: 2.5   # in MWh/tCO2
   lifetime: 20   # in years

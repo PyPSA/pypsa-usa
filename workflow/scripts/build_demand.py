@@ -1592,11 +1592,20 @@ class WriteStrategy(ABC):
         for load_zone in laf.zone.unique():
             load = laf[laf.zone == load_zone]
             load = load[~(load.laf < 0.000001)].copy()  # drop any buses that have zero load
+            if load_zone not in demand:
+                # occurs if laf overlaps with a neighbouring interconnect
+                # to replicate, run only 'AR' and 'Texas' will be a Key Error
+                logger.warning(f"No demand found for {load_zone}")
+                continue
             load_per_bus = pd.DataFrame(
                 data=([demand[load_zone]] * len(load.index)),
                 index=load.index,
             )
             dissag_load = load_per_bus.mul(laf.laf, axis=0).dropna()
+            if dissag_load.empty and load_per_bus.empty:
+                # occurs for empty loads in neighbouring states
+                # to replicate run only 'IL'
+                continue
             assert dissag_load.shape == load_per_bus.shape  # ensure no data is lost
             dissag_load = dissag_load.T  # set snapshot as index
             all_load.append(dissag_load)
@@ -2295,11 +2304,16 @@ if __name__ == "__main__":
         #     interconnect="texas",
         #     end_use="power",
         # )
+        # snakemake = mock_snakemake(
+        #     "build_transport_other_demand",
+        #     interconnect="western",
+        #     end_use="transport",
+        #     vehicle="boat-shipping",
+        # )
         snakemake = mock_snakemake(
-            "build_transport_other_demand",
-            interconnect="western",
-            end_use="transport",
-            vehicle="boat-shipping",
+            "build_service_demand",
+            interconnect="eastern",
+            end_use="residential",
         )
         # snakemake = mock_snakemake(
         #     "build_transport_road_demand",
@@ -2351,10 +2365,24 @@ if __name__ == "__main__":
     sns = n.snapshots
 
     if demand_profile == "efs":
-        # guarantee EFS data will have a base year to scale
-        assert min(planning_horizons) in (2018, 2020, 2024, 2030, 2040, 2050)
+        # Find closest available EFS year (rounding down) for base year
+        efs_years = (2018, 2020, 2024, 2030, 2040, 2050)
+        base_year = _get_closest_efs_year(efs_years, min(planning_horizons))
+        if base_year is None:
+            logger.error(
+                f"Planning horizon {min(planning_horizons)} is before earliest EFS year {min(efs_years)}. "
+                "Cannot find base year for EFS data.",
+            )
+            sys.exit()
+        if base_year != min(planning_horizons):
+            logger.warning(
+                f"Planning horizon {min(planning_horizons)} not in EFS years. "
+                f"Using base year {base_year} for EFS data, will scale to planning horizon.",
+            )
         reader = ReadEfs(demand_files)
-        sns = n.snapshots.get_level_values(1)
+        sns = n.snapshots.get_level_values(1).map(
+            lambda x: x.replace(year=base_year),
+        )
 
     elif demand_profile == "eia":
         assert profile_year in range(2018, 2024)

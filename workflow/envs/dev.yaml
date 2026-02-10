@@ -18,3 +18,4 @@ dependencies:
   - sphinx-book-theme
   - myst-parser
   - pytest
+  - sphinxcontrib-bibtex

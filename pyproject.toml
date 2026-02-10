@@ -82,6 +82,7 @@ dev = [
     "sphinx-book-theme",
     "myst-parser",
     "pytest",
+    "sphinxcontrib-bibtex>=2.6.5",
 ]
 
 [tool.setuptools.package-dir]

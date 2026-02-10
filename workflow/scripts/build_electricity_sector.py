@@ -89,10 +89,10 @@ def add_electricity_dr(
     dr_config: dict[str, Any],
 ) -> None:
     """Adds stores to the network to use for demand response."""
-    by_carrier = dr_config.get("by_carrier", False)
-
     # check if dr is applied at a per-carrier level
+    dr_config = dr_config.get(sector, dr_config)
 
+    by_carrier = dr_config.get("by_carrier", False)
     if by_carrier:
         dr_config = dr_config.get("elec", {})
 
@@ -207,13 +207,14 @@ def add_electricity_dr(
         bus=df.index + "-bck-dr",
         e_cyclic=True,
         e_nom_extendable=False,
-        e_nom=np.inf,
+        e_nom=1e9,
         e_min_pu=0,
         e_max_pu=1,
         carrier=df.carrier,
         marginal_cost_storage=marginal_cost_storage,
         lifetime=np.inf,
         build_year=n.investment_periods[0],
+        standing_loss=0,
     )
 
     n.madd(
@@ -223,13 +224,14 @@ def add_electricity_dr(
         bus=df.index + "-fwd-dr",
         e_cyclic=True,
         e_nom_extendable=False,
-        e_nom=np.inf,
+        e_nom=1e9,
         e_min_pu=-1,
         e_max_pu=0,
         carrier=df.carrier,
         marginal_cost_storage=marginal_cost_storage * (-1),
         lifetime=np.inf,
         build_year=n.investment_periods[0],
+        standing_loss=0,
     )
 
 
