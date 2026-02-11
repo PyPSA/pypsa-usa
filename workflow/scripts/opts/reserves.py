@@ -279,6 +279,7 @@ def define_erm_nodal_balance_constraints(n, snapshots, erm, region_name, region_
     ]
 
     exprs = []
+
     for c, attr, column, sign, activity in args:
         if n.df(c).empty:
             continue
@@ -287,7 +288,13 @@ def define_erm_nodal_balance_constraints(n, snapshots, erm, region_name, region_
             sign = sign * n.df(c).sign
 
         expr = DataArray(sign) * m[f"{c}-{attr}"]
-        cbuses = n.df(c)[column][lambda ds: ds.isin(buses)].rename("Bus")
+        df = n.df(c)
+        # For components with both bus0 and bus1, require both to be in buses
+        if "bus0" in df.columns and "bus1" in df.columns:
+            mask = df["bus0"].isin(buses) & df["bus1"].isin(buses)
+            cbuses = df.loc[mask, column].rename("Bus")
+        else:
+            cbuses = df[column][lambda ds: ds.isin(buses)].rename("Bus")
 
         expr = expr.sel({c: cbuses.index})
 
