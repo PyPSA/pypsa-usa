@@ -6,6 +6,14 @@ import subprocess
 import zipfile
 from pathlib import Path
 
+import zipfile_deflate64  # For Windows OS, use zipfile-deflate64
+
+
+def is_wsl():
+    with open("/proc/version") as f:
+        return "microsoft" in f.read().lower()
+
+
 from _helpers import configure_logging, progress_retrieve
 
 logger = logging.getLogger(__name__)
@@ -29,14 +37,17 @@ def download_repository(url, rootpath, repository):
     progress_retrieve(url, tarball_fn)
 
     logger.info(f"Extracting {repository} databundle.")
-    if (
-        repository == "EFS"
-    ):  # deflate64 compression not supported by zipFile, current subprocess command will only work on linux and mac
-        if platform.system() == "Windows":
-            cmd = ["tar", "-xf", tarball_fn, "-C", to_fn]
-        else:
-            cmd = ["unzip", tarball_fn, "-d", to_fn]
-        subprocess.run(cmd, check=True)
+    if repository == "EFS":
+        if platform.system() == "Windows" or is_wsl():  # Handle both Windows and WSL
+            try:
+                with zipfile_deflate64.ZipFile(tarball_fn, "r") as zip_ref:
+                    zip_ref.extractall(to_fn)
+            except Exception as e:
+                logger.error(f"Failed to extract zip file with zipfile_deflate64: {e}")
+                raise
+        else:  # Pure Linux environment
+            cmd = ["unzip", tarball_fn, "-d", str(to_fn)]
+            subprocess.run(cmd, check=True)
     else:
         with zipfile.ZipFile(tarball_fn, "r") as zip_ref:
             zip_ref.extractall(to_fn)
