@@ -67,7 +67,7 @@ rule add_sectors:
         "prepare"
     threads: 1
     resources:
-        mem_mb=4000,
+        mem_mb=20000,
     script:
         "../scripts/add_sectors.py"
 

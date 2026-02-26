@@ -847,7 +847,7 @@ rule add_extra_components:
         "logs/add_extra_components/{interconnect}/elec_s{simpl}_c{clusters}_ec.log",
     threads: 1
     resources:
-        mem_mb=lambda wildcards, input, attempt: (input.size // 100000) * attempt * 2,
+        mem_mb=lambda wildcards, input, attempt: (input.size // 100000) * attempt * 10,
         walltime=config_provider("walltime", "add_extra_components", default="00:30:00"),
     group:
         "prepare"

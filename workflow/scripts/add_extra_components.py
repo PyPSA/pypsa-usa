@@ -53,6 +53,8 @@ def add_nice_carrier_names(n, config):
     if colors.isna().any():
         missing_i = list(colors.index[colors.isna()])
         logger.warning(f"tech_colors for carriers {missing_i} not defined in config.")
+        # Fill missing colors with a default gray color
+        colors = colors.fillna("#808080")
     n.carriers["color"] = colors
 
 
