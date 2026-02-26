@@ -53,6 +53,19 @@ rule retrieve_zenodo_databundles:
         "../scripts/retrieve_databundles.py"
 
 
+# EGS seismic risk mask (Zenodo 10.5281/zenodo.18793962)
+rule retrieve_seismic_risk_mask:
+    output:
+        DATA + "seismic_risk_exclusion/seismic_risk_mask.geojson",
+    resources:
+        mem_mb=5000,
+        walltime="00:10:00",
+    log:
+        "logs/retrieve/retrieve_seismic_risk_mask.log",
+    script:
+        "../scripts/retrieve_seismic_risk_mask.py"
+
+
 def efs_databundle(wildcards):
     return {
         "EFS": f"https://data.nrel.gov/system/files/126/EFSLoadProfile_{wildcards.efs_case}_{wildcards.efs_speed}.zip"
