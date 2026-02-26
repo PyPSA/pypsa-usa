@@ -707,6 +707,10 @@ def attach_egs(
             .drop("interconnect", axis=1)
             .rename(columns={"Bus": "bus_id"})
         )
+        # bus2sub stores sub_id as float strings (e.g. "39763.0") while the
+        # EGS profile stores sub_id as integer strings (e.g. "39763").
+        # Normalize to integer strings so the merge key matches.
+        bus2sub["sub_id"] = bus2sub["sub_id"].apply(lambda x: str(int(float(x))))
 
         # IGNORE: Remove dropna(). Rather, apply dropna when creating the original dataset
         df_specs = pd.merge(
@@ -764,6 +768,21 @@ def attach_egs(
                 index=["year", "Date"],
                 values="capacity_factor",
             )
+
+            # Align bus_profiles to network snapshots.
+            # The EGS data has year=float (2030.0) and Date using the
+            # investment year (2030-01-01...) at hourly resolution.
+            # n.snapshots has period=int (2030) at the network's resolution.
+            # Cast the outer level to int and reindex so that:
+            #   (a) the float→int type is resolved, and
+            #   (b) the hourly profile is downsampled to the network's timestep.
+            # This also preserves the per-period production decline since the
+            # EGS data already has different CF values for 2030/2040/2050.
+            if hasattr(n.snapshots, "levels"):
+                bus_profiles.index = bus_profiles.index.set_levels(
+                    bus_profiles.index.levels[0].astype(int), level=0
+                )
+                bus_profiles = bus_profiles.reindex(n.snapshots)
 
             logger.info(
                 f"Adding EGS (Resource Quality-{q}) capacity-factor profiles to the network.",

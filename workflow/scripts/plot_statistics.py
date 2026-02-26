@@ -162,6 +162,39 @@ def stacked_bar_horizons(
 
 
 #### Bar Plots ####
+def _capacity_existing_at_start(n: pypsa.Network) -> tuple[pd.Series, pd.Series]:
+    """Capacity that existed at start of first investment period (excludes build in 2030+).
+
+    For multi-period myopic runs, 'Existing' must not include capacity built in
+    investment periods (e.g. EGS_2030). We only count assets with no build_year
+    or build_year before the first period.
+    """
+    first_period = (
+        n.investment_periods[0]
+        if hasattr(n, "investment_periods") and n.investment_periods is not None and len(n.investment_periods)
+        else None
+    )
+    if first_period is not None:
+        gen_mask = (
+            n.generators["build_year"].isna()
+            | (n.generators["build_year"] < first_period)
+        )
+        gens = n.generators.loc[gen_mask]
+        existing_gen = gens.groupby("carrier").p_nom.sum().round(0)
+        if hasattr(n.storage_units, "build_year") and "build_year" in n.storage_units.columns:
+            su_mask = (
+                n.storage_units["build_year"].isna()
+                | (n.storage_units["build_year"] < first_period)
+            )
+            existing_su = n.storage_units.loc[su_mask].groupby("carrier").p_nom.sum().round(0)
+        else:
+            existing_su = n.storage_units.groupby("carrier").p_nom.sum().round(0)
+    else:
+        existing_gen = n.generators.groupby("carrier").p_nom.sum().round(0)
+        existing_su = n.storage_units.groupby("carrier").p_nom.sum().round(0)
+    return existing_gen, existing_su
+
+
 def plot_capacity_additions_bar(
     n: pypsa.Network,
     carriers_2_plot: list[str],
@@ -169,10 +202,9 @@ def plot_capacity_additions_bar(
     **wildcards,
 ) -> None:
     """Plots base capacity vs optimal capacity as a bar chart."""
-    existing_capacity = n.generators.groupby("carrier").p_nom.sum().round(0)
-    existing_capacity = existing_capacity.to_frame(name="Existing Capacity")
-    storage_units = n.storage_units.groupby("carrier").p_nom.sum().round(0)
-    storage_units = storage_units.to_frame(name="Existing Capacity")
+    existing_gen, existing_su = _capacity_existing_at_start(n)
+    existing_capacity = existing_gen.to_frame(name="Existing Capacity")
+    storage_units = existing_su.to_frame(name="Existing Capacity")
     existing_capacity = pd.concat([existing_capacity, storage_units])
     existing_capacity.index = existing_capacity.index.map(n.carriers.nice_name)
 
@@ -246,12 +278,36 @@ def plot_global_constraint_shadow_prices(
 
 
 def get_currently_installed_capacity(n: pypsa.Network) -> pd.DataFrame:
-    """Returns a DataFrame with the currently installed capacity for each carrier and nerc region."""
+    """Returns a DataFrame with capacity existing at start of first period (by region/carrier)."""
+    first_period = (
+        n.investment_periods[0]
+        if hasattr(n, "investment_periods") and n.investment_periods is not None and len(n.investment_periods)
+        else None
+    )
     n.generators["nerc_reg"] = n.generators.bus.map(n.buses.nerc_reg)
-    existing_capacity = n.generators.groupby(["nerc_reg", "carrier"]).p_nom.sum().round(0)
+    if first_period is not None:
+        gen_mask = (
+            n.generators["build_year"].isna()
+            | (n.generators["build_year"] < first_period)
+        )
+        existing_capacity = (
+            n.generators.loc[gen_mask]
+            .groupby(["nerc_reg", "carrier"])
+            .p_nom.sum()
+            .round(0)
+        )
+    else:
+        existing_capacity = n.generators.groupby(["nerc_reg", "carrier"]).p_nom.sum().round(0)
     existing_capacity = existing_capacity.to_frame(name="Existing")
     n.storage_units["nerc_reg"] = n.storage_units.bus.map(n.buses.nerc_reg)
-    storage_units = n.storage_units.groupby(["nerc_reg", "carrier"]).p_nom.sum().round(0)
+    if first_period is not None and hasattr(n.storage_units, "build_year") and "build_year" in n.storage_units.columns:
+        su_mask = (
+            n.storage_units["build_year"].isna()
+            | (n.storage_units["build_year"] < first_period)
+        )
+        storage_units = n.storage_units.loc[su_mask].groupby(["nerc_reg", "carrier"]).p_nom.sum().round(0)
+    else:
+        storage_units = n.storage_units.groupby(["nerc_reg", "carrier"]).p_nom.sum().round(0)
     storage_units = storage_units.to_frame(name="Existing")
     existing_capacity = pd.concat([existing_capacity, storage_units])
 
