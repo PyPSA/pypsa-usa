@@ -682,6 +682,12 @@ rule add_electricity:
             if "EGS" in config["electricity"]["extendable_carriers"]["Generator"]
             else []
         ),
+        seismic_exclusion=(
+            DATA + "seismic_risk_exclusion/seismic_risk_mask.geojson"
+            if "EGS" in config["electricity"]["extendable_carriers"]["Generator"]
+            and config.get("renewable", {}).get("EGS", {}).get("seismic_exclusion", False)
+            else []
+        ),
     output:
         RESOURCES + "{interconnect}/elec_base_network_l_pp.pkl",
     log:

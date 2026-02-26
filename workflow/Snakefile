@@ -163,6 +163,18 @@ def electricity_figures(wildcards):
                 figure=FIGURES_SYSTEM,
             )
         )
+        # EGS seismic availability plot (only when EGS + seismic exclusion enabled)
+        if (
+            "EGS" in config["electricity"]["extendable_carriers"]["Generator"]
+            and config.get("renewable", {}).get("EGS", {}).get("seismic_exclusion", False)
+        ):
+            figs.append(
+                expand(
+                    RESULTS
+                    + "{interconnect}/figures/s{simpl}_cluster_{clusters}/l{ll}_{opts}_{sector}/maps/land_use_availability_EGS.png",
+                    **config["scenario"],
+                )
+            )
         return list(chain(*figs))  # expand list of lists to single list
     else:
         return []

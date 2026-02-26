@@ -4,6 +4,8 @@ pudl_path: s3://pudl.catalyst.coop/v2025.5.0
 renewable:
   EGS:
     dispatch: baseload # baseload or flexible
+    drilling_cost: advanced
+    seismic_exclusion: true
   onwind:
     cutout: era5
     resource:
