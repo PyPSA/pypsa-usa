@@ -1613,6 +1613,13 @@ if __name__ == "__main__":
         # created by attach_multihorizon_generators
         n.mremove("Generator", multi_horizon_gens.index)
 
+    if not egs_gens.empty and not len(n.investment_periods) == 1:
+        # Remove original EGS generators now that vintaged copies exist for
+        # each investment period. Without this, the originals (build_year=0)
+        # are always active, accumulate capacity through prepare_brownfield,
+        # and compound across periods.
+        n.mremove("Generator", egs_gens.index)
+
     apply_itc(n, snakemake.config["costs"]["itc_modifier"])
     apply_ptc(n, snakemake.config["costs"]["ptc_modifier"], costs)
     apply_max_annual_growth_rate(n, snakemake.config["costs"]["max_growth"])
