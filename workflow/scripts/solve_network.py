@@ -336,8 +336,7 @@ def mask_future_generators(n, planning_horizon):
     Returns saved state needed by restore_future_generators.
     """
     future_gens = n.generators.index[
-        n.generators["build_year"].notna()
-        & (n.generators["build_year"] > planning_horizon)
+        n.generators["build_year"].notna() & (n.generators["build_year"] > planning_horizon)
     ]
     if future_gens.empty:
         return future_gens, None, None, None, None
@@ -352,7 +351,9 @@ def mask_future_generators(n, planning_horizon):
     return future_gens, saved_extendable, saved_p_nom_max, saved_p_nom, saved_p_nom_min
 
 
-def restore_future_generators(n, future_gens, saved_extendable, saved_p_nom_max, saved_p_nom=None, saved_p_nom_min=None):
+def restore_future_generators(
+    n, future_gens, saved_extendable, saved_p_nom_max, saved_p_nom=None, saved_p_nom_min=None
+):
     """Restore generator parameters masked by mask_future_generators."""
     if future_gens.empty:
         return
@@ -388,8 +389,7 @@ def update_egs_p_nom_max(n, planning_horizon):
         return
 
     locked_egs = n.generators[
-        n.generators["carrier"].str.contains("EGS", case=False)
-        & ~n.generators["p_nom_extendable"]
+        n.generators["carrier"].str.contains("EGS", case=False) & ~n.generators["p_nom_extendable"]
     ]
     locked_by_bus = locked_egs.groupby("bus")["p_nom"].sum()
 
@@ -445,12 +445,18 @@ def solve_network(n, config, solving, opts="", **kwargs):
                 kwargs["snapshots"] = sns_horizon
 
                 future_gens, saved_extendable, saved_p_nom_max, saved_p_nom, saved_p_nom_min = mask_future_generators(
-                    n, planning_horizon
+                    n,
+                    planning_horizon,
                 )
                 update_egs_p_nom_max(n, planning_horizon)
                 run_optimize(n, rolling_horizon, skip_iterations, cf_solving, **kwargs)
                 restore_future_generators(
-                    n, future_gens, saved_extendable, saved_p_nom_max, saved_p_nom, saved_p_nom_min
+                    n,
+                    future_gens,
+                    saved_extendable,
+                    saved_p_nom_max,
+                    saved_p_nom,
+                    saved_p_nom_min,
                 )
 
                 if i == len(n.investment_periods) - 1:

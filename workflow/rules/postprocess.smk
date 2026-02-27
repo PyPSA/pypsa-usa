@@ -1,5 +1,6 @@
 """Rules for post procesing solved networks"""
 
+
 # Rule always defined; requested only when EGS + seismic_exclusion in electricity_figures()
 rule plot_egs_seismic_availability:
     input:
@@ -15,7 +16,7 @@ rule plot_egs_seismic_availability:
         + "plot_egs_seismic_availability_{interconnect}_s{simpl}_c{clusters}_l{ll}_{opts}_{sector}.log",
     benchmark:
         BENCHMARKS
-        + "plot_egs_seismic_availability_{interconnect}_s{simpl}_c{clusters}_l{ll}_{opts}_{sector}",
+        +"plot_egs_seismic_availability_{interconnect}_s{simpl}_c{clusters}_l{ll}_{opts}_{sector}"
     threads: 1
     resources:
         mem_mb=4000,
