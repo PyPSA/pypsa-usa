@@ -325,6 +325,81 @@ def prepare_brownfield(n, planning_horizon):
     n.storage_units.loc[:, "state_of_charge_initial"] = n.storage_units_t.state_of_charge.loc[planning_horizon].iloc[-1]
 
 
+def mask_future_generators(n, planning_horizon):
+    """Disable generators whose vintage year hasn't been reached yet.
+
+    In myopic mode (multi_investment_periods=False) PyPSA does not use
+    build_year to restrict dispatch, so all vintages are available in every
+    period solve. This function zeros out capacity for future-vintage
+    generators before a period solve so they cannot be built or dispatched.
+
+    Returns saved state needed by restore_future_generators.
+    """
+    future_gens = n.generators.index[
+        n.generators["build_year"].notna() & (n.generators["build_year"] > planning_horizon)
+    ]
+    if future_gens.empty:
+        return future_gens, None, None, None, None
+    saved_extendable = n.generators.loc[future_gens, "p_nom_extendable"].copy()
+    saved_p_nom_max = n.generators.loc[future_gens, "p_nom_max"].copy()
+    saved_p_nom = n.generators.loc[future_gens, "p_nom"].copy()
+    saved_p_nom_min = n.generators.loc[future_gens, "p_nom_min"].copy()
+    n.generators.loc[future_gens, "p_nom_extendable"] = False
+    n.generators.loc[future_gens, "p_nom_max"] = 0.0
+    n.generators.loc[future_gens, "p_nom"] = 0.0
+    n.generators.loc[future_gens, "p_nom_min"] = 0.0
+    return future_gens, saved_extendable, saved_p_nom_max, saved_p_nom, saved_p_nom_min
+
+
+def restore_future_generators(
+    n, future_gens, saved_extendable, saved_p_nom_max, saved_p_nom=None, saved_p_nom_min=None
+):
+    """Restore generator parameters masked by mask_future_generators."""
+    if future_gens.empty:
+        return
+    n.generators.loc[future_gens, "p_nom_extendable"] = saved_extendable
+    n.generators.loc[future_gens, "p_nom_max"] = saved_p_nom_max
+    if saved_p_nom is not None:
+        n.generators.loc[future_gens, "p_nom"] = saved_p_nom
+    if saved_p_nom_min is not None:
+        n.generators.loc[future_gens, "p_nom_min"] = saved_p_nom_min
+
+
+def update_egs_p_nom_max(n, planning_horizon):
+    """Cap EGS p_nom_max for the current period by subtracting capacity already
+    built in prior periods.
+
+    In perfect foresight mode PyPSA treats p_nom_max as a shared resource
+    across all investment periods. In myopic mode every period starts with the
+    full supply-curve p_nom_max, so without this adjustment the optimizer can
+    build the entire resource in the first period and then again in each
+    subsequent period, far exceeding the actual geological potential.
+
+    This function is called after mask_future_generators so that only
+    non-extendable (locked-in) prior-period EGS generators are counted;
+    masked future generators also have p_nom_extendable=False but start with
+    p_nom=0 and therefore contribute nothing to the already-built total.
+    """
+    current_egs = n.generators.index[
+        n.generators["carrier"].str.contains("EGS", case=False)
+        & n.generators["p_nom_extendable"]
+        & (n.generators["build_year"] == planning_horizon)
+    ]
+    if current_egs.empty:
+        return
+
+    locked_egs = n.generators[
+        n.generators["carrier"].str.contains("EGS", case=False) & ~n.generators["p_nom_extendable"]
+    ]
+    locked_by_bus = locked_egs.groupby("bus")["p_nom"].sum()
+
+    for gen_idx in current_egs:
+        bus = n.generators.loc[gen_idx, "bus"]
+        already_built = locked_by_bus.get(bus, 0.0)
+        original_max = n.generators.loc[gen_idx, "p_nom_max"]
+        n.generators.loc[gen_idx, "p_nom_max"] = max(0.0, original_max - already_built)
+
+
 def solve_network(n, config, solving, opts="", **kwargs):
     set_of_options = solving["solver"]["options"]
     cf_solving = solving["options"]
@@ -369,7 +444,20 @@ def solve_network(n, config, solving, opts="", **kwargs):
                 sns_horizon = n.snapshots[n.snapshots.get_level_values(0) == planning_horizon]
                 kwargs["snapshots"] = sns_horizon
 
+                future_gens, saved_extendable, saved_p_nom_max, saved_p_nom, saved_p_nom_min = mask_future_generators(
+                    n,
+                    planning_horizon,
+                )
+                update_egs_p_nom_max(n, planning_horizon)
                 run_optimize(n, rolling_horizon, skip_iterations, cf_solving, **kwargs)
+                restore_future_generators(
+                    n,
+                    future_gens,
+                    saved_extendable,
+                    saved_p_nom_max,
+                    saved_p_nom,
+                    saved_p_nom_min,
+                )
 
                 if i == len(n.investment_periods) - 1:
                     logger.info(f"Final time horizon {planning_horizon}")
