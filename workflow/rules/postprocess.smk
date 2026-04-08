@@ -1,30 +1,6 @@
 """Rules for post procesing solved networks"""
 
 
-# Rule always defined; requested only when EGS + seismic_exclusion in electricity_figures()
-rule plot_egs_seismic_availability:
-    input:
-        specs_egs=DATA + "EGS/{interconnect}/specs_EGS.nc",
-        bus2sub=RESOURCES + "{interconnect}/bus2sub.csv",
-        seismic_exclusion=DATA + "seismic_risk_exclusion/seismic_risk_mask.geojson",
-        regions_onshore=RESOURCES + "{interconnect}/Geospatial/regions_onshore.geojson",
-    output:
-        plot=RESULTS
-        + "{interconnect}/figures/s{simpl}_cluster_{clusters}/l{ll}_{opts}_{sector}/maps/land_use_availability_EGS.png",
-    log:
-        LOGS
-        + "plot_egs_seismic_availability_{interconnect}_s{simpl}_c{clusters}_l{ll}_{opts}_{sector}.log",
-    benchmark:
-        BENCHMARKS
-        +"plot_egs_seismic_availability_{interconnect}_s{simpl}_c{clusters}_l{ll}_{opts}_{sector}"
-    threads: 1
-    resources:
-        mem_mb=4000,
-        walltime="00:15:00",
-    script:
-        "../scripts/plot_egs_seismic_availability.py"
-
-
 rule plot_network_maps:
     input:
         network=RESULTS
