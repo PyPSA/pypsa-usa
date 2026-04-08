@@ -1341,7 +1341,7 @@ def compute_corrected_curtailment(n, groupby=None):
             # Prepend "Generator" component level to match stats_disagg index structure
             idx = pd.MultiIndex.from_tuples(
                 [("Generator", *k) for k in grouped.index],
-                names=["component"] + list(grouped.index.names),
+                names=["component", *list(grouped.index.names)],
             )
             period_results[period] = grouped.set_axis(idx)
 
