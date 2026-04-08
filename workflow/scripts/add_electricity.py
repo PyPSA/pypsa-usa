@@ -781,8 +781,7 @@ def attach_egs(
             # EGS data already has different CF values for 2030/2040/2050.
             if hasattr(n.snapshots, "levels"):
                 bus_profiles.index = bus_profiles.index.set_levels(
-                    bus_profiles.index.levels[0].astype(int),
-                    level=0,
+                    bus_profiles.index.levels[0].astype(int), level=0
                 )
                 bus_profiles = bus_profiles.reindex(n.snapshots)
 
