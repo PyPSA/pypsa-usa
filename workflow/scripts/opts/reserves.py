@@ -298,9 +298,7 @@ def define_erm_nodal_balance_constraints(
     # Build a per-snapshot boolean mask: True = snapshot is in a zero-emission period.
     # Emitting generators will be excluded from ERM capacity credit for these snapshots.
     if zero_emission_periods and emitting_carriers:
-        period_per_snap = (
-            sns.get_level_values(0) if isinstance(sns, pd.MultiIndex) else sns
-        )
+        period_per_snap = sns.get_level_values(0) if isinstance(sns, pd.MultiIndex) else sns
         snap_is_zero = pd.Series(
             [p in zero_emission_periods for p in period_per_snap],
             index=sns,
@@ -372,7 +370,7 @@ def define_erm_nodal_balance_constraints(
                 activity.loc[snap_is_zero, fossil_cols] = False
                 logger.debug(
                     f"Excluded {len(fossil_cols)} emitting extendable generators from ERM "
-                    f"in zero-emission snapshots for region {region_name}."
+                    f"in zero-emission snapshots for region {region_name}.",
                 )
 
         ext_contribution = ext_contribution.where(DataArray(activity))
@@ -394,14 +392,12 @@ def define_erm_nodal_balance_constraints(
 
         # Exclude emitting generators from ERM credit in zero-emission periods
         if snap_is_zero.any() and emitting_carriers:
-            fossil_nonext_cols = region_nonext_gens.index[
-                region_nonext_gens.carrier.isin(emitting_carriers)
-            ]
+            fossil_nonext_cols = region_nonext_gens.index[region_nonext_gens.carrier.isin(emitting_carriers)]
             if not fossil_nonext_cols.empty:
                 nonext_activity.loc[snap_is_zero, fossil_nonext_cols] = False
                 logger.debug(
                     f"Excluded {len(fossil_nonext_cols)} emitting non-extendable generators "
-                    f"from ERM credit in zero-emission snapshots for region {region_name}."
+                    f"from ERM credit in zero-emission snapshots for region {region_name}.",
                 )
 
         nonext_p_max_pu = get_as_dense(n, "Generator", "p_max_pu", sns, inds=region_nonext_gens.index)
@@ -480,7 +476,7 @@ def add_ERM_constraints(n, snapshots, config=None, snakemake=None, regional_erm_
         logger.info(
             f"Zero-emission periods detected {zero_emission_periods}. "
             f"Emitting carriers {emitting_carriers} will receive no ERM capacity credit "
-            f"in those periods."
+            f"in those periods.",
         )
 
     for region_name, erm_value in erm_dict.items():

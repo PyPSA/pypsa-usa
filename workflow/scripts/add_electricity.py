@@ -764,8 +764,7 @@ def attach_egs(
             excluded_buses = bus_with_risk[bus_with_risk["seismic_risk"] == 1].index
             df_specs = df_specs[~df_specs.index.isin(excluded_buses)]
             logger.info(
-                f"Seismic risk mask excluded {len(excluded_buses)} EGS buses. "
-                f"{len(df_specs)} buses remaining.",
+                f"Seismic risk mask excluded {len(excluded_buses)} EGS buses. {len(df_specs)} buses remaining.",
             )
 
         # TODO: review what qualities need to be included. Currently limited for speedup.
@@ -805,7 +804,8 @@ def attach_egs(
             # EGS data already has different CF values for 2030/2040/2050.
             if hasattr(n.snapshots, "levels"):
                 bus_profiles.index = bus_profiles.index.set_levels(
-                    bus_profiles.index.levels[0].astype(int), level=0
+                    bus_profiles.index.levels[0].astype(int),
+                    level=0,
                 )
                 bus_profiles = bus_profiles.reindex(n.snapshots)
             bus_profiles = bus_profiles.reindex(columns=bus_list)
