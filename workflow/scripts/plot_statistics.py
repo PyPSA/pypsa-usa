@@ -175,11 +175,17 @@ def _capacity_existing_at_start(n: pypsa.Network) -> tuple[pd.Series, pd.Series]
         else None
     )
     if first_period is not None:
-        gen_mask = n.generators["build_year"].isna() | (n.generators["build_year"] < first_period)
+        gen_mask = (
+            n.generators["build_year"].isna()
+            | (n.generators["build_year"] < first_period)
+        )
         gens = n.generators.loc[gen_mask]
         existing_gen = gens.groupby("carrier").p_nom.sum().round(0)
         if hasattr(n.storage_units, "build_year") and "build_year" in n.storage_units.columns:
-            su_mask = n.storage_units["build_year"].isna() | (n.storage_units["build_year"] < first_period)
+            su_mask = (
+                n.storage_units["build_year"].isna()
+                | (n.storage_units["build_year"] < first_period)
+            )
             existing_su = n.storage_units.loc[su_mask].groupby("carrier").p_nom.sum().round(0)
         else:
             existing_su = n.storage_units.groupby("carrier").p_nom.sum().round(0)
@@ -280,14 +286,25 @@ def get_currently_installed_capacity(n: pypsa.Network) -> pd.DataFrame:
     )
     n.generators["nerc_reg"] = n.generators.bus.map(n.buses.nerc_reg)
     if first_period is not None:
-        gen_mask = n.generators["build_year"].isna() | (n.generators["build_year"] < first_period)
-        existing_capacity = n.generators.loc[gen_mask].groupby(["nerc_reg", "carrier"]).p_nom.sum().round(0)
+        gen_mask = (
+            n.generators["build_year"].isna()
+            | (n.generators["build_year"] < first_period)
+        )
+        existing_capacity = (
+            n.generators.loc[gen_mask]
+            .groupby(["nerc_reg", "carrier"])
+            .p_nom.sum()
+            .round(0)
+        )
     else:
         existing_capacity = n.generators.groupby(["nerc_reg", "carrier"]).p_nom.sum().round(0)
     existing_capacity = existing_capacity.to_frame(name="Existing")
     n.storage_units["nerc_reg"] = n.storage_units.bus.map(n.buses.nerc_reg)
     if first_period is not None and hasattr(n.storage_units, "build_year") and "build_year" in n.storage_units.columns:
-        su_mask = n.storage_units["build_year"].isna() | (n.storage_units["build_year"] < first_period)
+        su_mask = (
+            n.storage_units["build_year"].isna()
+            | (n.storage_units["build_year"] < first_period)
+        )
         storage_units = n.storage_units.loc[su_mask].groupby(["nerc_reg", "carrier"]).p_nom.sum().round(0)
     else:
         storage_units = n.storage_units.groupby(["nerc_reg", "carrier"]).p_nom.sum().round(0)
@@ -1262,6 +1279,66 @@ def plot_seasonal_generation(
     plt.close()
 
 
+def compute_corrected_curtailment(n, groupby=None):
+    """
+    Compute curtailment for multi-period networks using only active generators
+    per investment period. Fixes PyPSA bug where future-vintage generators
+    inflate curtailment in earlier periods via their p_nom_opt.
+    """
+    if not isinstance(n.snapshots, pd.MultiIndex):
+        return n.statistics.curtailment(groupby=groupby)
+
+    period_results = {}
+    for period in n.investment_periods:
+        active_mask = n.get_active_assets("Generator", period)
+        active_gens = active_mask[active_mask].index
+
+        period_snaps = n.snapshots[n.snapshots.get_level_values(0) == period]
+        p_nom_opt = n.generators.loc[active_gens, "p_nom_opt"]
+        p = n.pnl("Generator").p.loc[period_snaps, active_gens]
+
+        # Time-varying p_max_pu if available; otherwise use static value
+        pmax_pnl = n.pnl("Generator").get("p_max_pu", pd.DataFrame())
+        if not pmax_pnl.empty:
+            pmax_ts = pmax_pnl.loc[period_snaps].reindex(columns=active_gens)
+            # Fill generators without a time-series p_max_pu with their static value
+            static_fallback = n.generators.loc[active_gens, "p_max_pu"]
+            pmax_ts = pmax_ts.where(pmax_ts.notna(), static_fallback, axis=1)
+        else:
+            pmax_ts = pd.DataFrame(
+                n.generators.loc[active_gens, "p_max_pu"].values[None, :],
+                index=period_snaps[:1],
+                columns=active_gens,
+            ).reindex(period_snaps, method="ffill")
+
+        curt = (pmax_ts.multiply(p_nom_opt) - p).clip(lower=0)
+        weights = n.snapshot_weightings["generators"].loc[period_snaps]
+        curt_sum = curt.multiply(weights, axis=0).sum()
+
+        if groupby is None:
+            carrier = n.generators.loc[active_gens, "carrier"].rename("carrier")
+            grouped = curt_sum.groupby(carrier).sum()
+            idx = pd.MultiIndex.from_tuples(
+                [("Generator", c) for c in grouped.index], names=["component", "carrier"]
+            )
+            period_results[period] = grouped.set_axis(idx)
+        else:
+            grouping_result = groupby(n, "Generator", nice_names=True)
+            if isinstance(grouping_result, list):
+                grouping = [g.loc[active_gens] if hasattr(g, "loc") else g for g in grouping_result]
+            else:
+                grouping = grouping_result.loc[active_gens]
+            grouped = curt_sum.groupby(grouping).sum()
+            # Prepend "Generator" component level to match stats_disagg index structure
+            idx = pd.MultiIndex.from_tuples(
+                [("Generator", *k) for k in grouped.index],
+                names=["component"] + list(grouped.index.names),
+            )
+            period_results[period] = grouped.set_axis(idx)
+
+    return pd.DataFrame(period_results)
+
+
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
@@ -1301,10 +1378,21 @@ if __name__ == "__main__":
 
     # Export Statistics Tables
     groupers = n.statistics.groupers
-    n.statistics(groupby=groupers.get_name_bus_and_carrier).round(3).to_csv(
-        snakemake.output.statistics_dissaggregated,
-    )
-    n.statistics().round(2).to_csv(snakemake.output.statistics_summary)
+    stats_disagg = n.statistics(groupby=groupers.get_name_bus_and_carrier).round(3)
+    stats_summary = n.statistics().round(2)
+
+    if isinstance(n.snapshots, pd.MultiIndex):
+        corrected_curt_summary = compute_corrected_curtailment(n).round(2)
+        corrected_curt_disagg = compute_corrected_curtailment(
+            n, groupby=groupers.get_name_bus_and_carrier
+        ).round(3)
+        gen_idx_summary = corrected_curt_summary.index.intersection(stats_summary["Curtailment"].index)
+        stats_summary.loc[gen_idx_summary, "Curtailment"] = corrected_curt_summary.loc[gen_idx_summary]
+        gen_idx_disagg = corrected_curt_disagg.index.intersection(stats_disagg["Curtailment"].index)
+        stats_disagg.loc[gen_idx_disagg, "Curtailment"] = corrected_curt_disagg.loc[gen_idx_disagg]
+
+    stats_disagg.to_csv(snakemake.output.statistics_dissaggregated)
+    stats_summary.to_csv(snakemake.output.statistics_summary)
     n.generators.to_csv(snakemake.output.generators)
     n.storage_units.to_csv(snakemake.output.storage_units)
     n.links.to_csv(snakemake.output.links)

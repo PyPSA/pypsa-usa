@@ -58,7 +58,7 @@ rule plot_network_maps:
         "logs/plot_figures/{interconnect}_{simpl}_{clusters}_l{ll}_{opts}_{sector}.log",
     threads: 1
     resources:
-        mem_mb=7000,
+        mem_mb=14000,
         walltime="00:30:00",
     script:
         "../scripts/plot_network_maps.py"
@@ -127,7 +127,7 @@ rule plot_statistics:
         "logs/plot_figures/{interconnect}_{simpl}_{clusters}_l{ll}_{opts}_{sector}.log",
     threads: 1
     resources:
-        mem_mb=10000,
+        mem_mb=20000,
         walltime="00:30:00",
     script:
         "../scripts/plot_statistics.py"

@@ -11,7 +11,7 @@
 #SBATCH --mail-user=hdaniels@stanford.edu
 
 set -euo pipefail
-cd /home/groups/iazevedo/henry/pypsa-usa/workflow
+cd /oak/stanford/groups/iazevedo/henry/pypsa-usa/workflow
 
 export GRB_LICENSE_FILE=/share/software/user/restricted/gurobi/11.0.2/licenses/gurobi.lic
 
