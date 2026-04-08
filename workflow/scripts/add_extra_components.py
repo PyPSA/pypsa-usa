@@ -1367,6 +1367,54 @@ def add_co2_network(n: pypsa.Network, config: dict):
     )
 
 
+def apply_ucap(n: pypsa.Network, ucap_config: dict) -> None:
+    """
+    Apply UCAP (Unforced Capacity) derating to conventional generators.
+
+    Sets p_max_pu = 1 - FOR (Forced Outage Rate) for each carrier specified
+    in the configuration. This converts ICAP to UCAP using the formula:
+    UCAP = ICAP * (1 - FOR)
+
+    For generators with time-varying p_max_pu values in n.generators_t.p_max_pu,
+    the time series is multiplied by (1 - FOR).
+
+    Arguments:
+        n: pypsa.Network
+        ucap_config: dict with 'enable' boolean and 'forced_outage_rates' dict
+            mapping carrier names to FOR values in percent
+    """
+    if not ucap_config.get("enable", False):
+        return
+
+    forced_outage_rates = ucap_config.get("forced_outage_rates", {})
+    if not forced_outage_rates:
+        logger.warning("UCAP enabled but no forced_outage_rates defined")
+        return
+
+    for carrier, for_pct in forced_outage_rates.items():
+        ucap_factor = 1 - (for_pct / 100)
+        mask = n.generators["carrier"] == carrier
+        if not mask.any():
+            logger.debug(f"No generators found for carrier {carrier} when applying UCAP")
+            continue
+
+        gen_names = n.generators.index[mask]
+
+        # Apply to static p_max_pu
+        n.generators.loc[mask, "p_max_pu"] *= ucap_factor
+
+        # Apply to time-varying p_max_pu if present
+        gens_with_time_varying = [g for g in gen_names if g in n.generators_t.p_max_pu.columns]
+        if gens_with_time_varying:
+            n.generators_t.p_max_pu[gens_with_time_varying] *= ucap_factor
+            logger.info(
+                f"Applied UCAP derating to {carrier}: factor = {ucap_factor:.4f} (FOR = {for_pct}%) "
+                f"[{len(gen_names)} static, {len(gens_with_time_varying)} time-varying]",
+            )
+        else:
+            logger.info(f"Applied UCAP derating to {carrier}: factor = {ucap_factor:.4f} (FOR = {for_pct}%)")
+
+
 def add_dac(n: pypsa.Network, config: dict, sector: bool):
     """Adds node level DAC capabilities."""
     # generate node level buses to represent emitted, captured and accounted CO2 and links to represent DAC in function of whether network is based on sectors or not
@@ -1698,6 +1746,12 @@ if __name__ == "__main__":
                 logger.warning(
                     "Not adding DAC capabilities given that CO2 (underground) storage is not enabled",
                 )
+
+    # Apply UCAP derating to conventional generators
+    ucap_config = snakemake.config.get("ucap", {})
+    if ucap_config.get("enable", False):
+        logger.info("Applying UCAP derating to conventional generators")
+        apply_ucap(n, ucap_config)
 
     n.consistency_check()
     n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))

@@ -599,7 +599,6 @@ def dynamic_fuel_price_files(wildcards):
 rule build_powerplants:
     params:
         pudl_path=config_provider("pudl_path"),
-        renewable_weather_year=config_provider("renewable_weather_years"),
     input:
         wecc_ads="repo_data/WECC_ADS_public",
         eia_ads_generator_mapping="repo_data/WECC_ADS_public/eia_ads_generator_mapping_updated.csv",
@@ -833,6 +832,7 @@ rule add_extra_components:
             "model_topology", "topological_boundaries"
         ),
         transmission_network=config_provider("model_topology", "transmission_network"),
+        ucap=config_provider("ucap", default={}),
     output:
         RESOURCES + "{interconnect}/elec_s{simpl}_c{clusters}_ec.nc",
     log:
