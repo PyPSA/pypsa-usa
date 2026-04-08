@@ -87,8 +87,8 @@ def test_erm_constraint_binding(reserve_margin_network):
 
     erm_value = 0.90
 
-    def extra_functionality(n, _):
-        add_ERM_constraints(n, regional_erm_data={"all": erm_value})
+    def extra_functionality(n, sns):
+        add_ERM_constraints(n, sns, regional_erm_data={"all": erm_value})
 
     n.optimize(solver_name="glpk", multi_investment_periods=True, extra_functionality=extra_functionality)
     store_ERM_duals(n)
@@ -138,10 +138,37 @@ def test_multiple_non_overlapping_erms(reserve_margin_network):
     """Test that multiple ERM constraints work correctly for non-overlapping regions."""
     n = reserve_margin_network.copy()
 
+    # Add large firm generators in each region so standalone regional ERM is feasible.
+    # NERC1 (z1) and NERC2 (z3) have insufficient capacity without cross-region transmission.
+    n.add(
+        "Generator",
+        "firm_nerc1",
+        bus="z1",
+        p_nom=2000,
+        p_nom_extendable=False,
+        carrier="gas",
+        marginal_cost=50,
+        p_max_pu=1.0,
+        build_year=2030,
+        lifetime=20,
+    )
+    n.add(
+        "Generator",
+        "firm_nerc2",
+        bus="z3",
+        p_nom=2000,
+        p_nom_extendable=False,
+        carrier="gas",
+        marginal_cost=50,
+        p_max_pu=1.0,
+        build_year=2030,
+        lifetime=20,
+    )
+
     erm_dict = {"NERC1": 0.15, "NERC2": 0.30}
 
-    def extra_functionality(n, _):
-        add_ERM_constraints(n, regional_erm_data=erm_dict)
+    def extra_functionality(n, sns):
+        add_ERM_constraints(n, sns, regional_erm_data=erm_dict)
 
     try:
         n.optimize(solver_name="glpk", multi_investment_periods=True, extra_functionality=extra_functionality)
@@ -180,8 +207,8 @@ def test_erm_increases_capacity(reserve_margin_network):
     # Now run with ERM constraint of 0.14
     n_with_erm = reserve_margin_network.copy()
 
-    def extra_functionality(n, _):
-        add_ERM_constraints(n, regional_erm_data={"all": 0.14})
+    def extra_functionality(n, sns):
+        add_ERM_constraints(n, sns, regional_erm_data={"all": 0.14})
 
     n_with_erm.optimize(
         solver_name="glpk",
@@ -242,8 +269,8 @@ def test_erm_increases_capacity_no_expandable_transmission(reserve_margin_networ
     n_with_erm = reserve_margin_network.copy()
     n_with_erm = disable_transmission_expansion(n_with_erm)
 
-    def extra_functionality(n, _):
-        add_ERM_constraints(n, regional_erm_data={"all": 0.14})
+    def extra_functionality(n, sns):
+        add_ERM_constraints(n, sns, regional_erm_data={"all": 0.14})
 
     n_with_erm.optimize(
         solver_name="glpk",
@@ -272,8 +299,8 @@ def test_multi_period_erm_optimization(multi_period_reserve_network):
 
     erm_dict = {"all": 0.15}
 
-    def extra_functionality(n, _):
-        add_ERM_constraints(n, regional_erm_data=erm_dict)
+    def extra_functionality(n, sns):
+        add_ERM_constraints(n, sns, regional_erm_data=erm_dict)
 
     n.optimize(solver_name="glpk", multi_investment_periods=True, extra_functionality=extra_functionality)
 
@@ -296,8 +323,8 @@ def test_multi_period_erm_increases_capacity(multi_period_reserve_network):
     # With ERM
     n_with_erm = multi_period_reserve_network.copy()
 
-    def extra_functionality(n, _):
-        add_ERM_constraints(n, regional_erm_data={"all": 0.15})
+    def extra_functionality(n, sns):
+        add_ERM_constraints(n, sns, regional_erm_data={"all": 0.15})
 
     n_with_erm.optimize(
         solver_name="glpk",
@@ -322,7 +349,10 @@ def test_multi_period_erm_activity_masking(multi_period_reserve_network):
     assert n.generators.loc["gas_retiring", "build_year"] == 2025
     assert n.generators.loc["gas_retiring", "lifetime"] == 10
 
-    # Check activity mask: gas_retiring should be active in 2030 but not in 2040
+    # Check activity mask: gas_retiring should be active in 2030 but not in 2040.
+    # n._multi_invest must be True for get_activity_mask to use build_year/lifetime logic;
+    # it is normally set by n.optimize(multi_investment_periods=True).
+    n._multi_invest = True
     activity = get_activity_mask(n, "Generator", n.snapshots)
     period_2030_mask = n.snapshots.get_level_values(0) == 2030
     period_2040_mask = n.snapshots.get_level_values(0) == 2040
@@ -333,8 +363,8 @@ def test_multi_period_erm_activity_masking(multi_period_reserve_network):
     )
 
     # Run optimization with ERM
-    def extra_functionality(n, _):
-        add_ERM_constraints(n, regional_erm_data={"all": 0.15})
+    def extra_functionality(n, sns):
+        add_ERM_constraints(n, sns, regional_erm_data={"all": 0.15})
 
     n.optimize(solver_name="glpk", multi_investment_periods=True, extra_functionality=extra_functionality)
 
