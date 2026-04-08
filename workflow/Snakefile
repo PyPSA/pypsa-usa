@@ -164,9 +164,10 @@ def electricity_figures(wildcards):
             )
         )
         # EGS seismic availability plot (only when EGS + seismic exclusion enabled)
-        if (
-            "EGS" in config["electricity"]["extendable_carriers"]["Generator"]
-            and config.get("renewable", {}).get("EGS", {}).get("seismic_exclusion", False)
+        if "EGS" in config["electricity"]["extendable_carriers"][
+            "Generator"
+        ] and config.get("renewable", {}).get("EGS", {}).get(
+            "seismic_exclusion", False
         ):
             figs.append(
                 expand(
