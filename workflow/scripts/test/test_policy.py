@@ -208,7 +208,7 @@ def test_add_rps_constraints(policy_network, rps_config):
 
     # Add RPS constraints
     def extra_functionality(n, _):
-        add_RPS_constraints(n, config, sector=False, snakemake=snakemake)
+        add_RPS_constraints(n, config, snakemake=snakemake)
 
     n.optimize(solver_name="glpk", multi_investment_periods=True, extra_functionality=extra_functionality)
 
@@ -261,7 +261,7 @@ def test_add_rps_constraints_clustered(clustered_policy_network, rps_config):
 
     # Add RPS constraints
     def extra_functionality(n, _):
-        add_RPS_constraints(n, config, sector=False, snakemake=snakemake)
+        add_RPS_constraints(n, config, snakemake=snakemake)
 
     n.optimize(solver_name="glpk", multi_investment_periods=True, extra_functionality=extra_functionality)
 
