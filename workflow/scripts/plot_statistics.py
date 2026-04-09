@@ -175,17 +175,11 @@ def _capacity_existing_at_start(n: pypsa.Network) -> tuple[pd.Series, pd.Series]
         else None
     )
     if first_period is not None:
-        gen_mask = (
-            n.generators["build_year"].isna()
-            | (n.generators["build_year"] < first_period)
-        )
+        gen_mask = n.generators["build_year"].isna() | (n.generators["build_year"] < first_period)
         gens = n.generators.loc[gen_mask]
         existing_gen = gens.groupby("carrier").p_nom.sum().round(0)
         if hasattr(n.storage_units, "build_year") and "build_year" in n.storage_units.columns:
-            su_mask = (
-                n.storage_units["build_year"].isna()
-                | (n.storage_units["build_year"] < first_period)
-            )
+            su_mask = n.storage_units["build_year"].isna() | (n.storage_units["build_year"] < first_period)
             existing_su = n.storage_units.loc[su_mask].groupby("carrier").p_nom.sum().round(0)
         else:
             existing_su = n.storage_units.groupby("carrier").p_nom.sum().round(0)
@@ -286,25 +280,14 @@ def get_currently_installed_capacity(n: pypsa.Network) -> pd.DataFrame:
     )
     n.generators["nerc_reg"] = n.generators.bus.map(n.buses.nerc_reg)
     if first_period is not None:
-        gen_mask = (
-            n.generators["build_year"].isna()
-            | (n.generators["build_year"] < first_period)
-        )
-        existing_capacity = (
-            n.generators.loc[gen_mask]
-            .groupby(["nerc_reg", "carrier"])
-            .p_nom.sum()
-            .round(0)
-        )
+        gen_mask = n.generators["build_year"].isna() | (n.generators["build_year"] < first_period)
+        existing_capacity = n.generators.loc[gen_mask].groupby(["nerc_reg", "carrier"]).p_nom.sum().round(0)
     else:
         existing_capacity = n.generators.groupby(["nerc_reg", "carrier"]).p_nom.sum().round(0)
     existing_capacity = existing_capacity.to_frame(name="Existing")
     n.storage_units["nerc_reg"] = n.storage_units.bus.map(n.buses.nerc_reg)
     if first_period is not None and hasattr(n.storage_units, "build_year") and "build_year" in n.storage_units.columns:
-        su_mask = (
-            n.storage_units["build_year"].isna()
-            | (n.storage_units["build_year"] < first_period)
-        )
+        su_mask = n.storage_units["build_year"].isna() | (n.storage_units["build_year"] < first_period)
         storage_units = n.storage_units.loc[su_mask].groupby(["nerc_reg", "carrier"]).p_nom.sum().round(0)
     else:
         storage_units = n.storage_units.groupby(["nerc_reg", "carrier"]).p_nom.sum().round(0)
@@ -1319,7 +1302,8 @@ def compute_corrected_curtailment(n, groupby=None):
             carrier = n.generators.loc[active_gens, "carrier"].rename("carrier")
             grouped = curt_sum.groupby(carrier).sum()
             idx = pd.MultiIndex.from_tuples(
-                [("Generator", c) for c in grouped.index], names=["component", "carrier"]
+                [("Generator", c) for c in grouped.index],
+                names=["component", "carrier"],
             )
             period_results[period] = grouped.set_axis(idx)
         else:
@@ -1384,7 +1368,8 @@ if __name__ == "__main__":
     if isinstance(n.snapshots, pd.MultiIndex):
         corrected_curt_summary = compute_corrected_curtailment(n).round(2)
         corrected_curt_disagg = compute_corrected_curtailment(
-            n, groupby=groupers.get_name_bus_and_carrier
+            n,
+            groupby=groupers.get_name_bus_and_carrier,
         ).round(3)
         gen_idx_summary = corrected_curt_summary.index.intersection(stats_summary["Curtailment"].index)
         stats_summary.loc[gen_idx_summary, "Curtailment"] = corrected_curt_summary.loc[gen_idx_summary]

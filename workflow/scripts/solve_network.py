@@ -352,7 +352,12 @@ def mask_future_generators(n, planning_horizon):
 
 
 def restore_future_generators(
-    n, future_gens, saved_extendable, saved_p_nom_max, saved_p_nom=None, saved_p_nom_min=None
+    n,
+    future_gens,
+    saved_extendable,
+    saved_p_nom_max,
+    saved_p_nom=None,
+    saved_p_nom_min=None,
 ):
     """Restore generator parameters masked by mask_future_generators."""
     if future_gens.empty:

@@ -280,7 +280,7 @@ def match_plant_to_bus(n, plants):
     https://stackoverflow.com/questions/58893719/find-nearest-point-in-other-dataframe-with-a-lot-of-data
     """
     plants_matched = plants.copy()
-    plants_matched["bus_assignment"] = None 
+    plants_matched["bus_assignment"] = None
     plants_matched["distance_nearest"] = None
 
     # Get a copy of buses and create a geometry column with GPS coordinates

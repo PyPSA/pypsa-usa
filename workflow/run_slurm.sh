@@ -138,7 +138,7 @@ snakemake --cluster "sbatch -A {cluster.account} --mail-type ALL --mail-user {cl
 #     --cluster-config config/config.cluster.yaml \
 #     --jobs 40 --latency-wait 60 --rerun-incomplete \
 #     --configfile config/config.egs_western.yaml \
-#     --set-resources build_renewable_profiles:mem_mb=40000 
+#     --set-resources build_renewable_profiles:mem_mb=40000
 
 # 33 node network, egs_western_z33_atlite_nz2035_myopic
 # snakemake --cluster "sbatch -A {cluster.account} --mail-type ALL --mail-user {cluster.email} -p {cluster.partition} -o {cluster.output} -e {cluster.error} -c {threads} --mem {resources.mem_mb} --time {cluster.walltime}" \

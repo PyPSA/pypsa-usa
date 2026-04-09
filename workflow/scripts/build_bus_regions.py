@@ -186,11 +186,7 @@ def main(snakemake):
 
         # create GeoDataFrame and append to regions
         empty_regions = gpd.GeoDataFrame(empty_region_rows, crs=onshore_regions_concat.crs)
-        onshore_regions_concat = (
-            onshore_regions_concat
-            .dissolve(by="name", aggfunc="first")
-            .reset_index()
-        )
+        onshore_regions_concat = onshore_regions_concat.dissolve(by="name", aggfunc="first").reset_index()
 
         logger.info(f"Added {len(empty_counties)} empty counties assigned to nearest buses.")
 
