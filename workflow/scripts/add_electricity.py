@@ -19,6 +19,7 @@ from _helpers import (
     calculate_annuity,
     configure_logging,
     export_network_for_gis_mapping,
+    load_costs,
     update_p_nom_max,
     weighted_avg,
 )
@@ -1034,8 +1035,7 @@ def main(snakemake):
     all_reeds_shapes = gpd.read_file(snakemake.input.all_reeds_shapes)
     reeds_memberships = pd.read_csv(snakemake.input.reeds_memberships)
 
-    costs = pd.read_csv(snakemake.input.tech_costs)
-    costs = costs.pivot(index="pypsa-name", columns="parameter", values="value")
+    costs = load_costs(snakemake.input.tech_costs, params.costs)
     update_transmission_costs(n, costs, params.length_factor)
 
     renewable_carriers = set(params.renewable_carriers)

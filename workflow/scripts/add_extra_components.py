@@ -6,7 +6,7 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 import pypsa
-from _helpers import calculate_annuity, configure_logging
+from _helpers import calculate_annuity, configure_logging, load_costs
 from add_electricity import add_missing_carriers
 from eia import FuelCosts
 from opts._helpers import get_region_buses
@@ -1499,10 +1499,9 @@ if __name__ == "__main__":
     elec_config = snakemake.config["electricity"]
 
     costs_dict = {
-        n.investment_periods[i]: pd.read_csv(snakemake.input.tech_costs[i]).pivot(
-            index="pypsa-name",
-            columns="parameter",
-            values="value",
+        n.investment_periods[i]: load_costs(
+            snakemake.input.tech_costs[i],
+            snakemake.params.costs,
         )
         for i in range(len(n.investment_periods))
     }

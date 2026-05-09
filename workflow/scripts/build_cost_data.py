@@ -221,166 +221,69 @@ def get_sector_costs(
     return final
 
 
-if __name__ == "__main__":
-    if "snakemake" not in globals():
-        from _helpers import mock_snakemake
+# Transmission cost assumptions are independent of ATB scenario / model case.
+# TEPCC 2023; WACC & Lifetime from https://emp.lbl.gov/publications/improving-estimates-transmission
+# Subsea: Purvins et al. (2018): https://doi.org/10.1016/j.jclepro.2018.03.095
+TRANSMISSION_DATA = [
+    {"pypsa-name": "HVAC overhead", "parameter": "capex_per_mw_km", "value": 1541},
+    {
+        "pypsa-name": "HVAC overhead",
+        "parameter": "cost_recovery_period_years",
+        "value": 60,
+    },
+    {"pypsa-name": "HVAC overhead", "parameter": "wacc_real", "value": 0.044},
+    {"pypsa-name": "HVDC overhead", "parameter": "capex_per_mw_km", "value": 1026.53},
+    {
+        "pypsa-name": "HVDC overhead",
+        "parameter": "cost_recovery_period_years",
+        "value": 60,
+    },
+    {"pypsa-name": "HVDC overhead", "parameter": "wacc_real", "value": 0.044},
+    {"pypsa-name": "HVDC submarine", "parameter": "capex_per_mw_km", "value": 504.141},
+    {
+        "pypsa-name": "HVDC submarine",
+        "parameter": "cost_recovery_period_years",
+        "value": 60,
+    },
+    {"pypsa-name": "HVDC submarine", "parameter": "wacc_real", "value": 0.044},
+    {
+        "pypsa-name": "HVDC inverter pair",
+        "parameter": "capex_per_kw",
+        "value": 173.730,
+    },
+    {
+        "pypsa-name": "HVDC inverter pair",
+        "parameter": "cost_recovery_period_years",
+        "value": 60,
+    },
+    {"pypsa-name": "HVDC inverter pair", "parameter": "wacc_real", "value": 0.044},
+]
 
-        snakemake = mock_snakemake("build_cost_data", year=2030)
-        rootpath = ".."
-    else:
-        rootpath = "."
 
-    costs = snakemake.params.costs
-    atb_params = costs.get("atb")
-    aeo_params = costs.get("aeo")
+ATB_VALUE_COLS = [
+    "cost_recovery_period_years",
+    "capacity_factor",
+    "capex_per_kw",
+    "capex_overnight_per_kw",
+    "capex_overnight_additional_per_kw",
+    "capex_grid_connection_per_kw",
+    "capex_construction_finance_factor",
+    "fuel_cost_per_mwh",
+    "heat_rate_mmbtu_per_mwh",
+    "heat_rate_penalty",
+    "levelized_cost_of_energy_per_mwh",
+    "net_output_penalty",
+    "opex_fixed_per_kw",
+    "opex_variable_per_mwh",
+    "wacc_real",
+]
 
-    tech_year = snakemake.wildcards.year
-    if int(tech_year) < 2024:
-        logger.warning(
-            "Minimum cost year supported is 2024, using 2024 expansion costs.",
-        )
-    years = range(2024, 2051)
-    tech_year = min(years, key=lambda x: abs(x - int(tech_year)))
 
-    emissions_data = EMISSIONS_DATA
-
-    # Path to parquet files
-    parquet_path = snakemake.params.pudl_path
-
-    # Import PUDLs ATB data
-    pudl_atb = load_pudl_atb_data(parquet_path)
-    pudl_atb["pypsa-name"] = pudl_atb.apply(
-        match_technology,
-        axis=1,
-        tech_dict=const.ATB_TECH_MAPPER,
-    )
-    pudl_atb = pudl_atb[pudl_atb["pypsa-name"].notnull()]
-
-    # Group by pypsa-name and filter for correct cost recovery period
-    pudl_atb = (
-        pudl_atb.groupby("pypsa-name")[pudl_atb.columns]
-        .apply(
-            lambda x: x[x["cost_recovery_period_years"] == const.ATB_TECH_MAPPER[x.name].get("crp", 30)],
-        )
-        .reset_index(drop=True)
-    )
-
-    # Filter for the correct year, scenario, and model case
-    pudl_atb_filt = pudl_atb[pudl_atb.projection_year == tech_year]
-    if tech_year < 2030:
-        logger.warning(
-            "Using 2030 ATB data for offwind_floating; earlier data not available.",
-        )
-        pudl_atb_offwind_floating = pudl_atb[
-            (pudl_atb["pypsa-name"] == "offwind_floating") & (pudl_atb.projection_year == 2030)
-        ]
-        pudl_atb = pd.concat(
-            [pudl_atb_filt, pudl_atb_offwind_floating],
-            ignore_index=True,
-        )
-    else:
-        pudl_atb = pudl_atb_filt
-
-    pudl_atb = pudl_atb[pudl_atb.scenario_atb == atb_params.get("scenario", "Moderate")]
-    pudl_atb = pudl_atb[pudl_atb.model_case_nrelatb == atb_params.get("model_case", "Market")]
-
-    pudl_premelt = pudl_atb.copy()
-    # Pivot Data
-    cols = [
-        "cost_recovery_period_years",
-        "capacity_factor",
-        "capex_per_kw",
-        "capex_overnight_per_kw",
-        "capex_overnight_additional_per_kw",
-        "capex_grid_connection_per_kw",
-        "capex_construction_finance_factor",
-        "fuel_cost_per_mwh",
-        "heat_rate_mmbtu_per_mwh",
-        "heat_rate_penalty",
-        "levelized_cost_of_energy_per_mwh",
-        "net_output_penalty",
-        "opex_fixed_per_kw",
-        "opex_variable_per_mwh",
-        "wacc_real",
-    ]
-    # pivot such that cols all get moved to one column
-    pudl_atb = pudl_atb.melt(
-        id_vars="pypsa-name",
-        value_vars=cols,
-        var_name="parameter",
-        value_name="value",
-    )
-
-    emissions_data = EMISSIONS_DATA
-
-    # Impute Transmission Data
-    # TEPCC 2023
-    # WACC & Lifetime: https://emp.lbl.gov/publications/improving-estimates-transmission
-    # Subsea costs: Purvins et al. (2018): https://doi.org/10.1016/j.jclepro.2018.03.095
-    transmission_data = [
-        {
-            "pypsa-name": "HVAC overhead",
-            "parameter": "capex_per_mw_km",
-            "value": 1541,
-        },
-        {
-            "pypsa-name": "HVAC overhead",
-            "parameter": "cost_recovery_period_years",
-            "value": 60,
-        },
-        {"pypsa-name": "HVAC overhead", "parameter": "wacc_real", "value": 0.044},
-        {
-            "pypsa-name": "HVDC overhead",
-            "parameter": "capex_per_mw_km",
-            "value": 1026.53,
-        },
-        {
-            "pypsa-name": "HVDC overhead",
-            "parameter": "cost_recovery_period_years",
-            "value": 60,
-        },
-        {"pypsa-name": "HVDC overhead", "parameter": "wacc_real", "value": 0.044},
-        {
-            "pypsa-name": "HVDC submarine",
-            "parameter": "capex_per_mw_km",
-            "value": 504.141,
-        },
-        {
-            "pypsa-name": "HVDC submarine",
-            "parameter": "cost_recovery_period_years",
-            "value": 60,
-        },
-        {"pypsa-name": "HVDC submarine", "parameter": "wacc_real", "value": 0.044},
-        {
-            "pypsa-name": "HVDC inverter pair",
-            "parameter": "capex_per_kw",
-            "value": 173.730,
-        },
-        {
-            "pypsa-name": "HVDC inverter pair",
-            "parameter": "cost_recovery_period_years",
-            "value": 60,
-        },
-        {"pypsa-name": "HVDC inverter pair", "parameter": "wacc_real", "value": 0.044},
-    ]
-    pudl_atb = pd.concat(
-        [
-            pudl_atb,
-            pd.DataFrame(emissions_data),
-            pd.DataFrame(transmission_data),
-            pd.DataFrame(LIFETIME_DATA),
-        ],
-        ignore_index=True,
-    )
-    pudl_atb = pudl_atb.drop_duplicates(
-        subset=["pypsa-name", "parameter"],
-        keep="last",
-    )
-
-    # Load AEO Fuel Cost Data
+def build_aeo_fuel_costs(parquet_path: str, tech_year: int, aeo_scenario: str) -> pd.DataFrame:
+    """Loads AEO fuel cost data, applies tech mappings, returns long-format frame."""
     aeo = load_pudl_aeo_data(parquet_path)
     aeo = aeo[aeo.projection_year == tech_year]
-    aeo = aeo[aeo.model_case_eiaaeo == aeo_params.get("scenario", "Reference")]
+    aeo = aeo[aeo.model_case_eiaaeo == aeo_scenario]
     cols = ["fuel_type_eiaaeo", "fuel_cost_real_per_mmbtu_eiaaeo"]
     aeo = aeo[cols]
     aeo = aeo.groupby("fuel_type_eiaaeo").mean()
@@ -429,11 +332,39 @@ if __name__ == "__main__":
             for new_name, source_name in tech_fuel_map.items()
         ],
     )
-    aeo = pd.concat([aeo, tech_fuels], ignore_index=True)
+    return pd.concat([aeo, tech_fuels], ignore_index=True)
+
+
+def process_atb_scenario(pudl_atb_sub: pd.DataFrame, aeo: pd.DataFrame) -> pd.DataFrame:
+    """Run the full cost pipeline for one (atb_scenario, model_case) slice.
+
+    Concatenates static data (emissions, transmission, lifetime, AEO fuels), pivots,
+    derives hydrogen_ct, marginal cost, annualized capex etc., and returns a long-form
+    DataFrame with columns [pypsa-name, parameter, value] for this scenario+case.
+    """
+    pudl_atb = pudl_atb_sub.melt(
+        id_vars="pypsa-name",
+        value_vars=ATB_VALUE_COLS,
+        var_name="parameter",
+        value_name="value",
+    )
+
+    pudl_atb = pd.concat(
+        [
+            pudl_atb,
+            pd.DataFrame(EMISSIONS_DATA),
+            pd.DataFrame(TRANSMISSION_DATA),
+            pd.DataFrame(LIFETIME_DATA),
+        ],
+        ignore_index=True,
+    )
+    pudl_atb = pudl_atb.drop_duplicates(
+        subset=["pypsa-name", "parameter"],
+        keep="last",
+    )
+
     pudl_atb = pd.concat([pudl_atb, aeo], ignore_index=True)
 
-    # Calculate Annualized Costs and Marinal Costs
-    # Apply: marginal_cost = opex_variable_per_mwh + fuel_cost_real_per_mwhth / efficiency
     pivot_atb = pudl_atb.pivot(
         index="pypsa-name",
         columns="parameter",
@@ -479,7 +410,6 @@ if __name__ == "__main__":
         )
         * pivot_atb["capex_per_kw"]
         * 1
-        # change to nyears
     ) * 1e3
 
     pivot_atb["annualized_capex_per_mw_km"] = (
@@ -489,12 +419,10 @@ if __name__ == "__main__":
         )
         * pivot_atb["capex_per_mw_km"]
         * 1
-        # change to nyears
     )
 
-    # Calculate grid interrconnection costs per MW-KM
-    # All land-based resources assume 1 mile of spur line
-    # All offshore resources assume 30 km of subsea cable
+    # Grid interconnection costs per MW-KM
+    # Land-based: 1 mile of spur line; offshore: 30 km of subsea cable
     pivot_atb["capex_grid_connection_per_kw_km"] = pivot_atb["capex_grid_connection_per_kw"] / 1.609
     pivot_atb.loc[
         pivot_atb["pypsa-name"].str.contains("offshore"),
@@ -508,23 +436,117 @@ if __name__ == "__main__":
         )
         * pivot_atb["capex_grid_connection_per_kw_km"]
         * 1
-        # change to nyears
     )
 
     pivot_atb["annualized_capex_fom"] = pivot_atb["annualized_capex_per_mw"] + (pivot_atb["opex_fixed_per_kw"] * 1e3)
-    pudl_atb = pivot_atb.melt(
+    result = pivot_atb.melt(
         id_vars=["pypsa-name"],
         value_vars=pivot_atb.columns.difference(["pypsa-name"]),
         var_name="parameter",
         value_name="value",
     )
-    pudl_atb = pudl_atb.reset_index(drop=True)
-    pudl_atb["value"] = pudl_atb["value"].round(3)
+    result = result.reset_index(drop=True)
+    result["value"] = result["value"].round(3)
+    return result
 
+
+if __name__ == "__main__":
+    if "snakemake" not in globals():
+        from _helpers import mock_snakemake
+
+        snakemake = mock_snakemake("build_cost_data", year=2030)
+        rootpath = ".."
+    else:
+        rootpath = "."
+
+    costs = snakemake.params.costs
+    atb_params = costs.get("atb") or {}
+    aeo_params = costs.get("aeo") or {}
+
+    tech_year = snakemake.wildcards.year
+    if int(tech_year) < 2024:
+        logger.warning(
+            "Minimum cost year supported is 2024, using 2024 expansion costs.",
+        )
+    years = range(2024, 2051)
+    tech_year = min(years, key=lambda x: abs(x - int(tech_year)))
+
+    # Path to parquet files
+    parquet_path = snakemake.params.pudl_path
+
+    # Import PUDLs ATB data
+    pudl_atb = load_pudl_atb_data(parquet_path)
+    pudl_atb["pypsa-name"] = pudl_atb.apply(
+        match_technology,
+        axis=1,
+        tech_dict=const.ATB_TECH_MAPPER,
+    )
+    pudl_atb = pudl_atb[pudl_atb["pypsa-name"].notnull()]
+
+    # Group by pypsa-name and filter for correct cost recovery period
+    pudl_atb = (
+        pudl_atb.groupby("pypsa-name")[pudl_atb.columns]
+        .apply(
+            lambda x: x[x["cost_recovery_period_years"] == const.ATB_TECH_MAPPER[x.name].get("crp", 30)],
+        )
+        .reset_index(drop=True)
+    )
+
+    # Filter to the requested projection year (with 2030 fallback for offwind_floating)
+    pudl_atb_filt = pudl_atb[pudl_atb.projection_year == tech_year]
+    if tech_year < 2030:
+        logger.warning(
+            "Using 2030 ATB data for offwind_floating; earlier data not available.",
+        )
+        pudl_atb_offwind_floating = pudl_atb[
+            (pudl_atb["pypsa-name"] == "offwind_floating") & (pudl_atb.projection_year == 2030)
+        ]
+        pudl_atb_year = pd.concat(
+            [pudl_atb_filt, pudl_atb_offwind_floating],
+            ignore_index=True,
+        )
+    else:
+        pudl_atb_year = pudl_atb_filt
+
+    # Build AEO fuel cost data once — independent of ATB scenario / case
+    aeo = build_aeo_fuel_costs(
+        parquet_path,
+        tech_year,
+        aeo_params.get("scenario", "Reference"),
+    )
+
+    # Iterate over every (atb_scenario, model_case) so that the final CSV holds
+    # the entire ATB scenario grid; downstream selects the correct slice via
+    # `costs.atb.scenario`/`model_case` (with optional per-carrier overrides).
+    scenarios = pudl_atb_year.scenario_atb.dropna().unique()
+    cases = pudl_atb_year.model_case_nrelatb.dropna().unique()
+    logger.info(
+        f"Building costs for {len(scenarios)} scenarios x {len(cases)} model cases "
+        f"= {len(scenarios) * len(cases)} ATB combinations",
+    )
+
+    scenario_results = []
+    for atb_scenario in scenarios:
+        for atb_model_case in cases:
+            sub = pudl_atb_year[
+                (pudl_atb_year.scenario_atb == atb_scenario) & (pudl_atb_year.model_case_nrelatb == atb_model_case)
+            ]
+            if sub.empty:
+                continue
+            result = process_atb_scenario(sub, aeo)
+            result["atb_scenario"] = atb_scenario
+            result["atb_model_case"] = atb_model_case
+            scenario_results.append(result)
+
+    pudl_atb = pd.concat(scenario_results, ignore_index=True)
+
+    # EGS costs do not vary with ATB scenario; tag as NA so the loader applies them universally
     egs_costs = pd.read_csv(snakemake.input.egs_costs)
     egs_costs = egs_costs.query("investment_horizon == @tech_year").drop(
         columns="investment_horizon",
     )
+    egs_costs["atb_scenario"] = pd.NA
+    egs_costs["atb_model_case"] = pd.NA
     pudl_atb = pd.concat([pudl_atb, egs_costs], ignore_index=True)
 
     pudl_atb.to_csv(snakemake.output.tech_costs, index=False)
