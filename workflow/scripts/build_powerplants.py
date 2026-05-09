@@ -690,9 +690,7 @@ if __name__ == "__main__":
         rootpath = "."
     configure_logging(snakemake)
 
-    weather_year = snakemake.params.renewable_weather_year[0]
-    # Cap the year at 2023 if it's greater
-    data_year = min(int(weather_year), 2023)
+    data_year = 2023  # Use latest available PUDL data
     start_date = f"{data_year}-01-01"
     end_date = f"{data_year + 1}-01-01"
 
