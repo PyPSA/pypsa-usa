@@ -304,7 +304,7 @@ def rollup_supply_curve(
     print(
         f"[caps] rolled up to {len(rollup)} buses; "
         f"total p_nom_max = {rollup['p_nom_max'].sum():.1f} MW; "
-        f"mean avg_cf = {rollup['avg_cf'].mean():.3f}"
+        f"mean avg_cf = {rollup['avg_cf'].mean():.3f}",
     )
 
     data_vars = {
@@ -336,7 +336,7 @@ def rollup_supply_curve(
             uf[i] = line.intersection(eez).length / line.length
         data_vars["underwater_fraction"] = (("bus",), uf)
         print(
-            f"[caps] underwater_fraction: mean={np.nanmean(uf):.3f}  min={np.nanmin(uf):.3f}  max={np.nanmax(uf):.3f}"
+            f"[caps] underwater_fraction: mean={np.nanmean(uf):.3f}  min={np.nanmin(uf):.3f}  max={np.nanmax(uf):.3f}",
         )
 
     ds = xr.Dataset(

@@ -217,7 +217,7 @@ def main():
                 "pnom_nrel_gw": df["pnom_nrel_mw"].sum() / 1e3,
                 "energy_legacy_twh": df["energy_legacy_mwh"].sum() / 1e6,
                 "energy_nrel_twh": df["energy_nrel_mwh"].sum() / 1e6,
-            }
+            },
         )
 
     summary = pd.DataFrame(rows)

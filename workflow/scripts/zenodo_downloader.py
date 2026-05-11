@@ -115,7 +115,6 @@ class ZenodoScenarioDownloader:
             return str(out_path)
         return self._download_file(record_id, filename, out_path, force_redownload)
 
-
     def download_by_record_id(self, record_id, filename, force_redownload=False):
         """
         Download a file directly using a record ID.

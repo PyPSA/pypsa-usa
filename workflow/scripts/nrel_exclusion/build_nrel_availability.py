@@ -429,7 +429,7 @@ def main():
     else:
         print(
             f"[avail] stats: n_valid={valid.size}  "
-            f"min={valid.min():.3f}  max={valid.max():.3f}  mean={valid.mean():.3f}"
+            f"min={valid.min():.3f}  max={valid.max():.3f}  mean={valid.mean():.3f}",
         )
 
     Path(args.output).parent.mkdir(parents=True, exist_ok=True)

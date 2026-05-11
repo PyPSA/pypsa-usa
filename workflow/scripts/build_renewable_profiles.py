@@ -281,7 +281,7 @@ if __name__ == "__main__":
         if not access:
             raise ValueError(
                 "renewable_land_access must be set (e.g. 'reference', 'limited', "
-                "'open') when renewable.dataset == 'godeeep'."
+                "'open') when renewable.dataset == 'godeeep'.",
             )
 
         # Determine year based on scenario type
@@ -331,7 +331,8 @@ if __name__ == "__main__":
         caps_ds = xr.open_dataset(snakemake.input.nrel_caps)
 
         mapping = get_cell_to_bus_mapping(
-            ds_cf["x"].values, ds_cf["y"].values,
+            ds_cf["x"].values,
+            ds_cf["y"].values,
             [snakemake.input.regions],
             cache_dir=snakemake.params.mapping_cache_dir,
         )
@@ -347,7 +348,7 @@ if __name__ == "__main__":
 
         region_buses = buses.values.astype(profile.bus.dtype)
         common_buses = sorted(
-            set(profile.bus.values) & set(capacities.bus.values) & set(region_buses)
+            set(profile.bus.values) & set(capacities.bus.values) & set(region_buses),
         )
         profile = profile.sel(bus=common_buses)
         capacities = capacities.sel(bus=common_buses)
