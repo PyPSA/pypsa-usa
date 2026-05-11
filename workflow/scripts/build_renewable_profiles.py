@@ -278,6 +278,11 @@ if __name__ == "__main__":
         scenario = snakemake.config["renewable_scenarios"][0]
         tech = snakemake.wildcards.technology
         access = snakemake.config.get("renewable_land_access")
+        if not access:
+            raise ValueError(
+                "renewable_land_access must be set (e.g. 'reference', 'limited', "
+                "'open') when renewable.dataset == 'godeeep'."
+            )
 
         # Determine year based on scenario type
         if scenario == "historical":
@@ -295,108 +300,62 @@ if __name__ == "__main__":
         if tech in ["onwind", "offwind", "offwind_floating"]:
             technology = "wind"
             wind_height = snakemake.config.get("godeeep_wind_height", "_100m")
-            start = ((year - 1980) // 20) * 20 + 1980
-            end = start + 19
         elif tech == "solar":
             technology = "solar"
             wind_height = ""
-            start = ((year - 2020) // 40) * 40 + 2020
-            end = start + 39
         else:
             raise ValueError("Invalid technology type. Choose 'onwind', 'offwind', 'offwind_floating' or 'solar'.")
 
-        year_range = "" if scenario == "historical" else f"_{start}_{end}"
-        scenario_final = technology + wind_height + f"_{scenario}" + year_range
+        # ===== NREL access-scenario path =====
+        # Download per-cell compressed CF and apply availability-weighted
+        # aggregation onto bus polygons at runtime. Capacity variables come
+        # from the NREL supply-curve rollup (caps file).
+        from nrel_exclusion.aggregate_godeeep_weighted import (
+            fix_godeeep_time,
+            get_cell_to_bus_mapping,
+            weighted_bus_aggregation,
+        )
 
-        if access:
-            # ===== NREL access-scenario path =====
-            # Download per-cell compressed CF and apply availability-weighted
-            # aggregation onto bus polygons at runtime. Capacity variables come
-            # from the NREL supply-curve rollup (caps file).
-            from nrel_exclusion.aggregate_godeeep_weighted import (
-                fix_godeeep_time,
-                get_cell_to_bus_mapping,
-                weighted_bus_aggregation,
-            )
+        logger.info(f"NREL access scenario: {access}")
+        cf_filename = f"{technology}_gen_cf_{year}{wind_height}_compressed.nc"
+        # Compressed-CF records on Zenodo are split by (tech, scenario), not by
+        # year-window — one record holds 2030/2040/2050 for the same scenario.
+        cf_record_key = f"{technology}{wind_height}_{scenario}_compressed"
+        cf_filepath = downloader.download_scenario_file(cf_record_key, scenario, cf_filename)
 
-            logger.info(f"NREL access scenario: {access}")
-            cf_filename = f"{technology}_gen_cf_{year}{wind_height}_compressed.nc"
-            cf_filepath = downloader.download_scenario_file(scenario_final, scenario, cf_filename)
+        ds_cf = xr.open_dataset(cf_filepath)
+        ds_cf = fix_godeeep_time(ds_cf, year)
+        ds_cf = ds_cf.rename({"XLONG": "x", "XLAT": "y"})
 
-            ds_cf = xr.open_dataset(cf_filepath)
-            ds_cf = fix_godeeep_time(ds_cf, year)
-            ds_cf = ds_cf.rename({"XLONG": "x", "XLAT": "y"})
+        avail = xr.open_dataarray(snakemake.input.nrel_avail)
+        caps_ds = xr.open_dataset(snakemake.input.nrel_caps)
 
-            avail = xr.open_dataarray(snakemake.input.nrel_avail)
-            caps_ds = xr.open_dataset(snakemake.input.nrel_caps)
+        mapping = get_cell_to_bus_mapping(
+            ds_cf["x"].values, ds_cf["y"].values,
+            [snakemake.input.regions],
+            cache_dir=snakemake.params.mapping_cache_dir,
+        )
+        logger.info(f"Cell→bus mapping: {mapping['name'].nunique()} buses, {len(mapping)} cell rows")
 
-            mapping = get_cell_to_bus_mapping(
-                ds_cf["x"].values,
-                ds_cf["y"].values,
-                [snakemake.input.regions],
-                cache_dir=snakemake.params.mapping_cache_dir,
-            )
-            logger.info(f"Cell→bus mapping: {mapping['name'].nunique()} buses, {len(mapping)} cell rows")
+        agg = weighted_bus_aggregation(ds_cf["capacity_factor"], avail, mapping)
+        profile = agg["profile"].sel(time=renewable_sns)
 
-            agg = weighted_bus_aggregation(ds_cf["capacity_factor"], avail, mapping)
-            profile = agg["profile"].sel(time=renewable_sns)
+        capacities = caps_ds["weight"]
+        p_nom_max = caps_ds["p_nom_max"]
+        potential = caps_ds["potential"]
+        average_distance = caps_ds["average_distance"]
 
-            capacities = caps_ds["weight"]
-            p_nom_max = caps_ds["p_nom_max"]
-            potential = caps_ds["potential"]
-            average_distance = caps_ds["average_distance"]
+        region_buses = buses.values.astype(profile.bus.dtype)
+        common_buses = sorted(
+            set(profile.bus.values) & set(capacities.bus.values) & set(region_buses)
+        )
+        profile = profile.sel(bus=common_buses)
+        capacities = capacities.sel(bus=common_buses)
+        p_nom_max = p_nom_max.sel(bus=common_buses)
+        potential = potential.sel(bus=common_buses)
+        average_distance = average_distance.sel(bus=common_buses)
 
-            region_buses = buses.values.astype(profile.bus.dtype)
-            common_buses = sorted(
-                set(profile.bus.values) & set(capacities.bus.values) & set(region_buses),
-            )
-            profile = profile.sel(bus=common_buses)
-            capacities = capacities.sel(bus=common_buses)
-            p_nom_max = p_nom_max.sel(bus=common_buses)
-            potential = potential.sel(bus=common_buses)
-            average_distance = average_distance.sel(bus=common_buses)
-
-            logger.info(f"Profile: {profile.shape}  Capacities: {capacities.shape}")
-
-        else:
-            # ===== Legacy path: pre-aggregated CF + atlite-preprocessed capacities =====
-            filename = f"{technology}_gen_cf_{year}{wind_height}_aggregated.nc"
-            filepath = downloader.download_scenario_file(scenario_final, scenario, filename)
-            profile = xr.open_dataarray(filepath).load()
-            profile = profile.sel(time=renewable_sns)
-
-            logger.info("Loading preprocessed data from Zenodo...")
-            logger.info(f"Pulling preprocessed data for {tech}")
-            preprocessed = xr.open_dataset(
-                downloader.download_scenario_file("capacities", scenario, f"profile_{tech}.nc")
-            )
-            capacities = preprocessed["weight"]
-            p_nom_max = preprocessed["p_nom_max"]
-            potential = preprocessed["potential"]
-            average_distance = preprocessed["average_distance"]
-
-            region_buses = buses.values.astype("<U7")
-            godeeep_buses = profile.bus.values
-            atlite_buses = capacities.bus.values
-            common_buses = [bus for bus in godeeep_buses if bus in atlite_buses and bus in region_buses]
-
-            capacities = capacities.sel(bus=common_buses)
-            p_nom_max = p_nom_max.sel(bus=common_buses)
-            average_distance = average_distance.sel(bus=common_buses)
-
-            regions_xy = regions.loc[common_buses]
-            regions_x = regions_xy["x"].values.astype("<U7")
-            regions_y = regions_xy["y"].values.astype("<U7")
-            potential = potential.sel(x=regions_x, y=regions_y, method="nearest")
-
-            logger.info(f"Before filtering Profile shape: {profile.shape}")
-            profile = profile.sel(bus=common_buses)
-
-            logger.info("Final data shapes:")
-            logger.info(f"Profile: {profile.shape}")
-            logger.info(f"Capacities: {capacities.shape}")
-            logger.info(f"P_nom_max: {p_nom_max.shape}")
-            logger.info(f"Average_distance: {average_distance.shape}")
+        logger.info(f"Profile: {profile.shape}  Capacities: {capacities.shape}")
 
     # ds of renewable data to be outputted
     ds = xr.merge(
@@ -423,24 +382,12 @@ if __name__ == "__main__":
                 underwater_fraction.append(frac)
             ds["underwater_fraction"] = xr.DataArray(underwater_fraction, [buses])
         elif snakemake.params.renewable.get("dataset", False) == "godeeep":
-            # Prefer the value baked into the NREL caps file (computed from NREL
-            # supply-curve site locations + the interconnect EEZ polygon).
-            # Fall back to the legacy preprocessed file if the caps file was
-            # built without it.
-            if "caps_ds" in locals() and "underwater_fraction" in caps_ds.data_vars:
-                ds["underwater_fraction"] = caps_ds["underwater_fraction"].reindex(
-                    bus=common_buses,
-                    fill_value=1.0,
-                )
-            else:
-                if "preprocessed" not in locals():
-                    preprocessed = xr.open_dataset(
-                        downloader.download_scenario_file("capacities", scenario, f"profile_{tech}.nc"),
-                    )
-                ds["underwater_fraction"] = preprocessed["underwater_fraction"].reindex(
-                    bus=common_buses,
-                    fill_value=1.0,
-                )
+            # underwater_fraction is baked into the NREL caps file by
+            # build_nrel_bus_capacities.py.
+            ds["underwater_fraction"] = caps_ds["underwater_fraction"].reindex(
+                bus=common_buses,
+                fill_value=1.0,
+            )
 
     # select only buses with some capacity and minimal capacity factor
     ds = ds.sel(
