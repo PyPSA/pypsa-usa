@@ -157,6 +157,12 @@ costs:
   atb:
     model_case: "Market" # Market, R&D
     scenario: "Moderate" # Advanced, Conservative, Moderate
+    overrides: # Optional per-carrier overrides for scenario and/or model_case. Falls back to defaults above when unset.
+      # solar:
+      #   scenario: "Advanced"
+      # nuclear:
+      #   scenario: "Conservative"
+      #   model_case: "R&D"
   aeo:
     scenario: "reference" # reference, high, low
   social_discount_rate: 0.02
