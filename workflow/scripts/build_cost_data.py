@@ -459,9 +459,7 @@ if __name__ == "__main__":
     else:
         rootpath = "."
 
-    costs = snakemake.params.costs
-    atb_params = costs.get("atb") or {}
-    aeo_params = costs.get("aeo") or {}
+    aeo_params = snakemake.params.aeo or {}
 
     tech_year = snakemake.wildcards.year
     if int(tech_year) < 2024:
