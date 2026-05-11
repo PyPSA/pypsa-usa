@@ -92,6 +92,17 @@ renewable:
 
 
 # docs :
+## NREL land-access exclusion settings for the GODEEEP workflow.
+## When renewable.dataset == "godeeep", `renewable_land_access` is REQUIRED and the
+## workflow downloads `data/nrel_exclusion/derived/{avail,caps}_*.nc` from Zenodo
+## to apply per-cell availability weighting and NREL supply-curve capacities.
+renewable_land_access:                # required for godeeep: reference | limited | open
+apply_cec_basescreen: false           # overlay CEC Wind/Solar BaseScreen on onwind+solar (CA-only)
+apply_boem_osw: false                 # overlay BOEM OSW planning areas on offwind+offwind_floating
+godeeep_wind_height: "_100m"          # raw GODEEEP wind-CF hub height (e.g. "_100m", "_125m")
+
+
+# docs :
 atlite:
   default_cutout: era5_2019
   nprocesses: 8
