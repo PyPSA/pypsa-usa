@@ -254,6 +254,25 @@ rule retrieve_pudl:
         "../scripts/retrieve_pudl.py"
 
 
+rule retrieve_nrel_exclusion_artifact:
+    """
+    Download a single NREL land-access availability/caps artifact from the
+    Zenodo bundle (record nrel_exclusion_v1). Triggered on-demand by
+    build_renewable_profiles when avail_*.nc / caps_*.nc are missing locally.
+    """
+    wildcard_constraints:
+        nrel_artifact=r"(avail|caps)_(solar|onwind|offwind|offwind_floating)_(reference|limited|open)(_cec|_boem)?",
+    output:
+        DATA + "nrel_exclusion/derived/{nrel_artifact}.nc",
+    log:
+        LOGS + "retrieve/nrel_exclusion_{nrel_artifact}.log",
+    resources:
+        walltime="00:10:00",
+        mem_mb=2000,
+    script:
+        "../scripts/retrieve_nrel_exclusion.py"
+
+
 if "EGS" in config["electricity"]["extendable_carriers"]["Generator"]:
 
     rule retrieve_egs:

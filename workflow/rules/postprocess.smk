@@ -103,7 +103,7 @@ rule plot_statistics:
         "logs/plot_figures/{interconnect}_{simpl}_{clusters}_l{ll}_{opts}_{sector}.log",
     threads: 1
     resources:
-        mem_mb=5000,
+        mem_mb=10000,
         walltime="00:30:00",
     script:
         "../scripts/plot_statistics.py"

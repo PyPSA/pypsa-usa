@@ -130,6 +130,68 @@ Specifies the types of generators that are included in the network, which are ex
    :end-before: solar:
 ```
 
+(godeeep_cf)=
+### `renewable: godeeep`
+
+PyPSA-USA supports two sources for renewable capacity-factor time series, selected via `renewable.dataset` in `config.common.yaml`:
+
+- `atlite` — runtime computation of capacity factors from ERA5 cutouts, weighted by Copernicus / CORINE land-use exclusions (the legacy default; see [Renewable Capacity Factors](renewable_cfs) under Model Data).
+- `godeeep` — pre-computed regional climate-model capacity factors from the [GODEEEP](https://www.pnnl.gov/projects/godeeep) (Grid Operations, Decarbonization, Environmental and Energy Equity Platform) dataset, weighted at runtime by NREL reV land-access exclusions.
+
+The `godeeep` path consumes two file families published on Zenodo, downloaded automatically by `scripts/zenodo_downloader.py` on first run:
+
+- **Compressed GODEEEP capacity factors** — per-cell hourly capacity factors on the GODEEEP Lambert Conformal grid, uint8-quantized and zlib-compressed (~12× smaller than the raw aggregated files). One Zenodo record per `(tech, scenario)`:
+   - solar: [historical](https://doi.org/10.5281/zenodo.20127513), [rcp45hotter](https://doi.org/10.5281/zenodo.20127523), [rcp45cooler](https://doi.org/10.5281/zenodo.20127562), [rcp85hotter](https://doi.org/10.5281/zenodo.20127589), [rcp85cooler](https://doi.org/10.5281/zenodo.20127633)
+   - wind (125 m): [historical](https://doi.org/10.5281/zenodo.20127520), [rcp45hotter](https://doi.org/10.5281/zenodo.20127545), [rcp45cooler](https://doi.org/10.5281/zenodo.20127572), [rcp85hotter](https://doi.org/10.5281/zenodo.20127604), [rcp85cooler](https://doi.org/10.5281/zenodo.20127645)
+- **NREL land-access artifacts** ([10.5281/zenodo.20127899](https://doi.org/10.5281/zenodo.20127899)) — `avail_{tech}_{access}[_cec|_boem].nc` per-cell availability rasters and `caps_{tech}_{access}[_cec|_boem].nc` per-bus rollups (`weight`, `p_nom_max`, `potential`, `average_distance`, and `underwater_fraction` for offshore).
+
+#### Configuring a godeeep run
+
+A complete godeeep configuration requires four config blocks beyond the standard `electricity:` / `clustering:` settings:
+
+1. **Dataset selection** (`config.common.yaml`):
+
+   ```yaml
+   renewable:
+     dataset: godeeep    # set to atlite for the ERA5 + CORINE workflow
+   ```
+
+2. **Scenario and year selection**. The GODEEEP dataset has one historical record (2012) and four future climate scenarios (`rcp45hotter`, `rcp45cooler`, `rcp85hotter`, `rcp85cooler`) at planning horizons 2030 / 2040 / 2050.
+
+   ```yaml
+   renewable_scenarios: ["rcp45cooler"]   # one of: historical | rcp45hotter | rcp45cooler | rcp85hotter | rcp85cooler
+   renewable_weather_years: [2012]        # used only when scenario == historical
+   ```
+
+   Future-scenario years come from the `planning_horizons` wildcard (under `scenario:`); the historical year comes from `renewable_weather_years`.
+
+3. **Snapshots** — the temporal slice within the chosen year. For godeeep this controls how much of the 8760-hour GODEEEP CF is sampled:
+
+   ```yaml
+   renewable_snapshots:
+     start_month: 1
+     start_day: 1
+     end_month: 12
+     end_day: 31
+     end_inclusive: true    # include the full end day, not just up to 00:00
+   ```
+
+4. **NREL land-access exclusions** (required when `renewable.dataset: godeeep`; the workflow raises if `renewable_land_access` is unset):
+
+```{eval-rst}
+.. literalinclude:: ../../workflow/repo_data/config/config.common.yaml
+   :language: yaml
+   :start-at: renewable_land_access:
+   :end-before: # docs :
+
+.. csv-table::
+   :header-rows: 1
+   :widths: 22,7,22,33
+   :file: configtables/nrel_exclusion.csv
+```
+
+The `_cec` and `_boem` variants overlay additional regulatory screens on top of the base NREL availability raster: California Energy Commission Wind/Solar BaseScreen for onshore solar/wind in CA, and BOEM offshore wind planning areas for offshore. Outside their applicable region the variant equals the base.
+
 (lines_cf)=
 ## `lines`
 ```{eval-rst}

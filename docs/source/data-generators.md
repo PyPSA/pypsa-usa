@@ -27,9 +27,14 @@ In production cost-minimizing optimization models, a generator’s marginal cost
 
 ## Renewable Resources
 
-**Solar & Wind Profiles**
+(renewable_cfs)=
+### Renewable Capacity Factors
 
-PyPSA-USA leverages the Atlite tool to provide access to decades of weather data with varying spatial resolutions. Atlite is used to estimate hourly renewable resource availability across the United States, typically at a spatial resolution of 30 km² cells. Within PyPSA-USA, users can configure:
+PyPSA-USA provides two sources for solar and wind capacity-factor time series, selected via `renewable.dataset` in the configuration. They are interchangeable from the perspective of downstream rules (both produce the same `profile_{technology}.nc` output schema), but they originate from different upstream datasets and embody different exclusion assumptions.
+
+#### Atlite (default)
+
+PyPSA-USA leverages the [Atlite](https://atlite.readthedocs.io) tool to provide access to decades of weather data with varying spatial resolutions. Atlite estimates hourly renewable resource availability across the United States from ERA5 reanalysis data, typically at a spatial resolution of 30 km² cells. Within PyPSA-USA, users can configure:
 
 - **Weather Year**
 - **Turbine Type**
@@ -38,6 +43,26 @@ PyPSA-USA leverages the Atlite tool to provide access to decades of weather data
 - **Availability Simulation Parameters**
 
 The hourly renewable capacity factors calculated by Atlite are weighted based on land-use availability factors. This ensures that areas unsuitable for specific technology types do not disproportionately affect the renewable resource capacity assigned to each node. These weighted capacity factors are aggregated into 41,564 distinct zones across the United States. These zones are then clustered using one of the clustering algorithms developed for PyPSA-Eur.
+
+#### GODEEEP
+
+For multi-year climate-change scenario studies, PyPSA-USA supports the [GODEEEP](https://www.pnnl.gov/projects/godeeep) dataset — regional-climate-model capacity factors developed at Pacific Northwest National Laboratory under the Grid Operations, Decarbonization, Environmental and Energy Equity Platform. GODEEEP provides hourly solar PV and 125 m hub-height wind capacity factors on a 12 km Lambert Conformal grid for:
+
+- **One historical year** (2012) calibrated against observed weather.
+- **Four future climate scenarios** — `rcp45hotter`, `rcp45cooler`, `rcp85hotter`, `rcp85cooler` — under the RCP4.5 and RCP8.5 emissions pathways, downscaled with two GCM ensemble members per pathway.
+- **Three planning horizons** (2030, 2040, 2050) per future scenario, drawn from contiguous 20-year (wind) or 40-year (solar) windows.
+
+The raw GODEEEP files are large (~4.4 GB per `(tech, scenario, year)` triple). PyPSA-USA consumes a uint8-quantized + zlib-compressed variant (~350 MB for solar, ~800 MB for wind) published as 10 Zenodo records keyed by `(tech, scenario)`. The compressed files are pulled automatically at runtime by `scripts/zenodo_downloader.py`.
+
+GODEEEP capacity factors are re-aggregated to PyPSA-USA bus polygons using a runtime weighting step:
+
+1. **Per-cell availability raster** — a fraction in [0, 1] for each 12 km GODEEEP cell, derived from NREL reV supply-curve availability scenarios. Three access scenarios are supported: `reference` (least restrictive, ~5× more permissive than Atlite+CORINE), `limited` (closest to the Atlite+CORINE baseline), and `open` (most permissive, for sensitivity studies). Optional overlays apply the California Energy Commission Wind/Solar BaseScreen (`_cec`, CA-only) and BOEM offshore wind planning areas (`_boem`, offshore).
+2. **Cell→bus mapping** computed once per bus layout from a county-level shapefile (cached on disk; ~14 min per interconnect at county resolution).
+3. **Per-bus rollup** of `weight`, `p_nom_max`, `potential`, `average_distance`, and (for offshore) `underwater_fraction` from NREL supply-curve site locations within each bus polygon.
+
+The availability rasters and per-bus capacity rollups are published as a separate Zenodo record ([10.5281/zenodo.20127899](https://doi.org/10.5281/zenodo.20127899)) and downloaded on first run.
+
+See [`renewable: godeeep`](godeeep_cf) under Model Configuration for the full set of config knobs.
 
 **Enhanced Geothermal (EGS) and Pumped Hydro Storage (PHS)**: These resources require more complex modeling due to subsurface and surface characteristics. Regional supply curves for these resources, including capital costs and technical capacity, are incorporated from specialized datasets.
     - **PHS**: Uses data from the [NREL Closed-Loop PHS dataset](https://www2.nrel.gov/gis/psh-supply-curves).
