@@ -164,6 +164,7 @@ rule build_renewable_profiles:
             int(w.planning_horizon) if godeeep_planning_horizon else None
         ),
         renewable_scenarios=config_provider("renewable_scenarios"),
+        mapping_cache_dir=RESOURCES + "{interconnect}/nrel_mapping_cache",
     input:
         corine=ancient(
             DATA
@@ -188,6 +189,26 @@ rule build_renewable_profiles:
             RESOURCES + "{interconnect}/Geospatial/regions_onshore.geojson"
             if w.technology in ("onwind", "solar")
             else RESOURCES + "{interconnect}/Geospatial/regions_offshore.geojson"
+        ),
+        nrel_avail=lambda w: (
+            DATA + "nrel_exclusion/derived/avail_{tech}_{acc}{cec}{boem}.nc".format(
+                tech=w.technology,
+                acc=config["renewable_land_access"],
+                cec="_cec" if config.get("apply_cec_basescreen") and w.technology in ("onwind", "solar") else "",
+                boem="_boem" if config.get("apply_boem_osw") and w.technology.startswith("offwind") else "",
+            )
+            if config.get("renewable_land_access")
+            else []
+        ),
+        nrel_caps=lambda w: (
+            DATA + "nrel_exclusion/derived/caps_{tech}_{acc}{cec}{boem}.nc".format(
+                tech=w.technology,
+                acc=config["renewable_land_access"],
+                cec="_cec" if config.get("apply_cec_basescreen") and w.technology in ("onwind", "solar") else "",
+                boem="_boem" if config.get("apply_boem_osw") and w.technology.startswith("offwind") else "",
+            )
+            if config.get("renewable_land_access")
+            else []
         ),
         cutout=lambda wildcards: (
             expand(
