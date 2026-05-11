@@ -19,7 +19,6 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
-
 TECH_LABEL = {
     "solar": "Solar",
     "onwind": "Onshore wind",
@@ -57,7 +56,7 @@ def metrics_on_intersection(leg: xr.Dataset, nrl: xr.Dataset) -> pd.DataFrame:
             "pnom_nrel_mw": nrl_pnom,
             "energy_legacy_mwh": leg_energy,
             "energy_nrel_mwh": nrl_energy,
-        }
+        },
     )
 
 
@@ -73,10 +72,13 @@ def _scatter(ax, x, y, *, log: bool, xlabel: str, ylabel: str, title: str):
         if log:
             lo = max(lo, 1e-6)
             ax.plot([lo, hi], [lo, hi], "k--", lw=0.8, alpha=0.6)
-            ax.set_xscale("log"); ax.set_yscale("log")
+            ax.set_xscale("log")
+            ax.set_yscale("log")
         else:
             ax.plot([lo, hi], [lo, hi], "k--", lw=0.8, alpha=0.6)
-    ax.set_xlabel(xlabel); ax.set_ylabel(ylabel); ax.set_title(title)
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+    ax.set_title(title)
     ax.grid(True, alpha=0.3)
 
 
@@ -85,33 +87,39 @@ def plot_tech(df: pd.DataFrame, tech: str, out_path: Path):
     n_buses = len(df)
 
     _scatter(
-        axes[0], df["cf_legacy"].values, df["cf_nrel"].values,
+        axes[0],
+        df["cf_legacy"].values,
+        df["cf_nrel"].values,
         log=False,
         xlabel="LEGACY annual mean CF",
         ylabel="NREL annual mean CF",
-        title=f"Annual mean CF\n(median LEG={df['cf_legacy'].median():.3f}, "
-              f"NREL={df['cf_nrel'].median():.3f})",
+        title=f"Annual mean CF\n(median LEG={df['cf_legacy'].median():.3f}, NREL={df['cf_nrel'].median():.3f})",
     )
     _scatter(
-        axes[1], df["pnom_legacy_mw"].values, df["pnom_nrel_mw"].values,
+        axes[1],
+        df["pnom_legacy_mw"].values,
+        df["pnom_nrel_mw"].values,
         log=True,
         xlabel="LEGACY p_nom_max (MW, log)",
         ylabel="NREL p_nom_max (MW, log)",
-        title=f"p_nom_max per bus\n(Σ LEG={df['pnom_legacy_mw'].sum()/1e3:,.0f} GW, "
-              f"NREL={df['pnom_nrel_mw'].sum()/1e3:,.0f} GW)",
+        title=f"p_nom_max per bus\n(Σ LEG={df['pnom_legacy_mw'].sum() / 1e3:,.0f} GW, "
+        f"NREL={df['pnom_nrel_mw'].sum() / 1e3:,.0f} GW)",
     )
     _scatter(
-        axes[2], df["energy_legacy_mwh"].values, df["energy_nrel_mwh"].values,
+        axes[2],
+        df["energy_legacy_mwh"].values,
+        df["energy_nrel_mwh"].values,
         log=True,
         xlabel="LEGACY annual energy (MWh, log)",
         ylabel="NREL annual energy (MWh, log)",
-        title=f"Annual energy potential\n(Σ LEG={df['energy_legacy_mwh'].sum()/1e6:,.1f} TWh, "
-              f"NREL={df['energy_nrel_mwh'].sum()/1e6:,.1f} TWh)",
+        title=f"Annual energy potential\n(Σ LEG={df['energy_legacy_mwh'].sum() / 1e6:,.1f} TWh, "
+        f"NREL={df['energy_nrel_mwh'].sum() / 1e6:,.1f} TWh)",
     )
 
     fig.suptitle(
         f"{TECH_LABEL[tech]}: LEGACY vs NREL on {n_buses} shared buses",
-        fontsize=13, y=1.02,
+        fontsize=13,
+        y=1.02,
     )
     fig.tight_layout()
     fig.savefig(out_path, dpi=150, bbox_inches="tight")
@@ -127,30 +135,34 @@ def plot_totals(summary: pd.DataFrame, out_path: Path):
 
     pnom_leg = summary["pnom_legacy_gw"].values
     pnom_nrl = summary["pnom_nrel_gw"].values
-    axes[0].bar(x - w/2, pnom_leg, w, color="#4C72B0", label="LEGACY (Zenodo)")
-    axes[0].bar(x + w/2, pnom_nrl, w, color="#C44E52", label="NREL (reference)")
-    for xi, v in zip(x - w/2, pnom_leg):
+    axes[0].bar(x - w / 2, pnom_leg, w, color="#4C72B0", label="LEGACY (Zenodo)")
+    axes[0].bar(x + w / 2, pnom_nrl, w, color="#C44E52", label="NREL (reference)")
+    for xi, v in zip(x - w / 2, pnom_leg):
         axes[0].text(xi, v, f"{v:,.0f}", ha="center", va="bottom", fontsize=9)
-    for xi, v in zip(x + w/2, pnom_nrl):
+    for xi, v in zip(x + w / 2, pnom_nrl):
         axes[0].text(xi, v, f"{v:,.0f}", ha="center", va="bottom", fontsize=9)
-    axes[0].set_xticks(x); axes[0].set_xticklabels([TECH_LABEL[t] for t in techs])
+    axes[0].set_xticks(x)
+    axes[0].set_xticklabels([TECH_LABEL[t] for t in techs])
     axes[0].set_ylabel("Σ p_nom_max on shared buses (GW)")
     axes[0].set_title("Capacity potential")
-    axes[0].grid(axis="y", alpha=0.3); axes[0].set_axisbelow(True)
+    axes[0].grid(axis="y", alpha=0.3)
+    axes[0].set_axisbelow(True)
     axes[0].legend()
 
     e_leg = summary["energy_legacy_twh"].values
     e_nrl = summary["energy_nrel_twh"].values
-    axes[1].bar(x - w/2, e_leg, w, color="#4C72B0", label="LEGACY (Zenodo)")
-    axes[1].bar(x + w/2, e_nrl, w, color="#C44E52", label="NREL (reference)")
-    for xi, v in zip(x - w/2, e_leg):
+    axes[1].bar(x - w / 2, e_leg, w, color="#4C72B0", label="LEGACY (Zenodo)")
+    axes[1].bar(x + w / 2, e_nrl, w, color="#C44E52", label="NREL (reference)")
+    for xi, v in zip(x - w / 2, e_leg):
         axes[1].text(xi, v, f"{v:,.0f}", ha="center", va="bottom", fontsize=9)
-    for xi, v in zip(x + w/2, e_nrl):
+    for xi, v in zip(x + w / 2, e_nrl):
         axes[1].text(xi, v, f"{v:,.0f}", ha="center", va="bottom", fontsize=9)
-    axes[1].set_xticks(x); axes[1].set_xticklabels([TECH_LABEL[t] for t in techs])
+    axes[1].set_xticks(x)
+    axes[1].set_xticklabels([TECH_LABEL[t] for t in techs])
     axes[1].set_ylabel("Σ annual energy on shared buses (TWh)")
     axes[1].set_title("Annual energy potential")
-    axes[1].grid(axis="y", alpha=0.3); axes[1].set_axisbelow(True)
+    axes[1].grid(axis="y", alpha=0.3)
+    axes[1].set_axisbelow(True)
     axes[1].legend()
 
     fig.suptitle("LEGACY vs NREL totals on shared bus sets", fontsize=13, y=1.02)
@@ -186,32 +198,39 @@ def main():
         leg, nrl = load_pair(profiles_dir, tech)
         n_leg, n_nrl = leg.sizes["bus"], nrl.sizes["bus"]
         df = metrics_on_intersection(leg, nrl)
-        leg.close(); nrl.close()
+        leg.close()
+        nrl.close()
 
         df.to_csv(out_dir / f"compare_legacy_vs_nrel_{tech}.csv", index=False)
 
         plot_tech(df, tech, out_dir / f"compare_legacy_vs_nrel_{tech}.png")
 
-        rows.append({
-            "tech": tech,
-            "n_legacy": n_leg,
-            "n_nrel": n_nrl,
-            "n_shared": len(df),
-            "cf_legacy_med": df["cf_legacy"].median(),
-            "cf_nrel_med": df["cf_nrel"].median(),
-            "pnom_legacy_gw": df["pnom_legacy_mw"].sum() / 1e3,
-            "pnom_nrel_gw": df["pnom_nrel_mw"].sum() / 1e3,
-            "energy_legacy_twh": df["energy_legacy_mwh"].sum() / 1e6,
-            "energy_nrel_twh": df["energy_nrel_mwh"].sum() / 1e6,
-        })
+        rows.append(
+            {
+                "tech": tech,
+                "n_legacy": n_leg,
+                "n_nrel": n_nrl,
+                "n_shared": len(df),
+                "cf_legacy_med": df["cf_legacy"].median(),
+                "cf_nrel_med": df["cf_nrel"].median(),
+                "pnom_legacy_gw": df["pnom_legacy_mw"].sum() / 1e3,
+                "pnom_nrel_gw": df["pnom_nrel_mw"].sum() / 1e3,
+                "energy_legacy_twh": df["energy_legacy_mwh"].sum() / 1e6,
+                "energy_nrel_twh": df["energy_nrel_mwh"].sum() / 1e6,
+            }
+        )
 
     summary = pd.DataFrame(rows)
     summary.to_csv(out_dir / "compare_legacy_vs_nrel_summary.csv", index=False)
     plot_totals(summary, out_dir / "compare_legacy_vs_nrel_totals.png")
 
     print("\n=== Summary on shared buses ===")
-    with pd.option_context("display.float_format", "{:,.3f}".format,
-                           "display.width", 160):
+    with pd.option_context(
+        "display.float_format",
+        "{:,.3f}".format,
+        "display.width",
+        160,
+    ):
         print(summary.to_string(index=False))
 
 

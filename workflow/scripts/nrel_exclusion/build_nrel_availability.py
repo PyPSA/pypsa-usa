@@ -34,23 +34,22 @@ from rasterio.features import rasterize
 from rasterio.warp import Resampling, reproject
 from shapely.geometry import Polygon
 
-
 RASTER_PATHS = {
-    ("solar", "reference"):   "solar/solar_reference_access_percent_included.tif",
-    ("solar", "limited"):     "solar/solar_limited_access_percent_included.tif",
-    ("solar", "open"):        "solar/solar_open_access_percent_included.tif",
-    ("onwind", "reference"):  "onwind/lbw_reference_115hh_170rd.tif",
-    ("onwind", "limited"):    "onwind/lbw_limited_115hh_170rd.tif",
-    ("onwind", "open"):       "onwind/lbw_open_115hh_170rd.tif",
+    ("solar", "reference"): "solar/solar_reference_access_percent_included.tif",
+    ("solar", "limited"): "solar/solar_limited_access_percent_included.tif",
+    ("solar", "open"): "solar/solar_open_access_percent_included.tif",
+    ("onwind", "reference"): "onwind/lbw_reference_115hh_170rd.tif",
+    ("onwind", "limited"): "onwind/lbw_limited_115hh_170rd.tif",
+    ("onwind", "open"): "onwind/lbw_open_115hh_170rd.tif",
     ("offwind", "reference"): "offwind/reference_composite_lzw.tif",
-    ("offwind", "limited"):   "offwind/limited_composite_lzw.tif",
-    ("offwind", "open"):      "offwind/open_composite_lzw.tif",
+    ("offwind", "limited"): "offwind/limited_composite_lzw.tif",
+    ("offwind", "open"): "offwind/open_composite_lzw.tif",
     # offwind_floating shares the BOEM composite raster with offwind — the
     # fixed/floating split lives in the supply-curve CSV's `technology` column,
     # not in the availability raster itself.
     ("offwind_floating", "reference"): "offwind/reference_composite_lzw.tif",
-    ("offwind_floating", "limited"):   "offwind/limited_composite_lzw.tif",
-    ("offwind_floating", "open"):      "offwind/open_composite_lzw.tif",
+    ("offwind_floating", "limited"): "offwind/limited_composite_lzw.tif",
+    ("offwind_floating", "open"): "offwind/open_composite_lzw.tif",
 }
 
 # Per-raster nodata sentinels that exactextract will ignore.
@@ -80,12 +79,8 @@ def build_cell_corners(xlong: np.ndarray, xlat: np.ndarray) -> tuple[np.ndarray,
     lat_corners = np.full((ny + 1, nx + 1), np.nan, dtype=np.float64)
 
     # Interior corners: mean of 4 neighbors
-    lon_corners[1:-1, 1:-1] = 0.25 * (
-        xlong[:-1, :-1] + xlong[:-1, 1:] + xlong[1:, :-1] + xlong[1:, 1:]
-    )
-    lat_corners[1:-1, 1:-1] = 0.25 * (
-        xlat[:-1, :-1] + xlat[:-1, 1:] + xlat[1:, :-1] + xlat[1:, 1:]
-    )
+    lon_corners[1:-1, 1:-1] = 0.25 * (xlong[:-1, :-1] + xlong[:-1, 1:] + xlong[1:, :-1] + xlong[1:, 1:])
+    lat_corners[1:-1, 1:-1] = 0.25 * (xlat[:-1, :-1] + xlat[:-1, 1:] + xlat[1:, :-1] + xlat[1:, 1:])
 
     # Top/bottom edges: extrapolate from first/last two interior rows
     lon_corners[0, 1:-1] = 2 * lon_corners[1, 1:-1] - lon_corners[2, 1:-1]
@@ -219,17 +214,18 @@ def build_composite_raster(
     if apply_cec and tech in ("onwind", "solar"):
         if repo_data_dir is None or state_shapes_path is None:
             raise ValueError(
-                "apply_cec_basescreen requires --repo-data-dir and --state-shapes"
+                "apply_cec_basescreen requires --repo-data-dir and --state-shapes",
             )
-        cec_name = (
-            "CEC_Wind_BaseScreen_epsg3310.tif" if tech == "onwind"
-            else "CEC_Solar_BaseScreen_epsg3310.tif"
-        )
+        cec_name = "CEC_Wind_BaseScreen_epsg3310.tif" if tech == "onwind" else "CEC_Solar_BaseScreen_epsg3310.tif"
         cec_path = Path(repo_data_dir) / "geospatial" / "CEC_GIS" / cec_name
         print(f"[avail] CEC mask : {cec_path}")
 
         cec_on_grid = _warp_mask_to_grid(
-            cec_path, transform, shape, crs, fill=1.0,
+            cec_path,
+            transform,
+            shape,
+            crs,
+            fill=1.0,
         )
 
         states = gpd.read_file(state_shapes_path).to_crs(crs)
@@ -258,7 +254,11 @@ def build_composite_raster(
         print(f"[avail] BOEM mask: {boem_path}")
 
         boem_on_grid = _warp_mask_to_grid(
-            boem_path, transform, shape, crs, fill=0.0,
+            boem_path,
+            transform,
+            shape,
+            crs,
+            fill=0.0,
         )
         composite = composite * boem_on_grid
         n_in = int((boem_on_grid > 0.5).sum())
@@ -353,9 +353,9 @@ def compute_availability(
             "apply_cec_basescreen": int(bool(apply_cec)),
             "apply_boem_osw": int(bool(apply_boem)),
             "description": "Mean fractional land availability from NREL exclusion "
-                           "raster, optionally modulated by CEC BaseScreen (CA-only) "
-                           "and BOEM OSW planning areas, aggregated per GODEEEP grid "
-                           "cell via exact_extract area-weighted mean.",
+            "raster, optionally modulated by CEC BaseScreen (CA-only) "
+            "and BOEM OSW planning areas, aggregated per GODEEEP grid "
+            "cell via exact_extract area-weighted mean.",
         },
     )
     return da
@@ -363,8 +363,11 @@ def compute_availability(
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--tech", required=True,
-                    choices=["solar", "onwind", "offwind", "offwind_floating"])
+    ap.add_argument(
+        "--tech",
+        required=True,
+        choices=["solar", "onwind", "offwind", "offwind_floating"],
+    )
     ap.add_argument("--access", required=True, choices=["reference", "limited", "open"])
     ap.add_argument("--godeeep", required=True, help="Path to a raw GODEEEP .nc file (any year).")
     ap.add_argument(
@@ -381,10 +384,16 @@ def main():
         default="/home/groups/iazevedo/asia/pypsa-usa/workflow/repo_data/geospatial/us_states_cb_2020_5m/cb_2020_us_state_5m.shp",
         help="Path to Census Bureau state shapefile (used for CA masking).",
     )
-    ap.add_argument("--apply-cec-basescreen", action="store_true",
-                    help="Multiply in CEC Wind/Solar BaseScreen (CA-only).")
-    ap.add_argument("--apply-boem-osw", action="store_true",
-                    help="Multiply in BOEM OSW planning areas (offwind only).")
+    ap.add_argument(
+        "--apply-cec-basescreen",
+        action="store_true",
+        help="Multiply in CEC Wind/Solar BaseScreen (CA-only).",
+    )
+    ap.add_argument(
+        "--apply-boem-osw",
+        action="store_true",
+        help="Multiply in BOEM OSW planning areas (offwind only).",
+    )
     ap.add_argument("--output", required=True, help="Output NetCDF path.")
     ap.add_argument(
         "--subset-n",
@@ -400,11 +409,7 @@ def main():
     )
     args = ap.parse_args()
 
-    subset = (
-        slice(args.subset_start, args.subset_start + args.subset_n)
-        if args.subset_n > 0
-        else None
-    )
+    subset = slice(args.subset_start, args.subset_start + args.subset_n) if args.subset_n > 0 else None
 
     da = compute_availability(
         tech=args.tech,
@@ -422,8 +427,10 @@ def main():
     if valid.size == 0:
         print("[avail] stats: n_valid=0 (all NaN — subset likely outside raster extent)")
     else:
-        print(f"[avail] stats: n_valid={valid.size}  "
-              f"min={valid.min():.3f}  max={valid.max():.3f}  mean={valid.mean():.3f}")
+        print(
+            f"[avail] stats: n_valid={valid.size}  "
+            f"min={valid.min():.3f}  max={valid.max():.3f}  mean={valid.mean():.3f}"
+        )
 
     Path(args.output).parent.mkdir(parents=True, exist_ok=True)
     da.to_netcdf(args.output)

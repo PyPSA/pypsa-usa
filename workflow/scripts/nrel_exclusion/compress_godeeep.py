@@ -16,14 +16,13 @@ from pathlib import Path
 import netCDF4 as nc
 import numpy as np
 
-
 DEFAULT_CHUNK_T = 500  # hours per time chunk
 SCALE = np.float32(1.0 / 254.0)
 FILL = np.uint8(255)
 
 
 def compress_one(src_path: str, out_path: str, chunk_t: int = DEFAULT_CHUNK_T) -> None:
-    print(f"[compress] source: {src_path} ({os.path.getsize(src_path)/1e9:.2f} GB)", flush=True)
+    print(f"[compress] source: {src_path} ({os.path.getsize(src_path) / 1e9:.2f} GB)", flush=True)
     t_start = time.time()
 
     Path(out_path).parent.mkdir(parents=True, exist_ok=True)
@@ -54,7 +53,8 @@ def compress_one(src_path: str, out_path: str, chunk_t: int = DEFAULT_CHUNK_T) -
             "capacity_factor",
             "u1",
             src_cf.dimensions,
-            zlib=True, complevel=4,
+            zlib=True,
+            complevel=4,
             chunksizes=(min(chunk_t, T), NS, EW),
             fill_value=FILL,
         )
@@ -85,8 +85,7 @@ def compress_one(src_path: str, out_path: str, chunk_t: int = DEFAULT_CHUNK_T) -
     out_size = os.path.getsize(out_path)
     src_size = os.path.getsize(src_path)
     print(
-        f"[compress] wrote {out_path}: {out_size/1e6:.1f} MB "
-        f"({src_size/out_size:.1f}x smaller) in {elapsed:.1f}s",
+        f"[compress] wrote {out_path}: {out_size / 1e6:.1f} MB ({src_size / out_size:.1f}x smaller) in {elapsed:.1f}s",
         flush=True,
     )
 
@@ -95,8 +94,12 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--input", required=True, help="Raw GODEEEP .nc file.")
     ap.add_argument("--output", required=True, help="Destination compressed .nc file.")
-    ap.add_argument("--chunk-t", type=int, default=DEFAULT_CHUNK_T,
-                    help="Hours per time chunk during read/write (controls peak memory).")
+    ap.add_argument(
+        "--chunk-t",
+        type=int,
+        default=DEFAULT_CHUNK_T,
+        help="Hours per time chunk during read/write (controls peak memory).",
+    )
     args = ap.parse_args()
     compress_one(args.input, args.output, chunk_t=args.chunk_t)
 

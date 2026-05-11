@@ -1,6 +1,6 @@
 pudl_path: s3://pudl.catalyst.coop/v2025.2.0
 
-foresight:  'perfect'
+foresight: 'perfect'
 # docs :
 renewable:
   dataset: godeeep #atlite or godeeep
@@ -35,7 +35,7 @@ renewable:
     corine:
       grid_codes: [80, 200] #page 28 of https://land.copernicus.eu/global/sites/cgls.vito.be/files/products/CGLOPS1_PUM_LC100m-V3_I3.4.pdf
     natura: true
-    boem_screen: False
+    boem_screen: false
     max_depth: 60 # meters, ref https://www.nrel.gov/docs/fy16osti/66599.pdf
     min_shore_distance: 22000 # meters
     max_shore_distance: 65000 # meters
@@ -124,7 +124,7 @@ atlite:
       dx: 0.3
       dy: 0.3
 
- 
+
 lines:
   types: #Temp values, replaced.
     115.: "Al/St 240/40 2-bundle 220.0"
@@ -134,7 +134,7 @@ lines:
     345.: "Al/St 240/40 4-bundle 380.0"
     500.: "Al/St 560/50 4-bundle 750.0"
     765.: "Al/St 560/50 4-bundle 750.0"
- 
+
 ## For Atlite (future/historical) and GODEEEP (just historical), configure this
 renewable_weather_years: [2019]
 snapshots:
@@ -152,7 +152,7 @@ renewable_scenarios: ["rcp85cooler"] #["historical", "rcp45hotter", "rcp45cooler
 ##   data/nrel_exclusion/derived/caps_{tech}_{access}[_cec|_boem].nc
 ## published on Zenodo and applies per-cell availability weighting to the
 ## raw GODEEEP CFs, with per-bus p_nom_max from the NREL supply-curve rollup.
-renewable_land_access: null                # [null | reference | limited | open]
+renewable_land_access:                     # [null | reference | limited | open]
 apply_cec_basescreen: false           # overlay CEC Wind/Solar BaseScreen on onwind+solar (CA-only)
 apply_boem_osw: false                 # overlay BOEM OSW planning areas on offwind+offwind_floating
 godeeep_wind_height: "_125m"          # which raw GODEEEP wind-CF hub height to pull ["_100m", "_125m"]

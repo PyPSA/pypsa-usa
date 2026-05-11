@@ -191,21 +191,43 @@ rule build_renewable_profiles:
             else RESOURCES + "{interconnect}/Geospatial/regions_offshore.geojson"
         ),
         nrel_avail=lambda w: (
-            DATA + "nrel_exclusion/derived/avail_{tech}_{acc}{cec}{boem}.nc".format(
+            DATA
+            + "nrel_exclusion/derived/avail_{tech}_{acc}{cec}{boem}.nc".format(
                 tech=w.technology,
                 acc=config["renewable_land_access"],
-                cec="_cec" if config.get("apply_cec_basescreen") and w.technology in ("onwind", "solar") else "",
-                boem="_boem" if config.get("apply_boem_osw") and w.technology.startswith("offwind") else "",
+                cec=(
+                    "_cec"
+                    if config.get("apply_cec_basescreen")
+                    and w.technology in ("onwind", "solar")
+                    else ""
+                ),
+                boem=(
+                    "_boem"
+                    if config.get("apply_boem_osw")
+                    and w.technology.startswith("offwind")
+                    else ""
+                ),
             )
             if config.get("renewable_land_access")
             else []
         ),
         nrel_caps=lambda w: (
-            DATA + "nrel_exclusion/derived/caps_{tech}_{acc}{cec}{boem}.nc".format(
+            DATA
+            + "nrel_exclusion/derived/caps_{tech}_{acc}{cec}{boem}.nc".format(
                 tech=w.technology,
                 acc=config["renewable_land_access"],
-                cec="_cec" if config.get("apply_cec_basescreen") and w.technology in ("onwind", "solar") else "",
-                boem="_boem" if config.get("apply_boem_osw") and w.technology.startswith("offwind") else "",
+                cec=(
+                    "_cec"
+                    if config.get("apply_cec_basescreen")
+                    and w.technology in ("onwind", "solar")
+                    else ""
+                ),
+                boem=(
+                    "_boem"
+                    if config.get("apply_boem_osw")
+                    and w.technology.startswith("offwind")
+                    else ""
+                ),
             )
             if config.get("renewable_land_access")
             else []

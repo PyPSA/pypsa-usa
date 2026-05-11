@@ -7,13 +7,12 @@ use) and the available generation time series (based on weather data).
 import functools
 import logging
 import time
-import os
 
 import atlite
 import geopandas as gpd
-import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import xarray as xr
 from _helpers import configure_logging, get_snapshots
 from dask.distributed import Client
@@ -315,7 +314,9 @@ if __name__ == "__main__":
             # aggregation onto bus polygons at runtime. Capacity variables come
             # from the NREL supply-curve rollup (caps file).
             from nrel_exclusion.aggregate_godeeep_weighted import (
-                fix_godeeep_time, get_cell_to_bus_mapping, weighted_bus_aggregation,
+                fix_godeeep_time,
+                get_cell_to_bus_mapping,
+                weighted_bus_aggregation,
             )
 
             logger.info(f"NREL access scenario: {access}")
@@ -330,7 +331,8 @@ if __name__ == "__main__":
             caps_ds = xr.open_dataset(snakemake.input.nrel_caps)
 
             mapping = get_cell_to_bus_mapping(
-                ds_cf["x"].values, ds_cf["y"].values,
+                ds_cf["x"].values,
+                ds_cf["y"].values,
                 [snakemake.input.regions],
                 cache_dir=snakemake.params.mapping_cache_dir,
             )
@@ -346,7 +348,7 @@ if __name__ == "__main__":
 
             region_buses = buses.values.astype(profile.bus.dtype)
             common_buses = sorted(
-                set(profile.bus.values) & set(capacities.bus.values) & set(region_buses)
+                set(profile.bus.values) & set(capacities.bus.values) & set(region_buses),
             )
             profile = profile.sel(bus=common_buses)
             capacities = capacities.sel(bus=common_buses)
@@ -365,7 +367,9 @@ if __name__ == "__main__":
 
             logger.info("Loading preprocessed data from Zenodo...")
             logger.info(f"Pulling preprocessed data for {tech}")
-            preprocessed = xr.open_dataset(downloader.download_scenario_file("capacities", scenario, f"profile_{tech}.nc"))
+            preprocessed = xr.open_dataset(
+                downloader.download_scenario_file("capacities", scenario, f"profile_{tech}.nc")
+            )
             capacities = preprocessed["weight"]
             p_nom_max = preprocessed["p_nom_max"]
             potential = preprocessed["potential"]
@@ -425,15 +429,17 @@ if __name__ == "__main__":
             # built without it.
             if "caps_ds" in locals() and "underwater_fraction" in caps_ds.data_vars:
                 ds["underwater_fraction"] = caps_ds["underwater_fraction"].reindex(
-                    bus=common_buses, fill_value=1.0,
+                    bus=common_buses,
+                    fill_value=1.0,
                 )
             else:
                 if "preprocessed" not in locals():
                     preprocessed = xr.open_dataset(
-                        downloader.download_scenario_file("capacities", scenario, f"profile_{tech}.nc")
+                        downloader.download_scenario_file("capacities", scenario, f"profile_{tech}.nc"),
                     )
                 ds["underwater_fraction"] = preprocessed["underwater_fraction"].reindex(
-                    bus=common_buses, fill_value=1.0,
+                    bus=common_buses,
+                    fill_value=1.0,
                 )
 
     # select only buses with some capacity and minimal capacity factor

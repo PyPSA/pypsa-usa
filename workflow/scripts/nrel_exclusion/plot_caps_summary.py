@@ -16,7 +16,6 @@ import pandas as pd
 import xarray as xr
 from matplotlib.colors import LogNorm
 
-
 TECH_LABEL = {
     "solar": "Solar",
     "onwind": "Onshore wind",
@@ -28,7 +27,7 @@ TECH_LABEL = {
 def load_caps(caps_dir: Path, tech: str, access: str) -> pd.DataFrame:
     ds = xr.open_dataset(caps_dir / f"caps_{tech}_{access}.nc")
     df = pd.DataFrame(
-        {"name": ds["bus"].values.astype(str), "p_nom_max": ds["p_nom_max"].values}
+        {"name": ds["bus"].values.astype(str), "p_nom_max": ds["p_nom_max"].values},
     )
     ds.close()
     return df
@@ -71,7 +70,7 @@ def plot_pnom_map(
     ax.set_title(
         f"{TECH_LABEL[tech]} capacity potential per bus "
         f"(NREL {access} supply curve)\n"
-        f"Σ = {total_gw:,.1f} GW across {n_buses} western buses"
+        f"Σ = {total_gw:,.1f} GW across {n_buses} western buses",
     )
     fig.tight_layout()
     fig.savefig(out_path, dpi=150, bbox_inches="tight")
@@ -105,7 +104,7 @@ def plot_totals_by_access(
     ax.set_ylabel(f"Western US {TECH_LABEL[tech].lower()} p_nom_max (GW)")
     ax.set_title(
         f"{TECH_LABEL[tech]} capacity potential vs NREL access scenario\n"
-        f"(Sum across western county buses, from NREL supply curves)"
+        f"(Sum across western county buses, from NREL supply curves)",
     )
     ax.grid(axis="y", alpha=0.3)
     ax.set_axisbelow(True)
@@ -118,8 +117,11 @@ def plot_totals_by_access(
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--tech", required=True,
-                    choices=["solar", "onwind", "offwind", "offwind_floating"])
+    ap.add_argument(
+        "--tech",
+        required=True,
+        choices=["solar", "onwind", "offwind", "offwind_floating"],
+    )
     ap.add_argument(
         "--caps-dir",
         default="/scratch/groups/iazevedo/asia/nrel_avail",
@@ -195,7 +197,7 @@ def main():
         ax.set_title(
             f"{TECH_LABEL[args.tech]} capacity potential per bus "
             f"(NREL {args.access_for_map} supply curve)\n"
-            f"Σ = {total_gw:,.1f} GW across {n_buses} western offshore buses"
+            f"Σ = {total_gw:,.1f} GW across {n_buses} western offshore buses",
         )
         fig.tight_layout()
         fig.savefig(map_path, dpi=150, bbox_inches="tight")
