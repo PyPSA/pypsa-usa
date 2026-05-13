@@ -343,10 +343,6 @@ Cleaned and labeled REeDs Shapes are pulled from this github repository: https:/
 ```
 
 
-```{note}
-`feature:` in `simplify_network:` are only relevant if `hac` were chosen in `algorithm`.
-```
-
 ```{tip}
 use `min` in `p_nom_max:` for more conservative assumptions.
 ```

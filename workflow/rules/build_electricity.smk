@@ -740,12 +740,9 @@ rule add_electricity:
 
 
 ################# ----------- Rules to Aggregate & Simplify Network ---------- #################
-rule simplify_network:
+rule aggregate_to_substations:
     params:
         aggregation_strategies=config["clustering"].get("aggregation_strategies", {}),
-        focus_weights=config_provider("focus_weights", default=False),
-        simplify_network=config_provider("clustering", "simplify_network"),
-        planning_horizons=config_provider("scenario", "planning_horizons"),
         topological_boundaries=config_provider(
             "model_topology", "topological_boundaries"
         ),
@@ -753,6 +750,29 @@ rule simplify_network:
         bus2sub=RESOURCES + "{interconnect}/bus2sub.csv",
         sub=RESOURCES + "{interconnect}/sub.csv",
         network=RESOURCES + "{interconnect}/elec_base_network_l_pp.pkl",
+    output:
+        network=RESOURCES + "{interconnect}/elec_b.nc",
+        busmap=RESOURCES + "{interconnect}/busmap_b.csv",
+    log:
+        "logs/aggregate_to_substations/{interconnect}.log",
+    threads: 1
+    resources:
+        mem_mb=lambda wildcards, input, attempt: (input.size // 150000) * attempt * 1.5,
+        walltime=config_provider(
+            "walltime", "aggregate_to_substations", default="01:00:00"
+        ),
+    script:
+        "../scripts/aggregate_to_substations.py"
+
+
+rule cluster_simpl:
+    params:
+        aggregation_strategies=config["clustering"].get("aggregation_strategies", {}),
+        focus_weights=config_provider("focus_weights", default=False),
+        simplify_network=config_provider("clustering", "simplify_network"),
+        planning_horizons=config_provider("scenario", "planning_horizons"),
+    input:
+        network=RESOURCES + "{interconnect}/elec_b.nc",
         regions_onshore=RESOURCES + "{interconnect}/Geospatial/regions_onshore.geojson",
         regions_offshore=RESOURCES
         + "{interconnect}/Geospatial/regions_offshore.geojson",
@@ -763,13 +783,13 @@ rule simplify_network:
         regions_offshore=RESOURCES
         + "{interconnect}/Geospatial/regions_offshore_s{simpl}.geojson",
     log:
-        "logs/simplify_network/{interconnect}/elec_s{simpl}.log",
+        "logs/cluster_simpl/{interconnect}/elec_s{simpl}.log",
     threads: 1
     resources:
         mem_mb=lambda wildcards, input, attempt: (input.size // 150000) * attempt * 1.5,
-        walltime=config_provider("walltime", "simplify_network", default="01:00:00"),
+        walltime=config_provider("walltime", "cluster_simpl", default="01:00:00"),
     script:
-        "../scripts/simplify_network.py"
+        "../scripts/cluster_simpl.py"
 
 
 rule cluster_network:

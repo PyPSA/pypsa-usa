@@ -22,7 +22,6 @@ from add_electricity import update_transmission_costs
 from constants import REEDS_NERC_INTERCONNECT_MAPPER, STATES_INTERCONNECT_MAPPER
 from pypsa.clustering.spatial import (
     busmap_by_greedy_modularity,
-    busmap_by_hac,
     busmap_by_kmeans,
     get_clustering_from_busmap,
 )
@@ -65,46 +64,6 @@ def weighting_for_region(n, x, weighting_strategy=None):
         weighting = normed(n.buses.loc[x.index].Pd)
 
     return (weighting * (100.0 / weighting.max())).clip(lower=1.0).astype(int)
-
-
-def get_feature_for_hac(n, buses_i=None, feature=None):
-    if buses_i is None:
-        buses_i = n.buses.index
-
-    if feature is None:
-        feature = "solar+onwind-time"
-
-    carriers = feature.split("-")[0].split("+")
-    if "offwind" in carriers:
-        carriers.remove("offwind")
-        carriers = np.append(
-            carriers,
-            n.generators.carrier.filter(like="offwind").unique(),
-        )
-
-    if feature.split("-")[1] == "cap":
-        feature_data = pd.DataFrame(index=buses_i, columns=carriers)
-        for carrier in carriers:
-            gen_i = n.generators.query("carrier == @carrier").index
-            attach = n.generators_t.p_max_pu[gen_i].mean().rename(index=n.generators.loc[gen_i].bus)
-            feature_data[carrier] = attach
-
-    if feature.split("-")[1] == "time":
-        feature_data = pd.DataFrame(columns=buses_i)
-        for carrier in carriers:
-            gen_i = n.generators.query("carrier == @carrier").index
-            attach = n.generators_t.p_max_pu[gen_i].rename(
-                columns=n.generators.loc[gen_i].bus,
-            )
-            feature_data = pd.concat([feature_data, attach], axis=0)[buses_i]
-
-        feature_data = feature_data.T
-        # timestamp raises error in sklearn >= v1.2:
-        feature_data.columns = feature_data.columns.astype(str)
-
-    feature_data = feature_data.fillna(0)
-
-    return feature_data
 
 
 def distribute_clusters(
@@ -179,7 +138,6 @@ def busmap_for_n_clusters(
     solver_name,
     focus_weights=None,
     algorithm="kmeans",
-    feature=None,
     weighting_strategy=None,
     **algorithm_kwds,
 ):
@@ -205,46 +163,9 @@ def busmap_for_n_clusters(
         algorithm_kwds.setdefault("tol", 1e-6)
         algorithm_kwds.setdefault("random_state", 0)
 
-    def fix_country_assignment_for_hac(n):
-        from scipy.sparse import csgraph
-
-        # overwrite country of nodes that are disconnected from their country-topology
-        for country in n.buses.country.unique():
-            m = n[n.buses.country == country].copy()
-
-            _, labels = csgraph.connected_components(
-                m.adjacency_matrix(),
-                directed=False,
-            )
-
-            component = pd.Series(labels, index=m.buses.index)
-            component_sizes = component.value_counts()
-
-            if len(component_sizes) > 1:
-                disconnected_bus = component[component == component_sizes.index[-1]].index[0]
-
-                neighbor_bus = n.lines.query(
-                    "bus0 == @disconnected_bus or bus1 == @disconnected_bus",
-                ).iloc[0][["bus0", "bus1"]]
-                new_country = next(
-                    iter(set(n.buses.loc[neighbor_bus].country) - {country}),
-                )
-
-                logger.info(
-                    f"overwriting country `{country}` of bus `{disconnected_bus}` "
-                    f"to new country `{new_country}`, because it is disconnected "
-                    "from its initial inter-country transmission grid.",
-                )
-                n.buses.at[disconnected_bus, "country"] = new_country
-        return n
-
     if algorithm == "hac":
-        feature = get_feature_for_hac(n, buses_i=n.buses.index, feature=feature)
-        n = fix_country_assignment_for_hac(n)
-
-    if (algorithm != "hac") and (feature is not None):
-        logger.warning(
-            f"Keyword argument feature is only valid for algorithm `hac`. Given feature `{feature}` will be ignored.",
+        raise ValueError(
+            "HAC clustering was removed from pypsa-usa. Use algorithm='kmeans' or 'modularity'.",
         )
 
     n.determine_network_topology()
@@ -292,13 +213,6 @@ def busmap_for_n_clusters(
                 buses_i=x.index,
                 **algorithm_kwds,
             )
-        elif algorithm == "hac":
-            return prefix + busmap_by_hac(
-                n,
-                n_clusters_per_region[x.name],
-                buses_i=x.index,
-                feature=feature.loc[x.index],
-            )
         elif algorithm == "modularity":
             return prefix + busmap_by_greedy_modularity(
                 n,
@@ -307,7 +221,7 @@ def busmap_for_n_clusters(
             )
         else:
             raise ValueError(
-                f"`algorithm` must be one of 'kmeans' or 'hac'. Is {algorithm}.",
+                f"`algorithm` must be one of 'kmeans' or 'modularity'. Is {algorithm}.",
             )
 
     return (
@@ -326,8 +240,7 @@ def clustering_for_n_clusters(
     line_length_factor=1.25,
     aggregation_strategies=dict(),
     solver_name="cbc",
-    algorithm="hac",
-    feature=None,
+    algorithm="kmeans",
     focus_weights=None,
     weighting_strategy=None,
 ):
@@ -338,7 +251,6 @@ def clustering_for_n_clusters(
             solver_name,
             focus_weights,
             algorithm,
-            feature,
             weighting_strategy,
         )
         # plot_busmap(n, busmap, 'busmap.png')
@@ -1064,7 +976,6 @@ if __name__ == "__main__":
             params.aggregation_strategies,
             solver_name,
             params.cluster_network["algorithm"],
-            params.cluster_network["feature"],
             params.focus_weights,
             weighting_strategy=params.cluster_network.get("weighting_strategy", None),
         )
