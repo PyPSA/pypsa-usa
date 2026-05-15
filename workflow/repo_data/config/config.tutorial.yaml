@@ -136,7 +136,6 @@ costs:
 sector:
   co2_sequestration_potential: 0
   natural_gas:
-    allow_imports_exports: true # false to be implemented
     cyclic_storage: false
   heating:
     heat_pump_sink_T: 55.

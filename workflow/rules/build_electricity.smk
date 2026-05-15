@@ -73,7 +73,6 @@ rule build_bus_regions:
         topological_boundaries=config_provider(
             "model_topology", "topological_boundaries"
         ),
-        focus_weights=config_provider("focus_weights"),
     input:
         country_shapes=RESOURCES + "{interconnect}/Geospatial/country_shapes.geojson",
         county_shapes=RESOURCES + "{interconnect}/Geospatial/county_shapes.geojson",
@@ -876,7 +875,6 @@ rule add_extra_components:
         ),
         transmission_network=config_provider("model_topology", "transmission_network"),
         costs=config_provider("costs"),
-        ucap=config_provider("ucap", default={}),
     output:
         RESOURCES + "{interconnect}/elec_s{simpl}_c{clusters}_ec.nc",
     log:
@@ -894,10 +892,8 @@ rule add_extra_components:
 rule prepare_network:
     params:
         time_resolution=config_provider("clustering", "temporal", "resolution_elec"),
-        adjustments=False,
         links=config_provider("links"),
         lines=config_provider("lines"),
-        co2base=config_provider("electricity", "co2base"),
         co2limit=config_provider("electricity", "co2limit"),
         co2limit_enable=config_provider("electricity", "co2limit_enable", default=False),
         gaslimit=config_provider("electricity", "gaslimit"),
