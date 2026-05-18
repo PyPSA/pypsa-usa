@@ -18,7 +18,7 @@ class ZenodoScenarioDownloader:
         # Keyed by (tech + wind_height + scenario) — no year_range — because
         # one record holds all years per (tech, scenario).
         self.scenario_records = {
-            "nrel_exclusion_v1": 20127899,
+            "nrel_exclusion_v1": 20277163,
             "solar_historical_compressed": 20127513,
             "solar_rcp45hotter_compressed": 20127523,
             "solar_rcp45cooler_compressed": 20127562,
