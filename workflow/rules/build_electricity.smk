@@ -100,7 +100,7 @@ rule build_bus_regions:
 
 rule build_cost_data:
     params:
-        costs=config_provider("costs"),
+        aeo=config_provider("costs", "aeo"),
         pudl_path=config_provider("pudl_path"),
     input:
         efs_tech_costs="repo_data/costs/EFS_Technology_Data.xlsx",
@@ -875,6 +875,7 @@ rule add_extra_components:
             "model_topology", "topological_boundaries"
         ),
         transmission_network=config_provider("model_topology", "transmission_network"),
+        costs=config_provider("costs"),
         ucap=config_provider("ucap", default={}),
     output:
         RESOURCES + "{interconnect}/elec_s{simpl}_c{clusters}_ec.nc",

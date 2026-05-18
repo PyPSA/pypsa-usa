@@ -15,6 +15,7 @@ from _helpers import (
     calculate_annuity,
     configure_logging,
     is_transport_model,
+    load_costs,
     update_p_nom_max,
 )
 from add_electricity import update_transmission_costs
@@ -969,12 +970,10 @@ if __name__ == "__main__":
             linemap,
         )
 
-        costs = pd.read_csv(snakemake.input.tech_costs)
-        costs = costs.pivot(index="pypsa-name", columns="parameter", values="value")
+        costs = load_costs(snakemake.input.tech_costs, params.costs)
         hvac_overhead_cost = costs.at["HVAC overhead", "annualized_capex_per_mw_km"]
     else:
-        costs = pd.read_csv(snakemake.input.tech_costs)
-        costs = costs.pivot(index="pypsa-name", columns="parameter", values="value")
+        costs = load_costs(snakemake.input.tech_costs, params.costs)
         hvac_overhead_cost = costs.at["HVAC overhead", "annualized_capex_per_mw_km"]
 
         custom_busmap = params.custom_busmap
