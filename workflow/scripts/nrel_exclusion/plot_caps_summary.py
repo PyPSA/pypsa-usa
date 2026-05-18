@@ -129,12 +129,12 @@ def main():
     ap.add_argument(
         "--onshore-shapes",
         default="/home/groups/iazevedo/asia/pypsa-usa/workflow/resources/godeeep/"
-        "county_rcp45hotter/western/Geospatial/regions_onshore.geojson",
+        "geospatial/county_rcp45hotter/western/regions_onshore.geojson",
     )
     ap.add_argument(
         "--offshore-shapes",
         default="/home/groups/iazevedo/asia/pypsa-usa/workflow/resources/godeeep/"
-        "county_rcp45hotter/western/Geospatial/regions_offshore.geojson",
+        "geospatial/county_rcp45hotter/western/regions_offshore.geojson",
     )
     ap.add_argument("--access-for-map", default="reference")
     ap.add_argument(
