@@ -253,8 +253,8 @@ if __name__ == "__main__":
 
         average_distance = []
         centre_of_mass = []
-        for bus in buses:
-            row = layoutmatrix.sel(bus=bus).data
+        for i, bus in enumerate(buses):
+            row = layoutmatrix.isel(bus=i).values.ravel()
             nz_b = row != 0
             row = row[nz_b]
             co = coords[nz_b]
