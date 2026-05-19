@@ -767,11 +767,10 @@ def attach_egs(
                 f"Seismic risk mask excluded {len(excluded_buses)} EGS buses. {len(df_specs)} buses remaining.",
             )
 
-        # TODO: review what qualities need to be included. Currently limited for speedup.
-        qualities = [1]  # df_specs.Quality.unique()
+        qualities = snakemake.config["renewable"]["EGS"].get("quality", [1])
 
         for q in qualities:
-            suffix = " " + car  # + f" Q{q}"
+            suffix = " " + car + f" Q{q}"
             df_q = df_specs[df_specs["Quality"] == q]
 
             bus_list = df_q.index.values
