@@ -23,7 +23,6 @@ Additionally, some extra constraints specified in :mod:`solve_network` are added
     based on the rule :mod:`solve_network`.
 """
 
-import copy
 import logging
 from pathlib import Path
 
@@ -257,154 +256,167 @@ def run_optimize(n, rolling_horizon, skip_iterations, cf_solving, **kwargs):
         raise RuntimeError("Solving status 'infeasible'")
 
 
-def prepare_brownfield(n, planning_horizon):
-    """Prepare the network for the next planning horizon by setting up brownfield constraints.
-    Used for myopic foresight.
-
-    This function:
-    1. Sets minimum capacities for transmission lines and DC links
-    2. Updates generator, link, and storage unit capacities
-    3. Handles time-dependent data transfer between planning periods
-    """
-    # electric transmission grid set optimised capacities of previous as minimum
-    n.lines.s_nom_min = n.lines.s_nom_opt  # for lines
-    dc_i = n.links[n.links.carrier == "DC"].index
-    n.links.loc[dc_i, "p_nom_min"] = n.links.loc[dc_i, "p_nom_opt"]  # for links
-
-    for c in n.iterate_components(["Generator", "Link", "StorageUnit"]):
-        nm = c.name
-        # limit our components that we remove/modify to those prior to this time horizon
-        c_lim = c.df.loc[n.get_active_assets(nm, planning_horizon)]
-
-        logger.info(f"Preparing brownfield for the component {nm}")
-        # attribute selection for naming convention
-        attr = "p"
-        # copy over asset sizing from previous period
-        c_lim[f"{attr}_nom"] = c_lim[f"{attr}_nom_opt"]
-        c_lim[f"{attr}_nom_extendable"] = False
-        df = copy.deepcopy(c_lim)
-        time_df = copy.deepcopy(c.pnl)
-
-        for c_idx in c_lim.index:
-            n.remove(nm, c_idx)
-
-        for df_idx in df.index:
-            if nm == "Generator":
-                n.madd(
-                    nm,
-                    [df_idx],
-                    carrier=df.loc[df_idx].carrier,
-                    bus=df.loc[df_idx].bus,
-                    p_nom_min=df.loc[df_idx].p_nom_min,
-                    p_nom=df.loc[df_idx].p_nom,
-                    p_nom_max=df.loc[df_idx].p_nom_max,
-                    p_nom_extendable=df.loc[df_idx].p_nom_extendable,
-                    ramp_limit_up=df.loc[df_idx].ramp_limit_up,
-                    ramp_limit_down=df.loc[df_idx].ramp_limit_down,
-                    efficiency=df.loc[df_idx].efficiency,
-                    marginal_cost=df.loc[df_idx].marginal_cost,
-                    capital_cost=df.loc[df_idx].capital_cost,
-                    build_year=df.loc[df_idx].build_year,
-                    lifetime=df.loc[df_idx].lifetime,
-                    heat_rate=df.loc[df_idx].heat_rate,
-                    fuel_cost=df.loc[df_idx].fuel_cost,
-                    vom_cost=df.loc[df_idx].vom_cost,
-                    carrier_base=df.loc[df_idx].carrier_base,
-                    p_min_pu=df.loc[df_idx].p_min_pu,
-                    p_max_pu=df.loc[df_idx].p_max_pu,
-                    land_region=df.loc[df_idx].land_region,
-                )
-            else:
-                n.add(nm, df_idx, **df.loc[df_idx])
-        logger.info(n.consistency_check())
-
-        # copy time-dependent
-        selection = n.component_attrs[nm].type.str.contains("series")
-        for tattr in n.component_attrs[nm].index[selection]:
-            n.import_series_from_dataframe(time_df[tattr], nm, tattr)
-
-    # roll over the last snapshot of time varying storage state of charge to be the state_of_charge_initial for the next time period
-    n.storage_units.loc[:, "state_of_charge_initial"] = n.storage_units_t.state_of_charge.loc[planning_horizon].iloc[-1]
+def freeze_prior_periods(n: pypsa.Network, prior_period: int):
+    for c in n.components[["Generator", "Link", "StorageUnit", "Store"]]:
+        attr = "e_nom" if c.name == "Store" else "p_nom"
+        c.static[attr] = c.static[attr + "_opt"]
+        # define  mask for existing resources that can be retired, and exclude them from the next line below
+        c.static.loc[c.static.build_year <= prior_period, attr + "_extendable"] = False
 
 
-def mask_future_generators(n, planning_horizon):
-    """Disable generators whose vintage year hasn't been reached yet.
+# land use
+# transmissions
+# retirement mask
+# statistics
 
-    In myopic mode (multi_investment_periods=False) PyPSA does not use
-    build_year to restrict dispatch, so all vintages are available in every
-    period solve. This function zeros out capacity for future-vintage
-    generators before a period solve so they cannot be built or dispatched.
+# def prepare_brownfield(n, planning_horizon):
+#     """Prepare the network for the next planning horizon by setting up brownfield constraints.
+#     Used for myopic foresight.
 
-    Returns saved state needed by restore_future_generators.
-    """
-    future_gens = n.generators.index[
-        n.generators["build_year"].notna() & (n.generators["build_year"] > planning_horizon)
-    ]
-    if future_gens.empty:
-        return future_gens, None, None, None, None
-    saved_extendable = n.generators.loc[future_gens, "p_nom_extendable"].copy()
-    saved_p_nom_max = n.generators.loc[future_gens, "p_nom_max"].copy()
-    saved_p_nom = n.generators.loc[future_gens, "p_nom"].copy()
-    saved_p_nom_min = n.generators.loc[future_gens, "p_nom_min"].copy()
-    n.generators.loc[future_gens, "p_nom_extendable"] = False
-    n.generators.loc[future_gens, "p_nom_max"] = 0.0
-    n.generators.loc[future_gens, "p_nom"] = 0.0
-    n.generators.loc[future_gens, "p_nom_min"] = 0.0
-    return future_gens, saved_extendable, saved_p_nom_max, saved_p_nom, saved_p_nom_min
+#     This function:
+#     1. Sets minimum capacities for transmission lines and DC links
+#     2. Updates generator, link, and storage unit capacities
+#     3. Handles time-dependent data transfer between planning periods
+#     """
+#     # electric transmission grid set optimised capacities of previous as minimum
+#     n.lines.s_nom_min = n.lines.s_nom_opt  # for lines
+#     dc_i = n.links[n.links.carrier == "DC"].index
+#     n.links.loc[dc_i, "p_nom_min"] = n.links.loc[dc_i, "p_nom_opt"]  # for links
+
+#     for c in n.iterate_components(["Generator", "Link", "StorageUnit"]):
+#         nm = c.name
+#         # limit our components that we remove/modify to those prior to this time horizon
+#         c_lim = c.df.loc[n.get_active_assets(nm, planning_horizon)]
+
+#         logger.info(f"Preparing brownfield for the component {nm}")
+#         # attribute selection for naming convention
+#         attr = "p"
+#         # copy over asset sizing from previous period
+#         c_lim[f"{attr}_nom"] = c_lim[f"{attr}_nom_opt"]
+#         c_lim[f"{attr}_nom_extendable"] = False
+#         df = copy.deepcopy(c_lim)
+#         time_df = copy.deepcopy(c.pnl)
+
+#         for c_idx in c_lim.index:
+#             n.remove(nm, c_idx)
+
+#         for df_idx in df.index:
+#             if nm == "Generator":
+#                 n.madd(
+#                     nm,
+#                     [df_idx],
+#                     carrier=df.loc[df_idx].carrier,
+#                     bus=df.loc[df_idx].bus,
+#                     p_nom_min=df.loc[df_idx].p_nom_min,
+#                     p_nom=df.loc[df_idx].p_nom,
+#                     p_nom_max=df.loc[df_idx].p_nom_max,
+#                     p_nom_extendable=df.loc[df_idx].p_nom_extendable,
+#                     ramp_limit_up=df.loc[df_idx].ramp_limit_up,
+#                     ramp_limit_down=df.loc[df_idx].ramp_limit_down,
+#                     efficiency=df.loc[df_idx].efficiency,
+#                     marginal_cost=df.loc[df_idx].marginal_cost,
+#                     capital_cost=df.loc[df_idx].capital_cost,
+#                     build_year=df.loc[df_idx].build_year,
+#                     lifetime=df.loc[df_idx].lifetime,
+#                     heat_rate=df.loc[df_idx].heat_rate,
+#                     fuel_cost=df.loc[df_idx].fuel_cost,
+#                     vom_cost=df.loc[df_idx].vom_cost,
+#                     carrier_base=df.loc[df_idx].carrier_base,
+#                     p_min_pu=df.loc[df_idx].p_min_pu,
+#                     p_max_pu=df.loc[df_idx].p_max_pu,
+#                     land_region=df.loc[df_idx].land_region,
+#                 )
+#             else:
+#                 n.add(nm, df_idx, **df.loc[df_idx])
+#         logger.info(n.consistency_check())
+
+#         # copy time-dependent
+#         selection = n.component_attrs[nm].type.str.contains("series")
+#         for tattr in n.component_attrs[nm].index[selection]:
+#             n.import_series_from_dataframe(time_df[tattr], nm, tattr)
+
+#     # roll over the last snapshot of time varying storage state of charge to be the state_of_charge_initial for the next time period
+#     n.storage_units.loc[:, "state_of_charge_initial"] = n.storage_units_t.state_of_charge.loc[planning_horizon].iloc[-1]
 
 
-def restore_future_generators(
-    n,
-    future_gens,
-    saved_extendable,
-    saved_p_nom_max,
-    saved_p_nom=None,
-    saved_p_nom_min=None,
-):
-    """Restore generator parameters masked by mask_future_generators."""
-    if future_gens.empty:
-        return
-    n.generators.loc[future_gens, "p_nom_extendable"] = saved_extendable
-    n.generators.loc[future_gens, "p_nom_max"] = saved_p_nom_max
-    if saved_p_nom is not None:
-        n.generators.loc[future_gens, "p_nom"] = saved_p_nom
-    if saved_p_nom_min is not None:
-        n.generators.loc[future_gens, "p_nom_min"] = saved_p_nom_min
+# def mask_future_generators(n, planning_horizon):
+#     """Disable generators whose vintage year hasn't been reached yet.
+
+#     In myopic mode (multi_investment_periods=False) PyPSA does not use
+#     build_year to restrict dispatch, so all vintages are available in every
+#     period solve. This function zeros out capacity for future-vintage
+#     generators before a period solve so they cannot be built or dispatched.
+
+#     Returns saved state needed by restore_future_generators.
+#     """
+#     future_gens = n.generators.index[
+#         n.generators["build_year"].notna() & (n.generators["build_year"] > planning_horizon)
+#     ]
+#     if future_gens.empty:
+#         return future_gens, None, None, None, None
+#     saved_extendable = n.generators.loc[future_gens, "p_nom_extendable"].copy()
+#     saved_p_nom_max = n.generators.loc[future_gens, "p_nom_max"].copy()
+#     saved_p_nom = n.generators.loc[future_gens, "p_nom"].copy()
+#     saved_p_nom_min = n.generators.loc[future_gens, "p_nom_min"].copy()
+#     n.generators.loc[future_gens, "p_nom_extendable"] = False
+#     n.generators.loc[future_gens, "p_nom_max"] = 0.0
+#     n.generators.loc[future_gens, "p_nom"] = 0.0
+#     n.generators.loc[future_gens, "p_nom_min"] = 0.0
+#     return future_gens, saved_extendable, saved_p_nom_max, saved_p_nom, saved_p_nom_min
 
 
-def update_egs_p_nom_max(n, planning_horizon):
-    """Cap EGS p_nom_max for the current period by subtracting capacity already
-    built in prior periods.
+# def restore_future_generators(
+#     n,
+#     future_gens,
+#     saved_extendable,
+#     saved_p_nom_max,
+#     saved_p_nom=None,
+#     saved_p_nom_min=None,
+# ):
+#     """Restore generator parameters masked by mask_future_generators."""
+#     if future_gens.empty:
+#         return
+#     n.generators.loc[future_gens, "p_nom_extendable"] = saved_extendable
+#     n.generators.loc[future_gens, "p_nom_max"] = saved_p_nom_max
+#     if saved_p_nom is not None:
+#         n.generators.loc[future_gens, "p_nom"] = saved_p_nom
+#     if saved_p_nom_min is not None:
+#         n.generators.loc[future_gens, "p_nom_min"] = saved_p_nom_min
 
-    In perfect foresight mode PyPSA treats p_nom_max as a shared resource
-    across all investment periods. In myopic mode every period starts with the
-    full supply-curve p_nom_max, so without this adjustment the optimizer can
-    build the entire resource in the first period and then again in each
-    subsequent period, far exceeding the actual geological potential.
 
-    This function is called after mask_future_generators so that only
-    non-extendable (locked-in) prior-period EGS generators are counted;
-    masked future generators also have p_nom_extendable=False but start with
-    p_nom=0 and therefore contribute nothing to the already-built total.
-    """
-    current_egs = n.generators.index[
-        n.generators["carrier"].str.contains("EGS", case=False)
-        & n.generators["p_nom_extendable"]
-        & (n.generators["build_year"] == planning_horizon)
-    ]
-    if current_egs.empty:
-        return
+# def update_egs_p_nom_max(n, planning_horizon):
+#     """Cap EGS p_nom_max for the current period by subtracting capacity already
+#     built in prior periods.
 
-    locked_egs = n.generators[
-        n.generators["carrier"].str.contains("EGS", case=False) & ~n.generators["p_nom_extendable"]
-    ]
-    locked_by_bus = locked_egs.groupby("bus")["p_nom"].sum()
+#     In perfect foresight mode PyPSA treats p_nom_max as a shared resource
+#     across all investment periods. In myopic mode every period starts with the
+#     full supply-curve p_nom_max, so without this adjustment the optimizer can
+#     build the entire resource in the first period and then again in each
+#     subsequent period, far exceeding the actual geological potential.
 
-    for gen_idx in current_egs:
-        bus = n.generators.loc[gen_idx, "bus"]
-        already_built = locked_by_bus.get(bus, 0.0)
-        original_max = n.generators.loc[gen_idx, "p_nom_max"]
-        n.generators.loc[gen_idx, "p_nom_max"] = max(0.0, original_max - already_built)
+#     This function is called after mask_future_generators so that only
+#     non-extendable (locked-in) prior-period EGS generators are counted;
+#     masked future generators also have p_nom_extendable=False but start with
+#     p_nom=0 and therefore contribute nothing to the already-built total.
+#     """
+#     current_egs = n.generators.index[
+#         n.generators["carrier"].str.contains("EGS", case=False)
+#         & n.generators["p_nom_extendable"]
+#         & (n.generators["build_year"] == planning_horizon)
+#     ]
+#     if current_egs.empty:
+#         return
+
+#     locked_egs = n.generators[
+#         n.generators["carrier"].str.contains("EGS", case=False) & ~n.generators["p_nom_extendable"]
+#     ]
+#     locked_by_bus = locked_egs.groupby("bus")["p_nom"].sum()
+
+#     for gen_idx in current_egs:
+#         bus = n.generators.loc[gen_idx, "bus"]
+#         already_built = locked_by_bus.get(bus, 0.0)
+#         original_max = n.generators.loc[gen_idx, "p_nom_max"]
+#         n.generators.loc[gen_idx, "p_nom_max"] = max(0.0, original_max - already_built)
 
 
 def solve_network(n, config, solving, opts="", **kwargs):
@@ -412,7 +424,7 @@ def solve_network(n, config, solving, opts="", **kwargs):
     cf_solving = solving["options"]
 
     foresight = snakemake.params.foresight
-    kwargs["multi_investment_periods"] = config["foresight"] == "perfect"
+    kwargs["multi_investment_periods"] = True
 
     kwargs["solver_options"] = solving["solver_options"][set_of_options] if set_of_options else {}
     kwargs["solver_name"] = solving["solver"]["name"]
@@ -477,22 +489,22 @@ def solve_network(n, config, solving, opts="", **kwargs):
                 sns_horizon = n.snapshots[n.snapshots.get_level_values(0) == planning_horizon]
                 kwargs["snapshots"] = sns_horizon
 
-                future_gens, saved_extendable, saved_p_nom_max, saved_p_nom, saved_p_nom_min = mask_future_generators(
-                    n,
-                    planning_horizon,
-                )
+                # future_gens, saved_extendable, saved_p_nom_max, saved_p_nom, saved_p_nom_min = mask_future_generators(
+                #     n,
+                #     planning_horizon,
+                # )
                 if "TCT" in opts:
                     apply_forced_retirements(n, planning_horizon, config)
-                update_egs_p_nom_max(n, planning_horizon)
+                # update_egs_p_nom_max(n, planning_horizon)
                 run_optimize(n, rolling_horizon, skip_iterations, cf_solving, **kwargs)
-                restore_future_generators(
-                    n,
-                    future_gens,
-                    saved_extendable,
-                    saved_p_nom_max,
-                    saved_p_nom,
-                    saved_p_nom_min,
-                )
+                # restore_future_generators(
+                #     n,
+                #     future_gens,
+                #     saved_extendable,
+                #     saved_p_nom_max,
+                #     saved_p_nom,
+                #     saved_p_nom_min,
+                # )
 
                 # Save per-period network before prepare_brownfield modifies p_nom.
                 # plot_statistics reads these to get correct installed capacity per period.
@@ -510,7 +522,7 @@ def solve_network(n, config, solving, opts="", **kwargs):
                     continue
 
                 logger.info(f"Preparing brownfield from {planning_horizon}")
-                prepare_brownfield(n, planning_horizon)
+                freeze_prior_periods(n, planning_horizon)
                 cp = _checkpoint_path(planning_horizon)
                 logger.info(f"Saving checkpoint to {cp}")
                 n.export_to_netcdf(str(cp))

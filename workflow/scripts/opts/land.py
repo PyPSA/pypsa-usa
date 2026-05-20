@@ -37,6 +37,6 @@ def add_land_use_constraints(n):
     if not index.empty:
         logger.info("Adding land-use constraints")
         model.add_constraints(
-            lhs.sel(group=index) <= rhs.loc[index],
+            lhs.sel(group=index) <= rhs.loc[index],  # subtrack previous build from the maximum allowed
             name="land_use_constraint",
         )
