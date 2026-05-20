@@ -259,14 +259,32 @@ def run_optimize(n, rolling_horizon, skip_iterations, cf_solving, **kwargs):
 def freeze_prior_periods(n: pypsa.Network, prior_period: int):
     for c in n.components[["Generator", "Link", "StorageUnit", "Store"]]:
         attr = "e_nom" if c.name == "Store" else "p_nom"
-        c.static[attr] = c.static[attr + "_opt"]
-        # define  mask for existing resources that can be retired, and exclude them from the next line below
-        c.static.loc[c.static.build_year <= prior_period, attr + "_extendable"] = False
+
+        prior = c.static.build_year <= prior_period
+        retirable = prior & (c.static[attr + "_min"] == 0)
+
+        # lock in the optimized capacity from the prior period as the starting point
+        # for the next period — without this, p_nom still holds the pre-solve value
+        # (e.g. 0 for a new-build), so the next period's dispatch constraints would
+        # see the wrong installed capacity
+        c.static.loc[prior, attr] = c.static.loc[prior, attr + "_opt"]
+
+        # freeze all prior-period assets by default; the optimizer cannot add more
+        # capacity through assets that have already been built
+        c.static.loc[prior, attr + "_extendable"] = False
+
+        # assets with p_nom_min == 0 were extendable investment decisions (CCGT, OCGT,
+        # coal, EGS, wind, solar etc.) — the optimizer can retire them in future periods
+        # by shrinking p_nom down to zero; p_nom_max is capped at what was built so no
+        # new capacity can be added through this asset
+        c.static.loc[retirable, attr + "_extendable"] = True
+        c.static.loc[retirable, attr + "_max"] = c.static.loc[retirable, attr]
 
 
 # land use
+
 # transmissions
-# retirement mask
+
 # statistics
 
 # def prepare_brownfield(n, planning_horizon):
