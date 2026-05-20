@@ -13,12 +13,12 @@ class ZenodoScenarioDownloader:
         self.download_dir.mkdir(exist_ok=True)
 
         # NREL land-access availability + bus-capacity artifacts; one record
-        # holds all 42 avail_*.nc / caps_*.nc files.
+        # holds all 48 avail_*.nc / caps_*.nc files.
         # GODEEEP _compressed.nc records used by the NREL land-access path.
         # Keyed by (tech + wind_height + scenario) — no year_range — because
         # one record holds all years per (tech, scenario).
         self.scenario_records = {
-            "nrel_exclusion_v1": 20277163,
+            "nrel_exclusion_v1": 20316475,
             "solar_historical_compressed": 20127513,
             "solar_rcp45hotter_compressed": 20127523,
             "solar_rcp45cooler_compressed": 20127562,
