@@ -309,7 +309,9 @@ def get_currently_installed_capacity(n: pypsa.Network) -> pd.DataFrame:
         gens = n.generators.loc[gen_mask]
         existing_capacity = _original_p_nom(gens).groupby([gens["nerc_reg"], gens["carrier"]]).sum().round(0)
     else:
-        existing_capacity = _original_p_nom(n.generators).groupby([n.generators["nerc_reg"], n.generators["carrier"]]).sum().round(0)
+        existing_capacity = (
+            _original_p_nom(n.generators).groupby([n.generators["nerc_reg"], n.generators["carrier"]]).sum().round(0)
+        )
     existing_capacity = existing_capacity.to_frame(name="Existing")
     n.storage_units["nerc_reg"] = n.storage_units.bus.map(n.buses.nerc_reg)
     if first_period is not None and hasattr(n.storage_units, "build_year") and "build_year" in n.storage_units.columns:
@@ -1409,6 +1411,7 @@ if __name__ == "__main__":
     network_path = Path(snakemake.input.network)
     period_files = sorted(network_path.parent.glob(f"{network_path.stem}_period_*.nc"))
     if period_files and isinstance(stats_summary.columns, pd.MultiIndex):
+
         def _has_col(df, name):
             return name in df.columns.get_level_values(0)
 

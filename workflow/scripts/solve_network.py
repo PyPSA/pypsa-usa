@@ -450,8 +450,10 @@ def solve_network(n, config, solving, opts="", **kwargs):
             # Checkpoint: save network state after each period's brownfield prep so a
             # failed run can resume from the last completed period rather than scratch.
             output_path = Path(snakemake.output[0])
+
             def _checkpoint_path(horizon):
                 return output_path.parent / f"{output_path.stem}_checkpoint_{horizon}.nc"
+
             def _period_path(horizon):
                 return output_path.parent / f"{output_path.stem}_period_{horizon}.nc"
 

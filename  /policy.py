@@ -190,12 +190,12 @@ def add_technology_capacity_target_constraints(n, config):
                     logger.warning(
                         f"TCT max of {target['max']} MW for {target['carrier']} in region {target['region']} "
                         f"is below existing non-extendable capacity of {lhs_existing:.1f} MW — "
-                        f"constraining new builds to 0 only (existing capacity cannot be retired via TCT)"
+                        f"constraining new builds to 0 only (existing capacity cannot be retired via TCT)",
                     )
                 else:
                     logger.warning(
                         f"TCT max of {target['max']} MW for {target['carrier']} is below existing "
-                        f"{lhs_existing:.4f} MW (within {_RESIDUAL_TOL} MW tolerance — treating as numerical residual)"
+                        f"{lhs_existing:.4f} MW (within {_RESIDUAL_TOL} MW tolerance — treating as numerical residual)",
                     )
                 lhs_existing = target["max"]  # clamp so rhs = 0 in both cases
 
@@ -263,7 +263,7 @@ def apply_forced_retirements(n, planning_horizon, config):
         logger.info(
             f"Forced retirement: zeroing {len(retirement_gens)} non-extendable "
             f"{carrier_list} generator(s) in {region_list} "
-            f"({total_mw:.1f} MW total) for planning horizon {planning_horizon}"
+            f"({total_mw:.1f} MW total) for planning horizon {planning_horizon}",
         )
         n.generators.loc[retirement_gens, ["p_nom", "p_nom_min", "p_nom_max"]] = 0.0
         # Clear ramp limits so the ramp constraint (p[t] ≥ p[t-1] - ramp_down * p_nom)

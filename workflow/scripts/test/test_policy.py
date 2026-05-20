@@ -390,21 +390,50 @@ def test_apply_forced_retirements_zeroes_nonextendable(policy_network, tmp_path)
     n = policy_network.copy()
 
     # Add non-extendable CCGT generators simulating brownfield-locked capacity
-    n.add("Generator", "ccgt_ca", bus="z1", carrier="CCGT",
-          p_nom=500.0, p_nom_min=0.0, p_nom_max=500.0, p_nom_extendable=False,
-          marginal_cost=40, p_max_pu=pd.Series(1.0, index=n.snapshots))
-    n.add("Generator", "ccgt_tx", bus="z2", carrier="CCGT",
-          p_nom=300.0, p_nom_min=0.0, p_nom_max=300.0, p_nom_extendable=False,
-          marginal_cost=40, p_max_pu=pd.Series(1.0, index=n.snapshots))
+    n.add(
+        "Generator",
+        "ccgt_ca",
+        bus="z1",
+        carrier="CCGT",
+        p_nom=500.0,
+        p_nom_min=0.0,
+        p_nom_max=500.0,
+        p_nom_extendable=False,
+        marginal_cost=40,
+        p_max_pu=pd.Series(1.0, index=n.snapshots),
+    )
+    n.add(
+        "Generator",
+        "ccgt_tx",
+        bus="z2",
+        carrier="CCGT",
+        p_nom=300.0,
+        p_nom_min=0.0,
+        p_nom_max=300.0,
+        p_nom_extendable=False,
+        marginal_cost=40,
+        p_max_pu=pd.Series(1.0, index=n.snapshots),
+    )
     # Extendable CCGT — should NOT be touched by apply_forced_retirements
-    n.add("Generator", "ccgt_ca_ext", bus="z1", carrier="CCGT",
-          p_nom=0.0, p_nom_min=0.0, p_nom_max=1000.0, p_nom_extendable=True,
-          marginal_cost=40, capital_cost=600, p_max_pu=pd.Series(1.0, index=n.snapshots))
+    n.add(
+        "Generator",
+        "ccgt_ca_ext",
+        bus="z1",
+        carrier="CCGT",
+        p_nom=0.0,
+        p_nom_min=0.0,
+        p_nom_max=1000.0,
+        p_nom_extendable=True,
+        marginal_cost=40,
+        capital_cost=600,
+        p_max_pu=pd.Series(1.0, index=n.snapshots),
+    )
 
     # Write a TCT CSV forcing CCGT retirement in CA (reeds_state) by 2030
     tct_csv = tmp_path / "tct_forced.csv"
-    tct_csv.write_text("name,planning_horizon,region,carrier,min,max\n"
-                       "ccgt_retire,2030,CA,CCGT,,0\n")
+    tct_csv.write_text(
+        "name,planning_horizon,region,carrier,min,max\nccgt_retire,2030,CA,CCGT,,0\n",
+    )
 
     config = {"electricity": {"technology_capacity_targets": str(tct_csv)}}
 
@@ -426,14 +455,24 @@ def test_apply_forced_retirements_future_horizon_skipped(policy_network, tmp_pat
     from opts.policy import apply_forced_retirements
 
     n = policy_network.copy()
-    n.add("Generator", "ccgt_ca", bus="z1", carrier="CCGT",
-          p_nom=500.0, p_nom_min=0.0, p_nom_max=500.0, p_nom_extendable=False,
-          marginal_cost=40, p_max_pu=pd.Series(1.0, index=n.snapshots))
+    n.add(
+        "Generator",
+        "ccgt_ca",
+        bus="z1",
+        carrier="CCGT",
+        p_nom=500.0,
+        p_nom_min=0.0,
+        p_nom_max=500.0,
+        p_nom_extendable=False,
+        marginal_cost=40,
+        p_max_pu=pd.Series(1.0, index=n.snapshots),
+    )
 
     # Retirement target is 2050 — should not apply during the 2030 solve
     tct_csv = tmp_path / "tct_future.csv"
-    tct_csv.write_text("name,planning_horizon,region,carrier,min,max\n"
-                       "ccgt_retire,2050,CA,CCGT,,0\n")
+    tct_csv.write_text(
+        "name,planning_horizon,region,carrier,min,max\nccgt_retire,2050,CA,CCGT,,0\n",
+    )
 
     config = {"electricity": {"technology_capacity_targets": str(tct_csv)}}
 
@@ -447,16 +486,35 @@ def test_apply_forced_retirements_all_region(policy_network, tmp_path):
     from opts.policy import apply_forced_retirements
 
     n = policy_network.copy()
-    n.add("Generator", "coal_ca", bus="z1", carrier="coal",
-          p_nom=400.0, p_nom_min=0.0, p_nom_max=400.0, p_nom_extendable=False,
-          marginal_cost=30, p_max_pu=pd.Series(1.0, index=n.snapshots))
-    n.add("Generator", "coal_tx", bus="z2", carrier="coal",
-          p_nom=250.0, p_nom_min=0.0, p_nom_max=250.0, p_nom_extendable=False,
-          marginal_cost=30, p_max_pu=pd.Series(1.0, index=n.snapshots))
+    n.add(
+        "Generator",
+        "coal_ca",
+        bus="z1",
+        carrier="coal",
+        p_nom=400.0,
+        p_nom_min=0.0,
+        p_nom_max=400.0,
+        p_nom_extendable=False,
+        marginal_cost=30,
+        p_max_pu=pd.Series(1.0, index=n.snapshots),
+    )
+    n.add(
+        "Generator",
+        "coal_tx",
+        bus="z2",
+        carrier="coal",
+        p_nom=250.0,
+        p_nom_min=0.0,
+        p_nom_max=250.0,
+        p_nom_extendable=False,
+        marginal_cost=30,
+        p_max_pu=pd.Series(1.0, index=n.snapshots),
+    )
 
     tct_csv = tmp_path / "tct_all.csv"
-    tct_csv.write_text("name,planning_horizon,region,carrier,min,max\n"
-                       "coal_retire,all,all,coal,,0\n")
+    tct_csv.write_text(
+        "name,planning_horizon,region,carrier,min,max\ncoal_retire,all,all,coal,,0\n",
+    )
 
     config = {"electricity": {"technology_capacity_targets": str(tct_csv)}}
 
