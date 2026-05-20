@@ -122,6 +122,18 @@ if "E" not in config["scenario"]["sector"]:
 # ----------------------------------- Rules ---------------------------------- #
 
 
+def electricity_statistics(wildcards):
+    if "G" in config["scenario"]["sector"].split("-"):
+        return []
+    if config["run"]["validation"]:
+        return []
+    return expand(
+        RESULTS
+        + "{interconnect}/figures/s{simpl}_cluster_{clusters}/l{ll}_{opts}_{sector}/statistics/statistics.csv",
+        **config["scenario"],
+    )
+
+
 def electricity_figures(wildcards):
     figs = []
     if "G" in config["scenario"]["sector"].split("-"):
@@ -232,6 +244,7 @@ def validation_figures(wildcards):
 rule all:
     input:
         #"repo_data/dag.jpg",
+        electricity_statistics,
         electricity_figures,
         sector_figures,
         validation_figures,
