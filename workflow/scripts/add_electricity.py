@@ -744,11 +744,33 @@ def attach_egs(
 
         df_specs = df_specs.loc[~(df_specs.index == "nan")]
 
-        # TODO: review what qualities need to be included. Currently limited for speedup.
-        qualities = [1]  # df_specs.Quality.unique()
+        seismic_path = getattr(input_profiles, "seismic_exclusion", [])
+        if seismic_path:
+            seismic_gdf = gpd.read_file(seismic_path).rename(
+                columns={"seismic risk": "seismic_risk"},
+            )
+            egs_buses = df_specs.index.intersection(n.buses.index)
+            bus_coords = n.buses.loc[egs_buses, ["x", "y"]]
+            bus_gdf = gpd.GeoDataFrame(
+                bus_coords,
+                geometry=gpd.points_from_xy(bus_coords["x"], bus_coords["y"]),
+                crs="EPSG:4326",
+            ).to_crs(seismic_gdf.crs)
+            bus_with_risk = gpd.sjoin_nearest(
+                bus_gdf[["geometry"]],
+                seismic_gdf[["geometry", "seismic_risk"]],
+                how="left",
+            )
+            excluded_buses = bus_with_risk[bus_with_risk["seismic_risk"] == 1].index
+            df_specs = df_specs[~df_specs.index.isin(excluded_buses)]
+            logger.info(
+                f"Seismic risk mask excluded {len(excluded_buses)} EGS buses. {len(df_specs)} buses remaining.",
+            )
+
+        qualities = snakemake.config["renewable"]["EGS"].get("quality", [1])
 
         for q in qualities:
-            suffix = " " + car  # + f" Q{q}"
+            suffix = " " + car + f" Q{q}"
             df_q = df_specs[df_specs["Quality"] == q]
 
             bus_list = df_q.index.values
@@ -785,6 +807,7 @@ def attach_egs(
                     level=0,
                 )
                 bus_profiles = bus_profiles.reindex(n.snapshots)
+            bus_profiles = bus_profiles.reindex(columns=bus_list)
 
             logger.info(
                 f"Adding EGS (Resource Quality-{q}) capacity-factor profiles to the network.",
