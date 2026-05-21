@@ -21,8 +21,6 @@ rule plot_network_maps:
         ),
     params:
         electricity=config["electricity"],
-        plotting=config["plotting"],
-        retirement=config["electricity"].get("retirement", "technical"),
     output:
         **{
             fig: RESULTS
@@ -60,7 +58,6 @@ rule plot_statistics:
         ),
     params:
         electricity=config["electricity"],
-        plotting=config["plotting"],
         retirement=config["electricity"].get("retirement", "technical"),
     output:
         **{

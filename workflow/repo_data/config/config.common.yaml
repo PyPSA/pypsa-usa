@@ -77,18 +77,9 @@ renewable:
   hydro:
     cutout: era5
     carriers: [ror, PHS, hydro]
-    PHS_max_hours: 6
     resource:
       method: hydro
-      hydrobasins: resources/hybas_na_lev06_v1c.shp
-      flowspeed: 1.0  # m/s
-    hydro_max_hours: "energy_capacity_totals_by_country"  # not active
-    clip_min_inflow: 1.0
     extendable: true
-    normalization:
-      method: hydro_capacities
-      year: 2013
-    multiplier: 1.1  # multiplier applied after the normalization of the hydro production; default 1.0
 
 
 # docs :
@@ -104,7 +95,6 @@ godeeep_wind_height: "_100m"          # raw GODEEEP wind-CF hub height (e.g. "_1
 
 # docs :
 atlite:
-  default_cutout: era5_2019
   nprocesses: 8
   show_progress: false # false saves time
   cutouts:
@@ -144,20 +134,6 @@ lines:
     500.: "Al/St 560/50 4-bundle 750.0"
     765.: "Al/St 560/50 4-bundle 750.0"
  
-
-# docs :
-electricity:
-  prm:
-    MISO: 0.183
-    NPCC_NE: 0.135
-    NPCC_NY: 0.15
-    PJM: 0.146
-    SERC: 0.15
-    SPP: 0.16
-    ERCOT: 0.1375
-    WECC_CA: 0.182
-    WECC_NWPP: 0.1435
-    WECC_SRSG: 0.1155
 
 offshore_shape:
   use: eez #options are ca_osw, eez
