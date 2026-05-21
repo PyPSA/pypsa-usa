@@ -16,12 +16,12 @@ rule build_shapes:
         offshore_shapes_eez=DATA + "eez/conus_eez.shp",
         county_shapes=DATA + "counties/cb_2020_us_county_500k.shp",
     output:
-        country_shapes=RESOURCES + "{interconnect}/Geospatial/country_shapes.geojson",
-        onshore_shapes=RESOURCES + "{interconnect}/Geospatial/onshore_shapes.geojson",
-        offshore_shapes=RESOURCES + "{interconnect}/Geospatial/offshore_shapes.geojson",
-        state_shapes=RESOURCES + "{interconnect}/Geospatial/state_boundaries.geojson",
-        reeds_shapes=RESOURCES + "{interconnect}/Geospatial/reeds_shapes.geojson",
-        county_shapes=RESOURCES + "{interconnect}/Geospatial/county_shapes.geojson",
+        country_shapes=GEOSPATIAL + "{interconnect}/country_shapes.geojson",
+        onshore_shapes=GEOSPATIAL + "{interconnect}/onshore_shapes.geojson",
+        offshore_shapes=GEOSPATIAL + "{interconnect}/offshore_shapes.geojson",
+        state_shapes=GEOSPATIAL + "{interconnect}/state_boundaries.geojson",
+        reeds_shapes=GEOSPATIAL + "{interconnect}/reeds_shapes.geojson",
+        county_shapes=GEOSPATIAL + "{interconnect}/county_shapes.geojson",
     log:
         "logs/build_shapes/{interconnect}.log",
     threads: 1
@@ -46,18 +46,18 @@ rule build_base_network:
         links=DATA + "breakthrough_network/base_grid/dcline.csv",
         bus2sub=DATA + "breakthrough_network/base_grid/bus2sub.csv",
         sub=DATA + "breakthrough_network/base_grid/sub.csv",
-        onshore_shapes=RESOURCES + "{interconnect}/Geospatial/onshore_shapes.geojson",
-        offshore_shapes=RESOURCES + "{interconnect}/Geospatial/offshore_shapes.geojson",
-        state_shapes=RESOURCES + "{interconnect}/Geospatial/state_boundaries.geojson",
-        reeds_shapes=RESOURCES + "{interconnect}/Geospatial/reeds_shapes.geojson",
-        county_shapes=RESOURCES + "{interconnect}/Geospatial/county_shapes.geojson",
+        onshore_shapes=GEOSPATIAL + "{interconnect}/onshore_shapes.geojson",
+        offshore_shapes=GEOSPATIAL + "{interconnect}/offshore_shapes.geojson",
+        state_shapes=GEOSPATIAL + "{interconnect}/state_boundaries.geojson",
+        reeds_shapes=GEOSPATIAL + "{interconnect}/reeds_shapes.geojson",
+        county_shapes=GEOSPATIAL + "{interconnect}/county_shapes.geojson",
         reeds_memberships="repo_data/ReEDS_Constraints/membership.csv",
     output:
-        bus2sub=RESOURCES + "{interconnect}/bus2sub.csv",
-        sub=RESOURCES + "{interconnect}/sub.csv",
-        bus_gis=RESOURCES + "{interconnect}/bus_gis.csv",
-        lines_gis=RESOURCES + "{interconnect}/lines_gis.csv",
-        network=RESOURCES + "{interconnect}/elec_base_network.nc",
+        bus2sub=BUSMAPS + "{interconnect}/bus2sub.csv",
+        sub=BUSMAPS + "{interconnect}/sub.csv",
+        bus_gis=GEOSPATIAL + "{interconnect}/bus_gis.csv",
+        lines_gis=GEOSPATIAL + "{interconnect}/lines_gis.csv",
+        network=NETWORKS + "{interconnect}/elec_base_network.nc",
     log:
         "logs/create_network/{interconnect}.log",
     threads: 1
@@ -75,19 +75,18 @@ rule build_bus_regions:
         ),
         focus_weights=config_provider("focus_weights"),
     input:
-        country_shapes=RESOURCES + "{interconnect}/Geospatial/country_shapes.geojson",
-        county_shapes=RESOURCES + "{interconnect}/Geospatial/county_shapes.geojson",
-        state_shapes=RESOURCES + "{interconnect}/Geospatial/state_boundaries.geojson",
-        ba_region_shapes=RESOURCES + "{interconnect}/Geospatial/onshore_shapes.geojson",
-        reeds_shapes=RESOURCES + "{interconnect}/Geospatial/reeds_shapes.geojson",
-        offshore_shapes=RESOURCES + "{interconnect}/Geospatial/offshore_shapes.geojson",
-        base_network=RESOURCES + "{interconnect}/elec_base_network.nc",
-        bus2sub=RESOURCES + "{interconnect}/bus2sub.csv",
-        sub=RESOURCES + "{interconnect}/sub.csv",
+        country_shapes=GEOSPATIAL + "{interconnect}/country_shapes.geojson",
+        county_shapes=GEOSPATIAL + "{interconnect}/county_shapes.geojson",
+        state_shapes=GEOSPATIAL + "{interconnect}/state_boundaries.geojson",
+        ba_region_shapes=GEOSPATIAL + "{interconnect}/onshore_shapes.geojson",
+        reeds_shapes=GEOSPATIAL + "{interconnect}/reeds_shapes.geojson",
+        offshore_shapes=GEOSPATIAL + "{interconnect}/offshore_shapes.geojson",
+        base_network=NETWORKS + "{interconnect}/elec_base_network.nc",
+        bus2sub=BUSMAPS + "{interconnect}/bus2sub.csv",
+        sub=BUSMAPS + "{interconnect}/sub.csv",
     output:
-        regions_onshore=RESOURCES + "{interconnect}/Geospatial/regions_onshore.geojson",
-        regions_offshore=RESOURCES
-        + "{interconnect}/Geospatial/regions_offshore.geojson",
+        regions_onshore=GEOSPATIAL + "{interconnect}/regions_onshore.geojson",
+        regions_offshore=GEOSPATIAL + "{interconnect}/regions_offshore.geojson",
     log:
         "logs/build_bus_regions/{interconnect}.log",
     threads: 1
@@ -109,8 +108,8 @@ rule build_cost_data:
         egs_costs="repo_data/costs/egs_costs.csv",
         additional_costs="repo_data/costs/additional_costs.csv",
     output:
-        tech_costs=RESOURCES + "costs/costs_{year}.csv",
-        sector_costs=RESOURCES + "costs/sector_costs_{year}.csv",
+        tech_costs=COSTS + "costs_{year}.csv",
+        sector_costs=COSTS + "sector_costs_{year}.csv",
     log:
         LOGS + "costs_{year}.log",
     threads: 1
@@ -131,10 +130,8 @@ if config["enable"].get("build_cutout", False):
             cutouts=config_provider("atlite", "cutouts"),
             interconnects=config_provider("atlite", "interconnects"),
         input:
-            regions_onshore=RESOURCES
-            + "{interconnect}/Geospatial/country_shapes.geojson",
-            regions_offshore=RESOURCES
-            + "{interconnect}/Geospatial/offshore_shapes.geojson",
+            regions_onshore=GEOSPATIAL + "{interconnect}/country_shapes.geojson",
+            regions_offshore=GEOSPATIAL + "{interconnect}/offshore_shapes.geojson",
         output:
             protected("cutouts/" + CDIR + "{interconnect}_{cutout}.nc"),
         log:
@@ -164,7 +161,7 @@ rule build_renewable_profiles:
             int(w.planning_horizon) if godeeep_planning_horizon else None
         ),
         renewable_scenarios=config_provider("renewable_scenarios"),
-        mapping_cache_dir=RESOURCES + "{interconnect}/nrel_mapping_cache",
+        mapping_cache_dir=PROFILES + "{interconnect}/nrel_mapping_cache",
     input:
         corine=ancient(
             DATA
@@ -180,15 +177,15 @@ rule build_renewable_profiles:
                 else []
             )
         ),
-        country_shapes=RESOURCES + "{interconnect}/Geospatial/country_shapes.geojson",
-        offshore_shapes=RESOURCES + "{interconnect}/Geospatial/offshore_shapes.geojson",
+        country_shapes=GEOSPATIAL + "{interconnect}/country_shapes.geojson",
+        offshore_shapes=GEOSPATIAL + "{interconnect}/offshore_shapes.geojson",
         cec_onwind="repo_data/geospatial/CEC_GIS/CEC_Wind_BaseScreen_epsg3310.tif",
         cec_solar="repo_data/geospatial/CEC_GIS/CEC_Solar_BaseScreen_epsg3310.tif",
         boem_osw="repo_data/geospatial/boem_osw_planning_areas.tif",
         regions=lambda w: (
-            RESOURCES + "{interconnect}/Geospatial/regions_onshore.geojson"
+            GEOSPATIAL + "{interconnect}/regions_onshore.geojson"
             if w.technology in ("onwind", "solar")
-            else RESOURCES + "{interconnect}/Geospatial/regions_offshore.geojson"
+            else GEOSPATIAL + "{interconnect}/regions_offshore.geojson"
         ),
         nrel_avail=lambda w: (
             DATA
@@ -247,9 +244,9 @@ rule build_renewable_profiles:
         ),
     output:
         profile=(
-            RESOURCES + "{interconnect}/{planning_horizon}/profile_{technology}.nc"
+            PROFILES + "{interconnect}/{planning_horizon}/profile_{technology}.nc"
             if godeeep_planning_horizon
-            else RESOURCES + "{interconnect}/profile_{technology}.nc"
+            else PROFILES + "{interconnect}/profile_{technology}.nc"
         ),
     log:
         LOGS
@@ -400,11 +397,11 @@ rule build_electrical_demand:
         snapshots=config["snapshots"],
         pudl_path=config_provider("pudl_path"),
     input:
-        network=RESOURCES + "{interconnect}/elec_base_network.nc",
+        network=NETWORKS + "{interconnect}/elec_base_network.nc",
         demand_files=demand_raw_data,
         demand_scaling_file=demand_scaling_data,
     output:
-        elec_demand=RESOURCES + "{interconnect}/demand/{end_use}_electricity.csv",
+        elec_demand=DEMAND + "{interconnect}/{end_use}_electricity.csv",
     log:
         LOGS + "{interconnect}/{end_use}_build_demand.log",
     benchmark:
@@ -428,15 +425,15 @@ rule build_service_demand:
         eia_api=config_provider("api", "eia"),
         snapshots=config_provider("snapshots"),
     input:
-        network=RESOURCES + "{interconnect}/elec_base_network.nc",
+        network=NETWORKS + "{interconnect}/elec_base_network.nc",
         demand_files=demand_raw_data,
         dissagregate_files=demand_dissagregate_data,
         demand_scaling_file=demand_scaling_data,
     output:
-        electricity=RESOURCES + "{interconnect}/demand/{end_use}_electricity.pkl",
-        space_heat=RESOURCES + "{interconnect}/demand/{end_use}_space-heating.pkl",
-        water_heat=RESOURCES + "{interconnect}/demand/{end_use}_water-heating.pkl",
-        cool=RESOURCES + "{interconnect}/demand/{end_use}_cooling.pkl",
+        electricity=DEMAND + "{interconnect}/{end_use}_electricity.pkl",
+        space_heat=DEMAND + "{interconnect}/{end_use}_space-heating.pkl",
+        water_heat=DEMAND + "{interconnect}/{end_use}_water-heating.pkl",
+        cool=DEMAND + "{interconnect}/{end_use}_cooling.pkl",
     log:
         LOGS + "{interconnect}/demand/{end_use}_build_demand.log",
     benchmark:
@@ -458,13 +455,13 @@ rule build_industry_demand:
         snapshots=config_provider("snapshots"),
         pudl_path=config_provider("pudl_path"),
     input:
-        network=RESOURCES + "{interconnect}/elec_base_network.nc",
+        network=NETWORKS + "{interconnect}/elec_base_network.nc",
         demand_files=demand_raw_data,
         dissagregate_files=demand_dissagregate_data,
         demand_scaling_file=demand_scaling_data,
     output:
-        electricity=RESOURCES + "{interconnect}/demand/{end_use}_electricity.pkl",
-        heat=RESOURCES + "{interconnect}/demand/{end_use}_heating.pkl",
+        electricity=DEMAND + "{interconnect}/{end_use}_electricity.pkl",
+        heat=DEMAND + "{interconnect}/{end_use}_heating.pkl",
     log:
         LOGS + "{interconnect}/demand/{end_use}_build_demand.log",
     benchmark:
@@ -486,15 +483,15 @@ rule build_transport_road_demand:
         eia_api=config_provider("api", "eia"),
         snapshots=config_provider("snapshots"),
     input:
-        network=RESOURCES + "{interconnect}/elec_base_network.nc",
+        network=NETWORKS + "{interconnect}/elec_base_network.nc",
         demand_files=demand_raw_data,
         dissagregate_files=demand_dissagregate_data,
         demand_scaling_file=demand_scaling_data,
     output:
-        light_duty=RESOURCES + "{interconnect}/demand/{end_use}_light-duty.pkl",
-        med_duty=RESOURCES + "{interconnect}/demand/{end_use}_med-duty.pkl",
-        heavy_duty=RESOURCES + "{interconnect}/demand/{end_use}_heavy-duty.pkl",
-        bus=RESOURCES + "{interconnect}/demand/{end_use}_bus.pkl",
+        light_duty=DEMAND + "{interconnect}/{end_use}_light-duty.pkl",
+        med_duty=DEMAND + "{interconnect}/{end_use}_med-duty.pkl",
+        heavy_duty=DEMAND + "{interconnect}/{end_use}_heavy-duty.pkl",
+        bus=DEMAND + "{interconnect}/{end_use}_bus.pkl",
     log:
         LOGS + "{interconnect}/demand/{end_use}_build_demand.log",
     benchmark:
@@ -518,11 +515,11 @@ rule build_transport_other_demand:
         eia_api=config_provider("api", "eia"),
         snapshots=config_provider("snapshots"),
     input:
-        network=RESOURCES + "{interconnect}/elec_base_network.nc",
+        network=NETWORKS + "{interconnect}/elec_base_network.nc",
         demand_files=demand_raw_data,
         dissagregate_files=demand_dissagregate_data,
     output:
-        RESOURCES + "{interconnect}/demand/{end_use}_{vehicle}.pkl",
+        DEMAND + "{interconnect}/{end_use}_{vehicle}.pkl",
     log:
         LOGS + "{interconnect}/demand/{end_use}_{vehicle}_build_demand.log",
     benchmark:
@@ -537,7 +534,7 @@ rule build_transport_other_demand:
 def demand_to_add(wildcards):
 
     if config["scenario"]["sector"] == "E":
-        return RESOURCES + "{interconnect}/demand/power_electricity.csv"
+        return DEMAND + "{interconnect}/power_electricity.csv"
     else:
         # service demand
         services = ["residential", "commercial"]
@@ -546,27 +543,26 @@ def demand_to_add(wildcards):
         else:
             fuels = ["electricity", "cooling", "heating"]
         service_demands = [
-            RESOURCES + "{interconnect}/demand/" + service + "_" + fuel + ".pkl"
+            DEMAND + "{interconnect}/" + service + "_" + fuel + ".pkl"
             for service in services
             for fuel in fuels
         ]
         # industrial demand
         fuels = ["electricity", "heating"]
         industrial_demands = [
-            RESOURCES + "{interconnect}/demand/industry_" + fuel + ".pkl"
-            for fuel in fuels
+            DEMAND + "{interconnect}/industry_" + fuel + ".pkl" for fuel in fuels
         ]
         # road transport demands
         vehicles = ["light-duty", "med-duty", "heavy-duty", "bus"]
         road_demand = [
-            RESOURCES + "{interconnect}/demand/transport_" + vehicle + ".pkl"
+            DEMAND + "{interconnect}/transport_" + vehicle + ".pkl"
             for vehicle in vehicles
         ]
 
         # other transport demands
         vehicles = ["boat-shipping", "rail-shipping", "rail-passenger", "air"]
         non_road_demand = [
-            RESOURCES + "{interconnect}/demand/transport_" + vehicle + ".pkl"
+            DEMAND + "{interconnect}/transport_" + vehicle + ".pkl"
             for vehicle in vehicles
         ]
 
@@ -579,10 +575,10 @@ rule add_demand:
         planning_horizons=config_provider("scenario", "planning_horizons"),
         snapshots=config_provider("snapshots"),
     input:
-        network=RESOURCES + "{interconnect}/elec_base_network.nc",
+        network=NETWORKS + "{interconnect}/elec_base_network.nc",
         demand=demand_to_add,
     output:
-        network=RESOURCES + "{interconnect}/elec_base_network_dem.nc",
+        network=NETWORKS + "{interconnect}/elec_base_network_dem.nc",
     log:
         LOGS + "{interconnect}/add_demand.log",
     benchmark:
@@ -609,10 +605,10 @@ rule build_fuel_prices:
     input:
         gas_balancing_area=ba_gas_dynamic_fuel_price_files,
     output:
-        state_ng_fuel_prices=RESOURCES + "{interconnect}/state_ng_power_prices.csv",
-        state_coal_fuel_prices=RESOURCES + "{interconnect}/state_coal_power_prices.csv",
-        ba_ng_fuel_prices=RESOURCES + "{interconnect}/ba_ng_power_prices.csv",
-        pudl_fuel_costs=RESOURCES + "{interconnect}/pudl_fuel_costs.csv",
+        state_ng_fuel_prices=PRICES + "{interconnect}/state_ng_power_prices.csv",
+        state_coal_fuel_prices=PRICES + "{interconnect}/state_coal_power_prices.csv",
+        ba_ng_fuel_prices=PRICES + "{interconnect}/ba_ng_power_prices.csv",
+        pudl_fuel_costs=PRICES + "{interconnect}/pudl_fuel_costs.csv",
     log:
         LOGS + "{interconnect}/build_fuel_prices.log",
     benchmark:
@@ -629,11 +625,10 @@ rule build_fuel_prices:
 def dynamic_fuel_price_files(wildcards):
     if config["conventional"]["dynamic_fuel_price"]["wholesale"]:
         return {
-            "state_ng_fuel_prices": RESOURCES
-            + "{interconnect}/state_ng_power_prices.csv",
-            "state_coal_fuel_prices": RESOURCES
+            "state_ng_fuel_prices": PRICES + "{interconnect}/state_ng_power_prices.csv",
+            "state_coal_fuel_prices": PRICES
             + "{interconnect}/state_coal_power_prices.csv",
-            "ba_ng_fuel_prices": RESOURCES + "{interconnect}/ba_ng_power_prices.csv",
+            "ba_ng_fuel_prices": PRICES + "{interconnect}/ba_ng_power_prices.csv",
         }
     else:
         return {}
@@ -649,7 +644,7 @@ rule build_powerplants:
         cems="repo_data/plants/cems_heat_rates.xlsx",
         epa_crosswalk="repo_data/plants/epa_eia_crosswalk.csv",
     output:
-        powerplants="resources/powerplants.csv",
+        powerplants="resources/powerplants/powerplants.csv",
     log:
         "logs/build_powerplants.log",
     resources:
@@ -675,7 +670,7 @@ rule add_electricity:
         **(
             {
                 # For GODEEEP future scenarios: pass all horizon-specific profiles
-                f"profile_{tech}_{horizon}": RESOURCES
+                f"profile_{tech}_{horizon}": PROFILES
                 + f"{{interconnect}}/{horizon}/profile_{tech}.nc"
                 for tech in config["electricity"]["renewable_carriers"]
                 if tech != "hydro"
@@ -684,7 +679,7 @@ rule add_electricity:
             if godeeep_planning_horizon
             else {
                 # For historical or AtLite: pass single profile
-                f"profile_{tech}": RESOURCES + "{interconnect}" + f"/profile_{tech}.nc"
+                f"profile_{tech}": PROFILES + "{interconnect}" + f"/profile_{tech}.nc"
                 for tech in config["electricity"]["renewable_carriers"]
                 if tech != "hydro"
             }
@@ -700,21 +695,19 @@ rule add_electricity:
             f"gen_cost_mult_{Path(x).stem}": f"repo_data/locational_multipliers/{Path(x).name}"
             for x in Path("repo_data/locational_multipliers/").glob("*")
         },
-        base_network=RESOURCES + "{interconnect}/elec_base_network_dem.nc",
-        tech_costs=RESOURCES
-        + f"costs/costs_{config['scenario']['planning_horizons'][0]}.csv",
+        base_network=NETWORKS + "{interconnect}/elec_base_network_dem.nc",
+        tech_costs=COSTS + f"costs_{config['scenario']['planning_horizons'][0]}.csv",
         # attach first horizon costs
         all_reeds_shapes="repo_data/geospatial/Reeds_Shapes/rb_and_ba_areas.shp",
         reeds_memberships="repo_data/ReEDS_Constraints/membership.csv",
-        regions_onshore=RESOURCES + "{interconnect}/Geospatial/regions_onshore.geojson",
-        regions_offshore=RESOURCES
-        + "{interconnect}/Geospatial/regions_offshore.geojson",
-        reeds_shapes=RESOURCES + "{interconnect}/Geospatial/reeds_shapes.geojson",
-        powerplants="resources/powerplants.csv",
+        regions_onshore=GEOSPATIAL + "{interconnect}/regions_onshore.geojson",
+        regions_offshore=GEOSPATIAL + "{interconnect}/regions_offshore.geojson",
+        reeds_shapes=GEOSPATIAL + "{interconnect}/reeds_shapes.geojson",
+        powerplants="resources/powerplants/powerplants.csv",
         plants_breakthrough=DATA + "breakthrough_network/base_grid/plant.csv",
         hydro_breakthrough=DATA + "breakthrough_network/base_grid/hydro.csv",
-        bus2sub=RESOURCES + "{interconnect}/bus2sub.csv",
-        pudl_fuel_costs=RESOURCES + "{interconnect}/pudl_fuel_costs.csv",
+        bus2sub=BUSMAPS + "{interconnect}/bus2sub.csv",
+        pudl_fuel_costs=PRICES + "{interconnect}/pudl_fuel_costs.csv",
         specs_egs=(
             DATA + "EGS/{interconnect}/specs_EGS.nc"
             if "EGS" in config["electricity"]["extendable_carriers"]["Generator"]
@@ -726,7 +719,7 @@ rule add_electricity:
             else []
         ),
     output:
-        RESOURCES + "{interconnect}/elec_base_network_l_pp.pkl",
+        NETWORKS + "{interconnect}/elec_base_network_l_pp.pkl",
     log:
         LOGS + "{interconnect}/add_electricity.log",
     benchmark:
@@ -747,12 +740,12 @@ rule aggregate_to_substations:
             "model_topology", "topological_boundaries"
         ),
     input:
-        bus2sub=RESOURCES + "{interconnect}/bus2sub.csv",
-        sub=RESOURCES + "{interconnect}/sub.csv",
-        network=RESOURCES + "{interconnect}/elec_base_network_l_pp.pkl",
+        bus2sub=BUSMAPS + "{interconnect}/bus2sub.csv",
+        sub=BUSMAPS + "{interconnect}/sub.csv",
+        network=NETWORKS + "{interconnect}/elec_base_network_l_pp.pkl",
     output:
-        network=RESOURCES + "{interconnect}/elec_b.nc",
-        busmap=RESOURCES + "{interconnect}/busmap_b.csv",
+        network=NETWORKS + "{interconnect}/elec_b.nc",
+        busmap=BUSMAPS + "{interconnect}/busmap_b.csv",
     log:
         "logs/aggregate_to_substations/{interconnect}.log",
     threads: 1
@@ -772,16 +765,13 @@ rule cluster_simpl:
         simplify_network=config_provider("clustering", "simplify_network"),
         planning_horizons=config_provider("scenario", "planning_horizons"),
     input:
-        network=RESOURCES + "{interconnect}/elec_b.nc",
-        regions_onshore=RESOURCES + "{interconnect}/Geospatial/regions_onshore.geojson",
-        regions_offshore=RESOURCES
-        + "{interconnect}/Geospatial/regions_offshore.geojson",
+        network=NETWORKS + "{interconnect}/elec_b.nc",
+        regions_onshore=GEOSPATIAL + "{interconnect}/regions_onshore.geojson",
+        regions_offshore=GEOSPATIAL + "{interconnect}/regions_offshore.geojson",
     output:
-        network=RESOURCES + "{interconnect}/elec_s{simpl}.nc",
-        regions_onshore=RESOURCES
-        + "{interconnect}/Geospatial/regions_onshore_s{simpl}.geojson",
-        regions_offshore=RESOURCES
-        + "{interconnect}/Geospatial/regions_offshore_s{simpl}.geojson",
+        network=NETWORKS + "{interconnect}/elec_s{simpl}.nc",
+        regions_onshore=GEOSPATIAL + "{interconnect}/regions_onshore_s{simpl}.geojson",
+        regions_offshore=GEOSPATIAL + "{interconnect}/regions_offshore_s{simpl}.geojson",
     log:
         "logs/cluster_simpl/{interconnect}/elec_s{simpl}.log",
     threads: 1
@@ -810,18 +800,15 @@ rule cluster_network:
         topology_aggregation=config_provider("model_topology", "aggregate"),
         s_max_pu=config_provider("lines", "s_max_pu", default=0.7),
     input:
-        network=RESOURCES + "{interconnect}/elec_s{simpl}.nc",
-        regions_onshore=RESOURCES
-        + "{interconnect}/Geospatial/regions_onshore_s{simpl}.geojson",
-        regions_offshore=RESOURCES
-        + "{interconnect}/Geospatial/regions_offshore_s{simpl}.geojson",
+        network=NETWORKS + "{interconnect}/elec_s{simpl}.nc",
+        regions_onshore=GEOSPATIAL + "{interconnect}/regions_onshore_s{simpl}.geojson",
+        regions_offshore=GEOSPATIAL + "{interconnect}/regions_offshore_s{simpl}.geojson",
         custom_busmap=(
             DATA + "{interconnect}/custom_busmap_{clusters}.csv"
             if config["enable"].get("custom_busmap", False)
             else []
         ),
-        tech_costs=RESOURCES
-        + f"costs/costs_{config['scenario']['planning_horizons'][0]}.csv",
+        tech_costs=COSTS + f"costs_{config['scenario']['planning_horizons'][0]}.csv",
         itl_reeds_zone="repo_data/ReEDS_Constraints/transmission/transmission_capacity_init_AC_ba_NARIS2024.csv",
         itl_county="repo_data/ReEDS_Constraints/transmission/transmission_capacity_init_AC_county_NARIS2024.csv",
         itl_trans_grp="repo_data/ReEDS_Constraints/transmission/transmission_capacity_init_AC_transgrp_NARIS2024.csv",
@@ -830,13 +817,13 @@ rule cluster_network:
         itl_state="repo_data/ReEDS_Constraints/transmission/transmission_capacity_init_AC_state_NARIS2024.csv",
         itl_costs_state="repo_data/ReEDS_Constraints/transmission/transmission_distance_cost_500kVdc_state.csv",
     output:
-        network=RESOURCES + "{interconnect}/elec_s{simpl}_c{clusters}.nc",
-        regions_onshore=RESOURCES
-        + "{interconnect}/Geospatial/regions_onshore_s{simpl}_{clusters}.geojson",
-        regions_offshore=RESOURCES
-        + "{interconnect}/Geospatial/regions_offshore_s{simpl}_{clusters}.geojson",
-        busmap=RESOURCES + "{interconnect}/busmap_s{simpl}_{clusters}.csv",
-        linemap=RESOURCES + "{interconnect}/linemap_s{simpl}_{clusters}.csv",
+        network=NETWORKS + "{interconnect}/elec_s{simpl}_c{clusters}.nc",
+        regions_onshore=GEOSPATIAL
+        + "{interconnect}/regions_onshore_s{simpl}_{clusters}.geojson",
+        regions_offshore=GEOSPATIAL
+        + "{interconnect}/regions_offshore_s{simpl}_{clusters}.geojson",
+        busmap=BUSMAPS + "{interconnect}/busmap_s{simpl}_{clusters}.csv",
+        linemap=BUSMAPS + "{interconnect}/linemap_s{simpl}_{clusters}.csv",
     log:
         "logs/cluster_network/{interconnect}/elec_s{simpl}_c{clusters}.log",
     benchmark:
@@ -868,17 +855,17 @@ rule add_extra_components:
             for hour in phs_tech.split("hr_")
             if hour.isdigit()
         },
-        network=RESOURCES + "{interconnect}/elec_s{simpl}_c{clusters}.nc",
+        network=NETWORKS + "{interconnect}/elec_s{simpl}_c{clusters}.nc",
         tech_costs=lambda wildcards: expand(
-            RESOURCES + "costs/costs_{year}.csv",
+            COSTS + "costs_{year}.csv",
             year=config["scenario"]["planning_horizons"],
         ),
-        regions_onshore=RESOURCES
-        + "{interconnect}/Geospatial/regions_onshore_s{simpl}_{clusters}.geojson",
+        regions_onshore=GEOSPATIAL
+        + "{interconnect}/regions_onshore_s{simpl}_{clusters}.geojson",
         flowgates=flowgates_for_extra_components,
         reeds_memberships="repo_data/ReEDS_Constraints/membership.csv",
         co2_storage=(
-            RESOURCES + "{interconnect}/co2_storage_s{simpl}_{clusters}.csv"
+            CO2 + "{interconnect}/co2_storage_s{simpl}_{clusters}.csv"
             if config["scenario"]["sector"] == "" and config["co2"]["storage"] is True
             else []
         ),
@@ -898,7 +885,7 @@ rule add_extra_components:
         costs=config_provider("costs"),
         ucap=config_provider("ucap", default={}),
     output:
-        RESOURCES + "{interconnect}/elec_s{simpl}_c{clusters}_ec.nc",
+        NETWORKS + "{interconnect}/elec_s{simpl}_c{clusters}_ec.nc",
     log:
         "logs/add_extra_components/{interconnect}/elec_s{simpl}_c{clusters}_ec.log",
     threads: 1
@@ -929,7 +916,7 @@ rule prepare_network:
             config["custom_files"]["files_path"]
             + config["custom_files"]["network_name"]
             if config["custom_files"].get("activate", False)
-            else RESOURCES + "{interconnect}/elec_s{simpl}_c{clusters}_ec.nc"
+            else NETWORKS + "{interconnect}/elec_s{simpl}_c{clusters}_ec.nc"
         ),
         tech_costs=(
             config["custom_files"]["files_path"] + "costs_2030.csv"
@@ -938,7 +925,7 @@ rule prepare_network:
             + f"costs/costs_{config['scenario']['planning_horizons'][0]}.csv"
         ),
     output:
-        RESOURCES + "{interconnect}/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}.nc",
+        NETWORKS + "{interconnect}/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}.nc",
     log:
         solver="logs/prepare_network/{interconnect}/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}.log",
     threads: 1

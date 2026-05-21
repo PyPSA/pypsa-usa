@@ -82,9 +82,9 @@ rule build_population_layouts:
             renewable_weather_year=config["renewable_weather_years"],
         ),
     output:
-        pop_layout_total=RESOURCES + "{interconnect}/pop_layout_total.nc",
-        pop_layout_urban=RESOURCES + "{interconnect}/pop_layout_urban.nc",
-        pop_layout_rural=RESOURCES + "{interconnect}/pop_layout_rural.nc",
+        pop_layout_total=POPULATION + "{interconnect}/pop_layout_total.nc",
+        pop_layout_urban=POPULATION + "{interconnect}/pop_layout_urban.nc",
+        pop_layout_rural=POPULATION + "{interconnect}/pop_layout_rural.nc",
     log:
         LOGS + "{interconnect}/build_population_layouts.log",
     resources:
@@ -104,17 +104,17 @@ rule build_temperature_profiles:
     params:
         snapshots=config["snapshots"],
     input:
-        pop_layout=RESOURCES + "{interconnect}/pop_layout_{scope}.nc",
-        regions_onshore=RESOURCES
-        + "{interconnect}/Geospatial/regions_onshore_s{simpl}_{clusters}.geojson",
+        pop_layout=POPULATION + "{interconnect}/pop_layout_{scope}.nc",
+        regions_onshore=GEOSPATIAL
+        + "{interconnect}/regions_onshore_s{simpl}_{clusters}.geojson",
         cutout=lambda wildcards: expand(
             "cutouts/" + CDIR + "usa_era5_" + "{renewable_weather_year}" + ".nc",
             renewable_weather_year=config["renewable_weather_years"],
         ),
     output:
-        temp_soil=RESOURCES
+        temp_soil=TEMPERATURE
         + "{interconnect}/temp_soil_{scope}_elec_s{simpl}_c{clusters}.nc",
-        temp_air=RESOURCES
+        temp_air=TEMPERATURE
         + "{interconnect}/temp_air_{scope}_elec_s{simpl}_c{clusters}.nc",
     resources:
         mem_mb=20000,
@@ -135,17 +135,17 @@ rule build_temperature_profiles:
 
 rule build_clustered_population_layouts:
     input:
-        pop_layout_total=RESOURCES + "{interconnect}/pop_layout_total.nc",
-        pop_layout_urban=RESOURCES + "{interconnect}/pop_layout_urban.nc",
-        pop_layout_rural=RESOURCES + "{interconnect}/pop_layout_rural.nc",
-        regions_onshore=RESOURCES
-        + "{interconnect}/Geospatial/regions_onshore_s{simpl}_{clusters}.geojson",
+        pop_layout_total=POPULATION + "{interconnect}/pop_layout_total.nc",
+        pop_layout_urban=POPULATION + "{interconnect}/pop_layout_urban.nc",
+        pop_layout_rural=POPULATION + "{interconnect}/pop_layout_rural.nc",
+        regions_onshore=GEOSPATIAL
+        + "{interconnect}/regions_onshore_s{simpl}_{clusters}.geojson",
         cutout=lambda wildcards: expand(
             "cutouts/" + CDIR + "usa_era5_" + "{renewable_weather_year}" + ".nc",
             renewable_weather_year=config["renewable_weather_years"],
         ),
     output:
-        clustered_pop_layout=RESOURCES
+        clustered_pop_layout=POPULATION
         + "{interconnect}/pop_layout_elec_s{simpl}_c{clusters}.csv",
     log:
         LOGS
@@ -167,30 +167,30 @@ rule build_cop_profiles:
     params:
         heat_pump_sink_T=config["sector"]["heating"]["heat_pump_sink_T"],
     input:
-        temp_soil_total=RESOURCES
+        temp_soil_total=TEMPERATURE
         + "{interconnect}/temp_soil_total_elec_s{simpl}_c{clusters}.nc",
-        temp_soil_rural=RESOURCES
+        temp_soil_rural=TEMPERATURE
         + "{interconnect}/temp_soil_rural_elec_s{simpl}_c{clusters}.nc",
-        temp_soil_urban=RESOURCES
+        temp_soil_urban=TEMPERATURE
         + "{interconnect}/temp_soil_urban_elec_s{simpl}_c{clusters}.nc",
-        temp_air_total=RESOURCES
+        temp_air_total=TEMPERATURE
         + "{interconnect}/temp_air_total_elec_s{simpl}_c{clusters}.nc",
-        temp_air_rural=RESOURCES
+        temp_air_rural=TEMPERATURE
         + "{interconnect}/temp_air_rural_elec_s{simpl}_c{clusters}.nc",
-        temp_air_urban=RESOURCES
+        temp_air_urban=TEMPERATURE
         + "{interconnect}/temp_air_urban_elec_s{simpl}_c{clusters}.nc",
     output:
-        cop_soil_total=RESOURCES
+        cop_soil_total=HEATING_COP
         + "{interconnect}/cop_soil_total_elec_s{simpl}_c{clusters}.nc",
-        cop_soil_rural=RESOURCES
+        cop_soil_rural=HEATING_COP
         + "{interconnect}/cop_soil_rural_elec_s{simpl}_c{clusters}.nc",
-        cop_soil_urban=RESOURCES
+        cop_soil_urban=HEATING_COP
         + "{interconnect}/cop_soil_urban_elec_s{simpl}_c{clusters}.nc",
-        cop_air_total=RESOURCES
+        cop_air_total=HEATING_COP
         + "{interconnect}/cop_air_total_elec_s{simpl}_c{clusters}.nc",
-        cop_air_rural=RESOURCES
+        cop_air_rural=HEATING_COP
         + "{interconnect}/cop_air_rural_elec_s{simpl}_c{clusters}.nc",
-        cop_air_urban=RESOURCES
+        cop_air_urban=HEATING_COP
         + "{interconnect}/cop_air_urban_elec_s{simpl}_c{clusters}.nc",
     resources:
         mem_mb=20000,
@@ -206,11 +206,11 @@ rule build_cop_profiles:
 
 rule build_co2_storage:
     input:
-        regions_onshore=RESOURCES
-        + "{interconnect}/Geospatial/regions_onshore_s{simpl}_{clusters}.geojson",
+        regions_onshore=GEOSPATIAL
+        + "{interconnect}/regions_onshore_s{simpl}_{clusters}.geojson",
         co2_storage="repo_data/geospatial/co2_storage/co2_storage.geojson",
     output:
-        co2_storage=RESOURCES + "{interconnect}/co2_storage_s{simpl}_{clusters}.csv",
+        co2_storage=CO2 + "{interconnect}/co2_storage_s{simpl}_{clusters}.csv",
     log:
         LOGS + "{interconnect}/build_co2_storage_s{simpl}_{clusters}.log",
     resources:

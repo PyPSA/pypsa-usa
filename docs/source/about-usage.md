@@ -29,7 +29,7 @@ snakemake -j1 --configfile config/config.default.yaml
 
 ### Generate Data Model
 
-To generate the data model only, specify the rule `data_model` in the `snakemake` call. The `data_model` rule generates the network file that is passed into the `solve_network` rule. This network will **not** include any additional policy constraints and only includes input data (ie. the network is not solved). The network is available in the `resources/` folder.
+To generate the data model only, specify the rule `data_model` in the `snakemake` call. The `data_model` rule generates the network file that is passed into the `solve_network` rule. This network will **not** include any additional policy constraints and only includes input data (ie. the network is not solved). The network is available in the `resources/networks/` folder.
 
 UV:
 ```console
