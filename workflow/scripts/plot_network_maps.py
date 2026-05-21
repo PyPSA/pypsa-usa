@@ -480,6 +480,20 @@ def plot_new_capacity_map(
     bus_values = bus_values[(bus_values > 0) & (bus_values.index.get_level_values(1).isin(carriers))]
     bus_values = remove_sector_buses(bus_values).reset_index().groupby(by=["bus", "carrier"]).sum().squeeze()
 
+    title = create_title("New Network Capacities", **wildcards)
+
+    # n.plot() calls np.nanmin over bus coords; an empty bus_values yields an
+    # empty array and crashes the bbox computation. Save a placeholder instead.
+    if bus_values.empty:
+        logger.warning("No new capacity for carriers %s; saving placeholder map.", carriers)
+        fig, ax = plt.subplots(figsize=(10, 10))
+        ax.text(0.5, 0.5, "No new capacity built", ha="center", va="center", fontsize=14)
+        ax.set_title(title, fontsize=TITLE_SIZE, pad=20)
+        ax.axis("off")
+        fig.savefig(save)
+        plt.close()
+        return
+
     line_snom = n.lines.s_nom
     line_snom_opt = n.lines.s_nom_opt
     line_values = line_snom_opt - line_snom
@@ -489,7 +503,6 @@ def plot_new_capacity_map(
     link_values = link_pnom_opt - link_pnom
 
     # plot data
-    title = create_title("New Network Capacities", **wildcards)
     interconnect = wildcards.get("interconnect", None)
     bus_scale = get_bus_scale(interconnect) if interconnect else 1
     line_scale = get_line_scale(interconnect) if interconnect else 1

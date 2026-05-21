@@ -255,6 +255,31 @@ def run_optimize(n, rolling_horizon, skip_iterations, cf_solving, **kwargs):
         raise RuntimeError("Solving status 'infeasible'")
 
 
+def _stash_original_nominal(n: pypsa.Network) -> None:
+    """Snapshot the pre-solve p_nom / e_nom into `*_initial` once, on first call.
+
+    PyPSA's statistics use `n.df(c)[p_nom]` as the "installed" baseline. The
+    myopic freeze loop overwrites p_nom with p_nom_opt between horizons, which
+    erases the original baseline. Stashing it lets us restore it after the
+    final horizon so downstream tools can recover (p_nom_opt - p_nom_initial)
+    as "what was actually built across all horizons".
+    """
+    for c in n.iterate_components(["Generator", "Link", "StorageUnit", "Store"]):
+        attr = "e_nom" if c.name == "Store" else "p_nom"
+        col = f"{attr}_initial"
+        if col not in c.df.columns:
+            c.df[col] = c.df[attr]
+
+
+def _restore_original_nominal(n: pypsa.Network) -> None:
+    """Restore stashed pre-solve p_nom / e_nom so statistics see original baseline."""
+    for c in n.iterate_components(["Generator", "Link", "StorageUnit", "Store"]):
+        attr = "e_nom" if c.name == "Store" else "p_nom"
+        col = f"{attr}_initial"
+        if col in c.df.columns:
+            c.df[attr] = c.df[col]
+
+
 def freeze_prior_periods(n: pypsa.Network, prior_period: int):
     renewable_carriers = set(n.config["electricity"].get("renewable_carriers", []))
     for c in n.iterate_components(["Generator", "Link", "StorageUnit", "Store"]):
@@ -328,6 +353,7 @@ def solve_network(n, config, solving, opts="", **kwargs):
         case "perfect":
             run_optimize(n, rolling_horizon, skip_iterations, cf_solving, **kwargs)
         case "myopic":
+            _stash_original_nominal(n)
             for i, planning_horizon in enumerate(n.investment_periods):
                 sns_horizon = n.snapshots[n.snapshots.get_level_values(0) == planning_horizon]
                 kwargs["snapshots"] = sns_horizon
@@ -339,6 +365,11 @@ def solve_network(n, config, solving, opts="", **kwargs):
 
                 logger.info(f"Preparing brownfield from {planning_horizon}")
                 freeze_prior_periods(n, planning_horizon)
+            # Restore the pre-solve p_nom/e_nom baseline so downstream statistics
+            # and plots can compute (p_nom_opt - p_nom) = what was actually built
+            # across the myopic horizons. Without this, the inter-period freeze
+            # leaves p_nom == p_nom_opt and the "new capacity" signal is zero.
+            _restore_original_nominal(n)
         case _:
             raise ValueError(f"Invalid foresight option: '{foresight}'. Must be 'perfect' or 'myopic'.")
 
