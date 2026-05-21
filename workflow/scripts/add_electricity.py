@@ -546,12 +546,8 @@ def attach_wind_and_solar(
 
         capital_cost = costs.at[car, "annualized_capex_fom"]
 
-        bus2sub = (
-            pd.read_csv(input_profiles.bus2sub, dtype=str)
-            .drop("interconnect", axis=1)
-            .rename(columns={"Bus": "bus_id"})
-            .drop_duplicates(subset="sub_id")
-        )
+        # Profile bus index already matches the network bus index after
+        # cluster_simpl runs upstream — both are keyed by simpl-cluster bus.
 
         # For GODEEEP future scenarios, load horizon-specific profiles
         if godeeep_future:
@@ -572,40 +568,28 @@ def attach_wind_and_solar(
                     if ds.indexes["bus"].empty:
                         continue
 
-                    # Get bus list
+                    # Get bus list (profile bus = network bus, both at cluster level)
                     if bus_list is None:
-                        bus_list = ds.bus.to_dataframe("sub_id").merge(bus2sub).bus_id.astype(str).values
+                        bus_list = ds.bus.values.astype(str)
 
-                        # Get p_nom_max and weight
                         p_nom_max_bus = (
                             ds["p_nom_max"]
-                            .to_dataframe()
-                            .merge(bus2sub[["bus_id", "sub_id"]], left_on="bus", right_on="sub_id")
-                            .set_index("bus_id")
-                            .p_nom_max
+                            .to_pandas()
+                            .rename(
+                                index=lambda b: str(b),
+                            )
                         )
                         weight_bus = (
                             ds["weight"]
-                            .to_dataframe()
-                            .merge(bus2sub[["bus_id", "sub_id"]], left_on="bus", right_on="sub_id")
-                            .set_index("bus_id")
-                            .weight
+                            .to_pandas()
+                            .rename(
+                                index=lambda b: str(b),
+                            )
                         )
 
-                    # Get profile for this horizon
-                    horizon_profile = (
-                        ds["profile"]
-                        .transpose("time", "bus")
-                        .to_pandas()
-                        .T.merge(
-                            bus2sub[["bus_id", "sub_id"]],
-                            left_on="bus",
-                            right_on="sub_id",
-                        )
-                        .set_index("bus_id")
-                        .drop(columns="sub_id")
-                        .T
-                    )
+                    # Get profile for this horizon — index already at bus level
+                    horizon_profile = ds["profile"].transpose("time", "bus").to_pandas()
+                    horizon_profile.columns = horizon_profile.columns.astype(str)
 
                     # Update timestamps to match the horizon year
                     horizon_profile.index = horizon_profile.index.map(lambda x: x.replace(year=int(horizon)))
@@ -624,34 +608,23 @@ def attach_wind_and_solar(
                 if ds.indexes["bus"].empty:
                     continue
 
-                bus_list = ds.bus.to_dataframe("sub_id").merge(bus2sub).bus_id.astype(str).values
+                bus_list = ds.bus.values.astype(str)
                 p_nom_max_bus = (
                     ds["p_nom_max"]
-                    .to_dataframe()
-                    .merge(bus2sub[["bus_id", "sub_id"]], left_on="bus", right_on="sub_id")
-                    .set_index("bus_id")
-                    .p_nom_max
+                    .to_pandas()
+                    .rename(
+                        index=lambda b: str(b),
+                    )
                 )
                 weight_bus = (
                     ds["weight"]
-                    .to_dataframe()
-                    .merge(bus2sub[["bus_id", "sub_id"]], left_on="bus", right_on="sub_id")
-                    .set_index("bus_id")
-                    .weight
-                )
-                bus_profiles = (
-                    ds["profile"]
-                    .transpose("time", "bus")
                     .to_pandas()
-                    .T.merge(
-                        bus2sub[["bus_id", "sub_id"]],
-                        left_on="bus",
-                        right_on="sub_id",
+                    .rename(
+                        index=lambda b: str(b),
                     )
-                    .set_index("bus_id")
-                    .drop(columns="sub_id")
-                    .T
                 )
+                bus_profiles = ds["profile"].transpose("time", "bus").to_pandas()
+                bus_profiles.columns = bus_profiles.columns.astype(str)
                 # Broadcast single profile across all horizons
                 bus_profiles = broadcast_investment_horizons_index(n, bus_profiles)
 
@@ -703,26 +676,11 @@ def attach_egs(
             getattr(input_profiles, "profile_egs"),
         ) as ds_profile,
     ):
-        bus2sub = (
-            pd.read_csv(input_profiles.bus2sub, dtype=str)
-            .drop("interconnect", axis=1)
-            .rename(columns={"Bus": "bus_id"})
-        )
-        # bus2sub stores sub_id as float strings (e.g. "39763.0") while the
-        # EGS profile stores sub_id as integer strings (e.g. "39763").
-        # Normalize to integer strings so the merge key matches.
-        bus2sub["sub_id"] = bus2sub["sub_id"].apply(lambda x: str(int(float(x))))
-
-        # IGNORE: Remove dropna(). Rather, apply dropna when creating the original dataset
-        df_specs = pd.merge(
-            ds_specs.to_dataframe().reset_index().dropna(),
-            bus2sub,
-            on="sub_id",
-            how="left",
-        )
+        # After aggregate_egs runs, the ``sub_id`` dimension contains the
+        # simpl-cluster bus IDs already, so it can be used as ``bus_id`` directly.
+        df_specs = ds_specs.to_dataframe().reset_index().dropna()
+        df_specs = df_specs.rename(columns={"sub_id": "bus_id"})
         df_specs["bus_id"] = df_specs["bus_id"].astype(str)
-
-        # bus_id must be in index for pypsa to read it
         df_specs = df_specs.set_index("bus_id")
 
         # columns must be renamed to refer to the right quantities for pypsa to read it correctly
@@ -756,13 +714,9 @@ def attach_egs(
             p_nom_max_bus = df_q["p_nom_max"]
             efficiency = df_q["efficiency"]  # for now.
 
-            # IGNORE: Remove dropna(). Rather, apply dropna when creating the original dataset
-            df_q_profile = pd.merge(
-                ds_profile.sel(Quality=q).to_dataframe().dropna().reset_index(),
-                bus2sub,
-                on="sub_id",
-                how="left",
-            )
+            df_q_profile = ds_profile.sel(Quality=q).to_dataframe().dropna().reset_index()
+            df_q_profile = df_q_profile.rename(columns={"sub_id": "bus_id"})
+            df_q_profile["bus_id"] = df_q_profile["bus_id"].astype(str)
             bus_profiles = pd.pivot_table(
                 df_q_profile,
                 columns="bus_id",

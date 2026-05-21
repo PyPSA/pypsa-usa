@@ -802,7 +802,13 @@ if __name__ == "__main__":
     params = snakemake.params
     solver_name = snakemake.config["solving"]["solver"]["name"]
 
-    n = pypsa.Network(snakemake.input.network)
+    if str(snakemake.input.network).endswith(".pkl"):
+        import dill as pickle
+
+        with open(snakemake.input.network, "rb") as fh:
+            n = pickle.load(fh)
+    else:
+        n = pypsa.Network(snakemake.input.network)
 
     n.set_investment_periods(
         periods=snakemake.params.planning_horizons,

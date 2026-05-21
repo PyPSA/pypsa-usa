@@ -1,9 +1,9 @@
 # BY PyPSA-USA Authors
-"""Aggregates the full nodal network to substation level and normalizes to one voltage.
+"""Aggregates the bare topology network to substation level and normalizes to one voltage.
 
-First stage of the topology-aggregation pipeline (formerly the first half of
-``simplify_network.py``). Consumes the full nodal network produced by
-``add_electricity`` and reduces it to one bus per substation via:
+First stage of the topology-aggregation pipeline. Consumes ``elec_base_network.nc``
+(buses, lines, transformers only — no generators, loads, or storage attached) and
+reduces it to one bus per substation via:
 
 1. Converting line parameters to a single voltage base (230 kV).
 2. Removing transformers, collapsing voltage layers into a single bus per
@@ -11,12 +11,12 @@ First stage of the topology-aggregation pipeline (formerly the first half of
 3. Aggregating buses by ``sub_id``.
 
 The downstream ``cluster_simpl`` rule may then optionally apply k-means
-clustering to ``{simpl}`` clusters.
+clustering to ``{simpl}`` clusters before any per-bus heavy data (renewable
+profiles, demand) is built.
 """
 
 import logging
 
-import dill as pickle
 import numpy as np
 import pandas as pd
 import pypsa
@@ -209,11 +209,7 @@ if __name__ == "__main__":
 
     topological_boundaries = snakemake.params.topological_boundaries
 
-    n = pickle.load(open(snakemake.input.network, "rb"))
-
-    n.generators = n.generators.drop(
-        columns=["ba_eia"],
-    )  # temp columns added in build_powerplants; drop for downstream
+    n = pypsa.Network(snakemake.input.network)
 
     n = convert_to_voltage_level(n, 230)
     n, trafo_map = remove_transformers(n)
