@@ -686,12 +686,12 @@ def plot_demand_map(
 
     for ax, horizon in zip(axes, horizons):
         values = horizon_values[horizon]
-        _plot_choropleth_on_ax(n, values, regions, ax, cmap="viridis", vmin=vmin, vmax=vmax)
+        _plot_choropleth_on_ax(n, values, regions, ax, cmap="Blues", vmin=vmin, vmax=vmax)
         h_label = "" if horizon is None else f" — {horizon}"
         ax.set_title(f"Mean Nodal Demand (MW){h_label}", fontsize=TITLE_SIZE - 2)
 
     # Shared colorbar on the right edge.
-    sm = plt.cm.ScalarMappable(cmap="viridis", norm=Normalize(vmin=vmin, vmax=vmax))
+    sm = plt.cm.ScalarMappable(cmap="Blues", norm=Normalize(vmin=vmin, vmax=vmax))
     sm.set_array([])
     cbar = fig.colorbar(sm, ax=axes, orientation="vertical", fraction=0.025, pad=0.02)
     cbar.set_label("Mean Demand (MW)")
