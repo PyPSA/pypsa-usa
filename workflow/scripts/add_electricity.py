@@ -826,6 +826,7 @@ def attach_egs(
                 p_max_pu=bus_profiles,
                 build_year=n.investment_periods[0],
                 lifetime=capital_recovery_period,
+                land_region=bus_list,
             )
 
 
