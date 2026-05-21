@@ -257,35 +257,35 @@ def run_optimize(n, rolling_horizon, skip_iterations, cf_solving, **kwargs):
 
 def freeze_prior_periods(n: pypsa.Network, prior_period: int):
     renewable_carriers = set(n.config["electricity"].get("renewable_carriers", []))
-    for c in n.components[["Generator", "Link", "StorageUnit", "Store"]]:
+    for c in n.iterate_components(["Generator", "Link", "StorageUnit", "Store"]):
         attr = "e_nom" if c.name == "Store" else "p_nom"
 
-        prior = c.static.build_year <= prior_period
+        prior = c.df.build_year <= prior_period
         # Only assets explicitly tagged "existing" in their name (split out by
         # attach_multihorizon_existing_generators in add_extra_components.py) AND
         # not on a renewable carrier are eligible for economic retirement. Renewables
         # attrite via lifetime, not economics, so they're excluded even if their name
         # happens to match.
-        existing = c.static.index.str.contains("existing", case=False, na=False)
-        not_renewable = ~c.static["carrier"].isin(renewable_carriers)
+        existing = c.df.index.str.contains("existing", case=False, na=False)
+        not_renewable = ~c.df["carrier"].isin(renewable_carriers)
         retirable = prior & existing & not_renewable
 
         # lock in the optimized capacity from the prior period as the starting point
         # for the next period — without this, p_nom still holds the pre-solve value
         # (e.g. 0 for a new-build), so the next period's dispatch constraints would
         # see the wrong installed capacity
-        c.static.loc[prior, attr] = c.static.loc[prior, attr + "_opt"]
+        c.df.loc[prior, attr] = c.df.loc[prior, attr + "_opt"]
 
         # freeze all prior-period assets by default; the optimizer cannot add more
         # capacity through assets that have already been built
-        c.static.loc[prior, attr + "_extendable"] = False
+        c.df.loc[prior, attr + "_extendable"] = False
 
         # "existing" vintage assets carry p_nom_min=0 already (set by the split in
         # add_extra_components.py), so flipping them back to extendable lets the
         # optimizer retire them by shrinking p_nom toward zero; p_nom_max is capped
         # at the locked-in capacity so no new capacity can be added through this asset
-        c.static.loc[retirable, attr + "_extendable"] = True
-        c.static.loc[retirable, attr + "_max"] = c.static.loc[retirable, attr]
+        c.df.loc[retirable, attr + "_extendable"] = True
+        c.df.loc[retirable, attr + "_max"] = c.df.loc[retirable, attr]
 
 
 def solve_network(n, config, solving, opts="", **kwargs):
