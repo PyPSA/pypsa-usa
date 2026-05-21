@@ -35,7 +35,7 @@ import seaborn as sns
 from _helpers import configure_logging
 from add_electricity import sanitize_carriers
 from cartopy import crs as ccrs
-from matplotlib.colors import Normalize
+from matplotlib.colors import LinearSegmentedColormap, Normalize
 from pypsa.plot import add_legend_circles, add_legend_lines, add_legend_patches
 from summary import (
     get_node_emissions_timeseries,
@@ -684,14 +684,22 @@ def plot_demand_map(
     if n_h == 1:
         axes = [axes]
 
+    # Use a truncated Blues palette so the low end starts at a slightly darker
+    # blue (skipping the near-white portion of matplotlib's built-in Blues).
+    base_blues = plt.colormaps["Blues"]
+    blues_truncated = LinearSegmentedColormap.from_list(
+        "BluesTruncated",
+        base_blues(np.linspace(0.25, 1.0, 256)),
+    )
+
     for ax, horizon in zip(axes, horizons):
         values = horizon_values[horizon]
-        _plot_choropleth_on_ax(n, values, regions, ax, cmap="Blues", vmin=vmin, vmax=vmax)
+        _plot_choropleth_on_ax(n, values, regions, ax, cmap=blues_truncated, vmin=vmin, vmax=vmax)
         h_label = "" if horizon is None else f" — {horizon}"
         ax.set_title(f"Mean Nodal Demand (MW){h_label}", fontsize=TITLE_SIZE - 2)
 
     # Shared colorbar on the right edge.
-    sm = plt.cm.ScalarMappable(cmap="Blues", norm=Normalize(vmin=vmin, vmax=vmax))
+    sm = plt.cm.ScalarMappable(cmap=blues_truncated, norm=Normalize(vmin=vmin, vmax=vmax))
     sm.set_array([])
     cbar = fig.colorbar(sm, ax=axes, orientation="vertical", fraction=0.025, pad=0.02)
     cbar.set_label("Mean Demand (MW)")
