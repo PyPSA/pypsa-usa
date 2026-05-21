@@ -256,11 +256,19 @@ def run_optimize(n, rolling_horizon, skip_iterations, cf_solving, **kwargs):
 
 
 def freeze_prior_periods(n: pypsa.Network, prior_period: int):
+    renewable_carriers = set(n.config["electricity"].get("renewable_carriers", []))
     for c in n.components[["Generator", "Link", "StorageUnit", "Store"]]:
         attr = "e_nom" if c.name == "Store" else "p_nom"
 
         prior = c.static.build_year <= prior_period
-        retirable = prior & (c.static[attr + "_min"] == 0)
+        # Only assets explicitly tagged "existing" in their name (split out by
+        # attach_multihorizon_existing_generators in add_extra_components.py) AND
+        # not on a renewable carrier are eligible for economic retirement. Renewables
+        # attrite via lifetime, not economics, so they're excluded even if their name
+        # happens to match.
+        existing = c.static.index.str.contains("existing", case=False, na=False)
+        not_renewable = ~c.static["carrier"].isin(renewable_carriers)
+        retirable = prior & existing & not_renewable
 
         # lock in the optimized capacity from the prior period as the starting point
         # for the next period — without this, p_nom still holds the pre-solve value
@@ -272,10 +280,10 @@ def freeze_prior_periods(n: pypsa.Network, prior_period: int):
         # capacity through assets that have already been built
         c.static.loc[prior, attr + "_extendable"] = False
 
-        # assets with p_nom_min == 0 were extendable investment decisions (CCGT, OCGT,
-        # coal, EGS, wind, solar etc.) — the optimizer can retire them in future periods
-        # by shrinking p_nom down to zero; p_nom_max is capped at what was built so no
-        # new capacity can be added through this asset
+        # "existing" vintage assets carry p_nom_min=0 already (set by the split in
+        # add_extra_components.py), so flipping them back to extendable lets the
+        # optimizer retire them by shrinking p_nom toward zero; p_nom_max is capped
+        # at the locked-in capacity so no new capacity can be added through this asset
         c.static.loc[retirable, attr + "_extendable"] = True
         c.static.loc[retirable, attr + "_max"] = c.static.loc[retirable, attr]
 

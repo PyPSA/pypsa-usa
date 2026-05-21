@@ -769,14 +769,18 @@ if __name__ == "__main__":
     # Needed as loads may be split off to urban/rural
     sanitize_carriers(n, snakemake.config)
 
+    co2_storage = snakemake.config.get("co2", {}).get("storage", False)
+    co2_network_enable = snakemake.config.get("co2", {}).get("network", {}).get("enable", False)
+    dac_enable = snakemake.config.get("dac", {}).get("enable", False)
+
     # add node level CO2 (underground) storage
-    if snakemake.config["co2"]["storage"]:
+    if co2_storage:
         logger.info("Adding node level CO2 (underground) storage")
         add_co2_storage(n, snakemake.config, snakemake.input.co2_storage, costs, True)
 
     # add CO2 (transportation) network
-    if snakemake.config["co2"]["network"]["enable"]:
-        if snakemake.config["co2"]["storage"]:
+    if co2_network_enable:
+        if co2_storage:
             logger.info("Adding CO2 (transportation) network")
             add_co2_network(n, snakemake.config)
         else:
@@ -785,9 +789,9 @@ if __name__ == "__main__":
             )
 
     # add node level DAC capabilities
-    if snakemake.config["dac"]["enable"]:
+    if dac_enable:
         raise ValueError("DAC is not supported for Sector Studies. See https://github.com/PyPSA/pypsa-usa/issues/652")
-        if snakemake.config["co2"]["storage"]:
+        if co2_storage:
             logger.info("Adding DAC capabilities")
             add_dac(n, snakemake.config, True)
         else:
