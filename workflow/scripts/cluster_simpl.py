@@ -53,6 +53,25 @@ def resolve_simpl_mode(value: str) -> str:
     )
 
 
+def build_county_busmap(n: "pypsa.Network") -> "pd.Series":
+    """Construct a sub_id -> '<reeds_zone>_<county_fips>' busmap.
+
+    Used by the simpl='county' fast-path. The county field is the 5-digit FIPS
+    GEOID assigned in build_base_network from county_shapes.GEOID, which is
+    nationally unique; the reeds_zone prefix is added for human readability
+    when inspecting clustered networks.
+    """
+    if "county" not in n.buses.columns or n.buses.county.isna().any():
+        raise ValueError(
+            "simpl='county' requires every substation bus to carry a non-null "
+            "'county' attribute. This attribute is dropped by "
+            "aggregate_to_substations when topological_boundaries='state'. "
+            "Set model_topology.topological_boundaries to 'county' (or "
+            "'reeds_zone') in your config, or use a numeric {simpl} wildcard.",
+        )
+    return (n.buses.reeds_zone.astype(str) + "_" + n.buses.county.astype(str)).rename("busmap")
+
+
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
