@@ -83,7 +83,7 @@ def get_color_palette(n: pypsa.Network) -> pd.Series:
                 },
             )
 
-    return pd.concat([colors, pd.Series(additional)]).to_dict()
+    return pd.concat([colors, pd.Series(additional)]).fillna("#808080").to_dict()
 
 
 def get_bus_scale(interconnect: str) -> float:
@@ -244,9 +244,14 @@ def plot_capacity_map(
     line_width = line_values / line_scale
     link_width = link_values / line_scale
 
+    has_bus_data = (
+        isinstance(bus_values, pd.Series)
+        and not bus_values.empty
+        and isinstance(bus_values.index, pd.MultiIndex)
+    )
     with plt.rc_context({"patch.linewidth": 0.1}):
         n.plot(
-            bus_sizes=bus_values / bus_scale,
+            bus_sizes=bus_values / bus_scale if has_bus_data else 0,
             bus_colors=bus_colors,
             bus_alpha=0.7,
             line_widths=line_width,
@@ -331,9 +336,10 @@ def plot_demand_map(
     line_width = line_values / line_scale
     link_width = link_values / line_scale
 
+    has_demand_data = isinstance(bus_values, pd.Series) and not bus_values.empty
     with plt.rc_context({"patch.linewidth": 0.1}):
         n.plot(
-            bus_sizes=bus_values / bus_scale,
+            bus_sizes=bus_values / bus_scale if has_demand_data else 0,
             # bus_colors=None,
             bus_alpha=0.7,
             line_widths=line_width,

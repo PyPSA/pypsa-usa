@@ -1297,6 +1297,9 @@ def compute_corrected_curtailment(n, groupby=None):
     if not isinstance(n.snapshots, pd.MultiIndex):
         return n.statistics.curtailment(groupby=groupby)
 
+    if n.pnl("Generator").p.empty:
+        return n.statistics.curtailment(groupby=groupby)
+
     period_results = {}
     for period in n.investment_periods:
         active_mask = n.get_active_assets("Generator", period)
