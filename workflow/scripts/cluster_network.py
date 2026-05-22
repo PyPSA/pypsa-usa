@@ -16,6 +16,7 @@ from _helpers import (
     configure_logging,
     is_transport_model,
     load_costs,
+    log_network_schema,
     update_p_nom_max,
 )
 from add_electricity import update_transmission_costs
@@ -810,6 +811,8 @@ if __name__ == "__main__":
     else:
         n = pypsa.Network(snakemake.input.network)
 
+    schema_entry = log_network_schema(n, stage="entry")
+
     n.set_investment_periods(
         periods=snakemake.params.planning_horizons,
     )
@@ -1063,6 +1066,7 @@ if __name__ == "__main__":
         periods=snakemake.params.planning_horizons,
     )
 
+    log_network_schema(clustering.network, stage="exit", baseline=schema_entry)
     clustering.network.export_to_netcdf(snakemake.output.network)
 
     for attr in (

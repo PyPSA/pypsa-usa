@@ -7,7 +7,7 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 import pypsa
-from _helpers import configure_logging
+from _helpers import configure_logging, log_network_schema
 from build_shapes import load_na_shapes
 from constants import REC_TRADING_ZONE_MAPPER
 from shapely.geometry import Polygon
@@ -669,6 +669,7 @@ def main(snakemake):
     lines_gis.to_csv(snakemake.output.lines_gis)
 
     # export network
+    log_network_schema(n, stage="exit")
     n.export_to_netcdf(snakemake.output.network)
 
 
