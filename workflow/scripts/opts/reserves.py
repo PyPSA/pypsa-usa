@@ -307,10 +307,18 @@ def define_erm_nodal_balance_constraints(
     else:
         snap_is_zero = pd.Series(False, index=sns, dtype=bool)
 
+    def _activity_da(component):
+        mask = get_activity_mask(n, component, sns)
+        mask.index.name = "snapshot"
+        return DataArray(mask)
+
     # LHS expressions for storage/transmission with activity masking
-    su_activity = DataArray(get_activity_mask(n, "StorageUnit", sns)) if not n.storage_units.empty else None
-    line_activity = DataArray(get_activity_mask(n, "Line", sns)) if not n.lines.empty else None
-    link_activity = DataArray(get_activity_mask(n, "Link", sns)) if not n.links.empty else None
+    su_activity = _activity_da("StorageUnit") if not n.storage_units.empty else None
+    line_activity = _activity_da("Line") if not n.lines.empty else None
+    link_activity = _activity_da("Link") if not n.links.empty else None
+
+    link_efficiency = get_as_dense(n, "Link", "efficiency", sns)
+    link_efficiency.index.name = "snapshot"
 
     args = [
         ["StorageUnit", "p_dispatch_RESERVES", "bus", 1, su_activity],
@@ -318,7 +326,7 @@ def define_erm_nodal_balance_constraints(
         ["Line", "s_RESERVES", "bus0", -1, line_activity],
         ["Line", "s_RESERVES", "bus1", 1, line_activity],
         ["Link", "p_RESERVES", "bus0", -1, link_activity],
-        ["Link", "p_RESERVES", "bus1", get_as_dense(n, "Link", "efficiency", sns), link_activity],
+        ["Link", "p_RESERVES", "bus1", link_efficiency, link_activity],
     ]
 
     exprs = []
@@ -355,12 +363,14 @@ def define_erm_nodal_balance_constraints(
         ext_p_nom = m["Generator-p_nom"].loc[region_ext_gens.index]
         ext_p_max_pu = get_as_dense(n, "Generator", "p_max_pu", sns, inds=region_ext_gens.index)
 
+        ext_p_max_pu.index.name = "snapshot"
         ext_p_max_pu.columns.name = "Generator-ext"
         ext_contribution = ext_p_nom * ext_p_max_pu
 
         # Use .where() to remove terms for inactive periods (sets var labels to -1)
         # rather than zeroing coefficients, which leaves orphaned variable references
         activity = get_activity_mask(n, "Generator", sns)[region_ext_gens.index]
+        activity.index.name = "snapshot"
         activity.columns.name = "Generator-ext"
 
         # Exclude emitting generators from ERM credit in zero-emission periods
@@ -368,6 +378,9 @@ def define_erm_nodal_balance_constraints(
             fossil_cols = region_ext_gens.index[region_ext_gens.carrier.isin(emitting_carriers)]
             if not fossil_cols.empty:
                 activity.loc[snap_is_zero, fossil_cols] = False
+                # pandas .loc boolean assignment can silently reset index/column names
+                activity.index.name = "snapshot"
+                activity.columns.name = "Generator-ext"
                 logger.debug(
                     f"Excluded {len(fossil_cols)} emitting extendable generators from ERM "
                     f"in zero-emission snapshots for region {region_name}.",
@@ -389,6 +402,7 @@ def define_erm_nodal_balance_constraints(
     region_nonext_gens = n.generators[region_gens & ~extendable_gens]
     if not region_nonext_gens.empty:
         nonext_activity = get_activity_mask(n, "Generator", sns)[region_nonext_gens.index]
+        nonext_activity.index.name = "snapshot"
 
         # Exclude emitting generators from ERM credit in zero-emission periods
         if snap_is_zero.any() and emitting_carriers:
@@ -401,6 +415,7 @@ def define_erm_nodal_balance_constraints(
                 )
 
         nonext_p_max_pu = get_as_dense(n, "Generator", "p_max_pu", sns, inds=region_nonext_gens.index)
+        nonext_p_max_pu.index.name = "snapshot"
         nonext_p_max_pu = nonext_p_max_pu * nonext_activity
         rhs_existing = region_nonext_gens.p_nom * nonext_p_max_pu
         rhs_existing.index = sns
