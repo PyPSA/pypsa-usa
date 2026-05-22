@@ -27,7 +27,7 @@ def e2e_network():
     if not os.path.exists(FIXTURE_NETWORK):
         pytest.skip(
             f"Fixture network not found: {FIXTURE_NETWORK}. "
-            "Run workflow/scripts/test/fixtures/build_test_network.py to generate it."
+            "Run workflow/scripts/test/fixtures/build_test_network.py to generate it.",
         )
     return pypsa.Network(FIXTURE_NETWORK)
 
@@ -66,8 +66,10 @@ def test_e2e_solve_network_myopic(e2e_network, tmp_path):
     n = e2e_network.copy()
     output_nc = tmp_path / "result.nc"
 
-    with patch.object(sn_module, "snakemake", _mock_snakemake("myopic", output=output_nc), create=True), \
-         patch.object(sn_module, "prepare_brownfield"):
+    with (
+        patch.object(sn_module, "snakemake", _mock_snakemake("myopic", output=output_nc), create=True),
+        patch.object(sn_module, "prepare_brownfield"),
+    ):
         result = sn_module.solve_network(
             n,
             _config("myopic", erm={"all": 0.15}),
@@ -77,7 +79,6 @@ def test_e2e_solve_network_myopic(e2e_network, tmp_path):
 
     # solve_network saves a per-period .nc for each investment period
     for period in e2e_network.investment_periods:
-        assert (tmp_path / f"result_period_{period}.nc").exists(), \
-            f"Missing period file for {period}"
+        assert (tmp_path / f"result_period_{period}.nc").exists(), f"Missing period file for {period}"
 
     assert "GlobalConstraint-all_ERM" in result.model.constraints

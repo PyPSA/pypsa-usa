@@ -40,12 +40,12 @@ def build():
     buses = {
         "CA_N": dict(x=-122, y=40, interconnect="western", nerc_reg="WECC", reeds_zone="CA_N", reeds_state="CA"),
         "CA_S": dict(x=-118, y=34, interconnect="western", nerc_reg="WECC", reeds_zone="CA_S", reeds_state="CA"),
-        "NV":   dict(x=-117, y=39, interconnect="western", nerc_reg="WECC", reeds_zone="NV",   reeds_state="NV"),
-        "AZ":   dict(x=-112, y=33, interconnect="western", nerc_reg="WECC", reeds_zone="AZ",   reeds_state="AZ"),
-        "IL":   dict(x=-89,  y=40, interconnect="eastern", nerc_reg="RFC",  reeds_zone="IL",   reeds_state="IL"),
-        "IN":   dict(x=-86,  y=40, interconnect="eastern", nerc_reg="RFC",  reeds_zone="IN",   reeds_state="IN"),
-        "OH":   dict(x=-83,  y=40, interconnect="eastern", nerc_reg="RFC",  reeds_zone="OH",   reeds_state="OH"),
-        "MI":   dict(x=-84,  y=44, interconnect="eastern", nerc_reg="RFC",  reeds_zone="MI",   reeds_state="MI"),
+        "NV": dict(x=-117, y=39, interconnect="western", nerc_reg="WECC", reeds_zone="NV", reeds_state="NV"),
+        "AZ": dict(x=-112, y=33, interconnect="western", nerc_reg="WECC", reeds_zone="AZ", reeds_state="AZ"),
+        "IL": dict(x=-89, y=40, interconnect="eastern", nerc_reg="RFC", reeds_zone="IL", reeds_state="IL"),
+        "IN": dict(x=-86, y=40, interconnect="eastern", nerc_reg="RFC", reeds_zone="IN", reeds_state="IN"),
+        "OH": dict(x=-83, y=40, interconnect="eastern", nerc_reg="RFC", reeds_zone="OH", reeds_state="OH"),
+        "MI": dict(x=-84, y=44, interconnect="eastern", nerc_reg="RFC", reeds_zone="MI", reeds_state="MI"),
     }
     for name, attrs in buses.items():
         n.add("Bus", name, carrier="AC", x=attrs["x"], y=attrs["y"])
@@ -62,8 +62,15 @@ def build():
     # Carriers
     # ------------------------------------------------------------------
     carriers = {
-        "onwind": 0, "offwind": 0, "solar": 0, "nuclear": 0,
-        "gas":    0.19, "coal": 0.34, "battery": 0, "AC": 0, "DC": 0,
+        "onwind": 0,
+        "offwind": 0,
+        "solar": 0,
+        "nuclear": 0,
+        "gas": 0.19,
+        "coal": 0.34,
+        "battery": 0,
+        "AC": 0,
+        "DC": 0,
     }
     for carrier, co2 in carriers.items():
         n.add("Carrier", carrier, co2_emissions=co2)
@@ -78,12 +85,34 @@ def build():
         return pd.Series(val, index=sns)
 
     # Realistic load: morning/evening peaks, tiled across periods
-    hour_load = np.array([
-        0.65, 0.62, 0.60, 0.59, 0.60, 0.63,
-        0.72, 0.82, 0.88, 0.90, 0.91, 0.92,
-        0.93, 0.94, 0.95, 0.97, 0.99, 1.00,
-        0.97, 0.93, 0.87, 0.80, 0.74, 0.68,
-    ])
+    hour_load = np.array(
+        [
+            0.65,
+            0.62,
+            0.60,
+            0.59,
+            0.60,
+            0.63,
+            0.72,
+            0.82,
+            0.88,
+            0.90,
+            0.91,
+            0.92,
+            0.93,
+            0.94,
+            0.95,
+            0.97,
+            0.99,
+            1.00,
+            0.97,
+            0.93,
+            0.87,
+            0.80,
+            0.74,
+            0.68,
+        ]
+    )
     load_profile = pd.Series(np.tile(hour_load, len(invest_periods)), index=sns)
 
     # Solar: midday peak, tiled
@@ -102,33 +131,57 @@ def build():
     # Coal: retires before 2050
     coal_plants = [
         ("coal_IL", "IL", 1200, 2000, 25),  # (name, bus, p_nom, build_year, lifetime)
-        ("coal_IN", "IN",  800, 2000, 25),
-        ("coal_OH", "OH",  600, 2005, 25),
+        ("coal_IN", "IN", 800, 2000, 25),
+        ("coal_OH", "OH", 600, 2005, 25),
     ]
     for name, bus, pnom, by, lt in coal_plants:
-        n.add("Generator", name, bus=bus, carrier="coal",
-              p_nom=pnom, p_nom_extendable=False,
-              marginal_cost=25, p_max_pu=0.85,
-              build_year=by, lifetime=lt)
+        n.add(
+            "Generator",
+            name,
+            bus=bus,
+            carrier="coal",
+            p_nom=pnom,
+            p_nom_extendable=False,
+            marginal_cost=25,
+            p_max_pu=0.85,
+            build_year=by,
+            lifetime=lt,
+        )
 
     # Gas (CCGT): persists through all periods
     gas_existing = [
-        ("gas_CA_N", "CA_N", 800,  2015, 40),
+        ("gas_CA_N", "CA_N", 800, 2015, 40),
         ("gas_CA_S", "CA_S", 1200, 2010, 40),
-        ("gas_IL",   "IL",    600, 2012, 40),
-        ("gas_MI",   "MI",    500, 2008, 40),
+        ("gas_IL", "IL", 600, 2012, 40),
+        ("gas_MI", "MI", 500, 2008, 40),
     ]
     for name, bus, pnom, by, lt in gas_existing:
-        n.add("Generator", name, bus=bus, carrier="gas",
-              p_nom=pnom, p_nom_extendable=False,
-              marginal_cost=45, p_max_pu=0.90,
-              build_year=by, lifetime=lt)
+        n.add(
+            "Generator",
+            name,
+            bus=bus,
+            carrier="gas",
+            p_nom=pnom,
+            p_nom_extendable=False,
+            marginal_cost=45,
+            p_max_pu=0.90,
+            build_year=by,
+            lifetime=lt,
+        )
 
     # Nuclear: long-lived, zero-emissions
-    n.add("Generator", "nuclear_IL", bus="IL", carrier="nuclear",
-          p_nom=1100, p_nom_extendable=False,
-          marginal_cost=10, p_max_pu=0.92,
-          build_year=1990, lifetime=80)
+    n.add(
+        "Generator",
+        "nuclear_IL",
+        bus="IL",
+        carrier="nuclear",
+        p_nom=1100,
+        p_nom_extendable=False,
+        marginal_cost=10,
+        p_max_pu=0.92,
+        build_year=1990,
+        lifetime=80,
+    )
 
     # ------------------------------------------------------------------
     # New-build (extendable) generators
@@ -136,66 +189,125 @@ def build():
 
     # Wind (onshore)
     wind_sites = [
-        ("wind_NV",   "NV",  0.42), ("wind_AZ",   "AZ",  0.38),
-        ("wind_IL",   "IL",  0.40), ("wind_IN",   "IN",  0.45),
-        ("wind_OH",   "OH",  0.35), ("wind_MI",   "MI",  0.38),
+        ("wind_NV", "NV", 0.42),
+        ("wind_AZ", "AZ", 0.38),
+        ("wind_IL", "IL", 0.40),
+        ("wind_IN", "IN", 0.45),
+        ("wind_OH", "OH", 0.35),
+        ("wind_MI", "MI", 0.38),
     ]
     for name, bus, cf_scale in wind_sites:
-        n.add("Generator", name, bus=bus, carrier="onwind",
-              p_nom=0, p_nom_extendable=True, p_nom_max=3000,
-              capital_cost=1200, marginal_cost=0.5,
-              p_max_pu=wind_profile * cf_scale / wind_profile.mean() * cf_scale,
-              build_year=2030, lifetime=25)
+        n.add(
+            "Generator",
+            name,
+            bus=bus,
+            carrier="onwind",
+            p_nom=0,
+            p_nom_extendable=True,
+            p_nom_max=3000,
+            capital_cost=1200,
+            marginal_cost=0.5,
+            p_max_pu=wind_profile * cf_scale / wind_profile.mean() * cf_scale,
+            build_year=2030,
+            lifetime=25,
+        )
 
     # Solar (utility)
     solar_sites = [
-        ("solar_CA_N", "CA_N", 1.00), ("solar_CA_S", "CA_S", 1.10),
-        ("solar_NV",   "NV",   1.15), ("solar_AZ",   "AZ",   1.20),
-        ("solar_IL",   "IL",   0.90), ("solar_IN",   "IN",   0.88),
+        ("solar_CA_N", "CA_N", 1.00),
+        ("solar_CA_S", "CA_S", 1.10),
+        ("solar_NV", "NV", 1.15),
+        ("solar_AZ", "AZ", 1.20),
+        ("solar_IL", "IL", 0.90),
+        ("solar_IN", "IN", 0.88),
     ]
     for name, bus, scale in solar_sites:
-        n.add("Generator", name, bus=bus, carrier="solar",
-              p_nom=0, p_nom_extendable=True, p_nom_max=5000,
-              capital_cost=900, marginal_cost=0.1,
-              p_max_pu=(solar_profile * scale).clip(upper=1.0),
-              build_year=2030, lifetime=30)
+        n.add(
+            "Generator",
+            name,
+            bus=bus,
+            carrier="solar",
+            p_nom=0,
+            p_nom_extendable=True,
+            p_nom_max=5000,
+            capital_cost=900,
+            marginal_cost=0.1,
+            p_max_pu=(solar_profile * scale).clip(upper=1.0),
+            build_year=2030,
+            lifetime=30,
+        )
 
     # New gas (peakers): available as firm capacity backstop
     for bus in ["CA_N", "CA_S", "IL", "OH"]:
-        n.add("Generator", f"gas_new_{bus}", bus=bus, carrier="gas",
-              p_nom=0, p_nom_extendable=True, p_nom_max=5000,
-              capital_cost=600, marginal_cost=55,
-              p_max_pu=0.95,
-              build_year=2030, lifetime=30)
+        n.add(
+            "Generator",
+            f"gas_new_{bus}",
+            bus=bus,
+            carrier="gas",
+            p_nom=0,
+            p_nom_extendable=True,
+            p_nom_max=5000,
+            capital_cost=600,
+            marginal_cost=55,
+            p_max_pu=0.95,
+            build_year=2030,
+            lifetime=30,
+        )
 
     # Extendable nuclear: firm zero-emission capacity needed for zero-emission ERM tests.
     # p_max_pu=0.92 means it counts as nearly-firm capacity credit in every snapshot.
     # High capital cost ensures it isn't built unless the ERM constraint requires it.
     for bus in list(buses.keys()):
-        n.add("Generator", f"nuclear_new_{bus}", bus=bus, carrier="nuclear",
-              p_nom=0, p_nom_extendable=True, p_nom_max=10000,
-              capital_cost=7000, marginal_cost=8,
-              p_max_pu=0.92,
-              build_year=2030, lifetime=60)
+        n.add(
+            "Generator",
+            f"nuclear_new_{bus}",
+            bus=bus,
+            carrier="nuclear",
+            p_nom=0,
+            p_nom_extendable=True,
+            p_nom_max=10000,
+            capital_cost=7000,
+            marginal_cost=8,
+            p_max_pu=0.92,
+            build_year=2030,
+            lifetime=60,
+        )
 
     # ------------------------------------------------------------------
     # Storage (batteries)
     # ------------------------------------------------------------------
     battery_sites = ["CA_N", "CA_S", "NV", "IL", "OH"]
     for bus in battery_sites:
-        n.add("StorageUnit", f"battery_{bus}", bus=bus, carrier="battery",
-              p_nom=0, p_nom_extendable=True, p_nom_max=2000,
-              capital_cost=250, marginal_cost=1,
-              efficiency_store=0.92, efficiency_dispatch=0.92,
-              standing_loss=0.002, max_hours=4,
-              build_year=2030, lifetime=15)
+        n.add(
+            "StorageUnit",
+            f"battery_{bus}",
+            bus=bus,
+            carrier="battery",
+            p_nom=0,
+            p_nom_extendable=True,
+            p_nom_max=2000,
+            capital_cost=250,
+            marginal_cost=1,
+            efficiency_store=0.92,
+            efficiency_dispatch=0.92,
+            standing_loss=0.002,
+            max_hours=4,
+            build_year=2030,
+            lifetime=15,
+        )
 
     # ------------------------------------------------------------------
     # Loads
     # ------------------------------------------------------------------
     peak_mw = {
-        "CA_N": 4000, "CA_S": 6000, "NV": 1200, "AZ": 2000,
-        "IL":   3500, "IN":   2000, "OH": 2500, "MI": 2200,
+        "CA_N": 4000,
+        "CA_S": 6000,
+        "NV": 1200,
+        "AZ": 2000,
+        "IL": 3500,
+        "IN": 2000,
+        "OH": 2500,
+        "MI": 2200,
     }
     for bus, peak in peak_mw.items():
         n.add("Load", f"load_{bus}", bus=bus, p_set=load_profile * peak)
@@ -206,29 +318,48 @@ def build():
     ac_lines = [
         # WECC
         ("line_CAN_CAS", "CA_N", "CA_S", 3000, 0.05),
-        ("line_CAN_NV",  "CA_N", "NV",   1500, 0.08),
-        ("line_CAS_AZ",  "CA_S", "AZ",   1500, 0.08),
-        ("line_NV_AZ",   "NV",   "AZ",    800, 0.10),
+        ("line_CAN_NV", "CA_N", "NV", 1500, 0.08),
+        ("line_CAS_AZ", "CA_S", "AZ", 1500, 0.08),
+        ("line_NV_AZ", "NV", "AZ", 800, 0.10),
         # RFC
-        ("line_IL_IN",   "IL",   "IN",   2000, 0.06),
-        ("line_IL_OH",   "IL",   "OH",   1500, 0.07),
-        ("line_IN_OH",   "IN",   "OH",   1200, 0.07),
-        ("line_OH_MI",   "OH",   "MI",   1000, 0.08),
+        ("line_IL_IN", "IL", "IN", 2000, 0.06),
+        ("line_IL_OH", "IL", "OH", 1500, 0.07),
+        ("line_IN_OH", "IN", "OH", 1200, 0.07),
+        ("line_OH_MI", "OH", "MI", 1000, 0.08),
     ]
     for name, b0, b1, snom, x in ac_lines:
-        n.add("Line", name, bus0=b0, bus1=b1,
-              s_nom=snom, s_nom_extendable=True, s_nom_min=snom,
-              x=x, r=x * 0.1, capital_cost=200,
-              build_year=2030, lifetime=60)
+        n.add(
+            "Line",
+            name,
+            bus0=b0,
+            bus1=b1,
+            s_nom=snom,
+            s_nom_extendable=True,
+            s_nom_min=snom,
+            x=x,
+            r=x * 0.1,
+            capital_cost=200,
+            build_year=2030,
+            lifetime=60,
+        )
 
     # ------------------------------------------------------------------
     # DC Link (inter-interconnect HVDC tie)
     # ------------------------------------------------------------------
-    n.add("Link", "hvdc_WECC_RFC", bus0="NV", bus1="IL",
-          carrier="DC",
-          p_nom=1000, p_nom_extendable=True, p_nom_min=1000,
-          capital_cost=800, efficiency=0.97,
-          build_year=2030, lifetime=60)
+    n.add(
+        "Link",
+        "hvdc_WECC_RFC",
+        bus0="NV",
+        bus1="IL",
+        carrier="DC",
+        p_nom=1000,
+        p_nom_extendable=True,
+        p_nom_min=1000,
+        capital_cost=800,
+        efficiency=0.97,
+        build_year=2030,
+        lifetime=60,
+    )
 
     # prepare_brownfield accesses these columns via df.loc[idx].col — they must exist
     for col, default in [

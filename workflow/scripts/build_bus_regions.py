@@ -195,7 +195,8 @@ def main(snakemake):
         # Dissolve to union geometries per name; keep x/y from first occurrence (substation coords).
         crs = onshore_regions_concat.crs
         onshore_regions_concat = onshore_regions_concat.dissolve(
-            by="name", aggfunc={"x": "first", "y": "first", "country": "first"}
+            by="name",
+            aggfunc={"x": "first", "y": "first", "country": "first"},
         ).reset_index()
         onshore_regions_concat = onshore_regions_concat.set_crs(crs)
 

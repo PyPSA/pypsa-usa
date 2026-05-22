@@ -379,14 +379,23 @@ def test_erm_zero_emission_period_excludes_fossil(multi_period_reserve_network, 
     (gas, coal) receive no ERM capacity credit in that period. The optimizer must
     then satisfy the reserve margin requirement with clean firm capacity instead.
     """
+
     def _add_nuclear(n):
         """Add extendable nuclear at each bus so the zero-emission ERM is feasible."""
         for bus in n.buses.index:
             n.add(
-                "Generator", f"nuclear_{bus}", bus=bus, carrier="nuclear",
-                p_nom=0, p_nom_extendable=True, p_nom_max=5000,
-                capital_cost=6000, marginal_cost=8, p_max_pu=0.92,
-                build_year=2030, lifetime=60,
+                "Generator",
+                f"nuclear_{bus}",
+                bus=bus,
+                carrier="nuclear",
+                p_nom=0,
+                p_nom_extendable=True,
+                p_nom_max=5000,
+                capital_cost=6000,
+                marginal_cost=8,
+                p_max_pu=0.92,
+                build_year=2030,
+                lifetime=60,
             )
 
     # Baseline: ERM with no CO2 restriction — gas can count toward ERM in all periods.
@@ -403,11 +412,13 @@ def test_erm_zero_emission_period_excludes_fossil(multi_period_reserve_network, 
     # Zero-emission run: CO2 limit=0 in 2040 → gas excluded from ERM credit in 2040.
     # Nuclear must now be built to satisfy the 2040 reserve requirement.
     co2_csv = tmp_path / "co2.csv"
-    pd.DataFrame({
-        "regions": ["all", "all"],
-        "planning_horizon": [2030, 2040],
-        "limit": [1e9, 0],
-    }).to_csv(co2_csv, index=False)
+    pd.DataFrame(
+        {
+            "regions": ["all", "all"],
+            "planning_horizon": [2030, 2040],
+            "limit": [1e9, 0],
+        }
+    ).to_csv(co2_csv, index=False)
 
     n_zero = multi_period_reserve_network.copy()
     _add_nuclear(n_zero)
