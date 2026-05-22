@@ -370,3 +370,67 @@ def test_multi_period_erm_activity_masking(multi_period_reserve_network):
 
     # Verify the constraint was added successfully
     assert "GlobalConstraint-all_ERM" in n.model.constraints
+
+
+def test_erm_zero_emission_period_excludes_fossil(multi_period_reserve_network, tmp_path):
+    """CO2 limit=0 in 2040 forces more clean (nuclear) capacity when gas is excluded from ERM credit.
+
+    When a planning horizon has a national CO2 limit of zero, emitting generators
+    (gas, coal) receive no ERM capacity credit in that period. The optimizer must
+    then satisfy the reserve margin requirement with clean firm capacity instead.
+    """
+
+    def _add_nuclear(n):
+        """Add extendable nuclear at each bus so the zero-emission ERM is feasible."""
+        for bus in n.buses.index:
+            n.add(
+                "Generator",
+                f"nuclear_{bus}",
+                bus=bus,
+                carrier="nuclear",
+                p_nom=0,
+                p_nom_extendable=True,
+                p_nom_max=5000,
+                capital_cost=6000,
+                marginal_cost=8,
+                p_max_pu=0.92,
+                build_year=2030,
+                lifetime=60,
+            )
+
+    # Baseline: ERM with no CO2 restriction — gas can count toward ERM in all periods.
+    # Nuclear (very expensive) should not be built when gas is available.
+    n_base = multi_period_reserve_network.copy()
+    _add_nuclear(n_base)
+
+    def extra_base(n, sns):
+        add_ERM_constraints(n, sns, regional_erm_data={"all": 0.15})
+
+    n_base.optimize(solver_name="glpk", multi_investment_periods=True, extra_functionality=extra_base)
+    nuclear_base = n_base.generators.filter(like="nuclear", axis=0).p_nom_opt.sum()
+
+    # Zero-emission run: CO2 limit=0 in 2040 → gas excluded from ERM credit in 2040.
+    # Nuclear must now be built to satisfy the 2040 reserve requirement.
+    co2_csv = tmp_path / "co2.csv"
+    pd.DataFrame(
+        {
+            "regions": ["all", "all"],
+            "planning_horizon": [2030, 2040],
+            "limit": [1e9, 0],
+        }
+    ).to_csv(co2_csv, index=False)
+
+    n_zero = multi_period_reserve_network.copy()
+    _add_nuclear(n_zero)
+    cfg = {"electricity": {"regional_Co2_limits": str(co2_csv)}}
+
+    def extra_zero(n, sns):
+        add_ERM_constraints(n, sns, config=cfg, regional_erm_data={"all": 0.15})
+
+    n_zero.optimize(solver_name="glpk", multi_investment_periods=True, extra_functionality=extra_zero)
+    nuclear_zero = n_zero.generators.filter(like="nuclear", axis=0).p_nom_opt.sum()
+
+    assert nuclear_zero >= nuclear_base, (
+        f"Zero-emission ERM should force more nuclear capacity. "
+        f"Baseline: {nuclear_base:.0f} MW, zero-emission: {nuclear_zero:.0f} MW"
+    )
