@@ -30,6 +30,29 @@ from cluster_network import cluster_regions, clustering_for_n_clusters
 logger = logging.getLogger(__name__)
 
 
+def resolve_simpl_mode(value: str) -> str:
+    """Map a `{simpl}` wildcard value to its dispatch branch.
+
+    Returns one of:
+      - "identity": pass-through (empty string)
+      - "county":   fast-path using county FIPS as busmap
+      - "kmeans":   numeric value -> N-cluster k-means
+
+    Raises ValueError for anything else, listing the recognized values.
+    """
+    if value == "":
+        return "identity"
+    if value == "county":
+        return "county"
+    if value.isdigit():
+        return "kmeans"
+    raise ValueError(
+        f"Unknown simpl wildcard value {value!r}. Recognized values are: "
+        f'"" (identity pass-through), "county" (county FIPS fast-path), '
+        f"or a positive integer (k-means).",
+    )
+
+
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
