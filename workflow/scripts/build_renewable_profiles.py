@@ -23,6 +23,63 @@ from zenodo_downloader import ZenodoScenarioDownloader
 logger = logging.getLogger(__name__)
 
 
+def remap_caps_to_cluster(caps_ds: xr.Dataset, busmap: pd.Series) -> xr.Dataset:
+    """Remap NREL bus-capacity dataset from substation keys to cluster bus keys.
+
+    NREL caps files are keyed by substation ID (e.g. "0.0", "35000.0"); after
+    the simplify-early refactor, the network and regions use simpl-cluster IDs
+    (e.g. "p10 0"). Aggregate per cluster_bus:
+      * weight, p_nom_max, potential, underwater_fraction_area → sum (extensive)
+      * average_distance, avg_cf, underwater_fraction → capacity-weighted mean
+    """
+    extensive = {"p_nom_max", "potential", "weight"}
+    intensive = {"average_distance", "avg_cf", "underwater_fraction"}
+
+    df = caps_ds.to_dataframe().reset_index()
+    df["bus"] = df["bus"].astype(str)
+    # Try direct match first; fall back to float→int→str normalization since
+    # NREL keys carry a ".0" suffix while busmap indices are bare ints.
+    df["cluster"] = df["bus"].map(busmap)
+    missing = df["cluster"].isna()
+    if missing.any():
+        try:
+            norm = df.loc[missing, "bus"].astype(float).astype(int).astype(str)
+            df.loc[missing, "cluster"] = norm.map(busmap).values
+        except (TypeError, ValueError):
+            pass
+    df = df.dropna(subset=["cluster"])
+    if df.empty:
+        raise RuntimeError(
+            "NREL caps remap produced 0 rows — busmap and caps bus IDs share no overlap.",
+        )
+
+    weights = df["weight"] if "weight" in df.columns else None
+    out_cols: dict[str, pd.Series] = {}
+    for col in df.columns:
+        if col in ("bus", "cluster"):
+            continue
+        if col in extensive:
+            out_cols[col] = df.groupby("cluster")[col].sum()
+        elif col in intensive and weights is not None:
+            wsum = (df[col] * weights).groupby(df["cluster"]).sum()
+            wtotal = weights.groupby(df["cluster"]).sum()
+            out_cols[col] = (wsum / wtotal).where(wtotal > 0, 0.0)
+        else:  # unknown column → sum (extensive default, since caps are capacities)
+            out_cols[col] = df.groupby("cluster")[col].sum()
+
+    out = xr.Dataset(
+        {
+            name: xr.DataArray(
+                series.values.astype("float32"),
+                coords={"bus": series.index.values},
+                dims="bus",
+            )
+            for name, series in out_cols.items()
+        },
+    )
+    return out
+
+
 # Get renewable snapshots for a given year using month/day from config
 def get_renewable_snapshots(config, year):
     ren_sns_config = config.get("renewable_snapshots", {})
@@ -329,6 +386,13 @@ if __name__ == "__main__":
 
         avail = xr.open_dataarray(snakemake.input.nrel_avail)
         caps_ds = xr.open_dataset(snakemake.input.nrel_caps)
+
+        # NREL caps are keyed by substation ID; remap to simpl-cluster bus IDs
+        # so they intersect with the profile/region bus space.
+        busmap_s = pd.read_csv(snakemake.input.busmap_s, index_col=0, dtype=str).iloc[:, 0]
+        busmap_s.index = busmap_s.index.astype(str)
+        caps_ds = remap_caps_to_cluster(caps_ds, busmap_s)
+        logger.info(f"Remapped NREL caps to {caps_ds.sizes['bus']} cluster buses.")
 
         mapping = get_cell_to_bus_mapping(
             ds_cf["x"].values,

@@ -241,6 +241,7 @@ rule build_renewable_profiles:
             if config["renewable"]["dataset"] == "atlite"
             else []
         ),
+        busmap_s=BUSMAPS + "{interconnect}/busmap_s{simpl}.csv",
     output:
         profile=(
             PROFILES

@@ -24,7 +24,7 @@ import logging
 import geopandas as gpd
 import pandas as pd
 import pypsa
-from _helpers import configure_logging, log_network_schema, update_p_nom_max
+from _helpers import configure_logging, log_network_schema, plot_geojson, update_p_nom_max
 from cluster_network import cluster_regions, clustering_for_n_clusters
 
 logger = logging.getLogger(__name__)
@@ -75,7 +75,9 @@ if __name__ == "__main__":
     else:
         for which in ("regions_onshore", "regions_offshore"):
             regions = gpd.read_file(getattr(snakemake.input, which))
-            regions.to_file(getattr(snakemake.output, which))
+            out_path = getattr(snakemake.output, which)
+            regions.to_file(out_path)
+            plot_geojson(out_path)
         busmap = pd.Series(n.buses.index, index=n.buses.index, name="cluster_bus")
 
     busmap.index = busmap.index.astype(str)

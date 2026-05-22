@@ -7,7 +7,7 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 import pypsa
-from _helpers import REGION_COLS, configure_logging
+from _helpers import REGION_COLS, configure_logging, plot_geojson
 from scipy.spatial import Voronoi
 from shapely.geometry import Polygon
 from sklearn.neighbors import BallTree
@@ -194,6 +194,7 @@ def main(snakemake):
         logger.info(f"Added {len(empty_counties)} empty counties assigned to nearest buses.")
 
     onshore_regions_concat.to_file(snakemake.output.regions_onshore)
+    plot_geojson(snakemake.output.regions_onshore)
     combined_onshore = onshore_regions_concat.geometry.union_all()
 
     ### Defining Offshore Regions ###
@@ -228,6 +229,7 @@ def main(snakemake):
         (pd.concat(offshore_regions, ignore_index=True).set_crs(epsg=4326).to_file(snakemake.output.regions_offshore))
     else:
         offshore_shapes.to_frame().to_file(snakemake.output.regions_offshore)
+    plot_geojson(snakemake.output.regions_offshore)
 
     if onshore_regions_concat[onshore_regions_concat.geometry.is_empty].shape[0] > 0:
         raise ValueError("Onshore Buses are missing geometry.")

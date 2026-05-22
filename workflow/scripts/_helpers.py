@@ -19,6 +19,69 @@ REGION_COLS = ["geometry", "name", "x", "y", "country"]
 logger = logging.getLogger(__name__)
 
 
+def _derive_geojson_plot_path(geojson_path: str) -> str | None:
+    """Map a geospatial resources path to its results-folder plot path.
+
+    Convention:
+      resources/<RDIR>/geospatial/<interconnect>/<name>.geojson
+      → results/<RDIR>/<interconnect>/geospatial/<name>.png
+    """
+    parts = list(Path(geojson_path).parts)
+    if "resources" not in parts or "geospatial" not in parts:
+        return None
+    res_i = parts.index("resources")
+    geo_i = parts.index("geospatial", res_i)
+    if geo_i + 1 >= len(parts) - 1:
+        return None
+    rdir = parts[res_i + 1 : geo_i]
+    interconnect = parts[geo_i + 1]
+    name = Path(parts[-1]).stem
+    return str(Path("results", *rdir, interconnect, "geospatial", f"{name}.png"))
+
+
+def plot_geojson(
+    geojson_path: str,
+    plot_path: str | None = None,
+    title: str | None = None,
+    color: str = "lightgray",
+    edgecolor: str = "black",
+) -> str | None:
+    """Render a quick overview PNG for a geojson file.
+
+    If ``plot_path`` is None, derive it from the standard layout
+    (see :func:`_derive_geojson_plot_path`). Silently skips when the
+    path cannot be derived or the file is missing/unreadable, so callers
+    can treat plotting as best-effort instrumentation.
+    """
+    import geopandas as gpd
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    if plot_path is None:
+        plot_path = _derive_geojson_plot_path(geojson_path)
+        if plot_path is None:
+            logger.warning("plot_geojson: cannot derive plot path for %s", geojson_path)
+            return None
+
+    try:
+        gdf = gpd.read_file(geojson_path)
+    except Exception as e:
+        logger.warning("plot_geojson: failed to read %s: %s", geojson_path, e)
+        return None
+
+    Path(plot_path).parent.mkdir(parents=True, exist_ok=True)
+    fig, ax = plt.subplots(figsize=(10, 10))
+    if not gdf.empty:
+        gdf.plot(ax=ax, color=color, edgecolor=edgecolor, linewidth=0.3)
+    ax.set_title(title or Path(geojson_path).stem)
+    ax.set_axis_off()
+    fig.savefig(plot_path, dpi=120, bbox_inches="tight")
+    plt.close(fig)
+    return plot_path
+
+
 def configure_logging(snakemake, skip_handlers=False):
     """
     Configure the basic behaviour for the logging module.

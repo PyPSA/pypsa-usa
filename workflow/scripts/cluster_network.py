@@ -17,6 +17,7 @@ from _helpers import (
     is_transport_model,
     load_costs,
     log_network_schema,
+    plot_geojson,
     update_p_nom_max,
 )
 from add_electricity import update_transmission_costs
@@ -160,7 +161,7 @@ def busmap_for_n_clusters(
     """
     if algorithm == "kmeans":
         algorithm_kwds.setdefault("n_init", 1000)
-        algorithm_kwds.setdefault("max_iter", 30000)
+        algorithm_kwds.setdefault("max_iter", 20000)
         algorithm_kwds.setdefault("tol", 1e-6)
         algorithm_kwds.setdefault("random_state", 0)
 
@@ -261,7 +262,7 @@ def clustering_for_n_clusters(
     line_strategies = aggregation_strategies.get("lines", dict())
     generator_strategies = aggregation_strategies.get("generators", dict())
     one_port_strategies = aggregation_strategies.get("one_ports", dict())
-    bus_strategies = {"Pd": "sum"}
+    bus_strategies = {"Pd": "sum", "LAF_state": "sum"}
     clustering = get_clustering_from_busmap(
         n,
         busmap,
@@ -477,18 +478,27 @@ def cluster_regions(busmaps, input=None, output=None):
         except:  # noqa: E722
             is_float = False
 
-        # Reindex to set name as index
-        regions = regions.reindex(columns=["name", "geometry"]).set_index("name")
+        # Preserve representative coordinates alongside geometry; downstream
+        # consumers (e.g. build_renewable_profiles) require x/y on each cluster.
+        keep_cols = [c for c in ("name", "x", "y", "geometry") if c in regions.columns]
+        regions = regions.reindex(columns=keep_cols).set_index("name")
 
         # Convert float indices to string representation of integers if needed
         if is_float:
             regions.index = regions.index.astype(float).astype(int).astype(str)
 
-        # Dissolve regions according to busmap
-        regions_c = regions.dissolve(busmap)
+        # Dissolve regions according to busmap; mean-aggregate coords so the
+        # cluster's x/y match pypsa's mean aggregation of the underlying buses.
+        coord_cols = [c for c in ("x", "y") if c in regions.columns]
+        regions_c = regions.dissolve(
+            busmap,
+            aggfunc={c: "mean" for c in coord_cols} if coord_cols else "first",
+        )
         regions_c.index.name = "name"
         regions_c = regions_c.reset_index()
-        regions_c.to_file(getattr(output, which))
+        out_path = getattr(output, which)
+        regions_c.to_file(out_path)
+        plot_geojson(out_path)
 
 
 def plot_busmap(n, busmap, fn=None):

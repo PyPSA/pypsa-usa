@@ -94,6 +94,7 @@ def aggregate_to_substations(
         bus_strategies={
             "type": "max",
             "Pd": "sum",
+            "LAF_state": "sum",
         },
         generator_strategies=generator_strategies,
     )

@@ -3,7 +3,7 @@
 
 def sector_input_files(wildcards):
     input_files = {
-        "network": RESOURCES
+        "network": NETWORKS
         + "{interconnect}/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}.nc",
         "tech_costs": RESOURCES
         + f"costs/sector_costs_{config['scenario']['planning_horizons'][0]}.csv",
@@ -56,7 +56,7 @@ rule add_sectors:
     input:
         unpack(sector_input_files),
     output:
-        network=RESOURCES
+        network=NETWORKS
         + "{interconnect}/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc",
     log:
         "logs/add_sectors/{interconnect}/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.log",
