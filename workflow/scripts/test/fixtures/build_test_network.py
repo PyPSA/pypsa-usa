@@ -111,7 +111,7 @@ def build():
             0.80,
             0.74,
             0.68,
-        ]
+        ],
     )
     load_profile = pd.Series(np.tile(hour_load, len(invest_periods)), index=sns)
 

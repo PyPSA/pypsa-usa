@@ -417,7 +417,7 @@ def test_erm_zero_emission_period_excludes_fossil(multi_period_reserve_network, 
             "regions": ["all", "all"],
             "planning_horizon": [2030, 2040],
             "limit": [1e9, 0],
-        }
+        },
     ).to_csv(co2_csv, index=False)
 
     n_zero = multi_period_reserve_network.copy()

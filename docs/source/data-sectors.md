@@ -89,7 +89,7 @@ Within the transport sector, demand response is applied to the aggregation bus d
 
 The diagram below illustrates the workflow of PyPSA-USA Sector. Many rules overlap with the electricity sector workflow; however, several additional rules are also present.
 
-:::{figure-md} workflow
+:::{figure-md} sector-workflow
 <img src="./_static/dag_sector.jpg" width="700px">
 
 Snakemake DAG for sector coupled studies
