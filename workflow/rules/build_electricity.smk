@@ -763,10 +763,10 @@ rule cluster_network:
         itl_reeds_zone="repo_data/ReEDS_Constraints/transmission/transmission_capacity_init_AC_ba_NARIS2024.csv",
         itl_county="repo_data/ReEDS_Constraints/transmission/transmission_capacity_init_AC_county_NARIS2024.csv",
         itl_trans_grp="repo_data/ReEDS_Constraints/transmission/transmission_capacity_init_AC_transgrp_NARIS2024.csv",
-        itl_costs_reeds_zone="repo_data/ReEDS_Constraints/transmission/transmission_distance_cost_500kVdc_ba.csv",
+        itl_costs_reeds_zone="repo_data/ReEDS_Constraints/transmission/transmission_distance_cost_500kVac_ba.csv",
         itl_costs_county="repo_data/ReEDS_Constraints/transmission/transmission_distance_cost_500kVac_county.csv",
         itl_state="repo_data/ReEDS_Constraints/transmission/transmission_capacity_init_AC_state_NARIS2024.csv",
-        itl_costs_state="repo_data/ReEDS_Constraints/transmission/transmission_distance_cost_500kVdc_state.csv",
+        itl_costs_state="repo_data/ReEDS_Constraints/transmission/transmission_distance_cost_500kVac_state.csv",
     output:
         network=RESOURCES + "{interconnect}/elec_s{simpl}_c{clusters}.nc",
         regions_onshore=RESOURCES
