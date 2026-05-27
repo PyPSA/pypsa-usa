@@ -19,6 +19,7 @@ import pypsa
 from _helpers import (
     configure_logging,
     is_transport_model,
+    load_costs,
     set_scenario_config,
     update_config_from_wildcards,
 )
@@ -288,8 +289,7 @@ if __name__ == "__main__":
 
     n = pypsa.Network(snakemake.input[0])
     num_years = n.snapshot_weightings.loc[n.investment_periods[0]].objective.sum() / 8760.0
-    costs = pd.read_csv(snakemake.input.tech_costs)
-    costs = costs.pivot(index="pypsa-name", columns="parameter", values="value")
+    costs = load_costs(snakemake.input.tech_costs, params.costs)
     # Set Investment Period Year Weightings
     # 'fillna(1)' needed if only one period
     inv_per_time_weight = n.investment_periods.to_series().diff().shift(-1).ffill().fillna(1)

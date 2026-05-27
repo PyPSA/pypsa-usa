@@ -19,6 +19,7 @@ from _helpers import (
     calculate_annuity,
     configure_logging,
     export_network_for_gis_mapping,
+    load_costs,
     update_p_nom_max,
     weighted_avg,
 )
@@ -707,6 +708,10 @@ def attach_egs(
             .drop("interconnect", axis=1)
             .rename(columns={"Bus": "bus_id"})
         )
+        # bus2sub stores sub_id as float strings (e.g. "39763.0") while the
+        # EGS profile stores sub_id as integer strings (e.g. "39763").
+        # Normalize to integer strings so the merge key matches.
+        bus2sub["sub_id"] = bus2sub["sub_id"].apply(lambda x: str(int(float(x))))
 
         # IGNORE: Remove dropna(). Rather, apply dropna when creating the original dataset
         df_specs = pd.merge(
@@ -739,11 +744,33 @@ def attach_egs(
 
         df_specs = df_specs.loc[~(df_specs.index == "nan")]
 
-        # TODO: review what qualities need to be included. Currently limited for speedup.
-        qualities = [1]  # df_specs.Quality.unique()
+        seismic_path = getattr(input_profiles, "seismic_exclusion", [])
+        if seismic_path:
+            seismic_gdf = gpd.read_file(seismic_path).rename(
+                columns={"seismic risk": "seismic_risk"},
+            )
+            egs_buses = df_specs.index.intersection(n.buses.index)
+            bus_coords = n.buses.loc[egs_buses, ["x", "y"]]
+            bus_gdf = gpd.GeoDataFrame(
+                bus_coords,
+                geometry=gpd.points_from_xy(bus_coords["x"], bus_coords["y"]),
+                crs="EPSG:4326",
+            ).to_crs(seismic_gdf.crs)
+            bus_with_risk = gpd.sjoin_nearest(
+                bus_gdf[["geometry"]],
+                seismic_gdf[["geometry", "seismic_risk"]],
+                how="left",
+            )
+            excluded_buses = bus_with_risk[bus_with_risk["seismic_risk"] == 1].index
+            df_specs = df_specs[~df_specs.index.isin(excluded_buses)]
+            logger.info(
+                f"Seismic risk mask excluded {len(excluded_buses)} EGS buses. {len(df_specs)} buses remaining.",
+            )
+
+        qualities = snakemake.config["renewable"]["EGS"].get("quality", [1])
 
         for q in qualities:
-            suffix = " " + car  # + f" Q{q}"
+            suffix = " " + car + f" Q{q}"
             df_q = df_specs[df_specs["Quality"] == q]
 
             bus_list = df_q.index.values
@@ -764,6 +791,23 @@ def attach_egs(
                 index=["year", "Date"],
                 values="capacity_factor",
             )
+
+            # Align bus_profiles to network snapshots.
+            # The EGS data has year=float (2030.0) and Date using the
+            # investment year (2030-01-01...) at hourly resolution.
+            # n.snapshots has period=int (2030) at the network's resolution.
+            # Cast the outer level to int and reindex so that:
+            #   (a) the float→int type is resolved, and
+            #   (b) the hourly profile is downsampled to the network's timestep.
+            # This also preserves the per-period production decline since the
+            # EGS data already has different CF values for 2030/2040/2050.
+            if hasattr(n.snapshots, "levels"):
+                bus_profiles.index = bus_profiles.index.set_levels(
+                    bus_profiles.index.levels[0].astype(int),
+                    level=0,
+                )
+                bus_profiles = bus_profiles.reindex(n.snapshots)
+            bus_profiles = bus_profiles.reindex(columns=bus_list)
 
             logger.info(
                 f"Adding EGS (Resource Quality-{q}) capacity-factor profiles to the network.",
@@ -1034,8 +1078,7 @@ def main(snakemake):
     all_reeds_shapes = gpd.read_file(snakemake.input.all_reeds_shapes)
     reeds_memberships = pd.read_csv(snakemake.input.reeds_memberships)
 
-    costs = pd.read_csv(snakemake.input.tech_costs)
-    costs = costs.pivot(index="pypsa-name", columns="parameter", values="value")
+    costs = load_costs(snakemake.input.tech_costs, params.costs)
     update_transmission_costs(n, costs, params.length_factor)
 
     renewable_carriers = set(params.renewable_carriers)

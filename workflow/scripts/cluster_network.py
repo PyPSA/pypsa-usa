@@ -15,6 +15,7 @@ from _helpers import (
     calculate_annuity,
     configure_logging,
     is_transport_model,
+    load_costs,
     update_p_nom_max,
 )
 from add_electricity import update_transmission_costs
@@ -347,7 +348,7 @@ def clustering_for_n_clusters(
     line_strategies = aggregation_strategies.get("lines", dict())
     generator_strategies = aggregation_strategies.get("generators", dict())
     one_port_strategies = aggregation_strategies.get("one_ports", dict())
-    bus_strategies = {"Pd": "sum"}
+    bus_strategies = {"Pd": "sum", "rec_trading_zone": "first", "original_reeds_zone": "first"}
     clustering = get_clustering_from_busmap(
         n,
         busmap,
@@ -473,7 +474,8 @@ def convert_to_transport(
         itl_lower_res = itl_lower_res[  # Filter low-res ITLs to only include those that have an end in the network
             itl_lower_res.r.isin(buses["country"]) | itl_lower_res.rr.isin(buses["country"])
         ]
-        aggregated_buses = agg_busmap.rename(index=lambda x: x.strip(" 0"))
+        aggregated_buses = agg_busmap.rename(index=lambda x: x.rsplit(" ", 1)[0])
+        aggregated_buses = aggregated_buses[~aggregated_buses.index.duplicated(keep="first")]
         non_agg_buses = buses[~buses.index.isin(agg_busmap.values)]
         non_agg_buses = non_agg_buses[
             non_agg_buses[topology_aggregation_key].isin(itl_lower_res.r)
@@ -969,12 +971,10 @@ if __name__ == "__main__":
             linemap,
         )
 
-        costs = pd.read_csv(snakemake.input.tech_costs)
-        costs = costs.pivot(index="pypsa-name", columns="parameter", values="value")
+        costs = load_costs(snakemake.input.tech_costs, params.costs)
         hvac_overhead_cost = costs.at["HVAC overhead", "annualized_capex_per_mw_km"]
     else:
-        costs = pd.read_csv(snakemake.input.tech_costs)
-        costs = costs.pivot(index="pypsa-name", columns="parameter", values="value")
+        costs = load_costs(snakemake.input.tech_costs, params.costs)
         hvac_overhead_cost = costs.at["HVAC overhead", "annualized_capex_per_mw_km"]
 
         custom_busmap = params.custom_busmap

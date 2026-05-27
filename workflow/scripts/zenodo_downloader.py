@@ -12,35 +12,23 @@ class ZenodoScenarioDownloader:
         self.download_dir = Path(download_dir)
         self.download_dir.mkdir(exist_ok=True)
 
-        # Mapping of scenarios to their Zenodo record IDs
+        # NREL land-access availability + bus-capacity artifacts; one record
+        # holds all 48 avail_*.nc / caps_*.nc files.
+        # GODEEEP _compressed.nc records used by the NREL land-access path.
+        # Keyed by (tech + wind_height + scenario) — no year_range — because
+        # one record holds all years per (tech, scenario).
         self.scenario_records = {
-            "solar_historical": 18293999,
-            "solar_rcp45hotter_2020_2059": None,
-            "solar_rcp45hotter_2060_2099": None,
-            "solar_rcp45cooler_2020_2059": None,
-            "solar_rcp45cooler_2060_2099": None,
-            "solar_rcp85hotter_2020_2059": None,
-            "solar_rcp85hotter_2060_2099": None,
-            "solar_rcp85cooler_2020_2059": None,
-            "solar_rcp85cooler_2060_2099": None,
-            "wind_100m_historical": 18331699,
-            "wind_100m_rcp45hotter_2020_2039": None,
-            "wind_100m_rcp45hotter_2040_2059": None,
-            "wind_100m_rcp45hotter_2060_2079": None,
-            "wind_100m_rcp45hotter_2080_2099": None,
-            "wind_100m_rcp45cooler_2020_2039": None,
-            "wind_100m_rcp45cooler_2040_2059": None,
-            "wind_100m_rcp45cooler_2060_2079": None,
-            "wind_100m_rcp45cooler_2080_2099": None,
-            "wind_100m_rcp85hotter_2020_2039": None,
-            "wind_100m_rcp85hotter_2040_2059": None,
-            "wind_100m_rcp85hotter_2060_2079": None,
-            "wind_100m_rcp85hotter_2080_2099": None,
-            "wind_100m_rcp85cooler_2020_2039": None,
-            "wind_100m_rcp85cooler_2040_2059": None,
-            "wind_100m_rcp85cooler_2060_2079": None,
-            "wind_100m_rcp85cooler_2080_2099": None,
-            "capacities": 17576458,
+            "nrel_exclusion_v1": 20316475,
+            "solar_historical_compressed": 20127513,
+            "solar_rcp45hotter_compressed": 20127523,
+            "solar_rcp45cooler_compressed": 20127562,
+            "solar_rcp85hotter_compressed": 20127589,
+            "solar_rcp85cooler_compressed": 20127633,
+            "wind_125m_historical_compressed": 20127520,
+            "wind_125m_rcp45hotter_compressed": 20127545,
+            "wind_125m_rcp45cooler_compressed": 20127572,
+            "wind_125m_rcp85hotter_compressed": 20127604,
+            "wind_125m_rcp85cooler_compressed": 20127645,
         }
 
         # Cache for record metadata to avoid repeated API calls
@@ -70,21 +58,18 @@ class ZenodoScenarioDownloader:
 
         Parameters
         ----------
-        scenario_name : str
-            Name of the scenario, e.g., "solar_historical".
+        scenario_final : str
+            Lookup key into scenario_records (e.g. "solar_rcp45hotter_compressed").
+        scenario : str
+            Climate-scenario name used to choose the on-disk subdir
+            (e.g. "historical", "rcp45hotter").
         filename : str
-            Name of the file to download, e.g., "solar_gen_cf_1980_aggregated.nc".
+            Name of the file to download, e.g., "solar_gen_cf_2030_compressed.nc".
         force_redownload : bool, optional
             If True, re-download the file even if it exists locally. Default is False.
         """
-        # pointing file path to workflow/data/zenodo/{scenario_name}
-        if scenario_final == "capacities":
-            local_filepath = f"{self.download_dir}/zenodo/{filename}"
-        else:
-            (self.download_dir / "zenodo" / scenario).mkdir(
-                exist_ok=True,
-            )  # create the zenodo directory if it doesn't exist
-            local_filepath = f"{self.download_dir}/zenodo/{scenario}/{filename}"
+        (self.download_dir / "zenodo" / scenario).mkdir(exist_ok=True)
+        local_filepath = f"{self.download_dir}/zenodo/{scenario}/{filename}"
 
         # Check if file already exists locally and skip Zenodo
         if Path(local_filepath).exists() and not force_redownload:
@@ -105,6 +90,30 @@ class ZenodoScenarioDownloader:
                 return None
 
             return self._download_file(record_id, filename, Path(local_filepath), force_redownload)
+
+    def download_to_path(self, record_id, filename, out_path, force_redownload=False):
+        """
+        Download a file from a Zenodo record to an explicit on-disk path.
+
+        Useful when called from a snakemake rule whose `output:` already names
+        the destination — bypasses the scenario subdir conventions of
+        download_scenario_file / download_by_record_id.
+
+        Parameters
+        ----------
+        record_id : int or str
+            Zenodo record ID.
+        filename : str
+            File name inside the record (used to find the right file in the
+            record's manifest).
+        out_path : str or Path
+            Destination path. Parent directories are created if missing.
+        """
+        out_path = Path(out_path)
+        if out_path.exists() and not force_redownload:
+            print(f"File already exists locally: {out_path}. Skipping download.")
+            return str(out_path)
+        return self._download_file(record_id, filename, out_path, force_redownload)
 
     def download_by_record_id(self, record_id, filename, force_redownload=False):
         """

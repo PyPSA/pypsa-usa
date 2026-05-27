@@ -191,9 +191,8 @@ def main(snakemake):
             ignore_index=True,
         )
 
-        # Multiple empty counties may map to the same nearest bus, creating duplicate
-        # "name" entries. Dissolve to union geometries per name; keep x/y from the
-        # first occurrence (substation coords, which precede the empty-county rows).
+        # Multiple empty counties may map to the same nearest bus, creating duplicate names.
+        # Dissolve to union geometries per name; keep x/y from first occurrence (substation coords).
         crs = onshore_regions_concat.crs
         onshore_regions_concat = onshore_regions_concat.dissolve(
             by="name",

@@ -1,11 +1,11 @@
-pudl_path: s3://pudl.catalyst.coop/v2025.5.0
+pudl_path: s3://pudl.catalyst.coop/v2025.2.0
 
+foresight: 'perfect'
 # docs :
 renewable:
+  dataset: godeeep #atlite or godeeep
   EGS:
     dispatch: baseload # baseload or flexible
-    drilling_cost: advanced
-    seismic_exclusion: true
   onwind:
     cutout: era5
     resource:
@@ -35,7 +35,7 @@ renewable:
     corine:
       grid_codes: [80, 200] #page 28 of https://land.copernicus.eu/global/sites/cgls.vito.be/files/products/CGLOPS1_PUM_LC100m-V3_I3.4.pdf
     natura: true
-    boem_screen: False
+    boem_screen: false
     max_depth: 60 # meters, ref https://www.nrel.gov/docs/fy16osti/66599.pdf
     min_shore_distance: 22000 # meters
     max_shore_distance: 65000 # meters
@@ -94,17 +94,6 @@ renewable:
 
 
 # docs :
-## NREL land-access exclusion settings for the GODEEEP workflow.
-## When renewable.dataset == "godeeep", `renewable_land_access` is REQUIRED and the
-## workflow downloads `data/nrel_exclusion/derived/{avail,caps}_*.nc` from Zenodo
-## to apply per-cell availability weighting and NREL supply-curve capacities.
-renewable_land_access:                # required for godeeep: reference | limited | open
-apply_cec_basescreen: false           # overlay CEC Wind/Solar BaseScreen on onwind+solar (CA-only)
-apply_boem_osw: false                 # overlay BOEM OSW planning areas on offwind+offwind_floating
-godeeep_wind_height: "_100m"          # raw GODEEEP wind-CF hub height (e.g. "_100m", "_125m")
-
-
-# docs :
 atlite:
   default_cutout: era5_2019
   nprocesses: 8
@@ -135,7 +124,7 @@ atlite:
       dx: 0.3
       dy: 0.3
 
- 
+
 lines:
   types: #Temp values, replaced.
     115.: "Al/St 240/40 2-bundle 220.0"
@@ -145,37 +134,42 @@ lines:
     345.: "Al/St 240/40 4-bundle 380.0"
     500.: "Al/St 560/50 4-bundle 750.0"
     765.: "Al/St 560/50 4-bundle 750.0"
- 
+
+## For Atlite (future/historical) and GODEEEP (just historical), configure this
+renewable_weather_years: [2019]
+snapshots:
+  start: "2019-01-01"
+  end: "2020-01-01"
+  inclusive: "left"
+
+## For GODEEEP inputs for future scenarios, configure this
+renewable_scenarios: ["rcp85cooler"] #["historical", "rcp45hotter", "rcp45cooler", "rcp85hotter", "rcp85cooler"]
+
+## NREL reV land-exclusion integration for GODEEEP capacity factors.
+## Leave renewable_land_access null/unset to keep the legacy Zenodo+atlite path.
+## When set, build_renewable_profiles.py reads
+##   data/nrel_exclusion/derived/avail_{tech}_{access}[_cec|_boem].nc
+##   data/nrel_exclusion/derived/caps_{tech}_{access}[_cec|_boem].nc
+## published on Zenodo and applies per-cell availability weighting to the
+## raw GODEEEP CFs, with per-bus p_nom_max from the NREL supply-curve rollup.
+renewable_land_access:                     # [null | reference | limited | open]
+apply_cec_basescreen: false           # overlay CEC Wind/Solar BaseScreen on onwind+solar (CA-only)
+apply_boem_osw: false                 # overlay BOEM OSW planning areas on offwind+offwind_floating
+godeeep_wind_height: "_125m"          # which raw GODEEEP wind-CF hub height to pull ["_100m", "_125m"]
+
+# Specify month-day range; year is pulled from planning_horizons
+# For multiple planning horizons, only specify the month and day - the year will automatically match each planning horizon (e.g., planning_horizons: [2030, 2040, 2050])
+renewable_snapshots:
+  start_month: 1
+  start_day: 1
+  end_month: 12
+  end_day: 31
+  end_inclusive: true  # if true, includes the end day; if false, stops before end day
 
 # docs :
-electricity:
-  prm:
-    MISO: 0.183
-    NPCC_NE: 0.135
-    NPCC_NY: 0.15
-    PJM: 0.146
-    SERC: 0.15
-    SPP: 0.16
-    ERCOT: 0.1375
-    WECC_CA: 0.182
-    WECC_NWPP: 0.1435
-    WECC_SRSG: 0.1155
-
 offshore_shape:
   use: eez #options are ca_osw, eez
 
 offshore_network:
+  enable: true # set to true to enable offshore network
   bus_spacing: 25000 # km
-
-# docs :
-# UCAP (Unforced Capacity) calculation based on Forced Outage Rates (FOR)
-# UCAP = ICAP * (1 - FOR), applied as p_max_pu = 1 - FOR for conventional generators
-ucap:
-  enable: false  # [false, true]
-  forced_outage_rates:  # Forced outage rates in percent
-    coal: 11.061
-    oil: 11.061
-    hydro: 8.127
-    CCGT: 6.107
-    nuclear: 2.207
-    OCGT: 6.259

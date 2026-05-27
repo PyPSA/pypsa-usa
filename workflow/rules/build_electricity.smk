@@ -100,7 +100,7 @@ rule build_bus_regions:
 
 rule build_cost_data:
     params:
-        costs=config_provider("costs"),
+        aeo=config_provider("costs", "aeo"),
         pudl_path=config_provider("pudl_path"),
     input:
         efs_tech_costs="repo_data/costs/EFS_Technology_Data.xlsx",
@@ -164,6 +164,7 @@ rule build_renewable_profiles:
             int(w.planning_horizon) if godeeep_planning_horizon else None
         ),
         renewable_scenarios=config_provider("renewable_scenarios"),
+        mapping_cache_dir=RESOURCES + "{interconnect}/nrel_mapping_cache",
     input:
         corine=ancient(
             DATA
@@ -188,6 +189,48 @@ rule build_renewable_profiles:
             RESOURCES + "{interconnect}/Geospatial/regions_onshore.geojson"
             if w.technology in ("onwind", "solar")
             else RESOURCES + "{interconnect}/Geospatial/regions_offshore.geojson"
+        ),
+        nrel_avail=lambda w: (
+            DATA
+            + "nrel_exclusion/derived/avail_{tech}_{acc}{cec}{boem}.nc".format(
+                tech=w.technology,
+                acc=config["renewable_land_access"],
+                cec=(
+                    "_cec"
+                    if config.get("apply_cec_basescreen")
+                    and w.technology in ("onwind", "solar")
+                    else ""
+                ),
+                boem=(
+                    "_boem"
+                    if config.get("apply_boem_osw")
+                    and w.technology.startswith("offwind")
+                    else ""
+                ),
+            )
+            if config.get("renewable_land_access")
+            else []
+        ),
+        nrel_caps=lambda w: (
+            DATA
+            + "nrel_exclusion/derived/caps_{tech}_{acc}{cec}{boem}.nc".format(
+                tech=w.technology,
+                acc=config["renewable_land_access"],
+                cec=(
+                    "_cec"
+                    if config.get("apply_cec_basescreen")
+                    and w.technology in ("onwind", "solar")
+                    else ""
+                ),
+                boem=(
+                    "_boem"
+                    if config.get("apply_boem_osw")
+                    and w.technology.startswith("offwind")
+                    else ""
+                ),
+            )
+            if config.get("renewable_land_access")
+            else []
         ),
         cutout=lambda wildcards: (
             expand(
@@ -599,7 +642,6 @@ def dynamic_fuel_price_files(wildcards):
 rule build_powerplants:
     params:
         pudl_path=config_provider("pudl_path"),
-        renewable_weather_year=config_provider("renewable_weather_years"),
     input:
         wecc_ads="repo_data/WECC_ADS_public",
         eia_ads_generator_mapping="repo_data/WECC_ADS_public/eia_ads_generator_mapping_updated.csv",
@@ -681,6 +723,14 @@ rule add_electricity:
         profile_egs=(
             DATA + "EGS/{interconnect}/profile_EGS.nc"
             if "EGS" in config["electricity"]["extendable_carriers"]["Generator"]
+            else []
+        ),
+        seismic_exclusion=(
+            DATA + "seismic_risk_exclusion/seismic_risk_mask.geojson"
+            if "EGS" in config["electricity"]["extendable_carriers"]["Generator"]
+            and config.get("renewable", {})
+            .get("EGS", {})
+            .get("seismic_exclusion", False)
             else []
         ),
     output:
@@ -833,6 +883,8 @@ rule add_extra_components:
             "model_topology", "topological_boundaries"
         ),
         transmission_network=config_provider("model_topology", "transmission_network"),
+        costs=config_provider("costs"),
+        ucap=config_provider("ucap", default={}),
     output:
         RESOURCES + "{interconnect}/elec_s{simpl}_c{clusters}_ec.nc",
     log:
