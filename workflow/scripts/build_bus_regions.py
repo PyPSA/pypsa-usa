@@ -191,7 +191,28 @@ def main(snakemake):
             ignore_index=True,
         )
 
-        logger.info(f"Added {len(empty_counties)} empty counties assigned to nearest buses.")
+        # A bus can be the nearest neighbour for more than one empty county, which
+        # would produce duplicate "name" entries in the GeoDataFrame.  Downstream
+        # code in build_renewable_profiles.py calls
+        #   layoutmatrix.sel(bus=bus).data
+        # and assumes the result is 1-D (one spatial row per bus).  If a bus
+        # appears k times, sel() returns a (k × n_spatial) array, making the
+        # boolean mask `nz_b` incompatible with the coords DataFrame and raising
+        #   ValueError: Item wrong length k instead of n_spatial.
+        # Fix: dissolve all rows that share the same "name" into a single row by
+        # taking the union of their geometries.  x/y must remain the *substation*
+        # coordinates, so we keep the first occurrence (the original region row,
+        # which comes before the empty-county rows in the concat above).
+        n_before = len(onshore_regions_concat)
+        onshore_regions_concat = onshore_regions_concat.dissolve(
+            by="name",
+            aggfunc={"x": "first", "y": "first", "country": "first"},
+        ).reset_index()
+        n_after = len(onshore_regions_concat)
+        logger.info(
+            f"Added {len(empty_counties)} empty counties assigned to nearest buses "
+            f"({n_before - n_after} duplicate bus rows dissolved by geometry union).",
+        )
 
     onshore_regions_concat.to_file(snakemake.output.regions_onshore)
     combined_onshore = onshore_regions_concat.geometry.union_all()
