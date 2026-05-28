@@ -32,6 +32,7 @@ import pypsa
 import yaml
 from _helpers import (
     configure_logging,
+    log_network_schema,
     update_config_from_wildcards,
 )
 from opts.bidirectional_link import add_bidirectional_link_constraints
@@ -504,6 +505,7 @@ if __name__ == "__main__":
     np.random.seed(solve_opts.get("seed", 123))
 
     n = pypsa.Network(snakemake.input.network)
+    schema_entry = log_network_schema(n, stage="entry")
 
     n = prepare_network(
         n,
@@ -522,6 +524,7 @@ if __name__ == "__main__":
         store_ERM_duals(n)
 
     n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))
+    log_network_schema(n, stage="exit", baseline=schema_entry)
     n.export_to_netcdf(snakemake.output[0])
     with open(snakemake.output.config, "w") as file:
         yaml.dump(
