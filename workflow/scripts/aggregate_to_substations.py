@@ -20,7 +20,7 @@ import logging
 import numpy as np
 import pandas as pd
 import pypsa
-from _helpers import configure_logging, log_network_schema
+from _helpers import configure_logging
 from pypsa.clustering.spatial import get_clustering_from_busmap
 
 logger = logging.getLogger(__name__)
@@ -210,7 +210,6 @@ if __name__ == "__main__":
     topological_boundaries = snakemake.params.topological_boundaries
 
     n = pypsa.Network(snakemake.input.network)
-    schema_entry = log_network_schema(n, stage="entry")
 
     n = convert_to_voltage_level(n, 230)
     n, trafo_map = remove_transformers(n)
@@ -235,6 +234,5 @@ if __name__ == "__main__":
     if topological_boundaries in ["reeds_zone", "state"] and "county" in n.buses.columns:
         n.buses = n.buses.drop(columns=["county"])
 
-    log_network_schema(n, stage="exit", baseline=schema_entry)
     n.export_to_netcdf(snakemake.output.network)
     busmap.to_csv(snakemake.output.busmap, header=["sub_id"])
