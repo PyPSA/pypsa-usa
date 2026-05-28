@@ -24,7 +24,7 @@ import logging
 import geopandas as gpd
 import pandas as pd
 import pypsa
-from _helpers import configure_logging, log_network_schema, update_p_nom_max
+from _helpers import configure_logging, update_p_nom_max
 from cluster_network import cluster_regions, clustering_for_n_clusters
 
 logger = logging.getLogger(__name__)
@@ -44,7 +44,6 @@ if __name__ == "__main__":
     solver_name = snakemake.config["solving"]["solver"]["name"]
 
     n = pypsa.Network(snakemake.input.network)
-    schema_entry = log_network_schema(n, stage="entry")
 
     if snakemake.wildcards.simpl:
         configured_strategy = params.simplify_network.get(
@@ -86,5 +85,4 @@ if __name__ == "__main__":
 
     update_p_nom_max(n)
 
-    log_network_schema(n, stage="exit", baseline=schema_entry)
     n.export_to_netcdf(snakemake.output.network)

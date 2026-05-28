@@ -20,7 +20,6 @@ from _helpers import (
     configure_logging,
     export_network_for_gis_mapping,
     load_costs,
-    log_network_schema,
     update_p_nom_max,
     weighted_avg,
 )
@@ -1003,7 +1002,6 @@ def main(snakemake):
     interconnection = snakemake.wildcards["interconnect"]
 
     n = pypsa.Network(snakemake.input.base_network)
-    schema_entry = log_network_schema(n, stage="entry")
 
     regions_onshore = gpd.read_file(snakemake.input.regions_onshore)
     regions_offshore = gpd.read_file(snakemake.input.regions_offshore)
@@ -1186,7 +1184,6 @@ def main(snakemake):
     sanitize_carriers(n, snakemake.config)
     n.meta = snakemake.config
 
-    log_network_schema(n, stage="exit", baseline=schema_entry)
     # n.export_to_netcdf(snakemake.output[0])
     pickle.dump(n, open(snakemake.output[0], "wb"))
 
