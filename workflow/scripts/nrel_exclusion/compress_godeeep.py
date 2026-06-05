@@ -13,7 +13,7 @@ import os
 import time
 from pathlib import Path
 
-import netCDF4 as netcdf
+import netCDF4
 import numpy as np
 
 DEFAULT_CHUNK_T = 500  # hours per time chunk
@@ -27,7 +27,7 @@ def compress_one(src_path: str, out_path: str, chunk_t: int = DEFAULT_CHUNK_T) -
 
     Path(out_path).parent.mkdir(parents=True, exist_ok=True)
 
-    with netcdf.Dataset(src_path) as srcf, netcdf.Dataset(out_path, "w") as dstf:
+    with netCDF4.Dataset(src_path) as srcf, netCDF4.Dataset(out_path, "w") as dstf:
         # Copy dimensions with original names (keep "Time" so downstream code is unchanged)
         for name, dim in srcf.dimensions.items():
             dstf.createDimension(name, len(dim))
