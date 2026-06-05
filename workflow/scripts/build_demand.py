@@ -496,7 +496,7 @@ class ReadEer(ReadStrategy):
         if invalid_years:
             raise ValueError(
                 f"EER demand supports planning_horizons {cls.MODEL_YEARS}; "
-                f"received unsupported year(s): {invalid_years}."
+                f"received unsupported year(s): {invalid_years}.",
             )
         return years
 
@@ -504,7 +504,7 @@ class ReadEer(ReadStrategy):
     def _validate_weather_year(cls, renewable_weather_years: list[int] | None) -> int:
         if not renewable_weather_years:
             raise ValueError(
-                "EER demand requires renewable_weather_years with exactly one weather year."
+                "EER demand requires renewable_weather_years with exactly one weather year.",
             )
 
         years = [int(year) for year in renewable_weather_years]
@@ -512,14 +512,13 @@ class ReadEer(ReadStrategy):
             raise ValueError(
                 "EER demand requires exactly one renewable_weather_years entry "
                 "because the electrical demand output path is not weather-year specific; "
-                f"received {years}."
+                f"received {years}.",
             )
 
         weather_year = years[0]
         if weather_year not in cls.WEATHER_YEARS:
             raise ValueError(
-                f"EER demand supports weather years {cls.WEATHER_YEARS}; "
-                f"received {weather_year}."
+                f"EER demand supports weather years {cls.WEATHER_YEARS}; received {weather_year}.",
             )
         return weather_year
 
@@ -544,7 +543,7 @@ class ReadEer(ReadStrategy):
                 group = h5.get_node(f"/{model_year}")
             except tables.NoSuchNodeError as exc:
                 raise ValueError(
-                    f"EER demand file does not contain model year {model_year}."
+                    f"EER demand file does not contain model year {model_year}.",
                 ) from exc
 
             state_codes = [

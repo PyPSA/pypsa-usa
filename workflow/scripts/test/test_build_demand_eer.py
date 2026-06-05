@@ -2,7 +2,6 @@ import numpy as np
 import pandas as pd
 import pytest
 import tables
-
 from build_demand import ReadEer
 
 

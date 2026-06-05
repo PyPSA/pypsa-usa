@@ -88,7 +88,6 @@ rule retrieve_nrel_efs_data:
         "../scripts/retrieve_databundles.py"
 
 
-
 rule retrieve_eer_demand_data:
     params:
         url="https://zenodo.org/records/18435264/files/demand_EER2025_100by2050.h5?download=1",
