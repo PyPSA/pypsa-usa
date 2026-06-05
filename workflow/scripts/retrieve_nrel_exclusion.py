@@ -9,7 +9,7 @@ from pathlib import Path
 from zenodo_downloader import ZenodoScenarioDownloader
 
 if __name__ == "__main__":
-    out_path = Path(snakemake.output[0])
+    out_path = Path(snakemake.output[0])  # noqa: F821
     filename = out_path.name
 
     downloader = ZenodoScenarioDownloader()

@@ -184,9 +184,9 @@ def add_technology_capacity_target_constraints(n, config):
             )
 
         if not np.isnan(target["max"]):
-            _RESIDUAL_TOL = 1.0  # MW — treat clustering residuals below this as zero
+            residual_tol = 1.0  # MW — treat clustering residuals below this as zero
             if target["max"] < lhs_existing:
-                if lhs_existing - target["max"] > _RESIDUAL_TOL:
+                if lhs_existing - target["max"] > residual_tol:
                     logger.warning(
                         f"TCT max of {target['max']} MW for {target['carrier']} in region {target['region']} "
                         f"is below existing non-extendable capacity of {lhs_existing:.1f} MW — "

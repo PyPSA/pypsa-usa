@@ -13,7 +13,7 @@ import os
 import time
 from pathlib import Path
 
-import netCDF4 as nc
+import netCDF4 as netcdf
 import numpy as np
 
 DEFAULT_CHUNK_T = 500  # hours per time chunk
@@ -27,7 +27,7 @@ def compress_one(src_path: str, out_path: str, chunk_t: int = DEFAULT_CHUNK_T) -
 
     Path(out_path).parent.mkdir(parents=True, exist_ok=True)
 
-    with nc.Dataset(src_path) as srcf, nc.Dataset(out_path, "w") as dstf:
+    with netcdf.Dataset(src_path) as srcf, netcdf.Dataset(out_path, "w") as dstf:
         # Copy dimensions with original names (keep "Time" so downstream code is unchanged)
         for name, dim in srcf.dimensions.items():
             dstf.createDimension(name, len(dim))
@@ -47,7 +47,7 @@ def compress_one(src_path: str, out_path: str, chunk_t: int = DEFAULT_CHUNK_T) -
                 dst_var.setncattr(attr, var.getncattr(attr))
 
         src_cf = srcf.variables["capacity_factor"]
-        T, NS, EW = src_cf.shape
+        time_count, ns_count, ew_count = src_cf.shape
 
         cfv = dstf.createVariable(
             "capacity_factor",
@@ -55,7 +55,7 @@ def compress_one(src_path: str, out_path: str, chunk_t: int = DEFAULT_CHUNK_T) -
             src_cf.dimensions,
             zlib=True,
             complevel=4,
-            chunksizes=(min(chunk_t, T), NS, EW),
+            chunksizes=(min(chunk_t, time_count), ns_count, ew_count),
             fill_value=FILL,
         )
         cfv.setncattr("scale_factor", SCALE)
@@ -68,8 +68,8 @@ def compress_one(src_path: str, out_path: str, chunk_t: int = DEFAULT_CHUNK_T) -
         cfv.set_auto_scale(False)
         cfv.set_auto_mask(False)
 
-        for t0 in range(0, T, chunk_t):
-            t1 = min(t0 + chunk_t, T)
+        for t0 in range(0, time_count, chunk_t):
+            t1 = min(t0 + chunk_t, time_count)
             chunk = src_cf[t0:t1, :, :]
             mask = np.isnan(chunk)
             quant = np.clip(np.round(chunk * 254.0), 0, 254).astype(np.uint8)
