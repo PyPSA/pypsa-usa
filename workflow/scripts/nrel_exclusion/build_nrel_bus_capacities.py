@@ -228,8 +228,10 @@ def rollup_supply_curve(
     # downstream code can .sel() a zero-row result without crashing.
     if joined.empty:
         print("[caps] no surviving sites — writing empty caps Dataset")
+
         def empty():
             return np.array([], dtype=np.float32)
+
         data_vars = {
             "p_nom_max": (("bus",), empty()),
             "potential": (("bus",), empty()),
