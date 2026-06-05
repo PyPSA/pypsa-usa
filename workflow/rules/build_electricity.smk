@@ -290,6 +290,25 @@ INTERCONNECT_2_STATE["eastern"].extend(["NH", "NJ", "NY", "NC", "ND", "OH", "OK"
 INTERCONNECT_2_STATE["eastern"].extend(["RI", "SC", "SD", "TN", "VT", "VA", "WV", "WI"])
 INTERCONNECT_2_STATE["usa"] = sum(INTERCONNECT_2_STATE.values(), [])
 
+EER_DEMAND_FILES = (
+    "demand_EER2025_100by2050.h5",
+    "demand_EER2025_Baseline_AEO2023.h5",
+    "demand_EER2025_IRAlow.h5",
+)
+
+
+def eer_demand_file():
+    filename = config["electricity"]["demand"]["scenario"].get(
+        "eer_file",
+        "demand_EER2025_100by2050.h5",
+    )
+    if filename not in EER_DEMAND_FILES:
+        raise ValueError(
+            "electricity.demand.scenario.eer_file must be one of "
+            f"{EER_DEMAND_FILES}; received {filename}."
+        )
+    return filename
+
 
 def demand_raw_data(wildcards):
     # get profile to use
@@ -321,7 +340,7 @@ def demand_raw_data(wildcards):
         ].capitalize()
         return DATA + f"nrel_efs/EFSLoadProfile_{efs_case}_{efs_speed}.csv"
     elif profile == "eer":
-        return DATA + "eer/demand_EER2025_100by2050.h5"
+        return DATA + f"eer/{eer_demand_file()}"
     elif profile == "ferc":
         return [
             DATA + "pudl/out_ferc714__hourly_estimated_state_demand.parquet",

@@ -87,6 +87,7 @@ electricity:
     scenario: 
       efs_case: reference # reference, medium, high
       efs_speed: moderate # slow, moderate, rapid
+      eer_file: demand_EER2025_100by2050.h5 # demand_EER2025_100by2050.h5, demand_EER2025_Baseline_AEO2023.h5, demand_EER2025_IRAlow.h5
       aeo: reference
 
   demand_response:

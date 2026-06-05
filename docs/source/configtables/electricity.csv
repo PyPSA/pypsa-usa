@@ -23,6 +23,7 @@ profile,--,"One of {``efs``, ``eia``, ``eer``}","Datasource for electrical load 
 scenario:,,,
 -efs_case,--,"One of {``reference``, ``medium``, ``high``}",(UNDER DEVELOPMENT) Extracts EFS data according to level of adoption
 -efs_speed,--,"One of {``slow``, ``moderate``, ``fast``}",(UNDER DEVELOPMENT) Extracts EFS data according to speed of electrification
+-eer_file,--,"One of {``demand_EER2025_100by2050.h5``, ``demand_EER2025_Baseline_AEO2023.h5``, ``demand_EER2025_IRAlow.h5``}",Selects the EER demand dataset file to download and use when ``profile`` is ``eer``.
 -aeo,--,One of the AEO scenarios `here <https://www.eia.gov/outlooks/aeo/data/browser/>`_,(UNDER DEVELOPMENT) Scales future demand according to the AEO scenario
 ,,,
 demand_response:,,,Settings to activate and configure demand response
