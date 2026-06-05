@@ -88,6 +88,20 @@ rule retrieve_nrel_efs_data:
         "../scripts/retrieve_databundles.py"
 
 
+
+rule retrieve_eer_demand_data:
+    params:
+        url="https://zenodo.org/records/18435264/files/demand_EER2025_100by2050.h5?download=1",
+    output:
+        DATA + "eer/demand_EER2025_100by2050.h5",
+    resources:
+        mem_mb=5000,
+    log:
+        "logs/retrieve/retrieve_eer_demand_data.log",
+    script:
+        "../scripts/retrieve_eer_data.py"
+
+
 sector_datafiles = [
     # heating sector
     "population/DECENNIALDHC2020.P1-Data.csv",

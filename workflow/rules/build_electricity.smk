@@ -320,6 +320,8 @@ def demand_raw_data(wildcards):
             "efs_speed"
         ].capitalize()
         return DATA + f"nrel_efs/EFSLoadProfile_{efs_case}_{efs_speed}.csv"
+    elif profile == "eer":
+        return DATA + "eer/demand_EER2025_100by2050.h5"
     elif profile == "ferc":
         return [
             DATA + "pudl/out_ferc714__hourly_estimated_state_demand.parquet",
@@ -385,6 +387,8 @@ def demand_scaling_data(wildcards):
         return []
     elif profile == "ferc":
         return []
+    elif profile == "eer":
+        return []
     else:
         return ""
 
@@ -397,6 +401,7 @@ rule build_electrical_demand:
         eia_api=config["api"]["eia"],
         profile_year=pd.to_datetime(config["snapshots"]["start"]).year,
         planning_horizons=config["scenario"]["planning_horizons"],
+        renewable_weather_years=config["renewable_weather_years"],
         snapshots=config["snapshots"],
         pudl_path=config_provider("pudl_path"),
     input:

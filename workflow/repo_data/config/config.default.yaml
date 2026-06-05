@@ -83,7 +83,7 @@ electricity:
     Link: [] 
 
   demand: 
-    profile: efs # efs, eia
+    profile: efs # efs, eia, eer
     scenario: 
       efs_case: reference # reference, medium, high
       efs_speed: moderate # slow, moderate, rapid

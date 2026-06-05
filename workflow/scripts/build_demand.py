@@ -444,6 +444,146 @@ class ReadEfs(ReadStrategy):
         return all_years
 
 
+class ReadEer(ReadStrategy):
+    """Reads state-level EER electricity demand profiles."""
+
+    MODEL_YEARS: ClassVar[tuple[int, ...]] = (2021, 2025, 2030, 2035, 2040, 2045, 2050)
+    WEATHER_YEARS: ClassVar[tuple[int, ...]] = (
+        2007,
+        2008,
+        2009,
+        2010,
+        2011,
+        2012,
+        2013,
+        2016,
+        2017,
+        2018,
+        2019,
+        2020,
+        2021,
+        2022,
+        2023,
+    )
+    HOURS_PER_YEAR: ClassVar[int] = 8760
+    CST_TO_UTC_SHIFT: ClassVar[int] = 6
+
+    def __init__(
+        self,
+        filepath: str | None = None,
+        planning_horizons: list[int] | None = None,
+        renewable_weather_years: list[int] | None = None,
+    ) -> None:
+        super().__init__(filepath)
+        self._zone = "state"
+        self.planning_horizons = self._validate_planning_horizons(planning_horizons)
+        self.weather_year = self._validate_weather_year(renewable_weather_years)
+
+    @property
+    def zone(self):  # noqa: D102
+        return self._zone
+
+    @classmethod
+    def _validate_planning_horizons(
+        cls,
+        planning_horizons: list[int] | None,
+    ) -> list[int]:
+        if not planning_horizons:
+            raise ValueError("EER demand requires scenario.planning_horizons.")
+
+        years = [int(year) for year in planning_horizons]
+        invalid_years = sorted(set(years) - set(cls.MODEL_YEARS))
+        if invalid_years:
+            raise ValueError(
+                f"EER demand supports planning_horizons {cls.MODEL_YEARS}; "
+                f"received unsupported year(s): {invalid_years}."
+            )
+        return years
+
+    @classmethod
+    def _validate_weather_year(cls, renewable_weather_years: list[int] | None) -> int:
+        if not renewable_weather_years:
+            raise ValueError(
+                "EER demand requires renewable_weather_years with exactly one weather year."
+            )
+
+        years = [int(year) for year in renewable_weather_years]
+        if len(years) != 1:
+            raise ValueError(
+                "EER demand requires exactly one renewable_weather_years entry "
+                "because the electrical demand output path is not weather-year specific; "
+                f"received {years}."
+            )
+
+        weather_year = years[0]
+        if weather_year not in cls.WEATHER_YEARS:
+            raise ValueError(
+                f"EER demand supports weather years {cls.WEATHER_YEARS}; "
+                f"received {weather_year}."
+            )
+        return weather_year
+
+    def _read_data(self) -> dict[int, pd.DataFrame]:
+        """Reads EER profiles for each requested model year."""
+        if not self.filepath:
+            logger.error("Must provide filepath for EER data")
+            sys.exit()
+
+        logger.info(f"Building Load Data using EER demand for weather year {self.weather_year}")
+        return {year: self._read_model_year(year) for year in self.planning_horizons}
+
+    def _read_model_year(self, model_year: int) -> pd.DataFrame:
+        """Read one model year and select the configured weather-year segment."""
+        import tables
+
+        start = self.WEATHER_YEARS.index(self.weather_year) * self.HOURS_PER_YEAR
+        stop = start + self.HOURS_PER_YEAR
+
+        with tables.open_file(self.filepath, "r") as h5:
+            try:
+                group = h5.get_node(f"/{model_year}")
+            except tables.NoSuchNodeError as exc:
+                raise ValueError(
+                    f"EER demand file does not contain model year {model_year}."
+                ) from exc
+
+            state_codes = [
+                self._decode_hdf_string(column)
+                for column in group.columns[:]
+                if self._decode_hdf_string(column) != "datetime"
+            ]
+            data = {
+                CODE_2_STATE[state]: np.roll(
+                    getattr(group, state)[start:stop],
+                    self.CST_TO_UTC_SHIFT,
+                )
+                for state in state_codes
+            }
+
+        snapshots = pd.date_range(
+            f"{model_year}-01-01 00:00:00",
+            periods=self.HOURS_PER_YEAR,
+            freq="h",
+        )
+        return pd.DataFrame(data, index=snapshots)
+
+    @staticmethod
+    def _decode_hdf_string(value) -> str:
+        if isinstance(value, bytes):
+            return value.decode()
+        return str(value)
+
+    def _format_data(self, data: dict[int, pd.DataFrame]) -> pd.DataFrame:
+        """Formats raw EER data to the demand strategy contract."""
+        df = pd.concat(data.values()).sort_index()
+        df = self._format_snapshot_index(df)
+        df["fuel"] = "electricity"
+        df["sector"] = "all"
+        df["subsector"] = "all"
+        df = df.set_index([df.index, "sector", "subsector", "fuel"])
+        return df
+
+
 class ReadEulp(ReadStrategy):
     """Reads in End Use Load Profile data."""
 
@@ -2216,10 +2356,13 @@ def get_demand_params(
                 scaling_method = "aeo_electricity"
             elif demand_profile == "ferc":
                 scaling_method = "aeo_electricity"
+            elif demand_profile == "eer":
+                scaling_method = None
             else:
                 logger.warning(
                     f"No scaling method available for {demand_profile} profile. Setting to 'aeo_electricity'",
                 )
+                scaling_method = "aeo_electricity"
         case "residential" | "commercial":
             demand_profile = "eulp"
             demand_disaggregation = "pop"
@@ -2391,6 +2534,14 @@ if __name__ == "__main__":
         sns = n.snapshots.get_level_values(1).map(
             lambda x: x.replace(year=profile_year),
         )
+
+    elif demand_profile == "eer":
+        reader = ReadEer(
+            demand_files,
+            planning_horizons=planning_horizons,
+            renewable_weather_years=snakemake.params.renewable_weather_years,
+        )
+        sns = n.snapshots.get_level_values(1)
 
     elif demand_profile == "ferc":
         assert profile_year in range(2018, 2024)
