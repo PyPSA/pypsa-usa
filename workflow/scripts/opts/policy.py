@@ -195,7 +195,7 @@ def add_technology_capacity_target_constraints(n, config):
                 else:
                     logger.warning(
                         f"TCT max of {target['max']} MW for {target['carrier']} is below existing "
-                        f"{lhs_existing:.4f} MW (within {_RESIDUAL_TOL} MW tolerance — treating as numerical residual)",
+                        f"{lhs_existing:.4f} MW (within {residual_tol} MW tolerance — treating as numerical residual)",
                     )
                 lhs_existing = target["max"]  # clamp so rhs = 0 in both cases
 

@@ -1,3 +1,0 @@
-,Unit,Values,Description
-planning_horizons,int,"(2018-2023, 2030, 2040, 2050)","Specifies the year of demand data to use. Historical values will use EIA930 data, Future years will use NREL EFS data. Specify multiple planning horizons to build a multi-horizon model."
-foresight,str,"One of {'perfect','myopic’}",Specifies foresight option for multi-horizon optimization.
