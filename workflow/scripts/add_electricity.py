@@ -856,7 +856,7 @@ def attach_battery_storage(
         p_nom_min=0,
         p_nom_extendable=False,  # Only Allow lifetime retirments for existing BESS
         capital_cost=costs.at["4hr_battery_storage", "opex_fixed_per_kw"] * 1e3,
-        max_hours=plants_filt.energy_storage_capacity_mwh / plants_filt.p_nom,
+        max_hours=plants_filt.energy_storage_capacity_mwh / plants_filt.p_nom / 0.85**0.5,
         build_year=plants_filt.build_year,
         lifetime=costs.at["4hr_battery_storage", "lifetime"],
         efficiency_store=0.85**0.5,
