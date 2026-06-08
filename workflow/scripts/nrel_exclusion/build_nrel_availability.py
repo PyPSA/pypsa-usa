@@ -160,7 +160,7 @@ def _warp_mask_to_grid(
     # nodata metadata. CEC/BOEM both use nodata=0, but for us 0 IS real data
     # (= "excluded"). Pass an out-of-band sentinel for src_nodata so no pixel
     # is masked — every source 0 and 1 gets reprojected onto the dst grid.
-    OOB_SENTINEL = -9999.0
+    oob_sentinel = -9999.0
     dst = np.full(dst_shape, fill, dtype=np.float32)
     with rasterio.open(src_path) as src:
         src_arr = src.read(1).astype(np.float32)
@@ -172,7 +172,7 @@ def _warp_mask_to_grid(
             dst_transform=dst_transform,
             dst_crs=dst_crs,
             resampling=Resampling.nearest,
-            src_nodata=OOB_SENTINEL,
+            src_nodata=oob_sentinel,
             dst_nodata=fill,
             init_dest_nodata=False,
         )

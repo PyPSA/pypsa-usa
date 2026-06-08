@@ -74,12 +74,12 @@ OFFSHORE_TECH_FILTER = {
 
 
 def haversine_km(lat1, lon1, lat2, lon2):
-    R = 6371.0
+    earth_radius_km = 6371.0
     lat1, lat2 = np.radians(lat1), np.radians(lat2)
     dlat = lat2 - lat1
     dlon = np.radians(lon2 - lon1)
     a = np.sin(dlat / 2) ** 2 + np.cos(lat1) * np.cos(lat2) * np.sin(dlon / 2) ** 2
-    return 2 * R * np.arcsin(np.sqrt(a))
+    return 2 * earth_radius_km * np.arcsin(np.sqrt(a))
 
 
 def _sample_raster(path: str | Path, lon: np.ndarray, lat: np.ndarray) -> np.ndarray:
@@ -228,7 +228,10 @@ def rollup_supply_curve(
     # downstream code can .sel() a zero-row result without crashing.
     if joined.empty:
         print("[caps] no surviving sites — writing empty caps Dataset")
-        empty = lambda: np.array([], dtype=np.float32)
+
+        def empty():
+            return np.array([], dtype=np.float32)
+
         data_vars = {
             "p_nom_max": (("bus",), empty()),
             "potential": (("bus",), empty()),

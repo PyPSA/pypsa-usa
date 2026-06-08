@@ -129,8 +129,8 @@ def weighted_bus_aggregation(
 
     buses = sorted(mapping["name"].unique())
     bus_idx = {b: i for i, b in enumerate(buses)}
-    B = len(buses)
-    T = cf.sizes["time"]
+    bus_count = len(buses)
+    time_count = cf.sizes["time"]
 
     # Precompute vectors aligned to mapping rows
     row_bus = mapping["name"].map(bus_idx).to_numpy(dtype=np.int64)
@@ -144,17 +144,17 @@ def weighted_bus_aggregation(
     row_w_k = row_w[keep]
 
     # Per-bus diagnostics (cheap, before streaming CF)
-    avail_sum = np.zeros(B, dtype=np.float64)
-    n_cells = np.zeros(B, dtype=np.int32)
+    avail_sum = np.zeros(bus_count, dtype=np.float64)
+    n_cells = np.zeros(bus_count, dtype=np.int32)
     np.add.at(avail_sum, row_bus, row_w)
     np.add.at(n_cells, row_bus, 1)
-    den = np.zeros(B, dtype=np.float64)
+    den = np.zeros(bus_count, dtype=np.float64)
     np.add.at(den, row_bus_k, row_w_k)
 
-    num = np.zeros((T, B), dtype=np.float64)  # ~8760*B*8 bytes ≈ 333 MB @ B=4751
+    num = np.zeros((time_count, bus_count), dtype=np.float64)  # ~8760*bus_count*8 bytes ≈ 333 MB @ B=4751
 
-    for t0 in range(0, T, chunk_t):
-        t1 = min(t0 + chunk_t, T)
+    for t0 in range(0, time_count, chunk_t):
+        t1 = min(t0 + chunk_t, time_count)
         chunk = cf.isel(time=slice(t0, t1)).values  # (t1-t0, NS, EW), forces decode of one slab
         # Gather CF at the (NS, EW) of each kept mapping row -> (t1-t0, n_kept)
         cf_rows = chunk[:, row_ns_k, row_ew_k]

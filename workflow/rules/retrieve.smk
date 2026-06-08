@@ -88,6 +88,21 @@ rule retrieve_nrel_efs_data:
         "../scripts/retrieve_databundles.py"
 
 
+rule retrieve_eer_demand_data:
+    wildcard_constraints:
+        eer_file="demand_EER2025_100by2050|demand_EER2025_Baseline_AEO2023|demand_EER2025_IRAlow",
+    params:
+        url=lambda wildcards: f"https://zenodo.org/records/18435264/files/{wildcards.eer_file}.h5?download=1",
+    output:
+        DATA + "eer/{eer_file}.h5",
+    resources:
+        mem_mb=5000,
+    log:
+        "logs/retrieve/retrieve_eer_{eer_file}.log",
+    script:
+        "../scripts/retrieve_eer_data.py"
+
+
 sector_datafiles = [
     # heating sector
     "population/DECENNIALDHC2020.P1-Data.csv",
