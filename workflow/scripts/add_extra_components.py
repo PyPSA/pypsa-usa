@@ -79,8 +79,8 @@ def attach_storageunits(n, costs, elec_opts, investment_year):
             marginal_cost=0,  # costs.at[carrier, "marginal_cost"], # TODO: FIX THIS ISSUE IN BUILD_COST_DATA
             efficiency_store=costs.at[carrier, "efficiency"] ** roundtrip_correction,
             efficiency_dispatch=costs.at[carrier, "efficiency"] ** roundtrip_correction,
-            max_hours=max_hours,
-            cyclic_state_of_charge=False,
+            max_hours=max_hours / (costs.at[carrier, "efficiency"] ** roundtrip_correction),
+            cyclic_state_of_charge=True,
             build_year=investment_year,
             lifetime=costs.at[carrier, "cost_recovery_period_years"],
         )
@@ -178,7 +178,7 @@ def attach_phs_storageunits(n: pypsa.Network, elec_opts, costs: pd.DataFrame):
             marginal_cost=region_onshore_psh_grp.marginal_cost,
             efficiency_store=efficiency_store,
             efficiency_dispatch=efficiency_dispatch,
-            max_hours=max_hours,
+            max_hours=max_hours / efficiency_dispatch,
             cyclic_state_of_charge=True,
         )
 
