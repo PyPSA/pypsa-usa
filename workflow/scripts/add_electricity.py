@@ -399,6 +399,9 @@ def attach_renewable_capacities_to_atlite(
     plants = plants_df.query(
         "bus_assignment in @n.buses.index",
     )
+    if "prime_mover_code" in plants:
+        plants = plants[plants.prime_mover_code != "PS"]
+
     for tech in renewable_carriers:
         plants_filt = plants.query("carrier == @tech").copy()
         if plants_filt.empty:
@@ -865,6 +868,40 @@ def attach_battery_storage(
     )
 
 
+def attach_phs_storage(
+    n: pypsa.Network,
+    plants: pd.DataFrame,
+):
+    """Attach existing pumped hydro storage from EIA prime mover PS units."""
+    efficiency_dispatch = 0.894427191
+    plants_filt = plants.query(
+        "prime_mover_code == 'PS' and bus_assignment in @n.buses.index",
+    ).copy()
+    plants_filt = plants_filt.dropna(subset=["p_nom"])
+    if plants_filt.empty:
+        logger.info("No PHS storage units found in powerplants.csv.")
+        return
+
+    logger.info(
+        f"Added PHS as Storage Units to the network.\n{np.round(plants_filt.p_nom.sum() / 1000, 2)} GW Power Capacity",
+    )
+
+    n.madd(
+        "StorageUnit",
+        plants_filt.index,
+        carrier="PHS",
+        bus=plants_filt.bus_assignment,
+        p_nom=plants_filt.p_nom,
+        p_nom_extendable=False,
+        build_year=plants_filt.build_year.astype(int),
+        lifetime=np.inf,
+        max_hours=24.0 / efficiency_dispatch,
+        efficiency_store=efficiency_dispatch,
+        efficiency_dispatch=efficiency_dispatch,
+        cyclic_state_of_charge=True,
+    )
+
+
 def broadcast_investment_horizons_index(n: pypsa.Network, df: pd.DataFrame):
     """
     Broadcast the index of a dataframe to match the potentially multi-indexed
@@ -1143,6 +1180,10 @@ def main(snakemake):
     attach_battery_storage(
         n,
         costs,
+        plants,
+    )
+    attach_phs_storage(
+        n,
         plants,
     )
 
