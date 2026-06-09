@@ -313,6 +313,30 @@ def freeze_prior_periods(n: pypsa.Network, prior_period: int):
         c.df.loc[retirable, attr + "_max"] = c.df.loc[retirable, attr]
 
 
+def update_egs_p_nom_max(n, planning_horizon):
+    """Cap EGS p_nom_max by subtracting capacity already built in prior periods.
+
+    The land use constraint only covers extendable generators, so non-extendable
+    prior-period EGS (frozen by freeze_prior_periods) is invisible to it. Without
+    this, the optimizer can build the full geological supply curve in every period.
+    """
+    current_egs = n.generators.index[
+        n.generators["carrier"].str.contains("EGS", case=False)
+        & n.generators["p_nom_extendable"]
+        & (n.generators["build_year"] == planning_horizon)
+    ]
+    if current_egs.empty:
+        return
+    locked_egs = n.generators[
+        n.generators["carrier"].str.contains("EGS", case=False) & ~n.generators["p_nom_extendable"]
+    ]
+    locked_by_bus = locked_egs.groupby("bus")["p_nom"].sum()
+    for gen_idx in current_egs:
+        bus = n.generators.loc[gen_idx, "bus"]
+        already_built = locked_by_bus.get(bus, 0.0)
+        n.generators.loc[gen_idx, "p_nom_max"] = max(0.0, n.generators.loc[gen_idx, "p_nom_max"] - already_built)
+
+
 def solve_network(n, config, solving, opts="", **kwargs):
     set_of_options = solving["solver"]["options"]
     cf_solving = solving["options"]
@@ -361,6 +385,7 @@ def solve_network(n, config, solving, opts="", **kwargs):
                 if "TCT" in opts:
                     apply_forced_retirements(n, planning_horizon, config)
 
+                update_egs_p_nom_max(n, planning_horizon)
                 run_optimize(n, rolling_horizon, skip_iterations, cf_solving, **kwargs)
 
                 logger.info(f"Preparing brownfield from {planning_horizon}")
