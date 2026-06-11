@@ -469,10 +469,10 @@ def attach_conventional_generators(
     plants["efficiency"] = plants.efficiency.astype(float).fillna(plants.efficiency_r)
 
     committable_fields = ["start_up_cost", "min_down_time", "min_up_time"]
-    defaults = pypsa.components["Generator"].default
+    # defaults = pypsa.components.component_attrs["Generator"].default
     if unit_commitment:
-        for attr in committable_fields:
-            plants[attr] = plants[attr].astype(float).fillna(defaults[attr])
+        # for attr in committable_fields:
+        #     plants[attr] = plants[attr].astype(float).fillna(defaults[attr])
         plants["p_min_pu"] = (
             (plants.minimum_load_mw / plants.p_nom)
             .clip(
@@ -483,9 +483,9 @@ def attach_conventional_generators(
             .fillna(0)
             .mul(0.95)
         )
-    else:
-        for attr in committable_fields:
-            plants[attr] = defaults[attr]
+    # else:
+    #     for attr in committable_fields:
+    #         plants[attr] = defaults[attr]
     committable_attrs = {attr: plants[attr] for attr in committable_fields}
 
     # Define generators using modified ppl DataFrame
