@@ -94,7 +94,10 @@ def aggregate_to_substations(
 ):
     logger.info("Aggregating buses to substation level...")
 
-    generator_strategies = aggregation_strategies.get("generators", dict())
+    # "first" default prevents PyPSA's consense check from failing when EGS
+    # generators at different buses (each with land_region=bus_id) are merged
+    # into the same substation. Config strategies can still override this.
+    generator_strategies = {"land_region": "first", **aggregation_strategies.get("generators", dict())}
 
     clustering = get_clustering_from_busmap(
         network,
@@ -285,6 +288,10 @@ if __name__ == "__main__":
         # Patch for bug where pypsa io clustering will add incorrect build_years for new gens
         n.generators.build_year += 0.001
 
+        simpl_agg_strategies = {
+            **params.aggregation_strategies,
+            "generators": {"land_region": "first", **params.aggregation_strategies.get("generators", {})},
+        }
         clustering = clustering_for_n_clusters(
             n,
             int(snakemake.wildcards.simpl),
@@ -292,7 +299,7 @@ if __name__ == "__main__":
             solver_name=solver_name,
             algorithm=params.simplify_network["algorithm"],
             feature=params.simplify_network["feature"],
-            aggregation_strategies=params.aggregation_strategies,
+            aggregation_strategies=simpl_agg_strategies,
             weighting_strategy=params.simplify_network.get("weighting_strategy", None),
         )
         n = clustering.network

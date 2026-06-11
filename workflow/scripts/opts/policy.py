@@ -282,6 +282,59 @@ def apply_forced_retirements(n, planning_horizon, config):
             n.generators.loc[retirement_gens, "committable"] = False
 
 
+def apply_zero_emission_retirements(n, planning_horizon, config):
+    """Zero non-extendable emitting generators in zero-CO2 planning horizons.
+
+    apply_forced_retirements() covers carriers listed in the TCT CSV (CCGT, OCGT,
+    coal, oil).  Carriers like waste and conventional geothermal are NOT in that
+    CSV but can have p_min_pu > 0 (must-run ratings from ADS data).  When a
+    national CO2 limit of 0 is active, any positive must-run dispatch from those
+    carriers makes the model immediately infeasible, which Gurobi catches in
+    presolve.  This function zeroes all remaining non-extendable emitting generators
+    so the CO2=0 constraint is satisfiable.
+    """
+    try:
+        co2_lims = pd.read_csv(config["electricity"]["regional_Co2_limits"])
+    except (KeyError, FileNotFoundError, TypeError):
+        return
+    mask = (co2_lims["regions"].str.strip() == "all") & (co2_lims["limit"] == 0)
+    zero_emission_periods = set(co2_lims.loc[mask, "planning_horizon"])
+    if planning_horizon not in zero_emission_periods:
+        return
+
+    emitting = set(n.carriers.index[n.carriers.co2_emissions.fillna(0) > 0])
+    if not emitting:
+        return
+
+    gen_mask = (
+        n.generators["carrier"].isin(emitting)
+        & ~n.generators["p_nom_extendable"]
+        & (n.generators["p_nom"] > 0)
+    )
+    gens = n.generators.index[gen_mask]
+    if gens.empty:
+        return
+
+    total_mw = n.generators.loc[gens, "p_nom"].sum()
+    carriers_found = n.generators.loc[gens, "carrier"].unique().tolist()
+    logger.info(
+        f"Zero-emission retirement: zeroing {len(gens)} non-extendable emitting "
+        f"{carriers_found} generator(s) ({total_mw:.1f} MW total) for planning horizon "
+        f"{planning_horizon} (CO2 limit = 0)",
+    )
+    n.generators.loc[gens, ["p_nom", "p_nom_min", "p_nom_max"]] = 0.0
+    n.generators.loc[gens, "p_min_pu"] = 0.0
+    n.generators.loc[gens, "ramp_limit_down"] = np.nan
+    n.generators.loc[gens, "ramp_limit_up"] = np.nan
+    for attr in ("ramp_limit_down", "ramp_limit_up"):
+        if attr in n.generators_t:
+            cols = gens.intersection(n.generators_t[attr].columns)
+            if not cols.empty:
+                n.generators_t[attr].drop(columns=cols, inplace=True)
+    if "committable" in n.generators.columns:
+        n.generators.loc[gens, "committable"] = False
+
+
 def _process_reeds_data(filepath, carriers, value_col):
     """Helper function to process RPS or CES REEDS data."""
     reeds = pd.read_csv(filepath)

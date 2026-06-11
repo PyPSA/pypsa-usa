@@ -87,7 +87,7 @@ rule export_statistics:
     threads: 1
     resources:
         mem_mb=20000,
-        walltime="01:00:00",
+        walltime="01:30:00",
     script:
         "../scripts/plot_statistics.py"
 
@@ -139,7 +139,7 @@ rule plot_statistics:
         "logs/plot_figures/{interconnect}_{simpl}_{clusters}_l{ll}_{opts}_{sector}.log",
     threads: 1
     resources:
-        mem_mb=5000,
+        mem_mb=20000,
         walltime="02:00:00",
     script:
         "../scripts/plot_statistics.py"

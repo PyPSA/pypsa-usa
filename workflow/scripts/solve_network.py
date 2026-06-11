@@ -24,6 +24,7 @@ Additionally, some extra constraints specified in :mod:`solve_network` are added
 """
 
 import logging
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -42,6 +43,7 @@ from opts.policy import (
     add_RPS_constraints_sector,
     add_technology_capacity_target_constraints,
     apply_forced_retirements,
+    apply_zero_emission_retirements,
 )
 from opts.reserves import (
     add_ERM_constraints,
@@ -229,6 +231,71 @@ def extra_functionality(n, snapshots):
         add_fossil_generation_constraint(n, config)
 
 
+def _log_gurobi_iis(n) -> None:
+    """Log the human-readable linopy names of every constraint in the Gurobi IIS.
+
+    linopy's print_infeasibilities() prints to stdout (not captured by the Python
+    logging handler), so this function mirrors the IIS report via logger.warning so
+    it always appears in the python log. computeIIS() is idempotent if linopy
+    already called it.
+
+    Strategy: use linopy's compute_infeasibilities() to get integer labels and map
+    them to names. If that returns nothing (can happen if the tmp ILP file is empty
+    due to OS-level buffering), fall back to writing the ILP file ourselves and
+    parsing it directly.
+    """
+    import os
+    import tempfile
+
+    grb_model = getattr(getattr(n, "model", None), "solver_model", None)
+    if grb_model is None:
+        logger.warning("IIS extraction: solver_model not available.")
+        return
+
+    # Ensure IIS is computed (idempotent)
+    try:
+        grb_model.computeIIS()
+    except Exception as exc:
+        logger.warning(f"IIS extraction: computeIIS() failed: {exc}")
+        return
+
+    # --- Path A: use linopy's label mapping ---
+    labels = []
+    try:
+        labels = n.model.compute_infeasibilities()
+    except Exception as exc:
+        logger.warning(f"IIS extraction: linopy compute_infeasibilities failed: {exc}")
+
+    if labels:
+        try:
+            from linopy.common import print_single_constraint
+
+            names = []
+            for lbl in labels:
+                try:
+                    names.append(print_single_constraint(n.model, lbl))
+                except Exception:
+                    names.append(f"<label {lbl}>")
+            logger.warning(f"IIS constraints ({len(names)}):\n" + "\n".join(names))
+            return
+        except Exception as exc:
+            logger.warning(f"IIS label lookup failed: {exc}; raw labels: {labels}")
+
+    # --- Path B: write ILP ourselves and log raw content ---
+    # Only 2 constraints in the IIS (confirmed by Gurobi log), so file is tiny.
+    logger.warning("IIS: falling back to direct ILP file write.")
+    try:
+        fd, ilp_path = tempfile.mkstemp(suffix=".ilp", prefix="iis_")
+        os.close(fd)
+        grb_model.write(ilp_path)
+        with open(ilp_path) as f:
+            ilp_text = f.read()
+        os.unlink(ilp_path)
+        logger.warning(f"IIS report (raw ILP):\n{ilp_text}")
+    except Exception as exc:
+        logger.warning(f"IIS extraction (ILP fallback) failed: {exc}")
+
+
 def run_optimize(n, rolling_horizon, skip_iterations, cf_solving, **kwargs):
     """Initiate the correct type of pypsa.optimize function."""
     if rolling_horizon:
@@ -252,6 +319,7 @@ def run_optimize(n, rolling_horizon, skip_iterations, cf_solving, **kwargs):
         )
     if "infeasible" in condition:
         n.model.print_infeasibilities()
+        _log_gurobi_iis(n)
         raise RuntimeError("Solving status 'infeasible'")
 
 
@@ -280,7 +348,67 @@ def _restore_original_nominal(n: pypsa.Network) -> None:
             c.df[attr] = c.df[col]
 
 
+def _mask_future_generators(n: pypsa.Network, planning_horizon: int) -> None:
+    """Suppress components with build_year > planning_horizon before a period's solve.
+
+    Generators/links/stores with future build years must not be visible to the
+    optimizer during the current period: with multi_investment_periods=True, their
+    p_nom decision variables are still created by linopy but have no dispatch
+    constraints and no capital-cost objective term (the investment-period weighting
+    for a future period is 0 when only current-period snapshots are passed). This
+    leaves the variable effectively unbounded, which causes Gurobi to report
+    infeasible_or_unbounded even when the actual constraint set is feasible.
+
+    Original values are stashed on n._future_mask_stash and restored by
+    _restore_future_generators at the start of the next freeze_prior_periods call.
+    """
+    stash: dict = {}
+    for c in n.iterate_components(["Generator", "Link", "StorageUnit", "Store"]):
+        attr = "e_nom" if c.name == "Store" else "p_nom"
+        future = c.df.build_year > planning_horizon
+        if not future.any():
+            continue
+        stash[c.name] = {
+            "index": c.df.index[future].copy(),
+            f"{attr}_extendable": c.df.loc[future, f"{attr}_extendable"].copy(),
+            f"{attr}_max": c.df.loc[future, f"{attr}_max"].copy(),
+            f"{attr}_min": c.df.loc[future, f"{attr}_min"].copy(),
+            attr: c.df.loc[future, attr].copy(),
+        }
+        c.df.loc[future, f"{attr}_extendable"] = False
+        c.df.loc[future, f"{attr}_max"] = 0.0
+        c.df.loc[future, f"{attr}_min"] = 0.0
+        c.df.loc[future, attr] = 0.0
+    n._future_mask_stash = stash
+
+
+def _restore_future_generators(n: pypsa.Network) -> None:
+    """Restore components previously suppressed by _mask_future_generators."""
+    if not hasattr(n, "_future_mask_stash"):
+        return
+    for c in n.iterate_components(["Generator", "Link", "StorageUnit", "Store"]):
+        if c.name not in n._future_mask_stash:
+            continue
+        attr = "e_nom" if c.name == "Store" else "p_nom"
+        entry = n._future_mask_stash[c.name]
+        idx = entry["index"]
+        c.df.loc[idx, f"{attr}_extendable"] = entry[f"{attr}_extendable"]
+        c.df.loc[idx, f"{attr}_max"] = entry[f"{attr}_max"]
+        c.df.loc[idx, f"{attr}_min"] = entry[f"{attr}_min"]
+        c.df.loc[idx, attr] = entry[attr]
+    del n._future_mask_stash
+
+
 def freeze_prior_periods(n: pypsa.Network, prior_period: int):
+    # Restore components that were masked before this period's solve, then
+    # re-mask generators beyond the next planning horizon so the next solve
+    # also has no unbounded future-vintage variables.
+    _restore_future_generators(n)
+
+    periods = list(n.investment_periods)
+    period_idx = periods.index(prior_period)
+    next_period = periods[period_idx + 1] if period_idx + 1 < len(periods) else None
+
     renewable_carriers = set(n.config["electricity"].get("renewable_carriers", []))
     for c in n.iterate_components(["Generator", "Link", "StorageUnit", "Store"]):
         attr = "e_nom" if c.name == "Store" else "p_nom"
@@ -298,8 +426,10 @@ def freeze_prior_periods(n: pypsa.Network, prior_period: int):
         # lock in the optimized capacity from the prior period as the starting point
         # for the next period — without this, p_nom still holds the pre-solve value
         # (e.g. 0 for a new-build), so the next period's dispatch constraints would
-        # see the wrong installed capacity
-        c.df.loc[prior, attr] = c.df.loc[prior, attr + "_opt"]
+        # see the wrong installed capacity. Clip to zero: solver numerical noise can
+        # return tiny negative p_nom_opt values that make p_max_pu*p_nom < 0 in the
+        # next period, causing an immediate infeasibility.
+        c.df.loc[prior, attr] = c.df.loc[prior, attr + "_opt"].clip(lower=0)
 
         # freeze all prior-period assets by default; the optimizer cannot add more
         # capacity through assets that have already been built
@@ -311,6 +441,9 @@ def freeze_prior_periods(n: pypsa.Network, prior_period: int):
         # at the locked-in capacity so no new capacity can be added through this asset
         c.df.loc[retirable, attr + "_extendable"] = True
         c.df.loc[retirable, attr + "_max"] = c.df.loc[retirable, attr]
+
+    if next_period is not None:
+        _mask_future_generators(n, next_period)
 
 
 def update_egs_p_nom_max(n, planning_horizon):
@@ -377,23 +510,84 @@ def solve_network(n, config, solving, opts="", **kwargs):
         case "perfect":
             run_optimize(n, rolling_horizon, skip_iterations, cf_solving, **kwargs)
         case "myopic":
+            output_path = Path(snakemake.output[0])
+            periods_list = list(n.investment_periods)
+
+            def _checkpoint_path(horizon):
+                return output_path.parent / f"{output_path.stem}_checkpoint_{horizon}.nc"
+
+            # Resume from the latest available checkpoint so a failed run doesn't
+            # have to re-solve periods that already converged.
+            resume_after = None
+            for ph in reversed(periods_list):
+                cp = _checkpoint_path(ph)
+                if cp.exists():
+                    logger.info(f"Resuming from checkpoint after {ph}: loading {cp}")
+                    n = pypsa.Network(str(cp))
+                    n.config = config
+                    n.opts = opts
+                    resume_after = ph
+                    break
+
+            # _stash_original_nominal is idempotent: if p_nom_initial already exists
+            # in the loaded checkpoint it does nothing, preserving the original stash.
             _stash_original_nominal(n)
-            for i, planning_horizon in enumerate(n.investment_periods):
+
+            if resume_after is None:
+                # Fresh start: mask everything beyond the first planning horizon.
+                _mask_future_generators(n, periods_list[0])
+            else:
+                # Checkpoints are saved in the *unmasked* state (all future generators
+                # restored to their original values). Re-apply the mask for the next
+                # period that will actually be solved so the optimizer doesn't see
+                # generators it shouldn't yet.
+                resume_idx = periods_list.index(resume_after)
+                next_after_resume = periods_list[resume_idx + 1] if resume_idx + 1 < len(periods_list) else None
+                if next_after_resume is not None:
+                    _mask_future_generators(n, next_after_resume)
+
+            for i, planning_horizon in enumerate(periods_list):
+                if resume_after is not None and planning_horizon <= resume_after:
+                    logger.info(f"Skipping {planning_horizon} — already solved in checkpoint")
+                    continue
+
                 sns_horizon = n.snapshots[n.snapshots.get_level_values(0) == planning_horizon]
                 kwargs["snapshots"] = sns_horizon
 
                 if "TCT" in opts:
                     apply_forced_retirements(n, planning_horizon, config)
 
+                apply_zero_emission_retirements(n, planning_horizon, config)
                 update_egs_p_nom_max(n, planning_horizon)
                 run_optimize(n, rolling_horizon, skip_iterations, cf_solving, **kwargs)
 
                 logger.info(f"Preparing brownfield from {planning_horizon}")
                 freeze_prior_periods(n, planning_horizon)
+
+                # Save checkpoint after each completed period so the next period can
+                # resume without re-solving earlier ones.  Checkpoints are saved in
+                # the *unmasked* state: call _restore_future_generators to undo the
+                # re-mask that freeze_prior_periods just applied, export, then re-mask
+                # so the in-memory network is correct for the next loop iteration.
+                period_idx = periods_list.index(planning_horizon)
+                next_period = periods_list[period_idx + 1] if period_idx + 1 < len(periods_list) else None
+                if next_period is not None:
+                    _restore_future_generators(n)  # unmask for clean checkpoint
+                    cp = _checkpoint_path(planning_horizon)
+                    logger.info(f"Saving checkpoint to {cp}")
+                    n.export_to_netcdf(str(cp))
+                    _mask_future_generators(n, next_period)  # re-mask for next iteration
+
+            # Remove checkpoints now that the full run succeeded.
+            for ph in periods_list:
+                cp = _checkpoint_path(ph)
+                if cp.exists():
+                    cp.unlink()
+                    logger.info(f"Deleted checkpoint {cp}")
+
             # Restore the pre-solve p_nom/e_nom baseline so downstream statistics
             # and plots can compute (p_nom_opt - p_nom) = what was actually built
-            # across the myopic horizons. Without this, the inter-period freeze
-            # leaves p_nom == p_nom_opt and the "new capacity" signal is zero.
+            # across the myopic horizons.
             _restore_original_nominal(n)
         case _:
             raise ValueError(f"Invalid foresight option: '{foresight}'. Must be 'perfect' or 'myopic'.")
