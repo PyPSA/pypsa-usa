@@ -16,6 +16,8 @@ from snakemake.utils import update_config
 
 REGION_COLS = ["geometry", "name", "x", "y", "country"]
 
+PYPSA_V1 = bool(re.match(r"^1\.\d", pypsa.__version__))
+
 
 def configure_logging(snakemake, skip_handlers=False):
     """

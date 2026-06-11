@@ -7,11 +7,14 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 import pypsa
-from _helpers import REGION_COLS, configure_logging
+from _helpers import (
+    REGION_COLS, 
+    configure_logging,
+    PYPSA_V1
+)
 from scipy.spatial import Voronoi
 from shapely.geometry import Polygon
 from sklearn.neighbors import BallTree
-
 
 def voronoi_partition_pts(points, outline):
     """
@@ -96,13 +99,14 @@ def main(snakemake):
 
     all_locs = bus2sub[["x", "y"]]
     onshore_buses = n.buses[~n.buses.substation_off]
+    level= "name" if PYPSA_V1 else "Bus"
     bus2sub = pd.merge(
         bus2sub.reset_index(),
         n.buses[["reeds_zone", "reeds_ba"]],
-        left_on="Bus",
+        left_on=level,
         right_on=n.buses.index,
     ).set_index("sub_id")
-    bus2sub_onshore = bus2sub[bus2sub.Bus.isin(onshore_buses.index)]
+    bus2sub_onshore = bus2sub[bus2sub[level].isin(onshore_buses.index)]
 
     logger.info("Building Onshore Regions")
     onshore_regions = []

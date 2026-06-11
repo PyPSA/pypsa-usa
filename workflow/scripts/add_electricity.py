@@ -21,6 +21,7 @@ from _helpers import (
     export_network_for_gis_mapping,
     update_p_nom_max,
     weighted_avg,
+    PYPSA_V1
 )
 from sklearn.neighbors import BallTree
 
@@ -265,7 +266,8 @@ def match_nearest_bus(plants_subset, buses_subset):
     )
 
     # Map the nearest bus information back to the plants subset
-    plants_subset["bus_assignment"] = buses_subset.reset_index().iloc[indices.flatten()]["Bus"].values
+    level = "name" if PYPSA_V1 else "Bus"
+    plants_subset["bus_assignment"] = buses_subset.reset_index().iloc[indices.flatten()][level].values
     plants_subset["distance_nearest"] = distances.flatten()
 
     return plants_subset
@@ -467,7 +469,7 @@ def attach_conventional_generators(
     plants["efficiency"] = plants.efficiency.astype(float).fillna(plants.efficiency_r)
 
     committable_fields = ["start_up_cost", "min_down_time", "min_up_time"]
-    defaults = pypsa.components.component_attrs["Generator"].default
+    defaults = pypsa.components["Generator"].default
     if unit_commitment:
         for attr in committable_fields:
             plants[attr] = plants[attr].astype(float).fillna(defaults[attr])
@@ -539,6 +541,7 @@ def attach_wind_and_solar(
         config.get("renewable", {}).get("dataset") == "godeeep" and config["renewable_scenarios"][0] != "historical"
     )
 
+    level = "name" if PYPSA_V1 else "Bus"
     for car in carriers:
         if car in ["hydro", "EGS"]:
             continue
@@ -548,7 +551,7 @@ def attach_wind_and_solar(
         bus2sub = (
             pd.read_csv(input_profiles.bus2sub, dtype=str)
             .drop("interconnect", axis=1)
-            .rename(columns={"Bus": "bus_id"})
+            .rename(columns={level: "bus_id"})
             .drop_duplicates(subset="sub_id")
         )
 
@@ -694,6 +697,7 @@ def attach_egs(
     discount_rate = 0.07  # load_costs(snakemake.input.tech_costs).loc["geothermal", "wacc_real"]
     drilling_cost = snakemake.config["renewable"]["EGS"]["drilling_cost"]
 
+    level = "name" if PYPSA_V1 else "Bus"
     with (
         xr.open_dataset(
             getattr(input_profiles, "specs_egs"),
@@ -705,7 +709,7 @@ def attach_egs(
         bus2sub = (
             pd.read_csv(input_profiles.bus2sub, dtype=str)
             .drop("interconnect", axis=1)
-            .rename(columns={"Bus": "bus_id"})
+            .rename(columns={level: "bus_id"})
         )
 
         # IGNORE: Remove dropna(). Rather, apply dropna when creating the original dataset

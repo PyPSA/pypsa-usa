@@ -7,12 +7,16 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 import pypsa
-from _helpers import configure_logging
+from _helpers import (
+    configure_logging,
+    PYPSA_V1
+)
 from build_shapes import load_na_shapes
 from constants import REC_TRADING_ZONE_MAPPER
 from shapely.geometry import Polygon
 from sklearn.neighbors import BallTree
 
+LEVEL = "name" if PYPSA_V1 else "name"
 
 def haversine_np(lon1, lat1, lon2, lat2):
     """
@@ -358,7 +362,6 @@ def match_missing_buses(buses_to_match_to, missing_buses):
     )
     
     foo = buses_to_match_to.reset_index().iloc[missing_buses.id_nearest]#.name.values
-    breakpoint()
     missing_buses["bus_assignment"] = foo.name.values
     missing_buses = missing_buses.drop(columns=["id_nearest"])
     return missing_buses
@@ -384,7 +387,7 @@ def assign_missing_state_regions(gdf_bus: gpd.GeoDataFrame):
     value.
     """
     buses = gdf_bus.copy()
-    buses = buses.reset_index().rename(columns={"bus_id": "Bus", "lon": "x", "lat": "y"}).set_index("Bus")
+    buses = buses.reset_index().rename(columns={"bus_id": LEVEL, "lon": "x", "lat": "y"}).set_index(LEVEL)
 
     missing = buses.loc[buses.full_state.isna()]
     if missing.empty:
@@ -394,13 +397,13 @@ def assign_missing_state_regions(gdf_bus: gpd.GeoDataFrame):
     missing = match_missing_buses(buses, missing)
 
     # check if error western / texas. can make this a function
-    missing = missing.reset_index().drop_duplicates("Bus").set_index("Bus")
-    buses = buses.reset_index().drop_duplicates("Bus").set_index("Bus")
+    missing = missing.reset_index().drop_duplicates(LEVEL).set_index(LEVEL)
+    buses = buses.reset_index().drop_duplicates(LEVEL).set_index(LEVEL)
 
     missing.full_state = buses.loc[missing.bus_assignment.values].full_state.values
 
-    buses = buses.reset_index().rename(columns={"Bus": "bus_id", "x": "lon", "y": "lat"}).set_index("bus_id")
-    missing = missing.reset_index().rename(columns={"Bus": "bus_id", "x": "lon", "y": "lat"}).set_index("bus_id")
+    buses = buses.reset_index().rename(columns={LEVEL: "bus_id", "x": "lon", "y": "lat"}).set_index("bus_id")
+    missing = missing.reset_index().rename(columns={LEVEL: "bus_id", "x": "lon", "y": "lat"}).set_index("bus_id")
 
     # reassigning values to original dataframe
     gdf_bus.loc[missing.index, "full_state"] = missing.full_state
@@ -550,6 +553,7 @@ def main(snakemake):
     gdf_bus = map_bus_to_region(gdf_bus, county_shape, ["county"])
 
     # assign load allocation factors to buses for state level dissagregation
+    breakpoint()
     gdf_bus = assign_missing_state_regions(gdf_bus)
 
     # if dissagregating based with breakthrough energy on states, the LAF must
@@ -571,6 +575,7 @@ def main(snakemake):
     if interconnect == "Texas" or interconnect == "usa":
         n = assign_texas_poi(n)
     n = remove_breakthrough_offshore(n)
+    breakpoint()
     assign_missing_regions(n)
 
     # build offshore network configuration
