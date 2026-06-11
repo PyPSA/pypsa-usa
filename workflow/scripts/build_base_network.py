@@ -8,8 +8,8 @@ import numpy as np
 import pandas as pd
 import pypsa
 from _helpers import (
+    PYPSA_V1,
     configure_logging,
-    PYPSA_V1
 )
 from build_shapes import load_na_shapes
 from constants import REC_TRADING_ZONE_MAPPER
@@ -17,6 +17,7 @@ from shapely.geometry import Polygon
 from sklearn.neighbors import BallTree
 
 LEVEL = "name" if PYPSA_V1 else "name"
+
 
 def haversine_np(lon1, lat1, lon2, lat2):
     """
@@ -360,8 +361,8 @@ def match_missing_buses(buses_to_match_to, missing_buses):
         missing_buses[["x", "y"]].values,  # The input array for the query
         k=1,  # The number of nearest neighbors
     )
-    
-    foo = buses_to_match_to.reset_index().iloc[missing_buses.id_nearest]#.name.values
+
+    foo = buses_to_match_to.reset_index().iloc[missing_buses.id_nearest]  # .name.values
     missing_buses["bus_assignment"] = foo.name.values
     missing_buses = missing_buses.drop(columns=["id_nearest"])
     return missing_buses

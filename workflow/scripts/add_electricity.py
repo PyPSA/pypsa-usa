@@ -16,12 +16,12 @@ import pandas as pd
 import pypsa
 import xarray as xr
 from _helpers import (
+    PYPSA_V1,
     calculate_annuity,
     configure_logging,
     export_network_for_gis_mapping,
     update_p_nom_max,
     weighted_avg,
-    PYPSA_V1
 )
 from sklearn.neighbors import BallTree
 
