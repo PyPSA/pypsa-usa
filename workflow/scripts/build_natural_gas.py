@@ -25,7 +25,7 @@ import pandas as pd
 import pypsa
 import yaml
 from constants import CODE_2_STATE, EMPTY_STATES, NG_MWH_2_MMCF, STATE_2_CODE, STATES_INTERCONNECT_MAPPER
-from pypsa.components import Network
+from pypsa import Network
 
 logger = logging.getLogger(__name__)
 
