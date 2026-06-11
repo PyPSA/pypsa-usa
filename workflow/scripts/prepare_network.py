@@ -144,7 +144,7 @@ def set_transmission_limit(n, ll_type, factor):
 
 def average_every_nhours(n, offset):
     logger.info(f"Resampling the network to {offset}")
-    m = n.copy(with_time=False)
+    m = n.copy(snapshots=None)
 
     def resample_multi_index(df, offset, func):
         sw = []
