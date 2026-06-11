@@ -103,7 +103,7 @@ def load_network(import_name=None, custom_components=None):
     -------
     pypsa.Network
     """
-    from pypsa.descriptors import Dict
+    from pypsa.definitions.structures import Dict
 
     override_components = None
     override_component_attrs = None
@@ -373,7 +373,7 @@ def mock_snakemake(rulename, **wildcards):
 
     import snakemake as sm
     from packaging.version import Version, parse
-    from pypsa.descriptors import Dict
+    from pypsa.definitions.structures import Dict
     from snakemake.script import Snakemake
 
     script_dir = Path(__file__).parent.resolve()
