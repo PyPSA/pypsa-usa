@@ -10,7 +10,6 @@ from _helpers import calculate_annuity, configure_logging
 from add_electricity import add_missing_carriers
 from eia import FuelCosts
 from opts._helpers import get_region_buses
-from pypsa.definitions.structures import get_switchable_as_dense as get_as_dense
 from shapely.geometry import Point
 
 idx = pd.IndexSlice
@@ -828,7 +827,7 @@ def trim_network(n, trim_topology):
 
     # Get OCGT generators and calculate average marginal cost
     ocgt_gens = n.generators[n.generators.carrier == "OCGT"]
-    avg_marginal_cost = get_as_dense(n, "Generator", "marginal_cost").loc[:, ocgt_gens.index].mean().mean()
+    avg_marginal_cost = n.get_switchable_as_dense("Generator", "marginal_cost").loc[:, ocgt_gens.index].mean().mean()
     n.add("Carrier", "imports", co2_emissions=0.428, nice_name="imports")
 
     # remove existing oneport components at bus
@@ -893,7 +892,7 @@ def calc_import_export_costs(n: pypsa.Network, carrier: str) -> float:
         component = "Link"
     if gens.empty:
         raise ValueError(f"No generators or links found for carrier to calculate imports/exports costs: {carrier}")
-    costs = get_as_dense(n, component, "marginal_cost").loc[:, gens.index].mean().mean()
+    costs = n.get_switchable_as_dense(component, "marginal_cost").loc[:, gens.index].mean().mean()
     if costs <= 0.01:
         raise ValueError(
             f"Average marginal cost for {carrier} is less than or equal to 0.01. Check the fuel costs configuration.",
