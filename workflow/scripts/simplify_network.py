@@ -140,7 +140,7 @@ def aggregate_to_substations(
                 "zonal_aggregation must be either balancing_area, country, or state",
             )
 
-    network_s = clustering.network
+    network_s = clustering.n
 
     network_s.buses["interconnect"] = substations.interconnect
     network_s.buses["x"] = substations.x
@@ -295,7 +295,7 @@ if __name__ == "__main__":
             aggregation_strategies=params.aggregation_strategies,
             weighting_strategy=params.simplify_network.get("weighting_strategy", None),
         )
-        n = clustering.network
+        n = clustering.n
 
         cluster_regions((clustering.busmap,), snakemake.input, snakemake.output)
     else:
