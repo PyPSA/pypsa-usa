@@ -13,13 +13,13 @@ import pandas as pd
 import pypsa
 from linopy import merge
 from opts._helpers import get_region_buses
-from pypsa.descriptors import (
+from pypsa.definitions.structures import (
     expand_series,
     get_activity_mask,
     get_bounds_pu,
     nominal_attrs,
 )
-from pypsa.descriptors import (
+from pypsa.definitions.structures import (
     get_switchable_as_dense as get_as_dense,
 )
 from pypsa.optimization.common import reindex

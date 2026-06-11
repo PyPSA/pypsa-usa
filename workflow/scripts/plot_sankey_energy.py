@@ -13,7 +13,7 @@ import pypsa
 from _helpers import configure_logging, mock_snakemake
 from constants import ATB_TECH_MAPPER, TBTU_2_MWH
 from constants_sector import TransportEfficiency
-from pypsa.descriptors import get_switchable_as_dense
+from pypsa.definitions.structures import get_switchable_as_dense
 from summary_sector import _get_gens_in_state, _get_links_in_state
 
 # These are node colors! Energy Services and Rejected Energy links do not

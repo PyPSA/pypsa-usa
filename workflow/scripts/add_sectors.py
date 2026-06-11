@@ -137,7 +137,7 @@ def add_sector_foundation(
 
     points = points[~points.index.isin(existing)]
 
-    n.madd(
+    n.add(
         "Bus",
         names=points.index,
         suffix=f" {carrier}",
@@ -173,7 +173,7 @@ def add_sector_foundation(
         marginal_cost = 0
 
     if add_supply:
-        n.madd(
+        n.add(
             "Store",
             names=points.index,
             suffix=f" {carrier}",
@@ -414,7 +414,7 @@ def convert_generators_2_links(
             if cols:
                 pnl[param] = df[cols]
 
-    n.madd(
+    n.add(
         "Link",
         names=plants.index,
         bus0=plants.STATE + bus0_suffix,
@@ -439,7 +439,7 @@ def convert_generators_2_links(
     for param, df in pnl.items():
         n.links_t[param] = n.links_t[param].join(df, how="inner")
 
-    n.mremove("Generator", plants.index)
+    n.remove("Generator", plants.index)
 
     # existing links will give a 'nan in efficiency2' warning
     n.links["efficiency2"] = n.links.efficiency2.fillna(0)
@@ -459,7 +459,7 @@ def split_loads_by_carrier(n: pypsa.Network):
     for bus in n.buses.index.unique():
         df = n.loads[n.loads.bus == bus][["bus", "carrier"]]
 
-        n.madd(
+        n.add(
             "Bus",
             df.index,
             v_nom=1,

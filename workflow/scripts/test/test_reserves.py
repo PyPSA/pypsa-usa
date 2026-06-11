@@ -10,10 +10,10 @@ import sys
 import numpy as np
 import pandas as pd
 import pytest
-from pypsa.descriptors import (
+from pypsa.definitions.structures import (
     get_activity_mask,
 )
-from pypsa.descriptors import (
+from pypsa.definitions.structures import (
     get_switchable_as_dense as get_as_dense,
 )
 

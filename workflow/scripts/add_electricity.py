@@ -78,7 +78,7 @@ def add_missing_carriers(n, carriers):
     """Function to add missing carriers to the network without raising errors."""
     missing_carriers = set(carriers) - set(n.carriers.index)
     if len(missing_carriers) > 0:
-        n.madd("Carrier", missing_carriers)
+        n.add("Carrier", missing_carriers)
 
 
 def clean_locational_multiplier(df: pd.DataFrame):
@@ -489,7 +489,7 @@ def attach_conventional_generators(
     # Define generators using modified ppl DataFrame
     caps = plants.groupby("carrier").p_nom.sum().div(1e3).round(2)
     logger.info(f"Adding {len(plants)} generators with capacities [GW] \n{caps}")
-    n.madd(
+    n.add(
         "Generator",
         plants.index,
         carrier=plants.carrier,
@@ -656,7 +656,7 @@ def attach_wind_and_solar(
 
         logger.info(f"Adding {car} capacity-factor profiles to the network.")
 
-        n.madd(
+        n.add(
             "Generator",
             bus_list,
             " " + car,
@@ -769,7 +769,7 @@ def attach_egs(
                 f"Adding EGS (Resource Quality-{q}) capacity-factor profiles to the network.",
             )
 
-            n.madd(
+            n.add(
                 "Generator",
                 bus_list,
                 suffix,
@@ -801,7 +801,7 @@ def attach_battery_storage(
     )
 
     plants_filt = plants_filt.dropna(subset=["energy_storage_capacity_mwh"])
-    n.madd(  # Adds storage units which can retire economically or at their lifetime
+    n.add(  # Adds storage units which can retire economically or at their lifetime
         "StorageUnit",
         plants_filt.index,
         carrier="battery",
@@ -960,7 +960,7 @@ def attach_breakthrough_renewable_plants(
         p_max_pu = p_max_pu.drop(leap_day.index)
         p_max_pu = broadcast_investment_horizons_index(n, p_max_pu)
 
-        n.madd(
+        n.add(
             "Generator",
             tech_plants.index,
             bus=tech_plants.bus_id,

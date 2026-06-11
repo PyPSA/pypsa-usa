@@ -268,13 +268,13 @@ def busmap_for_n_clusters(
             component = n.df(c)
             rm = component[component.bus.isin(buses_remove.index)]
             logger.warning(f"Removing {rm.shape} component {c}")
-            n.mremove(c, rm.index)
+            n.remove(c, rm.index)
         for c in ["Line", "Link"]:
             component = n.df(c)
             rm = component[component.bus0.isin(buses_remove.index) | component.bus1.isin(buses_remove.index)]
             logger.warning(f"Removing {rm.shape} component {c}")
-            n.mremove(c, rm.index)
-        n.mremove("Bus", buses_remove.index)
+            n.remove(c, rm.index)
+        n.remove("Bus", buses_remove.index)
         n.determine_network_topology()
 
     def busmap_for_country(x):
@@ -392,7 +392,7 @@ def add_itls(buses, itls, itl_cost, expansion=True):
     itls["efficiency"] = 1 - ((itls.length_miles / 100) * 0.01)
 
     # The fwd and rev links will be made extendable in prepare_network, so no need to add AC_exp
-    clustering.network.madd(
+    clustering.network.add(
         "Link",
         names=itls.interface,  # itl name
         suffix="_fwd",
@@ -411,7 +411,7 @@ def add_itls(buses, itls, itl_cost, expansion=True):
         carrier="AC",
     )
 
-    clustering.network.madd(
+    clustering.network.add(
         "Link",
         names=itls.interface,  # itl name
         suffix="_rev",
@@ -444,7 +444,7 @@ def convert_to_transport(
     Replaces all Lines according to Links with the transfer capacity specified
     by the ITLs.
     """
-    clustering.network.mremove("Line", clustering.network.lines.index)
+    clustering.network.remove("Line", clustering.network.lines.index)
     buses = clustering.network.buses.copy()
 
     itls = pd.read_csv(itl_fn)
@@ -523,7 +523,7 @@ def convert_to_transport(
         buses_p20 = clustering.network.buses[clustering.network.buses.reeds_zone == "p20"]
         existing_links = clustering.network.links[clustering.network.links.bus0.isin(buses_p19.index)]
         if existing_links.empty:
-            clustering.network.madd(
+            clustering.network.add(
                 "Link",
                 names=["p19_to_p20"],
                 bus0=buses_p19.iloc[0].name,
@@ -738,7 +738,7 @@ def calibrate_tamu_transmission_capacity(
 
     # Remove lines not in REEDS data
     if lines_not_in_reeds:
-        clustering.network.mremove("Line", lines_not_in_reeds)
+        clustering.network.remove("Line", lines_not_in_reeds)
 
     logger.info(
         f"REEDS capacity corrections completed: {lines_updated} lines updated with REEDS data, "
@@ -849,7 +849,7 @@ def calibrate_tamu_transmission_capacity(
     # Batch add all new lines using madd
     if new_lines_data:
         new_lines_df = pd.DataFrame(new_lines_data)
-        clustering.network.madd(
+        clustering.network.add(
             "Line",
             names=new_lines_df["name"],
             bus0=new_lines_df["bus0"].values,

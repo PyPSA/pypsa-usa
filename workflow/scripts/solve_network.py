@@ -93,7 +93,7 @@ def prepare_network(n, solve_opts=None):
             # TODO: do not scale via sign attribute (use Eur/MWh instead of Eur/kWh)
             load_shedding = 1e2  # Eur/kWh
 
-        n.madd(
+        n.add(
             "Generator",
             buses_i,
             " load",
@@ -288,7 +288,7 @@ def prepare_brownfield(n, planning_horizon):
 
         for df_idx in df.index:
             if nm == "Generator":
-                n.madd(
+                n.add(
                     nm,
                     [df_idx],
                     carrier=df.loc[df_idx].carrier,

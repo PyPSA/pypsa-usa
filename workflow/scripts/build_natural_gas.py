@@ -238,7 +238,7 @@ class GasBuses(GasData):
 
         states = df.set_index("STATE")
 
-        n.madd(
+        n.add(
             "Bus",
             names=states.index,
             suffix=" gas",
@@ -334,7 +334,7 @@ class GasStorage(GasData):
         if "gas storage" not in n.carriers.index:
             n.add("Carrier", "gas storage", color="#d35050", nice_name="Gas Storage")
 
-        n.madd(
+        n.add(
             "Bus",
             names=df.index,
             suffix=" gas storage",
@@ -345,7 +345,7 @@ class GasStorage(GasData):
         )
 
         cyclic_storage = kwargs.get("cyclic_storage", True)
-        n.madd(
+        n.add(
             "Store",
             names=df.index,
             suffix=" gas storage",
@@ -365,7 +365,7 @@ class GasStorage(GasData):
         # must do two links, rather than a bidirectional one, to constrain charge limits
         # Right now, chanrge limits are set at being able to drain the reservoir
         # over one full month
-        n.madd(
+        n.add(
             "Link",
             names=df.index,
             suffix=" charge gas storage",
@@ -381,7 +381,7 @@ class GasStorage(GasData):
             build_year=n.investment_periods[0],
         )
 
-        n.madd(
+        n.add(
             "Link",
             names=df.index,
             suffix=" discharge gas storage",
@@ -467,7 +467,7 @@ class GasProcessing(GasData):
                 nice_name="Gas Production",
             )
 
-        n.madd(
+        n.add(
             "Bus",
             names=df.index,
             suffix=" gas production",
@@ -484,7 +484,7 @@ class GasProcessing(GasData):
         # (63 CAD/ 1000 m3) (1 m3 / 35.5 CF) (1,000,000 CF / MMCF) (1 MMCF / 303.5 MWH) (1 USD / 0.75 CAD)
         # ~7.5 $/MWh
 
-        n.madd(
+        n.add(
             "Link",
             names=df.index,
             suffix=" gas production",
@@ -503,7 +503,7 @@ class GasProcessing(GasData):
             build_year=n.investment_periods[0],
         )
 
-        n.madd(
+        n.add(
             "Store",
             names=df.index,
             unit="MWh",
@@ -751,7 +751,7 @@ class InterconnectGasPipelineCapacity(_GasPipelineCapacity):
 
         df.index = df.STATE_FROM + " " + df.STATE_TO
 
-        n.madd(
+        n.add(
             "Link",
             names=df.index,
             suffix=" pipeline",
@@ -1100,7 +1100,7 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
         if "gas trade" not in n.carriers.index:
             n.add("Carrier", "gas trade", color="#d35050", nice_name="Gas Trade")
 
-        n.madd(
+        n.add(
             "Bus",
             names=template.index,
             suffix=" gas trade",
@@ -1110,7 +1110,7 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
             interconnect=self.interconnect,
         )
 
-        n.madd(
+        n.add(
             "Link",
             names=template.index,
             suffix=" gas trade",
@@ -1128,7 +1128,7 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
             build_year=n.investment_periods[0],
         )
 
-        n.madd(
+        n.add(
             "Store",
             names=store_exports.index,
             suffix=" gas trade",
@@ -1149,7 +1149,7 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
             build_year=n.investment_periods[0],
         )
 
-        n.madd(
+        n.add(
             "Store",
             names=store_imports.index,
             unit="MWh",
@@ -1282,7 +1282,7 @@ class PipelineLinepack(GasData):
         cyclic_storage = kwargs.get("cyclic_storage", True)
         standing_loss = kwargs.get("standing_loss", 0)
 
-        n.madd(
+        n.add(
             "Store",
             names=df.index,
             unit="MWh_th",

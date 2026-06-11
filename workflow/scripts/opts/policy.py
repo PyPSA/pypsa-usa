@@ -10,7 +10,7 @@ from opts._helpers import (
     get_model_horizon,
     get_region_buses,
 )
-from pypsa.descriptors import get_switchable_as_dense as get_as_dense
+from pypsa.definitions.structures import get_switchable_as_dense as get_as_dense
 
 logger = logging.getLogger(__name__)
 
