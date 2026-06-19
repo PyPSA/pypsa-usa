@@ -8,6 +8,7 @@ import pandas as pd
 import pypsa
 from _helpers import calculate_annuity, configure_logging, load_costs
 from add_electricity import add_missing_carriers
+from constants import HOURS_PER_YEAR
 from eia import FuelCosts
 from opts._helpers import get_region_buses
 from pypsa.descriptors import get_switchable_as_dense as get_as_dense
@@ -154,7 +155,7 @@ def attach_phs_storageunits(n: pypsa.Network, elec_opts, costs: pd.DataFrame):
             * region_onshore_psh_grp["cost_kw_round"]
             * 1e3
             * n.snapshot_weightings.objective.sum()
-            / 8760.0
+            / HOURS_PER_YEAR
         )
 
         region_onshore_psh_grp["marginal_cost"] = psh_vom
@@ -1342,7 +1343,7 @@ def add_co2_network(n: pypsa.Network, config: dict):
         connections = n.lines
 
     # calculate annualized capital cost
-    number_years = n.snapshot_weightings.generators.sum() / 8760
+    number_years = n.snapshot_weightings.generators.sum() / HOURS_PER_YEAR
     cost = (
         config["co2"]["network"]["capital_cost"]
         * calculate_annuity(config["co2"]["network"]["lifetime"], config["co2"]["network"]["discount_rate"])
@@ -1507,7 +1508,7 @@ def add_dac(n: pypsa.Network, config: dict, sector: bool):
     )
 
     # calculate annualized capital cost
-    number_years = n.snapshot_weightings.generators.sum() / 8760
+    number_years = n.snapshot_weightings.generators.sum() / HOURS_PER_YEAR
     cost = (
         config["dac"]["capital_cost"]
         * calculate_annuity(config["dac"]["lifetime"], config["dac"]["discount_rate"])

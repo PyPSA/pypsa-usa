@@ -33,6 +33,7 @@ from _helpers import (
     configure_logging,
     update_config_from_wildcards,
 )
+from constants import HOURS_PER_YEAR
 from opts.bidirectional_link import add_bidirectional_link_constraints
 from opts.interchange import add_interchange_constraints
 from opts.land import add_land_use_constraints
@@ -124,7 +125,7 @@ def prepare_network(n, solve_opts=None):
             names=n.snapshots.names,
         )
         n.set_snapshots(first_nhours)
-        n.snapshot_weightings[:] = 8760.0 / nhours
+        n.snapshot_weightings[:] = HOURS_PER_YEAR / nhours
 
     return n
 
