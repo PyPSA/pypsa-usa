@@ -469,7 +469,7 @@ def attach_conventional_generators(
     plants["efficiency"] = plants.efficiency.astype(float).fillna(plants.efficiency_r)
 
     committable_fields = ["start_up_cost", "min_down_time", "min_up_time"]
-    defaults = pd.read_csv("data/unit_commitment.csv", index_col='attribute')
+    defaults = pd.read_csv("data/unit_commitment.csv", index_col="attribute")
     if unit_commitment:
         for carrier in carriers:
             default_per_carrier = defaults[carrier]
@@ -490,7 +490,7 @@ def attach_conventional_generators(
             default_per_carrier = defaults[carrier]
             for attr in committable_fields:
                 plants[attr] = default_per_carrier[attr]
-    
+
     committable_attrs = {attr: plants[attr] for attr in committable_fields}
 
     # Define generators using modified ppl DataFrame
