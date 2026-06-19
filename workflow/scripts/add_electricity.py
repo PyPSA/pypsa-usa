@@ -469,23 +469,28 @@ def attach_conventional_generators(
     plants["efficiency"] = plants.efficiency.astype(float).fillna(plants.efficiency_r)
 
     committable_fields = ["start_up_cost", "min_down_time", "min_up_time"]
-    # defaults = pypsa.components.component_attrs["Generator"].default
+    defaults = pd.read_csv("data/unit_commitment.csv", index_col='attribute')
     if unit_commitment:
-        # for attr in committable_fields:
-        #     plants[attr] = plants[attr].astype(float).fillna(defaults[attr])
-        plants["p_min_pu"] = (
-            (plants.minimum_load_mw / plants.p_nom)
-            .clip(
-                upper=np.minimum(plants.summer_derate, plants.winter_derate),
-                lower=0,
+        for carrier in carriers:
+            default_per_carrier = defaults[carrier]
+            for attr in committable_fields:
+                plants[attr] = plants[attr].astype(float).fillna(default_per_carrier[attr])
+            plants["p_min_pu"] = (
+                (plants.minimum_load_mw / plants.p_nom)
+                .clip(
+                    upper=np.minimum(plants.summer_derate, plants.winter_derate),
+                    lower=0,
+                )
+                .astype(float)
+                .fillna(0)
+                .mul(0.95)
             )
-            .astype(float)
-            .fillna(0)
-            .mul(0.95)
-        )
-    # else:
-    #     for attr in committable_fields:
-    #         plants[attr] = defaults[attr]
+    else:
+        for carrier in carriers:
+            default_per_carrier = defaults[carrier]
+            for attr in committable_fields:
+                plants[attr] = default_per_carrier[attr]
+    
     committable_attrs = {attr: plants[attr] for attr in committable_fields}
 
     # Define generators using modified ppl DataFrame
