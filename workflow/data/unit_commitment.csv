@@ -1,0 +1,4 @@
+attribute,CCGT,geothermal,hydrogen_ct,waste,coal,nuclear,oil,OCGT,CCGT-95CCS,biomass
+start_up_cost, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+min_down_time, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+min_up_time, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
