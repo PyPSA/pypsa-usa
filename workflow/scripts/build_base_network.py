@@ -554,7 +554,6 @@ def main(snakemake):
     gdf_bus = map_bus_to_region(gdf_bus, county_shape, ["county"])
 
     # assign load allocation factors to buses for state level dissagregation
-    breakpoint()
     gdf_bus = assign_missing_state_regions(gdf_bus)
 
     # if dissagregating based with breakthrough energy on states, the LAF must
@@ -576,7 +575,6 @@ def main(snakemake):
     if interconnect == "Texas" or interconnect == "usa":
         n = assign_texas_poi(n)
     n = remove_breakthrough_offshore(n)
-    breakpoint()
     assign_missing_regions(n)
 
     # build offshore network configuration
