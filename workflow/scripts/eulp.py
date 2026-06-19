@@ -222,7 +222,7 @@ class Eulp:
             df.index = pd.to_datetime(df.index)
         df.index = df.index.map(lambda x: x.replace(year=2018))
         resampled = df.resample("1h").sum()
-        assert len(resampled == 8760), "Length of resampled != 8760 :("
+        assert len(resampled) == 8760, "Length of resampled != 8760 :("
         return resampled.sort_index()
 
     def _aggregate_data(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -344,7 +344,7 @@ class EulpTotals:
             df.index = pd.to_datetime(df.index)
         df.index = df.index.map(lambda x: x.replace(year=2018))
         resampled = df.resample("1h").sum()
-        assert len(resampled == 8760), "Length of resampled != 8760 :("
+        assert len(resampled) == 8760, "Length of resampled != 8760 :("
         return resampled.sort_index()
 
     def _aggregate_data(self, df: pd.DataFrame) -> pd.DataFrame:

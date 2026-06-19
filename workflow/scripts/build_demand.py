@@ -382,7 +382,7 @@ class ReadEfs(ReadStrategy):
 
         df["utc_shift"] = df.State.map(utc_shift)
         df["UtcHourID"] = df.LocalHourID + df.utc_shift
-        df["UtcHourID"] = df.UtcHourID.map(lambda x: x if x < 8761 else x - 8760)
+        df["UtcHourID"] = df.UtcHourID.map(lambda x: x if x < const.HOURS_PER_YEAR + 1 else x - const.HOURS_PER_YEAR)
         df = df.drop(columns=["utc_shift"])
         return df
 
@@ -465,7 +465,7 @@ class ReadEer(ReadStrategy):
         2022,
         2023,
     )
-    HOURS_PER_YEAR: ClassVar[int] = 8760
+    HOURS_PER_YEAR: ClassVar[int] = const.HOURS_PER_YEAR
     CST_TO_UTC_SHIFT: ClassVar[int] = 6
 
     def __init__(
@@ -636,7 +636,7 @@ class ReadEulp(ReadStrategy):
             aggfunc="sum",
         )
         df = df.rename(columns=CODE_2_STATE)
-        assert len(df.index.get_level_values("snapshot").unique()) == 8760
+        assert len(df.index.get_level_values("snapshot").unique()) == const.HOURS_PER_YEAR
         assert not df.empty
         return df
 
@@ -819,7 +819,7 @@ class ReadCliu(ReadStrategy):
         """
         Applies profile data to annual demand data.
 
-        This is quite a heavy operation, as it can be up to 8760hrs,
+        This is quite a heavy operation, as it can be up to a full year of hourly records,
         3000+ counties, 50+ subsectors and 4 fuels.
         """
 
@@ -1555,7 +1555,7 @@ class ReadTransportAeo(ReadStrategy):
 
             df = df.div(100)  # convert from percentage to decimal
             df = df.mul(demand_national.loc[(self.vehicle, year), "value"])
-            df = df.mul(1 / 8760)  # uniform load over the year
+            df = df.mul(1 / const.HOURS_PER_YEAR)  # uniform load over the year
 
             dfs.append(df)
 

@@ -166,7 +166,7 @@ def get_sector_costs(
         capex = capex.value.unstack().fillna(0)
 
         # n years should be
-        # n.snapshot_weightings.loc[n.investment_periods[x]].objective.sum() / 8760.0
+        # n.snapshot_weightings.loc[n.investment_periods[x]].objective.sum() / const.HOURS_PER_YEAR
 
         capex["capital_cost"] = (
             (

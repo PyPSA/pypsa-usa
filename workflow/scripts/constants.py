@@ -17,6 +17,9 @@ GPS_CRS = "EPSG:4326"
 # convert euros to USD
 EUR_2_USD = 1.07  # taken on 12-12-2023
 
+# number of hours in a non-leap year
+HOURS_PER_YEAR = 8760
+
 # energy content of natural gas
 # Assumes national averages for the conversion
 # https://www.eia.gov/naturalgas/monthly/pdf/table_25.pdf

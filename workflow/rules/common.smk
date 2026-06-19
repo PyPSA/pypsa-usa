@@ -11,6 +11,7 @@ path = workflow.source_path("../scripts/_helpers.py")
 sys.path.insert(0, os.path.dirname(path))
 
 from _helpers import validate_checksum, update_config_from_wildcards
+from constants import HOURS_PER_YEAR
 from snakemake.utils import update_config
 
 
@@ -95,7 +96,7 @@ def memory(w):
     for o in w.opts.split("-"):
         m = re.match(r"^(\d+)seg$", o, re.IGNORECASE)
         if m is not None:
-            factor *= int(m.group(1)) / 8760
+            factor *= int(m.group(1)) / HOURS_PER_YEAR
             break
     if w.clusters.endswith("m") or w.clusters.endswith("c"):
         val = int(factor * (50000 + 30 * int(w.simpl) + 195 * int(w.clusters[:-1])))
