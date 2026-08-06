@@ -1,7 +1,11 @@
 """Assimilates data on existing generator and storage resources from PUDL, CEMS, ADS, and other sources."""
 
 import logging
+import os
 import re
+import subprocess
+from pathlib import Path
+from urllib.parse import urlparse
 
 import constants as const
 import duckdb
@@ -12,9 +16,71 @@ from _helpers import configure_logging, weighted_avg
 logger = logging.getLogger(__name__)
 
 
-def initialize_duckdb():
-    duckdb.connect(database=":memory:", read_only=False)
-    duckdb.query("INSTALL httpfs;")
+PUDL_PARQUET_FILES = (
+    "out_eia__monthly_generators.parquet",
+    "out_eia__yearly_generators.parquet",
+    "core_eia860__scd_generators_energy_storage.parquet",
+    "core_eia860__scd_plants.parquet",
+)
+
+
+def _pudl_https_url(pudl_path: str) -> str:
+    """Return an HTTPS base URL that has a valid TLS certificate."""
+    path = pudl_path.rstrip("/")
+    s3_prefix = "s3://pudl.catalyst.coop"
+    virtual_hosted_prefix = "https://pudl.catalyst.coop.s3.amazonaws.com"
+    path_style_prefix = "https://s3.us-west-2.amazonaws.com/pudl.catalyst.coop"
+
+    if path.startswith(s3_prefix):
+        return path.replace(s3_prefix, path_style_prefix, 1)
+    if path.startswith(virtual_hosted_prefix):
+        return path.replace(virtual_hosted_prefix, path_style_prefix, 1)
+    return path
+
+
+def cache_pudl_parquet_files(pudl_path: str) -> str:
+    """Download required remote PUDL Parquet files and return a local path."""
+    parsed = urlparse(pudl_path)
+    if parsed.scheme not in {"s3", "http", "https"}:
+        return pudl_path
+
+    base_url = _pudl_https_url(pudl_path)
+    version = Path(parsed.path).name or "current"
+    cache_root = Path(os.environ.get("PUDL_CACHE_DIR", "repo_data/pudl"))
+    cache_dir = cache_root / version
+    cache_dir.mkdir(parents=True, exist_ok=True)
+
+    for filename in PUDL_PARQUET_FILES:
+        destination = cache_dir / filename
+        if destination.is_file() and destination.stat().st_size > 0:
+            logger.info("Using cached PUDL file %s", destination)
+            continue
+
+        temporary = destination.with_suffix(f"{destination.suffix}.part")
+        logger.info("Downloading %s", filename)
+        try:
+            subprocess.run(
+                [
+                    "curl",
+                    "-fL",
+                    "--retry",
+                    "3",
+                    "--connect-timeout",
+                    "10",
+                    "--max-time",
+                    "1800",
+                    f"{base_url}/{filename}",
+                    "-o",
+                    str(temporary),
+                ],
+                check=True,
+            )
+            temporary.replace(destination)
+        except (OSError, subprocess.CalledProcessError):
+            temporary.unlink(missing_ok=True)
+            raise
+
+    return str(cache_dir)
 
 
 def load_eia_operable_data(parquet_path: str):
@@ -694,9 +760,9 @@ if __name__ == "__main__":
     start_date = f"{data_year}-01-01"
     end_date = f"{data_year + 1}-01-01"
 
-    initialize_duckdb()
-    eia_data_operable = load_eia_operable_data(snakemake.params.pudl_path)
-    heat_rates = load_heat_rates_data(snakemake.params.pudl_path, start_date, end_date)
+    pudl_path = cache_pudl_parquet_files(snakemake.params.pudl_path)
+    eia_data_operable = load_eia_operable_data(pudl_path)
+    heat_rates = load_heat_rates_data(pudl_path, start_date, end_date)
 
     eia_data_operable = merge_fc_hr_data(
         eia_data_operable,
