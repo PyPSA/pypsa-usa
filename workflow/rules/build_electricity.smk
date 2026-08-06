@@ -1,6 +1,7 @@
 ################# ----------- Rules to Build Network ---------- #################
 
 from itertools import chain
+from pathlib import Path
 
 
 rule build_shapes:
@@ -663,10 +664,59 @@ def dynamic_fuel_price_files(wildcards):
         return {}
 
 
+PUDL_POWERPLANT_FILES = [
+    "out_eia__monthly_generators.parquet",
+    "out_eia__yearly_generators.parquet",
+    "core_eia860__scd_generators_energy_storage.parquet",
+    "core_eia860__scd_plants.parquet",
+]
+
+PUDL_VERSION = config["pudl_cache"]["version"]
+PUDL_BASE_URL = config["pudl_cache"]["base_url"].rstrip("/")
+PUDL_DIRECTORY = Path(config["pudl_cache"]["directory"]) / PUDL_VERSION
+
+PUDL_POWERPLANT_PATHS = [
+    str(PUDL_DIRECTORY / filename) for filename in PUDL_POWERPLANT_FILES
+]
+
+
+rule retrieve_pudl_powerplant_file:
+    output:
+        str(PUDL_DIRECTORY / "{pudl_file}.parquet"),
+    params:
+        url=lambda wildcards: (
+            f"{PUDL_BASE_URL}/{PUDL_VERSION}/" f"{wildcards.pudl_file}.parquet"
+        ),
+    wildcard_constraints:
+        pudl_file="|".join(Path(filename).stem for filename in PUDL_POWERPLANT_FILES),
+    log:
+        "logs/retrieve_pudl/{pudl_file}.log",
+    resources:
+        mem_mb=1000,
+        walltime="00:30:00",
+    shell:
+        r"""
+        mkdir -p "$(dirname {output:q})" "$(dirname {log:q})"
+
+        curl -fL \
+          --retry 5 \
+          --retry-all-errors \
+          --connect-timeout 20 \
+          --max-time 1800 \
+          {params.url:q} \
+          --output {output:q}.part \
+          > {log:q} 2>&1
+
+        mv {output:q}.part {output:q}
+        """
+
+
 rule build_powerplants:
     params:
-        pudl_path=config_provider("pudl_path"),
+        pudl_path=str(PUDL_DIRECTORY),
+        renewable_weather_year=config_provider("renewable_weather_years"),
     input:
+        pudl=PUDL_POWERPLANT_PATHS,
         wecc_ads="repo_data/WECC_ADS_public",
         eia_ads_generator_mapping="repo_data/WECC_ADS_public/eia_ads_generator_mapping_updated.csv",
         fuel_costs="repo_data/plants/fuelCost22.csv",
