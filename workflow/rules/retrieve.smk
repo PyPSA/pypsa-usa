@@ -55,7 +55,7 @@ rule retrieve_zenodo_databundles:
 
 def efs_databundle(wildcards):
     return {
-        "EFS": f"https://data.nrel.gov/system/files/126/EFSLoadProfile_{wildcards.efs_case}_{wildcards.efs_speed}.zip"
+        "EFS": f"https://data.nlr.gov/system/files/126/EFSLoadProfile_{wildcards.efs_case}_{wildcards.efs_speed}.zip"
     }
 
 

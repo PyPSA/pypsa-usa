@@ -595,7 +595,7 @@ def add_ev_generation_constraint(n, config, snakemake):
 
     Default limits taken from:
     - (Fig ES2) https://www.nrel.gov/docs/fy18osti/71500.pdf
-    - (Sheet 6.3 - high case) https://data.nrel.gov/submissions/90
+    - (Sheet 6.3 - high case) https://data.nlr.gov/submissions/90
     """
     mode_mapper = {
         "light_duty": "lgt",

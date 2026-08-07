@@ -557,7 +557,7 @@ class ReadCliu(ReadStrategy):
     - MECS is used to scale county level data
 
     Sources:
-    - https://data.nrel.gov/submissions/97
+    - https://data.nlr.gov/submissions/97
     - https://www.eia.gov/consumption/manufacturing/data/2014/#r3 (Table 3.2)
     - https://loadshape.epri.com/enduse
     - https://github.com/NREL/Industry-Energy-Tool/
@@ -1672,7 +1672,7 @@ class WriteIndustrial(WriteStrategy):
     """
     Based on county level energy use from 2014.
 
-    https://data.nrel.gov/submissions/97
+    https://data.nlr.gov/submissions/97
     """
 
     def __init__(self, n: pypsa.Network, filepath: str) -> None:
