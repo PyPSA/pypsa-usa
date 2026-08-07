@@ -4,6 +4,106 @@ from itertools import chain
 from pathlib import Path
 
 
+PUDL_VERSION = config["pudl_cache"]["version"]
+PUDL_BASE_URL = config["pudl_cache"]["base_url"].rstrip("/")
+PUDL_DIRECTORY = Path(config["pudl_cache"]["directory"]) / PUDL_VERSION
+
+PUDL_POWERPLANT_FILES = [
+    "out_eia__monthly_generators.parquet",
+    "out_eia__yearly_generators.parquet",
+    "core_eia860__scd_generators_energy_storage.parquet",
+    "core_eia860__scd_plants.parquet",
+]
+
+PUDL_COST_FILES = [
+    "core_nrelatb__yearly_projected_financial_cases_by_scenario.parquet",
+    "core_nrelatb__yearly_projected_cost_performance.parquet",
+    "core_eiaaeo__yearly_projected_fuel_cost_in_electric_sector_by_type.parquet",
+]
+
+PUDL_DEMAND_FILES = [
+    "censusdp1tract.state_2010census_dp1.parquet",
+    "core_eiaaeo__yearly_projected_generation_in_electric_sector_by_technology.parquet",
+]
+
+PUDL_FUEL_PRICE_FILES = [
+    "out_eia__monthly_generators.parquet",
+    "out_eia__yearly_generators.parquet",
+    "core_eia860__scd_plants.parquet",
+]
+
+PUDL_FILES = sorted(
+    set(
+        PUDL_POWERPLANT_FILES
+        + PUDL_COST_FILES
+        + PUDL_DEMAND_FILES
+        + PUDL_FUEL_PRICE_FILES
+    )
+)
+
+
+def pudl_paths(filenames):
+    return [str(PUDL_DIRECTORY / filename) for filename in filenames]
+
+
+PUDL_POWERPLANT_PATHS = pudl_paths(PUDL_POWERPLANT_FILES)
+PUDL_COST_PATHS = pudl_paths(PUDL_COST_FILES)
+PUDL_FUEL_PRICE_PATHS = pudl_paths(PUDL_FUEL_PRICE_FILES)
+
+
+def demand_pudl_paths(wildcards):
+    profile = config["electricity"]["demand"]["profile"]
+
+    if profile == "ferc":
+        return pudl_paths(PUDL_DEMAND_FILES)
+
+    if profile == "eia":
+        return pudl_paths(
+            [
+                "core_eiaaeo__yearly_projected_generation_in_electric_sector_by_technology.parquet",
+            ]
+        )
+
+    return []
+
+
+rule retrieve_pudl_file:
+    output:
+        str(PUDL_DIRECTORY / "{pudl_file}.parquet"),
+    params:
+        url=lambda wildcards: (
+            f"{PUDL_BASE_URL}/{PUDL_VERSION}/" f"{wildcards.pudl_file}.parquet"
+        ),
+    wildcard_constraints:
+        pudl_file="|".join(Path(filename).stem for filename in PUDL_FILES),
+    log:
+        "logs/retrieve_pudl/{pudl_file}.log",
+    resources:
+        mem_mb=1000,
+        walltime="00:30:00",
+    shell:
+        r"""
+        mkdir -p "$(dirname {output:q})" "$(dirname {log:q})"
+
+        curl -fL \
+          --retry 5 \
+          --retry-all-errors \
+          --connect-timeout 20 \
+          --max-time 1800 \
+          {params.url:q} \
+          --output {output:q}.part \
+          > {log:q} 2>&1
+
+        test -s {output:q}.part
+
+        python -c \
+          "import duckdb; duckdb.sql(\"SELECT * FROM read_parquet('{output}.part') LIMIT 1\").fetchall()" \
+          >> {log:q} 2>&1
+
+        mv {output:q}.part {output:q}
+        """
+
+
 rule build_shapes:
     params:
         source_offshore_shapes=config_provider("offshore_shape"),
@@ -102,8 +202,9 @@ rule build_bus_regions:
 rule build_cost_data:
     params:
         aeo=config_provider("costs", "aeo"),
-        pudl_path=config_provider("pudl_path"),
+        pudl_path=str(PUDL_DIRECTORY),
     input:
+        pudl=PUDL_COST_PATHS,
         efs_tech_costs="repo_data/costs/EFS_Technology_Data.xlsx",
         efs_icev_costs="repo_data/costs/efs_icev_costs.csv",
         eia_tech_costs="repo_data/costs/eia_tech_costs.csv",
@@ -120,7 +221,6 @@ rule build_cost_data:
         walltime=config_provider("walltime", "build_cost_data", default="00:30:00"),
     script:
         "../scripts/build_cost_data.py"
-
 
 ATLITE_NPROCESSES = config["atlite"].get("nprocesses", 4)
 
@@ -345,7 +445,6 @@ def demand_raw_data(wildcards):
     elif profile == "ferc":
         return [
             DATA + "pudl/out_ferc714__hourly_estimated_state_demand.parquet",
-            DATA + "pudl/censusdp1tract.sqlite",
         ]
     elif profile == "eulp":
         return [
@@ -423,8 +522,9 @@ rule build_electrical_demand:
         planning_horizons=config["scenario"]["planning_horizons"],
         renewable_weather_years=config["renewable_weather_years"],
         snapshots=config["snapshots"],
-        pudl_path=config_provider("pudl_path"),
+        pudl_path=str(PUDL_DIRECTORY),
     input:
+        pudl=demand_pudl_paths,
         network=RESOURCES + "{interconnect}/elec_base_network.nc",
         demand_files=demand_raw_data,
         demand_scaling_file=demand_scaling_data,
@@ -481,7 +581,6 @@ rule build_industry_demand:
         profile_year=pd.to_datetime(config["snapshots"]["start"]).year,
         eia_api=config_provider("api", "eia"),
         snapshots=config_provider("snapshots"),
-        pudl_path=config_provider("pudl_path"),
     input:
         network=RESOURCES + "{interconnect}/elec_base_network.nc",
         demand_files=demand_raw_data,
@@ -630,8 +729,9 @@ rule build_fuel_prices:
     params:
         snapshots=config["snapshots"],
         api_eia=config["api"]["eia"],
-        pudl_path=config_provider("pudl_path"),
+        pudl_path=str(PUDL_DIRECTORY),
     input:
+        pudl=PUDL_FUEL_PRICE_PATHS,
         gas_balancing_area=ba_gas_dynamic_fuel_price_files,
     output:
         state_ng_fuel_prices=RESOURCES + "{interconnect}/state_ng_power_prices.csv",
@@ -662,53 +762,6 @@ def dynamic_fuel_price_files(wildcards):
         }
     else:
         return {}
-
-
-PUDL_POWERPLANT_FILES = [
-    "out_eia__monthly_generators.parquet",
-    "out_eia__yearly_generators.parquet",
-    "core_eia860__scd_generators_energy_storage.parquet",
-    "core_eia860__scd_plants.parquet",
-]
-
-PUDL_VERSION = config["pudl_cache"]["version"]
-PUDL_BASE_URL = config["pudl_cache"]["base_url"].rstrip("/")
-PUDL_DIRECTORY = Path(config["pudl_cache"]["directory"]) / PUDL_VERSION
-
-PUDL_POWERPLANT_PATHS = [
-    str(PUDL_DIRECTORY / filename) for filename in PUDL_POWERPLANT_FILES
-]
-
-
-rule retrieve_pudl_powerplant_file:
-    output:
-        str(PUDL_DIRECTORY / "{pudl_file}.parquet"),
-    params:
-        url=lambda wildcards: (
-            f"{PUDL_BASE_URL}/{PUDL_VERSION}/" f"{wildcards.pudl_file}.parquet"
-        ),
-    wildcard_constraints:
-        pudl_file="|".join(Path(filename).stem for filename in PUDL_POWERPLANT_FILES),
-    log:
-        "logs/retrieve_pudl/{pudl_file}.log",
-    resources:
-        mem_mb=1000,
-        walltime="00:30:00",
-    shell:
-        r"""
-        mkdir -p "$(dirname {output:q})" "$(dirname {log:q})"
-
-        curl -fL \
-          --retry 5 \
-          --retry-all-errors \
-          --connect-timeout 20 \
-          --max-time 1800 \
-          {params.url:q} \
-          --output {output:q}.part \
-          > {log:q} 2>&1
-
-        mv {output:q}.part {output:q}
-        """
 
 
 rule build_powerplants:
