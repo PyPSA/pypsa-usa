@@ -12,6 +12,7 @@ import atlite
 import geopandas as gpd
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import xarray as xr
 from _helpers import configure_logging, get_snapshots
 from dask.distributed import Client
@@ -24,6 +25,7 @@ logger = logging.getLogger(__name__)
 
 # Get renewable snapshots for a given year using month/day from config
 def get_renewable_snapshots(config, year):
+    """Build hourly renewable snapshots for a given weather year."""
     ren_sns_config = config.get("renewable_snapshots", {})
 
     if "start_month" in ren_sns_config:
@@ -33,17 +35,26 @@ def get_renewable_snapshots(config, year):
         end_day = ren_sns_config.get("end_day", 31)
         end_inclusive = ren_sns_config.get("end_inclusive", False)
 
-        snapshots_config = {
-            "start": f"{year}-{start_month:02d}-{start_day:02d}",
-            "end": f"{year}-{end_month:02d}-{end_day:02d}",
-            "inclusive": "both" if end_inclusive else "left",
-        }
-        logger.info(
-            f"Using renewable snapshots for year {year}: "
-            f"{snapshots_config['start']} to {snapshots_config['end']} "
-            f"({'inclusive' if end_inclusive else 'exclusive'} end)",
+        start = pd.Timestamp(
+            year=year,
+            month=start_month,
+            day=start_day,
         )
-        return get_snapshots(snapshots_config)
+        end = pd.Timestamp(
+            year=year,
+            month=end_month,
+            day=end_day,
+        )
+
+        # An inclusive end date represents the complete calendar day.
+        if end_inclusive:
+            end += pd.Timedelta(days=1)
+
+        snapshots_config = {
+            "start": str(start),
+            "end": str(end),
+            "inclusive": "left",
+        }
     else:
         # Old format fallback
         snapshots_config = {
@@ -51,8 +62,18 @@ def get_renewable_snapshots(config, year):
             "end": f"{year + 1}-01-01",
             "inclusive": "left",
         }
-        logger.info(f"Using renewable snapshots for full year {year}")
-        return get_snapshots(snapshots_config)
+
+    renewable_snapshots = get_snapshots(snapshots_config)
+
+    logger.info(
+        "Using %s renewable snapshots for year %s: %s to %s",
+        len(renewable_snapshots),
+        year,
+        renewable_snapshots[0],
+        renewable_snapshots[-1],
+    )
+
+    return renewable_snapshots
 
 
 def plot_data(data):
@@ -307,29 +328,47 @@ if __name__ == "__main__":
         if "Time" in profile.dims and "time" not in profile.dims:
             profile = profile.rename({"Time": "time"})
 
+        if "time" not in profile.dims:
+            raise ValueError(
+                f"The GODEEEP profile must contain a 'time' or 'Time' dimension. Found dimensions: {profile.dims}",
+            )
+
         if profile.sizes["time"] != len(renewable_sns):
             raise ValueError(
                 "Renewable profile length does not match the requested snapshots: "
                 f"{profile.sizes['time']} != {len(renewable_sns)}",
             )
 
-        # Future GODEEEP files use end-of-interval timestamps, from 01:00 on
-        # January 1 through 00:00 on January 1 of the following year.
-        # Assign the model snapshots positionally to use start-of-interval labels.
-        profile = profile.assign_coords(time=renewable_sns)
+        if scenario == "historical":
+            profile = profile.sel(time=renewable_sns)
+        else:
+            # Future files use end-of-interval timestamps. Relabel them with the
+            # corresponding start-of-interval model snapshots.
+            profile = profile.assign_coords(time=renewable_sns)
 
-        # filtering for appropriate time snapshot
-        profile = profile.sel(time=renewable_sns)
+        if "bus" not in profile.dims:
+            raise ValueError(
+                "The downloaded GODEEEP profile is not aggregated by bus. "
+                f"Expected a 'bus' dimension, found: {profile.dims}. "
+                "A gridded file cannot be used as an aggregated profile.",
+            )
 
-        # load in preprocessed capacity data from Zenodo
         logger.info("Loading preprocessed data from Zenodo...")
 
         # Extract variables from the preprocessed ERA5/Atlite dataset
         logger.info(f"Pulling preprocessed data for {tech}")
-        preprocessed = xr.open_dataset(downloader.download_scenario_file("capacities", scenario, f"profile_{tech}.nc"))
+
+        preprocessed = xr.open_dataset(
+            downloader.download_scenario_file(
+                "capacities",
+                scenario,
+                f"profile_{tech}.nc",
+            ),
+        )
+
         capacities = preprocessed["weight"]
         p_nom_max = preprocessed["p_nom_max"]
-        potential = preprocessed["potential"]  # maybe not include this, the bus mapping is complicated
+        potential = preprocessed["potential"]
         average_distance = preprocessed["average_distance"]
 
         # Get bus values in interconnect region and format
@@ -341,7 +380,6 @@ if __name__ == "__main__":
         # Get preprocessed ERA5/Atlite bus values and format
         atlite_buses = capacities.bus.values
 
-        # Find intersection: buses that exist in regions AND profile AND preprocessed data
         common_buses = [bus for bus in godeeep_buses if bus in atlite_buses and bus in region_buses]
 
         # Reassign coordinates and filter to common buses
@@ -353,7 +391,11 @@ if __name__ == "__main__":
         regions_xy = regions.loc[common_buses]
         regions_x = regions_xy["x"].values.astype("<U7")
         regions_y = regions_xy["y"].values.astype("<U7")
-        potential = potential.sel(x=regions_x, y=regions_y, method="nearest")
+        potential = potential.sel(
+            x=regions_x,
+            y=regions_y,
+            method="nearest",
+        )
 
         # Filter godeeep profile to only common buses
         logger.info(f"Before filtering Profile shape: {profile.shape}")

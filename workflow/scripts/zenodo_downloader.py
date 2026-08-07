@@ -56,7 +56,10 @@ class ZenodoScenarioDownloader:
         url = f"https://zenodo.org/api/records/{record_id}"
 
         try:
-            response = requests.get(url)
+            response = requests.get(
+                url,
+                timeout=(30, 120),
+            )
             response.raise_for_status()
             metadata = response.json()
             self._metadata_cache[record_id] = metadata
@@ -191,15 +194,11 @@ class ZenodoScenarioDownloader:
 
         try:
             with ZipFile(archive_path) as archive:
-                archive_filename = filename.replace("_aggregated.nc", ".nc")
-
-                matches = [member for member in archive.namelist() if Path(member).name in {filename, archive_filename}]
+                matches = [member for member in archive.namelist() if Path(member).name == filename]
 
                 if len(matches) != 1:
                     raise FileNotFoundError(
-                        f"Expected exactly one of '{filename}' or "
-                        f"'{archive_filename}' in '{archive_path.name}', "
-                        f"found {len(matches)}",
+                        f"Expected exactly one '{filename}' in '{archive_path.name}', found {len(matches)}",
                     )
 
                 with (
@@ -212,7 +211,12 @@ class ZenodoScenarioDownloader:
                         length=1024 * 1024,
                     )
 
-        except (BadZipFile, OSError):
+        except BadZipFile:
+            local_filepath.unlink(missing_ok=True)
+            archive_path.unlink(missing_ok=True)
+            raise
+
+        except OSError:
             local_filepath.unlink(missing_ok=True)
             raise
 
@@ -297,16 +301,32 @@ class ZenodoScenarioDownloader:
         return available
 
 
-def download_scenario_file(scenario_final, scenario, filename, download_dir="./data/zenodo"):
-    """Quick function to download a single file from a scenario."""
+def download_scenario_file(
+    scenario_final,
+    scenario,
+    filename,
+    download_dir="./data",
+):
+    """Download a single file from a configured scenario."""
     downloader = ZenodoScenarioDownloader(download_dir)
-    return downloader.download_scenario_file(scenario_final, scenario, filename)
+    return downloader.download_scenario_file(
+        scenario_final,
+        scenario,
+        filename,
+    )
 
 
-def download_by_record_id(record_id, filename, download_dir="./data/zenodo"):
-    """Quick function to download a file directly by record ID."""
+def download_by_record_id(
+    record_id,
+    filename,
+    download_dir="./data",
+):
+    """Download a file directly using its Zenodo record ID."""
     downloader = ZenodoScenarioDownloader(download_dir)
-    return downloader.download_by_record_id(record_id, filename)
+    return downloader.download_by_record_id(
+        record_id,
+        filename,
+    )
 
 
 def list_available_scenarios():
