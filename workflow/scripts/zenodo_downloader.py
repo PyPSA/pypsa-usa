@@ -68,7 +68,10 @@ class ZenodoScenarioDownloader:
         force_redownload : bool, optional
             If True, re-download the file even if it exists locally. Default is False.
         """
-        (self.download_dir / "zenodo" / scenario).mkdir(exist_ok=True)
+        (self.download_dir / "zenodo" / scenario).mkdir(
+            parents=True,
+            exist_ok=True,
+        )
         local_filepath = f"{self.download_dir}/zenodo/{scenario}/{filename}"
 
         # Check if file already exists locally and skip Zenodo
