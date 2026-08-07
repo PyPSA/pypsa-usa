@@ -304,6 +304,20 @@ if __name__ == "__main__":
         filepath = downloader.download_scenario_file(scenario_final, scenario, filename)
         profile = xr.open_dataarray(filepath).load()
 
+        if "Time" in profile.dims and "time" not in profile.dims:
+            profile = profile.rename({"Time": "time"})
+
+        if profile.sizes["time"] != len(renewable_sns):
+            raise ValueError(
+                "Renewable profile length does not match the requested snapshots: "
+                f"{profile.sizes['time']} != {len(renewable_sns)}",
+            )
+
+        # Future GODEEEP files use end-of-interval timestamps, from 01:00 on
+        # January 1 through 00:00 on January 1 of the following year.
+        # Assign the model snapshots positionally to use start-of-interval labels.
+        profile = profile.assign_coords(time=renewable_sns)
+
         # filtering for appropriate time snapshot
         profile = profile.sel(time=renewable_sns)
 
