@@ -832,7 +832,7 @@ def add_road_transport_brownfield(
         # existing stock efficiencies taken from 2016 EFS Technology data
         # This is consistent with where future efficiencies are taken from
         # Historical uses lowest EIA 2017 case where available
-        # https://data.nrel.gov/submissions/93
+        # https://data.nlr.gov/submissions/93
         # https://www.nrel.gov/docs/fy18osti/70485.pdf
 
         ## Efficiencies of existing stock are quite sensitive! ##
