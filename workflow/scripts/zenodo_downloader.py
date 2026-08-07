@@ -1,6 +1,8 @@
 """Download scenarios from Zenodo."""
 
+import shutil
 from pathlib import Path
+from zipfile import BadZipFile, ZipFile
 
 import requests
 
@@ -21,7 +23,7 @@ class ZenodoScenarioDownloader:
             "solar_rcp45cooler_2060_2099": None,
             "solar_rcp85hotter_2020_2059": None,
             "solar_rcp85hotter_2060_2099": None,
-            "solar_rcp85cooler_2020_2059": None,
+            "solar_rcp85cooler_2020_2059": 10140411,
             "solar_rcp85cooler_2060_2099": None,
             "wind_100m_historical": 18331699,
             "wind_100m_rcp45hotter_2020_2039": None,
@@ -36,8 +38,8 @@ class ZenodoScenarioDownloader:
             "wind_100m_rcp85hotter_2040_2059": None,
             "wind_100m_rcp85hotter_2060_2079": None,
             "wind_100m_rcp85hotter_2080_2099": None,
-            "wind_100m_rcp85cooler_2020_2039": None,
-            "wind_100m_rcp85cooler_2040_2059": None,
+            "wind_100m_rcp85cooler_2020_2039": 10146347,
+            "wind_100m_rcp85cooler_2040_2059": 10150300,
             "wind_100m_rcp85cooler_2060_2079": None,
             "wind_100m_rcp85cooler_2080_2099": None,
             "capacities": 17576458,
@@ -98,12 +100,9 @@ class ZenodoScenarioDownloader:
             record_id = self.scenario_records.get(scenario_final)
 
             if not record_id:
-                print(f"No record ID found for scenario: {scenario_final}")
-                print("Available scenarios with record IDs:")
-                for scenario, rec_id in self.scenario_records.items():
-                    if rec_id is not None:
-                        print(f"  - {scenario} (ID: {rec_id})")
-                return None
+                raise ValueError(
+                    f"No Zenodo record ID configured for scenario: {scenario_final}",
+                )
 
             return self._download_file(record_id, filename, Path(local_filepath), force_redownload)
 
@@ -136,71 +135,121 @@ class ZenodoScenarioDownloader:
         # Only proceed with download if needed
         return self._download_file(record_id, filename, Path(local_filepath), force_redownload)
 
-    def _download_file(self, record_id, filename, local_filepath, force_redownload=False):
-        """
-        Internal method to download a file from Zenodo.
-
-        This is only called after confirming the file doesn't exist locally.
-        """
-        # Ensure directory exists
+    def _download_file(
+        self,
+        record_id,
+        filename,
+        local_filepath,
+        force_redownload=False,
+    ):
+        """Download a file directly or extract it from a Zenodo ZIP archive."""
         local_filepath.parent.mkdir(parents=True, exist_ok=True)
 
-        # Get record metadata
         metadata = self.get_record_metadata(record_id)
         if not metadata:
-            return None
+            raise RuntimeError(
+                f"Could not retrieve metadata for Zenodo record {record_id}",
+            )
 
-        # Find the specific file
-        target_file = None
-        for file_info in metadata.get("files", []):
-            if file_info["key"] == filename:
-                target_file = file_info
-                break
+        files = metadata.get("files", [])
 
-        if not target_file:
-            print(f"File '{filename}' not found in record {record_id}")
-            print("Available files:")
-            for file_info in metadata.get("files", []):
-                print(f"  - {file_info['key']}")
-            return None
+        # Some Zenodo records expose the requested NetCDF file directly.
+        target_file = next(
+            (file_info for file_info in files if file_info["key"] == filename),
+            None,
+        )
 
-        # Download the file
-        download_url = target_file["links"]["self"]
-        file_size_mb = target_file["size"] / (1024 * 1024)
-
-        print(f"Downloading {filename} from record {record_id}...")
-        print(f"Size: {file_size_mb:.1f} MB")
-        print(f"Saving to: {local_filepath}")
-
-        try:
-            response = requests.get(download_url, stream=True)
-            response.raise_for_status()
-
-            total_size = int(response.headers.get("content-length", 0))
-            downloaded_size = 0
-
-            with open(local_filepath, "wb") as f:
-                for chunk in response.iter_content(chunk_size=8192):
-                    if chunk:
-                        f.write(chunk)
-                        downloaded_size += len(chunk)
-
-                        # Show progress for large files
-                        if total_size > 10 * 1024 * 1024:  # Show progress for files > 10MB
-                            progress = (downloaded_size / total_size) * 100
-                            print(f"\rProgress: {progress:.1f}%", end="", flush=True)
-
-            if total_size > 10 * 1024 * 1024:
-                print()  # New line after progress
-
-            print(f"Successfully downloaded {filename}")
+        if target_file is not None:
+            self._download_url(
+                target_file["links"]["self"],
+                local_filepath,
+                target_file["size"],
+            )
             return str(local_filepath)
 
-        except requests.exceptions.RequestException as e:
-            print(f"Download failed: {e}")
-            if Path(local_filepath).exists():
-                Path(local_filepath).unlink()  # Remove partial file
-            return None
+        # Future renewable datasets are published as ZIP archives.
+        zip_file = next(
+            (file_info for file_info in files if file_info["key"].lower().endswith(".zip")),
+            None,
+        )
+
+        if zip_file is None:
+            available_files = ", ".join(file_info["key"] for file_info in files)
+            raise FileNotFoundError(
+                f"Neither '{filename}' nor a ZIP archive was found in "
+                f"Zenodo record {record_id}. Available files: {available_files}",
+            )
+
+        archive_path = local_filepath.parent / zip_file["key"]
+
+        if force_redownload or not archive_path.exists():
+            self._download_url(
+                zip_file["links"]["self"],
+                archive_path,
+                zip_file["size"],
+            )
+
+        try:
+            with ZipFile(archive_path) as archive:
+                matches = [member for member in archive.namelist() if Path(member).name == filename]
+
+                if len(matches) != 1:
+                    raise FileNotFoundError(
+                        f"Expected exactly one '{filename}' in '{archive_path.name}', found {len(matches)}",
+                    )
+
+                with (
+                    archive.open(matches[0]) as source,
+                    local_filepath.open("wb") as destination,
+                ):
+                    shutil.copyfileobj(
+                        source,
+                        destination,
+                        length=1024 * 1024,
+                    )
+
+        except (BadZipFile, OSError):
+            local_filepath.unlink(missing_ok=True)
+            raise
+
+        return str(local_filepath)
+
+    def _download_url(self, download_url, destination, expected_size):
+        """Download a URL to a local path using a temporary partial file."""
+        partial_path = destination.with_suffix(
+            destination.suffix + ".part",
+        )
+
+        print(
+            f"Downloading {destination.name} ({expected_size / 1024**3:.1f} GiB)...",
+        )
+
+        try:
+            with requests.get(
+                download_url,
+                stream=True,
+                timeout=(30, 300),
+            ) as response:
+                response.raise_for_status()
+
+                with partial_path.open("wb") as output:
+                    for chunk in response.iter_content(
+                        chunk_size=1024 * 1024,
+                    ):
+                        if chunk:
+                            output.write(chunk)
+
+            actual_size = partial_path.stat().st_size
+            if expected_size and actual_size != expected_size:
+                raise OSError(
+                    f"Incomplete download for {destination.name}: expected {expected_size} bytes, got {actual_size}",
+                )
+
+            partial_path.replace(destination)
+
+        except Exception:
+            partial_path.unlink(missing_ok=True)
+            raise
 
     def list_available_files(self, scenario_name):
         """List all available files in a scenario dataset."""
