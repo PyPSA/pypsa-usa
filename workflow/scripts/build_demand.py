@@ -255,9 +255,6 @@ class ReadFERC714(ReadStrategy):
 
     def _read_census_data(self) -> pd.DataFrame:
         """Reads in census data for population weighting using parquet."""
-        duckdb.connect(database=":memory:", read_only=False)
-        duckdb.query("INSTALL httpfs;")
-
         parquet_path = snakemake.params.pudl_path
 
         sql = f"""
@@ -1883,9 +1880,7 @@ class DemandFormatter:
             assert self.api, "Must provide eia api key"
             return AeoEnergyScaler(self.api)
         elif self.scaling_method == "aeo_electricity":
-            assert self.filepath.startswith(
-                "s3://pudl.catalyst.coop/",
-            ), "Must provide pudl S3 URL (s3://pudl.catalyst.coop/...)"
+            assert self.filepath, "Must provide a local PUDL directory"
             return AeoElectricityScaler(self.filepath)
         elif self.scaling_method == "efs":
             assert self.filepath.endswith(".csv"), "Must provide EFS.csv data"
@@ -1987,9 +1982,6 @@ class AeoElectricityScaler(DemandScaler):
         | 2049 |  ###  |  ###  |
         | 2050 |  ###  |  ###  |
         """
-        duckdb.connect(database=":memory:", read_only=False)
-        duckdb.query("INSTALL httpfs;")
-
         query = f"""
         SELECT
             projection_year,
