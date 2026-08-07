@@ -82,6 +82,7 @@ class ZenodoScenarioDownloader:
             local_filepath = f"{self.download_dir}/zenodo/{filename}"
         else:
             (self.download_dir / "zenodo" / scenario).mkdir(
+                parents=True,
                 exist_ok=True,
             )  # create the zenodo directory if it doesn't exist
             local_filepath = f"{self.download_dir}/zenodo/{scenario}/{filename}"
