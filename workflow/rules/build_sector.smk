@@ -3,7 +3,7 @@
 
 def sector_input_files(wildcards):
     input_files = {
-        "network": RESOURCES
+        "network": NETWORKS
         + "{interconnect}/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}.nc",
         "tech_costs": RESOURCES
         + f"costs/sector_costs_{config['scenario']['planning_horizons'][0]}.csv",
@@ -16,19 +16,19 @@ def sector_input_files(wildcards):
             + "natural_gas/EIA-StatetoStateCapacity_Feb2024.xlsx",
             "pipeline_shape": DATA + "natural_gas/pipelines.geojson",
             "eia_757": DATA + "natural_gas/EIA-757.csv",
-            "cop_soil_total": RESOURCES
+            "cop_soil_total": HEATING_COP
             + "{interconnect}/cop_soil_total_elec_s{simpl}_c{clusters}.nc",
-            "cop_soil_rural": RESOURCES
+            "cop_soil_rural": HEATING_COP
             + "{interconnect}/cop_soil_rural_elec_s{simpl}_c{clusters}.nc",
-            "cop_soil_urban": RESOURCES
+            "cop_soil_urban": HEATING_COP
             + "{interconnect}/cop_soil_urban_elec_s{simpl}_c{clusters}.nc",
-            "cop_air_total": RESOURCES
+            "cop_air_total": HEATING_COP
             + "{interconnect}/cop_air_total_elec_s{simpl}_c{clusters}.nc",
-            "cop_air_rural": RESOURCES
+            "cop_air_rural": HEATING_COP
             + "{interconnect}/cop_air_rural_elec_s{simpl}_c{clusters}.nc",
-            "cop_air_urban": RESOURCES
+            "cop_air_urban": HEATING_COP
             + "{interconnect}/cop_air_urban_elec_s{simpl}_c{clusters}.nc",
-            "clustered_pop_layout": RESOURCES
+            "clustered_pop_layout": POPULATION
             + "{interconnect}/pop_layout_elec_s{simpl}_c{clusters}.csv",
             "ev_policy": config["sector"]["transport_sector"]["ev_policy"],
             "residential_stock": "repo_data/sectors/residential_stock",
@@ -39,10 +39,7 @@ def sector_input_files(wildcards):
 
     if config["co2"]["storage"] is True:
         input_files.update(
-            {
-                "co2_storage": RESOURCES
-                + "{interconnect}/co2_storage_s{simpl}_{clusters}.csv"
-            }
+            {"co2_storage": CO2 + "{interconnect}/co2_storage_s{simpl}_{clusters}.csv"}
         )
 
     return input_files
@@ -56,7 +53,7 @@ rule add_sectors:
     input:
         unpack(sector_input_files),
     output:
-        network=RESOURCES
+        network=NETWORKS
         + "{interconnect}/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc",
     log:
         "logs/add_sectors/{interconnect}/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.log",
