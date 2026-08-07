@@ -202,11 +202,15 @@ class ZenodoScenarioDownloader:
 
         try:
             with ZipFile(archive_path) as archive:
-                matches = [member for member in archive.namelist() if Path(member).name == filename]
+                archive_filename = filename.replace("_aggregated.nc", ".nc")
+
+                matches = [member for member in archive.namelist() if Path(member).name in {filename, archive_filename}]
 
                 if len(matches) != 1:
                     raise FileNotFoundError(
-                        f"Expected exactly one '{filename}' in '{archive_path.name}', found {len(matches)}",
+                        f"Expected exactly one of '{filename}' or "
+                        f"'{archive_filename}' in '{archive_path.name}', "
+                        f"found {len(matches)}",
                     )
 
                 with (
