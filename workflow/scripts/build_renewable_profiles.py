@@ -17,6 +17,7 @@ import xarray as xr
 from _helpers import configure_logging, get_snapshots
 from dask.distributed import Client
 from pypsa.geo import haversine
+from scipy import sparse
 from shapely.geometry import LineString
 from zenodo_downloader import ZenodoScenarioDownloader
 
@@ -94,6 +95,187 @@ def plot_data(data):
     return fig, ax
 
 
+def aggregate_godeeep_grid(filepath, regions, chunk_size=168):
+    """
+    Aggregate a gridded GODEEEP capacity-factor dataset by bus region.
+
+    Grid cells are assigned to regions using their centre coordinates. The
+    capacity factor of a bus is the equally weighted mean of its assigned
+    cells. The time dimension is processed in chunks to limit memory use.
+    """
+    with xr.open_dataset(filepath, decode_times=False) as dataset:
+        required = {"capacity_factor", "XLONG", "XLAT"}
+        missing = required.difference(dataset.variables)
+
+        if missing:
+            raise ValueError(
+                f"Missing required variables in {filepath}: {sorted(missing)}",
+            )
+
+        capacity_factor = dataset["capacity_factor"]
+
+        expected_dims = ("Time", "south_north", "west_east")
+        if capacity_factor.dims != expected_dims:
+            raise ValueError(
+                f"Unexpected GODEEEP capacity-factor dimensions: {capacity_factor.dims}; expected {expected_dims}",
+            )
+
+        longitude = dataset["XLONG"].values.ravel()
+        latitude = dataset["XLAT"].values.ravel()
+
+        valid_coordinates = np.isfinite(longitude) & np.isfinite(latitude)
+        cell_indices = np.flatnonzero(valid_coordinates)
+
+        grid_points = gpd.GeoDataFrame(
+            {"cell": cell_indices},
+            geometry=gpd.points_from_xy(
+                longitude[valid_coordinates],
+                latitude[valid_coordinates],
+            ),
+            crs="EPSG:4326",
+        )
+
+        region_geometry = regions[["geometry"]].copy()
+
+        if region_geometry.crs is None:
+            raise ValueError("The renewable regions do not define a CRS")
+
+        region_geometry = region_geometry.to_crs(grid_points.crs)
+        region_geometry = region_geometry.reset_index()
+
+        assignments = gpd.sjoin(
+            grid_points,
+            region_geometry,
+            how="inner",
+            predicate="within",
+        )
+
+        # Boundary points may not be matched by "within".
+        unmatched = grid_points.loc[~grid_points.index.isin(assignments.index)]
+
+        if not unmatched.empty:
+            boundary_assignments = gpd.sjoin(
+                unmatched,
+                region_geometry,
+                how="inner",
+                predicate="intersects",
+            )
+            assignments = pd.concat(
+                [assignments, boundary_assignments],
+                ignore_index=True,
+            )
+
+        if assignments.empty:
+            raise ValueError(
+                "No GODEEEP grid-cell centres intersect the renewable regions",
+            )
+
+        assignments = assignments.drop_duplicates(subset="cell", keep="first")
+
+        region_bus_order = regions.index.astype(str)
+        bus_lookup = pd.Series(
+            np.arange(len(region_bus_order)),
+            index=region_bus_order,
+        )
+
+        assignments["bus"] = assignments["bus"].astype(str)
+        assignments = assignments[assignments["bus"].isin(bus_lookup.index)].copy()
+
+        bus_rows = bus_lookup.loc[assignments["bus"]].to_numpy()
+
+        cells_per_bus = np.bincount(
+            bus_rows,
+            minlength=len(region_bus_order),
+        )
+
+        buses_with_cells = cells_per_bus > 0
+
+        if not buses_with_cells.all():
+            logger.warning(
+                "%d of %d bus regions contain no GODEEEP grid-cell centre",
+                (~buses_with_cells).sum(),
+                len(region_bus_order),
+            )
+
+        selected_buses = region_bus_order[buses_with_cells]
+        selected_bus_lookup = pd.Series(
+            np.arange(len(selected_buses)),
+            index=selected_buses,
+        )
+
+        assignments = assignments[assignments["bus"].isin(selected_buses)].copy()
+
+        matrix_rows = selected_bus_lookup.loc[assignments["bus"]].to_numpy()
+        matrix_columns = assignments["cell"].to_numpy()
+
+        selected_counts = np.bincount(
+            matrix_rows,
+            minlength=len(selected_buses),
+        )
+
+        weights = 1.0 / selected_counts[matrix_rows]
+
+        aggregation_matrix = sparse.csr_matrix(
+            (
+                weights,
+                (matrix_rows, matrix_columns),
+            ),
+            shape=(
+                len(selected_buses),
+                capacity_factor.sizes["south_north"] * capacity_factor.sizes["west_east"],
+            ),
+        )
+
+        n_time = capacity_factor.sizes["Time"]
+        aggregated = np.empty(
+            (n_time, len(selected_buses)),
+            dtype=np.float32,
+        )
+
+        logger.info(
+            "Aggregating %d GODEEEP grid cells into %d bus regions",
+            assignments["cell"].nunique(),
+            len(selected_buses),
+        )
+
+        for start in range(0, n_time, chunk_size):
+            stop = min(start + chunk_size, n_time)
+
+            values = capacity_factor.isel(Time=slice(start, stop)).values.reshape(stop - start, -1)
+
+            finite = np.isfinite(values)
+            clean_values = np.where(finite, values, 0.0)
+
+            numerator = aggregation_matrix @ clean_values.T
+            denominator = aggregation_matrix @ finite.astype(np.float32).T
+
+            chunk = np.divide(
+                numerator,
+                denominator,
+                out=np.full_like(numerator, np.nan, dtype=np.float32),
+                where=denominator > 0,
+            )
+
+            aggregated[start:stop] = chunk.T
+
+            logger.info(
+                "Aggregated GODEEEP hours %d-%d of %d",
+                start + 1,
+                stop,
+                n_time,
+            )
+
+        return xr.DataArray(
+            aggregated,
+            dims=("time", "bus"),
+            coords={
+                "time": np.arange(n_time),
+                "bus": selected_buses,
+            },
+            name="profile",
+        )
+
+
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
@@ -131,8 +313,24 @@ if __name__ == "__main__":
     assert "x" in regions.columns and "y" in regions.columns, (
         f"List of regions in {snakemake.input.regions} is empty, please disable the corresponding renewable technology"
     )
-    # do not pull up, set_index does not work if geo dataframe is empty
+
+    # Do not move this before the check above.
     regions = regions.set_index("name").rename_axis("bus")
+
+    if regions.index.has_duplicates:
+        logger.warning(
+            "Dissolving %d region geometries into %d unique buses",
+            len(regions),
+            regions.index.nunique(),
+        )
+        regions = regions.reset_index().dissolve(
+            by="bus",
+            as_index=True,
+            aggfunc="first",
+        )
+
+    regions.index = regions.index.astype(str)
+    regions.index.name = "bus"
     buses = regions.index
 
     #### start editing to separate out different datasets
@@ -319,11 +517,31 @@ if __name__ == "__main__":
 
         year_range = "" if scenario == "historical" else f"_{start}_{end}"
         scenario_final = technology + wind_height + f"_{scenario}" + year_range
-        filename = f"{technology}_gen_cf_{year}{wind_height}_aggregated.nc"
+        aggregated_filename = f"{technology}_gen_cf_{year}{wind_height}_aggregated.nc"
 
-        # Download and load profile from zenodo, or pull from local if already downloaded
-        filepath = downloader.download_scenario_file(scenario_final, scenario, filename)
-        profile = xr.open_dataarray(filepath).load()
+        try:
+            filepath = downloader.download_scenario_file(
+                scenario_final,
+                scenario,
+                aggregated_filename,
+            )
+        except FileNotFoundError:
+            gridded_filename = f"{technology}_gen_cf_{year}{wind_height}.nc"
+
+            logger.warning(
+                "Aggregated GODEEEP file %s is unavailable; falling back to gridded file %s",
+                aggregated_filename,
+                gridded_filename,
+            )
+
+            filepath = downloader.download_scenario_file(
+                scenario_final,
+                scenario,
+                gridded_filename,
+            )
+            profile = aggregate_godeeep_grid(filepath, regions)
+        else:
+            profile = xr.open_dataarray(filepath).load()
 
         if "Time" in profile.dims and "time" not in profile.dims:
             profile = profile.rename({"Time": "time"})
@@ -371,35 +589,70 @@ if __name__ == "__main__":
         potential = preprocessed["potential"]
         average_distance = preprocessed["average_distance"]
 
-        # Get bus values in interconnect region and format
-        region_buses = buses.values.astype("<U7")
+        region_buses = pd.Index(buses).astype(str)
+        godeeep_buses = pd.Index(profile.bus.values).astype(str)
+        atlite_buses = pd.Index(capacities.bus.values).astype(str)
 
-        # Get godeeep bus values and format
-        godeeep_buses = profile.bus.values
+        profile = profile.assign_coords(bus=godeeep_buses)
+        capacities = capacities.assign_coords(bus=atlite_buses)
+        p_nom_max = p_nom_max.assign_coords(
+            bus=pd.Index(p_nom_max.bus.values).astype(str),
+        )
+        average_distance = average_distance.assign_coords(
+            bus=pd.Index(average_distance.bus.values).astype(str),
+        )
 
-        # Get preprocessed ERA5/Atlite bus values and format
-        atlite_buses = capacities.bus.values
+        common_buses = godeeep_buses[godeeep_buses.isin(atlite_buses) & godeeep_buses.isin(region_buses)].tolist()
 
-        common_buses = [bus for bus in godeeep_buses if bus in atlite_buses and bus in region_buses]
+        if not common_buses:
+            raise ValueError(
+                "No common buses were found between GODEEEP profiles, preprocessed capacities and renewable regions",
+            )
+
+        logger.info(
+            "Using %d common buses: %d GODEEEP, %d preprocessed, %d regions",
+            len(common_buses),
+            len(godeeep_buses),
+            len(atlite_buses),
+            len(region_buses),
+        )
 
         # Reassign coordinates and filter to common buses
-        capacities = capacities.sel(bus=common_buses)
-        p_nom_max = p_nom_max.sel(bus=common_buses)
-        average_distance = average_distance.sel(bus=common_buses)
-
-        # For potential, need to filter by x and y coordinates actually
         regions_xy = regions.loc[common_buses]
-        regions_x = regions_xy["x"].values.astype("<U7")
-        regions_y = regions_xy["y"].values.astype("<U7")
+
+        regions_x = xr.DataArray(
+            regions_xy["x"].to_numpy(dtype=float),
+            dims="bus",
+            coords={"bus": common_buses},
+        )
+        regions_y = xr.DataArray(
+            regions_xy["y"].to_numpy(dtype=float),
+            dims="bus",
+            coords={"bus": common_buses},
+        )
+
         potential = potential.sel(
             x=regions_x,
             y=regions_y,
             method="nearest",
         )
 
+        # The vectorized x/y selection introduces a bus dimension.
+        # Remove the selected auxiliary coordinates before merging.
+        potential = potential.drop_vars(
+            ["x", "y"],
+            errors="ignore",
+        )
+
         # Filter godeeep profile to only common buses
         logger.info(f"Before filtering Profile shape: {profile.shape}")
         profile = profile.sel(bus=common_buses)
+
+        if profile.sizes["bus"] != len(common_buses):
+            raise ValueError(
+                "Unexpected bus count after filtering the GODEEEP profile: "
+                f"{profile.sizes['bus']} != {len(common_buses)}",
+            )
 
         logger.info("Final data shapes:")
         logger.info(f"Profile: {profile.shape}")
