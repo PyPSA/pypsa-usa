@@ -6,7 +6,7 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 import pypsa
-from _helpers import calculate_annuity, configure_logging, load_costs
+from _helpers import calculate_annuity, configure_logging, load_costs, log_network_schema
 from add_electricity import add_missing_carriers
 from eia import FuelCosts
 from opts._helpers import get_region_buses
@@ -1544,6 +1544,7 @@ if __name__ == "__main__":
     configure_logging(snakemake)
 
     n = pypsa.Network(snakemake.input.network)
+    schema_entry = log_network_schema(n, stage="entry")
     elec_config = snakemake.config["electricity"]
 
     costs_dict = {
@@ -1754,4 +1755,5 @@ if __name__ == "__main__":
 
     n.consistency_check()
     n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))
+    log_network_schema(n, stage="exit", baseline=schema_entry)
     n.export_to_netcdf(snakemake.output[0])

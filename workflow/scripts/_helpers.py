@@ -16,6 +16,8 @@ from snakemake.utils import update_config
 
 REGION_COLS = ["geometry", "name", "x", "y", "country"]
 
+logger = logging.getLogger(__name__)
+
 
 def configure_logging(snakemake, skip_handlers=False):
     """
@@ -73,6 +75,72 @@ def setup_custom_logger(name):
     # logger.setLevel(logging.DEBUG)
     logger.addHandler(handler)
     return logger
+
+
+def log_network_schema(
+    n: "pypsa.Network",
+    stage: str,
+    baseline: dict[str, dict] | None = None,
+) -> dict[str, dict]:
+    """Log column schema of each PyPSA component on a network.
+
+    Call at script entry (stage="entry") right after pypsa.Network(...).
+    Capture the return value and pass it as baseline= to a later call
+    at script exit (stage="exit") right before export_to_netcdf — this
+    emits row-count and column-set deltas instead of full column lists.
+
+    Empty components are skipped. Column lists are sorted for stable
+    output. Logging only — no asserts, no behavior change.
+
+    Returns
+    -------
+    dict[str, dict]
+        Mapping of component name -> {"cols": [...], "rows": int}.
+        Pass this back as baseline= on the matching exit call.
+    """
+    snapshot: dict[str, dict] = {}
+    for component in n.iterate_components():
+        df = component.df
+        if df.empty:
+            continue
+        snapshot[component.name] = {
+            "cols": sorted(df.columns.tolist()),
+            "rows": len(df),
+        }
+
+    if baseline is None:
+        for name, info in snapshot.items():
+            logger.info(
+                "[schema %s] %s: %d rows, %d cols: %s",
+                stage,
+                name,
+                info["rows"],
+                len(info["cols"]),
+                info["cols"],
+            )
+        return snapshot
+
+    for name, info in snapshot.items():
+        base = baseline.get(name, {"cols": [], "rows": 0})
+        added = sorted(set(info["cols"]) - set(base["cols"]))
+        removed = sorted(set(base["cols"]) - set(info["cols"]))
+        if info["rows"] != base["rows"]:
+            logger.info(
+                "[schema %s] %s: %d -> %d rows",
+                stage,
+                name,
+                base["rows"],
+                info["rows"],
+            )
+        if added or removed:
+            logger.info(
+                "[schema %s] %s: +cols=%s, -cols=%s",
+                stage,
+                name,
+                added,
+                removed,
+            )
+    return snapshot
 
 
 def load_network(import_name=None, custom_components=None):
