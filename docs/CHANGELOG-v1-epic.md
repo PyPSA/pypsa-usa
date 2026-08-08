@@ -135,6 +135,23 @@ Conventions:
   upstream bug: it can never match the data.) *Results effect:* None (the rule
   previously produced no output at all; both branches now consume the
   identical AEO `reference` fuel-cost slice).
+- **`config.equivalence.yaml` — add solve-stage policy-file keys under
+  `electricity`**: `regional_Co2_limits`, `technology_capacity_targets`,
+  `portfolio_standards` (paths mirror `config.default.yaml`; CSVs already
+  ship in `config/policy_constraints/`). Both branches' `solve_network`
+  crashed identically with `KeyError: 'regional_Co2_limits'` in
+  `add_regional_co2limit` (`workflow/scripts/opts/policy.py:548`), invoked
+  by the `REM` opt in the harness opts string `REM-3h`; the sibling keys are
+  the same-style direct subscripts behind the `TCT` and `RPS` opts. The
+  remaining `config.default.yaml` policy siblings
+  (`transmission_interface_limits`, `SAFE_reservemargin`,
+  `SAFE_regional_reservemargins`) plus `agg_p_nom_limits` are referenced
+  nowhere in `scripts/` or `rules/` on either branch (dead config) and were
+  deliberately omitted. With this, both solves complete
+  (candidate objective -2.5629e+09, anchor -2.5506e+09, both optimal).
+  *Results effect:* None attributable to v1-epic — shared harness config,
+  identical constraint added on both sides; objective deltas fall to the
+  harness comparison stage.
 - **Network schema tracking** — `log_network_schema` helper wired into the
   topology chain, electricity assembly, and solve scripts; seeded
   `docs/network-schema.md` catalog. *Results effect:* None (logging only).
