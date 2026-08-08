@@ -77,6 +77,26 @@ Conventions:
   previously crashed).
   Status: open, merge order #20 → [#16](https://github.com/ktehranchi/pypsa-usa/pull/16) (Tier B assertions) → [#17](https://github.com/ktehranchi/pypsa-usa/pull/17) (CI jobs).
 
+### Upstream sync (Phase 1)
+
+- **Merged `upstream/develop` `e7f8bd70` (2026-07-22) into `v1-epic`** — the
+  **anchor** commit for all equivalence runs. Brings in upstream PRs
+  #745–#766 (NREL land-access exclusions, pumped hydro, EER demand profile,
+  StorageUnit max_hours fix, 500 kV ITL cost data, EGS seismic mask defaults,
+  myopic fixes, HOURS_PER_YEAR constant). Conflicts resolved: union of
+  `bus_strategies` in `cluster_network` (kept `LAF_state`, took upstream's
+  `rec_trading_zone`/`original_reeds_zone`); kept schema logging alongside
+  upstream's `HOURS_PER_YEAR` in `prepare_network`; took upstream EGS
+  defaults (`drilling_cost: advanced`, `seismic_exclusion: true`); folded
+  upstream's EER `eer_file` option into the documented demand block; kept our
+  CLAUDE.md. Post-merge fixes (caught by Tier A): upstream's new
+  `postprocess.smk` block repointed from the old `Geospatial/` layout to the
+  `GEOSPATIAL` category constant; `common.smk` now materializes
+  `constants.py` into the snakemake source cache (upstream #764's import
+  chain broke under a fresh cache). *Results effect:* carries upstream's
+  intended changes; equivalence is measured against this same code, so no
+  v1-epic-attributable delta.
+
 ## On local `v1-epic`, not yet pushed
 
 - **Network schema tracking** — `log_network_schema` helper wired into the
