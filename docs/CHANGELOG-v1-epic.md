@@ -124,10 +124,13 @@ Conventions:
 - **repo_data config documentation/standardization commits.**
   *Results effect:* None.
 
-## Uncommitted (working tree) — bugfixes found during refactor validation
+## Merged 2026-08-07 — bugfixes found during refactor validation (PR #21)
 
-All four are Phase 2 reconciliation candidates; each needs an equivalence-run
-verdict (fix restores parity with anchor vs. accepted delta):
+Merged into v1-epic mid-harness-bringup: the first candidate equivalence
+build independently re-hit the `build_demand` bug below (`n.buses.state`
+missing post-aggregation), confirming the candidate cannot build without
+these. Each still gets its equivalence verdict from the harness comparison
+(fix restores parity with anchor vs. accepted delta):
 
 - **`add_electricity.py`** — (1) capital-cost regional multipliers now map
   buses to states via `reeds_state` → full state name (post-aggregation buses
