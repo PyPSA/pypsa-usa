@@ -8,6 +8,7 @@ import pandas as pd
 import pypsa
 from _helpers import calculate_annuity, configure_logging, load_costs, log_network_schema
 from add_electricity import add_missing_carriers
+from constants import HOURS_PER_YEAR
 from eia import FuelCosts
 from opts._helpers import get_region_buses
 from pypsa.descriptors import get_switchable_as_dense as get_as_dense
@@ -79,8 +80,8 @@ def attach_storageunits(n, costs, elec_opts, investment_year):
             marginal_cost=0,  # costs.at[carrier, "marginal_cost"], # TODO: FIX THIS ISSUE IN BUILD_COST_DATA
             efficiency_store=costs.at[carrier, "efficiency"] ** roundtrip_correction,
             efficiency_dispatch=costs.at[carrier, "efficiency"] ** roundtrip_correction,
-            max_hours=max_hours,
-            cyclic_state_of_charge=False,
+            max_hours=max_hours / (costs.at[carrier, "efficiency"] ** roundtrip_correction),
+            cyclic_state_of_charge=True,
             build_year=investment_year,
             lifetime=costs.at[carrier, "cost_recovery_period_years"],
         )
@@ -154,7 +155,7 @@ def attach_phs_storageunits(n: pypsa.Network, elec_opts, costs: pd.DataFrame):
             * region_onshore_psh_grp["cost_kw_round"]
             * 1e3
             * n.snapshot_weightings.objective.sum()
-            / 8760.0
+            / HOURS_PER_YEAR
         )
 
         region_onshore_psh_grp["marginal_cost"] = psh_vom
@@ -178,7 +179,7 @@ def attach_phs_storageunits(n: pypsa.Network, elec_opts, costs: pd.DataFrame):
             marginal_cost=region_onshore_psh_grp.marginal_cost,
             efficiency_store=efficiency_store,
             efficiency_dispatch=efficiency_dispatch,
-            max_hours=max_hours,
+            max_hours=max_hours / efficiency_dispatch,
             cyclic_state_of_charge=True,
         )
 
@@ -1342,7 +1343,7 @@ def add_co2_network(n: pypsa.Network, config: dict):
         connections = n.lines
 
     # calculate annualized capital cost
-    number_years = n.snapshot_weightings.generators.sum() / 8760
+    number_years = n.snapshot_weightings.generators.sum() / HOURS_PER_YEAR
     cost = (
         config["co2"]["network"]["capital_cost"]
         * calculate_annuity(config["co2"]["network"]["lifetime"], config["co2"]["network"]["discount_rate"])
@@ -1507,7 +1508,7 @@ def add_dac(n: pypsa.Network, config: dict, sector: bool):
     )
 
     # calculate annualized capital cost
-    number_years = n.snapshot_weightings.generators.sum() / 8760
+    number_years = n.snapshot_weightings.generators.sum() / HOURS_PER_YEAR
     cost = (
         config["dac"]["capital_cost"]
         * calculate_annuity(config["dac"]["lifetime"], config["dac"]["discount_rate"])
@@ -1722,14 +1723,18 @@ if __name__ == "__main__":
         add_elec_imports_exports(n, "exports", export_flowgates, fuel_costs, co2_emissions)
 
     if snakemake.config["scenario"]["sector"] == "E":
+        co2_storage = snakemake.config.get("co2", {}).get("storage", False)
+        co2_network_enable = snakemake.config.get("co2", {}).get("network", {}).get("enable", False)
+        dac_enable = snakemake.config.get("dac", {}).get("enable", False)
+
         # add node level CO2 (underground) storage
-        if snakemake.config["co2"]["storage"]:
+        if co2_storage:
             logger.info("Adding node level CO2 (underground) storage")
             add_co2_storage(n, snakemake.config, snakemake.input.co2_storage, costs, False)
 
         # add CO2 (transportation) network
-        if snakemake.config["co2"]["network"]["enable"]:
-            if snakemake.config["co2"]["storage"]:
+        if co2_network_enable:
+            if co2_storage:
                 logger.info("Adding CO2 (transportation) network")
                 add_co2_network(n, snakemake.config)
             else:
@@ -1738,8 +1743,8 @@ if __name__ == "__main__":
                 )
 
         # add node level DAC capabilities
-        if snakemake.config["dac"]["enable"]:
-            if snakemake.config["co2"]["storage"]:
+        if dac_enable:
+            if co2_storage:
                 logger.info("Adding DAC capabilities")
                 add_dac(n, snakemake.config, False)
             else:

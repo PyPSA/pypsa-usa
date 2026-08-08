@@ -34,7 +34,7 @@ While representative of the US electricity system, the TAMU network is synthetic
 
 
 
-```{info}
+```{note}
 See the [Spatial Configuration](./config-spatial.md) page for information on how to choose between networks.
 ```
 

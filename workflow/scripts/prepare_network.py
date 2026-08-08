@@ -24,6 +24,7 @@ from _helpers import (
     set_scenario_config,
     update_config_from_wildcards,
 )
+from constants import HOURS_PER_YEAR
 
 idx = pd.IndexSlice
 
@@ -290,7 +291,7 @@ if __name__ == "__main__":
 
     n = pypsa.Network(snakemake.input[0])
     schema_entry = log_network_schema(n, stage="entry")
-    num_years = n.snapshot_weightings.loc[n.investment_periods[0]].objective.sum() / 8760.0
+    num_years = n.snapshot_weightings.loc[n.investment_periods[0]].objective.sum() / HOURS_PER_YEAR
     costs = load_costs(snakemake.input.tech_costs, params.costs)
     # Set Investment Period Year Weightings
     # 'fillna(1)' needed if only one period

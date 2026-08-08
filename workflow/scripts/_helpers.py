@@ -12,6 +12,7 @@ import pandas as pd
 import pypsa
 import requests
 import yaml
+from constants import HOURS_PER_YEAR
 from snakemake.utils import update_config
 
 REGION_COLS = ["geometry", "name", "x", "y", "country"]
@@ -352,7 +353,7 @@ def load_network_for_plots(fn, tech_costs, config, combine_hydro_ps=True):
     # bus_carrier = n.storage_units.bus.map(n.buses.carrier)
     # n.storage_units.loc[bus_carrier == "heat","carrier"] = "water tanks"
 
-    num_years = n.snapshot_weightings.loc[n.investment_periods[0]].objective.sum() / 8760.0
+    num_years = n.snapshot_weightings.loc[n.investment_periods[0]].objective.sum() / HOURS_PER_YEAR
     costs = load_costs(tech_costs, config["costs"], config["electricity"], num_years)
     update_transmission_costs(n, costs)
 

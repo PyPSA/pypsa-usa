@@ -38,7 +38,7 @@ rule plot_network_maps:
         "../scripts/plot_network_maps.py"
 
 
-rule plot_statistics:
+rule export_statistics:
     input:
         network=RESULTS
         + "{interconnect}/networks/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc",
@@ -59,25 +59,8 @@ rule plot_statistics:
     params:
         electricity=config["electricity"],
         retirement=config["electricity"].get("retirement", "technical"),
+        mode="export",
     output:
-        **{
-            fig: RESULTS
-            + "{interconnect}/figures/s{simpl}_cluster_{clusters}/l{ll}_{opts}_{sector}/emissions/%s"
-            % fig
-            for fig in FIGURES_EMISSIONS
-        },
-        **{
-            fig: RESULTS
-            + "{interconnect}/figures/s{simpl}_cluster_{clusters}/l{ll}_{opts}_{sector}/production/%s"
-            % fig
-            for fig in FIGURES_PRODUCTION
-        },
-        **{
-            fig: RESULTS
-            + "{interconnect}/figures/s{simpl}_cluster_{clusters}/l{ll}_{opts}_{sector}/system/%s"
-            % fig
-            for fig in FIGURES_SYSTEM
-        },
         statistics_summary=RESULTS
         + "{interconnect}/figures/s{simpl}_cluster_{clusters}/l{ll}_{opts}_{sector}/statistics/statistics.csv",
         statistics_dissaggregated=RESULTS
@@ -97,10 +80,63 @@ rule plot_statistics:
         global_constraints=RESULTS
         + "{interconnect}/figures/s{simpl}_cluster_{clusters}/l{ll}_{opts}_{sector}/statistics/global_constraints.csv",
     log:
+        "logs/plot_figures/{interconnect}_{simpl}_{clusters}_l{ll}_{opts}_{sector}_export_statistics.log",
+    threads: 1
+    resources:
+        mem_mb=20000,
+        walltime="01:00:00",
+    script:
+        "../scripts/plot_statistics.py"
+
+
+rule plot_statistics:
+    input:
+        network=RESULTS
+        + "{interconnect}/networks/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc",
+        regions_onshore=(
+            config["custom_files"]["files_path"]
+            + "regions_onshore_s_{clusters}.geojson"
+            if config["custom_files"].get("activate", False)
+            else RESOURCES
+            + "{interconnect}/Geospatial/regions_onshore_s{simpl}_{clusters}.geojson"
+        ),
+        regions_offshore=(
+            config["custom_files"]["files_path"]
+            + "regions_offshore_s_{clusters}.geojson"
+            if config["custom_files"].get("activate", False)
+            else RESOURCES
+            + "{interconnect}/Geospatial/regions_offshore_s{simpl}_{clusters}.geojson"
+        ),
+        statistics_summary=rules.export_statistics.output.statistics_summary,
+    params:
+        electricity=config["electricity"],
+        plotting=config["plotting"],
+        retirement=config["electricity"].get("retirement", "technical"),
+        mode="plot",
+    output:
+        **{
+            fig: RESULTS
+            + "{interconnect}/figures/s{simpl}_cluster_{clusters}/l{ll}_{opts}_{sector}/emissions/%s"
+            % fig
+            for fig in FIGURES_EMISSIONS
+        },
+        **{
+            fig: RESULTS
+            + "{interconnect}/figures/s{simpl}_cluster_{clusters}/l{ll}_{opts}_{sector}/production/%s"
+            % fig
+            for fig in FIGURES_PRODUCTION
+        },
+        **{
+            fig: RESULTS
+            + "{interconnect}/figures/s{simpl}_cluster_{clusters}/l{ll}_{opts}_{sector}/system/%s"
+            % fig
+            for fig in FIGURES_SYSTEM
+        },
+    log:
         "logs/plot_figures/{interconnect}_{simpl}_{clusters}_l{ll}_{opts}_{sector}.log",
     threads: 1
     resources:
-        mem_mb=10000,
-        walltime="00:30:00",
+        mem_mb=5000,
+        walltime="02:00:00",
     script:
         "../scripts/plot_statistics.py"

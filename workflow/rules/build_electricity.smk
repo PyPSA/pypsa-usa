@@ -289,6 +289,25 @@ INTERCONNECT_2_STATE["eastern"].extend(["NH", "NJ", "NY", "NC", "ND", "OH", "OK"
 INTERCONNECT_2_STATE["eastern"].extend(["RI", "SC", "SD", "TN", "VT", "VA", "WV", "WI"])
 INTERCONNECT_2_STATE["usa"] = sum(INTERCONNECT_2_STATE.values(), [])
 
+EER_DEMAND_FILES = (
+    "demand_EER2025_100by2050.h5",
+    "demand_EER2025_Baseline_AEO2023.h5",
+    "demand_EER2025_IRAlow.h5",
+)
+
+
+def eer_demand_file():
+    filename = config["electricity"]["demand"]["scenario"].get(
+        "eer_file",
+        "demand_EER2025_100by2050.h5",
+    )
+    if filename not in EER_DEMAND_FILES:
+        raise ValueError(
+            "electricity.demand.scenario.eer_file must be one of "
+            f"{EER_DEMAND_FILES}; received {filename}."
+        )
+    return filename
+
 
 def demand_raw_data(wildcards):
     # get profile to use
@@ -319,6 +338,8 @@ def demand_raw_data(wildcards):
             "efs_speed"
         ].capitalize()
         return DATA + f"nrel_efs/EFSLoadProfile_{efs_case}_{efs_speed}.csv"
+    elif profile == "eer":
+        return DATA + f"eer/{eer_demand_file()}"
     elif profile == "ferc":
         return [
             DATA + "pudl/out_ferc714__hourly_estimated_state_demand.parquet",
@@ -384,6 +405,8 @@ def demand_scaling_data(wildcards):
         return []
     elif profile == "ferc":
         return []
+    elif profile == "eer":
+        return []
     else:
         return ""
 
@@ -396,6 +419,7 @@ rule build_electrical_demand:
         eia_api=config["api"]["eia"],
         profile_year=pd.to_datetime(config["snapshots"]["start"]).year,
         planning_horizons=config["scenario"]["planning_horizons"],
+        renewable_weather_years=config["renewable_weather_years"],
         snapshots=config["snapshots"],
         pudl_path=config_provider("pudl_path"),
     input:
@@ -724,6 +748,14 @@ rule add_electricity:
             if "EGS" in config["electricity"]["extendable_carriers"]["Generator"]
             else []
         ),
+        seismic_exclusion=(
+            DATA + "seismic_risk_exclusion/seismic_risk_mask.geojson"
+            if "EGS" in config["electricity"]["extendable_carriers"]["Generator"]
+            and config.get("renewable", {})
+            .get("EGS", {})
+            .get("seismic_exclusion", False)
+            else []
+        ),
     output:
         NETWORKS + "{interconnect}/elec_s{simpl}_l_pp.pkl",
     log:
@@ -841,10 +873,10 @@ rule cluster_network:
         itl_reeds_zone="repo_data/ReEDS_Constraints/transmission/transmission_capacity_init_AC_ba_NARIS2024.csv",
         itl_county="repo_data/ReEDS_Constraints/transmission/transmission_capacity_init_AC_county_NARIS2024.csv",
         itl_trans_grp="repo_data/ReEDS_Constraints/transmission/transmission_capacity_init_AC_transgrp_NARIS2024.csv",
-        itl_costs_reeds_zone="repo_data/ReEDS_Constraints/transmission/transmission_distance_cost_500kVdc_ba.csv",
+        itl_costs_reeds_zone="repo_data/ReEDS_Constraints/transmission/transmission_distance_cost_500kVac_ba.csv",
         itl_costs_county="repo_data/ReEDS_Constraints/transmission/transmission_distance_cost_500kVac_county.csv",
         itl_state="repo_data/ReEDS_Constraints/transmission/transmission_capacity_init_AC_state_NARIS2024.csv",
-        itl_costs_state="repo_data/ReEDS_Constraints/transmission/transmission_distance_cost_500kVdc_state.csv",
+        itl_costs_state="repo_data/ReEDS_Constraints/transmission/transmission_distance_cost_500kVac_state.csv",
     output:
         network=NETWORKS + "{interconnect}/elec_s{simpl}_c{clusters}.nc",
         regions_onshore=GEOSPATIAL

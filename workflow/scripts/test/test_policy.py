@@ -209,7 +209,7 @@ def test_add_rps_constraints(policy_network, rps_config):
 
     # Add RPS constraints
     def extra_functionality(n, _):
-        add_RPS_constraints(n, config, sector=False, snakemake=snakemake)
+        add_RPS_constraints(n, config, snakemake=snakemake)
 
     n.optimize(solver_name="glpk", multi_investment_periods=True, extra_functionality=extra_functionality)
 
@@ -263,7 +263,7 @@ def test_add_rps_constraints_clustered(clustered_policy_network, rps_config):
 
     # Add RPS constraints
     def extra_functionality(n, _):
-        add_RPS_constraints(n, config, sector=False, snakemake=snakemake)
+        add_RPS_constraints(n, config, snakemake=snakemake)
 
     n.optimize(solver_name="glpk", multi_investment_periods=True, extra_functionality=extra_functionality)
 
@@ -376,3 +376,151 @@ def test_add_technology_capacity_target_constraints(policy_network, tct_config):
             assert total_capacity <= max_target, (
                 f"Maximum capacity target of {max_target} MW exceeded for {target['carrier']} in {target['region']}"
             )
+
+
+def test_apply_forced_retirements_zeroes_nonextendable(policy_network, tmp_path):
+    """apply_forced_retirements should zero non-extendable generators matching max=0 targets.
+
+    Simulates the brownfield scenario where prepare_brownfield() has locked in
+    previous-period capacity as non-extendable. Verifies that:
+    - Non-extendable CCGT in the target region (CA/z1) is zeroed.
+    - Non-extendable CCGT outside the target region (TX/z2) is untouched.
+    - Extendable generators are not modified (the TCT constraint handles those).
+    """
+    from opts.policy import apply_forced_retirements
+
+    n = policy_network.copy()
+
+    # Add non-extendable CCGT generators simulating brownfield-locked capacity
+    n.add(
+        "Generator",
+        "ccgt_ca",
+        bus="z1",
+        carrier="CCGT",
+        p_nom=500.0,
+        p_nom_min=0.0,
+        p_nom_max=500.0,
+        p_nom_extendable=False,
+        marginal_cost=40,
+        p_max_pu=pd.Series(1.0, index=n.snapshots),
+    )
+    n.add(
+        "Generator",
+        "ccgt_tx",
+        bus="z2",
+        carrier="CCGT",
+        p_nom=300.0,
+        p_nom_min=0.0,
+        p_nom_max=300.0,
+        p_nom_extendable=False,
+        marginal_cost=40,
+        p_max_pu=pd.Series(1.0, index=n.snapshots),
+    )
+    # Extendable CCGT — should NOT be touched by apply_forced_retirements
+    n.add(
+        "Generator",
+        "ccgt_ca_ext",
+        bus="z1",
+        carrier="CCGT",
+        p_nom=0.0,
+        p_nom_min=0.0,
+        p_nom_max=1000.0,
+        p_nom_extendable=True,
+        marginal_cost=40,
+        capital_cost=600,
+        p_max_pu=pd.Series(1.0, index=n.snapshots),
+    )
+
+    # Write a TCT CSV forcing CCGT retirement in CA (reeds_state) by 2030
+    tct_csv = tmp_path / "tct_forced.csv"
+    tct_csv.write_text(
+        "name,planning_horizon,region,carrier,min,max\nccgt_retire,2030,CA,CCGT,,0\n",
+    )
+
+    config = {"electricity": {"technology_capacity_targets": str(tct_csv)}}
+
+    apply_forced_retirements(n, planning_horizon=2030, config=config)
+
+    # CA non-extendable CCGT should be zeroed
+    assert n.generators.loc["ccgt_ca", "p_nom"] == 0.0, "ccgt_ca p_nom should be 0"
+    assert n.generators.loc["ccgt_ca", "p_nom_max"] == 0.0, "ccgt_ca p_nom_max should be 0"
+
+    # TX non-extendable CCGT should be untouched
+    assert n.generators.loc["ccgt_tx", "p_nom"] == 300.0, "ccgt_tx p_nom should be unchanged"
+
+    # Extendable CCGT should be untouched (handled by TCT constraint, not this function)
+    assert n.generators.loc["ccgt_ca_ext", "p_nom_max"] == 1000.0, "extendable ccgt should be unchanged"
+
+
+def test_apply_forced_retirements_future_horizon_skipped(policy_network, tmp_path):
+    """Forced retirement rows with planning_horizon > current should be skipped."""
+    from opts.policy import apply_forced_retirements
+
+    n = policy_network.copy()
+    n.add(
+        "Generator",
+        "ccgt_ca",
+        bus="z1",
+        carrier="CCGT",
+        p_nom=500.0,
+        p_nom_min=0.0,
+        p_nom_max=500.0,
+        p_nom_extendable=False,
+        marginal_cost=40,
+        p_max_pu=pd.Series(1.0, index=n.snapshots),
+    )
+
+    # Retirement target is 2050 — should not apply during the 2030 solve
+    tct_csv = tmp_path / "tct_future.csv"
+    tct_csv.write_text(
+        "name,planning_horizon,region,carrier,min,max\nccgt_retire,2050,CA,CCGT,,0\n",
+    )
+
+    config = {"electricity": {"technology_capacity_targets": str(tct_csv)}}
+
+    apply_forced_retirements(n, planning_horizon=2030, config=config)
+
+    assert n.generators.loc["ccgt_ca", "p_nom"] == 500.0, "2050 target should not retire capacity in 2030"
+
+
+def test_apply_forced_retirements_all_region(policy_network, tmp_path):
+    """planning_horizon='all' with region='all' should zero matching gens in every region."""
+    from opts.policy import apply_forced_retirements
+
+    n = policy_network.copy()
+    n.add(
+        "Generator",
+        "coal_ca",
+        bus="z1",
+        carrier="coal",
+        p_nom=400.0,
+        p_nom_min=0.0,
+        p_nom_max=400.0,
+        p_nom_extendable=False,
+        marginal_cost=30,
+        p_max_pu=pd.Series(1.0, index=n.snapshots),
+    )
+    n.add(
+        "Generator",
+        "coal_tx",
+        bus="z2",
+        carrier="coal",
+        p_nom=250.0,
+        p_nom_min=0.0,
+        p_nom_max=250.0,
+        p_nom_extendable=False,
+        marginal_cost=30,
+        p_max_pu=pd.Series(1.0, index=n.snapshots),
+    )
+
+    tct_csv = tmp_path / "tct_all.csv"
+    tct_csv.write_text(
+        "name,planning_horizon,region,carrier,min,max\ncoal_retire,all,all,coal,,0\n",
+    )
+
+    config = {"electricity": {"technology_capacity_targets": str(tct_csv)}}
+
+    apply_forced_retirements(n, planning_horizon=2030, config=config)
+
+    assert n.generators.loc["coal_ca", "p_nom"] == 0.0
+    assert n.generators.loc["coal_tx", "p_nom"] == 0.0

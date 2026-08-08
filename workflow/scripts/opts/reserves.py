@@ -28,6 +28,20 @@ from xarray import DataArray, concat
 logger = logging.getLogger(__name__)
 
 
+def _get_zero_emission_periods(n, config):
+    """Return the set of planning horizons where the national (all-region) CO2 limit is 0.
+
+    Used to exclude emitting generators from ERM capacity credit in periods
+    where fossil dispatch is completely prohibited.
+    """
+    try:
+        co2_lims = pd.read_csv(config["electricity"]["regional_Co2_limits"])
+    except (KeyError, FileNotFoundError, TypeError):
+        return set()
+    mask = (co2_lims["regions"].str.strip() == "all") & (co2_lims["limit"] == 0)
+    return set(co2_lims.loc[mask, "planning_horizon"])
+
+
 def define_SU_reserve_constraints(n, sns):
     """Sets energy balance constraints for storage units."""
     m = n.model
@@ -236,13 +250,25 @@ def _get_regional_demand(n, region_buses):
     return rhs
 
 
-def define_erm_nodal_balance_constraints(n, snapshots, erm, region_name, region_buses):
+def define_erm_nodal_balance_constraints(
+    n,
+    snapshots,
+    erm,
+    region_name,
+    region_buses,
+    zero_emission_periods=None,
+    emitting_carriers=None,
+):
     """
     Define ERM nodal balance constraints for a given region across all investment periods.
 
     Creates a single constraint per region that spans all snapshots (including all
     investment periods). Uses activity masking to zero out generator contributions
     in periods when they are inactive (e.g., retired or not yet built).
+
+    Emitting generators are excluded from the ERM capacity credit in any planning
+    horizon whose national CO2 limit is zero, since they cannot legally dispatch
+    and should not count as firm capacity.
 
     Parameters
     ----------
@@ -255,6 +281,11 @@ def define_erm_nodal_balance_constraints(n, snapshots, erm, region_name, region_
         Name of the region for constraint naming
     region_buses : pd.DataFrame
         DataFrame containing buses in the region
+    zero_emission_periods : set, optional
+        Planning horizons (int years) where the national CO2 limit is 0.
+        Emitting generators receive no ERM capacity credit in these periods.
+    emitting_carriers : set, optional
+        Carrier names with co2_emissions > 0. Required if zero_emission_periods is set.
     """
     sns = snapshots
     m = n.model
@@ -264,10 +295,30 @@ def define_erm_nodal_balance_constraints(n, snapshots, erm, region_name, region_
     regional_demand = _get_regional_demand(n, region_buses).loc[sns]
     planning_reserve = regional_demand * (1.0 + erm)
 
+    # Build a per-snapshot boolean mask: True = snapshot is in a zero-emission period.
+    # Emitting generators will be excluded from ERM capacity credit for these snapshots.
+    if zero_emission_periods and emitting_carriers:
+        period_per_snap = sns.get_level_values(0) if isinstance(sns, pd.MultiIndex) else sns
+        snap_is_zero = pd.Series(
+            [p in zero_emission_periods for p in period_per_snap],
+            index=sns,
+            dtype=bool,
+        )
+    else:
+        snap_is_zero = pd.Series(False, index=sns, dtype=bool)
+
+    def _activity_da(component):
+        mask = get_activity_mask(n, component, sns)
+        mask.index.name = "snapshot"
+        return DataArray(mask)
+
     # LHS expressions for storage/transmission with activity masking
-    su_activity = DataArray(get_activity_mask(n, "StorageUnit", sns)) if not n.storage_units.empty else None
-    line_activity = DataArray(get_activity_mask(n, "Line", sns)) if not n.lines.empty else None
-    link_activity = DataArray(get_activity_mask(n, "Link", sns)) if not n.links.empty else None
+    su_activity = _activity_da("StorageUnit") if not n.storage_units.empty else None
+    line_activity = _activity_da("Line") if not n.lines.empty else None
+    link_activity = _activity_da("Link") if not n.links.empty else None
+
+    link_efficiency = get_as_dense(n, "Link", "efficiency", sns)
+    link_efficiency.index.name = "snapshot"
 
     args = [
         ["StorageUnit", "p_dispatch_RESERVES", "bus", 1, su_activity],
@@ -275,7 +326,7 @@ def define_erm_nodal_balance_constraints(n, snapshots, erm, region_name, region_
         ["Line", "s_RESERVES", "bus0", -1, line_activity],
         ["Line", "s_RESERVES", "bus1", 1, line_activity],
         ["Link", "p_RESERVES", "bus0", -1, link_activity],
-        ["Link", "p_RESERVES", "bus1", get_as_dense(n, "Link", "efficiency", sns), link_activity],
+        ["Link", "p_RESERVES", "bus1", link_efficiency, link_activity],
     ]
 
     exprs = []
@@ -312,13 +363,29 @@ def define_erm_nodal_balance_constraints(n, snapshots, erm, region_name, region_
         ext_p_nom = m["Generator-p_nom"].loc[region_ext_gens.index]
         ext_p_max_pu = get_as_dense(n, "Generator", "p_max_pu", sns, inds=region_ext_gens.index)
 
+        ext_p_max_pu.index.name = "snapshot"
         ext_p_max_pu.columns.name = "Generator-ext"
         ext_contribution = ext_p_nom * ext_p_max_pu
 
         # Use .where() to remove terms for inactive periods (sets var labels to -1)
         # rather than zeroing coefficients, which leaves orphaned variable references
         activity = get_activity_mask(n, "Generator", sns)[region_ext_gens.index]
+        activity.index.name = "snapshot"
         activity.columns.name = "Generator-ext"
+
+        # Exclude emitting generators from ERM credit in zero-emission periods
+        if snap_is_zero.any() and emitting_carriers:
+            fossil_cols = region_ext_gens.index[region_ext_gens.carrier.isin(emitting_carriers)]
+            if not fossil_cols.empty:
+                activity.loc[snap_is_zero, fossil_cols] = False
+                # pandas .loc boolean assignment can silently reset index/column names
+                activity.index.name = "snapshot"
+                activity.columns.name = "Generator-ext"
+                logger.debug(
+                    f"Excluded {len(fossil_cols)} emitting extendable generators from ERM "
+                    f"in zero-emission snapshots for region {region_name}.",
+                )
+
         ext_contribution = ext_contribution.where(DataArray(activity))
 
         gen_buses = DataArray(
@@ -335,7 +402,20 @@ def define_erm_nodal_balance_constraints(n, snapshots, erm, region_name, region_
     region_nonext_gens = n.generators[region_gens & ~extendable_gens]
     if not region_nonext_gens.empty:
         nonext_activity = get_activity_mask(n, "Generator", sns)[region_nonext_gens.index]
+        nonext_activity.index.name = "snapshot"
+
+        # Exclude emitting generators from ERM credit in zero-emission periods
+        if snap_is_zero.any() and emitting_carriers:
+            fossil_nonext_cols = region_nonext_gens.index[region_nonext_gens.carrier.isin(emitting_carriers)]
+            if not fossil_nonext_cols.empty:
+                nonext_activity.loc[snap_is_zero, fossil_nonext_cols] = False
+                logger.debug(
+                    f"Excluded {len(fossil_nonext_cols)} emitting non-extendable generators "
+                    f"from ERM credit in zero-emission snapshots for region {region_name}.",
+                )
+
         nonext_p_max_pu = get_as_dense(n, "Generator", "p_max_pu", sns, inds=region_nonext_gens.index)
+        nonext_p_max_pu.index.name = "snapshot"
         nonext_p_max_pu = nonext_p_max_pu * nonext_activity
         rhs_existing = region_nonext_gens.p_nom * nonext_p_max_pu
         rhs_existing.index = sns
@@ -404,6 +484,16 @@ def add_ERM_constraints(n, snapshots, config=None, snakemake=None, regional_erm_
         logger.info("No ERM configuration provided. Using default: {'all': 0.15}")
         erm_dict = default_erm
 
+    # Identify planning horizons where fossil cannot count toward ERM (CO2 limit = 0)
+    zero_emission_periods = _get_zero_emission_periods(n, config)
+    emitting_carriers = set(n.carriers.index[n.carriers.co2_emissions.fillna(0) > 0])
+    if zero_emission_periods:
+        logger.info(
+            f"Zero-emission periods detected {zero_emission_periods}. "
+            f"Emitting carriers {emitting_carriers} will receive no ERM capacity credit "
+            f"in those periods.",
+        )
+
     for region_name, erm_value in erm_dict.items():
         region_list = [region_name.strip()]
         region_buses = get_region_buses(n, region_list)
@@ -450,7 +540,15 @@ def add_ERM_constraints(n, snapshots, config=None, snakemake=None, regional_erm_
             define_operational_constraints_for_extendables(n, snapshots, "Link", "p")
             define_operational_constraints_for_non_extendables(n, snapshots, "Link", "p")
 
-        define_erm_nodal_balance_constraints(n, snapshots, erm_value, region_name, region_buses)
+        define_erm_nodal_balance_constraints(
+            n,
+            snapshots,
+            erm_value,
+            region_name,
+            region_buses,
+            zero_emission_periods=zero_emission_periods,
+            emitting_carriers=emitting_carriers,
+        )
         logger.info(f"Added ERM constraint for {region_name}")
 
 

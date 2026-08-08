@@ -39,7 +39,8 @@ renewable:
   # ---------- Enhanced Geothermal Systems ----------
   EGS:
     dispatch: baseload                     # baseload (constant) | flexible (dispatchable like CCGT)
-    drilling_cost: base                    # base | advanced — selects EGS supply-curve capex column
+    drilling_cost: advanced                # base | advanced — selects EGS supply-curve capex column
+    seismic_exclusion: true                # apply the EGS seismic-risk mask (upstream PR #750)
 
   # ---------- Onshore wind ----------
   onwind:

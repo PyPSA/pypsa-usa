@@ -157,10 +157,11 @@ electricity:
 
   # ---------------- Demand ----------------
   demand:
-    profile: efs                           # demand time series source; efs (EIA-EFS) | eia (historical actuals)
-    scenario:                              # EFS scenario knobs (ignored if profile=eia)
+    profile: efs                           # demand time series source; efs (EIA-EFS) | eia (historical actuals) | eer (EER scenarios)
+    scenario:                              # EFS/EER scenario knobs (ignored if profile=eia)
       efs_case:  reference                 # reference | medium | high
       efs_speed: moderate                  # slow | moderate | rapid
+      eer_file: demand_EER2025_100by2050.h5 # EER h5 (profile=eer): demand_EER2025_100by2050 | demand_EER2025_Baseline_AEO2023 | demand_EER2025_IRAlow
       aeo:       reference                 # AEO (EIA Annual Energy Outlook) scaling case; reference | high | low
 
   demand_response:                         # price-responsive shiftable load; 0 = disabled
