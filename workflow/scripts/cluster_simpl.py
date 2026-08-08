@@ -117,6 +117,16 @@ if __name__ == "__main__":
     else:
         for which in ("regions_onshore", "regions_offshore"):
             regions = gpd.read_file(getattr(snakemake.input, which))
+            # Substation-level region names carry a float ".0" suffix (e.g.
+            # "35827.0") while the pass-through network keeps bare bus IDs
+            # ("35827"). Normalize so regions_s{simpl} names match
+            # n.buses.index — the invariant downstream consumers (e.g. the
+            # godeeep path of build_renewable_profiles) rely on. The kmeans
+            # branch gets the same normalization inside cluster_regions().
+            try:
+                regions["name"] = pd.to_numeric(regions["name"]).astype(int).astype(str)
+            except (ValueError, TypeError):
+                pass  # non-numeric names are already canonical
             out_path = getattr(snakemake.output, which)
             regions.to_file(out_path)
             plot_geojson(out_path)

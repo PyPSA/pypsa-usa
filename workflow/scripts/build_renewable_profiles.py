@@ -414,6 +414,18 @@ if __name__ == "__main__":
         common_buses = sorted(
             set(profile.bus.values) & set(capacities.bus.values) & set(region_buses),
         )
+        # Empty intersection with non-empty inputs means the three bus-ID
+        # spaces are formatted differently (e.g. "35827.0" vs "35827") —
+        # writing an empty profile would only crash later in add_electricity.
+        if not common_buses and profile.sizes["bus"] > 0 and capacities.sizes["bus"] > 0:
+            raise RuntimeError(
+                f"godeeep bus IDs share no overlap for {tech}: "
+                f"profile buses e.g. {[str(b) for b in profile.bus.values[:3]]}, "
+                f"caps buses e.g. {[str(b) for b in capacities.bus.values[:3]]}, "
+                f"region buses e.g. {[str(b) for b in region_buses[:3]]}. "
+                "Check bus-ID formatting in regions_s{simpl}.geojson (cluster_simpl) "
+                "and busmap_s{simpl}.csv.",
+            )
         profile = profile.sel(bus=common_buses)
         capacities = capacities.sel(bus=common_buses)
         p_nom_max = p_nom_max.sel(bus=common_buses)

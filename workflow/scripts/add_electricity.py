@@ -605,6 +605,15 @@ def attach_wind_and_solar(
                     horizon_profile.index = horizon_profile.index.map(lambda x: x.replace(year=int(horizon)))
                     all_profiles.append(horizon_profile)
 
+            # No horizon contributed any buses (e.g. no eligible sites for
+            # this carrier in the modeled region) — skip the carrier, matching
+            # the single-profile branch's empty-bus `continue`.
+            if not all_profiles:
+                logger.warning(
+                    f"No {car} profile buses found in any planning horizon; skipping {car}.",
+                )
+                continue
+
             # Concatenate all horizon profiles
             bus_profiles = pd.concat(all_profiles)
 

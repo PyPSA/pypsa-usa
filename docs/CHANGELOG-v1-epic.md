@@ -99,6 +99,27 @@ Conventions:
 
 ## On local `v1-epic`, not yet pushed
 
+- **`cluster_simpl` identity branch — normalize region bus names**
+  (`workflow/scripts/cluster_simpl.py`, plus guards in
+  `build_renewable_profiles.py` and `add_electricity.py`). With `simpl=''`
+  (pass-through), `cluster_simpl` copied `regions_{onshore,offshore}.geojson`
+  verbatim, keeping the substation-level float-formatted `name` values
+  (`"35827.0"`) while the network and `busmap_s.csv` carry bare bus IDs
+  (`"35827"`). The godeeep path of `build_renewable_profiles` intersects
+  profile buses (from region names, `"35827.0"`) with NREL caps buses
+  (remapped through the busmap, `"35827"`) — empty intersection, so it
+  silently wrote profiles with a 0-length `bus` dim, and `add_electricity`'s
+  `attach_wind_and_solar` later crashed on `pd.concat([])` (`ValueError: No
+  objects to concatenate`) after skipping every empty horizon. The kmeans
+  (`simpl=N`) branch was never affected: `cluster_regions()` already
+  normalizes float names. Fix: apply the same float→int→str normalization in
+  the identity branch; add a `RuntimeError` in `build_renewable_profiles` when
+  the three bus-ID spaces are non-empty but disjoint (fail at the producer,
+  not two rules later); and in `attach_wind_and_solar`, skip a carrier whose
+  horizon profiles have no buses (parity with the single-profile branch's
+  empty-bus `continue`) instead of crashing. *Results effect:* `simpl=''`
+  runs gain the onwind/solar generators that were silently dropped
+  (profiles were empty); `simpl=N` runs unchanged.
 - **`config.equivalence.yaml` — add `costs.aeo.scenario: reference`** (in the
   tracked canonical `workflow/repo_data/config/config.equivalence.yaml`, plus
   the gitignored `workflow/config/` working copy; the harness re-copies the
