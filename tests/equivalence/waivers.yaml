@@ -38,3 +38,63 @@
   kind: value
   ledger: DL-4
   reason: PQ/Slack bookkeeping; ignored by LOPF
+- stage: '*'
+  component: Generator_t.p_max_pu
+  column: '*'
+  kind: column_set
+  ledger: DL-6
+  reason: anchor-only aggregate-named p_max_pu columns; content guarded by unwaived value compare on common names
+- stage: '*'
+  component: Generator_t.p_max_pu
+  column: '*'
+  kind: suppressed
+  ledger: DL-6
+  reason: suppression marker of the waived column_set class
+- stage: '*'
+  component: Generator
+  column: <index>
+  kind: row_set
+  ledger: DL-6
+  reason: per-plant vs pre-aggregated names; content guarded by Generator[bus,carrier]
+- stage: '*'
+  component: Generator
+  column: ba_eia
+  kind: column_set
+  ledger: DL-6
+  reason: candidate-added schema column (metadata)
+- stage: '*'
+  component: StorageUnit
+  column: <index>
+  kind: row_set
+  ledger: DL-6
+  reason: per-plant vs pre-aggregated names; totals verified equal (battery 21254.0, PHS 3978.4 MW)
+- stage: assembled_substation_network
+  component: Generator[bus,carrier]
+  column: <index>
+  kind: row_set
+  ledger: DL-5
+  reason: sole residual is Pebbly Beach (Catalina) 36973 vs 37317 placement
+- stage: '*'
+  component: Generator
+  column: fuel_cost
+  kind: value
+  ledger: DL-7
+  reason: mean-of-means aggregation composition; max 2.55 $/MWh
+- stage: '*'
+  component: Generator
+  column: efficiency
+  kind: value
+  ledger: DL-7
+  reason: aggregation composition; max 0.0028
+- stage: '*'
+  component: Generator
+  column: marginal_cost
+  kind: value
+  ledger: DL-7
+  reason: aggregation composition; max 2.55 $/MWh
+- stage: '*'
+  component: Bus
+  column: Pd
+  kind: value
+  ledger: DL-8
+  reason: candidate conserves Pd through trafo removal, anchor static stale; Load_t.p_set finding-free
