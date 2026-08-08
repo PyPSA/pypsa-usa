@@ -98,3 +98,24 @@
   kind: value
   ledger: DL-8
   reason: candidate conserves Pd through trafo removal, anchor static stale; Load_t.p_set finding-free
+- prong: 2
+  stage: prong2_aggregates
+  component: Generator.p_nom_by_carrier
+  column: p_nom
+  kind: value
+  ledger: DL-9
+  reason: existing-RE silent-drop varies with cluster geometry; candidate closer to ground truth
+- prong: 2
+  stage: solved_network
+  component: Network
+  column: objective
+  kind: value
+  ledger: DL-9
+  reason: follows from DL-9 existing-RE baselines; prong-1 objective gate (6.6e-05) stays live
+- prong: 2
+  stage: solved_network
+  component: Network
+  column: p_nom_opt_by_carrier
+  kind: value
+  ledger: DL-9
+  reason: follows from DL-9 existing-RE baselines
