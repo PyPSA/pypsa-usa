@@ -1,0 +1,20 @@
+,Unit,Values,Description
+cutout,--,"Name of a source defined under ``atlite: cutouts:`` (e.g. ``era5``).","Selects the weather-data source for this technology. Combined with the weather year to pick the cutout file ``cutouts/usa_{cutout}_{year}.nc`` (e.g. ``usa_era5_2019.nc``)."
+resource,,,
+-- method,--,Must be 'wind',A superordinate technology type.
+-- turbine,--,One of the turbine types included in `atlite <https://github.com/PyPSA/atlite/tree/master/atlite/resources/windturbine>`__,Specifies the turbine type and its characteristic power curve.
+-- add_cutout_windspeed,bool,"{true, false}",Store the raw hub-height windspeeds in the profile output (used by the GODEEEP scaling workflow). Enabled by default for ``offwind_floating``.
+capacity_per_sqkm,:math:`MW/km^2`,float,Allowable density of offshore wind turbine placement.
+correction_factor,--,float,Correction factor for capacity factor time series (e.g. 0.8855 for wake losses).
+corine,,,
+-- grid_codes,--,"Offshore Copernicus Land Cover codes, e.g. ``[80, 200]`` (open water).",Specifies areas which are generally eligible for offshore wind placement.
+natura,bool,"{true, false}",Switch to exclude Protected Planet natural protection areas. Area is excluded if ``true``.
+boem_screen,bool,"{true, false}","Restrict eligible area to BOEM offshore-wind planning areas. Off by default for fixed-bottom ``offwind``; on by default for ``offwind_floating``."
+min_depth,m,float,"Minimum water depth (``offwind_floating`` only); sites shallower than this are excluded (60 m by default, the fixed-bottom/floating boundary)."
+max_depth,m,float,"Maximum water depth; deeper sites are excluded (60 m for fixed-bottom ``offwind``, 1300 m for ``offwind_floating``)."
+min_shore_distance,m,float,Minimum distance to shore; nearer sites are excluded.
+max_shore_distance,m,float,Maximum distance to shore; farther sites are excluded.
+potential,--,"One of {'simple', 'conservative'}",Method to compute the maximal installable potential for a node.
+clip_p_max_pu,p.u.,float,To avoid too small values in the renewables` per-unit availability time series values below this threshold are set to zero.
+extendable,bool,"{true, false}",Whether the technology is eligible for capacity expansion.
+note,,,"The ``corine``, ``natura``, ``boem_screen``, and depth/shore screens apply only when ``renewable: dataset: atlite``; with ``dataset: godeeep`` they are bypassed in favor of the NREL ``renewable_land_access`` exclusions (with optional ``apply_boem_osw`` overlay)."

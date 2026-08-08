@@ -1,46 +1,59 @@
 ,Unit,Values,Description
-conventional_carriers,--,"Any subset of {nuclear, oil, OCGT, CCGT, coal, geothermal, biomass}","List of conventional power plants to include in the model from ``resources/powerplants.csv``. If an included carrier is also listed in ``extendable_carriers``, the capacity is taken as a lower bound."
-renewable_carriers,--,"Any subset of {solar, onwind, offwind-ac, offwind-dc, hydro}",List of renewable generators to include in the model.
-retirement, --,One of ``economic`` or ``technical``,"Sets the retirement method for converntional generators. If ``technical`` all generators ``p_nom_min`` are set to ``p_nom`` to prevent selling off of the asset. Retirements are then tracked in post-proccessing. If ``economic`` existing plants have their ``p_nom_min`` set as ``0``,  ``p_nom_max`` set to ``p_nom``,  and capital costs set to fixed costs. Generators with ``p_nom`` are then added to handle capacity expansion."""
+conventional_carriers,--,"Any subset of {nuclear, oil, OCGT, CCGT, coal, geothermal, biomass, waste}","List of conventional power plants to include in the model from ``resources/powerplants/powerplants.csv``. If an included carrier is also listed in ``extendable_carriers``, the capacity is taken as a lower bound."
+renewable_carriers,--,"Any subset of {onwind, offwind, offwind_floating, solar, hydro}",List of renewable generators to include in the model as existing capacity.
+retirement, --,One of ``economic`` or ``technical``,"Sets the retirement method for conventional generators. If ``technical`` all generators ``p_nom_min`` are set to ``p_nom`` to prevent selling off of the asset. Retirements are then tracked in post-processing. If ``economic`` existing plants have their ``p_nom_min`` set as ``0``,  ``p_nom_max`` set to ``p_nom``,  and capital costs set to fixed costs. Generators with ``p_nom`` are then added to handle capacity expansion."""
+,,,
+extendable_carriers:,,,Capacity-expansion candidates. Carriers listed here get extendable ``p_nom`` and pay annualized capex; carriers listed only in the ``*_carriers`` lists above are fixed (brownfield-only).
+-- Generator,--,"Defaults: {solar, onwind, offwind_floating, OCGT, CCGT, CCGT-95CCS, coal, nuclear, hydrogen_ct}; also supported: {EGS, SMR, coal-95CCS}","Extendable generation carriers. Conventional generators can only be built/expanded where already existent today. If a listed conventional carrier is not included in the ``conventional_carriers`` list, the lower limit of the capacity expansion is set to 0."
+-- StorageUnit,--,"Any subset of {2hr_battery_storage, 4hr_battery_storage, 6hr_battery_storage, 8hr_battery_storage, 10hr_battery_storage, 8hr_PHS, 10hr_PHS, 12hr_PHS}",Adds extendable storage units of the given duration at every node/bus after clustering with zero initial capacity.
+-- Store,--,"e.g. {H2_tank}",Adds extendable stores at every node/bus after clustering with zero initial capacity. Requires sector coupling.
+-- Link,--,"e.g. {HVDC}",Adds extendable links at every connection where there are lines or HVDC links with zero initial capacity.
+,,,
+SAFE_reservemargin,p.u.,float,"System-wide planning reserve margin as a fraction of peak load. Reserved setting — not currently enforced by an active constraint; the ``ERM`` option is the active resource-adequacy mechanism."
+SAFE_regional_reservemargins,--,path,"CSV of per-region planning reserve margins (``config/policy_constraints/SAFE_regional_prm.csv``). Reserved setting — not currently enforced by an active constraint."
 ,,,
 operational_reserve:,,,Settings for reserve requirements following `GenX <https://genxproject.github.io/GenX.jl/stable/Model_Reference/core/#Operational-Reserves>`_
-activate,bool,true or false,Whether to take operational reserve requirements into account during optimisation
-epsilon_load,--,float,share of total load
-epsilon_vres,--,float,share of total renewable supply
-contingency,MW,float,fixed reserve capacity
+-- activate,bool,true or false,Whether to take operational reserve requirements into account during optimisation
+-- epsilon_load,--,float,share of total load
+-- epsilon_vres,--,float,share of total renewable supply
+-- contingency,MW,float,fixed reserve capacity
 ,,,
 erm:,,,Energy Reserve Margin settings (used when ERM opt is enabled). Ensures sufficient firm capacity to meet demand plus reserve margin at every timestep.
-<region>,--,float,"Reserve margin as a fraction (e.g., 0.15 for 15%). Use ``all`` for all regions, or specify region codes (state, interconnect, NERC region, or ReEDS zone). Defaults to ``all: 0.15`` if not specified."
+-- <region>,--,float,"Reserve margin as a fraction (e.g., 0.15 for 15%). Use ``all`` for all regions, or specify region codes (state, interconnect, NERC region, or ReEDS zone). Defaults to ``all: 0.15`` if not specified."
 ,,,
-extendable_carriers:,,,
-Generator,--,Any extendable carrier,"Defines existing or non-existing conventional and renewable power plants to be extendable during the optimization. Conventional generators can only be built/expanded where already existent today. If a listed conventional carrier is not included in the ``conventional_carriers`` list, the lower limit of the capacity expansion is set to 0."
-Storage Unit,--,Any subset of {``battery``},Adds extendable storage units (battery and/or hydrogen) at every node/bus after clustering without capacity limits and with zero initial capacity.
-Store,--,Any subset of {``battery``},Adds extendable storage units (battery and/or hydrogen) at every node/bus after clustering without capacity limits and with zero initial capacity.
-Links,--,Any subset of {},Adds extendable linksat every connection where there are lines or HVDC links without capacity limits and with zero initial capacity. Hydrogen pipelines require hydrogen storage to be modelled as ``Store``.
+regional_Co2_limits,--,path,"CSV of per-region CO2 caps in tCO2/yr (``config/policy_constraints/regional_Co2_limits.csv``). Enforced when the ``REM`` keyword is present in the ``{opts}`` wildcard."
+technology_capacity_targets,--,path,"CSV of forced minimum/maximum capacity builds by technology and region (``config/policy_constraints/technology_capacity_targets.csv``). Enforced when the ``TCT`` keyword is present in the ``{opts}`` wildcard."
+portfolio_standards,--,path,"CSV of RPS/CES clean-energy fractions by region (``config/policy_constraints/portfolio_standards.csv``). Enforced when the ``RPS`` keyword is present in the ``{opts}`` wildcard (covers both RPS and CES targets)."
+transmission_interface_limits,--,path,"CSV of MW limits on flows across inter-regional transmission interfaces (``config/policy_constraints/transmission_interface_limits.csv``), paired with ``model_topology: interface_transmission_limits``. Reserved setting — not currently consumed by the workflow."
+,,,
+co2limit_enable,bool,true or false,"Switch to activate the system-wide CO2 cap below. Optional; defaults to false when unset. Can also be set via the ``Co2L`` keyword in the ``{opts}`` wildcard."
+co2limit,:math:`t_{CO_2}/a`,float,"System-wide cap on annual CO2 emissions, added as a global constraint in ``prepare_network``. Only applied when ``co2limit_enable`` is true."
+gaslimit_enable,bool,true or false,"Switch to activate the gas-use cap below. Optional; defaults to false when unset. Can also be set via the ``CH4L`` keyword in the ``{opts}`` wildcard."
+gaslimit,MWh thermal,float,"Cap on annual gas-fired primary energy from gas carriers (OCGT, CCGT, CHP), added as a global constraint in ``prepare_network``. Only applied when ``gaslimit_enable`` is true."
 ,,,
 demand:,,,
-profile,--,"One of {``efs``, ``eia``, ``eer``}","Datasource for electrical load data. ``EFS`` pulls future state level electrical demand data. ``EIA`` pulls historical balancing level electrical demand data. ``EER`` pulls future state-level profiles from the EER dataset; when selected, ``planning_horizons`` must be one of 2021, 2025, 2030, 2035, 2040, 2045, or 2050 and ``renewable_weather_years`` must contain exactly one year from 2007-2013 or 2016-2023."
-scenario:,,,
--efs_case,--,"One of {``reference``, ``medium``, ``high``}",(UNDER DEVELOPMENT) Extracts EFS data according to level of adoption
--efs_speed,--,"One of {``slow``, ``moderate``, ``fast``}",(UNDER DEVELOPMENT) Extracts EFS data according to speed of electrification
--eer_file,--,"One of {``demand_EER2025_100by2050.h5``, ``demand_EER2025_Baseline_AEO2023.h5``, ``demand_EER2025_IRAlow.h5``}",Selects the EER demand dataset file to download and use when ``profile`` is ``eer``.
--aeo,--,One of the AEO scenarios `here <https://www.eia.gov/outlooks/aeo/data/browser/>`_,(UNDER DEVELOPMENT) Scales future demand according to the AEO scenario
+-- profile,--,"One of {``efs``, ``eia``, ``eer``}","Datasource for electrical load data. ``EFS`` pulls future state level electrical demand data. ``EIA`` pulls historical balancing level electrical demand data. ``EER`` pulls future state-level profiles from the EER dataset; when selected, ``planning_horizons`` must be one of 2021, 2025, 2030, 2035, 2040, 2045, or 2050 and ``renewable_weather_years`` must contain exactly one year from 2007-2013 or 2016-2023."
+-- scenario:,,,
+-- -- efs_case,--,"One of {``reference``, ``medium``, ``high``}",(UNDER DEVELOPMENT) Extracts EFS data according to level of adoption
+-- -- efs_speed,--,"One of {``slow``, ``moderate``, ``fast``}",(UNDER DEVELOPMENT) Extracts EFS data according to speed of electrification
+-- -- eer_file,--,"One of {``demand_EER2025_100by2050.h5``, ``demand_EER2025_Baseline_AEO2023.h5``, ``demand_EER2025_IRAlow.h5``}",Selects the EER demand dataset file to download and use when ``profile`` is ``eer``.
+-- -- aeo,--,One of the AEO scenarios `here <https://www.eia.gov/outlooks/aeo/data/browser/>`_,(UNDER DEVELOPMENT) Scales future demand according to the AEO scenario
 ,,,
 demand_response:,,,Settings to activate and configure demand response
--shift,per_unit,"float {0 <=, >= 1} or 'inf'",Allowable load to be shifted per snapshot. Set to 0 to turn off demand response. Set to 'inf' to not enforce capacity limits.
--marginal_cost,$/MWh,float {0 <=},Cost to store one unit of energy for one hour
+-- shift,per_unit,"float {0 <=, >= 1} or 'inf'",Allowable load to be shifted per snapshot. Set to 0 to turn off demand response. Set to 'inf' to not enforce capacity limits.
+-- marginal_cost,$/MWh,float {0 <=},Cost to store one unit of energy for one hour
 ,,,
 imports:,,,Configure electric imports from regions outside of model scope
--enable,,``true`` or ``false``,Enable electric imports
--costs,$/MWh,``wholesale`` or ``<name of carrier>`` or ``float``,Cost of electric imports from regions outside of model scope. ``Wholesale`` will use in monthly wholesales electric prices. ``float`` will assign a user specified value. ``carrier`` will take average marginal cost of the carrier.
--co2_emissions,CO2/MWh,``float``,CO2 emissions of electric imports from regions outside of model scope.
--capacity_limit,,``true`` or ``false``,Enable capacity limit for electric imports from regions outside of model scope
--volume_limit,percent,"float {0 <=, >= 100} or 'inf'",Volume limit for electric imports from regions outside of model scope (in % of total demand). Set to ``inf`` to not enforce volume limits.
--balancing_period,,``day`` or ``week`` or ``month`` or ``year``,Balancing period for electric imports from regions outside of model scope.
+-- enable,,``true`` or ``false``,Enable electric imports
+-- costs,$/MWh,``wholesale`` or ``<name of carrier>`` or ``float``,Cost of electric imports from regions outside of model scope. ``Wholesale`` will use in monthly wholesales electric prices. ``float`` will assign a user specified value. ``carrier`` will take average marginal cost of the carrier.
+-- co2_emissions,CO2/MWh,``float``,CO2 emissions of electric imports from regions outside of model scope.
+-- capacity_limit,,``true`` or ``false``,Enable capacity limit for electric imports from regions outside of model scope
+-- volume_limit,percent,"float {0 <=, >= 100} or 'inf'",Volume limit for electric imports from regions outside of model scope (in % of total demand). Set to ``inf`` to not enforce volume limits.
+-- balancing_period,,``day`` or ``week`` or ``month`` or ``year``,Balancing period for electric imports from regions outside of model scope.
 ,,,
 exports:,,,Configure electric exports to regions outside of model scope
--enable,,``true`` or ``false``,Enable electric exports
--costs,$/MWh,``wholesale`` or ``<name of carrier>`` or ``float``,Cost of electric imports from regions outside of model scope. ``Wholesale`` will use in monthly wholesales electric prices. ``float`` will assign a user specified value. ``carrier`` will take average marginal cost of the carrier.
--capacity_limit,,``true`` or ``false``,Enable capacity limit for electric exports to regions outside of model scope
--volume_limit,percent,"float {0 <=, >= 100} or 'inf'",Volume limit for electric exports to regions outside of model scope (in % of total demand). Set to ``inf`` to not enforce volume limits.
--balancing_period,,``day`` or ``week`` or ``month`` or ``year``,Balancing period for electric exports to regions outside of model scope.
+-- enable,,``true`` or ``false``,Enable electric exports
+-- costs,$/MWh,``wholesale`` or ``<name of carrier>`` or ``float``,Cost of electric exports to regions outside of model scope. ``Wholesale`` will use in monthly wholesales electric prices. ``float`` will assign a user specified value. ``carrier`` will take average marginal cost of the carrier.
+-- capacity_limit,,``true`` or ``false``,Enable capacity limit for electric exports to regions outside of model scope
+-- volume_limit,percent,"float {0 <=, >= 100} or 'inf'",Volume limit for electric exports to regions outside of model scope (in % of total demand). Set to ``inf`` to not enforce volume limits.
+-- balancing_period,,``day`` or ``week`` or ``month`` or ``year``,Balancing period for electric exports to regions outside of model scope.

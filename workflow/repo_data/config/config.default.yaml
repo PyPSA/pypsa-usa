@@ -41,6 +41,7 @@ run:
 # Sets which precomputed/atlite-derived CF time series the renewable
 # attach pipeline consumes. `godeeep` requires `renewable_land_access`
 # below; `atlite` requires a populated cutout (see config.common.yaml).
+# docs : RENEWABLE_DATASET
 renewable:
   dataset: godeeep                # atlite | godeeep — see docs/source/config-configuration.md#renewable-godeeep
 
@@ -66,6 +67,7 @@ foresight: 'perfect'                     # multi-horizon solve mode; perfect (mo
 # ====================================================================
 # MODEL TOPOLOGY — transmission backbone and zonal aggregation
 # ====================================================================
+# docs : MODEL_TOPOLOGY
 model_topology:
   transmission_network: 'reeds'          # transmission dataset; reeds | tamu
   topological_boundaries: 'reeds_zone'   # post-cluster zone type; county | reeds_zone | state | balancing_area
@@ -93,11 +95,13 @@ enable:
 # ====================================================================
 # For Atlite (any year) and GODEEEP-historical, configure renewable_weather_years.
 # For GODEEEP future scenarios, the year is taken from planning_horizons above.
+# docs : RENEWABLE_WEATHER_YEARS
 renewable_weather_years: [2019]         # weather years to use (single year unless multi-horizon godeeep)
 # renewable_weather_years_by_horizon:   # OPTIONAL: map planning-horizon → weather year (multi-horizon atlite)
 #   2030: 2019
 #   2040: 2019
 
+# docs : SNAPSHOTS
 snapshots:
   start: "2019-01-01"                   # ISO date string; first snapshot timestamp
   end: "2020-01-01"                     # ISO date string; one past the last snapshot if inclusive=left
@@ -105,11 +109,13 @@ snapshots:
 
 # GODEEEP future-scenario controls. Used only when renewable.dataset = godeeep
 # and renewable_scenarios != "historical".
+# docs : RENEWABLE_SCENARIOS
 renewable_scenarios: ["rcp85cooler"]   # climate scenario; historical | rcp45cooler | rcp45hotter | rcp85cooler | rcp85hotter
 # renewable_scenario_years: [2030]     # OPTIONAL: explicit list of GODEEEP scenario years; defaults to planning_horizons
 
 # For multi-horizon godeeep, the YEAR is taken from each planning_horizon
 # automatically — these knobs only set the month/day slice within that year.
+# docs : RENEWABLE_SNAPSHOTS
 renewable_snapshots:
   start_month: 1                        # int 1-12; first month of the snapshot window
   start_day: 1                          # int 1-31
@@ -436,12 +442,14 @@ solving:
 # ====================================================================
 # WALLTIME — per-rule HPC walltime overrides (only used by SLURM driver)
 # ====================================================================
+# docs : WALLTIME
 walltime:
   build_renewable_profiles: '04:00:00'
   build_fuel_prices:        '00:20:00'
   add_demand:               '02:00:00'
   add_electricity:          '04:00:00'
-  simplify_network:         '05:00:00'
+  aggregate_to_substations: '02:00:00'
+  cluster_simpl:            '05:00:00'
   cluster_network:          '04:00:00'
   solve_network:            '20:00:00'
 
@@ -454,3 +462,5 @@ custom_files:
   activate: false                          # true = use the network/costs paths below instead of pipeline outputs
   files_path: ''                           # directory containing the custom files
   network_name: ''                         # .nc filename inside files_path; loaded in place of cluster_network output
+
+# docs : end

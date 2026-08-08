@@ -14,8 +14,14 @@ build_renewable_profiles:
 add_electricity:
   walltime: 06:00:00
 
-simplify_network:
+aggregate_to_substations:
   walltime: 09:00:00
+
+cluster_simpl:
+  walltime: 09:00:00
+
+aggregate_egs:
+  walltime: 01:00:00
 
 cluster_network:
   walltime: 09:00:00

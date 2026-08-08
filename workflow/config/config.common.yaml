@@ -1,114 +1,180 @@
-pudl_path: s3://pudl.catalyst.coop/v2025.2.0
+# ====================================================================
+# PyPSA-USA — Common Configuration (always-loaded layered base)
+# ====================================================================
+# This file is auto-loaded by `workflow/Snakefile` underneath every
+# main config. It holds settings that rarely change per scenario:
+# the renewable resource-quality dataset (atlite cutouts or GODEEEP
+# CFs + NREL land-access exclusions), atlite cutout geometries,
+# the line-type catalog, offshore-shape source, and the UCAP
+# forced-outage-rate table.
+#
+# To override anything here, set the same key in your main config
+# file — keys in `--configfile <main>` take precedence over this one.
+#
+# Editing this file affects ALL runs in the repo. If a setting only
+# makes sense for one scenario, put it in the scenario config instead.
+#
+# Option reference: docs/source/config-configuration.md
+# ====================================================================
 
-foresight: 'perfect'
-# docs :
+
+# ====================================================================
+# PUDL — Public Utility Data Liberation parquet dataset source
+# ====================================================================
+# Points the build scripts at a specific PUDL release. Update the
+# version tag when you want fresher EIA-860/EIA-923/CEMS tables.
+# docs : PUDL
+pudl_path: s3://pudl.catalyst.coop/v2025.5.0   # versioned S3 prefix to PUDL parquet outputs (or a local file:// path)
+
+
+# ====================================================================
+# RENEWABLE — per-technology resource and land-availability settings
+# ====================================================================
+# These knobs feed `build_renewable_profiles`. The atlite resource:
+# method, capacity_per_sqkm, and the corine/natura/cec/boem land
+# screens together define each cell's potential and per-hour CF.
+# docs : RENEWABLE
+renewable_weather_years: [2019]            # always defined here; main configs may override
+
 renewable:
-  dataset: godeeep #atlite or godeeep
+  dataset: godeeep                         # godeeep | atlite — always defined here; main configs may override
+
+  # ---------- Enhanced Geothermal Systems ----------
+  # docs : EGS
   EGS:
-    dispatch: baseload # baseload or flexible
-    drilling_cost: base # base or advanced — selects EGS supply-curve capex column
+    dispatch: baseload                     # baseload (constant) | flexible (dispatchable like CCGT)
+    drilling_cost: advanced                # base | advanced — selects EGS supply-curve capex column
+    seismic_exclusion: true                # apply the EGS seismic-risk mask (upstream PR #750)
+
+  # ---------- Onshore wind ----------
+  # docs : ONWIND
   onwind:
-    cutout: era5
+    cutout: era5                           # atlite cutout name (must match an entry under atlite.cutouts below)
     resource:
       method: wind
-      turbine: Vestas_V112_3MW
-      add_cutout_windspeed: true
-    capacity_per_sqkm: 3 # conservative, ScholzPhd Tab 4.3.1: 10MW/km^2
-    correction_factor: 1 # 0.93
+      turbine: Vestas_V112_3MW             # atlite turbine config (see atlite.resource.windturbines)
+      add_cutout_windspeed: true           # store raw windspeeds in profile output (used by GODEEEP scaling)
+    capacity_per_sqkm: 3                   # MW/km^2 of available land (conservative; ScholzPhD Tab 4.3.1 cites 10)
+    correction_factor: 1                   # scalar applied to CF (e.g. 0.93 for wake losses)
+    # CORINE land-cover screen. NB: keys are labeled `corine` for
+    # pypsa-eur parity, but the codes are actually Copernicus CGLS
+    # (https://land.copernicus.eu/global/sites/cgls.vito.be/files/products/CGLOPS1_PUM_LC100m-V3_I3.4.pdf).
     corine:
-      #all keys labeled corrine are actually copernicus codes. Using the name corrine bc using the pypsa-eur convention: https://land.copernicus.eu/global/sites/cgls.vito.be/files/products/CGLOPS1_PUM_LC100m-V3_I3.4.pdf
-      grid_codes: [20, 30, 40, 60, 100, 111, 112, 113, 114, 115]
-      distance: 10 #buffer from distance_grid_codes that are to be excluded
-      distance_grid_codes: [50]
-    natura: true
-    cec: true
-    potential: conservative # simple or conservative
-    clip_p_max_pu: 1.e-2
-    extendable: true
+      grid_codes: [20, 30, 40, 60, 100, 111, 112, 113, 114, 115]    # eligible Copernicus land-cover classes
+      distance: 10                                                  # buffer (km) from `distance_grid_codes` that is excluded
+      distance_grid_codes: [50]                                     # classes that trigger the buffer (e.g. urban)
+    natura: true                           # exclude protected areas (Natura 2000 / US protected lands)
+    cec: true                              # apply CEC Wind/Solar BaseScreen in CA (additional CA-only screen)
+    potential: conservative                # simple | conservative
+    clip_p_max_pu: 1.e-2                   # treat CFs below this as zero
+    extendable: true                       # eligible for capacity expansion
+
+  # docs : OFFWIND
   offwind:
     cutout: era5
     resource:
       method: wind
       turbine: NREL_ReferenceTurbine_2020ATB_5.5MW
       # add_cutout_windspeed: true
-    capacity_per_sqkm: 3 # 2021–2022 Transmission Plan, CAISO
-    correction_factor: 1 # 0.8855 # proxy for wake losses, from 10.1016/j.energy.2018.08.153
+    capacity_per_sqkm: 3                   # MW/km^2 (2021–2022 CAISO Transmission Plan)
+    correction_factor: 1                   # 0.8855 in 10.1016/j.energy.2018.08.153 for wake losses
     corine:
-      grid_codes: [80, 200] #page 28 of https://land.copernicus.eu/global/sites/cgls.vito.be/files/products/CGLOPS1_PUM_LC100m-V3_I3.4.pdf
+      grid_codes: [80, 200]                # offshore CGLS codes (open water)
     natura: true
-    boem_screen: false
-    max_depth: 60 # meters, ref https://www.nrel.gov/docs/fy16osti/66599.pdf
-    min_shore_distance: 22000 # meters
-    max_shore_distance: 65000 # meters
-    potential: conservative # simple or conservative
+    boem_screen: false                     # overlay BOEM offshore-wind planning areas
+    max_depth: 60                          # meters; fixed-bottom upper bound (NREL fy16osti/66599)
+    min_shore_distance: 22000              # meters
+    max_shore_distance: 65000              # meters
+    potential: conservative
     clip_p_max_pu: 1.e-2
     extendable: true
+
+  # ---------- Offshore wind (floating) ----------
+  # docs : OFFWIND_FLOATING
   offwind_floating:
     cutout: era5
     resource:
       method: wind
       turbine: NREL_ReferenceTurbine_2020ATB_15MW_offshore
       add_cutout_windspeed: true
-    capacity_per_sqkm: 3 # 2021–2022 Transmission Plan, CAISO
-    correction_factor: 1 # 0.8855 # proxy for wake losses, from 10.1016/j.energy.2018.08.153
+    capacity_per_sqkm: 3                   # MW/km^2
+    correction_factor: 1                   # 0.8855 wake-loss proxy
     corine:
-      grid_codes: [80, 200] #page 28 of https://land.copernicus.eu/global/sites/cgls.vito.be/files/products/CGLOPS1_PUM_LC100m-V3_I3.4.pdf
+      grid_codes: [80, 200]
     natura: true
-    boem_screen: true
-    min_depth: 60 # meters, ref https://www.nrel.gov/docs/fy16osti/66599.pdf
-    max_depth: 1300 # meters, ref https://www.nrel.gov/docs/fy22osti/83650.pdf
-    min_shore_distance: 22000 # meters
-    max_shore_distance: 65000 # meters
-    potential: conservative # simple or conservative
+    boem_screen: true                      # default ON for floating
+    min_depth: 60                          # meters; floating lower bound
+    max_depth: 1300                        # meters; floating upper bound (NREL fy22osti/83650)
+    min_shore_distance: 22000              # meters
+    max_shore_distance: 65000              # meters
+    potential: conservative
     clip_p_max_pu: 1.e-2
     extendable: true
+
+  # docs : SOLAR
   solar:
     cutout: era5
     resource:
       method: pv
       panel: CSi
-      orientation: latitude_optimal # will lead into optimal
-    capacity_per_sqkm: 4.6 # From 1.7 to 4.6 addresses issue #361 - TODO revisit this assumption
-    correction_factor: 1 # 0.854337
+      orientation: latitude_optimal        # latitude_optimal | flat | <custom dict>
+    capacity_per_sqkm: 4.6                 # MW/km^2 (raised from 1.7 per issue #361; revisit assumption)
+    correction_factor: 1                   # 0.854337 in some references
     corine:
-      grid_codes: [20, 30, 60, 90, 100] #see above for codes
+      grid_codes: [20, 30, 60, 90, 100]
     natura: true
-    cec: true
-    potential: conservative # simple or conservative
+    cec: true                              # apply CEC BaseScreen in CA
+    potential: conservative
     clip_p_max_pu: 1.e-2
     extendable: true
+
+  # docs : HYDRO
   hydro:
     cutout: era5
-    carriers: [ror, PHS, hydro]
-    PHS_max_hours: 6
+    carriers: [ror, PHS, hydro]            # ror = run-of-river; PHS = pumped hydro storage; hydro = reservoir hydro
     resource:
       method: hydro
-      hydrobasins: resources/hybas_na_lev06_v1c.shp
-      flowspeed: 1.0  # m/s
-    hydro_max_hours: "energy_capacity_totals_by_country"  # not active
-    clip_min_inflow: 1.0
     extendable: true
-    normalization:
-      method: hydro_capacities
-      year: 2013
-    multiplier: 1.1  # multiplier applied after the normalization of the hydro production; default 1.0
+    # PHS_max_hours: 6                     # OPTIONAL: PHS storage duration in hours; defaults from cost table
 
 
-# docs :
+# ====================================================================
+# NREL LAND-ACCESS — GODEEEP exclusion overlay settings (REQUIRED for godeeep)
+# ====================================================================
+# When renewable.dataset == "godeeep" (set in your main config), the
+# workflow downloads `data/nrel_exclusion/derived/{avail,caps}_*.nc`
+# from Zenodo and weights GODEEEP CFs by per-cell availability and
+# per-bus supply-curve capacities. The variables here pick which
+# overlay variant gets loaded.
+# docs : NREL_EXCLUSION
+renewable_land_access:                  # REQUIRED for godeeep; one of: reference | limited | open
+apply_cec_basescreen: false             # overlay CEC Wind/Solar BaseScreen on onwind+solar (CA-only)
+apply_boem_osw: false                   # overlay BOEM offshore-wind planning areas on offwind + offwind_floating
+godeeep_wind_height: "_100m"            # raw GODEEEP wind-CF hub height; "_100m" | "_125m"
+
+
+# ====================================================================
+# ATLITE — ERA5 cutout definitions
+# ====================================================================
+# An atlite cutout is a spatial+temporal slice of ERA5 used to
+# compute renewable CFs. `cutouts:` defines named cutouts;
+# `interconnects:` sets the bounding box and grid resolution per
+# interconnect (consumed by build_cutout when build_cutout=true).
+# docs : ATLITE
 atlite:
-  default_cutout: era5_2019
-  nprocesses: 8
-  show_progress: false # false saves time
+  default_cutout: era5_2019              # cutout name picked when a config does not specify one
+  nprocesses: 8                          # atlite worker processes
+  show_progress: false                   # progress bar; false saves wall time
   cutouts:
     era5_2019:
-      module: era5 # in priority order
-      time: ['2019', '2019']
-  interconnects:
+      module: era5                       # weather data source; era5 (default) — see atlite docs
+      time: ['2019', '2019']             # [start, end] year strings (atlite consumes year-level)
+  interconnects:                         # bbox + grid resolution per interconnect
     western:
-      x: [-126, -99]
-      y: [27, 50]
-      dx: 0.3
-      dy: 0.3
+      x: [-126, -99]                     # longitude min/max
+      y: [27, 50]                        # latitude min/max
+      dx: 0.3                            # x-grid resolution (degrees)
+      dy: 0.3                            # y-grid resolution (degrees)
     eastern:
       x: [-109, -65]
       y: [23, 50]
@@ -126,8 +192,14 @@ atlite:
       dy: 0.3
 
 
+# ====================================================================
+# LINES — pyPSA line-type catalog (mapped onto AC corridors by v_nom)
+# ====================================================================
+# Each line in the base network is assigned the LineType matching its
+# voltage. The string values reference pypsa.LineType library entries.
+# docs : LINES_TYPES
 lines:
-  types: #Temp values, replaced.
+  types:                                 # Temp values; replaced when actual conductor data is loaded
     115.: "Al/St 240/40 2-bundle 220.0"
     138.: "Al/St 240/40 2-bundle 220.0"
     161.: "Al/St 240/40 2-bundle 220.0"
@@ -136,54 +208,49 @@ lines:
     500.: "Al/St 560/50 4-bundle 750.0"
     765.: "Al/St 560/50 4-bundle 750.0"
 
-## For Atlite (future/historical) and GODEEEP (just historical), configure this
-renewable_weather_years: [2019]
-snapshots:
-  start: "2019-01-01"
-  end: "2020-01-01"
-  inclusive: "left"
 
-## For GODEEEP inputs for future scenarios, configure this
-renewable_scenarios: ["rcp85cooler"] #["historical", "rcp45hotter", "rcp45cooler", "rcp85hotter", "rcp85cooler"]
-
-## NREL reV land-exclusion integration for GODEEEP capacity factors.
-## Leave renewable_land_access null/unset to keep the legacy Zenodo+atlite path.
-## When set, build_renewable_profiles.py reads
-##   data/nrel_exclusion/derived/avail_{tech}_{access}[_cec|_boem].nc
-##   data/nrel_exclusion/derived/caps_{tech}_{access}[_cec|_boem].nc
-## published on Zenodo and applies per-cell availability weighting to the
-## raw GODEEEP CFs, with per-bus p_nom_max from the NREL supply-curve rollup.
-renewable_land_access:                     # [null | reference | limited | open]
-apply_cec_basescreen: false           # overlay CEC Wind/Solar BaseScreen on onwind+solar (CA-only)
-apply_boem_osw: false                 # overlay BOEM OSW planning areas on offwind+offwind_floating
-godeeep_wind_height: "_125m"          # which raw GODEEEP wind-CF hub height to pull ["_100m", "_125m"]
-
-# Specify month-day range; year is pulled from planning_horizons
-# For multiple planning horizons, only specify the month and day - the year will automatically match each planning horizon (e.g., planning_horizons: [2030, 2040, 2050])
-renewable_snapshots:
-  start_month: 1
-  start_day: 1
-  end_month: 12
-  end_day: 31
-  end_inclusive: true  # if true, includes the end day; if false, stops before end day
-
-# docs :
+# ====================================================================
+# OFFSHORE — offshore-shape source and OSW bus spacing
+# ====================================================================
+# docs : OFFSHORE_SHAPE
 offshore_shape:
-  use: eez #options are ca_osw, eez
+  use: eez                               # offshore region polygons; ca_osw (CA-only) | eez (federal EEZ)
 
+# docs : OFFSHORE_NETWORK
 offshore_network:
-  enable: true # set to true to enable offshore network
-  bus_spacing: 25000 # km
+  bus_spacing: 25000                     # meters between adjacent offshore buses (OSW network density)
 
-# docs :
-# Defaults for the CO2 storage / pipeline-network optionality. Per-scenario
-# configs override; keeping the keys defined here ensures every rule that
-# reads ``config["co2"][...]`` resolves even when a config does not opt in.
+
+# ====================================================================
+# CO2 — storage / pipeline-network defaults
+# ====================================================================
+# Per-scenario configs override; keeping the keys defined here ensures every
+# rule that reads ``config["co2"][...]`` resolves even when a config does not
+# opt in.
+# docs : CO2_COMMON
 co2:
-  storage: false   # [false, true]
+  storage: false                         # [false, true]
   network:
-    enable: false   # [false, true]
-    capital_cost: 2736000   # in USD/12-inch diameter/mile
-    marginal_cost: 4   # in USD/tCO2
-    lifetime: 40   # in years
+    enable: false                        # [false, true]
+    capital_cost: 2736000                # USD per 12-inch-diameter mile
+    marginal_cost: 4                     # USD/tCO2
+    lifetime: 40                         # years
     discount_rate: 0.07
+
+# ====================================================================
+# UCAP — Unforced Capacity for resource-adequacy accounting
+# ====================================================================
+# Applies a derate to conventional plants based on Forced Outage Rates:
+# UCAP = ICAP * (1 - FOR), implemented as p_max_pu = 1 - FOR.
+# docs : UCAP
+ucap:
+  enable: false                          # true = apply FOR derate to conventional generators
+  forced_outage_rates:                   # FOR per carrier, in PERCENT
+    coal: 11.061
+    oil: 11.061
+    hydro: 8.127
+    CCGT: 6.107
+    nuclear: 2.207
+    OCGT: 6.259
+
+# docs : end

@@ -34,19 +34,24 @@ pudl_path: s3://pudl.catalyst.coop/v2025.5.0   # versioned S3 prefix to PUDL par
 # method, capacity_per_sqkm, and the corine/natura/cec/boem land
 # screens together define each cell's potential and per-hour CF.
 # docs : RENEWABLE
+renewable_weather_years: [2019]            # always defined here; main configs may override
+
 renewable:
+  dataset: godeeep                         # godeeep | atlite — always defined here; main configs may override
 
   # ---------- Enhanced Geothermal Systems ----------
+  # docs : EGS
   EGS:
     dispatch: baseload                     # baseload (constant) | flexible (dispatchable like CCGT)
     drilling_cost: advanced                # base | advanced — selects EGS supply-curve capex column
     seismic_exclusion: true                # apply the EGS seismic-risk mask (upstream PR #750)
 
   # ---------- Onshore wind ----------
+  # docs : ONWIND
   onwind:
     cutout: era5                           # atlite cutout name (must match an entry under atlite.cutouts below)
     resource:
-      method:  wind
+      method: wind
       turbine: Vestas_V112_3MW             # atlite turbine config (see atlite.resource.windturbines)
       add_cutout_windspeed: true           # store raw windspeeds in profile output (used by GODEEEP scaling)
     capacity_per_sqkm: 3                   # MW/km^2 of available land (conservative; ScholzPhD Tab 4.3.1 cites 10)
@@ -64,10 +69,11 @@ renewable:
     clip_p_max_pu: 1.e-2                   # treat CFs below this as zero
     extendable: true                       # eligible for capacity expansion
 
+  # docs : OFFWIND
   offwind:
     cutout: era5
     resource:
-      method:  wind
+      method: wind
       turbine: NREL_ReferenceTurbine_2020ATB_5.5MW
       # add_cutout_windspeed: true
     capacity_per_sqkm: 3                   # MW/km^2 (2021–2022 CAISO Transmission Plan)
@@ -84,10 +90,11 @@ renewable:
     extendable: true
 
   # ---------- Offshore wind (floating) ----------
+  # docs : OFFWIND_FLOATING
   offwind_floating:
     cutout: era5
     resource:
-      method:  wind
+      method: wind
       turbine: NREL_ReferenceTurbine_2020ATB_15MW_offshore
       add_cutout_windspeed: true
     capacity_per_sqkm: 3                   # MW/km^2
@@ -104,6 +111,7 @@ renewable:
     clip_p_max_pu: 1.e-2
     extendable: true
 
+  # docs : SOLAR
   solar:
     cutout: era5
     resource:
@@ -120,6 +128,7 @@ renewable:
     clip_p_max_pu: 1.e-2
     extendable: true
 
+  # docs : HYDRO
   hydro:
     cutout: era5
     carriers: [ror, PHS, hydro]            # ror = run-of-river; PHS = pumped hydro storage; hydro = reservoir hydro
@@ -203,10 +212,11 @@ lines:
 # ====================================================================
 # OFFSHORE — offshore-shape source and OSW bus spacing
 # ====================================================================
-# docs : OFFSHORE
+# docs : OFFSHORE_SHAPE
 offshore_shape:
   use: eez                               # offshore region polygons; ca_osw (CA-only) | eez (federal EEZ)
 
+# docs : OFFSHORE_NETWORK
 offshore_network:
   bus_spacing: 25000                     # meters between adjacent offshore buses (OSW network density)
 
@@ -217,7 +227,7 @@ offshore_network:
 # Per-scenario configs override; keeping the keys defined here ensures every
 # rule that reads ``config["co2"][...]`` resolves even when a config does not
 # opt in.
-# docs :
+# docs : CO2_COMMON
 co2:
   storage: false                         # [false, true]
   network:
@@ -236,9 +246,11 @@ co2:
 ucap:
   enable: false                          # true = apply FOR derate to conventional generators
   forced_outage_rates:                   # FOR per carrier, in PERCENT
-    coal:    11.061
-    oil:     11.061
-    hydro:    8.127
-    CCGT:     6.107
-    nuclear:  2.207
-    OCGT:     6.259
+    coal: 11.061
+    oil: 11.061
+    hydro: 8.127
+    CCGT: 6.107
+    nuclear: 2.207
+    OCGT: 6.259
+
+# docs : end

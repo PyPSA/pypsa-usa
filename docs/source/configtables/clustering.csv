@@ -1,11 +1,16 @@
 ,Unit,Value,Description
-simplify_network:,,,
-weighting_strategy,str,"{population, demand-capacity}","When building multiple networks, Use 'population' if you want to ensure the clusters are assigned constant names."
-algorithm,str,"{kmeans, modularity}",
-cluster_network:,,,
-weighting_strategy,str,"{population, demand-capacity}","When building multiple networks, Use 'population' if you want to ensure the clusters are assigned constant names."
-algorithm,str,"{kmeans, modularity}",
+simplify_network:,,,"Settings for the kmeans pre-clustering stage at the ``{simpl}`` wildcard. Naming trap: this config block feeds the rule named ``cluster_simpl`` — the historical rule name ``simplify_network`` no longer exists."
+-- weighting_strategy,str,"{population, demand-capacity}","When building multiple networks, use 'population' if you want to ensure the clusters are assigned constant names."
+-- algorithm,str,"{kmeans, modularity}",Clustering algorithm for the pre-clustering stage (HAC has been removed).
+cluster_network:,,,"Settings for the final clustering stage at the ``{clusters}`` wildcard."
+-- weighting_strategy,str,"{population, demand-capacity}","When building multiple networks, use 'population' if you want to ensure the clusters are assigned constant names."
+-- algorithm,str,"{kmeans, modularity}",Clustering algorithm for the final clustering stage (HAC has been removed).
+-- exclude_carriers,list,"List of carrier names, e.g. ``[]``",Carriers whose generators are dropped from the network before clustering.
+-- consider_efficiency_classes,bool,"{true, false}","If true, bin generators of a carrier into low/medium/high efficiency classes before aggregation so that efficiency spread survives clustering."
 aggregation_strategies:,,,
-table --> {key},str,"{'mean','max','min',etc}","Specifiy the method of aggregating fields within the generators, buses tables. "
+-- generators --> {key},str,"{'mean','max','min','capacity_weighted_average','any',etc}","Specify the method of aggregating generator attributes (e.g. ``build_year``, ``ramp_limit_up``, ``heat_rate``) when generators are combined during clustering."
+temporal:,,,"Temporal aggregation — the primary temporal-resolution knob for solved networks. Equivalent to (and written by) the ``nH`` / ``nSEG`` tokens of the ``{opts}`` wildcard."
+-- resolution_elec,--,"int hours or ``false``","Resample electricity-only networks to every n hours; ``false`` keeps native hourly resolution."
+-- resolution_sector,--,"int hours or ``false``","Resample sector-coupled networks to every n hours; ``false`` keeps native hourly resolution."
 focus_weights:,,,
-region_name',float,,Specify the proportion of nodes to be attributed to a given zone in the form (California: 0.5) for half of all nodes to be located in California. Only used with TAMU Network
+-- {region_name},p.u.,float,"Optional per-region share of clusters in the form ``California: 0.5``, placing half of all clusters in that region. Fractions must sum to at most 1. Applied by the kmeans algorithm in both ``cluster_simpl`` and ``cluster_network``; ``null`` distributes clusters by the configured weighting."

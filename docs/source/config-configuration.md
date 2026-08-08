@@ -13,7 +13,7 @@ The `run` section is used for running and storing scenarios with different confi
 ```{eval-rst}
 .. literalinclude:: ../../workflow/repo_data/config/config.default.yaml
    :language: yaml
-   :start-at: run:
+   :start-after: # docs : RUN
    :end-before: # docs :
 
 .. csv-table::
@@ -33,13 +33,63 @@ Planning horizons determines which year(s) of future demand forecast to use for 
 ```{eval-rst}
 .. literalinclude:: ../../workflow/repo_data/config/config.default.yaml
    :language: yaml
-   :start-at: scenario:
+   :start-after: # docs : SCENARIO
    :end-before: # docs :
 
 .. csv-table::
    :header-rows: 1
    :widths: 22,7,22,33
    :file: configtables/scenario.csv
+```
+
+(model_topology_cf)=
+## `model_topology`
+
+The `model_topology` section selects the transmission backbone and the spatial zones the final
+network is aggregated to. `transmission_network` chooses between the ReEDS zonal backbone and the
+TAMU synthetic nodal network; `topological_boundaries` sets the zone type used after clustering
+(county, REeDS zone, state, or balancing area). Use `include` to subset the modeled footprint to
+specific zones, states, or balancing authorities (mixed zone types are not supported), and
+`aggregate` to pre-aggregate buses into larger regions. `interface_transmission_limits` applies
+NARIS2024 inter-regional transfer capacity limits and requires the ReEDS backbone.
+
+```{eval-rst}
+.. literalinclude:: ../../workflow/repo_data/config/config.default.yaml
+   :language: yaml
+   :start-after: # docs : MODEL_TOPOLOGY
+   :end-before: # docs :
+```
+
+(enable_cf)=
+## `enable`
+
+Top-level feature flags. `build_cutout` switches between consuming the prebuilt atlite cutouts
+downloaded from Zenodo (the default) and building a fresh cutout from raw ERA5 data, which is slow
+and requires a CDS API key. The optional `custom_busmap` flag makes `cluster_network` read a
+user-provided busmap from `data/{interconnect}/custom_busmap_{clusters}.csv` instead of computing
+one; custom busmaps must key on the bus IDs produced by the `cluster_simpl` stage.
+
+```{eval-rst}
+.. literalinclude:: ../../workflow/repo_data/config/config.default.yaml
+   :language: yaml
+   :start-after: # docs : ENABLE
+   :end-before: # docs :
+```
+
+(pudl_cf)=
+## `pudl_path`
+
+Points the build scripts at a versioned release of the [PUDL](https://catalyst.coop/pudl/)
+(Public Utility Data Liberation) parquet outputs, which supply the EIA-860, EIA-923, and CEMS
+tables used to build powerplants and fuel prices. Bump the version tag to pull fresher data, or
+point it at a local `file://` mirror for offline runs. This key lives in `config.common.yaml`
+since it rarely changes per scenario.
+
+```{eval-rst}
+.. literalinclude:: ../../workflow/repo_data/config/config.common.yaml
+   :language: yaml
+   :start-after: # docs : PUDL
+   :end-before: # docs :
 ```
 
 (snapshots_cf)=
@@ -50,13 +100,58 @@ Specifies the temporal range to build an energy system model for as arguments to
 ```{eval-rst}
 .. literalinclude:: ../../workflow/repo_data/config/config.default.yaml
    :language: yaml
-   :start-at: snapshots:
+   :start-after: # docs : SNAPSHOTS
    :end-before: # docs :
 
 .. csv-table::
    :header-rows: 1
    :widths: 22,7,22,33
    :file: configtables/snapshots.csv
+```
+
+(renewable_weather_years_cf)=
+## `renewable_weather_years`
+
+Sets the weather year(s) the renewable capacity-factor time series are built for. With
+`renewable.dataset: atlite` any year with a matching cutout works; with `godeeep` this key is only
+used when `renewable_scenarios` is `historical` — for future climate scenarios the year is taken
+from `planning_horizons` instead. The optional commented `renewable_weather_years_by_horizon`
+mapping assigns a different weather year to each planning horizon in multi-horizon atlite runs.
+
+```{eval-rst}
+.. literalinclude:: ../../workflow/repo_data/config/config.default.yaml
+   :language: yaml
+   :start-after: # docs : RENEWABLE_WEATHER_YEARS
+   :end-before: # docs :
+```
+
+(renewable_scenarios_cf)=
+## `renewable_scenarios`
+
+Selects the GODEEEP climate scenario used for renewable capacity factors — one historical record
+or four future climate projections. Only consumed when `renewable.dataset: godeeep`; see
+[`renewable: godeeep`](#godeeep_cf) for how scenarios, years, and snapshots interact.
+
+```{eval-rst}
+.. literalinclude:: ../../workflow/repo_data/config/config.default.yaml
+   :language: yaml
+   :start-after: # docs : RENEWABLE_SCENARIOS
+   :end-before: # docs :
+```
+
+(renewable_snapshots_cf)=
+## `renewable_snapshots`
+
+Sets the month/day window sampled within each weather year for GODEEEP-based runs. In
+multi-horizon godeeep models the year itself comes from each planning horizon automatically, so
+these knobs only control how much of the 8760-hour capacity-factor series is used;
+`end_inclusive: true` keeps the full end day rather than stopping at midnight.
+
+```{eval-rst}
+.. literalinclude:: ../../workflow/repo_data/config/config.default.yaml
+   :language: yaml
+   :start-after: # docs : RENEWABLE_SNAPSHOTS
+   :end-before: # docs :
 ```
 
 (atlite_cf)=
@@ -67,8 +162,8 @@ Define and specify the `atlite.Cutout` used for calculating renewable potentials
 ```{eval-rst}
 .. literalinclude:: ../../workflow/repo_data/config/config.common.yaml
    :language: yaml
-   :start-at: atlite:
-   :end-before: # docs
+   :start-after: # docs : ATLITE
+   :end-before: # docs :
 
 .. csv-table::
    :header-rows: 1
@@ -84,7 +179,7 @@ Specifies the types of generators that are included in the network, which are ex
 ```{eval-rst}
 .. literalinclude:: ../../workflow/repo_data/config/config.default.yaml
    :language: yaml
-   :start-at: electricity:
+   :start-after: # docs : ELECTRICITY
    :end-before: # docs :
 
 .. csv-table::
@@ -96,12 +191,17 @@ Specifies the types of generators that are included in the network, which are ex
 (renewable_cf)=
 ## `renewable`
 
+Per-technology resource and land-availability settings live in `config.common.yaml` and feed
+`build_renewable_profiles`. Note that when `renewable.dataset: godeeep` is selected, the
+`corine`, `natura`, and `cec` land screens below are bypassed in favor of the NREL reV
+`renewable_land_access` exclusions (see [`renewable: godeeep`](#godeeep_cf)).
+
 ### `solar`
 ```{eval-rst}
 .. literalinclude:: ../../workflow/repo_data/config/config.common.yaml
    :language: yaml
-   :start-at: solar:
-   :end-before: hydro:
+   :start-after: # docs : SOLAR
+   :end-before: # docs :
 
 .. csv-table::
    :header-rows: 1
@@ -113,8 +213,8 @@ Specifies the types of generators that are included in the network, which are ex
 ```{eval-rst}
 .. literalinclude:: ../../workflow/repo_data/config/config.common.yaml
    :language: yaml
-   :start-at: onwind:
-   :end-before: offwind:
+   :start-after: # docs : ONWIND
+   :end-before: # docs :
 
 .. csv-table::
    :header-rows: 1
@@ -122,12 +222,65 @@ Specifies the types of generators that are included in the network, which are ex
    :file: configtables/onwind.csv
 ```
 
-### `Offshore wind`
+### `offwind`
+
+Fixed-bottom offshore wind, screened to water depths up to `max_depth` (60 m by default) within
+the configured shore-distance band.
+
 ```{eval-rst}
 .. literalinclude:: ../../workflow/repo_data/config/config.common.yaml
    :language: yaml
-   :start-at: offwind:
-   :end-before: solar:
+   :start-after: # docs : OFFWIND
+   :end-before: # docs :
+
+.. csv-table::
+   :header-rows: 1
+   :widths: 22,7,22,33
+   :file: configtables/offwind.csv
+```
+
+### `offwind_floating`
+
+Floating offshore wind, screened to the depth band between `min_depth` and `max_depth`
+(60–1300 m by default, following NREL fy22osti/83650) within the configured shore-distance band.
+The BOEM offshore-wind planning-area screen (`boem_screen`) is on by default for floating sites.
+The same option keys as fixed-bottom `offwind` apply.
+
+```{eval-rst}
+.. literalinclude:: ../../workflow/repo_data/config/config.common.yaml
+   :language: yaml
+   :start-after: # docs : OFFWIND_FLOATING
+   :end-before: # docs :
+```
+
+### `hydro`
+
+Configures the hydro fleet attached from EIA-860 capacity and atlite inflow time series.
+`carriers` selects which hydro types are modeled: `ror` (run-of-river), `PHS` (pumped hydro
+storage), and `hydro` (reservoir hydro). The optional commented `PHS_max_hours` overrides the
+pumped-storage duration that otherwise comes from the cost tables.
+
+```{eval-rst}
+.. literalinclude:: ../../workflow/repo_data/config/config.common.yaml
+   :language: yaml
+   :start-after: # docs : HYDRO
+   :end-before: # docs :
+```
+
+### `EGS`
+
+Options for Enhanced Geothermal Systems supply curves (used when `EGS` is listed under
+`electricity: extendable_carriers: Generator`). `dispatch` selects baseload (constant output) or
+flexible (dispatchable) operation, `drilling_cost` picks the `base` or `advanced` drilling-cost
+column of the EGS supply curves, and `seismic_exclusion` applies the seismic-risk mask to
+candidate sites. The underlying supply-curve and profile methodology is to be detailed in a
+forthcoming publication.
+
+```{eval-rst}
+.. literalinclude:: ../../workflow/repo_data/config/config.common.yaml
+   :language: yaml
+   :start-after: # docs : EGS
+   :end-before: # docs :
 ```
 
 (godeeep_cf)=
@@ -181,7 +334,7 @@ A complete godeeep configuration requires four config blocks beyond the standard
 ```{eval-rst}
 .. literalinclude:: ../../workflow/repo_data/config/config.common.yaml
    :language: yaml
-   :start-at: renewable_land_access:
+   :start-after: # docs : NREL_EXCLUSION
    :end-before: # docs :
 
 .. csv-table::
@@ -192,13 +345,41 @@ A complete godeeep configuration requires four config blocks beyond the standard
 
 The `_cec` and `_boem` variants overlay additional regulatory screens on top of the base NREL availability raster: California Energy Commission Wind/Solar BaseScreen for onshore solar/wind in CA, and BOEM offshore wind planning areas for offshore. Outside their applicable region the variant equals the base.
 
+(offshore_shape_cf)=
+## `offshore_shape`
+
+Selects the offshore region polygons used to delineate offshore wind resource areas: `eez` uses
+the federal Exclusive Economic Zone shapes (the default, covering all coasts), while `ca_osw`
+restricts offshore development to the California offshore wind areas.
+
+```{eval-rst}
+.. literalinclude:: ../../workflow/repo_data/config/config.common.yaml
+   :language: yaml
+   :start-after: # docs : OFFSHORE_SHAPE
+   :end-before: # docs :
+```
+
+(offshore_network_cf)=
+## `offshore_network`
+
+Controls the density of the synthetic offshore network: `bus_spacing` sets the distance in meters
+between adjacent offshore buses, which determines how many offshore wind connection points are
+created along the offshore shapes.
+
+```{eval-rst}
+.. literalinclude:: ../../workflow/repo_data/config/config.common.yaml
+   :language: yaml
+   :start-after: # docs : OFFSHORE_NETWORK
+   :end-before: # docs :
+```
+
 (lines_cf)=
 ## `lines`
 ```{eval-rst}
 .. literalinclude:: ../../workflow/repo_data/config/config.default.yaml
    :language: yaml
-   :start-at: lines:
-   :end-before: # docs
+   :start-after: # docs : LINES
+   :end-before: # docs :
 
 .. csv-table::
    :header-rows: 1
@@ -212,8 +393,8 @@ The `_cec` and `_boem` variants overlay additional regulatory screens on top of 
 ```{eval-rst}
 .. literalinclude:: ../../workflow/repo_data/config/config.default.yaml
    :language: yaml
-   :start-at: links:
-   :end-before: # docs
+   :start-after: # docs : LINKS
+   :end-before: # docs :
 
 .. csv-table::
    :header-rows: 1
@@ -221,33 +402,60 @@ The `_cec` and `_boem` variants overlay additional regulatory screens on top of 
    :file: configtables/links.csv
 ```
 
-<!-- (load_cf)=
-## `load`
-
-```{eval-rst}
-.. literalinclude:: ../../workflow/repo_data/config/config.default.yaml
-   :language: yaml
-   :start-after: # p_nom_max:
-   :end-before: # docs
-
-.. csv-table::
-   :header-rows: 1
-   :widths: 22,7,22,33
-   :file: configtables/load.csv
-``` -->
-
 (co2_cf)=
 ## `co2`
 
 The `co2` section specifies whether the model may use underground storage to sequester captured CO2 or not. In case underground storage is specified, each node (composing the network) has a specific storage potential and a cost associated with it. The storage potential (in tonnes) is calculated by aggregating all the underlying storage potentials of the U.S. counties encompassed in the node's geographical area. Counties that are only partially covered by the node's geographical area have their potential fractionated accordingly. The storage cost (in $/tonne) is calculated by weighting the potential with the cost of each county encompassed. The dataset containing information about underground CO2 storage potentials and costs at a county level (and used in PyPSA-USA) was provided by Edna Calzado at The University of Texas (Austin), which was derived from the Roads to Removal project (https://roads2removal.org). To get an illustration, enabling underground co2 storage for a sector-less network will render its topography similar to <a href = "_static/CCTS/pypsa-usa_sector-less_with_underground_co2_storage.svg" target = "_blank">this</a>, while for a sector-based network will render its topography similar to <a href = "_static/CCTS/pypsa-usa_sector-based_with_underground_co2_storage.svg" target = "_blank">this</a>. As a reference, disabling underground co2 storage (i.e. no CCTS), a sector-less network has a topography similar to <a href = "_static/CCTS/pypsa-usa_sector-less_without_CCTS.svg" target = "_blank">this</a>, while a sector-based network has a topography similar to <a href = "_static/CCTS/pypsa-usa_sector-based_without_CCTS.svg" target = "_blank">this</a>.
 
+:::{figure} _static/CCTS/pypsa-usa_sector-less_with_underground_co2_storage.svg
+:width: 90%
+:alt: Sector-less network topology with underground CO2 storage
+
+Sector-less network with underground CO2 storage enabled.
+:::
+
+:::{figure} _static/CCTS/pypsa-usa_sector-based_with_underground_co2_storage.svg
+:width: 90%
+:alt: Sector-based network topology with underground CO2 storage
+
+Sector-based network with underground CO2 storage enabled.
+:::
+
+:::{figure} _static/CCTS/pypsa-usa_sector-less_without_CCTS.svg
+:width: 90%
+:alt: Sector-less network topology without CCTS
+
+Reference: sector-less network without CCTS.
+:::
+
+:::{figure} _static/CCTS/pypsa-usa_sector-based_without_CCTS.svg
+:width: 90%
+:alt: Sector-based network topology without CCTS
+
+Reference: sector-based network without CCTS.
+:::
+
 In addition, the section specifies whether the model may transport captured CO2 between nodes or not. In case transportation is specified, a network of CO2 pipelines is built based on the electricity grid layout represented in PyPSA-USA to determine where/how to build pipelines to connect nodes. To get an illustration, enabling co2 transport for a sector-less network will render its topography similar to <a href = "_static/CCTS/pypsa-usa_sector-less_with_underground_co2_storage_and_co2_transport.svg" target = "_blank">this</a>, while for a sector-based network will render its topography similar to <a href = "_static/CCTS/pypsa-usa_sector-based_with_underground_co2_storage_and_co2_transport.svg" target = "_blank">this</a>.
+
+:::{figure} _static/CCTS/pypsa-usa_sector-less_with_underground_co2_storage_and_co2_transport.svg
+:width: 90%
+:alt: Sector-less network topology with CO2 storage and transport
+
+Sector-less network with underground CO2 storage and CO2 transport.
+:::
+
+:::{figure} _static/CCTS/pypsa-usa_sector-based_with_underground_co2_storage_and_co2_transport.svg
+:width: 90%
+:alt: Sector-based network topology with CO2 storage and transport
+
+Sector-based network with underground CO2 storage and CO2 transport.
+:::
 
 ```{eval-rst}
 .. literalinclude:: ../../workflow/repo_data/config/config.default.yaml
    :language: yaml
-   :start-at: co2:
-   :end-before: # docs
+   :start-after: # docs : CO2
+   :end-before: # docs :
 
 .. csv-table::
    :header-rows: 1
@@ -268,6 +476,27 @@ For a sector-less model:
 
    - When `granularity` is set to `nation`, the model only has one single "air atmosphere" into which all the processes of all the nodes emit CO2. For each node, DAC is built to capture CO2 from this "air atmosphere". To get an illustration, setting `granularity` to `nation` will render the topography of a sector-less network similar to <a href = "_static/CCTS/pypsa-usa_sector-less_with_underground_co2_storage_and_co2_transport_and_dac_nation-based.svg" target = "_blank">this</a>.
 
+:::{figure} _static/CCTS/pypsa-usa_sector-less_with_underground_co2_storage_and_co2_transport_and_dac_node-based.svg
+:width: 90%
+:alt: Sector-less network with node-granularity DAC
+
+Sector-less network with DAC at `node` granularity.
+:::
+
+:::{figure} _static/CCTS/pypsa-usa_sector-less_with_underground_co2_storage_and_co2_transport_and_dac_state-based.svg
+:width: 90%
+:alt: Sector-less network with state-granularity DAC
+
+Sector-less network with DAC at `state` granularity.
+:::
+
+:::{figure} _static/CCTS/pypsa-usa_sector-less_with_underground_co2_storage_and_co2_transport_and_dac_nation-based.svg
+:width: 90%
+:alt: Sector-less network with nation-granularity DAC
+
+Sector-less network with DAC at `nation` granularity.
+:::
+
 For a sector-based model:
 
    - When `granularity` is set to `node`, each sector/node pair has a specific "air atmosphere" into which all the processes belonging to the sector/node pair emit CO2. For each sector/node pair, DAC is built to capture CO2 from its "air atmosphere". To get an illustration, setting `granularity` to `node` will render the topography of a sector-based network similar to <a href = "_static/CCTS/pypsa-usa_sector-based_with_underground_co2_storage_and_co2_transport_and_dac_node-based.svg" target = "_blank">this</a>.
@@ -276,11 +505,25 @@ For a sector-based model:
 
    - Given that a `granularity` set to `nation` does not make sense in a sector-based model, it defaults to `node` in this case.
 
+:::{figure} _static/CCTS/pypsa-usa_sector-based_with_underground_co2_storage_and_co2_transport_and_dac_node-based.svg
+:width: 90%
+:alt: Sector-based network with node-granularity DAC
+
+Sector-based network with DAC at `node` granularity.
+:::
+
+:::{figure} _static/CCTS/pypsa-usa_sector-based_with_underground_co2_storage_and_co2_transport_and_dac_state-based.svg
+:width: 90%
+:alt: Sector-based network with state-granularity DAC
+
+Sector-based network with DAC at `state` granularity.
+:::
+
 ```{eval-rst}
 .. literalinclude:: ../../workflow/repo_data/config/config.default.yaml
    :language: yaml
-   :start-at: dac:
-   :end-before: # docs
+   :start-after: # docs : DAC
+   :end-before: # docs :
 
 .. csv-table::
    :header-rows: 1
@@ -291,11 +534,16 @@ For a sector-based model:
 (costs_cf)=
 ## `costs`
 
+Selects the capital- and operating-cost assumptions: the NREL Annual Technology Baseline (ATB)
+scenario used for capex/FOM, the EIA Annual Energy Outlook (AEO) case used for fuel-price
+escalation, and policy incentives (PTC/ITC modifiers, emission prices, per-carrier availability
+years and build-rate caps). Processed cost tables are written to `resources/costs/costs_{year}.csv`.
+
 ```{eval-rst}
 .. literalinclude:: ../../workflow/repo_data/config/config.default.yaml
    :language: yaml
-   :start-at: costs:
-   :end-before: # docs
+   :start-after: # docs : COSTS
+   :end-before: # docs :
 
 .. csv-table::
    :header-rows: 1
@@ -303,24 +551,26 @@ For a sector-based model:
    :file: configtables/costs.csv
 ```
 
-(sector_cf)=
-## `sector`
-<!-- ```{eval-rst}
-.. literalinclude:: ../../workflow/repo_data/config/config.default.yaml
+(ucap_cf)=
+## `ucap`
+
+The `ucap` section applies an Unforced Capacity (UCAP) derate to conventional generators for
+resource-adequacy accounting: each carrier's capacity is derated by its Forced Outage Rate (FOR),
+implemented as `p_max_pu = 1 - FOR`. Enable it when reserve-margin constraints should be met with
+outage-derated rather than installed capacity. Rates are given in percent per carrier.
+
+```{eval-rst}
+.. literalinclude:: ../../workflow/repo_data/config/config.common.yaml
    :language: yaml
-   :start-at: sector:
-   :end-before: # docs
-
-.. csv-table::
-   :header-rows: 1
-   :widths: 22,7,22,33
-   :file: configtables/sector.csv
-``` -->
-
-```{warning}
-Sector coupling studies are all under active development. More info to come!
+   :start-after: # docs : UCAP
+   :end-before: # docs :
 ```
 
+(sector_cf)=
+## `sector`
+
+Sector-coupling options (natural gas, heating, service, transport, and industrial demand) are
+documented on the dedicated [sector configuration page](#sectors).
 
 (clustering_cf)=
 ## `clustering`
@@ -330,10 +580,15 @@ Each clustering and interconnection option will have a different number of minim
 
 Cleaned and labeled REeDs Shapes are pulled from this github repository: https://github.com/pandaanson/NYU-law-work
 
+Note the naming trap: the `simplify_network:` config block feeds the rule named `cluster_simpl`
+(the historical rule name `simplify_network` no longer exists), while `cluster_network:` feeds the
+rule of the same name. The `temporal:` block is the primary temporal-resolution knob for solved
+networks.
+
 ```{eval-rst}
 .. literalinclude:: ../../workflow/repo_data/config/config.default.yaml
    :language: yaml
-   :start-at: clustering:
+   :start-after: # docs : CLUSTERING
    :end-before: # docs :
 
 .. csv-table::
@@ -342,23 +597,49 @@ Cleaned and labeled REeDs Shapes are pulled from this github repository: https:/
    :file: configtables/clustering.csv
 ```
 
-
-```{tip}
-use `min` in `p_nom_max:` for more conservative assumptions.
-```
-
 (solving_cf)=
 ## `solving`
 
 ```{eval-rst}
 .. literalinclude:: ../../workflow/repo_data/config/config.default.yaml
    :language: yaml
-   :start-at: solving:
+   :start-after: # docs : SOLVING
+   :end-before: # docs :
 
 .. csv-table::
    :header-rows: 1
    :widths: 22,7,22,33
    :file: configtables/solving.csv
+```
+
+(walltime_cf)=
+## `walltime`
+
+Per-rule wall-time overrides consumed as Snakemake `walltime` resources, used by the SLURM
+profile when submitting jobs to an HPC scheduler (see `config.cluster.yaml` and
+`workflow/run_slurm.sh`). Rules not listed here fall back to per-rule defaults defined in the
+workflow. Local runs ignore these values.
+
+```{eval-rst}
+.. literalinclude:: ../../workflow/repo_data/config/config.default.yaml
+   :language: yaml
+   :start-after: # docs : WALLTIME
+   :end-before: # docs :
+```
+
+(custom_files_cf)=
+## `custom_files`
+
+Bring-your-own network or cost inputs. When `activate: true`, `prepare_network` loads
+`network_name` from `files_path` in place of the `cluster_network` output (and expects a
+`costs_2030.csv` alongside it), letting you solve an externally-modified network with the standard
+solve pipeline.
+
+```{eval-rst}
+.. literalinclude:: ../../workflow/repo_data/config/config.default.yaml
+   :language: yaml
+   :start-after: # docs : CUSTOM_FILES
+   :end-before: # docs :
 ```
 
 (plotting_cf)=
