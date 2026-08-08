@@ -99,6 +99,25 @@ Conventions:
 
 ## On local `v1-epic`, not yet pushed
 
+- **Fix double-applied `length_factor` in line/link capital costs**
+  (`workflow/scripts/add_electricity.py:1091`). The simplify-early reorder
+  put `add_electricity` after `aggregate_to_substations`, whose
+  `assign_line_lengths(n, 1.25)` already folds `lines.length_factor` into
+  `length`; the unchanged `update_transmission_costs(n, costs,
+  params.length_factor)` call then multiplied by 1.25 again —
+  `capital_cost = hav x 1.5625 x $/MW-km` instead of `x 1.25` (observed
+  ratio 1.2486 on 2810/2811 lines vs anchor; TRANSMISSION_LIFETIME ruled
+  out — both sides annuitize at CRP 60y / WACC 0.044). Found by the Tier C
+  assembled-stage comparison. Masked in reeds transport-model runs (0
+  lines survive clustering; ITL link costs recomputed identically — the
+  clustered artifacts agree to full precision), but line-preserving runs
+  (`transmission_network` != 'reeds', or `lv/lc` normalization in
+  `prepare_network`) overpriced transmission expansion by 25%. Fix: pass
+  `length_factor=1.0` at the post-aggregation call site, preserving the
+  once-applied factor inside `length`. *Results effect:* restores parity
+  with anchor for line CAPEX; no effect on this harness config's clustered
+  or solved outputs (verified identical ITL costs).
+
 - **`cluster_simpl` identity branch — normalize region bus names**
   (`workflow/scripts/cluster_simpl.py`, plus guards in
   `build_renewable_profiles.py` and `add_electricity.py`). With `simpl=''`

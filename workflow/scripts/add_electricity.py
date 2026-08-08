@@ -1088,7 +1088,11 @@ def main(snakemake):
     reeds_memberships = pd.read_csv(snakemake.input.reeds_memberships)
 
     costs = load_costs(snakemake.input.tech_costs, params.costs)
-    update_transmission_costs(n, costs, params.length_factor)
+    # In the simplify-early DAG this network comes from aggregate_to_substations,
+    # whose assign_line_lengths already folded lines.length_factor into `length`.
+    # Passing the factor again here would compound it (25% CAPEX inflation on
+    # every line) — the pre-refactor pipeline applied it exactly once.
+    update_transmission_costs(n, costs, length_factor=1.0)
 
     renewable_carriers = set(params.renewable_carriers)
     extendable_carriers = params.extendable_carriers
