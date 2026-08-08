@@ -11,6 +11,7 @@ from __future__ import annotations
 import base64
 import io
 import json
+import re
 from pathlib import Path
 
 import matplotlib
@@ -122,6 +123,72 @@ def scatter_network(pair: ArtifactPair, cand_root: Path, anch_root: Path) -> str
     return _img(fig, f"{pair.stage} per-element scatters")
 
 
+def _pnom_grouped(n, attr: str):
+    """Generator p_nom summed by an attribute (carrier / zone / decade)."""
+    g = n.generators
+    if g.empty:
+        return pd.Series(dtype=float)
+    if attr == "carrier":
+        key = g.carrier
+    elif attr == "reeds_zone":
+        if "reeds_zone" not in n.buses.columns:
+            return pd.Series(dtype=float)
+        key = g.bus.map(n.buses.reeds_zone)
+    elif attr == "build_year":
+        key = (g.build_year.fillna(0).astype(float) // 10 * 10).astype(int).astype(str) + "s"
+    else:
+        return pd.Series(dtype=float)
+    return g.groupby(key).p_nom.sum()
+
+
+def pnom_attribute_section(prong: int, cand_root: Path, anch_root: Path) -> str:
+    """Paired p_nom-by-attribute bars for the add_electricity outputs and the
+    simplify-stage networks (candidate assembled pkl vs each anchor stage).
+    """
+    s = "" if prong == 1 else "20"
+    pairings = [
+        (
+            "add_electricity outputs",
+            cand_root / f"resources/equivalence/networks/western/elec_s{s}_l_pp.pkl",
+            anch_root / "resources/equivalence/western/elec_base_network_l_pp.pkl",
+            "candidate (substation)",
+            "anchor (nodal)",
+        ),
+        (
+            "simplify_network stage",
+            cand_root / f"resources/equivalence/networks/western/elec_s{s}_l_pp.pkl",
+            anch_root / f"resources/equivalence/western/elec_s{s}.nc",
+            "candidate (assembled)",
+            "anchor (simplified)",
+        ),
+    ]
+    out: list[str] = []
+    for title, pc, pa, lc, la in pairings:
+        if not (pc.exists() and pa.exists()):
+            out.append(f"<p>p_nom section: missing artifact for {title}</p>")
+            continue
+        try:
+            nc, na = load_network(pc), load_network(pa)
+            attrs = ["carrier", "reeds_zone", "build_year"]
+            fig, axes = plt.subplots(1, len(attrs), figsize=(5.2 * len(attrs), 4.2))
+            for ax, attr in zip(np.atleast_1d(axes), attrs):
+                gc, ga = _pnom_grouped(nc, attr), _pnom_grouped(na, attr)
+                if gc.empty and ga.empty:
+                    ax.set_title(f"by {attr}: n/a")
+                    continue
+                df = pd.DataFrame({lc: gc, la: ga}).fillna(0.0) / 1e3
+                df.sort_index().plot.barh(ax=ax, width=0.8)
+                ax.set_xlabel("p_nom (GW)")
+                ax.set_title(f"by {attr}", fontsize=10)
+                ax.tick_params(labelsize=7)
+            fig.suptitle(f"Generator p_nom by attribute - {title}")
+            fig.tight_layout()
+            out.append(_img(fig, f"p_nom by attribute: {title}"))
+        except Exception as e:
+            out.append(f"<p>p_nom plot failed for {title}: {e}</p>")
+    return "".join(out)
+
+
 def benchmark_table() -> str:
     rows = []
     for side in ("candidate", "anchor"):
@@ -130,10 +197,19 @@ def benchmark_table() -> str:
             continue
         m = json.loads(p.read_text())
         for rule, bench in sorted(m.get("benchmarks", {}).items()):
+            # Only rules from THIS harness run: the RDIR-scoped equivalence/
+            # tree, plus the hard-coded shared cluster_network path filtered
+            # to this harness's cluster targets (historic runs pollute it).
+            in_equiv = rule.startswith("equivalence/")
+            is_harness_cluster = bool(
+                re.fullmatch(r"cluster_network/western/elec_s(20)?_c\d+m?", rule),
+            )
+            if not (in_equiv or is_harness_cluster):
+                continue
             rows.append(
                 {
                     "side": side,
-                    "rule": rule,
+                    "rule": rule.removeprefix("equivalence/"),
                     "wall_s": bench.get("s", ""),
                     "max_rss_mb": bench.get("max_rss", ""),
                 },
@@ -141,13 +217,36 @@ def benchmark_table() -> str:
     if not rows:
         return "<p>No benchmark manifests found.</p>"
     df = pd.DataFrame(rows)
-    piv = df.pivot_table(
-        index="rule",
-        columns="side",
-        values="wall_s",
-        aggfunc="first",
-    ).fillna("")
-    return piv.to_html(border=0)
+    for col in ("wall_s", "max_rss_mb"):
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+    piv = df.pivot_table(index="rule", columns="side", values=["wall_s", "max_rss_mb"], aggfunc="first")
+    # concise layout: rule | candidate s | anchor s | candidate MB | anchor MB
+    out = pd.DataFrame(index=piv.index)
+    for side in ("candidate", "anchor"):
+        out[f"{side} wall (s)"] = piv.get(("wall_s", side))
+        out[f"{side} max RSS (MB)"] = piv.get(("max_rss_mb", side))
+    out = out.sort_values("candidate wall (s)", ascending=False)
+    total = pd.Series(
+        {
+            "candidate wall (s)": out["candidate wall (s)"].sum(),
+            "anchor wall (s)": out["anchor wall (s)"].sum(),
+            "candidate max RSS (MB)": out["candidate max RSS (MB)"].max(),
+            "anchor max RSS (MB)": out["anchor max RSS (MB)"].max(),
+        },
+        name="TOTAL (wall sum / RSS peak)",
+    )
+    out = pd.concat([out, total.to_frame().T])
+    out = out.round(1).fillna("")
+    note = (
+        "<p style='font-size:12px;color:#555555'>Harness-run rules only. "
+        "max_rss reads 0 on macOS (psutil limitation) - memory numbers "
+        "require a Linux/HPC run. TOTAL wall is the sum of per-rule times "
+        "(serial equivalent; actual runs used -j4). Cross-side TOTALs are "
+        "not apples-to-apples: the candidate builds prong-specific stage "
+        "instances (_s and _s20) twice where the anchor shares them - "
+        "compare per-rule rows across sides.</p>"
+    )
+    return out.to_html(border=0) + note
 
 
 def findings_tables(findings: dict) -> str:
@@ -194,6 +293,7 @@ figure{{margin:1rem 0;background:#ffffff}}figcaption{{color:#555555;font-size:12
 · waivers active: {len(waivers)}</p>
 <h2>Findings</h2>{findings_tables(findings)}
 <h2>Visual comparison</h2>{"".join(sections)}
+<h2>Generator p_nom by attribute</h2>{pnom_attribute_section(prong, cand_root, anch_root)}
 <h2>Benchmarks (wall seconds per rule)</h2>{benchmark_table()}
 </body></html>"""
     out = REPO / "workflow" / "results" / "equivalence" / f"report_prong{prong}.html"
