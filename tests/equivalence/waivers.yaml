@@ -2,3 +2,39 @@
 # Each entry suppresses exactly one signed-off delta and MUST reference a row
 # in docs/superpowers/specs/2026-08-07-deltas-ledger.md.
 # Fields: stage, component, column, kind ('*' wildcards allowed), ledger, reason.
+- stage: assembled_substation_network
+  component: Line
+  column: capital_cost
+  kind: value
+  ledger: DL-1
+  reason: stage-ordering artifact (anchor base-stage segment lengths); clustered ITL identical
+- stage: assembled_substation_network
+  component: Link
+  column: capital_cost
+  kind: value
+  ledger: DL-2
+  reason: stage-ordering artifact; clustered ITL identical
+- stage: '*'
+  component: Carrier
+  column: color
+  kind: value
+  ledger: DL-3
+  reason: plotting palette metadata
+- stage: '*'
+  component: Bus
+  column: control
+  kind: value
+  ledger: DL-4
+  reason: slack-bus bookkeeping; ignored by LOPF
+- stage: '*'
+  component: Bus
+  column: generator
+  kind: value
+  ledger: DL-4
+  reason: slack-bus bookkeeping; ignored by LOPF
+- stage: '*'
+  component: Generator
+  column: control
+  kind: value
+  ledger: DL-4
+  reason: PQ/Slack bookkeeping; ignored by LOPF
