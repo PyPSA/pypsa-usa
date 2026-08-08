@@ -22,21 +22,6 @@ PyPSA-USA builds on and leverages the work of [PyPSA-EUR](https://pypsa-eur.read
 This model is under active development. If you need assistance or would like to discuss using the model, please reach out to **ktehranchi@stanford.edu** and **trevor_barnes@sfu.ca**
 ```
 
-<!-- ```{include} ../../README.md
-:relative-images:
-``` -->
-
-<!-- # Indices and tables
-
-- {ref}`genindex`
-- {ref}`modindex`
-- {ref}`search` -->
-
-<!-- ```{toctree}
-:caption: 'Contents:'
-:maxdepth: 2
-``` -->
-
 ```{toctree}
 :caption: 'Getting Started:'
 :maxdepth: 1
@@ -45,6 +30,17 @@ This model is under active development. If you need assistance or would like to 
 about-introduction
 about-install
 about-usage
+```
+
+```{toctree}
+:caption: 'Model Description:'
+:maxdepth: 1
+:hidden:
+
+model-workflow
+model-components
+model-constraints
+model-network-schema
 ```
 
 ```{toctree}
@@ -80,7 +76,8 @@ config-sectors
 :maxdepth: 1
 :hidden:
 
-license
+release-notes
 contributing
 publications
+license
 ```

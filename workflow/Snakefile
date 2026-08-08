@@ -292,6 +292,37 @@ rule dag:
         """
 
 
+rule docs_figures:
+    message:
+        "Rendering documentation figures into docs/source/_static/generated/."
+    input:
+        base_network=expand(
+            NETWORKS + "{interconnect}/elec_base_network.nc",
+            interconnect=config["scenario"]["interconnect"],
+        )[0],
+        simpl_network=expand(
+            NETWORKS + "{interconnect}/elec_s{simpl}.nc", **config["scenario"]
+        )[0],
+        clustered_network=expand(
+            NETWORKS + "{interconnect}/elec_s{simpl}_c{clusters}.nc",
+            **config["scenario"],
+        )[0],
+        onshore_shapes=expand(
+            GEOSPATIAL + "{interconnect}/onshore_shapes.geojson",
+            interconnect=config["scenario"]["interconnect"],
+        )[0],
+        solved_network=expand(
+            RESULTS
+            + "{interconnect}/networks/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc",
+            **config["scenario"],
+        )[0],
+    output:
+        network_aggregation="../docs/source/_static/generated/network_aggregation.png",
+        example_outputs="../docs/source/_static/generated/example_outputs.png",
+    script:
+        "scripts/plot_docs_figures.py"
+
+
 rule clean:
     message:
         "Remove all build results but keep downloaded data."
