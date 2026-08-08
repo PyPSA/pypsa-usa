@@ -185,9 +185,10 @@ def build_report(prong: int) -> Path:
     waivers = load_waivers()
     html = f"""<!doctype html><html><head><meta charset="utf-8">
 <title>Equivalence report — prong {prong}</title>
-<style>body{{font-family:system-ui;margin:2rem;max-width:1100px}}
-table{{border-collapse:collapse;font-size:12px}}td,th{{padding:3px 8px;border-bottom:1px solid #ddd;text-align:left}}
-figure{{margin:1rem 0}}figcaption{{color:#666;font-size:12px}}</style></head><body>
+<style>body{{background:#ffffff;color:#111111;font-family:system-ui;margin:2rem;max-width:1100px}}
+a{{color:#0b5cad}}h1,h2{{color:#111111}}
+table{{border-collapse:collapse;font-size:12px;background:#ffffff;color:#111111}}td,th{{padding:3px 8px;border-bottom:1px solid #ddd;text-align:left;color:#111111}}
+figure{{margin:1rem 0;background:#ffffff}}figcaption{{color:#555555;font-size:12px}}</style></head><body>
 <h1>Equivalence run — prong {prong}: <span style="color:{"green" if status == "PASS" else "crimson"}">{status}</span></h1>
 <p>candidate = v1-epic · anchor = upstream/develop e7f8bd70 · live findings: {n_live}
 · waivers active: {len(waivers)}</p>
