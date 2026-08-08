@@ -190,6 +190,12 @@ def set_derates(plants):
     plants.winter_derate = plants.winter_derate.clip(
         upper=1,
     ).clip(lower=0)
+    # EIA-860 reports summer/winter capacity only on a representative generator
+    # for multi-unit combined-cycle plants, leaving sub-units (e.g. CCGT LMB/LMC/STA)
+    # with NaN derates. Treat missing derate info as "no derate" so downstream
+    # p_max_pu construction does not propagate NaN across every snapshot.
+    plants.summer_derate = plants.summer_derate.fillna(1.0)
+    plants.winter_derate = plants.winter_derate.fillna(1.0)
 
 
 # Create DataFrames from constants for mapping

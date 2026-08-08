@@ -97,8 +97,9 @@ def update_capital_costs(
     multiplier: pd.DataFrame,
 ):
     """Applies regional multipliers to capital cost data."""
-    # map generators to states
-    bus_state_mapper = n.buses.to_dict()["state"]
+    # map generators to states (multiplier CSVs are indexed by full state name;
+    # post-aggregation buses only carry reeds_state 2-letter codes)
+    bus_state_mapper = n.buses["reeds_state"].map(const.CODE_2_STATE).to_dict()
     gen = n.generators[n.generators.carrier == carrier].copy()
     gen["state"] = gen.bus.map(bus_state_mapper)
     gen = gen[gen["state"].isin(multiplier.index)]  # drops any regions that do not have cost multipliers
@@ -289,15 +290,18 @@ def match_plant_to_bus(n, plants):
     buses = n.buses.copy()
     buses["geometry"] = gpd.points_from_xy(buses["x"], buses["y"])
 
-    # First pass: Assign each plant to the nearest bus in the same reeds zone
-    for zone_id in buses["reeds_zone"].unique():
-        buses_in_zone = buses[buses["reeds_zone"] == zone_id]
-        plants_in_zone = plants_matched[
-            (plants_matched["country"] == zone_id) & (plants_matched["bus_assignment"].isnull())
-        ]
+    # First pass: Assign each plant to the nearest bus in the same reeds zone.
+    # Only runs when plants carry a `country` column (sjoined from regions_onshore);
+    # absent that, fall through to the zone-agnostic second pass.
+    if "country" in plants_matched.columns:
+        for zone_id in buses["reeds_zone"].unique():
+            buses_in_zone = buses[buses["reeds_zone"] == zone_id]
+            plants_in_zone = plants_matched[
+                (plants_matched["country"] == zone_id) & (plants_matched["bus_assignment"].isnull())
+            ]
 
-        # Update plants_matched with the nearest bus within the same REEDS zone
-        plants_matched.update(match_nearest_bus(plants_in_zone, buses_in_zone))
+            # Update plants_matched with the nearest bus within the same REEDS zone
+            plants_matched.update(match_nearest_bus(plants_in_zone, buses_in_zone))
 
     # Second pass: Assign any remaining unmatched plants to the nearest bus regardless of REEDS zone
     unmatched_plants = plants_matched[plants_matched["bus_assignment"].isnull()]
@@ -409,8 +413,10 @@ def attach_renewable_capacities_to_atlite(
             continue
 
         generators_tech = n.generators[n.generators.carrier == tech].copy()
-        generators_tech["sub_assignment"] = generators_tech.bus.map(n.buses.sub_id)
-        plants_filt["sub_assignment"] = plants_filt.bus_assignment.map(n.buses.sub_id)
+        # After aggregate_to_substations, each bus is one substation, so sub_id is
+        # collapsed into the bus index; use bus identity directly for grouping.
+        generators_tech["sub_assignment"] = generators_tech.bus
+        plants_filt["sub_assignment"] = plants_filt.bus_assignment
 
         build_year_avg = plants_filt.groupby(["sub_assignment"])[plants_filt.columns].apply(
             lambda x: pd.Series(

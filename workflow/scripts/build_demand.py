@@ -1774,7 +1774,7 @@ class WriteStrategy(ABC):
 
     def _get_state_zones(self) -> pd.Series:
         n = self.n
-        return n.buses.state
+        return n.buses.reeds_state.map(CODE_2_STATE)
 
     def _get_reeds_zones(self) -> pd.Series:
         n = self.n

@@ -566,8 +566,9 @@ def cluster_regions(busmaps, input=None, output=None):
             is_float = False
 
         # Preserve representative coordinates alongside geometry; downstream
-        # consumers (e.g. build_renewable_profiles) require x/y on each cluster.
-        keep_cols = [c for c in ("name", "x", "y", "geometry") if c in regions.columns]
+        # consumers (e.g. build_renewable_profiles) require x/y on each cluster,
+        # add_electricity.match_plant_to_bus requires `country` on each region.
+        keep_cols = [c for c in ("name", "x", "y", "country", "geometry") if c in regions.columns]
         regions = regions.reindex(columns=keep_cols).set_index("name")
 
         # Convert float indices to string representation of integers if needed
@@ -576,10 +577,12 @@ def cluster_regions(busmaps, input=None, output=None):
 
         # Dissolve regions according to busmap; mean-aggregate coords so the
         # cluster's x/y match pypsa's mean aggregation of the underlying buses.
-        coord_cols = [c for c in ("x", "y") if c in regions.columns]
+        agg = {c: "mean" for c in ("x", "y") if c in regions.columns}
+        if "country" in regions.columns:
+            agg["country"] = "first"
         regions_c = regions.dissolve(
             busmap,
-            aggfunc={c: "mean" for c in coord_cols} if coord_cols else "first",
+            aggfunc=agg if agg else "first",
         )
         regions_c.index.name = "name"
         regions_c = regions_c.reset_index()
