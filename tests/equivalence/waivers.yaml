@@ -1,0 +1,4 @@
+# Machine-readable waivers for the equivalence harness (spec D8).
+# Each entry suppresses exactly one signed-off delta and MUST reference a row
+# in docs/superpowers/specs/2026-08-07-deltas-ledger.md.
+# Fields: stage, component, column, kind ('*' wildcards allowed), ledger, reason.

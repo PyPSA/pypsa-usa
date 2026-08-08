@@ -98,6 +98,12 @@ links:
 
 costs:
   ng_fuel_year: 2019
+  # Required by build_cost_data on both branches: without it the script falls
+  # back to "Reference" (capital R), which matches zero rows in PUDL's
+  # model_case_eiaaeo (values are lowercase snake_case) and crashes with an
+  # IndexError in build_aeo_fuel_costs. Value mirrors config.default.yaml.
+  aeo:
+    scenario: reference
 
 clustering:
   simplify_network:

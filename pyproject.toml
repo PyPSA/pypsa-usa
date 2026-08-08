@@ -159,5 +159,6 @@ testpaths = ["tests", "workflow/scripts/test"]
 markers = [
     "fast: tier A — static checks, no data deps, target <30s",
     "integration: tier B — runs snakemake build, target <5min (needs data/, cutouts/, repo_data/)",
+    "equivalence: tier C — compares candidate vs anchor builds (run tests.equivalence.run first)",
 ]
 addopts = "--strict-markers -ra"

@@ -99,6 +99,21 @@ Conventions:
 
 ## On local `v1-epic`, not yet pushed
 
+- **`config.equivalence.yaml` — add `costs.aeo.scenario: reference`** (in the
+  tracked canonical `workflow/repo_data/config/config.equivalence.yaml`, plus
+  the gitignored `workflow/config/` working copy; the harness re-copies the
+  canonical file into the anchor worktree on every provision).
+  `build_cost_data` crashed with an `IndexError` in `build_aeo_fuel_costs`
+  (empty lookup for `natural_gas`): the equivalence config had no `costs.aeo`
+  key, so the script fell back to its hardcoded default `"Reference"`, which
+  matches **zero** rows of PUDL's `model_case_eiaaeo` (values are lowercase
+  snake_case, e.g. `reference`). Anchor (`upstream/develop`) is equally
+  affected — `build_cost_data.py` is byte-identical on both branches — so the
+  fix lives in the shared harness config, not code; value mirrors
+  `config.default.yaml`. (The script's `"Reference"` fallback remains a latent
+  upstream bug: it can never match the data.) *Results effect:* None (the rule
+  previously produced no output at all; both branches now consume the
+  identical AEO `reference` fuel-cost slice).
 - **Network schema tracking** — `log_network_schema` helper wired into the
   topology chain, electricity assembly, and solve scripts; seeded
   `docs/network-schema.md` catalog. *Results effect:* None (logging only).
