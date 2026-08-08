@@ -19,7 +19,7 @@ foresight: 'perfect'
 
 scenario:
   interconnect: [western]
-  clusters: [4m]           # reeds transport model: must equal CA's ReEDS zone count (p8-p11); 'm' = conventional-only aggregation, mirrors config.test.yaml
+  clusters: [4]            # reeds transport model: must equal CA's ReEDS zone count (p8-p11); plain 4 = all carriers aggregate to zones (user choice 2026-08-07)
   simpl: ['']            # prong 1 (pass-through); prong 2 targets use s20
   opts: [REM-3h]
   ll: [v1.0]
