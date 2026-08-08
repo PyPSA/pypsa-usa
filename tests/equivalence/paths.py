@@ -20,7 +20,7 @@ from dataclasses import dataclass
 
 RUN = "equivalence"
 INTERCONNECT = "western"
-CLUSTERS = "10"
+CLUSTERS = "4m"
 LL = "v1.0"
 OPTS = "REM-3h"
 SECTOR = "E"
