@@ -99,6 +99,16 @@ Conventions:
 
 ## On local `v1-epic`, not yet pushed
 
+- **Equivalence report revamped into a single explanatory artifact**
+  (`tests/equivalence/report_sections/`, grilling session 2026-08-07):
+  one `equivalence_report.html` with executive summary (verdict, provenance
+  fingerprint, delta index, stage timeline), unified diff-DAG annotated with
+  per-rule walltimes, stage-ordered narrative with born/inherited/masked
+  delta tracking, 3-panel maps (V1-epic | anchor | difference) at the
+  assembled and solved stages, and a rule-grouped benchmark table.
+  "candidate" renders as "V1-epic" in all user-facing text (internal keys
+  unchanged). *Results effect:* None (reporting only).
+
 - **Fix 6.28% silent demand loss through transformer removal**
   (`workflow/scripts/aggregate_to_substations.py`). `remove_transformers`
   runs before demand exists in the reordered DAG and dropped

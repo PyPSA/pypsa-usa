@@ -42,7 +42,7 @@ def main() -> int:
         REPO / "workflow",
         ANCHOR_WORKTREE / "workflow",
     )
-    report = build_report(args.prong)
+    report = build_report()
     print(
         f"[equivalence] prong {args.prong}: "
         f"{'PASS' if result['pass'] else 'FAIL'} "
