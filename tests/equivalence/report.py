@@ -170,7 +170,7 @@ def build_report(prong: int) -> Path:
         if not (pc.exists() and pa.exists()):
             continue
         try:
-            if pair.kind == "demand_csv":
+            if pair.kind in ("demand_csv", "demand_total"):
                 sections.append(demand_overlay(pair, cand_root, anch_root))
             elif pair.kind == "profile":
                 sections.append(profile_curves(pair, cand_root, anch_root))

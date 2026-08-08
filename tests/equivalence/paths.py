@@ -37,7 +37,7 @@ class ArtifactPair:
     stage: str  # short stage label used in findings/report
     candidate: str  # path relative to candidate workflow/
     anchor: str  # path relative to anchor worktree workflow/
-    kind: str  # loader: network | network_pkl_vs_nc | profile | demand_csv | csv
+    kind: str  # loader: network | network_pkl_vs_nc | profile | demand_total
     solve_stage: bool = False  # apply D7 tolerances instead of D2
 
 
@@ -46,11 +46,16 @@ def prong_pairs(prong: int) -> list[ArtifactPair]:
     s = "" if prong == 1 else "20"
     ic = INTERCONNECT
     pairs = [
+        # NOTE: these two CSVs are keyed at different granularities (anchor is
+        # NODAL, pre-aggregation raw bus ids; candidate is substation-keyed),
+        # so only the clustering-invariant system total is compared. Per-bus
+        # demand equivalence is covered by the assembled substation network's
+        # Load_t.p_set comparison.
         ArtifactPair(
             stage="demand",
             candidate=f"{EQ}/demand/{ic}/power_electricity_s{s}.csv",
             anchor=f"{EQ}/{ic}/demand/power_electricity.csv",
-            kind="demand_csv",
+            kind="demand_total",
         ),
         ArtifactPair(
             stage="profile_onwind",

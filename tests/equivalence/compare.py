@@ -5,6 +5,11 @@ Tolerance policy (spec D2/D7):
 - indexes / integers / strings: exact, after sorting
 - solved network: objective within 0.1%, per-carrier capacity within 0.5%
 - row-set and column-set differences are first-class findings
+- representation-only differences are normalized before comparing: float-
+  formatted integer labels ('35827.0' vs '35827') and Load names carrying a
+  carrier suffix ('35827 AC' vs '35827', re-keyed on the load's bus)
+- per-frame findings are capped at ``MAX_FINDINGS_PER_FRAME`` with a single
+  'suppressed' finding so fan-out cannot drown the signal
 - waivers (tests/equivalence/waivers.yaml) suppress exactly the signed-off
   deltas; each waiver must reference a deltas-ledger entry.
 
@@ -14,6 +19,7 @@ Findings are dicts: {stage, component, column, kind, detail, waived}.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import numpy as np
@@ -28,7 +34,19 @@ RTOL = 1e-3
 ATOL = 1e-8
 OBJECTIVE_RTOL = 1e-3
 CAPACITY_RTOL = 5e-3
+MAX_FINDINGS_PER_FRAME = 50
 WAIVERS_PATH = Path(__file__).parent / "waivers.yaml"
+
+# Anchor artifacts float-format integer bus labels ('35827.0'); candidate
+# writes them bare ('35827'). Pure representation — normalize on both sides.
+_FLOAT_INT_LABEL = re.compile(r"\d+\.0")
+
+
+def _norm_label(x) -> str:
+    """Str-ify a label, collapsing float-formatted integers to integer form."""
+    s = str(x)
+    return s[:-2] if _FLOAT_INT_LABEL.fullmatch(s) else s
+
 
 # Candidate-only bookkeeping columns that exist because of the DAG
 # restructuring itself (not results): compared as schema info, never values.
@@ -63,6 +81,36 @@ def _numeric(s: pd.Series) -> bool:
     return pd.api.types.is_numeric_dtype(s) and not pd.api.types.is_bool_dtype(s)
 
 
+def _normalize_frame(
+    df: pd.DataFrame,
+    side: str,
+    stage: str,
+    component: str,
+    local: list[dict],
+) -> pd.DataFrame:
+    """Copy with labels normalized; dedup (with a finding) if labels collide."""
+    df = df.copy()
+    df.index = df.index.map(_norm_label)
+    df.columns = df.columns.map(_norm_label)
+    for axis, labels in (("index", df.index), ("columns", df.columns)):
+        if labels.has_duplicates:
+            dups = sorted(set(labels[labels.duplicated()]))[:5]
+            local.append(
+                {
+                    "stage": stage,
+                    "component": component,
+                    "column": f"<{axis}>",
+                    "kind": "duplicate_labels",
+                    "detail": f"{side} {axis} labels collide after normalization: {dups}",
+                },
+            )
+    if df.index.has_duplicates:
+        df = df.loc[~df.index.duplicated()]
+    if df.columns.has_duplicates:
+        df = df.loc[:, ~df.columns.duplicated()]
+    return df
+
+
 def compare_frames(
     stage: str,
     component: str,
@@ -70,10 +118,19 @@ def compare_frames(
     anch: pd.DataFrame,
     findings: list[dict],
 ) -> None:
-    """Compare two indexed DataFrames; append findings in place."""
-    ci, ai = set(map(str, cand.index)), set(map(str, anch.index))
+    """Compare two indexed DataFrames; append findings in place.
+
+    Labels are normalized on both sides (float-formatted integers collapse to
+    integer form). A row-set mismatch is reported once and the comparison
+    proceeds on the intersection. Findings for one frame are capped at
+    ``MAX_FINDINGS_PER_FRAME`` with a single 'suppressed' finding.
+    """
+    local: list[dict] = []
+    cand = _normalize_frame(cand, "candidate", stage, component, local)
+    anch = _normalize_frame(anch, "anchor", stage, component, local)
+    ci, ai = set(cand.index), set(anch.index)
     if ci != ai:
-        findings.append(
+        local.append(
             {
                 "stage": stage,
                 "component": component,
@@ -85,17 +142,14 @@ def compare_frames(
         )
     common = sorted(ci & ai)
     if not common:
+        findings.extend(local)
         return
-    cand = cand.copy()
-    anch = anch.copy()
-    cand.index = cand.index.map(str)
-    anch.index = anch.index.map(str)
     cand = cand.loc[common]
     anch = anch.loc[common]
 
     cc, ac = set(cand.columns), set(anch.columns)
-    for col in sorted(cc ^ ac):
-        findings.append(
+    for col in sorted(cc ^ ac, key=str):
+        local.append(
             {
                 "stage": stage,
                 "component": component,
@@ -112,7 +166,7 @@ def compare_frames(
             if not close.all():
                 bad = np.flatnonzero(~close)
                 worst = bad[np.argsort(-np.abs(np.nan_to_num(av[bad] - bv[bad])))[:5]]
-                findings.append(
+                local.append(
                     {
                         "stage": stage,
                         "component": component,
@@ -139,7 +193,7 @@ def compare_frames(
             neq = av != bv
             if neq.any():
                 ex = av.index[neq][:5]
-                findings.append(
+                local.append(
                     {
                         "stage": stage,
                         "component": component,
@@ -152,6 +206,47 @@ def compare_frames(
                         },
                     },
                 )
+    if len(local) > MAX_FINDINGS_PER_FRAME:
+        n_more = len(local) - MAX_FINDINGS_PER_FRAME
+        local = local[:MAX_FINDINGS_PER_FRAME]
+        local.append(
+            {
+                "stage": stage,
+                "component": component,
+                "column": "<frame>",
+                "kind": "suppressed",
+                "detail": f"suppressed {n_more} more findings for this frame",
+            },
+        )
+    findings.extend(local)
+
+
+def _loads_by_bus(n) -> tuple[pd.DataFrame, dict[str, str]] | None:
+    """Static Load frame re-keyed on bus, plus name->bus map for _t columns.
+
+    Anchor Load names carry a carrier suffix ('35827 AC') while candidate
+    names are bare bus ids — re-keying on the ``bus`` attribute makes the two
+    comparable. Returns None when loads are not one-per-bus (caller falls
+    back to name comparison and emits a finding).
+    """
+    loads = n.loads
+    buses = loads["bus"].map(_norm_label)
+    if buses.duplicated().any():
+        return None
+    static = loads.copy()
+    static["bus"] = buses.to_numpy()
+    static.index = pd.Index(buses.to_numpy(), name=loads.index.name)
+    mapping = {str(name): bus for name, bus in zip(loads.index, buses)}
+    return static, mapping
+
+
+def _generator_p_nom_by_bus_carrier(n) -> pd.DataFrame:
+    """p_nom summed by (bus, carrier) — generator-name independent."""
+    g = n.generators
+    if g.empty:
+        return pd.DataFrame(columns=["p_nom"])
+    key = g["bus"].map(_norm_label) + " | " + g["carrier"].astype(str)
+    return g.groupby(key)["p_nom"].sum().to_frame("p_nom")
 
 
 def compare_networks(pair: ArtifactPair, nc, na, findings: list[dict]) -> None:
@@ -175,6 +270,23 @@ def compare_networks(pair: ArtifactPair, nc, na, findings: list[dict]) -> None:
         dfc, dfa = nc.df(name), na.df(name)
         if dfc.empty and dfa.empty:
             continue
+        map_c = map_a = None
+        if name == "Load":
+            kc, ka = _loads_by_bus(nc), _loads_by_bus(na)
+            if kc is None or ka is None:
+                bad = [s for s, k in (("candidate", kc), ("anchor", ka)) if k is None]
+                findings.append(
+                    {
+                        "stage": pair.stage,
+                        "component": "Load",
+                        "column": "<index>",
+                        "kind": "load_rekey",
+                        "detail": f"loads not one-per-bus on {', '.join(bad)}; falling back to name comparison",
+                    },
+                )
+            else:
+                dfc, map_c = kc
+                dfa, map_a = ka
         compare_frames(pair.stage, name, dfc, dfa, findings)
         pnl_c, pnl_a = nc.pnl(name), na.pnl(name)
         for attr in sorted(set(pnl_c) | set(pnl_a)):
@@ -182,7 +294,21 @@ def compare_networks(pair: ArtifactPair, nc, na, findings: list[dict]) -> None:
             ta = pnl_a.get(attr, pd.DataFrame())
             if tc.empty and ta.empty:
                 continue
+            if map_c is not None and map_a is not None:
+                tc = tc.rename(columns={c: map_c.get(str(c), str(c)) for c in tc.columns})
+                ta = ta.rename(columns={c: map_a.get(str(c), str(c)) for c in ta.columns})
             compare_frames(pair.stage, f"{name}_t.{attr}", tc, ta, findings)
+        if name == "Generator":
+            # Generator naming differs structurally between branches (plant-id
+            # vs 'bus carrier' names); the aggregate makes content equality
+            # visible regardless of names.
+            compare_frames(
+                pair.stage,
+                "Generator[bus,carrier]",
+                _generator_p_nom_by_bus_carrier(nc),
+                _generator_p_nom_by_bus_carrier(na),
+                findings,
+            )
 
 
 def _capacity_by_carrier(n) -> pd.DataFrame:
@@ -280,11 +406,28 @@ def compare_pair(pair: ArtifactPair, cand_root: Path, anch_root: Path) -> list[d
         compare_networks(pair, load_network(pc), load_network(pa), findings)
     elif pair.kind == "profile":
         compare_profiles(pair, pc, pa, findings)
-    elif pair.kind == "demand_csv":
-        fc = pd.read_csv(pc, index_col=0)
-        fa = pd.read_csv(pa, index_col=0)
-        fc.columns, fa.columns = fc.columns.map(str), fa.columns.map(str)
-        compare_frames(pair.stage, "demand", fc.T, fa.T, findings)
+    elif pair.kind == "demand_total":
+        # The two demand CSVs are keyed at different granularities (anchor is
+        # nodal pre-aggregation, candidate substation-keyed), so per-bus
+        # comparison is meaningless here — it is covered by the assembled
+        # network's Load_t.p_set. Compare the clustering-invariant system
+        # total instead.
+        tc = float(pd.read_csv(pc, index_col=0).apply(pd.to_numeric, errors="coerce").sum().sum())
+        ta = float(pd.read_csv(pa, index_col=0).apply(pd.to_numeric, errors="coerce").sum().sum())
+        if not np.isclose(tc, ta, rtol=RTOL):
+            findings.append(
+                {
+                    "stage": pair.stage,
+                    "component": "demand",
+                    "column": "system_total",
+                    "kind": "value",
+                    "detail": {
+                        "candidate": tc,
+                        "anchor": ta,
+                        "rel": abs(tc - ta) / max(abs(ta), 1e-9),
+                    },
+                },
+            )
     return findings
 
 
