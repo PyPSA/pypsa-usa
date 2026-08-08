@@ -737,6 +737,7 @@ rule add_electricity:
         plants_breakthrough=DATA + "breakthrough_network/base_grid/plant.csv",
         hydro_breakthrough=DATA + "breakthrough_network/base_grid/hydro.csv",
         bus2sub=BUSMAPS + "{interconnect}/bus2sub.csv",
+        busmap_s=BUSMAPS + "{interconnect}/busmap_s{simpl}.csv",
         pudl_fuel_costs=PRICES + "{interconnect}/pudl_fuel_costs.csv",
         specs_egs=(
             PROFILES + "{interconnect}/specs_EGS_s{simpl}.nc"

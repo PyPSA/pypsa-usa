@@ -62,12 +62,22 @@ def remove_transformers(n):
     missing_buses_i = n.buses.index.difference(trafo_map.index)
     missing = pd.Series(missing_buses_i, missing_buses_i)
     trafo_map = pd.concat([trafo_map, missing])
+    trafo_map = trafo_map.reindex(n.buses.index)
 
     for c in n.one_port_components | n.branch_components:
         df = n.df(c)
         for col in df.columns:
             if col.startswith("bus"):
                 df[col] = df[col].map(trafo_map)
+
+    # Transfer additive bus statics (Pd, LAF_state) from the buses about to be
+    # removed onto their surviving mapped bus, so demand weight is conserved.
+    # min_count=1 keeps all-NaN groups NaN (the base network carries LAF_state
+    # only on Pd-bearing buses) instead of coercing them to 0.
+    for col in ("Pd", "LAF_state"):
+        if col in n.buses.columns:
+            transferred = n.buses[col].groupby(trafo_map).sum(min_count=1)
+            n.buses.loc[transferred.index, col] = transferred
 
     n.mremove("Transformer", n.transformers.index)
     n.mremove("Bus", n.buses.index.difference(trafo_map))
@@ -235,6 +245,10 @@ if __name__ == "__main__":
 
     if topological_boundaries in ["reeds_zone", "state"] and "county" in n.buses.columns:
         n.buses = n.buses.drop(columns=["county"])
+
+    # `busmap` keys the post-trafo-removal buses only; compose with trafo_map
+    # so the exported busmap covers every original base-network bus.
+    busmap = trafo_map.map(busmap).rename_axis(busmap.index.name)
 
     log_network_schema(n, stage="exit", baseline=schema_entry)
     n.export_to_netcdf(snakemake.output.network)

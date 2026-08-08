@@ -99,6 +99,22 @@ Conventions:
 
 ## On local `v1-epic`, not yet pushed
 
+- **Fix 6.28% silent demand loss through transformer removal**
+  (`workflow/scripts/aggregate_to_substations.py`). `remove_transformers`
+  runs before demand exists in the reordered DAG and dropped
+  transformer-secondary buses (420 on the CA slice) together with their
+  `Pd`/`LAF_state` statics; `build_demand` allocates state demand by
+  `LAF_state` without renormalizing, so the dropped share (CA LAF sum
+  0.9367 vs 0.9995 base) vanished — total demand 9,541,668 vs anchor
+  10,181,147 MWh (−6.281%, matching the dropped LAF to 5 significant
+  digits), and 95 substations got zero load. `busmap_b.csv` also covered
+  only 3,828/4,248 base buses, breaking base-keyed remaps. Fix: transfer
+  `Pd`/`LAF_state` sums onto surviving buses through the trafo mapping and
+  compose the trafo map into the exported busmap (mirrors the anchor's
+  `trafo_map` composition, upstream simplify_network.py:246). Found by the
+  Tier C system-total demand check. *Results effect:* restores demand
+  conservation to anchor parity.
+
 - **Fix double-applied `length_factor` in line/link capital costs**
   (`workflow/scripts/add_electricity.py:1091`). The simplify-early reorder
   put `add_electricity` after `aggregate_to_substations`, whose
@@ -180,6 +196,28 @@ Conventions:
   Phase 3 work. *Results effect:* None yet.
 - **repo_data config documentation/standardization commits.**
   *Results effect:* None.
+- **`attach_breakthrough_renewable_plants` — remap breakthrough plant bus_ids
+  through the substation busmap chain**
+  (`workflow/scripts/add_electricity.py:~981`, plus new `busmap_s` input on
+  `rule add_electricity` in `workflow/rules/build_electricity.smk`). Bug: the
+  function filtered `plants.query("bus_id in @n.buses.index")`, but after the
+  simplify-early reorder the network at this stage is substation-level
+  (`elec_s{simpl}_dem.nc`) while `data/breakthrough_network/base_grid/plant.csv`
+  and `hydro.csv` reference RAW base-grid bus_ids. On the CA equivalence
+  harness every western hydro plant was silently dropped (12,848 MW missing),
+  and 9 *Eastern* plants whose raw ids collide with western substation ids
+  (5266, 5267, 5290–5292, 5332, 5333, 5340, 5341 — 128.6 MW) attached at wrong
+  buses. Fix, patterned after `aggregate_egs`: remap `plants.bus_id` raw →
+  `sub_id` (via `bus2sub.csv`, float-format `"35827.0"` normalized to
+  `"35827"`) → cluster bus (via `busmap_s{simpl}.csv`) before the membership
+  filter; per-plant generators keep their numeric plant-id names and attach at
+  the mapped bus, and raw ids from other interconnects drop out naturally
+  (eliminating the collision attachments). All ids compared as plain
+  integer-strings. *Results effect:* restores the 12.8 GW of CA hydro dropped
+  by the refactor — verified on the harness: hydro total p_nom 12,976.8 MW
+  (matches anchor to 0.00%), per-ReEDS-zone p9 = 10,247.2 MW / p10 =
+  2,622.6 MW (anchor ≈ 10,247 / 2,622), zero Eastern-collision plant ids in
+  the network.
 
 ## Merged 2026-08-07 — bugfixes found during refactor validation (PR #21)
 

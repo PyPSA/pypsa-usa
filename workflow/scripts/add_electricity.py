@@ -978,10 +978,32 @@ def attach_breakthrough_renewable_plants(
 ):
     add_missing_carriers(n, renewable_carriers)
 
-    plants = pd.read_csv(fn_plants, dtype={"bus_id": str}, index_col=0).query(
-        "bus_id in @n.buses.index",
-    )
+    plants = pd.read_csv(fn_plants, dtype={"bus_id": str}, index_col=0)
     plants = plants.replace(["wind_offshore"], ["offwind"])
+
+    # The network at this stage is substation-level (post aggregate_to_substations
+    # and cluster_simpl), while the breakthrough base-grid files reference RAW
+    # base-network bus_ids. Remap every plant through the busmap chain
+    # (raw bus_id -> sub_id -> cluster bus) before matching against n.buses,
+    # patterned after aggregate_egs. Raw ids belonging to other interconnects are
+    # absent from bus2sub and drop out naturally, which also removes accidental
+    # attachments where a foreign raw id collides with a local substation id.
+    # All ids are compared as plain integer-strings ("35827", never "35827.0").
+    bus2sub = pd.read_csv(snakemake.input.bus2sub, dtype=str)
+    raw_to_sub = bus2sub.assign(
+        sub_id=bus2sub["sub_id"].str.replace(r"\.0$", "", regex=True),
+    ).set_index("Bus")["sub_id"]
+    busmap_s = pd.read_csv(snakemake.input.busmap_s, dtype=str)
+    sub_to_cluster = busmap_s.assign(
+        sub_id=busmap_s["sub_id"].str.replace(r"\.0$", "", regex=True),
+        cluster_bus=busmap_s["cluster_bus"].str.replace(r"\.0$", "", regex=True),
+    ).set_index("sub_id")["cluster_bus"]
+    n_plants_raw = len(plants)
+    plants["bus_id"] = plants["bus_id"].map(raw_to_sub).map(sub_to_cluster)
+    plants = plants.dropna(subset=["bus_id"]).query("bus_id in @n.buses.index")
+    logger.info(
+        f"Remapped breakthrough plants through bus2sub/busmap_s: kept {len(plants)} of {n_plants_raw} plants on this network.",
+    )
 
     for tech in renewable_carriers:
         assert tech == "hydro"
