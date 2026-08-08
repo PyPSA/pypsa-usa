@@ -14,9 +14,10 @@ pipeline speed/memory work on `v1-epic`. Terms only — no implementation detail
   branch) under the same configuration and data as the baseline build.
 - **Equivalence run** — one baseline build plus one candidate build plus the
   comparison between them, producing a pass/fail result and a visual report.
-- **Pinned busmap** — a frozen bus-to-cluster mapping used by both sides of an
-  equivalence run so that clustering is identical by construction and
-  downstream artifacts are directly comparable.
+- **Config-only determinism** — the principle that both sides of an
+  equivalence run produce identical clustering from the same basic
+  configuration options alone (shared, seeded clustering code), with no
+  injected fixtures and no patches to the anchor.
 - **Delta** — any difference between baseline and candidate artifacts that
   exceeds tolerance.
 - **Waiver** — a machine-readable annotation that tells the comparison to

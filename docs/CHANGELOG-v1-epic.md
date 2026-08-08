@@ -114,10 +114,11 @@ verdict (fix restores parity with anchor vs. accepted delta):
 - Merge latest `upstream/develop` into `v1-epic` and pin the new anchor
   (brings in upstream PRs #745–#766: pumped hydro, EER demand, StorageUnit
   max_hours fix, transmission cost data, ...).
-- Tier C equivalence harness (CA now; USA deferred), two-prong pinned-busmap
-  protocol, visual comparison reports, deltas ledger + waivers.
-- `custom_busmap` repair (config key + pandas ≥2.0 `squeeze` fix) — required
-  by the pinning protocol; currently vestigial and broken on both branches.
+- Tier C equivalence harness (CA now; USA deferred), config-only two-prong
+  protocol (no fixtures, no anchor patches), visual comparison reports,
+  deltas ledger + waivers.
+- `custom_busmap` cleanup (config key + pandas ≥2.0 `squeeze` fix) — vestigial
+  and broken on both branches; not on the harness critical path.
 - County fast-path wiring in `cluster_simpl`.
 - Profiling-driven memory/speed hit-list (candidates: dill-pickle handoff,
   demand pickle formats, profile chunking).

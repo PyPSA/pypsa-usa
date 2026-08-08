@@ -47,40 +47,48 @@ profiling-driven performance work.
 | D7 | Solve stage: objective within 0.1%, per-carrier capacities within 0.5%. |
 | D8 | Accepted deltas: markdown **deltas ledger** (human-signed) + machine-readable **waivers** consumed by the comparison. 1:1 correspondence enforced. |
 | D9 | Upstream sync: land test-stack PRs #20→#16→#17 first, then **merge** (not rebase) `upstream/develop` into `v1-epic`; create fork `develop` tracking upstream. |
-| D10 | **Two-prong protocol** (below) for pinning vs. aggregate validation. |
+| D10 | **Two-prong protocol** (below): config-only determinism — no pinned fixtures, no anchor-side patches (revised per user 2026-08-07). |
 | D11 | Visual report ships the standard plot set (extensible). |
 | D12 | Performance: profile-first. No pre-committed hit-list beyond county fast-path wiring and the `custom_busmap` repair. |
-| D13 | Baseline builds are recomputed on demand (cheap at CA scale); no baseline artifacts in git. |
+| D13 | Baseline builds are recomputed on demand (cheap at CA scale); no baseline artifacts or busmap fixtures in git. |
 
 ## Equivalence methodology
 
-### Why pinning is needed
+### Why prong 1 skips the `{simpl}` stage
 
 The simplify-early refactor intentionally moved `{simpl}` kmeans ahead of
 demand/RE construction and changed its weighting. Cluster assignments
 therefore differ from the anchor **by design**, and per-bus artifacts are not
 directly comparable in a production (`simpl=N`) configuration.
 
-### The two-prong protocol (D10)
+### The two-prong protocol (D10, revised 2026-08-07)
 
-**Prong 1 — exact (pinned) comparison.** Both sides run with `simpl=""`
-(pass-through — supported on both branches), so both enter `cluster_network`
-at substation granularity with identical bus IDs. One **pinned busmap**
-fixture (generated once from the anchor, committed to the repo) is supplied to
-`cluster_network` on both sides via `custom_busmap`. Clustering is then
-identical by construction, and every downstream artifact — demand, profiles,
-capacities, line parameters, the prepared network — must match within D2
-tolerances. Any delta is a real behavior change.
+No fixtures, no patches to either side: equivalence runs use **basic
+configuration options only**. This works because `cluster_network`'s busmap
+generation is shared, unchanged code on both branches and its kmeans is
+seeded (`random_state=0` default, both branches) — deterministic given
+identical inputs. Stage-by-stage comparison (D3) guarantees inputs are
+verified identical before the clustering stage is judged.
 
-*Enabler:* `custom_busmap` is currently vestigial and broken on both branches
-(no config key wired; `pd.read_csv(..., squeeze=True)` raises under
-pandas ≥ 2.0). Phase 2 repairs it on `v1-epic`; the harness driver applies the
-equivalent two-line patch to the anchor worktree at baseline-build time.
+**Prong 1 — exact comparison.** Both sides run the identical config with
+`simpl=""` (pass-through — supported on both branches), so both enter
+`cluster_network` at substation granularity with identical bus IDs, and the
+seeded, shared clustering code produces identical busmaps. Every downstream
+artifact — demand, profiles, capacities, line parameters, the prepared
+network — must match within D2 tolerances. Any delta is a real behavior
+change. `simpl=""` is used because the `{simpl}`-stage kmeans is the one
+place the branches intentionally differ (weighting moved to static `Pd`);
+skipping it isolates the data-assembly path the constraint protects.
 
 **Prong 2 — aggregate invariants.** Both sides run production-style
-(`simpl=N`, live kmeans). Compare only clustering-invariant quantities:
-annual demand per state (within D2), total capacity per carrier per REEDS
-zone, system totals. This validates the clustering relocation itself.
+(`simpl=N`, live simpl-stage kmeans). Compare only clustering-invariant
+quantities: annual demand per state (within D2), total capacity per carrier
+per REEDS zone, system totals. This validates the clustering relocation
+itself.
+
+*Note:* the vestigial `custom_busmap` wiring (broken under pandas ≥ 2.0 on
+both branches) is no longer on the critical path; it becomes an ordinary
+cleanup candidate.
 
 ### Comparison points (D3)
 
@@ -134,7 +142,7 @@ run:
 scenario:
   interconnect: [western]
   simpl: ['']          # prong 1: pass-through; prong 2 variant uses [20]
-  clusters: [10]       # prong 1: must equal the pinned busmap's group count
+  clusters: [10]       # seeded kmeans in cluster_network (random_state=0, both branches)
   opts: [REM-3h]
   ll: [v1.0]
   planning_horizons: [2030]
@@ -156,8 +164,8 @@ first equivalence run.
 ### Driver
 
 `tests/equivalence/` contains:
-- `run_baseline.py` — checks out the anchor SHA into a git worktree, applies
-  the `custom_busmap` patch, builds artifacts into a dedicated run dir.
+- `run_baseline.py` — checks out the anchor SHA into a git worktree and
+  builds artifacts into a dedicated run dir (no patches to the anchor).
   Reuses the artifacts if the (anchor SHA, config hash, data-bundle) manifest
   matches (D13).
 - `compare.py` — the schema-aware artifact-diff library (also importable by
@@ -184,10 +192,9 @@ develop-vs-v1-epic change is documented over time.
   `simplify_network` vs our split rules, plus upstream PRs #745–#766
   (pumped hydro, EER demand, StorageUnit max_hours, transmission costs).
   Pin the anchor. Tier A/B must pass post-merge.
-- **Phase 2 — build the CA harness.** `custom_busmap` repair; pinned-busmap
-  fixture generation from the anchor; comparison library + visual report;
-  equivalence config (user confirms); driver. Exit: both prongs run
-  end-to-end and produce a report (red is expected).
+- **Phase 2 — build the CA harness.** Comparison library + visual report;
+  equivalence config (user confirms); baseline-build driver. Exit: both
+  prongs run end-to-end and produce a report (red is expected).
 - **Phase 3 — reconcile.** Work the delta list: each is fixed (restores
   parity) or waived (ledger row + waiver, user signs). The four bugfixes are
   adjudicated here. Exit: **CA harness green** — the constraint is now
@@ -203,7 +210,8 @@ develop-vs-v1-epic change is documented over time.
 
 ## USA harness (deferred — design sketch only)
 
-Same two-prong protocol and comparison library at `interconnect: usa` scale;
+Same config-only two-prong protocol and comparison library at
+`interconnect: usa` scale;
 baseline built once per anchor on HPC scratch with a manifest (anchor SHA,
 config hash, data-bundle versions, checksums); rerun only at milestones or
 when the anchor moves. No implementation until the CA harness is green.
@@ -224,6 +232,7 @@ when the anchor moves. No implementation until the CA harness is green.
 |---|---|
 | Phase 1 merge is large and conflict-heavy (simplify split vs upstream changes) | Do it right after the small test-stack PRs land; Tier A/B as the post-merge gate; timebox and fall back to re-applying v1-epic changes onto develop as fresh commits if the merge is unmanageable. |
 | `simpl=""` path is rarely exercised and may itself be buggy on either branch | It's prong 1's foundation — smoke-test it first on both sides before building the comparison on top. |
+| Seeded kmeans still differs across branches due to library-version drift in sklearn | environment.yaml is byte-identical (verified); the manifest records the resolved env so any drift is detectable. |
 | Zenodo data-bundle drift between baseline and candidate builds | Manifest records bundle versions; both sides build from the same `data/` cache. |
 | kmeans nondeterminism contaminates prong 2 | Prong 2 only asserts clustering-invariant aggregates; seeds pinned where exposed. |
 | Restructuring scope creep ("improve the code first") | Guardrail: only restructure code the harness or a profiled hotspot touches. Docs are written as-you-touch (schema catalog, change-log). |
@@ -233,7 +242,9 @@ when the anchor moves. No implementation until the CA harness is green.
 - `workflow/envs/environment.yaml` is byte-identical between `v1-epic` and
   `upstream/develop` (pypsa 0.30.2, atlite 0.3.0, linopy 0.3.14,
   pandas 2.2.2, snakemake 7.32.4, python 3.11.9): one env runs both sides.
-- Both branches support `simpl=""` pass-through; both have vestigial, broken
-  `custom_busmap` wiring (pandas ≥ 2.0 `squeeze` removal).
+- Both branches support `simpl=""` pass-through; `cluster_network` kmeans is
+  seeded on both (`random_state=0`); both have vestigial, broken
+  `custom_busmap` wiring (pandas ≥ 2.0 `squeeze` removal) — not used by the
+  harness.
 - Anchor-side pipeline shape: single `simplify_network` rule; profiles built
   at substation level, demand at nodal level, both pre-clustering.
