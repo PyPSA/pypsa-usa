@@ -3,7 +3,7 @@ rule solve_network_validation:
         solving=config["solving"],
         foresight=config["foresight"],
     input:
-        network=RESOURCES
+        network=NETWORKS
         + "{interconnect}/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc",
         flowgates="repo_data/ReEDS_Constraints/transmission/transmission_capacity_init_AC_ba_NARIS2024.csv",
         safer_reeds="config/policy_constraints/reeds/prm_annual.csv",

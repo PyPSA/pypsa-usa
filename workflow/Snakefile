@@ -257,7 +257,7 @@ rule all:
 rule data_model:
     input:
         expand(
-            RESOURCES
+            NETWORKS
             + "{interconnect}/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc",
             **config["scenario"],
         ),
