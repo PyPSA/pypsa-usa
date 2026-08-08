@@ -104,6 +104,37 @@ costs:
   # IndexError in build_aeo_fuel_costs. Value mirrors config.default.yaml.
   aeo:
     scenario: reference
+  # Hard-required (direct subscript) by add_extra_components (itc/ptc/
+  # max_growth, both branches) and prepare_network (emission_prices,
+  # social_discount_rate). Values mirror config.default.yaml.
+  social_discount_rate: 0.02
+  emission_prices:
+    enable: false
+    co2: 0.
+    co2_monthly_prices: false
+  ptc_modifier:
+    onwind: 27.50
+    biomass: 27.50
+  itc_modifier:
+    solar: 0.3
+    offwind: 0.3
+    offwind_floating: 0.3
+    EGS: 0.3
+    geothermal: 0.3
+    SMR: 0.3
+    nuclear: 0.3
+    hydro: 0.3
+    2hr_battery_storage: 0.3
+    4hr_battery_storage: 0.3
+    6hr_battery_storage: 0.3
+    8hr_battery_storage: 0.3
+    10hr_battery_storage: 0.3
+    8hr_PHS: 0.3
+    10hr_PHS: 0.3
+    12hr_PHS: 0.3
+  min_year:
+    hydrogen_ct: 2040
+  max_growth:
 
 clustering:
   simplify_network:
