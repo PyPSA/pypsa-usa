@@ -7,9 +7,30 @@
 
 ## See our [readthedocs](https://pypsa-usa.readthedocs.io/en/latest/) for installation and usage instructions.
 
-PyPSA-USA is an open-source power systems model of the bulk transmission systems in the United States. This workflow draws from the work of [pypsa-eur](https://pypsa-eur.readthedocs.io/en/latest/index.html) to build a highly configurable power systems model that can be used for capacity expansion modeling, production cost simulation, and power flow analysis.
+PyPSA-USA is an open-source power systems model of the bulk transmission systems in the United
+States. This workflow draws from the work of
+[pypsa-eur](https://pypsa-eur.readthedocs.io/en/latest/index.html) to build a highly
+configurable power systems model that can be used for capacity expansion modeling, production
+cost simulation, and power flow analysis. It can optionally be extended with sector coupling —
+adding the natural gas network and residential, commercial, industrial, and transportation
+demands — for full energy system studies.
 
 ![pypsa-usa Base Network](https://github.com/PyPSA/pypsa-usa/blob/0fe788397238b14f07857a9748aa86c7781bfa27/docs/source/_static/PyPSA-USA_network.png)
+
+# Quickstart
+
+With [uv](https://docs.astral.sh/uv/) installed:
+
+```bash
+git clone https://github.com/PyPSA/pypsa-usa.git
+cd pypsa-usa
+bash init_pypsa_usa.sh   # copy configuration templates into workflow/config
+cd workflow
+uv run snakemake -j1 --configfile config/config.default.yaml
+```
+
+See the [documentation](https://pypsa-usa.readthedocs.io/en/latest/) for full installation
+instructions (environment setup, solver, EIA API key) and usage details.
 
 # Contributing
 

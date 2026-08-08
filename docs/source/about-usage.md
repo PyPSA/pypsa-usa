@@ -55,11 +55,40 @@ To run, open a terminal within a login node of your cluster and run the script i
 bash run_slurm.sh
 ```
 
-We have included settings in the Snakemake workflow to dynamically request reasources from an HPC cluster based on the size of the pypsa-usa model you decide to run. To modify these resource selections checkout the `memory` and `threads` fields in individual snakemake rules.
+We have included settings in the Snakemake workflow to dynamically request resources from an HPC cluster based on the size of the pypsa-usa model you decide to run. To modify these resource selections checkout the `memory` and `threads` fields in individual snakemake rules.
 
 ## Examine Results
 
-Result plots and images are automatically built in the `workflow/results` folder. To further analyze the results of a solved network, you can use pypsa to analyze the `elec_s_{clusters}_ec_l{l}_{opts}.nc` file in the `results/{interconnect}/networks/` folder. (Tutorial juyper notebook is on the way!)
+### After the run: where outputs land
+
+All outputs are written to `workflow/results/{run name}/{interconnect}/`, where `{run name}`
+is the `run: name:` field of your configuration file (`Default` in
+`config/config.default.yaml`). Inside you will find three folders: `networks/` holds the
+solved network files, `figures/` holds automatically generated maps and plots along with
+summary CSVs (capacities, generation, statistics) in its `statistics/` subfolders, and
+`configs/` holds a snapshot of the configuration used for the run. A good first stop is the
+`figures/` folder to sanity-check the system maps and statistics before diving into the
+network file itself.
+
+### Analyzing a solved network
+
+To further analyze the results of a solved network, you can use pypsa to open the
+`elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc` file in the
+`results/{run name}/{interconnect}/networks/` folder. With the default configuration this is
+`results/Default/western/networks/elec_s75_c33_ec_lv1.0_REM-3h_E.nc`.
+
+The filename encodes the scenario. Each component is described briefly below; see the
+[wildcards page](https://pypsa-usa.readthedocs.io/en/latest/config-wildcards.html) for full
+details:
+
+| Component | Example | Meaning |
+|-----------|---------|---------|
+| `s{simpl}` | `s75` | Number of buses after pre-clustering simplification |
+| `c{clusters}` | `c33` | Final number of clustered buses (zones) |
+| `ec` | `ec` | Fixed marker: extra components (e.g. storage) have been added |
+| `l{ll}` | `lv1.0` | Transmission expansion limit (`v`olume or `c`ost, factor or `opt`) |
+| `{opts}` | `REM-3h` | Dash-separated options (here: regional emissions limit, 3-hourly resolution) |
+| `{sector}` | `E` | Sectors included (`E` = electricity only, `E-G` adds natural gas) |
 
 (troubleshooting)=
 ## Troubleshooting:
@@ -67,6 +96,11 @@ Result plots and images are automatically built in the `workflow/results` folder
 To force the execution of a portion of the workflow up to a given rule, cd to the `workflow` directory and run:
 
 ```console
-snakemake -j4 -R build_shapes  --until build_base_network
+uv run snakemake -j4 -R build_shapes --until build_base_network --configfile config/config.default.yaml
 ```
 where `build_shapes` is forced to run, and `build_base_network` is the last rule you would like to run.
+
+```{note}
+Every `snakemake` invocation must include `--configfile` (the Snakefile does not set a
+default configuration file). Omitting it fails with `KeyError: 'scenario'`.
+```
