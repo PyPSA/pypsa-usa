@@ -1,7 +1,7 @@
 # Pipeline Evolution with Results-Equivalence Guarantee — Master Work Plan
 
 **Date:** 2026-08-07
-**Status:** Approved via grilling session (2 rounds, 13 decisions)
+**Status:** Implemented 2026-08-07 — CA harness built; prong 1 GREEN (0 live findings, objective rel 6.6e-05); prong 2 aggregate verdict pending one investigation. See Implementation outcomes addendum.
 **Author:** ktehranchi (with Claude)
 **Vocabulary:** all capitalized terms defined in [`CONTEXT.md`](../../../CONTEXT.md)
 
@@ -248,3 +248,27 @@ when the anchor moves. No implementation until the CA harness is green.
   harness.
 - Anchor-side pipeline shape: single `simplify_network` rule; profiles built
   at substation level, demand at nodal level, both pre-clustering.
+
+
+## Implementation outcomes (2026-08-07 addendum)
+
+- Config-only determinism (D10) held, with one refinement: the reeds
+  transport-model path requires `clusters` = the footprint's ReEDS zone
+  count (CA -> `4m`), and its zonal busmap is pure attribute membership —
+  no kmeans anywhere in prong 1.
+- The harness caught four real defects during bringup, all fixed and
+  change-logged: AEO scenario-case mismatch (latent upstream, config fix);
+  `simpl=''` region-name normalization (empty profiles); double-applied
+  `length_factor` (25% line-CAPEX inflation in line-preserving configs);
+  hydro busmap remap (12.8 GW dropped); plus the demand-conservation fix in
+  `remove_transformers` (-6.28% silent demand loss). PR #21's four earlier
+  bugfixes were adjudicated by the same runs.
+- Prong 1: PASS. 305 findings, 0 live; 8 ledger entries DL-1..DL-8
+  (provisional, awaiting user countersignature); solved objectives agree at
+  rel 6.6e-05 against the 1e-3 gate.
+- CA-slice per-rule wall times (candidate vs anchor, seconds):
+  power_build_demand 139 vs 217; solar profiles 39 vs 61; onwind profiles
+  34 vs 42; add_electricity 13 vs 15; add_demand 3.9 vs 5.5; cluster 7.2
+  vs 10.2; solve 33.7 vs 32.3 (identical LP, as equivalence requires).
+  max RSS not measurable on macOS (0 in benchmarks) — Linux/HPC runs
+  needed for memory numbers, per the deferred USA-harness phase.
