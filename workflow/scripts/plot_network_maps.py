@@ -488,6 +488,28 @@ def plot_new_capacity_map(
     link_pnom_opt = n.links[n.links.carrier == "AC"].p_nom_opt
     link_values = link_pnom_opt - link_pnom
 
+    has_new_capacity = (
+        bus_values.fillna(0).gt(0).any() or line_values.fillna(0).gt(0).any() or link_values.fillna(0).gt(0).any()
+    )
+
+    if not has_new_capacity:
+        logger.info("No new capacity found; creating an empty new-capacity map.")
+
+        fig, ax = plt.subplots(figsize=(10, 10))
+        ax.text(
+            0.5,
+            0.5,
+            "No new capacity in this scenario",
+            ha="center",
+            va="center",
+            fontsize=16,
+            transform=ax.transAxes,
+        )
+        ax.set_axis_off()
+        fig.savefig(save, bbox_inches="tight")
+        plt.close(fig)
+        return
+
     # plot data
     title = create_title("New Network Capacities", **wildcards)
     interconnect = wildcards.get("interconnect", None)
