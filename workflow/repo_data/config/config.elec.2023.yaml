@@ -9,6 +9,8 @@ run:
 renewable:
   dataset: godeeep # [atlite, godeeep]
 
+godeep_wind_height: '_125m'
+
 # docs :
 scenario:
   interconnect: [usa] #"usa|texas|western|eastern"
