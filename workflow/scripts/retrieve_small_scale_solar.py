@@ -50,12 +50,54 @@ _FUEL_TYPE = "SUN"
 
 # All CONUS state abbreviations covered by pypsa-usa
 _STATES = [
-    "AL", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA",
-    "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD",
-    "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH",
-    "NJ", "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA",
-    "RI", "SC", "SD", "TN", "TX", "UT", "VT", "VA", "WA",
-    "WV", "WI", "WY",
+    "AL",
+    "AZ",
+    "AR",
+    "CA",
+    "CO",
+    "CT",
+    "DE",
+    "FL",
+    "GA",
+    "ID",
+    "IL",
+    "IN",
+    "IA",
+    "KS",
+    "KY",
+    "LA",
+    "ME",
+    "MD",
+    "MA",
+    "MI",
+    "MN",
+    "MS",
+    "MO",
+    "MT",
+    "NE",
+    "NV",
+    "NH",
+    "NJ",
+    "NM",
+    "NY",
+    "NC",
+    "ND",
+    "OH",
+    "OK",
+    "OR",
+    "PA",
+    "RI",
+    "SC",
+    "SD",
+    "TN",
+    "TX",
+    "UT",
+    "VT",
+    "VA",
+    "WA",
+    "WV",
+    "WI",
+    "WY",
 ]
 
 
@@ -97,8 +139,7 @@ def _fetch_from_eia(api_key: str, start_year: int, end_year: int) -> pd.DataFram
 
     if not records:
         raise ValueError(
-            "EIA API returned no small-scale solar data. "
-            "Check your API key and the date range."
+            "EIA API returned no small-scale solar data. Check your API key and the date range.",
         )
 
     df = pd.DataFrame(records)
@@ -114,8 +155,7 @@ def _fetch_from_eia(api_key: str, start_year: int, end_year: int) -> pd.DataFram
     df = df.sort_values(["state", "year"]).reset_index(drop=True)
 
     logger.info(
-        f"Retrieved {len(df)} state-year observations of small-scale solar "
-        f"from EIA API ({start_year}–{end_year})."
+        f"Retrieved {len(df)} state-year observations of small-scale solar from EIA API ({start_year}–{end_year}).",
     )
     return df
 
@@ -125,7 +165,7 @@ def _load_fallback(fallback_path: str) -> pd.DataFrame:
     logger.warning(
         "No EIA API key provided. Loading bundled small-scale solar data from "
         f"{fallback_path}. This data may not match your planning horizons exactly; "
-        "the most recent available year will be used for future years."
+        "the most recent available year will be used for future years.",
     )
     df = pd.read_csv(fallback_path, dtype={"state": str, "year": int, "generation_mwh": float})
     return df
@@ -170,6 +210,5 @@ if __name__ == "__main__":
     df.to_csv(output_path, index=False)
 
     logger.info(
-        f"Small-scale solar data written to {output_path} "
-        f"({len(df)} state-year rows)."
+        f"Small-scale solar data written to {output_path} ({len(df)} state-year rows).",
     )

@@ -263,7 +263,7 @@ def _load_small_scale_solar(snakemake) -> pd.Series:
     return df.set_index(["state", "year"])["generation_mwh"]
 
 
-def add_RPS_constraints(n, config, snakemake=None, sector=False):  # noqa: ARG001 (sector unused; kept for call-site compatibility)
+def add_RPS_constraints(n, config, snakemake=None, sector=False):
     """
     Add Renewable Portfolio Standards (RPS) constraints to the network.
 
@@ -375,7 +375,7 @@ def add_RPS_constraints(n, config, snakemake=None, sector=False):  # noqa: ARG00
                 f"RPS demand basis for {constraint_row.region} ({constraint_row.planning_horizon}): "
                 f"net_load={region_demand / 1e6:.1f} TWh, "
                 f"btm_rooftop={rooftop_gen / 1e6:.2f} TWh, "
-                f"adjusted_rhs={region_rps_rhs / 1e6:.1f} TWh"
+                f"adjusted_rhs={region_rps_rhs / 1e6:.1f} TWh",
             )
 
     # Iterate through constraints and add RPS constraints to the model

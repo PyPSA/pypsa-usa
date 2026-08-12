@@ -384,9 +384,7 @@ def test_rooftop_solar_counts_toward_rps(policy_network, rps_config):
 
     # Verify that rooftop solar generation is counted on the LHS of the constraint
     region_buses = get_region_buses(n, ["CA"])
-    rooftop_gens = n.generators[
-        (n.generators.bus.isin(region_buses.index)) & (n.generators.carrier == "solar-rooftop")
-    ]
+    rooftop_gens = n.generators[(n.generators.bus.isin(region_buses.index)) & (n.generators.carrier == "solar-rooftop")]
     assert not rooftop_gens.empty, "Rooftop solar generator missing from CA region"
 
     rooftop_gen = n.generators_t.p[rooftop_gens.index].sum().sum()
@@ -457,7 +455,7 @@ def test_btm_solar_credit_reduces_rps_rhs(policy_network, rps_config, rps_config
 
     logger.info(
         f"BTM credit test: CA eligible gen without BTM = {gen_no_btm:.1f} MWh, "
-        f"with BTM = {gen_with_btm:.1f} MWh  (reduction = {gen_no_btm - gen_with_btm:.1f} MWh)"
+        f"with BTM = {gen_with_btm:.1f} MWh  (reduction = {gen_no_btm - gen_with_btm:.1f} MWh)",
     )
 
     assert gen_with_btm <= gen_no_btm + 1e-3, (
