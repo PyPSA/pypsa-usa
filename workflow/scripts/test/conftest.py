@@ -77,6 +77,12 @@ def base_network():
     n.buses.loc["z1", "reeds_zone"] = "CA_Z1"
     n.buses.loc["z2", "reeds_zone"] = "TX_Z1"
     n.buses.loc["z3", "reeds_zone"] = "TX_Z1"
+    # rec_trading_zone mirrors reeds_state for the test network (real networks
+    # use constants.REC_TRADING_ZONE_MAPPER; states not in the mapper fall back
+    # to their own state abbreviation, which is what we replicate here).
+    n.buses.loc["z1", "rec_trading_zone"] = "CA"
+    n.buses.loc["z2", "rec_trading_zone"] = "TX"
+    n.buses.loc["z3", "rec_trading_zone"] = "TX"
 
     # Add versatile generators for different test scenarios
     # Wind generators
@@ -339,6 +345,9 @@ def multi_period_base_network():
     n.buses.loc["z1", "reeds_zone"] = "CA_Z1"
     n.buses.loc["z2", "reeds_zone"] = "TX_Z1"
     n.buses.loc["z3", "reeds_zone"] = "TX_Z1"
+    n.buses.loc["z1", "rec_trading_zone"] = "CA"
+    n.buses.loc["z2", "rec_trading_zone"] = "TX"
+    n.buses.loc["z3", "rec_trading_zone"] = "TX"
 
     # Wind generators (extendable, active in both periods)
     n.add(
