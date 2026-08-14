@@ -71,8 +71,7 @@ if __name__ == "__main__":
         end_year = max(planning_horizons)
         df = SmallScaleSolar(start_year, end_year, api_key).get_data()
         logger.info(
-            f"Retrieved {len(df)} state-year observations of small-scale solar "
-            f"from EIA API ({start_year}–{end_year})."
+            f"Retrieved {len(df)} state-year observations of small-scale solar from EIA API ({start_year}–{end_year}).",
         )
     else:
         df = _load_fallback(fallback_path)
