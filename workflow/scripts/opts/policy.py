@@ -286,6 +286,16 @@ def add_RPS_constraints(n, config, snakemake=None, sector=False):
         rhs = pct * net_load - (1 - pct) * rooftop_gen
             = pct * gross_load - rooftop_gen
 
+    **Demand source compatibility:** The BTM credit is only appropriate when
+    the network load time-series is derived from EIA 930 *net* generation data
+    (``demand.profile: eia``), in which case behind-the-meter solar is already
+    subtracted from the reported load.  If the demand profile is sourced from
+    EFS or AEO projections — which typically report *gross* electricity sales
+    and do not subtract BTM generation — the BTM credit should not be applied.
+    To disable it, simply omit the ``small_scale_solar`` input from the
+    ``solve_network`` rule (or leave ``api.eia`` unconfigured so the fallback
+    CSV is not forward-filled beyond its data year).
+
     Parameters
     ----------
     n : pypsa.Network

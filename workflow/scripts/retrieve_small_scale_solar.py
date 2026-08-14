@@ -15,7 +15,6 @@ allows the RPS constraint to credit it properly (see opts/policy.py).
   - ``fueltypeid = SUN``
   - ``sectorid = 98``  (small-scale, i.e. below 1 MW threshold)
   - ``frequency = annual``
-  - ``facets[location]`` = US state abbreviations
 
 **Outputs**
 
@@ -37,127 +36,9 @@ import logging
 from pathlib import Path
 
 import pandas as pd
-import requests
+from eia import SmallScaleSolar
 
 logger = logging.getLogger(__name__)
-
-# EIA API v2 endpoint for electric power operational data
-_EIA_URL = "https://api.eia.gov/v2/electricity/electric-power-operational-data/data/"
-
-# Sector 98 = small-scale solar (below 1 MW nameplate)
-_SECTOR_ID = "98"
-_FUEL_TYPE = "SUN"
-
-# All CONUS state abbreviations covered by pypsa-usa
-_STATES = [
-    "AL",
-    "AZ",
-    "AR",
-    "CA",
-    "CO",
-    "CT",
-    "DE",
-    "FL",
-    "GA",
-    "ID",
-    "IL",
-    "IN",
-    "IA",
-    "KS",
-    "KY",
-    "LA",
-    "ME",
-    "MD",
-    "MA",
-    "MI",
-    "MN",
-    "MS",
-    "MO",
-    "MT",
-    "NE",
-    "NV",
-    "NH",
-    "NJ",
-    "NM",
-    "NY",
-    "NC",
-    "ND",
-    "OH",
-    "OK",
-    "OR",
-    "PA",
-    "RI",
-    "SC",
-    "SD",
-    "TN",
-    "TX",
-    "UT",
-    "VT",
-    "VA",
-    "WA",
-    "WV",
-    "WI",
-    "WY",
-]
-
-
-def _fetch_from_eia(api_key: str, start_year: int, end_year: int) -> pd.DataFrame:
-    """Download small-scale solar annual generation from the EIA API v2."""
-    records = []
-    offset = 0
-    page_size = 5000
-
-    while True:
-        params = {
-            "api_key": api_key,
-            "frequency": "annual",
-            "data[0]": "generation",
-            "facets[fueltypeid][]": _FUEL_TYPE,
-            "facets[sectorid][]": _SECTOR_ID,
-            "start": str(start_year),
-            "end": str(end_year),
-            "sort[0][column]": "period",
-            "sort[0][direction]": "asc",
-            "offset": offset,
-            "length": page_size,
-        }
-
-        response = requests.get(_EIA_URL, params=params, timeout=60)
-        response.raise_for_status()
-        payload = response.json()
-
-        data = payload.get("response", {}).get("data", [])
-        if not data:
-            break
-
-        records.extend(data)
-
-        total = payload.get("response", {}).get("total", 0)
-        offset += page_size
-        if offset >= int(total):
-            break
-
-    if not records:
-        raise ValueError(
-            "EIA API returned no small-scale solar data. Check your API key and the date range.",
-        )
-
-    df = pd.DataFrame(records)
-    # API returns location as state abbreviation, period as "YYYY"
-    df = df.rename(columns={"location": "state", "period": "year", "generation": "generation_mwh"})
-    df = df[["state", "year", "generation_mwh"]].copy()
-    df["year"] = df["year"].astype(int)
-    # EIA reports generation in thousand MWh; convert to MWh
-    df["generation_mwh"] = pd.to_numeric(df["generation_mwh"], errors="coerce") * 1_000
-    df = df.dropna(subset=["generation_mwh"])
-    df = df[df["generation_mwh"] > 0]
-    df = df[df["state"].isin(_STATES)]
-    df = df.sort_values(["state", "year"]).reset_index(drop=True)
-
-    logger.info(
-        f"Retrieved {len(df)} state-year observations of small-scale solar from EIA API ({start_year}–{end_year}).",
-    )
-    return df
 
 
 def _load_fallback(fallback_path: str) -> pd.DataFrame:
@@ -188,7 +69,11 @@ if __name__ == "__main__":
         # EIA small-scale solar data starts around 2014.
         start_year = 2014
         end_year = max(planning_horizons)
-        df = _fetch_from_eia(api_key, start_year, end_year)
+        df = SmallScaleSolar(start_year, end_year, api_key).get_data()
+        logger.info(
+            f"Retrieved {len(df)} state-year observations of small-scale solar "
+            f"from EIA API ({start_year}–{end_year})."
+        )
     else:
         df = _load_fallback(fallback_path)
 
