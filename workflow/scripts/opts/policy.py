@@ -19,6 +19,7 @@ RPS_CARRIERS = [
     "offwind",
     "offwind_floating",
     "solar",
+    "solar-rooftop",
     "hydro",
     "geothermal",
     "biomass",
@@ -247,7 +248,22 @@ def _collapse_portfolio_standards(n: pypsa.Network, planning_horizons: list[int]
     return portfolio_standards
 
 
-def add_RPS_constraints(n, config, snakemake=None):
+def _load_small_scale_solar(snakemake) -> pd.Series:
+    """
+    Load state-level small-scale (behind-the-meter) solar generation.
+
+    Returns a Series indexed by (state, year) with generation in MWh, or an
+    empty Series if the input is not available on the snakemake object.
+    """
+    path = getattr(snakemake.input, "small_scale_solar", None)
+    if path is None:
+        return pd.Series(dtype=float)
+
+    df = pd.read_csv(path, dtype={"state": str, "year": int, "generation_mwh": float})
+    return df.set_index(["state", "year"])["generation_mwh"]
+
+
+def add_RPS_constraints(n, config, snakemake=None, sector=False):
     """
     Add Renewable Portfolio Standards (RPS) constraints to the network.
 
@@ -255,9 +271,30 @@ def add_RPS_constraints(n, config, snakemake=None):
     from renewable energy sources for specific regions and planning horizons.
     It reads the necessary data from configuration files and the network.
 
-    The differenct between electrical and sector implementation is:
+    The difference between electrical and sector implementation is:
     - Electrical applies RPS against exogenously defined demand
     - Sector applies RPS against endogenously solved power sector generation
+
+    When ``snakemake.input.small_scale_solar`` is provided, the demand basis for
+    each constraint is adjusted from net load to gross load by adding back the
+    behind-the-meter (rooftop) solar generation that is embedded as a demand
+    reduction in the EIA 930 input data.  This ensures that existing rooftop
+    solar receives credit toward the RPS target even when it is not explicitly
+    modelled as a Generator in the network.
+
+    The adjusted RHS is:
+        rhs = pct * net_load - (1 - pct) * rooftop_gen
+            = pct * gross_load - rooftop_gen
+
+    **Demand source compatibility:** The BTM credit is only appropriate when
+    the network load time-series is derived from EIA 930 *net* generation data
+    (``demand.profile: eia``), in which case behind-the-meter solar is already
+    subtracted from the reported load.  If the demand profile is sourced from
+    EFS or AEO projections — which typically report *gross* electricity sales
+    and do not subtract BTM generation — the BTM credit should not be applied.
+    To disable it, simply omit the ``small_scale_solar`` input from the
+    ``solve_network`` rule (or leave ``api.eia`` unconfigured so the fallback
+    CSV is not forward-filled beyond its data year).
 
     Parameters
     ----------
@@ -299,20 +336,57 @@ def add_RPS_constraints(n, config, snakemake=None):
         ces_reeds,
     )
 
+    # Small-scale solar generation by (state, year) in MWh — may be empty if
+    # the input file was not provided.
+    small_scale_solar = _load_small_scale_solar(snakemake)
+    using_btm_credit = not small_scale_solar.empty
+
     for _, constraint_row in portfolio_standards.iterrows():
         region_list = [region.strip() for region in constraint_row.region.split(",")]
         region_buses = get_region_buses(n, region_list)
         if region_buses.empty:
             continue
 
+        # Net load from the grid (EIA 930 data already has BTM solar subtracted)
         region_demand = (
             n.loads_t.p_set.loc[constraint_row.planning_horizon]
             .loc[:, n.loads.bus.isin(region_buses.index)]
             .sum()
             .sum()
         )
-        region_rps_rhs = int(constraint_row.pct * region_demand)
+
+        # Credit existing behind-the-meter rooftop solar toward the RPS target.
+        #
+        # Derivation:
+        #   statutory target: utility_renewables + rooftop >= pct * gross_load
+        #   gross_load = net_load + rooftop
+        #   rearranged:  utility_renewables >= pct * net_load - (1 - pct) * rooftop
+        #
+        # When rooftop solar is explicitly modelled as a Generator (carrier
+        # "solar-rooftop") in the network, it already appears on the LHS and
+        # n.loads_t.p_set is the gross load, so no adjustment is needed.
+        # The BTM credit here only applies to the residual rooftop generation
+        # that is embedded as a demand reduction and has no generator in the
+        # network.
+        rooftop_gen = 0.0
+        if using_btm_credit:
+            for state in region_list:
+                key = (state.strip(), constraint_row.planning_horizon)
+                if key in small_scale_solar.index:
+                    rooftop_gen += small_scale_solar[key]
+
+        pct = constraint_row.pct
+        region_rps_rhs = max(int(pct * region_demand - (1 - pct) * rooftop_gen), 0)
+
         portfolio_standards.loc[constraint_row.name, "rps_rhs"] = region_rps_rhs
+
+        if using_btm_credit and rooftop_gen > 0:
+            logger.info(
+                f"RPS demand basis for {constraint_row.region} ({constraint_row.planning_horizon}): "
+                f"net_load={region_demand / 1e6:.1f} TWh, "
+                f"btm_rooftop={rooftop_gen / 1e6:.2f} TWh, "
+                f"adjusted_rhs={region_rps_rhs / 1e6:.1f} TWh",
+            )
 
     # Iterate through constraints and add RPS constraints to the model
     for (rec_trading_zone, planning_horizon, policy_carriers), zone_constraints in portfolio_standards.groupby(
@@ -328,7 +402,7 @@ def add_RPS_constraints(n, config, snakemake=None):
         region_gens_eligible = region_gens[region_gens.carrier.isin(carriers)]
 
         if region_gens_eligible.empty:
-            return
+            continue  # skip this constraint group; do not exit the whole function
 
         # Eligible generation
         p_eligible = n.model["Generator-p"].sel(

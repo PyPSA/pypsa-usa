@@ -490,6 +490,43 @@ class ElectricPowerData(EiaData):
         return _ElectricPowerOperationalData(self.sector, self.year, self.api_key)
 
 
+class SmallScaleSolar(EiaData):
+    """State-level small-scale (behind-the-meter) solar PV annual generation.
+
+    Fetches sector-98 (below 1 MW nameplate) solar generation from the EIA
+    Electric Power Operational Data API for a range of years.
+
+    Parameters
+    ----------
+    start_year : int
+        First year to retrieve (EIA data available from ~2014).
+    end_year : int
+        Last year to retrieve. Capped at the latest available year.
+    api : str
+        EIA API v2 key.
+
+    Examples
+    --------
+    >>> df = SmallScaleSolar(2014, 2023, "YOUR_API_KEY").get_data()
+    """
+
+    LAST_AVAILABLE_YEAR: ClassVar[int] = 2023
+
+    def __init__(self, start_year: int, end_year: int, api: str) -> None:
+        self.start_year = start_year
+        self.end_year = min(end_year, self.LAST_AVAILABLE_YEAR)
+        self.api = api
+        if end_year > self.LAST_AVAILABLE_YEAR:
+            logger.warning(
+                f"Small-scale solar data only available through {self.LAST_AVAILABLE_YEAR}. "
+                f"Capping end_year at {self.LAST_AVAILABLE_YEAR}.",
+            )
+
+    def data_creator(self):
+        """Initializes data extractor."""
+        return _SmallScaleSolarData(self.start_year, self.end_year, self.api)
+
+
 # product
 class DataExtractor(ABC):
     """Extracts and formats data."""
@@ -1837,6 +1874,52 @@ class _ElectricPowerOperationalData(DataExtractor):
         df["state"] = df.state.map(lambda x: "U.S." if x == "US" else x)
 
         return self._assign_dtypes(df)
+
+
+class _SmallScaleSolarData(DataExtractor):
+    """Fetches annual small-scale (behind-the-meter) solar generation by state.
+
+    Uses the EIA Electric Power Operational Data endpoint with sector 98
+    (small-scale photovoltaic, below 1 MW nameplate) and fuel type SUN.
+    Generation values are returned in MWh (converted from the API's thousand MWh).
+    """
+
+    SECTOR_ID: ClassVar[int] = 98
+    FUEL_TYPE: ClassVar[str] = "SUN"
+
+    def __init__(self, start_year: int, end_year: int, api_key: str) -> None:
+        super().__init__(end_year, api_key)  # self.year = end_year
+        self.start_year = start_year
+
+    def build_url(self) -> str:
+        base_url = "electricity/electric-power-operational-data/data/"
+        facets = (
+            f"frequency=annual&data[0]=generation"
+            f"&facets[fueltypeid][]={self.FUEL_TYPE}"
+            f"&facets[sectorid][]={self.SECTOR_ID}"
+            f"&start={self.start_year}&end={self.year}"
+            f"&sort[0][column]=period&sort[0][direction]=asc"
+            f"&offset=0&length=5000"
+        )
+        return f"{API_BASE}{base_url}?api_key={self.api_key}&{facets}"
+
+    def format_data(self, df: pd.DataFrame) -> pd.DataFrame:
+        df = df.rename(
+            columns={
+                "location": "state",
+                "period": "year",
+                "generation": "generation_mwh",
+            },
+        )
+        df = df[["state", "year", "generation_mwh"]].copy()
+        df["year"] = df["year"].astype(int)
+        # EIA reports generation in thousand MWh; convert to MWh
+        df["generation_mwh"] = pd.to_numeric(df["generation_mwh"], errors="coerce") * 1_000
+        df = df.dropna(subset=["generation_mwh"])
+        df = df[df["generation_mwh"] > 0]
+        # Exclude national aggregates (e.g., "US") and sub-state numeric codes
+        df = df[(df["state"].str.len() == 2) & (df["state"] != "US")]
+        return df.sort_values(["state", "year"]).reset_index(drop=True)
 
 
 if __name__ == "__main__":

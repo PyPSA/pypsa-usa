@@ -232,8 +232,7 @@ rule retrieve_caiso_data:
         fuel_prices=DATA + "costs/caiso_ng_power_prices.csv",
     log:
         LOGS + "retrieve_caiso_data.log",
-    shadow:
-        "minimal"
+    # shadow: "minimal"  # disabled on Windows (symlink creation requires Developer Mode)
     resources:
         walltime="00:10:00",
         mem_mb=2000,
@@ -252,6 +251,23 @@ rule retrieve_pudl:
         mem_mb=5000,
     script:
         "../scripts/retrieve_pudl.py"
+
+
+rule retrieve_small_scale_solar:
+    params:
+        eia_api=config.get("api", {}).get("eia", None),
+        planning_horizons=config["scenario"]["planning_horizons"],
+    input:
+        fallback="repo_data/policy_constraints/small_scale_solar.csv",
+    output:
+        small_scale_solar=DATA + "eia/small_scale_solar.csv",
+    log:
+        LOGS + "retrieve_small_scale_solar.log",
+    resources:
+        walltime="00:10:00",
+        mem_mb=1000,
+    script:
+        "../scripts/retrieve_small_scale_solar.py"
 
 
 if "EGS" in config["electricity"]["extendable_carriers"]["Generator"]:

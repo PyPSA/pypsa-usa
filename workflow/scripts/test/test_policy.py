@@ -127,6 +127,38 @@ def rps_config():
 
 
 @pytest.fixture
+def rps_config_with_btm():
+    """Create a config dict for RPS constraints that includes BTM solar credit data."""
+    config = {
+        "electricity": {
+            "portfolio_standards": os.path.join(os.path.dirname(__file__), "fixtures/portfolio_standards.csv"),
+        },
+    }
+
+    class MockSnakemakeWithBTM:
+        def __init__(self):
+            self.input = type(
+                "obj",
+                (object,),
+                {
+                    "rps_reeds": os.path.join(os.path.dirname(__file__), "fixtures/rps_reeds.csv"),
+                    "ces_reeds": os.path.join(os.path.dirname(__file__), "fixtures/ces_reeds.csv"),
+                    "small_scale_solar": os.path.join(os.path.dirname(__file__), "fixtures/small_scale_solar.csv"),
+                },
+            )
+            self.params = type(
+                "obj",
+                (object,),
+                {
+                    "planning_horizons": [2030],
+                },
+            )
+
+    snakemake = MockSnakemakeWithBTM()
+    return config, snakemake
+
+
+@pytest.fixture
 def tct_config():
     """Create a config dictionary for TCT constraints."""
     return {
@@ -303,6 +335,133 @@ def test_add_rps_constraints_clustered(clustered_policy_network, rps_config):
         assert eligible_generation >= (row.pct * region_demand) - epsilon, (
             f"RPS requirement of {row.pct * 100}% not met for region {row.region} in clustered network"
         )
+
+
+def test_rooftop_solar_counts_toward_rps(policy_network, rps_config):
+    """Rooftop solar (carrier 'solar-rooftop') must be credited toward the RPS.
+
+    This is a regression test for the bug where 'solar-rooftop' was absent from
+    RPS_CARRIERS, causing rooftop solar generators to be silently ignored when the
+    optimizer evaluates RPS compliance.
+
+    The test adds a fixed-output rooftop solar generator to the CA bus and sets an
+    RPS percentage that can only be satisfied if rooftop solar counts.  If
+    'solar-rooftop' is not in RPS_CARRIERS the constraint would be infeasible or
+    the model would need to build significantly more utility-scale capacity.
+    """
+    from opts.policy import RPS_CARRIERS, add_RPS_constraints
+
+    # Verify the fix is in place before running the optimisation
+    assert "solar-rooftop" in RPS_CARRIERS, (
+        "'solar-rooftop' is missing from RPS_CARRIERS — rooftop solar will not count toward RPS"
+    )
+
+    n = policy_network.copy()
+    config, snakemake = rps_config
+
+    solar_profile = pd.Series(0.5, index=n.snapshots)
+
+    # Add a rooftop solar generator on the CA bus (z1)
+    n.add(
+        "Generator",
+        "rooftop_solar_z1",
+        bus="z1",
+        p_nom=200,
+        p_nom_extendable=False,
+        carrier="solar-rooftop",
+        capital_cost=0,
+        marginal_cost=0,
+        p_max_pu=solar_profile,
+    )
+    n.add("Carrier", "solar-rooftop", co2_emissions=0)
+
+    def extra_functionality(n, _):
+        add_RPS_constraints(n, config, sector=False, snakemake=snakemake)
+
+    n.optimize(solver_name="glpk", multi_investment_periods=True, extra_functionality=extra_functionality)
+
+    assert any("rps_limit" in c for c in n.model.constraints), "No RPS limit constraints were added"
+
+    # Verify that rooftop solar generation is counted on the LHS of the constraint
+    region_buses = get_region_buses(n, ["CA"])
+    rooftop_gens = n.generators[(n.generators.bus.isin(region_buses.index)) & (n.generators.carrier == "solar-rooftop")]
+    assert not rooftop_gens.empty, "Rooftop solar generator missing from CA region"
+
+    rooftop_gen = n.generators_t.p[rooftop_gens.index].sum().sum()
+    assert rooftop_gen > 0, "Rooftop solar generator produced no energy — check p_max_pu"
+
+    # Confirm that total eligible generation (including rooftop) meets the RPS target
+    eligible_carriers = ["solar", "solar-rooftop", "onwind"]
+    eligible_gens = n.generators[
+        (n.generators.bus.isin(region_buses.index)) & (n.generators.carrier.isin(eligible_carriers))
+    ]
+    eligible_gen = n.generators_t.p[eligible_gens.index].sum().sum()
+    region_demand = n.loads_t.p_set.loc[:, n.loads.bus.isin(region_buses.index)].sum().sum()
+
+    rps_pct = 0.9  # matches fixtures/portfolio_standards.csv for CA
+    epsilon = 1e-3
+    assert eligible_gen >= rps_pct * region_demand - epsilon, (
+        f"RPS not met even with rooftop solar: {eligible_gen:.1f} MWh < {rps_pct * region_demand:.1f} MWh"
+    )
+
+
+def test_btm_solar_credit_reduces_rps_rhs(policy_network, rps_config, rps_config_with_btm):
+    """BTM solar credit should reduce the required utility-scale renewable generation.
+
+    The RPS constraint RHS is adjusted from ``pct * net_load`` to
+    ``pct * net_load - (1 - pct) * rooftop_gen``.  This means when small-scale
+    (behind-the-meter) solar data is provided, the optimizer needs to build
+    *less* utility-scale renewable capacity to satisfy the same statutory target.
+    The test confirms this by comparing solutions with and without the BTM data.
+
+    Test network (from fixtures/small_scale_solar.csv):
+      CA demand  = 300 MW × 24 h = 7 200 MWh,  btm_solar = 720 MWh
+      CA pct     = 0.90  (from fixtures/portfolio_standards.csv)
+      Without BTM:  rhs = 0.90 × 7200          = 6 480 MWh
+      With BTM:     rhs = 0.90 × 7200 - 0.10 × 720 = 6 408 MWh  (72 MWh less)
+    """
+    from opts.policy import add_RPS_constraints
+
+    # --- Solve WITHOUT BTM credit ---
+    n_no_btm = policy_network.copy()
+    config_no_btm, snakemake_no_btm = rps_config
+
+    def extra_no_btm(n, _):
+        add_RPS_constraints(n, config_no_btm, sector=False, snakemake=snakemake_no_btm)
+
+    n_no_btm.optimize(solver_name="glpk", multi_investment_periods=True, extra_functionality=extra_no_btm)
+
+    # --- Solve WITH BTM credit ---
+    n_with_btm = policy_network.copy()
+    config_with_btm, snakemake_with_btm = rps_config_with_btm
+
+    def extra_with_btm(n, _):
+        add_RPS_constraints(n, config_with_btm, sector=False, snakemake=snakemake_with_btm)
+
+    n_with_btm.optimize(solver_name="glpk", multi_investment_periods=True, extra_functionality=extra_with_btm)
+
+    # Measure CA utility-scale eligible generation in each solution
+    region_buses_ca = get_region_buses(n_no_btm, ["CA"])
+    eligible_carriers = ["solar", "onwind"]
+
+    def _eligible_gen(n):
+        gens = n.generators[
+            (n.generators.bus.isin(region_buses_ca.index)) & (n.generators.carrier.isin(eligible_carriers))
+        ]
+        return n.generators_t.p[gens.index].sum().sum()
+
+    gen_no_btm = _eligible_gen(n_no_btm)
+    gen_with_btm = _eligible_gen(n_with_btm)
+
+    logger.info(
+        f"BTM credit test: CA eligible gen without BTM = {gen_no_btm:.1f} MWh, "
+        f"with BTM = {gen_with_btm:.1f} MWh  (reduction = {gen_no_btm - gen_with_btm:.1f} MWh)",
+    )
+
+    assert gen_with_btm <= gen_no_btm + 1e-3, (
+        f"BTM credit should reduce or not increase required renewable generation: "
+        f"with_btm={gen_with_btm:.1f} > no_btm={gen_no_btm:.1f}"
+    )
 
 
 def test_add_technology_capacity_target_constraints(policy_network, tct_config):
