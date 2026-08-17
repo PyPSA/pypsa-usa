@@ -44,8 +44,6 @@ rule plot_natural_gas:
     input:
         network=RESULTS
         + "{interconnect}/networks/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc",
-    params:
-        plotting=config["plotting"],
     output:
         **{
             fig: RESULTS
@@ -55,6 +53,8 @@ rule plot_natural_gas:
         },
     log:
         "logs/plot_figures/gas/{interconnect}_s{simpl}_c{clusters}_l{ll}_{opts}_{sector}.log",
+    params:
+        plotting=config["plotting"],
     script:
         "../scripts/plot_natural_gas.py"
 
@@ -63,11 +63,6 @@ rule plot_sector_emissions:
     input:
         network=RESULTS
         + "{interconnect}/networks/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc",
-    params:
-        result="emissions",
-        plotting=config["plotting"],
-        root_dir=RESULTS
-        + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/",
     output:
         expand(
             RESULTS
@@ -79,6 +74,11 @@ rule plot_sector_emissions:
     threads: 1
     resources:
         mem_mb=5000,
+    params:
+        result="emissions",
+        plotting=config["plotting"],
+        root_dir=RESULTS
+        + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/",
     script:
         "../scripts/plot_statistics_sector.py"
 
@@ -87,11 +87,6 @@ rule plot_sector_production:
     input:
         network=RESULTS
         + "{interconnect}/networks/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc",
-    params:
-        result="production",
-        plotting=config["plotting"],
-        root_dir=RESULTS
-        + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/",
     output:
         expand(
             RESULTS
@@ -104,6 +99,11 @@ rule plot_sector_production:
     threads: 1
     resources:
         mem_mb=5000,
+    params:
+        result="production",
+        plotting=config["plotting"],
+        root_dir=RESULTS
+        + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/",
     script:
         "../scripts/plot_statistics_sector.py"
 
@@ -112,11 +112,6 @@ rule plot_sector_capacity:
     input:
         network=RESULTS
         + "{interconnect}/networks/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc",
-    params:
-        result="capacity",
-        plotting=config["plotting"],
-        root_dir=RESULTS
-        + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/",
     output:
         expand(
             RESULTS
@@ -129,6 +124,11 @@ rule plot_sector_capacity:
     threads: 1
     resources:
         mem_mb=5000,
+    params:
+        result="capacity",
+        plotting=config["plotting"],
+        root_dir=RESULTS
+        + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/",
     script:
         "../scripts/plot_statistics_sector.py"
 
@@ -137,9 +137,6 @@ rule plot_sankey_energy:
     input:
         network=RESULTS
         + "{interconnect}/networks/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc",
-    params:
-        root_dir=RESULTS
-        + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/",
     output:
         RESULTS
         + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/system/sankey/energy.html",
@@ -148,6 +145,9 @@ rule plot_sankey_energy:
     threads: 1
     resources:
         mem_mb=5000,
+    params:
+        root_dir=RESULTS
+        + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/",
     script:
         "../scripts/plot_sankey_energy.py"
 
@@ -156,9 +156,6 @@ rule plot_sankey_carbon:
     input:
         network=RESULTS
         + "{interconnect}/networks/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc",
-    params:
-        root_dir=RESULTS
-        + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/",
     output:
         RESULTS
         + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/system/sankey/carbon.html",
@@ -167,6 +164,9 @@ rule plot_sankey_carbon:
     threads: 1
     resources:
         mem_mb=5000,
+    params:
+        root_dir=RESULTS
+        + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/",
     script:
         "../scripts/plot_sankey_carbon.py"
 
@@ -175,11 +175,6 @@ rule plot_sector_validation:
     input:
         network=RESULTS
         + "{interconnect}/networks/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc",
-    params:
-        plotting=config["plotting"],
-        eia_api=config["api"]["eia"],
-        root_dir=RESULTS
-        + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/",
     output:
         expand(
             RESULTS
@@ -192,5 +187,10 @@ rule plot_sector_validation:
     threads: 1
     resources:
         mem_mb=5000,
+    params:
+        plotting=config["plotting"],
+        eia_api=config["api"]["eia"],
+        root_dir=RESULTS
+        + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/",
     script:
         "../scripts/plot_statistics_sector.py"

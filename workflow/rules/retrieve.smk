@@ -38,17 +38,17 @@ def define_sector_databundles():
 
 
 rule retrieve_zenodo_databundles:
-    params:
-        define_zenodo_databundles(),
     output:
         expand(
             DATA + "breakthrough_network/base_grid/{file}", file=breakthrough_datafiles
         ),
         expand(DATA + "{file}", file=pypsa_usa_datafiles),
-    resources:
-        mem_mb=5000,
     log:
         "logs/retrieve/retrieve_databundles.log",
+    resources:
+        mem_mb=5000,
+    params:
+        define_zenodo_databundles(),
     script:
         "../scripts/retrieve_databundles.py"
 
@@ -60,17 +60,17 @@ def efs_databundle(wildcards):
 
 
 rule retrieve_nrel_efs_data:
+    output:
+        DATA + "nrel_efs/EFSLoadProfile_{efs_case}_{efs_speed}.csv",
+    log:
+        "logs/retrieve/retrieve_efs_{efs_case}_{efs_speed}.log",
     wildcard_constraints:
         efs_case="Reference|Medium|High",
         efs_speed="Slow|Moderate|Rapid",
-    params:
-        efs_databundle,
-    output:
-        DATA + "nrel_efs/EFSLoadProfile_{efs_case}_{efs_speed}.csv",
     resources:
         mem_mb=5000,
-    log:
-        "logs/retrieve/retrieve_efs_{efs_case}_{efs_speed}.log",
+    params:
+        efs_databundle,
     script:
         "../scripts/retrieve_databundles.py"
 
@@ -93,13 +93,13 @@ sector_datafiles = [
 
 
 rule retrieve_sector_databundle:
-    params:
-        define_sector_databundles(),
     output:
         expand(DATA + "{file}", file=sector_datafiles),
     log:
         LOGS + "retrieve_sector_databundle.log",
     retries: 2
+    params:
+        define_sector_databundles(),
     script:
         "../scripts/retrieve_databundles.py"
 
@@ -153,6 +153,9 @@ COMSTOCK_FILES = [
 
 
 rule retrieve_res_eulp:
+    output:
+        expand(DATA + "eulp/res/{{state}}/{profile}.csv", profile=RESSTOCK_FILES),
+        DATA + "eulp/res/{state}.csv",
     log:
         "logs/retrieve/retrieve_res_eulp/{state}.log",
     retries: 3
@@ -160,14 +163,14 @@ rule retrieve_res_eulp:
         stock="res",
         profiles=RESSTOCK_FILES,
         save_dir=DATA + "eulp/res",
-    output:
-        expand(DATA + "eulp/res/{{state}}/{profile}.csv", profile=RESSTOCK_FILES),
-        DATA + "eulp/res/{state}.csv",
     script:
         "../scripts/retrieve_eulp.py"
 
 
 rule retrieve_com_eulp:
+    output:
+        expand(DATA + "eulp/com/{{state}}/{profile}.csv", profile=COMSTOCK_FILES),
+        DATA + "eulp/com/{state}.csv",
     log:
         "logs/retrieve/retrieve_com_eulp/{state}.log",
     retries: 3
@@ -175,9 +178,6 @@ rule retrieve_com_eulp:
         stock="com",
         profiles=COMSTOCK_FILES,
         save_dir=DATA + "eulp/com",
-    output:
-        expand(DATA + "eulp/com/{{state}}/{profile}.csv", profile=COMSTOCK_FILES),
-        DATA + "eulp/com/{state}.csv",
     script:
         "../scripts/retrieve_eulp.py"
 
@@ -193,9 +193,9 @@ rule retrieve_ship_raster:
         DATA + "shipdensity_global.zip",
     log:
         LOGS + "retrieve_ship_raster.log",
+    retries: 2
     resources:
         mem_mb=5000,
-    retries: 2
     run:
         move(input[0], output[0])
 
@@ -215,17 +215,15 @@ if (
             "cutouts/" + CDIR + "usa_{cutout}.nc",
         log:
             "logs/" + CDIR + "retrieve_cutout_usa_{cutout}.log",
+        retries: 2
         resources:
             walltime="00:50:00",
             mem_mb=5000,
-        retries: 2
         run:
             move(input[0], output[0])
 
 
 rule retrieve_caiso_data:
-    params:
-        fuel_year=config["costs"]["ng_fuel_year"],
     input:
         fuel_regions="repo_data/plants/wecc_fuelregions.xlsx",
     output:
@@ -237,6 +235,8 @@ rule retrieve_caiso_data:
     resources:
         walltime="00:10:00",
         mem_mb=2000,
+    params:
+        fuel_year=config["costs"]["ng_fuel_year"],
     script:
         "../scripts/retrieve_caiso_data.py"
 
@@ -257,16 +257,16 @@ rule retrieve_pudl:
 if "EGS" in config["electricity"]["extendable_carriers"]["Generator"]:
 
     rule retrieve_egs:
-        params:
-            dispatch=config["renewable"]["EGS"]["dispatch"],
-            subdir=DATA + "EGS/{interconnect}",
         output:
             DATA + "EGS/{interconnect}/specs_EGS.nc",
             DATA + "EGS/{interconnect}/profile_EGS.nc",
+        log:
+            LOGS + "retrieve_EGS_{interconnect}.log",
         resources:
             walltime="00:30:00",
             mem_mb=5000,
-        log:
-            LOGS + "retrieve_EGS_{interconnect}.log",
+        params:
+            dispatch=config["renewable"]["EGS"]["dispatch"],
+            subdir=DATA + "EGS/{interconnect}",
         script:
             "../scripts/retrieve_egs.py"
