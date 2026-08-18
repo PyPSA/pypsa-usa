@@ -55,7 +55,7 @@ from tests.equivalence.paths import (  # noqa: E402
 
 WF = REPO / "workflow"
 SIDES = {"ab_pd": "breakthrough", "ab_pop": "population"}
-BASELINE, VARIANT = "ab_pd", "ab_pop"
+BASELINE, VARIANT, REPLICA = "ab_pd", "ab_pop", "ab_pop2"
 OUT_DIR = WF / "results" / "ab"
 PREPARED = f"elec_s_c{CLUSTERS}_ec_l{LL}_{OPTS}_{SECTOR}"
 
@@ -178,9 +178,18 @@ def analyze(solve: bool) -> dict:
     )
     res["tables"]["by_state"] = by_state.round(4)
 
-    # -- characterization: reallocation by zone / county / bus
+    # -- characterization: reallocation by zone / county / bus. Peaks matter
+    # because extendable peaker capacity (e.g. OCGT) tracks the zone peak.
+    def zone_peak(n):
+        p = n.loads_t.p_set.T.groupby(n.loads.bus.astype(str)).sum().T
+        zones = n.buses.reeds_zone.astype(str)
+        return p.T.groupby(zones.reindex(p.columns)).sum().T.max()
+
     by_zone = df.groupby("reeds_zone")[["mw_pd", "mw_pop"]].sum()
     by_zone["delta_pct"] = 100 * (by_zone.mw_pop - by_zone.mw_pd) / by_zone.mw_pd
+    by_zone["peak_pd"] = zone_peak(npd).reindex(by_zone.index)
+    by_zone["peak_pop"] = zone_peak(npop).reindex(by_zone.index)
+    by_zone["peak_delta_mw"] = by_zone.peak_pop - by_zone.peak_pd
     res["tables"]["by_zone"] = by_zone.round(4)
 
     movers = df.reindex(df.delta_mw.abs().sort_values(ascending=False).index)
@@ -226,6 +235,19 @@ def analyze(solve: bool) -> dict:
             res["stats"]["objective_pd"] = float(ncd.objective)
             res["stats"]["objective_pop"] = float(ncp.objective)
             res["stats"]["objective_delta_pct"] = _rel_pct(float(ncp.objective), float(ncd.objective))
+            # determinism bound: a replica of the variant (same config, other
+            # run name) shows how much of the delta could be solver noise
+            prep = WF / f"results/{REPLICA}/{INTERCONNECT}/networks/{PREPARED}.nc"
+            if prep.exists():
+                ncr = load_network(prep)
+                cap_noise = float(
+                    (ncp.generators.p_nom_opt.sort_index() - ncr.generators.p_nom_opt.sort_index()).abs().max(),
+                )
+                res["stats"]["replica_capacity_noise_mw"] = cap_noise
+                res["stats"]["replica_objective_noise_pct"] = _rel_pct(
+                    float(ncr.objective),
+                    float(ncp.objective),
+                )
             cap = {}
             for side, n in (("pd", ncd), ("pop", ncp)):
                 caps = []
@@ -342,6 +364,11 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--skip-solve", action="store_true")
     ap.add_argument("--skip-build", action="store_true", help="analyze/report existing artifacts only")
+    ap.add_argument(
+        "--replica",
+        action="store_true",
+        help="also solve an identical-config replica of the variant to bound solver noise",
+    )
     ap.add_argument("--jobs", type=int, default=4)
     args = ap.parse_args()
     solve = not args.skip_solve
@@ -350,6 +377,8 @@ def main() -> int:
         seed_workflow_configs()
         for run_name, method in SIDES.items():
             build(run_name, method, solve, args.jobs)
+        if args.replica and solve:
+            build(REPLICA, SIDES[VARIANT], solve, args.jobs)
 
     res = analyze(solve)
     report = build_report(res, solve)

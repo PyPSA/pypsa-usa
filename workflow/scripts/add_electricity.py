@@ -78,7 +78,10 @@ def sanitize_carriers(n, config):
 
 def add_missing_carriers(n, carriers):
     """Function to add missing carriers to the network without raising errors."""
-    missing_carriers = set(carriers) - set(n.carriers.index)
+    # sorted: set iteration order is hash-seed dependent, which makes the
+    # Carrier table order (and thus the .nc files) differ between otherwise
+    # identical runs
+    missing_carriers = sorted(set(carriers) - set(n.carriers.index))
     if len(missing_carriers) > 0:
         n.madd("Carrier", missing_carriers)
 
