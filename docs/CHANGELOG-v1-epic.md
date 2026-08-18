@@ -99,6 +99,35 @@ Conventions:
 
 ## On local `v1-epic`, not yet pushed
 
+- **Out-of-footprint NREL caps: loud accounting + opt-in nearest-bus
+  reassignment** (`workflow/scripts/build_renewable_profiles.py`,
+  `workflow/scripts/nrel_exclusion/build_nrel_bus_capacities.py`, new
+  `nrel_caps_reassign` config block in `config.common.yaml`; unit tests in
+  `workflow/scripts/test/test_remap_caps.py`). The NREL caps files are
+  rolled up against the NATIONAL substation tessellation (17,890 entries);
+  in footprint-scoped runs `remap_caps_to_cluster` silently dropna()'d
+  every out-of-footprint entry — CA prong-1: 17,340/17,890 entries,
+  9.43 TW of 9.70 TW national onwind p_nom_max (97.3%), including two
+  border regions holding 13.4% of the West's developable wind (see ledger
+  CF-coverage amendment). Now: (1) an UNCONDITIONAL WARNING reports the
+  dropped entry count, dropped MW, and % of the national total per
+  technology; (2) a config-gated, DEFAULT-OFF
+  `nrel_caps_reassign: {enable: false, max_km: 100}` reassigns each
+  unmapped entry to the cluster of the geographically nearest in-footprint
+  entry, but only within `max_km` — preventing distant-interconnect
+  capacity from teleporting across seams. The published Zenodo caps
+  artifacts carry no per-entry coordinates, so enabling the flag today
+  raises a clear config error; `build_nrel_bus_capacities.py` now writes
+  per-bus `x`/`y` (capacity-weighted site centroid, bus-centroid fallback)
+  so the NEXT HPC regeneration (`build_nrel_artifacts.sh` — raw per-site
+  NREL CSVs live only on HPC) carries them. The long-term fix (option a)
+  remains HPC-side: re-roll the caps against each run's own region
+  geometry instead of the national tessellation.
+  *Results effect:* **None by default** — flag off adds logging only
+  (verified byte-identical remap output vs pre-change code on the CA
+  prong-1 artifacts). Enabling the flag is a scenario choice that changes
+  p_nom_max/potential on border buses and needs its own ledger entry.
+
 - **Ledger amendments from the DL-2/DL-3/DL-9 + CF-coverage deep-dives**
   (2026-08-18, four low-effort investigations; full amendments in the deltas
   ledger): DL-2's +17.86% DC-link delta is an ANCHOR-side aggregation bug

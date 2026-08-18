@@ -123,3 +123,22 @@ classes; waivers finalized in tests/equivalence/waivers.yaml.
   (consistent with all other zonal machinery) or the raw breakthrough
   column? Waived provisionally (usa-scoped) with reeds_state as the
   candidate behavior. | countersigned (ktehranchi, 2026-08-18; adjudicated Claude 2026-08-18) |
+
+- **Out-of-footprint caps follow-up IMPLEMENTED, default-off (2026-08-18):**
+  the CF-coverage amendment's flagged follow-up ("warn loudly on partial
+  dropna") is now code: `remap_caps_to_cluster` unconditionally WARNs with
+  the dropped entry count, dropped MW, and % of the national total per
+  technology (CA prong-1 onwind: 17,340/17,890 entries, 9.43 of 9.70 TW,
+  97.3%). A new `nrel_caps_reassign: {enable: false, max_km: 100}` config
+  key opts into reassigning unmapped entries to the nearest in-footprint
+  bus within max_km; the published caps .nc files carry no per-entry
+  coordinates, so enabling it today raises a config error until the HPC
+  rollup (`build_nrel_bus_capacities.py`, which now writes per-bus x/y) is
+  regenerated. **No new delta vs anchor:** the flag defaults OFF and the
+  flag-off remap output was verified byte-identical
+  (xr.testing.assert_identical) to the pre-change code on the CA prong-1
+  artifacts — this entry is documentation of a behavior-neutral change.
+  Enabling the flag is a scenario choice that will need its own ledger
+  entry (delta class: border-bus p_nom_max/potential/weight increases)
+  the first time it is used in an equivalence-checked run. | needs no
+  countersignature while default-off |
