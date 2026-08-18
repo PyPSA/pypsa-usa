@@ -258,7 +258,15 @@ def render(ctx) -> str:
                 "profile files &mdash; the direct output of the relocated "
                 "build_renewable_profiles stage, before any network assembly. "
                 "Identical maps here mean the simplify-early refactor feeds the "
-                "same weather to the same places.</p>",
+                "same weather to the same places. <b>Blank (uncolored) regions "
+                "carry no profile because the NREL reference land-access supply "
+                "curve contains no eligible site within them</b> (urban Bay/LA/SD "
+                "coast, steep-slope and protected Sierra counties) &mdash; modeled "
+                "resource exclusion, not missing data. Both sides exclude the "
+                "identical 1,428 of 1,972 regions for onwind (72.4% of regions, "
+                "20.4% of land area; 0.0% difference in the excluded set); all "
+                "544 regions with eligible onwind resource agree, as do all 808 "
+                "solar regions.</p>",
             ]
             for tech in ("onwind", "solar"):
                 pcand = ctx["cand_root"] / f"resources/equivalence/profiles/western/2030/profile_{tech}_s.nc"

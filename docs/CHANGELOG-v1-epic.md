@@ -99,6 +99,26 @@ Conventions:
 
 ## On local `v1-epic`, not yet pushed
 
+- **Ledger amendments from the DL-2/DL-3/DL-9 + CF-coverage deep-dives**
+  (2026-08-18, four low-effort investigations; full amendments in the deltas
+  ledger): DL-2's +17.86% DC-link delta is an ANCHOR-side aggregation bug
+  (pypsa link aggregation rescales the length-independent inverter-pair term
+  by 1/1.25), not base-stage pricing — with a flagged follow-up that V1-epic
+  now under-charges the DC-link km-term by 25% (~6% of link cost, 2 links);
+  DL-3's palette diff was an uncommitted LOCAL plotting config on the
+  candidate side (co2_emissions verified 0.000% different at every stage) —
+  local config resynced from the template, class disappears on next rebuild;
+  DL-9 confirmed MW-exact with the candidate's dropped onwind shown to be
+  out-of-footprint plants snapped ~880 km into CA by the harness scoping
+  (production full-Western s385 exposure measured: 1.54% onwind / 0.12%
+  solar; prototype nearest-profiled-group fix recovers 100.0% with zero
+  residual). CF-map coverage traced: 72.4% of regions have no onwind because
+  NREL reference land access contains no eligible site (99.6% via absent
+  caps entries; anchor set identical, 0.0%) — report captions now say
+  "modeled resource exclusion, not missing data".
+  *Results effect:* None (documentation, captions, and a local-config
+  resync only).
+
 - **Rename rule `cluster_simpl` -> `cluster_resources`** (user request
   2026-08-07; rule name, log path, walltime config key, living docs; the
   script file stays `workflow/scripts/cluster_simpl.py`). *Results effect:*

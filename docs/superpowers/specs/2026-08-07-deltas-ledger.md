@@ -24,3 +24,59 @@ Resolution 2026-08-07 (post-fix rebuild): demand total and hydro FIXED in
 code (commits cccf696f et al.) — no waivers needed; solved objective now
 agrees at rel 6.6e-05 (gate 1e-3). All remaining findings are DL-5..DL-8
 classes; waivers finalized in tests/equivalence/waivers.yaml.
+
+
+## Amendments (2026-08-18, Fable deep-dive investigations)
+
+- **DL-2 — mechanism corrected (waiver outcome unchanged).** The anchor's
+  9,244.1 is not a "base-stage price": the anchor prices the DC links at base
+  stage as 11,555.2 (53.819 km x 1.25 x 48.856 + 8,268.4 inverter pair), then
+  its `simplify_network` aggregation (`get_clustering_from_busmap(...,
+  line_length_factor=1.0)`) rescales `capital_cost` by new/old length = exactly
+  1/1.25 — wrongly deflating the **length-independent inverter-pair term** by
+  20.0% (8,268.4 -> 6,614.7). Delta decomposition: +25.00% on the inverter term,
+  −0.11% on the km term. So the +17.86% is an **anchor-side aggregation bug**,
+  masked in reeds transport configs (DC links dropped at clustering; ITL costs
+  rebuilt identically). In line-preserving (tamu) runs it reaches the objective
+  whenever links are extendable (`lv>1.0`/`lvopt`) or under `lc*` budgets.
+  Follow-up flagged for the user: V1-epic's `length_factor=1.0` call correctly
+  de-duplicates LINE costs, but DC-link lengths are NOT pre-multiplied by the
+  1.25 routing factor, so V1-epic under-charges the DC-link km-term by 25%
+  (~6% of total link cost, 2 links) — restoring the factor for links only
+  would put V1-epic at 11,551.5 vs the anchor's true base price 11,555.2
+  (0.03%). Modeling decision pending sign-off.
+- **DL-3 — mechanism corrected (waiver outcome unchanged; root cause now
+  FIXED at source).** The color differences did not come from a committed
+  v1-epic palette change: no commit anywhere contains the candidate hexes.
+  The candidate ran with an uncommitted, local 67-key slim
+  `workflow/config/config.plotting.yaml` (vs the 274-key template the anchor
+  used); only onwind and 4hr_battery_storage exist as carriers, which is why
+  only they surfaced. `co2_emissions` — the ONLY Carrier column feeding the
+  solve (GlobalConstraint via prepare_network) — is numerically identical
+  (0.000% on every carrier at every stage). Remediation: local plotting
+  config resynced from the repo_data template (2026-08-18); the color class
+  disappears on the next candidate rebuild. Incidental: the anchor carries a
+  stale EMPTY `DC` Carrier row at clustered stages (0 member components,
+  co2 0.0) — DL-6 stage-ordering class, zero solver content.
+- **DL-9 — confirmed MW-exact, scope sharpened.** New finding: the
+  candidate's dropped onwind (2,183.0 MW, 6.10%) is entirely
+  OUT-OF-FOOTPRINT interconnect plants snapped a median 878 km into CA buses
+  by the CA-scoped harness — a harness scoping artifact, not in-state
+  capacity; the anchor's drops (6,601.6 MW onwind 18.46%, 3,586.6 MW solar
+  7.30%) are genuine local orphans (median 5.7 km from a profiled group).
+  Production exposure measured on full-Western s385: onwind 1.54%, solar
+  0.12%. Prototype fix (reassign to nearest profiled group in-zone) recovers
+  100.0% of dropped MW with zero residual in every tested geometry and would
+  null this waiver class. Scope confirmed prong-2 only; issue-#16 fix
+  priority MEDIUM (matters most for high-resolution runs). Also flagged: the
+  anchor-style sub_id grouping can double-attach when one sub has 2+ profiled
+  buses, and a shared −111.8 MW solar offset (both sides, cancels in diffs)
+  deserves a one-line audit.
+- **Onwind CF coverage (context, not a delta):** 1,428 of 1,972 regions
+  (72.4%, 20.4% of Western land area) have no onwind profile because the NREL
+  reference land-access supply curve contains no eligible site there (urban
+  Bay/LA/SD coast, Sierra counties); 99.6% via absent caps entries, joins
+  lossless; anchor bus set identical (0.0% difference). Expected behavior.
+  The `limited` variant is stricter still (−53.3% buses); no `open` artifacts
+  on disk. Report captions updated to say "modeled resource exclusion, not
+  missing data."
