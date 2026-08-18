@@ -89,3 +89,21 @@ classes; waivers finalized in tests/equivalence/waivers.yaml.
   rebuilt from the ReEDS distance-cost tables, so the factor never reaches
   the solve there. The 2-link DC km-term difference (~6% of link cost)
   is accepted under this decision.
+
+- **CF-coverage note SUPERSEDED by source-data verification (user-requested,
+  2026-08-18):** split verdict. (a) In-state CA missing regions: NREL's own
+  reference-access raster corroborates the exclusion (median 0.0% developable
+  in missing regions vs 8.1% kept; Inyo 0.0%, Tulare 0.0%, Fresno 1.2%,
+  LA 0.3%, SD 1.7%); only 450 MW (0.17% of 265.8 GW) sits in missing CA
+  regions; the sjoin is NOT buggy (49,264/49,323 national sites land inside
+  polygons, 0.12% dropped). (b) REAL GAP out of state: caps are rolled up
+  against the NATIONAL substation tessellation (17,890 entries) but the
+  CA-focus run's busmap covers only 1,975 CA substations —
+  `remap_caps_to_cluster` (build_renewable_profiles.py:50) silently
+  dropna()s the 17,340 unmapped entries. Two giant border regions holding
+  13.4% of the West's NREL-developable wind area (~100+ GW at the calibrated
+  ~2.8 MW/km2) get 0 MW, and several kept giants are severely undercounted
+  (e.g. 782k km2 region -> 186 MW). Shared identically by both sides (no
+  equivalence delta) but diverges structurally from the legacy atlite path.
+  Follow-up flagged: roll caps up against the run's own region geometry, or
+  warn loudly on partial dropna.
