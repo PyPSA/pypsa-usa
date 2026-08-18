@@ -209,6 +209,12 @@ def analyze(solve: bool) -> dict:
         },
     )
     res["bus_frame"] = df
+    res["weight_share"] = pd.DataFrame(
+        {
+            "pd": 100 * npd.buses.load_weight.fillna(0) / npd.buses.load_weight.fillna(0).sum(),
+            "pop": 100 * npop.buses.load_weight.fillna(0) / npop.buses.load_weight.fillna(0).sum(),
+        },
+    ).set_axis(npd.buses.index.map(str))
 
     # -- characterization: clustered + solved stages
     for stage, rel in (
@@ -266,6 +272,113 @@ def analyze(solve: bool) -> dict:
 
 
 # --------------------------------------------------------------- report side
+def maps_html(res: dict) -> str:
+    """Three-panel choropleths (legacy | population | difference) per quantity.
+
+    Reuses ``_plot_choropleth_on_ax`` from workflow/scripts/plot_network_maps
+    (show_lines=False makes it network-independent). Region files are
+    identical across the two runs (verified topology invariant), so the
+    baseline run's geospatial outputs are used for both sides.
+    """
+    try:
+        import cartopy.crs as ccrs
+        import geopandas as gpd
+        import pypsa
+        from matplotlib.colors import Normalize
+
+        sys.path.insert(0, str(WF / "scripts"))
+        import plot_network_maps as pnm
+    except Exception as e:  # cartopy/geopandas optional at report time
+        return f"<p>maps unavailable: {e}</p>"
+
+    geo = WF / f"resources/{BASELINE}/geospatial/{INTERCONNECT}"
+    regions_s = gpd.read_file(geo / "regions_onshore_s.geojson")
+    regions_c = gpd.read_file(geo / f"regions_onshore_s_{CLUSTERS}.geojson")
+    dummy = pypsa.Network()
+
+    def three_panel(regions, vals_pd, vals_pop, title, unit, vmax_q=1.0):
+        idx = vals_pd.index.union(vals_pop.index)
+        a = vals_pd.reindex(idx, fill_value=0.0).astype(float)
+        b = vals_pop.reindex(idx, fill_value=0.0).astype(float)
+        diff = b - a
+        vmax = float(max(a.quantile(vmax_q), b.quantile(vmax_q), 1e-9))
+        dlim = float(max(diff.abs().max(), 1e-9))
+        lon = float(regions.geometry.centroid.x.mean())
+        fig, axes = plt.subplots(
+            1,
+            3,
+            subplot_kw={"projection": ccrs.EqualEarth(lon)},
+            figsize=(15, 4.8),
+        )
+        panels = [
+            (axes[0], a, "viridis", 0.0, vmax, f"legacy Pd ({BASELINE})"),
+            (axes[1], b, "viridis", 0.0, vmax, f"population ({VARIANT})"),
+            (axes[2], diff, "RdBu_r", -dlim, dlim, "population \u2212 legacy"),
+        ]
+        for ax, vals, cmap, vmin_, vmax_, name in panels:
+            pnm._plot_choropleth_on_ax(
+                dummy,
+                vals,
+                regions.copy(),
+                ax,
+                cmap=cmap,
+                vmin=vmin_,
+                vmax=vmax_,
+                show_lines=False,
+            )
+            ax.set_title(name, fontsize=10)
+            sm = plt.cm.ScalarMappable(cmap=cmap, norm=Normalize(vmin_, vmax_))
+            fig.colorbar(sm, ax=ax, shrink=0.75, pad=0.02, label=unit)
+        fig.suptitle(title, fontsize=12)
+        cap = f"{title} — largest per-region shift: {float(diff.abs().max()):,.3g} {unit}" + (
+            f"; color scale capped at the {vmax_q:.0%} quantile" if vmax_q < 1.0 else ""
+        )
+        return _img(fig, cap)
+
+    parts = [
+        "<p>Left/middle panels share one color scale; the right panel is the "
+        "population-minus-legacy difference on a diverging scale centered at zero. "
+        "Gray regions carry no data. Note: polygons are Voronoi cells of the "
+        "CA-only substations clipped to the <em>western</em> onshore shape, so "
+        "border cells spill far beyond California — the spillover area belongs "
+        "to CA border substations, it is not out-of-state load.</p>",
+    ]
+    ws = res["weight_share"]
+    parts.append(
+        three_panel(
+            regions_s,
+            ws["pd"],
+            ws["pop"],
+            "Load-weight share per substation (percent of interconnect total)",
+            "%",
+            vmax_q=0.99,
+        ),
+    )
+    bf = res["bus_frame"]
+    parts.append(
+        three_panel(
+            regions_s,
+            bf["mw_pd"],
+            bf["mw_pop"],
+            "Mean allocated demand per substation",
+            "MW",
+            vmax_q=0.99,
+        ),
+    )
+    if "clustered_load" in res["tables"]:
+        cl = res["tables"]["clustered_load"]
+        parts.append(
+            three_panel(
+                regions_c,
+                cl["load_mw_pd"],
+                cl["load_mw_pop"],
+                f"Mean clustered demand per zone (c{CLUSTERS})",
+                "MW",
+            ),
+        )
+    return "\n".join(parts)
+
+
 def _png(fig) -> str:
     buf = io.BytesIO()
     fig.savefig(buf, format="png", dpi=110, bbox_inches="tight", facecolor="white")
@@ -350,6 +463,8 @@ Solve stage {"included" if solve else "skipped"}.</p>
 <table>{stat_rows}</table>
 <h2>Figures</h2>
 {figures(res)}
+<h2>Maps</h2>
+{maps_html(res)}
 <h2>Tables</h2>
 {"".join(tables)}
 <p><small>Generated by tests/equivalence/ab.py on {time.strftime("%Y-%m-%d %H:%M:%S")}.</small></p>
