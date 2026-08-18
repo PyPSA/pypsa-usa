@@ -1114,6 +1114,11 @@ def main(snakemake):
     # whose assign_line_lengths already folded lines.length_factor into `length`.
     # Passing the factor again here would compound it (25% CAPEX inflation on
     # every line) — the pre-refactor pipeline applied it exactly once.
+    # DECISION (user, 2026-08-18): keep length_factor=1.0 here so this stage
+    # never edits the length data. NOTE: these capital costs only reach the
+    # solve on the TAMU (line-preserving) network; under the reeds transport
+    # model, lines/DC links are dropped at clustering and ITL link costs are
+    # rebuilt from the ReEDS distance-cost tables (see deltas ledger DL-1/DL-2).
     update_transmission_costs(n, costs, length_factor=1.0)
 
     renewable_carriers = set(params.renewable_carriers)

@@ -80,3 +80,12 @@ classes; waivers finalized in tests/equivalence/waivers.yaml.
   The `limited` variant is stricter still (−53.3% buses); no `open` artifacts
   on disk. Report captions updated to say "modeled resource exclusion, not
   missing data."
+
+- **DL-2 follow-up DECIDED (user, 2026-08-18):** keep `length_factor=1.0` at
+  the post-aggregation costing call — the pipeline must not edit length data
+  at that stage. Recorded note: the length factor only modifies transmission
+  costs on the TAMU (line-preserving) network; under the reeds transport
+  model, lines and DC links are dropped at clustering and ITL link costs are
+  rebuilt from the ReEDS distance-cost tables, so the factor never reaches
+  the solve there. The 2-link DC km-term difference (~6% of link cost)
+  is accepted under this decision.

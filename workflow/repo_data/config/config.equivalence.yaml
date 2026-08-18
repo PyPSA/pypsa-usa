@@ -99,7 +99,7 @@ lines:
   s_max_pu: 0.7
   s_nom_max: .inf
   max_extension: 20000
-  length_factor: 1.25
+  length_factor: 1.25   # routing factor folded into `length` at aggregation; cost-side factor stays 1.0. Only affects TAMU (line-preserving) runs - reeds transport rebuilds ITL costs from ReEDS tables
 
 links:
   p_max_pu: 1.0
