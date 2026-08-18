@@ -72,7 +72,10 @@ def load_waivers() -> list[dict]:
 
 def is_waived(finding: dict, waivers: list[dict]) -> bool:
     for w in waivers:
-        if all(w.get(k) in (None, "*", finding.get(k)) for k in ("stage", "component", "column", "kind", "prong")):
+        if all(
+            w.get(k) in (None, "*", finding.get(k))
+            for k in ("stage", "component", "column", "kind", "prong", "interconnect")
+        ):
             return True
     return False
 
@@ -502,6 +505,7 @@ def run_comparison(prong: int, cand_root: Path, anch_root: Path) -> dict:
         all_findings += compare_pair(pair, cand_root, anch_root)
     for f in all_findings:
         f["prong"] = prong
+        f["interconnect"] = INTERCONNECT
         f["waived"] = is_waived(f, waivers)
     live = [f for f in all_findings if not f["waived"]]
     result = {

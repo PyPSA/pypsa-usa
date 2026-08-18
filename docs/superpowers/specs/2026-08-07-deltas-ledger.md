@@ -107,3 +107,20 @@ classes; waivers finalized in tests/equivalence/waivers.yaml.
   equivalence delta) but diverges structurally from the legacy atlite path.
   Follow-up flagged: roll caps up against the run's own region geometry, or
   warn loudly on partial dropna.
+
+- **DL-10 (usa interconnect, data stages; 2026-08-18): state-assignment
+  demand split.** At national scope, per-bus `Load_t.p_set` differs on ~2,300
+  buses (individual buses up to 394%) while the SYSTEM total conserves to
+  0.0485% and state totals shift by at most 1.6% (KS; 11 further states
+  0.3-0.9%). Root cause: the candidate allocates state demand to buses via
+  ReEDS membership (`reeds_state`, the PR #21 fix), the anchor via the raw
+  breakthrough `state` column — border-adjacent buses are assigned to
+  different states, reshuffling demand between neighboring states. Same
+  family: 93/38,974 generator `capital_cost` values (max 8.4%, regional capex
+  multipliers keyed on the same state assignment) and one 296 MW CCGT
+  placement flip (bus 35790, DL-5 nearest-bus class). Invisible in CA-only
+  runs (every bus is California on both sides). **Scientific decision for
+  the user:** which state assignment is authoritative — ReEDS membership
+  (consistent with all other zonal machinery) or the raw breakthrough
+  column? Waived provisionally (usa-scoped) with reeds_state as the
+  candidate behavior. | provisional (Claude, 2026-08-18) |
