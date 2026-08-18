@@ -332,8 +332,8 @@ def maps_html(res: dict) -> str:
         diff = b - a
         vmax = float(max(a.quantile(vmax_q), b.quantile(vmax_q), 1e-9))
         dlim = float(max(diff.abs().max(), 1e-9))
-        b = regions.total_bounds
-        lon = float((b[0] + b[2]) / 2)
+        bounds = regions.total_bounds
+        lon = float((bounds[0] + bounds[2]) / 2)
         fig, axes = plt.subplots(
             1,
             3,
